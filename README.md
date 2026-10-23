@@ -2,7 +2,7 @@
 
 **Free chemical drawing for the lab, with slides, sheets and documents built in.**
 
-Chem Illustrator draws structures and reaction schemes the way ChemDraw does, with the same hotkeys, the ACS Document 1996 look, and your existing `.cdxml` files. Around that it adds the other programs a synthetic chemist spends the day in: a PowerPoint-style slide editor, an Excel-style sheet, a Word-style document and a graphics canvas. Structures stay editable in all of them, and the chemistry (formula, masses, R/S and E/Z, warnings) is worked out as you draw.
+Chem Illustrator draws structures and reaction schemes with the hotkeys and look ChemDraw users already know, and it opens and saves your `.cdxml` files. Around the drawing it builds in the other programs a synthetic chemist spends the day in: slides, spreadsheets, documents and a canvas for posters and figures. Your structures stay editable in all of them, and the formula, masses, stereochemistry and warnings update as you draw.
 
 It is free and open source (GPL v3), and runs on Windows, macOS and Linux.
 
@@ -14,7 +14,7 @@ Nothing to install: the browser version opens straight away. The desktop app add
 
 **[User guide](docs/README.md)** · **[Send feedback](docs/guide/feedback.md)**
 
-![A two-step reaction scheme in Drawing mode, with the Analysis panel showing the product's formula and masses](docs/images/drawing.png)
+![A two-step reaction scheme in Drawing mode (dark interface), with the Analysis panel showing the product's formula and masses](docs/images/drawing-dark-ui.png)
 
 ## Smart reaction arrows
 
@@ -51,7 +51,7 @@ Fill rings with a colour, a gradient, hatching or dots (patterns can be see-thro
 
 | Metal complexes, from templates | Arrow pushing that snaps into place |
 |---|---|
-| ![Placing an arene chromium tricarbonyl from the Metallocenes palette, typing Cr and CO onto it, and moving the benzene ring: the η⁶ bond follows the ring's middle, and the side panel shows C9H6CrO3](docs/images/metal-complex.gif) | ![An aldol addition drawn with curved arrows: lone pairs clicked onto an enolate oxygen, an arrow from a lone pair into the C–O bond, one from the C=C bond to where the new C–C bond forms, one from the C=O bond onto oxygen, then the aldehyde dragged away and back while the arrows follow it](docs/images/mechanism.gif) |
+| ![Placing an arene chromium tricarbonyl from the Metallocenes palette, typing Cr and CO onto it, and moving the benzene ring: the η⁶ bond follows the ring's middle, and the side panel shows C9H6CrO3](docs/images/metal-complex.gif) | ![A Diels–Alder reaction drawn with curved arrows: from each C=C of butadiene and acrolein to where a new bond forms, and from the last C=C into the middle bond, then the acrolein dragged away and back while the arrows follow it](docs/images/mechanism.gif) |
 | Coordination geometries, metallocenes, piano stools and 26 ligands are a click away. Hapto (η) bonds go to the middle of a ring or π-bond and follow it, and formulas count metal carbonyls, Cp and phosphines the way a chemist would. | Drag from a lone pair, bond or atom to where the electrons go and the arrow snaps on, bending (or turning S-shaped) to stay clear of the structure. Arrows and lone pairs stay stuck to their atoms when you move, turn or flip the structure. |
 
 ## It knows the chemistry
@@ -81,11 +81,7 @@ The eye button shows the page dark on screen, with your structures in light ink.
 
 ![Turning the dark page on, then switching its colours between palettes](docs/images/dark-mode.gif)
 
-The interface itself follows your system's dark setting, in every mode:
-
-| Drawing | Slides | Sheets |
-|---|---|---|
-| ![Drawing mode with a dark interface and a white page](docs/images/drawing-dark-ui.png) | ![Slides mode with a dark interface](docs/images/slides-dark-ui.png) | ![Sheet mode with a dark interface](docs/images/sheet-dark-ui.png) |
+The interface itself follows your system's dark setting in every mode, as in the screenshots on this page.
 
 ## Getting round a big drawing
 
@@ -103,14 +99,9 @@ Every hotkey can be changed (**Edit ▸ Hotkeys**), and the hotkeys can be expor
 
 Each mode works like the Office program it is named after, and adds what Office can't do for a chemist.
 
-| Highlights that step in during a talk | A reagent table that works itself out |
-|---|---|
-| ![A slide show of a two-step scheme: each click fades in a highlight, first on the bromide, then on the new phenyl ring, then on the new C=C bond](docs/images/slide-highlights.gif) | ![Typing names and a SMILES into a reagent table: each structure is drawn in its cell and the MW, mmol, mass and volume fill in](docs/images/reagent-table.gif) |
-| Highlight part of a structure and animate it like any other object: it plays in the slide show and in PowerPoint. **Animate Reaction** can also put a reaction movie on a slide. | Type a name or SMILES and the structure is drawn in the cell; the MW, amounts, masses and volumes follow from the equivalents. |
-
 | Slides | Sheets |
 |---|---|
-| ![Slides mode with the reaction scheme on a templated slide, the mouse pointing at a bond of the product](docs/images/slides.png) | ![Sheet mode with structures in cells, formula and MW columns, and a chart](docs/images/sheet.png) |
+| ![Slides mode with the reaction scheme on a templated slide, the mouse pointing at a bond of the product](docs/images/slides-dark-ui.png) | ![Sheet mode with structures in cells, formula and MW columns, and a chart](docs/images/sheet-dark-ui.png) |
 | Layouts, about twenty design templates, transitions, animations and presenter view. The structures on a slide are real structures: point at one and edit it with the same tools and hotkeys. Saves as `.pptx` that opens in PowerPoint. | Excel's keys and formulas, structures in cells, columns that work out formula, MW, HRMS m/z and more, charts and dashboards. Saves as `.xlsx`. |
 
 | Documents | Design |

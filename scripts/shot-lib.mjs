@@ -21,6 +21,8 @@ export async function open(url = 'http://localhost:5173/', { width = 1440, heigh
   await page.addInitScript(() => { try { if (!sessionStorage.getItem('shots')) { localStorage.clear(); sessionStorage.setItem('shots', '1'); } } catch { /* none */ } });
   await page.goto(url);
   await page.waitForFunction(() => window.__app?.chem?.ready, null, { timeout: 60000 });
+  // no first-run welcome card over the page
+  await page.evaluate(() => document.getElementById('welcome')?.remove());
   // the navigator map (on by default) only where a picture is about getting round a drawing
   if (!navigator) await page.evaluate(() => window.__app.command('navigator'));
   return { browser, page, problems };

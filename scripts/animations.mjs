@@ -18,7 +18,17 @@ async function menu(page, button, cmd) {
   await glide(page, b.x + b.width / 2, b.y + b.height / 2, 20);
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
   await page.waitForTimeout(350);
-  const i = await page.locator(`#${button}-menu [data-cmd="${cmd}"]`).boundingBox();
+  const item = page.locator(`#${button}-menu [data-cmd="${cmd}"]`);
+  // a command in a submenu: rest on the submenu's name first, so it opens
+  const sub = page.locator(`#${button}-menu .submenu`, { has: item });
+  if (await sub.count()) {
+    const h = await sub.locator('.has-sub').first().boundingBox();
+    await glide(page, h.x + 40, h.y + h.height / 2, 12);
+    await page.mouse.click(h.x + 40, h.y + h.height / 2);
+    await page.waitForTimeout(350);
+  }
+  const i = await item.boundingBox();
+  if (!i) { await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); await page.evaluate((c) => window.__app.command(c), cmd); return; }
   await glide(page, i.x + 40, i.y + i.height / 2, 12);
   await page.waitForTimeout(250);
   await page.mouse.click(i.x + 40, i.y + i.height / 2);
@@ -363,74 +373,63 @@ if (want('metal-complex')) {
   await browser.close();
 }
 
-// ---------------------------------------------------------------- an aldol arrow-push: lone pairs, curved arrows that snap, arrows that follow the structure
+// ---------------------------------------------------------------- a Diels–Alder arrow-push: curved arrows that snap to bonds and to where new bonds form, and follow the structure
 if (want('mechanism')) {
-  const { browser, page } = await open(url, { width: 1180, height: 960 });
-  const en = await addSmiles(page, 'C=C([O-])C', 150, 130);
-  const al = await addSmiles(page, 'O=Cc1ccccc1', 260, 130);
-  // the enolate's CH2 points at the aldehyde carbon, whose C=O points up and phenyl off to the right
-  await page.evaluate(([en, al]) => {
-    const a = window.__app, doc = a.doc, P = (id) => doc.atoms.get(id);
-    const L = Math.hypot(P(en[0]).x - P(en[1]).x, P(en[0]).y - P(en[1]).y);
-    const place = (ids, pivot, from, angle, at, mirror) => {
-      const p = P(pivot), f = P(from), rot = angle - Math.atan2(f.y - p.y, f.x - p.x), c = Math.cos(rot), s = Math.sin(rot);
-      const pts = ids.map((id) => { const t = P(id), dx = t.x - p.x, dy = t.y - p.y; return { id, x: dx * c - dy * s, y: dx * s + dy * c }; });
-      if (mirror?.(pts)) for (const q of pts) q.x = -q.x;
-      for (const q of pts) doc.updateAtom(q.id, { x: at.x + q.x, y: at.y + q.y });
-    };
-    doc.edit('Arrange', () => {
-      place(en, en[1], en[0], 0, { x: 150, y: 140 });
-      const ch2 = P(en[0]);
-      place(al, al[1], al[0], -Math.PI / 2, { x: ch2.x + 1.6 * L, y: ch2.y - 0.3 * L }, (pts) => pts.find((q) => q.id === al[2]).x < 0);
-    });
-    a.editor.changed?.();
-  }, [en, al]);
+  const { browser, page } = await open(url, { width: 1180, height: 900 });
+  // s-cis butadiene (atoms 0–3) and acrolein (4–7), placed by hand (bond length 1.5, y up as molfiles have it)
+  const c30 = Math.cos(Math.PI / 6), d = 0.35;
+  const v = [0, 1, 2, 3, 4, 5].map((k) => { const t = (-90 - 60 * k) * Math.PI / 180; return [Math.cos(t), Math.sin(t)]; });
+  const atoms = [['C', ...v[0]], ['C', ...v[1]], ['C', ...v[2]], ['C', ...v[3]], ['C', v[4][0] + d, v[4][1]], ['C', v[5][0] + d, v[5][1]], ['C', v[4][0] + d + c30, v[4][1] + 0.5], ['O', v[4][0] + d + 2 * c30, v[4][1]]];
+  const bonds = [[0, 1, 2], [1, 2, 1], [2, 3, 2], [4, 5, 2], [4, 6, 1], [6, 7, 2]];
+  const n = (x, w) => String(x).padStart(w), f = (x) => x.toFixed(4).padStart(10);
+  const mol = ['', '  chem-illustrator', '', `${n(atoms.length, 3)}${n(bonds.length, 3)}  0  0  0  0  0  0  0  0999 V2000`,
+    ...atoms.map(([el, x, y]) => `${f(x * 1.5)}${f(-y * 1.5)}${f(0)} ${el.padEnd(3)} 0  0  0  0  0  0  0  0  0  0  0  0`),
+    ...bonds.map(([i, j, o]) => `${n(i + 1, 3)}${n(j + 1, 3)}${n(o, 3)}  0`), 'M  END'].join('\n');
+  const ids = await page.evaluate((mol) => { const a = window.__app; let ids; a.doc.edit('Structures', () => { ids = a.addMolfile(a.doc, mol, 200, 150); }); a.editor.changed?.(); return ids; }, mol);
+  await page.evaluate(() => window.__app.command('fold-side'));
+  await page.waitForTimeout(300);
   // zoom in and centre the two structures in the canvas
   await page.evaluate(() => {
     const a = window.__app, r = a.renderer, b = a.doc.bounds(), box = document.querySelector('#overlay').getBoundingClientRect();
     const mid = { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 };
-    r.view.scale = 6.5;
+    r.view.scale = 8;
     const p = r.toScreen(mid);
     r.view.ox += 1; r.view.oy += 1;
     const q = r.toScreen(mid);
-    r.view.ox += (box.width / 2 - p.x) / (q.x - p.x) - 1;
+    r.view.ox += (box.width * 0.42 - p.x) / (q.x - p.x) - 1;
     r.view.oy += (box.height * 0.45 - p.y) / (q.y - p.y) - 1;
     a.editor.requestScene();
   });
   await pointer(page);
   const c = await canvasBox(page);
-  await page.mouse.move(c.x + c.width * 0.5, c.y + c.height * 0.85);
-  const mid = async (i, j) => { const p = await atomAt(page, i), q = await atomAt(page, j); return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }; };
+  await page.mouse.move(c.x + c.width * 0.5, c.y + c.height * 0.88);
+  const mid = async (i, j) => { const p = await atomAt(page, ids[i]), q = await atomAt(page, ids[j]); return { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }; };
   await record(page, 'mechanism', async () => {
-    // three lone pairs on the enolate oxygen, each click putting one in the most open space
-    await tool(page, 'sym-lonepair');
-    await page.waitForTimeout(300);
-    const o = await atomAt(page, en[2]);
-    await glide(page, o.x, o.y, 20);
-    for (let i = 0; i < 3; i++) { await page.mouse.click(o.x, o.y); await page.waitForTimeout(450); }
-    // curved arrows: oxygen to the C–O bond (from the lone pair facing it), C=C to where the new C–C bond goes, C=O onto oxygen
+    await page.waitForTimeout(500);
+    // curved arrows: each C=C to where a new bond forms, and the last into the middle bond (the new C=C)
     await paletteItem(page, 'arrow', 7);
     await page.waitForTimeout(300);
-    for (const [from, to] of [[o, await mid(en[2], en[1])], [await mid(en[1], en[0]), await mid(en[0], al[1])], [await mid(al[1], al[0]), await atomAt(page, al[0])]]) {
+    for (const [from, to] of [[await mid(2, 3), await mid(3, 4)], [await mid(4, 5), await mid(5, 0)], [await mid(0, 1), await mid(1, 2)]]) {
       await glide(page, from.x, from.y, 14); await page.waitForTimeout(200);
       await drag(page, from, to, 28);
       await page.waitForTimeout(600);
     }
-    // the aldehyde moved and turned: the arrows stay on their atoms and bonds
+    // the dienophile moved away and back: the arrows stay on their bonds and gaps
     await tool(page, 'select');
     await page.waitForTimeout(300);
-    const pts = await Promise.all(al.map((id) => atomAt(page, id)));
-    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
-    await drag(page, { x: Math.min(...xs) - 18, y: Math.min(...ys) - 40 }, { x: Math.max(...xs) + 40, y: Math.max(...ys) + 40 }, 20);
+    const pts = await Promise.all(ids.slice(4).map((id) => atomAt(page, id)));
+    const left = ((await atomAt(page, ids[3])).x + pts[0].x) / 2;
+    const ys = pts.map((p) => p.y), xs = pts.map((p) => p.x);
+    await drag(page, { x: left, y: Math.min(...ys) - 60 }, { x: Math.max(...xs) + 50, y: Math.max(...ys) + 60 }, 20);
     await page.waitForTimeout(400);
-    const ring = pts[4];
-    await drag(page, ring, { x: ring.x + 90, y: ring.y + 70 }, 35);
+    const grab = pts[2];
+    await drag(page, grab, { x: grab.x + 150, y: grab.y + 90 }, 35);
     await page.waitForTimeout(900);
-    await drag(page, { x: ring.x + 90, y: ring.y + 70 }, ring, 35);
+    await drag(page, { x: grab.x + 150, y: grab.y + 90 }, grab, 35);
     await page.waitForTimeout(400);
-    await glide(page, c.x + c.width * 0.4, c.y + c.height * 0.9, 15);
-    await page.mouse.click(c.x + c.width * 0.4, c.y + c.height * 0.9);
-  }, { clip: { x: 0, y: 0, width: 1180, height: 960 }, width: 1000, hold: 2500 });
+    await glide(page, c.x + c.width * 0.5, c.y + c.height * 0.9, 15);
+    await page.mouse.click(c.x + c.width * 0.5, c.y + c.height * 0.9);
+  }, { clip: { x: 0, y: 0, width: 1180, height: 900 }, width: 900, hold: 2500 });
   await browser.close();
 }
 
