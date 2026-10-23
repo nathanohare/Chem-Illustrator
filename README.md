@@ -2,15 +2,19 @@
 
 **Free chemical drawing for the lab, with slides, sheets and documents built in.**
 
-Chem Illustrator draws structures and reaction schemes the way ChemDraw does, with the same hotkeys, the ACS Document 1996 look, and your existing `.cdxml` files. Around that it adds the other programs a synthetic chemist spends the day in: a PowerPoint-style slide editor, an Excel-style sheet, a Word-style document and a graphics canvas. Structures stay editable in all of them, and the chemistry (formula, masses, R/S and E/Z, warnings) is worked out as you draw.
+Chem Illustrator draws structures and reaction schemes with the hotkeys and look ChemDraw users already know, and it opens and saves your `.cdxml` files. Around the drawing it builds in the other programs a synthetic chemist spends the day in: slides, spreadsheets, documents and a canvas for posters and figures. Your structures stay editable in all of them, and the formula, masses, stereochemistry and warnings update as you draw.
 
 It is free and open source (GPL v3), and runs on Windows, macOS and Linux.
 
 > **Beta.** Chem Illustrator is under active development: new features arrive every few days and some things may not work as they should yet. Save often, and please [report anything that goes wrong](docs/guide/feedback.md). If you would rather update less often, choose **Stable** updates in **Edit ▸ Settings ▸ Online**: those versions are tried out on a real computer before they are offered.
 
-**[Download the latest version](https://github.com/nathanohare/Chem-Illustrator/releases/latest)** · **[User guide](docs/README.md)** · **[Send feedback](docs/guide/feedback.md)**
+### [▶ Try it in your browser](https://nathanohare.github.io/Chem-Illustrator/) · [Download the desktop app](https://github.com/nathanohare/Chem-Illustrator/releases/latest)
 
-![A two-step reaction scheme in Drawing mode, with the Analysis panel showing the product's formula and masses](docs/images/drawing.png)
+Nothing to install: the browser version opens straight away. The desktop app adds what a browser can't do: editing drawings inside Word and PowerPoint, AutoSave to your own folders, and automatic updates.
+
+**[User guide](docs/README.md)** · **[Send feedback](docs/guide/feedback.md)**
+
+![A two-step reaction scheme in Drawing mode (dark interface), with the Analysis panel showing the product's formula and masses](docs/images/drawing-dark-ui.png)
 
 ## Smart reaction arrows
 
@@ -24,6 +28,12 @@ Draw an arrow between two structures and a **+** box appears above and below it.
 
 ![A row of four palladium intermediates turned into a Suzuki–Miyaura catalytic cycle with Arrange Scheme](docs/images/catalytic-cycle.gif)
 
+## Reactions that move
+
+**Scheme ▸ Animate Reaction** turns a drawn scheme into an animation: the atoms of each structure move to their places in the next, bonds that break fade out and new ones fade in. An equivalency sign between two drawings of the same molecule turns it in 3-D. Save the clip as a GIF or MP4, or put it on a slide as a looping video that plays in PowerPoint too. Based on [cdxmorph](https://github.com/rshenvi/cdxmorph) by Ryan Shenvi, used with permission.
+
+![A decalone turned in 3-D into its chair conformation, then its ketone taken on to an imine and an amine, and back again; made with Save GIF](docs/images/reaction-animation.gif)
+
 ## Labels and frames that follow your structures
 
 | Compound numbers stay with their compounds | Frames fit what they surround |
@@ -33,16 +43,16 @@ Draw an arrow between two structures and a **+** box appears above and below it.
 
 ## Colour that means something
 
-Fill rings with a colour, a gradient, hatching or dots (patterns can be see-through over a colour), add a drop shadow, and pick out parts of a structure with smooth round, diamond or square highlights, soft-edged or with a shadow. Fills and highlights move with their atoms and come along when you copy a structure.
+Fill rings with a colour, a gradient, hatching or dots (patterns can be see-through over a colour), add a drop shadow, and pick out parts of a structure with round or straight highlights, soft-edged, with a shadow, or centred between a double bond's lines. Fills and highlights move with their atoms and come along when you copy a structure.
 
 ![Estrone with each ring filled differently (gradient, hatching, dots, solid), and a kinase inhibitor with its parts highlighted in round, diamond and square shapes](docs/images/ring-fills.png)
 
 ## Metals and mechanisms
 
-| Metal complexes, from templates | Lone pairs where you want them |
+| Metal complexes, from templates | Arrow pushing that snaps into place |
 |---|---|
-| ![Placing an arene chromium tricarbonyl from the Metallocenes palette, typing Cr and CO onto it, and moving the benzene ring: the η⁶ bond follows the ring's middle, and the side panel shows C9H6CrO3](docs/images/metal-complex.gif) | ![Adding lone pairs to acetate's oxygens by pressing on each oxygen and sweeping round it to aim the pair](docs/images/lone-pairs.gif) |
-| Coordination geometries, metallocenes, piano stools and 26 ligands are a click away. Hapto (η) bonds go to the middle of a ring or π-bond and follow it, and formulas count metal carbonyls, Cp and phosphines the way a chemist would. | Press on an atom with the lone pair, radical or circled charge tool and drag round it to put the symbol exactly where it should go. Charges keep clear of the bonds beside them. |
+| ![Placing an arene chromium tricarbonyl from the Metallocenes palette, typing Cr and CO onto it, and moving the benzene ring: the η⁶ bond follows the ring's middle, and the side panel shows C9H6CrO3](docs/images/metal-complex.gif) | ![A Diels–Alder reaction drawn with curved arrows: from each C=C of butadiene and acrolein to where a new bond forms, and from the last C=C into the middle bond, then the acrolein dragged away and back while the arrows follow it](docs/images/mechanism.gif) |
+| Coordination geometries, metallocenes, piano stools and 26 ligands are a click away. Hapto (η) bonds go to the middle of a ring or π-bond and follow it, and formulas count metal carbonyls, Cp and phosphines the way a chemist would. | Drag from a lone pair, bond or atom to where the electrons go and the arrow snaps on, bending (or turning S-shaped) to stay clear of the structure. Arrows and lone pairs stay stuck to their atoms when you move, turn or flip the structure. |
 
 ## It knows the chemistry
 
@@ -52,6 +62,12 @@ Fill rings with a colour, a gradient, hatching or dots (patterns can be see-thro
 | Rest the mouse on OTBS, Boc, CO2Me or any other abbreviation to see what it stands for. | Type a systematic or common name and the structure is drawn. Names are read on your computer; others can be looked up on PubChem. |
 
 Select anything and the side panel shows its formula, exact mass, m/z for the ion you pick, elemental analysis, isotope pattern, cLogP and TPSA. R/S and E/Z come from the IUPAC 2013 rules, including axial chirality, and atoms with impossible valences get a red mark.
+
+## Energy diagrams
+
+**Chemistry ▸ Energy Diagram** draws a reaction coordinate diagram from a table of levels: compare pathways in different colours, mark the barrier, and draw structures right on the levels.
+
+![An energy diagram comparing a thermal and a BF₃-catalysed Diels–Alder pathway, with ΔG‡ marked and the diene, dienophile and product drawn on their levels (illustrative values)](docs/images/energy-diagram.png)
 
 ## Spelling and chemistry checked everywhere
 
@@ -65,6 +81,14 @@ The eye button shows the page dark on screen, with your structures in light ink.
 
 ![Turning the dark page on, then switching its colours between palettes](docs/images/dark-mode.gif)
 
+The interface itself follows your system's dark setting in every mode, as in the screenshots on this page.
+
+## Getting round a big drawing
+
+Right-drag or middle-drag to pan, Ctrl+wheel to zoom in on the spot under the pointer, and Shift+wheel to scroll sideways. A small navigator map in the corner shows where you are in the whole drawing.
+
+![Panning a long route with the right and middle mouse buttons, zooming at the pointer with Ctrl+wheel and scrolling sideways with Shift+wheel, with the keys and buttons shown as they are pressed](docs/images/navigation.gif)
+
 ## Make it yours
 
 Every hotkey can be changed (**Edit ▸ Hotkeys**), and the hotkeys can be exported and shared. Toolboxes unlock to dock on any edge or float anywhere, and **Customize Toolboxes** rearranges any of them (or new ones of your own) by dragging icons about, as on a phone's home screen. The dark page colours, each mode's accent colour, the scheme spacing, your own templates, nicknames and drawing styles are all settings, kept in one file you can export and import on another computer.
@@ -73,9 +97,11 @@ Every hotkey can be changed (**Edit ▸ Hotkeys**), and the hotkeys can be expor
 
 ## Slides, sheets, documents and designs
 
+Each mode works like the Office program it is named after, and adds what Office can't do for a chemist.
+
 | Slides | Sheets |
 |---|---|
-| ![Slides mode with the reaction scheme on a templated slide, the mouse pointing at a bond of the product](docs/images/slides.png) | ![Sheet mode with structures in cells, formula and MW columns, and a chart](docs/images/sheet.png) |
+| ![Slides mode with the reaction scheme on a templated slide, the mouse pointing at a bond of the product](docs/images/slides-dark-ui.png) | ![Sheet mode with structures in cells, formula and MW columns, and a chart](docs/images/sheet-dark-ui.png) |
 | Layouts, about twenty design templates, transitions, animations and presenter view. The structures on a slide are real structures: point at one and edit it with the same tools and hotkeys. Saves as `.pptx` that opens in PowerPoint. | Excel's keys and formulas, structures in cells, columns that work out formula, MW, HRMS m/z and more, charts and dashboards. Saves as `.xlsx`. |
 
 | Documents | Design |
@@ -123,6 +149,10 @@ The **[user guide](docs/README.md)** covers each mode, every hotkey, and the fil
 ## Feedback
 
 Ideas, problems and questions are welcome. In the program, use **Help ▸ Send Feedback**: it fills in a new [issue](https://github.com/nathanohare/Chem-Illustrator/issues) on this page for you, or copies the text to send another way. See [Feedback, problems and ideas](docs/guide/feedback.md).
+
+## Try it
+
+**[▶ Try Chem Illustrator in your browser](https://nathanohare.github.io/Chem-Illustrator/)**, or **[download the desktop app](https://github.com/nathanohare/Chem-Illustrator/releases/latest)** for Windows, macOS or Linux.
 
 ## For developers
 
