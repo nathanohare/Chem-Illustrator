@@ -206,6 +206,8 @@ import { Navigator, EdgeArrows, paintGrid, paintTint, type Target } from './ui/o
 import { type OrientPrefs, DEFAULT_ORIENT } from './orientation-prefs';
 import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
+import { DEFAULT_AI, type AiPrefs } from './ai/link';
+import { aiSettingsDialog } from './ui/ai-settings';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -1149,6 +1151,8 @@ let namesReady = false;
 
 /** Names the name reader can't read are looked up on PubChem (Edit > Settings). */
 let pubchemNames = true;
+/** The person's own AI model, if linked (Edit > Settings > AI Model). */
+let aiPrefs: AiPrefs = { ...DEFAULT_AI };
 
 /** Why a name couldn't be turned into a structure: a plain message, the part that couldn't be read, and the name reader's own words. */
 interface NameError { error: string; bad?: string; details?: string }
@@ -5889,6 +5893,11 @@ async function generalPreferences(): Promise<void> {
 }
 
 /** Settings ▸ Online: what the program asks the internet for. */
+/** Edit > Settings > AI Model. */
+async function aiSettings(): Promise<void> {
+  await aiSettingsDialog(aiPrefs, (p) => { aiPrefs = p; storeSettings(); });
+}
+
 async function onlinePreferences(): Promise<void> {
   const r = await ask('Online', [
     { name: 'pubchem', label: 'Look up names the name reader can\'t read on PubChem', type: 'checkbox', value: String(pubchemNames),
@@ -5986,6 +5995,7 @@ function currentSettings(): Settings {
     updateCheck,
     updateChannel,
     pubchemNames,
+    ai: aiPrefs,
     convertChemDraw: !!docRead.convertChemDraw,
     matchStructure: matchStructure.on,
     fileTypesOffered,
@@ -6176,6 +6186,7 @@ function applySettings(s: Settings): void {
   updateCheck = s.updateCheck;
   updateChannel = s.updateChannel;
   pubchemNames = s.pubchemNames;
+  aiPrefs = s.ai;
   docRead.convertChemDraw = s.convertChemDraw;
   matchStructure.on = s.matchStructure;
   fileTypesOffered = s.fileTypesOffered;
@@ -7995,6 +8006,7 @@ const settingsWindow = new SettingsWindow([
   { id: 'dark', title: 'Dark Page', words: 'dark mode night paper ink graphite slate appearance colours', open: darkColours },
   { id: 'schemes', title: 'Schemes', words: 'scheme arrow gap plus text size reagents conditions boxes', open: schemeSettings },
   { id: 'autosave', title: 'AutoSave and Recovery', words: 'autosave recovery versions backup copies shared folders onedrive', open: () => keeper.optionsCommand() },
+  { id: 'ai', title: 'AI Model', words: 'ai artificial intelligence claude anthropic chatgpt gpt openai gemini google ollama openrouter api key llm model link connect', open: () => aiSettings() },
   { id: 'online', title: 'Online', words: 'pubchem internet names lookup updates check version privacy stable latest channel beta', open: onlinePreferences },
   { id: 'transfer', title: 'Import and Export', words: 'backup back up copy move settings file new computer install reinstall export import toolboxes hotkeys', open: settingsTransfer },
   { id: 'files', title: 'File Types', words: 'open with default app explorer finder associations cdxml cdx mol sdf docx pptx xlsx double-click', open: () => fileTypesPage(fileTypesHost) },
