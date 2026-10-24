@@ -5,13 +5,16 @@ name: Structure Reader Model
 # pre-release, so it is never "latest" and the updater passes over it). The pack: MolScribe
 # (MIT licence) converted to ONNX by scripts/recognition/export.py, its vocabulary, and the
 # WebAssembly part of the ONNX runtime the app runs it with (the version in package-lock.json).
-# Runs when export.py changes on staging, or by hand. The app asks for PACK in
+# Runs when export.py changes on staging, or by hand; a pull request that changes it builds the
+# pack without publishing it. The app asks for PACK in
 # src/recognise/pack.ts: change both together when the pack changes.
 
 on:
   workflow_dispatch:
   push:
     branches: [staging]
+    paths: [scripts/recognition/**, .github/workflows/recognition-model.yml]
+  pull_request:
     paths: [scripts/recognition/**, .github/workflows/recognition-model.yml]
 
 permissions:
@@ -68,6 +71,7 @@ jobs:
           "
           cat pack/manifest.json
       - name: Publish
+        if: github.event_name != 'pull_request'
         run: |
           if ! gh release view "$PACK" --json tagName > /dev/null 2>&1; then
             gh release create "$PACK" --prerelease --latest=false --target "$GITHUB_SHA" --title "Structure reader model" \
