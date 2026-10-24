@@ -95,8 +95,9 @@ base64 -w0 Chem_Illustrator_App_Store.mobileprovision > profile.txt
    Platform iOS, name "Chem Illustrator", language English, Bundle ID the one from step 1, SKU
    `chem-illustrator`.
 
-The next merge into main (or Actions > iPad app > Run workflow) builds the iPad app and sends it
-to TestFlight. In App Store Connect > the app > **TestFlight**, add yourself and labmates as
+Then add a repository **variable** (Settings > Secrets and variables > Actions > **Variables** tab)
+named `TESTFLIGHT` with the value `on`. The next merge into main (or Actions > iPad app > Run
+workflow) builds the iPad app and sends it to TestFlight. In App Store Connect > the app > **TestFlight**, add yourself and labmates as
 testers; they install the free TestFlight app on their iPads and get each new build there.
 
 ## Renewing
