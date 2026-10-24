@@ -51,6 +51,7 @@ pub fn open_files(app: &tauri::AppHandle, files: Vec<String>) {
         return;
     }
     if let Some(w) = app.get_webview_window("main") {
+        #[cfg(desktop)]
         let _ = w.unminimize();
         let _ = w.set_focus();
     }
