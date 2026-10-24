@@ -230,6 +230,7 @@ describe('the settings file', () => {
       myStyles: [], modeStyles: { document: 'RSC' }, darkPage: true, darkPalette: 'Slate', darkPalettes: [], guides: { drawing: true, slides: false, design: true }, orient: { navigator: false, navCorner: 'tl' as const, navSize: 'large' as const, navHideAll: true, edgeArrows: false, arrowsTo: 'everything' as const, dotGrid: true, gridSpacing: 'fine' as const, gridStrength: 'strong' as const, tint: true, tintStrength: 'faint' as const, goButtons: false }, highlightLooks: [{ name: 'Mine', colour: '#abcdef', style: { glow: true } }], docPins: ['style', 'hf'], docRuler: true, sheetFormulaBar: false, slideRuler: false, slideGrid: false, rulerUnits: 'in', rulerFrom: 'centre', updateCheck: false, updateChannel: 'stable', pubchemNames: false, fileTypesOffered: true, wordObjectsOffered: true, reviewName: 'Nate O.', skipVersion: '0.1.80', recentFiles: ['C:\\Work\\a.cdxml'], recentSymbols: ['°', 'Å', '⇌'], quickParts: [{ name: 'Lab address', runs: [{ text: 'Auburn', bold: true }], paras: [{ align: 'center' as const }] }], docDesign: { theme: 'Report', spacing: 'Open' },
       scheme: { ...DEFAULT_SCHEME_PREFS, structGap: 14, textAlign: 'left', fit: false },
       keep: { ...DEFAULT_KEEP, autoSave: true, recoveryMinutes: 5, changedOnDisk: 'reload' as const, lockFiles: false },
+      ai: { provider: 'anthropic' as const, model: 'claude-sonnet-5-5', base: '' },
     };
     const text = settingsText(s);
     expect(text).toContain('"app": "Chem Illustrator"');

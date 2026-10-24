@@ -2,6 +2,7 @@
 // this opens the window, reads and writes the files the user picks, and runs a
 // self-test used by the automatic Windows build.
 
+mod ai;
 mod clipboard;
 mod file_types;
 mod keep;
@@ -326,7 +327,10 @@ pub fn run() {
             ole::ole_registered,
             ole::ole_register,
             ole::ole_object_folder,
-            web::web_get
+            web::web_get,
+            ai::ai_key_set,
+            ai::ai_key_has,
+            ai::ai_request
         ])
         .build(tauri::generate_context!())
         .expect("error while running Chem Illustrator")
