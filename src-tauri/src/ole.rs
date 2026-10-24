@@ -134,6 +134,7 @@ pub fn start(app: &tauri::AppHandle) {
 fn hand_over(app: &tauri::AppHandle, edit: Edit) {
     use tauri::{Emitter, Manager};
     if let Some(w) = app.get_webview_window("main") {
+        #[cfg(desktop)]
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();

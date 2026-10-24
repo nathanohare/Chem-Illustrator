@@ -108,6 +108,35 @@ jobs:
       - name: Number this version
         shell: bash
         run: node scripts/release.mjs prepare "$VERSION" "$RELEASE"
+      - name: Sign and notarise the Mac app (once the Apple secrets are set)
+        # With a Developer ID certificate and an App Store Connect API key in the repository's
+        # secrets (docs/apple-signing.md), Tauri signs the app and has Apple notarise it, so
+        # Macs open it without a warning. Without them it is signed ad hoc, as before.
+        if: matrix.platform == 'macos'
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          if [ -z "$CERT" ] || [ -z "$IDENTITY" ]; then echo "No Developer ID certificate in the secrets: the Mac app is signed ad hoc."; exit 0; fi
+          {
+            echo "APPLE_CERTIFICATE<<EOF_CERT"; echo "$CERT"; echo "EOF_CERT"
+            echo "APPLE_CERTIFICATE_PASSWORD=$CERT_PASSWORD"
+            echo "APPLE_SIGNING_IDENTITY=$IDENTITY"
+          } >> "$GITHUB_ENV"
+          if [ -n "$API_KEY_P8" ]; then
+            printf '%s\n' "$API_KEY_P8" > "$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
+            {
+              echo "APPLE_API_ISSUER=$API_ISSUER"
+              echo "APPLE_API_KEY=$API_KEY_ID"
+              echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
+            } >> "$GITHUB_ENV"
+          else
+            echo "No App Store Connect API key in the secrets: the Mac app is signed but not notarised."
+          fi
       - name: Build the app and its installers
         run: npm run desktop:build -- ${{ matrix.args }}
       - name: Start the app and run its self-test

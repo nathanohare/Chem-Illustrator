@@ -1,0 +1,79 @@
+name: iPad app
+
+# The iPad app: the same web page as the desktop app, in Tauri's iOS shell.
+#
+# On a pull request that changes the shell (src-tauri) this only checks that the shell builds
+# for iOS and that the Xcode project can be made. On a merge into main, or on request (Actions >
+# iPad app > Run workflow), it also builds the signed app and sends it to TestFlight, once the
+# Apple secrets are set (docs/apple-signing.md). Without them the signed steps are skipped.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths: ['src-tauri/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    env:
+      # 0.1.<build number>: each TestFlight build is newer than the one before
+      VERSION: 0.1.${{ github.run_number }}
+      SHIP: ${{ github.event_name != 'pull_request' && secrets.IOS_CERTIFICATE != '' && secrets.IOS_MOBILE_PROVISION != '' && secrets.APPLE_API_KEY_P8 != '' && secrets.APPLE_TEAM_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ios
+      - run: npm ci
+      - run: brew install xcodegen
+      - name: Number this version
+        run: node scripts/release.mjs prepare "$VERSION" false
+      - name: Check the shell builds for iOS
+        working-directory: src-tauri
+        run: cargo build --lib --target aarch64-apple-ios
+      - name: Make the Xcode project
+        env:
+          # a stand-in Team ID until the real one is in the secrets (enough to check the project)
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID || '0000000000' }}
+        run: |
+          npx tauri ios init --ci
+          # iPad only (not iPhone): the drawing needs the room
+          sed -i '' 's/TARGETED_DEVICE_FAMILY = "1,2"/TARGETED_DEVICE_FAMILY = 2/g' src-tauri/gen/apple/*.xcodeproj/project.pbxproj
+          sed -i '' 's/TARGETED_DEVICE_FAMILY: "1,2"/TARGETED_DEVICE_FAMILY: "2"/g' src-tauri/gen/apple/project.yml || true
+          # the privacy manifest goes in beside the app's Info.plist
+          cp src-tauri/ios/PrivacyInfo.xcprivacy src-tauri/gen/apple/*_iOS/
+          # the app icons for iPad, from the same picture as the desktop icons
+          npx tauri icon src-tauri/icons/icon.png --ios-color '#ffffff'
+          ls src-tauri/gen/apple
+      - name: Build the signed app
+        if: env.SHIP == 'true'
+        env:
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          IOS_CERTIFICATE: ${{ secrets.IOS_CERTIFICATE }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          IOS_MOBILE_PROVISION: ${{ secrets.IOS_MOBILE_PROVISION }}
+        run: npx tauri ios build --export-method app-store-connect
+      - name: Send it to TestFlight
+        if: env.SHIP == 'true'
+        env:
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          printf '%s\n' "$API_KEY_P8" > ~/.appstoreconnect/private_keys/AuthKey_$API_KEY_ID.p8
+          ipa=$(find src-tauri/gen/apple/build -name '*.ipa' | head -n 1)
+          echo "Uploading $ipa"
+          xcrun altool --upload-app --type ios --file "$ipa" --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER"
+      - name: Say what was skipped
+        if: env.SHIP != 'true' && github.event_name != 'pull_request'
+        run: echo "No iOS certificate, provisioning profile or App Store Connect key in the secrets yet, so nothing was signed or sent to TestFlight (docs/apple-signing.md)."

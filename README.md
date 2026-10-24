@@ -130,7 +130,7 @@ Chem Illustrator is written in TypeScript and runs as a [Tauri](https://tauri.ap
 
 ## Licence
 
-Chem Illustrator is free software: you can use, share and change it under the terms of the [GNU General Public License](LICENSE), version 3 or (at your option) any later version. It comes with no warranty.
+Chem Illustrator is free software: you can use, share and change it under the terms of the [GNU General Public License](LICENSE), version 3 or (at your option) any later version. It comes with no warranty. An [additional permission](APP-STORE-EXCEPTION.md) allows it to be distributed through Apple's App Store and TestFlight.
 
 Everything it uses is free and open source, and keeps its own licence: RDKit (BSD-3-Clause), OPSIN (MIT), cdxmorph (MIT), Tauri (MIT or Apache-2.0), the bundled fonts (SIL Open Font License) and others listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
