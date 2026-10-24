@@ -21,15 +21,18 @@ serde_json = "1"
 serde = { version = "1", features = ["derive"] }
 tauri = { version = "2.12", features = [] }
 tauri-plugin-dialog = "2.8"
-tauri-plugin-process = "2"
-tauri-plugin-updater = "2"
 tauri-plugin-opener = "2"
-tauri-plugin-single-instance = "2"
 # Data > Get Data > From Web: the same HTTP client (and TLS) the updater already brings in
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "system-proxy"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 # the structure reader's model pack is checked against its SHA-256 sums
 sha2 = "0.10"
+
+# desktop only: on an iPad the App Store updates the app, and there is only ever one copy running
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+tauri-plugin-process = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-single-instance = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Registry", "Win32_UI_Shell"] }
