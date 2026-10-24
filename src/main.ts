@@ -208,6 +208,8 @@ import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
 import { aiSettingsDialog } from './ui/ai-settings';
+import { decodePicture, importPictures, type ImportHost } from './ui/import-structures';
+import { placeRead } from './recognise/check';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -3161,6 +3163,74 @@ function placeClip(v: { mp4?: Uint8Array; still: Uint8Array; gif?: Uint8Array; w
   editor.changed();
 }
 
+// ------------------------------------------------------------------ structures from pictures
+
+const importHost: ImportHost = {
+  style: () => doc.style,
+  chem,
+  ai: () => aiPrefs,
+  flash,
+  // side by side from the middle of the window, two bond lengths apart, selected
+  place(chosen) {
+    finishTyping();
+    const gap = doc.style.bondLength * 2;
+    const widths = chosen.map(({ checked }) => {
+      const xs = [...checked.doc.atoms.values()].map((a) => a.x);
+      return xs.length ? Math.max(...xs) - Math.min(...xs) : 0;
+    });
+    const total = widths.reduce((s, w) => s + w, 0) + gap * (chosen.length - 1);
+    const c = pasteCentre();
+    let x = c.x - total / 2;
+    const ids: number[] = [];
+    doc.edit(chosen.length === 1 ? 'Import Structure' : 'Import Structures', () => {
+      chosen.forEach(({ result, checked }, i) => {
+        ids.push(...placeRead(doc, result, checked.molblock, x + widths[i] / 2, c.y));
+        x += widths[i] + gap;
+      });
+    });
+    selectNewAtoms(ids);
+    flash(chosen.length === 1 ? 'Placed the structure. Check it against the picture.' : `Placed ${chosen.length} structures. Check them against the pictures.`, 5000);
+  },
+};
+
+/** File > Import Structures from Picture: the selected picture, or one chosen from a file. */
+async function importPicture(): Promise<void> {
+  finishTyping();
+  const sel = [...editor.sel.shapes].map((id) => doc.shapes.get(id)).filter((s): s is Shape => s?.kind === 'picture' && !!s.src);
+  const pics: { name: string; bytes: Uint8Array; mime: string }[] = sel.length
+    ? sel.map((s, i) => ({ name: sel.length > 1 ? `Picture ${i + 1}` : 'Selected picture', ...fromDataUrl(s.src!) }))
+    : await pickPicture().then((p) => (p ? [p] : []));
+  await readPictures(pics);
+}
+
+/** File > Paste Picture as Structure: a picture on the clipboard (a screenshot, or copied from a paper). */
+async function importPastedPicture(): Promise<void> {
+  finishTyping();
+  let got: { bytes: Uint8Array; mime: string } | null = null;
+  try {
+    const p = nativeClipboard ? await readNativeClipboard() : await readWebClipboard();
+    if (p.kind === 'picture') got = { bytes: p.bytes, mime: p.mime };
+  } catch { /* nothing readable */ }
+  if (!got) { flash('Copy a picture of a structure first (a screenshot works), then use this again.'); return; }
+  await readPictures([{ name: 'Pasted picture', ...got }]);
+}
+
+async function readPictures(pics: { name: string; bytes: Uint8Array; mime: string }[]): Promise<void> {
+  if (!pics.length) return;
+  const found = [];
+  for (const p of pics) {
+    const px = await decodePicture(p.bytes, p.mime);
+    if (px) found.push({ where: p.name, pixels: px });
+    else flash(`${p.name} can't be read as a picture.`);
+  }
+  await importPictures(importHost, found, {
+    title: 'Import Structures from Picture',
+    note: 'Photos and scans of hand drawings work best with dark lines on plain paper, one structure to a picture. Check each structure against its picture before you place it: fix the SMILES, or tick it off.',
+    tickDoubtful: true,
+    photo: true,
+  });
+}
+
 /** Insert > Crop Picture: the selected picture's handles cut its edges off until Esc or a click elsewhere. */
 function cropPicture(): void {
   const pics = [...editor.sel.shapes].filter((id) => doc.shapes.get(id)?.kind === 'picture');
@@ -4636,6 +4706,8 @@ const COMMANDS: Record<string, () => unknown> = {
   undo: () => undo(),
   redo: () => redo(),
   'insert-picture': () => insertPicture(),
+  'import-picture': () => importPicture(),
+  'import-paste': () => importPastedPicture(),
   'insert-video': () => void insertMedia(false),
   'insert-slide-zoom': () => void insertZoom(false),
   'insert-summary-zoom': () => void insertZoom(true),
@@ -7124,7 +7196,7 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'undo' }, { cmd: 'redo' }, null,
       ...(ws.active.mode === 'slides' ? [{ cmd: 'new-comment', label: 'New Comment' }, { cmd: 'show-comments', label: 'Show Comments' }, null] : []),
       ...(ws.active.mode === 'slides' || design ? [{ cmd: 'format-background', label: 'Format Background…' }, null] : []),
-      { label: 'Insert', items: [{ cmd: 'name-to-structure' }, { cmd: 'periodic-table' }, { cmd: 'insert-picture' }, { cmd: 'text-box' }, { cmd: 'insert-symbol' }, ...(design ? [{ cmd: 'design-shapes', label: 'Shape…' }, { cmd: 'design-icons', label: 'Icon…' }, { cmd: 'connector-tool' }] : []), ...(ws.active.mode === 'slides' ? [{ cmd: 'slide-shapes', label: 'Shape…' }, { cmd: 'slide-icons', label: 'Icon…' }] : [])] },
+      { label: 'Insert', items: [{ cmd: 'name-to-structure' }, { cmd: 'periodic-table' }, { cmd: 'insert-picture' }, { cmd: 'import-picture', label: 'Structure from Picture…' }, { cmd: 'text-box' }, { cmd: 'insert-symbol' }, ...(design ? [{ cmd: 'design-shapes', label: 'Shape…' }, { cmd: 'design-icons', label: 'Icon…' }, { cmd: 'connector-tool' }] : []), ...(ws.active.mode === 'slides' ? [{ cmd: 'slide-shapes', label: 'Shape…' }, { cmd: 'slide-icons', label: 'Icon…' }] : [])] },
       { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }] },
       { cmd: 'drawing-style' },
       view,
@@ -7188,7 +7260,7 @@ function drawingMenu(): MenuItem[] {
       { label: 'Shape Effects', items: effectsMenu() },
       { label: 'Shape Fill', items: [{ cmd: 'shape-picture-fill', label: 'Picture…' }, { cmd: 'shape-no-picture-fill', label: 'No Picture' }] },
     ] : []),
-    ...(shapes.some((x) => x.kind === 'picture') ? [{ cmd: 'crop' }, { cmd: 'picture-format' }, { label: 'Picture Style', items: PICTURE_STYLES.map((p) => ({ cmd: `picture-style-${p.id}`, label: p.name })) }] : []),
+    ...(shapes.some((x) => x.kind === 'picture') ? [{ cmd: 'import-picture', label: 'Read Structure from Picture…' }, { cmd: 'crop' }, { cmd: 'picture-format' }, { label: 'Picture Style', items: PICTURE_STYLES.map((p) => ({ cmd: `picture-style-${p.id}`, label: p.name })) }] : []),
     ...(ws.active.mode === 'slides' ? [{ label: 'Animation', items: [
       ...ANIM_COMMANDS.slice(0, EFFECTS.length), null, ...ANIM_COMMANDS.slice(EFFECTS.length), null,
       { cmd: 'remove-animation', label: 'Remove Animation' }, { cmd: 'animation-pane', label: 'Animation Pane' }, { cmd: 'preview-slide', label: 'Preview Slide' },

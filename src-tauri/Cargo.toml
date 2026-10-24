@@ -28,6 +28,8 @@ tauri-plugin-single-instance = "2"
 # Data > Get Data > From Web: the same HTTP client (and TLS) the updater already brings in
 reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider", "system-proxy"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
+# the structure reader's model pack is checked against its SHA-256 sums
+sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Registry", "Win32_UI_Shell"] }

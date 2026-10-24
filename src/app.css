@@ -2615,3 +2615,19 @@ html.touch-ui .toolbox.vertical .tb-swatches { grid-template-columns: repeat(4, 
 .pad-row button[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .pad-close { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 18px; line-height: 1; }
 html.touch-ui #flash { bottom: 150px; }
+/* File > Import > From PDF, From Picture: the review screen */
+dialog.import-review { width: min(96vw, 900px); max-height: 92vh; display: flex; flex-direction: column; }
+dialog.import-review[open] { display: flex; }
+.import-list { overflow: auto; flex: 1; min-height: 120px; border: 1px solid var(--line); border-radius: 6px; }
+.import-row { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: 10px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+.import-row:last-child { border-bottom: 0; }
+.import-row.doubtful { background: color-mix(in srgb, var(--slow) 7%, transparent); }
+.import-picture, .import-structure { max-width: 100%; max-height: 150px; object-fit: contain; justify-self: center; background: #fff; }
+.import-result { color: var(--muted); text-align: center; }
+.import-side { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.import-where { font-weight: 600; font-size: 0.9em; }
+.import-smiles { font-family: var(--mono, monospace); font-size: 12px; width: 100%; box-sizing: border-box; }
+.import-problem { color: var(--slow); font-size: 12px; }
+.import-side button { align-self: flex-start; }
+dialog.import-review .ask-buttons .grow { flex: 1; }
+@media (max-width: 600px) { .import-row { grid-template-columns: auto 1fr 1fr; } .import-side { grid-column: 1 / -1; } }
