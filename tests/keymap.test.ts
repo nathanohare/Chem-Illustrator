@@ -10,6 +10,7 @@ import {
   registerToolNames, KeyPress,
 } from '../src/editor/keymap';
 import { parseSettings, settingsText, DEFAULT_SETTINGS } from '../src/settings';
+import { stepUiScale } from '../src/ui/ui-scale';
 
 const press = (key: string, more: Partial<KeyPress> = {}): KeyPress => ({ key, ...more });
 
@@ -223,11 +224,11 @@ describe('the settings file', () => {
       hotkeys: { command: { 'Ctrl+M': 'command zoom-in' } }, keepHotspotOnBond: false, fixedLength: true, fixedAngles: false, devTools: true, showRoles: false,
       chemTyping: false, stereoItalic: false, boldNumbers: true, autoLinks: false, linkCtrlClick: false, spellCheck: true, replacements: [['oC', '°C'], ['rxn', 'reaction']] as [string, string][], dictionary: ['Fooxane'],
       modeColours: { style: 'off' as const, drawing: '#2f6fdf', slides: '#00aa00', sheet: '#1e8a50', document: '#2647a8', design: '#7b3fbf' },
-      nicknames: { Qq: 'CC' }, templates: [], splitWidth: 0.6, scrollBars: false, titleBar: 'system' as const, ribbonCollapsed: true, page: { w: 523, h: 770, grow: false, name: 'a4' }, welcomed: true, textBar: 'floating' as const, groupTips: false, citeStyle: 'rsc', citeOptions: { lastAuthor: 'none', etAlOver: 5 }, methylStyle: 'Me' as const, axialStyle: 'PM' as const, circledCharges: true, textToAtom: false, groupClick: 'item' as const, groupOutline: false, rerouteArrows: false, superscriptR: false, linkSide: 'left' as const, slideTemplate: 'harbor', slideThemes: [{ id: 'mine-1', name: 'Group', group: 'Mine' as const, background: '#fafafa', titleFont: 'Inter', bodyFont: 'Lato', titleColor: '#112233', textColor: '#223344', footerColor: '#778899', accent: '#aa0000', accent2: '#00aa00', decor: 'frame' as const, titleBold: false, titleSlide: { background: '#000000', titleColor: '#ffffff', textColor: '#eeeeee' } }], askWholeDrawing: false,
+      nicknames: { Qq: 'CC' }, templates: [], splitWidth: 0.6, scrollBars: false, titleBar: 'system' as const, ribbonCollapsed: true, uiScale: 1.25, page: { w: 523, h: 770, grow: false, name: 'a4' }, welcomed: true, textBar: 'floating' as const, groupTips: false, touchMode: 'on' as const, penSketch: true, citeStyle: 'rsc', citeOptions: { lastAuthor: 'none', etAlOver: 5 }, methylStyle: 'Me' as const, axialStyle: 'PM' as const, circledCharges: true, textToAtom: false, groupClick: 'item' as const, groupOutline: false, rerouteArrows: false, superscriptR: false, linkSide: 'left' as const, slideTemplate: 'harbor', slideThemes: [{ id: 'mine-1', name: 'Group', group: 'Mine' as const, background: '#fafafa', titleFont: 'Inter', bodyFont: 'Lato', titleColor: '#112233', textColor: '#223344', footerColor: '#778899', accent: '#aa0000', accent2: '#00aa00', decor: 'frame' as const, titleBold: false, titleSlide: { background: '#000000', titleColor: '#ffffff', textColor: '#eeeeee' } }], askWholeDrawing: false,
       palettes: [{ name: 'Group colours', colors: ['#1f5fbf', '#e69f00'] }],
       toolboxes: { ...defaultToolboxes(), locked: false, custom: ['tool:chain', 'cmd:clean-up'] },
       ribbons: { slides: { tabs: ['insert', 'home'], hiddenGroups: ['g:clipboard'], own: { abc: { title: 'Mine', items: ['cmd:clean-up'] } } } },
-      myStyles: [], modeStyles: { document: 'RSC' }, darkPage: true, darkPalette: 'Slate', darkPalettes: [], guides: { drawing: true, slides: false, design: true }, orient: { navigator: false, navCorner: 'tl' as const, navSize: 'large' as const, navHideAll: true, edgeArrows: false, arrowsTo: 'everything' as const, dotGrid: true, gridSpacing: 'fine' as const, gridStrength: 'strong' as const, tint: true, tintStrength: 'faint' as const, goButtons: false }, highlightLooks: [{ name: 'Mine', colour: '#abcdef', style: { glow: true } }], docPins: ['style', 'hf'], docRuler: true, sheetFormulaBar: false, slideRuler: false, slideGrid: false, rulerUnits: 'in', rulerFrom: 'centre', updateCheck: false, updateChannel: 'stable', pubchemNames: false, fileTypesOffered: true, wordObjectsOffered: true, reviewName: 'Nate O.', skipVersion: '0.1.80', recentFiles: ['C:\\Work\\a.cdxml'], recentSymbols: ['°', 'Å', '⇌'], quickParts: [{ name: 'Lab address', runs: [{ text: 'Auburn', bold: true }], paras: [{ align: 'center' as const }] }], docDesign: { theme: 'Report', spacing: 'Open' },
+      myStyles: [], modeStyles: { document: 'RSC' }, darkPage: true, darkPalette: 'Slate', darkPalettes: [], guides: { drawing: true, slides: false, design: true }, orient: { navigator: false, navCorner: 'tl' as const, navSize: 'large' as const, navHideAll: true, edgeArrows: false, arrowsTo: 'everything' as const, dotGrid: true, gridSpacing: 'fine' as const, gridStrength: 'strong' as const, tint: true, tintStrength: 'faint' as const, goButtons: false }, highlightLooks: [{ name: 'Mine', colour: '#abcdef', style: { glow: true } }], docPins: ['style', 'hf'], docRuler: true, sheetFormulaBar: false, slideRuler: false, slideGrid: false, rulerUnits: 'in', rulerFrom: 'centre', updateCheck: false, updateChannel: 'stable', pubchemNames: false, convertChemDraw: true, matchStructure: false, fileTypesOffered: true, wordObjectsOffered: true, reviewName: 'Nate O.', skipVersion: '0.1.80', recentFiles: ['C:\\Work\\a.cdxml'], recentSymbols: ['°', 'Å', '⇌'], quickParts: [{ name: 'Lab address', runs: [{ text: 'Auburn', bold: true }], paras: [{ align: 'center' as const }] }], docDesign: { theme: 'Report', spacing: 'Open' },
       scheme: { ...DEFAULT_SCHEME_PREFS, structGap: 14, textAlign: 'left', fit: false },
       keep: { ...DEFAULT_KEEP, autoSave: true, recoveryMinutes: 5, changedOnDisk: 'reload' as const, lockFiles: false },
       ai: { provider: 'anthropic' as const, model: 'claude-sonnet-5-5', base: '' },
@@ -246,5 +247,21 @@ describe('drop-down lists for typed boxes', () => {
     expect(comboChoices(sizes, '11', true)).toEqual(['11', '110']);
     expect(comboChoices(['Arial', 'Times New Roman', 'Georgia'], 'new', true)).toEqual(['Times New Roman']);
     expect(comboChoices(sizes, 'zz', true)).toEqual(sizes);
+  });
+});
+
+describe('interface size', () => {
+  it('keeps a saved size to the sizes the window can use', () => {
+    expect(parseSettings(JSON.stringify({ uiScale: 1.25 })).uiScale).toBe(1.25);
+    expect(parseSettings(JSON.stringify({ uiScale: 9 })).uiScale).toBe(2);
+    expect(parseSettings(JSON.stringify({ uiScale: 'big' })).uiScale).toBe(1);
+    expect(parseSettings('{}').uiScale).toBe(1);
+  });
+  it('steps up and down the list of sizes', () => {
+    expect(stepUiScale(1, 1)).toBe(1.1);
+    expect(stepUiScale(1, -1)).toBe(0.9);
+    expect(stepUiScale(1.2, 1)).toBe(1.25);
+    expect(stepUiScale(1.5, 1)).toBe(1.5);
+    expect(stepUiScale(0.8, -1)).toBe(0.8);
   });
 });

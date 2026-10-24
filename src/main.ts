@@ -84,7 +84,7 @@ import { editMaster } from './ui/master-dialog';
 import { editDrawingStyle } from './ui/style-dialog';
 import type { DocText } from './document/document';
 import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from './dark-page';
-import { applyStyle, restyleContents, styleNamed, type StyleMode } from './drawing-styles';
+import { STYLE_PRESETS, applyStyle, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
 import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
 import { pngWithDpi } from './render/emf-read';
 import { whiteToClear } from './render/background';
@@ -124,7 +124,7 @@ import type { Item } from './render/vector';
 import { PAPERS, defaultPaper, orient, placeIn, inside, placeSvg, pageSvg } from './print-layout';
 import { printPages } from './ui/print';
 import { dataUrl, fromDataUrl, imageSize, loadImage, onImageReady, pictureMime, showableSrc, webpToPng } from './render/images';
-import { freeRing, fusedRing, placeRing, sprout, ringOnAtom, ringDir } from './chem/chemgeom';
+import { freeRing, matchStructure, fusedRing, placeRing, sprout, ringOnAtom, ringDir } from './chem/chemgeom';
 import { Toolbar, ToolbarItem, PaletteDef, type ToolDef } from './ui/toolbar';
 import { StylePanel, tidyStyle } from './ui/style-panel';
 import { installCombos } from './ui/combo';
@@ -161,6 +161,8 @@ import { SettingsWindow } from './ui/settings-window';
 import { fileTypesPage, FILE_TYPES } from './ui/file-types-page';
 import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed } from './ui/ribbon-fit';
 import { placeTitleBar, titleBarPlace } from './ui/title-bar';
+import { canScaleUi, setUiScale, stepUiScale, uiScale, UI_SCALES } from './ui/ui-scale';
+import { installTouchUi, keypadShowing, markSketch, setTouchMode, showKeypad, touchMode, touchOn } from './ui/touch-ui';
 import { FeedbackDialog } from './ui/feedback-dialog';
 import { addRecent, removeRecent, recentLabel } from './recent';
 import { NameReader, captionName, attachmentAtoms, cxNotes } from './chem/names';
@@ -404,6 +406,7 @@ const TOOL_GROUPS: ToolbarItem[][] = [
     BRACKETS,
     SHAPES,
     { name: 'fragment', title: 'Mass fragmentation: drag a line across bonds (or click a bond) to break them and label each piece with its formula and mass' },
+    { name: 'sketch', title: 'Sketch (for a pen): draw freehand. Lines become bonds, a loop with corners a ring, a circle benzene (inside a ring: aromatic), letters label atoms (C N O S P F Cl Br I H, + −), a scribble erases' },
   ],
   [
     { name: 'ring-3', title: 'Cyclopropane' },
@@ -475,6 +478,7 @@ const toolbar = new Toolbar($<HTMLDivElement>('#tools'), TOOL_GROUPS, (name) => 
 }, (name, size) => TOOL_PALETTE.get(name)?.icon?.(name, size));
 
 const HINTS: Record<string, string> = {
+  sketch: 'Draw freehand: a line is a bond, a zig-zag a chain, over a bond doubles it; a loop with corners is a ring, a circle benzene; write C, N, O, Cl, Br, + or − on an atom; scribble to erase.',
   connector: 'Drag from one shape\'s blue dot to another\'s: the connector sticks to both and follows them when they move.',
   'connector-elbow': 'Drag from one shape\'s blue dot to another\'s: the connector bends square and follows the shapes when they move.',
   select: 'Click to select (Shift or Ctrl+click adds), drag to box-select or move. Ctrl+drag copies; Shift keeps a drag straight. Double-click selects a whole structure. Delete removes.',
@@ -522,6 +526,7 @@ const GEO_HINT = 'Click on the page to put the shape down, or drag to draw it at
 
 editor.onToolChange = (name) => {
   toolbar.setActive(name);
+  markSketch(name === 'sketch');
   for (const b of document.querySelectorAll<HTMLElement>('.tb-tool')) b.classList.toggle('active', b.dataset.tool === name);
   designLib?.setActive(name);
   if (name.startsWith('geo:')) { $('#hint').textContent = GEO_HINT; return; }
@@ -530,6 +535,15 @@ editor.onToolChange = (name) => {
     : t.kind === 'shape' ? SHAPE_HINT : t.kind === 'bracket' ? BRACKET_HINT : t.kind === 'template' ? TEMPLATE_HINT : BOND_HINT);
 };
 editor.setTool('bond-single');
+
+// tablets: bigger buttons, long-press menus, double taps and the atom keypad (View > Touch Mode)
+installTouchUi({
+  canvasHost: host,
+  keypad: (atom, bond) => editor.keypad(atom, bond),
+  command: (cmd) => { command(cmd); },
+  say: (msg) => flash(msg),
+  changed: (on) => $('[data-cmd="atom-keypad"]')?.setAttribute('aria-checked', String(on && keypadShowing())),
+}, 'auto');
 
 // ---------------------------------------------------------------- top bar actions
 
@@ -568,7 +582,7 @@ async function dropFiles(files: File[], at: { x: number; y: number }): Promise<v
   const inside = at.x >= r.left && at.x <= r.right && at.y >= r.top && at.y <= r.bottom;
   for (const f of files) {
     const bytes = new Uint8Array(await f.arrayBuffer());
-    const mime = /\.(cdxml|cdx|pptx|xlsx|xlsm|xls|ods|docx|csv|tsv|txt|sdf?)$/i.test(f.name) ? null : pictureMime(f.name, bytes);
+    const mime = /\.(cdxml|cdx|cds|pptx|xlsx|xlsm|xls|ods|docx|csv|tsv|txt|sdf?)$/i.test(f.name) ? null : pictureMime(f.name, bytes);
     if (mime && sheetActive()) flash('Pictures can\'t go in a cell yet. Drop sheet files (.xlsx, .csv, .sdf) to open them.');
     else if (mime && docActive()) docMode.dropPicture(bytes, mime);
     else if (mime) placePicture(bytes, mime, inside ? renderer.toDoc(at.x - r.left, at.y - r.top) : null);
@@ -1078,7 +1092,7 @@ setLinkHost({
   },
   async openHere(path) {
     // drawings, documents, slides, sheets and workspaces open in a tab here
-    if (!/\.(cdxml|cdx|docx|pptx|xlsx|xlsm|xls|ods|csv|tsv|sdf|sd)$/i.test(path) && !path.toLowerCase().endsWith(`.${WORKSPACE.extension}`)) return false;
+    if (!/\.(cdxml|cdx|cds|docx|pptx|xlsx|xlsm|xls|ods|csv|tsv|sdf|sd)$/i.test(path) && !path.toLowerCase().endsWith(`.${WORKSPACE.extension}`)) return false;
     if (!isTauri()) return false;
     await openRecent(path);
     return true;
@@ -1786,6 +1800,7 @@ const docFiles: DocxDeps = {
 
 /** Opening Word files: ChemDraw objects in them become structures, kept at the size they had. */
 const docRead: DocxReadDeps = {
+  convertChemDraw: false,
   chemdraw: (cdx, style) => docRead.cdxml!(cdxToCdxml(cdx), style),
   cdxml: (text, style) => {
     const d = readCdxml(text).doc;
@@ -1833,6 +1848,7 @@ const ws: Workspace = new Workspace(doc, {
   saved: (tab, data, how, was) => keeper.saved(tab, data, how, was),
   autoSaveFailed: (tab, msg) => keeper.autoSaveFailed(tab, msg),
   opened: (tab) => keeper.opened(tab),
+  styleSheet: (tab, style) => void offerStyleSheet(tab, style),
   dropped: (tab) => {
     keeper.dropped(tab);
     // a drawing being edited for Word: Word hears that the editing is over
@@ -3287,6 +3303,35 @@ async function drawingStyleDialog(): Promise<void> {
   flash(`Structures are now drawn in ${next.name}${got.forNew ? `, and new ${STYLE_KINDS[mode].plural} will start in it` : ''}.`, 4000);
 }
 
+/**
+ * A ChemDraw style sheet (.cds) was opened: its contents show in their tab, and its settings can
+ * be kept as one of your own drawing styles (and made the style new drawings start in).
+ */
+async function offerStyleSheet(tab: Tab, style: DocStyle): Promise<void> {
+  const known = [...STYLE_PRESETS.map((p) => p.style), ...ownStyles].find((s) => sameLook(s, style));
+  if (known) {
+    flash(`${tab.name} has the same settings as ${known.name}, which is already in Drawing Style.`, 5000);
+    return;
+  }
+  const base = tab.name.replace(/\.cds$/i, '');
+  const got = await ask('Use this style sheet?', [
+    { name: 'name', label: 'Name', value: base },
+    { name: 'forNew', label: 'Start new drawings in it', value: 'false', type: 'checkbox' },
+  ], {
+    ok: 'Add to My Styles',
+    note: `${tab.name} is a ChemDraw style sheet: bond length ${style.bondLength} pt, line width ${style.lineWidth} pt, bold width ${style.boldWidth} pt, `
+      + `${style.labelFont} ${style.labelSize} pt labels. Keep these settings as one of your own drawing styles, to pick in Drawing Style in any mode? `
+      + 'Its contents are open in a tab either way.',
+  });
+  if (!got) return;
+  const st: DocStyle = { ...style, name: got.name.trim() || base };
+  const had = ownStyles.findIndex((s) => s.name === st.name);
+  ownStyles = had >= 0 ? ownStyles.map((s, i) => (i === had ? st : s)) : [...ownStyles, st];
+  if (got.forNew === 'true') modeStyles.drawing = st.name;
+  storeSettings();
+  flash(`${st.name} is now one of your drawing styles${got.forNew === 'true' ? ', and new drawings will start in it' : ''}.`, 4000);
+}
+
 async function slideMaster(): Promise<void> {
   const d = deckNow();
   if (!d) return;
@@ -4098,6 +4143,11 @@ const docMode = new DocumentMode({
   pickObjectFile: () => pickObjectFile(),
   objectPicture: (name, bytes, icon) => objectPictureOf(name, bytes, icon),
   openObjectFile: (file, changed) => openObjectFile(file, changed),
+  chemdrawDrawing: (cdx, style) => {
+    const contents = docRead.chemdraw!(cdx, style);
+    const size = contents && docRead.drawingSize!(contents, style);
+    return contents && size ? { contents, w: size.w } : null;
+  },
   clipboardObject: nativeClipboard ? () => clipboardObject() : undefined,
   pickReferenceFile: () => pickReferenceFile(),
   preferredChanged: () => storeSettings(),
@@ -4257,7 +4307,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'group-tips', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -4736,12 +4786,26 @@ const COMMANDS: Record<string, () => unknown> = {
   'show-stereo': () => previewStereo(!renderer.previewStereo),
   'scroll-bars': () => { showScrollBars(!scrollbars.shown); storeSettings(); },
   'collapse-ribbon': () => { setRibbonCollapsed(!ribbonCollapsed()); storeSettings(); },
+  'ui-scale-in': () => sizeInterface(stepUiScale(uiScale(), 1)),
+  'ui-scale-out': () => sizeInterface(stepUiScale(uiScale(), -1)),
+  'ui-scale-reset': () => sizeInterface(1),
+  ...Object.fromEntries(UI_SCALES.map((v) => [`ui-scale-${Math.round(v * 100)}`, () => sizeInterface(v)])),
   'title-bar-in-menu': () => { void placeTitleBar(titleBarPlace() === 'app' ? 'system' : 'app'); storeSettings(); },
   'page-setup': () => void pageSetup(),
   'text-bar-docked': () => { placeTextBar('docked'); storeSettings(); },
   'text-bar-floating': () => { placeTextBar('floating'); storeSettings(); },
   'text-bar-hidden': () => { placeTextBar('hidden'); storeSettings(); },
   'group-tips': () => { showGroupTips(!labelTips.enabled); storeSettings(); },
+  'touch-mode-auto': () => { setTouchMode('auto'); storeSettings(); },
+  'touch-mode-on': () => { setTouchMode('on'); storeSettings(); },
+  'touch-mode-off': () => { setTouchMode('off'); storeSettings(); },
+  'atom-keypad': () => {
+    if (!touchOn()) { flash('The atom keypad is part of Touch Mode: View > Touch Mode > On.'); return; }
+    showKeypad(!keypadShowing());
+    $('[data-cmd="atom-keypad"]')?.setAttribute('aria-checked', String(keypadShowing()));
+  },
+  'tool-sketch': () => { editor.setTool(editor.toolName === 'sketch' ? 'bond-single' : 'sketch'); },
+  'pen-sketch': () => { editor.options.penSketch = !editor.options.penSketch; $('[data-cmd="pen-sketch"]')?.setAttribute('aria-checked', String(editor.options.penSketch)); storeSettings(); },
   'dark-page': () => { showDark(!dark.on); storeSettings(); },
   'alignment-guides': () => {
     const m = guideMode();
@@ -5211,7 +5275,7 @@ function layoutSplit(): void {
   if (ws.pane) editor.paused = !splitDrawing && !cellEdit;
   $('[data-cmd="split-view"]')?.setAttribute('aria-checked', String(!!st));
   if (!st) { $('#split-empty').hidden = true; return; }
-  const opts = ws.tabs.filter((t) => t.mode === 'drawing').map((t) => new Option(t.name.replace(/\.(cdxml|cdx)$/i, ''), String(t.id), false, t === st.drawing));
+  const opts = ws.tabs.filter((t) => t.mode === 'drawing').map((t) => new Option(t.name.replace(/\.(cdxml|cdx|cds)$/i, ''), String(t.id), false, t === st.drawing));
   opts.push(new Option('New drawing', 'new'));
   splitPick.replaceChildren(...opts);
   $('#split-insert').textContent = st.main.mode === 'document' ? 'Insert into Document' : st.main.mode === 'sheet' ? 'Insert into Cell' : st.main.mode === 'design' ? 'Insert into Design' : 'Insert into Slide';
@@ -5811,6 +5875,10 @@ async function generalPreferences(): Promise<void> {
     { name: 'groupOutline', label: 'Outline the rest of a group when part of it is selected', type: 'checkbox', value: String(editor.options.groupOutline) },
     { name: 'linkSide', label: 'Text linked to a structure goes', value: linkSide, options: [{ value: 'keep', label: 'Where it is' }, { value: 'below', label: 'Below' }, { value: 'above', label: 'Above' }, { value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }] },
     { name: 'ask', label: 'Ask before changing every structure on the page when nothing is selected', type: 'checkbox', value: String(askWholeDrawing) },
+    { name: 'matchStructure', label: 'New bonds match the structure they\'re added to', type: 'checkbox', value: String(matchStructure.on),
+      help: 'Bonds, rings and chains added to a structure take its own bond length, line widths and colours, so a structure drawn with other settings stays consistent. Off: they always take the document\'s drawing settings.' },
+    { name: 'convertChemDraw', label: 'Redraw ChemDraw objects in Word files as they open', type: 'checkbox', value: String(!!docRead.convertChemDraw),
+      help: 'Off: they keep the look they had in Word and become drawings when you edit one. On: each is redrawn here in the document\'s drawing style.' },
     { name: 'reviewer', label: 'Your name on tracked changes in documents', value: reviewAuthor() },
   ], { ok: 'Save' });
   if (!r) return;
@@ -5818,6 +5886,8 @@ async function generalPreferences(): Promise<void> {
   editor.options.groupOutline = r.groupOutline === 'true';
   linkSide = (['below', 'above', 'left', 'right'].includes(r.linkSide) ? r.linkSide : 'keep') as Settings['linkSide'];
   askWholeDrawing = r.ask === 'true';
+  docRead.convertChemDraw = r.convertChemDraw === 'true';
+  matchStructure.on = r.matchStructure === 'true';
   setReviewAuthor(r.reviewer ?? '');
   storeSettings();
 }
@@ -5872,10 +5942,13 @@ function currentSettings(): Settings {
     scrollBars: scrollbars.shown,
     titleBar: titleBarPlace(),
     ribbonCollapsed: ribbonCollapsed(),
+    uiScale: uiScale(),
     textBar: CaptionEditor.barPlace,
     page: defaultPage,
     welcomed,
     groupTips: labelTips.enabled,
+    touchMode: touchMode(),
+    penSketch: editor.options.penSketch,
     chemTyping: typingPrefs.chemistry,
     stereoItalic: typingPrefs.stereoItalic,
     boldNumbers: typingPrefs.boldNumbers,
@@ -5923,6 +5996,8 @@ function currentSettings(): Settings {
     updateChannel,
     pubchemNames,
     ai: aiPrefs,
+    convertChemDraw: !!docRead.convertChemDraw,
+    matchStructure: matchStructure.on,
     fileTypesOffered,
     wordObjectsOffered,
     reviewName: reviewAuthor(),
@@ -6076,12 +6151,16 @@ function applySettings(s: Settings): void {
   setOrient(s.orient, false);
   void placeTitleBar(s.titleBar);
   setRibbonCollapsed(s.ribbonCollapsed);
+  void setUiScale(s.uiScale);
   defaultPage = s.page;
   welcomed = s.welcomed;
   // the drawing open at start (empty and never saved) takes the default page
   if (!doc.page && !doc.source && !doc.atoms.size && !deckNow()) doc.page = defaultPage && { ...defaultPage };
   placeTextBar(s.textBar);
   showGroupTips(s.groupTips);
+  setTouchMode(s.touchMode);
+  editor.options.penSketch = s.penSketch;
+  $('[data-cmd="pen-sketch"]')?.setAttribute('aria-checked', String(s.penSketch));
   modeColours = s.modeColours;
   applyModeColours(ws.active.mode, modeColours);
   keymap.setOverrides(s.hotkeys);
@@ -6108,6 +6187,8 @@ function applySettings(s: Settings): void {
   updateChannel = s.updateChannel;
   pubchemNames = s.pubchemNames;
   aiPrefs = s.ai;
+  docRead.convertChemDraw = s.convertChemDraw;
+  matchStructure.on = s.matchStructure;
   fileTypesOffered = s.fileTypesOffered;
   wordObjectsOffered = s.wordObjectsOffered;
   setReviewAuthor(s.reviewName);
@@ -7956,10 +8037,13 @@ stylePanel.tables = {
 let stereoSeen = -1;
 let outlineSeen = -1;
 // scroll bars over the drawing: they cover what is drawn (or the slide), and the part on screen
-const scrollbars = new Scrollbars(host, renderer, () => {
+const scrollArea = () => {
   const d = ws.active.deck;
   return d ? { x1: 0, y1: 0, x2: d.size.w, y2: d.size.h } : doc.bounds();
-}, () => editor.requestScene());
+};
+const scrollbars = new Scrollbars(host, renderer, scrollArea, () => editor.requestScene());
+// the wheel stops where the bars end, at the edge of the drawing, rather than going on for ever
+editor.scrollArea = scrollArea;
 
 // ---------------------------------------------------------------- finding your way round (Settings ▸ Navigation)
 
@@ -8116,6 +8200,13 @@ async function pageSetup(): Promise<void> {
   editor.changed();
   renderer.repaintAll();
   editor.requestScene();
+}
+
+/** View > Interface Size: the whole window bigger or smaller, saved for next time. */
+function sizeInterface(v: number): void {
+  if (!canScaleUi()) { flash('In the web version, use your browser\'s zoom (in its menu) to make the whole page bigger or smaller.', 5000); return; }
+  void setUiScale(v).then(() => flash(`Interface size ${Math.round(uiScale() * 100)}% (Ctrl+Alt+= larger, Ctrl+Alt+- smaller, Ctrl+Alt+0 normal)`, 2500));
+  storeSettings();
 }
 
 /** View > Text Formatting Bar: along the top of the drawing, floating by the text, or hidden. */
