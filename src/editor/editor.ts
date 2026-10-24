@@ -2,9 +2,11 @@
 // pan. The editor changes the document and asks for a repaint; hover and drawing previews
 // only repaint the overlay layer.
 
+import { installPenAndTouch } from './touch';
 import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAtom, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
 import { CaptionEditor } from '../ui/caption-editor';
 import { followLink, linkTip } from '../ui/links-ui';
+import { stopAtEdge } from '../ui/scrollbars';
 import { linkAtPoint } from '../links';
 import { typingPrefs } from '../text/typing';
 import { geoDef, geoShapeStyle, moveSteps, traceSteps } from '../design/geo';
@@ -373,6 +375,8 @@ export class Editor {
 
   constructor(public doc: Doc, public r: Renderer, public host: HTMLElement) {
     const el = r.overlay;
+    // tablets: fingers pan and pinch, a long press opens the menu (before the editor's own listeners)
+    installPenAndTouch({ overlay: el, view: r.view, requestScene: (ts) => this.requestScene(ts) });
     el.addEventListener('pointerdown', (e) => this.onDown(e));
     // pressing on the text being typed keeps the keys going to it
     el.addEventListener('mousedown', (e) => { if (this.captionEd?.hit(this.docPoint(e))) e.preventDefault(); });
@@ -1065,8 +1069,10 @@ export class Editor {
       this.zoomAt(sx, sy, f);
     } else {
       const k = e.deltaMode === 1 ? 16 : 1;
+      const from = { ox: this.r.view.ox, oy: this.r.view.oy };
       this.r.view.ox -= (e.shiftKey ? e.deltaY : e.deltaX) * k;
       this.r.view.oy -= (e.shiftKey ? 0 : e.deltaY) * k;
+      if (this.scrollArea) stopAtEdge(this.r, this.scrollArea(), from);
     }
     this.requestScene(e.timeStamp);
   }
@@ -1089,6 +1095,9 @@ export class Editor {
   zoomTo(scale: number): void {
     this.zoomBy(scale / this.r.view.scale);
   }
+
+  /** What the wheel scrolls over: it stops at this (with half a screen of room) as the scroll bars do. */
+  scrollArea: (() => { x1: number; y1: number; x2: number; y2: number } | null) | null = null;
 
   /** What Fit shows instead of the whole drawing (the slide, in Slides mode). */
   fitArea: (() => { x1: number; y1: number; x2: number; y2: number }) | null = null;
