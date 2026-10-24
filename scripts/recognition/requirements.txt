@@ -1,0 +1,12 @@
+# For export.py, with torch 2.2.2 (CPU) from download.pytorch.org (see recognition-model.yml)
+numpy==1.26.4
+pandas==2.3.3
+matplotlib==3.10.9
+opencv-python-headless==4.10.0.84
+SmilesPE==0.0.3
+OpenNMT-py==2.2.0
+rdkit==2026.9.1
+albumentations==1.1.0
+timm==0.4.12
+onnx==1.23.2
+onnxruntime==1.23.2

@@ -9,6 +9,7 @@ mod keep;
 mod ole;
 mod open_dialog;
 mod portable;
+mod recognise;
 mod web;
 
 use std::path::PathBuf;
@@ -330,7 +331,10 @@ pub fn run() {
             web::web_get,
             ai::ai_key_set,
             ai::ai_key_has,
-            ai::ai_request
+            ai::ai_request,
+            recognise::pack_ready,
+            recognise::pack_download,
+            recognise::pack_read
         ])
         .build(tauri::generate_context!())
         .expect("error while running Chem Illustrator")

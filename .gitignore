@@ -6,6 +6,7 @@ test-results/
 # Copied from node_modules by scripts/copy-rdkit.mjs
 public/RDKit_minimal.js
 public/RDKit_minimal.wasm
+public/ort-wasm-simd-threaded.mjs
 
 # Made from @mdi/svg by scripts/build-icons.mjs
 src/design/icons/mdi.json
