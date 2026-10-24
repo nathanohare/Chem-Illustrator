@@ -2,12 +2,14 @@
 // this opens the window, reads and writes the files the user picks, and runs a
 // self-test used by the automatic Windows build.
 
+mod ai;
 mod clipboard;
 mod file_types;
 mod keep;
 mod ole;
 mod open_dialog;
 mod portable;
+mod recognise;
 mod web;
 
 use std::path::PathBuf;
@@ -137,6 +139,7 @@ fn portable_info() -> serde_json::Value {
 /// (.github/workflows/stable.yml). The Latest channel reads the endpoint in tauri.conf.json.
 const STABLE_FEED: &str = "https://github.com/nathanohare/Chem-Illustrator/releases/download/stable/stable.json";
 
+#[cfg(desktop)]
 /// An updater that reads the chosen channel ("stable" or "latest").
 fn updater_for(app: &tauri::AppHandle, channel: &str, target: Option<&str>) -> Result<tauri_plugin_updater::Updater, String> {
     use tauri_plugin_updater::UpdaterExt;
@@ -153,6 +156,7 @@ fn updater_for(app: &tauri::AppHandle, channel: &str, target: Option<&str>) -> R
 
 /// A newer version found by update_check, in the shape the updater's own JavaScript (Update)
 /// takes, so downloading and installing it goes through the updater as before.
+#[cfg(desktop)]
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct UpdateFound {
@@ -164,6 +168,7 @@ struct UpdateFound {
     raw_json: serde_json::Value,
 }
 
+#[cfg(desktop)]
 /// Help > Check for Updates, and the check when the app starts: ask the chosen channel for a
 /// newer version. Nothing when this is the newest.
 #[tauri::command]
@@ -187,6 +192,7 @@ async fn update_check(webview: tauri::Webview, channel: String, target: Option<S
     }))
 }
 
+#[cfg(desktop)]
 /// Help > Check for Updates in a portable copy on Windows: download the newer portable app,
 /// check its signature, put it in place of this one and start it. Reports how far the download
 /// has got (0 to 1, or -1 when the size isn't known).
@@ -218,6 +224,19 @@ async fn portable_install_update(app: tauri::AppHandle, channel: Option<String>,
         .map_err(|e| format!("The new version is in place but didn't start ({e}); open it again."))?;
     app.exit(0);
     Ok(())
+}
+
+/// On an iPad the App Store keeps the app up to date: there is never an update to offer here.
+#[cfg(mobile)]
+#[tauri::command]
+fn update_check() -> Option<()> {
+    None
+}
+
+#[cfg(mobile)]
+#[tauri::command]
+fn portable_install_update() -> Result<(), String> {
+    Err("Updates come from the App Store.".into())
 }
 
 #[tauri::command]
@@ -259,17 +278,20 @@ mod tests {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
-        // a file opened (double-clicked) while the app is running goes to this window, not a second app
-        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
-            file_types::open_files(app, file_types::files_in(args, Some(std::path::Path::new(&cwd))));
-        }))
+    let builder = tauri::Builder::default();
+    // a file opened (double-clicked) while the app is running goes to this window, not a second app
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
+        file_types::open_files(app, file_types::files_in(args, Some(std::path::Path::new(&cwd))));
+    }));
+    // Help > Check for Updates: fetches the newest release from GitHub, checks its signature
+    // against the public key in tauri.conf.json, installs it and restarts the app (on an iPad
+    // the App Store does this)
+    #[cfg(desktop)]
+    let builder = builder.plugin(tauri_plugin_updater::Builder::new().build()).plugin(tauri_plugin_process::init());
+    builder
         .manage(file_types::Waiting::default())
         .plugin(tauri_plugin_dialog::init())
-        // Help > Check for Updates: fetches the newest release from GitHub, checks its signature
-        // against the public key in tauri.conf.json, installs it and restarts the app
-        .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             portable::tidy();
@@ -326,7 +348,13 @@ pub fn run() {
             ole::ole_registered,
             ole::ole_register,
             ole::ole_object_folder,
-            web::web_get
+            web::web_get,
+            ai::ai_key_set,
+            ai::ai_key_has,
+            ai::ai_request,
+            recognise::pack_ready,
+            recognise::pack_download,
+            recognise::pack_read
         ])
         .build(tauri::generate_context!())
         .expect("error while running Chem Illustrator")

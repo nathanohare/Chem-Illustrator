@@ -179,7 +179,7 @@ export const COMMAND_NAMES: Record<string, string> = {
   'zoom-in': 'Zoom in', 'zoom-out': 'Zoom out', 'zoom-fit': 'Fit the drawing in the window', 'zoom-selection': 'Go to Selection', 'zoom-actual': 'Actual size', navigator: 'Navigator (on or off)', 'edge-arrows': 'Edge Arrows (on or off)', 'dot-grid': 'Dot Grid (on or off)', 'outside-tint': 'Tint Outside the Drawing (on or off)', 'navigation-settings': 'Navigation Settings…',
   hotkeys: 'Hotkeys…', 'typing-spelling': 'Typing and Spelling…', 'mode-colours': 'Mode Colours…', 'edit-palettes': 'Colour Palettes…', preferences: 'Settings…',
   'new-slides': 'New slides', 'close-tab': 'Close the file', 'next-tab': 'Next file', 'prev-tab': 'Previous file',
-  'export-pdf': 'Export PDF…', 'insert-picture': 'Insert a picture…', crop: 'Crop the selected picture',
+  'export-pdf': 'Export PDF…', 'insert-picture': 'Insert a picture…', 'import-pdf': 'Import Structures from PDF…', 'import-picture': 'Import Structures from Picture…', 'import-paste': 'Paste Picture as Structure', crop: 'Crop the selected picture',
   'new-slide': 'New slide', 'duplicate-slide': 'Duplicate slide', 'delete-slide': 'Delete slide',
   'cut-slides': 'Cut slides', 'copy-slides': 'Copy slides', 'paste-slides': 'Paste slides', 'paste-slides-keep': 'Paste slides keeping their own look',
   'hide-slide': 'Hide slide (or show it again)', 'selection-pane': 'Selection Pane: every object on the slide, to pick, hide or rename', 'reuse-slides': 'Reuse slides from another PowerPoint file…',

@@ -24,6 +24,7 @@ import { CITE_PRESETS, DEFAULT_STYLE, cleanOptions, type CiteFormat } from './do
 import { DEFAULT_KEEP, parseKeepPrefs, type KeepPrefs } from './keep/prefs';
 import { parseThemes, type SlideTemplate } from './deck/templates';
 import { parseRecent } from './text/symbols';
+import { DEFAULT_AI, parseAiPrefs, type AiPrefs } from './ai/link';
 import { clampUiScale } from './ui/ui-scale';
 
 export interface Settings {
@@ -178,6 +179,8 @@ export interface Settings {
   scheme: SchemePrefs;
   /** AutoSave, recovery copies, Version History and shared folders (File > AutoSave and Recovery Options). */
   keep: KeepPrefs;
+  /** The person's own AI model, if they linked one (Edit > Settings > AI Model). Its key is kept apart, never here. */
+  ai: AiPrefs;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -198,13 +201,14 @@ export const DEFAULT_SETTINGS: Settings = {
   rulerFrom: 'centre',
   scheme: DEFAULT_SCHEME_PREFS,
   keep: DEFAULT_KEEP,
+  ai: DEFAULT_AI,
 };
 
 const STORAGE_KEY = 'chem-illustrator.settings';
 
 /** Read settings saved as text, keeping only what makes sense. */
 export function parseSettings(text: string | null | undefined): Settings {
-  const s: Settings = { ...DEFAULT_SETTINGS, hotkeys: {}, replacements: DEFAULT_SETTINGS.replacements.map(([a, b]) => [a, b]), dictionary: [], modeColours: { ...DEFAULT_MODE_COLOURS }, nicknames: {}, templates: [], palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, myStyles: [], modeStyles: {}, darkPalettes: [], guides: { ...DEFAULT_SETTINGS.guides }, orient: { ...DEFAULT_ORIENT }, docPins: [], recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], scheme: { ...DEFAULT_SCHEME_PREFS }, keep: { ...DEFAULT_KEEP } };
+  const s: Settings = { ...DEFAULT_SETTINGS, hotkeys: {}, replacements: DEFAULT_SETTINGS.replacements.map(([a, b]) => [a, b]), dictionary: [], modeColours: { ...DEFAULT_MODE_COLOURS }, nicknames: {}, templates: [], palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, myStyles: [], modeStyles: {}, darkPalettes: [], guides: { ...DEFAULT_SETTINGS.guides }, orient: { ...DEFAULT_ORIENT }, docPins: [], recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], scheme: { ...DEFAULT_SCHEME_PREFS }, keep: { ...DEFAULT_KEEP }, ai: { ...DEFAULT_AI } };
   if (!text) return s;
   let raw: unknown;
   try { raw = JSON.parse(text); } catch { return s; }
@@ -267,6 +271,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.skipVersion === 'string' || r.skipVersion === null) s.skipVersion = r.skipVersion as string | null;
   s.scheme = parseSchemePrefs(r.scheme);
   s.keep = parseKeepPrefs(r.keep);
+  s.ai = parseAiPrefs(r.ai);
   if (Array.isArray(r.dictionary)) s.dictionary = r.dictionary.filter((w): w is string => typeof w === 'string' && w.trim() !== '').map((w) => w.trim());
   return s;
 }

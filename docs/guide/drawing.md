@@ -360,6 +360,19 @@ With nothing selected, the panel shows the structure you last drew on. Clearing 
 
 Pick the mass fragmentation tool (the dashed line through a bond) and drag a line across one or more bonds, or click a single bond. A dashed line is drawn and each piece gets a caption with its formula and exact mass, placed clear of the structure. They are ordinary captions, so you can move or retype them.
 
+## Structures from pictures and hand drawings
+
+**File ▸ Import Structures from Picture…** reads the structures in a picture and places them as real, editable structures: a photo or scan of a hand drawing, a screenshot, or a figure saved from a paper. With a picture selected on the drawing, it reads that picture instead (also on the picture's right-click menu: **Read Structure from Picture…**). **File ▸ Paste Picture as Structure** reads a picture on the clipboard, such as a screenshot of a paper.
+
+A window shows each picture beside the structure read from it and its SMILES. Check each one: the chemistry engine checks every structure, and ones it can't read, ones with groups the app doesn't know, and ones the reader was unsure of are marked ⚠. Type a correction into the SMILES box and press Enter, untick ones you don't want, then **Place**.
+
+Two readers can read pictures:
+
+- **The structure reader on this computer** (desktop app). Nothing is sent anywhere. The first time, it downloads about 140 MB once (the MolScribe model, MIT licence). It reads printed structures well (most journal and patent drawings) but few hand drawings.
+- **Your own AI model** (Claude, ChatGPT, Gemini or another), linked in **Edit ▸ Settings ▸ AI Model** with your own API key. It reads hand drawings far better. Pictures are sent to it only when it reads them, and the cost goes on your account there. When one is linked, photos and scans go to it first, and each picture has a button to read it with the other reader. In the browser version, only an AI model can read pictures.
+
+**File ▸ Import Structures from PDF…** finds the structures in a paper, SI or thesis and offers them in the same window, each marked with its page. Text, arrows and pictures that turn out not to be structures are put aside (tick **Show … pictures that don't look like structures** to see them), and none are ticked at first: tick the ones you want, then **Place**. A PDF of more than 40 pages is read a part at a time; you choose the pages. PDFs are read by the structure reader on this computer, so nothing is sent anywhere unless you choose your AI model or press a **Read with** button.
+
 ## Pictures and tables
 
 **Insert ▸ Picture…** puts a picture on the drawing (or drop a picture file on it). Drag a corner to resize it; it keeps its proportions unless you hold Alt. **Insert ▸ Crop Picture** crops it. **Insert ▸ Table…** adds an ACS-style table (rules above and below the heading row and under the last row) of the rows and columns you ask for; double-click a cell to type in it, and use the Style panel to change its lines, rows and columns (each column can line up left, centred or right; new tables start centred). Drag a structure into a cell to put it there: the cell grows to fit it, it sits centred at the top of the cell with any text under it, and it moves with the table. Drag it out to take it out of the cell.

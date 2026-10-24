@@ -206,6 +206,10 @@ import { Navigator, EdgeArrows, paintGrid, paintTint, type Target } from './ui/o
 import { type OrientPrefs, DEFAULT_ORIENT } from './orientation-prefs';
 import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
+import { DEFAULT_AI, type AiPrefs } from './ai/link';
+import { aiSettingsDialog } from './ui/ai-settings';
+import { decodePicture, importPictures, pdfDrawings, type ImportHost } from './ui/import-structures';
+import { placeRead } from './recognise/check';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -298,8 +302,6 @@ const ARROWS: PaletteDef = {
     { name: 'arrow-fishhook', title: 'Curved half-headed arrow (one electron). Snaps between atoms and bonds like the curved arrow; hold Alt to draw freely' },
     { name: 'arrow-s', title: 'S-shaped curved arrow (two bends), for electrons that have to go round something. Snaps like the curved arrow; hold Alt to draw freely' },
     { name: 'arrow-s-fishhook', title: 'S-shaped half-headed arrow (one electron, two bends). Snaps like the curved arrow; hold Alt to draw freely' },
-    { name: 'arrow-pen', title: 'Pen arrow. Click to place anchors, drag to pull out curve handles, Enter or double-click to finish. Its ends stick to the atom, bond or lone pair they start and end on. On a selected pen arrow: click its line to add an anchor, click an anchor to delete it, Alt+click to make it a corner, Alt+drag to pull handles out' },
-    { name: 'arrow-pen-fishhook', title: 'Pen half-headed arrow (one electron). Click to place anchors, drag to pull out curve handles, Enter or double-click to finish' },
   ],
 };
 
@@ -1149,6 +1151,8 @@ let namesReady = false;
 
 /** Names the name reader can't read are looked up on PubChem (Edit > Settings). */
 let pubchemNames = true;
+/** The person's own AI model, if linked (Edit > Settings > AI Model). */
+let aiPrefs: AiPrefs = { ...DEFAULT_AI };
 
 /** Why a name couldn't be turned into a structure: a plain message, the part that couldn't be read, and the name reader's own words. */
 interface NameError { error: string; bad?: string; details?: string }
@@ -3157,6 +3161,106 @@ function placeClip(v: { mp4?: Uint8Array; still: Uint8Array; gif?: Uint8Array; w
   editor.changed();
 }
 
+// ------------------------------------------------------------------ structures from pictures
+
+const importHost: ImportHost = {
+  style: () => doc.style,
+  chem,
+  ai: () => aiPrefs,
+  flash,
+  // side by side from the middle of the window, two bond lengths apart, selected
+  place(chosen) {
+    finishTyping();
+    const gap = doc.style.bondLength * 2;
+    const widths = chosen.map(({ checked }) => {
+      const xs = [...checked.doc.atoms.values()].map((a) => a.x);
+      return xs.length ? Math.max(...xs) - Math.min(...xs) : 0;
+    });
+    const total = widths.reduce((s, w) => s + w, 0) + gap * (chosen.length - 1);
+    const c = pasteCentre();
+    let x = c.x - total / 2;
+    const ids: number[] = [];
+    doc.edit(chosen.length === 1 ? 'Import Structure' : 'Import Structures', () => {
+      chosen.forEach(({ result, checked }, i) => {
+        ids.push(...placeRead(doc, result, checked.molblock, x + widths[i] / 2, c.y));
+        x += widths[i] + gap;
+      });
+    });
+    selectNewAtoms(ids);
+    flash(chosen.length === 1 ? 'Placed the structure. Check it against the picture.' : `Placed ${chosen.length} structures. Check them against the pictures.`, 5000);
+  },
+};
+
+/** File > Import Structures from Picture: the selected picture, or one chosen from a file. */
+async function importPicture(): Promise<void> {
+  finishTyping();
+  const sel = [...editor.sel.shapes].map((id) => doc.shapes.get(id)).filter((s): s is Shape => s?.kind === 'picture' && !!s.src);
+  const pics: { name: string; bytes: Uint8Array; mime: string }[] = sel.length
+    ? sel.map((s, i) => ({ name: sel.length > 1 ? `Picture ${i + 1}` : 'Selected picture', ...fromDataUrl(s.src!) }))
+    : await pickPicture().then((p) => (p ? [p] : []));
+  await readPictures(pics);
+}
+
+/** File > Paste Picture as Structure: a picture on the clipboard (a screenshot, or copied from a paper). */
+async function importPastedPicture(): Promise<void> {
+  finishTyping();
+  let got: { bytes: Uint8Array; mime: string } | null = null;
+  try {
+    const p = nativeClipboard ? await readNativeClipboard() : await readWebClipboard();
+    if (p.kind === 'picture') got = { bytes: p.bytes, mime: p.mime };
+  } catch { /* nothing readable */ }
+  if (!got) { flash('Copy a picture of a structure first (a screenshot works), then use this again.'); return; }
+  await readPictures([{ name: 'Pasted picture', ...got }]);
+}
+
+/** File > Import Structures from PDF: every drawing on the pages, read and offered on the review screen. */
+async function importPdf(): Promise<void> {
+  finishTyping();
+  const f = await openBytesDialog('PDF files', [], ['pdf']).catch(async (e) => { await showError(String(e)); return null; });
+  if (!f) return;
+  let found;
+  try {
+    found = await pdfDrawings(f.bytes, async (pages) => {
+      const r = await ask('Import Structures from PDF', [
+        { name: 'from', label: 'From page', type: 'number', value: '1' },
+        { name: 'to', label: 'To page', type: 'number', value: String(Math.min(pages, 40)) },
+      ], { ok: 'Read', note: `${f.name} has ${pages} pages. Which shall be read? (40 or fewer at a time.)` });
+      if (!r) return null;
+      const a = Math.max(1, Math.min(pages, Math.round(Number(r.from) || 1)));
+      return [a, Math.max(a, Math.min(pages, a + 39, Math.round(Number(r.to) || a)))];
+    }, (msg) => flash(msg, 20000));
+  } catch (e) {
+    await showError(`Could not read ${f.name}: ${String(e)}`);
+    return;
+  }
+  if (!found) return;
+  if (!found.length) { flash('No drawings were found in this PDF. If its pages are scans, try Import Structures from Picture on a screenshot.', 8000); return; }
+  flash(`Found ${found.length} drawings.`);
+  await importPictures(importHost, found, {
+    title: 'Import Structures from PDF',
+    note: `${f.name}: each drawing found, beside the structure read from it. Ones the reader is sure of are ticked; check each against its picture, fix a SMILES or tick more, then place them.`,
+    tickDoubtful: false,
+    photo: false,
+    hideJunk: true,
+  });
+}
+
+async function readPictures(pics: { name: string; bytes: Uint8Array; mime: string }[]): Promise<void> {
+  if (!pics.length) return;
+  const found = [];
+  for (const p of pics) {
+    const px = await decodePicture(p.bytes, p.mime);
+    if (px) found.push({ where: p.name, pixels: px });
+    else flash(`${p.name} can't be read as a picture.`);
+  }
+  await importPictures(importHost, found, {
+    title: 'Import Structures from Picture',
+    note: 'Photos and scans of hand drawings work best with dark lines on plain paper, one structure to a picture. Check each structure against its picture before you place it: fix the SMILES, or tick it off.',
+    tickDoubtful: true,
+    photo: true,
+  });
+}
+
 /** Insert > Crop Picture: the selected picture's handles cut its edges off until Esc or a click elsewhere. */
 function cropPicture(): void {
   const pics = [...editor.sel.shapes].filter((id) => doc.shapes.get(id)?.kind === 'picture');
@@ -4632,6 +4736,9 @@ const COMMANDS: Record<string, () => unknown> = {
   undo: () => undo(),
   redo: () => redo(),
   'insert-picture': () => insertPicture(),
+  'import-picture': () => importPicture(),
+  'import-paste': () => importPastedPicture(),
+  'import-pdf': () => importPdf(),
   'insert-video': () => void insertMedia(false),
   'insert-slide-zoom': () => void insertZoom(false),
   'insert-summary-zoom': () => void insertZoom(true),
@@ -5889,6 +5996,11 @@ async function generalPreferences(): Promise<void> {
 }
 
 /** Settings ▸ Online: what the program asks the internet for. */
+/** Edit > Settings > AI Model. */
+async function aiSettings(): Promise<void> {
+  await aiSettingsDialog(aiPrefs, (p) => { aiPrefs = p; storeSettings(); });
+}
+
 async function onlinePreferences(): Promise<void> {
   const r = await ask('Online', [
     { name: 'pubchem', label: 'Look up names the name reader can\'t read on PubChem', type: 'checkbox', value: String(pubchemNames),
@@ -5986,6 +6098,7 @@ function currentSettings(): Settings {
     updateCheck,
     updateChannel,
     pubchemNames,
+    ai: aiPrefs,
     convertChemDraw: !!docRead.convertChemDraw,
     matchStructure: matchStructure.on,
     fileTypesOffered,
@@ -6176,6 +6289,7 @@ function applySettings(s: Settings): void {
   updateCheck = s.updateCheck;
   updateChannel = s.updateChannel;
   pubchemNames = s.pubchemNames;
+  aiPrefs = s.ai;
   docRead.convertChemDraw = s.convertChemDraw;
   matchStructure.on = s.matchStructure;
   fileTypesOffered = s.fileTypesOffered;
@@ -7113,7 +7227,7 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'undo' }, { cmd: 'redo' }, null,
       ...(ws.active.mode === 'slides' ? [{ cmd: 'new-comment', label: 'New Comment' }, { cmd: 'show-comments', label: 'Show Comments' }, null] : []),
       ...(ws.active.mode === 'slides' || design ? [{ cmd: 'format-background', label: 'Format Background…' }, null] : []),
-      { label: 'Insert', items: [{ cmd: 'name-to-structure' }, { cmd: 'periodic-table' }, { cmd: 'insert-picture' }, { cmd: 'text-box' }, { cmd: 'insert-symbol' }, ...(design ? [{ cmd: 'design-shapes', label: 'Shape…' }, { cmd: 'design-icons', label: 'Icon…' }, { cmd: 'connector-tool' }] : []), ...(ws.active.mode === 'slides' ? [{ cmd: 'slide-shapes', label: 'Shape…' }, { cmd: 'slide-icons', label: 'Icon…' }] : [])] },
+      { label: 'Insert', items: [{ cmd: 'name-to-structure' }, { cmd: 'periodic-table' }, { cmd: 'insert-picture' }, { cmd: 'import-picture', label: 'Structure from Picture…' }, { cmd: 'text-box' }, { cmd: 'insert-symbol' }, ...(design ? [{ cmd: 'design-shapes', label: 'Shape…' }, { cmd: 'design-icons', label: 'Icon…' }, { cmd: 'connector-tool' }] : []), ...(ws.active.mode === 'slides' ? [{ cmd: 'slide-shapes', label: 'Shape…' }, { cmd: 'slide-icons', label: 'Icon…' }] : [])] },
       { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }] },
       { cmd: 'drawing-style' },
       view,
@@ -7177,7 +7291,7 @@ function drawingMenu(): MenuItem[] {
       { label: 'Shape Effects', items: effectsMenu() },
       { label: 'Shape Fill', items: [{ cmd: 'shape-picture-fill', label: 'Picture…' }, { cmd: 'shape-no-picture-fill', label: 'No Picture' }] },
     ] : []),
-    ...(shapes.some((x) => x.kind === 'picture') ? [{ cmd: 'crop' }, { cmd: 'picture-format' }, { label: 'Picture Style', items: PICTURE_STYLES.map((p) => ({ cmd: `picture-style-${p.id}`, label: p.name })) }] : []),
+    ...(shapes.some((x) => x.kind === 'picture') ? [{ cmd: 'import-picture', label: 'Read Structure from Picture…' }, { cmd: 'crop' }, { cmd: 'picture-format' }, { label: 'Picture Style', items: PICTURE_STYLES.map((p) => ({ cmd: `picture-style-${p.id}`, label: p.name })) }] : []),
     ...(ws.active.mode === 'slides' ? [{ label: 'Animation', items: [
       ...ANIM_COMMANDS.slice(0, EFFECTS.length), null, ...ANIM_COMMANDS.slice(EFFECTS.length), null,
       { cmd: 'remove-animation', label: 'Remove Animation' }, { cmd: 'animation-pane', label: 'Animation Pane' }, { cmd: 'preview-slide', label: 'Preview Slide' },
@@ -7995,6 +8109,7 @@ const settingsWindow = new SettingsWindow([
   { id: 'dark', title: 'Dark Page', words: 'dark mode night paper ink graphite slate appearance colours', open: darkColours },
   { id: 'schemes', title: 'Schemes', words: 'scheme arrow gap plus text size reagents conditions boxes', open: schemeSettings },
   { id: 'autosave', title: 'AutoSave and Recovery', words: 'autosave recovery versions backup copies shared folders onedrive', open: () => keeper.optionsCommand() },
+  { id: 'ai', title: 'AI Model', words: 'ai artificial intelligence claude anthropic chatgpt gpt openai gemini google ollama openrouter api key llm model link connect', open: () => aiSettings() },
   { id: 'online', title: 'Online', words: 'pubchem internet names lookup updates check version privacy stable latest channel beta', open: onlinePreferences },
   { id: 'transfer', title: 'Import and Export', words: 'backup back up copy move settings file new computer install reinstall export import toolboxes hotkeys', open: settingsTransfer },
   { id: 'files', title: 'File Types', words: 'open with default app explorer finder associations cdxml cdx mol sdf docx pptx xlsx double-click', open: () => fileTypesPage(fileTypesHost) },
