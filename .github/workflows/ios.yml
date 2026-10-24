@@ -19,7 +19,7 @@ jobs:
     env:
       # 0.1.<build number>: each TestFlight build is newer than the one before
       VERSION: 0.1.${{ github.run_number }}
-      SHIP: ${{ github.event_name != 'pull_request' && secrets.IOS_CERTIFICATE != '' && secrets.IOS_MOBILE_PROVISION != '' && secrets.APPLE_API_KEY_P8 != '' }}
+      SHIP: ${{ github.event_name != 'pull_request' && secrets.IOS_CERTIFICATE != '' && secrets.IOS_MOBILE_PROVISION != '' && secrets.APPLE_API_KEY_P8 != '' && secrets.APPLE_TEAM_ID != '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -42,7 +42,8 @@ jobs:
         run: cargo build --lib --target aarch64-apple-ios
       - name: Make the Xcode project
         env:
-          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+          # a stand-in Team ID until the real one is in the secrets (enough to check the project)
+          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID || '0000000000' }}
         run: |
           npx tauri ios init --ci
           # iPad only (not iPhone): the drawing needs the room
