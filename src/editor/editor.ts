@@ -53,7 +53,7 @@ import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '..
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
-import { diagramFrameOf, heldLines, putDiagram, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
+import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
 import { Align, Measure, POINTS, Snapshot, type TurnText, units, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
@@ -419,6 +419,8 @@ export class Editor {
       if (energy) refitEnergy(this.doc, before, this.measure());
       // a diagram resized by hand is drawn again in its new box; words typed into its shapes go into its text
       if (diagrams) refitDiagrams(this.doc, before, this.measure());
+      // structures in a diagram's items: room kept for them (the diagram growing to fit), and centred there
+      if (diagrams) refitDiagramFigures(this.doc, before, this.measure());
       if (frames) refitFrames(this.doc, before, this.measure());
       // mechanism arrows the change left running into something find their own way round again
       if (this.options.rerouteArrows) this.rerouteArrows(before);
@@ -1340,14 +1342,14 @@ export class Editor {
       const b = doc.bonds.get(h.id)!;
       const side = fuseSide(doc, b, n, p);
       const pts = fusedRing(doc.atoms.get(b.a1)!, doc.atoms.get(b.a2)!, n, side);
-      ids = placeRing(doc, pts, { aromatic, shiftPhase: shift, existing: [b.a1, b.a2], scale: b.s });
+      ids = placeRing(doc, pts, { aromatic, shiftPhase: shift, existing: [b.a1, b.a2], scale: b.s, like: b });
     } else if (h && h.kind === 'atom') {
       let a = doc.atoms.get(h.id)!;
       const L = bondLength(doc, a);
       const deg = doc.degree(a.id);
       if (alt || deg >= 3) a = sprout(doc, a.id);
       const dir = ringDir(doc, a.id);
-      ids = placeRing(doc, ringOnAtom(a, dir, n, L), { aromatic, shiftPhase: shift, existing: [a.id], scale: a.s });
+      ids = placeRing(doc, ringOnAtom(a, dir, n, L), { aromatic, shiftPhase: shift, existing: [a.id], scale: a.s, like: a });
     } else {
       const L = doc.style.bondLength;
       ids = placeRing(doc, freeRing(p, n, L, towards), { aromatic, shiftPhase: shift });
@@ -1754,7 +1756,7 @@ export class Editor {
         else if (h && h.kind === 'atom') {
           const a = doc.atoms.get(h.id)!;
           const dir = norm(fromAngle(snapAngle(angleOf(sub(p, a)))));
-          const ids = placeRing(doc, ringOnAtom(a, dir, t.size, bondLength(doc, a)), { aromatic: t.aromatic, shiftPhase: d.shift, existing: [a.id], scale: a.s });
+          const ids = placeRing(doc, ringOnAtom(a, dir, t.size, bondLength(doc, a)), { aromatic: t.aromatic, shiftPhase: d.shift, existing: [a.id], scale: a.s, like: a });
           if (d.ctrl && t.aromatic) circleRing(doc, ids.slice(0, t.size));
           this.lastEdited = ids[0];
         } else this.ringClick(null, d.start, t.size, t.aromatic, false, d.shift, p, d.ctrl);
@@ -2764,6 +2766,8 @@ export class Editor {
       // a table takes the structures in its cells along
       const sh = doc.shapes.get(id);
       if (sh?.kind === 'table') for (const a of tableContents(doc, sh, (t) => this.r.tableLayout(t))) sel.atoms.add(a);
+      // and a diagram the structures in its items (found by where they are, as after opening a file)
+      if (sh?.diagram) for (const a of diagramContents(doc, sh)) sel.atoms.add(a);
       const f = doc.shapes.get(id)?.frame;
       if (!f?.fit) continue;
       const m = frameMembers(doc, f);
@@ -3701,7 +3705,7 @@ export class Editor {
       if (act === 'chair' || act === 'chair-2') { fuseChair(doc, id, act === 'chair-2'); return; }
       const side = fuseSide(doc, b, n, this.pointer);
       const pts = fusedRing(doc.atoms.get(b.a1)!, doc.atoms.get(b.a2)!, n, side);
-      const ids = placeRing(doc, pts, { aromatic: act === 'benzene' || act === 'cyclopentadiene', existing: [b.a1, b.a2], scale: b.s });
+      const ids = placeRing(doc, pts, { aromatic: act === 'benzene' || act === 'cyclopentadiene', existing: [b.a1, b.a2], scale: b.s, like: b });
       // a and z leave the highlight on the bond, so the other key fuses on its other side (a z
       // gives indene); 3 to 8 move it to the new ring's far bond (on a five-ring, the one on the
       // first atom's side), ready to change the ring there: both as the cheat sheet's examples need
