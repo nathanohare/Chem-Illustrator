@@ -8,6 +8,8 @@ name: Desktop app
 # latest.json file, which is what the app's File > Check for Updates reads. The installers are
 # signed for the updater with the TAURI_SIGNING_PRIVATE_KEY secret (Settings > Secrets and
 # variables > Actions); without that secret the builds still run but nothing is published.
+# Separately, the Windows app and installers are code-signed with Azure Artifact Signing once
+# its secrets and variables are set (docs/windows-signing.md), which stops SmartScreen warning.
 #
 # While the repository is public the builds cost nothing. If it is ever made private again, only
 # Windows is built (macOS minutes count ten times against the free allowance), unless a run is
@@ -75,6 +77,33 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Sign the Windows app and installers (once the Azure secrets are set)
+        # With an Azure Artifact Signing account in the repository's secrets and variables
+        # (docs/windows-signing.md), Tauri signs the app, the setup .exe and the .msi as it builds
+        # them, before the updater's signatures are made, so SmartScreen knows who they are from.
+        # Without them nothing is signed for Windows, as before.
+        if: matrix.platform == 'windows'
+        shell: bash
+        env:
+          CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}
+          ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
+        run: |
+          if [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ] || [ -z "$TENANT_ID" ] || [ -z "$ENDPOINT" ] || [ -z "$ACCOUNT" ] || [ -z "$PROFILE" ]; then
+            echo "No Azure Artifact Signing account in the secrets and variables: the Windows app is not signed."; exit 0
+          fi
+          cargo install artifact-signing-cli --locked
+          {
+            echo "AZURE_CLIENT_ID=$CLIENT_ID"
+            echo "AZURE_CLIENT_SECRET=$CLIENT_SECRET"
+            echo "AZURE_TENANT_ID=$TENANT_ID"
+            # merged into tauri.conf.json by the Tauri build; %1 is the file to sign, and the
+            # description is the name Windows shows when the .msi asks for permission
+            node -e 'const [e, a, c] = process.argv.slice(1); console.log("TAURI_CONFIG=" + JSON.stringify({ bundle: { windows: { signCommand: { cmd: "artifact-signing-cli", args: ["-e", e, "-a", a, "-c", c, "-d", "Chem Illustrator", "%1"] } } } }))' "$ENDPOINT" "$ACCOUNT" "$PROFILE"
+          } >> "$GITHUB_ENV"
       - run: npm ci
       - name: Number this version
         shell: bash
