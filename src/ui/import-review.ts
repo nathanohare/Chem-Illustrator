@@ -26,6 +26,8 @@ export interface ReviewOptions {
   typed: (smiles: string) => ReadResult;
   /** Tick doubtful ones too (a single picture); a PDF's are left for the person to tick. */
   tickDoubtful: boolean;
+  /** Put aside pictures that turn out not to be structures (a PDF's charts, tables and arrows), with a button to show them. */
+  hideJunk?: boolean;
   place: (chosen: { result: ReadResult; checked: Checked }[]) => void;
 }
 
@@ -71,7 +73,17 @@ export function openReview(o: ReviewOptions): void {
   const aiAll = o.alt ? el('button', { type: 'button', textContent: `Read Doubtful Ones with ${o.alt.name}`, title: sends }) : null;
   const all = el('button', { type: 'button', textContent: 'Tick All' });
   const none = el('button', { type: 'button', textContent: 'Tick None' });
-  d.append(el('h2', { textContent: o.title }), el('p', { className: 'muted', textContent: o.note }), status, list,
+  const showJunk = el('input', { type: 'checkbox' });
+  const junkLabel = el('label', { className: 'import-junk', hidden: true }, showJunk, ' ');
+  const junkText = el('span');
+  junkLabel.append(junkText);
+  const junkCount = () => {
+    const n = list.querySelectorAll('.import-row.junk').length;
+    junkLabel.hidden = n === 0;
+    junkText.textContent = `Show ${n} ${n === 1 ? 'picture' : 'pictures'} that don't look like structures`;
+  };
+  showJunk.addEventListener('change', () => { for (const r of list.querySelectorAll<HTMLElement>('.import-row.junk')) r.hidden = !showJunk.checked; });
+  d.append(el('h2', { textContent: o.title }), el('p', { className: 'muted', textContent: o.note }), status, list, junkLabel,
     el('p', { className: 'ask-buttons' }, all, none, ...(aiAll ? [aiAll] : []), el('span', { className: 'grow' }), cancel, place));
 
   let closed = false;
@@ -127,6 +139,12 @@ export function openReview(o: ReviewOptions): void {
     const usable = checked.doc.atoms.size > 0 && checked.smiles !== null;
     row.tick.disabled = !checked.doc.atoms.size;
     row.tick.checked = usable && (tickIt || o.tickDoubtful || checked.problems.length === 0);
+    // fewer than three atoms, or a reading the reader itself barely believes: not a structure
+    const junk = !!o.hideJunk && !tickIt && (checked.doc.atoms.size < 3 || (result.kind === 'graph' && result.graph.confidence < 0.25));
+    row.el.classList.toggle('junk', junk);
+    row.el.hidden = junk && !showJunk.checked;
+    if (junk) row.tick.checked = false;
+    junkCount();
     count();
   }
 

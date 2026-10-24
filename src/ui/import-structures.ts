@@ -7,6 +7,7 @@ import { openReview, pixelsPng, type FoundPicture } from './import-review';
 import { canReadHere, downloadPack, localReader, packReady, readWithAi, PACK_MB, type ReadResult } from '../recognise/reader';
 import { checkRead, type Checked, type Engine } from '../recognise/check';
 import { cleanPhoto, shrinkTo, type Pixels } from '../recognise/picture';
+import { findDrawings, isProse, type Box } from '../recognise/find';
 import { aiName, aiReady, type AiPrefs } from '../ai/link';
 import type { DocStyle } from '../style';
 
@@ -86,7 +87,7 @@ async function chooseReader(host: ImportHost, preferAi: boolean): Promise<'here'
  * first, when there is one: the reader on this computer was trained on printed drawings and reads
  * few hand drawings right (about 1 in 10 on the DECIMER hand-drawn set; Claude about 3 in 4).
  */
-export async function importPictures(host: ImportHost, found: FoundPicture[], o: { title: string; note: string; tickDoubtful: boolean; photo: boolean }): Promise<void> {
+export async function importPictures(host: ImportHost, found: FoundPicture[], o: { title: string; note: string; tickDoubtful: boolean; photo: boolean; hideJunk?: boolean }): Promise<void> {
   if (!found.length) { host.flash('No pictures to read.'); return; }
   if (!host.chem.ready) { host.flash('The chemistry engine is still loading. Try again in a moment.'); return; }
   const how = await chooseReader(host, o.photo);
@@ -107,6 +108,61 @@ export async function importPictures(host: ImportHost, found: FoundPicture[], o:
     check: (r) => checkRead(r, host.style(), host.chem),
     typed: (smiles) => ({ kind: 'smiles', smiles, note: '', ms: 0 }),
     tickDoubtful: o.tickDoubtful,
+    hideJunk: o.hideJunk,
     place: host.place,
   });
+}
+
+/** Pages read at most in one go (a thesis is read a part at a time). */
+const MOST_PAGES = 40;
+
+/** The drawings on the pages of a PDF, as pictures (pages from `first` to `last`, from 1). */
+export async function pdfDrawings(bytes: Uint8Array, pick: (pages: number) => Promise<[number, number] | null>, progress: (msg: string) => void): Promise<FoundPicture[] | null> {
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+    pdfjs.GlobalWorkerOptions.workerSrc = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
+  }
+  const task = pdfjs.getDocument({ data: bytes.slice() });
+  try {
+    const pdf = await task.promise;
+    const range = pdf.numPages > MOST_PAGES ? await pick(pdf.numPages) : [1, pdf.numPages] as [number, number];
+    if (!range) return null;
+    const found: FoundPicture[] = [];
+    for (let n = range[0]; n <= range[1]; n++) {
+      progress(`Looking for structures on page ${n} of ${range[1]}…`);
+      const page = await pdf.getPage(n);
+      // about 150 dots to the inch: structures come out a few hundred pixels across, as the reader likes
+      const view = page.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.ceil(view.width);
+      canvas.height = Math.ceil(view.height);
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      await page.render({ canvas, canvasContext: ctx, viewport: view }).promise;
+      const text = await page.getTextContent();
+      const prose: Box[] = [], labels: Box[] = [];
+      for (const it of text.items) {
+        if (!('str' in it) || !it.str.trim()) continue;
+        const t = pdfjs.Util.transform(view.transform, it.transform);
+        const size = Math.hypot(t[2], t[3]);
+        (isProse(it.str) ? prose : labels).push({ x: t[4], y: t[5] - size, w: it.width * view.scale, h: size * 1.25 });
+      }
+      const w = canvas.width, h = canvas.height;
+      const px = ctx.getImageData(0, 0, w, h).data;
+      const ink = new Uint8Array(w * h);
+      for (let i = 0; i < w * h; i++) ink[i] = px[i * 4] + px[i * 4 + 1] + px[i * 4 + 2] < 600 ? 1 : 0;
+      const boxes = findDrawings(ink, w, h, prose, Math.round(w / 120), labels);
+      boxes.forEach((b, k) => {
+        const pad = 6;
+        const x = Math.max(0, b.x - pad), y = Math.max(0, b.y - pad), bw = Math.min(w - x, b.w + 2 * pad), bh = Math.min(h - y, b.h + 2 * pad);
+        const d = ctx.getImageData(x, y, bw, bh);
+        found.push({ where: boxes.length > 1 ? `Page ${n}, ${k + 1}` : `Page ${n}`, pixels: { width: d.width, height: d.height, data: d.data } });
+      });
+      page.cleanup();
+    }
+    return found;
+  } finally {
+    void task.destroy();
+  }
 }
