@@ -208,7 +208,7 @@ import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
 import { aiSettingsDialog } from './ui/ai-settings';
-import { decodePicture, importPictures, type ImportHost } from './ui/import-structures';
+import { decodePicture, importPictures, pdfDrawings, type ImportHost } from './ui/import-structures';
 import { placeRead } from './recognise/check';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -3215,6 +3215,38 @@ async function importPastedPicture(): Promise<void> {
   await readPictures([{ name: 'Pasted picture', ...got }]);
 }
 
+/** File > Import Structures from PDF: every drawing on the pages, read and offered on the review screen. */
+async function importPdf(): Promise<void> {
+  finishTyping();
+  const f = await openBytesDialog('PDF files', [], ['pdf']).catch(async (e) => { await showError(String(e)); return null; });
+  if (!f) return;
+  let found;
+  try {
+    found = await pdfDrawings(f.bytes, async (pages) => {
+      const r = await ask('Import Structures from PDF', [
+        { name: 'from', label: 'From page', type: 'number', value: '1' },
+        { name: 'to', label: 'To page', type: 'number', value: String(Math.min(pages, 40)) },
+      ], { ok: 'Read', note: `${f.name} has ${pages} pages. Which shall be read? (40 or fewer at a time.)` });
+      if (!r) return null;
+      const a = Math.max(1, Math.min(pages, Math.round(Number(r.from) || 1)));
+      return [a, Math.max(a, Math.min(pages, a + 39, Math.round(Number(r.to) || a)))];
+    }, (msg) => flash(msg, 20000));
+  } catch (e) {
+    await showError(`Could not read ${f.name}: ${String(e)}`);
+    return;
+  }
+  if (!found) return;
+  if (!found.length) { flash('No drawings were found in this PDF. If its pages are scans, try Import Structures from Picture on a screenshot.', 8000); return; }
+  flash(`Found ${found.length} drawings.`);
+  await importPictures(importHost, found, {
+    title: 'Import Structures from PDF',
+    note: `${f.name}: each drawing found, beside the structure read from it. Ones the reader is sure of are ticked; check each against its picture, fix a SMILES or tick more, then place them.`,
+    tickDoubtful: false,
+    photo: false,
+    hideJunk: true,
+  });
+}
+
 async function readPictures(pics: { name: string; bytes: Uint8Array; mime: string }[]): Promise<void> {
   if (!pics.length) return;
   const found = [];
@@ -4708,6 +4740,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'insert-picture': () => insertPicture(),
   'import-picture': () => importPicture(),
   'import-paste': () => importPastedPicture(),
+  'import-pdf': () => importPdf(),
   'insert-video': () => void insertMedia(false),
   'insert-slide-zoom': () => void insertZoom(false),
   'insert-summary-zoom': () => void insertZoom(true),
