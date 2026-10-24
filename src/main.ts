@@ -84,7 +84,7 @@ import { editMaster } from './ui/master-dialog';
 import { editDrawingStyle } from './ui/style-dialog';
 import type { DocText } from './document/document';
 import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from './dark-page';
-import { applyStyle, restyleContents, styleNamed, type StyleMode } from './drawing-styles';
+import { STYLE_PRESETS, applyStyle, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
 import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
 import { pngWithDpi } from './render/emf-read';
 import { whiteToClear } from './render/background';
@@ -161,6 +161,7 @@ import { SettingsWindow } from './ui/settings-window';
 import { fileTypesPage, FILE_TYPES } from './ui/file-types-page';
 import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed } from './ui/ribbon-fit';
 import { placeTitleBar, titleBarPlace } from './ui/title-bar';
+import { canScaleUi, setUiScale, stepUiScale, uiScale, UI_SCALES } from './ui/ui-scale';
 import { FeedbackDialog } from './ui/feedback-dialog';
 import { addRecent, removeRecent, recentLabel } from './recent';
 import { NameReader, captionName, attachmentAtoms, cxNotes } from './chem/names';
@@ -566,7 +567,7 @@ async function dropFiles(files: File[], at: { x: number; y: number }): Promise<v
   const inside = at.x >= r.left && at.x <= r.right && at.y >= r.top && at.y <= r.bottom;
   for (const f of files) {
     const bytes = new Uint8Array(await f.arrayBuffer());
-    const mime = /\.(cdxml|cdx|pptx|xlsx|xlsm|xls|ods|docx|csv|tsv|txt|sdf?)$/i.test(f.name) ? null : pictureMime(f.name, bytes);
+    const mime = /\.(cdxml|cdx|cds|pptx|xlsx|xlsm|xls|ods|docx|csv|tsv|txt|sdf?)$/i.test(f.name) ? null : pictureMime(f.name, bytes);
     if (mime && sheetActive()) flash('Pictures can\'t go in a cell yet. Drop sheet files (.xlsx, .csv, .sdf) to open them.');
     else if (mime && docActive()) docMode.dropPicture(bytes, mime);
     else if (mime) placePicture(bytes, mime, inside ? renderer.toDoc(at.x - r.left, at.y - r.top) : null);
@@ -1076,7 +1077,7 @@ setLinkHost({
   },
   async openHere(path) {
     // drawings, documents, slides, sheets and workspaces open in a tab here
-    if (!/\.(cdxml|cdx|docx|pptx|xlsx|xlsm|xls|ods|csv|tsv|sdf|sd)$/i.test(path) && !path.toLowerCase().endsWith(`.${WORKSPACE.extension}`)) return false;
+    if (!/\.(cdxml|cdx|cds|docx|pptx|xlsx|xlsm|xls|ods|csv|tsv|sdf|sd)$/i.test(path) && !path.toLowerCase().endsWith(`.${WORKSPACE.extension}`)) return false;
     if (!isTauri()) return false;
     await openRecent(path);
     return true;
@@ -1830,6 +1831,7 @@ const ws: Workspace = new Workspace(doc, {
   saved: (tab, data, how, was) => keeper.saved(tab, data, how, was),
   autoSaveFailed: (tab, msg) => keeper.autoSaveFailed(tab, msg),
   opened: (tab) => keeper.opened(tab),
+  styleSheet: (tab, style) => void offerStyleSheet(tab, style),
   dropped: (tab) => {
     keeper.dropped(tab);
     // a drawing being edited for Word: Word hears that the editing is over
@@ -3284,6 +3286,35 @@ async function drawingStyleDialog(): Promise<void> {
   flash(`Structures are now drawn in ${next.name}${got.forNew ? `, and new ${STYLE_KINDS[mode].plural} will start in it` : ''}.`, 4000);
 }
 
+/**
+ * A ChemDraw style sheet (.cds) was opened: its contents show in their tab, and its settings can
+ * be kept as one of your own drawing styles (and made the style new drawings start in).
+ */
+async function offerStyleSheet(tab: Tab, style: DocStyle): Promise<void> {
+  const known = [...STYLE_PRESETS.map((p) => p.style), ...ownStyles].find((s) => sameLook(s, style));
+  if (known) {
+    flash(`${tab.name} has the same settings as ${known.name}, which is already in Drawing Style.`, 5000);
+    return;
+  }
+  const base = tab.name.replace(/\.cds$/i, '');
+  const got = await ask('Use this style sheet?', [
+    { name: 'name', label: 'Name', value: base },
+    { name: 'forNew', label: 'Start new drawings in it', value: 'false', type: 'checkbox' },
+  ], {
+    ok: 'Add to My Styles',
+    note: `${tab.name} is a ChemDraw style sheet: bond length ${style.bondLength} pt, line width ${style.lineWidth} pt, bold width ${style.boldWidth} pt, `
+      + `${style.labelFont} ${style.labelSize} pt labels. Keep these settings as one of your own drawing styles, to pick in Drawing Style in any mode? `
+      + 'Its contents are open in a tab either way.',
+  });
+  if (!got) return;
+  const st: DocStyle = { ...style, name: got.name.trim() || base };
+  const had = ownStyles.findIndex((s) => s.name === st.name);
+  ownStyles = had >= 0 ? ownStyles.map((s, i) => (i === had ? st : s)) : [...ownStyles, st];
+  if (got.forNew === 'true') modeStyles.drawing = st.name;
+  storeSettings();
+  flash(`${st.name} is now one of your drawing styles${got.forNew === 'true' ? ', and new drawings will start in it' : ''}.`, 4000);
+}
+
 async function slideMaster(): Promise<void> {
   const d = deckNow();
   if (!d) return;
@@ -4259,7 +4290,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'group-tips', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'group-tips', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -4738,6 +4769,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'show-stereo': () => previewStereo(!renderer.previewStereo),
   'scroll-bars': () => { showScrollBars(!scrollbars.shown); storeSettings(); },
   'collapse-ribbon': () => { setRibbonCollapsed(!ribbonCollapsed()); storeSettings(); },
+  'ui-scale-in': () => sizeInterface(stepUiScale(uiScale(), 1)),
+  'ui-scale-out': () => sizeInterface(stepUiScale(uiScale(), -1)),
+  'ui-scale-reset': () => sizeInterface(1),
+  ...Object.fromEntries(UI_SCALES.map((v) => [`ui-scale-${Math.round(v * 100)}`, () => sizeInterface(v)])),
   'title-bar-in-menu': () => { void placeTitleBar(titleBarPlace() === 'app' ? 'system' : 'app'); storeSettings(); },
   'page-setup': () => void pageSetup(),
   'text-bar-docked': () => { placeTextBar('docked'); storeSettings(); },
@@ -5213,7 +5248,7 @@ function layoutSplit(): void {
   if (ws.pane) editor.paused = !splitDrawing && !cellEdit;
   $('[data-cmd="split-view"]')?.setAttribute('aria-checked', String(!!st));
   if (!st) { $('#split-empty').hidden = true; return; }
-  const opts = ws.tabs.filter((t) => t.mode === 'drawing').map((t) => new Option(t.name.replace(/\.(cdxml|cdx)$/i, ''), String(t.id), false, t === st.drawing));
+  const opts = ws.tabs.filter((t) => t.mode === 'drawing').map((t) => new Option(t.name.replace(/\.(cdxml|cdx|cds)$/i, ''), String(t.id), false, t === st.drawing));
   opts.push(new Option('New drawing', 'new'));
   splitPick.replaceChildren(...opts);
   $('#split-insert').textContent = st.main.mode === 'document' ? 'Insert into Document' : st.main.mode === 'sheet' ? 'Insert into Cell' : st.main.mode === 'design' ? 'Insert into Design' : 'Insert into Slide';
@@ -5875,6 +5910,7 @@ function currentSettings(): Settings {
     scrollBars: scrollbars.shown,
     titleBar: titleBarPlace(),
     ribbonCollapsed: ribbonCollapsed(),
+    uiScale: uiScale(),
     textBar: CaptionEditor.barPlace,
     page: defaultPage,
     welcomed,
@@ -6080,6 +6116,7 @@ function applySettings(s: Settings): void {
   setOrient(s.orient, false);
   void placeTitleBar(s.titleBar);
   setRibbonCollapsed(s.ribbonCollapsed);
+  void setUiScale(s.uiScale);
   defaultPage = s.page;
   welcomed = s.welcomed;
   // the drawing open at start (empty and never saved) takes the default page
@@ -8120,6 +8157,13 @@ async function pageSetup(): Promise<void> {
   editor.changed();
   renderer.repaintAll();
   editor.requestScene();
+}
+
+/** View > Interface Size: the whole window bigger or smaller, saved for next time. */
+function sizeInterface(v: number): void {
+  if (!canScaleUi()) { flash('In the web version, use your browser\'s zoom (in its menu) to make the whole page bigger or smaller.', 5000); return; }
+  void setUiScale(v).then(() => flash(`Interface size ${Math.round(uiScale() * 100)}% (Ctrl+Alt+= larger, Ctrl+Alt+- smaller, Ctrl+Alt+0 normal)`, 2500));
+  storeSettings();
 }
 
 /** View > Text Formatting Bar: along the top of the drawing, floating by the text, or hidden. */
