@@ -39,12 +39,12 @@ export class ShapeMenu {
     this.pop.style.top = `${r.bottom + 4}px`;
     this.lib.focusSearch();
     // after this click has finished
-    setTimeout(() => { addEventListener('mousedown', this.close, true); addEventListener('keydown', this.close, true); });
+    setTimeout(() => { addEventListener('pointerdown', this.close, true); addEventListener('keydown', this.close, true); });
   }
 
   hide(): void {
     this.pop.hidden = true;
-    removeEventListener('mousedown', this.close, true);
+    removeEventListener('pointerdown', this.close, true);
     removeEventListener('keydown', this.close, true);
   }
 }

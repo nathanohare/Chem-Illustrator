@@ -88,8 +88,9 @@ export type StrokeKind =
   | { kind: 'loop'; corners: number; centre: Vec; radius: number }
   | { kind: 'line'; vertices: Vec[] };
 
-/** What a stroke is, by its shape and size against the bond length L (and whether it starts on an atom). */
-export function classify(pts: Vec[], L: number, startsOnAtom = false): StrokeKind {
+/** What a stroke is, by its shape and size against the bond length L (and whether it starts on an
+ * atom). Strokes smaller than `letterMax` across are letters. */
+export function classify(pts: Vec[], L: number, startsOnAtom = false, letterMax = 0.7 * L): StrokeKind {
   const P = pathLength(pts);
   if (P < 0.12 * L) return { kind: 'tap' };
   const b = boxOf(pts), D = Math.hypot(b.w, b.h);
@@ -99,7 +100,7 @@ export function classify(pts: Vec[], L: number, startsOnAtom = false): StrokeKin
   for (const p of pts) dev = Math.max(dev, distToSegment(p, pts[0], pts[pts.length - 1]));
   const straight = dev < Math.max(0.12 * chord, 0.06 * L);
   // small strokes are letters, unless a straight one starts on an atom (a short bond)
-  if (Math.max(b.w, b.h) < 0.7 * L && !(straight && startsOnAtom)) return { kind: 'glyph' };
+  if (Math.max(b.w, b.h) < letterMax && !(straight && startsOnAtom)) return { kind: 'glyph' };
   const closed = chord < Math.max(0.22 * D, 0.2 * L) && P > 1.8 * L;
   if (closed) {
     const c = centroid(resample(pts, L / 10));
@@ -304,10 +305,14 @@ export interface SketchHost {
   /** The ink waiting to be read changed: redraw the overlay. */
   repaint(): void;
   say(msg: string): void;
+  /** Screen pixels per drawing unit now (letters are written at hand size, whatever the zoom). */
+  scale?(): number;
 }
 
 /** How long after the last small stroke a letter is read (another stroke may follow, as in H or Cl). */
 const LETTER_WAIT = 650;
+/** A letter written by hand is at least this many screen pixels high, however far out the view is. */
+const HAND_LETTER_PX = 36;
 
 export class Sketcher {
   /** Small strokes waiting to be read as letters. */
@@ -322,7 +327,11 @@ export class Sketcher {
     if (pts.length < 2) { this.flush(); return; }
     const doc = this.h.doc, L = this.L;
     const startAtom = atomAt(doc, pts[0], 0.3 * L);
-    const k = classify(pts, L, !!startAtom);
+    // letters: up to a bond long, or hand size when the view is zoomed out (but under a ring's size)
+    const px = this.h.scale?.() ?? 0;
+    const letterMax = Math.max(0.7 * L, px > 0 ? Math.min(1.3 * L, HAND_LETTER_PX / px) : 0);
+    let k = classify(pts, L, !!startAtom, letterMax);
+    if ((k.kind === 'line' || k.kind === 'loop') && this.isLetter(pts, k, !!startAtom)) k = { kind: 'glyph' };
     if (k.kind === 'glyph') {
       // a letter far from the ones waiting is a new one: read those first
       if (this.pending.length) {
@@ -339,6 +348,22 @@ export class Sketcher {
     if (k.kind === 'scribble') this.erase(pts);
     else if (k.kind === 'loop') this.ring(pts, k);
     else this.chain(k.vertices);
+  }
+
+  /** A stroke bigger than a letter is usually drawn, but is still writing when it is the next
+   * stroke of a letter being written (the bar of an H, the l of Cl), or a letter written over an
+   * atom (centred on it: a ring drawn from an atom is centred a bond away). */
+  private isLetter(pts: Vec[], k: Extract<StrokeKind, { kind: 'line' | 'loop' }>, startsOnAtom: boolean): boolean {
+    const L = this.L, b = boxOf(pts);
+    if (Math.max(b.w, b.h) > 1.6 * L) return false;
+    if (this.pending.length) {
+      const p = boxOf(this.pending.flat()), m = 0.3 * L;
+      if (b.x1 < p.x2 + m && b.x2 > p.x1 - m && b.y1 < p.y2 + m && b.y2 > p.y1 - m) return true;
+    }
+    // a straight stroke is a bond (or a minus, when small), never a letter on an atom
+    if (k.kind === 'line' && k.vertices.length <= 2) return false;
+    if (startsOnAtom && k.kind === 'line') return false;
+    return !!nearestAtom(this.h.doc, { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 }, 0.45 * L);
   }
 
   /** Read the letters waiting now. */

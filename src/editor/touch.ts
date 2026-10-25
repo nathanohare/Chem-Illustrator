@@ -34,6 +34,15 @@ export function installPenAndTouch(h: TouchHost): void {
   // no text selection, magnifier or callout from a long press on the canvas (iPadOS)
   el.style.setProperty('-webkit-user-select', 'none');
   el.style.setProperty('-webkit-touch-callout', 'none');
+  // Apple Pencil on Safari: iPadOS Scribble (handwriting into text) watches pencil touches on
+  // the page and takes the stroke away from the drawing, sending pointercancel at the lift, and
+  // slows the ink while it reads it. Turning down the pencil's touch events keeps its strokes
+  // ours; its pointer events still come. Fingers keep the browser's usual handling.
+  const stylus = (e: TouchEvent) => {
+    for (const t of Array.from(e.changedTouches)) if ((t as Touch & { touchType?: string }).touchType === 'stylus') { if (e.cancelable) e.preventDefault(); return; }
+  };
+  el.addEventListener('touchstart', stylus, { passive: false });
+  el.addEventListener('touchmove', stylus, { passive: false });
 
   let penSeen = false;
   /** Touches taken from the editor, where they are now (screen px, relative to the canvas). */

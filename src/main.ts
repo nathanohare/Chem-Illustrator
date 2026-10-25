@@ -5315,7 +5315,9 @@ function showMenu(m: Menu | null, focus = true): void {
 }
 for (const m of menus) {
   m.btn.addEventListener('click', () => showMenu(openMenu === m ? null : m));
-  m.btn.addEventListener('pointerenter', () => { if (openMenu && openMenu !== m) showMenu(m, false); });
+  // sliding along the menu bar opens each menu in turn (a mouse only: a tap's pointerenter would
+  // open the menu and its click shut it again)
+  m.btn.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse' && openMenu && openMenu !== m) showMenu(m, false); });
   m.list.addEventListener('scroll', () => closeSubs(m.list));
   m.list.addEventListener('pointerover', (e) => {
     const item = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
@@ -5488,9 +5490,10 @@ function tickMenuModes(): void {
   }
 }
 tickMenuModes();
+// (in the capture phase: the drawing takes a finger's press for itself, so it never bubbles up)
 document.addEventListener('pointerdown', (e) => {
   if (openMenu && !(e.target as HTMLElement).closest('.menu-wrap')) showMenu(null);
-});
+}, true);
 // listing the clipboard's formats needs the Windows app
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-cmd="clipboard-formats"]')) b.hidden = !nativeClipboard;
 

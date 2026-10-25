@@ -162,8 +162,8 @@ export function showStyleGallery(button: HTMLElement | { left: number; bottom: n
   };
   const close = () => {
     pop.remove();
-    removeEventListener('mousedown', outside, true);
+    removeEventListener('pointerdown', outside, true);
     removeEventListener('keydown', outside, true);
   };
-  setTimeout(() => { addEventListener('mousedown', outside, true); addEventListener('keydown', outside, true); });
+  setTimeout(() => { addEventListener('pointerdown', outside, true); addEventListener('keydown', outside, true); });
 }
