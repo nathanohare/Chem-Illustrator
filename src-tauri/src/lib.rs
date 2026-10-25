@@ -265,7 +265,7 @@ fn settings_write(app: tauri::AppHandle, contents: String) -> Result<(), String>
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| format!("Could not make {}: {e}", dir.display()))?;
     }
-    write_text_file(path.to_string_lossy().into_owned(), contents)
+    write_bytes(&path.to_string_lossy(), contents.as_bytes())
 }
 
 #[cfg(test)]
