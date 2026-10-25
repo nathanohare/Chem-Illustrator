@@ -145,7 +145,7 @@ import { htmlToRich } from './text/html';
 import { LiveStereo } from './chem/live-stereo';
 import { setStereoShown, shownDescriptor, axialStyle } from './chem/stereo';
 import { keymap, registerToolNames, displayChord, actionName, chordOf, parseAction, KeyContext, KeyOverrides } from './editor/keymap';
-import { loadSettings, saveSettings, settingsLocation, exportText, importSettings, Settings } from './settings';
+import { loadSettings, saveSettings, settingsLocation, exportText, importSettings, Settings, SLIDE_PANE_MIN, SLIDE_PANE_MAX, NOTES_MIN, NOTES_MAX } from './settings';
 import { showDialog } from './ui/dialog-host';
 import { HotkeysDialog } from './ui/hotkeys-dialog';
 import { TypingDialog } from './ui/typing-dialog';
@@ -4694,6 +4694,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'connector-tool': () => { finishTyping(); editor.setTool('connector'); },
   'connector-elbow-tool': () => { finishTyping(); editor.setTool('connector-elbow'); },
   'shape-styles': () => shapeStyles(),
+  'view-notes': () => { slidePanes.notes = !slidePanes.notes; applySlidePanes(); storeSettings(); mainResized(); },
   'view-slide-ruler': () => { slideLook.ruler = !slideLook.ruler; showRulers(); storeSettings(); },
   'view-gridlines': () => { slideLook.grid = !slideLook.grid; showRulers(); storeSettings(); renderer.repaintAll(); editor.requestScene(); },
   'view-guides': () => toggleGuides(),
@@ -5642,6 +5643,61 @@ $('#split-handle').addEventListener('pointerdown', (e) => {
 });
 applySplitWidth();
 
+// ---------------------------------------------------------------- Slides: the slide list's width and the speaker notes (drag their edges)
+
+const slidePanes = { width: 212, notes: true, notesH: 84 };
+/** The slide list's pictures fill its width, less the slide numbers and the scroll bar. */
+const thumbFor = (w: number) => Math.max(60, w - 44);
+
+function applySlidePanes(): void {
+  workEl.style.setProperty('--slide-pane-w', `${slidePanes.width}px`);
+  workEl.style.setProperty('--notes-h', `${slidePanes.notesH}px`);
+  $('#notes-pane').classList.toggle('notes-off', !slidePanes.notes);
+  for (const b of document.querySelectorAll<HTMLElement>('[data-cmd="view-notes"]')) {
+    b.setAttribute(b.getAttribute('role') === 'menuitemcheckbox' ? 'aria-checked' : 'aria-pressed', String(slidePanes.notes));
+  }
+  if (slideList.thumbW !== thumbFor(slidePanes.width)) slideList.setThumbW(thumbFor(slidePanes.width), true);
+}
+
+/** Drag a pane's edge: `at` turns the pointer's place into the new size; the size is kept in settings when you let go. */
+function dragEdge(h: HTMLElement, at: (ev: PointerEvent) => void, done: () => void): void {
+  h.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0) return;
+    h.setPointerCapture(e.pointerId);
+    h.classList.add('dragging');
+    const move = (ev: PointerEvent) => at(ev);
+    const up = () => {
+      h.classList.remove('dragging');
+      h.removeEventListener('pointermove', move);
+      h.removeEventListener('pointerup', up);
+      h.removeEventListener('pointercancel', up);
+      done();
+      storeSettings();
+      mainResized();
+    };
+    h.addEventListener('pointermove', move);
+    h.addEventListener('pointerup', up);
+    h.addEventListener('pointercancel', up);
+    e.preventDefault();
+  });
+}
+const listHandle = $<HTMLElement>('#slide-list-handle');
+dragEdge(listHandle, (ev) => {
+  const left = $('#slide-list').getBoundingClientRect().left;
+  slidePanes.width = Math.round(Math.min(SLIDE_PANE_MAX, Math.max(SLIDE_PANE_MIN, ev.clientX - left)));
+  workEl.style.setProperty('--slide-pane-w', `${slidePanes.width}px`);
+  slideList.setThumbW(thumbFor(slidePanes.width));
+}, () => slideList.setThumbW(thumbFor(slidePanes.width), true));
+listHandle.addEventListener('dblclick', () => { slidePanes.width = 212; applySlidePanes(); storeSettings(); });
+const notesHandle = $<HTMLElement>('#notes-handle');
+dragEdge(notesHandle, (ev) => {
+  const bottom = $('#notes-pane').getBoundingClientRect().bottom;
+  const most = Math.min(NOTES_MAX, Math.round(workEl.getBoundingClientRect().height * 0.6));
+  slidePanes.notesH = Math.round(Math.min(most, Math.max(NOTES_MIN, bottom - ev.clientY)));
+  workEl.style.setProperty('--notes-h', `${slidePanes.notesH}px`);
+}, () => undefined);
+notesHandle.addEventListener('dblclick', () => { slidePanes.notesH = 84; applySlidePanes(); storeSettings(); });
+
 // ---------------------------------------------------------------- settings and the Hotkeys window
 
 /** The colour Chemistry > Highlight and Fill > Highlight uses: the one last chosen in the Style panel (a soft yellow at first). */
@@ -6094,6 +6150,9 @@ function currentSettings(): Settings {
     nicknames: ownNicknames,
     templates: ownTemplates(),
     splitWidth,
+    slidePaneWidth: slidePanes.width,
+    notesHeight: slidePanes.notesH,
+    slideNotes: slidePanes.notes,
     citeStyle: preferredStyle().style,
     citeOptions: preferredStyle().options,
     methylStyle: editor.options.methylStyle,
@@ -6302,6 +6361,10 @@ function applySettings(s: Settings): void {
   addNicknames(ownNicknames);
   useOwnTemplates(s.templates);
   splitWidth = s.splitWidth;
+  slidePanes.width = s.slidePaneWidth;
+  slidePanes.notesH = s.notesHeight;
+  slidePanes.notes = s.slideNotes;
+  applySlidePanes();
   applySplitWidth();
   setPreferredStyle(s.citeStyle, s.citeOptions);
   editor.options.methylStyle = s.methylStyle;
@@ -8276,6 +8339,7 @@ async function navigationSettings(): Promise<void> {
 
 $('#go-fit').addEventListener('click', () => { command('zoom-fit'); $('#overlay').focus({ preventScroll: true }); });
 $('#go-sel').addEventListener('click', () => { command('zoom-selection'); $('#overlay').focus({ preventScroll: true }); });
+$('#status-notes').addEventListener('click', () => command('view-notes'));
 
 // ---------------------------------------------------------------- the page in drawings
 
