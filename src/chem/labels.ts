@@ -54,9 +54,11 @@ export const NICKNAMES: Record<string, string> = {
  * Ligands that give the metal a lone pair or a π-bond (L-type): their bond to a metal takes no
  * hydrogen off them, so PPh₃, COD and THF keep every hydrogen they have as free molecules.
  */
-const L_LIGANDS = new Set(['CO', 'OC', 'THF', 'DMF', 'DMSO', 'Et2O', 'DME', 'MeCN', 'PhCN', 'PPh3', 'PCy3', 'PMe3', 'PEt3', 'PtBu3', 'PnBu3',
+const L_LIGANDS: ReadonlySet<string> = new Set(['CO', 'OC', 'THF', 'DMF', 'DMSO', 'Et2O', 'DME', 'MeCN', 'PhCN', 'PPh3', 'PCy3', 'PMe3', 'PEt3', 'PtBu3', 'PnBu3',
   'dppm', 'dppe', 'dppp', 'dppb', 'BINAP', 'Xantphos', 'XPhos', 'SPhos', 'RuPhos', 'JohnPhos', 'DavePhos', 'py', 'bpy', 'bipy',
   'phen', 'tmeda', 'TMEDA', 'en', 'IMes', 'SIMes', 'IPr', 'SIPr', 'COD', 'NBD', 'dba', 'p-cymene', 'C6Me6']);
+/** The L-type ligand labels (whole molecules when written on their own). */
+export const L_LIGAND_NAMES = L_LIGANDS;
 
 /**
  * Does this label, bonded to a metal, give it a lone pair or π-bond rather than share an
@@ -551,9 +553,9 @@ export function parseSmiles(smi: string): MiniGraph {
   let prev = -1;
   let pendingOrder = 0;
   let i = 0;
-  const add = (z: number, aromatic: boolean, charge = 0, dummy = false, hCount?: number) => {
+  const add = (z: number, aromatic: boolean, charge = 0, dummy = false, hCount?: number, iso?: number) => {
     const idx = atoms.length;
-    atoms.push({ z, charge, aromatic, dummy, hCount });
+    atoms.push({ z, charge, aromatic, dummy, hCount, ...(iso ? { iso } : {}) });
     if (prev >= 0) {
       const ord = pendingOrder || (aromatic && atoms[prev].aromatic ? 1.5 : 1);
       bonds.push({ a: prev, b: idx, order: ord });
@@ -569,6 +571,8 @@ export function parseSmiles(smi: string): MiniGraph {
     if (c === '#') { pendingOrder = 3; i++; continue; }
     if (c === '-') { pendingOrder = 1; i++; continue; }
     if (c === '*') { add(0, false, 0, true); i++; continue; }
+    // a dot starts a new molecule (salts: [Li+].[AlH4-])
+    if (c === '.') { prev = -1; pendingOrder = 0; i++; continue; }
     if (/\d/.test(c)) {
       const n = Number(c);
       const open = rings.get(n);
@@ -590,7 +594,7 @@ export function parseSmiles(smi: string): MiniGraph {
       let charge = 0;
       if (m[4]) charge = (m[4][0] === '+' ? 1 : -1) * (m[4].length > 1 ? Number(m[4].slice(1)) : 1);
       const h = m[3] ? (m[3].length > 1 ? Number(m[3].slice(1)) : 1) : 0;
-      add(elementNumber(sym) ?? 0, aromatic, charge, false, h);
+      add(elementNumber(sym) ?? 0, aromatic, charge, false, h, m[1] ? Number(m[1]) : undefined);
       i = j + 1;
       continue;
     }
@@ -612,10 +616,16 @@ export function parseSmiles(smi: string): MiniGraph {
 export function kekulize(g: MiniGraph): MiniBond[] {
   const arom = g.bonds.map((b, i) => (b.order === 1.5 ? i : -1)).filter((i) => i >= 0);
   if (!arom.length) return g.bonds;
-  // atoms that need one double bond: aromatic carbons, and nitrogens without H as in pyridine
+  // atoms that need one double bond: aromatic carbons, nitrogens without H as in pyridine (not
+  // one with three bonds, as in an N-substituted pyrrole), and N+ with three as in pyridinium
+  const degree = g.atoms.map(() => 0);
+  for (const b of g.bonds) { degree[b.a]++; degree[b.b]++; }
   const needs = (i: number) => {
     const a = g.atoms[i];
-    return a.z === 6 || a.z === 5 || ((a.z === 7 || a.z === 15) && !a.hCount && a.charge >= 0);
+    if (a.z === 6 || a.z === 5) return true;
+    if (a.z !== 7 && a.z !== 15) return false;
+    const n = degree[i] + (a.hCount ?? 0);
+    return a.charge === 1 ? n === 3 : a.charge === 0 && !a.hCount && n < 3;
   };
   const atoms = [...new Set(arom.flatMap((i) => [g.bonds[i].a, g.bonds[i].b]))].filter(needs);
   const mate = new Map<number, number>(); // atom → bond index of its double bond
