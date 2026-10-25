@@ -13,6 +13,10 @@ on:
     paths: ['src-tauri/**', '.github/workflows/ios.yml']
   workflow_dispatch:
 
+# the token only reads the code (none of these steps writes to the repository)
+permissions:
+  contents: read
+
 jobs:
   ios:
     runs-on: macos-latest
@@ -52,8 +56,15 @@ jobs:
           sed -i '' 's/TARGETED_DEVICE_FAMILY: "1,2"/TARGETED_DEVICE_FAMILY: "2"/g' src-tauri/gen/apple/project.yml || true
           # the privacy manifest goes in beside the app's Info.plist
           cp src-tauri/ios/PrivacyInfo.xcprivacy src-tauri/gen/apple/*_iOS/
-          # the app icons for iPad, from the same picture as the desktop icons
-          npx tauri icon src-tauri/icons/icon.png --ios-color '#ffffff'
+          # the app icons for iPad: the desktop picture filling the square (iPadOS rounds the
+          # corners), with no transparency, which App Store Connect refuses
+          npx tauri icon src-tauri/icons/ios-icon.png --ios-color '#2f6fdf'
+          for f in src-tauri/gen/apple/Assets.xcassets/AppIcon.appiconset/*.png; do
+            if sips -g hasAlpha "$f" | grep -q 'hasAlpha: yes'; then
+              sips -s format jpeg "$f" --out "$RUNNER_TEMP/flat.jpg" >/dev/null
+              sips -s format png "$RUNNER_TEMP/flat.jpg" --out "$f" >/dev/null
+            fi
+          done
           ls src-tauri/gen/apple
       - name: Build the signed app
         if: env.SHIP == 'true'

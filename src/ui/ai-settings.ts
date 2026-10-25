@@ -1,11 +1,14 @@
 // Edit > Settings > AI Model: link (or unlink) an AI model of the person's own, with their own key.
 
+import { isTauri } from '@tauri-apps/api/core';
 import { ask } from './ask';
-import { PROVIDERS, aiModel, aiModels, aiAsk, aiName, hasAiKey, setAiKey, type AiPrefs, type AiProvider } from '../ai/link';
+import { PROVIDERS, aiKeyRemembered, aiModel, aiModels, aiAsk, aiName, hasAiKey, rememberAiKey, setAiKey, type AiPrefs, type AiProvider } from '../ai/link';
 
 const NOTE = 'Optional. Link an AI model with your own API key to use it where the app offers "Use AI model", such as reading hand-drawn structures. '
   + 'Nothing is sent anywhere until you link one; after that, only what you choose to send (such as the picture being read) goes to that service, '
-  + 'and it is billed to your account there. The key is kept on this computer only, never in exported settings.';
+  + 'and it is billed to your account there. The key is never in exported settings. '
+  + (isTauri() ? 'It is kept on this computer only.'
+    : 'In a browser it is forgotten when this tab closes unless you tick "Remember". Other sites at the same github.io address can read what a browser remembers, so a separate key with a spending limit is safest here.');
 
 /** Show the settings; `save` keeps the new choice. */
 export async function aiSettingsDialog(now: AiPrefs, save: (p: AiPrefs) => void): Promise<void> {
@@ -24,6 +27,7 @@ export async function aiSettingsDialog(now: AiPrefs, save: (p: AiPrefs) => void)
         help: 'Leave empty for: ' + (['anthropic', 'openai', 'gemini'] as const).map((k) => `${PROVIDERS[k].name.split(' ')[0]} ${PROVIDERS[k].model}`).join(', ') + '. A model must read pictures to read structures.' },
       { name: 'base', label: 'Address (Other only)', value: cur.base, placeholder: 'http://localhost:11434/v1',
         help: 'For Other: the service\'s OpenAI-style address, such as https://openrouter.ai/api/v1 or Ollama\'s http://localhost:11434/v1.' },
+      ...(isTauri() ? [] : [{ name: 'remember', label: 'Remember the key in this browser', type: 'checkbox' as const, value: String(aiKeyRemembered(cur)) }]),
       { name: 'forget', label: 'Forget the saved key for this service', type: 'checkbox', value: 'false' },
     ], { ok: 'Save and Test', note: NOTE });
     if (!r) return;
@@ -36,7 +40,8 @@ export async function aiSettingsDialog(now: AiPrefs, save: (p: AiPrefs) => void)
     }
     try {
       if (r.forget === 'true') await setAiKey(next, '');
-      else if (r.key.trim()) await setAiKey(next, r.key.trim());
+      else if (r.key.trim()) await setAiKey(next, r.key.trim(), r.remember === 'true');
+      else await rememberAiKey(next, r.remember === 'true');
     } catch (e) {
       await ask('AI Model', [], { noCancel: true, note: 'Could not save the key: ' + String(e) });
       return;
