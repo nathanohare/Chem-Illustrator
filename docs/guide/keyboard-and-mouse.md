@@ -239,7 +239,7 @@ Pick the **Sketch** tool (the pen and squiggle in the toolbox, or ✎ on the key
 - a **line** becomes a bond, and a **zig-zag** a chain (one bond for each straight stretch). Lines start and end on atoms they touch; a line drawn **along a bond** makes it double (again: triple);
 - a **loop with corners** becomes a ring with that many atoms, and a **circle** a benzene ring. Drawn over a bond, the ring is fused there. A **circle inside a ring** makes it aromatic;
 - a **scribble** (back and forth) erases the atoms and bonds under it;
-- small **letters** label the atom they are written on (C, N, O, S, P, F, Cl, Br, I, H, B), or make a new atom in empty space; **+** and **−** charge the nearest atom.
+- **letters** label the atom they are written on (C, N, O, S, P, F, Cl, Br, I, H, B), or make a new atom in empty space; **+** and **−** charge the nearest atom. Write a letter centred on the atom, up to about a bond high; in empty space keep it smaller than a bond, or it is read as a bond or ring.
 
 To sketch with the pen whatever tool is picked (a finger or mouse still uses the tool), turn on **View > Touch Mode > Pen Always Sketches**.
 

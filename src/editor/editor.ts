@@ -386,6 +386,7 @@ export class Editor {
       done: () => this.changed(),
       repaint: () => this.requestOverlay(),
       say: (msg) => this.say(msg),
+      scale: () => this.r.view.scale,
     });
     const el = r.overlay;
     // tablets: fingers pan and pinch, a long press opens the menu (before the editor's own listeners)
@@ -961,8 +962,11 @@ export class Editor {
     if (d.moved) this.showPointer(e.ctrlKey || e.metaKey);
     const p = this.docPoint(e);
     if (d.mode === 'sketch') {
-      // a cancelled stroke (two fingers came down, or a long press) is not ink
-      if (e.type !== 'pointercancel') { d.path!.push(p); this.sketcher.stroke(d.path!); }
+      // a stroke we cancel ourselves (two fingers came down, or a long press) is not ink; one the
+      // system cancels at the lift (Safari does, when iPadOS wants the pencil) still is
+      // (a cancel's own position can be stale, so the ink ends where it last moved)
+      if (e.type !== 'pointercancel') d.path!.push(p);
+      if (e.type !== 'pointercancel' || e.isTrusted) this.sketcher.stroke(d.path!);
       this.requestOverlay(e.timeStamp);
       return;
     }

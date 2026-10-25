@@ -104,6 +104,37 @@ describe('sketching chemistry', () => {
     expect(doc.atoms.size).toBe(4);
   });
 
+  it('reads letters written bigger than a bond on an atom, and an H stroke by stroke', () => {
+    const doc = new Doc(), L = doc.style.bondLength;
+    const sk = new Sketcher(host(doc).h);
+    sk.stroke(wobble(segs([{ x: 0, y: 0 }, { x: L * 0.87, y: -L / 2 }, { x: L * 1.73, y: 0 }]), L * 0.03));
+    const [a, , c] = [...doc.atoms.values()];
+    // an O about a bond high, centred on the first atom: a label, not a ring
+    const s = L * 1.1;
+    sk.stroke(at([arc(0.5, 0.5, 0.42, 0.5, -100, 260)], a.x - s / 2, a.y - s / 2, s)[0]);
+    sk.flush();
+    expect(doc.atoms.size).toBe(3);
+    expect(doc.atoms.get(a.id)!.z).toBe(8);
+    // an N as big on the last atom
+    sk.stroke(at([ln([0, 1], [0, 0], [0.75, 1], [0.75, 0])], c.x - s * 0.4, c.y - s / 2, s)[0]);
+    sk.flush();
+    expect(doc.atoms.size).toBe(3);
+    expect(doc.atoms.get(c.id)!.z).toBe(7);
+  });
+
+  it('reads hand-size letters when zoomed out', () => {
+    const doc = new Doc(), L = doc.style.bondLength;
+    const { h } = host(doc);
+    // zoomed out: a bond is 10 px on the screen, and a C written 10 px high is a letter, not a chain
+    h.scale = () => 10 / L;
+    const sk = new Sketcher(h);
+    sk.stroke(at([arc(0.55, 0.5, 0.45, 0.5, -45, -315)], 5 * L, 5 * L, L * 1.0)[0]);
+    sk.flush();
+    expect(doc.atoms.size).toBe(1);
+    expect([...doc.atoms.values()][0].z).toBe(6);
+    expect(doc.bonds.size).toBe(0);
+  });
+
   it('makes a drawn ring aromatic with a circle inside', () => {
     const doc = new Doc(), L = doc.style.bondLength;
     const sk = new Sketcher(host(doc).h);
