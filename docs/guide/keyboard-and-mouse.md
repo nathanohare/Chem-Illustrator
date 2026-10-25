@@ -243,6 +243,10 @@ Pick the **Sketch** tool (the pen and squiggle in the toolbox, or ✎ on the key
 
 To sketch with the pen whatever tool is picked (a finger or mouse still uses the tool), turn on **View > Touch Mode > Pen Always Sketches**.
 
+In a text box, Apple Pencil's **Scribble** works in Touch Mode: write over the text box (or just to its right or below it) and your handwriting is typed where the pencil first touched. A tap with the pencil puts the caret there.
+
+If writing with the pen feels slow, **View > Developer Tools** shows a **Pen stroke** line after each stroke: how often the pen reported, how often the screen caught up, and how long the app took for each.
+
 ## What the mouse pointer means
 
 The pointer changes to show what a click or drag will do.
