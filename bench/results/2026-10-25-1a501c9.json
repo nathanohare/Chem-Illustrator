@@ -1,0 +1,108 @@
+{
+  "commit": "1a501c9",
+  "date": "2026-10-25T08:38:36.186Z",
+  "node": "v22.22.0",
+  "browser": {
+    "launch": {
+      "up": 756,
+      "quiet": 999,
+      "longest": 385,
+      "busy": 590,
+      "runs": [
+        {
+          "up": 1296,
+          "quiet": 1553,
+          "longest": 723,
+          "busy": 997
+        },
+        {
+          "up": 756,
+          "quiet": 999,
+          "longest": 385,
+          "busy": 590
+        },
+        {
+          "up": 656,
+          "quiet": 923,
+          "longest": 328,
+          "busy": 522
+        }
+      ]
+    },
+    "big": {
+      "dom": 654,
+      "appUp": 953,
+      "chemReady": 956,
+      "atoms": 40000,
+      "mb": 6.82,
+      "saveMs": [
+        931,
+        739,
+        712
+      ],
+      "openMs": [
+        2264,
+        2001,
+        2436
+      ],
+      "paintMs": [
+        23,
+        146,
+        74
+      ],
+      "drag1": [
+        4.5,
+        11
+      ],
+      "drag2000": [
+        59.3,
+        101.9
+      ]
+    },
+    "stress": {
+      "open": 1871,
+      "firstFit": 312.9,
+      "atoms": 40000,
+      "bonds": 44000,
+      "captions": 0,
+      "fitScale": 0.186,
+      "panFit": [
+        0.1,
+        0.2
+      ],
+      "pan100": [
+        0,
+        0.2
+      ],
+      "pan300": [
+        0.1,
+        0.2
+      ],
+      "hover": [
+        0.1,
+        0.2
+      ],
+      "move": [
+        2.3,
+        12.8
+      ],
+      "hotkey": [
+        2.9,
+        4.6
+      ],
+      "undo31": 38.1
+    }
+  },
+  "core": {
+    "drawing (1,000 rings, 6,000 atoms) / save CDXML": 691.6,
+    "drawing (1,000 rings, 6,000 atoms) / open CDXML": 507.37,
+    "drawing (1,000 rings, 6,000 atoms) / crossing gaps for every bond, from scratch": 43.57,
+    "sheet (20,000 formulas) / fill 20,000 formulas": 1981.13,
+    "sheet (20,000 formulas) / type one value (recalculate what reads it)": 1301.55,
+    "sheet (20,000 formulas) / save .xlsx": 436.15,
+    "sheet (20,000 formulas) / open .xlsx": 2979.43,
+    "document (60,000 words) / lay out every page": 13.91,
+    "document (60,000 words) / save .docx": 22.38,
+    "document (60,000 words) / open .docx": 102.41
+  }
+}

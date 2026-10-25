@@ -12,6 +12,10 @@
     "pretest": "node scripts/build-icons.mjs",
     "test": "vitest run",
     "bench": "node bench/perf.mjs stress",
+    "bench:core": "vitest bench --run bench/core.bench.ts",
+    "bench:baseline": "node bench/baseline.mjs",
+    "coverage": "vitest run --coverage.enabled --coverage.provider=v8 --coverage.include=src/** --coverage.reporter=text-summary --coverage.reporter=json-summary --coverage.reporter=html",
+    "typecheck:strict": "tsc --noEmit -p tsconfig.strict.json",
     "tauri": "tauri",
     "desktop": "tauri dev",
     "desktop:build": "tauri build"
@@ -23,6 +27,7 @@
     "@mdi/svg": "^7.4.47",
     "@playwright/test": "^1.56.1",
     "@tauri-apps/cli": "~2.12.1",
+    "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "^27.4.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.12",
