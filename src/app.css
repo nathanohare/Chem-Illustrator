@@ -378,6 +378,10 @@ body.slides-mode #canvas-host, body.design-mode #canvas-host { background: var(-
 @media (prefers-reduced-motion: reduce) { .edge-arrow { transition: none; } }
 .go-buttons { display: inline-flex; gap: 4px; }
 .go-buttons[hidden] { display: none; }
+#status-notes[hidden] { display: none; }
+#status-notes { font: 12px var(--ui-font); color: var(--muted); background: transparent; border: 1px solid transparent; border-radius: 5px; padding: 0 6px; line-height: 18px; }
+#status-notes:hover { color: var(--text); border-color: var(--line); }
+#status-notes[aria-pressed="true"] { color: var(--text); background: var(--accent-soft); }
 .go-buttons button { font: 12px var(--ui-font); color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; line-height: 18px; }
 #overlay { cursor: crosshair; touch-action: none; }
 .label-input {
@@ -624,8 +628,8 @@ dialog ul { margin: 0; padding-left: 16px; }
   }
   #work { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto; grid-template-areas: 'list' 'host' 'notes' 'split'; }
   #split-pane { width: auto; max-width: none; height: 45vh; border-left: 0; border-top: 1px solid var(--line); }
-  #split-handle { display: none; }
-  #slide-list, #design-lib { width: auto; max-height: 120px; border-right: 0; border-bottom: 1px solid var(--line); }
+  #split-handle, .pane-handle { display: none; }
+  #slide-list, #design-lib { width: auto !important; max-height: 120px; border-right: 0; border-bottom: 1px solid var(--line); }
   .sl-list { flex-direction: row; overflow-x: auto; overflow-y: hidden; }
   .sl-add { display: none; }
   aside { border-left: 0; border-top: 1px solid var(--line); max-height: 32vh; }
@@ -893,12 +897,19 @@ dialog.typing-dialog p { margin: 2px 0 6px; }
   grid-area: list;
   display: flex;
   flex-direction: column;
-  width: 212px;
+  width: var(--slide-pane-w, 212px);
   min-height: 0;
   background: var(--bg);
   border-right: 1px solid var(--line);
 }
 #slide-list[hidden] { display: none; }
+
+/* the edges you drag: the slide list's right edge and the speaker notes' top edge (main.ts) */
+.pane-handle { z-index: 6; touch-action: none; }
+.pane-handle:hover, .pane-handle.dragging { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+#slide-list-handle { grid-area: list; justify-self: end; position: relative; left: 3px; width: 7px; cursor: col-resize; }
+#slide-list[hidden] + #slide-list-handle { display: none; }
+#notes-handle { position: absolute; left: 0; right: 0; top: -4px; height: 7px; cursor: row-resize; }
 
 /* ------------------------------------------------------------------ Design mode's shape library */
 #design-lib {
@@ -1017,17 +1028,16 @@ dialog.design-size { width: min(94vw, 500px); }
 .sl-add:hover { color: var(--text); }
 
 /* ------------------------------------------------------------------ speaker notes */
-#notes-pane { grid-area: notes; border-top: 1px solid var(--line); background: var(--panel); }
-#notes-pane[hidden] { display: none; }
+#notes-pane { grid-area: notes; position: relative; border-top: 1px solid var(--line); background: var(--panel); }
+#notes-pane[hidden], #notes-pane.notes-off { display: none; }
 #notes {
   display: block;
   width: 100%;
-  height: 84px;
-  min-height: 40px;
-  max-height: 45vh;
-  padding: 8px 12px;
+  height: var(--notes-h, 84px);
+  max-height: 60vh;
+  padding: 6px 12px;
   border: 0;
-  resize: vertical;
+  resize: none;
   background: transparent;
   color: var(--text);
   font: 13px/1.45 var(--ui-font);
