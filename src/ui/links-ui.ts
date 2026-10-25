@@ -53,6 +53,12 @@ export async function followLink(link: string): Promise<void> {
     return;
   }
   if (kind === 'file') {
+    // another program's address (ms-msdt:, search-ms: and the like) is not a file: links like
+    // these have been used to start programs from a document
+    if (/^[a-z][a-z0-9+.-]+:/i.test(link) && !/^file:/i.test(link)) {
+      host.flash(`This link (${link.slice(0, 80)}) isn't a web page, an e-mail address or a file, so it isn't followed.`);
+      return;
+    }
     const path = wholePath(filePath(link));
     if (host.openHere && await host.openHere(path).catch(() => false)) return;
     if (!isTauri()) { window.open(/^file:/i.test(link) ? link : `file:///${path.replace(/\\/g, '/')}`, '_blank', 'noopener'); return; }

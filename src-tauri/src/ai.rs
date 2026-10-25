@@ -27,6 +27,23 @@ fn keys_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join("ai-keys.json"))
 }
 
+/// The page's own file commands (Open, Save) never read or write the keys file, so a page that
+/// was tricked into running someone else's script still can't take the keys from it.
+pub fn guard_key_file(app: &tauri::AppHandle, path: &str) -> Result<(), String> {
+    let refuse = || Err("That file holds the AI keys and is kept by the app itself.".to_string());
+    let name = std::path::Path::new(path.trim_end_matches(['/', '\\', '.', ' '])).file_name();
+    if name.and_then(|n| n.to_str()).is_some_and(|n| n.to_ascii_lowercase().starts_with("ai-keys.json")) {
+        return refuse();
+    }
+    // the same file by another name (a link, a short Windows name)
+    if let (Ok(keys), Ok(asked)) = (keys_file(app).and_then(|k| std::fs::canonicalize(k).map_err(|e| e.to_string())), std::fs::canonicalize(path)) {
+        if keys == asked {
+            return refuse();
+        }
+    }
+    Ok(())
+}
+
 fn read_keys(app: &tauri::AppHandle) -> HashMap<String, Saved> {
     keys_file(app)
         .ok()
@@ -126,6 +143,8 @@ pub async fn ai_request(
     let client = reqwest::Client::builder()
         .user_agent(concat!("ChemIllustrator/", env!("CARGO_PKG_VERSION")))
         .timeout(Duration::from_secs(180))
+        // a redirect could carry the key's header to another address
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| format!("Could not get ready to reach the AI service: {e}"))?;
     let url = format!("{base}{path}");

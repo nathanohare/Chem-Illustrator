@@ -13,6 +13,10 @@ on:
     paths: ['src-tauri/**', '.github/workflows/ios.yml']
   workflow_dispatch:
 
+# the token only reads the code (none of these steps writes to the repository)
+permissions:
+  contents: read
+
 jobs:
   ios:
     runs-on: macos-latest
