@@ -6,7 +6,8 @@
 //
 // The key is not kept with the other settings (so Export Settings never carries it): in the
 // desktop app the app keeps it in its own file and adds it to each request itself, sending it
-// only to the service it is for; in a browser it stays in this browser's storage.
+// only to the service it is for; in a browser it stays in this tab, or in this browser's storage
+// if the person asks for it to be remembered.
 
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
@@ -173,17 +174,50 @@ export function keyHeaders(p: AiPrefs, key: string): Record<string, string> {
 
 const WEB_KEYS = 'chem-illustrator.ai-keys';
 
-function webKeys(): Record<string, string> {
-  try { return JSON.parse(localStorage.getItem(WEB_KEYS) ?? '{}') ?? {}; } catch { return {}; }
+// In a browser a key lasts only while the tab is open (sessionStorage) unless the person ticks
+// "Remember the key in this browser" (localStorage). Every site under the same github.io
+// address shares that browser storage, so remembering is the person's choice, not the default.
+function store(remember: boolean): Storage | null {
+  try { return remember ? localStorage : sessionStorage; } catch { return null; }
 }
 
-/** Keep the key for this service (empty forgets it). */
-export async function setAiKey(p: AiPrefs, key: string): Promise<void> {
+function readKeys(remember: boolean): Record<string, string> {
+  try { return JSON.parse(store(remember)?.getItem(WEB_KEYS) ?? '{}') ?? {}; } catch { return {}; }
+}
+
+function writeKeys(remember: boolean, k: Record<string, string>): void {
+  try {
+    const st = store(remember);
+    if (!st) return;
+    if (Object.keys(k).length) st.setItem(WEB_KEYS, JSON.stringify(k)); else st.removeItem(WEB_KEYS);
+  } catch { /* storage refused: the key isn't kept */ }
+}
+
+function webKeys(): Record<string, string> {
+  return { ...readKeys(true), ...readKeys(false) };
+}
+
+/** Keep the key for this service (empty forgets it). In a browser, `remember` keeps it after the tab closes. */
+export async function setAiKey(p: AiPrefs, key: string, remember = false): Promise<void> {
   if (p.provider === 'none') return;
   if (isTauri()) { await invoke('ai_key_set', { provider: p.provider, key, base: aiBase(p) }); return; }
-  const k = webKeys();
-  if (key) k[p.provider] = key; else delete k[p.provider];
-  try { localStorage.setItem(WEB_KEYS, JSON.stringify(k)); } catch { /* private window: the key lasts until the page closes */ }
+  for (const where of [true, false]) {
+    const k = readKeys(where);
+    if (key && where === remember) k[p.provider] = key; else delete k[p.provider];
+    writeKeys(where, k);
+  }
+}
+
+/** In a browser: whether this service's key is remembered after the tab closes. */
+export function aiKeyRemembered(p: AiPrefs): boolean {
+  return !isTauri() && p.provider !== 'none' && !!readKeys(true)[p.provider];
+}
+
+/** In a browser: move the kept key to where `remember` says, without typing it again. */
+export async function rememberAiKey(p: AiPrefs, remember: boolean): Promise<void> {
+  if (isTauri() || p.provider === 'none') return;
+  const key = webKeys()[p.provider];
+  if (key) await setAiKey(p, key, remember);
 }
 
 /** Whether a key is kept for this service. */
