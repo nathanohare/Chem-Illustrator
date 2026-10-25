@@ -21,8 +21,12 @@ jobs:
   ios:
     runs-on: macos-latest
     env:
-      # 0.1.<build number>: each TestFlight build is newer than the one before
-      VERSION: 0.1.${{ github.run_number }}
+      # The iPad version stays the same from build to build, and only the build number goes up, so
+      # TestFlight's outside testers get each new build without another Beta App Review. Raise
+      # VERSION by hand for a new round of review (or for the App Store). It started above the
+      # 0.1.<run> numbers the first uploads used, because App Store Connect refuses a lower one.
+      VERSION: 0.2.0
+      BUILD: ${{ github.run_number }}
       # TestFlight uploads also wait for the repository variable TESTFLIGHT = on
       SHIP: ${{ github.event_name != 'pull_request' && secrets.IOS_CERTIFICATE != '' && secrets.IOS_MOBILE_PROVISION != '' && secrets.APPLE_API_KEY_P8 != '' && secrets.APPLE_TEAM_ID != '' && vars.TESTFLIGHT == 'on' }}
     steps:
@@ -41,7 +45,11 @@ jobs:
       - run: npm ci
       - run: brew install xcodegen
       - name: Number this version
-        run: node scripts/release.mjs prepare "$VERSION" false
+        run: |
+          node scripts/release.mjs prepare "$VERSION" false
+          # the build number (CFBundleVersion), which TestFlight needs to go up each upload
+          node -e "const f='src-tauri/tauri.conf.json',fs=require('fs'),c=JSON.parse(fs.readFileSync(f));c.bundle.iOS={...c.bundle.iOS,bundleVersion:process.env.BUILD};fs.writeFileSync(f,JSON.stringify(c,null,2)+'\\n')"
+          echo "iPad version $VERSION, build $BUILD"
       - name: Check the shell builds for iOS
         working-directory: src-tauri
         run: cargo build --lib --target aarch64-apple-ios
