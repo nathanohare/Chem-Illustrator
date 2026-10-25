@@ -36,14 +36,16 @@ fn selftest_report(app: tauri::AppHandle, report: String, ok: bool) {
 
 /// Read a file the user chose in an Open dialog.
 #[tauri::command]
-fn read_text_file(path: String) -> Result<String, String> {
+fn read_text_file(app: tauri::AppHandle, path: String) -> Result<String, String> {
+    ai::guard_key_file(&app, &path)?;
     std::fs::read_to_string(&path).map_err(|e| format!("Could not read {path}: {e}"))
 }
 
 /// Save a file the user chose. The text goes to a temporary file next to it first, so a
 /// failed save (full disk, lost network drive) never leaves a half-written drawing.
 #[tauri::command]
-fn write_text_file(path: String, contents: String) -> Result<(), String> {
+fn write_text_file(app: tauri::AppHandle, path: String, contents: String) -> Result<(), String> {
+    ai::guard_key_file(&app, &path)?;
     write_bytes(&path, contents.as_bytes())
 }
 
@@ -55,7 +57,8 @@ fn path_exists(path: String) -> bool {
 
 /// Read a file the user chose, as bytes (PowerPoint files, CDX drawings, pictures).
 #[tauri::command]
-fn read_binary_file(path: String) -> Result<tauri::ipc::Response, String> {
+fn read_binary_file(app: tauri::AppHandle, path: String) -> Result<tauri::ipc::Response, String> {
+    ai::guard_key_file(&app, &path)?;
     std::fs::read(&path)
         .map(tauri::ipc::Response::new)
         .map_err(|e| format!("Could not read {path}: {e}"))
@@ -64,7 +67,7 @@ fn read_binary_file(path: String) -> Result<tauri::ipc::Response, String> {
 /// Save bytes to a file the user chose. The page sends the bytes as they are, with the path
 /// in a "path" header (percent-encoded, since headers only carry plain ASCII).
 #[tauri::command]
-fn write_binary_file(request: tauri::ipc::Request<'_>) -> Result<(), String> {
+fn write_binary_file(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<(), String> {
     let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
         return Err("expected the file's bytes".into());
     };
@@ -74,6 +77,7 @@ fn write_binary_file(request: tauri::ipc::Request<'_>) -> Result<(), String> {
         .and_then(|v| v.to_str().ok())
         .ok_or("no file name given")?;
     let path = percent_decode(raw)?;
+    ai::guard_key_file(&app, &path)?;
     write_bytes(&path, bytes)
 }
 

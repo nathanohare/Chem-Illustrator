@@ -3051,6 +3051,9 @@ function objectPictureOf(name: string, bytes: Uint8Array, icon: boolean): Promis
   });
 }
 
+/** Embedded files that open in a viewer or an Office program, not as a program of their own. */
+const SAFE_OBJECT_FILE = /\.(docx?|xlsx?|pptx?|odt|ods|odp|rtf|pdf|txt|csv|cdx|cdxml|mol|sdf|jdx|png|jpe?g|gif|bmp|tiff?|svg|emf|wmf)$/i;
+
 /**
  * Open an object's file in its own program: written to a folder of its own in the temporary
  * folder and opened as a double-click in Explorer would. While it is open (up to a working day)
@@ -3063,6 +3066,10 @@ async function openObjectFile(file: { name: string; bytes: Uint8Array }, changed
     await writeFile({ kind: 'none' }, file.name, file.bytes, { description: file.name, extension: ext, mime: 'application/octet-stream' });
     return `${file.name} was downloaded: in a browser it can't open in its program or bring changes back here (the desktop app does both).`;
   }
+  // an object in a document someone sent could be a program in disguise: anything but a
+  // document or picture is opened only after the person says yes, as Word asks
+  if (!SAFE_OBJECT_FILE.test(file.name)
+    && !window.confirm(`This object is a file called "${file.name}". Files like this can be programs that run on your computer.\n\nOpen it only if you trust where the document came from. Open it?`)) return null;
   let path: string;
   try {
     const dir = await invoke<string>('ole_object_folder');

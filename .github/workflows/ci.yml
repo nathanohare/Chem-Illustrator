@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# the token only reads the code (none of these steps writes to the repository)
+permissions:
+  contents: read
+
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
