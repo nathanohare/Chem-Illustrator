@@ -148,6 +148,11 @@ export class Renderer {
   showWarnings = true;
   /** The drawing's chemistry warnings, drawn as red boxes when `showWarnings` is on. */
   checks: StructureChecks | null = null;
+  /**
+   * On screen only: text boxes read as chemistry get a faint dotted underline ('chem'), and those
+   * with a problem (BF4 without its charge) a red box when warnings are shown ('warn').
+   */
+  chemMarks: ((c: Caption) => 'chem' | 'warn' | null) | null = null;
   /** Makes the paths bonds are collected in (pictures record them instead of drawing). */
   makePath: () => Path2D = () => new Path2D();
   /** Last scene paint time in ms (for the speed readout). */
@@ -776,6 +781,9 @@ export class Renderer {
       if (r.x1 > vis.x2 || r.x2 < vis.x1 || r.y1 > vis.y2 || r.y2 < vis.y1) continue;
       if (c.ph && isEmptyText(c)) { if (this.screen) this.drawPrompt(ctx, c); continue; }
       this.drawCaption(ctx, c);
+      const mark = this.chemMarks?.(c);
+      if (mark === 'warn' && checks) warns.push(r);
+      else if (mark) this.drawChemMark(ctx, r);
     }
 
     if (warns.length) {
@@ -1535,6 +1543,20 @@ export class Renderer {
     if (toRight) ctx.lineTo(right.x, right.y);
     ctx.closePath();
     if (r.headType === 'hollow') ctx.stroke(); else ctx.fill();
+  }
+
+  /** The faint dotted line under a text box read as chemistry (never printed or saved). */
+  private drawChemMark(ctx: CanvasRenderingContext2D, r: Rect): void {
+    ctx.save();
+    ctx.strokeStyle = CHEM_MARK_COLOR;
+    ctx.globalAlpha = 0.75;
+    ctx.lineWidth = 0.6;
+    ctx.setLineDash([0.8, 1.6]);
+    ctx.beginPath();
+    ctx.moveTo(r.x1, r.y2 - 0.4);
+    ctx.lineTo(r.x2, r.y2 - 0.4);
+    ctx.stroke();
+    ctx.restore();
   }
 
   drawCaption(ctx: CanvasRenderingContext2D, c: Caption): void {
@@ -2300,6 +2322,7 @@ export function attachWave(path: Path2D, at: Vec, across: Vec, bondLength: numbe
 }
 
 const WARN_COLOR = '#e0141e';
+const CHEM_MARK_COLOR = '#1f8a7a';
 
 /**
  * Half the length and the height of the attachment wave, as fractions of the bond length, and

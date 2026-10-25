@@ -9,6 +9,7 @@ import type { HighlightLookPreset } from './highlight-looks';
 
 export { tidyStyle };
 import { DESCRIPTORS } from './analysis-panel';
+import { captionReading, speciesSummary } from '../chem/species';
 import { COMMON_ADDUCTS } from '../chem/hrms';
 import { PATTERNS, RING_FILL_COLOUR, RING_PATTERN_COLOUR, patternSpacing, ringShadowSize, shadowLook } from '../render/fills';
 import type { Role } from '../chem/reaction';
@@ -76,6 +77,7 @@ const SHADOW_DIRS: Opt<string>[] = [['45', 'Down and right'], ['90', 'Down'], ['
 /** The Style panel's folding groups that are open. */
 const OPEN_GROUPS = new Set<string>();
 const SIDES: Opt<AttachSide>[] = [['below', 'Below'], ['above', 'Above'], ['left', 'Left'], ['right', 'Right']];
+const READ_AS: Opt<'auto' | 'on' | 'off'>[] = [['auto', 'Automatically'], ['on', 'Chemical'], ['off', 'Plain text']];
 const JUSTIFY: Opt<Caption['justify']>[] = [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']];
 const TABLE_LINES: Opt<TableData['lines']>[] = [['acs', 'ACS style (rules above and below the headings, and at the end)'], ['grid', 'Every cell boxed'], ['none', 'None']];
 
@@ -770,7 +772,23 @@ export class StylePanel {
     whole('Formula style (CH₃, NH₄⁺)', 'formula');
     this.select('Line up', JUSTIFY, c.justify, (v) => set('Justification', () => ({ justify: v })));
     this.color('Colour', c.runs[0]?.color, (v) => set('Text colour', (x) => ({ runs: x.runs.map((r) => ({ ...r, color: v })) })));
+    this.chemControls(caps);
     this.attachControls(caps);
+  }
+
+  /** Read as chemistry or as plain text, and what the text is read as. */
+  private chemControls(caps: Caption[]): void {
+    const now = new Set(caps.map((x) => (x.chem === undefined ? 'auto' : x.chem ? 'on' : 'off')));
+    const value = now.size === 1 ? [...now][0] as 'auto' | 'on' | 'off' : 'auto';
+    this.select<'auto' | 'on' | 'off'>('Read as', READ_AS, value, (v) => this.edit(v === 'off' ? 'Read as plain text' : v === 'on' ? 'Read as chemistry' : 'Read text automatically', () => {
+      for (const x of caps) this.doc.updateCaption(x.id, { chem: v === 'auto' ? undefined : v === 'on' });
+    }));
+    if (caps.length !== 1) return;
+    const r = captionReading(this.doc, caps[0]);
+    if (r.species) this.note(`Chemistry: ${speciesSummary(r.species)}. It counts in the formula, mass and SMILES of what it is selected with.`);
+    else if (r.why === 'arrow') this.note('Text above or below a reaction arrow stays text. Choose Chemical to count it.');
+    else if (r.why === 'unread' && r.forced) this.note('Set to Chemical, but this text can\'t be read as chemistry.');
+    else if (r.why === 'tied') this.note('Text tied to a structure stays text.');
   }
 
   /** Where a caption tied to a structure sits, what descriptors it shows; tie or untie it. */

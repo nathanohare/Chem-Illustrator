@@ -82,9 +82,6 @@ function entryGraph(e: SpeciesEntry): MiniGraph {
   return g;
 }
 
-/** A copy of a graph. */
-const copy = (g: MiniGraph): MiniGraph => ({ atoms: g.atoms.map((a) => ({ ...a })), bonds: g.bonds.map((b) => ({ ...b })) });
-
 /** Graphs side by side as one (the molecules of a salt). */
 function joined(parts: MiniGraph[]): MiniGraph {
   const out: MiniGraph = { atoms: [], bonds: [] };
@@ -357,11 +354,11 @@ export function chemicalCaptions(doc: Doc, m?: Measure): Map<number, Species> {
 /** The warning a text box gets: an ion without its charge, or text set to Chemical that can't be read. */
 export function captionChemWarning(doc: Doc, c: Caption, m?: Measure): string | null {
   const r = captionReading(doc, c, m);
-  if (r.species?.expected !== undefined) {
-    const sp = r.species;
+  const sp = r.species;
+  if (sp?.expected !== undefined) {
     const what = sp.name ? sp.name[0].toUpperCase() + sp.name.slice(1) : sp.body;
     const has = sp.written ? `is written ${chargeSign(sp.written)}` : 'has no charge written';
-    return `Invalid valence: “${sp.body}” ${has}. ${what} carries a ${chargeSign(sp.expected)} charge: add it (or turn on Edit > Settings > Chemistry in Text, Add charges to common counterions).`;
+    return `Invalid valence: “${sp.body}” ${has}. ${what} carries a ${chargeSign(sp.expected)} charge: add it, or turn on Settings ▸ Drawing ▸ Add charges to common counterions.`;
   }
   if (!r.species && r.forced && c.chem && r.why === 'unread') return `“${plainText(c.runs).trim()}” is set to Chemical but can't be read as chemistry, so it's left out of the formula and mass.`;
   return null;
@@ -369,6 +366,23 @@ export function captionChemWarning(doc: Doc, c: Caption, m?: Measure): string | 
 
 /** The species' atoms placed around a point, for counting with the rest of a drawing. */
 export interface PlacedSpecies { graph: MiniGraph; x: number; y: number }
+
+/** These text boxes' species, each at the middle of its box (text boxes that aren't chemistry are left out). */
+export function placeSpecies(doc: Doc, caps: Iterable<Caption>, m: Measure = plainMeasure(doc)): PlacedSpecies[] {
+  const out: PlacedSpecies[] = [];
+  for (const c of caps) {
+    const sp = captionSpecies(doc, c, m);
+    if (!sp) continue;
+    const b = m.captionBox(c);
+    out.push({ graph: sp.graph, x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 });
+  }
+  return out;
+}
+
+/** Every text box in a drawing read as chemistry, placed (for a whole drawing's SMILES or molfile). */
+export function allSpecies(doc: Doc, m: Measure = plainMeasure(doc)): PlacedSpecies[] {
+  return placeSpecies(doc, doc.captions.values(), m);
+}
 
 /**
  * Text boxes read as ions, grouped (Format > Group) with these atoms: their counterions,

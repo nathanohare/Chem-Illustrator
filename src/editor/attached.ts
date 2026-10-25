@@ -11,6 +11,8 @@ import { POINTS, selectionBox, type Measure } from './arrange';
 export const ATTACH_TAG = 'Chem Illustrator attached';
 /** The tag that marks a caption whose label warning was ignored. */
 export const IGNORE_TAG = 'Chem Illustrator ignore';
+/** The objecttag on a text box set by hand to be read as chemistry ('yes') or as plain text ('no'). */
+export const CHEM_TAG = 'Chem Illustrator chemistry';
 
 /** The usual gap between a structure and its label: a third of a bond length. */
 export function defaultGap(doc: Doc): number {

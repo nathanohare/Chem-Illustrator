@@ -1,3 +1,5 @@
+// @vitest-environment jsdom
+//
 // Text boxes read as chemistry: the curated list of ions, reagents and ligands, condensed
 // formulas and salts, what is left as plain text, and counting them with a drawing.
 
@@ -5,7 +7,12 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
 import { Doc } from '../src/model';
 import { toMolfile } from '../src/chem/molfile';
-import { readSpecies, speciesFormula, speciesSmiles } from '../src/chem/species';
+import { allSpecies, captionChemWarning, captionReading, captionSpecies, groupedIons, readSpecies, speciesFormula, speciesSmiles } from '../src/chem/species';
+import { plainMeasure } from '../src/chem/reaction';
+import { setSideText } from '../src/chem/arrow-text';
+import { writeCdxml } from '../src/io/cdxml-write';
+import { readCdxml } from '../src/io/cdxml';
+import { textRuns } from '../src/chem/arrow-text';
 import { SPECIES_ENTRIES } from '../src/chem/species-list';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -138,5 +145,74 @@ describe('counting text boxes with a drawing', () => {
   it('keeps a radical or a free carbene as one', () => {
     expect(engineSmiles('TEMPO')).toBe(canonical('CC1(C)CCCC(C)(C)N1[O]'));
     expect(engineSmiles('IMes')).toBe(canonical('[C]1N(c2c(C)cc(C)cc2C)C=CN1c1c(C)cc(C)cc1C'));
+  });
+});
+
+const text = (doc: Doc, t: string, x = 100, y = 100, extra = {}) => doc.edit('t', () => doc.addCaption({ x, y, runs: textRuns(t), justify: 'left', ...extra }));
+
+describe('text boxes in a drawing', () => {
+  it('reads a free text box as chemistry, and leaves the text above and below arrows as text', () => {
+    const doc = new Doc();
+    const m = plainMeasure(doc);
+    const r = doc.edit('arrow', () => doc.addArrow({ tail: { x: 100, y: 200 }, head: { x: 160, y: 200 }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: 6, headWidth: 1.5 }));
+    doc.edit('t', () => setSideText(doc, m, r, 'above', 'DMAP'));
+    doc.edit('t', () => setSideText(doc, m, doc.arrows.get(r.id)!, 'below', 'CH2Cl2'));
+    const free = text(doc, 'DMAP', 300, 40);
+    const above = [...doc.captions.values()].find((c) => c.id !== free.id && c.runs.map((x) => x.text).join('') === 'DMAP')!;
+    expect(captionSpecies(doc, free, m)?.name).toBe('4-(dimethylamino)pyridine');
+    expect(captionReading(doc, above, m)).toMatchObject({ species: null, why: 'arrow' });
+    // set to Chemical by hand, it counts
+    doc.edit('c', () => doc.updateCaption(above.id, { chem: true }));
+    expect(captionSpecies(doc, doc.captions.get(above.id)!, m)?.name).toBe('4-(dimethylamino)pyridine');
+    // and a free one set to Plain text doesn't
+    doc.edit('c', () => doc.updateCaption(free.id, { chem: false }));
+    expect(captionReading(doc, doc.captions.get(free.id)!, m)).toMatchObject({ species: null, why: 'plain' });
+  });
+  it('leaves text tied to a structure and ordinary captions alone', () => {
+    const doc = new Doc();
+    const a = doc.edit('a', () => doc.addAtom(0, 0, 6));
+    const tied = text(doc, 'C6H6', 0, 20, { attach: { atoms: [a.id], side: 'below', gap: 4, shift: 0, role: 'descriptors' } });
+    const step = text(doc, 'Step 2', 0, 60);
+    expect(captionReading(doc, tied)).toMatchObject({ species: null, why: 'tied' });
+    expect(captionReading(doc, step)).toMatchObject({ species: null, why: 'unread' });
+    expect(captionChemWarning(doc, step)).toBeNull();
+  });
+  it('flags a counterion without its charge, and text set to Chemical that cannot be read', () => {
+    const doc = new Doc();
+    const bf4 = text(doc, 'BF4');
+    expect(captionChemWarning(doc, bf4)).toMatch(/Invalid valence.*tetrafluoroborate carries a − charge/i);
+    const ok = text(doc, 'BF4−', 200);
+    expect(captionChemWarning(doc, ok)).toBeNull();
+    const odd = text(doc, 'Step 2', 300, 100, { chem: true });
+    expect(captionChemWarning(doc, odd)).toMatch(/can't be read as chemistry/);
+  });
+  it('counts an ion grouped with a structure as one salt', async () => {
+    const doc = new Doc();
+    const n = doc.edit('n', () => doc.addAtom(0, 0, 7, { charge: 1, label: 'NMe4' }));
+    const bf4 = text(doc, 'BF4−', 30, 0);
+    expect(groupedIons(doc, [n.id])).toEqual([]);
+    doc.edit('g', () => { doc.updateAtom(n.id, { grp: 1 }); doc.updateCaption(bf4.id, { grp: 1 }); });
+    const ions = groupedIons(doc, [n.id]);
+    expect(ions.map((c) => c.id)).toEqual([bf4.id]);
+    const sp = allSpecies(doc).map((p) => p);
+    const { molblock } = toMolfile(doc, [n.id], '', { species: sp });
+    const mol = RDKit.get_mol(molblock);
+    expect(mol.get_smiles()).toBe(canonical('C[N+](C)(C)C.F[B-](F)(F)F'));
+    mol.delete();
+  });
+  it('keeps the choice of Chemical or Plain text in CDXML, and marks chemistry for ChemDraw', () => {
+    const doc = new Doc();
+    text(doc, 'BF4−', 0, 0);
+    text(doc, 'DMAP', 100, 0, { chem: false });
+    text(doc, 'Step 2', 200, 0, { chem: true });
+    text(doc, 'rt, 12 h', 300, 0);
+    const xml = writeCdxml(doc, { name: 't' });
+    expect((xml.match(/InterpretChemically="yes"/g) ?? []).length).toBe(1);
+    const back = readCdxml(xml).doc;
+    const by = (t: string) => [...back.captions.values()].find((c) => c.runs.map((r) => r.text).join('') === t)!;
+    expect(by('BF4−').chem).toBeUndefined();
+    expect(by('DMAP').chem).toBe(false);
+    expect(by('Step 2').chem).toBe(true);
+    expect(by('rt, 12 h').chem).toBeUndefined();
   });
 });
