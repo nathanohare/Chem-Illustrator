@@ -39,16 +39,7 @@ On macOS and Linux, a folder named **Chem Illustrator Data** next to the app (or
 Works on Apple silicon and Intel Macs, macOS 11 or newer.
 
 1. Download the file ending in `universal.dmg`, open it, and drag **Chem Illustrator** into **Applications**.
-2. The first time you open it, macOS (Gatekeeper) says it can't check the app, because it isn't signed with an Apple Developer certificate. To open it anyway:
-   - open **System Settings ▸ Privacy & Security**, scroll down, and click **Open Anyway** next to Chem Illustrator;
-   - on older versions of macOS, right-click (or Control-click) the app in Applications and choose **Open**.
-3. If macOS says instead that the app **"is damaged"**, open the Terminal app and run this line once, then open the app again:
-
-   ```
-   xattr -cr "/Applications/Chem Illustrator.app"
-   ```
-
-You only need to do this once; after that the app opens normally.
+2. Open it from **Applications**. The app is signed with an Apple Developer ID and notarised by Apple, so macOS opens it straight away, with no warning.
 
 ### Linux
 

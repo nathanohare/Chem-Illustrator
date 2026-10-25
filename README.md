@@ -137,10 +137,10 @@ In Word, PowerPoint and Excel your structures show as sharp pictures; open the f
 Download the installer for your computer from the **[latest release](https://github.com/nathanohare/Chem-Illustrator/releases/latest)**:
 
 - **Windows**: the file ending in `x64-setup.exe`. Windows will warn that the installer isn't signed: click **More info**, then **Run anyway**. It installs for you alone, so it doesn't need administrator rights. To run it from a flash drive or a folder without installing anything, take `x64-portable.zip` instead and unzip it ([portable copy](docs/guide/getting-started.md#windows-without-installing-portable-copy)).
-- **macOS** (Apple silicon or Intel, macOS 11 or newer): the file ending in `universal.dmg`. The first time, open **System Settings ▸ Privacy & Security** and click **Open Anyway**.
+- **macOS** (Apple silicon or Intel, macOS 11 or newer): the file ending in `universal.dmg`. Open it and drag **Chem Illustrator** into **Applications**. The app is signed and notarised by Apple, so it opens without a warning.
 - **Linux**: the `.AppImage` (any distribution), `.deb` (Ubuntu, Debian) or `.rpm` (Fedora).
 
-Once installed, the program keeps itself up to date: it offers each new version when it starts. [Getting started](docs/guide/getting-started.md) has the details, including what to do if macOS says the app is damaged.
+Once installed, the program keeps itself up to date: it offers each new version when it starts. [Getting started](docs/guide/getting-started.md) has the details.
 
 ## Learn it
 
