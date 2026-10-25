@@ -234,6 +234,19 @@ export class SlideList {
     });
   }
 
+  /** The list got wider or narrower: the pictures take the new width at once, and are painted sharp again with `paint`. */
+  setThumbW(w: number, paint = false): void {
+    this.thumbW = w;
+    const deck = this.deck;
+    if (!deck) return;
+    const h = Math.round((w * deck.size.h) / deck.size.w);
+    for (const it of this.items) {
+      const c = it?.querySelector('canvas');
+      if (c) { c.style.width = `${w}px`; c.style.height = `${h}px`; }
+    }
+    if (paint) this.refreshAll();
+  }
+
   /** Redraw one slide's picture (soon, for the slide being edited, so typing stays quick). */
   refresh(i = this.deck?.index ?? 0, soon = true): void {
     if (!soon) { this.paint(i); return; }

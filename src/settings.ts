@@ -68,6 +68,11 @@ export interface Settings {
   templates: Template[];
   /** Split view: the share of the window's width the drawing beside a document, sheet or slides takes (0.2 to 0.8). */
   splitWidth: number;
+  /** Slides: how wide the slide list on the left is, and how tall the speaker notes are (drag their edges), in pixels. */
+  slidePaneWidth: number;
+  notesHeight: number;
+  /** Slides: the speaker notes box under the slide shown (View > Notes). */
+  slideNotes: boolean;
   /** Scroll bars along the drawing's bottom and right (View > Scroll Bars). */
   scrollBars: boolean;
   /** Desktop app: the window's buttons in the menu row instead of the system's title bar (View > Title Bar in Menu Row). */
@@ -183,10 +188,13 @@ export interface Settings {
   ai: AiPrefs;
 }
 
+/** Limits for dragging the slide list's edge and the speaker notes' top edge, in pixels. */
+export const SLIDE_PANE_MIN = 120, SLIDE_PANE_MAX = 480, NOTES_MIN = 36, NOTES_MAX = 600;
+
 export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
-  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, scrollBars: true, ribbonCollapsed: false, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', groupTips: true, touchMode: 'auto', penSketch: false,
+  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', groupTips: true, touchMode: 'auto', penSketch: false,
   citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, groupClick: 'group', groupOutline: true, rerouteArrows: true, superscriptR: true, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {},
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
@@ -240,6 +248,9 @@ export function parseSettings(text: string | null | undefined): Settings {
   s.docDesign = parseDesign(r.docDesign);
   s.templates = parseOwnTemplates(r.templates);
   if (typeof r.splitWidth === 'number' && isFinite(r.splitWidth)) s.splitWidth = Math.min(0.8, Math.max(0.2, r.splitWidth));
+  if (typeof r.slidePaneWidth === 'number' && isFinite(r.slidePaneWidth)) s.slidePaneWidth = Math.round(Math.min(SLIDE_PANE_MAX, Math.max(SLIDE_PANE_MIN, r.slidePaneWidth)));
+  if (typeof r.notesHeight === 'number' && isFinite(r.notesHeight)) s.notesHeight = Math.round(Math.min(NOTES_MAX, Math.max(NOTES_MIN, r.notesHeight)));
+  if (typeof r.slideNotes === 'boolean') s.slideNotes = r.slideNotes;
   if (typeof r.citeStyle === 'string' && r.citeStyle in CITE_PRESETS) s.citeStyle = r.citeStyle;
   s.citeOptions = cleanOptions(r.citeOptions);
   s.palettes = parsePalettes(r.palettes);

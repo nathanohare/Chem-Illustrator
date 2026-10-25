@@ -238,6 +238,7 @@
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Slide Views</button>
     <div class="menu sub" role="menu" hidden>
     <button role="menuitem" data-cmd="view-outline" title="Every slide's title and bullet points as one outline to type in">Outline View</button>
+    <button role="menuitemcheckbox" aria-checked="true" data-cmd="view-notes" title="The speaker notes box under the slide"><span>Notes</span></button>
     <button role="menuitem" data-cmd="view-notes-page" title="Each slide on a page with its notes under it">Notes Page</button>
     <button role="menuitem" data-cmd="notes-master" title="How notes pages look and print">Notes Master…</button>
     <button role="menuitem" data-cmd="handout-master" title="How handouts print">Handout Master…</button>
@@ -2187,6 +2188,7 @@
       </div>
       <div class="rb-group">
         <div class="rb-row">
+          <button class="rb-big" data-cmd="view-notes" aria-pressed="true" title="Notes: show or hide the speaker notes box under the slide (drag its top edge to make it taller)"><span class="rb-icon">✎</span>Notes</button>
           <div class="rb-col">
             <label class="rb-field check" title="Rulers along the top and left of the slide, from its middle (Grid Settings changes the units). Drag out of a ruler for a guide"><input type="checkbox" data-cmd="view-slide-ruler" /> Ruler</label>
             <label class="rb-field check" title="Gridlines over the slide, on screen only (Grid Settings sets the spacing and snapping)"><input type="checkbox" data-cmd="view-gridlines" /> Gridlines</label>
@@ -2503,6 +2505,7 @@
 
   <main id="work">
     <div id="slide-list" class="slides-only" hidden></div>
+    <div id="slide-list-handle" class="pane-handle" role="separator" aria-orientation="vertical" aria-label="Slide list width" title="Drag to make the slide list wider or narrower (double-click for the usual width)"></div>
     <div id="design-lib" class="design-only" hidden></div>
     <div id="sheet-pane" class="sheet-only" hidden>
       <div id="formula-bar">
@@ -2576,6 +2579,7 @@
       </div>
     </div>
     <div id="notes-pane" class="slides-only" hidden>
+      <div id="notes-handle" class="pane-handle" role="separator" aria-orientation="horizontal" aria-label="Speaker notes height" title="Drag to make the speaker notes taller or shorter (double-click for the usual height)"></div>
       <textarea id="notes" placeholder="Click to add speaker notes" aria-label="Speaker notes"></textarea>
     </div>
   </main>
@@ -2614,7 +2618,7 @@
     </div>
   </aside>
 
-  <footer id="status"><span id="hint"></span><label class="zoom-pick canvas-only" title="Zoom (Ctrl+= and Ctrl+− also zoom; F6 fits the window)"><span class="sr-only">Zoom</span><select id="zoom-pick">
+  <footer id="status"><span id="hint"></span><button type="button" id="status-notes" class="slides-only" data-cmd="view-notes" aria-pressed="true" title="Show or hide the speaker notes under the slide" hidden>✎ Notes</button><label class="zoom-pick canvas-only" title="Zoom (Ctrl+= and Ctrl+− also zoom; F6 fits the window)"><span class="sr-only">Zoom</span><select id="zoom-pick">
     <option value="fit">Fit</option><option value="actual">Actual size</option><option disabled>──</option>
     <option value="25">25%</option><option value="50">50%</option><option value="75">75%</option><option value="100">100%</option><option value="150">150%</option><option value="200">200%</option><option value="300">300%</option><option value="400">400%</option><option value="800">800%</option>
     <option value="now" hidden></option></select></label><span id="go-buttons" class="go-buttons canvas-only"><button type="button" id="go-fit" title="Fit the whole drawing in the window (F6)">Fit</button><button type="button" id="go-sel" title="Go to Selection: bring what is selected into view (Shift+F6)">Go to Selection</button></span></footer>
