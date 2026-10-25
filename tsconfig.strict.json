@@ -1,0 +1,10 @@
+{
+  "//": "Extra checks for code review only (npm run typecheck:strict); the build uses tsconfig.json. Most of what this finds is a click handler that returns false on one path and nothing on another, but read each one.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    "allowUnreachableCode": false
+  }
+}
