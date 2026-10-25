@@ -17,6 +17,7 @@ import { findIssues, type Issue } from '../text/chemtext';
 import { loadSpeller, type Speller } from '../text/spelling';
 import { linkAtPoint } from '../links';
 import { askLink, followLink, linkTip, type LinkPlace } from './links-ui';
+import { touchOn } from './touch-ui';
 
 /** What the editor needs from the drawing it sits on. */
 export interface EditorHost {
@@ -144,6 +145,8 @@ export class CaptionEditor {
     ta.addEventListener('copy', (e) => this.copy(e, false));
     ta.addEventListener('cut', (e) => this.copy(e, true));
     ta.addEventListener('paste', (e) => this.paste(e));
+    // touch mode: the field covers the text so Apple Pencil's Scribble can write into it
+    for (const t of ['pointerdown', 'pointerup', 'pointercancel'] as const) ta.addEventListener(t, (e) => this.padPointer(e));
     for (const el of [ta, this.bar] as HTMLElement[]) {
       el.addEventListener('focusout', (e) => {
         const to = e.relatedTarget as Node | null;
@@ -259,6 +262,36 @@ export class CaptionEditor {
   /** Copy where the link the caret is in goes. */
   private copyLink(link: string): void {
     void navigator.clipboard?.writeText(link).catch(() => {});
+  }
+
+  /** A screen point (from a pointer event) as a point on the page. */
+  private pagePoint(e: PointerEvent): Vec {
+    const r = this.h.host.getBoundingClientRect(), o = this.h.toScreen({ x: 0, y: 0 }), k = this.h.view.scale;
+    return { x: (e.clientX - r.left - o.x) / k, y: (e.clientY - r.top - o.y) / k };
+  }
+
+  /**
+   * A press on the field while it covers the text (touch mode). The pencil puts the caret where
+   * it touches (so what Scribble writes goes in there) and leaves the stroke to the system: no
+   * dragging a selection while writing. A finger or mouse press goes on to what is under the
+   * field (the drawing), as if the field weren't there.
+   */
+  private padPointer(e: PointerEvent): void {
+    if (!this.ta.classList.contains('scribble-pad') || this.closed) return;
+    if (e.pointerType === 'pen') {
+      if (e.type === 'pointerdown' && e.button === 0) {
+        const p = this.pagePoint(e);
+        if (this.hit(p) === 'text') this.pointerDown(p, false);
+        else this.ed.setCaret(this.ed.text.length, false);
+      } else this.pointerUp();
+      return;
+    }
+    if (e.type !== 'pointerdown') return;
+    const under = document.elementsFromPoint(e.clientX, e.clientY).find((el) => el !== this.ta);
+    if (!under) return;
+    e.preventDefault();
+    e.stopPropagation();
+    under.dispatchEvent(new PointerEvent(e.type, e));
   }
 
   pointerMove(p: Vec): void {
@@ -436,9 +469,23 @@ export class CaptionEditor {
     const c = this.ed.caret();
     const cp = this.h.toScreen({ x: this.at.x + c.x, y: this.at.y + c.y1 });
     const ts = this.ta.style;
-    ts.left = `${cp.x}px`;
-    ts.top = `${cp.y}px`;
-    ts.height = `${Math.max(8, (c.y2 - c.y1) * this.h.view.scale)}px`;
+    const line = Math.max(8, (c.y2 - c.y1) * this.h.view.scale);
+    const pad = touchOn();
+    this.ta.classList.toggle('scribble-pad', pad);
+    if (pad) {
+      // Scribble writes into the field under the pencil: the field covers the text, with room
+      // to the right and below to write more (presses on it are passed on: padPointer)
+      const x1 = Math.min(tl.x, br.x), y1 = Math.min(tl.y, br.y), w = Math.abs(br.x - tl.x), hgt = Math.abs(br.y - tl.y);
+      ts.left = `${x1 - 8}px`;
+      ts.top = `${y1 - 8}px`;
+      ts.width = `${Math.max(240, w + Math.max(160, w / 2)) + 16}px`;
+      ts.height = `${Math.max(64, hgt + 1.5 * line) + 16}px`;
+    } else {
+      ts.left = `${cp.x}px`;
+      ts.top = `${cp.y}px`;
+      ts.width = '';
+      ts.height = `${line}px`;
+    }
     if (CaptionEditor.barPlace !== 'floating') return;
     // the bar sits above the text, or below it near the top of the window
     const hb = this.bar.offsetHeight || 32;
