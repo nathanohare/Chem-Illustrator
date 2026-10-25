@@ -127,6 +127,10 @@ jobs:
             echo "APPLE_CERTIFICATE_PASSWORD=$CERT_PASSWORD"
             echo "APPLE_SIGNING_IDENTITY=$IDENTITY"
           } >> "$GITHUB_ENV"
+          if [ -n "$API_KEY_P8" ] && [ ${#API_KEY_ID} -lt 3 ]; then
+            echo "::error::APPLE_API_KEY_P8 is set but APPLE_API_KEY_ID is missing or too short. Add the key's Key ID (10 characters, from App Store Connect > Users and Access > Integrations) as the secret APPLE_API_KEY_ID."
+            exit 1
+          fi
           if [ -n "$API_KEY_P8" ]; then
             printf '%s\n' "$API_KEY_P8" > "$RUNNER_TEMP/AuthKey_$API_KEY_ID.p8"
             {
