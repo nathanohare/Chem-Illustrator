@@ -23,7 +23,7 @@ import { Renderer, measureText, forgetTextWidths } from './render/renderer';
 import { Editor, TOOLS, type HighlightToggle, type Selection } from './editor/editor';
 import { BUILT_IN_LOOKS, type HighlightLookPreset } from './ui/highlight-looks';
 import { selectionBox, POINTS, type Align } from './editor/arrange';
-import { selectedGroups } from './editor/groups';
+import { groupSelection, selectedGroups } from './editor/groups';
 import { readCdxml, ReadStats } from './io/cdxml';
 import { ChemClient } from './chem/client';
 import type { FragmentResult } from './worker/chem-worker';
@@ -40,6 +40,7 @@ import type { Rect, Vec } from './geom';
 import { isCurved } from './objects';
 import { captionPlaces, fragmentRuns } from './chem/fragments';
 import { toMolfile, addMolfile } from './chem/molfile';
+import { allSpecies, captionChemWarning, captionReading, captionSpecies, chargeSign, chemicalCaptions, groupedIons, placeSpecies, speciesSmiles, type PlacedSpecies } from './chem/species';
 import { bestFit, fitMove, fitMatters } from './chem/orient';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -1359,6 +1360,117 @@ async function addTiedText(role: 'label' | 'caption'): Promise<void> {
   else { editor.clearSelection(); for (const id of made) editor.sel.captions.add(id); editor.changed(); }
 }
 
+// ---------------------------------------------------------------- text boxes read as chemistry
+
+/** Settings ▸ Drawing: what happens to an ion typed as text. */
+const chemText = { ionCharges: false, saltGroups: false };
+
+/** The selected text boxes that are read as chemistry. */
+function selectedSpecies(): Caption[] {
+  const m = editor.measure();
+  return [...editor.sel.captions].map((id) => doc.captions.get(id)).filter((c): c is Caption => !!c && !!captionSpecies(doc, c, m));
+}
+
+/**
+ * What a command on "the selection, or else everything" counts: the atoms, and the text boxes
+ * read as chemistry (selected ones, and ions grouped with the atoms as their salt).
+ */
+function chemistryInSelection(): { atoms: number[]; species: PlacedSpecies[] } {
+  const chosen = selectedSpecies();
+  const any = editor.sel.atoms.size > 0 || chosen.length > 0;
+  const atoms = [...(any ? editor.sel.atoms : doc.atoms.keys())];
+  const caps = new Set<Caption>(any ? [...chosen, ...groupedIons(doc, atoms, editor.measure())] : [...chemicalCaptions(doc, editor.measure()).keys()].map((id) => doc.captions.get(id)!));
+  return { atoms, species: placeSpecies(doc, caps, editor.measure()) };
+}
+
+/** Each text box read as chemistry, and whether it has a problem (for the marks on screen). */
+let chemMarkKey = '';
+function chemMark(c: Caption): 'chem' | 'warn' | null {
+  if (!captionSpecies(doc, c, editor.measure()) && !(c.chem && !c.ignoreWarnings && captionChemWarning(doc, c, editor.measure()))) return null;
+  return !c.ignoreWarnings && captionChemWarning(doc, c, editor.measure()) ? 'warn' : 'chem';
+}
+renderer.chemMarks = chemMark;
+
+/** Repaint when which text boxes read as chemistry changes for some other reason than their own text (an arrow moved). */
+function refreshChemMarks(): void {
+  const key = [...doc.captions.values()].map((c) => { const k = chemMark(c); return k ? `${c.id}${k[0]}` : ''; }).join(',');
+  if (key === chemMarkKey) return;
+  const first = !chemMarkKey && !key;
+  chemMarkKey = key;
+  if (!first) { renderer.repaintAll(); editor.requestScene(); }
+}
+
+/**
+ * Typing into a text box finished: an ion without its charge gets it, and an ion next to one of
+ * the opposite charge is grouped with it as a salt, when the settings say so.
+ */
+function captionTyped(id: number): void {
+  const c = doc.captions.get(id);
+  if (!c) return;
+  const m = editor.measure();
+  let sp = captionSpecies(doc, c, m);
+  if (!sp) return;
+  if (chemText.ionCharges && sp.expected !== undefined && !sp.written) {
+    const sign = chargeSign(sp.expected);
+    const last = c.runs[c.runs.length - 1];
+    doc.edit('Add charge', () => doc.updateCaption(id, { runs: [...c.runs, { ...last, text: sign, sub: undefined, sup: true, formula: undefined }] }));
+    editor.changed();
+    sp = captionSpecies(doc, doc.captions.get(id)!, m);
+    if (!sp) return;
+    flash(`Added the ${sign} charge of ${sp.name ?? sp.body}. Undo (Ctrl+Z) to take it off, or turn this off in Settings ▸ Drawing.`, 6000);
+  }
+  if (chemText.saltGroups && sp.charge) groupCounterion(id, sp.charge);
+}
+
+/** Group a text box holding an ion with the nearest structure or ion of the opposite charge (one salt). */
+function groupCounterion(id: number, charge: number): void {
+  const c = doc.captions.get(id)!;
+  const m = editor.measure();
+  const box = renderer.captionBox(c);
+  const reach = doc.style.bondLength * 2.5;
+  const gap = (p: { x: number; y: number }) => Math.hypot(Math.max(box.x1 - p.x, 0, p.x - box.x2), Math.max(box.y1 - p.y, 0, p.y - box.y2));
+  let best: { d: number; atoms: number[]; caption?: number } | null = null;
+  const seen = new Set<number>();
+  for (const a of doc.atomsNear({ x: (box.x1 + box.x2) / 2, y: (box.y1 + box.y2) / 2 }, reach + Math.hypot(box.x2 - box.x1, box.y2 - box.y1) / 2)) {
+    if (seen.has(a.id)) continue;
+    const f = doc.fragmentOf(a.id);
+    for (const x of f) seen.add(x);
+    let q = 0, d = Infinity;
+    for (const x of f) { const at = doc.atoms.get(x)!; q += at.charge; d = Math.min(d, gap(at)); }
+    if (q * charge < 0 && d <= reach && (!best || d < best.d)) best = { d, atoms: [...f] };
+  }
+  for (const o of doc.captions.values()) {
+    if (o.id === id) continue;
+    const sp = captionSpecies(doc, o, m);
+    if (!sp || sp.charge * charge >= 0) continue;
+    const ob = renderer.captionBox(o);
+    const d = Math.hypot(Math.max(ob.x1 - box.x2, 0, box.x1 - ob.x2), Math.max(ob.y1 - box.y2, 0, box.y1 - ob.y2));
+    if (d <= reach && (!best || d < best.d)) best = { d, atoms: [], caption: o.id };
+  }
+  if (!best) return;
+  const other = best.caption !== undefined ? doc.captions.get(best.caption)?.grp : doc.atoms.get(best.atoms[0])?.grp;
+  if (other !== undefined && other === c.grp) return;
+  const sel = { atoms: new Set(best.atoms), bonds: new Set<number>(), captions: new Set([id, ...(best.caption !== undefined ? [best.caption] : [])]), arrows: new Set<number>(), shapes: new Set<number>() };
+  doc.edit('Group salt', () => groupSelection(doc, sel));
+  editor.changed();
+  flash('Grouped the counterion with its partner as one salt. Undo (Ctrl+Z) to keep them apart, or turn this off in Settings ▸ Drawing.', 6000);
+}
+editor.onCaptionDone = captionTyped;
+
+/** Set the selected text boxes to be read as chemistry, as plain text, or by themselves. */
+function setCaptionChem(how: 'auto' | 'on' | 'off'): boolean {
+  const caps = [...editor.sel.captions].map((id) => doc.captions.get(id)).filter((c): c is Caption => !!c);
+  if (!caps.length) { flash('Select a text box first.'); return false; }
+  const chem = how === 'auto' ? undefined : how === 'on';
+  doc.edit(how === 'off' ? 'Read as plain text' : how === 'on' ? 'Read as chemistry' : 'Read text automatically', () => { for (const c of caps) doc.updateCaption(c.id, { chem }); });
+  editor.changed();
+  if (how === 'on') {
+    const bad = caps.filter((c) => !captionSpecies(doc, doc.captions.get(c.id)!, editor.measure()));
+    if (bad.length) flash(`Not read as chemistry: ${bad.map((c) => `“${plainText(c.runs).trim()}”`).join(', ')}. It is flagged in Warnings.`, 6000);
+  }
+  return true;
+}
+
 // ---------------------------------------------------------------- labels that clash
 
 /** Captions whose compound label is also used for a different structure, with the warning to show. */
@@ -1374,6 +1486,7 @@ function scheduleLabelCheck(): void {
 
 async function checkLabels(): Promise<void> {
   const version = doc.version;
+  refreshChemMarks();
   const items = schemeItems(doc, editor.measure());
   const labels = labelsOf(items, new Set(), doc, doc.style.bondLength);
   let found = new Map<number, string>();
@@ -1479,6 +1592,7 @@ async function deleteNickname(): Promise<void> {
  */
 async function expandLabel(): Promise<void> {
   const list = editor.expandableLabels();
+  if (!list.length && selectedSpecies().length) { await expandText(selectedSpecies()); return; }
   if (!list.length) { flash('Select a label to expand: an abbreviation such as OMe, Boc or CO2Et, or a ligand on a metal such as PPh3, dppe or Cp*.', 6000); return; }
   const mbs = new Map<number, string>();
   const failed: string[] = [];
@@ -1491,6 +1605,37 @@ async function expandLabel(): Promise<void> {
   const n = editor.expandLabels(list, mbs);
   if (failed.length) flash(`Not expanded (not read as chemistry): ${failed.map((f) => `“${f}”`).join(', ')}`, 6000);
   else if (!n) flash('Nothing to expand.');
+}
+
+/** Expand Label on text boxes read as chemistry (DMAP, BF4⁻): each drawn as its structure, where the text was. */
+async function expandText(caps: Caption[]): Promise<void> {
+  if (!chem.ready) { flash('The chemistry engine is still loading.'); return; }
+  const m = editor.measure();
+  const drawn: { id: number; mb: string; x: number; y: number }[] = [];
+  const failed: string[] = [];
+  for (const c of caps) {
+    const sp = captionSpecies(doc, c, m);
+    const mb = sp ? await chem.smilesToMol(speciesSmiles(sp)).catch(() => null) : null;
+    const b = m.captionBox(c);
+    if (mb) drawn.push({ id: c.id, mb, x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 });
+    else failed.push(plainText(c.runs).trim());
+  }
+  if (drawn.length) {
+    const made: number[] = [];
+    doc.edit('Expand text', () => {
+      for (const d of drawn) {
+        const grp = doc.captions.get(d.id)?.grp;
+        doc.removeCaption(d.id);
+        const ids = addMolfile(doc, d.mb, d.x, d.y);
+        // a salt's counterion stays in its group
+        if (grp !== undefined) for (const id of ids) doc.updateAtom(id, { grp });
+        made.push(...ids);
+      }
+    });
+    editor.selectThese({ atoms: new Set(made), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() });
+    editor.changed();
+  }
+  if (failed.length) flash(`Not expanded (not read as chemistry): ${failed.map((f) => `“${f}”`).join(', ')}`, 6000);
 }
 
 /** Canonical SMILES of each built-in nickname with its join point (worked out once). */
@@ -1599,8 +1744,8 @@ async function nameToStructure(): Promise<void> {
 /** Copy the selected structures (or everything) as SMILES text. */
 async function copySmiles(): Promise<void> {
   if (!chem.ready) { flash('The chemistry engine is still loading.'); return; }
-  const atoms = [...(editor.sel.atoms.size ? editor.sel.atoms : doc.atoms.keys())];
-  const { molblock } = toMolfile(doc, atoms);
+  const { atoms, species } = chemistryInSelection();
+  const { molblock } = toMolfile(doc, atoms, '', { species });
   let smiles = await chem.molToSmiles(molblock);
   if (!smiles) {
     // most often an atom with too many bonds: say which, and offer the SMILES as drawn
@@ -1894,7 +2039,7 @@ function pptxOptions(): PptxOptions {
 /** The structures in a drawing as SMILES (for alt text), or null when there are none or the chemistry engine isn't ready. */
 async function drawingSmiles(d: Doc): Promise<string | null> {
   if (!chem.ready || !d.atoms.size) return null;
-  const { molblock, unknownLabels } = toMolfile(d, d.atoms.keys());
+  const { molblock, unknownLabels } = toMolfile(d, d.atoms.keys(), '', { species: allSpecies(d) });
   return unknownLabels.length ? null : chem.molToSmiles(molblock);
 }
 
@@ -3666,9 +3811,9 @@ presenter.onEnd = presenterView.onEnd = (i) => {
 // ---------------------------------------------------------------- export
 
 async function exportMolfile(): Promise<void> {
-  const ids = [...(editor.sel.atoms.size ? editor.sel.atoms : doc.atoms.keys())];
-  if (!ids.length) { flash('There is no structure to export.'); return; }
-  const { molblock, unknownLabels } = toMolfile(doc, ids);
+  const { atoms: ids, species } = chemistryInSelection();
+  if (!ids.length && !species.length) { flash('There is no structure to export.'); return; }
+  const { molblock, unknownLabels } = toMolfile(doc, ids, '', { species });
   const target = await saveFileDialog(withExtension(ws.active.name, MOL.extension), MOL).catch(async (e) => { await showError(String(e)); return null; });
   if (!target) return;
   try {
@@ -4206,7 +4351,7 @@ const SHEET_COMMANDS: Record<string, () => unknown> = {
   'copy-mol': () => {
     const d = activeStructureDoc();
     if (!d) { flash('Select a cell with a structure in it.'); return; }
-    return copyText(toMolfile(d, d.atoms.keys()).molblock, 'Copied as molfile text.');
+    return copyText(toMolfile(d, d.atoms.keys(), '', { species: allSpecies(d) }).molblock, 'Copied as molfile text.');
   },
   'copy-cdxml': () => {
     const d = activeStructureDoc();
@@ -4368,7 +4513,7 @@ const DOC_COMMANDS: Record<string, () => unknown> = {
     const d = pickedFigureDoc();
     if (!d) { flash('Click a structure first (it gets a blue frame), then Copy as SMILES.'); return; }
     if (!chem.ready) { flash('The chemistry engine is still loading.'); return; }
-    const { molblock } = toMolfile(d, d.atoms.keys());
+    const { molblock } = toMolfile(d, d.atoms.keys(), '', { species: allSpecies(d) });
     const smiles = await chem.molToSmiles(molblock).catch(() => '');
     if (!smiles) { flash('Could not make SMILES for this drawing.'); return; }
     await copyText(smiles, 'Copied SMILES: ' + smiles);
@@ -4376,7 +4521,7 @@ const DOC_COMMANDS: Record<string, () => unknown> = {
   'copy-mol': () => {
     const d = pickedFigureDoc();
     if (!d) { flash('Click a structure first, then Copy as Molfile Text.'); return; }
-    return copyText(toMolfile(d, d.atoms.keys()).molblock, 'Copied as molfile text.');
+    return copyText(toMolfile(d, d.atoms.keys(), '', { species: allSpecies(d) }).molblock, 'Copied as molfile text.');
   },
   'copy-cdxml': () => {
     const d = pickedFigureDoc();
@@ -4565,6 +4710,7 @@ function command(name: string): boolean {
     return true;
   }
   if (name.startsWith('shape-fx:')) { void shapeEffect(name); return true; }
+  if (name.startsWith('caption-chem:')) return setCaptionChem(name.slice('caption-chem:'.length) as 'auto' | 'on' | 'off');
   if (name.startsWith('add-ligand:')) {
     if (editor.addLigand(name.slice('add-ligand:'.length))) return true;
     flash('Select one metal first, then add the ligand to it.');
@@ -6038,6 +6184,10 @@ async function drawingPreferences(): Promise<void> {
     { name: 'charges', label: 'Charges from the + and − keys', value: editor.options.circledCharges ? 'circled' : 'plain', options: [{ value: 'plain', label: 'Plain sign (N+)' }, { value: 'circled', label: 'In a circle (⊕, ⊖)' }],
       help: 'Charges already drawn keep their look; the circle tools on the Object toolbox always draw a circled charge.' },
     { name: 'textAtom', label: 'An atom or group typed with the Text tool beside a bond end (Br, OMe) becomes that atom', type: 'checkbox', value: String(editor.options.textToAtom) },
+    { name: 'ionCharges', label: 'Add charges to common counterions typed as text (BF4 becomes BF4⁻, NBu4 becomes NBu4⁺)', type: 'checkbox', value: String(chemText.ionCharges),
+      help: 'Off, a counterion typed without its charge is still read as that ion, and flagged until the charge is added.' },
+    { name: 'saltGroups', label: 'Group a counterion typed as text with the structure or ion of opposite charge next to it, as one salt', type: 'checkbox', value: String(chemText.saltGroups),
+      help: 'Grouped, the two count as one salt: one formula and mass, and a SMILES with both parts.' },
     { name: 'supR', label: 'R groups numbered R1, R12… show the number raised (R¹, R¹²)', type: 'checkbox', value: String(labelPrefs.superscriptR),
       help: 'Longer labels (OR1, CO2R1) and labels from files are left as they are.' },
     { name: 'reroute', label: 'Mechanism arrows find their own way round again when a change leaves them running into a structure, a label or another arrow', type: 'checkbox', value: String(editor.options.rerouteArrows),
@@ -6046,6 +6196,8 @@ async function drawingPreferences(): Promise<void> {
   if (!r) return;
   editor.options.circledCharges = r.charges === 'circled';
   editor.options.textToAtom = r.textAtom === 'true';
+  chemText.ionCharges = r.ionCharges === 'true';
+  chemText.saltGroups = r.saltGroups === 'true';
   editor.options.rerouteArrows = r.reroute === 'true';
   if (labelPrefs.superscriptR !== (r.supR === 'true')) {
     labelPrefs.superscriptR = r.supR === 'true';
@@ -6159,6 +6311,8 @@ function currentSettings(): Settings {
     axialStyle: axialStyle.helicity ? 'PM' : 'RaSa',
     circledCharges: editor.options.circledCharges,
     textToAtom: editor.options.textToAtom,
+    ionCharges: chemText.ionCharges,
+    saltGroups: chemText.saltGroups,
     groupClick: editor.options.groupClick,
     groupOutline: editor.options.groupOutline,
     rerouteArrows: editor.options.rerouteArrows,
@@ -6371,6 +6525,8 @@ function applySettings(s: Settings): void {
   showHelicity(s.axialStyle === 'PM');
   editor.options.circledCharges = s.circledCharges;
   editor.options.textToAtom = s.textToAtom;
+  chemText.ionCharges = s.ionCharges;
+  chemText.saltGroups = s.saltGroups;
   editor.options.groupClick = s.groupClick;
   editor.options.groupOutline = s.groupOutline;
   editor.options.rerouteArrows = s.rerouteArrows;
@@ -6812,30 +6968,47 @@ async function runAnalysis(force: boolean): Promise<void> {
   // Analyse the selected structures, or else the one last drawn on.
   let roots: number[] = [];
   // clearing the selection clears the panel, until something is drawn again
-  if (editor.sel.atoms.size) analysisHadSel = true;
+  const texts = selectedSpecies();
+  const picked = editor.sel.atoms.size > 0 || texts.length > 0;
+  if (picked) analysisHadSel = true;
   else if (analysisHadSel) { analysisHadSel = false; clearedAt = doc.version; }
   if (editor.sel.atoms.size) roots = [...editor.sel.atoms];
-  else if (editor.lastEdited !== null && doc.atoms.has(editor.lastEdited) && doc.version !== clearedAt) roots = [editor.lastEdited];
+  else if (!picked && editor.lastEdited !== null && doc.atoms.has(editor.lastEdited) && doc.version !== clearedAt) roots = [editor.lastEdited];
   const frags: Set<number>[] = [];
+  // the text boxes read as chemistry counted with each: ions grouped with the structure (its salt)
+  const extras: Caption[][] = [];
   const seen = new Set<number>();
+  const counted = new Set<number>();
   for (const r of roots) {
     if (seen.has(r)) continue;
     const f = doc.fragmentOf(r);
     for (const x of f) seen.add(x);
+    const ions = groupedIons(doc, f, editor.measure());
+    for (const c of ions) counted.add(c.id);
     frags.push(editor.sel.atoms.size ? new Set([...f].filter((x) => editor.sel.atoms.has(x))) : f);
+    extras.push(ions);
     if (frags.length >= 12) break;
   }
-  const key = doc.version + ':' + live.version + ':' + frags.map((f) => [...f].join(',')).join('|');
+  // selected text boxes on their own (an ion grouped with a structure counts with it)
+  for (const c of texts) {
+    if (counted.has(c.id) || frags.length >= 12) continue;
+    counted.add(c.id);
+    const mates = c.grp !== undefined ? texts.filter((o) => o.grp === c.grp && !counted.has(o.id)) : [];
+    for (const o of mates) counted.add(o.id);
+    frags.push(new Set());
+    extras.push([c, ...mates]);
+  }
+  const key = doc.version + ':' + live.version + ':' + frags.map((f, i) => [...f].join(',') + '+' + extras[i].map((c) => c.id).join(',')).join('|');
   if (!force && key === analysisKey) return;
   analysisKey = key;
   const panel = $('#analysis-body');
   if (!frags.length) {
-    panel.innerHTML = '<p class="muted">Select a structure, or draw one, to see its formula and masses.</p>';
+    panel.innerHTML = '<p class="muted">Select a structure (or text read as chemistry, such as BF4⁻ or DMAP), or draw one, to see its formula and masses.</p>';
     return;
   }
   const seq = ++analysisSeq;
   const t0 = performance.now();
-  const exports = frags.map((f) => toMolfile(doc, f));
+  const exports = frags.map((f, i) => toMolfile(doc, f, '', { species: placeSpecies(doc, extras[i], editor.measure()) }));
   const res = await chem.analyze(exports.map((e) => ({ molblock: e.molblock, map: e.map }))).catch((e) => { panel.textContent = String(e); return null; });
   if (!res || seq !== analysisSeq) return;
   const roundTrip = performance.now() - t0;
@@ -6867,7 +7040,7 @@ async function runAnalysis(force: boolean): Promise<void> {
   if (seq !== analysisSeq) return;
   lastAnalysis = { results, frags };
   saySelection(results);
-  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: electronsHtml(countElectrons(doc, frags[i].values().next().value!)), rGroups: rGroupNames(frags[i]), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i) })).join('');
+  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i) })).join('');
   updatePanels();
 }
 
@@ -7076,6 +7249,10 @@ function updateWarnings(): void {
   if (h?.kind === 'atom') {
     const a = doc.atoms.get(h.id);
     if (a) { tip = checks.forAtom(a); at = a; }
+  } else if (h?.kind === 'caption') {
+    const c = doc.captions.get(h.id);
+    const w = c && !c.ignoreWarnings ? captionChemWarning(doc, c, editor.measure()) : null;
+    if (c && w) { tip = [w]; const b = renderer.captionBox(c); at = { x: b.x1, y: b.y2 }; }
   } else if (h?.kind === 'bond') {
     const b = doc.bonds.get(h.id);
     if (b) {
@@ -7099,6 +7276,12 @@ function updateWarnings(): void {
   warnKey = key;
   const list: { kind: 'atom' | 'bond' | 'caption'; id: number; text: string[] }[] = checks.list();
   for (const [id, text] of labelWarnings) if (doc.captions.has(id)) list.push({ kind: 'caption', id, text: [text] });
+  // text boxes read as chemistry: an ion without its charge, text set to Chemical that can't be read
+  for (const c of doc.captions.values()) {
+    if (c.ignoreWarnings) continue;
+    const w = captionChemWarning(doc, c, editor.measure());
+    if (w) list.push({ kind: 'caption', id: c.id, text: [w] });
+  }
   const ignored = checks.ignoredCount() + [...doc.captions.values()].filter((c) => c.ignoreWarnings).length;
   $('#warnings-count').textContent = list.length ? String(list.length) : '';
   const MAX = 100;
@@ -7307,10 +7490,26 @@ function fuseRingMenu(): MenuItem[] {
   return [{ label: 'Fuse a Ring Here', items }];
 }
 
+/** Right-click on text: read it as chemistry or as plain text (the one in use ticked). */
+function readAsMenu(): MenuItem {
+  const caps = [...editor.sel.captions].map((id) => doc.captions.get(id)).filter((c): c is Caption => !!c);
+  const now = new Set<string>(caps.map((c) => (c.chem === undefined ? 'auto' : c.chem ? 'on' : 'off')));
+  const tick = (k: string, label: string) => (now.size === 1 && now.has(k) ? '✓ ' : '') + label;
+  const m = editor.measure();
+  const reads = caps.length === 1 ? captionReading(doc, caps[0], m) : null;
+  const auto = reads?.species ? ' (now: chemistry)' : reads && !reads.forced ? ' (now: text)' : '';
+  return { label: 'Read Text As', items: [
+    { cmd: 'caption-chem:auto', label: tick('auto', 'Automatically' + auto) },
+    { cmd: 'caption-chem:on', label: tick('on', 'Chemical') },
+    { cmd: 'caption-chem:off', label: tick('off', 'Plain Text') },
+  ] };
+}
+
 function drawingMenu(): MenuItem[] {
   const s = editor.sel;
   const any = s.atoms.size + s.bonds.size + s.captions.size + s.arrows.size + s.shapes.size > 0;
   const atoms = s.atoms.size > 0;
+  const texts = selectedSpecies().length > 0;
   const shapes = [...s.shapes].map((id) => doc.shapes.get(id)).filter((x): x is Shape => !!x);
   const design = ws.active.mode === 'design';
   const view: MenuItem = { label: 'View', items: [{ cmd: 'zoom-in' }, { cmd: 'zoom-out' }, { cmd: 'zoom-fit' }, { cmd: 'zoom-selection' }, { cmd: 'zoom-actual' }, null, { cmd: 'show-stereo' }, { cmd: 'group-tips' }, { cmd: 'scroll-bars' }, { cmd: 'alignment-guides' }, null, { cmd: 'dark-page' }, { cmd: 'dark-colours' }] };
@@ -7342,7 +7541,8 @@ function drawingMenu(): MenuItem[] {
     { cmd: 'cut' }, { cmd: 'copy' }, { cmd: 'paste' }, { cmd: 'delete', label: 'Delete' }, { cmd: 'format-painter' }, null,
     ...(editor.selectedEnergy() !== null ? [{ cmd: 'edit-energy' }, null] : []),
     ...(editor.selectedDiagram() !== null ? [{ cmd: 'edit-diagram' }, { cmd: 'diagram-to-shapes' }, null] : []),
-    ...(atoms ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }, null] : []),
+    ...(atoms || texts ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }, null] : []),
+    ...(s.captions.size ? [readAsMenu(), ...(texts && !atoms ? [{ cmd: 'expand-label', label: 'Expand to Structure' }] : []), null] : []),
     ...(atoms ? [
       { cmd: 'clean-up' },
       ...fuseRingMenu(),
@@ -8525,7 +8725,7 @@ requestAnimationFrame(() => {
 });
 
 // Hooks for the automated speed tests.
-(window as any).__app = { doc, editor, renderer, chem, live, command, addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys()).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, presenter, Doc, keymap, names, sheetMode, sheetChem, docMode, docxBytes: () => writeDocx(docMode.file!.t, docFiles),
+(window as any).__app = { doc, editor, renderer, chem, live, command, addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, presenter, Doc, keymap, names, sheetMode, sheetChem, docMode, docxBytes: () => writeDocx(docMode.file!.t, docFiles),
   pptxBytes: () => { const d = deckNow()!; return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test

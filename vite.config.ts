@@ -35,7 +35,8 @@ export default defineConfig({
   base: './',
   plugins: [webCsp()],
   // The desktop app's development mode expects this exact port (src-tauri/tauri.conf.json).
-  server: { port: 5173, strictPort: true },
+  // docs/ holds the README pictures; the picture scripts write there while the page is open, so don't reload it
+  server: { port: 5173, strictPort: true, watch: { ignored: ['**/docs/**'] } },
   build: {
     target: 'es2022',
     assetsInlineLimit: 0,

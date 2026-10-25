@@ -17,7 +17,8 @@ import { arialWidth } from '../text-metrics';
 import { toSymbolPieces, isSymbolFont, faceFromStyle } from '../richtext';
 import { layoutText, SINGLE } from '../text/layout';
 import { runsForChemDraw, TEXT_TAG } from '../text/chemdraw-text';
-import { ATTACH_TAG, IGNORE_TAG, attachTag } from '../editor/attached';
+import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached';
+import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl } from '../render/images';
 import { ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
@@ -1039,7 +1040,7 @@ class CdxmlWriter {
 
   private fillCaption(t: Element, c: Caption): void {
     for (const ch of kids(t)) {
-      if (ch.nodeName === 's' || (ch.nodeName === 'objecttag' && [TEXT_TAG, ATTACH_TAG, IGNORE_TAG, TURN_TAG].includes(ch.getAttribute('Name') ?? ''))) t.removeChild(ch);
+      if (ch.nodeName === 's' || (ch.nodeName === 'objecttag' && [TEXT_TAG, ATTACH_TAG, IGNORE_TAG, TURN_TAG, CHEM_TAG].includes(ch.getAttribute('Name') ?? ''))) t.removeChild(ch);
     }
     const def = this.doc.style.captionSize;
     // lists and paragraph formatting are written as ChemDraw can show them, with a tag to read them back
@@ -1060,6 +1061,9 @@ class CdxmlWriter {
     if (tag) t.appendChild(this.el('objecttag', { TagType: 'String', Name: TEXT_TAG, Value: JSON.stringify(tag), Visible: 'no' }));
     if (c.attach) t.appendChild(this.el('objecttag', { TagType: 'String', Name: ATTACH_TAG, Value: attachTag(c.attach), Visible: 'no' }));
     if (c.ignoreWarnings) t.appendChild(this.el('objecttag', { TagType: 'String', Name: IGNORE_TAG, Value: 'yes', Visible: 'no' }));
+    // text read as chemistry is marked for ChemDraw (Interpret Chemically); a choice made by hand is kept for us
+    if (c.chem !== undefined) t.appendChild(this.el('objecttag', { TagType: 'String', Name: CHEM_TAG, Value: c.chem ? 'yes' : 'no', Visible: 'no' }));
+    this.set(t, 'InterpretChemically', captionSpecies(this.doc, c) ? 'yes' : null);
     if (c.rot) t.appendChild(this.el('objecttag', { TagType: 'String', Name: TURN_TAG, Value: String(+c.rot.toFixed(3)), Visible: 'no' }));
     const fixed = c.lineHeight ?? (c.lineSpacing && c.lineSpacing !== 1 ? SINGLE * c.lineSpacing * maxSize : undefined);
     // the text as it is drawn: wrapped to the box with the app's text widths (Arial's by default)

@@ -11,15 +11,20 @@ import { execFileSync } from 'node:child_process';
 export const out = new URL('../docs/images/', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
 mkdirSync(out, { recursive: true });
 
-export async function open(url = 'http://localhost:5173/', { width = 1440, height = 900, scale = 1.5 } = {}) {
+export async function open(url = 'http://localhost:5173/', { width = 1440, height = 900, scale = 1.5, navigator = false } = {}) {
   const browser = await chromium.launch(process.env.CHROMIUM ? { executablePath: process.env.CHROMIUM } : {});
-  const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: scale });
+  // SHOT_THEME=dark shows the program's own dark interface (as Windows' dark setting does)
+  const page = await browser.newPage({ viewport: { width, height }, deviceScaleFactor: scale, colorScheme: process.env.SHOT_THEME === 'dark' ? 'dark' : 'light' });
   const problems = [];
   page.on('pageerror', (e) => problems.push(e.message));
   // a clean start each time: no settings left from an earlier run
   await page.addInitScript(() => { try { if (!sessionStorage.getItem('shots')) { localStorage.clear(); sessionStorage.setItem('shots', '1'); } } catch { /* none */ } });
   await page.goto(url);
   await page.waitForFunction(() => window.__app?.chem?.ready, null, { timeout: 60000 });
+  // no first-run welcome card over the page
+  await page.evaluate(() => document.getElementById('welcome')?.remove());
+  // the navigator map (on by default) only where a picture is about getting round a drawing
+  if (!navigator) await page.evaluate(() => window.__app.command('navigator'));
   return { browser, page, problems };
 }
 
@@ -56,8 +61,10 @@ export async function shot(page, name, { clip, mouseAway = true } = {}) {
   if (mouseAway) await page.mouse.move(2, 400);
   await calm(page);
   await page.waitForTimeout(500);
-  await page.screenshot({ path: `${out}${name}.png`, ...(clip ? { clip } : {}) });
-  console.log(`docs/images/${name}.png`);
+  // SHOT_SUFFIX names a second set (such as -dark-ui) beside the usual pictures
+  const file = `${name}${process.env.SHOT_SUFFIX ?? ''}.png`;
+  await page.screenshot({ path: `${out}${file}`, ...(clip ? { clip } : {}) });
+  console.log(`docs/images/${file}`);
 }
 
 /** Screen position (CSS pixels) of a drawing point in the active canvas. */
@@ -227,7 +234,8 @@ export async function helperSpot(page, arrowId, side) {
 /** Click a toolbar tool by name. */
 export async function tool(page, name, glideThere = true) {
   const b = await page.locator(`[data-tool="${name}"]`).first().boundingBox();
-  const p = { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  // up and left of the middle: a tool with more like it has a "more" corner button over its lower right
+  const p = { x: b.x + b.width * 0.35, y: b.y + b.height * 0.35 };
   if (glideThere) await glide(page, p.x, p.y, 20);
   await page.mouse.click(p.x, p.y);
 }
@@ -292,13 +300,37 @@ export async function paletteTool(page, first, label) {
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
 }
 
-/** Press at `from`, then sweep the mouse round `centre` to the angle `to` (degrees, clockwise from east) and let go. */
-export async function sweep(page, centre, r, from, to, steps = 30) {
-  const at = (d) => ({ x: centre.x + r * Math.cos(d * Math.PI / 180), y: centre.y + r * Math.sin(d * Math.PI / 180) });
-  await page.mouse.move(centre.x, centre.y, { steps: 10 });
-  await page.mouse.down();
-  const s = at(from); await page.mouse.move(s.x, s.y, { steps: 8 });
-  for (let i = 1; i <= steps; i++) { const p = at(from + (to - from) * i / steps); await page.mouse.move(p.x, p.y); await page.waitForTimeout(16); }
-  await page.waitForTimeout(250);
-  await page.mouse.up();
+/** Pick the n-th tool (from 0) in a palette's flyout, for palettes whose items share one long title style. */
+export async function paletteItem(page, first, n) {
+  const m = await page.locator(`.palette-wrap:has([data-tool="${first}"]) .more`).boundingBox();
+  await glide(page, m.x + m.width / 2, m.y + m.height / 2, 20);
+  await page.mouse.click(m.x + m.width / 2, m.y + m.height / 2);
+  await page.waitForTimeout(450);
+  const b = await page.locator('.flyout button').nth(n).boundingBox();
+  await glide(page, b.x + b.width / 2, b.y + b.height / 2, 15);
+  await page.waitForTimeout(350);
+  await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+}
+
+/**
+ * A caption at the foot of the window saying which keys and mouse buttons are held and what they do,
+ * since a screen recording shows neither. `keys` are keycaps, `button` lights part of a mouse drawing
+ * ('left', 'middle', 'right', 'wheel'), and `text` says what happens. Null takes it away.
+ */
+export async function inputBadge(page, spec) {
+  await page.evaluate((spec) => {
+    document.getElementById('shot-badge')?.remove();
+    if (!spec) return;
+    const b = document.createElement('div');
+    b.id = 'shot-badge';
+    b.style.cssText = 'position:fixed;left:0;right:0;margin:0 auto;width:max-content;bottom:46px;display:flex;align-items:center;gap:12px;padding:10px 18px;border-radius:14px;background:rgba(24,26,32,0.88);color:#fff;font:600 19px/1.2 system-ui,sans-serif;white-space:nowrap;z-index:2147483646;pointer-events:none;box-shadow:0 6px 20px rgba(0,0,0,0.25)';
+    const cap = (k) => `<span style="display:inline-block;min-width:22px;padding:4px 9px;border-radius:7px;background:#fff;color:#111;border-bottom:3px solid #9aa0aa;font:700 16px/1 system-ui,sans-serif;text-align:center">${k}</span>`;
+    const lit = (part) => (spec.button === part ? '#4f9dff' : 'none');
+    const mouse = spec.button ? `<svg width="30" height="42" viewBox="0 0 30 42"><rect x="2" y="2" width="26" height="38" rx="13" fill="#fff" stroke="#fff" stroke-width="2"/><path d="M15 2 V16" stroke="#555" stroke-width="1.5"/><path d="M2 16 H28" stroke="#555" stroke-width="1.5"/><path d="M15 2 A13 13 0 0 0 2 15 V16 H15 Z" fill="${lit('left')}"/><path d="M15 2 A13 13 0 0 1 28 15 V16 H15 Z" fill="${lit('right')}"/><rect x="12" y="6" width="6" height="9" rx="3" fill="${spec.button === 'middle' || spec.button === 'wheel' ? '#4f9dff' : '#888'}"/></svg>` : '';
+    const what = spec.label ?? { left: 'drag', right: 'Right-drag', middle: 'Middle-drag', wheel: 'Wheel' }[spec.button] ?? '';
+    const parts = [...(spec.keys ?? []).map(cap), ...(spec.button ? [`<span style="display:flex;align-items:center;gap:8px">${mouse}<span>${what}</span></span>`] : [])];
+    b.innerHTML = parts.join('<span style="opacity:.7">+</span>') + `<span style="opacity:.6;margin:0 2px">→</span><span style="font-weight:500">${spec.text}</span>`;
+    // in a full-screen slide show only the full-screen element is drawn
+    (document.fullscreenElement ?? document.body).appendChild(b);
+  }, spec);
 }

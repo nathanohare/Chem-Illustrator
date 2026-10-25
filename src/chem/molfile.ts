@@ -4,8 +4,8 @@
 
 import { Doc, Atom, isMetalAtom, outsideValence, radicalElectrons } from '../model';
 import { metalCarbonyl } from './hapto';
-import { SYMBOLS, elementNumber, valenceOfBonds } from './elements';
-import { CARBONYL_LIGAND, isCarbonylLabel, labelDonates, labelGraph, MiniGraph } from './labels';
+import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, valenceOfBonds } from './elements';
+import { CARBONYL_LIGAND, isCarbonylLabel, kekulize, labelDonates, labelGraph, MiniGraph } from './labels';
 import { stereoAnchor, stereoSense } from './stereo';
 
 export interface MolExport {
@@ -31,6 +31,11 @@ export interface MolfileOptions {
    * molfile.
    */
   stereo?: boolean;
+  /**
+   * Text boxes read as chemistry (BF4−, DMAP) counted with the atoms: each one's molecules
+   * placed round its point, as separate molecules (map −1).
+   */
+  species?: { graph: MiniGraph; x: number; y: number }[];
 }
 
 /** Stands in for R groups when working out R/S: oganesson, heavier than any atom in a real drawing. */
@@ -190,6 +195,24 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
       if (g!.atoms.length > 1) inLabel.push(base + k);
     });
     for (const gb of g.bonds) bonds.push({ a: base + gb.a, b: base + gb.b, order: gb.order === 1.5 ? 4 : gb.order, stereo: 0 });
+  }
+  for (const sp of opts.species ?? []) {
+    // written out as single and double bonds, and an atom shown without hydrogens it would
+    // otherwise take is a radical or carbene (TEMPO's O, NO, a free NHC's carbon)
+    const kb = kekulize(sp.graph);
+    const base = atoms.length;
+    const used = sp.graph.atoms.map(() => 0);
+    for (const b of kb) { used[b.a] += b.order === 1.5 ? 1.5 : b.order; used[b.b] += b.order === 1.5 ? 1.5 : b.order; }
+    const x0 = (sp.x - first.x) / L, y0 = -(sp.y - first.y) / L;
+    sp.graph.atoms.forEach((ga, k) => {
+      const missing = ga.hCount !== undefined && hasImplicitH(ga.z) ? implicitHydrogens(ga.z, used[k], ga.charge) - ga.hCount : 0;
+      const ang = k * 2.4, r = k === 0 ? 0 : 0.35 + 0.05 * k;
+      atoms.push({ sym: ga.dummy ? generic : SYMBOLS[ga.z] || generic, x: x0 + r * Math.cos(ang), y: y0 + r * Math.sin(ang), charge: ga.charge, iso: ga.iso ?? 0, rad: missing === 1 ? 2 : missing === 2 ? 1 : 0 });
+      map.push(-1);
+      inLabel.push(base + k);
+    });
+    // (positions are made up, so double bonds are written as either cis or trans)
+    for (const b of kb) bonds.push({ a: base + b.a, b: base + b.b, order: b.order === 1.5 ? 4 : b.order, stereo: b.order === 2 ? 3 : 0 });
   }
   const seen = new Set<number>();
   for (const id of ids) {

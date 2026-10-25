@@ -3,7 +3,8 @@
 // charge symbols). Anything not understood yet is counted and skipped, never fatal.
 
 import { fillFrameMembers, frameFromTag } from '../editor/frames';
-import { ATTACH_TAG, IGNORE_TAG, attachFromTag, fillAttachments } from '../editor/attached';
+import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachFromTag, fillAttachments } from '../editor/attached';
+import { readSpecies } from '../chem/species';
 import { highlightStyleFromTag } from '../render/highlight';
 import { attachRingFills } from '../chem/ring-fill';
 import { lipDirection } from '../chem/polymer';
@@ -389,6 +390,11 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const attach = attachFromTag(kids(t).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === ATTACH_TAG)?.getAttribute('Value') ?? null);
     if (attach) extra.attach = attach;
     if (kids(t).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === IGNORE_TAG)) extra.ignoreWarnings = true;
+    // read as chemistry or as text: as set here by hand, else ChemDraw's Interpret Chemically
+    // (text it interprets that this program wouldn't read by itself is kept as Chemical)
+    const chemTag = kids(t).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === CHEM_TAG)?.getAttribute('Value');
+    if (chemTag === 'yes' || chemTag === 'no') extra.chem = chemTag === 'yes';
+    else if (t.getAttribute('InterpretChemically') === 'yes' && !readSpecies(back.runs.map((r) => r.text).join(''))) extra.chem = true;
     const turn = Number(kids(t).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === TURN_TAG)?.getAttribute('Value'));
     if (Number.isFinite(turn) && turn) extra.rot = turn;
     return { x, y: py, runs: back.runs, justify, width, lineHeight, ...extra };

@@ -109,6 +109,10 @@ export interface Settings {
   circledCharges: boolean;
   /** An atom or group typed with the Text tool beside a bond end becomes that atom. */
   textToAtom: boolean;
+  /** A common counterion typed as text without its charge gets it (BF4 → BF4⁻) (Settings ▸ Drawing). */
+  ionCharges: boolean;
+  /** A counterion typed as text next to a cation (or the other way round) is grouped with it, as one salt (Settings ▸ Drawing). */
+  saltGroups: boolean;
   /** A click on something grouped selects the whole group, or just that thing. */
   groupClick: 'group' | 'item';
   /** Selecting part of a group outlines the rest of it. */
@@ -195,7 +199,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
   modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', groupTips: true, touchMode: 'auto', penSketch: false,
-  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, groupClick: 'group', groupOutline: true, rerouteArrows: true, superscriptR: true, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {},
+  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, superscriptR: true, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {},
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
   orient: { ...DEFAULT_ORIENT },
@@ -223,7 +227,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (!raw || typeof raw !== 'object') return s;
   const r = raw as Record<string, unknown>;
   if (r.hotkeys && typeof r.hotkeys === 'object' && !Array.isArray(r.hotkeys)) s.hotkeys = r.hotkeys as KeyOverrides;
-  for (const k of ['keepHotspotOnBond', 'fixedLength', 'fixedAngles', 'devTools', 'showRoles', 'chemTyping', 'stereoItalic', 'boldNumbers', 'autoLinks', 'linkCtrlClick', 'spellCheck', 'scrollBars', 'ribbonCollapsed', 'welcomed', 'groupTips', 'penSketch', 'askWholeDrawing', 'darkPage', 'circledCharges', 'textToAtom', 'groupOutline', 'rerouteArrows', 'superscriptR', 'updateCheck', 'pubchemNames', 'convertChemDraw', 'matchStructure', 'fileTypesOffered', 'wordObjectsOffered'] as const) if (typeof r[k] === 'boolean') s[k] = r[k] as boolean;
+  for (const k of ['keepHotspotOnBond', 'fixedLength', 'fixedAngles', 'devTools', 'showRoles', 'chemTyping', 'stereoItalic', 'boldNumbers', 'autoLinks', 'linkCtrlClick', 'spellCheck', 'scrollBars', 'ribbonCollapsed', 'welcomed', 'groupTips', 'penSketch', 'askWholeDrawing', 'darkPage', 'circledCharges', 'textToAtom', 'ionCharges', 'saltGroups', 'groupOutline', 'rerouteArrows', 'superscriptR', 'updateCheck', 'pubchemNames', 'convertChemDraw', 'matchStructure', 'fileTypesOffered', 'wordObjectsOffered'] as const) if (typeof r[k] === 'boolean') s[k] = r[k] as boolean;
   if (r.touchMode === 'auto' || r.touchMode === 'on' || r.touchMode === 'off') s.touchMode = r.touchMode;
   s.orient = parseOrient(r.orient);
   if (r.page === null) s.page = null;
