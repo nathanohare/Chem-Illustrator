@@ -413,6 +413,12 @@ export interface Caption {
   attach?: Attachment;
   /** Don't warn about this compound label (shared with a different structure on purpose). */
   ignoreWarnings?: boolean;
+  /**
+   * Read as chemistry (true) or as plain text (false), set by hand; left out, a text box whose
+   * whole text is a formula, ion or abbreviation (BF4−, DMAP, CH2Cl2) is read as chemistry by
+   * itself (chem/species.ts), except text above and below reaction arrows.
+   */
+  chem?: boolean;
   /** Turned this many degrees clockwise about (x, y), the start of its first line. */
   rot?: number;
   /** Its name in the Selection Pane (Slides), when given one. */

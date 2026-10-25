@@ -87,6 +87,8 @@ header {
 }
 /* the app's name sits at the right, so the menus start at the top left as in other programs */
 header h1.app-name { font-size: 12px; margin: 0 4px 0 auto; font-weight: 600; letter-spacing: 0.01em; color: var(--muted); white-space: nowrap; }
+/* the name takes only the room left over (never wrapping the menu bar to a second row) */
+header h1.app-name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; }
 /* the Beta mark beside the program's name (src/updates.ts STAGE) */
 header .stage-badge { height: 18px; padding: 0 7px; margin: 0 2px 0 -2px; border: 1px solid var(--accent, #2f6fdf); border-radius: 9px; background: transparent; color: var(--accent, #2f6fdf); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; line-height: 16px; cursor: pointer; }
 header .stage-badge:hover { background: var(--accent, #2f6fdf); color: #fff; }
@@ -140,6 +142,10 @@ button:hover { border-color: var(--accent); }
 /* a menu taller than the window scrolls; its submenus are placed on the screen by the script */
 .menu { max-height: calc(100vh - var(--menu-top, 48px) - 8px); overflow-y: auto; overscroll-behavior: contain; }
 .menu.sub { position: fixed; top: 0; left: 0; z-index: 31; }
+/* a menu too tall for the window is laid out in columns instead (src/main.ts fitMenu) */
+.menu.cols { display: block; columns: var(--menu-cols) var(--menu-col-w); column-gap: 4px; column-fill: auto; overflow: hidden; }
+.menu.cols > button, .menu.cols > .submenu > button, .menu.cols > .menu-head { display: flex; width: 100%; break-inside: avoid; }
+.menu.cols hr { break-after: avoid; }
 .submenu { display: contents; }
 .menu button.has-sub::after { content: '›'; color: var(--muted); }
 .menu button.has-sub[aria-expanded='true'] { background: var(--accent-soft); }
@@ -157,7 +163,12 @@ header .sep { height: 18px; margin: 0 3px; }
 .win-btn { width: 44px; height: auto; padding: 0; display: grid; place-items: center; border: 0; border-radius: 0; background: transparent; color: inherit; }
 .win-btn:hover { background: rgb(128 128 128 / 0.22); }
 .win-btn.win-close:hover { background: #c42b1c; color: #fff; }
-body.own-title-bar header { flex-wrap: nowrap; user-select: none; }
+/* the window's buttons are pinned to the top right, so a full menu bar wraps to a second row
+   under them instead of pushing them off the window */
+body.own-title-bar header { position: relative; padding-right: 138px; user-select: none; }
+body.own-title-bar .win-controls { position: absolute; top: 0; right: 0; height: 32px; margin: 0; }
+header > button, header > select { white-space: nowrap; flex-shrink: 0; }
+#btn-dev-off { min-width: 26px; padding: 0 6px; font-size: 15px; line-height: 1; }
 #btn-lock .lock-text { display: inline-block; min-width: 4.6em; text-align: left; }
 .menu button {
   display: flex;

@@ -150,6 +150,15 @@ As you type, common chemistry is tidied for you: CH2Cl2 gets its subscripts, `0 
 
 You can paste formatted text from Word into a text box; bold, italic, subscripts, colours and lists come across.
 
+### Text read as chemistry
+
+A caption or text box whose whole text is a formula (CH2Cl2, Cs2CO3, NaBF4), an ion (BF4⁻, PF6⁻, OTf⁻, NBu4⁺, Na⁺) or a reagent, solvent or ligand abbreviation (DMAP, THF, mCPBA, PPh3, dppe, COD) is read as that chemical by itself. A faint dotted line under it shows this on screen (it is never printed or saved). Select it, alone or with structures, and the Analysis panel, **Copy As ▸ SMILES**, **Copy As ▸ Molfile** and molfile export count it; **Chemistry ▸ Expand Label** (right-click ▸ **Expand to Structure**) draws it as its structure. Ordinary text ("Step 2", "rt, 12 h", "1a") stays text, and so does the text above and below reaction arrows (it keeps its automatic subscripts).
+
+- A counterion typed without its charge (BF4) is still read as that ion, and is flagged in Warnings until the charge is added. Turn on **Settings ▸ Drawing ▸ Add charges to common counterions** to have the charge added as you finish typing.
+- Turn on **Settings ▸ Drawing ▸ Group a counterion … as one salt** to have an ion typed next to a structure or ion of opposite charge grouped with it. Grouped, the two count as one salt: one formula and mass, and SMILES with both parts. You can also group them yourself with **Format ▸ Group**.
+- Right-click ▸ **Read Text As** (or **Read as** in the Style panel) sets a text box to **Chemical** or **Plain text** by hand, or back to **Automatically**. The Style panel says what the text is read as.
+- Saved as CDXML, text read as chemistry is marked for ChemDraw to interpret chemically.
+
 ### Links in text
 
 While typing a caption or text box, **Ctrl+K** (or the link button on the text bar) links the selected words to a web page, a DOI, a file or an e-mail address. With the text selected but not being typed, **Insert ▸ Link…** or right-click ▸ **Link…** links the whole caption. **Ctrl+click** a link to follow it. Right-click a link for **Edit Link…**, **Open Link**, **Copy Link** and **Remove Link**. ChemDraw shows linked text as plain text; open the file here again and the links are back.

@@ -4230,6 +4230,7 @@ export class Editor {
       if (id !== null) hide(null);
       const empty = !plainText(res.runs).trim();
       const cur = id !== null ? doc.captions.get(id) : null;
+      let made = 0;
       const fields: Partial<Caption> = {
         x: res.x, y: res.y, runs: stripBase(res.runs, base), justify: res.justify, paras: res.paras,
         wrap: res.wrap, width: res.width, lineHeight: res.lineHeight, lineSpacing: res.lineSpacing,
@@ -4244,12 +4245,13 @@ export class Editor {
           doc.edit('Edit caption', () => doc.updateCaption(cur.id, fields));
         }
       } else if (!empty) {
-        let made = 0;
         doc.edit('Caption', () => { const nc = doc.addCaption({ ...fields, x: res.x, y: res.y, runs: fields.runs!, justify: res.justify }); made = nc.id; opts?.done?.(nc.id); });
         // only an atom label, typed at a bond end: it becomes that atom (Undo brings the text back)
         if (!wrap && !opts?.done) this.labelFromText(made, plainText(res.runs).trim(), at);
       }
       this.changed();
+      const done = empty ? 0 : cur?.id ?? made;
+      if (done && doc.captions.has(done)) this.onCaptionDone(done);
     }, c?.rot ?? 0);
     this.captionEd = ed;
     this.captionEdId = id;
@@ -4283,6 +4285,9 @@ export class Editor {
   selectedShapes(): number[] {
     return [...this.sel.shapes];
   }
+
+  /** Typing into a text box finished, leaving it with text (for reading it as chemistry). */
+  onCaptionDone: (id: number) => void = () => {};
 
   /** Smart guides: things moved snap into line with other structures, text, shapes and the page (View > Alignment Guides; Alt turns them off while dragging). */
   smartGuides = false;
