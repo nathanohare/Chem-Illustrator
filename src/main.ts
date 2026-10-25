@@ -5315,7 +5315,9 @@ function showMenu(m: Menu | null, focus = true): void {
 }
 for (const m of menus) {
   m.btn.addEventListener('click', () => showMenu(openMenu === m ? null : m));
-  m.btn.addEventListener('pointerenter', () => { if (openMenu && openMenu !== m) showMenu(m, false); });
+  // sliding along the menu bar opens each menu in turn (a mouse only: a tap's pointerenter would
+  // open the menu and its click shut it again)
+  m.btn.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse' && openMenu && openMenu !== m) showMenu(m, false); });
   m.list.addEventListener('scroll', () => closeSubs(m.list));
   m.list.addEventListener('pointerover', (e) => {
     const item = (e.target as HTMLElement).closest<HTMLButtonElement>('button');
@@ -5488,9 +5490,10 @@ function tickMenuModes(): void {
   }
 }
 tickMenuModes();
+// (in the capture phase: the drawing takes a finger's press for itself, so it never bubbles up)
 document.addEventListener('pointerdown', (e) => {
   if (openMenu && !(e.target as HTMLElement).closest('.menu-wrap')) showMenu(null);
-});
+}, true);
 // listing the clipboard's formats needs the Windows app
 for (const b of document.querySelectorAll<HTMLButtonElement>('[data-cmd="clipboard-formats"]')) b.hidden = !nativeClipboard;
 
@@ -7339,6 +7342,24 @@ function stat(xs: number[]): { last: number; med: number; p95: number } {
   return { last: xs[xs.length - 1], med: s[Math.floor(s.length / 2)], p95: s[Math.min(s.length - 1, Math.floor(s.length * 0.95))] };
 }
 
+/** The pen's last stroke, for tablets: how often the pen reported and how often the screen
+ * caught up, what each report cost and how long a paint took. */
+function penRow(): string {
+  const m = editor.penMoves, f = editor.dragFrames;
+  if (m.length < 2) return '';
+  // the last stroke: moves less than a quarter second apart
+  let i = m.length - 1;
+  while (i > 0 && m[i].t - m[i - 1].t < 250) i--;
+  const s = m.slice(i);
+  if (s.length < 2) return '';
+  const span = (s[s.length - 1].t - s[0].t) / 1000 || 1;
+  const fr = f.filter((x) => x.t >= s[0].t && x.t <= s[s.length - 1].t + 50);
+  const pts = s[0].n < 0 ? 'no extra points from the browser' : `${(s.reduce((a, x) => a + x.n, 0) / s.length).toFixed(1)} points each`;
+  const work = stat(s.map((x) => x.ms)), paint = stat(fr.map((x) => x.ms));
+  return `<tr><th>Pen stroke</th><td>${Math.round((s.length - 1) / span)} reports/s (${pts}), screen ${Math.round(fr.length / span)} frames/s<br>
+    <span class="muted">handling ${work.med.toFixed(1)} ms (95% ${work.p95.toFixed(1)}), paint ${paint.med.toFixed(1)} ms (95% ${paint.p95.toFixed(1)})</span></td></tr>`;
+}
+
 let panelQueued = false;
 function updatePanels(): void {
   if (panelQueued || !devTools) return;
@@ -7351,6 +7372,7 @@ function updatePanels(): void {
     $('#speed-body').innerHTML = `
       <table>
         <tr><th>Input → screen</th><td>${ok(lat.last, 16)} ms <span class="muted">(median ${lat.med.toFixed(1)}, 95% ${lat.p95.toFixed(1)})</span></td></tr>
+        ${penRow()}
         <tr><th>Full redraw</th><td>${ok(renderer.lastSceneMs, 16)} ms</td></tr>
         <tr><th>Chemistry</th><td>${chem.ready ? `${ok(ch.last, 50)} ms <span class="muted">(engine loaded in ${chem.loadMs.toFixed(0)} ms)</span>` : chem.error ? `<span class="slow">${escapeHtml(chem.error)}</span>` : 'loading…'}</td></tr>
         <tr><th>Drawing size</th><td>${doc.atoms.size.toLocaleString()} atoms, ${doc.bonds.size.toLocaleString()} bonds, ${doc.captions.size.toLocaleString()} captions</td></tr>

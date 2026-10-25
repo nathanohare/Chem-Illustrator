@@ -343,6 +343,11 @@ export class Editor {
   private inputTs = 0;
   /** Input-to-paint times for the speed readout (ms). */
   latencies: number[] = [];
+  /** The pen's moves lately while pressed, for the speed readout: when, how many points each
+   * brought (-1: the browser doesn't give them), and how long the editor took over it (ms). */
+  penMoves: { t: number; n: number; ms: number }[] = [];
+  /** How long each paint took while a press was dragging (ms), and when it was. */
+  dragFrames: { t: number; ms: number }[] = [];
   onChange: () => void = () => {};
   /** A right click on the drawing (not a right-button drag, which pans). */
   onContextMenu: (e: MouseEvent) => void = () => {};
@@ -386,6 +391,7 @@ export class Editor {
       done: () => this.changed(),
       repaint: () => this.requestOverlay(),
       say: (msg) => this.say(msg),
+      scale: () => this.r.view.scale,
     });
     const el = r.overlay;
     // tablets: fingers pan and pinch, a long press opens the menu (before the editor's own listeners)
@@ -393,7 +399,13 @@ export class Editor {
     el.addEventListener('pointerdown', (e) => this.onDown(e));
     // pressing on the text being typed keeps the keys going to it
     el.addEventListener('mousedown', (e) => { if (this.captionEd?.hit(this.docPoint(e))) e.preventDefault(); });
-    el.addEventListener('pointermove', (e) => this.onMove(e));
+    el.addEventListener('pointermove', (e) => {
+      if (e.pointerType !== 'pen' || !e.buttons) { this.onMove(e); return; }
+      const t0 = performance.now();
+      this.onMove(e);
+      this.penMoves.push({ t: e.timeStamp, n: e.getCoalescedEvents?.().length ?? -1, ms: performance.now() - t0 });
+      if (this.penMoves.length > 240) this.penMoves.shift();
+    });
     el.addEventListener('pointerup', (e) => this.onUp(e));
     // a drag the system takes away (a pen gesture, the window losing the pointer) ends where it
     // got to, as if let go; one that hadn't moved is forgotten
@@ -470,6 +482,7 @@ export class Editor {
    */
   frame(full = false): void {
     this.frameQueued = false;
+    const t0 = performance.now(), dragging = !!this.drag;
     if (this.needScene) {
       this.r.renderScene(this.doc, full ? Infinity : 10);
       this.needScene = this.r.incomplete;
@@ -477,6 +490,10 @@ export class Editor {
     if (this.needOverlay) {
       this.drawOverlay();
       this.needOverlay = false;
+    }
+    if (dragging) {
+      this.dragFrames.push({ t: t0, ms: performance.now() - t0 });
+      if (this.dragFrames.length > 240) this.dragFrames.shift();
     }
     if (this.inputTs) {
       // Event timestamps share the performance.now() clock.
@@ -961,8 +978,11 @@ export class Editor {
     if (d.moved) this.showPointer(e.ctrlKey || e.metaKey);
     const p = this.docPoint(e);
     if (d.mode === 'sketch') {
-      // a cancelled stroke (two fingers came down, or a long press) is not ink
-      if (e.type !== 'pointercancel') { d.path!.push(p); this.sketcher.stroke(d.path!); }
+      // a stroke we cancel ourselves (two fingers came down, or a long press) is not ink; one the
+      // system cancels at the lift (Safari does, when iPadOS wants the pencil) still is
+      // (a cancel's own position can be stale, so the ink ends where it last moved)
+      if (e.type !== 'pointercancel') d.path!.push(p);
+      if (e.type !== 'pointercancel' || e.isTrusted) this.sketcher.stroke(d.path!);
       this.requestOverlay(e.timeStamp);
       return;
     }

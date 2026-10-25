@@ -421,6 +421,10 @@ body.slides-mode #canvas-host, body.design-mode #canvas-host { background: var(-
   white-space: pre;
   font-size: 12px;
 }
+/* touch mode: the field covers the text being typed, so Apple Pencil's Scribble can write into it.
+   It stays see-through (the text is drawn on the drawing); 16 px stops Safari zooming in on it. */
+.text-input.scribble-pad { opacity: 1; font-size: 16px; touch-action: none; white-space: pre-wrap; }
+.text-input.scribble-pad::selection { background: transparent; color: transparent; }
 .caption-bar {
   position: absolute;
   z-index: 7;

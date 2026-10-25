@@ -49,7 +49,7 @@ export class Toolbar {
     });
     document.addEventListener('pointerdown', (e) => {
       if (this.flyout && !this.flyout.contains(e.target as Node) && !(e.target as HTMLElement).closest?.('.palette-wrap')) this.close();
-    });
+    }, true); // capture: the drawing keeps a finger's press to itself
     window.addEventListener('resize', () => this.close());
   }
 
