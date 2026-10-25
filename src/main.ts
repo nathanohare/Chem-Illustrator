@@ -551,6 +551,7 @@ $('#btn-undo').addEventListener('click', () => undo());
 $('#btn-redo').addEventListener('click', () => redo());
 $('#btn-fit').addEventListener('click', () => command('zoom-fit'));
 $('#btn-stress').addEventListener('click', () => stressTest(Number($<HTMLSelectElement>('#stress-n').value)));
+$('#btn-dev-off').addEventListener('click', () => command('dev-tools'));
 $('#btn-dark').addEventListener('click', () => command('dark-page'));
 $('#help-hotkeys').addEventListener('click', () => { $<HTMLDialogElement>('#help').close(); hotkeysDialog.open(); });
 $('#help-close').addEventListener('click', () => $<HTMLDialogElement>('#help').close());
@@ -5131,6 +5132,27 @@ function openSub(item: HTMLButtonElement, focus: boolean): void {
   sub.style.top = `${Math.max(4, Math.min(r.top - 5, innerHeight - h - 4))}px`;
   if (focus) menuItems(sub)[0]?.focus();
 }
+/** Keep an open menu inside the window: one taller than the room below its button is laid out in
+ * columns (so its last items are never out of sight, even where scroll bars are hidden), and one
+ * that would run past the right edge is moved left. */
+function fitMenu(list: HTMLElement): void {
+  list.classList.remove('cols');
+  for (const k of ['--menu-cols', '--menu-col-w', 'height', 'width', 'translate']) list.style.removeProperty(k);
+  const room = list.clientHeight, tall = list.scrollHeight;
+  if (tall > room + 1) {
+    const colW = list.offsetWidth - 8, most = Math.max(1, Math.floor((innerWidth - 16) / (colW + 4)));
+    list.style.height = `${list.offsetHeight}px`;
+    list.style.setProperty('--menu-col-w', `${colW}px`);
+    list.classList.add('cols');
+    for (let n = Math.min(most, Math.ceil(tall / room)); n <= most; n++) {
+      list.style.setProperty('--menu-cols', String(n));
+      list.style.width = `${n * colW + (n - 1) * 4 + 10}px`;
+      if (list.scrollWidth <= list.clientWidth + 1) break;
+    }
+  }
+  const r = list.getBoundingClientRect();
+  if (r.right > innerWidth - 4 || r.left < 4) list.style.translate = `${Math.max(4, innerWidth - 4 - r.width) - r.left}px 0`;
+}
 function showMenu(m: Menu | null, focus = true): void {
   openMenu = m;
   for (const x of menus) {
@@ -5141,6 +5163,7 @@ function showMenu(m: Menu | null, focus = true): void {
   if (!m) return;
   refreshHistory();
   m.list.style.setProperty('--menu-top', `${m.btn.getBoundingClientRect().bottom}px`);
+  fitMenu(m.list);
   if (focus) menuItems(m.list)[0]?.focus();
 }
 for (const m of menus) {
