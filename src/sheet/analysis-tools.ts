@@ -660,9 +660,17 @@ export function rankPercentile(groups: Group[]): ToolOutput | string {
     const n = pts.length;
     out.row(0, c, ['Point', g.label, 'Rank', 'Percent']);
     const sorted = [...pts].sort((p, q) => q.v - p.v || p.i - q.i);
+    // largest first, so equal values sit together: the rank is one more than the place of the first,
+    // and the count below is what comes after the last
+    let first = 0, end = 0;
     sorted.forEach((p, j) => {
-      const rank = 1 + pts.filter((q) => q.v > p.v).length;
-      const below = pts.filter((q) => q.v < p.v).length;
+      if (j >= end) {
+        first = j;
+        end = j + 1;
+        while (end < n && sorted[end].v === p.v) end++;
+      }
+      const rank = 1 + first;
+      const below = n - end;
       // PERCENTRANK.INC of the value in its own data, cut (not rounded) to three decimals
       const pr = n > 1 ? Math.floor((below / (n - 1)) * 1000 + 1e-9) / 1000 : 1;
       out.row(1 + j, c, [p.i + 1, p.v, rank, pr]);
