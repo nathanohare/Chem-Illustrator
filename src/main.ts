@@ -5171,7 +5171,16 @@ const COMMANDS: Record<string, () => unknown> = {
   'paste-slides': () => pasteSlides(),
   'paste-slides-keep': () => pasteSlides(true),
   'hide-slide': () => hideSlides(),
-  'selection-pane': () => { selectionPane = !selectionPane; showLayers(); },
+  'selection-pane': () => {
+    selectionPane = !selectionPane;
+    showLayers();
+    // the pane is in the side panel, under Style: unfolded and brought into view, as PowerPoint's opens beside the slide
+    if (selectionPane && deckNow()) {
+      if (sideIsFolded()) command('fold-side');
+      const pane = $('#layers-section');
+      if (!pane.hidden) requestAnimationFrame(() => { pane.scrollIntoView({ block: 'start' }); (pane.querySelector<HTMLElement>('[role="listbox"]') ?? pane).focus({ preventScroll: true }); });
+    }
+  },
   'reuse-slides': () => reuseSlides(),
   'compare-slides': () => compareSlides(),
   'insert-equation': () => insertEquation(),
