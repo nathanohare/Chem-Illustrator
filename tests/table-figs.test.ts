@@ -56,8 +56,9 @@ describe('structures in table cells', () => {
 });
 
 describe('structures in table cells saved for ChemDraw', () => {
-  it('writes a structure in a cell after its table, so the cells do not paint over it', async () => {
+  it('writes a structure in a cell inside ChemDraw\'s cell, and reads it back where it was', async () => {
     const { writeCdxml } = await import('../src/io/cdxml-write');
+    const { readCdxml } = await import('../src/io/cdxml');
     const doc = new Doc();
     const L = doc.style.bondLength;
     const t = emptyTable(2, 2, 10);
@@ -72,7 +73,17 @@ describe('structures in table cells saved for ChemDraw', () => {
       doc.moveAtoms(new Set([...doc.atoms.keys()]), cell.x - (300 + L / 2), cell.y - 300);
     });
     const xml = writeCdxml(doc);
-    expect(xml.indexOf('<fragment')).toBeGreaterThan(xml.indexOf('<table'));
+    // inside the cell (ChemDraw paints cells over anything outside them), placed from its corner
+    const cellXml = xml.slice(xml.indexOf('<table'), xml.indexOf('</table>'));
+    expect(cellXml).toContain('<fragment');
+    const back = readCdxml(xml).doc;
+    expect(back.atoms.size).toBe(2);
+    const was = [...doc.atoms.values()].map((a) => [a.x, a.y]), now = [...back.atoms.values()].map((a) => [a.x, a.y]);
+    now.forEach(([x, y], i) => { expect(x).toBeCloseTo(was[i][0], 1); expect(y).toBeCloseTo(was[i][1], 1); });
+    // saved again unchanged: still one copy, in its cell
+    const again = writeCdxml(back);
+    expect(again.match(/<fragment/g)?.length).toBe(1);
+    expect(readCdxml(again).doc.atoms.size).toBe(2);
     // a structure outside the table keeps its place
     const out = new Doc();
     out.edit('build', () => {

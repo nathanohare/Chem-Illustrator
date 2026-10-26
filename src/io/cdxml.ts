@@ -75,7 +75,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   const refOf = () => (refMap ??= new Map([...ord].map(([key, o]) => [all[o], key])));
   const morphTags: [number, string][] = [];
   const pinTags: [number, string][] = [];
-  const from = (kind: Kind, id: number, el: Element) => { ord.set(kind + id, ordOf.get(el)!); };
+  const from = (kind: Kind, id: number, el: Element) => { const o = ordOf.get(el); if (o !== undefined) ord.set(kind + id, o); };
   const stats: ReadStats = { atoms: 0, bonds: 0, captions: 0, arrows: 0, shapes: 0, skipped: {}, parseMs: t1 - t0, buildMs: 0 };
   const skip = (what: string) => { stats.skipped[what] = (stats.skipped[what] ?? 0) + 1; };
 
@@ -434,6 +434,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
    */
   const readTable = (tbl: Element, outer: Element | null, parts: TableParts) => {
     const read: ReadCell[] = [];
+    const figs: Element[] = [];
     /** Add a text's runs to a cell (after any it has, on a new line). */
     const addText = (cell: ReadCell['cell'], t: Element) => {
       const c = captionOf(t);
@@ -462,7 +463,13 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
           // ChemDraw turns text it can read as chemistry (Pd(OAc)2, THF) into a label; its text stays
           const label = labelText(ch);
           if (label) addText(cell, label);
-          else skip('structure in a table cell');
+          else {
+            // a structure in the cell, placed from the cell's top left corner (read as a copy moved
+            // onto the page; the table is written again with it when saved)
+            const copy = ch.cloneNode(true) as Element;
+            for (const e of [copy, ...descendants(copy)]) movePoints(e, x1, y1);
+            figs.push(copy);
+          }
         } else if (ch.nodeName !== 'objecttag') skip(`${ch.nodeName} in a table cell`);
       }
       read.push({ x1, y1, x2, y2, cell, borders });
@@ -515,6 +522,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const sh = doc.addShape({ id: idFor(outer ?? tbl), kind: 'table', x1, y1, x2: x1 + lay.width, y2: y1 + lay.height, table, z: tbl.hasAttribute('Z') ? num(tbl, 'Z') : undefined });
     from('s', sh.id, outer ?? tbl);
     stats.shapes++;
+    for (const f of figs) readFragment(f);
   };
 
   /** A group made of a table and its tagged title, footnotes and joined cells' text. */
@@ -1163,4 +1171,13 @@ export function labelLookOf(runs: TextRun[], text: string): { supDigits?: boolea
   });
   if (any) out.marks = marks.slice(0, text.length);
   return out;
+}
+
+/** Move an element's own points (not its children's) by (dx, dy). */
+function movePoints(e: Element, dx: number, dy: number): void {
+  for (const name of ['p', 'BoundingBox']) {
+    const v = e.getAttribute(name);
+    if (v === null) continue;
+    e.setAttribute(name, pts(v).map((x, i) => String(+(x + (i % 2 ? dy : dx)).toFixed(3))).join(' '));
+  }
 }
