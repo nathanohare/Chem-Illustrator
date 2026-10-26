@@ -56,6 +56,14 @@ describe('naming key presses', () => {
     expect(chordOf(press('@', { code: 'KeyQ', ctrlKey: true, altKey: true, getModifierState: altGr }))).toBe('@');
   });
 
+  it('reads Ctrl+Alt on Windows (reported as AltGr) as a shortcut when the key gives its own digit or letter', () => {
+    const altGr = (k: string) => k === 'AltGraph';
+    expect(chordOf(press('0', { code: 'Digit0', ctrlKey: true, altKey: true, getModifierState: altGr }))).toBe('Ctrl+Alt+0');
+    expect(chordOf(press('m', { code: 'KeyM', ctrlKey: true, altKey: true, getModifierState: altGr }))).toBe('Ctrl+Alt+M');
+    // German AltGr+0 is }: still typing
+    expect(chordOf(press('}', { code: 'Digit0', ctrlKey: true, altKey: true, getModifierState: altGr }))).toBe('}');
+  });
+
   it('ignores a modifier pressed on its own', () => {
     expect(chordOf(press('Shift', { shiftKey: true }))).toBeNull();
     expect(chordOf(press('Control', { ctrlKey: true }))).toBeNull();

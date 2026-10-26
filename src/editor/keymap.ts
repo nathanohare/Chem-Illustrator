@@ -49,7 +49,10 @@ const CODE_CHARS: Record<string, string> = {
 export function chordOf(e: KeyPress): string | null {
   const key = e.key;
   if (!key || MODIFIERS.has(key)) return null;
-  const altGr = !!e.getModifierState?.('AltGraph');
+  // Windows reports Ctrl+Alt as AltGr. A key that still gives its own letter or digit (Ctrl+Alt+0
+  // on a US keyboard) is a shortcut; one that gives another character (AltGr+Q is @ in German) is typing.
+  const own = /^(?:Key([A-Z])|Digit(\d))$/.exec(e.code ?? '');
+  const altGr = !!e.getModifierState?.('AltGraph') && !(e.ctrlKey && e.altKey && own && key.toUpperCase() === (own[1] ?? own[2]));
   const ctrl = !altGr && !!(e.ctrlKey || e.metaKey);
   const alt = !altGr && !!e.altKey;
   const shift = !!e.shiftKey;

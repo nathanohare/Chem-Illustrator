@@ -4,6 +4,7 @@
 // spelling check knows chemistry words. The panel on the right shows the paragraph's formatting,
 // its style, the page and the figure picked, every value of which can be typed in.
 
+import { placeTextMenu } from './text-menu';
 import { Doc, type Contents, type ParaStyle, type Shape, type TabStop, type TextRun } from '../model';
 
 type TabStopKind = TabStop['kind'];
@@ -274,6 +275,8 @@ export class DocumentMode {
   private ruler: Ruler;
   /** Home > Styles > More Styles: every style, to apply, change and make. */
   private stylesPane: StylesPane;
+  /** Called when the right-click menu closes (its arrow keys go). */
+  private menuDone: (() => void) | null = null;
   private readonly closeMenuOutside = (e: Event) => { if (this.menu && !this.menu.contains(e.target as Node)) this.closeMenu(); };
 
   constructor(private host: DocModeHost) {
@@ -1465,11 +1468,7 @@ export class DocumentMode {
     cmd('Style…', 'box-style', 'Change how this paragraph\'s style looks');
     cmd('Page Setup…', 'box-page', 'Paper, orientation and margins');
     cmd('Header and Footer…', 'box-hf', 'Header, footer and page numbers');
-    const host = this.view.host;
-    host.appendChild(menu);
-    const r = host.getBoundingClientRect();
-    menu.style.left = `${Math.max(4, Math.min(clientX - r.left, r.width - menu.offsetWidth - 4))}px`;
-    menu.style.top = `${Math.max(4, Math.min(clientY - r.top, r.height - menu.offsetHeight - 4))}px`;
+    this.menuDone = placeTextMenu(menu, clientX, clientY);
     this.menu = menu;
     document.addEventListener('pointerdown', this.closeMenuOutside, true);
     return true;
@@ -1540,6 +1539,8 @@ export class DocumentMode {
     if (!this.menu) return;
     this.menu.remove();
     this.menu = null;
+    this.menuDone?.();
+    this.menuDone = null;
     document.removeEventListener('pointerdown', this.closeMenuOutside, true);
   }
 
