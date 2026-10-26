@@ -55,6 +55,33 @@ fn path_exists(path: String) -> bool {
     std::path::Path::new(&path).exists()
 }
 
+/// Whether another program holds a file open for changing it (Windows): Word keeps the file it
+/// edits open that way, and writes no "~$" owner file for one in OneDrive with AutoSave on.
+/// Asking to read it while letting nobody else write fails then, with a sharing violation; the
+/// file itself is never changed. Asked twice, so OneDrive syncing it for a moment doesn't count.
+#[tauri::command(async)]
+fn file_held(path: String) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_SHARE_READ: u32 = 1;
+        const ERROR_SHARING_VIOLATION: i32 = 32;
+        let held = || {
+            std::fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ).open(&path).err().and_then(|e| e.raw_os_error()) == Some(ERROR_SHARING_VIOLATION)
+        };
+        if !held() {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(400));
+        held()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        false
+    }
+}
+
 /// Read a file the user chose, as bytes (PowerPoint files, CDX drawings, pictures).
 #[tauri::command]
 fn read_binary_file(app: tauri::AppHandle, path: String) -> Result<tauri::ipc::Response, String> {
@@ -347,6 +374,7 @@ pub fn run() {
             read_binary_file,
             write_binary_file,
             path_exists,
+            file_held,
             settings_path,
             settings_read,
             settings_write,
