@@ -188,7 +188,7 @@ The **Format** menu has:
 - **Flip Left to Right, Keeping Configuration** and **Flip Top to Bottom, Keeping Configuration**: the structure is turned over and its wedges and hashes swap, so every stereocentre keeps its R or S;
 - **Rotate 90° Clockwise**, **Rotate 90° Anticlockwise**, **Rotate 180°** and **Rotate…** (Ctrl+R, any angle);
 - **Scale…** (Ctrl+K): by a percentage, or to a bond length in points;
-- **Join** (Ctrl+J): joins two selected atoms, or two selected bonds, into one;
+- **Join** (Ctrl+J): joins two selected atoms, or two selected bonds, into one. You can also drag an atom onto another one: it snaps on, the atom it will join lights up, and the two become one when you let go. Drag a chain's end onto its start to close a ring. Hold Alt to drop it without joining;
 - **Group** (Ctrl+G) and **Ungroup** (Ctrl+Shift+G): grouped structures, text, arrows and shapes select and move as one. Clicking any part selects the whole group, and a grey dashed box shows it; **Edit ▸ Settings** can make a click pick just the one thing instead. Groups are kept in CDXML files, so ChemDraw opens them as groups too;
 - **Bring to Front** and **Send to Back** for shapes and pictures;
 - **Bring Bond to Front** and **Send Bond to Back**: where two bonds cross, the one behind gets a small gap.
