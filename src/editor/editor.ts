@@ -633,6 +633,31 @@ export class Editor {
   }
 
   /**
+   * What a double-click opens: the topmost thing with something drawn under the pointer. A text
+   * box (a slide's title placeholder) is picked anywhere in its box, but where none of its text is
+   * under the pointer an arrow or shape there (an equation half under the title's box) comes first.
+   */
+  contentHit(p: Vec): Hit {
+    const h = this.hitTest(p);
+    if (h?.kind !== 'caption') return h;
+    const c = this.doc.captions.get(h.id)!;
+    const q = c.rot ? turnAbout(p, c, -c.rot) : p;
+    const pad = this.tol(2);
+    for (const l of this.r.captionLayout(c).lines) {
+      const x1 = c.x + l.x, y = c.y + l.y;
+      if (q.x >= x1 - pad && q.x <= x1 + l.width + pad && q.y >= y - l.ascent - pad && q.y <= y + l.descent + pad) return h;
+    }
+    const at = this.tol(5);
+    for (const r of this.doc.arrows.values()) if (arrowHit(r, p, at)) return { kind: 'arrow', id: r.id };
+    const order = shapeOrder([...this.doc.shapes.values()]);
+    for (let i = order.length - 1; i >= 0; i--) {
+      const s = order[i];
+      if (!s.hidden && !s.locked && shapeHit(s, p, at)) return { kind: 'shape', id: s.id };
+    }
+    return h;
+  }
+
+  /**
    * Handles shown on selected arrows and shapes: ends and middle of an arrow, corners of a box.
    * Shown when only a few arrows or shapes (and no structures) are selected.
    */
@@ -1205,7 +1230,7 @@ export class Editor {
     if (spot && energyFrameOf(this.doc, 'arrow', spot.id) === null && diagramFrameOf(this.doc, 'arrow', spot.id) === null) {
       if (spot.join !== undefined ? this.removeBend(spot.id, spot.join) : this.addBend(spot.id, spot.t!)) return;
     }
-    const h = this.hitTest(p);
+    const h = this.contentHit(p);
     // any part of an energy diagram (but a structure put on it) opens its numbers
     const diagram = h && h.kind !== 'atom' && h.kind !== 'bond' && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? energyFrameOf(this.doc, h.kind, h.id) : null;
     if (diagram !== null) { this.selectOnly({ kind: 'shape', id: diagram }); this.onEnergy(diagram); return; }

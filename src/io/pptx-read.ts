@@ -24,7 +24,7 @@ import { drawingInEmf } from '../render/emf';
 import { dataUrl, imageSize } from '../render/images';
 import { knownShape, tidyFx } from '../render/picture-fx';
 import { readPictureFx } from './picture-xml';
-import { layoutText, ASCENT } from '../text/layout';
+import { layoutText, caretPos, ASCENT } from '../text/layout';
 import { Master, SlideSize, LayoutId, defaultMaster, textStyles, slideDrawingStyle, slideBackground, slideColours, hasLayout, newLayoutId, deckLayouts, type LayoutDef, type PlaceholderBox, type SectionCount, type DeckSettings, type SlideHF, type DateFormat, showsNumber, showsFooter, showsDate } from '../deck/deck';
 import { backgroundColour, isPlain, sameBackground, type Background } from '../deck/background';
 import { readFill, readOneFill, type FillContext } from './pptx-background';
@@ -648,7 +648,7 @@ class Reader {
 
   private elementOnly(s: Part, layout: Part | null, el: Element, t: Xf, doc: Doc): void {
     switch (el.localName) {
-      case 'sp': if (!this.ourConnector(s, el, t, doc) && !this.equation(s, el, t, doc)) this.shape(s, layout, el, t, doc); break;
+      case 'sp': if (!this.ourConnector(s, el, t, doc) && !this.equation(s, layout, el, t, doc)) this.shape(s, layout, el, t, doc); break;
       case 'pic': this.pictureEl(s, el, t, doc); break;
       case 'cxnSp': if (!this.ourConnector(s, el, t, doc)) this.line(el, kid(el, 'spPr'), t, doc); break;
       case 'grpSp': {
@@ -718,7 +718,7 @@ class Reader {
    * its LaTeX as typed here when PowerPoint has not changed it. Its box is the equation's own size,
    * where PowerPoint shows it in the text box. False when the text box holds no equation.
    */
-  private equation(s: Part, sp: Element, t: Xf, doc: Doc): boolean {
+  private equation(s: Part, layout: Part | null, sp: Element, t: Xf, doc: Doc): boolean {
     const m = sp.getElementsByTagNameNS(NS_A14, 'm')[0];
     const maths = m ? Array.from(m.getElementsByTagNameNS(NS_M, 'oMath')) : [];
     const frame = boxOf(kid(sp, 'spPr', 'xfrm'), t);
@@ -745,10 +745,26 @@ class Reader {
     const nat = shapeMathSize(math, arialMeasure);
     const k = sz > 0 ? sz / 100 / math.size : 1;
     const cx = (frame.x1 + frame.x2) / 2, cy = (frame.y1 + frame.y2) / 2;
-    const box: Rect = same ? frame : { x1: cx - (nat.w * k) / 2, y1: cy - (nat.h * k) / 2, x2: cx + (nat.w * k) / 2, y2: cy + (nat.h * k) / 2 };
+    let box: Rect = same ? frame : { x1: cx - (nat.w * k) / 2, y1: cy - (nat.h * k) / 2, x2: cx + (nat.w * k) / 2, y2: cy + (nat.h * k) / 2 };
+    // text typed beside the equation in the same box ("+c" after it): the box comes in as text,
+    // with room left where the equation is, and the equation goes in that room
+    const words = Array.from(sp.getElementsByTagNameNS(NS.a, 't')).filter((x) => !x.closest('oMath, oMathPara') && (x.textContent ?? '').trim());
+    if (words.length && m.closest('p')?.parentElement?.localName === 'txBody') {
+      this.inlineMath = { w: nat.w * k, h: nat.h * k, at: null };
+      this.shape(s, layout, sp, t, doc);
+      const at = this.inlineMath.at as { x: number; y: number } | null;
+      this.inlineMath = null;
+      if (at) box = { x1: at.x, y1: at.y - (nat.h * k) / 2, x2: at.x + nat.w * k, y2: at.y + (nat.h * k) / 2 };
+    }
     doc.addShape({ kind: 'picture', x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2, src: shapeMathPicture(math, arialMeasure), px: { w: Math.round(nat.w), h: Math.round(nat.h) }, math, ...turn(frame) });
     return true;
   }
+
+  /**
+   * An equation with text beside it in one PowerPoint text box, while that box's text is read:
+   * its size, and where its middle-left comes on the slide (set once the text is laid out).
+   */
+  private inlineMath: { w: number; h: number; at: { x: number; y: number } | null } | null = null;
 
   /** The invisible frame of a diagram saved here, round the shapes its group brought in, keeping its text (with any words changed in PowerPoint). */
   private diagramFrame(tag: string, off: Element, ext: Element, t: Xf, doc: Doc, hadShapes: Set<number>, hadArrows: Set<number>): void {
@@ -1678,6 +1694,7 @@ class Reader {
     const paras: ParaStyle[] = [];
     let lineSpacing: number | undefined, lineHeight: number | undefined;
     const ps = kids(body, 'p');
+    let mathAt = -1;
     ps.forEach((p, pi) => {
       const pPr = kid(p, 'pPr');
       const lvl = Math.max(0, Math.min(8, Number(pPr?.getAttribute('lvl') ?? 0)));
@@ -1710,7 +1727,7 @@ class Reader {
       const marL = fromEmu(inherit(pPr, chain, lvl, (e) => e.getAttribute('marL')));
       const indent = fromEmu(inherit(pPr, chain, lvl, (e) => e.getAttribute('indent')));
       // our lists put the marker one step in per level; anything further in is extra indent
-      const pieces = kids(p).filter((k) => k.localName === 'r' || k.localName === 'fld' || k.localName === 'br');
+      const pieces = kids(p).filter((k) => k.localName === 'r' || k.localName === 'fld' || k.localName === 'br' || (k.localName === 'm' && k.namespaceURI === NS_A14 && !!this.inlineMath));
       const firstSize = (() => {
         const rPr = kid(pieces.find((k) => k.localName !== 'br'), 'rPr');
         const v = inherit(rPr, chain, lvl, (e) => e.getAttribute('sz'), true) ?? kid(p, 'endParaRPr')?.getAttribute('sz') ?? null;
@@ -1724,6 +1741,13 @@ class Reader {
         if (k.localName === 'br') {
           runs.push({ text: '\n' });
           paras.push(list ? { ...para, cont: true } : { ...para });
+          continue;
+        }
+        if (k.localName === 'm') {
+          // the equation's room: en spaces as wide as it (it is drawn over them)
+          const size = Math.round(firstSize * 10) / 10;
+          mathAt = runs.reduce((n, r) => n + r.text.length, 0);
+          runs.push({ text: '\u2002'.repeat(Math.max(1, Math.ceil(this.inlineMath!.w / (size / 2)))), size });
           continue;
         }
         const rPr = kid(k, 'rPr');
@@ -1812,6 +1836,11 @@ class Reader {
     const height = lay.lines.length ? lay.box.y2 - lay.box.y1 : 0;
     const shift = anchor === 'ctr' ? (room - height) / 2 : anchor === 'b' ? room - height : 0;
     c.y = box.y1 + tI + shift + PPT_ASCENT * first;
+    if (this.inlineMath && mathAt >= 0 && lay.lines.length) {
+      const at = caretPos(lay, mathAt), line = lay.lines[at.line];
+      const size = line.size || sizeFor;
+      this.inlineMath.at = { x: c.x + at.x, y: c.y + line.y - lay.lines[0].y - size * 0.3 };
+    }
     return c;
   }
 }
