@@ -1277,6 +1277,14 @@ export class Doc {
     for (const id of ends) if (this.atoms.get(id)?.multi && !this.degree(id)) this.removeAtom(id);
   }
 
+  /** Give up the step being made: what it changed goes back as it was, with nothing to undo or redo. */
+  abandon(): void {
+    const tx = this.tx;
+    if (!tx) return;
+    this.tx = null;
+    if (tx.before.size) this.apply(tx.before);
+  }
+
   /** Run `fn` inside one undoable step. */
   edit<T>(label: string, fn: () => T): T {
     const outer = this.tx !== null;

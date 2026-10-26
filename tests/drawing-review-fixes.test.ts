@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 //
-// Drawing-core fixes from the code review: the "text is chemistry" marks during a drag.
+// Drawing-core fixes from the code review: the "text is chemistry" marks during a drag, and a
+// two-finger pinch on a touch screen leaving the drawing alone.
 
 import { describe, expect, it } from 'vitest';
 import { Doc } from '../src/model';
 import { captionReading } from '../src/chem/species';
 import { plainMeasure } from '../src/chem/reaction';
+import { installPenAndTouch } from '../src/editor/touch';
 
 const L = new Doc().style.bondLength;
 
@@ -72,5 +74,41 @@ describe('text read as chemistry, during a drag', () => {
     doc.moveAtoms(frag, 0, 0.5);
     doc.commit();
     expect(captionReading(doc, doc.captions.get(thf.id)!, m).species).toBeNull();
+  });
+});
+
+describe('a two-finger pinch whose first finger slid before the second landed', () => {
+  it('drops the first finger\'s press in the editor instead of finishing it', () => {
+    const el = document.createElement('div');
+    document.body.append(el);
+    let abandoned = 0;
+    installPenAndTouch({ overlay: el, view: { ox: 0, oy: 0, scale: 1 }, requestScene: () => {}, abandonPress: () => { abandoned++; } });
+    // the editor's own listeners (after touch.ts's): a cancelled press that had moved is finished, as if let go
+    const finished: string[] = [];
+    el.addEventListener('pointercancel', (e) => finished.push(e.type));
+    el.addEventListener('pointerup', (e) => finished.push(e.type));
+    const ev = (type: string, id: number, x: number) => el.dispatchEvent(new PointerEvent(type, { pointerId: id, pointerType: 'touch', clientX: x, clientY: 100, bubbles: true, cancelable: true }));
+    ev('pointerdown', 1, 100);
+    for (let i = 1; i <= 4; i++) ev('pointermove', 1, 100 - i);
+    ev('pointerdown', 2, 300);
+    for (let i = 1; i <= 5; i++) { ev('pointermove', 1, 90 - 10 * i); ev('pointermove', 2, 300 + 10 * i); }
+    ev('pointerup', 1, 40); ev('pointerup', 2, 350);
+    expect(abandoned).toBe(1);
+    expect(finished).toEqual([]);
+    el.remove();
+  });
+
+  it('puts a move already under way back, with nothing to undo or redo', () => {
+    const doc = new Doc();
+    let id = 0;
+    doc.edit('draw', () => { const a = doc.addAtom(0, 0); const b = doc.addAtom(L, 0); doc.addBond(a.id, b.id); id = a.id; });
+    doc.begin('Copy');
+    doc.updateAtom(id, { x: 5 });
+    doc.addAtom(40, 40);
+    doc.abandon();
+    expect(doc.atoms.get(id)!.x).toBe(0);
+    expect(doc.atoms.size).toBe(2);
+    expect(doc.undoLabel).toBe('draw');
+    expect(doc.canRedo()).toBe(false);
   });
 });
