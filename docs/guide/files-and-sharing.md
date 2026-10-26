@@ -158,7 +158,7 @@ In the desktop app, the **File** menu lists the last ten files and workspaces yo
 
 ## Printing
 
-**File ▸ Print…** (Ctrl+P) asks a question or two, then opens your system's Print window, where you pick the printer and copies, or save a PDF.
+**File ▸ Print…** (Ctrl+P) asks a question or two, then opens your system's Print window, where you pick the printer and copies, or save a PDF. In the Windows app the printer, copies and pages are picked in Chem Illustrator's own Print window instead, so pages print at their own size and the right way round (pick **Microsoft Print to PDF** to save a PDF).
 
 | Tab | Choices |
 |---|---|

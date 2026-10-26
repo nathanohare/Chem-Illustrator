@@ -9,6 +9,7 @@ mod keep;
 mod ole;
 mod open_dialog;
 mod portable;
+mod print;
 mod recognise;
 mod web;
 
@@ -445,7 +446,9 @@ pub fn run() {
             recognise::pack_ready,
             recognise::pack_download,
             recognise::pack_cancel,
-            recognise::pack_read
+            recognise::pack_read,
+            print::printers,
+            print::print_page
         ])
         .build(tauri::generate_context!())
         .expect("error while running Chem Illustrator")
