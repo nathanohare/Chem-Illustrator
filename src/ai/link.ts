@@ -261,6 +261,12 @@ async function send(p: AiPrefs, req: AiRequest): Promise<unknown> {
       status = res.status; text = await res.text();
     } catch (e) {
       if (stop.signal.aborted) throw new Error(`The AI service did not answer in ${ANSWER_MS / 60_000} minutes.`);
+      // fetch says only "Failed to fetch": nothing there, no network, or the service refused this page
+      if (e instanceof TypeError) {
+        const here = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i.test(base);
+        throw new Error(`Could not reach the AI service at ${base}. Check that it is running and the address is right` +
+          (here ? '; a model on this computer (Ollama, LM Studio) must also allow requests from this page (for Ollama, its OLLAMA_ORIGINS setting).' : ', and that this computer is online.'));
+      }
       throw e;
     } finally {
       clearTimeout(timer);
