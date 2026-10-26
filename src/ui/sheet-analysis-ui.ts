@@ -10,7 +10,7 @@ import type { Sheet, Workbook, CellStyle } from '../sheet/workbook';
 import { mergeStyle, valueInput } from '../sheet/workbook';
 import { Range, keyOf, rowOf, colOf, cellName, quoteSheet, rangeName, rangesOverlap } from '../sheet/refs';
 import { readRef, refText, newChartId, type Chart } from '../sheet/chart';
-import { isError, type Value } from '../sheet/values';
+import { isError, type Value, maxOf } from '../sheet/values';
 import { formatValue } from '../sheet/numfmt';
 import {
   type ToolOutput, type Group, type RandomDistribution, groupsOf, descriptive, histogram, regression, anovaSingle, anovaTwoNoRep, anovaTwoRep,
@@ -526,7 +526,7 @@ export class SheetAnalysis {
   private write(r: ToolOutput | string, target: Target | string, label: string, chart?: 'histogram' | { kind: 'line'; actual: { sheet: Sheet; range: Range } }): Promise<string | null> | string | null {
     if (typeof r === 'string') return r;
     if (typeof target === 'string') return target;
-    const h = r.cells.length, w = Math.max(1, ...r.cells.map((x) => x.length));
+    const h = r.cells.length, w = maxOf(r.cells.map((x) => x.length), 1);
     const go = () => this.place(r, target, label, chart);
     if ('sheet' in target) {
       const R: Range = { r1: target.at.row, c1: target.at.col, r2: target.at.row + h - 1, c2: target.at.col + w - 1 };
@@ -564,7 +564,7 @@ export class SheetAnalysis {
       }));
       // the label column wide enough to read, on a new sheet
       if ('newSheet' in target) {
-        const widest = Math.max(...r.cells.map((row) => (typeof row[0] === 'string' ? row[0].length : 0)));
+        const widest = maxOf(r.cells.map((row) => (typeof row[0] === 'string' ? row[0].length : 0)));
         if (widest > 10) sheet.setColWidth(0, Math.min(260, widest * 7 + 12));
       }
       if (chart) {
@@ -579,7 +579,7 @@ export class SheetAnalysis {
 
   /** The chart a tool draws beside its results: the histogram's columns, or actual values and forecasts. */
   private chartFor(r: ToolOutput, sheet: Sheet, at: { row: number; col: number }, chart: 'histogram' | { kind: 'line'; actual: { sheet: Sheet; range: Range } }): Chart | null {
-    const width = Math.max(...r.cells.map((x) => x.length));
+    const width = maxOf(r.cells.map((x) => x.length));
     if (chart === 'histogram') {
       if (!r.chart) return null;
       const rows = { r1: at.row + r.chart.r1, r2: at.row + r.chart.r2 };

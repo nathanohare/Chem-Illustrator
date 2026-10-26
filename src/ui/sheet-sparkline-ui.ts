@@ -12,6 +12,7 @@ import { readRef } from '../sheet/chart';
 import { quoteSheet } from '../sheet/refs';
 import { makeSparklines, sparklineAt, SPARK_STYLES, type SparkKind, type SparklineGroup, type SparkAxisLimit } from '../sheet/sparklines';
 import { themeOf } from '../sheet/themes';
+import { maxOf, minOf } from '../sheet/values';
 
 export interface SparkHost {
   readonly view: SheetView;
@@ -245,7 +246,7 @@ export class SheetSparklines {
     const src = blocks[0].sheet;
     const all = blocks.reduce((a, b) => ({ r1: Math.min(a.r1, b.range.r1), c1: Math.min(a.c1, b.range.c1), r2: Math.max(a.r2, b.range.r2), c2: Math.max(a.c2, b.range.c2) }), blocks[0].range);
     const rs = g.items.map((it) => it.row), cs = g.items.map((it) => it.col);
-    const where = { r1: Math.min(...rs), c1: Math.min(...cs), r2: Math.max(...rs), c2: Math.max(...cs) };
+    const where = { r1: minOf(rs), c1: minOf(cs), r2: maxOf(rs), c2: maxOf(cs) };
     const w = new ToolWindow('Edit Sparklines');
     w.home = s.name;
     const data = w.ref('Data Range', absText(all, src !== s ? src.name : null));

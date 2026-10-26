@@ -8,7 +8,7 @@
 // reading the input cells, again as Excel writes them.
 
 import type { CellStyle } from './workbook';
-import { ERR, Value, isError } from './values';
+import { ERR, Value, isError, maxOf, minOf } from './values';
 import { leastSquares, tTail, tInv, normCdf, normInv, fTail, fCdf, fInvTail } from './stats';
 
 /** A cell of a tool's results: a value, or a formula (moving averages and smoothing). */
@@ -51,7 +51,7 @@ class Out {
   }
   get height(): number { return this.cells.length; }
   done(): ToolOutput {
-    const w = Math.max(0, ...this.cells.map((r) => r.length));
+    const w = maxOf(this.cells.map((r) => r.length), 0);
     for (const r of this.cells) while (r.length < w) r.push(null);
     return { cells: this.cells, styles: this.styles };
   }
@@ -65,7 +65,7 @@ class Out {
  * as null so paired data stays paired.
  */
 export function groupsOf(block: Value[][], byRows: boolean, labels: boolean): Group[] | string {
-  const h = block.length, w = Math.max(0, ...block.map((r) => r.length));
+  const h = block.length, w = maxOf(block.map((r) => r.length), 0);
   const n = byRows ? h : w, len = byRows ? w : h;
   const out: Group[] = [];
   for (let g = 0; g < n; g++) {
@@ -200,7 +200,7 @@ export interface HistogramOptions {
  */
 export function autoBins(xs: number[]): number[] {
   if (!xs.length) return [];
-  const lo = Math.min(...xs), hi = Math.max(...xs);
+  const lo = minOf(xs), hi = maxOf(xs);
   const k = Math.max(1, Math.round(Math.sqrt(xs.length)));
   if (hi === lo) return [lo];
   const w = (hi - lo) / k;
@@ -584,7 +584,7 @@ export function zTest(a: Group, b: Group, var1: number, var2: number, hypDiff: n
 /** A lower-triangle matrix of every pair of groups: Pearson's r, or the population covariance (as the ToolPak gives). */
 export function matrix(groups: Group[], kind: 'correlation' | 'covariance'): ToolOutput | string {
   if (groups.length < 1) return 'Give the input range.';
-  const len = Math.max(...groups.map((g) => g.values.length));
+  const len = maxOf(groups.map((g) => g.values.length));
   // rows where every group has a number
   const keep = Array.from({ length: len }, (_, i) => i).filter((i) => groups.every((g) => g.values[i] !== null && g.values[i] !== undefined));
   if (keep.length < 2) return 'Each variable needs at least two numbers in matching rows.';

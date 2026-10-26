@@ -12,7 +12,7 @@ import {
   PasteSpecialOptions, PasteWhat, PasteOp, splitText, SplitOptions, textToColumns, removeDuplicates, applyAdvancedFilter, showAllRows,
 } from '../sheet/data-tools';
 import { flashFill } from '../sheet/flash-fill';
-import { readTyped } from '../sheet/values';
+import { readTyped, maxOf } from '../sheet/values';
 
 export interface DataUiHost {
   readonly view: SheetView;
@@ -548,7 +548,7 @@ export class SheetData {
       breakRow.hidden = !fixed;
       const o = options();
       const rows = texts.map((t) => splitText(t, o));
-      const width = Math.max(...rows.map((x) => x.length));
+      const width = maxOf(rows.map((x) => x.length));
       formats = Array.from({ length: width }, (_, i) => formats?.[i] ?? 'general');
       const table = el('table', 'sd-preview-table');
       const head = el('tr');

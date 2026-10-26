@@ -14,7 +14,7 @@ import { shiftFormula } from '../sheet/formula';
 import { PROPERTIES, MolProps, propertyValue } from '../sheet/properties';
 import { FORMATS, changeDecimals, describeFormat } from '../sheet/numfmt';
 import { UNITS, unitFormat } from '../sheet/units';
-import { isError, CellError, Value } from '../sheet/values';
+import { isError, CellError, Value, maxOf } from '../sheet/values';
 import { listedPeaks, readsAsFormula, type IsotopeSource } from '../sheet/isotopes';
 import { isotopeTable, ISOTOPE_CHARTS, type IsotopeChartKind } from '../sheet/isotope-table';
 import { COMMON_ADDUCTS } from '../chem/hrms';
@@ -1915,7 +1915,7 @@ export class SheetMode {
     }
     if (!block && !got.drawing && got.text !== undefined && got.text !== '') {
       const rows = parseDelimited(got.text, got.text.includes('\t') ? '\t' : 'auto');
-      const width = Math.max(...rows.map((x) => x.length));
+      const width = maxOf(rows.map((x) => x.length));
       block = { rows: rows.length, cols: width, cells: rows.map((x) => x.map((t) => (t === '' ? undefined : { input: t } as Cell))), origin: null };
     }
     return { got, block, fromClip };

@@ -192,7 +192,7 @@ function rowsOf(table: Element): Element[] {
   const out: Element[] = [];
   for (const k of kids(table)) {
     if (k.localName === 'table-row') out.push(k);
-    else if (k.localName === 'table-header-rows' || k.localName === 'table-row-group' || k.localName === 'table-rows') out.push(...rowsOf(k));
+    else if (k.localName === 'table-header-rows' || k.localName === 'table-row-group' || k.localName === 'table-rows') for (const r of rowsOf(k)) out.push(r);
   }
   return out;
 }
@@ -201,7 +201,7 @@ function columnsOf(table: Element): Element[] {
   const out: Element[] = [];
   for (const k of kids(table)) {
     if (k.localName === 'table-column') out.push(k);
-    else if (k.localName === 'table-header-columns' || k.localName === 'table-column-group' || k.localName === 'table-columns') out.push(...columnsOf(k));
+    else if (k.localName === 'table-header-columns' || k.localName === 'table-column-group' || k.localName === 'table-columns') for (const c of columnsOf(k)) out.push(c);
   }
   return out;
 }
