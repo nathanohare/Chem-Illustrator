@@ -209,7 +209,8 @@ import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
 import { aiSettingsDialog } from './ui/ai-settings';
-import { importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
+import { freeSpace } from './editor/free-space';
+import { canReadStructures, importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
 import { placeRead } from './recognise/check';
 import { Diagnostics, catchErrors, errorReport, formatEntry, stamp, type LogEntry, type UnexpectedClose } from './diagnostics';
 import { keepStore } from './keep/store';
@@ -3337,23 +3338,39 @@ const importHost: ImportHost = {
   chem,
   ai: () => aiPrefs,
   flash,
-  // side by side from the middle of the window, two bond lengths apart, selected
+  // side by side, two bond lengths apart, in rows no wider than the window, in the free space
+  // nearest the middle of the window (clear of what is drawn already), selected
   place(chosen) {
     finishTyping();
-    const gap = doc.style.bondLength * 2;
-    const widths = chosen.map(({ checked }) => {
-      const xs = [...checked.doc.atoms.values()].map((a) => a.x);
-      return xs.length ? Math.max(...xs) - Math.min(...xs) : 0;
+    const L = doc.style.bondLength, gap = L * 2;
+    const sizes = chosen.map(({ checked }) => {
+      const at = [...checked.doc.atoms.values()];
+      if (!at.length) return { w: 0, h: 0 };
+      const xs = at.map((a) => a.x), ys = at.map((a) => a.y);
+      return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
     });
-    const total = widths.reduce((s, w) => s + w, 0) + gap * (chosen.length - 1);
-    const c = pasteCentre();
-    let x = c.x - total / 2;
+    const area = slideContentArea();
+    const tl = renderer.toDoc(0, 0), br = renderer.toDoc(renderer.width, renderer.height);
+    const room = Math.max(...sizes.map((z) => z.w), 0.9 * (area ? area.x2 - area.x1 : br.x - tl.x));
+    const rows: { items: number[]; w: number; h: number }[] = [];
+    sizes.forEach((z, i) => {
+      const row = rows.at(-1);
+      if (row && row.w + gap + z.w <= room) { row.items.push(i); row.w += gap + z.w; row.h = Math.max(row.h, z.h); }
+      else rows.push({ items: [i], w: z.w, h: z.h });
+    });
+    const blockW = Math.max(...rows.map((r) => r.w)), blockH = rows.reduce((s, r) => s + r.h, 0) + gap * (rows.length - 1);
+    const c = freeSpace(doc, blockW, blockH, pasteCentre(), gap);
     const ids: number[] = [];
     doc.edit(chosen.length === 1 ? 'Import Structure' : 'Import Structures', () => {
-      chosen.forEach(({ result, checked }, i) => {
-        ids.push(...placeRead(doc, result, checked.molblock, x + widths[i] / 2, c.y));
-        x += widths[i] + gap;
-      });
+      let y = c.y - blockH / 2;
+      for (const row of rows) {
+        let x = c.x - row.w / 2;
+        for (const i of row.items) {
+          ids.push(...placeRead(doc, chosen[i].result, chosen[i].checked.molblock, x + sizes[i].w / 2, y + row.h / 2));
+          x += sizes[i].w + gap;
+        }
+        y += row.h + gap;
+      }
     });
     selectNewAtoms(ids);
     flash(chosen.length === 1 ? 'Placed the structure. Check it against the picture.' : `Placed ${chosen.length} structures. Check them against the pictures.`, 5000);
@@ -3385,6 +3402,7 @@ async function importPastedPicture(): Promise<void> {
 /** File > Import Structures from PDF: every drawing on the pages, read and offered on the review screen. */
 async function importPdf(): Promise<void> {
   finishTyping();
+  if (!await canReadStructures(importHost)) return;
   const f = await openBytesDialog('PDF files', [], ['pdf']).catch(async (e) => { await showError(String(e)); return null; });
   if (!f) return;
   // the pages are read with only a progress line showing, so another tab may show by the time Place
