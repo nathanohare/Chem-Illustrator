@@ -168,7 +168,6 @@ header .sep { height: 18px; margin: 0 3px; }
 body.own-title-bar header { position: relative; padding-right: 138px; user-select: none; }
 body.own-title-bar .win-controls { position: absolute; top: 0; right: 0; height: 32px; margin: 0; }
 header > button, header > select { white-space: nowrap; flex-shrink: 0; }
-#btn-dev-off { min-width: 26px; padding: 0 6px; font-size: 15px; line-height: 1; }
 /* the lock is an icon; its word stays for screen readers and its tooltip says what it does */
 #btn-lock .lock-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .menu button {
@@ -1949,6 +1948,7 @@ dialog.command-search .cs-foot { margin: 8px 2px 0; }
 header { flex-wrap: nowrap; }
 @media (max-width: 1060px) { .search-box > span { display: none; } }
 @media (max-width: 900px) { header .stage-badge { display: none; } }
+@media (max-width: 880px) { header > .menu-wrap > button, header > button:not(.stage-badge) { padding: 0 5px; } }
 
 /* the equation window */
 dialog.equation-dialog { width: min(92vw, 620px); }

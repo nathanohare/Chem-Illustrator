@@ -37,7 +37,7 @@ import {
 } from '../chem/chemgeom';
 import { keymap, chordOf, parseAction, KeyContext } from './keymap';
 import { sproutGroup, fuseChair, SPROUT_KINDS, SproutKind, nextNumber } from '../chem/sprouts';
-import { joinAtoms, joinBonds } from '../chem/join';
+import { joinAtoms, joinBonds, mergeAtom } from '../chem/join';
 import { extractDrawing, insertDrawing } from '../io/clipboard';
 import { isReactionArrow, itemFinder, rolesOf, ROLES, schemeItems, type Item, type Role } from '../chem/reaction';
 import { applySchemePlan, planCleanUp } from '../chem/scheme-layout';
@@ -243,6 +243,8 @@ interface Drag {
   paint?: boolean;
   /** Pressed on the charge sign an atom shows: dragging takes it off the atom's label as a sign of its own (freeCharge). */
   charge?: number;
+  /** Moving an atom: the atom it has been dropped on, which it becomes one with at the lift (closing a ring). */
+  joinTo?: number;
 }
 
 /** One way a template can go: where its atoms land, and which are shared with the drawing. */
@@ -911,6 +913,12 @@ export class Editor {
           to = { x: want.x === 0 && e.shiftKey ? 0 : snapped.x, y: want.y === 0 && e.shiftKey ? 0 : snapped.y };
         }
       }
+      // an atom dragged onto another atom sticks to it, and the two become one at the lift (Alt: off)
+      d.joinTo = undefined;
+      if (d.hit?.kind === 'atom' && d.charge === undefined && !d.ctrl && !e.altKey) {
+        const t = this.joinTarget(d.hit.id, add(this.doc.atoms.get(d.hit.id)!, sub(to, done)));
+        if (t) { d.joinTo = t.id; to = add(done, sub(t, this.doc.atoms.get(d.hit.id)!)); this.guideLines = []; }
+      }
       this.moveSelection(to.x - done.x, to.y - done.y);
       // arrows and lone pairs stuck to what moves go along with it as it goes
       if (hasPins(this.doc)) followPins(this.doc);
@@ -1052,6 +1060,11 @@ export class Editor {
     }
     if (d.mode === 'move') {
       this.guideLines = [];
+      if (d.joinTo !== undefined && d.hit?.kind === 'atom' && this.doc.atoms.has(d.joinTo) && this.doc.atoms.has(d.hit.id)) {
+        mergeAtom(this.doc, d.joinTo, d.hit.id);
+        this.sel.atoms.delete(d.hit.id);
+        this.sel.bonds = new Set([...this.sel.bonds].filter((b) => this.doc.bonds.has(b)));
+      }
       this.doc.commit();
       this.changed();
       return;
@@ -1807,6 +1820,22 @@ export class Editor {
    * Where a dragged bond ends: on an atom under the pointer, else one bond length away in a
    * 15° step. Alt, or turning off fixed lengths (Ctrl+L) or angles (Ctrl+E), lets it go free.
    */
+  /**
+   * The atom that an atom being moved to `at` would land on: one that is not moving with it and
+   * not already bonded to it, close enough to grab it. Null when there is none.
+   */
+  private joinTarget(id: number, at: Vec): Atom | null {
+    const doc = this.doc;
+    const r = Math.max(this.tol(10), doc.style.bondLength * 0.2);
+    let best: Atom | null = null, bestD = r;
+    for (const a of doc.atoms.values()) {
+      if (a.id === id || this.sel.atoms.has(a.id) || doc.bondBetween(id, a.id)) continue;
+      const k = dist(a, at);
+      if (k < bestD) { best = a; bestD = k; }
+    }
+    return best;
+  }
+
   private snapEnd(from: Vec, p: Vec, L: number, fromId?: number, alt = false): { pt: Vec; atom?: Atom } {
     const h = this.hitTest(p);
     if (h && h.kind === 'atom' && h.id !== fromId) {
@@ -4772,7 +4801,8 @@ export class Editor {
     }
     if (this.showRoles && s.arrows.size === 1 && !this.drag) this.drawRoles(ctx, [...s.arrows][0], px);
     // hotspot
-    const h = this.drag?.mode === 'move' || this.drag?.mode === 'rotate' ? null : this.hotspot();
+    const join = this.drag?.joinTo;
+    const h: Hit = join !== undefined ? { kind: 'atom', id: join } : this.drag?.mode === 'move' || this.drag?.mode === 'rotate' ? null : this.hotspot();
     if (h) {
       ctx.fillStyle = mk.hot;
       ctx.strokeStyle = mk.hot;

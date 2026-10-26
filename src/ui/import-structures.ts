@@ -1,4 +1,4 @@
-// File > Import Structures: from a picture (a photo or scan of a hand drawing, a screenshot, a
+// File > Import > Import Structures: from a picture (a photo or scan of a hand drawing, a screenshot, a
 // figure), from the clipboard, or from a PDF. Chooses the reader (the one on this computer, the
 // person's AI model, or asks to download the first), then opens the review screen.
 
@@ -143,6 +143,17 @@ async function review(host: ImportHost, how: 'here' | 'ai', found: FoundPicture[
   });
 }
 
+async function noReader(): Promise<void> {
+  await ask('Import Structures', [], { noCancel: true, note: 'In the browser, structures are read by an AI model of your own: link one in Edit > Settings > AI Model. The desktop app can also read them on your computer, with nothing sent anywhere.' });
+}
+
+/** Whether anything here can read structures (asked before a PDF's pages are searched); says how to get one when not. */
+export async function canReadStructures(host: ImportHost): Promise<boolean> {
+  if (canReadHere || await aiReady(host.ai()).catch(() => false)) return true;
+  await noReader();
+  return false;
+}
+
 /**
  * File > Import > Import Structures from PDF, once the drawings are found (on this computer: nothing is sent
  * to find them): the pages are shown with each drawing outlined, the person ticks the ones to read,
@@ -156,10 +167,7 @@ export async function importPdfDrawings(host: ImportHost, found: FoundPicture[],
   const readers: { value: string; label: string }[] = [];
   if (linked) readers.push({ value: 'ai', label: aiName(ai) });
   if (canReadHere) readers.push({ value: 'here', label: ready ? 'This computer (nothing sent)' : `This computer (downloads about ${PACK_MB} MB once)` });
-  if (!readers.length) {
-    await ask('Import Structures', [], { noCancel: true, note: 'In the browser, structures are read by an AI model of your own: link one in Edit > Settings > AI Model. The desktop app can also read them on your computer, with nothing sent anywhere.' });
-    return;
-  }
+  if (!readers.length) { await noReader(); return; }
   const picked = await pickDrawings({
     title: o.title,
     note: `${o.file}: the drawings found on each page are outlined. Click one to tick it or tick it off; only the ticked ones are read.`,

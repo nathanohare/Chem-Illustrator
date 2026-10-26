@@ -18,7 +18,7 @@ import { linesFromBorders, type Borders } from './cdxml-table';
 import { turnAbout, normDegrees, DEG, type Vec, type Rect } from '../geom';
 import { POINTS, rotation, snapshot, transform } from '../editor/arrange';
 import { PackageReader, NS, REL, kids, kid, rAttr, fromEmu } from './ooxml';
-import { linkFromTarget } from '../links';
+import { linkFromTarget, officeTarget, slideOfLink } from '../links';
 import { readCdxml } from './cdxml';
 import { drawingInEmf } from '../render/emf';
 import { dataUrl, imageSize } from '../render/images';
@@ -1442,6 +1442,111 @@ class Reader {
     return rel.external ? linkFromTarget(rel.target) : null;
   }
 
+  /**
+   * How PowerPoint shows linked text: underlined, in the theme's link colour, or in the text's own
+   * colour when the link says so (hlinkClr val="tx", which PowerPoint 2019 and later write).
+   */
+  private linkLook(click: Element | null, own: string | undefined): { underline: true; color: string } {
+    const tx = click ? Array.from(click.getElementsByTagNameNS('*', 'hlinkClr')).some((e) => e.getAttribute('val') === 'tx') : false;
+    if (tx && own) return { underline: true, color: own };
+    const hex = this.theme.colors[this.clrMap.hlink ?? 'hlink'];
+    return { underline: true, color: hex ? `#${hex}` : HLINK };
+  }
+
+  /** The links PowerPoint has on a shape's text, as stretches of its plain text (see plain). */
+  private linksIn(sp: Element): { from: number; to: number; link: string; click: Element }[] {
+    const out: { from: number; to: number; link: string; click: Element }[] = [];
+    let at = 0;
+    kids(kid(sp, 'txBody'), 'p').forEach((p, pi) => {
+      if (pi > 0) at++;
+      for (const k of kids(p)) {
+        if (k.localName === 'br') { at++; continue; }
+        if (k.localName !== 'r' && k.localName !== 'fld') continue;
+        const n = (kid(k, 't')?.textContent ?? '').length;
+        const click = kid(k, 'rPr', 'hlinkClick');
+        const link = this.hlinkOf(click);
+        if (link && click && n) {
+          const last = out[out.length - 1];
+          if (last && last.to === at && last.link === link) last.to += n;
+          else out.push({ from: at, to: at + n, link, click });
+        }
+        at += n;
+      }
+    });
+    return out;
+  }
+
+  /** The slides' ids saved with them here → their places in the deck. */
+  private placeOfId: Map<number, number> | null = null;
+
+  /** A slide's place in the deck from the id saved with it here (-1: none has it). */
+  private slideById(id: number): number {
+    if (!this.placeOfId) {
+      this.placeOfId = new Map();
+      this.slidePaths.forEach((p, i) => {
+        const v = this.tagsOf(p, kid(this.part(p)?.doc.documentElement ?? null, 'cSld'))[TAG.slideId];
+        if (v) this.placeOfId!.set(Number(v), i);
+      });
+    }
+    return this.placeOfId.get(id) ?? -1;
+  }
+
+  /**
+   * Links added, changed or taken away in PowerPoint on text saved here (its words unchanged),
+   * put on our copy of the text. Text whose words don't line up with PowerPoint's is left as saved.
+   */
+  private relink(runs: TextRun[], sp: Element, plain: string): TextRun[] {
+    if (runs.map((r) => r.text).join('') !== plain) return runs;
+    const theirs = this.linksIn(sp);
+    // our link as it was saved for PowerPoint (a slide by its place now); null: PowerPoint can't hold it
+    const asSaved = (link: string | undefined): string | null | undefined => {
+      if (!link) return undefined;
+      const id = slideOfLink(link);
+      if (id !== null) {
+        const i = this.slideById(id);
+        return i < 0 ? null : `#slide-n=${i}`;
+      }
+      if (SHOW_JUMPS.has(link)) return link;
+      return link.startsWith('#') ? null : linkFromTarget(officeTarget(link));
+    };
+    const at = (i: number) => theirs.find((l) => l.from <= i && i < l.to);
+    /** Whether PowerPoint left a run's link (from `from` to `to`) as it was saved. */
+    const kept = (r: TextRun, from: number, to: number) => {
+      const was = asSaved(r.link);
+      for (let i = from; i < to; i++) {
+        if (r.text[i - from] === '\n') continue;
+        const l = at(i)?.link;
+        if (was === null ? l !== undefined : l !== was) return false;
+      }
+      return true;
+    };
+    let pos = 0;
+    if (runs.every((r) => { const ok = kept(r, pos, pos + r.text.length); pos += r.text.length; return ok; })) return runs;
+    // cut our runs where PowerPoint's links start and end, and give each piece PowerPoint's link
+    const cuts = new Set(theirs.flatMap((l) => [l.from, l.to]));
+    const out: TextRun[] = [];
+    pos = 0;
+    for (const r of runs) {
+      let start = 0;
+      for (let i = 1; i <= r.text.length; i++) {
+        if (i < r.text.length && !cuts.has(pos + i)) continue;
+        const piece: TextRun = { ...r, text: r.text.slice(start, i) };
+        if (!kept(piece, pos + start, pos + i)) {
+          const l = at(pos + start);
+          if (!l) delete piece.link;
+          else {
+            piece.link = l.link;
+            if (!r.link) Object.assign(piece, this.linkLook(l.click, r.color));
+          }
+        }
+        out.push(piece);
+        start = i;
+      }
+      pos += r.text.length;
+    }
+    return merge(out);
+  }
+
   private ourText(tag: string | undefined, sp: Element, box: Rect & { rot?: number }): Omit<Caption, 'id'> | null {
     if (!tag) return null;
     let saved: { c: Caption; plain: string; at?: number[]; o?: number[] };
@@ -1454,6 +1559,7 @@ class Reader {
     if (now !== saved.plain) return null;
     const c: Omit<Caption, 'id'> & { id?: number } = { ...saved.c };
     delete c.id;
+    if (Array.isArray(c.runs)) c.runs = this.relink(c.runs, sp, now);
     if (saved.at?.length === 4 && saved.o?.length === 2) {
       // where the text starts in its box, turned with the box about the box's middle (as PowerPoint turns it)
       const [, , w, h] = saved.at;
@@ -1641,7 +1747,10 @@ class Reader {
         r.color = this.color(fillEl) ?? '#000000';
         r.font = this.font(inheritEl(rPr, chain, lvl, ['latin'], true)?.getAttribute('typeface') ?? null, title);
         const link = this.hlinkOf(kid(rPr, 'hlinkClick'));
-        if (link) r.link = link;
+        if (link) {
+          r.link = link;
+          Object.assign(r, this.linkLook(kid(rPr, 'hlinkClick'), r.color));
+        }
         runs.push(r);
       }
     });
@@ -1706,6 +1815,11 @@ class Reader {
     return c;
   }
 }
+
+/** PowerPoint's own link colour, for a theme without one. */
+const HLINK = '#0563C1';
+/** Our links PowerPoint keeps as show jumps. */
+const SHOW_JUMPS = new Set(['#first', '#last', '#next', '#prev', '#return', '#end']);
 
 const dropUndefined = (r: TextRun): Partial<TextRun> => Object.fromEntries(Object.entries(r).filter(([, v]) => v !== undefined));
 

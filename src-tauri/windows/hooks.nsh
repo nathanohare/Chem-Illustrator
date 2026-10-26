@@ -23,3 +23,26 @@
     System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
   ${EndIf}
 !macroend
+
+; An update is started by the app, which then closes itself. Windows can take a moment to finish
+; closing it, and the installer's own check would find it still there, fail to stop it and give
+; up ("Failed to kill Chem Illustrator", issue #213). So an update first waits (up to 15 seconds)
+; for the app to be gone.
+!macro NSIS_HOOK_PREINSTALL
+  ${If} $UpdateMode = 1
+    StrCpy $R9 0
+    ci_wait_for_app:
+      !if "${INSTALLMODE}" == "currentUser"
+        nsis_tauri_utils::FindProcessCurrentUser "${MAINBINARYNAME}.exe"
+      !else
+        nsis_tauri_utils::FindProcess "${MAINBINARYNAME}.exe"
+      !endif
+      Pop $R8
+      ${If} $R8 = 0
+      ${AndIf} $R9 < 60
+        Sleep 250
+        IntOp $R9 $R9 + 1
+        Goto ci_wait_for_app
+      ${EndIf}
+  ${EndIf}
+!macroend
