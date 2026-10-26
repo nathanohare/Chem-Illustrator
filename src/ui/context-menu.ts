@@ -2,6 +2,8 @@
 // in groups that open to the side, so people used to finding things on the right-click menu in
 // ChemDraw find them there too.
 
+import { COMMAND_NAMES } from '../editor/keymap';
+
 /** A command (named as in the top menus unless `label` says otherwise), a group, or a line. */
 export type MenuItem =
   | { cmd: string; label?: string }
@@ -107,7 +109,8 @@ function build(items: MenuItem[], hooks: MenuHooks, depth: number): HTMLDivEleme
       b.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); openSub(true); } });
     } else {
       const top = topMenuEntry(it.cmd);
-      name.textContent = it.label ?? top?.label ?? it.cmd;
+      // (a command no top menu has goes by its name in Keyboard Shortcuts, never its id)
+      name.textContent = it.label ?? top?.label ?? COMMAND_NAMES[it.cmd] ?? it.cmd;
       if (top?.checked != null) {
         b.setAttribute('role', 'menuitemcheckbox');
         b.setAttribute('aria-checked', String(top.checked));

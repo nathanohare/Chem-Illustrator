@@ -240,7 +240,11 @@ describe('connectors', () => {
   it('stay stuck to the same shapes in a PowerPoint file', async () => {
     const { doc } = two();
     const bytes = await writePptx({ size: { w: 504, h: 288 }, master: Deck.design(new Doc(), { w: 504, h: 288 }).master, slides: [{ layout: 'blank', doc, notes: '' }], design: true }, opts);
-    expect(slideXml(bytes)).toContain('<p:cxnSp>');
+    // an elbow is drawn as a shape along its path: PowerPoint repairs a connector drawn as a path
+    // by deleting everything on the slide
+    const xml = slideXml(bytes);
+    expect(xml).not.toMatch(/<p:cxnSp>(?:(?!<\/p:cxnSp>).)*custGeom/);
+    expect(xml).toContain('name="Elbow Connector');
     const back = readPptx(bytes).slides[0].contents;
     const shapes = back.shapes.filter((s) => s.kind === 'geo');
     expect(back.arrows).toHaveLength(1);

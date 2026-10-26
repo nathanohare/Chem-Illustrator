@@ -891,9 +891,10 @@ class Writer {
     const { id: _, ...keep } = r;
     const tag = this.addTags(path, { [TAG.connector]: JSON.stringify({ v: 1, a: keep }) });
     const nvPr = `<p:nvPr><p:custDataLst><p:tags r:id="${tag}"/></p:custDataLst></p:nvPr>`;
-    // a curved arrow is a shape drawn along the curve (programs route a connector afresh, square)
-    if (curved) return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Curved Arrow ${id - 1}"/><p:cNvSpPr/>${nvPr}</p:nvSpPr><p:spPr>${frame}${geom}${ln}</p:spPr></p:sp>`;
-    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="${r.elbow ? 'Elbow Connector' : 'Straight Arrow Connector'} ${id - 1}"/><p:cNvCxnSpPr/>${nvPr}</p:nvCxnSpPr>` +
+    // a curved arrow is a shape drawn along the curve (programs route a connector afresh, square),
+    // and so is an elbow: PowerPoint repairs a connector drawn as a path by deleting the slide's contents
+    if (curved) return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${r.elbow ? 'Elbow Connector' : 'Curved Arrow'} ${id - 1}"/><p:cNvSpPr/>${nvPr}</p:nvSpPr><p:spPr>${frame}${geom}${ln}</p:spPr></p:sp>`;
+    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Straight Arrow Connector ${id - 1}"/><p:cNvCxnSpPr/>${nvPr}</p:nvCxnSpPr>` +
       `<p:spPr>${frame}${geom}${ln}</p:spPr></p:cxnSp>`;
   }
 
@@ -1103,7 +1104,10 @@ class Writer {
 }
 
 /** One of a design template's shapes, as a plain PowerPoint shape in a slide layout. */
-/** A connector's place, path and line with its heads, as PowerPoint and Word (in groups) both write them. */
+/**
+ * A connector's place, path and line with its heads, as PowerPoint and Word (in groups) both write
+ * them; `curved` when it is drawn along its path (a curve or an elbow) as a shape, not a connector.
+ */
 export function connectorSpPr(r: Arrow, lw: number): { frame: string; geom: string; ln: string; curved: boolean } {
   const curved = !r.elbow && !!r.sweep;
   const pts = r.elbow ? elbowRoute(r) : curved ? arrowPoints(r, 32) : [r.tail, r.head];
@@ -1124,7 +1128,7 @@ export function connectorSpPr(r: Arrow, lw: number): { frame: string; geom: stri
   const headEnd = end(r.tailStyle), tailEnd = end(r.headStyle);
   const ln = `<a:ln w="${emu(r.line === 'bold' ? width * 2.5 : width)}"><a:solidFill><a:srgbClr val="${hex6(r.color ?? '#000000')}"/></a:solidFill>${r.line === 'dashed' ? '<a:prstDash val="dash"/>' : ''}<a:miter lim="800000"/>` +
     `${headEnd ? `<a:headEnd type="${headEnd}"/>` : ''}${tailEnd ? `<a:tailEnd type="${tailEnd}"/>` : ''}</a:ln>`;
-  return { frame, geom, ln, curved };
+  return { frame, geom, ln, curved: curved || !!r.elbow };
 }
 
 /** A design shape's place, outline, fill, line and effects (shadow, glow, reflection, soft edges, bevel), as PowerPoint and Word (in groups) both write them. */
