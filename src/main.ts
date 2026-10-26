@@ -3371,6 +3371,18 @@ async function importPdf(): Promise<void> {
   finishTyping();
   const f = await openBytesDialog('PDF files', [], ['pdf']).catch(async (e) => { await showError(String(e)); return null; });
   if (!f) return;
+  // the pages are read with only a progress line showing, so another tab may show by the time Place
+  // is pressed: the structures go to the tab the import started in, kept even if it is an empty new drawing
+  const from = ws.active;
+  const release = ws.hold(from);
+  try {
+    await readPdf(f, from);
+  } finally {
+    release();
+  }
+}
+
+async function readPdf(f: { name: string; bytes: Uint8Array }, from: Tab): Promise<void> {
   let found;
   try {
     found = await pdfDrawings(f.bytes, async (pages) => {
@@ -3389,7 +3401,14 @@ async function importPdf(): Promise<void> {
   if (!found) return;
   if (!found.length) { flash('No drawings were found in this PDF. If its pages are scans, try Import Structures from Picture on a screenshot.', 8000); return; }
   flash(`Found ${found.length} drawings.`);
-  await importPictures(importHost, found, {
+  const place: ImportHost['place'] = (chosen) => {
+    const gone = !ws.tabs.includes(from);
+    if (gone) ws.newDrawing();
+    else ws.activate(from);
+    importHost.place(chosen);
+    if (gone) flash(`${from.name} was closed while the pages were read, so the structures were placed in a new drawing. Check them against the pictures.`, 8000);
+  };
+  await importPictures({ ...importHost, place }, found, {
     title: 'Import Structures from PDF',
     note: `${f.name}: each drawing found, beside the structure read from it. Ones the reader is sure of are ticked; check each against its picture, fix a SMILES or tick more, then place them.`,
     tickDoubtful: false,
