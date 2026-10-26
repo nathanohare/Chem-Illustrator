@@ -13,7 +13,7 @@ import { measureText } from '../render/renderer';
 import { linkAtPoint } from '../links';
 import { turnAbout } from '../geom';
 import type { Deck } from './deck';
-import { paintSlide, type SlidePage } from './slide-view';
+import { paintSlide, drawDrawing, type SlidePage } from './slide-view';
 import { selectionBox, POINTS } from '../editor/arrange';
 import type { Rect } from '../geom';
 import type { Selection } from '../editor/editor';
@@ -88,12 +88,13 @@ export interface MediaSpot { id: number; media: Media; x: number; y: number; w: 
 export class SlideFrames {
   readonly steps: Step[];
   private base = document.createElement('canvas');
-  private layers: { part: Part; canvas: HTMLCanvasElement; box: Rect }[] = [];
+  /** Each moving part painted on its own, cut to its box; `x`, `y`: where its canvas goes (device pixels). */
+  private layers: { part: Part; canvas: HTMLCanvasElement; box: Rect; x: number; y: number }[] = [];
   private parts: Part[] = [];
   /** Where the slide sits on the canvas: its corner and scale (CSS pixels per point). */
   private at = { x: 0, y: 0, k: 1 };
 
-  constructor(private page: SlidePage, private doc: Doc, private anims: Anim[], private w: number, private h: number, private dpr: number, fill: string | null) {
+  constructor(private page: SlidePage, private doc: Doc, private anims: Anim[], w: number, h: number, private dpr: number, fill: string | null) {
     // a sound's icon hidden during the show isn't painted (it still plays)
     const hidden = [...doc.shapes.values()].filter((x) => x.video?.audio && x.video.hide);
     if (hidden.length) {
@@ -131,39 +132,47 @@ export class SlideFrames {
     const out = [...lifted];
     const still = lifted.size ? subDoc(doc, (kind, id) => !out.some((p) => inPart(p, kind, id)), strip) : doc;
     this.at = paintSlide(this.base, w, h, dpr, page, still, fill);
-    const textCanvas = new Map<number, HTMLCanvasElement>();
     for (const part of this.parts.filter((p) => lifted.has(p))) {
+      let box: Rect, one: Doc;
       if (part.para !== undefined) {
-        // one picture of the whole text box, shown a paragraph's band at a time
+        // the text box painted in the band of its paragraph, so the paragraph can move on its own
         const id = Math.min(...part.sel.captions);
-        let canvas = textCanvas.get(id);
-        if (!canvas) {
-          canvas = document.createElement('canvas');
-          paintSlide(canvas, w, h, dpr, page, subDoc(doc, (kind, x) => kind === 'caption' && x === id), null, false);
-          textCanvas.set(id, canvas);
-        }
         const band = paraBands(doc, id)[part.para] ?? { x1: 0, y1: 0, x2: 0, y2: 0 };
         const pad = 2;
-        const box = { x1: band.x1 - 8, y1: band.y1 - pad, x2: band.x2 + 8, y2: band.y2 + pad };
-        // the paragraph's band cut out, so it can move on its own
-        const one = document.createElement('canvas');
-        one.width = canvas.width;
-        one.height = canvas.height;
-        const { x: ox, y: oy, k: ok } = this.at;
-        const sx = Math.max(0, Math.floor((ox + box.x1 * ok) * dpr)), sy = Math.max(0, Math.floor((oy + box.y1 * ok) * dpr));
-        const sw = Math.min(canvas.width - sx, Math.ceil((box.x2 - box.x1) * ok * dpr)), sh = Math.min(canvas.height - sy, Math.ceil((box.y2 - box.y1) * ok * dpr));
-        if (sw > 0 && sh > 0) one.getContext('2d')?.drawImage(canvas, sx, sy, sw, sh, sx, sy, sw, sh);
-        this.layers.push({ part, canvas: one, box });
-        continue;
+        box = { x1: band.x1 - 8, y1: band.y1 - pad, x2: band.x2 + 8, y2: band.y2 + pad };
+        one = subDoc(doc, (kind, x) => kind === 'caption' && x === id);
+      } else {
+        one = part.kind === 'highlight' ? highlightDoc(doc, part.sel) : subDoc(doc, (kind, id) => inPart(part, kind, id), strip);
+        const b = selectionBox(doc, part.sel, POINTS) ?? { x1: 0, y1: 0, x2: page.size.w, y2: page.size.h };
+        // room for frames, shadows, glows and arrowheads
+        const pad = part.kind === 'highlight' ? doc.style.bondLength : 8;
+        box = { x1: b.x1 - pad, y1: b.y1 - pad, x2: b.x2 + pad, y2: b.y2 + pad };
       }
+      // a canvas only the size of the part's box, not of the whole screen
+      const { x: ox, y: oy, k } = this.at;
+      const W = this.base.width, H = this.base.height;
+      const x = Math.max(0, Math.min(W, Math.floor((ox + box.x1 * k) * dpr))), y = Math.max(0, Math.min(H, Math.floor((oy + box.y1 * k) * dpr)));
       const canvas = document.createElement('canvas');
-      const one = part.kind === 'highlight' ? highlightDoc(doc, part.sel) : subDoc(doc, (kind, id) => inPart(part, kind, id), strip);
-      paintSlide(canvas, w, h, dpr, page, one, null, false);
-      const b = selectionBox(doc, part.sel, POINTS) ?? { x1: 0, y1: 0, x2: page.size.w, y2: page.size.h };
-      // room for frames, shadows, glows and arrowheads
-      const pad = part.kind === 'highlight' ? doc.style.bondLength : 8;
-      this.layers.push({ part, canvas, box: { x1: b.x1 - pad, y1: b.y1 - pad, x2: b.x2 + pad, y2: b.y2 + pad } });
+      canvas.width = Math.max(1, Math.min(W, Math.ceil((ox + box.x2 * k) * dpr)) - x);
+      canvas.height = Math.max(1, Math.min(H, Math.ceil((oy + box.y2 * k) * dpr)) - y);
+      const L = { part, canvas, box, x, y };
+      this.paintLayer(L, one);
+      this.layers.push(L);
     }
+  }
+
+  /** Paint a part (`one`: a drawing of it alone) on its layer's canvas, in its place on the slide. */
+  private paintLayer(L: { canvas: HTMLCanvasElement; box: Rect; x: number; y: number }, one: Doc): void {
+    const ctx = L.canvas.getContext('2d');
+    if (!ctx) return;
+    const { x, y, k } = this.at, d = this.dpr, size = this.page.size;
+    ctx.setTransform(k * d, 0, 0, k * d, x * d - L.x, y * d - L.y);
+    // nothing spills outside the slide, or outside the part's box
+    const r = { x1: Math.max(0, L.box.x1), y1: Math.max(0, L.box.y1), x2: Math.min(size.w, L.box.x2), y2: Math.min(size.h, L.box.y2) };
+    ctx.beginPath();
+    ctx.rect(r.x1, r.y1, Math.max(0, r.x2 - r.x1), Math.max(0, r.y2 - r.y1));
+    ctx.clip();
+    drawDrawing(ctx, one);
   }
 
   /** The slide's triggers: the part a click sets each sequence off on, and the sequence's clicks. */
@@ -282,13 +291,13 @@ export class SlideFrames {
         ctx.globalAlpha *= Math.max(0, Math.min(1, e.alpha));
       }
       const paint = () => {
-        if (!e?.color || (e.mix <= 0 && !e.was)) { ctx.drawImage(L.canvas, 0, 0); return; }
+        if (!e?.color || (e.mix <= 0 && !e.was)) { ctx.drawImage(L.canvas, L.x, L.y); return; }
         // changing colour: the colour it had (or its own), the new one over it
         const a0 = ctx.globalAlpha;
-        ctx.drawImage(e.was && e.mix < 1 ? this.tinted(L, e.was) : L.canvas, 0, 0);
+        ctx.drawImage(e.was && e.mix < 1 ? this.tinted(L, e.was) : L.canvas, L.x, L.y);
         if (e.mix > 0) {
           ctx.globalAlpha = a0 * Math.min(1, e.mix);
-          ctx.drawImage(this.tinted(L, e.color), 0, 0);
+          ctx.drawImage(this.tinted(L, e.color), L.x, L.y);
           ctx.globalAlpha = a0;
         }
       };
@@ -321,7 +330,7 @@ export class SlideFrames {
    * A part in another colour (Colour Change): a shape's fill, text's colour, and anything else
    * (structures, pictures) coloured all over, as a stamp.
    */
-  private tinted(L: { part: Part; canvas: HTMLCanvasElement }, colour: string): HTMLCanvasElement {
+  private tinted(L: { part: Part; canvas: HTMLCanvasElement; box: Rect; x: number; y: number }, colour: string): HTMLCanvasElement {
     const key = `${this.layers.indexOf(L as never)}|${colour}`;
     let c = this.tints.get(key);
     if (c) return c;
@@ -330,7 +339,7 @@ export class SlideFrames {
     c.height = L.canvas.height;
     const part = L.part;
     const own = part.kind === 'shape' || part.kind === 'text' ? recoloured(this.doc, part, colour) : null;
-    if (own) paintSlide(c, this.w, this.h, this.dpr, this.page, own, null, false);
+    if (own) this.paintLayer({ ...L, canvas: c }, own);
     else {
       const g = c.getContext('2d');
       if (g) {
@@ -610,7 +619,12 @@ export class Player {
   /** Steps of animations the slide has. */
   get stepCount(): number { return this.current.stepCount; }
   /** Where the slide showing sits on the canvas (CSS pixels; k is pixels per point). */
-  get slidePlace(): { x: number; y: number; k: number } { return this.current.place; }
+  get slidePlace(): { x: number; y: number; k: number } {
+    if (this.frames) return this.frames.place;
+    // worked out as paintSlide does, without painting the slide's pictures to find it
+    const s = this.deck.page(this.i).size, k = Math.min(this.w / s.w, this.h / s.h);
+    return { x: (this.w - s.w * k) / 2, y: (this.h - s.h * k) / 2, k };
+  }
 
   /** The link at a point on the canvas (CSS pixels from its corner), if any. */
   linkAt(px: number, py: number): string | null {
@@ -638,6 +652,7 @@ export class Player {
    */
   zoom(i: number, rect: Rect, out = false): void {
     this.stop();
+    this.started = true;
     const from = document.createElement('canvas');
     from.width = this.canvas.width;
     from.height = this.canvas.height;
@@ -658,14 +673,20 @@ export class Player {
   constructor(private canvas: HTMLCanvasElement, private deck: Deck, private fill = '#000') {}
 
   resize(w: number, h: number, dpr: number): void {
+    // the same size again (a resize event as the show starts): the slide's pictures still do
+    if (w === this.w && h === this.h && dpr === this.dpr) return;
     this.w = w; this.h = h; this.dpr = dpr;
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
     this.canvas.width = Math.max(1, Math.round(w * dpr));
     this.canvas.height = Math.max(1, Math.round(h * dpr));
     this.frames = null;
-    this.paint();
+    // before the first slide is shown there is nothing to paint (show() paints it)
+    if (this.started) this.paint();
   }
+
+  /** A slide has been shown (show or zoom), so a change of size paints it again. */
+  private started = false;
 
   /** Paint the slide again from scratch (a picture or font has loaded). */
   refresh(): void {
@@ -873,6 +894,7 @@ export class Player {
   /** Show slide `i`: with its transition (from what is on screen now), or straight away; at its start or with everything played. */
   show(i: number, how: { transition?: boolean; atEnd?: boolean } = {}): void {
     this.stop();
+    this.started = true;
     let from: HTMLCanvasElement | null = null;
     const t = this.deck.slides[i].transition;
     if (how.transition && t && t.kind !== 'none') {

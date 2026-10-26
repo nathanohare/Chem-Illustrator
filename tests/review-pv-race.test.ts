@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-vi.mock('../src/deck/slide-view', () => ({ paintSlide: () => ({ x: 0, y: 0, k: 1 }) }));
+vi.mock('../src/deck/slide-view', () => ({ paintSlide: () => ({ x: 0, y: 0, k: 1 }), drawDrawing: () => undefined }));
 (globalThis as any).ResizeObserver = class { observe() {} disconnect() {} };
 const noop = () => undefined;
 const ctx = new Proxy({}, { get: () => noop, set: () => true });
