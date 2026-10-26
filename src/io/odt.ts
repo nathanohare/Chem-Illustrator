@@ -252,7 +252,8 @@ class OdtReader {
       switch (c.localName) {
         case 'span': this.inline(c, { ...look, ...cleanText(this.resolved(attr(c, 'text', 'style-name')).text) }, out, link, cell); break;
         case 'a': this.inline(c, look, out, attr(c, 'xlink', 'href') ?? undefined, cell); break;
-        case 's': out.push({ ...look, ...(link ? { link } : {}), text: ' '.repeat(Math.max(1, Number(attr(c, 'text', 'c') ?? '1'))) }); break;
+        // (a damaged file can ask for any number of spaces: a thousand is more than any page holds)
+        case 's': out.push({ ...look, ...(link ? { link } : {}), text: ' '.repeat(Math.min(1000, Math.max(1, Number(attr(c, 'text', 'c') ?? '1')))) }); break;
         case 'tab': out.push({ ...look, ...(link ? { link } : {}), text: '\t' }); break;
         case 'line-break': out.push({ ...look, ...(link ? { link } : {}), text: ' ' }); break;
         case 'note': {

@@ -220,3 +220,15 @@ describe('control characters in saved text', () => {
     expect(doc.atoms.size).toBe(2);
   });
 });
+
+describe('OpenDocument text', () => {
+  it('a damaged run of 300 million spaces is held to a thousand', async () => {
+    const d = newDocument();
+    d.runs = [{ ...runStyleOf(d.styles.Normal), text: 'a  b' }];
+    const files = copy(unzipSync(await writeOdt(d)));
+    files['content.xml'] = u8(strFromU8(files['content.xml']).replace(/<text:s text:c="\d+"\/>|<text:s\/>/, '<text:s text:c="300000000"/>'));
+    expect(strFromU8(files['content.xml'])).toContain('300000000');
+    const { doc } = readOdt(zipSync(files));
+    expect(Math.max(...doc.runs.map((x) => x.text.length))).toBeLessThan(1010);
+  });
+});
