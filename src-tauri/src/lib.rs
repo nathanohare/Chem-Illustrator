@@ -268,6 +268,26 @@ fn settings_write(app: tauri::AppHandle, contents: String) -> Result<(), String>
     write_bytes(&path.to_string_lossy(), contents.as_bytes())
 }
 
+/// The window as first opened (1400 × 900) can be taller than a laptop screen, which leaves the
+/// status bar below its bottom edge when the window isn't maximised: made smaller to fit the
+/// screen's work area (the part the taskbar leaves) and centred there.
+#[cfg(desktop)]
+fn fit_to_screen(w: &tauri::WebviewWindow) {
+    let (Ok(Some(m)), Ok(outer), Ok(inner)) = (w.current_monitor(), w.outer_size(), w.inner_size()) else { return };
+    let area = m.work_area();
+    if outer.width <= area.size.width && outer.height <= area.size.height {
+        return;
+    }
+    // the frame (title bar and borders) around the page, in pixels
+    let (fw, fh) = (outer.width.saturating_sub(inner.width), outer.height.saturating_sub(inner.height));
+    let width = outer.width.min(area.size.width);
+    let height = outer.height.min(area.size.height);
+    let _ = w.set_size(tauri::PhysicalSize::new(width.saturating_sub(fw), height.saturating_sub(fh)));
+    let x = area.position.x + (area.size.width - width) as i32 / 2;
+    let y = area.position.y + (area.size.height - height) as i32 / 2;
+    let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
+}
+
 #[cfg(test)]
 mod tests {
     use super::percent_decode;
@@ -304,6 +324,10 @@ pub fn run() {
             file_types::refresh();
             // Word and PowerPoint reach the app here to edit drawings embedded in their documents
             ole::start(app.handle());
+            #[cfg(desktop)]
+            if let Some(w) = tauri::Manager::get_webview_window(app, "main") {
+                fit_to_screen(&w);
+            }
             // A self-test that never reports (the page failed to load) still ends.
             if let Some(path) = selftest_path() {
                 let handle = app.handle().clone();
