@@ -4,11 +4,13 @@
 
 import { ask } from './ask';
 import { openReview, pixelsPng, type FoundPicture } from './import-review';
-import { canReadHere, downloadPack, localReader, packReady, readWithAi, PACK_MB, type ReadResult } from '../recognise/reader';
+import { pickDrawings, type PagePreview } from './import-pick';
+import { canReadHere, cancelPack, downloadPack, localReader, packReady, readWithAi, PACK_MB, type ReadResult } from '../recognise/reader';
 import { checkRead, type Checked, type Engine } from '../recognise/check';
 import { cleanPhoto, shrinkTo, type Pixels } from '../recognise/picture';
 import { findDrawings, isProse, type Box } from '../recognise/find';
 import { aiName, aiReady, type AiPrefs } from '../ai/link';
+import { imageSize } from '../render/images';
 import type { DocStyle } from '../style';
 
 export interface ImportHost {
@@ -22,7 +24,12 @@ export interface ImportHost {
 /** A picture's pixels, at most `most` pixels on its longer side. */
 export async function decodePicture(bytes: Uint8Array, mime: string, most = 2000): Promise<Pixels | null> {
   try {
-    const bmp = await createImageBitmap(new Blob([bytes as BlobPart], { type: mime }));
+    // a big scan or photo is decoded already shrunk, away from the page (it froze the window for seconds),
+    // the longer side to `most`; shrinkTo below still has the last word (a photo turned by its EXIF)
+    const size = imageSize(bytes, mime);
+    const k = size ? most / Math.max(size.w, size.h) : 1;
+    const shrunk: ImageBitmapOptions = k < 1 ? { ...(size!.w >= size!.h ? { resizeWidth: most } : { resizeHeight: most }), resizeQuality: 'high' } : {};
+    const bmp = await createImageBitmap(new Blob([bytes as BlobPart], { type: mime }), shrunk);
     const c = document.createElement('canvas');
     c.width = bmp.width;
     c.height = bmp.height;
@@ -58,6 +65,11 @@ async function chooseReader(host: ImportHost, preferAi: boolean): Promise<'here'
   });
   if (!r) return null;
   if (r.how === 'ai') return 'ai';
+  return await downloadReader() ? 'here' : null;
+}
+
+/** Download the reader on this computer, with a progress window and Cancel; true when it is ready. */
+async function downloadReader(): Promise<boolean> {
   const d = document.createElement('dialog');
   d.className = 'ask';
   const bar = document.createElement('progress');
@@ -66,16 +78,27 @@ async function chooseReader(host: ImportHost, preferAi: boolean): Promise<'here'
   bar.style.width = '100%';
   const h = document.createElement('h2');
   h.textContent = 'Downloading the structure reader…';
-  d.append(h, bar);
-  d.addEventListener('cancel', (e) => e.preventDefault());
+  // Cancel (or Esc) drops the download; what was fetched of a file is fetched again next time
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.textContent = 'Cancel';
+  const buttons = document.createElement('p');
+  buttons.className = 'ask-buttons';
+  buttons.append(cancel);
+  d.append(h, bar, buttons);
+  let cancelled = false;
+  const stop = () => { if (cancelled) return; cancelled = true; cancel.disabled = true; h.textContent = 'Stopping the download…'; void cancelPack().catch(() => {}); };
+  cancel.addEventListener('click', stop);
+  d.addEventListener('cancel', (e) => { e.preventDefault(); stop(); });
   document.body.append(d);
   d.showModal();
   try {
     await downloadPack((share) => { bar.value = share; });
-    return 'here';
+    return true;
   } catch (e) {
+    if (cancelled) return false;
     await ask('Import Structures', [], { noCancel: true, note: 'The structure reader could not be downloaded: ' + (e instanceof Error ? e.message : String(e)) });
-    return null;
+    return false;
   } finally {
     d.close();
     d.remove();
@@ -92,6 +115,13 @@ export async function importPictures(host: ImportHost, found: FoundPicture[], o:
   if (!host.chem.ready) { host.flash('The chemistry engine is still loading. Try again in a moment.'); return; }
   const how = await chooseReader(host, o.photo);
   if (!how) return;
+  await review(host, how, found, o);
+}
+
+type ReviewText = { title: string; note: string; tickDoubtful: boolean; photo: boolean; hideJunk?: boolean };
+
+/** The review screen, reading `found` with `how` (and the other reader one click away, when there is one). */
+async function review(host: ImportHost, how: 'here' | 'ai', found: FoundPicture[], o: ReviewText): Promise<void> {
   const ai = host.ai();
   const linked = await aiReady(ai).catch(() => false);
   const here = canReadHere && await packReady();
@@ -113,11 +143,85 @@ export async function importPictures(host: ImportHost, found: FoundPicture[], o:
   });
 }
 
+/**
+ * File > Import Structures from PDF, once the drawings are found (on this computer: nothing is sent
+ * to find them): the pages are shown with each drawing outlined, the person ticks the ones to read,
+ * and only those are read, by their AI model (when linked) or the reader on this computer.
+ */
+export async function importPdfDrawings(host: ImportHost, found: FoundPicture[], pages: PagePreview[], o: ReviewText & { file: string }): Promise<void> {
+  if (!host.chem.ready) { host.flash('The chemistry engine is still loading. Try again in a moment.'); return; }
+  const ai = host.ai();
+  const linked = await aiReady(ai).catch(() => false);
+  const ready = canReadHere && await packReady();
+  const readers: { value: string; label: string }[] = [];
+  if (linked) readers.push({ value: 'ai', label: aiName(ai) });
+  if (canReadHere) readers.push({ value: 'here', label: ready ? 'This computer (nothing sent)' : `This computer (downloads about ${PACK_MB} MB once)` });
+  if (!readers.length) {
+    await ask('Import Structures', [], { noCancel: true, note: 'In the browser, structures are read by an AI model of your own: link one in Edit > Settings > AI Model. The desktop app can also read them on your computer, with nothing sent anywhere.' });
+    return;
+  }
+  const picked = await pickDrawings({
+    title: o.title,
+    note: `${o.file}: the drawings found on each page are outlined. Click one to tick it or tick it off; only the ticked ones are read.`,
+    pages,
+    found,
+    readers,
+  }).finally(() => { for (const p of pages) if (p.url.startsWith('blob:')) URL.revokeObjectURL(p.url); });
+  if (!picked || !picked.chosen.length) return;
+  const how = picked.reader === 'ai' ? 'ai' : 'here';
+  if (how === 'here' && !ready && !await downloadReader()) return;
+  await review(host, how, picked.chosen, o);
+}
+
+/** File > Import Structures from Picture (or Paste Picture as Structure): the pictures read, and the review screen. */
+export async function importPictureFiles(host: ImportHost, pics: { name: string; bytes: Uint8Array; mime: string }[]): Promise<void> {
+  if (!pics.length) return;
+  const found: FoundPicture[] = [];
+  host.flash(pics.length === 1 ? 'Reading the picture…' : 'Reading the pictures…');
+  for (const p of pics) {
+    const px = await decodePicture(p.bytes, p.mime);
+    if (px) found.push({ where: p.name, pixels: px });
+    else host.flash(`${p.name} can't be read as a picture.`);
+  }
+  // none could be read: the message naming the file stays
+  if (!found.length) return;
+  await importPictures(host, found, {
+    title: 'Import Structures from Picture',
+    note: 'Photos and scans of hand drawings work best with dark lines on plain paper, one structure to a picture. Check each structure against its picture before you place it: fix the SMILES, or tick it off.',
+    tickDoubtful: true,
+    photo: true,
+  });
+}
+
+/** A small picture of a page for the pick screen (a JPEG, as an object URL; revoke it when done). */
+async function pagePicture(page: HTMLCanvasElement): Promise<string> {
+  const k = Math.min(1, 900 / page.width);
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.round(page.width * k));
+  c.height = Math.max(1, Math.round(page.height * k));
+  c.getContext('2d')!.drawImage(page, 0, 0, c.width, c.height);
+  const blob = await new Promise<Blob | null>((ok) => c.toBlob(ok, 'image/jpeg', 0.85));
+  return blob ? URL.createObjectURL(blob) : c.toDataURL('image/jpeg', 0.85);
+}
+
 /** Pages read at most in one go (a thesis is read a part at a time). */
-const MOST_PAGES = 40;
+export const MOST_PAGES = 40;
+
+/** Pixels a page is drawn in at most (a poster), and on its longer side: canvases larger than this can't be made everywhere. */
+const MOST_PIXELS = 16e6, MOST_SIDE = 8000;
+
+/**
+ * How large a page of `w` × `h` points is drawn (about 150 dots to the inch: structures come out a few
+ * hundred pixels across, as the reader likes; less on a poster), and how far apart two strokes can be and
+ * still be one drawing, in pixels: a set distance on the page (a letter page's width / 120), not a share of its width.
+ */
+export function pageRender(w: number, h: number): { scale: number; gap: number } {
+  const scale = Math.min(2, Math.sqrt(MOST_PIXELS / (w * h)), MOST_SIDE / Math.max(w, h));
+  return { scale, gap: Math.max(1, Math.round((612 / 120) * scale)) };
+}
 
 /** The drawings on the pages of a PDF, as pictures (pages from `first` to `last`, from 1). */
-export async function pdfDrawings(bytes: Uint8Array, pick: (pages: number) => Promise<[number, number] | null>, progress: (msg: string) => void): Promise<FoundPicture[] | null> {
+export async function pdfDrawings(bytes: Uint8Array, pick: (pages: number) => Promise<[number, number] | null>, progress: (msg: string) => void): Promise<{ found: FoundPicture[]; pages: PagePreview[] } | null> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
   if (!pdfjs.GlobalWorkerOptions.workerSrc) {
     pdfjs.GlobalWorkerOptions.workerSrc = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
@@ -125,14 +229,16 @@ export async function pdfDrawings(bytes: Uint8Array, pick: (pages: number) => Pr
   const task = pdfjs.getDocument({ data: bytes.slice() });
   try {
     const pdf = await task.promise;
-    const range = pdf.numPages > MOST_PAGES ? await pick(pdf.numPages) : [1, pdf.numPages] as [number, number];
+    const range = pdf.numPages > 1 ? await pick(pdf.numPages) : [1, 1] as [number, number];
     if (!range) return null;
     const found: FoundPicture[] = [];
+    const pages: PagePreview[] = [];
     for (let n = range[0]; n <= range[1]; n++) {
       progress(`Looking for structures on page ${n} of ${range[1]}…`);
       const page = await pdf.getPage(n);
-      // about 150 dots to the inch: structures come out a few hundred pixels across, as the reader likes
-      const view = page.getViewport({ scale: 2 });
+      const size = page.getViewport({ scale: 1 });
+      const { scale, gap } = pageRender(size.width, size.height);
+      const view = page.getViewport({ scale });
       const canvas = document.createElement('canvas');
       canvas.width = Math.ceil(view.width);
       canvas.height = Math.ceil(view.height);
@@ -152,16 +258,17 @@ export async function pdfDrawings(bytes: Uint8Array, pick: (pages: number) => Pr
       const px = ctx.getImageData(0, 0, w, h).data;
       const ink = new Uint8Array(w * h);
       for (let i = 0; i < w * h; i++) ink[i] = px[i * 4] + px[i * 4 + 1] + px[i * 4 + 2] < 600 ? 1 : 0;
-      const boxes = findDrawings(ink, w, h, prose, Math.round(w / 120), labels);
+      const boxes = findDrawings(ink, w, h, prose, gap, labels);
       boxes.forEach((b, k) => {
         const pad = 6;
         const x = Math.max(0, b.x - pad), y = Math.max(0, b.y - pad), bw = Math.min(w - x, b.w + 2 * pad), bh = Math.min(h - y, b.h + 2 * pad);
         const d = ctx.getImageData(x, y, bw, bh);
-        found.push({ where: boxes.length > 1 ? `Page ${n}, ${k + 1}` : `Page ${n}`, pixels: { width: d.width, height: d.height, data: d.data } });
+        found.push({ where: boxes.length > 1 ? `Page ${n}, ${k + 1}` : `Page ${n}`, pixels: { width: d.width, height: d.height, data: d.data }, page: n, box: { x, y, w: bw, h: bh } });
       });
+      if (boxes.length) pages.push({ n, url: await pagePicture(canvas), width: w, height: h });
       page.cleanup();
     }
-    return found;
+    return { found, pages };
   } finally {
     void task.destroy();
   }

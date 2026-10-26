@@ -4,8 +4,9 @@
 // is a design shape (kind 'geo') whose id is "icon:<name>", so it is drawn, filled, coloured,
 // sized, saved and exported like any other shape in the library (design/geo.ts).
 //
-// The icons' data is large, so it is loaded on its own, once, after the window opens (loadIcons).
-// Until then an icon draws as nothing and is kept as it is in saved files.
+// The icons' data is large (2.7 MB), so it is loaded on its own, once, the first time an icon is
+// drawn or looked for (loadIcons), not at start-up. Until then an icon draws as nothing and is kept
+// as it is in saved files.
 //
 // The data is made from the @mdi/svg package by scripts/build-icons.mjs; logos of companies and
 // products are left out (they are trademarks).

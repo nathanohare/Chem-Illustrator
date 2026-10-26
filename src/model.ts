@@ -1241,6 +1241,9 @@ export class Doc {
 
   // ---------------------------------------------------------------- transactions
 
+  /** Whether a step is being made (between `begin` and `commit`, such as during a drag). */
+  get editing(): boolean { return this.tx !== null; }
+
   begin(label: string): void {
     if (this.tx) return; // nested: fold into the outer transaction
     this.tx = { label, before: new Map(), after: new Map() };
@@ -1274,6 +1277,14 @@ export class Doc {
       for (const b of [was as Bond | null, now]) if (b) { ends.add(b.a1); ends.add(b.a2); }
     }
     for (const id of ends) if (this.atoms.get(id)?.multi && !this.degree(id)) this.removeAtom(id);
+  }
+
+  /** Give up the step being made: what it changed goes back as it was, with nothing to undo or redo. */
+  abandon(): void {
+    const tx = this.tx;
+    if (!tx) return;
+    this.tx = null;
+    if (tx.before.size) this.apply(tx.before);
   }
 
   /** Run `fn` inside one undoable step. */

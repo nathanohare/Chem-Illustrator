@@ -758,7 +758,10 @@ function readObject(r: Reader, name: string, id: number): Node {
   return node;
 }
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// characters XML 1.0 can't hold would stop the whole drawing opening: Word's line break (U+000B)
+// becomes a line break, and the rest are dropped (as cdxml-write.ts does)
+const esc = (s: string) => s.replace(/\u000B/g, '\n').replace(/[\u0000-\u0008\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '')
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const escAttr = (s: string) => esc(s).replace(/\n/g, '&#10;').replace(/\r/g, '&#13;').replace(/\t/g, '&#9;');
 
 function toXml(n: Node, out: string[]): void {

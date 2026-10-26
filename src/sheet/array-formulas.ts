@@ -57,11 +57,15 @@ function tree(text: string): Node | null {
 
 /** A formula from a file that doesn't mark it as a dynamic array formula, with @ where Excel would show one. */
 export function legacyFormula(text: string): string {
-  const t = tree(text), toks = tokens(text);
-  if (!t || !toks) return text;
+  // only a block (A1:B9, A:A, 1:3) or a spill (A1#) can take an @, and each is written with : or #
+  if (!text.includes(':') && !text.includes('#')) return text;
+  const t = tree(text);
+  if (!t) return text;
   const marks: number[] = [];
   valueBlocks(t, true, marks);
   if (!marks.length) return text;
+  const toks = tokens(text);
+  if (!toks) return text;
   const before = new Set(marks.map((i) => toks.at[i]));
   return '=' + toks.all.map((tok, i) => (before.has(i) ? '@' : '') + (tok.t === 'ref' ? untokenize([tok]) : tok.s)).join('');
 }

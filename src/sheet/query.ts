@@ -4,7 +4,7 @@
 // steps are kept with the workbook, so Refresh reads the data again and runs the same steps on
 // it. Everything here is pure: reading the file or page is the caller's job.
 
-import { CellError, ERR, Value, compareValues, isError, numberText, readTyped } from './values';
+import { CellError, ERR, Value, compareValues, isError, numberText, readTyped, maxOf } from './values';
 import { readDateTime } from './dates';
 import { parseDelimited } from './csv';
 
@@ -439,7 +439,7 @@ function passes(v: Value, test: FilterTest, value: string | undefined, type: Col
 export function splitCount(t: QTable, col: string, by: string): number {
   const i = t.cols.indexOf(col);
   if (i < 0 || !by) return 1;
-  return Math.max(1, ...t.rows.map((r) => (isBlank(r[i]) ? 1 : textOf(r[i]).split(by).length)));
+  return maxOf(t.rows.map((r) => (isBlank(r[i]) ? 1 : textOf(r[i]).split(by).length)), 1);
 }
 
 function applyStep(t: QTable, s: QueryStep): QTable {

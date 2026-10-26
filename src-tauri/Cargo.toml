@@ -27,6 +27,8 @@ reqwest = { version = "0.13", default-features = false, features = ["rustls-no-p
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 # the structure reader's model pack is checked against its SHA-256 sums
 sha2 = "0.10"
+# (and its download can be cancelled: already in the app through tauri)
+tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
 
 # desktop only: on an iPad the App Store updates the app, and there is only ever one copy running
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]

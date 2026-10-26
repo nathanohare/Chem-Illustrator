@@ -292,7 +292,7 @@ export function goToSpecial(s: Sheet, sel: Range, active: { r: number; c: number
         }
         frontier = o.allLevels ? next : [];
       }
-      keys.push(...seen);
+      for (const k of seen) keys.push(k);
       break;
     }
     case 'dependents': {
@@ -313,7 +313,7 @@ export function goToSpecial(s: Sheet, sel: Range, active: { r: number; c: number
         }
         targets = o.allLevels ? found : [];
       }
-      keys.push(...seen);
+      for (const k of seen) keys.push(k);
       break;
     }
     case 'condformats': case 'validation': {

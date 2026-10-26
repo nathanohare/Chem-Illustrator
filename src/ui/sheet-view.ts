@@ -8,9 +8,9 @@
 // structures and wrapped text in them unless their height has been set by hand.
 
 import { Workbook, Sheet, Structure, CellStyle, Side, growToMerges, countOn } from '../sheet/workbook';
-import { Range, MAX_ROWS, MAX_COLS, colName, rangeName, normRange, inRange, keyOf, rowOf, colOf, cellName } from '../sheet/refs';
+import { Range, MAX_ROWS, MAX_COLS, colName, rangeName, normRange, inRange, keyOf, rowOf, colOf, cellName, sheetNameProblem } from '../sheet/refs';
 import { formatValue, generalFitting } from '../sheet/numfmt';
-import { readTyped, isError, CellError } from '../sheet/values';
+import { readTyped, isError, CellError, maxOf, minOf } from '../sheet/values';
 import { chemPieces, showsChem } from '../sheet/cell-text';
 import { DEFAULT_COL_W, DEFAULT_ROW_H, STRUCTURE_SCALE, STRUCTURE_PAD, MAX_AUTO_ROW, structureHeight, structurePlace } from '../sheet/layout';
 import { formulaRefs, normalizeFormula } from '../sheet/formula';
@@ -1589,8 +1589,8 @@ export class SheetView {
       c.values.set(g, values);
       const all = values.flat().filter((v): v is number => v !== null);
       c.limits.set(g, {
-        min: typeof g.minAxis === 'number' ? g.minAxis : g.minAxis === 'group' && all.length ? Math.min(...all, g.kind === 'column' ? 0 : Infinity) : undefined,
-        max: typeof g.maxAxis === 'number' ? g.maxAxis : g.maxAxis === 'group' && all.length ? Math.max(...all) : undefined,
+        min: typeof g.minAxis === 'number' ? g.minAxis : g.minAxis === 'group' && all.length ? minOf(all, g.kind === 'column' ? 0 : Infinity) : undefined,
+        max: typeof g.maxAxis === 'number' ? g.maxAxis : g.maxAxis === 'group' && all.length ? maxOf(all) : undefined,
       });
     }
     return { values, ...c.limits.get(g) };
@@ -1601,7 +1601,7 @@ export class SheetView {
     const { values, min, max } = this.sparkValues(s, g);
     const vals = values[g.items.findIndex((i) => i.row === it.row && i.col === it.col)] ?? [];
     const nums = vals.filter((v): v is number => v !== null);
-    const lim = min !== undefined || max !== undefined ? { min: min ?? Math.min(...nums), max: max ?? Math.max(...nums) } : undefined;
+    const lim = min !== undefined || max !== undefined ? { min: min ?? minOf(nums), max: max ?? maxOf(nums) } : undefined;
     const shape = sparkShape(g, vals, w - 2, h - 2, lim);
     const ctx = this.ctx;
     ctx.save();
@@ -2355,7 +2355,8 @@ export class SheetView {
       done = true;
       const name = box.value.trim().replace(/[\\/?*[\]:]/g, '').slice(0, 31);
       if (keep && name && name !== s.name) {
-        if (wb.sheets.some((x) => x !== s && x.name.toLowerCase() === name.toLowerCase())) this.host.flash(`There is already a sheet called ${name}.`);
+        const problem = sheetNameProblem(name, wb.sheets.filter((x) => x !== s).map((x) => x.name));
+        if (problem) this.host.flash(problem);
         else wb.edit('Rename sheet', () => s.rename(name), this.place());
       }
       this.renderTabs();

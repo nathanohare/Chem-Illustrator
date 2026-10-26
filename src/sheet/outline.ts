@@ -7,6 +7,7 @@
 import type { Sheet } from './workbook';
 import { Range, keyOf, colName } from './refs';
 import { formulaRefs } from './formula';
+import { maxOf } from './values';
 
 export const MAX_LEVEL = 7;
 
@@ -208,7 +209,7 @@ export function addSubtotals(s: Sheet, R: Range, o: SubtotalOptions): Range | st
   const key = (r: number) => s.shownText(r, o.by);
   const fnName = SUBTOTAL_FUNCTIONS.find(([, n]) => n === o.fn)?.[0] ?? 'Total';
   const label = (v: string) => (o.fn === 9 ? `${v} Total` : `${v} ${fnName}`);
-  const deepest = Math.max(0, ...[...s.rowLevels.entries()].filter(([r]) => r > T.r1 && r <= T.r2).map(([, v]) => v));
+  const deepest = maxOf([...s.rowLevels.entries()].filter(([r]) => r > T.r1 && r <= T.r2).map(([, v]) => v), 0);
   if (deepest + 2 > MAX_LEVEL) return 'The outline is seven levels deep already.';
   // groups of rows with the same value, top to bottom (existing subtotal rows end a group)
   const groups: [number, number][] = [];

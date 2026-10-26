@@ -10,7 +10,7 @@ import type { Sheet, Workbook } from '../sheet/workbook';
 import { cellName, parseRange, rangeName, type Range } from '../sheet/refs';
 import { refersTo } from '../sheet/names';
 import type { Value } from '../sheet/values';
-import { isError } from '../sheet/values';
+import { isError, maxOf, minOf } from '../sheet/values';
 import type { DataTable } from '../sheet/what-if';
 import { newDataTableId } from '../sheet/what-if';
 import {
@@ -105,7 +105,7 @@ function sharedItemsXml(items: { value: Value }[]): string {
   if (nums.length) {
     a.push('containsNumber="1"');
     if (nums.every((x) => Number.isInteger(x))) a.push('containsInteger="1"');
-    a.push(`minValue="${Math.min(...nums)}"`, `maxValue="${Math.max(...nums)}"`);
+    a.push(`minValue="${minOf(nums)}"`, `maxValue="${maxOf(nums)}"`);
   }
   if (blank) a.push('containsBlank="1"');
   return `<sharedItems ${a.join(' ')}${a.length ? ' ' : ''}count="${items.length}">${vals.map(itemXml).join('')}</sharedItems>`;
@@ -128,7 +128,7 @@ export function pivotParts(wb: Workbook, s: Sheet, pt: PivotTable, cacheId: numb
   // where the report sits: Excel's location leaves out the filters above it
   const rep = reportOf(wb, s, pt);
   if (typeof rep === 'string') return null;
-  const width = Math.max(1, ...rep.cells.map((r) => r.length));
+  const width = maxOf(rep.cells.map((r) => r.length), 1);
   const top = pt.at.row + rep.filterRows;
   const loc: Range = { r1: top, c1: pt.at.col, r2: Math.max(top, pt.at.row + rep.cells.length - 1), c2: pt.at.col + width - 1 };
   const nf = pt.filters.length;

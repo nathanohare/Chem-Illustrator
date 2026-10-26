@@ -7,7 +7,7 @@ import { FUNCTION_NAMES } from './evaluate';
 import { PROPERTIES } from './properties';
 import { ISOTOPE_FUNCTIONS } from './isotopes';
 
-export const CATEGORIES = ['Chemistry', 'Math & Trig', 'Statistical', 'Logical', 'Text', 'Date & Time', 'Lookup & Reference', 'Arrays & LAMBDA', 'Information'] as const;
+export const CATEGORIES = ['Chemistry', 'Math & Trig', 'Financial', 'Statistical', 'Logical', 'Text', 'Date & Time', 'Lookup & Reference', 'Arrays & LAMBDA', 'Information'] as const;
 export type Category = (typeof CATEGORIES)[number];
 
 export interface FnArg {
@@ -28,7 +28,7 @@ export interface FnHelp {
 
 type Entry = [Category, string, ...string[]];
 
-const M: Category = 'Math & Trig', S: Category = 'Statistical', L: Category = 'Logical', T: Category = 'Text', D: Category = 'Date & Time',
+const M: Category = 'Math & Trig', F: Category = 'Financial', S: Category = 'Statistical', L: Category = 'Logical', T: Category = 'Text', D: Category = 'Date & Time',
   R: Category = 'Lookup & Reference', A: Category = 'Arrays & LAMBDA', I: Category = 'Information';
 
 const DATE = 'date: a date (a cell holding one, DATE(2026,10,22), or text such as "2026-10-22")';
@@ -60,6 +60,13 @@ const HELP: Record<string, Entry> = {
   LOG: [M, 'The logarithm to a base.', 'number: a number above 0', '[base]: the base; 10 when left out'],
   POWER: [M, 'A number raised to a power.', 'number: the base', 'power: the power'],
   MOD: [M, 'The remainder after dividing (with the sign of the divisor).', 'number: the number to divide', 'divisor: what to divide by'],
+  CEILING: [M, 'Rounds a number up to a multiple of the significance (a negative number towards zero, or away from it with a negative significance).', 'number: the number to round', 'significance: the multiple, such as 0.05'],
+  FLOOR: [M, 'Rounds a number down to a multiple of the significance (a negative number away from zero, or towards it with a negative significance).', 'number: the number to round', 'significance: the multiple, such as 0.05'],
+  FACT: [M, 'The factorial: 1 × 2 × 3 × … × the number.', 'number: a whole number from 0 to 170'],
+  COMBIN: [M, 'The number of ways to choose some items from a set, order not mattering.', 'number: how many items there are', 'number_chosen: how many are chosen'],
+  // ---------------------------------------------------------------- financial
+  PMT: [F, 'The payment each period of a loan (or saving) at a fixed rate.', 'rate: the interest rate per period (5% a year paid monthly is 5%/12)', 'nper: the number of payments', 'pv: what the loan is worth now', '[fv]: what is left after the last payment; 0 when left out', '[type]: 1 for payments at the start of each period; 0 (left out) at the end'],
+  NPV: [F, 'What payments at the end of each coming period are worth today, at a discount rate.', 'rate: the discount rate per period', 'value…: the payments (negative for money paid out), one each period'],
   PI: [M, 'π to 15 figures.'],
   SUBTOTAL: [M, 'An average, count, sum… of a block (as a table\'s totals row uses it).', 'function_num: 1 average, 2 count, 3 count filled, 4 max, 5 min, 6 product, 7 stdev, 9 sum, 10 var (101… the same)', 'ref…: the cells'],
   // ---------------------------------------------------------------- statistics
@@ -205,6 +212,7 @@ const HELP: Record<string, Entry> = {
   MATCH: [R, 'Where a value is in a row or column.', 'lookup_value: what to find', 'lookup_array: where to look', '[match_type]: 0 exact, 1 (left out) largest at or below in ascending data, −1 smallest at or above in descending data'],
   XMATCH: [R, 'Where a value is in a row or column.', 'lookup_value: what to find', 'lookup_array: where to look', '[match_mode]: 0 exact, −1, 1 or 2 wildcards', '[search_mode]: 1, −1, 2 or −2'],
   INDEX: [R, 'The value at a row and column of a block (0 for the whole row or column).', 'array: the block', 'row_num: the row', '[column_num]: the column'],
+  LOOKUP: [R, 'Finds the largest value at or below one in a sorted row or column, and gives the value in the same place of another.', 'lookup_value: what to find', 'lookup_vector: where to look (sorted ascending), or a block (its first row or column)', '[result_vector]: what to give; the block\'s last row or column when left out'],
   CHOOSE: [R, 'Picks a value from a list by its number.', 'index_num: 1 for the first value', 'value…: the values'],
   OFFSET: [R, 'A reference moved some rows and columns from another, and sized.', 'reference: where to start', 'rows: rows down (negative up)', 'cols: columns across (negative left)', '[height]: rows tall', '[width]: columns wide'],
   INDIRECT: [R, 'The reference written in a text.', 'ref_text: such as "B2" or "Sheet2!A1:C5"', '[a1]: FALSE for R1C1 style'],

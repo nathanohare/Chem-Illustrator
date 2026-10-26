@@ -27,6 +27,8 @@ export interface TouchHost {
   overlay: HTMLElement;
   view: View;
   requestScene(ts?: number): void;
+  /** Drop the editor's press (a finger's) as if it never happened: it was the start of a pinch. */
+  abandonPress(): void;
 }
 
 export function installPenAndTouch(h: TouchHost): void {
@@ -48,7 +50,7 @@ export function installPenAndTouch(h: TouchHost): void {
   /** Touches taken from the editor, where they are now (screen px, relative to the canvas). */
   const fingers = new Map<number, Vec>();
   /** A touch the editor was given (before a pen was seen), taken back if a second finger lands. */
-  let given: { id: number; at: Vec; client: Vec } | null = null;
+  let given: { id: number; at: Vec } | null = null;
   let gesture: { v0: View; a0: Vec; b0: Vec; ids: [number, number] } | null = null;
   let pan: { v0: View; p0: Vec; id: number } | null = null;
 
@@ -70,8 +72,7 @@ export function installPenAndTouch(h: TouchHost): void {
     const p = local(e);
     if (!penSeen && fingers.size === 0 && given === null) {
       // the first finger on a screen with no pen draws, like a mouse
-      const client = { x: e.clientX, y: e.clientY };
-      given = { id: e.pointerId, at: p, client };
+      given = { id: e.pointerId, at: p };
       return;
     }
     take(e);
@@ -80,7 +81,7 @@ export function installPenAndTouch(h: TouchHost): void {
       // a second finger: the first one's press was the start of a pinch, not a drawing
       const g = given;
       given = null;
-      cancelInEditor(g.id, g.client);
+      h.abandonPress();
       fingers.set(g.id, g.at);
     }
     fingers.set(e.pointerId, p);
@@ -90,7 +91,7 @@ export function installPenAndTouch(h: TouchHost): void {
 
   el.addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'touch') return;
-    if (e.pointerId === given?.id) { given.at = local(e); given.client = { x: e.clientX, y: e.clientY }; return; }
+    if (e.pointerId === given?.id) { given.at = local(e); return; }
     if (!fingers.has(e.pointerId)) return;
     take(e);
     const p = local(e);
@@ -120,11 +121,6 @@ export function installPenAndTouch(h: TouchHost): void {
     h.requestScene(e.timeStamp);
   };
   el.addEventListener('pointerup', up, true);
-  // a long press (ui/touch-ui.ts) ends the finger's pan; the editor's own cancels pass by
+  // a long press (ui/touch-ui.ts) ends the finger's pan; its cancel of the editor's press passes by
   el.addEventListener('pointercancel', (e) => { if (e.isTrusted || fingers.has(e.pointerId)) up(e); else if (e.pointerId === given?.id) given = null; }, true);
-
-  // the editor's press ends where the pointer is now (it forgets one that hadn't moved)
-  function cancelInEditor(id: number, client: Vec) {
-    el.dispatchEvent(new PointerEvent('pointercancel', { pointerId: id, pointerType: 'touch', clientX: client.x, clientY: client.y, bubbles: true }));
-  }
 }

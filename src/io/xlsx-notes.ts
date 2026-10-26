@@ -220,12 +220,21 @@ function formulaFor(kind: ValidationKind, text: string | undefined, fn: (f: stri
   return n === null ? null : String(n);
 }
 
-/** A sheet's data validation rules as Excel writes them ('' for none). `fn` puts Excel's prefixes on newer functions. */
-export function validationsXml(list: Validation[], fn: (f: string) => string): string {
+/** The most characters Excel takes in a drop-down list typed as its items. */
+const MAX_TYPED_LIST = 255;
+
+/**
+ * A sheet's data validation rules as Excel writes them ('' for none). `fn` puts Excel's prefixes on
+ * newer functions; `longList` gives a list typed as items that is too long for Excel as a range of
+ * cells holding them.
+ */
+export function validationsXml(list: Validation[], fn: (f: string) => string, longList?: (text: string) => string): string {
   const rules: string[] = [];
   for (const v of list) {
     if (!v.ranges.length) continue;
-    const f1 = v.kind === 'any' ? null : formulaFor(v.kind, v.value1, fn);
+    const typed = (v.value1 ?? '').trim();
+    const long = v.kind === 'list' && !!longList && !typed.startsWith('=') && typed.length > MAX_TYPED_LIST;
+    const f1 = v.kind === 'any' ? null : long ? longList!(typed) : formulaFor(v.kind, v.value1, fn);
     if (v.kind !== 'any' && f1 === null) continue;
     const comparing = v.kind !== 'any' && v.kind !== 'list' && v.kind !== 'custom';
     const op = v.op ?? 'between';

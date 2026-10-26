@@ -69,7 +69,7 @@ import { writePdf, jpegInfo, PdfPage, PdfImage } from './io/pdf';
 import { SlideList } from './ui/slide-list';
 import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel } from './ui/design-panel';
 import { ShapeMenu } from './ui/shape-menu';
-import { loadIcons, whenIconsLoaded } from './design/icons';
+import { whenIconsLoaded } from './design/icons';
 import { SlideTextRibbon } from './ui/slide-text-ribbon';
 import { CaptionEditor } from './ui/caption-editor';
 import { LayersPanel } from './ui/layers-panel';
@@ -209,7 +209,7 @@ import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
 import { aiSettingsDialog } from './ui/ai-settings';
-import { decodePicture, importPictures, pdfDrawings, type ImportHost } from './ui/import-structures';
+import { importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
 import { placeRead } from './recognise/check';
 import { Diagnostics, catchErrors, errorReport, formatEntry, stamp, type LogEntry, type UnexpectedClose } from './diagnostics';
 import { keepStore } from './keep/store';
@@ -1974,6 +1974,8 @@ const docRead: DocxReadDeps = {
 const ws: Workspace = new Workspace(doc, {
   remember: (path) => rememberFile(path),
   leave: (tab) => {
+    // letters still being written with the pen go into this tab's drawing
+    editor.sketcher.flush();
     finishTyping();
     if (tab.mode === 'sheet') sheetMode.leave();
     if (tab.mode === 'document') docMode.leave();
@@ -1981,7 +1983,7 @@ const ws: Workspace = new Workspace(doc, {
     editor.cropping = null;
     (ws.pane ?? tab).view = { ...renderer.view };
     (ws.pane ?? tab).fitted = editor.stillFitted;
-    if (tab.deck) { tab.deck.onChange = () => {}; tab.deck.onSwitch = () => {}; tab.deck.onMotion = () => {}; }
+    if (tab.deck) { tab.deck.onChange = () => {}; tab.deck.onSwitch = () => {}; tab.deck.onLeave = () => {}; tab.deck.onMotion = () => {}; }
   },
   enter: (tab, opened) => enterTab(tab, opened),
   // every way of closing a tab (×, middle-click, Delete, Ctrl+W) finishes a figure or cell structure first
@@ -2124,6 +2126,7 @@ function enterTab(tab: Tab, opened: boolean): void {
   if (deck) {
     deck.onChange = () => deckChanged(deck);
     deck.onSwitch = () => slideSwitched(deck);
+    deck.onLeave = () => editor.sketcher.flush();
     listKey = slideListKey(deck);
     masterSeen = deck.master;
     slideList.show(design ? null : deck);
@@ -3384,25 +3387,46 @@ async function importPdf(): Promise<void> {
   finishTyping();
   const f = await openBytesDialog('PDF files', [], ['pdf']).catch(async (e) => { await showError(String(e)); return null; });
   if (!f) return;
+  // the pages are read with only a progress line showing, so another tab may show by the time Place
+  // is pressed: the structures go to the tab the import started in, kept even if it is an empty new drawing
+  const from = ws.active;
+  const release = ws.hold(from);
+  try {
+    await readPdf(f, from);
+  } finally {
+    release();
+  }
+}
+
+async function readPdf(f: { name: string; bytes: Uint8Array }, from: Tab): Promise<void> {
   let found;
   try {
     found = await pdfDrawings(f.bytes, async (pages) => {
       const r = await ask('Import Structures from PDF', [
         { name: 'from', label: 'From page', type: 'number', value: '1' },
-        { name: 'to', label: 'To page', type: 'number', value: String(Math.min(pages, 40)) },
-      ], { ok: 'Read', note: `${f.name} has ${pages} pages. Which shall be read? (40 or fewer at a time.)` });
+        { name: 'to', label: 'To page', type: 'number', value: String(Math.min(pages, MOST_PAGES)) },
+      ], { ok: 'Find Structures', note: `${f.name} has ${pages} pages. Which shall be searched for structures? (${MOST_PAGES} or fewer at a time.) They are found on this computer; you then choose which to read.` });
       if (!r) return null;
       const a = Math.max(1, Math.min(pages, Math.round(Number(r.from) || 1)));
-      return [a, Math.max(a, Math.min(pages, a + 39, Math.round(Number(r.to) || a)))];
+      return [a, Math.max(a, Math.min(pages, a + MOST_PAGES - 1, Math.round(Number(r.to) || a)))];
     }, (msg) => flash(msg, 20000));
   } catch (e) {
     await showError(`Could not read ${f.name}: ${String(e)}`);
     return;
   }
   if (!found) return;
-  if (!found.length) { flash('No drawings were found in this PDF. If its pages are scans, try Import Structures from Picture on a screenshot.', 8000); return; }
-  flash(`Found ${found.length} drawings.`);
-  await importPictures(importHost, found, {
+  const { found: drawings, pages } = found;
+  if (!drawings.length) { flash('No drawings were found in this PDF. If its pages are scans, try Import Structures from Picture on a screenshot.', 8000); return; }
+  flash(`Found ${drawings.length} drawings.`);
+  const place: ImportHost['place'] = (chosen) => {
+    const gone = !ws.tabs.includes(from);
+    if (gone) ws.newDrawing();
+    else ws.activate(from);
+    importHost.place(chosen);
+    if (gone) flash(`${from.name} was closed while the pages were read, so the structures were placed in a new drawing. Check them against the pictures.`, 8000);
+  };
+  await importPdfDrawings({ ...importHost, place }, drawings, pages, {
+    file: f.name,
     title: 'Import Structures from PDF',
     note: `${f.name}: each drawing found, beside the structure read from it. Ones the reader is sure of are ticked; check each against its picture, fix a SMILES or tick more, then place them.`,
     tickDoubtful: false,
@@ -3412,19 +3436,7 @@ async function importPdf(): Promise<void> {
 }
 
 async function readPictures(pics: { name: string; bytes: Uint8Array; mime: string }[]): Promise<void> {
-  if (!pics.length) return;
-  const found = [];
-  for (const p of pics) {
-    const px = await decodePicture(p.bytes, p.mime);
-    if (px) found.push({ where: p.name, pixels: px });
-    else flash(`${p.name} can't be read as a picture.`);
-  }
-  await importPictures(importHost, found, {
-    title: 'Import Structures from Picture',
-    note: 'Photos and scans of hand drawings work best with dark lines on plain paper, one structure to a picture. Check each structure against its picture before you place it: fix the SMILES, or tick it off.',
-    tickDoubtful: true,
-    photo: true,
-  });
+  await importPictureFiles(importHost, pics);
 }
 
 /** Insert > Crop Picture: the selected picture's handles cut its edges off until Esc or a click elsewhere. */
@@ -7477,14 +7489,14 @@ registerBundledFonts(() => {
     docMode.fontsChanged();
   }, 50);
 });
-// the icon library loads on its own once the window is up; then anything with icons in it is drawn again
+// the icon library loads the first time something needs it (Design > Icons, a file with icons in it, a
+// diagram); then anything with icons in it is drawn again
 whenIconsLoaded(() => {
   // (only a drawing with shapes can hold icons: a big structure opened at start-up isn't drawn twice)
   if (doc.shapes.size) doc.allDirty = true;
   editor.changed();
   docMode.fontsChanged();
 });
-setTimeout(() => void loadIcons().catch(() => flash('The icon library could not be loaded.')), 0);
 applyRibbonIcons();
 
 const stylePanel = new StylePanel($('#style-section'), $('#style-body'), doc, () => editor.sel, () => editor.changed());
@@ -8653,12 +8665,15 @@ let defaultPage: Settings['page'] = { name: 'letter', w: 540, h: 720, grow: true
 /** The welcome card has been closed for good. */
 let welcomed = false;
 const welcomeCard = $('#welcome');
+/** While the welcome card shows: looks, on each change, for drawing having started. */
+let welcomeWatch: (() => void) | null = null;
 /** Show the welcome card on a first, empty drawing; it goes when closed or when drawing starts. */
 function showWelcome(): void {
   if (welcomed || doc.atoms.size || doc.captions.size || doc.shapes.size || deckNow() || ws.active.mode !== 'drawing') return;
   welcomeCard.hidden = false;
   const seen = doc.version;
   const off = () => {
+    welcomeWatch = null;
     if (welcomeCard.hidden) return;
     welcomeCard.hidden = true;
     welcomed = true;
@@ -8666,9 +8681,8 @@ function showWelcome(): void {
   };
   $('#welcome-close').addEventListener('click', () => { off(); $('#overlay').focus({ preventScroll: true }); }, { once: true });
   welcomeCard.querySelector('[data-cmd="user-guide"]')?.addEventListener('click', (e) => { e.preventDefault(); off(); command('user-guide'); }, { once: true });
-  // drawing anything puts it away
-  const watch = () => { if (welcomeCard.hidden) return; if (doc.version !== seen) off(); else requestAnimationFrame(watch); };
-  requestAnimationFrame(watch);
+  // drawing anything puts it away (looked for on each change, not on every frame)
+  welcomeWatch = () => { if (welcomeCard.hidden) welcomeWatch = null; else if (doc.version !== seen) off(); };
 }
 
 /** File > Page Setup…: the drawing's paper size and way up, whether it adds pages, and the default for new drawings. */
@@ -8766,7 +8780,7 @@ const slideText = new SlideTextRibbon($('#ribbon'), {
   boxLook: () => editor.textBoxLook(),
 });
 CaptionEditor.onState = () => { if (ws.active.mode === 'slides') slideText.refresh(); };
-editor.onChange = () => { if (ws.active.mode === 'slides') slideText.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); if (ws.active.mode === 'slides') slideText.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();

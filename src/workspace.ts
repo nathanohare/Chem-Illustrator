@@ -20,6 +20,7 @@ import { writePptx, PptxOptions } from './io/pptx-write';
 import { zipHas } from './io/ooxml';
 import { isXls } from './io/xls';
 import { isOds } from './io/ods';
+import { excelLimitNote } from './io/xlsx';
 import { DOC_OPEN_ONLY, documentSaveNote, isOtherDocument } from './io/doc-files';
 import { adoptSaved } from './io/document-file';
 import {
@@ -160,6 +161,8 @@ export class Workspace {
   workspacePath: string | null = null;
   /** While a workspace saves or opens: its files don't each go on the recent list (the workspace does). */
   private quiet = false;
+  /** Tabs a command still working will come back to (File > Import Structures from PDF): never replaced by a new tab. */
+  private held: Tab[] = [];
   private nextId = 1;
 
   constructor(public host: Doc, private hooks: WorkspaceHooks) {
@@ -497,10 +500,16 @@ export class Workspace {
     }
   }
 
+  /** Keep `tab` from being replaced by a new or opened file (as an untouched new drawing is) until the function returned is called. */
+  hold(tab: Tab): () => void {
+    this.held.push(tab);
+    return () => { const i = this.held.indexOf(tab); if (i >= 0) this.held.splice(i, 1); };
+  }
+
   /** The tab showing, when it is new and untouched (an opened file takes its place). */
   private spare(): Tab | null {
     const t = this.active;
-    if (t.dirty || t.ref.kind !== 'none' || !isNewName(t.name)) return null;
+    if (this.held.includes(t) || t.dirty || t.ref.kind !== 'none' || !isNewName(t.name)) return null;
     if (t.mode === 'drawing') return this.host.atoms.size || this.host.captions.size || this.host.arrows.size || this.host.shapes.size ? null : t;
     if (t.mode === 'sheet') return t.book!.edits === 0 ? t : null;
     if (t.mode === 'document') return t.document!.edits === 0 ? t : null;
@@ -719,7 +728,7 @@ export class Workspace {
       const data = await this.hooks.sheets.write(book, name);
       // CSV and SD files keep only the values of the sheet showing: said, not stopped (as Excel does)
       const note = ext === 'csv' || ext === 'sdf' || ext === 'sd' ? ` (${book.sheets.length > 1 ? `only the sheet "${book.sheet.name}", ` : ''}values only: save as .xlsx to keep formulas and formatting)`
-        : ext === 'xlsx' && book.macros ? ' (its macros are left out: save as .xlsm to keep them)' : '';
+        : (ext === 'xlsx' && book.macros ? ' (its macros are left out: save as .xlsm to keep them)' : '') + excelLimitNote(book);
       return { data, type: ext === 'csv' ? CSV : ext === 'sdf' || ext === 'sd' ? SDF : ext === 'xlsm' ? XLSM : XLSX, note };
     }
     if (tab.mode === 'document') {

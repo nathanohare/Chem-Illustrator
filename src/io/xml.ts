@@ -20,3 +20,9 @@ export function descendants(root: Element): Element[] {
   visit(root);
   return out;
 }
+
+/** Text with each lone half of a surrogate pair (left when text is cut inside an emoji, or pasted
+ * from some PDFs) made U+FFFD: XML can't hold one, and the desktop app's JSON reader refuses one. */
+export function wellFormed(text: string): string {
+  return text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '\uFFFD');
+}

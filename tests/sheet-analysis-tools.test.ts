@@ -152,6 +152,32 @@ describe('Analysis ToolPak', () => {
     expect(out.cells.slice(1).map((r) => r.slice(0, 4))).toEqual([[2, 90, 1, 0.666], [4, 90, 1, 0.666], [3, 80, 3, 0.333], [1, 70, 4, 0]]);
   });
 
+  it('rank and percentile: ties counted as before, and quick on 20,000 rows', () => {
+    const xs = Array.from({ length: 2000 }, (_, i) => (i * 37) % 301 - 150);
+    const out = rankPercentile([g('x', xs)]);
+    if (typeof out === 'string') throw new Error(out);
+    for (const r of out.cells.slice(1)) {
+      const v = r[1] as number;
+      expect(r[2]).toBe(1 + xs.filter((x) => x > v).length);
+      expect(r[3]).toBe(Math.floor((xs.filter((x) => x < v).length / 1999) * 1000 + 1e-9) / 1000);
+    }
+    // every point was compared with every other: about 6 s here
+    const big = Array.from({ length: 20_000 }, (_, i) => (i * 7919) % 1000);
+    const t = performance.now();
+    rankPercentile([g('y', big)]);
+    expect(performance.now() - t).toBeLessThan(1000);
+  });
+
+  it('patterned numbers and sampling stop at a million, as the other distributions do', () => {
+    expect(randomNumbers({ kind: 'uniform', from: 0, to: 1 }, 1, 1_500_000, seededRandom(1))).toMatch(/million/);
+    expect(randomNumbers({ kind: 'patterned', from: 1, to: 1_500_000, step: 1, repeatEach: 1, repeatSeq: 1 }, 1, 0, seededRandom(1))).toMatch(/million/);
+    expect(randomNumbers({ kind: 'patterned', from: 1, to: 1000, step: 1, repeatEach: 2, repeatSeq: 1 }, 600, 0, seededRandom(1))).toMatch(/million/);
+    expect(sample([1, 2, 3], { random: 1_500_000 }, seededRandom(1))).toMatch(/million/);
+    const pat = randomNumbers({ kind: 'patterned', from: 0, to: 1, step: 0.1, repeatEach: 1, repeatSeq: 1 }, 1, 0, seededRandom(1));
+    if (typeof pat === 'string') throw new Error(pat);
+    expect(pat.cells.length).toBe(11);
+  });
+
   it('random numbers and sampling repeat with a seed', () => {
     const a = randomNumbers({ kind: 'normal', mean: 10, sd: 2 }, 2, 500, seededRandom(42));
     const b = randomNumbers({ kind: 'normal', mean: 10, sd: 2 }, 2, 500, seededRandom(42));

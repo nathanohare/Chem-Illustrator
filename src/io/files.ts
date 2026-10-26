@@ -4,6 +4,7 @@
 
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { FileStamp } from '../keep/recovery';
+import { wellFormed } from './xml';
 
 /** Where a drawing lives, so Save can write back to it. */
 export type FileRef =
@@ -219,6 +220,8 @@ export async function saveFileDialog(suggestedName: string, type: FileType | Fil
 
 /** Write text or bytes to a file chosen earlier (or download it when the browser cannot write files). */
 export async function writeFile(ref: FileRef, name: string, data: string | Uint8Array, type: FileType): Promise<void> {
+  // (text goes to the desktop app as JSON, which can't carry half a surrogate pair)
+  if (typeof data === 'string') data = wellFormed(data);
   if (ref.kind === 'path') {
     if (typeof data === 'string') await invoke('write_text_file', { path: ref.path, contents: data });
     else await invoke('write_binary_file', data, { headers: { path: encodeURIComponent(ref.path) } });
