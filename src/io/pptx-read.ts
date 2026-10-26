@@ -28,7 +28,7 @@ import { layoutText, caretPos, ASCENT } from '../text/layout';
 import { Master, SlideSize, LayoutId, defaultMaster, textStyles, slideDrawingStyle, slideBackground, slideColours, hasLayout, newLayoutId, deckLayouts, type LayoutDef, type PlaceholderBox, type SectionCount, type DeckSettings, type SlideHF, type DateFormat, showsNumber, showsFooter, showsDate } from '../deck/deck';
 import { backgroundColour, isPlain, sameBackground, type Background } from '../deck/background';
 import { readFill, readOneFill, type FillContext } from './pptx-background';
-import { TAG, PPT_ASCENT, MIME_EXT, arialMeasure, NS_A14, NS_M, swapBox } from './pptx-write';
+import { TAG, PPT_ASCENT, MIME_EXT, arialMeasure, NS_A14, NS_M, swapBox, tableLookKey, savedTableLook } from './pptx-write';
 import { ommlToTex, toOmml } from '../document/math';
 import { shapeMathPicture, shapeMathSize } from '../deck/equation';
 import { GEOS } from '../design/geo';
@@ -1344,6 +1344,15 @@ class Reader {
     const tags = this.tagsOf(s.path, kid(el, 'nvGraphicFramePr', 'nvPr'));
     let saved: { key: string; table: TableData; plain: string[][] } | null = null;
     try { saved = tags[TAG.table] ? JSON.parse(tags[TAG.table]) : null; } catch { saved = null; }
+    // a new style picked in PowerPoint, or a fill changed there: PowerPoint's table, with our key (title and footnotes)
+    const lookNow = tableLookKey(style, ['firstRow', 'firstCol', 'lastCol', 'lastRow', 'bandRow', 'bandCol'].filter(flag), kids(tbl, 'tr').map((tr) => {
+      const tcs = kids(tr, 'tc');
+      return Array.from({ length: m }, (_, c) => this.color(kid(kid(tcs[c] ?? null, 'tcPr'), 'solidFill')) ?? undefined);
+    }));
+    if (saved?.table && saved.table.rows.length === rows.length && saved.table.cols.length === m && lookNow !== savedTableLook(saved.table)) {
+      this.tables.push({ key: String(saved.key), table: read, frame, color });
+      return;
+    }
     if (saved?.table && saved.table.rows.length === rows.length && saved.table.cols.length === m) {
       const same = JSON.stringify(rows.map((row) => row.map((c) => c.runs.map((r) => r.text).join('')))) === JSON.stringify(saved.plain);
       // columns PowerPoint has resized keep their new widths

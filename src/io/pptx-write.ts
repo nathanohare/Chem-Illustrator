@@ -12,7 +12,7 @@
 
 import type { PinnedComment } from '../document/comments';
 import { COMMENT_CT, COMMENT_REL, writeSlideComments } from './pptx-comments';
-import { Doc, Caption, Shape, TextRun, ParaStyle, Arrow, applyBase, PICTURE_SHADOWS, type Pattern, type PictureFx, type PictureLook, type Media } from '../model';
+import { Doc, Caption, Shape, TextRun, ParaStyle, Arrow, applyBase, PICTURE_SHADOWS, type Pattern, type PictureFx, type PictureLook, type Media, type TableData } from '../model';
 import { bakedPart, tidyFx } from '../render/picture-fx';
 import { blipEffectsXml, pictureGeomXml } from './picture-xml';
 import { turnAbout, type Rect } from '../geom';
@@ -1052,7 +1052,7 @@ class Writer {
         const top = heavier(x.top, r > 0 ? lines[r - 1][c].bottom : undefined), bottom = heavier(x.bottom, r < n - 1 ? lines[r + 1][c].top : undefined);
         const o = coveringCell(t, r, c);
         const look = styled ? slideCellLook(t, o.r, o.c) : null;
-        const fill = t.rows[o.r][o.c]?.fill ?? look?.fill;
+        const fill = cellFill(t, r, c);
         const tcPr = `<a:tcPr marL="${emu(lay.padX)}" marR="${emu(lay.padX)}" marT="${emu(marT)}" marB="${emu(marB)}" anchor="t">${ln('lnL', left)}${ln('lnR', right)}${ln('lnT', top)}${ln('lnB', bottom)}${fill ? solid(fill) : '<a:noFill/>'}</a:tcPr>`;
         const align = cellAlign(t, r, c);
         if (o.r !== r || o.c !== c) {
@@ -1078,11 +1078,7 @@ class Writer {
     // the cells carry every fill and line themselves, so PowerPoint shows the same whatever the
     // style id; a style PowerPoint knows by id is named so its gallery and options show it,
     // otherwise "No Style, No Grid"
-    const look = lookOf(t);
-    const styleId = Object.keys(PPT_STYLE_IDS).find((g) => PPT_STYLE_IDS[g] === t.style) ?? '{2D5ABB26-0587-4C30-8999-92F81FD0307C}';
-    const flags = styled
-      ? `${look.header ? ' firstRow="1"' : ''}${look.firstCol ? ' firstCol="1"' : ''}${look.lastCol ? ' lastCol="1"' : ''}${look.total ? ' lastRow="1"' : ''}${look.bandRows ? ' bandRow="1"' : ''}${look.bandCols ? ' bandCol="1"' : ''}`
-      : t.head > 0 ? ' firstRow="1"' : '';
+    const { styleId, flags } = tableStyleOf(t);
     out.push(`<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}"${nameAttrs(s.name?.trim() || `Table ${id - 1}`, s.hidden)}/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>` +
       `<p:nvPr><p:custDataLst><p:tags r:id="${tag}"/></p:custDataLst></p:nvPr></p:nvGraphicFramePr>` +
       `<p:xfrm><a:off x="${emu(frame.x1)}" y="${emu(frame.y1)}"/><a:ext cx="${emu(frame.x2 - frame.x1)}" cy="${emu(frame.y2 - frame.y1)}"/></p:xfrm>` +
@@ -1104,6 +1100,36 @@ class Writer {
 }
 
 /** One of a design template's shapes, as a plain PowerPoint shape in a slide layout. */
+/** The PowerPoint table style a table is saved with (by id), and its options (firstRow="1"…). */
+function tableStyleOf(t: TableData): { styleId: string; flags: string } {
+  const look = lookOf(t);
+  const styleId = Object.keys(PPT_STYLE_IDS).find((g) => PPT_STYLE_IDS[g] === t.style) ?? '{2D5ABB26-0587-4C30-8999-92F81FD0307C}';
+  const flags = slideCellLook(t, 0, 0)
+    ? `${look.header ? ' firstRow="1"' : ''}${look.firstCol ? ' firstCol="1"' : ''}${look.lastCol ? ' lastCol="1"' : ''}${look.total ? ' lastRow="1"' : ''}${look.bandRows ? ' bandRow="1"' : ''}${look.bandCols ? ' bandCol="1"' : ''}`
+    : t.head > 0 ? ' firstRow="1"' : '';
+  return { styleId, flags };
+}
+
+/** The fill a table cell is saved with (its own, else its style's), for each place in the grid. */
+function cellFill(t: TableData, r: number, c: number): string | undefined {
+  const o = coveringCell(t, r, c);
+  return t.rows[o.r][o.c]?.fill ?? slideCellLook(t, o.r, o.c)?.fill;
+}
+
+/**
+ * A table's look as PowerPoint's copy says it: style id, options and each cell's fill. What we
+ * saved is told from what PowerPoint has after a change there (a new style, a fill cleared).
+ */
+export function tableLookKey(styleId: string, flags: string[], fills: (string | undefined)[][]): string {
+  return [styleId.toUpperCase(), [...flags].sort().join(','), fills.map((row) => row.map((f) => (f ? hex6(f) : '-')).join(' ')).join('/')].join('|');
+}
+
+/** tableLookKey of a table as saved here. */
+export function savedTableLook(t: TableData): string {
+  const { styleId, flags } = tableStyleOf(t);
+  return tableLookKey(styleId, [...flags.matchAll(/(\w+)="1"/g)].map((m) => m[1]), t.rows.map((_, r) => t.cols.map((__, c) => cellFill(t, r, c))));
+}
+
 /**
  * A connector's place, path and line with its heads, as PowerPoint and Word (in groups) both write
  * them; `curved` when it is drawn along its path (a curve or an elbow) as a shape, not a connector.

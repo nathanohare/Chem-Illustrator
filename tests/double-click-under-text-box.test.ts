@@ -48,11 +48,36 @@ describe('double-click under a text box', () => {
       eq = doc.addShape({ kind: 'geo', geo: 'rect', x1: 300, y1: 90, x2: 400, y2: 130, filled: true, color: '#000000' }).id;
     });
     // the equation is under the title's box, away from its text
-    expect(ed.hitTest({ x: 320, y: 100 })).toEqual({ kind: 'caption', id: cap });
     expect(ed.contentHit({ x: 320, y: 100 })).toEqual({ kind: 'shape', id: eq });
+    // (and a single click picks it too)
+    expect(ed.hitTest({ x: 320, y: 100 })).toEqual({ kind: 'shape', id: eq });
     // on the title's own words the title still wins
     expect(ed.contentHit({ x: 60, y: 75 })).toEqual({ kind: 'caption', id: cap });
     // in the box with nothing else there: still the title
     expect(ed.contentHit({ x: 500, y: 100 })).toEqual({ kind: 'caption', id: cap });
+  });
+
+  it('picks a picture put over an empty title placeholder (laptop bench pp-table-text-options)', () => {
+    const { doc, ed } = setup();
+    let cap = 0, pic = 0;
+    doc.edit('Slide', () => {
+      cap = doc.addCaption({ x: 50, y: 80, runs: [], justify: 'left', wrap: 600, ph: 'title', boxH: 100 }).id;
+      pic = doc.addShape({ kind: 'geo', geo: 'rect', x1: 60, y1: 60, x2: 160, y2: 140, filled: true, color: '#000000' }).id;
+    });
+    expect(ed.hitTest({ x: 100, y: 100 })).toEqual({ kind: 'shape', id: pic });
+    // elsewhere in the empty placeholder: the placeholder, to type into
+    expect(ed.hitTest({ x: 400, y: 100 })).toEqual({ kind: 'caption', id: cap });
+  });
+
+  it('keeps a slide text box selected when typing in it stops, for the ribbon to change it', () => {
+    const { doc, ed } = setup();
+    doc.textStyles = { title: { size: 44 } };
+    let cap = 0;
+    doc.edit('Slide', () => { cap = doc.addCaption({ x: 50, y: 80, runs: [{ text: 'Title' }], justify: 'left', wrap: 600, ph: 'title', boxH: 100 }).id; });
+    ed.typeInto(cap);
+    expect(ed.textLook()).not.toBeNull();
+    ed.closeCaption();
+    expect([...ed.sel.captions]).toEqual([cap]);
+    expect(ed.textLook()).not.toBeNull();
   });
 });
