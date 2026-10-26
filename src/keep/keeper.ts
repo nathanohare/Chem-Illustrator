@@ -371,7 +371,12 @@ export class Keeper {
       if (this.holders.has(t.id)) {
         this.holders.delete(t.id);
         closeNotice(`lock-${t.id}`);
-        if (p.warnOpenElsewhere) this.host.flash(`${t.name} is no longer open anywhere else.`, 5000);
+        // a notice that stays until it is read (a flash could pass unseen while working in Word)
+        if (p.warnOpenElsewhere) {
+          notice(`lock-${t.id}`, `${t.name} is no longer open anywhere else`, 'Nobody else has it open now, so saving here won’t overwrite their changes. If it was changed there, a “changed on disk” notice offers to reload it.', [
+            { label: 'OK', run: () => {}, main: true },
+          ]);
+        }
       }
       if (p.lockFiles && this.locks.get(t.id) !== lockPath(path)) {
         try {
