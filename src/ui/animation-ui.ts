@@ -877,6 +877,8 @@ export class AnimationUI {
     document.body.append(d);
     const w = Math.min(720, window.innerWidth - 80), ht = w * deck.size.h / deck.size.w;
     const player = new Player(canvas, deck, '#30343a');
+    // the slide's After time would go on to the next slides: the preview plays this one only
+    player.useTimings = false;
     let wait = 0;
     const clickOn = () => {
       clearTimeout(wait);

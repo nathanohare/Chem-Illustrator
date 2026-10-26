@@ -6,6 +6,7 @@ import {
   DIAGRAM_BY_ID, DIAGRAM_CATEGORIES, DIAGRAM_COLOURS, DIAGRAM_DEFAULTS, DIAGRAM_LAYOUTS, newDiagram,
   type DiagramColours, type DiagramData,
 } from '../design/diagrams';
+import { iconsLoaded, loadIcons } from '../design/icons';
 import type { Doc } from '../model';
 import { colourButton } from './colour-picker';
 
@@ -97,6 +98,8 @@ export function askDiagram(editing: DiagramData | null, o: DiagramDialogOptions)
     // the layouts, by kind, each a button with a small picture of it
     const list = $<HTMLDivElement>('.dg-layouts');
     const buttons = new Map<string, HTMLButtonElement>();
+    const thumb = (id: string) => o.preview({ ...newDiagram(id, null, { colours: 'accent', accent: '#4472c4', rounded: true, shadow: false }), size: 0.1 });
+    const thumbs: [HTMLElement, string][] = [];
     for (const cat of DIAGRAM_CATEGORIES) {
       const ls = DIAGRAM_LAYOUTS.filter((l) => l.category === cat);
       if (!ls.length) continue;
@@ -112,7 +115,8 @@ export function askDiagram(editing: DiagramData | null, o: DiagramDialogOptions)
         b.setAttribute('aria-label', l.name);
         const pic = document.createElement('span');
         pic.className = 'dg-thumb';
-        pic.innerHTML = o.preview({ ...newDiagram(l.id, null, { colours: 'accent', accent: '#4472c4', rounded: true, shadow: false }), size: 0.1 });
+        pic.innerHTML = thumb(l.id);
+        thumbs.push([pic, l.id]);
         b.append(pic, Object.assign(document.createElement('span'), { textContent: l.name }));
         b.addEventListener('click', () => pick(l.id));
         buttons.set(l.id, b);
@@ -140,6 +144,8 @@ export function askDiagram(editing: DiagramData | null, o: DiagramDialogOptions)
     const draw = () => { view.innerHTML = o.preview(data()); };
     let timer = 0;
     const later = () => { clearTimeout(timer); timer = window.setTimeout(draw, 120); };
+    // icon lists show icons from the icon library, loaded the first time a diagram is made
+    if (!iconsLoaded()) void loadIcons().then(() => { for (const [pic, id] of thumbs) pic.innerHTML = thumb(id); draw(); }, () => {});
     for (const el of [coloursSel, accent, size, wIn, hIn, rounded, shadow]) el.addEventListener('input', later);
 
     // Tab and Shift+Tab move the lines the caret or selection is on a level down or up

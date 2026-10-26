@@ -5,13 +5,13 @@
 // tables, pictures, footnotes and endnotes, links, and the page's size and margins from
 // styles.xml. What ODT can't hold of ours (live fields, citations) is saved as the text it shows.
 
-import { unzipSync, strFromU8, strToU8, Zip, ZipDeflate, ZipPassThrough } from 'fflate';
+import { strFromU8, strToU8, Zip, ZipDeflate, ZipPassThrough } from 'fflate';
 import * as rt from '../richtext';
 import type { Contents, Justify, ParaStyle, TableCell, TableData, TextRun } from '../model';
 import type { DocStyle } from '../style';
 import { fieldTexts, styleOf, type DocObject, type DocText } from '../document/document';
 import { fitParas, paraCount, splitParagraphs } from '../text/paragraphs';
-import { kid, kids } from './ooxml';
+import { kid, kids, unzipPackage, ZipTooBigError, xml } from './ooxml';
 import { DocBuilder, headingId, styleIdOf } from './doc-build';
 
 const NS = {
@@ -252,7 +252,8 @@ class OdtReader {
       switch (c.localName) {
         case 'span': this.inline(c, { ...look, ...cleanText(this.resolved(attr(c, 'text', 'style-name')).text) }, out, link, cell); break;
         case 'a': this.inline(c, look, out, attr(c, 'xlink', 'href') ?? undefined, cell); break;
-        case 's': out.push({ ...look, ...(link ? { link } : {}), text: ' '.repeat(Math.max(1, Number(attr(c, 'text', 'c') ?? '1'))) }); break;
+        // (a damaged file can ask for any number of spaces: a thousand is more than any page holds)
+        case 's': out.push({ ...look, ...(link ? { link } : {}), text: ' '.repeat(Math.min(1000, Math.max(1, Number(attr(c, 'text', 'c') ?? '1')))) }); break;
         case 'tab': out.push({ ...look, ...(link ? { link } : {}), text: '\t' }); break;
         case 'line-break': out.push({ ...look, ...(link ? { link } : {}), text: ' ' }); break;
         case 'note': {
@@ -359,9 +360,9 @@ function pictureMime(name: string, b?: Uint8Array): string | null {
 export function readOdt(bytes: Uint8Array): { doc: DocText; warnings: string[] } {
   let files: Record<string, Uint8Array>;
   try {
-    files = unzipSync(bytes);
-  } catch {
-    throw new Error('This is not an OpenDocument text (or it is damaged).');
+    files = unzipPackage(bytes);
+  } catch (e) {
+    throw e instanceof ZipTooBigError ? e : new Error('This is not an OpenDocument text (or it is damaged).');
   }
   if (files['META-INF/manifest.xml'] && /encryption-data/.test(strFromU8(files['META-INF/manifest.xml']))) {
     throw new Error('This document is protected with a password. Open it in LibreOffice, take the password off, and save it again.');
@@ -376,12 +377,13 @@ export interface OdtDeps {
   picture?(contents: Contents, style: DocStyle): Promise<{ png: Uint8Array; w: number; h: number } | null>;
 }
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// (characters XML 1.0 can't hold are dropped, as in the Office files)
+const esc = xml;
 const pt = (v: number) => `${Math.round(v * 100) / 100}pt`;
 
-/** Text as ODF writes it: runs of spaces as text:s, tabs as text:tab. */
+/** Text as ODF writes it: runs of spaces as text:s, tabs as text:tab, Word's line break (U+000B) as text:line-break. */
 function odText(t: string): string {
-  return esc(t).replace(/\t/g, '<text:tab/>').replace(/ {2,}/g, (m) => ` <text:s text:c="${m.length - 1}"/>`).replace(/^ /, '<text:s/>');
+  return t.split('\u000B').map((part) => esc(part).replace(/\t/g, '<text:tab/>').replace(/ {2,}/g, (m) => ` <text:s text:c="${m.length - 1}"/>`).replace(/^ /, '<text:s/>')).join('<text:line-break/>');
 }
 
 class OdtWriter {

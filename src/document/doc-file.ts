@@ -36,6 +36,21 @@ const INDENT = 36;
 /** Each paragraph's page number as last laid out, by document (for the contents' page numbers in Word files). */
 export const paragraphPages = new WeakMap<DocText, string[]>();
 
+/**
+ * A text box, note or table cell being typed into: its own editing, the object it makes of the
+ * box's text, and the step of the document's Undo its changes went into (once recorded).
+ */
+interface Box {
+  id: number;
+  cell?: { r: number; c: number };
+  ed: TextEditing;
+  recorded: boolean;
+  made: (x: { runs: TextRun[]; paras: ParaStyle[] }) => DocObject | null;
+  /** The box's text as the session started. */
+  start: unknown;
+  step?: object;
+}
+
 export class DocFile {
   readonly ed: TextEditing;
   readonly layouter: DocLayouter;
@@ -54,7 +69,7 @@ export class DocFile {
    * The text box or table cell being typed into, if any: its own editing, whose changes go back
    * into the document.
    */
-  box: { id: number; cell?: { r: number; c: number }; ed: TextEditing; recorded: boolean } | null = null;
+  box: Box | null = null;
 
   constructor(t: DocText = newDocument()) {
     this.layouter = new DocLayouter({ measure: docMeasure, drawingSize: (c, s) => figures.size(c, s) });
@@ -111,14 +126,14 @@ export class DocFile {
     };
     // tracked like the document's own text, and protected with it
     ed.track = this.ed.track;
-    this.guardBox(ed, (x) => { const cur = this.t.objects[id]; return cur?.kind === 'textbox' ? { ...cur, runs: x.runs, paras: storedParas(x.paras) } : null; }, id);
-    const box = { id, ed, recorded: false };
+    const made = (x: { runs: TextRun[]; paras: ParaStyle[] }): DocObject | null => { const cur = this.t.objects[id]; return cur?.kind === 'textbox' ? { ...cur, runs: x.runs, paras: storedParas(x.paras) } : null; };
+    this.guardBox(ed, made, id);
+    const box: Box = { id, ed, recorded: false, made, start: ed.t };
     ed.onChange = (kind) => {
       if (kind === 'text') {
         const cur = this.t.objects[id];
         if (cur?.kind === 'textbox') {
-          this.ed.update({ ...this.t, objects: { ...this.t.objects, [id]: { ...cur, runs: ed.t.runs, paras: storedParas(ed.t.paras) } } } as DocText, box.recorded ? null : 'Edit text box');
-          box.recorded = true;
+          this.record(box, { ...cur, runs: ed.t.runs, paras: storedParas(ed.t.paras) }, 'Edit text box');
         }
         ed.relayout();
       }
@@ -147,14 +162,14 @@ export class DocFile {
     };
     // tracked like the document's own text, and protected with it
     ed.track = this.ed.track;
-    this.guardBox(ed, (x) => { const cur = this.t.objects[id]; return cur?.kind === 'note' ? { ...cur, runs: x.runs, paras: storedParas(x.paras) } : null; }, id);
-    const box = { id, ed, recorded: false };
+    const made = (x: { runs: TextRun[]; paras: ParaStyle[] }): DocObject | null => { const cur = this.t.objects[id]; return cur?.kind === 'note' ? { ...cur, runs: x.runs, paras: storedParas(x.paras) } : null; };
+    this.guardBox(ed, made, id);
+    const box: Box = { id, ed, recorded: false, made, start: ed.t };
     ed.onChange = (kind) => {
       if (kind === 'text') {
         const cur = this.t.objects[id];
         if (cur?.kind === 'note') {
-          this.ed.update({ ...this.t, objects: { ...this.t.objects, [id]: { ...cur, runs: ed.t.runs, paras: storedParas(ed.t.paras) } } } as DocText, box.recorded ? null : cur.end ? 'Edit endnote' : 'Edit footnote');
-          box.recorded = true;
+          this.record(box, { ...cur, runs: ed.t.runs, paras: storedParas(ed.t.paras) }, cur.end ? 'Edit endnote' : 'Edit footnote');
         }
         ed.relayout();
       }
@@ -190,15 +205,15 @@ export class DocFile {
     };
     // tracked like the document's own text, and protected with it
     ed.track = this.ed.track;
-    this.guardBox(ed, (x) => { const cur = this.t.objects[id]; return cur?.kind === 'table' && cur.table.rows[r]?.[c] ? { ...cur, table: setPart(cur.table, { r, c }, { runs: x.runs, paras: storedParas(x.paras) }) } : null; }, id);
-    const box = { id, cell: { r, c }, ed, recorded: false };
+    const made = (x: { runs: TextRun[]; paras: ParaStyle[] }): DocObject | null => { const cur = this.t.objects[id]; return cur?.kind === 'table' && cur.table.rows[r]?.[c] ? { ...cur, table: setPart(cur.table, { r, c }, { runs: x.runs, paras: storedParas(x.paras) }) } : null; };
+    this.guardBox(ed, made, id);
+    const box: Box = { id, cell: { r, c }, ed, recorded: false, made, start: ed.t };
     ed.onChange = (kind) => {
       if (kind === 'text') {
         const cur = this.t.objects[id];
         if (cur?.kind === 'table' && cur.table.rows[r]?.[c]) {
           const table = setPart(cur.table, { r, c }, { runs: ed.t.runs, paras: storedParas(ed.t.paras) });
-          this.ed.update({ ...this.t, objects: { ...this.t.objects, [id]: { ...cur, table } } } as DocText, box.recorded ? null : 'Edit table');
-          box.recorded = true;
+          this.record(box, { ...cur, table }, 'Edit table');
         }
         ed.relayout();
       }
@@ -225,9 +240,29 @@ export class DocFile {
     ed.refused = () => this.onRefused();
   }
 
-  /** Stop typing into the text box. */
+  /** A change typed into a text box, note or cell goes back into the document: the session's first as a step of Undo, the rest added to it. */
+  private record(box: Box, o: DocObject, label: string): void {
+    const was = this.t;
+    this.ed.update({ ...this.t, objects: { ...this.t.objects, [box.id]: o } } as DocText, box.recorded ? null : label);
+    if (box.recorded || this.t === was) return;
+    box.recorded = true;
+    box.step = this.ed.lastStep;
+  }
+
+  /**
+   * Stop typing into the text box. When everything typed into it was undone there, its step of
+   * the document's Undo changes nothing and goes (Undo then takes back the step before), and
+   * Redo brings back what the box could still redo.
+   */
   endBox(): void {
+    const b = this.box;
     this.box = null;
+    if (!b?.recorded) return;
+    const id = b.id, runs = this.t.runs;
+    const ahead = b.ed.redoneText;
+    const o = ahead && b.made(ahead as { runs: TextRun[]; paras: ParaStyle[] });
+    // the box's text is the very text it started with: everything typed was undone
+    this.ed.dropStep(b.step, (before) => b.ed.t === b.start && (before as DocText).runs === runs, o ? { ...this.t, objects: { ...this.t.objects, [id]: o } } as DocText : undefined);
   }
 
   get t(): DocText {

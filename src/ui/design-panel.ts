@@ -286,7 +286,7 @@ export class DesignLibrary {
     this.body = document.createElement('div');
     this.body.className = 'dl-body';
     el.replaceChildren(head, this.body);
-    whenIconsLoaded(() => this.fillGroups());
+    whenIconsLoaded(() => { this.fillGroups(); this.build(); });
     this.showTab('shapes');
   }
 
@@ -301,7 +301,7 @@ export class DesignLibrary {
     this.search.placeholder = `Find ${what}`;
     this.search.setAttribute('aria-label', tab === 'icons' ? 'Find an icon' : 'Find a shape');
     this.groupPick.hidden = tab !== 'icons';
-    if (tab === 'icons' && !iconsLoaded()) void loadIcons().then(() => this.build(), () => this.build());
+    if (tab === 'icons' && !iconsLoaded()) void loadIcons().catch(() => this.build());
     this.build();
   }
 
@@ -384,7 +384,8 @@ export class DesignLibrary {
       }
       parts.push(h, grid);
     }
-    // the icons that match too, a click away
+    // the icons that match too, a click away (once the icon library is loaded)
+    if (words.length) void loadIcons().catch(() => {});
     const icons = words.length ? findIcons(words.join(' ')) : [];
     if (icons.length) parts.push(this.link(`${icons.length === 1 ? 'An icon matches' : `${icons.length.toLocaleString()} icons match`} too: show ${icons.length === 1 ? 'it' : 'them'}`, () => {
       this.iconGroup = '';

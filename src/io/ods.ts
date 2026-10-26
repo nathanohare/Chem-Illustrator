@@ -4,12 +4,12 @@
 // widths, row heights, and bold, italic, colours and alignment are read. Files are only read:
 // saving writes .xlsx.
 
-import { unzipSync, strFromU8 } from 'fflate';
+import { strFromU8 } from 'fflate';
 import { Workbook, CellStyle } from '../sheet/workbook';
 import { quoteSheet, Range, MAX_COLS, MAX_ROWS } from '../sheet/refs';
 import { normalizeFormula } from '../sheet/formula';
 import { dateSerial } from '../sheet/dates';
-import { kids, kid } from './ooxml';
+import { kids, kid, unzipPackage, ZipTooBigError } from './ooxml';
 import { textInput } from './xlsx';
 import { safeSheetName } from './sheet-files';
 
@@ -192,7 +192,7 @@ function rowsOf(table: Element): Element[] {
   const out: Element[] = [];
   for (const k of kids(table)) {
     if (k.localName === 'table-row') out.push(k);
-    else if (k.localName === 'table-header-rows' || k.localName === 'table-row-group' || k.localName === 'table-rows') out.push(...rowsOf(k));
+    else if (k.localName === 'table-header-rows' || k.localName === 'table-row-group' || k.localName === 'table-rows') for (const r of rowsOf(k)) out.push(r);
   }
   return out;
 }
@@ -201,7 +201,7 @@ function columnsOf(table: Element): Element[] {
   const out: Element[] = [];
   for (const k of kids(table)) {
     if (k.localName === 'table-column') out.push(k);
-    else if (k.localName === 'table-header-columns' || k.localName === 'table-column-group' || k.localName === 'table-columns') out.push(...columnsOf(k));
+    else if (k.localName === 'table-header-columns' || k.localName === 'table-column-group' || k.localName === 'table-columns') for (const c of columnsOf(k)) out.push(c);
   }
   return out;
 }
@@ -213,9 +213,9 @@ const oAttr = (el: Element, name: string) => el.getAttributeNS(OFFICE, name);
 export function readOds(bytes: Uint8Array): { book: Workbook; warnings: string[] } {
   let files: Record<string, Uint8Array>;
   try {
-    files = unzipSync(bytes);
-  } catch {
-    throw new Error('This is not an OpenDocument spreadsheet (or it is damaged).');
+    files = unzipPackage(bytes);
+  } catch (e) {
+    throw e instanceof ZipTooBigError ? e : new Error('This is not an OpenDocument spreadsheet (or it is damaged).');
   }
   if (files['META-INF/manifest.xml'] && /encryption-data/.test(strFromU8(files['META-INF/manifest.xml']))) {
     throw new Error('This spreadsheet is protected with a password. Open it in LibreOffice, take the password off, and save it again.');
@@ -228,11 +228,7 @@ export function readOds(bytes: Uint8Array): { book: Workbook; warnings: string[]
   const tables = kids(sheet, 'table');
   if (!tables.length) throw new Error('This spreadsheet has no sheets.');
   const names: string[] = [];
-  for (const [i, t] of tables.entries()) {
-    let n = safeSheetName(tAttr(t, 'name') || `Sheet${i + 1}`);
-    for (let k = 2; names.some((x) => x.toLowerCase() === n.toLowerCase()); k++) n = safeSheetName(`${tAttr(t, 'name')} (${k})`);
-    names.push(n);
-  }
+  for (const [i, t] of tables.entries()) names.push(safeSheetName(tAttr(t, 'name') || `Sheet${i + 1}`, names));
   const book = new Workbook(names);
   const warnings: string[] = [];
   let pictures = 0, hiddenSheets = 0;

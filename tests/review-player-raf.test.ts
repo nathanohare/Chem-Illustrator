@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('../src/deck/slide-view', () => ({
   paintSlide: () => ({ x: 0, y: 0, k: 1 }),
+  drawDrawing: () => undefined,
 }));
 
 import { Doc } from '../src/model';

@@ -15,9 +15,9 @@ import { fittedLength, labelsOf, lineStart, schemePrefs, spacing } from './schem
 
 export type ArrowSide = 'above' | 'below';
 
-/** The captions above and below an arrow, nearest the arrow first. */
-export function arrowTexts(doc: Doc, m: Measure, r: Arrow): Record<ArrowSide, Caption[]> {
-  const roles = rolesOf(r, schemeItems(doc, m), doc.style.bondLength);
+/** The captions above and below an arrow, nearest the arrow first (`items`: the drawing's scheme items, when already made). */
+export function arrowTexts(doc: Doc, m: Measure, r: Arrow, items = schemeItems(doc, m)): Record<ArrowSide, Caption[]> {
+  const roles = rolesOf(r, items, doc.style.bondLength);
   const f = arrowFrame(r);
   const pick = (refs: string[], sign: 1 | -1) => refs
     .filter((ref) => ref[0] === 'c')

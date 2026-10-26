@@ -116,6 +116,14 @@ export function rgbaToPng(rgba: Uint8Array, w: number, h: number): Uint8Array {
 
 type Bitmap = { kind: 'rgba'; w: number; h: number; rgba: Uint8Array } | { kind: 'file'; mime: string; bytes: Uint8Array };
 
+/** How many pixels a device-independent bitmap's header says it holds. */
+function dibPixels(bmi: Uint8Array): number {
+  if (bmi.length < 12) return 0;
+  const dv = new DataView(bmi.buffer, bmi.byteOffset, bmi.byteLength);
+  if (dv.getUint32(0, true) === 12) return dv.getUint16(4, true) * Math.abs(dv.getInt16(6, true));
+  return bmi.length < 16 ? 0 : Math.abs(dv.getInt32(4, true) * dv.getInt32(8, true));
+}
+
 /** A device-independent bitmap (header, colours, pixels) as RGBA pixels, top row first. */
 export function decodeDib(bmi: Uint8Array, bits: Uint8Array): Bitmap | null {
   if (bmi.length < 12) return null;
@@ -414,7 +422,9 @@ function readEmf(bytes: Uint8Array): EmfSvg | null {
 
   // ---- pictures
   const ROP = { SRCCOPY: 0xcc0020, SRCAND: 0x8800c6, SRCPAINT: 0xee0086, SRCINVERT: 0x660046, NOTSRCCOPY: 0x330008, PATCOPY: 0xf00021, BLACKNESS: 0x42, WHITENESS: 0xff0062 };
-  const bitmap = (off: number, bmiOff: number, bmiSize: number, bitsOff: number, bitsSize: number, rop: number,
+  // a bitmap is read only from its own record, and a picture decodes at most 50 million pixels in all
+  let pixels = 0;
+  const bitmap = (off: number, size: number, bmiOff: number, bmiSize: number, bitsOff: number, bitsSize: number, rop: number,
     dest: [number, number, number, number], src: [number, number, number, number]) => {
     const [dx, dy, dw, dh] = dest;
     if (!bmiSize) {
@@ -425,7 +435,9 @@ function readEmf(bytes: Uint8Array): EmfSvg | null {
       else if (rop === ROP.PATCOPY) fill(area);
       return;
     }
+    if (bmiOff + bmiSize > size || bitsOff + bitsSize > size) return;
     const bmi = bytes.subarray(off + bmiOff, off + bmiOff + bmiSize), bits = bytes.subarray(off + bitsOff, off + bitsOff + bitsSize);
+    if ((pixels += dibPixels(bmi)) > 50e6) return;
     const dib = decodeDib(bmi, bits);
     if (!dib) return;
     let href: string;
@@ -738,7 +750,8 @@ function readEmf(bytes: Uint8Array): EmfSvg | null {
         break;
       }
       case 93: case 94: { // CreateMonoBrush, CreateDIBPatternBrushPt: the pattern's average colour
-        const dib = decodeDib(bytes.subarray(o + u32(o + 16), o + u32(o + 16) + u32(o + 20)), bytes.subarray(o + u32(o + 24), o + u32(o + 24) + u32(o + 28)));
+        const inside = u32(o + 16) + u32(o + 20) <= size && u32(o + 24) + u32(o + 28) <= size;
+        const dib = inside ? decodeDib(bytes.subarray(o + u32(o + 16), o + u32(o + 16) + u32(o + 20)), bytes.subarray(o + u32(o + 24), o + u32(o + 24) + u32(o + 28))) : null;
         let color = '#808080';
         if (dib?.kind === 'rgba') {
           const sum = [0, 0, 0];
@@ -780,17 +793,17 @@ function readEmf(bytes: Uint8Array): EmfSvg | null {
         const rop = type === 114 ? ROP.SRCCOPY : u32(o + 40);
         const stretch = type !== 76;
         const src: [number, number, number, number] = [i32(o + 44), i32(o + 48), stretch ? i32(o + 100) : dest[2], stretch ? i32(o + 104) : dest[3]];
-        bitmap(o, u32(o + 84), u32(o + 88), u32(o + 92), u32(o + 96), rop, dest, src);
+        bitmap(o, size, u32(o + 84), u32(o + 88), u32(o + 92), u32(o + 96), rop, dest, src);
         break;
       }
       case 80: { // SetDIBitsToDevice
         const dest: [number, number, number, number] = [i32(o + 24), i32(o + 28), i32(o + 40), i32(o + 44)];
-        bitmap(o, u32(o + 48), u32(o + 52), u32(o + 56), u32(o + 60), ROP.SRCCOPY, dest, [i32(o + 32), i32(o + 36), i32(o + 40), i32(o + 44)]);
+        bitmap(o, size, u32(o + 48), u32(o + 52), u32(o + 56), u32(o + 60), ROP.SRCCOPY, dest, [i32(o + 32), i32(o + 36), i32(o + 40), i32(o + 44)]);
         break;
       }
       case 81: { // StretchDIBits
         const dest: [number, number, number, number] = [i32(o + 24), i32(o + 28), i32(o + 72), i32(o + 76)];
-        bitmap(o, u32(o + 48), u32(o + 52), u32(o + 56), u32(o + 60), u32(o + 68), dest, [i32(o + 32), i32(o + 36), i32(o + 40), i32(o + 44)]);
+        bitmap(o, size, u32(o + 48), u32(o + 52), u32(o + 56), u32(o + 60), u32(o + 68), dest, [i32(o + 32), i32(o + 36), i32(o + 40), i32(o + 44)]);
         break;
       }
       default: break; // comments (and the EMF+ inside them), palettes, colour management

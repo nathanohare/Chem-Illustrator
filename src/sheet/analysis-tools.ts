@@ -8,7 +8,7 @@
 // reading the input cells, again as Excel writes them.
 
 import type { CellStyle } from './workbook';
-import { ERR, Value, isError } from './values';
+import { ERR, Value, isError, maxOf, minOf } from './values';
 import { leastSquares, tTail, tInv, normCdf, normInv, fTail, fCdf, fInvTail } from './stats';
 
 /** A cell of a tool's results: a value, or a formula (moving averages and smoothing). */
@@ -51,7 +51,7 @@ class Out {
   }
   get height(): number { return this.cells.length; }
   done(): ToolOutput {
-    const w = Math.max(0, ...this.cells.map((r) => r.length));
+    const w = maxOf(this.cells.map((r) => r.length), 0);
     for (const r of this.cells) while (r.length < w) r.push(null);
     return { cells: this.cells, styles: this.styles };
   }
@@ -65,7 +65,7 @@ class Out {
  * as null so paired data stays paired.
  */
 export function groupsOf(block: Value[][], byRows: boolean, labels: boolean): Group[] | string {
-  const h = block.length, w = Math.max(0, ...block.map((r) => r.length));
+  const h = block.length, w = maxOf(block.map((r) => r.length), 0);
   const n = byRows ? h : w, len = byRows ? w : h;
   const out: Group[] = [];
   for (let g = 0; g < n; g++) {
@@ -200,7 +200,7 @@ export interface HistogramOptions {
  */
 export function autoBins(xs: number[]): number[] {
   if (!xs.length) return [];
-  const lo = Math.min(...xs), hi = Math.max(...xs);
+  const lo = minOf(xs), hi = maxOf(xs);
   const k = Math.max(1, Math.round(Math.sqrt(xs.length)));
   if (hi === lo) return [lo];
   const w = (hi - lo) / k;
@@ -584,7 +584,7 @@ export function zTest(a: Group, b: Group, var1: number, var2: number, hypDiff: n
 /** A lower-triangle matrix of every pair of groups: Pearson's r, or the population covariance (as the ToolPak gives). */
 export function matrix(groups: Group[], kind: 'correlation' | 'covariance'): ToolOutput | string {
   if (groups.length < 1) return 'Give the input range.';
-  const len = Math.max(...groups.map((g) => g.values.length));
+  const len = maxOf(groups.map((g) => g.values.length));
   // rows where every group has a number
   const keep = Array.from({ length: len }, (_, i) => i).filter((i) => groups.every((g) => g.values[i] !== null && g.values[i] !== undefined));
   if (keep.length < 2) return 'Each variable needs at least two numbers in matching rows.';
@@ -660,9 +660,17 @@ export function rankPercentile(groups: Group[]): ToolOutput | string {
     const n = pts.length;
     out.row(0, c, ['Point', g.label, 'Rank', 'Percent']);
     const sorted = [...pts].sort((p, q) => q.v - p.v || p.i - q.i);
+    // largest first, so equal values sit together: the rank is one more than the place of the first,
+    // and the count below is what comes after the last
+    let first = 0, end = 0;
     sorted.forEach((p, j) => {
-      const rank = 1 + pts.filter((q) => q.v > p.v).length;
-      const below = pts.filter((q) => q.v < p.v).length;
+      if (j >= end) {
+        first = j;
+        end = j + 1;
+        while (end < n && sorted[end].v === p.v) end++;
+      }
+      const rank = 1 + first;
+      const below = n - end;
       // PERCENTRANK.INC of the value in its own data, cut (not rounded) to three decimals
       const pr = n > 1 ? Math.floor((below / (n - 1)) * 1000 + 1e-9) / 1000 : 1;
       out.row(1 + j, c, [p.i + 1, p.v, rank, pr]);
@@ -697,6 +705,7 @@ export function sample(xs: number[], how: { periodic: number } | { random: numbe
   } else {
     const n = Math.trunc(how.random);
     if (n < 1) return 'The number of samples must be 1 or more.';
+    if (n > 1_000_000) return 'That is more than a million samples.';
     // with replacement, as the ToolPak samples
     for (let r = 0; r < n; r++) out.put(r, 0, xs[Math.floor(rnd() * xs.length)]);
   }
@@ -717,6 +726,8 @@ export function randomNumbers(dist: RandomDistribution, variables: number, count
   const out = new Out();
   if (dist.kind === 'patterned') {
     if (!(dist.step > 0) || dist.to < dist.from) return 'Give a range from a smaller to a larger number, and a step above 0.';
+    const steps = Math.floor((dist.to - dist.from) / dist.step + 1e-9) + 1;
+    if (nv * steps * Math.ceil(Math.max(1, dist.repeatEach)) * Math.ceil(Math.max(1, dist.repeatSeq)) > 1_000_000) return 'That is more than a million numbers.';
     const seq: number[] = [];
     for (let s = 0; s < Math.max(1, dist.repeatSeq); s++)
       for (let x = dist.from; x <= dist.to + 1e-9 * Math.abs(dist.step); x += dist.step)

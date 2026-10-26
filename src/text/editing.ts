@@ -670,6 +670,26 @@ export class TextEditing {
   undo(): void { this.restore(this.undoStack, this.redoStack); }
   redo(): void { this.restore(this.redoStack, this.undoStack); }
 
+  /** The last step of Undo, to know it again later (dropStep). */
+  get lastStep(): object | undefined { return this.undoStack[this.undoStack.length - 1]; }
+
+  /**
+   * Take back the last step of Undo when it is `step` and changed nothing after all (`same`: the
+   * text before it is like the text now), as if it had never been made. `redo`: a text for Redo
+   * to bring back instead. True when the step was taken back.
+   */
+  dropStep(step: object | undefined, same: (before: RichText) => boolean, redo?: RichText): boolean {
+    const s = this.undoStack[this.undoStack.length - 1];
+    if (!s || s !== step || !same(s.t)) return false;
+    this.undoStack.pop();
+    this.lastKind = { kind: '', time: 0, at: -1 };
+    if (redo) this.redoStack.push({ t: redo, anchor: this.anchor, focus: this.focus });
+    return true;
+  }
+
+  /** The furthest text Redo would bring back (before any of it is redone), if any. */
+  get redoneText(): RichText | undefined { return this.redoStack[0]?.t; }
+
   private restore(from: Snap[], to: Snap[]): void {
     const s = from.pop();
     if (!s) return;

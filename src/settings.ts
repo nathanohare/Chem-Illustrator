@@ -26,6 +26,7 @@ import { parseThemes, type SlideTemplate } from './deck/templates';
 import { parseRecent } from './text/symbols';
 import { DEFAULT_AI, parseAiPrefs, type AiPrefs } from './ai/link';
 import { clampUiScale } from './ui/ui-scale';
+import { wellFormed } from './io/xml';
 
 export interface Settings {
   /** Changes to ChemDraw's default keys. */
@@ -347,7 +348,7 @@ export function saveSettings(s: Settings, onError: (msg: string) => void = () =>
     pending = null;
     const text = settingsText(s);
     try {
-      if (isTauri()) await invoke('settings_write', { contents: text });
+      if (isTauri()) await invoke('settings_write', { contents: wellFormed(text) });
       else localStorage.setItem(STORAGE_KEY, text);
     } catch (e) {
       onError(`Settings were not saved: ${e}`);

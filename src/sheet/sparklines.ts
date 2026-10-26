@@ -6,6 +6,7 @@
 
 import type { Range } from './refs';
 import { parseRange, rangeName } from './refs';
+import { maxOf, minOf } from './values';
 
 export type SparkKind = 'line' | 'column' | 'winloss';
 
@@ -147,7 +148,7 @@ export function sparkShape(g: SparklineGroup, values: (number | null)[], w: numb
   const pad = 2;
   const innerW = Math.max(1, w - 2 * pad), innerH = Math.max(1, h - 2 * pad);
   const n = vals.length;
-  const hi = Math.max(...nums), lo = Math.min(...nums);
+  const hi = maxOf(nums), lo = minOf(nums);
   // a mark on each special point (the first of equal highs and lows)
   const firstAt = vals.findIndex((v) => v !== null);
   let lastAt = -1;

@@ -32,6 +32,11 @@ export async function downloadPack(progress: (share: number) => void): Promise<v
   }
 }
 
+/** Stop a download under way: downloadPack then fails with "Cancelled.". */
+export async function cancelPack(): Promise<void> {
+  await invoke('pack_cancel');
+}
+
 /** One structure read from a picture: the drawing's atoms and bonds, or SMILES (an AI model's answer). */
 export type ReadResult =
   | { kind: 'graph'; graph: ReadGraph; w: number; h: number; ms: number }

@@ -127,6 +127,28 @@ const tableLookup = (byRow: boolean): FnDef => ({
 export const LOOKUP_FUNCTIONS: Record<string, FnDef> = {
   VLOOKUP: tableLookup(false),
   HLOOKUP: tableLookup(true),
+  // LOOKUP(x, look in, [result]): the largest value at or below x in sorted data, and what is in the
+  // same place of the result row or column; without one, a block wider than tall is looked up in
+  // its first row and gives its last row, any other in its first column and gives its last column
+  LOOKUP: {
+    min: 2, max: 3,
+    fn: (args) => {
+      const x = scalar(args[0]);
+      if (isError(x)) return x;
+      const b = asBlock(args[1]);
+      const byRow = b.w > b.h;
+      const look: Vec | null = args.length > 2 ? vector(args[1]) : byRow
+        ? { n: b.w, held: Math.min(b.w, b.block[0]?.length ?? 0), get: (j) => at(b, 0, j) }
+        : { n: b.h, held: Math.min(b.h, b.block.length), get: (i) => at(b, i, 0) };
+      if (!look) return ERR.na('LOOKUP looks in one row or one column');
+      const i = sortedIndex(look, x, false);
+      if (i < 0) return ERR.na(`${typeof x === 'string' ? `"${x}"` : String(x)} was not found`);
+      if (args.length < 3) return byRow ? at(b, b.h - 1, i) : at(b, i, b.w - 1);
+      const res = vector(args[2]);
+      if (!res) return ERR.na('The result range of LOOKUP is one row or one column');
+      return i < res.n ? res.get(i) : ERR.na('The result range is shorter than the range looked in');
+    },
+  },
   // MATCH(x, row or column, [1 sorted ascending | 0 exact | −1 sorted descending]): the position found
   MATCH: {
     min: 2, max: 3,

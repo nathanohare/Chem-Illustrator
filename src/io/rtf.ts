@@ -204,7 +204,7 @@ class RtfReader {
     const on = n !== 0;
     // inside what isn't read, only what moves through the file counts (and an old-style list's kind)
     if (st.dest === 'skip') {
-      if (w === 'bin') this.i += n ?? 0;
+      if (w === 'bin') this.skipBin(n);
       else if (w === 'u') this.skipFallback(st.uc);
       else if (w === 'pnlvlblt') this.ps.list = 'bullet';
       else if (w === 'pnlvlbody' || w === 'pndec') this.ps.list ??= 'number';
@@ -304,11 +304,16 @@ class RtfReader {
       case 'pichgoal': if (this.pict) this.pict.goalH = (n ?? 0) / TWIP; return;
       case 'picscalex': if (this.pict) this.pict.scaleX = (n ?? 100) / 100; return;
       case 'picscaley': if (this.pict) this.pict.scaleY = (n ?? 100) / 100; return;
-      case 'bin': this.i += n ?? 0; return;
+      case 'bin': this.skipBin(n); return;
       default:
         if (SKIP.has(w)) { st.dest = 'skip'; return; }
         if (SYMBOLS[w] !== undefined) this.chars(SYMBOLS[w]);
     }
+  }
+
+  /** Skip \binN's N bytes; a count below 1 (damaged) skips nothing, and never past the end. */
+  private skipBin(n: number | null): void {
+    this.i = Math.min(this.src.length, this.i + Math.max(0, n ?? 0));
   }
 
   /** Skip the characters after a \uN that stand in for it in programs without Unicode. */
