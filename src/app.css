@@ -2687,3 +2687,6 @@ dialog.import-pick .ask-buttons .grow { flex: 1; }
 .import-mark.on::after { content: '✓'; position: absolute; top: -9px; right: -9px; width: 18px; height: 18px; line-height: 18px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; text-align: center; }
 .import-read-with { display: inline-flex; align-items: center; gap: 4px; }
 @media (max-width: 600px) { .import-row { grid-template-columns: auto 1fr 1fr; } .import-side { grid-column: 1 / -1; } }
+
+/* View > Focus View: the page gets the whole window */
+body.focus-view .ribbon, body.focus-view .dock, body.focus-view > aside, body.focus-view .toolbox.floating { display: none !important; }

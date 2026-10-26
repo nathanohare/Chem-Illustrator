@@ -172,6 +172,24 @@ export function parseGrid(raw: unknown, valid: (key: string) => boolean): Grid |
   return lines.length ? { ...g, lines } : g;
 }
 
+/**
+ * A grid in one column (View > Toolboxes > One Column Outside Drawing): its buttons in reading
+ * order, gaps left out, with the lines between groups kept where they fall.
+ */
+export function oneColumn(g: Grid): Grid {
+  if (g.cols <= 1) return g;
+  const cells: (string | null)[] = [];
+  const lines: number[] = [];
+  for (let r = 0; r < g.rows; r++) {
+    if (g.lines?.includes(r) && cells.length && !lines.includes(cells.length)) lines.push(cells.length);
+    for (let c = 0; c < g.cols; c++) { const k = g.cells[r * g.cols + c]; if (k) cells.push(k); }
+  }
+  if (!cells.length) return g;
+  const out: Grid = { cols: 1, rows: cells.length, cells };
+  const inside = lines.filter((l) => l > 0 && l < cells.length);
+  return inside.length ? { ...out, lines: inside } : out;
+}
+
 // ------------------------------------------------------------------ the grid on screen
 
 /** Where a grid shows: how it is turned, and the cells' places before any wrapping. */

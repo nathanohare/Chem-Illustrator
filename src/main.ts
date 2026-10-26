@@ -13,7 +13,7 @@ import type { MethylStyle } from './chem/hydrogens';
 import { STANDARD_COLOURS, usedColours } from './colours';
 import { ICONS } from './icons';
 import { Toolboxes, lockIcon, sideFolded, commandButton, defaultToolboxes, menuCommands, boxIds, boxGrid, boxTitle, flyGrid, isEditable, withoutGoneItems, isOwnBox, overflowOf, type Pickable, type ToolboxDef, type ToolboxState } from './ui/toolboxes';
-import { gridItems, inBlock, shownGrid, wrapped, type Grid, type Shown } from './ui/toolbox-grid';
+import { gridItems, inBlock, oneColumn, shownGrid, wrapped, type Grid, type Shown } from './ui/toolbox-grid';
 import { ToolboxEditor } from './ui/toolbox-editor';
 import { RibbonEditor } from './ui/ribbon-editor';
 import { readRibbons, applyRibbon, type RibbonInfo, type RibbonsPrefs } from './ui/ribbon-custom';
@@ -157,8 +157,8 @@ import { UpdateUI } from './ui/update-ui';
 import { canUpdate, appVersion, portableInfo, STAGE, STAGE_NOTE, UPDATE_CHANNELS, type UpdateChannel } from './updates';
 import { computerName } from './feedback';
 import { guideSpot } from './ui/guide-spot';
-import type { GuideWindow } from './ui/guide-window';
-import { SettingsWindow } from './ui/settings-window';
+import type { GuideWindow, GuideHeading } from './ui/guide-window';
+import { SettingsWindow, type SettingsPage } from './ui/settings-window';
 import { fileTypesPage, FILE_TYPES } from './ui/file-types-page';
 import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed } from './ui/ribbon-fit';
 import { placeTitleBar, titleBarPlace } from './ui/title-bar';
@@ -1237,6 +1237,14 @@ function addNamed(got: { mb: string; attach: number[] }, x: number, y: number, t
 
 /** Slides: structures locked so clicks reach the text near them. */
 let structuresLocked = false;
+/** View > Focus View is on. */
+let focusView = false;
+/** View > Toolboxes > One Column Outside Drawing is on; and whether the toolboxes on screen were built that way. */
+let oneColumnTools = false;
+let toolsInOneColumn = false;
+/** The toolboxes have been built once (the toolbox code is set up). */
+let toolboxesBuilt = false;
+const wantOneColumn = () => oneColumnTools && ws.active.mode !== 'drawing';
 
 function toggleStructureLock(): void {
   structuresLocked = !structuresLocked;
@@ -2122,6 +2130,7 @@ function enterTab(tab: Tab, opened: boolean): void {
   document.body.classList.toggle('sheet-mode', sheet);
   document.body.classList.toggle('doc-mode', words);
   placeSidePanel();
+  if (toolboxesBuilt && wantOneColumn() !== toolsInOneColumn) toolboxes.render();
   tickToolboxes();
   applyModeColours(tab.mode, modeColours);
   for (const el of document.querySelectorAll<HTMLElement>('.slides-only')) el.hidden = !slides;
@@ -4607,7 +4616,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -5101,6 +5110,8 @@ const COMMANDS: Record<string, () => unknown> = {
   'theme-system': () => { setAppTheme('system'); storeSettings(); },
   'theme-light': () => { setAppTheme('light'); storeSettings(); },
   'theme-dark': () => { setAppTheme('dark'); storeSettings(); },
+  'focus-view': () => setFocusView(!focusView),
+  'one-column-tools': () => { setOneColumnTools(!oneColumnTools); storeSettings(); },
   'text-bar-floating': () => { placeTextBar('floating'); storeSettings(); },
   'text-bar-hidden': () => { placeTextBar('hidden'); storeSettings(); },
   'group-tips': () => { showGroupTips(!labelTips.enabled); storeSettings(); },
@@ -6410,6 +6421,7 @@ function currentSettings(): Settings {
     uiScale: uiScale(),
     textBar: CaptionEditor.barPlace,
     appTheme,
+    oneColumnTools,
     page: defaultPage,
     welcomed,
     groupTips: labelTips.enabled,
@@ -6630,6 +6642,7 @@ function applySettings(s: Settings): void {
   if (!doc.page && !doc.source && !doc.atoms.size && !deckNow()) doc.page = defaultPage && { ...defaultPage };
   placeTextBar(s.textBar);
   setAppTheme(s.appTheme);
+  setOneColumnTools(s.oneColumnTools);
   showGroupTips(s.groupTips);
   setTouchMode(s.touchMode);
   editor.options.penSketch = s.penSketch;
@@ -8108,8 +8121,11 @@ const SHOWN = new WeakMap<HTMLElement, { s: Shown; wrap: boolean; across: boolea
  * highlight looks, each in its cell of the toolbox's grid (empty cells kept, so groups stay apart).
  */
 function buildBox(body: HTMLElement, id: string, vertical: boolean): void {
-  const g = boxGrid(toolboxState, id, BOX_ITEMS[id]);
   const dock = toolboxState.places[id]?.dock ?? 'float';
+  toolsInOneColumn = wantOneColumn();
+  toolboxesBuilt = true;
+  const whole = boxGrid(toolboxState, id, BOX_ITEMS[id]);
+  const g = toolsInOneColumn && (dock === 'left' || dock === 'right') ? oneColumn(whole) : whole;
   const s = shownGrid(g, dock);
   const cells = document.createElement('div');
   cells.className = 'tb-cells';
@@ -8132,7 +8148,8 @@ function buildBox(body: HTMLElement, id: string, vertical: boolean): void {
       cells.append(b);
     });
   };
-  const wrap = overflowOf(toolboxState, id) === 'wrap';
+  // one column scrolls rather than wrapping back into more columns
+  const wrap = overflowOf(toolboxState, id) === 'wrap' && g === whole;
   SHOWN.set(cells, { s, wrap, across: dock === 'top' || dock === 'bottom' });
   if (id === 'main') { toolbar.fill((root) => { fillCells(); root.append(cells); }); body.append(toolsNav); }
   else { fillCells(); body.append(cells); }
@@ -8561,8 +8578,21 @@ function commandItems(): CommandItem[] {
     const { name, folder } = recentLabel(p);
     out.push({ id: `recent:${p}`, label: `Open ${name}`, place: folder, more: 'recent file', run: () => void openRecent(p) });
   }
+  for (const p of SETTINGS_PAGES) out.push({ id: `set:${p.id}`, label: `${p.title} settings`, place: 'Settings', more: p.words, run: () => settingsWindow.open(p.id) });
+  // the User Guide's sections, once its pages have loaded (the first search starts that)
+  if (guideIndex) {
+    for (const h of guideIndex) {
+      out.push({ id: `guide:${h.page}#${h.anchor}`, label: h.title, place: h.anchor ? `User Guide ▸ ${h.pageTitle}` : 'User Guide', more: 'help how to guide',
+        run: () => void guide.open(h.page, h.anchor) });
+    }
+  } else if (!guideIndexLoading) {
+    guideIndexLoading = true;
+    void import('./ui/guide-window').then((m) => m.guideHeadings()).then((h) => { guideIndex = h; commandSearch.refresh(); }, () => { guideIndexLoading = false; });
+  }
   return uniqueCommands(out);
 }
+let guideIndex: GuideHeading[] | null = null;
+let guideIndexLoading = false;
 const commandSearch = new CommandSearch(commandItems);
 // the User Guide (and the Markdown reader it uses) loads the first time it opens
 let guideWindow: GuideWindow | null = null;
@@ -8573,7 +8603,7 @@ const guide = {
   },
 };
 watchRibbons(() => storeSettings());
-const settingsWindow = new SettingsWindow([
+const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name', open: generalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute', open: drawingPreferences },
   { id: 'style', title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin', open: drawingStyleDialog },
@@ -8589,7 +8619,8 @@ const settingsWindow = new SettingsWindow([
   { id: 'online', title: 'Online', words: 'pubchem internet names lookup updates check version privacy stable latest channel beta', open: onlinePreferences },
   { id: 'transfer', title: 'Import and Export', words: 'backup back up copy move settings file new computer install reinstall export import toolboxes hotkeys', open: settingsTransfer },
   { id: 'files', title: 'File Types', words: 'open with default app explorer finder associations cdxml cdx mol sdf docx pptx xlsx double-click', open: () => fileTypesPage(fileTypesHost) },
-]);
+];
+const settingsWindow = new SettingsWindow(SETTINGS_PAGES);
 $('#btn-search').addEventListener('click', () => commandSearch.open());
 placeSidePanel();
 // your palettes show in the Colours toolbox as soon as they change
@@ -8804,6 +8835,22 @@ function setAppTheme(t: Settings['appTheme']): void {
   if (t === 'system') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = t;
   for (const w of ['system', 'light', 'dark']) $(`[data-cmd="theme-${w}"]`)?.setAttribute('aria-checked', String(w === t));
+}
+
+/** View > Focus View (Ctrl+Shift+F1): the toolboxes, side panel and ribbon hidden, the page given the whole window. */
+function setFocusView(on: boolean): void {
+  focusView = on;
+  document.body.classList.toggle('focus-view', on);
+  $('[data-cmd="focus-view"]')?.setAttribute('aria-checked', String(on));
+  dispatchEvent(new Event('resize'));
+  if (on) flash(`Focus view: toolboxes, side panel and ribbon hidden. ${commandKey('focus-view') || 'View > Focus View'} brings them back.`, 6000);
+}
+
+/** View > Toolboxes > One Column Outside Drawing: side-docked toolboxes in one column in the other kinds of tab. */
+function setOneColumnTools(on: boolean): void {
+  oneColumnTools = on;
+  $('[data-cmd="one-column-tools"]')?.setAttribute('aria-checked', String(on));
+  if (toolboxesBuilt && wantOneColumn() !== toolsInOneColumn) toolboxes.render();
 }
 
 function showScrollBars(on: boolean): void {

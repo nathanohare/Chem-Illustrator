@@ -15,6 +15,34 @@ const ROOT = '../../docs/';
 const ORDER = ['README.md', 'guide/getting-started.md', 'guide/keyboard-and-mouse.md', 'guide/drawing.md', 'guide/slides.md', 'guide/sheets.md',
   'guide/documents.md', 'guide/design.md', 'guide/files-and-sharing.md', 'guide/troubleshooting.md', 'guide/feedback.md', 'developers.md'];
 
+/** A section of the guide, for Search Commands. */
+export interface GuideHeading { page: string; anchor: string; title: string; pageTitle: string }
+
+/** The headings of a page's Markdown (the page's own title first), leaving out code blocks. */
+export function headingsOf(page: string, md: string): GuideHeading[] {
+  const out: GuideHeading[] = [];
+  let fence = false, pageTitle = '';
+  for (const line of md.split('\n')) {
+    if (/^\s*```/.test(line)) { fence = !fence; continue; }
+    const m = !fence && /^(#{1,3})\s+(.+?)\s*#*\s*$/.exec(line);
+    if (!m) continue;
+    const title = m[2].replace(/\*\*|`|\[([^\]]*)\]\([^)]*\)/g, '$1').trim();
+    if (m[1].length === 1 && !pageTitle) { pageTitle = title; out.push({ page, anchor: '', title, pageTitle }); continue; }
+    out.push({ page, anchor: slug(title), title, pageTitle: pageTitle || page });
+  }
+  return out;
+}
+
+/** Every section of the guide's pages, in the contents' order. */
+export async function guideHeadings(): Promise<GuideHeading[]> {
+  const out: GuideHeading[] = [];
+  for (const page of ORDER) {
+    const load = PAGES[ROOT + page];
+    if (load) out.push(...headingsOf(page, await load()));
+  }
+  return out;
+}
+
 /** A heading's anchor, made the way GitHub makes them, so links such as design.md#icons work in both places. */
 export function slug(text: string): string {
   return text.trim().toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/\s/g, '-');
