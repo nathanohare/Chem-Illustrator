@@ -138,7 +138,8 @@ import { selectedGroup } from './chem/group-smiles';
 import { templateIcon } from './ui/template-icons';
 import { StructureChecks } from './chem/warnings';
 import { idText, labelClashes, parseIdStart, type IdStyle } from './chem/compound-numbers';
-import { schemeItems, isReactionArrow } from './chem/reaction';
+import { schemeItems, isReactionArrow, reactionSteps, itemFinder } from './chem/reaction';
+import { stoichiometryBook, type StoichRow, type StoichRole } from './chem/stoichiometry';
 import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
 import { plainText, savableChar } from './richtext';
 import { htmlToRich } from './text/html';
@@ -1273,6 +1274,62 @@ function toggleStructureLock(): void {
     editor.changed();
   }
   flash(structuresLocked ? 'Structures locked: clicks go to text and pictures. Click Lock Structures again to edit structures.' : 'Structures can be clicked again.');
+}
+
+/**
+ * Chemistry > Reactions and Schemes > Stoichiometry Table: the amounts for a reaction step, in a
+ * new sheet. The step is the selected arrow's, or the only one in the drawing.
+ */
+async function stoichiometryTable(): Promise<void> {
+  if (!chem.ready) { flash('The chemistry engine is still loading. Try again in a moment.'); return; }
+  const m = editor.measure();
+  const items = schemeItems(doc, m);
+  const steps = reactionSteps(doc, items);
+  const picked = steps.filter((s) => editor.sel.arrows.has(s.arrow.id));
+  const step = picked[0] ?? (steps.length === 1 ? steps[0] : null);
+  if (!step) {
+    flash(steps.length ? 'Select the arrow of the step to make the table for.' : 'No reaction step found: draw the starting materials, an arrow and the products.', 6000);
+    return;
+  }
+  const find = itemFinder(items);
+  const wanted: { role: StoichRole; ref: string }[] = [
+    ...step.roles.reactants.map((ref) => ({ role: 'Starting material' as const, ref })),
+    ...[...step.roles.above, ...step.roles.below].map((ref) => ({ role: 'Reagent' as const, ref })),
+    ...step.roles.products.map((ref) => ({ role: 'Product' as const, ref })),
+  ];
+  const rows: StoichRow[] = [];
+  const mols: { molblock: string; map: number[] }[] = [];
+  const at: number[] = [];
+  for (const w of wanted) {
+    const it = find(w.ref);
+    if (!it || it.plus) continue;
+    const cap = it.caption !== undefined ? doc.captions.get(it.caption) : undefined;
+    const species = cap ? placeSpecies(doc, [cap], m) : [];
+    if (!it.atoms.length && !species.length) {
+      // text that isn't a compound (a solvent and temperature, a yield): kept as the conditions
+      if (cap) rows.push({ role: 'Conditions', name: plainText(cap.runs).trim() });
+      continue;
+    }
+    const ex = toMolfile(doc, new Set(it.atoms), '', { species });
+    at.push(rows.length);
+    mols.push({ molblock: ex.molblock, map: ex.map });
+    rows.push({ role: w.role, name: cap ? plainText(cap.runs).trim() : '' });
+  }
+  const res = await chem.analyze(mols).catch(() => null);
+  at.forEach((r, i) => {
+    const got = res?.results[i];
+    if (!got || got.error) return;
+    rows[r].formula = got.formula;
+    rows[r].mw = got.mw;
+    if (!rows[r].name) rows[r].name = got.formula;
+  });
+  // starting materials, then reagents, then the conditions, then products
+  const order: StoichRole[] = ['Starting material', 'Reagent', 'Conditions', 'Product'];
+  rows.sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role));
+  if (!rows.some((r) => r.mw)) { flash('None of this step could be read as a compound.', 6000); return; }
+  finishTyping();
+  ws.newSheet(stoichiometryBook(rows));
+  flash('Stoichiometry table: type the equivalents, the millimoles of the first starting material and any densities; the rest follows.', 8000);
 }
 
 /** How Number Compounds counted last time (offered again). */
@@ -5284,6 +5341,7 @@ const COMMANDS: Record<string, () => unknown> = {
   },
   'clean-up-reaction': () => editor.cleanUpReaction() || flash('No reaction to tidy: draw starting materials, an arrow and products (the arrow pointing from one to the other), or the scheme is already tidy.', 6000),
   'arrange-scheme': () => arrangeDialog.open(),
+  'stoichiometry-table': () => void stoichiometryTable(),
   'catalytic-cycle': () => void insertCycle(),
   'ts-brackets': () => { if (!editor.tsBrackets()) flash('Select the transition state first (draw it with partial bonds: P over a bond).'); },
   'energy-diagram': () => void energyDiagram(null),
