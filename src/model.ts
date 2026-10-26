@@ -1239,6 +1239,9 @@ export class Doc {
 
   // ---------------------------------------------------------------- transactions
 
+  /** Whether a step is being made (between `begin` and `commit`, such as during a drag). */
+  get editing(): boolean { return this.tx !== null; }
+
   begin(label: string): void {
     if (this.tx) return; // nested: fold into the outer transaction
     this.tx = { label, before: new Map(), after: new Map() };
