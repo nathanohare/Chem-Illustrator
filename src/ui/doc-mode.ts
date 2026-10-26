@@ -154,6 +154,8 @@ export interface DocPaste {
   text?: string;
 }
 
+/** Two clicks this close together are a double-click (Windows' own setting is 500 ms out of the box). */
+const DOUBLE_CLICK_MS = 500;
 const SELECTION_SQUIGGLE = '#e0302f';
 const FORMATTING = '#2f6fdf';
 /** Words ignored with "Ignore" while the program is open (lower case). */
@@ -2385,7 +2387,17 @@ export class DocumentMode {
       if (id !== null && f.t.objects[id]?.kind === 'toa') { e.preventDefault(); void this.indexes.toaOptions(id); return; }
       if (id !== null && f.t.objects[id]?.kind === 'math') { e.preventDefault(); void this.editEquation(id); return; }
       if (f.box?.cell && id !== null && id !== f.box.id && f.t.objects[id]?.kind === 'drawing') { e.preventDefault(); this.editFigure(id); return; }
-      if (f.box) { e.preventDefault(); return; }
+      // a word: the system's double-click (its own speed and distance) picks it when the clicks counted were too slow
+      const word = (ed: TextEditing, o: number) => {
+        if (!ed.collapsed) return;
+        ed.selectWord(o);
+        this.clicks.n = 2;
+      };
+      if (f.box) {
+        e.preventDefault();
+        if (id === null || id === f.box.id) { const p = this.view.toDoc(e.clientX, e.clientY); word(f.box.ed, offsetAt(f.box.ed.layout(), p.x, p.y)); }
+        return;
+      }
       if (id !== null && f.t.objects[id]?.kind === 'textbox') { e.preventDefault(); this.startBox(id, this.view.toDoc(e.clientX, e.clientY)); return; }
       if (id !== null) { e.preventDefault(); this.editFigure(id); return; }
       // a citation: change what it cites
@@ -2412,6 +2424,7 @@ export class DocumentMode {
           return;
         }
       }
+      word(f.ed, o);
     });
     s.addEventListener('contextmenu', (e) => {
       if (!this.file) return;
@@ -2470,7 +2483,7 @@ export class DocumentMode {
     }
     const now0 = performance.now();
     const c0 = this.clicks;
-    const n = now0 - c0.time < 450 && Math.hypot(e.clientX - c0.at.x, e.clientY - c0.at.y) < 4 ? c0.n + 1 : 1;
+    const n = now0 - c0.time < DOUBLE_CLICK_MS && Math.hypot(e.clientX - c0.at.x, e.clientY - c0.at.y) < 4 ? c0.n + 1 : 1;
     // Outline: a heading's mark picks it with everything under it; a double-click folds or unfolds it
     const mark = this.view.markAt(e.clientX, e.clientY);
     if (mark !== null) {
@@ -2576,7 +2589,7 @@ export class DocumentMode {
     }
     const now = performance.now();
     const c = this.clicks;
-    c.n = now - c.time < 450 && Math.hypot(e.clientX - c.at.x, e.clientY - c.at.y) < 4 ? c.n + 1 : 1;
+    c.n = now - c.time < DOUBLE_CLICK_MS && Math.hypot(e.clientX - c.at.x, e.clientY - c.at.y) < 4 ? c.n + 1 : 1;
     c.time = now;
     c.at = { x: e.clientX, y: e.clientY };
     const o = offsetAt(f.layout().text, p.x, p.y);
