@@ -2,15 +2,13 @@ name: iPad app
 
 # The iPad app: the same web page as the desktop app, in Tauri's iOS shell.
 #
-# On a pull request that changes the shell (src-tauri) this only checks that the shell builds
-# for iOS and that the Xcode project can be made. On a merge into main, or on request (Actions >
-# iPad app > Run workflow), it also builds the signed app and sends it to TestFlight, once the
-# Apple secrets are set (docs/apple-signing.md). Without them the signed steps are skipped.
+# Runs only on a merge into main, or on request (Actions > iPad app > Run workflow), so pull
+# requests into staging aren't held up waiting for a Mac. It checks the shell builds for iOS,
+# makes the Xcode project, then builds the signed app and sends it to TestFlight once the Apple
+# secrets are set (docs/apple-signing.md). Without them the signed steps are skipped.
 on:
   push:
     branches: [main]
-  pull_request:
-    paths: ['src-tauri/**', '.github/workflows/ios.yml']
   workflow_dispatch:
 
 # the token only reads the code (none of these steps writes to the repository)
