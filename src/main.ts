@@ -562,9 +562,9 @@ installTouchUi({
 $('#btn-undo').addEventListener('click', () => undo());
 $('#btn-redo').addEventListener('click', () => redo());
 $('#btn-fit').addEventListener('click', () => command('zoom-fit'));
-$('#btn-stress').addEventListener('click', () => stressTest(Number($<HTMLSelectElement>('#stress-n').value)));
-$('#btn-dev-off').addEventListener('click', () => command('dev-tools'));
 $('#btn-dark').addEventListener('click', () => command('dark-page'));
+/** Developer > Stress Test: how many drug-sized molecules it can draw. */
+const STRESS_SIZES = [100, 500, 2000, 5000];
 $('#help-hotkeys').addEventListener('click', () => { $<HTMLDialogElement>('#help').close(); hotkeysDialog.open(); });
 $('#help-close').addEventListener('click', () => $<HTMLDialogElement>('#help').close());
 /** View > Show R/S Preview: every R/S and E/Z label in red, on screen only. */
@@ -4585,7 +4585,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -5270,6 +5270,8 @@ const COMMANDS: Record<string, () => unknown> = {
   },
 };
 for (const p of PICTURE_STYLES) COMMANDS[`picture-style-${p.id}`] = () => setPictureStyle(p.look);
+// Developer > Stress Test (shown with View > Developer Tools)
+for (const n of STRESS_SIZES) COMMANDS[`stress-${n}`] = () => { void stressTest(n); };
 for (const [i, a] of ANIM_COMMANDS.entries()) {
   const e = EFFECTS[i % EFFECTS.length].id, exit = i >= EFFECTS.length;
   COMMANDS[a.cmd] = () => { if (ws.active.mode !== 'slides') return false; animUi?.applyEffect(e, exit); return true; };
@@ -5284,6 +5286,8 @@ const menus = [...document.querySelectorAll<HTMLDivElement>('header > .menu-wrap
   list: w.querySelector<HTMLDivElement>(':scope > .menu')!,
 }));
 type Menu = (typeof menus)[number];
+/** The menus on the bar now (Developer only while Developer Tools are on). */
+const shownMenus = () => menus.filter((m) => !(m.btn.parentElement as HTMLElement).hidden);
 let openMenu: Menu | null = null;
 /** The items arrow keys move through in one menu or submenu: not hidden, not greyed out. */
 const menuItems = (list: HTMLElement) =>
@@ -5369,7 +5373,8 @@ for (const m of menus) {
     const items = menuItems(here);
     const now = document.activeElement as HTMLButtonElement;
     const i = items.indexOf(now);
-    const j = menus.indexOf(m);
+    const bar = shownMenus();
+    const j = bar.indexOf(m);
     const parentItem = here === m.list ? null : here.parentElement!.querySelector<HTMLButtonElement>(':scope > button');
     if (e.key === 'Escape') {
       e.stopPropagation();
@@ -5386,7 +5391,7 @@ for (const m of menus) {
     }
     else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();
-      showMenu(menus[(j + (e.key === 'ArrowRight' ? 1 : -1) + menus.length) % menus.length]);
+      showMenu(bar[(j + (e.key === 'ArrowRight' ? 1 : -1) + bar.length) % bar.length]);
     }
   });
 }
@@ -5402,13 +5407,14 @@ for (const m of menus) {
   const letter = m.btn.getAttribute('aria-keyshortcuts')?.match(/^Alt\+(\w)$/)?.[1];
   if (letter) MNEMONICS.set(letter.toUpperCase(), m);
   m.btn.addEventListener('keydown', (e) => {
-    const j = menus.indexOf(m);
-    const go = (k: number) => { e.preventDefault(); const n = menus[(k + menus.length) % menus.length]; if (openMenu) showMenu(n); else n.btn.focus(); };
+    const bar = shownMenus();
+    const j = bar.indexOf(m);
+    const go = (k: number) => { e.preventDefault(); const n = bar[(k + bar.length) % bar.length]; if (openMenu) showMenu(n); else n.btn.focus(); };
     if (e.key === 'ArrowRight') go(j + 1);
     else if (e.key === 'ArrowLeft') go(j - 1);
     else if (e.key === 'ArrowDown') { e.preventDefault(); showMenu(m); }
     else if (e.key === 'Home') go(0);
-    else if (e.key === 'End') go(menus.length - 1);
+    else if (e.key === 'End') go(bar.length - 1);
     else if (e.key === 'Escape' && !openMenu) { e.preventDefault(); leaveMenuBar(); }
   });
 }
