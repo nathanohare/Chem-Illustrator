@@ -173,10 +173,19 @@ export function excelFunctionNames(f: string): string {
 
 const KNOWN = new Set(FUNCTION_NAMES);
 
-/** Does a formula from Excel use something this program can't work out (a newer function it lacks, or a table reference)? */
-function usesUnknownFunction(text: string): boolean {
-  if (/\[/.test(text.replace(/"(?:[^"]|"")*"/g, ''))) return true;
-  for (const m of text.matchAll(/_xlfn\.(?:_xlws\.)?([A-Za-z0-9.]+)\(/g)) if (!KNOWN.has(m[1].toUpperCase())) return true;
+/**
+ * Does a formula from Excel use something this program can't work out (a function it lacks, old
+ * or newer, or a table reference)? `names` are the workbook's defined names (a LAMBDA one is called like a function).
+ */
+function usesUnknownFunction(text: string, names: ReadonlySet<string>): boolean {
+  const bare = text.replace(/"(?:[^"]|"")*"/g, '""');
+  if (/\[/.test(bare)) return true;
+  for (const m of bare.matchAll(/_xlfn\.(?:_xlws\.)?([A-Za-z0-9.]+)\(/g)) if (!KNOWN.has(m[1].toUpperCase())) return true;
+  // other names before a bracket, leaving out quoted sheet names and _xlfn./_xlpm. ones
+  for (const m of bare.replace(/'(?:[^']|'')*'/g, "''").matchAll(/(?<![A-Za-z0-9_.])([A-Za-z][A-Za-z0-9_.]*)\(/g)) {
+    const up = m[1].toUpperCase();
+    if (!KNOWN.has(up) && !names.has(up)) return true;
+  }
   return false;
 }
 
@@ -1025,6 +1034,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const activeTab = Number(kid(root, 'bookViews', 'workbookView')?.getAttribute('activeTab') ?? 0);
   if (sheetEls.some((s) => s.getAttribute('state') === 'hidden' || s.getAttribute('state') === 'veryHidden')) notKept.add('hidden sheets (shown here)');
   const definedNames = kids(kid(root, 'definedNames'), 'definedName');
+  const nameSet = new Set(definedNames.map((d) => (d.getAttribute('name') ?? '').toUpperCase()));
 
   // our own part, if this file was saved here (found by name: programs that keep it don't all keep its link)
   let model: Model | null = null;
@@ -1166,7 +1176,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
               }
             }
             if (text) {
-              if (usesUnknownFunction(text)) unknownFormulas++;
+              if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
               const isArray = f.getAttribute('t') === 'array';
               // a formula from before arrays spilled keeps working out one value (Excel shows it with @)
               input = normalizeFormula(isArray ? readFileFormula(text) : legacyFormula(readFileFormula(text)));
@@ -1394,7 +1404,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       const local = d.getAttribute('localSheetId');
       const sheet = local !== null ? book.sheets[Number(local)] : undefined;
       if (local !== null && !sheet) continue;
-      if (usesUnknownFunction(text)) unknownFormulas++;
+      if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
       names.push({
         name, formula: normalizeFormula(readFileFormula(text)),
         ...(sheet ? { sheet } : {}),
@@ -1420,7 +1430,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   book.active = Math.min(Math.max(0, activeTab), book.sheets.length - 1);
 
   if (foreignPictures) notKept.add(`${foreignPictures} picture${foreignPictures > 1 ? 's' : ''} or chart${foreignPictures > 1 ? 's' : ''}`);
-  if (unknownFormulas) warnings.push(`${unknownFormulas} formula${unknownFormulas > 1 ? 's use' : ' uses'} newer Excel functions this program can't work out yet.`);
+  if (unknownFormulas) warnings.push(`${unknownFormulas} formula${unknownFormulas > 1 ? 's use' : ' uses'} Excel functions this program can't work out yet.`);
   if (restored.changed) warnings.push(`${restored.changed} structure or calculated cell${restored.changed > 1 ? 's were' : ' was'} changed in another program: ${restored.changed > 1 ? 'they show' : 'it shows'} what that program saved.`);
   if (notKept.size) warnings.push(`Not shown here, and left out if you save over this file: ${[...notKept].join(', ')}.`);
   return { book, warnings };

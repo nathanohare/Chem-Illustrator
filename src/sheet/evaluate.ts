@@ -5,8 +5,8 @@
 
 import { tokenize, type Node, type RefToken } from './formula';
 import { MAX_COLS, MAX_ROWS, cellName, type Range } from './refs';
-import { CellError, ERR, Value, compareValues, isError, toBool, toNumber, toText } from './values';
-import { Arg, Block, FnDef, Fn, LambdaValue, array, at, isBlock, isMulti, lift, numbers, rowsOf, scalar } from './args';
+import { CellError, ERR, Value, compareValues, isError, sigFigs15, toBool, toNumber, toText } from './values';
+import { Arg, Block, FnDef, Fn, LambdaValue, array, at, firstError, isBlock, isMulti, lift, numArg, numbers, optNumber, rowsOf, scalar } from './args';
 import { ARRAY_FUNCTIONS } from './fn-array';
 import { DATE_FUNCTIONS, DATE_LIFTED } from './fn-date';
 import { CRITERIA_FUNCTIONS } from './fn-criteria';
@@ -224,6 +224,18 @@ const num1 = (f: (x: number) => Value): Fn => (args) => {
   return isError(x) ? x : f(x);
 };
 
+/** CEILING and FLOOR: a number taken to a multiple of the significance (0.3 to a multiple of 0.1 is 0.3, not 0.30000000000000004). */
+const toMultiple = (round: (q: number) => number): Fn => (args) => {
+  const x = numArg(args, 0), s = numArg(args, 1);
+  if (isError(x)) return x;
+  if (isError(s)) return s;
+  if (x === 0 || (s === 0 && round === Math.ceil)) return 0;
+  if (s === 0) return ERR.div0('The significance is 0');
+  if (x > 0 && s < 0) return ERR.num('A positive number needs a positive significance');
+  const q = sigFigs15(x / s);
+  return sigFigs15(round(q) * s);
+};
+
 /** Round half away from zero to `digits` places, without binary fractions getting in the way (2.675 → 2.68, as Excel gives). */
 export function roundTo(x: number, digits: number, mode: 'near' | 'up' | 'down' = 'near'): number {
   const k = Math.pow(10, Math.trunc(digits));
@@ -380,6 +392,59 @@ const FUNCTIONS: Record<string, FnDef> = {
       if (isError(d)) return d;
       if (d === 0) return ERR.div0();
       return x - d * Math.floor(x / d);
+    },
+  },
+  // CEILING and FLOOR (Excel 2010's): to a multiple of the significance; a positive number with a negative significance is #NUM!
+  CEILING: { min: 2, max: 2, fn: toMultiple(Math.ceil) },
+  FLOOR: { min: 2, max: 2, fn: toMultiple(Math.floor) },
+  FACT: {
+    min: 1, max: 1,
+    fn: num1((x) => {
+      const n = Math.trunc(x);
+      if (n < 0 || n > 170) return ERR.num('FACT works out 0 to 170');
+      let f = 1;
+      for (let i = 2; i <= n; i++) f *= i;
+      return f;
+    }),
+  },
+  COMBIN: {
+    min: 2, max: 2,
+    fn: (args) => {
+      const a = toNumber(scalar(args[0])), b = toNumber(scalar(args[1]));
+      if (isError(a)) return a;
+      if (isError(b)) return b;
+      const n = Math.trunc(a), k = Math.trunc(b);
+      if (n < 0 || k < 0 || k > n) return ERR.num('COMBIN needs 0 ≤ number_chosen ≤ number');
+      let c = 1;
+      for (let i = 1; i <= Math.min(k, n - k); i++) c = (c * (n - Math.min(k, n - k) + i)) / i;
+      if (!Number.isFinite(c)) return ERR.num();
+      return c < 2 ** 53 ? Math.round(c) : c;
+    },
+  },
+  // PMT(rate, nper, pv, [fv], [type]): the payment each period of a loan or saving (type 1: at the start of each period)
+  PMT: {
+    min: 3, max: 5,
+    fn: (args) => {
+      const r = numArg(args, 0), n = numArg(args, 1), pv = numArg(args, 2), fv = optNumber(args, 3, 0), type = optNumber(args, 4, 0);
+      const bad = firstError(r, n, pv, fv, type);
+      if (bad) return bad;
+      const [rate, nper, p, f, t] = [r, n, pv, fv, type] as number[];
+      if (nper === 0) return ERR.num('PMT needs a number of periods');
+      if (rate === 0) return -(p + f) / nper;
+      const g = Math.pow(1 + rate, nper);
+      return (-rate * (f + p * g)) / ((1 + rate * (t ? 1 : 0)) * (g - 1));
+    },
+  },
+  // NPV(rate, value1, …): the values (at the end of periods 1, 2, …) worth today
+  NPV: {
+    min: 2, max: 255,
+    fn: (args) => {
+      const r = numArg(args, 0);
+      if (isError(r)) return r;
+      if (r === -1) return ERR.div0();
+      const xs = numbers(args.slice(1));
+      if (isError(xs)) return xs;
+      return xs.reduce((s, x, i) => s + x / Math.pow(1 + r, i + 1), 0);
     },
   },
   PI: { min: 0, max: 0, fn: () => Math.PI },
@@ -739,7 +804,7 @@ function indirectRef(argNodes: Node[], host: EvalHost): RefToken | CellError {
 }
 
 /** The functions that add up, average, rank or spread the numbers they are given. */
-const BY_REFERENCE = new Set(['SUM', 'PRODUCT', 'AVERAGE', 'MIN', 'MAX', 'MEDIAN', 'SKEW', 'KURT', 'MODE', 'STDEV', 'STDEVP', 'VAR', 'VARP', 'STDEV.S', 'STDEV.P', 'VAR.S', 'VAR.P']);
+const BY_REFERENCE = new Set(['SUM', 'PRODUCT', 'NPV', 'AVERAGE', 'MIN', 'MAX', 'MEDIAN', 'SKEW', 'KURT', 'MODE', 'STDEV', 'STDEVP', 'VAR', 'VARP', 'STDEV.S', 'STDEV.P', 'VAR.S', 'VAR.P']);
 
 function call(name: string, argNodes: Node[], host: EvalHost): Arg {
   // a LAMBDA named by LET
