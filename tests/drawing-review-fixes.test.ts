@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 //
 // Drawing-core fixes from the code review: the "text is chemistry" marks during a drag, and a
-// two-finger pinch on a touch screen leaving the drawing alone, and the pen (Sketch tool).
+// two-finger pinch on a touch screen leaving the drawing alone, the pen (Sketch tool), and common
+// inorganic reagents read as chemistry.
 
 import { describe, expect, it, vi } from 'vitest';
 import { Doc } from '../src/model';
-import { captionReading } from '../src/chem/species';
+import { captionReading, readSpecies, speciesFormula } from '../src/chem/species';
 import { plainMeasure } from '../src/chem/reaction';
 import { installPenAndTouch } from '../src/editor/touch';
 import { Sketcher, type SketchHost } from '../src/editor/sketch';
@@ -200,5 +201,31 @@ describe('a pen letter written in empty space', () => {
     expect(doc.undoLabel).toBe('Sketch I');
     doc.undo();
     expect([...doc.atoms.values()].map((a) => a.z)).toEqual([]);
+  });
+});
+
+describe('common inorganic reagents in a text box', () => {
+  // formulas in Hill order
+  const cases: [string, string][] = [
+    ['H2SO4', 'H2O4S'], ['H2SO3', 'H2O3S'], ['HNO3', 'HNO3'], ['HNO2', 'HNO2'], ['HCN', 'CHN'], ['HSCN', 'CHNS'], ['HN3', 'HN3'],
+    ['H3PO4', 'H3O4P'], ['H3BO3', 'BH3O3'], ['HClO4', 'ClHO4'], ['HIO4', 'HIO4'], ['H5IO6', 'H5IO6'], ['H2CrO4', 'CrH2O4'],
+    ['HBF4', 'BF4H'], ['HPF6', 'F6HP'],
+    ['N2O', 'N2O'], ['N2O4', 'N2O4'], ['N2O5', 'N2O5'], ['P2O5', 'O5P2'], ['P4O10', 'O10P4'], ['OsO4', 'O4Os'], ['RuO4', 'O4Ru'],
+    ['CrO3', 'CrO3'], ['MoO3', 'MoO3'], ['WO3', 'O3W'], ['V2O5', 'O5V2'], ['Al2O3', 'Al2O3'], ['Fe2O3', 'Fe2O3'], ['Cr2O3', 'Cr2O3'],
+    ['Na2O2', 'Na2O2'], ['K2Cr2O7', 'Cr2K2O7'], ['Na2Cr2O7', 'Cr2Na2O7'], ['K2CrO4', 'CrK2O4'], ['K2OsO4', 'K2O4Os'],
+    ['NaBO3', 'BNaO3'], ['KHSO5', 'HKO5S'], ['Oxone', 'H3K5O18S4'], ['K2S2O8', 'K2O8S2'], ['(NH4)2S2O8', 'H8N2O8S2'],
+    ['NaHSO3', 'HNaO3S'], ['Na2S2O5', 'Na2O5S2'], ['Na2S', 'Na2S'], ['CuSO4', 'CuO4S'], ['FeSO4', 'FeO4S'], ['SnCl2', 'Cl2Sn'],
+    ['CuCN', 'CCuN'], ['BrCN', 'CBrN'], ['ClCN', 'CClN'], ['KOCN', 'CKNO'], ['NaOCN', 'CNNaO'],
+  ];
+  for (const [text, hill] of cases) {
+    it(`reads ${text}`, () => {
+      const sp = readSpecies(text);
+      expect(sp, `${text} is not read as chemistry`).not.toBeNull();
+      expect(speciesFormula(sp!)).toBe(hill);
+    });
+  }
+  it('still reads the ones the formula reader puts together, and leaves NO2 to its other readings', () => {
+    for (const t of ['SO3', 'SOCl2', 'POCl3', 'KMnO4', 'NaIO4', 'SeO2', 'MnO2']) expect(readSpecies(t), t).not.toBeNull();
+    expect(readSpecies('NO2')).toBeNull();
   });
 });
