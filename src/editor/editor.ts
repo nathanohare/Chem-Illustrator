@@ -50,7 +50,7 @@ import { groupMembers, groupSelection, selectedGroups, ungroupSelection, withGro
 import { circleRing, circleRings, kekulize } from '../chem/aromatic';
 import { bondLayer, crossingBonds } from '../chem/crossing';
 import { nextNumber as nextCompound, planNumbers, type NumberOptions } from '../chem/compound-numbers';
-import { arrowClash, bendSide, cleanUpArrow, headEnd, isAtomSymbol, pushArrow, pushEndAt, pushPins, sameEnd, symbolAt, symbolPin, symbolSpot, tailEnd, SMALL_HEAD, type PushArrow, type PushEnd } from '../chem/mechanism';
+import { arrowClash, bendSide, cleanUpArrow, endCentre, endPointToward, headEnd, isAtomSymbol, pushArrow, pushEndAt, pushPins, sameEnd, symbolAt, symbolPin, symbolSpot, tailEnd, SMALL_HEAD, type PushArrow, type PushEnd } from '../chem/mechanism';
 import { followPins, hasPins, makePin, mirrorBend } from '../chem/pins';
 import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '../chem/scheme-arrange';
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
@@ -67,11 +67,11 @@ import {
   arrowPoints, bracketHalves, type BracketForm, bracketLip, unionRect,
   shapeOrder, portNear, shapePorts, isCurved, headBend, swapHalf, bezPoints,
 } from '../objects';
-import { bezFrom, dragPathPoint, insertJoin, joinIndexes, nearestOnPath, pathPoints, removeJoin, setJoin } from '../arrow-path';
+import { bezFrom, dragCurveAt, throughPoints, dragPathPoint, insertJoin, joinIndexes, nearestOnPath, pathPoints, removeJoin, setJoin } from '../arrow-path';
 import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
 import { imageFor } from '../render/images';
-import { BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
+import { BEND, BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
 import type { TextEditing } from '../text/editing';
 
 export type Tool =
@@ -221,7 +221,7 @@ interface Drag {
   shift: boolean;
   alt: boolean;
   ctrl: boolean;
-  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch';
+  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'reshape';
   last: Vec;
   panOrigin?: { ox: number; oy: number };
   /** The arrow or shape handle being dragged. */
@@ -240,6 +240,8 @@ interface Drag {
   tpl?: { key: string; choices: TemplateChoice[]; index: number; manual: Vec | null };
   /** Format Painter: the click or box paints what it lands on. */
   paint?: boolean;
+  /** Reshaping a curved arrow by its line: the arrow, its path when the drag began, and where along it it was grabbed. */
+  reshape?: { id: number; pts: Vec[]; t: number };
   /** Pressed on the charge sign an atom shows: dragging takes it off the atom's label as a sign of its own (freeCharge). */
   charge?: number;
   /** Moving an atom: the atom it has been dropped on, which it becomes one with at the lift (closing a ring). */
@@ -365,6 +367,8 @@ export class Editor {
   /** Drawn on the overlay before the marks, in points (the tint outside the drawing). */
   underlay: ((ctx: CanvasRenderingContext2D) => void) | null = null;
   onToolChange: (name: string) => void = () => {};
+  /** Show a hint for the step in hand in the status bar (empty: the tool's own hint again). */
+  onHint: (text: string) => void = () => {};
   /** The fragmentation tool drew a line from p to q across these bonds (the app works out the masses). */
   onFragment: (p: Vec, q: Vec, bonds: number[]) => void = () => {};
   /** The atom most recently drawn or changed (its structure is analysed when nothing is selected). */
@@ -380,6 +384,11 @@ export class Editor {
   cropping: number | null = null;
   /** The handle or join of a curved arrow last pressed: the arrow keys move it, Delete takes a join out. */
   activeHandle: { id: number; which: HandleId } | null = null;
+  /**
+   * A curved arrow being drawn through clicked points: what it starts on, the points so far (the
+   * first where it starts), and the direction dragged out at each (null: the usual smooth turn).
+   */
+  route: { from: PushEnd; at: Vec[]; dirs: (Vec | null)[] } | null = null;
   /** The join or place on a curved arrow that was right-clicked. */
   contextSpot: { id: number; join?: number; t?: number } | null = null;
   /**
@@ -529,6 +538,8 @@ export class Editor {
     if (t.kind !== 'sketch') this.sketcher.flush();
     this.tool = t;
     this.toolName = name;
+    // (a curved arrow half drawn through points is dropped)
+    if (this.route) { this.route = null; this.requestOverlay(); }
     this.onToolChange(name);
     this.showPointer(false);
     this.requestOverlay();
@@ -768,6 +779,14 @@ export class Editor {
     this.r.overlay.setPointerCapture(e.pointerId);
     const p = this.docPoint(e);
     const rect = this.r.overlay.getBoundingClientRect();
+    // drawing a curved arrow through points: each press puts the next point down (drag out from it to set the way the arrow runs through it)
+    if (this.route && e.button === 0) {
+      if (!this.curvedTool()) this.route = null;
+      else {
+        this.drag = { start: p, startScreen: { x: e.clientX - rect.left, y: e.clientY - rect.top }, hit: null, button: 0, moved: false, shift: e.shiftKey, alt: e.altKey, ctrl: false, mode: 'route', last: p };
+        return;
+      }
+    }
     const painting = !!this.painter && e.button === 0;
     const rh = e.button === 0 && !painting ? this.rotateHandle() : null;
     const rotating = !!rh && dist(rh, p) <= this.tol(7);
@@ -781,6 +800,12 @@ export class Editor {
       ...(painting ? { paint: true } : {}),
     };
     if (handle) this.drag.handle = handle;
+    // a curved arrow tool on a selected S-shaped (or longer) arrow's line: dragging there reshapes it
+    if (e.button === 0 && !handle && !rotating && !painting && !e.shiftKey && hit?.kind === 'arrow' && this.curvedTool() && this.isSelected(hit)) {
+      const r = this.pathArrow(hit.id);
+      const pts = r && bezPoints(r);
+      if (pts) { this.drag.mode = 'reshape'; this.drag.reshape = { id: hit.id, pts, t: nearestOnPath(pts, p).t }; }
+    }
     // a curved arrow's handle or join pressed: the arrow keys and Delete go to it from now on
     if (e.button === 0) this.contextSpot = null;
     if (e.button === 0) this.activeHandle = handle?.kind === 'arrow' && handle.which[0] === 'b' ? { id: handle.id, which: handle.which } : null;
@@ -851,6 +876,7 @@ export class Editor {
     if (!d.moved && Math.hypot(sp.x - d.startScreen.x, sp.y - d.startScreen.y) > 3) {
       d.moved = true;
       if (d.mode === 'none') d.mode = this.dragModeFor(d);
+      if (d.mode === 'reshape') this.doc.begin('Bend arrow');
       if (d.mode === 'handle') this.doc.begin(d.handle!.which === 'mid' || d.handle!.which[0] === 'b' ? 'Bend arrow' : this.cropping === d.handle!.id ? 'Crop picture' : 'Resize');
       if (d.mode === 'rotate') this.doc.begin('Rotate');
       if (d.mode === 'move') {
@@ -940,6 +966,19 @@ export class Editor {
       r.angle = ang;
       transform(this.doc, r.snap, rotation(r.center, ang), false, this.textTurn(ang / DEG));
       if (hasPins(this.doc)) followPins(this.doc);
+      d.last = p;
+      this.requestScene(e.timeStamp);
+      return;
+    }
+    if (d.mode === 'route') {
+      d.last = p;
+      this.requestOverlay(e.timeStamp);
+      return;
+    }
+    if (d.mode === 'reshape') {
+      const rs = d.reshape!;
+      const r = this.doc.arrows.get(rs.id);
+      if (r && d.moved) this.putPath(r, dragCurveAt(rs.pts, rs.t, p));
       d.last = p;
       this.requestScene(e.timeStamp);
       return;
@@ -1063,6 +1102,14 @@ export class Editor {
       if (ctx && !d.moved) this.onContextMenu(ctx);
     }
     if (d.mode === 'pan') { this.requestScene(e.timeStamp); return; }
+    if (d.mode === 'route') {
+      // a point dragged out: the arrow runs through it the way it was dragged
+      if (d.moved) this.routePoint(d.start, sub(d.last, d.start));
+      else this.routeClick(p);
+      this.requestOverlay(e.timeStamp);
+      return;
+    }
+    if (d.mode === 'reshape' && d.moved) { this.doc.commit(); this.changed(); return; }
     if (d.mode === 'handle' || d.mode === 'rotate') {
       if (d.moved) { this.doc.commit(); this.changed(); }
       return;
@@ -1143,6 +1190,8 @@ export class Editor {
     const p = this.docPoint(e);
     // (in the text being typed, a double-click selects a word: the text sees the clicks itself)
     if (this.captionEd?.hit(p)) return;
+    // drawing through points: a double-click ends the arrow there
+    if (this.route) { this.finishRoute(); return; }
     // on a selected curved arrow: a join comes out, anywhere else on its line a join goes in
     const spot = e.button === 0 ? this.pathSpotAt(p) : null;
     if (spot && energyFrameOf(this.doc, 'arrow', spot.id) === null && diagramFrameOf(this.doc, 'arrow', spot.id) === null) {
@@ -1375,6 +1424,8 @@ export class Editor {
           }
           return;
         }
+        // a curved arrow tool: a click starts an arrow drawn through the points clicked next
+        if (t.kind === 'arrow' && t.style.sweep && !t.style.equilibrium) { this.startRoute(p); return; }
         if (t.kind === 'arrow') {
           const L = doc.style.bondLength;
           doc.edit('Arrow', () => this.selectOnly({ kind: 'arrow', id: this.addArrow(p, add(p, { x: L * (t.style.sweep ? 2 : 3), y: 0 }), t.style).id }));
@@ -2115,6 +2166,92 @@ export class Editor {
     });
     this.changed();
     return arrows.length;
+  }
+
+  /** Is the tool a curved (mechanism) arrow? */
+  private curvedTool(): boolean {
+    const t = this.tool;
+    return t.kind === 'arrow' && !!t.style.sweep && !t.style.equilibrium;
+  }
+
+  /** Start drawing a curved arrow through points: from what is at `p` (a lone pair, atom or bond), or from `p`. */
+  private startRoute(p: Vec): void {
+    const doc = this.doc, m = this.measure();
+    const here = tailEnd(doc, pushEndAt(doc, m, p), p);
+    this.route = { from: here, at: [here.kind === 'point' ? p : endCentre(doc, here)], dirs: [null] };
+    this.onHint('Click where the arrow should go through, then click the atom or bond it points at (or double-click, or press Enter, to end it there). Drag from a point to set the way the arrow runs through it. Backspace takes back a point; Esc stops.');
+    this.requestOverlay();
+  }
+
+  /** The next point of the arrow being drawn through points, `dir` the way it runs through it. */
+  private routePoint(p: Vec, dir: Vec | null): void {
+    const r = this.route;
+    if (!r) return;
+    const last = r.at[r.at.length - 1];
+    if (dist(last, p) < this.tol(3)) { if (dir) r.dirs[r.dirs.length - 1] = dir; return; }
+    r.at.push(p);
+    r.dirs.push(dir);
+  }
+
+  /** A click while drawing through points: on an atom, bond or new bond's place it ends there, elsewhere it is the next point. */
+  private routeClick(p: Vec): void {
+    const r = this.route;
+    if (!r) return;
+    const doc = this.doc, m = this.measure();
+    const here = headEnd(doc, pushEndAt(doc, m, p), p);
+    if (here.kind !== 'point' && !sameEnd(here, r.from)) { this.finishRoute(here); return; }
+    this.routePoint(p, null);
+  }
+
+  /**
+   * End the arrow being drawn through points: at `to` (what it points at), or at its last point.
+   * With only the point it started from, a curved arrow of the usual size goes there instead.
+   */
+  finishRoute(to?: PushEnd): boolean {
+    const r = this.route;
+    if (!r) return false;
+    this.route = null;
+    this.onHint('');
+    const t = this.tool;
+    if (t.kind !== 'arrow') return false;
+    const doc = this.doc, m = this.measure();
+    const at = r.at.slice(), dirs = r.dirs.slice();
+    if (to) { at.push(endCentre(doc, to)); dirs.push(null); }
+    if (at.length < 2) {
+      const L = doc.style.bondLength;
+      doc.edit('Arrow', () => this.selectOnly({ kind: 'arrow', id: this.addArrow(at[0], add(at[0], { x: L * 2, y: 0 }), t.style).id }));
+      this.changed();
+      return true;
+    }
+    const end: PushEnd = to ?? { kind: 'point', p: at[at.length - 1] };
+    // the ends sit just off what they are on, facing the next (or last) point
+    at[0] = endPointToward(doc, m, r.from, at[1], 'start');
+    at[at.length - 1] = endPointToward(doc, m, end, at[at.length - 2], 'end');
+    const pts = throughPoints(at, dirs);
+    const tail = pts[0], head = pts[pts.length - 1];
+    if (dist(tail, head) < 1e-3) return false;
+    doc.edit('Arrow', () => {
+      const a = this.addPushArrow({ tail, head, sweep: 0, bez: bezFrom(tail, head, pts), start: r.from, end }, t.style);
+      // drawn by hand: it keeps this way round the structure
+      if (a.pin) doc.updateArrow(a.id, { bent: true });
+      this.selectOnly({ kind: 'arrow', id: a.id });
+    });
+    this.changed();
+    return true;
+  }
+
+  /** Stop drawing through points without an arrow (Esc), or take back the last point (Backspace). */
+  private routeKey(chord: string): boolean {
+    const r = this.route;
+    if (!r) return false;
+    if (chord === 'Escape') { this.route = null; this.onHint(''); this.requestOverlay(); return true; }
+    if (chord === 'Backspace' || chord === 'Delete') {
+      if (r.at.length > 1) { r.at.pop(); r.dirs.pop(); } else { this.route = null; this.onHint(''); }
+      this.requestOverlay();
+      return true;
+    }
+    if (chord === 'Enter') { this.finishRoute(); return true; }
+    return false;
   }
 
   /** A curved arrow that can be edited as a path (not an equilibrium pair or an elbow connector). */
@@ -3602,6 +3739,8 @@ export class Editor {
     if (this.drag?.moved && chord !== 'Escape' && !/^(Shift|Control|Alt|Meta)$/.test(e.key)) { e.preventDefault(); return; }
     // Tab moves on through the window's buttons unless the drawing has the keys (or the mouse)
     if (/^(Shift\+)?Tab$/.test(chord) && !this.pointerInside && target !== this.r.overlay) return;
+    // drawing a curved arrow through points: Enter ends it, Backspace takes back a point, Esc stops
+    if (this.routeKey(chord)) { e.preventDefault(); return; }
     // on a focused button or menu, Enter, Space and Tab do their usual jobs (unless the mouse
     // is over the drawing: then they are drawing keys, as in ChemDraw)
     if (!this.pointerInside && target && target !== document.body && target !== this.r.overlay && /^(Shift\+)?(Enter|Space|Tab)$/.test(chord)) return;
@@ -4556,6 +4695,8 @@ export class Editor {
     if (!o || this.drag) return;
     if (this.painter) { this.r.overlay.style.cursor = BRUSH; return; }
     const { onRotate, handle, h } = o;
+    // a curved arrow tool over a selected S's line: a drag there reshapes it
+    if (!onRotate && !handle && h?.kind === 'arrow' && this.curvedTool() && this.isSelected(h) && bezPoints(this.doc.arrows.get(h.id)!)) { this.r.overlay.style.cursor = BEND; return; }
     this.r.overlay.style.cursor = onRotate ? ROTATE : handle ? handleCursor(handle.which) : pointerFor({
       tool: this.tool.kind,
       over: !h ? null : h.kind === 'atom' || h.kind === 'bond' ? 'chem' : 'object',
@@ -4949,6 +5090,22 @@ export class Editor {
       ctx.strokeStyle = '#000';
       ctx.lineWidth = px;
       ctx.strokeRect(x1 - c.l * W, y1 - c.t * H, W, H);
+      ctx.restore();
+    }
+    // a curved arrow being drawn through points: the curve so far, on to the pointer, and its points
+    const route = this.route;
+    if (route) {
+      const d = this.drag;
+      const at = [...route.at], dirs = [...route.dirs];
+      if (d?.mode === 'route' && d.moved) { at.push(d.start); dirs.push(sub(d.last, d.start)); }
+      else if (this.pointer && dist(this.pointer, at[at.length - 1]) > this.tol(3)) { at.push(this.pointer); dirs.push(null); }
+      ctx.save();
+      ctx.strokeStyle = PREVIEW;
+      ctx.lineWidth = 1.5 * px;
+      const pts = throughPoints(at, dirs);
+      if (pts.length) strokeAlong(ctx, arrowPoints({ tail: pts[0], head: pts[pts.length - 1], sweep: 0, bez: bezFrom(pts[0], pts[pts.length - 1], pts) }, 24 * at.length));
+      ctx.fillStyle = PREVIEW;
+      for (const q of route.at) { ctx.beginPath(); ctx.arc(q.x, q.y, 2.5 * px, 0, Math.PI * 2); ctx.fill(); }
       ctx.restore();
     }
     // handles on selected arrows and shapes

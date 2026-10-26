@@ -248,3 +248,62 @@ export function fitPath(points: Vec[], tol: number): Vec[] {
   if (d.length < 2) return [];
   return fitRun(d, startTangent(d), endTangent(d), tol, 0);
 }
+
+// ------------------------------------------------------------------ drawing and reshaping
+
+/**
+ * A smooth path through points clicked one after another: each point a join, the curve running
+ * through it in the direction from the point before to the point after (or along `dirs[i]`,
+ * where a point was dragged out to set its direction).
+ */
+export function throughPoints(anchors: Vec[], dirs: (Vec | null)[] = []): Vec[] {
+  const n = anchors.length;
+  if (n < 2) return [];
+  const tangent = (i: number): Vec => {
+    const prev = anchors[Math.max(0, i - 1)], next = anchors[Math.min(n - 1, i + 1)];
+    const t = sub(next, prev);
+    const span = Math.hypot(t.x, t.y);
+    const d = dirs[i];
+    // a direction set by hand keeps the usual length
+    return d && Math.hypot(d.x, d.y) > 1e-6 ? mul(norm(d), span / (i === 0 || i === n - 1 ? 1 : 2)) : mul(t, i === 0 || i === n - 1 ? 1 : 0.5);
+  };
+  const out: Vec[] = [anchors[0]];
+  for (let i = 0; i < n - 1; i++) {
+    const a = anchors[i], b = anchors[i + 1];
+    const l = dist(a, b);
+    // (each handle a third of the way to the next point, at most)
+    const ta = tangent(i), tb = tangent(i + 1);
+    const cap = (t: Vec) => { const m = Math.hypot(t.x, t.y) / 3; return m > l / 1.5 ? mul(norm(t), l / 1.5) : mul(t, 1 / 3); };
+    out.push(add(a, cap(ta)), sub(b, cap(tb)), b);
+  }
+  return out;
+}
+
+/**
+ * Dragging a path by its line: the curve that was grabbed at `t` (as bezPathAt counts) reshapes
+ * so that the place grabbed follows the pointer to `p`, its ends and joins staying put. A smooth
+ * join next to it stays smooth (the handle across it turns to match). `pts` is the path as it
+ * was when the drag began.
+ */
+export function dragCurveAt(pts: Vec[], t: number, p: Vec): Vec[] {
+  const n = (pts.length - 1) / 3;
+  const k = Math.min(n - 1, Math.max(0, Math.floor(t)));
+  const u = Math.min(0.9, Math.max(0.1, t - k));
+  const from = bezAt(pts, u, 3 * k);
+  const d = sub(p, from);
+  // the two controls move the same way, the nearer one more, so the grabbed place lands on p
+  const w1 = 1 - u, w2 = u;
+  const s = 1 / (3 * u * (1 - u) * (w1 * (1 - u) + w2 * u));
+  const out = pts.slice();
+  const i1 = 3 * k + 1, i2 = 3 * k + 2;
+  out[i1] = add(pts[i1], mul(d, w1 * s));
+  out[i2] = add(pts[i2], mul(d, w2 * s));
+  // smooth joins either side stay smooth
+  for (const [i, anchor, across] of [[i1, 3 * k, 3 * k - 1], [i2, 3 * k + 3, 3 * k + 4]] as const) {
+    if (anchor <= 0 || anchor >= pts.length - 1) continue;
+    const kind = joinKind(pts, anchor);
+    if (kind === 'corner' || dist(out[i], pts[anchor]) < 1e-6) continue;
+    out[across] = add(pts[anchor], mul(norm(sub(pts[anchor], out[i])), kind === 'symmetric' ? dist(out[i], pts[anchor]) : dist(pts[across], pts[anchor])));
+  }
+  return out;
+}

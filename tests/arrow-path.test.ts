@@ -2,7 +2,7 @@
 // and curves fitted to points.
 
 import { describe, expect, it } from 'vitest';
-import { dragPathPoint, fitPath, insertJoin, joinKind, nearestOnPath, pathPoints, removeJoin, setJoin, bezFrom } from '../src/arrow-path';
+import { dragCurveAt, dragPathPoint, fitPath, throughPoints, insertJoin, joinKind, nearestOnPath, pathPoints, removeJoin, setJoin, bezFrom } from '../src/arrow-path';
 import { arrowPoints, bezPathAt, bezPoints } from '../src/objects';
 import { angleOf, dist, sub, DEG, type Vec } from '../src/geom';
 
@@ -130,5 +130,34 @@ describe('fitting curves to points', () => {
   it('is one curve for a straight stroke', () => {
     const pts: Vec[] = Array.from({ length: 30 }, (_, i) => ({ x: i * 3, y: i }));
     expect(fitPath(pts, 0.5)).toHaveLength(4);
+  });
+});
+
+describe('drawing through points and reshaping by the line', () => {
+  it('runs smoothly through every point clicked', () => {
+    const at: Vec[] = [{ x: 0, y: 0 }, { x: 40, y: -30 }, { x: 90, y: -20 }, { x: 120, y: 10 }];
+    const pts = throughPoints(at);
+    expect(pts).toHaveLength(10);
+    at.forEach((q, i) => expect(pts[3 * i]).toEqual(q));
+    for (const j of [3, 6]) expect(joinKind(pts, j)).not.toBe('corner');
+  });
+
+  it('runs through a point the way it was dragged out', () => {
+    const at: Vec[] = [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 }];
+    const pts = throughPoints(at, [null, { x: 0, y: 1 }, null]);
+    // going straight down through the middle point
+    expect(Math.abs(pts[4].x - pts[3].x)).toBeLessThan(1e-9);
+    expect(pts[4].y).toBeGreaterThan(pts[3].y);
+  });
+
+  it('moves the place grabbed on to the pointer, leaving ends and joins where they were', () => {
+    const two = insertJoin(bezPoints(S)!, 0.5)!;
+    const t = 1.3;
+    const target = { x: bezPathAt(two, t).x + 6, y: bezPathAt(two, t).y - 12 };
+    const out = dragCurveAt(two, t, target);
+    expect(dist(bezPathAt(out, t), target)).toBeLessThan(1e-6);
+    for (const i of [0, 3, 6]) expect(out[i]).toEqual(two[i]);
+    // the join it touches stays smooth
+    expect(joinKind(out, 3)).not.toBe('corner');
   });
 });
