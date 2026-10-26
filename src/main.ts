@@ -392,9 +392,20 @@ const templatePalette = (group: Template['group'] | Template['group'][], palette
   icon: (name, size) => templateIcon(templateById(name.slice(4))!, size),
 });
 
+/** Box select, with the lasso (freehand) on the same button. */
+const SELECT_TOOLS: PaletteDef = {
+  palette: 'select',
+  title: 'Select',
+  items: [
+    { name: 'select', title: 'Select and move: drag a box round what to select' },
+    { name: 'lasso', title: 'Lasso select: drag a loop round what to select, to pick pieces out of a crowded scheme' },
+  ],
+  columns: 2,
+};
+
 const TOOL_GROUPS: ToolbarItem[][] = [
   [
-    { name: 'select', title: 'Select and move' },
+    SELECT_TOOLS,
     { name: 'eraser', title: 'Eraser' },
   ],
   [
@@ -8020,7 +8031,14 @@ function pickTool(name: string): void {
 
 /** A tool's button in a toolbox: picks the tool, and shows when it is the one in use. */
 /** Saved toolboxes without the tools and palettes taken off the tool bar since (they left empty cells). */
-function withoutRetired(st: ToolboxState): ToolboxState {
+function withoutRetired(saved: ToolboxState): ToolboxState {
+  // the select button became a fly-out (with the lasso): a layout saved before keeps its place
+  const was = (k: string | null) => (k === 'tool:select' ? 'pal:select' : k);
+  const st: ToolboxState = {
+    ...saved,
+    items: saved.items?.main ? { ...saved.items, main: saved.items.main.map((k) => was(k)!) } : saved.items,
+    grids: saved.grids?.main ? { ...saved.grids, main: { ...saved.grids.main, cells: saved.grids.main.cells.map(was) } } : saved.grids,
+  };
   const isTool = (n: string) => ALL_TOOLS.has(n) || ownTemplates().some((t) => `tpl-${t.id}` === n);
   const item = (k: string) => (k.startsWith('tool:') ? isTool(k.slice(5)) : k.startsWith('pal:') ? PALETTES.has(k.slice(4)) : true);
   return withoutGoneItems(st, item, (pal, n) => PALETTES.has(pal) && (pal === 'tpl-own' || isTool(n)));
