@@ -124,4 +124,17 @@ describe('energy diagrams', () => {
     expect(s.energy!.paths[0].points[2].g).toBe(32);
     expect(s.frame!.captions.length).toBe(doc.shapes.get(frame)!.frame!.captions.length);
   });
+
+  it('turns the axis title up the page in ChemDraw too, and reads ChemDraw\'s turn back', () => {
+    const { doc } = put('catalysed');
+    const xml = writeCdxml(doc);
+    const t = [...xml.matchAll(/<t [^>]*>/g)].map((x) => x[0]).find((x) => x.includes('RotationAngle'))!;
+    expect(t).toMatch(/RotationAngle="17694720"/);
+    // the box ChemDraw keeps is the turned one: taller than wide
+    const [x1, y1, x2, y2] = t.match(/BoundingBox="([^"]+)"/)![1].split(' ').map(Number);
+    expect(y2 - y1).toBeGreaterThan(x2 - x1);
+    // a ChemDraw re-save with no tag of ours still turns it
+    const back = readCdxml(xml.replace(/<objecttag [^>]*Name="Chem Illustrator turn"[^>]*\/>/g, '')).doc;
+    expect([...back.captions.values()].some((c) => c.rot === -90)).toBe(true);
+  });
 });

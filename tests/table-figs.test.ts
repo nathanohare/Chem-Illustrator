@@ -54,3 +54,43 @@ describe('structures in table cells', () => {
     expect(doc.shapes.get(tid)!.table!.rows[1][1].fig).toBeUndefined();
   });
 });
+
+describe('structures in table cells saved for ChemDraw', () => {
+  it('writes a structure in a cell inside ChemDraw\'s cell, and reads it back where it was', async () => {
+    const { writeCdxml } = await import('../src/io/cdxml-write');
+    const { readCdxml } = await import('../src/io/cdxml');
+    const doc = new Doc();
+    const L = doc.style.bondLength;
+    const t = emptyTable(2, 2, 10);
+    const lay = layoutOf(t);
+    doc.edit('build', () => {
+      const a = doc.addAtom(300, 300, 6).id, b = doc.addAtom(300 + L, 300, 6).id;
+      doc.addBond(a, b, 1);
+      doc.addShape({ kind: 'table', x1: 0, y1: 0, x2: lay.width, y2: lay.height, table: t });
+    });
+    change(doc, () => {
+      const cell = { x: (lay.xs[1] + lay.xs[2]) / 2, y: (lay.ys[1] + lay.ys[2]) / 2 };
+      doc.moveAtoms(new Set([...doc.atoms.keys()]), cell.x - (300 + L / 2), cell.y - 300);
+    });
+    const xml = writeCdxml(doc);
+    // inside the cell (ChemDraw paints cells over anything outside them), placed from its corner
+    const cellXml = xml.slice(xml.indexOf('<table'), xml.indexOf('</table>'));
+    expect(cellXml).toContain('<fragment');
+    const back = readCdxml(xml).doc;
+    expect(back.atoms.size).toBe(2);
+    const was = [...doc.atoms.values()].map((a) => [a.x, a.y]), now = [...back.atoms.values()].map((a) => [a.x, a.y]);
+    now.forEach(([x, y], i) => { expect(x).toBeCloseTo(was[i][0], 1); expect(y).toBeCloseTo(was[i][1], 1); });
+    // saved again unchanged: still one copy, in its cell
+    const again = writeCdxml(back);
+    expect(again.match(/<fragment/g)?.length).toBe(1);
+    expect(readCdxml(again).doc.atoms.size).toBe(2);
+    // a structure outside the table keeps its place
+    const out = new Doc();
+    out.edit('build', () => {
+      out.addAtom(900, 900, 6);
+      out.addShape({ kind: 'table', x1: 0, y1: 0, x2: lay.width, y2: lay.height, table: t });
+    });
+    const x2 = writeCdxml(out);
+    expect(x2.indexOf('<fragment')).toBeLessThan(x2.indexOf('<table'));
+  });
+});

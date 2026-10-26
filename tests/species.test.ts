@@ -216,3 +216,32 @@ describe('text boxes in a drawing', () => {
     expect(by('rt, 12 h').chem).toBeUndefined();
   });
 });
+
+describe('text boxes after a ChemDraw save', () => {
+  // ChemDraw 25 turns text it interprets into lone labels on saving: BF4- as a nickname with the
+  // charge on one F of its inner fragment, DMAP as an Unspecified label of D, M, A and P
+  const saved = `<?xml version="1.0" encoding="UTF-8" ?><CDXML CreationProgram="ChemDraw 25.0.2.14" BondLength="14.40"><page id="1">`
+    + `<fragment id="10"><n id="11" p="112.36 395.87" NodeType="Fragment" NeedsClean="yes"><fragment id="12">`
+    + `<n id="13" p="141.14 399.46" Element="5" NumHydrogens="0"/><n id="14" p="128.71 406.63" Element="9" NumHydrogens="0"/>`
+    + `<n id="15" p="153.57 406.63" Element="9" NumHydrogens="0"/><n id="16" p="141.14 385.11" Element="9" NumHydrogens="0"/>`
+    + `<n id="17" p="114.36 395.87" Element="9" NumHydrogens="0" Charge="-1"/><b id="18" B="13" E="14"/><b id="19" B="13" E="15"/><b id="20" B="13" E="16"/></fragment>`
+    + `<t id="21" p="109.03 399.77" BoundingBox="109.03 391.43 128.48 401.97" LabelJustification="Left"><s font="3" size="10" color="0" face="96">BF4-</s></t></n></fragment>`
+    + `<fragment id="30"><n id="31" p="253.80 395.87" Warning="An atom in this label has an invalid valence." NodeType="Unspecified" NeedsClean="yes"><fragment id="32">`
+    + `<n id="33" p="235.91 392.28" Element="1" Isotope="2"/><n id="34" p="248.34 399.46" NodeType="GenericNickname" GenericNickname="M"/></fragment>`
+    + `<t id="35" p="250.19 399.77" BoundingBox="250.19 391.43 279.08 399.77"><s font="3" size="10" color="0" face="96">DMAP</s></t></n></fragment>`
+    + `</page></CDXML>`;
+
+  it('reads them back as text boxes read as chemistry, with no false valence warnings', () => {
+    const doc = readCdxml(saved).doc;
+    expect(doc.atoms.size).toBe(0);
+    const caps = [...doc.captions.values()];
+    expect(caps.map((c) => c.runs.map((r) => r.text).join(''))).toEqual(['BF4-', 'DMAP']);
+    for (const c of caps) expect(captionSpecies(doc, c)).toBeTruthy();
+  });
+
+  it('takes a label\'s charge from its inner fragment when the label has none of its own', () => {
+    const bonded = saved.replace('<fragment id="10"><n id="11"', '<fragment id="10"><n id="9" p="90 395.87" Element="6"/><b id="8" B="9" E="11"/><n id="11"');
+    const a = [...readCdxml(bonded).doc.atoms.values()].find((x) => x.label);
+    expect(a?.charge).toBe(-1);
+  });
+});
