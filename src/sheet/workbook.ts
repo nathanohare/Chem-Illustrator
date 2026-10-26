@@ -1145,6 +1145,8 @@ export class Sheet {
 
 /** Columns per sheet in the index of which formulas read which cells. */
 const READER_COLS = 1 << 15;
+/** The most running totals (SUM down one column) kept while sheets are worked out. */
+const RUNNING_MAX = 4_000_000;
 
 /** Changes that leave every value as it was. */
 const NO_VALUES = new Set<string>(['colWidths', 'rowHeights', 'colStyles', 'hiddenRows', 'hiddenCols', 'merges', 'filter', 'frozen', 'split', 'condFormats', 'tables', 'charts', 'dashboard', 'notes', 'validations', 'objects', 'pageSetup', 'pivots',
@@ -1593,6 +1595,7 @@ export class Workbook {
 
   private recalcOnce(): void {
     this.identityCache.clear();
+    this.forgetRunningSums();
     this.graph = null;
     const sheetIndex = new Map(this.sheets.map((s, i) => [s, i] as const));
     // where arrays spilled last time
@@ -1832,6 +1835,7 @@ export class Workbook {
     }
     if (todo.size > g.nodes.length / 2) return false;
     this.identityCache.clear();
+    this.forgetRunningSums();
     for (const t of typed) {
       if (t.cell?.input) t.s.values.set(t.key, this.literal(t.cell));
       else t.s.values.delete(t.key);
@@ -1879,6 +1883,7 @@ export class Workbook {
       undo.push(() => { s.spills = spills; s.spillOwner = owner; s.spillWanted = wanted; });
     }
     this.identityCache.clear();
+    this.forgetRunningSums();
     try {
       for (const i of inputs) {
         if (i.value === null) i.s.values.delete(i.key);
@@ -1890,6 +1895,7 @@ export class Workbook {
       for (let i = undo.length - 1; i >= 0; i--) undo[i]();
       this.spillsMoved = moved;
       this.identityCache.clear();
+      this.forgetRunningSums();
     }
   }
 
@@ -2050,6 +2056,7 @@ export class Workbook {
 
   /** Take an array's values out of the cells it spilled into. */
   private unspill(s: Sheet, key: number): void {
+    this.forgetRunningSums();
     const R = s.spills.get(key);
     if (R) {
       for (let r = R.r1; r <= R.r2; r++) for (let c = R.c1; c <= R.c2; c++) {
@@ -2069,6 +2076,7 @@ export class Workbook {
    * formula, a merged block, another array) or the array runs off the sheet, the cell shows #SPILL!.
    */
   private spill(s: Sheet, key: number, a: Arg): Value {
+    this.forgetRunningSums();
     const rows = rowsOf(a);
     const h = rows.length, w = rows[0]?.length ?? 0;
     const r0 = rowOf(key), c0 = colOf(key);
@@ -2119,6 +2127,32 @@ export class Workbook {
   private namesBusy = new Set<DefinedName>();
   /** Which molecule each cell of a block holds, kept while the sheets are worked out (DUPLICATE asks once per row). */
   private identityCache = new Map<string, (string | CellError | null)[][]>();
+  /**
+   * Running totals down columns that hold no formulas (so SUM(A$1:An) in every row reads the
+   * column once instead of once per row), by sheet, then column and first row. Cleared wherever
+   * identityCache is, and whenever an array spills or is taken back.
+   */
+  private running = new Map<Sheet, Map<number, { sums: number[]; err: CellError | null; errAt: number }>>();
+  /** How many running totals are held (capped, so that SUM(An:A$5000) can't fill memory). */
+  private runningHeld = 0;
+  /** The columns of each sheet that hold a formula or an array: their values change while sheets are worked out. */
+  private formulaCols = new Map<Sheet, Set<number>>();
+  private forgetRunningSums(): void {
+    this.running.clear();
+    this.runningHeld = 0;
+    this.formulaCols.clear();
+  }
+  private colHasFormulas(s: Sheet, col: number): boolean {
+    let m = this.formulaCols.get(s);
+    if (!m) {
+      m = new Set();
+      for (const k of s.formulas.keys()) m.add(colOf(k));
+      for (const R of s.spills.values()) for (let c = R.c1; c <= R.c2; c++) m.add(c);
+      for (const R of s.spillWanted.values()) for (let c = R.c1; c <= R.c2; c++) m.add(c);
+      this.formulaCols.set(s, m);
+    }
+    return m.has(col);
+  }
 
   private hostFor(home: Sheet): EvalHost {
     let h = this.hosts.get(home);
@@ -2139,6 +2173,32 @@ export class Workbook {
         return out.length ? out : [[null]];
       },
       hasSheet: (name) => !!this.sheetNamed(name),
+      sumColumn: (sheet, col, r1, r2) => {
+        const s = sheetOf(sheet);
+        if (!s || this.colHasFormulas(s, col)) return undefined;
+        r2 = Math.min(r2, s.lastRow);
+        if (r2 < r1) return 0;
+        let bySheet = this.running.get(s);
+        if (!bySheet) this.running.set(s, (bySheet = new Map()));
+        const id = col * 2 ** 21 + r1;
+        let e = bySheet.get(id);
+        const k = r2 - r1;
+        if (!e || e.sums.length <= k) {
+          const more = k + 1 - (e?.sums.length ?? 0);
+          if (this.runningHeld + more > RUNNING_MAX) return undefined;
+          this.runningHeld += more;
+          if (!e) bySheet.set(id, (e = { sums: [], err: null, errAt: -1 }));
+          // extend the running total down to r2, adding top to bottom exactly as SUM does
+          let sum = e.sums.length ? e.sums[e.sums.length - 1] : 0;
+          for (let row = r1 + e.sums.length; row <= r2; row++) {
+            const v = s.values.get(keyOf(row, col));
+            if (typeof v === 'number') sum += v;
+            else if (!e.err && isError(v)) { e.err = v; e.errAt = row - r1; }
+            e.sums.push(sum);
+          }
+        }
+        return e.err && e.errAt <= k ? e.err : e.sums[k];
+      },
       subtotalSkip: (sheet, row, col, hidden) => {
         const s = sheetOf(sheet);
         if (!s) return false;

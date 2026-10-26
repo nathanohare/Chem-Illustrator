@@ -54,6 +54,8 @@ export interface EvalHost {
   subtotalSkip?(sheet: string | undefined, row: number, col: number, hidden: boolean): boolean;
   /** A field of the compound card in a cell (Data > Data Types > Compound): undefined for a cell with no card, null for a field it doesn't have. */
   field?(sheet: string | undefined, row: number, col: number, name: string): Value | null | undefined;
+  /** SUM of one column, rows r1 to r2, from a running total down it; undefined when there is none to use. */
+  sumColumn?(sheet: string | undefined, col: number, r1: number, r2: number): number | CellError | undefined;
 }
 
 /** A number as a cell holds it: −0 is 0, infinities and NaN are #NUM!. */
@@ -758,6 +760,17 @@ function call(name: string, argNodes: Node[], host: EvalHost): Arg {
   }
   if (argNodes.length < def.min || argNodes.length > def.max) {
     return ERR.value(def.min === def.max ? `${name} needs ${def.min} argument${def.min === 1 ? '' : 's'}` : `${name} needs ${def.min} to ${def.max} arguments`);
+  }
+  // SUM down part of one column: from a running total, so that SUM(A$1:An) in every row stays quick
+  if (name === 'SUM' && host.sumColumn && argNodes.length === 1) {
+    const a = argNodes[0];
+    if (a.t === 'ref' && !a.v.broken && !a.v.spill && a.v.kind !== 'cell' && (a.v.sheet === undefined || host.hasSheet(a.v.sheet))) {
+      const R = refRange(a.v);
+      if (R.c1 === R.c2) {
+        const got = host.sumColumn(a.v.sheet, R.c1, R.r1, R.r2);
+        if (got !== undefined) return got;
+      }
+    }
   }
   const args = argNodes.map((a) => {
     const v = evalNode(a, host);
