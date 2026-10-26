@@ -32,21 +32,24 @@ function read(b: Uint8Array, want: 'streams' | 'class'): Map<string, Uint8Array>
   const cutoff = u32(0x38);
   const sectorAt = (n: number) => (n + 1) * size;
 
-  // the sectors holding the table of sector chains (the FAT): 109 named in the header, the rest in a chain of their own
+  // the sectors holding the table of sector chains (the FAT): 109 named in the header, the rest in a
+  // chain of their own (in a damaged file that chain can loop, or name more sectors than the file has)
+  const sectors = Math.ceil(b.length / size);
   const fatSectors: number[] = [];
   for (let i = 0; i < 109; i++) {
     const s = u32(0x4c + 4 * i);
     if (s !== FREE && s !== END) fatSectors.push(s);
   }
-  let difat = u32(0x44);
-  for (let guard = 0; difat !== END && difat !== FREE && guard < 1e5; guard++) {
+  const seenDifat = new Set<number>();
+  for (let difat = u32(0x44); difat !== END && difat !== FREE && !seenDifat.has(difat) && fatSectors.length < sectors; difat = u32(sectorAt(difat) + size - 4)) {
+    seenDifat.add(difat);
     const at = sectorAt(difat);
     for (let i = 0; i < size / 4 - 1; i++) {
       const s = u32(at + 4 * i);
       if (s !== FREE && s !== END) fatSectors.push(s);
     }
-    difat = u32(at + size - 4);
   }
+  fatSectors.length = Math.min(fatSectors.length, sectors);
   const fat: number[] = [];
   for (const s of fatSectors) {
     const at = sectorAt(s);

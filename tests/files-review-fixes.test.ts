@@ -13,6 +13,7 @@ import { writeXlsx, readXlsx, type XlsxPictures } from '../src/io/xlsx';
 import { readOdt, writeOdt } from '../src/io/odt';
 import { readOds } from '../src/io/ods';
 import { readPptx } from '../src/io/pptx-read';
+import { cfbStreams, writeCfb } from '../src/io/cfb';
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 const deps: DocxDeps = { async picture() { return null; }, async svgToPng() { return PNG; } };
@@ -146,4 +147,25 @@ describe('zip bombs', () => {
     // an ordinary file still opens
     expect(await refusal(() => readDocx(zipSync(docx)))).toBeNull();
   });
+});
+
+describe('compound files (.doc, .xls, Word objects)', () => {
+  /** A real compound file, then broken: its DIFAT chain starts at sector 0, which points back at itself. */
+  function loopingDifat(entriesPerSector: number): Uint8Array {
+    const b = new Uint8Array(writeCfb([['WordDocument', new Uint8Array(600)]]));
+    const dv = new DataView(b.buffer);
+    dv.setUint32(0x44, 0, true);
+    dv.setUint32(0x48, 1, true);
+    for (let i = 0; i < 127; i++) dv.setUint32(512 + 4 * i, i < entriesPerSector ? 1 : 0xffffffff, true);
+    dv.setUint32(512 + 508, 0, true);
+    return b;
+  }
+
+  it('a DIFAT chain that loops back on itself is read once', () => {
+    const t0 = performance.now();
+    try { cfbStreams(loopingDifat(4)); } catch { /* refusing the file is fine */ }
+    expect(performance.now() - t0).toBeLessThan(200);
+    // an undamaged file still reads
+    expect(cfbStreams(writeCfb([['WordDocument', new Uint8Array(600).fill(7)]])).get('WordDocument')?.[599]).toBe(7);
+  }, 60_000);
 });
