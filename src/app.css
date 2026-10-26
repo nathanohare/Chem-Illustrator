@@ -1377,6 +1377,10 @@ body.ribbon-collapsed .ribbon.rb-peek > .rb-tabs [role='tab'][aria-selected='tru
 .fb-title { flex: 1; font-weight: 600; }
 .fb-head button { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 4px; border: 0; border-radius: 4px; background: none; color: var(--muted); cursor: pointer; font-size: 15px; }
 .fb-head button:hover { background: var(--hover, rgb(0 0 0 / 0.06)); color: var(--text); }
+.fb-head button[hidden] { display: none; }
+/* pinned down the right side of the window, as PowerPoint's panes */
+.float-box.fb-docked { left: auto; right: 0; bottom: 0; max-height: none; border-radius: 0; border-top: 0; border-right: 0; box-shadow: -4px 0 12px rgb(0 0 0 / 0.12); }
+.float-box.fb-docked .fb-head { cursor: default; }
 .fb-body { padding: 6px 10px 10px; overflow: auto; }
 .fb-body .dp-section > h3 { display: none; }
 .fb-body .dp-input:focus, .fb-body select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
@@ -2527,7 +2531,8 @@ dialog.show-setup { width: min(94vw, 600px); }
 .sc-bar, .sc-act { display: flex; gap: 6px; flex-wrap: wrap; }
 .sc-bar { margin-bottom: 6px; }
 .sc-accepted, .sc-rejected { opacity: 0.6; }
-.sc-list { max-height: 60vh; overflow: auto; }
+.sc-pane .fb-body { display: flex; flex-direction: column; min-height: 0; flex: 1; overflow: hidden; }
+.sc-list { flex: 1; min-height: 0; overflow: auto; }
 
 /* File > New from Template */
 .file-templates .ft-body { max-height: min(68vh, 620px); overflow-y: auto; }

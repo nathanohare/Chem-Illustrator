@@ -84,7 +84,9 @@ const EMU = 12700;
 /** The view settings part (ppt/viewProps.xml): Normal view's guides, snapping and grid. */
 export function viewPropsXml(view: SlideView | undefined, ns: string): string {
   const v = view;
-  const guides = v ? [...v.guides.y.map((y) => `<p:guide orient="horz" pos="${Math.round(y * 8)}"/>`), ...v.guides.x.map((x) => `<p:guide pos="${Math.round(x * 8)}"/>`)].join('') : '';
+  // each guide once (two in the same place are one in PowerPoint)
+  const once = (xs: number[]) => [...new Set(xs.map((x) => Math.round(x * 8)))];
+  const guides = v ? [...once(v.guides.y).map((y) => `<p:guide orient="horz" pos="${y}"/>`), ...once(v.guides.x).map((x) => `<p:guide pos="${x}"/>`)].join('') : '';
   return `<p:viewPr ${ns}><p:normalViewPr><p:restoredLeft sz="15620"/><p:restoredTop sz="94660"/></p:normalViewPr>` +
     `<p:slideViewPr><p:cSldViewPr snapToGrid="${v && !v.snapToGrid ? 0 : 1}"${v?.showGuides ? ' showGuides="1"' : ''}><p:cViewPr varScale="1"><p:scale><a:sx n="100" d="100"/><a:sy n="100" d="100"/></p:scale><p:origin x="0" y="0"/></p:cViewPr>` +
     `${guides ? `<p:guideLst>${guides}</p:guideLst>` : '<p:guideLst/>'}</p:cSldViewPr></p:slideViewPr>` +
@@ -106,7 +108,8 @@ export function readViewProps(root: Element | null | undefined): SlideView | nul
   const view: SlideView = { guides: { x: [], y: [] }, showGuides: csld?.getAttribute('showGuides') === '1', snapToGrid: csld?.getAttribute('snapToGrid') !== '0', grid: 7.2 };
   for (const g of Array.from(find(csld, 'guideLst')?.children ?? [])) {
     const pos = Number(g.getAttribute('pos') ?? 0) / 8;
-    if (g.getAttribute('orient') === 'horz') view.guides.y.push(pos); else view.guides.x.push(pos);
+    const list = g.getAttribute('orient') === 'horz' ? view.guides.y : view.guides.x;
+    if (!list.some((q) => Math.abs(q - pos) < 0.01)) list.push(pos);
   }
   const cx = Number(grid?.getAttribute('cx') ?? 0);
   if (cx > 0) view.grid = +(cx / EMU).toFixed(4);

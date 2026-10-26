@@ -9,6 +9,7 @@
 // lines, arrows and tables. What has no place here yet (charts, rotated things) is noted in
 // warnings, never refused.
 
+import { fromDataUrl } from '../render/images';
 import type { PinnedComment } from '../document/comments';
 import { COMMENT_REL, readCommentAuthors, readLegacyComments, readModernComments } from './pptx-comments';
 import { Doc, Caption, Shape, TextRun, ParaStyle, Arrow, Contents, Placeholder, Justify, stripBase, type TableCell, type TableData, type PictureFx, type BackgroundRemoval, type PictureLook, type Frame, type ShapeMath, type Media } from '../model';
@@ -898,7 +899,7 @@ class Reader {
     const video0 = this.videoOf(s.path, kid(el, 'nvPicPr', 'nvPr'));
     // recorded narration (Slide Show > Record), as we name it
     const video = video0?.audio && kid(el, 'nvPicPr', 'cNvPr')?.getAttribute('name') === NARRATION_NAME ? { ...video0, narration: true } : video0;
-    const fx = this.pictureFx(s.path, el, img, tags[TAG.picture]);
+    const fx = this.pictureFx(s.path, el, img, tags[TAG.picture], tags[TAG.pictureOrig]);
     // a picture cut to a shape has the shape's outline, not rounded corners
     if (fx?.shape && look) delete look.round;
     // a click on it in the show: a zoom (ours, or PowerPoint's, from its fallback picture) or a link
@@ -919,7 +920,7 @@ class Reader {
    * into the picture and kept the original as its layer, the original comes in (`img` changed to
    * it) with the settings; without the original they stay worked in, and are not done again.
    */
-  private pictureFx(from: string, pic: Element, img: { src: string; px: { w: number; h: number }; mime: string }, tag: string | undefined): PictureFx | undefined {
+  private pictureFx(from: string, pic: Element, img: { src: string; px: { w: number; h: number }; mime: string }, tag: string | undefined, origTag?: string): PictureFx | undefined {
     const blip = kid(pic, 'blipFill', 'blip');
     const got = readPictureFx(blip, kid(pic, 'spPr'));
     if (got.dropped) this.warnings.add('Some picture effects (artistic effects, saturation, colour temperature) were left off.');
@@ -937,9 +938,17 @@ class Reader {
       }
     }
     if (!fx) return undefined;
-    const target = layer ? this.r.rels(from).get(layer)?.target : undefined;
-    const bytes = target ? this.r.bytes(target) : null;
-    const mime = target ? EXT_MIME[target.split('.').pop()!.toLowerCase()] : undefined;
+    // the original: in our tag (files saved since), or a picture beside it (older files; PowerPoint
+    // drops it when it saves, and gives its id to some other part)
+    let bytes: Uint8Array | null = null, mime: string | undefined;
+    if (layer === 'tag') {
+      try { if (origTag) ({ bytes, mime } = fromDataUrl(origTag)); } catch { /* lost */ }
+    } else if (layer) {
+      const rel = this.r.rels(from).get(layer);
+      const target = rel && /\/image$/.test(rel.type ?? '') ? rel.target : undefined;
+      bytes = target ? this.r.bytes(target) : null;
+      mime = target ? EXT_MIME[target.split('.').pop()!.toLowerCase()] : undefined;
+    }
     if (bytes && mime && SHOWABLE.has(mime) && !img.mime.includes('svg')) {
       img.src = dataUrl(bytes, mime);
       img.px = imageSize(bytes, mime) ?? img.px;

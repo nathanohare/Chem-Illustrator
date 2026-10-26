@@ -599,13 +599,14 @@ function previewStereo(on: boolean): void {
 
 // The webview's own right-click menu (Back, Refresh, Save as, Inspect) is no use in the app, and
 // its Refresh reloads it: left out wherever the app gives no menu of its own, except in text boxes
-// (cut, copy, paste and spelling there).
+// (cut, copy, paste and spelling there). Caught on the way in, before anything over the slide
+// (a shape's own handler, say) can stop it reaching the window (laptop bench pp-effects-masters).
 if (isTauri()) {
   window.addEventListener('contextmenu', (e) => {
     const t = e.target as HTMLElement | null;
     if (t?.closest?.('input, textarea, [contenteditable=""], [contenteditable="true"]')) return;
     e.preventDefault();
-  });
+  }, true);
 }
 
 // Files dropped on the window: pictures go on the drawing or slide, other files open in tabs
@@ -2321,7 +2322,11 @@ let masterSeen: unknown = null;
 let indexSeen = -1;
 const slideListKey = (d: Deck) => `${d.slides.map((s) => s.id + (s.notes.trim() ? 'n' : '') + (s.hidden ? 'h' : '') + (s.section !== undefined ? `s${s.section}` : '')).join(',')}|${d.sections.map((x) => `${x.id}:${x.name}`).join('/')}|${d.size.w}x${d.size.h}|${d.looks}`;
 
+/** Told of every change to a deck (the Compare pane, which follows Undo). */
+const deckWatchers: ((deck: Deck) => void)[] = [];
+
 function deckChanged(deck: Deck): void {
+  for (const f of deckWatchers) f(deck);
   const key = slideListKey(deck);
   if (key !== listKey || masterSeen !== deck.master) {
     listKey = key;
@@ -2646,7 +2651,9 @@ function addGuide(axis: 'x' | 'y'): void {
   if (!d || ws.active.mode !== 'slides') return;
   const v = slideViewOf(d);
   const next = { ...v, showGuides: true, guides: { x: [...v.guides.x], y: [...v.guides.y] } };
-  next.guides[axis].push((axis === 'x' ? d.size.w : d.size.h) / 2);
+  // not a second guide where one is already (the deck's first ones are down the middle, hidden): it shows
+  const mid = (axis === 'x' ? d.size.w : d.size.h) / 2;
+  if (!next.guides[axis].some((g) => Math.abs(g - mid) < 0.01)) next.guides[axis].push(mid);
   d.setSettings({ ...d.settings, view: next }, 'Add guide');
   showRulers();
   renderer.repaintAll();
@@ -4897,6 +4904,7 @@ const slideCompare = new SlideComparePane({
   flash: (m, ms) => flash(m, ms),
   changed: () => { const d = deckNow(); if (d) deckChanged(d); },
 });
+deckWatchers.push((d) => slideCompare.deckChanged(d));
 
 /** File > New > New from Template: a document or sheet started from one of our templates. */
 async function newFromTemplate(): Promise<void> {
@@ -4944,7 +4952,8 @@ async function compareSlides(): Promise<void> {
     name = t.name;
   }
   if (deckNow() !== d) return;
-  const n = slideCompare.start(d, theirs, name, document.querySelector<HTMLElement>('[data-cmd="compare-slides"]:not([hidden])'));
+  // at the right of the window, clear of the slide list
+  const n = slideCompare.start(d, theirs, name);
   flash(n ? `${n} change${n === 1 ? '' : 's'} from ${name} to review.` : `${name} has the same slides as this deck.`);
 }
 

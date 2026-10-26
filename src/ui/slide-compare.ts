@@ -5,6 +5,7 @@
 
 import { FloatBox } from './float-box';
 import { paintSlide } from '../deck/slide-view';
+import { onImageReady } from '../render/images';
 import { compareDecks, type SlideChange, type SlideView } from '../deck/compare';
 import type { Deck, Slide } from '../deck/deck';
 
@@ -28,6 +29,8 @@ interface Item {
   state: State;
   /** This deck's slide it is about (changed, deleted), or the slide it goes in after (inserted; null: at the start). */
   slide: Slide | null;
+  /** Accepted: the slide it put in (inserted, changed) or took out (deleted), to see whether Undo took it back. */
+  made?: Slide;
 }
 
 const W = 132;
@@ -47,9 +50,9 @@ export class SlideComparePane {
   private placed = new Map<Slide | null, Slide>();
 
   constructor(private host: SlideCompareHost) {
-    this.box = new FloatBox('Compare', () => {});
+    // pinned, it stands down the right side of the window, as PowerPoint's Revisions pane
+    this.box = new FloatBox('Compare', () => this.box.dock(!this.box.docked));
     this.box.el.classList.add('sc-pane');
-    (this.box.el.querySelector('.fb-pin') as HTMLElement | null)?.setAttribute('hidden', '');
     this.summary = document.createElement('p');
     this.summary.className = 'sc-summary';
     this.summary.setAttribute('role', 'status');
@@ -81,6 +84,30 @@ export class SlideComparePane {
     this.box.close();
     this.mine = this.theirs = null;
     this.items = [];
+    this.unwatch?.();
+    this.unwatch = null;
+  }
+
+  private unwatch: (() => void) | null = null;
+  private thumbs: { cv: HTMLCanvasElement; d: Deck; i: number }[] = [];
+  private painting = 0;
+  private seen = '';
+
+  /**
+   * The deck changed (an edit, Undo or Redo): a change accepted and then undone is open again,
+   * and one redone accepted again.
+   */
+  deckChanged(d: Deck): void {
+    if (!this.open || d !== this.mine) return;
+    const key = `${d.slides.map((s) => s.id).join(',')}|${this.items.map((it) => this.stateOf(it)).join('')}`;
+    if (key !== this.seen) this.render();
+  }
+
+  /** Where a change stands now: an accepted one whose slide Undo took back (or put back) is open again. */
+  private stateOf(it: Item): State {
+    if (it.state !== 'accepted' || !it.made || !this.mine) return it.state;
+    const there = this.mine.slides.includes(it.made);
+    return (it.change.kind === 'deleted' ? !there : there) ? 'accepted' : 'open';
   }
 
   /** Compare `mine` (the deck showing) with `theirs` (another version, named `name`) and list the changes. */
@@ -97,16 +124,27 @@ export class SlideComparePane {
       slide: c.kind === 'inserted' ? (mine.slides[c.after] ?? null) : mine.slides[c.mine],
     }));
     this.box.title = `Compare with ${name}`;
+    // pictures still loading draw grey at first: the thumbnails again once they are in
+    this.unwatch?.();
+    this.unwatch = onImageReady(() => {
+      if (this.painting) return;
+      this.painting = requestAnimationFrame(() => { this.painting = 0; for (const t of this.thumbs) this.paint(t.cv, t.d, t.i); });
+    });
     this.render();
     this.box.show(near);
     return changes.length;
   }
 
-  /** Where a slide of the original deck is now (following slides put in its place), or -1. */
+  /** Where a slide of the original deck is now (following slides put in its place, unless Undo took them back), or -1. */
   private where(s: Slide): number {
     let at: Slide = s;
-    for (let n = 0; this.replaced.has(at) && n < 1000; n++) at = this.replaced.get(at)!;
-    return this.mine!.slides.indexOf(at);
+    let found = this.mine!.slides.indexOf(at);
+    for (let n = 0; this.replaced.has(at) && n < 1000; n++) {
+      at = this.replaced.get(at)!;
+      const k = this.mine!.slides.indexOf(at);
+      if (k >= 0) found = k;
+    }
+    return found;
   }
 
   /** The place an inserted slide goes in after: its slide, or the nearest earlier one still in the deck. */
@@ -139,23 +177,28 @@ export class SlideComparePane {
     if (c.kind === 'inserted') {
       const after = this.after(it.slide);
       mine.pasteSlides(theirs.copySlides([c.theirs]), false, after);
-      this.placed.set(it.slide, mine.slides[after + 1]);
+      it.made = mine.slides[after + 1];
+      this.placed.set(it.slide, it.made);
     } else if (c.kind === 'deleted') {
       const i = this.where(it.slide!);
       if (i < 0) return false;
+      const gone = mine.slides[i];
       if (!mine.remove([i])) { this.host.flash("The deck's last slide can't be deleted."); return false; }
+      it.made = gone;
     } else {
       const i = this.where(it.slide!);
       if (i < 0) return false;
       const old = mine.slides[i];
       if (!mine.replaceSlide(i, theirs.copySlides([c.theirs]))) return false;
-      this.replaced.set(old, mine.slides[i]);
+      it.made = mine.slides[i];
+      this.replaced.set(old, it.made);
     }
     it.state = 'accepted';
     return true;
   }
 
   private decide(it: Item, yes: boolean): void {
+    if (this.stateOf(it) !== 'open') return;
     if (yes) {
       if (!this.ready() || !this.accept(it)) return;
       this.host.changed();
@@ -167,7 +210,7 @@ export class SlideComparePane {
     if (yes && !this.ready()) return;
     let n = 0;
     for (const it of this.items) {
-      if (it.state !== 'open') continue;
+      if (this.stateOf(it) !== 'open') continue;
       if (!yes) { it.state = 'rejected'; n++; } else if (this.accept(it)) n++;
     }
     if (yes && n) this.host.changed();
@@ -184,7 +227,9 @@ export class SlideComparePane {
   }
 
   private render(): void {
-    const left = this.items.filter((i) => i.state === 'open').length;
+    if (this.mine) this.seen = `${this.mine.slides.map((s) => s.id).join(',')}|${this.items.map((it) => this.stateOf(it)).join('')}`;
+    this.thumbs = [];
+    const left = this.items.filter((i) => this.stateOf(i) === 'open').length;
     this.summary.textContent = !this.items.length
       ? 'The two versions are the same: no changes to review.'
       : left
@@ -200,12 +245,8 @@ export class SlideComparePane {
     cap.textContent = label;
     if (i >= 0 && i < d.slides.length) {
       const cv = document.createElement('canvas');
-      const h = Math.round((W * d.size.h) / d.size.w);
-      cv.style.width = `${W}px`;
-      cv.style.height = `${h}px`;
-      try {
-        paintSlide(cv, W, h, window.devicePixelRatio || 1, d.page(i), d.docOf(i), '#fff');
-      } catch { /* a slide that can't be drawn (no canvas in tests) still lists */ }
+      this.paint(cv, d, i);
+      this.thumbs.push({ cv, d, i });
       fig.append(cv);
     } else {
       const none = document.createElement('div');
@@ -217,10 +258,21 @@ export class SlideComparePane {
     return fig;
   }
 
+  private paint(cv: HTMLCanvasElement, d: Deck, i: number): void {
+    if (i < 0 || i >= d.slides.length) return;
+    const h = Math.round((W * d.size.h) / d.size.w);
+    cv.style.width = `${W}px`;
+    cv.style.height = `${h}px`;
+    try {
+      paintSlide(cv, W, h, window.devicePixelRatio || 1, d.page(i), d.docOf(i), '#fff');
+    } catch { /* a slide that can't be drawn (no canvas in tests) still lists */ }
+  }
+
   private row(it: Item): HTMLElement {
     const c = it.change;
     const row = document.createElement('div');
-    row.className = `sc-item sc-${it.state}`;
+    const state = this.stateOf(it);
+    row.className = `sc-item sc-${state}`;
     const head = document.createElement('button');
     head.type = 'button';
     head.className = 'sc-head';
@@ -237,11 +289,11 @@ export class SlideComparePane {
     }
     const thumbs = document.createElement('div');
     thumbs.className = 'sc-thumbs';
-    const mineAt = c.kind === 'inserted' ? -1 : it.state === 'open' && it.slide ? this.where(it.slide) : -1;
-    if (it.state === 'open') thumbs.append(this.thumb(this.mine!, mineAt, 'This deck'));
+    const mineAt = c.kind === 'inserted' ? -1 : state === 'open' && it.slide ? this.where(it.slide) : -1;
+    if (state === 'open') thumbs.append(this.thumb(this.mine!, mineAt, 'This deck'));
     thumbs.append(this.thumb(this.theirs!, c.kind === 'deleted' ? -1 : c.theirs, 'Other version'));
     row.append(head, ul, thumbs);
-    if (it.state === 'open') {
+    if (state === 'open') {
       const bar = document.createElement('div');
       bar.className = 'sc-act';
       const ok = document.createElement('button');
@@ -259,7 +311,7 @@ export class SlideComparePane {
     } else {
       const s = document.createElement('p');
       s.className = 'muted small';
-      s.textContent = it.state === 'accepted' ? 'Accepted' : 'Rejected';
+      s.textContent = state === 'accepted' ? 'Accepted' : 'Rejected';
       row.append(s);
     }
     return row;

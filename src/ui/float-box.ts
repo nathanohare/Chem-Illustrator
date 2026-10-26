@@ -8,6 +8,9 @@ export class FloatBox {
   private titleEl: HTMLSpanElement;
   /** Where it was left (kept while the app is open). */
   private at: { x: number; y: number } | null = null;
+  private pinBtn: HTMLButtonElement;
+  /** Pinned down the right side of the window (dock). */
+  docked = false;
 
   constructor(title: string, private onPin: () => void) {
     this.el = document.createElement('div');
@@ -25,6 +28,7 @@ export class FloatBox {
     pin.innerHTML = PIN_ICON;
     pin.title = 'Pin to the panel on the right (it stays there until you unpin it)';
     pin.addEventListener('click', () => this.onPin());
+    this.pinBtn = pin;
     const close = document.createElement('button');
     close.type = 'button';
     close.className = 'fb-close';
@@ -68,12 +72,35 @@ export class FloatBox {
     this.el.hidden = true;
   }
 
+  /**
+   * Stand it down the right side of the window, under the ribbon (over the side panel), or let it
+   * float again where it was.
+   */
+  dock(on: boolean): void {
+    this.docked = on;
+    this.el.classList.toggle('fb-docked', on);
+    this.pinBtn.innerHTML = on ? PINNED_ICON : PIN_ICON;
+    this.pinBtn.title = on ? 'Unpin: float it over the window again' : 'Pin to the right side of the window';
+    if (on) {
+      const side = document.querySelector('main') ?? document.querySelector('aside');
+      const top = side ? Math.max(0, side.getBoundingClientRect().top) : 0;
+      this.el.style.left = '';
+      this.el.style.top = `${top}px`;
+      this.el.style.maxHeight = '';
+    } else if (this.at) {
+      this.place(this.at.x, this.at.y);
+    }
+  }
+
   private place(x: number, y: number, w = this.el.offsetWidth, h = this.el.offsetHeight): void {
+    if (this.docked) return;
     x = Math.max(4, Math.min(x, window.innerWidth - w - 4));
     y = Math.max(4, Math.min(y, window.innerHeight - Math.min(h, 120)));
     this.at = { x, y };
     this.el.style.left = `${x}px`;
     this.el.style.top = `${y}px`;
+    // never past the bottom of the window: what doesn't fit scrolls
+    this.el.style.maxHeight = `${Math.max(120, window.innerHeight - y - 8)}px`;
   }
 
   private wireDrag(head: HTMLElement): void {
