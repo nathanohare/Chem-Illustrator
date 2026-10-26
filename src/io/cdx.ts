@@ -86,7 +86,8 @@ const P: Record<string, Prop> = {
   xyz: { tag: 0x0201, kind: 'pt3' },
   extent: { tag: 0x0202, kind: 'pt2' },
   BoundingBox: { tag: 0x0204, kind: 'rect' },
-  RotationAngle: { tag: 0x0205, kind: 'deg65536' },
+  // stored in 1/65536 degree in CDXML as well (ChemDraw 25 writes 17694720 for 270°)
+  RotationAngle: { tag: 0x0205, kind: 'i32' },
   BoundsInParent: { tag: 0x0206, kind: 'rect' },
   Head3D: { tag: 0x0207, kind: 'pt3' },
   Tail3D: { tag: 0x0208, kind: 'pt3' },
