@@ -5220,6 +5220,11 @@ const COMMANDS: Record<string, () => unknown> = {
   },
   'arrow-smooth-join': () => { const j = editor.pickedJoin(); if (!j || !editor.setJoinKind(j.id, j.join, 'smooth')) flash('Right-click a round join handle on a selected arrow first.'); },
   'arrow-symmetric-join': () => { const j = editor.pickedJoin(); if (!j || !editor.setJoinKind(j.id, j.join, 'symmetric')) flash('Right-click a round join handle on a selected arrow first.'); },
+  'arrow-shape-u': () => { if (!pickedCurved()) flash('Select one or more curved (mechanism) arrows first.'); else if (!editor.setArrowShape('u')) flash('The selected arrows are U-turns already.'); },
+  'arrow-shape-loop': () => { if (!pickedCurved()) flash('Select one or more curved (mechanism) arrows first.'); else if (!editor.setArrowShape('loop')) flash('The selected arrows are loops already.'); },
+  'arrow-reverse': () => { if (!editor.reverseArrows()) flash('Select one or more curved (mechanism) arrows first.'); },
+  'arrow-smooth-path': () => { if (!pickedCurved()) flash('Select one or more curved (mechanism) arrows first.'); else if (!editor.tidyPaths('smooth')) flash('The selected arrows have no sharp corners.'); },
+  'arrow-simplify-path': () => { if (!pickedCurved()) flash('Select one or more curved (mechanism) arrows first.'); else if (!editor.tidyPaths('simplify')) flash('The selected arrows can\'t be drawn with fewer bends.'); },
   'flip-arrow-bend': () => { if (!editor.flipArrowBend()) flash('Select one or more curved (mechanism) arrows first.'); },
   'homolysis-arrows': () => {
     const n = editor.sel.bonds.size;
@@ -7721,7 +7726,8 @@ function drawingMenu(): MenuItem[] {
     ] : []),
     ...(pickedCurved() ? [{ cmd: 'clean-up-arrow' }, { label: 'Mechanism Arrow', items: [
       { cmd: 'arrow-add-bend', ...(editor.contextSpot?.t !== undefined ? { label: 'Add Bend Here' } : {}) }, ...(editor.pickedJoin() ? [{ cmd: 'arrow-remove-bend' }, { cmd: 'arrow-smooth-join' }, { cmd: 'arrow-symmetric-join' }] : []), null,
-      { cmd: 'arrow-s-shape' }, { cmd: 'arrow-single-curve' }, { cmd: 'flip-arrow-bend' }, null, { cmd: 'attach-arrow' }, { cmd: 'detach-arrow' },
+      { label: 'Shape', items: [{ cmd: 'arrow-s-shape', label: 'S' }, { cmd: 'arrow-single-curve', label: 'Single Curve' }, { cmd: 'arrow-shape-u', label: 'U-Turn' }, { cmd: 'arrow-shape-loop', label: 'Loop' }] },
+      { cmd: 'flip-arrow-bend' }, { cmd: 'arrow-reverse' }, { cmd: 'arrow-smooth-path' }, { cmd: 'arrow-simplify-path' }, null, { cmd: 'attach-arrow' }, { cmd: 'detach-arrow' },
     ] }] : []),
     ...(s.bonds.size && s.bonds.size <= 2 && !s.arrows.size ? [{ cmd: 'homolysis-arrows' }] : []),
     ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : []),

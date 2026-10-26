@@ -67,7 +67,7 @@ import {
   arrowPoints, bracketHalves, type BracketForm, bracketLip, unionRect,
   shapeOrder, portNear, shapePorts, isCurved, headBend, swapHalf, bezPoints,
 } from '../objects';
-import { bezFrom, dragCurveAt, throughPoints, dragPathPoint, insertJoin, joinIndexes, nearestOnPath, pathPoints, removeJoin, setJoin } from '../arrow-path';
+import { bezFrom, dragCurveAt, throughPoints, dragPathPoint, firstBend, reversePath, shapeBez, shapeOf, simplifyPath, smoothPath, type ArrowShape, insertJoin, joinIndexes, nearestOnPath, pathPoints, removeJoin, setJoin } from '../arrow-path';
 import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
 import { imageFor } from '../render/images';
@@ -2252,6 +2252,67 @@ export class Editor {
     }
     if (chord === 'Enter') { this.finishRoute(); return true; }
     return false;
+  }
+
+  /** The picked curved arrows that can be edited as paths. */
+  private pickedPaths(): Arrow[] {
+    return [...this.sel.arrows].map((id) => this.pathArrow(id)).filter((r): r is Arrow => !!r);
+  }
+
+  /** Give each picked curved arrow a ready-made shape (S, single curve, U-turn, loop), from and to the same places. Gives how many changed. */
+  setArrowShape(shape: ArrowShape): number {
+    if (shape === 's' || shape === 'single') return this.setArrowS(shape === 's');
+    const arrows = this.pickedPaths().filter((r) => shapeOf(r) !== shape);
+    if (!arrows.length) return 0;
+    this.doc.edit(shape === 'u' ? 'U-turn arrow' : 'Loop arrow', () => {
+      for (const r of arrows) {
+        const patch: Partial<Arrow> = { sweep: 0, bez: shapeBez(shape, firstBend(r)) };
+        if (headBend(r) !== headBend({ ...r, ...patch })) Object.assign(patch, { headStyle: swapHalf(r.headStyle), tailStyle: swapHalf(r.tailStyle) });
+        if (r.pin) patch.bent = true;
+        this.doc.updateArrow(r.id, patch);
+      }
+    });
+    this.changed();
+    return arrows.length;
+  }
+
+  /** Turn each picked curved arrow round: the same line, pointing back the way it came. Gives how many. */
+  reverseArrows(): number {
+    const arrows = this.pickedPaths();
+    if (!arrows.length) return 0;
+    this.doc.edit('Reverse Arrow', () => {
+      for (const r of arrows) {
+        const tail = r.head, head = r.tail;
+        const pin = r.pin ? { ...(r.pin.head ? { tail: r.pin.head } : {}), ...(r.pin.tail ? { head: r.pin.tail } : {}) } : undefined;
+        const patch: Partial<Arrow> = bezPoints(r)
+          ? { tail, head, sweep: 0, bez: bezFrom(tail, head, reversePath(bezPoints(r)!)) }
+          : { tail, head, sweep: -r.sweep };
+        if (pin) patch.pin = pin;
+        // a half head keeps its barb on the outside of the (new) last bend
+        if (headBend(r) !== headBend({ ...r, ...patch })) Object.assign(patch, { headStyle: swapHalf(r.headStyle), tailStyle: swapHalf(r.tailStyle) });
+        this.doc.updateArrow(r.id, patch);
+      }
+    });
+    this.changed();
+    return arrows.length;
+  }
+
+  /** Smooth every corner of the picked curved arrows (Smooth Path), or redraw them with as few curves as keep their shape (Simplify Path). Gives how many changed. */
+  tidyPaths(how: 'smooth' | 'simplify'): number {
+    let n = 0;
+    const arrows = this.pickedPaths();
+    this.doc.edit(how === 'smooth' ? 'Smooth Path' : 'Simplify Path', () => {
+      for (const r of arrows) {
+        const pts = bezPoints(r);
+        if (!pts) continue;
+        const next = how === 'smooth' ? smoothPath(pts) : simplifyPath(pts, Math.max(0.5, dist(r.tail, r.head) * 0.02));
+        if (!next || next.every((q, i) => pts[i] && dist(q, pts[i]) < 1e-6) && next.length === pts.length) continue;
+        this.putPath(r, next);
+        n++;
+      }
+    });
+    if (n) this.changed();
+    return n;
   }
 
   /** A curved arrow that can be edited as a path (not an equilibrium pair or an elbow connector). */
