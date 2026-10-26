@@ -1326,8 +1326,9 @@ class Reader {
       for (let c = 0; c < m; c++) {
         const tc = tcs[c];
         const tcPr = kid(tc ?? null, 'tcPr');
+        // (a cell covered by a joined one shows none of its own lines)
+        if (!tc || tc.getAttribute('hMerge') === '1' || tc.getAttribute('vMerge') === '1') { bs.push({ left: 0, top: 0, bottom: 0, right: 0 }); row.push({ runs: [] }); continue; }
         bs.push({ left: width(tcPr, 'lnL'), top: width(tcPr, 'lnT'), bottom: width(tcPr, 'lnB'), right: width(tcPr, 'lnR') });
-        if (!tc || tc.getAttribute('hMerge') === '1' || tc.getAttribute('vMerge') === '1') { row.push({ runs: [] }); continue; }
         const cap = this.text(tc, { x1: 0, y1: 0, x2: cols[c], y2: 100 }, null, []);
         const cell: TableCell = { runs: cap?.runs ?? [] };
         const down = Number(tc.getAttribute('rowSpan') ?? 1);
@@ -1360,9 +1361,16 @@ class Reader {
     if (ours) {
       // one of the styles kept here: the cells' fills and text colours that only repeat it go
       read = unstyle({ ...read, style: ours, look: { total: flag('lastRow'), bandRows: flag('bandRow'), firstCol: flag('firstCol'), lastCol: flag('lastCol'), bandCols: flag('bandCol') } });
-    } else if (lines) read = { ...read, ...linesFromBorders(borders) };
-    else if (style === '{5940675A-B579-460E-94D1-54222C63F5DA}') read.lines = 'grid';
-    else if (style && style !== '{2D5ABB26-0587-4C30-8999-92F81FD0307C}') read = this.bakeStyle(read, style, { firstRow: !!head, lastRow: flag('lastRow'), band1H: flag('bandRow'), band1V: flag('bandCol'), firstCol: flag('firstCol'), lastCol: flag('lastCol') });
+    } else {
+      if (style === '{5940675A-B579-460E-94D1-54222C63F5DA}') read.lines = 'grid';
+      else if (style && style !== '{2D5ABB26-0587-4C30-8999-92F81FD0307C}') {
+        // a PowerPoint style: its fills and text colours, under any lines the cells give themselves
+        const baked = this.bakeStyle(read, style, { firstRow: !!head, lastRow: flag('lastRow'), band1H: flag('bandRow'), band1V: flag('bandCol'), firstCol: flag('firstCol'), lastCol: flag('lastCol') });
+        read = baked.table;
+        if (!lines) color = baked.line;
+      }
+      if (lines) read = { ...read, ...linesFromBorders(borders) };
+    }
     // what was saved here, when the table still has its rows and columns (and its text, for its formatting)
     const tags = this.tagsOf(s.path, kid(el, 'nvGraphicFramePr', 'nvPr'));
     let saved: { key: string; table: TableData; plain: string[][] } | null = null;
@@ -1394,12 +1402,12 @@ class Reader {
    * A table in a PowerPoint style not kept here: the style's fills and text colours (from the
    * file's table styles) written onto the cells, and its inside lines as a grid.
    */
-  private bakeStyle(t: TableData, id: string, on: Record<string, boolean>): TableData {
+  private bakeStyle(t: TableData, id: string, on: Record<string, boolean>): { table: TableData; line?: string } {
     const def = kids(this.r.xml(this.r.relOfType(this.r.relOfType('', REL.officeDocument) ?? '', REL.tableStyles) ?? '')?.documentElement ?? null, 'tblStyle')
       .find((e) => e.getAttribute('styleId') === id);
     if (!def) {
       this.warnings.add('A table\'s PowerPoint style wasn\'t in the file, so its colours were left out (pick a style in the Style panel).');
-      return t;
+      return { table: t };
     }
     const n = t.rows.length, m = t.cols.length;
     const head = on.firstRow ? 1 : 0;
@@ -1417,17 +1425,18 @@ class Reader {
       return out;
     };
     const inside = kid(def, 'wholeTbl', 'tcStyle', 'tcBdr');
-    const grid = ['insideH', 'insideV'].some((k) => { const l = kid(inside, k, 'ln'); return !!l && !kid(l, 'noFill') && !!kid(l, 'solidFill'); });
+    const insideLines = ['insideH', 'insideV'].map((k) => this.styleLine(kid(inside, k))).filter((x): x is string => !!x);
     const rows = t.rows.map((row, r) => row.map((cell, c) => {
       let fill: string | undefined, color: string | undefined, bold: boolean | undefined;
       for (const name of partsAt(r, c)) {
         const p = kid(def, name);
         if (!p) continue;
-        const f = this.color(kid(p, 'tcStyle', 'fill', 'solidFill'));
-        if (f) fill = f;
+        const f = this.styleFill(kid(p, 'tcStyle'));
+        if (f !== undefined) fill = f ?? undefined;
         const tx = kid(p, 'tcTxStyle');
         if (tx) {
-          const tc = this.color(tx);
+          // its colour, or the one its font reference gives
+          const tc = this.color(tx) ?? this.color(kid(tx, 'fontRef'));
           if (tc) color = tc;
           if (tx.getAttribute('b') === 'on') bold = true;
           else if (tx.getAttribute('b') === 'off') bold = undefined;
@@ -1438,7 +1447,54 @@ class Reader {
       if (color || bold) out.runs = cell.runs.map((x) => ({ ...x, ...(color && x.color === undefined ? { color } : {}), ...(bold && x.bold === undefined ? { bold: true } : {}) }));
       return out;
     }));
-    return { ...t, rows, lines: grid ? 'grid' : 'none' };
+    return { table: { ...t, rows, lines: insideLines.length ? 'grid' : 'none' }, ...(insideLines.length ? { line: insideLines[0] } : {}) };
+  }
+
+  /**
+   * A table style part's fill: its own colour, or one of the theme's fill styles in the colour
+   * its fillRef gives; null for no fill, undefined when the part doesn't say.
+   */
+  private styleFill(tcStyle: Element | null): string | null | undefined {
+    const f = kid(tcStyle, 'fill');
+    if (f) {
+      if (kid(f, 'noFill')) return null;
+      const solid = kid(f, 'solidFill');
+      if (solid) return this.solidOnWhite(solid);
+      const stops = [...(kid(f, 'gradFill', 'gsLst')?.children ?? [])];
+      if (stops.length) return this.solidOnWhite(stops[Math.floor(stops.length / 2)]);
+    }
+    const ref = kid(tcStyle, 'fillRef');
+    if (!ref) return undefined;
+    const idx = Number(ref.getAttribute('idx') ?? 0);
+    if (!idx) return null;
+    // the theme's fill style, with its placeholder colour (phClr) the one given here
+    const style = kids(kid(this.themeFills, idx > 1000 ? 'bgFillStyleLst' : 'fillStyleLst'))[idx > 1000 ? idx - 1001 : idx - 1];
+    if (style?.localName === 'noFill') return null;
+    if (style?.localName === 'solidFill') return this.solidOnWhite(style, ref);
+    const stops = [...(kid(style ?? null, 'gsLst')?.children ?? [])];
+    if (stops.length) return this.solidOnWhite(stops[Math.floor(stops.length / 2)], ref);
+    return this.solidOnWhite(ref);
+  }
+
+  /** A table style's line (a border side): the colour of its own line or of the theme line it refers to; null for none. */
+  private styleLine(side: Element | null): string | null {
+    const ln = kid(side, 'ln');
+    if (ln) return kid(ln, 'noFill') ? null : this.color(kid(ln, 'solidFill'));
+    const ref = kid(side, 'lnRef');
+    if (!ref || !Number(ref.getAttribute('idx') ?? 0)) return null;
+    return this.color(ref);
+  }
+
+  /** A colour with its see-through amount (alpha) mixed with the white of the slide under it. */
+  private solidOnWhite(el: Element, ph: Element | null = null): string | null {
+    const hex = this.color(el, ph);
+    if (!hex) return null;
+    const clr = kids(el).find((k) => /Clr$/.test(k.localName));
+    const a = clr ? kids(clr).find((k) => k.localName === 'alpha') : undefined;
+    if (!a) return hex;
+    const f = Math.max(0, Math.min(1, Number(a.getAttribute('val') ?? 100000) / 100000));
+    const [r, g, b] = hexToRgb(hex.slice(1));
+    return rgbHex(r * f + 255 * (1 - f), g * f + 255 * (1 - f), b * f + 255 * (1 - f));
   }
 
   /** Put the slide's tables on it, with the titles and footnotes saved beside them. */
