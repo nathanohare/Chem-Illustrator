@@ -1,9 +1,16 @@
 // File > Print: where things go on the paper.
 
 import { describe, it, expect } from 'vitest';
-import { PAPERS, defaultPaper, orient, placeIn, inside, handoutCells, noteLines, placeSvg, pageSvg } from '../src/print-layout';
+import { PAPERS, defaultPaper, orient, placeIn, inside, handoutCells, noteLines, placeSvg, pageSvg, pageSizeCss } from '../src/print-layout';
 
 describe('print layout', () => {
+  it('names the paper and its orientation for the page rule', () => {
+    expect(pageSizeCss(792, 612)).toBe('letter landscape');
+    expect(pageSizeCss(612, 792)).toBe('letter portrait');
+    expect(pageSizeCss(841.89, 595.28)).toBe('A4 landscape');
+    expect(pageSizeCss(500, 300)).toBe('500pt 300pt');
+  });
+
   it('picks Letter in North America and A4 elsewhere', () => {
     expect(defaultPaper('en-US')).toBe('letter');
     expect(defaultPaper('fr-CA')).toBe('letter');

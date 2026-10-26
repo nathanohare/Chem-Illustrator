@@ -2,6 +2,8 @@
 // shows only them, and the system's Print dialog takes it from there (printer, copies, which
 // pages, or Save as PDF). They are taken away again once printing is done.
 
+import { pageSizeCss } from '../print-layout';
+
 let root: HTMLDivElement | null = null;
 let pageRule: HTMLStyleElement | null = null;
 
@@ -21,7 +23,7 @@ export function printPages(what: { pages: string[]; w: number; h: number }): voi
   root = document.createElement('div');
   root.id = 'print-root';
   pageRule = document.createElement('style');
-  pageRule.textContent = `@page { size: ${what.w}pt ${what.h}pt; margin: 0; }`;
+  pageRule.textContent = `@page { size: ${pageSizeCss(what.w, what.h)}; margin: 0; }`;
   for (const svg of what.pages) {
     const p = document.createElement('div');
     p.className = 'print-page';
