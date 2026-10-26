@@ -234,6 +234,9 @@ export async function aiReady(p: AiPrefs): Promise<boolean> {
   return hasAiKey(p);
 }
 
+/** How long to wait for an answer, as the desktop app does (ai.rs). */
+const ANSWER_MS = 180_000;
+
 async function send(p: AiPrefs, req: AiRequest): Promise<unknown> {
   const base = aiBase(p);
   if (!base) throw new Error('Link an AI model first (Edit > Settings > AI Model).');
@@ -245,12 +248,23 @@ async function send(p: AiPrefs, req: AiRequest): Promise<unknown> {
     });
     status = r.status; text = r.body;
   } else {
-    const res = await fetch(base + req.path, {
-      method: req.method,
-      headers: { ...keyHeaders(p, webKeys()[p.provider] ?? ''), ...(req.body !== undefined ? { 'content-type': 'application/json' } : {}) },
-      ...(req.body !== undefined ? { body: JSON.stringify(req.body) } : {}),
-    });
-    status = res.status; text = await res.text();
+    // a service that takes the request and never answers (a model stuck loading) is given up on
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), ANSWER_MS);
+    try {
+      const res = await fetch(base + req.path, {
+        method: req.method,
+        headers: { ...keyHeaders(p, webKeys()[p.provider] ?? ''), ...(req.body !== undefined ? { 'content-type': 'application/json' } : {}) },
+        ...(req.body !== undefined ? { body: JSON.stringify(req.body) } : {}),
+        signal: stop.signal,
+      });
+      status = res.status; text = await res.text();
+    } catch (e) {
+      if (stop.signal.aborted) throw new Error(`The AI service did not answer in ${ANSWER_MS / 60_000} minutes.`);
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
   }
   let json: unknown = null;
   try { json = JSON.parse(text); } catch { /* not JSON: say what came back */ }
