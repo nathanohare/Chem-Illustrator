@@ -28,7 +28,7 @@ export interface RulerHost {
 }
 
 /** Whether the ruler shows (kept in the settings); `changed` saves it. */
-export const docRulerPrefs: { shown: boolean; changed?: () => void } = { shown: false };
+export { docRulerPrefs } from './mode-prefs';
 
 const KINDS: TabStop['kind'][] = ['left', 'center', 'right', 'decimal'];
 const KIND_MARK: Record<TabStop['kind'], string> = { left: 'L', center: '⊥', right: '⅃', decimal: '⊥.' };
