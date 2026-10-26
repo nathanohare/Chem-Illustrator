@@ -8,11 +8,14 @@ import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import { writeDocx, readDocx, type DocxDeps } from '../src/io/docx';
 import { newDocument, runStyleOf } from '../src/document/document';
 import { emfToSvg } from '../src/render/emf-read';
+import { Workbook } from '../src/sheet/workbook';
+import { writeXlsx, readXlsx, type XlsxPictures } from '../src/io/xlsx';
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 const deps: DocxDeps = { async picture() { return null; }, async svgToPng() { return PNG; } };
 // (copied into this window's Uint8Array: the zip library takes other bytes for folders)
 const u8 = (s: string) => { const b = strToU8(s); const o = new Uint8Array(b.length); o.set(b); return o; };
+const pictures: XlsxPictures = { box: () => ({ w: 60, h: 40 }), picture: async () => null };
 const copy = (f: Record<string, Uint8Array>) => Object.fromEntries(Object.entries(f).map(([k, v]) => { const o = new Uint8Array(v.length); o.set(v); return [k, o]; }));
 
 describe('Word tables', () => {
@@ -79,4 +82,22 @@ describe('EMF bitmaps', () => {
     expect(images(emf([{ w: 6000, h: 10000, inside: true, bytes: 64 }, { w: 16, h: 16, inside: true }]))).toBe(0);
     expect(images(emf([{ w: 16, h: 16, inside: true }, { w: 16, h: 16, inside: true }]))).toBe(2);
   });
+});
+
+describe('Excel drawings', () => {
+  it('a shape whose corner is far past Excel\'s last row opens at once', async () => {
+    const wb = new Workbook();
+    wb.edit('x', () => wb.sheet.setInput(0, 0, 'x'));
+    const files = copy(unzipSync(await writeXlsx(wb, pictures)));
+    files['xl/worksheets/_rels/sheet1.xml.rels'] = u8('<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>');
+    files['xl/worksheets/sheet1.xml'] = u8(strFromU8(files['xl/worksheets/sheet1.xml']).replace('</worksheet>', '<drawing xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="rId9"/></worksheet>'));
+    files['xl/drawings/drawing1.xml'] = u8(`<?xml version="1.0"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+      <xdr:twoCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>0</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>2</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>200000000</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>
+      <xdr:sp macro="" textlink=""><xdr:nvSpPr><xdr:cNvPr id="2" name="Rectangle 1"/><xdr:cNvSpPr/></xdr:nvSpPr><xdr:spPr><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:sp><xdr:clientData/></xdr:twoCellAnchor>
+      </xdr:wsDr>`);
+    const t0 = performance.now();
+    const back = await readXlsx(zipSync(files));
+    expect(performance.now() - t0).toBeLessThan(1000);
+    expect(back.book.sheet.objects).toHaveLength(1);
+  }, 120_000);
 });

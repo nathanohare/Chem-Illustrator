@@ -17,7 +17,7 @@
 import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr } from './ooxml';
 import { officeTarget, linkFromTarget } from '../links';
 import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side, makeStructure } from '../sheet/workbook';
-import { keyOf, rowOf, colOf, colName, cellName, parseRange, quoteSheet, Range, MAX_COLS, rangesOverlap, rangeName, inRange } from '../sheet/refs';
+import { keyOf, rowOf, colOf, colName, cellName, parseRange, quoteSheet, Range, MAX_COLS, rangesOverlap, rangeName, inRange, MAX_ROWS } from '../sheet/refs';
 import { normalizeFormula, shiftFormula } from '../sheet/formula';
 import { fileFormula, legacyFormula, needsDynamic, readFileFormula } from '../sheet/array-formulas';
 import { DefinedName, isBuiltInName } from '../sheet/names';
@@ -1314,11 +1314,10 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           const cdoc = target ? pkg.xml(target) : null;
           const from = kid(anchor, 'from'), to = kid(anchor, 'to');
           if (!cdoc || !from) { foreignPictures++; continue; }
-          const pos = (el: Element | null) => ({ col: Number(kid(el, 'col')?.textContent ?? 0), colOff: Number(kid(el, 'colOff')?.textContent ?? 0) / 9525, row: Number(kid(el, 'row')?.textContent ?? 0), rowOff: Number(kid(el, 'rowOff')?.textContent ?? 0) / 9525 });
-          const a = pos(from);
+          const a = anchorPos(from);
           let w = 480, h = 290;
           if (to) {
-            const b = pos(to);
+            const b = anchorPos(to);
             w = b.colOff - a.colOff; for (let c = a.col; c < b.col; c++) w += colPx(c);
             h = b.rowOff - a.rowOff; for (let r = a.row; r < b.row; r++) h += rowPx(r);
           } else {
@@ -1412,9 +1411,15 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   return { book, warnings };
 }
 
+/** A drawing anchor's corner: its cell (held within Excel's last row and column, as a damaged file
+ * can say any number) and the offsets into it in pixels. */
+function anchorPos(el: Element | null): { col: number; colOff: number; row: number; rowOff: number } {
+  const cell = (name: string, n: number) => Math.min(n - 1, Math.max(0, Math.trunc(Number(kid(el, name)?.textContent ?? 0)) || 0));
+  return { col: cell('col', MAX_COLS), colOff: Number(kid(el, 'colOff')?.textContent ?? 0) / PX, row: cell('row', MAX_ROWS), rowOff: Number(kid(el, 'rowOff')?.textContent ?? 0) / PX };
+}
+
 /** Where a drawing's anchor puts its object: the top-left corner in cells and the size in pixels. */
 function anchorPlace(anchor: Element, colPx: (c: number) => number, rowPx: (r: number) => number): ReadAnchor | null {
-  const pos = (el: Element | null) => ({ col: Number(kid(el, 'col')?.textContent ?? 0), colOff: Number(kid(el, 'colOff')?.textContent ?? 0) / PX, row: Number(kid(el, 'row')?.textContent ?? 0), rowOff: Number(kid(el, 'rowOff')?.textContent ?? 0) / PX });
   const ext = kid(anchor, 'ext');
   const extSize = ext ? { w: Number(ext.getAttribute('cx') ?? 0) / PX, h: Number(ext.getAttribute('cy') ?? 0) / PX } : null;
   if (anchor.localName === 'absoluteAnchor') {
@@ -1431,11 +1436,11 @@ function anchorPlace(anchor: Element, colPx: (c: number) => number, rowPx: (r: n
   }
   const from = kid(anchor, 'from');
   if (!from) return null;
-  const a = pos(from);
+  const a = anchorPos(from);
   let w: number, h: number;
   const to = kid(anchor, 'to');
   if (anchor.localName === 'twoCellAnchor' && to) {
-    const b = pos(to);
+    const b = anchorPos(to);
     w = b.colOff - a.colOff; for (let c = a.col; c < b.col; c++) w += colPx(c);
     h = b.rowOff - a.rowOff; for (let r = a.row; r < b.row; r++) h += rowPx(r);
   } else if (extSize) ({ w, h } = extSize);
