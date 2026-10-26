@@ -15,12 +15,11 @@ import type { View } from './render/renderer';
 import { readCdxml } from './io/cdxml';
 import { writeCdxml, WriteOptions } from './io/cdxml-write';
 import { cdxToCdxml, cdxmlToCdx, isCdx } from './io/cdx';
-import { writePptx, PptxOptions } from './io/pptx-write';
+// the PowerPoint writer loads the first time slides are saved
+import type { PptxOptions } from './io/pptx-write';
 import { zipHas } from './io/ooxml';
-import { isXls } from './io/xls';
-import { isOds } from './io/ods';
-import { excelLimitNote } from './io/xlsx';
-import { DOC_OPEN_ONLY, documentSaveNote, isOtherDocument } from './io/doc-files';
+import { isXls, isOds, excelLimitNote } from './io/sheet-sniff';
+import { DOC_OPEN_ONLY, documentSaveNote, isOtherDocument } from './io/doc-sniff';
 import { adoptSaved } from './io/document-file';
 import {
   FileRef, FileHandle, FileType, CDXML, CDX, CDS, PPTX, XLSX, XLSM, SHEET_OPEN_ONLY, CSV, SDF, DOCX, RTF, ODT, TABLE_TEXT_EXTENSIONS, openBytesDialog, saveFileDialog, writeFile, canSaveInPlace, askSaveChanges,
@@ -721,6 +720,7 @@ export class Workspace {
     const ext = extensionOf(name);
     if (tab.deck) {
       const deck = tab.deck;
+      const { writePptx } = await import('./io/pptx-write');
       const bytes = await writePptx({
         size: deck.size, master: deck.master, design: tab.mode === 'design', sections: deck.sectionCounts(), settings: deck.settings,
         slides: deck.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: deck.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf })),

@@ -14,6 +14,7 @@
 // a structure whose SMILES was changed in Excel, or a calculated value typed over there, stays
 // as Excel left it.
 
+import { MAX_CELL_TEXT } from './sheet-sniff';
 import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr, ZipTooBigError } from './ooxml';
 import { officeTarget, linkFromTarget } from '../links';
 import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side, makeStructure } from '../sheet/workbook';
@@ -369,9 +370,6 @@ function borderName(b: BorderStyle): string {
   return b === 'dashed' ? 'dashed' : b === 'dotted' ? 'dotted' : b;
 }
 
-/** The most characters an Excel cell holds ("Excel specifications and limits"). */
-const MAX_CELL_TEXT = 32767;
-
 /** Text cut to what an Excel cell holds (never inside a surrogate pair). */
 function excelCellText(t: string): string {
   if (t.length <= MAX_CELL_TEXT) return t;
@@ -379,12 +377,7 @@ function excelCellText(t: string): string {
   return t.slice(0, c >= 0xd800 && c <= 0xdbff ? MAX_CELL_TEXT - 1 : MAX_CELL_TEXT);
 }
 
-/** Said after an .xlsx save that cut cells' text to Excel's limit ('' when none was cut). */
-export function excelLimitNote(book: Workbook): string {
-  let n = 0;
-  for (const s of book.sheets) for (const v of s.values.values()) if (typeof v === 'string' && v.length > MAX_CELL_TEXT) n++;
-  return n ? ` (${n === 1 ? 'one cell holds' : `${n} cells hold`} more than Excel's ${MAX_CELL_TEXT.toLocaleString('en')} characters: cut to that in the file)` : '';
-}
+export { excelLimitNote } from './sheet-sniff';
 
 /** Shared strings: each text once; chemistry text (C9H8O4) with its numbers lowered. */
 class Strings {
