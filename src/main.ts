@@ -597,7 +597,20 @@ function previewStereo(on: boolean): void {
   editor.requestScene();
 }
 
-// Files dropped on the window: pictures go on the drawing or slide, other files open in tabs.
+// The webview's own right-click menu (Back, Refresh, Save as, Inspect) is no use in the app, and
+// its Refresh reloads it: left out wherever the app gives no menu of its own, except in text boxes
+// (cut, copy, paste and spelling there).
+if (isTauri()) {
+  window.addEventListener('contextmenu', (e) => {
+    const t = e.target as HTMLElement | null;
+    if (t?.closest?.('input, textarea, [contenteditable=""], [contenteditable="true"]')) return;
+    e.preventDefault();
+  });
+}
+
+// Files dropped on the window: pictures go on the drawing or slide, other files open in tabs
+// (the desktop app leaves drops to the page: tauri.conf.json's dragDropEnabled is off, which
+// WebView2 needs for dragging inside the page, such as PivotTable fields, too).
 const hasFiles = (e: DragEvent) => !!e.dataTransfer?.types.includes('Files');
 window.addEventListener('dragover', (e) => {
   if (!hasFiles(e)) return;

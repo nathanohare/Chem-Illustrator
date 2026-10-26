@@ -276,6 +276,8 @@ export class SheetMode {
   /** A sheet tab came to the front (or null: another kind of tab). */
   show(tab: Tab | null): void {
     if (this.tab && this.tab !== tab) this.leave();
+    // a PivotTable's Fields window belongs to the sheet it was opened on
+    if (!tab?.book) this.pivots.hideFields();
     this.tab = tab;
     const wb = tab?.book ?? null;
     if (wb) {
@@ -763,7 +765,7 @@ export class SheetMode {
       case 'solver': this.analysis.solverWindow(); break;
       case 'insert-pivot': this.pivots.insertWindow(); break;
       case 'insert-pivot-chart': this.pivots.pivotChart(); break;
-      case 'pivot-fields': this.pivots.fieldsWindow(); break;
+      case 'pivot-fields': this.pivots.toggleFields(); break;
       case 'pivot-refresh': this.pivots.refresh(); break;
       case 'refresh-all': void this.refreshAll(); break;
       case 'from-text': void this.queries.fromText(); break;
