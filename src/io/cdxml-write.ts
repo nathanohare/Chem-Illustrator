@@ -12,7 +12,7 @@ import { SYMBOLS } from '../chem/elements';
 import { labelBonds, labelSpec, layoutLabel, labelDir, labelGraph, tokenize, isGenericLabel, Measure, MiniGraph, kekulize, labelLook } from '../chem/labels';
 import { Vec, DEG, arcCenter, norm, sub, Rect } from '../geom';
 import { bezPoints } from '../objects';
-import { kids, descendants } from './xml';
+import { kids, descendants, wellFormed } from './xml';
 import { arialWidth } from '../text-metrics';
 import { toSymbolPieces, isSymbolFont, faceFromStyle } from '../richtext';
 import { layoutText, SINGLE } from '../text/layout';
@@ -182,8 +182,8 @@ class CdxmlWriter {
     if (b) this.root.setAttribute('BoundingBox', box(b));
     if (!src || doc.page) this.sizePage(b);
     // characters XML 1.0 can't hold (from text pasted out of Word or a PDF) would make the file
-    // unreadable: Word's line break (U+000B) becomes a line break, and the rest are dropped
-    const out = new XMLSerializer().serializeToString(this.root).replace(/\u000B/g, '\n').replace(/[\u0000-\u0008\u000C\u000E-\u001F\uFFFE\uFFFF]/g, '');
+    // unreadable: Word's line break (U+000B) becomes a line break, half an emoji U+FFFD, and the rest are dropped
+    const out = wellFormed(new XMLSerializer().serializeToString(this.root).replace(/\u000B/g, '\n').replace(/[\u0000-\u0008\u000C\u000E-\u001F\uFFFE\uFFFF]/g, ''));
     return this.prolog + out + '\n';
   }
 

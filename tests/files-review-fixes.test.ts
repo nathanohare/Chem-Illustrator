@@ -3,7 +3,7 @@
 // File fixes from the 26 October code review: numbers in damaged or hostile files held to sane
 // limits, and saved files that other programs refuse.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import { writeDocx, readDocx, type DocxDeps } from '../src/io/docx';
 import { newDocument, runStyleOf } from '../src/document/document';
@@ -14,6 +14,13 @@ import { readOdt, writeOdt } from '../src/io/odt';
 import { readOds } from '../src/io/ods';
 import { readPptx } from '../src/io/pptx-read';
 import { cfbStreams, writeCfb } from '../src/io/cfb';
+import { Doc } from '../src/model';
+import { writeCdxml } from '../src/io/cdxml-write';
+import { writeFile } from '../src/io/files';
+
+// what the desktop app is sent
+const sent = vi.hoisted(() => [] as unknown[]);
+vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => false, invoke: async (_cmd: string, args: unknown) => { sent.push(args); } }));
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 const deps: DocxDeps = { async picture() { return null; }, async svgToPng() { return PNG; } };
@@ -168,4 +175,23 @@ describe('compound files (.doc, .xls, Word objects)', () => {
     // an undamaged file still reads
     expect(cfbStreams(writeCfb([['WordDocument', new Uint8Array(600).fill(7)]])).get('WordDocument')?.[599]).toBe(7);
   }, 60_000);
+});
+
+describe('half an emoji in saved text', () => {
+  const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+  it('a CDXML caption holding a lone surrogate is saved with U+FFFD', () => {
+    const doc = new Doc();
+    doc.edit('caption', () => { doc.addCaption({ x: 100, y: 130, runs: [{ text: 'Yield \uD83D 92% \uD83D\uDE00' }], justify: 'left' }); });
+    const out = writeCdxml(doc);
+    expect(out).not.toMatch(lone);
+    expect(out).toContain('Yield \uFFFD 92% \uD83D\uDE00');
+  });
+
+  it('every text file sent to the desktop app is well formed', async () => {
+    sent.length = 0;
+    await writeFile({ kind: 'path', path: '/tmp/a.json' }, 'a.json', '{"t":"\uDE00 a \uD83D"}', { description: 'JSON', extension: 'json', mime: 'application/json' });
+    expect((sent[0] as { contents: string }).contents).toBe('{"t":"\uFFFD a \uFFFD"}');
+    expect(JSON.stringify(sent[0])).not.toMatch(/\\ud[89a-f][0-9a-f]{2}/i);
+  });
 });
