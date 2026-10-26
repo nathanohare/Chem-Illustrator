@@ -17,6 +17,8 @@ import { cfbStreams, writeCfb } from '../src/io/cfb';
 import { Doc } from '../src/model';
 import { writeCdxml } from '../src/io/cdxml-write';
 import { writeFile } from '../src/io/files';
+import { cdxmlToCdx, cdxToCdxml } from '../src/io/cdx';
+import { readCdxml } from '../src/io/cdxml';
 
 // what the desktop app is sent
 const sent = vi.hoisted(() => [] as unknown[]);
@@ -205,5 +207,16 @@ describe('control characters in saved text', () => {
     expect(new DOMParser().parseFromString(content, 'application/xml').getElementsByTagName('parsererror')).toHaveLength(0);
     expect(content).toContain('Stirred<text:line-break/>overnight (see SI)');
     expect(readOdt(bytes).doc.runs.map((r) => r.text).join('')).toContain('overnight (see SI)');
+  });
+
+  it('a .cdx with a control character in a caption still opens, with its structure', () => {
+    const cdx = cdxmlToCdx('<?xml version="1.0" encoding="UTF-8" ?><CDXML><page id="1"><t id="2" p="100 100"><s font="3" size="10">Yield QQ</s></t>' +
+      '<fragment id="3"><n id="4" p="100 120"/><n id="5" p="114 120"/><b id="6" B="4" E="5"/></fragment></page></CDXML>');
+    // a vertical tab and a bell where each copy of the caption has its "QQ"
+    let n = 0;
+    for (let i = 0; i + 1 < cdx.length; i++) if (cdx[i] === 0x51 && cdx[i + 1] === 0x51) { cdx[i] = 0x0b; cdx[i + 1] = 0x07; n++; }
+    expect(n).toBeGreaterThan(0);
+    const { doc } = readCdxml(cdxToCdxml(cdx));
+    expect(doc.atoms.size).toBe(2);
   });
 });
