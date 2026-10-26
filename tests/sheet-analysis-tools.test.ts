@@ -168,6 +168,16 @@ describe('Analysis ToolPak', () => {
     expect(performance.now() - t).toBeLessThan(1000);
   });
 
+  it('patterned numbers and sampling stop at a million, as the other distributions do', () => {
+    expect(randomNumbers({ kind: 'uniform', from: 0, to: 1 }, 1, 1_500_000, seededRandom(1))).toMatch(/million/);
+    expect(randomNumbers({ kind: 'patterned', from: 1, to: 1_500_000, step: 1, repeatEach: 1, repeatSeq: 1 }, 1, 0, seededRandom(1))).toMatch(/million/);
+    expect(randomNumbers({ kind: 'patterned', from: 1, to: 1000, step: 1, repeatEach: 2, repeatSeq: 1 }, 600, 0, seededRandom(1))).toMatch(/million/);
+    expect(sample([1, 2, 3], { random: 1_500_000 }, seededRandom(1))).toMatch(/million/);
+    const pat = randomNumbers({ kind: 'patterned', from: 0, to: 1, step: 0.1, repeatEach: 1, repeatSeq: 1 }, 1, 0, seededRandom(1));
+    if (typeof pat === 'string') throw new Error(pat);
+    expect(pat.cells.length).toBe(11);
+  });
+
   it('random numbers and sampling repeat with a seed', () => {
     const a = randomNumbers({ kind: 'normal', mean: 10, sd: 2 }, 2, 500, seededRandom(42));
     const b = randomNumbers({ kind: 'normal', mean: 10, sd: 2 }, 2, 500, seededRandom(42));

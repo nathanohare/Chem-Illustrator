@@ -705,6 +705,7 @@ export function sample(xs: number[], how: { periodic: number } | { random: numbe
   } else {
     const n = Math.trunc(how.random);
     if (n < 1) return 'The number of samples must be 1 or more.';
+    if (n > 1_000_000) return 'That is more than a million samples.';
     // with replacement, as the ToolPak samples
     for (let r = 0; r < n; r++) out.put(r, 0, xs[Math.floor(rnd() * xs.length)]);
   }
@@ -725,6 +726,8 @@ export function randomNumbers(dist: RandomDistribution, variables: number, count
   const out = new Out();
   if (dist.kind === 'patterned') {
     if (!(dist.step > 0) || dist.to < dist.from) return 'Give a range from a smaller to a larger number, and a step above 0.';
+    const steps = Math.floor((dist.to - dist.from) / dist.step + 1e-9) + 1;
+    if (nv * steps * Math.ceil(Math.max(1, dist.repeatEach)) * Math.ceil(Math.max(1, dist.repeatSeq)) > 1_000_000) return 'That is more than a million numbers.';
     const seq: number[] = [];
     for (let s = 0; s < Math.max(1, dist.repeatSeq); s++)
       for (let x = dist.from; x <= dist.to + 1e-9 * Math.abs(dist.step); x += dist.step)
