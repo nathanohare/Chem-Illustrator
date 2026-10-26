@@ -121,3 +121,19 @@ describe('saving and opening a workspace', () => {
     expect(flashes.at(-1)).toContain('Not found: gone.cdxml');
   });
 });
+
+describe('the note about structures in Word', () => {
+  it('is said only when the document has a structure (not for shapes, diagrams or tables alone, or one taken out of the text)', async () => {
+    const { hasStructures } = await import('../src/workspace');
+    const { newDocument, objectRun } = await import('../src/document/document');
+    const atom = { id: 1, x: 0, y: 0, element: 'C' } as unknown as import('../src/model').Atom;
+    const empty = { atoms: [], bonds: [], captions: [], arrows: [], shapes: [] };
+    const d = newDocument();
+    expect(hasStructures(d)).toBe(false);
+    // a drawing of shapes only
+    expect(hasStructures({ ...d, runs: [objectRun(1, {})], objects: { 1: { kind: 'drawing', contents: empty } } })).toBe(false);
+    // a structure left in the objects after its place in the text was deleted
+    expect(hasStructures({ ...d, objects: { 1: { kind: 'drawing', contents: { ...empty, atoms: [atom] } } } })).toBe(false);
+    expect(hasStructures({ ...d, runs: [objectRun(1, {})], objects: { 1: { kind: 'drawing', contents: { ...empty, atoms: [atom] } } } })).toBe(true);
+  });
+});
