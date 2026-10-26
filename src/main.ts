@@ -8580,12 +8580,15 @@ let defaultPage: Settings['page'] = { name: 'letter', w: 540, h: 720, grow: true
 /** The welcome card has been closed for good. */
 let welcomed = false;
 const welcomeCard = $('#welcome');
+/** While the welcome card shows: looks, on each change, for drawing having started. */
+let welcomeWatch: (() => void) | null = null;
 /** Show the welcome card on a first, empty drawing; it goes when closed or when drawing starts. */
 function showWelcome(): void {
   if (welcomed || doc.atoms.size || doc.captions.size || doc.shapes.size || deckNow() || ws.active.mode !== 'drawing') return;
   welcomeCard.hidden = false;
   const seen = doc.version;
   const off = () => {
+    welcomeWatch = null;
     if (welcomeCard.hidden) return;
     welcomeCard.hidden = true;
     welcomed = true;
@@ -8593,9 +8596,8 @@ function showWelcome(): void {
   };
   $('#welcome-close').addEventListener('click', () => { off(); $('#overlay').focus({ preventScroll: true }); }, { once: true });
   welcomeCard.querySelector('[data-cmd="user-guide"]')?.addEventListener('click', (e) => { e.preventDefault(); off(); command('user-guide'); }, { once: true });
-  // drawing anything puts it away
-  const watch = () => { if (welcomeCard.hidden) return; if (doc.version !== seen) off(); else requestAnimationFrame(watch); };
-  requestAnimationFrame(watch);
+  // drawing anything puts it away (looked for on each change, not on every frame)
+  welcomeWatch = () => { if (welcomeCard.hidden) welcomeWatch = null; else if (doc.version !== seen) off(); };
 }
 
 /** File > Page Setup…: the drawing's paper size and way up, whether it adds pages, and the default for new drawings. */
@@ -8693,7 +8695,7 @@ const slideText = new SlideTextRibbon($('#ribbon'), {
   boxLook: () => editor.textBoxLook(),
 });
 CaptionEditor.onState = () => { if (ws.active.mode === 'slides') slideText.refresh(); };
-editor.onChange = () => { if (ws.active.mode === 'slides') slideText.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); if (ws.active.mode === 'slides') slideText.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();
