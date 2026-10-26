@@ -18,6 +18,7 @@ import { arialWidth } from '../text-metrics';
 import { Selection } from '../editor/editor';
 import { DEG, normDegrees } from '../geom';
 import { isCircle, cropTo, isCurved, headBend, swapHalf } from '../objects';
+import { firstBend, shapeBez, shapeOf } from '../arrow-path';
 import { GEOS, geoDef } from '../design/geo';
 import { nextNumber } from '../chem/sprouts';
 import { ringFillsOn } from '../chem/ring-fill';
@@ -256,13 +257,19 @@ export class StylePanel {
       this.body.append(b);
     }
     if (!r.equilibrium && !r.shaftSpacing && !r.elbow && isCurved(r)) {
-      // an S bends one way and then the other; its diamonds on the page shape it
-      this.check('S-shaped (two bends)', !!r.bez?.length, (v) => set(v ? 'S-shaped arrow' : 'Single-curve arrow', (a) => {
-        const side = a.bez?.length ? (a.bez[0].y >= 0 ? 1 : -1) : a.sweep > 0 ? -1 : 1;
-        const patch: Partial<Arrow> = v ? { sweep: 0, bez: [{ x: 0.25, y: 0.8 * side }, { x: 0.75, y: -0.8 * side }] } : { bez: undefined, sweep: -side * 120 * DEG };
-        if (headBend(a) !== headBend({ ...a, ...patch })) Object.assign(patch, { headStyle: swapHalf(a.headStyle), tailStyle: swapHalf(a.tailStyle) });
-        return patch;
-      }));
+      // a ready-made shape between the same two ends (or the arrow's own path, drawn or built up bend by bend)
+      const now = shapeOf(r);
+      const opts: Opt<string>[] = [['single', 'Single curve'], ['s', 'S (two bends)'], ['u', 'U-turn'], ['loop', 'Loop']];
+      if (!now) opts.push(['path', `Own path (${(r.bez!.length + 1) / 3} curves)`]);
+      this.select('Shape', opts, now ?? 'path', (v) => {
+        if (v === 'path') return;
+        set(v === 'single' ? 'Single-curve arrow' : v === 's' ? 'S-shaped arrow' : v === 'u' ? 'U-turn arrow' : 'Loop arrow', (a) => {
+          const side = firstBend(a);
+          const patch: Partial<Arrow> = v === 'single' ? { bez: undefined, sweep: -side * 120 * DEG } : { sweep: 0, bez: shapeBez(v as 's' | 'u' | 'loop', side) };
+          if (headBend(a) !== headBend({ ...a, ...patch })) Object.assign(patch, { headStyle: swapHalf(a.headStyle), tailStyle: swapHalf(a.tailStyle) });
+          return patch;
+        });
+      });
     }
     if (!r.equilibrium && !r.shaftSpacing && !r.elbow && !r.bez?.length) {
       this.number('Curve (°)', round(r.sweep / DEG, 1), 5, -330, 330, (v) => set('Bend arrow', () => ({ sweep: v * DEG })),

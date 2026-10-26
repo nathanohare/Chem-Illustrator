@@ -2,7 +2,7 @@
 // and curves fitted to points.
 
 import { describe, expect, it } from 'vitest';
-import { dragCurveAt, dragPathPoint, fitPath, throughPoints, insertJoin, joinKind, nearestOnPath, pathPoints, removeJoin, setJoin, bezFrom } from '../src/arrow-path';
+import { dragCurveAt, dragPathPoint, fitPath, throughPoints, firstBend, reversePath, shapeBez, shapeOf, simplifyPath, smoothPath, insertJoin, joinKind, nearestOnPath, pathPoints, removeJoin, setJoin, bezFrom } from '../src/arrow-path';
 import { arrowPoints, bezPathAt, bezPoints } from '../src/objects';
 import { angleOf, dist, sub, DEG, type Vec } from '../src/geom';
 
@@ -159,5 +159,58 @@ describe('drawing through points and reshaping by the line', () => {
     for (const i of [0, 3, 6]) expect(out[i]).toEqual(two[i]);
     // the join it touches stays smooth
     expect(joinKind(out, 3)).not.toBe('corner');
+  });
+});
+
+describe('shapes and path commands', () => {
+  it('knows its ready-made shapes, either way round', () => {
+    for (const side of [1, -1]) {
+      for (const shape of ['s', 'u'] as const) {
+        const r = { tail: { x: 0, y: 0 }, head: { x: 100, y: 0 }, sweep: 0, bez: shapeBez(shape, side) };
+        expect(shapeOf(r)).toBe(shape);
+        expect(firstBend(r)).toBe(side);
+      }
+    }
+    expect(shapeOf({ tail: { x: 0, y: 0 }, head: { x: 1, y: 0 }, sweep: 1 })).toBe('single');
+    expect(shapeOf({ tail: { x: 0, y: 0 }, head: { x: 1, y: 0 }, sweep: 0, bez: shapeBez('loop', -1) })).toBe('loop');
+    const own = shapeBez('loop', 1);
+    own[2] = { x: 0.5, y: 0.9 };
+    expect(shapeOf({ tail: { x: 0, y: 0 }, head: { x: 1, y: 0 }, sweep: 0, bez: own })).toBeNull();
+  });
+
+  it('a loop crosses itself', () => {
+    const pts = bezPoints({ tail: { x: 0, y: 0 }, head: { x: 100, y: 0 }, sweep: 0, bez: shapeBez('loop', 1) })!;
+    const line = along(pts, 200);
+    const cross = (a: Vec, b: Vec, c: Vec, d: Vec) => {
+      const o = (p: Vec, q: Vec, r: Vec) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+      return o(a, b, c) !== o(a, b, d) && o(c, d, a) !== o(c, d, b);
+    };
+    let found = false;
+    for (let i = 0; i < line.length - 1 && !found; i++) for (let j = i + 3; j < line.length - 1; j++) if (cross(line[i], line[i + 1], line[j], line[j + 1])) { found = true; break; }
+    expect(found).toBe(true);
+  });
+
+  it('runs the same line backwards when reversed', () => {
+    const pts = insertJoin(bezPoints(S)!, 0.3)!;
+    const back = reversePath(pts);
+    expect(back[0]).toEqual(pts[pts.length - 1]);
+    expect(gap(back, pts)).toBeLessThan(1e-4);
+  });
+
+  it('smooths every corner', () => {
+    const two = insertJoin(bezPoints(S)!, 0.5)!;
+    const corner = dragPathPoint(two, 4, { x: two[3].x, y: two[3].y + 30 }, { corner: true });
+    expect(joinKind(smoothPath(corner), 3)).not.toBe('corner');
+  });
+
+  it('simplifies a path built up bend by bend back to fewer curves', () => {
+    let pts = bezPoints(S)!;
+    for (const t of [0.2, 1.5, 2.5]) pts = insertJoin(pts, t)!;
+    expect(pts).toHaveLength(13);
+    const simple = simplifyPath(pts, 0.5)!;
+    expect(simple.length).toBeLessThan(pts.length);
+    expect(gap(pts, simple)).toBeLessThan(1);
+    expect(simple[0]).toEqual(pts[0]);
+    expect(simple[simple.length - 1]).toEqual(pts[pts.length - 1]);
   });
 });

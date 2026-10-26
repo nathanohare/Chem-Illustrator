@@ -221,13 +221,12 @@ function fitRun(d: Vec[], t1: Vec, t2: Vec, tol: number, depth: number): Vec[] {
   let bez = generate(d, u, t1, t2);
   let { err, at } = worst(bez, d, u);
   if (err <= tol) return bez;
-  if (err <= tol * 4) {
-    for (let k = 0; k < 12; k++) {
-      u = reparam(bez, d, u);
-      bez = generate(d, u, t1, t2);
-      ({ err, at } = worst(bez, d, u));
-      if (err <= tol) return bez;
-    }
+  // better params first (a curve that could fit often just needs them), then split
+  for (let k = 0; k < 20; k++) {
+    u = reparam(bez, d, u);
+    bez = generate(d, u, t1, t2);
+    ({ err, at } = worst(bez, d, u));
+    if (err <= tol) return bez;
   }
   if (depth > 12) return bez;
   // split at the worst point, smooth through it
@@ -306,4 +305,60 @@ export function dragCurveAt(pts: Vec[], t: number, p: Vec): Vec[] {
     out[across] = add(pts[anchor], mul(norm(sub(pts[anchor], out[i])), kind === 'symmetric' ? dist(out[i], pts[anchor]) : dist(pts[across], pts[anchor])));
   }
   return out;
+}
+
+// ------------------------------------------------------------------ shapes and path commands
+
+/** The ready-made shapes a curved arrow can take between its two ends. */
+export type ArrowShape = 'single' | 's' | 'u' | 'loop';
+
+/** Which way a curved arrow first bends: +1 or −1, as an arrow's `bez` points count y. */
+export function firstBend(r: Path): number {
+  if (r.bez?.length) return r.bez[0].y >= 0 ? 1 : -1;
+  return r.sweep > 0 ? -1 : 1;
+}
+
+/** Which ready-made shape an arrow has (null: a path of its own). */
+export function shapeOf(r: Path): ArrowShape | null {
+  const b = r.bez;
+  if (!b?.length) return 'single';
+  if (b.length === 2) return Math.sign(b[0].y) === Math.sign(b[1].y) ? 'u' : 's';
+  // a loop as made, not reshaped since
+  const loop = shapeBez('loop', b[0].y >= 0 ? 1 : -1);
+  return b.length === loop.length && b.every((q, i) => dist(q, loop[i]) < 1e-6) ? 'loop' : null;
+}
+
+/** A ready-made shape's control points in the frame of the line from tail to head, its first bend to `side`. */
+export function shapeBez(shape: Exclude<ArrowShape, 'single'>, side: number): Vec[] {
+  const pts: [number, number][] =
+    shape === 's' ? [[0.25, 0.8], [0.75, -0.8]]
+    : shape === 'u' ? [[0, 1], [1, 1]]
+    // a loop: out along the line, up and round over the top, down across itself and on to the head
+    : [[0.75, 0.1], [0.75, 0.75], [0.5, 0.75], [0.25, 0.75], [0.25, 0.1]];
+  return pts.map(([x, y]) => ({ x, y: y * side }));
+}
+
+/** A path run the other way: from its head back to its tail. */
+export function reversePath(pts: Vec[]): Vec[] {
+  return pts.slice().reverse();
+}
+
+/** Every join of a path made smooth (corners turned into smooth bends). */
+export function smoothPath(pts: Vec[]): Vec[] {
+  let out = pts;
+  for (const j of joinIndexes(pts)) if (joinKind(out, j) === 'corner') out = setJoin(out, j, 'smooth');
+  return out;
+}
+
+/**
+ * A path drawn again with as few curves as keep within `tol` of it (a path built up bend by bend,
+ * or drawn freehand, tidied). Null when it can't be done with fewer.
+ */
+export function simplifyPath(pts: Vec[], tol: number): Vec[] | null {
+  const n = (pts.length - 1) / 3;
+  if (n < 2) return null;
+  const along: Vec[] = [];
+  for (let s = 0; s <= 40 * n; s++) along.push(bezPathAt(pts, s / 40));
+  const fit = fitPath(along, tol);
+  return fit.length && fit.length < pts.length ? [pts[0], ...fit.slice(1, -1), pts[pts.length - 1]] : null;
 }

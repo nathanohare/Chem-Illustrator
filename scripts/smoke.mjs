@@ -36,7 +36,7 @@ try {
   await page.waitForFunction(() => window.__app?.chem?.ready || window.__app?.chem?.error, null, { timeout: 30000 });
   if (await page.evaluate(() => window.__app.chem.error)) fail('the chemistry engine did not load: ' + await page.evaluate(() => String(window.__app.chem.error)));
   console.log(`  up and chemistry ready in ${Date.now() - t0} ms`);
-  await page.locator('text=Start drawing').click({ timeout: 2000 }).catch(() => {});
+  await page.locator('#welcome-close').click({ timeout: 2000 }).catch(() => {});
 
   step('draw a ring and grow a bond with a hotkey');
   const box = await page.locator('#overlay').boundingBox();
