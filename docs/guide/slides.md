@@ -290,7 +290,7 @@ With only one screen, the audience's slides open in a window of their own. Drag 
 - **Full page slides**, one to a page;
 - **Handouts** with 2, 3, 4, 6 or 9 slides a page. Three a page leaves lines beside each slide for notes.
 
-For handouts you can also pick the paper and **Frame the slides**. The system's Print window then picks the printer and copies, and can save a PDF.
+For handouts you can also pick the paper and **Frame the slides**. The printer and copies are picked next (in the system's Print window, or in the Windows app its own Print window), which can also save a PDF.
 
 ## Links
 
