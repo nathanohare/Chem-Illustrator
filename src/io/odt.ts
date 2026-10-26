@@ -11,7 +11,7 @@ import type { Contents, Justify, ParaStyle, TableCell, TableData, TextRun } from
 import type { DocStyle } from '../style';
 import { fieldTexts, styleOf, type DocObject, type DocText } from '../document/document';
 import { fitParas, paraCount, splitParagraphs } from '../text/paragraphs';
-import { kid, kids, unzipPackage, ZipTooBigError } from './ooxml';
+import { kid, kids, unzipPackage, ZipTooBigError, xml } from './ooxml';
 import { DocBuilder, headingId, styleIdOf } from './doc-build';
 
 const NS = {
@@ -376,12 +376,13 @@ export interface OdtDeps {
   picture?(contents: Contents, style: DocStyle): Promise<{ png: Uint8Array; w: number; h: number } | null>;
 }
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// (characters XML 1.0 can't hold are dropped, as in the Office files)
+const esc = xml;
 const pt = (v: number) => `${Math.round(v * 100) / 100}pt`;
 
-/** Text as ODF writes it: runs of spaces as text:s, tabs as text:tab. */
+/** Text as ODF writes it: runs of spaces as text:s, tabs as text:tab, Word's line break (U+000B) as text:line-break. */
 function odText(t: string): string {
-  return esc(t).replace(/\t/g, '<text:tab/>').replace(/ {2,}/g, (m) => ` <text:s text:c="${m.length - 1}"/>`).replace(/^ /, '<text:s/>');
+  return t.split('\u000B').map((part) => esc(part).replace(/\t/g, '<text:tab/>').replace(/ {2,}/g, (m) => ` <text:s text:c="${m.length - 1}"/>`).replace(/^ /, '<text:s/>')).join('<text:line-break/>');
 }
 
 class OdtWriter {

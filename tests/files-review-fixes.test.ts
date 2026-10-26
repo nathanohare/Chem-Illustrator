@@ -195,3 +195,15 @@ describe('half an emoji in saved text', () => {
     expect(JSON.stringify(sent[0])).not.toMatch(/\\ud[89a-f][0-9a-f]{2}/i);
   });
 });
+
+describe('control characters in saved text', () => {
+  it('an .odt with Word\'s line break or a stray control character opens again', async () => {
+    const d = newDocument();
+    d.runs = [{ ...runStyleOf(d.styles.Normal), text: 'Stirred\u000Bovernight \u0001(see SI)' }];
+    const bytes = await writeOdt(d);
+    const content = strFromU8(unzipSync(bytes)['content.xml']);
+    expect(new DOMParser().parseFromString(content, 'application/xml').getElementsByTagName('parsererror')).toHaveLength(0);
+    expect(content).toContain('Stirred<text:line-break/>overnight (see SI)');
+    expect(readOdt(bytes).doc.runs.map((r) => r.text).join('')).toContain('overnight (see SI)');
+  });
+});
