@@ -785,7 +785,8 @@ export class Deck {
       const i = this.slides.indexOf(e.slide);
       if (i < 0) return this.undo(); // the slide has gone (should not happen: its removal is undone first)
       this.go(i);
-      this.host.undo();
+      // the drawing turns it down while a step is still being made (a drag): the step stays
+      if (!this.host.undo()) { this.undoList.push(e); return false; }
     } else {
       this.showSlide(e.slide);
       e.undo();
@@ -803,7 +804,7 @@ export class Deck {
       const i = this.slides.indexOf(e.slide);
       if (i < 0) return this.redo();
       this.go(i);
-      this.host.redo();
+      if (!this.host.redo()) { this.redoList.push(e); return false; }
     } else {
       this.showSlide(e.slide);
       e.redo();

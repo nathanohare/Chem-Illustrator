@@ -138,7 +138,8 @@ export class Presenter {
     const start = player.order ? (player.order.includes(from) ? from : player.first) : from;
     player.show(Math.max(0, Math.min(deck.slides.length - 1, start)), { transition: true });
     this.showCursor();
-    void document.fonts?.ready.then(() => { if (this.player === player) player.refresh(); });
+    // painted again once the fonts it asked for have come (not when none was still to come)
+    if (document.fonts && document.fonts.status !== 'loaded') void document.fonts.ready.then(() => { if (this.player === player) player.refresh(); });
   }
 
   /** Back and Next, and where the show is, below a show in the window (Reading View). */
