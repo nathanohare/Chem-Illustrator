@@ -959,7 +959,19 @@ export class DocumentMode {
     this.paraCountWas = paraCount(f.ed.text);
     this.showViewKind();
     if (f.view.kind === 'read') this.startReading();
-    this.blink ??= setInterval(() => { this.caretOn = !this.caretOn; this.redraw(); }, 530);
+    this.blink ??= setInterval(() => {
+      // no caret to blink (Read Mode, text selected, typing elsewhere): no need to paint the pages
+      // again, after one last time to take a caret that showed off
+      if (!this.caretCanShow()) {
+        if (this.blinkIdle) return;
+        this.blinkIdle = true;
+        this.caretOn = true;
+      } else {
+        this.blinkIdle = false;
+        this.caretOn = !this.caretOn;
+      }
+      this.redraw();
+    }, 530);
     this.changed('selection');
     requestAnimationFrame(() => this.focus());
   }
@@ -1062,6 +1074,16 @@ export class DocumentMode {
     const o = id !== undefined ? f.t.objects[id] : undefined;
     return o && (o.kind === 'drawing' || o.kind === 'picture' || o.kind === 'textbox') ? id! : null;
   }
+
+  /** The caret blinks: not in Read Mode, with text selected, or with the typing field not focused. */
+  private caretCanShow(): boolean {
+    const f = this.file;
+    if (!f || f.view.kind === 'read' || document.activeElement !== this.ta) return false;
+    const ed = f.box?.ed ?? f.ed;
+    return ed.collapsed || ed.composing !== null;
+  }
+  /** The blink found no caret to show and has stopped painting. */
+  private blinkIdle = false;
 
   private overlay(pane: DocView = this.view): Overlay {
     const f = this.file;
