@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { Workbook } from '../src/sheet/workbook';
 import { keyOf } from '../src/sheet/refs';
 import { goalSeek, newDataTableId } from '../src/sheet/what-if';
-import { layoutPivot, sourceOf, newPivotId, type PivotTable } from '../src/sheet/pivot';
+import { layoutPivot, sourceOf, newPivotId, pivotChartSeries, type PivotTable } from '../src/sheet/pivot';
 import { writePivot, removePivot, pivotAt } from '../src/sheet/pivot-sheet';
 
 function book(cells: Record<string, string>) {
@@ -132,6 +132,15 @@ describe('PivotTables', () => {
     expect(rep.cells[0]).toEqual(['Solvent', 'THF']);
     expect(rep.cells[2]).toEqual(['Row Labels', 'Max of ee']);
     expect(rep.cells.slice(3).map((r) => r.slice(0, 2))).toEqual([['Ni', 72], ['Pd', 90], ['Grand Total', 90]]);
+  });
+
+  it("charts every line of a compact report but the grand total, the first outer item too", () => {
+    const pt = pivot({ rows: ['Catalyst', 'Solvent'], values: [{ field: 'Yield', fn: 'sum' }] });
+    const rep = layoutPivot(pt, src);
+    if (typeof rep === 'string') throw new Error(rep);
+    // Row Labels, then Cu (its subtotal), DMF, Ni, THF, Pd, DMF, THF, and Grand Total
+    expect(rep.cells.map((r) => r[0])).toEqual(['Row Labels', 'Cu', 'DMF', 'Ni', 'THF', 'Pd', 'DMF', 'THF', 'Grand Total']);
+    expect(pivotChartSeries(rep, pt.at, 'Sheet1', pt)).toEqual([{ name: 'Sum of Yield', x: '=Sheet1!$G$2:$G$8', y: '=Sheet1!$H$2:$H$8' }]);
   });
 
   it('is written into the sheet, refreshed, and taken away', () => {

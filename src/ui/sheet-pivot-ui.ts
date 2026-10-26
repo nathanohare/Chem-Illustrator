@@ -269,6 +269,15 @@ export class SheetPivots {
       const name = document.createElement('span');
       name.textContent = f;
       row.append(box, name);
+      // right-click: add it to an area, as Excel's field list offers
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const to = (area: Area) => () => this.change(`Add ${f}`, (p) => moveField(p, f, undefined, undefined, area, Number.MAX_SAFE_INTEGER, src));
+        popupMenu(e.clientX, e.clientY, [
+          ['Add to Report Filter', to('filters')], ['Add to Row Labels', to('rows')], ['Add to Column Labels', to('cols')], ['Add to Values', to('values')],
+          ...(used.has(f) ? [null, ['Remove Field', () => this.change(`Remove ${f}`, (p) => withoutField(p, f))] as [string, () => void]] : []),
+        ]);
+      });
       if (pt.hidden[f]?.length) row.append(Object.assign(document.createElement('span'), { className: 'muted', textContent: ' (filtered)' }));
       list.append(row);
     }
@@ -342,6 +351,7 @@ export class SheetPivots {
         const b = chip.getBoundingClientRect();
         this.chipMenu(b.left, b.bottom + 2, area, i, field, src, names.length);
       });
+      chip.addEventListener('contextmenu', (e) => { e.preventDefault(); this.chipMenu(e.clientX, e.clientY, area, i, field, src, names.length); });
       box.append(chip);
     });
     return box;
