@@ -581,6 +581,8 @@ export class Deck {
   onChange: () => void = () => {};
   /** Called after the slide being edited changes (the editor clears its selection and redraws). */
   onSwitch: () => void = () => {};
+  /** Called just before the slide's drawing is put away (the editor reads any pen letters still waiting). */
+  onLeave: () => void = () => {};
   /** Called when a slide's transition or animations change (also on undo and redo). */
   onMotion: () => void = () => {};
   /** Called when a slide's comments change (also on undo and redo). */
@@ -628,6 +630,7 @@ export class Deck {
   /** Take the current slide out of the app's document (another tab is shown). */
   detach(): void {
     if (!this.attached || !this.current) return;
+    this.onLeave();
     this.host.onCommit = null;
     this.host.onAmend = null;
     this.host.swap(this.current.doc);

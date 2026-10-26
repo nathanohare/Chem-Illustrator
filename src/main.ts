@@ -1972,7 +1972,7 @@ const ws: Workspace = new Workspace(doc, {
     editor.cropping = null;
     (ws.pane ?? tab).view = { ...renderer.view };
     (ws.pane ?? tab).fitted = editor.stillFitted;
-    if (tab.deck) { tab.deck.onChange = () => {}; tab.deck.onSwitch = () => {}; tab.deck.onMotion = () => {}; }
+    if (tab.deck) { tab.deck.onChange = () => {}; tab.deck.onSwitch = () => {}; tab.deck.onLeave = () => {}; tab.deck.onMotion = () => {}; }
   },
   enter: (tab, opened) => enterTab(tab, opened),
   // every way of closing a tab (×, middle-click, Delete, Ctrl+W) finishes a figure or cell structure first
@@ -2115,6 +2115,7 @@ function enterTab(tab: Tab, opened: boolean): void {
   if (deck) {
     deck.onChange = () => deckChanged(deck);
     deck.onSwitch = () => slideSwitched(deck);
+    deck.onLeave = () => editor.sketcher.flush();
     listKey = slideListKey(deck);
     masterSeen = deck.master;
     slideList.show(design ? null : deck);
