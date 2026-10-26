@@ -329,6 +329,8 @@ export function readXls(bytes: Uint8Array): { book: Workbook; warnings: string[]
   for (const s of sheets) names.push(safeSheetName(s.name, names));
   const world: FormulaWorld = { sheetNames: names, xti, names: nameRecs.map((n) => n.name) };
   const book = new Workbook(names);
+  // another program's text is shown as it wrote it (Q1 stays Q1, not Q₁)
+  book.autoChem = false;
   let unreadFormulas = 0;
   const defined: DefinedName[] = [];
   book.build(() => {

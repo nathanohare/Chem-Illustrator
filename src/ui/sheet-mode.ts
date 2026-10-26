@@ -1719,7 +1719,7 @@ export class SheetMode {
     const s = this.view.sheet;
     if (!s) return false;
     const { r, c } = this.view.sel.active;
-    return showsChem(s.styleAt(r, c)?.chem, s.values.get(keyOf(r, c)));
+    return showsChem(s.styleAt(r, c)?.chem, s.values.get(keyOf(r, c)), s.wb.autoChem);
   }
 
   /** Put back the calculated values where they were typed over. */
@@ -1846,7 +1846,7 @@ export class SheetMode {
     // Excel reads a number with x:num and keeps its full value
     const text = this.cellText(s, r, c);
     // printed pages: formulas with their numbers lowered and charges raised, as on screen
-    const chem = fit && typeof v === 'string' && showsChem(st?.chem, v)
+    const chem = fit && typeof v === 'string' && showsChem(st?.chem, v, s.wb.autoChem)
       ? chemPieces(text).map((p) => { const t = esc(p.text); const x = p.pos === 'sub' ? `<sub>${t}</sub>` : p.pos === 'sup' ? `<sup>${t}</sup>` : t; return p.italic ? `<i>${x}</i>` : x; }).join('')
       : null;
     return { attrs: `${num ? ` x:num="${v}"` : ''}${css.length ? ` style="${css.join(';')}"` : ''}`, body: picture() ?? chem ?? esc(text).replace(/\n/g, '<br>') };
@@ -2107,6 +2107,10 @@ export class SheetMode {
       ['Structure from name or SMILES…', () => void this.structureFromName()],
       ['Insert property columns…', () => void this.propertyColumns()],
       ['Isotope pattern…', () => void this.isotopePattern()],
+      ['Formula Style ▸', () => popupMenu(x, y, [
+        [this.chemShown() ? 'Turn Off for These Cells' : 'Turn On for These Cells', () => this.run('format-chem')],
+        [`${s.wb.autoChem ? '✓ ' : ''}Spot Formulas in Typed Text (CH2Cl2 → CH₂Cl₂)`, () => s.wb.edit('Spot formulas in typed text', () => s.wb.setAutoChem(!s.wb.autoChem))],
+      ])],
       ['Reset to calculated', () => this.resetCalculated(), overrides],
       null,
       ['Conditional Formatting ▸', () => this.formatting.conditionalMenu(x, y)],

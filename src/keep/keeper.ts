@@ -243,7 +243,10 @@ export class Keeper {
     const key = versionKey(tab.ref, tab.name);
     if (key) void this.versions.add(key, data, how, { keep: p.versionsKeep, days: p.versionsDays, every: how === 'autosaved' ? p.versionMinutes : 0, ext: extensionOf(tab.name) }).catch(() => {});
     // Save As somewhere else: the lock moves with it
+    // (and who had the old file open says nothing about the new one: no "no longer open" notice for it)
     if (!sameRef(was, tab.ref)) {
+      this.holders.delete(tab.id);
+      closeNotice(`lock-${tab.id}`);
       void this.unlock(tab, was).then(() => this.checkLocks(tab));
       this.conflicts.delete(tab.id);
     }

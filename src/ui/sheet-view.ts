@@ -1961,7 +1961,7 @@ export class SheetView {
 
   /** The cell's look with chemistry on where its text has a formula in it (see showsChem). */
   private chemLook(style: CellStyle | undefined, v: unknown): CellStyle | undefined {
-    return style?.chem === undefined && showsChem(undefined, v) ? { ...style, chem: true } : style;
+    return style?.chem === undefined && showsChem(undefined, v, this.wb?.autoChem) ? { ...style, chem: true } : style;
   }
 
   private piecesWidth(text: string, style: CellStyle | undefined): number {
