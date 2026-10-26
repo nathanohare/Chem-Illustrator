@@ -1,4 +1,4 @@
-// View > Mode Colours…: each kind of file has its own colour (blue for drawings, orange for
+// View > Window and Colours > Mode Colours…: each kind of file has its own colour (blue for drawings, orange for
 // slides, green for sheets, a deeper blue for documents, purple for designs), so you can tell at a glance which mode you are in. By default only the accent
 // colour changes (buttons, highlights, tab icons); "Whole window" also colours the menu bar.
 // Every colour can be changed, and the choice is saved in the settings file.

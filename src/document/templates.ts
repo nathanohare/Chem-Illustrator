@@ -1,4 +1,4 @@
-// File > New from Template, for documents: our own starting points for a chemist's writing (a
+// File > New > New from Template, for documents: our own starting points for a chemist's writing (a
 // lab report, a Supporting Information file, a thesis chapter). Each is headings in the standard
 // styles with a line or two in brackets saying what goes there, so the Navigation pane, the
 // table of contents and the accessibility checker work from the start. All are written here for

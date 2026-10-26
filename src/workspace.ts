@@ -57,7 +57,7 @@ export interface Tab {
   savedEdits: number;
   /** Split view: the drawing shown beside this document, sheet or slide deck. */
   partner: Tab | null;
-  /** View > New Window: the tab whose document this tab shows too (null for the tab that owns its file). */
+  /** View > Document > New Window: the tab whose document this tab shows too (null for the tab that owns its file). */
   windowOf: Tab | null;
   /** When its file on disk last changed and its size, as last opened or saved here (to notice changes made elsewhere). */
   stamp: FileStamp | null;
@@ -157,11 +157,11 @@ export class Workspace {
    * it took the place of (saved, AutoSaved and kept for recovery from here, untouched by the edit).
    */
   aside: Doc | null = null;
-  /** The workspace file last saved or opened, so File > Save Workspace saves there again. */
+  /** The workspace file last saved or opened, so File > Workspace > Save Workspace saves there again. */
   workspacePath: string | null = null;
   /** While a workspace saves or opens: its files don't each go on the recent list (the workspace does). */
   private quiet = false;
-  /** Tabs a command still working will come back to (File > Import Structures from PDF): never replaced by a new tab. */
+  /** Tabs a command still working will come back to (File > Import > Import Structures from PDF): never replaced by a new tab. */
   private held: Tab[] = [];
   private nextId = 1;
 
@@ -301,7 +301,7 @@ export class Workspace {
   }
 
   /**
-   * View > New Window: the document (or workbook) showing in another tab too, each with its own view and
+   * View > Document > New Window: the document (or workbook) showing in another tab too, each with its own view and
    * place in the text. Typing in either shows in both; Save in either saves the one file.
    */
   newWindow(): Tab | null {
@@ -406,7 +406,7 @@ export class Workspace {
     return t;
   }
 
-  /** New sheet (empty, or `book`: File > New from Template), in place of an untouched new drawing. */
+  /** New sheet (empty, or `book`: File > New > New from Template), in place of an untouched new drawing. */
   newSheet(book?: Workbook): Tab {
     const spare = this.active.mode === 'drawing' ? this.spare() : null;
     const t = this.makeTab('sheet', this.untitled('sheet'));
@@ -419,7 +419,7 @@ export class Workspace {
     return t;
   }
 
-  /** New document (empty, or `doc`: File > New from Template), in place of an untouched new drawing. */
+  /** New document (empty, or `doc`: File > New > New from Template), in place of an untouched new drawing. */
   newDocument(doc?: DocText): Tab {
     const spare = this.active.mode === 'drawing' ? this.spare() : null;
     const t = this.makeTab('document', this.untitled('document'));
@@ -475,7 +475,7 @@ export class Workspace {
     if (ext === WORKSPACE.extension) {
       // a workspace lists files by where they are, so it needs its own place on disk
       if (ref.kind === 'path') await this.openWorkspace(new TextDecoder().decode(bytes), ref.path);
-      else await showError(`${name} is a workspace: open it with File > Open Workspace in the desktop app.`);
+      else await showError(`${name} is a workspace: open it with File > Workspace > Open Workspace in the desktop app.`);
       return ref.kind === 'path';
     }
     const zip = bytes[0] === 0x50 && bytes[1] === 0x4b;
@@ -813,7 +813,7 @@ export class Workspace {
   }
 
   /**
-   * File > Save Workspace: save the tabs and a list of them to `path`. Tabs that were never saved
+   * File > Workspace > Save Workspace: save the tabs and a list of them to `path`. Tabs that were never saved
    * go into the workspace file's folder; with `copyIn`, so do copies of files kept in other folders
    * (their tabs then save to the copies). With `saveChanges`, unsaved changes to files already on
    * disk are saved too. False if a file couldn't be written (the error has been shown).
@@ -864,7 +864,7 @@ export class Workspace {
   }
 
   /**
-   * File > Open Workspace: open every file a workspace lists, in order, beside the tabs already
+   * File > Workspace > Open Workspace: open every file a workspace lists, in order, beside the tabs already
    * open (a file already open just goes to its tab). Files that can't be found are named, not stopped for.
    */
   async openWorkspace(text: string, path: string): Promise<void> {

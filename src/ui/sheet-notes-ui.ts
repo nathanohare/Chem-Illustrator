@@ -2,7 +2,7 @@
 // (note) or purple (comment) corner shows its card beside the cell; clicking into the card keeps
 // it open. A note's card is a yellow sticky note to type in; a comment's card is the same
 // conversation card as Word's and PowerPoint's comments here (reply, resolve, edit, delete).
-// Notes set to show all the time (Show Note, or View > Show All Notes) sit beside their cells.
+// Notes set to show all the time (Show Note, or View > Sheet > Show All Notes) sit beside their cells.
 // Every change is a step of the workbook's Undo.
 
 import type { Sheet } from '../sheet/workbook';
@@ -30,7 +30,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 };
 
 export class SheetNotes {
-  /** View > Show All Notes. */
+  /** View > Sheet > Show All Notes. */
   showAll = false;
   /** The card showing, for which cell, and whether it stays open (clicked, or being typed in). */
   private card: { el: HTMLElement; sheet: Sheet; r: number; c: number; pinned: boolean } | null = null;
@@ -275,7 +275,7 @@ export class SheetNotes {
     this.host.edit(n.shown ? 'Hide note' : 'Show note', (sh) => sh.setNote(a.r, a.c, { ...n, shown: !n.shown || undefined }));
   }
 
-  /** View > Show All Notes. */
+  /** View > Sheet > Show All Notes. */
   toggleShowAll(): void {
     this.showAll = !this.showAll;
     this.close();

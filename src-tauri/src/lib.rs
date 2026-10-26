@@ -286,6 +286,38 @@ fn settings_read(app: tauri::AppHandle) -> Result<Option<String>, String> {
     }
 }
 
+/// The last settings file that was read whole, kept as settings.bak beside it, so a damaged
+/// settings.json never costs the person their templates, nicknames and keys.
+fn settings_backup_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(settings_file(app)?.with_extension("bak"))
+}
+
+#[tauri::command]
+fn settings_backup_read(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let path = settings_backup_file(&app)?;
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Ok(Some(text)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(format!("Could not read {}: {e}", path.display())),
+    }
+}
+
+#[tauri::command]
+fn settings_backup_write(app: tauri::AppHandle, contents: String) -> Result<(), String> {
+    write_bytes(&settings_backup_file(&app)?.to_string_lossy(), contents.as_bytes())
+}
+
+/// A settings.json that can't be read is moved aside (settings.damaged-<seconds>.json), never
+/// written over, so it can still be looked at. Returns where it went.
+#[tauri::command]
+fn settings_set_aside(app: tauri::AppHandle) -> Result<String, String> {
+    let path = settings_file(&app)?;
+    let secs = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+    let aside = path.with_file_name(format!("settings.damaged-{secs}.json"));
+    std::fs::rename(&path, &aside).map_err(|e| format!("Could not move {} aside: {e}", path.display()))?;
+    Ok(aside.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 fn settings_write(app: tauri::AppHandle, contents: String) -> Result<(), String> {
     let path = settings_file(&app)?;
@@ -412,6 +444,9 @@ pub fn run() {
             settings_path,
             settings_read,
             settings_write,
+            settings_backup_read,
+            settings_backup_write,
+            settings_set_aside,
             portable_info,
             update_check,
             portable_install_update,

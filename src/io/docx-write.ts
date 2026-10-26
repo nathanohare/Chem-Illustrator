@@ -459,7 +459,7 @@ class DocxWriter {
       open = { id: this.bookmarkId++, seq: seqs[0] };
       out.push(`<w:bookmarkStart w:id="${open.id}" w:name="${this.bookmarks.get(seqs[0])}"/>`);
     }
-    // the paragraph's bookmarks (Insert > Bookmark), round the whole paragraph
+    // the paragraph's bookmarks (Insert > Document > Bookmark), round the whole paragraph
     const marks = (ps.marks ?? []).map((name) => ({ name, id: this.bookmarkId++ }));
     for (const m of marks) out.push(`<w:bookmarkStart w:id="${m.id}" w:name="${xml(m.name)}"/>`);
     // index entries and marked citations (Word's XE and TA fields, hidden text with no result)

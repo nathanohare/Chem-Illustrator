@@ -89,7 +89,7 @@ export class DocInsertUI {
     const code = got.code as FieldCode;
     if (code === 'ref' || code === 'pageref' || code === 'abovebelow') {
       const target = got.target.trim();
-      if (!target) { this.host.flash('Name the bookmark the field refers to (Insert > Bookmark adds one).'); return; }
+      if (!target) { this.host.flash('Name the bookmark the field refers to (Insert > Document > Bookmark adds one).'); return; }
       this.insertField({ kind: 'field', code, target });
       return;
     }
@@ -273,7 +273,7 @@ export class DocInsertUI {
     }
     for (const h of tocEntries(f.t, 9)) targets.push({ value: `h:${h.para}`, label: `Heading: ${short(h.text)}` });
     for (const b of bookmarksOf(f.t).filter((x) => !x.name.startsWith('_'))) targets.push({ value: `b:${b.name}`, label: `Bookmark: ${b.name}` });
-    if (!targets.length) { this.host.flash('There is nothing to refer to yet: add a caption (References > Insert Caption), a heading or a bookmark (Insert > Bookmark).', 7000); return; }
+    if (!targets.length) { this.host.flash('There is nothing to refer to yet: add a caption (References > Insert Caption), a heading or a bookmark (Insert > Document > Bookmark).', 7000); return; }
     const got = await ask('Cross-reference', [
       { name: 'target', label: 'Refer to', value: targets[0].value, options: targets },
       { name: 'what', label: 'Insert reference to', value: 'text', options: [

@@ -131,7 +131,7 @@ The label box opens right on the atom: its first letter sits where the atom is, 
 - To raise or lower other characters, select them in the box and press **Ctrl+Shift+=** (raise) or **Ctrl+=** (lower). Press it again to put them back. The marks are saved in the .cdxml file, so ChemDraw shows them too.
 - A label that is just R and a number (R1, R12) shows the number raised: R¹, R¹². Longer labels such as OR1 or CO2R1 keep their numbers lowered, and labels from files keep the look they were saved with. **Edit ▸ Settings** turns raised R numbers off.
 
-While you type, a bar along the top of the drawing has bold, italic and underline, subscript and superscript, **formula style**, font, size and colour, alignment, bullets and numbering, indents, line and paragraph spacing, and a set of Greek letters and symbols (**αΩ**). It sits along the top so it never covers what you have drawn; **View ▸ Text Formatting Bar** can float it just above the text instead, or hide it (the keys below still work).
+While you type, a bar along the top of the drawing has bold, italic and underline, subscript and superscript, **formula style**, font, size and colour, alignment, bullets and numbering, indents, line and paragraph spacing, and a set of Greek letters and symbols (**αΩ**). It sits along the top so it never covers what you have drawn; **View ▸ Window and Colours ▸ Text Formatting Bar** can float it just above the text instead, or hide it (the keys below still work).
 
 Useful keys while typing:
 
@@ -335,7 +335,7 @@ A drawing is endless: scroll as far as you like in any direction. It still has a
 
 ## Dark page
 
-**View ▸ Dark Page**, or the eye button at the top, shows the page dark: black ink as light grey, white paper as dark grey, and pale fills dimmed. It changes the screen only; saved files, printing, copies and exports stay black on white. **View ▸ Dark Page Colours…** picks **Graphite**, **Slate** or **Warm dark**, or your own paper and ink colours.
+**View ▸ Dark Page**, or the eye button at the top, shows the page dark: black ink as light grey, white paper as dark grey, and pale fills dimmed. It changes the screen only; saved files, printing, copies and exports stay black on white. **View ▸ Window and Colours ▸ Dark Page Colours…** picks **Graphite**, **Slate** or **Warm dark**, or your own paper and ink colours.
 
 ![The same drawing with the dark page on](../images/dark-page.png)
 
@@ -371,7 +371,7 @@ Pick the mass fragmentation tool (the dashed line through a bond) and drag a lin
 
 ## Structures from pictures and hand drawings
 
-**File ▸ Import Structures from Picture…** reads the structures in a picture and places them as real, editable structures: a photo or scan of a hand drawing, a screenshot, or a figure saved from a paper. With a picture selected on the drawing, it reads that picture instead (also on the picture's right-click menu: **Read Structure from Picture…**). **File ▸ Paste Picture as Structure** reads a picture on the clipboard, such as a screenshot of a paper.
+**File ▸ Import ▸ Import Structures from Picture…** reads the structures in a picture and places them as real, editable structures: a photo or scan of a hand drawing, a screenshot, or a figure saved from a paper. With a picture selected on the drawing, it reads that picture instead (also on the picture's right-click menu: **Read Structure from Picture…**). **File ▸ Import ▸ Paste Picture as Structure** reads a picture on the clipboard, such as a screenshot of a paper.
 
 A window shows each picture beside the structure read from it and its SMILES. Check each one: the chemistry engine checks every structure, and ones it can't read, ones with groups the app doesn't know, and ones the reader was unsure of are marked ⚠. Type a correction into the SMILES box and press Enter, untick ones you don't want, then **Place**.
 
@@ -380,11 +380,11 @@ Two readers can read pictures:
 - **The structure reader on this computer** (desktop app). Nothing is sent anywhere. The first time, it downloads about 140 MB once (the MolScribe model, MIT licence). It reads printed structures well (most journal and patent drawings) but few hand drawings.
 - **Your own AI model** (Claude, ChatGPT, Gemini or another), linked in **Edit ▸ Settings ▸ AI Model** with your own API key. It reads hand drawings far better. Pictures are sent to it only when it reads them, and the cost goes on your account there. When one is linked, photos and scans go to it first, and each picture has a button to read it with the other reader. In the browser version, only an AI model can read pictures.
 
-**File ▸ Import Structures from PDF…** finds the structures in a paper, SI or thesis and offers them in the same window, each marked with its page. Text, arrows and pictures that turn out not to be structures are put aside (tick **Show … pictures that don't look like structures** to see them), and none are ticked at first: tick the ones you want, then **Place**. A PDF of more than 40 pages is read a part at a time; you choose the pages. PDFs are read by the structure reader on this computer, so nothing is sent anywhere unless you choose your AI model or press a **Read with** button.
+**File ▸ Import ▸ Import Structures from PDF…** finds the structures in a paper, SI or thesis and offers them in the same window, each marked with its page. Text, arrows and pictures that turn out not to be structures are put aside (tick **Show … pictures that don't look like structures** to see them), and none are ticked at first: tick the ones you want, then **Place**. A PDF of more than 40 pages is read a part at a time; you choose the pages. PDFs are read by the structure reader on this computer, so nothing is sent anywhere unless you choose your AI model or press a **Read with** button.
 
 ## Pictures and tables
 
-**Insert ▸ Picture…** puts a picture on the drawing (or drop a picture file on it). Drag a corner to resize it; it keeps its proportions unless you hold Alt. **Insert ▸ Crop Picture** crops it. **Insert ▸ Table…** adds an ACS-style table (rules above and below the heading row and under the last row) of the rows and columns you ask for; double-click a cell to type in it, and use the Style panel to change its lines, rows and columns (each column can line up left, centred or right; new tables start centred). Drag a structure into a cell to put it there: the cell grows to fit it, it sits centred at the top of the cell with any text under it, and it moves with the table. Drag it out to take it out of the cell.
+**Insert ▸ Picture…** puts a picture on the drawing (or drop a picture file on it). Drag a corner to resize it; it keeps its proportions unless you hold Alt. **Insert ▸ Picture Tools ▸ Crop Picture** crops it. **Insert ▸ Table…** adds an ACS-style table (rules above and below the heading row and under the last row) of the rows and columns you ask for; double-click a cell to type in it, and use the Style panel to change its lines, rows and columns (each column can line up left, centred or right; new tables start centred). Drag a structure into a cell to put it there: the cell grows to fit it, it sits centred at the top of the cell with any text under it, and it moves with the table. Drag it out to take it out of the cell.
 
 ## Colours and palettes
 
@@ -405,7 +405,7 @@ The **View** menu can show more toolboxes besides the drawing tools:
 
 ### Customize Toolboxes
 
-**View ▸ Customize Toolboxes…** (or right-click a toolbox ▸ **Customize This Toolbox…**) changes what is in any toolbox, much as you rearrange apps on a phone's home screen. On the left is every drawing tool, fly-out palette and menu command, each with its icon, with a search box. On the right, pick a toolbox from the list: it shows cell by cell, laid out just as it is on screen, its icons jiggling while you work on them.
+**View ▸ Toolboxes ▸ Customize Toolboxes…** (or right-click a toolbox ▸ **Customize This Toolbox…**) changes what is in any toolbox, much as you rearrange apps on a phone's home screen. On the left is every drawing tool, fly-out palette and menu command, each with its icon, with a search box. On the right, pick a toolbox from the list: it shows cell by cell, laid out just as it is on screen, its icons jiggling while you work on them.
 
 - **Grid size**: each toolbox is a grid of so many columns by so many rows. Type the numbers next to **Grid**, or pick one of the **Presets** (a tall strip of two columns, a square, a wide strip, one row and so on). A bigger grid keeps every button where it is; a smaller one asks first if it would leave no room for some, and names them.
 - **Empty cells** are fine: leave gaps to keep groups of tools apart. Click the small mark at the left of a row to put a thin line above it, as between the groups of the Drawing Tools.
@@ -417,12 +417,12 @@ The **View** menu can show more toolboxes besides the drawing tools:
 - **Fly-outs**: a palette (the buttons with a small corner arrow, such as Arrows or Brackets) has a grid of its own. Click it to lay out its tools the same way, as the fly-out opens; drop a tool on the middle of a palette to put it inside.
 - **Your own toolboxes**: **New** makes one (it floats over the drawing; dock it like any other). Type a **Name** to rename any toolbox, untick **Shown** to hide it, use ↑ and ↓ to move it up or down the View menu (and its place in a dock), and **Delete** to delete it. The Drawing Tools and the side panel can't be deleted. **Restore Deleted Toolboxes** brings back the app's own toolboxes and names.
 - A tool or command can be in as many toolboxes as you like.
-- Every change shows at once in the toolbox itself. **Undo** (or Ctrl+Z) takes changes back one at a time, and **Reset This Toolbox** puts a toolbox back as it came, grid and all. The grids are kept with your settings, so **Edit ▸ Export Settings** takes them to another computer.
+- Every change shows at once in the toolbox itself. **Undo** (or Ctrl+Z) takes changes back one at a time, and **Reset This Toolbox** puts a toolbox back as it came, grid and all. The grids are kept with your settings, so **Edit ▸ Settings File ▸ Export Settings** takes them to another computer.
 - Untick **Jiggle icons** to keep them still. They never jiggle when Windows is set to show fewer animations (Settings ▸ Accessibility ▸ Visual effects ▸ Animation effects off), or the same setting on a Mac.
 
 The Templates, Colours and side panel toolboxes are laid out by the app; they can be renamed, hidden, moved in the list and (except the side panel) deleted.
 
-To move a toolbox, unlock it first: click the padlock on its title bar (or right-click the toolbox and choose **Unlock**). Each toolbox locks on its own. **Locked** in the top bar (or **View ▸ Lock Toolboxes**) locks or unlocks them all at once. Then drag a toolbox by its title to the left, right, top or bottom edge of the drawing to dock it there, or anywhere else to float it. Right-click a toolbox's title for **Dock Left**, **Dock Right**, **Dock at the Top**, **Dock at the Bottom**, **Float** and more. The side panel (Style, Warnings, Analysis) is a toolbox too: it starts docked at the right, and moves, floats and locks like the others. Its arrow (or **View ▸ Fold Side Panel**) folds it to a strip, separately in each mode. The app remembers where you left them.
+To move a toolbox, unlock it first: click the padlock on its title bar (or right-click the toolbox and choose **Unlock**). Each toolbox locks on its own. **Locked** in the top bar (or **View ▸ Toolboxes ▸ Lock Toolboxes**) locks or unlocks them all at once. Then drag a toolbox by its title to the left, right, top or bottom edge of the drawing to dock it there, or anywhere else to float it. Right-click a toolbox's title for **Dock Left**, **Dock Right**, **Dock at the Top**, **Dock at the Bottom**, **Float** and more. The side panel (Style, Warnings, Analysis) is a toolbox too: it starts docked at the right, and moves, floats and locks like the others. Its arrow (or **View ▸ Fold Side Panel**) folds it to a strip, separately in each mode. The app remembers where you left them.
 
 ## The right-click menu
 

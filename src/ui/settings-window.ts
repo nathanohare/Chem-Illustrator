@@ -43,6 +43,8 @@ export class SettingsWindow {
     this.search.value = '';
     this.fillList();
     this.show(id);
+    // typing goes to the search box, not the page's first box (which a page focuses as it opens)
+    requestAnimationFrame(() => { if (this.d?.open) this.search.focus(); });
   }
 
   private build(): void {
@@ -57,6 +59,17 @@ export class SettingsWindow {
     this.search = d.querySelector('.sw-search')!;
     d.querySelector('.sw-close')!.addEventListener('click', () => this.close());
     d.addEventListener('cancel', (e) => { e.preventDefault(); this.close(); });
+    // Esc closes the whole window (as Cancel), wherever the focus is: a page would otherwise
+    // take it as its own Cancel and simply be shown again
+    d.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      const t = e.target as HTMLElement | null;
+      // (but a list that is open, a colour palette or a key being recorded takes it first)
+      if (t?.closest('select, [aria-expanded="true"], .colour-pop, .recording')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      this.close();
+    }, true);
     this.search.addEventListener('input', () => {
       const found = this.fillList();
       if (found.length && !found.some((p) => p.id === this.page)) this.show(found[0].id);

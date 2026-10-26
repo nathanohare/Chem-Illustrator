@@ -1,4 +1,4 @@
-// View > Touch Mode, for tablets and touch screens (an iPad with Apple Pencil, a Surface):
+// View > Window and Colours > Touch Mode, for tablets and touch screens (an iPad with Apple Pencil, a Surface):
 //
 // - Bigger menus, ribbon buttons and toolbox buttons (html.touch-ui in app.css).
 // - Holding a finger or the pen still for half a second is a right-click, anywhere in the window.

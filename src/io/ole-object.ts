@@ -1,4 +1,4 @@
-// Another program's file kept whole inside a document (Insert > Object, or an object in a Word
+// Another program's file kept whole inside a document (Insert > Document > Object, or an object in a Word
 // file), as Word keeps it: an Office file as a part of its own (Excel.Sheet.12 and the like),
 // anything else wrapped in an OLE package (a compound file holding the file, which Windows opens
 // in the file's own program when the object is double-clicked). Written from Microsoft's

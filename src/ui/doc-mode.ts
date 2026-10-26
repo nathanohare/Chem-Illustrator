@@ -111,7 +111,7 @@ export interface DocModeHost {
   toStructure(text: string, style: DocStyle): Promise<{ contents: Contents; notes: string[] } | { error: string }>;
   /** Choose a picture file. */
   pickPicture(): Promise<{ bytes: Uint8Array; mime: string; name: string } | null>;
-  /** Choose any file, to put in as an object (Insert > Object). */
+  /** Choose any file, to put in as an object (Insert > Document > Object). */
   pickObjectFile?(): Promise<{ name: string; bytes: Uint8Array } | null>;
   /** The picture a file put in as an object shows: its contents where they can be shown, else its icon. */
   objectPicture?(name: string, bytes: Uint8Array, icon: boolean): Promise<ObjectPicture>;
@@ -204,11 +204,11 @@ const VIEW_COMMANDS: Record<string, DocViewKind> = {
 const OWN_KIND = 'chem-illustrator-document';
 
 export class DocumentMode {
-  /** The pane being worked in: the document's view, or with View > Split, the one clicked last. */
+  /** The pane being worked in: the document's view, or with View > Document > Split Window, the one clicked last. */
   view: DocView;
   /** Every pane on the document (two while split). */
   private views: DocView[] = [];
-  /** View > Split: the second pane, under the first, and the bar between them. */
+  /** View > Document > Split Window: the second pane, under the first, and the bar between them. */
   private split: { view: DocView; host: HTMLDivElement; bar: HTMLDivElement } | null = null;
   /** Where the caret was last in Outline view (to step over folded text in the direction it went). */
   private lastFocus = 0;
@@ -254,6 +254,7 @@ export class DocumentMode {
   readonly proofing: DocProofingUI;
   readonly arranging: DocArrangeUI;
   private speller: Speller | null = null;
+  private spellerAsked = false;
   private dictSeen: string[] | null = null;
   private checkCache = new Map<string, { spell: [number, number][]; issues: Issue[] }>();
   private checked: { t: DocText; spell: [number, number][]; issues: Issue[] } | null = null;
@@ -426,7 +427,6 @@ export class DocumentMode {
     this.wireInput();
     this.wirePointer(this.view);
     this.wireRibbon();
-    if (typingPrefs.spelling) void loadSpeller().then((sp) => { this.speller = sp; this.checked = null; this.redraw(); });
   }
 
   get file(): DocFile | null {
@@ -1253,6 +1253,11 @@ export class DocumentMode {
   private checks(): { spell: [number, number][]; issues: Issue[] } {
     const f = this.file!;
     const sp = this.speller;
+    // the word lists are read the first time there is text to check, not when the app starts
+    if (!sp && typingPrefs.spelling && !this.spellerAsked) {
+      this.spellerAsked = true;
+      void loadSpeller().then((got) => { this.speller = got; this.checked = null; this.redraw(); });
+    }
     if (sp && this.dictSeen !== typingPrefs.dictionary) {
       sp.setPersonal(typingPrefs.dictionary);
       for (const w of ignored) sp.ignore(w);
@@ -1990,7 +1995,7 @@ export class DocumentMode {
     this.changed('selection');
   }
 
-  /** View > Split: a second pane under the first, on the same document, scrolled on its own. */
+  /** View > Document > Split Window: a second pane under the first, on the same document, scrolled on its own. */
   private setSplit(on: boolean): void {
     if (on === !!this.split) return;
     const main = this.views[0];
@@ -2319,7 +2324,7 @@ export class DocumentMode {
     return this.file ? placeName(this.file.t, link) : null;
   }
 
-  /** Insert > Bookmark: name the paragraph the caret is in, or go to or delete a bookmark. */
+  /** Insert > Document > Bookmark: name the paragraph the caret is in, or go to or delete a bookmark. */
   private async bookmarkDialog(): Promise<void> {
     const f = this.file;
     if (!f || this.reading) return;
@@ -3488,7 +3493,7 @@ export class DocumentMode {
   }
 
   /**
-   * Insert > Object: another program's file kept whole in the document, shown as its contents
+   * Insert > Document > Object: another program's file kept whole in the document, shown as its contents
    * (a workbook's cells, a PDF's first page, a picture) or as an icon. Double-clicking it opens
    * the file in its program, and saving it there changes it here; Word does the same with it.
    */

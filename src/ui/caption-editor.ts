@@ -86,6 +86,7 @@ export class CaptionEditor {
   private dragging: 'text' | 'wrap' | null = null;
   private wrapDragged = false;
   private speller: Speller | null = null;
+  private spellerAsked = false;
   private dictSeen: string[] | null = null;
   private checked: { t: RichText; spell: [number, number][]; issues: Issue[] } | null = null;
   private menu: HTMLDivElement | null = null;
@@ -108,7 +109,6 @@ export class CaptionEditor {
     this.ed = new TextEditing(initial, defaults, h.measure, h.defaultSize);
     this.ed.onChange = (kind) => this.changed(kind);
     this.ed.onTyped = (typed) => afterTyping(this.ed, typed);
-    if (typingPrefs.spelling) void loadSpeller().then((sp) => { this.speller = sp; this.checked = null; this.h.redraw(); });
     const d = h.host.ownerDocument;
     this.ta = d.createElement('textarea');
     this.ta.className = 'text-input';
@@ -129,7 +129,7 @@ export class CaptionEditor {
     this.spacing.className = 'caption-spacing';
     this.spacing.hidden = true;
     this.buildBar();
-    // View > Text Formatting Bar: along the top of the drawing (so it never covers what is
+    // View > Window and Colours > Text Formatting Bar: along the top of the drawing (so it never covers what is
     // drawn), floating by the text, or hidden (the keys still work)
     this.bar.classList.toggle('docked', CaptionEditor.barPlace === 'docked');
     this.bar.hidden = CaptionEditor.barPlace === 'hidden';
@@ -371,6 +371,11 @@ export class CaptionEditor {
   private checks(): { spell: [number, number][]; issues: Issue[] } {
     if (!typingPrefs.spelling) return { spell: [], issues: [] };
     const sp = this.speller;
+    // the word lists are read the first time there is text to check, not when the app starts
+    if (!sp && typingPrefs.spelling && !this.spellerAsked) {
+      this.spellerAsked = true;
+      void loadSpeller().then((got) => { this.speller = got; this.checked = null; this.h.redraw(); });
+    }
     if (sp && this.dictSeen !== typingPrefs.dictionary) {
       sp.setPersonal(typingPrefs.dictionary);
       for (const w of ignored) sp.ignore(w);
@@ -495,7 +500,7 @@ export class CaptionEditor {
     this.bar.style.top = `${below ? br.y + 8 : tl.y - hb - 8}px`;
   }
 
-  /** Where the bar goes (View > Text Formatting Bar). */
+  /** Where the bar goes (View > Window and Colours > Text Formatting Bar). */
   static barPlace: 'docked' | 'floating' | 'hidden' = 'docked';
 
   /** Called whenever the text or the selection changes (the Slides ribbon shows how it looks). */

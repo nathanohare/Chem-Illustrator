@@ -126,7 +126,7 @@ export async function openFileDialog(types: FileType[]): Promise<{ name: string;
   return file ? { name: file.name, text: await file.text(), ref: { kind: 'none' } } : null;
 }
 
-/** Ask for a file of any kind and read its bytes (Insert > Object). Null when the user cancels. */
+/** Ask for a file of any kind and read its bytes (Insert > Document > Object). Null when the user cancels. */
 export async function openAnyBytesDialog(): Promise<{ name: string; bytes: Uint8Array } | null> {
   if (desktop) {
     const path = await pickPath(/Windows/i.test(navigator.userAgent) ? [{ name: 'All files', extensions: ['*'] }] : []);

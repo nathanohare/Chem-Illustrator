@@ -1,4 +1,4 @@
-// Format > Slide Master…: the look of every slide in one place (fonts, sizes, colours, the
+// Format > Slides > Slide Master…: the look of every slide in one place (fonts, sizes, colours, the
 // background, a logo, slide numbers, a footer, and how big structures are drawn).
 // Everything here changes every slide at once, and Undo puts it back.
 

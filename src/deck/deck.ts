@@ -119,7 +119,7 @@ export interface Master {
   /** Numbers on Title Slide layouts too (PowerPoint leaves them off there). */
   numberTitleSlides: boolean;
   footer: string;
-  /** The date and time on every slide (Insert > Header & Footer): shown, and in which form; fixed text in place of today's date when set. */
+  /** The date and time on every slide (Insert > Slides > Header & Footer): shown, and in which form; fixed text in place of today's date when set. */
   dateOn?: boolean;
   dateFormat?: DateFormat;
   dateFixed?: string;

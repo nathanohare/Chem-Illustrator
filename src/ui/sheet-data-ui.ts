@@ -835,7 +835,7 @@ export class SheetData {
 
   // ---------------------------------------------------------------- freeze panes and split
 
-  /** View > Freeze Panes ▾ */
+  /** View > Sheet > Freeze Panes ▾ */
   freezeMenu(x: number, y: number): void {
     const s = this.view.sheet;
     if (!s) return;
@@ -869,7 +869,7 @@ export class SheetData {
     this.host.flash(`Frozen: ${what} stay in view as you scroll.`);
   }
 
-  /** View > Split: split the window above and left of the active cell into panes that scroll on their own (again to take it away). */
+  /** View > Sheet > Split: split the window above and left of the active cell into panes that scroll on their own (again to take it away). */
   toggleSplit(): void {
     const v = this.view;
     const s = v.sheet;

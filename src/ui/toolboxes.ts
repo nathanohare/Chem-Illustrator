@@ -118,7 +118,7 @@ export function defaultToolboxes(): ToolboxState {
 }
 
 /**
- * Every toolbox back where it starts (View > Reset Toolboxes): shown or hidden, docked or floating,
+ * Every toolbox back where it starts (View > Toolboxes > Reset Toolboxes): shown or hidden, docked or floating,
  * open, and locked as they come. What is in them, their names and your own toolboxes are kept.
  */
 export function withLayoutReset(st: ToolboxState): ToolboxState {
@@ -524,7 +524,7 @@ export class Toolboxes {
     if (p) this.place(id, { collapsed: (collapsed ?? !p.collapsed) || undefined });
   }
 
-  /** Every toolbox back where it starts (View > Reset Toolboxes). */
+  /** Every toolbox back where it starts (View > Toolboxes > Reset Toolboxes). */
   reset(): void {
     this.change(withLayoutReset(this.hooks.get()));
   }

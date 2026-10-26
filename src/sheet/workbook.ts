@@ -266,7 +266,7 @@ export class Sheet {
   filter: Filter | null = null;
   /** Rows and columns that stay put while scrolling. */
   frozen = { rows: 0, cols: 0 };
-  /** View > Split: the window in two or four panes that scroll on their own, split above this row and left of this column (null: none). */
+  /** View > Sheet > Split: the window in two or four panes that scroll on their own, split above this row and left of this column (null: none). */
   split: { rows: number; cols: number } | null = null;
   /** Conditional formatting rules, the first in the list winning. */
   condFormats: CondFormat[] = [];

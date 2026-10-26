@@ -1,4 +1,4 @@
-// The picture an embedded object shows (Insert > Object): the cells of a workbook, the first
+// The picture an embedded object shows (Insert > Document > Object): the cells of a workbook, the first
 // page of a PDF, a picture file itself, or an icon with the file's name for anything else
 // (and whenever the person asks for the icon).
 

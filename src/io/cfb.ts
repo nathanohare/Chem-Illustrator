@@ -1,7 +1,7 @@
 // Reading and writing OLE compound files (the "structured storage" format Windows programs use
 // to embed one document in another, published by Microsoft as [MS-CFB]). Word keeps each
 // embedded object in one of these: a ChemDraw drawing is one of its streams, a file put in with
-// Insert > Object another.
+// Insert > Document > Object another.
 
 const SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 const END = 0xfffffffe;

@@ -6,16 +6,16 @@ This page covers Slides mode: building a deck, the slide master and templates, c
 
 ## Starting a deck
 
-Click **+ Slides** at the end of the tab strip, or choose **File ▸ New Slides**. While a deck is showing, Ctrl+N starts another one. Each open file has its own tab: Ctrl+Tab moves between tabs and Ctrl+W closes one.
+Click **+ Slides** at the end of the tab strip, or choose **File ▸ New ▸ New Slides**. While a deck is showing, Ctrl+N starts another one. Each open file has its own tab: Ctrl+Tab moves between tabs and Ctrl+W closes one.
 
 The Slides ribbon has PowerPoint's tabs: **Home** (slides, sections, font, paragraph), **Insert** (pictures, text boxes, tables, shapes), **Design & Transitions** (size, templates, slide master, layouts, drawing style, format background, and the transitions between slides), **Animations**, **Slide Show**, **Review** and **View** (Normal, Slide Sorter, Slide Master, Edit Layouts, Themes). The **Slide** menu at the top holds the same commands.
 
 ## Slides and layouts
 
 - **New slide:** Ctrl+M, **Home** tab ▸ **New Slide**, or **+ New slide** under the slide list. The new slide goes after the current one.
-- **Layout:** pick one from **Layout** on the **Home** tab or **Format ▸ Slide Layout**: Title Slide, Title and Content, Two Content, Title Only, Blank, or a layout of your own (see [Layouts](#layouts)).
+- **Layout:** pick one from **Layout** on the **Home** tab or **Format ▸ Slides ▸ Slide Layout**: Title Slide, Title and Content, Two Content, Title Only, Blank, or a layout of your own (see [Layouts](#layouts)).
 - **Text:** click "Click to add title" (or any placeholder) and type. Lists and the chemistry typing helpers work as in any text box, so CH2Cl2 gets its subscripts.
-- **Slide size:** **Design & Transitions** tab ▸ **Size**, or **Format ▸ Slide Size ▸ Widescreen (16:9)** / **Standard (4:3)** / **Custom Slide Size…** (see [Slide size](#slide-size)).
+- **Slide size:** **Design & Transitions** tab ▸ **Size**, or **Format ▸ Slides ▸ Slide Size ▸ Widescreen (16:9)** / **Standard (4:3)** / **Custom Slide Size…** (see [Slide size](#slide-size)).
 - **Speaker notes:** type them in the box under the slide. A slide with notes shows a small mark in the slide list. **View** tab ▸ **Notes** (or **✎ Notes** in the status bar) hides or shows the box.
 - **Pane sizes:** drag the slide list's right edge to make it wider or narrower (the pictures grow with it), and drag the top edge of the notes box to make it taller or shorter. Double-click an edge for the usual size. The sizes are remembered.
 
@@ -29,14 +29,14 @@ The list down the left shows every slide.
 | Pick several | Ctrl+click or Shift+click |
 | Delete the picked slides | Delete, or **Home** tab ▸ **Delete** |
 | Duplicate the picked slides | Ctrl+D, or **Home** tab ▸ **Duplicate** |
-| Copy, cut or paste whole slides | Ctrl+C, Ctrl+X, Ctrl+V in the list, or **Edit ▸ Copy Slides** / **Paste Slides** |
+| Copy, cut or paste whole slides | Ctrl+C, Ctrl+X, Ctrl+V in the list, or **Edit ▸ Slides ▸ Copy Slides** / **Paste Slides** |
 | Hide a slide from the show | **Home** tab ▸ **Hide**, **Slide Show** tab ▸ **Hide Slide**, or right-click ▸ **Hide Slide** |
 | See every slide command | Right-click in the list |
 | Go to the next or previous slide | Page Down / Page Up |
 
 ### Sections
 
-Sections split a long deck into named parts, as in PowerPoint. Pick a slide and choose **Home** tab ▸ **Section ▾** ▸ **Add Section** (or right-click in the slide list ▸ **Add Section**, or **Format ▸ Sections**): a new section starts at that slide and you name it. The slides before the first section go in a **Default Section**.
+Sections split a long deck into named parts, as in PowerPoint. Pick a slide and choose **Home** tab ▸ **Section ▾** ▸ **Add Section** (or right-click in the slide list ▸ **Add Section**, or **Format ▸ Slides ▸ Sections**): a new section starts at that slide and you name it. The slides before the first section go in a **Default Section**.
 
 - **Fold a section:** click the arrow on its heading. **View** tab ▸ **Collapse All** / **Expand All** fold or open them all. Folding is for the screen only.
 - **Move a section with all its slides:** drag its heading up or down, or right-click it ▸ **Move Section Up** / **Move Section Down**.
@@ -49,15 +49,15 @@ New slides go in the section of the slide before them. Sections are saved as Pow
 
 ### Slide Sorter
 
-**View** tab ▸ **Slide Sorter** (or **View ▸ Slide Sorter**) shows every slide in rows of larger pictures, under their section headings. Drag slides (or whole sections) to reorder them, pick several with Ctrl or Shift, and use the same keys and right-click commands as in the slide list. Double-click a slide, or press Enter, to open it in **Normal** view.
+**View** tab ▸ **Slide Sorter** (or **View ▸ Slides ▸ Slide Sorter**) shows every slide in rows of larger pictures, under their section headings. Drag slides (or whole sections) to reorder them, pick several with Ctrl or Shift, and use the same keys and right-click commands as in the slide list. Double-click a slide, or press Enter, to open it in **Normal** view.
 
 ### Copying slides between decks
 
-Pick slides in one deck's list and press Ctrl+C, then click in the list of another deck (or the same one) and press Ctrl+V: the copies go in after the slide picked. They take the look of the deck they go into, as PowerPoint's *Use Destination Theme* does. When that changes how they look, a **Keep source formatting** button appears for a few seconds to paste them again with their own background, fonts and colours; **Edit ▸ Paste Slides (Keep Source Formatting)** (or right-click ▸ **Paste (Keep Source Formatting)**) does that straight away. Structures drawn in another drawing style are redrawn in this deck's, or keep their look when you keep the source formatting. Slides from a deck of another size stay centred, with their titles and text boxes moved to this deck's places.
+Pick slides in one deck's list and press Ctrl+C, then click in the list of another deck (or the same one) and press Ctrl+V: the copies go in after the slide picked. They take the look of the deck they go into, as PowerPoint's *Use Destination Theme* does. When that changes how they look, a **Keep source formatting** button appears for a few seconds to paste them again with their own background, fonts and colours; **Edit ▸ Slides ▸ Paste Slides (Keep Source Formatting)** (or right-click ▸ **Paste (Keep Source Formatting)**) does that straight away. Structures drawn in another drawing style are redrawn in this deck's, or keep their look when you keep the source formatting. Slides from a deck of another size stay centred, with their titles and text boxes moved to this deck's places.
 
 ### Reusing slides from another file
 
-**Home** tab ▸ **Reuse…** (or **Insert ▸ Reuse Slides…**) opens a PowerPoint file and shows its slides. Click the ones you want (Shift+click picks a run of them), tick **Keep source formatting** if they should keep their own look, and choose **Insert Slide** or **Insert All**. Double-click a slide to put just that one in.
+**Home** tab ▸ **Reuse…** (or **Insert ▸ Slides ▸ Reuse Slides…**) opens a PowerPoint file and shows its slides. Click the ones you want (Shift+click picks a run of them), tick **Keep source formatting** if they should keep their own look, and choose **Insert Slide** or **Insert All**. Double-click a slide to put just that one in.
 
 ### Comparing two versions of a deck
 
@@ -69,7 +69,7 @@ Pick slides in one deck's list and press Ctrl+C, then click in the list of anoth
 
 ## The slide master
 
-**Design & Transitions** tab ▸ **Slide Master…** (or **Format ▸ Slide Master…**) sets the look of every slide at once:
+**Design & Transitions** tab ▸ **Slide Master…** (or **Format ▸ Slides ▸ Slide Master…**) sets the look of every slide at once:
 
 - **Background:** colour, the template's shapes and its accent colours.
 - **Title slides:** their own background and text colours, if you want them different.
@@ -82,7 +82,7 @@ Click **Apply to all slides**. Text you formatted by hand keeps its own formatti
 
 ### Layouts
 
-**View** tab ▸ **Edit Layouts** (or **Design & Transitions** tab ▸ **Edit Layouts…**, or **Format ▸ Slide Layout ▸ Edit Layouts…**) shows the deck's layouts, as PowerPoint's Slide Master view does. Pick one on the left to see it on the slide.
+**View** tab ▸ **Edit Layouts** (or **Design & Transitions** tab ▸ **Edit Layouts…**, or **Format ▸ Slides ▸ Slide Layout ▸ Edit Layouts…**) shows the deck's layouts, as PowerPoint's Slide Master view does. Pick one on the left to see it on the slide.
 
 - **Move or size a placeholder:** drag it, or drag one of its corners. The arrow keys nudge the one picked (Shift for bigger steps); X, Y, W and H set its place and size in per cent of the slide.
 - **Add a placeholder:** **+ Title**, **+ Text** or **+ Subtitle**. A layout has one title. **Delete Placeholder** (or Delete) takes the one picked off.
@@ -94,7 +94,7 @@ Click **Apply**: slides with a changed layout move their placeholders to its pla
 
 ## Slide backgrounds
 
-**Design & Transitions** tab ▸ **Format Background** (or **Format ▸ Format Background…**, or right-click an empty part of the slide) gives the slide a background of its own:
+**Design & Transitions** tab ▸ **Format Background** (or **Format ▸ Slides ▸ Format Background…**, or right-click an empty part of the slide) gives the slide a background of its own:
 
 - **Solid colour**, as see-through as you like (see-through backgrounds show white behind them).
 - **Gradient:** linear, radial or rectangular, in any direction or angle, with as many colour stops as you want, each with its own place and transparency. **Preset** offers ten ready-made ones to start from.
@@ -109,7 +109,7 @@ Backgrounds are saved as PowerPoint's own, so PowerPoint (and LibreOffice) shows
 
 ## Design templates
 
-**Design & Transitions** tab ▸ **Templates…** (or **Format ▸ Slide Templates…**) offers 21 ready-made looks in three groups: **Light**, **Dark title slide** and **Bright**. Picking one changes the fonts, colours, background and the shapes behind every slide. Your text, structures and pictures stay where they are, and Undo puts the old look back.
+**Design & Transitions** tab ▸ **Templates…** (or **Format ▸ Slides ▸ Slide Templates…**) offers 21 ready-made looks in three groups: **Light**, **Dark title slide** and **Bright**. Picking one changes the fonts, colours, background and the shapes behind every slide. Your text, structures and pictures stay where they are, and Undo puts the old look back.
 
 Tick **Also start new slide decks with the template I pick** to make it the starting look for new decks. You can change any part of a template afterwards with **Slide Master…**.
 
@@ -121,7 +121,7 @@ Your themes appear under **Your themes** at the top of the window, ready to pick
 
 ## Slide size
 
-**Design & Transitions** tab ▸ **Size** ▸ **Custom Slide Size…** (or **Format ▸ Slide Size ▸ Custom Slide Size…**) sets any size: pick one of the usual ones (Widescreen, Standard, 16:10, Letter, A4, A3, B4, 35 mm slides, Overhead, Banner, posters) or type the width and height in inches or centimetres, from 1 to 56 inches, and turn it to portrait. Choose how what is on the slides fits the new size:
+**Design & Transitions** tab ▸ **Size** ▸ **Custom Slide Size…** (or **Format ▸ Slides ▸ Slide Size ▸ Custom Slide Size…**) sets any size: pick one of the usual ones (Widescreen, Standard, 16:10, Letter, A4, A3, B4, 35 mm slides, Overhead, Banner, posters) or type the width and height in inches or centimetres, from 1 to 56 inches, and turn it to portrait. Choose how what is on the slides fits the new size:
 
 - **Ensure Fit** makes everything as big as fits on the new slide.
 - **Maximize** makes it as big as the slide allows, which can run off the edges.
@@ -235,13 +235,13 @@ A highlight can animate on its own, like a shape in PowerPoint, so it can fade i
 
 ### The Animation pane
 
-**Animations** tab ▸ **Animation Pane** (or **View ▸ Animation Pane**) lists the slide's animations in the right-hand panel. The numbers are clicks, and small numbered tags beside the objects on the slide show which click brings each one in.
+**Animations** tab ▸ **Animation Pane** (or **View ▸ Slides ▸ Animation Pane**) lists the slide's animations in the right-hand panel. The numbers are clicks, and small numbered tags beside the objects on the slide show which click brings each one in.
 
 - Click a row to select its object.
 - Drag rows, or use ▲ and ▼, to change the order.
 - × removes an animation.
 
-**Preview** on the Animations tab (or **View ▸ Slide Show ▸ Preview Slide**) plays the slide's transition and animations. Undo and redo work for every change.
+**Preview** on the Animations tab (or **View ▸ Slides ▸ Slide Show ▸ Preview Slide**) plays the slide's transition and animations. Undo and redo work for every change.
 
 ## Comments
 
@@ -270,7 +270,7 @@ Each click plays the next animation, then moves on to the next slide with its tr
 
 ### Presenter View
 
-**View ▸ Slide Show ▸ Presenter View**, **Slide Show** tab ▸ **Presenter View**, or Alt+F5.
+**View ▸ Slides ▸ Slide Show ▸ Presenter View**, **Slide Show** tab ▸ **Presenter View**, or Alt+F5.
 
 With a second screen or projector set to extend the desktop, the slides fill the second screen. Your own screen shows:
 
@@ -304,8 +304,8 @@ For handouts you can also pick the paper and **Frame the slides**. The system's 
 - In PowerPoint, titles, text boxes and lists are ordinary PowerPoint text, tables are PowerPoint tables, and transitions and animations are PowerPoint's own. Structures show as sharp pictures.
 - Open the same .pptx here again (Ctrl+O) and the structures are editable drawings again, even after PowerPoint has saved the file.
 - The free fonts that come with the app are saved inside the file when you use them, so the deck looks the same on a computer that doesn't have them.
-- **File ▸ Export PDF…** makes a PDF with one page per slide.
-- **File ▸ Export Picture…** saves the current slide as a PNG or TIFF at the dpi you choose, or as an SVG, EMF or EPS.
+- **File ▸ Export ▸ Export PDF…** makes a PDF with one page per slide.
+- **File ▸ Export ▸ Export Picture…** saves the current slide as a PNG or TIFF at the dpi you choose, or as an SVG, EMF or EPS.
 
 Opening a deck made in PowerPoint works too. A ChemDraw object embedded in a PowerPoint slide comes in as a picture, not an editable structure. More on file types in [Files and sharing](files-and-sharing.md).
 

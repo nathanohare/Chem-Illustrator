@@ -59,7 +59,7 @@ import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } f
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
-import { Align, Measure, POINTS, Snapshot, type TurnText, units, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
+import { Align, Measure, POINTS, Snapshot, type TurnText, units, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
 import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, CAP, SUB_SCALE } from '../chem/labels';
 import {
@@ -300,7 +300,7 @@ export class Editor {
   showRoles = true;
 
   options = {
-    /** The pen sketches whatever tool is picked (View > Touch Mode > Pen Always Sketches). */
+    /** The pen sketches whatever tool is picked (View > Window and Colours > Touch Mode > Pen Always Sketches). */
     penSketch: false,
     /** After 1 or 0 on the atom under the mouse, the highlight stays there (ChemDraw). */
     keepHotspotOnBond: true,
@@ -796,6 +796,8 @@ export class Editor {
   private onMove(e: PointerEvent): void {
     const p = this.docPoint(e);
     this.pointer = p;
+    // (a card or menu closing over the drawing leaves the mouse on it without a pointerenter)
+    this.pointerInside = true;
     const d = this.drag;
     if (d?.mode === 'text') {
       this.captionEd?.pointerMove(p);
@@ -1202,7 +1204,7 @@ export class Editor {
   }
 
   /**
-   * View > Go to Selection: bring what is selected into the middle of the window, at the zoom
+   * View > Zoom > Go to Selection: bring what is selected into the middle of the window, at the zoom
    * it is at; zoomed out to fit when it is too big to see whole. False with nothing selected.
    */
   goToSelection(): boolean {
@@ -3056,6 +3058,30 @@ export class Editor {
       if (!stations.length) this.moveClear(page);
     });
     this.changed();
+  }
+
+  /** Where the mouse is on the drawing, or null when it is somewhere else (a menu, a panel). */
+  get mouseOnPage(): Vec | null {
+    return this.pointerInside ? { ...this.pointer } : null;
+  }
+
+  /**
+   * Move what was just pasted (the selection) the least it takes to sit clear of everything
+   * else, so pasting twice doesn't stack one copy on the other. Call inside an edit.
+   */
+  placeClear(page?: { w: number; h: number }): void {
+    const doc = this.doc, m = this.measure();
+    const mine = withFrameContents(doc, this.sel);
+    const b = selectionBox(doc, mine, m);
+    if (!b) return;
+    const others = emptySel();
+    for (const id of doc.atoms.keys()) if (!mine.atoms.has(id)) others.atoms.add(id);
+    for (const id of doc.captions.keys()) if (!mine.captions.has(id)) others.captions.add(id);
+    for (const id of doc.arrows.keys()) if (!mine.arrows.has(id)) others.arrows.add(id);
+    for (const id of doc.shapes.keys()) if (!mine.shapes.has(id)) others.shapes.add(id);
+    const boxes = units(doc, others, m).map((u) => u.box);
+    const t = clearOffset(b, boxes, doc.style.bondLength, page);
+    if (t.x || t.y) this.moveSelection(t.x, t.y);
   }
 
   /**

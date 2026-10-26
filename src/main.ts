@@ -166,6 +166,7 @@ import { canScaleUi, setUiScale, stepUiScale, uiScale, UI_SCALES } from './ui/ui
 import { installTouchUi, keypadShowing, markSketch, setTouchMode, showKeypad, touchMode, touchOn } from './ui/touch-ui';
 import { FeedbackDialog } from './ui/feedback-dialog';
 import { addRecent, removeRecent, recentLabel } from './recent';
+import { groupWarnings } from './ui/warning-groups';
 import { NameReader, captionName, attachmentAtoms, cxNotes } from './chem/names';
 import { NameDialog } from './ui/name-dialog';
 import { ArrangeDialog } from './ui/arrange-dialog';
@@ -548,7 +549,7 @@ editor.onToolChange = (name) => {
 };
 editor.setTool('bond-single');
 
-// tablets: bigger buttons, long-press menus, double taps and the atom keypad (View > Touch Mode)
+// tablets: bigger buttons, long-press menus, double taps and the atom keypad (View > Window and Colours > Touch Mode)
 installTouchUi({
   canvasHost: host,
   keypad: (atom, bond) => editor.keypad(atom, bond),
@@ -670,7 +671,10 @@ async function pasteFrom(read: () => Pasted | Promise<Pasted>): Promise<void> {
       const k = Math.min(1, (0.95 * (area.x2 - area.x1)) / Math.max(1, b.x2 - b.x1), (0.95 * (area.y2 - area.y1)) / Math.max(1, b.y2 - b.y1));
       if (k < 0.999) fitPasted(got.doc, doc.style, L * k);
     }
-    editor.sel = insertDrawing(doc, got.doc, pasteCentre());
+    doc.edit('Paste', () => {
+      editor.sel = insertDrawing(doc, got.doc, pastePoint());
+      editor.placeClear(deckNow()?.size);
+    });
     editor.changed();
   } else if (got.kind === 'text') await pasteText(got.text, got.html);
   else if (got.kind === 'picture') placePicture(got.bytes, got.mime, null);
@@ -737,16 +741,28 @@ function pasteCentre(): { x: number; y: number } {
   return a ? { x: (a.x1 + a.x2) / 2, y: (a.y1 + a.y2) / 2 } : renderer.toDoc(renderer.width / 2, renderer.height / 2);
 }
 
+/**
+ * Where a paste goes: under the mouse when it is on the drawing (Ctrl+V), else as pasteCentre;
+ * it is then moved clear of what is already there (placeClear).
+ */
+function pastePoint(): { x: number; y: number } {
+  return (!deckNow() && editor.mouseOnPage) || pasteCentre();
+}
+
 /** Paste a SMILES string or a molfile as a structure. With `quiet`, text that isn't one is left (false) without a message. */
 async function pasteChemistry(text: string, quiet = false): Promise<boolean> {
   if (!chem.ready) { flash('The chemistry engine is still loading.'); return true; }
-  const c = pasteCentre();
+  const c = pastePoint();
   let mb: string | null = text.includes('M  END') ? text : null;
   if (!mb && !/\s/.test(text)) mb = await chem.smilesToMol(text);
   if (!mb) { if (!quiet) flash('Paste a SMILES string or a molfile.'); return false; }
   try {
     let ids: number[] = [];
-    doc.edit('Paste', () => { ids = addMolfile(doc, mb!, c.x, c.y); });
+    doc.edit('Paste', () => {
+      ids = addMolfile(doc, mb!, c.x, c.y);
+      editor.sel = { atoms: new Set(ids), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() };
+      editor.placeClear(deckNow()?.size);
+    });
     selectNewAtoms(ids);
   } catch (err) {
     flash(String(err));
@@ -768,7 +784,7 @@ async function pasteText(text: string, html?: string): Promise<void> {
   const paras = rich && rich.paras.length > 1 ? rich.paras : undefined;
   finishTyping();
   renderer.useStyle(doc);
-  const c = pasteCentre();
+  const c = pastePoint();
   // long text wraps: to the slide's content area, or about 25 bond lengths on a drawing
   const area = slideContentArea();
   const most = area ? area.x2 - area.x1 : doc.style.bondLength * 25;
@@ -779,8 +795,9 @@ async function pasteText(text: string, html?: string): Promise<void> {
   let id = 0;
   doc.edit('Paste text', () => {
     id = doc.addCaption({ x: c.x - (b.x1 + b.x2) / 2, y: c.y - (b.y1 + b.y2) / 2, runs, justify: 'left', ...(paras ? { paras } : {}), ...(wrap ? { wrap } : {}) }).id;
+    editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set([id]), arrows: new Set(), shapes: new Set() };
+    editor.placeClear(deckNow()?.size);
   });
-  editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set([id]), arrows: new Set(), shapes: new Set() };
   editor.changed();
 }
 
@@ -893,7 +910,7 @@ async function editMediaShape(id: number): Promise<void> {
 }
 editor.onMedia = (id) => void editMediaShape(id);
 
-/** Insert > Video or Audio: a file put on the slide, starting when clicked and playing once, as in PowerPoint. */
+/** Insert > Slides > Video or Audio: a file put on the slide, starting when clicked and playing once, as in PowerPoint. */
 async function insertMedia(audio: boolean): Promise<void> {
   const exts = Object.keys(audio ? AUDIO_TYPES : VIDEO_TYPES);
   let f;
@@ -944,7 +961,7 @@ async function insertMedia(audio: boolean): Promise<void> {
  */
 async function insertZoom(summary: boolean): Promise<void> {
   const d = deckNow();
-  if (!d || ws.active.mode !== 'slides') { flash('Zooms go on slides: use File > New Slides, or open a PowerPoint file.'); return; }
+  if (!d || ws.active.mode !== 'slides') { flash('Zooms go on slides: use File > New > New Slides, or open a PowerPoint file.'); return; }
   finishTyping();
   refreshZooms(d);
   const pick = await pickReuseSlides('', d, false, summary
@@ -979,7 +996,7 @@ async function insertZoom(summary: boolean): Promise<void> {
   editor.changed();
 }
 
-/** What a click does in the slide show (Insert > Action), for the selected shapes or action buttons. */
+/** What a click does in the slide show (Insert > Slides > Action), for the selected shapes or action buttons. */
 async function actionSettings(): Promise<void> {
   const d = deckNow();
   const shapes = [...editor.sel.shapes].map((id) => doc.shapes.get(id)).filter((s): s is Shape => !!s && s.kind === 'geo' && !s.diagram && !s.energy);
@@ -1703,10 +1720,14 @@ const pickedReactionArrow = (): number | undefined => [...editor.sel.arrows].fin
 const nameDialog = new NameDialog(async (name) => {
   const got = await nameToMolfile(name);
   if ('error' in got) return got;
-  const c = renderer.toDoc(renderer.width / 2, renderer.height / 2);
+  const c = pasteCentre();
   try {
     let ids: number[] = [];
-    doc.edit('Name to Structure', () => { ids = addNamed(got, c.x, c.y); });
+    doc.edit('Name to Structure', () => {
+      ids = addNamed(got, c.x, c.y);
+      editor.sel = { atoms: new Set(ids), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() };
+      editor.placeClear(deckNow()?.size);
+    });
     selectNewAtoms(ids);
   } catch (err) {
     return { error: String(err) };
@@ -1893,7 +1914,7 @@ const sizeSel = $<HTMLSelectElement>('#rb-size');
 const presenter = new Presenter();
 const presenterView = new PresenterView();
 
-/** View > Mode Colours: blue for drawings, orange for slides, green for sheets, or the person's own colours. */
+/** View > Window and Colours > Mode Colours: blue for drawings, orange for slides, green for sheets, or the person's own colours. */
 let modeColours: ModeColours = { ...DEFAULT_MODE_COLOURS };
 // Each mode keeps its own tool: slides start with Select (click a placeholder to type), drawings
 // and structures drawn for sheet cells with a bond.
@@ -2016,7 +2037,7 @@ const ws: Workspace = new Workspace(doc, {
   },
 });
 
-// AutoSave, recovery copies, Version History and shared folders (File > AutoSave and Recovery Options)
+// AutoSave, recovery copies, Version History and shared folders (File > Versions and Recovery > AutoSave and Recovery Options)
 let keepPrefs: KeepPrefs = { ...DEFAULT_KEEP };
 const keeper = new Keeper({
   ws,
@@ -2220,7 +2241,7 @@ function slideSwitched(deck: Deck): void {
 /** The layouts last put in the Layout box and the Format menu (they change with the slide master). */
 let layoutsShown = '';
 
-/** The Layout box and Format > Slide Layout list the deck's layouts: the five built in, as edited, then the ones made here. */
+/** The Layout box and Format > Slides > Slide Layout list the deck's layouts: the five built in, as edited, then the ones made here. */
 function showLayoutMenus(deck: Deck): void {
   const list = deckLayouts(deck.master);
   const key = JSON.stringify(list.map((l) => [l.id, l.name]));
@@ -2543,7 +2564,7 @@ async function newDesign(): Promise<void> {
 
 async function designSize(): Promise<void> {
   const d = deckNow();
-  if (!d || ws.active.mode !== 'design') { flash('Page Size is for designs: use File > New Design.'); return; }
+  if (!d || ws.active.mode !== 'design') { flash('Page Size is for designs: use File > New > New Design.'); return; }
   finishTyping();
   const size = await pickDesignSize('Page size', d.size);
   if (size && deckNow() === d) {
@@ -2587,7 +2608,7 @@ const slideListHooks = {
 };
 const slideList = new SlideList($('#slide-list'), slideListHooks);
 
-// View > Slide Sorter: every slide in rows of larger pictures, over the slide being edited.
+// View > Slides > Slide Sorter: every slide in rows of larger pictures, over the slide being edited.
 // Double-click a slide (or press Enter) to go back to Normal view on it.
 let sorterOn = false;
 const sorterEl = $('#slide-sorter');
@@ -2596,7 +2617,7 @@ const sorterList = new SlideList(sorterEl, { ...slideListHooks, open: (i) => { g
 /** Slide Sorter on or off (Normal view). */
 function setSorter(on: boolean): void {
   const d = deckNow();
-  if (on && (!d || ws.active.mode !== 'slides')) { flash('Slide Sorter is for slides: use File > New Slides, or open a PowerPoint file.'); return; }
+  if (on && (!d || ws.active.mode !== 'slides')) { flash('Slide Sorter is for slides: use File > New > New Slides, or open a PowerPoint file.'); return; }
   if (on === sorterOn) { if (on) sorterList.focus(); return; }
   finishTyping();
   sorterOn = on;
@@ -2635,7 +2656,7 @@ function slideViewNow(): 'normal' | 'outline' | 'sorter' | 'notes' {
 /** Change the slides' view (Normal, Outline, Slide Sorter or Notes Page). */
 function setSlideView(v: 'normal' | 'outline' | 'sorter' | 'notes'): void {
   const d = deckNow();
-  if (v !== 'normal' && (!d || ws.active.mode !== 'slides')) { flash('That view is for slides: use File > New Slides, or open a PowerPoint file.'); return; }
+  if (v !== 'normal' && (!d || ws.active.mode !== 'slides')) { flash('That view is for slides: use File > New > New Slides, or open a PowerPoint file.'); return; }
   finishTyping();
   if (v !== 'sorter' && sorterOn) setSorter(false);
   if (v !== 'notes' && notesView.shown) { notesView.show(false); $('#notes-pane').classList.remove('np-hidden'); editor.paused = false; }
@@ -2749,7 +2770,7 @@ function sectionCommand(cmd: string): void {
 }
 
 /**
- * Slides copied or cut (in the slide list, or Edit > Copy Slides), with the deck they came from,
+ * Slides copied or cut (in the slide list, or Edit > Slides > Copy Slides), with the deck they came from,
  * for pasting into any deck that is open.
  */
 let slideClip: SlideSource | null = null;
@@ -2773,7 +2794,7 @@ function copySlides(ix: number[], cut: boolean): void {
 function pasteSlides(keep?: boolean): void {
   const d = deckNow();
   if (!d || ws.active.mode !== 'slides') return;
-  if (!slideClip) { flash('Copy slides first: pick them in the slide list and press Ctrl+C (or Edit > Copy Slides).'); return; }
+  if (!slideClip) { flash('Copy slides first: pick them in the slide list and press Ctrl+C (or Edit > Slides > Copy Slides).'); return; }
   finishTyping();
   const src = slideClip;
   const after = pickedSlides().at(-1) ?? d.index;
@@ -2786,7 +2807,7 @@ function pasteSlides(keep?: boolean): void {
     label: 'Keep source formatting',
     run: () => {
       // put them in again their own way, in place of the ones just pasted (if nothing has changed since)
-      if (deckNow() !== d || d.edits !== edits) { flash('Use Edit > Paste Slides (Keep Source Formatting) to paste them with their own look.'); return; }
+      if (deckNow() !== d || d.edits !== edits) { flash('Use Edit > Slides > Paste Slides (Keep Source Formatting) to paste them with their own look.'); return; }
       d.undo();
       d.pasteSlides(src, true, after);
       flash(`Pasted ${what} with their own look.`);
@@ -2843,7 +2864,7 @@ function goSlide(i: number): void {
 
 function newSlide(layout?: LayoutId): void {
   const d = deckNow();
-  if (!d) { flash('Slides are for presentations: use File > New Slides, or open a PowerPoint file.'); return; }
+  if (!d) { flash('Slides are for presentations: use File > New > New Slides, or open a PowerPoint file.'); return; }
   finishTyping();
   d.addSlide(layout);
 }
@@ -3193,7 +3214,7 @@ async function pickPicture(): Promise<{ bytes: Uint8Array; mime: string; name: s
   return { bytes: f.bytes, mime, name: f.name };
 }
 
-// ---------------------------------------------------------------- embedded objects (Insert > Object)
+// ---------------------------------------------------------------- embedded objects (Insert > Document > Object)
 
 /** Ask for a file of any kind, to put in a document as an object. */
 async function pickObjectFile(): Promise<{ name: string; bytes: Uint8Array } | null> {
@@ -3360,7 +3381,7 @@ const importHost: ImportHost = {
   },
 };
 
-/** File > Import Structures from Picture: the selected picture, or one chosen from a file. */
+/** File > Import > Import Structures from Picture: the selected picture, or one chosen from a file. */
 async function importPicture(): Promise<void> {
   finishTyping();
   const sel = [...editor.sel.shapes].map((id) => doc.shapes.get(id)).filter((s): s is Shape => s?.kind === 'picture' && !!s.src);
@@ -3370,7 +3391,7 @@ async function importPicture(): Promise<void> {
   await readPictures(pics);
 }
 
-/** File > Paste Picture as Structure: a picture on the clipboard (a screenshot, or copied from a paper). */
+/** File > Import > Paste Picture as Structure: a picture on the clipboard (a screenshot, or copied from a paper). */
 async function importPastedPicture(): Promise<void> {
   finishTyping();
   let got: { bytes: Uint8Array; mime: string } | null = null;
@@ -3382,7 +3403,7 @@ async function importPastedPicture(): Promise<void> {
   await readPictures([{ name: 'Pasted picture', ...got }]);
 }
 
-/** File > Import Structures from PDF: every drawing on the pages, read and offered on the review screen. */
+/** File > Import > Import Structures from PDF: every drawing on the pages, read and offered on the review screen. */
 async function importPdf(): Promise<void> {
   finishTyping();
   const f = await openBytesDialog('PDF files', [], ['pdf']).catch(async (e) => { await showError(String(e)); return null; });
@@ -3439,7 +3460,7 @@ async function readPictures(pics: { name: string; bytes: Uint8Array; mime: strin
   await importPictureFiles(importHost, pics);
 }
 
-/** Insert > Crop Picture: the selected picture's handles cut its edges off until Esc or a click elsewhere. */
+/** Insert > Picture Tools > Crop Picture: the selected picture's handles cut its edges off until Esc or a click elsewhere. */
 function cropPicture(): void {
   const pics = [...editor.sel.shapes].filter((id) => doc.shapes.get(id)?.kind === 'picture');
   if (pics.length !== 1) { flash('Select one picture to crop.'); return; }
@@ -3690,7 +3711,7 @@ async function slideTemplates(): Promise<void> {
 /** Slide Master > Edit Layouts: the deck's layouts and their placeholders. */
 async function editSlideLayouts(): Promise<void> {
   const d = deckNow();
-  if (!d?.current || ws.active.mode !== 'slides') { flash('Layouts are for slides: use File > New Slides, or open a PowerPoint file.'); return; }
+  if (!d?.current || ws.active.mode !== 'slides') { flash('Layouts are for slides: use File > New > New Slides, or open a PowerPoint file.'); return; }
   finishTyping();
   const used = new Map<LayoutId, number>();
   for (const s of d.slides) used.set(s.layout, (used.get(s.layout) ?? 0) + 1);
@@ -3709,7 +3730,7 @@ async function customSlideSize(): Promise<void> {
 
 function present(fromHere: boolean, notes = false, how: { custom?: number; windowed?: boolean; rehearse?: boolean; record?: boolean } = {}): void {
   const d = deckNow();
-  if (!d) { flash('Present shows slides: use File > New Slides, or open a PowerPoint file.'); return; }
+  if (!d) { flash('Present shows slides: use File > New > New Slides, or open a PowerPoint file.'); return; }
   if (presenter.running || presenterView.running) return;
   finishTyping();
   // Set Up Show: the slides it plays, how it goes on, and the rest
@@ -3761,7 +3782,7 @@ presenter.onRehearsed = (r) => {
   })();
 };
 
-/** Insert > Header & Footer (Date & Time, Slide Number): the slides', notes pages' and handouts' header and footer. */
+/** Insert > Slides > Header & Footer (Date & Time, Slide Number): the slides', notes pages' and handouts' header and footer. */
 async function headerFooter(tab: 'slide' | 'notes' = 'slide'): Promise<void> {
   const d = deckNow();
   if (!d?.current || ws.active.mode !== 'slides') return;
@@ -3851,7 +3872,7 @@ async function exportMolfile(): Promise<void> {
   flash(`Saved ${target.name}${left}`);
 }
 
-/** File > Export PDF: every slide as a page, or the drawing on a page of its own size. */
+/** File > Export > Export PDF: every slide as a page, or the drawing on a page of its own size. */
 async function exportPdf(): Promise<void> {
   const tab = ws.active, deck = tab.deck;
   let pages: PdfPage[];
@@ -3934,7 +3955,7 @@ async function printNow(): Promise<void> {
       ] },
       { name: 'paper', label: 'Paper (handouts)', value: printChoices.paper, options: PAPER_OPTIONS },
       { name: 'frame', label: 'Frame the slides (handouts)', value: printChoices.frame, type: 'checkbox' },
-    ], { ok: 'Print…', note: 'Full page slides print at the slide\'s own shape, notes pages at 7.5 × 10 in; the next window fits them to the paper. Handouts and notes pages carry the header and footer from Insert > Header & Footer > Notes and Handouts. Copies and which pages are chosen in the next window.' });
+    ], { ok: 'Print…', note: 'Full page slides print at the slide\'s own shape, notes pages at 7.5 × 10 in; the next window fits them to the paper. Handouts and notes pages carry the header and footer from Insert > Slides > Header & Footer > Notes and Handouts. Copies and which pages are chosen in the next window.' });
     if (!v) return;
     Object.assign(printChoices, v);
     if (v.handout === '1') { printPages({ pages: deck.slides.map((_, i) => slide(i)), w: deck.size.w, h: deck.size.h }); return; }
@@ -3972,7 +3993,7 @@ async function printNow(): Promise<void> {
 }
 
 /**
- * File > Export Picture: the page (a design or the current slide) or the drawing as a PNG or
+ * File > Export > Export Picture: the page (a design or the current slide) or the drawing as a PNG or
  * TIFF at the resolution picked, or as an SVG, EMF or EPS, on its background colour or see-through.
  */
 async function exportPicture(): Promise<void> {
@@ -4098,7 +4119,7 @@ async function pdfImage(src: string): Promise<PdfImage | null> {
 
 // ---------------------------------------------------------------- sheets: the grid, and structures drawn for cells
 
-const SHEET_HINT = 'Type in a cell, or double-click to change it. Insert > Structure in Cell puts a structure in a cell; Insert > Insert Property Columns works out formula, MW, HRMS m/z and more.';
+const SHEET_HINT = 'Type in a cell, or double-click to change it. Insert > Structure in Cell puts a structure in a cell; Insert > Sheet > Insert Property Columns works out formula, MW, HRMS m/z and more.';
 
 /** True when a sheet is showing (and no structure is being drawn for one of its cells). */
 function sheetActive(): boolean {
@@ -4567,7 +4588,7 @@ const DOC_COMMANDS: Record<string, () => unknown> = {
     docMode.insertObject({ kind: 'drawing', contents: r.contents }, 'Paste SMILES');
   },
   'name-to-structure': () => docMode.run('structure-from-name-doc'),
-  // View > New Window: the document in another tab too, with its own view and place
+  // View > Document > New Window: the document in another tab too, with its own view and place
   'doc-new-window': () => { ws.newWindow(); },
 };
 
@@ -4664,7 +4685,7 @@ const slideCompare = new SlideComparePane({
   changed: () => { const d = deckNow(); if (d) deckChanged(d); },
 });
 
-/** File > New from Template: a document or sheet started from one of our templates. */
+/** File > New > New from Template: a document or sheet started from one of our templates. */
 async function newFromTemplate(): Promise<void> {
   finishTyping();
   const got = await pickFileTemplate(sheetActive() ? 'sheet' : 'document');
@@ -4731,7 +4752,7 @@ function command(name: string): boolean {
     if (!ANY_TAB.has(name) && !DOC_ANY.has(name)) return false;
   }
   if (ws.active.mode === 'design' && (SLIDE_ONLY.has(name) || name.startsWith('layout-'))) {
-    flash('A design is one page: use Page Size and Background on the Design ribbon. For several pages, use File > New Slides.');
+    flash('A design is one page: use Page Size and Background on the Design ribbon. For several pages, use File > New > New Slides.');
     return true;
   }
   if (name.startsWith('shape-fx:')) { void shapeEffect(name); return true; }
@@ -4884,7 +4905,7 @@ const COMMANDS: Record<string, () => unknown> = {
     const anchor = b && b.offsetParent ? b : document.querySelector<HTMLElement>('#ribbon .rb-tabs')!;
     shapeMenu.show(anchor, 'Click an icon, then click or drag on the slide. Change its colour in the Style panel.', (id) => { finishTyping(); editor.setTool(`geo:${id}`); }, 'icons');
   },
-  'design-shapes': () => { if (ws.active.mode === 'design') { lib.showTab('shapes'); lib.focusSearch(); } else flash('Shapes are in Design mode: use File > New Design.'); },
+  'design-shapes': () => { if (ws.active.mode === 'design') { lib.showTab('shapes'); lib.focusSearch(); } else flash('Shapes are in Design mode: use File > New > New Design.'); },
   'design-icons': () => { if (ws.active.mode === 'design') { lib.showTab('icons'); lib.focusSearch(); } else flash('Icons are in Design, Slides and Document modes.'); },
   // the Insert menu's Shapes and Icons, in whichever mode is showing (Documents have their own)
   'insert-shapes': () => (ws.active.mode === 'design' ? COMMANDS['design-shapes']() : ws.active.mode === 'slides' ? COMMANDS['slide-shapes']() : flash('Shapes go on slides, designs and documents.')),
@@ -5083,7 +5104,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'touch-mode-on': () => { setTouchMode('on'); storeSettings(); },
   'touch-mode-off': () => { setTouchMode('off'); storeSettings(); },
   'atom-keypad': () => {
-    if (!touchOn()) { flash('The atom keypad is part of Touch Mode: View > Touch Mode > On.'); return; }
+    if (!touchOn()) { flash('The atom keypad is part of Touch Mode: View > Window and Colours > Touch Mode > On.'); return; }
     showKeypad(!keypadShowing());
     $('[data-cmd="atom-keypad"]')?.setAttribute('aria-checked', String(keypadShowing()));
   },
@@ -5778,7 +5799,10 @@ $('#split-insert').addEventListener('click', () => {
     focusSlideDrawing(false);
     const deck = deckNow();
     fitPasted(part, doc.style, deck?.master.fitPasted ? deck.master.drawing.bondLength : undefined);
-    editor.sel = insertDrawing(doc, part, pasteCentre(), 'Insert structure');
+    doc.edit('Insert structure', () => {
+      editor.sel = insertDrawing(doc, part, pasteCentre(), 'Insert structure');
+      editor.placeClear(deck?.size);
+    });
     editor.changed();
   }
 });
@@ -6030,15 +6054,15 @@ function renderRecent(): void {
     b.append(n, f);
     return b;
   });
-  const head = document.createElement('div');
-  head.className = 'menu-head';
-  head.textContent = 'Recent';
   const clear = document.createElement('button');
   clear.setAttribute('role', 'menuitem');
   clear.dataset.recent = '';
   clear.textContent = 'Clear Recent Files';
-  box.replaceChildren(...(items.length ? [head, ...items, clear] : []));
+  box.replaceChildren(...(items.length ? [...items, document.createElement('hr'), clear] : []));
   box.hidden = !canUpdate || !items.length;
+  // File > Open Recent shows only with something in it
+  const sub = document.querySelector<HTMLElement>('#recent-sub');
+  if (sub) sub.hidden = box.hidden;
 }
 async function openRecent(path: string): Promise<void> {
   finishTyping();
@@ -6203,7 +6227,7 @@ async function openEmbedded(e: EmbeddedEdit): Promise<void> {
   let t: Tab | null;
   if (e.cdxml.trim()) t = await ws.openAs(new TextEncoder().encode(e.cdxml), 'drawing.cdxml', { name, ref, dirty: false, stamp: null });
   else {
-    // a new drawing (Insert ▸ Object in Word)
+    // a new drawing (Insert ▸ Document ▸ Object in Word)
     t = ws.newDrawing();
     t.ref = ref;
     t.name = name;
@@ -6451,14 +6475,14 @@ function currentSettings(): Settings {
   };
 }
 
-// ---------------------------------------------------------------- Edit > Export Settings and Import Settings
+// ---------------------------------------------------------------- Edit > Settings File > Export Settings and Import Settings
 
 /** Save every setting in one file, to keep or to use on another computer. */
 async function exportSettings(say: (text: string) => void = flash): Promise<void> {
   const target = await saveFileDialog('Chem Illustrator settings.json', SETTINGS_FILE).catch((e) => { say(String(e)); return null; });
   if (!target) return;
   await writeFile(target.ref, target.name, exportText(currentSettings()), SETTINGS_FILE).then(
-    () => say(`Saved every setting in ${target.name}. Import it on another computer (Edit > Import Settings) to set that one up the same.`),
+    () => say(`Saved every setting in ${target.name}. Import it on another computer (Edit > Settings File > Import Settings) to set that one up the same.`),
     (e) => say(`Could not save the settings: ${e}`),
   );
 }
@@ -6577,7 +6601,7 @@ const hotkeysDialog = new HotkeysDialog({
   },
 });
 
-/** Use these settings: at start, and when settings are imported (Edit > Import Settings). */
+/** Use these settings: at start, and when settings are imported (Edit > Settings File > Import Settings). */
 function applySettings(s: Settings): void {
   editor.options.keepHotspotOnBond = s.keepHotspotOnBond;
   editor.options.fixedLength = s.fixedLength;
@@ -6681,7 +6705,7 @@ function applySettings(s: Settings): void {
   refreshKeys();
 }
 
-void loadSettings().then((s) => {
+void loadSettings((msg) => flash(msg, 12000)).then((s) => {
   applySettings(s);
   settingsLoaded = true;
   void keeper.start();
@@ -7380,23 +7404,36 @@ function updateWarnings(): void {
   const ignored = checks.ignoredCount() + [...doc.captions.values()].filter((c) => c.ignoreWarnings).length;
   $('#warnings-count').textContent = list.length ? String(list.length) : '';
   const MAX = 100;
-  const rows = list.slice(0, MAX).map((w, i) =>
-    `<li><button class="w-text" data-i="${i}" title="Show it on the drawing">${escapeHtml(w.text.join(' '))}</button>` +
-    `<button class="w-ignore" data-i="${i}" title="Stop flagging this one (saved with the file)">Ignore</button></li>`).join('');
+  // the same problem in many places is one row, with how many
+  const groups = groupWarnings(list);
+  const rows = groups.slice(0, MAX).map((g, i) => {
+    const n = g.items.length;
+    return `<li><button class="w-text" data-i="${i}" title="${n > 1 ? 'Show them on the drawing, one by one' : 'Show it on the drawing'}">${n > 1 ? `<b class="w-count">${n}×</b> ` : ''}${escapeHtml(g.text)}</button>` +
+      `<button class="w-ignore" data-i="${i}" title="Stop flagging ${n > 1 ? 'these' : 'this one'} (saved with the file)">${n > 1 ? 'Ignore All' : 'Ignore'}</button></li>`;
+  }).join('');
   $('#warnings-body').innerHTML =
-    (list.length ? `<ul class="warn-list">${rows}</ul>${list.length > MAX ? `<p class="muted small">and ${list.length - MAX} more</p>` : ''}` : '<p class="muted">No problems found.</p>') +
+    (list.length ? `<ul class="warn-list">${rows}</ul>${groups.length > MAX ? `<p class="muted small">and ${groups.length - MAX} more</p>` : ''}` : '<p class="muted">No problems found.</p>') +
     (ignored ? `<p class="muted small">${ignored} ignored. <button id="w-unignore">Show them again</button></p>` : '');
-  const items = list.slice(0, MAX);
+  const shown = groups.slice(0, MAX);
+  const next = new Map<number, number>();
   for (const b of document.querySelectorAll<HTMLButtonElement>('#warnings-body .w-text')) {
-    b.addEventListener('click', () => { const w = items[Number(b.dataset.i)]; editor.reveal(w.kind, w.id); });
+    b.addEventListener('click', () => {
+      const i = Number(b.dataset.i), g = shown[i], k = next.get(i) ?? 0;
+      const w = g.items[k % g.items.length];
+      next.set(i, k + 1);
+      editor.reveal(w.kind, w.id);
+      if (g.items.length > 1) flash(`${k % g.items.length + 1} of ${g.items.length}: ${g.text}`);
+    });
   }
   for (const b of document.querySelectorAll<HTMLButtonElement>('#warnings-body .w-ignore')) {
     b.addEventListener('click', () => {
-      const w = items[Number(b.dataset.i)];
-      doc.edit('Ignore warning', () => {
-        if (w.kind === 'atom') doc.updateAtom(w.id, { ignoreWarnings: true });
-        else if (w.kind === 'bond') doc.updateBond(w.id, { ignoreWarnings: true });
-        else doc.updateCaption(w.id, { ignoreWarnings: true });
+      const g = shown[Number(b.dataset.i)];
+      doc.edit(g.items.length > 1 ? 'Ignore warnings' : 'Ignore warning', () => {
+        for (const w of g.items) {
+          if (w.kind === 'atom') doc.updateAtom(w.id, { ignoreWarnings: true });
+          else if (w.kind === 'bond') doc.updateBond(w.id, { ignoreWarnings: true });
+          else doc.updateCaption(w.id, { ignoreWarnings: true });
+        }
       });
       editor.changed();
     });
@@ -7764,7 +7801,7 @@ function showDark(on: boolean): void {
   $('#btn-dark').setAttribute('aria-pressed', String(on));
 }
 
-/** View > Dark Page Colours…: pick a palette, change its paper and ink, or keep your own. */
+/** View > Window and Colours > Dark Page Colours…: pick a palette, change its paper and ink, or keep your own. */
 async function darkColours(): Promise<void> {
   const all = (): DarkPalette[] => [...DARK_PALETTES, ...dark.own];
   const cur = darkPaletteNamed(dark.palette, dark.own);
@@ -8375,7 +8412,7 @@ const toolboxEditor = new ToolboxEditor({
   newPlace: () => { const w = $('#work').getBoundingClientRect(); return { x: Math.round(Math.max(w.left + 8, w.right - 300)), y: Math.round(w.top + 40) }; },
 });
 
-// ---------------------------------------------------------------- View > Customize the Ribbon
+// ---------------------------------------------------------------- View > Ribbon > Customize the Ribbon
 
 /** Each ribbon's tabs and groups as you put them (kept in the settings). */
 let ribbonPrefs: RibbonsPrefs = {};
@@ -8455,11 +8492,17 @@ function commandItems(): CommandItem[] {
     const menu = wrap.querySelector<HTMLElement>(':scope > button')?.textContent?.trim() ?? '';
     for (const b of wrap.querySelectorAll<HTMLButtonElement>('[data-cmd]')) {
       if (b.hidden || b.disabled || getComputedStyle(b).display === 'none') continue;
-      const sub = b.closest('.submenu')?.querySelector<HTMLButtonElement>(':scope > button');
-      if (sub?.disabled) continue; // a submenu for another mode
+      // the submenus it is in, outermost first (File ▸ Export)
+      const subs: HTMLButtonElement[] = [];
+      for (let w = b.parentElement?.closest<HTMLElement>('.submenu'); w; w = w.parentElement?.closest<HTMLElement>('.submenu')) {
+        const head = w.querySelector<HTMLButtonElement>(':scope > button');
+        if (head) subs.unshift(head);
+      }
+      if (subs.some((h) => h.disabled || h.parentElement!.hidden)) continue; // a submenu for another mode
       const cmd = b.dataset.cmd!, e = topMenuEntry(cmd);
       const label = e?.label ?? cmd;
-      out.push({ id: `cmd:${cmd}`, label, place: sub ? `${menu} ▸ ${sub.textContent!.trim()}` : `${menu} menu`, more: b.title, key: commandKey(cmd),
+      const path = subs.map((h) => h.firstChild?.textContent?.trim() ?? '').join(' ▸ ');
+      out.push({ id: `cmd:${cmd}`, label, place: subs.length ? `${menu} ▸ ${path}` : `${menu} menu`, more: b.title, key: commandKey(cmd),
         checked: e?.checked, icon: searchIcon(cmd), run: runCmd(cmd, label) });
     }
   }
@@ -8715,14 +8758,14 @@ async function pageSetup(): Promise<void> {
   editor.requestScene();
 }
 
-/** View > Interface Size: the whole window bigger or smaller, saved for next time. */
+/** View > Window and Colours > Interface Size: the whole window bigger or smaller, saved for next time. */
 function sizeInterface(v: number): void {
   if (!canScaleUi()) { flash('In the web version, use your browser\'s zoom (in its menu) to make the whole page bigger or smaller.', 5000); return; }
   void setUiScale(v).then(() => flash(`Interface size ${Math.round(uiScale() * 100)}% (Ctrl+Alt+= larger, Ctrl+Alt+- smaller, Ctrl+Alt+0 normal)`, 2500));
   storeSettings();
 }
 
-/** View > Text Formatting Bar: along the top of the drawing, floating by the text, or hidden. */
+/** View > Window and Colours > Text Formatting Bar: along the top of the drawing, floating by the text, or hidden. */
 function placeTextBar(where: Settings['textBar']): void {
   CaptionEditor.barPlace = where;
   for (const w of ['docked', 'floating', 'hidden']) $(`[data-cmd="text-bar-${w}"]`)?.setAttribute('aria-checked', String(w === where));

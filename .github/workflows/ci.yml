@@ -27,3 +27,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      # the built app in a real browser: start, draw, paste, save and reopen, every kind of tab,
+      # menus that fit a laptop's window (scripts/smoke.mjs)
+      - run: npx playwright install --with-deps chromium
+      - run: npm run smoke

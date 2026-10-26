@@ -101,7 +101,7 @@ New files are called **Drawing 1**, **Slides 1**, **Sheet 1** and so on, until t
 | **Document** | A new document with pages, styles and references | Word |
 | **Design** | A TOC graphic, graphical abstract, poster or flowchart | a graphics program |
 
-The same commands are in the **File** menu (**New Drawing**, **New Slides**, **New Sheet**, **New Document**, **New Design…**). To change the tab colours, use **View ▸ Mode Colours…**.
+The same commands are in the **File** menu (**New Drawing**, **New Slides**, **New Sheet**, **New Document**, **New Design…**). To change the tab colours, use **View ▸ Window and Colours ▸ Mode Colours…**.
 
 ### The toolbox on the left
 
@@ -184,13 +184,13 @@ When you save a ChemDraw file you opened here, only the parts you changed are re
 
 Other ways to get a drawing out:
 
-- **File ▸ Export PDF…** saves a PDF.
-- **File ▸ Export Picture…** saves a PNG or TIFF at the resolution you choose (300 or 600 dpi for journals), or an SVG, EMF or EPS, on the page colour or see-through.
-- **File ▸ Export Molfile…** saves the selected structures (or all of them) as a `.mol` file.
+- **File ▸ Export ▸ Export PDF…** saves a PDF.
+- **File ▸ Export ▸ Export Picture…** saves a PNG or TIFF at the resolution you choose (300 or 600 dpi for journals), or an SVG, EMF or EPS, on the page colour or see-through.
+- **File ▸ Export ▸ Export Molfile…** saves the selected structures (or all of them) as a `.mol` file.
 - **File ▸ Print…** (Ctrl+P) prints on Letter or A4, at actual size or as large as fits.
-- **Edit ▸ Copy** (Ctrl+C) copies the selection, or the whole drawing when nothing is selected. In the Windows app it pastes into Word and PowerPoint as a sharp picture. **Edit ▸ Copy as SMILES** (Ctrl+Alt+C), **Copy as Molfile Text** (Ctrl+Alt+O) and **Copy as CDXML Text** (Ctrl+D) copy text instead.
+- **Edit ▸ Copy** (Ctrl+C) copies the selection, or the whole drawing when nothing is selected. In the Windows app it pastes into Word and PowerPoint as a sharp picture. **Edit ▸ Copy As ▸ Copy as SMILES** (Ctrl+Alt+C), **Copy as Molfile Text** (Ctrl+Alt+O) and **Copy as CDXML Text** (Ctrl+D) copy text instead.
 
-Slides, sheets, documents and designs save in their own formats; see their pages. To save every open tab together, see **File ▸ Save Workspace** in [Files and sharing](files-and-sharing.md).
+Slides, sheets, documents and designs save in their own formats; see their pages. To save every open tab together, see **File ▸ Workspace ▸ Save Workspace** in [Files and sharing](files-and-sharing.md).
 
 ## Edit ▸ Settings
 
@@ -213,14 +213,14 @@ Your preferences, hotkeys, own templates, nicknames, palettes and toolbox layout
 
 ### Customize the Ribbon
 
-**View ▸ Customize the Ribbon…** (or right-click a ribbon's tabs or a group's name) rearranges the ribbons of Slides, Documents, Sheets and Designs, with the same jiggling icons as Customize Toolboxes. Pick the ribbon at the top; its tabs show as a row:
+**View ▸ Ribbon ▸ Customize the Ribbon…** (or right-click a ribbon's tabs or a group's name) rearranges the ribbons of Slides, Documents, Sheets and Designs, with the same jiggling icons as Customize Toolboxes. Pick the ribbon at the top; its tabs show as a row:
 
 - Drag a tab to put the tabs in your order, type a new **Tab** name, or untick **Shown** to hide it.
 - Click a tab to see its groups. Drag a group to move it, drop it on another tab to move it there, or drag it out (or click its **×**) to hide it. Hidden groups are listed on the left, to drag back in.
 - Click a group to rename it. **New Group** makes a group of your own: drag commands into it from the list on the left (every button of that ribbon, and every menu command), or click **+**.
 - **Undo** (Ctrl+Z) takes changes back one at a time; **Reset This Ribbon** puts a ribbon back as it came.
 
-To set up a new install or another computer the same way, use **Edit ▸ Export Settings…** to save every setting in one file (hotkeys, toolboxes and what is in them, preferences, your templates, nicknames, drawing styles, colour palettes, slide themes and highlight looks), then **Edit ▸ Import Settings…** on the other one. The same two buttons are on the **Import and Export** page of the Settings window. Recent files stay on each computer. A file saved from the Hotkeys window's Export imports too, and changes only the keys.
+To set up a new install or another computer the same way, use **Edit ▸ Settings File ▸ Export Settings…** to save every setting in one file (hotkeys, toolboxes and what is in them, preferences, your templates, nicknames, drawing styles, colour palettes, slide themes and highlight looks), then **Edit ▸ Settings File ▸ Import Settings…** on the other one. The same two buttons are on the **Import and Export** page of the Settings window. Recent files stay on each computer. A file saved from the Hotkeys window's Export imports too, and changes only the keys.
 
 ---
 

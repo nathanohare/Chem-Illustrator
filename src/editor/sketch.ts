@@ -1,4 +1,4 @@
-// Sketching with the pen (the Sketch tool, or any tool with View > Touch Mode > Pen Always
+// Sketching with the pen (the Sketch tool, or any tool with View > Window and Colours > Touch Mode > Pen Always
 // Sketches): freehand ink becomes chemistry when the pen lifts.
 //
 // - A line becomes a bond; a line with corners (a zig-zag) a chain, one bond per straight
