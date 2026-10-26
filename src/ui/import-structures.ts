@@ -127,6 +127,19 @@ export async function importPictures(host: ImportHost, found: FoundPicture[], o:
 /** Pages read at most in one go (a thesis is read a part at a time). */
 const MOST_PAGES = 40;
 
+/** Pixels a page is drawn in at most (a poster), and on its longer side: canvases larger than this can't be made everywhere. */
+const MOST_PIXELS = 16e6, MOST_SIDE = 8000;
+
+/**
+ * How large a page of `w` × `h` points is drawn (about 150 dots to the inch: structures come out a few
+ * hundred pixels across, as the reader likes; less on a poster), and how far apart two strokes can be and
+ * still be one drawing, in pixels: a set distance on the page (a letter page's width / 120), not a share of its width.
+ */
+export function pageRender(w: number, h: number): { scale: number; gap: number } {
+  const scale = Math.min(2, Math.sqrt(MOST_PIXELS / (w * h)), MOST_SIDE / Math.max(w, h));
+  return { scale, gap: Math.max(1, Math.round((612 / 120) * scale)) };
+}
+
 /** The drawings on the pages of a PDF, as pictures (pages from `first` to `last`, from 1). */
 export async function pdfDrawings(bytes: Uint8Array, pick: (pages: number) => Promise<[number, number] | null>, progress: (msg: string) => void): Promise<FoundPicture[] | null> {
   const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
@@ -142,8 +155,9 @@ export async function pdfDrawings(bytes: Uint8Array, pick: (pages: number) => Pr
     for (let n = range[0]; n <= range[1]; n++) {
       progress(`Looking for structures on page ${n} of ${range[1]}…`);
       const page = await pdf.getPage(n);
-      // about 150 dots to the inch: structures come out a few hundred pixels across, as the reader likes
-      const view = page.getViewport({ scale: 2 });
+      const size = page.getViewport({ scale: 1 });
+      const { scale, gap } = pageRender(size.width, size.height);
+      const view = page.getViewport({ scale });
       const canvas = document.createElement('canvas');
       canvas.width = Math.ceil(view.width);
       canvas.height = Math.ceil(view.height);
@@ -163,7 +177,7 @@ export async function pdfDrawings(bytes: Uint8Array, pick: (pages: number) => Pr
       const px = ctx.getImageData(0, 0, w, h).data;
       const ink = new Uint8Array(w * h);
       for (let i = 0; i < w * h; i++) ink[i] = px[i * 4] + px[i * 4 + 1] + px[i * 4 + 2] < 600 ? 1 : 0;
-      const boxes = findDrawings(ink, w, h, prose, Math.round(w / 120), labels);
+      const boxes = findDrawings(ink, w, h, prose, gap, labels);
       boxes.forEach((b, k) => {
         const pad = 6;
         const x = Math.max(0, b.x - pad), y = Math.max(0, b.y - pad), bw = Math.min(w - x, b.w + 2 * pad), bh = Math.min(h - y, b.h + 2 * pad);
