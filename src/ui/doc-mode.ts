@@ -2034,6 +2034,8 @@ export class DocumentMode {
     v.sideways = true;
     v.perRow = 1;
     v.turnPages = (dir) => this.turn(dir);
+    // only the two pages being read: the next one doesn't peek in at the edge
+    v.shownPages = (i) => i === this.readPage || (i === this.readPage + 1 && (this.file?.layout().pages.length ?? 0) > 1);
     v.resize();
     v.fitPages();
     this.readPage = page - (page % 2);
@@ -2050,6 +2052,7 @@ export class DocumentMode {
     document.querySelector<HTMLElement>('#doc-readbar')!.hidden = true;
     v.scroller.classList.remove('doc-turning');
     v.turnPages = null;
+    v.shownPages = null;
     const w = this.readWas;
     this.readWas = null;
     const page = this.readPage;
@@ -2073,6 +2076,8 @@ export class DocumentMode {
     p -= p % step;
     this.readPage = p;
     this.views[0].scrollToPage(p);
+    this.views[0].redraw();
+    this.comments.place();
     this.showReadPages();
   }
 

@@ -2292,6 +2292,8 @@ slideCmts = new SlideComments($('#cmt-section'), $('#canvas-host'), {
   askName: () => docMode.askReviewName(),
   flash,
   focus: () => $('#overlay').focus(),
+  // the Comments pane is in the side panel: a new comment's card needs it unfolded
+  reveal: () => { if (sideIsFolded()) command('fold-side'); },
 });
 
 // ---------------------------------------------------------------- Design mode
@@ -5445,6 +5447,12 @@ window.addEventListener('keydown', (e) => {
   const step = chord && !(e.target as HTMLElement | null)?.closest?.('dialog')
     ? keymap.keysFor('command', 'command next-region').includes(chord) ? 1 : keymap.keysFor('command', 'command prev-region').includes(chord) ? -1 : 0 : 0;
   if (step) { e.preventDefault(); e.stopImmediatePropagation(); cycleRegion(step); return; }
+  // Escape shuts an open menu wherever the keys are (one with every item greyed out never takes them)
+  if (e.key === 'Escape' && openMenu && !openMenu.list.contains(e.target as Node | null)) {
+    e.preventDefault(); e.stopImmediatePropagation();
+    showMenu(null);
+    return;
+  }
   if (isTyping(e.target) || (e.target as HTMLElement | null)?.closest?.('dialog')) return;
   if (e.key === 'F10' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
     e.preventDefault();
