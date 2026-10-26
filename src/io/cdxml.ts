@@ -7,6 +7,7 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachFromTag, fillAttachments } from
 import { readSpecies } from '../chem/species';
 import { highlightStyleFromTag } from '../render/highlight';
 import { attachRingFills } from '../chem/ring-fill';
+import { paperOf } from './cdxml-print';
 import { lipDirection } from '../chem/polymer';
 import { Doc, Atom, Bond, BondDisplay, TextRun, Arrow, Shape, Entity, Kind, StereoLabel, Caption, StepRoles, MorphStep, CHIRAL_FLAGS, PARTIAL, PAPER, type Pin, type PictureFx, type ShapeMath } from '../model';
 import { TEXT_TAG, parseTextTag, runsFromChemDraw } from '../text/chemdraw-text';
@@ -119,7 +120,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const wp = Math.max(1, Number(pg!.getAttribute('WidthPages')) || 1), hp = Math.max(1, Number(pg!.getAttribute('HeightPages')) || 1);
     const w = (pb[2] - pb[0]) / wp, h = (pb[3] - pb[1]) / hp;
     if (w > 10 && h > 10) {
-      const paper = PAPER.find((p) => (Math.abs(p.w - w) < 2 && Math.abs(p.h - h) < 2) || (Math.abs(p.w - h) < 2 && Math.abs(p.h - w) < 2));
+      // the paper's name from ChemDraw's print record (its margins are its own), else from the page
+      const sheet = paperOf(root.getAttribute('MacPrintInfo'));
+      const pw = sheet ? sheet.w - 72 : w, ph = sheet ? sheet.h - 72 : h;
+      const paper = PAPER.find((p) => (Math.abs(p.w - pw) < 2 && Math.abs(p.h - ph) < 2) || (Math.abs(p.w - ph) < 2 && Math.abs(p.h - pw) < 2));
       doc.page = { w, h, grow: true, ...(paper ? { name: paper.name } : {}) };
     }
   }
@@ -186,6 +190,22 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   const pendingCircles: { x: number; y: number; oval: () => void }[] = [];
 
   const readFragment = (frag: Element) => {
+    // text ChemDraw turned into a lone label on saving (Interpret Chemically): a text box again, as
+    // it was written; ChemDraw's guess at what an unknown name is made of (DMAP as D, M, A, P) is not kept
+    const lone = kids(frag).filter((k) => k.nodeName === 'n');
+    if (lone.length === 1 && !kids(frag).some((k) => k.nodeName === 'b')) {
+      const n = lone[0], type = n.getAttribute('NodeType');
+      const t = kids(n).find((k) => k.nodeName === 't');
+      if (t && (type === 'Unspecified' || ((type === 'Fragment' || type === 'Nickname') && n.getAttribute('NeedsClean') === 'yes'))) {
+        const c = captionOf(t);
+        if (c) {
+          const cap = doc.addCaption({ id: idFor(t), ...c });
+          from('c', cap.id, t);
+          stats.captions++;
+          return;
+        }
+      }
+    }
     const nodeIds = new Map<string, number>();
     const pendingMulti: { id: number; key: string; ids: string[] }[] = [];
     for (const n of kids(frag)) {
@@ -212,7 +232,11 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         continue;
       }
       const z = num(n, 'Element', 6);
-      const extra: Partial<Atom> = { id, charge: num(n, 'Charge', 0), isotope: num(n, 'Isotope', 0) };
+      // a label's charge may be kept only on an atom of its inner fragment (BF4− as ChemDraw saves it)
+      const inner = type === 'Fragment' || type === 'Nickname' ? kids(n).find((k) => k.nodeName === 'fragment') : undefined;
+      const charge = n.hasAttribute('Charge') || !inner ? num(n, 'Charge', 0)
+        : kids(inner).reduce((q, k) => q + (k.nodeName === 'n' ? num(k, 'Charge', 0) : 0), 0);
+      const extra: Partial<Atom> = { id, charge, isotope: num(n, 'Isotope', 0) };
       if (n.getAttribute('IgnoreWarnings') === 'yes') extra.ignoreWarnings = true;
       const xyz = pts(n.getAttribute('xyz'));
       if (xyz.length === 3 && xyz.every(Number.isFinite)) extra.xyz = xyz as [number, number, number];
@@ -396,10 +420,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     if (chemTag === 'yes' || chemTag === 'no') extra.chem = chemTag === 'yes';
     else if (t.getAttribute('InterpretChemically') === 'yes' && !readSpecies(back.runs.map((r) => r.text).join(''))) extra.chem = true;
     const turn = Number(kids(t).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === TURN_TAG)?.getAttribute('Value'));
-    // ChemDraw's own turn, in degrees clockwise about the text's origin, when this program left no tag
-    const angle = Number(t.getAttribute('RotationAngle') ?? NaN);
+    // ChemDraw's own turn (1/65536 degree, clockwise about the text's origin) when this program left no tag
+    const angle = (Number(t.getAttribute('RotationAngle') ?? NaN) / 65536) % 360;
     if (Number.isFinite(turn) && turn) extra.rot = turn;
-    else if (Number.isFinite(angle) && angle % 360) extra.rot = angle;
+    else if (Number.isFinite(angle) && angle) extra.rot = angle > 180 ? angle - 360 : angle;
     return { x, y: py, runs: back.runs, justify, width, lineHeight, ...extra };
   };
 

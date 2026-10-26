@@ -54,3 +54,32 @@ describe('structures in table cells', () => {
     expect(doc.shapes.get(tid)!.table!.rows[1][1].fig).toBeUndefined();
   });
 });
+
+describe('structures in table cells saved for ChemDraw', () => {
+  it('writes a structure in a cell after its table, so the cells do not paint over it', async () => {
+    const { writeCdxml } = await import('../src/io/cdxml-write');
+    const doc = new Doc();
+    const L = doc.style.bondLength;
+    const t = emptyTable(2, 2, 10);
+    const lay = layoutOf(t);
+    doc.edit('build', () => {
+      const a = doc.addAtom(300, 300, 6).id, b = doc.addAtom(300 + L, 300, 6).id;
+      doc.addBond(a, b, 1);
+      doc.addShape({ kind: 'table', x1: 0, y1: 0, x2: lay.width, y2: lay.height, table: t });
+    });
+    change(doc, () => {
+      const cell = { x: (lay.xs[1] + lay.xs[2]) / 2, y: (lay.ys[1] + lay.ys[2]) / 2 };
+      doc.moveAtoms(new Set([...doc.atoms.keys()]), cell.x - (300 + L / 2), cell.y - 300);
+    });
+    const xml = writeCdxml(doc);
+    expect(xml.indexOf('<fragment')).toBeGreaterThan(xml.indexOf('<table'));
+    // a structure outside the table keeps its place
+    const out = new Doc();
+    out.edit('build', () => {
+      out.addAtom(900, 900, 6);
+      out.addShape({ kind: 'table', x1: 0, y1: 0, x2: lay.width, y2: lay.height, table: t });
+    });
+    const x2 = writeCdxml(out);
+    expect(x2.indexOf('<fragment')).toBeLessThan(x2.indexOf('<table'));
+  });
+});

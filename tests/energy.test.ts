@@ -129,7 +129,7 @@ describe('energy diagrams', () => {
     const { doc } = put('catalysed');
     const xml = writeCdxml(doc);
     const t = [...xml.matchAll(/<t [^>]*>/g)].map((x) => x[0]).find((x) => x.includes('RotationAngle'))!;
-    expect(t).toMatch(/RotationAngle="-90"/);
+    expect(t).toMatch(/RotationAngle="17694720"/);
     // the box ChemDraw keeps is the turned one: taller than wide
     const [x1, y1, x2, y2] = t.match(/BoundingBox="([^"]+)"/)![1].split(' ').map(Number);
     expect(y2 - y1).toBeGreaterThan(x2 - x1);

@@ -23,6 +23,8 @@ import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../ch
 import { fromDataUrl } from '../render/images';
 import { ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
 import { frameTag } from '../editor/frames';
+import { tableContents } from '../editor/table-figs';
+import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
 import { geoDef, moveSteps, outlineParts, textArea, type GeoStep } from '../design/geo';
 import { FADE, tint } from '../colours';
 import { fillInk, mix, ringShadowSize, shadowLook } from '../render/fills';
@@ -123,6 +125,8 @@ class CdxmlWriter {
   private placerMade: StereoPlacer | null = null;
   /** Fragment element each atom ends up in. */
   private fragOfAtom = new Map<number, Element>();
+  /** Each table as written this time (its table, or the group holding its parts). */
+  private tableEls = new Map<number, Element>();
   /** The element written for each bond. */
   private bondEls = new Map<number, Element>();
   /** Neighbours of each atom as read from the file. */
@@ -168,6 +172,7 @@ class CdxmlWriter {
     this.writeRepeatGroups();
     this.writeSteps();
     this.writeGroups();
+    this.raiseTableFigures();
     if (src) this.cleanUp();
 
     // the file name stored inside; an untouched file is not rewritten just for a rename
@@ -257,6 +262,24 @@ class CdxmlWriter {
   private sizePage(b: Rect | null): void {
     if (!this.page.getAttribute('id')) this.page.setAttribute('id', this.id());
     for (const [k, v] of Object.entries(this.pageAttrs(b))) this.page.setAttribute(k, v);
+    this.writePaper();
+  }
+
+  /**
+   * The paper as ChemDraw takes it (its print record), with half-inch margins round the page, unless
+   * the file's own record already gives this page.
+   */
+  private writePaper(): void {
+    const p = this.doc.page;
+    if (!p) return;
+    const paper = paperOf(this.root.getAttribute('MacPrintInfo'));
+    const m = (this.root.getAttribute('PrintMargins') ?? '').trim().split(/\s+/).map(Number);
+    if (paper && m.length === 4 && m.every(isFinite) && Math.abs(paper.w - m[0] - m[2] - p.w) < 1 && Math.abs(paper.h - m[1] - m[3] - p.h) < 1) return;
+    // a named paper at its true size (A4 is not a whole number of points), turned to the page
+    const sheet = p.name ? SHEETS[p.name] : undefined;
+    const [w, h] = sheet ? (p.w > p.h ? [sheet.h, sheet.w] : [sheet.w, sheet.h]) : [p.w + 72, p.h + 72];
+    this.root.setAttribute('MacPrintInfo', macPrintInfo(w, h, p.name === 'a4'));
+    this.root.setAttribute('PrintMargins', '36 36 36 36');
   }
 
   // ------------------------------------------------------------------ small helpers
@@ -994,6 +1017,32 @@ class CdxmlWriter {
     }
   }
 
+  /** ChemDraw paints a table's cells over what comes before it in the file, so a structure in a cell goes after its table. */
+  private raiseTableFigures(): void {
+    const measure = this.opts.textMeasure ?? ((text: string, size: number, _f: string, style: string) => arialWidth(text, size, /bold/.test(style)));
+    for (const s of this.doc.shapes.values()) {
+      if (s.kind !== 'table' || !s.table) continue;
+      const el = this.tableEls.get(s.id) ?? this.source('s', s.id, ['table', 'group']);
+      if (!el) continue;
+      const frags = new Set<Element>();
+      for (const id of tableContents(this.doc, s, (t) => layoutTable(t, this.doc.style.captionSize, measure))) {
+        const f = this.fragOfAtom.get(id);
+        if (f) frags.add(f);
+      }
+      for (const f of frags) {
+        // the table, or what holds it, beside the structure
+        let anchor: Node | null = el;
+        while (anchor && anchor.parentNode !== f.parentNode) anchor = anchor.parentNode;
+        if (!anchor || !(anchor.compareDocumentPosition(f) & 2)) continue;
+        f.parentNode!.insertBefore(f, anchor.nextSibling);
+        // and above it where the drawing order is numbered
+        const z = Math.max(Number((anchor as Element).getAttribute?.('Z')) || 0, ...descendants(anchor as Element).map((e) => Number(e.getAttribute('Z')) || 0));
+        if (z) for (const e of [f, ...descendants(f)]) if (e.hasAttribute('Z')) e.setAttribute('Z', String(z + Number(e.getAttribute('Z'))));
+        this.changed = true;
+      }
+    }
+  }
+
   private buildBond(b: Bond): Element {
     const e = this.el('b', { id: b.id });
     this.patchBond(e, b);
@@ -1081,8 +1130,9 @@ class CdxmlWriter {
     const last = lay.lines[lay.lines.length - 1];
     const flat = { x1: c.x + x1, y1: c.y - maxSize * CAP, x2: c.x + x2, y2: c.y + last.y + maxSize * 0.2 };
     t.setAttribute('BoundingBox', box(c.rot ? turnedBox(flat, c, c.rot) : flat));
-    // turned text: ChemDraw's angle in degrees, clockwise on the page, about the text's origin
-    this.set(t, 'RotationAngle', c.rot ? String(+c.rot.toFixed(3)) : null);
+    // turned text: ChemDraw's angle, clockwise on the page about the text's origin, in 1/65536 degree
+    // (text reading up the page is 270°, 17694720, in a ChemDraw 25 save)
+    this.set(t, 'RotationAngle', c.rot ? String(Math.round((((c.rot % 360) + 360) % 360) * 65536)) : null);
     this.set(t, 'Justification', c.justify === 'left' ? null : c.justify === 'center' ? 'Center' : c.justify === 'right' ? 'Right' : 'Full');
     this.set(t, 'CaptionJustification', null);
     this.set(t, 'WordWrapWidth', c.wrap !== undefined ? f2(c.wrap) : null);
@@ -1363,6 +1413,7 @@ class CdxmlWriter {
     const o = this.orig<Shape>('s', s.id);
     if (e && o && sameExcept(s, o, [])) return;
     const el = this.tableElement(s, t, e?.getAttribute('id') ?? String(s.id));
+    this.tableEls.set(s.id, el);
     if (e?.parentNode) e.parentNode.replaceChild(el, e);
     else this.page.appendChild(el);
     this.changed = true;
