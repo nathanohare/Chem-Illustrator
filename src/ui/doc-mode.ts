@@ -3222,8 +3222,11 @@ export class DocumentMode {
   /** The section the caret is in (its page setup, header and footer, numbering and line numbers). */
   private section(): Section {
     const f = this.file!;
-    return sectionAt(sectionsOf(f.t), paraAt(f.ed.text, f.ed.focus));
+    // the sections are worked out from the whole text: again only when the text changes
+    if (this.sections?.t !== f.t) this.sections = { t: f.t, secs: sectionsOf(f.t) };
+    return sectionAt(this.sections.secs, paraAt(f.ed.text, f.ed.focus));
   }
+  private sections: { t: DocText; secs: Section[] } | null = null;
 
   /** Change the section the caret is in. */
   private setSection(patch: SectionPatch, label: string): void {
@@ -4697,17 +4700,41 @@ export class DocumentMode {
     const sw = this.ribbon.querySelector<HTMLElement>('#doc-pen-swatch');
     if (sw) { const svg = penSwatch(pen); if (sw.innerHTML !== svg) sw.innerHTML = svg; }
     this.showZoom();
+    this.updateStatus();
+  }
+
+  /**
+   * The status bar's word count, and the text it counted: counted again only when the text has
+   * changed, and then once the typing stops (in a long document a count takes a while).
+   */
+  private words: { f: DocFile; text: string; n: number } | null = null;
+  private wordTimer = 0;
+
+  /** The status bar: the page the caret is on, and the words. */
+  private updateStatus(): void {
+    const f = this.file;
     const status = document.querySelector<HTMLElement>('#doc-status');
-    if (status) {
-      const lay = f.layout();
-      const c = f.ed.caret();
-      const page = lay.pages.findIndex((p) => c.line >= p.first && c.line < p.end);
-      const words = f.ed.text.split(/[\s￼]+/).filter((w) => /\p{L}|\p{N}/u.test(w)).length;
-      const wordCount = `${words.toLocaleString()} word${words === 1 ? '' : 's'}`;
-      // the views without pages have no page numbers to show
-      const where = lay.pages.some((p) => p.section > 0) ? `  ·  Section ${(lay.pages[page]?.section ?? 0) + 1}` : '';
-      status.textContent = continuous(f.view.kind) ? `${VIEW_LABEL[f.view.kind]}  ·  ${wordCount}` : `Page ${page + 1} of ${lay.pages.length}${where}  ·  ${wordCount}`;
+    if (!f || !status) return;
+    const text = f.ed.text;
+    const count = (t: string) => t.split(/[\s￼]+/).filter((w) => /\p{L}|\p{N}/u.test(w)).length;
+    if (this.words?.f !== f) this.words = { f, text, n: count(text) };
+    else if (this.words.text !== text) {
+      clearTimeout(this.wordTimer);
+      this.wordTimer = window.setTimeout(() => {
+        if (this.file !== f) return;
+        const now = f.ed.text;
+        if (this.words?.text !== now) this.words = { f, text: now, n: count(now) };
+        this.updateStatus();
+      }, 300);
     }
+    const lay = f.layout();
+    const c = f.ed.caret();
+    const page = lay.pages.findIndex((p) => c.line >= p.first && c.line < p.end);
+    const words = this.words.n;
+    const wordCount = `${words.toLocaleString()} word${words === 1 ? '' : 's'}`;
+    // the views without pages have no page numbers to show
+    const where = lay.pages.some((p) => p.section > 0) ? `  ·  Section ${(lay.pages[page]?.section ?? 0) + 1}` : '';
+    status.textContent = continuous(f.view.kind) ? `${VIEW_LABEL[f.view.kind]}  ·  ${wordCount}` : `Page ${page + 1} of ${lay.pages.length}${where}  ·  ${wordCount}`;
   }
 }
 
