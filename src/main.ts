@@ -52,7 +52,6 @@ import { WORKSPACE, folderOf } from './io/workspace-file';
 import { askLink, followLink, setLinkHost, type LinkPlace } from './ui/links-ui';
 import { SHOW_JUMPS, cellOfLink, linkSpans, normalizeLink, removeLink, setLink, slideOfLink } from './links';
 import { openFileDialog, openBytesDialog, openAnyBytesDialog, stampOf, readRef, saveFileDialog, writeFile, showError, baseName, readPath, withExtension, setEmbeddedWriter, KEYMAP_FILE, SETTINGS_FILE, MOL, PDF, PICTURE, SVG, TIFF, EMF, EPS, PPTX, DOCX, PICTURE_EXTENSIONS, type FileType } from './io/files';
-import { readPptx } from './io/pptx-read';
 import { pickReuseSlides } from './ui/reuse-slides';
 import { writeTiff } from './render/tiff';
 import { itemsToEps } from './render/eps';
@@ -157,7 +156,8 @@ import { ask } from './ui/ask';
 import { UpdateUI } from './ui/update-ui';
 import { canUpdate, appVersion, portableInfo, STAGE, STAGE_NOTE, UPDATE_CHANNELS, type UpdateChannel } from './updates';
 import { computerName } from './feedback';
-import { GuideWindow, guideSpot } from './ui/guide-window';
+import { guideSpot } from './ui/guide-spot';
+import type { GuideWindow } from './ui/guide-window';
 import { SettingsWindow } from './ui/settings-window';
 import { fileTypesPage, FILE_TYPES } from './ui/file-types-page';
 import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed } from './ui/ribbon-fit';
@@ -178,7 +178,8 @@ import { docBoxPrefs, parseDocPins } from './ui/doc-panel';
 import { docRulerPrefs } from './ui/ruler';
 import { formulaBarPrefs } from './ui/sheet-views-ui';
 import { setScreenMeasure, figures } from './document/doc-file';
-import { readDocx, writeDocx, type DocxDeps, type DocxReadDeps } from './io/docx';
+import type { DocxDeps } from './io/docx-write';
+import type { DocxReadDeps } from './io/docx-read';
 import { FIGURE_MARGIN } from './document/figures';
 import { recordPages } from './document/doc-paint';
 import { preferredStyle, setPreferredStyle } from './document/cite-styles';
@@ -2825,9 +2826,9 @@ async function reuseSlides(): Promise<void> {
   finishTyping();
   const f = await openBytesDialog('PowerPoint presentations', [PPTX]).catch(async (e) => { await showError(String(e)); return null; });
   if (!f) return;
-  let got: ReturnType<typeof readPptx>;
+  let got: ReturnType<typeof import('./io/pptx-read').readPptx>;
   try {
-    got = readPptx(f.bytes);
+    got = (await import('./io/pptx-read')).readPptx(f.bytes);
   } catch (e) {
     flash(`Could not read ${f.name}: ${e instanceof Error ? e.message : String(e)}`, 8000);
     return;
@@ -4462,7 +4463,7 @@ const docMode = new DocumentMode({
     const f = await openBytesDialog('Word documents', [DOCX]).catch(async (e) => { await showError(String(e)); return null; });
     if (!f) return null;
     try {
-      const { doc, warnings } = await readDocx(f.bytes, docRead);
+      const { doc, warnings } = await (await import('./io/docx-read')).readDocx(f.bytes, docRead);
       if (warnings.length) flash(`${f.name}: ${warnings.join(' ')}`, 8000);
       return { name: f.name, t: doc };
     } catch (e) {
@@ -4717,7 +4718,7 @@ async function compareSlides(): Promise<void> {
     const f = await openBytesDialog('PowerPoint presentations', [PPTX]).catch(async (e) => { await showError(String(e)); return null; });
     if (!f) return;
     try {
-      const got = readPptx(f.bytes);
+      const got = (await import('./io/pptx-read')).readPptx(f.bytes);
       theirs.load(got.slides.map((s) => theirs.makeSlide(s.layout, s.contents, s.notes, s, got.master)), got.size, got.master);
     } catch (e) {
       flash(`Could not read ${f.name}: ${e instanceof Error ? e.message : String(e)}`, 8000);
@@ -8563,7 +8564,14 @@ function commandItems(): CommandItem[] {
   return uniqueCommands(out);
 }
 const commandSearch = new CommandSearch(commandItems);
-const guide = new GuideWindow(openWebPage);
+// the User Guide (and the Markdown reader it uses) loads the first time it opens
+let guideWindow: GuideWindow | null = null;
+const guide = {
+  async open(page?: string, anchor?: string): Promise<void> {
+    const { GuideWindow } = await import('./ui/guide-window');
+    await (guideWindow ??= new GuideWindow(openWebPage)).open(page, anchor);
+  },
+};
 watchRibbons(() => storeSettings());
 const settingsWindow = new SettingsWindow([
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name', open: generalPreferences },
@@ -8911,7 +8919,7 @@ requestAnimationFrame(() => {
 });
 
 // Hooks for the automated speed tests.
-(window as any).__app = { doc, editor, renderer, chem, live, command, addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, presenter, Doc, keymap, names, sheetMode, sheetChem, docMode, docxBytes: () => writeDocx(docMode.file!.t, docFiles),
+(window as any).__app = { doc, editor, renderer, chem, live, command, addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, presenter, Doc, keymap, names, sheetMode, sheetChem, docMode, docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
   pptxBytes: () => { const d = deckNow()!; return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test

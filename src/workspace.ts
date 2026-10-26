@@ -15,7 +15,6 @@ import type { View } from './render/renderer';
 import { readCdxml } from './io/cdxml';
 import { writeCdxml, WriteOptions } from './io/cdxml-write';
 import { cdxToCdxml, cdxmlToCdx, isCdx } from './io/cdx';
-import { readPptx } from './io/pptx-read';
 import { writePptx, PptxOptions } from './io/pptx-write';
 import { zipHas } from './io/ooxml';
 import { isXls } from './io/xls';
@@ -484,7 +483,7 @@ export class Workspace {
       if (isOtherDocument(bytes, file) && !TABLE_TEXT_EXTENSIONS.includes(ext)) ok = await this.openDocument(bytes, name, ref, file);
       else if (ext === 'xlsx' || ext === 'xlsm' || SHEET_OPEN_ONLY.includes(ext) || (zip && (zipHas(bytes, 'xl/workbook.xml') || isOds(bytes))) || isXls(bytes) || ext === 'sdf' || ext === 'sd' || TABLE_TEXT_EXTENSIONS.includes(ext)) ok = await this.openSheet(bytes, name, ref, file);
       else if (ext === 'docx' || (zip && zipHas(bytes, 'word/document.xml'))) ok = await this.openDocument(bytes, name, ref, file);
-      else if (ext === 'pptx' || zip) ok = this.openSlides(bytes, name, ref);
+      else if (ext === 'pptx' || zip) ok = await this.openSlides(bytes, name, ref);
       else ok = this.openDrawing(isCdx(bytes) ? cdxToCdxml(bytes) : new TextDecoder().decode(bytes), name, ref);
       if (ok && ref.kind === 'path' && !this.quiet) this.hooks.remember?.(ref.path);
       if (ok && ext === CDS.extension && this.active.mode === 'drawing' && !this.quiet) this.hooks.styleSheet?.(this.active, { ...this.docOf(this.active).style });
@@ -530,7 +529,9 @@ export class Workspace {
     return true;
   }
 
-  private openSlides(bytes: Uint8Array, name: string, ref: FileRef): boolean {
+  private async openSlides(bytes: Uint8Array, name: string, ref: FileRef): Promise<boolean> {
+    // the PowerPoint reader loads the first time one is opened
+    const { readPptx } = await import('./io/pptx-read');
     const got = readPptx(bytes);
     const spare = this.spare();
     const t = this.makeTab(got.design ? 'design' : 'slides', name, ref);

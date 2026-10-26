@@ -5,7 +5,7 @@
 
 import type { BorderLine, BorderSide, CellBorders, CellMargins, TableData, TableLook } from '../model';
 import { kid, kids } from './ooxml';
-import { twips } from './docx';
+import { twips } from './docx-base';
 import { coveringCell } from '../table';
 import { DEFAULT_LOOK, PART_ORDER, resolveTable, type PartName, type StyleEdge, type StylePart, type TableStyleDef } from '../document/table-styles';
 

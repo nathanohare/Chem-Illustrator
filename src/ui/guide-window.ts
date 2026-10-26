@@ -4,6 +4,7 @@
 // a search box, and Back. F1 opens it at the part about the tool or mode in use.
 
 import { Marked } from 'marked';
+export { guideSpot } from './guide-spot';
 
 // the pages load the first time the guide opens; pictures are files beside the program
 const PAGES = import.meta.glob('../../docs/**/*.md', { query: '?raw', import: 'default' }) as Record<string, () => Promise<string>>;
@@ -32,20 +33,6 @@ export function resolveLink(from: string, href: string): { page: string; anchor:
   return { page: parts.join('/'), anchor };
 }
 
-/** The page and heading that explain a tool (by its kind) or a mode. */
-export function guideSpot(mode: string, toolKind?: string): { page: string; anchor: string } {
-  const pages: Record<string, string> = { slides: 'guide/slides.md', sheet: 'guide/sheets.md', document: 'guide/documents.md', design: 'guide/design.md' };
-  if (pages[mode]) return { page: pages[mode], anchor: '' };
-  const tools: Record<string, string> = {
-    select: 'select-and-eraser', eraser: 'select-and-eraser', bond: 'bonds-and-chains', chain: 'bonds-and-chains', ring: 'rings',
-    template: 'templates', text: 'text-periodic-table-and-fragmentation', element: 'text-periodic-table-and-fragmentation',
-    fragment: 'text-periodic-table-and-fragmentation', arrow: 'arrows-mechanism-symbols-shapes-and-brackets',
-    symbol: 'arrows-mechanism-symbols-shapes-and-brackets', shape: 'arrows-mechanism-symbols-shapes-and-brackets',
-    bracket: 'arrows-mechanism-symbols-shapes-and-brackets', line: 'arrows-mechanism-symbols-shapes-and-brackets',
-    mark: 'arrows-mechanism-symbols-shapes-and-brackets',
-  };
-  return { page: 'guide/drawing.md', anchor: (toolKind && tools[toolKind]) || '' };
-}
 
 export class GuideWindow {
   private el: HTMLDivElement | null = null;

@@ -30,7 +30,7 @@ import {
   type DocViewKind, type OutlineOp, type OutlineState, type ScreenView,
 } from '../document/doc-views';
 import { DocPanel, parseLength, showLength, type DocBoxKey } from './doc-panel';
-import { WORD_HIGHLIGHTS } from '../io/docx';
+import { WORD_HIGHLIGHTS } from '../io/docx-base';
 import { DocFind } from './doc-find';
 import { askLink, followLink, linkTip } from './links-ui';
 import { bookmarkName, linkAtPoint } from '../links';
