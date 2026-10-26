@@ -43,6 +43,8 @@ export class FloatBox {
     this.el.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.close(); }, true);
     this.wireDrag(head);
     document.body.append(this.el);
+    // a smaller window (or a bigger interface size) keeps it inside, its body scrolling
+    window.addEventListener('resize', () => { if (this.open && !this.docked && this.at) this.place(this.at.x, this.at.y); });
   }
 
   get open(): boolean {
