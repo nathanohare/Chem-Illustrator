@@ -82,11 +82,51 @@ export function speakerPng(): string {
 }
 
 /**
- * What a video file holds: its size in pixels, its length in seconds and a picture of its first
- * moments (PNG), from the browser's own player. Null when this system can't play it.
+ * A video or sound kept as a data: URL, as a blob: URL for a player (`done` lets it go): a player
+ * reads a blob as a file, where a data: URL of tens of megabytes is slow and some players stall
+ * on it at 0:00. Anything else is given back as it is.
  */
-export function probeVideo(url: string): Promise<{ w: number; h: number; length: number; poster: string } | null> {
-  return new Promise((resolve) => {
+export function playableUrl(src: string): { url: string; done: () => void } {
+  const m = /^data:([^;,]+)(;base64)?,/.exec(src);
+  if (!m || typeof URL.createObjectURL !== 'function') return { url: src, done: () => {} };
+  try {
+    const body = src.slice(m[0].length);
+    const bytes = m[2] ? Uint8Array.from(atob(body), (c) => c.charCodeAt(0)) : new TextEncoder().encode(decodeURIComponent(body));
+    const url = URL.createObjectURL(new Blob([bytes], { type: m[1] }));
+    return { url, done: () => URL.revokeObjectURL(url) };
+  } catch {
+    return { url: src, done: () => {} };
+  }
+}
+
+/**
+ * The picture a video shows on the slide when its first frame can't be read here (a format this
+ * system can't play): a dark frame with a play mark, so it still looks like a video (PNG).
+ */
+export function filmPng(w = 640, h = 360): string {
+  const k = 160 / Math.max(w, h);
+  const c = document.createElement('canvas');
+  c.width = Math.max(16, Math.round(w * k)); c.height = Math.max(16, Math.round(h * k));
+  const g = c.getContext('2d');
+  if (!g) return '';
+  g.fillStyle = '#20262e';
+  g.fillRect(0, 0, c.width, c.height);
+  const r = Math.min(c.width, c.height) * 0.22, cx = c.width / 2, cy = c.height / 2;
+  g.fillStyle = 'rgba(255,255,255,0.85)';
+  g.beginPath();
+  g.moveTo(cx - r * 0.6, cy - r); g.lineTo(cx + r, cy); g.lineTo(cx - r * 0.6, cy + r);
+  g.closePath();
+  g.fill();
+  try { return c.toDataURL('image/png'); } catch { return ''; }
+}
+
+/**
+ * What a video file holds: its size in pixels, its length in seconds and a picture of its first
+ * frame (PNG), from the browser's own player. Null when this system can't play it.
+ */
+export function probeVideo(src: string): Promise<{ w: number; h: number; length: number; poster: string } | null> {
+  const { url, done: release } = playableUrl(src);
+  return new Promise<{ w: number; h: number; length: number; poster: string } | null>((resolve) => {
     const v = document.createElement('video');
     v.muted = true;
     v.preload = 'auto';
@@ -95,7 +135,8 @@ export function probeVideo(url: string): Promise<{ w: number; h: number; length:
     const finish = (r: { w: number; h: number; length: number; poster: string } | null) => { if (!done) { done = true; v.removeAttribute('src'); v.load(); resolve(r); } };
     const timer = window.setTimeout(() => finish(null), 15000);
     v.addEventListener('error', () => { clearTimeout(timer); finish(null); });
-    v.addEventListener('loadedmetadata', () => { v.currentTime = Math.min(0.1, (v.duration || 0) / 2); });
+    // the first frame (a seek a little in, as some files show nothing at 0 exactly), once it is decoded
+    v.addEventListener('loadeddata', () => { v.currentTime = Math.min(0.05, (v.duration || 0) / 2); });
     v.addEventListener('seeked', () => {
       clearTimeout(timer);
       const w = v.videoWidth || 640, h = v.videoHeight || 360;
@@ -106,17 +147,18 @@ export function probeVideo(url: string): Promise<{ w: number; h: number; length:
       finish({ w, h, length: Number.isFinite(v.duration) ? v.duration : 0, poster });
     });
     v.src = url;
-  });
+  }).finally(release);
 }
 
 /** A sound file's length in seconds (0 when it can't be read here). */
-export function probeAudio(url: string): Promise<number> {
-  return new Promise((resolve) => {
+export function probeAudio(src: string): Promise<number> {
+  const { url, done: release } = playableUrl(src);
+  return new Promise<number>((resolve) => {
     const a = document.createElement('audio');
     a.preload = 'metadata';
     const timer = window.setTimeout(() => resolve(0), 10000);
     a.addEventListener('loadedmetadata', () => { clearTimeout(timer); resolve(Number.isFinite(a.duration) ? a.duration : 0); });
     a.addEventListener('error', () => { clearTimeout(timer); resolve(0); });
     a.src = url;
-  });
+  }).finally(release);
 }

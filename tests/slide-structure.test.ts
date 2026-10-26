@@ -275,6 +275,46 @@ describe('layouts in the slide master', () => {
     expect(b.master.layouts).toBeUndefined();
   });
 
+  // laptop bench pp-reuse-copy: Keep source formatting gave a white slide with two empty
+  // placeholders, as the white title lost the template's dark band behind it
+  it('keeps a reused slide\'s template band and title with Keep source formatting', async () => {
+    const a = deck(2);
+    a.setMaster(applyTemplate(a.master, SLIDE_TEMPLATES.find((t) => t.id === 'steel-band')!));
+    a.setLayouts([...deckLayouts(a.master), { id: 'u1', name: 'Scheme Layout', boxes: [{ ph: 'title', x: 0.05, y: 0.04, w: 0.9, h: 0.12, justify: 'left' }, { ph: 'body', x: 0.05, y: 0.24, w: 0.9, h: 0.66, justify: 'left' }] }]);
+    a.setLayout('u1', 1);
+    a.go(1);
+    const title = [...a.host.captions.values()].find((c) => c.ph === 'title')!;
+    a.host.edit('Title', () => a.host.updateCaption(title.id, { runs: [{ text: 'Custom layout slide' }] }));
+    // an A4 deck, read as Reuse Slides reads one
+    a.setSize({ w: 841.9, h: 595.3 }, 'fit');
+    const got = readPptx(await save(a));
+    const from = new Deck(new Doc());
+    from.load(got.slides.map((x) => from.makeSlide(x.layout, x.contents, x.notes, x)), got.size, got.master);
+    const b = Deck.blank(new Doc());
+    b.attach();
+    for (const keep of [true, false]) {
+      b.pasteSlides(from.copySlides([1]), keep);
+      const s = b.slides[1], doc = b.docOf(1);
+      const t = [...doc.captions.values()].find((c) => c.ph === 'title')!;
+      expect(t.runs.map((r) => r.text).join('')).toBe('Custom layout slide');
+      if (keep) {
+        // the white title on its band, the deck's own shapes left off
+        expect(t.runs[0].color?.toLowerCase()).toBe('#ffffff');
+        expect(s.hideGraphics).toBe(true);
+        const band = [...doc.shapes.values()].find((x) => x.name === 'Template band')!;
+        expect(band).toMatchObject({ kind: 'rect', filled: true, color: '#3d4f63', locked: true });
+        // across the slide, at the A4 slide's height, centred as the slide's things are
+        expect(band.x2 - band.x1).toBeGreaterThan(0.6 * b.size.w);
+        expect((band.y2 - band.y1) / (band.x2 - band.x1)).toBeCloseTo(0.2 * 595.3 / 841.9, 2);
+      } else {
+        expect(s.hideGraphics).toBeFalsy();
+        expect([...doc.shapes.values()].some((x) => x.name === 'Template band')).toBe(false);
+      }
+      b.undo();
+      expect(b.slides.length).toBe(1);
+    }
+  });
+
   it('puts placeholders where the layout says on any slide size', () => {
     const f = layoutFrames('two-content', STANDARD);
     expect(f[2].x).toBeCloseTo(0.51 * 720);

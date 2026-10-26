@@ -12,10 +12,10 @@
 
 import type { PinnedComment } from '../document/comments';
 import { COMMENT_CT, COMMENT_REL, writeSlideComments } from './pptx-comments';
-import { Doc, Caption, Shape, TextRun, ParaStyle, Arrow, applyBase, PICTURE_SHADOWS, type Pattern, type PictureFx, type PictureLook, type Media, type TableData } from '../model';
+import { Doc, Caption, Shape, TextRun, ParaStyle, Arrow, applyBase, PICTURE_SHADOWS, type Pattern, type PictureFx, type PictureLook, type Media, type TableData, type Glue } from '../model';
 import { bakedPart, tidyFx } from '../render/picture-fx';
 import { blipEffectsXml, pictureGeomXml } from './picture-xml';
-import { turnAbout, type Rect } from '../geom';
+import { turnAbout, type Rect, type Vec } from '../geom';
 import { layoutText, ASCENT, FONT_STACK, type Measure } from '../text/layout';
 import { fitParas, listMarkers, splitParagraphs } from '../text/paragraphs';
 import { formulaParts, plainText } from '../richtext';
@@ -160,6 +160,7 @@ export function videoTimingXml(videos: { spid: number; once: boolean }[]): strin
 
 /** PowerPoint's zooms. */
 export const NS_SLIDEZOOM = 'http://schemas.microsoft.com/office/powerpoint/2016/slidezoom';
+export const NS_SUMMARYZOOM = 'http://schemas.microsoft.com/office/powerpoint/2016/summaryzoom';
 
 /** A slide's creation number in the file (PowerPoint's p14:creationId), by its place. */
 export const creationId = (i: number): number => 1000000000 + i * 7919;
@@ -631,10 +632,21 @@ class Writer {
     }
     // pictures and shapes at the back, as on screen
     const videos: MediaTiming[] = [];
+    // the PowerPoint id each shape went into, for the connectors stuck to them
+    const spOf = new Map<number, number>();
+    const site = (g: Glue | undefined) => { const sp = g ? spOf.get(g.shape) : undefined; const sh = g ? doc.shapes.get(g.shape) : undefined; return sp && sh ? connectionSite(sh, g!.port, sp) : null; };
+    // a Summary Zoom's parts go in one frame, PowerPoint's, where the first of them is
+    const summary = this.summaryParts(parts.pictures);
     // pictures and shapes in their order front to back (the Selection Pane's), back first
     for (const p of shapeOrder([...parts.pictures, ...parts.shapes])) {
+      if (summary?.some((x) => x.p === p)) {
+        if (p !== summary[0].p) continue;
+        const z = this.summaryZoomXml(path, summary, id);
+        if (z) { mark({ shapes: new Set(summary.map((x) => x.p.id)) }, id); out.push(z); id++; continue; }
+      }
       mark({ shapes: new Set([p.id]) }, id);
       if (p.kind !== 'picture') {
+        spOf.set(p.id, id);
         out.push(p.kind === 'geo' ? this.geo(path, p, id++, doc, styles.body?.size ?? doc.style.captionSize) : shapeXml(p, id++, doc.style.lineWidth));
         continue;
       }
@@ -648,15 +660,15 @@ class Writer {
     }
     for (const r of parts.connectors) {
       mark({ arrows: new Set([r.id]) }, id);
-      out.push(this.connector(path, r, id++, doc.style.lineWidth));
+      out.push(this.connector(path, r, id++, doc.style.lineWidth, site));
     }
     // diagrams: a group each, which animates as one
     for (const g of parts.diagrams) {
       const gid = id++;
       mark({ shapes: new Set([g.frame.id, ...g.shapes.map((x) => x.id)]), arrows: new Set(g.connectors.map((x) => x.id)) }, gid);
       const kids = [
-        ...g.shapes.map((sh) => this.geo(path, sh, id++, doc, styles.body?.size ?? doc.style.captionSize)),
-        ...g.connectors.map((r) => this.connector(path, r, id++, doc.style.lineWidth)),
+        ...g.shapes.map((sh) => { spOf.set(sh.id, id); return this.geo(path, sh, id++, doc, styles.body?.size ?? doc.style.captionSize); }),
+        ...g.connectors.map((r) => this.connector(path, r, id++, doc.style.lineWidth, site)),
       ];
       const { id: _, x1: _a, y1: _b, x2: _c, y2: _d, frame: _f, ...look } = g.frame;
       const tag = this.addTags(path, { [TAG.diagram]: JSON.stringify({ v: 1, s: look }) });
@@ -812,6 +824,72 @@ class Writer {
   }
 
   /**
+   * The parts of a Summary Zoom on a slide, each with its section's place in the deck's sections,
+   * when every one goes to the first slide of a section of its own (as PowerPoint's must); else
+   * null, and they are saved as slide zooms.
+   */
+  private summaryParts(pics: Shape[]): { p: Shape; section: number; i: number }[] | null {
+    const zs = shapeOrder(pics.filter((p) => p.zoom?.summary && p.link && p.src));
+    if (!zs.length || !this.deck.sections?.length) return null;
+    const starts = new Map<number, number>();
+    let at = 0;
+    this.deck.sections.forEach((sec, k) => { if (sec.count > 0) starts.set(at, k); at += Math.max(0, sec.count); });
+    const out: { p: Shape; section: number; i: number }[] = [];
+    for (const p of zs) {
+      const target = slideOfLink(p.link!);
+      const i = target === null ? -1 : this.deck.slides.findIndex((s) => s.id === target);
+      const section = starts.get(i);
+      if (section === undefined || out.some((x) => x.section === section)) return null;
+      out.push({ p, section, i });
+    }
+    return out;
+  }
+
+  /**
+   * A Summary Zoom as PowerPoint 2019 and 365 make one: one frame round its parts, each zooming
+   * to its section (by the section's id in presentation.xml), with the pictures as a group that
+   * go to the slides when clicked for older programs. Each picture keeps its own tag.
+   */
+  private summaryZoomXml(from: string, zs: { p: Shape; section: number; i: number }[], id: number): string {
+    const P166 = 'http://schemas.microsoft.com/office/powerpoint/2016/6/main';
+    const line = '<a:ln w="3175"><a:solidFill><a:prstClr val="ltGray"/></a:solidFill></a:ln>';
+    const boxOf = (p: Shape) => ({ x1: Math.min(p.x1, p.x2), y1: Math.min(p.y1, p.y2), x2: Math.max(p.x1, p.x2), y2: Math.max(p.y1, p.y2) });
+    const items: { box: Rect; blip: string; rel: string; tags: string; back: boolean; section: number; k: number }[] = [];
+    for (const [k, z] of zs.entries()) {
+      let still: { mime: string; bytes: Uint8Array };
+      try { still = fromDataUrl(z.p.src!); } catch { return ''; }
+      const ext = MIME_EXT[still.mime];
+      if (!ext || ext === 'svg') return '';
+      items.push({
+        box: boxOf(z.p), blip: this.addMedia(from, still.bytes, ext), rel: this.pkg.relate(from, REL.slide, `slide${z.i + 1}.xml`),
+        tags: this.addTags(from, { [TAG.zoom]: JSON.stringify({ v: 1, zoom: z.p.zoom, link: z.p.link }) }), back: !!z.p.zoom?.back, section: z.section, k,
+      });
+    }
+    const all = { x1: Math.min(...items.map((x) => x.box.x1)), y1: Math.min(...items.map((x) => x.box.y1)), x2: Math.max(...items.map((x) => x.box.x2)), y2: Math.max(...items.map((x) => x.box.y2)) };
+    const name = `Summary Zoom ${id - 1}`;
+    const zmId = (k: number) => `{${(0x5b00 + id).toString(16).padStart(8, '0').toUpperCase()}-0000-4000-8000-${(2000000 + k).toString(16).padStart(12, '0').toUpperCase()}}`;
+    const objs = items.map((x) =>
+      `<psuz:summaryZmObj sectionId="${sectionGuid(x.section)}"><psuz:zmPr id="${zmId(x.k)}" returnToParent="${x.back ? 1 : 0}" transitionDur="1000">` +
+      `<p166:blipFill xmlns:p166="${P166}"><a:blip r:embed="${x.blip}"/><a:stretch><a:fillRect/></a:stretch></p166:blipFill>` +
+      `<p166:spPr xmlns:p166="${P166}"><a:xfrm><a:off x="${emu(x.box.x1 - all.x1)}" y="${emu(x.box.y1 - all.y1)}"/><a:ext cx="${emu(x.box.x2 - x.box.x1)}" cy="${emu(x.box.y2 - x.box.y1)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${line}</p166:spPr>` +
+      `</psuz:zmPr></psuz:summaryZmObj>`).join('');
+    const choice = `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${name}"/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>` +
+      `<p:xfrm><a:off x="${emu(all.x1)}" y="${emu(all.y1)}"/><a:ext cx="${emu(all.x2 - all.x1)}" cy="${emu(all.y2 - all.y1)}"/></p:xfrm>` +
+      `<a:graphic><a:graphicData uri="${NS_SUMMARYZOOM}"><psuz:summaryZm>${objs}<psuz:fixedLayout/></psuz:summaryZm></a:graphicData></a:graphic></p:graphicFrame>`;
+    // ids for the pictures in the fallback: after every id this slide could use (they are a different branch)
+    const pics = items.map((x, k) => {
+      const pid = 10000 + id * 100 + k;
+      return `<p:pic><p:nvPicPr><p:cNvPr id="${pid}" name="Zoom ${k + 1}"><a:hlinkClick r:id="${x.rel}" action="ppaction://hlinksldjump"/></p:cNvPr><p:cNvPicPr><a:picLocks noGrp="1" noRot="1" noChangeAspect="1"/></p:cNvPicPr>` +
+        `<p:nvPr><p:custDataLst><p:tags r:id="${x.tags}"/></p:custDataLst></p:nvPr></p:nvPicPr>` +
+        `<p:blipFill><a:blip r:embed="${x.blip}"/><a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
+        `<p:spPr>${xfrm(x.box)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${line}</p:spPr></p:pic>`;
+    }).join('');
+    const fallback = `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>` +
+      `<p:grpSpPr>${xfrm(all).replace('</a:xfrm>', `<a:chOff x="${emu(all.x1)}" y="${emu(all.y1)}"/><a:chExt cx="${emu(all.x2 - all.x1)}" cy="${emu(all.y2 - all.y1)}"/></a:xfrm>`)}</p:grpSpPr>${pics}</p:grpSp>`;
+    return `<mc:AlternateContent xmlns:mc="${NS_MC}"><mc:Choice xmlns:psuz="${NS_SUMMARYZOOM}" Requires="psuz">${choice}</mc:Choice><mc:Fallback>${fallback}</mc:Fallback></mc:AlternateContent>`;
+  }
+
+  /**
    * A video or sound with the picture PowerPoint shows until it plays (a video's first frame, a
    * sound's loudspeaker): the file is linked both ways PowerPoint looks for it (PowerPoint 2010's
    * media link, with its trim and fades, and the older video or audio link).
@@ -835,7 +913,8 @@ class Writer {
     const blip = this.addMedia(from, still.bytes, ext);
     const ms = (v: number | undefined) => String(Math.round(Math.max(0, v ?? 0) * 1000 * 10) / 10);
     const trim = m.trimStart || m.trimEnd ? `<p14:trim${m.trimStart ? ` st="${ms(m.trimStart)}"` : ''}${m.trimEnd ? ` end="${ms(m.trimEnd)}"` : ''}/>` : '';
-    const fade = m.fadeIn || m.fadeOut ? `<p14:fade${m.fadeIn ? ` inDur="${ms(m.fadeIn)}"` : ''}${m.fadeOut ? ` outDur="${ms(m.fadeOut)}"` : ''}/>` : '';
+    // (MS-PPTX CT_MediaFade: in and out, milliseconds when no unit is given)
+    const fade = m.fadeIn || m.fadeOut ? `<p14:fade${m.fadeIn ? ` in="${ms(m.fadeIn)}"` : ''}${m.fadeOut ? ` out="${ms(m.fadeOut)}"` : ''}/>` : '';
     const p14 = trim || fade ? `<p14:media xmlns:p14="${NS_P14}" r:embed="${media}">${trim}${fade}</p14:media>` : `<p14:media xmlns:p14="${NS_P14}" r:embed="${media}"/>`;
     const name = m.audio ? `Audio ${id - 1}` : `Video ${id - 1}`;
     return `<p:pic><p:nvPicPr><p:cNvPr id="${id}"${nameAttrs(s?.name?.trim() || name, s?.hidden)}><a:hlinkClick r:id="" action="ppaction://media"/></p:cNvPr><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>` +
@@ -883,18 +962,28 @@ class Writer {
   }
 
   /**
-   * A connector: PowerPoint's straight connector, or a bent line for an elbow, with its heads.
-   * A tag keeps the arrow (and which shapes it is stuck to).
+   * A connector: PowerPoint's straight or elbow connector, with its heads, its ends stuck to the
+   * shapes it joins (stCxn and endCxn, so it stays joined when they move there). A tag keeps the
+   * arrow (and which shapes it is stuck to).
    */
-  private connector(path: string, r: Arrow, id: number, lw: number): string {
-    const { frame, geom, ln, curved } = connectorSpPr(r, lw);
+  private connector(path: string, r: Arrow, id: number, lw: number, site: (g: Glue | undefined) => { id: number; idx: number } | null = () => null): string {
+    const sp = connectorSpPr(r, lw);
+    const { ln } = sp;
+    let { frame, geom, curved } = sp;
+    let name = curved ? `${r.elbow ? 'Elbow Connector' : 'Curved Arrow'} ${id - 1}` : `Straight Arrow Connector ${id - 1}`;
+    // an elbow as PowerPoint's bent connector (bentConnector2 to 5) when its route is one
+    const bent = r.elbow ? bentConnector(elbowRoute(r)) : null;
+    if (bent) { frame = bent.frame; geom = bent.geom; curved = false; name = `Elbow Connector ${id - 1}`; }
     const { id: _, ...keep } = r;
     const tag = this.addTags(path, { [TAG.connector]: JSON.stringify({ v: 1, a: keep }) });
     const nvPr = `<p:nvPr><p:custDataLst><p:tags r:id="${tag}"/></p:custDataLst></p:nvPr>`;
     // a curved arrow is a shape drawn along the curve (programs route a connector afresh, square),
-    // and so is an elbow: PowerPoint repairs a connector drawn as a path by deleting the slide's contents
-    if (curved) return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${r.elbow ? 'Elbow Connector' : 'Curved Arrow'} ${id - 1}"/><p:cNvSpPr/>${nvPr}</p:nvSpPr><p:spPr>${frame}${geom}${ln}</p:spPr></p:sp>`;
-    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Straight Arrow Connector ${id - 1}"/><p:cNvCxnSpPr/>${nvPr}</p:nvCxnSpPr>` +
+    // and so is an elbow PowerPoint has no bent connector for: PowerPoint repairs a connector
+    // drawn as a path by deleting the slide's contents
+    if (curved) return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nvPr}</p:nvSpPr><p:spPr>${frame}${geom}${ln}</p:spPr></p:sp>`;
+    const st = site(r.from), end = site(r.to);
+    const ends = `${st ? `<a:stCxn id="${st.id}" idx="${st.idx}"/>` : ''}${end ? `<a:endCxn id="${end.id}" idx="${end.idx}"/>` : ''}`;
+    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="${name}"/>${ends ? `<p:cNvCxnSpPr>${ends}</p:cNvCxnSpPr>` : '<p:cNvCxnSpPr/>'}${nvPr}</p:nvCxnSpPr>` +
       `<p:spPr>${frame}${geom}${ln}</p:spPr></p:cxnSp>`;
   }
 
@@ -1122,6 +1211,57 @@ function cellFill(t: TableData, r: number, c: number): string | undefined {
  */
 export function tableLookKey(styleId: string, flags: string[], fills: (string | undefined)[][]): string {
   return [styleId.toUpperCase(), [...flags].sort().join(','), fills.map((row) => row.map((f) => (f ? hex6(f) : '-')).join(' ')).join('/')].join('|');
+}
+
+/**
+ * PowerPoint's shapes whose connection sites are the middles of their sides in the order top,
+ * left, bottom, right (their cxnLst), as our ports are (top, right, bottom, left).
+ */
+const SIDE_SITES = new Set(['rect', 'roundRect', 'diamond', 'flowChartProcess', 'flowChartAlternateProcess', 'flowChartDecision', 'flowChartTerminator',
+  'flowChartPredefinedProcess', 'flowChartPreparation', 'flowChartInputOutput', 'flowChartDocument', 'flowChartManualOperation']);
+const PORT_SITE = [0, 3, 2, 1];
+
+/** The connection site of a shape (saved as PowerPoint id `sp`) a connector's end is stuck to, when PowerPoint has it in the same place. */
+export function connectionSite(sh: Shape, port: number, sp: number): { id: number; idx: number } | null {
+  if (sh.rot && sh.rot % 360) return null;
+  const prst = sh.kind === 'geo' ? geoDef(sh.geo).prst : sh.kind === 'rect' ? (sh.rounded ? 'roundRect' : 'rect') : null;
+  if (!prst || !SIDE_SITES.has(prst) || PORT_SITE[port] === undefined) return null;
+  return { id: sp, idx: PORT_SITE[port] };
+}
+
+/**
+ * An elbow's route as PowerPoint's bent connector: the box from its start to its end, turned a
+ * quarter when it sets off up or down, flipped so it runs from top left to bottom right, and
+ * bentConnector2 to 5 (as many bends as it has) with where its middle legs run. Null when the
+ * route isn't one of those (a straight line, too many bends, or no width to measure them by).
+ */
+export function bentConnector(route: Vec[]): { prst: string; adj: number[]; frame: string; geom: string } | null {
+  const n = route.length - 1;
+  if (n < 2 || n > 5) return null;
+  const a = route[0], b = route[n];
+  const c = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+  const turned = Math.abs(route[1].x - a.x) < 1e-6;
+  // into the connector's own frame: centred, and turned back a quarter (screen x, y = -v, u)
+  const local = route.map((p) => (turned ? { u: p.y - c.y, v: -(p.x - c.x) } : { u: p.x - c.x, v: p.y - c.y }));
+  const s0 = local[0], s1 = local[n];
+  const flipH = s1.u < s0.u, flipV = s1.v < s0.v;
+  const q = local.map((p) => ({ u: flipH ? -p.u : p.u, v: flipV ? -p.v : p.v }));
+  const W = q[n].u - q[0].u, H = q[n].v - q[0].v;
+  // legs alternate across and down, starting across
+  for (let k = 0; k < n; k++) {
+    const du = Math.abs(q[k + 1].u - q[k].u), dv = Math.abs(q[k + 1].v - q[k].v);
+    if (k % 2 === 0 ? dv > 1e-6 : du > 1e-6) return null;
+  }
+  const adj: number[] = [];
+  const frac = (x: number, of: number) => Math.round((x / of) * 100000);
+  if (n >= 3) { if (W < 0.5) return null; adj.push(frac(q[1].u - q[0].u, W)); }
+  if (n >= 4) { if (H < 0.5) return null; adj.push(frac(q[2].v - q[0].v, H)); }
+  if (n === 5) adj.push(frac(q[3].u - q[0].u, W));
+  const prst = `bentConnector${n}`;
+  const box = { x1: c.x - W / 2, y1: c.y - H / 2, x2: c.x + W / 2, y2: c.y + H / 2 };
+  const attrs = `${turned ? ' rot="5400000"' : ''}${flipH ? ' flipH="1"' : ''}${flipV ? ' flipV="1"' : ''}`;
+  const geom = `<a:prstGeom prst="${prst}"><a:avLst>${adj.map((v, k) => `<a:gd name="adj${k + 1}" fmla="val ${v}"/>`).join('')}</a:avLst></a:prstGeom>`;
+  return { prst, adj, frame: xfrm(box, attrs), geom };
 }
 
 /** tableLookKey of a table as saved here. */

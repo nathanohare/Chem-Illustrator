@@ -100,7 +100,7 @@ import { fillTemplate, templateSize } from './design/templates';
 import { putDiagram, type DiagramData } from './design/diagrams';
 import type { EnergyData } from './design/energy';
 import { refreshZooms, summaryParts, zoomGrid, zoomShape } from './deck/zoom';
-import { AUDIO_TYPES, VIDEO_TYPES, mediaMime, probeAudio, probeVideo, speakerPng } from './deck/media';
+import { AUDIO_TYPES, VIDEO_TYPES, mediaMime, probeAudio, probeVideo, speakerPng, filmPng } from './deck/media';
 import { newChartBox, sizedBox } from './sheet/chart-box';
 import { chartBoxPng } from './render/chart-box-paint';
 import { itemsToSvg } from './render/svg';
@@ -969,7 +969,9 @@ async function insertMedia(audio: boolean): Promise<void> {
     if (got) { px = { w: got.w, h: got.h }; poster = got.poster; length = got.length; }
     else playable = false;
   }
-  if (!poster) poster = speakerPng();
+  // a video this system can't play still looks like a video (not a loudspeaker)
+  if (!type.audio && !playable) px = { w: 640, h: 360 };
+  if (!poster) poster = type.audio ? speakerPng() : filmPng(px.w, px.h);
   finishTyping();
   const deck = deckNow();
   const room = deck ? { w: deck.size.w * 0.6, h: deck.size.h * 0.6 } : { w: (renderer.width * 0.6) / renderer.view.scale, h: (renderer.height * 0.6) / renderer.view.scale };
@@ -1008,17 +1010,19 @@ async function insertZoom(summary: boolean): Promise<void> {
     const parts = summaryParts(pick.indices, d.slides.length);
     const ids = parts.map((p) => ({ first: d.slides[p.first].id, last: d.slides[p.last].id }));
     const at = parts[0].first;
-    d.insertSlide(at, 'title-only', (sd) => {
+    // each part's section is named by its first slide's title, as PowerPoint names them
+    const names = parts.map((p) => [...d.docOf(p.first).captions.values()].find((c) => c.ph === 'title')?.runs.map((r) => r.text).join('').replace(/\s+/g, ' ').trim() ?? '');
+    d.insertSummary(at, (sd) => {
       const title = [...sd.captions.values()].find((c) => c.ph === 'title');
       if (title) sd.updateCaption(title.id, { runs: [{ text: 'Summary' }] });
       const area = { x1: d.size.w * 0.06, y1: d.size.h * 0.26, x2: d.size.w * 0.94, y2: d.size.h * 0.94 };
       // the slides moved one along: their pictures are drawn from the deck before the new slide goes in
       zoomGrid(ids.length, d.size, area).forEach((box, k) => {
         const i = d.slides.findIndex((s) => s.id === ids[k].first);
-        const z = i >= 0 ? zoomShape(d, i, box, { back: true, ...(ids[k].last !== ids[k].first ? { to: `#slide=${ids[k].last}` } : {}) }) : null;
+        const z = i >= 0 ? zoomShape(d, i, box, { back: true, summary: true, ...(ids[k].last !== ids[k].first ? { to: `#slide=${ids[k].last}` } : {}) }) : null;
         if (z) sd.addShape(z);
       });
-    }, 'Insert Summary Zoom');
+    }, ids.map((x) => x.first), names);
     flash('Summary Zoom added. In the show, click a zoom to play its part; the show comes back here after it.', 7000);
     return;
   }

@@ -11,7 +11,7 @@
 import type { SlideView } from './guides';
 import type { HandoutSetup, NotesPageSetup } from './notes-pages';
 import { copyPinned, type PinnedComment } from '../document/comments';
-import { Doc, Caption, Placeholder, TextBase, ParaStyle, Contents, applyBase } from '../model';
+import { Doc, Caption, Placeholder, TextBase, ParaStyle, Contents, Shape, applyBase } from '../model';
 import { DocStyle, ACS_1996 } from '../style';
 import { applyStyle, type RestyleHow } from '../drawing-styles';
 import type { Rect } from '../geom';
@@ -234,6 +234,25 @@ export function decorShapes(size: SlideSize, m: Master, layout: LayoutId): Decor
     default:
       return [];
   }
+}
+
+/**
+ * A template's shapes (and logo) as shapes on a slide, locked at the back: what Keep Source
+ * Formatting puts on a slide from a deck with another template, in place of this deck's.
+ */
+export function masterGraphics(size: SlideSize, m: Master, layout: LayoutId, z: number): Omit<Shape, 'id'>[] {
+  const lock = { locked: true, z } as const;
+  const out: Omit<Shape, 'id'>[] = decorShapes(size, m, layout).map((sh): Omit<Shape, 'id'> => {
+    if (sh.kind === 'rect') return { kind: 'rect', x1: sh.x1, y1: sh.y1, x2: sh.x2, y2: sh.y2, filled: true, color: sh.color, fillColor: sh.color, lineWidth: 0, name: 'Template band', ...lock };
+    if (sh.kind === 'frame') return { kind: 'rect', x1: sh.x1, y1: sh.y1, x2: sh.x2, y2: sh.y2, color: sh.color, lineWidth: sh.width, name: 'Template frame', ...lock };
+    if (sh.kind === 'line') return { kind: 'line', x1: sh.x1, y1: sh.y1, x2: sh.x2, y2: sh.y2, color: sh.color, lineWidth: sh.width, name: 'Template rule', ...lock };
+    // the corner's right triangles (right angle bottom right): a right triangle turned three quarters
+    const xs = sh.pts.map((q) => q[0]), ys = sh.pts.map((q) => q[1]);
+    return { kind: 'geo', geo: 'rtTriangle', x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys), rot: 270, filled: true, color: sh.color, fillColor: sh.color, lineWidth: 0, name: 'Template corner', ...lock };
+  });
+  const logo = decorFrames(size, m).logo;
+  if (m.logo && logo) out.push({ kind: 'picture', ...logo, src: m.logo.src, px: { ...m.logo.px }, name: 'Logo', ...lock });
+  return out;
 }
 
 /** ACS Document 1996 at twice the size: structures that read well on a projector. */
@@ -892,6 +911,48 @@ export class Deck {
   }
 
   /**
+   * Insert > Summary Zoom: the summary slide at `at`, made by `fill`, and the sections PowerPoint
+   * gives a Summary Zoom (each part a section of its own, the summary slide in a Summary
+   * Section before them; slides before it keep theirs), as one step of the history. `parts` are
+   * the ids of each part's first slide; `names` names their sections.
+   */
+  insertSummary(at: number, fill: (doc: Doc) => void, parts: number[], names: string[]): Slide {
+    const s = this.insertSlide(at, 'title-only', fill, 'Insert Summary Zoom');
+    const made = this.undoList[this.undoList.length - 1];
+    this.sectionEdit('Insert Summary Zoom', (secs, of) => {
+      const i0 = this.slides.indexOf(s);
+      const before = this.slides.slice(0, i0);
+      const keep = new Set(before.map((x) => of.get(x)));
+      const kept = secs.filter((x) => keep.has(x.id));
+      if (!kept.length && before.length) {
+        const first = { id: this.nextSectionId++, name: 'Default Section' };
+        kept.push(first);
+        for (const x of before) of.set(x, first.id);
+      }
+      const summary = { id: this.nextSectionId++, name: 'Summary Section' };
+      kept.push(summary);
+      let cur = summary.id;
+      for (const x of this.slides.slice(i0)) {
+        const k = parts.indexOf(x.id);
+        if (k >= 0) {
+          const sec = { id: this.nextSectionId++, name: names[k] || `Section ${k + 1}` };
+          kept.push(sec);
+          cur = sec.id;
+        }
+        of.set(x, cur);
+      }
+      secs.splice(0, secs.length, ...kept);
+    });
+    // the slide and its sections, undone as one
+    const secs = this.undoList[this.undoList.length - 1];
+    if (secs !== made && secs?.kind === 'deck' && made?.kind === 'deck') {
+      this.undoList.splice(-2, 2, { kind: 'deck', label: 'Insert Summary Zoom', undo: () => { secs.undo(); made.undo(); }, redo: () => { made.redo(); secs.redo(); }, slide: made.slide });
+      this.edits--;
+    }
+    return s;
+  }
+
+  /**
    * Change the drawings of slides (other than through their own undo), as one step of the deck's
    * history: ink kept from the slide show, say.
    */
@@ -1434,6 +1495,14 @@ export class Deck {
           }
           const styles = textStyles(from.master, c.layout);
           for (const cap of [...d.captions.values()]) if (cap.ph) d.updateCaption(cap.id, { runs: applyBase(cap.runs, styles[cap.ph]) });
+          // and its template's shapes (a band behind a white title, say) in place of this deck's
+          const theirs = masterGraphics(from.size, from.master, c.layout, 0);
+          const ours = masterGraphics(this.size, target, hasLayout(target, c.layout) ? c.layout : 'title-content', 0);
+          if (!motion.hideGraphics && JSON.stringify(theirs) !== JSON.stringify(ours)) {
+            motion.hideGraphics = true;
+            const z = Math.min(0, ...[...d.shapes.values()].map((x) => x.z ?? 0)) - 1;
+            for (const g of masterGraphics(from.size, from.master, c.layout, z)) d.addShape(g);
+          }
         }
         if (restyle) applyStyle(d, this.master.drawing, keep ? 'new-only' : 'restyle');
         if (resized) scaleContents(d, from.size, this.size, 1);

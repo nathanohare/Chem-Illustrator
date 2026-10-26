@@ -292,11 +292,12 @@ describe('PowerPoint', () => {
     expect(slide.match(/<p:grpSp>/g)?.length).toBe(1);
     expect(slide).toContain('name="Diagram');
     const group = slide.slice(slide.indexOf('<p:grpSp>'), slide.indexOf('</p:grpSp>'));
-    // the boxes, and the elbow lines drawn as shapes along their paths (laptop bench pp-diagram:
-    // PowerPoint "repaired" connectors drawn as paths by deleting everything on the slide)
-    expect(group.match(/<p:sp>/g)?.length).toBe(5);
-    expect(group.match(/name="Elbow Connector/g)?.length).toBe(2);
-    expect(group).not.toContain('<p:cxnSp>');
+    // the boxes, and the elbow lines as PowerPoint's bent connectors stuck to them, never drawn
+    // as paths (laptop bench pp-diagram: PowerPoint "repaired" connectors drawn as paths by
+    // deleting everything on the slide)
+    expect(group.match(/<p:sp>/g)?.length).toBe(3);
+    expect(group.match(/<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="\d+" name="Elbow Connector \d+"\/><p:cNvCxnSpPr><a:stCxn /g)?.length).toBe(2);
+    expect(group).not.toMatch(/<p:cxnSp>(?:(?!<\/p:cxnSp>).)*custGeom/);
     const back = readPptx(file);
     const d = new Doc();
     d.restoreContents(back.slides[0].contents);
