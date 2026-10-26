@@ -716,6 +716,16 @@ dialog.feedback-dialog .muted { margin: 4px 0 10px; max-width: 62ch; }
 .feedback-field > span { font-size: 12px; color: var(--muted); }
 .feedback-field input, .feedback-field textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 5px 8px; resize: vertical; }
 .feedback-about { display: flex; gap: 6px; align-items: baseline; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.feedback-extra[hidden] { display: none; }
+.feedback-extra details { font-size: 12px; margin: 2px 0 0 22px; }
+.feedback-extra pre, .error-log pre { max-height: 160px; overflow: auto; margin: 4px 0 0; padding: 6px 8px; font: 11px/1.35 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--panel-2, rgba(127,127,127,.08)); border-radius: 3px; }
+/* View > Developer Tools: Error Console */
+.error-log { max-height: 260px; overflow: auto; font-size: 12px; }
+.error-log .entry { padding: 3px 0; border-bottom: 1px solid var(--line, rgba(127,127,127,.2)); }
+.error-log .entry summary { cursor: pointer; overflow-wrap: anywhere; }
+.error-log .error { color: #c62828; }
+.error-log .warning { color: #a86400; }
+.error-buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 dialog.name-dialog .muted { margin: 4px 0 10px; max-width: 60ch; }
 .name-input { width: 100%; box-sizing: border-box; font: inherit; padding: 5px 8px; }
 .name-status { min-height: 1.4em; margin: 8px 0 0; color: var(--muted); overflow-wrap: anywhere; }

@@ -34,6 +34,11 @@ tauri-plugin-process = "2"
 tauri-plugin-updater = "2"
 tauri-plugin-single-instance = "2"
 
+# View > Developer Tools > Inspector: the web inspector in the Windows and Linux apps (it uses
+# private APIs on a Mac, which the App Store refuses)
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
+tauri = { version = "2.12", features = ["devtools"] }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_System_DataExchange", "Win32_System_Memory", "Win32_System_Registry", "Win32_UI_Shell"] }
 windows-core = "0.62"
