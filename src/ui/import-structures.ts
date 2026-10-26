@@ -9,6 +9,7 @@ import { checkRead, type Checked, type Engine } from '../recognise/check';
 import { cleanPhoto, shrinkTo, type Pixels } from '../recognise/picture';
 import { findDrawings, isProse, type Box } from '../recognise/find';
 import { aiName, aiReady, type AiPrefs } from '../ai/link';
+import { imageSize } from '../render/images';
 import type { DocStyle } from '../style';
 
 export interface ImportHost {
@@ -22,7 +23,12 @@ export interface ImportHost {
 /** A picture's pixels, at most `most` pixels on its longer side. */
 export async function decodePicture(bytes: Uint8Array, mime: string, most = 2000): Promise<Pixels | null> {
   try {
-    const bmp = await createImageBitmap(new Blob([bytes as BlobPart], { type: mime }));
+    // a big scan or photo is decoded already shrunk, away from the page (it froze the window for seconds),
+    // the longer side to `most`; shrinkTo below still has the last word (a photo turned by its EXIF)
+    const size = imageSize(bytes, mime);
+    const k = size ? most / Math.max(size.w, size.h) : 1;
+    const shrunk: ImageBitmapOptions = k < 1 ? { ...(size!.w >= size!.h ? { resizeWidth: most } : { resizeHeight: most }), resizeQuality: 'high' } : {};
+    const bmp = await createImageBitmap(new Blob([bytes as BlobPart], { type: mime }), shrunk);
     const c = document.createElement('canvas');
     c.width = bmp.width;
     c.height = bmp.height;
@@ -128,6 +134,7 @@ export async function importPictures(host: ImportHost, found: FoundPicture[], o:
 export async function importPictureFiles(host: ImportHost, pics: { name: string; bytes: Uint8Array; mime: string }[]): Promise<void> {
   if (!pics.length) return;
   const found: FoundPicture[] = [];
+  host.flash(pics.length === 1 ? 'Reading the picture…' : 'Reading the pictures…');
   for (const p of pics) {
     const px = await decodePicture(p.bytes, p.mime);
     if (px) found.push({ where: p.name, pixels: px });
