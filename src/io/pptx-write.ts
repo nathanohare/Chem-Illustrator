@@ -31,7 +31,7 @@ import { contentsAlt, titleOverlaps, roughCaptionBox } from '../accessibility';
 import type { Selection } from '../editor/editor';
 import { Package, NS, REL, emu, xml, xmlAttr, hex6, MediaFiles, structureAltText } from './ooxml';
 import { facesToEmbed, toEot, type FontSource } from './font-embed';
-import { fromDataUrl } from '../render/images';
+import { dataUrl, fromDataUrl } from '../render/images';
 import { patternClear, patternInk, shadowLook } from '../render/fills';
 import { FADE, tint } from '../colours';
 import { transitionXml, timingXml, highlightParts, partHolds, expandParas, targetKey, type Transition, type Anim, type MediaTiming } from '../deck/animation';
@@ -83,6 +83,11 @@ export const TAG = {
   chart: 'CHEMILLUSTRATOR_CHART',
   /** A picture's Picture Format settings PowerPoint has no place for (how near a colour Remove Background takes). */
   picture: 'CHEMILLUSTRATOR_PICTURE',
+  /**
+   * The original of a picture saved with sharpening or Remove Background worked in, as a data
+   * URL. A tag, as PowerPoint keeps tags but drops a picture the slide's XML doesn't show.
+   */
+  pictureOrig: 'CHEMILLUSTRATOR_PICTURE_ORIG',
   /** An equation: its LaTeX, size, colour and font as made here, used when PowerPoint has not changed it. */
   math: 'CHEMILLUSTRATOR_MATH',
 };
@@ -364,6 +369,9 @@ class Writer {
   /** The slide being written (links are related from it). */
   private curPath = '';
 
+  /** The slide's placeholders' places among the layout's (1 is the first), whatever order they are written in. */
+  private phAt = new Map<Caption, number>();
+
   constructor(private deck: DeckData, private opts: PptxOptions) {
     this.measure = opts.measure ?? arialMeasure;
     for (const [mime, ext] of Object.entries(MIME_EXT)) this.pkg.defaultType(ext, mime);
@@ -629,6 +637,17 @@ class Writer {
       parts.texts.splice(parts.texts.indexOf(title), 1);
       mark({ captions: new Set([title.id]) }, id);
       out.push(this.text(path, title, id++, s.layout, styles, phCount, doc));
+    }
+    // empty placeholders at the back: things put on the slide go in front of them, so in
+    // PowerPoint a click on a picture over one picks the picture (laptop bench pp-compare-decks)
+    // (each keeps the layout's placeholder it has in the order they are listed)
+    this.phAt.clear();
+    const seen = { ...phCount };
+    for (const c of parts.texts) if (c.ph) { const k = c.ph === 'title' ? 'title' : 'body'; this.phAt.set(c, seen[k] = (seen[k] ?? 0) + 1); }
+    for (const c of parts.texts.filter((x) => x.ph && !x.runs.some((r) => r.text.trim()))) {
+      parts.texts.splice(parts.texts.indexOf(c), 1);
+      mark({ captions: new Set([c.id]) }, id);
+      out.push(this.text(path, c, id++, s.layout, styles, phCount, doc));
     }
     // pictures and shapes at the back, as on screen
     const videos: MediaTiming[] = [];
@@ -1001,19 +1020,19 @@ class Writer {
     const more: PicMore = { rot: pic?.rot, hidden: pic?.hidden };
     const descr = alt?.trim() || undefined;
     // what Office can't show live goes in worked in. PowerPoint keeps the original as the blip's
-    // layer only as an HD Photo (.wdp) and refuses a PNG there, so the original is kept beside the
-    // picture instead (a relationship our tag names) with the settings in the tag: PowerPoint shows
-    // the worked-in picture and this program gets the original back
+    // layer only as an HD Photo (.wdp) and refuses a PNG there, so the original goes in a tag with
+    // the settings (a picture beside it that nothing on the slide shows is dropped when PowerPoint
+    // saves the file): PowerPoint shows the worked-in picture and this program gets the original back
     let baked: Uint8Array | null = null;
     if (pic && bakedPart(fx) && this.opts.bakePicture) baked = await this.opts.bakePicture(pic).catch(() => null);
-    const tagFor = (orig?: string) => {
+    const tagFor = (orig?: { bytes: Uint8Array; mime: string }) => {
       const t: Record<string, unknown> = {};
       if (fx?.bg?.tol !== undefined) t.tol = fx.bg.tol;
       if (orig) {
-        t.orig = orig;
+        t.orig = 'tag';
         t.fx = { ...(fx?.bg ? { bg: fx.bg } : {}), ...(fx?.sharpen ? { sharpen: fx.sharpen } : {}) };
       }
-      return Object.keys(t).length ? this.addTags(from, { [TAG.picture]: JSON.stringify({ v: 1, ...t }) }) : null;
+      return Object.keys(t).length ? this.addTags(from, { [TAG.picture]: JSON.stringify({ v: 1, ...t }), ...(orig ? { [TAG.pictureOrig]: dataUrl(orig.bytes, orig.mime) } : {}) }) : null;
     };
     if (ext === 'svg') {
       // PowerPoint shows the SVG; older programs the PNG beside it (300 dots per inch)
@@ -1021,13 +1040,13 @@ class Writer {
       const png = await this.opts.svgToPng(new TextDecoder().decode(bytes), Math.max(1, Math.round((box.x2 - box.x1) * k)), Math.max(1, Math.round((box.y2 - box.y1) * k)));
       if (baked) {
         const blip = this.addMedia(from, baked, 'png');
-        return picXml(id, name, blip, null, box, crop, tagFor(this.addMedia(from, png, 'png')), look, descr, fx, more);
+        return picXml(id, name, blip, null, box, crop, tagFor({ bytes: png, mime: 'image/png' }), look, descr, fx, more);
       }
       return picXml(id, name, this.addMedia(from, png, 'png'), this.addMedia(from, bytes, 'svg'), box, crop, tagFor(), look, descr, fx, more);
     }
     if (baked) {
       const blip = this.addMedia(from, baked, 'png');
-      return picXml(id, name, blip, null, box, crop, tagFor(this.addMedia(from, bytes, ext)), look, descr, fx, more);
+      return picXml(id, name, blip, null, box, crop, tagFor({ bytes, mime }), look, descr, fx, more);
     }
     const own = this.addMedia(from, bytes, ext);
     return picXml(id, name, own, null, box, crop, tagFor(), look, descr, fx, more);
@@ -1071,7 +1090,7 @@ class Writer {
     let ph = '';
     if (c.ph) {
       const k = c.ph === 'title' ? 'title' : 'body';
-      const i = (phCount[k] = (phCount[k] ?? 0) + 1) - 1;
+      const i = (this.phAt.get(c) ?? (phCount[k] = (phCount[k] ?? 0) + 1)) - 1;
       const forms = layoutPh(layoutDef(this.deck.master, layout));
       ph = k === 'title' ? (i === 0 && forms.title) || '<p:ph type="title"/>' : forms.bodies[i] ?? ''; // more text boxes than the layout has: plain text boxes
     }
