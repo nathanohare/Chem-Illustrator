@@ -7,8 +7,17 @@ export class ShapeMenu {
   private pop: HTMLDivElement;
   private lib: DesignLibrary;
   private pick: (id: string) => void = () => {};
+  /** Where the keys went before the menu opened (a document's caret): Escape goes back there. */
+  private back: Element | null = null;
   private close = (e: Event) => {
-    if (e instanceof KeyboardEvent ? e.key === 'Escape' : !this.pop.contains(e.target as Node)) this.hide();
+    if (e instanceof KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      // Escape only closes the menu: it doesn't also reach the page underneath
+      e.preventDefault();
+      e.stopPropagation();
+      this.hide();
+      if (this.back instanceof HTMLElement && this.back.isConnected) this.back.focus({ preventScroll: true });
+    } else if (!this.pop.contains(e.target as Node)) this.hide();
   };
 
   constructor() {
@@ -29,6 +38,7 @@ export class ShapeMenu {
   show(button: HTMLElement, tip: string, pick: (id: string) => void, tab: LibraryTab = 'shapes'): void {
     if (this.shown) { this.hide(); return; }
     this.pick = pick;
+    this.back = document.activeElement;
     this.lib.showTab(tab);
     const p = this.pop.querySelector('.dl-head p');
     if (p) p.textContent = tip;

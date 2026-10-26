@@ -338,6 +338,8 @@ export function penSwatch(b: BorderLine): string {
 export { BORDER_STYLES, BORDER_WIDTHS };
 
 function placePopup(m: HTMLElement, x: number, y: number): void {
+  // where the keys went before (the caret's hidden field, in a table cell): Escape goes back there
+  const back = document.activeElement;
   document.body.append(m);
   const r = m.getBoundingClientRect();
   m.style.left = `${Math.max(4, Math.min(x, innerWidth - r.width - 4))}px`;
@@ -348,6 +350,12 @@ function placePopup(m: HTMLElement, x: number, y: number): void {
     m.remove();
     document.removeEventListener('pointerdown', close, true);
     document.removeEventListener('keydown', close, true);
+    if (e instanceof KeyboardEvent) {
+      // Escape only closes the gallery: it doesn't also reach the page, where it leaves the cell and picks the whole table
+      e.preventDefault();
+      e.stopPropagation();
+      if (back instanceof HTMLElement && back.isConnected) back.focus({ preventScroll: true });
+    }
   };
   setTimeout(() => { document.addEventListener('pointerdown', close, true); document.addEventListener('keydown', close, true); });
 }
