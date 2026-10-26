@@ -6,9 +6,9 @@ This page covers Slides mode: building a deck, the slide master and templates, c
 
 ## Starting a deck
 
-Click **+ Slides** at the end of the tab strip, or choose **File ▸ New ▸ New Slides**. While a deck is showing, Ctrl+N starts another one. Each open file has its own tab: Ctrl+Tab moves between tabs and Ctrl+W closes one.
+Click **+** at the end of the tab strip and pick **Slides**, or choose **File ▸ New ▸ New Slides**. While a deck is showing, Ctrl+N starts another one. Each open file has its own tab: Ctrl+Tab moves between tabs and Ctrl+W closes one.
 
-The Slides ribbon has PowerPoint's tabs: **Home** (slides, sections, font, paragraph), **Insert** (pictures, text boxes, tables, shapes), **Design & Transitions** (size, templates, slide master, layouts, drawing style, format background, and the transitions between slides), **Animations**, **Slide Show**, **Review** and **View** (Normal, Slide Sorter, Slide Master, Edit Layouts, Themes). The **Slide** menu at the top holds the same commands.
+The Slides ribbon has PowerPoint's tabs: **Home** (slides, sections, font, paragraph), **Insert** (pictures, text boxes, tables, shapes), **Design & Transitions** (size, templates, slide master, layouts, drawing style, format background, and the transitions between slides), **Animations**, **Slide Show**, **Review** and **View** (Normal, Slide Sorter, Slide Master, Edit Layouts, Themes). The **Slides** submenus of the **Edit**, **View**, **Insert** and **Format** menus hold the same commands.
 
 ## Slides and layouts
 
@@ -144,7 +144,7 @@ The small bar that appears above text while you type has the same buttons, plus 
 
 ## Shapes
 
-**Insert** tab ▸ **Shapes** opens the shape library: basic shapes, block arrows, flowchart shapes, callouts and lab glassware. Type in its box to find one (for example "flask"). Click a shape, then click on the slide to place it at its usual size, or drag to draw it the size you want. Double-click a shape to type in it. Its fill, outline and text are in the **Style** panel, and shapes save to PowerPoint as PowerPoint's own shapes where it has a matching one.
+**Insert** tab ▸ **Shapes** opens the shape library: basic shapes, block arrows, flowchart shapes, callouts, action buttons and lab glassware. Type in its box to find one (for example "flask"). Click a shape, then click on the slide to place it at its usual size, or drag to draw it the size you want. Double-click a shape to type in it. Its fill, outline and text are in the **Style** panel, and shapes save to PowerPoint as PowerPoint's own shapes where it has a matching one.
 
 **Insert** tab ▸ **Diagram** draws a list, process, cycle, hierarchy, Venn diagram, matrix or pyramid from lines of text, like PowerPoint's SmartArt, saved to PowerPoint as a group of shapes. See [Design: Diagrams](design.md#diagrams).
 
@@ -204,7 +204,7 @@ Double-click a chart (or right-click ▸ **Edit Chart…**) to change it. Draggi
 
 Open the **Design & Transitions** tab.
 
-1. Pick **Fade**, **Push**, **Wipe** or **Cover**.
+1. Pick **Fade**, **Push**, **Wipe**, **Cover** or **Morph**.
 2. **Effect** sets the direction.
 3. **Speed** sets how fast, or type any **Duration** in seconds.
 4. **After … s** moves on to the next slide by itself after that time (once the slide's animations have played).
@@ -263,7 +263,7 @@ Undo works for every change. Comments are saved in the .pptx as PowerPoint comme
 | Next click or slide | Click, →, Space or Enter |
 | Back one click | ← or Backspace |
 | Jump to a slide | Type its number, then Enter |
-| Black or white screen | B or W (any key brings the slide back) |
+| Black or white screen | B or W (B or W again, or the next or back key, brings the slide back) |
 | End the show | Esc |
 
 Each click plays the next animation, then moves on to the next slide with its transition. A click while something is moving finishes it at once.

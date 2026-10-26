@@ -11,7 +11,7 @@ Each kind of tab saves to its own file type. **Save** (Ctrl+S) uses the first ty
 | Drawing | .cdxml, .cdx, .cds | .cdxml (the default), .cdx | Molfile (.mol), PDF, PNG, TIFF, SVG, EMF, EPS |
 | Slides | .pptx | .pptx | PDF (one page per slide), PNG, TIFF, SVG, EMF or EPS of the current slide |
 | Design | .pptx | .pptx (one slide) | PDF, PNG, TIFF, SVG, EMF, EPS |
-| Document | .docx | .docx | PDF |
+| Document | .docx, .doc, .rtf, .odt | .docx (the default), .rtf, .odt | PDF |
 | Sheet | .xlsx, .xlsm, .xls, .ods, .csv, .tsv, .txt, .sdf | .xlsx, .xlsm, .csv, .sdf | Charts as PNG or SVG |
 | Workspace | .ciworkspace | .ciworkspace | |
 
@@ -71,7 +71,7 @@ Double-click a file, or right-click it and choose **Open with ▸ Chem Illustrat
 | Word, PowerPoint or Excel (Windows app) | A Chem Illustrator drawing object: a sharp picture you can double-click to edit here (see below) |
 | Other programs, or from the browser version or on macOS and Linux | A high-resolution picture |
 
-In the Windows app, **Paste** (Ctrl+V) takes drawings copied in ChemDraw as editable structures, and spectra copied in MestReNova as sharp lines and text. **Edit ▸ Paste Special ▸ Paste Special ▸ Show Clipboard Formats** lists what is on the clipboard, which helps when a paste doesn't come out as expected.
+In the Windows app, **Paste** (Ctrl+V) takes drawings copied in ChemDraw as editable structures, and spectra copied in MestReNova as sharp lines and text. **Edit ▸ Paste Special ▸ Show Clipboard Formats** lists what is on the clipboard, which helps when a paste doesn't come out as expected.
 
 ### Editing drawings inside Word, PowerPoint and Excel (Windows)
 
@@ -92,13 +92,13 @@ Charts in a sheet have **Copy as Picture** on the **Chart** tab, to paste into W
 
 ## Split View
 
-Split View puts a drawing beside a document, sheet or slide deck, so you can draw and write at the same time.
+Split View puts a drawing beside a document, sheet, slide deck or design, so you can draw and write at the same time.
 
 ![A drawing beside a document in Split View](../images/split-view.png)
 
-1. In a document, sheet or slides tab, choose **View ▸ Split View: Drawing Beside**. A drawing opens on the right: the first drawing tab, or a new one.
-2. Click a side to work on it. Beside a document or sheet, both sides stay live; Ctrl+Z and Ctrl+S act on the side you clicked last. Beside slides, the side you aren't working on shows as a picture until you click it.
-3. The bar above the drawing picks another open drawing or a new one. **Insert into Document** (or **Cell**, or **Slide**) puts the selected structures, or the whole drawing, in at the caret, the selected cell or the slide.
+1. In a document, sheet, slides or design tab, choose **View ▸ Split View: Drawing Beside**. A drawing opens on the right: the first drawing tab, or a new one.
+2. Click a side to work on it. Beside a document or sheet, both sides stay live; Ctrl+Z and Ctrl+S act on the side you clicked last. Beside slides or a design, the side you aren't working on shows as a picture until you click it.
+3. The bar above the drawing picks another open drawing or a new one. **Insert into Document** (or **Cell**, **Slide** or **Design**) puts the selected structures, or the whole drawing, in at the caret, the selected cell, the slide or the design.
 4. Drag the divider to change the widths. The × closes the split; the drawing stays open in its own tab.
 
 ## Workspaces

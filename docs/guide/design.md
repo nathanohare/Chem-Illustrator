@@ -6,7 +6,7 @@ This page covers Design mode: single-page graphics such as TOC graphics, graphic
 
 ## Starting a design
 
-Click **+ Design** at the end of the tab strip, or choose **File ▸ New ▸ New Design…**. A gallery opens with a **Blank page** and six ready-made layouts.
+Click **+** at the end of the tab strip and pick **Design**, or choose **File ▸ New ▸ New Design…**. A gallery opens with a **Blank page** and six ready-made layouts.
 
 A design is a single page. For several pages, use [Slides](slides.md) instead.
 
@@ -42,12 +42,13 @@ Everything in a layout is ordinary shapes and text you can change. The dashed bo
 
 ## Shapes
 
-The shape library on the left has five groups:
+The shape library on the left has six groups:
 
 - **Basic shapes:** rectangle, rounded rectangle, oval, triangle, diamond, hexagon, star, cylinder, cloud and more.
 - **Block arrows.**
 - **Flowchart** shapes.
 - **Callouts.**
+- **Action buttons.**
 - **Lab equipment:** round-bottom flask, Erlenmeyer flask, beaker, vial, test tube, separatory funnel, condenser, chromatography column, TLC plate, syringe, stirrer hot plate, bath and funnel.
 
 Type in the search box at the top to find one (try "flask" or "decision"). **Shapes** on the ribbon takes you to the library.
@@ -138,7 +139,7 @@ The ribbon's **Arrange** group has **Bring to Front**, **Bring Forward**, **Send
 
 ## The Layers panel
 
-The **Layers** panel on the right lists everything on the page, front first.
+The **Layers** panel on the right lists the shapes, pictures and tables on the page, front first. (Structures, text and arrows always sit above them.)
 
 - Drag the ⋮⋮ grip to change the order.
 - Click the eye to hide something, or the lock so clicks pass through it.

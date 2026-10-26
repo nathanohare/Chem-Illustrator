@@ -26,7 +26,7 @@ If the desktop app closed unexpectedly last time (it crashed, or Windows ended i
 The program keeps a small error log **on your computer only**, and never sends it anywhere by itself. File paths in it have your user name replaced with `~`.
 
 - **Help ▸ Copy Diagnostics** copies the version, the computer and the newest part of the log, to paste into a report or message.
-- **Help ▸ Open Log Folder** (desktop app) shows the log file, `log.txt`, in the app's data folder.
+- **Help ▸ Open Log Folder** (desktop app) opens the folder that holds the log file, `log.txt`, in the app's data folder.
 - **View ▸ Developer Tools** adds an **Error Console** to the side panel, listing this session's errors and warnings (click one for where it happened). On Windows and Linux its **Inspector** button opens the web inspector (Ctrl+Shift+I also opens it). The Mac and iPad apps don't have the inspector, because the App Store doesn't allow it.
 
 ## Straight on GitHub

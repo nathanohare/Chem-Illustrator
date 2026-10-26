@@ -143,6 +143,7 @@ Start a sequence from a highlight a key set (as above), not from the mouse resti
 | Ctrl+Alt+Shift+H, V | Space evenly across, down |
 | Ctrl+→ (or ←, ↑, ↓) | Reaction arrow and a copy of the selection that way |
 | Ctrl+J | Join two selected atoms or bonds |
+| Ctrl+G, Ctrl+Shift+G | Group, Ungroup |
 | Ctrl+L | Fixed bond lengths on or off |
 | Ctrl+E | Fixed angles on or off |
 | Ctrl+Shift+K | Clean Up Structure |
@@ -152,6 +153,8 @@ Start a sequence from a highlight a key set (as above), not from the mouse resti
 | Ctrl+= or Ctrl+Shift+=, Ctrl+- | Zoom in, zoom out |
 | Ctrl+0 | Fit the drawing in the window |
 | F5, F6, F7, F8 | Actual size, fit, zoom in, zoom out |
+| Shift+F6 | Go to Selection |
+| Ctrl+Alt+=, Ctrl+Alt+-, Ctrl+Alt+0 | Interface size: larger, smaller, normal (desktop app) |
 | Alt+Q | Search for a command |
 | F1 | The User Guide, at the part about the tool or kind of tab in use |
 
@@ -179,7 +182,7 @@ Slides, sheets and documents have their own keys (PowerPoint's, Excel's and Word
 
 ## Changing hotkeys
 
-Every key can be changed. Open **Edit ▸ Hotkeys…**, or **Help** and then **Show and change all hotkeys…**.
+Every key can be changed. Open **Edit ▸ Hotkeys…**, or **Help ▸ Hotkeys and Tips** and then **Show and change all hotkeys…**.
 
 The window lists every action, grouped as above (pointing at an atom, at a bond, at empty space, anywhere, in slides, in sheets, in documents, and typing text), with the keys that do each one.
 
@@ -206,9 +209,9 @@ Changes work straight away and are saved in the settings file; the window shows 
 ### Dragging
 
 - **Drag a selection** to move it, with any tool. With the select tool, dragging an atom or object that isn't selected moves just that one.
-- **Ctrl+drag** makes a copy: the copy goes with the pointer and the original stays. Ctrl+dragging an unselected atom or bond copies its whole structure.
+- **Ctrl+drag** makes a copy: the copy goes with the pointer and the original stays. Ctrl+dragging an unselected atom or bond copies its whole structure. (With a curved arrow tool, Ctrl+drag draws the arrow freehand instead.)
 - **Shift while dragging** keeps the move straight across or straight up and down.
-- **Alt while dragging** turns off the alignment guides, so you can move freely.
+- **Alt while dragging** turns off the alignment guides, so you can move freely. It also lets you drop an atom on another without joining them (without Alt, an atom dragged onto another snaps to it and the two become one).
 - **Alt while drawing** a bond, arrow or line lets it point at any angle instead of 15° steps (and ignores fixed bond lengths).
 - **Holding the mouse with a template** on a bond shows a blue outline of where it will go. Move the pointer, or press **Tab** / **Shift+Tab**, to try the other ways it can join (trans or cis for conformers), and release to place it. See [Fusing conformers](drawing.md#fusing-conformers).
 
@@ -227,18 +230,18 @@ Boxes, ovals, frames and pictures have square handles on their corners and sides
 
 ### Scrolling and zooming
 
-- The **mouse wheel** scrolls up and down; **Shift+wheel** scrolls sideways.
+- The **mouse wheel** scrolls up and down; **Shift+wheel** scrolls sideways. Scrolling stops a little way past the edge of the drawing.
 - **Ctrl+wheel** zooms.
 - **Middle-drag** or **right-drag** pans the drawing.
 
 ## Pen and touch (tablets)
 
-On a tablet or touch screen (an iPad with Apple Pencil, a Surface pen), **View > Window and Colours > Touch Mode** makes the buttons, menus and toolboxes big enough for a fingertip. It is **Automatic** to start with: it comes on by itself on a touch screen, or the first time a pen or finger touches the window.
+On a tablet or touch screen (an iPad with Apple Pencil, a Surface pen), **View ▸ Window and Colours ▸ Touch Mode** makes the buttons, menus and toolboxes big enough for a fingertip. It is **Automatic** to start with: it comes on by itself on a touch screen, or the first time a pen or finger touches the window.
 
-- **The pen** works like the mouse with every tool.
+- **The pen** works like the mouse with every tool, except that with a curved arrow tool it draws the arrow freehand.
 - **Two fingers** pan and pinch-zoom the drawing. Once you have used the pen, **one finger** pans too, so a resting palm never draws.
 - **Hold** the pen or a finger still for half a second for the right-click menu. **Two quick taps** are a double-click.
-- **The atom keypad** along the bottom of the drawing gives the keys a keyboard would: element labels, charges, a new bond, double and triple bonds, wedges, rings, Undo and Redo. A key acts on the atom or bond you last drew, or the one selected. Hide it with its ×, or show it again with **View > Window and Colours > Touch Mode > Atom Keypad**.
+- **The atom keypad** along the bottom of the drawing gives the keys a keyboard would: element labels, charges, a new bond, double and triple bonds, wedges, rings, Undo and Redo. A key acts on the atom or bond you last drew, or the one selected. Hide it with its ×, or show it again with **View ▸ Window and Colours ▸ Touch Mode ▸ Atom Keypad**.
 
 ### Sketching with the pen
 
@@ -249,11 +252,11 @@ Pick the **Sketch** tool (the pen and squiggle in the toolbox, or ✎ on the key
 - a **scribble** (back and forth) erases the atoms and bonds under it;
 - **letters** label the atom they are written on (C, N, O, S, P, F, Cl, Br, I, H, B), or make a new atom in empty space; **+** and **−** charge the nearest atom. Write a letter centred on the atom, up to about a bond high; in empty space keep it smaller than a bond, or it is read as a bond or ring.
 
-To sketch with the pen whatever tool is picked (a finger or mouse still uses the tool), turn on **View > Window and Colours > Touch Mode > Pen Always Sketches**.
+To sketch with the pen whatever tool is picked (a finger or mouse still uses the tool), turn on **View ▸ Window and Colours ▸ Touch Mode ▸ Pen Always Sketches**.
 
 In a text box, Apple Pencil's **Scribble** works in Touch Mode: write over the text box (or just to its right or below it) and your handwriting is typed where the pencil first touched. A tap with the pencil puts the caret there.
 
-If writing with the pen feels slow, **View > Developer Tools** shows a **Pen stroke** line after each stroke: how often the pen reported, how often the screen caught up, and how long the app took for each.
+If writing with the pen feels slow, **View ▸ Developer Tools** shows a **Pen stroke** line after each stroke: how often the pen reported, how often the screen caught up, and how long the app took for each.
 
 ## What the mouse pointer means
 
@@ -263,7 +266,8 @@ The pointer changes to show what a click or drag will do.
 |---|---|---|
 | Small square with a shadow | Empty space, select tool | Drag to draw a selection box. |
 | Crosshair | Over an atom or bond (select tool), or anywhere with a drawing tool | Click to select or draw at that spot. |
-| Open hand | Over something already selected, or the middle of a selected arrow | Drag to move it (or bend the arrow). It closes while you drag. |
+| Open hand | Over something already selected, or an arrow's line (select tool) | Drag to move it. It closes while you drag. |
+| Arc with arrows | Over the middle handle of an arrow | Drag to bend the arrow. |
 | Arrow with a plus (copy) | Over the selection with Ctrl held | Drag to make a copy. |
 | Eraser | Eraser tool | Click something to remove it. |
 | Two-headed arrows | Over a resize handle | Drag to resize, in the direction shown. |

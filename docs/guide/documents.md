@@ -6,11 +6,11 @@ This page covers Document mode: writing and formatting text, putting structures,
 
 ## Starting a document
 
-Click **+ Document** at the end of the tab strip, or choose **File ▸ New ▸ New Document**. While a document is showing, Ctrl+N starts another one.
+Click **+** at the end of the tab strip and choose **Document**, or choose **File ▸ New ▸ New Document**. While a document is showing, Ctrl+N starts another one.
 
 **File ▸ New ▸ New from Template…** starts from one of our own templates: a **Lab report** (aim, scheme, reagent table, procedure, observations, results, safety), **Supporting Information** (title block, contents, general information, procedures with a characterization line to fill in, spectra) or a **Thesis chapter** (numbered sections, a wide binding margin and 1.5 line spacing). Text in [brackets] says what goes there; type over it. The headings are in the Heading styles, so the Navigation pane and Table of Contents pick them up.
 
-The ribbon has Word's tabs: **Home**, **Insert**, **Layout**, **References** and **Review**, plus a **Table** tab that appears while the caret is in a table. Text flows on to the next page by itself. The status bar at the bottom shows the page and word count; Ctrl+mouse wheel or the − and + buttons zoom, and **Page Width** fits the page to the window.
+The ribbon has Word's tabs: **Home**, **Insert**, **Design**, **Layout**, **References**, **Review** and **View**, plus a **Table** tab that appears while the caret is in a table. Text flows on to the next page by itself. The status bar at the bottom shows the page and word count; Ctrl+mouse wheel or the − and + buttons zoom, and **Page Width** fits the page to the window.
 
 ## The chemistry toolbox
 
@@ -148,7 +148,7 @@ For a substrate-scope or screening table, put the caret in a cell and use **Inse
 
 Double-click the object (or right-click ▸ **Open Object**) to open the file in its own program. Each time you save it there, the document takes the changes and a new picture of them, so a table of results can be kept up to date in Excel. This needs the desktop app; in a browser the file is downloaded instead.
 
-To embed cells from Excel, copy them in Excel and choose **Edit** ▸ **Paste as Object** (or right-click ▸ Paste as Object) in the Windows app, as Word's Paste Special does.
+To embed cells from Excel, copy them in Excel and choose **Edit** ▸ **Paste Special** ▸ **Paste as Object** (or right-click ▸ Paste as Object) in the Windows app, as Word's Paste Special does.
 
 Objects are saved in Word files as Word's own embedded objects, so double-clicking one in Word opens it in its program too (Office files as Word keeps them; other files as Windows packages). Objects in Word files you open here are kept as they are and saved back unchanged. ChemDraw objects are kept the same way, with the look they had in Word, until you double-click one (or right-click ▸ **Edit Drawing**): then it becomes a structure here that you can change. To have every ChemDraw object redrawn here as the file opens instead, turn on **Settings ▸ General ▸ Redraw ChemDraw objects in Word files as they open**. Objects stay in line with the text.
 
@@ -211,7 +211,7 @@ On the **Layout** tab:
 - **Header…** and **Footer…** set the text at the top and bottom of every page. The ⬊ in the corner of the group sets where they sit, the first page number and whether the first page is numbered.
 - **Line Numbers**: numbers down the left margin, as journals ask for in manuscripts under review: **Continuous**, **Restart Each Page** or **Restart Each Section**. **Suppress for Current Paragraph** leaves the selected paragraphs out (a title, say). **Line Numbering Options…** sets the first number, shows only every 5th (or any nth) number, and sets how far they sit from the text.
 - **Hyphenation**: **Automatic** breaks long words at the ends of lines, with a hyphen, where English allows (US English patterns). **Don't Hyphenate This Paragraph** keeps the selected paragraphs whole. **Hyphenation Options…** sets the hyphenation zone (a word is broken only if leaving it whole would leave more room than this at the end of the line), a limit on hyphens in a row, and whether words in capitals are broken. Words with digits and formulas are never broken.
-- **Insert ▸ Cover Page** puts a first page in front: the title, subtitle, author, institution and date in one of five looks (Plain, Banded, Ruled, Lab Report, Supporting Information). They are fields, so they follow **Document Properties** (Insert ▸ Quick Parts). The cover page has no page number; **Remove Cover Page** on the same menu takes it out. **Blank Page** puts an empty page at the caret.
+- **Insert ▸ Cover Page** puts a first page in front: the title, subtitle, author, institution and date in one of five looks (Plain, Banded, Ruled, Lab Report, Supporting Information). They are fields, so they follow **Document Properties** (Insert ▸ Quick Parts). The cover page has no page number; **Remove Current Cover Page** on the same menu takes it out. **Blank Page** puts an empty page at the caret.
 
 ### Headers and footers on odd, even and first pages
 
@@ -224,7 +224,7 @@ In the Header and Footer settings (the ⬊ in the corner of the group, or **Head
 
 ### Sections
 
-A section break starts a new section, which can have its own paper size, orientation, margins, columns, header and footer, page numbering and line numbers. Choose one from **Layout** ▸ **Breaks** (or **Insert ▸ Section Break**):
+A section break starts a new section, which can have its own paper size, orientation, margins, columns, header and footer, page numbering and line numbers. Choose one from **Layout** ▸ **Breaks** (or **Insert ▸ Document ▸ Section Break**):
 
 - **Next Page**: the new section starts on a new page. Use it for a landscape page with a wide table, or to number the front matter i, ii, iii and the text 1, 2, 3.
 - **Continuous**: the new section starts on the same page. Use it for a title and abstract across the page with two columns of text under them. Columns before a continuous break are evened up, as in Word.
@@ -301,7 +301,7 @@ Changes made by other people in Word open here as changes, in a different colour
 
 ### Markup views and reviewers
 
-**Review** tab ▸ **Tracking** chooses how changes show:
+**Review** tab ▸ **Display** (in the **Tracking** group) chooses how changes show:
 
 - **All Markup**: insertions and deletions in each reviewer's colour, a grey bar in the margin beside every changed line.
 - **Simple Markup**: the text as it will read once the changes are accepted, with a red bar in the margin where something changed.
@@ -381,7 +381,7 @@ The **View** tab has Word's ways of looking at a document. The text is the same 
 - **Print Layout** shows the pages as they print. This is the usual view.
 - **Read Mode** fills the window with two pages at a time and nothing else. The arrow keys, Page Up and Page Down, Space or the mouse wheel turn the pages. Text can be picked and copied but not changed. **Edit Document** at the top, or Esc, goes back.
 - **Web Layout** wraps the text to the width of the window, with no pages, the way a web page shows it.
-- **Outline** shows the headings indented by level, each with the text under it. A **⊕** beside a heading means there is something under it, **⊖** means there is nothing, and a dot marks body text. Click a **⊕** to pick the heading with everything under it. Double-click it to fold or unfold the heading; a folded heading is underlined in grey. The **Outlining** tab that appears has Promote (Alt+Shift+←) and Demote (Alt+Shift+→), the level of the paragraph, Move Up (Alt+Shift+↑) and Move Down (Alt+Shift+↓), Expand (Alt+Shift++) and Collapse (Alt+Shift+−), **Show Level** (Alt+Shift+1 to 3, or Alt+Shift+A for all), **Show Text Formatting** and **Show First Line Only**. A folded heading moves, promotes and demotes together with everything under it. Headings are paragraphs in the Heading 1, 2 and 3 styles.
+- **Outline** shows the headings indented by level, each with the text under it. A **⊕** beside a heading means there is something under it, **⊖** means there is nothing, and a dot marks body text. Click a **⊕** to pick the heading with everything under it. Double-click it to fold or unfold the heading; a folded heading is underlined in grey. The **Outlining** tab that appears has Promote (Alt+Shift+←) and Demote (Alt+Shift+→), the level of the paragraph, Move Up (Alt+Shift+↑) and Move Down (Alt+Shift+↓), Expand (Alt+Shift++) and Collapse (Alt+Shift+−), **Show Level** (Alt+Shift+1 to 9, or Alt+Shift+A for all), **Show Text Formatting** and **Show First Line Only**. A folded heading moves, promotes and demotes together with everything under it. Headings are paragraphs in the Heading 1 to 9 styles.
 - **Draft** (Ctrl+Alt+N) shows the text on one long page at its printed width, without headers and footers. Page and column breaks show as dotted lines.
 
 **Page Movement** sets how the pages sit in Print Layout: **Vertical**, one under another, or **Side to Side**, two at a time in a row that the mouse wheel scrolls across. Under **Zoom**, **One Page** fits a whole page in the window, **Multiple Pages** puts two pages in each row, and **Page Width** fits the page across the window.
