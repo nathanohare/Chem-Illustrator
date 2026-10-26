@@ -141,6 +141,12 @@ button:hover { border-color: var(--accent); }
 .menu.right { left: auto; right: 0; }
 /* a menu taller than the window scrolls; its submenus are placed on the screen by the script */
 .menu { max-height: calc(100vh - var(--menu-top, 48px) - 8px); overflow-y: auto; overscroll-behavior: contain; }
+/* a menu at a point (a right-click in a window, a field's menu): over the windows, kept on the screen by popupMenu */
+.menu.popup-menu { position: fixed; top: 0; left: 0; z-index: 110; max-height: calc(100vh - 8px); }
+/* the menu bar, ribbons, tabs and status bar are buttons, not text: a drag across them selects nothing
+   (laptop bench: a drag from the menu bar turned the ribbon blue); the boxes in them still select */
+header, .ribbon, .toolbox, .menu, .context-menu, #tabs, footer#status { -webkit-user-select: none; user-select: none; }
+:is(header, .ribbon, .toolbox, .menu, .context-menu, #tabs, footer#status) :is(input, textarea, [contenteditable='true'], [contenteditable='']) { -webkit-user-select: text; user-select: text; }
 .menu.sub { position: fixed; top: 0; left: 0; z-index: 31; }
 /* a menu too tall for the window is laid out in columns instead (src/main.ts fitMenu) */
 .menu.cols:not([hidden]) { display: block; columns: var(--menu-cols) var(--menu-col-w); column-gap: 4px; column-fill: auto; overflow: hidden; }

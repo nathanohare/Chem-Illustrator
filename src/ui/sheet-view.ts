@@ -3637,7 +3637,9 @@ export function popupMenu(x: number, y: number, items: ([string, () => void, boo
     b.addEventListener('click', () => { m.remove(); it[1](); });
     m.append(b);
   }
-  document.body.append(m);
+  // inside a window open over the page (the top layer), so it shows over that window
+  const modal = [...document.querySelectorAll<HTMLDialogElement>('dialog[open]')].reverse().find((d) => d.matches(':modal'));
+  (modal ?? document.body).append(m);
   const r = m.getBoundingClientRect();
   m.style.left = `${Math.max(4, Math.min(x, innerWidth - r.width - 4))}px`;
   m.style.top = `${Math.max(4, Math.min(y, innerHeight - r.height - 4))}px`;

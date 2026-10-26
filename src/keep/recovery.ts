@@ -48,6 +48,8 @@ export interface Session {
   /** The start-up question has been asked about it once (it stays in File > Versions and Recovery > Recover Unsaved Work). */
   offered?: boolean;
   tabs: CopiedTab[];
+  /** The lock files it has beside open files (so a later start can take away those a crash left). */
+  locks?: string[];
 }
 
 /** How often a running app says it is still running. */
@@ -73,13 +75,15 @@ export function parseSession(text: string | null): Session | null {
     .map((t) => ({ id: Number(t.id) || 0, name: t.name, mode: String(t.mode ?? ''), path: typeof t.path === 'string' ? t.path : null,
       stamp: t.stamp && typeof t.stamp.modified === 'number' && typeof t.stamp.size === 'number' ? { modified: t.stamp.modified, size: t.stamp.size } : null,
       file: keyPart(t.file), copied: Number(t.copied) || 0 }));
-  return { session: o.session, started: typeof o.started === 'number' ? o.started : o.beat, beat: o.beat, offered: o.offered === true, tabs };
+  const locks = Array.isArray(o.locks) ? o.locks.filter((l): l is string => typeof l === 'string') : [];
+  return { session: o.session, started: typeof o.started === 'number' ? o.started : o.beat, beat: o.beat, offered: o.offered === true, tabs, ...(locks.length ? { locks } : {}) };
 }
 
 export class Recovery {
   private tabs = new Map<number, CopiedTab>();
   /** Each copied tab's token when it was copied. */
   private tokens = new Map<number, number>();
+  private locks: string[] = [];
   readonly started: number;
   private busy: Promise<unknown> = Promise.resolve();
 
@@ -140,8 +144,16 @@ export class Recovery {
     return this.serial(() => this.writeManifest());
   }
 
+  /** The lock files this app has beside open files now: written down at once, in case it stops without closing. */
+  setLocks(paths: string[]): Promise<void> {
+    const next = [...new Set(paths)].sort();
+    if (next.join('\n') === this.locks.join('\n')) return this.busy.then(() => {});
+    this.locks = next;
+    return this.serial(() => this.writeManifest());
+  }
+
   private writeManifest(): Promise<void> {
-    const s: Session = { session: this.session, started: this.started, beat: this.now(), tabs: [...this.tabs.values()] };
+    const s: Session = { session: this.session, started: this.started, beat: this.now(), tabs: [...this.tabs.values()], ...(this.locks.length ? { locks: this.locks } : {}) };
     return putText(this.store, this.key(MANIFEST), JSON.stringify(s));
   }
 
@@ -150,6 +162,7 @@ export class Recovery {
     return this.serial(async () => {
       this.tabs.clear();
       this.tokens.clear();
+      this.locks = [];
       await this.store.remove(`${FOLDER}/${keyPart(this.session)}`);
     });
   }
@@ -164,6 +177,19 @@ export class Recovery {
     if (session === this.session) return true;
     const s = parseSession(await getText(this.store, `${FOLDER}/${keyPart(session)}/${MANIFEST}`));
     return !!s && this.now() - s.beat < STALE_MS;
+  }
+
+  /** Lock files listed by sessions that stopped without closing (a crash, the app being ended from Task Manager). */
+  async strayLocks(): Promise<{ session: string; paths: string[] }[]> {
+    const out: { session: string; paths: string[] }[] = [];
+    const now = this.now();
+    for (const e of await this.store.list(FOLDER)) {
+      if (!e.folder || e.name === keyPart(this.session)) continue;
+      const s = parseSession(await getText(this.store, `${FOLDER}/${e.name}/${MANIFEST}`));
+      if (!s?.locks?.length || now - s.beat < STALE_MS) continue;
+      out.push({ session: s.session, paths: s.locks });
+    }
+    return out;
   }
 
   /**
