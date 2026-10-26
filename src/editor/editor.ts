@@ -395,7 +395,7 @@ export class Editor {
     });
     const el = r.overlay;
     // tablets: fingers pan and pinch, a long press opens the menu (before the editor's own listeners)
-    installPenAndTouch({ overlay: el, view: r.view, requestScene: (ts) => this.requestScene(ts) });
+    installPenAndTouch({ overlay: el, view: r.view, requestScene: (ts) => this.requestScene(ts), abandonPress: () => this.abandonPress() });
     el.addEventListener('pointerdown', (e) => this.onDown(e));
     // pressing on the text being typed keeps the keys going to it
     el.addEventListener('mousedown', (e) => { if (this.captionEd?.hit(this.docPoint(e))) e.preventDefault(); });
@@ -969,6 +969,23 @@ export class Editor {
         // dragging across empty space makes a text box that wide
         return d.hit && d.hit.kind === 'caption' ? 'move' : d.hit ? 'none' : 'draw';
     }
+  }
+
+  /**
+   * Forget the press going on, as if it never happened (a finger that turned out to be the start
+   * of a two-finger pinch): nothing is drawn or selected, and a move already under way goes back,
+   * with nothing left to undo or redo.
+   */
+  abandonPress(): void {
+    const d = this.drag;
+    if (!d) return;
+    this.drag = null;
+    this.guideLines = [];
+    if (d.moved && (d.mode === 'move' || d.mode === 'rotate' || d.mode === 'handle')) {
+      this.doc.abandon();
+      this.afterUndo();
+    }
+    this.requestScene();
   }
 
   private onUp(e: PointerEvent): void {

@@ -1963,6 +1963,8 @@ const docRead: DocxReadDeps = {
 const ws: Workspace = new Workspace(doc, {
   remember: (path) => rememberFile(path),
   leave: (tab) => {
+    // letters still being written with the pen go into this tab's drawing
+    editor.sketcher.flush();
     finishTyping();
     if (tab.mode === 'sheet') sheetMode.leave();
     if (tab.mode === 'document') docMode.leave();

@@ -13,7 +13,7 @@ import { groupFormula } from './label-tip';
 import { NICKNAMES, kekulize, labelGraph, labelOverValent, parseSmiles, tokenize, type MiniGraph } from './labels';
 import { SPECIES_BY_NAME, type SpeciesEntry, type SpeciesKind } from './species-list';
 import { arrowTexts } from './arrow-text';
-import { isReactionArrow, plainMeasure } from './reaction';
+import { isReactionArrow, plainMeasure, schemeItems, type Item } from './reaction';
 import type { Measure } from '../editor/arrange';
 
 export interface Species {
@@ -300,15 +300,41 @@ function mayHold(c: Caption): boolean {
   return !c.ph && !c.attach && !c.hidden && c.runs.length > 0 && !(c.paras && c.paras.length > 1);
 }
 
-const memo = new WeakMap<Doc, { version: number; arrowText: Set<number>; read: Map<number, CaptionReading> }>();
+interface Memo {
+  version: number;
+  /** Kept through structures moving in a step still being made: worked out again once it is done. */
+  moved: boolean;
+  /** What the arrows' text was worked out from, besides where the structures are. */
+  atoms: number; bonds: number; style: Doc['style']; things: readonly object[];
+  arrowText: Set<number>;
+  read: Map<number, CaptionReading>;
+}
+const memo = new WeakMap<Doc, Memo>();
+
+/** The captions, arrows and shapes (each replaced, never changed in place, when edited). */
+const thingsOf = (doc: Doc): object[] => [...doc.captions.values(), ...doc.arrows.values(), ...doc.shapes.values()];
+
+/**
+ * Whether the drawing has changed only in where its structures are, during a step still being
+ * made (a drag): what is text over an arrow is then worked out again when the step is done, not
+ * on every move.
+ */
+function onlyMoved(doc: Doc, s: Memo): boolean {
+  if (!doc.editing || doc.atoms.size !== s.atoms || doc.bonds.size !== s.bonds || doc.style !== s.style) return false;
+  let i = 0;
+  for (const map of [doc.captions, doc.arrows, doc.shapes] as Map<number, object>[]) for (const x of map.values()) if (s.things[i++] !== x) return false;
+  return i === s.things.length;
+}
 
 /** The text above and below the reaction arrows (conditions), which stays text. */
 function arrowCaptions(doc: Doc, m: Measure): Set<number> {
   const out = new Set<number>();
   if (!doc.arrows.size) return out;
+  let items: Item[] | null = null;
   for (const r of doc.arrows.values()) {
     if (!isReactionArrow(r)) continue;
-    const t = arrowTexts(doc, m, r);
+    // one pass over the drawing for all the arrows
+    const t = arrowTexts(doc, m, r, items ??= schemeItems(doc, m));
     for (const c of [...t.above, ...t.below]) out.add(c.id);
   }
   return out;
@@ -317,8 +343,12 @@ function arrowCaptions(doc: Doc, m: Measure): Set<number> {
 /** How a text box in this drawing is read. */
 export function captionReading(doc: Doc, c: Caption, m?: Measure): CaptionReading {
   let s = memo.get(doc);
-  if (!s || s.version !== doc.version) {
-    s = { version: doc.version, arrowText: arrowCaptions(doc, m ?? plainMeasure(doc)), read: new Map() };
+  if (s && s.version !== doc.version && onlyMoved(doc, s)) { s.version = doc.version; s.moved = true; }
+  if (!s || s.version !== doc.version || (s.moved && !doc.editing)) {
+    s = {
+      version: doc.version, moved: false, atoms: doc.atoms.size, bonds: doc.bonds.size, style: doc.style, things: thingsOf(doc),
+      arrowText: arrowCaptions(doc, m ?? plainMeasure(doc)), read: new Map(),
+    };
     memo.set(doc, s);
   }
   const known = s.read.get(c.id);

@@ -14,7 +14,7 @@
 
 import type { Vec } from '../geom';
 import { add, angleOf, dist, distToSegment, fromAngle, mul, normAngle, sub, DEG } from '../geom';
-import type { Doc, Atom } from '../model';
+import type { Doc, Atom, Bond } from '../model';
 import { atomAt, bondLength, bondTo, freeRing, fusedRing, placeRing, ringOnAtom, ringRadius, sproutDir } from '../chem/chemgeom';
 
 // ------------------------------------------------------------------ stroke geometry
@@ -317,6 +317,8 @@ const HAND_LETTER_PX = 36;
 export class Sketcher {
   /** Small strokes waiting to be read as letters. */
   pending: Vec[][] = [];
+  /** The drawing they were written in (its atoms: a tab or slide put away takes them with it). */
+  private inkIn: unknown = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   constructor(private h: SketchHost) {}
 
@@ -339,6 +341,7 @@ export class Sketcher {
         if (c.x1 > b.x2 + 0.6 * L || c.x2 < b.x1 - 0.6 * L || c.y1 > b.y2 + 0.6 * L || c.y2 < b.y1 - 0.6 * L) this.flush();
       }
       this.pending.push(pts);
+      this.inkIn = doc.atoms;
       this.wait();
       this.h.repaint();
       return;
@@ -372,7 +375,8 @@ export class Sketcher {
     if (!this.pending.length) return;
     const strokes = this.pending;
     this.pending = [];
-    this.letters(strokes);
+    // written in a drawing that has since been put away (another tab or slide): not read into this one
+    if (this.h.doc.atoms === this.inkIn) this.letters(strokes);
     this.h.repaint();
   }
 
@@ -400,8 +404,9 @@ export class Sketcher {
       return;
     }
     let a = nearestAtom(doc, c, 0.75 * L);
-    if (!a) doc.edit(`Sketch ${sym}`, () => { a = doc.addAtom(c.x, c.y, 6); });
-    this.h.label(a!.id, sym);
+    // a new atom and its label are one step (one Undo takes both back)
+    if (a) this.h.label(a.id, sym);
+    else doc.edit(`Sketch ${sym}`, () => { a = doc.addAtom(c.x, c.y, 6); this.h.label(a.id, sym); });
     this.h.setHot(a!.id);
   }
 
@@ -444,8 +449,11 @@ export class Sketcher {
     const aromatic = k.corners < 3;
     const r = resample(pts, 0.1 * L);
     // drawn over a bond: fused there, on the side the loop is on
+    // (only bonds near the stroke can have both ends on it)
+    const nearby = new Set<Bond>();
+    for (const p of r) for (const bd of doc.bondsNear(p, 0.3 * L)) nearby.add(bd);
     let best: { a: Atom; b: Atom; d: number } | null = null;
-    for (const bd of doc.bonds.values()) {
+    for (const bd of nearby) {
       const a = doc.atoms.get(bd.a1)!, b = doc.atoms.get(bd.a2)!;
       const da = Math.min(...r.map((p) => dist(p, a))), db = Math.min(...r.map((p) => dist(p, b)));
       if (da < 0.3 * L && db < 0.3 * L && (!best || da + db < best.d)) best = { a, b, d: da + db };
