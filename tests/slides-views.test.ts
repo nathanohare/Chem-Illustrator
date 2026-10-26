@@ -179,6 +179,24 @@ describe('guides and grid', () => {
     expect(readPptx(bytes).settings?.view).toEqual(view);
   });
 
+  // laptop bench pp-recheck-241: PowerPoint opened our decks with Guides unticked; it keeps the
+  // guides in presentation.xml (p15:sldGuideLst) and writes them only there when it saves
+  it('writes the guides where PowerPoint 2013 and later look for them, and reads them from there', async () => {
+    const view = { guides: { x: [480], y: [270] }, showGuides: true, snapToGrid: true, grid: 7.2 };
+    const host = new Doc();
+    const d = Deck.blank(host);
+    const bytes = await writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ layout: s.layout, doc: d.docOf(i), notes: s.notes })), settings: { view } }, opts);
+    const files = unzipSync(bytes);
+    const pres = strFromU8(files['ppt/presentation.xml']);
+    expect(pres).toContain('<p:ext uri="{EFAFB233-063F-42B5-8137-9DF3F51BA10A}"><p15:sldGuideLst');
+    expect(pres).toContain('<p15:guide id="1" orient="horz" pos="2160">');
+    expect(pres).toContain('<p15:guide id="2" pos="3840">');
+    expect(new DOMParser().parseFromString(pres, 'application/xml').getElementsByTagName('parsererror')).toHaveLength(0);
+    // a guide moved in PowerPoint: only its list has the new place
+    files['ppt/presentation.xml'] = new Uint8Array(strToU8(pres.replace('pos="3840"', 'pos="2000"')));
+    expect(readPptx(zipSync(files)).settings?.view?.guides).toEqual({ x: [250], y: [270] });
+  });
+
   // laptop bench pp-effects-masters: ticking Guides then Add Vertical and Add Horizontal Guide
   // wrote each centre guide twice, and PowerPoint opened the file with its guides off
   it('writes each guide once', () => {

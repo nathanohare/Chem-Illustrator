@@ -36,7 +36,7 @@ import { GEOS } from '../design/geo';
 import { cleanDiagram, textFromShapes } from '../design/diagrams';
 import { gluePoint, arrowPoints, boxOf as pointsBox } from '../objects';
 import { readEffects } from './pptx-effects';
-import { readViewProps } from '../deck/guides';
+import { readViewProps, readSlideGuides } from '../deck/guides';
 import { readMasterHF } from '../deck/notes-pages';
 import { readShowPr, readCustShows } from '../deck/show-setup';
 import { NARRATION_NAME } from '../deck/narration';
@@ -327,7 +327,10 @@ class Reader {
     const show = readShowPr(props ? this.r.xml(props)?.documentElement ?? null : null);
     const customShows = readCustShows(root, (rid) => { const t = rels.get(rid)?.target; return t ? slidePaths.indexOf(t) : -1; }, (el) => rAttr(el, 'id'));
     const vp = this.r.relOfType(main, REL.viewProps);
-    const view = readViewProps(vp ? this.r.xml(vp)?.documentElement : null);
+    let view = readViewProps(vp ? this.r.xml(vp)?.documentElement : null);
+    // PowerPoint 2013 and later keep the guides in presentation.xml (moved there, they are only there)
+    const guides = readSlideGuides(root);
+    if (guides) view = { ...(view ?? { showGuides: false, snapToGrid: true, grid: 7.2 }), guides };
     const settings: DeckSettings = { ...(show ? { show } : {}), ...(customShows.length ? { customShows } : {}), ...(view ? { view } : {}) };
     return { size: this.size, master: this.masterOut, slides, warnings: [...this.warnings], design: this.design, ...(sections ? { sections } : {}), ...(Object.keys(settings).length ? { settings } : {}) };
   }
