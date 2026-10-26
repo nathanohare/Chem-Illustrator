@@ -14,7 +14,7 @@
 
 import type { Vec } from '../geom';
 import { add, angleOf, dist, distToSegment, fromAngle, mul, normAngle, sub, DEG } from '../geom';
-import type { Doc, Atom } from '../model';
+import type { Doc, Atom, Bond } from '../model';
 import { atomAt, bondLength, bondTo, freeRing, fusedRing, placeRing, ringOnAtom, ringRadius, sproutDir } from '../chem/chemgeom';
 
 // ------------------------------------------------------------------ stroke geometry
@@ -448,8 +448,11 @@ export class Sketcher {
     const aromatic = k.corners < 3;
     const r = resample(pts, 0.1 * L);
     // drawn over a bond: fused there, on the side the loop is on
+    // (only bonds near the stroke can have both ends on it)
+    const nearby = new Set<Bond>();
+    for (const p of r) for (const bd of doc.bondsNear(p, 0.3 * L)) nearby.add(bd);
     let best: { a: Atom; b: Atom; d: number } | null = null;
-    for (const bd of doc.bonds.values()) {
+    for (const bd of nearby) {
       const a = doc.atoms.get(bd.a1)!, b = doc.atoms.get(bd.a2)!;
       const da = Math.min(...r.map((p) => dist(p, a))), db = Math.min(...r.map((p) => dist(p, b)));
       if (da < 0.3 * L && db < 0.3 * L && (!best || da + db < best.d)) best = { a, b, d: da + db };

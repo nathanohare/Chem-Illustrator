@@ -154,3 +154,38 @@ describe('pen letters waiting to be read when the tab or slide changes', () => {
     expect([...app.doc.atoms.values()].map((a) => a.z)).toEqual([53]);
   });
 });
+
+const hexagon = (cx: number, cy: number): Vec[] => {
+  const out: Vec[] = [];
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 8; j++) {
+    const t = j / 8, a0 = ((-90 + 60 * i) * Math.PI) / 180, a1 = ((-90 + 60 * (i + 1)) * Math.PI) / 180, R = 1.1 * L;
+    out.push({ x: cx + R * ((1 - t) * Math.cos(a0) + t * Math.cos(a1)), y: cy + R * ((1 - t) * Math.sin(a0) + t * Math.sin(a1)) });
+  }
+  out.push(out[0]);
+  return out;
+};
+
+describe('a ring drawn with the pen in a big drawing', () => {
+  it('looks only at the bonds near the stroke to fuse it', () => {
+    const doc = new Doc();
+    // 40,000 bonds, well away from where the rings are drawn
+    doc.bulk(() => { for (let i = 0; i < 40000; i++) { const p = doc.addAtom((i % 200) * 30, Math.floor(i / 200) * 30); const q = doc.addAtom(p.x + L, p.y); doc.addBond(p.id, q.id); } });
+    const sk = new Sketcher(sketchHost({ doc }));
+    let looked = 0;
+    const values = doc.bonds.values.bind(doc.bonds);
+    doc.bonds.values = () => { looked++; return values(); };
+    for (let i = 0; i < 5; i++) sk.stroke(hexagon(-2000 - i * 100, -2000));
+    expect(doc.atoms.size).toBe(80000 + 30);
+    expect(looked).toBe(0);
+  });
+
+  it('is still fused onto a bond it is drawn over', () => {
+    const doc = new Doc();
+    // a bond along the hexagon's bottom-left edge
+    const R = 1.1 * L, corner = (k: number) => ({ x: 300 + R * Math.cos(((-90 + 60 * k) * Math.PI) / 180), y: 300 + R * Math.sin(((-90 + 60 * k) * Math.PI) / 180) });
+    doc.edit('bond', () => { const a = doc.addAtom(corner(2).x, corner(2).y), b = doc.addAtom(corner(3).x, corner(3).y); doc.addBond(a.id, b.id); });
+    new Sketcher(sketchHost({ doc })).stroke(hexagon(300, 300));
+    expect(doc.atoms.size).toBe(6);
+    expect(doc.bonds.size).toBe(6);
+  });
+});
