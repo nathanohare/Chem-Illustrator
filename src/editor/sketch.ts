@@ -404,8 +404,9 @@ export class Sketcher {
       return;
     }
     let a = nearestAtom(doc, c, 0.75 * L);
-    if (!a) doc.edit(`Sketch ${sym}`, () => { a = doc.addAtom(c.x, c.y, 6); });
-    this.h.label(a!.id, sym);
+    // a new atom and its label are one step (one Undo takes both back)
+    if (a) this.h.label(a.id, sym);
+    else doc.edit(`Sketch ${sym}`, () => { a = doc.addAtom(c.x, c.y, 6); this.h.label(a.id, sym); });
     this.h.setHot(a!.id);
   }
 

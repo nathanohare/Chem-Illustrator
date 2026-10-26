@@ -189,3 +189,16 @@ describe('a ring drawn with the pen in a big drawing', () => {
     expect(doc.bonds.size).toBe(6);
   });
 });
+
+describe('a pen letter written in empty space', () => {
+  it('is one Undo step (no bare carbon left behind)', () => {
+    const doc = new Doc();
+    const sk = new Sketcher(sketchHost({ doc }));
+    sk.stroke(letterI(300, 300));
+    sk.flush();
+    expect([...doc.atoms.values()].map((a) => a.z)).toEqual([53]);
+    expect(doc.undoLabel).toBe('Sketch I');
+    doc.undo();
+    expect([...doc.atoms.values()].map((a) => a.z)).toEqual([]);
+  });
+});
