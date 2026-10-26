@@ -228,11 +228,7 @@ export function readOds(bytes: Uint8Array): { book: Workbook; warnings: string[]
   const tables = kids(sheet, 'table');
   if (!tables.length) throw new Error('This spreadsheet has no sheets.');
   const names: string[] = [];
-  for (const [i, t] of tables.entries()) {
-    let n = safeSheetName(tAttr(t, 'name') || `Sheet${i + 1}`);
-    for (let k = 2; names.some((x) => x.toLowerCase() === n.toLowerCase()); k++) n = safeSheetName(`${tAttr(t, 'name')} (${k})`);
-    names.push(n);
-  }
+  for (const [i, t] of tables.entries()) names.push(safeSheetName(tAttr(t, 'name') || `Sheet${i + 1}`, names));
   const book = new Workbook(names);
   const warnings: string[] = [];
   let pictures = 0, hiddenSheets = 0;

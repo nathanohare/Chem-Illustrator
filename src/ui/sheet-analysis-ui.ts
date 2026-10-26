@@ -8,7 +8,7 @@ import { ToolWindow, absText } from './tool-window';
 import { ask } from './ask';
 import type { Sheet, Workbook, CellStyle } from '../sheet/workbook';
 import { mergeStyle, valueInput } from '../sheet/workbook';
-import { Range, keyOf, rowOf, colOf, cellName, quoteSheet, rangeName, rangesOverlap } from '../sheet/refs';
+import { Range, keyOf, rowOf, colOf, cellName, quoteSheet, rangeName, rangesOverlap, sheetNameProblem } from '../sheet/refs';
 import { readRef, refText, newChartId, type Chart } from '../sheet/chart';
 import { isError, type Value, maxOf } from '../sheet/values';
 import { formatValue } from '../sheet/numfmt';
@@ -140,7 +140,8 @@ export class SheetAnalysis {
     return () => {
       if (how?.get() === 'sheet') {
         const name = ply!.value.trim() || this.wb.newSheetName();
-        if (this.wb.sheetNamed(name)) return `There is already a sheet called "${name}".`;
+        const problem = sheetNameProblem(name, this.wb.sheets.map((s) => s.name));
+        if (problem) return problem;
         return { newSheet: name };
       }
       const c = this.cells(at.value, 'output range');

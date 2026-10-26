@@ -8,7 +8,7 @@ import { Doc, Contents } from '../model';
 import type { DocStyle } from '../style';
 import { addMolfile } from '../chem/molfile';
 import { Workbook, Sheet } from '../sheet/workbook';
-import { keyOf } from '../sheet/refs';
+import { keyOf, fixSheetName } from '../sheet/refs';
 import { isError, CellError } from '../sheet/values';
 import { parseDelimited, toDelimited } from '../sheet/csv';
 import { structureMolfile } from '../sheet/structure-doc';
@@ -107,9 +107,9 @@ function cellText(s: Sheet, r: number, c: number): string {
   return s.shownText(r, c);
 }
 
-/** Excel's rules for sheet names: at most 31 characters, none of \ / ? * [ ] : */
-export function safeSheetName(name: string): string {
-  return name.replace(/[\\/?*[\]:]/g, '_').slice(0, 31) || 'Sheet1';
+/** Excel's rules for sheet names: at most 31 characters, none of \ / ? * [ ] :, no apostrophe at either end, not History, and none of `others` ("Name (2)" then). */
+export function safeSheetName(name: string, others: readonly string[] = []): string {
+  return fixSheetName(name, others);
 }
 
 // ---------------------------------------------------------------- SD files

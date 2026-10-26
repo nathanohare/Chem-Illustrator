@@ -17,7 +17,7 @@
 import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr } from './ooxml';
 import { officeTarget, linkFromTarget } from '../links';
 import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side, makeStructure } from '../sheet/workbook';
-import { keyOf, rowOf, colOf, colName, cellName, parseRange, quoteSheet, Range, MAX_COLS, rangesOverlap, rangeName, inRange } from '../sheet/refs';
+import { keyOf, rowOf, colOf, colName, cellName, parseRange, quoteSheet, Range, MAX_COLS, rangesOverlap, rangeName, inRange, sheetNameProblem, fixSheetName } from '../sheet/refs';
 import { normalizeFormula, shiftFormula } from '../sheet/formula';
 import { fileFormula, legacyFormula, needsDynamic, readFileFormula } from '../sheet/array-formulas';
 import { DefinedName, isBuiltInName } from '../sheet/names';
@@ -407,6 +407,20 @@ class Axis {
  * VBA project it was opened with, untouched.
  */
 export async function writeXlsx(book: Workbook, deps: XlsxPictures, opts: { macros?: boolean } = {}): Promise<Uint8Array> {
+  // a sheet name Excel refuses (however it was made) is put right in a copy, and the formulas that use it follow
+  const fixes: [number, string][] = [];
+  const names = book.sheets.map((s) => s.name);
+  names.forEach((n, i) => {
+    const others = names.filter((_, j) => j !== i);
+    if (sheetNameProblem(n, others.slice(0, i))) fixes.push([i, (names[i] = fixSheetName(n, others))]);
+  });
+  if (!fixes.length) return writeBook(book, deps, opts);
+  const copy = (await readXlsx(await writeBook(book, deps, opts))).book;
+  copy.build(() => { for (const [i, name] of fixes) copy.sheets[i].rename(name); });
+  return writeBook(copy, deps, opts);
+}
+
+async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: boolean }): Promise<Uint8Array> {
   const pkg = new Package();
   const vba = opts.macros ? book.macros : null;
   const styles = new Styles(book.theme);

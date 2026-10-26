@@ -8,7 +8,7 @@
 // structures and wrapped text in them unless their height has been set by hand.
 
 import { Workbook, Sheet, Structure, CellStyle, Side, growToMerges, countOn } from '../sheet/workbook';
-import { Range, MAX_ROWS, MAX_COLS, colName, rangeName, normRange, inRange, keyOf, rowOf, colOf, cellName } from '../sheet/refs';
+import { Range, MAX_ROWS, MAX_COLS, colName, rangeName, normRange, inRange, keyOf, rowOf, colOf, cellName, sheetNameProblem } from '../sheet/refs';
 import { formatValue, generalFitting } from '../sheet/numfmt';
 import { readTyped, isError, CellError, maxOf, minOf } from '../sheet/values';
 import { chemPieces, showsChem } from '../sheet/cell-text';
@@ -2355,7 +2355,8 @@ export class SheetView {
       done = true;
       const name = box.value.trim().replace(/[\\/?*[\]:]/g, '').slice(0, 31);
       if (keep && name && name !== s.name) {
-        if (wb.sheets.some((x) => x !== s && x.name.toLowerCase() === name.toLowerCase())) this.host.flash(`There is already a sheet called ${name}.`);
+        const problem = sheetNameProblem(name, wb.sheets.filter((x) => x !== s).map((x) => x.name));
+        if (problem) this.host.flash(problem);
         else wb.edit('Rename sheet', () => s.rename(name), this.place());
       }
       this.renderTabs();

@@ -335,11 +335,7 @@ export function readXls(bytes: Uint8Array): { book: Workbook; warnings: string[]
 
   // sheet names as this program takes them (and unique)
   const names: string[] = [];
-  for (const s of sheets) {
-    let n = safeSheetName(s.name);
-    for (let k = 2; names.some((x) => x.toLowerCase() === n.toLowerCase()); k++) n = safeSheetName(`${s.name} (${k})`);
-    names.push(n);
-  }
+  for (const s of sheets) names.push(safeSheetName(s.name, names));
   const world: FormulaWorld = { sheetNames: names, xti, names: nameRecs.map((n) => n.name) };
   const book = new Workbook(names);
   let unreadFormulas = 0;
