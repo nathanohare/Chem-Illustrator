@@ -245,7 +245,15 @@ export function fitPath(points: Vec[], tol: number): Vec[] {
   const d: Vec[] = [];
   for (const p of points) if (!d.length || dist(p, d[d.length - 1]) > 1e-6) d.push(p);
   if (d.length < 2) return [];
-  return fitRun(d, startTangent(d), endTangent(d), tol, 0);
+  // the way a hand-drawn stroke leaves and arrives: over its first and last few points, not the
+  // first jitter
+  const L = d.reduce((s, p, i) => (i ? s + dist(p, d[i - 1]) : 0), 0);
+  const reach = Math.min(L * 0.06, tol * 4);
+  const out = (pts: Vec[]): Vec => {
+    for (const q of pts.slice(1)) if (dist(q, pts[0]) >= reach) return norm(sub(q, pts[0]));
+    return startTangent(pts);
+  };
+  return fitRun(d, out(d), out(d.slice().reverse()), tol, 0);
 }
 
 // ------------------------------------------------------------------ drawing and reshaping

@@ -67,7 +67,7 @@ import {
   arrowPoints, bracketHalves, type BracketForm, bracketLip, unionRect,
   shapeOrder, portNear, shapePorts, isCurved, headBend, swapHalf, bezPoints,
 } from '../objects';
-import { bezFrom, dragCurveAt, throughPoints, dragPathPoint, firstBend, reversePath, shapeBez, shapeOf, simplifyPath, smoothPath, type ArrowShape, insertJoin, joinIndexes, nearestOnPath, pathPoints, removeJoin, setJoin } from '../arrow-path';
+import { bezFrom, fitPath, dragCurveAt, throughPoints, dragPathPoint, firstBend, reversePath, shapeBez, shapeOf, simplifyPath, smoothPath, type ArrowShape, insertJoin, joinIndexes, nearestOnPath, pathPoints, removeJoin, setJoin } from '../arrow-path';
 import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
 import { imageFor } from '../render/images';
@@ -242,6 +242,8 @@ interface Drag {
   paint?: boolean;
   /** Reshaping a curved arrow by its line: the arrow, its path when the drag began, and where along it it was grabbed. */
   reshape?: { id: number; pts: Vec[]; t: number };
+  /** Pressed with a pen (stylus) rather than a mouse or finger. */
+  pen?: boolean;
   /** Pressed on the charge sign an atom shows: dragging takes it off the atom's label as a sign of its own (freeCharge). */
   charge?: number;
   /** Moving an atom: the atom it has been dropped on, which it becomes one with at the lift (closing a ring). */
@@ -798,6 +800,7 @@ export class Editor {
       start: p, startScreen: { x: e.clientX - rect.left, y: e.clientY - rect.top }, hit, button: e.button, moved: false,
       shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey, mode: handle ? 'handle' : rotating ? 'rotate' : 'none', last: p, path: [p],
       ...(painting ? { paint: true } : {}),
+      ...(e.pointerType === 'pen' ? { pen: true } : {}),
     };
     if (handle) this.drag.handle = handle;
     // a curved arrow tool on a selected S-shaped (or longer) arrow's line: dragging there reshapes it
@@ -1962,6 +1965,8 @@ export class Editor {
         } else this.ringClick(null, d.start, t.size, t.aromatic, false, d.shift, p, d.ctrl);
       });
     } else if (t.kind === 'arrow') {
+      // drawn freehand (Ctrl, or the pen): the stroke as drawn, made smooth, its ends on what they are on
+      if (this.freehand(d)) { this.finishFreehand(d, p); return; }
       const push = this.pushFor(d, p);
       if (push) {
         doc.edit('Arrow', () => this.selectOnly({ kind: 'arrow', id: this.addPushArrow(push, t.style).id }));
@@ -2166,6 +2171,39 @@ export class Editor {
     });
     this.changed();
     return arrows.length;
+  }
+
+  /** Is this drag a curved arrow drawn freehand: with Ctrl (Cmd on a Mac) held, or with a pen? */
+  private freehand(d: Drag): boolean {
+    return this.curvedTool() && (d.ctrl || !!d.pen) && !d.alt && (d.path?.length ?? 0) > 2;
+  }
+
+  /** A curved arrow drawn freehand: the stroke fitted with as few smooth curves as follow it, its ends stuck to what they start and end on. */
+  private finishFreehand(d: Drag, p: Vec): void {
+    const t = this.tool;
+    if (t.kind !== 'arrow') return;
+    const doc = this.doc, m = this.measure();
+    const stroke = [...(d.path ?? []), p];
+    const fit = fitPath(stroke, this.tol(5));
+    // (tidied once more, so a wobble at the start doesn't leave tiny curves)
+    const pts = fit.length > 7 ? simplifyPath(fit, this.tol(5)) ?? fit : fit;
+    if (pts.length < 4 || dist(pts[0], pts[pts.length - 1]) < this.tol(4)) return;
+    const from = tailEnd(doc, pushEndAt(doc, m, pts[0]), pts[0]);
+    let to = headEnd(doc, pushEndAt(doc, m, pts[pts.length - 1]), pts[pts.length - 1]);
+    if (sameEnd(from, to)) to = { kind: 'point', p: pts[pts.length - 1] };
+    // each end moved onto what it is on (its handle going with it), facing the way the stroke left or arrived
+    const last = pts.length - 1;
+    const t0 = endPointToward(doc, m, from, pts[1], 'start'), t1 = endPointToward(doc, m, to, pts[last - 1], 'end');
+    pts[1] = add(pts[1], sub(t0, pts[0])); pts[0] = t0;
+    pts[last - 1] = add(pts[last - 1], sub(t1, pts[last])); pts[last] = t1;
+    const tail = pts[0], head = pts[last];
+    if (dist(tail, head) < 1e-3) return;
+    doc.edit('Arrow', () => {
+      const a = this.addPushArrow({ tail, head, sweep: 0, bez: bezFrom(tail, head, pts), start: from, end: to }, t.style);
+      if (a.pin) doc.updateArrow(a.id, { bent: true });
+      this.selectOnly({ kind: 'arrow', id: a.id });
+    });
+    this.changed();
   }
 
   /** Is the tool a curved (mechanism) arrow? */
@@ -5444,6 +5482,7 @@ export class Editor {
       } else pts = freeRing(d.start, t.size, L, d.last);
       poly(pts, true);
     } else if (t.kind === 'arrow') {
+      if (this.freehand(d)) { poly(d.path ?? [d.start, d.last], false); return; }
       const push = this.pushFor(d, d.last);
       if (push) { poly(arrowPoints(push), false); return; }
       const c = this.connectorEnds(t.style, d.start, d.last);
