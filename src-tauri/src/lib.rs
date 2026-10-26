@@ -55,6 +55,33 @@ fn path_exists(path: String) -> bool {
     std::path::Path::new(&path).exists()
 }
 
+/// Whether another program holds a file open for changing it (Windows): Word keeps the file it
+/// edits open that way, and writes no "~$" owner file for one in OneDrive with AutoSave on.
+/// Asking to read it while letting nobody else write fails then, with a sharing violation; the
+/// file itself is never changed. Asked twice, so OneDrive syncing it for a moment doesn't count.
+#[tauri::command(async)]
+fn file_held(path: String) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        const FILE_SHARE_READ: u32 = 1;
+        const ERROR_SHARING_VIOLATION: i32 = 32;
+        let held = || {
+            std::fs::OpenOptions::new().read(true).share_mode(FILE_SHARE_READ).open(&path).err().and_then(|e| e.raw_os_error()) == Some(ERROR_SHARING_VIOLATION)
+        };
+        if !held() {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(400));
+        held()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        false
+    }
+}
+
 /// Read a file the user chose, as bytes (PowerPoint files, CDX drawings, pictures).
 #[tauri::command]
 fn read_binary_file(app: tauri::AppHandle, path: String) -> Result<tauri::ipc::Response, String> {
@@ -300,6 +327,38 @@ mod tests {
     }
 }
 
+/// A panic is written to "diagnostics/panic-<time>.txt" in the kept folder before the app goes
+/// on (or stops), and the page reads it on the next start to offer a problem report
+/// (src/diagnostics.ts). Nothing is sent anywhere.
+fn catch_panics(app: &tauri::AppHandle) {
+    let Ok(dir) = keep::root(app).map(|r| r.join("diagnostics")) else { return };
+    let earlier = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis());
+        let thread = std::thread::current().name().unwrap_or("unnamed").to_owned();
+        let text = format!("Version {}, thread '{thread}' {info}\n", env!("CARGO_PKG_VERSION"));
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(dir.join(format!("panic-{ms}.txt")), text);
+        earlier(info);
+    }));
+}
+
+/// View > Developer Tools > Inspector: the web inspector, built into the Windows and Linux apps
+/// (the "devtools" feature in Cargo.toml). Apple doesn't allow it in App Store apps.
+#[tauri::command]
+fn open_inspector(window: tauri::WebviewWindow) -> Result<(), String> {
+    #[cfg(any(debug_assertions, windows, target_os = "linux"))]
+    {
+        window.open_devtools();
+        Ok(())
+    }
+    #[cfg(not(any(debug_assertions, windows, target_os = "linux")))]
+    {
+        let _ = window;
+        Err("The inspector isn't built into this version of the app.".into())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = tauri::Builder::default();
@@ -318,6 +377,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            catch_panics(app.handle());
             portable::tidy();
             // the files the app was opened with (double-clicked, or "Open with")
             file_types::open_files(app.handle(), file_types::files_in(std::env::args(), None));
@@ -341,12 +401,14 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             selftest_requested,
+            open_inspector,
             selftest_report,
             read_text_file,
             write_text_file,
             read_binary_file,
             write_binary_file,
             path_exists,
+            file_held,
             settings_path,
             settings_read,
             settings_write,

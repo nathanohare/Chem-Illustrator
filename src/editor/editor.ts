@@ -290,6 +290,11 @@ export class Editor {
   private keyHot: Hit = null;
   /** What the mouse pointed at when the keyboard highlight was set. */
   private keyHotHover: Hit = null;
+  /**
+   * Waiting for the mouse to rest on something new before that takes over from the keyboard
+   * highlight (passing over a bond on the way out doesn't take it).
+   */
+  private takeover: ReturnType<typeof setTimeout> | null = null;
   /** Preferences from the settings file. */
   /** With one reaction arrow selected, outline what its starting materials, products and conditions are. */
   showRoles = true;
@@ -666,7 +671,28 @@ export class Editor {
     }
     this.keyHot = h;
     this.keyHotHover = this.hover;
+    this.cancelTakeover();
     this.requestOverlay();
+  }
+
+  /** How long the mouse rests on another atom or bond before it takes over from the keyboard highlight. */
+  static readonly TAKEOVER_MS = 150;
+
+  /**
+   * The mouse is on something other than what it was on when the keyboard highlight was set:
+   * once it rests there (no move for a moment), that takes over, as in ChemDraw. Moving on
+   * starts the wait again, so a bond or atom passed over on the way somewhere doesn't.
+   */
+  private takeoverSoon(h: NonNullable<Hit>): void {
+    this.cancelTakeover();
+    this.takeover = setTimeout(() => {
+      this.takeover = null;
+      if (this.keyHot && sameHit(this.hover, h)) { this.keyHot = null; this.requestOverlay(); }
+    }, Editor.TAKEOVER_MS);
+  }
+
+  private cancelTakeover(): void {
+    if (this.takeover !== null) { clearTimeout(this.takeover); this.takeover = null; }
   }
 
   // ------------------------------------------------------------------ pointer
@@ -786,10 +812,11 @@ export class Editor {
       const handle = onRotate ? null : this.handleAt(p);
       const h = handle || onRotate ? null : this.hitTest(p);
       if (!sameHit(h, this.hover)) { this.hover = h; }
-      // the keyboard highlight gives way once the mouse points at something new
+      // the keyboard highlight gives way once the mouse rests on something new
       if (this.keyHot) {
-        if (!h) this.keyHotHover = null;
-        else if (!sameHit(h, this.keyHotHover)) this.keyHot = null;
+        if (!h) { this.keyHotHover = null; this.cancelTakeover(); }
+        else if (sameHit(h, this.keyHotHover)) this.cancelTakeover();
+        else this.takeoverSoon(h);
       }
       this.lastHover = { onRotate, handle, h };
       // the "+" box shows only where nothing else is under the pointer (Alt hides it)
@@ -3446,10 +3473,21 @@ export class Editor {
   runAction(action: string, hs: Hit = this.hotspot()): boolean {
     const { verb, arg } = parseAction(action);
     switch (verb) {
-      case 'label': return hs?.kind === 'atom' && this.labelKey(hs.id, arg);
-      case 'atom': return hs?.kind === 'atom' && this.atomKey(hs.id, arg);
-      case 'bond': return hs?.kind === 'bond' && this.bondKey(hs.id, arg);
-      case 'fuse': return hs?.kind === 'bond' && this.fuseKey(hs.id, arg);
+      case 'label':
+      case 'atom':
+      case 'bond':
+      case 'fuse': {
+        if (hs?.kind !== (verb === 'label' || verb === 'atom' ? 'atom' : 'bond')) return false;
+        // a label key on one of several selected atoms labels them all: Undo selects them again
+        const many = verb === 'label' && this.sel.atoms.size > 1 && this.sel.atoms.has(hs.id);
+        const top = this.doc.topStep;
+        const done = verb === 'label' ? this.labelKey(hs.id, arg) : verb === 'atom' ? this.atomKey(hs.id, arg)
+          : verb === 'bond' ? this.bondKey(hs.id, arg) : this.fuseKey(hs.id, arg);
+        // Undo and Redo put the highlight back where the key found it (or left it), so typing
+        // carries on from there
+        if (done && !many && this.doc.topStep !== top) this.doc.markStep(hs, this.hotspot());
+        return done;
+      }
       case 'hotspot': return !!hs && (hs.kind === 'atom' || hs.kind === 'bond') && this.moveHotspot(hs, arg);
       case 'tool': if (!TOOLS[arg]) return false; this.setTool(arg); return true;
       case 'command': return this.runCommand(arg);
@@ -3476,11 +3514,18 @@ export class Editor {
   }
 
   undo(): void {
-    if (this.doc.undo()) { this.selectApplied(); this.afterUndo(); }
+    if (this.doc.undo()) { if (!this.markedHot()) this.selectApplied(); this.afterUndo(); }
   }
 
   redo(): void {
-    if (this.doc.redo()) { this.selectApplied(); this.afterUndo(); }
+    if (this.doc.redo()) { if (!this.markedHot()) this.selectApplied(); this.afterUndo(); }
+  }
+
+  /** The highlight a step taken back or done again by a key had (see runAction), if it is still there. */
+  private markedHot(): Hit {
+    const m = this.doc.lastMark as Hit | undefined;
+    if (!m || (m.kind === 'atom' ? !this.doc.atoms.has(m.id) : m.kind !== 'bond' || !this.doc.bonds.has(m.id))) return null;
+    return m;
   }
 
   /**
@@ -3531,6 +3576,11 @@ export class Editor {
       for (const id of set) if (!map.has(id)) set.delete(id);
     }
     this.keyHot = null;
+    // a step made by a key: the highlight goes back to where it was, with nothing selected (else
+    // the next letter would label the whole molecule Undo selected)
+    const hot = this.markedHot();
+    this.doc.lastMark = undefined;
+    if (hot) { this.sel = emptySel(); this.setKeyHot(hot); }
     this.changed();
   }
 
@@ -3552,14 +3602,18 @@ export class Editor {
     if (!a) return false;
     if ((SPROUT_KINDS as readonly string[]).includes(act)) {
       const kind = act as SproutKind;
-      const fromMouse = this.keyHot === null;
+      // the highlight is "under the mouse" when it is the mouse's own, or a keyboard one on the
+      // atom the mouse is on (after a first 1 there), as ChemDraw counts it
+      const fromMouse = this.keyHot === null || sameHit(this.keyHot, this.hover);
       let next: number | null = null;
       doc.edit('Hotkey', () => { next = sproutGroup(doc, id, kind); });
       this.lastEdited = next ?? id;
       // 1 and 0 on the atom under the mouse leave the highlight there (pressing 1 again adds
       // another branch); other keys, or keys after a keyboard move, follow the new atom
       const stay = (kind === 'bond' || kind === 'ring-bond') && fromMouse && this.options.keepHotspotOnBond;
-      if (!stay && next !== null && doc.atoms.has(next)) this.setKeyHot({ kind: 'atom', id: next });
+      // staying, the highlight becomes a keyboard one, so it stays put when the mouse moves off
+      if (stay) this.setKeyHot({ kind: 'atom', id });
+      else if (next !== null && doc.atoms.has(next)) this.setKeyHot({ kind: 'atom', id: next });
       this.changed();
       return true;
     }

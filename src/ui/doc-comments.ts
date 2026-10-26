@@ -78,7 +78,7 @@ export class DocComments {
       this.view.gutter = gutter;
       this.view.sizeSpace();
       // when the page and the comments don't both fit, zoom out so they do (as Word does)
-      if (gutter && this.view.overflows()) this.view.fitWidth();
+      if (gutter && this.view.overflows()) { if (this.view.sideways) this.view.fitPages(); else this.view.fitWidth(); }
       this.view.redraw();
     }
     this.layer.hidden = !list.length;
@@ -97,27 +97,47 @@ export class DocComments {
     this.place(list);
   }
 
-  /** Put each card beside its words. */
+  /** Put each card beside its words: beside the page they are on, when pages sit side by side. */
   place(list = this.placed()): void {
     if (!this.cards.size) return;
     const host = this.layer.parentElement!.getBoundingClientRect();
-    const left = this.view.toScreen(this.view.pageWidth(), 0).x + 14;
-    this.layer.style.left = `${left}px`;
-    this.layer.style.maxWidth = `${Math.max(0, host.width - left)}px`;
-    this.layer.style.width = `${COLUMN - 24}px`;
-    const want: number[] = [], heights: number[] = [], cards: HTMLElement[] = [];
-    let active = -1;
+    this.layer.style.left = '0';
+    this.layer.style.width = `${host.width}px`;
+    // the cards of each page's column, stacked so they don't cover each other
+    type Column = { left: number; want: number[]; heights: number[]; cards: HTMLElement[]; active: number };
+    const columns = new Map<number, Column>();
     for (const p of list) {
       const card = this.cards.get(p.id);
       if (!card) continue;
       const r = this.view.rangeRects(p.start, p.end)[0];
-      want.push(r ? this.view.toScreen(0, r.y1).y : 0);
-      heights.push(card.offsetHeight);
-      if (p.id === this.active) active = cards.length;
-      cards.push(card);
+      const y = r?.y1 ?? 0;
+      const page = this.view.pageIndexAt(y);
+      card.hidden = !this.view.pageShown(page);
+      if (card.hidden) continue;
+      let col = columns.get(page);
+      if (!col) columns.set(page, col = { left: this.view.toScreen(this.view.pageWidth(), y).x + 14, want: [], heights: [], cards: [], active: -1 });
+      col.want.push(this.view.toScreen(0, y).y);
+      col.heights.push(card.offsetHeight);
+      if (p.id === this.active) col.active = col.cards.length;
+      col.cards.push(card);
     }
-    const tops = stackCards(want, heights, active);
-    cards.forEach((c, i) => { c.style.top = `${tops[i]}px`; });
+    // pages one under another share one column
+    const merged = new Map<number, Column>();
+    for (const col of columns.values()) {
+      const key = Math.round(col.left);
+      const m = merged.get(key);
+      if (!m) { merged.set(key, col); continue; }
+      if (col.active >= 0) m.active = m.cards.length + col.active;
+      m.want.push(...col.want); m.heights.push(...col.heights); m.cards.push(...col.cards);
+    }
+    for (const col of merged.values()) {
+      const tops = stackCards(col.want, col.heights, col.active);
+      col.cards.forEach((c, i) => {
+        c.style.top = `${tops[i]}px`;
+        c.style.left = `${col.left}px`;
+        c.style.width = `${COLUMN - 24}px`;
+      });
+    }
   }
 
   // ---------------------------------------------------------------- changes

@@ -15,7 +15,9 @@ What a key does depends on what the mouse is pointing at:
 
 Letters are case-sensitive: `f` and Shift+F do different things.
 
-A key that grows something moves the highlight to the new atom, so you can carry on typing: `8` then `1` makes an E double bond, `1 1 1` draws a chain. `1` and `0` pressed with the mouse still on an atom keep the highlight there, so pressing `1` three times adds three bonds to the same atom. (The Hotkeys window has a box to turn this off.)
+A key that grows something moves the highlight to the new atom, so you can carry on typing: `8` then `1` makes an E double bond, `1 1 1` draws a chain. `1` and `0` pressed with the mouse still on an atom keep the highlight there, so pressing `1` three times adds three bonds to the same atom; once the mouse moves off, the next `1` follows the new atom again. (The Hotkeys window has a box to turn this off, so `1` always follows.)
+
+A highlight set by a key stays put when the mouse moves off into empty space or passes over other atoms and bonds. Rest the mouse on another atom or bond, or click, and that takes over. **Undo** puts the highlight back where the key found it, so you can carry on typing.
 
 If several atoms are selected and you point at one of them, a label key labels them all.
 
@@ -69,12 +71,18 @@ If several atoms are selected and you point at one of them, a label key labels t
 | Enter | Type a label |
 | Backspace or Delete | Remove the label, then the atom |
 | `g` | Select the atom |
-| Arrow keys | Move the highlight to the next atom that way |
+| Arrow keys | Move the highlight one step that way: from an atom to a bond, from a bond to the atom at its end |
 | Shift+arrow keys | Move the highlight about three bonds that way |
 | Space or Tab | Select the whole molecule the highlight is on |
 | Enter (molecule selected) | Back to the highlight on it, ready for more keys |
 
-Keys typed one after another build whole molecules. From a phenyl's highlighted atom, `1B79←←←←o↓↓↓↓o→→9` makes the pinacol boronate; from a bond end, `2o1n1←5←2↓↓→→2` makes the NHS ester of acetic acid. After `3` to `8` on a bond the highlight moves to the new ring's far bond; after `a` or `z` it stays, so `a` then `z` makes indene.
+Keys typed one after another build whole molecules. The arrow keys go by direction on the page, so a sequence works from a structure lying the way it was written for:
+
+- **Pinacol boronate:** draw a level bond, point at its right-hand end and press `3` for a phenyl. The highlight moves to the phenyl's far atom; then `1B79←←←←o↓↓↓↓o→→9` gives the p-tolyl pinacol boronate (the bond's other end is the methyl).
+- **NHS ester of acetic acid:** click once on the page with the bond tool. The highlight is on the new bond's end; then `2o1n1←5←2↓↓→→2`.
+- **Indene:** point at a bond and press `a` then `z`. After `3` to `8` on a bond the highlight moves to the new ring's far bond; after `a` or `z` it stays, so the second ring goes on the other side.
+
+Start a sequence from a highlight a key set (as above), not from the mouse resting on an atom: there the first `1` keeps the highlight on that atom.
 
 ## Pointing at a bond
 

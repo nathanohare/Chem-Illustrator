@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 /// The folder recovery copies and versions go in: "Kept" in the app's local data folder
 /// (on Windows %LOCALAPPDATA%\io.github.nathanohare.chemillustrator\Kept), or in the
 /// "Chem Illustrator Data" folder of a portable copy.
-fn root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     use tauri::Manager;
     if let Some(dir) = crate::portable::settings_folder() {
         return Ok(dir.join("Kept"));
@@ -18,14 +18,15 @@ fn root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     Ok(dir.join("Kept"))
 }
 
-/// A place inside the kept folder: "recovery/…" or "versions/…", one to four plain names
+/// A place inside the kept folder: "recovery/…", "versions/…" or "diagnostics/…" (the error
+/// log, src/diagnostics.ts), one to four plain names
 /// (letters, digits, '.', '_' and '-'), so a key can never point outside it.
 fn key_path(app: &tauri::AppHandle, key: &str) -> Result<PathBuf, String> {
     let parts: Vec<&str> = key.split('/').collect();
     let ok_part = |p: &&str| {
         !p.is_empty() && *p != "." && *p != ".." && p.len() <= 120 && p.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'_' || b == b'-')
     };
-    if parts.is_empty() || parts.len() > 4 || !parts.iter().all(ok_part) || !matches!(parts[0], "recovery" | "versions") {
+    if parts.is_empty() || parts.len() > 4 || !parts.iter().all(ok_part) || !matches!(parts[0], "recovery" | "versions" | "diagnostics") {
         return Err(format!("not a place for kept copies: {key}"));
     }
     let mut path = root(app)?;

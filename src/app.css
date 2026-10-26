@@ -163,8 +163,7 @@ header .sep { height: 18px; margin: 0 3px; }
 .win-btn { width: 44px; height: auto; padding: 0; display: grid; place-items: center; border: 0; border-radius: 0; background: transparent; color: inherit; }
 .win-btn:hover { background: rgb(128 128 128 / 0.22); }
 .win-btn.win-close:hover { background: #c42b1c; color: #fff; }
-/* the window's buttons are pinned to the top right, so a full menu bar wraps to a second row
-   under them instead of pushing them off the window */
+/* the window's buttons are pinned to the top right, with room kept for them beside the menu bar */
 body.own-title-bar header { position: relative; padding-right: 138px; user-select: none; }
 body.own-title-bar .win-controls { position: absolute; top: 0; right: 0; height: 32px; margin: 0; }
 header > button, header > select { white-space: nowrap; flex-shrink: 0; }
@@ -717,6 +716,16 @@ dialog.feedback-dialog .muted { margin: 4px 0 10px; max-width: 62ch; }
 .feedback-field > span { font-size: 12px; color: var(--muted); }
 .feedback-field input, .feedback-field textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 5px 8px; resize: vertical; }
 .feedback-about { display: flex; gap: 6px; align-items: baseline; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.feedback-extra[hidden] { display: none; }
+.feedback-extra details { font-size: 12px; margin: 2px 0 0 22px; }
+.feedback-extra pre, .error-log pre { max-height: 160px; overflow: auto; margin: 4px 0 0; padding: 6px 8px; font: 11px/1.35 ui-monospace, Consolas, monospace; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--panel-2, rgba(127,127,127,.08)); border-radius: 3px; }
+/* View > Developer Tools: Error Console */
+.error-log { max-height: 260px; overflow: auto; font-size: 12px; }
+.error-log .entry { padding: 3px 0; border-bottom: 1px solid var(--line, rgba(127,127,127,.2)); }
+.error-log .entry summary { cursor: pointer; overflow-wrap: anywhere; }
+.error-log .error { color: #c62828; }
+.error-log .warning { color: #a86400; }
+.error-buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 dialog.name-dialog .muted { margin: 4px 0 10px; max-width: 60ch; }
 .name-input { width: 100%; box-sizing: border-box; font: inherit; padding: 5px 8px; }
 .name-status { min-height: 1.4em; margin: 8px 0 0; color: var(--muted); overflow-wrap: anywhere; }
@@ -1277,7 +1286,7 @@ dialog.prop-dialog { width: min(94vw, 520px); }
 /* Web Layout, Outline and Draft: white right across */
 #doc-host.doc-endless, .doc-host-2.doc-endless { background: #fff; }
 /* Read Mode: nothing but the pages and a bar to turn them */
-.doc-turning { overflow: hidden; cursor: default; }
+.doc-scroll.doc-turning { overflow: hidden; cursor: default; }
 #doc-readbar { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 12px; font-size: 13px; background: var(--panel); border-bottom: 1px solid var(--line); color: var(--text); }
 #doc-readbar[hidden] { display: none; }
 #doc-readbar .grow { flex: 1 1 auto; }
@@ -1930,6 +1939,11 @@ dialog.command-search .cs-foot { margin: 8px 2px 0; }
 /* narrow windows: the search box gives up its key, then the app's name goes, before anything wraps */
 @media (max-width: 1240px) { .search-box { min-width: 0; } .search-box kbd { display: none; } }
 @media (max-width: 1100px) { header h1.app-name { display: none; } }
+/* then the search box and the toolbox lock keep only their pictures, and last the Beta mark goes:
+   the bar stays one row down to the narrowest window (800 px, with the window's own buttons) */
+header { flex-wrap: nowrap; }
+@media (max-width: 1060px) { .search-box > span, #btn-lock .lock-text { display: none; } }
+@media (max-width: 900px) { header .stage-badge { display: none; } }
 
 /* the equation window */
 dialog.equation-dialog { width: min(92vw, 620px); }
@@ -1951,7 +1965,7 @@ dialog.equation-dialog textarea { width: 100%; box-sizing: border-box; font: 14p
 
 /* Comments (Review > New Comment): cards beside a document's page, or listed beside a slide */
 .doc-comments { position: absolute; top: 0; bottom: 0; pointer-events: none; overflow: hidden; z-index: 3; }
-.doc-comments .cmt-card { position: absolute; left: 0; right: 0; pointer-events: auto; transition: top 0.12s ease-out; }
+.doc-comments .cmt-card { position: absolute; left: 0; pointer-events: auto; box-sizing: border-box; transition: top 0.12s ease-out; }
 .cmt-card { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid #e0a83a; border-radius: 6px; padding: 7px 9px; font: 12px/1.4 var(--ui-font); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
 .cmt-card.active { border-color: #d8901f; border-left-color: #d8901f; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18); }
 .cmt-card.done { opacity: 0.62; border-left-color: var(--muted); }

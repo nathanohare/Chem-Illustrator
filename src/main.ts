@@ -211,6 +211,17 @@ import { DEFAULT_AI, type AiPrefs } from './ai/link';
 import { aiSettingsDialog } from './ui/ai-settings';
 import { decodePicture, importPictures, pdfDrawings, type ImportHost } from './ui/import-structures';
 import { placeRead } from './recognise/check';
+import { Diagnostics, catchErrors, errorReport, formatEntry, stamp, type LogEntry, type UnexpectedClose } from './diagnostics';
+import { keepStore } from './keep/store';
+
+// Crash handling (src/diagnostics.ts): errors nothing else caught go to a log kept on this computer,
+// with a notice offering to report them through Send Feedback. The desktop app (not the iPad, whose
+// apps the system ends whenever it likes) also notices when it stopped without closing last time.
+const iPadApp = isTauri() && /Mac/.test(navigator.platform) && navigator.maxTouchPoints > 1;
+const diagnostics = new Diagnostics({ store: keepStore(), markers: isTauri() && !iPadApp });
+// (shown once the page has finished setting up: an error while it starts can come before the notice can show)
+catchErrors(window, { diagnostics, show: (e) => setTimeout(() => { try { errorNotice(e); } catch { /* the page never finished starting */ } }, 0) });
+const lastClose = diagnostics.start().catch(() => null);
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
 
@@ -1846,7 +1857,7 @@ function showDevTools(on: boolean): void {
   devTools = on;
   for (const el of document.querySelectorAll<HTMLElement>('.dev-only')) el.hidden = !on;
   $('[data-cmd="dev-tools"]')?.setAttribute('aria-checked', String(on));
-  if (on) updatePanels();
+  if (on) { updatePanels(); renderErrorLog(); }
 }
 
 function align(how: Align): void {
@@ -2292,6 +2303,8 @@ slideCmts = new SlideComments($('#cmt-section'), $('#canvas-host'), {
   askName: () => docMode.askReviewName(),
   flash,
   focus: () => $('#overlay').focus(),
+  // the Comments pane is in the side panel: a new comment's card needs it unfolded
+  reveal: () => { if (sideIsFolded()) command('fold-side'); },
 });
 
 // ---------------------------------------------------------------- Design mode
@@ -4561,7 +4574,7 @@ window.addEventListener('keydown', (e) => {
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
   'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
-  'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'check-updates']);
+  'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
 
@@ -5102,6 +5115,9 @@ const COMMANDS: Record<string, () => unknown> = {
       + 'Chem Illustrator is not made by or affiliated with Revvity Signals.',
   })),
   'report-problem': () => feedback.open('problem'),
+  'copy-diagnostics': () => copyText(diagnosticsText(), 'Copied the diagnostics: paste them into a bug report or message.'),
+  'open-log-folder': () => openLogFolder(),
+  'open-inspector': () => { invoke('open_inspector').catch((e) => flash(String(e))); },
   'command-search': () => commandSearch.open(),
   'next-region': () => cycleRegion(1),
   'prev-region': () => cycleRegion(-1),
@@ -5445,6 +5461,12 @@ window.addEventListener('keydown', (e) => {
   const step = chord && !(e.target as HTMLElement | null)?.closest?.('dialog')
     ? keymap.keysFor('command', 'command next-region').includes(chord) ? 1 : keymap.keysFor('command', 'command prev-region').includes(chord) ? -1 : 0 : 0;
   if (step) { e.preventDefault(); e.stopImmediatePropagation(); cycleRegion(step); return; }
+  // Escape shuts an open menu wherever the keys are (one with every item greyed out never takes them)
+  if (e.key === 'Escape' && openMenu && !openMenu.list.contains(e.target as Node | null)) {
+    e.preventDefault(); e.stopImmediatePropagation();
+    showMenu(null);
+    return;
+  }
   if (isTyping(e.target) || (e.target as HTMLElement | null)?.closest?.('dialog')) return;
   if (e.key === 'F10' && !e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey) {
     e.preventDefault();
@@ -6067,6 +6089,7 @@ for (const el of document.querySelectorAll<HTMLElement>('.desktop-only')) el.hid
 let versionText = canUpdate ? '' : 'Web version';
 void Promise.all([appVersion(), portableInfo()]).then(([v, portable]) => {
   versionText = canUpdate ? `Version ${v} ${STAGE.toLowerCase()}${portable ? ' (portable)' : ''}` : `Web version (${STAGE.toLowerCase()})`;
+  diagnostics.version = versionText;
   if (portable && !portable.writable) flash(`This portable copy can’t write to its “Chem Illustrator Data” folder (a locked or read-only drive), so settings are kept on this computer instead.`, 8000);
   const el = document.querySelector('#app-version');
   if (el) el.textContent = versionText;
@@ -6082,6 +6105,61 @@ const feedback = new FeedbackDialog({
     Mode: ws.active.mode,
   }),
 });
+
+/** An error nothing caught: say so, with a button that fills in a problem report about it. */
+function errorNotice(e: LogEntry): void {
+  const msg = e.message.split('\n')[0];
+  flash(`Something went wrong: ${msg.length > 120 ? `${msg.slice(0, 119)}…` : msg}. It was written to the log (Help ▸ Copy Diagnostics).`, 12000,
+    { label: 'Report It…', run: () => feedback.open('problem', errorReport(diagnostics, { entry: e })) });
+}
+
+/** The app stopped without closing last time: offer to report it, once nothing else is asking (the recovery question first). */
+function unexpectedCloseNotice(c: UnexpectedClose): void {
+  const wait = (): void => {
+    if (document.querySelector('dialog[open]')) { setTimeout(wait, 1500); return; }
+    flash(`Chem Illustrator closed unexpectedly last time (last running at ${stamp(c.beat).slice(11, 16)} on ${stamp(c.beat).slice(0, 10)}).`, 15000,
+      { label: 'Report It…', run: () => feedback.open('problem', errorReport(diagnostics, { closed: c })) });
+  };
+  setTimeout(wait, 2000);
+}
+
+/** Help > Copy Diagnostics: the version, computer and mode, then the newest part of the log. */
+function diagnosticsText(): string {
+  const about = Object.entries(feedback.about()).map(([k, v]) => `${k}: ${v}`).join('\n');
+  const log = diagnostics.logText();
+  return `Chem Illustrator diagnostics\n${about}\n\n${log.length > 20_000 ? `…\n${log.slice(-20_000)}` : log}`;
+}
+
+async function openLogFolder(): Promise<void> {
+  try {
+    await diagnostics.write();
+    const kept = await invoke<string>('keep_folder');
+    const { openPath } = await import('@tauri-apps/plugin-opener');
+    await openPath(`${kept}${kept.includes('\\') ? '\\' : '/'}diagnostics`);
+  } catch (e) {
+    flash(`Couldn't open the log folder: ${e}`);
+  }
+}
+
+/** View > Developer Tools > Error Console: this session's errors and warnings, newest last. */
+function renderErrorLog(): void {
+  if (!devTools) return;
+  const body = $('#errors-body');
+  const n = diagnostics.errorCount;
+  $('#errors-count').textContent = n ? String(n) : '';
+  if (!diagnostics.entries.length) { body.innerHTML = `<p class="muted">No errors or warnings since ${escapeHtml(stamp(diagnostics.started).slice(11, 16))}.</p>`; return; }
+  body.innerHTML = diagnostics.entries.map((e) => {
+    const head = escapeHtml(formatEntry({ ...e, detail: undefined }).slice(11));
+    return e.detail
+      ? `<details class="entry ${e.level}"><summary>${head}</summary><pre>${escapeHtml(e.detail)}</pre></details>`
+      : `<div class="entry ${e.level}">${head}</div>`;
+  }).join('');
+  body.scrollTop = body.scrollHeight;
+}
+diagnostics.onChange(() => renderErrorLog());
+$('#errors-clear').addEventListener('click', () => diagnostics.clear());
+// The web inspector is built into the Windows and Linux apps (Apple doesn't allow it in App Store apps)
+for (const el of document.querySelectorAll<HTMLElement>('.inspector-only')) el.hidden = !isTauri() || isMac;
 
 // ---------------------------------------------------------------- opening files from outside
 
@@ -6595,6 +6673,7 @@ void loadSettings().then((s) => {
   applySettings(s);
   settingsLoaded = true;
   void keeper.start();
+  void lastClose.then((c) => { if (c) unexpectedCloseNotice(c); });
   void openOutsideFiles();
   void startWordObjects();
   // (a moment after starting, once a file opened with the app has had time to load)
@@ -6658,7 +6737,7 @@ if (isTauri()) {
     finishTyping();
     if (!(await ws.closeAll())) e.preventDefault();
     // closing normally: the recovery copies and lock files aren't needed
-    else await keeper.end();
+    else { await keeper.end(); await diagnostics.end(); }
   }).catch(() => {});
 } else {
   window.addEventListener('beforeunload', (e) => {
@@ -6666,6 +6745,7 @@ if (isTauri()) {
     if (ws.anyDirty) e.preventDefault();
     // with nothing unsaved the copies can go; otherwise they stay, in case the page is left
     else void keeper.end();
+    void diagnostics.write();
   });
 }
 

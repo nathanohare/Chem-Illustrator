@@ -344,9 +344,12 @@ export class Keeper {
         if (!mine && !stale) return h;
       }
     } catch { /* no lock file */ }
-    for (const p of officeOwnerPaths(path)) {
+    const owners = officeOwnerPaths(path);
+    for (const p of owners) {
       try { const h = parseOfficeOwner(await readPath(p)); if (h) return h; } catch { /* none */ }
     }
+    // Word editing a file in OneDrive with AutoSave on writes no owner file, but still holds the file
+    if (owners.length && (await invoke<boolean>('file_held', { path }).catch(() => false))) return { user: '', host: '', since: '', by: 'office' };
     return null;
   }
 

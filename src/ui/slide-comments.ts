@@ -21,8 +21,33 @@ export interface SlideCommentsHooks {
   flash(msg: string): void;
   /** Back to the slide. */
   focus(): void;
+  /** Make the Comments pane visible (the side panel it is in may be folded away). */
+  reveal(): void;
 }
 
+
+/** A marker's size on screen, in pixels (with room for its initials and number). */
+const MARKER_W = 40, MARKER_H = 24;
+
+/**
+ * Where a new comment's marker goes: at `at` (kept on the slide), or the first place below it
+ * (then in the next column across) that no other marker covers. Markers keep their size on screen
+ * whatever the zoom, so how far apart they must be in points depends on `scale` (pixels per point).
+ */
+export function freeSpot(at: { x: number; y: number }, others: readonly { x: number; y: number }[], size: { w: number; h: number }, scale = 1): { x: number; y: number } {
+  const w = MARKER_W / scale, h = MARKER_H / scale;
+  const clamp = (x: number, y: number) => ({ x: Math.round(Math.max(0, Math.min(size.w - w, x))), y: Math.round(Math.max(0, Math.min(size.h - h, y))) });
+  const taken = (p: { x: number; y: number }) => others.some((o) => Math.abs(o.x - p.x) < w - 1 && Math.abs(o.y - p.y) < h - 1);
+  let p = clamp(at.x, at.y);
+  const x0 = p.x, y0 = p.y;
+  for (let col = 0; taken(p) && col < 40; col++) {
+    for (let y = y0; y <= size.h - h; y += h) {
+      p = clamp(x0 + col * w, y);
+      if (!taken(p)) break;
+    }
+  }
+  return p;
+}
 
 export class SlideComments {
   /** Review > Show Comments: the markers and the pane. */
@@ -224,12 +249,13 @@ export class SlideComments {
     if (!deck?.current) return;
     if (!reviewAuthor() && !(await this.hooks.askName())) return;
     const list = this.comments();
-    const at = this.hooks.anchor() ?? { x: 8, y: 8 + 28 * list.length };
+    const at = freeSpot(this.hooks.anchor() ?? { x: 8, y: 8 }, list, deck.size, this.hooks.view().scale);
     const id = list.reduce((n, c) => Math.max(n, c.id + 1), 0);
-    const c: PinnedComment = { id, x: Math.round(Math.max(0, Math.min(deck.size.w - 30, at.x))), y: Math.round(Math.max(0, Math.min(deck.size.h - 22, at.y))), author: reviewAuthor() || 'Author', date: revisionDate(), text: '' };
+    const c: PinnedComment = { id, x: at.x, y: at.y, author: reviewAuthor() || 'Author', date: revisionDate(), text: '' };
     this.draft = { slide: deck.current.id, c };
     this.active = id;
     this.editing = id;
+    this.hooks.reveal();
     this.show(true);
   }
 

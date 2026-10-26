@@ -24,6 +24,8 @@ export interface Feedback {
   steps?: string;
   /** The program's version, the computer and the mode, when the person leaves them in. */
   about?: Record<string, string>;
+  /** What the program wrote down about an error (src/diagnostics.ts), when the person leaves it in. */
+  extra?: string;
 }
 
 export interface Issue { title: string; body: string }
@@ -35,6 +37,7 @@ export function feedbackIssue(f: Feedback): Issue {
   const details = f.details.trim();
   parts.push(`**${KIND_NAMES[f.kind]}**`, '', details || '_(no details given)_');
   if (f.kind === 'problem' && f.steps?.trim()) parts.push('', '**Steps to make it happen**', '', f.steps.trim());
+  if (f.extra?.trim()) parts.push('', '**Error details**', '', '```', f.extra.trim().replace(/```/g, '``\u200b`'), '```');
   const about = Object.entries(f.about ?? {}).filter(([, v]) => v);
   if (about.length) parts.push('', '**About the program**', '', ...about.map(([k, v]) => `- ${k}: ${v}`));
   parts.push('', '_Sent from Chem Illustrator (Help ▸ Send Feedback)._');
