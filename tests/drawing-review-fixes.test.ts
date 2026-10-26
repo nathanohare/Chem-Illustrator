@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 //
 // Drawing-core fixes from the code review: the "text is chemistry" marks during a drag, and a
-// two-finger pinch on a touch screen leaving the drawing alone.
+// two-finger pinch on a touch screen leaving the drawing alone, and the pen (Sketch tool).
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Doc } from '../src/model';
 import { captionReading } from '../src/chem/species';
 import { plainMeasure } from '../src/chem/reaction';
 import { installPenAndTouch } from '../src/editor/touch';
+import { Sketcher, type SketchHost } from '../src/editor/sketch';
+import type { Vec } from '../src/geom';
 
 const L = new Doc().style.bondLength;
 
@@ -110,5 +112,45 @@ describe('a two-finger pinch whose first finger slid before the second landed', 
     expect(doc.atoms.size).toBe(2);
     expect(doc.undoLabel).toBe('draw');
     expect(doc.canRedo()).toBe(false);
+  });
+});
+
+// the host the app gives the sketcher, with a label that is one undoable step (as runAction's is)
+function sketchHost(app: { doc: Doc }): SketchHost {
+  return {
+    get doc() { return app.doc; },
+    label: (id, text) => app.doc.edit('Label', () => {
+      const z = ({ C: 6, N: 7, O: 8, S: 16, P: 15, F: 9, Cl: 17, Br: 35, I: 53, H: 1, B: 5 } as Record<string, number>)[text] ?? 6;
+      app.doc.updateAtom(id, { z });
+    }),
+    atomKey: () => {}, setHot: () => {}, done: () => {}, repaint: () => {}, say: () => {},
+  };
+}
+// an upright stroke half a bond long: the letter I
+const letterI = (x: number, y: number): Vec[] => Array.from({ length: 12 }, (_, i) => ({ x, y: y + (i * 0.5 * L) / 11 }));
+
+describe('pen letters waiting to be read when the tab or slide changes', () => {
+  it('do not land in the drawing switched to', () => {
+    vi.useFakeTimers();
+    try {
+      // the app's one document, whose contents the tabs and slides swap in and out (Doc.swap)
+      const app = { doc: new Doc() };
+      const sk = new Sketcher(sketchHost(app));
+      sk.stroke(letterI(600, 600)); // read 650 ms after the last stroke
+      const tab1 = new Doc(), tab2 = new Doc();
+      app.doc.swap(tab1); // put tab 1 away ...
+      app.doc.swap(tab2); // ... and show tab 2, all within those 650 ms
+      vi.advanceTimersByTime(1000);
+      expect(app.doc.atoms.size).toBe(0);
+      expect(sk.pending).toEqual([]);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('are read into the drawing they were written in when it is put away (as the tab-leave hook does)', () => {
+    const app = { doc: new Doc() };
+    const sk = new Sketcher(sketchHost(app));
+    sk.stroke(letterI(600, 600));
+    sk.flush();
+    expect([...app.doc.atoms.values()].map((a) => a.z)).toEqual([53]);
   });
 });

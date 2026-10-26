@@ -317,6 +317,8 @@ const HAND_LETTER_PX = 36;
 export class Sketcher {
   /** Small strokes waiting to be read as letters. */
   pending: Vec[][] = [];
+  /** The drawing they were written in (its atoms: a tab or slide put away takes them with it). */
+  private inkIn: unknown = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
   constructor(private h: SketchHost) {}
 
@@ -339,6 +341,7 @@ export class Sketcher {
         if (c.x1 > b.x2 + 0.6 * L || c.x2 < b.x1 - 0.6 * L || c.y1 > b.y2 + 0.6 * L || c.y2 < b.y1 - 0.6 * L) this.flush();
       }
       this.pending.push(pts);
+      this.inkIn = doc.atoms;
       this.wait();
       this.h.repaint();
       return;
@@ -372,7 +375,8 @@ export class Sketcher {
     if (!this.pending.length) return;
     const strokes = this.pending;
     this.pending = [];
-    this.letters(strokes);
+    // written in a drawing that has since been put away (another tab or slide): not read into this one
+    if (this.h.doc.atoms === this.inkIn) this.letters(strokes);
     this.h.repaint();
   }
 
