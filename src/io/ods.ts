@@ -225,6 +225,8 @@ export function readOds(bytes: Uint8Array): { book: Workbook; warnings: string[]
   const names: string[] = [];
   for (const [i, t] of tables.entries()) names.push(safeSheetName(tAttr(t, 'name') || `Sheet${i + 1}`, names));
   const book = new Workbook(names);
+  // another program's text is shown as it wrote it (Q1 stays Q1, not Q₁)
+  book.autoChem = false;
   const warnings: string[] = [];
   let pictures = 0, hiddenSheets = 0;
   book.build(() => {

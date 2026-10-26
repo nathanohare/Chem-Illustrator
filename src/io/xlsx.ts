@@ -253,6 +253,8 @@ interface Model {
   customViews?: CustomView[];
   /** Data > Get Data: the queries and their steps (Excel is given the tables they loaded). */
   queries?: Query[];
+  /** Workbook.autoChem: formulas in typed text shown as chemistry (unset in older files: on). */
+  autoChem?: boolean;
 }
 
 // ---------------------------------------------------------------- writing: styles
@@ -447,7 +449,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   const vba = opts.macros ? book.macros : null;
   const styles = new Styles(book.theme);
   const strings = new Strings();
-  const model: Model = { app: 'Chem Illustrator', version: 1, drawingStyle: book.drawingStyle, sheets: [], ...(book.customViews.length ? { customViews: book.customViews } : {}), ...(book.queries.length ? { queries: book.queries } : {}) };
+  const model: Model = { app: 'Chem Illustrator', version: 1, drawingStyle: book.drawingStyle, sheets: [], autoChem: book.autoChem, ...(book.customViews.length ? { customViews: book.customViews } : {}), ...(book.queries.length ? { queries: book.queries } : {}) };
   const sheetEntries: string[] = [];
   const filterNames: string[] = [];
   const printTitleNames: string[] = [];
@@ -538,7 +540,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         const style = s.styleAt(r, c);
         const ref = cellName(r, c);
         const own = cell?.style;
-        const chem = showsChem(style?.chem, v);
+        const chem = showsChem(style?.chem, v, book.autoChem);
         let formula: string | null = null;
         /** The block a dynamic array formula fills (its own cell when it doesn't spill). */
         let arrayRef: string | null = null;
@@ -1096,6 +1098,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const nameCase = new Map(definedNames.map((d) => [(d.getAttribute('name') ?? '').toUpperCase(), d.getAttribute('name') ?? '']));
 
   if (model?.drawingStyle) book.drawingStyle = { ...book.drawingStyle, ...model.drawingStyle };
+  // another program's text is shown as it wrote it (Q1 stays Q1); ours as it was made here
+  book.autoChem = !!model && model.autoChem !== false;
 
   // macros (.xlsm): kept byte for byte to save back, never run
   const vbaPath = relTarget(RELS.vbaProject);

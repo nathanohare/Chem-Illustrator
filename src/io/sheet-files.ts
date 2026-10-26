@@ -75,6 +75,8 @@ export function decodeText(bytes: Uint8Array): string {
 export function bookFromText(text: string, sheetName: string, sep: ',' | '\t' | 'auto' = 'auto'): Workbook {
   const rows = parseDelimited(text, sep);
   const wb = new Workbook([safeSheetName(sheetName)]);
+  // the file's text is shown as it was written (Q1 stays Q1, not Q₁)
+  wb.autoChem = false;
   const s = wb.sheets[0];
   wb.build(() => {
     rows.forEach((row, r) => row.forEach((field, c) => { if (field !== '') s.setInput(r, c, field); }));
