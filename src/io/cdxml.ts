@@ -396,7 +396,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     if (chemTag === 'yes' || chemTag === 'no') extra.chem = chemTag === 'yes';
     else if (t.getAttribute('InterpretChemically') === 'yes' && !readSpecies(back.runs.map((r) => r.text).join(''))) extra.chem = true;
     const turn = Number(kids(t).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === TURN_TAG)?.getAttribute('Value'));
+    // ChemDraw's own turn, in degrees clockwise about the text's origin, when this program left no tag
+    const angle = Number(t.getAttribute('RotationAngle') ?? NaN);
     if (Number.isFinite(turn) && turn) extra.rot = turn;
+    else if (Number.isFinite(angle) && angle % 360) extra.rot = angle;
     return { x, y: py, runs: back.runs, justify, width, lineHeight, ...extra };
   };
 
