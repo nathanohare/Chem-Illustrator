@@ -320,6 +320,7 @@ class Reader {
     // the slides' ids in the file (as PowerPoint's sections name them)
     const sldIds = kids(kid(root, 'sldIdLst'), 'sldId').filter((x) => { const t = rels.get(rAttr(x, 'id') ?? '')?.target; return !!t && this.r.has(t); }).map((x) => x.getAttribute('id') ?? '');
     const sections = readSections(root, sldIds);
+    if (sections) summaryEnds(slides, sections);
     // Set Up Show, and custom shows
     const props = this.r.relOfType(main, REL.presProps);
     const show = readShowPr(props ? this.r.xml(props)?.documentElement ?? null : null);
@@ -683,9 +684,12 @@ class Reader {
         // a zoom PowerPoint made: its picture (the fallback) is read as a zoom, coming back or not
         const zm = choices.map((c) => c.getElementsByTagNameNS('*', 'zmPr')[0]).find((z) => z);
         this.zoomBack = zm ? /^(1|true)$/.test(zm.getAttribute('returnToParent') ?? '') : null;
-        if (choices.some((c) => c.getElementsByTagNameNS('*', 'sumZm').length || c.getElementsByTagNameNS('*', 'secZm').length)) this.warnings.add('Summary and section zooms came in as pictures that go to their first slides.');
+        // a Summary Zoom's pictures are its parts (each playing its section); a section zoom is read as a slide zoom
+        this.zoomSummary = choices.some((c) => c.getElementsByTagNameNS('*', 'summaryZm').length);
+        if (choices.some((c) => c.getElementsByTagNameNS('*', 'sectionZm').length)) this.warnings.add('Section zooms came in as zooms to their sections\' first slides.');
         for (const k of kids(branch)) this.element(s, layout, k, t, doc);
         this.zoomBack = null;
+        this.zoomSummary = false;
         break;
       }
       default: break;
@@ -901,8 +905,8 @@ class Reader {
     const click = video ? null : this.hlinkOf(kid(el, 'nvPicPr', 'cNvPr', 'hlinkClick'));
     let zoom: Shape['zoom'] | undefined;
     if (tags[TAG.zoom]) {
-      try { const z = JSON.parse(tags[TAG.zoom]); if (z && typeof z === 'object' && z.zoom) zoom = { ...(z.zoom.back ? { back: true } : {}), ...(typeof z.zoom.to === 'string' ? { to: z.zoom.to } : {}) }; } catch { /* a plain link */ }
-    } else if (this.zoomBack !== null && click) zoom = this.zoomBack ? { back: true } : {};
+      try { const z = JSON.parse(tags[TAG.zoom]); if (z && typeof z === 'object' && z.zoom) zoom = { ...(z.zoom.back ? { back: true } : {}), ...(typeof z.zoom.to === 'string' ? { to: z.zoom.to } : {}), ...(z.zoom.summary ? { summary: true } : {}) }; } catch { /* a plain link */ }
+    } else if (this.zoomBack !== null && click) zoom = { ...(this.zoomBack ? { back: true } : {}), ...(this.zoomSummary ? { summary: true } : {}) };
     const alt = kid(el, 'nvPicPr', 'cNvPr')?.getAttribute('descr')?.trim();
     doc.addShape({
       kind: 'picture', x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2, src: img.src, px: img.px, ...(img.crop ? { crop: img.crop } : {}), ...(look && Object.keys(look).length ? { look } : {}), ...(fx ? { fx } : {}), ...(video ? { video } : {}), ...(alt ? { alt } : {}),
@@ -971,8 +975,16 @@ class Reader {
     const m: Media = { src: dataUrl(bytes, type.mime), ...(type.audio ? { audio: true } : {}), start: 'click', once: true };
     const P14 = 'http://schemas.microsoft.com/office/powerpoint/2010/main';
     const trim = media?.getElementsByTagNameNS(P14, 'trim')[0], fade = media?.getElementsByTagNameNS(P14, 'fade')[0];
-    const sec = (el: Element | undefined, a: string) => { const v = Number(el?.getAttribute(a)); return Number.isFinite(v) && v > 0 ? +(v / 1000).toFixed(3) : undefined; };
-    const parts = { trimStart: sec(trim, 'st'), trimEnd: sec(trim, 'end'), fadeIn: sec(fade, 'inDur'), fadeOut: sec(fade, 'outDur') };
+    // times as MS-PPTX writes them (ST_UniversalTimeOffset): a number and a unit, milliseconds when there is none
+    const UNIT: Record<string, number> = { h: 3600, min: 60, s: 1, ms: 0.001, 'µs': 1e-6, us: 1e-6, ns: 1e-9 };
+    const sec = (el: Element | undefined, ...names: string[]) => {
+      const raw = names.map((a) => el?.getAttribute(a)).find((x) => x != null)?.trim() ?? '';
+      const m = /^(\d+(?:\.\d+)?)\s*(h|min|s|ms|µs|us|ns)?$/.exec(raw);
+      const v = m ? Number(m[1]) * UNIT[m[2] ?? 'ms'] : NaN;
+      return Number.isFinite(v) && v > 0 ? +v.toFixed(3) : undefined;
+    };
+    // (inDur and outDur: what this program wrote before v0.1.136)
+    const parts = { trimStart: sec(trim, 'st'), trimEnd: sec(trim, 'end'), fadeIn: sec(fade, 'in', 'inDur'), fadeOut: sec(fade, 'out', 'outDur') };
     for (const [k, v] of Object.entries(parts)) if (v !== undefined) (m as unknown as Record<string, number>)[k] = v;
     return m;
   }
@@ -1138,6 +1150,8 @@ class Reader {
   private geoIds = new Map<number, number>();
   /** Reading a zoom PowerPoint made: whether the show comes back from it (null: not a zoom). */
   private zoomBack: boolean | null = null;
+  /** Reading a Summary Zoom PowerPoint made. */
+  private zoomSummary = false;
 
   /** A connector saved here: the arrow, stuck to the same shapes, where PowerPoint now has it. */
   private ourConnector(s: Part, el: Element, t: Xf, doc: Doc): boolean {
@@ -1959,6 +1973,23 @@ function turned(c: Omit<Caption, 'id'> | null, box: Rect & { rot: number }): Omi
   if (!c || !rot) return c;
   const a = turnAbout(c, { x: (box.x1 + box.x2) / 2, y: (box.y1 + box.y2) / 2 }, rot);
   return { ...c, x: a.x, y: a.y, rot };
+}
+
+/**
+ * A Summary Zoom PowerPoint made plays each part's section: the part runs on to the section's
+ * last slide (zoom.to) before coming back.
+ */
+function summaryEnds(slides: PptxSlide[], sections: SectionCount[]): void {
+  const last = new Map<number, number>();
+  let at = 0;
+  for (const sec of sections) { if (sec.count > 1) last.set(at, at + sec.count - 1); at += sec.count; }
+  for (const s of slides) {
+    for (const sh of s.contents.shapes ?? []) {
+      const i = /^#slide-n=(\d+)$/.exec(sh.link ?? '')?.[1];
+      const end = i === undefined ? undefined : last.get(Number(i));
+      if (sh.zoom?.summary && !sh.zoom.to && end !== undefined) sh.zoom = { ...sh.zoom, to: `#slide-n=${end}` };
+    }
+  }
 }
 
 /** PowerPoint 2010's sections (p14:sectionLst in presentation.xml), as runs of slides in order. */

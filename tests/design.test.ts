@@ -8,7 +8,7 @@ import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import { Doc, type Shape } from '../src/model';
 import { Deck, DESIGN_SIZES, designScale } from '../src/deck/deck';
 import { GEOS, GEO_BY_ID, geoDef, flatten, insideOutline, textArea } from '../src/design/geo';
-import { writePptx, type PptxOptions } from '../src/io/pptx-write';
+import { writePptx, bentConnector, connectionSite, type PptxOptions } from '../src/io/pptx-write';
 import { readPptx } from '../src/io/pptx-read';
 import { shapeHit, shapeOrder, elbowRoute, gluePoint } from '../src/objects';
 import { writeCdxml, chemDrawCurves } from '../src/io/cdxml-write';
@@ -240,11 +240,13 @@ describe('connectors', () => {
   it('stay stuck to the same shapes in a PowerPoint file', async () => {
     const { doc } = two();
     const bytes = await writePptx({ size: { w: 504, h: 288 }, master: Deck.design(new Doc(), { w: 504, h: 288 }).master, slides: [{ layout: 'blank', doc, notes: '' }], design: true }, opts);
-    // an elbow is drawn as a shape along its path: PowerPoint repairs a connector drawn as a path
-    // by deleting everything on the slide
+    // an elbow is PowerPoint's own bent connector, never a path (PowerPoint repairs a connector
+    // drawn as a path by deleting everything on the slide), with its ends stuck to the shapes'
+    // connection sites so it follows them there (laptop bench pp-design)
     const xml = slideXml(bytes);
     expect(xml).not.toMatch(/<p:cxnSp>(?:(?!<\/p:cxnSp>).)*custGeom/);
-    expect(xml).toContain('name="Elbow Connector');
+    expect(xml).toMatch(/<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="\d+" name="Elbow Connector \d+"\/><p:cNvCxnSpPr><a:stCxn id="2" idx="3"\/><a:endCxn id="3" idx="0"\/><\/p:cNvCxnSpPr>/);
+    expect(xml).toContain('<a:prstGeom prst="bentConnector2">');
     const back = readPptx(bytes).slides[0].contents;
     const shapes = back.shapes.filter((s) => s.kind === 'geo');
     expect(back.arrows).toHaveLength(1);
@@ -252,6 +254,53 @@ describe('connectors', () => {
     expect(r.elbow).toBe(true);
     expect(shapes.find((s) => s.id === r.from?.shape)?.geo).toBe('fcProcess');
     expect(shapes.find((s) => s.id === r.to?.shape)?.geo).toBe('fcDecision');
+  });
+});
+
+describe('bent connectors', () => {
+  /** The route PowerPoint draws for a bent connector: its legs from the preset, flipped, turned and put in its box. */
+  function drawn(frame: string, prst: string, adj: number[]): { x: number; y: number }[] {
+    const num = (re: RegExp) => Number(re.exec(frame)?.[1] ?? 0) / 12700;
+    const x = num(/<a:off x="(-?\d+)"/), y = num(/ y="(-?\d+)"/), W = num(/cx="(\d+)"/), H = num(/cy="(\d+)"/);
+    const turned = /rot="5400000"/.test(frame), fh = /flipH="1"/.test(frame), fv = /flipV="1"/.test(frame);
+    const l = -W / 2, t = -H / 2, r = W / 2, b = H / 2;
+    const x1 = l + (adj[0] / 1e5) * W, y2 = t + (adj[1] / 1e5) * H, x3 = l + (adj[2] / 1e5) * W;
+    const legs: Record<string, [number, number][]> = {
+      bentConnector2: [[l, t], [r, t], [r, b]],
+      bentConnector3: [[l, t], [x1, t], [x1, b], [r, b]],
+      bentConnector4: [[l, t], [x1, t], [x1, y2], [r, y2], [r, b]],
+      bentConnector5: [[l, t], [x1, t], [x1, y2], [x3, y2], [x3, b], [r, b]],
+    };
+    const cx = x + W / 2, cy = y + H / 2;
+    return legs[prst].map(([u0, v0]) => {
+      const u = fh ? -u0 : u0, v = fv ? -v0 : v0;
+      return turned ? { x: cx - v, y: cy + u } : { x: cx + u, y: cy + v };
+    });
+  }
+
+  it('draws every elbow PowerPoint can as its bent connector, along the same route', () => {
+    let tried = 0;
+    for (const tail of [{ x: 100, y: 100 }, { x: 300, y: 260 }])
+      for (const head of [{ x: 220, y: 30 }, { x: 40, y: 300 }, { x: 400, y: 120 }, { x: 100, y: 220 }])
+        for (const fp of [0, 1, 2, 3])
+          for (const tp of [0, 1, 2, 3]) {
+            const route = elbowRoute({ tail, head, sweep: 0, from: { shape: 1, port: fp }, to: { shape: 2, port: tp } } as never);
+            const bent = bentConnector(route);
+            if (!bent) continue;
+            tried++;
+            const got = drawn(bent.frame, bent.prst, bent.adj);
+            expect(got.length).toBe(route.length);
+            got.forEach((p, k) => { expect(p.x).toBeCloseTo(route[k].x, 1); expect(p.y).toBeCloseTo(route[k].y, 1); });
+          }
+    // the rest double back on themselves (a side facing away), which no bent connector does: drawn as shapes
+    expect(tried).toBeGreaterThan(25);
+  });
+
+  it('sticks the ends to the sides of boxes and flowchart shapes, not to turned ones', () => {
+    const box = { kind: 'geo', geo: 'fcDecision', x1: 0, y1: 0, x2: 10, y2: 10 } as Shape;
+    expect([0, 1, 2, 3].map((p) => connectionSite(box, p, 7)!.idx)).toEqual([0, 3, 2, 1]);
+    expect(connectionSite({ ...box, rot: 30 }, 0, 7)).toBeNull();
+    expect(connectionSite({ ...box, geo: 'hexagon' }, 0, 7)).toBeNull();
   });
 });
 

@@ -5,7 +5,7 @@
 // PowerPoint files and back.
 
 import { describe, it, expect } from 'vitest';
-import { unzipSync, strFromU8 } from 'fflate';
+import { unzipSync, zipSync, strFromU8 } from 'fflate';
 import { Doc } from '../src/model';
 import { Deck } from '../src/deck/deck';
 import { writePptx, type PptxOptions } from '../src/io/pptx-write';
@@ -181,6 +181,9 @@ describe('video and audio', () => {
     }]);
     const xml = t.xml(0);
     expect(xml).toContain('<p14:trim st="1500" end="2000"/>');
+    // MS-PPTX's CT_MediaFade names (laptop bench pp-zoom-morph-media: PowerPoint ignored inDur and outDur)
+    expect(xml).toContain('<p14:fade in="500"/>');
+    expect(xml).toContain('<p14:fade out="3000"/>');
     expect(xml).toContain('<a:audioFile r:link=');
     expect(xml).toContain('nodeType="interactiveSeq"');
     expect(xml).toContain('cmd="togglePause"');
@@ -238,6 +241,71 @@ describe('action buttons and zooms', () => {
     const ids = t.deck.slides.map((s) => s.id);
     expect(z.link).toBe(`#slide=${ids[2]}`);
     expect(z.zoom).toEqual({ back: true, to: `#slide=${ids[3]}` });
+  });
+
+  // laptop bench pp-zoom-morph-media: a Summary Zoom was saved as slide zooms, not PowerPoint's own
+  it('makes a Summary Zoom with its sections, saved as PowerPoint\'s Summary Zoom and back', async () => {
+    const host = new Doc();
+    const d = Deck.blank(host);
+    d.attach();
+    d.setLayout('blank');
+    for (let i = 1; i < 5; i++) d.addSlide('blank');
+    const ids = d.slides.map((s) => s.id);
+    const parts = [{ first: ids[1], last: ids[2] }, { first: ids[3], last: ids[4] }];
+    d.insertSummary(1, (sd) => {
+      parts.forEach((p, k) => sd.addShape({ kind: 'picture', x1: 100 + 300 * k, y1: 200, x2: 340 + 300 * k, y2: 335, src: DOT, px: { w: 1, h: 1 }, link: `#slide=${p.first}`, zoom: { back: true, summary: true, to: `#slide=${p.last}` } }));
+    }, parts.map((p) => p.first), ['Synthesis', '']);
+    // the summary slide in its own section, each part a section, the slide before in a Default Section
+    expect(d.sectionCounts()).toEqual([{ name: 'Default Section', count: 1 }, { name: 'Summary Section', count: 1 }, { name: 'Synthesis', count: 2 }, { name: 'Section 2', count: 2 }]);
+    // one step to undo
+    d.undo();
+    expect(d.slides.length).toBe(5);
+    expect(d.sections.length).toBe(0);
+    d.redo();
+    expect(d.sections.length).toBe(4);
+
+    const bytes = await writePptx({ size: d.size, master: d.master, sections: d.sectionCounts(), slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes })) }, opts);
+    const files = unzipSync(bytes);
+    const xml = strFromU8(files['ppt/slides/slide2.xml']);
+    expect(xml).toContain('Requires="psuz"');
+    expect(xml).toContain('<a:graphicData uri="http://schemas.microsoft.com/office/powerpoint/2016/summaryzoom"><psuz:summaryZm>');
+    expect(xml).not.toContain('pslz:sldZm');
+    expect(xml.match(/<psuz:summaryZmObj /g)?.length).toBe(2);
+    expect(xml).toContain('<psuz:fixedLayout/></psuz:summaryZm>');
+    // each part names its section by the id presentation.xml gives it
+    const pres = strFromU8(files['ppt/presentation.xml']);
+    const secIds = [...pres.matchAll(/<p14:section name="([^"]*)" id="([^"]+)"/g)].map((m) => [m[1], m[2]]);
+    const zoomIds = [...xml.matchAll(/summaryZmObj sectionId="([^"]+)"/g)].map((m) => m[1]);
+    expect(zoomIds).toEqual([secIds[2][1], secIds[3][1]]);
+    // the second part sits 300 pt to the right of the first in the frame
+    expect(xml).toContain(`<a:off x="${300 * 12700}" y="0"/>`);
+
+    const load = (b: Uint8Array) => {
+      const back = readPptx(b);
+      const deck = new Deck(new Doc());
+      deck.load(back.slides.map((s) => deck.makeSlide(s.layout, s.contents, s.notes)), back.size, back.master, back.sections);
+      return deck;
+    };
+    const ours = load(bytes);
+    const zs = [...ours.docOf(1).shapes.values()].filter((s) => s.zoom);
+    const nid = ours.slides.map((s) => s.id);
+    expect(zs.map((z) => z.link)).toEqual([`#slide=${nid[2]}`, `#slide=${nid[4]}`]);
+    expect(zs.map((z) => z.zoom)).toEqual([{ back: true, summary: true, to: `#slide=${nid[3]}` }, { back: true, summary: true, to: `#slide=${nid[5]}` }]);
+
+    // one PowerPoint made (no tags of ours): each part plays its section and comes back
+    files['ppt/slides/slide2.xml'] = new Uint8Array(new TextEncoder().encode(xml.replace(/<p:custDataLst><p:tags r:id="[^"]+"\/><\/p:custDataLst>/g, '')));
+    const theirs = load(zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, new Uint8Array(v)]))));
+    const tz = [...theirs.docOf(1).shapes.values()].filter((s) => s.zoom);
+    expect(tz.map((z) => z.zoom)).toEqual([{ back: true, summary: true, to: `#slide=${nid[3]}` }, { back: true, summary: true, to: `#slide=${nid[5]}` }]);
+  });
+
+  it('saves a Summary Zoom whose parts no longer start sections as slide zooms', async () => {
+    const t = await deckTrip([
+      (doc, ids) => { doc.addShape({ kind: 'picture', x1: 100, y1: 200, x2: 260, y2: 290, src: DOT, px: { w: 1, h: 1 }, link: `#slide=${ids[1]}`, zoom: { back: true, summary: true } }); },
+      () => {},
+    ]);
+    expect(t.xml(0)).toContain('pslz:sldZm');
+    expect(t.xml(0)).not.toContain('psuz');
   });
 
   it('lays zooms out in a grid of slide-shaped boxes, and splits a deck into parts', () => {
