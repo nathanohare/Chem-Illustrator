@@ -35,6 +35,23 @@ export type Value = number | string | boolean | null | CellError;
 
 export const isError = (v: unknown): v is CellError => v instanceof CellError;
 
+/**
+ * The largest of some numbers, as Math.max gives, without passing each one as an argument:
+ * Math.max(...list) runs out of stack past about 120,000 items (a long paste or column).
+ */
+export function maxOf(xs: Iterable<number>, start = -Infinity): number {
+  let m = start;
+  for (const x of xs) m = Math.max(m, x);
+  return m;
+}
+
+/** The smallest of some numbers, as Math.min gives (see maxOf). */
+export function minOf(xs: Iterable<number>, start = Infinity): number {
+  let m = start;
+  for (const x of xs) m = Math.min(m, x);
+  return m;
+}
+
 /** What typed text means, and a number format it suggests (typing 5% shows as a percentage). */
 export interface Typed {
   value: Value;

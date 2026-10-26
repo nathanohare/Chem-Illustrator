@@ -17,7 +17,7 @@
 import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr, ZipTooBigError } from './ooxml';
 import { officeTarget, linkFromTarget } from '../links';
 import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side, makeStructure } from '../sheet/workbook';
-import { keyOf, rowOf, colOf, colName, cellName, parseRange, quoteSheet, Range, MAX_COLS, rangesOverlap, rangeName, inRange, MAX_ROWS } from '../sheet/refs';
+import { keyOf, rowOf, colOf, colName, cellName, parseRange, quoteSheet, Range, MAX_COLS, rangesOverlap, rangeName, inRange, MAX_ROWS, sheetNameProblem, fixSheetName } from '../sheet/refs';
 import { normalizeFormula, shiftFormula } from '../sheet/formula';
 import { fileFormula, legacyFormula, needsDynamic, readFileFormula } from '../sheet/array-formulas';
 import { DefinedName, isBuiltInName } from '../sheet/names';
@@ -173,10 +173,19 @@ export function excelFunctionNames(f: string): string {
 
 const KNOWN = new Set(FUNCTION_NAMES);
 
-/** Does a formula from Excel use something this program can't work out (a newer function it lacks, or a table reference)? */
-function usesUnknownFunction(text: string): boolean {
-  if (/\[/.test(text.replace(/"(?:[^"]|"")*"/g, ''))) return true;
-  for (const m of text.matchAll(/_xlfn\.(?:_xlws\.)?([A-Za-z0-9.]+)\(/g)) if (!KNOWN.has(m[1].toUpperCase())) return true;
+/**
+ * Does a formula from Excel use something this program can't work out (a function it lacks, old
+ * or newer, or a table reference)? `names` are the workbook's defined names (a LAMBDA one is called like a function).
+ */
+function usesUnknownFunction(text: string, names: ReadonlySet<string>): boolean {
+  const bare = text.replace(/"(?:[^"]|"")*"/g, '""');
+  if (/\[/.test(bare)) return true;
+  for (const m of bare.matchAll(/_xlfn\.(?:_xlws\.)?([A-Za-z0-9.]+)\(/g)) if (!KNOWN.has(m[1].toUpperCase())) return true;
+  // other names before a bracket, leaving out quoted sheet names and _xlfn./_xlpm. ones
+  for (const m of bare.replace(/'(?:[^']|'')*'/g, "''").matchAll(/(?<![A-Za-z0-9_.])([A-Za-z][A-Za-z0-9_.]*)\(/g)) {
+    const up = m[1].toUpperCase();
+    if (!KNOWN.has(up) && !names.has(up)) return true;
+  }
   return false;
 }
 
@@ -427,6 +436,20 @@ class Axis {
  * VBA project it was opened with, untouched.
  */
 export async function writeXlsx(book: Workbook, deps: XlsxPictures, opts: { macros?: boolean } = {}): Promise<Uint8Array> {
+  // a sheet name Excel refuses (however it was made) is put right in a copy, and the formulas that use it follow
+  const fixes: [number, string][] = [];
+  const names = book.sheets.map((s) => s.name);
+  names.forEach((n, i) => {
+    const others = names.filter((_, j) => j !== i);
+    if (sheetNameProblem(n, others.slice(0, i))) fixes.push([i, (names[i] = fixSheetName(n, others))]);
+  });
+  if (!fixes.length) return writeBook(book, deps, opts);
+  const copy = (await readXlsx(await writeBook(book, deps, opts))).book;
+  copy.build(() => { for (const [i, name] of fixes) copy.sheets[i].rename(name); });
+  return writeBook(copy, deps, opts);
+}
+
+async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: boolean }): Promise<Uint8Array> {
   const pkg = new Package();
   const vba = opts.macros ? book.macros : null;
   const styles = new Styles(book.theme);
@@ -1073,6 +1096,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const activeTab = Number(kid(root, 'bookViews', 'workbookView')?.getAttribute('activeTab') ?? 0);
   if (sheetEls.some((s) => s.getAttribute('state') === 'hidden' || s.getAttribute('state') === 'veryHidden')) notKept.add('hidden sheets (shown here)');
   const definedNames = kids(kid(root, 'definedNames'), 'definedName');
+  const nameSet = new Set(definedNames.map((d) => (d.getAttribute('name') ?? '').toUpperCase()));
 
   if (model?.drawingStyle) book.drawingStyle = { ...book.drawingStyle, ...model.drawingStyle };
 
@@ -1201,7 +1225,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
               }
             }
             if (text) {
-              if (usesUnknownFunction(text)) unknownFormulas++;
+              if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
               const isArray = f.getAttribute('t') === 'array';
               // a formula from before arrays spilled keeps working out one value (Excel shows it with @)
               input = normalizeFormula(isArray ? readFileFormula(text) : legacyFormula(readFileFormula(text)));
@@ -1431,7 +1455,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       const local = d.getAttribute('localSheetId');
       const sheet = local !== null ? book.sheets[Number(local)] : undefined;
       if (local !== null && !sheet) continue;
-      if (usesUnknownFunction(text)) unknownFormulas++;
+      if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
       names.push({
         name, formula: normalizeFormula(readFileFormula(text)),
         ...(sheet ? { sheet } : {}),
@@ -1457,7 +1481,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   book.active = Math.min(Math.max(0, activeTab), book.sheets.length - 1);
 
   if (foreignPictures) notKept.add(`${foreignPictures} picture${foreignPictures > 1 ? 's' : ''} or chart${foreignPictures > 1 ? 's' : ''}`);
-  if (unknownFormulas) warnings.push(`${unknownFormulas} formula${unknownFormulas > 1 ? 's use' : ' uses'} newer Excel functions this program can't work out yet.`);
+  if (unknownFormulas) warnings.push(`${unknownFormulas} formula${unknownFormulas > 1 ? 's use' : ' uses'} Excel functions this program can't work out yet.`);
   if (restored.changed) warnings.push(`${restored.changed} structure or calculated cell${restored.changed > 1 ? 's were' : ' was'} changed in another program: ${restored.changed > 1 ? 'they show' : 'it shows'} what that program saved.`);
   if (notKept.size) warnings.push(`Not shown here, and left out if you save over this file: ${[...notKept].join(', ')}.`);
   return { book, warnings };

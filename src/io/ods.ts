@@ -11,7 +11,7 @@ import { normalizeFormula } from '../sheet/formula';
 import { dateSerial } from '../sheet/dates';
 import { kids, kid, unzipPackage, ZipTooBigError } from './ooxml';
 import { textInput } from './xlsx';
-import { uniqueSheetName } from './sheet-files';
+import { safeSheetName } from './sheet-files';
 
 const TABLE = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
 const OFFICE = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
@@ -192,7 +192,7 @@ function rowsOf(table: Element): Element[] {
   const out: Element[] = [];
   for (const k of kids(table)) {
     if (k.localName === 'table-row') out.push(k);
-    else if (k.localName === 'table-header-rows' || k.localName === 'table-row-group' || k.localName === 'table-rows') out.push(...rowsOf(k));
+    else if (k.localName === 'table-header-rows' || k.localName === 'table-row-group' || k.localName === 'table-rows') for (const r of rowsOf(k)) out.push(r);
   }
   return out;
 }
@@ -201,7 +201,7 @@ function columnsOf(table: Element): Element[] {
   const out: Element[] = [];
   for (const k of kids(table)) {
     if (k.localName === 'table-column') out.push(k);
-    else if (k.localName === 'table-header-columns' || k.localName === 'table-column-group' || k.localName === 'table-columns') out.push(...columnsOf(k));
+    else if (k.localName === 'table-header-columns' || k.localName === 'table-column-group' || k.localName === 'table-columns') for (const c of columnsOf(k)) out.push(c);
   }
   return out;
 }
@@ -228,7 +228,7 @@ export function readOds(bytes: Uint8Array): { book: Workbook; warnings: string[]
   const tables = kids(sheet, 'table');
   if (!tables.length) throw new Error('This spreadsheet has no sheets.');
   const names: string[] = [];
-  for (const [i, t] of tables.entries()) names.push(uniqueSheetName(tAttr(t, 'name') || `Sheet${i + 1}`, names));
+  for (const [i, t] of tables.entries()) names.push(safeSheetName(tAttr(t, 'name') || `Sheet${i + 1}`, names));
   const book = new Workbook(names);
   const warnings: string[] = [];
   let pictures = 0, hiddenSheets = 0;

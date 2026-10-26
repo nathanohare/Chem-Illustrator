@@ -13,9 +13,9 @@ vi.mock('../src/io/sheet-files', async (orig) => {
   const real = await orig<typeof import('../src/io/sheet-files')>();
   return {
     ...real,
-    safeSheetName: (n: string) => {
+    safeSheetName: (n: string, others?: readonly string[]) => {
       if (++calls > 10_000) throw new Error('safeSheetName called over 10,000 times: stuck in a loop');
-      return real.safeSheetName(n);
+      return real.safeSheetName(n, others);
     },
   };
 });

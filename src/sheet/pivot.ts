@@ -6,7 +6,7 @@
 // of its row or of its column. A PivotChart charts the report and follows it when it refreshes.
 
 import type { Value } from './values';
-import { ERR, isError } from './values';
+import { ERR, isError, maxOf, minOf } from './values';
 import type { CellStyle } from './workbook';
 import type { Range } from './refs';
 
@@ -148,8 +148,8 @@ function summarise(fn: PivotFn, vs: Value[]): Value {
     case 'sum': return xs.reduce((s, x) => s + x, 0);
     case 'countNums': return n;
     case 'average': return n ? mean() : divZero();
-    case 'max': return n ? Math.max(...xs) : 0;
-    case 'min': return n ? Math.min(...xs) : 0;
+    case 'max': return n ? maxOf(xs) : 0;
+    case 'min': return n ? minOf(xs) : 0;
     case 'product': return n ? xs.reduce((s, x) => s * x, 1) : 0;
     case 'stdDev': return n > 1 ? Math.sqrt(ss() / (n - 1)) : divZero();
     case 'stdDevp': return n ? Math.sqrt(ss() / n) : divZero();

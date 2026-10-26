@@ -8,7 +8,7 @@ import { Doc, Contents } from '../model';
 import type { DocStyle } from '../style';
 import { addMolfile } from '../chem/molfile';
 import { Workbook, Sheet } from '../sheet/workbook';
-import { keyOf } from '../sheet/refs';
+import { keyOf, fixSheetName } from '../sheet/refs';
 import { isError, CellError } from '../sheet/values';
 import { parseDelimited, toDelimited } from '../sheet/csv';
 import { structureMolfile } from '../sheet/structure-doc';
@@ -107,19 +107,14 @@ function cellText(s: Sheet, r: number, c: number): string {
   return s.shownText(r, c);
 }
 
-/** Excel's rules for sheet names: at most 31 characters, none of \ / ? * [ ] : */
-export function safeSheetName(name: string): string {
-  return name.replace(/[\\/?*[\]:]/g, '_').slice(0, 31) || 'Sheet1';
+/** Excel's rules for sheet names: at most 31 characters, none of \ / ? * [ ] :, no apostrophe at either end, not History, and none of `others` ("Name (2)" then). */
+export function safeSheetName(name: string, others: readonly string[] = []): string {
+  return fixSheetName(name, others);
 }
 
-/** A safe sheet name that no name in `taken` matches ignoring capitals: " (2)", " (3)" … is added,
- * with the name cut short enough that the number stays within the 31 characters. */
+/** A safe sheet name that no name in `taken` matches ignoring capitals (the reading loops' name). */
 export function uniqueSheetName(name: string, taken: readonly string[]): string {
-  const base = safeSheetName(name);
-  const used = (n: string) => taken.some((x) => x.toLowerCase() === n.toLowerCase());
-  let n = base;
-  for (let k = 2; used(n); k++) n = base.slice(0, 31 - ` (${k})`.length) + ` (${k})`;
-  return n;
+  return safeSheetName(name, taken);
 }
 
 // ---------------------------------------------------------------- SD files

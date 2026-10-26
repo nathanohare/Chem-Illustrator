@@ -85,6 +85,33 @@ export const sameRange = (a: Range, b: Range): boolean => a.r1 === b.r1 && a.c1 
 /** Number of cells in a range. */
 export const rangeSize = (r: Range): number => (r.r2 - r.r1 + 1) * (r.c2 - r.c1 + 1);
 
+/**
+ * Why Excel would refuse a sheet name, or null when it takes it: 1 to 31 characters, none of
+ * \ / ? * [ ] :, no apostrophe at the start or end, not "History" (Excel keeps it), and not the
+ * name of another sheet in `others`, capitals or not.
+ */
+export function sheetNameProblem(name: string, others: readonly string[] = []): string | null {
+  if (!name) return 'A sheet needs a name.';
+  if (name.length > 31) return 'A sheet name can be at most 31 characters long.';
+  if (/[\\/?*[\]:]/.test(name)) return 'A sheet name can\'t hold any of \\ / ? * [ ] :';
+  if (/^'|'$/.test(name)) return 'A sheet name can\'t start or end with an apostrophe.';
+  if (name.toLowerCase() === 'history') return 'Excel keeps the sheet name "History" for itself.';
+  if (others.some((o) => o.toLowerCase() === name.toLowerCase())) return `There is already a sheet called "${name}".`;
+  return null;
+}
+
+/** A sheet name Excel takes, made from any text (see sheetNameProblem): "Name (2)" when `others` has it already. */
+export function fixSheetName(name: string, others: readonly string[] = []): string {
+  const cut = (t: string, room = 31) => t.slice(0, room).replace(/^'+|'+$/g, '');
+  let b = cut(name.replace(/[\\/?*[\]:]/g, '_')) || 'Sheet1';
+  if (b.toLowerCase() === 'history') b += '_';
+  if (!sheetNameProblem(b, others)) return b;
+  for (let n = 2; ; n++) {
+    const t = `${cut(b, 31 - String(n).length - 3)} (${n})`;
+    if (!sheetNameProblem(t, others)) return t;
+  }
+}
+
 /** A sheet name as a formula writes it: quoted when it has spaces or other characters. */
 export function quoteSheet(name: string): string {
   return /^[A-Za-z_][A-Za-z0-9_.]*$/.test(name) && !parseCellRef(name) ? name : `'${name.replace(/'/g, "''")}'`;

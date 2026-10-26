@@ -9,6 +9,7 @@ import { PivotTable, PivotSource, PivotReport, layoutPivot, sourceOf, pivotChart
 import type { Value } from './values';
 import type { Chart } from './chart';
 import { DEFAULT_COL_W } from './layout';
+import { maxOf } from './values';
 
 /** The sheet and block a PivotTable's source names (a reference, a table's name or a defined name). */
 export function sourceRange(wb: Workbook, source: string, home: Sheet): { sheet: Sheet; range: Range } | string {
@@ -62,7 +63,7 @@ export function reportOf(wb: Workbook, s: Sheet, pt: PivotTable): PivotReport | 
 
 /** The cells a report fills at a PivotTable's place. */
 export function reportRange(pt: PivotTable, rep: PivotReport): Range {
-  const h = rep.cells.length, w = Math.max(1, ...rep.cells.map((r) => r.length));
+  const h = rep.cells.length, w = maxOf(rep.cells.map((r) => r.length), 1);
   return { r1: pt.at.row, c1: pt.at.col, r2: pt.at.row + Math.max(1, h) - 1, c2: pt.at.col + w - 1 };
 }
 

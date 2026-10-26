@@ -4,7 +4,7 @@
 import type { EvalHost } from './evaluate';
 import type { Node } from './formula';
 import { MAX_COLS, MAX_ROWS } from './refs';
-import { CellError, ERR, Value, isError, toBool, toNumber, toText } from './values';
+import { CellError, ERR, Value, isError, toBool, toNumber, toText, maxOf } from './values';
 
 /**
  * A block of cells given to a function (SUM(A1:A9)), or an array a function worked out. `h`
@@ -52,7 +52,7 @@ export const isMulti = (a: Arg): a is Block => isBlock(a) && (a.h > 1 || a.w > 1
 export function extent(b: Block): { h: number; w: number } {
   return {
     h: b.h >= MAX_ROWS ? Math.max(1, b.block.length) : b.h,
-    w: b.w >= MAX_COLS ? Math.max(1, ...b.block.map((r) => r.length)) : b.w,
+    w: b.w >= MAX_COLS ? maxOf(b.block.map((r) => r.length), 1) : b.w,
   };
 }
 
