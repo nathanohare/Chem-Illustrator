@@ -6,8 +6,10 @@
 use sha2::{Digest, Sha256};
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use std::time::Duration;
 use tauri::Emitter;
+use tokio::sync::Notify;
 
 const RELEASES: &str = "https://github.com/nathanohare/Chem-Illustrator/releases/download";
 
@@ -51,13 +53,20 @@ pub fn pack_ready(app: tauri::AppHandle, pack: String) -> Result<bool, String> {
     Ok(m.files.iter().all(|f| std::fs::metadata(dir.join(&f.name)).is_ok_and(|md| md.len() == f.bytes)))
 }
 
-fn client() -> Result<reqwest::Client, String> {
+/// How long a download waits for more of a file before it gives up (Wi-Fi gone, the laptop slept, a proxy holding on).
+const READ_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Told when the person presses Cancel in the download window.
+static CANCEL: LazyLock<Notify> = LazyLock::new(Notify::new);
+
+fn client(read: Duration) -> Result<reqwest::Client, String> {
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
     reqwest::Client::builder()
         .user_agent(concat!("ChemIllustrator/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(30))
+        .read_timeout(read)
         .build()
         .map_err(|e| format!("Could not get ready to download: {e}"))
 }
@@ -69,11 +78,26 @@ struct Progress {
 }
 
 /// Download the pack (what isn't here already), telling the page how far it has got ("pack-progress").
+/// Stops at once on pack_cancel: the request is dropped, and a file half downloaded is fetched again next time.
 #[tauri::command]
 pub async fn pack_download(app: tauri::AppHandle, pack: String) -> Result<(), String> {
-    let dir = pack_folder(&app, &pack)?;
+    let cancelled = CANCEL.notified();
+    tokio::select! {
+        r = download(&app, &pack) => r,
+        _ = cancelled => Err("Cancelled.".into()),
+    }
+}
+
+/// The download window's Cancel (or Esc).
+#[tauri::command]
+pub fn pack_cancel() {
+    CANCEL.notify_waiters();
+}
+
+async fn download(app: &tauri::AppHandle, pack: &str) -> Result<(), String> {
+    let dir = pack_folder(app, pack)?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("Could not make {}: {e}", dir.display()))?;
-    let http = client()?;
+    let http = client(READ_TIMEOUT)?;
     let base = format!("{RELEASES}/{pack}");
     let text = http
         .get(format!("{base}/manifest.json"))
@@ -107,7 +131,7 @@ pub async fn pack_download(app: tauri::AppHandle, pack: String) -> Result<(), St
         let mut hash = Sha256::new();
         let mut got = 0u64;
         let mut told = 0u64;
-        while let Some(chunk) = res.chunk().await.map_err(|e| format!("The download of {} stopped: {e}", f.name))? {
+        while let Some(chunk) = res.chunk().await.map_err(|e| stopped(&f.name, &e))? {
             got += chunk.len() as u64;
             if got > f.bytes {
                 break;
@@ -133,6 +157,14 @@ pub async fn pack_download(app: tauri::AppHandle, pack: String) -> Result<(), St
     Ok(())
 }
 
+fn stopped(name: &str, e: &reqwest::Error) -> String {
+    if e.is_timeout() {
+        format!("The download of {name} stalled: nothing came for {} s. Check the connection and try again.", READ_TIMEOUT.as_secs())
+    } else {
+        format!("The download of {name} stopped: {e}")
+    }
+}
+
 /// One file of the pack, for the reader to load.
 #[tauri::command]
 pub fn pack_read(app: tauri::AppHandle, pack: String, name: String) -> Result<tauri::ipc::Response, String> {
@@ -142,4 +174,35 @@ pub fn pack_read(app: tauri::AppHandle, pack: String, name: String) -> Result<ta
     let path = pack_folder(&app, &pack)?.join(&name);
     let bytes = std::fs::read(&path).map_err(|e| format!("Could not read {}: {e}", path.display()))?;
     Ok(tauri::ipc::Response::new(bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Read;
+
+    #[test]
+    fn a_stalled_download_gives_up() {
+        // a server that sends 1 KB of a "140 MB" file, then nothing (the connection stays open)
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 1024];
+            let _ = s.read(&mut buf);
+            let _ = s.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 140000000\r\n\r\n");
+            let _ = s.write_all(&[0u8; 1024]);
+            std::thread::sleep(Duration::from_secs(30));
+        });
+        let started = std::time::Instant::now();
+        let got = tauri::async_runtime::block_on(async {
+            let http = client(Duration::from_secs(1)).unwrap();
+            let mut res = http.get(format!("http://127.0.0.1:{port}/encoder.onnx")).send().await.map_err(|e| e.to_string())?;
+            while let Some(_c) = res.chunk().await.map_err(|e| stopped("encoder.onnx", &e))? {}
+            Ok::<(), String>(())
+        });
+        let e = got.expect_err("the download should stop");
+        assert!(e.contains("stalled"), "{e}");
+        assert!(started.elapsed() < Duration::from_secs(10));
+    }
 }

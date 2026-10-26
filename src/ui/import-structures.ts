@@ -4,11 +4,12 @@
 
 import { ask } from './ask';
 import { openReview, pixelsPng, type FoundPicture } from './import-review';
-import { canReadHere, downloadPack, localReader, packReady, readWithAi, PACK_MB, type ReadResult } from '../recognise/reader';
+import { canReadHere, cancelPack, downloadPack, localReader, packReady, readWithAi, PACK_MB, type ReadResult } from '../recognise/reader';
 import { checkRead, type Checked, type Engine } from '../recognise/check';
 import { cleanPhoto, shrinkTo, type Pixels } from '../recognise/picture';
 import { findDrawings, isProse, type Box } from '../recognise/find';
 import { aiName, aiReady, type AiPrefs } from '../ai/link';
+import { imageSize } from '../render/images';
 import type { DocStyle } from '../style';
 
 export interface ImportHost {
@@ -22,7 +23,12 @@ export interface ImportHost {
 /** A picture's pixels, at most `most` pixels on its longer side. */
 export async function decodePicture(bytes: Uint8Array, mime: string, most = 2000): Promise<Pixels | null> {
   try {
-    const bmp = await createImageBitmap(new Blob([bytes as BlobPart], { type: mime }));
+    // a big scan or photo is decoded already shrunk, away from the page (it froze the window for seconds),
+    // the longer side to `most`; shrinkTo below still has the last word (a photo turned by its EXIF)
+    const size = imageSize(bytes, mime);
+    const k = size ? most / Math.max(size.w, size.h) : 1;
+    const shrunk: ImageBitmapOptions = k < 1 ? { ...(size!.w >= size!.h ? { resizeWidth: most } : { resizeHeight: most }), resizeQuality: 'high' } : {};
+    const bmp = await createImageBitmap(new Blob([bytes as BlobPart], { type: mime }), shrunk);
     const c = document.createElement('canvas');
     c.width = bmp.width;
     c.height = bmp.height;
@@ -66,14 +72,25 @@ async function chooseReader(host: ImportHost, preferAi: boolean): Promise<'here'
   bar.style.width = '100%';
   const h = document.createElement('h2');
   h.textContent = 'Downloading the structure reader…';
-  d.append(h, bar);
-  d.addEventListener('cancel', (e) => e.preventDefault());
+  // Cancel (or Esc) drops the download; what was fetched of a file is fetched again next time
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.textContent = 'Cancel';
+  const buttons = document.createElement('p');
+  buttons.className = 'ask-buttons';
+  buttons.append(cancel);
+  d.append(h, bar, buttons);
+  let cancelled = false;
+  const stop = () => { if (cancelled) return; cancelled = true; cancel.disabled = true; h.textContent = 'Stopping the download…'; void cancelPack().catch(() => {}); };
+  cancel.addEventListener('click', stop);
+  d.addEventListener('cancel', (e) => { e.preventDefault(); stop(); });
   document.body.append(d);
   d.showModal();
   try {
     await downloadPack((share) => { bar.value = share; });
     return 'here';
   } catch (e) {
+    if (cancelled) return null;
     await ask('Import Structures', [], { noCancel: true, note: 'The structure reader could not be downloaded: ' + (e instanceof Error ? e.message : String(e)) });
     return null;
   } finally {
@@ -113,8 +130,41 @@ export async function importPictures(host: ImportHost, found: FoundPicture[], o:
   });
 }
 
+/** File > Import Structures from Picture (or Paste Picture as Structure): the pictures read, and the review screen. */
+export async function importPictureFiles(host: ImportHost, pics: { name: string; bytes: Uint8Array; mime: string }[]): Promise<void> {
+  if (!pics.length) return;
+  const found: FoundPicture[] = [];
+  host.flash(pics.length === 1 ? 'Reading the picture…' : 'Reading the pictures…');
+  for (const p of pics) {
+    const px = await decodePicture(p.bytes, p.mime);
+    if (px) found.push({ where: p.name, pixels: px });
+    else host.flash(`${p.name} can't be read as a picture.`);
+  }
+  // none could be read: the message naming the file stays
+  if (!found.length) return;
+  await importPictures(host, found, {
+    title: 'Import Structures from Picture',
+    note: 'Photos and scans of hand drawings work best with dark lines on plain paper, one structure to a picture. Check each structure against its picture before you place it: fix the SMILES, or tick it off.',
+    tickDoubtful: true,
+    photo: true,
+  });
+}
+
 /** Pages read at most in one go (a thesis is read a part at a time). */
 const MOST_PAGES = 40;
+
+/** Pixels a page is drawn in at most (a poster), and on its longer side: canvases larger than this can't be made everywhere. */
+const MOST_PIXELS = 16e6, MOST_SIDE = 8000;
+
+/**
+ * How large a page of `w` × `h` points is drawn (about 150 dots to the inch: structures come out a few
+ * hundred pixels across, as the reader likes; less on a poster), and how far apart two strokes can be and
+ * still be one drawing, in pixels: a set distance on the page (a letter page's width / 120), not a share of its width.
+ */
+export function pageRender(w: number, h: number): { scale: number; gap: number } {
+  const scale = Math.min(2, Math.sqrt(MOST_PIXELS / (w * h)), MOST_SIDE / Math.max(w, h));
+  return { scale, gap: Math.max(1, Math.round((612 / 120) * scale)) };
+}
 
 /** The drawings on the pages of a PDF, as pictures (pages from `first` to `last`, from 1). */
 export async function pdfDrawings(bytes: Uint8Array, pick: (pages: number) => Promise<[number, number] | null>, progress: (msg: string) => void): Promise<FoundPicture[] | null> {
@@ -131,8 +181,9 @@ export async function pdfDrawings(bytes: Uint8Array, pick: (pages: number) => Pr
     for (let n = range[0]; n <= range[1]; n++) {
       progress(`Looking for structures on page ${n} of ${range[1]}…`);
       const page = await pdf.getPage(n);
-      // about 150 dots to the inch: structures come out a few hundred pixels across, as the reader likes
-      const view = page.getViewport({ scale: 2 });
+      const size = page.getViewport({ scale: 1 });
+      const { scale, gap } = pageRender(size.width, size.height);
+      const view = page.getViewport({ scale });
       const canvas = document.createElement('canvas');
       canvas.width = Math.ceil(view.width);
       canvas.height = Math.ceil(view.height);
@@ -152,7 +203,7 @@ export async function pdfDrawings(bytes: Uint8Array, pick: (pages: number) => Pr
       const px = ctx.getImageData(0, 0, w, h).data;
       const ink = new Uint8Array(w * h);
       for (let i = 0; i < w * h; i++) ink[i] = px[i * 4] + px[i * 4 + 1] + px[i * 4 + 2] < 600 ? 1 : 0;
-      const boxes = findDrawings(ink, w, h, prose, Math.round(w / 120), labels);
+      const boxes = findDrawings(ink, w, h, prose, gap, labels);
       boxes.forEach((b, k) => {
         const pad = 6;
         const x = Math.max(0, b.x - pad), y = Math.max(0, b.y - pad), bw = Math.min(w - x, b.w + 2 * pad), bh = Math.min(h - y, b.h + 2 * pad);
