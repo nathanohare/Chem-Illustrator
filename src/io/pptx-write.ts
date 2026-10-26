@@ -344,8 +344,20 @@ function runXml(r: TextRun, explicit: { size: number; font: string } | null, hli
     const color = r.color ?? (explicit ? '#000000' : undefined);
     const fill = color ? `<a:solidFill><a:srgbClr val="${hex6(color)}"/></a:solidFill>` : '';
     const latin = font ? `<a:latin typeface="${xml(font)}"/><a:cs typeface="${xml(font)}"/>` : '';
-    return `<a:r><a:rPr ${attrs.join(' ')}>${fill}${latin}${click}</a:rPr><a:t>${xml(p.text)}</a:t></a:r>`;
+    return `<a:r><a:rPr ${attrs.join(' ')}>${fill}${latin}${ownColour(click, color)}</a:rPr><a:t>${xml(p.text)}</a:t></a:r>`;
   }).join('');
+}
+
+/** The theme's link colour (the theme written here has PowerPoint's). */
+export const HLINK_COLOUR = '#0563C1';
+
+/**
+ * A link that keeps its text's colour in PowerPoint (2019 and later; earlier ones show the theme's
+ * link colour): any colour but the theme's.
+ */
+function ownColour(click: string, color: string | undefined): string {
+  if (!click || (color && hex6(color) === hex6(HLINK_COLOUR))) return click;
+  return click.replace(/\/>$/, '><a:extLst><a:ext uri="{A12FA001-AC4F-418D-AE19-62706E023703}"><ahyp:hlinkClr xmlns:ahyp="http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor" val="tx"/></a:ext></a:extLst></a:hlinkClick>');
 }
 
 const NUMBER_TYPES = ['arabicPeriod', 'alphaLcPeriod', 'romanLcPeriod'];
@@ -1464,7 +1476,7 @@ function theme(m: Master, name: string): string {
     `<a:clrScheme name="Chem Illustrator"><a:dk1><a:srgbClr val="${hex6(m.textColor)}"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>` +
     `<a:dk2><a:srgbClr val="1D2330"/></a:dk2><a:lt2><a:srgbClr val="EEF0F3"/></a:lt2>` +
     accents.map((c, i) => `<a:accent${i + 1}><a:srgbClr val="${c}"/></a:accent${i + 1}>`).join('') +
-    `<a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme>` +
+    `<a:hlink><a:srgbClr val="${hex6(HLINK_COLOUR)}"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme>` +
     `<a:fontScheme name="Chem Illustrator"><a:majorFont><a:latin typeface="${xml(m.titleFont)}"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>` +
     `<a:minorFont><a:latin typeface="${xml(m.bodyFont)}"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>` +
     `<a:fmtScheme name="Chem Illustrator"><a:fillStyleLst>${fmt('')}${fmt('<a:tint val="50000"/>')}${fmt('<a:shade val="80000"/>')}</a:fillStyleLst>` +

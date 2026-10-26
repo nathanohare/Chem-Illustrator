@@ -26,6 +26,9 @@ const opts: PptxOptions = {
   async svgToPng() { return PNG; },
 };
 
+// (strToU8's bytes, copied: zipSync takes another window's Uint8Array for a folder)
+const u8 = (t: string) => new Uint8Array(strToU8(t));
+
 const text = (c: Caption) => c.runs.map((r) => r.text).join('');
 
 describe('opening files saved here', () => {
@@ -243,8 +246,10 @@ describe('links in PowerPoint files', () => {
     const r = new PackageReader(bytes);
     const xml = new XMLSerializer().serializeToString(r.xml('ppt/slides/slide1.xml')!);
     expect(xml).toMatch(/<a:hlinkClick r:id="rId\d+"\/>/);
-    expect(xml).toMatch(/<a:hlinkClick r:id="rId\d+" action="ppaction:\/\/hlinksldjump"\/>/);
-    expect(xml).toMatch(/<a:hlinkClick r:id="" action="ppaction:\/\/hlinkshowjump\?jump=nextslide"\/>/);
+    // links in the text's own colour say so (PowerPoint shows the rest in the theme's link colour)
+    const own = '><a:extLst><a:ext uri="{A12FA001-AC4F-418D-AE19-62706E023703}"><ahyp:hlinkClr xmlns:ahyp="http://schemas.microsoft.com/office/drawing/2018/hyperlinkcolor" val="tx"/></a:ext></a:extLst></a:hlinkClick>';
+    expect(xml).toContain(`action="ppaction://hlinksldjump"${own}`);
+    expect(xml).toContain(`<a:hlinkClick r:id="" action="ppaction://hlinkshowjump?jump=nextslide"${own}`);
     const rels = [...r.rels('ppt/slides/slide1.xml').values()];
     expect(rels).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: REL.hyperlink, target: 'https://doi.org/10.1021/ja00001', external: true }),
@@ -264,10 +269,62 @@ describe('links in PowerPoint files', () => {
     const { bytes } = await linkedDeck();
     // PowerPoint's text only: our tags taken away
     const files = unzipSync(bytes);
-    for (const k of Object.keys(files)) if (k.startsWith('ppt/tags/')) files[k] = strToU8(strFromU8(files[k]).replace(/<p:tag name="CHEMILLUSTRATOR_TEXT"[^>]*\/>/g, ''));
+    for (const k of Object.keys(files)) if (k.startsWith('ppt/tags/')) files[k] = u8(strFromU8(files[k]).replace(/<p:tag name="CHEMILLUSTRATOR_TEXT"[^>]*\/>/g, ''));
     const back = readPptx(zipSync(files));
     const deck = new Deck(new Doc());
     deck.load(back.slides.map((s) => deck.makeSlide(s.layout, s.contents, s.notes, s)), back.size, back.master);
     expect(linksOf(deck.docOf(0).contents())).toEqual([['the paper', 'https://doi.org/10.1021/ja00001'], ['slide 3', `#slide=${deck.slides[2].id}`], ['on', '#next']]);
+  });
+  /** A deck whose title slide reads "Slide One", then a link PowerPoint puts on the word "Slide". */
+  async function titleLinkedInPowerPoint(keepOurs: boolean) {
+    const host = new Doc();
+    const d = Deck.blank(host);
+    d.attach();
+    const title = [...host.captions.values()].find((c) => c.ph === 'title')!;
+    host.edit('Type', () => host.updateCaption(title.id, { runs: [{ text: 'Slide One' }] }));
+    d.addSlide('title-content');
+    const bytes = await writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes })) }, opts);
+    const files = unzipSync(bytes);
+    if (!keepOurs) for (const k of Object.keys(files)) if (k.startsWith('ppt/tags/')) files[k] = u8(strFromU8(files[k]).replace(/<p:tag name="CHEMILLUSTRATOR_TEXT"[^>]*\/>/g, ''));
+    // as PowerPoint saves Insert Hyperlink > Place in This Document: the link alone, its look from the theme
+    const slide = strFromU8(files['ppt/slides/slide1.xml']);
+    const run = /<a:r><a:rPr lang="en-US" dirty="0"><\/a:rPr><a:t>Slide One<\/a:t><\/a:r>/;
+    expect(slide).toMatch(run);
+    files['ppt/slides/slide1.xml'] = u8(slide.replace(run, '<a:r><a:rPr lang="en-US" dirty="0"><a:hlinkClick r:id="rId9" action="ppaction://hlinksldjump"/></a:rPr><a:t>Slide</a:t></a:r><a:r><a:rPr lang="en-US" dirty="0"/><a:t> One</a:t></a:r>'));
+    const rels = 'ppt/slides/_rels/slide1.xml.rels';
+    files[rels] = u8(strFromU8(files[rels]).replace('</Relationships>', `<Relationship Id="rId9" Type="${REL.slide}" Target="slide1.xml"/></Relationships>`));
+    const back = readPptx(zipSync(files));
+    const deck = new Deck(new Doc());
+    deck.load(back.slides.map((s) => deck.makeSlide(s.layout, s.contents, s.notes, s)), back.size, back.master);
+    return deck;
+  }
+
+  for (const keepOurs of [true, false]) {
+    it(`reads a link PowerPoint put on words in a title, in the theme's link look (${keepOurs ? 'text saved here' : 'PowerPoint\'s text only'})`, async () => {
+      const deck = await titleLinkedInPowerPoint(keepOurs);
+      const title = deck.docOf(0).contents().captions.find((c) => c.ph === 'title')!;
+      expect(text(title)).toBe('Slide One');
+      const linked = title.runs.find((r) => r.link)!;
+      expect(linked).toMatchObject({ text: 'Slide', link: `#slide=${deck.slides[0].id}`, underline: true, color: '#0563C1' });
+      expect(title.runs.filter((r) => r !== linked).every((r) => !r.link && !r.underline)).toBe(true);
+      // and saved again as PowerPoint's own jump, in the theme's link colour
+      const bytes = await writePptx({ size: deck.size, master: deck.master, slides: deck.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: deck.docOf(i), notes: s.notes })) }, opts);
+      const r = new PackageReader(bytes);
+      const xml = new XMLSerializer().serializeToString(r.xml('ppt/slides/slide1.xml')!);
+      const id = /<a:hlinkClick r:id="(rId\d+)" action="ppaction:\/\/hlinksldjump"\/><\/a:rPr><a:t>Slide<\/a:t>/.exec(xml)?.[1];
+      expect(id).toBeTruthy();
+      expect(r.rels('ppt/slides/slide1.xml').get(id!)).toMatchObject({ type: REL.slide, target: 'ppt/slides/slide1.xml' });
+    });
+  }
+
+  it('drops a link taken away in PowerPoint from text saved here', async () => {
+    const { bytes } = await linkedDeck();
+    const files = unzipSync(bytes);
+    const slide = strFromU8(files['ppt/slides/slide1.xml']);
+    files['ppt/slides/slide1.xml'] = u8(slide.replace(/<a:hlinkClick r:id="" action="ppaction:\/\/hlinkshowjump\?jump=nextslide"[^]*?<\/a:hlinkClick>/, ''));
+    const back = readPptx(zipSync(files));
+    const deck = new Deck(new Doc());
+    deck.load(back.slides.map((s) => deck.makeSlide(s.layout, s.contents, s.notes, s)), back.size, back.master);
+    expect(linksOf(deck.docOf(0).contents())).toEqual([['the paper', 'https://doi.org/10.1021/ja00001'], ['slide 3', `#slide=${deck.slides[2].id}`]]);
   });
 });

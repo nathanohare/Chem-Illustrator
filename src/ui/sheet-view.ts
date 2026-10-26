@@ -1723,8 +1723,18 @@ export class SheetView {
     ctx.restore();
   }
 
+  /**
+   * The mode's colour for the grid. The grid stays white in a dark window, as Excel's does, so it
+   * takes the colours made for a light window (the dark window's are pale on dark, and vanish here).
+   */
   private accent(): string {
-    return getComputedStyle(this.el).getPropertyValue('--accent').trim() || '#1e8a50';
+    const css = getComputedStyle(this.el);
+    return css.getPropertyValue('--mode-accent').trim() || css.getPropertyValue('--accent').trim() || '#1e8a50';
+  }
+
+  /** The pale tint of the mode's colour under selected headings (for a light grid, as accent()). */
+  private accentSoft(): string {
+    return getComputedStyle(this.el).getPropertyValue('--mode-soft').trim() || '#d8eee2';
   }
 
   private drawBorders(b: Partial<Record<Side, { style: string; color?: string }>>, x: number, y: number, w: number, h: number): void {
@@ -2055,7 +2065,7 @@ export class SheetView {
     const css = getComputedStyle(this.el);
     const headBg = css.getPropertyValue('--sh-head').trim() || '#f3f4f6';
     const headText = css.getPropertyValue('--sh-head-text').trim() || '#3a414d';
-    const soft = css.getPropertyValue('--accent-soft').trim() || '#d8eee2';
+    const soft = this.accentSoft();
     ctx.fillStyle = headBg;
     ctx.fillRect(0, 0, vw, HH);
     ctx.fillRect(0, 0, HW, vh);

@@ -209,7 +209,8 @@ import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
 import { aiSettingsDialog } from './ui/ai-settings';
-import { importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
+import { freeSpace } from './editor/free-space';
+import { canReadStructures, importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
 import { placeRead } from './recognise/check';
 import { Diagnostics, catchErrors, errorReport, formatEntry, stamp, type LogEntry, type UnexpectedClose } from './diagnostics';
 import { keepStore } from './keep/store';
@@ -562,9 +563,9 @@ installTouchUi({
 $('#btn-undo').addEventListener('click', () => undo());
 $('#btn-redo').addEventListener('click', () => redo());
 $('#btn-fit').addEventListener('click', () => command('zoom-fit'));
-$('#btn-stress').addEventListener('click', () => stressTest(Number($<HTMLSelectElement>('#stress-n').value)));
-$('#btn-dev-off').addEventListener('click', () => command('dev-tools'));
 $('#btn-dark').addEventListener('click', () => command('dark-page'));
+/** Developer > Stress Test: how many drug-sized molecules it can draw. */
+const STRESS_SIZES = [100, 500, 2000, 5000];
 $('#help-hotkeys').addEventListener('click', () => { $<HTMLDialogElement>('#help').close(); hotkeysDialog.open(); });
 $('#help-close').addEventListener('click', () => $<HTMLDialogElement>('#help').close());
 /** View > Show R/S Preview: every R/S and E/Z label in red, on screen only. */
@@ -3337,23 +3338,39 @@ const importHost: ImportHost = {
   chem,
   ai: () => aiPrefs,
   flash,
-  // side by side from the middle of the window, two bond lengths apart, selected
+  // side by side, two bond lengths apart, in rows no wider than the window, in the free space
+  // nearest the middle of the window (clear of what is drawn already), selected
   place(chosen) {
     finishTyping();
-    const gap = doc.style.bondLength * 2;
-    const widths = chosen.map(({ checked }) => {
-      const xs = [...checked.doc.atoms.values()].map((a) => a.x);
-      return xs.length ? Math.max(...xs) - Math.min(...xs) : 0;
+    const L = doc.style.bondLength, gap = L * 2;
+    const sizes = chosen.map(({ checked }) => {
+      const at = [...checked.doc.atoms.values()];
+      if (!at.length) return { w: 0, h: 0 };
+      const xs = at.map((a) => a.x), ys = at.map((a) => a.y);
+      return { w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) };
     });
-    const total = widths.reduce((s, w) => s + w, 0) + gap * (chosen.length - 1);
-    const c = pasteCentre();
-    let x = c.x - total / 2;
+    const area = slideContentArea();
+    const tl = renderer.toDoc(0, 0), br = renderer.toDoc(renderer.width, renderer.height);
+    const room = Math.max(...sizes.map((z) => z.w), 0.9 * (area ? area.x2 - area.x1 : br.x - tl.x));
+    const rows: { items: number[]; w: number; h: number }[] = [];
+    sizes.forEach((z, i) => {
+      const row = rows.at(-1);
+      if (row && row.w + gap + z.w <= room) { row.items.push(i); row.w += gap + z.w; row.h = Math.max(row.h, z.h); }
+      else rows.push({ items: [i], w: z.w, h: z.h });
+    });
+    const blockW = Math.max(...rows.map((r) => r.w)), blockH = rows.reduce((s, r) => s + r.h, 0) + gap * (rows.length - 1);
+    const c = freeSpace(doc, blockW, blockH, pasteCentre(), gap);
     const ids: number[] = [];
     doc.edit(chosen.length === 1 ? 'Import Structure' : 'Import Structures', () => {
-      chosen.forEach(({ result, checked }, i) => {
-        ids.push(...placeRead(doc, result, checked.molblock, x + widths[i] / 2, c.y));
-        x += widths[i] + gap;
-      });
+      let y = c.y - blockH / 2;
+      for (const row of rows) {
+        let x = c.x - row.w / 2;
+        for (const i of row.items) {
+          ids.push(...placeRead(doc, chosen[i].result, chosen[i].checked.molblock, x + sizes[i].w / 2, y + row.h / 2));
+          x += sizes[i].w + gap;
+        }
+        y += row.h + gap;
+      }
     });
     selectNewAtoms(ids);
     flash(chosen.length === 1 ? 'Placed the structure. Check it against the picture.' : `Placed ${chosen.length} structures. Check them against the pictures.`, 5000);
@@ -3385,6 +3402,7 @@ async function importPastedPicture(): Promise<void> {
 /** File > Import Structures from PDF: every drawing on the pages, read and offered on the review screen. */
 async function importPdf(): Promise<void> {
   finishTyping();
+  if (!await canReadStructures(importHost)) return;
   const f = await openBytesDialog('PDF files', [], ['pdf']).catch(async (e) => { await showError(String(e)); return null; });
   if (!f) return;
   // the pages are read with only a progress line showing, so another tab may show by the time Place
@@ -4585,7 +4603,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -5270,6 +5288,8 @@ const COMMANDS: Record<string, () => unknown> = {
   },
 };
 for (const p of PICTURE_STYLES) COMMANDS[`picture-style-${p.id}`] = () => setPictureStyle(p.look);
+// Developer > Stress Test (shown with View > Developer Tools)
+for (const n of STRESS_SIZES) COMMANDS[`stress-${n}`] = () => { void stressTest(n); };
 for (const [i, a] of ANIM_COMMANDS.entries()) {
   const e = EFFECTS[i % EFFECTS.length].id, exit = i >= EFFECTS.length;
   COMMANDS[a.cmd] = () => { if (ws.active.mode !== 'slides') return false; animUi?.applyEffect(e, exit); return true; };
@@ -5284,6 +5304,8 @@ const menus = [...document.querySelectorAll<HTMLDivElement>('header > .menu-wrap
   list: w.querySelector<HTMLDivElement>(':scope > .menu')!,
 }));
 type Menu = (typeof menus)[number];
+/** The menus on the bar now (Developer only while Developer Tools are on). */
+const shownMenus = () => menus.filter((m) => !(m.btn.parentElement as HTMLElement).hidden);
 let openMenu: Menu | null = null;
 /** The items arrow keys move through in one menu or submenu: not hidden, not greyed out. */
 const menuItems = (list: HTMLElement) =>
@@ -5369,7 +5391,8 @@ for (const m of menus) {
     const items = menuItems(here);
     const now = document.activeElement as HTMLButtonElement;
     const i = items.indexOf(now);
-    const j = menus.indexOf(m);
+    const bar = shownMenus();
+    const j = bar.indexOf(m);
     const parentItem = here === m.list ? null : here.parentElement!.querySelector<HTMLButtonElement>(':scope > button');
     if (e.key === 'Escape') {
       e.stopPropagation();
@@ -5386,7 +5409,7 @@ for (const m of menus) {
     }
     else if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
       e.preventDefault();
-      showMenu(menus[(j + (e.key === 'ArrowRight' ? 1 : -1) + menus.length) % menus.length]);
+      showMenu(bar[(j + (e.key === 'ArrowRight' ? 1 : -1) + bar.length) % bar.length]);
     }
   });
 }
@@ -5402,13 +5425,14 @@ for (const m of menus) {
   const letter = m.btn.getAttribute('aria-keyshortcuts')?.match(/^Alt\+(\w)$/)?.[1];
   if (letter) MNEMONICS.set(letter.toUpperCase(), m);
   m.btn.addEventListener('keydown', (e) => {
-    const j = menus.indexOf(m);
-    const go = (k: number) => { e.preventDefault(); const n = menus[(k + menus.length) % menus.length]; if (openMenu) showMenu(n); else n.btn.focus(); };
+    const bar = shownMenus();
+    const j = bar.indexOf(m);
+    const go = (k: number) => { e.preventDefault(); const n = bar[(k + bar.length) % bar.length]; if (openMenu) showMenu(n); else n.btn.focus(); };
     if (e.key === 'ArrowRight') go(j + 1);
     else if (e.key === 'ArrowLeft') go(j - 1);
     else if (e.key === 'ArrowDown') { e.preventDefault(); showMenu(m); }
     else if (e.key === 'Home') go(0);
-    else if (e.key === 'End') go(menus.length - 1);
+    else if (e.key === 'End') go(bar.length - 1);
     else if (e.key === 'Escape' && !openMenu) { e.preventDefault(); leaveMenuBar(); }
   });
 }
