@@ -2113,7 +2113,7 @@ const ws: Workspace = new Workspace(doc, {
   leave: (tab) => {
     // letters still being written with the pen go into this tab's drawing
     editor.sketcher.flush();
-    finishTyping();
+    finishTab();
     if (tab.mode === 'sheet') sheetMode?.leave();
     if (tab.mode === 'document') docMode?.leave();
     modeTool[tab.mode] = editor.toolName;
@@ -2124,7 +2124,7 @@ const ws: Workspace = new Workspace(doc, {
   },
   enter: (tab, opened) => enterTab(tab, opened),
   // every way of closing a tab (×, middle-click, Delete, Ctrl+W) finishes a figure or cell structure first
-  closing: () => finishTyping(),
+  closing: () => finishTab(),
   changed: () => { renderTabs(); updateTitle(); layoutSplit(); tickAutoSave(); },
   flash,
   pptx: pptxOptions(),
@@ -2210,9 +2210,18 @@ function showLayers(tab = ws.active): void {
 
 /** Finish typing in a caption or the notes (and drawing a structure for a cell), before the slide or tab changes. */
 function finishTyping(): void {
-  finishCellStructure(true);
   editor.closeCaption();
   flushNotes();
+}
+
+/**
+ * Finish typing and a structure being drawn for a cell or a document's figure (put in place as
+ * with Done), before the tab is left, saved or closed. Commands on the drawing itself only use
+ * finishTyping: they work on the structure being drawn and leave it open.
+ */
+function finishTab(): void {
+  finishCellStructure(true);
+  finishTyping();
 }
 
 /** Set the window up for a tab that has just come to the front. */
@@ -4908,7 +4917,7 @@ deckWatchers.push((d) => slideCompare.deckChanged(d));
 
 /** File > New > New from Template: a document or sheet started from one of our templates. */
 async function newFromTemplate(): Promise<void> {
-  finishTyping();
+  finishTab();
   const got = await pickFileTemplate(sheetActive() ? 'sheet' : 'document');
   if (!got) return;
   if (got.kind === 'sheet') {
@@ -5099,10 +5108,10 @@ const ANIM_COMMANDS: { cmd: string; label: string }[] = [false, true].flatMap((e
 })));
 
 const COMMANDS: Record<string, () => unknown> = {
-  new: () => { finishTyping(); ws.newDrawing(); },
+  new: () => { finishTab(); ws.newDrawing(); },
   'check-accessibility': () => { finishTyping(); if (accessibility.open) accessibility.refresh(); else accessibility.show(document.querySelector<HTMLElement>('[data-cmd="check-accessibility"]:not([hidden])')); },
   'alt-text': () => { finishTyping(); void drawingAltText(); },
-  'new-slides': () => { finishTyping(); ws.newSlides(); },
+  'new-slides': () => { finishTab(); ws.newSlides(); },
   'new-design': () => newDesign(),
   'design-size': () => designSize(),
   'connector-tool': () => { finishTyping(); editor.setTool('connector'); },
@@ -5136,26 +5145,26 @@ const COMMANDS: Record<string, () => unknown> = {
   'shape-back': () => editor.setShapeLayer('back') || flash('Select the shapes to send to the back.'),
   'shape-forward': () => editor.setShapeLayer('forward') || flash('Select the shapes to bring forward.'),
   'shape-backward': () => editor.setShapeLayer('backward') || flash('Select the shapes to send backward.'),
-  'new-sheet': () => { finishTyping(); ws.newSheet(); },
-  'new-document': () => { finishTyping(); ws.newDocument(); },
+  'new-sheet': () => { finishTab(); ws.newSheet(); },
+  'new-document': () => { finishTab(); ws.newDocument(); },
   'new-from-template': () => { void newFromTemplate(); },
   open: () => ws.open(),
-  save: () => { finishTyping(); return ws.save(focusTab()); },
-  'save-as': () => { finishTyping(); return ws.saveAs(focusTab()); },
-  autosave: () => { finishTyping(); return keeper.toggleAutoSave(focusTab()); },
-  'version-history': () => { finishTyping(); return keeper.historyCommand(focusTab()); },
+  save: () => { finishTab(); return ws.save(focusTab()); },
+  'save-as': () => { finishTab(); return ws.saveAs(focusTab()); },
+  autosave: () => { finishTab(); return keeper.toggleAutoSave(focusTab()); },
+  'version-history': () => { finishTab(); return keeper.historyCommand(focusTab()); },
   'recover-work': () => keeper.recoverCommand(),
   'keep-options': () => settingsWindow.open('autosave'),
   'save-workspace': () => saveWorkspace(false),
   'save-workspace-as': () => saveWorkspace(true),
   'open-workspace': () => openWorkspace(),
-  'close-tab': () => { finishTyping(); return ws.close(); },
+  'close-tab': () => { finishTab(); return ws.close(); },
   'next-tab': () => ws.cycle(1),
   'prev-tab': () => ws.cycle(-1),
   'export-mol': () => exportMolfile(),
-  'export-pdf': () => { finishTyping(); return exportPdf(); },
+  'export-pdf': () => { finishTab(); return exportPdf(); },
   print: () => void printNow(),
-  'export-picture': () => { finishTyping(); return exportPicture(); },
+  'export-picture': () => { finishTab(); return exportPicture(); },
   undo: () => undo(),
   redo: () => redo(),
   'insert-picture': () => insertPicture(),
@@ -7082,7 +7091,7 @@ editor.onProperties = () => {
 // Unsaved work: ask before the window closes.
 if (isTauri()) {
   getCurrentWindow().onCloseRequested(async (e) => {
-    finishTyping();
+    finishTab();
     if (!(await ws.closeAll())) e.preventDefault();
     // closing normally: the recovery copies and lock files aren't needed
     else { await keeper.end(); await diagnostics.end(); }
