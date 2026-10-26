@@ -32,12 +32,36 @@ describe('empty placeholders', () => {
     const sps = [...xml.matchAll(/<p:sp>.*?<\/p:sp>/g)].map((m) => ({ at: m.index!, ph: /<p:ph[^>]*>/.exec(m[0])?.[0] ?? '', text: /<a:t>([^<]*)/.exec(m[0])?.[1] ?? '' }));
     const empty = sps.find((x) => /idx="2"/.test(x.ph))!;
     const left = sps.find((x) => x.text === 'Left side')!;
-    // the empty right one (the layout's second body) behind the picture; the left one, with text, in front
+    // both behind the picture (the left one's text is clear of it), in the layout's order, each its own placeholder
     expect(empty.at).toBeLessThan(pic);
     expect(left.ph).toContain('idx="1"');
-    expect(left.at).toBeGreaterThan(pic);
+    expect(left.at).toBeLessThan(empty.at);
     // and both come back where they were
     const back = readPptx(bytes).slides[0].contents.captions.filter((c) => c.ph === 'body').sort((p, q) => p.x - q.x);
     expect(back.map((c) => c.runs.map((r) => r.text).join(''))).toEqual(['Left side', '']);
+  });
+
+  // laptop check office-alt-text: PowerPoint's Accessibility Assistant flagged the reading order,
+  // as the title and subtitle came after pictures put on the slide later
+  it('reads the title and subtitle first, unless the text sits over something', async () => {
+    const host = new Doc();
+    const d = Deck.blank(host);
+    d.attach();
+    d.setLayout('title');
+    const ph = (k: string) => [...host.captions.values()].find((c) => c.ph === k)!;
+    host.edit('Fill', () => {
+      host.updateCaption(ph('title').id, { runs: [{ text: 'Results' }] });
+      host.updateCaption(ph('subtitle').id, { runs: [{ text: 'Group meeting' }] });
+      host.addShape({ kind: 'picture', x1: 20, y1: 20, x2: 120, y2: 80, src: DOT, px: { w: 1, h: 1 } });
+    });
+    const save = async () => strFromU8(unzipSync(await writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ layout: s.layout, doc: d.docOf(i), notes: s.notes })) }, opts))['ppt/slides/slide1.xml']);
+    let xml = await save();
+    expect(xml.indexOf('<a:t>Results</a:t>')).toBeLessThan(xml.indexOf('<a:t>Group meeting</a:t>'));
+    expect(xml.indexOf('<a:t>Group meeting</a:t>')).toBeLessThan(xml.indexOf('<p:pic>'));
+    // a picture right under the subtitle: its text stays in front, as on screen
+    const sub = ph('subtitle');
+    host.edit('Under', () => host.addShape({ kind: 'picture', x1: sub.x, y1: sub.y - 20, x2: sub.x + 200, y2: sub.y + 20, src: DOT, px: { w: 1, h: 1 } }));
+    xml = await save();
+    expect(xml.lastIndexOf('<p:pic>')).toBeLessThan(xml.indexOf('<a:t>Group meeting</a:t>'));
   });
 });

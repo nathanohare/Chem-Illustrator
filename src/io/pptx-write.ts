@@ -638,13 +638,16 @@ class Writer {
       mark({ captions: new Set([title.id]) }, id);
       out.push(this.text(path, title, id++, s.layout, styles, phCount, doc));
     }
-    // empty placeholders at the back: things put on the slide go in front of them, so in
-    // PowerPoint a click on a picture over one picks the picture (laptop bench pp-compare-decks)
+    // the other placeholders next, at the back: things put on the slide go in front of them, so in
+    // PowerPoint a click on a picture over an empty one picks the picture (laptop bench
+    // pp-compare-decks), and they are read straight after the title (office-alt-text: PowerPoint's
+    // Check reading order). One with text over something stays in front of it, as on screen.
     // (each keeps the layout's placeholder it has in the order they are listed)
     this.phAt.clear();
     const seen = { ...phCount };
     for (const c of parts.texts) if (c.ph) { const k = c.ph === 'title' ? 'title' : 'body'; this.phAt.set(c, seen[k] = (seen[k] ?? 0) + 1); }
-    for (const c of parts.texts.filter((x) => x.ph && !x.runs.some((r) => r.text.trim()))) {
+    const back = (c: Caption) => !c.runs.some((r) => r.text.trim()) || !titleOverlaps(doc, c, roughCaptionBox(c, (c.ph === 'title' ? styles.title?.size : c.ph === 'subtitle' ? styles.subtitle?.size : styles.body?.size) ?? 24));
+    for (const c of parts.texts.filter((x) => x.ph && back(x))) {
       parts.texts.splice(parts.texts.indexOf(c), 1);
       mark({ captions: new Set([c.id]) }, id);
       out.push(this.text(path, c, id++, s.layout, styles, phCount, doc));
