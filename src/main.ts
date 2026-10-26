@@ -943,15 +943,15 @@ async function insertMedia(audio: boolean): Promise<void> {
   if (!type) { flash(`${f.name} isn't a ${audio ? 'sound' : 'video'} file this takes (${exts.join(', ')}).`); return; }
   if (f.bytes.length > 200 * 1024 * 1024) flash('This is a big file: it is kept inside the slide file, which grows by as much.', 8000);
   const src = dataUrl(f.bytes, type.mime);
-  let px = { w: 128, h: 128 }, poster = '', length = 0;
+  let px = { w: 128, h: 128 }, poster = '', length = 0, playable = true;
   if (type.audio) {
     poster = speakerPng();
     length = await probeAudio(src);
   } else {
     flash('Reading the video…');
     const got = await probeVideo(src);
-    if (!got) { flash(`This computer can't play ${f.name}. MP4 (H.264) videos play everywhere, PowerPoint too.`, 8000); }
     if (got) { px = { w: got.w, h: got.h }; poster = got.poster; length = got.length; }
+    else playable = false;
   }
   if (!poster) poster = speakerPng();
   finishTyping();
@@ -969,7 +969,9 @@ async function insertMedia(audio: boolean): Promise<void> {
   });
   editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set([made!.id]) };
   editor.changed();
-  flash(`${type.audio ? 'Sound' : 'Video'} added: it starts when clicked in the show. Double-click it to trim it or change how it plays.`, 6000);
+  // kept even so, for PowerPoint, which may play it
+  if (!playable) flash(`${f.name} is on the slide, but this computer can't play it. MP4 (H.264) videos play everywhere, PowerPoint too.`, 8000);
+  else flash(`${type.audio ? 'Sound' : 'Video'} added: it starts when clicked in the show. Double-click it to trim it or change how it plays.`, 6000);
 }
 
 /**
