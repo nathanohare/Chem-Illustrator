@@ -11,7 +11,7 @@ import { normalizeFormula } from '../sheet/formula';
 import { dateSerial } from '../sheet/dates';
 import { kids, kid } from './ooxml';
 import { textInput } from './xlsx';
-import { safeSheetName } from './sheet-files';
+import { uniqueSheetName } from './sheet-files';
 
 const TABLE = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
 const OFFICE = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
@@ -228,11 +228,7 @@ export function readOds(bytes: Uint8Array): { book: Workbook; warnings: string[]
   const tables = kids(sheet, 'table');
   if (!tables.length) throw new Error('This spreadsheet has no sheets.');
   const names: string[] = [];
-  for (const [i, t] of tables.entries()) {
-    let n = safeSheetName(tAttr(t, 'name') || `Sheet${i + 1}`);
-    for (let k = 2; names.some((x) => x.toLowerCase() === n.toLowerCase()); k++) n = safeSheetName(`${tAttr(t, 'name')} (${k})`);
-    names.push(n);
-  }
+  for (const [i, t] of tables.entries()) names.push(uniqueSheetName(tAttr(t, 'name') || `Sheet${i + 1}`, names));
   const book = new Workbook(names);
   const warnings: string[] = [];
   let pictures = 0, hiddenSheets = 0;

@@ -10,7 +10,7 @@ import { colName, quoteSheet, Range } from '../sheet/refs';
 import { normalizeFormula } from '../sheet/formula';
 import type { DefinedName } from '../sheet/names';
 import { BUILTIN_FORMATS, pxFromWidth, textInput } from './xlsx';
-import { safeSheetName } from './sheet-files';
+import { uniqueSheetName } from './sheet-files';
 
 /** Is this an old Excel workbook (a compound file with a workbook stream)? */
 export function isXls(bytes: Uint8Array): boolean {
@@ -335,11 +335,7 @@ export function readXls(bytes: Uint8Array): { book: Workbook; warnings: string[]
 
   // sheet names as this program takes them (and unique)
   const names: string[] = [];
-  for (const s of sheets) {
-    let n = safeSheetName(s.name);
-    for (let k = 2; names.some((x) => x.toLowerCase() === n.toLowerCase()); k++) n = safeSheetName(`${s.name} (${k})`);
-    names.push(n);
-  }
+  for (const s of sheets) names.push(uniqueSheetName(s.name, names));
   const world: FormulaWorld = { sheetNames: names, xti, names: nameRecs.map((n) => n.name) };
   const book = new Workbook(names);
   let unreadFormulas = 0;

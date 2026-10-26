@@ -112,6 +112,16 @@ export function safeSheetName(name: string): string {
   return name.replace(/[\\/?*[\]:]/g, '_').slice(0, 31) || 'Sheet1';
 }
 
+/** A safe sheet name that no name in `taken` matches ignoring capitals: " (2)", " (3)" … is added,
+ * with the name cut short enough that the number stays within the 31 characters. */
+export function uniqueSheetName(name: string, taken: readonly string[]): string {
+  const base = safeSheetName(name);
+  const used = (n: string) => taken.some((x) => x.toLowerCase() === n.toLowerCase());
+  let n = base;
+  for (let k = 2; used(n); k++) n = base.slice(0, 31 - ` (${k})`.length) + ` (${k})`;
+  return n;
+}
+
 // ---------------------------------------------------------------- SD files
 
 /** The records of an SD file: each molfile with its data items. */
