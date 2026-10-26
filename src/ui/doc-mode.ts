@@ -39,9 +39,10 @@ import { DocComments } from './doc-comments';
 import { Ruler, docRulerPrefs, type RulerGeometry } from './ruler';
 import { StylesPane } from './styles-pane';
 import { TOF_NAMES, tocEntries, tofEntries } from '../document/toc';
-import { changeName, changesIn, countChanges, decide, decideEverywhere, reviewAuthor, reviewers, setReviewAuthor, setTrackFormatting, trackingFormatting, type MarkupView, type ReviewView } from '../document/revisions';
+import { changeName, changesIn, countChanges, decide, decideEverywhere, reviewAuthor, reviewers, setTrackFormatting, trackingFormatting, type MarkupView, type ReviewView } from '../document/revisions';
 import { combineDocuments, compareDocuments } from '../document/compare';
 import { ask } from './ask';
+import { askReviewName } from './review-name';
 import { askEquation } from './equation-dialog';
 import { ReferencesDialog, chooseReferences } from './references-dialog';
 import { citeSuper, formatOf, type Reference } from '../document/references';
@@ -4143,13 +4144,10 @@ export class DocumentMode {
   }
 
   /** The name put on your changes (kept in your settings). */
-  async askReviewName(): Promise<boolean> {
-    const got = await ask('Your Name', [{ name: 'name', label: 'Name shown on your changes', value: reviewAuthor() }], { ok: 'Save', note: 'Word shows this name on your changes too. Change it any time here or in Edit > Settings.' });
-    if (!got || !got.name.trim()) return false;
-    setReviewAuthor(got.name);
-    this.host.reviewNameChanged?.();
-    return true;
+  askReviewName(): Promise<boolean> {
+    return askReviewName(() => this.host.reviewNameChanged?.());
   }
+
 
   /** Accept or reject the changes in the selection, or the one at the caret, then go to the next. */
   private decideChange(accept: boolean): void {

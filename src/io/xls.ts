@@ -4,7 +4,7 @@
 // heights are read; charts, pictures, macros and the rest are not. Excel 5 and 95 files (BIFF5)
 // open with their values only. Files are only read: saving writes .xlsx.
 
-import { cfbStreams, isCfb } from './cfb';
+import { cfbStreams } from './cfb';
 import { Workbook, CellStyle } from '../sheet/workbook';
 import { colName, quoteSheet, Range } from '../sheet/refs';
 import { normalizeFormula } from '../sheet/formula';
@@ -12,16 +12,7 @@ import type { DefinedName } from '../sheet/names';
 import { BUILTIN_FORMATS, pxFromWidth, textInput } from './xlsx';
 import { safeSheetName } from './sheet-files';
 
-/** Is this an old Excel workbook (a compound file with a workbook stream)? */
-export function isXls(bytes: Uint8Array): boolean {
-  if (!isCfb(bytes)) return false;
-  try {
-    const s = cfbStreams(bytes);
-    return s.has('Workbook') || s.has('Book');
-  } catch {
-    return false;
-  }
-}
+export { isXls } from './sheet-sniff';
 
 interface Rec { id: number; data: Uint8Array; /** where CONTINUE records were joined on (for the shared strings) */ breaks: number[] }
 

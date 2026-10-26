@@ -2,7 +2,6 @@
 // toolbar, the drawing area (with the slide list and notes in Slides mode, or the grid in Sheet
 // mode), and the panels on the right.
 
-import { readDocumentFile, writeDocumentFile } from './io/doc-files';
 import { newDocDesign, setNewDocDesign } from './document/themes';
 import { fieldEnv } from './document/fields';
 import type { QuickPart } from './document/quick-parts';
@@ -52,15 +51,12 @@ import { WORKSPACE, folderOf } from './io/workspace-file';
 import { askLink, followLink, setLinkHost, type LinkPlace } from './ui/links-ui';
 import { SHOW_JUMPS, cellOfLink, linkSpans, normalizeLink, removeLink, setLink, slideOfLink } from './links';
 import { openFileDialog, openBytesDialog, openAnyBytesDialog, stampOf, readRef, saveFileDialog, writeFile, showError, baseName, readPath, withExtension, setEmbeddedWriter, KEYMAP_FILE, SETTINGS_FILE, MOL, PDF, PICTURE, SVG, TIFF, EMF, EPS, PPTX, DOCX, PICTURE_EXTENSIONS, type FileType } from './io/files';
-import { pickReuseSlides } from './ui/reuse-slides';
 import { writeTiff } from './render/tiff';
 import { itemsToEps } from './render/eps';
 import { Workspace, Tab } from './workspace';
 import { Deck, LayoutId, WIDE, STANDARD, Image as SlideImage, sizeName, SlideSize, slideBackground, slideColours, type SlideSource, contentArea, deckLayouts, type SizeFit } from './deck/deck';
 import { shapeMathPicture, shapeMathScale, shapeMathSize } from './deck/equation';
-import { askEquation } from './ui/equation-dialog';
 import { solid } from './deck/background';
-import { formatBackground } from './ui/background-dialog';
 import { pictureFormat } from './ui/picture-dialog';
 import { fxPng } from './render/picture-fx';
 import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND } from './deck/slide-view';
@@ -73,14 +69,12 @@ import { SlideTextRibbon } from './ui/slide-text-ribbon';
 import { CaptionEditor } from './ui/caption-editor';
 import { LayersPanel } from './ui/layers-panel';
 import { Scrollbars } from './ui/scrollbars';
-import { Presenter, type ShowOptions } from './ui/present';
+import type { Presenter, ShowOptions } from './ui/present';
 import { editHeaderFooter } from './ui/header-footer-dialog';
-import { setUpShow, editCustomShows } from './ui/show-setup-dialog';
 import { defaultShow, showOrder } from './deck/show-setup';
 import { recordingToWav, NARRATION_NAME } from './deck/narration';
 import { clockText } from './deck/show-link';
-import { PresenterView } from './ui/presenter-view';
-import { editMaster } from './ui/master-dialog';
+import type { PresenterView } from './ui/presenter-view';
 import { editDrawingStyle } from './ui/style-dialog';
 import type { DocText } from './document/document';
 import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from './dark-page';
@@ -89,14 +83,11 @@ import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPOR
 import { pngWithDpi } from './render/emf-read';
 import { whiteToClear } from './render/background';
 
-import { pickSlideTemplate } from './ui/slide-templates';
 import { AnimationUI } from './ui/animation-ui';
 import { SlideComments } from './ui/slide-comments';
-import { writePptx, type PptxOptions } from './io/pptx-write';
+import type { PptxOptions } from './io/pptx-write';
 import { EFFECTS, animName, newAnim, highlightParts } from './deck/animation';
 import { SLIDE_TEMPLATES, applyTemplate, type SlideTemplate } from './deck/templates';
-import { editLayouts } from './ui/layout-editor';
-import { pickSlideSize } from './ui/slide-size-dialog';import { pickTemplate } from './ui/template-gallery';
 import { showContextMenu, topMenuEntry, type MenuItem } from './ui/context-menu';
 import { defaultHandout, handoutLayout, handoutPageSvg, notesPageSize, notesPageSvg, type HandoutSetup } from './deck/notes-pages';
 import { OutlineView } from './ui/outline-view';
@@ -106,15 +97,9 @@ import { defaultView, guideNear, rulerText, snapMove, type RulerPrefs, type Slid
 import { effectPatch, effectsMenu, showStyleGallery, styleColours, stylePatch } from './ui/shape-styles';
 import { CommandSearch, uniqueCommands, type CommandItem } from './ui/command-search';
 import { fillTemplate, templateSize } from './design/templates';
-import { askCycle } from './ui/cycle-dialog';
-import { askEnergy } from './ui/energy-dialog';
-import { askDiagram } from './ui/diagram-dialog';
 import { putDiagram, type DiagramData } from './design/diagrams';
 import type { EnergyData } from './design/energy';
-import { editChart, chartPoints } from './ui/chart-editor';
-import { editMedia } from './ui/media-dialog';
 import { refreshZooms, summaryParts, zoomGrid, zoomShape } from './deck/zoom';
-import { inkShape } from './ui/show-ink';
 import { AUDIO_TYPES, VIDEO_TYPES, mediaMime, probeAudio, probeVideo, speakerPng } from './deck/media';
 import { newChartBox, sizedBox } from './sheet/chart-box';
 import { chartBoxPng } from './render/chart-box-paint';
@@ -173,13 +158,12 @@ import { groupWarnings } from './ui/warning-groups';
 import { NameReader, captionName, attachmentAtoms, cxNotes } from './chem/names';
 import { NameDialog } from './ui/name-dialog';
 import { ArrangeDialog } from './ui/arrange-dialog';
-import { AnimateDialog } from './ui/animate-dialog';
+import type { AnimateDialog } from './ui/animate-dialog';
 import { PeriodicTable } from './ui/periodic-table';
-import { SheetMode, ClipboardCells } from './ui/sheet-mode';
-import { DocumentMode, DocPaste } from './ui/doc-mode';
-import { docBoxPrefs, parseDocPins } from './ui/doc-panel';
-import { docRulerPrefs } from './ui/ruler';
-import { formulaBarPrefs } from './ui/sheet-views-ui';
+import type { SheetMode, ClipboardCells } from './ui/sheet-mode';
+import type { DocumentMode, DocPaste } from './ui/doc-mode';
+import { askReviewName } from './ui/review-name';
+import { docBoxPrefs, docRulerPrefs, formulaBarPrefs, parseDocPins } from './ui/mode-prefs';
 import { setScreenMeasure, figures } from './document/doc-file';
 import type { DocxDeps } from './io/docx-write';
 import type { DocxReadDeps } from './io/docx-read';
@@ -193,7 +177,8 @@ import { StructurePictures } from './ui/structure-pictures';
 import { LabelTooltip } from './ui/label-tooltip';
 import { starAtoms } from './chem/label-tip';
 import { structurePlace } from './sheet/layout';
-import { readSheetFile, writeSheetFile, SheetFileDeps } from './io/sheet-files';
+// sheet and document files' readers and writers load the first time one is opened or saved
+import type { SheetFileDeps } from './io/sheet-files';
 import { fromEmbedSource, type Embedded } from './io/ole-object';
 import { objectPicture, type ObjectPicture } from './render/object-picture';
 import { ACS_1996, DocStyle } from './style';
@@ -219,6 +204,24 @@ import { canReadStructures, importPictureFiles, importPdfDrawings, MOST_PAGES, p
 import { placeRead } from './recognise/check';
 import { Diagnostics, catchErrors, errorReport, formatEntry, stamp, type LogEntry, type UnexpectedClose } from './diagnostics';
 import { keepStore } from './keep/store';
+import { later } from './lazy';
+
+// dialogs for slides, design and charts load the first time they open
+const askEquation = later(() => import('./ui/equation-dialog'), 'askEquation');
+const formatBackground = later(() => import('./ui/background-dialog'), 'formatBackground');
+const setUpShow = later(() => import('./ui/show-setup-dialog'), 'setUpShow');
+const editCustomShows = later(() => import('./ui/show-setup-dialog'), 'editCustomShows');
+const editMaster = later(() => import('./ui/master-dialog'), 'editMaster');
+const pickSlideTemplate = later(() => import('./ui/slide-templates'), 'pickSlideTemplate');
+const editLayouts = later(() => import('./ui/layout-editor'), 'editLayouts');
+const pickSlideSize = later(() => import('./ui/slide-size-dialog'), 'pickSlideSize');
+const pickTemplate = later(() => import('./ui/template-gallery'), 'pickTemplate');
+const askCycle = later(() => import('./ui/cycle-dialog'), 'askCycle');
+const askEnergy = later(() => import('./ui/energy-dialog'), 'askEnergy');
+const askDiagram = later(() => import('./ui/diagram-dialog'), 'askDiagram');
+const editChart = later(() => import('./ui/chart-editor'), 'editChart');
+const editMedia = later(() => import('./ui/media-dialog'), 'editMedia');
+const pickReuseSlides = later(() => import('./ui/reuse-slides'), 'pickReuseSlides');
 
 // Crash handling (src/diagnostics.ts): errors nothing else caught go to a log kept on this computer,
 // with a notice offering to report them through Send Feedback. The desktop app (not the iPad, whose
@@ -891,7 +894,7 @@ async function insertChart(): Promise<void> {
   if (slides) box.chart.fontSize = 18;
   const got = await editChart(box, true, flash);
   if (!got || got === 'delete') return;
-  const { w, h } = chartPoints(got.chart);
+  const { w, h } = (await import('./ui/chart-editor')).chartPoints(got.chart);
   const c = pasteCentre();
   let made: Shape | null = null;
   doc.edit('Insert chart', () => {
@@ -910,7 +913,7 @@ async function editChartShape(id: number): Promise<void> {
   const got = await editChart(sizedBox(s.chart, Math.abs(s.x2 - s.x1), Math.abs(s.y2 - s.y1)), false, flash);
   if (!got || !doc.shapes.get(id)?.chart) return;
   if (got === 'delete') { doc.edit('Delete chart', () => doc.removeShape(id)); editor.changed(); return; }
-  const { w, h } = chartPoints(got.chart);
+  const { w, h } = (await import('./ui/chart-editor')).chartPoints(got.chart);
   doc.edit('Change chart', () => doc.updateShape(id, { chart: got, src: chartBoxPng(got, w, h), px: { w: got.chart.w, h: got.chart.h }, x1: x, y1: y, x2: x + w, y2: y + h, crop: undefined }));
   editor.changed();
 }
@@ -1789,16 +1792,26 @@ async function contractLabel(): Promise<void> {
 }
 
 const arrangeDialog = new ArrangeDialog({ apply: (o) => editor.arrangeScheme(o), undo: () => editor.undo() });
-const animateDialog = new AnimateDialog({
-  doc: () => doc,
-  renderer: () => renderer,
-  selectedAtoms: () => new Set(editor.sel.atoms),
-  setMorph: (arrow, m) => doc.edit('Animation Pairing', () => doc.updateArrow(arrow, { morph: m })),
-  name: () => ws.active.name,
-  flash: (msg) => flash(msg, 6000),
-  onSlide: () => ws.active.mode === 'slides',
-  putOnSlide: (v) => placeClip(v),
-});
+/** Animate Reaction: its code loads the first time it opens. */
+let animateDialogLoading: Promise<AnimateDialog> | null = null;
+const animateDialog = {
+  open(opts: { arrow?: number } = {}): void {
+    animateDialogLoading ??= import('./ui/animate-dialog').then(({ AnimateDialog }) => new AnimateDialog({
+      doc: () => doc,
+      renderer: () => renderer,
+      selectedAtoms: () => new Set(editor.sel.atoms),
+      setMorph: (arrow, m) => doc.edit('Animation Pairing', () => doc.updateArrow(arrow, { morph: m })),
+      name: () => ws.active.name,
+      flash: (msg) => flash(msg, 6000),
+      onSlide: () => ws.active.mode === 'slides',
+      putOnSlide: (v) => placeClip(v),
+    }), (err: unknown) => {
+      animateDialogLoading = null;
+      throw err;
+    });
+    animateDialogLoading.then((d) => d.open(opts), (err: unknown) => void showError(`Animate Reaction could not be loaded: ${String(err)}`));
+  },
+};
 /** The reaction arrow picked (for Animate This Step), if one is. */
 /** Is a curved (mechanism) arrow among the selection? */
 const pickedCurved = (): boolean => [...editor.sel.arrows].some((id) => { const r = doc.arrows.get(id); return !!r && isCurved(r); });
@@ -1997,8 +2010,6 @@ const tabsEl = $<HTMLDivElement>('#tabs');
 const notesBox = $<HTMLTextAreaElement>('#notes');
 const layoutSel = $<HTMLSelectElement>('#rb-layout');
 const sizeSel = $<HTMLSelectElement>('#rb-size');
-const presenter = new Presenter();
-const presenterView = new PresenterView();
 
 /** View > Window and Colours > Mode Colours: blue for drawings, orange for slides, green for sheets, or the person's own colours. */
 let modeColours: ModeColours = { ...DEFAULT_MODE_COLOURS };
@@ -2043,7 +2054,7 @@ const sheetFiles: SheetFileDeps = {
     }
     return new Uint8Array(await (await canvasPng(canvas)).arrayBuffer());
   },
-  rowHeights: (s) => sheetMode.view.autoHeights(s),
+  rowHeights: (s) => sheetMode?.view.autoHeights(s) ?? new Map(),
 };
 
 /** Pictures of a document's drawings for Word files (300 dots to the inch, as for PowerPoint). */
@@ -2085,8 +2096,8 @@ const ws: Workspace = new Workspace(doc, {
     // letters still being written with the pen go into this tab's drawing
     editor.sketcher.flush();
     finishTyping();
-    if (tab.mode === 'sheet') sheetMode.leave();
-    if (tab.mode === 'document') docMode.leave();
+    if (tab.mode === 'sheet') sheetMode?.leave();
+    if (tab.mode === 'document') docMode?.leave();
     modeTool[tab.mode] = editor.toolName;
     editor.cropping = null;
     (ws.pane ?? tab).view = { ...renderer.view };
@@ -2101,12 +2112,12 @@ const ws: Workspace = new Workspace(doc, {
   pptx: pptxOptions(),
   measure: measureText,
   sheets: {
-    read: (bytes, name) => readSheetFile(bytes, name, sheetFiles),
-    write: (book, name) => writeSheetFile(book, name, sheetFiles),
+    read: async (bytes, name) => (await import('./io/sheet-files')).readSheetFile(bytes, name, sheetFiles),
+    write: async (book, name) => (await import('./io/sheet-files')).writeSheetFile(book, name, sheetFiles),
   },
   documents: {
-    read: (bytes, name) => readDocumentFile(bytes, name, docRead),
-    write: (d, name) => writeDocumentFile(d, name, docFiles),
+    read: async (bytes, name) => (await import('./io/doc-files')).readDocumentFile(bytes, name, docRead),
+    write: async (d, name) => (await import('./io/doc-files')).writeDocumentFile(d, name, docFiles),
   },
   newStyle: (mode) => { const n = modeStyleFor(mode); return n ? styleNamed(n, ownStyles) ?? null : null; },
   newPage: () => (defaultPage ? { ...defaultPage } : null),
@@ -2222,9 +2233,12 @@ function enterTab(tab: Tab, opened: boolean): void {
   if (notesView.shown) { notesView.show(false); $('#notes-pane').classList.remove('np-hidden'); }
   showSheetParts();
   editor.paused = sheet || words;
-  sheetMode.show(sheet ? tab : null);
+  // a sheet's or document's own code may still be loading: it shows the tab when it's ready
+  if (sheet && !sheetMode) void loadSheetMode().catch(modeFailed);
+  if (words && !docMode) void loadDocMode().catch(modeFailed);
+  sheetMode?.show(sheet ? tab : null);
   if (words) fieldEnv.fileName = ws.mainOf(tab).name;
-  docMode.show(words ? tab : null);
+  docMode?.show(words ? tab : null);
   renderer.screen = !!deck;
   renderer.page = deck ? slidePage : drawingBackdrop;
   editor.slideKeys = slides;
@@ -2412,7 +2426,7 @@ slideCmts = new SlideComments($('#cmt-section'), $('#canvas-host'), {
     return b ? { x: b.x2 + 4, y: b.y1 } : null;
   },
   view: () => renderer.view,
-  askName: () => docMode.askReviewName(),
+  askName: () => askReviewName(() => storeSettings()),
   flash,
   focus: () => $('#overlay').focus(),
   // the Comments pane is in the side panel: a new comment's card needs it unfolded
@@ -3317,7 +3331,7 @@ async function pickObjectFile(): Promise<{ name: string; bytes: Uint8Array } | n
 /** The picture an object shows: a workbook's cells, a PDF's first page, a picture, or an icon. */
 function objectPictureOf(name: string, bytes: Uint8Array, icon: boolean): Promise<ObjectPicture> {
   return objectPicture(name, bytes, icon, {
-    readBook: async (b) => (await readSheetFile(b, name, sheetFiles)).book,
+    readBook: async (b) => (await (await import('./io/sheet-files')).readSheetFile(b, name, sheetFiles)).book,
     pdfPage: (b) => import('./render/pdf-page').then((m) => m.pdfFirstPage(b)),
   });
 }
@@ -3692,14 +3706,14 @@ async function drawingStyleDialog(): Promise<void> {
   if (deck) deck.setDrawingStyle(next, got.how);
   else if (book) {
     book.setDrawingStyle(next, (c, old) => restyleContents(c, old, next, got.how));
-    sheetMode.styleChanged();
+    sheetMode?.styleChanged();
   } else if (file) {
     const t = file.t, old = t.drawingStyle;
     const objects = { ...t.objects };
     for (const [k, o] of Object.entries(objects)) if (o.kind === 'drawing') objects[Number(k)] = { ...o, contents: restyleContents(o.contents, old, next, got.how) };
     const changed: DocText = { ...t, objects, drawingStyle: { ...next } };
     file.ed.update(changed, 'Drawing style');
-    docMode.fontsChanged();
+    docMode?.fontsChanged();
   } else {
     doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, next, got.how));
     editor.changed();
@@ -3836,7 +3850,7 @@ async function customSlideSize(): Promise<void> {
 function present(fromHere: boolean, notes = false, how: { custom?: number; windowed?: boolean; rehearse?: boolean; record?: boolean } = {}): void {
   const d = deckNow();
   if (!d) { flash('Present shows slides: use File > New > New Slides, or open a PowerPoint file.'); return; }
-  if (presenter.running || presenterView.running) return;
+  if (shows?.presenter.running || shows?.presenterView.running) return;
   finishTyping();
   // Set Up Show: the slides it plays, how it goes on, and the rest
   const setup = d.settings.show ?? defaultShow();
@@ -3852,40 +3866,84 @@ function present(fromHere: boolean, notes = false, how: { custom?: number; windo
   refreshZooms(d);
   // from the start: the first slide that isn't hidden; from here: this slide even when hidden, as in PowerPoint
   const from = fromHere ? d.index : order ? order[0] : d.firstShown();
-  void (notes ? presenterView.start(d, from, opts) : presenter.start(d, from, opts));
+  void loadShows().then((s) => (notes ? s.presenterView.start(d, from, opts) : s.presenter.start(d, from, opts)), (err: unknown) => {
+    editor.paused = false;
+    void showError(`The slide show could not be loaded: ${String(err)}`);
+  });
 }
 
-/** Rehearse Timings and Record, kept: each slide's time, and its narration as a sound on it. */
-presenter.onRehearsed = (r) => {
-  const d = deckNow();
-  if (!d) return;
-  void (async () => {
-    if (r.recordings.size) {
-      const sounds = new Map<number, { src: string; seconds: number }>();
-      for (const [i, blob] of r.recordings) {
-        try {
-          const w = await recordingToWav(blob);
-          if (w.seconds > 0.2) sounds.set(i, { src: dataUrl(w.bytes, 'audio/wav'), seconds: w.seconds });
-        } catch { /* a recording this computer can't read is left out */ }
-      }
-      const ix = [...sounds.keys()].filter((i) => i >= 0 && i < d.slides.length);
-      if (ix.length) {
-        const poster = speakerPng(), s = 24;
-        d.editSlides('Record narration', ix, (sd, i) => {
-          // a new recording takes the place of the slide's old one
-          for (const sh of [...sd.shapes.values()]) if (sh.video?.narration) sd.removeShape(sh.id);
-          const n = sounds.get(i)!;
-          sd.addShape({
-            kind: 'picture', x1: d.size.w - s - 12, y1: d.size.h - s - 12, x2: d.size.w - 12, y2: d.size.h - 12, px: { w: 128, h: 128 }, src: poster, name: NARRATION_NAME,
-            video: { src: n.src, audio: true, start: 'auto', once: true, hide: true, narration: true, length: +n.seconds.toFixed(3) },
+/** The slide show and Presenter View: their code loads the first time a show starts. */
+let shows: { presenter: Presenter; presenterView: PresenterView } | null = null;
+let showsLoading: Promise<{ presenter: Presenter; presenterView: PresenterView }> | null = null;
+
+function loadShows(): Promise<{ presenter: Presenter; presenterView: PresenterView }> {
+  showsLoading ??= Promise.all([import('./ui/present'), import('./ui/presenter-view'), import('./ui/show-ink')]).then(([a, b, ink]) => {
+    const presenter = new a.Presenter(), presenterView = new b.PresenterView();
+    wireShows(presenter, presenterView, ink.inkShape);
+    shows = { presenter, presenterView };
+    return shows;
+  }, (err: unknown) => {
+    showsLoading = null;
+    throw err;
+  });
+  return showsLoading;
+}
+
+/** What happens when a show ends: timings, narration and ink are kept, and editing carries on. */
+function wireShows(presenter: Presenter, presenterView: PresenterView, inkShape: typeof import('./ui/show-ink').inkShape): void {
+
+  /** Rehearse Timings and Record, kept: each slide's time, and its narration as a sound on it. */
+  presenter.onRehearsed = (r) => {
+    const d = deckNow();
+    if (!d) return;
+    void (async () => {
+      if (r.recordings.size) {
+        const sounds = new Map<number, { src: string; seconds: number }>();
+        for (const [i, blob] of r.recordings) {
+          try {
+            const w = await recordingToWav(blob);
+            if (w.seconds > 0.2) sounds.set(i, { src: dataUrl(w.bytes, 'audio/wav'), seconds: w.seconds });
+          } catch { /* a recording this computer can't read is left out */ }
+        }
+        const ix = [...sounds.keys()].filter((i) => i >= 0 && i < d.slides.length);
+        if (ix.length) {
+          const poster = speakerPng(), s = 24;
+          d.editSlides('Record narration', ix, (sd, i) => {
+            // a new recording takes the place of the slide's old one
+            for (const sh of [...sd.shapes.values()]) if (sh.video?.narration) sd.removeShape(sh.id);
+            const n = sounds.get(i)!;
+            sd.addShape({
+              kind: 'picture', x1: d.size.w - s - 12, y1: d.size.h - s - 12, x2: d.size.w - 12, y2: d.size.h - 12, px: { w: 128, h: 128 }, src: poster, name: NARRATION_NAME,
+              video: { src: n.src, audio: true, start: 'auto', once: true, hide: true, narration: true, length: +n.seconds.toFixed(3) },
+            });
           });
-        });
-      } else flash('Nothing was recorded (the microphone gave no sound).');
-    }
-    d.setTimings(r.times, r.recordings.size ? 'Record slide show timings' : 'Rehearse timings');
-    flash(`Kept: the show takes ${clockText(r.total)}${r.recordings.size ? ', with narration on the slides' : ''}. Set Up Show > Advance slides can turn the times off.`, 8000);
-  })();
-};
+        } else flash('Nothing was recorded (the microphone gave no sound).');
+      }
+      d.setTimings(r.times, r.recordings.size ? 'Record slide show timings' : 'Rehearse timings');
+      flash(`Kept: the show takes ${clockText(r.total)}${r.recordings.size ? ', with narration on the slides' : ''}. Set Up Show > Advance slides can turn the times off.`, 8000);
+    })();
+  };
+
+  /** Ink drawn in the slide show, kept: shapes on its slides, as one step to undo. */
+  presenter.onKeepInk = presenterView.onKeepInk = (ink) => {
+    const d = deckNow();
+    if (!d) return;
+    const indices = [...ink.keys()].filter((i) => i >= 0 && i < d.slides.length);
+    if (!indices.length) return;
+    d.editSlides('Keep ink', indices, (sd, i) => {
+      for (const st of ink.get(i) ?? []) { const sh = inkShape(st); if (sh) sd.addShape(sh); }
+    });
+    editor.requestScene();
+    flash(`Ink kept on ${indices.length} slide${indices.length === 1 ? '' : 's'}. Each line is a shape: move it, recolour it or delete it.`, 6000);
+  };
+
+  presenter.onEnd = presenterView.onEnd = (i) => {
+    editor.paused = false;
+    // carry on editing the slide the show ended on
+    goSlide(i);
+    editor.requestScene();
+  };
+}
 
 /** Insert > Slides > Header & Footer (Date & Time, Slide Number): the slides', notes pages' and handouts' header and footer. */
 async function headerFooter(tab: 'slide' | 'notes' = 'slide'): Promise<void> {
@@ -3938,26 +3996,6 @@ function customShowMenu(anchor: HTMLElement): void {
     { cmd: 'custom-shows', label: 'Custom Shows…' },
   ], { run: (cmd) => (cmd.startsWith('custom-show:') ? present(false, false, { custom: Number(cmd.slice(12)) }) : void command(cmd)), key: commandKey });
 }
-
-/** Ink drawn in the slide show, kept: shapes on its slides, as one step to undo. */
-presenter.onKeepInk = presenterView.onKeepInk = (ink) => {
-  const d = deckNow();
-  if (!d) return;
-  const indices = [...ink.keys()].filter((i) => i >= 0 && i < d.slides.length);
-  if (!indices.length) return;
-  d.editSlides('Keep ink', indices, (sd, i) => {
-    for (const st of ink.get(i) ?? []) { const sh = inkShape(st); if (sh) sd.addShape(sh); }
-  });
-  editor.requestScene();
-  flash(`Ink kept on ${indices.length} slide${indices.length === 1 ? '' : 's'}. Each line is a shape: move it, recolour it or delete it.`, 6000);
-};
-
-presenter.onEnd = presenterView.onEnd = (i) => {
-  editor.paused = false;
-  // carry on editing the slide the show ended on
-  goSlide(i);
-  editor.requestScene();
-};
 
 // ---------------------------------------------------------------- export
 
@@ -4228,7 +4266,7 @@ const SHEET_HINT = 'Type in a cell, or double-click to change it. Insert > Struc
 
 /** True when a sheet is showing (and no structure is being drawn for one of its cells). */
 function sheetActive(): boolean {
-  return ws.active.mode === 'sheet' && !drawingOnTop();
+  return ws.active.mode === 'sheet' && !!sheetMode && !drawingOnTop();
 }
 
 /** True when a structure is being drawn for a cell or figure, or the drawing in split view has the keys. */
@@ -4236,21 +4274,35 @@ function drawingOnTop(): boolean {
   return !!cellEdit || (splitDrawing && !!ws.pane);
 }
 
-const sheetMode = new SheetMode({
-  flash,
-  editStructure: (contents, title, done) => editCellStructure(contents, title, done),
-  key: (e) => sheetKey(e),
-  command: (name) => command(name),
-  changed: (book) => ws.noteChange(book && ws.tabs.find((t) => t.book === book)),
-  isOpen: (book) => ws.tabs.some((t) => t.book === book),
-  toStructure: (text, style) => textToStructure(text, style),
-  writeCells: (own, text, html) => writeCells(own, text, html),
-  copyStructure: async (contents, style) => (await copyDrawing(structureDoc(contents, style), null)).replace(/^Copied the whole drawing/, 'Copied the structure'),
-  readCells: (e) => readCells(e),
-  askName: () => docMode.askReviewName(),
-  pickPicture: () => pickPicture(),
-  print: () => void printNow(),
-}, sheetChem);
+let sheetMode!: SheetMode;
+let sheetModeLoading: Promise<SheetMode> | null = null;
+
+/** Sheet mode's code loads the first time a sheet shows (or in idle time after start-up), not at start-up. */
+function loadSheetMode(): Promise<SheetMode> {
+  sheetModeLoading ??= import('./ui/sheet-mode').then(({ SheetMode }) => {
+    sheetMode = new SheetMode({
+      flash,
+      editStructure: (contents, title, done) => editCellStructure(contents, title, done),
+      key: (e) => sheetKey(e),
+      command: (name) => command(name),
+      changed: (book) => ws.noteChange(book && ws.tabs.find((t) => t.book === book)),
+      isOpen: (book) => ws.tabs.some((t) => t.book === book),
+      toStructure: (text, style) => textToStructure(text, style),
+      writeCells: (own, text, html) => writeCells(own, text, html),
+      copyStructure: async (contents, style) => (await copyDrawing(structureDoc(contents, style), null)).replace(/^Copied the whole drawing/, 'Copied the structure'),
+      readCells: (e) => readCells(e),
+      askName: () => askReviewName(() => storeSettings()),
+      pickPicture: () => pickPicture(),
+      print: () => void printNow(),
+    }, sheetChem);
+    modeLoaded('sheet');
+    return sheetMode;
+  }, (err: unknown) => {
+    sheetModeLoading = null;
+    throw err;
+  });
+  return sheetModeLoading;
+}
 
 /** The style structures in the sheet showing are drawn in. */
 const sheetStyle = (): DocStyle => ws.active.book?.drawingStyle ?? ACS_1996;
@@ -4441,8 +4493,8 @@ function finishCellStructure(keep: boolean): void {
   if (sheet) $('#hint').textContent = SHEET_HINT;
   if (words) $('#hint').textContent = DOC_HINT;
   e.done(result);
-  if (!result && sheet) sheetMode.focus();
-  if (!result && words) docMode.focus();
+  if (!result && sheet) sheetMode?.focus();
+  if (!result && words) docMode?.focus();
 }
 
 $('#structure-done').addEventListener('click', () => finishCellStructure(true));
@@ -4522,7 +4574,7 @@ const DOC_HINT = 'Type on the page. Insert > Structure draws a structure in the 
 
 /** True when a document is showing (and no structure is being drawn for it). */
 function docActive(): boolean {
-  return ws.active.mode === 'document' && !drawingOnTop();
+  return ws.active.mode === 'document' && !!docMode && !drawingOnTop();
 }
 
 /** The style structures in the document showing are drawn in. */
@@ -4531,60 +4583,99 @@ let docQuickParts: QuickPart[] = [];
 
 const docStyle = (): DocStyle => ws.active.document?.t.drawingStyle ?? ACS_1996;
 
-const docMode = new DocumentMode({
-  flash,
-  key: (e) => docKey(e),
-  command: (name) => command(name),
-  changed: () => ws.noteChange(),
-  editDrawing: (contents, title, done) => editCellStructure(contents, title, done, docStyle()),
-  editDiagram: (contents) => documentDiagram(contents),
-  copyDrawing: async (contents, style) => (await copyDrawing(structureDoc(contents, style), null)).replace(/^Copied the whole drawing/, 'Copied the structure'),
-  copiedOther: () => forgetCopy(),
-  copyPicture: (src) => copyImage(src),
-  readPaste: (e) => readDocPaste(e),
-  toStructure: (text, style) => textToStructure(text, style),
-  pickPicture: () => pickPicture(),
-  pickObjectFile: () => pickObjectFile(),
-  objectPicture: (name, bytes, icon) => objectPictureOf(name, bytes, icon),
-  openObjectFile: (file, changed) => openObjectFile(file, changed),
-  chemdrawDrawing: (cdx, style) => {
-    const contents = docRead.chemdraw!(cdx, style);
-    const size = contents && docRead.drawingSize!(contents, style);
-    return contents && size ? { contents, w: size.w } : null;
-  },
-  clipboardObject: nativeClipboard ? () => clipboardObject() : undefined,
-  pickReferenceFile: () => pickReferenceFile(),
-  preferredChanged: () => storeSettings(),
-  reviewNameChanged: () => storeSettings(),
-  quickParts: () => docQuickParts,
-  setQuickParts: (list) => { docQuickParts = list; storeSettings(); },
-  setNewDesign: (d) => { setNewDocDesign(d); storeSettings(); },
-  openDocuments: () => {
-    const seen = new Set<unknown>();
-    return ws.tabs.filter((t) => t.mode === 'document' && t.document && !seen.has(t.document) && seen.add(t.document)).map((t) => ({ name: ws.label(t), t: t.document!.t }));
-  },
-  pickDocument: async () => {
-    const f = await openBytesDialog('Word documents', [DOCX]).catch(async (e) => { await showError(String(e)); return null; });
-    if (!f) return null;
-    try {
-      const { doc, warnings } = await (await import('./io/docx-read')).readDocx(f.bytes, docRead);
-      if (warnings.length) flash(`${f.name}: ${warnings.join(' ')}`, 8000);
-      return { name: f.name, t: doc };
-    } catch (e) {
-      await showError(`Could not open ${f.name}: ${String(e)}`);
-      return null;
-    }
-  },
-  showDocument: (t, name) => { ws.showDocument(t, name); },
-  newTable: (rows, cols, style) => tableDrawing(emptyTable(rows, cols, style.captionSize), style),
-  measure: measureText,
-});
+let docMode!: DocumentMode;
+let docModeLoading: Promise<DocumentMode> | null = null;
+
+/** Document mode's code loads the first time a document shows (or in idle time after start-up), not at start-up. */
+function loadDocMode(): Promise<DocumentMode> {
+  docModeLoading ??= import('./ui/doc-mode').then(({ DocumentMode }) => {
+    docMode = new DocumentMode({
+      flash,
+      key: (e) => docKey(e),
+      command: (name) => command(name),
+      changed: () => ws.noteChange(),
+      editDrawing: (contents, title, done) => editCellStructure(contents, title, done, docStyle()),
+      editDiagram: (contents) => documentDiagram(contents),
+      copyDrawing: async (contents, style) => (await copyDrawing(structureDoc(contents, style), null)).replace(/^Copied the whole drawing/, 'Copied the structure'),
+      copiedOther: () => forgetCopy(),
+      copyPicture: (src) => copyImage(src),
+      readPaste: (e) => readDocPaste(e),
+      toStructure: (text, style) => textToStructure(text, style),
+      pickPicture: () => pickPicture(),
+      pickObjectFile: () => pickObjectFile(),
+      objectPicture: (name, bytes, icon) => objectPictureOf(name, bytes, icon),
+      openObjectFile: (file, changed) => openObjectFile(file, changed),
+      chemdrawDrawing: (cdx, style) => {
+        const contents = docRead.chemdraw!(cdx, style);
+        const size = contents && docRead.drawingSize!(contents, style);
+        return contents && size ? { contents, w: size.w } : null;
+      },
+      clipboardObject: nativeClipboard ? () => clipboardObject() : undefined,
+      pickReferenceFile: () => pickReferenceFile(),
+      preferredChanged: () => storeSettings(),
+      reviewNameChanged: () => storeSettings(),
+      quickParts: () => docQuickParts,
+      setQuickParts: (list) => { docQuickParts = list; storeSettings(); },
+      setNewDesign: (d) => { setNewDocDesign(d); storeSettings(); },
+      openDocuments: () => {
+        const seen = new Set<unknown>();
+        return ws.tabs.filter((t) => t.mode === 'document' && t.document && !seen.has(t.document) && seen.add(t.document)).map((t) => ({ name: ws.label(t), t: t.document!.t }));
+      },
+      pickDocument: async () => {
+        const f = await openBytesDialog('Word documents', [DOCX]).catch(async (e) => { await showError(String(e)); return null; });
+        if (!f) return null;
+        try {
+          const { doc, warnings } = await (await import('./io/docx-read')).readDocx(f.bytes, docRead);
+          if (warnings.length) flash(`${f.name}: ${warnings.join(' ')}`, 8000);
+          return { name: f.name, t: doc };
+        } catch (e) {
+          await showError(`Could not open ${f.name}: ${String(e)}`);
+          return null;
+        }
+      },
+      showDocument: (t, name) => { ws.showDocument(t, name); },
+      newTable: (rows, cols, style) => tableDrawing(emptyTable(rows, cols, style.captionSize), style),
+      measure: measureText,
+    });
+    modeLoaded('document');
+    return docMode;
+  }, (err: unknown) => {
+    docModeLoading = null;
+    throw err;
+  });
+  return docModeLoading;
+}
+
+/** Sheet or document mode's code just loaded: bring it up to date with the settings, the brush and the tab showing. */
+function modeLoaded(mode: 'sheet' | 'document'): void {
+  if (mode === 'sheet') sheetMode.showFormulaBar();
+  else {
+    docMode.showRuler();
+    docMode.boxesChanged();
+  }
+  brush.onChange();
+  if (ws.active.mode !== mode) return;
+  if (mode === 'sheet') sheetMode.show(ws.active);
+  else docMode.show(ws.active);
+}
+
+/** Sheet or document mode's code didn't load (a broken install, or the web version gone offline). */
+function modeFailed(err: unknown): void {
+  void showError(`This part of Chem Illustrator could not be loaded: ${String(err)}. Restart it and try again.`);
+}
+
+// both load in idle time soon after start-up, so the first sheet or document opens at once
+setTimeout(() => {
+  const load = () => { void loadSheetMode().catch(() => {}); void loadDocMode().catch(() => {}); };
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(load, { timeout: 5000 });
+  else load();
+}, 2500);
 docBoxPrefs.changed = () => storeSettings();
 docRulerPrefs.changed = () => storeSettings();
 formulaBarPrefs.changed = () => storeSettings();
 // documents measure fonts they have no published widths for on the screen
 setScreenMeasure(measureText);
-void document.fonts?.ready.then(() => docMode.fontsChanged());
+void document.fonts?.ready.then(() => docMode?.fontsChanged());
 
 /** A table as a drawing (for a document): one table shape at its laid-out size. */
 function tableDrawing(t: TableData, style: DocStyle): Contents {
@@ -4642,7 +4733,7 @@ async function readDocPaste(e: ClipboardEvent | null): Promise<DocPaste> {
 /** The structure picked in the document, as a drawing (for Copy as SMILES, Molfile and CDXML). */
 function pickedFigureDoc(): Doc | null {
   const f = ws.active.document;
-  const id = docMode.pickedObject();
+  const id = docMode?.pickedObject();
   const o = f && id !== null ? f.t.objects[id] : null;
   return o?.kind === 'drawing' ? structureDoc(o.contents, f!.t.drawingStyle) : null;
 }
@@ -5875,8 +5966,8 @@ function closeSplit(): void {
   refreshKeys();
   analysisKey = '';
   scheduleAnalysis(true);
-  if (sheet) { $('#hint').textContent = SHEET_HINT; sheetMode.focus(); }
-  if (words) { $('#hint').textContent = DOC_HINT; docMode.focus(); }
+  if (sheet) { $('#hint').textContent = SHEET_HINT; sheetMode?.focus(); }
+  if (words) { $('#hint').textContent = DOC_HINT; docMode?.focus(); }
   resize();
   renderer.repaintAll();
   mainResized();
@@ -5885,7 +5976,7 @@ function closeSplit(): void {
 /** The document or slide got narrower or wider: fit the page or slide to its new width. */
 function mainResized(): void {
   requestAnimationFrame(() => {
-    if (ws.active.mode === 'document') docMode.refit();
+    if (ws.active.mode === 'document') docMode?.refit();
     if (ws.active.mode === 'slides') { resize(); editor.fit(); }
   });
 }
@@ -5923,10 +6014,10 @@ $('#split-insert').addEventListener('click', () => {
   if (isEmpty(part)) { flash('Draw something first.'); return; }
   if (st.main.mode === 'document') {
     setSplitSide(false);
-    docMode.insertDrawing(part.contents());
+    docMode?.insertDrawing(part.contents());
   } else if (st.main.mode === 'sheet') {
     setSplitSide(false);
-    sheetMode.putStructure(part.contents());
+    sheetMode?.putStructure(part.contents());
   } else {
     focusSlideDrawing(false);
     const deck = deckNow();
@@ -6861,13 +6952,13 @@ function applySettings(s: Settings): void {
   docBoxPrefs.pinned = parseDocPins(s.docPins);
   docRulerPrefs.shown = !!s.docRuler;
   formulaBarPrefs.shown = s.sheetFormulaBar !== false;
-  sheetMode.showFormulaBar();
+  sheetMode?.showFormulaBar();
   slideLook.ruler = !!s.slideRuler;
   slideLook.grid = !!s.slideGrid;
   rulerPrefs.units = s.rulerUnits;
   rulerPrefs.from = s.rulerFrom;
-  docMode.showRuler();
-  docMode.boxesChanged();
+  docMode?.showRuler();
+  docMode?.boxesChanged();
   showGuides();
   // the drawing the app opened with takes your default style, if nothing has been drawn yet
   const first = modeStyles.drawing ? styleNamed(modeStyles.drawing, ownStyles) : undefined;
@@ -7709,7 +7800,7 @@ registerBundledFonts(() => {
     forgetTextWidths();
     doc.allDirty = true;
     editor.changed();
-    docMode.fontsChanged();
+    docMode?.fontsChanged();
   }, 50);
 });
 // the icon library loads the first time something needs it (Design > Icons, a file with icons in it, a
@@ -7718,7 +7809,7 @@ whenIconsLoaded(() => {
   // (only a drawing with shapes can hold icons: a big structure opened at start-up isn't drawn twice)
   if (doc.shapes.size) doc.allDirty = true;
   editor.changed();
-  docMode.fontsChanged();
+  docMode?.fontsChanged();
 });
 applyRibbonIcons();
 
@@ -8097,8 +8188,8 @@ function paintThings(sel: { atoms: Set<number>; bonds: Set<number>; captions: Se
 brush.onChange = () => {
   const l = brush.look;
   editor.painter = l && l.kind !== 'cells' ? { things: paintThings, text: paintText } : null;
-  docMode.painter = heldText() ? paintText : null;
-  sheetMode.view.painter = l?.kind === 'cells' ? () => { sheetMode.paintFormats(l.block); brush.used(); } : null;
+  if (docMode) docMode.painter = heldText() ? paintText : null;
+  if (sheetMode) sheetMode.view.painter = l?.kind === 'cells' ? () => { sheetMode.paintFormats(l.block); brush.used(); } : null;
   for (const b of document.querySelectorAll(PAINTER_BUTTONS)) b.setAttribute('aria-pressed', String(!!l));
   editor.requestOverlay();
 };
@@ -8167,7 +8258,7 @@ function pickTool(name: string): void {
     modeTool[mode] = name;
     editor.setTool(name);
     if (name !== 'select' && name !== 'eraser') {
-      if (mode === 'document') docMode.drawWithTool();
+      if (mode === 'document') docMode?.drawWithTool();
       else command('draw-structure');
     }
   } else editor.setTool(name);
@@ -9172,8 +9263,8 @@ requestAnimationFrame(() => {
 });
 
 // Hooks for the automated speed tests.
-(window as any).__app = { doc, editor, renderer, chem, live, command, addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, presenter, Doc, keymap, names, sheetMode, sheetChem, docMode, docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
-  pptxBytes: () => { const d = deckNow()!; return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments })) }, pptxOptions()); } };
+(window as any).__app = { doc, editor, renderer, chem, live, command, addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
+  pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test
 

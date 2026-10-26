@@ -11,15 +11,7 @@ import type { DocObject, DocText } from '../document/document';
 import { cfbStreams, isCfb } from './cfb';
 import { DocBuilder, fromCp1252, headingId } from './doc-build';
 
-/** Is this an old Word document (a compound file with a WordDocument stream)? */
-export function isDoc(bytes: Uint8Array): boolean {
-  if (!isCfb(bytes)) return false;
-  try {
-    return cfbStreams(bytes).has('WordDocument');
-  } catch {
-    return false;
-  }
-}
+export { isDoc } from './doc-sniff';
 
 /** Word's 16 standard colours (ico), by index. */
 const ICO = [undefined, '#000000', '#0000ff', '#00ffff', '#00ff00', '#ff00ff', '#ff0000', '#ffff00', '#ffffff', '#000080', '#008080', '#008000', '#800080', '#800000', '#808000', '#808080', '#c0c0c0'];

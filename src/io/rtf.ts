@@ -46,8 +46,7 @@ export function readRtf(bytes: Uint8Array): { doc: DocText; warnings: string[] }
   return new RtfReader(src).read();
 }
 
-/** Is this an RTF file? */
-export const isRtf = (b: Uint8Array): boolean => b.length > 5 && String.fromCharCode(...b.slice(0, 5)) === '{\\rtf';
+export { isRtf } from './doc-sniff';
 
 class RtfReader {
   private i = 0;
