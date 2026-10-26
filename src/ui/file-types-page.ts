@@ -93,7 +93,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     objRow.append(objBox, objName);
     const objHelp = document.createElement('p');
     objHelp.className = 'ask-help muted';
-    objHelp.textContent = 'Copied drawings paste as Chem Illustrator objects: double-click one in Word to edit it here, and Save puts it back. Without this they paste as pictures (they still hold the drawing, so copying one back here keeps it editable). Also in Word under Insert ▸ Object.';
+    objHelp.textContent = 'Copied drawings paste as Chem Illustrator objects: double-click one in Word to edit it here, and Save puts it back. Without this they paste as pictures (they still hold the drawing, so copying one back here keeps it editable). Also in Word under Insert ▸ Document ▸ Object.';
     form.append(objRow, objHelp);
     const cancel = document.createElement('button');
     cancel.type = 'button';

@@ -6,9 +6,9 @@ This page covers Sheet mode: cells and formulas, structures in cells, the chemis
 
 ## Starting a sheet
 
-Click **+ Sheet** at the end of the tab strip, or choose **File ▸ New Sheet**. While a sheet is showing, Ctrl+N starts another one.
+Click **+ Sheet** at the end of the tab strip, or choose **File ▸ New ▸ New Sheet**. While a sheet is showing, Ctrl+N starts another one.
 
-**File ▸ New from Template…** offers a **Reaction table** (one row per entry: catalyst, loading, solvent, temperature, time, conversion, yield, ee and dr, with the best yield and its entry found for you) and a **Reagent sheet** (the reagent table below, and a Yield sheet that works out the percent yield from the product's structure and its isolated mass).
+**File ▸ New ▸ New from Template…** offers a **Reaction table** (one row per entry: catalyst, loading, solvent, temperature, time, conversion, yield, ee and dr, with the best yield and its entry found for you) and a **Reagent sheet** (the reagent table below, and a Yield sheet that works out the percent yield from the product's structure and its isolated mass).
 
 Sheets open from .xlsx, .xlsm, .xls and .ods files as well as text and SD files; see [File types](files-and-sharing.md#file-types).
 
@@ -38,7 +38,7 @@ When the pointer turns into a pointing hand over a cell, that cell holds a struc
 
 ### Property columns
 
-Click in your table and choose **Home** tab ▸ **Properties** (or **Insert ▸ Insert Property Columns…**). Tick the columns you want:
+Click in your table and choose **Home** tab ▸ **Properties** (or **Insert ▸ Sheet ▸ Insert Property Columns…**). Tick the columns you want:
 
 Formula, MW, Exact mass, HRMS m/z, cLogP, TPSA, H-bond donors, H-bond acceptors, Rotatable bonds, SMILES, InChIKey and **Duplicate of**.
 
@@ -48,7 +48,7 @@ Any calculated value can be typed over, for example with a measured mass. The ce
 
 ### Reagent tables
 
-**Home** tab ▸ **Reagent Table** (or **Insert ▸ New Reagent Table**) adds a worksheet set up for a reaction. Type the limiting reagent's mmol, then for each reagent draw its structure (or type its SMILES or name into the **Structure** column, and it is drawn there) and its equivalents. MW, mmol and mass (mg) work themselves out; type a density (g/mL) or a concentration (M) and the volume (µL) appears. Any number can be typed over, for example the MW of a salt or hydrate, and the rest of the row follows.
+**Home** tab ▸ **Reagent Table** (or **Insert ▸ Sheet ▸ New Reagent Table**) adds a worksheet set up for a reaction. Type the limiting reagent's mmol, then for each reagent draw its structure (or type its SMILES or name into the **Structure** column, and it is drawn there) and its equivalents. MW, mmol and mass (mg) work themselves out; type a density (g/mL) or a concentration (M) and the volume (µL) appears. Any number can be typed over, for example the MW of a salt or hydrate, and the rest of the row follows.
 
 ## Formulas
 
@@ -145,7 +145,7 @@ The **View** tab has **Normal**, **Page Break Preview** (what prints, page by pa
 - **Freeze Header** keeps the header rows in view as you scroll.
 - **Data > Custom Sort…** sorts by several levels (add, copy, delete and reorder them), in a custom order such as "Low, Medium, High", case sensitive or not, or left to right.
 - **Data > Advanced Filter…** uses a block of criteria typed above the table: tests on one row must all pass, and any row of tests may pass. It filters in place or copies the matching rows elsewhere, and can keep unique rows only. **Clear Filter** shows every row again.
-- **View > Freeze Panes ▾** freezes the rows above and the columns left of the selected cell, or just the top row or first column. **View > Split** splits the window into panes that scroll on their own; drag a bar to move it, double-click it to remove it. Both are saved in .xlsx files.
+- **View > Sheet > Freeze Panes ▾** freezes the rows above and the columns left of the selected cell, or just the top row or first column. **View > Sheet > Split** splits the window into panes that scroll on their own; drag a bar to move it, double-click it to remove it. Both are saved in .xlsx files.
 
 ## Finding and changing data
 
@@ -166,7 +166,7 @@ Notes and comments move with their cells when you sort, insert or delete rows, a
 
 ## Data validation
 
-**Home** tab ▸ **Validation…** (or **Format ▸ Data Validation…**) sets what may be typed in the selected cells, as Excel's Data Validation does:
+**Home** tab ▸ **Validation…** (or **Format ▸ Sheet ▸ Data Validation…**) sets what may be typed in the selected cells, as Excel's Data Validation does:
 
 - **Settings:** allow a whole number, a decimal, a date or time, a text length (each between limits, or greater than, less than…), a **List**, or a **Custom** formula. A limit can be a number or a formula such as `=B1` or `=TODAY()`. A list is items separated by commas (`Pd(OAc)2, PdCl2, Pd(PPh3)4`) or a reference to cells that hold them (`=$H$2:$H$20`, or on another sheet, `=Reagents!$A$2:$A$40`).
 - **Input Message:** a title and message shown beside the cell while it is selected.
@@ -266,7 +266,7 @@ In the chart panel, each series of a scatter chart has **Sticks** (peaks drawn u
 To compare a measured HRMS isotope pattern with the calculated one:
 
 1. Put the compound in a cell: draw a structure, or type SMILES or a formula such as `C14H12BrNO`.
-2. With that cell selected, choose **Home** tab ▸ **Isotopes** (or **Insert ▸ Isotope Pattern…**, or the right-click menu).
+2. With that cell selected, choose **Home** tab ▸ **Isotopes** (or **Insert ▸ Sheet ▸ Isotope Pattern…**, or the right-click menu).
 3. Fill in the window:
    - **Compound:** the cell you are on, or a formula typed in.
    - **Ion:** [M+H]+ to start; pick another or type any adduct ([M+Na]+, [M−H]−, [M+2H]2+…).

@@ -1,4 +1,4 @@
-// Bookmarks (Insert > Bookmark, as in Word): named places in a document that links go to. Each is
+// Bookmarks (Insert > Document > Bookmark, as in Word): named places in a document that links go to. Each is
 // kept on its paragraph (ParaStyle.marks). A link to a heading puts a hidden bookmark on the
 // heading (its name starts with an underscore, as Word's own do), so the link still finds the
 // heading after its words change. Word's "_top" is the start of the document.

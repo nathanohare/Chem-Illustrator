@@ -238,7 +238,7 @@ export class StylePanel {
       this.check('Square bends (elbow)', !!r.elbow, (v) => set('Elbow connector', () => ({ elbow: v || undefined, sweep: 0, bez: undefined })));
     }
     if (r.from || r.to) {
-      const loose = (a: Arrow) => ({ from: undefined, to: undefined } as Partial<Arrow>);
+      const loose = (_a: Arrow) => ({ from: undefined, to: undefined } as Partial<Arrow>);
       this.note('Stuck to shapes: it follows them when they move.');
       const b = document.createElement('button');
       b.type = 'button';

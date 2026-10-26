@@ -321,7 +321,7 @@ function clusters(its: Item[], boxOf: (it: Item) => Rect, f: Frame, touch: numbe
 }
 
 /** Size of a + sign in the drawing's caption style. */
-function plusBox(doc: Doc, m: Measure): { w: number; h: number } {
+function plusBox(_doc: Doc, m: Measure): { w: number; h: number } {
   const b = m.captionBox({ id: -1, x: 0, y: 0, runs: [{ text: '+' }], justify: 'left' });
   return { w: b.x2 - b.x1, h: b.y2 - b.y1 };
 }

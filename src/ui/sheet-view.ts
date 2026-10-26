@@ -3427,7 +3427,7 @@ export class SheetView {
     this.metricsKey = '';
   }
 
-  /** View > Split: split the window above and left of a cell (the top left cell: no split), each pane scrolled to go on from the one before. */
+  /** View > Sheet > Split: split the window above and left of a cell (the top left cell: no split), each pane scrolled to go on from the one before. */
   splitAt(rows: number, cols: number): void {
     const s = this.sheet, wb = this.wb;
     if (!s || !wb) return;

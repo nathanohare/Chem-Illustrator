@@ -1517,7 +1517,7 @@ export class SheetMode {
     this.host.changed();
   }
 
-  /** Edit > Paste SMILES: a SMILES string, molfile or name drawn as a structure in the active cell. */
+  /** Edit > Paste Special > Paste SMILES: a SMILES string, molfile or name drawn as a structure in the active cell. */
   async structureFromText(text: string): Promise<void> {
     const v = this.view;
     const s = v.sheet;
@@ -1544,7 +1544,7 @@ export class SheetMode {
   }
 
   /**
-   * Insert > Isotope Pattern…: a table of an ion's isotope peaks (calculated, with columns for the
+   * Insert > Sheet > Isotope Pattern…: a table of an ion's isotope peaks (calculated, with columns for the
    * peaks found and their error in ppm) and a chart of them as a mass spectrum.
    */
   private async isotopePattern(): Promise<void> {

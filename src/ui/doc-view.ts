@@ -616,7 +616,7 @@ export class DocView {
   }
 
   /** A white page with its shadow, and faint corner marks where the text area starts and ends. */
-  private paper(ctx: CanvasRenderingContext2D, p: PageBox, lay: DocLayout): void {
+  private paper(ctx: CanvasRenderingContext2D, p: PageBox, _lay: DocLayout): void {
     const k = this.zoom;
     ctx.save();
     ctx.shadowColor = 'rgba(0, 0, 0, 0.18)';

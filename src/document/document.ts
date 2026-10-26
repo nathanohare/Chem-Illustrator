@@ -305,7 +305,7 @@ export function floatOf(o: DocObject | undefined): Float | undefined {
 
 /** Something that sits in the text in place of one character. */
 /**
- * Another program's file kept whole in the document, shown as its picture (Insert > Object, or
+ * Another program's file kept whole in the document, shown as its picture (Insert > Document > Object, or
  * an object in a Word file): double-clicking it opens the file in its program.
  */
 export interface Embedded {
@@ -331,7 +331,7 @@ export type DocObject =
    * (Insert > Chart) is a picture with its chart and data: drawn from them, saved as Word's chart.
    * `crop` cuts parts off (fractions of the whole image from each side; w × h is the part left),
    * and `fx` is its Picture Format settings (corrections, colour, background, shape). An
-   * embedded object (Insert > Object) is a picture with another program's file in `embed`. `alt` is
+   * embedded object (Insert > Document > Object) is a picture with another program's file in `embed`. `alt` is
    * its alt text (a structure without it is described by its SMILES).
    */
   | { kind: 'picture'; src: string; w: number; h: number; px?: { w: number; h: number }; scale?: number; look?: FigureLook; float?: Float; chart?: ChartBox; crop?: { l: number; t: number; r: number; b: number }; fx?: PictureFx; embed?: Embedded; alt?: string; /** Turned clockwise about its middle, in degrees, and flipped (Arrange > Rotate). */ rot?: number; flipH?: boolean; flipV?: boolean }

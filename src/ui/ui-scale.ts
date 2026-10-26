@@ -1,4 +1,4 @@
-// View > Interface Size: the whole window (menus, ribbons, toolboxes, panels, the drawing too)
+// View > Window and Colours > Interface Size: the whole window (menus, ribbons, toolboxes, panels, the drawing too)
 // bigger or smaller. The desktop app zooms its web view as a browser's zoom does, which keeps text
 // and drawings sharp and clicks in the right place. A web page cannot set the browser's zoom (and
 // CSS zoom puts clicks on the drawings in the wrong place), so there the browser's own zoom does
@@ -7,7 +7,7 @@
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 
-/** The sizes offered in View > Interface Size, as fractions of normal. */
+/** The sizes offered in View > Window and Colours > Interface Size, as fractions of normal. */
 export const UI_SCALES = [0.8, 0.9, 1, 1.1, 1.25, 1.5] as const;
 export const UI_SCALE_MIN = 0.5;
 export const UI_SCALE_MAX = 2;

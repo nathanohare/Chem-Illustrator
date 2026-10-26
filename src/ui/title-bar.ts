@@ -1,7 +1,7 @@
 // The window's title bar (desktop app only). By default the system's title bar is taken away and
 // its buttons (minimise, maximise, close) sit at the right end of the menu bar, which also moves
 // the window when dragged by an empty part and maximises it on a double-click, so the program
-// gains a row of height. View > Title Bar in Menu Row puts the system's title bar back.
+// gains a row of height. View > Window and Colours > Title Bar in Menu Row puts the system's title bar back.
 
 import { isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';

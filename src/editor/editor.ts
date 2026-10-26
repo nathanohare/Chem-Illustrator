@@ -59,7 +59,7 @@ import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } f
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
-import { Align, Measure, POINTS, Snapshot, type TurnText, units, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
+import { Align, Measure, POINTS, Snapshot, type TurnText, units, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
 import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, CAP, SUB_SCALE } from '../chem/labels';
 import {
@@ -75,7 +75,8 @@ import { BEND, BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
 import type { TextEditing } from '../text/editing';
 
 export type Tool =
-  | { kind: 'select' }
+  /** `lasso`: drag round what to select, freehand, instead of a box. */
+  | { kind: 'select'; lasso?: boolean }
   | { kind: 'eraser' }
   /** `hapto`: bonds a metal to the middle of a ring or π-bond (η⁵, η²), or splits one into a line to each atom. */
   | { kind: 'bond'; order: number; display: BondDisplay; hapto?: boolean }
@@ -114,6 +115,7 @@ export type ShapeStyle = Partial<Omit<Shape, 'id' | 'kind' | 'x1' | 'y1' | 'x2' 
 
 export const TOOLS: Record<string, Tool> = {
   select: { kind: 'select' },
+  lasso: { kind: 'select', lasso: true },
   eraser: { kind: 'eraser' },
   element: { kind: 'element' },
   fragment: { kind: 'fragment' },
@@ -307,7 +309,7 @@ export class Editor {
   showRoles = true;
 
   options = {
-    /** The pen sketches whatever tool is picked (View > Touch Mode > Pen Always Sketches). */
+    /** The pen sketches whatever tool is picked (View > Window and Colours > Touch Mode > Pen Always Sketches). */
     penSketch: false,
     /** After 1 or 0 on the atom under the mouse, the highlight stays there (ChemDraw). */
     keepHotspotOnBond: true,
@@ -834,6 +836,8 @@ export class Editor {
   private onMove(e: PointerEvent): void {
     const p = this.docPoint(e);
     this.pointer = p;
+    // (a card or menu closing over the drawing leaves the mouse on it without a pointerenter)
+    this.pointerInside = true;
     const d = this.drag;
     if (d?.mode === 'text') {
       this.captionEd?.pointerMove(p);
@@ -1129,7 +1133,8 @@ export class Editor {
       return;
     }
     if (d.mode === 'marquee') {
-      this.selectRect(d.start, p, d.shift);
+      if (this.lassoing(d)) this.selectLasso(d.path!, d.shift);
+      else this.selectRect(d.start, p, d.shift);
       if (d.paint) this.painter?.things(this.sel);
       this.requestScene(e.timeStamp);
       this.onChange();
@@ -1287,7 +1292,7 @@ export class Editor {
   }
 
   /**
-   * View > Go to Selection: bring what is selected into the middle of the window, at the zoom
+   * View > Zoom > Go to Selection: bring what is selected into the middle of the window, at the zoom
    * it is at; zoomed out to fit when it is too big to see whole. False with nothing selected.
    */
   goToSelection(): boolean {
@@ -2941,20 +2946,36 @@ export class Editor {
     this.onChange();
   }
 
+  /** A drag with the lasso (not Format Painter's box). */
+  private lassoing(d: Drag): boolean {
+    return this.tool.kind === 'select' && !!this.tool.lasso && !d.paint && !!d.path && d.path.length > 2;
+  }
+
   private selectRect(a: Vec, b: Vec, add: boolean): void {
     const r: Rect = { x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y), x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y) };
+    this.selectWithin(r, (x, y) => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2, add);
+  }
+
+  /** Select what lies inside a freehand loop (the lasso), closed back to where it started. */
+  private selectLasso(loop: readonly Vec[], add: boolean): void {
+    const r: Rect = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
+    for (const q of loop) { r.x1 = Math.min(r.x1, q.x); r.y1 = Math.min(r.y1, q.y); r.x2 = Math.max(r.x2, q.x); r.y2 = Math.max(r.y2, q.y); }
+    this.selectWithin(r, (x, y) => insideLoop(loop, x, y), add);
+  }
+
+  /** Select the atoms, text, arrows and shapes wholly inside an area (`inside`, within the box `r`). */
+  private selectWithin(r: Rect, inside: (x: number, y: number) => boolean, add: boolean): void {
     if (!add) this.sel = emptySel();
     const doc = this.doc;
-    if (!this.structuresLocked) for (const at of doc.atomsIn(r)) this.sel.atoms.add(at.id);
+    if (!this.structuresLocked) for (const at of doc.atomsIn(r)) if (inside(at.x, at.y)) this.sel.atoms.add(at.id);
     for (const id of this.sel.atoms) {
       for (const bid of doc.adj.get(id) ?? []) {
         const bb = doc.bonds.get(bid)!;
         if (this.sel.atoms.has(bb.a1) && this.sel.atoms.has(bb.a2)) this.sel.bonds.add(bid);
       }
     }
-    const inside = (x: number, y: number) => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2;
-    for (const c of doc.captions.values()) { if (c.hidden) continue; const bx = this.r.captionBox(c); if (inside(bx.x1, bx.y1) && inside(bx.x2, bx.y2)) this.sel.captions.add(c.id); }
-    const within = (b: Rect) => inside(b.x1, b.y1) && inside(b.x2, b.y2);
+    const within = (b: Rect) => inside(b.x1, b.y1) && inside(b.x2, b.y2) && inside(b.x1, b.y2) && inside(b.x2, b.y1);
+    for (const c of doc.captions.values()) { if (c.hidden) continue; if (within(this.r.captionBox(c))) this.sel.captions.add(c.id); }
     for (const ar of doc.arrows.values()) if (arrowPoints(ar).every((q) => inside(q.x, q.y))) this.sel.arrows.add(ar.id);
     for (const s of doc.shapes.values()) if (!s.hidden && !s.locked && within(s.kind === 'bracket' ? { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) } : shapeBox(s))) this.sel.shapes.add(s.id);
   }
@@ -3443,6 +3464,30 @@ export class Editor {
       if (!stations.length) this.moveClear(page);
     });
     this.changed();
+  }
+
+  /** Where the mouse is on the drawing, or null when it is somewhere else (a menu, a panel). */
+  get mouseOnPage(): Vec | null {
+    return this.pointerInside ? { ...this.pointer } : null;
+  }
+
+  /**
+   * Move what was just pasted (the selection) the least it takes to sit clear of everything
+   * else, so pasting twice doesn't stack one copy on the other. Call inside an edit.
+   */
+  placeClear(page?: { w: number; h: number }): void {
+    const doc = this.doc, m = this.measure();
+    const mine = withFrameContents(doc, this.sel);
+    const b = selectionBox(doc, mine, m);
+    if (!b) return;
+    const others = emptySel();
+    for (const id of doc.atoms.keys()) if (!mine.atoms.has(id)) others.atoms.add(id);
+    for (const id of doc.captions.keys()) if (!mine.captions.has(id)) others.captions.add(id);
+    for (const id of doc.arrows.keys()) if (!mine.arrows.has(id)) others.arrows.add(id);
+    for (const id of doc.shapes.keys()) if (!mine.shapes.has(id)) others.shapes.add(id);
+    const boxes = units(doc, others, m).map((u) => u.box);
+    const t = clearOffset(b, boxes, doc.style.bondLength, page);
+    if (t.x || t.y) this.moveSelection(t.x, t.y);
   }
 
   /**
@@ -5349,7 +5394,12 @@ export class Editor {
         ctx.setLineDash([4 * px, 3 * px]);
         ctx.lineWidth = px;
         ctx.strokeStyle = mk.marquee;
-        ctx.strokeRect(Math.min(d.start.x, d.last.x), Math.min(d.start.y, d.last.y), Math.abs(d.last.x - d.start.x), Math.abs(d.last.y - d.start.y));
+        if (this.lassoing(d)) {
+          ctx.beginPath();
+          d.path!.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+          ctx.closePath();
+          ctx.stroke();
+        } else ctx.strokeRect(Math.min(d.start.x, d.last.x), Math.min(d.start.y, d.last.y), Math.abs(d.last.x - d.start.x), Math.abs(d.last.y - d.start.y));
         ctx.setLineDash([]);
       } else if (d.mode === 'draw' || pressing) {
         this.drawPreview(ctx, d);
@@ -5771,4 +5821,14 @@ export function circledChargesOf(doc: Doc, a: Atom): Shape[] {
   // stuck to this atom, or (not stuck to any) beside it
   return [...doc.shapes.values()].filter((s) => s.kind === 'symbol' && ['CirclePlus', 'CircleMinus', 'Plus', 'Minus'].includes(s.symbol ?? '')
     && (s.pin ? s.pin.on === 'atom' && s.pin.ref[0] === a.id : dist({ x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 }, a) < 0.8 * L));
+}
+
+/** Is (x, y) inside the loop (closed from its last point back to its first)? Even-odd rule. */
+export function insideLoop(loop: readonly Vec[], x: number, y: number): boolean {
+  let inside = false;
+  for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+    const a = loop[i], b = loop[j];
+    if ((a.y > y) !== (b.y > y) && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
 }

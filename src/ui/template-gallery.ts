@@ -1,4 +1,4 @@
-// File > New Design: a blank page, or one of the ready-made designs, each shown as a small
+// File > New > New Design: a blank page, or one of the ready-made designs, each shown as a small
 // picture of the page it makes.
 
 import { Doc } from '../model';

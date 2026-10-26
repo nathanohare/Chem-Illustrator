@@ -1,4 +1,4 @@
-// File > AutoSave and Recovery Options: how often unsaved work is copied, AutoSave, how many
+// File > Versions and Recovery > AutoSave and Recovery Options: how often unsaved work is copied, AutoSave, how many
 // earlier versions are kept, and what happens with files in shared folders (OneDrive, a lab drive).
 
 export interface KeepPrefs {

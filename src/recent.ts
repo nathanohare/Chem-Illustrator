@@ -1,4 +1,5 @@
-// File > Recent: the files and workspaces opened or saved lately (desktop app), newest first.
+// File > Open Recent: the files and workspaces opened or saved lately, newest first: paths in the
+// desktop app, files the browser keeps a handle to in the web version (recent-handles.ts).
 
 
 /** How many are kept and listed. */
@@ -21,6 +22,9 @@ export function removeRecent(list: readonly string[], path: string): string[] {
 
 /** What the menu shows: the file's name, and its folder (shortened) to tell same-named files apart. */
 export function recentLabel(path: string): { name: string; folder: string } {
+  // a file the browser keeps (the web version): its name, and where it is kept
+  const kept = /^handle:[^:]+:(.*)$/.exec(path);
+  if (kept) return { name: kept[1], folder: 'kept by this browser' };
   const name = path.split(/[\\/]/).pop() || path;
   const folder = path.slice(0, path.length - name.length).replace(/[\\/]$/, '');
   const parts = folder.split(/[\\/]/).filter(Boolean);

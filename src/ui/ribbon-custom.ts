@@ -1,4 +1,4 @@
-// Your own ribbons (View > Customize the Ribbon): each ribbon's tabs in your order, renamed or
+// Your own ribbons (View > Ribbon > Customize the Ribbon): each ribbon's tabs in your order, renamed or
 // hidden, and each tab's groups in your order, moved to another tab of the same ribbon, renamed
 // or hidden, with groups of your own holding the commands you choose. Kept with the settings;
 // the ribbons in the page are rearranged to match when the program starts and on each change.
@@ -228,7 +228,7 @@ function ownGroup(info: RibbonInfo, id: string, g: { title: string; items: strin
   if (!buttons.length) {
     const none = document.createElement('span');
     none.className = 'rb-own-empty';
-    none.textContent = 'Empty: View ▸ Customize the Ribbon';
+    none.textContent = 'Empty: View ▸ Ribbon ▸ Customize the Ribbon';
     row.append(none);
   }
   const label = document.createElement('div');

@@ -426,13 +426,13 @@ export class Keeper {
 
   // ---------------------------------------------------------------- Recover Unsaved Work
 
-  /** File > Recover Unsaved Work…: copies left by sessions that stopped unexpectedly. */
+  /** File > Versions and Recovery > Recover Unsaved Work…: copies left by sessions that stopped unexpectedly. */
   async recoverCommand(): Promise<void> {
     let left: Session[] = [];
     try { left = await this.recovery.leftOver(this.prefs.recoveryDays); } catch { /* none */ }
     if (!left.length) {
       const m = this.prefs.recoveryMinutes;
-      await choose('Recover Unsaved Work', `There is nothing to recover. ${m ? `While you work, each tab with unsaved changes is copied every ${m === 1 ? 'minute' : `${m} minutes`}; the copies are offered here if Chem Illustrator closes before they are saved.` : 'Recovery copies are switched off (File ▸ AutoSave and Recovery Options).'}`, ['OK']);
+      await choose('Recover Unsaved Work', `There is nothing to recover. ${m ? `While you work, each tab with unsaved changes is copied every ${m === 1 ? 'minute' : `${m} minutes`}; the copies are offered here if Chem Illustrator closes before they are saved.` : 'Recovery copies are switched off (File ▸ Versions and Recovery ▸ AutoSave and Recovery Options).'}`, ['OK']);
       return;
     }
     await this.offer(left, false);
@@ -474,19 +474,19 @@ export class Keeper {
 
   // ---------------------------------------------------------------- Version History
 
-  /** File > Version History…: the kept versions of the tab's file. */
+  /** File > Versions and Recovery > Version History…: the kept versions of the tab's file. */
   async historyCommand(tab: Tab): Promise<void> {
     const key = versionKey(tab.ref, tab.name);
     const p = this.prefs;
     if (!key) {
-      await choose('Version History', `${tab.name} hasn’t been saved as a file yet. Once it is, a version is kept each time it’s saved${p.versionsKeep ? '' : ' (when Version History is switched on in File ▸ AutoSave and Recovery Options)'}.`, ['OK']);
+      await choose('Version History', `${tab.name} hasn’t been saved as a file yet. Once it is, a version is kept each time it’s saved${p.versionsKeep ? '' : ' (when Version History is switched on in File ▸ Versions and Recovery ▸ AutoSave and Recovery Options)'}.`, ['OK']);
       return;
     }
     const list = await this.versions.list(key).catch(() => [] as Version[]);
     const place = tab.ref.kind === 'path' ? tab.ref.path : tab.name;
     const note = p.versionsKeep
-      ? `Up to ${p.versionsKeep} versions are kept${p.versionsDays ? `, for ${p.versionsDays} days` : ''} (File ▸ AutoSave and Recovery Options).`
-      : 'Version History is switched off: File ▸ AutoSave and Recovery Options switches it on. Versions kept before are still here.';
+      ? `Up to ${p.versionsKeep} versions are kept${p.versionsDays ? `, for ${p.versionsDays} days` : ''} (File ▸ Versions and Recovery ▸ AutoSave and Recovery Options).`
+      : 'Version History is switched off: File ▸ Versions and Recovery ▸ AutoSave and Recovery Options switches it on. Versions kept before are still here.';
     versionDialog(tab.name, place, list, note, {
       open: (v) => void this.openVersion(tab, key, v),
       restore: (v) => this.restoreVersion(tab, key, v),

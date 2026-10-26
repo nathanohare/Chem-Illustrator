@@ -43,12 +43,12 @@ Open files with **File ▸ Open…** (Ctrl+O), or drop them onto the window. Pic
 
 ### Other formats
 
-- **SMILES:** **Edit ▸ Copy as SMILES** (Ctrl+Alt+C) copies the selected structures as SMILES; **Edit ▸ Paste SMILES** (Ctrl+Alt+P) draws them. A SMILES string pasted with Ctrl+V is drawn too.
-- **Molfile:** **File ▸ Export Molfile…** saves the selected structures (or all of them) as a .mol file; **Edit ▸ Copy as Molfile Text** copies them as text. A molfile pasted with Ctrl+V is drawn.
-- **CDXML text:** **Edit ▸ Copy as CDXML Text** copies the drawing as ChemDraw XML.
+- **SMILES:** **Edit ▸ Copy As ▸ Copy as SMILES** (Ctrl+Alt+C) copies the selected structures as SMILES; **Edit ▸ Paste Special ▸ Paste SMILES** (Ctrl+Alt+P) draws them. A SMILES string pasted with Ctrl+V is drawn too.
+- **Molfile:** **File ▸ Export ▸ Export Molfile…** saves the selected structures (or all of them) as a .mol file; **Edit ▸ Copy As ▸ Copy as Molfile Text** copies them as text. A molfile pasted with Ctrl+V is drawn.
+- **CDXML text:** **Edit ▸ Copy As ▸ Copy as CDXML Text** copies the drawing as ChemDraw XML.
 - **SD files (.sdf):** open in a sheet with one row per structure and its data fields as columns.
-- **PDF:** **File ▸ Export PDF…** for drawings, slides, designs and documents. Structures and text stay sharp at any zoom. The fonts go inside the file, so it looks the same everywhere and passes journals' "all fonts embedded" checks. Arial, Helvetica and similar fonts are drawn with Arimo, Times with Tinos and Courier with Cousine: free fonts with exactly the same letter widths. A character none of those has (an arrow such as →) uses the reader's Symbol font.
-- **Pictures:** **File ▸ Export Picture…** for a drawing, the current slide or a design page. Pick a white or page-coloured background or a see-through one.
+- **PDF:** **File ▸ Export ▸ Export PDF…** for drawings, slides, designs and documents. Structures and text stay sharp at any zoom. The fonts go inside the file, so it looks the same everywhere and passes journals' "all fonts embedded" checks. Arial, Helvetica and similar fonts are drawn with Arimo, Times with Tinos and Courier with Cousine: free fonts with exactly the same letter widths. A character none of those has (an arrow such as →) uses the reader's Symbol font.
+- **Pictures:** **File ▸ Export ▸ Export Picture…** for a drawing, the current slide or a design page. Pick a white or page-coloured background or a see-through one.
   - **PNG** and **TIFF** are pictures made of dots. Type the dpi (300 for colour, 600 to 1200 for line art). TIFF files are LZW-compressed, the kind many journals ask for.
   - **SVG**, **EMF** and **EPS** keep shapes and text sharp at any size. SVG suits Illustrator, Inkscape and web pages; EMF suits Word and PowerPoint on Windows; EPS suits older journal systems. EPS uses the standard PostScript fonts (Helvetica, Times, Courier and Symbol), and has no see-through colours, so those are mixed with white.
 
@@ -71,7 +71,7 @@ Double-click a file, or right-click it and choose **Open with ▸ Chem Illustrat
 | Word, PowerPoint or Excel (Windows app) | A Chem Illustrator drawing object: a sharp picture you can double-click to edit here (see below) |
 | Other programs, or from the browser version or on macOS and Linux | A high-resolution picture |
 
-In the Windows app, **Paste** (Ctrl+V) takes drawings copied in ChemDraw as editable structures, and spectra copied in MestReNova as sharp lines and text. **Edit ▸ Show Clipboard Formats** lists what is on the clipboard, which helps when a paste doesn't come out as expected.
+In the Windows app, **Paste** (Ctrl+V) takes drawings copied in ChemDraw as editable structures, and spectra copied in MestReNova as sharp lines and text. **Edit ▸ Paste Special ▸ Paste Special ▸ Show Clipboard Formats** lists what is on the clipboard, which helps when a paste doesn't come out as expected.
 
 ### Editing drawings inside Word, PowerPoint and Excel (Windows)
 
@@ -105,24 +105,24 @@ Split View puts a drawing beside a document, sheet or slide deck, so you can dra
 
 A workspace saves all your open tabs together, so a project's scheme, slides, SI document and data sheet open in one go. Workspaces are in the desktop app only.
 
-1. **File ▸ Save Workspace**. A window lists any tabs that have never been saved and offers two choices:
+1. **File ▸ Workspace ▸ Save Workspace**. A window lists any tabs that have never been saved and offers two choices:
    - **Put copies of files kept in other folders into the workspace folder.** On: everything ends up in one folder. Off: the workspace points to the files where they are.
    - **Save changes to tabs already saved as files.**
 2. Click **Choose Folder…**, pick or make a folder, and name the workspace.
 
 The folder then holds your files plus a small `.ciworkspace` file listing the tabs, their order, which tab was showing and any Split View. Tabs never saved are saved there under their tab names; a file that would replace another gets "(2)" added instead.
 
-To open it again, use **File ▸ Open Workspace…** or **File ▸ Open**, and pick the `.ciworkspace` file. **Save Workspace** then saves back to the same place, and **Save Workspace As…** saves a new one.
+To open it again, use **File ▸ Workspace ▸ Open Workspace…** or **File ▸ Open**, and pick the `.ciworkspace` file. **Save Workspace** then saves back to the same place, and **Save Workspace As…** saves a new one.
 
 Files inside the workspace folder are listed by name, so you can move or copy the whole folder (to another computer through a cloud drive, say) and it still opens. If a file has been moved or deleted, the rest open and a message names the missing ones.
 
 ## AutoSave, recovery and Version History
 
-Every kind of tab (drawings, slides, sheets, documents and designs) is kept safe in three ways. Set them all in **File ▸ AutoSave and Recovery Options…**.
+Every kind of tab (drawings, slides, sheets, documents and designs) is kept safe in three ways. Set them all in **File ▸ Versions and Recovery ▸ AutoSave and Recovery Options…**.
 
 ### Recovery copies
 
-While you work, each tab with unsaved changes is copied every 2 minutes (choose 1 to 30 minutes, or never) to the app's own data folder. Closing the app normally deletes the copies. If it stops without closing (a crash, a power cut, Windows restarting for updates), the next start shows **Recover Unsaved Work**: tick the files to reopen and click **Reopen**. Reopened files come back unsaved, under their own names; Save puts a file that had been saved back where it was. **Not Now** keeps the copies for later in **File ▸ Recover Unsaved Work…**, and they are deleted after 7 days (you can change this).
+While you work, each tab with unsaved changes is copied every 2 minutes (choose 1 to 30 minutes, or never) to the app's own data folder. Closing the app normally deletes the copies. If it stops without closing (a crash, a power cut, Windows restarting for updates), the next start shows **Recover Unsaved Work**: tick the files to reopen and click **Reopen**. Reopened files come back unsaved, under their own names; Save puts a file that had been saved back where it was. **Not Now** keeps the copies for later in **File ▸ Versions and Recovery ▸ Recover Unsaved Work…**, and they are deleted after 7 days (you can change this).
 
 ### AutoSave
 
@@ -134,7 +134,7 @@ With AutoSave on, a file that has been saved saves itself a few seconds after yo
 
 ### Version History
 
-**File ▸ Version History…** lists earlier versions of the file showing, newest first. A version is kept each time you save, and the file as it was before your first save in each session is kept too, so AutoSave can never lose what was there. While AutoSave is on, it adds a version at most every 10 minutes.
+**File ▸ Versions and Recovery ▸ Version History…** lists earlier versions of the file showing, newest first. A version is kept each time you save, and the file as it was before your first save in each session is kept too, so AutoSave can never lose what was there. While AutoSave is on, it adds a version at most every 10 minutes.
 
 - **Open a Copy** opens a version in a new tab to look at or copy from. The file isn't changed.
 - **Restore** puts the version in the tab in place of what it has now. What it had is kept as a version first, so a restore can be undone.
@@ -154,7 +154,9 @@ Recovery copies and versions are kept in a folder named `Kept` in the app's loca
 
 ## Recent files
 
-In the desktop app, the **File** menu lists the last ten files and workspaces you opened or saved, under **Open…**, newest first. Click one to open it. If it has been moved or deleted, a message says so and it comes off the list. **Clear Recent Files** empties the list.
+**File ▸ Open Recent** lists the last ten files and workspaces you opened or saved, newest first. Click one to open it. If it has been moved or deleted, a message says so and it comes off the list. **Clear Recent Files** empties the list.
+
+The web version keeps a recent list too in Chrome and Edge, which let a page open a file again by itself: the browser asks once for leave to open it. Other browsers (Firefox, Safari) don't allow this, so there the menu stays hidden.
 
 ## Printing
 

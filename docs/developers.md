@@ -39,7 +39,13 @@ npm run desktop:build    # makes the installers in src-tauri/target/release/bund
 ```
 npm test          # unit tests for the chemistry, geometry and saving
 npm run build     # type-check and build the web version into dist/
+npm run typecheck:strict   # stricter type checks (unused parameters, a path that forgets to return)
+npm run smoke     # after a build: the app in a headless browser, start to save and every menu
 ```
+
+Every pull request runs all of these (the **Checks** workflow), plus a speed check that times `bench/core.bench.ts` for the pull request and for the branch it merges into and fails when a measure gets more than 40% slower. Pull requests that change `src-tauri/` also run `cargo test`.
+
+To see whether real drawings survive a save and reopen, `npm run roundtrip -- <folder>` (after a build) opens every `.cdxml`, `.cdx`, `.mol` and `.sdf` file in the folder, saves it as CDXML, opens it again and lists any file whose atoms, bonds, text, arrows or structures changed. The files are read where they are and never copied.
 
 To also check saving against your own ChemDraw files (they stay on your computer), point the tests at a folder of `.cdxml` files: in PowerShell `$env:CHEM_TEST_FILES="C:\path\to\folder"; npm test`. Any `.cdx` files saved by ChemDraw in that folder, or in a folder inside it, are also checked against the `.cdxml` file of the same name.
 

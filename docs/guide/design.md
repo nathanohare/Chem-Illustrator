@@ -6,7 +6,7 @@ This page covers Design mode: single-page graphics such as TOC graphics, graphic
 
 ## Starting a design
 
-Click **+ Design** at the end of the tab strip, or choose **File ▸ New Design…**. A gallery opens with a **Blank page** and six ready-made layouts.
+Click **+ Design** at the end of the tab strip, or choose **File ▸ New ▸ New Design…**. A gallery opens with a **Blank page** and six ready-made layouts.
 
 A design is a single page. For several pages, use [Slides](slides.md) instead.
 
@@ -147,8 +147,8 @@ The **Layers** panel on the right lists everything on the page, front first.
 ## Saving and exporting
 
 - **Save** (Ctrl+S) writes a one-slide PowerPoint file (.pptx). In PowerPoint the shapes look the same and connectors are PowerPoint connectors. Open it here again and everything is editable, with connectors still attached to their shapes.
-- **Export Picture** (ribbon **Share** group, or **File ▸ Export Picture…**) saves a PNG or TIFF at the resolution you type, or an SVG, EMF or EPS. Choose the page colour or a see-through background. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line art. A very large page at a very high dpi is reduced to what fits in memory, and a message says which dpi was used.
-- **Export PDF** (ribbon **Share** group, or **File ▸ Export PDF…**) saves the page at its exact size.
+- **Export Picture** (ribbon **Share** group, or **File ▸ Export ▸ Export Picture…**) saves a PNG or TIFF at the resolution you type, or an SVG, EMF or EPS. Choose the page colour or a see-through background. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line art. A very large page at a very high dpi is reduced to what fits in memory, and a message says which dpi was used.
+- **Export PDF** (ribbon **Share** group, or **File ▸ Export ▸ Export PDF…**) saves the page at its exact size.
 - **File ▸ Print…** (Ctrl+P) prints the page at its own size.
 
 Next: [Getting started](getting-started.md) · [Drawing](drawing.md) · [Keyboard and mouse](keyboard-and-mouse.md) · [Slides](slides.md) · [Documents](documents.md) · [Sheets](sheets.md) · [Files and sharing](files-and-sharing.md) · [Feedback](feedback.md)

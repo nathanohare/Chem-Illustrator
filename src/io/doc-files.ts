@@ -3,7 +3,9 @@
 // contents or, failing that, its name.
 
 import type { DocText } from '../document/document';
-import { readDocx, writeDocx, type DocxDeps, type DocxReadDeps } from './docx';
+// Word's reader and writer load the first time a document is opened or saved
+import type { DocxDeps } from './docx-write';
+import type { DocxReadDeps } from './docx-read';
 import { isRtf, readRtf, writeRtf } from './rtf';
 import { isOdt, readOdt, writeOdt } from './odt';
 import { isDoc, readDoc } from './doc-binary';
@@ -28,7 +30,7 @@ export async function readDocumentFile(bytes: Uint8Array, name: string, deps: Do
   if (ext === 'rtf') return readRtf(bytes);
   if (ext === 'odt') return readOdt(bytes);
   if (ext === 'doc') return readDoc(bytes);
-  return readDocx(bytes, deps);
+  return (await import('./docx-read')).readDocx(bytes, deps);
 }
 
 /** Save a document as its name says: .rtf, .odt, else .docx. */
@@ -36,7 +38,7 @@ export async function writeDocumentFile(t: DocText, name: string, deps: DocxDeps
   const ext = extOf(name);
   if (ext === 'rtf') return writeRtf(t, { picture: deps.picture });
   if (ext === 'odt') return writeOdt(t, { picture: deps.picture });
-  return writeDocx(t, deps);
+  return (await import('./docx-write')).writeDocx(t, deps);
 }
 
 /** A note after saving in a format that keeps less than .docx. */

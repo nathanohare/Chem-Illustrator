@@ -1,5 +1,5 @@
 // AutoSave: a tab already saved as a file saves itself a little while after the last change
-// (File > AutoSave and Recovery Options sets how long), and also every few minutes during long
+// (File > Versions and Recovery > AutoSave and Recovery Options sets how long), and also every few minutes during long
 // stretches of steady work, so it is never far behind. This decides when; the app does the saving.
 
 export interface AutoSaveTab {

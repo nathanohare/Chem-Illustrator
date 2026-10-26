@@ -1,4 +1,4 @@
-// Workspace files (File > Save Workspace, Open Workspace): a short list of the tabs that were
+// Workspace files (File > Workspace > Save Workspace, Open Workspace): a short list of the tabs that were
 // open, in order, which one was showing and which drawing sat beside a document, sheet or deck
 // in split view. Files in the workspace's own folder are listed by name, so the folder can be
 // moved or copied (to OneDrive, another computer) and still open; others by their full path.

@@ -1,4 +1,4 @@
-// Video and sound from files on slides (Insert > Video, Insert > Audio), as PowerPoint has them:
+// Video and sound from files on slides (Insert > Slides > Video, Insert > Slides > Audio), as PowerPoint has them:
 // trimmed at either end, faded in and out, started by themselves or by a click, looped,
 // rewound, at a volume, a sound's icon hidden in the show or the sound carried on across slides.
 // The rules here are pure (no screen), so they can be tested; the slide show plays them with the
@@ -6,9 +6,9 @@
 
 import type { Media } from '../model';
 
-/** The files Insert > Video takes, by extension, with their types. */
+/** The files Insert > Slides > Video takes, by extension, with their types. */
 export const VIDEO_TYPES: Record<string, string> = { mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', webm: 'video/webm' };
-/** The files Insert > Audio takes. */
+/** The files Insert > Slides > Audio takes. */
 export const AUDIO_TYPES: Record<string, string> = { mp3: 'audio/mpeg', m4a: 'audio/mp4', wav: 'audio/wav', aac: 'audio/aac', ogg: 'audio/ogg' };
 
 /** A video or sound file's type from its name, or null when it isn't one we take. */

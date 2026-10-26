@@ -352,6 +352,7 @@ export class SheetData {
     w.onOk(() => {
       if (!ref.value.trim()) return 'Type a cell or block to go to.';
       this.host.goTo(ref.value.trim());
+      return undefined;
     });
     open(w, ref);
   }
@@ -409,6 +410,7 @@ export class SheetData {
       v.selectAreas(got, k === 'region' || k === 'rowdiff' || k === 'coldiff' ? v.sel.active : undefined);
       const n = got.reduce((sum, a) => sum + (a.r2 - a.r1 + 1) * (a.c2 - a.c1 + 1), 0);
       if (got.length > 1 || n > 1) this.host.flash(`${n.toLocaleString()} cell${n === 1 ? '' : 's'} selected. Type and press Ctrl+Enter to fill them all, or format them.`, 6000);
+      return undefined;
     });
     open(w, pick.inputs.get('blanks'));
     v.focus();
@@ -457,6 +459,7 @@ export class SheetData {
       let n = 0;
       this.host.edit('Series', (sh) => { n = fillSeries(sh, R, o); });
       this.host.flash(n ? `Filled ${n} cell${n === 1 ? '' : 's'}.` : 'Nothing to fill: the next value would pass the stop value.');
+      return undefined;
     });
     open(w, step);
   }
@@ -589,6 +592,7 @@ export class SheetData {
       let n = 0;
       this.host.edit('Text to Columns', (sh) => { n = textToColumns(sh, R, o, at); }, () => ({ r1: at.row, c1: at.col, r2: at.row + R.r2 - R.r1, c2: at.col + Math.max(0, n - 1) }));
       this.host.flash(n > 1 ? `Split into ${n} columns.` : 'Nothing was split: no delimiter was found in the cells.');
+      return undefined;
     });
     open(w, null);
   }
@@ -633,6 +637,7 @@ export class SheetData {
       let got = { removed: 0, kept: 0 };
       this.host.edit('Remove Duplicates', (sh) => { got = removeDuplicates(sh, all, cols, header.box.checked); });
       this.host.flash(got.removed ? `${got.removed} duplicate row${got.removed === 1 ? '' : 's'} found and removed; ${got.kept} unique row${got.kept === 1 ? '' : 's'} remain.` : 'No duplicate rows found.', 6000);
+      return undefined;
     });
     open(w, null);
   }
@@ -774,6 +779,7 @@ export class SheetData {
       if (byCols ? R.c2 <= R.c1 : R.r2 <= R.r1) return 'There is only one row to sort.';
       this.host.edit('Sort', (sh) => sh.sort(R, keys, { caseSensitive: caseBox.box.checked, byColumns: byCols }));
       this.host.flash(`Sorted ${byCols ? `${R.c2 - R.c1 + 1} columns` : `${R.r2 - R.r1 + 1} rows`} by ${keys.length} level${keys.length === 1 ? '' : 's'}.`);
+      return undefined;
     });
     open(w, levels[0].key);
   }
@@ -816,6 +822,7 @@ export class SheetData {
       this.host.edit('Advanced Filter', (sh) => { got = applyAdvancedFilter(sh, { list: L, criteria: C, unique: unique.box.checked, copyTo: dest }); },
         dest ? () => ({ r1: dest.row, c1: dest.col, r2: dest.row + got.shown, c2: dest.col + L.c2 - L.c1 }) : undefined);
       this.host.flash(copy ? `Copied ${got.shown} of ${got.total} rows.` : `${got.shown} of ${got.total} rows show. Data > Clear shows them all again.`, 6000);
+      return undefined;
     });
     open(w, crit);
   }
@@ -835,7 +842,7 @@ export class SheetData {
 
   // ---------------------------------------------------------------- freeze panes and split
 
-  /** View > Freeze Panes ▾ */
+  /** View > Sheet > Freeze Panes ▾ */
   freezeMenu(x: number, y: number): void {
     const s = this.view.sheet;
     if (!s) return;
@@ -869,7 +876,7 @@ export class SheetData {
     this.host.flash(`Frozen: ${what} stay in view as you scroll.`);
   }
 
-  /** View > Split: split the window above and left of the active cell into panes that scroll on their own (again to take it away). */
+  /** View > Sheet > Split: split the window above and left of the active cell into panes that scroll on their own (again to take it away). */
   toggleSplit(): void {
     const v = this.view;
     const s = v.sheet;

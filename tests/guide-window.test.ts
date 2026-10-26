@@ -29,3 +29,24 @@ describe('the built-in User Guide', () => {
     expect(guideSpot('design', 'bond').page).toBe('guide/design.md');
   });
 });
+
+describe('guide sections for Search Commands', () => {
+  it('lists the headings with their anchors, leaving out code blocks', async () => {
+    const { headingsOf } = await import('../src/ui/guide-window');
+    const md = '# Troubleshooting\n\nText.\n\n## A damaged **settings** file\n\n```\n# not a heading\n```\n\n### [Keys](keys.md)\n';
+    expect(headingsOf('guide/troubleshooting.md', md)).toEqual([
+      { page: 'guide/troubleshooting.md', anchor: '', title: 'Troubleshooting', pageTitle: 'Troubleshooting' },
+      { page: 'guide/troubleshooting.md', anchor: 'a-damaged-settings-file', title: 'A damaged settings file', pageTitle: 'Troubleshooting' },
+      { page: 'guide/troubleshooting.md', anchor: 'keys', title: 'Keys', pageTitle: 'Troubleshooting' },
+    ]);
+  });
+  it('puts the command first, ahead of a guide section or settings page of the same name', async () => {
+    const { searchCommands } = await import('../src/ui/command-search');
+    const got = searchCommands([
+      { id: 'guide:x#hotkeys', label: 'Hotkeys', place: 'User Guide', more: '' },
+      { id: 'set:keys', label: 'Hotkeys settings', place: 'Settings', more: '' },
+      { id: 'cmd:hotkeys', label: 'Hotkeys', place: 'Edit menu', more: '' },
+    ], 'hotkeys');
+    expect(got.map((c) => c.id)).toEqual(['cmd:hotkeys', 'guide:x#hotkeys', 'set:keys']);
+  });
+});

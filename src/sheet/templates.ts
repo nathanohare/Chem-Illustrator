@@ -1,4 +1,4 @@
-// File > New from Template, for sheets: our own starting points (a reaction optimization table
+// File > New > New from Template, for sheets: our own starting points (a reaction optimization table
 // and a reagent sheet with the yield worked out). Written here for this app; none is taken from
 // another program's templates.
 

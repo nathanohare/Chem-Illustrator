@@ -1,7 +1,7 @@
-// File > Version History: each time a file is saved, a copy of what was saved is kept in the
+// File > Versions and Recovery > Version History: each time a file is saved, a copy of what was saved is kept in the
 // app's own folder, so an earlier state can be opened or brought back. The file as it was before
 // the first save here is kept too, so AutoSave can never lose what was there. How many versions
-// are kept, and for how long, is set in File > AutoSave and Recovery Options.
+// are kept, and for how long, is set in File > Versions and Recovery > AutoSave and Recovery Options.
 
 import type { KeepStore } from './store';
 import { getText, putText, keyPart } from './store';

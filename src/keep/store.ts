@@ -82,6 +82,8 @@ function listKeys(folder: string, all: { key: string; size: number; modified: nu
 function browserStore(): KeepStore {
   let db: Promise<IDBDatabase> | null = null;
   const open = () => db ??= new Promise((resolve, reject) => {
+    // ask the browser to keep this storage when space runs short (it may still say no, or ask the person)
+    void navigator.storage?.persist?.().catch(() => false);
     const r = indexedDB.open('chem-illustrator-kept', 1);
     r.onupgradeneeded = () => r.result.createObjectStore('kept');
     r.onsuccess = () => resolve(r.result);

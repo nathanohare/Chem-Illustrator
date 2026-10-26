@@ -61,7 +61,7 @@ export interface Settings {
   replacements: [string, string][];
   /** Words added to the spelling check. */
   dictionary: string[];
-  /** Each mode's colour and how much of the window it colours (View > Mode Colours). */
+  /** Each mode's colour and how much of the window it colours (View > Window and Colours > Mode Colours). */
   modeColours: ModeColours;
   /** Nicknames of the person's own: name → SMILES, first atom where it joins (Chemistry > Nicknames and Templates > Define Nickname). */
   nicknames: Record<string, string>;
@@ -76,21 +76,27 @@ export interface Settings {
   slideNotes: boolean;
   /** Scroll bars along the drawing's bottom and right (View > Scroll Bars). */
   scrollBars: boolean;
-  /** Desktop app: the window's buttons in the menu row instead of the system's title bar (View > Title Bar in Menu Row). */
+  /** Desktop app: the window's buttons in the menu row instead of the system's title bar (View > Window and Colours > Title Bar in Menu Row). */
   titleBar: 'app' | 'system';
-  /** The ribbons show their tabs only, until a tab is clicked (View > Collapse the Ribbon, Ctrl+F1). */
+  /** The ribbons show their tabs only, until a tab is clicked (View > Ribbon > Collapse the Ribbon, Ctrl+F1). */
   ribbonCollapsed: boolean;
-  /** The size of the whole interface, 1 for normal (View > Interface Size, Ctrl+Alt+= / Ctrl+Alt+-). */
+  /** The size of the whole interface, 1 for normal (View > Window and Colours > Interface Size, Ctrl+Alt+= / Ctrl+Alt+-). */
   uiScale: number;
   /** The page new drawings start on (File > Page Setup's default); null for no page. */
   page: { name?: string; w: number; h: number; grow: boolean } | null;
   /** The welcome card has been closed (it shows once, on a first empty drawing). */
   welcomed: boolean;
-  /** Where the text formatting bar goes while typing text (View > Text Formatting Bar). */
+  /** Where the text formatting bar goes while typing text (View > Window and Colours > Text Formatting Bar). */
   textBar: 'docked' | 'floating' | 'hidden';
+  /** The window's own colours: as the computer is set (light or dark), or always light or dark (View > Window and Colours > Theme). The page has its own Dark Page. */
+  appTheme: 'system' | 'light' | 'dark';
+  /** Toolboxes docked at a side show in one column in Slides, Sheet, Document and Design tabs (View > Toolboxes). */
+  oneColumnTools: boolean;
+  /** The start view (new tabs, recent files) on the empty drawing the program opens with. */
+  startView: boolean;
   /** Resting the mouse on an abbreviation shows the group written out (View > Group Tooltips). */
   groupTips: boolean;
-  /** View > Touch Mode: bigger buttons, the atom keypad and long-press menus. Automatic turns it on once a pen or finger is used. */
+  /** View > Window and Colours > Touch Mode: bigger buttons, the atom keypad and long-press menus. Automatic turns it on once a pen or finger is used. */
   touchMode: 'auto' | 'on' | 'off';
   /** The pen always sketches (whatever tool is picked): strokes become bonds and rings, letters atom labels, a scribble erases. */
   penSketch: boolean;
@@ -133,7 +139,7 @@ export interface Settings {
   palettes: Palette[];
   /** Which toolboxes show and where (View > Toolboxes), and what is in your own. */
   toolboxes: ToolboxState;
-  /** Each ribbon's tabs and groups as you put them (View > Customize the Ribbon). */
+  /** Each ribbon's tabs and groups as you put them (View > Ribbon > Customize the Ribbon). */
   ribbons: RibbonsPrefs;
   /** Your own drawing styles (File > Drawing Style > Save as My Style). */
   myStyles: DocStyle[];
@@ -143,7 +149,7 @@ export interface Settings {
   darkPage: boolean;
   /** Which dark palette, by name. */
   darkPalette: string;
-  /** Your own dark palettes (View > Dark Page Colours). */
+  /** Your own dark palettes (View > Window and Colours > Dark Page Colours). */
   darkPalettes: DarkPalette[];
   /** Alignment guides on or off in each kind of tab (View > Alignment Guides). */
   guides: { drawing: boolean; slides: boolean; design: boolean };
@@ -178,6 +184,8 @@ export interface Settings {
   reviewName: string;
   /** A version the user chose Skip This Version for, so starting the app doesn't offer it again. */
   skipVersion: string | null;
+  /** The version of the desktop app that ran last, to say what's new after an update. */
+  lastVersion: string | null;
   /** Files and workspaces opened or saved lately, newest first (File menu, desktop app). */
   recentFiles: string[];
   /** Characters typed from Insert > Symbol lately, newest first. */
@@ -190,7 +198,7 @@ export interface Settings {
   docDesign: DocDesign | null;
   /** Spacing in schemes and the text above and below arrows (Chemistry > Reactions and Schemes > Scheme Settings). */
   scheme: SchemePrefs;
-  /** AutoSave, recovery copies, Version History and shared folders (File > AutoSave and Recovery Options). */
+  /** AutoSave, recovery copies, Version History and shared folders (File > Versions and Recovery > AutoSave and Recovery Options). */
   keep: KeepPrefs;
   /** The person's own AI model, if they linked one (Edit > Settings > AI Model). Its key is kept apart, never here. */
   ai: AiPrefs;
@@ -202,7 +210,7 @@ export const SLIDE_PANE_MIN = 120, SLIDE_PANE_MAX = 480, NOTES_MIN = 36, NOTES_M
 export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
-  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', groupTips: true, touchMode: 'auto', penSketch: false,
+  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', oneColumnTools: false, startView: true, groupTips: true, touchMode: 'auto', penSketch: false,
   citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {},
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
@@ -210,7 +218,7 @@ export const DEFAULT_SETTINGS: Settings = {
   docPins: [],
   docRuler: false,
   sheetFormulaBar: true,
-  updateCheck: true, updateChannel: 'latest', pubchemNames: true, convertChemDraw: false, matchStructure: true, fileTypesOffered: false, wordObjectsOffered: false, reviewName: '', skipVersion: null, recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], docDesign: null,
+  updateCheck: true, updateChannel: 'latest', pubchemNames: true, convertChemDraw: false, matchStructure: true, fileTypesOffered: false, wordObjectsOffered: false, reviewName: '', skipVersion: null, lastVersion: null, recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], docDesign: null,
   slideRuler: false,
   slideGrid: false,
   rulerUnits: typeof navigator !== 'undefined' && /^[a-z]{2,3}-(US|LR|MM)\b/i.test(navigator.language) ? 'in' : 'cm',
@@ -244,6 +252,9 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.uiScale === 'number') s.uiScale = clampUiScale(r.uiScale);
   if (r.updateChannel === 'stable' || r.updateChannel === 'latest') s.updateChannel = r.updateChannel;
   if (typeof r.textBar === 'string' && ['docked', 'floating', 'hidden'].includes(r.textBar)) s.textBar = r.textBar as Settings['textBar'];
+  if (r.appTheme === 'system' || r.appTheme === 'light' || r.appTheme === 'dark') s.appTheme = r.appTheme;
+  if (typeof r.oneColumnTools === 'boolean') s.oneColumnTools = r.oneColumnTools;
+  if (typeof r.startView === 'boolean') s.startView = r.startView;
   if (typeof r.linkSide === 'string' && ['keep', 'below', 'above', 'left', 'right'].includes(r.linkSide)) s.linkSide = r.linkSide as Settings['linkSide'];
   if (Array.isArray(r.replacements)) {
     s.replacements = r.replacements.filter((x): x is [string, string] => Array.isArray(x) && typeof x[0] === 'string' && typeof x[1] === 'string' && x[0] !== '').map(([a, b]) => [a, b]);
@@ -289,6 +300,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (Array.isArray(r.recentFiles)) s.recentFiles = r.recentFiles.filter((p): p is string => typeof p === 'string' && p.trim() !== '').slice(0, 10);
   s.recentSymbols = parseRecent(r.recentSymbols);
   if (typeof r.skipVersion === 'string' || r.skipVersion === null) s.skipVersion = r.skipVersion as string | null;
+  if (typeof r.lastVersion === 'string') s.lastVersion = r.lastVersion;
   s.scheme = parseSchemePrefs(r.scheme);
   s.keep = parseKeepPrefs(r.keep);
   s.ai = parseAiPrefs(r.ai);
@@ -302,10 +314,10 @@ export function settingsText(s: Settings): string {
 }
 
 /** Settings that belong to this computer: left out of an export, and kept as they are by an import. */
-export const THIS_COMPUTER = ['recentFiles', 'fileTypesOffered', 'wordObjectsOffered', 'skipVersion', 'welcomed'] as const;
+export const THIS_COMPUTER = ['recentFiles', 'fileTypesOffered', 'wordObjectsOffered', 'skipVersion', 'lastVersion', 'welcomed'] as const;
 
 /**
- * Every setting in one file to keep or take to another computer (Edit > Export Settings): keys,
+ * Every setting in one file to keep or take to another computer (Edit > Settings File > Export Settings): keys,
  * toolboxes, preferences, your own templates, nicknames, styles, palettes, themes and looks.
  */
 export function exportText(s: Settings, date = new Date()): string {
@@ -334,19 +346,85 @@ export function importSettings(text: string, now: Settings): { settings: Setting
   return { settings: parseSettings(JSON.stringify(merged)) };
 }
 
-export async function loadSettings(): Promise<Settings> {
+/** The settings couldn't be read this time: saving would write over them, so it doesn't. */
+let keepOff = false;
+
+/** Whether saved settings text can be read at all (a damaged file can't). */
+export function settingsReadable(text: string): boolean {
   try {
-    if (isTauri()) return parseSettings(await invoke<string | null>('settings_read'));
-    return parseSettings(localStorage.getItem(STORAGE_KEY));
+    const raw = JSON.parse(text);
+    return !!raw && typeof raw === 'object' && !Array.isArray(raw);
   } catch {
+    return false;
+  }
+}
+
+/** Where the settings are kept: the desktop app's settings.json (and its .bak), or this browser's storage. */
+export interface SettingsStore {
+  read(): Promise<string | null>;
+  readBackup(): Promise<string | null>;
+  writeBackup(text: string): Promise<void>;
+  /** Move a damaged file aside (never written over); says where it went. */
+  setAside(): Promise<string>;
+}
+
+const desktopSettings: SettingsStore = {
+  read: () => invoke<string | null>('settings_read'),
+  readBackup: () => invoke<string | null>('settings_backup_read'),
+  writeBackup: (text) => invoke('settings_backup_write', { contents: text }),
+  setAside: () => invoke<string>('settings_set_aside'),
+};
+
+const browserSettings: SettingsStore = {
+  read: async () => localStorage.getItem(STORAGE_KEY),
+  readBackup: async () => localStorage.getItem(STORAGE_KEY + '.bak'),
+  writeBackup: async (text) => localStorage.setItem(STORAGE_KEY + '.bak', text),
+  async setAside() {
+    const bad = localStorage.getItem(STORAGE_KEY);
+    if (bad !== null) localStorage.setItem(STORAGE_KEY + '.damaged', bad);
+    localStorage.removeItem(STORAGE_KEY);
+    return 'this browser\u2019s storage';
+  },
+};
+
+/**
+ * The saved settings. Each time they read whole, a copy is kept as a backup; when they can't be
+ * read (a damaged file), the damaged one is moved aside and the backup is used instead, so
+ * templates, nicknames and keys aren't lost to the defaults. `notice` is told what happened.
+ */
+export async function loadSettings(notice: (msg: string) => void = () => {}, store: SettingsStore = isTauri() ? desktopSettings : browserSettings): Promise<Settings> {
+  let text: string | null;
+  try {
+    text = await store.read();
+  } catch (e) {
+    notice(`Your settings could not be read (${e}), so the app is using its defaults until it is restarted. Changes to settings won't be saved, so the file isn't written over.`);
+    // (saving now would write over the file that couldn't be read)
+    keepOff = true;
     return parseSettings(null);
   }
+  if (text === null || !text.trim()) return parseSettings(text);
+  if (settingsReadable(text)) {
+    void store.writeBackup(text).catch(() => {});
+    return parseSettings(text);
+  }
+  let where = '';
+  try { where = await store.setAside(); } catch { /* left where it is */ }
+  let backup: string | null = null;
+  try { backup = await store.readBackup(); } catch { /* none */ }
+  const kept = where ? ` The damaged file was kept as ${where}.` : '';
+  if (backup && settingsReadable(backup)) {
+    notice(`Your settings file was damaged, so the last good copy of your settings was put back.${kept}`);
+    return parseSettings(backup);
+  }
+  notice(`Your settings file was damaged and there was no good copy to put back, so the app started with its defaults.${kept}`);
+  return parseSettings(null);
 }
 
 let pending: ReturnType<typeof setTimeout> | null = null;
 
 /** Save settings shortly (several quick changes make one write). Failures are reported, never fatal. */
 export function saveSettings(s: Settings, onError: (msg: string) => void = () => {}): void {
+  if (keepOff) return;
   if (pending) clearTimeout(pending);
   pending = setTimeout(async () => {
     pending = null;

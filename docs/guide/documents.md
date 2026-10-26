@@ -6,9 +6,9 @@ This page covers Document mode: writing and formatting text, putting structures,
 
 ## Starting a document
 
-Click **+ Document** at the end of the tab strip, or choose **File ▸ New Document**. While a document is showing, Ctrl+N starts another one.
+Click **+ Document** at the end of the tab strip, or choose **File ▸ New ▸ New Document**. While a document is showing, Ctrl+N starts another one.
 
-**File ▸ New from Template…** starts from one of our own templates: a **Lab report** (aim, scheme, reagent table, procedure, observations, results, safety), **Supporting Information** (title block, contents, general information, procedures with a characterization line to fill in, spectra) or a **Thesis chapter** (numbered sections, a wide binding margin and 1.5 line spacing). Text in [brackets] says what goes there; type over it. The headings are in the Heading styles, so the Navigation pane and Table of Contents pick them up.
+**File ▸ New ▸ New from Template…** starts from one of our own templates: a **Lab report** (aim, scheme, reagent table, procedure, observations, results, safety), **Supporting Information** (title block, contents, general information, procedures with a characterization line to fill in, spectra) or a **Thesis chapter** (numbered sections, a wide binding margin and 1.5 line spacing). Text in [brackets] says what goes there; type over it. The headings are in the Heading styles, so the Navigation pane and Table of Contents pick them up.
 
 The ribbon has Word's tabs: **Home**, **Insert**, **Layout**, **References** and **Review**, plus a **Table** tab that appears while the caret is in a table. Text flows on to the next page by itself. The status bar at the bottom shows the page and word count; Ctrl+mouse wheel or the − and + buttons zoom, and **Page Width** fits the page to the window.
 
@@ -243,24 +243,24 @@ To remove a section break, put the caret at the start of the paragraph after it 
 
 ## Table of contents
 
-Give your headings **Heading 1**, **2** or **3**, put the caret where the contents should go, and choose **References** tab ▸ **Table of Contents** (also **Insert ▸ Table of Contents…**). Pick how many heading levels to show.
+Give your headings **Heading 1**, **2** or **3**, put the caret where the contents should go, and choose **References** tab ▸ **Table of Contents** (also **Insert ▸ Document ▸ Tables and Indexes ▸ Table of Contents…**). Pick how many heading levels to show.
 
 The contents keep themselves up to date: page numbers change as text moves, and renamed headings change as you type. There is no Update button. Double-click the contents to change the number of levels. With S1, S2 page numbering, the contents use the same numbers.
 
 ## Table of figures
 
-**References** tab ▸ **Table of Figures** (also **Insert ▸ Table of Figures…**) lists the captions made with Insert Caption, each with its page number after a line of dots. Choose Figure, Scheme, Table or Chart captions, or all of them. Like the contents, it keeps itself up to date; double-click it to list other captions. In Word it is Word's own table of figures.
+**References** tab ▸ **Table of Figures** (also **Insert ▸ Document ▸ Tables and Indexes ▸ Table of Figures…**) lists the captions made with Insert Caption, each with its page number after a line of dots. Choose Figure, Scheme, Table or Chart captions, or all of them. Like the contents, it keeps itself up to date; double-click it to list other captions. In Word it is Word's own table of figures.
 
 ## Index
 
-1. Select a word or phrase (or just click in a word) and choose **References** tab ▸ **Mark Entry** (Alt+Shift+X, also **Insert ▸ Mark Index Entry…**).
+1. Select a word or phrase (or just click in a word) and choose **References** tab ▸ **Mark Entry** (Alt+Shift+X, also **Insert ▸ Document ▸ Tables and Indexes ▸ Mark Index Entry…**).
 2. Check the **Main entry**, and type a **Subentry** to list it under the main one (Aldol reaction ▸ asymmetric).
 3. Leave **Current page** for its page number (in bold or italic if you tick them), or choose **Cross-reference** and type "See Enolates" to send readers elsewhere instead.
 4. Tick **Mark All** to mark every paragraph where the text comes up, once each, as Word does.
 
 Each entry is kept on its paragraph, so it moves with the text. Open Mark Entry in a marked paragraph to see its entries, and tick **Take this paragraph's entries off** to remove them.
 
-**References** tab ▸ **Insert Index** (also **Insert ▸ Index…**) puts an Index heading and the index after the caret's paragraph: the entries A to Z, ignoring case and accents, with the subentries indented under them and each page once. It is set in two columns unless you choose another number (it gets a section of its own, with continuous section breaks before and after, as Word does). **Right align page numbers** puts them at the right after dots, and **A letter over each letter's entries** adds A, B, C headings. Like the contents, it keeps itself up to date; double-click it to change it. In Word, entries are Word's XE fields and the index is Word's own INDEX field.
+**References** tab ▸ **Insert Index** (also **Insert ▸ Document ▸ Tables and Indexes ▸ Index…**) puts an Index heading and the index after the caret's paragraph: the entries A to Z, ignoring case and accents, with the subentries indented under them and each page once. It is set in two columns unless you choose another number (it gets a section of its own, with continuous section breaks before and after, as Word does). **Right align page numbers** puts them at the right after dots, and **A letter over each letter's entries** adds A, B, C headings. Like the contents, it keeps itself up to date; double-click it to change it. In Word, entries are Word's XE fields and the index is Word's own INDEX field.
 
 ## Table of authorities
 
@@ -287,7 +287,7 @@ For legal writing (cases, statutes, rules and other authorities), as Word does i
 - Links show blue and underlined. **Ctrl+click** a link to follow it; pointing at one shows where it goes. In Reading view a plain click follows it.
 - Right-click a link for **Edit Link…**, **Open Link**, **Copy Link** and **Remove Link**. Ctrl+K on a link edits it.
 - Web addresses, `doi:10.…` and e-mail addresses become links as you type them, once a space or a new line ends them. Ctrl+Z straight after keeps one as plain text. **Edit ▸ Typing and Spelling…** turns this off, and can make a plain click follow links in drawings, slides and sheets.
-- **Insert ▸ Bookmark…** (Ctrl+Shift+F5) names the paragraph the caret is in, so links can go to it; the same window goes to or deletes bookmarks. A link to a heading keeps finding the heading after its words change.
+- **Insert ▸ Document ▸ Bookmark…** (Ctrl+Shift+F5) names the paragraph the caret is in, so links can go to it; the same window goes to or deletes bookmarks. A link to a heading keeps finding the heading after its words change.
 - Word files keep links and bookmarks as Word's own, both ways, including links in footnotes. Copying text to Word or a web page carries its web links with it.
 
 ## Tracked changes
@@ -390,7 +390,7 @@ The **View** tab has Word's ways of looking at a document. The text is the same 
 
 **New Window** opens the document in a second tab, named as Word names windows: Report.docx:1 and Report.docx:2. Each tab keeps its own view and place, so one can be in Outline while the other shows the pages. Typing in either shows in both, and Save in either saves the one file. Closing one leaves the document open in the other.
 
-Saving, printing and PDFs always use the pages of Print Layout, whatever view is showing. These views are also under **View ▸ Document Views** in the menu bar.
+Saving, printing and PDFs always use the pages of Print Layout, whatever view is showing. These views are also under **View ▸ Document ▸ Document Views** in the menu bar.
 
 ## Saving as Word, RTF, OpenDocument and PDF
 
@@ -400,7 +400,7 @@ Saving, printing and PDFs always use the pages of Print Layout, whatever view is
 - Opening a Word file made in Word brings in its text, styles, lists, tables, pictures, captions and cross-references. ChemDraw drawings embedded in it keep their look and become editable structures when you double-click them. Anything left out is listed in a note.
 - **File ▸ Save As…** can also write **Rich Text (.rtf)**, which every word processor opens, or **OpenDocument Text (.odt)** for LibreOffice and Google Docs. Both keep the text and its look, headings, lists, tables, pictures, footnotes and the page size. Structures go as pictures. Live fields, citations, comments and tracked changes are kept only as their text (the save note says so); save as .docx to keep everything.
 - **File ▸ Open** opens .rtf, .odt and old Word files (.doc, Word 97–2003) too. An old .doc brings in its text, formatting, headings, tables, links and footnotes; its pictures are left out (a note says so; open and save it in Word as .docx to keep them). Saving it again writes a .docx.
-- **File ▸ Export PDF…** saves the pages exactly as they look on screen, with sharp structures, text and equations.
+- **File ▸ Export ▸ Export PDF…** saves the pages exactly as they look on screen, with sharp structures, text and equations.
 - **File ▸ Print…** (Ctrl+P) prints every page as laid out.
 
 Next: [Getting started](getting-started.md) · [Drawing](drawing.md) · [Keyboard and mouse](keyboard-and-mouse.md) · [Slides](slides.md) · [Sheets](sheets.md) · [Design](design.md) · [Files and sharing](files-and-sharing.md) · [Feedback](feedback.md)
