@@ -6209,6 +6209,11 @@ function renderErrorLog(): void {
 }
 diagnostics.onChange(() => renderErrorLog());
 $('#errors-clear').addEventListener('click', () => diagnostics.clear());
+// the console's other buttons run their commands (side-panel buttons aren't wired to commands like menu items are)
+$('#errors-section').addEventListener('click', (e) => {
+  const cmd = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-cmd]')?.dataset.cmd;
+  if (cmd) command(cmd);
+});
 // The web inspector is built into the Windows and Linux apps (Apple doesn't allow it in App Store apps)
 for (const el of document.querySelectorAll<HTMLElement>('.inspector-only')) el.hidden = !isTauri() || isMac;
 
