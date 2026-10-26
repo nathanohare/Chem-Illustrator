@@ -52,15 +52,12 @@ import { WORKSPACE, folderOf } from './io/workspace-file';
 import { askLink, followLink, setLinkHost, type LinkPlace } from './ui/links-ui';
 import { SHOW_JUMPS, cellOfLink, linkSpans, normalizeLink, removeLink, setLink, slideOfLink } from './links';
 import { openFileDialog, openBytesDialog, openAnyBytesDialog, stampOf, readRef, saveFileDialog, writeFile, showError, baseName, readPath, withExtension, setEmbeddedWriter, KEYMAP_FILE, SETTINGS_FILE, MOL, PDF, PICTURE, SVG, TIFF, EMF, EPS, PPTX, DOCX, PICTURE_EXTENSIONS, type FileType } from './io/files';
-import { pickReuseSlides } from './ui/reuse-slides';
 import { writeTiff } from './render/tiff';
 import { itemsToEps } from './render/eps';
 import { Workspace, Tab } from './workspace';
 import { Deck, LayoutId, WIDE, STANDARD, Image as SlideImage, sizeName, SlideSize, slideBackground, slideColours, type SlideSource, contentArea, deckLayouts, type SizeFit } from './deck/deck';
 import { shapeMathPicture, shapeMathScale, shapeMathSize } from './deck/equation';
-import { askEquation } from './ui/equation-dialog';
 import { solid } from './deck/background';
-import { formatBackground } from './ui/background-dialog';
 import { pictureFormat } from './ui/picture-dialog';
 import { fxPng } from './render/picture-fx';
 import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND } from './deck/slide-view';
@@ -73,14 +70,12 @@ import { SlideTextRibbon } from './ui/slide-text-ribbon';
 import { CaptionEditor } from './ui/caption-editor';
 import { LayersPanel } from './ui/layers-panel';
 import { Scrollbars } from './ui/scrollbars';
-import { Presenter, type ShowOptions } from './ui/present';
+import type { Presenter, ShowOptions } from './ui/present';
 import { editHeaderFooter } from './ui/header-footer-dialog';
-import { setUpShow, editCustomShows } from './ui/show-setup-dialog';
 import { defaultShow, showOrder } from './deck/show-setup';
 import { recordingToWav, NARRATION_NAME } from './deck/narration';
 import { clockText } from './deck/show-link';
-import { PresenterView } from './ui/presenter-view';
-import { editMaster } from './ui/master-dialog';
+import type { PresenterView } from './ui/presenter-view';
 import { editDrawingStyle } from './ui/style-dialog';
 import type { DocText } from './document/document';
 import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from './dark-page';
@@ -89,14 +84,11 @@ import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPOR
 import { pngWithDpi } from './render/emf-read';
 import { whiteToClear } from './render/background';
 
-import { pickSlideTemplate } from './ui/slide-templates';
 import { AnimationUI } from './ui/animation-ui';
 import { SlideComments } from './ui/slide-comments';
 import { writePptx, type PptxOptions } from './io/pptx-write';
 import { EFFECTS, animName, newAnim, highlightParts } from './deck/animation';
 import { SLIDE_TEMPLATES, applyTemplate, type SlideTemplate } from './deck/templates';
-import { editLayouts } from './ui/layout-editor';
-import { pickSlideSize } from './ui/slide-size-dialog';import { pickTemplate } from './ui/template-gallery';
 import { showContextMenu, topMenuEntry, type MenuItem } from './ui/context-menu';
 import { defaultHandout, handoutLayout, handoutPageSvg, notesPageSize, notesPageSvg, type HandoutSetup } from './deck/notes-pages';
 import { OutlineView } from './ui/outline-view';
@@ -106,15 +98,9 @@ import { defaultView, guideNear, rulerText, snapMove, type RulerPrefs, type Slid
 import { effectPatch, effectsMenu, showStyleGallery, styleColours, stylePatch } from './ui/shape-styles';
 import { CommandSearch, uniqueCommands, type CommandItem } from './ui/command-search';
 import { fillTemplate, templateSize } from './design/templates';
-import { askCycle } from './ui/cycle-dialog';
-import { askEnergy } from './ui/energy-dialog';
-import { askDiagram } from './ui/diagram-dialog';
 import { putDiagram, type DiagramData } from './design/diagrams';
 import type { EnergyData } from './design/energy';
-import { editChart, chartPoints } from './ui/chart-editor';
-import { editMedia } from './ui/media-dialog';
 import { refreshZooms, summaryParts, zoomGrid, zoomShape } from './deck/zoom';
-import { inkShape } from './ui/show-ink';
 import { AUDIO_TYPES, VIDEO_TYPES, mediaMime, probeAudio, probeVideo, speakerPng } from './deck/media';
 import { newChartBox, sizedBox } from './sheet/chart-box';
 import { chartBoxPng } from './render/chart-box-paint';
@@ -173,7 +159,7 @@ import { groupWarnings } from './ui/warning-groups';
 import { NameReader, captionName, attachmentAtoms, cxNotes } from './chem/names';
 import { NameDialog } from './ui/name-dialog';
 import { ArrangeDialog } from './ui/arrange-dialog';
-import { AnimateDialog } from './ui/animate-dialog';
+import type { AnimateDialog } from './ui/animate-dialog';
 import { PeriodicTable } from './ui/periodic-table';
 import type { SheetMode, ClipboardCells } from './ui/sheet-mode';
 import type { DocumentMode, DocPaste } from './ui/doc-mode';
@@ -220,6 +206,24 @@ import { canReadStructures, importPictureFiles, importPdfDrawings, MOST_PAGES, p
 import { placeRead } from './recognise/check';
 import { Diagnostics, catchErrors, errorReport, formatEntry, stamp, type LogEntry, type UnexpectedClose } from './diagnostics';
 import { keepStore } from './keep/store';
+import { later } from './lazy';
+
+// dialogs for slides, design and charts load the first time they open
+const askEquation = later(() => import('./ui/equation-dialog'), 'askEquation');
+const formatBackground = later(() => import('./ui/background-dialog'), 'formatBackground');
+const setUpShow = later(() => import('./ui/show-setup-dialog'), 'setUpShow');
+const editCustomShows = later(() => import('./ui/show-setup-dialog'), 'editCustomShows');
+const editMaster = later(() => import('./ui/master-dialog'), 'editMaster');
+const pickSlideTemplate = later(() => import('./ui/slide-templates'), 'pickSlideTemplate');
+const editLayouts = later(() => import('./ui/layout-editor'), 'editLayouts');
+const pickSlideSize = later(() => import('./ui/slide-size-dialog'), 'pickSlideSize');
+const pickTemplate = later(() => import('./ui/template-gallery'), 'pickTemplate');
+const askCycle = later(() => import('./ui/cycle-dialog'), 'askCycle');
+const askEnergy = later(() => import('./ui/energy-dialog'), 'askEnergy');
+const askDiagram = later(() => import('./ui/diagram-dialog'), 'askDiagram');
+const editChart = later(() => import('./ui/chart-editor'), 'editChart');
+const editMedia = later(() => import('./ui/media-dialog'), 'editMedia');
+const pickReuseSlides = later(() => import('./ui/reuse-slides'), 'pickReuseSlides');
 
 // Crash handling (src/diagnostics.ts): errors nothing else caught go to a log kept on this computer,
 // with a notice offering to report them through Send Feedback. The desktop app (not the iPad, whose
@@ -892,7 +896,7 @@ async function insertChart(): Promise<void> {
   if (slides) box.chart.fontSize = 18;
   const got = await editChart(box, true, flash);
   if (!got || got === 'delete') return;
-  const { w, h } = chartPoints(got.chart);
+  const { w, h } = (await import('./ui/chart-editor')).chartPoints(got.chart);
   const c = pasteCentre();
   let made: Shape | null = null;
   doc.edit('Insert chart', () => {
@@ -911,7 +915,7 @@ async function editChartShape(id: number): Promise<void> {
   const got = await editChart(sizedBox(s.chart, Math.abs(s.x2 - s.x1), Math.abs(s.y2 - s.y1)), false, flash);
   if (!got || !doc.shapes.get(id)?.chart) return;
   if (got === 'delete') { doc.edit('Delete chart', () => doc.removeShape(id)); editor.changed(); return; }
-  const { w, h } = chartPoints(got.chart);
+  const { w, h } = (await import('./ui/chart-editor')).chartPoints(got.chart);
   doc.edit('Change chart', () => doc.updateShape(id, { chart: got, src: chartBoxPng(got, w, h), px: { w: got.chart.w, h: got.chart.h }, x1: x, y1: y, x2: x + w, y2: y + h, crop: undefined }));
   editor.changed();
 }
@@ -1788,16 +1792,26 @@ async function contractLabel(): Promise<void> {
 }
 
 const arrangeDialog = new ArrangeDialog({ apply: (o) => editor.arrangeScheme(o), undo: () => editor.undo() });
-const animateDialog = new AnimateDialog({
-  doc: () => doc,
-  renderer: () => renderer,
-  selectedAtoms: () => new Set(editor.sel.atoms),
-  setMorph: (arrow, m) => doc.edit('Animation Pairing', () => doc.updateArrow(arrow, { morph: m })),
-  name: () => ws.active.name,
-  flash: (msg) => flash(msg, 6000),
-  onSlide: () => ws.active.mode === 'slides',
-  putOnSlide: (v) => placeClip(v),
-});
+/** Animate Reaction: its code loads the first time it opens. */
+let animateDialogLoading: Promise<AnimateDialog> | null = null;
+const animateDialog = {
+  open(opts: { arrow?: number } = {}): void {
+    animateDialogLoading ??= import('./ui/animate-dialog').then(({ AnimateDialog }) => new AnimateDialog({
+      doc: () => doc,
+      renderer: () => renderer,
+      selectedAtoms: () => new Set(editor.sel.atoms),
+      setMorph: (arrow, m) => doc.edit('Animation Pairing', () => doc.updateArrow(arrow, { morph: m })),
+      name: () => ws.active.name,
+      flash: (msg) => flash(msg, 6000),
+      onSlide: () => ws.active.mode === 'slides',
+      putOnSlide: (v) => placeClip(v),
+    }), (err: unknown) => {
+      animateDialogLoading = null;
+      throw err;
+    });
+    animateDialogLoading.then((d) => d.open(opts), (err: unknown) => void showError(`Animate Reaction could not be loaded: ${String(err)}`));
+  },
+};
 /** The reaction arrow picked (for Animate This Step), if one is. */
 /** Is a curved (mechanism) arrow among the selection? */
 const pickedCurved = (): boolean => [...editor.sel.arrows].some((id) => { const r = doc.arrows.get(id); return !!r && isCurved(r); });
@@ -1996,8 +2010,6 @@ const tabsEl = $<HTMLDivElement>('#tabs');
 const notesBox = $<HTMLTextAreaElement>('#notes');
 const layoutSel = $<HTMLSelectElement>('#rb-layout');
 const sizeSel = $<HTMLSelectElement>('#rb-size');
-const presenter = new Presenter();
-const presenterView = new PresenterView();
 
 /** View > Window and Colours > Mode Colours: blue for drawings, orange for slides, green for sheets, or the person's own colours. */
 let modeColours: ModeColours = { ...DEFAULT_MODE_COLOURS };
@@ -3838,7 +3850,7 @@ async function customSlideSize(): Promise<void> {
 function present(fromHere: boolean, notes = false, how: { custom?: number; windowed?: boolean; rehearse?: boolean; record?: boolean } = {}): void {
   const d = deckNow();
   if (!d) { flash('Present shows slides: use File > New > New Slides, or open a PowerPoint file.'); return; }
-  if (presenter.running || presenterView.running) return;
+  if (shows?.presenter.running || shows?.presenterView.running) return;
   finishTyping();
   // Set Up Show: the slides it plays, how it goes on, and the rest
   const setup = d.settings.show ?? defaultShow();
@@ -3854,40 +3866,84 @@ function present(fromHere: boolean, notes = false, how: { custom?: number; windo
   refreshZooms(d);
   // from the start: the first slide that isn't hidden; from here: this slide even when hidden, as in PowerPoint
   const from = fromHere ? d.index : order ? order[0] : d.firstShown();
-  void (notes ? presenterView.start(d, from, opts) : presenter.start(d, from, opts));
+  void loadShows().then((s) => (notes ? s.presenterView.start(d, from, opts) : s.presenter.start(d, from, opts)), (err: unknown) => {
+    editor.paused = false;
+    void showError(`The slide show could not be loaded: ${String(err)}`);
+  });
 }
 
-/** Rehearse Timings and Record, kept: each slide's time, and its narration as a sound on it. */
-presenter.onRehearsed = (r) => {
-  const d = deckNow();
-  if (!d) return;
-  void (async () => {
-    if (r.recordings.size) {
-      const sounds = new Map<number, { src: string; seconds: number }>();
-      for (const [i, blob] of r.recordings) {
-        try {
-          const w = await recordingToWav(blob);
-          if (w.seconds > 0.2) sounds.set(i, { src: dataUrl(w.bytes, 'audio/wav'), seconds: w.seconds });
-        } catch { /* a recording this computer can't read is left out */ }
-      }
-      const ix = [...sounds.keys()].filter((i) => i >= 0 && i < d.slides.length);
-      if (ix.length) {
-        const poster = speakerPng(), s = 24;
-        d.editSlides('Record narration', ix, (sd, i) => {
-          // a new recording takes the place of the slide's old one
-          for (const sh of [...sd.shapes.values()]) if (sh.video?.narration) sd.removeShape(sh.id);
-          const n = sounds.get(i)!;
-          sd.addShape({
-            kind: 'picture', x1: d.size.w - s - 12, y1: d.size.h - s - 12, x2: d.size.w - 12, y2: d.size.h - 12, px: { w: 128, h: 128 }, src: poster, name: NARRATION_NAME,
-            video: { src: n.src, audio: true, start: 'auto', once: true, hide: true, narration: true, length: +n.seconds.toFixed(3) },
+/** The slide show and Presenter View: their code loads the first time a show starts. */
+let shows: { presenter: Presenter; presenterView: PresenterView } | null = null;
+let showsLoading: Promise<{ presenter: Presenter; presenterView: PresenterView }> | null = null;
+
+function loadShows(): Promise<{ presenter: Presenter; presenterView: PresenterView }> {
+  showsLoading ??= Promise.all([import('./ui/present'), import('./ui/presenter-view'), import('./ui/show-ink')]).then(([a, b, ink]) => {
+    const presenter = new a.Presenter(), presenterView = new b.PresenterView();
+    wireShows(presenter, presenterView, ink.inkShape);
+    shows = { presenter, presenterView };
+    return shows;
+  }, (err: unknown) => {
+    showsLoading = null;
+    throw err;
+  });
+  return showsLoading;
+}
+
+/** What happens when a show ends: timings, narration and ink are kept, and editing carries on. */
+function wireShows(presenter: Presenter, presenterView: PresenterView, inkShape: typeof import('./ui/show-ink').inkShape): void {
+
+  /** Rehearse Timings and Record, kept: each slide's time, and its narration as a sound on it. */
+  presenter.onRehearsed = (r) => {
+    const d = deckNow();
+    if (!d) return;
+    void (async () => {
+      if (r.recordings.size) {
+        const sounds = new Map<number, { src: string; seconds: number }>();
+        for (const [i, blob] of r.recordings) {
+          try {
+            const w = await recordingToWav(blob);
+            if (w.seconds > 0.2) sounds.set(i, { src: dataUrl(w.bytes, 'audio/wav'), seconds: w.seconds });
+          } catch { /* a recording this computer can't read is left out */ }
+        }
+        const ix = [...sounds.keys()].filter((i) => i >= 0 && i < d.slides.length);
+        if (ix.length) {
+          const poster = speakerPng(), s = 24;
+          d.editSlides('Record narration', ix, (sd, i) => {
+            // a new recording takes the place of the slide's old one
+            for (const sh of [...sd.shapes.values()]) if (sh.video?.narration) sd.removeShape(sh.id);
+            const n = sounds.get(i)!;
+            sd.addShape({
+              kind: 'picture', x1: d.size.w - s - 12, y1: d.size.h - s - 12, x2: d.size.w - 12, y2: d.size.h - 12, px: { w: 128, h: 128 }, src: poster, name: NARRATION_NAME,
+              video: { src: n.src, audio: true, start: 'auto', once: true, hide: true, narration: true, length: +n.seconds.toFixed(3) },
+            });
           });
-        });
-      } else flash('Nothing was recorded (the microphone gave no sound).');
-    }
-    d.setTimings(r.times, r.recordings.size ? 'Record slide show timings' : 'Rehearse timings');
-    flash(`Kept: the show takes ${clockText(r.total)}${r.recordings.size ? ', with narration on the slides' : ''}. Set Up Show > Advance slides can turn the times off.`, 8000);
-  })();
-};
+        } else flash('Nothing was recorded (the microphone gave no sound).');
+      }
+      d.setTimings(r.times, r.recordings.size ? 'Record slide show timings' : 'Rehearse timings');
+      flash(`Kept: the show takes ${clockText(r.total)}${r.recordings.size ? ', with narration on the slides' : ''}. Set Up Show > Advance slides can turn the times off.`, 8000);
+    })();
+  };
+
+  /** Ink drawn in the slide show, kept: shapes on its slides, as one step to undo. */
+  presenter.onKeepInk = presenterView.onKeepInk = (ink) => {
+    const d = deckNow();
+    if (!d) return;
+    const indices = [...ink.keys()].filter((i) => i >= 0 && i < d.slides.length);
+    if (!indices.length) return;
+    d.editSlides('Keep ink', indices, (sd, i) => {
+      for (const st of ink.get(i) ?? []) { const sh = inkShape(st); if (sh) sd.addShape(sh); }
+    });
+    editor.requestScene();
+    flash(`Ink kept on ${indices.length} slide${indices.length === 1 ? '' : 's'}. Each line is a shape: move it, recolour it or delete it.`, 6000);
+  };
+
+  presenter.onEnd = presenterView.onEnd = (i) => {
+    editor.paused = false;
+    // carry on editing the slide the show ended on
+    goSlide(i);
+    editor.requestScene();
+  };
+}
 
 /** Insert > Slides > Header & Footer (Date & Time, Slide Number): the slides', notes pages' and handouts' header and footer. */
 async function headerFooter(tab: 'slide' | 'notes' = 'slide'): Promise<void> {
@@ -3940,26 +3996,6 @@ function customShowMenu(anchor: HTMLElement): void {
     { cmd: 'custom-shows', label: 'Custom Shows…' },
   ], { run: (cmd) => (cmd.startsWith('custom-show:') ? present(false, false, { custom: Number(cmd.slice(12)) }) : void command(cmd)), key: commandKey });
 }
-
-/** Ink drawn in the slide show, kept: shapes on its slides, as one step to undo. */
-presenter.onKeepInk = presenterView.onKeepInk = (ink) => {
-  const d = deckNow();
-  if (!d) return;
-  const indices = [...ink.keys()].filter((i) => i >= 0 && i < d.slides.length);
-  if (!indices.length) return;
-  d.editSlides('Keep ink', indices, (sd, i) => {
-    for (const st of ink.get(i) ?? []) { const sh = inkShape(st); if (sh) sd.addShape(sh); }
-  });
-  editor.requestScene();
-  flash(`Ink kept on ${indices.length} slide${indices.length === 1 ? '' : 's'}. Each line is a shape: move it, recolour it or delete it.`, 6000);
-};
-
-presenter.onEnd = presenterView.onEnd = (i) => {
-  editor.paused = false;
-  // carry on editing the slide the show ended on
-  goSlide(i);
-  editor.requestScene();
-};
 
 // ---------------------------------------------------------------- export
 
@@ -9227,7 +9263,7 @@ requestAnimationFrame(() => {
 });
 
 // Hooks for the automated speed tests.
-(window as any).__app = { doc, editor, renderer, chem, live, command, addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, presenter, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
+(window as any).__app = { doc, editor, renderer, chem, live, command, addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
   pptxBytes: () => { const d = deckNow()!; return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test
