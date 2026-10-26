@@ -1079,7 +1079,10 @@ class CdxmlWriter {
       if (x1 > x2) x1 = x2 = 0;
     }
     const last = lay.lines[lay.lines.length - 1];
-    t.setAttribute('BoundingBox', box({ x1: c.x + x1, y1: c.y - maxSize * CAP, x2: c.x + x2, y2: c.y + last.y + maxSize * 0.2 }));
+    const flat = { x1: c.x + x1, y1: c.y - maxSize * CAP, x2: c.x + x2, y2: c.y + last.y + maxSize * 0.2 };
+    t.setAttribute('BoundingBox', box(c.rot ? turnedBox(flat, c, c.rot) : flat));
+    // turned text: ChemDraw's angle in degrees, clockwise on the page, about the text's origin
+    this.set(t, 'RotationAngle', c.rot ? String(+c.rot.toFixed(3)) : null);
     this.set(t, 'Justification', c.justify === 'left' ? null : c.justify === 'center' ? 'Center' : c.justify === 'right' ? 'Right' : 'Full');
     this.set(t, 'CaptionJustification', null);
     this.set(t, 'WordWrapWidth', c.wrap !== undefined ? f2(c.wrap) : null);
@@ -1300,6 +1303,8 @@ class CdxmlWriter {
         g!.appendChild(this.el('curve', {
           id: this.id(), BoundingBox: box({ x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) }),
           color: this.colorAttr(color), CurvePoints: c.points.map((p) => `${f2(p.x)} ${f2(p.y)}`).join(' '), CurveType: String(kinds),
+          // ChemDraw 25 fills a curve by its FillType; the CurveType bit alone leaves it empty
+          FillType: type === 'fill' ? 'Solid' : null,
         }));
       }
     };
@@ -1936,4 +1941,13 @@ function deepEqual(x: unknown, y: unknown): boolean {
   const kx = Object.keys(x).filter((k) => (x as any)[k] !== undefined), ky = Object.keys(y).filter((k) => (y as any)[k] !== undefined);
   if (kx.length !== ky.length) return false;
   return kx.every((k) => deepEqual((x as any)[k], (y as any)[k]));
+}
+
+/** The box round `r` turned `deg` degrees (clockwise on the page) about `at`. */
+function turnedBox(r: Rect, at: Vec, deg: number): Rect {
+  const a = (deg * Math.PI) / 180, cos = Math.cos(a), sin = Math.sin(a);
+  const ps = [[r.x1, r.y1], [r.x2, r.y1], [r.x2, r.y2], [r.x1, r.y2]].map(([x, y]) => ({
+    x: at.x + (x - at.x) * cos - (y - at.y) * sin, y: at.y + (x - at.x) * sin + (y - at.y) * cos,
+  }));
+  return { x1: Math.min(...ps.map((p) => p.x)), y1: Math.min(...ps.map((p) => p.y)), x2: Math.max(...ps.map((p) => p.x)), y2: Math.max(...ps.map((p) => p.y)) };
 }

@@ -176,6 +176,15 @@ describe('designs saved for ChemDraw', () => {
     expect(c.points.slice(6, 9)).toEqual([{ x: 14, y: 2 }, { x: 14, y: 4 }, { x: 14, y: 4 }]);
   });
 
+  it('fills a filled shape in ChemDraw (FillType on the fill curves only)', () => {
+    const doc = new Doc();
+    doc.edit('shape', () => { doc.addShape({ kind: 'geo', geo: 'labBeaker', x1: 10, y1: 20, x2: 60, y2: 80, filled: true, fillColor: '#bdd7ee', color: '#000000' }); });
+    const curves = [...writeCdxml(doc).matchAll(/<curve [^>]*>/g)].map((m) => m[0]);
+    const fills = curves.filter((c) => /CurveType="\d+"/.test(c) && (+c.match(/CurveType="(\d+)"/)![1] & 128));
+    expect(fills.length).toBeGreaterThan(0);
+    for (const c of curves) expect(c.includes('FillType="Solid"')).toBe(fills.includes(c));
+  });
+
   it('comes back from a ChemDraw file as the same shape, where it was moved to', () => {
     const doc = new Doc();
     doc.edit('shape', () => { doc.addShape({ kind: 'geo', geo: 'labBeaker', x1: 10, y1: 20, x2: 60, y2: 80, color: '#000000', text: { runs: [{ text: 'H2O', formula: true }] } }); });
