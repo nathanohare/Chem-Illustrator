@@ -31,7 +31,7 @@ export interface OrientPrefs {
 }
 
 export const DEFAULT_ORIENT: OrientPrefs = {
-  navigator: true, navCorner: 'br', navSize: 'medium', navHideAll: false,
+  navigator: true, navCorner: 'br', navSize: 'medium', navHideAll: true,
   edgeArrows: true, arrowsTo: 'structures',
   dotGrid: false, gridSpacing: 'normal', gridStrength: 'light',
   tint: false, tintStrength: 'light',

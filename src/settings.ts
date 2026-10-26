@@ -88,6 +88,8 @@ export interface Settings {
   welcomed: boolean;
   /** Where the text formatting bar goes while typing text (View > Window and Colours > Text Formatting Bar). */
   textBar: 'docked' | 'floating' | 'hidden';
+  /** The window's own colours: as the computer is set (light or dark), or always light or dark (View > Window and Colours > Theme). The page has its own Dark Page. */
+  appTheme: 'system' | 'light' | 'dark';
   /** Resting the mouse on an abbreviation shows the group written out (View > Group Tooltips). */
   groupTips: boolean;
   /** View > Window and Colours > Touch Mode: bigger buttons, the atom keypad and long-press menus. Automatic turns it on once a pen or finger is used. */
@@ -175,6 +177,8 @@ export interface Settings {
   reviewName: string;
   /** A version the user chose Skip This Version for, so starting the app doesn't offer it again. */
   skipVersion: string | null;
+  /** The version of the desktop app that ran last, to say what's new after an update. */
+  lastVersion: string | null;
   /** Files and workspaces opened or saved lately, newest first (File menu, desktop app). */
   recentFiles: string[];
   /** Characters typed from Insert > Symbol lately, newest first. */
@@ -199,7 +203,7 @@ export const SLIDE_PANE_MIN = 120, SLIDE_PANE_MAX = 480, NOTES_MIN = 36, NOTES_M
 export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
-  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', groupTips: true, touchMode: 'auto', penSketch: false,
+  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', groupTips: true, touchMode: 'auto', penSketch: false,
   citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, superscriptR: true, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {},
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
@@ -207,7 +211,7 @@ export const DEFAULT_SETTINGS: Settings = {
   docPins: [],
   docRuler: false,
   sheetFormulaBar: true,
-  updateCheck: true, updateChannel: 'latest', pubchemNames: true, convertChemDraw: false, matchStructure: true, fileTypesOffered: false, wordObjectsOffered: false, reviewName: '', skipVersion: null, recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], docDesign: null,
+  updateCheck: true, updateChannel: 'latest', pubchemNames: true, convertChemDraw: false, matchStructure: true, fileTypesOffered: false, wordObjectsOffered: false, reviewName: '', skipVersion: null, lastVersion: null, recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], docDesign: null,
   slideRuler: false,
   slideGrid: false,
   rulerUnits: typeof navigator !== 'undefined' && /^[a-z]{2,3}-(US|LR|MM)\b/i.test(navigator.language) ? 'in' : 'cm',
@@ -240,6 +244,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.uiScale === 'number') s.uiScale = clampUiScale(r.uiScale);
   if (r.updateChannel === 'stable' || r.updateChannel === 'latest') s.updateChannel = r.updateChannel;
   if (typeof r.textBar === 'string' && ['docked', 'floating', 'hidden'].includes(r.textBar)) s.textBar = r.textBar as Settings['textBar'];
+  if (r.appTheme === 'system' || r.appTheme === 'light' || r.appTheme === 'dark') s.appTheme = r.appTheme;
   if (typeof r.linkSide === 'string' && ['keep', 'below', 'above', 'left', 'right'].includes(r.linkSide)) s.linkSide = r.linkSide as Settings['linkSide'];
   if (Array.isArray(r.replacements)) {
     s.replacements = r.replacements.filter((x): x is [string, string] => Array.isArray(x) && typeof x[0] === 'string' && typeof x[1] === 'string' && x[0] !== '').map(([a, b]) => [a, b]);
@@ -285,6 +290,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (Array.isArray(r.recentFiles)) s.recentFiles = r.recentFiles.filter((p): p is string => typeof p === 'string' && p.trim() !== '').slice(0, 10);
   s.recentSymbols = parseRecent(r.recentSymbols);
   if (typeof r.skipVersion === 'string' || r.skipVersion === null) s.skipVersion = r.skipVersion as string | null;
+  if (typeof r.lastVersion === 'string') s.lastVersion = r.lastVersion;
   s.scheme = parseSchemePrefs(r.scheme);
   s.keep = parseKeepPrefs(r.keep);
   s.ai = parseAiPrefs(r.ai);
@@ -298,7 +304,7 @@ export function settingsText(s: Settings): string {
 }
 
 /** Settings that belong to this computer: left out of an export, and kept as they are by an import. */
-export const THIS_COMPUTER = ['recentFiles', 'fileTypesOffered', 'wordObjectsOffered', 'skipVersion', 'welcomed'] as const;
+export const THIS_COMPUTER = ['recentFiles', 'fileTypesOffered', 'wordObjectsOffered', 'skipVersion', 'lastVersion', 'welcomed'] as const;
 
 /**
  * Every setting in one file to keep or take to another computer (Edit > Settings File > Export Settings): keys,

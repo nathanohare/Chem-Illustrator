@@ -12,7 +12,7 @@ const PICTURES = import.meta.glob('../../docs/images/*', { query: '?url', import
 const ROOT = '../../docs/';
 /** The pages in the order the contents list shows them. */
 const ORDER = ['README.md', 'guide/getting-started.md', 'guide/keyboard-and-mouse.md', 'guide/drawing.md', 'guide/slides.md', 'guide/sheets.md',
-  'guide/documents.md', 'guide/design.md', 'guide/files-and-sharing.md', 'guide/feedback.md', 'developers.md'];
+  'guide/documents.md', 'guide/design.md', 'guide/files-and-sharing.md', 'guide/troubleshooting.md', 'guide/feedback.md', 'developers.md'];
 
 /** A heading's anchor, made the way GitHub makes them, so links such as design.md#icons work in both places. */
 export function slug(text: string): string {

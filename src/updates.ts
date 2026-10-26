@@ -110,3 +110,42 @@ export function shortNotes(notes: string, lines = 4): string {
   const ls = notes.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   return ls.slice(0, lines).join('\n') + (ls.length > lines ? '\n…' : '');
 }
+
+/** Version numbers in order: -1, 0 or 1 (0.1.9 before 0.1.10). */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.replace(/^v/, '').split(/[.-]/).map((x) => parseInt(x, 10) || 0);
+  const pb = b.replace(/^v/, '').split(/[.-]/).map((x) => parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d) return Math.sign(d);
+  }
+  return 0;
+}
+
+/** A release as GitHub's list of releases gives it. */
+export interface PublishedRelease { tag_name: string; body?: string | null; draft?: boolean }
+
+/**
+ * What changed between the version that ran last and this one, newest first: each release's
+ * notes without GitHub's "Merge pull request #… from …" line, for the What's New card.
+ */
+export function notesSince(releases: readonly PublishedRelease[], before: string, now: string): { version: string; notes: string }[] {
+  return releases
+    .filter((r) => !r.draft && /^v?\d/.test(r.tag_name) && compareVersions(r.tag_name, before) > 0 && compareVersions(r.tag_name, now) <= 0)
+    .sort((a, b) => compareVersions(b.tag_name, a.tag_name))
+    .map((r) => ({
+      version: r.tag_name.replace(/^v/, ''),
+      notes: (r.body ?? '').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^Merge (pull request|branch)\b/.test(l)).join('\n'),
+    }))
+    .filter((r) => r.notes);
+}
+
+/** The project's releases on GitHub (the newest 30), for What's New. Throws when GitHub can't be reached. */
+export async function publishedReleases(): Promise<PublishedRelease[]> {
+  const r = await fetch('https://api.github.com/repos/nathanohare/Chem-Illustrator/releases?per_page=30', { headers: { Accept: 'application/vnd.github+json' } });
+  if (!r.ok) throw new Error(`GitHub said ${r.status}`);
+  return r.json();
+}
+
+/** Where every release's notes are. */
+export const RELEASES_PAGE = 'https://github.com/nathanohare/Chem-Illustrator/releases';

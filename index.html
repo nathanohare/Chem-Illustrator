@@ -334,6 +334,14 @@
     <div class="submenu">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Window and Colours</button>
     <div class="menu sub" role="menu" hidden>
+    <div class="submenu">
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false" title="The window's own colours (menus, ribbons, panels). The page itself has Dark Page">Theme</button>
+    <div class="menu sub" role="menu" hidden>
+    <button role="menuitemradio" aria-checked="true" data-cmd="theme-system" title="Light or dark as the computer is set"><span>As the Computer Is Set</span></button>
+    <button role="menuitemradio" aria-checked="false" data-cmd="theme-light"><span>Light</span></button>
+    <button role="menuitemradio" aria-checked="false" data-cmd="theme-dark"><span>Dark</span></button>
+    </div>
+    </div>
     <div class="submenu desktop-only" hidden>
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false" title="Desktop app: make the whole window (menus, ribbons, toolboxes, panels) bigger or smaller. The drawing's own zoom is separate">Interface Size <span class="muted" data-ui-scale-now>100%</span></button>
     <div class="menu sub" role="menu" hidden>

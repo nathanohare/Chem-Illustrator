@@ -169,7 +169,8 @@ body.own-title-bar header { position: relative; padding-right: 138px; user-selec
 body.own-title-bar .win-controls { position: absolute; top: 0; right: 0; height: 32px; margin: 0; }
 header > button, header > select { white-space: nowrap; flex-shrink: 0; }
 #btn-dev-off { min-width: 26px; padding: 0 6px; font-size: 15px; line-height: 1; }
-#btn-lock .lock-text { display: inline-block; min-width: 4.6em; text-align: left; }
+/* the lock is an icon; its word stays for screen readers and its tooltip says what it does */
+#btn-lock .lock-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .menu button {
   display: flex;
   justify-content: space-between;
@@ -1879,6 +1880,8 @@ dialog.cf-manage { width: min(92vw, 640px); }
 }
 .update-box p { margin: 0; white-space: pre-line; }
 .update-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.whats-new-list { display: grid; gap: 6px; max-height: 40vh; overflow-y: auto; }
+.whats-new-list p { margin: 0; white-space: pre-line; font-size: 12px; }
 .update-progress { font-variant-numeric: tabular-nums; }
 .desktop-only[hidden] { display: none !important; }
 
@@ -1944,7 +1947,7 @@ dialog.command-search .cs-foot { margin: 8px 2px 0; }
 /* then the search box and the toolbox lock keep only their pictures, and last the Beta mark goes:
    the bar stays one row down to the narrowest window (800 px, with the window's own buttons) */
 header { flex-wrap: nowrap; }
-@media (max-width: 1060px) { .search-box > span, #btn-lock .lock-text { display: none; } }
+@media (max-width: 1060px) { .search-box > span { display: none; } }
 @media (max-width: 900px) { header .stage-badge { display: none; } }
 
 /* the equation window */

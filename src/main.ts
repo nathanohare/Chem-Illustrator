@@ -4606,7 +4606,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -5097,6 +5097,9 @@ const COMMANDS: Record<string, () => unknown> = {
   'title-bar-in-menu': () => { void placeTitleBar(titleBarPlace() === 'app' ? 'system' : 'app'); storeSettings(); },
   'page-setup': () => void pageSetup(),
   'text-bar-docked': () => { placeTextBar('docked'); storeSettings(); },
+  'theme-system': () => { setAppTheme('system'); storeSettings(); },
+  'theme-light': () => { setAppTheme('light'); storeSettings(); },
+  'theme-dark': () => { setAppTheme('dark'); storeSettings(); },
   'text-bar-floating': () => { placeTextBar('floating'); storeSettings(); },
   'text-bar-hidden': () => { placeTextBar('hidden'); storeSettings(); },
   'group-tips': () => { showGroupTips(!labelTips.enabled); storeSettings(); },
@@ -6120,7 +6123,10 @@ const updates = new UpdateUI({
   skipped: () => skipVersion,
   skip: (v) => { skipVersion = v; storeSettings(); },
   channel: () => updateChannel,
+  openPage: (url) => openWebPage(url),
 });
+/** The desktop app's version when it last ran (for What's New after an update). */
+let lastVersion: string | null = null;
 for (const el of document.querySelectorAll<HTMLElement>('.desktop-only')) el.hidden = !canUpdate;
 let versionText = canUpdate ? '' : 'Web version';
 void Promise.all([appVersion(), portableInfo()]).then(([v, portable]) => {
@@ -6402,6 +6408,7 @@ function currentSettings(): Settings {
     ribbonCollapsed: ribbonCollapsed(),
     uiScale: uiScale(),
     textBar: CaptionEditor.barPlace,
+    appTheme,
     page: defaultPage,
     welcomed,
     groupTips: labelTips.enabled,
@@ -6465,6 +6472,7 @@ function currentSettings(): Settings {
     wordObjectsOffered,
     reviewName: reviewAuthor(),
     skipVersion,
+    lastVersion,
     recentFiles,
     recentSymbols,
     scheme: { ...schemePrefs },
@@ -6620,6 +6628,7 @@ function applySettings(s: Settings): void {
   // the drawing open at start (empty and never saved) takes the default page
   if (!doc.page && !doc.source && !doc.atoms.size && !deckNow()) doc.page = defaultPage && { ...defaultPage };
   placeTextBar(s.textBar);
+  setAppTheme(s.appTheme);
   showGroupTips(s.groupTips);
   setTouchMode(s.touchMode);
   editor.options.penSketch = s.penSketch;
@@ -6664,6 +6673,7 @@ function applySettings(s: Settings): void {
   docQuickParts = s.quickParts;
   setNewDocDesign(s.docDesign);
   skipVersion = s.skipVersion;
+  lastVersion = s.lastVersion;
   recentFiles = s.recentFiles;
   recentSymbols = s.recentSymbols;
   keepPrefs = s.keep;
@@ -6716,6 +6726,14 @@ void loadSettings((msg) => flash(msg, 12000)).then((s) => {
   setTimeout(showWelcome, 800);
   // a few seconds after starting, so the check doesn't slow down opening the window
   if (canUpdate && updateCheck) setTimeout(() => void updates.quietCheck(), 4000);
+  // the first start after an update says what changed
+  if (canUpdate) void appVersion().then((now) => {
+    const before = lastVersion;
+    if (before === now) return;
+    lastVersion = now;
+    storeSettings();
+    if (before) setTimeout(() => void updates.whatsNew(before, now), 2500);
+  });
   refreshKeys();
 });
 refreshKeys();
@@ -8769,6 +8787,15 @@ function sizeInterface(v: number): void {
 function placeTextBar(where: Settings['textBar']): void {
   CaptionEditor.barPlace = where;
   for (const w of ['docked', 'floating', 'hidden']) $(`[data-cmd="text-bar-${w}"]`)?.setAttribute('aria-checked', String(w === where));
+}
+
+/** View > Window and Colours > Theme: the window light or dark whatever the computer is set to, or as it is set. */
+let appTheme: Settings['appTheme'] = 'system';
+function setAppTheme(t: Settings['appTheme']): void {
+  appTheme = t;
+  if (t === 'system') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = t;
+  for (const w of ['system', 'light', 'dark']) $(`[data-cmd="theme-${w}"]`)?.setAttribute('aria-checked', String(w === t));
 }
 
 function showScrollBars(on: boolean): void {
