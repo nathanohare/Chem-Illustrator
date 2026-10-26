@@ -79,11 +79,11 @@ export class DocArrangeUI {
     this.update({ ...f.t, objects: { ...f.t.objects, [id]: { ...o, float: fl } as DocObject } }, 'Position');
   }
 
-  /** Rotate: a quarter right or left, flipped, or by any angle. */
+  /** Rotate: a quarter right or left, flipped, or by any angle (a picture, or a drawing as a whole: an icon, a shape, a structure). */
   rotateMenu(x: number, y: number): void {
     const id = this.host.picked();
     const o = id !== null ? this.host.file()?.t.objects[id] : undefined;
-    if (id === null || o?.kind !== 'picture') { this.host.flash('Click a picture first. (A structure turns in its drawing: double-click it.)'); return; }
+    if (id === null || (o?.kind !== 'picture' && o?.kind !== 'drawing')) { this.host.flash('Click a picture, icon, shape or structure first.'); return; }
     popupMenu(x, y, [
       ['Rotate Right 90°', () => this.turn(id, 'right')],
       ['Rotate Left 90°', () => this.turn(id, 'left')],
@@ -97,13 +97,13 @@ export class DocArrangeUI {
   private turn(id: number, how: Turn | number): void {
     const f = this.host.file();
     const o = f?.t.objects[id];
-    if (!f || o?.kind !== 'picture') return;
+    if (!f || (o?.kind !== 'picture' && o?.kind !== 'drawing')) return;
     this.update({ ...f.t, objects: { ...f.t.objects, [id]: turned(o, how) } }, 'Rotate');
   }
 
   private async turnBy(id: number): Promise<void> {
     const o = this.host.file()?.t.objects[id];
-    if (o?.kind !== 'picture') return;
+    if (o?.kind !== 'picture' && o?.kind !== 'drawing') return;
     const got = await ask('Rotation', [{ name: 'deg', label: 'Rotation (degrees, clockwise)', value: String(o.rot ?? 0), type: 'number' }], { ok: 'Rotate' });
     const deg = Number(got?.deg);
     if (got && Number.isFinite(deg)) this.turn(id, deg);

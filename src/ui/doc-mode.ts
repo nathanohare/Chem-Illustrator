@@ -1189,6 +1189,46 @@ export class DocumentMode {
     if (!this.applySimilar('', patch)) this.ed.setStyle(patch);
   }
 
+  /** The ribbon's menus that open under their buttons. */
+  private ribbonMenus(b: HTMLElement): Record<string, (x: number, y: number) => void> {
+    return {
+      'para-borders': (x, y) => this.paragraphs.bordersMenu(x, y),
+      'quick-parts': (x, y) => this.inserts.quickPartsMenu(x, y),
+      'cover-page': (x, y) => this.inserts.coverMenu(x, y),
+      'doc-select': (x, y) => this.selectMenu(x, y),
+      'show-markup': (x, y) => this.showMarkupMenu(x, y),
+      'arrange-position': (x, y) => this.arranging.positionMenu(x, y),
+      'arrange-rotate': (x, y) => this.arranging.rotateMenu(x, y),
+      'arrange-forward': (x, y) => this.arranging.orderMenu(x, y, true),
+      'arrange-backward': (x, y) => this.arranging.orderMenu(x, y, false),
+      'arrange-group': (x, y) => this.arranging.groupMenu(x, y, b),
+    };
+  }
+
+  /** The ribbon button whose menu is open (while one is, pointing at another menu button opens its menu, as a menu bar does). */
+  private ribbonMenuFrom: HTMLElement | null = null;
+
+  /** Open a ribbon button's menu under it; false when the button has none. */
+  private ribbonMenu(cmd: string, b: HTMLElement): boolean {
+    const open = this.ribbonMenus(b)[cmd];
+    if (!open || !this.file) return false;
+    const br = b.getBoundingClientRect();
+    // in a group dropped down from a narrow ribbon its buttons are a menu's items: theirs opens beside
+    // the group, as a submenu does, clear of the group's other buttons
+    const pop = b.closest('.rb-popped')?.querySelector(':scope > .rb-row')?.getBoundingClientRect();
+    if (pop) open(pop.right + 2, br.top);
+    else open(br.left, br.bottom + 2);
+    const m = document.querySelector<HTMLElement>('.popup-menu');
+    // no room on the right (it was kept inside the window, over the group): on the left, else below it
+    const mr = m?.getBoundingClientRect();
+    if (m && mr && pop && mr.left < pop.right && mr.right > pop.left) {
+      if (pop.left - mr.width - 2 >= 4) m.style.left = `${pop.left - mr.width - 2}px`;
+      else m.style.top = `${Math.max(4, Math.min(pop.bottom + 2, innerHeight - mr.height - 4))}px`;
+    }
+    this.ribbonMenuFrom = m ? b : null;
+    return true;
+  }
+
   /** Home > Select: Select All, Select Text with Similar Formatting, and the Selection Pane. */
   private selectMenu(x: number, y: number): void {
     popupMenu(x, y, [
@@ -4480,31 +4520,25 @@ export class DocumentMode {
       // buttons keep the caret where it is
       if ((e.target as HTMLElement).closest('button')) e.preventDefault();
     });
+    // laptop bench: pointing at Rotate ▾ in the Arrange group dropped down from a narrow ribbon opens
+    // its menu, as a submenu does; and with one menu open, pointing at another's button opens that
+    // one instead, as a menu bar does
+    r.addEventListener('pointerover', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-doc][aria-haspopup]');
+      if (!b || !this.ribbonMenus(b)[b.dataset.doc!]) return;
+      const open = !!document.querySelector('.popup-menu');
+      const from = open ? this.ribbonMenuFrom : null;
+      if (from === b || (!from && !b.closest('.rb-popped'))) return;
+      document.querySelector('.popup-menu')?.remove();
+      this.ribbonMenu(b.dataset.doc!, b);
+    });
     r.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('button[data-doc]');
       if (!b) return;
       const cmd = b.dataset.doc!;
       const box = /^box-(para|style|page|hf)$/.exec(cmd);
       if (box) { this.panel.open(box[1] as DocBoxKey, b); return; }
-      // the table galleries open under their buttons
-      // the menus that open under their buttons
-      const menus: Record<string, (x: number, y: number) => void> = {
-        'para-borders': (x, y) => this.paragraphs.bordersMenu(x, y),
-        'quick-parts': (x, y) => this.inserts.quickPartsMenu(x, y),
-        'cover-page': (x, y) => this.inserts.coverMenu(x, y),
-        'doc-select': (x, y) => this.selectMenu(x, y),
-        'show-markup': (x, y) => this.showMarkupMenu(x, y),
-        'arrange-position': (x, y) => this.arranging.positionMenu(x, y),
-        'arrange-rotate': (x, y) => this.arranging.rotateMenu(x, y),
-        'arrange-forward': (x, y) => this.arranging.orderMenu(x, y, true),
-        'arrange-backward': (x, y) => this.arranging.orderMenu(x, y, false),
-        'arrange-group': (x, y) => this.arranging.groupMenu(x, y, b),
-      };
-      if (menus[cmd] && this.file) {
-        const br = b.getBoundingClientRect();
-        menus[cmd](br.left, br.bottom + 2);
-        return;
-      }
+      if (this.ribbonMenu(cmd, b)) return;
       if (cmd === 'table-styles' || cmd === 'table-borders') {
         const br = b.getBoundingClientRect();
         if (cmd === 'table-styles') this.tables.styleGallery(br.left, br.bottom + 2);

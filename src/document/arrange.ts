@@ -37,8 +37,11 @@ export function positioned(fl: Float | undefined, place: PositionPlace, size: { 
 
 export type Turn = 'right' | 'left' | 'flipH' | 'flipV';
 
-/** A picture turned a quarter right or left, or flipped across or up and down. */
-export function turned<T extends Extract<DocObject, { kind: 'picture' }>>(o: T, how: Turn | number): T {
+/** The figures Arrange > Rotate turns: pictures, and drawings (an icon, a shape, a structure as a whole). */
+export type Turnable = Extract<DocObject, { kind: 'picture' | 'drawing' }>;
+
+/** A figure turned a quarter right or left, or flipped across or up and down. */
+export function turned<T extends Turnable>(o: T, how: Turn | number): T {
   let rot = o.rot ?? 0;
   let flipH = !!o.flipH, flipV = !!o.flipV;
   if (typeof how === 'number') rot = how;
@@ -51,9 +54,9 @@ export function turned<T extends Extract<DocObject, { kind: 'picture' }>>(o: T, 
   return { ...rest, ...(rot ? { rot } : {}), ...(flipH ? { flipH } : {}), ...(flipV ? { flipV } : {}) } as T;
 }
 
-/** How a picture is turned and flipped (null when it isn't). */
+/** How a picture or drawing is turned and flipped (null when it isn't). */
 export function turnOf(o: DocObject | undefined): { rot: number; flipH: boolean; flipV: boolean } | null {
-  if (o?.kind !== 'picture' || (!o.rot && !o.flipH && !o.flipV)) return null;
+  if ((o?.kind !== 'picture' && o?.kind !== 'drawing') || (!o.rot && !o.flipH && !o.flipV)) return null;
   return { rot: o.rot ?? 0, flipH: !!o.flipH, flipV: !!o.flipV };
 }
 
@@ -125,5 +128,8 @@ export function objectName(t: Pick<DocText, 'objects'>, id: number): string {
   if (own) return own;
   if (o?.kind === 'textbox') return `Text Box ${id}`;
   if (o?.kind === 'picture') return o.chart ? `Chart ${id}` : `Picture ${id}`;
+  // an icon or shape from Insert, on its own (laptop bench: an icon was listed as "Drawing 1")
+  const c = o?.kind === 'drawing' ? o.contents : undefined;
+  if (c && !c.atoms.length && !c.bonds.length && !c.arrows.length && !c.captions.length && c.shapes.length === 1 && c.shapes[0].kind === 'geo') return `${c.shapes[0].geo?.startsWith('icon:') ? 'Icon' : 'Shape'} ${id}`;
   return `Drawing ${id}`;
 }

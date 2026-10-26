@@ -914,7 +914,7 @@ class DocxWriter {
         const kids = diagramShapesXml(o.contents, t.drawingStyle);
         const at = { x: pic.x, y: pic.y, w: pic.w, h: pic.h };
         if (kids) group = (docPr) => `${docPr}<wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="${WPG_NS}"><wpg:wgp><wpg:cNvGrpSpPr/>` +
-          `<wpg:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${emu(size.w)}" cy="${emu(size.h)}"/><a:chOff x="${emu(at.x)}" y="${emu(at.y)}"/><a:chExt cx="${emu(at.w)}" cy="${emu(at.h)}"/></a:xfrm></wpg:grpSpPr>` +
+          `<wpg:grpSpPr><a:xfrm${turnAttrs(o)}><a:off x="0" y="0"/><a:ext cx="${emu(size.w)}" cy="${emu(size.h)}"/><a:chOff x="${emu(at.x)}" y="${emu(at.y)}"/><a:chExt cx="${emu(at.w)}" cy="${emu(at.h)}"/></a:xfrm></wpg:grpSpPr>` +
           `${kids}</wpg:wgp></a:graphicData></a:graphic>`;
       }
       this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png) };
@@ -1408,9 +1408,9 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   return out.join('');
 }
 
-/** A picture's turn and flips, as DrawingML's a:xfrm has them (rot in 60000ths of a degree). */
+/** A picture's or drawing's turn and flips, as DrawingML's a:xfrm has them (rot in 60000ths of a degree). */
 function turnAttrs(o: DocObject): string {
-  if (o.kind !== 'picture') return '';
+  if (o.kind !== 'picture' && o.kind !== 'drawing') return '';
   return `${o.rot ? ` rot="${Math.round(o.rot * 60000)}"` : ''}${o.flipH ? ' flipH="1"' : ''}${o.flipV ? ' flipV="1"' : ''}`;
 }
 
