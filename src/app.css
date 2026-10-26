@@ -143,7 +143,7 @@ button:hover { border-color: var(--accent); }
 .menu { max-height: calc(100vh - var(--menu-top, 48px) - 8px); overflow-y: auto; overscroll-behavior: contain; }
 .menu.sub { position: fixed; top: 0; left: 0; z-index: 31; }
 /* a menu too tall for the window is laid out in columns instead (src/main.ts fitMenu) */
-.menu.cols { display: block; columns: var(--menu-cols) var(--menu-col-w); column-gap: 4px; column-fill: auto; overflow: hidden; }
+.menu.cols:not([hidden]) { display: block; columns: var(--menu-cols) var(--menu-col-w); column-gap: 4px; column-fill: auto; overflow: hidden; }
 .menu.cols > button, .menu.cols > .submenu > button, .menu.cols > .menu-head { display: flex; width: 100%; break-inside: avoid; }
 .menu.cols hr { break-after: avoid; }
 .submenu { display: contents; }
