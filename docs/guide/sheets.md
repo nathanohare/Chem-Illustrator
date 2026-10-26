@@ -12,7 +12,7 @@ Click **+ Sheet** at the end of the tab strip, or choose **File ▸ New ▸ New 
 
 Sheets open from .xlsx, .xlsm, .xls and .ods files as well as text and SD files; see [File types](files-and-sharing.md#file-types).
 
-The ribbon has **Home** and **Insert** tabs. **Table Design**, **Chart** and **Dashboard** tabs appear when you click in a table, a chart or a dashboard. The **Sheet** menu at the top holds most of the same commands.
+The ribbon has **Home**, **Insert**, **Page Layout**, **Formulas**, **Data**, **Review** and **View** tabs. **Table Design**, **Chart**, **PivotTable**, **Sparkline** and **Dashboard** tabs appear when you click in a table, a chart, a PivotTable, a sparkline or a dashboard. The **Sheet** submenus of the **Edit**, **View**, **Insert** and **Format** menus hold many of the same commands.
 
 ## Working with cells
 
@@ -73,7 +73,7 @@ Not every Excel function is available; one that isn't shows an error in its cell
 
 ### Insert Function and the Formulas tab
 
-**Formulas > Insert Function** (or the **fx** button by the formula bar, or Shift+F3) finds a function by name or by what it does ("working days", "molar mass"). Pick one to get a box for each of its arguments, with a line of help for the one you are in, what each argument works out to, and the formula's result before you press OK. On a cell that already holds one function, fx opens its arguments to change them. The Function Library buttons list the functions by category.
+**Formulas** tab ▸ **Insert Function** (or the **fx** button by the formula bar, or Shift+F3) finds a function by name or by what it does ("working days", "molar mass"). Pick one to get a box for each of its arguments, with a line of help for the one you are in, what each argument works out to, and the formula's result before you press OK. On a cell that already holds one function, fx opens its arguments to change them. The Function Library buttons list the functions by category.
 
 ### Names
 
@@ -143,16 +143,16 @@ The **View** tab has **Normal**, **Page Break Preview** (what prints, page by pa
 - **Filter** (Ctrl+Shift+L) puts buttons in the header row. Each one sorts, picks values to show, or keeps rows that match a condition such as "less than 500" or "containing Br".
 - **By Substructure** opens the drawing tools: draw the part to look for, and only rows whose structure contains it stay.
 - **Freeze Header** keeps the header rows in view as you scroll.
-- **Data > Custom Sort…** sorts by several levels (add, copy, delete and reorder them), in a custom order such as "Low, Medium, High", case sensitive or not, or left to right.
-- **Data > Advanced Filter…** uses a block of criteria typed above the table: tests on one row must all pass, and any row of tests may pass. It filters in place or copies the matching rows elsewhere, and can keep unique rows only. **Clear Filter** shows every row again.
-- **View > Sheet > Freeze Panes ▾** freezes the rows above and the columns left of the selected cell, or just the top row or first column. **View > Sheet > Split** splits the window into panes that scroll on their own; drag a bar to move it, double-click it to remove it. Both are saved in .xlsx files.
+- **Data** tab ▸ **Sort…** sorts by several levels (add, copy, delete and reorder them), in a custom order such as "Low, Medium, High", case sensitive or not, or left to right.
+- **Data** tab ▸ **Advanced…** (Advanced Filter) uses a block of criteria typed above the table: tests on one row must all pass, and any row of tests may pass. It filters in place or copies the matching rows elsewhere, and can keep unique rows only. **Clear** shows every row again.
+- **View** tab ▸ **Freeze Panes ▾** freezes the rows above and the columns left of the selected cell, or just the top row or first column. **View** tab ▸ **Split** splits the window into panes that scroll on their own; drag a bar to move it, double-click it to remove it. Both are saved in .xlsx files.
 
 ## Finding and changing data
 
 - **Find & Select ▾** (Home tab): **Find** (Ctrl+F) and **Replace** (Ctrl+H) search the selection, the sheet or the whole workbook, in formulas, values or notes, with `?` and `*` wildcards. **Find All** lists every match. **Go To** (Ctrl+G or F5) jumps to a cell or name, and **Go To Special…** selects blanks, constants, formulas, structures, differences, precedents, dependents and more. With blanks selected, type a value and press Ctrl+Enter to fill them all.
-- **Fill ▾ > Series…** fills a linear, growth or date series (days, weekdays, months, years), with a step and a stop value. **Flash Fill** (Ctrl+E) learns from one or two examples typed beside a table (initials, a surname, parts joined with punctuation) and fills the rest of the column.
-- **Paste ▾ > Paste Special…** (Ctrl+Alt+V) pastes values, formulas, formats, notes, validation or column widths only; adds, subtracts, multiplies or divides into the cells below (multiply a column of mmol by 1000 to get µmol); skips blanks; or transposes rows into columns.
-- **Data > Text to Columns…** splits one column by delimiters or fixed widths, with a preview and a format for each new column. **Remove Duplicates…** removes rows whose chosen columns repeat.
+- **Fill ▾** ▸ **Series…** fills a linear, growth or date series (days, weekdays, months, years), with a step and a stop value. **Flash Fill** (Ctrl+E) learns from one or two examples typed beside a table (initials, a surname, parts joined with punctuation) and fills the rest of the column.
+- **Paste ▾** ▸ **Paste Special…** (Ctrl+Alt+V) pastes values, formulas, formats, notes, validation or column widths only; adds, subtracts, multiplies or divides into the cells below (multiply a column of mmol by 1000 to get µmol); skips blanks; or transposes rows into columns.
+- **Data** tab ▸ **Text to Columns** splits one column by delimiters or fixed widths, with a preview and a format for each new column. **Remove Duplicates** removes rows whose chosen columns repeat.
 
 ## Notes and comments
 
@@ -308,11 +308,11 @@ Each new tile asks which table or block of cells to read. For a gallery, the str
 
 ## Pictures, shapes and text boxes
 
-**Insert > Pictures** puts a picture from a file (PNG, JPEG, GIF, SVG and others) over the cells: a TLC plate, a photo of a reaction, a spectrum. **Shapes** adds lines, arrows, rectangles, ovals, stars and block arrows, and **Text Box** a box of notes. Drag one to move it and its handles to size it (a picture keeps its shape from a corner; hold Shift for a shape to do the same). Arrow keys nudge it, Delete removes it. Type while a shape is picked, or double-click it, to put text in it. Right-click for **Format Shape** (fill, line, text look, size, rotation, and whether it moves and sizes with the cells), **Alt Text**, **Bring to Front**, **Send to Back** and **Duplicate**. They are saved in .xlsx files as Excel's own pictures and shapes, and pictures and shapes drawn in Excel open here.
+**Insert** tab ▸ **Pictures** puts a picture from a file (PNG, JPEG, GIF, SVG and others) over the cells: a TLC plate, a photo of a reaction, a spectrum. **Shapes** adds lines, arrows, rectangles, ovals, stars and block arrows, and **Text Box** a box of notes. Drag one to move it and its handles to size it (a picture keeps its shape from a corner; hold Shift for a shape to do the same). Arrow keys nudge it, Delete removes it. Type while a shape is picked, or double-click it, to put text in it. Right-click for **Format Shape** (fill, line, text look, size, rotation, and whether it moves and sizes with the cells), **Alt Text**, **Bring to Front**, **Send to Back** and **Duplicate**. They are saved in .xlsx files as Excel's own pictures and shapes, and pictures and shapes drawn in Excel open here.
 
 ## Printing
 
-The **Page Layout** tab sets how a sheet prints, as in Excel: **Margins**, **Orientation**, paper **Size**, the **Print Area** (Set, Add another block on pages of its own, or Clear), **Breaks** (Insert Page Break starts a new page above and to the left of the active cell), **Print Titles** (rows repeated at the top of every page, columns at the left), **Header & Footer** (left, centre and right parts; type &[Page], &[Pages], &[Date], &[Time], &[File] or &[Tab]), and **Scale to Fit** (a percentage, or so many pages wide and tall; fitting ignores breaks put in by hand, as Excel does). **Print Gridlines** and **Print Headings** print them; **Page Breaks** shows where pages end on the grid (dashed for automatic breaks, solid for your own). **Page Setup…** has everything in one window, with centring and page order too. **Print Preview** shows each page before printing, and **File > Print** prints the print area, the whole sheet or the selected cells. All of it is saved in .xlsx files as Excel's own page setup, so the sheet prints the same from Excel.
+The **Page Layout** tab sets how a sheet prints, as in Excel: **Margins**, **Orientation**, paper **Size**, the **Print Area** (Set, Add another block on pages of its own, or Clear), **Breaks** (Insert Page Break starts a new page above and to the left of the active cell), **Print Titles** (rows repeated at the top of every page, columns at the left), **Header & Footer** (left, centre and right parts; type &[Page], &[Pages], &[Date], &[Time], &[File] or &[Tab]), and **Scale to Fit** (a percentage, or so many pages wide and tall; fitting ignores breaks put in by hand, as Excel does). **Print Gridlines** and **Print Headings** print them; **Page Breaks** shows where pages end on the grid (dashed for automatic breaks, solid for your own). **Page Setup…** has everything in one window, with centring and page order too. **Print Preview** shows each page before printing, and **File ▸ Print…** prints the print area, the whole sheet or the selected cells. All of it is saved in .xlsx files as Excel's own page setup, so the sheet prints the same from Excel.
 
 ## Saving and sharing
 

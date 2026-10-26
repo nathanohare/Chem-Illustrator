@@ -32,7 +32,7 @@ Updates work as in an installed copy, except that **Install and Restart** replac
 
 The app needs the Microsoft Edge WebView2 Runtime, which Windows 10 and 11 already have. The only thing a portable copy leaves on the computer is WebView2's cache in `%LOCALAPPDATA%\io.github.nathanohare.chemillustrator`, which holds none of your work or settings.
 
-On macOS and Linux, a folder named **Chem Illustrator Data** next to the app (or the AppImage) has the same effect. On a Mac, the app keeps its normal settings folder until the "damaged" step below has been done, because macOS runs a downloaded app from a hidden copy until then.
+On macOS and Linux, a folder named **Chem Illustrator Data** next to the app (or the AppImage) has the same effect.
 
 ### macOS
 
@@ -75,7 +75,7 @@ Chem Illustrator is in **beta**: it is still being built, new features arrive of
 
 ### The menu bar
 
-Along the top are the menus: **File**, **Edit**, **View** and **Insert**, then the menus for the kind of tab you are in. In a drawing these are **Object**, **Structure** and **Scheme**; slides add a **Slide** menu and sheets a **Sheet** menu. Documents, sheets, slides and designs also have a ribbon of buttons under the menu bar, like Word, Excel and PowerPoint.
+Along the top are the menus: **File**, **Edit**, **View**, **Insert**, **Format** and **Chemistry**. They are the same in every kind of tab: a command that doesn't work in the tab you are in is greyed out, and the commands for one kind of tab are in its own submenu (such as **Insert ▸ Sheet**). Documents, sheets, slides and designs also have a ribbon of buttons under the menu bar, like Word, Excel and PowerPoint.
 
 To the right of the menus are:
 
@@ -101,7 +101,7 @@ New files are called **Drawing 1**, **Slides 1**, **Sheet 1** and so on, until t
 | **Document** | A new document with pages, styles and references | Word |
 | **Design** | A TOC graphic, graphical abstract, poster or flowchart | a graphics program |
 
-The same commands are in the **File** menu (**New Drawing**, **New Slides**, **New Sheet**, **New Document**, **New Design…**). To change the tab colours, use **View ▸ Window and Colours ▸ Mode Colours…**.
+The same commands are in the **File** menu (**New Drawing**, and **New Slides**, **New Sheet**, **New Document** and **New Design…** under **File ▸ New**). To change the tab colours, use **View ▸ Window and Colours ▸ Mode Colours…**.
 
 ### The toolbox on the left
 
@@ -131,7 +131,7 @@ The **zoom box** at the right end of that line shows how big the drawing is show
 
 ### The welcome card
 
-The first time you open the app, a small card on the empty page lists the tips most people need first: drawing bonds and rings, typing atom labels, pasting SMILES or names, Search and the right-click menu. Close it with its **×**; it doesn't come back.
+The first time you open the app, a small card on the empty page lists the tips most people need first: drawing bonds and rings, typing atom labels, pasting SMILES or names, Search and the right-click menu. Close it with **Start drawing**; it doesn't come back.
 
 After that, each time the app opens on an empty drawing, a smaller **start view** offers a new Slides, Sheet, Document or Design tab, a template, Open, and your recent files. Start drawing (or click **Start drawing**) and it goes. Untick **Show at start** to stop it, or turn it back on in **Edit ▸ Settings ▸ General**.
 
@@ -173,7 +173,7 @@ It types into the text you are editing: a document, a caption or text box, a sli
 
 You can also drag a file from your file manager and drop it on the window. The Open window also takes PowerPoint (`.pptx`), Word (`.docx`), Excel (`.xlsx`), CSV and SD files, each in the right kind of tab.
 
-In the desktop app, **File ▸ Recent** lists the last ten files you opened or saved. **Clear Recent Files** at the bottom of the list empties it.
+**File ▸ Open Recent** lists the last ten files you opened or saved (in the browser version, only in Chrome and Edge). **Clear Recent Files** at the bottom of the list empties it.
 
 ### Copying from ChemDraw
 
@@ -202,7 +202,7 @@ Slides, sheets, documents and designs save in their own formats; see their pages
 
 | Page | What it holds |
 |---|---|
-| **General** | What a click on a grouped thing selects, outlining the rest of a group, where linked text goes, asking before a command changes every structure on the page, and your name on tracked changes in documents. |
+| **General** | The start view, what a click on a grouped thing selects, outlining the rest of a group, where linked text goes, asking before a command changes every structure on the page, and your name on tracked changes in documents. |
 | **Drawing** | Terminal methyls as Me or CH3; axial chirality as Ra / Sa or P / M (Ra is the same as M, and Sa as P); charges from the + and − keys plain (N+) or circled (⊕, ⊖); text typed beside a bond end becoming an atom; raised R-group numbers; mechanism arrows finding their own way round. |
 | **Drawing Style** | Bond length, line widths, fonts and journal styles (see [Drawing](drawing.md#drawing-styles)). |
 | **Hotkeys** | Every key, to change, import or export (see [Keyboard and mouse](keyboard-and-mouse.md)). |
