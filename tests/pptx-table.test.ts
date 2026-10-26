@@ -213,4 +213,41 @@ describe('tables in PowerPoint files', () => {
     expect(table.rows[1][0].rowSpan).toBe(2);
     expect(table.lines).toBe('none');
   });
+
+  it('reads a PowerPoint themed style: theme line references, see-through bands, header text colour (laptop bench pp-recheck-239)', async () => {
+    const bytes = await save(sample());
+    const cell = (t: string, extra = '', pr = '') => `<a:tc${extra}><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="1800"/><a:t>${t}</a:t></a:r></a:p></a:txBody><a:tcPr>${pr}</a:tcPr></a:tc>`;
+    const id = '{775DCB02-9BB8-47FD-8907-85C794F793BA}';
+    // a covered cell keeps the white lines and fill the old style wrote on it: they don't show
+    const white = ['lnL', 'lnR', 'lnT', 'lnB'].map((k) => `<a:${k} w="12700"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:${k}>`).join('') + '<a:solidFill><a:srgbClr val="2E8B57"/></a:solidFill>';
+    const frame = `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="9" name="Table 8"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr>` +
+      `<p:xfrm><a:off x="1270000" y="1270000"/><a:ext cx="2438400" cy="741680"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">` +
+      `<a:tbl><a:tblPr firstRow="1" bandRow="1"><a:tableStyleId>${id}</a:tableStyleId></a:tblPr><a:tblGrid><a:gridCol w="1219200"/><a:gridCol w="1219200"/></a:tblGrid>` +
+      `<a:tr h="370840">${cell('Entry')}${cell('Yield')}</a:tr><a:tr h="370840">${cell('1', ' rowSpan="2"')}${cell('85')}</a:tr><a:tr h="370840">${cell('', ' vMerge="1"', white)}${cell('78')}</a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
+    const xml = slideXml(bytes).replace(/<p:graphicFrame>.*<\/p:graphicFrame>/s, frame).replace(/<p:sp>.*?<\/p:sp>/gs, '');
+    const files = unzipSync(withSlide(bytes, xml));
+    const ref = (k: string, idx = 1) => `<a:${k}><a:lnRef idx="${idx}"><a:schemeClr val="accent4"/></a:lnRef></a:${k}>`;
+    files['ppt/tableStyles.xml'] = new Uint8Array(strToU8(`<?xml version="1.0"?><a:tblStyleLst xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" def="${id}"><a:tblStyle styleId="${id}" styleName="Themed Style 1 - Accent 4">` +
+      `<a:tblBg><a:fillRef idx="2"><a:schemeClr val="accent4"/></a:fillRef></a:tblBg>` +
+      `<a:wholeTbl><a:tcTxStyle><a:fontRef idx="minor"><a:scrgbClr r="0" g="0" b="0"/></a:fontRef><a:schemeClr val="dk1"/></a:tcTxStyle><a:tcStyle><a:tcBdr>${['left', 'right', 'top', 'bottom', 'insideH', 'insideV'].map((k) => ref(k)).join('')}</a:tcBdr><a:fill><a:noFill/></a:fill></a:tcStyle></a:wholeTbl>` +
+      `<a:band1H><a:tcStyle><a:tcBdr/><a:fill><a:solidFill><a:schemeClr val="accent4"><a:alpha val="40000"/></a:schemeClr></a:solidFill></a:fill></a:tcStyle></a:band1H>` +
+      `<a:firstRow><a:tcTxStyle b="on"><a:fontRef idx="minor"><a:scrgbClr r="0" g="0" b="0"/></a:fontRef><a:schemeClr val="lt1"/></a:tcTxStyle><a:tcStyle><a:tcBdr/><a:fill><a:solidFill><a:schemeClr val="accent4"/></a:solidFill></a:fill></a:tcStyle></a:firstRow>` +
+      `</a:tblStyle></a:tblStyleLst>`));
+    const { table, back, shape } = tableOf(zipSync(files));
+    expect(back.warnings).toEqual([]);
+    const accent = table.rows[0][0].fill!;
+    expect(accent).toMatch(/^#[0-9a-f]{6}$/);
+    expect(accent).not.toBe('#ffffff');
+    // the header's white bold text on the accent colour
+    expect(table.rows[0][0].runs[0]).toMatchObject({ text: 'Entry', bold: true });
+    expect(table.rows[0][0].runs[0].color?.toLowerCase()).toBe('#ffffff');
+    // the first band: the accent at 40%, mixed with the white under it
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(accent.slice(i, i + 2), 16));
+    const mix = (v: number) => Math.round(v * 0.4 + 255 * 0.6);
+    expect(table.rows[1][1].fill).toBe('#' + [mix(r), mix(g), mix(b)].map((v) => v.toString(16).padStart(2, '0')).join(''));
+    expect(table.rows[2][1].fill).toBeUndefined();
+    // inside lines from the theme line reference, in the accent colour
+    expect(table.lines).toBe('grid');
+    expect(shape.color?.toLowerCase()).toBe(accent.toLowerCase());
+  });
 });
