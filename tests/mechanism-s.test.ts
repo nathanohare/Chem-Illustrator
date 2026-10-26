@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { Doc, type Arrow } from '../src/model';
 import { plainMeasure } from '../src/chem/reaction';
-import { cleanUpArrow, gapAt, pathClash, pushArrow, pushEndAt, pushPins, type PushArrow, type PushEnd } from '../src/chem/mechanism';
+import { arrowGaps, cleanUpArrow, gapAt, pathClash, pushArrow, pushEndAt, pushPins, type PushArrow, type PushEnd } from '../src/chem/mechanism';
 import { followPins, makePin, pinPoint } from '../src/chem/pins';
 import { arrowHit, arrowPoints, bezPoints, chordLocal, chordPoint, headBend, arrowHandles, dragArrowHandle } from '../src/objects';
 import { snapshot, transform, rotation, mirrorY } from '../src/editor/arrange';
@@ -138,6 +138,27 @@ describe('where mechanism arrows start and end', () => {
     const p = pushArrow(doc, m, { kind: 'atom', id: o }, { kind: 'atom', id: c }, { side: 1 })!;
     // it starts at the dot, not on the far side of the O
     expect(dist(p.tail, { x: 100 + 1.35 * L, y: 100 - 0.2 * L })).toBeLessThan(0.25 * L);
+  });
+
+  it('leaves the gap set in Settings between its ends and the dot or atom', () => {
+    const doc = new Doc();
+    const [, o, , c] = build(doc, [[0, 0], [1, 0, 8], [-1.5, 0.3], [3, -0.6], [3.87, -1.1]], [[0, 1], [3, 4]]);
+    const at = { x: 100 + 1.35 * L, y: 100 - 0.2 * L };
+    doc.edit('dot', () => doc.addShape({ kind: 'symbol', symbol: 'Electron', x1: at.x, y1: at.y, x2: at.x, y2: at.y }));
+    const m = plainMeasure(doc);
+    const carbon = doc.atoms.get(c)!;
+    try {
+      for (const g of [1, 4]) {
+        arrowGaps.start = g; arrowGaps.end = g;
+        const p = pushArrow(doc, m, { kind: 'atom', id: o }, { kind: 'atom', id: c }, { side: 1 })!;
+        expect(dist(p.tail, at)).toBeCloseTo(g, 6);
+        // a bare carbon: the gap beyond the room its corner always has (the head stops in small steps round its curve)
+        expect(dist(p.head, carbon)).toBeGreaterThanOrEqual(0.1 * L + g - 1e-6);
+        expect(dist(p.head, carbon)).toBeLessThan(0.1 * L + g + 0.1 * L);
+      }
+    } finally {
+      arrowGaps.start = null; arrowGaps.end = null;
+    }
   });
 });
 

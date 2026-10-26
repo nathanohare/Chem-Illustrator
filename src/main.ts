@@ -147,6 +147,7 @@ import { LiveStereo } from './chem/live-stereo';
 import { setStereoShown, shownDescriptor, axialStyle } from './chem/stereo';
 import { keymap, registerToolNames, displayChord, actionName, chordOf, parseAction, KeyContext, KeyOverrides } from './editor/keymap';
 import { loadSettings, saveSettings, settingsLocation, exportText, importSettings, Settings, SLIDE_PANE_MIN, SLIDE_PANE_MAX, NOTES_MIN, NOTES_MAX } from './settings';
+import { arrowGaps } from './chem/mechanism';
 import { showDialog } from './ui/dialog-host';
 import { HotkeysDialog } from './ui/hotkeys-dialog';
 import { TypingDialog } from './ui/typing-dialog';
@@ -5207,6 +5208,16 @@ const COMMANDS: Record<string, () => unknown> = {
     if (!pickedCurved()) { flash('Select one or more curved (mechanism) arrows first.'); return; }
     if (!editor.setArrowS(false)) flash('The selected arrows are single curves already.');
   },
+  'arrow-add-bend': () => {
+    if (!pickedCurved()) { flash('Select one curved (mechanism) arrow first.'); return; }
+    if (!editor.addBendHere()) flash('Right-click the arrow\'s line where the bend should go (or double-click it).');
+  },
+  'arrow-remove-bend': () => {
+    const j = editor.pickedJoin();
+    if (!j || !editor.removeBend(j.id, j.join)) flash('Right-click a round join handle on a selected arrow first (or double-click it).');
+  },
+  'arrow-smooth-join': () => { const j = editor.pickedJoin(); if (!j || !editor.setJoinKind(j.id, j.join, 'smooth')) flash('Right-click a round join handle on a selected arrow first.'); },
+  'arrow-symmetric-join': () => { const j = editor.pickedJoin(); if (!j || !editor.setJoinKind(j.id, j.join, 'symmetric')) flash('Right-click a round join handle on a selected arrow first.'); },
   'flip-arrow-bend': () => { if (!editor.flipArrowBend()) flash('Select one or more curved (mechanism) arrows first.'); },
   'homolysis-arrows': () => {
     const n = editor.sel.bonds.size;
@@ -6309,6 +6320,9 @@ async function drawingPreferences(): Promise<void> {
       help: 'Longer labels (OR1, CO2R1) and labels from files are left as they are.' },
     { name: 'reroute', label: 'Mechanism arrows find their own way round again when a change leaves them running into a structure, a label or another arrow', type: 'checkbox', value: String(editor.options.rerouteArrows),
       help: 'Arrows you bent by hand stay as they are.' },
+    { name: 'startGap', label: 'Gap between a mechanism arrow\'s start and its atom or lone pair', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic' },
+    { name: 'endGap', label: 'Gap between a mechanism arrow\'s head and its atom', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic',
+      help: 'Measured from the atom\'s label (or a bare carbon\'s corner) or the lone pair\'s dots. Leave blank for the usual gap, which grows with the bond length. New arrows, and arrows stuck to a structure, use it when they are next drawn; Clean Up Arrow redraws the selected ones now.' },
   ], { ok: 'Save' });
   if (!r) return;
   editor.options.circledCharges = r.charges === 'circled';
@@ -6316,6 +6330,9 @@ async function drawingPreferences(): Promise<void> {
   chemText.ionCharges = r.ionCharges === 'true';
   chemText.saltGroups = r.saltGroups === 'true';
   editor.options.rerouteArrows = r.reroute === 'true';
+  const gap = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
+  arrowGaps.start = gap(r.startGap);
+  arrowGaps.end = gap(r.endGap);
   if (labelPrefs.superscriptR !== (r.supR === 'true')) {
     labelPrefs.superscriptR = r.supR === 'true';
     doc.allDirty = true;
@@ -6433,6 +6450,8 @@ function currentSettings(): Settings {
     groupClick: editor.options.groupClick,
     groupOutline: editor.options.groupOutline,
     rerouteArrows: editor.options.rerouteArrows,
+    arrowStartGap: arrowGaps.start,
+    arrowEndGap: arrowGaps.end,
     superscriptR: labelPrefs.superscriptR,
     linkSide,
     slideTemplate,
@@ -6647,6 +6666,8 @@ function applySettings(s: Settings): void {
   editor.options.groupClick = s.groupClick;
   editor.options.groupOutline = s.groupOutline;
   editor.options.rerouteArrows = s.rerouteArrows;
+  arrowGaps.start = s.arrowStartGap;
+  arrowGaps.end = s.arrowEndGap;
   labelPrefs.superscriptR = s.superscriptR;
   linkSide = s.linkSide;
   slideTemplate = s.slideTemplate;
@@ -7695,6 +7716,7 @@ function drawingMenu(): MenuItem[] {
       ] },
     ] : []),
     ...(pickedCurved() ? [{ cmd: 'clean-up-arrow' }, { label: 'Mechanism Arrow', items: [
+      { cmd: 'arrow-add-bend', ...(editor.contextSpot?.t !== undefined ? { label: 'Add Bend Here' } : {}) }, ...(editor.pickedJoin() ? [{ cmd: 'arrow-remove-bend' }, { cmd: 'arrow-smooth-join' }, { cmd: 'arrow-symmetric-join' }] : []), null,
       { cmd: 'arrow-s-shape' }, { cmd: 'arrow-single-curve' }, { cmd: 'flip-arrow-bend' }, null, { cmd: 'attach-arrow' }, { cmd: 'detach-arrow' },
     ] }] : []),
     ...(s.bonds.size && s.bonds.size <= 2 && !s.arrows.size ? [{ cmd: 'homolysis-arrows' }] : []),
