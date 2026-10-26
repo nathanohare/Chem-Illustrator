@@ -16,7 +16,7 @@ export { isDoc } from './doc-sniff';
 /** Word's 16 standard colours (ico), by index. */
 const ICO = [undefined, '#000000', '#0000ff', '#00ffff', '#00ff00', '#ff00ff', '#ff0000', '#ffff00', '#ffffff', '#000080', '#008080', '#008000', '#800080', '#800000', '#808000', '#808080', '#c0c0c0'];
 
-interface Chp { bold?: boolean; italic?: boolean; strike?: boolean; underline?: boolean; smallCaps?: boolean; allCaps?: boolean; hidden?: boolean; size?: number; sub?: boolean; sup?: boolean; color?: string; font?: number; highlight?: string; deleted?: boolean; special?: boolean }
+interface Chp { bold?: boolean; italic?: boolean; strike?: boolean; underline?: boolean; smallCaps?: boolean; allCaps?: boolean; hidden?: boolean; size?: number; sub?: boolean; sup?: boolean; color?: string; font?: number; highlight?: string; deleted?: boolean; special?: boolean; istd?: number }
 interface Pap { istd?: number; align?: Justify; spaceBefore?: number; spaceAfter?: number; indent?: number; firstLine?: number; indentRight?: number; line?: number; linePt?: number; lineRule?: 'exact' | 'atLeast'; inTable?: boolean; rowEnd?: boolean; pageBreak?: boolean; outline?: number; list?: boolean; level?: number; cols?: number[] }
 
 /** A sprm's operand size (its spra, the top 3 bits, says; a variable one gives its own). */
@@ -48,6 +48,9 @@ function* sprms(b: Uint8Array, from: number, to: number): Generator<[number, num
   }
 }
 
+/** The properties that are set (a sprm read sets its own; the others stay as the style has them). */
+const defined = (c: Chp): Chp => Object.fromEntries(Object.entries(c).filter(([, v]) => v !== undefined)) as Chp;
+
 const toggle = (v: number): boolean | undefined => (v === 0 ? false : v === 1 || v === 0x81 ? true : undefined);
 
 function readChp(b: Uint8Array, from: number, to: number): Chp {
@@ -70,6 +73,7 @@ function readChp(b: Uint8Array, from: number, to: number): Chp {
       case 0x6870: c.color = b[at + 3] === 0xff ? undefined : `#${[b[at], b[at + 1], b[at + 2]].map((v) => v.toString(16).padStart(2, '0')).join('')}`; break;
       case 0x4a4f: c.font = i16(at); break;
       case 0x2a0c: c.highlight = ICO[b[at]]; break;
+      case 0x4a30: c.istd = b[at] | (b[at + 1] << 8); break;
     }
   }
   return c;
@@ -139,6 +143,12 @@ class DocReader {
   private fonts: string[] = [];
   /** Each style's built-in identifier (sti: 1 to 9 the headings), by its index. */
   private sti: number[] = [];
+  /** Each style's own character formatting and the style it is based on, by its index. */
+  private styleChp: { base: number; chp: Chp }[] = [];
+  /** Character formatting each style gives its text, worked out through the styles it is based on. */
+  private resolved = new Map<number, Chp>();
+  /** The font text has when nothing says otherwise (the stylesheet's default). */
+  private defaultFont: number | undefined;
 
   constructor(streams: Map<string, Uint8Array>) {
     this.wd = streams.get('WordDocument')!;
@@ -166,7 +176,7 @@ class DocReader {
     const chars = this.pieces(fcLcb(33), ccpText + ccpFtn);
     const chp = this.bins(fcLcb(12), (b, from, to) => readChp(b, from, to), 'chp');
     const pap = this.bins(fcLcb(13), (b, from, to) => readPap(b, from, to), 'pap');
-    const notes = this.footnotes(fcLcb(2), fcLcb(3), ccpText, ccpFtn, chars, chp);
+    const notes = this.footnotes(fcLcb(2), fcLcb(3), ccpText, ccpFtn, chars, chp, pap);
     this.text(chars.slice(0, ccpText), chp, pap, notes);
     return { doc: this.b.finish(), warnings: [...this.warnings] };
   }
@@ -198,13 +208,55 @@ class DocReader {
     if (!lcb) return;
     const cbStshi = this.u16(t, fc);
     const cstd = this.u16(t, fc + 2);
+    // the STD's fixed part: 10 bytes (Word 97), 18 from Word 2000 on
+    const cbBase = this.u16(t, fc + 4) || 10;
+    // the default fonts (rgftcStandardChpStsh): the first, for Latin text
+    if (cbStshi >= 14) this.defaultFont = this.u16(t, fc + 2 + 12);
     let at = fc + 2 + cbStshi;
     for (let i = 0; i < cstd && at < fc + lcb; i++) {
       const cb = this.u16(t, at);
       at += 2;
       this.sti.push(cb ? this.u16(t, at) & 0x0fff : 0x0ffe);
+      this.styleChp.push(cb ? this.styleFormatting(at, cb, cbBase) : { base: 0x0fff, chp: {} });
       at += cb;
     }
+  }
+
+  /** A style's own character formatting (its UpxChpx), and the style it is based on. */
+  private styleFormatting(at: number, cb: number, cbBase: number): { base: number; chp: Chp } {
+    const t = this.tbl, end = at + cb;
+    const stk = this.u16(t, at + 2) & 0x000f;
+    const base = this.u16(t, at + 2) >> 4;
+    const cupx = this.u16(t, at + 4) & 0x000f;
+    let p = at + cbBase;
+    if (p + 2 > end) return { base, chp: {} };
+    // the name: its length, then that many UTF-16 characters and a 0
+    p += 2 + 2 * this.u16(t, p) + 2;
+    // paragraph styles: the paragraph's then the characters' formatting; character styles: the characters'
+    const chpx = stk === 1 ? 1 : stk === 2 ? 0 : -1;
+    for (let k = 0; k < cupx && p + 2 <= end; k++) {
+      const n = this.u16(t, p);
+      if (k === chpx) return { base, chp: readChp(t, p + 2, Math.min(end, p + 2 + n)) };
+      p += 2 + n + (n % 2);
+    }
+    return { base, chp: {} };
+  }
+
+  /** The character formatting a style gives (with what the styles it is based on give). */
+  private styleLook(istd: number | undefined, depth = 0): Chp {
+    if (istd === undefined || istd >= this.styleChp.length || depth > 10) return {};
+    const got = this.resolved.get(istd);
+    if (got) return got;
+    const s = this.styleChp[istd];
+    const out = { ...(s.base !== 0x0fff && s.base !== istd ? this.styleLook(s.base, depth + 1) : {}), ...defined(s.chp) };
+    this.resolved.set(istd, out);
+    return out;
+  }
+
+  /** A run's formatting: its paragraph style's, then its character style's, then its own. */
+  private chpAt(c: Chp, para: Pap | undefined): Chp {
+    if (!this.styleChp.length) return c;
+    return { ...this.styleLook(para?.istd ?? 0), ...defined(this.styleLook(c.istd)), ...defined(c) };
   }
 
   /** Each character of the text (cp 0 to `n`) with its offset in the WordDocument stream. */
@@ -263,7 +315,7 @@ class DocReader {
   }
 
   /** The footnotes' text (each a note object), by the place of its mark in the text. */
-  private footnotes(ref: { fc: number; lcb: number }, txt: { fc: number; lcb: number }, ccpText: number, ccpFtn: number, chars: { ch: string; fc: number }[], chp: FcRun<Chp>[]): Map<number, DocObject> {
+  private footnotes(ref: { fc: number; lcb: number }, txt: { fc: number; lcb: number }, ccpText: number, ccpFtn: number, chars: { ch: string; fc: number }[], chp: FcRun<Chp>[], pap: FcRun<Pap>[]): Map<number, DocObject> {
     const out = new Map<number, DocObject>();
     if (!ref.lcb || !txt.lcb || !ccpFtn) return out;
     const t = this.tbl;
@@ -274,7 +326,7 @@ class DocReader {
       const runs: TextRun[] = [];
       for (let cp = a; cp < b && cp < chars.length; cp++) {
         const { ch, fc } = chars[cp];
-        const c = lookup(chp, fc) ?? {};
+        const c = this.chpAt(lookup(chp, fc) ?? {}, lookup(pap, fc));
         if (ch === '\x02' || c.deleted || c.hidden) continue;
         runs.push({ ...this.look(c), text: ch === '\r' ? '\n' : ch === '\x0b' ? ' ' : ch === '\x07' ? '\t' : ch });
       }
@@ -291,7 +343,7 @@ class DocReader {
   private look(c: Chp): rt.RunStyle {
     return rt.cleanStyle({
       bold: c.bold || undefined, italic: c.italic || undefined, underline: c.underline || undefined, strike: c.strike || undefined, smallCaps: c.smallCaps || undefined, allCaps: c.allCaps || undefined,
-      sub: c.sub || undefined, sup: c.sup || undefined, size: c.size ?? 10, font: (c.font !== undefined ? this.fonts[c.font] : undefined) || this.fonts[0] || 'Times New Roman', color: c.color && c.color !== '#000000' ? c.color : undefined, highlight: c.highlight,
+      sub: c.sub || undefined, sup: c.sup || undefined, size: c.size ?? 10, font: (c.font !== undefined ? this.fonts[c.font] : undefined) || (this.defaultFont !== undefined ? this.fonts[this.defaultFont] : undefined) || this.fonts[0] || 'Times New Roman', color: c.color && c.color !== '#000000' ? c.color : undefined, highlight: c.highlight,
     });
   }
 
@@ -332,14 +384,13 @@ class DocReader {
     };
     for (let cp = 0; cp < chars.length; cp++) {
       const { ch, fc } = chars[cp];
-      const c = lookup(chp, fc) ?? {};
+      const c = this.chpAt(lookup(chp, fc) ?? {}, lookup(pap, fc));
       const code = ch.charCodeAt(0);
       if (code === 0x13) { fields.push({ inCode: true, code: '' }); continue; }
       if (code === 0x14 && fields.length) {
         const f = fields[fields.length - 1];
         f.inCode = false;
-        const m = /^\s*HYPERLINK\s+(?:\\l\s+)?"([^"]+)"/i.exec(f.code);
-        if (m) f.link = m[1];
+        f.link = hyperlinkOf(f.code);
         continue;
       }
       if (code === 0x15 && fields.length) { fields.pop(); continue; }
@@ -370,8 +421,9 @@ class DocReader {
       if (c.special || code < 0x20) {
         if (code === 0x02 && notes.has(cp)) {
           const note = notes.get(cp)!;
-          if (cell.length || row.length || lookup(pap, fc)?.inTable) cell.push({ ...look, sup: undefined, obj: this.b.reserve(note), text: '￼' });
-          else { flushTable(); this.b.object(note, { ...look, sup: undefined }); }
+          // the mark is a superscript number, as in Word (and as .docx files read)
+          if (cell.length || row.length || lookup(pap, fc)?.inTable) cell.push({ ...look, sub: undefined, sup: true, obj: this.b.reserve(note), text: '￼' });
+          else { flushTable(); this.b.object(note, { ...look, sub: undefined, sup: true }); }
           continue;
         }
         if (code === 0x01 || code === 0x08) { pictures++; continue; }
@@ -395,6 +447,30 @@ class DocReader {
     flushTable();
     if (pictures) this.warnings.add(`${pictures} picture${pictures === 1 ? ' and shape was' : 's and shapes were'} left out: open the file in Word and save it as .docx to keep them.`);
   }
+}
+
+/**
+ * Where a HYPERLINK field goes: its address (quoted or not) and, with \\l, the place in it
+ * (#bookmark); other switches (\\o tool tip, \\t target frame, \\h, \\m, \\n) are skipped.
+ */
+export function hyperlinkOf(code: string): string | undefined {
+  const m = /^\s*HYPERLINK\b(.*)$/is.exec(code);
+  if (!m) return undefined;
+  let url = '', place = '';
+  const re = /\\([a-z])\s*(?:"([^"]*)"|(\S+))?|"([^"]*)"|(\S+)/gi;
+  for (let k: RegExpExecArray | null; (k = re.exec(m[1]));) {
+    if (k[1]) {
+      const sw = k[1].toLowerCase(), arg = k[2] ?? k[3] ?? '';
+      if (sw === 'l') place = arg;
+      // switches without an argument take none: a word after them is the address
+      else if ((sw === 'h' || sw === 'm' || sw === 'n') && k[3] && !url) url = k[3];
+      continue;
+    }
+    if (!url) url = k[4] ?? k[5] ?? '';
+  }
+  url = url.trim();
+  if (!url && !place) return undefined;
+  return place ? `${url}#${place}` : url;
 }
 
 /** Open an old Word document (.doc) as a document. */
