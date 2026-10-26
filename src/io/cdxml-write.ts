@@ -30,7 +30,7 @@ import { FADE, tint } from '../colours';
 import { fillInk, mix, ringShadowSize, shadowLook } from '../render/fills';
 import { shapeShadow } from '../render/highlight-fx';
 import { parseColor } from '../render/vector';
-import { layoutTable, cellAlign, isCovered, spanOf, NOTE_SCALE } from '../table';
+import { layoutTable, cellAlign, isCovered, spanOf, partAt, NOTE_SCALE } from '../table';
 import { TABLE_TAG, TABLE_PART_TAG, tableBorders, type TableTag } from './cdxml-table';
 import { bondLayer, crossingBondsCached } from '../chem/crossing';
 import { repeatGroups, repeatCount, repeatLabelPlace } from '../chem/polymer';
@@ -1017,27 +1017,34 @@ class CdxmlWriter {
     }
   }
 
-  /** ChemDraw paints a table's cells over what comes before it in the file, so a structure in a cell goes after its table. */
+  /**
+   * A structure in a table cell goes inside ChemDraw's cell, placed from the cell's top left corner
+   * as the cell's text is: ChemDraw paints a table's cells over any structure outside them,
+   * whatever the file order or Z.
+   */
   private raiseTableFigures(): void {
     const measure = this.opts.textMeasure ?? ((text: string, size: number, _f: string, style: string) => arialWidth(text, size, /bold/.test(style)));
     for (const s of this.doc.shapes.values()) {
       if (s.kind !== 'table' || !s.table) continue;
-      const el = this.tableEls.get(s.id) ?? this.source('s', s.id, ['table', 'group']);
-      if (!el) continue;
-      const frags = new Set<Element>();
-      for (const id of tableContents(this.doc, s, (t) => layoutTable(t, this.doc.style.captionSize, measure))) {
+      const t = s.table;
+      const el = this.tableEls.get(s.id);
+      const table = el?.nodeName === 'table' ? el : el ? descendants(el).find((e) => e.nodeName === 'table') : undefined;
+      if (!table) continue;
+      const lay = layoutTable(t, this.doc.style.captionSize, measure);
+      const cells = kids(table).filter((k) => k.nodeName === 'page');
+      const byFrag = new Map<Element, number[]>();
+      for (const id of tableContents(this.doc, s, () => lay)) {
         const f = this.fragOfAtom.get(id);
-        if (f) frags.add(f);
+        if (f) byFrag.set(f, [...(byFrag.get(f) ?? []), id]);
       }
-      for (const f of frags) {
-        // the table, or what holds it, beside the structure
-        let anchor: Node | null = el;
-        while (anchor && anchor.parentNode !== f.parentNode) anchor = anchor.parentNode;
-        if (!anchor || !(anchor.compareDocumentPosition(f) & 2)) continue;
-        f.parentNode!.insertBefore(f, anchor.nextSibling);
-        // and above it where the drawing order is numbered
-        const z = Math.max(Number((anchor as Element).getAttribute?.('Z')) || 0, ...descendants(anchor as Element).map((e) => Number(e.getAttribute('Z')) || 0));
-        if (z) for (const e of [f, ...descendants(f)]) if (e.hasAttribute('Z')) e.setAttribute('Z', String(z + Number(e.getAttribute('Z'))));
+      for (const [f, ids] of byFrag) {
+        const xs = ids.map((id) => this.doc.atoms.get(id)!.x), ys = ids.map((id) => this.doc.atoms.get(id)!.y);
+        const part = partAt(t, lay, { x: (Math.min(...xs) + Math.max(...xs)) / 2 - s.x1, y: (Math.min(...ys) + Math.max(...ys)) / 2 - s.y1 });
+        if (!part || typeof part === 'string') continue;
+        const cell = cells[part.r * t.cols.length + part.c];
+        if (!cell) continue;
+        shift(f, -(s.x1 + lay.xs[part.c]), -(s.y1 + lay.ys[part.r]));
+        cell.insertBefore(f, kids(cell).find((k) => k.nodeName === 'border') ?? null);
         this.changed = true;
       }
     }
@@ -1411,7 +1418,9 @@ class CdxmlWriter {
     if (!t) return;
     const e = this.source('s', s.id, ['table', 'group']);
     const o = this.orig<Shape>('s', s.id);
-    if (e && o && sameExcept(s, o, [])) return;
+    const measure = this.opts.textMeasure ?? ((text: string, size: number, _f: string, style: string) => arialWidth(text, size, /bold/.test(style)));
+    // (a table holding structures is written again, so its cells hold them as they are now)
+    if (e && o && sameExcept(s, o, []) && !tableContents(this.doc, s, (x) => layoutTable(x, this.doc.style.captionSize, measure)).length) return;
     const el = this.tableElement(s, t, e?.getAttribute('id') ?? String(s.id));
     this.tableEls.set(s.id, el);
     if (e?.parentNode) e.parentNode.replaceChild(el, e);
