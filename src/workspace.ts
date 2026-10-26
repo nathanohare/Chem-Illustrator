@@ -20,6 +20,7 @@ import { writePptx, PptxOptions } from './io/pptx-write';
 import { zipHas } from './io/ooxml';
 import { isXls } from './io/xls';
 import { isOds } from './io/ods';
+import { excelLimitNote } from './io/xlsx';
 import { DOC_OPEN_ONLY, documentSaveNote, isOtherDocument } from './io/doc-files';
 import { adoptSaved } from './io/document-file';
 import {
@@ -719,7 +720,7 @@ export class Workspace {
       const data = await this.hooks.sheets.write(book, name);
       // CSV and SD files keep only the values of the sheet showing: said, not stopped (as Excel does)
       const note = ext === 'csv' || ext === 'sdf' || ext === 'sd' ? ` (${book.sheets.length > 1 ? `only the sheet "${book.sheet.name}", ` : ''}values only: save as .xlsx to keep formulas and formatting)`
-        : ext === 'xlsx' && book.macros ? ' (its macros are left out: save as .xlsm to keep them)' : '';
+        : (ext === 'xlsx' && book.macros ? ' (its macros are left out: save as .xlsm to keep them)' : '') + excelLimitNote(book);
       return { data, type: ext === 'csv' ? CSV : ext === 'sdf' || ext === 'sd' ? SDF : ext === 'xlsm' ? XLSM : XLSX, note };
     }
     if (tab.mode === 'document') {

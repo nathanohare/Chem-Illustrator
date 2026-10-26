@@ -9,7 +9,8 @@ import { writeDocx, readDocx, type DocxDeps } from '../src/io/docx';
 import { newDocument, runStyleOf } from '../src/document/document';
 import { emfToSvg } from '../src/render/emf-read';
 import { Workbook } from '../src/sheet/workbook';
-import { writeXlsx, readXlsx, type XlsxPictures } from '../src/io/xlsx';
+import { writeXlsx, readXlsx, excelLimitNote, type XlsxPictures } from '../src/io/xlsx';
+import { newValidation } from '../src/sheet/validation';
 import { readOdt, writeOdt } from '../src/io/odt';
 import { readOds } from '../src/io/ods';
 import { readPptx } from '../src/io/pptx-read';
@@ -230,5 +231,43 @@ describe('OpenDocument text', () => {
     expect(strFromU8(files['content.xml'])).toContain('300000000');
     const { doc } = readOdt(zipSync(files));
     expect(Math.max(...doc.runs.map((x) => x.text.length))).toBeLessThan(1010);
+  });
+});
+
+describe('Excel\'s limits', () => {
+  const decode = (s: string) => s.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+  it('cell text is cut to 32,767 characters, and the save says so', async () => {
+    const wb = new Workbook();
+    wb.edit('x', () => { wb.sheet.setInput(0, 0, 'x'.repeat(40000)); wb.sheet.setInput(1, 0, 'short'); });
+    const files = unzipSync(await writeXlsx(wb, pictures));
+    const texts = [...strFromU8(files['xl/sharedStrings.xml']).matchAll(/<t[^>]*>([^<]*)<\/t>/g)].map((m) => decode(m[1]));
+    expect(Math.max(...texts.map((t) => t.length))).toBe(32767);
+    expect(texts).toContain('short');
+    expect(excelLimitNote(wb)).toMatch(/one cell holds more than Excel's 32,767 characters/);
+    wb.edit('y', () => wb.sheet.setInput(0, 0, 'x'));
+    expect(excelLimitNote(wb)).toBe('');
+  });
+
+  it('a drop-down list over 255 characters goes on a hidden sheet, and comes back as typed', async () => {
+    const wb = new Workbook();
+    const items = Array.from({ length: 30 }, (_, i) => `Pd(PPh3)4 batch ${i + 1}`).join(', ');
+    wb.edit('x', () => wb.sheet.setValidations([
+      newValidation([{ r1: 0, c1: 1, r2: 9, c2: 1 }], { kind: 'list', value1: items }),
+      newValidation([{ r1: 0, c1: 2, r2: 9, c2: 2 }], { kind: 'list', value1: 'yes, no' }),
+    ]));
+    const bytes = await writeXlsx(wb, pictures);
+    const files = unzipSync(bytes);
+    const sheet = strFromU8(files['xl/worksheets/sheet1.xml']);
+    const f1 = [...sheet.matchAll(/<formula1>([^<]*)<\/formula1>/g)].map((m) => decode(m[1]));
+    expect(f1).toEqual(['Lists!$A$1:$A$30', '"yes, no"']);
+    expect(strFromU8(files['xl/workbook.xml'])).toMatch(/<sheet name="Lists" sheetId="2" state="hidden" r:id="[^"]+"\/>/);
+    const lists = strFromU8(files['xl/worksheets/sheet2.xml']);
+    expect(lists.match(/<c /g)).toHaveLength(30);
+    // opened here again: no extra sheet, and the list as it was typed
+    const back = await readXlsx(bytes);
+    expect(back.book.sheets.map((s) => s.name)).toEqual(['Sheet1']);
+    expect(back.book.sheet.validations.map((v) => v.value1)).toEqual([items, 'yes, no']);
+    expect(back.warnings.join(' ')).not.toMatch(/hidden sheets/);
   });
 });

@@ -236,6 +236,9 @@ interface Model {
   version: 1;
   drawingStyle: DocStyle;
   sheets: ModelSheet[];
+  /** The hidden sheet holding drop-down lists too long for Excel to hold typed, and each list as typed here, by the range it was given. */
+  listSheet?: string;
+  lists?: { ref: string; text: string }[];
   /** Custom views as this program holds them (Excel's copy can't say which rows each hides, or its print settings). */
   customViews?: CustomView[];
   /** Data > Get Data: the queries and their steps (Excel is given the tables they loaded). */
@@ -357,6 +360,23 @@ function borderName(b: BorderStyle): string {
   return b === 'dashed' ? 'dashed' : b === 'dotted' ? 'dotted' : b;
 }
 
+/** The most characters an Excel cell holds ("Excel specifications and limits"). */
+const MAX_CELL_TEXT = 32767;
+
+/** Text cut to what an Excel cell holds (never inside a surrogate pair). */
+function excelCellText(t: string): string {
+  if (t.length <= MAX_CELL_TEXT) return t;
+  const c = t.charCodeAt(MAX_CELL_TEXT - 1);
+  return t.slice(0, c >= 0xd800 && c <= 0xdbff ? MAX_CELL_TEXT - 1 : MAX_CELL_TEXT);
+}
+
+/** Said after an .xlsx save that cut cells' text to Excel's limit ('' when none was cut). */
+export function excelLimitNote(book: Workbook): string {
+  let n = 0;
+  for (const s of book.sheets) for (const v of s.values.values()) if (typeof v === 'string' && v.length > MAX_CELL_TEXT) n++;
+  return n ? ` (${n === 1 ? 'one cell holds' : `${n} cells hold`} more than Excel's ${MAX_CELL_TEXT.toLocaleString('en')} characters: cut to that in the file)` : '';
+}
+
 /** Shared strings: each text once; chemistry text (C9H8O4) with its numbers lowered. */
 class Strings {
   private list: string[] = [];
@@ -420,6 +440,19 @@ export async function writeXlsx(book: Workbook, deps: XlsxPictures, opts: { macr
   let anyDynamic = false;
   const persons = new Persons();
   pkg.defaultType('png', 'image/png');
+  // drop-down lists too long for Excel to hold typed: their items on a hidden sheet, as Excel does itself
+  const lists: { ref: string; text: string; items: string[] }[] = [];
+  let listSheet = 'Lists';
+  for (let k = 2; book.sheets.some((s) => s.name.toLowerCase() === listSheet.toLowerCase()); k++) listSheet = `Lists (${k})`;
+  const longList = (text: string): string => {
+    const had = lists.find((l) => l.text === text);
+    if (had) return had.ref;
+    const items = text.split(',').map((x) => x.trim()).filter((x) => x !== '');
+    const col = colName(lists.length);
+    const ref = `${quoteSheet(listSheet)}!$${col}$1:$${col}$${Math.max(1, items.length)}`;
+    lists.push({ ref, text, items });
+    return ref;
+  };
 
   for (let si = 0; si < book.sheets.length; si++) {
     const own = book.sheets[si];
@@ -531,10 +564,10 @@ export async function writeXlsx(book: Workbook, deps: XlsxPictures, opts: { macr
           wrote = code;
           body = `<c r="${ref}"${sAttr} t="e">${f}<v>${EXCEL_ERRORS.includes(code) ? code : '#VALUE!'}</v></c>`;
         } else {
-          wrote = v as string;
+          wrote = excelCellText(v as string);
           body = f
-            ? `<c r="${ref}"${sAttr} t="str">${f}<v>${xml(v as string)}</v></c>`
-            : `<c r="${ref}"${sAttr} t="s"><v>${strings.index(v as string, chem)}</v></c>`;
+            ? `<c r="${ref}"${sAttr} t="str">${f}<v>${xml(wrote)}</v></c>`
+            : `<c r="${ref}"${sAttr} t="s"><v>${strings.index(wrote, chem)}</v></c>`;
         }
         if (entry) entry.wrote = wrote;
         if (body) cells.push(body);
@@ -706,7 +739,7 @@ export async function writeXlsx(book: Workbook, deps: XlsxPictures, opts: { macr
       const vid = pkg.relate(sheetRels, NOTES_REL.vml, `../drawings/vmlDrawing${notesNo}.vml`);
       drawingXml += `<legacyDrawing r:id="${vid}"/>`;
     }
-    const dvXml = standIn ? '' : validationsXml(s.validations, excelFunctionNames);
+    const dvXml = standIn ? '' : validationsXml(s.validations, excelFunctionNames, longList);
     // links (Insert > Link): a place in the workbook as Excel's location, anything else through a relationship
     const linkXml: string[] = [];
     for (const [k, c] of s.cells) {
@@ -737,6 +770,20 @@ export async function writeXlsx(book: Workbook, deps: XlsxPictures, opts: { macr
     const rid = pkg.relate('xl/workbook.xml', RELS.worksheet, `worksheets/sheet${si + 1}.xml`);
     sheetEntries.push(`<sheet name="${xml(s.name)}" sheetId="${si + 1}" r:id="${rid}"/>`);
     model.sheets.push(ms);
+  }
+  if (lists.length) {
+    // (last, so the sheets' places in the list, which names and print areas go by, stay as they are)
+    const n = book.sheets.length + 1;
+    const rowXml: string[] = [];
+    for (let r = 0; r < Math.max(...lists.map((l) => l.items.length)); r++) {
+      const cells = lists.map((l, c) => (r < l.items.length ? `<c r="${cellName(r, c)}" t="s"><v>${strings.index(excelCellText(l.items[r]), false)}</v></c>` : '')).join('');
+      rowXml.push(`<row r="${r + 1}">${cells}</row>`);
+    }
+    pkg.add(`xl/worksheets/sheet${n}.xml`, `${HEAD}<worksheet xmlns="${MAIN}" xmlns:r="${RNS}"><sheetData>${rowXml.join('')}</sheetData></worksheet>`, CT.sheet);
+    const rid = pkg.relate('xl/workbook.xml', RELS.worksheet, `worksheets/sheet${n}.xml`);
+    sheetEntries.push(`<sheet name="${xml(listSheet)}" sheetId="${n}" state="hidden" r:id="${rid}"/>`);
+    model.listSheet = listSheet;
+    model.lists = lists.map(({ ref, text }) => ({ ref, text }));
   }
 
   pkg.relate('xl/workbook.xml', RELS.styles, 'styles.xml');
@@ -1004,14 +1051,6 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const ssPath = relTarget(RELS.sharedStrings);
   const shared = ssPath ? kids(pkg.xml(ssPath)?.documentElement, 'si').map(stringItem) : [];
 
-  const sheetEls = kids(kid(root, 'sheets'), 'sheet');
-  if (!sheetEls.length) throw new Error('This workbook has no sheets.');
-  const names = sheetEls.map((s, i) => s.getAttribute('name') || `Sheet${i + 1}`);
-  const book = new Workbook(names);
-  const activeTab = Number(kid(root, 'bookViews', 'workbookView')?.getAttribute('activeTab') ?? 0);
-  if (sheetEls.some((s) => s.getAttribute('state') === 'hidden' || s.getAttribute('state') === 'veryHidden')) notKept.add('hidden sheets (shown here)');
-  const definedNames = kids(kid(root, 'definedNames'), 'definedName');
-
   // our own part, if this file was saved here (found by name: programs that keep it don't all keep its link)
   let model: Model | null = null;
   const custom = pkg.names().filter((n) => /^customXml\/item\d*\.xml$/i.test(n)).map((n) => {
@@ -1025,6 +1064,16 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       model = null;
     }
   }
+
+  // (the hidden sheet saved here to hold long drop-down lists is not one of the workbook's own)
+  const sheetEls = kids(kid(root, 'sheets'), 'sheet').filter((el) => !model?.listSheet || el.getAttribute('name') !== model.listSheet);
+  if (!sheetEls.length) throw new Error('This workbook has no sheets.');
+  const names = sheetEls.map((s, i) => s.getAttribute('name') || `Sheet${i + 1}`);
+  const book = new Workbook(names);
+  const activeTab = Number(kid(root, 'bookViews', 'workbookView')?.getAttribute('activeTab') ?? 0);
+  if (sheetEls.some((s) => s.getAttribute('state') === 'hidden' || s.getAttribute('state') === 'veryHidden')) notKept.add('hidden sheets (shown here)');
+  const definedNames = kids(kid(root, 'definedNames'), 'definedName');
+
   if (model?.drawingStyle) book.drawingStyle = { ...book.drawingStyle, ...model.drawingStyle };
 
   // macros (.xlsm): kept byte for byte to save back, never run
@@ -1353,7 +1402,10 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
         const notes = readNotes(commentsPath ? pkg.xml(commentsPath) : null, shownNotes(vmlPath ? pkg.text(vmlPath) : null), threadedPath ? pkg.xml(threadedPath) : null, personsDoc);
         for (const [k, n] of notes) s.setNote(rowOf(k), colOf(k), n);
       }
-      const dv = readValidations(ws);
+      const dv = readValidations(ws).map((v) => {
+        const typed = v.kind === 'list' ? model?.lists?.find((l) => '=' + l.ref === v.value1) : undefined;
+        return typed ? { ...v, value1: typed.text } : v;
+      });
       if (dv.length) s.setValidations(dv);
       const sparks = readSparklines(ws, s.name, colourOf);
       if (sparks.length) { for (const g of sparks) seenSparkId(g.id); s.setSparklines(sparks); }
