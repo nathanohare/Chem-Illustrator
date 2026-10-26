@@ -459,14 +459,14 @@ export class MorphFrames {
   private pairs: [number, number][];
   private at = { x: 0, y: 0, k: 1 };
 
-  /** `gone`: parts of the first slide its animations took off by its end. */
-  constructor(page0: SlidePage, doc0: Doc, gone: Set<Part>, page1: SlidePage, doc1: Doc, w: number, h: number, private dpr: number, fill: string | null) {
+  /** `shown`: the parts of the first slide still on it at its end (not those its animations took off). */
+  constructor(page0: SlidePage, doc0: Doc, shown: Part[], page1: SlidePage, doc1: Doc, w: number, h: number, private dpr: number, fill: string | null) {
     const scratch = document.createElement('canvas');
     const empty = (d: Doc) => subDoc(d, () => false);
     paintSlide(this.base0, w, h, dpr, page0, empty(doc0), fill);
     this.at = paintSlide(this.base1, w, h, dpr, page1, empty(doc1), fill);
-    const pieces = (page: SlidePage, doc: Doc, skip: Set<Part>): Piece[] =>
-      slideParts(doc).filter((p) => p.kind !== 'highlight' && !skip.has(p)).map((part) => {
+    const pieces = (page: SlidePage, doc: Doc, parts: Part[]): Piece[] =>
+      parts.filter((p) => p.kind !== 'highlight').map((part) => {
         const one = subDoc(doc, (kind, id) => inPart(part, kind, id));
         const at = paintSlide(scratch, w, h, dpr, page, one, null, false);
         const b0 = selectionBox(doc, part.sel, POINTS) ?? { x1: 0, y1: 0, x2: page.size.w, y2: page.size.h };
@@ -480,8 +480,8 @@ export class MorphFrames {
         const k = morphKey(doc, part);
         return { part, key: k.key + '\u0000' + k.role, kind: k.kind, box, canvas: c };
       });
-    this.from = pieces(page0, doc0, gone);
-    this.to = pieces(page1, doc1, new Set());
+    this.from = pieces(page0, doc0, shown);
+    this.to = pieces(page1, doc1, slideParts(doc1));
     const info = (ps: Piece[]) => ps.map((p) => { const [key, role] = p.key.split('\u0000'); return { kind: p.kind, key, role, box: p.box }; });
     this.pairs = morphPairs(info(this.from), info(this.to));
   }
@@ -827,11 +827,12 @@ export class Player {
     const s = this.deck.slides[was];
     if (!s) return undefined;
     const doc0 = this.deck.docOf(was), anims = s.anims ?? [];
-    const parts = anims.length ? slideParts(doc0) : [];
-    const states = anims.length ? partStates(parts, anims, this.wasDone, -1) : new Map();
-    const gone = new Set<Part>([...states].filter(([, st]) => !st.visible).map(([p]) => p));
+    // the same Part objects the states are kept by, so the parts gone are left out
+    const parts = slideParts(doc0);
+    const states = anims.length ? partStates(parts, anims, this.wasDone, -1) : new Map<Part, { visible: boolean }>();
+    const shown = parts.filter((p) => states.get(p)?.visible ?? true);
     try {
-      return new MorphFrames(this.deck.page(was), doc0, gone, this.deck.page(this.i), this.deck.docOf(this.i), this.w, this.h, this.dpr, this.fill);
+      return new MorphFrames(this.deck.page(was), doc0, shown, this.deck.page(this.i), this.deck.docOf(this.i), this.w, this.h, this.dpr, this.fill);
     } catch {
       return undefined;
     }
