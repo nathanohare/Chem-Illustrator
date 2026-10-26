@@ -15,6 +15,11 @@ export interface UpdateHost {
   channel(): UpdateChannel;
   /** Open a web page in the computer's browser. */
   openPage(url: string): void;
+  /**
+   * The app is about to close for the installer, the user having agreed to lose what isn't
+   * saved: tidy up as a normal close does, so the next start doesn't offer those tabs back.
+   */
+  closing(): Promise<void>;
 }
 
 export class UpdateUI {
@@ -140,7 +145,7 @@ export class UpdateUI {
     try {
       await r.install((done) => {
         bar.textContent = done === null ? 'Downloading…' : done >= 1 ? 'Installing…' : `Downloading… ${Math.round(done * 100)}%`;
-      });
+      }, () => this.host.closing());
     } catch (e) {
       bar.textContent = `The update didn’t install: ${String(e)}`;
       row.hidden = false;

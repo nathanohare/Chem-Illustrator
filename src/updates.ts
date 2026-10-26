@@ -14,8 +14,12 @@ export interface Release {
   /** What changed, as written in the release on GitHub. */
   notes: string;
   date?: string;
-  /** Download, check and install; reports how far the download has got (0 to 1, or null if unknown). */
-  install(progress: (done: number | null) => void): Promise<void>;
+  /**
+   * Download, check and install; reports how far the download has got (0 to 1, or null if
+   * unknown). `closing` runs once the app is about to close for the installer (after the
+   * download, where the download is a step of its own), to tidy up as a normal close does.
+   */
+  install(progress: (done: number | null) => void, closing?: () => Promise<void>): Promise<void>;
 }
 
 /** Which builds to be offered (Edit > Settings > Online). */
@@ -78,9 +82,11 @@ export async function findRelease(channel: UpdateChannel = 'latest'): Promise<Re
     version: u.version,
     notes: (u.body ?? '').trim(),
     date: u.date,
-    async install(progress) {
+    async install(progress, closing) {
       if (inPlace) {
         // the shell downloads the new app, checks it, swaps it for this one and starts it
+        // (all in one step, so the tidying up comes first)
+        await closing?.();
         const { Channel } = await import('@tauri-apps/api/core');
         const onProgress = new Channel<number>();
         onProgress.onmessage = (done) => progress(done < 0 ? null : done);
@@ -88,11 +94,14 @@ export async function findRelease(channel: UpdateChannel = 'latest'): Promise<Re
         return;
       }
       let total = 0, got = 0;
-      await u.downloadAndInstall((e) => {
+      await u.download((e) => {
         if (e.event === 'Started') { total = e.data.contentLength ?? 0; progress(total ? 0 : null); }
         else if (e.event === 'Progress') { got += e.data.chunkLength; progress(total ? Math.min(1, got / total) : null); }
         else progress(1);
       });
+      // downloaded and checked: on Windows the app closes the moment the installer starts
+      await closing?.();
+      await u.install();
       // Windows closes the app itself to run the installer; elsewhere start the new version
       const { relaunch } = await import('@tauri-apps/plugin-process');
       await relaunch();

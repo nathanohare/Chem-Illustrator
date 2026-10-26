@@ -46,3 +46,16 @@
       ${EndIf}
   ${EndIf}
 !macroend
+
+; An update asked to restart the app (/R) should open the new version when it is done. The
+; installer's own restart sometimes leaves it closed, so it is started here too; if both get
+; through, the second just hands over to the first (one copy of the app runs at a time).
+!macro NSIS_HOOK_POSTINSTALL
+  ${If} $UpdateMode = 1
+    ClearErrors
+    ${GetOptions} $CMDLINE "/R" $R8
+    ${IfNot} ${Errors}
+      Exec '"$INSTDIR\${MAINBINARYNAME}.exe"'
+    ${EndIf}
+  ${EndIf}
+!macroend

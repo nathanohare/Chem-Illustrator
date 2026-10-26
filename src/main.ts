@@ -147,6 +147,7 @@ import { LiveStereo } from './chem/live-stereo';
 import { setStereoShown, shownDescriptor, axialStyle } from './chem/stereo';
 import { keymap, registerToolNames, displayChord, actionName, chordOf, parseAction, KeyContext, KeyOverrides } from './editor/keymap';
 import { loadSettings, saveSettings, settingsLocation, exportText, importSettings, Settings, SLIDE_PANE_MIN, SLIDE_PANE_MAX, NOTES_MIN, NOTES_MAX } from './settings';
+import { arrowGaps } from './chem/mechanism';
 import { showDialog } from './ui/dialog-host';
 import { HotkeysDialog } from './ui/hotkeys-dialog';
 import { TypingDialog } from './ui/typing-dialog';
@@ -518,7 +519,7 @@ const HINTS: Record<string, string> = {
   fragment: 'Drag a line across the bonds to break (or click one bond). Each piece gets a caption with its formula and exact mass, which you can edit.',
 };
 const ARROW_HINT = 'Drag to draw an arrow (Alt: any angle); click for a standard one. Drag the ends to move them, the middle to bend it.';
-const CURVE_HINT = 'Drag from where the electrons start (lone pair, bond, radical, charge) to where they go (atom, bond, or the gap where a new bond forms); swing out to one side to bend that way. The arrow sticks to the structure. Drag the middle dot (an S: its diamonds) to change the curve.';
+const CURVE_HINT = 'Drag from where the electrons start (lone pair, bond, radical, charge) to where they go (atom, bond, or the gap where a new bond forms); swing out to one side to bend that way. Or click where it starts, click points it goes through, and click where it ends. The arrow sticks to the structure. Drag the middle dot (an S: its diamonds, or its line) to change the curve.';
 const SHAPE_HINT = 'Drag to draw. Drag the corner squares to resize; the Style panel changes dashes, fill, corners and shadow.';
 const BRACKET_HINT = 'Drag a box to put brackets round it, or click a structure to bracket it.';
 const BOND_HINT = 'Click empty space or an atom to draw; drag to aim. Point at an atom or bond and press a hotkey (Edit > Hotkeys lists them).';
@@ -562,6 +563,8 @@ editor.onToolChange = (name) => {
   $('#hint').textContent = HINTS[name] ?? (t.kind === 'ring' ? RING_HINT : t.kind === 'arrow' ? (t.style.sweep ? CURVE_HINT : ARROW_HINT)
     : t.kind === 'shape' ? SHAPE_HINT : t.kind === 'bracket' ? BRACKET_HINT : t.kind === 'template' ? TEMPLATE_HINT : BOND_HINT);
 };
+// a hint for the step in hand (drawing an arrow through points), and back to the tool's own after
+editor.onHint = (text) => { if (text) $('#hint').textContent = text; else editor.onToolChange(editor.toolName); };
 editor.setTool('bond-single');
 
 // tablets: bigger buttons, long-press menus, double taps and the atom keypad (View > Window and Colours > Touch Mode)
@@ -5315,6 +5318,16 @@ const COMMANDS: Record<string, () => unknown> = {
     if (!pickedCurved()) { flash('Select one or more curved (mechanism) arrows first.'); return; }
     if (!editor.setArrowS(false)) flash('The selected arrows are single curves already.');
   },
+  'arrow-add-bend': () => {
+    if (!pickedCurved()) { flash('Select one curved (mechanism) arrow first.'); return; }
+    if (!editor.addBendHere()) flash('Right-click the arrow\'s line where the bend should go (or double-click it).');
+  },
+  'arrow-remove-bend': () => {
+    const j = editor.pickedJoin();
+    if (!j || !editor.removeBend(j.id, j.join)) flash('Right-click a round join handle on a selected arrow first (or double-click it).');
+  },
+  'arrow-smooth-join': () => { const j = editor.pickedJoin(); if (!j || !editor.setJoinKind(j.id, j.join, 'smooth')) flash('Right-click a round join handle on a selected arrow first.'); },
+  'arrow-symmetric-join': () => { const j = editor.pickedJoin(); if (!j || !editor.setJoinKind(j.id, j.join, 'symmetric')) flash('Right-click a round join handle on a selected arrow first.'); },
   'flip-arrow-bend': () => { if (!editor.flipArrowBend()) flash('Select one or more curved (mechanism) arrows first.'); },
   'homolysis-arrows': () => {
     const n = editor.sel.bonds.size;
@@ -6249,6 +6262,8 @@ const updates = new UpdateUI({
   skip: (v) => { skipVersion = v; storeSettings(); },
   channel: () => updateChannel,
   openPage: (url) => openWebPage(url),
+  // as when the window closes: the recovery copies and lock files aren't needed
+  closing: async () => { await keeper.end(); await diagnostics.end(); },
 });
 /** The desktop app's version when it last ran (for What's New after an update). */
 let lastVersion: string | null = null;
@@ -6440,6 +6455,9 @@ async function drawingPreferences(): Promise<void> {
       help: 'Longer labels (OR1, CO2R1) and labels from files are left as they are.' },
     { name: 'reroute', label: 'Mechanism arrows find their own way round again when a change leaves them running into a structure, a label or another arrow', type: 'checkbox', value: String(editor.options.rerouteArrows),
       help: 'Arrows you bent by hand stay as they are.' },
+    { name: 'startGap', label: 'Gap between a mechanism arrow\'s start and its atom or lone pair', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic' },
+    { name: 'endGap', label: 'Gap between a mechanism arrow\'s head and its atom', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic',
+      help: 'Measured from the atom\'s label (or a bare carbon\'s corner) or the lone pair\'s dots. Leave blank for the usual gap, which grows with the bond length. New arrows, and arrows stuck to a structure, use it when they are next drawn; Clean Up Arrow redraws the selected ones now.' },
   ], { ok: 'Save' });
   if (!r) return;
   editor.options.circledCharges = r.charges === 'circled';
@@ -6447,6 +6465,9 @@ async function drawingPreferences(): Promise<void> {
   chemText.ionCharges = r.ionCharges === 'true';
   chemText.saltGroups = r.saltGroups === 'true';
   editor.options.rerouteArrows = r.reroute === 'true';
+  const gap = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
+  arrowGaps.start = gap(r.startGap);
+  arrowGaps.end = gap(r.endGap);
   if (labelPrefs.superscriptR !== (r.supR === 'true')) {
     labelPrefs.superscriptR = r.supR === 'true';
     doc.allDirty = true;
@@ -6569,6 +6590,8 @@ function currentSettings(): Settings {
     groupClick: editor.options.groupClick,
     groupOutline: editor.options.groupOutline,
     rerouteArrows: editor.options.rerouteArrows,
+    arrowStartGap: arrowGaps.start,
+    arrowEndGap: arrowGaps.end,
     superscriptR: labelPrefs.superscriptR,
     linkSide,
     slideTemplate,
@@ -6787,6 +6810,8 @@ function applySettings(s: Settings): void {
   editor.options.groupClick = s.groupClick;
   editor.options.groupOutline = s.groupOutline;
   editor.options.rerouteArrows = s.rerouteArrows;
+  arrowGaps.start = s.arrowStartGap;
+  arrowGaps.end = s.arrowEndGap;
   labelPrefs.superscriptR = s.superscriptR;
   linkSide = s.linkSide;
   slideTemplate = s.slideTemplate;
@@ -7857,6 +7882,7 @@ function drawingMenu(): MenuItem[] {
       ] },
     ] : []),
     ...(pickedCurved() ? [{ cmd: 'clean-up-arrow' }, { label: 'Mechanism Arrow', items: [
+      { cmd: 'arrow-add-bend', ...(editor.contextSpot?.t !== undefined ? { label: 'Add Bend Here' } : {}) }, ...(editor.pickedJoin() ? [{ cmd: 'arrow-remove-bend' }, { cmd: 'arrow-smooth-join' }, { cmd: 'arrow-symmetric-join' }] : []), null,
       { cmd: 'arrow-s-shape' }, { cmd: 'arrow-single-curve' }, { cmd: 'flip-arrow-bend' }, null, { cmd: 'attach-arrow' }, { cmd: 'detach-arrow' },
     ] }] : []),
     ...(s.bonds.size && s.bonds.size <= 2 && !s.arrows.size ? [{ cmd: 'homolysis-arrows' }] : []),

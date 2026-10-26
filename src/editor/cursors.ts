@@ -51,8 +51,8 @@ export function handleCursor(which: HandleId): string {
     case 'nw': case 'se': return 'nwse-resize';
     case 'mid': return BEND;
     default:
-      // a control point of an S-shaped arrow bends it, as its middle does an arc
-      if (which[0] === 'b') return BEND;
+      // a join on a curved arrow moves that point (its handles with it); a control point bends the curve
+      if (which[0] === 'b') return (Number(which.slice(1)) + 1) % 3 === 0 ? 'move' : BEND;
       return 'move'; // an arrow's or line's end: it goes wherever it is dragged
   }
 }
@@ -70,6 +70,8 @@ export interface PointerState {
   slides: boolean;
   /** Over a text box that takes typing at a click. */
   typing: boolean;
+  /** Over an arrow's line (not one of its handles): with the select tool, a drag moves the whole arrow. */
+  arrow?: boolean;
 }
 
 export function pointerFor(s: PointerState): string {
@@ -77,6 +79,8 @@ export function pointerFor(s: PointerState): string {
   if (s.overSelection && s.tool !== 'eraser') return s.ctrl ? 'copy' : 'grab';
   switch (s.tool) {
     case 'select':
+      // a drag on an arrow takes the whole arrow with it: the grab hand says so
+      if (s.arrow) return s.ctrl ? 'copy' : 'grab';
       if (s.over) return s.slides ? 'move' : 'crosshair';
       return s.slides ? '' : MARQUEE;
     case 'eraser': return ERASER;
