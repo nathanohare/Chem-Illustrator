@@ -1126,6 +1126,8 @@ interface UndoEntry {
   after: Map<string, Entity | null>;
   /** A bulk change (see Doc.bulk), which keeps no undo step. */
   bulk?: boolean;
+  /** What the editor had highlighted before and after the step (see Doc.markStep). */
+  marks?: { before: unknown; after: unknown };
 }
 
 const CELL = 12; // spatial grid cell size in points
@@ -1319,6 +1321,20 @@ export class Doc {
 
   /** The things the last undo or redo put back (keys such as "a12"), for selecting them. */
   lastApplied: string[] = [];
+  /** The mark (see markStep) on the side of the step the last undo or redo went back to. */
+  lastMark: unknown = undefined;
+
+  /** The newest undo step, as a token: compare it before and after an edit to see if one was made. */
+  get topStep(): object | undefined { return this.undoStack[this.undoStack.length - 1]; }
+
+  /**
+   * Note what the editor had highlighted before and after the newest step, so an undo or redo
+   * of it can put the highlight back (keyboard building carries on where it was).
+   */
+  markStep(before: unknown, after: unknown): void {
+    const top = this.undoStack[this.undoStack.length - 1];
+    if (top && !this.tx) top.marks = { before, after };
+  }
 
   canUndo(): boolean { return this.undoStack.length > 0; }
   canRedo(): boolean { return this.redoStack.length > 0; }
@@ -1333,6 +1349,7 @@ export class Doc {
     if (!e) return false;
     this.apply(e.before);
     this.lastApplied = [...e.before.keys()];
+    this.lastMark = e.marks?.before;
     this.redoStack.push(e);
     return true;
   }
@@ -1343,6 +1360,7 @@ export class Doc {
     if (!e) return false;
     this.apply(e.after);
     this.lastApplied = [...e.after.keys()];
+    this.lastMark = e.marks?.after;
     this.undoStack.push(e);
     return true;
   }
