@@ -12,6 +12,9 @@ export interface FoundPicture {
   /** Where it was found: "Page 3", or the file's name. */
   where: string;
   pixels: Pixels;
+  /** For a PDF: the page it is on (from 1), and where on that page (in the page picture's pixels). */
+  page?: number;
+  box?: { x: number; y: number; w: number; h: number };
 }
 
 export interface ReviewOptions {

@@ -209,7 +209,7 @@ import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
 import { aiSettingsDialog } from './ui/ai-settings';
-import { importPictureFiles, importPictures, pdfDrawings, type ImportHost } from './ui/import-structures';
+import { importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
 import { placeRead } from './recognise/check';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -3391,19 +3391,20 @@ async function readPdf(f: { name: string; bytes: Uint8Array }, from: Tab): Promi
     found = await pdfDrawings(f.bytes, async (pages) => {
       const r = await ask('Import Structures from PDF', [
         { name: 'from', label: 'From page', type: 'number', value: '1' },
-        { name: 'to', label: 'To page', type: 'number', value: String(Math.min(pages, 40)) },
-      ], { ok: 'Read', note: `${f.name} has ${pages} pages. Which shall be read? (40 or fewer at a time.)` });
+        { name: 'to', label: 'To page', type: 'number', value: String(Math.min(pages, MOST_PAGES)) },
+      ], { ok: 'Find Structures', note: `${f.name} has ${pages} pages. Which shall be searched for structures? (${MOST_PAGES} or fewer at a time.) They are found on this computer; you then choose which to read.` });
       if (!r) return null;
       const a = Math.max(1, Math.min(pages, Math.round(Number(r.from) || 1)));
-      return [a, Math.max(a, Math.min(pages, a + 39, Math.round(Number(r.to) || a)))];
+      return [a, Math.max(a, Math.min(pages, a + MOST_PAGES - 1, Math.round(Number(r.to) || a)))];
     }, (msg) => flash(msg, 20000));
   } catch (e) {
     await showError(`Could not read ${f.name}: ${String(e)}`);
     return;
   }
   if (!found) return;
-  if (!found.length) { flash('No drawings were found in this PDF. If its pages are scans, try Import Structures from Picture on a screenshot.', 8000); return; }
-  flash(`Found ${found.length} drawings.`);
+  const { found: drawings, pages } = found;
+  if (!drawings.length) { flash('No drawings were found in this PDF. If its pages are scans, try Import Structures from Picture on a screenshot.', 8000); return; }
+  flash(`Found ${drawings.length} drawings.`);
   const place: ImportHost['place'] = (chosen) => {
     const gone = !ws.tabs.includes(from);
     if (gone) ws.newDrawing();
@@ -3411,7 +3412,8 @@ async function readPdf(f: { name: string; bytes: Uint8Array }, from: Tab): Promi
     importHost.place(chosen);
     if (gone) flash(`${from.name} was closed while the pages were read, so the structures were placed in a new drawing. Check them against the pictures.`, 8000);
   };
-  await importPictures({ ...importHost, place }, found, {
+  await importPdfDrawings({ ...importHost, place }, drawings, pages, {
+    file: f.name,
     title: 'Import Structures from PDF',
     note: `${f.name}: each drawing found, beside the structure read from it. Ones the reader is sure of are ticked; check each against its picture, fix a SMILES or tick more, then place them.`,
     tickDoubtful: false,
