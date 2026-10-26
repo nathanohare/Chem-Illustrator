@@ -6096,6 +6096,8 @@ const updates = new UpdateUI({
   skipped: () => skipVersion,
   skip: (v) => { skipVersion = v; storeSettings(); },
   channel: () => updateChannel,
+  // as when the window closes: the recovery copies and lock files aren't needed
+  closing: async () => { await keeper.end(); await diagnostics.end(); },
 });
 for (const el of document.querySelectorAll<HTMLElement>('.desktop-only')) el.hidden = !canUpdate;
 let versionText = canUpdate ? '' : 'Web version';
