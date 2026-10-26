@@ -222,6 +222,25 @@ export function kekulize(doc: Doc, bonds: Iterable<number>): number {
     const b = doc.bonds.get(id)!;
     for (const a of [b.a1, b.a2]) for (const n of doc.adj.get(a) ?? []) { const o = doc.bonds.get(n)!; if (o.circle && o.order === 1.5 && !todo.has(n)) stack.push(n); }
   }
+  const chosen = kekuleDoubles(doc, todo);
+  if (!chosen) return -1;
+  const paired = new Set([...chosen].flatMap((id) => { const b = doc.bonds.get(id)!; return [b.a1, b.a2]; }));
+  const atoms = [...new Set([...todo].flatMap((id) => { const b = doc.bonds.get(id)!; return [b.a1, b.a2]; }))];
+  for (const id of todo) doc.updateBond(id, { order: chosen.has(id) ? 2 : 1, circle: undefined });
+  // an NH label written when the ring was circled goes back to an automatic one
+  for (const id of atoms) {
+    const a = doc.atoms.get(id)!;
+    if (a.label === SYMBOLS[a.z] + 'H' && !paired.has(id) && implicitHydrogens(a.z, doc.valenceSum(id), a.charge) === 1) doc.updateAtom(id, { label: null });
+  }
+  return rings.length;
+}
+
+/**
+ * Which of these bonds (a set of 1½ bonds) to make double so every neutral carbon has one
+ * double bond; N, O, S and charged atoms (tropylium's C⁺, cyclopentadienide's C⁻) may go
+ * without. Null when no such pattern exists. The drawing is not changed.
+ */
+export function kekuleDoubles(doc: Doc, todo: Set<number>): Set<number> | null {
   const atoms = [...new Set([...todo].flatMap((id) => { const b = doc.bonds.get(id)!; return [b.a1, b.a2]; }))];
   // an atom already double-bonded outside the rings (a quinone's C=O) needs none inside
   const optional = (id: number) => {
@@ -246,12 +265,5 @@ export function kekulize(doc: Doc, bonds: Iterable<number>): number {
     }
     return optional(a) && solve(i + 1);
   };
-  if (!solve(0)) return -1;
-  for (const id of todo) doc.updateBond(id, { order: chosen.has(id) ? 2 : 1, circle: undefined });
-  // an NH label written when the ring was circled goes back to an automatic one
-  for (const id of atoms) {
-    const a = doc.atoms.get(id)!;
-    if (a.label === SYMBOLS[a.z] + 'H' && !paired.has(id) && implicitHydrogens(a.z, doc.valenceSum(id), a.charge) === 1) doc.updateAtom(id, { label: null });
-  }
-  return rings.length;
+  return solve(0) ? chosen : null;
 }

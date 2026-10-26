@@ -7,6 +7,7 @@ import { metalCarbonyl } from './hapto';
 import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, valenceOfBonds } from './elements';
 import { CARBONYL_LIGAND, isCarbonylLabel, kekulize, labelDonates, labelGraph, MiniGraph } from './labels';
 import { stereoAnchor, stereoSense } from './stereo';
+import { kekuleDoubles } from './aromatic';
 
 export interface MolExport {
   molblock: string;
@@ -134,6 +135,29 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
         prev = cur; cur = next.a1 === cur ? next.a2 : next.a1; k++;
       }
     }
+  }
+  // A charged atom in a ring of 1½ bonds (tropylium's C⁺, cyclopentadienide's C⁻) takes its
+  // hydrogen from the double bonds it hasn't got, which aromatic bonds alone don't tell the
+  // engine (it gives C⁺ with two aromatic bonds no H, and can't kekulize the ring): the ring is
+  // written with alternating bonds instead, the charged atom left without a double bond.
+  const seen15 = new Set<number>();
+  for (const id of ids) {
+    const a = doc.atoms.get(id)!;
+    if (!a.charge || a.label || charged.has(id)) continue;
+    const start = (doc.adj.get(id) ?? []).filter((bid) => doc.bonds.get(bid)!.order === 1.5 && !kekule.has(bid) && !seen15.has(bid));
+    if (!start.length) continue;
+    const part = new Set<number>();
+    const stack = [...start];
+    while (stack.length) {
+      const bid = stack.pop()!;
+      const b = doc.bonds.get(bid)!;
+      if (part.has(bid) || kekule.has(bid) || !inSet.has(b.a1) || !inSet.has(b.a2)) continue;
+      part.add(bid);
+      for (const at of [b.a1, b.a2]) for (const n of doc.adj.get(at) ?? []) if (doc.bonds.get(n)!.order === 1.5 && !part.has(n)) stack.push(n);
+    }
+    for (const bid of part) seen15.add(bid);
+    const doubles = kekuleDoubles(doc, part);
+    if (doubles) for (const bid of part) kekule.set(bid, doubles.has(bid) ? 2 : 1);
   }
   for (const id of ids) {
     const a = doc.atoms.get(id)!;
