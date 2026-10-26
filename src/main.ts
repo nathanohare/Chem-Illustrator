@@ -69,7 +69,7 @@ import { writePdf, jpegInfo, PdfPage, PdfImage } from './io/pdf';
 import { SlideList } from './ui/slide-list';
 import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel } from './ui/design-panel';
 import { ShapeMenu } from './ui/shape-menu';
-import { loadIcons, whenIconsLoaded } from './design/icons';
+import { whenIconsLoaded } from './design/icons';
 import { SlideTextRibbon } from './ui/slide-text-ribbon';
 import { CaptionEditor } from './ui/caption-editor';
 import { LayersPanel } from './ui/layers-panel';
@@ -7404,14 +7404,14 @@ registerBundledFonts(() => {
     docMode.fontsChanged();
   }, 50);
 });
-// the icon library loads on its own once the window is up; then anything with icons in it is drawn again
+// the icon library loads the first time something needs it (Design > Icons, a file with icons in it, a
+// diagram); then anything with icons in it is drawn again
 whenIconsLoaded(() => {
   // (only a drawing with shapes can hold icons: a big structure opened at start-up isn't drawn twice)
   if (doc.shapes.size) doc.allDirty = true;
   editor.changed();
   docMode.fontsChanged();
 });
-setTimeout(() => void loadIcons().catch(() => flash('The icon library could not be loaded.')), 0);
 applyRibbonIcons();
 
 const stylePanel = new StylePanel($('#style-section'), $('#style-body'), doc, () => editor.sel, () => editor.changed());
