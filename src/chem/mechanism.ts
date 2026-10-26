@@ -65,12 +65,22 @@ function labelReach(c: Vec, boxes: Rect[], d: Vec): number {
 }
 
 /** How far from an atom an arrow should stop when it leaves or reaches it along d. */
-function stopAt(doc: Doc, m: Measure, id: number, d: Vec): number {
+function stopAt(doc: Doc, m: Measure, id: number, d: Vec, end: 'start' | 'end' = 'end'): number {
   const a = doc.atoms.get(id)!;
   const L = doc.style.bondLength;
   const boxes = m.atomBoxes(a);
+  const gap = arrowGaps[end];
+  // a bare carbon's corner keeps the same extra room beyond the gap as it has by default
+  if (gap !== null) return boxes.length ? labelReach(a, boxes, d) + gap : (BARE - CLEAR) * L + gap;
   return boxes.length ? labelReach(a, boxes, d) + CLEAR * L : BARE * L;
 }
+
+/**
+ * The space left between a mechanism arrow's end and the atom label (or bare atom) or lone pair it
+ * starts or ends at, in points (Settings ▸ Drawing). Null: the usual space, which scales with the
+ * bond length.
+ */
+export const arrowGaps: { start: number | null; end: number | null } = { start: null, end: null };
 
 const shapeCentre = (s: Shape): Vec => ({ x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 });
 
@@ -199,7 +209,7 @@ function pushArrowAt(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, o: PushOp
   let lean: Vec | null = null;
   if (from.kind === 'atom') {
     const d = lonePairDir(doc, from.id, c1);
-    tail = add(c0, mul(d, stopAt(doc, m, from.id, d)));
+    tail = add(c0, mul(d, stopAt(doc, m, from.id, d, 'start')));
     lean = d;
   } else if (from.kind === 'pair') {
     const pair = doc.shapes.get(from.id)!;
@@ -208,7 +218,7 @@ function pushArrowAt(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, o: PushOp
     const d = owner !== null ? norm(sub(pc, doc.atoms.get(owner)!)) : norm(sub(c1, pc));
     // just outside the dots (or the circled charge)
     const size = Math.max(pair.x2 - pair.x1, pair.y2 - pair.y1);
-    tail = add(pc, mul(d, Math.max(0.09 * L, size / 2 + 0.05 * L)));
+    tail = add(pc, mul(d, arrowGaps.start !== null ? size / 2 + arrowGaps.start : Math.max(0.09 * L, size / 2 + 0.05 * L)));
     lean = d;
   }
   const chord = dist(tail, c1);

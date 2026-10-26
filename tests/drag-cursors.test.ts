@@ -59,6 +59,13 @@ describe('the pointer', () => {
     expect(at({ over: 'chem', overSelection: true, ctrl: true })).toBe('copy');
     expect(at({ tool: 'bond', over: 'chem', overSelection: true, ctrl: true })).toBe('copy');
   });
+  it('is the grab hand over an arrow\'s line with the select tool, where a drag moves the whole arrow', () => {
+    expect(at({ over: 'object', arrow: true })).toBe('grab');
+    expect(at({ over: 'object', arrow: true, slides: true })).toBe('grab');
+    expect(at({ over: 'object', arrow: true, ctrl: true })).toBe('copy');
+    // other tools draw from an arrow rather than move it
+    expect(at({ tool: 'arrow', over: 'object', arrow: true })).toBe('crosshair');
+  });
   it('keeps the usual arrow in Slides, as in PowerPoint', () => {
     expect(at({ slides: true })).toBe('');
     expect(at({ slides: true, over: 'object' })).toBe('move');
@@ -80,5 +87,8 @@ describe('the pointer', () => {
     // the middle of an arrow bends it: its own pointer, not the hand that moves things
     expect(handleCursor('mid')).toBe(BEND);
     expect(handleCursor('b0')).toBe(BEND);
+    // a join between two curves moves that point, not the whole arrow
+    expect(handleCursor('b2')).toBe('move');
+    expect(handleCursor('b3')).toBe(BEND);
   });
 });
