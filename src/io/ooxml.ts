@@ -182,13 +182,35 @@ export function resolvePath(from: string, target: string): string {
   return parts.join('/');
 }
 
+/** Thrown for an Office or OpenDocument file whose parts would unpack to too much. */
+export class ZipTooBigError extends Error {}
+
+const MB = 1024 * 1024;
+/** The most one part of an Office or OpenDocument file may unpack to, and all its parts together. */
+const MAX_PART = 256 * MB, MAX_UNPACKED = 1024 * MB;
+
+/**
+ * Unpack an Office or OpenDocument file (a zip). A small hostile or damaged zip can hold parts that
+ * unpack to gigabytes, so the sizes in the zip's own list of contents are checked first, and a
+ * file over the limits is refused before anything is unpacked (no part is unpacked past its listed size).
+ */
+export function unzipPackage(bytes: Uint8Array): Record<string, Uint8Array> {
+  let total = 0, largest = 0;
+  unzipSync(bytes, { filter: (f) => { total += f.originalSize; largest = Math.max(largest, f.originalSize); return false; } });
+  if (largest > MAX_PART || total > MAX_UNPACKED) {
+    const what = largest > MAX_PART ? `one of its parts unpacks to ${Math.round(largest / MB)} MB (at most ${MAX_PART / MB} MB is read)` : `it unpacks to ${Math.round(total / MB)} MB (at most ${MAX_UNPACKED / MB} MB is read)`;
+    throw new ZipTooBigError(`This file is too big to open: ${what}. It may be damaged.`);
+  }
+  return unzipSync(bytes);
+}
+
 /** A package being read. */
 export class PackageReader {
   private files: Record<string, Uint8Array>;
   private relCache = new Map<string, Map<string, { type: string; target: string; external: boolean }>>();
 
   constructor(bytes: Uint8Array) {
-    this.files = unzipSync(bytes);
+    this.files = unzipPackage(bytes);
   }
 
   has(path: string): boolean {

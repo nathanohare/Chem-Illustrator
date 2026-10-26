@@ -4,12 +4,12 @@
 // widths, row heights, and bold, italic, colours and alignment are read. Files are only read:
 // saving writes .xlsx.
 
-import { unzipSync, strFromU8 } from 'fflate';
+import { strFromU8 } from 'fflate';
 import { Workbook, CellStyle } from '../sheet/workbook';
 import { quoteSheet, Range, MAX_COLS, MAX_ROWS } from '../sheet/refs';
 import { normalizeFormula } from '../sheet/formula';
 import { dateSerial } from '../sheet/dates';
-import { kids, kid } from './ooxml';
+import { kids, kid, unzipPackage, ZipTooBigError } from './ooxml';
 import { textInput } from './xlsx';
 import { uniqueSheetName } from './sheet-files';
 
@@ -213,9 +213,9 @@ const oAttr = (el: Element, name: string) => el.getAttributeNS(OFFICE, name);
 export function readOds(bytes: Uint8Array): { book: Workbook; warnings: string[] } {
   let files: Record<string, Uint8Array>;
   try {
-    files = unzipSync(bytes);
-  } catch {
-    throw new Error('This is not an OpenDocument spreadsheet (or it is damaged).');
+    files = unzipPackage(bytes);
+  } catch (e) {
+    throw e instanceof ZipTooBigError ? e : new Error('This is not an OpenDocument spreadsheet (or it is damaged).');
   }
   if (files['META-INF/manifest.xml'] && /encryption-data/.test(strFromU8(files['META-INF/manifest.xml']))) {
     throw new Error('This spreadsheet is protected with a password. Open it in LibreOffice, take the password off, and save it again.');

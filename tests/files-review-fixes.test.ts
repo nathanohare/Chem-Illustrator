@@ -10,6 +10,9 @@ import { newDocument, runStyleOf } from '../src/document/document';
 import { emfToSvg } from '../src/render/emf-read';
 import { Workbook } from '../src/sheet/workbook';
 import { writeXlsx, readXlsx, type XlsxPictures } from '../src/io/xlsx';
+import { readOdt, writeOdt } from '../src/io/odt';
+import { readOds } from '../src/io/ods';
+import { readPptx } from '../src/io/pptx-read';
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
 const deps: DocxDeps = { async picture() { return null; }, async svgToPng() { return PNG; } };
@@ -100,4 +103,47 @@ describe('Excel drawings', () => {
     expect(performance.now() - t0).toBeLessThan(1000);
     expect(back.book.sheet.objects).toHaveLength(1);
   }, 120_000);
+});
+
+describe('zip bombs', () => {
+  const MB = 1024 * 1024;
+  const refusal = async (f: () => unknown) => { try { await f(); return null; } catch (e) { return (e as Error).message; } };
+
+  it('a 0.3 MB .xlsx with a 300 MB junk part is refused before it is unpacked', async () => {
+    const files = copy(unzipSync(await writeXlsx(new Workbook(['Sheet1']), pictures)));
+    files['xl/media/junk.bin'] = new Uint8Array(300 * MB);
+    const bomb = zipSync(files, { level: 9 });
+    expect(bomb.length).toBeLessThan(0.5 * MB);
+    expect(await refusal(() => readXlsx(bomb))).toMatch(/too big to open: one of its parts unpacks to 300 MB/);
+  }, 60_000);
+
+  /** A zip whose list of contents says one part unpacks to `size` bytes (and each part to 300 MB). */
+  function claiming(files: Record<string, Uint8Array>, size: (name: string) => number): Uint8Array {
+    const z = zipSync(files);
+    const dv = new DataView(z.buffer, z.byteOffset, z.byteLength);
+    for (let at = 0; at + 46 <= z.length; at++) {
+      if (dv.getUint32(at, true) !== 0x02014b50) continue;
+      const n = dv.getUint16(at + 28, true);
+      dv.setUint32(at + 24, size(strFromU8(z.subarray(at + 46, at + 46 + n))), true);
+    }
+    return z;
+  }
+
+  it('Word, PowerPoint, OpenDocument text and spreadsheet files are held to the same limits', async () => {
+    const d = newDocument();
+    d.runs = [{ ...runStyleOf(d.styles.Normal), text: 'x' }];
+    const docx = copy(unzipSync(await writeDocx(d, deps)));
+    const odt = copy(unzipSync(await writeOdt(d)));
+    // each part says 300 MB: one part too big
+    const big = () => 300 * MB;
+    expect(await refusal(() => readDocx(claiming(docx, big)))).toMatch(/too big to open/);
+    expect(await refusal(() => readOdt(claiming(odt, big)))).toMatch(/too big to open/);
+    expect(await refusal(() => readOds(claiming({ mimetype: u8('application/vnd.oasis.opendocument.spreadsheet'), 'content.xml': u8('<x/>') }, big)))).toMatch(/too big to open/);
+    expect(await refusal(() => readPptx(claiming({ '[Content_Types].xml': u8('<x/>') }, big)))).toMatch(/too big to open/);
+    // five parts of 250 MB: too much in all
+    const five = Object.fromEntries([1, 2, 3, 4, 5].map((i) => [`word/media/p${i}.bin`, u8('x')]));
+    expect(await refusal(() => readDocx(claiming({ ...docx, ...five }, (n) => (n.startsWith('word/media/p') ? 250 * MB : 1000))))).toMatch(/it unpacks to 1250 MB/);
+    // an ordinary file still opens
+    expect(await refusal(() => readDocx(zipSync(docx)))).toBeNull();
+  });
 });

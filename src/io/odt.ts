@@ -5,13 +5,13 @@
 // tables, pictures, footnotes and endnotes, links, and the page's size and margins from
 // styles.xml. What ODT can't hold of ours (live fields, citations) is saved as the text it shows.
 
-import { unzipSync, strFromU8, strToU8, Zip, ZipDeflate, ZipPassThrough } from 'fflate';
+import { strFromU8, strToU8, Zip, ZipDeflate, ZipPassThrough } from 'fflate';
 import * as rt from '../richtext';
 import type { Contents, Justify, ParaStyle, TableCell, TableData, TextRun } from '../model';
 import type { DocStyle } from '../style';
 import { fieldTexts, styleOf, type DocObject, type DocText } from '../document/document';
 import { fitParas, paraCount, splitParagraphs } from '../text/paragraphs';
-import { kid, kids } from './ooxml';
+import { kid, kids, unzipPackage, ZipTooBigError } from './ooxml';
 import { DocBuilder, headingId, styleIdOf } from './doc-build';
 
 const NS = {
@@ -359,9 +359,9 @@ function pictureMime(name: string, b?: Uint8Array): string | null {
 export function readOdt(bytes: Uint8Array): { doc: DocText; warnings: string[] } {
   let files: Record<string, Uint8Array>;
   try {
-    files = unzipSync(bytes);
-  } catch {
-    throw new Error('This is not an OpenDocument text (or it is damaged).');
+    files = unzipPackage(bytes);
+  } catch (e) {
+    throw e instanceof ZipTooBigError ? e : new Error('This is not an OpenDocument text (or it is damaged).');
   }
   if (files['META-INF/manifest.xml'] && /encryption-data/.test(strFromU8(files['META-INF/manifest.xml']))) {
     throw new Error('This document is protected with a password. Open it in LibreOffice, take the password off, and save it again.');

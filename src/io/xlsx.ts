@@ -14,7 +14,7 @@
 // a structure whose SMILES was changed in Excel, or a calculated value typed over there, stays
 // as Excel left it.
 
-import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr } from './ooxml';
+import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr, ZipTooBigError } from './ooxml';
 import { officeTarget, linkFromTarget } from '../links';
 import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side, makeStructure } from '../sheet/workbook';
 import { keyOf, rowOf, colOf, colName, cellName, parseRange, quoteSheet, Range, MAX_COLS, rangesOverlap, rangeName, inRange, MAX_ROWS } from '../sheet/refs';
@@ -979,8 +979,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   let pkg: PackageReader;
   try {
     pkg = new PackageReader(bytes);
-  } catch {
-    throw new Error('This is not an Excel workbook (or it is damaged).');
+  } catch (e) {
+    throw e instanceof ZipTooBigError ? e : new Error('This is not an Excel workbook (or it is damaged).');
   }
   const wbPath = pkg.relOfType('', REL.officeDocument) ?? 'xl/workbook.xml';
   const wbDoc = pkg.xml(wbPath);
