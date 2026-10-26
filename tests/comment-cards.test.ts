@@ -4,6 +4,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { threadCard, type ThreadActions } from '../src/ui/comment-cards';
+import { freeSpot } from '../src/ui/slide-comments';
 
 const actions = (): ThreadActions => ({ edit: vi.fn(), reply: vi.fn(), removeReply: vi.fn(), resolve: vi.fn(), remove: vi.fn(), focus: vi.fn(), cancelNew: vi.fn() });
 
@@ -32,5 +33,19 @@ describe('comment cards', () => {
     const a = actions();
     typeAndEscape('Old text', 'New text', a);
     expect(a.edit).toHaveBeenCalledWith('Old text');
+  });
+});
+
+describe('slide comment markers', () => {
+  const size = { w: 960, h: 540 };
+  it('puts a new marker where asked when the place is free', () => {
+    expect(freeSpot({ x: 8, y: 8 }, [], size)).toEqual({ x: 8, y: 8 });
+  });
+  it('moves a new marker below the ones already there', () => {
+    const a = freeSpot({ x: 8, y: 8 }, [{ x: 8, y: 8 }], size);
+    expect(a.x).toBe(8);
+    expect(a.y).toBeGreaterThanOrEqual(30);
+    const b = freeSpot({ x: 8, y: 8 }, [{ x: 8, y: 8 }, a], size);
+    expect(b.y).toBeGreaterThan(a.y);
   });
 });

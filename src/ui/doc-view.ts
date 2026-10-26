@@ -74,6 +74,8 @@ export class DocView {
   gridlines = false;
   /** Pages side by side in one row, scrolled across (View > Side to Side, and Read Mode). */
   sideways = false;
+  /** Read Mode: only these pages are drawn (the two being read), or all. */
+  shownPages: ((index: number) => boolean) | null = null;
   /** Read Mode: the wheel turns the pages two at a time instead of scrolling. */
   turnPages: ((dir: 1 | -1) => void) | null = null;
   private wheelSum = 0;
@@ -131,7 +133,7 @@ export class DocView {
   /** Where a page sits in the scrolled area, in points from the top left of the first (before zooming). */
   place(p: PageBox, lay: DocLayout): { x: number; y: number } {
     if (this.endless) return { x: 0, y: p.top };
-    const W = lay.pageW + PAGE_GAP, H = lay.pageH + PAGE_GAP;
+    const W = lay.pageW + this.gapX, H = lay.pageH + PAGE_GAP;
     if (this.sideways) return { x: p.index * W, y: 0 };
     if (this.perRow > 1) return { x: (p.index % this.perRow) * W, y: Math.floor(p.index / this.perRow) * H };
     return { x: 0, y: p.top };
@@ -140,16 +142,47 @@ export class DocView {
   /** The size of everything shown, in points: the pages as arranged, or the long sheet down to its last line. */
   private extent(lay: DocLayout): { w: number; h: number } {
     const n = lay.pages.length;
-    const W = lay.pageW + PAGE_GAP, H = lay.pageH + PAGE_GAP;
+    const W = lay.pageW + this.gapX, H = lay.pageH + PAGE_GAP;
     if (this.endless) {
       let bottom = 0;
       for (const l of lay.text.lines) bottom = Math.max(bottom, l.y + (l.below ?? l.descent));
       for (const o of lay.objects) bottom = Math.max(bottom, o.y + o.h);
       return { w: lay.pageW, h: bottom + SHEET_MARGIN + 0.5 * Math.max(0, this.scroller.clientHeight / this.zoom) };
     }
-    if (this.sideways) return { w: n * W - PAGE_GAP, h: lay.pageH };
-    if (this.perRow > 1) return { w: Math.min(this.perRow, n) * W - PAGE_GAP, h: Math.ceil(n / this.perRow) * H - PAGE_GAP };
+    // (the last page's comments have the room sizeSpace keeps beside the pages)
+    if (this.sideways) return { w: n * W - this.gapX, h: lay.pageH };
+    if (this.perRow > 1) return { w: Math.min(this.perRow, n) * W - this.gapX, h: Math.ceil(n / this.perRow) * H - PAGE_GAP };
     return { w: lay.pageW, h: lay.pages[n - 1].top + lay.pageH };
+  }
+
+  /** More than one page across (Side to Side, Read Mode, Multiple Pages): each has its comments beside it. */
+  private get across(): boolean {
+    return !this.endless && (this.sideways || this.perRow > 1);
+  }
+
+  /** The room between pages side by side, in points: with the comments' column when they show. */
+  private get gapX(): number {
+    return PAGE_GAP + (this.across ? this.gutter / this.zoom : 0);
+  }
+
+  /**
+   * How many columns of comments to make room for when fitting n pages across: one for each in
+   * Read Mode and Multiple Pages, which show just those pages; Side to Side scrolls across anyway,
+   * so the pages aren't made tiny for it.
+   */
+  private gutters(n: number): number {
+    return this.across && (this.turnPages || !this.sideways) ? n : 1;
+  }
+
+  /** Whether a page is drawn (Read Mode draws only the two being read). */
+  pageShown(index: number): boolean {
+    return !this.shownPages || this.shownPages(index);
+  }
+
+  /** The page a point of the document (points) is on, by its number. */
+  pageIndexAt(y: number): number {
+    const lay = this.layout;
+    return lay ? this.pageAt(lay, y).index : 0;
   }
 
   resize(): void {
@@ -228,7 +261,10 @@ export class DocView {
   /** The pages and the room beside them are wider than the view. */
   overflows(): boolean {
     const lay = this.layout;
-    return !!lay && this.extent(lay).w * this.zoom + 2 * PAD_X + this.gutter > this.scroller.clientWidth;
+    if (!lay) return false;
+    // pages side by side scroll across anyway: what matters is the two in view and their comments
+    if (this.sideways) { const n = Math.min(2, lay.pages.length); return n * lay.pageW * this.zoom + this.gutters(n) * this.gutter + 2 * PAD_X > this.scroller.clientWidth; }
+    return this.extent(lay).w * this.zoom + 2 * PAD_X + this.gutter > this.scroller.clientWidth;
   }
 
   /** Web Layout and Outline: the width of the window, in points, for the text to wrap to. */
@@ -265,8 +301,10 @@ export class DocView {
   fitWidth(): void {
     const lay = this.layout;
     if (!lay) return;
-    const w = this.sideways ? 2 * lay.pageW + PAGE_GAP : this.extent(lay).w;
-    this.setZoom((this.scroller.clientWidth - 2 * PAD_X - 16 - this.gutter) / w);
+    const n = !this.across ? 1 : Math.min(this.sideways ? 2 : this.perRow, lay.pages.length);
+    const w = this.across ? n * lay.pageW + (n - 1) * PAGE_GAP : this.extent(lay).w;
+    // a column of comments beside each page across
+    this.setZoom((this.scroller.clientWidth - 2 * PAD_X - 16 - this.gutters(n) * this.gutter) / w);
   }
 
   /** Zoom so whole pages show: one (One Page), or a row of them (Multiple Pages, Side to Side: two). */
@@ -275,7 +313,7 @@ export class DocView {
     if (!lay) return;
     const n = this.sideways ? Math.min(2, lay.pages.length) : Math.min(this.perRow, lay.pages.length);
     const w = n * lay.pageW + (n - 1) * PAGE_GAP;
-    const kx = (this.scroller.clientWidth - 2 * PAD_X - this.gutter - (this.sideways ? 0 : 16)) / w;
+    const kx = (this.scroller.clientWidth - 2 * PAD_X - this.gutters(n) * this.gutter - (this.sideways ? 0 : 16)) / w;
     const ky = (this.scroller.clientHeight - 2 * PAD_Y - (this.sideways ? 16 : 0)) / lay.pageH;
     this.setZoom(Math.min(kx, ky));
   }
@@ -392,7 +430,7 @@ export class DocView {
     const visible = lay.pages.filter((p) => {
       const pos = this.place(p, lay);
       const x = ox + pos.x * k, y = oy + pos.y * k;
-      return x < this.w && x + lay.pageW * k > 0 && y < this.h && y + lay.pageH * k > 0;
+      return x < this.w && x + lay.pageW * k > 0 && y < this.h && y + lay.pageH * k > 0 && this.pageShown(p.index);
     });
     ctx.fontKerning = 'none';
     if (!endless) for (const p of visible) { at(p); this.paper(ctx, p, lay); }
