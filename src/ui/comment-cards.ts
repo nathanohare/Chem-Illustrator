@@ -33,7 +33,10 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
   return e;
 };
 
-/** A text box for a note: Enter saves (Shift+Enter starts a new line), Escape stops. */
+/**
+ * A text box for a note: Enter saves (Shift+Enter starts a new line), Escape stops. Escape keeps
+ * what was typed into a new note or reply (as Word does) and takes back changes to an old one.
+ */
 function noteBox(value: string, placeholder: string, save: (text: string) => void, stop: () => void): HTMLTextAreaElement {
   const ta = el('textarea', 'cmt-input');
   ta.value = value;
@@ -50,7 +53,7 @@ function noteBox(value: string, placeholder: string, save: (text: string) => voi
   ta.addEventListener('keydown', (e) => {
     e.stopPropagation();
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); finish(true); }
-    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(!value && !!ta.value.trim()); }
   });
   ta.addEventListener('input', () => { ta.rows = Math.min(8, Math.max(2, ta.value.split('\n').length)); });
   ta.addEventListener('blur', () => finish(true));
