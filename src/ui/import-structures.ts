@@ -4,7 +4,7 @@
 
 import { ask } from './ask';
 import { openReview, pixelsPng, type FoundPicture } from './import-review';
-import { canReadHere, downloadPack, localReader, packReady, readWithAi, PACK_MB, type ReadResult } from '../recognise/reader';
+import { canReadHere, cancelPack, downloadPack, localReader, packReady, readWithAi, PACK_MB, type ReadResult } from '../recognise/reader';
 import { checkRead, type Checked, type Engine } from '../recognise/check';
 import { cleanPhoto, shrinkTo, type Pixels } from '../recognise/picture';
 import { findDrawings, isProse, type Box } from '../recognise/find';
@@ -66,14 +66,25 @@ async function chooseReader(host: ImportHost, preferAi: boolean): Promise<'here'
   bar.style.width = '100%';
   const h = document.createElement('h2');
   h.textContent = 'Downloading the structure reader…';
-  d.append(h, bar);
-  d.addEventListener('cancel', (e) => e.preventDefault());
+  // Cancel (or Esc) drops the download; what was fetched of a file is fetched again next time
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.textContent = 'Cancel';
+  const buttons = document.createElement('p');
+  buttons.className = 'ask-buttons';
+  buttons.append(cancel);
+  d.append(h, bar, buttons);
+  let cancelled = false;
+  const stop = () => { if (cancelled) return; cancelled = true; cancel.disabled = true; h.textContent = 'Stopping the download…'; void cancelPack().catch(() => {}); };
+  cancel.addEventListener('click', stop);
+  d.addEventListener('cancel', (e) => { e.preventDefault(); stop(); });
   document.body.append(d);
   d.showModal();
   try {
     await downloadPack((share) => { bar.value = share; });
     return 'here';
   } catch (e) {
+    if (cancelled) return null;
     await ask('Import Structures', [], { noCancel: true, note: 'The structure reader could not be downloaded: ' + (e instanceof Error ? e.message : String(e)) });
     return null;
   } finally {

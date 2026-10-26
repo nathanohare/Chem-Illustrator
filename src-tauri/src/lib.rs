@@ -358,6 +358,7 @@ pub fn run() {
             ai::ai_request,
             recognise::pack_ready,
             recognise::pack_download,
+            recognise::pack_cancel,
             recognise::pack_read
         ])
         .build(tauri::generate_context!())
