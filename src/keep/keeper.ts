@@ -92,6 +92,7 @@ export class Keeper {
     window.addEventListener('focus', () => { this.lastDisk = 0; this.lastLocks = 0; });
     if (desktop) {
       try { this.me = await invoke<{ user: string; host: string }>('who_am_i'); } catch { /* names stay blank */ }
+      await this.clearStrayLocks().catch(() => {});
     }
     this.timer = window.setInterval(() => void this.tick(), TICK_MS);
     // files opened before the timer started (a workspace, a file given when starting)
@@ -108,7 +109,7 @@ export class Keeper {
     if (this.ended) return;
     this.ended = true;
     clearInterval(this.timer);
-    await Promise.all([...this.locks.values()].map((p) => invoke('remove_lock_file', { path: p }).catch(() => {})));
+    await Promise.all([...new Set(this.locks.values())].map((p) => invoke('remove_lock_file', { path: p }).catch(() => {})));
     this.locks.clear();
     await this.recovery.end().catch(() => {});
   }
@@ -342,8 +343,9 @@ export class Keeper {
       const h = parseLock(new TextDecoder().decode(await readPath(lockPath(path))));
       if (h) {
         const mine = h.by === 'app' && h.session === this.recovery.session;
-        // left behind by a copy of this app on this computer that has stopped
+        // left behind by a copy of this app on this computer that has stopped: it goes
         const stale = h.by === 'app' && h.user === this.me.user && h.host === this.me.host && !!h.session && !(await this.recovery.running(h.session));
+        if (stale && !this.hasLock(lockPath(path))) await invoke('remove_lock_file', { path: lockPath(path) }).catch(() => {});
         if (!mine && !stale) return h;
       }
     } catch { /* no lock file */ }
@@ -385,6 +387,9 @@ export class Keeper {
         try {
           await invoke('write_lock_file', { path: lockPath(path), contents: lockText(this.me, this.recovery.session) });
           this.locks.set(t.id, lockPath(path));
+          this.noteLocks();
+          // closed (or saved somewhere else) while the lock was being written: it goes again
+          if (this.ended || !this.ws.tabs.includes(t) || t.ref.kind !== 'path' || t.ref.path !== path) await this.unlock(t, { kind: 'path', path });
         } catch { /* a read-only folder: no lock, nothing else changes */ }
       } else if (!p.lockFiles && this.locks.has(t.id)) await this.unlock(t, t.ref);
     }
@@ -422,9 +427,31 @@ export class Keeper {
     const lock = this.locks.get(t.id);
     if (!lock || ref.kind !== 'path' || lock !== lockPath(ref.path)) return;
     this.locks.delete(t.id);
-    const other = this.ws.fileTabs.find((o) => o !== t && o.ref.kind === 'path' && o.ref.path === ref.path);
+    const other = this.ended ? undefined : this.ws.fileTabs.find((o) => o !== t && o.ref.kind === 'path' && o.ref.path === ref.path);
     if (other) { this.locks.set(other.id, lock); return; }
-    await invoke('remove_lock_file', { path: lock }).catch(() => {});
+    if (!this.hasLock(lock)) await invoke('remove_lock_file', { path: lock }).catch(() => {});
+    this.noteLocks();
+  }
+
+  private hasLock(path: string): boolean {
+    return [...this.locks.values()].includes(path);
+  }
+
+  /** Write down the lock files there are now, for the start after a crash. */
+  private noteLocks(): void {
+    if (!this.ended) void this.recovery.setLocks([...this.locks.values()]).catch(() => {});
+  }
+
+  /** Take away the lock files a crashed copy of this app left beside files (only those it wrote itself). */
+  private async clearStrayLocks(): Promise<void> {
+    for (const s of await this.recovery.strayLocks()) {
+      for (const path of s.paths) {
+        try {
+          const h = parseLock(new TextDecoder().decode(await readPath(path)));
+          if (h?.by === 'app' && h.session === s.session) await invoke('remove_lock_file', { path });
+        } catch { /* gone already */ }
+      }
+    }
   }
 
   // ---------------------------------------------------------------- Recover Unsaved Work
