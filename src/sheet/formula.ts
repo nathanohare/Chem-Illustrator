@@ -316,12 +316,16 @@ export function parseFormula(text: string): Node {
   return tree;
 }
 
-/** A formula tidied as Excel does it: function names and references in capitals. Unreadable formulas come back as they are. */
-export function normalizeFormula(text: string): string {
+/**
+ * A formula tidied as Excel does it: function names and references in capitals, and a defined
+ * name called like a function (a LAMBDA one) spelt as the name is (`names`: capitals → as
+ * defined). Unreadable formulas come back as they are.
+ */
+export function normalizeFormula(text: string, names?: ReadonlyMap<string, string>): string {
   if (!text.startsWith('=')) return text;
   try {
     const toks = tokenize(text.slice(1));
-    return '=' + toks.map((t) => (t.t === 'ref' ? refText(t.v) : t.t === 'fn' || t.t === 'bool' ? t.s.toUpperCase() : t.s)).join('');
+    return '=' + toks.map((t) => (t.t === 'ref' ? refText(t.v) : t.t === 'fn' ? names?.get(t.v) ?? t.v : t.t === 'bool' ? t.s.toUpperCase() : t.s)).join('');
   } catch {
     return text;
   }

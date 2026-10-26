@@ -20,7 +20,7 @@ import { officeTarget, linkFromTarget } from '../links';
 import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side, makeStructure } from '../sheet/workbook';
 import { keyOf, rowOf, colOf, colName, cellName, parseRange, quoteSheet, Range, MAX_COLS, rangesOverlap, rangeName, inRange, MAX_ROWS, sheetNameProblem, fixSheetName } from '../sheet/refs';
 import { normalizeFormula, shiftFormula } from '../sheet/formula';
-import { fileFormula, legacyFormula, needsDynamic, readFileFormula } from '../sheet/array-formulas';
+import { callsName, fileFormula, legacyFormula, needsDynamic, readFileFormula } from '../sheet/array-formulas';
 import { DefinedName, isBuiltInName } from '../sheet/names';
 import { FUNCTION_NAMES } from '../sheet/evaluate';
 import { readTyped, isError, CellError, Value, EXCEL_ERRORS } from '../sheet/values';
@@ -454,6 +454,9 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   let imageNo = 0, drawingNo = 0, tableNo = 0, chartNo = 0, notesNo = 0, pivotNo = 0;
   const pivotCaches: string[] = [];
   let anyDynamic = false;
+  // calls to defined names (LAMBDA ones) are dynamic array formulas in Excel
+  const lambdaNames = new Set(book.names.map((n) => n.name.toUpperCase()));
+  const nameCase = book.nameCase();
   const persons = new Persons();
   pkg.defaultType('png', 'image/png');
   // drop-down lists too long for Excel to hold typed: their items on a hidden sheet, as Excel does itself
@@ -552,8 +555,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
           entry = { r, c, wrote: null, fix, formula: input, ...(sp ? { spill: [sp.r2, sp.c2] as [number, number] } : {}) };
         } else if (input?.startsWith('=') && header === undefined) {
           const sp = s.spills.get(k);
-          const dynamic = !!sp || s.spillWanted.has(k) || needsDynamic(input);
-          formula = excelFunctionNames(fileFormula(input, dynamic));
+          const dynamic = !!sp || s.spillWanted.has(k) || needsDynamic(input) || callsName(input, lambdaNames);
+          formula = excelFunctionNames(fileFormula(normalizeFormula(input, nameCase), dynamic));
           if (dynamic) { arrayRef = sp ? rangeName(sp) : ref; anyDynamic = true; }
         }
         if (!entry && fix) entry = { r, c, wrote: null, fix };
@@ -1090,6 +1093,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   if (sheetEls.some((s) => s.getAttribute('state') === 'hidden' || s.getAttribute('state') === 'veryHidden')) notKept.add('hidden sheets (shown here)');
   const definedNames = kids(kid(root, 'definedNames'), 'definedName');
   const nameSet = new Set(definedNames.map((d) => (d.getAttribute('name') ?? '').toUpperCase()));
+  const nameCase = new Map(definedNames.map((d) => [(d.getAttribute('name') ?? '').toUpperCase(), d.getAttribute('name') ?? '']));
 
   if (model?.drawingStyle) book.drawingStyle = { ...book.drawingStyle, ...model.drawingStyle };
 
@@ -1221,7 +1225,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
               if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
               const isArray = f.getAttribute('t') === 'array';
               // a formula from before arrays spilled keeps working out one value (Excel shows it with @)
-              input = normalizeFormula(isArray ? readFileFormula(text) : legacyFormula(readFileFormula(text)));
+              input = normalizeFormula(isArray ? readFileFormula(text) : legacyFormula(readFileFormula(text)), nameCase);
               const R = isArray ? parseRange(f.getAttribute('ref') ?? '') : null;
               if (R && (R.r2 > R.r1 || R.c2 > R.c1)) arrays.push({ R, r, c: col });
             }
@@ -1450,7 +1454,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       if (local !== null && !sheet) continue;
       if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
       names.push({
-        name, formula: normalizeFormula(readFileFormula(text)),
+        name, formula: normalizeFormula(readFileFormula(text), nameCase),
         ...(sheet ? { sheet } : {}),
         ...(d.getAttribute('comment') ? { comment: d.getAttribute('comment')! } : {}),
         ...(isOn(d.getAttribute('hidden')) ? { hidden: true } : {}),

@@ -505,7 +505,7 @@ export class Sheet {
   setInput(row: number, col: number, input: string): void {
     const old = this.cell(row, col);
     let style = old ? old.style : this.colStyles.get(col);
-    const text = input.startsWith('=') ? normalizeFormula(input) : input;
+    const text = input.startsWith('=') ? normalizeFormula(input, this.wb.nameCase()) : input;
     const typed = readTyped(text);
     if (typed.format && !this.styleAt(row, col)?.numFmt) style = patchStyleWith(style, { numFmt: typed.format });
     this.setCell(row, col, { input: text || undefined, style, link: old?.link });
@@ -1370,6 +1370,11 @@ export class Workbook {
   }
 
   /** Change the defined names, as one recorded change. */
+  /** The defined names, capitals → as defined (to spell calls to LAMBDA names as the name is). */
+  nameCase(): Map<string, string> {
+    return new Map(this.names.map((n) => [n.name.toUpperCase(), n.name]));
+  }
+
   setNames(list: DefinedName[]): void {
     const before = this.names;
     this.names = list.slice();
