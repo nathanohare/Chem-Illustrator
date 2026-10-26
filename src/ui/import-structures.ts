@@ -124,6 +124,25 @@ export async function importPictures(host: ImportHost, found: FoundPicture[], o:
   });
 }
 
+/** File > Import Structures from Picture (or Paste Picture as Structure): the pictures read, and the review screen. */
+export async function importPictureFiles(host: ImportHost, pics: { name: string; bytes: Uint8Array; mime: string }[]): Promise<void> {
+  if (!pics.length) return;
+  const found: FoundPicture[] = [];
+  for (const p of pics) {
+    const px = await decodePicture(p.bytes, p.mime);
+    if (px) found.push({ where: p.name, pixels: px });
+    else host.flash(`${p.name} can't be read as a picture.`);
+  }
+  // none could be read: the message naming the file stays
+  if (!found.length) return;
+  await importPictures(host, found, {
+    title: 'Import Structures from Picture',
+    note: 'Photos and scans of hand drawings work best with dark lines on plain paper, one structure to a picture. Check each structure against its picture before you place it: fix the SMILES, or tick it off.',
+    tickDoubtful: true,
+    photo: true,
+  });
+}
+
 /** Pages read at most in one go (a thesis is read a part at a time). */
 const MOST_PAGES = 40;
 

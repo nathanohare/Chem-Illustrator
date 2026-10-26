@@ -209,7 +209,7 @@ import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
 import { aiSettingsDialog } from './ui/ai-settings';
-import { decodePicture, importPictures, pdfDrawings, type ImportHost } from './ui/import-structures';
+import { importPictureFiles, importPictures, pdfDrawings, type ImportHost } from './ui/import-structures';
 import { placeRead } from './recognise/check';
 
 const $ = <T extends HTMLElement>(sel: string) => document.querySelector(sel) as T;
@@ -3418,19 +3418,7 @@ async function readPdf(f: { name: string; bytes: Uint8Array }, from: Tab): Promi
 }
 
 async function readPictures(pics: { name: string; bytes: Uint8Array; mime: string }[]): Promise<void> {
-  if (!pics.length) return;
-  const found = [];
-  for (const p of pics) {
-    const px = await decodePicture(p.bytes, p.mime);
-    if (px) found.push({ where: p.name, pixels: px });
-    else flash(`${p.name} can't be read as a picture.`);
-  }
-  await importPictures(importHost, found, {
-    title: 'Import Structures from Picture',
-    note: 'Photos and scans of hand drawings work best with dark lines on plain paper, one structure to a picture. Check each structure against its picture before you place it: fix the SMILES, or tick it off.',
-    tickDoubtful: true,
-    photo: true,
-  });
+  await importPictureFiles(importHost, pics);
 }
 
 /** Insert > Crop Picture: the selected picture's handles cut its edges off until Esc or a click elsewhere. */
