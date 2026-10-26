@@ -5,6 +5,7 @@
 
 import { showContextMenu, topMenuEntry, type MenuItem } from './context-menu';
 import { commandIcon } from './command-icons';
+import { COMMAND_NAMES } from '../editor/keymap';
 import { listToGrid, parseGrid, withoutGone, type Grid } from './toolbox-grid';
 
 export type Dock = 'left' | 'right' | 'top' | 'bottom' | 'float';
@@ -694,7 +695,7 @@ export function commandButton(cmd: string, run: (cmd: string) => void, label?: s
   b.className = 'tb-cmd';
   b.dataset.cmd = cmd;
   const top = topMenuEntry(cmd);
-  const name = label ?? top?.label ?? cmd;
+  const name = label ?? top?.label ?? COMMAND_NAMES[cmd] ?? cmd;
   const icon = commandIcon(cmd);
   // an icon when the command has one (its name shows on hover), else the name
   if (icon) { b.innerHTML = icon; b.classList.add('tb-icon'); b.setAttribute('aria-label', name); } else b.textContent = name;

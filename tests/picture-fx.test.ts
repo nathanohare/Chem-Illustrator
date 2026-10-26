@@ -4,7 +4,7 @@
 // Remove Background), and the settings saved as PowerPoint's and Word's own and read back.
 
 import { describe, it, expect } from 'vitest';
-import { unzipSync, strFromU8 } from 'fflate';
+import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate';
 import { Doc, type PictureFx } from '../src/model';
 import { Deck } from '../src/deck/deck';
 import { brightContrast, clearColour, fade, recolor, removeBackground, sharpen, tidyFx, bakedPart, SEPIA_LIGHT, knownShape } from '../src/render/picture-fx';
@@ -212,6 +212,35 @@ describe('PowerPoint files', () => {
     // the original came back, not the one with the effects worked in
     expect(pic.src).toBe(DOT);
     expect(pic.crop).toEqual({ l: 0.1, t: 0, r: 0, b: 0 });
+
+    // laptop bench pp-compare-decks: PowerPoint drops a picture nothing on the slide shows and
+    // numbers the relationships afresh; the original rides in the tag, so it still comes back
+    const rels = strFromU8(files['ppt/slides/_rels/slide2.xml.rels']);
+    expect(rels.match(/relationships\/image"/g)?.length).toBe(1);
+    const ids = [...rels.matchAll(/Id="(rId\d+)"/g)].map((m) => m[1]);
+    const swap = (t: string) => t.replace(/rId\d+/g, (x) => (ids.includes(x) ? `rId${ids.length + 1 - ids.indexOf(x)}` : x));
+    files['ppt/slides/_rels/slide2.xml.rels'] = new Uint8Array(strToU8(swap(rels)));
+    files['ppt/slides/slide2.xml'] = new Uint8Array(strToU8(swap(slide)));
+    const resaved = readPptx(zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, new Uint8Array(v)]))));
+    const again = resaved.slides[1].contents.shapes.find((s) => s.kind === 'picture')!;
+    expect(again.src).toBe(DOT);
+    expect(again.fx).toEqual(fx);
+  });
+
+  it('leave worked-in effects alone when an older file\'s original was dropped by PowerPoint', async () => {
+    const host = new Doc();
+    const d = Deck.blank(host);
+    d.attach();
+    host.edit('Picture', () => host.addShape({ kind: 'picture', x1: 100, y1: 100, x2: 300, y2: 200, src: DOT, px: { w: 1, h: 1 }, fx: { sharpen: 0.5 } }));
+    const files = unzipSync(await writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ layout: s.layout, doc: d.docOf(i), notes: s.notes })) }, opts));
+    // as files saved before: the tag names a relationship, which PowerPoint gave to the slide's layout
+    for (const k of Object.keys(files).filter((f) => f.startsWith('ppt/tags/'))) {
+      const t = strFromU8(files[k]);
+      if (t.includes('CHEMILLUSTRATOR_PICTURE')) files[k] = new Uint8Array(strToU8(t.replace(/<p:tag name="CHEMILLUSTRATOR_PICTURE_ORIG"[^>]*\/>/, '').replace('&quot;orig&quot;:&quot;tag&quot;', '&quot;orig&quot;:&quot;rId1&quot;')));
+    }
+    const pic = readPptx(zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, new Uint8Array(v)])))).slides[0].contents.shapes.find((s) => s.kind === 'picture')!;
+    expect(pic.fx).toBeUndefined();
+    expect(pic.src).toMatch(/^data:image\/png/);
   });
 
   it('leave worked-in effects alone when the original is missing', async () => {

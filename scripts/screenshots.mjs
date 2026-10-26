@@ -54,7 +54,7 @@ const url = process.argv[2] ?? 'http://localhost:5173/';
   await pointer(page, false);
 
   // Sheet: a table of products with structures, worked-out formula and MW, and a chart
-  await page.evaluate(() => window.__app.ws.newSheet());
+  await page.evaluate(() => window.__app.ws.newSheet()); await page.waitForFunction(() => window.__app.sheetMode?.book);
   await page.waitForTimeout(800);
   const rows = [['Entry', 'Product', 'Yield (%)', 'ee (%)'], ['1', 'CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O', '78', '92'], ['2', 'COc1ccc2cc(ccc2c1)[C@H](C)C(=O)O', '85', '96'], ['3', 'C[C@H](C(=O)O)c1ccc(c(F)c1)-c1ccccc1', '64', '88'], ['4', 'C[C@H](C(=O)O)c1cccc(c1)C(=O)c1ccccc1', '71', '90']];
   await page.evaluate(async (rows) => {
@@ -96,7 +96,7 @@ const url = process.argv[2] ?? 'http://localhost:5173/';
   await shot(page, 'sheet');
 
   // Document: an experimental paragraph with a structure in the text
-  await page.evaluate(() => window.__app.ws.newDocument()); await page.waitForTimeout(800);
+  await page.evaluate(() => window.__app.ws.newDocument()); await page.waitForFunction(() => window.__app.docMode?.file); await page.waitForTimeout(800);
   await page.mouse.click(700, 330); await page.waitForTimeout(200);
   await page.keyboard.press('Control+Alt+1');
   await page.keyboard.type('Ethyl (E)-3-([1,1\'-biphenyl]-4-yl)acrylate'); await page.keyboard.press('Enter');

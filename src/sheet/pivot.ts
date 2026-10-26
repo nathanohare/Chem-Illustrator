@@ -419,9 +419,13 @@ export function newPivotName(used: string[]): string {
 export function pivotChartSeries(rep: PivotReport, at: { row: number; col: number }, sheet: string, pt: PivotTable): { name: string; x: string; y: string }[] {
   const q = /^[A-Za-z_][\w.]*$/.test(sheet) ? sheet : `'${sheet.replace(/'/g, "''")}'`;
   const col = (c: number) => { let s = '', n = c + 1; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
-  const items = rep.rowLines.map((l, i) => ({ l, i })).filter((x) => x.l.kind === 'item');
+  // compact form: every line but the grand total, so an outer field's own line (Cu above its
+  // solvents, in the same column) is a category too, where the item lines alone would start
+  // below it; the other forms label the lines in a column for each field, so their items
+  const compact = pt.layout === 'compact';
+  const items = rep.rowLines.map((l, i) => ({ l, i })).filter((x) => (compact ? x.l.kind !== 'grand' : x.l.kind === 'item'));
   if (!items.length || !pt.values.length) return [];
-  // the item lines in one run (a chart series is one block of cells)
+  // the lines in one run (a chart series is one block of cells)
   const r1 = at.row + rep.body.row + items[0].i, r2 = at.row + rep.body.row + items[items.length - 1].i;
   const labelCol = at.col + (pt.layout === 'compact' ? 0 : rep.labelCols - 1);
   const out: { name: string; x: string; y: string }[] = [];

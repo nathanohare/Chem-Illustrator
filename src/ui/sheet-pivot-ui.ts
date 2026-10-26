@@ -32,6 +32,8 @@ export class SheetPivots {
   /** The PivotTable the Fields window is open on: its sheet and id. */
   private fieldsOf: { sheet: Sheet; id: number } | null = null;
   private fieldsWin: ToolWindow | null = null;
+  /** Field List: the Fields window shows whenever the active cell is in a PivotTable (Close turns it off). */
+  private fieldListOn = true;
 
   constructor(private host: PivotUiHost) {}
 
@@ -49,10 +51,33 @@ export class SheetPivots {
     return s ? pivotAt(s, this.view.sel.active.r, this.view.sel.active.c) : undefined;
   }
 
-  /** The active cell moved: the Fields window follows it onto another PivotTable. */
+  /**
+   * The active cell moved (or another sheet or workbook came up): as in Excel, the Fields window
+   * shows while the active cell is in a PivotTable (following it onto another one) and hides
+   * outside one, coming back on a PivotTable while Field List is on.
+   */
   selectionChanged(): void {
     const pt = this.here();
-    if (pt && this.fieldsWin && ToolWindow.open === this.fieldsWin && pt.id !== this.fieldsOf?.id) this.fieldsWindow();
+    const open = !!this.fieldsWin && ToolWindow.open === this.fieldsWin;
+    if (!pt) { if (open) this.hideFields(); return; }
+    // (never over another tool window, such as one picking cells)
+    if (!open && ToolWindow.open) return;
+    if (this.fieldListOn && (!open || pt.id !== this.fieldsOf?.id || this.fieldsOf?.sheet !== this.view.sheet)) this.fieldsWindow();
+  }
+
+  /** Field List on the PivotTable tab: shows the Fields window, or hides it (and keeps it hidden). */
+  toggleFields(): void {
+    if (this.fieldsWin && ToolWindow.open === this.fieldsWin) { this.fieldListOn = false; this.hideFields(); return; }
+    this.fieldsWindow();
+  }
+
+  /** The Fields window taken away (Field List stays as it was). */
+  hideFields(): void {
+    const w = this.fieldsWin;
+    if (!w) return;
+    const on = this.fieldListOn;
+    w.close();
+    this.fieldListOn = on;
   }
 
   // ---------------------------------------------------------------- changing a PivotTable
@@ -231,10 +256,12 @@ export class SheetPivots {
     const pt = id !== undefined ? s?.pivots.find((p) => p.id === id) : this.here();
     if (!s || !pt) { this.host.flash('Click in a PivotTable to show its fields.'); return; }
     this.fieldsOf = { sheet: s, id: pt.id };
+    this.fieldListOn = true;
     const w = new ToolWindow('PivotTable Fields', 'pivot-fields');
     w.home = s.name;
     this.fieldsWin = w;
-    w.onClose = () => { if (this.fieldsWin === w) this.fieldsWin = null; };
+    // closed by the person (Close or Escape): Field List is off until asked for again
+    w.onClose = () => { if (this.fieldsWin === w) { this.fieldsWin = null; this.fieldListOn = false; } };
     w.button('Close', () => w.close(), 'primary');
     this.renderFields();
     w.show();
@@ -269,6 +296,15 @@ export class SheetPivots {
       const name = document.createElement('span');
       name.textContent = f;
       row.append(box, name);
+      // right-click: add it to an area, as Excel's field list offers
+      row.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        const to = (area: Area) => () => this.change(`Add ${f}`, (p) => moveField(p, f, undefined, undefined, area, Number.MAX_SAFE_INTEGER, src));
+        popupMenu(e.clientX, e.clientY, [
+          ['Add to Report Filter', to('filters')], ['Add to Row Labels', to('rows')], ['Add to Column Labels', to('cols')], ['Add to Values', to('values')],
+          ...(used.has(f) ? [null, ['Remove Field', () => this.change(`Remove ${f}`, (p) => withoutField(p, f))] as [string, () => void]] : []),
+        ]);
+      });
       if (pt.hidden[f]?.length) row.append(Object.assign(document.createElement('span'), { className: 'muted', textContent: ' (filtered)' }));
       list.append(row);
     }
@@ -342,6 +378,7 @@ export class SheetPivots {
         const b = chip.getBoundingClientRect();
         this.chipMenu(b.left, b.bottom + 2, area, i, field, src, names.length);
       });
+      chip.addEventListener('contextmenu', (e) => { e.preventDefault(); this.chipMenu(e.clientX, e.clientY, area, i, field, src, names.length); });
       box.append(chip);
     });
     return box;

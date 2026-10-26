@@ -28,12 +28,7 @@ const NS = {
 };
 const MIME = 'application/vnd.oasis.opendocument.text';
 
-/** Is this an OpenDocument text? (Its first file, `mimetype`, says so, uncompressed.) */
-export function isOdt(bytes: Uint8Array): boolean {
-  if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) return false;
-  const head = String.fromCharCode(...bytes.subarray(30, 120));
-  return head.startsWith(`mimetype${MIME}`) && !head.startsWith(`mimetype${MIME}-`);
-}
+export { isOdt } from './doc-sniff';
 
 /** A length ("2.5cm", "0.5in", "12pt", "10mm") in points. */
 export function points(v: string | null | undefined): number | null {

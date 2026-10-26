@@ -18,12 +18,7 @@ const OFFICE = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
 const STYLE = 'urn:oasis:names:tc:opendocument:xmlns:style:1.0';
 const FO = 'urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0';
 
-/** Is this an OpenDocument spreadsheet? (Its first file, `mimetype`, says so, uncompressed.) */
-export function isOds(bytes: Uint8Array): boolean {
-  if (bytes[0] !== 0x50 || bytes[1] !== 0x4b) return false;
-  const head = new TextDecoder('latin1').decode(bytes.subarray(30, 120));
-  return head.startsWith('mimetypeapplication/vnd.oasis.opendocument.spreadsheet');
-}
+export { isOds } from './sheet-sniff';
 
 /** A length in an OpenDocument file ("2.258cm", "0.1665in", "12pt") in pixels (96 to the inch). */
 export function lengthPx(v: string | null): number | null {
@@ -230,6 +225,8 @@ export function readOds(bytes: Uint8Array): { book: Workbook; warnings: string[]
   const names: string[] = [];
   for (const [i, t] of tables.entries()) names.push(safeSheetName(tAttr(t, 'name') || `Sheet${i + 1}`, names));
   const book = new Workbook(names);
+  // another program's text is shown as it wrote it (Q1 stays Q1, not Q₁)
+  book.autoChem = false;
   const warnings: string[] = [];
   let pictures = 0, hiddenSheets = 0;
   book.build(() => {

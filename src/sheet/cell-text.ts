@@ -3,6 +3,7 @@
 // as typing in a caption (src/text/chemtext.ts), applied to the whole text at once.
 
 import { typingFormats, WORD_ENDS, CharLook } from '../text/chemtext';
+import { SYMBOLS } from '../chem/elements';
 
 export interface Piece {
   text: string;
@@ -11,6 +12,9 @@ export interface Piece {
 }
 
 const HILL = /^((?:[A-Z][a-z]?\d*)+)((?:\s\d+)?[+\-−])?$/;
+const ELEMENT = new Set(SYMBOLS.filter(Boolean));
+/** Every capital letter of a Hill formula starts an element symbol (Q1 isn't a formula). */
+const allElements = (f: string) => (f.match(/[A-Z][a-z]?/g) ?? []).every((e) => ELEMENT.has(e));
 
 /**
  * How far back before a word its chemistry depends on the text: a formula is at most 100
@@ -23,7 +27,7 @@ const REACH = 200;
 export function chemPieces(text: string): Piece[] {
   const looks: CharLook[] = Array.from({ length: text.length }, () => ({ pos: 'base' as const, italic: false }));
   const hill = HILL.exec(text);
-  if (hill) {
+  if (hill && allElements(hill[1])) {
     // a formula as the FORMULA function writes it, charge and all
     for (let i = 0; i < hill[1].length; i++) if (/\d/.test(text[i])) looks[i].pos = 'sub';
     for (let i = hill[1].length; i < text.length; i++) looks[i].pos = 'sup';
@@ -57,14 +61,18 @@ export function chemPieces(text: string): Piece[] {
 
 const seen = new Map<string, boolean>();
 
+/** One letter or element and a number (Q1, B2, C3): a label or a cell's name more often than a formula. */
+const LABEL = /^[A-Z][a-z]?\d+$/;
+
 /**
- * Is a cell shown as chemistry: when its look says so (the C₉H₈ button), or, left unset, when
- * it holds text with a formula in it (Pd(PPh3)4, 1H NMR), as a caption would show it. A cell
- * the button turned off (false), and numbers, stay plain.
+ * Is a cell shown as chemistry: when its look says so (the C₉H₈ button), or, left unset and the
+ * workbook spots formulas in typed text (`auto`, Workbook.autoChem), when it holds text with a
+ * formula in it (Pd(PPh3)4, 1H NMR), as a caption would show it. A cell the button turned off
+ * (false), numbers, and labels like Q1 stay plain.
  */
-export function showsChem(chem: boolean | undefined, v: unknown): boolean {
+export function showsChem(chem: boolean | undefined, v: unknown, auto = true): boolean {
   if (chem !== undefined) return chem;
-  if (typeof v !== 'string' || !/[A-Za-z]/.test(v)) return false;
+  if (!auto || typeof v !== 'string' || !/[A-Za-z]/.test(v) || LABEL.test(v)) return false;
   let got = seen.get(v);
   if (got === undefined) {
     got = chemPieces(v).some((p) => p.pos !== 'base');

@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { writeCfb } from '../src/io/cfb';
-import { isDoc, readDoc } from '../src/io/doc-binary';
+import { hyperlinkOf, isDoc, readDoc } from '../src/io/doc-binary';
 import * as rt from '../src/richtext';
 
 /** Bytes with little-endian numbers written into them. */
@@ -25,7 +25,10 @@ const sprm = (code: number, ...op: number[]) => [code & 0xff, code >> 8, ...op];
  * A .doc of paragraphs (each its text, character runs and paragraph sprms). Text is stored as
  * cp1252 from offset 0x400 of WordDocument; the CHPX and PAPX pages follow.
  */
-function makeDoc(paras: { text: string; runs?: [number, number, number[]][]; pap?: number[]; istd?: number }[], notes: { at: number; text: string }[] = []): Uint8Array {
+/** A style for the stylesheet: its built-in id (sti), kind (1 paragraph, 2 character), the style it is based on, and its character sprms. */
+interface TestStyle { sti: number; stk?: 1 | 2; base?: number; chpx?: number[] }
+
+function makeDoc(paras: { text: string; runs?: [number, number, number[]][]; pap?: number[]; istd?: number }[], notes: { at: number; text: string }[] = [], styles?: TestStyle[]): Uint8Array {
   let main = paras.map((p) => p.text).join('');
   const ftn = notes.map((n) => `\x02 ${n.text}\r`).join('');
   const all = main + ftn + (ftn ? '\r' : '');
@@ -108,8 +111,26 @@ function makeDoc(paras: { text: string; runs?: [number, number, number[]][]; pap
   pair(13, bp, 12);
   // styles: 0 Normal (sti 0), 1 heading 1 (sti 1)
   const st = tb.length;
-  tb.u16(18).u16(2).u16(10).at(st + 2 + 18);
-  for (const sti of [0, 1]) { tb.u16(10).u16(sti).bytes([0, 0, 0, 0, 0, 0, 0, 0]); }
+  if (!styles) {
+    tb.u16(18).u16(2).u16(10).at(st + 2 + 18);
+    for (const sti of [0, 1]) { tb.u16(10).u16(sti).bytes([0, 0, 0, 0, 0, 0, 0, 0]); }
+  } else {
+    // the stylesheet's header: cstd, the STD's fixed size (10), and the default font (index 1) at rgftcStandardChpStsh
+    tb.u16(18).u16(styles.length).u16(10).at(st + 2 + 12).u16(1).at(st + 2 + 18);
+    for (const sty of styles) {
+      const stk = sty.stk ?? 1, base = sty.base ?? 0x0fff;
+      const std = new Buf();
+      // StdfBase: sti; stk and istdBase; cupx; bchUpe; grfstd
+      std.u16(sty.sti).u16(stk | (base << 4)).u16(stk === 1 ? 2 : 1).u16(0).u16(0);
+      // no name: its length (0) and the 0 after it
+      std.u16(0).u16(0);
+      const chpx = sty.chpx ?? [];
+      if (stk === 1) std.u16(2).u16(0);
+      std.u16(chpx.length).bytes(chpx);
+      if (chpx.length % 2) std.u8(0);
+      tb.u16(std.length).bytes(std.b);
+    }
+  }
   pair(1, st, tb.length - st);
   // fonts: Times New Roman, Arial
   const ff = tb.length;
@@ -154,6 +175,45 @@ describe('.doc (Word 97-2003)', () => {
     expect(doc.paras[1].align).toBe('justify');
     const note = Object.values(doc.objects).find((o) => o.kind === 'note');
     expect(note?.kind === 'note' && rt.plainText(note.runs)).toBe('Freshly made.');
+  });
+
+  it('gives text the look of its styles (as Word saves them), with the footnote mark and links as Word shows them', () => {
+    // 0 Normal: 11 pt; 1 heading 1: bold, 16 pt, blue, on Normal; 2 Hyperlink (characters): blue, underlined;
+    // 3 footnote reference (characters): superscript
+    const styles: TestStyle[] = [
+      { sti: 0, chpx: sprm(0x4a43, 22, 0) },
+      { sti: 1, base: 0, chpx: [...sprm(0x0835, 1), ...sprm(0x4a43, 32, 0), ...sprm(0x6870, 0x2f, 0x54, 0x96, 0)] },
+      { sti: 85, stk: 2, chpx: [...sprm(0x6870, 0x05, 0x63, 0xc1, 0), ...sprm(0x2a3e, 1)] },
+      { sti: 38, stk: 2, chpx: sprm(0x2a48, 1) },
+    ];
+    const link = '\x13 HYPERLINK "https://example.org/si" \\o "Supporting information" \x14SI\x15';
+    const body = `See the ${link} and go high\x02.\r`;
+    const at = 'Results\r'.length + body.indexOf('\x02');
+    const start = body.indexOf('\x14SI') + 1;
+    const fixed = makeDoc([
+      { text: 'Results\r', istd: 1 },
+      { text: body, runs: [[start, start + 2, sprm(0x4a30, 2, 0)], [body.indexOf('\x02'), body.indexOf('\x02') + 1, sprm(0x4a30, 3, 0)]] },
+    ], [{ at, text: 'Freshly made.' }], styles);
+    const { doc } = readDoc(fixed);
+    expect(doc.paras[0].style).toBe('Heading1');
+    // the heading's look from its style, and the default font (Arial) from the stylesheet
+    expect(doc.runs[0]).toMatchObject({ bold: true, size: 16, color: '#2f5496', font: 'Arial' });
+    expect(doc.runs.find((r) => r.text.startsWith('See'))).toMatchObject({ size: 11, font: 'Arial' });
+    expect(doc.runs.find((r) => r.text.startsWith('See'))?.bold).toBeUndefined();
+    expect(doc.runs.find((r) => r.text === 'SI')).toMatchObject({ link: 'https://example.org/si', color: '#0563c1', underline: true, size: 11 });
+    const mark = doc.runs.find((r) => r.obj !== undefined);
+    expect(mark?.sup).toBe(true);
+    expect(rt.plainText(doc.runs)).toBe('Results\nSee the SI and go high￼.');
+  });
+
+  it('reads where a HYPERLINK field goes, whatever its switches', () => {
+    expect(hyperlinkOf(' HYPERLINK "https://example.org/a b" ')).toBe('https://example.org/a b');
+    expect(hyperlinkOf(' HYPERLINK "https://example.org" \\o "A tip" \\t "_blank" ')).toBe('https://example.org');
+    expect(hyperlinkOf(' HYPERLINK \\o "A tip" "https://example.org" ')).toBe('https://example.org');
+    expect(hyperlinkOf(' HYPERLINK https://example.org ')).toBe('https://example.org');
+    expect(hyperlinkOf(' HYPERLINK \\l "_Results" ')).toBe('#_Results');
+    expect(hyperlinkOf(' HYPERLINK \\h https://example.org ')).toBe('https://example.org');
+    expect(hyperlinkOf(' PAGEREF _Toc1 \\h ')).toBeUndefined();
   });
 
   it('opens tables', () => {

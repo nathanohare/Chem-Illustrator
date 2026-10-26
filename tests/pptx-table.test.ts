@@ -102,6 +102,25 @@ describe('tables in PowerPoint files', () => {
     expect(table.title!.map((r) => r.text).join('')).toBe('Table 1. Screening');
   });
 
+  it('takes the table from PowerPoint when its style or a fill was changed there', async () => {
+    // laptop bench (pp-table-text-options): Themed Style 1 – Accent 4 picked in PowerPoint, which
+    // also cleared a green cell; the copy saved here still won
+    const t: TableData = { ...sample(), title: undefined, notes: undefined, style: 'pp-medium2-2', look: { header: true, bandRows: true } };
+    t.rows[2][2] = { ...t.rows[2][2], fill: '#00b050' };
+    const bytes = await save(t);
+    // unchanged, it is ours as saved
+    expect(tableOf(bytes).table.rows[2][2].fill).toBe('#00b050');
+    expect(tableOf(bytes).table.style).toBe('pp-medium2-2');
+    let xml = slideXml(bytes);
+    expect(xml).toContain('<a:srgbClr val="00B050"/>');
+    xml = xml.replace(/\{21E4AEA4-8DFA-4A89-87EB-49C32662AFE8\}/, '{69C7853C-536D-4A76-A0AE-DD22124D55A5}')
+      .replace(/<a:solidFill><a:srgbClr val="00B050"\/><\/a:solidFill><\/a:tcPr>/, '<a:noFill/></a:tcPr>');
+    const { table } = tableOf(withSlide(bytes, xml));
+    expect(table.rows[2][2].fill).not.toBe('#00b050');
+    expect(table.style).not.toBe('pp-medium2-2');
+    expect(text(table)[2]).toEqual(['1', 'Pd(OAc)2', 'THF', '45']);
+  });
+
   it('keeps column widths changed in PowerPoint', async () => {
     const bytes = await save(sample());
     const xml = slideXml(bytes).replace(/<a:gridCol w="\d+"\/>/, '<a:gridCol w="914400"/>');

@@ -9,6 +9,7 @@
 // lines, arrows and tables. What has no place here yet (charts, rotated things) is noted in
 // warnings, never refused.
 
+import { fromDataUrl } from '../render/images';
 import type { PinnedComment } from '../document/comments';
 import { COMMENT_REL, readCommentAuthors, readLegacyComments, readModernComments } from './pptx-comments';
 import { Doc, Caption, Shape, TextRun, ParaStyle, Arrow, Contents, Placeholder, Justify, stripBase, type TableCell, type TableData, type PictureFx, type BackgroundRemoval, type PictureLook, type Frame, type ShapeMath, type Media } from '../model';
@@ -24,11 +25,11 @@ import { drawingInEmf } from '../render/emf';
 import { dataUrl, imageSize } from '../render/images';
 import { knownShape, tidyFx } from '../render/picture-fx';
 import { readPictureFx } from './picture-xml';
-import { layoutText, ASCENT } from '../text/layout';
+import { layoutText, caretPos, ASCENT } from '../text/layout';
 import { Master, SlideSize, LayoutId, defaultMaster, textStyles, slideDrawingStyle, slideBackground, slideColours, hasLayout, newLayoutId, deckLayouts, type LayoutDef, type PlaceholderBox, type SectionCount, type DeckSettings, type SlideHF, type DateFormat, showsNumber, showsFooter, showsDate } from '../deck/deck';
 import { backgroundColour, isPlain, sameBackground, type Background } from '../deck/background';
 import { readFill, readOneFill, type FillContext } from './pptx-background';
-import { TAG, PPT_ASCENT, MIME_EXT, arialMeasure, NS_A14, NS_M, swapBox } from './pptx-write';
+import { TAG, PPT_ASCENT, MIME_EXT, arialMeasure, NS_A14, NS_M, swapBox, tableLookKey, savedTableLook } from './pptx-write';
 import { ommlToTex, toOmml } from '../document/math';
 import { shapeMathPicture, shapeMathSize } from '../deck/equation';
 import { GEOS } from '../design/geo';
@@ -320,6 +321,7 @@ class Reader {
     // the slides' ids in the file (as PowerPoint's sections name them)
     const sldIds = kids(kid(root, 'sldIdLst'), 'sldId').filter((x) => { const t = rels.get(rAttr(x, 'id') ?? '')?.target; return !!t && this.r.has(t); }).map((x) => x.getAttribute('id') ?? '');
     const sections = readSections(root, sldIds);
+    if (sections) summaryEnds(slides, sections);
     // Set Up Show, and custom shows
     const props = this.r.relOfType(main, REL.presProps);
     const show = readShowPr(props ? this.r.xml(props)?.documentElement ?? null : null);
@@ -648,7 +650,7 @@ class Reader {
 
   private elementOnly(s: Part, layout: Part | null, el: Element, t: Xf, doc: Doc): void {
     switch (el.localName) {
-      case 'sp': if (!this.ourConnector(s, el, t, doc) && !this.equation(s, el, t, doc)) this.shape(s, layout, el, t, doc); break;
+      case 'sp': if (!this.ourConnector(s, el, t, doc) && !this.equation(s, layout, el, t, doc)) this.shape(s, layout, el, t, doc); break;
       case 'pic': this.pictureEl(s, el, t, doc); break;
       case 'cxnSp': if (!this.ourConnector(s, el, t, doc)) this.line(el, kid(el, 'spPr'), t, doc); break;
       case 'grpSp': {
@@ -683,9 +685,12 @@ class Reader {
         // a zoom PowerPoint made: its picture (the fallback) is read as a zoom, coming back or not
         const zm = choices.map((c) => c.getElementsByTagNameNS('*', 'zmPr')[0]).find((z) => z);
         this.zoomBack = zm ? /^(1|true)$/.test(zm.getAttribute('returnToParent') ?? '') : null;
-        if (choices.some((c) => c.getElementsByTagNameNS('*', 'sumZm').length || c.getElementsByTagNameNS('*', 'secZm').length)) this.warnings.add('Summary and section zooms came in as pictures that go to their first slides.');
+        // a Summary Zoom's pictures are its parts (each playing its section); a section zoom is read as a slide zoom
+        this.zoomSummary = choices.some((c) => c.getElementsByTagNameNS('*', 'summaryZm').length);
+        if (choices.some((c) => c.getElementsByTagNameNS('*', 'sectionZm').length)) this.warnings.add('Section zooms came in as zooms to their sections\' first slides.');
         for (const k of kids(branch)) this.element(s, layout, k, t, doc);
         this.zoomBack = null;
+        this.zoomSummary = false;
         break;
       }
       default: break;
@@ -718,7 +723,7 @@ class Reader {
    * its LaTeX as typed here when PowerPoint has not changed it. Its box is the equation's own size,
    * where PowerPoint shows it in the text box. False when the text box holds no equation.
    */
-  private equation(s: Part, sp: Element, t: Xf, doc: Doc): boolean {
+  private equation(s: Part, layout: Part | null, sp: Element, t: Xf, doc: Doc): boolean {
     const m = sp.getElementsByTagNameNS(NS_A14, 'm')[0];
     const maths = m ? Array.from(m.getElementsByTagNameNS(NS_M, 'oMath')) : [];
     const frame = boxOf(kid(sp, 'spPr', 'xfrm'), t);
@@ -745,10 +750,26 @@ class Reader {
     const nat = shapeMathSize(math, arialMeasure);
     const k = sz > 0 ? sz / 100 / math.size : 1;
     const cx = (frame.x1 + frame.x2) / 2, cy = (frame.y1 + frame.y2) / 2;
-    const box: Rect = same ? frame : { x1: cx - (nat.w * k) / 2, y1: cy - (nat.h * k) / 2, x2: cx + (nat.w * k) / 2, y2: cy + (nat.h * k) / 2 };
+    let box: Rect = same ? frame : { x1: cx - (nat.w * k) / 2, y1: cy - (nat.h * k) / 2, x2: cx + (nat.w * k) / 2, y2: cy + (nat.h * k) / 2 };
+    // text typed beside the equation in the same box ("+c" after it): the box comes in as text,
+    // with room left where the equation is, and the equation goes in that room
+    const words = Array.from(sp.getElementsByTagNameNS(NS.a, 't')).filter((x) => !x.closest('oMath, oMathPara') && (x.textContent ?? '').trim());
+    if (words.length && m.closest('p')?.parentElement?.localName === 'txBody') {
+      this.inlineMath = { w: nat.w * k, h: nat.h * k, at: null };
+      this.shape(s, layout, sp, t, doc);
+      const at = this.inlineMath.at as { x: number; y: number } | null;
+      this.inlineMath = null;
+      if (at) box = { x1: at.x, y1: at.y - (nat.h * k) / 2, x2: at.x + nat.w * k, y2: at.y + (nat.h * k) / 2 };
+    }
     doc.addShape({ kind: 'picture', x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2, src: shapeMathPicture(math, arialMeasure), px: { w: Math.round(nat.w), h: Math.round(nat.h) }, math, ...turn(frame) });
     return true;
   }
+
+  /**
+   * An equation with text beside it in one PowerPoint text box, while that box's text is read:
+   * its size, and where its middle-left comes on the slide (set once the text is laid out).
+   */
+  private inlineMath: { w: number; h: number; at: { x: number; y: number } | null } | null = null;
 
   /** The invisible frame of a diagram saved here, round the shapes its group brought in, keeping its text (with any words changed in PowerPoint). */
   private diagramFrame(tag: string, off: Element, ext: Element, t: Xf, doc: Doc, hadShapes: Set<number>, hadArrows: Set<number>): void {
@@ -878,15 +899,15 @@ class Reader {
     const video0 = this.videoOf(s.path, kid(el, 'nvPicPr', 'nvPr'));
     // recorded narration (Slide Show > Record), as we name it
     const video = video0?.audio && kid(el, 'nvPicPr', 'cNvPr')?.getAttribute('name') === NARRATION_NAME ? { ...video0, narration: true } : video0;
-    const fx = this.pictureFx(s.path, el, img, tags[TAG.picture]);
+    const fx = this.pictureFx(s.path, el, img, tags[TAG.picture], tags[TAG.pictureOrig]);
     // a picture cut to a shape has the shape's outline, not rounded corners
     if (fx?.shape && look) delete look.round;
     // a click on it in the show: a zoom (ours, or PowerPoint's, from its fallback picture) or a link
     const click = video ? null : this.hlinkOf(kid(el, 'nvPicPr', 'cNvPr', 'hlinkClick'));
     let zoom: Shape['zoom'] | undefined;
     if (tags[TAG.zoom]) {
-      try { const z = JSON.parse(tags[TAG.zoom]); if (z && typeof z === 'object' && z.zoom) zoom = { ...(z.zoom.back ? { back: true } : {}), ...(typeof z.zoom.to === 'string' ? { to: z.zoom.to } : {}) }; } catch { /* a plain link */ }
-    } else if (this.zoomBack !== null && click) zoom = this.zoomBack ? { back: true } : {};
+      try { const z = JSON.parse(tags[TAG.zoom]); if (z && typeof z === 'object' && z.zoom) zoom = { ...(z.zoom.back ? { back: true } : {}), ...(typeof z.zoom.to === 'string' ? { to: z.zoom.to } : {}), ...(z.zoom.summary ? { summary: true } : {}) }; } catch { /* a plain link */ }
+    } else if (this.zoomBack !== null && click) zoom = { ...(this.zoomBack ? { back: true } : {}), ...(this.zoomSummary ? { summary: true } : {}) };
     const alt = kid(el, 'nvPicPr', 'cNvPr')?.getAttribute('descr')?.trim();
     doc.addShape({
       kind: 'picture', x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2, src: img.src, px: img.px, ...(img.crop ? { crop: img.crop } : {}), ...(look && Object.keys(look).length ? { look } : {}), ...(fx ? { fx } : {}), ...(video ? { video } : {}), ...(alt ? { alt } : {}),
@@ -899,7 +920,7 @@ class Reader {
    * into the picture and kept the original as its layer, the original comes in (`img` changed to
    * it) with the settings; without the original they stay worked in, and are not done again.
    */
-  private pictureFx(from: string, pic: Element, img: { src: string; px: { w: number; h: number }; mime: string }, tag: string | undefined): PictureFx | undefined {
+  private pictureFx(from: string, pic: Element, img: { src: string; px: { w: number; h: number }; mime: string }, tag: string | undefined, origTag?: string): PictureFx | undefined {
     const blip = kid(pic, 'blipFill', 'blip');
     const got = readPictureFx(blip, kid(pic, 'spPr'));
     if (got.dropped) this.warnings.add('Some picture effects (artistic effects, saturation, colour temperature) were left off.');
@@ -917,9 +938,17 @@ class Reader {
       }
     }
     if (!fx) return undefined;
-    const target = layer ? this.r.rels(from).get(layer)?.target : undefined;
-    const bytes = target ? this.r.bytes(target) : null;
-    const mime = target ? EXT_MIME[target.split('.').pop()!.toLowerCase()] : undefined;
+    // the original: in our tag (files saved since), or a picture beside it (older files; PowerPoint
+    // drops it when it saves, and gives its id to some other part)
+    let bytes: Uint8Array | null = null, mime: string | undefined;
+    if (layer === 'tag') {
+      try { if (origTag) ({ bytes, mime } = fromDataUrl(origTag)); } catch { /* lost */ }
+    } else if (layer) {
+      const rel = this.r.rels(from).get(layer);
+      const target = rel && /\/image$/.test(rel.type ?? '') ? rel.target : undefined;
+      bytes = target ? this.r.bytes(target) : null;
+      mime = target ? EXT_MIME[target.split('.').pop()!.toLowerCase()] : undefined;
+    }
     if (bytes && mime && SHOWABLE.has(mime) && !img.mime.includes('svg')) {
       img.src = dataUrl(bytes, mime);
       img.px = imageSize(bytes, mime) ?? img.px;
@@ -955,8 +984,16 @@ class Reader {
     const m: Media = { src: dataUrl(bytes, type.mime), ...(type.audio ? { audio: true } : {}), start: 'click', once: true };
     const P14 = 'http://schemas.microsoft.com/office/powerpoint/2010/main';
     const trim = media?.getElementsByTagNameNS(P14, 'trim')[0], fade = media?.getElementsByTagNameNS(P14, 'fade')[0];
-    const sec = (el: Element | undefined, a: string) => { const v = Number(el?.getAttribute(a)); return Number.isFinite(v) && v > 0 ? +(v / 1000).toFixed(3) : undefined; };
-    const parts = { trimStart: sec(trim, 'st'), trimEnd: sec(trim, 'end'), fadeIn: sec(fade, 'inDur'), fadeOut: sec(fade, 'outDur') };
+    // times as MS-PPTX writes them (ST_UniversalTimeOffset): a number and a unit, milliseconds when there is none
+    const UNIT: Record<string, number> = { h: 3600, min: 60, s: 1, ms: 0.001, 'µs': 1e-6, us: 1e-6, ns: 1e-9 };
+    const sec = (el: Element | undefined, ...names: string[]) => {
+      const raw = names.map((a) => el?.getAttribute(a)).find((x) => x != null)?.trim() ?? '';
+      const m = /^(\d+(?:\.\d+)?)\s*(h|min|s|ms|µs|us|ns)?$/.exec(raw);
+      const v = m ? Number(m[1]) * UNIT[m[2] ?? 'ms'] : NaN;
+      return Number.isFinite(v) && v > 0 ? +v.toFixed(3) : undefined;
+    };
+    // (inDur and outDur: what this program wrote before v0.1.136)
+    const parts = { trimStart: sec(trim, 'st'), trimEnd: sec(trim, 'end'), fadeIn: sec(fade, 'in', 'inDur'), fadeOut: sec(fade, 'out', 'outDur') };
     for (const [k, v] of Object.entries(parts)) if (v !== undefined) (m as unknown as Record<string, number>)[k] = v;
     return m;
   }
@@ -1122,6 +1159,8 @@ class Reader {
   private geoIds = new Map<number, number>();
   /** Reading a zoom PowerPoint made: whether the show comes back from it (null: not a zoom). */
   private zoomBack: boolean | null = null;
+  /** Reading a Summary Zoom PowerPoint made. */
+  private zoomSummary = false;
 
   /** A connector saved here: the arrow, stuck to the same shapes, where PowerPoint now has it. */
   private ourConnector(s: Part, el: Element, t: Xf, doc: Doc): boolean {
@@ -1328,6 +1367,15 @@ class Reader {
     const tags = this.tagsOf(s.path, kid(el, 'nvGraphicFramePr', 'nvPr'));
     let saved: { key: string; table: TableData; plain: string[][] } | null = null;
     try { saved = tags[TAG.table] ? JSON.parse(tags[TAG.table]) : null; } catch { saved = null; }
+    // a new style picked in PowerPoint, or a fill changed there: PowerPoint's table, with our key (title and footnotes)
+    const lookNow = tableLookKey(style, ['firstRow', 'firstCol', 'lastCol', 'lastRow', 'bandRow', 'bandCol'].filter(flag), kids(tbl, 'tr').map((tr) => {
+      const tcs = kids(tr, 'tc');
+      return Array.from({ length: m }, (_, c) => this.color(kid(kid(tcs[c] ?? null, 'tcPr'), 'solidFill')) ?? undefined);
+    }));
+    if (saved?.table && saved.table.rows.length === rows.length && saved.table.cols.length === m && lookNow !== savedTableLook(saved.table)) {
+      this.tables.push({ key: String(saved.key), table: read, frame, color });
+      return;
+    }
     if (saved?.table && saved.table.rows.length === rows.length && saved.table.cols.length === m) {
       const same = JSON.stringify(rows.map((row) => row.map((c) => c.runs.map((r) => r.text).join('')))) === JSON.stringify(saved.plain);
       // columns PowerPoint has resized keep their new widths
@@ -1678,6 +1726,7 @@ class Reader {
     const paras: ParaStyle[] = [];
     let lineSpacing: number | undefined, lineHeight: number | undefined;
     const ps = kids(body, 'p');
+    let mathAt = -1;
     ps.forEach((p, pi) => {
       const pPr = kid(p, 'pPr');
       const lvl = Math.max(0, Math.min(8, Number(pPr?.getAttribute('lvl') ?? 0)));
@@ -1710,7 +1759,7 @@ class Reader {
       const marL = fromEmu(inherit(pPr, chain, lvl, (e) => e.getAttribute('marL')));
       const indent = fromEmu(inherit(pPr, chain, lvl, (e) => e.getAttribute('indent')));
       // our lists put the marker one step in per level; anything further in is extra indent
-      const pieces = kids(p).filter((k) => k.localName === 'r' || k.localName === 'fld' || k.localName === 'br');
+      const pieces = kids(p).filter((k) => k.localName === 'r' || k.localName === 'fld' || k.localName === 'br' || (k.localName === 'm' && k.namespaceURI === NS_A14 && !!this.inlineMath));
       const firstSize = (() => {
         const rPr = kid(pieces.find((k) => k.localName !== 'br'), 'rPr');
         const v = inherit(rPr, chain, lvl, (e) => e.getAttribute('sz'), true) ?? kid(p, 'endParaRPr')?.getAttribute('sz') ?? null;
@@ -1724,6 +1773,13 @@ class Reader {
         if (k.localName === 'br') {
           runs.push({ text: '\n' });
           paras.push(list ? { ...para, cont: true } : { ...para });
+          continue;
+        }
+        if (k.localName === 'm') {
+          // the equation's room: en spaces as wide as it (it is drawn over them)
+          const size = Math.round(firstSize * 10) / 10;
+          mathAt = runs.reduce((n, r) => n + r.text.length, 0);
+          runs.push({ text: '\u2002'.repeat(Math.max(1, Math.ceil(this.inlineMath!.w / (size / 2)))), size });
           continue;
         }
         const rPr = kid(k, 'rPr');
@@ -1812,6 +1868,11 @@ class Reader {
     const height = lay.lines.length ? lay.box.y2 - lay.box.y1 : 0;
     const shift = anchor === 'ctr' ? (room - height) / 2 : anchor === 'b' ? room - height : 0;
     c.y = box.y1 + tI + shift + PPT_ASCENT * first;
+    if (this.inlineMath && mathAt >= 0 && lay.lines.length) {
+      const at = caretPos(lay, mathAt), line = lay.lines[at.line];
+      const size = line.size || sizeFor;
+      this.inlineMath.at = { x: c.x + at.x, y: c.y + line.y - lay.lines[0].y - size * 0.3 };
+    }
     return c;
   }
 }
@@ -1921,6 +1982,23 @@ function turned(c: Omit<Caption, 'id'> | null, box: Rect & { rot: number }): Omi
   if (!c || !rot) return c;
   const a = turnAbout(c, { x: (box.x1 + box.x2) / 2, y: (box.y1 + box.y2) / 2 }, rot);
   return { ...c, x: a.x, y: a.y, rot };
+}
+
+/**
+ * A Summary Zoom PowerPoint made plays each part's section: the part runs on to the section's
+ * last slide (zoom.to) before coming back.
+ */
+function summaryEnds(slides: PptxSlide[], sections: SectionCount[]): void {
+  const last = new Map<number, number>();
+  let at = 0;
+  for (const sec of sections) { if (sec.count > 1) last.set(at, at + sec.count - 1); at += sec.count; }
+  for (const s of slides) {
+    for (const sh of s.contents.shapes ?? []) {
+      const i = /^#slide-n=(\d+)$/.exec(sh.link ?? '')?.[1];
+      const end = i === undefined ? undefined : last.get(Number(i));
+      if (sh.zoom?.summary && !sh.zoom.to && end !== undefined) sh.zoom = { ...sh.zoom, to: `#slide-n=${end}` };
+    }
+  }
 }
 
 /** PowerPoint 2010's sections (p14:sectionLst in presentation.xml), as runs of slides in order. */

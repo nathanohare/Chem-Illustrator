@@ -327,6 +327,23 @@ describe('Excel files', () => {
     return { book, files };
   }
 
+  it('saves calls to LAMBDA names as dynamic array formulas, spelt as the name is', async () => {
+    const wb = book({ C9: 4, E8: '=twice(C9)' });
+    wb.edit('names', () => wb.setNames([{ name: 'Mmol', formula: '=LAMBDA(mg, mw, mg/mw)' }, { name: 'Twice', formula: '=LAMBDA(x, x*2)' }]));
+    type(wb, { E9: '=mmol(100,50)' });
+    expect(wb.sheet.cell(8, 4)?.input).toBe('=Mmol(100,50)');
+    const { book: back, files } = await roundTrip(wb);
+    const sheet = files['xl/worksheets/sheet1.xml'].replace(/ s="\d+"/g, '');
+    expect(sheet).toContain('<c r="E8" cm="1"><f t="array" ref="E8">Twice(C9)</f><v>8</v></c>');
+    expect(sheet).toContain('<c r="E9" cm="1"><f t="array" ref="E9">Mmol(100,50)</f><v>2</v></c>');
+    expect(files['xl/metadata.xml']).toContain('fDynamic="1"');
+    // and as Excel saves them, they open with the name's own spelling and save the same again
+    expect(back.sheet.cell(8, 4)?.input).toBe('=Mmol(100,50)');
+    expect(val(back, 'E9')).toBe(2);
+    const again = (await roundTrip(back)).files['xl/worksheets/sheet1.xml'].replace(/ s="\d+"/g, '');
+    expect(again).toContain('<c r="E9" cm="1"><f t="array" ref="E9">Mmol(100,50)</f>');
+  });
+
   it('saves spilling formulas as Excel\'s dynamic array formulas, and opens them again', async () => {
     const wb = book({ A1: 3, A2: 1, A3: 2, B1: '=SORT(A1:A3)', C1: '=SUM(B1#)', D1: '=LET(x, A1, x*2)', E1: '=@A1:A3', F1: '=SUM(A1:A3)', G1: '=SUM(A1:A3*2)' });
     const { book: back, files } = await roundTrip(wb);

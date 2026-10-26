@@ -178,6 +178,16 @@ describe('guides and grid', () => {
     const bytes = await writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ layout: s.layout, doc: d.docOf(i), notes: s.notes })), settings: { view } }, opts);
     expect(readPptx(bytes).settings?.view).toEqual(view);
   });
+
+  // laptop bench pp-effects-masters: ticking Guides then Add Vertical and Add Horizontal Guide
+  // wrote each centre guide twice, and PowerPoint opened the file with its guides off
+  it('writes each guide once', () => {
+    const view = { guides: { x: [480, 480], y: [270, 270.001] }, showGuides: true, snapToGrid: true, grid: 7.2 };
+    const xml = viewPropsXml(view, 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"');
+    expect(xml).toContain('<p:guideLst><p:guide orient="horz" pos="2160"/><p:guide pos="3840"/></p:guideLst>');
+    const twice = xml.replace('<p:guide pos="3840"/>', '<p:guide pos="3840"/><p:guide pos="3840"/>');
+    expect(readViewProps(new DOMParser().parseFromString(twice, 'application/xml').documentElement)!.guides).toEqual({ x: [480], y: [270] });
+  });
 });
 
 describe('notes pages and handouts', () => {
@@ -225,6 +235,12 @@ describe('notes pages and handouts', () => {
     expect(nm).toContain('type="datetime4"');
     const hm = strFromU8(files['ppt/handoutMasters/handoutMaster1.xml']);
     expect(hm).toContain('<a:t>Group meeting</a:t>');
+    // laid out on PowerPoint's notes and handouts page (notesSz), not on letter paper (laptop bench
+    // pp-effects-masters: the date ran off the right edge, the footer and number below the page)
+    for (const m of hm.matchAll(/<a:off x="(\d+)" y="(\d+)"\/><a:ext cx="(\d+)" cy="(\d+)"\/>/g)) {
+      expect(Number(m[1]) + Number(m[3])).toBeLessThanOrEqual(9144000);
+      expect(Number(m[2]) + Number(m[4])).toBeLessThanOrEqual(6858000);
+    }
     expect(strFromU8(files['[Content_Types].xml'])).toContain('handoutMaster+xml');
     // ours come back from our settings; PowerPoint's from the masters
     const back = readPptx(bytes);

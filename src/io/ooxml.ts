@@ -158,11 +158,16 @@ export class MediaFiles {
   }
 
   private static key(bytes: Uint8Array, ext: string): string {
-    // FNV-1a over the bytes: quick, and a match is checked byte by byte
-    let h = 0x811c9dc5;
-    for (let i = 0; i < bytes.length; i++) h = Math.imul(h ^ bytes[i], 0x01000193);
-    return `${ext}|${bytes.length}|${h >>> 0}`;
+    // a match is checked byte by byte
+    return `${ext}|${bytesHash(bytes)}`;
   }
+}
+
+/** A short fingerprint of some bytes: their length and FNV-1a hash (quick, not for security). */
+export function bytesHash(bytes: Uint8Array): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < bytes.length; i++) h = Math.imul(h ^ bytes[i], 0x01000193);
+  return `${bytes.length}|${h >>> 0}`;
 }
 
 function sameBytes(a: Uint8Array, b: Uint8Array): boolean {

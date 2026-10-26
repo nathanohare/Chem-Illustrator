@@ -86,6 +86,11 @@ export function needsDynamic(text: string): boolean {
   return marks.length > 0;
 }
 
+/** Does a formula call a defined name like a function (a LAMBDA one)? Excel saves those as dynamic array formulas. `names` in capitals. */
+export function callsName(text: string, names: ReadonlySet<string>): boolean {
+  return !!names.size && !!tokens(text)?.all.some((t) => t.t === 'fn' && names.has(t.v));
+}
+
 /** The names a formula's LETs and LAMBDAs give (upper case). */
 function boundNames(n: Node, out: Set<string>): void {
   switch (n.t) {

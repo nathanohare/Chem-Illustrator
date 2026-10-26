@@ -185,9 +185,14 @@ export function notesMasterXml(m: Master, slide: SlideSize, head: string, ns: st
     `<p:notesStyle><a:lvl1pPr marL="0" algn="l" defTabSz="914400" rtl="0" eaLnBrk="1" latinLnBrk="0" hangingPunct="1"><a:defRPr sz="${size}" kern="1200"><a:solidFill><a:schemeClr val="tx1"/></a:solidFill>${font}<a:ea typeface="+mn-ea"/><a:cs typeface="+mn-cs"/></a:defRPr></a:lvl1pPr></p:notesStyle></p:notesMaster>`;
 }
 
-/** PowerPoint's handout master: the header, date, footer and page number of printed handouts. */
+/**
+ * PowerPoint's handout master: the header, date, footer and page number of printed handouts, on
+ * the page PowerPoint has for notes and handouts (notesSz), not a sheet of letter paper, which
+ * put the date past its right edge and the footer below it (laptop bench pp-effects-masters).
+ */
 export function handoutMasterXml(m: Master, slide: SlideSize, head: string, ns: string, group: string, lang: string): string {
-  const L = handoutLayout(slide, m.handout ?? defaultHandout());
+  // (PowerPoint has the one page for both, the notes' way up; our own handout settings ride in our tags)
+  const L = handoutLayout(slide, { ...(m.handout ?? defaultHandout()), landscape: !!m.notesPage?.landscape }, notesPageSize(m.notesPage));
   const { shapes, hf } = hfShapes(L, m.notesHF, lang, 2);
   return `${head}<p:handoutMaster ${ns}><p:cSld><p:bg><p:bgRef idx="1001"><a:schemeClr val="bg1"/></p:bgRef></p:bg><p:spTree>${group}${shapes}</p:spTree></p:cSld>${CLR_MAP}${hf}</p:handoutMaster>`;
 }

@@ -104,7 +104,12 @@ export interface DocxModel {
   version: 1;
   drawingStyle: DocStyle;
   /** Each drawing by its id: what it is, and its picture's own size (for its scale). */
-  drawings: Record<number, { contents: Contents; w: number; h: number }>;
+  /**
+   * Each drawing, by the number in its picture's name. `png` (the picture's fingerprint) and `alt`
+   * (its alt text as written) tell it from a picture Word copied in from another of our files
+   * under the same name.
+   */
+  drawings: Record<number, { contents: Contents; w: number; h: number; png?: string; alt?: string }>;
   /** Each table by its id, with its text (used when the text is the same in the file). */
   tables: Record<number, { table: TableData; text: string }>;
   /** The document's references and citation style (citations are ADDIN fields naming them). */

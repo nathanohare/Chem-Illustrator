@@ -6,20 +6,13 @@ import type { DocText } from '../document/document';
 // Word's reader and writer load the first time a document is opened or saved
 import type { DocxDeps } from './docx-write';
 import type { DocxReadDeps } from './docx-read';
-import { isRtf, readRtf, writeRtf } from './rtf';
-import { isOdt, readOdt, writeOdt } from './odt';
-import { isDoc, readDoc } from './doc-binary';
-
-/** Extensions of documents that open but save as .docx. */
-export const DOC_OPEN_ONLY = ['doc'];
+import { readRtf, writeRtf } from './rtf';
+import { readOdt, writeOdt } from './odt';
+import { readDoc } from './doc-binary';
+import { isRtf, isOdt, isDoc } from './doc-sniff';
+export { DOC_OPEN_ONLY, isOtherDocument, documentSaveNote } from './doc-sniff';
 
 const extOf = (name: string) => /\.([^.\\/]+)$/.exec(name)?.[1]?.toLowerCase() ?? '';
-
-/** Is this one of the other word processors' files (not Word's .docx)? */
-export function isOtherDocument(bytes: Uint8Array, name: string): boolean {
-  const ext = extOf(name);
-  return ext === 'rtf' || ext === 'odt' || ext === 'doc' || isRtf(bytes) || isOdt(bytes) || isDoc(bytes);
-}
 
 /** Open a document file of any of these kinds. */
 export async function readDocumentFile(bytes: Uint8Array, name: string, deps: DocxReadDeps = {}): Promise<{ doc: DocText; warnings: string[] }> {
@@ -41,10 +34,3 @@ export async function writeDocumentFile(t: DocText, name: string, deps: DocxDeps
   return (await import('./docx-write')).writeDocx(t, deps);
 }
 
-/** A note after saving in a format that keeps less than .docx. */
-export function documentSaveNote(name: string): string {
-  const ext = extOf(name);
-  if (ext === 'rtf') return ' (as RTF: live fields, citations, comments and tracked changes are kept as their text; save as .docx to keep everything)';
-  if (ext === 'odt') return ' (as OpenDocument: live fields, citations, comments and tracked changes are kept as their text; save as .docx to keep everything)';
-  return '';
-}

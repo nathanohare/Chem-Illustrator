@@ -7,7 +7,8 @@ import type { Sheet } from '../sheet/workbook';
 import { captureView, applyView, type SheetViewOpts } from '../sheet/views';
 
 /** Whether the formula bar shows (a setting kept between sessions, as in Excel). */
-export const formulaBarPrefs: { shown: boolean; changed?: () => void } = { shown: true };
+export { formulaBarPrefs } from './mode-prefs';
+import { formulaBarPrefs } from './mode-prefs';
 
 export interface ViewsHost {
   readonly view: SheetView;

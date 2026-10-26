@@ -12,6 +12,7 @@ import { shapeMathPicture, shapeMathScale, shapeMathSize } from '../src/deck/equ
 import { layoutMath, mathSvg, toOmml } from '../src/document/math';
 import { writePptx, arialMeasure, type PptxOptions } from '../src/io/pptx-write';
 import { readPptx } from '../src/io/pptx-read';
+import { layoutText, caretPos } from '../src/text/layout';
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 40, 0, 0, 0, 30]);
 const opts: PptxOptions = { async picture() { return null; }, async svgToPng() { return PNG; } };
@@ -180,6 +181,34 @@ describe('equations on slides', () => {
     expect(shapeMathScale(s.math!, s.x2 - s.x1, s.y2 - s.y1, arialMeasure)).toBeCloseTo(1.5, 3);
     // nothing else came in from the picture for older programs
     expect(back.slides[0].contents.shapes.filter((x) => x.kind === 'picture').length).toBe(1);
+  });
+
+  it('keeps text typed beside an equation in PowerPoint, with room left where the equation is', async () => {
+    const { d, host } = deck(1);
+    const nat = shapeMathSize(math, arialMeasure);
+    host.edit('Equation', () => host.addShape({ kind: 'picture', x1: 100, y1: 100, x2: 100 + nat.w + 60, y2: 100 + nat.h, src: shapeMathPicture(math, arialMeasure), px: { w: 10, h: 10 }, math }));
+    const files = unzipSync(await save(d));
+    // as PowerPoint leaves it: "+c" typed after the equation, in the same paragraph, and no tag of ours
+    let xml = strFromU8(files['ppt/slides/slide1.xml']);
+    xml = xml.replace(/<p:custDataLst><p:tags r:id="[^"]+"\/><\/p:custDataLst><\/p:nvPr><\/p:nvSpPr><p:spPr>/, '</p:nvPr></p:nvSpPr><p:spPr>')
+      .replace('</a14:m>', '</a14:m><a:r><a:rPr lang="en-US" sz="2400"/><a:t>+c</a:t></a:r>');
+    expect(xml).toContain('<a:t>+c</a:t>');
+    files['ppt/slides/slide1.xml'] = new Uint8Array(strToU8(xml));
+    const back = readPptx(zipSync(files));
+    const c = back.slides[0].contents;
+    const eq = c.shapes.find((x) => x.math)!;
+    expect(eq).toBeTruthy();
+    const text = c.captions.find((x) => x.runs.some((r) => r.text.includes('+c')))!;
+    expect(text).toBeTruthy();
+    const plain = text.runs.map((r) => r.text).join('');
+    expect(plain).toMatch(/^\u2002+\+c$/);
+    // the equation sits in the room before "+c", on its line
+    const lay = layoutText({ ...text, runs: text.runs.map((r) => ({ size: 24, ...r })) }, 24, arialMeasure);
+    const plusX = text.x + caretPos(lay, plain.indexOf('+')).x;
+    expect(eq.x2).toBeLessThanOrEqual(plusX + 0.5);
+    expect(plusX - eq.x2).toBeLessThan(13);
+    expect(eq.y1).toBeLessThan(text.y);
+    expect(eq.y2).toBeGreaterThan(text.y - 24);
   });
 
   it('reads an equation changed or made in PowerPoint from its Office Math, at its text size', async () => {

@@ -227,7 +227,7 @@ const VALUE_FIELDS = new Set<string>(['merges', 'filter', 'frozen', 'split', 'na
 
 interface Change {
   sheet: Sheet | null; // null: the workbook's list of sheets, its names, theme or custom views
-  field: MapField | ValueField | 'sheets' | 'names' | 'theme' | 'customViews' | 'queries' | 'drawingStyle';
+  field: MapField | ValueField | 'sheets' | 'names' | 'theme' | 'customViews' | 'queries' | 'drawingStyle' | 'autoChem';
   key: number;
   before: unknown;
   after: unknown;
@@ -505,7 +505,7 @@ export class Sheet {
   setInput(row: number, col: number, input: string): void {
     const old = this.cell(row, col);
     let style = old ? old.style : this.colStyles.get(col);
-    const text = input.startsWith('=') ? normalizeFormula(input) : input;
+    const text = input.startsWith('=') ? normalizeFormula(input, this.wb.nameCase()) : input;
     const typed = readTyped(text);
     if (typed.format && !this.styleAt(row, col)?.numFmt) style = patchStyleWith(style, { numFmt: typed.format });
     this.setCell(row, col, { input: text || undefined, style, link: old?.link });
@@ -1210,6 +1210,12 @@ export class Workbook {
   /** How structures in cells are drawn: bond length, line widths, label size. */
   drawingStyle: DocStyle = { ...ACS_1996 };
   chem: ChemHost | null = null;
+  /**
+   * Text typed into cells with a formula in it (CH2Cl2, Pd(PPh3)4) is shown as chemistry without
+   * the C₉H₈ button. Off in workbooks opened from other programs' files, whose text is shown as
+   * it was written; turned on or off from the cell menu (Formula Style).
+   */
+  autoChem = true;
   /** Names defined for cells, values and formulas (Formulas > Name Manager). */
   names: DefinedName[] = [];
   /**
@@ -1352,6 +1358,7 @@ export class Workbook {
     if (c.field === 'drawingStyle') { this.drawingStyle = v as DocStyle; return; }
     if (c.field === 'customViews') { this.customViews = v as CustomView[]; return; }
     if (c.field === 'queries') { this.queries = v as Query[]; return; }
+    if (c.field === 'autoChem') { this.autoChem = v as boolean; return; }
     const s = c.sheet!;
     if (VALUE_FIELDS.has(c.field)) {
       (s as unknown as Record<string, unknown>)[c.field] = v;
@@ -1370,11 +1377,24 @@ export class Workbook {
   }
 
   /** Change the defined names, as one recorded change. */
+  /** The defined names, capitals → as defined (to spell calls to LAMBDA names as the name is). */
+  nameCase(): Map<string, string> {
+    return new Map(this.names.map((n) => [n.name.toUpperCase(), n.name]));
+  }
+
   setNames(list: DefinedName[]): void {
     const before = this.names;
     this.names = list.slice();
     this.refsByText.clear();
     this.record({ sheet: null, field: 'names', key: 0, before, after: this.names });
+  }
+
+  /** Formula Style > Spot Formulas in Typed Text: on or off, as one recorded change. */
+  setAutoChem(on: boolean): void {
+    const before = this.autoChem;
+    if (before === on) return;
+    this.autoChem = on;
+    this.record({ sheet: null, field: 'autoChem', key: 0, before, after: on });
   }
 
   /** Change the workbook's theme, as one recorded change. */

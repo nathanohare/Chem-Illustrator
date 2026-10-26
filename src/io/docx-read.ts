@@ -22,7 +22,7 @@ import { keepDirectBorders, readBorder, readBorders, readLook as readTableLook, 
 import { cleanBorders } from '../document/para-borders';
 import { ACS_1996, type DocStyle } from '../style';
 import * as rt from '../richtext';
-import { PackageReader, REL, kid, kids, rAttr, fromEmu } from './ooxml';
+import { PackageReader, REL, bytesHash, kid, kids, rAttr, fromEmu } from './ooxml';
 import { dataUrl, imageSize, pictureMime } from '../render/images';
 import { drawingInEmf } from '../render/emf';
 import { BULLETS, BULLET_LIBRARY, LIST_SCHEMES, cleanPara } from '../text/paragraphs';
@@ -1564,7 +1564,7 @@ class DocxReader {
     const ours = new RegExp(`^${DRAWING_NAME} (\\d+)$`).exec(name);
     const m = ours ? this.model?.drawings?.[Number(ours[1])] : undefined;
     const look = pic ? readLook(kid(pic, 'spPr')) : null;
-    if (m?.contents) {
+    if (m?.contents && this.isOurDrawing(m, pic, descr)) {
       const natural = shownSize({ w: m.w, h: m.h }, 1, this.textW);
       const scale = Math.abs(natural.w - shown.w) < 0.75 || m.w <= 0 ? undefined : round(shown.w / m.w, 1e4);
       // a diagram's shapes may have been typed into in Word: their words go back into its text
@@ -1595,6 +1595,22 @@ class DocxReader {
     const turn = { ...(rot ? { rot: round(rot) } : {}), ...(yes(xf?.getAttribute('flipH') ?? null) ? { flipH: true } : {}), ...(yes(xf?.getAttribute('flipV') ?? null) ? { flipV: true } : {}) };
     const more = { ...(crop && (crop.l || crop.t || crop.r || crop.b) && crop.l + crop.r < 0.99 && crop.t + crop.b < 0.99 ? { crop } : {}), ...(tidyFx(fx) ? { fx: tidyFx(fx) } : {}), ...alt, ...turn };
     this.picture(target, shown, r, ctx, look, float, more);
+  }
+
+  /**
+   * Whether a picture named as one of our drawings is that drawing, and not one Word copied in
+   * from another of our files (Word keeps the name, so the copy's number can be one this file
+   * uses for something else). The picture's bytes match what was written; or, when Word has
+   * stored the picture afresh, its alt text (the structure's SMILES, unless typed) still does.
+   * Files from before the fingerprints were kept are taken by the name.
+   */
+  private isOurDrawing(m: DocxModel['drawings'][number], pic: Element | null, descr: string): boolean {
+    if (m.png === undefined && m.alt === undefined) return true;
+    const blip = kid(pic, 'blipFill', 'blip');
+    const path = this.relTarget(rAttr(blip, 'embed'));
+    const bytes = path ? this.pkg.bytes(path) : null;
+    if (m.png !== undefined && bytes && bytesHash(bytes) === m.png) return true;
+    return m.alt !== undefined && m.alt.trim() === descr;
   }
 
   private relTarget(id: string | null): string | null {

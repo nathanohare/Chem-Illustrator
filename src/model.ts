@@ -763,9 +763,10 @@ export interface Shape {
   /**
    * A picture that is a Slide Zoom (Insert > Zoom): a picture of the slide `link` goes to. In
    * the show a click zooms into that slide; with `back`, the show comes back here after it (a
-   * Summary Zoom's part runs on to the slide `to` first).
+   * Summary Zoom's part runs on to the slide `to` first). `summary`: one of a Summary Zoom's
+   * parts, each the section that starts at its slide; saved as PowerPoint's Summary Zoom.
    */
-  zoom?: { back?: boolean; to?: string };
+  zoom?: { back?: boolean; to?: string; summary?: boolean };
   /** Parts of a picture cut off, as fractions of its width and height from each side. */
   crop?: { l: number; t: number; r: number; b: number };
   /** A picture's frame, corners and shadow (PowerPoint's Picture Styles). */

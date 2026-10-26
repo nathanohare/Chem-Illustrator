@@ -22,7 +22,7 @@ import { BORDER_SPACE, cleanBorders } from '../document/para-borders';
 import { fieldInstr } from '../document/fields';
 import type { DocStyle } from '../style';
 import * as rt from '../richtext';
-import { Package, REL, NS, xml, hex6, emu, MediaFiles, structureAltText } from './ooxml';
+import { Package, REL, NS, xml, hex6, emu, MediaFiles, bytesHash, structureAltText } from './ooxml';
 import { contentsAlt } from '../accessibility';
 import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed';
 import { fromDataUrl } from '../render/images';
@@ -889,7 +889,7 @@ class DocxWriter {
           `<wpg:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${emu(size.w)}" cy="${emu(size.h)}"/><a:chOff x="${emu(at.x)}" y="${emu(at.y)}"/><a:chExt cx="${emu(at.w)}" cy="${emu(at.h)}"/></a:xfrm></wpg:grpSpPr>` +
           `${kids}</wpg:wgp></a:graphicData></a:graphic>`;
       }
-      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h };
+      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png) };
       blip = this.media(main, pic.png, 'png');
       if (pic.svg) svgId = this.media(main, new TextEncoder().encode(pic.svg), 'svg');
       size = shownSize({ w: pic.w, h: pic.h }, o.scale ?? 1, this.textW);
@@ -929,6 +929,7 @@ class DocxWriter {
       ? `<a:srcRect l="${Math.round(crop.l * 100000)}" t="${Math.round(crop.t * 100000)}" r="${Math.round(crop.r * 100000)}" b="${Math.round(crop.b * 100000)}"/>` : '';
     const alt = o.kind === 'drawing' ? o.alt?.trim() || contentsAlt(o.contents) || structureAltText(smiles) : o.kind === 'picture' ? o.alt?.trim() : '';
     const descr = alt ? ` descr="${xml(alt)}"` : '';
+    if (o.kind === 'drawing' && this.model.drawings[id]) this.model.drawings[id].alt = alt ?? '';
     const look = lookOf(o);
     const docPr = `<wp:docPr id="${n}" name="${xml(name)}"${descr}/>`;
     const picture = `<w:drawing>` + this.placed(o, cx, cy,

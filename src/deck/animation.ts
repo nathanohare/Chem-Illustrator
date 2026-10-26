@@ -20,7 +20,7 @@ import type { Doc, Media } from '../model';
 /** A video or sound on a slide, for the slide's timing: its PowerPoint shape and how it plays. */
 export interface MediaTiming { spid: number; media: Media }
 import type { Selection } from '../editor/editor';
-import { splitSlide } from '../io/pptx-write';
+import { splitSlide } from './split-slide';
 import { plainText } from '../richtext';
 
 // ---------------------------------------------------------------- transitions

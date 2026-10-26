@@ -612,24 +612,57 @@ export class Editor {
       if (d < bbd) { bbd = d; bb = b; }
     }
     if (bb) return { kind: 'bond', id: bb.id };
+    // a slide placeholder's empty room (all of it, while it shows only its prompt) gives way to a
+    // picture or shape put over it
+    let room: Hit = null;
     for (const c of doc.captions.values()) {
       if (c.hidden) continue;
       // turned text: the point turned back, against the text's own box
       const r = c.rot ? this.r.captionFrame(c) : this.r.captionBox(c);
       const q = c.rot ? turnAbout(p, c, -c.rot) : p;
-      if (q.x >= r.x1 - 1 && q.x <= r.x2 + 1 && q.y >= r.y1 - 1 && q.y <= r.y2 + 1) return { kind: 'caption', id: c.id };
+      if (q.x >= r.x1 - 1 && q.x <= r.x2 + 1 && q.y >= r.y1 - 1 && q.y <= r.y2 + 1) {
+        if (c.ph && !this.overText(c, p)) { room ??= { kind: 'caption', id: c.id }; continue; }
+        return { kind: 'caption', id: c.id };
+      }
     }
+    return this.arrowOrShapeAt(p) ?? room;
+  }
+
+  /** The arrow or shape (the one drawn last, on top) under a point. */
+  private arrowOrShapeAt(p: Vec): Hit {
     const at = this.tol(5);
-    for (const r of doc.arrows.values()) {
+    for (const r of this.doc.arrows.values()) {
       if (arrowHit(r, p, at)) return { kind: 'arrow', id: r.id };
     }
-    // the shape drawn last is on top
-    const order = shapeOrder([...doc.shapes.values()]);
+    const order = shapeOrder([...this.doc.shapes.values()]);
     for (let i = order.length - 1; i >= 0; i--) {
       const s = order[i];
       if (!s.hidden && !s.locked && shapeHit(s, p, at)) return { kind: 'shape', id: s.id };
     }
     return null;
+  }
+
+  /** Is the point on a text box's own words (a line of its text), not just inside its box? */
+  private overText(c: Caption, p: Vec): boolean {
+    const q = c.rot ? turnAbout(p, c, -c.rot) : p;
+    const pad = this.tol(2);
+    for (const l of this.r.captionLayout(c).lines) {
+      if (l.end <= l.start && !c.runs.some((r) => r.text)) continue;
+      const x1 = c.x + l.x, y = c.y + l.y;
+      if (q.x >= x1 - pad && q.x <= x1 + l.width + pad && q.y >= y - l.ascent - pad && q.y <= y + l.descent + pad) return true;
+    }
+    return false;
+  }
+
+  /**
+   * What a double-click opens: the topmost thing with something drawn under the pointer. A text
+   * box (a slide's title placeholder) is picked anywhere in its box, but where none of its text is
+   * under the pointer an arrow or shape there (an equation half under the title's box) comes first.
+   */
+  contentHit(p: Vec): Hit {
+    const h = this.hitTest(p);
+    if (h?.kind !== 'caption' || this.overText(this.doc.captions.get(h.id)!, p)) return h;
+    return this.arrowOrShapeAt(p) ?? h;
   }
 
   /**
@@ -1205,7 +1238,7 @@ export class Editor {
     if (spot && energyFrameOf(this.doc, 'arrow', spot.id) === null && diagramFrameOf(this.doc, 'arrow', spot.id) === null) {
       if (spot.join !== undefined ? this.removeBend(spot.id, spot.join) : this.addBend(spot.id, spot.t!)) return;
     }
-    const h = this.hitTest(p);
+    const h = this.contentHit(p);
     // any part of an energy diagram (but a structure put on it) opens its numbers
     const diagram = h && h.kind !== 'atom' && h.kind !== 'bond' && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? energyFrameOf(this.doc, h.kind, h.id) : null;
     if (diagram !== null) { this.selectOnly({ kind: 'shape', id: diagram }); this.onEnergy(diagram); return; }
@@ -4781,8 +4814,17 @@ export class Editor {
         // only an atom label, typed at a bond end: it becomes that atom (Undo brings the text back)
         if (!wrap && !opts?.done) this.labelFromText(made, plainText(res.runs).trim(), at);
       }
-      this.changed();
       const done = empty ? 0 : cur?.id ?? made;
+      // on a slide, the text box stays selected when typing stops (Esc, or a click on the ribbon),
+      // as in PowerPoint, for the ribbon's Font and Paragraph groups to change it as a whole; a
+      // click on the slide picks what it lands on after this
+      const keep = done || (cur?.ph ? cur.id : 0);
+      if (doc.textStyles && keep && doc.captions.has(keep)) {
+        this.sel = emptySel();
+        this.sel.captions.add(keep);
+        this.requestOverlay();
+      }
+      this.changed();
       if (done && doc.captions.has(done)) this.onCaptionDone(done);
     }, c?.rot ?? 0);
     this.captionEd = ed;
@@ -4791,6 +4833,8 @@ export class Editor {
       const q = c?.rot ? turnAbout(click, at, -c.rot) : click;
       ed.ed.setCaret(ed.ed.offsetAt(q.x - at.x, q.y - at.y));
     }
+    // the Slides ribbon shows the text's look from the start (a new, empty text box too)
+    CaptionEditor.onState?.();
   }
 
   // ------------------------------------------------------------------ text in design shapes

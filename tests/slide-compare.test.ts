@@ -105,4 +105,38 @@ describe('accepting changes', () => {
     expect(titles(a)).toEqual(['A', 'New', 'B']);
     pane.close();
   });
+
+  // laptop bench pp-compare-decks: after Accept and Ctrl+Z the card still said Accepted, and
+  // Accept All skipped it
+  it('opens a change again when Undo takes it back, and accepts it again with Accept All', () => {
+    const a = deckOf([{ title: 'Intro' }, { title: 'Methods', body: 'old' }, { title: 'Thanks' }], true);
+    const b = deckOf([{ title: 'Intro' }, { title: 'Methods', body: 'new' }, { title: 'Thanks' }, { title: 'Backup' }]);
+    const flashes: string[] = [];
+    const pane = new SlideComparePane({ deck: () => a, flash: (m) => flashes.push(m), changed: () => {} });
+    expect(pane.start(a, b, 'Reviewer.pptx')).toBe(2);
+    const box = document.querySelector('.sc-pane:not([hidden])')!;
+    const accepts = () => [...box.querySelectorAll('.sc-act button')].filter((x) => x.textContent === 'Accept') as HTMLButtonElement[];
+    const states = () => [...box.querySelectorAll('.sc-item')].map((x) => x.className.replace('sc-item sc-', ''));
+    accepts()[0].click();
+    accepts()[0].click();
+    expect(states()).toEqual(['accepted', 'accepted']);
+    // Undo takes back the inserted slide: that card is open again
+    a.undo();
+    pane.deckChanged(a);
+    expect(states()).toEqual(['accepted', 'open']);
+    // and the replaced slide
+    a.undo();
+    pane.deckChanged(a);
+    expect(states()).toEqual(['open', 'open']);
+    expect(viewsOf(a)[1].contents.captions.some((c) => c.runs.some((r) => r.text === 'old'))).toBe(true);
+    // Redo puts it back: accepted again
+    a.redo();
+    pane.deckChanged(a);
+    expect(states()).toEqual(['accepted', 'open']);
+    (document.querySelector('.sc-pane:not([hidden]) .sc-bar button') as HTMLButtonElement).click();
+    expect(flashes.at(-1)).toBe('Accepted 1 change.');
+    expect(titles(a)).toEqual(titles(b));
+    expect(states()).toEqual(['accepted', 'accepted']);
+    pane.close();
+  });
 });

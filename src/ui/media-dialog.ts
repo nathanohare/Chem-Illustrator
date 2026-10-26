@@ -4,7 +4,7 @@
 // whether it loops, rewinds, fills the screen, hides its icon or plays on across slides.
 
 import type { Media } from '../model';
-import { VOLUMES, mediaTime, playWindow } from '../deck/media';
+import { VOLUMES, mediaTime, playWindow, playableUrl } from '../deck/media';
 
 /** Resolves with the media's new settings, or null when cancelled. */
 export function editMedia(m: Media): Promise<Media | null> {
@@ -17,7 +17,9 @@ export function editMedia(m: Media): Promise<Media | null> {
     const player = document.createElement(m.audio ? 'audio' : 'video');
     player.controls = true;
     player.preload = 'auto';
-    player.src = m.src;
+    // (a blob: URL: a long video kept as a data: URL stayed black at 0:00)
+    const file = playableUrl(m.src);
+    player.src = file.url;
     player.className = 'md-player';
     const length = () => (Number.isFinite(player.duration) && player.duration > 0 ? player.duration : m.length ?? 0);
 
@@ -119,7 +121,7 @@ export function editMedia(m: Media): Promise<Media | null> {
       row('Fade in (s)', fadeIn, 'Seconds the sound takes to come up at the start'), row('Fade out (s)', fadeOut, 'Seconds the sound takes to die away at the end'),
       row('Volume', vol), row('Start', start, 'When it starts in the slide show: by itself, or when you click it (a click on it pauses it too)'),
       loop.r, rewind.r, ...(m.audio ? [hide.r, across.r] : [full.r]), buttons);
-    d.addEventListener('close', () => { player.pause(); d.remove(); resolve(result); });
+    d.addEventListener('close', () => { player.pause(); player.removeAttribute('src'); player.load(); file.done(); d.remove(); resolve(result); });
     document.body.append(d);
     say();
     d.showModal();

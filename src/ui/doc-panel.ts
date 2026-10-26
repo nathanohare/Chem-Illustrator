@@ -61,16 +61,9 @@ export function showLength(pt: number, unit: 'in' | 'pt' | 'cm'): string {
 type Field = HTMLInputElement | HTMLSelectElement;
 
 /** The settings boxes: each floats (opened from its ribbon group's corner button) or is pinned in the panel. */
-export type DocBoxKey = 'para' | 'style' | 'page' | 'hf';
-export const DOC_BOXES: DocBoxKey[] = ['para', 'style', 'page', 'hf'];
+export { DOC_BOXES, docBoxPrefs, parseDocPins, type DocBoxKey } from './mode-prefs';
+import { DOC_BOXES, docBoxPrefs, type DocBoxKey } from './mode-prefs';
 const BOX_TITLES: Record<DocBoxKey, string> = { para: 'Paragraph', style: 'Style', page: 'Page Setup', hf: 'Header, footer and page numbers' };
-
-/** Which boxes are pinned in the panel on the right (kept in the settings); `changed` saves them. */
-export const docBoxPrefs: { pinned: DocBoxKey[]; changed?: () => void } = { pinned: [] };
-
-export function parseDocPins(raw: unknown): DocBoxKey[] {
-  return Array.isArray(raw) ? DOC_BOXES.filter((k) => raw.includes(k)) : [];
-}
 
 export class DocPanel {
   private fields = new Map<string, Field>();
