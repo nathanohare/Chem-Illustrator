@@ -23,6 +23,9 @@ import {
   setItemText, textFromShapes, ungroupDiagram, cleanDiagram, inkOn, type DiagramData,
 } from '../src/design/diagrams';
 import { selectionBox } from '../src/editor/arrange';
+import { textArea } from '../src/design/geo';
+import { layoutText } from '../src/text/layout';
+import { arialWidth } from '../src/text-metrics';
 
 function put(d: DiagramData) {
   const doc = new Doc();
@@ -376,5 +379,23 @@ describe('Word', () => {
     expect(f?.diagram?.text).toBe('Mix\nReflux');
     // drawn again with the new words
     expect(o!.kind === 'drawing' && o!.contents.shapes.some((x) => words(x) === 'Reflux')).toBe(true);
+  });
+});
+
+describe('text sized to fit where it is drawn', () => {
+  it("every layout's words fit the text area the drawing lays them out in (a wrapped bullet is not hidden under the next bar)", () => {
+    const bad: string[] = [];
+    for (const l of DIAGRAM_LAYOUTS) {
+      for (const scale of [1, 0.75]) {
+        const { doc, frame } = put(newDiagram(l.id, null, {}, scale));
+        for (const s of doc.shapes.values()) {
+          if (s.id === frame || !s.text || s.geo === undefined) continue;
+          const a = textArea(geoDef(s.geo), Math.min(s.x1, s.x2), Math.min(s.y1, s.y2), Math.max(s.x1, s.x2), Math.max(s.y1, s.y2));
+          const lay = layoutText({ runs: s.text.runs, paras: s.text.paras, justify: s.textAlign ?? 'center', wrap: Math.max(4, a.x2 - a.x1) }, 10, (t, size, _f, style) => arialWidth(t, size, /bold/.test(style)));
+          if (lay.box.y2 - lay.box.y1 > a.y2 - a.y1 + 0.5) bad.push(`${l.id} at ${scale}: "${words(s)}"`);
+        }
+      }
+    }
+    expect(bad).toEqual([]);
   });
 });

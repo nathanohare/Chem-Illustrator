@@ -898,9 +898,9 @@ function textOf(p: PartShape, size: number, ink: string, head: number | null): {
   return { runs, paras: paras.some((x) => Object.keys(x).length) ? paras : [] };
 }
 
-/** Where a shape's words go: its library shape's text area (a box of text only, all but a small margin). */
+/** Where a shape's words go: its library shape's text area, as the drawing (and PowerPoint's copy) lays them out there. */
 function textBox(p: PartShape): Rect {
-  return p.geo === 'rect' && p.role !== 'item' ? { x1: p.box.x1 + 2, y1: p.box.y1 + 2, x2: p.box.x2 - 2, y2: p.box.y2 - 2 } : textArea(geoDef(p.geo), p.box.x1, p.box.y1, p.box.x2, p.box.y2);
+  return textArea(geoDef(p.geo), p.box.x1, p.box.y1, p.box.x2, p.box.y2);
 }
 
 /** How much of an item's text area its structure takes when it has words too (they go underneath). */

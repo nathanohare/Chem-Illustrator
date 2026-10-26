@@ -9,7 +9,7 @@ import { Doc, keepOnPage, type PageSetup } from './model';
 import { Deck, type SlideSize, type Master } from './deck/deck';
 import { Workbook } from './sheet/workbook';
 import { DocFile } from './document/doc-file';
-import { newDocument, type DocText } from './document/document';
+import { newDocument, usedObjects, type DocText } from './document/document';
 import type { DocStyle } from './style';
 import type { View } from './render/renderer';
 import { readCdxml } from './io/cdxml';
@@ -136,6 +136,15 @@ function officeNote(tab: Tab, program: 'Word' | 'PowerPoint'): string {
   if (officeNoted.has(tab)) return '';
   officeNoted.add(tab);
   return `. In ${program} the structures are pictures (their SMILES are in the alt text); open the file here to edit them, or copy them from here into ChemDraw`;
+}
+
+/** Whether a document's text (or its headers and footers) holds a structure: a drawing with atoms (not only shapes, a diagram or a table). */
+export function hasStructures(t: DocText): boolean {
+  for (const id of usedObjects(t)) {
+    const o = t.objects[id];
+    if (o?.kind === 'drawing' && o.contents.atoms.length) return true;
+  }
+  return false;
 }
 
 /** What a new, unsaved file of each kind is called ("Drawing 1"). */
@@ -748,7 +757,7 @@ export class Workspace {
   /** Said once per tab after a Word or PowerPoint save that holds structures. */
   private officeNoteFor(tab: Tab): string {
     if (tab.deck && tab.mode !== 'design' && tab.deck.slides.some((_, i) => tab.deck!.docOf(i).atoms.size)) return officeNote(tab, 'PowerPoint');
-    if (tab.mode === 'document' && Object.values(tab.document!.t.objects).some((o) => o.kind === 'drawing')) return officeNote(tab, 'Word');
+    if (tab.mode === 'document' && hasStructures(tab.document!.t)) return officeNote(tab, 'Word');
     return '';
   }
 

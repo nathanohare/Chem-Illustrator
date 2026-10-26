@@ -156,11 +156,16 @@ export function askDiagram(editing: DiagramData | null, o: DiagramDialogOptions)
       const a = v.lastIndexOf('\n', text.selectionStart - 1) + 1;
       let b = v.indexOf('\n', Math.max(text.selectionStart, text.selectionEnd - 1));
       if (b < 0) b = v.length;
+      const caret = text.selectionStart === text.selectionEnd ? text.selectionStart : null;
       const lines = v.slice(a, b).split('\n').map((l) => (e.shiftKey ? l.replace(/^(\t| {1,2})/, '') : '\t' + l));
       const block = lines.join('\n');
       text.value = v.slice(0, a) + block + v.slice(b);
-      text.selectionStart = a;
-      text.selectionEnd = a + block.length;
+      // a caret stays a caret (moved with its line), so what is typed next goes on the line, not over the tab
+      if (caret !== null) text.selectionStart = text.selectionEnd = Math.max(a, caret + block.length - (b - a));
+      else {
+        text.selectionStart = a;
+        text.selectionEnd = a + block.length;
+      }
       sample = false;
       later();
     });

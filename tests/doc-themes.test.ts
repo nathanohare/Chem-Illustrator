@@ -7,6 +7,8 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { newDocument, paraFromStyle, runStyleOf, type DocText } from '../src/document/document';
 import { applyDesign, newDocDesign, parseDesign, setNewDocDesign, setParaSpacing, setStyleSet, setTheme, setThemeColors, setThemeFonts, STYLE_SETS, THEMES, THEME_FONTS } from '../src/document/themes';
 import { writeDocx, readDocx, type DocxDeps } from '../src/io/docx';
+import { wordTheme } from '../src/io/docx-write';
+import { unzipSync, strFromU8 } from 'fflate';
 import type { TextRun } from '../src/model';
 
 const deps: DocxDeps = { async picture() { return null; }, async svgToPng() { return new Uint8Array(); } };
@@ -96,5 +98,31 @@ describe('keeping the design', () => {
     const t = applyDesign(newDocument(), newDocDesign());
     expect(t.styles.Heading1.font).toBe('Montserrat');
     expect(t.styles.Normal.align).toBe('left');
+  });
+});
+
+describe('the theme in Word files', () => {
+  it("writes the theme as Word's own (fonts and colours), so Word's Design tab shows it", async () => {
+    const t = setTheme(sample(), 'Classic');
+    const z = unzipSync(await writeDocx(t, deps));
+    const theme = strFromU8(z['word/theme/theme1.xml']);
+    expect(theme).toContain('<a:majorFont><a:latin typeface="Libre Baskerville"/>');
+    expect(theme).toContain('<a:minorFont><a:latin typeface="Source Serif 4"/>');
+    // Crimson: the headings colour as Text 2, its first accent as Accent 1
+    expect(theme).toContain('<a:dk2><a:srgbClr val="8B1A1A"/></a:dk2>');
+    expect(theme).toContain('<a:accent1><a:srgbClr val="8B1A1A"/></a:accent1>');
+    expect(strFromU8(z['word/_rels/document.xml.rels'])).toContain('Target="theme/theme1.xml"');
+    expect(strFromU8(z['[Content_Types].xml'])).toContain('/word/theme/theme1.xml');
+    // and it still opens with its design
+    const { doc } = await readDocx(await writeDocx(t, deps));
+    expect(doc.design?.theme).toBe('Classic');
+  });
+
+  it("writes none for a document with no theme chosen (Word's own default)", async () => {
+    const z = unzipSync(await writeDocx(sample(), deps));
+    expect(z['word/theme/theme1.xml']).toBeUndefined();
+    expect(wordTheme(undefined)).toBeNull();
+    expect(wordTheme({ styleSet: 'Simple' })).toBeNull();
+    expect(wordTheme({ fonts: 'Inter' })).toMatchObject({ major: 'Inter', minor: 'Inter' });
   });
 });
