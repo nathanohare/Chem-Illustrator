@@ -13,6 +13,7 @@ import { add, angleOf, arcCenter, DEG, dist, distToSegment, dot, fromAngle, mul,
 import type { Measure } from '../editor/arrange';
 import { bezPathAt, bezPoints, chordLocal, chordPoint } from '../objects';
 import { makePin } from './pins';
+import { throughPoints } from '../arrow-path';
 
 /**
  * Where an electron-pushing arrow starts or ends: an atom, a bond, a drawn lone pair, radical
@@ -336,9 +337,46 @@ function pushArrowAt(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, o: PushOp
       }
     }
     // an S when asked for; otherwise only when it is clearly clearer than the best curve
-    if (bestS && (o.s || !best || sClash < bestClash - 0.25)) return bestS;
+    if (bestS && (o.s || !best || sClash < bestClash - 0.25)) { best = bestS; bestClash = sClash; }
+  }
+  // still running into something: a longer way round, through a point or two off to one side
+  if (bestClash > 0.3 && !o.arcOnly) {
+    let bestD: PushArrow | null = null, dScore = Infinity, dClash = Infinity;
+    for (const sd of sides) {
+      const { t0, end } = ends(sd);
+      for (const anchors of detourAnchors(t0, end, sd, L)) {
+        const pts = throughPoints(anchors);
+        const bez = pts.slice(1, -1).map((q) => chordLocal(t0, end, q));
+        const shaped = to.kind === 'atom' ? sToAtom(doc, m, t0, c1, pts.slice(1, -1).map((q) => chordLocal(t0, c1, q)), to.id) : { head: end, bez };
+        if (!shaped) continue;
+        const path = bezPoints({ tail: t0, head: shaped.head, bez: shaped.bez })!;
+        const clash = pathClash(doc, m, sampleBez(path, 10 * (anchors.length - 1)), t0, shaped.head, skip, o.self);
+        // the shortest way round that is clear, on the usual side
+        const length = sampleBez(path, 16).reduce((t, q, i, a) => (i ? t + dist(q, a[i - 1]) : t), 0) / Math.max(dist(t0, shaped.head), 1e-6);
+        const score = clash + 0.15 * length + (sd !== usual ? 0.25 : 0);
+        if (score < dScore) { dScore = score; dClash = clash; bestD = { tail: t0, head: shaped.head, sweep: 0, bez: shaped.bez, start: from }; }
+      }
+    }
+    if (bestD && dClash < bestClash - 0.25) return bestD;
   }
   return best;
+}
+
+/**
+ * Ways round to try between two points: through one point off to side `sd` of the middle, or
+ * through two (a third and two thirds of the way along), the same distance off to one side or one each way,
+ * at a few distances (in bond lengths).
+ */
+function detourAnchors(t0: Vec, end: Vec, sd: number, L: number): Vec[][] {
+  const u = sub(end, t0), n = mul(perp(norm(u)), sd);
+  const at = (f: number, k: number) => add(add(t0, mul(u, f)), mul(n, k * L));
+  const out: Vec[][] = [];
+  for (const k of [0.8, 1.3, 1.8, 2.4]) out.push([t0, at(0.5, k), end]);
+  for (const k of [1, 1.6, 2.2]) {
+    out.push([t0, at(1 / 3, k), at(2 / 3, k), end]);
+    out.push([t0, at(1 / 3, k), at(2 / 3, -k), end]);
+  }
+  return out;
 }
 
 /**

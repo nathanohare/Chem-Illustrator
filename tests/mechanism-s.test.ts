@@ -140,6 +140,17 @@ describe('where mechanism arrows start and end', () => {
     expect(dist(p.tail, { x: 100 + 1.35 * L, y: 100 - 0.2 * L })).toBeLessThan(0.25 * L);
   });
 
+  it('goes the long way round, through a point or two, when no single curve or S gets past', () => {
+    const doc = new Doc();
+    // O⁻ and a carbon four bond lengths apart, with a chain standing across the way between them
+    const wall: AtomSpec[] = [-1.6, -0.8, 0, 0.8, 1.6].map((y) => [2, y]);
+    const ids = build(doc, [[0, 0, 8, { charge: -1 }], [4, 0], [4.87, 0.5], ...wall], [[1, 2], [3, 4], [4, 5], [5, 6], [6, 7]]);
+    const m = plainMeasure(doc);
+    const p = pushArrow(doc, m, { kind: 'atom', id: ids[0] }, { kind: 'atom', id: ids[1] })!;
+    expect(p.bez?.length ?? 0).toBeGreaterThan(2);
+    expect(clash(doc, p, { kind: 'atom', id: ids[0] }, { kind: 'atom', id: ids[1] })).toBeLessThan(0.3);
+  });
+
   it('leaves the gap set in Settings between its ends and the dot or atom', () => {
     const doc = new Doc();
     const [, o, , c] = build(doc, [[0, 0], [1, 0, 8], [-1.5, 0.3], [3, -0.6], [3.87, -1.1]], [[0, 1], [3, 4]]);
