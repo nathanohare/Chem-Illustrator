@@ -17,6 +17,18 @@ Open **Help ▸ Send Feedback…** (or **Help ▸ Report a Problem…** if somet
 
 Nothing is sent by the program itself: you always see the text first, in your browser or wherever you paste it. If you close the window by mistake, what you wrote is still there the next time you open it (until you quit the program).
 
+## When something goes wrong
+
+If the program hits an error it didn't expect, a notice at the bottom of the window says so, with a **Report It…** button. That opens **Report a Problem**, already filled in with the error and the few things the program noted just before it. Under **Include the error details the program wrote down**, click **Show them** to read exactly what would be sent, or untick the box to leave them out. Add what you were doing, then send it as above.
+
+If the desktop app closed unexpectedly last time (it crashed, or Windows ended it), the next start says so, after offering your unsaved work back, with the same **Report It…** button.
+
+The program keeps a small error log **on your computer only**, and never sends it anywhere by itself. File paths in it have your user name replaced with `~`.
+
+- **Help ▸ Copy Diagnostics** copies the version, the computer and the newest part of the log, to paste into a report or message.
+- **Help ▸ Open Log Folder** (desktop app) shows the log file, `log.txt`, in the app's data folder.
+- **View ▸ Developer Tools** adds an **Error Console** to the side panel, listing this session's errors and warnings (click one for where it happened). On Windows and Linux its **Inspector** button opens the web inspector (Ctrl+Shift+I also opens it). The Mac and iPad apps don't have the inspector, because the App Store doesn't allow it.
+
 ## Straight on GitHub
 
 You can also go to <https://github.com/nathanohare/Chem-Illustrator/issues> and click **New issue**. Before you do, it's worth searching the open issues in case someone has already asked for the same thing: a thumbs-up on an existing issue helps decide what gets done first.

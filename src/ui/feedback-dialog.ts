@@ -17,11 +17,25 @@ export class FeedbackDialog {
   /** What was written last time, kept until it is sent or copied, in case the window was closed by mistake. */
   private draft: Feedback = { kind: 'idea', title: '', details: '', steps: '' };
   private withAbout = true;
+  /** Error details to go with a problem report (from the error notice), and whether to include them. */
+  private extra = '';
+  private withExtra = true;
 
   constructor(private host: FeedbackHost) {}
 
-  open(kind?: FeedbackKind): void {
+  /** The program's version, the computer and what is open. */
+  about(): Record<string, string> {
+    return this.host.about();
+  }
+
+  /** Open the window; `prefill` fills in a problem report about an error (its title and details). */
+  open(kind?: FeedbackKind, prefill?: Pick<Feedback, 'title' | 'extra'>): void {
     if (kind) this.draft.kind = kind;
+    if (prefill) {
+      this.draft = { kind: kind ?? 'problem', title: prefill.title, details: '', steps: '' };
+      this.extra = prefill.extra ?? '';
+      this.withExtra = true;
+    }
     const d = document.createElement('dialog');
     d.className = 'ask feedback-dialog';
     const form = document.createElement('form');
@@ -78,6 +92,24 @@ export class FeedbackDialog {
     const aboutText = document.createElement('span');
     aboutLab.append(aboutBox, aboutText);
 
+    // the error details, shown so the person can read what would be sent before leaving them in
+    const extraWrap = document.createElement('div');
+    extraWrap.className = 'feedback-extra';
+    extraWrap.hidden = !this.extra;
+    const extraBox = document.createElement('input');
+    extraBox.type = 'checkbox';
+    extraBox.checked = this.withExtra;
+    const extraLab = document.createElement('label');
+    extraLab.className = 'feedback-about';
+    extraLab.append(extraBox, ' Include the error details the program wrote down');
+    const extraShow = document.createElement('details');
+    const extraSum = document.createElement('summary');
+    extraSum.textContent = 'Show them';
+    const extraPre = document.createElement('pre');
+    extraPre.textContent = this.extra;
+    extraShow.append(extraSum, extraPre);
+    extraWrap.append(extraLab, extraShow);
+
     const status = document.createElement('p');
     status.className = 'name-status';
     status.setAttribute('role', 'status');
@@ -98,7 +130,7 @@ export class FeedbackDialog {
     send.title = `Open a new issue on ${REPO_URL.replace('https://', '')}, filled in, in your browser`;
     buttons.append(cancel, copy, send);
 
-    form.append(h, note, kinds, titleRow, detailsRow, stepsRow, aboutLab, status, buttons);
+    form.append(h, note, kinds, titleRow, detailsRow, stepsRow, extraWrap, aboutLab, status, buttons);
     d.append(form);
 
     const about = this.host.about();
@@ -108,6 +140,7 @@ export class FeedbackDialog {
         k === 'idea' ? 'What would you like it to do? How would it help?' :
         k === 'problem' ? 'What went wrong? What did you expect to happen?' : 'Your comment or question';
       stepsRow.hidden = k !== 'problem';
+      extraWrap.hidden = !this.extra || k !== 'problem';
       aboutText.textContent = ` Include the program's version and computer (${Object.values(about).filter(Boolean).join(', ')})`;
     };
     const read = (): Feedback => {
@@ -115,13 +148,15 @@ export class FeedbackDialog {
       this.draft.details = details.value;
       this.draft.steps = steps.value;
       this.withAbout = aboutBox.checked;
-      return { ...this.draft, about: aboutBox.checked ? about : undefined };
+      this.withExtra = extraBox.checked;
+      const extra = this.extra && extraBox.checked && this.draft.kind === 'problem' ? this.extra : undefined;
+      return { ...this.draft, about: aboutBox.checked ? about : undefined, extra };
     };
-    const empty = (f: Feedback): boolean => !f.title.trim() && !f.details.trim();
+    const empty = (f: Feedback): boolean => !f.title.trim() && !f.details.trim() && !f.extra;
     show();
 
     const close = () => { read(); if (d.open) d.close(); };
-    const sent = () => { this.draft = { kind: this.draft.kind, title: '', details: '', steps: '' }; };
+    const sent = () => { this.draft = { kind: this.draft.kind, title: '', details: '', steps: '' }; this.extra = ''; };
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const f = read();
