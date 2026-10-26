@@ -115,7 +115,7 @@ export function distributeOffsets(us: Unit[], axis: 'h' | 'v'): Vec[] {
   const out = us.map(() => ({ x: 0, y: 0 }));
   if (us.length < 3) return out;
   const lo = (r: Rect) => (axis === 'h' ? r.x1 : r.y1), hi = (r: Rect) => (axis === 'h' ? r.x2 : r.y2);
-  const order = us.map((u, i) => i).sort((i, j) => lo(us[i].box) + hi(us[i].box) - lo(us[j].box) - hi(us[j].box));
+  const order = us.map((_u, i) => i).sort((i, j) => lo(us[i].box) + hi(us[i].box) - lo(us[j].box) - hi(us[j].box));
   const first = us[order[0]].box, last = us[order[order.length - 1]].box;
   let sizes = 0;
   for (const i of order) sizes += hi(us[i].box) - lo(us[i].box);
@@ -249,3 +249,33 @@ export const rotation = (c: Vec, ang: number) => (p: Vec): Vec => {
 
 export const mirrorX = (cx: number) => (p: Vec): Vec => ({ x: 2 * cx - p.x, y: p.y });
 export const mirrorY = (cy: number) => (p: Vec): Vec => ({ x: p.x, y: 2 * cy - p.y });
+
+/**
+ * How far to move a box `b` (something just pasted) so that it overlaps none of `others`,
+ * moving it as little as possible: the shifts tried line it up a `gap` beside one of the boxes
+ * near it. Inside `page` when one is given. (0, 0) when it is clear already, or when nothing
+ * near enough is clear.
+ */
+export function clearOffset(b: Rect, others: readonly Rect[], gap: number, page?: { w: number; h: number }): Vec {
+  const w = b.x2 - b.x1, h = b.y2 - b.y1;
+  const hits = (t: Vec, o: Rect) => b.x1 + t.x < o.x2 + gap / 2 && o.x1 < b.x2 + t.x + gap / 2 && b.y1 + t.y < o.y2 + gap / 2 && o.y1 < b.y2 + t.y + gap / 2;
+  const onPage = (t: Vec) => !page || (b.x1 + t.x >= 0 && b.y1 + t.y >= 0 && b.x2 + t.x <= page.w && b.y2 + t.y <= page.h);
+  const zero = { x: 0, y: 0 };
+  if (!others.some((o) => hits(zero, o))) return zero;
+  // only the boxes it could land among (nearest first), so huge drawings stay quick
+  const reach = 6 * Math.max(w, h, gap);
+  const cx = (b.x1 + b.x2) / 2, cy = (b.y1 + b.y2) / 2;
+  const dist = (o: Rect) => Math.hypot(Math.max(o.x1 - cx, 0, cx - o.x2), Math.max(o.y1 - cy, 0, cy - o.y2));
+  const near = others.filter((o) => dist(o) < reach).sort((p, q) => dist(p) - dist(q)).slice(0, 80);
+  const xs = [0], ys = [0];
+  for (const o of near) {
+    xs.push(o.x2 + gap - b.x1, o.x1 - gap - b.x2);
+    ys.push(o.y2 + gap - b.y1, o.y1 - gap - b.y2);
+  }
+  const tries: Vec[] = [];
+  for (const x of xs) for (const y of ys) if (Math.hypot(x, y) <= reach) tries.push({ x, y });
+  // nearest first; on a tie, to the right, then below (the way a scheme reads)
+  tries.sort((p, q) => Math.hypot(p.x, p.y) - Math.hypot(q.x, q.y) || q.x - p.x || q.y - p.y);
+  for (const t of tries) if (onPage(t) && !near.some((o) => hits(t, o)) && !others.some((o) => hits(t, o))) return t;
+  return zero;
+}

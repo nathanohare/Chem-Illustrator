@@ -1,4 +1,4 @@
-// File > Import Structures: from a picture (a photo or scan of a hand drawing, a screenshot, a
+// File > Import > Import Structures: from a picture (a photo or scan of a hand drawing, a screenshot, a
 // figure), from the clipboard, or from a PDF. Chooses the reader (the one on this computer, the
 // person's AI model, or asks to download the first), then opens the review screen.
 
@@ -155,7 +155,7 @@ export async function canReadStructures(host: ImportHost): Promise<boolean> {
 }
 
 /**
- * File > Import Structures from PDF, once the drawings are found (on this computer: nothing is sent
+ * File > Import > Import Structures from PDF, once the drawings are found (on this computer: nothing is sent
  * to find them): the pages are shown with each drawing outlined, the person ticks the ones to read,
  * and only those are read, by their AI model (when linked) or the reader on this computer.
  */
@@ -181,7 +181,7 @@ export async function importPdfDrawings(host: ImportHost, found: FoundPicture[],
   await review(host, how, picked.chosen, o);
 }
 
-/** File > Import Structures from Picture (or Paste Picture as Structure): the pictures read, and the review screen. */
+/** File > Import > Import Structures from Picture (or Paste Picture as Structure): the pictures read, and the review screen. */
 export async function importPictureFiles(host: ImportHost, pics: { name: string; bytes: Uint8Array; mime: string }[]): Promise<void> {
   if (!pics.length) return;
   const found: FoundPicture[] = [];

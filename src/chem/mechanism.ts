@@ -13,6 +13,7 @@ import { add, angleOf, arcCenter, DEG, dist, distToSegment, dot, fromAngle, mul,
 import type { Measure } from '../editor/arrange';
 import { bezPathAt, bezPoints, chordLocal, chordPoint } from '../objects';
 import { makePin } from './pins';
+import { throughPoints } from '../arrow-path';
 
 /**
  * Where an electron-pushing arrow starts or ends: an atom, a bond, a drawn lone pair, radical
@@ -65,12 +66,22 @@ function labelReach(c: Vec, boxes: Rect[], d: Vec): number {
 }
 
 /** How far from an atom an arrow should stop when it leaves or reaches it along d. */
-function stopAt(doc: Doc, m: Measure, id: number, d: Vec): number {
+function stopAt(doc: Doc, m: Measure, id: number, d: Vec, end: 'start' | 'end' = 'end'): number {
   const a = doc.atoms.get(id)!;
   const L = doc.style.bondLength;
   const boxes = m.atomBoxes(a);
+  const gap = arrowGaps[end];
+  // a bare carbon's corner keeps the same extra room beyond the gap as it has by default
+  if (gap !== null) return boxes.length ? labelReach(a, boxes, d) + gap : (BARE - CLEAR) * L + gap;
   return boxes.length ? labelReach(a, boxes, d) + CLEAR * L : BARE * L;
 }
+
+/**
+ * The space left between a mechanism arrow's end and the atom label (or bare atom) or lone pair it
+ * starts or ends at, in points (Settings ▸ Drawing). Null: the usual space, which scales with the
+ * bond length.
+ */
+export const arrowGaps: { start: number | null; end: number | null } = { start: null, end: null };
 
 const shapeCentre = (s: Shape): Vec => ({ x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 });
 
@@ -100,6 +111,9 @@ export function pairsOn(doc: Doc, id: number): Shape[] {
   const L = doc.style.bondLength;
   return [...doc.shapes.values()].filter((s) => isElectrons(s) && dist(shapeCentre(s), a) < 0.7 * L && pairOwner(doc, s) === id);
 }
+
+/** The middle of what an arrow end is on: a lone pair's dots, an atom, a bond's or new bond's middle. */
+export const endCentre = (doc: Doc, e: PushEnd): Vec => centreOf(doc, e);
 
 const centreOf = (doc: Doc, e: PushEnd): Vec => {
   if (e.kind === 'point') return e.p;
@@ -199,7 +213,7 @@ function pushArrowAt(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, o: PushOp
   let lean: Vec | null = null;
   if (from.kind === 'atom') {
     const d = lonePairDir(doc, from.id, c1);
-    tail = add(c0, mul(d, stopAt(doc, m, from.id, d)));
+    tail = add(c0, mul(d, stopAt(doc, m, from.id, d, 'start')));
     lean = d;
   } else if (from.kind === 'pair') {
     const pair = doc.shapes.get(from.id)!;
@@ -208,7 +222,7 @@ function pushArrowAt(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, o: PushOp
     const d = owner !== null ? norm(sub(pc, doc.atoms.get(owner)!)) : norm(sub(c1, pc));
     // just outside the dots (or the circled charge)
     const size = Math.max(pair.x2 - pair.x1, pair.y2 - pair.y1);
-    tail = add(pc, mul(d, Math.max(0.09 * L, size / 2 + 0.05 * L)));
+    tail = add(pc, mul(d, arrowGaps.start !== null ? size / 2 + arrowGaps.start : Math.max(0.09 * L, size / 2 + 0.05 * L)));
     lean = d;
   }
   const chord = dist(tail, c1);
@@ -323,9 +337,46 @@ function pushArrowAt(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, o: PushOp
       }
     }
     // an S when asked for; otherwise only when it is clearly clearer than the best curve
-    if (bestS && (o.s || !best || sClash < bestClash - 0.25)) return bestS;
+    if (bestS && (o.s || !best || sClash < bestClash - 0.25)) { best = bestS; bestClash = sClash; }
+  }
+  // still running into something: a longer way round, through a point or two off to one side
+  if (bestClash > 0.3 && !o.arcOnly) {
+    let bestD: PushArrow | null = null, dScore = Infinity, dClash = Infinity;
+    for (const sd of sides) {
+      const { t0, end } = ends(sd);
+      for (const anchors of detourAnchors(t0, end, sd, L)) {
+        const pts = throughPoints(anchors);
+        const bez = pts.slice(1, -1).map((q) => chordLocal(t0, end, q));
+        const shaped = to.kind === 'atom' ? sToAtom(doc, m, t0, c1, pts.slice(1, -1).map((q) => chordLocal(t0, c1, q)), to.id) : { head: end, bez };
+        if (!shaped) continue;
+        const path = bezPoints({ tail: t0, head: shaped.head, bez: shaped.bez })!;
+        const clash = pathClash(doc, m, sampleBez(path, 10 * (anchors.length - 1)), t0, shaped.head, skip, o.self);
+        // the shortest way round that is clear, on the usual side
+        const length = sampleBez(path, 16).reduce((t, q, i, a) => (i ? t + dist(q, a[i - 1]) : t), 0) / Math.max(dist(t0, shaped.head), 1e-6);
+        const score = clash + 0.15 * length + (sd !== usual ? 0.25 : 0);
+        if (score < dScore) { dScore = score; dClash = clash; bestD = { tail: t0, head: shaped.head, sweep: 0, bez: shaped.bez, start: from }; }
+      }
+    }
+    if (bestD && dClash < bestClash - 0.25) return bestD;
   }
   return best;
+}
+
+/**
+ * Ways round to try between two points: through one point off to side `sd` of the middle, or
+ * through two (a third and two thirds of the way along), the same distance off to one side or one each way,
+ * at a few distances (in bond lengths).
+ */
+function detourAnchors(t0: Vec, end: Vec, sd: number, L: number): Vec[][] {
+  const u = sub(end, t0), n = mul(perp(norm(u)), sd);
+  const at = (f: number, k: number) => add(add(t0, mul(u, f)), mul(n, k * L));
+  const out: Vec[][] = [];
+  for (const k of [0.8, 1.3, 1.8, 2.4]) out.push([t0, at(0.5, k), end]);
+  for (const k of [1, 1.6, 2.2]) {
+    out.push([t0, at(1 / 3, k), at(2 / 3, k), end]);
+    out.push([t0, at(1 / 3, k), at(2 / 3, -k), end]);
+  }
+  return out;
 }
 
 /**
@@ -572,6 +623,34 @@ export function headEnd(doc: Doc, e: PushEnd, at: Vec): PushEnd {
 /** An end an arrow starts from: electrons drawn there, or else the atom a circled plus is on. */
 export function tailEnd(doc: Doc, e: PushEnd, at: Vec): PushEnd {
   return e.kind === 'pair' && !isElectrons(doc.shapes.get(e.id)) ? headEnd(doc, e, at) : e;
+}
+
+/**
+ * Where an arrow drawn through waypoints starts (or ends) on what it was clicked on, coming from
+ * (or going to) `toward`: just outside a lone pair's dots, clear of an atom's label, beside a
+ * bond's middle, or in the gap of a new bond, with the gap set in Settings.
+ */
+export function endPointToward(doc: Doc, m: Measure, e: PushEnd, toward: Vec, end: 'start' | 'end'): Vec {
+  const L = doc.style.bondLength;
+  if (e.kind === 'point') return e.p;
+  if (e.kind === 'pair') {
+    const pair = doc.shapes.get(e.id)!;
+    const owner = pairOwner(doc, pair);
+    const pc = shapeCentre(pair);
+    const d = owner !== null ? norm(sub(pc, doc.atoms.get(owner)!)) : norm(sub(toward, pc));
+    const size = Math.max(pair.x2 - pair.x1, pair.y2 - pair.y1);
+    return add(pc, mul(d, arrowGaps.start !== null ? size / 2 + arrowGaps.start : Math.max(0.09 * L, size / 2 + 0.05 * L)));
+  }
+  if (e.kind === 'atom') {
+    const a = doc.atoms.get(e.id)!;
+    const d = norm(sub(toward, a));
+    return add(a, mul(d, stopAt(doc, m, e.id, d, end)));
+  }
+  const c = centreOf(doc, e);
+  const [q1, q2] = endPair(doc, e)!.map((id) => doc.atoms.get(id)!);
+  let n = perp(norm(sub(q2, q1)));
+  if (dot(sub(toward, c), n) < 0) n = mul(n, -1);
+  return add(c, mul(n, (e.kind === 'gap' ? 0.06 : end === 'start' ? 0.08 : 0.12) * L));
 }
 
 /** Are two ends the same thing (an arrow can't run from a thing to itself)? */

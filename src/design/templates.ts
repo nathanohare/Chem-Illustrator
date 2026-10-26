@@ -1,4 +1,4 @@
-// Ready-made designs to start from (File > New Design): a TOC graphic, a graphical abstract, a
+// Ready-made designs to start from (File > New > New Design): a TOC graphic, a graphical abstract, a
 // poster, a flowchart, a workup scheme and a timeline. Each is ordinary shapes, text and
 // connectors on a page of the right size, so everything in it can be moved, retyped, recoloured
 // or deleted; the dashed boxes mark where structures or pictures go.

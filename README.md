@@ -77,7 +77,7 @@ Text on drawings, slides and documents is spell-checked, and a second check catc
 
 ## Dark mode
 
-The eye button shows the page dark on screen, with your structures in light ink. Files, printing and copies keep their white paper. Choose Graphite, Slate or Warm dark, or mix your own in **View ▸ Dark Page Colours**.
+The eye button shows the page dark on screen, with your structures in light ink. Files, printing and copies keep their white paper. Choose Graphite, Slate or Warm dark, or mix your own in **View ▸ Window and Colours ▸ Dark Page Colours**.
 
 ![Turning the dark page on, then switching its colours between palettes](docs/images/dark-mode.gif)
 

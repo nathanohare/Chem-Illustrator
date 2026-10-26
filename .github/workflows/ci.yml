@@ -26,4 +26,39 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # the stricter type checks (unused parameters, a path that forgets to return)
+      - run: npm run typecheck:strict
       - run: npm run build
+      # the built app in a real browser: start, draw, paste, save and reopen, every kind of tab,
+      # menus that fit a laptop's window (scripts/smoke.mjs)
+      - run: npx playwright install --with-deps chromium
+      - run: npm run smoke
+
+  # the work behind each mode (bench/core.bench.ts), timed for this pull request and for the branch
+  # it merges into on the same machine: fails when a measure gets more than 40% slower
+  speed:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: head
+      - uses: actions/checkout@v4
+        with:
+          path: base
+          ref: ${{ github.event.pull_request.base.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: head/package-lock.json
+      - run: (cd head && npm ci) && (cd base && npm ci)
+      # both are timed with this pull request's benchmarks
+      - run: cp head/bench/core.bench.ts base/bench/core.bench.ts
+      # twice each, taking turns, so a slow moment on the machine doesn't count against one side
+      - run: |
+          for n in 1 2; do
+            (cd base && npx vitest bench --run bench/core.bench.ts --outputJson ../base$n.json > /dev/null)
+            (cd head && npx vitest bench --run bench/core.bench.ts --outputJson ../head$n.json > /dev/null)
+          done
+      - run: node head/scripts/bench-gate.mjs base1.json,base2.json head1.json,head2.json

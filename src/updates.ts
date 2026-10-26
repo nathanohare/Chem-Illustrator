@@ -14,8 +14,12 @@ export interface Release {
   /** What changed, as written in the release on GitHub. */
   notes: string;
   date?: string;
-  /** Download, check and install; reports how far the download has got (0 to 1, or null if unknown). */
-  install(progress: (done: number | null) => void): Promise<void>;
+  /**
+   * Download, check and install; reports how far the download has got (0 to 1, or null if
+   * unknown). `closing` runs once the app is about to close for the installer (after the
+   * download, where the download is a step of its own), to tidy up as a normal close does.
+   */
+  install(progress: (done: number | null) => void, closing?: () => Promise<void>): Promise<void>;
 }
 
 /** Which builds to be offered (Edit > Settings > Online). */
@@ -78,9 +82,11 @@ export async function findRelease(channel: UpdateChannel = 'latest'): Promise<Re
     version: u.version,
     notes: (u.body ?? '').trim(),
     date: u.date,
-    async install(progress) {
+    async install(progress, closing) {
       if (inPlace) {
         // the shell downloads the new app, checks it, swaps it for this one and starts it
+        // (all in one step, so the tidying up comes first)
+        await closing?.();
         const { Channel } = await import('@tauri-apps/api/core');
         const onProgress = new Channel<number>();
         onProgress.onmessage = (done) => progress(done < 0 ? null : done);
@@ -88,11 +94,14 @@ export async function findRelease(channel: UpdateChannel = 'latest'): Promise<Re
         return;
       }
       let total = 0, got = 0;
-      await u.downloadAndInstall((e) => {
+      await u.download((e) => {
         if (e.event === 'Started') { total = e.data.contentLength ?? 0; progress(total ? 0 : null); }
         else if (e.event === 'Progress') { got += e.data.chunkLength; progress(total ? Math.min(1, got / total) : null); }
         else progress(1);
       });
+      // downloaded and checked: on Windows the app closes the moment the installer starts
+      await closing?.();
+      await u.install();
       // Windows closes the app itself to run the installer; elsewhere start the new version
       const { relaunch } = await import('@tauri-apps/plugin-process');
       await relaunch();
@@ -110,3 +119,42 @@ export function shortNotes(notes: string, lines = 4): string {
   const ls = notes.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   return ls.slice(0, lines).join('\n') + (ls.length > lines ? '\n…' : '');
 }
+
+/** Version numbers in order: -1, 0 or 1 (0.1.9 before 0.1.10). */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.replace(/^v/, '').split(/[.-]/).map((x) => parseInt(x, 10) || 0);
+  const pb = b.replace(/^v/, '').split(/[.-]/).map((x) => parseInt(x, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d) return Math.sign(d);
+  }
+  return 0;
+}
+
+/** A release as GitHub's list of releases gives it. */
+export interface PublishedRelease { tag_name: string; body?: string | null; draft?: boolean }
+
+/**
+ * What changed between the version that ran last and this one, newest first: each release's
+ * notes without GitHub's "Merge pull request #… from …" line, for the What's New card.
+ */
+export function notesSince(releases: readonly PublishedRelease[], before: string, now: string): { version: string; notes: string }[] {
+  return releases
+    .filter((r) => !r.draft && /^v?\d/.test(r.tag_name) && compareVersions(r.tag_name, before) > 0 && compareVersions(r.tag_name, now) <= 0)
+    .sort((a, b) => compareVersions(b.tag_name, a.tag_name))
+    .map((r) => ({
+      version: r.tag_name.replace(/^v/, ''),
+      notes: (r.body ?? '').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !/^Merge (pull request|branch)\b/.test(l)).join('\n'),
+    }))
+    .filter((r) => r.notes);
+}
+
+/** The project's releases on GitHub (the newest 30), for What's New. Throws when GitHub can't be reached. */
+export async function publishedReleases(): Promise<PublishedRelease[]> {
+  const r = await fetch('https://api.github.com/repos/nathanohare/Chem-Illustrator/releases?per_page=30', { headers: { Accept: 'application/vnd.github+json' } });
+  if (!r.ok) throw new Error(`GitHub said ${r.status}`);
+  return r.json();
+}
+
+/** Where every release's notes are. */
+export const RELEASES_PAGE = 'https://github.com/nathanohare/Chem-Illustrator/releases';

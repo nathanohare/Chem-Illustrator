@@ -1,6 +1,7 @@
 // Search Commands (Alt+Q, or the search box at the top): type a few letters of what you want
 // to do and pick it from the list, as in Office's "Tell me" box. It lists every menu command,
-// the buttons on the ribbon showing, and the drawing tools, with their keys.
+// the buttons on the ribbon showing, and the drawing tools, with their keys; then the pages of
+// Settings and the sections of the User Guide.
 
 export interface CommandItem {
   /** Unique, e.g. "cmd:save" or "tool:bond-wedge". */
@@ -48,6 +49,9 @@ export function matchScore(item: Pick<CommandItem, 'label' | 'place' | 'more'> &
   else if (joined.startsWith(typed)) score += 4;
   // the everyday commands before the rarer ones that share a word ("Copy" before "Copy as InChI")
   if (COMMON.has(item.id ?? '')) score += 2;
+  // a command that does it comes before a page of Settings, and that before reading about it
+  if (item.id?.startsWith('set:')) score -= 1;
+  else if (item.id?.startsWith('guide:')) score -= 3;
   // shorter names are the more likely meaning ("Save" before "Save Workspace As")
   return score - name.length * 0.1;
 }
@@ -128,6 +132,13 @@ export class CommandSearch {
     d.addEventListener('click', (e) => { if (e.target === d) d.close(); });
     document.body.append(d);
     return d;
+  }
+
+  /** Gather the items again (more have arrived, such as the User Guide's sections) and show them, if open. */
+  refresh(): void {
+    if (!this.d?.open) return;
+    this.items = this.gather();
+    this.draw();
   }
 
   private draw(): void {

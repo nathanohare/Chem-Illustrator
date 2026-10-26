@@ -2,7 +2,7 @@
 // (note) or purple (comment) corner shows its card beside the cell; clicking into the card keeps
 // it open. A note's card is a yellow sticky note to type in; a comment's card is the same
 // conversation card as Word's and PowerPoint's comments here (reply, resolve, edit, delete).
-// Notes set to show all the time (Show Note, or View > Show All Notes) sit beside their cells.
+// Notes set to show all the time (Show Note, or View > Sheet > Show All Notes) sit beside their cells.
 // Every change is a step of the workbook's Undo.
 
 import type { Sheet } from '../sheet/workbook';
@@ -30,7 +30,7 @@ const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: 
 };
 
 export class SheetNotes {
-  /** View > Show All Notes. */
+  /** View > Sheet > Show All Notes. */
   showAll = false;
   /** The card showing, for which cell, and whether it stays open (clicked, or being typed in). */
   private card: { el: HTMLElement; sheet: Sheet; r: number; c: number; pinned: boolean } | null = null;
@@ -100,7 +100,9 @@ export class SheetNotes {
     const el = this.card?.el;
     if (!el) return;
     const w = el.offsetWidth || 240, h = el.offsetHeight || 120;
-    let x = box.right + 10, y = box.top - 4;
+    // past the next column, so the cells beside and below the note's cell can still be clicked
+    const next = this.card ? this.view.screenRect(this.card.r, this.card.c + 1) : null;
+    let x = (next && next.left >= box.right - 1 ? next.right : box.right) + 10, y = box.top - 4;
     if (x + w > innerWidth - 6) x = Math.max(6, box.left - w - 10);
     y = Math.max(6, Math.min(y, innerHeight - h - 6));
     el.style.left = `${Math.round(x)}px`;
@@ -142,7 +144,7 @@ export class SheetNotes {
       done = true;
       const text = ta.value.replace(/\s+$/, '');
       const draft = this.draft && this.draft.note === n ? this.draft : null;
-      this.draft = null;
+      if (draft) this.draft = null;
       if (keep && text !== n.text) {
         if (draft && !text) { /* an empty new note isn't kept */ }
         else this.host.edit(draft ? 'New note' : text ? 'Edit note' : 'Delete note', (sh) => sh.setNote(r, c, text ? { ...n, text } : undefined));
@@ -224,6 +226,7 @@ export class SheetNotes {
     if (had) { this.edit(); return; }
     if (!reviewAuthor() && !(await this.host.askName())) return;
     this.view.commitEdit();
+    this.close();
     this.view.reveal(a.r, a.c);
     this.draft = { sheet: a.s, r: a.r, c: a.c, note: { kind: 'note', author: reviewAuthor(), date: revisionDate(), text: '' } };
     this.close(true);
@@ -239,6 +242,7 @@ export class SheetNotes {
     if (had) { this.open(a.s, a.r, a.c, true); return; }
     if (!reviewAuthor() && !(await this.host.askName())) return;
     this.view.commitEdit();
+    this.close();
     this.view.reveal(a.r, a.c);
     this.draft = { sheet: a.s, r: a.r, c: a.c, note: { kind: 'comment', author: reviewAuthor(), date: revisionDate(), text: '' } };
     this.close(true);
@@ -275,7 +279,7 @@ export class SheetNotes {
     this.host.edit(n.shown ? 'Hide note' : 'Show note', (sh) => sh.setNote(a.r, a.c, { ...n, shown: !n.shown || undefined }));
   }
 
-  /** View > Show All Notes. */
+  /** View > Sheet > Show All Notes. */
   toggleShowAll(): void {
     this.showAll = !this.showAll;
     this.close();

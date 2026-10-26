@@ -2,7 +2,7 @@
 // starts, which shows a small notice in the corner if there is one, and File > Check for Updates…,
 // which always says what it found. Installing asks first when some tabs aren't saved.
 
-import { appVersion, findRelease, shortNotes, worthOffering, type Release, type UpdateChannel } from '../updates';
+import { appVersion, findRelease, notesSince, publishedReleases, shortNotes, worthOffering, RELEASES_PAGE, type Release, type UpdateChannel } from '../updates';
 import { ask } from './ask';
 
 export interface UpdateHost {
@@ -13,6 +13,13 @@ export interface UpdateHost {
   skip(version: string | null): void;
   /** Stable or Latest (Edit > Settings > Online). */
   channel(): UpdateChannel;
+  /** Open a web page in the computer's browser. */
+  openPage(url: string): void;
+  /**
+   * The app is about to close for the installer, the user having agreed to lose what isn't
+   * saved: tidy up as a normal close does, so the next start doesn't offer those tabs back.
+   */
+  closing(): Promise<void>;
 }
 
 export class UpdateUI {
@@ -82,6 +89,45 @@ export class UpdateUI {
     this.box = box;
   }
 
+  /**
+   * After an update: a card in the corner saying what changed since the version that ran last
+   * (from the releases on GitHub). Nothing when GitHub can't be reached or there are no notes.
+   */
+  async whatsNew(before: string, now: string): Promise<void> {
+    let found: { version: string; notes: string }[];
+    try { found = notesSince(await publishedReleases(), before, now); } catch { return; }
+    if (!found.length || this.box) return;
+    const box = document.createElement('div');
+    box.className = 'update-box whats-new';
+    box.setAttribute('role', 'status');
+    const h = document.createElement('strong');
+    h.textContent = `What’s new in Chem Illustrator ${now}`;
+    const list = document.createElement('div');
+    list.className = 'whats-new-list';
+    for (const r of found.slice(0, 5)) {
+      const p = document.createElement('p');
+      const v = document.createElement('b');
+      v.textContent = r.version + ' ';
+      p.append(v, shortNotes(r.notes, 3));
+      list.append(p);
+    }
+    const row = document.createElement('div');
+    row.className = 'update-buttons';
+    const all = document.createElement('button');
+    all.type = 'button';
+    all.textContent = 'All Release Notes';
+    all.addEventListener('click', () => this.host.openPage(RELEASES_PAGE));
+    const ok = document.createElement('button');
+    ok.type = 'button';
+    ok.className = 'primary';
+    ok.textContent = 'OK';
+    ok.addEventListener('click', () => { box.remove(); this.box = null; });
+    row.append(ok, all);
+    box.append(h, list, row);
+    document.body.append(box);
+    this.box = box;
+  }
+
   private async install(r: Release, bar: HTMLElement, row: HTMLElement): Promise<void> {
     if (this.busy) return;
     const open = this.host.unsaved();
@@ -99,7 +145,7 @@ export class UpdateUI {
     try {
       await r.install((done) => {
         bar.textContent = done === null ? 'Downloading…' : done >= 1 ? 'Installing…' : `Downloading… ${Math.round(done * 100)}%`;
-      });
+      }, () => this.host.closing());
     } catch (e) {
       bar.textContent = `The update didn’t install: ${String(e)}`;
       row.hidden = false;

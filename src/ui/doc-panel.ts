@@ -519,7 +519,7 @@ export class DocPanel {
     const s = this.sections.hf;
     this.secNote(s);
     const hf = (f: (h: HeaderFooter) => HeaderFooter) => this.changeSec('Header and footer', (x) => ({ hf: f(x.hf) }));
-    this.check(s, 'hf-link', 'Same as previous section', (v) => this.changeSec('Header and footer', (x) => ({ linked: v })),
+    this.check(s, 'hf-link', 'Same as previous section', (v) => this.changeSec('Header and footer', () => ({ linked: v })),
       'Word\'s Link to Previous: this section shows the header and footer of the one before. Turn it off to give this section its own');
     this.row(s, 'Page numbers', this.select('hf-numbers', PLACES, (v) => hf((h) => ({ ...h, numbers: v as NumberPlace }))));
     this.row(s, 'Before the number', this.input('hf-prefix', (v) => hf((h) => ({ ...h, prefix: v })), { placeholder: 'S for S1, S2…' }), 'Supporting Information pages are numbered S1, S2…: type S here');

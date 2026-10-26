@@ -207,8 +207,10 @@ export function passes(v: Validation, value: Value, shown: string, sheet: Sheet,
       const got = host.formulaAt(v.value1.trim().startsWith('=') ? v.value1.trim() : '=' + v.value1.trim(), homeOf(v), row, col);
       return got === true || (typeof got === 'number' && got !== 0);
     }
+    // a kind from a newer version of the program: let the value through
+    default:
+      return true;
   }
-  return true;
 }
 
 /** "a whole number between 1 and 10", for alerts and the panel. */

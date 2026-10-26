@@ -1,4 +1,4 @@
-// Insert > Header & Footer (also Date & Time and Slide Number): the date (today's, kept up to
+// Insert > Slides > Header & Footer (also Date & Time and Slide Number): the date (today's, kept up to
 // date in the form picked, or fixed text), slide number and footer on the slides, for the slides
 // picked (Apply) or every slide (Apply to All), and the header, footer, date and page numbers of
 // notes pages and handouts. Saved as PowerPoint's own date, number and footer placeholders.

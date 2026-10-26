@@ -1,4 +1,4 @@
-// Reuse Slides (Home > Reuse, or Insert > Reuse Slides): the slides of another PowerPoint file
+// Reuse Slides (Home > Reuse, or Insert > Slides > Reuse Slides): the slides of another PowerPoint file
 // as small pictures. Click slides to pick them (Shift+click for a run of them), then insert
 // them after the slide being edited, in this deck's look or each keeping its own.
 

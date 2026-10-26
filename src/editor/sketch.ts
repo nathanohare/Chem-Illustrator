@@ -1,4 +1,4 @@
-// Sketching with the pen (the Sketch tool, or any tool with View > Touch Mode > Pen Always
+// Sketching with the pen (the Sketch tool, or any tool with View > Window and Colours > Touch Mode > Pen Always
 // Sketches): freehand ink becomes chemistry when the pen lifts.
 //
 // - A line becomes a bond; a line with corners (a zig-zag) a chain, one bond per straight
@@ -112,7 +112,7 @@ export function classify(pts: Vec[], L: number, startsOnAtom = false, letterMax 
 }
 
 /** Corners round a closed stroke (0 for a smooth loop). */
-export function loopCorners(pts: Vec[], c: Vec, r: number): number {
+export function loopCorners(pts: Vec[], _c: Vec, r: number): number {
   const ring = resample(pts, (2 * Math.PI * r) / 72);
   if (ring.length < 8) return 0;
   // the turning at each point, over a short window: corners turn sharply, circles evenly

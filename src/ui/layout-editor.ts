@@ -230,7 +230,7 @@ export function editLayouts(input: LayoutEditorInput): Promise<LayoutDef[] | nul
     }
 
     function render(): void {
-      list.replaceChildren(...layouts.map((l, i) => {
+      list.replaceChildren(...layouts.map((_l, i) => {
         const it = document.createElement('button');
         it.type = 'button';
         it.className = i === sel ? 'le-item current' : 'le-item';

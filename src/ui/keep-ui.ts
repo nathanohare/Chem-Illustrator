@@ -190,7 +190,7 @@ export function recoverDialog(sessions: Session[], atStart: boolean): Promise<Re
     buttons.append(spacer);
     button(atStart ? 'Not Now' : 'Close', 'later');
     button('Reopen', 'reopen', true);
-    form.append(buttons, para(atStart ? '“Not Now” keeps them: File ▸ Recover Unsaved Work… has them later.' : 'Copies are deleted after the number of days set in File ▸ AutoSave and Recovery Options.'));
+    form.append(buttons, para(atStart ? '“Not Now” keeps them: File ▸ Versions and Recovery ▸ Recover Unsaved Work… has them later.' : 'Copies are deleted after the number of days set in File ▸ Versions and Recovery ▸ AutoSave and Recovery Options.'));
     d.addEventListener('close', () => { d.remove(); resolve(result); });
     document.body.append(d);
     d.showModal();
@@ -283,7 +283,7 @@ export function versionDialog(fileName: string, place: string, versions: Version
 
 const MINUTE_CHOICES = [0, 1, 2, 5, 10, 15, 30];
 
-/** File > AutoSave and Recovery Options. */
+/** File > Versions and Recovery > AutoSave and Recovery Options. */
 export async function optionsDialog(p: KeepPrefs, where: string, desktop: boolean): Promise<KeepPrefs | null> {
   const pending = ask('AutoSave and Recovery Options', [
     { name: 'autoSave', label: 'AutoSave: files already saved save themselves as you work (File ▸ AutoSave switches it for one file)', type: 'checkbox', value: String(p.autoSave) },

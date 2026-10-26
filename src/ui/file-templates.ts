@@ -1,4 +1,4 @@
-// File > New from Template: a gallery of our own document and sheet templates (lab report,
+// File > New > New from Template: a gallery of our own document and sheet templates (lab report,
 // Supporting Information, thesis chapter; reaction table, reagent sheet), each shown as a small
 // page of its headings, or its first row of column headings.
 

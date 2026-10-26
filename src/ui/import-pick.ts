@@ -1,4 +1,4 @@
-// The step before reading, for File > Import Structures from PDF: each page as a picture with
+// The step before reading, for File > Import > Import Structures from PDF: each page as a picture with
 // the drawings found on it (found on this computer, nothing sent anywhere) outlined. Click a
 // drawing to tick it or tick it off; only the ticked ones are then read, by the AI model or by
 // the reader on this computer, so nothing else leaves the computer.

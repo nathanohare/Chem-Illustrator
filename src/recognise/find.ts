@@ -1,4 +1,4 @@
-// Finding the structures on a page (File > Import Structures from PDF): the page is drawn, the
+// Finding the structures on a page (File > Import > Import Structures from PDF): the page is drawn, the
 // lines of prose are rubbed out (the PDF says where its text is), and what ink is left is grouped
 // into blobs, each drawing on its own. Atom labels (O, N, OMe, CO2Et) are short and aren't prose,
 // so they stay with their structure. Blobs too small, too thin (arrows, rules) or too big (a

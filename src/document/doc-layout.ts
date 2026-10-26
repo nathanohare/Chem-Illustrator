@@ -1053,7 +1053,7 @@ export class DocLayouter {
           const { tb } = part;
           const tw = tb.xs[tb.xs.length - 1];
           const tx = x0 + (part.align === 'center' ? (W - tw) / 2 : part.align === 'right' ? W - tw : 0);
-          const rows = tb.hs.map((rh, r) => { const at = { page: pg.index, x: tx, y: y + sum(tb.hs.slice(0, r)) }; return at; });
+          const rows = tb.hs.map((_rh, r) => { const at = { page: pg.index, x: tx, y: y + sum(tb.hs.slice(0, r)) }; return at; });
           const box: TableBox = { ...tb, rows };
           placed.tables.push({ id: part.id, tb: box });
           tb.cells.forEach((row, r) => row.forEach((cl, c) => {

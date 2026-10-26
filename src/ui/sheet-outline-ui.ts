@@ -169,6 +169,7 @@ export class SheetOutline {
       }, () => (typeof out === 'string' ? R : out));
       if (typeof out === 'string') return out;
       this.view.select(out);
+      return undefined;
     }, [['Remove All', () => {
       let out = R;
       this.host.edit('Remove subtotals', (sh) => { out = removeSubtotals(sh, R); }, () => out);

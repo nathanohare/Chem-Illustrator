@@ -45,6 +45,7 @@ function poly(n: number, r = 8, inner = false, flat = false, label = ''): string
 
 export const ICONS: Record<string, string> = {
   select: svg('<rect x="4" y="5" width="16" height="14" stroke-dasharray="2.5 2"/>'),
+  lasso: svg('<path d="M7 17c-3.5-1.5-4-6 0-9s11-3.5 13 0-2 8.5-8 8.5c-2 0-3.5-.3-5-.5" stroke-dasharray="2.5 2"/><path d="M7 17c0 1.5 1 3 2.5 3.5"/>'),
   eraser: svg('<path d="M14.5 4.5l5 5-9 9H6l-2.5-2.5z"/><path d="M10 9l5 5"/><path d="M11 18.5h9"/>'),
   'bond-single': svg('<line x1="5" y1="18" x2="19" y2="6"/>'),
   'bond-double': svg('<line x1="4" y1="16" x2="17" y2="5"/><line x1="7" y1="19" x2="20" y2="8"/>'),

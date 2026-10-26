@@ -119,7 +119,7 @@ export interface Master {
   /** Numbers on Title Slide layouts too (PowerPoint leaves them off there). */
   numberTitleSlides: boolean;
   footer: string;
-  /** The date and time on every slide (Insert > Header & Footer): shown, and in which form; fixed text in place of today's date when set. */
+  /** The date and time on every slide (Insert > Slides > Header & Footer): shown, and in which form; fixed text in place of today's date when set. */
   dateOn?: boolean;
   dateFormat?: DateFormat;
   dateFixed?: string;
@@ -1062,6 +1062,7 @@ export class Deck {
       const mine = this.slides.filter((s) => of.get(s) === id);
       if (slides) return this.slides.filter((s) => !mine.includes(s));
       for (const s of mine) of.set(s, into?.id);
+      return undefined;
     });
     return true;
   }

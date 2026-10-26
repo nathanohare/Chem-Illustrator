@@ -50,7 +50,7 @@ import { groupMembers, groupSelection, selectedGroups, ungroupSelection, withGro
 import { circleRing, circleRings, kekulize } from '../chem/aromatic';
 import { bondLayer, crossingBonds } from '../chem/crossing';
 import { nextNumber as nextCompound, planNumbers, type NumberOptions } from '../chem/compound-numbers';
-import { arrowClash, bendSide, cleanUpArrow, headEnd, isAtomSymbol, pushArrow, pushEndAt, pushPins, sameEnd, symbolAt, symbolPin, symbolSpot, tailEnd, SMALL_HEAD, type PushArrow, type PushEnd } from '../chem/mechanism';
+import { arrowClash, bendSide, cleanUpArrow, endCentre, endPointToward, headEnd, isAtomSymbol, pushArrow, pushEndAt, pushPins, sameEnd, symbolAt, symbolPin, symbolSpot, tailEnd, SMALL_HEAD, type PushArrow, type PushEnd } from '../chem/mechanism';
 import { followPins, hasPins, makePin, mirrorBend } from '../chem/pins';
 import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '../chem/scheme-arrange';
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
@@ -59,22 +59,24 @@ import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } f
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
-import { Align, Measure, POINTS, Snapshot, type TurnText, units, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
+import { Align, Measure, POINTS, Snapshot, type TurnText, units, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
 import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, CAP, SUB_SCALE } from '../chem/labels';
 import {
-  Handle, arrowHit, shapeHit, arrowHandles, shapeHandles, dragArrowHandle, dragShapeHandle, dragCropHandle, shapeBox, shapeMid, shapeTurn,
+  Handle, type HandleId, arrowHit, shapeHit, arrowHandles, shapeHandles, dragArrowHandle, dragShapeHandle, dragCropHandle, shapeBox, shapeMid, shapeTurn,
   arrowPoints, bracketHalves, type BracketForm, bracketLip, unionRect,
   shapeOrder, portNear, shapePorts, isCurved, headBend, swapHalf, bezPoints,
 } from '../objects';
+import { bezFrom, fitPath, dragCurveAt, throughPoints, dragPathPoint, firstBend, reversePath, shapeBez, shapeOf, simplifyPath, smoothPath, type ArrowShape, insertJoin, joinIndexes, nearestOnPath, pathPoints, removeJoin, setJoin } from '../arrow-path';
 import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
 import { imageFor } from '../render/images';
-import { BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
+import { BEND, BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
 import type { TextEditing } from '../text/editing';
 
 export type Tool =
-  | { kind: 'select' }
+  /** `lasso`: drag round what to select, freehand, instead of a box. */
+  | { kind: 'select'; lasso?: boolean }
   | { kind: 'eraser' }
   /** `hapto`: bonds a metal to the middle of a ring or π-bond (η⁵, η²), or splits one into a line to each atom. */
   | { kind: 'bond'; order: number; display: BondDisplay; hapto?: boolean }
@@ -113,6 +115,7 @@ export type ShapeStyle = Partial<Omit<Shape, 'id' | 'kind' | 'x1' | 'y1' | 'x2' 
 
 export const TOOLS: Record<string, Tool> = {
   select: { kind: 'select' },
+  lasso: { kind: 'select', lasso: true },
   eraser: { kind: 'eraser' },
   element: { kind: 'element' },
   fragment: { kind: 'fragment' },
@@ -220,7 +223,7 @@ interface Drag {
   shift: boolean;
   alt: boolean;
   ctrl: boolean;
-  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch';
+  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'reshape';
   last: Vec;
   panOrigin?: { ox: number; oy: number };
   /** The arrow or shape handle being dragged. */
@@ -239,6 +242,10 @@ interface Drag {
   tpl?: { key: string; choices: TemplateChoice[]; index: number; manual: Vec | null };
   /** Format Painter: the click or box paints what it lands on. */
   paint?: boolean;
+  /** Reshaping a curved arrow by its line: the arrow, its path when the drag began, and where along it it was grabbed. */
+  reshape?: { id: number; pts: Vec[]; t: number };
+  /** Pressed with a pen (stylus) rather than a mouse or finger. */
+  pen?: boolean;
   /** Pressed on the charge sign an atom shows: dragging takes it off the atom's label as a sign of its own (freeCharge). */
   charge?: number;
   /** Moving an atom: the atom it has been dropped on, which it becomes one with at the lift (closing a ring). */
@@ -302,7 +309,7 @@ export class Editor {
   showRoles = true;
 
   options = {
-    /** The pen sketches whatever tool is picked (View > Touch Mode > Pen Always Sketches). */
+    /** The pen sketches whatever tool is picked (View > Window and Colours > Touch Mode > Pen Always Sketches). */
     penSketch: false,
     /** After 1 or 0 on the atom under the mouse, the highlight stays there (ChemDraw). */
     keepHotspotOnBond: true,
@@ -364,6 +371,8 @@ export class Editor {
   /** Drawn on the overlay before the marks, in points (the tint outside the drawing). */
   underlay: ((ctx: CanvasRenderingContext2D) => void) | null = null;
   onToolChange: (name: string) => void = () => {};
+  /** Show a hint for the step in hand in the status bar (empty: the tool's own hint again). */
+  onHint: (text: string) => void = () => {};
   /** The fragmentation tool drew a line from p to q across these bonds (the app works out the masses). */
   onFragment: (p: Vec, q: Vec, bonds: number[]) => void = () => {};
   /** The atom most recently drawn or changed (its structure is analysed when nothing is selected). */
@@ -377,6 +386,15 @@ export class Editor {
   slideKeys = false;
   /** The picture being cropped: its handles cut the picture instead of resizing it. */
   cropping: number | null = null;
+  /** The handle or join of a curved arrow last pressed: the arrow keys move it, Delete takes a join out. */
+  activeHandle: { id: number; which: HandleId } | null = null;
+  /**
+   * A curved arrow being drawn through clicked points: what it starts on, the points so far (the
+   * first where it starts), and the direction dragged out at each (null: the usual smooth turn).
+   */
+  route: { from: PushEnd; at: Vec[]; dirs: (Vec | null)[] } | null = null;
+  /** The join or place on a curved arrow that was right-clicked. */
+  contextSpot: { id: number; join?: number; t?: number } | null = null;
   /**
    * Format Painter: while set, a click paints the thing clicked and a drag paints what the box
    * takes in, instead of selecting, moving or drawing; a drag in the text being typed paints the
@@ -524,6 +542,8 @@ export class Editor {
     if (t.kind !== 'sketch') this.sketcher.flush();
     this.tool = t;
     this.toolName = name;
+    // (a curved arrow half drawn through points is dropped)
+    if (this.route) { this.route = null; this.requestOverlay(); }
     this.onToolChange(name);
     this.showPointer(false);
     this.requestOverlay();
@@ -763,6 +783,14 @@ export class Editor {
     this.r.overlay.setPointerCapture(e.pointerId);
     const p = this.docPoint(e);
     const rect = this.r.overlay.getBoundingClientRect();
+    // drawing a curved arrow through points: each press puts the next point down (drag out from it to set the way the arrow runs through it)
+    if (this.route && e.button === 0) {
+      if (!this.curvedTool()) this.route = null;
+      else {
+        this.drag = { start: p, startScreen: { x: e.clientX - rect.left, y: e.clientY - rect.top }, hit: null, button: 0, moved: false, shift: e.shiftKey, alt: e.altKey, ctrl: false, mode: 'route', last: p };
+        return;
+      }
+    }
     const painting = !!this.painter && e.button === 0;
     const rh = e.button === 0 && !painting ? this.rotateHandle() : null;
     const rotating = !!rh && dist(rh, p) <= this.tol(7);
@@ -774,8 +802,18 @@ export class Editor {
       start: p, startScreen: { x: e.clientX - rect.left, y: e.clientY - rect.top }, hit, button: e.button, moved: false,
       shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey, mode: handle ? 'handle' : rotating ? 'rotate' : 'none', last: p, path: [p],
       ...(painting ? { paint: true } : {}),
+      ...(e.pointerType === 'pen' ? { pen: true } : {}),
     };
     if (handle) this.drag.handle = handle;
+    // a curved arrow tool on a selected S-shaped (or longer) arrow's line: dragging there reshapes it
+    if (e.button === 0 && !handle && !rotating && !painting && !e.shiftKey && hit?.kind === 'arrow' && this.curvedTool() && this.isSelected(hit)) {
+      const r = this.pathArrow(hit.id);
+      const pts = r && bezPoints(r);
+      if (pts) { this.drag.mode = 'reshape'; this.drag.reshape = { id: hit.id, pts, t: nearestOnPath(pts, p).t }; }
+    }
+    // a curved arrow's handle or join pressed: the arrow keys and Delete go to it from now on
+    if (e.button === 0) this.contextSpot = null;
+    if (e.button === 0) this.activeHandle = handle?.kind === 'arrow' && handle.which[0] === 'b' ? { id: handle.id, which: handle.which } : null;
     // the selection tool on a charge sign: it can be dragged anywhere round its atom
     if (e.button === 0 && !handle && !rotating && !painting && this.tool.kind === 'select') {
       const c = this.chargeSignAt(p);
@@ -798,6 +836,8 @@ export class Editor {
   private onMove(e: PointerEvent): void {
     const p = this.docPoint(e);
     this.pointer = p;
+    // (a card or menu closing over the drawing leaves the mouse on it without a pointerenter)
+    this.pointerInside = true;
     const d = this.drag;
     if (d?.mode === 'text') {
       this.captionEd?.pointerMove(p);
@@ -843,6 +883,7 @@ export class Editor {
     if (!d.moved && Math.hypot(sp.x - d.startScreen.x, sp.y - d.startScreen.y) > 3) {
       d.moved = true;
       if (d.mode === 'none') d.mode = this.dragModeFor(d);
+      if (d.mode === 'reshape') this.doc.begin('Bend arrow');
       if (d.mode === 'handle') this.doc.begin(d.handle!.which === 'mid' || d.handle!.which[0] === 'b' ? 'Bend arrow' : this.cropping === d.handle!.id ? 'Crop picture' : 'Resize');
       if (d.mode === 'rotate') this.doc.begin('Rotate');
       if (d.mode === 'move') {
@@ -936,13 +977,31 @@ export class Editor {
       this.requestScene(e.timeStamp);
       return;
     }
+    if (d.mode === 'route') {
+      d.last = p;
+      this.requestOverlay(e.timeStamp);
+      return;
+    }
+    if (d.mode === 'reshape') {
+      const rs = d.reshape!;
+      const r = this.doc.arrows.get(rs.id);
+      if (r && d.moved) this.putPath(r, dragCurveAt(rs.pts, rs.t, p));
+      d.last = p;
+      this.requestScene(e.timeStamp);
+      return;
+    }
     if (d.mode === 'handle') {
       const h = d.handle!;
       if (h.kind === 'arrow') {
         const r = this.doc.arrows.get(h.id);
         if (r) {
           // (a handle drawn off the shaft bends the arrow as if it were on it)
-          let patch = dragArrowHandle(r, h.which, h.off ? sub(p, h.off) : p, e.altKey);
+          const at = h.off ? sub(p, h.off) : p;
+          // an S's handles and joins: smooth joins stay smooth (Alt: a sharp corner), Shift turns in 15° steps
+          const pts = h.which[0] === 'b' ? bezPoints(r) : null;
+          let patch = pts
+            ? { bez: bezFrom(r.tail, r.head, dragPathPoint(pts, Number(h.which.slice(1)) + 1, at, { corner: e.altKey, step: e.shiftKey })) }
+            : dragArrowHandle(r, h.which, at, e.altKey);
           // a half head keeps its barb on the outside of an S's last bend
           if (h.which[0] === 'b' && headBend(r) !== headBend({ ...r, ...patch })) Object.assign(patch, { headStyle: swapHalf(r.headStyle), tailStyle: swapHalf(r.tailStyle) });
           // bent by hand, it keeps that bend from now on (Clean Up Arrow lets it find its own way again)
@@ -1050,6 +1109,14 @@ export class Editor {
       if (ctx && !d.moved) this.onContextMenu(ctx);
     }
     if (d.mode === 'pan') { this.requestScene(e.timeStamp); return; }
+    if (d.mode === 'route') {
+      // a point dragged out: the arrow runs through it the way it was dragged
+      if (d.moved) this.routePoint(d.start, sub(d.last, d.start));
+      else this.routeClick(p);
+      this.requestOverlay(e.timeStamp);
+      return;
+    }
+    if (d.mode === 'reshape' && d.moved) { this.doc.commit(); this.changed(); return; }
     if (d.mode === 'handle' || d.mode === 'rotate') {
       if (d.moved) { this.doc.commit(); this.changed(); }
       return;
@@ -1066,7 +1133,8 @@ export class Editor {
       return;
     }
     if (d.mode === 'marquee') {
-      this.selectRect(d.start, p, d.shift);
+      if (this.lassoing(d)) this.selectLasso(d.path!, d.shift);
+      else this.selectRect(d.start, p, d.shift);
       if (d.paint) this.painter?.things(this.sel);
       this.requestScene(e.timeStamp);
       this.onChange();
@@ -1121,6 +1189,8 @@ export class Editor {
         this.onChange();
       }
     }
+    // a join or a place on a curved arrow's line: what Add Bend Here and the join commands work on
+    this.contextSpot = this.pathSpotAt(p);
     return h;
   }
 
@@ -1128,6 +1198,13 @@ export class Editor {
     const p = this.docPoint(e);
     // (in the text being typed, a double-click selects a word: the text sees the clicks itself)
     if (this.captionEd?.hit(p)) return;
+    // drawing through points: a double-click ends the arrow there
+    if (this.route) { this.finishRoute(); return; }
+    // on a selected curved arrow: a join comes out, anywhere else on its line a join goes in
+    const spot = e.button === 0 ? this.pathSpotAt(p) : null;
+    if (spot && energyFrameOf(this.doc, 'arrow', spot.id) === null && diagramFrameOf(this.doc, 'arrow', spot.id) === null) {
+      if (spot.join !== undefined ? this.removeBend(spot.id, spot.join) : this.addBend(spot.id, spot.t!)) return;
+    }
     const h = this.hitTest(p);
     // any part of an energy diagram (but a structure put on it) opens its numbers
     const diagram = h && h.kind !== 'atom' && h.kind !== 'bond' && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? energyFrameOf(this.doc, h.kind, h.id) : null;
@@ -1215,7 +1292,7 @@ export class Editor {
   }
 
   /**
-   * View > Go to Selection: bring what is selected into the middle of the window, at the zoom
+   * View > Zoom > Go to Selection: bring what is selected into the middle of the window, at the zoom
    * it is at; zoomed out to fit when it is too big to see whole. False with nothing selected.
    */
   goToSelection(): boolean {
@@ -1355,6 +1432,8 @@ export class Editor {
           }
           return;
         }
+        // a curved arrow tool: a click starts an arrow drawn through the points clicked next
+        if (t.kind === 'arrow' && t.style.sweep && !t.style.equilibrium) { this.startRoute(p); return; }
         if (t.kind === 'arrow') {
           const L = doc.style.bondLength;
           doc.edit('Arrow', () => this.selectOnly({ kind: 'arrow', id: this.addArrow(p, add(p, { x: L * (t.style.sweep ? 2 : 3), y: 0 }), t.style).id }));
@@ -1891,6 +1970,8 @@ export class Editor {
         } else this.ringClick(null, d.start, t.size, t.aromatic, false, d.shift, p, d.ctrl);
       });
     } else if (t.kind === 'arrow') {
+      // drawn freehand (Ctrl, or the pen): the stroke as drawn, made smooth, its ends on what they are on
+      if (this.freehand(d)) { this.finishFreehand(d, p); return; }
       const push = this.pushFor(d, p);
       if (push) {
         doc.edit('Arrow', () => this.selectOnly({ kind: 'arrow', id: this.addPushArrow(push, t.style).id }));
@@ -2095,6 +2176,285 @@ export class Editor {
     });
     this.changed();
     return arrows.length;
+  }
+
+  /** Is this drag a curved arrow drawn freehand: with Ctrl (Cmd on a Mac) held, or with a pen? */
+  private freehand(d: Drag): boolean {
+    return this.curvedTool() && (d.ctrl || !!d.pen) && !d.alt && (d.path?.length ?? 0) > 2;
+  }
+
+  /** A curved arrow drawn freehand: the stroke fitted with as few smooth curves as follow it, its ends stuck to what they start and end on. */
+  private finishFreehand(d: Drag, p: Vec): void {
+    const t = this.tool;
+    if (t.kind !== 'arrow') return;
+    const doc = this.doc, m = this.measure();
+    const stroke = [...(d.path ?? []), p];
+    const fit = fitPath(stroke, this.tol(5));
+    // (tidied once more, so a wobble at the start doesn't leave tiny curves)
+    const pts = fit.length > 7 ? simplifyPath(fit, this.tol(5)) ?? fit : fit;
+    if (pts.length < 4 || dist(pts[0], pts[pts.length - 1]) < this.tol(4)) return;
+    const from = tailEnd(doc, pushEndAt(doc, m, pts[0]), pts[0]);
+    let to = headEnd(doc, pushEndAt(doc, m, pts[pts.length - 1]), pts[pts.length - 1]);
+    if (sameEnd(from, to)) to = { kind: 'point', p: pts[pts.length - 1] };
+    // each end moved onto what it is on (its handle going with it), facing the way the stroke left or arrived
+    const last = pts.length - 1;
+    const t0 = endPointToward(doc, m, from, pts[1], 'start'), t1 = endPointToward(doc, m, to, pts[last - 1], 'end');
+    pts[1] = add(pts[1], sub(t0, pts[0])); pts[0] = t0;
+    pts[last - 1] = add(pts[last - 1], sub(t1, pts[last])); pts[last] = t1;
+    const tail = pts[0], head = pts[last];
+    if (dist(tail, head) < 1e-3) return;
+    doc.edit('Arrow', () => {
+      const a = this.addPushArrow({ tail, head, sweep: 0, bez: bezFrom(tail, head, pts), start: from, end: to }, t.style);
+      if (a.pin) doc.updateArrow(a.id, { bent: true });
+      this.selectOnly({ kind: 'arrow', id: a.id });
+    });
+    this.changed();
+  }
+
+  /** Is the tool a curved (mechanism) arrow? */
+  private curvedTool(): boolean {
+    const t = this.tool;
+    return t.kind === 'arrow' && !!t.style.sweep && !t.style.equilibrium;
+  }
+
+  /** Start drawing a curved arrow through points: from what is at `p` (a lone pair, atom or bond), or from `p`. */
+  private startRoute(p: Vec): void {
+    const doc = this.doc, m = this.measure();
+    const here = tailEnd(doc, pushEndAt(doc, m, p), p);
+    this.route = { from: here, at: [here.kind === 'point' ? p : endCentre(doc, here)], dirs: [null] };
+    this.onHint('Click where the arrow should go through, then click the atom or bond it points at (or double-click, or press Enter, to end it there). Drag from a point to set the way the arrow runs through it. Backspace takes back a point; Esc stops.');
+    this.requestOverlay();
+  }
+
+  /** The next point of the arrow being drawn through points, `dir` the way it runs through it. */
+  private routePoint(p: Vec, dir: Vec | null): void {
+    const r = this.route;
+    if (!r) return;
+    const last = r.at[r.at.length - 1];
+    if (dist(last, p) < this.tol(3)) { if (dir) r.dirs[r.dirs.length - 1] = dir; return; }
+    r.at.push(p);
+    r.dirs.push(dir);
+  }
+
+  /** A click while drawing through points: on an atom, bond or new bond's place it ends there, elsewhere it is the next point. */
+  private routeClick(p: Vec): void {
+    const r = this.route;
+    if (!r) return;
+    const doc = this.doc, m = this.measure();
+    const here = headEnd(doc, pushEndAt(doc, m, p), p);
+    if (here.kind !== 'point' && !sameEnd(here, r.from)) { this.finishRoute(here); return; }
+    this.routePoint(p, null);
+  }
+
+  /**
+   * End the arrow being drawn through points: at `to` (what it points at), or at its last point.
+   * With only the point it started from, a curved arrow of the usual size goes there instead.
+   */
+  finishRoute(to?: PushEnd): boolean {
+    const r = this.route;
+    if (!r) return false;
+    this.route = null;
+    this.onHint('');
+    const t = this.tool;
+    if (t.kind !== 'arrow') return false;
+    const doc = this.doc, m = this.measure();
+    const at = r.at.slice(), dirs = r.dirs.slice();
+    if (to) { at.push(endCentre(doc, to)); dirs.push(null); }
+    if (at.length < 2) {
+      const L = doc.style.bondLength;
+      doc.edit('Arrow', () => this.selectOnly({ kind: 'arrow', id: this.addArrow(at[0], add(at[0], { x: L * 2, y: 0 }), t.style).id }));
+      this.changed();
+      return true;
+    }
+    const end: PushEnd = to ?? { kind: 'point', p: at[at.length - 1] };
+    // the ends sit just off what they are on, facing the next (or last) point
+    at[0] = endPointToward(doc, m, r.from, at[1], 'start');
+    at[at.length - 1] = endPointToward(doc, m, end, at[at.length - 2], 'end');
+    const pts = throughPoints(at, dirs);
+    const tail = pts[0], head = pts[pts.length - 1];
+    if (dist(tail, head) < 1e-3) return false;
+    doc.edit('Arrow', () => {
+      const a = this.addPushArrow({ tail, head, sweep: 0, bez: bezFrom(tail, head, pts), start: r.from, end }, t.style);
+      // drawn by hand: it keeps this way round the structure
+      if (a.pin) doc.updateArrow(a.id, { bent: true });
+      this.selectOnly({ kind: 'arrow', id: a.id });
+    });
+    this.changed();
+    return true;
+  }
+
+  /** Stop drawing through points without an arrow (Esc), or take back the last point (Backspace). */
+  private routeKey(chord: string): boolean {
+    const r = this.route;
+    if (!r) return false;
+    if (chord === 'Escape') { this.route = null; this.onHint(''); this.requestOverlay(); return true; }
+    if (chord === 'Backspace' || chord === 'Delete') {
+      if (r.at.length > 1) { r.at.pop(); r.dirs.pop(); } else { this.route = null; this.onHint(''); }
+      this.requestOverlay();
+      return true;
+    }
+    if (chord === 'Enter') { this.finishRoute(); return true; }
+    return false;
+  }
+
+  /** The picked curved arrows that can be edited as paths. */
+  private pickedPaths(): Arrow[] {
+    return [...this.sel.arrows].map((id) => this.pathArrow(id)).filter((r): r is Arrow => !!r);
+  }
+
+  /** Give each picked curved arrow a ready-made shape (S, single curve, U-turn, loop), from and to the same places. Gives how many changed. */
+  setArrowShape(shape: ArrowShape): number {
+    if (shape === 's' || shape === 'single') return this.setArrowS(shape === 's');
+    const arrows = this.pickedPaths().filter((r) => shapeOf(r) !== shape);
+    if (!arrows.length) return 0;
+    this.doc.edit(shape === 'u' ? 'U-turn arrow' : 'Loop arrow', () => {
+      for (const r of arrows) {
+        const patch: Partial<Arrow> = { sweep: 0, bez: shapeBez(shape, firstBend(r)) };
+        if (headBend(r) !== headBend({ ...r, ...patch })) Object.assign(patch, { headStyle: swapHalf(r.headStyle), tailStyle: swapHalf(r.tailStyle) });
+        if (r.pin) patch.bent = true;
+        this.doc.updateArrow(r.id, patch);
+      }
+    });
+    this.changed();
+    return arrows.length;
+  }
+
+  /** Turn each picked curved arrow round: the same line, pointing back the way it came. Gives how many. */
+  reverseArrows(): number {
+    const arrows = this.pickedPaths();
+    if (!arrows.length) return 0;
+    this.doc.edit('Reverse Arrow', () => {
+      for (const r of arrows) {
+        const tail = r.head, head = r.tail;
+        const pin = r.pin ? { ...(r.pin.head ? { tail: r.pin.head } : {}), ...(r.pin.tail ? { head: r.pin.tail } : {}) } : undefined;
+        const patch: Partial<Arrow> = bezPoints(r)
+          ? { tail, head, sweep: 0, bez: bezFrom(tail, head, reversePath(bezPoints(r)!)) }
+          : { tail, head, sweep: -r.sweep };
+        if (pin) patch.pin = pin;
+        // a half head keeps its barb on the outside of the (new) last bend
+        if (headBend(r) !== headBend({ ...r, ...patch })) Object.assign(patch, { headStyle: swapHalf(r.headStyle), tailStyle: swapHalf(r.tailStyle) });
+        this.doc.updateArrow(r.id, patch);
+      }
+    });
+    this.changed();
+    return arrows.length;
+  }
+
+  /** Smooth every corner of the picked curved arrows (Smooth Path), or redraw them with as few curves as keep their shape (Simplify Path). Gives how many changed. */
+  tidyPaths(how: 'smooth' | 'simplify'): number {
+    let n = 0;
+    const arrows = this.pickedPaths();
+    this.doc.edit(how === 'smooth' ? 'Smooth Path' : 'Simplify Path', () => {
+      for (const r of arrows) {
+        const pts = bezPoints(r);
+        if (!pts) continue;
+        const next = how === 'smooth' ? smoothPath(pts) : simplifyPath(pts, Math.max(0.5, dist(r.tail, r.head) * 0.02));
+        if (!next || next.every((q, i) => pts[i] && dist(q, pts[i]) < 1e-6) && next.length === pts.length) continue;
+        this.putPath(r, next);
+        n++;
+      }
+    });
+    if (n) this.changed();
+    return n;
+  }
+
+  /** A curved arrow that can be edited as a path (not an equilibrium pair or an elbow connector). */
+  private pathArrow(id: number): Arrow | null {
+    const r = this.doc.arrows.get(id);
+    return r && isCurved(r) && !r.equilibrium && !r.elbow ? r : null;
+  }
+
+  /** Give arrow `id` the path `pts` (its tail and head stay put), keeping a half head on the outside of its last bend. */
+  private putPath(r: Arrow, pts: Vec[]): void {
+    const patch: Partial<Arrow> = { sweep: 0, bez: bezFrom(r.tail, r.head, pts) };
+    if (headBend(r) !== headBend({ ...r, ...patch })) Object.assign(patch, { headStyle: swapHalf(r.headStyle), tailStyle: swapHalf(r.tailStyle) });
+    // reshaped by hand, it keeps that shape (Clean Up Arrow lets it find its own way again)
+    if (r.pin) patch.bent = true;
+    this.doc.updateArrow(r.id, patch);
+  }
+
+  /**
+   * What of a curved arrow is at `p`: one of its joins, or a place on its line. A single-curve
+   * arrow counts as the path it would become.
+   */
+  pathSpotAt(p: Vec): { id: number; join?: number; t?: number } | null {
+    const tol = this.tol(6);
+    for (const id of this.sel.arrows) {
+      const r = this.pathArrow(id);
+      if (!r) continue;
+      const bz = bezPoints(r);
+      if (bz) { const j = joinIndexes(bz).find((k) => dist(bz[k], p) <= tol); if (j !== undefined) return { id, join: j }; }
+      const near = nearestOnPath(pathPoints(r), p);
+      if (near.d <= tol * 1.5) return { id, t: near.t };
+    }
+    return null;
+  }
+
+  /** Add a join to curved arrow `id` at `t` along it (its shape stays as it was). False where one cannot go. */
+  addBend(id: number, t: number): boolean {
+    const r = this.pathArrow(id);
+    const pts = r && insertJoin(pathPoints(r), t);
+    if (!r || !pts) return false;
+    this.doc.edit('Add Bend', () => this.putPath(r, pts));
+    // the new join: where the curve that was cut ends
+    const n = (pathPoints(r).length - 1) / 3;
+    this.activeHandle = { id, which: `b${3 * (Math.min(n - 1, Math.floor(t)) + 1) - 1}` };
+    this.changed();
+    return true;
+  }
+
+  /** Take join `j` (an index into the arrow's path points) out of arrow `id`, the curves either side becoming one. */
+  removeBend(id: number, j: number): boolean {
+    const r = this.pathArrow(id);
+    const bz = r && bezPoints(r);
+    const pts = bz && removeJoin(bz, j);
+    if (!r || !pts) return false;
+    this.doc.edit('Remove Bend', () => this.putPath(r, pts));
+    this.activeHandle = null;
+    this.changed();
+    return true;
+  }
+
+  /** Make join `j` of arrow `id` smooth or symmetric. */
+  setJoinKind(id: number, j: number, kind: 'smooth' | 'symmetric'): boolean {
+    const r = this.pathArrow(id);
+    const bz = r && bezPoints(r);
+    if (!r || !bz || j % 3 || j <= 0 || j >= bz.length - 1) return false;
+    this.doc.edit(kind === 'smooth' ? 'Smooth Join' : 'Symmetric Join', () => this.putPath(r, setJoin(bz, j, kind)));
+    this.changed();
+    return true;
+  }
+
+  /** The join the join commands work on: the one right-clicked, else the one last pressed. */
+  pickedJoin(): { id: number; join: number } | null {
+    const c = this.contextSpot;
+    if (c?.join !== undefined && this.sel.arrows.has(c.id)) return { id: c.id, join: c.join };
+    const a = this.activePoint();
+    return a && a.i % 3 === 0 ? { id: a.r.id, join: a.i } : null;
+  }
+
+  /** Add Bend Here: at the place right-clicked, else half way along the one picked curved arrow. */
+  addBendHere(): boolean {
+    const c = this.contextSpot;
+    if (c?.t !== undefined && this.sel.arrows.has(c.id)) return this.addBend(c.id, c.t);
+    const ids = [...this.sel.arrows].filter((id) => this.pathArrow(id));
+    if (ids.length !== 1) return false;
+    const pts = pathPoints(this.pathArrow(ids[0])!);
+    const n = (pts.length - 1) / 3;
+    // the middle of the longest curve
+    let best = 0, bl = -1;
+    for (let k = 0; k < n; k++) { const l = dist(pts[3 * k], pts[3 * k + 3]); if (l > bl) { bl = l; best = k; } }
+    return this.addBend(ids[0], best + 0.5);
+  }
+
+  /** The active handle's arrow and its index in the path, while that arrow is still selected. */
+  private activePoint(): { r: Arrow; pts: Vec[]; i: number } | null {
+    const a = this.activeHandle;
+    if (!a || !this.sel.arrows.has(a.id) || a.which[0] !== 'b') return null;
+    const r = this.pathArrow(a.id);
+    const pts = r && bezPoints(r);
+    const i = Number(a.which.slice(1)) + 1;
+    return r && pts && i > 0 && i < pts.length - 1 ? { r, pts, i } : null;
   }
 
   /** Bend each picked curved arrow the other way (a mirror image about the line between its ends). */
@@ -2586,20 +2946,36 @@ export class Editor {
     this.onChange();
   }
 
+  /** A drag with the lasso (not Format Painter's box). */
+  private lassoing(d: Drag): boolean {
+    return this.tool.kind === 'select' && !!this.tool.lasso && !d.paint && !!d.path && d.path.length > 2;
+  }
+
   private selectRect(a: Vec, b: Vec, add: boolean): void {
     const r: Rect = { x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y), x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y) };
+    this.selectWithin(r, (x, y) => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2, add);
+  }
+
+  /** Select what lies inside a freehand loop (the lasso), closed back to where it started. */
+  private selectLasso(loop: readonly Vec[], add: boolean): void {
+    const r: Rect = { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity };
+    for (const q of loop) { r.x1 = Math.min(r.x1, q.x); r.y1 = Math.min(r.y1, q.y); r.x2 = Math.max(r.x2, q.x); r.y2 = Math.max(r.y2, q.y); }
+    this.selectWithin(r, (x, y) => insideLoop(loop, x, y), add);
+  }
+
+  /** Select the atoms, text, arrows and shapes wholly inside an area (`inside`, within the box `r`). */
+  private selectWithin(r: Rect, inside: (x: number, y: number) => boolean, add: boolean): void {
     if (!add) this.sel = emptySel();
     const doc = this.doc;
-    if (!this.structuresLocked) for (const at of doc.atomsIn(r)) this.sel.atoms.add(at.id);
+    if (!this.structuresLocked) for (const at of doc.atomsIn(r)) if (inside(at.x, at.y)) this.sel.atoms.add(at.id);
     for (const id of this.sel.atoms) {
       for (const bid of doc.adj.get(id) ?? []) {
         const bb = doc.bonds.get(bid)!;
         if (this.sel.atoms.has(bb.a1) && this.sel.atoms.has(bb.a2)) this.sel.bonds.add(bid);
       }
     }
-    const inside = (x: number, y: number) => x >= r.x1 && x <= r.x2 && y >= r.y1 && y <= r.y2;
-    for (const c of doc.captions.values()) { if (c.hidden) continue; const bx = this.r.captionBox(c); if (inside(bx.x1, bx.y1) && inside(bx.x2, bx.y2)) this.sel.captions.add(c.id); }
-    const within = (b: Rect) => inside(b.x1, b.y1) && inside(b.x2, b.y2);
+    const within = (b: Rect) => inside(b.x1, b.y1) && inside(b.x2, b.y2) && inside(b.x1, b.y2) && inside(b.x2, b.y1);
+    for (const c of doc.captions.values()) { if (c.hidden) continue; if (within(this.r.captionBox(c))) this.sel.captions.add(c.id); }
     for (const ar of doc.arrows.values()) if (arrowPoints(ar).every((q) => inside(q.x, q.y))) this.sel.arrows.add(ar.id);
     for (const s of doc.shapes.values()) if (!s.hidden && !s.locked && within(s.kind === 'bracket' ? { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) } : shapeBox(s))) this.sel.shapes.add(s.id);
   }
@@ -2793,6 +3169,9 @@ export class Editor {
   }
 
   deleteSelection(): void {
+    // a curved arrow's join that was pressed: Delete takes out just that join
+    const a = this.activePoint();
+    if (a && a.i % 3 === 0 && this.removeBend(a.r.id, a.i)) return;
     const doc = this.doc;
     const s = this.sel;
     doc.edit('Delete', () => {
@@ -3087,6 +3466,30 @@ export class Editor {
     this.changed();
   }
 
+  /** Where the mouse is on the drawing, or null when it is somewhere else (a menu, a panel). */
+  get mouseOnPage(): Vec | null {
+    return this.pointerInside ? { ...this.pointer } : null;
+  }
+
+  /**
+   * Move what was just pasted (the selection) the least it takes to sit clear of everything
+   * else, so pasting twice doesn't stack one copy on the other. Call inside an edit.
+   */
+  placeClear(page?: { w: number; h: number }): void {
+    const doc = this.doc, m = this.measure();
+    const mine = withFrameContents(doc, this.sel);
+    const b = selectionBox(doc, mine, m);
+    if (!b) return;
+    const others = emptySel();
+    for (const id of doc.atoms.keys()) if (!mine.atoms.has(id)) others.atoms.add(id);
+    for (const id of doc.captions.keys()) if (!mine.captions.has(id)) others.captions.add(id);
+    for (const id of doc.arrows.keys()) if (!mine.arrows.has(id)) others.arrows.add(id);
+    for (const id of doc.shapes.keys()) if (!mine.shapes.has(id)) others.shapes.add(id);
+    const boxes = units(doc, others, m).map((u) => u.box);
+    const t = clearOffset(b, boxes, doc.style.bondLength, page);
+    if (t.x || t.y) this.moveSelection(t.x, t.y);
+  }
+
   /**
    * Move what was just put down (the selection) off whatever else is on the page: to the right
    * of it, or below it when that would run off the page. Call inside an edit.
@@ -3342,6 +3745,13 @@ export class Editor {
   /** Move the selection a few points (the arrow keys). False with nothing selected. */
   nudge(dx: number, dy: number): boolean {
     if (!this.hasSelection()) return false;
+    // a curved arrow's handle or join that was pressed moves on its own
+    const a = this.activePoint();
+    if (a) {
+      this.doc.edit('Nudge', () => this.putPath(a.r, dragPathPoint(a.pts, a.i, add(a.pts[a.i], { x: dx, y: dy }))));
+      this.changed();
+      return true;
+    }
     this.doc.edit('Nudge', () => this.moveSelection(dx, dy));
     this.changed();
     return true;
@@ -3473,6 +3883,8 @@ export class Editor {
     if (this.drag?.moved && chord !== 'Escape' && !/^(Shift|Control|Alt|Meta)$/.test(e.key)) { e.preventDefault(); return; }
     // Tab moves on through the window's buttons unless the drawing has the keys (or the mouse)
     if (/^(Shift\+)?Tab$/.test(chord) && !this.pointerInside && target !== this.r.overlay) return;
+    // drawing a curved arrow through points: Enter ends it, Backspace takes back a point, Esc stops
+    if (this.routeKey(chord)) { e.preventDefault(); return; }
     // on a focused button or menu, Enter, Space and Tab do their usual jobs (unless the mouse
     // is over the drawing: then they are drawing keys, as in ChemDraw)
     if (!this.pointerInside && target && target !== document.body && target !== this.r.overlay && /^(Shift\+)?(Enter|Space|Tab)$/.test(chord)) return;
@@ -4427,6 +4839,8 @@ export class Editor {
     if (!o || this.drag) return;
     if (this.painter) { this.r.overlay.style.cursor = BRUSH; return; }
     const { onRotate, handle, h } = o;
+    // a curved arrow tool over a selected S's line: a drag there reshapes it
+    if (!onRotate && !handle && h?.kind === 'arrow' && this.curvedTool() && this.isSelected(h) && bezPoints(this.doc.arrows.get(h.id)!)) { this.r.overlay.style.cursor = BEND; return; }
     this.r.overlay.style.cursor = onRotate ? ROTATE : handle ? handleCursor(handle.which) : pointerFor({
       tool: this.tool.kind,
       over: !h ? null : h.kind === 'atom' || h.kind === 'bond' ? 'chem' : 'object',
@@ -4435,6 +4849,7 @@ export class Editor {
       slides: this.textFirst,
       // in Slides and Design, text boxes show an I-beam: a click there types, a drag moves the box
       typing: this.textFirst && this.tool.kind === 'select' && h?.kind === 'caption',
+      arrow: h?.kind === 'arrow',
     });
   }
   /** Structures ignore clicks and box selection, so text near them is easy to work on (Slides). */
@@ -4821,6 +5236,22 @@ export class Editor {
       ctx.strokeRect(x1 - c.l * W, y1 - c.t * H, W, H);
       ctx.restore();
     }
+    // a curved arrow being drawn through points: the curve so far, on to the pointer, and its points
+    const route = this.route;
+    if (route) {
+      const d = this.drag;
+      const at = [...route.at], dirs = [...route.dirs];
+      if (d?.mode === 'route' && d.moved) { at.push(d.start); dirs.push(sub(d.last, d.start)); }
+      else if (this.pointer && dist(this.pointer, at[at.length - 1]) > this.tol(3)) { at.push(this.pointer); dirs.push(null); }
+      ctx.save();
+      ctx.strokeStyle = PREVIEW;
+      ctx.lineWidth = 1.5 * px;
+      const pts = throughPoints(at, dirs);
+      if (pts.length) strokeAlong(ctx, arrowPoints({ tail: pts[0], head: pts[pts.length - 1], sweep: 0, bez: bezFrom(pts[0], pts[pts.length - 1], pts) }, 24 * at.length));
+      ctx.fillStyle = PREVIEW;
+      for (const q of route.at) { ctx.beginPath(); ctx.arc(q.x, q.y, 2.5 * px, 0, Math.PI * 2); ctx.fill(); }
+      ctx.restore();
+    }
     // handles on selected arrows and shapes
     const handles = this.drag?.mode === 'move' ? [] : this.handles();
     if (handles.length) {
@@ -4858,10 +5289,15 @@ export class Editor {
           continue;
         }
         if (hd.which === 'mid') ctx.arc(hd.at.x, hd.at.y, k * 1.1, 0, Math.PI * 2);
+        else if (hd.which[0] === 'b' && (Number(hd.which.slice(1)) + 1) % 3 === 0) ctx.arc(hd.at.x, hd.at.y, k * 1.1, 0, Math.PI * 2);
         else if (hd.which[0] === 'b') { ctx.moveTo(hd.at.x, hd.at.y - k * 1.2); ctx.lineTo(hd.at.x + k * 1.2, hd.at.y); ctx.lineTo(hd.at.x, hd.at.y + k * 1.2); ctx.lineTo(hd.at.x - k * 1.2, hd.at.y); ctx.closePath(); }
         else ctx.rect(hd.at.x - k, hd.at.y - k, 2 * k, 2 * k);
+        // the handle or join the arrow keys move is filled in
+        const active = this.activeHandle?.id === hd.id && this.activeHandle.which === hd.which && hd.kind === 'arrow';
+        if (active) ctx.fillStyle = PREVIEW;
         ctx.fill();
         ctx.stroke();
+        if (active) ctx.fillStyle = '#fff';
       }
     }
     // the groups the selection is in, each outlined in grey so the rest of the group shows
@@ -4958,7 +5394,12 @@ export class Editor {
         ctx.setLineDash([4 * px, 3 * px]);
         ctx.lineWidth = px;
         ctx.strokeStyle = mk.marquee;
-        ctx.strokeRect(Math.min(d.start.x, d.last.x), Math.min(d.start.y, d.last.y), Math.abs(d.last.x - d.start.x), Math.abs(d.last.y - d.start.y));
+        if (this.lassoing(d)) {
+          ctx.beginPath();
+          d.path!.forEach((q, i) => (i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)));
+          ctx.closePath();
+          ctx.stroke();
+        } else ctx.strokeRect(Math.min(d.start.x, d.last.x), Math.min(d.start.y, d.last.y), Math.abs(d.last.x - d.start.x), Math.abs(d.last.y - d.start.y));
         ctx.setLineDash([]);
       } else if (d.mode === 'draw' || pressing) {
         this.drawPreview(ctx, d);
@@ -5091,6 +5532,7 @@ export class Editor {
       } else pts = freeRing(d.start, t.size, L, d.last);
       poly(pts, true);
     } else if (t.kind === 'arrow') {
+      if (this.freehand(d)) { poly(d.path ?? [d.start, d.last], false); return; }
       const push = this.pushFor(d, d.last);
       if (push) { poly(arrowPoints(push), false); return; }
       const c = this.connectorEnds(t.style, d.start, d.last);
@@ -5379,4 +5821,14 @@ export function circledChargesOf(doc: Doc, a: Atom): Shape[] {
   // stuck to this atom, or (not stuck to any) beside it
   return [...doc.shapes.values()].filter((s) => s.kind === 'symbol' && ['CirclePlus', 'CircleMinus', 'Plus', 'Minus'].includes(s.symbol ?? '')
     && (s.pin ? s.pin.on === 'atom' && s.pin.ref[0] === a.id : dist({ x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 }, a) < 0.8 * L));
+}
+
+/** Is (x, y) inside the loop (closed from its last point back to its first)? Even-odd rule. */
+export function insideLoop(loop: readonly Vec[], x: number, y: number): boolean {
+  let inside = false;
+  for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
+    const a = loop[i], b = loop[j];
+    if ((a.y > y) !== (b.y > y) && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
 }

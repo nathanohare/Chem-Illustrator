@@ -1,4 +1,4 @@
-// Where new things go so they land clear of what is already drawn (File > Import Structures
+// Where new things go so they land clear of what is already drawn (File > Import > Import Structures
 // places what it read here): the drawing is marked on a coarse grid, and the free rectangle of
 // the size needed nearest the middle of the window is found.
 

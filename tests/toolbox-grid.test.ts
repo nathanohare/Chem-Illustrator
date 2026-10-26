@@ -172,3 +172,12 @@ describe('toolbox grids in the settings', () => {
     expect(out.flyGrids).toEqual({});
   });
 });
+
+describe('one column', () => {
+  it('puts the buttons in reading order, drops gaps and keeps the lines between groups', async () => {
+    const { oneColumn } = await import('../src/ui/toolbox-grid');
+    const g = { cols: 2, rows: 3, cells: ['tool:a', 'tool:b', 'tool:c', null, 'tool:d', 'tool:e'], lines: [2] };
+    expect(oneColumn(g)).toEqual({ cols: 1, rows: 5, cells: ['tool:a', 'tool:b', 'tool:c', 'tool:d', 'tool:e'], lines: [3] });
+    expect(oneColumn({ cols: 1, rows: 2, cells: ['x', 'y'] })).toEqual({ cols: 1, rows: 2, cells: ['x', 'y'] });
+  });
+});

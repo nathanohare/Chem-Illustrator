@@ -1,4 +1,4 @@
-// Recovery copies: every few minutes (File > AutoSave and Recovery Options) each open tab with
+// Recovery copies: every few minutes (File > Versions and Recovery > AutoSave and Recovery Options) each open tab with
 // unsaved changes is copied to the app's own folder, with a small list of the tabs (the session's
 // manifest) that the app rewrites every half minute while it runs. Closing the app normally
 // deletes the copies. If the app stops without closing (a crash, a power cut, Windows restarting
@@ -45,7 +45,7 @@ export interface Session {
   started: number;
   /** Rewritten every half minute while the app runs. */
   beat: number;
-  /** The start-up question has been asked about it once (it stays in File > Recover Unsaved Work). */
+  /** The start-up question has been asked about it once (it stays in File > Versions and Recovery > Recover Unsaved Work). */
   offered?: boolean;
   tabs: CopiedTab[];
 }
@@ -202,7 +202,7 @@ export class Recovery {
     await putText(this.store, `${folder}/${MANIFEST}`, JSON.stringify(s));
   }
 
-  /** Don't ask about this session when the app starts again (File > Recover Unsaved Work still has it). */
+  /** Don't ask about this session when the app starts again (File > Versions and Recovery > Recover Unsaved Work still has it). */
   async markOffered(s: Session): Promise<void> {
     s.offered = true;
     await putText(this.store, `${FOLDER}/${keyPart(s.session)}/${MANIFEST}`, JSON.stringify(s));

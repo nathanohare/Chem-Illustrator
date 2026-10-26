@@ -331,7 +331,7 @@ export interface ParaStyle {
   noLineNumbers?: boolean;
   /** Don't hyphenate this paragraph (Word's Don't hyphenate, under Line and Page Breaks). */
   noHyphen?: boolean;
-  /** Documents: bookmarks at this paragraph (Insert > Bookmark), by name, for links to point at. */
+  /** Documents: bookmarks at this paragraph (Insert > Document > Bookmark), by name, for links to point at. */
   marks?: string[];
   /** Documents: tab stops, in points from the left margin, in order (Word's default every half inch past the last). */
   tabs?: TabStop[];

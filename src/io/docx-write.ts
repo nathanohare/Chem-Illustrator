@@ -53,7 +53,7 @@ import { isChartEx } from '../sheet/chart';
 import type { ChartBox } from '../sheet/chart-box';
 import {
   BIB_MARK, CHART_NAME, CITE_FIELD, CUSTOM_PROPS_FMTID, DOCX_CT, W14_NS, W15_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_NAME, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
-} from './docx';
+} from './docx-base';
 
 export interface DocxDeps {
   /** A drawing's picture for Word: PNG bytes, an SVG Word shows instead when it can, and its own size in points. */
@@ -459,7 +459,7 @@ class DocxWriter {
       open = { id: this.bookmarkId++, seq: seqs[0] };
       out.push(`<w:bookmarkStart w:id="${open.id}" w:name="${this.bookmarks.get(seqs[0])}"/>`);
     }
-    // the paragraph's bookmarks (Insert > Bookmark), round the whole paragraph
+    // the paragraph's bookmarks (Insert > Document > Bookmark), round the whole paragraph
     const marks = (ps.marks ?? []).map((name) => ({ name, id: this.bookmarkId++ }));
     for (const m of marks) out.push(`<w:bookmarkStart w:id="${m.id}" w:name="${xml(m.name)}"/>`);
     // index entries and marked citations (Word's XE and TA fields, hidden text with no result)
