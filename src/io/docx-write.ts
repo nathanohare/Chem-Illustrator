@@ -398,7 +398,8 @@ class DocxWriter {
       (c.replies ?? []).forEach((r, i) => note(replies[i], r, top, !!c.done));
     }
     this.pkg.relate(main, DOCX_REL.comments, 'comments.xml');
-    this.pkg.add('word/comments.xml', `${HEAD}<w:comments xmlns:w="${W_NS}" xmlns:w14="${W14_NS}">${notes.join('')}</w:comments>`, DOCX_CT.comments);
+    // (Word 2010's paragraph ids marked as ones to skip, so Word 2007 and strict readers take the part)
+    this.pkg.add('word/comments.xml', `${HEAD}<w:comments xmlns:w="${W_NS}" xmlns:w14="${W14_NS}" xmlns:mc="${MC_NS}" mc:Ignorable="w14">${notes.join('')}</w:comments>`, DOCX_CT.comments);
     this.pkg.relate(main, DOCX_REL.commentsExtended, 'commentsExtended.xml');
     this.pkg.add('word/commentsExtended.xml', `${HEAD}<w15:commentsEx xmlns:w15="${W15_NS}" xmlns:mc="${MC_NS}">${ex.join('')}</w15:commentsEx>`, DOCX_CT.commentsExtended);
   }

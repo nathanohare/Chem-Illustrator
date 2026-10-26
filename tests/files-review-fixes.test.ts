@@ -6,7 +6,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import { writeDocx, readDocx, type DocxDeps } from '../src/io/docx';
-import { newDocument, runStyleOf } from '../src/document/document';
+import { newDocument, runStyleOf, paraFromStyle } from '../src/document/document';
+import { markComment } from '../src/document/comments';
 import { emfToSvg } from '../src/render/emf-read';
 import { Workbook } from '../src/sheet/workbook';
 import { writeXlsx, readXlsx, excelLimitNote, type XlsxPictures } from '../src/io/xlsx';
@@ -269,5 +270,18 @@ describe('Excel\'s limits', () => {
     expect(back.book.sheets.map((s) => s.name)).toEqual(['Sheet1']);
     expect(back.book.sheet.validations.map((v) => v.value1)).toEqual([items, 'yes, no']);
     expect(back.warnings.join(' ')).not.toMatch(/hidden sheets/);
+  });
+});
+
+describe('Word comments', () => {
+  it('the comments part lists w14 as ignorable where it uses w14 attributes', async () => {
+    const d = newDocument();
+    const runs = markComment([{ ...runStyleOf(d.styles.Normal), text: 'Stirred for 2 h.' }], 12, 15, 0);
+    const bytes = await writeDocx({ ...d, runs, paras: [paraFromStyle(d.styles.Normal, {})], comments: { 0: { author: 'Nate', date: '2026-10-14T21:00:00Z', text: 'Check the time' } } }, deps);
+    const xml = strFromU8(unzipSync(bytes)['word/comments.xml']);
+    expect(xml).toContain('w14:paraId');
+    const root = new DOMParser().parseFromString(xml, 'application/xml').documentElement;
+    expect((root.getAttributeNS('http://schemas.openxmlformats.org/markup-compatibility/2006', 'Ignorable') ?? '').split(/\s+/)).toContain('w14');
+    expect(Object.values((await readDocx(bytes)).doc.comments ?? {}).map((c) => c.text)).toEqual(['Check the time']);
   });
 });
