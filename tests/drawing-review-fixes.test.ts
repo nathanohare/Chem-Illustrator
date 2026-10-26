@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 //
 // Drawing-core fixes from the code review: the "text is chemistry" marks during a drag, and a
-// two-finger pinch on a touch screen leaving the drawing alone, the pen (Sketch tool), and common
-// inorganic reagents read as chemistry.
+// two-finger pinch on a touch screen leaving the drawing alone, the pen (Sketch tool), common
+// inorganic reagents read as chemistry, and zooming a big drawing.
 
 import { describe, expect, it, vi } from 'vitest';
 import { Doc } from '../src/model';
 import { captionReading, readSpecies, speciesFormula } from '../src/chem/species';
 import { plainMeasure } from '../src/chem/reaction';
+import { Renderer } from '../src/render/renderer';
+import { VecPath } from '../src/render/vector';
 import { installPenAndTouch } from '../src/editor/touch';
 import { Sketcher, type SketchHost } from '../src/editor/sketch';
 import type { Vec } from '../src/geom';
@@ -227,5 +229,42 @@ describe('common inorganic reagents in a text box', () => {
   it('still reads the ones the formula reader puts together, and leaves NO2 to its other readings', () => {
     for (const t of ['SO3', 'SOCl2', 'POCl3', 'KMnO4', 'NaIO4', 'SeO2', 'MnO2']) expect(readSpecies(t), t).not.toBeNull();
     expect(readSpecies('NO2')).toBeNull();
+  });
+});
+
+describe('zooming a big drawing', () => {
+  it('shows the stretched old tiles while zoom steps keep coming, and paints new ones once it rests', () => {
+    // a canvas context that draws nothing
+    const ctx: Record<string | symbol, unknown> = new Proxy({}, { get: (t: Record<string | symbol, unknown>, k) => (k in t ? t[k] : (t[k] = () => ({ width: 0 }))) });
+    const getContext = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(() => ctx as unknown as CanvasRenderingContext2D);
+    let now = 1000;
+    const clock = vi.spyOn(performance, 'now').mockImplementation(() => now);
+    try {
+      const doc = new Doc();
+      doc.bulk(() => { for (let i = 0; i < 400; i++) { const p = doc.addAtom((i % 20) * 30, Math.floor(i / 20) * 30); const q = doc.addAtom(p.x + L, p.y); doc.addBond(p.id, q.id); } });
+      const r = new Renderer(document.createElement('canvas'), document.createElement('canvas'));
+      r.makePath = () => new VecPath() as unknown as Path2D;
+      r.resize(800, 600, 1);
+      r.view.scale = 1;
+      r.renderScene(doc);
+      let painted = 0;
+      const rr = r as unknown as { paintTile: (...a: unknown[]) => unknown };
+      const paint = rr.paintTile.bind(r);
+      rr.paintTile = (...a) => { painted++; return paint(...a); };
+      // a burst of wheel steps, one frame each (10 ms budget, as the editor gives)
+      for (let i = 0; i < 4; i++) { now += 30; r.view.scale *= 1.1; r.renderScene(doc, 10); }
+      expect(painted).toBe(0);
+      expect(r.incomplete).toBe(true);
+      // the frames after the last step: new tiles once the zoom has rested
+      now += 50; r.renderScene(doc, 10);
+      expect(painted).toBe(0);
+      now += 100; r.renderScene(doc, 10);
+      expect(painted).toBeGreaterThan(0);
+      expect(r.incomplete).toBe(false);
+      // a full paint (pictures, Fit) never waits
+      painted = 0;
+      r.view.scale *= 1.1; r.renderScene(doc);
+      expect(painted).toBeGreaterThan(0);
+    } finally { clock.mockRestore(); getContext.mockRestore(); }
   });
 });

@@ -191,6 +191,8 @@ export class Renderer {
   private tableLayouts = new WeakMap<TableData, TableLayout>();
   private tiles = new Map<string, Tile>();
   private stale: { tiles: Map<string, Tile>; scale: number } | null = null;
+  /** When the scale last changed (a zoom step). */
+  private scaledAt = 0;
   private tileScale = 0;
   private tileDpr = 0;
   private tileBg = '';
@@ -411,7 +413,9 @@ export class Renderer {
    * Paint the document. The page is cut into tiles that are painted once and then reused
    * while scrolling; an edit repaints only the tiles it touches. After a zoom, the old tiles
    * are shown stretched until new ones are ready, painting as many per frame as fit in
-   * `budgetMs` (the rest follow on the next frames; `incomplete` says so).
+   * `budgetMs` (the rest follow on the next frames; `incomplete` says so). While zoom steps keep
+   * coming, only the stretched tiles show: new ones wait until the zoom rests, so a fast wheel
+   * or pinch isn't held up painting tiles the next step throws away.
    */
   renderScene(doc: Doc, budgetMs = Infinity): void {
     const t0 = performance.now();
@@ -425,12 +429,14 @@ export class Renderer {
     this.view.oy = Math.round(this.view.oy * dpr) / dpr;
     const { ox, oy } = this.view;
     if (scale !== this.tileScale || dpr !== this.tileDpr || doc.background !== this.tileBg) {
-      if (this.tiles.size && dpr === this.tileDpr && doc.background === this.tileBg) {
+      if ((this.tiles.size || this.stale) && dpr === this.tileDpr && doc.background === this.tileBg) {
         // keep the old tiles as stretched placeholders while new ones are painted
-        // (not tiles waiting to have an edit painted in: they show the drawing as it was)
+        // (not tiles waiting to have an edit painted in: they show the drawing as it was;
+        // with none painted since the last step, the placeholders already there stay)
         if (!this.stale || this.tiles.size >= this.stale.tiles.size / 2) this.stale = { tiles: new Map([...this.tiles].filter(([, t]) => !t.patch)), scale: this.tileScale };
       } else this.stale = null;
       this.tiles = new Map();
+      this.scaledAt = t0;
       this.tileScale = scale;
       this.tileDpr = dpr;
       this.tileBg = doc.background;
@@ -457,8 +463,9 @@ export class Renderer {
     // paint missing tiles, nearest the middle first
     const cx = (tx0 + tx1) / 2, cy = (ty0 + ty1) / 2;
     need.sort((a, b) => Math.hypot(a[0] - cx, a[1] - cy) - Math.hypot(b[0] - cx, b[1] - cy));
+    const resting = !this.stale || budgetMs === Infinity || t0 - this.scaledAt >= ZOOM_REST_MS;
     for (const [tx, ty] of need) {
-      if (performance.now() - t0 > budgetMs) { missing = true; break; }
+      if (!resting || performance.now() - t0 > budgetMs) { missing = true; break; }
       this.tiles.set(tx + ',' + ty, this.paintTile(doc, tx, ty));
     }
     for (let ty = ty0; ty <= ty1; ty++) {
@@ -2220,6 +2227,8 @@ export class Renderer {
 
 /** Tile size in CSS pixels. */
 const TILE = 256;
+/** How long after a zoom step new tiles wait for another step (the stretched old ones show meanwhile). */
+const ZOOM_REST_MS = 120;
 const MAX_TILES = 600;
 /** Memory the tiles may take, in bytes (600 tiles at standard resolution). */
 const TILE_BYTES = 160 * 1024 * 1024;
