@@ -23,7 +23,7 @@ import { excelLimitNote } from './io/xlsx';
 import { DOC_OPEN_ONLY, documentSaveNote, isOtherDocument } from './io/doc-files';
 import { adoptSaved } from './io/document-file';
 import {
-  FileRef, FileType, CDXML, CDX, CDS, PPTX, XLSX, XLSM, SHEET_OPEN_ONLY, CSV, SDF, DOCX, RTF, ODT, TABLE_TEXT_EXTENSIONS, openBytesDialog, saveFileDialog, writeFile, canSaveInPlace, askSaveChanges,
+  FileRef, FileHandle, FileType, CDXML, CDX, CDS, PPTX, XLSX, XLSM, SHEET_OPEN_ONLY, CSV, SDF, DOCX, RTF, ODT, TABLE_TEXT_EXTENSIONS, openBytesDialog, saveFileDialog, writeFile, canSaveInPlace, askSaveChanges,
   showError, withExtension, extensionOf, baseName, readPath, pathExists, stampOf,
 } from './io/files';
 import type { FileStamp } from './keep/recovery';
@@ -100,6 +100,8 @@ export interface WorkspaceHooks {
   newPage?(): PageSetup | null;
   /** A file or workspace was opened from or saved to this path (File > Recent). */
   remember?(path: string): void;
+  /** A file was opened from or saved to a file the browser keeps a handle to (File > Recent, web version). */
+  rememberHandle?(handle: FileHandle): void;
   /** The master new slide decks start with (your template), or null for the plain one. */
   newMaster?(m: Master): Master | null;
   /**
@@ -486,6 +488,7 @@ export class Workspace {
       else if (ext === 'pptx' || zip) ok = await this.openSlides(bytes, name, ref);
       else ok = this.openDrawing(isCdx(bytes) ? cdxToCdxml(bytes) : new TextDecoder().decode(bytes), name, ref);
       if (ok && ref.kind === 'path' && !this.quiet) this.hooks.remember?.(ref.path);
+      else if (ok && ref.kind === 'handle' && !this.quiet) this.hooks.rememberHandle?.(ref.handle);
       if (ok && ext === CDS.extension && this.active.mode === 'drawing' && !this.quiet) this.hooks.styleSheet?.(this.active, { ...this.docOf(this.active).style });
       if (ok && ref.kind !== 'none') {
         const t = this.active;
@@ -801,6 +804,7 @@ export class Workspace {
     this.syncWindows(tab);
     this.hooks.saved?.(tab, typeof enc.data === 'string' ? new TextEncoder().encode(enc.data) : enc.data, how, was);
     if (ref.kind === 'path' && !this.quiet) this.hooks.remember?.(ref.path);
+    else if (ref.kind === 'handle' && !this.quiet) this.hooks.rememberHandle?.(ref.handle);
     this.hooks.changed();
     if (!auto) this.hooks.flash((ref.kind === 'none' ? `Downloaded ${name}` : ref.kind === 'embedded' ? `Put the drawing back in ${ref.doc || ref.app}` : `Saved ${name}`) + enc.note, enc.note ? 8000 : 3500);
     return true;

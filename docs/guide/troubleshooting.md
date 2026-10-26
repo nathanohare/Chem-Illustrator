@@ -32,7 +32,7 @@ Settings (hotkeys, your nicknames and templates, styles, palettes and every pref
 
 - **The app closed without saving** (a crash, a power cut, Windows restarting for updates): the next start offers your unsaved work back. To look again later, use **File ▸ Versions and Recovery ▸ Recover Unsaved Work…**.
 - **You saved over something you wanted:** **File ▸ Versions and Recovery ▸ Version History…** lists earlier versions kept each time the file was saved; open one as a copy, or restore it.
-- **A file isn't where it was:** **File ▸ Open Recent** (desktop app) names the folder each recent file was in. A file moved or renamed since is taken off the list.
+- **A file isn't where it was:** **File ▸ Open Recent** names the folder each recent file was in (in the web version, Chrome and Edge only). A file moved or renamed since is taken off the list.
 
 Recovery copies and versions are kept in the **Kept** folder of the app's data folder (on Windows, `%LOCALAPPDATA%\io.github.nathanohare.chemillustrator\Kept`). In the web version they are kept in the browser’s storage; the program asks the browser to keep it, but a browser can still clear it, so save files you care about.
 

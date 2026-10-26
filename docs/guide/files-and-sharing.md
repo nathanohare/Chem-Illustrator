@@ -154,7 +154,9 @@ Recovery copies and versions are kept in a folder named `Kept` in the app's loca
 
 ## Recent files
 
-In the desktop app, the **File** menu lists the last ten files and workspaces you opened or saved, under **Open…**, newest first. Click one to open it. If it has been moved or deleted, a message says so and it comes off the list. **Clear Recent Files** empties the list.
+**File ▸ Open Recent** lists the last ten files and workspaces you opened or saved, newest first. Click one to open it. If it has been moved or deleted, a message says so and it comes off the list. **Clear Recent Files** empties the list.
+
+The web version keeps a recent list too in Chrome and Edge, which let a page open a file again by itself: the browser asks once for leave to open it. Other browsers (Firefox, Safari) don't allow this, so there the menu stays hidden.
 
 ## Printing
 

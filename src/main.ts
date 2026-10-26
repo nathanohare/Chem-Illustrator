@@ -166,6 +166,7 @@ import { canScaleUi, setUiScale, stepUiScale, uiScale, UI_SCALES } from './ui/ui
 import { installTouchUi, keypadShowing, markSketch, setTouchMode, showKeypad, touchMode, touchOn } from './ui/touch-ui';
 import { FeedbackDialog } from './ui/feedback-dialog';
 import { addRecent, removeRecent, recentLabel } from './recent';
+import { canKeepHandles, forgetHandles, handleFor, isHandleEntry, keepHandle } from './recent-handles';
 import { groupWarnings } from './ui/warning-groups';
 import { NameReader, captionName, attachmentAtoms, cxNotes } from './chem/names';
 import { NameDialog } from './ui/name-dialog';
@@ -2015,6 +2016,7 @@ const docRead: DocxReadDeps = {
 
 const ws: Workspace = new Workspace(doc, {
   remember: (path) => rememberFile(path),
+  rememberHandle: (handle) => { if (canKeepHandles()) void keepHandle(handle, recentFiles).then(rememberFile, () => {}); },
   leave: (tab) => {
     // letters still being written with the pen go into this tab's drawing
     editor.sketcher.flush();
@@ -6086,6 +6088,7 @@ function rememberFile(path: string): void {
   recentFiles = addRecent(recentFiles, path);
   renderRecent();
   storeSettings();
+  if (canKeepHandles()) void forgetHandles(recentFiles).catch(() => {});
 }
 function renderRecent(): void {
   const box = document.querySelector<HTMLElement>('#recent-files');
@@ -6094,8 +6097,8 @@ function renderRecent(): void {
     const b = document.createElement('button');
     b.setAttribute('role', 'menuitem');
     b.dataset.recent = p;
-    b.title = p;
     const { name, folder } = recentLabel(p);
+    b.title = isHandleEntry(p) ? `${name} (kept by this browser)` : p;
     const n = document.createElement('span');
     n.textContent = name;
     const f = document.createElement('small');
@@ -6109,14 +6112,29 @@ function renderRecent(): void {
   clear.dataset.recent = '';
   clear.textContent = 'Clear Recent Files';
   box.replaceChildren(...(items.length ? [...items, document.createElement('hr'), clear] : []));
-  box.hidden = !canUpdate || !items.length;
+  box.hidden = !items.length;
   // File > Open Recent shows only with something in it
   const sub = document.querySelector<HTMLElement>('#recent-sub');
   if (sub) sub.hidden = box.hidden;
 }
 async function openRecent(path: string): Promise<void> {
   finishTyping();
-  if (!path) { recentFiles = []; renderRecent(); storeSettings(); return; }
+  if (!path) { recentFiles = []; renderRecent(); storeSettings(); if (canKeepHandles()) void forgetHandles([]).catch(() => {}); return; }
+  if (isHandleEntry(path)) {
+    // the web version: a file the browser kept, opened again with its leave
+    const handle = await handleFor(path).catch(() => null);
+    const name = recentLabel(path).name;
+    const file = await handle?.getFile().catch(() => null);
+    if (!handle || !file) {
+      recentFiles = removeRecent(recentFiles, path);
+      renderRecent();
+      storeSettings();
+      flash(`${name} can't be opened from here any more (moved, deleted, or the browser wasn't allowed), so it has come off the recent list. File > Open finds it.`, 8000);
+      return;
+    }
+    await ws.openBytes(new Uint8Array(await file.arrayBuffer()), file.name, { kind: 'handle', handle });
+    return;
+  }
   let bytes: Uint8Array;
   try {
     bytes = await readPath(path);

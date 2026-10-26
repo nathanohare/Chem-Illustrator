@@ -55,7 +55,7 @@ export const KEYMAP_FILE: FileType = { description: 'Chem Illustrator hotkeys', 
 export const SETTINGS_FILE: FileType = { description: 'Chem Illustrator settings', extension: 'json', mime: 'application/json' };
 
 // The parts of the File System Access API used here (Chrome and Edge only).
-interface FileHandle {
+export interface FileHandle {
   name: string;
   getFile(): Promise<File>;
   createWritable(): Promise<{ write(data: string | Uint8Array): Promise<void>; close(): Promise<void> }>;
