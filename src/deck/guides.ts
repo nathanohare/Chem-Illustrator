@@ -94,6 +94,36 @@ export function viewPropsXml(view: SlideView | undefined, ns: string): string {
     `<p:gridSpacing cx="${Math.round((v?.grid ?? 7.2) * EMU)}" cy="${Math.round((v?.grid ?? 7.2) * EMU)}"/></p:viewPr>`;
 }
 
+const GUIDES_EXT = '{EFAFB233-063F-42B5-8137-9DF3F51BA10A}';
+const NS_P15 = 'http://schemas.microsoft.com/office/powerpoint/2012/main';
+
+/**
+ * The guides as PowerPoint 2013 and later keep them (p15:sldGuideLst, in presentation.xml's
+ * extLst): a file with only viewProps' list opens in PowerPoint with no guides shown.
+ */
+export function slideGuidesExt(view: SlideView | undefined): string {
+  if (!view) return '';
+  const once = (xs: number[]) => [...new Set(xs.map((x) => Math.round(x * 8)))];
+  let id = 0;
+  const guide = (pos: number, horz: boolean) => `<p15:guide id="${++id}"${horz ? ' orient="horz"' : ''} pos="${pos}"><p15:clr><a:srgbClr val="A4A3A4"/></p15:clr></p15:guide>`;
+  const list = [...once(view.guides.y).map((y) => guide(y, true)), ...once(view.guides.x).map((x) => guide(x, false))].join('');
+  return list ? `<p:ext uri="${GUIDES_EXT}"><p15:sldGuideLst xmlns:p15="${NS_P15}">${list}</p15:sldGuideLst></p:ext>` : '';
+}
+
+/** The guides in presentation.xml's p15:sldGuideLst (PowerPoint 2013 and later), or null when it has none. */
+export function readSlideGuides(root: Element | null | undefined): SlideView['guides'] | null {
+  const lst = root ? Array.from(root.getElementsByTagNameNS(NS_P15, 'sldGuideLst'))[0] : undefined;
+  if (!lst) return null;
+  const out: SlideView['guides'] = { x: [], y: [] };
+  for (const g of Array.from(lst.children)) {
+    if (g.localName !== 'guide') continue;
+    const pos = Number(g.getAttribute('pos') ?? 0) / 8;
+    const list = g.getAttribute('orient') === 'horz' ? out.y : out.x;
+    if (!list.some((q) => Math.abs(q - pos) < 0.01)) list.push(pos);
+  }
+  return out;
+}
+
 /** The guides, snapping and grid from a file's view settings (null when it has none). */
 export function readViewProps(root: Element | null | undefined): SlideView | null {
   if (!root) return null;

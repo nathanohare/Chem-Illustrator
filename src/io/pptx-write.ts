@@ -37,7 +37,7 @@ import { FADE, tint } from '../colours';
 import { transitionXml, timingXml, highlightParts, partHolds, expandParas, targetKey, type Transition, type Anim, type MediaTiming } from '../deck/animation';
 import { MEDIA_EXT } from '../deck/media';
 import { effectsXml } from './pptx-effects';
-import { viewPropsXml } from '../deck/guides';
+import { viewPropsXml, slideGuidesExt } from '../deck/guides';
 import { handoutMasterXml, notesMasterXml } from '../deck/notes-pages';
 import { showPrXml, custShowsXml } from '../deck/show-setup';
 import {
@@ -338,15 +338,15 @@ const SECTIONS_EXT = '{521415D9-36F7-43E2-AB2F-B90AF26B5E84}';
 const sectionGuid = (i: number) => `{${(0x5ec70000 + i).toString(16).toUpperCase().padStart(8, '0')}-0000-4000-8000-${(i + 1).toString(16).toUpperCase().padStart(12, '0')}}`;
 
 /** The deck's sections as PowerPoint's own (p14:sectionLst), naming the slides by their ids in sldIdLst. */
-export function sectionsXml(sections: SectionCount[] | undefined, n: number): string {
-  if (!sections?.length) return '';
+export function sectionsXml(sections: SectionCount[] | undefined, n: number, more = ''): string {
+  if (!sections?.length) return more ? `<p:extLst>${more}</p:extLst>` : '';
   let at = 0;
   const list = sections.map((sec, k) => {
     const ids = Array.from({ length: Math.max(0, Math.min(sec.count, n - at)) }, (_, j) => `<p14:sldId id="${256 + at + j}"/>`).join('');
     at += Math.max(0, sec.count);
     return `<p14:section name="${xmlAttr(sec.name)}" id="${sectionGuid(k)}"><p14:sldIdLst>${ids}</p14:sldIdLst></p14:section>`;
   }).join('');
-  return `<p:extLst><p:ext uri="${SECTIONS_EXT}"><p14:sectionLst xmlns:p14="${NS_P14}">${list}</p14:sectionLst></p:ext></p:extLst>`;
+  return `<p:extLst><p:ext uri="${SECTIONS_EXT}"><p14:sectionLst xmlns:p14="${NS_P14}">${list}</p14:sectionLst></p:ext>${more}</p:extLst>`;
 }
 
 /** A part in ppt/ as seen from another part in ppt/ or a folder in it. */
@@ -536,7 +536,8 @@ class Writer {
       custShowsXml(deck.settings?.customShows ?? [], (sid) => slideRels[deck.slides.findIndex((x) => x.id === sid)], xml) +
       `<p:custDataLst><p:tags r:id="${masterTags}"/></p:custDataLst>` +
       `<p:defaultTextStyle>${defaultLevels(this.deck.master)}</p:defaultTextStyle>` +
-      sectionsXml(deck.sections, n) +
+      // (the guides, also where PowerPoint 2013 and later look for them)
+      sectionsXml(deck.sections, n, slideGuidesExt(deck.settings?.view)) +
       `</p:presentation>`, CT.presentation);
     return pkg.build();
   }

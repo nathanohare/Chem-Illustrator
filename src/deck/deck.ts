@@ -559,7 +559,7 @@ function styleWith(d: Doc, m: Master, layout: LayoutId, own?: Background): void 
  * by k (structures with their bond lengths and labels, arrows with their heads, shapes and the
  * places of text; text keeps its size).
  */
-function scaleContents(d: Doc, from: SlideSize, to: SlideSize, k: number): void {
+function scaleContents(d: Doc, from: SlideSize, to: SlideSize, k: number, placeholders = false): void {
   const at = (x: number, y: number) => ({ x: to.w / 2 + (x - from.w / 2) * k, y: to.h / 2 + (y - from.h / 2) * k });
   if (k === 1) {
     const dx = (to.w - from.w) / 2, dy = (to.h - from.h) / 2;
@@ -568,7 +568,7 @@ function scaleContents(d: Doc, from: SlideSize, to: SlideSize, k: number): void 
     for (const a of [...d.atoms.values()]) d.updateAtom(a.id, { ...at(a.x, a.y), s: (a.s ?? 1) * k });
     for (const b of [...d.bonds.values()]) d.updateBond(b.id, { s: (b.s ?? 1) * k });
   }
-  for (const c of [...d.captions.values()]) if (!c.ph) d.updateCaption(c.id, at(c.x, c.y));
+  for (const c of [...d.captions.values()]) if (!c.ph || placeholders) d.updateCaption(c.id, at(c.x, c.y));
   for (const r of [...d.arrows.values()]) {
     d.updateArrow(r.id, { tail: at(r.tail.x, r.tail.y), head: at(r.head.x, r.head.y), ...(k !== 1 ? { headLength: r.headLength * k, headWidth: r.headWidth * k } : {}) });
   }
@@ -1505,11 +1505,13 @@ export class Deck {
           }
         }
         if (restyle) applyStyle(d, this.master.drawing, keep ? 'new-only' : 'restyle');
-        if (resized) scaleContents(d, from.size, this.size, 1);
+        if (resized) scaleContents(d, from.size, this.size, 1, keep);
       });
       const lay = hasLayout(target, c.layout) ? c.layout : 'title-content';
       const made = this.makeSlide(lay, d.contents(), c.notes, motion, target);
-      if (resized) made.doc.bulk(() => this.fitPlaceholders(made.doc, lay, target));
+      // (kept formatting: the placeholders stay where they were among the source's own shapes, a
+      // white title on its band, say, rather than moving to this size's places off the band)
+      if (resized && !keep) made.doc.bulk(() => this.fitPlaceholders(made.doc, lay, target));
       return made;
     });
     return { slides, master };
