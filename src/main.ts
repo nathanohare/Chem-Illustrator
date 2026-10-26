@@ -2,7 +2,6 @@
 // toolbar, the drawing area (with the slide list and notes in Slides mode, or the grid in Sheet
 // mode), and the panels on the right.
 
-import { readDocumentFile, writeDocumentFile } from './io/doc-files';
 import { newDocDesign, setNewDocDesign } from './document/themes';
 import { fieldEnv } from './document/fields';
 import type { QuickPart } from './document/quick-parts';
@@ -86,7 +85,7 @@ import { whiteToClear } from './render/background';
 
 import { AnimationUI } from './ui/animation-ui';
 import { SlideComments } from './ui/slide-comments';
-import { writePptx, type PptxOptions } from './io/pptx-write';
+import type { PptxOptions } from './io/pptx-write';
 import { EFFECTS, animName, newAnim, highlightParts } from './deck/animation';
 import { SLIDE_TEMPLATES, applyTemplate, type SlideTemplate } from './deck/templates';
 import { showContextMenu, topMenuEntry, type MenuItem } from './ui/context-menu';
@@ -178,7 +177,8 @@ import { StructurePictures } from './ui/structure-pictures';
 import { LabelTooltip } from './ui/label-tooltip';
 import { starAtoms } from './chem/label-tip';
 import { structurePlace } from './sheet/layout';
-import { readSheetFile, writeSheetFile, SheetFileDeps } from './io/sheet-files';
+// sheet and document files' readers and writers load the first time one is opened or saved
+import type { SheetFileDeps } from './io/sheet-files';
 import { fromEmbedSource, type Embedded } from './io/ole-object';
 import { objectPicture, type ObjectPicture } from './render/object-picture';
 import { ACS_1996, DocStyle } from './style';
@@ -2110,12 +2110,12 @@ const ws: Workspace = new Workspace(doc, {
   pptx: pptxOptions(),
   measure: measureText,
   sheets: {
-    read: (bytes, name) => readSheetFile(bytes, name, sheetFiles),
-    write: (book, name) => writeSheetFile(book, name, sheetFiles),
+    read: async (bytes, name) => (await import('./io/sheet-files')).readSheetFile(bytes, name, sheetFiles),
+    write: async (book, name) => (await import('./io/sheet-files')).writeSheetFile(book, name, sheetFiles),
   },
   documents: {
-    read: (bytes, name) => readDocumentFile(bytes, name, docRead),
-    write: (d, name) => writeDocumentFile(d, name, docFiles),
+    read: async (bytes, name) => (await import('./io/doc-files')).readDocumentFile(bytes, name, docRead),
+    write: async (d, name) => (await import('./io/doc-files')).writeDocumentFile(d, name, docFiles),
   },
   newStyle: (mode) => { const n = modeStyleFor(mode); return n ? styleNamed(n, ownStyles) ?? null : null; },
   newPage: () => (defaultPage ? { ...defaultPage } : null),
@@ -3329,7 +3329,7 @@ async function pickObjectFile(): Promise<{ name: string; bytes: Uint8Array } | n
 /** The picture an object shows: a workbook's cells, a PDF's first page, a picture, or an icon. */
 function objectPictureOf(name: string, bytes: Uint8Array, icon: boolean): Promise<ObjectPicture> {
   return objectPicture(name, bytes, icon, {
-    readBook: async (b) => (await readSheetFile(b, name, sheetFiles)).book,
+    readBook: async (b) => (await (await import('./io/sheet-files')).readSheetFile(b, name, sheetFiles)).book,
     pdfPage: (b) => import('./render/pdf-page').then((m) => m.pdfFirstPage(b)),
   });
 }
@@ -9262,7 +9262,7 @@ requestAnimationFrame(() => {
 
 // Hooks for the automated speed tests.
 (window as any).__app = { doc, editor, renderer, chem, live, command, addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
-  pptxBytes: () => { const d = deckNow()!; return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments })) }, pptxOptions()); } };
+  pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test
 
