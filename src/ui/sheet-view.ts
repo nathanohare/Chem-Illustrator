@@ -3622,6 +3622,8 @@ const sameRange = (a: Range, b: Range) => a.r1 === b.r1 && a.c1 === b.c1 && a.r2
 /** A small menu at a point: [label, action, enabled?] items, null for a line. */
 export function popupMenu(x: number, y: number, items: ([string, () => void, boolean?] | null)[]): HTMLDivElement {
   document.querySelector('.popup-menu')?.remove();
+  // where the keys went before (a document's caret, a sheet's cell): Escape goes back there
+  const back = document.activeElement;
   const m = document.createElement('div');
   m.className = 'menu popup-menu';
   m.setAttribute('role', 'menu');
@@ -3645,6 +3647,12 @@ export function popupMenu(x: number, y: number, items: ([string, () => void, boo
     m.remove();
     document.removeEventListener('pointerdown', close, true);
     document.removeEventListener('keydown', close, true);
+    if (e instanceof KeyboardEvent) {
+      // Escape only closes the menu: it doesn't also reach the page underneath
+      e.preventDefault();
+      e.stopPropagation();
+      if (back instanceof HTMLElement && back.isConnected) back.focus({ preventScroll: true });
+    }
   };
   setTimeout(() => {
     document.addEventListener('pointerdown', close, true);
