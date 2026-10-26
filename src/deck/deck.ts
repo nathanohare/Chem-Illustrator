@@ -1062,6 +1062,7 @@ export class Deck {
       const mine = this.slides.filter((s) => of.get(s) === id);
       if (slides) return this.slides.filter((s) => !mine.includes(s));
       for (const s of mine) of.set(s, into?.id);
+      return undefined;
     });
     return true;
   }

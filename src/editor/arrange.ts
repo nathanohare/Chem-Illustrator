@@ -115,7 +115,7 @@ export function distributeOffsets(us: Unit[], axis: 'h' | 'v'): Vec[] {
   const out = us.map(() => ({ x: 0, y: 0 }));
   if (us.length < 3) return out;
   const lo = (r: Rect) => (axis === 'h' ? r.x1 : r.y1), hi = (r: Rect) => (axis === 'h' ? r.x2 : r.y2);
-  const order = us.map((u, i) => i).sort((i, j) => lo(us[i].box) + hi(us[i].box) - lo(us[j].box) - hi(us[j].box));
+  const order = us.map((_u, i) => i).sort((i, j) => lo(us[i].box) + hi(us[i].box) - lo(us[j].box) - hi(us[j].box));
   const first = us[order[0]].box, last = us[order[order.length - 1]].box;
   let sizes = 0;
   for (const i of order) sizes += hi(us[i].box) - lo(us[i].box);

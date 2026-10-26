@@ -3881,7 +3881,7 @@ async function exportPdf(): Promise<void> {
     // the pages as laid out on screen, figures as shapes and text so they stay sharp
     pages = recordPages(docFile.t, docFile.printLayout(), (c, style) => figures.record(c, style).pic);
   } else if (deck) {
-    pages = deck.slides.map((s, i) => ({
+    pages = deck.slides.map((_s, i) => ({
       w: deck.size.w, h: deck.size.h,
       items: recordSlide(deck.page(i), deck.docOf(i)),
     }));
@@ -4971,8 +4971,8 @@ const COMMANDS: Record<string, () => unknown> = {
   'open-link': () => openLink(),
   'insert-bookmark': () => { flash('Bookmarks are for documents: they name a place in the text for links to go to.'); return false; },
   'edit-equation': () => { const id = [...editor.sel.shapes].find((x) => doc.shapes.get(x)?.math); if (id === undefined) { flash('Click an equation first (or double-click it).'); return; } void editEquationShape(id); },
-  'next-slide': () => { const d = deckNow(); if (!d) return false; goSlide(d.index + 1); },
-  'prev-slide': () => { const d = deckNow(); if (!d) return false; goSlide(d.index - 1); },
+  'next-slide': () => { const d = deckNow(); if (!d) return false; goSlide(d.index + 1); return undefined; },
+  'prev-slide': () => { const d = deckNow(); if (!d) return false; goSlide(d.index - 1); return undefined; },
   'size-wide': () => setSlideSize(WIDE),
   'size-standard': () => setSlideSize(STANDARD),
   'size-custom': () => customSlideSize(),
@@ -5000,13 +5000,13 @@ const COMMANDS: Record<string, () => unknown> = {
   'preview-slide': () => animUi?.preview(),
   'remove-animation': () => animUi?.removePicked(),
   // comments on slides (in documents, the document's own commands run first)
-  'new-comment': () => { if (ws.active.mode !== 'slides' || !slideCmts) return false; finishTyping(); void slideCmts.add(); },
-  'prev-comment': () => { if (ws.active.mode !== 'slides') return false; slideCmts?.step(false); },
-  'next-comment': () => { if (ws.active.mode !== 'slides') return false; slideCmts?.step(true); },
-  'resolve-comment': () => { if (ws.active.mode !== 'slides') return false; slideCmts?.toggleResolved(); },
-  'delete-comment': () => { if (ws.active.mode !== 'slides') return false; slideCmts?.remove(); },
-  'delete-all-comments': () => { if (ws.active.mode !== 'slides') return false; slideCmts?.removeAll(); },
-  'show-comments': () => { if (ws.active.mode !== 'slides' || !slideCmts) return false; slideCmts.show(!slideCmts.shown); },
+  'new-comment': () => { if (ws.active.mode !== 'slides' || !slideCmts) return false; finishTyping(); void slideCmts.add(); return undefined; },
+  'prev-comment': () => { if (ws.active.mode !== 'slides') return false; slideCmts?.step(false); return undefined; },
+  'next-comment': () => { if (ws.active.mode !== 'slides') return false; slideCmts?.step(true); return undefined; },
+  'resolve-comment': () => { if (ws.active.mode !== 'slides') return false; slideCmts?.toggleResolved(); return undefined; },
+  'delete-comment': () => { if (ws.active.mode !== 'slides') return false; slideCmts?.remove(); return undefined; },
+  'delete-all-comments': () => { if (ws.active.mode !== 'slides') return false; slideCmts?.removeAll(); return undefined; },
+  'show-comments': () => { if (ws.active.mode !== 'slides' || !slideCmts) return false; slideCmts.show(!slideCmts.shown); return undefined; },
   'drawing-style': () => settingsWindow.open('style'),
   present: () => present(false),
   'present-current': () => present(true),

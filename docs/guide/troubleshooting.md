@@ -34,7 +34,7 @@ Settings (hotkeys, your nicknames and templates, styles, palettes and every pref
 - **You saved over something you wanted:** **File ▸ Versions and Recovery ▸ Version History…** lists earlier versions kept each time the file was saved; open one as a copy, or restore it.
 - **A file isn't where it was:** **File ▸ Open Recent** (desktop app) names the folder each recent file was in. A file moved or renamed since is taken off the list.
 
-Recovery copies and versions are kept in the **Kept** folder of the app's data folder (on Windows, `%LOCALAPPDATA%\io.github.nathanohare.chemillustrator\Kept`). In the web version they are kept in the browser's storage, which the browser may clear: save files you care about.
+Recovery copies and versions are kept in the **Kept** folder of the app's data folder (on Windows, `%LOCALAPPDATA%\io.github.nathanohare.chemillustrator\Kept`). In the web version they are kept in the browser’s storage; the program asks the browser to keep it, but a browser can still clear it, so save files you care about.
 
 How often copies are made, and how many versions are kept, is in **File ▸ Versions and Recovery ▸ AutoSave and Recovery Options…**.
 

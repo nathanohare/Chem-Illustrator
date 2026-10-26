@@ -12,6 +12,7 @@
     "pretest": "node scripts/build-icons.mjs",
     "test": "vitest run",
     "smoke": "node scripts/smoke.mjs",
+    "roundtrip": "node bench/roundtrip.mjs",
     "bench": "node bench/perf.mjs stress",
     "bench:core": "vitest bench --run bench/core.bench.ts",
     "bench:baseline": "node bench/baseline.mjs",

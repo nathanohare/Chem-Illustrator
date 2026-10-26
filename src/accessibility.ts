@@ -215,7 +215,7 @@ export function checkDrawing(doc: Doc, opts: DrawingCheck = {}): Issue[] {
 }
 
 /** Does a slide's title overlap anything else on it (so it can't be read first without changing how the slide looks)? */
-export function titleOverlaps(doc: Doc, title: Caption, box: Box): boolean {
+export function titleOverlaps(doc: Doc, _title: Caption, box: Box): boolean {
   for (const s of doc.shapes.values()) if (!s.hidden && !s.ring && !s.pin && overlaps(box, boxOf(s))) return true;
   for (const a of doc.atoms.values()) if (holds(box, a.x, a.y)) return true;
   for (const r of doc.arrows.values()) if (overlaps(box, { x1: Math.min(r.tail.x, r.head.x), y1: Math.min(r.tail.y, r.head.y), x2: Math.max(r.tail.x, r.head.x), y2: Math.max(r.tail.y, r.head.y) })) return true;

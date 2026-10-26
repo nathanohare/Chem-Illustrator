@@ -118,6 +118,7 @@ export class SheetViews {
       }, was?.guid);
       this.host.edit('Add view', () => wb.setCustomViews(was ? wb.customViews.map((x) => (x === was ? v : x)) : [...wb.customViews, v]));
       this.host.flash(`Saved the view "${n}". View > Custom Views shows it again.`);
+      return undefined;
     });
     w.show();
   }

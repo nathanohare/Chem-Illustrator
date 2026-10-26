@@ -112,7 +112,7 @@ export function classify(pts: Vec[], L: number, startsOnAtom = false, letterMax 
 }
 
 /** Corners round a closed stroke (0 for a smooth loop). */
-export function loopCorners(pts: Vec[], c: Vec, r: number): number {
+export function loopCorners(pts: Vec[], _c: Vec, r: number): number {
   const ring = resample(pts, (2 * Math.PI * r) / 72);
   if (ring.length < 8) return 0;
   // the turning at each point, over a short window: corners turn sharply, circles evenly

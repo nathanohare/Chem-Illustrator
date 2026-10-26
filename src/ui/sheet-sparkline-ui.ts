@@ -100,6 +100,7 @@ export class SheetSparklines {
         sh.setSparklines([...kept, g]);
       });
       this.view.select(p.range);
+      return undefined;
     });
     w.show();
   }
@@ -259,6 +260,7 @@ export class SheetSparklines {
       const made = makeSparklines(g.kind, d.range, p.range, d.sheet !== s ? d.sheet.name : undefined);
       if (typeof made === 'string') return made;
       this.host.edit('Edit sparklines', (sh) => sh.setSparklines(sh.sparklines.map((x) => (x.id === g.id ? { ...g, items: made.items } : x))));
+      return undefined;
     });
     w.show();
   }
