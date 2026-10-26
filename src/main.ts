@@ -1250,6 +1250,8 @@ function addNamed(got: { mb: string; attach: number[] }, x: number, y: number, t
 
 /** Slides: structures locked so clicks reach the text near them. */
 let structuresLocked = false;
+/** The start view shows on the empty drawing the program opens with (Settings > General). */
+let startView = true;
 /** View > Focus View is on. */
 let focusView = false;
 /** View > Toolboxes > One Column Outside Drawing is on; and whether the toolboxes on screen were built that way. */
@@ -6409,6 +6411,7 @@ async function generalPreferences(): Promise<void> {
     { name: 'convertChemDraw', label: 'Redraw ChemDraw objects in Word files as they open', type: 'checkbox', value: String(!!docRead.convertChemDraw),
       help: 'Off: they keep the look they had in Word and become drawings when you edit one. On: each is redrawn here in the document\'s drawing style.' },
     { name: 'reviewer', label: 'Your name on tracked changes in documents', value: reviewAuthor() },
+    { name: 'startView', label: 'Show the start view (new tabs, recent files) when the program opens', type: 'checkbox', value: String(startView) },
   ], { ok: 'Save' });
   if (!r) return;
   editor.options.groupClick = r.groupClick === 'item' ? 'item' : 'group';
@@ -6418,6 +6421,7 @@ async function generalPreferences(): Promise<void> {
   docRead.convertChemDraw = r.convertChemDraw === 'true';
   matchStructure.on = r.matchStructure === 'true';
   setReviewAuthor(r.reviewer ?? '');
+  startView = r.startView === 'true';
   storeSettings();
 }
 
@@ -6475,6 +6479,7 @@ function currentSettings(): Settings {
     textBar: CaptionEditor.barPlace,
     appTheme,
     oneColumnTools,
+    startView,
     page: defaultPage,
     welcomed,
     groupTips: labelTips.enabled,
@@ -6696,6 +6701,7 @@ function applySettings(s: Settings): void {
   placeTextBar(s.textBar);
   setAppTheme(s.appTheme);
   setOneColumnTools(s.oneColumnTools);
+  startView = s.startView;
   showGroupTips(s.groupTips);
   setTouchMode(s.touchMode);
   editor.options.penSketch = s.penSketch;
@@ -8664,7 +8670,7 @@ const guide = {
 };
 watchRibbons(() => storeSettings());
 const SETTINGS_PAGES: SettingsPage[] = [
-  { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name', open: generalPreferences },
+  { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files', open: generalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute', open: drawingPreferences },
   { id: 'style', title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
@@ -8827,9 +8833,52 @@ let welcomed = false;
 const welcomeCard = $('#welcome');
 /** While the welcome card shows: looks, on each change, for drawing having started. */
 let welcomeWatch: (() => void) | null = null;
+/** Show the start view (after the welcome card has been seen): new tabs, recent files. It goes when anything is picked or drawn. */
+function showStartView(): void {
+  if (!startView || doc.atoms.size || doc.captions.size || doc.shapes.size || doc.arrows.size || deckNow() || ws.active.mode !== 'drawing' || ws.tabs.length > 1) return;
+  const card = $('#start-view');
+  const files = recentFiles.slice(0, 6).map((p) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    const { name, folder } = recentLabel(p);
+    const n = document.createElement('span');
+    n.textContent = name;
+    const f = document.createElement('small');
+    f.className = 'muted';
+    f.textContent = folder;
+    b.append(n, f);
+    b.title = isHandleEntry(p) ? name : p;
+    b.addEventListener('click', () => { off(); void openRecent(p); });
+    return b;
+  });
+  card.querySelector('.sv-files')!.replaceChildren(...files);
+  card.querySelector<HTMLElement>('.sv-recent')!.hidden = !files.length;
+  const again = card.querySelector<HTMLInputElement>('.sv-again input')!;
+  again.checked = true;
+  card.hidden = false;
+  const seen = doc.version;
+  const tab = ws.active;
+  const off = () => {
+    welcomeWatch = null;
+    if (card.hidden) return;
+    card.hidden = true;
+    if (!again.checked) { startView = false; storeSettings(); }
+  };
+  card.onclick = (e) => {
+    const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-start]');
+    if (!b) return;
+    off();
+    if (b.dataset.start === 'draw') $('#overlay').focus({ preventScroll: true });
+    else command(b.dataset.start!);
+  };
+  // drawing anything, or going to another tab, puts it away
+  welcomeWatch = () => { if (card.hidden) welcomeWatch = null; else if (doc.version !== seen || ws.active !== tab) off(); };
+}
+
 /** Show the welcome card on a first, empty drawing; it goes when closed or when drawing starts. */
 function showWelcome(): void {
-  if (welcomed || doc.atoms.size || doc.captions.size || doc.shapes.size || deckNow() || ws.active.mode !== 'drawing') return;
+  if (welcomed) { showStartView(); return; }
+  if (doc.atoms.size || doc.captions.size || doc.shapes.size || deckNow() || ws.active.mode !== 'drawing') return;
   welcomeCard.hidden = false;
   const seen = doc.version;
   const off = () => {

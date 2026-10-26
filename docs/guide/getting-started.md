@@ -117,6 +117,8 @@ The panel on the right changes with what you are doing. In a drawing it has:
 
 The **›** arrow at the top of the panel folds it away to give the drawing more room (also **View ▸ Fold Side Panel**). Each kind of tab remembers this on its own, so you can keep the panel folded in sheets and open in drawings. In a window narrower than about 1,200 pixels the panel folds by itself so the drawing keeps its room, and opens again when the window is widened; **›** still opens it while the window is narrow.
 
+**View ▸ Focus View** (Ctrl+Shift+F1) hides the toolboxes, the side panel and the ribbon at once, to give the page the whole window on a laptop; the same key brings them back. In Slides, Sheet, Document and Design tabs, **View ▸ Toolboxes ▸ One Column Outside Drawing** shows the toolboxes docked at the side in one narrow column.
+
 ### A small window
 
 When the window is too narrow for a ribbon (in documents, slides, sheets and designs), its groups at the right end first show their buttons as icons only (rest the mouse on one to see its name), then fold into one button each, named after the group, that drops the group's buttons down. A slide or design page that was fitted to the window is fitted again when the window changes size.
@@ -131,9 +133,11 @@ The **zoom box** at the right end of that line shows how big the drawing is show
 
 The first time you open the app, a small card on the empty page lists the tips most people need first: drawing bonds and rings, typing atom labels, pasting SMILES or names, Search and the right-click menu. Close it with its **×**; it doesn't come back.
 
+After that, each time the app opens on an empty drawing, a smaller **start view** offers a new Slides, Sheet, Document or Design tab, a template, Open, and your recent files. Start drawing (or click **Start drawing**) and it goes. Untick **Show at start** to stop it, or turn it back on in **Edit ▸ Settings ▸ General**.
+
 ### Search (Alt+Q)
 
-Click **Search** at the top, or press Alt+Q, and type a few letters of what you want to do: `wedge`, `number comp`, `bold`, `dark`. The list shows each matching menu command, ribbon button and drawing tool, where it lives and its key. Press Enter for the top match, or use the arrow keys to pick another. With nothing typed, the commands you used lately come first. **Edit ▸ Search Commands…** opens the same box.
+Click **Search** at the top, or press Alt+Q, and type a few letters of what you want to do: `wedge`, `number comp`, `bold`, `dark`. The list shows each matching menu command, ribbon button and drawing tool, where it lives and its key, then the matching pages of Settings and sections of this guide. Press Enter for the top match, or use the arrow keys to pick another. With nothing typed, the commands you used lately come first. **Edit ▸ Search Commands…** opens the same box.
 
 ### Format Painter (every mode)
 

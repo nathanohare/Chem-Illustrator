@@ -2728,6 +2728,18 @@
         </ul>
         <p class="welcome-buttons"><a href="#" data-cmd="user-guide">Open the user guide</a><span class="grow"></span><button type="button" class="primary" id="welcome-close">Start drawing</button></p>
       </section>
+      <section id="start-view" class="welcome-card start-view" aria-label="Start" hidden>
+        <div class="sv-new">
+          <button type="button" data-start="new-slides">New Slides</button>
+          <button type="button" data-start="new-sheet">New Sheet</button>
+          <button type="button" data-start="new-document">New Document</button>
+          <button type="button" data-start="new-design">New Design</button>
+          <button type="button" data-start="new-from-template">From Template…</button>
+          <button type="button" data-start="open">Open…</button>
+        </div>
+        <div class="sv-recent" hidden><h3>Recent</h3><div class="sv-files"></div></div>
+        <p class="welcome-buttons"><label class="sv-again"><input type="checkbox" checked> Show at start</label><span class="grow"></span><button type="button" class="primary" data-start="draw">Start drawing</button></p>
+      </section>
     </div>
     <div id="main-snap" hidden title="Click to work on the slide again"><canvas></canvas></div>
     <div id="split-pane" hidden>

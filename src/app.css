@@ -448,6 +448,17 @@ body.slides-mode #canvas-host, body.design-mode #canvas-host { background: var(-
 .welcome-card li + li { margin-top: 4px; }
 .welcome-card kbd { font: 11px var(--ui-font); padding: 0 4px; border: 1px solid var(--line); border-radius: 3px; }
 .welcome-buttons { display: flex; align-items: center; margin: 0; }
+/* the start view: new tabs, recent files, and drawing straight away */
+.start-view { width: min(460px, calc(100% - 32px)); padding: 12px 14px 10px; }
+.sv-new { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+.sv-new button { padding: 5px 6px; }
+.sv-recent h3 { margin: 4px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.sv-recent[hidden] { display: none; }
+.sv-files { display: flex; flex-direction: column; margin-bottom: 8px; }
+.sv-files button { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; text-align: left; border: 0; background: none; padding: 2px 4px; border-radius: 4px; }
+.sv-files button:hover { background: var(--accent-soft); }
+.sv-files small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
+.sv-again { display: flex; gap: 5px; align-items: center; color: var(--muted); }
 .welcome-buttons .grow { flex: 1; }
 .energy-preview { display: block; width: 100%; height: 200px; margin: 6px 0; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
 .energy-preview[hidden] { display: none; }
