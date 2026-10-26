@@ -159,6 +159,8 @@ export async function readDocx(bytes: Uint8Array, deps: DocxReadDeps = {}): Prom
 const yes = (v: string | null): boolean => v !== null && /^(1|true|on)$/i.test(v);
 const merge = <T extends object>(...xs: (T | undefined)[]): T => Object.assign({}, ...xs.filter(Boolean)) as T;
 const round = (v: number, k = 100) => Math.round(v * k) / k;
+/** A table's gridSpan or gridBefore: Word allows 63 columns, so a damaged count is held to that. */
+const gridCount = (v: string | null, least: number): number => Math.min(63, Math.max(least, Math.trunc(Number(v ?? least)) || least));
 
 class DocxReader {
   private pkg: PackageReader;
@@ -1697,11 +1699,11 @@ class DocxReader {
       if (counting && kid(trPr, 'tblHeader') && this.on(kid(trPr, 'tblHeader'))) head++;
       else counting = false;
       const row: Cell[] = [];
-      const before = Number(this.a(kid(trPr, 'gridBefore')) ?? 0);
+      const before = gridCount(this.a(kid(trPr, 'gridBefore')), 0);
       for (let i = 0; i < before; i++) row.push({ cell: { runs: [] }, span: 1, vmerge: false, borders: null });
       for (const tc of this.cellsOf(tr)) {
         const tcPr = kid(tc, 'tcPr');
-        const span = Math.max(1, Number(this.a(kid(tcPr, 'gridSpan')) ?? 1));
+        const span = gridCount(this.a(kid(tcPr, 'gridSpan')), 1);
         const vm = kid(tcPr, 'vMerge');
         const vmerge = !!vm && this.a(vm) !== 'restart';
         if (vmerge) this.warn('vmerge');
@@ -1834,11 +1836,11 @@ class DocxReader {
         if (counting && kid(trPr, 'tblHeader') && this.on(kid(trPr, 'tblHeader'))) head++;
         else counting = false;
         const row: Cell[] = [];
-        const before = Number(this.a(kid(trPr, 'gridBefore')) ?? 0);
+        const before = gridCount(this.a(kid(trPr, 'gridBefore')), 0);
         for (let i = 0; i < before; i++) row.push({ cell: { runs: [] }, span: 1, borders: null, vm: null });
         for (const tc of this.cellsOf(tr)) {
           const tcPr = kid(tc, 'tcPr');
-          const span = Math.max(1, Number(this.a(kid(tcPr, 'gridSpan')) ?? 1));
+          const span = gridCount(this.a(kid(tcPr, 'gridSpan')), 1);
           // merged down a column: the first cell starts it, the ones under it carry it on
           const vmEl = kid(tcPr, 'vMerge');
           const vm = !vmEl ? null : this.a(vmEl) === 'restart' ? 'restart' : 'continue';
