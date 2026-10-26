@@ -21,6 +21,24 @@ export function orient(p: Paper, how: 'portrait' | 'landscape' | 'auto', w = 1, 
   return land ? { w: Math.max(p.w, p.h), h: Math.min(p.w, p.h) } : { w: Math.min(p.w, p.h), h: Math.max(p.w, p.h) };
 }
 
+/** The paper sizes CSS names in `@page { size }`, upright, in points. */
+const CSS_PAPERS: [string, number, number][] = [
+  ['letter', 612, 792], ['legal', 612, 1008], ['ledger', 792, 1224],
+  ['A5', 419.53, 595.28], ['A4', 595.28, 841.89], ['A3', 841.89, 1190.55],
+];
+
+/**
+ * The `@page` size for w × h point pages. A paper CSS names goes by name and orientation
+ * ("letter landscape"): given only as two lengths, a wider-than-tall page prints in the printer's
+ * own orientation (portrait), and Windows turns the page 90° to fit it.
+ */
+export function pageSizeCss(w: number, h: number): string {
+  const lo = Math.min(w, h), hi = Math.max(w, h);
+  const named = CSS_PAPERS.find(([, a, b]) => Math.abs(a - lo) < 1 && Math.abs(b - hi) < 1);
+  const turn = w > h ? 'landscape' : 'portrait';
+  return named ? `${named[0]} ${turn}` : `${w}pt ${h}pt`;
+}
+
 /**
  * Where a w × h drawing goes in an area: centred, at its own size ("actual", made smaller only
  * when it would not fit) or as large as fits ("fit").
