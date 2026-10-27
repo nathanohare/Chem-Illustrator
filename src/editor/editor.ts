@@ -3229,7 +3229,7 @@ export class Editor {
       for (const id of s.atoms) doc.removeAtom(id);
       for (const id of s.captions) doc.removeCaption(id);
       for (const id of s.arrows) doc.removeArrow(id);
-      for (const id of s.shapes) doc.removeShape(id);
+      for (const id of s.shapes) removeShapeAndCharge(doc, id);
     });
     this.sel = emptySel();
     this.changed();
@@ -3241,7 +3241,7 @@ export class Editor {
     else if (h.kind === 'bond') this.removeBondAndOrphans(h.id);
     else if (h.kind === 'caption') doc.removeCaption(h.id);
     else if (h.kind === 'arrow') doc.removeArrow(h.id);
-    else doc.removeShape(h.id);
+    else removeShapeAndCharge(doc, h.id);
   }
 
   /** Remove a bond and any bare carbon left on its own. */
@@ -4284,6 +4284,10 @@ export class Editor {
   applyLabel(id: number, text: string): void {
     const doc = this.doc;
     const t = text.trim();
+    // a charge shown by a sign that is no longer there (deleted before signs took their charge
+    // with them, #253): the label typed now says what the atom is, without it
+    const was = doc.atoms.get(id);
+    if (was?.hideCharge && was.charge && !circledChargesOf(doc, was).length) doc.updateAtom(id, { charge: 0, hideCharge: undefined });
     if (!t) { doc.updateAtom(id, { label: null, z: 6, fileLabel: false }); return; }
     const z = elementNumber(t);
     if (z !== undefined && t !== 'D' && t !== 'T') { doc.updateAtom(id, { label: null, z, fileLabel: false }); return; }
@@ -5874,6 +5878,25 @@ export function freeCharge(doc: Doc, id: number, box: Rect): number {
   const s = doc.addShape({ kind: 'symbol', symbol: a.charge > 0 ? 'Plus' : 'Minus', x1: c.x - size / 2, y1: c.y - size / 2, x2: c.x + size / 2, y2: c.y + size / 2, ...(a.color ? { color: a.color } : {}), ...(pin ? { pin } : {}) });
   doc.updateAtom(id, { hideCharge: true });
   return s.id;
+}
+
+/**
+ * Remove a shape, inside an edit. A charge sign (⊕, ⊖, or a + or − moved off a label) that shows
+ * an atom's charge takes that charge with it, so the atom gets its hydrogens back as it should
+ * (deleting the + of an OH⁺ leaves O, not an OH with a hidden charge).
+ */
+export function removeShapeAndCharge(doc: Doc, id: number): void {
+  const s = doc.shapes.get(id);
+  const sign = s?.kind === 'symbol' ? ({ Plus: 1, CirclePlus: 1, Minus: -1, CircleMinus: -1 } as Record<string, number>)[s.symbol ?? ''] : undefined;
+  doc.removeShape(id);
+  if (!s || !sign) return;
+  const pinned = s.pin?.on === 'atom' ? doc.atoms.get(s.pin.ref[0]) : undefined;
+  const c = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };
+  const owner = pinned ?? [...doc.atomsNear(c, 0.8 * doc.style.bondLength)].filter((a) => a.hideCharge && Math.sign(a.charge) === sign).sort((p, q) => dist(p, c) - dist(q, c))[0];
+  if (!owner || !owner.hideCharge || Math.sign(owner.charge) !== sign) return;
+  const charge = owner.charge - sign;
+  const left = circledChargesOf(doc, owner).length;
+  doc.updateAtom(owner.id, { charge, hideCharge: charge && left ? true : undefined });
 }
 
 /** The charge signs (⊕, ⊖, or + and − moved off a label) beside an atom: within most of a bond length of it. */
