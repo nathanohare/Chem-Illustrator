@@ -49,3 +49,14 @@ describe('the paper in CDXML', () => {
     expect(xml).toContain('PrintMargins="55.80 50.83 55.80 50.83"');
   });
 });
+
+describe('the document size in pages', () => {
+  it('keeps a ChemDraw document set to two pages tall when saved again', () => {
+    const file = `<?xml version="1.0" encoding="UTF-8" ?><CDXML CreationProgram="ChemDraw 25.0.2.14" BondLength="14.40"><page id="1" BoundingBox="0 0 510.24 1360.63" HeightPages="2" WidthPages="1"><fragment id="2"><n id="3" p="100 100"/></fragment></page></CDXML>`;
+    const doc = readCdxml(file).doc;
+    expect(doc.page?.h).toBeCloseTo(680.3, 1);
+    expect(doc.page?.down).toBe(2);
+    doc.edit('move', () => doc.moveAtoms(new Set([...doc.atoms.keys()]), 5, 0));
+    expect(writeCdxml(doc)).toMatch(/HeightPages="2"/);
+  });
+});
