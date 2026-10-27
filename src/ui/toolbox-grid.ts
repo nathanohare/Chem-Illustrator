@@ -62,12 +62,32 @@ export function gridItems(g: Grid): string[] {
   return g.cells.filter((x): x is string => !!x);
 }
 
-/** The grid at a new size: each button stays in its cell; those beyond the new edges go (see `cutOff`). */
+/**
+ * The grid at a new size: each button that still fits stays in its cell, and those beyond the new
+ * edges move into the empty cells (from the start of their row on), so only buttons there is no
+ * room for go (see `cutOff`).
+ */
 export function resized(g: Grid, cols: number, rows: number): Grid {
+  return fitted(g, cols, rows).grid;
+}
+
+function fitted(g: Grid, cols: number, rows: number): { grid: Grid; out: string[] } {
   const n = emptyGrid(cols, rows);
-  for (let r = 0; r < Math.min(g.rows, n.rows); r++) for (let c = 0; c < Math.min(g.cols, n.cols); c++) n.cells[r * n.cols + c] = g.cells[r * g.cols + c] ?? null;
+  const moved: { k: string; row: number }[] = [];
+  g.cells.forEach((k, i) => {
+    if (!k) return;
+    const r = Math.floor(i / g.cols), c = i % g.cols;
+    if (r < n.rows && c < n.cols) n.cells[r * n.cols + c] = k;
+    else moved.push({ k, row: Math.min(r, n.rows - 1) });
+  });
+  const out: string[] = [];
+  for (const { k, row } of moved) {
+    const at = nextFree(n.cells, row * n.cols);
+    if (at < 0) out.push(k);
+    else n.cells[at] = k;
+  }
   const lines = g.lines?.filter((r) => r > 0 && r < n.rows);
-  return lines?.length ? { ...n, lines } : n;
+  return { grid: lines?.length ? { ...n, lines } : n, out };
 }
 
 /**
@@ -95,11 +115,9 @@ export function withoutGone(g: Grid, keep: (k: string) => boolean): Grid {
   return { cols: g.cols, rows, cells, ...(lines.length ? { lines } : {}) };
 }
 
-/** The buttons a new size would cut off. */
+/** The buttons a new size has no room for (those beyond its edges move into empty cells while there are any). */
 export function cutOff(g: Grid, cols: number, rows: number): string[] {
-  const out: string[] = [];
-  g.cells.forEach((k, i) => { if (k && (i % g.cols >= cols || Math.floor(i / g.cols) >= rows)) out.push(k); });
-  return out;
+  return fitted(g, cols, rows).out;
 }
 
 /** A button put in a cell. One already in the grid moves there (they swap when the cell is taken); one new pushes what is there to the next empty cell. Null when no cell is free for it. */

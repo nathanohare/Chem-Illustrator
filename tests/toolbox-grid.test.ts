@@ -27,6 +27,18 @@ describe('toolbox grids', () => {
     expect(small.cells).toEqual(['tool:a', 'tool:b']);
   });
 
+  it('moves buttons a narrower grid cuts off into its empty cells (laptop bench: 8 × 3 to 6 × 3 with 12 buttons)', () => {
+    const g = { cols: 8, rows: 3, cells: [...'abcdefgh'.split(''), 'i', 'j', 'k', 'l', null, null, null, null, ...Array(8).fill(null)] };
+    expect(cutOff(g, 6, 3)).toEqual([]);
+    const n = resized(g, 6, 3);
+    expect(n.cells.filter(Boolean).sort()).toEqual('abcdefghijkl'.split(''));
+    // those still inside stay put; g and h go to the first empty cell from their own row on
+    expect(n.cells.slice(0, 6)).toEqual('abcdef'.split(''));
+    expect(n.cells.slice(6, 12)).toEqual(['i', 'j', 'k', 'l', 'g', 'h']);
+    // only what there is no room for goes
+    expect(cutOff(g, 3, 3)).toEqual(['g', 'h', 'l']);
+  });
+
   it('moves a button to a cell, swapping, and pushes one aside for a new button', () => {
     const g = { cols: 2, rows: 2, cells: ['a', 'b', null, 'c'] };
     expect(placed(g, 'c', 0)!.cells).toEqual(['c', 'b', null, 'a']);
