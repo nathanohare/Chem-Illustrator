@@ -126,8 +126,12 @@ export interface DocxModel {
   pictureTol?: Record<number, number>;
   /** Design's theme, style set and paragraph spacing, by name. */
   design?: import('../document/document').DocDesign;
-  /** Floating figures' groups and Selection Pane names, by their wp:docPr id. */
-  floats?: Record<number, { group?: number; name?: string }>;
+  /**
+   * Floating figures' groups and Selection Pane names, by their wp:docPr id. A named figure's
+   * wp:docPr carries its name (Word's Selection Pane shows it); `was` is the name it would have
+   * had ("Chem Illustrator drawing 3"), which says which of ours it is.
+   */
+  floats?: Record<number, { group?: number; name?: string; was?: string }>;
 }
 
 /** The name of a chart's frame in Word ("Chart 4", 4 its id in our part). */

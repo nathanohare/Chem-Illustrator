@@ -1046,6 +1046,9 @@ export interface PageSetup {
   name?: string;
   /** More pages are added when the drawing goes past the page; otherwise it is kept on the page when saved. */
   grow: boolean;
+  /** How many sheets across and down the document is at least (ChemDraw's document size in pages). */
+  across?: number;
+  down?: number;
 }
 
 /** Paper sizes, as the area ChemDraw draws on (the paper less half-inch margins). */

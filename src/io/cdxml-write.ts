@@ -243,7 +243,8 @@ class CdxmlWriter {
   /** The page's attributes for the drawing's page (ChemDraw's US Letter page is 540 × 720 pt), grown to hold the drawing. */
   private pageAttrs(b: Rect | null): Record<string, string> {
     const W = this.doc.page?.w ?? 540, H = this.doc.page?.h ?? 720;
-    const wp = Math.max(1, Math.ceil(((b?.x2 ?? 0) + 36) / W)), hp = Math.max(1, Math.ceil(((b?.y2 ?? 0) + 36) / H));
+    // (at least as many sheets as the document was set to have)
+    const wp = Math.max(this.doc.page?.across ?? 1, Math.ceil(((b?.x2 ?? 0) + 36) / W)), hp = Math.max(this.doc.page?.down ?? 1, Math.ceil(((b?.y2 ?? 0) + 36) / H));
     return { BoundingBox: `0 0 ${f2(W * wp)} ${f2(H * hp)}`, HeaderPosition: '36', FooterPosition: '36', PrintTrimMarks: 'yes', HeightPages: String(hp), WidthPages: String(wp) };
   }
 
@@ -1082,9 +1083,12 @@ class CdxmlWriter {
   private writeCaption(c: Caption): void {
     const e = this.source('c', c.id, ['t']);
     const o = this.orig<Caption>('c', c.id);
+    // (turned text from an older file of ours, with only our tag, gets ChemDraw's turn too)
+    const unturned = !!c.rot && !e?.hasAttribute('RotationAngle');
     if (e && o) {
-      if (sameExcept(c, o, [])) return;
-      if (sameExcept(c, o, ['x', 'y'])) shift(e, c.x - o.x, c.y - o.y);
+      if (unturned) this.fillCaption(e, c);
+      else if (sameExcept(c, o, [])) return;
+      else if (sameExcept(c, o, ['x', 'y'])) shift(e, c.x - o.x, c.y - o.y);
       else this.fillCaption(e, c);
     } else {
       const t = this.el('t', { id: c.id });

@@ -794,7 +794,7 @@ class DocxReader {
     const choice = kid(el, 'Choice');
     if (choice && /(^|\s)wps(\s|$)/.test(choice.getAttribute('Requires') ?? '') && choice.getElementsByTagNameNS('*', 'txbx').length) return choice;
     // one of our diagrams as a group of shapes (Word puts an older shape in place of our picture when it saves)
-    if (choice && /(^|\s)wpg(\s|$)/.test(choice.getAttribute('Requires') ?? '') && Array.from(choice.getElementsByTagNameNS('*', 'docPr')).some((d) => new RegExp(`^${DRAWING_NAME} \\d+$`).test(d.getAttribute('name') ?? ''))) return choice;
+    if (choice && /(^|\s)wpg(\s|$)/.test(choice.getAttribute('Requires') ?? '') && Array.from(choice.getElementsByTagNameNS('*', 'docPr')).some((d) => new RegExp(`^${DRAWING_NAME} \\d+$`).test(this.model?.floats?.[Number(d.getAttribute('id'))]?.was ?? d.getAttribute('name') ?? ''))) return choice;
     // Word 2016's newer charts (histograms, box charts): their fallback is only a picture
     if (choice && /(^|\s)cx\d*(\s|$)/.test(choice.getAttribute('Requires') ?? '') && Array.from(choice.getElementsByTagNameNS('*', 'graphicData')).some((g) => /chartex/.test(g.getAttribute('uri') ?? ''))) return choice;
     return kid(el, 'Fallback') ?? choice;
@@ -840,7 +840,10 @@ class DocxReader {
     if (yes(pr?.getAttribute('hidden') ?? null)) fl.hidden = true;
     const kept = this.model?.floats?.[Number(pr?.getAttribute('id'))];
     if (kept?.group !== undefined) fl.group = kept.group;
-    if (kept?.name) fl.name = kept.name;
+    // its name: as Word's Selection Pane has it (renamed there too), else as kept
+    const shown = pr?.getAttribute('name');
+    if (kept?.was !== undefined && shown && shown !== kept.was) fl.name = shown;
+    else if (kept?.name) fl.name = kept.name;
     // which is drawn over which: worked out once every figure is read
     const rh = Number(anchor.getAttribute('relativeHeight'));
     if (Number.isFinite(rh)) this.stack.push({ fl, rh });
@@ -1523,7 +1526,9 @@ class DocxReader {
     if (!box) return;
     const ext = kid(box, 'extent');
     const shown = { w: fromEmu(ext?.getAttribute('cx')), h: fromEmu(ext?.getAttribute('cy')) };
-    const name = kid(box, 'docPr')?.getAttribute('name') ?? '';
+    // a figure named in the Selection Pane: which of ours it is goes by the name it would have had
+    const pr = kid(box, 'docPr');
+    const name = this.model?.floats?.[Number(pr?.getAttribute('id'))]?.was ?? pr?.getAttribute('name') ?? '';
     // alt text: a structure's own, not the description by SMILES written when it has none
     const descr = kid(box, 'docPr')?.getAttribute('descr')?.trim() ?? '';
     const alt = descr && !/^Chemical structure( \(SMILES\): | or scheme$)/.test(descr) ? { alt: descr } : {};

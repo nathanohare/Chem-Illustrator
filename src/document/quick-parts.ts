@@ -157,7 +157,8 @@ export function insertCover(t: DocText, design: CoverDesign, accent: string, bas
   const first = old[0] ?? {};
   // the document's own first paragraph starts on the page after the cover
   const rest = [{ ...first, pageBreak: true }, ...old.slice(1)];
-  const lastLook = runs.length ? rt.styleOf(runs[runs.length - 1]) : base;
+  // (the break after the last line takes its look, not its field)
+  const { obj: _o, ...lastLook } = runs.length ? rt.styleOf(runs[runs.length - 1]) : base;
   doc = {
     ...doc,
     objects,
@@ -187,7 +188,7 @@ export function removeCover(t: DocText): DocText {
   const runs: TextRun[] = [];
   const keep = parts.slice(c.end);
   keep.forEach((rs, i) => {
-    if (i > 0) { const prev = keep[i - 1]; runs.push({ ...(prev.length ? rt.styleOf(prev[prev.length - 1]) : {}), text: '\n' }); }
+    if (i > 0) { const prev = keep[i - 1]; const { obj: _o, ...look } = prev.length ? rt.styleOf(prev[prev.length - 1]) : {}; runs.push({ ...look, text: '\n' }); }
     runs.push(...rs);
   });
   const rest = paras.slice(c.end);
