@@ -206,6 +206,26 @@ describe('cover pages and Quick Parts', () => {
     expect(back.paras[0].pageBreak).toBeUndefined();
   });
 
+  it('keeps cross-references on their bookmark after a cover page goes in front (laptop bench)', () => {
+    const look = { font: 'Calibri', size: 11 };
+    const t: DocText = {
+      ...newDocument(),
+      objects: { 1: { kind: 'field', code: 'ref', target: 'Target' }, 2: { kind: 'field', code: 'abovebelow', target: 'Target' } },
+      runs: [{ ...look, text: 'Bookmarked target sentence.\n' }, { ...look, text: 'See ' }, { ...look, obj: 1, text: '\uFFFC' }, { ...look, text: ', ' }, { ...look, obj: 2, text: '\uFFFC' }, { ...look, text: '.' }],
+      paras: [{ marks: ['Target'] }, { pageBreak: true }],
+    };
+    let id = 100;
+    const c = insertCover(t, COVER_PAGES.find((d) => d.id === 'plain')!, '#1f4e79', runStyleOf(t.styles.Normal), (code, format) => ({ id: id++, o: { kind: 'field', code, ...(format ? { format } : {}) } }));
+    // the line break after the cover's last field (its date) is text, not part of the field
+    expect(c.runs.every((r) => r.obj === undefined || r.text === '\uFFFC')).toBe(true);
+    const see = rt.plainText(c.runs).split('\n').findIndex((l) => l.startsWith('See'));
+    expect(fieldText(c.objects[1] as FieldObj, c, see)).toBe('Bookmarked target sentence.');
+    expect(fieldText(c.objects[2] as FieldObj, c, see)).toBe('above');
+    expect(rt.plainText(removeCover(c).runs)).toBe(rt.plainText(t.runs));
+    // a break that took a field's style, from before: only the placeholder stays the field
+    expect(rt.normalizeRuns([{ ...look, obj: 5, text: '\uFFFC\n' }, { ...look, text: 'x' }])).toEqual([{ ...look, obj: 5, text: '\uFFFC' }, { ...look, text: '\nx' }]);
+  });
+
   it('saves a selection as a Quick Part and reads Quick Parts from the settings', () => {
     const t = docOf(['Department of Chemistry', { text: 'Auburn University', para: { align: 'center' } }]);
     const part = partFromSelection(t, 0, rt.plainText(t.runs).length, ' Affiliation ');
