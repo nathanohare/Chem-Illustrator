@@ -3,7 +3,7 @@ name: iPad app
 # The iPad app: the same web page as the desktop app, in Tauri's iOS shell.
 #
 # Runs only on a merge into main, or on request (Actions > iPad app > Run workflow), so pull
-# requests into staging aren't held up waiting for a Mac. It checks the shell builds for iOS,
+# requests aren't held up waiting for a Mac. It checks the shell builds for iOS,
 # makes the Xcode project, then builds the signed app and sends it to TestFlight once the Apple
 # secrets are set (docs/apple-signing.md). Without them the signed steps are skipped.
 on:

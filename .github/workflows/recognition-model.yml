@@ -5,14 +5,14 @@ name: Structure Reader Model
 # pre-release, so it is never "latest" and the updater passes over it). The pack: MolScribe
 # (MIT licence) converted to ONNX by scripts/recognition/export.py, its vocabulary, and the
 # WebAssembly part of the ONNX runtime the app runs it with (the version in package-lock.json).
-# Runs when export.py changes on staging, or by hand; a pull request that changes it builds the
+# Runs when export.py changes on main, or by hand; a pull request that changes it builds the
 # pack without publishing it. The app asks for PACK in
 # src/recognise/pack.ts: change both together when the pack changes.
 
 on:
   workflow_dispatch:
   push:
-    branches: [staging]
+    branches: [main]
     paths: [scripts/recognition/**, .github/workflows/recognition-model.yml]
   pull_request:
     paths: [scripts/recognition/**, .github/workflows/recognition-model.yml]
