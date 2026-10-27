@@ -328,29 +328,62 @@ fn settings_write(app: tauri::AppHandle, contents: String) -> Result<(), String>
     write_bytes(&path.to_string_lossy(), contents.as_bytes())
 }
 
-/// The window as first opened (1400 × 900) can be taller than a laptop screen, which leaves the
-/// status bar below its bottom edge when the window isn't maximised: made smaller to fit the
-/// screen's work area (the part the taskbar leaves) and centred there.
-#[cfg(desktop)]
-fn fit_to_screen(w: &tauri::WebviewWindow) {
-    let (Ok(Some(m)), Ok(outer), Ok(inner)) = (w.current_monitor(), w.outer_size(), w.inner_size()) else { return };
-    let area = m.work_area();
-    if outer.width <= area.size.width && outer.height <= area.size.height {
-        return;
+/// A window's outer rectangle (x, y, width, height) moved and, if need be, shrunk to lie inside
+/// a screen's work area (the part the taskbar leaves), or None when it is inside already.
+/// `slack` pixels may hang over each edge (Windows counts its invisible resize borders in).
+fn kept_inside(rect: (i32, i32, u32, u32), area: (i32, i32, u32, u32), slack: i32) -> Option<(i32, i32, u32, u32)> {
+    let (x, y, w, h) = rect;
+    let (ax, ay, aw, ah) = area;
+    let inside = x >= ax - slack && y >= ay - slack && x + w as i32 <= ax + aw as i32 + slack && y + h as i32 <= ay + ah as i32 + slack;
+    if inside {
+        return None;
     }
-    // the frame (title bar and borders) around the page, in pixels
-    let (fw, fh) = (outer.width.saturating_sub(inner.width), outer.height.saturating_sub(inner.height));
-    let width = outer.width.min(area.size.width);
-    let height = outer.height.min(area.size.height);
-    let _ = w.set_size(tauri::PhysicalSize::new(width.saturating_sub(fw), height.saturating_sub(fh)));
-    let x = area.position.x + (area.size.width - width) as i32 / 2;
-    let y = area.position.y + (area.size.height - height) as i32 / 2;
+    let (w, h) = (w.min(aw), h.min(ah));
+    let x = x.clamp(ax, ax + (aw - w) as i32);
+    let y = y.clamp(ay, ay + (ah - h) as i32);
+    Some((x, y, w, h))
+}
+
+/// Keep the window on a screen: the window as first opened (1400 × 900) can be taller than a
+/// laptop screen, and one restored from maximised could come back where a screen no longer is
+/// (a second monitor unplugged), its menus off the left edge and its status bar under the
+/// taskbar (laptop bench). Moved inside the screen's work area, and made smaller if it must be.
+#[cfg(desktop)]
+fn keep_on_screen(w: &tauri::WebviewWindow) {
+    let (Ok(pos), Ok(outer), Ok(inner)) = (w.outer_position(), w.outer_size(), w.inner_size()) else { return };
+    // the screen it is on, else the main one
+    let Some(m) = w.current_monitor().ok().flatten().or_else(|| w.primary_monitor().ok().flatten()) else { return };
+    let a = m.work_area();
+    let area = (a.position.x, a.position.y, a.size.width, a.size.height);
+    let Some((x, y, width, height)) = kept_inside((pos.x, pos.y, outer.width, outer.height), area, 16) else { return };
+    if width != outer.width || height != outer.height {
+        // the frame (title bar and borders) around the page, in pixels
+        let (fw, fh) = (outer.width.saturating_sub(inner.width), outer.height.saturating_sub(inner.height));
+        let _ = w.set_size(tauri::PhysicalSize::new(width.saturating_sub(fw), height.saturating_sub(fh)));
+    }
     let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
 }
 
+/// Whether the main window was maximised when last resized (a restore is a resize from maximised).
+#[cfg(desktop)]
+static WAS_MAXIMISED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 #[cfg(test)]
 mod tests {
-    use super::percent_decode;
+    use super::{kept_inside, percent_decode};
+
+    #[test]
+    fn keeps_a_window_on_its_screen() {
+        let area = (0, 0, 1389, 820);
+        // inside (or hanging over by the resize borders): left alone
+        assert_eq!(kept_inside((100, 50, 1000, 700), area, 16), None);
+        assert_eq!(kept_inside((-7, 0, 1403, 827), area, 16), None);
+        // off the left edge and under the taskbar (where an unplugged screen was): moved in, made shorter
+        assert_eq!(kept_inside((-1700, 100, 1400, 900), area, 16), Some((0, 0, 1389, 820)));
+        assert_eq!(kept_inside((-300, 200, 1000, 700), area, 16), Some((0, 120, 1000, 700)));
+        // a screen that starts to the right of another
+        assert_eq!(kept_inside((100, 100, 800, 600), (1920, 0, 1389, 820), 16), Some((1920, 100, 800, 600)));
+    }
 
     #[test]
     fn decodes_file_names() {
@@ -419,7 +452,7 @@ pub fn run() {
             ole::start(app.handle());
             #[cfg(desktop)]
             if let Some(w) = tauri::Manager::get_webview_window(app, "main") {
-                fit_to_screen(&w);
+                keep_on_screen(&w);
             }
             // A self-test that never reports (the page failed to load) still ends.
             if let Some(path) = selftest_path() {
@@ -431,6 +464,19 @@ pub fn run() {
                 });
             }
             Ok(())
+        })
+        .on_window_event(|_window, _event| {
+            // restored from maximised: kept on a screen
+            #[cfg(desktop)]
+            if let tauri::WindowEvent::Resized(_) = _event {
+                use std::sync::atomic::Ordering;
+                let Some(w) = tauri::Manager::get_webview_window(_window, _window.label()) else { return };
+                let max = w.is_maximized().unwrap_or(false);
+                let was = WAS_MAXIMISED.swap(max, Ordering::Relaxed);
+                if was && !max && !w.is_minimized().unwrap_or(false) {
+                    keep_on_screen(&w);
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             selftest_requested,
