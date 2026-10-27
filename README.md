@@ -4,7 +4,7 @@
 
 Chem Illustrator draws structures and reaction schemes with the hotkeys and look ChemDraw users already know, and it opens and saves your `.cdxml` files. Around the drawing it builds in the other programs a synthetic chemist spends the day in: slides, spreadsheets, documents and a canvas for posters and figures. Your structures stay editable in all of them, and the formula, masses, stereochemistry and warnings update as you draw.
 
-It is free and open source (GPL v3), and runs on Windows, macOS and Linux.
+It is free and open source (GPL v3), and runs on Windows, macOS and Linux, with a test version for iPad.
 
 > **Beta.** Chem Illustrator is under active development: new features arrive every few days and some things may not work as they should yet. Save often, and please [report anything that goes wrong](docs/guide/feedback.md). If you would rather update less often, choose **Stable** updates in **Edit ▸ Settings ▸ Online**: those versions are tried out on a real computer before they are offered.
 
@@ -139,6 +139,7 @@ Download the installer for your computer from the **[latest release](https://git
 - **Windows**: the file ending in `x64-setup.exe`. Windows will warn that the installer isn't signed: click **More info**, then **Run anyway**. It installs for you alone, so it doesn't need administrator rights. To run it from a flash drive or a folder without installing anything, take `x64-portable.zip` instead and unzip it ([portable copy](docs/guide/getting-started.md#windows-without-installing-portable-copy)).
 - **macOS** (Apple silicon or Intel, macOS 11 or newer): the file ending in `universal.dmg`. Open it and drag **Chem Illustrator** into **Applications**. The app is signed and notarised by Apple, so it opens without a warning.
 - **Linux**: the `.AppImage` (any distribution), `.deb` (Ubuntu, Debian) or `.rpm` (Fedora).
+- **iPad**: the iPad app is in testing through Apple's TestFlight. Install the free **[TestFlight](https://apps.apple.com/app/testflight/id899247664)** app from the App Store, then open **[this invitation](https://testflight.apple.com/join/hMdcFJBH)** on the iPad and tap **Accept**, then **Install**. TestFlight offers each new test version as it comes out. Draw with an Apple Pencil or your finger; see [Pen and touch](docs/guide/keyboard-and-mouse.md#pen-and-touch-tablets).
 
 Once installed, the program keeps itself up to date: it offers each new version when it starts. [Getting started](docs/guide/getting-started.md) has the details.
 
@@ -152,7 +153,7 @@ Ideas, problems and questions are welcome. In the program, use **Help ▸ Send F
 
 ## Try it
 
-**[▶ Try Chem Illustrator in your browser](https://nathanohare.github.io/Chem-Illustrator/)**, or **[download the desktop app](https://github.com/nathanohare/Chem-Illustrator/releases/latest)** for Windows, macOS or Linux.
+**[▶ Try Chem Illustrator in your browser](https://nathanohare.github.io/Chem-Illustrator/)**, or **[download the desktop app](https://github.com/nathanohare/Chem-Illustrator/releases/latest)** for Windows, macOS or Linux, or **[join the iPad test](https://testflight.apple.com/join/hMdcFJBH)**.
 
 ## For developers
 

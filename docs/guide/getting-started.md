@@ -41,6 +41,16 @@ Works on Apple silicon and Intel Macs, macOS 11 or newer.
 1. Download the file ending in `universal.dmg`, open it, and drag **Chem Illustrator** into **Applications**.
 2. Open it from **Applications**. The app is signed with an Apple Developer ID and notarised by Apple, so macOS opens it straight away, with no warning.
 
+### iPad
+
+The iPad app is in testing through Apple's TestFlight.
+
+1. Install the free **TestFlight** app from the App Store.
+2. On the iPad, open the invitation link, [testflight.apple.com/join/hMdcFJBH](https://testflight.apple.com/join/hMdcFJBH), and tap **Accept**, then **Install**.
+3. Open **Chem Illustrator** from the Home Screen. TestFlight offers each new test version as it comes out, and test versions stop working after 90 days unless you update.
+
+Draw with an Apple Pencil or your finger: see [Pen and touch](keyboard-and-mouse.md#pen-and-touch-tablets).
+
 ### Linux
 
 Three kinds of file are offered:
