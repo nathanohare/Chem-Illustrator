@@ -35,6 +35,16 @@ export class FigurePictures {
     return r;
   }
 
+  /**
+   * Let every recording and bitmap go, so the drawings are recorded again: the icons arrived (a
+   * file with icons opened before they had loaded drew them empty, at the size of an empty drawing).
+   */
+  forget(): void {
+    this.recorded = new WeakMap();
+    this.bitmaps.clear();
+    this.bytes = 0;
+  }
+
   /** The drawing's own size in points. */
   size(contents: Contents, style: DocStyle): { w: number; h: number } {
     const p = this.record(contents, style).pic;
