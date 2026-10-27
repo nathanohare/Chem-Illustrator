@@ -4,7 +4,7 @@
 // Backward, Group, and the Selection Pane's hidden figures and names, saved in Word files.
 
 import { describe, it, expect } from 'vitest';
-import { unzipSync, strFromU8 } from 'fflate';
+import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate';
 import { newDocument, paraFromStyle, type DocObject, type DocText, type Float } from '../src/document/document';
 import { DocLayouter } from '../src/document/doc-layout';
 import { recordPages } from '../src/document/doc-paint';
@@ -132,5 +132,27 @@ describe('order, groups and the Selection Pane', () => {
     const floats = Object.values(doc.objects).map((o) => (o as { float?: Float }).float).filter(Boolean) as Float[];
     expect(floats.find((f) => f.hidden)).toMatchObject({ name: 'TLC plate' });
     expect(floats.filter((f) => f.group !== undefined)).toHaveLength(2);
+  });
+
+  it("puts a figure's Selection Pane name on wp:docPr for Word's Selection Pane, and still reads it back as ours (laptop bench)", async () => {
+    const shape = { id: 1, kind: 'geo', geo: 'icon:flask', x1: 0, y1: 0, x2: 40, y2: 40 };
+    const t = threeDoc();
+    t.objects[2] = { kind: 'drawing', contents: { atoms: [], bonds: [], captions: [], arrows: [], shapes: [shape] }, float: { wrap: 'front', x: 0, y: 0, name: 'Flask "flipped" & co' }, flipH: true } as unknown as DocObject;
+    t.objects[3] = { ...t.objects[3], float: { ...(t.objects[3] as { float: Float }).float, name: 'TLC plate' } } as DocObject;
+    const pngDeps: DocxDeps = { async picture() { return { png: new Uint8Array([137, 80, 78, 71]), w: 40, h: 40 }; }, async svgToPng() { return new Uint8Array(); } };
+    const bytes = await writeDocx(t, pngDeps);
+    const docXml = strFromU8(unzipSync(bytes)['word/document.xml']);
+    expect(docXml).toMatch(/<wp:docPr id="\d+" name="Flask &quot;flipped&quot; &amp; co"/);
+    expect(docXml).toMatch(/<wp:docPr id="\d+" name="TLC plate"/);
+    const { doc } = await readDocx(bytes);
+    const icon = Object.values(doc.objects).find((o) => o.kind === 'drawing') as Extract<DocObject, { kind: 'drawing' }>;
+    expect(icon.contents.shapes[0]).toMatchObject({ geo: 'icon:flask' });
+    expect(icon).toMatchObject({ flipH: true, float: { name: 'Flask "flipped" & co' } });
+    // renamed again in Word: Word's name wins, and it is still ours
+    const files = unzipSync(bytes);
+    files['word/document.xml'] = new Uint8Array(strToU8(docXml.replace('name="TLC plate"', 'name="Spot test"')));
+    const again = await readDocx(new Uint8Array(zipSync(files)));
+    const names = Object.values(again.doc.objects).map((o) => (o as { float?: Float }).float?.name).filter(Boolean);
+    expect(names).toEqual(expect.arrayContaining(['Spot test', 'Flask "flipped" & co']));
   });
 });

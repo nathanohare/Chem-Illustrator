@@ -3640,9 +3640,15 @@ export function popupMenu(x: number, y: number, items: ([string, () => void, boo
   // inside a window open over the page (the top layer), so it shows over that window
   const modal = [...document.querySelectorAll<HTMLDialogElement>('dialog[open]')].reverse().find((d) => d.matches(':modal'));
   (modal ?? document.body).append(m);
-  const r = m.getBoundingClientRect();
-  m.style.left = `${Math.max(4, Math.min(x, innerWidth - r.width - 4))}px`;
-  m.style.top = `${Math.max(4, Math.min(y, innerHeight - r.height - 4))}px`;
+  // kept inside the window, now and when the window changes size (Interface Size zooms it)
+  const place = () => {
+    if (!m.isConnected) { removeEventListener('resize', place); return; }
+    const r = m.getBoundingClientRect();
+    m.style.left = `${Math.max(4, Math.min(x, innerWidth - r.width - 4))}px`;
+    m.style.top = `${Math.max(4, Math.min(y, innerHeight - r.height - 4))}px`;
+  };
+  place();
+  addEventListener('resize', place);
   const close = (e: Event) => {
     if (e instanceof KeyboardEvent && e.key !== 'Escape') return;
     if (e instanceof PointerEvent && m.contains(e.target as Node)) return;

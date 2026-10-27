@@ -25,4 +25,27 @@ describe('placeTextMenu', () => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true }));
     expect(document.activeElement?.textContent).toBe('Paste');
   });
+
+  it('closes on Escape, and moves back inside the window when the window gets smaller (Interface Size)', () => {
+    const menu = document.createElement('div');
+    menu.append(document.createElement('button'));
+    Object.defineProperty(menu, 'offsetWidth', { value: 200 });
+    Object.defineProperty(menu, 'offsetHeight', { value: 300 });
+    let closed = 0;
+    const done = placeTextMenu(menu, 600, 400, document, () => { closed++; });
+    const was = { w: innerWidth, h: innerHeight };
+    Object.defineProperty(window, 'innerWidth', { value: 500, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: 500, configurable: true });
+    window.dispatchEvent(new Event('resize'));
+    expect([menu.style.left, menu.style.top]).toEqual(['296px', '196px']);
+    const esc = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    document.dispatchEvent(esc);
+    expect(closed).toBe(1);
+    expect(esc.defaultPrevented).toBe(true);
+    done();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    expect(closed).toBe(1);
+    Object.defineProperty(window, 'innerWidth', { value: was.w, configurable: true });
+    Object.defineProperty(window, 'innerHeight', { value: was.h, configurable: true });
+  });
 });

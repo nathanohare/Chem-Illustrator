@@ -3,15 +3,28 @@
 // with the arrow keys moving through its items (laptop bench: in a short window the menu was cut
 // off at the bottom of the document area, out of reach).
 
-/** Show `menu` at (x, y) in its window. Returns what to call when the menu closes. */
-export function placeTextMenu(menu: HTMLElement, x: number, y: number, doc: Document = document): () => void {
+/**
+ * Show `menu` at (x, y) in its window; Escape calls `close`. Returns what to call when the menu
+ * closes.
+ */
+export function placeTextMenu(menu: HTMLElement, x: number, y: number, doc: Document = document, close?: () => void): () => void {
   const win = doc.defaultView ?? window;
   menu.classList.add('at-point');
   doc.body.append(menu);
-  const w = menu.offsetWidth, h = menu.offsetHeight;
-  menu.style.left = `${Math.max(4, Math.min(x, win.innerWidth - w - 4))}px`;
-  menu.style.top = `${Math.max(4, Math.min(y, win.innerHeight - h - 4))}px`;
+  // kept inside the window, now and when the window changes size (Interface Size zooms it)
+  const place = () => {
+    const w = menu.offsetWidth, h = menu.offsetHeight;
+    menu.style.left = `${Math.max(4, Math.min(x, win.innerWidth - w - 4))}px`;
+    menu.style.top = `${Math.max(4, Math.min(y, win.innerHeight - h - 4))}px`;
+  };
+  place();
   const keys = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && close) {
+      e.preventDefault();
+      e.stopPropagation();
+      close();
+      return;
+    }
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     const list = [...menu.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
     if (!list.length) return;
@@ -24,5 +37,6 @@ export function placeTextMenu(menu: HTMLElement, x: number, y: number, doc: Docu
     list[next].focus();
   };
   doc.addEventListener('keydown', keys, true);
-  return () => doc.removeEventListener('keydown', keys, true);
+  win.addEventListener('resize', place);
+  return () => { doc.removeEventListener('keydown', keys, true); win.removeEventListener('resize', place); };
 }

@@ -450,7 +450,7 @@ export class CaptionEditor {
       item('Copy Link', () => this.copyLink(link));
       item('Remove Link', () => this.ed.removeLink());
     }
-    this.menuDone = placeTextMenu(menu, clientX, clientY, d);
+    this.menuDone = placeTextMenu(menu, clientX, clientY, d, () => { this.closeMenu(); this.ta.focus({ preventScroll: true }); });
     this.menu = menu;
     d.addEventListener('pointerdown', this.closeMenuOutside, true);
   }
