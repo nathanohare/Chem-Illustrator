@@ -63,7 +63,7 @@
     "hyphen": "^1.14.1",
     "marked": "^18.1.1",
     "onnxruntime-web": "1.22.0",
-    "pdfjs-dist": "^5.7.284",
+    "pdfjs-dist": "^6.2.108",
     "polygon-clipping": "^0.15.7"
   },
   "private": true,
