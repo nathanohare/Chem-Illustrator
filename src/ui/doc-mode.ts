@@ -1508,7 +1508,7 @@ export class DocumentMode {
     cmd('Style…', 'box-style', 'Change how this paragraph\'s style looks');
     cmd('Page Setup…', 'box-page', 'Paper, orientation and margins');
     cmd('Header and Footer…', 'box-hf', 'Header, footer and page numbers');
-    this.menuDone = placeTextMenu(menu, clientX, clientY);
+    this.menuDone = placeTextMenu(menu, clientX, clientY, document, () => { this.closeMenu(); this.focus(); });
     this.menu = menu;
     document.addEventListener('pointerdown', this.closeMenuOutside, true);
     return true;

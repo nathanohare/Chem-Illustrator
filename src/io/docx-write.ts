@@ -22,7 +22,7 @@ import { BORDER_SPACE, cleanBorders } from '../document/para-borders';
 import { fieldInstr } from '../document/fields';
 import type { DocStyle } from '../style';
 import * as rt from '../richtext';
-import { Package, REL, NS, xml, hex6, emu, MediaFiles, bytesHash, structureAltText } from './ooxml';
+import { Package, REL, NS, xml, xmlAttr, hex6, emu, MediaFiles, bytesHash, structureAltText } from './ooxml';
 import { contentsAlt } from '../accessibility';
 import { THEMES, THEME_COLORS, THEME_FONTS, type DocDesign } from '../document/themes';
 import { DEFAULT_THEME, type WorkbookTheme } from '../sheet/themes';
@@ -782,7 +782,11 @@ class DocxWriter {
     // hidden in the Selection Pane (Word's own mark); its group and name kept with our data, by its id
     const pr = /<wp:docPr id="(\d+)"/.exec(inner);
     if (fl.hidden) inner = inner.replace(/<wp:docPr ([^>]*?)(\/?)>/, '<wp:docPr $1 hidden="1"$2>');
-    if (pr && (fl.group !== undefined || fl.name)) (this.model.floats ??= {})[Number(pr[1])] = { ...(fl.group !== undefined ? { group: fl.group } : {}), ...(fl.name ? { name: fl.name } : {}) };
+    // a name from the Selection Pane goes on wp:docPr, where Word's Selection Pane reads it (laptop bench)
+    // (our own names, "Picture 4" and the like, have nothing to escape)
+    const was = fl.name ? /<wp:docPr [^>]*?name="([^"]*)"/.exec(inner)?.[1] : undefined;
+    if (fl.name && was !== undefined) inner = inner.replace(/(<wp:docPr [^>]*?name=")[^"]*"/, (_, a: string) => `${a}${xmlAttr(fl.name!)}"`);
+    if (pr && (fl.group !== undefined || fl.name)) (this.model.floats ??= {})[Number(pr[1])] = { ...(fl.group !== undefined ? { group: fl.group } : {}), ...(fl.name ? { name: fl.name } : {}), ...(was !== undefined ? { was } : {}) };
     const gap = emu(fl.gap ?? FLOAT_GAP);
     const [l, t] = lookExtent(lookOf(o));
     const h = fl.xFrom === 'page' ? 'page' : 'margin';
