@@ -7841,6 +7841,8 @@ whenIconsLoaded(() => {
   // (only a drawing with shapes can hold icons: a big structure opened at start-up isn't drawn twice)
   if (doc.shapes.size) doc.allDirty = true;
   editor.changed();
+  // a document's figures were recorded without them (empty, and too small)
+  figures.forget();
   docMode?.fontsChanged();
 });
 applyRibbonIcons();

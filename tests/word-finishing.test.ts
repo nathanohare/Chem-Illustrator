@@ -6,7 +6,7 @@
 // hyphenation; each laid out here and saved in Word files and read back.
 
 import { describe, it, expect, afterEach } from 'vitest';
-import { unzipSync, strFromU8 } from 'fflate';
+import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate';
 import { newDocument, paraFromStyle, runStyleOf, type DocObject, type DocText } from '../src/document/document';
 import { DocLayouter } from '../src/document/doc-layout';
 import { documentMeasure } from '../src/text/font-measure';
@@ -224,6 +224,23 @@ describe('cover pages and Quick Parts', () => {
     expect(rt.plainText(removeCover(c).runs)).toBe(rt.plainText(t.runs));
     // a break that took a field's style, from before: only the placeholder stays the field
     expect(rt.normalizeRuns([{ ...look, obj: 5, text: '\uFFFC\n' }, { ...look, text: 'x' }])).toEqual([{ ...look, obj: 5, text: '\uFFFC' }, { ...look, text: '\nx' }]);
+  });
+
+  it('knows its cover page again in a file saved here and then by Word (laptop bench)', async () => {
+    const t = docOf(['Body text', 'More text']);
+    let id = 100;
+    const c = insertCover(t, COVER_PAGES.find((d) => d.id === 'plain')!, '#1f4e79', runStyleOf(t.styles.Normal), (code, format) => ({ id: id++, o: { kind: 'field', code, ...(format ? { format } : {}) } }));
+    const bytes = await writeDocx(c, deps);
+    expect(coverParas((await readDocx(bytes)).doc)).toEqual(coverParas(c));
+    // Word moves the cover's bookmark out in front of its first paragraph
+    const files = unzipSync(bytes);
+    const xml = strFromU8(files['word/document.xml']);
+    const mark = /<w:bookmarkStart [^>]*w:name="_Cover"\/>/.exec(xml)![0];
+    files['word/document.xml'] = new Uint8Array(strToU8(xml.replace(mark, '').replace('<w:body><w:p>', `<w:body>${mark}<w:p>`).replace(/<w:body><w:p( [^>]*)>/, `<w:body>${mark}<w:p$1>`)));
+    expect(strFromU8(files['word/document.xml'])).toContain(`<w:body>${mark}`);
+    const back = (await readDocx(new Uint8Array(zipSync(files)))).doc;
+    expect(coverParas(back)).toEqual(coverParas(c));
+    expect(rt.plainText(removeCover(back).runs)).toBe('Body text\nMore text');
   });
 
   it('saves a selection as a Quick Part and reads Quick Parts from the settings', () => {
