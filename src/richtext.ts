@@ -38,11 +38,20 @@ export function sameStyle(a: RunStyle, b: RunStyle): boolean {
 /** Join neighbouring runs that look the same and drop empty ones. */
 export function normalizeRuns(runs: TextRun[]): TextRun[] {
   const out: TextRun[] = [];
+  const add = (r: TextRun) => {
+    const last = out[out.length - 1];
+    // an object stands alone, one placeholder to a run
+    if (last && r.obj === undefined && last.obj === undefined && sameStyle(last, r)) last.text += r.text;
+    else out.push({ ...styleOf(r), text: r.text });
+  };
   for (const r of runs) {
     if (!r.text) continue;
-    const last = out[out.length - 1];
-    if (last && sameStyle(last, r)) last.text += r.text;
-    else out.push({ ...styleOf(r), text: r.text });
+    if (r.obj === undefined || r.text === '\uFFFC') { add(r); continue; }
+    // text that took an object's style (a line break typed after it): only the placeholder is the
+    // object (laptop bench: a cover page's break joined its date field, and a cross-reference then
+    // counted its paragraphs wrong)
+    const { obj: _o, ...plain } = r;
+    for (const piece of r.text.split(/(\uFFFC)/)) if (piece) add(piece === '\uFFFC' ? { ...r, text: piece } : { ...plain, text: piece });
   }
   return out;
 }
