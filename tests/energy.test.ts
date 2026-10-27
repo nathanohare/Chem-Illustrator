@@ -137,4 +137,12 @@ describe('energy diagrams', () => {
     const back = readCdxml(xml.replace(/<objecttag [^>]*Name="Chem Illustrator turn"[^>]*\/>/g, '')).doc;
     expect([...back.captions.values()].some((c) => c.rot === -90)).toBe(true);
   });
+
+  it('gives turned text in an older file of ours ChemDraw\'s turn when saved again', () => {
+    const { doc } = put('catalysed');
+    const old = writeCdxml(doc).replace(/ RotationAngle="[^"]*"/g, '');
+    const xml = writeCdxml(readCdxml(old).doc);
+    expect(xml).toMatch(/RotationAngle="17694720"/);
+    expect(xml.match(/kcal/g)?.length).toBe(old.match(/kcal/g)?.length);
+  });
 });

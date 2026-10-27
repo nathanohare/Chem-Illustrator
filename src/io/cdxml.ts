@@ -124,7 +124,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       const sheet = paperOf(root.getAttribute('MacPrintInfo'));
       const pw = sheet ? sheet.w - 72 : w, ph = sheet ? sheet.h - 72 : h;
       const paper = PAPER.find((p) => (Math.abs(p.w - pw) < 2 && Math.abs(p.h - ph) < 2) || (Math.abs(p.w - ph) < 2 && Math.abs(p.h - pw) < 2));
-      doc.page = { w, h, grow: true, ...(paper ? { name: paper.name } : {}) };
+      doc.page = { w, h, grow: true, ...(paper ? { name: paper.name } : {}), ...(wp > 1 ? { across: wp } : {}), ...(hp > 1 ? { down: hp } : {}) };
     }
   }
 

@@ -9133,7 +9133,7 @@ async function pageSetup(): Promise<void> {
     const pp = PAPER.find((x) => x.name === got.paper);
     let w = pp ? pp.w : Math.max(1, Number(got.w) || 8.5) * 72 - 72, h = pp ? pp.h : Math.max(1, Number(got.h) || 11) * 72 - 72;
     if ((got.way === 'landscape') !== (w > h)) [w, h] = [h, w];
-    next = { w: Math.max(72, w), h: Math.max(72, h), grow: got.grow !== 'keep', ...(pp ? { name: pp.name } : {}) };
+    next = { w: Math.max(72, w), h: Math.max(72, h), grow: got.grow !== 'keep', ...(pp ? { name: pp.name } : {}), ...(p?.across ? { across: p.across } : {}), ...(p?.down ? { down: p.down } : {}) };
   }
   doc.page = next;
   ws.noteChange();
