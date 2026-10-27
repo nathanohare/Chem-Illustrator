@@ -206,8 +206,9 @@ export class DocView {
     const e = this.extent(lay);
     const w = e.w * this.zoom + 2 * PAD_X + this.gutter;
     const h = e.h * this.zoom + 2 * PAD_Y;
-    this.space.style.width = `${Math.ceil(w)}px`;
-    this.space.style.height = `${Math.ceil(h)}px`;
+    const sw = `${Math.ceil(w)}px`, sh = `${Math.ceil(h)}px`;
+    if (this.space.style.width !== sw) this.space.style.width = sw;
+    if (this.space.style.height !== sh) this.space.style.height = sh;
   }
 
   /** Left edge of the pages in the scrolled area (they sit in the middle when the window is wider). */
@@ -409,6 +410,8 @@ export class DocView {
   paint(): void {
     const ctx = this.canvas.getContext('2d');
     if (!ctx) return;
+    // the scrolled area follows the pages, however they changed (fonts or pictures arriving after the file opened)
+    this.sizeSpace();
     const d = this.dpr;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const endless = this.endless;

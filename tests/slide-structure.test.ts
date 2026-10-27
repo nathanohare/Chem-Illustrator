@@ -306,6 +306,10 @@ describe('layouts in the slide master', () => {
         // across the slide, at the A4 slide's height, centred as the slide's things are
         expect(band.x2 - band.x1).toBeGreaterThan(0.6 * b.size.w);
         expect((band.y2 - band.y1) / (band.x2 - band.x1)).toBeCloseTo(0.2 * 595.3 / 841.9, 2);
+        // and the title stays on it (laptop bench pp-recheck-240: it moved to the wide layout's
+        // place, starting left of the band, white on white)
+        expect(t.x).toBeGreaterThanOrEqual(band.x1);
+        expect(t.x + t.wrap!).toBeLessThanOrEqual(band.x2 + 0.01);
       } else {
         expect(s.hideGraphics).toBeFalsy();
         expect([...doc.shapes.values()].some((x) => x.name === 'Template band')).toBe(false);

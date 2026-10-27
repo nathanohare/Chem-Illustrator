@@ -24,6 +24,9 @@ import type { DocStyle } from '../style';
 import * as rt from '../richtext';
 import { Package, REL, NS, xml, hex6, emu, MediaFiles, bytesHash, structureAltText } from './ooxml';
 import { contentsAlt } from '../accessibility';
+import { THEMES, THEME_COLORS, THEME_FONTS, type DocDesign } from '../document/themes';
+import { DEFAULT_THEME, type WorkbookTheme } from '../sheet/themes';
+import { themeXml } from './xlsx-view';
 import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed';
 import { fromDataUrl } from '../render/images';
 import { embeddedPart } from './ole-object';
@@ -94,6 +97,25 @@ const WORD_CHAR: Record<string, [string, number]> = { Emphasis: ['Emphasis', 20]
 const JC: Record<Justify, string> = { left: 'left', center: 'center', right: 'right', justify: 'both' };
 
 /** Save a document as a Word file. */
+const THEME_CT = 'application/vnd.openxmlformats-officedocument.theme+xml';
+
+/**
+ * A document's Design theme as an Office theme: its heading and body fonts (major and minor) and
+ * its colours (text, headings as Text 2, the six accents); null when no theme, fonts or colours were chosen.
+ */
+export function wordTheme(d: DocDesign | undefined): WorkbookTheme | null {
+  if (!d || (!d.theme && !d.fonts && !d.colors)) return null;
+  const th = THEMES.find((x) => x.name === d.theme);
+  const f = THEME_FONTS.find((x) => x.name === (d.fonts ?? th?.fonts));
+  const c = THEME_COLORS.find((x) => x.name === (d.colors ?? th?.colors));
+  if (!f && !c) return null;
+  const office = DEFAULT_THEME;
+  const colors = c
+    ? [c.text ?? '#000000', '#ffffff', c.heading, '#e7e6e6', ...c.accents.slice(0, 6), '#0563c1', '#954f72']
+    : office.colors;
+  return { name: d.theme ?? f?.name ?? c?.name ?? 'Chem Illustrator', major: f?.heading ?? office.major, minor: f?.body ?? office.minor, colors };
+}
+
 export async function writeDocx(t: DocText, deps: DocxDeps, title = ''): Promise<Uint8Array> {
   return new DocxWriter(pruneObjects(t), deps, deps.pages?.(t)).write(title);
 }
@@ -191,6 +213,12 @@ class DocxWriter {
     pkg.add(main, `${HEAD}<w:document xmlns:w="${W_NS}" xmlns:r="${NS.r}" xmlns:wp="${WP_NS}" xmlns:a="${NS.a}" xmlns:pic="${PIC_NS}" xmlns:wps="${WPS_NS}" xmlns:wpg="${WPG_NS}" xmlns:mc="${MC_NS}" xmlns:m="${M_NS}">${bg}<w:body>${body}${sect}</w:body></w:document>`, DOCX_CT.document);
     pkg.relate(main, DOCX_REL.styles, 'styles.xml');
     pkg.add('word/styles.xml', this.styles(), DOCX_CT.styles);
+    // Design's theme as Word's own, so Word's Design tab shows it and new text and shapes take its fonts and colours
+    const theme = wordTheme(this.t.design);
+    if (theme) {
+      pkg.relate(main, DOCX_REL.theme, 'theme/theme1.xml');
+      pkg.add('word/theme/theme1.xml', themeXml(theme), THEME_CT);
+    }
     if (this.cmts.size) this.commentParts(main);
     const notes = this.noteParts(main);
     pkg.relate(main, DOCX_REL.numbering, 'numbering.xml');
@@ -886,7 +914,7 @@ class DocxWriter {
         const kids = diagramShapesXml(o.contents, t.drawingStyle);
         const at = { x: pic.x, y: pic.y, w: pic.w, h: pic.h };
         if (kids) group = (docPr) => `${docPr}<wp:cNvGraphicFramePr/><a:graphic><a:graphicData uri="${WPG_NS}"><wpg:wgp><wpg:cNvGrpSpPr/>` +
-          `<wpg:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${emu(size.w)}" cy="${emu(size.h)}"/><a:chOff x="${emu(at.x)}" y="${emu(at.y)}"/><a:chExt cx="${emu(at.w)}" cy="${emu(at.h)}"/></a:xfrm></wpg:grpSpPr>` +
+          `<wpg:grpSpPr><a:xfrm${turnAttrs(o)}><a:off x="0" y="0"/><a:ext cx="${emu(size.w)}" cy="${emu(size.h)}"/><a:chOff x="${emu(at.x)}" y="${emu(at.y)}"/><a:chExt cx="${emu(at.w)}" cy="${emu(at.h)}"/></a:xfrm></wpg:grpSpPr>` +
           `${kids}</wpg:wgp></a:graphicData></a:graphic>`;
       }
       this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png) };
@@ -1380,9 +1408,9 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   return out.join('');
 }
 
-/** A picture's turn and flips, as DrawingML's a:xfrm has them (rot in 60000ths of a degree). */
+/** A picture's or drawing's turn and flips, as DrawingML's a:xfrm has them (rot in 60000ths of a degree). */
 function turnAttrs(o: DocObject): string {
-  if (o.kind !== 'picture') return '';
+  if (o.kind !== 'picture' && o.kind !== 'drawing') return '';
   return `${o.rot ? ` rot="${Math.round(o.rot * 60000)}"` : ''}${o.flipH ? ' flipH="1"' : ''}${o.flipV ? ' flipV="1"' : ''}`;
 }
 

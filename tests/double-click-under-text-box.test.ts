@@ -69,6 +69,25 @@ describe('double-click under a text box', () => {
     expect(ed.hitTest({ x: 400, y: 100 })).toEqual({ kind: 'caption', id: cap });
   });
 
+  it('reaches an equation set in a text box line, in the spaces left for it (laptop bench pp-recheck-237-equation)', () => {
+    const { doc, ed } = setup();
+    let cap = 0, eq = 0;
+    doc.edit('Slide', () => {
+      // a full-width text box (not a placeholder): "y = " then en spaces for the equation, then "+c"
+      // (at 200 pt every character is 10 wide here: the spaces run from x 90 to 250)
+      cap = doc.addCaption({ x: 50, y: 80, runs: [{ text: 'y = ' + '\u2002'.repeat(16) + '+c', size: 200 }], justify: 'left', wrap: 600 }).id;
+      eq = doc.addShape({ kind: 'geo', geo: 'rect', x1: 92, y1: 0, x2: 248, y2: 100, filled: true, color: '#000000' }).id;
+    });
+    expect(ed.hitTest({ x: 170, y: 50 })).toEqual({ kind: 'shape', id: eq });
+    expect(ed.contentHit({ x: 170, y: 50 })).toEqual({ kind: 'shape', id: eq });
+    // the words beside it still edit the text box
+    expect(ed.hitTest({ x: 65, y: 50 })).toEqual({ kind: 'caption', id: cap });
+    expect(ed.hitTest({ x: 260, y: 50 })).toEqual({ kind: 'caption', id: cap });
+    // a shape reaching out of the text box doesn't take its spaces
+    doc.edit('Move', () => { doc.shapes.get(eq)!.y1 = -300; });
+    expect(ed.hitTest({ x: 170, y: 50 })).toEqual({ kind: 'caption', id: cap });
+  });
+
   it('keeps a slide text box selected when typing in it stops, for the ribbon to change it', () => {
     const { doc, ed } = setup();
     doc.textStyles = { title: { size: 44 } };

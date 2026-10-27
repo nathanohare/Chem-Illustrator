@@ -68,6 +68,31 @@ describe('Rotate and flip', () => {
     const pages = recordPages(t, layouter().layout(t), () => null);
     expect(pages[0].items.find((i) => i.kind === 'image' && i.rot === 33)).toMatchObject({ flipH: true });
   });
+
+  it('turns an icon from Insert > Icons (a drawing), names it in the Selection Pane, and keeps the turn in Word (laptop bench)', async () => {
+    const shape = { id: 1, kind: 'geo', geo: 'icon:atom', x1: 0, y1: 0, x2: 40, y2: 40 };
+    const icon = { kind: 'drawing', contents: { atoms: [], bonds: [], captions: [], arrows: [], shapes: [shape] }, float: { wrap: 'front', x: 0, y: 0 } } as unknown as Extract<DocObject, { kind: 'drawing' }>;
+    const t = threeDoc();
+    t.objects[2] = turned(icon, 'right');
+    expect(objectName(t, 2)).toBe('Icon 2');
+    expect(objectName({ objects: { 2: { ...icon, contents: { ...icon.contents, shapes: [{ ...shape, geo: 'rect' }] } } as DocObject } }, 2)).toBe('Shape 2');
+    const pngDeps: DocxDeps = { async picture() { return { png: new Uint8Array([137, 80, 78, 71]), w: 40, h: 40 }; }, async svgToPng() { return new Uint8Array(); } };
+    const bytes = await writeDocx(t, pngDeps);
+    expect(strFromU8(unzipSync(bytes)['word/document.xml'])).toContain('<a:xfrm rot="5400000">');
+    const { doc } = await readDocx(bytes);
+    expect(Object.values(doc.objects).find((o) => o.kind === 'drawing')).toMatchObject({ rot: 90 });
+    // drawn turned in a PDF: a line across the figure's top turns a quarter right about its middle
+    const line = { kind: 'path' as const, segs: [{ k: 'M' as const, x: 0, y: 0 }, { k: 'L' as const, x: 40, y: 0 }], stroke: { color: '#000', width: 1, cap: 'butt' as const, join: 'miter' as const } };
+    const lay = layouter().layout(t);
+    const o = lay.objects.find((x) => x.id === 2)!;
+    const pages = recordPages(t, lay, () => ({ items: [line], box: { x1: 0, y1: 0, x2: 40, y2: 40 } }) as never);
+    const segs = (pages[0].items.find((i) => i.kind === 'path' && i.segs.length === 2) as { segs: { x: number; y: number }[] }).segs;
+    const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+    // (dx, dy) from the middle goes to (−dy, dx)
+    const near = (p: { x: number; y: number }, x: number, y: number) => { expect(p.x).toBeCloseTo(x); expect(p.y).toBeCloseTo(y); };
+    near(segs[0], cx + o.h / 2, cy - o.w / 2);
+    near(segs[1], cx + o.h / 2, cy + o.w / 2);
+  });
 });
 
 describe('order, groups and the Selection Pane', () => {

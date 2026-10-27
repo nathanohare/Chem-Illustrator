@@ -19,6 +19,7 @@ import { drawMath } from './math';
 import { fxSrc, hasFx, traceShape } from '../render/picture-fx';
 import { drawParaBorders, drawParaShading } from './para-borders';
 import { hfKeyFor, numbersFor, zonesFor } from './hf-bodies';
+import { turnOf } from './arrange';
 
 /** One piece of a header or footer line: its text, where it goes, and its font. */
 export interface HfPart { where: 'header' | 'footer'; align: 'left' | 'center' | 'right'; text: string; font: string; size: number; w: number }
@@ -147,6 +148,42 @@ export function turnAbout(ctx: CanvasRenderingContext2D, o: { x: number; y: numb
   ctx.translate(-cx, -cy);
 }
 
+/** A figure's drawn items turned and flipped about its middle, as `turnAbout` turns a canvas. */
+export function turnItems(items: Item[], o: { x: number; y: number; w: number; h: number }, turn: { rot: number; flipH: boolean; flipV: boolean }): Item[] {
+  const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+  const a = (turn.rot * Math.PI) / 180, cos = Math.cos(a), sin = Math.sin(a);
+  const sx = turn.flipH ? -1 : 1, sy = turn.flipV ? -1 : 1;
+  const at = (x: number, y: number) => {
+    const dx = (x - cx) * sx, dy = (y - cy) * sy;
+    return { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos };
+  };
+  const mirrored = turn.flipH !== turn.flipV;
+  return items.map((it): Item => {
+    if (it.kind === 'path') {
+      return { ...it, segs: it.segs.map((s) => {
+        if (s.k === 'Z') return s;
+        const p = at(s.x, s.y);
+        if (s.k !== 'C') return { k: s.k, ...p };
+        const p1 = at(s.x1, s.y1), p2 = at(s.x2, s.y2);
+        return { k: 'C', x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, ...p };
+      }) };
+    }
+    if (it.kind === 'image') {
+      const m = at(it.x + it.w / 2, it.y + it.h / 2);
+      const own = it.rot ?? 0;
+      const rot = ((((mirrored ? -own : own) + turn.rot) % 360) + 360) % 360;
+      const { rot: _r, flipH: _h, flipV: _v, ...rest } = it;
+      const flipH = !!it.flipH !== turn.flipH, flipV = !!it.flipV !== turn.flipV;
+      return { ...rest, x: m.x - it.w / 2, y: m.y - it.h / 2, ...(rot ? { rot } : {}), ...(flipH ? { flipH } : {}), ...(flipV ? { flipV } : {}) };
+    }
+    // words are turned with the figure but read the right way round (a PDF can't mirror them)
+    const p = at(it.x, it.y);
+    const angle = ((((it.angle ?? 0) - turn.rot) % 360) + 360) % 360;
+    const { angle: _a, ...rest } = it;
+    return { ...rest, ...p, ...(angle ? { angle } : {}) };
+  });
+}
+
 /** The bars in the left margin by lines with tracked changes: grey in All Markup, red in Simple Markup (as Word's). */
 export function drawChangeBars(ctx: CanvasRenderingContext2D, lay: DocLayout, page: number): void {
   for (const b of lay.changeBars) {
@@ -225,7 +262,8 @@ export function recordPages(t: DocText, lay: DocLayout, drawing: (c: Contents, s
       } else if (obj?.kind === 'picture') ctx.items.push({ kind: 'image', src: fxSrc(obj) ?? obj.src, x: o.x, y: o.y, w: o.w, h: o.h, px: obj.px, ...(obj.crop ? { crop: obj.crop } : {}), ...(obj.rot ? { rot: obj.rot } : {}), ...(obj.flipH ? { flipH: true } : {}), ...(obj.flipV ? { flipV: true } : {}) });
       else if (obj?.kind === 'drawing') {
         const pic = drawing(obj.contents, t.drawingStyle);
-        if (pic) ctx.items.push(...placeItems(pic, o));
+        const turn = turnOf(obj);
+        if (pic) ctx.items.push(...(turn ? turnItems(placeItems(pic, o), o, turn) : placeItems(pic, o)));
       }
       if (look?.frame) {
         c.strokeStyle = look.frameColor ?? '#000';

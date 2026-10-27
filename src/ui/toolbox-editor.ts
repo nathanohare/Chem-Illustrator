@@ -14,6 +14,7 @@ import {
 } from './toolboxes';
 import { added, cutOff, emptied, GRID_PRESETS, gridItems, MAX_COLS, MAX_ROWS, placed, resized, withLine, type Grid } from './toolbox-grid';
 import { inside } from './tile-drag';
+import { choose } from './keep-ui';
 
 export interface ToolboxEditorHooks {
   get(): ToolboxState;
@@ -146,40 +147,39 @@ export class ToolboxEditor {
     });
     d.addEventListener('close', () => { this.folder = null; });
     this.els.pick.addEventListener('change', () => { this.box = this.els.pick.value; this.folder = null; this.draw(); this.say(''); });
-    this.els.name.addEventListener('change', () => this.change((s) => withTitle(s, this.box, this.els.name.value), false));
-    this.els.shown.addEventListener('change', () => this.change((s) => ({ ...s, places: { ...s.places, [this.box]: { ...s.places[this.box], shown: this.els.shown.checked } } }), false));
+    this.els.name.addEventListener('change', () => this.change((s) => withTitle(s, this.box, this.els.name.value)));
+    this.els.shown.addEventListener('change', () => this.change((s) => ({ ...s, places: { ...s.places, [this.box]: { ...s.places[this.box], shown: this.els.shown.checked } } })));
     q('[data-act=new]').addEventListener('click', () => this.newBox());
-    this.els.up.addEventListener('click', () => this.change((s) => withBoxMoved(s, this.box, -1), false));
-    this.els.down.addEventListener('click', () => this.change((s) => withBoxMoved(s, this.box, 1), false));
+    this.els.up.addEventListener('click', () => this.change((s) => withBoxMoved(s, this.box, -1)));
+    this.els.down.addEventListener('click', () => this.change((s) => withBoxMoved(s, this.box, 1)));
     this.els.del.addEventListener('click', () => this.deleteBox());
     this.els.undo.addEventListener('click', () => this.takeBack());
     this.els.reset.addEventListener('click', () => this.reset());
-    this.els.restore.addEventListener('click', () => { this.change(withBoxesRestored, false); this.say('The toolboxes that come with the app are back in View > Toolboxes, with their own names.'); });
-    this.els.jiggle.addEventListener('change', () => this.change((s) => ({ ...s, jiggle: this.els.jiggle.checked ? undefined : false }), false));
-    this.els.cols.addEventListener('change', () => this.resize(Number(this.els.cols.value), this.grid().rows));
-    this.els.rows.addEventListener('change', () => this.resize(this.grid().cols, Number(this.els.rows.value)));
+    this.els.restore.addEventListener('click', () => { this.change(withBoxesRestored); this.say('The toolboxes that come with the app are back in View > Toolboxes, with their own names.'); });
+    this.els.jiggle.addEventListener('change', () => this.change((s) => ({ ...s, jiggle: this.els.jiggle.checked ? undefined : false })));
+    this.els.cols.addEventListener('change', () => void this.resize(Number(this.els.cols.value), this.grid().rows));
+    this.els.rows.addEventListener('change', () => void this.resize(this.grid().cols, Number(this.els.rows.value)));
     this.els.preset.addEventListener('change', () => {
       const [c, r] = this.els.preset.value.split('x').map(Number);
       this.els.preset.value = '';
-      if (c && r) this.resize(c, r);
+      if (c && r) void this.resize(c, r);
     });
-    this.els.overflow.addEventListener('change', () => this.change((s) => withOverflow(s, this.box, this.els.overflow.value as Overflow), false));
+    this.els.overflow.addEventListener('change', () => this.change((s) => withOverflow(s, this.box, this.els.overflow.value as Overflow)));
     q('[data-act=done]').addEventListener('click', () => d.close());
     document.body.append(d);
     this.d = d;
   }
 
   private say(text: string): void {
-    this.els.say.textContent = text;
+    // a hidden toolbox stays hidden while it is changed (laptop bench: it used to pop up on screen)
+    this.els.say.textContent = text + this.hiddenNote();
   }
 
   /** Make a change (kept for Undo), show it everywhere, and draw the window again. */
-  private change(f: (s: ToolboxState) => ToolboxState, show = true): void {
+  private change(f: (s: ToolboxState) => ToolboxState): void {
     const before = this.hooks.get();
     let next = f(before);
     if (next === before) return;
-    // a toolbox being filled shows, so the change can be seen
-    if (show && next.places[this.box] && !next.places[this.box].shown) next = { ...next, places: { ...next.places, [this.box]: { ...next.places[this.box], shown: true } } };
     this.undo.push(before);
     if (this.undo.length > 100) this.undo.shift();
     this.hooks.set(next);
@@ -216,7 +216,7 @@ export class ToolboxEditor {
     const st = this.hooks.get();
     const name = boxTitle(st, this.box, this.hooks.title(this.box));
     if (KEEP.includes(this.box)) return;
-    this.change((s) => withoutBox(s, this.box), false);
+    this.change((s) => withoutBox(s, this.box));
     this.box = 'custom' === this.box || !boxIds(this.hooks.get()).includes('custom') ? 'main' : 'custom';
     this.folder = null;
     this.draw();
@@ -265,20 +265,37 @@ export class ToolboxEditor {
     else this.change((s) => withGrid(s, this.box, g));
   }
 
-  /** A new size for the grid: the buttons stay in their cells, and it asks first before any are cut off. */
-  private resize(cols: number, rows: number): void {
+  /**
+   * A new size for the grid: the buttons stay in their cells (those past the new edges move into
+   * empty ones), and it asks first before any are taken out. Nothing changes until it is answered
+   * (laptop bench: window.confirm did not hold the change back in the desktop app, so Cancel
+   * kept it).
+   */
+  private async resize(cols: number, rows: number): Promise<void> {
     const g = this.grid();
+    const folder = this.folder, box = this.box;
     cols = Math.max(1, Math.min(MAX_COLS, Math.round(cols) || g.cols));
     rows = Math.max(1, Math.min(MAX_ROWS, Math.round(rows) || g.rows));
     if (cols === g.cols && rows === g.rows) { this.draw(); return; }
     const lost = cutOff(g, cols, rows);
     if (lost.length) {
+      this.draw();
       const names = lost.map((k) => this.hooks.describe(this.keyOf(k)).label);
       const list = names.length > 6 ? `${names.slice(0, 6).join(', ')} and ${names.length - 6} more` : names.join(', ');
-      if (!window.confirm(`A ${cols} × ${rows} grid leaves no room for ${lost.length === 1 ? 'this button' : `these ${lost.length} buttons`}: ${list}.\n\nMake it ${cols} × ${rows} anyway, taking ${lost.length === 1 ? 'it' : 'them'} out? (Undo brings ${lost.length === 1 ? 'it' : 'them'} back.)`)) { this.draw(); return; }
+      const one = lost.length === 1;
+      const answer = await choose(`Make it ${cols} × ${rows}?`,
+        `A ${cols} × ${rows} grid has ${cols * rows} cells, too few for ${one ? 'this button' : `these ${lost.length} buttons`}: ${list}.\n\nMake it ${cols} × ${rows} anyway, taking ${one ? 'it' : 'them'} out? (Undo brings ${one ? 'it' : 'them'} back.)`,
+        [`Take ${one ? 'It' : 'Them'} Out`, 'Cancel'], 1);
+      // the grid changed, or another toolbox was picked, while the question was up
+      if (answer !== 0 || this.folder !== folder || this.box !== box || this.grid() !== g) { this.draw(); return; }
     }
     this.setGrid(resized(g, cols, rows));
     this.say(`The grid is ${cols} × ${rows} now${lost.length ? `; took out ${lost.length}` : ''}.`);
+  }
+
+  /** A note for the status line when the toolbox being changed is hidden. */
+  private hiddenNote(): string {
+    return this.folder || this.box === 'details' || this.hooks.get().places[this.box]?.shown ? '' : ' (It is hidden: tick Shown to see it.)';
   }
 
   private draw(): void {

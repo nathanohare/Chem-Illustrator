@@ -774,6 +774,24 @@ function xAt(lay: TextLayout, li: number, offset: number): number {
   return last ? last.x + last.w : lay.lines[li].x;
 }
 
+/**
+ * Whether x (from the origin) falls in a run of spaces on a line at least `wide` across: the
+ * room left in a line for something drawn there (an equation set among the words).
+ */
+export function blankRoomAt(lay: TextLayout, l: LaidLine, x: number, wide: number): boolean {
+  for (const g of textPieces(l)) {
+    if (g.hidden || x < g.x || x > g.x + g.w) continue;
+    let k = 0;
+    while (k < g.text.length && g.x + pieceX(lay, g, k + 1) < x) k++;
+    if (!/\s/.test(g.text[k] ?? '')) return false;
+    let a = k, b = k + 1;
+    while (a > 0 && /\s/.test(g.text[a - 1])) a--;
+    while (b < g.text.length && /\s/.test(g.text[b])) b++;
+    return pieceX(lay, g, b) - pieceX(lay, g, a) >= wide;
+  }
+  return false;
+}
+
 /** A line's pieces that hold its text (not the ones only shown, as a bibliography's). */
 function textPieces(l: LaidLine): Glyphs[] {
   return l.pieces.some((g) => g.decor) ? l.pieces.filter((g) => !g.decor) : l.pieces;

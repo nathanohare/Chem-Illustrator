@@ -21,7 +21,7 @@ import { applyFormat, formatWhole, type TextFormat } from '../text/format';
 import { cleanUpMoves } from '../chem/cleanup';
 import { Renderer, measureText } from '../render/renderer';
 import { tidyStyle } from '../render/highlight';
-import { ASCENT } from '../text/layout';
+import { ASCENT, blankRoomAt } from '../text/layout';
 import { cellAlign, insertRow, nextCell, partAt, partRuns, setColumnWidth, setPart, spanOf, NOTE_SCALE, type TablePart } from '../table';
 import { slideCellLook, styledRuns, unstyledRuns } from '../deck/table-styles';
 import { Vec, Rect, add, sub, mul, norm, dist, dot, distToSegment, rectContains, angleOf, fromAngle, snapAngle, perp, DEG, exitParam, lockAxis, turnAbout, turnedCorners, normDegrees } from '../geom';
@@ -622,6 +622,12 @@ export class Editor {
       const q = c.rot ? turnAbout(p, c, -c.rot) : p;
       if (q.x >= r.x1 - 1 && q.x <= r.x2 + 1 && q.y >= r.y1 - 1 && q.y <= r.y2 + 1) {
         if (c.ph && !this.overText(c, p)) { room ??= { kind: 'caption', id: c.id }; continue; }
+        // a text box's blank room (the spaces left for an equation set in its line) gives way
+        // to a picture or shape drawn there that sits within the box
+        if (!this.overText(c, p)) {
+          const under = this.arrowOrShapeAt(p);
+          if (under?.kind === 'shape' && this.withinBox(shapeBox(this.doc.shapes.get(under.id)!), r)) return under;
+        }
         return { kind: 'caption', id: c.id };
       }
     }
@@ -642,16 +648,27 @@ export class Editor {
     return null;
   }
 
-  /** Is the point on a text box's own words (a line of its text), not just inside its box? */
+  /**
+   * Is the point on a text box's own words (a line of its text), not just inside its box? A run
+   * of spaces wider than a couple of word spaces (the room an equation is set in) doesn't count.
+   */
   private overText(c: Caption, p: Vec): boolean {
     const q = c.rot ? turnAbout(p, c, -c.rot) : p;
     const pad = this.tol(2);
-    for (const l of this.r.captionLayout(c).lines) {
+    const lay = this.r.captionLayout(c);
+    for (const l of lay.lines) {
       if (l.end <= l.start && !c.runs.some((r) => r.text)) continue;
       const x1 = c.x + l.x, y = c.y + l.y;
-      if (q.x >= x1 - pad && q.x <= x1 + l.width + pad && q.y >= y - l.ascent - pad && q.y <= y + l.descent + pad) return true;
+      if (q.x >= x1 - pad && q.x <= x1 + l.width + pad && q.y >= y - l.ascent - pad && q.y <= y + l.descent + pad) {
+        return !blankRoomAt(lay, l, q.x - c.x, (l.ascent + l.descent) * 0.4);
+      }
     }
     return false;
+  }
+
+  private withinBox(inner: Rect, outer: Rect): boolean {
+    const e = this.tol(2);
+    return inner.x1 >= outer.x1 - e && inner.x2 <= outer.x2 + e && inner.y1 >= outer.y1 - e && inner.y2 <= outer.y2 + e;
   }
 
   /**

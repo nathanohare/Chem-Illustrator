@@ -141,11 +141,15 @@ button:hover { border-color: var(--accent); }
 .menu.right { left: auto; right: 0; }
 /* a menu taller than the window scrolls; its submenus are placed on the screen by the script */
 .menu { max-height: calc(100vh - var(--menu-top, 48px) - 8px); overflow-y: auto; overscroll-behavior: contain; }
-.menu.sub { position: fixed; top: 0; left: 0; z-index: 31; }
-/* a menu too tall for the window is laid out in columns instead (src/main.ts fitMenu) */
-.menu.cols:not([hidden]) { display: block; columns: var(--menu-cols) var(--menu-col-w); column-gap: 4px; column-fill: auto; overflow: hidden; }
-.menu.cols > button, .menu.cols > .submenu > button, .menu.cols > .menu-head { display: flex; width: 100%; break-inside: avoid; }
-.menu.cols hr { break-after: avoid; }
+/* a menu at a point (a right-click in a window, a field's menu): over the windows, kept on the screen by popupMenu */
+.menu.popup-menu { position: fixed; top: 0; left: 0; z-index: 110; max-height: calc(100vh - 8px); }
+/* the menu bar, ribbons, tabs and status bar are buttons, not text: a drag across them selects nothing
+   (laptop bench: a drag from the menu bar turned the ribbon blue); the boxes in them still select */
+header, .ribbon, .toolbox, .menu, .context-menu, #tabs, footer#status { -webkit-user-select: none; user-select: none; }
+:is(header, .ribbon, .toolbox, .menu, .context-menu, #tabs, footer#status) :is(input, textarea, [contenteditable='true'], [contenteditable='']) { -webkit-user-select: text; user-select: text; }
+.menu.sub { position: fixed; top: 0; left: 0; z-index: 31; max-height: calc(100vh - 8px); }
+/* a tall menu's items keep their height (it scrolls instead) */
+.menu > *, .menu > .submenu > * { flex-shrink: 0; }
 .submenu { display: contents; }
 .submenu[hidden] { display: none; }
 .menu button.has-sub::after { content: '›'; color: var(--muted); }
@@ -794,6 +798,9 @@ button.hk-add.recording { color: var(--panel); background: var(--accent); border
 .text-menu button:hover:not(:disabled) { background: var(--accent-soft); }
 .text-menu button:disabled { color: var(--muted); }
 .text-menu hr { border: 0; border-top: 1px solid var(--line); margin: 3px 0; }
+/* put at the point clicked (src/ui/text-menu.ts): over everything, and scrolling in a short window */
+.text-menu.at-point { position: fixed; z-index: 110; max-height: calc(100vh - 8px); overflow-y: auto; overscroll-behavior: contain; }
+.text-menu.at-point > * { flex-shrink: 0; }
 /* Edit > Typing and Spelling */
 dialog.typing-dialog { width: min(94vw, 560px); }
 dialog.mode-dialog { width: min(94vw, 480px); }
@@ -1408,7 +1415,10 @@ body.ribbon-collapsed .ribbon.rb-peek > .rb-tabs [role='tab'][aria-selected='tru
 
 /* Document mode: Find and Replace, floating over the top right of the pages */
 .doc-find { position: absolute; top: 8px; right: 22px; z-index: 6; width: 330px; max-width: calc(100% - 44px); display: flex; flex-direction: column; gap: 5px;
-  padding: 7px 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); font-size: 12px; }
+  padding: 7px 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); font-size: 12px;
+  /* a short window: it scrolls rather than running off the bottom of the page area */
+  max-height: calc(100% - 16px); overflow-y: auto; overscroll-behavior: contain; }
+.doc-find > * { flex-shrink: 0; }
 .doc-find[hidden], .doc-find [hidden] { display: none; }
 .df-row { display: flex; align-items: center; gap: 4px; }
 .df-replace { display: flex; flex-direction: column; gap: 5px; }

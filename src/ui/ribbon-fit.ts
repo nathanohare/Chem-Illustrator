@@ -164,8 +164,9 @@ export function watchRibbons(collapseChanged: (on: boolean) => void = () => {}):
         for (const r of document.querySelectorAll('.ribbon.rb-peek')) r.classList.remove('rb-peek');
       }
     }
-    // a click on a dropped-down group's button closes it, as a click anywhere else does
-    if (!t.closest?.('.rb-fold-btn') && !t.closest?.('.rb-popped input, .rb-popped select')) closePopped();
+    // a click on a dropped-down group's button closes it, as a click anywhere else does; one that
+    // opens a menu (Position ▾) keeps it down, so pointing at the next (Rotate ▾) opens that one
+    if (!t.closest?.('.rb-fold-btn') && !t.closest?.('.rb-popped input, .rb-popped select, .rb-popped button[aria-haspopup]')) closePopped();
   });
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {

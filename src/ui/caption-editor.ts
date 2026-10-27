@@ -18,6 +18,7 @@ import { loadSpeller, type Speller } from '../text/spelling';
 import { linkAtPoint } from '../links';
 import { askLink, followLink, linkTip, type LinkPlace } from './links-ui';
 import { touchOn } from './touch-ui';
+import { placeTextMenu } from './text-menu';
 
 /** What the editor needs from the drawing it sits on. */
 export interface EditorHost {
@@ -90,6 +91,8 @@ export class CaptionEditor {
   private dictSeen: string[] | null = null;
   private checked: { t: RichText; spell: [number, number][]; issues: Issue[] } | null = null;
   private menu: HTMLDivElement | null = null;
+  /** Called when the right-click menu closes (its arrow keys go). */
+  private menuDone: (() => void) | null = null;
   /** The link window is open: the text stays open while it is. */
   private asking = false;
   /** Places in the file a link can go to (slides in a deck), set up by the app. */
@@ -447,11 +450,7 @@ export class CaptionEditor {
       item('Copy Link', () => this.copyLink(link));
       item('Remove Link', () => this.ed.removeLink());
     }
-    this.h.host.appendChild(menu);
-    const host = this.h.host.getBoundingClientRect();
-    const mw = menu.offsetWidth, mh = menu.offsetHeight;
-    menu.style.left = `${Math.max(4, Math.min(clientX - host.left, host.width - mw - 4))}px`;
-    menu.style.top = `${Math.max(4, Math.min(clientY - host.top, host.height - mh - 4))}px`;
+    this.menuDone = placeTextMenu(menu, clientX, clientY, d);
     this.menu = menu;
     d.addEventListener('pointerdown', this.closeMenuOutside, true);
   }
@@ -460,6 +459,8 @@ export class CaptionEditor {
     if (!this.menu) return;
     this.menu.remove();
     this.menu = null;
+    this.menuDone?.();
+    this.menuDone = null;
     this.h.host.ownerDocument.removeEventListener('pointerdown', this.closeMenuOutside, true);
   }
 
