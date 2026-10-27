@@ -9,8 +9,7 @@ on:
 permissions:
   contents: read
 
-# A new push to a pull request (such as each merge into staging while the checkpoint pull request
-# is open) stops the run still going for the old one
+# A new push to a pull request stops the run still going for its previous commit
 concurrency:
   group: checks-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
