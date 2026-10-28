@@ -2138,7 +2138,7 @@ export class Workbook {
 
   /** Does a formula use a defined name whose formula is worked out again after every change (TODAY, INDIRECT…)? */
   private usesVolatileName(text: string): boolean {
-    for (const n of this.names) if (VOLATILE.test(n.formula) && new RegExp(`\\b${n.name.replace(/\./g, '\\.')}\\b`, 'i').test(text)) return true;
+    for (const n of this.names) if (VOLATILE.test(n.formula) && new RegExp(`(?<![\\w.\\\\?])${n.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\w.\\\\?])`, 'i').test(text)) return true;
     return false;
   }
 

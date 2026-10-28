@@ -139,7 +139,7 @@ describe('writing citations back for the reference manager', () => {
     const { doc } = await readDocx(zoteroDoc());
     const p = parts(await writeDocx(doc, deps));
     const body = p['word/document.xml'];
-    const instr = [...body.matchAll(/<w:instrText[^>]*>([^<]*)<\/w:instrText>/g)].map((m) => m[1]).join('').replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+    const instr = [...body.matchAll(/<w:instrText[^>]*>([^<]*)<\/w:instrText>/g)].map((m) => m[1]).join('').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
     expect(instr).toMatch(/ADDIN ZOTERO_ITEM CSL_CITATION \{"citationID":"abc123"/);
     expect(instr).toMatch(/"uris":\["http:\/\/zotero.org\/users\/1\/items\/ABCD1234"\]/);
     expect(instr).toMatch(/"ISSN":"0276-7333"/);

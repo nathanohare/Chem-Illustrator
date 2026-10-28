@@ -178,7 +178,10 @@ const str = (v: unknown): string => (typeof v === 'string' || typeof v === 'numb
 
 /** Text without the HTML tags and entities Crossref titles can carry (<i>, <sub>, &amp;). */
 function stripTags(text: string): string {
-  return text.replace(/<[^>]+>/g, '')
+  // again until none is left, so a tag cut in two by another (<<i>i>) goes too
+  let bare = text;
+  for (let was = ''; was !== bare;) { was = bare; bare = bare.replace(/<[^<>]*>/g, ''); }
+  return bare
     .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
     .replace(/&#(\d+);/g, (_, d: string) => String.fromCodePoint(Number(d)))
     .replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')

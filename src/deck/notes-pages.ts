@@ -84,7 +84,7 @@ export function pageTexts(hf: NotesHF | undefined, page: number, now = new Date(
   };
 }
 
-const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 
 /** The header, date, footer and number as SVG text in a page's frame. */
 export function frameSvg(f: PageFrame, t: ReturnType<typeof pageTexts>, font = 'Arial'): string {

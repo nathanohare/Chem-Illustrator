@@ -18,7 +18,7 @@ import { ringBonds, ringsThroughBond } from '../chem/aromatic';
 import { DEG } from '../geom';
 import { chordLocal, headBend, swapHalf } from '../objects';
 import { pinSymbols } from '../chem/pins';
-import { kids, descendants } from './xml';
+import { kids, descendants, withoutDoctype } from './xml';
 import { styleFromFace, isSymbolFont, fromSymbolFont } from '../richtext';
 import { dataUrl, fromDataUrl, imageSize } from '../render/images';
 import { emfToSvg } from '../render/emf-read';
@@ -54,7 +54,7 @@ const pts = (v: string | null): number[] => (v ? v.trim().split(/\s+/).map(Numbe
 export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   const t0 = performance.now();
   // ChemDraw writes a DOCTYPE pointing at a web address; drop it so nothing is fetched.
-  const xml = new DOMParser().parseFromString(text.replace(/<!DOCTYPE[^>]*>/i, ''), 'application/xml');
+  const xml = new DOMParser().parseFromString(withoutDoctype(text), 'application/xml');
   const t1 = performance.now();
   const root = xml.documentElement;
   if (!root || root.nodeName !== 'CDXML') throw new Error('This does not look like a CDXML file.');

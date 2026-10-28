@@ -12,7 +12,7 @@ import { SYMBOLS } from '../chem/elements';
 import { labelBonds, labelSpec, layoutLabel, labelDir, labelGraph, tokenize, isGenericLabel, Measure, MiniGraph, kekulize, labelLook } from '../chem/labels';
 import { Vec, DEG, arcCenter, norm, sub, Rect } from '../geom';
 import { bezPoints } from '../objects';
-import { kids, descendants, wellFormed } from './xml';
+import { kids, descendants, wellFormed, withoutDoctype } from './xml';
 import { arialWidth } from '../text-metrics';
 import { toSymbolPieces, isSymbolFont, faceFromStyle } from '../richtext';
 import { layoutText, SINGLE } from '../text/layout';
@@ -198,7 +198,7 @@ class CdxmlWriter {
     const src = this.doc.source!, text = src.text;
     const start = text.search(/<CDXML[\s>]/);
     this.prolog = start > 0 ? text.slice(0, start) : NEW_PROLOG;
-    src.xml ??= new DOMParser().parseFromString(text.replace(/<!DOCTYPE[^>]*>/i, ''), 'application/xml');
+    src.xml ??= new DOMParser().parseFromString(withoutDoctype(text), 'application/xml');
     this.x = src.xml.cloneNode(true) as XMLDocument;
     this.root = this.x.documentElement;
     this.all = descendants(this.root);
