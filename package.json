@@ -29,11 +29,11 @@
     "@mdi/svg": "^7.4.47",
     "@playwright/test": "^1.56.1",
     "@tauri-apps/cli": "~2.12.1",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.12",
     "jsdom": "^27.4.0",
     "typescript": "^5.9.3",
     "vite": "^7.1.12",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "dependencies": {
     "@fontsource/archivo-black": "^5.3.0",
@@ -59,11 +59,11 @@
     "@tauri-apps/plugin-opener": "~2.7.2",
     "@tauri-apps/plugin-process": "~2.4.0",
     "@tauri-apps/plugin-updater": "~2.13.3",
-    "fflate": "^0.8.2",
+    "fflate": "^0.8.3",
     "hyphen": "^1.14.1",
     "marked": "^18.1.1",
     "onnxruntime-web": "1.22.0",
-    "pdfjs-dist": "^5.7.284",
+    "pdfjs-dist": "^6.4.299",
     "polygon-clipping": "^0.15.7"
   },
   "private": true,
