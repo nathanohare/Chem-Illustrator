@@ -11,6 +11,8 @@
 // CDXML attributes with no known CDX property (chemical-property captions, sequence settings
 // and so on) are left out of CDX; nothing that changes how the drawing looks depends on them.
 
+import { withoutDoctype } from './xml';
+
 // ---------------------------------------------------------------- objects
 
 const OBJECTS: Record<string, number> = {
@@ -522,7 +524,7 @@ function writeObject(out: Bytes, e: Element): void {
 
 /** A CDXML document as CDX. */
 export function cdxmlToCdx(xml: string): Uint8Array {
-  const root = new DOMParser().parseFromString(xml.replace(/<!DOCTYPE[^>]*>/i, ''), 'application/xml').documentElement;
+  const root = new DOMParser().parseFromString(withoutDoctype(xml), 'application/xml').documentElement;
   if (!root || root.nodeName !== 'CDXML') throw new Error('not a CDXML document');
   const out = new Bytes();
   out.bytes(HEADER);

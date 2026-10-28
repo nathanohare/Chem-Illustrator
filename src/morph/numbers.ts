@@ -6,14 +6,14 @@
 // be used in the other.
 
 import type { Doc, MorphStep } from '../model';
-import { descendants } from '../io/xml';
+import { descendants, withoutDoctype } from '../io/xml';
 
 /** An attribute of each atom's node in the file the drawing was read from (atoms drawn since have none). */
 export function sourceAttr(doc: Doc, name: string): Map<number, string> {
   const out = new Map<number, string>();
   const src = doc.source;
   if (!src) return out;
-  const xml = new DOMParser().parseFromString(src.text.replace(/<!DOCTYPE[^>]*>/i, ''), 'application/xml');
+  const xml = new DOMParser().parseFromString(withoutDoctype(src.text), 'application/xml');
   const all = xml.documentElement ? descendants(xml.documentElement) : [];
   for (const id of doc.atoms.keys()) {
     const i = src.ord.get('a' + id);

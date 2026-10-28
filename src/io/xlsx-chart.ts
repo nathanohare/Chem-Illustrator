@@ -427,12 +427,12 @@ function readTitle(t: Element | null): string | undefined {
     const out = kids(rich, 'p').map((p) => kids(p, 'r').map((r) => {
       const text = kid(r, 't')?.textContent ?? '';
       const base = Number(kid(r, 'rPr')?.getAttribute('baseline') ?? 0);
-      return base < 0 ? `_{${text}}` : base > 0 ? `^{${text}}` : text.replace(/([_^])/g, '\\$1');
+      return base < 0 ? `_{${text}}` : base > 0 ? `^{${text}}` : text.replace(/([\\_^])/g, '\\$1');
     }).join('')).join(' ');
     return out || undefined;
   }
   const plain = kid(t, 'tx', 'txData', 'v')?.textContent;
-  return plain ? plain.replace(/([_^])/g, '\\$1') : undefined;
+  return plain ? plain.replace(/([\\_^])/g, '\\$1') : undefined;
 }
 
 const colourIn = (sp: Element | null): string | undefined => {

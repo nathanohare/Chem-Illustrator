@@ -108,7 +108,7 @@ describe('frames and shadows on figures', () => {
   it("writes Word's picture line and outer shadow, and reads them back", () => {
     const x = lookXml({ frame: 1.5, frameColor: '#1f4e79', shadow: 'soft' });
     expect(x).toMatch(/^<a:solidFill>.*<\/a:solidFill><a:ln w="19050">.*1F4E79.*<\/a:ln><a:effectLst><a:outerShdw /);
-    const el = new DOMParser().parseFromString(`<pic:spPr xmlns:pic="p" xmlns:a="a">${x.replace(/<a:/g, '<a:').replace(/<\/a:/g, '</a:')}</pic:spPr>`, 'application/xml').documentElement;
+    const el = new DOMParser().parseFromString(`<pic:spPr xmlns:pic="p" xmlns:a="a">${x}</pic:spPr>`, 'application/xml').documentElement;
     expect(readLook(el)).toEqual({ frame: 1.5, frameColor: '#1f4e79', shadow: 'soft' });
     expect(lookXml(undefined)).toBe('');
   });

@@ -26,3 +26,14 @@ export function descendants(root: Element): Element[] {
 export function wellFormed(text: string): string {
   return text.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '\uFFFD');
 }
+
+/**
+ * XML text without its DOCTYPE, internal subset included, so a file can neither fetch a DTD
+ * nor declare entities that swell into a huge text. A DOCTYPE that can't be cut out cleanly
+ * (so might still declare something) is refused.
+ */
+export function withoutDoctype(text: string): string {
+  const out = text.replace(/<!DOCTYPE(?:[^>[]|\[(?:[^\]"']|"[^"]*"|'[^']*')*\])*>/gi, '');
+  if (/<!(?:DOCTYPE|ENTITY)/i.test(out)) throw new Error('This file declares XML entities, which are not allowed.');
+  return out;
+}

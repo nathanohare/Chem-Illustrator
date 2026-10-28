@@ -92,14 +92,14 @@ export const CHART_FONT = 'Arial';
 
 interface Run { t: string; pos: 'base' | 'sub' | 'sup' }
 
-/** Split "k_{obs} (s^{-1})" into runs; a single character may follow _ or ^ without braces; \_ is a plain _. */
+/** Split "k_{obs} (s^{-1})" into runs; a single character may follow _ or ^ without braces; \_, \^ and \\ are a plain _, ^ and \. */
 export function textRuns(text: string): Run[] {
   const out: Run[] = [];
   let buf = '';
   const flush = () => { if (buf) { out.push({ t: buf, pos: 'base' }); buf = ''; } };
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
-    if (ch === '\\' && (text[i + 1] === '_' || text[i + 1] === '^')) { buf += text[++i]; continue; }
+    if (ch === '\\' && (text[i + 1] === '_' || text[i + 1] === '^' || text[i + 1] === '\\')) { buf += text[++i]; continue; }
     if ((ch === '_' || ch === '^') && i + 1 < text.length) {
       let t: string;
       if (text[i + 1] === '{') {

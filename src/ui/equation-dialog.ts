@@ -101,9 +101,10 @@ export function askEquation(opts: { tex: string; display?: boolean; font: string
       const a = ta.selectionStart, b = ta.selectionEnd;
       const picked = ta.value.slice(a, b);
       // a selection goes inside the first braces of a piece
-      let text = tex.replace('|', picked ? `${picked}|` : '|');
-      const caret = text.indexOf('|');
-      text = text.replace('|', '');
+      const mark = tex.indexOf('|');
+      const before = mark < 0 ? tex : tex.slice(0, mark) + picked;
+      const text = mark < 0 ? tex : before + tex.slice(mark + 1);
+      const caret = mark < 0 ? -1 : before.length;
       ta.setRangeText(text, a, b, 'end');
       const at = a + (caret >= 0 ? caret : text.length);
       ta.setSelectionRange(at, at);
