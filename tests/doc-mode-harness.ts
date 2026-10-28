@@ -24,7 +24,9 @@ g.ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
 /** A DocumentMode showing a new document made from `t` (its runs, paragraphs and objects). */
 export async function docMode(t: Partial<DocText>): Promise<{ dm: DocumentMode; f: DocFile; ta: HTMLTextAreaElement }> {
   const html = readFileSync(join(__dirname, '../index.html'), 'utf8');
-  document.body.innerHTML = html.slice(html.indexOf('<body'), html.lastIndexOf('</body>')).replace(/^<body[^>]*>/, '').replace(/<script\b[\s\S]*?<\/script[^>]*>/gi, '');
+  document.body.innerHTML = html.slice(html.indexOf('<body'), html.lastIndexOf('</body>')).replace(/^<body[^>]*>/, '');
+  // innerHTML never runs scripts; take them out so none is left in the page either
+  for (const el of document.body.querySelectorAll('script')) el.remove();
   const { DocumentMode } = await import('../src/ui/doc-mode');
   const { DocFile } = await import('../src/document/doc-file');
   const { newDocument } = await import('../src/document/document');
