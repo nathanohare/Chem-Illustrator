@@ -27,7 +27,7 @@ import { tableContents } from '../editor/table-figs';
 import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
 import { geoDef, moveSteps, outlineParts, textArea, type GeoStep } from '../design/geo';
 import { FADE, tint } from '../colours';
-import { fillInk, mix, ringShadowSize, shadowLook } from '../render/fills';
+import { fillInk, mix, ringShadowGroups, ringShadowSize, shadowLook } from '../render/fills';
 import { shapeShadow } from '../render/highlight-fx';
 import { parseColor } from '../render/vector';
 import { layoutTable, cellAlign, isCovered, spanOf, partAt, NOTE_SCALE } from '../table';
@@ -134,6 +134,8 @@ class CdxmlWriter {
   /** Atoms found unchanged since the file was read (see untouched). */
   private untouchedAtoms = new Map<number, boolean>();
   private changed = false;
+  /** Fused ring fills that cast one shadow (worked out when the first ring fill is saved). */
+  private ringShadows?: Map<number, Shape[]>;
   /** Older copies of arrows that ChemDraw keeps for old versions, by the arrow they belong to. */
   private legacy: Map<string, Element[]> | null = null;
 
@@ -1369,10 +1371,14 @@ class CdxmlWriter {
         }));
       }
     };
-    if (ringPts && s.shadow) {
+    // fused rings cast one shadow round their outer edge, saved with the first of them
+    this.ringShadows ??= ringShadowGroups(this.doc.shapes.values(), this.doc.style.bondLength);
+    const group = s.kind === 'ring' ? this.ringShadows.get(s.id) : undefined;
+    if (ringPts && s.shadow && (!group || group[0] === s)) {
       // ChemDraw has no see-through colours: the shadow is the grey it looks on white
       const look = shadowLook(s, ringShadowSize(s, this.doc.style.bondLength));
-      for (const p of shapeShadow([ringPts], look, true)) {
+      const polys = group ? group.map((r) => r.ring!.map((id) => this.doc.atoms.get(id)).filter((a): a is NonNullable<typeof a> => !!a)) : [ringPts];
+      for (const p of shapeShadow(polys, look, true)) {
         const { a } = parseColor(p.colour);
         for (const r of p.region) curves([...r.map((v, i): GeoStep => [i ? 'L' : 'M', v.x - b.x1, v.y - b.y1]), ['Z']], 'fill', mix('#ffffff', look.colour, a));
       }

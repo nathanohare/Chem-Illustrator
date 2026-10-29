@@ -72,6 +72,32 @@ export function shadowLook(s: Pick<Shape, 'kind' | 'shadowSize' | 'shadowColor' 
 }
 
 /**
+ * Ring fills that cast one shadow between them: fused rings (sharing an atom) whose shadows look
+ * the same cast one round their outer edge, so no ring's shadow falls on its neighbour's fill. A
+ * ring set to keep its shadow between fused rings (shadowBetween) casts its own. Each ring in a
+ * group of two or more maps to the group, in the order given (the first paints the shadow).
+ */
+export function ringShadowGroups(shapes: Iterable<Shape>, bondLength: number): Map<number, Shape[]> {
+  const rings = [...shapes].filter((s) => s.kind === 'ring' && s.shadow && !s.shadowBetween && (s.ring?.length ?? 0) > 2);
+  const up = rings.map((_, i) => i);
+  const root = (i: number): number => (up[i] === i ? i : (up[i] = root(up[i])));
+  const looks = rings.map((s) => JSON.stringify(shadowLook(s, ringShadowSize(s, bondLength))));
+  const byAtom = new Map<number, number[]>();
+  rings.forEach((s, i) => {
+    for (const a of s.ring!) {
+      const here = byAtom.get(a) ?? [];
+      for (const j of here) if (looks[j] === looks[i]) up[root(i)] = root(j);
+      byAtom.set(a, [...here, i]);
+    }
+  });
+  const groups = new Map<number, Shape[]>();
+  rings.forEach((s, i) => { const r = root(i); groups.set(r, [...(groups.get(r) ?? []), s]); });
+  const out = new Map<number, Shape[]>();
+  for (const g of groups.values()) if (g.length > 1) for (const s of g) out.set(s.id, g);
+  return out;
+}
+
+/**
  * The polygon's drop shadow, `dx`, `dy` away, where it sticks out past the polygon (so a see-through
  * fill or a pattern on its own shows nothing under it): pieces of the moved polygon outside each
  * edge in turn. A ring that is not convex gets the whole moved polygon.
