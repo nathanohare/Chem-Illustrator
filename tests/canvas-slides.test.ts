@@ -11,8 +11,9 @@ import { Deck, WIDE, STANDARD } from '../src/deck/deck';
 import {
   addKeyframe, insertKeyframe, keyframeAround, keyRect, keyAt, keysBounds, moveKeyframe, removeKeyframe, snapKeyframe, zoomByCorner,
   canvasTag, readCanvasTag, clampZoom, ZOOM_MIN, shownRect, slidePlace, syncCamera, isCamera, distanceDur, timedCamera, viewBetween, cameraAt,
-  withCameraMoves, type CanvasData,
+  withCameraMoves, PARALLAX_MAX, type CanvasData,
 } from '../src/deck/canvas';
+import { routeEnds } from '../src/deck/canvas-look';
 import { buildSteps, type Anim } from '../src/deck/animation';
 import { writePptx, type PptxOptions } from '../src/io/pptx-write';
 import { readPptx } from '../src/io/pptx-read';
@@ -283,5 +284,43 @@ describe('moving between keyframes', () => {
     }, opts);
     const back = readPptx(bytes).slides[1];
     expect(back.anims!.map((a) => [a.effect, a.start, a.move ?? null])).toEqual([['camera', 'click', 'pan'], ['fade', 'with', null], ['camera', 'click', 'fly']]);
+  });
+});
+
+describe('the look of a canvas', () => {
+  it('keeps titles, zones and the background look in the tag, turning down what makes no sense', () => {
+    const c: CanvasData = {
+      keys: [{ id: 1, x: 0, y: 0, zoom: 1, title: 'Fragment A', tint: '#ffb3b3' }, { id: 2, x: 900, y: 0, zoom: 1 }],
+      look: { route: ['#fff7e6', '#e6f0ff'], texture: 'hex', parallax: 0.5 },
+    };
+    expect(readCanvasTag(canvasTag(c))).toEqual(c);
+    const odd = '{"keys":[[1,0,0,1,"",42]],"look":{"route":["red","#000000"],"texture":"stars","parallax":3}}';
+    expect(readCanvasTag(odd)).toEqual({ keys: [{ id: 1, x: 0, y: 0, zoom: 1 }], look: { parallax: PARALLAX_MAX } });
+  });
+
+  it('gives a new keyframe the title and zone of the one before, and keeps the look as keyframes change', () => {
+    const { d } = deck();
+    d.addCanvasSlide();
+    d.setCanvas({ keys: [{ id: 1, x: 0, y: 0, zoom: 1, title: 'Endgame', tint: '#9ad0ff' }], look: { texture: 'dots' } });
+    const next = addKeyframe(d.current!.canvas!, d.size);
+    expect(next.canvas.keys[1]).toMatchObject({ title: 'Endgame', tint: '#9ad0ff', x: 480 });
+    // keyframes given on their own keep the canvas's look; a look set to nothing goes
+    d.setCanvas(next.canvas);
+    expect(d.current!.canvas!.look).toEqual({ texture: 'dots' });
+    d.setCanvas({ keys: d.current!.canvas!.keys, look: undefined });
+    expect(d.current!.canvas!.look).toBeUndefined();
+    d.undo();
+    expect(d.current!.canvas!.look).toEqual({ texture: 'dots' });
+    // the page of a keyframe carries its title and the canvas, for drawing its background and screen
+    expect(d.page(1, 1)).toMatchObject({ title: 'Endgame', canvas: d.current!.canvas });
+  });
+
+  it('runs the route gradient from the first keyframe to the last, or across them all when the route comes back', () => {
+    const [a, b] = routeEnds({ keys: [{ id: 1, x: 0, y: 0, zoom: 1 }, { id: 2, x: 3000, y: 540, zoom: 1 }] }, size);
+    expect(a).toEqual({ x: 480, y: 270 });
+    expect(b).toEqual({ x: 3480, y: 810 });
+    const [c, e] = routeEnds({ keys: [{ id: 1, x: 0, y: 0, zoom: 1 }, { id: 2, x: 1000, y: 0, zoom: 1 }, { id: 3, x: 100, y: 0, zoom: 1 }] }, size);
+    expect(c.x).toBe(0);
+    expect(e.x).toBe(1960);
   });
 });

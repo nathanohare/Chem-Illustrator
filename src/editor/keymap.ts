@@ -184,7 +184,7 @@ export const COMMAND_NAMES: Record<string, string> = {
   'new-slides': 'New slides', 'close-tab': 'Close the file', 'next-tab': 'Next file', 'prev-tab': 'Previous file',
   'export-pdf': 'Export PDF…', 'insert-picture': 'Insert a picture…', 'import-pdf': 'Import Structures from PDF…', 'import-picture': 'Import Structures from Picture…', 'import-paste': 'Paste Picture as Structure', crop: 'Crop the selected picture',
   'new-slide': 'New slide', 'duplicate-slide': 'Duplicate slide', 'delete-slide': 'Delete slide',
-  'new-canvas-slide': 'New Canvas Slide (no edge; the show steps through its keyframes)', 'add-keyframe': 'Add Keyframe', 'keyframe-here': 'Keyframe from Window', 'fit-keyframe': 'Fit Keyframe to Selection', 'delete-keyframe': 'Delete Keyframe',
+  'new-canvas-slide': 'New Canvas Slide (no edge; the show steps through its keyframes)', 'add-keyframe': 'Add Keyframe', 'keyframe-here': 'Keyframe from Window', 'fit-keyframe': 'Fit Keyframe to Selection', 'delete-keyframe': 'Delete Keyframe', 'keyframe-title': 'Keyframe Title…', 'keyframe-zone': 'Zone Colour…', 'canvas-background': 'Canvas Background…', 'canvas-heading': 'Canvas Heading',
   'cut-slides': 'Cut slides', 'copy-slides': 'Copy slides', 'paste-slides': 'Paste slides', 'paste-slides-keep': 'Paste slides keeping their own look',
   'hide-slide': 'Hide slide (or show it again)', 'selection-pane': 'Selection Pane: every object on the slide, to pick, hide or rename', 'reuse-slides': 'Reuse slides from another PowerPoint file…',
   'next-slide': 'Next slide', 'prev-slide': 'Previous slide', 'slide-master': 'Slide Master…',

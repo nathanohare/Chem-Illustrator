@@ -635,12 +635,16 @@ export class Deck {
 
   /**
    * What slide i's page needs to be drawn: its size, master, layout, number and background. On a
-   * canvas slide, `view` is the part of the canvas keyframe `key` shows (the first by default).
+   * canvas slide, `view` is the part of the canvas keyframe `key` shows (the first by default),
+   * with the canvas (for its background) and the keyframe's title.
    */
-  page(i = this.index, key = 0): { size: SlideSize; master: Master; layout: LayoutId; index: number; own?: Background; hideGraphics?: boolean; hf?: SlideHF; view?: Rect } {
+  page(i = this.index, key = 0): { size: SlideSize; master: Master; layout: LayoutId; index: number; own?: Background; hideGraphics?: boolean; hf?: SlideHF; view?: Rect; canvas?: CanvasData; title?: string } {
     const s = this.slides[i];
     const k = s?.canvas?.keys[Math.max(0, Math.min(s.canvas.keys.length - 1, key))];
-    return { size: this.size, master: this.master, layout: s?.layout ?? 'blank', index: i, own: s?.background, hideGraphics: s?.hideGraphics, hf: s?.hf, ...(k ? { view: keyRect(k, this.size) } : {}) };
+    return {
+      size: this.size, master: this.master, layout: s?.layout ?? 'blank', index: i, own: s?.background, hideGraphics: s?.hideGraphics, hf: s?.hf,
+      ...(k ? { view: keyRect(k, this.size), canvas: s.canvas, ...(k.title ? { title: k.title } : {}) } : {}),
+    };
   }
 
   /** Restyle every slide's drawing after the master or backgrounds change. */
@@ -933,7 +937,8 @@ export class Deck {
   setCanvas(c: CanvasData, label = 'Keyframes', i = this.index): void {
     const s = this.slides[i];
     if (!s?.canvas || !c.keys.length) return;
-    const before = copyCanvas(s.canvas), after = copyCanvas(c);
+    // (keyframes given without a look keep the canvas's look)
+    const before = copyCanvas(s.canvas), after = copyCanvas({ ...s.canvas, ...c });
     if (JSON.stringify(before) === JSON.stringify(after)) return;
     const animsBefore = copyMotion(s).anims ?? [];
     const animsAfter = syncCamera(animsBefore, after.keys);
@@ -1367,7 +1372,7 @@ export class Deck {
     // canvas slides' keyframes go where the drawing under them goes
     const canvases = this.slides.filter((s) => s.canvas);
     const keysBefore = canvases.map((s) => copyCanvas(s.canvas!));
-    const keysAfter = keysBefore.map((c) => ({ keys: c.keys.map((x) => scaleKeyframe(x, old, size, k)) }));
+    const keysAfter = keysBefore.map((c) => ({ ...c, keys: c.keys.map((x) => scaleKeyframe(x, old, size, k)) }));
     const putKeys = (cs: CanvasData[]) => canvases.forEach((s, j) => { s.canvas = copyCanvas(cs[j]); });
     this.contentEdit('Change slide size', all, () => {
       putKeys(keysAfter);

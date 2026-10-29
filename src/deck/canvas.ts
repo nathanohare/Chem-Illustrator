@@ -11,12 +11,26 @@ import type { Anim, CameraMove } from './animation';
 
 /**
  * A keyframe: the window's top-left corner on the canvas (points) and its size, as how many
- * slide widths wide it is (1: the slide's own size; 0.5: zoomed in 2×; 3: zoomed out 3×).
+ * slide widths wide it is (1: the slide's own size; 0.5: zoomed in 2×; 3: zoomed out 3×). Its
+ * `title` shows fixed to the screen while the show is there; its `tint` colours the background
+ * softly round it (a zone: keyframes next to each other with one tint make one zone).
  */
-export interface Keyframe { id: number; x: number; y: number; zoom: number }
+export interface Keyframe { id: number; x: number; y: number; zoom: number; title?: string; tint?: string }
 
-/** What makes a slide a canvas slide: its keyframes, in the order the show plays them. */
-export interface CanvasData { keys: Keyframe[] }
+/**
+ * How a canvas's endless background looks (canvas-look.ts): the master's background colour,
+ * and over it a gradient from the first keyframe to the last (`route`, its colours in order), a
+ * faint pattern that moves with the canvas, and parallax: the background moving slower than the
+ * drawing (0: with it; 0.5: at half its speed), for a sense of depth.
+ */
+export interface CanvasLook { route?: string[]; texture?: Texture; parallax?: number }
+export type Texture = 'dots' | 'grid' | 'hex';
+export const TEXTURES: { id: Texture; name: string }[] = [{ id: 'dots', name: 'Dots' }, { id: 'grid', name: 'Grid' }, { id: 'hex', name: 'Hexagons' }];
+/** The most parallax there can be (the background still moves a fifth as fast). */
+export const PARALLAX_MAX = 0.8;
+
+/** What makes a slide a canvas slide: its keyframes, in the order the show plays them, and its background's look. */
+export interface CanvasData { keys: Keyframe[]; look?: CanvasLook }
 
 export interface Size { w: number; h: number }
 
@@ -41,7 +55,10 @@ export function newCanvas(): CanvasData {
   return { keys: [{ id: 1, x: 0, y: 0, zoom: 1 }] };
 }
 
-export const copyCanvas = (c: CanvasData): CanvasData => ({ keys: c.keys.map((k) => ({ ...k })) });
+export const copyCanvas = (c: CanvasData): CanvasData => ({
+  keys: c.keys.map((k) => ({ ...k })),
+  ...(c.look ? { look: { ...c.look, ...(c.look.route ? { route: [...c.look.route] } : {}) } } : {}),
+});
 
 const nextId = (keys: Keyframe[]) => keys.reduce((m, k) => Math.max(m, k.id), 0) + 1;
 
@@ -49,7 +66,8 @@ const nextId = (keys: Keyframe[]) => keys.reduce((m, k) => Math.max(m, k.id), 0)
 export function addKeyframe(c: CanvasData, size: Size, after = c.keys.length - 1, step = KEY_STEP): { canvas: CanvasData; index: number } {
   const keys = c.keys.map((k) => ({ ...k }));
   const from = keys[Math.max(0, Math.min(keys.length - 1, after))];
-  const k: Keyframe = from ? { id: nextId(keys), x: from.x + size.w * from.zoom * step, y: from.y, zoom: from.zoom } : { id: nextId(keys), x: 0, y: 0, zoom: 1 };
+  // (it keeps the title and zone of the one it follows: the next step of the same part of the route)
+  const k: Keyframe = from ? { ...from, id: nextId(keys), x: from.x + size.w * from.zoom * step, y: from.y } : { id: nextId(keys), x: 0, y: 0, zoom: 1 };
   const at = from ? keys.indexOf(from) + 1 : 0;
   keys.splice(at, 0, k);
   return { canvas: { keys }, index: at };
@@ -329,7 +347,8 @@ export function canvasTag(c: CanvasData, anims: Anim[] = []): string {
     if (isCamera(a)) moves.push([others, a.target.id, a.start, a.delay, a.dur, a.move ?? 'pan', a.byDistance ? 1 : 0]);
     else others++;
   }
-  return JSON.stringify({ v: 1, keys: c.keys.map((k) => [k.id, +k.x.toFixed(3), +k.y.toFixed(3), +k.zoom.toFixed(5)]), ...(moves.length ? { moves } : {}) });
+  const keys = c.keys.map((k) => [k.id, +k.x.toFixed(3), +k.y.toFixed(3), +k.zoom.toFixed(5), ...(k.title || k.tint ? [k.title ?? '', k.tint ?? ''] : [])]);
+  return JSON.stringify({ v: 1, keys, ...(moves.length ? { moves } : {}), ...(c.look && Object.keys(c.look).length ? { look: c.look } : {}) });
 }
 
 /** The slide's animations read from PowerPoint with the keyframe moves from its tag put back in their places. */
@@ -359,17 +378,36 @@ export function withCameraMoves(anims: Anim[], text: string | undefined): Anim[]
 export function readCanvasTag(text: string | undefined): CanvasData | null {
   if (!text) return null;
   try {
-    const o = JSON.parse(text) as { keys?: unknown };
+    const o = JSON.parse(text) as { keys?: unknown; look?: unknown };
     if (!Array.isArray(o.keys)) return null;
     const keys: Keyframe[] = [];
     for (const row of o.keys) {
       if (!Array.isArray(row)) continue;
-      const [id, x, y, zoom] = row.map(Number);
+      const [id, x, y, zoom] = row.slice(0, 4).map(Number);
       if (![id, x, y, zoom].every(Number.isFinite)) continue;
-      keys.push({ id: keys.some((k) => k.id === id) ? nextId(keys) : id, x, y, zoom: clampZoom(zoom) });
+      const title = typeof row[4] === 'string' && row[4] ? row[4] : undefined, tint = isColour(row[5]) ? row[5] : undefined;
+      keys.push({ id: keys.some((k) => k.id === id) ? nextId(keys) : id, x, y, zoom: clampZoom(zoom), ...(title ? { title } : {}), ...(tint ? { tint } : {}) });
     }
-    return keys.length ? { keys } : null;
+    const look = readLook(o.look);
+    return keys.length ? { keys, ...(look ? { look } : {}) } : null;
   } catch {
     return null;
   }
+}
+
+const isColour = (v: unknown): v is string => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v);
+
+/** A canvas's look read back from its tag, keeping only what makes sense. */
+function readLook(v: unknown): CanvasLook | null {
+  if (!v || typeof v !== 'object') return null;
+  const o = v as Record<string, unknown>;
+  const look: CanvasLook = {};
+  if (Array.isArray(o.route)) {
+    const route = o.route.filter(isColour).slice(0, 5);
+    if (route.length >= 2) look.route = route;
+  }
+  if (TEXTURES.some((t) => t.id === o.texture)) look.texture = o.texture as Texture;
+  const p = Number(o.parallax);
+  if (Number.isFinite(p) && p > 0) look.parallax = Math.min(PARALLAX_MAX, p);
+  return Object.keys(look).length ? look : null;
 }

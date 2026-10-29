@@ -13,7 +13,7 @@ import { measureText } from '../render/renderer';
 import { linkAtPoint } from '../links';
 import { turnAbout } from '../geom';
 import type { Deck } from './deck';
-import { paintSlide, drawDrawing, type SlidePage } from './slide-view';
+import { paintSlide, drawDrawing, drawCanvasUnder, drawScreen, drawKeyTitle, type SlidePage } from './slide-view';
 import { cameraAt, isCamera, keyRect, shownRect, slidePlace, slideShaped, timedCamera, unionRect, viewBetween, type CameraAt } from './canvas';
 import { selectionBox, POINTS } from '../editor/arrange';
 import type { Rect } from '../geom';
@@ -133,7 +133,9 @@ export class SlideFrames {
     for (const p of this.parts) if (p.para !== undefined) lifted.add(p);
     const out = [...lifted];
     const still = lifted.size ? subDoc(doc, (kind, id) => !out.some((p) => inPart(p, kind, id)), strip) : doc;
-    this.at = paintSlide(this.base, w, h, dpr, page, still, fill);
+    // (a canvas slide's frames are its drawing alone, on a clear canvas: the show draws its
+    // background and screen layer under it for wherever the view is)
+    this.at = paintSlide(this.base, w, h, dpr, page, still, page.view ? null : fill, !page.view);
     for (const part of this.parts.filter((p) => lifted.has(p))) {
       let box: Rect, one: Doc;
       if (part.para !== undefined) {
@@ -911,23 +913,60 @@ export class Player {
     return 'at' in c ? c.at : c.from;
   }
 
+  /** Where a part of the canvas shown on the screen goes (CSS pixels; k is pixels per point), and where the slide's own place is. */
+  private placeOf(view: Rect): { x: number; y: number; k: number } {
+    return slidePlace(this.w, this.h, { size: this.deck.size, view });
+  }
+
+  /**
+   * Under a canvas slide's drawing: the fill round the slide's place, the canvas's background
+   * as the view `view` sees it, and the screen layer (the master's shapes and footer, and the
+   * keyframes' titles: `titles`, each with how much of it shows). Leaves `ctx` cut to the slide's place.
+   */
+  private drawUnder(ctx: CanvasRenderingContext2D, view: Rect, titles: [string | undefined, number][]): void {
+    const d = this.dpr, size = this.deck.size;
+    const page = this.deck.page(this.i, this.keyNow);
+    const box = slidePlace(this.w, this.h, { size });
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = this.fill;
+    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.beginPath();
+    ctx.rect(box.x * d, box.y * d, size.w * box.k * d, size.h * box.k * d);
+    ctx.clip();
+    const at = this.placeOf(view);
+    ctx.setTransform(at.k * d, 0, 0, at.k * d, at.x * d, at.y * d);
+    drawCanvasUnder(ctx, page, view, true);
+    ctx.setTransform(box.k * d, 0, 0, box.k * d, box.x * d, box.y * d);
+    drawScreen(ctx, page);
+    for (const [title, a] of titles) if (title && a > 0) drawKeyTitle(ctx, page, title, a);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  /** A canvas slide at keyframe `key`: its background, screen layer and drawing. */
+  private drawKey(ctx: CanvasRenderingContext2D, key: number, t: number, fired: Map<string, { done: number; t: number }>): void {
+    const k = this.deck.slides[this.i].canvas!.keys[key];
+    ctx.save();
+    this.drawUnder(ctx, keyRect(k, this.deck.size), [[k.title, 1]]);
+    this.framesFor(this.i, key).draw(ctx, this.done, t, fired);
+    ctx.restore();
+  }
+
   /**
    * A canvas slide's view on its way from one keyframe to another: a glide over a sweep of the
-   * canvas painted once for the whole move (sharper the less it has to take in), with the two
-   * keyframes' own sharp frames over it near the ends; or one keyframe fading in over the other.
+   * drawing painted once for the whole move (sharper the less it has to take in), with the two
+   * keyframes' own sharp frames over it near the ends, the background drawn for each moment and
+   * the titles cross-fading; or one keyframe fading in over the other.
    */
   private drawMove(ctx: CanvasRenderingContext2D, c: Extract<CameraAt, { from: number }>, t: number, fired: Map<string, { done: number; t: number }>): void {
     const keys = this.deck.slides[this.i].canvas!.keys, size = this.deck.size;
     const A = keys[c.from], B = keys[c.to];
-    const fa = this.framesFor(this.i, c.from), fb = this.framesFor(this.i, c.to);
-    const W = this.canvas.width, H = this.canvas.height;
     if (c.move === 'fade' || c.move === 'cut') {
-      fa.draw(ctx, this.done, t, fired);
+      this.drawKey(ctx, c.from, t, fired);
+      const W = this.canvas.width, H = this.canvas.height;
       const sc = (this.scratch ??= document.createElement('canvas'));
       if (sc.width !== W) sc.width = W;
       if (sc.height !== H) sc.height = H;
-      const g = sc.getContext('2d')!;
-      fb.draw(g, this.done, t, fired);
+      this.drawKey(sc.getContext('2d')!, c.to, t, fired);
       ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = c.move === 'cut' ? 1 : ease(c.p);
@@ -935,25 +974,22 @@ export class Player {
       ctx.restore();
       return;
     }
+    const fa = this.framesFor(this.i, c.from), fb = this.framesFor(this.i, c.to);
     // the sweep: a slide-shaped part of the canvas the view stays inside all the way
     let r = unionRect(keyRect(A, size), keyRect(B, size));
     for (let k = 1; k < 16; k++) r = unionRect(r, viewBetween(A, B, k / 16, c.move, size));
     const sweep = slideShaped(r, size);
     // painted as many times bigger than the screen as it is wider than the nearer keyframe, within reason
+    const W = this.canvas.width, H = this.canvas.height;
     const zoomOut = (sweep.x2 - sweep.x1) / size.w / Math.min(A.zoom, B.zoom);
     const f = Math.max(1, Math.min(zoomOut, 3, Math.sqrt(36e6 / Math.max(1, W * H))));
     const fs = this.keep(`${c.from}>${c.to} ${c.move}`, () => new SlideFrames({ ...this.deck.page(this.i), view: sweep }, this.deck.docOf(this.i), this.animsOf(this.i), this.w * f, this.h * f, this.dpr, this.fill));
     const view = viewBetween(A, B, c.p, c.move, size);
-    const at = slidePlace(this.w, this.h, { size, view });
-    const box = slidePlace(this.w, this.h, { size });
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.fillStyle = this.fill;
-    ctx.fillRect(0, 0, W, H);
+    const at = this.placeOf(view);
     ctx.save();
-    // nothing spills past the slide's place on the screen
-    ctx.beginPath();
-    ctx.rect(box.x * this.dpr, box.y * this.dpr, size.w * box.k * this.dpr, size.h * box.k * this.dpr);
-    ctx.clip();
+    // a title the two keyframes share stays still; another cross-fades
+    const e = ease(c.p);
+    this.drawUnder(ctx, view, A.title === B.title ? [[A.title, 1]] : [[A.title, 1 - e], [B.title, e]]);
     fs.drawAt(ctx, at, this.done, t, fired);
     // the keyframes' own sharp frames over the sweep near the ends of the move
     const ends: [SlideFrames, number][] = [[fa, 1 - c.p / 0.25], [fb, (c.p - 0.75) / 0.25]];
@@ -967,9 +1003,10 @@ export class Player {
 
   /** Draw the slide showing, `t` seconds into the step being played (t < 0: none is). */
   private drawNow(ctx: CanvasRenderingContext2D, t: number, fired: Map<string, { done: number; t: number }>): void {
+    if (!this.deck.slides[this.i]?.canvas) { this.current.draw(ctx, this.done, t, fired); return; }
     const c = this.camera(this.done, t);
     if ('from' in c) this.drawMove(ctx, c, t, fired);
-    else this.framesFor(this.i, c.at).draw(ctx, this.done, t, fired);
+    else this.drawKey(ctx, c.at, t, fired);
   }
 
   /** The slide the show plays after slide i (in its order), or -1 at the end. */
@@ -1145,7 +1182,7 @@ export class Player {
         m.to = document.createElement('canvas');
         m.to.width = this.canvas.width;
         m.to.height = this.canvas.height;
-        this.current.draw(m.to.getContext('2d')!, this.done, -1, this.firedAt(now));
+        this.drawNow(m.to.getContext('2d')!, -1, this.firedAt(now));
       }
       if (m.morph === null && m.was !== undefined) m.morph = this.morphFrom(m.was);
       if (m.zoom) drawZoom(ctx, m.from!, m.to, m.zoom.rect, p, m.zoom.out, this.canvas.width, this.canvas.height);
@@ -1166,13 +1203,13 @@ export class Player {
       if (!st || (now - m.t0) / 1000 >= st.length) {
         this.moving = null;
         this.fired.set(m.key, { done: f + 1 });
-        this.current.draw(ctx, this.done, -1, this.firedAt(now));
+        this.drawNow(ctx, -1, this.firedAt(now));
         this.videos(true);
         this.onChange();
         this.idle();
         return;
       }
-      this.current.draw(ctx, this.done, -1, this.firedAt(now));
+      this.drawNow(ctx, -1, this.firedAt(now));
       return;
     }
     if (m?.kind === 'step') {
@@ -1181,7 +1218,7 @@ export class Player {
       if (!st || t >= st.length) {
         this.moving = null;
         this.done = Math.min(this.current.stepCount, this.done + 1);
-        this.current.draw(ctx, this.done, -1, this.firedAt(now));
+        this.drawNow(ctx, -1, this.firedAt(now));
         this.videos(true);
         this.onChange();
         this.idle();
@@ -1190,7 +1227,7 @@ export class Player {
       this.drawNow(ctx, t, this.firedAt(now));
       return;
     }
-    this.current.draw(ctx, this.done, -1, this.firedAt(now));
+    this.drawNow(ctx, -1, this.firedAt(now));
     this.videos(true);
   }
 }

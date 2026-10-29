@@ -426,6 +426,9 @@
     <button class="keyframes-only" role="menuitem" data-cmd="keyframe-here" title="A new keyframe showing what is in the window now">Keyframe from Window</button>
     <button class="keyframes-only" role="menuitem" data-cmd="fit-keyframe" title="The keyframe picked shows what is selected">Fit Keyframe to Selection</button>
     <button class="keyframes-only" role="menuitem" data-cmd="delete-keyframe" title="Take away the keyframe picked">Delete Keyframe</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="keyframe-title" title="The title shown fixed to the screen while the show is at the keyframe picked">Keyframe Title…</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="keyframe-zone" title="A soft tint in the background round the keyframe picked: give a part of the route its own colour">Zone Colour…</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="canvas-heading" title="A large, faint label marking a part of the route, such as Fragment A or Endgame">Canvas Heading</button>
     <button data-modes="slides" role="menuitem" data-cmd="reuse-slides" title="Slides from another PowerPoint file: see them all, pick the ones you want">Reuse Slides…</button>
     <button data-modes="slides" role="menuitem" data-cmd="insert-slide-zoom" title="Pictures of other slides that zoom into them in the slide show">Slide Zoom…</button>
     <button data-modes="slides" role="menuitem" data-cmd="insert-summary-zoom" title="A slide of zooms, one for each part of the talk">Summary Zoom…</button>
@@ -586,6 +589,7 @@
     </div>
     <hr />
     <button data-modes="slides" role="menuitem" data-cmd="format-background" title="This slide's background (or every slide's): a colour, gradient, picture or pattern">Format Background…</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="canvas-background" title="A canvas slide's endless background: a gradient along the route, a faint pattern, parallax">Canvas Background…</button>
     <button data-modes="slides" role="menuitemcheckbox" aria-checked="false" data-cmd="hide-slide" title="The slide show skips the slides picked; they stay in the deck and in the PowerPoint file. Again to show them"><span>Hide Slide</span></button>
     <button data-modes="slides" role="menuitem" data-cmd="slide-transitions">Transitions…</button>
     <button data-modes="slides" role="menuitem" data-cmd="slide-animations">Animations…</button>
@@ -2193,6 +2197,11 @@
             <button data-cmd="fit-keyframe" title="The keyframe picked shows what is selected">Fit to Selection</button>
             <button data-cmd="delete-keyframe" title="Take away the keyframe picked">Delete</button>
           </div>
+          <div class="rb-col">
+            <button data-cmd="keyframe-title" title="The title shown fixed to the screen while the show is at the keyframe picked">Title…</button>
+            <button data-cmd="keyframe-zone" title="A soft tint in the background round the keyframe picked: give a part of the route its own colour">Zone…</button>
+            <button data-cmd="canvas-heading" title="A large, faint label marking a part of the route, such as Fragment A or Endgame">Heading</button>
+          </div>
         </div>
         <div class="rb-label">Keyframes</div>
       </div>
@@ -2474,6 +2483,7 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="format-background" title="The background of this slide, the slides picked, or every slide: a colour, gradient, picture or pattern, see-through as you like"><span class="rb-icon">▨</span>Format Background</button>
+          <button class="rb-big keyframes-only" hidden data-cmd="canvas-background" title="A canvas slide's endless background: a gradient along the route, a faint pattern, parallax. Zones: right-click a keyframe"><span class="rb-icon">◌</span>Canvas Background</button>
         </div>
         <div class="rb-label">Customize</div>
       </div>

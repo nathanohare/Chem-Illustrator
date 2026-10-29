@@ -63,7 +63,8 @@ import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND } from '.
 import { writePdf, jpegInfo, PdfPage, PdfImage } from './io/pdf';
 import { SlideList } from './ui/slide-list';
 import { CanvasKeys } from './ui/canvas-keys';
-import { addKeyframe, insertKeyframe, keyframeAround, keyRect, keysBounds, moveKeyframe, removeKeyframe, unionRect, ZOOM_IN_MAX } from './deck/canvas';
+import { addKeyframe, insertKeyframe, keyframeAround, keyRect, keysBounds, moveKeyframe, removeKeyframe, unionRect, ZOOM_IN_MAX, TEXTURES, PARALLAX_MAX, type CanvasLook, type Texture } from './deck/canvas';
+import { mix } from './render/fills';
 import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel } from './ui/design-panel';
 import { ShapeMenu } from './ui/shape-menu';
 import { whenIconsLoaded } from './design/icons';
@@ -2323,7 +2324,8 @@ const slidePage = {
   draw(ctx: CanvasRenderingContext2D): void {
     const d = deckNow();
     if (!d?.current) return;
-    drawSlidePage(ctx, d.page(), SURROUND);
+    // (a canvas slide: its background as the keyframe picked sees it, and the screen's title and footer there)
+    drawSlidePage(ctx, d.page(d.index, d.current.canvas ? canvasKeys.picked(d) : 0), SURROUND);
     // a canvas slide: no edge, so no slide grid or guides; its keyframes instead
     if (d.current.canvas && ws.active.mode === 'slides') { canvasKeys.draw(ctx, d, renderer.view.scale); slideCmts?.place(); return; }
     if (ws.active.mode === 'design' && designGrid.on) drawGrid(ctx, d.size, designGrid.step);
@@ -2409,6 +2411,81 @@ const keyframeCommands = {
     const k = canvasNow();
     if (!k) return;
     setKeyframes(k.d, moveKeyframe(k.c, from, to), to, 'Move keyframe');
+  },
+  /** The title shown fixed to the screen while the show is at keyframe i (the one picked by default). */
+  async title(i?: number): Promise<void> {
+    const k = canvasNow();
+    if (!k) return;
+    const at = i ?? k.i, key = k.c.keys[at];
+    if (!key) return;
+    const got = await ask(`Keyframe ${at + 1} Title`, [
+      { name: 'title', label: 'Title', value: key.title ?? '', placeholder: 'Shown where a slide\'s title goes, fixed to the screen' },
+    ], { ok: 'Set Title', note: 'The next keyframes you add take this title too. When the title changes from one keyframe to the next, the show cross-fades it; when it stays the same, it stays still. Leave it empty for no title.' });
+    if (got === null) return;
+    const title = got.title.trim();
+    setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === at ? (({ title: _, ...rest }) => (title ? { ...rest, title } : rest))(x) : x)) }, at, title ? 'Keyframe title' : 'Remove keyframe title');
+  },
+  /** A soft tint in the background round keyframe i: a zone (keyframes next to each other with one tint make one zone). */
+  async zone(i?: number): Promise<void> {
+    const k = canvasNow();
+    if (!k) return;
+    const at = i ?? k.i, key = k.c.keys[at];
+    if (!key) return;
+    const got = await ask(`Keyframe ${at + 1} Zone`, [
+      { name: 'on', label: 'Tint the background round this keyframe', value: String(!!key.tint), type: 'checkbox' },
+      { name: 'tint', label: 'Colour', value: key.tint ?? k.d.master.accent, type: 'color' },
+    ], { ok: 'Set Zone', note: 'A zone fades out softly over about half a slide, so it never shows an edge. Give the keyframes of one part of the route (a fragment, a campaign) the same colour to make one zone.' });
+    if (got === null) return;
+    const tint = got.on === 'true' && /^#[0-9a-f]{6}$/i.test(got.tint) ? got.tint.toLowerCase() : '';
+    setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === at ? (({ tint: _, ...rest }) => (tint ? { ...rest, tint } : rest))(x) : x)) }, at, tint ? 'Keyframe zone' : 'Remove keyframe zone');
+  },
+  /** How the canvas's endless background looks: the route gradient, a pattern, and parallax. */
+  async background(): Promise<void> {
+    const k = canvasNow();
+    if (!k) return;
+    const look = k.c.look ?? {};
+    const m = k.d.master;
+    const route = look.route ?? [mix(m.background, m.accent, 0.1), mix(m.background, m.accent2, 0.3)];
+    const got = await ask('Canvas Background', [
+      {
+        name: 'route', label: 'Background', value: look.route ? (look.route.length > 2 ? '3' : '2') : '0',
+        options: [{ value: '0', label: 'Plain (the slide master\'s colour)' }, { value: '2', label: 'Route gradient: two colours' }, { value: '3', label: 'Route gradient: three colours' }],
+        help: 'A wide, slow gradient from the first keyframe to the last, so the colour shifts as the talk moves along the route.',
+      },
+      { name: 'c1', label: 'Start colour', value: route[0], type: 'color' },
+      { name: 'c2', label: route.length > 2 ? 'Middle colour' : 'End colour', value: route[1], type: 'color' },
+      { name: 'c3', label: 'End colour (three colours)', value: route[2] ?? route[1], type: 'color' },
+      { name: 'texture', label: 'Pattern', value: look.texture ?? '', options: [{ value: '', label: 'None' }, ...TEXTURES.map((t) => ({ value: t.id, label: t.name }))], help: 'Faint, and it moves with the canvas, so a pan across empty space still feels like moving.' },
+      { name: 'parallax', label: 'Parallax', value: String(Math.round((look.parallax ?? 0) * 100)), type: 'number', unit: '%', help: `How much slower the background moves than the drawing, for a sense of depth (0 to ${PARALLAX_MAX * 100}; 50 is half as fast).` },
+    ], { ok: 'Apply', note: 'Zones: right-click a keyframe for Zone Colour. The background has no edges, so nothing sharp scrolls past in the show.' });
+    if (got === null) return;
+    const next: CanvasLook = {};
+    const colours = [got.c1, got.c2, got.c3].filter((c) => /^#[0-9a-f]{6}$/i.test(c)).map((c) => c.toLowerCase());
+    if (got.route === '2' && colours.length >= 2) next.route = colours.slice(0, 2);
+    if (got.route === '3' && colours.length >= 3) next.route = colours;
+    if (TEXTURES.some((t) => t.id === got.texture)) next.texture = got.texture as Texture;
+    const p = Number(got.parallax) / 100;
+    if (Number.isFinite(p) && p > 0) next.parallax = Math.min(PARALLAX_MAX, p);
+    k.d.setCanvas({ keys: k.c.keys, look: Object.keys(next).length ? next : undefined }, 'Canvas background');
+    renderer.repaintAll();
+    editor.requestScene();
+  },
+  /** A Canvas Heading: a large, faint label marking a part of the route ("Fragment A", "Endgame"), in the middle of the window. */
+  heading(): void {
+    const k = canvasNow();
+    if (!k) return;
+    const m = k.d.master;
+    const r = renderer.visibleRect(0);
+    const size = Math.round(m.titleSize * 2.4);
+    let id = 0;
+    doc.edit('Canvas heading', () => {
+      id = doc.addCaption({
+        x: (r.x1 + r.x2) / 2, y: (r.y1 + r.y2) / 2, justify: 'center',
+        runs: [{ text: 'Heading', font: m.titleFont, size, bold: true, color: mix(m.titleColor, m.background, 0.6) }],
+      }).id;
+    });
+    editor.selectThese({ atoms: new Set(), bonds: new Set(), captions: new Set([id]), arrows: new Set(), shapes: new Set() });
+    flash('Canvas Heading: type over it. It is ordinary text, faint and large, for marking a part of the route.');
   },
 };
 
@@ -2863,7 +2940,7 @@ const slideList = new SlideList($('#slide-list'), slideListHooks);
 
 /** Right-click on a keyframe (on the canvas or in the slide list). */
 function keyframeMenu(): MenuItem[] {
-  return [{ cmd: 'add-keyframe' }, { cmd: 'keyframe-here' }, { cmd: 'fit-keyframe' }, null, { cmd: 'delete-keyframe' }];
+  return [{ cmd: 'add-keyframe' }, { cmd: 'keyframe-here' }, { cmd: 'fit-keyframe' }, null, { cmd: 'keyframe-title' }, { cmd: 'keyframe-zone' }, { cmd: 'canvas-background' }, null, { cmd: 'delete-keyframe' }];
 }
 
 // View > Slides > Slide Sorter: every slide in rows of larger pictures, over the slide being edited.
@@ -5220,7 +5297,7 @@ function setPictureStyle(look: PictureLook | undefined): boolean {
 }
 
 /** Slide commands that don't apply to a design's single page. */
-const SLIDE_ONLY = new Set(['compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
+const SLIDE_ONLY = new Set(['compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
   'edit-layouts', 'view-sorter', 'add-section', 'rename-section', 'remove-section', 'remove-section-slides', 'remove-all-sections', 'section-up', 'section-down', 'collapse-sections', 'expand-sections',
   'slide-transitions', 'slide-animations', 'animation-pane', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-video', 'insert-audio',
   'reading-view', 'rehearse-timings', 'record-show', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
@@ -5314,6 +5391,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'keyframe-here': () => keyframeCommands.keyframeHere(),
   'fit-keyframe': () => keyframeCommands.fitToSelection(),
   'delete-keyframe': () => keyframeCommands.remove(),
+  'keyframe-title': () => void keyframeCommands.title(),
+  'keyframe-zone': () => void keyframeCommands.zone(),
+  'canvas-background': () => void keyframeCommands.background(),
+  'canvas-heading': () => keyframeCommands.heading(),
   'duplicate-slide': () => { const d = deckNow(); if (d) { finishTyping(); d.duplicate(pickedSlides()); } },
   'delete-slide': () => removeSlides(pickedSlides()),
   'cut-slides': () => copySlides(pickedSlides(), true),

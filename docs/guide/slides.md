@@ -89,6 +89,13 @@ The slide show steps through the canvas's **keyframes**. A keyframe is a slide-s
 
 A move comes and goes with its keyframe, so it can't be removed on its own: delete the keyframe, or set the move to Cut. Picking a move in the pane shows its keyframe. Presenter View counts keyframes and shows the keyframe the next click moves to. Canvas slides keep their keyframes and moves in the PowerPoint file and open as canvas slides again. PowerPoint shows a canvas slide as a single slide for now (what lies where the slide would be); a slide for each keyframe comes in a later update.
 
+**Design.** A canvas slide has no edge, so nothing with a hard edge scrolls past in the show:
+
+- **The screen layer.** The template's bars, the logo, slide number and footer stay fixed to the screen, so a canvas slide looks like the slides round it. Give a keyframe a **Title** (Home tab, Keyframes group, or right-click a keyframe) and it shows where a slide's title goes. The next keyframes you add take the same title. When the title changes, the show cross-fades it; when it stays the same, it stays still.
+- **Canvas Background…** (Design & Transitions tab, or right-click a keyframe): a **route gradient**, two or three colours running from the first keyframe to the last, so the colour shifts as the talk moves along the route; a faint **pattern** (dots, grid or hexagons) that moves with the canvas; and **parallax**, the background moving slower than the drawing for a sense of depth (50% is half as fast).
+- **Zone…** gives a keyframe a soft tint that fades out over about half a slide. Give the keyframes of one part of the route the same colour to make one zone (one per fragment, say).
+- **Heading** puts a large, faint label in the middle of the window, such as "Fragment A" or "Endgame", to mark a part of the route. It is ordinary text.
+
 ## The slide master
 
 **Design & Transitions** tab ▸ **Slide Master…** (or **Format ▸ Slides ▸ Slide Master…**) sets the look of every slide at once:
