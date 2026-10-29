@@ -24,7 +24,7 @@ import { attachDiamondSize, hasAttachDiamond } from './atom-marks';
 import { layoutText, FONT_STACK, withStack, type TextLayout } from '../text/layout';
 import { drawLayout } from '../text/draw';
 import { geoDef, moveSteps, textArea, traceSteps, type GeoStep } from '../design/geo';
-import { cutCorners, fillInk, patternClear, patternInk, ringShadowSize, shadowLook, insetPolygon, dotCentres, gradientBands, hatchLines, isDotPattern, patternAngles, patternSpacing, radialBands, shapePolygons } from './fills';
+import { cutCorners, fillInk, patternClear, patternInk, ringShadowGroups, ringShadowSize, shadowLook, insetPolygon, dotCentres, gradientBands, hatchLines, isDotPattern, patternAngles, patternSpacing, radialBands, shapePolygons } from './fills';
 import { placeholderRect, isEmptyText } from '../deck/deck';
 import { imageFor } from './images';
 import { hasShapeFx, shapeFx, type ShapeFxPaints } from './shape-fx';
@@ -687,6 +687,7 @@ export class Renderer {
     if (this.shapeVersion !== doc.version || !this.shapeList) {
       this.shapeList = shapeOrder([...doc.shapes.values()].filter((s) => !s.hidden));
       this.shapeVersion = doc.version;
+      this.ringShadows = ringShadowGroups(this.shapeList, doc.style.bondLength);
     }
     return this.shapeList;
   }
@@ -706,6 +707,7 @@ export class Renderer {
     this.ringDoc = doc;
 
     // Shapes behind the structures (filled boxes first).
+    this.shadowsCast.clear();
     for (const s of doc.onlyHighlights ? [] : this.sortedShapes(doc)) {
       const b = s.kind === 'table' ? this.tableBox(s) : s.rot ? shapeBox(s) : { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
       if (b.x2 < vis.x1 || b.x1 > vis.x2 || b.y2 < vis.y1 || b.y1 > vis.y2) continue;
@@ -1184,8 +1186,14 @@ export class Renderer {
         if (pts.length < 3) break;
         const L = this.ringDoc?.style.bondLength ?? 14.4;
         if (s.shadow) {
-          // down and to the right unless set, as a highlight's shadow, showing only where it sticks out
-          this.paintShadow(ctx, [pts], shadowLook(s, ringShadowSize(s, L)), true);
+          // down and to the right unless set, as a highlight's shadow, showing only where it sticks out;
+          // fused rings cast one round their outer edge, before any of their fills
+          const group = this.ringShadows.get(s.id);
+          if (!group) this.paintShadow(ctx, [pts], shadowLook(s, ringShadowSize(s, L)), true);
+          else if (!this.shadowsCast.has(group)) {
+            this.shadowsCast.add(group);
+            this.paintShadow(ctx, group.map((r) => this.ringPoints(r)), shadowLook(s, ringShadowSize(s, L)), true);
+          }
           ctx.beginPath();
         }
         ctx.moveTo(pts[0].x, pts[0].y);
@@ -1885,6 +1893,9 @@ export class Renderer {
 
   /** The drawing being drawn (ring fills sit on its atoms). */
   private ringDoc: Doc | null = null;
+  /** Fused ring fills that cast one shadow (see ringShadowGroups), and those cast so far this drawing. */
+  private ringShadows = new Map<number, Shape[]>();
+  private shadowsCast = new Set<Shape[]>();
 
   /**
    * Fill the path just traced for a filled box or oval, and draw its outline: a fill colour of

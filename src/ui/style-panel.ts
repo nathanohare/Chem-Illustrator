@@ -417,6 +417,10 @@ export class StylePanel {
           ...(p.colour !== undefined ? { shadowColor: p.colour === '#000000' ? undefined : p.colour } : {}), ...(p.opacity !== undefined ? { shadowOpacity: p.opacity } : {}),
           ...(p.angle !== undefined ? { shadowAngle: p.angle === 45 ? undefined : p.angle } : {}), ...(p.distance !== undefined ? { shadowSize: p.distance } : {}), ...(p.blur !== undefined ? { shadowBlur: p.blur || undefined } : {}),
         })));
+        // fused ring fills cast one shadow round their outer edge unless asked for one between them
+        const ring = any((x) => x.kind === 'ring' && !!x.shadow);
+        if (ring) this.check('Shadow between fused rings', !!ring.shadowBetween, (v) => set('Shadow between fused rings', (x) => x.kind === 'ring', () => ({ shadowBetween: v || undefined })),
+          'Each ring casts its own shadow, onto the rings fused to it too; untick for one shadow round the outer edge');
       });
     }
     if (geo) {

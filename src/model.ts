@@ -717,6 +717,11 @@ export interface Shape {
   /** Boxes, design shapes and ring fills: a drop shadow down and to the right. */
   shadow?: boolean;
   /**
+   * Ring fills: each ring of a fused system casts its own shadow, onto its neighbours' fills too
+   * (true), rather than the system casting one round its outer edge (absent, the default).
+   */
+  shadowBetween?: boolean;
+  /**
    * How far the shadow sticks out, in points (a box's default is four line widths, ChemDraw's; a
    * ring fill's is that of a highlight's shadow).
    */
