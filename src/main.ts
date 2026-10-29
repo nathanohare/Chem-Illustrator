@@ -9153,6 +9153,8 @@ async function keepPasteInside(): Promise<void> {
 /** Settings ▸ Page Grid. */
 async function pageGridSettings(): Promise<void> {
   const o = pageLook;
+  // sizes in pixels, with the one in use kept even when it isn't one of these
+  const px = (vs: number[], now: number) => [...new Set([...vs, now])].sort((a, b) => a - b).map((v) => ({ value: String(v), label: `${v} px` }));
   const shade = [{ value: 'off', label: 'None' }, { value: 'faint', label: 'Faint' }, { value: 'light', label: 'Light' }, { value: 'strong', label: 'Stronger' }];
   const r = await ask('Page Grid', [
     { name: 'grid', label: 'Show the drawing\'s pages (a new drawing starts with one, and pages are added as it grows)', type: 'checkbox', value: String(o.grid),
@@ -9165,6 +9167,12 @@ async function pageGridSettings(): Promise<void> {
     { name: 'outsideShade', label: 'The space round the pages', value: o.outsideShade, options: shade },
     { name: 'ghost', label: 'Outline the pages beyond, where drawing adds pages', type: 'checkbox', value: String(o.ghost) },
     { name: 'wallStyle', label: 'Fixed edges', value: o.wallStyle, options: [{ value: 'hatch', label: 'Bold line, hatched on the outside' }, { value: 'line', label: 'Bold line' }] },
+    { name: 'wallWidth', label: 'Fixed edge line', value: String(o.wallWidth), options: px([1.5, 2, 2.2, 2.5, 3, 4], o.wallWidth) },
+    { name: 'hatchSpacing', label: 'Hatching: gap between strokes', value: String(o.hatchSpacing), options: px([4, 5, 6, 7, 8, 10, 12, 14], o.hatchSpacing) },
+    { name: 'hatchLength', label: 'Hatching: how far out', value: String(o.hatchLength), options: px([4, 5, 6, 7, 8, 10, 12, 16], o.hatchLength) },
+    { name: 'hatchWidth', label: 'Hatching: stroke width', value: String(o.hatchWidth), options: px([0.5, 0.75, 1, 1.25, 1.5, 2], o.hatchWidth) },
+    { name: 'hatchAngle', label: 'Hatching: slant', value: String(o.hatchAngle), options: [{ value: '45', label: '45° (/)' }, { value: '135', label: '45° (\\)' }, { value: '60', label: '60° (steep /)' }, { value: '120', label: '60° (steep \\)' }, { value: '30', label: '30° (shallow /)' }, { value: '150', label: '30° (shallow \\)' }] },
+    { name: 'hatchCorner', label: 'Hatching where two fixed edges meet', value: o.hatchCorner, options: [{ value: 'wrap', label: 'Carry on round the corner' }, { value: 'mirror', label: 'Lean the other way on the sides (a chevron at the corner)' }] },
     { name: 'pasteAtWall', label: 'A paste that goes past a fixed edge', value: o.pasteAtWall, options: [{ value: 'ask', label: 'Ask each time' }, { value: 'pages', label: 'Move it inside, adding pages' }, { value: 'wrap', label: 'Wrap its structures at the page\'s edge' }] },
   ], { ok: 'Save' });
   if (!r) return;
@@ -9173,6 +9181,8 @@ async function pageGridSettings(): Promise<void> {
     lineColour: /^#[0-9a-f]{6}$/i.test(r.lineColour) ? r.lineColour : o.lineColour, lineOpacity: Number(r.lineOpacity) || o.lineOpacity,
     emptyShade: r.emptyShade as PageLook['emptyShade'], outsideShade: r.outsideShade as PageLook['outsideShade'], ghost: r.ghost === 'true',
     wallStyle: r.wallStyle === 'line' ? 'line' : 'hatch', pasteAtWall: r.pasteAtWall as PageLook['pasteAtWall'],
+    wallWidth: Number(r.wallWidth) || o.wallWidth, hatchSpacing: Number(r.hatchSpacing) || o.hatchSpacing, hatchLength: Number(r.hatchLength) || o.hatchLength,
+    hatchWidth: Number(r.hatchWidth) || o.hatchWidth, hatchAngle: Number(r.hatchAngle) || o.hatchAngle, hatchCorner: r.hatchCorner === 'mirror' ? 'mirror' : 'wrap',
   });
 }
 
@@ -9495,7 +9505,7 @@ requestAnimationFrame(() => {
 });
 
 // Hooks for the automated speed tests.
-(window as any).__app = { doc, editor, renderer, chem, live, command, addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
+(window as any).__app = { doc, editor, renderer, chem, live, command, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
   pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test

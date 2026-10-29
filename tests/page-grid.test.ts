@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { Doc, keepOnPage, type PageSetup } from '../src/model';
 import { writeCdxml } from '../src/io/cdxml-write';
 import { readCdxml } from '../src/io/cdxml';
+import { hatchBand } from '../src/ui/page-grid-view';
 import {
   pageExtent, pageCount, wallRect, inWalls, clampMove, crossesWalls, scrollBox, usedPages, pagesToPrint,
   setWall, wrapPieces, pageTag, readPageTag, atFirstPage, parsePageLook, DEFAULT_PAGE_LOOK, fixedCount, extentRect,
@@ -203,5 +204,29 @@ describe('the page grid settings', () => {
     expect(got.lineOpacity).toBe(DEFAULT_PAGE_LOOK.lineOpacity);
     expect(got.emptyShade).toBe(DEFAULT_PAGE_LOOK.emptyShade);
     expect(got.grid).toBe(false);
+  });
+});
+
+describe('the hatching along fixed edges', () => {
+  const view = box(-100, -100, 400, 300);
+  it('runs on round a corner where two fixed edges meet, cut on the diagonal', () => {
+    const walls = wallRect(letter());
+    // the left edge's strip reaches up to the outside corner; the top edge's out to it
+    expect(hatchBand('l', walls, 7, view)).toEqual([{ x: 0, y: 0 }, { x: 0, y: 307 }, { x: -7, y: 307 }, { x: -7, y: -7 }]);
+    expect(hatchBand('t', walls, 7, view)).toEqual([{ x: 0, y: 0 }, { x: 407, y: 0 }, { x: 407, y: -7 }, { x: -7, y: -7 }]);
+  });
+
+  it('stops square where the other edge is free, and is skipped out of view', () => {
+    const walls = wallRect(letter({ walls: { l: 0 } }));
+    expect(hatchBand('l', walls, 7, view)).toEqual([{ x: 0, y: -107 }, { x: 0, y: 307 }, { x: -7, y: 307 }, { x: -7, y: -107 }]);
+    expect(hatchBand('l', wallRect(letter({ walls: { l: 5 } })), 7, view)).toBeNull();
+  });
+
+  it('reads the hatching settings within their ranges', () => {
+    const got = parsePageLook({ hatchSpacing: 5, hatchLength: 999, hatchCorner: 'mirror', hatchAngle: 135 });
+    expect(got.hatchSpacing).toBe(5);
+    expect(got.hatchLength).toBe(DEFAULT_PAGE_LOOK.hatchLength);
+    expect(got.hatchCorner).toBe('mirror');
+    expect(got.hatchAngle).toBe(135);
   });
 });

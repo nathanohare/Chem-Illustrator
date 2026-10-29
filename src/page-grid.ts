@@ -285,6 +285,21 @@ export interface PageLook {
   ghost: boolean;
   /** A fixed edge: a bold line with hatching on the outside ('hatch') or a bold line only. */
   wallStyle: 'hatch' | 'line';
+  /** The fixed edge's line width, in screen pixels. */
+  wallWidth: number;
+  /**
+   * The hatching, in screen pixels: the gap between strokes along the edge, how far out they
+   * reach, and their width; their slant in degrees (45 leans like /, 135 like \).
+   */
+  hatchSpacing: number;
+  hatchLength: number;
+  hatchWidth: number;
+  hatchAngle: number;
+  /**
+   * Where two fixed edges meet: the hatching carries on round the corner ('wrap'), or the side
+   * edges' hatching leans the other way so the two meet in a chevron ('mirror').
+   */
+  hatchCorner: 'wrap' | 'mirror';
   /** What happens when a paste would go past a fixed edge. */
   pasteAtWall: 'ask' | 'pages' | 'wrap';
 }
@@ -294,11 +309,17 @@ export const DEFAULT_LINE_COLOUR = '#6b7a90';
 export const DEFAULT_PAGE_LOOK: PageLook = {
   grid: true, lineWidth: 1, lineStyle: 'dashed', lineColour: DEFAULT_LINE_COLOUR, lineOpacity: 0.55,
   emptyShade: 'light', outsideShade: 'faint', ghost: true, wallStyle: 'hatch', pasteAtWall: 'ask',
+  wallWidth: 2.2, hatchSpacing: 7, hatchLength: 7, hatchWidth: 1, hatchAngle: 45, hatchCorner: 'wrap',
+};
+
+/** The sizes each number may take (in screen pixels, or degrees for the slant). */
+export const LOOK_RANGES: { [K in keyof PageLook]?: [number, number] } = {
+  lineWidth: [0.5, 4], lineOpacity: [0.05, 1], wallWidth: [1, 6], hatchSpacing: [3, 20], hatchLength: [3, 24], hatchWidth: [0.5, 3], hatchAngle: [15, 165],
 };
 
 const LOOK_CHOICES: { [K in keyof PageLook]?: readonly string[] } = {
   lineStyle: ['dashed', 'dotted', 'solid'], emptyShade: ['off', 'faint', 'light', 'strong'], outsideShade: ['off', 'faint', 'light', 'strong'],
-  wallStyle: ['hatch', 'line'], pasteAtWall: ['ask', 'pages', 'wrap'],
+  wallStyle: ['hatch', 'line'], pasteAtWall: ['ask', 'pages', 'wrap'], hatchCorner: ['wrap', 'mirror'],
 };
 
 /** The settings as saved, with anything missing or not understood left at its default. */
@@ -311,8 +332,7 @@ export function parsePageLook(raw: unknown): PageLook {
     const v = r[k], allowed = LOOK_CHOICES[k];
     if (allowed) { if (typeof v === 'string' && allowed.includes(v)) o[k] = v; }
     else if (k === 'lineColour') { if (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)) o[k] = v; }
-    else if (k === 'lineWidth') { if (typeof v === 'number' && v >= 0.5 && v <= 4) o[k] = v; }
-    else if (k === 'lineOpacity') { if (typeof v === 'number' && v >= 0.05 && v <= 1) o[k] = v; }
+    else if (LOOK_RANGES[k]) { const [lo, hi] = LOOK_RANGES[k]!; if (typeof v === 'number' && v >= lo && v <= hi) o[k] = v; }
     else if (typeof v === 'boolean') o[k] = v;
   }
   return out;

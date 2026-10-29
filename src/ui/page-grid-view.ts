@@ -119,28 +119,81 @@ export function paintPages(ctx: CanvasRenderingContext2D, look: PageLook, r: Ori
   ctx.setLineDash([]);
   ctx.lineCap = 'butt';
   const wallInk = rgba(lineHex, Math.min(1, look.lineOpacity + 0.35));
+  if (look.wallStyle === 'hatch') {
+    ctx.strokeStyle = wallInk;
+    ctx.lineWidth = look.hatchWidth * px;
+    for (const side of ['l', 't', 'r', 'b'] as Side[]) {
+      if (ws[side] === undefined) continue;
+      const band = hatchBand(side, walls, look.hatchLength * px, view);
+      if (!band) continue;
+      // the side edges' strokes lean the other way when mirrored, meeting the others in a chevron
+      const turned = look.hatchCorner === 'mirror' && (side === 'l' || side === 'r');
+      hatch(ctx, band, turned ? 180 - look.hatchAngle : look.hatchAngle, look.hatchSpacing * px);
+    }
+  }
+  ctx.strokeStyle = wallInk;
+  ctx.lineWidth = look.wallWidth * px;
+  ctx.lineCap = 'square';
+  ctx.beginPath();
   for (const side of ['l', 't', 'r', 'b'] as Side[]) {
     if (ws[side] === undefined) continue;
     const vertical = side === 'l' || side === 'r';
     const at = side === 'l' ? walls.x1 : side === 'r' ? walls.x2 : side === 't' ? walls.y1 : walls.y2;
     // along the room the edge bounds (it runs on where the grid can still grow)
-    const from = Math.max(vertical ? walls.y1 : walls.x1, (vertical ? view.y1 : view.x1));
-    const to = Math.min(vertical ? walls.y2 : walls.x2, (vertical ? view.y2 : view.x2));
+    const from = Math.max(vertical ? walls.y1 : walls.x1, vertical ? view.y1 : view.x1);
+    const to = Math.min(vertical ? walls.y2 : walls.x2, vertical ? view.y2 : view.x2);
     if (to <= from || at < (vertical ? view.x1 : view.y1) || at > (vertical ? view.x2 : view.y2)) continue;
-    ctx.strokeStyle = wallInk;
-    ctx.lineWidth = Math.max(2, w * 2.2) * px;
-    ctx.beginPath();
     if (vertical) { ctx.moveTo(at, from); ctx.lineTo(at, to); } else { ctx.moveTo(from, at); ctx.lineTo(to, at); }
-    ctx.stroke();
-    if (look.wallStyle !== 'hatch') continue;
-    // hatching: short slanted strokes on the outside, a fixed size on screen
-    const step = 7 * px, len = 7 * px, outward = side === 'l' || side === 't' ? -1 : 1;
-    ctx.lineWidth = Math.max(1, w) * px;
-    ctx.beginPath();
-    for (let v = Math.ceil(from / step) * step; v <= to; v += step) {
-      if (vertical) { ctx.moveTo(at, v); ctx.lineTo(at + outward * len, v + len); } else { ctx.moveTo(v, at); ctx.lineTo(v + len, at + outward * len); }
-    }
-    ctx.stroke();
   }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/**
+ * The strip a fixed edge's hatching fills: `depth` deep on the outside of the edge, along the part
+ * in view. Where it meets another fixed edge it runs on to the outside corner, cut along the
+ * diagonal, so the two strips meet like the sides of a picture frame. Null when out of view.
+ */
+export function hatchBand(side: Side, walls: Rect, depth: number, view: Rect): { x: number; y: number }[] | null {
+  const vertical = side === 'l' || side === 'r';
+  const at = side === 'l' ? walls.x1 : side === 'r' ? walls.x2 : side === 't' ? walls.y1 : walls.y2;
+  const lo = vertical ? walls.y1 : walls.x1, hi = vertical ? walls.y2 : walls.x2;
+  const vlo = (vertical ? view.y1 : view.x1) - depth, vhi = (vertical ? view.y2 : view.x2) + depth;
+  const across = vertical ? [view.x1, view.x2] : [view.y1, view.y2];
+  if (!isFinite(at) || at < across[0] - depth || at > across[1] + depth) return null;
+  // each end: at the corner with another fixed edge (mitred), or cut off past the window
+  const a = isFinite(lo) && lo >= vlo ? lo : vlo, b = isFinite(hi) && hi <= vhi ? hi : vhi;
+  if (b <= a) return null;
+  const ma = a === lo ? depth : 0, mb = b === hi ? depth : 0;
+  const out = side === 'l' || side === 't' ? -depth : depth;
+  const pts: [number, number][] = [[at, a], [at, b], [at + out, b + mb], [at + out, a - ma]];
+  return pts.map(([u, v]) => (vertical ? { x: u, y: v } : { x: v, y: u }));
+}
+
+/** Parallel strokes at `angle` degrees (45 leans like /), `gap` apart along a level edge, filling a polygon. */
+function hatch(ctx: CanvasRenderingContext2D, poly: { x: number; y: number }[], angle: number, gap: number): void {
+  const t = (angle * Math.PI) / 180;
+  const d = { x: Math.cos(t), y: -Math.sin(t) }, n = { x: Math.sin(t), y: Math.cos(t) };
+  // the gap between the strokes themselves
+  const step = Math.max(1e-6, gap * Math.abs(Math.sin(t)));
+  let p0 = Infinity, p1 = -Infinity, q0 = Infinity, q1 = -Infinity;
+  for (const p of poly) {
+    const u = p.x * n.x + p.y * n.y, v = p.x * d.x + p.y * d.y;
+    p0 = Math.min(p0, u); p1 = Math.max(p1, u); q0 = Math.min(q0, v); q1 = Math.max(q1, v);
+  }
+  // (a strip far longer than the window is never asked for: hatchBand cuts it to the view)
+  if ((p1 - p0) / step > 5000) return;
+  ctx.save();
+  ctx.beginPath();
+  poly.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+  ctx.closePath();
+  ctx.clip();
+  ctx.beginPath();
+  for (let k = Math.ceil(p0 / step); k * step <= p1; k++) {
+    const u = k * step;
+    ctx.moveTo(n.x * u + d.x * q0, n.y * u + d.y * q0);
+    ctx.lineTo(n.x * u + d.x * q1, n.y * u + d.y * q1);
+  }
+  ctx.stroke();
   ctx.restore();
 }
