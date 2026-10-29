@@ -309,7 +309,7 @@ export const DEFAULT_LINE_COLOUR = '#6b7a90';
 export const DEFAULT_PAGE_LOOK: PageLook = {
   grid: true, lineWidth: 1, lineStyle: 'dashed', lineColour: DEFAULT_LINE_COLOUR, lineOpacity: 0.55,
   emptyShade: 'light', outsideShade: 'faint', ghost: true, wallStyle: 'hatch', pasteAtWall: 'ask',
-  wallWidth: 2.2, hatchSpacing: 7, hatchLength: 7, hatchWidth: 1, hatchAngle: 45, hatchCorner: 'wrap',
+  wallWidth: 2, hatchSpacing: 4, hatchLength: 5, hatchWidth: 0.75, hatchAngle: 45, hatchCorner: 'wrap',
 };
 
 /** The sizes each number may take (in screen pixels, or degrees for the slant). */
