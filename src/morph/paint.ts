@@ -343,7 +343,8 @@ function drawStereo(ctx: Ctx, r: Stroke & { trimmed: [Vec, Vec] }, segs: Piece[]
       const count = Math.max(2, st.rungs || Math.floor(L / (style.hashSpacing * k)));
       const wide = st.display === 'hash' ? (style.boldWidth * k) / 2 : (style.wedge * k) / 2;
       ctx.beginPath();
-      for (let i = 0; i <= count; i++) {
+      // a hashed wedge has no hash at its narrow end (on the stereocentre)
+      for (let i = st.display === 'hashWedge' ? 1 : 0; i <= count; i++) {
         const f = i / count;
         if (!kept(f)) continue;
         const c = { x: s.x + dir.x * L * f, y: s.y + dir.y * L * f };

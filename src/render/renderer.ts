@@ -1033,7 +1033,8 @@ export class Renderer {
         case 'hashWedge': {
           const w = wedgeWidth(st) / 2;
           const n = Math.min(MAX_HASHES, Math.max(2, Math.floor(l / st.hashSpacing)));
-          for (let i = 0; i <= n; i++) {
+          // no hash at the narrow end, where it would sit on the stereocentre (as ChemDraw draws it)
+          for (let i = 1; i <= n; i++) {
             const t = i / n;
             const c = add(s, mul(d, t));
             const hw = st.lineWidth / 2 + (w - st.lineWidth / 2) * t;
