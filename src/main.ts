@@ -62,6 +62,8 @@ import { fxPng } from './render/picture-fx';
 import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND } from './deck/slide-view';
 import { writePdf, jpegInfo, PdfPage, PdfImage } from './io/pdf';
 import { SlideList } from './ui/slide-list';
+import { CanvasKeys } from './ui/canvas-keys';
+import { addKeyframe, insertKeyframe, keyframeAround, keyRect, keysBounds, moveKeyframe, removeKeyframe, unionRect, ZOOM_IN_MAX } from './deck/canvas';
 import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel } from './ui/design-panel';
 import { ShapeMenu } from './ui/shape-menu';
 import { whenIconsLoaded } from './design/icons';
@@ -708,7 +710,7 @@ async function pasteFrom(read: () => Pasted | Promise<Pasted>): Promise<void> {
     }
     doc.edit('Paste', () => {
       editor.sel = insertDrawing(doc, got.doc, pastePoint());
-      editor.placeClear(deckNow()?.size);
+      editor.placeClear(placingPage());
     });
     editor.changed();
   } else if (got.kind === 'text') await pasteText(got.text, got.html);
@@ -767,7 +769,14 @@ async function insertTable(): Promise<void> {
 /** The part of the slide showing that pasted things go in (below the title), in Slides mode. */
 function slideContentArea(): Rect | null {
   const deck = deckNow();
-  return deck ? contentArea(deck.current?.layout ?? 'blank', deck.size, deck.master) : null;
+  // a canvas slide has no edge: things go where the window is, as on a drawing
+  return deck && !deck.current?.canvas ? contentArea(deck.current?.layout ?? 'blank', deck.size, deck.master) : null;
+}
+
+/** The page things put down are kept on (the slide; none on a drawing or a canvas slide). */
+function placingPage(): { w: number; h: number } | undefined {
+  const deck = deckNow();
+  return deck && !deck.current?.canvas ? deck.size : undefined;
 }
 
 /** Where pasted things go: the middle of the slide's content area in Slides mode, else the middle of the window. */
@@ -781,7 +790,7 @@ function pasteCentre(): { x: number; y: number } {
  * it is then moved clear of what is already there (placeClear).
  */
 function pastePoint(): { x: number; y: number } {
-  return (!deckNow() && editor.mouseOnPage) || pasteCentre();
+  return ((!deckNow() || deckNow()?.current?.canvas) && editor.mouseOnPage) || pasteCentre();
 }
 
 /** Paste a SMILES string or a molfile as a structure. With `quiet`, text that isn't one is left (false) without a message. */
@@ -796,7 +805,7 @@ async function pasteChemistry(text: string, quiet = false): Promise<boolean> {
     doc.edit('Paste', () => {
       ids = addMolfile(doc, mb!, c.x, c.y);
       editor.sel = { atoms: new Set(ids), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() };
-      editor.placeClear(deckNow()?.size);
+      editor.placeClear(placingPage());
     });
     selectNewAtoms(ids);
   } catch (err) {
@@ -831,7 +840,7 @@ async function pasteText(text: string, html?: string): Promise<void> {
   doc.edit('Paste text', () => {
     id = doc.addCaption({ x: c.x - (b.x1 + b.x2) / 2, y: c.y - (b.y1 + b.y2) / 2, runs, justify: 'left', ...(paras ? { paras } : {}), ...(wrap ? { wrap } : {}) }).id;
     editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set([id]), arrows: new Set(), shapes: new Set() };
-    editor.placeClear(deckNow()?.size);
+    editor.placeClear(placingPage());
   });
   editor.changed();
 }
@@ -1843,7 +1852,7 @@ const nameDialog = new NameDialog(async (name) => {
     doc.edit('Name to Structure', () => {
       ids = addNamed(got, c.x, c.y);
       editor.sel = { atoms: new Set(ids), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() };
-      editor.placeClear(deckNow()?.size);
+      editor.placeClear(placingPage());
     });
     selectNewAtoms(ids);
   } catch (err) {
@@ -2272,7 +2281,10 @@ function enterTab(tab: Tab, opened: boolean): void {
   editor.cropping = null;
   editor.lastEdited = null;
   if (editor.toolName !== modeTool[tab.mode]) editor.setTool(modeTool[tab.mode]);
-  editor.fitArea = deck ? () => ({ x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h }) : null;
+  onCanvas = !!deck?.current?.canvas && !design;
+  showCanvasState();
+  // Fit shows the slide; on a canvas slide, the keyframe picked
+  editor.fitArea = deck ? () => (deck.current?.canvas ? keyRect(deck.current.canvas.keys[canvasKeys.picked(deck)], deck.size) : { x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h }) : null;
   if (deck) {
     deck.onChange = () => deckChanged(deck);
     deck.onSwitch = () => slideSwitched(deck);
@@ -2312,6 +2324,8 @@ const slidePage = {
     const d = deckNow();
     if (!d?.current) return;
     drawSlidePage(ctx, d.page(), SURROUND);
+    // a canvas slide: no edge, so no slide grid or guides; its keyframes instead
+    if (d.current.canvas && ws.active.mode === 'slides') { canvasKeys.draw(ctx, d, renderer.view.scale); slideCmts?.place(); return; }
     if (ws.active.mode === 'design' && designGrid.on) drawGrid(ctx, d.size, designGrid.step);
     if (ws.active.mode === 'slides') {
       const v = d.settings.view;
@@ -2324,12 +2338,95 @@ const slidePage = {
   },
 };
 
+// Keyframes on a canvas slide: drawn over it, moved by their tabs and outlines, zoomed by their corners.
+const canvasKeys = new CanvasKeys(renderer.overlay, {
+  deck: () => {
+    const d = deckNow();
+    return d?.current?.canvas && ws.active.mode === 'slides' && !sorterOn && editor.toolName === 'select' ? d : null;
+  },
+  view: () => renderer.view,
+  pointAt: (e) => editor.pointAt(e),
+  repaint: () => { renderer.repaintAll(); editor.requestScene(); },
+  begin: () => finishTyping(),
+  picked: () => slideList.markKeyframe(),
+});
+
+/** The canvas slide being edited and its keyframe picked, for the keyframe commands (null, said, on another slide). */
+function canvasNow(): { d: Deck; c: NonNullable<Deck['slides'][number]['canvas']>; i: number } | null {
+  const d = deckNow();
+  const c = d?.current?.canvas;
+  if (!d || !c || ws.active.mode !== 'slides') { flash('Keyframes are on canvas slides: Insert > Canvas Slide makes one.'); return null; }
+  finishTyping();
+  return { d, c, i: canvasKeys.picked(d) };
+}
+
+/** Show keyframe i of the canvas slide being edited, picked, filling the window. */
+function goKeyframe(i: number): void {
+  const d = deckNow();
+  const c = d?.current?.canvas;
+  if (!d || !c?.keys[i]) return;
+  canvasKeys.setPicked(d, i);
+  editor.fit();
+}
+
+/** Keyframe commands that change the keyframes: the new list, which keyframe to pick, and the step's name. */
+function setKeyframes(d: Deck, keys: NonNullable<Deck['slides'][number]['canvas']>, pick: number, label: string): void {
+  d.setCanvas(keys, label);
+  goKeyframe(pick);
+}
+
+const keyframeCommands = {
+  addKeyframe(): void {
+    const k = canvasNow();
+    if (!k) return;
+    const got = addKeyframe(k.c, k.d.size, k.i);
+    setKeyframes(k.d, got.canvas, got.index, 'Add keyframe');
+  },
+  /** A keyframe showing what is in the window now (as near as the zoom limits allow). */
+  keyframeHere(): void {
+    const k = canvasNow();
+    if (!k) return;
+    const got = insertKeyframe(k.c, keyframeAround(renderer.visibleRect(0), k.d.size, 0, 1), k.i);
+    setKeyframes(k.d, got.canvas, got.index, 'Keyframe from window');
+  },
+  fitToSelection(): void {
+    const k = canvasNow();
+    if (!k) return;
+    const box = editor.hasSelection() ? editor.selBox() : null;
+    if (!box) { flash('Select what the keyframe should show, then Fit Keyframe to Selection.'); return; }
+    const key = { ...keyframeAround(box, k.d.size), id: k.c.keys[k.i].id };
+    if (key.zoom <= 1 / ZOOM_IN_MAX + 1e-9 && Math.max((box.x2 - box.x1) / k.d.size.w, (box.y2 - box.y1) / k.d.size.h) < 1 / ZOOM_IN_MAX) flash(`Keyframes zoom in at most ${ZOOM_IN_MAX}×, so this one shows a little more than the selection.`);
+    setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === k.i ? key : x)) }, k.i, 'Fit keyframe to selection');
+  },
+  remove(i?: number): void {
+    const k = canvasNow();
+    if (!k) return;
+    const next = removeKeyframe(k.c, i ?? k.i);
+    if (!next) { flash('A canvas slide needs at least one keyframe.'); return; }
+    setKeyframes(k.d, next, Math.min(i ?? k.i, next.keys.length - 1), 'Delete keyframe');
+  },
+  move(from: number, to: number): void {
+    const k = canvasNow();
+    if (!k) return;
+    setKeyframes(k.d, moveKeyframe(k.c, from, to), to, 'Move keyframe');
+  },
+};
+
+/** The keyframe ribbon group shows on canvas slides only; the menus' keyframe items are greyed elsewhere (menus keep their shape). */
+function showCanvasState(): void {
+  const on = !!deckNow()?.current?.canvas && ws.active.mode === 'slides';
+  for (const el of document.querySelectorAll<HTMLElement>('.keyframes-only')) {
+    if (el instanceof HTMLButtonElement && el.getAttribute('role') === 'menuitem') el.disabled = !on;
+    else el.hidden = !on;
+  }
+}
+
 // The slide list is rebuilt when slides come, go or move; otherwise only the slide being
 // edited gets a new picture.
 let listKey = '';
 let masterSeen: unknown = null;
 let indexSeen = -1;
-const slideListKey = (d: Deck) => `${d.slides.map((s) => s.id + (s.notes.trim() ? 'n' : '') + (s.hidden ? 'h' : '') + (s.section !== undefined ? `s${s.section}` : '')).join(',')}|${d.sections.map((x) => `${x.id}:${x.name}`).join('/')}|${d.size.w}x${d.size.h}|${d.looks}`;
+const slideListKey = (d: Deck) => `${d.slides.map((s) => s.id + (s.notes.trim() ? 'n' : '') + (s.hidden ? 'h' : '') + (s.section !== undefined ? `s${s.section}` : '') + (s.canvas ? `k${s.canvas.keys.map((k) => k.id).join('.')}` : '')).join(',')}|${d.sections.map((x) => `${x.id}:${x.name}`).join('/')}|${d.size.w}x${d.size.h}|${d.looks}`;
 
 /** Told of every change to a deck (the Compare pane, which follows Undo). */
 const deckWatchers: ((deck: Deck) => void)[] = [];
@@ -2360,9 +2457,17 @@ function deckChanged(deck: Deck): void {
   ws.noteChange();
 }
 
+/** The slide last switched to was a canvas slide (going to or from one fits the window again). */
+let onCanvas = false;
+
 function slideSwitched(deck: Deck): void {
   editor.cropping = null;
   editor.lastEdited = null;
+  const canvas = !!deck.current?.canvas;
+  if (canvas !== onCanvas) showRulers();
+  if (canvas || onCanvas) editor.fit();
+  onCanvas = canvas;
+  showCanvasState();
   notesBox.value = deck.current?.notes ?? '';
   renderer.repaintAll();
   editor.requestScene();
@@ -2590,7 +2695,7 @@ function startGuideDrag(d: Deck, view: SlideView, which: { axis: 'x' | 'y'; i: n
 // on the slide, a guide is picked up where nothing else is: a drag moves it, Ctrl+drag copies it
 renderer.overlay.addEventListener('pointerdown', (e) => {
   const d = deckNow();
-  if (e.button !== 0 || !d || ws.active.mode !== 'slides' || sorterOn || !d.settings.view?.showGuides || editor.toolName !== 'select') return;
+  if (e.button !== 0 || !d || ws.active.mode !== 'slides' || sorterOn || !d.settings.view?.showGuides || d.current?.canvas || editor.toolName !== 'select') return;
   const { p, taken } = editor.pointAt(e);
   if (taken) return;
   const view = d.settings.view;
@@ -2606,7 +2711,7 @@ renderer.overlay.addEventListener('pointerdown', (e) => {
 // over a guide, the pointer says it can be dragged
 renderer.overlay.addEventListener('pointermove', (e) => {
   const d = deckNow();
-  if (guideDrag || e.buttons || !d || ws.active.mode !== 'slides' || !d.settings.view?.showGuides || editor.toolName !== 'select') return;
+  if (guideDrag || e.buttons || !d || ws.active.mode !== 'slides' || !d.settings.view?.showGuides || d.current?.canvas || editor.toolName !== 'select') return;
   const { p, taken } = editor.pointAt(e);
   const near = taken ? null : guideNear(d.settings.view, p, 4 / renderer.view.scale);
   if (near) renderer.overlay.style.cursor = near.axis === 'x' ? 'col-resize' : 'row-resize';
@@ -2614,12 +2719,13 @@ renderer.overlay.addEventListener('pointermove', (e) => {
 
 editor.moveSnap = (box, raw, tol) => {
   const d = deckNow();
-  return d && ws.active.mode === 'slides' ? snapMove(box, raw, d.settings.view ?? null, tol) : raw;
+  return d && ws.active.mode === 'slides' && !d.current?.canvas ? snapMove(box, raw, d.settings.view ?? null, tol) : raw;
 };
 
 /** The rulers show in Normal view of slides when View > Ruler is ticked. */
 function showRulers(): void {
-  rulers.show(slideLook.ruler && ws.active.mode === 'slides' && !sorterOn && !!deckNow());
+  // (a canvas slide has no edge to measure from)
+  rulers.show(slideLook.ruler && ws.active.mode === 'slides' && !sorterOn && !!deckNow() && !deckNow()?.current?.canvas);
   for (const b of document.querySelectorAll<HTMLInputElement>('[data-cmd="view-slide-ruler"]')) b.checked = slideLook.ruler;
   for (const b of document.querySelectorAll<HTMLInputElement>('[data-cmd="view-gridlines"]')) b.checked = slideLook.grid;
   const g = !!deckNow()?.settings.view?.showGuides;
@@ -2740,8 +2846,20 @@ const slideListHooks = {
     });
   },
   renameSection: (id: number) => void renameSection(id),
+  keyframe: {
+    picked: () => { const d = deckNow(); return d ? canvasKeys.picked(d) : 0; },
+    go: (i: number) => goKeyframe(i),
+    move: (from: number, to: number) => keyframeCommands.move(from, to),
+    remove: (i: number) => keyframeCommands.remove(i),
+    menu: (x: number, y: number) => showContextMenu(x, y, keyframeMenu(), { run: (cmd) => void command(cmd), key: commandKey }),
+  },
 };
 const slideList = new SlideList($('#slide-list'), slideListHooks);
+
+/** Right-click on a keyframe (on the canvas or in the slide list). */
+function keyframeMenu(): MenuItem[] {
+  return [{ cmd: 'add-keyframe' }, { cmd: 'keyframe-here' }, { cmd: 'fit-keyframe' }, null, { cmd: 'delete-keyframe' }];
+}
 
 // View > Slides > Slide Sorter: every slide in rows of larger pictures, over the slide being edited.
 // Double-click a slide (or press Enter) to go back to Normal view on it.
@@ -2835,7 +2953,7 @@ function slideListMenu(): MenuItem[] {
     { cmd: 'cut-slides', label: 'Cut' }, { cmd: 'copy-slides', label: 'Copy' }, { cmd: 'paste-slides', label: 'Paste' },
     { cmd: 'paste-slides-keep', label: 'Paste (Keep Source Formatting)' },
     null,
-    { cmd: 'new-slide' }, { cmd: 'duplicate-slide' }, { cmd: 'delete-slide' },
+    { cmd: 'new-slide' }, { cmd: 'new-canvas-slide' }, { cmd: 'duplicate-slide' }, { cmd: 'delete-slide' },
     null,
     { label: 'Layout', items: deckLayouts(deckNow()?.master).map((l) => ({ cmd: `layout-${l.id}`, label: l.name })) },
     { cmd: 'format-background' },
@@ -5097,7 +5215,7 @@ function setPictureStyle(look: PictureLook | undefined): boolean {
 }
 
 /** Slide commands that don't apply to a design's single page. */
-const SLIDE_ONLY = new Set(['compare-slides', 'section-menu', 'new-slide', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
+const SLIDE_ONLY = new Set(['compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
   'edit-layouts', 'view-sorter', 'add-section', 'rename-section', 'remove-section', 'remove-section-slides', 'remove-all-sections', 'section-up', 'section-down', 'collapse-sections', 'expand-sections',
   'slide-transitions', 'slide-animations', 'animation-pane', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-video', 'insert-audio',
   'reading-view', 'rehearse-timings', 'record-show', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
@@ -5186,6 +5304,11 @@ const COMMANDS: Record<string, () => unknown> = {
   'format-painter': () => formatPainter(),
   'insert-symbol': () => symbolWindow.open(),
   'new-slide': () => newSlide(),
+  'new-canvas-slide': () => { const d = deckNow(); if (!d) { newSlide(); return; } finishTyping(); d.addCanvasSlide(); },
+  'add-keyframe': () => keyframeCommands.addKeyframe(),
+  'keyframe-here': () => keyframeCommands.keyframeHere(),
+  'fit-keyframe': () => keyframeCommands.fitToSelection(),
+  'delete-keyframe': () => keyframeCommands.remove(),
   'duplicate-slide': () => { const d = deckNow(); if (d) { finishTyping(); d.duplicate(pickedSlides()); } },
   'delete-slide': () => removeSlides(pickedSlides()),
   'cut-slides': () => copySlides(pickedSlides(), true),
@@ -6056,7 +6179,7 @@ $('#split-insert').addEventListener('click', () => {
     fitPasted(part, doc.style, deck?.master.fitPasted ? deck.master.drawing.bondLength : undefined);
     doc.edit('Insert structure', () => {
       editor.sel = insertDrawing(doc, part, pasteCentre(), 'Insert structure');
-      editor.placeClear(deck?.size);
+      editor.placeClear(placingPage());
     });
     editor.changed();
   }
@@ -7981,6 +8104,7 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'undo' }, { cmd: 'redo' }, null,
       ...(ws.active.mode === 'slides' ? [{ cmd: 'new-comment', label: 'New Comment' }, { cmd: 'show-comments', label: 'Show Comments' }, null] : []),
       ...(ws.active.mode === 'slides' || design ? [{ cmd: 'format-background', label: 'Format Background…' }, null] : []),
+      ...(ws.active.mode === 'slides' && deckNow()?.current?.canvas ? [{ label: 'Keyframes', items: keyframeMenu() }, null] : []),
       { label: 'Insert', items: [{ cmd: 'name-to-structure' }, { cmd: 'periodic-table' }, { cmd: 'insert-picture' }, { cmd: 'import-picture', label: 'Structure from Picture…' }, { cmd: 'text-box' }, { cmd: 'insert-symbol' }, ...(design ? [{ cmd: 'design-shapes', label: 'Shape…' }, { cmd: 'design-icons', label: 'Icon…' }, { cmd: 'connector-tool' }] : []), ...(ws.active.mode === 'slides' ? [{ cmd: 'slide-shapes', label: 'Shape…' }, { cmd: 'slide-icons', label: 'Icon…' }] : [])] },
       { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }] },
       { cmd: 'drawing-style' },
@@ -8148,6 +8272,8 @@ function showGroupTips(on: boolean): void {
 editor.onContextMenu = (e) => {
   if (sheetActive() || docActive()) return;
   finishTyping();
+  // on a keyframe's tab, corner or outline: the keyframe commands
+  if (canvasKeys.menuAt(e) >= 0) { showContextMenu(e.clientX, e.clientY, keyframeMenu(), { run: (cmd) => void command(cmd), key: commandKey }); return; }
   const h = editor.contextPick(e);
   contextBond = h?.kind === 'bond' ? h.id : null;
   rightClickAt = { left: e.clientX, bottom: e.clientY };
@@ -8937,6 +9063,9 @@ let outlineSeen = -1;
 // scroll bars over the drawing: they cover what is drawn (or the slide), and the part on screen
 const scrollArea = () => {
   const d = ws.active.deck;
+  // a canvas slide: its keyframes and whatever is drawn beyond them
+  const c = d?.current?.canvas;
+  if (d && c) return unionRect(keysBounds(c, d.size), doc.bounds());
   return d ? { x1: 0, y1: 0, x2: d.size.w, y2: d.size.h } : doc.bounds();
 };
 const scrollbars = new Scrollbars(host, renderer, scrollArea, () => editor.requestScene());

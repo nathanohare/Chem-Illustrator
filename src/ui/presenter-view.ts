@@ -223,7 +223,7 @@ export class PresenterView {
   private heard(m: ShowMessage): void {
     if (!this.deck || !this.player) return;
     if (m.kind === 'hello') {
-      this.link?.send({ kind: 'deck', deck: deckData(this.deck, { order: this.player.order, noAnimation: this.player.noAnimation, useTimings: this.player.useTimings }), i: this.player.i, done: this.player.done });
+      this.link?.send({ kind: 'deck', deck: deckData(this.deck, { order: this.player.order, noAnimation: this.player.noAnimation, useTimings: this.player.useTimings }), i: this.player.i, done: this.player.done, key: this.player.key });
       if (this.blank) this.link?.send({ kind: 'blank', how: this.blank });
       for (const [i, strokes] of this.ink?.all() ?? []) this.link?.send({ kind: 'ink', i, strokes });
     } else if (m.kind === 'key') {
@@ -319,7 +319,8 @@ export class PresenterView {
     if (!this.root || !this.deck || !this.player) return;
     const i = this.player.i, n = this.deck.slides.length;
     const steps = this.player.stepCount, done = this.player.done;
-    this.els.count.textContent = `Slide ${i + 1} of ${n}${steps ? ` · animation ${done} of ${steps}` : ''}`;
+    const keys = this.deck.slides[i].canvas?.keys.length ?? 0;
+    this.els.count.textContent = `Slide ${i + 1} of ${n}${keys ? ` · keyframe ${this.player.key + 1} of ${keys}` : ''}${steps ? ` · animation ${done} of ${steps}` : ''}`;
     this.els.notes.textContent = this.deck.slides[i].notes || 'No notes for this slide.';
     this.els.notes.classList.toggle('muted', !this.deck.slides[i].notes);
     this.els.where.textContent = this.audience === 'other-screen' ? 'Audience: full screen on the second screen'
@@ -343,14 +344,17 @@ export class PresenterView {
   private paintNext(): void {
     if (!this.root || !this.deck || !this.player) return;
     // the next slide the show plays (hidden slides are skipped)
-    const d = this.deck, i = this.player.after(this.player.i);
+    const d = this.deck, now = this.player.i;
+    // on a canvas slide, its next keyframe comes first
+    const nextKey = this.player.key + 1 < (d.slides[now].canvas?.keys.length ?? 0) ? this.player.key + 1 : -1;
+    const i = nextKey >= 0 ? now : this.player.after(now);
     const box = this.els.nextBox.getBoundingClientRect();
     const w = Math.max(1, box.width), h = Math.max(1, Math.min(box.height, (box.width * d.size.h) / d.size.w));
     const c = this.els.next;
     c.style.width = `${w}px`;
     c.style.height = `${h}px`;
     const more = this.player.done < this.player.stepCount;
-    this.els.nextLabel.textContent = more ? 'Next: more of this slide, then' : 'Next';
+    this.els.nextLabel.textContent = more ? 'Next: more of this slide, then' : nextKey >= 0 ? 'Next keyframe' : 'Next';
     if (i < 0) {
       const ctx = c.getContext('2d')!;
       const dpr = window.devicePixelRatio || 1;
@@ -363,7 +367,7 @@ export class PresenterView {
       ctx.fillText('End of slide show', 12, 24);
       return;
     }
-    paintSlide(c, w, h, window.devicePixelRatio || 1, d.page(i), d.docOf(i), '#111317');
+    paintSlide(c, w, h, window.devicePixelRatio || 1, d.page(i, Math.max(0, nextKey)), d.docOf(i), '#111317');
   }
 
   private async fullscreen(on: boolean): Promise<void> {

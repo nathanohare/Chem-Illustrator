@@ -9,13 +9,19 @@ import { imageFor } from '../render/images';
 import { VectorContext, VecPath, Item } from '../render/vector';
 import { arialWidth } from '../text-metrics';
 import { Master, SlideSize, LayoutId, decorFrames, showsNumber, showsFooter, showsDate, dateText, type SlideHF, slideColours, slideBackground, decorShapes, type DecorShape } from './deck';
-import { paintBackground, type Background } from './background';
+import { backgroundColour, paintBackground, type Background } from './background';
+import type { Rect } from '../geom';
+import { shownRect, slidePlace } from './canvas';
 
 /** Grey around the slide while editing, as in PowerPoint. */
 export const SURROUND = '#d5d8de';
 
-/** What a slide's page needs from its deck: with the slide's own background, and whether the master's shapes and logo are hidden on it. */
-export interface SlidePage { size: SlideSize; master: Master; layout: LayoutId; index: number; own?: Background; hideGraphics?: boolean; hf?: SlideHF }
+/**
+ * What a slide's page needs from its deck: with the slide's own background, and whether the
+ * master's shapes and logo are hidden on it. A canvas slide's page has the part of the canvas
+ * shown (`view`, one of its keyframes) instead of the slide's own place.
+ */
+export interface SlidePage { size: SlideSize; master: Master; layout: LayoutId; index: number; own?: Background; hideGraphics?: boolean; hf?: SlideHF; view?: Rect }
 
 // Drawing whole slides never draws on screen through the renderer's own canvases.
 const noCanvas = { getContext: () => null } as unknown as HTMLCanvasElement;
@@ -26,6 +32,7 @@ const noCanvas = { getContext: () => null } as unknown as HTMLCanvasElement;
  */
 export function drawSlidePage(ctx: CanvasRenderingContext2D, p: SlidePage, surround: string | null = null): void {
   const { size, master: m } = p;
+  if (p.view) { drawCanvasPage(ctx, p, !!surround); return; }
   if (surround) {
     const far = 1e5;
     ctx.fillStyle = surround;
@@ -56,6 +63,18 @@ export function drawSlidePage(ctx: CanvasRenderingContext2D, p: SlidePage, surro
   if (showsNumber(m, p.layout, p.hf)) text(String(p.index + 1), d.number, 'right');
   if (showsFooter(m, p.layout, p.hf)) text(m.footer, d.footer, 'center');
   if (showsDate(m, p.layout, p.hf)) text(dateText(m), d.date, 'left');
+}
+
+/**
+ * A canvas slide's page: its background's colour, with no edge (`endless`, while editing) or over
+ * the part of the canvas shown. The master's shapes, logo, number and footer are left off: they
+ * belong to the screen, not to a place on the canvas.
+ */
+function drawCanvasPage(ctx: CanvasRenderingContext2D, p: SlidePage, endless: boolean): void {
+  ctx.fillStyle = backgroundColour(slideBackground(p.master, p.layout, p.own));
+  const far = 1e7, v = p.view!;
+  if (endless) ctx.fillRect(-far, -far, 2 * far, 2 * far);
+  else ctx.fillRect(v.x1, v.y1, v.x2 - v.x1, v.y2 - v.y1);
 }
 
 /** One of a design template's shapes behind the slide. */
@@ -124,16 +143,16 @@ export function paintSlide(canvas: HTMLCanvasElement, w: number, h: number, dpr:
     ctx.fillStyle = fill;
     ctx.fillRect(0, 0, pw, ph);
   } else ctx.clearRect(0, 0, pw, ph);
-  const k = Math.min(w / p.size.w, h / p.size.h);
-  const x = (w - p.size.w * k) / 2, y = (h - p.size.h * k) / 2;
-  ctx.setTransform(k * dpr, 0, 0, k * dpr, x * dpr, y * dpr);
+  const at = slidePlace(w, h, p);
+  ctx.setTransform(at.k * dpr, 0, 0, at.k * dpr, at.x * dpr, at.y * dpr);
   // nothing spills outside the slide
+  const r = shownRect(p);
   ctx.save();
   ctx.beginPath();
-  ctx.rect(0, 0, p.size.w, p.size.h);
+  ctx.rect(r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1);
   ctx.clip();
   if (pageToo) drawSlide(ctx, p, doc);
   else drawDrawing(ctx, doc);
   ctx.restore();
-  return { x, y, k };
+  return at;
 }

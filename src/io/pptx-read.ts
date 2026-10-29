@@ -45,13 +45,14 @@ import { mediaMime } from '../deck/media';
 import { readChart } from './office-chart';
 import { freshBox, sameBoxData, sizedBox, type ChartBox } from '../sheet/chart-box';
 import { chartBoxPng } from '../render/chart-box-paint';
+import { readCanvasTag, type CanvasData } from '../deck/canvas';
 
 /** PowerPoint's shapes that are shapes in the library, by PowerPoint's name. */
 const GEO_BY_PRST = new Map(GEOS.filter((g) => g.prst).map((g) => [g.prst!, g.id]));
 /** PowerPoint shapes that come into slides as plain boxes and ovals (with their text beside them as text boxes). */
 const PLAIN_PRST = new Set(['rect', 'roundRect', 'ellipse', 'snip1Rect', 'flowChartProcess', 'flowChartAlternateProcess']);
 
-export interface PptxSlide { layout: LayoutId; contents: Contents; notes: string; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF }
+export interface PptxSlide { layout: LayoutId; contents: Contents; notes: string; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData }
 export interface PptxRead {
   size: SlideSize;
   master: Master;
@@ -534,11 +535,13 @@ class Reader {
     if (m.footer.trim() && has('ftr') !== showsFooter(m, lay)) own.footer = has('ftr');
     if (has('dt') !== showsDate(m, lay)) own.date = has('dt');
     const hf = Object.keys(own).length ? own : undefined;
+    // a canvas slide saved here
+    const canvas = readCanvasTag(tags[TAG.canvas]);
     return {
       layout: lay, contents: doc.contents(), notes: this.notes(path),
       ...(background ? { background } : {}), ...(hideGraphics ? { hideGraphics } : {}), ...(hidden ? { hidden } : {}), ...(hf ? { hf } : {}),
       ...(transition && (transition.kind !== 'none' || transition.advanceAfter) ? { transition } : {}), ...(anims.length ? { anims } : {}),
-      ...(comments.length ? { comments } : {}),
+      ...(comments.length ? { comments } : {}), ...(canvas ? { canvas } : {}),
     };
   }
 

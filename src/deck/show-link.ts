@@ -8,19 +8,20 @@ import { Doc, type Contents } from '../model';
 import { Deck, type LayoutId, type Master, type SlideSize, type SlideHF } from './deck';
 import type { Anim, Transition } from './animation';
 import type { Background } from './background';
+import type { CanvasData } from './canvas';
 
 /** Everything the audience window needs to show the slides. */
 export interface DeckData {
   size: SlideSize;
   master: Master;
-  slides: { layout: LayoutId; contents: Contents; transition?: Transition; anims?: Anim[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF }[];
+  slides: { layout: LayoutId; contents: Contents; transition?: Transition; anims?: Anim[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData }[];
   /** How the show plays, as the presenter's player does (Set Up Show): its slides in order, without animations, by its timings. */
   play?: { order: number[] | null; noAnimation: boolean; useTimings: boolean };
 }
 
 export type ShowMessage =
   | { kind: 'hello' } // audience → presenter: ready, send the slides
-  | { kind: 'deck'; deck: DeckData; i: number; done: number }
+  | { kind: 'deck'; deck: DeckData; i: number; done: number; key?: number }
   | { kind: 'next' }
   | { kind: 'prev' }
   | { kind: 'go'; i: number; atEnd?: boolean }
@@ -41,7 +42,7 @@ export function deckData(deck: Deck, play?: DeckData['play']): DeckData {
   return {
     size: { ...deck.size },
     master: deck.master,
-    slides: deck.slides.map((s, i) => ({ layout: s.layout, contents: deck.docOf(i).contents(), transition: s.transition, anims: s.anims, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf })),
+    slides: deck.slides.map((s, i) => ({ layout: s.layout, contents: deck.docOf(i).contents(), transition: s.transition, anims: s.anims, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf, canvas: s.canvas })),
     ...(play ? { play } : {}),
   };
 }
@@ -49,7 +50,7 @@ export function deckData(deck: Deck, play?: DeckData['play']): DeckData {
 /** A deck to play, made from the data sent. */
 export function deckFromData(d: DeckData): Deck {
   const deck = new Deck(new Doc());
-  deck.load(d.slides.map((s) => deck.makeSlide(s.layout, s.contents, '', { transition: s.transition, anims: s.anims, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf })), d.size, d.master);
+  deck.load(d.slides.map((s) => deck.makeSlide(s.layout, s.contents, '', { transition: s.transition, anims: s.anims, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf, canvas: s.canvas })), d.size, d.master);
   return deck;
 }
 

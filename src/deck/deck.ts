@@ -18,6 +18,7 @@ import type { Rect } from '../geom';
 import { ASCENT } from '../text/layout';
 import { slideIdLinks } from '../links';
 import type { Transition, Anim } from './animation';
+import { clampZoom, copyCanvas, keyRect, newCanvas, type CanvasData, type Keyframe } from './canvas';
 import { backgroundColour, copyBackground, isPlain, sameBackground, solid, type Background } from './background';
 import type { ShowSetup, CustomShow } from './show-setup';
 
@@ -512,6 +513,8 @@ export interface Slide {
   section?: number;
   /** Its own say on the slide number, footer and date (Header & Footer > Apply). */
   hf?: SlideHF;
+  /** A canvas slide: its drawing has no edge, and the show goes through these keyframes on it. */
+  canvas?: CanvasData;
 }
 
 /**
@@ -528,7 +531,7 @@ export interface SectionCount { name: string; count: number }
 export type SizeFit = 'centre' | 'fit' | 'max';
 
 /** A slide's transition, animations, comments, own background and whether it is hidden, copied (for duplicates and the undo history). */
-export interface Motion { transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF }
+export interface Motion { transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData }
 const copyMotion = (m: Motion): Motion => ({
   ...(m.transition ? { transition: { ...m.transition } } : {}),
   ...(m.anims?.length ? { anims: m.anims.map((a) => ({ ...a, target: { ...a.target }, ...(a.trigger ? { trigger: { ...a.trigger } } : {}) })) } : {}),
@@ -537,6 +540,7 @@ const copyMotion = (m: Motion): Motion => ({
   ...(m.hideGraphics ? { hideGraphics: true } : {}),
   ...(m.hidden ? { hidden: true } : {}),
   ...(m.hf && Object.keys(m.hf).length ? { hf: { ...m.hf } } : {}),
+  ...(m.canvas?.keys.length ? { canvas: copyCanvas(m.canvas) } : {}),
 });
 
 /** A slide copied out of a deck (Copy, or Reuse Slides): its layout, drawing, notes and the rest. */
@@ -576,6 +580,14 @@ function scaleContents(d: Doc, from: SlideSize, to: SlideSize, k: number, placeh
     const p1 = at(s.x1, s.y1), p2 = at(s.x2, s.y2);
     d.updateShape(s.id, { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y });
   }
+}
+
+/** A keyframe after scaleContents: its middle where the drawing under it went, as many slide widths wide as the drawing under it now takes. */
+function scaleKeyframe(key: Keyframe, from: SlideSize, to: SlideSize, k: number): Keyframe {
+  const r = keyRect(key, from);
+  const mx = to.w / 2 + ((r.x1 + r.x2) / 2 - from.w / 2) * k, my = to.h / 2 + ((r.y1 + r.y2) / 2 - from.h / 2) * k;
+  const zoom = clampZoom(((r.x2 - r.x1) * k) / to.w);
+  return { ...key, x: mx - (to.w * zoom) / 2, y: my - (to.h * zoom) / 2, zoom };
 }
 
 const sameStyle = (a: DocStyle, b: DocStyle) => JSON.stringify({ ...a, name: '' }) === JSON.stringify({ ...b, name: '' });
@@ -621,10 +633,14 @@ export class Deck {
 
   get current(): Slide | null { return this.slides[this.index] ?? null; }
 
-  /** What slide i's page needs to be drawn: its size, master, layout, number and background. */
-  page(i = this.index): { size: SlideSize; master: Master; layout: LayoutId; index: number; own?: Background; hideGraphics?: boolean; hf?: SlideHF } {
+  /**
+   * What slide i's page needs to be drawn: its size, master, layout, number and background. On a
+   * canvas slide, `view` is the part of the canvas keyframe `key` shows (the first by default).
+   */
+  page(i = this.index, key = 0): { size: SlideSize; master: Master; layout: LayoutId; index: number; own?: Background; hideGraphics?: boolean; hf?: SlideHF; view?: Rect } {
     const s = this.slides[i];
-    return { size: this.size, master: this.master, layout: s?.layout ?? 'blank', index: i, own: s?.background, hideGraphics: s?.hideGraphics, hf: s?.hf };
+    const k = s?.canvas?.keys[Math.max(0, Math.min(s.canvas.keys.length - 1, key))];
+    return { size: this.size, master: this.master, layout: s?.layout ?? 'blank', index: i, own: s?.background, hideGraphics: s?.hideGraphics, hf: s?.hf, ...(k ? { view: keyRect(k, this.size) } : {}) };
   }
 
   /** Restyle every slide's drawing after the master or backgrounds change. */
@@ -896,6 +912,23 @@ export class Deck {
     const lay = layout ?? (!cur || cur === 'title' ? 'title-content' : cur);
     const s: Slide = { id: this.nextSlideId++, layout: lay, doc: this.newSlideDoc(lay), notes: '' };
     this.insert(this.index + 1, [s], 'New slide');
+  }
+
+  /** A new canvas slide after the current one: a blank slide with no edge and one keyframe where the slide would be. */
+  addCanvasSlide(): void {
+    const s: Slide = { id: this.nextSlideId++, layout: 'blank', doc: this.newSlideDoc('blank'), notes: '', canvas: newCanvas() };
+    this.insert(this.index + 1, [s], 'New canvas slide');
+  }
+
+  /** Change a canvas slide's keyframes (the current slide by default). One undo step. */
+  setCanvas(c: CanvasData, label = 'Keyframes', i = this.index): void {
+    const s = this.slides[i];
+    if (!s?.canvas || !c.keys.length) return;
+    const before = copyCanvas(s.canvas), after = copyCanvas(c);
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    const put = (v: CanvasData) => { s.canvas = copyCanvas(v); this.looks++; };
+    put(after);
+    this.record(label, () => put(before), () => put(after), s);
   }
 
   /**
@@ -1315,7 +1348,13 @@ export class Deck {
     const old = { ...this.size };
     const k = how === 'centre' ? 1 : how === 'fit' ? Math.min(size.w / old.w, size.h / old.h) : Math.max(size.w / old.w, size.h / old.h);
     const all = this.slides.map((_, i) => i);
+    // canvas slides' keyframes go where the drawing under them goes
+    const canvases = this.slides.filter((s) => s.canvas);
+    const keysBefore = canvases.map((s) => copyCanvas(s.canvas!));
+    const keysAfter = keysBefore.map((c) => ({ keys: c.keys.map((x) => scaleKeyframe(x, old, size, k)) }));
+    const putKeys = (cs: CanvasData[]) => canvases.forEach((s, j) => { s.canvas = copyCanvas(cs[j]); });
     this.contentEdit('Change slide size', all, () => {
+      putKeys(keysAfter);
       this.size = { ...size };
       for (const i of all) {
         const d = this.docOf(i);
@@ -1324,7 +1363,7 @@ export class Deck {
           this.fitPlaceholders(d, this.slides[i].layout);
         });
       }
-    }, () => { this.size = old; }, () => { this.size = { ...size }; });
+    }, () => { this.size = old; putKeys(keysBefore); }, () => { this.size = { ...size }; putKeys(keysAfter); });
   }
 
   /**

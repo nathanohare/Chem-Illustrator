@@ -67,6 +67,20 @@ Pick slides in one deck's list and press Ctrl+C, then click in the list of anoth
 
 **Hide Slide** keeps a slide in the deck but leaves it out of the slide show: its picture in the list is greyed and its number struck through. The show skips it going forwards and back, and starting from the beginning starts at the first slide that isn't hidden. **From This Slide** on a hidden slide still shows it, and typing its number then Enter jumps to it, as in PowerPoint. Hidden slides stay hidden in the PowerPoint file. Click **Hide Slide** again to show it.
 
+### Canvas slides
+
+A canvas slide has no edge. Draw a whole route across it once, then show it a step or two at a time, so a big intermediate never has to be redrawn on the next slide. **Home** tab ▸ **Canvas Slide** (or **Insert ▸ Slides ▸ New Canvas Slide**) adds one after the slide you are on. A canvas slide can sit between normal slides, or a whole talk can be one canvas.
+
+The slide show steps through the canvas's **keyframes**. A keyframe is a slide-shaped window on the canvas, drawn as a numbered outline; the one picked is orange.
+
+- **Add Keyframe** puts a new one after the one picked, half a slide along to the right and level with it.
+- **From Window** makes a keyframe of what is in the window now; **Fit to Selection** makes the picked keyframe show what is selected.
+- Drag a keyframe's number (or its outline) to move it. It lines up with the keyframes before and after it; hold Alt to place it anywhere.
+- Drag a corner to zoom it out (an overview of the route) or in. Keyframes zoom in at most 2×.
+- In the slide list, the arrow beside a canvas slide opens a picture of each keyframe. Click one to go to it, drag one to play it at another place, and press Delete or right-click to take it away. Right-click a keyframe on the canvas for the same commands.
+
+**Fit** shows the keyframe picked. In the slide show each click goes on to the next keyframe; animations on canvas slides are not played yet. Canvas slides keep their keyframes in the PowerPoint file and open as canvas slides again. PowerPoint shows a canvas slide as a single slide for now (what lies where the slide would be); a slide for each keyframe comes in a later update.
+
 ## The slide master
 
 **Design & Transitions** tab ▸ **Slide Master…** (or **Format ▸ Slides ▸ Slide Master…**) sets the look of every slide at once:

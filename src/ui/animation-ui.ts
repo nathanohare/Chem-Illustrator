@@ -598,6 +598,11 @@ export class AnimationUI {
   }
 
   private setAnims(anims: Anim[], label: string): void {
+    // a canvas slide's clicks are its keyframes for now: taking animations off still works
+    if (this.hooks.deck()?.current?.canvas && anims.length > this.anims().length) {
+      this.hooks.flash('Animations on canvas slides are coming, played in order with the moves between keyframes. For now the show steps through the keyframes.', 6000);
+      return;
+    }
     this.hooks.deck()?.setAnims(anims, label);
     this.paneKey = '';
     this.refresh();

@@ -420,7 +420,12 @@
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Slides</button>
     <div class="menu sub" role="menu" hidden>
     <button data-modes="slides" role="menuitem" data-cmd="new-slide">New Slide</button>
+    <button data-modes="slides" role="menuitem" data-cmd="new-canvas-slide" title="A slide with no edge: draw a whole route across it, then add keyframes, the windows the slide show steps through">New Canvas Slide</button>
     <button data-modes="slides" role="menuitem" data-cmd="duplicate-slide">Duplicate Slide</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="add-keyframe" title="A new keyframe after the one picked, half a slide along to the right">Add Keyframe</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="keyframe-here" title="A new keyframe showing what is in the window now">Keyframe from Window</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="fit-keyframe" title="The keyframe picked shows what is selected">Fit Keyframe to Selection</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="delete-keyframe" title="Take away the keyframe picked">Delete Keyframe</button>
     <button data-modes="slides" role="menuitem" data-cmd="reuse-slides" title="Slides from another PowerPoint file: see them all, pick the ones you want">Reuse Slides…</button>
     <button data-modes="slides" role="menuitem" data-cmd="insert-slide-zoom" title="Pictures of other slides that zoom into them in the slide show">Slide Zoom…</button>
     <button data-modes="slides" role="menuitem" data-cmd="insert-summary-zoom" title="A slide of zooms, one for each part of the talk">Summary Zoom…</button>
@@ -2158,6 +2163,7 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="new-slide" title="New slide after this one"><span class="rb-icon">＋</span>New Slide</button>
+          <button class="rb-big" data-cmd="new-canvas-slide" title="A canvas slide after this one: no edge, so a whole route can be drawn across it; keyframes are the windows the slide show steps through"><span class="rb-icon">⇿</span>Canvas Slide</button>
           <div class="rb-col">
             <label class="rb-field">Layout <select id="rb-layout">
               <option value="title">Title Slide</option>
@@ -2178,6 +2184,17 @@
           </div>
         </div>
         <div class="rb-label">Slides</div>
+      </div>
+      <div class="rb-group keyframes-only" hidden>
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="add-keyframe" title="A new keyframe after the one picked, half a slide along to the right. Drag a keyframe's number to move it, a corner to zoom it"><span class="rb-icon">⊞</span>Add Keyframe</button>
+          <div class="rb-col">
+            <button data-cmd="keyframe-here" title="A new keyframe showing what is in the window now">From Window</button>
+            <button data-cmd="fit-keyframe" title="The keyframe picked shows what is selected">Fit to Selection</button>
+            <button data-cmd="delete-keyframe" title="Take away the keyframe picked">Delete</button>
+          </div>
+        </div>
+        <div class="rb-label">Keyframes</div>
       </div>
       <div class="rb-group" data-sl-text>
         <div class="rb-row">
@@ -2279,6 +2296,7 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="new-slide" title="New slide after this one"><span class="rb-icon">＋</span>New Slide</button>
+          <button class="rb-big" data-cmd="new-canvas-slide" title="A canvas slide after this one: no edge, so a whole route can be drawn across it; keyframes are the windows the slide show steps through"><span class="rb-icon">⇿</span>Canvas Slide</button>
         </div>
         <div class="rb-label">Slides</div>
       </div>

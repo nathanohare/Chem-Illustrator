@@ -14,6 +14,7 @@ import { linkAtPoint } from '../links';
 import { turnAbout } from '../geom';
 import type { Deck } from './deck';
 import { paintSlide, drawDrawing, type SlidePage } from './slide-view';
+import { shownRect, slidePlace } from './canvas';
 import { selectionBox, POINTS } from '../editor/arrange';
 import type { Rect } from '../geom';
 import type { Selection } from '../editor/editor';
@@ -165,10 +166,10 @@ export class SlideFrames {
   private paintLayer(L: { canvas: HTMLCanvasElement; box: Rect; x: number; y: number }, one: Doc): void {
     const ctx = L.canvas.getContext('2d');
     if (!ctx) return;
-    const { x, y, k } = this.at, d = this.dpr, size = this.page.size;
+    const { x, y, k } = this.at, d = this.dpr, shown = shownRect(this.page);
     ctx.setTransform(k * d, 0, 0, k * d, x * d - L.x, y * d - L.y);
     // nothing spills outside the slide, or outside the part's box
-    const r = { x1: Math.max(0, L.box.x1), y1: Math.max(0, L.box.y1), x2: Math.min(size.w, L.box.x2), y2: Math.min(size.h, L.box.y2) };
+    const r = { x1: Math.max(shown.x1, L.box.x1), y1: Math.max(shown.y1, L.box.y1), x2: Math.min(shown.x2, L.box.x2), y2: Math.min(shown.y2, L.box.y2) };
     ctx.beginPath();
     ctx.rect(r.x1, r.y1, Math.max(0, r.x2 - r.x1), Math.max(0, r.y2 - r.y1));
     ctx.clip();
@@ -264,11 +265,11 @@ export class SlideFrames {
     ctx.drawImage(this.base, 0, 0);
     if (!this.layers.length) return;
     const states = partStates(this.parts, this.anims, done, t, fired, this.page.size);
-    const { x, y, k } = this.at, s = this.dpr * k, size = this.page.size;
+    const { x, y, k } = this.at, s = this.dpr * k, size = this.page.size, shown = shownRect(this.page);
     const px = (v: number, o: number) => (o + v * k) * this.dpr;
     ctx.save();
     ctx.beginPath();
-    ctx.rect(px(0, x), px(0, y), size.w * s, size.h * s);
+    ctx.rect(px(shown.x1, x), px(shown.y1, y), (shown.x2 - shown.x1) * s, (shown.y2 - shown.y1) * s);
     ctx.clip();
     for (const L of this.layers) {
       const st = states.get(L.part) ?? { visible: true };
@@ -586,6 +587,8 @@ export class Player {
   i = 0;
   /** Steps of the slide's animations played so far. */
   done = 0;
+  /** On a canvas slide, the keyframe showing. */
+  key = 0;
   private frames: SlideFrames | null = null;
   private moving: { kind: 'transition'; from: HTMLCanvasElement | null; to?: HTMLCanvasElement; t: Transition; t0: number; morph?: MorphFrames | null; was?: number; zoom?: { rect: Rect; out: boolean } } | { kind: 'step'; t0: number } | { kind: 'trigger'; key: string; t0: number } | null = null;
   /** Clicks played so far of each of the slide's triggers (by the trigger's key). */
@@ -622,8 +625,7 @@ export class Player {
   get slidePlace(): { x: number; y: number; k: number } {
     if (this.frames) return this.frames.place;
     // worked out as paintSlide does, without painting the slide's pictures to find it
-    const s = this.deck.page(this.i).size, k = Math.min(this.w / s.w, this.h / s.h);
-    return { x: (this.w - s.w * k) / 2, y: (this.h - s.h * k) / 2, k };
+    return slidePlace(this.w, this.h, this.deck.page(this.i, this.key));
   }
 
   /** The link at a point on the canvas (CSS pixels from its corner), if any. */
@@ -840,8 +842,24 @@ export class Player {
 
   private framesFor(i: number): SlideFrames {
     const s = this.deck.slides[i];
-    const page: SlidePage = this.deck.page(i);
-    return new SlideFrames(page, this.deck.docOf(i), this.noAnimation ? [] : s.anims ?? [], this.w, this.h, this.dpr, this.fill);
+    const page: SlidePage = this.deck.page(i, this.key);
+    // (a canvas slide's animations are not played yet: its keyframes are its clicks)
+    return new SlideFrames(page, this.deck.docOf(i), this.noAnimation || s.canvas ? [] : s.anims ?? [], this.w, this.h, this.dpr, this.fill);
+  }
+
+  /** How many keyframes slide i has (1 for a slide that isn't a canvas). */
+  private keysOf(i: number): number {
+    return this.deck.slides[i]?.canvas?.keys.length ?? 1;
+  }
+
+  /** On a canvas slide, show keyframe `key` (straight there). */
+  private toKey(key: number): void {
+    this.key = key;
+    this.frames = null;
+    this.done = 0;
+    this.fired = new Map();
+    this.paint();
+    this.onChange();
   }
 
   /** The slide the show plays after slide i (in its order), or -1 at the end. */
@@ -905,13 +923,16 @@ export class Player {
       from.getContext('2d')?.drawImage(this.canvas, 0, 0);
     }
     const was = this.frames && this.i !== i ? this.i : undefined;
+    // a morph pairs things by where they are on two slides: not into or out of a canvas, where places are on the canvas
+    const morph = t?.kind === 'morph' && was !== undefined && !this.deck.slides[was]?.canvas && !this.deck.slides[i].canvas;
     this.wasDone = this.done;
     this.i = i;
+    this.key = how.atEnd ? this.keysOf(i) - 1 : 0;
     this.frames = null;
     this.fired = new Map();
     this.done = how.atEnd ? this.current.stepCount : 0;
     this.timeUp = false;
-    if (from && t) this.moving = { kind: 'transition', from, t, t0: performance.now(), ...(t.kind === 'morph' && was !== undefined ? { was, morph: null } : {}) };
+    if (from && t) this.moving = { kind: 'transition', from, t: t.kind === 'morph' && !morph ? { ...t, kind: 'fade' } : t, t0: performance.now(), ...(morph ? { was, morph: null } : {}) };
     else this.arrived();
     this.paint();
     if (this.moving) this.loop();
@@ -947,6 +968,7 @@ export class Player {
   next(): void {
     if (this.moving) { this.finish(); return; }
     if (this.done < this.current.stepCount) { this.playStep(); return; }
+    if (this.key < this.keysOf(this.i) - 1) { this.toKey(this.key + 1); return; }
     if (this.beforeNextSlide()) return;
     // hidden slides (Hide Slide) are skipped, and slides not in the show's order
     const j = this.after(this.i);
@@ -963,6 +985,7 @@ export class Player {
       this.onChange();
       return;
     }
+    if (this.key > 0) { this.toKey(this.key - 1); return; }
     const j = this.before(this.i);
     if (j >= 0) this.show(j, { atEnd: true });
   }
