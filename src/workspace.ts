@@ -6,6 +6,7 @@
 
 import { applyDesign, newDocDesign } from './document/themes';
 import { Doc, keepOnPage, type PageSetup } from './model';
+import { atFirstPage } from './page-grid';
 import { Deck, type SlideSize, type Master } from './deck/deck';
 import { Workbook } from './sheet/workbook';
 import { DocFile } from './document/doc-file';
@@ -750,7 +751,7 @@ export class Workspace {
       return { data: await this.hooks.documents.write(tab.document!.t, name), type: ext === 'rtf' ? RTF : ext === 'odt' ? ODT : DOCX, note: documentSaveNote(name) };
     }
     keepOnPage(this.docOf(tab));
-    const text = writeCdxml(this.docOf(tab), { name, textMeasure: this.hooks.measure });
+    const text = atFirstPage(this.docOf(tab), () => writeCdxml(this.docOf(tab), { name, textMeasure: this.hooks.measure }));
     return ext === 'cdx' ? { data: cdxmlToCdx(text), type: CDX, note: '' } : { data: text, type: CDXML, note: '' };
   }
 

@@ -4,6 +4,8 @@
 // this page. Drawings never go here.
 
 import { type OrientPrefs, DEFAULT_ORIENT, parseOrient } from './orientation-prefs';
+import { type PageLook, DEFAULT_PAGE_LOOK, parsePageLook, readPageTag } from './page-grid';
+import type { PageSetup } from './model';
 import { parseQuickParts, type QuickPart } from './document/quick-parts';
 import { parseDesign, type DocDesign } from './document/themes';
 import type { UpdateChannel } from './updates';
@@ -83,7 +85,7 @@ export interface Settings {
   /** The size of the whole interface, 1 for normal (View > Window and Colours > Interface Size, Ctrl+Alt+= / Ctrl+Alt+-). */
   uiScale: number;
   /** The page new drawings start on (File > Page Setup's default); null for no page. */
-  page: { name?: string; w: number; h: number; grow: boolean } | null;
+  page: PageSetup | null;
   /** The welcome card has been closed (it shows once, on a first empty drawing). */
   welcomed: boolean;
   /** Where the text formatting bar goes while typing text (View > Window and Colours > Text Formatting Bar). */
@@ -155,6 +157,8 @@ export interface Settings {
   guides: { drawing: boolean; slides: boolean; design: boolean };
   /** Finding your way round drawings: navigator, edge arrows, dot grid, outside tint, Fit and Go to Selection buttons (Settings ▸ Navigation). */
   orient: OrientPrefs;
+  /** How the drawing's page grid looks, and what a paste past a fixed edge does (Settings ▸ Page Grid). */
+  pageLook: PageLook;
   /** Document settings boxes pinned in the panel on the right ('para', 'style', 'page', 'hf'). */
   docPins: string[];
   /** Document mode's ruler shown (View > Ruler). */
@@ -215,6 +219,7 @@ export const DEFAULT_SETTINGS: Settings = {
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
   orient: { ...DEFAULT_ORIENT },
+  pageLook: { ...DEFAULT_PAGE_LOOK },
   docPins: [],
   docRuler: false,
   sheetFormulaBar: true,
@@ -232,7 +237,7 @@ const STORAGE_KEY = 'chem-illustrator.settings';
 
 /** Read settings saved as text, keeping only what makes sense. */
 export function parseSettings(text: string | null | undefined): Settings {
-  const s: Settings = { ...DEFAULT_SETTINGS, hotkeys: {}, replacements: DEFAULT_SETTINGS.replacements.map(([a, b]) => [a, b]), dictionary: [], modeColours: { ...DEFAULT_MODE_COLOURS }, nicknames: {}, templates: [], palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, myStyles: [], modeStyles: {}, darkPalettes: [], guides: { ...DEFAULT_SETTINGS.guides }, orient: { ...DEFAULT_ORIENT }, docPins: [], recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], scheme: { ...DEFAULT_SCHEME_PREFS }, keep: { ...DEFAULT_KEEP }, ai: { ...DEFAULT_AI } };
+  const s: Settings = { ...DEFAULT_SETTINGS, hotkeys: {}, replacements: DEFAULT_SETTINGS.replacements.map(([a, b]) => [a, b]), dictionary: [], modeColours: { ...DEFAULT_MODE_COLOURS }, nicknames: {}, templates: [], palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, myStyles: [], modeStyles: {}, darkPalettes: [], guides: { ...DEFAULT_SETTINGS.guides }, orient: { ...DEFAULT_ORIENT }, pageLook: { ...DEFAULT_PAGE_LOOK }, docPins: [], recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], scheme: { ...DEFAULT_SCHEME_PREFS }, keep: { ...DEFAULT_KEEP }, ai: { ...DEFAULT_AI } };
   if (!text) return s;
   let raw: unknown;
   try { raw = JSON.parse(text); } catch { return s; }
@@ -243,10 +248,16 @@ export function parseSettings(text: string | null | undefined): Settings {
   for (const k of ['arrowStartGap', 'arrowEndGap'] as const) if (typeof r[k] === 'number' && isFinite(r[k] as number) && (r[k] as number) >= 0) s[k] = Math.min(50, r[k] as number);
   if (r.touchMode === 'auto' || r.touchMode === 'on' || r.touchMode === 'off') s.touchMode = r.touchMode;
   s.orient = parseOrient(r.orient);
+  s.pageLook = parsePageLook(r.pageLook);
   if (r.page === null) s.page = null;
   else if (r.page && typeof r.page === 'object') {
     const p = r.page as Record<string, unknown>;
-    if (typeof p.w === 'number' && typeof p.h === 'number' && p.w > 10 && p.h > 10) s.page = { w: p.w, h: p.h, grow: p.grow !== false, ...(typeof p.name === 'string' ? { name: p.name } : {}) };
+    const count = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v > 1 && v < 1000 ? v : undefined);
+    const across = count(p.across), down = count(p.down);
+    const grid = readPageTag(p.walls && typeof p.walls === 'object' ? JSON.stringify({ walls: p.walls }) : null);
+    if (typeof p.w === 'number' && typeof p.h === 'number' && p.w > 10 && p.h > 10) {
+      s.page = { w: p.w, h: p.h, grow: p.grow !== false, ...(typeof p.name === 'string' ? { name: p.name } : {}), ...(across ? { across } : {}), ...(down ? { down } : {}), ...(grid?.walls ? { walls: grid.walls } : {}) };
+    }
   }
   if (r.titleBar === 'app' || r.titleBar === 'system') s.titleBar = r.titleBar;
   if (typeof r.uiScale === 'number') s.uiScale = clampUiScale(r.uiScale);

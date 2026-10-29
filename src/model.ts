@@ -1051,10 +1051,21 @@ export interface PageSetup {
   name?: string;
   /** More pages are added when the drawing goes past the page; otherwise it is kept on the page when saved. */
   grow: boolean;
-  /** How many sheets across and down the document is at least (ChemDraw's document size in pages). */
+  /**
+   * How many sheets across and down the document is at least (ChemDraw's document size in pages);
+   * kept on the page (grow false), exactly how many it has.
+   */
   across?: number;
   down?: number;
+  /** The fixed edges the page grid doesn't grow past (page-grid.ts); missing, top and left. */
+  walls?: PageWalls;
 }
+
+/**
+ * A drawing's fixed edges, as the first column (l) or row (t) of pages it may have, or the last
+ * (r, b). An edge that isn't given grows as the drawing does.
+ */
+export interface PageWalls { l?: number; t?: number; r?: number; b?: number }
 
 /** Paper sizes, as the area ChemDraw draws on (the paper less half-inch margins). */
 export const PAPER: { name: string; label: string; w: number; h: number }[] = [
@@ -1062,26 +1073,33 @@ export const PAPER: { name: string; label: string; w: number; h: number }[] = [
   { name: 'a4', label: 'A4 (210 × 297 mm)', w: 523, h: 770 },
   { name: 'legal', label: 'US Legal (8.5 × 14 in)', w: 540, h: 936 },
   { name: 'a3', label: 'A3 (297 × 420 mm)', w: 770, h: 1118 },
+  { name: 'a5', label: 'A5 (148 × 210 mm)', w: 348, h: 523 },
+  { name: 'b5', label: 'B5 (176 × 250 mm)', w: 427, h: 637 },
   { name: 'tabloid', label: 'Tabloid (11 × 17 in)', w: 720, h: 1152 },
 ];
 
 /**
- * A drawing kept on its page (File > Page Setup without "add pages"): moved back onto the page
- * where it has gone past it and fits, as one undoable step. False when it is too big to fit.
+ * A drawing kept to its pages (File > Page Setup, a set number of pages): moved back onto them
+ * where it has gone past them and fits, as one undoable step. False when it is too big to fit.
  */
 export function keepOnPage(doc: Doc): boolean {
   const p = doc.page, b = doc.bounds();
   if (!p || p.grow || !b) return true;
-  if (b.x2 - b.x1 > p.w || b.y2 - b.y1 > p.h) return false;
-  const dx = b.x1 < 0 ? -b.x1 : b.x2 > p.w ? p.w - b.x2 : 0, dy = b.y1 < 0 ? -b.y1 : b.y2 > p.h ? p.h - b.y2 : 0;
+  // (the set number of pages across and down)
+  const W = p.w * Math.max(1, p.across ?? 1), H = p.h * Math.max(1, p.down ?? 1);
+  if (b.x2 - b.x1 > W || b.y2 - b.y1 > H) return false;
+  const dx = b.x1 < 0 ? -b.x1 : b.x2 > W ? W - b.x2 : 0, dy = b.y1 < 0 ? -b.y1 : b.y2 > H ? H - b.y2 : 0;
   if (!dx && !dy) return true;
-  doc.edit('Keep on page', () => {
-    doc.moveAtoms(new Set(doc.atoms.keys()), dx, dy);
-    for (const c of [...doc.captions.values()]) doc.updateCaption(c.id, { x: c.x + dx, y: c.y + dy });
-    for (const r of [...doc.arrows.values()]) doc.updateArrow(r.id, { tail: { x: r.tail.x + dx, y: r.tail.y + dy }, head: { x: r.head.x + dx, y: r.head.y + dy } });
-    for (const s of [...doc.shapes.values()]) doc.updateShape(s.id, { x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy, ...(s.poly ? { poly: s.poly.map((q) => ({ x: q.x + dx, y: q.y + dy })) } : {}) });
-  });
+  doc.edit('Keep on page', () => shiftDrawing(doc, dx, dy));
   return true;
+}
+
+/** Move the whole drawing. Call inside an edit. */
+export function shiftDrawing(doc: Doc, dx: number, dy: number): void {
+  doc.moveAtoms(new Set(doc.atoms.keys()), dx, dy);
+  for (const c of [...doc.captions.values()]) doc.updateCaption(c.id, { x: c.x + dx, y: c.y + dy });
+  for (const r of [...doc.arrows.values()]) doc.updateArrow(r.id, { tail: { x: r.tail.x + dx, y: r.tail.y + dy }, head: { x: r.head.x + dx, y: r.head.y + dy } });
+  for (const s of [...doc.shapes.values()]) doc.updateShape(s.id, { x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy, ...(s.poly ? { poly: s.poly.map((q) => ({ x: q.x + dx, y: q.y + dy })) } : {}) });
 }
 
 export type Entity = Atom | Bond | Caption | Arrow | Shape;

@@ -10,6 +10,7 @@ const DPI = 600;
 /** The sheets of PAPER (in model.ts), portrait, in points. */
 export const SHEETS: Record<string, { w: number; h: number }> = {
   letter: { w: 612, h: 792 }, a4: { w: 595.28, h: 841.89 }, legal: { w: 612, h: 1008 }, a3: { w: 841.89, h: 1190.55 }, tabloid: { w: 792, h: 1224 },
+  a5: { w: 419.53, h: 595.28 }, b5: { w: 498.9, h: 708.66 },
 };
 
 const word = (n: number) => (n & 0xffff).toString(16).toUpperCase().padStart(4, '0');

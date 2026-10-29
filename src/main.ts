@@ -17,11 +17,11 @@ import { ToolboxEditor } from './ui/toolbox-editor';
 import { RibbonEditor } from './ui/ribbon-editor';
 import { readRibbons, applyRibbon, type RibbonInfo, type RibbonsPrefs } from './ui/ribbon-custom';
 import { editPalettes, getPalettes, onPalettes, setPalettes, useDrawingColours, usePaletteMenus } from './ui/palette-ui';
-import { Doc, Atom, Caption, Shape, type TextRun, outsideValence, Contents, CHIRAL_FLAGS, PICTURE_STYLES, type PictureLook, type Attachment, type HighlightStyle, type ShapeMath, PAPER, keepOnPage } from './model';
+import { Doc, Atom, Caption, Shape, type TextRun, outsideValence, Contents, CHIRAL_FLAGS, PICTURE_STYLES, type PictureLook, type Attachment, type HighlightStyle, type ShapeMath, PAPER, keepOnPage, type PageSetup, type PageWalls } from './model';
 import { Renderer, measureText, forgetTextWidths } from './render/renderer';
 import { Editor, TOOLS, type HighlightToggle, type Selection } from './editor/editor';
 import { BUILT_IN_LOOKS, type HighlightLookPreset } from './ui/highlight-looks';
-import { selectionBox, POINTS, type Align } from './editor/arrange';
+import { selectionBox, POINTS, type Align, units, moveUnit } from './editor/arrange';
 import { groupSelection, selectedGroups } from './editor/groups';
 import { readCdxml, ReadStats } from './io/cdxml';
 import { ChemClient } from './chem/client';
@@ -108,6 +108,7 @@ import { itemsToEmf, type EmfBox } from './render/emf';
 import type { Item } from './render/vector';
 import { PAPERS, defaultPaper, orient, placeIn, inside, placeSvg, pageSvg } from './print-layout';
 import { printPages } from './ui/print';
+import { SHEETS } from './io/cdxml-print';
 import { dataUrl, fromDataUrl, imageSize, loadImage, onImageReady, pictureMime, showableSrc, webpToPng } from './render/images';
 import { freeRing, matchStructure, fusedRing, placeRing, sprout, ringOnAtom, ringDir } from './chem/chemgeom';
 import { Toolbar, ToolbarItem, PaletteDef, type ToolDef } from './ui/toolbar';
@@ -195,6 +196,8 @@ import { Brush, paintObjects, pickObjectLook, type ObjectLook, type TextLook } f
 import { SymbolWindow } from './ui/symbol-window';
 import { Navigator, EdgeArrows, paintGrid, paintTint, type Target } from './ui/orientation';
 import { type OrientPrefs, DEFAULT_ORIENT } from './orientation-prefs';
+import { type PageLook, type Side, DEFAULT_PAGE_LOOK, SIDES, SIDE_NAMES, pageExtent, extentRect, pageCount, scrollBox, wallRect, wallsOf, setWall, usedPages, pagesToPrint, fixedCount, crossesWalls, clampMove, wrapPieces } from './page-grid';
+import { paintPages } from './ui/page-grid-view';
 import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
@@ -281,6 +284,8 @@ const modeStyleFor = (mode: StyleMode): string | undefined => modeStyles[mode] ?
 const dark = { on: false, palette: 'Graphite', own: [] as DarkPalette[] };
 /** Finding your way round drawings (Settings ▸ Navigation): navigator, edge arrows, dot grid, outside tint, Fit and Go to Selection buttons. */
 let orientPrefs: OrientPrefs = { ...DEFAULT_ORIENT };
+/** How the drawing's page grid looks, and what a paste past a fixed edge does (Settings ▸ Page Grid). */
+let pageLook: PageLook = { ...DEFAULT_PAGE_LOOK };
 /** Beside slides: the deck whose drawing is being worked on (the drawing's tab shows; the slide is a picture). */
 let slideSplit: Tab | null = null;
 /** Beside a document or sheet: the drawing has the keys and menus (it was clicked last). */
@@ -711,6 +716,7 @@ async function pasteFrom(read: () => Pasted | Promise<Pasted>): Promise<void> {
       editor.placeClear(deckNow()?.size);
     });
     editor.changed();
+    await keepPasteInside();
   } else if (got.kind === 'text') await pasteText(got.text, got.html);
   else if (got.kind === 'picture') placePicture(got.bytes, got.mime, null);
   else if (got.kind === 'table') pasteTable(got.rows);
@@ -799,6 +805,7 @@ async function pasteChemistry(text: string, quiet = false): Promise<boolean> {
       editor.placeClear(deckNow()?.size);
     });
     selectNewAtoms(ids);
+    await keepPasteInside();
   } catch (err) {
     flash(String(err));
   }
@@ -4082,7 +4089,7 @@ async function exportPdf(): Promise<void> {
 // ---------------------------------------------------------------- printing
 
 /** The choices made in the Print window, kept while the app is open. */
-const printChoices = { paper: defaultPaper(navigator.language) as string, orient: 'auto', size: 'actual', handout: '1', frame: 'true', sheet: 'all' };
+const printChoices = { paper: defaultPaper(navigator.language) as string, orient: 'auto', size: 'actual', handout: '1', frame: 'true', sheet: 'all', layout: 'pages', skip: 'true' };
 const PAPER_OPTIONS = Object.entries(PAPERS).map(([value, p]) => ({ value, label: p.name }));
 
 const pageSvgOf = (p: PdfPage) => {
@@ -4155,6 +4162,28 @@ async function printNow(): Promise<void> {
   }
   const pic = recordPicture(doc, 4);
   if (!pic) { flash('There is nothing to print yet.'); return; }
+  // a drawing on pages: one sheet for each page of its grid, as ChemDraw prints
+  const pg = !deckNow() ? doc.page : null;
+  if (pg) {
+    const v = await ask('Print', [
+      { name: 'layout', label: 'Print', value: printChoices.layout, options: [{ value: 'pages', label: 'One sheet for each page, at actual size' }, { value: 'one', label: 'The whole drawing on one sheet' }] },
+      { name: 'skip', label: 'Leave out pages with nothing on them', type: 'checkbox', value: String(printChoices.skip !== 'false') },
+    ], { ok: 'Next', note: 'The paper and its size are in File > Page Setup.' });
+    if (!v) return;
+    Object.assign(printChoices, v);
+    if (v.layout === 'pages') {
+      const e = pageExtent(pg, doc.bounds());
+      const list = pagesToPrint(e, pagesInUse(pg), v.skip === 'true');
+      if (!list.length) { flash('There is nothing on the pages to print.'); return; }
+      // the paper: the page with its half-inch margins (a named paper at its true size)
+      const sheet = pg.name ? SHEETS[pg.name] : undefined;
+      const [W, H] = sheet ? (pg.w > pg.h ? [sheet.h, sheet.w] : [sheet.w, sheet.h]) : [pg.w + 72, pg.h + 72];
+      const mx = (W - pg.w) / 2, my = (H - pg.h) / 2;
+      const pages = list.map(({ c, r }) => pageSvg(W, H, [placeSvg(itemsToSvg(pic.items, { x1: c * pg.w, y1: r * pg.h, x2: (c + 1) * pg.w, y2: (r + 1) * pg.h }), { x: mx, y: my, w: pg.w, h: pg.h })]));
+      printPages({ pages, w: W, h: H });
+      return;
+    }
+  }
   const v = await ask('Print', [
     { name: 'paper', label: 'Paper', value: printChoices.paper, options: PAPER_OPTIONS },
     { name: 'orient', label: 'Orientation', value: printChoices.orient, options: [{ value: 'auto', label: 'To suit the drawing' }, { value: 'portrait', label: 'Portrait' }, { value: 'landscape', label: 'Landscape' }] },
@@ -4987,6 +5016,7 @@ function command(name: string): boolean {
     return true;
   }
   if (name.startsWith('shape-fx:')) { void shapeEffect(name); return true; }
+  if (name.startsWith('page-edge:')) return togglePageEdge(name.slice('page-edge:'.length) as Side);
   if (name.startsWith('caption-chem:')) return setCaptionChem(name.slice('caption-chem:'.length) as 'auto' | 'on' | 'off');
   if (name.startsWith('add-ligand:')) {
     if (editor.addLigand(name.slice('add-ligand:'.length))) return true;
@@ -5374,6 +5404,8 @@ const COMMANDS: Record<string, () => unknown> = {
   'dot-grid': () => setOrient({ ...orientPrefs, dotGrid: !orientPrefs.dotGrid }),
   'outside-tint': () => setOrient({ ...orientPrefs, tint: !orientPrefs.tint }),
   'navigation-settings': () => settingsWindow.open('navigation'),
+  'page-grid': () => setPageLook({ ...pageLook, grid: !pageLook.grid }),
+  'page-grid-settings': () => settingsWindow.open('page-grid'),
   // 100%: a point on the page is a point on the screen (96 pixels to the inch)
   'zoom-actual': () => editor.zoomTo(96 / 72),
   hotkeys: () => settingsWindow.open('hotkeys'),
@@ -6742,6 +6774,7 @@ function currentSettings(): Settings {
     darkPalettes: dark.own,
     guides: { ...guidesOn },
     orient: { ...orientPrefs },
+    pageLook: { ...pageLook },
     docPins: [...docBoxPrefs.pinned],
     docRuler: docRulerPrefs.shown,
     sheetFormulaBar: formulaBarPrefs.shown,
@@ -6907,6 +6940,7 @@ function applySettings(s: Settings): void {
   showDevTools(s.devTools);
   showScrollBars(s.scrollBars);
   setOrient(s.orient, false);
+  setPageLook(s.pageLook, false);
   void placeTitleBar(s.titleBar);
   setRibbonCollapsed(s.ribbonCollapsed);
   void setUiScale(s.uiScale);
@@ -7984,6 +8018,7 @@ function drawingMenu(): MenuItem[] {
       { label: 'Insert', items: [{ cmd: 'name-to-structure' }, { cmd: 'periodic-table' }, { cmd: 'insert-picture' }, { cmd: 'import-picture', label: 'Structure from Picture…' }, { cmd: 'text-box' }, { cmd: 'insert-symbol' }, ...(design ? [{ cmd: 'design-shapes', label: 'Shape…' }, { cmd: 'design-icons', label: 'Icon…' }, { cmd: 'connector-tool' }] : []), ...(ws.active.mode === 'slides' ? [{ cmd: 'slide-shapes', label: 'Shape…' }, { cmd: 'slide-icons', label: 'Icon…' }] : [])] },
       { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }] },
       { cmd: 'drawing-style' },
+      ...(ws.active.mode === 'drawing' && pageEdgesMenu() ? [pageEdgesMenu()!] : []),
       view,
     ];
   }
@@ -8900,6 +8935,7 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'palettes', title: 'Colour Palettes', words: 'colours colors palette rows', open: () => editPalettes() },
   { id: 'mode-colours', title: 'Mode Colours', words: 'tab colours accent window drawing slides sheet document design appearance', open: () => modeDialog.open() },
   { id: 'navigation', title: 'Navigation', words: 'navigator minimap map overview edge arrows off screen lost find dot grid dots tint outside fit go to selection orientation zoom', open: navigationSettings },
+  { id: 'page-grid', title: 'Page Grid', words: 'pages page grid boundaries dashed dotted lines paper fixed edges hatched wall empty grey print chemdraw paste wrap', open: pageGridSettings },
   { id: 'dark', title: 'Dark Page', words: 'dark mode night paper ink graphite slate appearance colours', open: darkColours },
   { id: 'schemes', title: 'Schemes', words: 'scheme arrow gap plus text size reagents conditions boxes', open: schemeSettings },
   { id: 'autosave', title: 'AutoSave and Recovery', words: 'autosave recovery versions backup copies shared folders onedrive', open: () => keeper.optionsCommand() },
@@ -8937,7 +8973,10 @@ let outlineSeen = -1;
 // scroll bars over the drawing: they cover what is drawn (or the slide), and the part on screen
 const scrollArea = () => {
   const d = ws.active.deck;
-  return d ? { x1: 0, y1: 0, x2: d.size.w, y2: d.size.h } : doc.bounds();
+  if (d) return { x1: 0, y1: 0, x2: d.size.w, y2: d.size.h };
+  // with the page grid: the pages, and a page more on each side that can grow
+  const p = gridPage(), b = doc.bounds();
+  return p ? scrollBox(p, pageExtent(p, b), b) : b;
 };
 const scrollbars = new Scrollbars(host, renderer, scrollArea, () => editor.requestScene());
 // the wheel stops where the bars end, at the edge of the drawing, rather than going on for ever
@@ -8985,7 +9024,14 @@ const navMap = new Navigator(host, renderer, () => orientPrefs, {
   busy: () => editor.dragging,
 });
 const edgeArrows = new EdgeArrows(host, renderer, () => editor.requestScene());
-editor.underlay = (ctx) => { if (drawingShown()) paintTint(ctx, orientPrefs, renderer, doc.bounds(), doc.style.labelSize * 1.5 + doc.style.bondLength); };
+editor.underlay = (ctx) => {
+  if (!drawingShown()) return;
+  const p = gridPage();
+  if (p) paintPages(ctx, pageLook, renderer, p, pageExtent(p, doc.bounds()), pagesInUse(p), dark.on);
+  paintTint(ctx, orientPrefs, renderer, doc.bounds(), doc.style.labelSize * 1.5 + doc.style.bondLength);
+};
+// nothing is drawn or moved past a fixed edge of the page grid
+editor.walls = () => { const p = gridPage(); return p ? wallRect(p) : null; };
 
 /** Each frame: the navigator and the edge arrows follow the view and the drawing. */
 function updateOrientation(): void {
@@ -9006,6 +9052,128 @@ function setOrient(next: OrientPrefs, store = true): void {
   if (gridChanged) renderer.repaintAll();
   editor.requestScene();
   if (store) storeSettings();
+}
+
+// ---------------------------------------------------------------- the page grid (page-grid.ts)
+
+/** The drawing's page, when its page grid shows: a drawing (not a slide or design) with a page, and the grid switched on. */
+function gridPage(): PageSetup | null {
+  return pageLook.grid && !deckNow() && doc.page ? doc.page : null;
+}
+
+/** The pages with something on them, worked out again when the drawing changes. */
+let usedCache: { doc: Doc; version: number; w: number; h: number; set: Set<string> } | null = null;
+function pagesInUse(p: PageSetup): Set<string> {
+  if (usedCache && usedCache.doc === doc && usedCache.version === doc.version && usedCache.w === p.w && usedCache.h === p.h) return usedCache.set;
+  const r = doc.style.labelSize * 0.5;
+  const boxes: Rect[] = [];
+  for (const a of doc.atoms.values()) boxes.push({ x1: a.x - r, y1: a.y - r, x2: a.x + r, y2: a.y + r });
+  for (const c of doc.captions.values()) boxes.push({ x1: c.x, y1: c.y - 10, x2: c.x + (c.width ?? 40), y2: c.y + 4 });
+  for (const a of doc.arrows.values()) boxes.push({ x1: Math.min(a.tail.x, a.head.x), y1: Math.min(a.tail.y, a.head.y), x2: Math.max(a.tail.x, a.head.x), y2: Math.max(a.tail.y, a.head.y) });
+  for (const sh of doc.shapes.values()) boxes.push({ x1: Math.min(sh.x1, sh.x2), y1: Math.min(sh.y1, sh.y2), x2: Math.max(sh.x1, sh.x2), y2: Math.max(sh.y1, sh.y2) });
+  usedCache = { doc, version: doc.version, w: p.w, h: p.h, set: usedPages(p, boxes) };
+  return usedCache.set;
+}
+
+/** Use these page grid settings: tick the View menu and repaint. */
+function setPageLook(next: PageLook, store = true): void {
+  pageLook = { ...next };
+  for (const el of document.querySelectorAll('[data-cmd="page-grid"][role="menuitemcheckbox"]')) el.setAttribute('aria-checked', String(pageLook.grid));
+  editor.requestScene();
+  if (store) storeSettings();
+}
+
+/** Fix or free one edge of the page grid (right-click > Page Edges, or Page Setup). */
+function togglePageEdge(side: Side): boolean {
+  const p = doc.page;
+  if (!p || deckNow()) { flash('This drawing has no pages: choose a paper in File > Page Setup first.'); return false; }
+  if (!p.grow) { flash('The drawing is kept to a set number of pages, so all its edges are fixed. Choose "Add pages as the drawing grows" in File > Page Setup to free some.', 7000); return false; }
+  const w = wallsOf(p), on = w[side] === undefined;
+  if (on && fixedCount(w) >= 3) { flash('At most three edges can be fixed, so the drawing always has room to grow. Free another edge first.', 6000); return false; }
+  p.walls = setWall(p, doc.bounds(), side, on);
+  ws.noteChange();
+  editor.requestScene();
+  flash(on ? `The ${SIDE_NAMES[side]} edge is fixed: nothing can go past it.` : `The ${SIDE_NAMES[side]} edge is free: pages are added that way as the drawing grows.`, 3500);
+  return true;
+}
+
+/** Right-click on the drawing: fix or free the page grid's edges. */
+function pageEdgesMenu(): MenuItem | null {
+  const p = gridPage();
+  if (!p || !p.grow) return null;
+  const w = wallsOf(p);
+  return { label: 'Page Edges', items: [
+    ...SIDES.map((s) => ({ cmd: `page-edge:${s}`, label: `${w[s] !== undefined ? '✓ ' : ''}Fix ${SIDE_NAMES[s][0].toUpperCase()}${SIDE_NAMES[s].slice(1)} Edge` })),
+    null, { cmd: 'page-setup' }, { cmd: 'page-grid-settings' },
+  ] };
+}
+
+/**
+ * After a paste: when it goes past a fixed edge, it is moved inside, adding pages the open ways,
+ * or its pieces are wrapped at the page's edges like a line of text (asked, unless a choice is set
+ * in Settings ▸ Page Grid). The change joins the paste, so one undo takes both back.
+ */
+async function keepPasteInside(): Promise<void> {
+  const p = gridPage();
+  if (!p || !editor.hasSelection()) return;
+  const walls = wallRect(p), box = editor.selBox();
+  if (!box || !crossesWalls(box, walls)) return;
+  let how: 'pages' | 'wrap' = pageLook.pasteAtWall === 'wrap' ? 'wrap' : 'pages';
+  if (pageLook.pasteAtWall === 'ask') {
+    const got = await ask('Pasted past a fixed edge', [
+      { name: 'how', label: 'Fit it in by', value: 'pages', options: [
+        { value: 'pages', label: 'Adding pages: keep it as it was pasted' },
+        { value: 'wrap', label: 'Wrapping: put its structures on new rows at the page\'s edge' },
+      ] },
+      { name: 'remember', label: 'Do this every time (Settings ▸ Page Grid changes it)', type: 'checkbox', value: 'false' },
+    ], { ok: 'OK', note: 'What was pasted goes past a fixed edge of the page grid, where nothing can go.' });
+    how = got?.how === 'wrap' ? 'wrap' : 'pages';
+    if (got?.remember === 'true') setPageLook({ ...pageLook, pasteAtWall: how });
+  }
+  const sel = editor.sel;
+  doc.amend('Paste', () => {
+    const pieces = units(doc, sel, editor.measure());
+    if (how === 'wrap' && pieces.length > 1) {
+      // between the fixed edges, or the grid's edges on an open side
+      const grid = extentRect(p, pageExtent(p, doc.bounds()));
+      const left = isFinite(walls.x1) ? walls.x1 : Math.max(grid.x1, Math.min(box.x1, grid.x2 - p.w));
+      const right = isFinite(walls.x2) ? walls.x2 : Math.max(grid.x2, left + p.w);
+      const top = Math.max(isFinite(walls.y1) ? walls.y1 : -Infinity, box.y1);
+      const gap = doc.style.bondLength;
+      const moves = wrapPieces(pieces.map((u) => u.box), left + gap / 2, right - gap / 2, top + gap / 2, gap);
+      pieces.forEach((u, i) => moveUnit(doc, u, moves[i]));
+    }
+    const now = editor.selBox();
+    if (now) { const d = clampMove(now, { x: 0, y: 0 }, walls); if (d.x || d.y) for (const u of units(doc, sel, editor.measure())) moveUnit(doc, u, d); }
+  });
+  editor.changed();
+  if (crossesWalls(editor.selBox() ?? box, walls)) flash('What was pasted is bigger than the room between the fixed edges. Free an edge (right-click > Page Edges) or choose a bigger page.', 7000);
+}
+
+/** Settings ▸ Page Grid. */
+async function pageGridSettings(): Promise<void> {
+  const o = pageLook;
+  const shade = [{ value: 'off', label: 'None' }, { value: 'faint', label: 'Faint' }, { value: 'light', label: 'Light' }, { value: 'strong', label: 'Stronger' }];
+  const r = await ask('Page Grid', [
+    { name: 'grid', label: 'Show the drawing\'s pages (a new drawing starts with one, and pages are added as it grows)', type: 'checkbox', value: String(o.grid),
+      help: 'On screen only. Off: the endless drawing with nothing fixed. The paper size and fixed edges are in File > Page Setup.' },
+    { name: 'lineStyle', label: 'Page boundaries', value: o.lineStyle, options: [{ value: 'dashed', label: 'Dashed' }, { value: 'dotted', label: 'Dotted' }, { value: 'solid', label: 'Solid' }] },
+    { name: 'lineWidth', label: 'Boundary thickness', value: String(o.lineWidth), options: [0.5, 1, 1.5, 2, 3].map((v) => ({ value: String(v), label: `${v} px` })) },
+    { name: 'lineColour', label: 'Boundary colour', value: o.lineColour, type: 'color' },
+    { name: 'lineOpacity', label: 'Boundary strength', value: String(o.lineOpacity), options: [[0.2, 'Very faint'], [0.35, 'Faint'], [0.55, 'Light'], [0.8, 'Strong'], [1, 'Solid']].map(([v, l]) => ({ value: String(v), label: `${l} (${Math.round(Number(v) * 100)}%)` })) },
+    { name: 'emptyShade', label: 'Pages with nothing on them', value: o.emptyShade, options: shade },
+    { name: 'outsideShade', label: 'The space round the pages', value: o.outsideShade, options: shade },
+    { name: 'ghost', label: 'Outline the pages beyond, where drawing adds pages', type: 'checkbox', value: String(o.ghost) },
+    { name: 'wallStyle', label: 'Fixed edges', value: o.wallStyle, options: [{ value: 'hatch', label: 'Bold line, hatched on the outside' }, { value: 'line', label: 'Bold line' }] },
+    { name: 'pasteAtWall', label: 'A paste that goes past a fixed edge', value: o.pasteAtWall, options: [{ value: 'ask', label: 'Ask each time' }, { value: 'pages', label: 'Move it inside, adding pages' }, { value: 'wrap', label: 'Wrap its structures at the page\'s edge' }] },
+  ], { ok: 'Save' });
+  if (!r) return;
+  setPageLook({
+    grid: r.grid === 'true', lineStyle: r.lineStyle as PageLook['lineStyle'], lineWidth: Number(r.lineWidth) || 1,
+    lineColour: /^#[0-9a-f]{6}$/i.test(r.lineColour) ? r.lineColour : o.lineColour, lineOpacity: Number(r.lineOpacity) || o.lineOpacity,
+    emptyShade: r.emptyShade as PageLook['emptyShade'], outsideShade: r.outsideShade as PageLook['outsideShade'], ghost: r.ghost === 'true',
+    wallStyle: r.wallStyle === 'line' ? 'line' : 'hatch', pasteAtWall: r.pasteAtWall as PageLook['pasteAtWall'],
+  });
 }
 
 /** Settings ▸ Navigation. */
@@ -9116,31 +9284,61 @@ function showWelcome(): void {
   welcomeWatch = () => { if (welcomeCard.hidden) welcomeWatch = null; else if (doc.version !== seen) off(); };
 }
 
-/** File > Page Setup…: the drawing's paper size and way up, whether it adds pages, and the default for new drawings. */
+/**
+ * File > Page Setup…: the drawing's paper size and way up; whether pages are added as it grows
+ * (and which edges are fixed) or it is kept to a set number of pages; and the default for new drawings.
+ */
 async function pageSetup(): Promise<void> {
   const p = doc.page;
   const land = !!p && p.w > p.h;
   const paper = p ? PAPER.find((x) => (Math.abs(x.w - p.w) < 1 && Math.abs(x.h - p.h) < 1) || (Math.abs(x.w - p.h) < 1 && Math.abs(x.h - p.w) < 1)) : undefined;
+  const walls = p ? wallsOf(p) : { l: 0, t: 0 };
+  const count = p ? pageCount(pageExtent(p, doc.bounds())) : { across: 1, down: 1 };
   const got = await ask('Page Setup', [
     { name: 'paper', label: 'Paper', value: !p ? 'none' : paper?.name ?? 'custom', options: [...PAPER.map((x) => ({ value: x.name, label: x.label })), { value: 'custom', label: 'Your own size' }, { value: 'none', label: 'No page (an endless drawing)' }] },
     { name: 'way', label: 'Way up', value: land ? 'landscape' : 'portrait', options: [{ value: 'portrait', label: 'Portrait' }, { value: 'landscape', label: 'Landscape' }] },
     { name: 'w', label: 'Your own size: width (in)', value: String(Math.round(((p?.w ?? 540) + 72) / 72 * 100) / 100), type: 'number' },
     { name: 'h', label: 'Your own size: height (in)', value: String(Math.round(((p?.h ?? 720) + 72) / 72 * 100) / 100), type: 'number' },
-    { name: 'grow', label: 'When the drawing goes past the page', value: !p || p.grow ? 'grow' : 'keep', options: [{ value: 'grow', label: 'Add pages (as ChemDraw does)' }, { value: 'keep', label: 'Keep it on the page when saving' }] },
+    { name: 'grow', label: 'Pages', value: !p || p.grow ? 'grow' : 'keep', options: [{ value: 'grow', label: 'Add pages as the drawing grows' }, { value: 'keep', label: 'Keep it to a set number of pages (as ChemDraw)' }] },
+    { name: 'across', label: 'Set number of pages: across', value: String(count.across), type: 'number' },
+    { name: 'down', label: 'Set number of pages: down', value: String(count.down), type: 'number' },
+    ...SIDES.map((sd) => ({ name: `fix-${sd}`, label: `Fixed ${SIDE_NAMES[sd]} edge`, type: 'checkbox' as const, value: String(walls[sd] !== undefined) })),
     { name: 'dflt', label: 'Use this for new drawings', type: 'checkbox', value: 'false' },
-  ], { ok: 'OK', note: 'Sizes are the paper; the page drawn on is half an inch in from each edge, as in ChemDraw. The page isn\'t drawn on screen (the drawing stays endless); it is saved with the file for ChemDraw.' });
+  ], { ok: 'OK', note: 'Sizes are the paper; the page drawn on is half an inch in from each edge, as in ChemDraw. When pages are added as the drawing grows, up to three edges can be fixed: nothing can go past them (a new drawing has its top and left edges fixed, as ChemDraw\'s pages grow right and down). Right-click the drawing for Page Edges to change them as you go.' });
   if (!got) return;
-  let next: Settings['page'] = null;
+  let next: PageSetup | null = null;
   if (got.paper !== 'none') {
     const pp = PAPER.find((x) => x.name === got.paper);
     let w = pp ? pp.w : Math.max(1, Number(got.w) || 8.5) * 72 - 72, h = pp ? pp.h : Math.max(1, Number(got.h) || 11) * 72 - 72;
     if ((got.way === 'landscape') !== (w > h)) [w, h] = [h, w];
-    next = { w: Math.max(72, w), h: Math.max(72, h), grow: got.grow !== 'keep', ...(pp ? { name: pp.name } : {}), ...(p?.across ? { across: p.across } : {}), ...(p?.down ? { down: p.down } : {}) };
+    const grow = got.grow !== 'keep';
+    const pages = (v: string) => Math.max(1, Math.min(200, Math.round(Number(v) || 1)));
+    next = { w: Math.max(72, w), h: Math.max(72, h), grow, ...(pp ? { name: pp.name } : {}) };
+    if (!grow) {
+      next.across = pages(got.across);
+      next.down = pages(got.down);
+    } else {
+      if (p?.grow && p.across) next.across = p.across;
+      if (p?.grow && p.down) next.down = p.down;
+      // edges fixed before stay where they were (on the same page size); new ones where the grid's edge is now
+      const same = !!p && Math.abs(p.w - next.w) < 1 && Math.abs(p.h - next.h) < 1 && p.grow;
+      let w2: PageWalls = same ? { ...wallsOf(p!) } : {};
+      for (const sd of SIDES) {
+        const on = got[`fix-${sd}`] === 'true';
+        if (!on) { delete w2[sd]; continue; }
+        if (w2[sd] === undefined) w2 = setWall({ ...next, walls: w2 }, doc.bounds(), sd, true);
+      }
+      if (fixedCount(w2) > 3) {
+        delete w2.b;
+        flash('At most three edges can be fixed, so the drawing always has room to grow: the bottom edge was left free.', 7000);
+      }
+      next.walls = w2;
+    }
   }
   doc.page = next;
   ws.noteChange();
-  if (got.dflt === 'true') { defaultPage = next && { ...next }; storeSettings(); }
-  if (next && !next.grow && !keepOnPage(doc)) flash('The drawing is bigger than the page, so it can\'t all be kept on it. Choose a bigger page, or add pages.', 7000);
+  if (got.dflt === 'true') { defaultPage = next && { ...next, ...(next.walls ? { walls: { ...next.walls } } : {}) }; storeSettings(); }
+  if (next && !next.grow && !keepOnPage(doc)) flash('The drawing is bigger than its pages, so it can\'t all be kept on them. Choose more pages, a bigger page, or add pages as it grows.', 7000);
   editor.changed();
   renderer.repaintAll();
   editor.requestScene();

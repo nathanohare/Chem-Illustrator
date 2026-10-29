@@ -338,9 +338,17 @@ None of these is saved, printed, copied or exported.
 
 ## The page
 
-A drawing is endless: scroll as far as you like in any direction. It still has a page size, which is saved with the file but not drawn on screen.
+A drawing is laid out on pages, as in ChemDraw, so you can see how it will print and how it maps onto ChemDraw's pages. A new drawing starts with one page. Draw or move something past it and the next page is added that way; take it away again and the page goes. The page boundaries are a faint dashed line, pages with something on them are white, and empty pages are light grey. Beyond the pages, a fainter outline of more pages shows there is room to keep drawing. Page numbers are not shown on the drawing.
 
-**File ▸ Page Setup…** picks the paper: Letter, A4, Legal, A3, Tabloid, your own size in inches, or no page (an endless drawing). The page drawn on is half an inch in from each edge of the paper. Choose **Portrait** or **Landscape**, and what happens when the drawing goes past the edge: **Add pages** adds more sheets, and **Keep it on the page when saving** moves things back inside it when you save. Tick **Use this for new drawings** to make it the default. The page size is saved in the .cdxml file, so ChemDraw opens it on the same paper.
+**Fixed edges.** An edge can be fixed so the drawing never grows past it: a fixed edge is a bold line hatched on its outside (like the ground in a physics diagram), and the area beyond it is a darker grey with no pages. Nothing can be drawn, dragged or nudged past it. A new drawing has its top and left edges fixed, as ChemDraw's pages grow right and down. Up to three edges can be fixed, so there is always a way to grow. Right-click an empty part of the drawing and use **Page Edges** to fix or free an edge as you go; an edge you fix is fixed where the pages end now.
+
+**Pasting past a fixed edge.** When something you paste would go past a fixed edge, you are asked how to fit it in: **adding pages** moves it inside, as it was pasted, and adds pages the open ways; **wrapping** puts its structures on new rows at the page's edge, like words in a line of text (a reagent over its arrow stays with it). One Undo takes the paste back. **Settings ▸ Page Grid** can make either choice the one used every time.
+
+**File ▸ Page Setup…** picks the paper: Letter, A4, Legal, A3, A5, B5, Tabloid, your own size in inches, or no page (an endless drawing). The page drawn on is half an inch in from each edge of the paper. Choose **Portrait** or **Landscape**, and how the pages work: **Add pages as the drawing grows** (with ticks for the fixed edges), or **Keep it to a set number of pages**, where you give the pages across and down (as in ChemDraw) and can change them whenever you like; nothing can go past its edges, and saving moves anything outside back onto it. Tick **Use this for new drawings** to make it the default. The page size and the number of pages are saved in the .cdxml file, so ChemDraw opens it on the same paper and pages (pages added above or to the left of the first are moved to the start when saving, as ChemDraw needs).
+
+**Settings ▸ Page Grid** (also **View ▸ Navigation ▸ Page Grid Settings…**) changes how the pages look: the boundaries dashed, dotted or solid, their thickness, colour and strength, how grey empty pages and the space round the pages are, whether the pages beyond are outlined, and whether fixed edges are hatched. **View ▸ Navigation ▸ Page Grid** switches the pages off for an endless drawing with nothing fixed. None of this is printed.
+
+**Printing** a drawing on pages prints one sheet for each page, at actual size, as ChemDraw does; tick **Leave out pages with nothing on them** to skip empty ones, or choose **The whole drawing on one sheet**.
 
 ## Dark page
 
