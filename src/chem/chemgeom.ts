@@ -112,6 +112,8 @@ export function sproutDir(doc: Doc, atomId: number): Vec {
   if (nb.length === 1) {
     const n = nb[0];
     const back = angleOf(sub(n, a));
+    // an alkyne or nitrile carbon is linear (sp): the new bond carries straight on
+    if ((doc.bondBetween(atomId, n.id)?.order ?? 1) === 3) return fromAngle(back + Math.PI);
     const cands = [fromAngle(back + 120 * DEG), fromAngle(back - 120 * DEG)];
     // Zig-zag: the new bond runs parallel to the bond before the neighbour (trans). A C=O or
     // =CH2 on the neighbour, or a wedged methyl, is not part of the chain, so it doesn't steer
