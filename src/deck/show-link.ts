@@ -21,7 +21,7 @@ export interface DeckData {
 
 export type ShowMessage =
   | { kind: 'hello' } // audience → presenter: ready, send the slides
-  | { kind: 'deck'; deck: DeckData; i: number; done: number; key?: number }
+  | { kind: 'deck'; deck: DeckData; i: number; done: number }
   | { kind: 'next' }
   | { kind: 'prev' }
   | { kind: 'go'; i: number; atEnd?: boolean }

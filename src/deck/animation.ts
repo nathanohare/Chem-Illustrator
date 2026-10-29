@@ -71,7 +71,8 @@ export const DEFAULT_TRANSITION_DUR = 0.7;
 
 // ---------------------------------------------------------------- animations
 
-export type Effect = 'appear' | 'fade' | 'wipe' | 'fly' | Emphasis | 'path';
+/** `camera`: on a canvas slide, the show moves on to a keyframe (see canvas.ts); it moves no object. */
+export type Effect = 'appear' | 'fade' | 'wipe' | 'fly' | Emphasis | 'path' | 'camera';
 /** Effects that change something already showing (PowerPoint's Emphasis effects). */
 export type Emphasis = 'pulse' | 'grow' | 'spin' | 'transparency' | 'colour';
 export type Side = 'left' | 'right' | 'top' | 'bottom';
@@ -86,6 +87,14 @@ export const EFFECTS: { id: Effect; name: string; sides: boolean; emph?: boolean
   { id: 'spin', name: 'Spin', sides: false, emph: true },
   { id: 'transparency', name: 'Transparency', sides: false, emph: true },
   { id: 'colour', name: 'Colour Change', sides: false, emph: true },
+];
+
+/** The keyframe moves, as the ribbon offers them. */
+export const MOVES: { id: CameraMove; name: string; tip: string }[] = [
+  { id: 'pan', name: 'Pan', tip: 'the view glides straight to the next keyframe, zooming as it goes' },
+  { id: 'fly', name: 'Fly-over', tip: 'the view pulls back on the way, so the audience sees where it is going: for long jumps and detours' },
+  { id: 'fade', name: 'Fade', tip: 'the next keyframe fades in over this one: for jumping somewhere unrelated' },
+  { id: 'cut', name: 'Cut', tip: 'straight to the next keyframe' },
 ];
 
 export const isEmphasis = (e: Effect): e is Emphasis => e === 'pulse' || e === 'grow' || e === 'spin' || e === 'transparency' || e === 'colour';
@@ -107,7 +116,7 @@ export const SIDES: { id: Side; name: string }[] = [
  * highlight is named by one of its atoms (or, with `bond`, one of its bonds when it has no atoms).
  */
 export interface AnimTarget {
-  kind: 'caption' | 'shape' | 'atom' | 'arrow' | 'highlight';
+  kind: 'caption' | 'shape' | 'atom' | 'arrow' | 'highlight' | 'keyframe';
   id: number;
   bond?: boolean;
   /** One paragraph of a text box (counted from 0), for text that comes in a paragraph at a time. */
@@ -151,7 +160,13 @@ export interface Anim {
   trigger?: AnimTarget;
   /** Text: each paragraph comes in (or goes, or is emphasised) on its own, one after another. */
   byPara?: boolean;
+  /** A keyframe move (`camera`): how the view gets there, and whether its time follows the distance. */
+  move?: CameraMove;
+  byDistance?: boolean;
 }
+
+/** How a canvas slide's view moves to the next keyframe: a glide, a glide that pulls back on the way, a cross-fade, or straight there. */
+export type CameraMove = 'pan' | 'fly' | 'fade' | 'cut';
 
 export const DEFAULT_ANIM_DUR = 0.5;
 
@@ -167,6 +182,7 @@ export function newAnim(target: AnimTarget, effect: Effect, exit = false): Anim 
 }
 
 export function animName(a: Anim): string {
+  if (a.effect === 'camera') return `${MOVES.find((m) => m.id === (a.move ?? 'pan'))?.name ?? 'Pan'} to keyframe`;
   if (a.effect === 'path') return `${PATHS.find((p) => p.id === a.pathKind)?.name ?? 'Custom Path'} (motion path)`;
   const e = EFFECTS.find((x) => x.id === a.effect)!.name;
   if (isEmphasis(a.effect)) return e;
@@ -372,6 +388,8 @@ export function highlightParts(doc: Doc, within: Selection): Part[] {
 
 export function partHolds(part: Part, t: AnimTarget): boolean {
   const s = part.sel;
+  // a keyframe move moves no object
+  if (t.kind === 'keyframe') return false;
   if ((t.kind === 'highlight') !== (part.kind === 'highlight')) return false;
   if (part.para !== undefined) return t.kind === 'caption' && t.para === part.para && s.captions.has(t.id);
   if (t.kind === 'highlight') return t.bond ? s.bonds.has(t.id) : s.atoms.has(t.id);
@@ -655,7 +673,7 @@ export function readTransition(sld: Element, warn: (s: string) => void): Transit
 
 // ---------------------------------------------------------------- PowerPoint: animations
 
-const PRESET: Record<Effect, number> = { appear: 1, fly: 2, fade: 10, wipe: 22, pulse: 26, grow: 6, spin: 8, transparency: 9, colour: 1, path: 0 };
+const PRESET: Record<Effect, number> = { appear: 1, fly: 2, fade: 10, wipe: 22, pulse: 26, grow: 6, spin: 8, transparency: 9, colour: 1, path: 0, camera: 0 };
 /** Colour Change on text is PowerPoint's Font Color (on anything else, its Fill Color). */
 const PRESET_FONT_COLOR = 3;
 const SUBTYPE: Record<Side, number> = { top: 1, right: 2, bottom: 4, left: 8 };

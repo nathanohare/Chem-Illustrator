@@ -223,7 +223,7 @@ export class PresenterView {
   private heard(m: ShowMessage): void {
     if (!this.deck || !this.player) return;
     if (m.kind === 'hello') {
-      this.link?.send({ kind: 'deck', deck: deckData(this.deck, { order: this.player.order, noAnimation: this.player.noAnimation, useTimings: this.player.useTimings }), i: this.player.i, done: this.player.done, key: this.player.key });
+      this.link?.send({ kind: 'deck', deck: deckData(this.deck, { order: this.player.order, noAnimation: this.player.noAnimation, useTimings: this.player.useTimings }), i: this.player.i, done: this.player.done });
       if (this.blank) this.link?.send({ kind: 'blank', how: this.blank });
       for (const [i, strokes] of this.ink?.all() ?? []) this.link?.send({ kind: 'ink', i, strokes });
     } else if (m.kind === 'key') {
@@ -345,8 +345,9 @@ export class PresenterView {
     if (!this.root || !this.deck || !this.player) return;
     // the next slide the show plays (hidden slides are skipped)
     const d = this.deck, now = this.player.i;
-    // on a canvas slide, its next keyframe comes first
-    const nextKey = this.player.key + 1 < (d.slides[now].canvas?.keys.length ?? 0) ? this.player.key + 1 : -1;
+    // on a canvas slide, the keyframe the next click moves to comes first
+    const after = this.player.keyAfter(this.player.done + 1);
+    const nextKey = d.slides[now].canvas && this.player.done < this.player.stepCount && after !== this.player.key ? after : -1;
     const i = nextKey >= 0 ? now : this.player.after(now);
     const box = this.els.nextBox.getBoundingClientRect();
     const w = Math.max(1, box.width), h = Math.max(1, Math.min(box.height, (box.width * d.size.h) / d.size.w));
@@ -354,7 +355,7 @@ export class PresenterView {
     c.style.width = `${w}px`;
     c.style.height = `${h}px`;
     const more = this.player.done < this.player.stepCount;
-    this.els.nextLabel.textContent = more ? 'Next: more of this slide, then' : nextKey >= 0 ? 'Next keyframe' : 'Next';
+    this.els.nextLabel.textContent = nextKey >= 0 ? 'Next: on to keyframe' : more ? 'Next: more of this slide, then' : 'Next';
     if (i < 0) {
       const ctx = c.getContext('2d')!;
       const dpr = window.devicePixelRatio || 1;

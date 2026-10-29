@@ -45,7 +45,7 @@ import { mediaMime } from '../deck/media';
 import { readChart } from './office-chart';
 import { freshBox, sameBoxData, sizedBox, type ChartBox } from '../sheet/chart-box';
 import { chartBoxPng } from '../render/chart-box-paint';
-import { readCanvasTag, type CanvasData } from '../deck/canvas';
+import { readCanvasTag, withCameraMoves, type CanvasData } from '../deck/canvas';
 
 /** PowerPoint's shapes that are shapes in the library, by PowerPoint's name. */
 const GEO_BY_PRST = new Map(GEOS.filter((g) => g.prst).map((g) => [g.prst!, g.id]));
@@ -517,7 +517,7 @@ class Reader {
         }
       });
     }
-    const anims = targets ? readTiming(root, (spid) => targets.get(spid) ?? null, warn) : [];
+    let anims = targets ? readTiming(root, (spid) => targets.get(spid) ?? null, warn) : [];
     this.spidTargets = null;
     const comments = this.comments(path);
     const lay: LayoutId = hasLayout(this.masterOut, id) ? id : 'title-content';
@@ -537,6 +537,8 @@ class Reader {
     const hf = Object.keys(own).length ? own : undefined;
     // a canvas slide saved here
     const canvas = readCanvasTag(tags[TAG.canvas]);
+    // its keyframe moves (which PowerPoint can't hold) back among its animations
+    if (canvas) anims = withCameraMoves(anims, tags[TAG.canvas]);
     return {
       layout: lay, contents: doc.contents(), notes: this.notes(path),
       ...(background ? { background } : {}), ...(hideGraphics ? { hideGraphics } : {}), ...(hidden ? { hidden } : {}), ...(hf ? { hf } : {}),

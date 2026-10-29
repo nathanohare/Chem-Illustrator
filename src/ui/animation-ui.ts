@@ -12,11 +12,12 @@ import type { Selection } from '../editor/editor';
 import { selectionBox, POINTS } from '../editor/arrange';
 import {
   TRANSITIONS, DIRS, SPEEDS, EFFECTS, SIDES, PATHS, DEFAULT_TRANSITION_DUR, EMPH_DEFAULTS, isEmphasis, newAnim, animName, slideParts, partOf, partName, targetOf, buildSteps,
-  mainAnims, targetKey, presetPath, pathPoints, reversePath, pathThrough,
-  type Anim, type AnimTarget, type Effect, type Part, type PathKind, type Transition, type TransitionKind,
+  mainAnims, targetKey, presetPath, pathPoints, reversePath, pathThrough, MOVES,
+  type Anim, type CameraMove, type AnimTarget, type Effect, type Part, type PathKind, type Transition, type TransitionKind,
 } from '../deck/animation';
 import type { View } from '../render/renderer';
 import { Player } from '../deck/playback';
+import { isCamera, timedCamera } from '../deck/canvas';
 import { onImageReady } from '../render/images';
 
 export interface AnimationHooks {
@@ -34,6 +35,8 @@ export interface AnimationHooks {
   /** The element the slide is drawn in (for drawing a custom path over it), and how the slide sits in it. */
   host(): HTMLElement;
   view(): View;
+  /** A keyframe move was picked in the pane: pick its keyframe on the canvas (by the keyframe's id). */
+  keyframe?(id: number): void;
 }
 
 const svg = (body: string, size = 22) => `<svg viewBox="0 0 22 22" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -58,6 +61,7 @@ const EFFECT_ICONS: Record<Effect, string> = {
   transparency: svg('<path d="M11 3l2 5.5 5.5.5-4.2 3.6 1.4 5.4L11 15l-4.7 3 1.4-5.4L3.5 9l5.5-.5z" fill="currentColor" opacity=".25"/><path d="M11 3l2 5.5 5.5.5-4.2 3.6 1.4 5.4L11 15l-4.7 3 1.4-5.4L3.5 9l5.5-.5z"/>'),
   colour: svg('<path d="M11 3l2 5.5 5.5.5-4.2 3.6 1.4 5.4L11 15l-4.7 3 1.4-5.4L3.5 9l5.5-.5z" fill="currentColor"/><path d="M3 20h16" stroke-width="2.5" stroke="#e53935"/>'),
   path: svg('<path d="M4 17C7 4 15 18 18 5" stroke-dasharray="2 2"/><circle cx="4" cy="17" r="2" fill="#2e8b57" stroke="none"/><circle cx="18" cy="5" r="2" fill="#c0392b" stroke="none"/>'),
+  camera: svg('<rect x="2" y="6" width="8" height="6" rx="1" stroke-dasharray="2 1.5"/><rect x="12" y="9" width="8" height="6" rx="1" fill="currentColor" opacity=".8"/><path d="M8 15c2 2 4 2 5 1m0 0l-.3-2M13 16l-2 .2"/>'),
 };
 
 const ICONS = {
@@ -196,6 +200,16 @@ export class AnimationUI {
     });
     const colour = this.$<HTMLInputElement>('#an-colour');
     colour.addEventListener('change', () => this.changePicked({ color: colour.value }, 'Colour Change colour'));
+    // keyframe moves on a canvas slide: how the view moves, and whether its time follows the distance
+    const move = this.$<HTMLSelectElement>('#an-move');
+    for (const m of MOVES) {
+      const o = new Option(m.name, m.id);
+      o.title = `${m.name}: ${m.tip}`;
+      move.add(o);
+    }
+    move.addEventListener('change', () => this.changePicked({ move: move.value as CameraMove }, 'Keyframe move'));
+    const byDist = this.$<HTMLInputElement>('#an-bydist');
+    byDist.addEventListener('change', () => this.changePicked({ byDistance: byDist.checked || undefined }, byDist.checked ? 'Move time by distance' : 'Move time'));
     const start = this.$<HTMLSelectElement>('#an-start');
     start.addEventListener('change', () => this.changePicked({ start: start.value as Anim['start'] }, 'Animation start'));
     const anSpeed = this.$<HTMLSelectElement>('#an-speed');
@@ -394,7 +408,7 @@ export class AnimationUI {
     const parts = slideParts(doc);
     let anims = this.anims().map((a) => ({ ...a }));
     const chosen = selectedParts(parts, this.hooks.selection());
-    const picked = this.picked !== null ? anims[this.picked] : undefined;
+    const pa = this.picked !== null ? anims[this.picked] : undefined, picked = pa && !isCamera(pa) ? pa : undefined;
     const pickedPart = picked ? partOf(parts, picked.target) : undefined;
     if (picked && picked.effect === effect && (!chosen.length || (pickedPart && chosen.length === 1 && chosen[0] === pickedPart))) {
       anims[this.picked!] = { ...picked, ...extra };
@@ -446,6 +460,17 @@ export class AnimationUI {
   private slideIndex(): number { return this.hooks.deck()?.index ?? 0; }
   private transition(): Transition | undefined { return this.hooks.deck()?.current?.transition; }
   private anims(): Anim[] { return this.hooks.deck()?.current?.anims ?? []; }
+  /** Animation i of the slide as the show plays it (a keyframe move's time worked out from the distance when it follows it). */
+  private timed(i: number): Anim {
+    const deck = this.hooks.deck(), keys = deck?.current?.canvas?.keys;
+    const anims = this.anims();
+    return keys && deck && isCamera(anims[i]) ? timedCamera(anims, keys, deck.size)[i] : anims[i];
+  }
+  /** What a keyframe move is called in the pane: the keyframe it goes to, by number. */
+  private moveName(a: Anim): string {
+    const n = (this.hooks.deck()?.current?.canvas?.keys.findIndex((k) => k.id === a.target.id) ?? -1) + 1;
+    return `Keyframe ${n || '?'} (${MOVES.find((m) => m.id === (a.move ?? 'pan'))?.name ?? 'Pan'})`;
+  }
 
   /** The ribbon tab showing ('home', 'transitions' or 'animations'). */
   tab = 'home';
@@ -552,15 +577,23 @@ export class AnimationUI {
     }
     colourBox.style.display = a?.effect === 'colour' ? '' : 'none';
     if (a?.effect === 'colour' && document.activeElement !== colour) colour.value = a.color ?? EMPH_DEFAULTS.color;
-    (from.closest('label') ?? from).style.display = a && isEmphasis(a.effect) ? 'none' : '';
+    const cam = !!a && isCamera(a);
+    (from.closest('label') ?? from).style.display = a && (isEmphasis(a.effect) || cam) ? 'none' : '';
+    // a keyframe move: how it moves, and its time (worked out from the distance when it follows it)
+    this.$<HTMLElement>('#an-move-box').style.display = cam ? '' : 'none';
+    this.$<HTMLElement>('#an-bydist-box').style.display = cam ? '' : 'none';
+    if (cam) {
+      this.$<HTMLSelectElement>('#an-move').value = a.move ?? 'pan';
+      this.$<HTMLInputElement>('#an-bydist').checked = !!a.byDistance;
+    }
     const start = this.$<HTMLSelectElement>('#an-start');
     start.disabled = !a;
     start.value = a?.start ?? 'click';
-    this.showSpeed('#an-speed', '#an-dur', a?.dur ?? 0.5, !a || a.effect === 'appear');
+    this.showSpeed('#an-speed', '#an-dur', a ? this.timed(cur[0]).dur : 0.5, !a || a.effect === 'appear' || (cam && a.move === 'cut'));
     const delay = this.$<HTMLInputElement>('#an-delay');
     delay.disabled = !a;
     if (document.activeElement !== delay) delay.value = String(a?.delay ?? 0);
-    for (const k of ['remove', 'earlier', 'later']) (this.ribbon.querySelector(`[data-an="${k}"]`) as HTMLButtonElement).disabled = !a;
+    for (const k of ['remove', 'earlier', 'later']) (this.ribbon.querySelector(`[data-an="${k}"]`) as HTMLButtonElement).disabled = !a || (k === 'remove' && cam);
     // motion path, paragraphs, trigger
     const pathSel = this.$<HTMLSelectElement>('#an-path');
     if (document.activeElement !== pathSel) pathSel.value = a?.effect === 'path' ? a.pathKind ?? 'custom' : '';
@@ -578,7 +611,8 @@ export class AnimationUI {
       this.triggerChoices = new Map(names.map((n) => [n.key, n.t]));
       trig.replaceChildren(new Option('On Click Sequence', ''), ...names.map((n) => new Option(`On Click of ${n.name}`, n.key)));
     }
-    trig.disabled = !a;
+    // a keyframe move plays in the slide's order of clicks
+    trig.disabled = !a || cam;
     const tp = a?.trigger ? partOf(parts, a.trigger) : undefined;
     trig.value = tp ? targetKey(targetOf(tp)) : '';
   }
@@ -598,11 +632,6 @@ export class AnimationUI {
   }
 
   private setAnims(anims: Anim[], label: string): void {
-    // a canvas slide's clicks are its keyframes for now: taking animations off still works
-    if (this.hooks.deck()?.current?.canvas && anims.length > this.anims().length) {
-      this.hooks.flash('Animations on canvas slides are coming, played in order with the moves between keyframes. For now the show steps through the keyframes.', 6000);
-      return;
-    }
     this.hooks.deck()?.setAnims(anims, label);
     this.paneKey = '';
     this.refresh();
@@ -617,7 +646,8 @@ export class AnimationUI {
     let anims = this.anims().map((a) => ({ ...a }));
     // the animation picked in the pane, when it belongs to the selection (or nothing is selected), changes
     const chosen = selectedParts(parts, this.hooks.selection());
-    const picked = this.picked !== null ? anims[this.picked] : undefined;
+    // (a keyframe move picked stays a move: it has no object to give an effect)
+    const pa = this.picked !== null ? anims[this.picked] : undefined, picked = pa && !isCamera(pa) ? pa : undefined;
     const pickedPart = picked ? partOf(parts, picked.target) : undefined;
     if (picked && (!chosen.length || (pickedPart && chosen.length === 1 && chosen[0] === pickedPart))) {
       const fresh = newAnim(picked.target, effect, exit);
@@ -639,13 +669,23 @@ export class AnimationUI {
   private changePicked(change: Partial<Anim>, label: string): void {
     const cur = this.current();
     if (!cur.length) return;
-    const anims = this.anims().map((a, i) => (cur.includes(i) ? { ...a, ...change } : a));
+    const anims = this.anims().map((a, i) => {
+      if (!cur.includes(i)) return a;
+      const b: Anim = { ...a, ...change };
+      // a keyframe move given its own time no longer takes its time from the distance
+      if (isCamera(a) && change.dur !== undefined) delete b.byDistance;
+      if (!b.byDistance) delete b.byDistance;
+      return b;
+    });
     this.setAnims(anims, label);
   }
 
   /** Take off the animation picked in the pane, else those of the selected objects. */
   removePicked(): void {
-    const cur = this.current();
+    const all = this.current();
+    // a keyframe move goes with its keyframe
+    const cur = all.filter((i) => !isCamera(this.anims()[i]));
+    if (cur.length < all.length) this.hooks.flash('A keyframe move comes and goes with its keyframe: delete the keyframe to take its move out, or set the move to Cut.', 6000);
     if (!cur.length) return;
     const anims = this.anims().filter((_, i) => !cur.includes(i));
     this.picked = anims.length ? Math.min(cur[0], anims.length - 1) : null;
@@ -670,6 +710,7 @@ export class AnimationUI {
   private pick(i: number): void {
     this.picked = i;
     const a = this.anims()[i];
+    if (a && isCamera(a)) this.hooks.keyframe?.(a.target.id);
     const doc = this.hooks.doc();
     const part = a ? partOf(slideParts(doc), a.target) : undefined;
     if (part?.kind === 'highlight') pickHighlight(part.sel);
@@ -687,7 +728,8 @@ export class AnimationUI {
     const doc = this.hooks.doc();
     const part = a ? partOf(slideParts(doc), a.target) : undefined;
     const empty = !sel.atoms.size && !sel.captions.size && !sel.arrows.size && !sel.shapes.size;
-    if (!part || (!empty && !selectedParts([part], sel).length)) { this.picked = null; this.paneKey = ''; }
+    // (a keyframe move picked has no object: it stays picked until something is selected)
+    if (a && isCamera(a) ? !empty : !part || (!empty && !selectedParts([part], sel).length)) { this.picked = null; this.paneKey = ''; }
     this.refresh();
   }
 
@@ -725,7 +767,9 @@ export class AnimationUI {
       row.setAttribute('role', 'option');
       row.setAttribute('aria-selected', String(cur.includes(i)));
       row.classList.toggle('picked', cur.includes(i));
-      row.classList.toggle('gone', !part);
+      const cam = isCamera(a);
+      row.classList.toggle('gone', !part && !cam);
+      row.classList.toggle('camera', cam);
       row.draggable = true;
       const num = document.createElement('span');
       num.className = 'an-num';
@@ -741,14 +785,16 @@ export class AnimationUI {
       icon.innerHTML = EFFECT_ICONS[a.effect].replace(/width="22" height="22"/, 'width="16" height="16"');
       const name = document.createElement('span');
       name.className = 'an-name';
-      name.textContent = partName(doc, part) + (a.byPara ? ' (by paragraph)' : '');
-      name.title = `${animName(a)}${a.trigger ? `, when ${partName(doc, partOf(parts, a.trigger))} is clicked` : ''}${a.effect !== 'appear' ? `, ${a.dur} s` : ''}${a.delay ? `, after a ${a.delay} s delay` : ''}${part ? '' : '. Its object has been deleted: this animation is left out when saving'}`;
+      name.textContent = cam ? this.moveName(a) : partName(doc, part) + (a.byPara ? ' (by paragraph)' : '');
+      name.title = cam ? `${animName(a)} ${this.moveName(a).replace(/^Keyframe /, '').replace(/ \(.*/, '')}, ${this.timed(i).dur} s${a.byDistance ? ' (by distance)' : ''}${a.delay ? `, after a ${a.delay} s delay` : ''}. It comes and goes with its keyframe` : `${animName(a)}${a.trigger ? `, when ${partName(doc, partOf(parts, a.trigger))} is clicked` : ''}${a.effect !== 'appear' ? `, ${a.dur} s` : ''}${a.delay ? `, after a ${a.delay} s delay` : ''}${part ? '' : '. Its object has been deleted: this animation is left out when saving'}`;
       const del = document.createElement('button');
       del.type = 'button';
       del.className = 'an-del';
       del.textContent = '×';
       del.title = 'Remove this animation';
       del.setAttribute('aria-label', 'Remove this animation');
+      // a keyframe move goes when its keyframe does
+      del.hidden = cam;
       del.addEventListener('click', (e) => {
         e.stopPropagation();
         this.picked = i;

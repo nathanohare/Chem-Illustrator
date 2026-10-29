@@ -79,7 +79,15 @@ The slide show steps through the canvas's **keyframes**. A keyframe is a slide-s
 - Drag a corner to zoom it out (an overview of the route) or in. Keyframes zoom in at most 2×.
 - In the slide list, the arrow beside a canvas slide opens a picture of each keyframe. Click one to go to it, drag one to play it at another place, and press Delete or right-click to take it away. Right-click a keyframe on the canvas for the same commands.
 
-**Fit** shows the keyframe picked. In the slide show each click goes on to the next keyframe; animations on canvas slides are not played yet. Canvas slides keep their keyframes in the PowerPoint file and open as canvas slides again. PowerPoint shows a canvas slide as a single slide for now (what lies where the slide would be); a slide for each keyframe comes in a later update.
+**Fit** shows the keyframe picked.
+
+**Moving between keyframes.** Each keyframe after the first has a move in the **Animation Pane**, named "Keyframe 2 (Pan)" and so on, in among the slide's other animations. Drag it up or down like any animation: an arrow can wipe in **With Previous** as the view arrives, a product can fade in on the click after. Pick a move to set, in the **Animations** tab:
+
+- **Move**: **Pan** glides straight there, zooming as it goes; **Fly-over** pulls back on the way so the audience sees where it is going (good for long jumps); **Fade** fades the next keyframe in over this one; **Cut** goes straight there.
+- **By distance** (on to start with): the move takes 0.6 s for a short step and up to 1.5 s for a long jump. Typing a **Duration** sets your own time.
+- **Start** and **Delay** work as they do for any animation.
+
+A move comes and goes with its keyframe, so it can't be removed on its own: delete the keyframe, or set the move to Cut. Picking a move in the pane shows its keyframe. Presenter View counts keyframes and shows the keyframe the next click moves to. Canvas slides keep their keyframes and moves in the PowerPoint file and open as canvas slides again. PowerPoint shows a canvas slide as a single slide for now (what lies where the slide would be); a slide for each keyframe comes in a later update.
 
 ## The slide master
 

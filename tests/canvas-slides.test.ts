@@ -10,8 +10,10 @@ import { Doc } from '../src/model';
 import { Deck, WIDE, STANDARD } from '../src/deck/deck';
 import {
   addKeyframe, insertKeyframe, keyframeAround, keyRect, keyAt, keysBounds, moveKeyframe, removeKeyframe, snapKeyframe, zoomByCorner,
-  canvasTag, readCanvasTag, clampZoom, ZOOM_MIN, shownRect, slidePlace, type CanvasData,
+  canvasTag, readCanvasTag, clampZoom, ZOOM_MIN, shownRect, slidePlace, syncCamera, isCamera, distanceDur, timedCamera, viewBetween, cameraAt,
+  withCameraMoves, type CanvasData,
 } from '../src/deck/canvas';
+import { buildSteps, type Anim } from '../src/deck/animation';
 import { writePptx, type PptxOptions } from '../src/io/pptx-write';
 import { readPptx } from '../src/io/pptx-read';
 
@@ -178,5 +180,108 @@ describe('canvas slides in a deck', () => {
     const d2 = Deck.blank(new Doc());
     d2.load(back.slides.map((s) => d2.makeSlide(s.layout, s.contents, s.notes, s, back.master)), back.size, back.master);
     expect(d2.slides[1].canvas!.keys[1].zoom).toBe(1.5);
+  });
+});
+
+describe('moving between keyframes', () => {
+  const k = (id: number, x: number, y = 0, zoom = 1) => ({ id, x, y, zoom });
+  const fade = (id: number): Anim => ({ target: { kind: 'caption', id }, effect: 'fade', start: 'click', dur: 0.5, delay: 0 });
+
+  it('keeps one move to each keyframe after the first, in their order, where the moves were', () => {
+    const keys = [k(1, 0), k(2, 960), k(3, 1920)];
+    const a = syncCamera([fade(7)], keys);
+    expect(a.map((x) => (isCamera(x) ? x.target.id : 'fade'))).toEqual(['fade', 2, 3]);
+    // a move set to fly-over and started with the one before, then the keyframes swapped:
+    // the slots keep when they play, the moves keep how they move
+    const b = a.map((x, i) => (i === 1 ? { ...x, move: 'fly' as const } : i === 2 ? { ...x, start: 'with' as const } : x));
+    const c = syncCamera(b, [k(1, 0), k(3, 1920), k(2, 960)]);
+    expect(c.map((x) => [x.target.id, x.start, x.move ?? null])).toEqual([[7, 'click', null], [3, 'click', 'pan'], [2, 'with', 'fly']]);
+    // a keyframe taken out takes its move with it; one put in between gets a move in its turn
+    expect(syncCamera(a, [k(1, 0), k(3, 1920)]).filter(isCamera).map((x) => x.target.id)).toEqual([3]);
+    const d = syncCamera(a, [k(1, 0), k(4, 500), k(2, 960), k(3, 1920)]);
+    expect(d.filter(isCamera).map((x) => x.target.id)).toEqual([4, 2, 3]);
+    expect(d.every((x) => x.effect)).toBe(true);
+    // the first keyframe has none: the slide starts there
+    expect(syncCamera(a, [k(2, 960)]).filter(isCamera)).toEqual([]);
+  });
+
+  it('times a move by its distance, from 0.6 s to 1.5 s, and a cut takes none', () => {
+    expect(distanceDur(k(1, 0), k(2, 100), size)).toBe(0.6);
+    expect(distanceDur(k(1, 0), k(2, 50000), size)).toBe(1.5);
+    const keys = [k(1, 0), k(2, 960), k(3, 1920)];
+    const anims = syncCamera([], keys);
+    anims[1] = { ...anims[1], move: 'cut' };
+    const t = timedCamera(anims, keys, size);
+    expect(t[0].dur).toBeCloseTo(distanceDur(keys[0], keys[1], size));
+    expect(t[1].dur).toBe(0);
+  });
+
+  it('glides from one keyframe to the next, and a fly-over pulls back on the way', () => {
+    const a = k(1, 0), b = k(2, 3840, 0, 2);
+    expect(viewBetween(a, b, 0, 'pan', size)).toEqual(keyRect(a, size));
+    const end = viewBetween(a, b, 1, 'pan', size), rb = keyRect(b, size);
+    expect(end.x1).toBeCloseTo(rb.x1);
+    expect(end.x2).toBeCloseTo(rb.x2);
+    const mid = viewBetween(a, b, 0.5, 'pan', size), fly = viewBetween(a, b, 0.5, 'fly', size);
+    // half way in zoom (by ratio), and slide-shaped
+    expect((mid.x2 - mid.x1) / size.w).toBeCloseTo(Math.SQRT2);
+    expect((mid.x2 - mid.x1) / (mid.y2 - mid.y1)).toBeCloseTo(size.w / size.h);
+    expect(fly.x2 - fly.x1).toBeGreaterThan(mid.x2 - mid.x1);
+  });
+
+  it('says where the view is as the show plays the steps', () => {
+    const keys = [k(1, 0), k(2, 960), k(3, 1920)];
+    const anims = [fade(7), ...syncCamera([], keys)];
+    anims[2] = { ...anims[2], start: 'after', dur: 1, byDistance: undefined };
+    // click 1: the fade; click 2: the move to keyframe 2 and, after it, the move to keyframe 3
+    const steps = buildSteps(timedCamera(anims, keys, size));
+    expect(cameraAt(steps, keys, 0, -1)).toEqual({ at: 0 });
+    expect(cameraAt(steps, keys, 1, -1)).toEqual({ at: 0 });
+    const d = steps[1].items[0].end;
+    expect(cameraAt(steps, keys, 1, d / 2)).toMatchObject({ from: 0, to: 1, p: 0.5, move: 'pan' });
+    expect(cameraAt(steps, keys, 1, d + 0.5)).toMatchObject({ from: 1, to: 2, p: 0.5 });
+    expect(cameraAt(steps, keys, 2, -1)).toEqual({ at: 2 });
+  });
+
+  it('keeps the moves in the slide tag, among the other animations, and puts them back', () => {
+    const keys = [k(1, 0), k(2, 960), k(3, 1920)];
+    const anims = [fade(7), ...syncCamera([], keys), fade(8)];
+    anims[1] = { ...anims[1], move: 'fly', byDistance: undefined, dur: 2 };
+    const tag = canvasTag({ keys }, anims);
+    expect(readCanvasTag(tag)).toEqual({ keys });
+    const back = withCameraMoves([fade(7), fade(8)], tag);
+    expect(back).toEqual(anims.map((a) => (a.byDistance === undefined ? (({ byDistance: _, ...r }) => r)(a) : a)));
+    expect(withCameraMoves([fade(7)], 'not json')).toEqual([fade(7)]);
+  });
+
+  it('adds and takes out moves with the keyframes, in the same step of the history', () => {
+    const { d } = deck();
+    d.addCanvasSlide();
+    d.setCanvas(addKeyframe(d.current!.canvas!, d.size).canvas, 'Add keyframe');
+    expect(d.current!.anims!.map((a) => a.effect)).toEqual(['camera']);
+    d.undo();
+    expect(d.current!.anims).toBeUndefined();
+    d.redo();
+    // the pane can reorder a move and change it, but not take it out
+    d.setAnims([]);
+    expect(d.current!.anims).toHaveLength(1);
+    d.setAnims([{ ...d.current!.anims![0], move: 'fade' }]);
+    expect(d.current!.anims![0].move).toBe('fade');
+  });
+
+  it('saves the moves in a PowerPoint file with the other animations and reads them back in place', async () => {
+    const { d, host } = deck();
+    d.addCanvasSlide();
+    let cap = 0;
+    host.edit('Text', () => { cap = host.addCaption({ x: 100, y: 100, runs: [{ text: 'Product' }], justify: 'left' }).id; });
+    d.setCanvas({ keys: [k(1, 0), k(2, 960), k(3, 1920)] });
+    const moves = d.current!.anims!;
+    d.setAnims([moves[0], { ...fade(cap), start: 'with' }, { ...moves[1], move: 'fly' }]);
+    const bytes = await writePptx({
+      size: d.size, master: d.master,
+      slides: d.slides.map((s, i) => ({ layout: s.layout, doc: d.docOf(i), notes: s.notes, canvas: s.canvas, anims: s.anims })),
+    }, opts);
+    const back = readPptx(bytes).slides[1];
+    expect(back.anims!.map((a) => [a.effect, a.start, a.move ?? null])).toEqual([['camera', 'click', 'pan'], ['fade', 'with', null], ['camera', 'click', 'fly']]);
   });
 });

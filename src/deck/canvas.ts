@@ -7,6 +7,7 @@
 // (zoomed in, at most 2×) or larger (zoomed out, for an overview of the route).
 
 import type { Rect, Vec } from '../geom';
+import type { Anim, CameraMove } from './animation';
 
 /**
  * A keyframe: the window's top-left corner on the canvas (points) and its size, as how many
@@ -184,11 +185,174 @@ export function snapKeyframe(c: CanvasData, i: number, k: Keyframe, size: Size, 
   return { ...k, x, y };
 }
 
+// ---------------------------------------------------------------- moving between keyframes
+//
+// The moves from keyframe to keyframe are animations of the slide (effect `camera`), one for each
+// keyframe after the first, in the keyframes' order, so the Animation pane puts them in order with
+// the objects' animations: an arrow can wipe in with the move that brings it into view, a product
+// fade in on the click after. Their places in the list are kept when keyframes come, go or are
+// reordered: each slot then moves to the keyframe whose turn it is.
+
+/** A keyframe move: on a click, a glide whose time follows the distance. */
+export function cameraAnim(keyId: number): Anim {
+  return { target: { kind: 'keyframe', id: keyId }, effect: 'camera', start: 'click', dur: 1, delay: 0, move: 'pan', byDistance: true };
+}
+
+export const isCamera = (a: Anim): boolean => a.effect === 'camera';
+
+/**
+ * A slide's animations with exactly one move for each keyframe after the first, in the keyframes'
+ * order: the moves' places in the list are kept (a move to a keyframe gone is dropped, a missing
+ * one goes at the end) and each keeps its own settings as it follows its keyframe.
+ */
+export function syncCamera(anims: Anim[], keys: Keyframe[]): Anim[] {
+  const wanted = keys.slice(1).map((k) => k.id);
+  const want = new Set(wanted);
+  const byKey = new Map<number, Anim>();
+  // the moves still wanted, each once; the first keyframe has none (the slide starts there)
+  const kept = anims.filter((a) => {
+    if (!isCamera(a)) return true;
+    if (!want.has(a.target.id) || byKey.has(a.target.id)) return false;
+    byKey.set(a.target.id, a);
+    return true;
+  });
+  let next = 0;
+  const out = kept.map((a) => {
+    if (!isCamera(a)) return a;
+    const id = wanted[next++];
+    const own = byKey.get(id) ?? cameraAnim(id);
+    // the slot keeps when it plays; the move keeps how it moves
+    return { ...own, target: { kind: 'keyframe' as const, id }, start: a.start, delay: a.delay };
+  });
+  for (; next < wanted.length; next++) out.push(byKey.get(wanted[next]) ?? cameraAnim(wanted[next]));
+  return out;
+}
+
+/** How long a move takes when its time follows the distance: from 0.6 s for a short step to 1.5 s for a long jump. */
+export function distanceDur(a: Keyframe, b: Keyframe, size: Size): number {
+  const ra = keyRect(a, size), rb = keyRect(b, size);
+  const w = Math.min(ra.x2 - ra.x1, rb.x2 - rb.x1);
+  const d = Math.hypot((ra.x1 + ra.x2 - rb.x1 - rb.x2) / 2, (ra.y1 + ra.y2 - rb.y1 - rb.y2) / 2) / w;
+  const z = Math.abs(Math.log2(b.zoom / a.zoom));
+  return +Math.min(1.5, Math.max(0.6, 0.45 + 0.35 * d + 0.3 * z)).toFixed(2);
+}
+
+/** The slide's animations with each move's time worked out (by distance, or none for a cut), as the show plays them. */
+export function timedCamera(anims: Anim[], keys: Keyframe[], size: Size): Anim[] {
+  let at = keys[0];
+  return anims.map((a) => {
+    if (!isCamera(a)) return a;
+    const to = keys.find((k) => k.id === a.target.id);
+    if (!to || !at) return a;
+    const dur = a.move === 'cut' ? 0 : a.byDistance ? distanceDur(at, to, size) : a.dur;
+    at = to;
+    return dur === a.dur ? a : { ...a, dur };
+  });
+}
+
+const ease = (p: number) => (p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2);
+
+/**
+ * The part of the canvas shown `p` of the way through a move from keyframe `a` to `b`. A pan
+ * glides and zooms smoothly; a fly-over also pulls back on the way, to `wide` (a slide-shaped box
+ * round both) at its widest.
+ */
+export function viewBetween(a: Keyframe, b: Keyframe, p: number, move: CameraMove, size: Size): Rect {
+  const e = ease(Math.max(0, Math.min(1, p)));
+  const ra = keyRect(a, size), rb = keyRect(b, size);
+  const cx = (ra.x1 + ra.x2) / 2 + ((rb.x1 + rb.x2 - ra.x1 - ra.x2) / 2) * e;
+  const cy = (ra.y1 + ra.y2) / 2 + ((rb.y1 + rb.y2 - ra.y1 - ra.y2) / 2) * e;
+  let lz = Math.log(a.zoom) + (Math.log(b.zoom) - Math.log(a.zoom)) * e;
+  if (move === 'fly') {
+    const top = Math.log(wideZoom(a, b, size));
+    lz += Math.max(0, top - Math.max(Math.log(a.zoom), Math.log(b.zoom))) * Math.sin(Math.PI * e);
+  }
+  const z = Math.exp(lz), w = size.w * z, h = size.h * z;
+  return { x1: cx - w / 2, y1: cy - h / 2, x2: cx + w / 2, y2: cy + h / 2 };
+}
+
+/** How many slide widths a slide-shaped box round both keyframes is. */
+function wideZoom(a: Keyframe, b: Keyframe, size: Size): number {
+  const u = unionRect(keyRect(a, size), keyRect(b, size));
+  return Math.max((u.x2 - u.x1) / size.w, (u.y2 - u.y1) / size.h);
+}
+
+/** A slide-shaped box round a box (growing the short side about the middle). */
+export function slideShaped(r: Rect, size: Size): Rect {
+  const z = Math.max((r.x2 - r.x1) / size.w, (r.y2 - r.y1) / size.h);
+  const cx = (r.x1 + r.x2) / 2, cy = (r.y1 + r.y2) / 2;
+  return { x1: cx - (size.w * z) / 2, y1: cy - (size.h * z) / 2, x2: cx + (size.w * z) / 2, y2: cy + (size.h * z) / 2 };
+}
+
+/** Where the show is on a canvas slide: at a keyframe, or `p` of the way through a move from one to the next. */
+export type CameraAt = { at: number } | { from: number; to: number; p: number; move: CameraMove };
+
+/**
+ * Where the view is after `done` whole clicks of the slide's animations and `t` seconds into the
+ * next (t < 0: not started), as keyframe indexes. `steps` are the slide's steps, each item with
+ * its start and end in seconds (buildSteps).
+ */
+export function cameraAt(steps: { items: { anim: Anim; start: number; end: number }[] }[], keys: Keyframe[], done: number, t: number): CameraAt {
+  const index = (id: number) => keys.findIndex((k) => k.id === id);
+  let at = 0;
+  for (let k = 0; k < Math.min(done, steps.length); k++) for (const it of steps[k].items) if (isCamera(it.anim) && index(it.anim.target.id) >= 0) at = index(it.anim.target.id);
+  const st = steps[done];
+  if (!st || t < 0) return { at };
+  for (const it of [...st.items].sort((x, y) => x.start - y.start)) {
+    if (!isCamera(it.anim) || t < it.start) continue;
+    const to = index(it.anim.target.id);
+    if (to < 0) continue;
+    if (t >= it.end) { at = to; continue; }
+    return { from: at, to, p: (t - it.start) / Math.max(1e-6, it.end - it.start), move: it.anim.move ?? 'pan' };
+  }
+  return { at };
+}
+
 // ---------------------------------------------------------------- saving
 
-/** A canvas as kept in a tag of its slide in a PowerPoint file. */
-export function canvasTag(c: CanvasData): string {
-  return JSON.stringify({ v: 1, keys: c.keys.map((k) => [k.id, +k.x.toFixed(3), +k.y.toFixed(3), +k.zoom.toFixed(5)]) });
+/**
+ * A keyframe move as kept in its slide's tag: its place among the animations (how many of the
+ * others come before it), keyframe, start, delay, time, kind of move, and whether its time
+ * follows the distance.
+ */
+type MoveRow = [number, number, Anim['start'], number, number, CameraMove, 0 | 1];
+
+/**
+ * A canvas as kept in a tag of its slide in a PowerPoint file, with its keyframe moves (which
+ * move nothing in PowerPoint, so its animations can't hold them) and their places among the
+ * slide's animations.
+ */
+export function canvasTag(c: CanvasData, anims: Anim[] = []): string {
+  const moves: MoveRow[] = [];
+  let others = 0;
+  for (const a of anims) {
+    if (isCamera(a)) moves.push([others, a.target.id, a.start, a.delay, a.dur, a.move ?? 'pan', a.byDistance ? 1 : 0]);
+    else others++;
+  }
+  return JSON.stringify({ v: 1, keys: c.keys.map((k) => [k.id, +k.x.toFixed(3), +k.y.toFixed(3), +k.zoom.toFixed(5)]), ...(moves.length ? { moves } : {}) });
+}
+
+/** The slide's animations read from PowerPoint with the keyframe moves from its tag put back in their places. */
+export function withCameraMoves(anims: Anim[], text: string | undefined): Anim[] {
+  let rows: unknown[] = [];
+  try { rows = (JSON.parse(text ?? '{}') as { moves?: unknown[] }).moves ?? []; } catch { return anims; }
+  const others = anims.filter((a) => !isCamera(a));
+  const out: Anim[] = [];
+  const MOVE_IDS: CameraMove[] = ['pan', 'fly', 'fade', 'cut'];
+  let j = 0;
+  for (const row of rows) {
+    if (!Array.isArray(row)) continue;
+    const [before, id, start, delay, dur, move, byDistance] = row;
+    if (![before, id, delay, dur].every((v) => Number.isFinite(Number(v)))) continue;
+    // the other animations that come before it, then the move
+    while (j < others.length && j < Number(before)) out.push(others[j++]);
+    out.push({
+      target: { kind: 'keyframe', id: Number(id) }, effect: 'camera',
+      start: start === 'with' || start === 'after' ? start : 'click', delay: Math.max(0, Number(delay)), dur: Math.max(0, Number(dur)),
+      move: MOVE_IDS.includes(move as CameraMove) ? move as CameraMove : 'pan', ...(byDistance ? { byDistance: true } : {}),
+    });
+  }
+  return [...out, ...others.slice(j)];
 }
 
 /** A canvas read back from its tag (null when the tag is not one). */

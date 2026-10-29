@@ -2552,6 +2552,11 @@ animUi = new AnimationUI($('#ribbon'), $('#anim-section'), {
   repaint: () => { renderer.repaintAll(); editor.requestScene(); },
   host: () => $('#canvas-host'),
   view: () => renderer.view,
+  // a keyframe move picked in the pane shows the keyframe it goes to
+  keyframe: (id) => {
+    const i = deckNow()?.current?.canvas?.keys.findIndex((k) => k.id === id) ?? -1;
+    if (i >= 0) goKeyframe(i);
+  },
 });
 
 slideCmts = new SlideComments($('#cmt-section'), $('#canvas-host'), {

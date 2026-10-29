@@ -18,7 +18,7 @@ import type { Rect } from '../geom';
 import { ASCENT } from '../text/layout';
 import { slideIdLinks } from '../links';
 import type { Transition, Anim } from './animation';
-import { clampZoom, copyCanvas, keyRect, newCanvas, type CanvasData, type Keyframe } from './canvas';
+import { clampZoom, copyCanvas, keyRect, newCanvas, syncCamera, type CanvasData, type Keyframe } from './canvas';
 import { backgroundColour, copyBackground, isPlain, sameBackground, solid, type Background } from './background';
 import type { ShowSetup, CustomShow } from './show-setup';
 
@@ -695,7 +695,13 @@ export class Deck {
     const doc = new Doc();
     styleWith(doc, master, layout, motion.background);
     if (contents) doc.restoreContents(contents);
-    return { id: this.nextSlideId++, layout, doc, notes, ...copyMotion(motion) };
+    const s: Slide = { id: this.nextSlideId++, layout, doc, notes, ...copyMotion(motion) };
+    // a canvas slide has a move to each keyframe after the first
+    if (s.canvas) {
+      const anims = syncCamera(s.anims ?? [], s.canvas.keys);
+      if (anims.length) s.anims = anims; else delete s.anims;
+    }
+    return s;
   }
 
   /** Start with these slides (a new deck or one read from a file), editing the first. Clears the history. */
@@ -920,15 +926,25 @@ export class Deck {
     this.insert(this.index + 1, [s], 'New canvas slide');
   }
 
-  /** Change a canvas slide's keyframes (the current slide by default). One undo step. */
+  /**
+   * Change a canvas slide's keyframes (the current slide by default), and its keyframe moves with
+   * them (one for each keyframe after the first, see syncCamera). One undo step.
+   */
   setCanvas(c: CanvasData, label = 'Keyframes', i = this.index): void {
     const s = this.slides[i];
     if (!s?.canvas || !c.keys.length) return;
     const before = copyCanvas(s.canvas), after = copyCanvas(c);
     if (JSON.stringify(before) === JSON.stringify(after)) return;
-    const put = (v: CanvasData) => { s.canvas = copyCanvas(v); this.looks++; };
-    put(after);
-    this.record(label, () => put(before), () => put(after), s);
+    const animsBefore = copyMotion(s).anims ?? [];
+    const animsAfter = syncCamera(animsBefore, after.keys);
+    const put = (v: CanvasData, anims: Anim[]) => {
+      s.canvas = copyCanvas(v);
+      if (anims.length) s.anims = copyMotion({ anims }).anims; else delete s.anims;
+      this.looks++;
+      this.onMotion();
+    };
+    put(after, animsAfter);
+    this.record(label, () => put(before, animsBefore), () => put(after, animsAfter), s);
   }
 
   /**
@@ -1647,7 +1663,8 @@ export class Deck {
     const s = this.slides[i];
     if (!s) return;
     const before = copyMotion(s).anims ?? [];
-    const after = copyMotion({ anims }).anims ?? [];
+    // a canvas slide keeps one move to each keyframe after the first
+    const after = copyMotion({ anims: s.canvas ? syncCamera(anims, s.canvas.keys) : anims }).anims ?? [];
     if (JSON.stringify(before) === JSON.stringify(after)) return;
     const put = (v: Anim[]) => { if (v.length) s.anims = copyMotion({ anims: v }).anims; else delete s.anims; this.onMotion(); };
     put(after);

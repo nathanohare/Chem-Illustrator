@@ -56,8 +56,6 @@ const link = new ShowLink('audience', (m: ShowMessage) => {
     size();
     player.show(m.i, { atEnd: false });
     for (let k = 0; k < m.done; k++) player.next();
-    // on a canvas slide, on to the presenter's keyframe
-    for (let k = 0; k < (m.key ?? 0); k++) player.next();
   } else if (m.kind === 'next') player?.next();
   else if (m.kind === 'prev') player?.prev();
   else if (m.kind === 'go') player?.show(m.i, { atEnd: m.atEnd });

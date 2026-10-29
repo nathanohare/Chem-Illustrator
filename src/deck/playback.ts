@@ -14,7 +14,7 @@ import { linkAtPoint } from '../links';
 import { turnAbout } from '../geom';
 import type { Deck } from './deck';
 import { paintSlide, drawDrawing, type SlidePage } from './slide-view';
-import { shownRect, slidePlace } from './canvas';
+import { cameraAt, isCamera, keyRect, shownRect, slidePlace, slideShaped, timedCamera, unionRect, viewBetween, type CameraAt } from './canvas';
 import { selectionBox, POINTS } from '../editor/arrange';
 import type { Rect } from '../geom';
 import type { Selection } from '../editor/editor';
@@ -108,7 +108,8 @@ export class SlideFrames {
     const live = all.length ? (() => {
       const parts = slideParts(doc);
       this.parts = splitParas(parts, all, (id) => captionParas(doc, id)?.length ?? 1);
-      return all.filter((a) => partOf(this.parts, a.target) && (!a.trigger || partOf(parts, a.trigger)));
+      // a keyframe move moves no part, but it is a step of the show all the same
+      return all.filter((a) => isCamera(a) || (partOf(this.parts, a.target) && (!a.trigger || partOf(parts, a.trigger))));
     })() : [];
     this.anims = live;
     this.steps = buildSteps(mainAnims(live));
@@ -116,7 +117,7 @@ export class SlideFrames {
       const part = partOf(slideParts(doc), g.trigger);
       if (part) this.triggers.set(key, { part, steps: buildSteps(g.anims.map((a, k) => (k ? a : { ...a, start: 'click' as const }))) });
     }
-    const moving = new Set(live.map((a) => partOf(this.parts, a.target)!));
+    const moving = new Set(live.map((a) => partOf(this.parts, a.target)).filter((x): x is Part => !!x));
     // a highlight that moves on its own is drawn under its structure, so the structure comes
     // off the page too (drawn over the highlight, without it)
     const lifted = new Set(moving);
@@ -260,8 +261,9 @@ export class SlideFrames {
    * Draw the slide with `done` steps played and `t` seconds into the next (t < 0: not started),
    * and its triggers' sequences as far as `fired` says.
    */
-  draw(ctx: CanvasRenderingContext2D, done: number, t = -1, fired?: Map<string, { done: number; t: number }>): void {
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  draw(ctx: CanvasRenderingContext2D, done: number, t = -1, fired?: Map<string, { done: number; t: number }>, m?: { k: number; x: number; y: number }): void {
+    // `m`: drawn scaled by k and moved by (x, y) device pixels (drawAt)
+    ctx.setTransform(m?.k ?? 1, 0, 0, m?.k ?? 1, m?.x ?? 0, m?.y ?? 0);
     ctx.drawImage(this.base, 0, 0);
     if (!this.layers.length) return;
     const states = partStates(this.parts, this.anims, done, t, fired, this.page.size);
@@ -322,6 +324,22 @@ export class SlideFrames {
       ctx.restore();
       ctx.restore();
     }
+    ctx.restore();
+  }
+
+  /**
+   * Draw the slide as draw() does, but with the part of it shown at `at` on `ctx` (its screen place
+   * of (0, 0) and CSS pixels per point), cut to the part shown: the frames of a canvas slide's
+   * keyframe, or of a sweep over several, drawn where the view is during a keyframe move.
+   */
+  drawAt(ctx: CanvasRenderingContext2D, at: { x: number; y: number; k: number }, done: number, t = -1, fired?: Map<string, { done: number; t: number }>): void {
+    const own = this.at, d = this.dpr, K = at.k / own.k, r = shownRect(this.page);
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.beginPath();
+    ctx.rect((at.x + r.x1 * at.k) * d, (at.y + r.y1 * at.k) * d, (r.x2 - r.x1) * at.k * d, (r.y2 - r.y1) * at.k * d);
+    ctx.clip();
+    this.draw(ctx, done, t, fired, { k: K, x: (at.x - own.x * K) * d, y: (at.y - own.y * K) * d });
     ctx.restore();
   }
 
@@ -587,9 +605,13 @@ export class Player {
   i = 0;
   /** Steps of the slide's animations played so far. */
   done = 0;
-  /** On a canvas slide, the keyframe showing. */
-  key = 0;
-  private frames: SlideFrames | null = null;
+  /**
+   * The slide painted ready to play, by keyframe on a canvas slide (and the sweeps over two
+   * keyframes that moves between them are drawn from): the few used last are kept.
+   */
+  private framesBy = new Map<string, SlideFrames>();
+  /** A canvas the size of the show's, to fade a keyframe in on. */
+  private scratch: HTMLCanvasElement | null = null;
   private moving: { kind: 'transition'; from: HTMLCanvasElement | null; to?: HTMLCanvasElement; t: Transition; t0: number; morph?: MorphFrames | null; was?: number; zoom?: { rect: Rect; out: boolean } } | { kind: 'step'; t0: number } | { kind: 'trigger'; key: string; t0: number } | null = null;
   /** Clicks played so far of each of the slide's triggers (by the trigger's key). */
   private fired = new Map<string, { done: number }>();
@@ -623,9 +645,10 @@ export class Player {
   get stepCount(): number { return this.current.stepCount; }
   /** Where the slide showing sits on the canvas (CSS pixels; k is pixels per point). */
   get slidePlace(): { x: number; y: number; k: number } {
-    if (this.frames) return this.frames.place;
+    const f = this.framesBy.get(String(this.keyNow));
+    if (f) return f.place;
     // worked out as paintSlide does, without painting the slide's pictures to find it
-    return slidePlace(this.w, this.h, this.deck.page(this.i, this.key));
+    return slidePlace(this.w, this.h, this.deck.page(this.i, this.keyNow));
   }
 
   /** The link at a point on the canvas (CSS pixels from its corner), if any. */
@@ -661,7 +684,8 @@ export class Player {
     from.getContext('2d')?.drawImage(this.canvas, 0, 0);
     this.wasDone = this.done;
     this.i = i;
-    this.frames = null;
+    this.framesBy.clear();
+    this.keyNow = 0;
     this.fired = new Map();
     this.done = out ? this.current.stepCount : 0;
     this.timeUp = false;
@@ -682,7 +706,7 @@ export class Player {
     this.canvas.style.height = `${h}px`;
     this.canvas.width = Math.max(1, Math.round(w * dpr));
     this.canvas.height = Math.max(1, Math.round(h * dpr));
-    this.frames = null;
+    this.framesBy.clear();
     // before the first slide is shown there is nothing to paint (show() paints it)
     if (this.started) this.paint();
   }
@@ -692,7 +716,7 @@ export class Player {
 
   /** Paint the slide again from scratch (a picture or font has loaded). */
   refresh(): void {
-    this.frames = null;
+    this.framesBy.clear();
     this.paint();
   }
 
@@ -840,26 +864,112 @@ export class Player {
     }
   }
 
-  private framesFor(i: number): SlideFrames {
+  /**
+   * Slide i's animations as the show plays them: none without animation (Set Up Show), though a
+   * canvas slide still moves from keyframe to keyframe; keyframe moves timed (canvas.ts).
+   */
+  private animsOf(i: number): Anim[] {
     const s = this.deck.slides[i];
-    const page: SlidePage = this.deck.page(i, this.key);
-    // (a canvas slide's animations are not played yet: its keyframes are its clicks)
-    return new SlideFrames(page, this.deck.docOf(i), this.noAnimation || s.canvas ? [] : s.anims ?? [], this.w, this.h, this.dpr, this.fill);
+    let anims = s?.anims ?? [];
+    if (this.noAnimation) anims = anims.filter(isCamera);
+    return s?.canvas ? timedCamera(anims, s.canvas.keys, this.deck.size) : anims;
   }
 
-  /** How many keyframes slide i has (1 for a slide that isn't a canvas). */
-  private keysOf(i: number): number {
-    return this.deck.slides[i]?.canvas?.keys.length ?? 1;
+  /** The slide painted ready to play: keyframe `key`'s part of it on a canvas slide. */
+  private framesFor(i: number, key = 0): SlideFrames {
+    return this.keep(String(key), () => new SlideFrames(this.deck.page(i, key), this.deck.docOf(i), this.animsOf(i), this.w, this.h, this.dpr, this.fill));
   }
 
-  /** On a canvas slide, show keyframe `key` (straight there). */
-  private toKey(key: number): void {
-    this.key = key;
-    this.frames = null;
-    this.done = 0;
-    this.fired = new Map();
-    this.paint();
-    this.onChange();
+  /** Frames made once and kept, a few at a time (each is the size of the screen, or bigger). */
+  private keep(id: string, make: () => SlideFrames): SlideFrames {
+    let f = this.framesBy.get(id);
+    if (f) this.framesBy.delete(id);
+    else f = make();
+    this.framesBy.set(id, f);
+    for (const old of this.framesBy.keys()) {
+      if (this.framesBy.size <= 4) break;
+      this.framesBy.delete(old);
+    }
+    return f;
+  }
+
+  /** Where a canvas slide's view is after `done` steps and `t` seconds into the next ({ at: 0 } on any other slide). */
+  private camera(done = this.done, t = -1): CameraAt {
+    const keys = this.deck.slides[this.i]?.canvas?.keys;
+    return keys?.length ? cameraAt(this.current.steps, keys, done, t) : { at: 0 };
+  }
+
+  /** On a canvas slide, the keyframe showing (the one the view last got to). */
+  get key(): number {
+    void this.current;
+    return this.keyNow;
+  }
+
+  /** On a canvas slide, the keyframe showing after `done` steps. */
+  keyAfter(done: number): number {
+    const c = this.camera(done);
+    return 'at' in c ? c.at : c.from;
+  }
+
+  /**
+   * A canvas slide's view on its way from one keyframe to another: a glide over a sweep of the
+   * canvas painted once for the whole move (sharper the less it has to take in), with the two
+   * keyframes' own sharp frames over it near the ends; or one keyframe fading in over the other.
+   */
+  private drawMove(ctx: CanvasRenderingContext2D, c: Extract<CameraAt, { from: number }>, t: number, fired: Map<string, { done: number; t: number }>): void {
+    const keys = this.deck.slides[this.i].canvas!.keys, size = this.deck.size;
+    const A = keys[c.from], B = keys[c.to];
+    const fa = this.framesFor(this.i, c.from), fb = this.framesFor(this.i, c.to);
+    const W = this.canvas.width, H = this.canvas.height;
+    if (c.move === 'fade' || c.move === 'cut') {
+      fa.draw(ctx, this.done, t, fired);
+      const sc = (this.scratch ??= document.createElement('canvas'));
+      if (sc.width !== W) sc.width = W;
+      if (sc.height !== H) sc.height = H;
+      const g = sc.getContext('2d')!;
+      fb.draw(g, this.done, t, fired);
+      ctx.save();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = c.move === 'cut' ? 1 : ease(c.p);
+      ctx.drawImage(sc, 0, 0);
+      ctx.restore();
+      return;
+    }
+    // the sweep: a slide-shaped part of the canvas the view stays inside all the way
+    let r = unionRect(keyRect(A, size), keyRect(B, size));
+    for (let k = 1; k < 16; k++) r = unionRect(r, viewBetween(A, B, k / 16, c.move, size));
+    const sweep = slideShaped(r, size);
+    // painted as many times bigger than the screen as it is wider than the nearer keyframe, within reason
+    const zoomOut = (sweep.x2 - sweep.x1) / size.w / Math.min(A.zoom, B.zoom);
+    const f = Math.max(1, Math.min(zoomOut, 3, Math.sqrt(36e6 / Math.max(1, W * H))));
+    const fs = this.keep(`${c.from}>${c.to} ${c.move}`, () => new SlideFrames({ ...this.deck.page(this.i), view: sweep }, this.deck.docOf(this.i), this.animsOf(this.i), this.w * f, this.h * f, this.dpr, this.fill));
+    const view = viewBetween(A, B, c.p, c.move, size);
+    const at = slidePlace(this.w, this.h, { size, view });
+    const box = slidePlace(this.w, this.h, { size });
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = this.fill;
+    ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    // nothing spills past the slide's place on the screen
+    ctx.beginPath();
+    ctx.rect(box.x * this.dpr, box.y * this.dpr, size.w * box.k * this.dpr, size.h * box.k * this.dpr);
+    ctx.clip();
+    fs.drawAt(ctx, at, this.done, t, fired);
+    // the keyframes' own sharp frames over the sweep near the ends of the move
+    const ends: [SlideFrames, number][] = [[fa, 1 - c.p / 0.25], [fb, (c.p - 0.75) / 0.25]];
+    for (const [fr, a] of ends) {
+      if (a <= 0) continue;
+      ctx.globalAlpha = Math.min(1, a);
+      fr.drawAt(ctx, at, this.done, t, fired);
+    }
+    ctx.restore();
+  }
+
+  /** Draw the slide showing, `t` seconds into the step being played (t < 0: none is). */
+  private drawNow(ctx: CanvasRenderingContext2D, t: number, fired: Map<string, { done: number; t: number }>): void {
+    const c = this.camera(this.done, t);
+    if ('from' in c) this.drawMove(ctx, c, t, fired);
+    else this.framesFor(this.i, c.at).draw(ctx, this.done, t, fired);
   }
 
   /** The slide the show plays after slide i (in its order), or -1 at the end. */
@@ -905,9 +1015,19 @@ export class Player {
     return out;
   }
 
+  /** The keyframe the frames of `current` are painted at. */
+  private keyNow = 0;
+
+  /** The slide showing, painted ready to play (at the keyframe the view is at, on a canvas slide). */
   private get current(): SlideFrames {
-    if (!this.frames) this.frames = this.framesFor(this.i);
-    return this.frames;
+    // any keyframe's frames give the slide's steps: they are the same at every keyframe
+    const any = this.framesBy.get(String(this.keyNow)) ?? this.framesFor(this.i, this.keyNow);
+    const keys = this.deck.slides[this.i]?.canvas?.keys;
+    const c = keys?.length ? cameraAt(any.steps, keys, this.done, -1) : { at: 0 };
+    const k = 'at' in c ? c.at : c.from;
+    if (k === this.keyNow) return any;
+    this.keyNow = k;
+    return this.framesFor(this.i, k);
   }
 
   /** Show slide `i`: with its transition (from what is on screen now), or straight away; at its start or with everything played. */
@@ -922,13 +1042,13 @@ export class Player {
       from.height = this.canvas.height;
       from.getContext('2d')?.drawImage(this.canvas, 0, 0);
     }
-    const was = this.frames && this.i !== i ? this.i : undefined;
+    const was = this.framesBy.size && this.i !== i ? this.i : undefined;
     // a morph pairs things by where they are on two slides: not into or out of a canvas, where places are on the canvas
     const morph = t?.kind === 'morph' && was !== undefined && !this.deck.slides[was]?.canvas && !this.deck.slides[i].canvas;
     this.wasDone = this.done;
     this.i = i;
-    this.key = how.atEnd ? this.keysOf(i) - 1 : 0;
-    this.frames = null;
+    this.framesBy.clear();
+    this.keyNow = 0;
     this.fired = new Map();
     this.done = how.atEnd ? this.current.stepCount : 0;
     this.timeUp = false;
@@ -968,7 +1088,6 @@ export class Player {
   next(): void {
     if (this.moving) { this.finish(); return; }
     if (this.done < this.current.stepCount) { this.playStep(); return; }
-    if (this.key < this.keysOf(this.i) - 1) { this.toKey(this.key + 1); return; }
     if (this.beforeNextSlide()) return;
     // hidden slides (Hide Slide) are skipped, and slides not in the show's order
     const j = this.after(this.i);
@@ -985,7 +1104,6 @@ export class Player {
       this.onChange();
       return;
     }
-    if (this.key > 0) { this.toKey(this.key - 1); return; }
     const j = this.before(this.i);
     if (j >= 0) this.show(j, { atEnd: true });
   }
@@ -1069,7 +1187,7 @@ export class Player {
         this.idle();
         return;
       }
-      this.current.draw(ctx, this.done, t, this.firedAt(now));
+      this.drawNow(ctx, t, this.firedAt(now));
       return;
     }
     this.current.draw(ctx, this.done, -1, this.firedAt(now));
