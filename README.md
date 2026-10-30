@@ -1,8 +1,8 @@
 # Chem Illustrator
 
-**Free chemical drawing for the lab, with slides, sheets and documents built in.**
+**Free chemical drawing for the lab, with presentations, spreadsheets and documents built in.**
 
-Chem Illustrator draws structures and reaction schemes with the hotkeys and look ChemDraw users already know, and it opens and saves your `.cdxml` files. Around the drawing it builds in the other programs a synthetic chemist spends the day in: slides, spreadsheets, documents and a canvas for posters and figures. Your structures stay editable in all of them, and the formula, masses, stereochemistry and warnings update as you draw.
+Chem Illustrator draws structures and reaction schemes with the hotkeys and look ChemDraw users already know, and it opens and saves your `.cdxml` files. Around the chemistry canvas it builds in the other programs a synthetic chemist spends the day in: presentations, spreadsheets, documents and a design page for posters and figures. Your structures stay editable in all of them, and the formula, masses, stereochemistry and warnings update as you draw.
 
 It is free and open source (GPL v3), and runs on Windows, macOS and Linux, with a test version for iPad.
 
@@ -14,7 +14,7 @@ Nothing to install: the browser version opens straight away. The desktop app add
 
 **[User guide](docs/README.md)** · **[Send feedback](docs/guide/feedback.md)**
 
-![A two-step reaction scheme in Drawing mode (dark interface), with the Analysis panel showing the product's formula and masses](docs/images/drawing-dark-ui.png)
+![A two-step reaction scheme in Canvas mode (dark interface), with the Analysis panel showing the product's formula and masses](docs/images/drawing-dark-ui.png)
 
 ## Smart reaction arrows
 
@@ -71,7 +71,7 @@ Select anything and the side panel shows its formula, exact mass, m/z for the io
 
 ## Spelling and chemistry checked everywhere
 
-Text on drawings, slides and documents is spell-checked, and a second check catches chemistry formatting slips: formulas without subscripts, deuterated solvents, a number glued to its unit (5mL), a hyphen in a range (10-15), and the nucleus before "NMR". Right-click a marked word for the fix. Formulas are also formatted as you type (CH2Cl2 becomes CH₂Cl₂).
+Text on canvases, slides and documents is spell-checked, and a second check catches chemistry formatting slips: formulas without subscripts, deuterated solvents, a number glued to its unit (5mL), a hyphen in a range (10-15), and the nucleus before "NMR". Right-click a marked word for the fix. Formulas are also formatted as you type (CH2Cl2 becomes CH₂Cl₂).
 
 ![Right-clicking marked words in a caption: CH2Cl2, 5mL, 10-15, 1H and CDCl3 get their formatting fixed, and two misspellings are corrected](docs/images/spelling.gif)
 
@@ -95,21 +95,21 @@ Every hotkey can be changed (**Edit ▸ Hotkeys**), and the hotkeys can be expor
 
 ![Toolboxes moved to new places, the dark page in Slate colours, and the Hotkeys window open](docs/images/customize.png)
 
-## Slides, sheets, documents and designs
+## Presentations, spreadsheets, documents and designs
 
-Each mode works like the Office program it is named after, and adds what Office can't do for a chemist.
+Chem Illustrator has five modes: **Canvas** (chemistry), **Presentation** (slideshow), **Spreadsheet** (tables, charts, dashboards), **Document** (text) and **Design** (TOC graphic, abstract, poster, figure). Each Office-like mode works like the Office program it matches, and adds what Office can't do for a chemist.
 
-| Slides | Sheets |
+| Presentation | Spreadsheet |
 |---|---|
-| ![Slides mode with the reaction scheme on a templated slide, the mouse pointing at a bond of the product](docs/images/slides-dark-ui.png) | ![Sheet mode with structures in cells, formula and MW columns, and a chart](docs/images/sheet-dark-ui.png) |
+| ![Presentation mode with the reaction scheme on a templated slide, the mouse pointing at a bond of the product](docs/images/slides-dark-ui.png) | ![Spreadsheet mode with structures in cells, formula and MW columns, and a chart](docs/images/sheet-dark-ui.png) |
 | Layouts, about twenty design templates, transitions, animations and presenter view. The structures on a slide are real structures: point at one and edit it with the same tools and hotkeys. Saves as `.pptx` that opens in PowerPoint. | Excel's keys and formulas, structures in cells, columns that work out formula, MW, HRMS m/z and more, charts and dashboards. Saves as `.xlsx`. |
 
-| Documents | Design |
+| Document | Design |
 |---|---|
 | ![Document mode with an experimental paragraph and a structure in the text](docs/images/document.png) | ![Design mode with the conference poster template and the shape library](docs/images/design.png) |
 | Word's styles and keys, structures in the text, numbered captions, references, tracked changes, comments and equations. Saves as `.docx`. | Posters, TOC graphics and graphical abstracts at the journals' sizes, with templates and a shape library that includes flowcharts and lab glassware. |
 
-**Split View** puts a drawing beside a document, sheet or slides, so you can draw on one side and insert on the other.
+**Split View** puts a canvas beside a document, spreadsheet or presentation, so you can draw on one side and insert on the other.
 
 ![Split View: a document on the left, the scheme it describes on the right](docs/images/split-view.png)
 
@@ -125,10 +125,10 @@ Nothing is locked into a format of our own. Each mode saves the file type its pr
 
 | Mode | Opens | Saves | Works with |
 |---|---|---|---|
-| Drawing | `.cdxml`, `.cdx` | `.cdxml`, `.cdx` | ChemDraw. A ChemDraw file you open keeps everything you didn't change exactly as ChemDraw wrote it. Copy and paste with ChemDraw on Windows. |
-| Slides and Design | `.pptx` | `.pptx` | PowerPoint |
-| Documents | `.docx` | `.docx` | Word |
-| Sheets | `.xlsx`, `.csv`, `.sdf` | `.xlsx`, `.csv`, `.sdf` | Excel |
+| Canvas | `.cdxml`, `.cdx` | `.cdxml`, `.cdx` | ChemDraw. A ChemDraw file you open keeps everything you didn't change exactly as ChemDraw wrote it. Copy and paste with ChemDraw on Windows. |
+| Presentation and Design | `.pptx` | `.pptx` | PowerPoint |
+| Document | `.docx` | `.docx` | Word |
+| Spreadsheet | `.xlsx`, `.csv`, `.sdf` | `.xlsx`, `.csv`, `.sdf` | Excel |
 
 In Word, PowerPoint and Excel your structures show as sharp pictures; open the file in Chem Illustrator again and they are editable structures, even after Office has saved it. Drawings also export as PDF, PNG, SVG and Molfile. [Files and sharing](docs/guide/files-and-sharing.md) has the details.
 

@@ -87,8 +87,8 @@ export function pickFileTemplate(prefer: 'document' | 'sheet' = 'document'): Pro
       card('Blank document', 'An empty page in the standard styles.', blankPage, { kind: 'document', template: null }),
       ...DOC_TEMPLATES.map((t) => card(t.name, t.blurb, docPreview(t), { kind: 'document', template: t })),
     ]);
-    const sheets = section('Sheets', [
-      card('Blank sheet', 'An empty workbook.', blankGrid, { kind: 'sheet', template: null }),
+    const sheets = section('Spreadsheets', [
+      card('Blank spreadsheet', 'An empty workbook.', blankGrid, { kind: 'sheet', template: null }),
       ...SHEET_TEMPLATES.map((t) => card(t.name, t.blurb, sheetPreview(t), { kind: 'sheet', template: t })),
     ]);
     const body = document.createElement('div');

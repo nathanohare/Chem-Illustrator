@@ -140,7 +140,7 @@ export interface RibbonInfo {
 
 const TAB_ATTR: Record<string, string> = { sheet: 'sh', doc: 'doc', slides: 'sl' };
 const RIBBON_EL: Record<string, string> = { sheet: '#sheet-ribbon', doc: '#doc-ribbon', slides: '#ribbon', design: '#design-ribbon' };
-const RIBBON_TITLE: Record<string, string> = { slides: 'Slides', doc: 'Document', sheet: 'Sheet', design: 'Design' };
+const RIBBON_TITLE: Record<string, string> = { slides: 'Presentation', doc: 'Document', sheet: 'Spreadsheet', design: 'Design' };
 
 /** Read every ribbon in the page as it comes (once, at start). */
 export function readRibbons(): RibbonInfo[] {

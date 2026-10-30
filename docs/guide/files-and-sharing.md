@@ -8,18 +8,18 @@ Each kind of tab saves to its own file type. **Save** (Ctrl+S) uses the first ty
 
 | Tab | Opens | Saves | Also exports |
 |---|---|---|---|
-| Drawing | .cdxml, .cdx, .cds | .cdxml (the default), .cdx | Molfile (.mol), PDF, PNG, TIFF, SVG, EMF, EPS |
-| Slides | .pptx | .pptx | PDF (one page per slide), PNG, TIFF, SVG, EMF or EPS of the current slide |
+| Canvas | .cdxml, .cdx, .cds | .cdxml (the default), .cdx | Molfile (.mol), PDF, PNG, TIFF, SVG, EMF, EPS |
+| Presentation | .pptx | .pptx | PDF (one page per slide), PNG, TIFF, SVG, EMF or EPS of the current slide |
 | Design | .pptx | .pptx (one slide) | PDF, PNG, TIFF, SVG, EMF, EPS |
 | Document | .docx, .doc, .rtf, .odt | .docx (the default), .rtf, .odt | PDF |
-| Sheet | .xlsx, .xlsm, .xls, .ods, .csv, .tsv, .txt, .sdf | .xlsx, .xlsm, .csv, .sdf | Charts as PNG or SVG |
+| Spreadsheet | .xlsx, .xlsm, .xls, .ods, .csv, .tsv, .txt, .sdf | .xlsx, .xlsm, .csv, .sdf | Charts as PNG or SVG |
 | Workspace | .ciworkspace | .ciworkspace | |
 
-Open files with **File ▸ Open…** (Ctrl+O), or drop them onto the window. Picture files (PNG, JPEG, GIF, SVG, EMF, BMP, WebP) dropped on a drawing, slide, design or document are placed as pictures.
+Open files with **File ▸ Open…** (Ctrl+O), or drop them onto the window. Picture files (PNG, JPEG, GIF, SVG, EMF, BMP, WebP) dropped on a canvas, slide, design or document are placed as pictures.
 
 ### ChemDraw files
 
-- **.cdxml** is the default for drawings. When you save a ChemDraw file you opened, only what you changed is rewritten, so the rest stays exactly as ChemDraw wrote it.
+- **.cdxml** is the default for canvases. When you save a ChemDraw file you opened, only what you changed is rewritten, so the rest stays exactly as ChemDraw wrote it.
 - **.cdx** is ChemDraw's binary format. It opens and saves, and it is what ChemDraw reads from the clipboard.
 - **.cds** is a ChemDraw style sheet. It opens like a drawing, and the app offers to keep its settings (bond length, line widths, label font) as one of your own drawing styles, so you can pick it in **Drawing Style** in any mode or start new drawings in it. Style sheets open but are never written back to: Save asks for a .cdxml or .cdx file.
 
@@ -37,7 +37,7 @@ Open files with **File ▸ Open…** (Ctrl+O), or drop them onto the window. Pic
 
 ### Alt text and the accessibility checker
 
-**Alt Text…** (on the right-click menu, the **Review** tab in Slides, Documents and Sheets, and **Insert ▸ Alt Text…**) gives a picture, chart or structure a description for people using a screen reader. It is saved where Word, PowerPoint and Excel keep their own alt text, and in .cdxml files. A structure with no alt text of its own is described by its SMILES in Office files, as before.
+**Alt Text…** (on the right-click menu, the **Review** tab in Presentations, Spreadsheets and Documents, and **Insert ▸ Alt Text…**) gives a picture, chart or structure a description for people using a screen reader. It is saved where Word, PowerPoint and Excel keep their own alt text, and in .cdxml files. A structure with no alt text of its own is described by its SMILES in Office files, as before.
 
 **File ▸ Check Accessibility** (or **Review** ▸ **Check Accessibility**) lists what makes the file harder to read: pictures, charts and structures with no alt text, text with too little contrast against its background (WCAG 2.2: 4.5:1, or 3:1 for large text), slides with no title or the same title as another, slide titles that a screen reader would not reach first, skipped heading levels, tables with no heading row, floating pictures, merged cells and unnamed sheets. Click an item to go to it; **Add Alt Text…** fixes a missing description there and then. **Check Again** looks again after changes.
 
@@ -46,9 +46,9 @@ Open files with **File ▸ Open…** (Ctrl+O), or drop them onto the window. Pic
 - **SMILES:** **Edit ▸ Copy As ▸ Copy as SMILES** (Ctrl+Alt+C) copies the selected structures as SMILES; **Edit ▸ Paste Special ▸ Paste SMILES** (Ctrl+Alt+P) draws them. A SMILES string pasted with Ctrl+V is drawn too.
 - **Molfile:** **File ▸ Export ▸ Export Molfile…** saves the selected structures (or all of them) as a .mol file; **Edit ▸ Copy As ▸ Copy as Molfile Text** copies them as text. A molfile pasted with Ctrl+V is drawn.
 - **CDXML text:** **Edit ▸ Copy As ▸ Copy as CDXML Text** copies the drawing as ChemDraw XML.
-- **SD files (.sdf):** open in a sheet with one row per structure and its data fields as columns.
-- **PDF:** **File ▸ Export ▸ Export PDF…** for drawings, slides, designs and documents. Structures and text stay sharp at any zoom. The fonts go inside the file, so it looks the same everywhere and passes journals' "all fonts embedded" checks. Arial, Helvetica and similar fonts are drawn with Arimo, Times with Tinos and Courier with Cousine: free fonts with exactly the same letter widths. A character none of those has (an arrow such as →) uses the reader's Symbol font.
-- **Pictures:** **File ▸ Export ▸ Export Picture…** for a drawing, the current slide or a design page. Pick a white or page-coloured background or a see-through one.
+- **SD files (.sdf):** open in a spreadsheet with one row per structure and its data fields as columns.
+- **PDF:** **File ▸ Export ▸ Export PDF…** for canvases, presentations, designs and documents. Structures and text stay sharp at any zoom. The fonts go inside the file, so it looks the same everywhere and passes journals' "all fonts embedded" checks. Arial, Helvetica and similar fonts are drawn with Arimo, Times with Tinos and Courier with Cousine: free fonts with exactly the same letter widths. A character none of those has (an arrow such as →) uses the reader's Symbol font.
+- **Pictures:** **File ▸ Export ▸ Export Picture…** for a canvas, the current slide or a design page. Pick a white or page-coloured background or a see-through one.
   - **PNG** and **TIFF** are pictures made of dots. Type the dpi (300 for colour, 600 to 1200 for line art). TIFF files are LZW-compressed, the kind many journals ask for.
   - **SVG**, **EMF** and **EPS** keep shapes and text sharp at any size. SVG suits Illustrator, Inkscape and web pages; EMF suits Word and PowerPoint on Windows; EPS suits older journal systems. EPS uses the standard PostScript fonts (Helvetica, Times, Courier and Symbol), and has no see-through colours, so those are mixed with white.
 
@@ -84,22 +84,22 @@ A drawing copied here and pasted into Word, PowerPoint or Excel is a Chem Illust
 
 Tables travel too:
 
-- A table selected on a drawing or slide and copied pastes into Word or Excel as real cells.
-- Cells copied from Excel, Word or a sheet here paste onto a drawing or slide as a new table.
-- Cells copied from a sheet paste into Excel with their values, and SMILES for structures.
+- A table selected on a canvas or slide and copied pastes into Word or Excel as real cells.
+- Cells copied from Excel, Word or a spreadsheet here paste onto a canvas or slide as a new table.
+- Cells copied from a spreadsheet paste into Excel with their values, and SMILES for structures.
 
-Charts in a sheet have **Copy as Picture** on the **Chart** tab, to paste into Word, PowerPoint, or a document or slide here.
+Charts in a spreadsheet have **Copy as Picture** on the **Chart** tab, to paste into Word, PowerPoint, or a document or slide here.
 
 ## Split View
 
-Split View puts a drawing beside a document, sheet, slide deck or design, so you can draw and write at the same time.
+Split View puts a canvas beside a document, spreadsheet, presentation or design, so you can draw and write at the same time.
 
-![A drawing beside a document in Split View](../images/split-view.png)
+![A canvas beside a document in Split View](../images/split-view.png)
 
-1. In a document, sheet, slides or design tab, choose **View ▸ Split View: Drawing Beside**. A drawing opens on the right: the first drawing tab, or a new one.
-2. Click a side to work on it. Beside a document or sheet, both sides stay live; Ctrl+Z and Ctrl+S act on the side you clicked last. Beside slides or a design, the side you aren't working on shows as a picture until you click it.
-3. The bar above the drawing picks another open drawing or a new one. **Insert into Document** (or **Cell**, **Slide** or **Design**) puts the selected structures, or the whole drawing, in at the caret, the selected cell, the slide or the design.
-4. Drag the divider to change the widths. The × closes the split; the drawing stays open in its own tab.
+1. In a document, spreadsheet, presentation or design tab, choose **View ▸ Split View: Canvas Beside**. A canvas opens on the right: the first canvas tab, or a new one.
+2. Click a side to work on it. Beside a document or spreadsheet, both sides stay live; Ctrl+Z and Ctrl+S act on the side you clicked last. Beside slides or a design, the side you aren't working on shows as a picture until you click it.
+3. The bar above the canvas picks another open canvas or a new one. **Insert into Document** (or **Cell**, **Slide** or **Design**) puts the selected structures, or the whole drawing, in at the caret, the selected cell, the slide or the design.
+4. Drag the divider to change the widths. The × closes the split; the canvas stays open in its own tab.
 
 ## Workspaces
 
@@ -118,7 +118,7 @@ Files inside the workspace folder are listed by name, so you can move or copy th
 
 ## AutoSave, recovery and Version History
 
-Every kind of tab (drawings, slides, sheets, documents and designs) is kept safe in three ways. Set them all in **File ▸ Versions and Recovery ▸ AutoSave and Recovery Options…**.
+Every kind of tab (canvases, presentations, spreadsheets, documents and designs) is kept safe in three ways. Set them all in **File ▸ Versions and Recovery ▸ AutoSave and Recovery Options…**.
 
 ### Recovery copies
 
@@ -164,11 +164,11 @@ The web version keeps a recent list too in Chrome and Edge, which let a page ope
 
 | Tab | Choices |
 |---|---|
-| Drawing | Letter or A4; orientation to suit the drawing, portrait or landscape; actual size (smaller only if it wouldn't fit) or as large as fits |
-| Slides | Full page slides, or handouts with 2, 3 (with lines for notes), 4, 6 or 9 to a page, optionally framed |
+| Canvas | Letter or A4; orientation to suit the drawing, portrait or landscape; actual size (smaller only if it wouldn't fit) or as large as fits |
+| Presentation | Full page slides, or handouts with 2, 3 (with lines for notes), 4, 6 or 9 to a page, optionally framed |
 | Design | The page at its own size |
 | Document | Every page as laid out on screen |
-| Sheet | The whole sheet or the selected cells; portrait or landscape; with or without gridlines |
+| Spreadsheet | The whole sheet or the selected cells; portrait or landscape; with or without gridlines |
 
 ## Fonts
 
@@ -184,4 +184,4 @@ Type in the box to filter the list, or type the name of any font installed on yo
 
 The first fourteen are free fonts (SIL Open Font License) that come with the app. When you use them in a document or slide deck, they are saved inside the .docx or .pptx file, so it looks the same in Word or PowerPoint on a computer that doesn't have them. Only the fonts you used are included. Fonts from your own computer are not embedded, as Word does by default for fonts that may not be shared.
 
-Next: [Getting started](getting-started.md) · [Drawing](drawing.md) · [Keyboard and mouse](keyboard-and-mouse.md) · [Slides](slides.md) · [Documents](documents.md) · [Sheets](sheets.md) · [Design](design.md) · [Feedback](feedback.md)
+Next: [Getting started](getting-started.md) · [Canvas](drawing.md) · [Keyboard and mouse](keyboard-and-mouse.md) · [Presentation](slides.md) · [Document](documents.md) · [Spreadsheet](sheets.md) · [Design](design.md) · [Feedback](feedback.md)

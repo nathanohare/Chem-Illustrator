@@ -66,7 +66,7 @@ function labReport(): DocText {
     H1('Aim'),
     P('[What this reaction or experiment is meant to show or make, in a sentence or two.]'),
     H1('Reaction'),
-    P('[Draw the scheme here: Insert > Structure, or paste from a drawing.]'),
+    P('[Draw the scheme here: Insert > Structure, or paste from a canvas.]'),
     CAPTION('Scheme 1. [What the scheme shows.]'),
     H1('Reagents'),
     { obj: table(['Reagent', 'MW (g/mol)', 'equiv', 'mmol', 'Amount', 'Supplier / lot'], [118, 66, 46, 50, 70, 118], 4, [['[limiting reagent]', '', '1.0']]) },
