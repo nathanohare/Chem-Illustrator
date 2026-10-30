@@ -138,7 +138,7 @@ export interface RibbonInfo {
   own: Map<string, HTMLElement>;
 }
 
-const TAB_ATTR: Record<string, string> = { sheet: 'sh', doc: 'doc', slides: 'sl' };
+const TAB_ATTR: Record<string, string> = { sheet: 'sh', doc: 'doc', slides: 'sl', design: 'dz' };
 const RIBBON_EL: Record<string, string> = { sheet: '#sheet-ribbon', doc: '#doc-ribbon', slides: '#ribbon', design: '#design-ribbon' };
 const RIBBON_TITLE: Record<string, string> = { slides: 'Presentation', doc: 'Document', sheet: 'Spreadsheet', design: 'Design' };
 

@@ -40,9 +40,10 @@ function gridPath(ctx: CanvasRenderingContext2D, p: PageSetup, box: Rect): void 
 
 /**
  * Paint the page grid: `e` the drawing's pages, `used` those with something on them (page-grid.ts
- * usedPages). `dark`: the page is shown dark.
+ * usedPages). `dark`: the page is shown dark. `surround`: a solid colour for the space round the
+ * pages (the dark theme's, so a white page does not sit in a glare of light grey), or null for the shading.
  */
-export function paintPages(ctx: CanvasRenderingContext2D, look: PageLook, r: OrientView, p: PageSetup, e: Extent, used: Set<string>, dark: boolean): void {
+export function paintPages(ctx: CanvasRenderingContext2D, look: PageLook, r: OrientView, p: PageSetup, e: Extent, used: Set<string>, dark: boolean, surround: string | null = null): void {
   if (!look.grid) return;
   const s = r.view.scale;
   if (!(s > 0)) return;
@@ -59,9 +60,15 @@ export function paintPages(ctx: CanvasRenderingContext2D, look: PageLook, r: Ori
   const tiny = Math.min(p.w, p.h) * s < 8;
   ctx.save();
 
-  // the space round the pages, where drawing adds pages, a light grey; beyond a fixed edge darker
+  // the space round the pages, where drawing adds pages, a light grey (the theme's colour in the dark theme); beyond a fixed edge darker
   const out = SHADE_ALPHA[look.outsideShade];
-  if (out > 0) {
+  if (surround) {
+    ctx.fillStyle = surround;
+    ctx.beginPath();
+    ctx.rect(view.x1, view.y1, view.x2 - view.x1, view.y2 - view.y1);
+    ctx.rect(grid.x1, grid.y1, grid.x2 - grid.x1, grid.y2 - grid.y1);
+    ctx.fill('evenodd');
+  } else if (out > 0) {
     ctx.fillStyle = `rgba(${shade}, ${out})`;
     ctx.beginPath();
     ctx.rect(view.x1, view.y1, view.x2 - view.x1, view.y2 - view.y1);

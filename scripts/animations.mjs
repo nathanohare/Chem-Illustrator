@@ -308,7 +308,7 @@ if (want('dark-mode')) {
   const c = await canvasBox(page);
   await page.mouse.move(c.x + c.width * 0.5, c.y + c.height * 0.8);
   await record(page, 'dark-mode', async () => {
-    const b = await page.locator('#btn-dark').boundingBox();
+    const b = await page.locator('.quick-bar [data-qa="dark-page"]').boundingBox();
     await glide(page, b.x + b.width / 2, b.y + b.height / 2, 25); await page.waitForTimeout(300);
     await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
     await page.waitForTimeout(1200);

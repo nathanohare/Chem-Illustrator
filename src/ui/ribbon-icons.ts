@@ -33,8 +33,19 @@ export const RIBBON_ICONS: Record<string, string> = {
   'doc-bullets': bullets, 'doc-numbering': numbering, 'doc-outdent': indent(false), 'doc-indent': indent(true),
 };
 
+/** Small buttons in words that also get a picture before the words, as Format Painter has (and Cut and Copy have in Office). */
+const LEADS: Record<string, string> = { cut: COMMAND_ICONS.cut, copy: COMMAND_ICONS.copy };
+
 /** Put icons on the ribbons' small buttons that have one; their names stay as tooltips. */
 export function applyRibbonIcons(root: ParentNode = document): void {
+  for (const b of root.querySelectorAll<HTMLButtonElement>('.ribbon .rb-col > button')) {
+    const icon = LEADS[b.dataset.cmd ?? b.dataset.sh ?? b.dataset.doc ?? ''];
+    if (!icon || b.querySelector('.rb-lead')) continue;
+    const lead = document.createElement('span');
+    lead.className = 'rb-lead';
+    lead.innerHTML = icon;
+    b.prepend(lead);
+  }
   for (const b of root.querySelectorAll<HTMLButtonElement>('.ribbon button:not(.rb-big)')) {
     const key = b.dataset.doc ?? (b.dataset.sh ? 'sh:' + b.dataset.sh : undefined) ?? (b.classList.contains('rb-sq') ? b.dataset.cmd : undefined);
     const icon = key ? RIBBON_ICONS[key] ?? (b.dataset.cmd ? COMMAND_ICONS[b.dataset.cmd] : undefined) : undefined;

@@ -6,7 +6,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M16 3l11.3 6.5v13L16 29 4.7 22.5v-13z%22 fill=%22none%22 stroke=%22%232f6fdf%22 stroke-width=%222.6%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M16 8.5l6.5 3.75M9.5 20l6.5 3.75%22 stroke=%22%232f6fdf%22 stroke-width=%222.2%22 stroke-linecap=%22round%22/%3E%3C/svg%3E" />
   <title>Chem Illustrator</title>
 </head>
-<body>
+<body class="tabs-in-menu">
   <header>
     <div class="menu-wrap">
       <button id="btn-file" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu" aria-keyshortcuts="Alt+F"><span class="mn">F</span>ile</button>
@@ -323,15 +323,17 @@
     <button role="menuitem" data-cmd="customize-toolbox" title="Rearrange any toolbox's buttons by dragging them, put tools and commands in or take them out, change the fly-outs, and make, rename or delete toolboxes">Customize Toolboxes…</button>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="one-column-tools" title="In Presentation, Spreadsheet, Document and Design tabs, show toolboxes docked at the side in one column, to leave more room for the page"><span>One Column Outside Canvas</span></button>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="lock-toolboxes" title="Unlock to drag toolboxes by their titles: to an edge of the drawing to dock them, anywhere else to float"><span>Lock Toolboxes</span></button>
+    <button role="menuitem" data-cmd="customize-quick-bar" title="Choose the buttons on the quick bar beside the menus (Save, Undo, Redo…) and their order, like Office's Quick Access Toolbar">Customize Quick Access Toolbar…</button>
     <button role="menuitem" data-cmd="reset-toolboxes" title="Put every toolbox back where it starts: Drawing Tools docked at the left, the others hidden, all open and locked. What is in them is kept">Reset Toolboxes</button>
     </div>
     </div>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="focus-view" title="Hide the toolboxes, side panel and ribbon to give the page the whole window; press again (Ctrl+Shift+F1) to bring them back"><span>Focus View</span></button>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="fold-side" title="Fold the side panel to a strip at the right, to give the drawing more room"><span>Fold Side Panel</span></button>
-    <div class="submenu">
+    <div class="submenu" data-modes="slides sheet document design">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Ribbon</button>
     <div class="menu sub" role="menu" hidden>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="collapse-ribbon" title="Show the ribbon's tabs only, for more room; click a tab to use its buttons (Ctrl+F1, or double-click a tab)"><span>Collapse the Ribbon</span><kbd>Ctrl+F1</kbd></button>
+    <button role="menuitemcheckbox" aria-checked="false" data-cmd="ribbon-auto-fold" title="Fold the ribbon to its tabs while the window is short (under 760 pixels tall), so the page keeps its room on a laptop; click a tab to use its buttons. It opens again when the window is taller"><span>Fold on Short Windows</span></button>
     <button role="menuitem" data-cmd="customize-ribbon" title="Put the ribbon's tabs and groups in your order, rename or hide them, and make groups of your own commands (Presentations, Documents, Spreadsheets and Designs)">Customize the Ribbon…</button>
     </div>
     </div>
@@ -381,6 +383,7 @@
     </div>
     </div>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="title-bar-in-menu" class="desktop-only" hidden title="Desktop app: the window's minimise, maximise and close buttons at the right of this menu bar, in place of the system's title bar, to give the work a row more room. Drag an empty part of the menu bar to move the window"><span>Title Bar in Menu Row</span></button>
+    <button role="menuitemcheckbox" aria-checked="true" data-cmd="tabs-in-menu" title="The open files' tabs in the menu bar, beside the menus, to give the work a row more room (a row of their own when off). When many files are open the tabs show only their icons; rest the mouse on one for its name"><span>File Tabs in Menu Row</span></button>
     <hr />
     <button role="menuitem" data-cmd="dark-colours" title="Choose the dark page's colours (Graphite, Slate, Warm dark) or make your own">Dark Page Colours…</button>
     <button role="menuitem" data-cmd="mode-colours" title="Blue for drawings, orange for slides: choose how much of the window is coloured, and the colours">Mode Colours…</button>
@@ -393,119 +396,6 @@
     <div class="menu-wrap">
     <button id="btn-insert" aria-haspopup="menu" aria-expanded="false" aria-controls="insert-menu" aria-keyshortcuts="Alt+I"><span class="mn">I</span>nsert</button>
     <div id="insert-menu" class="menu" role="menu" hidden>
-    <button title="A structure from its name or SMILES: in the drawing, in the text at the caret, or in the selected cell" role="menuitem" data-cmd="name-to-structure">Structure from Name or SMILES…</button>
-    <button data-modes="document" role="menuitem" data-cmd="insert-structure" title="Draw a structure or scheme to put in the text at the caret">Structure</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="draw-structure">Structure in Cell</button>
-    <hr />
-    <button data-modes="drawing slides design document" role="menuitem" data-cmd="insert-picture">Picture…</button>
-    <div class="submenu" data-modes="drawing slides design document">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Picture Tools</button>
-    <div class="menu sub" role="menu" hidden>
-    <button data-modes="drawing slides design" role="menuitem" data-cmd="crop" title="Cut the edges off the selected picture">Crop Picture</button>
-    <button data-modes="drawing slides design document" role="menuitem" data-cmd="picture-format" title="Brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions">Picture Format…</button>
-    </div>
-    </div>
-    <button data-modes="drawing slides design" role="menuitem" data-cmd="text-box">Text Box</button>
-    <button data-modes="drawing slides design document" role="menuitem" data-cmd="insert-table" title="A table in the ACS style; or paste cells from Excel or a sheet">Table…</button>
-    <button data-modes="drawing slides design document" role="menuitem" data-cmd="insert-chart" title="A chart with its own data (type or paste it in a grid), saved as a Word or PowerPoint chart">Chart…</button>
-    <button data-modes="slides design document" role="menuitem" data-cmd="insert-shapes" title="Basic shapes, block arrows, flowchart shapes, callouts and lab glassware">Shapes…</button>
-    <button data-modes="slides design document" role="menuitem" data-cmd="insert-icons" title="About 7,000 icons, lab and science ones first: glassware, molecules, hazard and safety signs">Icons…</button>
-    <button data-modes="drawing slides design document" role="menuitem" data-cmd="insert-diagram" title="Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint's SmartArt">Diagram…</button>
-    <button data-modes="slides design document" role="menuitem" data-cmd="insert-equation" title="An equation typed as LaTeX (x^2, \frac{a}{b}, \alpha), shown as maths; a Word or PowerPoint equation in .docx and .pptx files">Equation…</button>
-    <button data-modes="drawing slides design" role="menuitem" data-cmd="insert-reference" title="References from any open file (or looked up by DOI) put here as formatted text: full, or short (journal, year, volume, page), in the citation style you pick">Formatted Reference…</button>
-    <button role="menuitem" data-cmd="references" title="The references of every open document and presentation, grouped by file: add, edit, and copy them from one file to another">Reference Manager…</button>
-    <hr />
-    <button role="menuitem" data-cmd="insert-symbol" title="Greek letters, arrows, maths and chemistry signs, accented letters: find one by name (degree, angstrom) or code, with the ones you used lately first">Symbol…</button>
-    <button role="menuitem" data-cmd="insert-link" title="Link the selected text to a web page, a DOI, a file or a place in this file (Ctrl+K while typing). Ctrl+click a link to follow it">Link…</button>
-    <button role="menuitem" data-cmd="alt-text" title="Alt text for the picture, chart or structure picked: what it shows, for people who can't see it (screen readers). Kept as its alt text in Word, PowerPoint and Excel">Alt Text…</button>
-    <button data-modes="slides sheet" role="menuitem" data-cmd="new-comment">New Comment</button>
-    <hr />
-    <div class="submenu" data-modes="slides">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Presentation</button>
-    <div class="menu sub" role="menu" hidden>
-    <button data-modes="slides" role="menuitem" data-cmd="new-slide">New Slide</button>
-    <button data-modes="slides" role="menuitem" data-cmd="new-canvas-slide" title="A slide with no edge: draw a whole route across it, then add keyframes, the windows the slide show steps through">New Canvas Slide</button>
-    <button data-modes="slides" role="menuitem" data-cmd="duplicate-slide">Duplicate Slide</button>
-    <button class="keyframes-only" role="menuitem" data-cmd="add-keyframe" title="A new keyframe after the one picked, half a slide along to the right">Add Keyframe</button>
-    <button class="keyframes-only" role="menuitem" data-cmd="keyframe-here" title="A new keyframe showing what is in the window now">Keyframe from Window</button>
-    <button class="keyframes-only" role="menuitem" data-cmd="fit-keyframe" title="The keyframe picked shows what is selected">Fit Keyframe to Selection</button>
-    <button class="keyframes-only" role="menuitem" data-cmd="delete-keyframe" title="Take away the keyframe picked">Delete Keyframe</button>
-    <button class="keyframes-only" role="menuitem" data-cmd="keyframe-title" title="The title shown fixed to the screen while the show is at the keyframe picked">Keyframe Title…</button>
-    <button class="keyframes-only" role="menuitem" data-cmd="keyframe-zone" title="A soft tint in the background round the keyframe picked: give a part of the route its own colour">Zone Colour…</button>
-    <button class="keyframes-only" role="menuitem" data-cmd="canvas-heading" title="A large, faint label marking a part of the route, such as Fragment A or Endgame">Canvas Heading</button>
-    <button class="keyframes-only" role="menuitem" data-cmd="keyframe-spotlight" title="In the show, what is selected stays bright and the rest of the keyframe picked dims (nothing selected: take the spotlight away)">Spotlight Selection</button>
-    <button class="keyframes-only" role="menuitem" data-cmd="keyframe-detour" title="The keyframe picked is a detour off the route (a side reaction, a failed attempt): after it the show glides back to where it left the route. Again to put it back on the route">Mark as Detour</button>
-    <button class="keyframes-only" role="menuitem" data-cmd="canvas-show-options" title="In the show: dim what is outside the keyframe, a mini-map of the whole canvas, compound numbers that fly back to where the compound was made">Canvas Show Options…</button>
-    <button data-modes="slides" role="menuitem" data-cmd="reuse-slides" title="Slides from another PowerPoint file: see them all, pick the ones you want">Reuse Slides…</button>
-    <button data-modes="slides" role="menuitem" data-cmd="insert-slide-zoom" title="Pictures of other slides that zoom into them in the slide show">Slide Zoom…</button>
-    <button data-modes="slides" role="menuitem" data-cmd="insert-summary-zoom" title="A slide of zooms, one for each part of the talk">Summary Zoom…</button>
-    <button data-modes="slides" role="menuitem" data-cmd="action-settings" title="What a click on the selected shape or action button does in the slide show">Action…</button>
-    <button data-modes="slides" role="menuitem" data-cmd="insert-video" title="A video from a file that plays in the slide show and in PowerPoint">Video…</button>
-    <button data-modes="slides" role="menuitem" data-cmd="insert-audio" title="A sound from a file that plays in the slide show and in PowerPoint">Audio…</button>
-    <button data-modes="slides" role="menuitem" data-cmd="header-footer" title="The date, slide number and footer on the slides, and the header and footer of notes pages and handouts">Header &amp; Footer…</button>
-    <button data-modes="slides" role="menuitem" data-cmd="slide-references" title="Tick which of the presentation's references this slide shows at its foot; the lines are written, placed and formatted for you">References on Slide…</button>
-    <button data-modes="slides" role="menuitem" data-cmd="references-slide" title="A slide at the end listing the references shown on the slides, in full, kept up to date">References Slide…</button>
-    </div>
-    </div>
-    <div class="submenu" data-modes="sheet">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Spreadsheet</button>
-    <div class="menu sub" role="menu" hidden>
-    <button data-modes="sheet" role="menuitem" data-cmd="new-note">New Note</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="property-column">Insert Property Columns…</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="isotope-pattern">Isotope Pattern…</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="reagent-table">New Reagent Table</button>
-    <hr />
-    <button data-modes="sheet" role="menuitem" data-cmd="chart-scatter">Insert Scatter Chart</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="chart-column">Insert Column Chart</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="insert-pivot">Insert PivotTable…</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="insert-pivot-chart">Insert PivotChart…</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="insert-dashboard">Insert Dashboard</button>
-    <hr />
-    <button data-modes="sheet" role="menuitem" data-cmd="insert-picture-sheet">Insert Picture…</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="insert-text-box">Insert Text Box</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="insert-cells">Insert Rows or Columns</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="insert-sheet">Insert Worksheet</button>
-    </div>
-    </div>
-    <div class="submenu" data-modes="document">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Document</button>
-    <div class="menu sub" role="menu" hidden>
-    <button data-modes="document" role="menuitem" data-cmd="insert-object" title="Another program's file kept whole in the document (an Excel workbook, a PDF, anything): shown as its cells, first page or an icon; double-click it to open it in its program">Object…</button>
-    <button data-modes="document" role="menuitem" data-cmd="insert-caption" title="A numbered caption: Figure 1, Scheme 2, Table S1…">Caption…</button>
-    <button data-modes="document" role="menuitem" data-cmd="cross-reference" title="&quot;Figure 2&quot; in the text, which follows the caption's number">Cross-reference…</button>
-    <button data-modes="document" role="menuitem" data-cmd="compound-number" title="A bold compound number that renumbers itself">Compound Number…</button>
-    <button data-modes="document" role="menuitem" data-cmd="insert-citation" title="Cite references: superscript numbers in order of first citation">Citation…</button>
-    <button data-modes="document" role="menuitem" data-cmd="insert-bibliography" title="The references cited, numbered, in the journal style">Bibliography</button>
-    <hr />
-    <button data-modes="document" role="menuitem" data-cmd="insert-footnote" title="A footnote at the foot of the page (Ctrl+Alt+F)">Footnote</button>
-    <button data-modes="document" role="menuitem" data-cmd="insert-endnote" title="An endnote after the text (Ctrl+Alt+D)">Endnote</button>
-    <button data-modes="document" role="menuitem" data-cmd="insert-bookmark" title="Name the paragraph the caret is in, so links can go to it (Ctrl+Shift+F5)">Bookmark…</button>
-    <hr />
-    <button data-modes="document" role="menuitem" data-cmd="page-break">Page Break</button>
-    <button data-modes="document" role="menuitem" data-cmd="breaks-nextPage" title="A new section on a new page: it can have its own paper, margins, columns, header and footer, page numbers and line numbers">Section Break (Next Page)</button>
-    <button data-modes="document" role="menuitem" data-cmd="breaks-continuous" title="A new section on the same page (one column of title and abstract, then two columns of text)">Section Break (Continuous)</button>
-    <hr />
-    <div class="submenu">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Tables and Indexes</button>
-    <div class="menu sub" role="menu" hidden>
-    <button data-modes="document" role="menuitem" data-cmd="insert-toc" title="The headings (Heading 1, 2, 3) with their page numbers; it updates by itself">Table of Contents…</button>
-    <button data-modes="document" role="menuitem" data-cmd="insert-tof" title="The Figure, Scheme, Table or Chart captions with their page numbers; it updates by itself">Table of Figures…</button>
-    <button data-modes="document" role="menuitem" data-cmd="mark-entry" title="Mark the selected word or phrase as an index entry (Alt+Shift+X)">Mark Index Entry…</button>
-    <button data-modes="document" role="menuitem" data-cmd="insert-index" title="The entries marked, A to Z, with their page numbers; it updates by itself">Index…</button>
-    <button data-modes="document" role="menuitem" data-cmd="mark-citation" title="Mark the selected authority for the table of authorities (Alt+Shift+I)">Mark Citation…</button>
-    <button data-modes="document" role="menuitem" data-cmd="insert-toa" title="The authorities marked, by category, with their pages; it updates by itself">Table of Authorities…</button>
-    </div>
-    </div>
-    <div class="submenu">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Form Fields</button>
-    <div class="menu sub" role="menu" hidden>
-    <button data-modes="document" role="menuitem" data-cmd="insert-form-text" title="A text form field to fill in">Text Form Field…</button>
-    <button data-modes="document" role="menuitem" data-cmd="insert-form-check" title="A check box form field">Check Box Form Field…</button>
-    <button data-modes="document" role="menuitem" data-cmd="insert-form-drop" title="A drop-down form field">Drop-Down Form Field…</button>
-    </div>
-    </div>
-    </div>
-    </div>
     </div>
     </div>
     <div class="menu-wrap">
@@ -754,28 +644,9 @@
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="fixed-angles"><span>Fixed Angles</span></button>
     </div>
     </div>
-    <span class="sep"></span>
-    <button id="btn-undo" title="Undo">Undo</button>
-    <button id="btn-redo" title="Redo">Redo</button>
-    <button id="btn-fit" title="Fit drawing to window">Fit</button>
-    <button id="btn-lock" type="button" aria-pressed="true" title="Lock or unlock the toolboxes (unlocked, drag one by its title to move it)"><span class="lock-icon"></span><span class="lock-text">Locked</span></button>
-    <div class="menu-wrap dev-only" hidden>
-      <button id="btn-developer" aria-haspopup="menu" aria-expanded="false" aria-controls="developer-menu" title="Developer Tools: the stress test and turning them off (View &gt; Developer Tools)">Developer</button>
-      <div id="developer-menu" class="menu" role="menu" hidden>
-        <button role="menuitem" data-cmd="stress-100" title="Draw 100 drug-sized molecules to test speed">Stress Test: 100 Molecules</button>
-        <button role="menuitem" data-cmd="stress-500" title="Draw 500 drug-sized molecules to test speed">Stress Test: 500 Molecules</button>
-        <button role="menuitem" data-cmd="stress-2000" title="Draw 2,000 drug-sized molecules to test speed">Stress Test: 2,000 Molecules</button>
-        <button role="menuitem" data-cmd="stress-5000" title="Draw 5,000 drug-sized molecules to test speed">Stress Test: 5,000 Molecules</button>
-        <hr />
-        <button role="menuitem" data-cmd="dev-tools" title="Turn off Developer Tools (the speed readout, stress test and Error Console); View &gt; Developer Tools turns them back on">Turn Off Developer Tools</button>
-      </div>
-    </div>
-    <span class="sep"></span>
-    <button id="btn-dark" type="button" aria-pressed="false" data-cmd="dark-page" title="Dark page: show the page dark on screen only (files, printing and copies are not changed)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 4.5 12 4.5 22.5 12 22.5 12 18.5 19.5 12 19.5 1.5 12 1.5 12Z"/><circle cx="12" cy="12" r="3.5"/></svg></button>
-    <button id="btn-search" type="button" class="search-box" title="Search for a command by name (Alt+Q)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><span>Search</span><kbd>Alt+Q</kbd></button>
     <div class="menu-wrap">
       <button id="btn-help" aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu" title="Hotkeys, the user guide, and sending feedback" aria-keyshortcuts="Alt+H"><span class="mn">H</span>elp</button>
-      <div id="help-menu" class="menu right" role="menu" hidden>
+      <div id="help-menu" class="menu" role="menu" hidden>
         <button role="menuitem" data-cmd="help" title="The most used hotkeys and tips, with a button to change any key">Hotkeys and Tips</button>
         <button role="menuitem" data-cmd="user-guide" title="How to use the program (built in: works without a connection)">User Guide</button>
         <button role="menuitem" data-cmd="help-here" title="The part of the User Guide about the tool or mode in use">Help on This Tool or Mode</button>
@@ -788,11 +659,25 @@
 <button role="menuitem" data-cmd="about">About Chem Illustrator</button>
       </div>
     </div>
+    <span class="sep"></span>
+    <div id="quick-bar" class="quick-bar" role="toolbar" aria-label="Quick Access Toolbar"></div>
+    <div class="menu-wrap dev-only" hidden>
+      <button id="btn-developer" aria-haspopup="menu" aria-expanded="false" aria-controls="developer-menu" title="Developer Tools: the stress test and turning them off (View &gt; Developer Tools)">Developer</button>
+      <div id="developer-menu" class="menu" role="menu" hidden>
+        <button role="menuitem" data-cmd="stress-100" title="Draw 100 drug-sized molecules to test speed">Stress Test: 100 Molecules</button>
+        <button role="menuitem" data-cmd="stress-500" title="Draw 500 drug-sized molecules to test speed">Stress Test: 500 Molecules</button>
+        <button role="menuitem" data-cmd="stress-2000" title="Draw 2,000 drug-sized molecules to test speed">Stress Test: 2,000 Molecules</button>
+        <button role="menuitem" data-cmd="stress-5000" title="Draw 5,000 drug-sized molecules to test speed">Stress Test: 5,000 Molecules</button>
+        <hr />
+        <button role="menuitem" data-cmd="dev-tools" title="Turn off Developer Tools (the speed readout, stress test and Error Console); View &gt; Developer Tools turns them back on">Turn Off Developer Tools</button>
+      </div>
+    </div>
+    <div id="tabs" role="tablist" aria-label="Open files"></div>
+    <button id="btn-search" type="button" class="search-box" title="Search for a command by name (Alt+Q)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><span>Search</span><kbd>Alt+Q</kbd></button>
     <h1 class="app-name">Chem Illustrator</h1>
     <button id="stage-badge" type="button" class="stage-badge" title="Chem Illustrator is still being built: new features arrive often and some things may not work yet. Click for more.">Beta</button>
   </header>
 
-  <div id="tabs" role="tablist" aria-label="Open files"></div>
 
   <div id="sheet-ribbon" class="ribbon tabbed sheet-only" role="toolbar" aria-label="Spreadsheet" hidden>
     <div class="rb-tabs" role="tablist">
@@ -2615,114 +2500,126 @@
     </div>
   </div>
 
-  <div id="design-ribbon" class="ribbon design-only" role="toolbar" aria-label="Design" hidden>
-    <div class="rb-group">
-      <div class="rb-row">
-        <div class="rb-col">
-          <button data-cmd="paste" title="Paste">Paste</button>
-          <button data-cmd="copy" title="Copy">Copy</button>
-          <button data-cmd="format-painter" aria-pressed="false" title="Format Painter: copy the look of what is selected to the next thing you click or drag over. Double-click to keep painting until Esc"><svg class="fp-icon" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="2.5" width="12" height="5" rx="1"/><path d="M15 5h2v4.5h-7V12"/><rect x="8.5" y="12" width="3" height="6" rx="0.8"/></svg> Format Painter</button>
-        </div>
-      </div>
-      <div class="rb-label">Clipboard</div>
+  <div id="design-ribbon" class="ribbon tabbed design-only" role="toolbar" aria-label="Design" hidden>
+    <div class="rb-tabs" role="tablist">
+      <button role="tab" data-dz-tab="home" aria-selected="true">Home</button>
+      <button role="tab" data-dz-tab="insert" aria-selected="false">Insert</button>
+      <button role="tab" data-dz-tab="page" aria-selected="false">Page</button>
     </div>
-    <div class="rb-group">
-      <div class="rb-row">
-        <button class="rb-big" data-cmd="design-size" title="Change the page size: journal TOC graphics, graphical abstracts, posters, slides, paper or your own size"><span class="rb-icon">▭</span>Page Size</button>
-        <div class="rb-col">
-          <span id="dz-size" class="muted small"></span>
-          <span class="rb-pair"><label class="rb-field" title="The page's colour (saved with the design)">Background <input id="dz-bg" type="color" value="#ffffff" /></label> <button type="button" data-cmd="format-background" title="A gradient, picture or pattern behind the page, see-through as you like">Format…</button></span>
-          <div class="rb-pair">
-            <label class="check small" title="Lines to line things up by (shown on screen only, never saved or printed)"><input id="dz-grid" type="checkbox" /> Grid</label>
-            <label class="check small" title="While moving, edges and middles snap into line with other shapes and the page, shown by pink lines (hold Alt to move freely)"><input id="dz-guides" type="checkbox" checked /> Guides</label>
-            <select id="dz-grid-step" aria-label="Grid spacing" title="How far apart the grid lines are">
-              <option value="7.2">0.1 in</option>
-              <option value="18">0.25 in</option>
-              <option value="36">0.5 in</option>
-              <option value="72">1 in</option>
-              <option value="14.173">0.5 cm</option>
-              <option value="28.346">1 cm</option>
-            </select>
+    <div class="rb-panel" data-dz-panel="home">
+      <div class="rb-group">
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="paste" title="Paste a structure, a picture or text"><span class="rb-icon">⎘</span>Paste</button>
+          <div class="rb-col">
+            <button data-cmd="cut" title="Cut">Cut</button>
+            <button data-cmd="copy" title="Copy">Copy</button>
+            <button data-cmd="format-painter" aria-pressed="false" title="Format Painter: copy the look of what is selected to the next thing you click or drag over. Double-click to keep painting until Esc"><svg class="fp-icon" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="2.5" width="12" height="5" rx="1"/><path d="M15 5h2v4.5h-7V12"/><rect x="8.5" y="12" width="3" height="6" rx="0.8"/></svg> Format Painter</button>
           </div>
         </div>
+        <div class="rb-label">Clipboard</div>
       </div>
-      <div class="rb-label">Page</div>
-    </div>
-    <div class="rb-group">
-      <div class="rb-row">
-        <button class="rb-big" data-cmd="design-shapes" title="Find a shape in the library on the left"><span class="rb-icon">◇</span>Shapes</button>
-        <button class="rb-big" data-cmd="design-icons" title="Find an icon in the library on the left: about 7,000, lab and science ones first"><span class="rb-icon">⚗</span>Icons</button>
-        <button class="rb-big" data-cmd="insert-diagram" title="Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint's SmartArt"><span class="rb-icon">⧉</span>Diagram</button>
-        <button class="rb-big" data-cmd="text-box" title="Click on the page to type, or drag to make a text box that wraps"><span class="rb-icon">T</span>Text Box</button>
-        <button class="rb-big" data-cmd="insert-picture" title="Put a picture on the page (or paste or drop one)"><span class="rb-icon">▣</span>Picture</button>
-        <button class="rb-big" data-cmd="insert-table" title="Put a table on the page (or paste cells from Excel or a sheet)"><span class="rb-icon">▦</span>Table</button>
-        <button class="rb-big" data-cmd="insert-chart" title="A chart with its own data: type or paste the numbers, pick the kind of chart. Double-click it to change it"><span class="rb-icon">▥</span>Chart</button>
-        <button class="rb-big" data-cmd="insert-symbol" title="Symbol: Greek letters, arrows, maths and chemistry signs, accented letters, typed into the text being edited (or a new text box). Find one by name or code"><span class="rb-icon">Ω</span>Symbol</button>
-        <button class="rb-big" data-cmd="slide-references" title="References on Page: tick which of the design's references the page shows at its foot, written and formatted for you (short form by default). Reference Manager to add them or copy them from another file"><span class="rb-icon">¹⁾</span>References</button>
-        <button class="rb-big" data-cmd="crop" title="Cut the edges off the selected picture"><span class="rb-icon">⌗</span>Crop</button>
-        <button class="rb-big" data-cmd="picture-format" title="Picture Format for the selected picture: brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions. Saved as PowerPoint's own picture settings"><span class="rb-icon">◐</span>Picture Format</button>
-      </div>
-      <div class="rb-label">Insert</div>
-    </div>
-    <div class="rb-group">
-      <div class="rb-row">
-        <button class="rb-big" data-cmd="shape-styles" aria-haspopup="dialog" title="Shape Styles: a ready-made fill, outline and effects for the selected shapes"><span class="rb-icon">◩</span>Shape Styles ▾</button>
-        <div class="rb-col">
-          <button data-cmd="shape-effects" aria-haspopup="menu" title="Shape Effects: a shadow, reflection, glow, soft edges or a bevel for the selected shapes">Shape Effects ▾</button>
-          <button data-cmd="shape-picture-fill" title="Fill the selected shapes with a picture from a file, stretched to each">Picture Fill…</button>
-        </div>
-      </div>
-      <div class="rb-label">Shape Styles</div>
-    </div>
-    <div class="rb-group">
-      <div class="rb-row">
-        <button class="rb-big" data-cmd="connector-tool" title="A straight connector: drag between shapes' blue dots, and it follows the shapes when they move"><span class="rb-icon">↗</span>Connector</button>
-        <button class="rb-big" data-cmd="connector-elbow-tool" title="An elbow connector with square bends: drag between shapes' blue dots"><span class="rb-icon">↳</span>Elbow</button>
-      </div>
-      <div class="rb-label">Connect</div>
-    </div>
-    <div class="rb-group">
-      <div class="rb-row">
-        <button class="rb-big" data-cmd="catalytic-cycle" title="Draw a catalytic cycle: a ready-made one (Suzuki, Heck, Sonogashira's two loops…) or a blank one, or the selected structures put round a loop"><span class="rb-icon">⟳</span>Catalytic Cycle</button>
-        <button class="rb-big" data-cmd="energy-diagram" title="Draw a reaction energy diagram from a table of energies (double-click one to change its numbers)"><span class="rb-icon">⩘</span>Energy Diagram</button>
-      </div>
-      <div class="rb-label">Chemistry</div>
-    </div>
-    <div class="rb-group">
-      <div class="rb-row">
-        <div class="rb-col">
-          <button data-cmd="shape-front" title="Put the selected shapes in front of all the others">Bring to Front</button>
-          <button data-cmd="shape-forward" title="Put the selected shapes one step forward">Bring Forward</button>
-        </div>
-        <div class="rb-col">
-          <button data-cmd="shape-back" title="Put the selected shapes behind all the others">Send to Back</button>
-          <button data-cmd="shape-backward" title="Put the selected shapes one step back">Send Backward</button>
-        </div>
-        <div class="rb-col">
-          <div class="rb-pair">
-            <button class="rb-sq" data-cmd="align-left" title="Line up the left edges">⇤</button>
-            <button class="rb-sq" data-cmd="align-hcenter" title="Line up the centres, across">↔</button>
-            <button class="rb-sq" data-cmd="align-right" title="Line up the right edges">⇥</button>
-          </div>
-          <div class="rb-pair">
-            <button class="rb-sq" data-cmd="align-top" title="Line up the tops">⤒</button>
-            <button class="rb-sq" data-cmd="align-vcenter" title="Line up the middles, up and down">↕</button>
-            <button class="rb-sq" data-cmd="align-bottom" title="Line up the bottoms">⤓</button>
+      <div class="rb-group">
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="shape-styles" aria-haspopup="dialog" title="Shape Styles: a ready-made fill, outline and effects for the selected shapes"><span class="rb-icon">◩</span>Shape Styles ▾</button>
+          <div class="rb-col">
+            <button data-cmd="shape-effects" aria-haspopup="menu" title="Shape Effects: a shadow, reflection, glow, soft edges or a bevel for the selected shapes">Shape Effects ▾</button>
+            <button data-cmd="shape-picture-fill" title="Fill the selected shapes with a picture from a file, stretched to each">Picture Fill…</button>
           </div>
         </div>
-        <div class="rb-col">
-          <button data-cmd="distribute-h" title="Space the selected things evenly across">Space Across</button>
-          <button data-cmd="distribute-v" title="Space the selected things evenly up and down">Space Down</button>
+        <div class="rb-label">Shape Styles</div>
+      </div>
+      <div class="rb-group">
+        <div class="rb-row">
+          <div class="rb-col">
+            <button data-cmd="shape-front" title="Put the selected shapes in front of all the others">Bring to Front</button>
+            <button data-cmd="shape-forward" title="Put the selected shapes one step forward">Bring Forward</button>
+          </div>
+          <div class="rb-col">
+            <button data-cmd="shape-back" title="Put the selected shapes behind all the others">Send to Back</button>
+            <button data-cmd="shape-backward" title="Put the selected shapes one step back">Send Backward</button>
+          </div>
+          <div class="rb-col">
+            <div class="rb-pair">
+              <button class="rb-sq" data-cmd="align-left" title="Line up the left edges">⇤</button>
+              <button class="rb-sq" data-cmd="align-hcenter" title="Line up the centres, across">↔</button>
+              <button class="rb-sq" data-cmd="align-right" title="Line up the right edges">⇥</button>
+            </div>
+            <div class="rb-pair">
+              <button class="rb-sq" data-cmd="align-top" title="Line up the tops">⤒</button>
+              <button class="rb-sq" data-cmd="align-vcenter" title="Line up the middles, up and down">↕</button>
+              <button class="rb-sq" data-cmd="align-bottom" title="Line up the bottoms">⤓</button>
+            </div>
+          </div>
+          <div class="rb-col">
+            <button data-cmd="distribute-h" title="Space the selected things evenly across">Space Across</button>
+            <button data-cmd="distribute-v" title="Space the selected things evenly up and down">Space Down</button>
+          </div>
         </div>
+        <div class="rb-label">Arrange</div>
       </div>
-      <div class="rb-label">Arrange</div>
     </div>
-    <div class="rb-group">
-      <div class="rb-row">
-        <button class="rb-big" data-cmd="export-pdf" title="Save the design as a PDF at its page size"><span class="rb-icon">⎙</span>Export PDF</button>
-          <button class="rb-big" data-cmd="export-picture" title="Save the design as a PNG (choose the dpi) or an SVG"><span class="rb-icon">▣</span>Export Picture</button>
+    <div class="rb-panel" data-dz-panel="insert" hidden>
+      <div class="rb-group">
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="design-shapes" title="Find a shape in the library on the left"><span class="rb-icon">◇</span>Shapes</button>
+          <button class="rb-big" data-cmd="design-icons" title="Find an icon in the library on the left: about 7,000, lab and science ones first"><span class="rb-icon">⚗</span>Icons</button>
+          <button class="rb-big" data-cmd="insert-diagram" title="Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint's SmartArt"><span class="rb-icon">⧉</span>Diagram</button>
+          <button class="rb-big" data-cmd="text-box" title="Click on the page to type, or drag to make a text box that wraps"><span class="rb-icon">T</span>Text Box</button>
+          <button class="rb-big" data-cmd="insert-picture" title="Put a picture on the page (or paste or drop one)"><span class="rb-icon">▣</span>Picture</button>
+          <button class="rb-big" data-cmd="insert-table" title="Put a table on the page (or paste cells from Excel or a sheet)"><span class="rb-icon">▦</span>Table</button>
+          <button class="rb-big" data-cmd="insert-chart" title="A chart with its own data: type or paste the numbers, pick the kind of chart. Double-click it to change it"><span class="rb-icon">▥</span>Chart</button>
+          <button class="rb-big" data-cmd="insert-symbol" title="Symbol: Greek letters, arrows, maths and chemistry signs, accented letters, typed into the text being edited (or a new text box). Find one by name or code"><span class="rb-icon">Ω</span>Symbol</button>
+          <button class="rb-big" data-cmd="slide-references" title="References on Page: tick which of the design's references the page shows at its foot, written and formatted for you (short form by default). Reference Manager to add them or copy them from another file"><span class="rb-icon">¹⁾</span>References</button>
+          <button class="rb-big" data-cmd="crop" title="Cut the edges off the selected picture"><span class="rb-icon">⌗</span>Crop</button>
+          <button class="rb-big" data-cmd="picture-format" title="Picture Format for the selected picture: brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions. Saved as PowerPoint's own picture settings"><span class="rb-icon">◐</span>Picture Format</button>
+        </div>
+        <div class="rb-label">Insert</div>
       </div>
-      <div class="rb-label">Share</div>
+      <div class="rb-group">
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="connector-tool" title="A straight connector: drag between shapes' blue dots, and it follows the shapes when they move"><span class="rb-icon">↗</span>Connector</button>
+          <button class="rb-big" data-cmd="connector-elbow-tool" title="An elbow connector with square bends: drag between shapes' blue dots"><span class="rb-icon">↳</span>Elbow</button>
+        </div>
+        <div class="rb-label">Connect</div>
+      </div>
+      <div class="rb-group">
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="catalytic-cycle" title="Draw a catalytic cycle: a ready-made one (Suzuki, Heck, Sonogashira's two loops…) or a blank one, or the selected structures put round a loop"><span class="rb-icon">⟳</span>Catalytic Cycle</button>
+          <button class="rb-big" data-cmd="energy-diagram" title="Draw a reaction energy diagram from a table of energies (double-click one to change its numbers)"><span class="rb-icon">⩘</span>Energy Diagram</button>
+        </div>
+        <div class="rb-label">Chemistry</div>
+      </div>
+    </div>
+    <div class="rb-panel" data-dz-panel="page" hidden>
+      <div class="rb-group">
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="design-size" title="Change the page size: journal TOC graphics, graphical abstracts, posters, slides, paper or your own size"><span class="rb-icon">▭</span>Page Size</button>
+          <div class="rb-col">
+            <span id="dz-size" class="muted small"></span>
+            <span class="rb-pair"><label class="rb-field" title="The page's colour (saved with the design)">Background <input id="dz-bg" type="color" value="#ffffff" /></label> <button type="button" data-cmd="format-background" title="A gradient, picture or pattern behind the page, see-through as you like">Format…</button></span>
+            <div class="rb-pair">
+              <label class="check small" title="Lines to line things up by (shown on screen only, never saved or printed)"><input id="dz-grid" type="checkbox" /> Grid</label>
+              <label class="check small" title="While moving, edges and middles snap into line with other shapes and the page, shown by pink lines (hold Alt to move freely)"><input id="dz-guides" type="checkbox" checked /> Guides</label>
+              <select id="dz-grid-step" aria-label="Grid spacing" title="How far apart the grid lines are">
+                <option value="7.2">0.1 in</option>
+                <option value="18">0.25 in</option>
+                <option value="36">0.5 in</option>
+                <option value="72">1 in</option>
+                <option value="14.173">0.5 cm</option>
+                <option value="28.346">1 cm</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="rb-label">Page</div>
+      </div>
+      <div class="rb-group">
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="export-pdf" title="Save the design as a PDF at its page size"><span class="rb-icon">⎙</span>Export PDF</button>
+            <button class="rb-big" data-cmd="export-picture" title="Save the design as a PNG (choose the dpi) or an SVG"><span class="rb-icon">▣</span>Export Picture</button>
+        </div>
+        <div class="rb-label">Share</div>
+      </div>
     </div>
   </div>
 
@@ -2756,17 +2653,6 @@
       </div>
       <div id="doc-ruler" hidden></div>
       <div id="doc-host"></div>
-      <div id="doc-statusbar">
-        <span id="doc-status"></span>
-        <span class="grow"></span>
-        <button type="button" class="doc-viewbtn" data-doc="view-read" aria-pressed="false" title="Read Mode">📖</button>
-        <button type="button" class="doc-viewbtn" data-doc="view-print" aria-pressed="true" title="Print Layout">▯</button>
-        <button type="button" class="doc-viewbtn" data-doc="view-web" aria-pressed="false" title="Web Layout">🌐</button>
-        <button type="button" data-doc="zoom-out" title="Zoom out">−</button>
-        <span id="doc-zoom">100%</span>
-        <button type="button" data-doc="zoom-in" title="Zoom in">+</button>
-        <button type="button" data-doc="zoom-fit" title="Fit the page width in the window">Page Width</button>
-      </div>
     </div>
     <div id="structure-bar" role="toolbar" aria-label="Structure" hidden>
       <span id="structure-title"></span>
@@ -2869,7 +2755,7 @@
     </div>
   </aside>
 
-  <footer id="status"><span id="hint"></span><button type="button" id="status-notes" class="slides-only" data-cmd="view-notes" aria-pressed="true" title="Show or hide the speaker notes under the slide" hidden>✎ Notes</button><label class="zoom-pick canvas-only" title="Zoom (Ctrl+= and Ctrl+− also zoom; F6 fits the window)"><span class="sr-only">Zoom</span><select id="zoom-pick">
+  <footer id="status"><span id="hint"></span><div id="doc-statusbar" class="doc-only" hidden><span id="doc-status"></span><button type="button" class="doc-viewbtn" data-doc="view-read" aria-pressed="false" title="Read Mode">📖</button><button type="button" class="doc-viewbtn" data-doc="view-print" aria-pressed="true" title="Print Layout">▯</button><button type="button" class="doc-viewbtn" data-doc="view-web" aria-pressed="false" title="Web Layout">🌐</button><button type="button" data-doc="zoom-out" title="Zoom out">−</button><span id="doc-zoom">100%</span><button type="button" data-doc="zoom-in" title="Zoom in">+</button><button type="button" data-doc="zoom-fit" title="Fit the page width in the window">Page Width</button></div><button type="button" id="status-notes" class="slides-only" data-cmd="view-notes" aria-pressed="true" title="Show or hide the speaker notes under the slide" hidden>✎ Notes</button><label class="zoom-pick canvas-only" title="Zoom (Ctrl+= and Ctrl+− also zoom; F6 fits the window)"><span class="sr-only">Zoom</span><select id="zoom-pick">
     <option value="fit">Fit</option><option value="actual">Actual size</option><option disabled>──</option>
     <option value="25">25%</option><option value="50">50%</option><option value="75">75%</option><option value="100">100%</option><option value="150">150%</option><option value="200">200%</option><option value="300">300%</option><option value="400">400%</option><option value="800">800%</option>
     <option value="now" hidden></option></select></label><span id="go-buttons" class="go-buttons canvas-only"><button type="button" id="go-fit" title="Fit the whole drawing in the window (F6)">Fit</button><button type="button" id="go-sel" title="Go to Selection: bring what is selected into view (Shift+F6)">Go to Selection</button></span></footer>
