@@ -403,6 +403,10 @@ Two readers can read pictures:
 
 **Insert ▸ Picture…** puts a picture on the drawing (or drop a picture file on it). Drag a corner to resize it; it keeps its proportions unless you hold Alt. **Insert ▸ Picture Tools ▸ Crop Picture** crops it. **Insert ▸ Table…** adds an ACS-style table (rules above and below the heading row and under the last row) of the rows and columns you ask for; double-click a cell to type in it, and use the Style panel to change its lines, rows and columns (each column can line up left, centred or right; new tables start centred). Drag a structure into a cell to put it there: the cell grows to fit it, it sits centred at the top of the cell with any text under it, and it moves with the table. Drag it out to take it out of the cell.
 
+## References as text
+
+**Insert ▸ Formatted Reference…** puts references on the canvas as formatted text: tick them in any open document or presentation (or look one up with **By DOI…**), pick the citation style, write them in full or short (journal, year, volume, page), and number them if you like. The text is ordinary text afterwards. **Insert ▸ Reference Manager…** shows the references of every open file.
+
 ## Colours and palettes
 
 Every colour button opens a palette: Automatic, the standard colours, the colours already in the drawing, your own palettes, and **More colours…**. Atoms, bonds and whole structures can be coloured from the Style panel.

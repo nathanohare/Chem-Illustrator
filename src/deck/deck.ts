@@ -21,6 +21,8 @@ import type { Transition, Anim } from './animation';
 import { clampZoom, copyCanvas, keyRect, newCanvas, syncCamera, type CanvasData, type Keyframe } from './canvas';
 import { backgroundColour, copyBackground, isPlain, sameBackground, solid, type Background } from './background';
 import type { ShowSetup, CustomShow } from './show-setup';
+import { fitEntries, lineGap, mergeReferences, refArea, slideRefBlock, type DeckRefs, type LaidLine, type Measure, type RefBlock, type RefListSpec, type RefLook } from './slide-refs';
+import type { Reference } from '../document/references';
 
 /**
  * Settings of the deck as a whole that aren't part of its look: how the slide show runs (Set Up
@@ -31,6 +33,8 @@ export interface DeckSettings {
   customShows?: CustomShow[];
   /** The drawing guides and grid (View > Guides, Grid and Guides). */
   view?: SlideView;
+  /** The presentation's references, their citation style and how the slide lines look (see slide-refs.ts). */
+  refs?: DeckRefs;
 }
 
 export const copySettings = (s: DeckSettings): DeckSettings => structuredClone(s);
@@ -313,6 +317,36 @@ export function decorFrames(size: SlideSize, m: Master): { number: Rect; footer:
   return { number, footer, date, logo };
 }
 
+/** A slide's reference lines (or a References slide's list) laid out: where the block's top left is, its lines and their size. */
+export interface PlacedRefs { x: number; w: number; top: number; align: 'left' | 'center' | 'right'; lines: LaidLine[]; size: number; color?: string; /** The References slide's list. */ list?: true }
+
+/**
+ * Where a slide's reference lines go, and their lines, measured with `measure`: above the row of
+ * slide number, footer and date when the slide shows any of them, in the place the look picks,
+ * made smaller to fit. A References slide lists them under its title, filling the slide.
+ */
+export function placeRefs(p: { size: SlideSize; master: Master; layout: LayoutId; hf?: SlideHF; refs?: RefBlock }, measure: Measure): PlacedRefs | null {
+  const b = p.refs;
+  if (!b?.entries.length) return null;
+  const { size, master: m } = p;
+  const d = decorFrames(size, m);
+  const row = showsNumber(m, p.layout, p.hf) || showsFooter(m, p.layout, p.hf) || showsDate(m, p.layout, p.hf);
+  const rowTop = row ? (d.footer.y1 + d.footer.y2) / 2 - 0.6 * m.footerSize - 2 : null;
+  const color = b.look.color;
+  if (b.list) {
+    const t = layoutFrames('title-only', size, m).find((f) => f.ph === 'title');
+    const x = t?.x ?? 0.05 * size.w, w = t?.w ?? 0.9 * size.w;
+    const top = (t ? t.y + t.h : 0.2 * size.h) + 0.02 * size.h;
+    const bottom = rowTop ?? size.h - 0.04 * size.h;
+    const fit = fitEntries(b.entries, w, bottom - top, b.look.size, measure, 8);
+    return { x, w, top, align: 'left', ...fit, ...(color ? { color } : {}), list: true };
+  }
+  const a = refArea(b.look.place, size.w, size.h, rowTop);
+  const fit = fitEntries(b.entries, a.w, a.bottom - a.top, b.look.size, measure);
+  const top = a.fromTop ? a.top : a.bottom - fit.lines.length * lineGap(fit.size);
+  return { x: a.x, w: a.w, top, align: a.align, ...fit, ...(color ? { color } : {}) };
+}
+
 /** Does this slide show its number? (`hf`: the slide's own say, from Header & Footer > Apply.) */
 export function showsNumber(m: Master, layout: LayoutId, hf?: SlideHF): boolean {
   return hf?.number ?? (m.slideNumbers && (!titleLook(m, layout) || m.numberTitleSlides));
@@ -515,6 +549,12 @@ export interface Slide {
   hf?: SlideHF;
   /** A canvas slide: its drawing has no edge, and the show goes through these keyframes on it. */
   canvas?: CanvasData;
+  /** The references (their ids in the deck's list) whose lines it shows, in order. */
+  refs?: string[];
+  /** Its own look for those lines (References on Slide > Apply). */
+  refLook?: Partial<RefLook>;
+  /** It is a References slide: it lists the deck's references and keeps the list up to date. */
+  refList?: RefListSpec;
 }
 
 /**
@@ -531,7 +571,7 @@ export interface SectionCount { name: string; count: number }
 export type SizeFit = 'centre' | 'fit' | 'max';
 
 /** A slide's transition, animations, comments, own background and whether it is hidden, copied (for duplicates and the undo history). */
-export interface Motion { transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData }
+export interface Motion { transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec }
 const copyMotion = (m: Motion): Motion => ({
   ...(m.transition ? { transition: { ...m.transition } } : {}),
   ...(m.anims?.length ? { anims: m.anims.map((a) => ({ ...a, target: { ...a.target }, ...(a.trigger ? { trigger: { ...a.trigger } } : {}) })) } : {}),
@@ -541,13 +581,16 @@ const copyMotion = (m: Motion): Motion => ({
   ...(m.hidden ? { hidden: true } : {}),
   ...(m.hf && Object.keys(m.hf).length ? { hf: { ...m.hf } } : {}),
   ...(m.canvas?.keys.length ? { canvas: copyCanvas(m.canvas) } : {}),
+  ...(m.refs?.length ? { refs: [...m.refs] } : {}),
+  ...(m.refLook && Object.keys(m.refLook).length ? { refLook: { ...m.refLook } } : {}),
+  ...(m.refList ? { refList: { ...m.refList } } : {}),
 });
 
 /** A slide copied out of a deck (Copy, or Reuse Slides): its layout, drawing, notes and the rest. */
 export interface SlideCopy { layout: LayoutId; contents: Contents; notes: string; motion: Motion }
 
-/** Slides copied out of a deck, with the size and master they were made for. */
-export interface SlideSource { size: SlideSize; master: Master; slides: SlideCopy[] }
+/** Slides copied out of a deck, with the size and master they were made for (and the references their lines show). */
+export interface SlideSource { size: SlideSize; master: Master; slides: SlideCopy[]; refs?: Reference[] }
 
 /** Give a slide's drawing a master's drawing style and text styles (a title slide's in its own colours), and its background's colour. */
 function styleWith(d: Doc, m: Master, layout: LayoutId, own?: Background): void {
@@ -638,11 +681,12 @@ export class Deck {
    * canvas slide, `view` is the part of the canvas keyframe `key` shows (the first by default),
    * with the canvas (for its background) and the keyframe's title.
    */
-  page(i = this.index, key = 0): { size: SlideSize; master: Master; layout: LayoutId; index: number; own?: Background; hideGraphics?: boolean; hf?: SlideHF; view?: Rect; canvas?: CanvasData; title?: string } {
+  page(i = this.index, key = 0): { size: SlideSize; master: Master; layout: LayoutId; index: number; own?: Background; hideGraphics?: boolean; hf?: SlideHF; view?: Rect; canvas?: CanvasData; title?: string; refs?: RefBlock } {
     const s = this.slides[i];
     const k = s?.canvas?.keys[Math.max(0, Math.min(s.canvas.keys.length - 1, key))];
+    const refs = slideRefBlock(this.settings.refs, this.slides, i);
     return {
-      size: this.size, master: this.master, layout: s?.layout ?? 'blank', index: i, own: s?.background, hideGraphics: s?.hideGraphics, hf: s?.hf,
+      size: this.size, master: this.master, layout: s?.layout ?? 'blank', index: i, own: s?.background, hideGraphics: s?.hideGraphics, hf: s?.hf, ...(refs ? { refs } : {}),
       ...(k ? { view: keyRect(k, this.size), canvas: s.canvas, ...(k.title ? { title: k.title } : {}) } : {}),
     };
   }
@@ -872,21 +916,25 @@ export class Deck {
   // ---------------------------------------------------------------- slide operations
 
   /** Put slides in, at position `at`, and edit the first of them. */
-  private insert(at: number, slides: Slide[], label: string, master?: Master): void {
+  private insert(at: number, slides: Slide[], label: string, master?: Master, refs?: DeckRefs): void {
     const beforeIndex = this.index;
     const beforeMaster = this.master;
+    const beforeRefs = this.settings.refs;
+    const useRefs = (r: DeckRefs | undefined) => { if (refs) { if (r) this.settings.refs = r; else delete this.settings.refs; } };
     // new slides go in the section of the slide before them (the first section at the start)
     const sec = this.sections.length ? (this.slides[at - 1]?.section ?? this.slides[at]?.section ?? this.sections[0].id) : undefined;
     for (const s of slides) { if (sec === undefined) delete s.section; else s.section = sec; }
     const useMaster = (m: Master) => { if (this.master !== m) { this.master = m; this.restyleAll(); } };
     const doIt = () => {
       if (master) useMaster(master);
+      useRefs(refs);
       this.detachKeep(() => this.slides.splice(at, 0, ...slides));
       this.goFresh(at);
     };
     const undoIt = () => {
       this.detachKeep(() => this.slides.splice(at, slides.length));
       if (master) useMaster(beforeMaster);
+      useRefs(beforeRefs);
       this.goFresh(beforeIndex);
     };
     doIt();
@@ -1480,9 +1528,13 @@ export class Deck {
   /** Copies of some slides (the current one by default), with this deck's size and master, for pasting into a deck. */
   copySlides(indices: number[] = [this.index]): SlideSource {
     const sorted = [...new Set(indices)].filter((i) => i >= 0 && i < this.slides.length).sort((a, b) => a - b);
+    // the references their lines show (a References slide's list: all of them) go with them
+    const used = new Set(sorted.flatMap((i) => (this.slides[i].refList ? (this.settings.refs?.list ?? []).map((r) => r.id) : this.slides[i].refs ?? [])));
+    const refs = (this.settings.refs?.list ?? []).filter((r) => used.has(r.id));
     return {
       size: { ...this.size },
       master: structuredClone(this.master),
+      ...(refs.length ? { refs: structuredClone(refs) } : {}),
       slides: sorted.map((i) => {
         const s = this.slides[i];
         return { layout: s.layout, contents: structuredClone(this.docOf(i).contents()), notes: s.notes, motion: copyMotion(s) };
@@ -1502,7 +1554,7 @@ export class Deck {
     if (!from.slides.length) return 0;
     const { slides, master } = this.adopt(from, keep);
     const at = Math.max(0, Math.min(this.slides.length, after + 1));
-    this.insert(at, slides, slides.length > 1 ? 'Paste slides' : 'Paste slide', master);
+    this.insert(at, slides, slides.length > 1 ? 'Paste slides' : 'Paste slide', master, this.adoptRefs(from, slides));
     return slides.length;
   }
 
@@ -1674,5 +1726,102 @@ export class Deck {
     const put = (v: Anim[]) => { if (v.length) s.anims = copyMotion({ anims: v }).anims; else delete s.anims; this.onMotion(); };
     put(after);
     this.record(label, () => put(before), () => put(after), s);
+  }
+
+  // ---------------------------------------------------------------- references
+
+  /** The deck's reference list (empty until references are added). */
+  get references(): Reference[] { return this.settings.refs?.list ?? []; }
+
+  /**
+   * Change the deck's references: the list, its style or the slide lines' look. Slides showing a
+   * reference taken out of the list stop showing it. One undo step.
+   */
+  setRefs(next: DeckRefs, label = 'References'): void {
+    const before = this.settings.refs ? structuredClone(this.settings.refs) : undefined;
+    const after = structuredClone(next);
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    const known = new Set(after.list.map((r) => r.id));
+    const slides = this.slides.slice();
+    const idsBefore = slides.map((s) => s.refs);
+    const idsAfter = slides.map((s) => s.refs?.filter((id) => known.has(id)));
+    const put = (v: DeckRefs | undefined, ids: (string[] | undefined)[]) => {
+      if (v) this.settings.refs = structuredClone(v); else delete this.settings.refs;
+      slides.forEach((s, k) => { if (ids[k]?.length) s.refs = [...ids[k]!]; else delete s.refs; });
+      this.looks++;
+      this.onSwitch();
+    };
+    put(after, idsAfter);
+    this.record(label, () => put(before, idsBefore), () => put(after, idsAfter));
+  }
+
+  /**
+   * References on Slide: the references slides `indices` show (by id, in order) and, when
+   * `look` is given, their own look for the lines (null: the deck's look again). `deckLook`
+   * (Apply to All) is the look every slide takes: no slide keeps its own. One undo step.
+   */
+  setSlideRefs(indices: number[], ids: string[], look?: Partial<RefLook> | null, deckLook?: Partial<RefLook>, label = 'References on slide'): void {
+    const picked = new Set([...new Set(indices)].map((i) => this.slides[i]).filter(Boolean));
+    if (!picked.size) return;
+    const slides = this.slides.slice();
+    const beforeRefs = this.settings.refs ? structuredClone(this.settings.refs) : undefined;
+    const before = slides.map((s) => ({ refs: s.refs, refLook: s.refLook }));
+    const after = slides.map((s) => {
+      if (!picked.has(s)) return { refs: s.refs, refLook: deckLook ? undefined : s.refLook };
+      const own = deckLook ? undefined : look === null ? undefined : look ?? s.refLook;
+      return { refs: ids.length ? [...ids] : undefined, refLook: own && Object.keys(own).length ? { ...own } : undefined };
+    });
+    const afterRefs = deckLook ? { ...(beforeRefs ?? { list: [] }), look: { ...deckLook } } : beforeRefs;
+    if (afterRefs?.look && !Object.keys(afterRefs.look).length) delete afterRefs.look;
+    const put = (v: typeof before, r: DeckRefs | undefined) => {
+      if (r) this.settings.refs = structuredClone(r); else delete this.settings.refs;
+      slides.forEach((s, k) => {
+        if (v[k].refs?.length) s.refs = [...v[k].refs!]; else delete s.refs;
+        if (v[k].refLook) s.refLook = { ...v[k].refLook }; else delete s.refLook;
+      });
+      this.looks++;
+      this.onSwitch();
+    };
+    put(after, afterRefs);
+    this.record(label, () => put(before, beforeRefs), () => put(after, afterRefs), picked.size === 1 && !deckLook ? [...picked][0] : undefined);
+  }
+
+  /**
+   * Insert a References slide at `at` (Title Only, titled References): it lists the references
+   * the slides show, in the order they first appear (or every reference), and keeps the list up
+   * to date. One undo step.
+   */
+  insertRefsSlide(at: number, spec: RefListSpec, title = 'References'): Slide {
+    const s = this.insertSlide(at, 'title-only', (doc) => {
+      for (const c of [...doc.captions.values()]) if (c.ph === 'title') doc.updateCaption(c.id, { runs: applyBase([{ text: title }], textStyles(this.master, 'title-only').title) });
+    }, 'Insert References slide');
+    s.refList = { ...spec };
+    this.looks++;
+    this.onSwitch();
+    return s;
+  }
+
+  /** Change what a References slide lists. One undo step. */
+  setRefList(spec: RefListSpec | undefined, i = this.index): void {
+    const s = this.slides[i];
+    if (!s) return;
+    const before = s.refList ? { ...s.refList } : undefined;
+    if (JSON.stringify(before) === JSON.stringify(spec)) return;
+    const put = (v: RefListSpec | undefined) => { if (v) s.refList = { ...v }; else delete s.refList; this.looks++; this.onSwitch(); };
+    put(spec);
+    this.record(spec ? 'References slide' : 'Stop listing references', () => put(before), () => put(spec), s);
+  }
+
+  /**
+   * The references pasted slides bring (from another deck): those this deck has (the same DOI, or
+   * title and year) are used, the rest are added; the slides' lines point at this deck's
+   * references. Returns the deck's references to use, or undefined when nothing changes.
+   */
+  private adoptRefs(from: SlideSource, slides: Slide[]): DeckRefs | undefined {
+    if (!from.refs?.length) return undefined;
+    const mine = this.settings.refs?.list ?? [];
+    const { list, added, ids } = mergeReferences(mine, from.refs);
+    for (const s of slides) if (s.refs) s.refs = [...new Set(s.refs.map((id) => ids.get(id) ?? id))];
+    return added.length ? { ...(this.settings.refs ?? {}), list } : undefined;
   }
 }

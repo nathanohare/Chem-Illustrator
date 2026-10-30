@@ -167,7 +167,7 @@ Add, delete or move captions and every number and reference follows.
 
 ## References and bibliography
 
-1. **References** tab ▸ **Manage References…** holds the document's references. Add them with **Add by DOI…** (looked up on Crossref; needs the internet), **Add by Hand…**, **Import BibTeX / RIS…** or **Paste BibTeX / RIS…**. **Edit…** and **Delete…** change them.
+1. **References** tab ▸ **Manage References…** holds the document's references. The window shows the references of every open document and presentation, each file in its own group, so you can copy references from one file to another (**Copy to…**, drag them onto a file's name, or Ctrl+C and Ctrl+V). Each file keeps its own copy. Add them with **Add by DOI…** (looked up on Crossref; needs the internet), **Add by Hand…**, **Import BibTeX / RIS…** or **Paste BibTeX / RIS…**. **Edit…** and **Delete…** change them.
 2. Put the caret where a citation belongs and click **Insert Citation**. Citations are numbered in order of first citation.
 3. Click **Bibliography** to add a References heading and the numbered list.
 

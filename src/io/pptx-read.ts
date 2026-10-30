@@ -47,13 +47,14 @@ import { freshBox, sameBoxData, sizedBox, type ChartBox } from '../sheet/chart-b
 import { chartBoxPng } from '../render/chart-box-paint';
 import { canvasTag, readCanvasTag, withCameraMoves, type CanvasData } from '../deck/canvas';
 import { slidePrint, type CanvasKeep } from '../deck/canvas-export';
+import { cleanDeckRefs, cleanSlideRefs, type DeckRefs, type SlideRefs } from '../deck/slide-refs';
 
 /** PowerPoint's shapes that are shapes in the library, by PowerPoint's name. */
 const GEO_BY_PRST = new Map(GEOS.filter((g) => g.prst).map((g) => [g.prst!, g.id]));
 /** PowerPoint shapes that come into slides as plain boxes and ovals (with their text beside them as text boxes). */
 const PLAIN_PRST = new Set(['rect', 'roundRect', 'ellipse', 'snip1Rect', 'flowChartProcess', 'flowChartAlternateProcess']);
 
-export interface PptxSlide { layout: LayoutId; contents: Contents; notes: string; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData }
+export interface PptxSlide extends SlideRefs { layout: LayoutId; contents: Contents; notes: string; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData }
 
 /** How a slide made from a canvas slide's keyframe was marked when saved, and the print of what it holds now. */
 interface PartRead { uid: string; index: number; count: number; print: string; now: string; keep?: CanvasKeep }
@@ -257,6 +258,8 @@ class Reader {
   /** The layout of the slide being read, when the file says (files saved here). */
   private curLayout: LayoutId | undefined;
   private design = false;
+  /** The presentation's references, when this program saved the file. */
+  private refs: DeckRefs | undefined;
   /** The slides' parts, the one being read, and the ids slides had here (files saved here), for links. */
   private slidePaths: string[] = [];
   private curPath = '';
@@ -312,6 +315,9 @@ class Reader {
     const tags = this.tagsOf(main, root);
     const ours = tags[TAG.master];
     this.design = tags[TAG.design] === '1';
+    if (tags[TAG.refs]) {
+      try { this.refs = cleanDeckRefs(JSON.parse(tags[TAG.refs])); } catch { /* left without references */ }
+    }
     if (ours) {
       try { this.ourMaster = JSON.parse(ours); } catch { /* use PowerPoint's master */ }
     }
@@ -361,7 +367,7 @@ class Reader {
     // PowerPoint 2013 and later keep the guides in presentation.xml (moved there, they are only there)
     const guides = readSlideGuides(root);
     if (guides) view = { ...(view ?? { showGuides: false, snapToGrid: true, grid: 7.2 }), guides };
-    const settings: DeckSettings = { ...(show ? { show } : {}), ...(customShows.length ? { customShows } : {}), ...(view ? { view } : {}) };
+    const settings: DeckSettings = { ...(show ? { show } : {}), ...(customShows.length ? { customShows } : {}), ...(view ? { view } : {}), ...(this.refs?.list.length ? { refs: this.refs } : {}) };
     return {
       size: this.size, master: this.masterOut, slides, warnings: [...this.warnings], design: this.design, ...(sections ? { sections } : {}), ...(Object.keys(settings).length ? { settings } : {}),
       ...(joined.edited ? { canvasEdited: joined.edited } : {}),
@@ -572,7 +578,13 @@ class Reader {
     const canvas = readCanvasTag(tags[TAG.canvas]);
     // its keyframe moves (which PowerPoint can't hold) back among its animations
     if (canvas) anims = withCameraMoves(anims, tags[TAG.canvas]);
+    // the references its lines show (the lines themselves are made again from them)
+    let refs: SlideRefs = {};
+    if (tags[TAG.slideRefs]) {
+      try { refs = cleanSlideRefs(JSON.parse(tags[TAG.slideRefs])); } catch { /* none */ }
+    }
     return {
+      ...refs,
       layout: lay, contents: doc.contents(), notes: this.notes(path),
       ...(background ? { background } : {}), ...(hideGraphics ? { hideGraphics } : {}), ...(hidden ? { hidden } : {}), ...(hf ? { hf } : {}),
       ...(transition && (transition.kind !== 'none' || transition.advanceAfter) ? { transition } : {}), ...(anims.length ? { anims } : {}),
@@ -1134,6 +1146,8 @@ class Reader {
   private shape(s: Part, layout: Part | null, sp: Element, t: Xf, doc: Doc): void {
     const ph = phOf(sp);
     if (ph && SKIP_PH.has(ph.type)) return; // slide numbers, footers and dates come from the master
+    // reference lines saved here are made again from the references
+    if (!ph && this.tagsOf(s.path, kid(sp, 'nvSpPr', 'nvPr'))[TAG.refLines]) return;
     const from = ph ? this.inherited(layout, ph) : [];
     const spPr = kid(sp, 'spPr');
     const xfrm = kid(spPr, 'xfrm') ?? from.map((e) => kid(e, 'spPr', 'xfrm')).find((x) => x) ?? null;

@@ -412,6 +412,8 @@
     <button data-modes="slides design document" role="menuitem" data-cmd="insert-icons" title="About 7,000 icons, lab and science ones first: glassware, molecules, hazard and safety signs">Icons…</button>
     <button data-modes="drawing slides design document" role="menuitem" data-cmd="insert-diagram" title="Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint's SmartArt">Diagram…</button>
     <button data-modes="slides design document" role="menuitem" data-cmd="insert-equation" title="An equation typed as LaTeX (x^2, \frac{a}{b}, \alpha), shown as maths; a Word or PowerPoint equation in .docx and .pptx files">Equation…</button>
+    <button data-modes="drawing slides design" role="menuitem" data-cmd="insert-reference" title="References from any open file (or looked up by DOI) put here as formatted text: full, or short (journal, year, volume, page), in the citation style you pick">Formatted Reference…</button>
+    <button role="menuitem" data-cmd="references" title="The references of every open document and presentation, grouped by file: add, edit, and copy them from one file to another">Reference Manager…</button>
     <hr />
     <button role="menuitem" data-cmd="insert-symbol" title="Greek letters, arrows, maths and chemistry signs, accented letters: find one by name (degree, angstrom) or code, with the ones you used lately first">Symbol…</button>
     <button role="menuitem" data-cmd="insert-link" title="Link the selected text to a web page, a DOI, a file or a place in this file (Ctrl+K while typing). Ctrl+click a link to follow it">Link…</button>
@@ -441,6 +443,8 @@
     <button data-modes="slides" role="menuitem" data-cmd="insert-video" title="A video from a file that plays in the slide show and in PowerPoint">Video…</button>
     <button data-modes="slides" role="menuitem" data-cmd="insert-audio" title="A sound from a file that plays in the slide show and in PowerPoint">Audio…</button>
     <button data-modes="slides" role="menuitem" data-cmd="header-footer" title="The date, slide number and footer on the slides, and the header and footer of notes pages and handouts">Header &amp; Footer…</button>
+    <button data-modes="slides" role="menuitem" data-cmd="slide-references" title="Tick which of the presentation's references this slide shows at its foot; the lines are written, placed and formatted for you">References on Slide…</button>
+    <button data-modes="slides" role="menuitem" data-cmd="references-slide" title="A slide at the end listing the references shown on the slides, in full, kept up to date">References Slide…</button>
     </div>
     </div>
     <div class="submenu" data-modes="sheet">
@@ -1844,7 +1848,7 @@
         <div class="rb-row">
           <button class="rb-big" data-doc="insert-citation" title="Cite one or more references: superscript numbers, in order of first citation, that change by themselves when text moves (double-click a citation to change it)"><span class="rb-icon">¹²</span>Insert Citation</button>
           <button class="rb-big" data-doc="insert-bibliography" title="A References heading and the list of references cited, numbered, in the citation style"><span class="rb-icon">☰</span>Bibliography</button>
-          <button class="rb-big" data-doc="manage-references" title="The document's references: add by DOI, by hand or from BibTeX or RIS; edit, delete; the citation style (ACS, Angewandte, RSC)"><span class="rb-icon">✎</span>Manage References…</button>
+          <button class="rb-big" data-doc="manage-references" title="The references of this document and every other open file, grouped by file: add by DOI, by hand or from BibTeX or RIS; edit, delete; copy between files; the citation style (ACS, Angewandte, RSC)"><span class="rb-icon">✎</span>Manage References…</button>
         </div>
         <div class="rb-label">Citations and Bibliography</div>
       </div>
@@ -2334,6 +2338,11 @@
             <button data-cmd="insert-date-time" title="Date &amp; Time: the date on the slides, today's in the form you pick or fixed text (in Header &amp; Footer)">📅 Date &amp; Time</button>
             <button data-cmd="insert-slide-number" title="Slide Number: the slides' numbers at the bottom right (in Header &amp; Footer)"># Slide Number</button>
           </div>
+          <button class="rb-big" data-cmd="slide-references" title="References on Slide: tick which of the presentation's references the slides picked show at their foot. The lines are written, placed and formatted for you (short form, numbered or not), like the slide number and footer"><span class="rb-icon">¹⁾</span>References on Slide</button>
+          <div class="rb-col">
+            <button data-cmd="references-slide" title="References Slide: a slide at the end listing the references shown on the slides, in full, kept up to date">☰ References Slide</button>
+            <button data-cmd="references" title="Reference Manager: the references of every open file, grouped by file. Add by DOI, by hand or from BibTeX or RIS, and copy references between files">✎ Reference Manager</button>
+          </div>
           <button class="rb-big" data-cmd="insert-symbol" title="Symbol: Greek letters, arrows, maths and chemistry signs, accented letters, typed into the text being edited (or a new text box). Find one by name or code; the ones you used lately come first"><span class="rb-icon">Ω</span>Symbol</button>
           <button class="rb-big" data-cmd="crop" title="Cut the edges off the selected picture"><span class="rb-icon">⌗</span>Crop</button>
           <button class="rb-big" data-cmd="picture-format" title="Picture Format for the selected picture: brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions. Saved as PowerPoint's own picture settings"><span class="rb-icon">◐</span>Picture Format</button>
@@ -2647,6 +2656,7 @@
         <button class="rb-big" data-cmd="insert-table" title="Put a table on the page (or paste cells from Excel or a sheet)"><span class="rb-icon">▦</span>Table</button>
         <button class="rb-big" data-cmd="insert-chart" title="A chart with its own data: type or paste the numbers, pick the kind of chart. Double-click it to change it"><span class="rb-icon">▥</span>Chart</button>
         <button class="rb-big" data-cmd="insert-symbol" title="Symbol: Greek letters, arrows, maths and chemistry signs, accented letters, typed into the text being edited (or a new text box). Find one by name or code"><span class="rb-icon">Ω</span>Symbol</button>
+        <button class="rb-big" data-cmd="slide-references" title="References on Page: tick which of the design's references the page shows at its foot, written and formatted for you (short form by default). Reference Manager to add them or copy them from another file"><span class="rb-icon">¹⁾</span>References</button>
         <button class="rb-big" data-cmd="crop" title="Cut the edges off the selected picture"><span class="rb-icon">⌗</span>Crop</button>
         <button class="rb-big" data-cmd="picture-format" title="Picture Format for the selected picture: brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions. Saved as PowerPoint's own picture settings"><span class="rb-icon">◐</span>Picture Format</button>
       </div>

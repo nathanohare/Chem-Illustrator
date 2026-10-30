@@ -741,7 +741,7 @@ export class Workspace {
       const { writePptx } = await import('./io/pptx-write');
       const bytes = await writePptx({
         size: deck.size, master: deck.master, design: tab.mode === 'design', sections: deck.sectionCounts(), settings: deck.settings,
-        slides: deck.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: deck.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf, canvas: s.canvas })),
+        slides: deck.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: deck.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf, canvas: s.canvas, refs: s.refs, refLook: s.refLook, refList: s.refList })),
       }, { ...this.hooks.pptx, title: name.replace(/\.[^.]+$/, '') });
       return { data: bytes, type: PPTX, note: '' };
     }
