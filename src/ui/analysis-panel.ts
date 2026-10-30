@@ -8,6 +8,7 @@ import { ionCounts, isotopePattern, elementalAnalysis, type IsotopePeak, type Jo
 import type { PkaSite } from '../chem/pka';
 import { chargeText, hillFormula, withoutCharge } from '../chem/formula';
 import { roman, sup, type MetalCount } from '../chem/electrons';
+import { nameRuns } from '../chem/namer';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
@@ -157,7 +158,25 @@ function thermoHtml(jb: JobackResult, vp: number | null, henry: number | null, t
     </table></details>`;
 }
 
-export function analysisHtml(r: FragmentResult, i: number, adductText: string, extras: { stereo?: string; unknown?: string[]; pubchem?: string; electrons?: string; rGroups?: string[] }): string {
+/** Where the systematic name of a structure in the Analysis panel has got to. */
+export type NameState =
+  | { kind: 'idle' }
+  | { kind: 'busy'; loading: boolean }
+  | { kind: 'found'; name: string }
+  | { kind: 'none'; message: string };
+
+/** The structure's systematic name, or the button that asks for it (the namer loads only when first asked). */
+export function nameHtml(state: NameState, i: number): string {
+  const ask = `<button type="button" data-name="${i}" title="Work out the systematic (IUPAC) name here, offline. It is shown only if reading it back gives exactly this structure. The namer loads the first time (about 14 MB); after that names appear by themselves.">IUPAC name</button>`;
+  if (state.kind === 'idle') return `<div class="an-name an-buttons">${ask}</div>`;
+  if (state.kind === 'busy') return `<p class="an-name muted small">${state.loading ? 'Loading the namer (first time only)…' : 'Naming…'}</p>`;
+  if (state.kind === 'none') return `<p class="an-name muted small">${esc(state.message)}</p>`;
+  const html = nameRuns(state.name).map((r) => (r.italic ? `<i>${esc(r.text)}</i>` : esc(r.text))).join('');
+  return `<div class="an-name"><span class="iupac" title="Systematic name (OpenClatura), checked by reading it back with OPSIN">${html}</span>
+    <button type="button" data-insert="name:${i}" title="Put the name under the structure; it follows the structure and can be edited like any text">Name caption</button></div>`;
+}
+
+export function analysisHtml(r: FragmentResult, i: number, adductText: string, extras: { stereo?: string; unknown?: string[]; pubchem?: string; electrons?: string; rGroups?: string[]; name?: string }): string {
   if (r.error) return `<div class="frag"><p class="warn">${esc(r.error)}</p></div>`;
   // with R groups only the core is known: no ion or elemental analysis for a compound not drawn
   const core = !!extras.rGroups?.length;
@@ -210,6 +229,7 @@ export function analysisHtml(r: FragmentResult, i: number, adductText: string, e
   return `<div class="frag">
     <div class="formula">${formulaHtml(r.formula)}${core ? `·${extras.rGroups!.map(esc).join('·')} <span class="muted">(core only)</span>` : ''}</div>
     ${core ? `<p class="muted small">${extras.rGroups!.map(esc).join(', ')} could be anything, so there are no masses. Chemistry ▸ R-Group Table works out each compound.</p>` : ''}
+    ${extras.name ?? ''}
     <table>${rows.join('')}</table>
     ${extras.electrons ?? ''}${iso}${props}
     <div class="smiles" title="SMILES">${esc(r.smiles)}</div>
