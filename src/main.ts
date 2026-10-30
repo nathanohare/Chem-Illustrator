@@ -8925,6 +8925,9 @@ function layCells(cells: HTMLElement, fit?: number): void {
   }
 }
 
+/** The menu bar, file tabs, ribbon and status bar together at their tallest (Presentation, ribbon open), in pixels. */
+const SIDE_DOCK_CHROME = 236;
+
 /**
  * A toolbox set to wrap, with too little room for its grid, takes fewer rows and puts the rest in
  * more columns beside them (or, along the top or bottom, fewer columns and more rows). One set to
@@ -8939,7 +8942,12 @@ function fitTools(): void {
     if (!wrap || !box || box.classList.contains('collapsed')) continue;
     const dock = box.parentElement!;
     const floating = box.classList.contains('floating');
-    const over = () => (floating ? box.scrollHeight > box.clientHeight + 1 : across ? c.scrollWidth > dock.clientWidth - 16 : dock.scrollHeight > dock.clientHeight + 1);
+    // a dock down a side wraps for the room the window has in its busiest mode (a ribbon above), not for
+    // the room this mode leaves, so each tool keeps its place in every mode and after the ribbon folds or
+    // the window narrows; where that is still too little, the dock scrolls
+    const room = innerHeight - SIDE_DOCK_CHROME;
+    const tall = () => [...dock.children].reduce((h, el) => h + (el as HTMLElement).offsetHeight, 0);
+    const over = () => (floating ? box.scrollHeight > box.clientHeight + 1 : across ? c.scrollWidth > dock.clientWidth - 16 : tall() > room + 1);
     for (let f = (across ? s.cols : s.rows) - 1; f >= 1 && over(); f--) layCells(c, f);
   }
   fadeDocks();

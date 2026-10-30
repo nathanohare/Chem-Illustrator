@@ -61,6 +61,13 @@ describe('toolboxes', () => {
     expect(sideFolded(parseToolboxes({ sideCollapsed: true }), 'document')).toBe(true);
     expect(parseToolboxes(JSON.parse(JSON.stringify(s))).sideByMode).toEqual({ sheet: true });
   });
+
+  it('starts the side panel folded beside slides, sheets and documents, open in canvases and designs', () => {
+    const s = defaultToolboxes();
+    expect(['drawing', 'design', 'slides', 'sheet', 'document'].map((m) => sideFolded(s, m))).toEqual([false, false, true, true, true]);
+    // opened in one of them, it stays open there
+    expect(sideFolded(withSideFolded(s, 'document', false), 'document')).toBe(false);
+  });
 });
 
 describe('the side panel toolbox', () => {

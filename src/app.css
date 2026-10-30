@@ -2757,3 +2757,10 @@ body:not(.mode-window).ribbon-collapsed .ribbon > .rb-tabs [role='tab'][aria-sel
 body:not(.mode-window) .rb-tabs button.rb-context { color: var(--accent); background: var(--accent-soft); }
 body:not(.mode-window) .rb-tabs button.rb-context[aria-selected='true'] { background: var(--accent-soft); color: var(--accent); }
 .tab.active { box-shadow: inset 0 3px 0 var(--accent); }
+
+/* Document and Spreadsheet: until a structure is drawn or edited, the drawing tools fold to a rail of the
+   few that start one (picking one starts a structure, main.ts pickTool); the whole toolbox comes back while
+   a structure is drawn, and in split view */
+body:is(.sheet-mode, .doc-mode):not(.floating-drawing):not(.split-view) .toolbox[data-id='main'] .tb-cells { display: flex; flex-direction: column; align-items: stretch; }
+body:is(.sheet-mode, .doc-mode):not(.floating-drawing):not(.split-view) .toolbox[data-id='main'] .tb-line { display: none; }
+body:is(.sheet-mode, .doc-mode):not(.floating-drawing):not(.split-view) .toolbox[data-id='main'] .tb-cell:not(:is([data-tool='select'], [data-tool='bond-single'], [data-tool='chain'], [data-tool='ring-benzene'], [data-tool='ring-6'], [data-tool='text']), :has(button:is([data-tool='select'], [data-tool='bond-single'], [data-tool='chain'], [data-tool='ring-benzene'], [data-tool='ring-6'], [data-tool='text']))) { display: none; }
