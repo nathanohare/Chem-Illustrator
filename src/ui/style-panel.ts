@@ -30,6 +30,7 @@ import { SLIDE_TABLE_STYLES, lookOf, slideCellLook, slideTableStyle } from '../d
 import type { Measure } from '../text/layout';
 import { colourButton } from './colour-picker';
 import { centreEnd, haptoText, splitHapto } from '../chem/hapto';
+import { straightenAt } from '../chem/chemgeom';
 import type { EnergyData } from '../design/energy';
 import { DIAGRAM_COLOURS, DIAGRAM_LAYOUTS, type DiagramData } from '../design/diagrams';
 
@@ -922,7 +923,10 @@ export class StylePanel {
     }
     this.heading('Bond');
     // a partial bond is drawn dashed (until another style is chosen)
-    this.select('Order', BOND_ORDERS, String(b.order), (v) => set('Bond order', { order: Number(v), ...(Number(v) === 0.5 && b.display === 'solid' ? { display: 'dash' as const } : {}) }));
+    this.select('Order', BOND_ORDERS, String(b.order), (v) => this.edit('Bond order', () => {
+      this.doc.updateBond(b.id, { order: Number(v), ...(Number(v) === 0.5 && b.display === 'solid' ? { display: 'dash' as const } : {}) });
+      straightenAt(this.doc, b.id);
+    }));
     this.select('Style', BOND_STYLES, b.display, (v) => set('Bond style', { display: v }));
     if (b.order === 2) this.select('Second line', DOUBLE_POS, b.dpos, (v) => set('Double bond position', { dpos: v }));
     this.color('Colour', b.color, (v) => set('Bond colour', { color: v }));

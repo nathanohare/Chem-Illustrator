@@ -24,7 +24,7 @@ import { tidyStyle } from '../render/highlight';
 import { ASCENT, blankRoomAt } from '../text/layout';
 import { cellAlign, insertRow, nextCell, partAt, partRuns, setColumnWidth, setPart, spanOf, NOTE_SCALE, type TablePart } from '../table';
 import { slideCellLook, styledRuns, unstyledRuns } from '../deck/table-styles';
-import { Vec, Rect, add, sub, mul, norm, dist, dot, distToSegment, rectContains, angleOf, fromAngle, snapAngle, perp, DEG, exitParam, lockAxis, turnAbout, turnedCorners, normDegrees } from '../geom';
+import { Vec, Rect, add, sub, mul, norm, dist, dot, distToSegment, rectContains, angleOf, fromAngle, snapAngle, normAngle, perp, DEG, exitParam, lockAxis, turnAbout, turnedCorners, normDegrees } from '../geom';
 import { clampMove, inWalls } from '../page-grid';
 
 /** A change to a text box's settings from the ribbon (see Editor.setTextBox). */
@@ -33,7 +33,7 @@ export type TextBoxChange =
   | { kind: 'cols'; cols: number; gap?: number }
   | { kind: 'fit'; fit: 'grow' | 'shrink' | 'fixed' };
 import {
-  sproutDir, sprout, bondTo, bondLength, atomAt, freeRing, fusedRing, fuseSide, ringOnAtom, ringDir,
+  sproutDir, sprout, bondTo, bondLength, straightenAt, linearDir, atomAt, freeRing, fusedRing, fuseSide, ringOnAtom, ringDir,
   placeRing, chainPoints, chainFrom, MERGE_FRACTION,
 } from '../chem/chemgeom';
 import { keymap, chordOf, parseAction, KeyContext } from './keymap';
@@ -1633,6 +1633,8 @@ export class Editor {
     } else {
       doc.updateBond(id, { order: 1, display: b.display === t.display ? 'solid' : t.display });
     }
+    // a bond made triple (or a second double bond on an allene carbon) straightens its ends
+    straightenAt(doc, id);
   }
 
   private ringClick(h: Hit, p: Vec, n: number, aromatic: boolean, alt: boolean, shift: boolean, towards?: Vec, circle = false): void {
@@ -2018,14 +2020,21 @@ export class Editor {
     return best;
   }
 
-  private snapEnd(from: Vec, p: Vec, L: number, fromId?: number, alt = false): { pt: Vec; atom?: Atom } {
+  private snapEnd(from: Vec, p: Vec, L: number, fromId?: number, alt = false, order = 1): { pt: Vec; atom?: Atom } {
     const h = this.hitTest(p);
     if (h && h.kind === 'atom' && h.id !== fromId) {
       const a = this.doc.atoms.get(h.id)!;
       return { pt: a, atom: a };
     }
     const raw = angleOf(sub(p, from));
-    const ang = this.options.fixedAngles && !alt ? snapAngle(raw) : raw;
+    let ang = this.options.fixedAngles && !alt ? snapAngle(raw) : raw;
+    // a triple bond (or an allene's second double bond) dragged roughly straight on goes straight on
+    const straight = this.options.fixedAngles && !alt && fromId !== undefined ? linearDir(this.doc, fromId, order) : null;
+    if (straight) {
+      let diff = Math.abs(normAngle(raw - angleOf(straight)));
+      if (diff > Math.PI) diff = 2 * Math.PI - diff;
+      if (diff < 35 * DEG) ang = angleOf(straight);
+    }
     const len = this.options.fixedLength && !alt ? L : Math.max(L * 0.2, dist(p, from));
     return { pt: add(from, fromAngle(ang, len)) };
   }
@@ -2052,7 +2061,7 @@ export class Editor {
       doc.edit('Bond', () => {
         const a = startAtom ?? doc.addAtom(start.x, start.y);
         const L = bondLength(doc, a);
-        const end = this.snapEnd(a, p, L, a.id, d.alt);
+        const end = this.snapEnd(a, p, L, a.id, d.alt, t.order);
         const to = end.atom ?? bondTo(doc, a, end.pt, t.order, t.display);
         if (end.atom && !doc.bondBetween(a.id, end.atom.id)) doc.addBond(a.id, end.atom.id, t.order, t.display);
         this.lastEdited = to.id;
@@ -4252,6 +4261,7 @@ export class Editor {
       const patch = { ...SET[act] };
       if (patch.dpos && b.order !== 2) patch.order = 2;
       doc.updateBond(id, patch);
+      straightenAt(doc, id);
     });
     if (!(act in SET) && act !== 'delete' && act !== 'wedge' && act !== 'hash-wedge') return false;
     this.lastEdited = doc.bonds.has(id) ? b.a1 : null;
@@ -5640,7 +5650,7 @@ export class Editor {
       for (const e of [from, to]) if (e.pi) poly(e.pi.atoms.map((id) => doc.atoms.get(id)!), e.pi.atoms.length > 2);
       ctx.restore();
     } else if (t.kind === 'bond') {
-      const end = this.snapEnd(start, d.last, L, startAtom?.id, d.alt);
+      const end = this.snapEnd(start, d.last, L, startAtom?.id, d.alt, t.order);
       poly([start, end.pt], false);
     } else if (t.kind === 'chain') {
       const pts = chainPoints(start, d.last, L, doc.style.chainAngle, this.chainFirstUp(start, d.last));

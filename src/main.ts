@@ -125,7 +125,7 @@ import { PAPERS, defaultPaper, orient, placeIn, inside, placeSvg, pageSvg } from
 import { printPages } from './ui/print';
 import { SHEETS } from './io/cdxml-print';
 import { dataUrl, fromDataUrl, imageSize, loadImage, onImageReady, pictureMime, showableSrc, webpToPng } from './render/images';
-import { freeRing, matchStructure, fusedRing, placeRing, sprout, ringOnAtom, ringDir } from './chem/chemgeom';
+import { freeRing, matchStructure, straightenLinear, fusedRing, placeRing, sprout, ringOnAtom, ringDir } from './chem/chemgeom';
 import { Toolbar, ToolbarItem, PaletteDef, type ToolDef } from './ui/toolbar';
 import { StylePanel, tidyStyle } from './ui/style-panel';
 import { installCombos } from './ui/combo';
@@ -7265,6 +7265,8 @@ async function generalPreferences(): Promise<void> {
     { name: 'ask', label: 'Ask before changing every structure on the page when nothing is selected', type: 'checkbox', value: String(askWholeDrawing) },
     { name: 'matchStructure', label: 'New bonds match the structure they\'re added to', type: 'checkbox', value: String(matchStructure.on),
       help: 'Bonds, rings and chains added to a structure take its own bond length, line widths and colours, so a structure drawn with other settings stays consistent. Off: they always take the document\'s drawing settings.' },
+    { name: 'straightenLinear', label: 'Straighten alkynes and allenes when a bond becomes triple', type: 'checkbox', value: String(straightenLinear.on),
+      help: 'Making a bond triple (or giving an allene carbon its second double bond) swings the smaller side round so the sp carbon\'s two bonds lie in a straight line. Off: atoms stay where they are. New bonds always go straight on.' },
     { name: 'convertChemDraw', label: 'Redraw ChemDraw objects in Word files as they open', type: 'checkbox', value: String(!!docRead.convertChemDraw),
       help: 'Off: they keep the look they had in Word and become drawings when you edit one. On: each is redrawn here in the document\'s drawing style.' },
     { name: 'reviewer', label: 'Your name on tracked changes in documents', value: reviewAuthor() },
@@ -7277,6 +7279,7 @@ async function generalPreferences(): Promise<void> {
   askWholeDrawing = r.ask === 'true';
   docRead.convertChemDraw = r.convertChemDraw === 'true';
   matchStructure.on = r.matchStructure === 'true';
+  straightenLinear.on = r.straightenLinear === 'true';
   setReviewAuthor(r.reviewer ?? '');
   startView = r.startView === 'true';
   storeSettings();
@@ -7403,6 +7406,7 @@ function currentSettings(): Settings {
     ai: aiPrefs,
     convertChemDraw: !!docRead.convertChemDraw,
     matchStructure: matchStructure.on,
+    straightenLinear: straightenLinear.on,
     fileTypesOffered,
     wordObjectsOffered,
     reviewName: reviewAuthor(),
@@ -7612,6 +7616,7 @@ function applySettings(s: Settings): void {
   aiPrefs = s.ai;
   docRead.convertChemDraw = s.convertChemDraw;
   matchStructure.on = s.matchStructure;
+  straightenLinear.on = s.straightenLinear;
   fileTypesOffered = s.fileTypesOffered;
   wordObjectsOffered = s.wordObjectsOffered;
   setReviewAuthor(s.reviewName);
