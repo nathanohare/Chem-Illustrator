@@ -9326,8 +9326,9 @@ const edgeArrows = new EdgeArrows(host, renderer, () => editor.requestScene());
 editor.underlay = (ctx) => {
   if (!drawingShown()) return;
   const p = gridPage();
-  if (p) paintPages(ctx, pageLook, renderer, p, pageExtent(p, doc.bounds()), pagesInUse(p), dark.on);
-  paintTint(ctx, orientPrefs, renderer, doc.bounds(), doc.style.labelSize * 1.5 + doc.style.bondLength);
+  // with the page grid, whole pages show what is in use, so the tint round the drawing is left off
+  if (p && pageLook.grid) paintPages(ctx, pageLook, renderer, p, pageExtent(p, doc.bounds()), pagesInUse(p), dark.on);
+  else paintTint(ctx, orientPrefs, renderer, doc.bounds(), doc.style.labelSize * 1.5 + doc.style.bondLength);
 };
 // nothing is drawn or moved past a fixed edge of the page grid
 editor.walls = () => { const p = gridPage(); return p ? wallRect(p) : null; };
@@ -9501,7 +9502,7 @@ async function navigationSettings(): Promise<void> {
     { name: 'gridSpacing', label: 'Dot spacing', value: o.gridSpacing, options: [{ value: 'fine', label: 'Fine (¼ inch)' }, { value: 'normal', label: 'Normal (½ inch)' }, { value: 'wide', label: 'Wide (1 inch)' }] },
     { name: 'gridStrength', label: 'Dots', value: o.gridStrength, options: strength },
     { name: 'tint', label: 'Tint the empty space beyond everything drawn', type: 'checkbox', value: String(o.tint),
-      help: 'On screen only. Shows at a glance which way the drawing is when nothing of it is in the window.' },
+      help: 'On screen only. Shows at a glance which way the drawing is when nothing of it is in the window. Not shown with the page grid, whose white pages already show where the drawing is.' },
     { name: 'tintStrength', label: 'Tint', value: o.tintStrength, options: strength },
     { name: 'goButtons', label: 'Fit and Go to Selection buttons in the status bar', type: 'checkbox', value: String(o.goButtons),
       help: 'F6 fits the drawing and Shift+F6 goes to the selection, with or without the buttons (Edit ▸ Hotkeys changes the keys).' },
