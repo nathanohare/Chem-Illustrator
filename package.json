@@ -58,7 +58,7 @@
     "@tauri-apps/plugin-dialog": "~2.8.2",
     "@tauri-apps/plugin-opener": "~2.7.2",
     "@tauri-apps/plugin-process": "~2.4.0",
-    "@tauri-apps/plugin-updater": "~2.13.3",
+    "@tauri-apps/plugin-updater": "~2.14.1",
     "fflate": "^0.8.3",
     "hyphen": "^1.14.1",
     "marked": "^18.1.1",
