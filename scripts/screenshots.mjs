@@ -272,7 +272,9 @@ const url = process.argv[2] ?? 'http://localhost:5173/';
   await page.waitForTimeout(400);
   // Edit > Hotkeys, finding the benzene ring's key
   await page.evaluate(() => window.__app.command('hotkeys'));
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(500);
+  // the Hotkeys page of Settings: type in its own find box, not the window's
+  await page.locator('dialog[open] input[placeholder="Find an action or a key"]').click();
   await page.keyboard.type('ring');
   await page.waitForTimeout(400);
   await page.evaluate(() => { const d = document.querySelector('.hotkeys')?.closest('dialog'); if (d) { d.style.margin = '0'; d.style.left = 'auto'; d.style.right = '24px'; d.style.top = '120px'; d.style.maxHeight = '560px'; } });
