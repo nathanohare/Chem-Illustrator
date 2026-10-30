@@ -67,6 +67,47 @@ Pick slides in one deck's list and press Ctrl+C, then click in the list of anoth
 
 **Hide Slide** keeps a slide in the deck but leaves it out of the slide show: its picture in the list is greyed and its number struck through. The show skips it going forwards and back, and starting from the beginning starts at the first slide that isn't hidden. **From This Slide** on a hidden slide still shows it, and typing its number then Enter jumps to it, as in PowerPoint. Hidden slides stay hidden in the PowerPoint file. Click **Hide Slide** again to show it.
 
+### Canvas slides
+
+A canvas slide has no edge. Draw a whole route across it once, then show it a step or two at a time, so a big intermediate never has to be redrawn on the next slide. **Home** tab ▸ **Canvas Slide** (or **Insert ▸ Slides ▸ New Canvas Slide**) adds one after the slide you are on. A canvas slide can sit between normal slides, or a whole talk can be one canvas.
+
+The slide show steps through the canvas's **keyframes**. A keyframe is a slide-shaped window on the canvas, drawn as a numbered outline; the one picked is orange.
+
+- **Add Keyframe** puts a new one after the one picked, half a slide along to the right and level with it.
+- **From Window** makes a keyframe of what is in the window now; **Fit to Selection** makes the picked keyframe show what is selected.
+- Drag a keyframe's number (or its outline) to move it. It lines up with the keyframes before and after it; hold Alt to place it anywhere.
+- Drag a corner to zoom it out (an overview of the route) or in. Keyframes zoom in at most 2×.
+- In the slide list, the arrow beside a canvas slide opens a picture of each keyframe. Click one to go to it, drag one to play it at another place, and press Delete or right-click to take it away. Right-click a keyframe on the canvas for the same commands.
+
+**Fit** shows the keyframe picked.
+
+**Moving between keyframes.** Each keyframe after the first has a move in the **Animation Pane**, named "Keyframe 2 (Pan)" and so on, in among the slide's other animations. Drag it up or down like any animation: an arrow can wipe in **With Previous** as the view arrives, a product can fade in on the click after. Pick a move to set, in the **Animations** tab:
+
+- **Move**: **Pan** glides straight there, zooming as it goes; **Fly-over** pulls back on the way so the audience sees where it is going (good for long jumps); **Fade** fades the next keyframe in over this one; **Cut** goes straight there.
+- **By distance** (on to start with): the move takes 0.6 s for a short step and up to 1.5 s for a long jump. Typing a **Duration** sets your own time.
+- **Start** and **Delay** work as they do for any animation.
+
+A move comes and goes with its keyframe, so it can't be removed on its own: delete the keyframe, or set the move to Cut. Picking a move in the pane shows its keyframe. Presenter View counts keyframes and shows the keyframe the next click moves to.
+
+**Design.** A canvas slide has no edge, so nothing with a hard edge scrolls past in the show:
+
+- **The screen layer.** The template's bars, the logo, slide number and footer stay fixed to the screen, so a canvas slide looks like the slides round it. Give a keyframe a **Title** (Home tab, Keyframes group, or right-click a keyframe) and it shows where a slide's title goes. The next keyframes you add take the same title. When the title changes, the show cross-fades it; when it stays the same, it stays still.
+- **Canvas Background…** (Design & Transitions tab, or right-click a keyframe): a **route gradient**, two or three colours running from the first keyframe to the last, so the colour shifts as the talk moves along the route; a faint **pattern** (dots, grid or hexagons) that moves with the canvas; and **parallax**, the background moving slower than the drawing for a sense of depth (50% is half as fast).
+- **Zone…** gives a keyframe a soft tint that fades out over about half a slide. Give the keyframes of one part of the route the same colour to make one zone (one per fragment, say).
+- **Heading** puts a large, faint label in the middle of the window, such as "Fragment A" or "Endgame", to mark a part of the route. It is ordinary text.
+
+**In the show.** The Keyframes group on the Home tab (and right-click on a keyframe) has more for the show:
+
+- **Spotlight** keeps what is selected bright while the show is at the keyframe picked, and dims the rest of it with a soft edge. Nothing selected, Spotlight takes it away (or right-click ▸ **Remove Spotlight**). The spotlight shows as a green dotted box on the canvas.
+- **Detour** marks the keyframe picked as a side trip off the route: a side reaction, a failed attempt, a mechanism. After a detour (or a run of detours one after another) the show glides back to the keyframe it left from. The return is a move in the Animation Pane, "Back to keyframe 3 (Pan)", which can be set like any move. Detour again puts the keyframe back on the route.
+- **Show Options…** (also on the Slide Show tab): **Dim what is outside the keyframe**, so what is off the route fades back as the show moves; a **mini-map** of the whole canvas in the corner of the show, or in Presenter View only, where a click on a keyframe flies the show there; and **compound numbers as links**, on to start with: in the show, a click on a compound number (2, 7a, (±)-12) flies back to the first keyframe that has it, and the next click flies back to where you were.
+
+Presenter View lists a canvas slide's keyframes by number and title; a click flies the show there and it goes on from that keyframe. The audience's window follows.
+
+**PowerPoint and PDF.** Saved as a PowerPoint file, a canvas slide becomes an ordinary slide for each keyframe: what is in the keyframe's window, cut off at the slide's edge (a structure half in view stays whole), with the keyframe's title as the slide's title and the canvas's background cut to the window. Pans become **Morph** transitions, so PowerPoint 2019 and 365 glide from one to the next (older versions fade); a fly-over goes through an extra zoomed-out slide that moves on by itself. Each slide carries the animations played while the show is at its keyframe; things that came in earlier are already there, and things not in yet are left off. A detour's return is a slide of the keyframe it goes back to. Compound numbers link to the slide where the compound was first shown, so a click on one in PowerPoint's show goes back there. A PDF, a printout or a picture of the slide has a page for each keyframe in the same way.
+
+Opened here again, the slides come back as the canvas slide. If they were changed in PowerPoint since, you are asked whether to keep the canvas (PowerPoint's changes to them are left out) or PowerPoint's slides as normal slides.
+
 ## The slide master
 
 **Design & Transitions** tab ▸ **Slide Master…** (or **Format ▸ Slides ▸ Slide Master…**) sets the look of every slide at once:

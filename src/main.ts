@@ -59,9 +59,13 @@ import { shapeMathPicture, shapeMathScale, shapeMathSize } from './deck/equation
 import { solid } from './deck/background';
 import { pictureFormat } from './ui/picture-dialog';
 import { fxPng } from './render/picture-fx';
-import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND } from './deck/slide-view';
+import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND, type SlidePage } from './deck/slide-view';
 import { writePdf, jpegInfo, PdfPage, PdfImage } from './io/pdf';
 import { SlideList } from './ui/slide-list';
+import { CanvasKeys } from './ui/canvas-keys';
+import { addKeyframe, insertKeyframe, keyframeAround, keyRect, keysBounds, moveKeyframe, removeKeyframe, unionRect, ZOOM_IN_MAX, TEXTURES, PARALLAX_MAX, type CanvasLook, type CanvasShow, type Texture } from './deck/canvas';
+import { mix } from './render/fills';
+import { splitCanvas, type SplitSlide } from './deck/canvas-export';
 import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel } from './ui/design-panel';
 import { ShapeMenu } from './ui/shape-menu';
 import { whenIconsLoaded } from './design/icons';
@@ -713,7 +717,7 @@ async function pasteFrom(read: () => Pasted | Promise<Pasted>): Promise<void> {
     }
     doc.edit('Paste', () => {
       editor.sel = insertDrawing(doc, got.doc, pastePoint());
-      editor.placeClear(deckNow()?.size);
+      editor.placeClear(placingPage());
     });
     editor.changed();
     await keepPasteInside();
@@ -773,7 +777,14 @@ async function insertTable(): Promise<void> {
 /** The part of the slide showing that pasted things go in (below the title), in Slides mode. */
 function slideContentArea(): Rect | null {
   const deck = deckNow();
-  return deck ? contentArea(deck.current?.layout ?? 'blank', deck.size, deck.master) : null;
+  // a canvas slide has no edge: things go where the window is, as on a drawing
+  return deck && !deck.current?.canvas ? contentArea(deck.current?.layout ?? 'blank', deck.size, deck.master) : null;
+}
+
+/** The page things put down are kept on (the slide; none on a drawing or a canvas slide). */
+function placingPage(): { w: number; h: number } | undefined {
+  const deck = deckNow();
+  return deck && !deck.current?.canvas ? deck.size : undefined;
 }
 
 /** Where pasted things go: the middle of the slide's content area in Slides mode, else the middle of the window. */
@@ -787,7 +798,7 @@ function pasteCentre(): { x: number; y: number } {
  * it is then moved clear of what is already there (placeClear).
  */
 function pastePoint(): { x: number; y: number } {
-  return (!deckNow() && editor.mouseOnPage) || pasteCentre();
+  return ((!deckNow() || deckNow()?.current?.canvas) && editor.mouseOnPage) || pasteCentre();
 }
 
 /** Paste a SMILES string or a molfile as a structure. With `quiet`, text that isn't one is left (false) without a message. */
@@ -802,7 +813,7 @@ async function pasteChemistry(text: string, quiet = false): Promise<boolean> {
     doc.edit('Paste', () => {
       ids = addMolfile(doc, mb!, c.x, c.y);
       editor.sel = { atoms: new Set(ids), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() };
-      editor.placeClear(deckNow()?.size);
+      editor.placeClear(placingPage());
     });
     selectNewAtoms(ids);
     await keepPasteInside();
@@ -838,7 +849,7 @@ async function pasteText(text: string, html?: string): Promise<void> {
   doc.edit('Paste text', () => {
     id = doc.addCaption({ x: c.x - (b.x1 + b.x2) / 2, y: c.y - (b.y1 + b.y2) / 2, runs, justify: 'left', ...(paras ? { paras } : {}), ...(wrap ? { wrap } : {}) }).id;
     editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set([id]), arrows: new Set(), shapes: new Set() };
-    editor.placeClear(deckNow()?.size);
+    editor.placeClear(placingPage());
   });
   editor.changed();
 }
@@ -1850,7 +1861,7 @@ const nameDialog = new NameDialog(async (name) => {
     doc.edit('Name to Structure', () => {
       ids = addNamed(got, c.x, c.y);
       editor.sel = { atoms: new Set(ids), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() };
-      editor.placeClear(deckNow()?.size);
+      editor.placeClear(placingPage());
     });
     selectNewAtoms(ids);
   } catch (err) {
@@ -2150,6 +2161,13 @@ const ws: Workspace = new Workspace(doc, {
   beforeWrite: (tab, ref, name, how) => keeper.beforeWrite(tab, ref, name, how),
   saved: (tab, data, how, was) => keeper.saved(tab, data, how, was),
   autoSaveFailed: (tab, msg) => keeper.autoSaveFailed(tab, msg),
+  canvasEdited: async (name, n) => {
+    const got = await ask('Canvas Slides Changed in PowerPoint', [{
+      name: 'keep', label: 'Keep', value: 'canvas',
+      options: [{ value: 'canvas', label: 'The canvas (as it was saved here)' }, { value: 'slides', label: 'PowerPoint\'s slides (as normal slides)' }],
+    }], { ok: 'Open', note: `${n === 1 ? 'A canvas slide' : `${n} canvas slides`} in ${name} ${n === 1 ? 'was' : 'were'} saved as a slide for each keyframe, and ${n === 1 ? 'its slides were' : 'their slides were'} changed in PowerPoint since. Keep the canvas to go on editing it here (PowerPoint's changes to those slides are left out), or keep PowerPoint's slides as normal slides.` });
+    return got?.keep === 'slides' ? 'slides' : 'canvas';
+  },
   opened: (tab) => keeper.opened(tab),
   styleSheet: (tab, style) => void offerStyleSheet(tab, style),
   dropped: (tab) => {
@@ -2279,7 +2297,10 @@ function enterTab(tab: Tab, opened: boolean): void {
   editor.cropping = null;
   editor.lastEdited = null;
   if (editor.toolName !== modeTool[tab.mode]) editor.setTool(modeTool[tab.mode]);
-  editor.fitArea = deck ? () => ({ x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h }) : null;
+  onCanvas = !!deck?.current?.canvas && !design;
+  showCanvasState();
+  // Fit shows the slide; on a canvas slide, the keyframe picked
+  editor.fitArea = deck ? () => (deck.current?.canvas ? keyRect(deck.current.canvas.keys[canvasKeys.picked(deck)], deck.size) : { x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h }) : null;
   if (deck) {
     deck.onChange = () => deckChanged(deck);
     deck.onSwitch = () => slideSwitched(deck);
@@ -2318,7 +2339,10 @@ const slidePage = {
   draw(ctx: CanvasRenderingContext2D): void {
     const d = deckNow();
     if (!d?.current) return;
-    drawSlidePage(ctx, d.page(), SURROUND);
+    // (a canvas slide: its background as the keyframe picked sees it, and the screen's title and footer there)
+    drawSlidePage(ctx, d.page(d.index, d.current.canvas ? canvasKeys.picked(d) : 0), SURROUND);
+    // a canvas slide: no edge, so no slide grid or guides; its keyframes instead
+    if (d.current.canvas && ws.active.mode === 'slides') { canvasKeys.draw(ctx, d, renderer.view.scale); slideCmts?.place(); return; }
     if (ws.active.mode === 'design' && designGrid.on) drawGrid(ctx, d.size, designGrid.step);
     if (ws.active.mode === 'slides') {
       const v = d.settings.view;
@@ -2331,12 +2355,222 @@ const slidePage = {
   },
 };
 
+// Keyframes on a canvas slide: drawn over it, moved by their tabs and outlines, zoomed by their corners.
+const canvasKeys = new CanvasKeys(renderer.overlay, {
+  deck: () => {
+    const d = deckNow();
+    return d?.current?.canvas && ws.active.mode === 'slides' && !sorterOn && editor.toolName === 'select' ? d : null;
+  },
+  view: () => renderer.view,
+  pointAt: (e) => editor.pointAt(e),
+  repaint: () => { renderer.repaintAll(); editor.requestScene(); },
+  begin: () => finishTyping(),
+  picked: () => slideList.markKeyframe(),
+});
+
+/** The canvas slide being edited and its keyframe picked, for the keyframe commands (null, said, on another slide). */
+function canvasNow(): { d: Deck; c: NonNullable<Deck['slides'][number]['canvas']>; i: number } | null {
+  const d = deckNow();
+  const c = d?.current?.canvas;
+  if (!d || !c || ws.active.mode !== 'slides') { flash('Keyframes are on canvas slides: Insert > Canvas Slide makes one.'); return null; }
+  finishTyping();
+  return { d, c, i: canvasKeys.picked(d) };
+}
+
+/** Show keyframe i of the canvas slide being edited, picked, filling the window. */
+function goKeyframe(i: number): void {
+  const d = deckNow();
+  const c = d?.current?.canvas;
+  if (!d || !c?.keys[i]) return;
+  canvasKeys.setPicked(d, i);
+  editor.fit();
+}
+
+/** Keyframe commands that change the keyframes: the new list, which keyframe to pick, and the step's name. */
+function setKeyframes(d: Deck, keys: NonNullable<Deck['slides'][number]['canvas']>, pick: number, label: string): void {
+  d.setCanvas(keys, label);
+  goKeyframe(pick);
+}
+
+const keyframeCommands = {
+  addKeyframe(): void {
+    const k = canvasNow();
+    if (!k) return;
+    const got = addKeyframe(k.c, k.d.size, k.i);
+    setKeyframes(k.d, got.canvas, got.index, 'Add keyframe');
+  },
+  /** A keyframe showing what is in the window now (as near as the zoom limits allow). */
+  keyframeHere(): void {
+    const k = canvasNow();
+    if (!k) return;
+    const got = insertKeyframe(k.c, keyframeAround(renderer.visibleRect(0), k.d.size, 0, 1), k.i);
+    setKeyframes(k.d, got.canvas, got.index, 'Keyframe from window');
+  },
+  fitToSelection(): void {
+    const k = canvasNow();
+    if (!k) return;
+    const box = editor.hasSelection() ? editor.selBox() : null;
+    if (!box) { flash('Select what the keyframe should show, then Fit Keyframe to Selection.'); return; }
+    const key = { ...keyframeAround(box, k.d.size), id: k.c.keys[k.i].id };
+    if (key.zoom <= 1 / ZOOM_IN_MAX + 1e-9 && Math.max((box.x2 - box.x1) / k.d.size.w, (box.y2 - box.y1) / k.d.size.h) < 1 / ZOOM_IN_MAX) flash(`Keyframes zoom in at most ${ZOOM_IN_MAX}×, so this one shows a little more than the selection.`);
+    setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === k.i ? key : x)) }, k.i, 'Fit keyframe to selection');
+  },
+  remove(i?: number): void {
+    const k = canvasNow();
+    if (!k) return;
+    const next = removeKeyframe(k.c, i ?? k.i);
+    if (!next) { flash('A canvas slide needs at least one keyframe.'); return; }
+    setKeyframes(k.d, next, Math.min(i ?? k.i, next.keys.length - 1), 'Delete keyframe');
+  },
+  move(from: number, to: number): void {
+    const k = canvasNow();
+    if (!k) return;
+    setKeyframes(k.d, moveKeyframe(k.c, from, to), to, 'Move keyframe');
+  },
+  /** The title shown fixed to the screen while the show is at keyframe i (the one picked by default). */
+  async title(i?: number): Promise<void> {
+    const k = canvasNow();
+    if (!k) return;
+    const at = i ?? k.i, key = k.c.keys[at];
+    if (!key) return;
+    const got = await ask(`Keyframe ${at + 1} Title`, [
+      { name: 'title', label: 'Title', value: key.title ?? '', placeholder: 'Shown where a slide\'s title goes, fixed to the screen' },
+    ], { ok: 'Set Title', note: 'The next keyframes you add take this title too. When the title changes from one keyframe to the next, the show cross-fades it; when it stays the same, it stays still. Leave it empty for no title.' });
+    if (got === null) return;
+    const title = got.title.trim();
+    setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === at ? (({ title: _, ...rest }) => (title ? { ...rest, title } : rest))(x) : x)) }, at, title ? 'Keyframe title' : 'Remove keyframe title');
+  },
+  /** A soft tint in the background round keyframe i: a zone (keyframes next to each other with one tint make one zone). */
+  async zone(i?: number): Promise<void> {
+    const k = canvasNow();
+    if (!k) return;
+    const at = i ?? k.i, key = k.c.keys[at];
+    if (!key) return;
+    const got = await ask(`Keyframe ${at + 1} Zone`, [
+      { name: 'on', label: 'Tint the background round this keyframe', value: String(!!key.tint), type: 'checkbox' },
+      { name: 'tint', label: 'Colour', value: key.tint ?? k.d.master.accent, type: 'color' },
+    ], { ok: 'Set Zone', note: 'A zone fades out softly over about half a slide, so it never shows an edge. Give the keyframes of one part of the route (a fragment, a campaign) the same colour to make one zone.' });
+    if (got === null) return;
+    const tint = got.on === 'true' && /^#[0-9a-f]{6}$/i.test(got.tint) ? got.tint.toLowerCase() : '';
+    setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === at ? (({ tint: _, ...rest }) => (tint ? { ...rest, tint } : rest))(x) : x)) }, at, tint ? 'Keyframe zone' : 'Remove keyframe zone');
+  },
+  /** How the canvas's endless background looks: the route gradient, a pattern, and parallax. */
+  async background(): Promise<void> {
+    const k = canvasNow();
+    if (!k) return;
+    const look = k.c.look ?? {};
+    const m = k.d.master;
+    const route = look.route ?? [mix(m.background, m.accent, 0.1), mix(m.background, m.accent2, 0.3)];
+    const got = await ask('Canvas Background', [
+      {
+        name: 'route', label: 'Background', value: look.route ? (look.route.length > 2 ? '3' : '2') : '0',
+        options: [{ value: '0', label: 'Plain (the slide master\'s colour)' }, { value: '2', label: 'Route gradient: two colours' }, { value: '3', label: 'Route gradient: three colours' }],
+        help: 'A wide, slow gradient from the first keyframe to the last, so the colour shifts as the talk moves along the route.',
+      },
+      { name: 'c1', label: 'Start colour', value: route[0], type: 'color' },
+      { name: 'c2', label: route.length > 2 ? 'Middle colour' : 'End colour', value: route[1], type: 'color' },
+      { name: 'c3', label: 'End colour (three colours)', value: route[2] ?? route[1], type: 'color' },
+      { name: 'texture', label: 'Pattern', value: look.texture ?? '', options: [{ value: '', label: 'None' }, ...TEXTURES.map((t) => ({ value: t.id, label: t.name }))], help: 'Faint, and it moves with the canvas, so a pan across empty space still feels like moving.' },
+      { name: 'parallax', label: 'Parallax', value: String(Math.round((look.parallax ?? 0) * 100)), type: 'number', unit: '%', help: `How much slower the background moves than the drawing, for a sense of depth (0 to ${PARALLAX_MAX * 100}; 50 is half as fast).` },
+    ], { ok: 'Apply', note: 'Zones: right-click a keyframe for Zone Colour. The background has no edges, so nothing sharp scrolls past in the show.' });
+    if (got === null) return;
+    const next: CanvasLook = {};
+    const colours = [got.c1, got.c2, got.c3].filter((c) => /^#[0-9a-f]{6}$/i.test(c)).map((c) => c.toLowerCase());
+    if (got.route === '2' && colours.length >= 2) next.route = colours.slice(0, 2);
+    if (got.route === '3' && colours.length >= 3) next.route = colours;
+    if (TEXTURES.some((t) => t.id === got.texture)) next.texture = got.texture as Texture;
+    const p = Number(got.parallax) / 100;
+    if (Number.isFinite(p) && p > 0) next.parallax = Math.min(PARALLAX_MAX, p);
+    k.d.setCanvas({ keys: k.c.keys, look: Object.keys(next).length ? next : undefined }, 'Canvas background');
+    renderer.repaintAll();
+    editor.requestScene();
+  },
+  /** A spotlight on keyframe i: what is selected stays bright in the show and the rest dims. Nothing selected: the spotlight goes. */
+  spotlight(i?: number): void {
+    const k = canvasNow();
+    if (!k) return;
+    const at = i ?? k.i, key = k.c.keys[at];
+    if (!key) return;
+    const box = editor.hasSelection() ? editor.selBox() : null;
+    if (!box) {
+      if (key.spot) keyframeCommands.unspot(at);
+      else flash('Select what should stay bright at this keyframe, then Spotlight Selection.');
+      return;
+    }
+    const m = 6;
+    const spot = { x1: box.x1 - m, y1: box.y1 - m, x2: box.x2 + m, y2: box.y2 + m };
+    setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === at ? { ...x, spot } : x)) }, at, 'Spotlight selection');
+    flash('Spotlight: in the show, the rest of this keyframe dims. Right-click the keyframe for Remove Spotlight.');
+  },
+  unspot(i?: number): void {
+    const k = canvasNow();
+    if (!k) return;
+    const at = i ?? k.i;
+    if (!k.c.keys[at]?.spot) return;
+    setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === at ? (({ spot: _, ...rest }) => rest)(x) : x)) }, at, 'Remove spotlight');
+  },
+  /** Keyframe i a detour off the route, or back on it: after a run of detours the show glides back to where the run left the route. */
+  detour(i?: number): void {
+    const k = canvasNow();
+    if (!k) return;
+    const at = i ?? k.i, key = k.c.keys[at];
+    if (!key) return;
+    if (at === 0 && !key.detour) { flash('The first keyframe is where the route starts, so it can\'t be a detour.'); return; }
+    const on = !key.detour;
+    setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === at ? (({ detour: _, ...rest }) => (on ? { ...rest, detour: true } : rest))(x) : x)) }, at, on ? 'Mark keyframe as detour' : 'Put keyframe back on the route');
+    flash(on ? 'Detour: after this keyframe (and any detours straight after it) the show glides back to the keyframe before. The return is a move in the Animation pane.' : 'Back on the route: the show no longer glides back after it.');
+  },
+  /** How the canvas slide's show behaves: dimming, the mini-map, and compound numbers as links. */
+  async showOptions(): Promise<void> {
+    const k = canvasNow();
+    if (!k) return;
+    const show = k.c.show ?? {};
+    const got = await ask('Canvas Show Options', [
+      { name: 'dim', label: 'Dim what is outside the keyframe', value: String(!!show.dim), type: 'checkbox', help: 'As the show moves, what is off the route fades back, so the eye follows the move. A keyframe\'s own spotlight (Spotlight Selection) dims even with this off.' },
+      { name: 'minimap', label: 'Mini-map', value: show.minimap ?? '', options: [{ value: '', label: 'None' }, { value: 'show', label: 'In the show\'s corner' }, { value: 'presenter', label: 'In Presenter View only' }], help: 'A small map of the whole canvas with where the show is. A click on a keyframe in it flies the show there.' },
+      { name: 'links', label: 'Compound numbers fly to where the compound was made', value: String(!show.noLinks), type: 'checkbox', help: 'A click on a compound number (2, 7a, (±)-12) flies to the first keyframe that has it; the next click flies back. In PowerPoint the numbers link to that keyframe\'s slide.' },
+    ], { ok: 'Apply', note: 'Presenter View also lists the keyframes: a click flies the show to one.' });
+    if (got === null) return;
+    const next: CanvasShow = {};
+    if (got.dim === 'true') next.dim = true;
+    if (got.minimap === 'show' || got.minimap === 'presenter') next.minimap = got.minimap;
+    if (got.links !== 'true') next.noLinks = true;
+    k.d.setCanvas({ keys: k.c.keys, show: Object.keys(next).length ? next : undefined }, 'Canvas show options');
+  },
+  /** A Canvas Heading: a large, faint label marking a part of the route ("Fragment A", "Endgame"), in the middle of the window. */
+  heading(): void {
+    const k = canvasNow();
+    if (!k) return;
+    const m = k.d.master;
+    const r = renderer.visibleRect(0);
+    const size = Math.round(m.titleSize * 2.4);
+    let id = 0;
+    doc.edit('Canvas heading', () => {
+      id = doc.addCaption({
+        x: (r.x1 + r.x2) / 2, y: (r.y1 + r.y2) / 2, justify: 'center',
+        runs: [{ text: 'Heading', font: m.titleFont, size, bold: true, color: mix(m.titleColor, m.background, 0.6) }],
+      }).id;
+    });
+    editor.selectThese({ atoms: new Set(), bonds: new Set(), captions: new Set([id]), arrows: new Set(), shapes: new Set() });
+    flash('Canvas Heading: type over it. It is ordinary text, faint and large, for marking a part of the route.');
+  },
+};
+
+/** The keyframe ribbon group shows on canvas slides only; the menus' keyframe items are greyed elsewhere (menus keep their shape). */
+function showCanvasState(): void {
+  const on = !!deckNow()?.current?.canvas && ws.active.mode === 'slides';
+  for (const el of document.querySelectorAll<HTMLElement>('.keyframes-only')) {
+    if (el instanceof HTMLButtonElement && el.getAttribute('role') === 'menuitem') el.disabled = !on;
+    else el.hidden = !on;
+  }
+}
+
 // The slide list is rebuilt when slides come, go or move; otherwise only the slide being
 // edited gets a new picture.
 let listKey = '';
 let masterSeen: unknown = null;
 let indexSeen = -1;
-const slideListKey = (d: Deck) => `${d.slides.map((s) => s.id + (s.notes.trim() ? 'n' : '') + (s.hidden ? 'h' : '') + (s.section !== undefined ? `s${s.section}` : '')).join(',')}|${d.sections.map((x) => `${x.id}:${x.name}`).join('/')}|${d.size.w}x${d.size.h}|${d.looks}`;
+const slideListKey = (d: Deck) => `${d.slides.map((s) => s.id + (s.notes.trim() ? 'n' : '') + (s.hidden ? 'h' : '') + (s.section !== undefined ? `s${s.section}` : '') + (s.canvas ? `k${s.canvas.keys.map((k) => k.id).join('.')}` : '')).join(',')}|${d.sections.map((x) => `${x.id}:${x.name}`).join('/')}|${d.size.w}x${d.size.h}|${d.looks}`;
 
 /** Told of every change to a deck (the Compare pane, which follows Undo). */
 const deckWatchers: ((deck: Deck) => void)[] = [];
@@ -2367,9 +2601,17 @@ function deckChanged(deck: Deck): void {
   ws.noteChange();
 }
 
+/** The slide last switched to was a canvas slide (going to or from one fits the window again). */
+let onCanvas = false;
+
 function slideSwitched(deck: Deck): void {
   editor.cropping = null;
   editor.lastEdited = null;
+  const canvas = !!deck.current?.canvas;
+  if (canvas !== onCanvas) showRulers();
+  if (canvas || onCanvas) editor.fit();
+  onCanvas = canvas;
+  showCanvasState();
   notesBox.value = deck.current?.notes ?? '';
   renderer.repaintAll();
   editor.requestScene();
@@ -2454,6 +2696,11 @@ animUi = new AnimationUI($('#ribbon'), $('#anim-section'), {
   repaint: () => { renderer.repaintAll(); editor.requestScene(); },
   host: () => $('#canvas-host'),
   view: () => renderer.view,
+  // a keyframe move picked in the pane shows the keyframe it goes to
+  keyframe: (id) => {
+    const i = deckNow()?.current?.canvas?.keys.findIndex((k) => k.id === id) ?? -1;
+    if (i >= 0) goKeyframe(i);
+  },
 });
 
 slideCmts = new SlideComments($('#cmt-section'), $('#canvas-host'), {
@@ -2597,7 +2844,7 @@ function startGuideDrag(d: Deck, view: SlideView, which: { axis: 'x' | 'y'; i: n
 // on the slide, a guide is picked up where nothing else is: a drag moves it, Ctrl+drag copies it
 renderer.overlay.addEventListener('pointerdown', (e) => {
   const d = deckNow();
-  if (e.button !== 0 || !d || ws.active.mode !== 'slides' || sorterOn || !d.settings.view?.showGuides || editor.toolName !== 'select') return;
+  if (e.button !== 0 || !d || ws.active.mode !== 'slides' || sorterOn || !d.settings.view?.showGuides || d.current?.canvas || editor.toolName !== 'select') return;
   const { p, taken } = editor.pointAt(e);
   if (taken) return;
   const view = d.settings.view;
@@ -2613,7 +2860,7 @@ renderer.overlay.addEventListener('pointerdown', (e) => {
 // over a guide, the pointer says it can be dragged
 renderer.overlay.addEventListener('pointermove', (e) => {
   const d = deckNow();
-  if (guideDrag || e.buttons || !d || ws.active.mode !== 'slides' || !d.settings.view?.showGuides || editor.toolName !== 'select') return;
+  if (guideDrag || e.buttons || !d || ws.active.mode !== 'slides' || !d.settings.view?.showGuides || d.current?.canvas || editor.toolName !== 'select') return;
   const { p, taken } = editor.pointAt(e);
   const near = taken ? null : guideNear(d.settings.view, p, 4 / renderer.view.scale);
   if (near) renderer.overlay.style.cursor = near.axis === 'x' ? 'col-resize' : 'row-resize';
@@ -2621,12 +2868,13 @@ renderer.overlay.addEventListener('pointermove', (e) => {
 
 editor.moveSnap = (box, raw, tol) => {
   const d = deckNow();
-  return d && ws.active.mode === 'slides' ? snapMove(box, raw, d.settings.view ?? null, tol) : raw;
+  return d && ws.active.mode === 'slides' && !d.current?.canvas ? snapMove(box, raw, d.settings.view ?? null, tol) : raw;
 };
 
 /** The rulers show in Normal view of slides when View > Ruler is ticked. */
 function showRulers(): void {
-  rulers.show(slideLook.ruler && ws.active.mode === 'slides' && !sorterOn && !!deckNow());
+  // (a canvas slide has no edge to measure from)
+  rulers.show(slideLook.ruler && ws.active.mode === 'slides' && !sorterOn && !!deckNow() && !deckNow()?.current?.canvas);
   for (const b of document.querySelectorAll<HTMLInputElement>('[data-cmd="view-slide-ruler"]')) b.checked = slideLook.ruler;
   for (const b of document.querySelectorAll<HTMLInputElement>('[data-cmd="view-gridlines"]')) b.checked = slideLook.grid;
   const g = !!deckNow()?.settings.view?.showGuides;
@@ -2747,8 +2995,26 @@ const slideListHooks = {
     });
   },
   renameSection: (id: number) => void renameSection(id),
+  keyframe: {
+    picked: () => { const d = deckNow(); return d ? canvasKeys.picked(d) : 0; },
+    go: (i: number) => goKeyframe(i),
+    move: (from: number, to: number) => keyframeCommands.move(from, to),
+    remove: (i: number) => keyframeCommands.remove(i),
+    menu: (x: number, y: number) => showContextMenu(x, y, keyframeMenu(), { run: (cmd) => void command(cmd), key: commandKey }),
+  },
 };
 const slideList = new SlideList($('#slide-list'), slideListHooks);
+
+/** Right-click on a keyframe (on the canvas or in the slide list). */
+function keyframeMenu(): MenuItem[] {
+  const k = canvasNow(), key = k?.c.keys[k.i];
+  return [
+    { cmd: 'add-keyframe' }, { cmd: 'keyframe-here' }, { cmd: 'fit-keyframe' }, null,
+    { cmd: 'keyframe-title' }, { cmd: 'keyframe-zone' }, { cmd: 'canvas-background' }, null,
+    { cmd: 'keyframe-spotlight' }, ...(key?.spot ? [{ cmd: 'keyframe-unspot' }] : []), { cmd: 'keyframe-detour', ...(key?.detour ? { label: 'Put Back on Route' } : {}) }, { cmd: 'canvas-show-options' }, null,
+    { cmd: 'delete-keyframe' },
+  ];
+}
 
 // View > Slides > Slide Sorter: every slide in rows of larger pictures, over the slide being edited.
 // Double-click a slide (or press Enter) to go back to Normal view on it.
@@ -2842,7 +3108,7 @@ function slideListMenu(): MenuItem[] {
     { cmd: 'cut-slides', label: 'Cut' }, { cmd: 'copy-slides', label: 'Copy' }, { cmd: 'paste-slides', label: 'Paste' },
     { cmd: 'paste-slides-keep', label: 'Paste (Keep Source Formatting)' },
     null,
-    { cmd: 'new-slide' }, { cmd: 'duplicate-slide' }, { cmd: 'delete-slide' },
+    { cmd: 'new-slide' }, { cmd: 'new-canvas-slide' }, { cmd: 'duplicate-slide' }, { cmd: 'delete-slide' },
     null,
     { label: 'Layout', items: deckLayouts(deckNow()?.master).map((l) => ({ cmd: `layout-${l.id}`, label: l.name })) },
     { cmd: 'format-background' },
@@ -4055,7 +4321,18 @@ async function exportMolfile(): Promise<void> {
   flash(`Saved ${target.name}${left}`);
 }
 
-/** File > Export > Export PDF: every slide as a page, or the drawing on a page of its own size. */
+/**
+ * A slide as pages: a canvas slide's keyframes each as a slide of its own, as PowerPoint gets them
+ * (canvas-export.ts), any other slide as it is.
+ */
+function slidePages(deck: Deck, i: number): { page: SlidePage; doc: Doc }[] {
+  const s = deck.slides[i];
+  if (!s?.canvas) return [{ page: deck.page(i), doc: deck.docOf(i) }];
+  const split = splitCanvas<SplitSlide>({ id: s.id, layout: s.layout, doc: deck.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf, canvas: s.canvas }, deck.master, deck.size, i);
+  return split.filter((x) => !x.part?.via).map((x) => ({ page: { size: deck.size, master: deck.master, layout: x.layout, index: i, own: x.background, hideGraphics: x.hideGraphics, hf: s.hf }, doc: x.doc }));
+}
+
+/** File > Export > Export PDF: every slide as a page (a canvas slide's keyframes a page each), or the drawing on a page of its own size. */
 async function exportPdf(): Promise<void> {
   const tab = ws.active, deck = tab.deck;
   let pages: PdfPage[];
@@ -4064,10 +4341,10 @@ async function exportPdf(): Promise<void> {
     // the pages as laid out on screen, figures as shapes and text so they stay sharp
     pages = recordPages(docFile.t, docFile.printLayout(), (c, style) => figures.record(c, style).pic);
   } else if (deck) {
-    pages = deck.slides.map((_s, i) => ({
+    pages = deck.slides.flatMap((_s, i) => slidePages(deck, i).map((p) => ({
       w: deck.size.w, h: deck.size.h,
-      items: recordSlide(deck.page(i), deck.docOf(i)),
-    }));
+      items: recordSlide(p.page, p.doc),
+    })));
   } else {
     const pic = recordPicture(doc, 18);
     if (!pic) { flash('There is nothing to put in a PDF yet.'); return; }
@@ -4126,7 +4403,8 @@ async function printNow(): Promise<void> {
     return;
   }
   if (deck) {
-    const slide = (i: number) => itemsToSvg(recordSlide(deck.page(i), deck.docOf(i)), { x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h });
+    // (a canvas slide as its first keyframe; full-page slides print each keyframe)
+    const slide = (i: number, k = 0) => { const p = slidePages(deck, i)[k]; return itemsToSvg(recordSlide(p.page, p.doc), { x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h }); };
     if (tab.mode === 'design') { printPages({ pages: [slide(deck.index)], w: deck.size.w, h: deck.size.h }); return; }
     const m = deck.master;
     const v = await ask('Print', [
@@ -4141,7 +4419,7 @@ async function printNow(): Promise<void> {
     ], { ok: 'Print…', note: 'Full page slides print at the slide\'s own shape, notes pages at 7.5 × 10 in; the next window fits them to the paper. Handouts and notes pages carry the header and footer from Insert > Slides > Header & Footer > Notes and Handouts. Copies and which pages are chosen in the next window.' });
     if (!v) return;
     Object.assign(printChoices, v);
-    if (v.handout === '1') { printPages({ pages: deck.slides.map((_, i) => slide(i)), w: deck.size.w, h: deck.size.h }); return; }
+    if (v.handout === '1') { printPages({ pages: deck.slides.flatMap((_, i) => slidePages(deck, i).map((_p, k) => slide(i, k))), w: deck.size.w, h: deck.size.h }); return; }
     if (v.handout === 'notes') {
       const size = notesPageSize(m.notesPage);
       const pages = deck.slides.map((s, i) => notesPageSvg(m, deck.size, slide(i), s.notes, i + 1, (t, k) => measureText(t, k, m.notesPage?.font || m.bodyFont || 'Arial'), placeSvg));
@@ -4228,13 +4506,15 @@ async function exportPicture(): Promise<void> {
   let png: (k: number) => HTMLCanvasElement;
   if (deck) {
     const i = deck.index;
-    const page = clear ? { ...deck.page(i), own: solid(CLEAR) } : deck.page(i);
+    // a canvas slide: the keyframe picked, as a slide of its own
+    const at = slidePages(deck, i)[deck.current?.canvas ? canvasKeys.picked(deck) : 0];
+    const page = clear ? { ...at.page, own: solid(CLEAR) } : at.page;
     ({ w, h } = deck.size);
-    items = () => ({ items: recordSlide(page, deck.docOf(i)).filter((it) => !(it.kind === 'path' && it.fill === CLEAR)), box: { x1: 0, y1: 0, x2: w, y2: h } });
+    items = () => ({ items: recordSlide(page, at.doc).filter((it) => !(it.kind === 'path' && it.fill === CLEAR)), box: { x1: 0, y1: 0, x2: w, y2: h } });
     svg = () => { const p = items(); return itemsToSvg(p.items, p.box); };
     png = (k) => {
       const c = document.createElement('canvas');
-      paintSlide(c, w, h, k, page, deck.docOf(i));
+      paintSlide(c, w, h, k, page, at.doc);
       return c;
     };
   } else {
@@ -5127,7 +5407,7 @@ function setPictureStyle(look: PictureLook | undefined): boolean {
 }
 
 /** Slide commands that don't apply to a design's single page. */
-const SLIDE_ONLY = new Set(['compare-slides', 'section-menu', 'new-slide', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
+const SLIDE_ONLY = new Set(['compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
   'edit-layouts', 'view-sorter', 'add-section', 'rename-section', 'remove-section', 'remove-section-slides', 'remove-all-sections', 'section-up', 'section-down', 'collapse-sections', 'expand-sections',
   'slide-transitions', 'slide-animations', 'animation-pane', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-video', 'insert-audio',
   'reading-view', 'rehearse-timings', 'record-show', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
@@ -5216,6 +5496,19 @@ const COMMANDS: Record<string, () => unknown> = {
   'format-painter': () => formatPainter(),
   'insert-symbol': () => symbolWindow.open(),
   'new-slide': () => newSlide(),
+  'new-canvas-slide': () => { const d = deckNow(); if (!d) { newSlide(); return; } finishTyping(); d.addCanvasSlide(); },
+  'add-keyframe': () => keyframeCommands.addKeyframe(),
+  'keyframe-here': () => keyframeCommands.keyframeHere(),
+  'fit-keyframe': () => keyframeCommands.fitToSelection(),
+  'delete-keyframe': () => keyframeCommands.remove(),
+  'keyframe-title': () => void keyframeCommands.title(),
+  'keyframe-zone': () => void keyframeCommands.zone(),
+  'canvas-background': () => void keyframeCommands.background(),
+  'canvas-heading': () => keyframeCommands.heading(),
+  'keyframe-spotlight': () => keyframeCommands.spotlight(),
+  'keyframe-unspot': () => keyframeCommands.unspot(),
+  'keyframe-detour': () => keyframeCommands.detour(),
+  'canvas-show-options': () => void keyframeCommands.showOptions(),
   'duplicate-slide': () => { const d = deckNow(); if (d) { finishTyping(); d.duplicate(pickedSlides()); } },
   'delete-slide': () => removeSlides(pickedSlides()),
   'cut-slides': () => copySlides(pickedSlides(), true),
@@ -6088,7 +6381,7 @@ $('#split-insert').addEventListener('click', () => {
     fitPasted(part, doc.style, deck?.master.fitPasted ? deck.master.drawing.bondLength : undefined);
     doc.edit('Insert structure', () => {
       editor.sel = insertDrawing(doc, part, pasteCentre(), 'Insert structure');
-      editor.placeClear(deck?.size);
+      editor.placeClear(placingPage());
     });
     editor.changed();
   }
@@ -8015,6 +8308,7 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'undo' }, { cmd: 'redo' }, null,
       ...(ws.active.mode === 'slides' ? [{ cmd: 'new-comment', label: 'New Comment' }, { cmd: 'show-comments', label: 'Show Comments' }, null] : []),
       ...(ws.active.mode === 'slides' || design ? [{ cmd: 'format-background', label: 'Format Background…' }, null] : []),
+      ...(ws.active.mode === 'slides' && deckNow()?.current?.canvas ? [{ label: 'Keyframes', items: keyframeMenu() }, null] : []),
       { label: 'Insert', items: [{ cmd: 'name-to-structure' }, { cmd: 'periodic-table' }, { cmd: 'insert-picture' }, { cmd: 'import-picture', label: 'Structure from Picture…' }, { cmd: 'text-box' }, { cmd: 'insert-symbol' }, ...(design ? [{ cmd: 'design-shapes', label: 'Shape…' }, { cmd: 'design-icons', label: 'Icon…' }, { cmd: 'connector-tool' }] : []), ...(ws.active.mode === 'slides' ? [{ cmd: 'slide-shapes', label: 'Shape…' }, { cmd: 'slide-icons', label: 'Icon…' }] : [])] },
       { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }] },
       { cmd: 'drawing-style' },
@@ -8183,6 +8477,8 @@ function showGroupTips(on: boolean): void {
 editor.onContextMenu = (e) => {
   if (sheetActive() || docActive()) return;
   finishTyping();
+  // on a keyframe's tab, corner or outline: the keyframe commands
+  if (canvasKeys.menuAt(e) >= 0) { showContextMenu(e.clientX, e.clientY, keyframeMenu(), { run: (cmd) => void command(cmd), key: commandKey }); return; }
   const h = editor.contextPick(e);
   contextBond = h?.kind === 'bond' ? h.id : null;
   rightClickAt = { left: e.clientX, bottom: e.clientY };
@@ -8973,10 +9269,13 @@ let outlineSeen = -1;
 // scroll bars over the drawing: they cover what is drawn (or the slide), and the part on screen
 const scrollArea = () => {
   const d = ws.active.deck;
+  // a canvas slide: its keyframes and whatever is drawn beyond them
+  const c = d?.current?.canvas;
+  if (d && c) return unionRect(keysBounds(c, d.size), doc.bounds());
   if (d) return { x1: 0, y1: 0, x2: d.size.w, y2: d.size.h };
   // with the page grid: the pages, and a page more on each side that can grow
-  const p = gridPage(), b = doc.bounds();
-  return p ? scrollBox(p, pageExtent(p, b), b) : b;
+  const p = gridPage(), bb = doc.bounds();
+  return p ? scrollBox(p, pageExtent(p, bb), bb) : bb;
 };
 const scrollbars = new Scrollbars(host, renderer, scrollArea, () => editor.requestScene());
 // the wheel stops where the bars end, at the edge of the drawing, rather than going on for ever
@@ -9506,7 +9805,7 @@ requestAnimationFrame(() => {
 
 // Hooks for the automated speed tests.
 (window as any).__app = { doc, editor, renderer, chem, live, command, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
-  pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments })) }, pptxOptions()); } };
+  pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, canvas: s.canvas })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test
 

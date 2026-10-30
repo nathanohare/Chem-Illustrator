@@ -67,6 +67,7 @@ const link = new ShowLink('audience', (m: ShowMessage) => {
     const x = m.fx * canvas.clientWidth, y = m.fy * canvas.clientHeight;
     if (!player.clickMedia(x, y)) player.fireTrigger(x, y);
   }
+  else if (m.kind === 'fly') player?.flyTo(m.key, m.go);
   else if (m.kind === 'ink') ink?.setSlideInk(m.i, m.strokes);
   else if (m.kind === 'laser') ink?.showLaser(m.p);
   else if (m.kind === 'bye') void end();

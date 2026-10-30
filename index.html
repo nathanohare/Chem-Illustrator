@@ -422,7 +422,18 @@
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Slides</button>
     <div class="menu sub" role="menu" hidden>
     <button data-modes="slides" role="menuitem" data-cmd="new-slide">New Slide</button>
+    <button data-modes="slides" role="menuitem" data-cmd="new-canvas-slide" title="A slide with no edge: draw a whole route across it, then add keyframes, the windows the slide show steps through">New Canvas Slide</button>
     <button data-modes="slides" role="menuitem" data-cmd="duplicate-slide">Duplicate Slide</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="add-keyframe" title="A new keyframe after the one picked, half a slide along to the right">Add Keyframe</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="keyframe-here" title="A new keyframe showing what is in the window now">Keyframe from Window</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="fit-keyframe" title="The keyframe picked shows what is selected">Fit Keyframe to Selection</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="delete-keyframe" title="Take away the keyframe picked">Delete Keyframe</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="keyframe-title" title="The title shown fixed to the screen while the show is at the keyframe picked">Keyframe Title…</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="keyframe-zone" title="A soft tint in the background round the keyframe picked: give a part of the route its own colour">Zone Colour…</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="canvas-heading" title="A large, faint label marking a part of the route, such as Fragment A or Endgame">Canvas Heading</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="keyframe-spotlight" title="In the show, what is selected stays bright and the rest of the keyframe picked dims (nothing selected: take the spotlight away)">Spotlight Selection</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="keyframe-detour" title="The keyframe picked is a detour off the route (a side reaction, a failed attempt): after it the show glides back to where it left the route. Again to put it back on the route">Mark as Detour</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="canvas-show-options" title="In the show: dim what is outside the keyframe, a mini-map of the whole canvas, compound numbers that fly back to where the compound was made">Canvas Show Options…</button>
     <button data-modes="slides" role="menuitem" data-cmd="reuse-slides" title="Slides from another PowerPoint file: see them all, pick the ones you want">Reuse Slides…</button>
     <button data-modes="slides" role="menuitem" data-cmd="insert-slide-zoom" title="Pictures of other slides that zoom into them in the slide show">Slide Zoom…</button>
     <button data-modes="slides" role="menuitem" data-cmd="insert-summary-zoom" title="A slide of zooms, one for each part of the talk">Summary Zoom…</button>
@@ -583,6 +594,7 @@
     </div>
     <hr />
     <button data-modes="slides" role="menuitem" data-cmd="format-background" title="This slide's background (or every slide's): a colour, gradient, picture or pattern">Format Background…</button>
+    <button class="keyframes-only" role="menuitem" data-cmd="canvas-background" title="A canvas slide's endless background: a gradient along the route, a faint pattern, parallax">Canvas Background…</button>
     <button data-modes="slides" role="menuitemcheckbox" aria-checked="false" data-cmd="hide-slide" title="The slide show skips the slides picked; they stay in the deck and in the PowerPoint file. Again to show them"><span>Hide Slide</span></button>
     <button data-modes="slides" role="menuitem" data-cmd="slide-transitions">Transitions…</button>
     <button data-modes="slides" role="menuitem" data-cmd="slide-animations">Animations…</button>
@@ -2160,6 +2172,7 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="new-slide" title="New slide after this one"><span class="rb-icon">＋</span>New Slide</button>
+          <button class="rb-big" data-cmd="new-canvas-slide" title="A canvas slide after this one: no edge, so a whole route can be drawn across it; keyframes are the windows the slide show steps through"><span class="rb-icon">⇿</span>Canvas Slide</button>
           <div class="rb-col">
             <label class="rb-field">Layout <select id="rb-layout">
               <option value="title">Title Slide</option>
@@ -2180,6 +2193,27 @@
           </div>
         </div>
         <div class="rb-label">Slides</div>
+      </div>
+      <div class="rb-group keyframes-only" hidden>
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="add-keyframe" title="A new keyframe after the one picked, half a slide along to the right. Drag a keyframe's number to move it, a corner to zoom it"><span class="rb-icon">⊞</span>Add Keyframe</button>
+          <div class="rb-col">
+            <button data-cmd="keyframe-here" title="A new keyframe showing what is in the window now">From Window</button>
+            <button data-cmd="fit-keyframe" title="The keyframe picked shows what is selected">Fit to Selection</button>
+            <button data-cmd="delete-keyframe" title="Take away the keyframe picked">Delete</button>
+          </div>
+          <div class="rb-col">
+            <button data-cmd="keyframe-title" title="The title shown fixed to the screen while the show is at the keyframe picked">Title…</button>
+            <button data-cmd="keyframe-zone" title="A soft tint in the background round the keyframe picked: give a part of the route its own colour">Zone…</button>
+            <button data-cmd="canvas-heading" title="A large, faint label marking a part of the route, such as Fragment A or Endgame">Heading</button>
+          </div>
+          <div class="rb-col">
+            <button data-cmd="keyframe-spotlight" title="In the show, what is selected stays bright and the rest of the keyframe picked dims (nothing selected: take the spotlight away)">Spotlight</button>
+            <button data-cmd="keyframe-detour" title="The keyframe picked is a detour off the route (a side reaction, a failed attempt): after it the show glides back to where it left the route. Again to put it back on the route">Detour</button>
+            <button data-cmd="canvas-show-options" title="In the show: dim what is outside the keyframe, a mini-map of the whole canvas, compound numbers that fly back to where the compound was made">Show Options…</button>
+          </div>
+        </div>
+        <div class="rb-label">Keyframes</div>
       </div>
       <div class="rb-group" data-sl-text>
         <div class="rb-row">
@@ -2281,6 +2315,7 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="new-slide" title="New slide after this one"><span class="rb-icon">＋</span>New Slide</button>
+          <button class="rb-big" data-cmd="new-canvas-slide" title="A canvas slide after this one: no edge, so a whole route can be drawn across it; keyframes are the windows the slide show steps through"><span class="rb-icon">⇿</span>Canvas Slide</button>
         </div>
         <div class="rb-label">Slides</div>
       </div>
@@ -2342,6 +2377,7 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="set-up-show" title="Set Up Show: full screen with a speaker, in a window for one person, or at a kiosk going round by itself; which slides; loop; narration, animations and timings. Saved with the PowerPoint file"><span class="rb-icon">⚙</span>Set Up Slide Show</button>
+          <button class="rb-big keyframes-only" hidden data-cmd="canvas-show-options" title="Canvas Show Options: dim what is outside the keyframe, a mini-map of the whole canvas, compound numbers that fly back to where the compound was made"><span class="rb-icon">◰</span>Canvas Show</button>
           <button class="rb-big" data-cmd="hide-slide" aria-pressed="false" title="The slide show skips the slides picked; they stay in the deck and in the PowerPoint file. Again to show them"><span class="rb-icon">⊘</span>Hide Slide</button>
           <button class="rb-big" data-cmd="rehearse-timings" title="Rehearse Timings: play the show with a clock for each slide and the whole talk; at the end keep the times, so the show can go on by itself"><span class="rb-icon">⏱</span>Rehearse Timings</button>
           <button class="rb-big" data-cmd="record-show" title="Record: play the show recording your narration from the microphone, slide by slide, and timing each slide; at the end keep them (narration goes on each slide as a sound that plays as it comes in, PowerPoint too)"><span class="rb-icon">●</span>Record</button>
@@ -2458,6 +2494,7 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="format-background" title="The background of this slide, the slides picked, or every slide: a colour, gradient, picture or pattern, see-through as you like"><span class="rb-icon">▨</span>Format Background</button>
+          <button class="rb-big keyframes-only" hidden data-cmd="canvas-background" title="A canvas slide's endless background: a gradient along the route, a faint pattern, parallax. Zones: right-click a keyframe"><span class="rb-icon">◌</span>Canvas Background</button>
         </div>
         <div class="rb-label">Customize</div>
       </div>
@@ -2522,6 +2559,8 @@
             <label class="rb-field" title="Wipe and Fly: the side it comes in from (or goes out to)">Effect <select id="an-from"></select></label>
             <label class="rb-field" id="an-amount-box" style="display: none">Amount <input id="an-amount" type="number" step="5" style="width: 60px" /> <span id="an-amount-unit"></span></label>
             <label class="rb-field" id="an-colour-box" style="display: none" title="Colour Change: the colour it changes to">Colour <input id="an-colour" type="color" /></label>
+            <label class="rb-field" id="an-move-box" style="display: none" title="Keyframe move: how the view gets to this keyframe on a canvas slide">Move <select id="an-move"></select></label>
+            <label class="rb-field" id="an-bydist-box" style="display: none" title="By distance: the move takes longer the further it goes (0.6 s for a short step, up to 1.5 s for a long jump). Typing a duration turns this off"><input id="an-bydist" type="checkbox" /> By distance</label>
             <label class="rb-field" title="Text: comes in (or goes, or is emphasised) as one object, or one paragraph at a time (each starting as the first does: on its own click, with or after the one before)">Sequence <select id="an-seq">
               <option value="one">As One Object</option>
               <option value="para">By Paragraph</option>

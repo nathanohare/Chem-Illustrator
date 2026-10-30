@@ -111,6 +111,12 @@ export interface WorkspaceHooks {
   beforeWrite?(tab: Tab, ref: FileRef, name: string, how: SaveHow): Promise<'go' | 'stop' | 'save-as'>;
   /** A file was written (`was`: where the tab's file was before, which Save As changes). */
   saved?(tab: Tab, data: Uint8Array, how: SaveHow, was: FileRef): void;
+  /**
+   * A file has canvas slides whose keyframes' slides were changed in PowerPoint since they were
+   * saved here: keep each as the canvas (PowerPoint's changes to them left out) or PowerPoint's
+   * slides (as normal slides). The canvas when there is no one to ask.
+   */
+  canvasEdited?(name: string, n: number): Promise<'canvas' | 'slides'>;
   /** AutoSave couldn't write a file (no window is shown for it). */
   autoSaveFailed?(tab: Tab, message: string): void;
   /** A file was opened from disk into this tab. */
@@ -544,7 +550,9 @@ export class Workspace {
   private async openSlides(bytes: Uint8Array, name: string, ref: FileRef): Promise<boolean> {
     // the PowerPoint reader loads the first time one is opened
     const { readPptx } = await import('./io/pptx-read');
-    const got = readPptx(bytes);
+    let got = readPptx(bytes);
+    // canvas slides changed in PowerPoint: the canvas, or PowerPoint's slides?
+    if (got.canvasEdited && (await this.hooks.canvasEdited?.(name, got.canvasEdited)) === 'slides') got = readPptx(bytes, { edited: 'slides' });
     const spare = this.spare();
     const t = this.makeTab(got.design ? 'design' : 'slides', name, ref);
     const deck = new Deck(this.host);
@@ -733,7 +741,7 @@ export class Workspace {
       const { writePptx } = await import('./io/pptx-write');
       const bytes = await writePptx({
         size: deck.size, master: deck.master, design: tab.mode === 'design', sections: deck.sectionCounts(), settings: deck.settings,
-        slides: deck.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: deck.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf })),
+        slides: deck.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: deck.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf, canvas: s.canvas })),
       }, { ...this.hooks.pptx, title: name.replace(/\.[^.]+$/, '') });
       return { data: bytes, type: PPTX, note: '' };
     }

@@ -24,6 +24,8 @@ export interface ShowActionHooks {
   open(link: string): void;
   /** A zoom in or out was played here (presenter view tells the audience's window). */
   zoomed?(i: number, rect: Rect, out: boolean): void;
+  /** A canvas slide's view flew to a keyframe: to look at it, or (`go`) to go on from there (presenter view tells the audience's window). */
+  flew?(key: number, go: boolean): void;
   /** A video or sound was clicked (presenter view tells the audience's window), as fractions of the canvas. */
   tapped?(fx: number, fy: number): void;
 }
@@ -45,13 +47,19 @@ export class ShowActions {
 
   /** Whether something there takes a click (for the pointer). */
   clickable(px: number, py: number): boolean {
-    return !!this.player.actionAt(px, py) || this.player.mediaAt(px, py) || this.player.triggerAt(px, py);
+    return !!this.player.actionAt(px, py) || this.player.minimapKeyAt(px, py) >= 0 || this.player.compoundAt(px, py) >= 0 || this.player.mediaAt(px, py) || this.player.triggerAt(px, py);
   }
 
   /** A click at a point on the canvas (CSS pixels): true when something there took it. */
   click(px: number, py: number): boolean {
+    // a canvas slide's mini-map: the show goes on from the keyframe picked
+    const mk = this.player.minimapKeyAt(px, py);
+    if (mk >= 0) { this.fly(mk, true); return true; }
     const a = this.player.actionAt(px, py);
     if (a) { this.follow(a.link, a.zoom ? { back: !!a.zoom.back, to: a.zoom.to, rect: a.rect } : undefined); return true; }
+    // a compound number on a canvas slide: a look back at where the compound was made
+    const ck = this.player.compoundAt(px, py);
+    if (ck >= 0) { this.fly(ck, false); return true; }
     if (this.player.clickMedia(px, py)) {
       const w = this.canvas.clientWidth || 1, h = this.canvas.clientHeight || 1;
       this.hooks.tapped?.(px / w, py / h);
@@ -64,6 +72,12 @@ export class ShowActions {
       return true;
     }
     return false;
+  }
+
+  /** Fly a canvas slide's view to keyframe `key`: a look, or (`go`) on from there. */
+  fly(key: number, go: boolean): void {
+    this.player.flyTo(key, go);
+    this.hooks.flew?.(key, go);
   }
 
   /** Follow a link or action; with `zoom`, as a zoom from a box on the slide. */

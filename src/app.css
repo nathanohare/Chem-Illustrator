@@ -112,6 +112,7 @@ body.mode-window header .sep { background: rgba(255, 255, 255, 0.35); }
 body.mode-window header > label.check { color: #fff; }
 body.mode-window #tabs { background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
 .dev-only[hidden] { display: none !important; }
+.keyframes-only[hidden] { display: none !important; }
 button, select {
   font: inherit;
   color: var(--text);
@@ -1040,6 +1041,16 @@ dialog.design-size { width: min(94vw, 500px); }
 .sl-item.is-hidden .sl-thumb { opacity: 0.45; }
 .sl-item.is-hidden .sl-num { text-decoration: line-through; }
 .sl-item.is-hidden .sl-num::after { content: ''; display: block; margin: 2px 0 0 auto; width: 9px; height: 9px; border: 1px solid currentColor; border-radius: 1px; background: linear-gradient(to top right, transparent 45%, currentColor 45%, currentColor 55%, transparent 55%); }
+/* a canvas slide: its arrow opens its keyframes, each a smaller picture under it */
+.sl-keys-fold { position: absolute; left: 2px; top: 34px; width: 20px; height: 20px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 12px; line-height: 1; }
+.sl-keys-fold:hover { color: var(--text); }
+.sl-keys { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: none; margin-top: -4px; padding-right: 2px; }
+.sl-key { position: relative; display: flex; align-items: flex-start; gap: 4px; padding: 0; border: 0; background: none; }
+.sl-key canvas { display: block; background: #fff; border: 1px solid var(--line); border-radius: 2px; }
+.sl-key-num { font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.sl-key.current canvas { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+.sl-key.current .sl-key-num { color: var(--accent); font-weight: 600; }
+.sl-key:focus-visible canvas { box-shadow: 0 0 0 2px var(--accent), 0 0 0 5px var(--accent-soft); }
 .sl-drop { position: absolute; left: 26px; right: 8px; height: 3px; margin-top: -2px; border-radius: 2px; background: var(--accent); pointer-events: none; }
 .sl-drop[hidden] { display: none; }
 .sl-add { flex: none; margin: 6px 8px 8px 30px; border-style: dashed; color: var(--muted); }
@@ -1958,12 +1969,19 @@ dialog.command-search .cs-foot { margin: 8px 2px 0; }
 .pv-blank { position: absolute; inset: 0; display: grid; place-items: center; background: #000; color: #9aa3b5; font-size: 16px; }
 .pv-blank.white { background: #fff; color: #555; }
 .pv-blank[hidden] { display: none; }
-.pv-side { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 8px; min-height: 0; }
+.pv-side { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.pv-side > * { flex: none; }
 .pv-label { color: #9aa3b5; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
 .pv-label button { padding: 2px 8px; text-transform: none; letter-spacing: 0; }
 .pv-next { height: 30vh; }
 .pv-next canvas { display: block; }
 .pv-notes { overflow-y: auto; white-space: pre-wrap; line-height: 1.45; padding: 4px 2px; }
+.pv-side > .pv-notes { flex: 1; min-height: 0; }
+/* a canvas slide's keyframes: a click flies the show there */
+.pv-keys { display: flex; flex-wrap: wrap; gap: 4px; max-height: 18vh; overflow-y: auto; }
+.pv-keys[hidden], .pv-keys-label[hidden] { display: none; }
+.presenter-view .pv-keys button { padding: 2px 8px; max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.presenter-view .pv-keys button.on { background: #2b5f9e; border-color: #3f7fc8; }
 .pv-notes.muted { color: #6f7787; }
 .pv-bottom { justify-content: center; }
 .pv-count { min-width: 16em; text-align: center; color: #c6cbd4; font-variant-numeric: tabular-nums; }

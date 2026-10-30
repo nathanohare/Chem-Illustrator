@@ -45,13 +45,24 @@ import { mediaMime } from '../deck/media';
 import { readChart } from './office-chart';
 import { freshBox, sameBoxData, sizedBox, type ChartBox } from '../sheet/chart-box';
 import { chartBoxPng } from '../render/chart-box-paint';
+import { canvasTag, readCanvasTag, withCameraMoves, type CanvasData } from '../deck/canvas';
+import { slidePrint, type CanvasKeep } from '../deck/canvas-export';
 
 /** PowerPoint's shapes that are shapes in the library, by PowerPoint's name. */
 const GEO_BY_PRST = new Map(GEOS.filter((g) => g.prst).map((g) => [g.prst!, g.id]));
 /** PowerPoint shapes that come into slides as plain boxes and ovals (with their text beside them as text boxes). */
 const PLAIN_PRST = new Set(['rect', 'roundRect', 'ellipse', 'snip1Rect', 'flowChartProcess', 'flowChartAlternateProcess']);
 
-export interface PptxSlide { layout: LayoutId; contents: Contents; notes: string; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF }
+export interface PptxSlide { layout: LayoutId; contents: Contents; notes: string; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData }
+
+/** How a slide made from a canvas slide's keyframe was marked when saved, and the print of what it holds now. */
+interface PartRead { uid: string; index: number; count: number; print: string; now: string; keep?: CanvasKeep }
+
+/**
+ * Reading a file: a canvas slide saved as a slide for each keyframe comes back as the canvas
+ * (`canvas`), or, for canvases whose slides PowerPoint changed, as those slides (`slides`).
+ */
+export interface PptxReadOptions { edited?: 'canvas' | 'slides' }
 export interface PptxRead {
   size: SlideSize;
   master: Master;
@@ -64,6 +75,8 @@ export interface PptxRead {
   sections?: SectionCount[];
   /** Set Up Show, and custom shows (naming their slides by their places in the deck). */
   settings?: DeckSettings;
+  /** Canvas slides whose keyframes' slides were changed outside (in PowerPoint) since they were saved here. */
+  canvasEdited?: number;
 }
 
 /** A plain box or oval that needs a design shape to keep its look: a picture or gradient fill, or effects past a shadow. */
@@ -262,9 +275,12 @@ class Reader {
   /** …and its highlight pictures, matched to their highlights once the structures are in. */
   private highlightPics: { spid: number; x: number; y: number; bond: boolean; box: string }[] = [];
 
-  constructor(bytes: Uint8Array) {
+  constructor(bytes: Uint8Array, private options: PptxReadOptions = {}) {
     this.r = new PackageReader(bytes);
   }
+
+  /** Each slide's mark as a keyframe's slide of a canvas slide (null for other slides), by its place. */
+  private partsRead: (PartRead | null)[] = [];
 
   private part(path: string | null): Part | null {
     if (!path) return null;
@@ -316,23 +332,40 @@ class Reader {
       if (hf && (hf.header || hf.footer || hf.date || !hf.pageNumbers)) this.masterOut.notesHF = hf;
     }
     this.slidePaths = slidePaths;
-    const slides = slidePaths.map((p) => this.slide(p));
-    placeSlideLinks(slides, this.slideIds);
+    let slides = slidePaths.map((p) => this.slide(p));
+    // canvas slides saved as a slide for each keyframe, together again
+    const joined = joinCanvases(slides, this.partsRead, this.options.edited ?? 'canvas');
+    slides = joined.slides;
+    const place = (k: number) => (k < 0 ? k : joined.place[k] ?? k);
+    placeSlideLinks(slides, new Map([...this.slideIds].map(([id, k]) => [id, place(k)])));
     // the slides' ids in the file (as PowerPoint's sections name them)
     const sldIds = kids(kid(root, 'sldIdLst'), 'sldId').filter((x) => { const t = rels.get(rAttr(x, 'id') ?? '')?.target; return !!t && this.r.has(t); }).map((x) => x.getAttribute('id') ?? '');
-    const sections = readSections(root, sldIds);
+    let sections = readSections(root, sldIds);
+    if (sections && joined.edited + joined.joined > 0) {
+      // the sections count the canvases' slides as one each
+      let at = 0;
+      sections = sections.map((sec) => {
+        const from = at;
+        at += sec.count;
+        return { ...sec, count: new Set(Array.from({ length: sec.count }, (_, k) => place(from + k))).size };
+      });
+    }
     if (sections) summaryEnds(slides, sections);
     // Set Up Show, and custom shows
     const props = this.r.relOfType(main, REL.presProps);
     const show = readShowPr(props ? this.r.xml(props)?.documentElement ?? null : null);
-    const customShows = readCustShows(root, (rid) => { const t = rels.get(rid)?.target; return t ? slidePaths.indexOf(t) : -1; }, (el) => rAttr(el, 'id'));
+    const customShows = readCustShows(root, (rid) => { const t = rels.get(rid)?.target; return t ? place(slidePaths.indexOf(t)) : -1; }, (el) => rAttr(el, 'id'))
+      .map((c) => ({ ...c, slides: c.slides.filter((x, k, all) => all.indexOf(x) === k) }));
     const vp = this.r.relOfType(main, REL.viewProps);
     let view = readViewProps(vp ? this.r.xml(vp)?.documentElement : null);
     // PowerPoint 2013 and later keep the guides in presentation.xml (moved there, they are only there)
     const guides = readSlideGuides(root);
     if (guides) view = { ...(view ?? { showGuides: false, snapToGrid: true, grid: 7.2 }), guides };
     const settings: DeckSettings = { ...(show ? { show } : {}), ...(customShows.length ? { customShows } : {}), ...(view ? { view } : {}) };
-    return { size: this.size, master: this.masterOut, slides, warnings: [...this.warnings], design: this.design, ...(sections ? { sections } : {}), ...(Object.keys(settings).length ? { settings } : {}) };
+    return {
+      size: this.size, master: this.masterOut, slides, warnings: [...this.warnings], design: this.design, ...(sections ? { sections } : {}), ...(Object.keys(settings).length ? { settings } : {}),
+      ...(joined.edited ? { canvasEdited: joined.edited } : {}),
+    };
   }
 
   private readTheme(): void {
@@ -480,6 +513,7 @@ class Reader {
     const layout = this.part(layoutPath);
     const tags = this.tagsOf(path, kid(s.doc.documentElement, 'cSld'));
     this.curPath = path;
+    this.partsRead[this.slidePaths.indexOf(path)] = readPart(tags[TAG.canvasPart], tags[TAG.canvasKeep], s.tree);
     if (tags[TAG.slideId]) this.slideIds.set(Number(tags[TAG.slideId]), this.slidePaths.indexOf(path));
     const doc = new Doc();
     doc.style = { ...this.masterOut.drawing };
@@ -516,7 +550,7 @@ class Reader {
         }
       });
     }
-    const anims = targets ? readTiming(root, (spid) => targets.get(spid) ?? null, warn) : [];
+    let anims = targets ? readTiming(root, (spid) => targets.get(spid) ?? null, warn) : [];
     this.spidTargets = null;
     const comments = this.comments(path);
     const lay: LayoutId = hasLayout(this.masterOut, id) ? id : 'title-content';
@@ -534,11 +568,15 @@ class Reader {
     if (m.footer.trim() && has('ftr') !== showsFooter(m, lay)) own.footer = has('ftr');
     if (has('dt') !== showsDate(m, lay)) own.date = has('dt');
     const hf = Object.keys(own).length ? own : undefined;
+    // a canvas slide saved here
+    const canvas = readCanvasTag(tags[TAG.canvas]);
+    // its keyframe moves (which PowerPoint can't hold) back among its animations
+    if (canvas) anims = withCameraMoves(anims, tags[TAG.canvas]);
     return {
       layout: lay, contents: doc.contents(), notes: this.notes(path),
       ...(background ? { background } : {}), ...(hideGraphics ? { hideGraphics } : {}), ...(hidden ? { hidden } : {}), ...(hf ? { hf } : {}),
       ...(transition && (transition.kind !== 'none' || transition.advanceAfter) ? { transition } : {}), ...(anims.length ? { anims } : {}),
-      ...(comments.length ? { comments } : {}),
+      ...(comments.length ? { comments } : {}), ...(canvas ? { canvas } : {}),
     };
   }
 
@@ -2014,8 +2052,66 @@ function texOfOmml(tex: string): string {
   return ommlToTex(doc.documentElement);
 }
 
-export function readPptx(bytes: Uint8Array): PptxRead {
-  return new Reader(bytes).read();
+export function readPptx(bytes: Uint8Array, options: PptxReadOptions = {}): PptxRead {
+  return new Reader(bytes, options).read();
+}
+
+/** A slide's mark as a keyframe's slide (its tags), with the print of what it holds now. */
+function readPart(tag: string | undefined, keep: string | undefined, tree: Element | null): PartRead | null {
+  if (!tag) return null;
+  try {
+    const o = JSON.parse(tag) as Partial<PartRead>;
+    if (typeof o.uid !== 'string' || !Number.isInteger(o.index) || !Number.isInteger(o.count) || typeof o.print !== 'string') return null;
+    let k: CanvasKeep | undefined;
+    if (keep) {
+      const c = JSON.parse(keep) as CanvasKeep;
+      // the canvas's keyframes as a tag gives them, so only sound ones come back
+      const canvas = c?.canvas ? readCanvasTag(canvasTag(c.canvas)) : null;
+      if (canvas && c.contents && Array.isArray(c.contents.atoms)) k = { ...c, canvas, notes: typeof c.notes === 'string' ? c.notes : '' };
+    }
+    return { uid: o.uid, index: o.index!, count: o.count!, print: o.print, now: tree ? slidePrint(tree) : '', ...(k ? { keep: k } : {}) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The slides with each canvas slide saved as a slide for each keyframe put back together: a run of
+ * slides marked with one canvas, starting with the one that carries the canvas itself. Unless the
+ * run was changed outside since (`edited`: a slide gone, added, moved or altered) and those
+ * slides are wanted as they are. `place` says where each slide read went.
+ */
+function joinCanvases(slides: PptxSlide[], parts: (PartRead | null)[], want: 'canvas' | 'slides'): { slides: PptxSlide[]; place: number[]; edited: number; joined: number } {
+  if (!parts.some((p) => p?.keep)) return { slides, place: slides.map((_, i) => i), edited: 0, joined: 0 };
+  const out: PptxSlide[] = [];
+  const place: number[] = [];
+  let edited = 0, joined = 0;
+  for (let i = 0; i < slides.length;) {
+    const first = parts[i];
+    if (!first?.keep || first.index !== 0) { place[i] = out.length; out.push(slides[i]); i++; continue; }
+    let j = i + 1;
+    while (j < slides.length && parts[j]?.uid === first.uid && !parts[j]?.keep) j++;
+    const run = parts.slice(i, j) as PartRead[];
+    const changed = run.length !== first.count || run.some((p, k) => p.index !== k || p.print !== p.now);
+    if (changed) edited++;
+    if (changed && want === 'slides') {
+      for (let k = i; k < j; k++) { place[k] = out.length; out.push(slides[k]); }
+      i = j;
+      continue;
+    }
+    joined++;
+    const keep = first.keep, s = slides[i];
+    for (let k = i; k < j; k++) place[k] = out.length;
+    out.push({
+      layout: keep.layout, contents: keep.contents, notes: keep.notes, canvas: keep.canvas,
+      ...(keep.anims?.length ? { anims: keep.anims } : {}),
+      ...(keep.transition ? { transition: keep.transition } : {}), ...(keep.background ? { background: keep.background } : {}),
+      ...(keep.hideGraphics ? { hideGraphics: true } : {}), ...(keep.hidden ? { hidden: true } : {}),
+      ...(s.comments?.length ? { comments: s.comments } : {}), ...(s.hf ? { hf: s.hf } : {}),
+    });
+    i = j;
+  }
+  return { slides: out, place, edited, joined };
 }
 
 /** The names PowerPoint (and this program) give shapes on their own: "Picture 3", "TextBox 12". */
