@@ -2737,3 +2737,14 @@ dialog.import-pick .ask-buttons .grow { flex: 1; }
 
 /* View > Focus View: the page gets the whole window */
 body.focus-view .ribbon, body.focus-view .dock, body.focus-view > aside, body.focus-view .toolbox.floating { display: none !important; }
+
+/* the 3-D Model window (src/ui/viewer3d.ts) */
+.float-box.viewer3d { width: 380px; resize: both; overflow: hidden; min-width: 260px; min-height: 280px; }
+.viewer3d .fb-body { display: flex; flex-direction: column; gap: 4px; padding: 6px; }
+.v3d-canvas { flex: 1 1 auto; width: 100%; min-height: 220px; height: 300px; border: 1px solid var(--line); border-radius: 4px; cursor: grab; touch-action: none; outline-offset: -2px; }
+.v3d-canvas:active { cursor: grabbing; }
+.v3d-canvas:focus:not(:focus-visible) { outline: none; }
+.v3d-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.v3d-bar label { display: inline-flex; align-items: center; gap: 3px; }
+.v3d-bar button[aria-pressed='true'] { background: var(--accent-soft); }
+.v3d-info { flex: 1; text-align: center; color: var(--muted); font-size: 0.92em; }

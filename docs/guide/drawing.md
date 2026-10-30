@@ -262,6 +262,17 @@ R/S and E/Z are worked out for every structure as you draw.
 - **Polymer or Repeat Brackets (n, ×3)…**: put square brackets round a repeat unit with the bracket tool, select both brackets, and type `n` for a polymer or a number for a group repeated that many times. The Analysis panel then shows the formula as end groups plus the repeat unit.
 - **R-Group Table…**: draw a core with R1, R2 (or R, X, Ar) as labels, select it and choose this. Type one compound per line, its groups separated by commas (`Me, H`), or paste cells from Excel. You can set a compound number (2 gives 2a, 2b, 2c…), choose whether formula and MW are worked out, and add columns to fill in yourself (`Yield (%), ee (%)`). The table goes under the structure; double-click a cell to change it.
 
+### 3-D model
+
+**Chemistry ▸ Look Up ▸ 3-D Model…** (also on the right-click menu of a structure) builds the selected structure in 3-D in a window of its own. The conformers come from OpenChemLib's torsion library and each is relaxed with the MMFF94s+ force field, lowest energy first; **‹** and **›** step through them, with each one's energy above the lowest. The model starts turned to look like your drawing.
+
+- Drag to turn it, Shift+drag (or the right button) to move it, the wheel to zoom, the arrow keys to turn it in steps, and double-click to go back to the drawing's view. **Spin** turns it slowly.
+- Draw it as **Ball and stick**, **Sticks**, **Wire** or **Space filling**, with or without hydrogens and element labels.
+- **Place on Page** turns the drawn structure to match the view (one undoable step): bonds nearer you go in front where two cross, and each stereocentre gets a wedge or hashed wedge that reads right from that angle (in a crowded ring fusion, on a drawn H). The structure also keeps its 3-D positions in the CDXML file, so two placed views of one molecule with an arrow between them turn into each other in a reaction animation. If a bond points almost straight at you, so a stereocentre can't be shown clearly, the step is taken back and the window says so: turn the model a little and place it again.
+- **Copy Picture** copies the view as a PNG (three times the window's size); **Copy MOL** copies the conformer as a 3-D molfile with hydrogens, for Chem3D, Avogadro, PyMOL or a calculation.
+
+Structures with R groups or labels that can't be read have no 3-D shape. Metals mostly have no MMFF parameters, so their models are the generator's geometry, not relaxed.
+
 ### PubChem
 
 **Chemistry ▸ Look Up ▸ Look Up on PubChem** (also in the Analysis panel and the right-click menu) sends the selected structure to PubChem and shows its names, CAS number, a link to its PubChem page, GHS hazards, and measured melting point, boiling point and density where known. See [The Analysis panel](#the-analysis-panel).

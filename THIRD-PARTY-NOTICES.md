@@ -5,6 +5,7 @@ Chem Illustrator is licensed under the GNU General Public License, version 3 or 
 | Package | Used for | Licence |
 |---|---|---|
 | [RDKit](https://www.rdkit.org) (`@rdkit/rdkit`, MinimalLib WebAssembly build) | Chemistry: formula, masses, stereo, SMILES | BSD-3-Clause (full text below) |
+| [OpenChemLib](https://github.com/cheminfo/openchemlib-js) (`openchemlib`, the JavaScript build of Idorsia's OpenChemLib), with its torsion and MMFF94 tables (`public/ocl-resources.json`) | Chemistry ▸ 3-D Model: conformers and the MMFF94s+ force field | BSD-3-Clause (full text below) |
 | [OPSIN](https://github.com/dan2097/opsin) 2.9.0, compiled to JavaScript (`src/vendor/opsin/opsin.js`, data in `public/opsin/opsin-data.dat`) | Name to Structure, offline | MIT (full text below) |
 | [dk.brics.automaton](https://www.brics.dk/automaton/) 1.12-4 (part of the OPSIN build) | OPSIN's name grammar | BSD-3-Clause (full text below) |
 | [TeaVM](https://teavm.org) 0.16.0 runtime and class library (part of the OPSIN build) | Runs OPSIN's Java code as JavaScript | Apache-2.0; includes code from Apache Harmony (Apache-2.0). Notice: "This product includes software developed by Alexey Andreev (http://teavm.org). This product includes software developed by The Apache Software Foundation (http://www.apache.org/)." |
@@ -184,6 +185,40 @@ The MIT license applies to all non-font and non-icon files.
 ```
 
 The Apache License 2.0 is in `opsin-js/licences/Apache-2.0.txt`.
+
+## OpenChemLib licence
+
+```
+Copyright (c) 2015-2017, cheminfo
+
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification,
+are permitted provided that the following conditions are met:
+
+    * Redistributions of source code must retain the above copyright notice,
+      this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above copyright notice,
+      this list of conditions and the following disclaimer in the documentation
+      and/or other materials provided with the distribution.
+    * Neither the name of {{ project }} nor the names of its contributors
+      may be used to endorse or promote products derived from this software
+      without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR
+CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+```
+
+OpenChemLib itself (Java), from which the JavaScript build is made, is Copyright (c) Idorsia Pharmaceuticals Ltd. and Actelion Pharmaceuticals Ltd., under the same BSD 3-Clause terms.
 
 ## RDKit licence
 
