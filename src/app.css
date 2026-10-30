@@ -2212,7 +2212,10 @@ dialog.settings-window[open] { display: flex; }
 .rb-group.rb-compact button.rb-big .rb-icon { font-size: 21px; }
 .rb-group.rb-compact button.rb-iconbtn:has(svg) { font-size: 0; }
 .rb-fold-btn { display: none; }
-.rb-group.rb-folded > .rb-fold-btn { display: inline-flex; align-items: center; gap: 4px; align-self: stretch; padding: 4px 8px; font-size: 12px; white-space: nowrap; }
+.rb-group.rb-folded > .rb-fold-btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; align-self: stretch; padding: 3px 8px; font-size: 12px; line-height: 1.15; white-space: nowrap; }
+.rb-fold-btn .rb-icon svg { width: 22px; height: 22px; vertical-align: middle; }
+.rb-fold-name { display: block; }
+.ribbon .rb-style.rb-gal-out { display: none; }
 .rb-group.rb-folded > :not(.rb-fold-btn) { display: none; }
 .rb-group.rb-folded.rb-popped > .rb-row { display: flex; position: fixed; z-index: 60; left: var(--pop-x); top: var(--pop-y); max-width: calc(100vw - 8px); padding: 6px 8px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 20px rgb(0 0 0 / 0.18); }
@@ -2784,3 +2787,5 @@ dialog.quick-editor { width: min(94vw, 640px); }
 dialog.quick-editor .ask-buttons .spacer { flex: 1; }
 body.mode-window .quick-bar > button[data-qa='lock-toolboxes'][aria-pressed='true'] { color: #fff; background: transparent; }
 body.mode-window .quick-bar > button[data-qa='lock-toolboxes'][aria-pressed='false'] { color: #fff; border-color: #fff; background: rgba(255, 255, 255, 0.22); }
+/* Cut and Copy show a picture before their names, as Format Painter does (src/ui/ribbon-icons.ts) */
+.rb-lead svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }

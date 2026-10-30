@@ -9867,6 +9867,13 @@ function sampleMolecule(): void {
   editor.changed();
 }
 
+// the Design ribbon's tabs
+for (const b of document.querySelectorAll<HTMLButtonElement>('#design-ribbon [data-dz-tab]')) {
+  b.addEventListener('click', () => {
+    for (const x of document.querySelectorAll<HTMLButtonElement>('#design-ribbon [data-dz-tab]')) x.setAttribute('aria-selected', String(x === b));
+    for (const p of document.querySelectorAll<HTMLElement>('#design-ribbon [data-dz-panel]')) p.hidden = p.dataset.dzPanel !== b.dataset.dzTab;
+  });
+}
 // the ribbon's buttons run the same commands as the menus
 for (const id of ['#ribbon', '#design-ribbon']) {
   $(id).addEventListener('click', (e) => {
