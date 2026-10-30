@@ -2,7 +2,7 @@
 // Start the program first (npm run dev), then: node scripts/animations.mjs [address] [name …]
 // Needs Playwright with Chromium (as scripts/screenshots.mjs does) and ffmpeg. Give names
 // (smart-arrows, frames, catalytic-cycle, id-labels, spelling, name-to-structure, dark-mode,
-// metal-complex, mechanism, navigation, slide-highlights, reagent-table,
+// metal-complex, mechanism, navigation, slide-highlights, canvas-slides, reagent-table,
 // reaction-animation) to
 // record only those.
 
@@ -543,6 +543,72 @@ if (want('slide-highlights')) {
       await page.waitForTimeout(500);
       await page.mouse.click(W * 0.8, H * 0.85);
       await page.waitForTimeout(1700);
+    }
+    await inputBadge(page, null);
+  }, { clip: { x: 0, y: 0, width: W, height: H }, width: 820, hold: 2000 });
+  await browser.close();
+}
+
+// ---------------------------------------------------------------- Slides: a canvas slide, a route drawn once and shown a step at a time
+if (want('canvas-slides')) {
+  const { browser, page } = await open(url, { width: 1280, height: 720 });
+  await page.evaluate(async () => {
+    const a = window.__app; a.ws.newSlides();
+    const t = await import('/src/deck/templates.ts');
+    const d = a.ws.active.deck; d.setMaster(t.applyTemplate(d.master, t.SLIDE_TEMPLATES.find((x) => x.id === 'harbor')));
+    d.addCanvasSlide();
+  });
+  await page.waitForTimeout(800);
+  // a three-step route across the canvas, a slide width and a half apart
+  await page.evaluate(async () => {
+    const a = window.__app, doc = a.doc, y = 290;
+    (await import('/src/chem/scheme-layout.ts')).setSchemePrefs({ structGap: 17, lead: 8, headGap: 13 });
+    const xs = [170, 650, 1130, 1610];
+    const smiles = ['O=Cc1ccc(Br)cc1', 'O=Cc1ccc(-c2ccccc2)cc1', 'CCOC(=O)/C=C/c1ccc(-c2ccccc2)cc1', 'OC/C=C/c1ccc(-c2ccccc2)cc1'];
+    const mols = await Promise.all(smiles.map((s) => a.chem.smilesToMol(s)));
+    const ids = [];
+    doc.edit('Scheme', () => {
+      mols.forEach((m, i) => a.addMolfile(doc, m, xs[i], y));
+      for (const i of [0, 1, 2]) {
+        const x1 = xs[i] + (xs[i + 1] - xs[i]) * 0.3, x2 = xs[i] + (xs[i + 1] - xs[i]) * 0.6;
+        ids.push(doc.addArrow({ tail: { x: x1, y }, head: { x: x2, y }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: 10, headWidth: 3 }).id);
+      }
+    });
+    a.command('clean-up-reaction');
+    const e = a.editor;
+    e.setArrowSideText(ids[0], 'above', 'PhB(OH)2, Pd(PPh3)4');
+    e.setArrowSideText(ids[0], 'below', 'K2CO3, dioxane/H2O\n90 °C, 92%');
+    e.setArrowSideText(ids[1], 'above', '(EtO)2P(O)CH2CO2Et');
+    e.setArrowSideText(ids[1], 'below', 'NaH, THF, 0 °C\n88%, E/Z > 20:1');
+    e.setArrowSideText(ids[2], 'above', 'DIBAL-H');
+    e.setArrowSideText(ids[2], 'below', 'CH2Cl2, −78 °C\n95%');
+    a.command('clean-up-reaction');
+    e.numberCompounds({ start: 1, style: 'numbers', prefix: '', suffix: '', bold: true });
+    e.clearSelection();
+    // a keyframe on each step, then the whole route; a soft gradient along it and a mini-map
+    const b = doc.bounds(), d = a.ws.active.deck, W = d.size.w, H = d.size.h, cy = (b.y1 + b.y2) / 2;
+    const step = (b.x2 - b.x1 - W * 0.9) / 2;
+    const titles = ['Suzuki coupling', 'Olefination', 'Reduction'];
+    const keys = titles.map((title, i) => ({ id: i + 1, x: b.x1 - W * 0.05 + step * i, y: cy - H / 2 + 20, zoom: 1, title }));
+    const zoom = (b.x2 - b.x1) / W * 1.12;
+    keys.push({ id: 4, x: (b.x1 + b.x2) / 2 - W * zoom / 2, y: cy - H * zoom / 2 + 20 * zoom, zoom, title: 'The route' });
+    d.setCanvas({ keys, look: { route: ['#e8f1fa', '#eaf6ee', '#fbf1e4'] }, show: { minimap: 'show' } });
+  });
+  await page.waitForTimeout(800);
+  await pointer(page);
+  const W = 1280, H = 720;
+  await page.mouse.move(W * 0.8, H * 0.85);
+  await record(page, 'canvas-slides', async () => {
+    await page.waitForTimeout(1500);
+    await inputBadge(page, { keys: ['F5'], text: 'start the slide show' });
+    await page.waitForTimeout(900);
+    await page.evaluate(() => window.__app.command('present-current'));
+    await page.waitForTimeout(1800);
+    for (const what of ['glide to the next step', 'glide to the next step', 'fly out to the whole route']) {
+      await inputBadge(page, { keys: ['→'], text: what });
+      await page.waitForTimeout(500);
+      await page.keyboard.press('ArrowRight');
+      await page.waitForTimeout(2600);
     }
     await inputBadge(page, null);
   }, { clip: { x: 0, y: 0, width: W, height: H }, width: 820, hold: 2000 });
