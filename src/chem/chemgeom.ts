@@ -100,10 +100,38 @@ function crowding(doc: Doc, p: Vec, L: number, ignore: Set<number>): number {
 }
 
 /**
- * Direction for a new bond from an atom, the way ChemDraw picks it: up-right for a lone
- * atom, a zig-zag continuation for a chain end, and the middle of the widest gap otherwise.
+ * Whether an atom of element `z` whose two bonds have these orders is linear (sp) and so drawn
+ * with its bonds at 180°, as the IUPAC graphical representation recommendations (2008) ask: a
+ * triple bond and one other (an alkyne or nitrile carbon, a diazonium N), or two double bonds on
+ * C or N (an allene, ketene, CO2, isocyanate or azide centre; not S or Se, as SO2 is bent).
  */
-export function sproutDir(doc: Doc, atomId: number): Vec {
+export function linearOrders(z: number, orders: number[]): boolean {
+  if (orders.length !== 2) return false;
+  if (orders.includes(3)) return true;
+  return orders[0] === 2 && orders[1] === 2 && (z === 6 || z === 7);
+}
+
+/**
+ * The straight-on direction for a new bond of `order` from an atom with one bond, when the two
+ * together make the atom linear (see linearOrders); null otherwise.
+ */
+export function linearDir(doc: Doc, atomId: number, order = 1): Vec | null {
+  const a = doc.atoms.get(atomId);
+  const bids = doc.adj.get(atomId) ?? [];
+  if (!a || bids.length !== 1) return null;
+  const b = doc.bonds.get(bids[0])!;
+  const n = doc.atoms.get(b.a1 === atomId ? b.a2 : b.a1)!;
+  if (n.multi || !linearOrders(a.z, [b.order, order])) return null;
+  return norm(sub(a, n));
+}
+
+/**
+ * Direction for a new bond of `order` from an atom, the way ChemDraw picks it: up-right for a
+ * lone atom, straight on where the atom becomes linear (a triple bond, or a second double bond
+ * on an allene carbon), a zig-zag continuation for a chain end, and the middle of the widest gap
+ * otherwise.
+ */
+export function sproutDir(doc: Doc, atomId: number, order = 1): Vec {
   const a = doc.atoms.get(atomId)!;
   const nb = doc.neighbors(atomId);
   const L = bondLength(doc, a);
@@ -112,8 +140,9 @@ export function sproutDir(doc: Doc, atomId: number): Vec {
   if (nb.length === 1) {
     const n = nb[0];
     const back = angleOf(sub(n, a));
-    // an alkyne or nitrile carbon is linear (sp): the new bond carries straight on
-    if ((doc.bondBetween(atomId, n.id)?.order ?? 1) === 3) return fromAngle(back + Math.PI);
+    // an alkyne, nitrile or allene carbon is linear (sp): the new bond carries straight on
+    const straight = linearDir(doc, atomId, order);
+    if (straight) return straight;
     const cands = [fromAngle(back + 120 * DEG), fromAngle(back - 120 * DEG)];
     // Zig-zag: the new bond runs parallel to the bond before the neighbour (trans). A C=O or
     // =CH2 on the neighbour, or a wedged methyl, is not part of the chain, so it doesn't steer
@@ -356,15 +385,77 @@ export function bondTo(doc: Doc, from: Atom, p: Vec, order = 1, display: BondDis
   const look = lookFrom(doc, from);
   const to = hit ?? doc.addAtom(p.x, p.y, z, look.atom);
   const ex = doc.bondBetween(from.id, to.id);
-  if (ex) doc.updateBond(ex.id, { order, display });
+  if (ex) { doc.updateBond(ex.id, { order, display }); straightenAt(doc, ex.id); }
   else doc.addBond(from.id, to.id, order, display, look.bond);
   return to;
+}
+
+/**
+ * Whether an atom left bent when a bond to it becomes triple (or makes a second, cumulated
+ * double bond) is straightened (Settings ▸ General).
+ */
+export const straightenLinear = { on: true };
+
+/**
+ * Straighten the ends of a bond whose new order has made them linear (an alkyne or allene
+ * carbon drawn bent, see linearOrders): the lighter side swings round the atom until its two
+ * bonds lie at 180°, the rest of the structure staying put. A side that closes a ring back to
+ * the atom, or an atom drawn in perspective, is left alone. Call inside an edit, after the
+ * bond's order has changed.
+ */
+export function straightenAt(doc: Doc, bondId: number): void {
+  if (!straightenLinear.on) return;
+  const b = doc.bonds.get(bondId);
+  if (!b) return;
+  straightenAtom(doc, b.a1, b.a2);
+  straightenAtom(doc, b.a2, b.a1);
+}
+
+function straightenAtom(doc: Doc, id: number, via: number): void {
+  const x = doc.atoms.get(id);
+  if (!x || x.xyz || x.depth !== undefined) return;
+  const bonds = (doc.adj.get(id) ?? []).map((bid) => doc.bonds.get(bid)!);
+  if (!linearOrders(x.z, bonds.map((b) => b.order))) return;
+  const [p, q] = bonds.map((b) => doc.atoms.get(b.a1 === id ? b.a2 : b.a1)!);
+  if (p.multi || q.multi || p.xyz || q.xyz) return;
+  // the turn that puts q opposite p
+  let turn = normAngle(angleOf(sub(p, x)) + Math.PI - angleOf(sub(q, x)));
+  if (turn > Math.PI) turn -= 2 * Math.PI;
+  if (Math.abs(turn) < 0.5 * DEG) return;
+  const sp = sideOf(doc, p.id, id), sq = sideOf(doc, q.id, id);
+  if (!sp && !sq) return;
+  // the smaller side swings; on a tie, the side across the bond that changed
+  const swingQ = !sp || !!sq && (sq.size < sp.size || sq.size === sp.size && q.id === via);
+  const side = swingQ ? sq! : sp!;
+  const t = swingQ ? turn : -turn;
+  const c = Math.cos(t), s = Math.sin(t);
+  for (const aid of side) {
+    const a = doc.atoms.get(aid)!;
+    if (a.multi) continue; // a ring's middle follows its atoms
+    const dx = a.x - x.x, dy = a.y - x.y;
+    doc.updateAtom(aid, { x: x.x + dx * c - dy * s, y: x.y + dx * s + dy * c });
+  }
+}
+
+/** The atoms reached from `start` without passing through `pivot`, or null if a ring leads back to it. */
+function sideOf(doc: Doc, start: number, pivot: number): Set<number> | null {
+  const seen = new Set<number>([start]);
+  const stack = [start];
+  while (stack.length) {
+    const id = stack.pop()!;
+    const a = doc.atoms.get(id);
+    for (const n of [...doc.neighbors(id).map((m) => m.id), ...(a?.multi ?? [])]) {
+      if (n === pivot) { if (id !== start) return null; continue; }
+      if (!seen.has(n)) { seen.add(n); stack.push(n); }
+    }
+  }
+  return seen;
 }
 
 /** Sprout a bond from an atom in the automatic direction. */
 export function sprout(doc: Doc, atomId: number, order = 1, display: BondDisplay = 'solid', z = 6, dir?: Vec): Atom {
   const a = doc.atoms.get(atomId)!;
-  const d = dir ?? sproutDir(doc, atomId);
+  const d = dir ?? sproutDir(doc, atomId, order);
   return bondTo(doc, a, add(a, mul(d, bondLength(doc, a))), order, display, z);
 }
 

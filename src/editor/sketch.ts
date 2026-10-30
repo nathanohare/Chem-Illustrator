@@ -15,7 +15,7 @@
 import type { Vec } from '../geom';
 import { add, angleOf, dist, distToSegment, fromAngle, mul, normAngle, sub, DEG } from '../geom';
 import type { Doc, Atom, Bond } from '../model';
-import { atomAt, bondLength, bondTo, freeRing, fusedRing, placeRing, ringOnAtom, ringRadius, sproutDir } from '../chem/chemgeom';
+import { atomAt, bondLength, bondTo, freeRing, fusedRing, placeRing, ringOnAtom, ringRadius, sproutDir, straightenAt } from '../chem/chemgeom';
 
 // ------------------------------------------------------------------ stroke geometry
 
@@ -484,7 +484,7 @@ export class Sketcher {
         const end = atomAt(doc, v[i], 0.35 * L, new Set([cur.id]));
         if (end) {
           const ex = doc.bondBetween(cur.id, end.id);
-          if (ex) doc.updateBond(ex.id, { order: Math.min(3, Math.floor(ex.order) + 1), display: 'solid' });
+          if (ex) { doc.updateBond(ex.id, { order: Math.min(3, Math.floor(ex.order) + 1), display: 'solid' }); straightenAt(doc, ex.id); }
           else doc.addBond(cur.id, end.id);
           cur = end;
           continue;
