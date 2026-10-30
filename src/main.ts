@@ -63,7 +63,7 @@ import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND, type Sli
 import { writePdf, jpegInfo, PdfPage, PdfImage } from './io/pdf';
 import { SlideList } from './ui/slide-list';
 import { CanvasKeys } from './ui/canvas-keys';
-import { addKeyframe, insertKeyframe, keyframeAround, keyRect, keysBounds, moveKeyframe, removeKeyframe, unionRect, ZOOM_IN_MAX, TEXTURES, PARALLAX_MAX, type CanvasLook, type Texture } from './deck/canvas';
+import { addKeyframe, insertKeyframe, keyframeAround, keyRect, keysBounds, moveKeyframe, removeKeyframe, unionRect, ZOOM_IN_MAX, TEXTURES, PARALLAX_MAX, type CanvasLook, type CanvasShow, type Texture } from './deck/canvas';
 import { mix } from './render/fills';
 import { splitCanvas, type SplitSlide } from './deck/canvas-export';
 import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel } from './ui/design-panel';
@@ -2478,6 +2478,58 @@ const keyframeCommands = {
     renderer.repaintAll();
     editor.requestScene();
   },
+  /** A spotlight on keyframe i: what is selected stays bright in the show and the rest dims. Nothing selected: the spotlight goes. */
+  spotlight(i?: number): void {
+    const k = canvasNow();
+    if (!k) return;
+    const at = i ?? k.i, key = k.c.keys[at];
+    if (!key) return;
+    const box = editor.hasSelection() ? editor.selBox() : null;
+    if (!box) {
+      if (key.spot) keyframeCommands.unspot(at);
+      else flash('Select what should stay bright at this keyframe, then Spotlight Selection.');
+      return;
+    }
+    const m = 6;
+    const spot = { x1: box.x1 - m, y1: box.y1 - m, x2: box.x2 + m, y2: box.y2 + m };
+    setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === at ? { ...x, spot } : x)) }, at, 'Spotlight selection');
+    flash('Spotlight: in the show, the rest of this keyframe dims. Right-click the keyframe for Remove Spotlight.');
+  },
+  unspot(i?: number): void {
+    const k = canvasNow();
+    if (!k) return;
+    const at = i ?? k.i;
+    if (!k.c.keys[at]?.spot) return;
+    setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === at ? (({ spot: _, ...rest }) => rest)(x) : x)) }, at, 'Remove spotlight');
+  },
+  /** Keyframe i a detour off the route, or back on it: after a run of detours the show glides back to where the run left the route. */
+  detour(i?: number): void {
+    const k = canvasNow();
+    if (!k) return;
+    const at = i ?? k.i, key = k.c.keys[at];
+    if (!key) return;
+    if (at === 0 && !key.detour) { flash('The first keyframe is where the route starts, so it can\'t be a detour.'); return; }
+    const on = !key.detour;
+    setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === at ? (({ detour: _, ...rest }) => (on ? { ...rest, detour: true } : rest))(x) : x)) }, at, on ? 'Mark keyframe as detour' : 'Put keyframe back on the route');
+    flash(on ? 'Detour: after this keyframe (and any detours straight after it) the show glides back to the keyframe before. The return is a move in the Animation pane.' : 'Back on the route: the show no longer glides back after it.');
+  },
+  /** How the canvas slide's show behaves: dimming, the mini-map, and compound numbers as links. */
+  async showOptions(): Promise<void> {
+    const k = canvasNow();
+    if (!k) return;
+    const show = k.c.show ?? {};
+    const got = await ask('Canvas Show Options', [
+      { name: 'dim', label: 'Dim what is outside the keyframe', value: String(!!show.dim), type: 'checkbox', help: 'As the show moves, what is off the route fades back, so the eye follows the move. A keyframe\'s own spotlight (Spotlight Selection) dims even with this off.' },
+      { name: 'minimap', label: 'Mini-map', value: show.minimap ?? '', options: [{ value: '', label: 'None' }, { value: 'show', label: 'In the show\'s corner' }, { value: 'presenter', label: 'In Presenter View only' }], help: 'A small map of the whole canvas with where the show is. A click on a keyframe in it flies the show there.' },
+      { name: 'links', label: 'Compound numbers fly to where the compound was made', value: String(!show.noLinks), type: 'checkbox', help: 'A click on a compound number (2, 7a, (±)-12) flies to the first keyframe that has it; the next click flies back. In PowerPoint the numbers link to that keyframe\'s slide.' },
+    ], { ok: 'Apply', note: 'Presenter View also lists the keyframes: a click flies the show to one.' });
+    if (got === null) return;
+    const next: CanvasShow = {};
+    if (got.dim === 'true') next.dim = true;
+    if (got.minimap === 'show' || got.minimap === 'presenter') next.minimap = got.minimap;
+    if (got.links !== 'true') next.noLinks = true;
+    k.d.setCanvas({ keys: k.c.keys, show: Object.keys(next).length ? next : undefined }, 'Canvas show options');
+  },
   /** A Canvas Heading: a large, faint label marking a part of the route ("Fragment A", "Endgame"), in the middle of the window. */
   heading(): void {
     const k = canvasNow();
@@ -2948,7 +3000,13 @@ const slideList = new SlideList($('#slide-list'), slideListHooks);
 
 /** Right-click on a keyframe (on the canvas or in the slide list). */
 function keyframeMenu(): MenuItem[] {
-  return [{ cmd: 'add-keyframe' }, { cmd: 'keyframe-here' }, { cmd: 'fit-keyframe' }, null, { cmd: 'keyframe-title' }, { cmd: 'keyframe-zone' }, { cmd: 'canvas-background' }, null, { cmd: 'delete-keyframe' }];
+  const k = canvasNow(), key = k?.c.keys[k.i];
+  return [
+    { cmd: 'add-keyframe' }, { cmd: 'keyframe-here' }, { cmd: 'fit-keyframe' }, null,
+    { cmd: 'keyframe-title' }, { cmd: 'keyframe-zone' }, { cmd: 'canvas-background' }, null,
+    { cmd: 'keyframe-spotlight' }, ...(key?.spot ? [{ cmd: 'keyframe-unspot' }] : []), { cmd: 'keyframe-detour', ...(key?.detour ? { label: 'Put Back on Route' } : {}) }, { cmd: 'canvas-show-options' }, null,
+    { cmd: 'delete-keyframe' },
+  ];
 }
 
 // View > Slides > Slide Sorter: every slide in rows of larger pictures, over the slide being edited.
@@ -5319,7 +5377,7 @@ function setPictureStyle(look: PictureLook | undefined): boolean {
 }
 
 /** Slide commands that don't apply to a design's single page. */
-const SLIDE_ONLY = new Set(['compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
+const SLIDE_ONLY = new Set(['compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
   'edit-layouts', 'view-sorter', 'add-section', 'rename-section', 'remove-section', 'remove-section-slides', 'remove-all-sections', 'section-up', 'section-down', 'collapse-sections', 'expand-sections',
   'slide-transitions', 'slide-animations', 'animation-pane', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-video', 'insert-audio',
   'reading-view', 'rehearse-timings', 'record-show', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
@@ -5417,6 +5475,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'keyframe-zone': () => void keyframeCommands.zone(),
   'canvas-background': () => void keyframeCommands.background(),
   'canvas-heading': () => keyframeCommands.heading(),
+  'keyframe-spotlight': () => keyframeCommands.spotlight(),
+  'keyframe-unspot': () => keyframeCommands.unspot(),
+  'keyframe-detour': () => keyframeCommands.detour(),
+  'canvas-show-options': () => void keyframeCommands.showOptions(),
   'duplicate-slide': () => { const d = deckNow(); if (d) { finishTyping(); d.duplicate(pickedSlides()); } },
   'delete-slide': () => removeSlides(pickedSlides()),
   'cut-slides': () => copySlides(pickedSlides(), true),

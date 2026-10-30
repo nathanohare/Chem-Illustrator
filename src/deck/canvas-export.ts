@@ -9,6 +9,7 @@
 // held, so slides changed in PowerPoint since can be told apart (Reader: collapseCanvases).
 
 import { Doc, type Contents } from '../model';
+import { plainText } from '../richtext';
 import type { Selection } from '../editor/editor';
 import { units, POINTS } from '../editor/arrange';
 import type { Rect } from '../geom';
@@ -18,7 +19,9 @@ import {
   buildSteps, keepsShowing, mainAnims, partOf, partStates, slideParts,
   type Anim, type Part, type Transition,
 } from './animation';
-import { isCamera, keyRect, timedCamera, viewBetween, type CanvasData } from './canvas';
+import { compoundId, isCamera, keyRect, timedCamera, viewBetween, type CanvasData } from './canvas';
+
+export { compoundId };
 import { canvasBackgroundPicture, hasLook } from './canvas-look';
 
 /** One slide of a deck being saved (DeckData's), as far as a canvas slide's split needs it. */
@@ -138,25 +141,35 @@ function cutToView(d: Doc, view: Rect, size: SlideSize, drop: Part[]): void {
   }
 }
 
+/** A stop of the show on a canvas slide: at keyframe `key`, got to by `move` (none for the first), playing `anims` there. */
+export interface Stop { key: number; move?: Anim; anims: Anim[] }
+
 /**
- * A canvas slide's animations cut at its keyframe moves: `segs[j]` are those played while the show
- * is at keyframe j (after the move there, before the next), and `moves[j]` the move to keyframe j
- * (none for the first), timed as the show plays it.
+ * A canvas slide's animations cut at its keyframe moves: a stop for the start and one for each
+ * move (a keyframe is stopped at twice when the show comes back to it from a detour), each with
+ * the animations played there and the move there timed as the show plays it.
  */
-export function animSegments(anims: Anim[], c: CanvasData, size: SlideSize): { segs: Anim[][]; moves: (Anim | undefined)[] } {
-  const timed = timedCamera(anims, c.keys, size);
-  const segs: Anim[][] = c.keys.map(() => []);
-  const moves: (Anim | undefined)[] = c.keys.map(() => undefined);
-  let at = 0;
-  for (const a of timed) {
-    if (isCamera(a)) {
-      const j = c.keys.findIndex((k) => k.id === a.target.id);
-      if (j >= 0) { at = j; moves[j] = a; }
-      continue;
-    }
-    segs[at].push(a);
+export function animStops(anims: Anim[], c: CanvasData, size: SlideSize): Stop[] {
+  const stops: Stop[] = [{ key: 0, anims: [] }];
+  for (const a of timedCamera(anims, c.keys, size)) {
+    if (!isCamera(a)) { stops[stops.length - 1].anims.push(a); continue; }
+    const j = c.keys.findIndex((k) => k.id === a.target.id);
+    if (j >= 0) stops.push({ key: j, move: a, anims: [] });
   }
-  return { segs, moves };
+  return stops;
+}
+
+/**
+ * Where each compound ID on a canvas is first shown: the first of `views` (in the show's order)
+ * with a text of that ID in it.
+ */
+export function compoundHomes(doc: Doc, views: Rect[]): Map<string, number> {
+  const out = new Map<string, number>();
+  const ids = [...doc.captions.values()].map((c) => ({ c, id: compoundId(plainText(c.runs)) })).filter((x) => x.id);
+  views.forEach((v, j) => {
+    for (const { c, id } of ids) if (!out.has(id!) && c.x >= v.x1 && c.x <= v.x2 && c.y >= v.y1 && c.y <= v.y2) out.set(id!, j);
+  });
+  return out;
 }
 
 /**
@@ -215,19 +228,25 @@ const AT_ONCE = 0.01;
 export function splitCanvas<S extends SplitSlide>(s: S, master: Master, size: SlideSize, n = 0): S[] {
   const c = s.canvas;
   if (!c?.keys.length) return [s];
-  const uid = `${s.id ?? n}.${Date.now().toString(36)}${(++uids).toString(36)}`;
+  const uidNo = ++uids;
+  const uid = `${s.id ?? n}.${Date.now().toString(36)}${uidNo.toString(36)}`;
   const parts = slideParts(s.doc);
-  const { segs, moves } = animSegments(s.anims ?? [], c, size);
+  const stops = animStops(s.anims ?? [], c, size);
+  const segs = stops.map((x) => x.anims);
+  // compound numbers link back to the slide where the compound was first shown
+  const homes = c.show?.noLinks ? new Map<string, number>() : compoundHomes(s.doc, stops.map((x) => keyRect(c.keys[x.key], size)));
   const out: S[] = [];
+  const at: number[] = [];
   const { advanceAfter: _, ...enter } = s.transition ?? { kind: 'none' as const, dur: 0 };
   const base = (view: Rect, drop: Part[], title: string | undefined): Pick<SplitSlide, 'layout' | 'doc' | 'background'> => ({
     ...keyframeSlide(s.doc, view, title, master, size, drop),
     background: keyBackground(s, c, view, master, size),
   });
-  c.keys.forEach((k, j) => {
+  stops.forEach((stop, j) => {
+    const k = c.keys[stop.key];
     const drop = hiddenAt(parts, segs, j);
-    const move = moves[j];
-    const prev = c.keys[j - 1];
+    const move = stop.move;
+    const prev = j ? c.keys[stops[j - 1].key] : undefined;
     // a fly-over: through a zoomed-out slide that moves on by itself
     if (move && prev && move.move === 'fly') {
       const view = viewBetween(prev, k, 0.5, 'fly', size);
@@ -247,11 +266,12 @@ export function splitCanvas<S extends SplitSlide>(s: S, master: Master, size: Sl
       const last = out[out.length - 1];
       last.transition = { ...(last.transition ?? { kind: 'none', dur: 0 }), advanceAfter: Math.max(AT_ONCE, move.delay) };
     }
+    at.push(out.length);
     out.push({
       ...s,
       ...(j ? { id: undefined, notes: '', comments: undefined } : {}),
       ...base(keyRect(k, size), drop, k.title),
-      anims: segs[j],
+      anims: stop.anims,
       transition: trans,
       canvas: undefined,
       part: { uid, index: 0, count: 0 },
@@ -263,6 +283,21 @@ export function splitCanvas<S extends SplitSlide>(s: S, master: Master, size: Sl
     last.transition = { ...(last.transition ?? { kind: 'none', dur: 0 }), advanceAfter: s.transition.advanceAfter };
   }
   out.forEach((x, i) => { x.part = { ...x.part!, index: i, count: out.length }; });
+  // links to the stops' slides: by the canvas slide's id for the first, by ids of their own for the rest
+  const idOf = (j: number) => (j === 0 && s.id !== undefined ? s.id : PART_IDS + uidNo * 1000 + j);
+  if (homes.size) {
+    stops.forEach((_, j) => {
+      const x = out[at[j]];
+      if (j || s.id === undefined) x.id = idOf(j);
+      x.doc.bulk(() => {
+        for (const cap of [...x.doc.captions.values()]) {
+          const id = compoundId(plainText(cap.runs));
+          const home = id ? homes.get(id) : undefined;
+          if (home !== undefined && home < j) x.doc.updateCaption(cap.id, { runs: cap.runs.map((r) => ({ ...r, link: `#slide=${idOf(home)}` })) });
+        }
+      });
+    });
+  }
   // the first carries the canvas slide itself, to come back whole
   out[0].part!.keep = {
     layout: s.layout, contents: s.doc.contents(), notes: s.notes, canvas: c,
@@ -271,6 +306,9 @@ export function splitCanvas<S extends SplitSlide>(s: S, master: Master, size: Sl
   };
   return out;
 }
+
+/** Ids given to a canvas slide's later slides in a file, for links to them (far past any slide's own). */
+const PART_IDS = 900_000_000;
 
 /** A deck's slides with each canvas slide split into a slide for each keyframe. */
 export function splitCanvases<S extends SplitSlide>(slides: S[], master: Master, size: SlideSize): S[] {
@@ -293,9 +331,51 @@ export function slidePrint(tree: Element): string {
     for (const k of Array.from(el.children)) walk(k);
   };
   walk(tree);
-  // FNV-1a, as hex
+  return printOf(bits);
+}
+
+/** The print's bits as a short text: how many, and an FNV-1a hash of them in hex. */
+function printOf(bits: string[]): string {
   let h = 0x811c9dc5;
   const s = bits.join('\u0001');
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
   return `${bits.length}.${h.toString(16)}`;
+}
+
+const unescape = (t: string) => t.replace(/&(?:#x([0-9a-f]+)|#(\d+)|(amp|lt|gt|quot|apos));/gi, (_, hex: string, dec: string, name: string) =>
+  hex ? String.fromCodePoint(parseInt(hex, 16)) : dec ? String.fromCodePoint(Number(dec)) : ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" } as Record<string, string>)[name.toLowerCase()]);
+
+/**
+ * slidePrint of a shape tree as written here (well-formed, without a DOCTYPE), read straight from
+ * its text: the same print, without parsing it into a document.
+ */
+export function slidePrintXml(xml: string): string {
+  const bits: string[] = [];
+  // each open element: its name, its namespaces, and its text so far
+  const stack: { name: string; ns: Map<string, string>; text: string }[] = [];
+  const attr = (attrs: string, name: string): string | null => {
+    const m = new RegExp(`(?:^|\\s)${name.replace(':', '\\:')}\\s*=\\s*("([^"]*)"|'([^']*)')`).exec(attrs);
+    return m ? unescape(m[2] ?? m[3]) : null;
+  };
+  const tag = /<(\/?)([\w.-]+(?::[\w.-]+)?)((?:[^>"']|"[^"]*"|'[^']*')*?)(\/?)>|<\?[^>]*\?>|<!--[\s\S]*?-->|([^<]+)/g;
+  for (let m = tag.exec(xml); m; m = tag.exec(xml)) {
+    const [, close, qname, attrs = '', empty, text] = m;
+    if (text !== undefined) { if (stack.length) stack[stack.length - 1].text += unescape(text); continue; }
+    if (!qname) continue;
+    const top = stack[stack.length - 1];
+    if (close) {
+      const el = stack.pop();
+      if (el?.name === 't' && el.ns.get(qname.includes(':') ? qname.split(':')[0] : '')?.includes('drawingml')) bits.push(`t${el.text}`);
+      continue;
+    }
+    const ns = new Map(top?.ns ?? []);
+    for (const d of attrs.matchAll(/xmlns(?::([\w.-]+))?\s*=\s*("([^"]*)"|'([^']*)')/g)) ns.set(d[1] ?? '', unescape(d[3] ?? d[4]));
+    const [prefix, local] = qname.includes(':') ? qname.split(':') : ['', qname];
+    if (local === 'cNvPr') bits.push(`n${attr(attrs, 'name') ?? ''}`);
+    else if ((local === 'off' || local === 'ext') && top?.name === 'xfrm') bits.push(`${local}${attr(attrs, 'x') ?? attr(attrs, 'cx')},${attr(attrs, 'y') ?? attr(attrs, 'cy')}`);
+    const el = { name: local, ns, text: '' };
+    if (empty) { if (local === 't' && ns.get(prefix)?.includes('drawingml')) bits.push('t'); }
+    else stack.push(el);
+  }
+  return printOf(bits);
 }

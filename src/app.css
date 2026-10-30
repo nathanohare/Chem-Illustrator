@@ -1969,12 +1969,19 @@ dialog.command-search .cs-foot { margin: 8px 2px 0; }
 .pv-blank { position: absolute; inset: 0; display: grid; place-items: center; background: #000; color: #9aa3b5; font-size: 16px; }
 .pv-blank.white { background: #fff; color: #555; }
 .pv-blank[hidden] { display: none; }
-.pv-side { display: grid; grid-template-rows: auto auto auto minmax(0, 1fr); gap: 8px; min-height: 0; }
+.pv-side { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.pv-side > * { flex: none; }
 .pv-label { color: #9aa3b5; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
 .pv-label button { padding: 2px 8px; text-transform: none; letter-spacing: 0; }
 .pv-next { height: 30vh; }
 .pv-next canvas { display: block; }
 .pv-notes { overflow-y: auto; white-space: pre-wrap; line-height: 1.45; padding: 4px 2px; }
+.pv-side > .pv-notes { flex: 1; min-height: 0; }
+/* a canvas slide's keyframes: a click flies the show there */
+.pv-keys { display: flex; flex-wrap: wrap; gap: 4px; max-height: 18vh; overflow-y: auto; }
+.pv-keys[hidden], .pv-keys-label[hidden] { display: none; }
+.presenter-view .pv-keys button { padding: 2px 8px; max-width: 14em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.presenter-view .pv-keys button.on { background: #2b5f9e; border-color: #3f7fc8; }
 .pv-notes.muted { color: #6f7787; }
 .pv-bottom { justify-content: center; }
 .pv-count { min-width: 16em; text-align: center; color: #c6cbd4; font-variant-numeric: tabular-nums; }

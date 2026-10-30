@@ -11,10 +11,10 @@ import { Deck, WIDE, STANDARD } from '../src/deck/deck';
 import {
   addKeyframe, insertKeyframe, keyframeAround, keyRect, keyAt, keysBounds, moveKeyframe, removeKeyframe, snapKeyframe, zoomByCorner,
   canvasTag, readCanvasTag, clampZoom, ZOOM_MIN, shownRect, slidePlace, syncCamera, isCamera, distanceDur, timedCamera, viewBetween, cameraAt,
-  withCameraMoves, PARALLAX_MAX, type CanvasData,
+  withCameraMoves, wantedMoves, PARALLAX_MAX, type CanvasData,
 } from '../src/deck/canvas';
 import { routeEnds } from '../src/deck/canvas-look';
-import { keyframeDoc, animSegments, hiddenAt, splitCanvas } from '../src/deck/canvas-export';
+import { keyframeDoc, animStops, hiddenAt, splitCanvas, compoundHomes, compoundId, slidePrint, slidePrintXml } from '../src/deck/canvas-export';
 import { slideParts } from '../src/deck/animation';
 import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate';
 import { buildSteps, type Anim } from '../src/deck/animation';
@@ -359,9 +359,10 @@ describe('a canvas slide as a slide for each keyframe', () => {
     const c: CanvasData = { keys: [{ id: 1, x: 0, y: 0, zoom: 1 }, { id: 2, x: 960, y: 0, zoom: 1 }, { id: 3, x: 480, y: 0, zoom: 1 }] };
     const [m2, m3] = syncCamera([], c.keys);
     const anims = [fade({ kind: 'caption', id: p }), m2, fade({ kind: 'caption', id: q }), m3, fade({ kind: 'caption', id: p }, true)];
-    const { segs, moves } = animSegments(anims, c, size);
-    expect(segs.map((s) => s.length)).toEqual([1, 1, 1]);
-    expect(moves.map((m) => m?.target.id ?? null)).toEqual([null, 2, 3]);
+    const stops = animStops(anims, c, size);
+    const segs = stops.map((x) => x.anims);
+    expect(segs.map((x) => x.length)).toEqual([1, 1, 1]);
+    expect(stops.map((x) => x.move?.target.id ?? null)).toEqual([null, 2, 3]);
     const parts = slideParts(d);
     const text = (id: number) => parts.find((x) => x.sel.captions.has(id));
     expect(hiddenAt(parts, segs, 0)).toEqual([text(q)]);
@@ -412,5 +413,83 @@ describe('a canvas slide as a slide for each keyframe', () => {
     expect(asSlides.slides).toHaveLength(3);
     expect(asSlides.slides[2].canvas).toBeUndefined();
     expect(JSON.stringify(asSlides.slides[2].contents)).toContain('Step 2');
+  });
+});
+
+describe('show extras: detours, spotlights, compound numbers', () => {
+  const k = (id: number, x: number, detour = false) => ({ id, x, y: 0, zoom: 1, ...(detour ? { detour: true } : {}) });
+
+  it('glides back to the route after each run of detours', () => {
+    const keys = [k(1, 0), k(2, 960, true), k(3, 1920, true), k(4, 2880), k(5, 3840, true)];
+    expect(wantedMoves(keys)).toEqual([
+      { id: 2, back: false }, { id: 3, back: false }, { id: 1, back: true },
+      { id: 4, back: false }, { id: 5, back: false }, { id: 4, back: true },
+    ]);
+    const anims = syncCamera([], keys);
+    expect(anims.map((a) => [a.target.id, !!a.back])).toEqual([[2, false], [3, false], [1, true], [4, false], [5, false], [4, true]]);
+    // the show is back at keyframe 1 after the detours, and back at 4 at the end
+    const steps = buildSteps(timedCamera(anims, keys, size));
+    expect(cameraAt(steps, keys, 3, -1)).toEqual({ at: 0 });
+    expect(cameraAt(steps, keys, 6, -1)).toEqual({ at: 3 });
+    // putting the detour back on the route takes its return away, and keeps the other moves' settings
+    const tuned = anims.map((a) => (a.target.id === 4 && !a.back ? { ...a, move: 'fly' as const } : a));
+    const plain = syncCamera(tuned, keys.map((x) => (x.id === 5 ? k(5, 3840) : x)));
+    expect(plain.map((a) => [a.target.id, !!a.back])).toEqual([[2, false], [3, false], [1, true], [4, false], [5, false]]);
+    expect(plain[3].move).toBe('fly');
+  });
+
+  it('keeps spotlights, detours, show options and return moves in the tag', () => {
+    const keys = [{ ...k(1, 0), title: 'Start', spot: { x1: 10, y1: 20, x2: 300, y2: 200 } }, k(2, 960, true)];
+    const show = { dim: true, minimap: 'presenter' as const, noLinks: true };
+    const anims = syncCamera([], keys);
+    const tag = canvasTag({ keys, show }, anims);
+    expect(readCanvasTag(tag)).toEqual({ keys, show });
+    expect(withCameraMoves([], tag)).toEqual(anims.map(({ byDistance: _, ...a }) => ({ ...a, byDistance: true })));
+    // nonsense is turned down
+    const bad = JSON.stringify({ v: 1, keys: [[1, 0, 0, 1, '', '', { s: [5, 5, 1, 1], d: 0 }]], show: { minimap: 'wall', dim: 'yes' } });
+    expect(readCanvasTag(bad)).toEqual({ keys: [{ id: 1, x: 0, y: 0, zoom: 1 }], show: { dim: true } });
+  });
+
+  it('knows a compound number when it sees one, and where each compound is first shown', () => {
+    expect(['2', '12a', '(±)-7', ' 3b ', 'NaH', '1,2-diol', '1234'].map(compoundId)).toEqual(['2', '12a', '(±)-7', '3b', null, null, null]);
+    const d = new Doc();
+    d.edit('x', () => {
+      d.addCaption({ x: 100, y: 100, runs: [{ text: '7' }], justify: 'left' });
+      d.addCaption({ x: 1100, y: 100, runs: [{ text: '7' }], justify: 'left' });
+      d.addCaption({ x: 1200, y: 100, runs: [{ text: '8' }], justify: 'left' });
+    });
+    const homes = compoundHomes(d, [keyRect(k(1, 0), size), keyRect(k(2, 960), size)]);
+    expect([...homes]).toEqual([['7', 0], ['8', 1]]);
+  });
+
+  it('splits a detour into a slide for the return, and links compound numbers back to where they were made', () => {
+    const doc = new Doc();
+    doc.edit('x', () => {
+      doc.addCaption({ x: 100, y: 100, runs: [{ text: '7' }], justify: 'left' });
+      doc.addCaption({ x: 1100, y: 100, runs: [{ text: '7' }], justify: 'left' });
+    });
+    const keys = [k(1, 0), k(2, 960, true)];
+    const master = Deck.blank(new Doc()).master;
+    const out = splitCanvas({ id: 5, layout: 'blank', doc, notes: '', anims: syncCamera([], keys), canvas: { keys } }, master, size);
+    // keyframe 1, the detour, and keyframe 1 again
+    expect(out).toHaveLength(3);
+    expect(out.map((s) => s.transition?.kind ?? 'none')).toEqual(['none', 'morph', 'morph']);
+    const link = (s: typeof out[number]) => [...s.doc.captions.values()].map((c) => c.runs[0].link);
+    expect(link(out[0])).toEqual([undefined]);
+    expect(link(out[1])).toEqual(['#slide=5']);
+    // off with the show option
+    const off = splitCanvas({ id: 5, layout: 'blank', doc, notes: '', anims: syncCamera([], keys), canvas: { keys, show: { noLinks: true } } }, master, size);
+    expect(off.flatMap(link)).toEqual([undefined, undefined, undefined]);
+  });
+
+  it('prints a shape tree from its text the same as from the parsed tree', () => {
+    const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+    const xml = `<p:spTree ${NS}><p:nvGrpSpPr><p:cNvPr id="1" name=""/></p:nvGrpSpPr><p:sp><p:nvSpPr><p:cNvPr id="2" name="!!atom 3 &amp; &quot;more&quot;"/></p:nvSpPr>` +
+      `<p:spPr><a:xfrm rot="5"><a:off x="10" y="20"/><a:ext cx="300" cy="40"/></a:xfrm><a:extLst><a:ext uri="{X}"/></a:extLst></p:spPr>` +
+      `<p:txBody><a:p><a:r><a:t>7 &lt;b&gt; &#x3b1;&#946; </a:t></a:r><a:r><a:t/></a:r></a:p></p:txBody></p:sp>` +
+      `<p:graphicFrame><p:xfrm><a:off x="1" y="2"/><a:ext cx="3" cy="4"/></p:xfrm><a:graphic><t xmlns="urn:other">not drawing</t></a:graphic></p:graphicFrame></p:spTree>`;
+    const tree = new DOMParser().parseFromString(xml, 'application/xml').documentElement;
+    expect(slidePrintXml(xml)).toBe(slidePrint(tree));
+    expect(slidePrintXml(xml).startsWith('8.')).toBe(true);
   });
 });

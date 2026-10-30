@@ -6,15 +6,16 @@
 // an animation on a layer of its own. A frame of the show is then those pictures put together
 // (faded, wiped or moved as the animations say), so even big slides play smoothly.
 
-import { Doc, applyBase, captionBase, type Media, type Shape } from '../model';
+import { Doc, applyBase, captionBase, type Caption, type Media, type Shape } from '../model';
 import { playWindow, volumeAt } from './media';
 import { layoutText } from '../text/layout';
 import { measureText } from '../render/renderer';
 import { linkAtPoint } from '../links';
 import { turnAbout } from '../geom';
 import type { Deck } from './deck';
-import { paintSlide, drawDrawing, drawCanvasUnder, drawScreen, drawKeyTitle, type SlidePage } from './slide-view';
-import { cameraAt, isCamera, keyRect, shownRect, slidePlace, slideShaped, timedCamera, unionRect, viewBetween, type CameraAt } from './canvas';
+import { paintSlide, drawDrawing, drawCanvasUnder, drawScreen, drawKeyTitle, pageBase, type SlidePage } from './slide-view';
+import { drawVeil } from './canvas-look';
+import { cameraAt, compoundId, distanceDur, isCamera, keyRect, keysBounds, shownRect, slidePlace, slideShaped, timedCamera, unionRect, viewBetween, type CameraAt, type CanvasData, type Keyframe } from './canvas';
 import { selectionBox, POINTS } from '../editor/arrange';
 import type { Rect } from '../geom';
 import type { Selection } from '../editor/editor';
@@ -257,6 +258,23 @@ export class SlideFrames {
       if (span) return span.link;
     }
     return null;
+  }
+
+  /** The text at a point on the canvas (CSS pixels from its corner) that `want`s, the last one if several. */
+  textAt(px: number, py: number, want: (c: Caption) => boolean): Caption | null {
+    const { x, y, k } = this.at;
+    const p = { x: (px - x) / k, y: (py - y) / k };
+    const doc = this.doc;
+    let top: Caption | null = null;
+    for (const c of doc.captions.values()) {
+      if (c.hidden || !want(c)) continue;
+      const base = c.ph ? doc.textStyles?.[c.ph] : captionBase(doc.style);
+      const lay = layoutText(base ? { ...c, runs: applyBase(c.runs, base) } : c, base?.size ?? doc.style.captionSize, (t, s, family, style) => measureText(t, s, family, style));
+      const q = c.rot ? turnAbout(p, c, -c.rot) : p;
+      const b = lay.box, m = 2;
+      if (q.x - c.x >= b.x1 - m && q.x - c.x <= b.x2 + m && q.y - c.y >= b.y1 - m && q.y - c.y <= b.y2 + m) top = c;
+    }
+    return top;
   }
 
   /**
@@ -614,11 +632,20 @@ export class Player {
   private framesBy = new Map<string, SlideFrames>();
   /** A canvas the size of the show's, to fade a keyframe in on. */
   private scratch: HTMLCanvasElement | null = null;
-  private moving: { kind: 'transition'; from: HTMLCanvasElement | null; to?: HTMLCanvasElement; t: Transition; t0: number; morph?: MorphFrames | null; was?: number; zoom?: { rect: Rect; out: boolean } } | { kind: 'step'; t0: number } | { kind: 'trigger'; key: string; t0: number } | null = null;
+  private moving: { kind: 'transition'; from: HTMLCanvasElement | null; to?: HTMLCanvasElement; t: Transition; t0: number; morph?: MorphFrames | null; was?: number; zoom?: { rect: Rect; out: boolean } } | { kind: 'step'; t0: number } | { kind: 'trigger'; key: string; t0: number } | { kind: 'fly'; from: number; to: number; t0: number; dur: number } | null = null;
   /** Clicks played so far of each of the slide's triggers (by the trigger's key). */
   private fired = new Map<string, { done: number }>();
   /** The slides the show plays, in order (a custom show, or a range of slides); every slide not hidden when null. */
   order: number[] | null = null;
+  /**
+   * On a canvas slide, a look at another keyframe (a compound number clicked, or a keyframe picked
+   * in Presenter View's map): the keyframe the view is at until the next click flies it back.
+   */
+  private away: number | null = null;
+  /** The presenter's own screen (Presenter View): a mini-map set to show there only shows. */
+  presenter = false;
+  /** The mini-map's drawing, painted once for the slide. */
+  private mini: { id: string; frames: SlideFrames } | null = null;
   /** Show without animation (Set Up Show): every slide comes in with everything on it. */
   noAnimation = false;
   /** Go on by itself after each slide's time (Set Up Show: Using timings); off, only clicks go on. */
@@ -688,6 +715,7 @@ export class Player {
     this.i = i;
     this.framesBy.clear();
     this.keyNow = 0;
+    this.away = null;
     this.fired = new Map();
     this.done = out ? this.current.stepCount : 0;
     this.timeUp = false;
@@ -719,6 +747,7 @@ export class Player {
   /** Paint the slide again from scratch (a picture or font has loaded). */
   refresh(): void {
     this.framesBy.clear();
+    this.mini = null;
     this.paint();
   }
 
@@ -921,9 +950,9 @@ export class Player {
   /**
    * Under a canvas slide's drawing: the fill round the slide's place, the canvas's background
    * as the view `view` sees it, and the screen layer (the master's shapes and footer, and the
-   * keyframes' titles: `titles`, each with how much of it shows). Leaves `ctx` cut to the slide's place.
+   * keyframes' titles go over the drawing: drawOver). Leaves `ctx` cut to the slide's place.
    */
-  private drawUnder(ctx: CanvasRenderingContext2D, view: Rect, titles: [string | undefined, number][]): void {
+  private drawUnder(ctx: CanvasRenderingContext2D, view: Rect): void {
     const d = this.dpr, size = this.deck.size;
     const page = this.deck.page(this.i, this.keyNow);
     const box = slidePlace(this.w, this.h, { size });
@@ -938,16 +967,166 @@ export class Player {
     drawCanvasUnder(ctx, page, view, true);
     ctx.setTransform(box.k * d, 0, 0, box.k * d, box.x * d, box.y * d);
     drawScreen(ctx, page);
-    for (const [title, a] of titles) if (title && a > 0) drawKeyTitle(ctx, page, title, a);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
+
+  /**
+   * Over a canvas slide's drawing: the veils that dim what is outside keyframes' spotlights (or,
+   * with Dim Outside, outside the keyframes), each keyframe with how much of its veil shows; the
+   * keyframes' titles, each with how much of it shows; and the mini-map.
+   */
+  private drawOver(ctx: CanvasRenderingContext2D, view: Rect, veils: [Keyframe, number][], titles: [string | undefined, number][]): void {
+    const d = this.dpr, size = this.deck.size, c = this.deck.slides[this.i].canvas!;
+    const page = this.deck.page(this.i, this.keyNow), base = pageBase(page);
+    const at = this.placeOf(view);
+    ctx.setTransform(at.k * d, 0, 0, at.k * d, at.x * d, at.y * d);
+    for (const [k, a] of veils) {
+      const focus = k.spot ?? (c.show?.dim ? keyRect(k, size) : null);
+      if (focus) drawVeil(ctx, focus, base, a);
+    }
+    const box = slidePlace(this.w, this.h, { size });
+    ctx.setTransform(box.k * d, 0, 0, box.k * d, box.x * d, box.y * d);
+    for (const [title, a] of titles) if (title && a > 0) drawKeyTitle(ctx, page, title, a);
+    if (this.minimapShown(c)) this.drawMinimap(ctx, c, view, base);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+  }
+
+  private minimapShown(c: CanvasData): boolean {
+    return c.show?.minimap === 'show' || (c.show?.minimap === 'presenter' && this.presenter);
+  }
+
+  /**
+   * Where the mini-map goes: its box on the screen (CSS pixels), in the slide's bottom right
+   * corner, the part of the canvas it shows (all the keyframes) and its scale (pixels per point).
+   */
+  private minimapPlace(c: CanvasData): { box: Rect; area: Rect; k: number } {
+    const size = this.deck.size, slide = slidePlace(this.w, this.h, { size });
+    const b = keysBounds(c, size), m = 0.04 * Math.max(b.x2 - b.x1, b.y2 - b.y1);
+    const area = { x1: b.x1 - m, y1: b.y1 - m, x2: b.x2 + m, y2: b.y2 + m };
+    const sw = size.w * slide.k, sh = size.h * slide.k;
+    const k = Math.min((0.2 * sw) / (area.x2 - area.x1), (0.28 * sh) / (area.y2 - area.y1));
+    const w = (area.x2 - area.x1) * k, h = (area.y2 - area.y1) * k, gap = Math.max(6, 0.015 * sw);
+    const x2 = slide.x + sw - gap, y2 = slide.y + sh - gap;
+    return { box: { x1: x2 - w, y1: y2 - h, x2, y2 }, area, k };
+  }
+
+  /** A small map of the whole canvas in the corner, with the keyframes' outlines and where the view is. */
+  private drawMinimap(ctx: CanvasRenderingContext2D, c: CanvasData, view: Rect, base: string): void {
+    const d = this.dpr, size = this.deck.size;
+    const { box, area, k } = this.minimapPlace(c);
+    const w = box.x2 - box.x1, h = box.y2 - box.y1;
+    const id = `${this.i} ${Math.round(w)}x${Math.round(h)}`;
+    if (this.mini?.id !== id) this.mini = { id, frames: new SlideFrames({ ...this.deck.page(this.i), view: area }, this.deck.docOf(this.i), this.animsOf(this.i), w, h, d, null) };
+    ctx.save();
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    ctx.shadowColor = 'rgba(0,0,0,0.25)';
+    ctx.shadowBlur = 6;
+    ctx.fillStyle = base;
+    ctx.fillRect(box.x1, box.y1, w, h);
+    ctx.shadowColor = 'transparent';
+    ctx.globalAlpha = 0.85;
+    this.mini.frames.drawAt(ctx, { x: box.x1 - area.x1 * k, y: box.y1 - area.y1 * k, k }, this.done, -1, this.firedAt(performance.now()));
+    ctx.globalAlpha = 1;
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    const toBox = (r: Rect) => [box.x1 + (r.x1 - area.x1) * k, box.y1 + (r.y1 - area.y1) * k, (r.x2 - r.x1) * k, (r.y2 - r.y1) * k] as const;
+    ctx.lineWidth = 0.75;
+    ctx.strokeStyle = 'rgba(110,110,120,0.55)';
+    for (const key of c.keys) ctx.strokeRect(...toBox(keyRect(key, size)));
+    ctx.fillStyle = 'rgba(43,123,214,0.14)';
+    ctx.strokeStyle = '#2b7bd6';
+    ctx.lineWidth = 1.5;
+    ctx.fillRect(...toBox(view));
+    ctx.strokeRect(...toBox(view));
+    ctx.strokeStyle = 'rgba(110,110,120,0.6)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(box.x1, box.y1, w, h);
+    ctx.restore();
+  }
+
+  /** The keyframe under a point (CSS pixels) on the mini-map, if it shows: -1 off it. */
+  minimapKeyAt(px: number, py: number): number {
+    const c = this.deck.slides[this.i]?.canvas;
+    if (!c?.keys.length || !this.minimapShown(c) || this.moving) return -1;
+    const { box, area, k } = this.minimapPlace(c);
+    if (px < box.x1 || px > box.x2 || py < box.y1 || py > box.y2) return -1;
+    const q = { x: area.x1 + (px - box.x1) / k, y: area.y1 + (py - box.y1) / k };
+    const size = this.deck.size;
+    // the smallest keyframe there, else the nearest
+    let best = -1, score = Infinity;
+    c.keys.forEach((key, i) => {
+      const r = keyRect(key, size);
+      const inside = q.x >= r.x1 && q.x <= r.x2 && q.y >= r.y1 && q.y <= r.y2;
+      const sc = inside ? key.zoom - 1e6 : Math.hypot(q.x - (r.x1 + r.x2) / 2, q.y - (r.y1 + r.y2) / 2);
+      if (sc < score) { score = sc; best = i; }
+    });
+    return best;
+  }
+
+  /**
+   * On a canvas slide, the keyframe a compound number at a point (CSS pixels) takes the show to:
+   * the first keyframe that has that compound in it. -1 when there is no compound number there,
+   * the canvas's compound links are off, or the compound is from the keyframe showing.
+   */
+  compoundAt(px: number, py: number): number {
+    if (this.moving) return -1;
+    const c = this.deck.slides[this.i]?.canvas;
+    if (!c?.keys.length || c.show?.noLinks) return -1;
+    const hit = this.current.textAt(px, py, (t) => !!compoundId(plainText(t.runs)));
+    if (!hit) return -1;
+    const id = compoundId(plainText(hit.runs)), size = this.deck.size;
+    const same = [...this.deck.docOf(this.i).captions.values()].filter((t) => !t.hidden && compoundId(plainText(t.runs)) === id);
+    const home = c.keys.findIndex((k) => {
+      const r = keyRect(k, size);
+      return same.some((t) => t.x >= r.x1 && t.x <= r.x2 && t.y >= r.y1 && t.y <= r.y2);
+    });
+    return home >= 0 && home !== this.key ? home : -1;
+  }
+
+  /**
+   * Fly to keyframe `key` of the canvas slide showing. A look (`go` false): the next click flies
+   * back to where the show was. A jump (`go`): the show goes on from that keyframe.
+   */
+  flyTo(key: number, go = false): void {
+    const keys = this.deck.slides[this.i]?.canvas?.keys;
+    if (!keys?.[key]) return;
+    if (this.moving) this.finish();
+    const from = this.away ?? this.keyAfter(this.done);
+    if (go) {
+      // the first time the show gets to that keyframe
+      let d = 0;
+      while (d < this.current.stepCount && this.keyAfter(d) !== key) d++;
+      if (this.keyAfter(d) === key) { this.done = d; this.away = null; } else this.away = key;
+    } else this.away = key === this.keyAfter(this.done) ? null : key;
+    this.fly(from, key);
+  }
+
+  /** Back from a look at another keyframe to where the show was. */
+  private flyBack(): void {
+    const from = this.away!;
+    this.away = null;
+    this.fly(from, this.keyAfter(this.done));
+  }
+
+  private fly(from: number, to: number): void {
+    const keys = this.deck.slides[this.i].canvas!.keys;
+    if (from !== to) {
+      this.moving = { kind: 'fly', from, to, t0: performance.now(), dur: Math.min(1.8, distanceDur(keys[from], keys[to], this.deck.size) * 1.2) };
+      this.loop();
+    } else this.paint();
+    this.onChange();
+  }
+
+  /** Where the show is looking away to (a compound's keyframe), or null. */
+  get lookingAway(): number | null { return this.away; }
 
   /** A canvas slide at keyframe `key`: its background, screen layer and drawing. */
   private drawKey(ctx: CanvasRenderingContext2D, key: number, t: number, fired: Map<string, { done: number; t: number }>): void {
     const k = this.deck.slides[this.i].canvas!.keys[key];
+    const view = keyRect(k, this.deck.size);
     ctx.save();
-    this.drawUnder(ctx, keyRect(k, this.deck.size), [[k.title, 1]]);
+    this.drawUnder(ctx, view);
     this.framesFor(this.i, key).draw(ctx, this.done, t, fired);
+    this.drawOver(ctx, view, [[k, 1]], [[k.title, 1]]);
     ctx.restore();
   }
 
@@ -989,7 +1168,7 @@ export class Player {
     ctx.save();
     // a title the two keyframes share stays still; another cross-fades
     const e = ease(c.p);
-    this.drawUnder(ctx, view, A.title === B.title ? [[A.title, 1]] : [[A.title, 1 - e], [B.title, e]]);
+    this.drawUnder(ctx, view);
     fs.drawAt(ctx, at, this.done, t, fired);
     // the keyframes' own sharp frames over the sweep near the ends of the move
     const ends: [SlideFrames, number][] = [[fa, 1 - c.p / 0.25], [fb, (c.p - 0.75) / 0.25]];
@@ -998,12 +1177,20 @@ export class Player {
       ctx.globalAlpha = Math.min(1, a);
       fr.drawAt(ctx, at, this.done, t, fired);
     }
+    ctx.globalAlpha = 1;
+    this.drawOver(ctx, view, [[A, 1 - e], [B, e]], A.title === B.title ? [[A.title, 1]] : [[A.title, 1 - e], [B.title, e]]);
     ctx.restore();
   }
 
   /** Draw the slide showing, `t` seconds into the step being played (t < 0: none is). */
   private drawNow(ctx: CanvasRenderingContext2D, t: number, fired: Map<string, { done: number; t: number }>): void {
     if (!this.deck.slides[this.i]?.canvas) { this.current.draw(ctx, this.done, t, fired); return; }
+    const m = this.moving;
+    if (m?.kind === 'fly') {
+      this.drawMove(ctx, { from: m.from, to: m.to, p: Math.min(1, (performance.now() - m.t0) / 1000 / m.dur), move: 'fly' }, t, fired);
+      return;
+    }
+    if (this.away !== null) { this.drawKey(ctx, this.away, t, fired); return; }
     const c = this.camera(this.done, t);
     if ('from' in c) this.drawMove(ctx, c, t, fired);
     else this.drawKey(ctx, c.at, t, fired);
@@ -1061,7 +1248,7 @@ export class Player {
     const any = this.framesBy.get(String(this.keyNow)) ?? this.framesFor(this.i, this.keyNow);
     const keys = this.deck.slides[this.i]?.canvas?.keys;
     const c = keys?.length ? cameraAt(any.steps, keys, this.done, -1) : { at: 0 };
-    const k = 'at' in c ? c.at : c.from;
+    const k = this.away ?? ('at' in c ? c.at : c.from);
     if (k === this.keyNow) return any;
     this.keyNow = k;
     return this.framesFor(this.i, k);
@@ -1086,6 +1273,7 @@ export class Player {
     this.i = i;
     this.framesBy.clear();
     this.keyNow = 0;
+    this.away = null;
     this.fired = new Map();
     this.done = how.atEnd ? this.current.stepCount : 0;
     this.timeUp = false;
@@ -1124,6 +1312,7 @@ export class Player {
   /** A click: finish what is moving, else play the next animations, else go on to the next slide that isn't hidden. */
   next(): void {
     if (this.moving) { this.finish(); return; }
+    if (this.away !== null) { this.flyBack(); return; }
     if (this.done < this.current.stepCount) { this.playStep(); return; }
     if (this.beforeNextSlide()) return;
     // hidden slides (Hide Slide) are skipped, and slides not in the show's order
@@ -1135,6 +1324,7 @@ export class Player {
   /** Back: undo the last animations, else the previous slide with everything played. */
   prev(): void {
     if (this.moving) this.finish();
+    if (this.away !== null) { this.flyBack(); return; }
     if (this.done > 0 && !(this.done === 1 && this.current.steps[0]?.auto)) {
       this.done--;
       this.paint();
@@ -1195,6 +1385,19 @@ export class Player {
         if (this.moving) this.loop();
         else this.idle();
       }
+      return;
+    }
+    if (m?.kind === 'fly') {
+      if ((now - m.t0) / 1000 >= m.dur) {
+        this.moving = null;
+        this.drawNow(ctx, -1, this.firedAt(now));
+        this.videos(true);
+        this.onChange();
+        this.onIdle();
+        return;
+      }
+      this.videos(false);
+      this.drawNow(ctx, -1, this.firedAt(now));
       return;
     }
     if (m?.kind === 'trigger') {

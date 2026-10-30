@@ -53,7 +53,7 @@ import type { ChartBox } from '../sheet/chart-box';
 import { toOmml, mathText } from '../document/math';
 import { shapeMathPicture, shapeMathScale } from '../deck/equation';
 import { canvasTag, type CanvasData } from '../deck/canvas';
-import { splitCanvas, slidePrint, type CanvasPart } from '../deck/canvas-export';
+import { splitCanvas, slidePrintXml, type CanvasPart } from '../deck/canvas-export';
 
 /** Tag names (PowerPoint keeps tags when it saves). */
 export const TAG = {
@@ -773,9 +773,8 @@ class Writer {
         // (the slide number, footer and date are PowerPoint's own, and the title is one per slide)
         return k && !/^(Title|Slide Number|Footer|Date)\b/.test(name) ? `<p:cNvPr id="${sp}" name="!!${xmlAttr(k)}"` : all;
       });
-      const tree = new DOMParser().parseFromString(`<p:spTree ${XMLNS}>${GROUP}${out.join('')}</p:spTree>`, 'application/xml').documentElement;
       const { keep, ...where } = s.part;
-      part = { [TAG.canvasPart]: JSON.stringify({ ...where, print: slidePrint(tree) }), ...(keep ? { [TAG.canvasKeep]: JSON.stringify(keep) } : {}) };
+      part = { [TAG.canvasPart]: JSON.stringify({ ...where, print: slidePrintXml(`<p:spTree ${XMLNS}>${GROUP}${out.join('')}</p:spTree>`) }), ...(keep ? { [TAG.canvasKeep]: JSON.stringify(keep) } : {}) };
     }
     const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}), ...part });
     const bg = s.background ? await this.background(path, s.background) : '';

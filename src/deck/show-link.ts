@@ -28,6 +28,7 @@ export type ShowMessage =
   | { kind: 'blank'; how: 'black' | 'white' | 'end' | null }
   | { kind: 'zoom'; i: number; rect: { x1: number; y1: number; x2: number; y2: number }; out: boolean } // a zoom, its box as fractions of the slide canvas
   | { kind: 'tap'; fx: number; fy: number } // a click on a video or sound, as fractions of the canvas
+  | { kind: 'fly'; key: number; go: boolean } // a canvas slide's view flown to a keyframe: to look (back on the next click), or to go on from there
   | { kind: 'ink'; i: number; strokes: { tool: 'pen' | 'highlighter'; color: string; width: number; pts: { x: number; y: number }[] }[] }
   | { kind: 'laser'; p: { x: number; y: number } | null }
   | { kind: 'key'; key: string } // audience → presenter: a key pressed or a click there

@@ -92,12 +92,15 @@ function drawCanvasPage(ctx: CanvasRenderingContext2D, p: SlidePage, endless: bo
   ctx.restore();
 }
 
+/** The colour of a slide's background (its own, its layout's or its master's). */
+export const pageBase = (p: Pick<SlidePage, 'master' | 'layout' | 'own'>): string => backgroundColour(slideBackground(p.master, p.layout, p.own));
+
 /**
  * A canvas slide's background for the view `v` (in canvas points): everywhere when `endless`, else
  * over the view only. A PDF page gets it as a picture.
  */
 export function drawCanvasUnder(ctx: CanvasRenderingContext2D, p: SlidePage, v: Rect, endless = false): void {
-  const base = backgroundColour(slideBackground(p.master, p.layout, p.own));
+  const base = pageBase(p);
   const ink = slideColours(p.master, p.layout).textColor;
   const c = p.canvas;
   if ('picture' in ctx) {

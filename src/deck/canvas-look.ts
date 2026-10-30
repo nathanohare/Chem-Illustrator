@@ -162,3 +162,28 @@ export function canvasBackgroundPicture(c: CanvasData, size: Size, view: Rect, b
 
 /** Whether a canvas's background is more than its plain colour. */
 export const hasLook = (c: CanvasData): boolean => !!(c.look?.route || c.look?.texture || c.keys.some((k) => k.tint));
+
+/** How much a spotlight or Dim Outside dims what is outside its focus. */
+export const VEIL = 0.72;
+
+/**
+ * Dim everything outside `focus` (in the points `ctx` draws in) with a veil of the background
+ * colour `base`, `alpha` of it showing, its edge soft: it builds up over a margin round the focus.
+ */
+export function drawVeil(ctx: CanvasRenderingContext2D, focus: Rect, base: string, alpha = 1): void {
+  if (alpha <= 0) return;
+  const far = 1e7, rings = 8;
+  const pad = 0.06 * Math.max(focus.x2 - focus.x1, focus.y2 - focus.y1);
+  ctx.save();
+  ctx.fillStyle = base;
+  // each ring a little of the veil, so it is all there beyond the margin
+  ctx.globalAlpha *= 1 - (1 - VEIL * alpha) ** (1 / rings);
+  for (let i = 0; i < rings; i++) {
+    const g = (pad * i) / rings;
+    ctx.beginPath();
+    ctx.rect(-far, -far, 2 * far, 2 * far);
+    ctx.rect(focus.x1 - g, focus.y1 - g, focus.x2 - focus.x1 + 2 * g, focus.y2 - focus.y1 + 2 * g);
+    ctx.fill('evenodd');
+  }
+  ctx.restore();
+}

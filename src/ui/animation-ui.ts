@@ -469,7 +469,7 @@ export class AnimationUI {
   /** What a keyframe move is called in the pane: the keyframe it goes to, by number. */
   private moveName(a: Anim): string {
     const n = (this.hooks.deck()?.current?.canvas?.keys.findIndex((k) => k.id === a.target.id) ?? -1) + 1;
-    return `Keyframe ${n || '?'} (${MOVES.find((m) => m.id === (a.move ?? 'pan'))?.name ?? 'Pan'})`;
+    return `${a.back ? 'Back to keyframe' : 'Keyframe'} ${n || '?'} (${MOVES.find((m) => m.id === (a.move ?? 'pan'))?.name ?? 'Pan'})`;
   }
 
   /** The ribbon tab showing ('home', 'transitions' or 'animations'). */
@@ -786,7 +786,7 @@ export class AnimationUI {
       const name = document.createElement('span');
       name.className = 'an-name';
       name.textContent = cam ? this.moveName(a) : partName(doc, part) + (a.byPara ? ' (by paragraph)' : '');
-      name.title = cam ? `${animName(a)} ${this.moveName(a).replace(/^Keyframe /, '').replace(/ \(.*/, '')}, ${this.timed(i).dur} s${a.byDistance ? ' (by distance)' : ''}${a.delay ? `, after a ${a.delay} s delay` : ''}. It comes and goes with its keyframe` : `${animName(a)}${a.trigger ? `, when ${partName(doc, partOf(parts, a.trigger))} is clicked` : ''}${a.effect !== 'appear' ? `, ${a.dur} s` : ''}${a.delay ? `, after a ${a.delay} s delay` : ''}${part ? '' : '. Its object has been deleted: this animation is left out when saving'}`;
+      name.title = cam ? `${animName(a)} ${this.moveName(a).replace(/^(Back to keyframe|Keyframe) /, '').replace(/ \(.*/, '')}, ${this.timed(i).dur} s${a.byDistance ? ' (by distance)' : ''}${a.delay ? `, after a ${a.delay} s delay` : ''}. It comes and goes with its keyframe` : `${animName(a)}${a.trigger ? `, when ${partName(doc, partOf(parts, a.trigger))} is clicked` : ''}${a.effect !== 'appear' ? `, ${a.dur} s` : ''}${a.delay ? `, after a ${a.delay} s delay` : ''}${part ? '' : '. Its object has been deleted: this animation is left out when saving'}`;
       const del = document.createElement('button');
       del.type = 'button';
       del.className = 'an-del';

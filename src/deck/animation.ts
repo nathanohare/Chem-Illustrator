@@ -163,6 +163,8 @@ export interface Anim {
   /** A keyframe move (`camera`): how the view gets there, and whether its time follows the distance. */
   move?: CameraMove;
   byDistance?: boolean;
+  /** A keyframe move back from a detour to the keyframe on the main route it left. */
+  back?: boolean;
 }
 
 /** How a canvas slide's view moves to the next keyframe: a glide, a glide that pulls back on the way, a cross-fade, or straight there. */
@@ -182,7 +184,7 @@ export function newAnim(target: AnimTarget, effect: Effect, exit = false): Anim 
 }
 
 export function animName(a: Anim): string {
-  if (a.effect === 'camera') return `${MOVES.find((m) => m.id === (a.move ?? 'pan'))?.name ?? 'Pan'} to keyframe`;
+  if (a.effect === 'camera') return `${MOVES.find((m) => m.id === (a.move ?? 'pan'))?.name ?? 'Pan'} ${a.back ? 'back ' : ''}to keyframe`;
   if (a.effect === 'path') return `${PATHS.find((p) => p.id === a.pathKind)?.name ?? 'Custom Path'} (motion path)`;
   const e = EFFECTS.find((x) => x.id === a.effect)!.name;
   if (isEmphasis(a.effect)) return e;

@@ -25,6 +25,8 @@ export interface CanvasKeysHooks {
 /** The outline and tab of the keyframe picked, and of the others. */
 const PICKED = '#e8590c';
 const OTHER = '#5c7cfa';
+/** A keyframe's spotlight. */
+const SPOT = '#2f9e44';
 
 export class CanvasKeys {
   /** The keyframe picked on the slide being edited. */
@@ -88,6 +90,24 @@ export class CanvasKeys {
       const label = String(i + 1);
       const w = ctx.measureText(label).width;
       ctx.fillText(label, r.x1 + (TAB.w * px - w) / 2, r.y1 + 13 * px);
+      // a detour says so beside its number
+      if (keys[i].detour) {
+        ctx.fillStyle = colour;
+        ctx.font = `${11 * px}px system-ui, sans-serif`;
+        ctx.fillText('detour, then back', r.x1 + (TAB.w + 5) * px, r.y1 + 13 * px);
+      }
+      // its spotlight: what stays bright in the show
+      const spot = keys[i].spot;
+      if (spot && on) {
+        ctx.strokeStyle = SPOT;
+        ctx.lineWidth = 1.5 * px;
+        ctx.setLineDash([2 * px, 3 * px]);
+        ctx.strokeRect(spot.x1, spot.y1, spot.x2 - spot.x1, spot.y2 - spot.y1);
+        ctx.setLineDash([]);
+        ctx.fillStyle = SPOT;
+        ctx.font = `${11 * px}px system-ui, sans-serif`;
+        ctx.fillText('Spotlight', spot.x1 + 3 * px, spot.y2 - 4 * px);
+      }
       if (on) {
         // corner handles that zoom it
         const hs = 7 * px;
