@@ -33,7 +33,7 @@ tokio = { version = "1", default-features = false, features = ["sync", "macros"]
 # desktop only: on an iPad the App Store updates the app, and there is only ever one copy running
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-process = "2"
-tauri-plugin-updater = "2"
+tauri-plugin-updater = "2.14.1"
 tauri-plugin-single-instance = "2"
 
 # View > Developer Tools > Inspector: the web inspector in the Windows and Linux apps (it uses
