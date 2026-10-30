@@ -7,6 +7,7 @@ import { formulaFromJson } from '../chem/formula';
 import { stereoTags, StereoTags } from '../chem/stereo';
 import { molProps, substructureMatches, panelProps, massFragments, type PanelProps, type MassFragment } from '../chem/props';
 import type { MolProps } from '../sheet/properties';
+import { namerGraph, type NamerGraph } from '../chem/namer-graph';
 type InitRDKit = (opts: { locateFile: () => string }) => Promise<any>;
 
 export type ChemRequest =
@@ -22,7 +23,11 @@ export type ChemRequest =
   /** The pieces a molfile falls into when bonds (pairs of molfile atoms, 0-based) are broken. */
   | { type: 'fragments'; id: number; molblock: string; cuts: [number, number][] }
   /** The largest part `mol` shares with `ref` (both molfiles): pairs of matching atoms, [ref atom, mol atom], 0-based. */
-  | { type: 'common'; id: number; ref: string; mols: string[] };
+  | { type: 'common'; id: number; ref: string; mols: string[] }
+  /** A molfile as the systematic namer reads it, with its SMILES to check the name against. */
+  | { type: 'namerGraph'; id: number; molblock: string }
+  /** A SMILES string written the one way RDKit writes that structure, to compare two. */
+  | { type: 'canonical'; id: number; smiles: string };
 
 export interface FragmentResult {
   formula: string;
@@ -45,7 +50,9 @@ export type ChemResponse =
   | { type: 'props'; id: number; results: (MolProps | { error: string })[] }
   | { type: 'substructure'; id: number; results: (boolean | null)[]; error?: string }
   | { type: 'fragments'; id: number; results: MassFragment[] | { error: string } }
-  | { type: 'common'; id: number; results: ([number, number][] | null)[] };
+  | { type: 'common'; id: number; results: ([number, number][] | null)[] }
+  | { type: 'namerGraph'; id: number; graph: NamerGraph | null; smiles: string | null }
+  | { type: 'canonical'; id: number; smiles: string | null };
 
 let RDKit: any = null;
 const post = (m: ChemResponse) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(m);
@@ -152,6 +159,15 @@ self.onmessage = async (e: MessageEvent<ChemRequest>) => {
       const smiles = mol && mol.is_valid() ? mol.get_smiles() : null;
       mol?.delete();
       post({ type: 'molToSmiles', id: m.id, smiles });
+    } else if (m.type === 'namerGraph') {
+      const mol = RDKit.get_mol(m.molblock);
+      const ok = mol && mol.is_valid();
+      post({ type: 'namerGraph', id: m.id, graph: ok ? namerGraph(mol) : null, smiles: ok ? mol.get_smiles() : null });
+      mol?.delete();
+    } else if (m.type === 'canonical') {
+      const mol = RDKit.get_mol(m.smiles);
+      post({ type: 'canonical', id: m.id, smiles: mol && mol.is_valid() ? mol.get_smiles() : null });
+      mol?.delete();
     } else if (m.type === 'props') {
       post({ type: 'props', id: m.id, results: m.mols.map((x) => molProps(RDKit, x)) });
     } else if (m.type === 'substructure') {

@@ -65,7 +65,8 @@
     "onnxruntime-web": "1.22.0",
     "openchemlib": "9.25.1",
     "pdfjs-dist": "^6.4.299",
-    "polygon-clipping": "^0.15.7"
+    "polygon-clipping": "^0.15.7",
+    "pyodide": "314.0.7"
   },
   "private": true,
   "type": "module",

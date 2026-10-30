@@ -1507,6 +1507,10 @@ dialog.periodic-table { position: fixed; inset: 64px 16px auto auto; max-height:
 /* the Analysis panel's PubChem section */
 .pubchem { margin-top: 6px; }
 .pubchem .pc-name { overflow-wrap: anywhere; font-family: var(--ui-font); }
+.an-name { margin: 2px 0 4px; }
+.an-name .iupac { overflow-wrap: anywhere; font-size: 13px; }
+.an-name > button { display: block; margin-top: 4px; padding: 2px 8px; font-size: 12px; }
+.an-name.an-buttons { margin-top: 0; }
 .pubchem a { color: var(--accent); }
 .pc-signal { font-weight: 600; }
 .pc-danger { color: var(--slow); }
