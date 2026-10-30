@@ -2,7 +2,7 @@
 // Start the program first (npm run dev), then: node scripts/animations.mjs [address] [name …]
 // Needs Playwright with Chromium (as scripts/screenshots.mjs does) and ffmpeg. Give names
 // (smart-arrows, frames, catalytic-cycle, id-labels, spelling, name-to-structure, dark-mode,
-// metal-complex, mechanism, navigation, slide-highlights, canvas-slides, reagent-table,
+// metal-complex, mechanism, navigation, slide-highlights, canvas-slides, model-3d, page-grid, slide-references, reagent-table,
 // reaction-animation) to
 // record only those.
 
@@ -612,6 +612,157 @@ if (want('canvas-slides')) {
     }
     await inputBadge(page, null);
   }, { clip: { x: 0, y: 0, width: W, height: H }, width: 820, hold: 2000 });
+  await browser.close();
+}
+
+// ---------------------------------------------------------------- pKa and solubility estimates, and the 3-D model
+if (want('model-3d')) {
+  const { browser, page } = await open(url, { width: 1280, height: 760 });
+  const ids = await addSmiles(page, 'COc1ccc2nccc([C@@H](O)[C@@H]3C[C@@H]4CCN3C[C@@H]4C=C)c2c1', 300, 250);
+  await page.evaluate(() => window.__app.editor.fit());
+  await look(page, 2.0, 420, 250);
+  await pointer(page);
+  const c = await canvasBox(page);
+  await page.mouse.move(c.x + c.width * 0.85, c.y + c.height * 0.85);
+  // warm the 3-D builder up, so the recorded window opens at once
+  await select(page, { atoms: ids });
+  await page.evaluate(() => window.__app.command('model-3d'));
+  for (let i = 0; i < 120 && !(await page.locator('.v3d-canvas').isVisible()); i++) await page.waitForTimeout(250);
+  for (let i = 0; i < 240 && (await page.locator('.viewer3d', { hasText: 'Building' }).count()); i++) await page.waitForTimeout(250);
+  // a roomier window over the right of the drawing (it opens there again)
+  await page.evaluate(() => { const el = document.querySelector('.viewer3d'); Object.assign(el.style, { left: '640px', top: '70px', width: '600px', height: '640px' }); window.dispatchEvent(new Event('resize')); });
+  await page.waitForTimeout(500);
+  await page.locator('.viewer3d .fb-close, .viewer3d button[title^="Close"]').first().click().catch(() => {});
+  await page.evaluate(() => window.__app.editor.clearSelection());
+  await page.waitForTimeout(400);
+  await record(page, 'model-3d', async () => {
+    await page.waitForTimeout(600);
+    await tool(page, 'select');
+    const p = await atomAt(page, ids[10]);
+    await glide(page, p.x, p.y, 20);
+    await page.mouse.dblclick(p.x, p.y);
+    await page.waitForTimeout(700);
+    // the side panel's Properties: the pKa of each site, solubility, vapour pressure
+    const sum = page.locator('summary', { hasText: 'Properties' }).first();
+    await sum.scrollIntoViewIfNeeded();
+    const sb = await sum.boundingBox();
+    await glide(page, sb.x + 30, sb.y + sb.height / 2, 20);
+    await page.mouse.click(sb.x + 30, sb.y + sb.height / 2);
+    await page.waitForTimeout(500);
+    await page.mouse.wheel(0, 260);
+    await page.waitForTimeout(2200);
+    await menu(page, 'chemistry', 'model-3d');
+    for (let i = 0; i < 60 && !(await page.locator('.v3d-canvas').isVisible()); i++) await page.waitForTimeout(250);
+    for (let i = 0; i < 120 && (await page.locator('.viewer3d', { hasText: 'Building' }).count()); i++) await page.waitForTimeout(250);
+    await page.waitForTimeout(900);
+    const v = await page.locator('.v3d-canvas').boundingBox();
+    const cx = v.x + v.width / 2, cy = v.y + v.height / 2;
+    await glide(page, cx - 60, cy, 15);
+    await page.mouse.down();
+    await glide(page, cx + 120, cy + 30, 45);
+    await glide(page, cx + 40, cy - 90, 35);
+    await page.mouse.up();
+    await page.waitForTimeout(600);
+    // the next conformers, higher in energy
+    for (let i = 0; i < 2; i++) {
+      const nb = await page.locator('.viewer3d button[title^="Next conformer"]').boundingBox();
+      await glide(page, nb.x + nb.width / 2, nb.y + nb.height / 2, 15);
+      await page.mouse.click(nb.x + nb.width / 2, nb.y + nb.height / 2);
+      await page.waitForTimeout(1300);
+    }
+  }, { width: 1000, hold: 2500 });
+  await browser.close();
+}
+
+// ---------------------------------------------------------------- Canvas: pages that grow as the drawing does
+if (want('page-grid')) {
+  const { browser, page } = await open(url, { width: 1280, height: 760 });
+  await roomy(page);
+  // the first page's corner at the top left, with room for two pages across and most of two down
+  const pg = await page.evaluate(() => { const a = window.__app, r = a.renderer; r.view.scale = 0.55; r.view.ox = 24; r.view.oy = 24; a.editor.requestScene(); return a.doc.page; });
+  console.log('page', JSON.stringify(pg));
+  await pointer(page);
+  const c = await canvasBox(page);
+  await page.mouse.move(c.x + c.width * 0.9, c.y + c.height * 0.9);
+  // a route along the first page, on to a second page to the right, then down to a page below
+  const W = pg?.w ?? 540, H = pg?.h ?? 720, y0 = H * 0.45, y1 = H * 1.3;
+  const steps = [['O=Cc1ccc(Br)cc1', W * 0.22, y0], ['O=Cc1ccc(-c2ccccc2)cc1', W * 0.75, y0], ['CCOC(=O)/C=C/c1ccc(-c2ccccc2)cc1', W * 1.4, y0], ['OC/C=C/c1ccc(-c2ccccc2)cc1', W * 1.4, y1], ['O=C/C=C/c1ccc(-c2ccccc2)cc1', W * 0.75, y1]];
+  await record(page, 'page-grid', async () => {
+    await page.waitForTimeout(1200);
+    for (let i = 0; i < steps.length; i++) {
+      const [smi, x, y] = steps[i];
+      if (i) {
+        const [, px, py] = steps[i - 1];
+        const down = px === x, dir = Math.sign(x - px);
+        const tail = down ? { x, y: py + 80 } : { x: px + dir * 100, y }, head = down ? { x, y: y - 90 } : { x: x - dir * 115, y };
+        await page.evaluate(([tail, head]) => { const doc = window.__app.doc; doc.edit('Arrow', () => doc.addArrow({ tail, head, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: 10, headWidth: 3 })); window.__app.editor.changed?.(); }, [tail, head]);
+        await page.waitForTimeout(500);
+      }
+      const ids = await addSmiles(page, smi, x, y);
+      const p = await atomAt(page, ids[0]);
+      await glide(page, p.x + 20, p.y + 30, 18);
+      await page.waitForTimeout(1300);
+    }
+    await page.waitForTimeout(800);
+  }, { clip: { x: c.x, y: c.y - 30, width: c.width, height: c.height + 30 }, width: 900, hold: 2500 });
+  await browser.close();
+}
+
+// ---------------------------------------------------------------- Presentation: references at the foot of a slide, and a References slide
+if (want('slide-references')) {
+  const { browser, page } = await open(url, { width: 1280, height: 720 });
+  await page.evaluate(async () => {
+    const a = window.__app; a.ws.newSlides();
+    const t = await import('/src/deck/templates.ts');
+    const d = a.ws.active.deck; d.setMaster(t.applyTemplate(d.master, t.SLIDE_TEMPLATES.find((x) => x.id === 'harbor')));
+    a.command('new-slide');
+    const ref = (id, authors, title, journal, year, volume, pages, doi) => ({ id, type: 'article', authors, title, journal, year, volume, issue: '', pages, doi, url: '', publisher: '', note: '' });
+    d.setRefs({ list: [
+      ref('r-suzuki', ['Miyaura, Norio', 'Suzuki, Akira'], 'Palladium-Catalyzed Cross-Coupling Reactions of Organoboron Compounds', 'Chem. Rev.', '1995', '95', '2457–2483', '10.1021/cr00039a007'),
+      ref('r-hwe', ['Wadsworth, William S.', 'Emmons, William D.'], 'The Utility of Phosphonate Carbanions in Olefin Synthesis', 'J. Am. Chem. Soc.', '1961', '83', '1733–1738', '10.1021/ja01468a042'),
+      ref('r-still', ['Still, W. Clark', 'Gennari, Cesare'], 'Direct Synthesis of Z-Unsaturated Esters. A Useful Modification of the Horner-Emmons Olefination', 'Tetrahedron Lett.', '1983', '24', '4405–4408', '10.1016/S0040-4039(00)85909-2'),
+      ref('r-fulmer', ['Fulmer, Gregory R.', 'Miller, Alexander J. M.', 'Sherden, Nathaniel H.', 'Gottlieb, Hugo E.', 'Nudelman, Abraham', 'Stoltz, Brian M.', 'Bercaw, John E.', 'Goldberg, Karen I.'], 'NMR Chemical Shifts of Trace Impurities', 'Organometallics', '2010', '29', '2176–2179', '10.1021/om100106e'),
+    ] });
+  });
+  await page.waitForTimeout(600);
+  await page.evaluate(() => {
+    const doc = window.__app.doc;
+    const ph = [...doc.captions.values()].filter((c) => c.ph);
+    doc.edit('Text', () => { doc.updateCaption(ph[0].id, { runs: [{ text: 'Route to the enoate' }] }); for (const c of ph.slice(1)) doc.removeCaption(c.id); });
+    window.__app.command('fold-side');
+  });
+  await page.waitForTimeout(400);
+  await drawScheme(page, { xs: [150, 420, 740], y: 330, fit: false });
+  await fitOnSlide(page, { width: 0.9, cy: 0.55 });
+  await page.evaluate(() => window.__app.editor.clearSelection());
+  // the side panel folded away, so the slide has the room
+  await page.evaluate(() => window.__app.command('fold-side'));
+  await page.waitForTimeout(600);
+  await pointer(page);
+  const W = 1280, H = 720;
+  await page.mouse.move(W * 0.8, H * 0.85);
+  const tick = async (text) => {
+    const b = await page.locator('dialog[open] label.slide-refs-row', { hasText: text }).locator('input').boundingBox();
+    await glide(page, b.x + b.width / 2, b.y + b.height / 2, 15);
+    await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+    await page.waitForTimeout(600);
+  };
+  await record(page, 'slide-references', async () => {
+    await page.waitForTimeout(1000);
+    await menu(page, 'insert', 'slide-references');
+    await page.waitForTimeout(800);
+    await tick('Miyaura');
+    await tick('Wadsworth');
+    await page.waitForTimeout(500);
+    await press(page, 'Apply');
+    await page.waitForTimeout(1800);
+    await menu(page, 'insert', 'references-slide');
+    await page.waitForTimeout(800);
+    await press(page, 'Insert');
+    await page.waitForTimeout(800);
+    await page.evaluate(() => { const d = window.__app.ws.active.deck; d.go(d.slides.length - 1); });
+    await page.waitForTimeout(2000);
+  }, { clip: { x: 0, y: 0, width: W, height: H }, width: 900, hold: 2000 });
   await browser.close();
 }
 
