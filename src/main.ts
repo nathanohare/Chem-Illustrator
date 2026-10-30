@@ -41,6 +41,7 @@ import type { Rect, Vec } from './geom';
 import { isCurved } from './objects';
 import { captionPlaces, fragmentRuns } from './chem/fragments';
 import { toMolfile, addMolfile } from './chem/molfile';
+import { molfileOrSmiles } from './chem/text-molfile';
 import { allSpecies, captionChemWarning, captionReading, captionSpecies, chargeSign, chemicalCaptions, groupedIons, placeSpecies, speciesSmiles, type PlacedSpecies } from './chem/species';
 import { bestFit, fitMove, fitMatters } from './chem/orient';
 import { invoke, isTauri } from '@tauri-apps/api/core';
@@ -125,7 +126,7 @@ import { PAPERS, defaultPaper, orient, placeIn, inside, placeSvg, pageSvg } from
 import { printPages } from './ui/print';
 import { SHEETS } from './io/cdxml-print';
 import { dataUrl, fromDataUrl, imageSize, loadImage, onImageReady, pictureMime, showableSrc, webpToPng } from './render/images';
-import { freeRing, matchStructure, fusedRing, placeRing, sprout, ringOnAtom, ringDir } from './chem/chemgeom';
+import { freeRing, matchStructure, straightenLinear, fusedRing, placeRing, sprout, ringOnAtom, ringDir } from './chem/chemgeom';
 import { Toolbar, ToolbarItem, PaletteDef, type ToolDef } from './ui/toolbar';
 import { StylePanel, tidyStyle } from './ui/style-panel';
 import { installCombos } from './ui/combo';
@@ -1996,7 +1997,9 @@ const animateDialog = {
 const pickedCurved = (): boolean => [...editor.sel.arrows].some((id) => { const r = doc.arrows.get(id); return !!r && isCurved(r); });
 const pickedReactionArrow = (): number | undefined => [...editor.sel.arrows].find((id) => { const r = doc.arrows.get(id); return !!r && isReactionArrow(r); });
 const nameDialog = new NameDialog(async (name) => {
-  const got = await nameToMolfile(name);
+  // a SMILES string (or molfile) is drawn as it is; anything else is read as a name
+  const mb = chem.ready ? await molfileOrSmiles(name, (s) => chem.smilesToMol(s)) : null;
+  const got = mb ? { mb, attach: [], warnings: [] } : await nameToMolfile(name);
   if ('error' in got) return got;
   const c = pasteCentre();
   try {
@@ -4970,12 +4973,9 @@ async function textToStructure(text: string, style: DocStyle): Promise<{ content
   if (!t) return { error: 'Type a name or SMILES.' };
   if (!chem.ready) return { error: 'The chemistry engine is still loading; try again in a moment.' };
   let got: { mb: string; attach: number[]; warnings: string[] } | null = null;
-  if (t.includes('M  END')) got = { mb: t, attach: [], warnings: [] };
-  else if (!/\s/.test(t)) {
-    const mb = await chem.smilesToMol(t).catch(() => null);
-    if (mb) got = { mb, attach: [], warnings: [] };
-  }
-  if (!got) {
+  const mb = await molfileOrSmiles(text, (s) => chem.smilesToMol(s));
+  if (mb) got = { mb, attach: [], warnings: [] };
+  else {
     const named = await nameToMolfile(t);
     if ('error' in named) return { error: named.bad !== undefined || named.details ? `"${t}" isn't SMILES or a name that could be read. Check the spelling, or try a CAS number or a simpler name.` : named.error };
     got = named;
@@ -7265,6 +7265,8 @@ async function generalPreferences(): Promise<void> {
     { name: 'ask', label: 'Ask before changing every structure on the page when nothing is selected', type: 'checkbox', value: String(askWholeDrawing) },
     { name: 'matchStructure', label: 'New bonds match the structure they\'re added to', type: 'checkbox', value: String(matchStructure.on),
       help: 'Bonds, rings and chains added to a structure take its own bond length, line widths and colours, so a structure drawn with other settings stays consistent. Off: they always take the document\'s drawing settings.' },
+    { name: 'straightenLinear', label: 'Straighten alkynes and allenes when a bond becomes triple', type: 'checkbox', value: String(straightenLinear.on),
+      help: 'Making a bond triple (or giving an allene carbon its second double bond) swings the smaller side round so the sp carbon\'s two bonds lie in a straight line. Off: atoms stay where they are. New bonds always go straight on.' },
     { name: 'convertChemDraw', label: 'Redraw ChemDraw objects in Word files as they open', type: 'checkbox', value: String(!!docRead.convertChemDraw),
       help: 'Off: they keep the look they had in Word and become drawings when you edit one. On: each is redrawn here in the document\'s drawing style.' },
     { name: 'reviewer', label: 'Your name on tracked changes in documents', value: reviewAuthor() },
@@ -7277,6 +7279,7 @@ async function generalPreferences(): Promise<void> {
   askWholeDrawing = r.ask === 'true';
   docRead.convertChemDraw = r.convertChemDraw === 'true';
   matchStructure.on = r.matchStructure === 'true';
+  straightenLinear.on = r.straightenLinear === 'true';
   setReviewAuthor(r.reviewer ?? '');
   startView = r.startView === 'true';
   storeSettings();
@@ -7403,6 +7406,7 @@ function currentSettings(): Settings {
     ai: aiPrefs,
     convertChemDraw: !!docRead.convertChemDraw,
     matchStructure: matchStructure.on,
+    straightenLinear: straightenLinear.on,
     fileTypesOffered,
     wordObjectsOffered,
     reviewName: reviewAuthor(),
@@ -7612,6 +7616,7 @@ function applySettings(s: Settings): void {
   aiPrefs = s.ai;
   docRead.convertChemDraw = s.convertChemDraw;
   matchStructure.on = s.matchStructure;
+  straightenLinear.on = s.straightenLinear;
   fileTypesOffered = s.fileTypesOffered;
   wordObjectsOffered = s.wordObjectsOffered;
   setReviewAuthor(s.reviewName);

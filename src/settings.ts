@@ -193,6 +193,8 @@ export interface Settings {
   convertChemDraw: boolean;
   /** New bonds, rings and chains on a structure take that structure's own bond length, line widths and colours (off: the drawing style's). */
   matchStructure: boolean;
+  /** Straighten an alkyne or allene carbon left bent when a bond to it becomes triple or cumulated. */
+  straightenLinear: boolean;
   /** The Windows app has offered to open the chemistry file types (once, at its first start). */
   fileTypesOffered: boolean;
   /** The Windows app has registered its drawings as objects Word can send back to edit (once, at its first start). */
@@ -244,6 +246,7 @@ export const DEFAULT_SETTINGS: Settings = {
   scheme: DEFAULT_SCHEME_PREFS,
   keep: DEFAULT_KEEP,
   ai: DEFAULT_AI,
+  straightenLinear: true,
 };
 
 const STORAGE_KEY = 'chem-illustrator.settings';
@@ -330,6 +333,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   s.keep = parseKeepPrefs(r.keep);
   s.ai = parseAiPrefs(r.ai);
   if (Array.isArray(r.dictionary)) s.dictionary = r.dictionary.filter((w): w is string => typeof w === 'string' && w.trim() !== '').map((w) => w.trim());
+  if (typeof r.straightenLinear === 'boolean') s.straightenLinear = r.straightenLinear;
   return s;
 }
 
