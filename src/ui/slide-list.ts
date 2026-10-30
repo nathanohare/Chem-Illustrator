@@ -8,6 +8,10 @@
 // move the section with all its slides, double-click its name to rename it, right-click for the
 // section commands. Slide Sorter is the same list in a grid of larger pictures (`grid`), where
 // double-clicking a slide opens it in Normal view.
+//
+// A canvas slide's entry opens (its arrow) to a picture of each of its keyframes, in the order the
+// show plays them: click one to go to it, drag one to play it at another place, Delete or
+// right-click to take it away.
 
 import type { Deck } from '../deck/deck';
 import { paintSlide } from '../deck/slide-view';
@@ -31,10 +35,22 @@ export interface SlideListHooks {
   renameSection?(section: number): void;
   /** Slide Sorter: double-click a slide (or Enter) to open it. */
   open?(i: number): void;
+  /** The keyframes of the canvas slide being edited (Normal view's list only). */
+  keyframe?: {
+    /** The keyframe picked. */
+    picked(): number;
+    /** Go to keyframe k (on the slide being edited). */
+    go(k: number): void;
+    /** Play keyframe `from` at place `to` instead. */
+    move(from: number, to: number): void;
+    remove(k: number): void;
+    menu(x: number, y: number): void;
+  };
 }
 
 const SLIDES_TYPE = 'application/x-chem-illustrator-slides';
 const SECTION_TYPE = 'application/x-chem-illustrator-section';
+const KEYFRAME_TYPE = 'application/x-chem-illustrator-keyframe';
 
 export interface SlideListOptions {
   /** Slide Sorter: rows of larger pictures. */
@@ -58,6 +74,10 @@ export class SlideList {
   private thumbTimer = 0;
   private grid: boolean;
   thumbW: number;
+  /** Canvas slides (by id) whose keyframes are folded away in the list. */
+  private keysFolded = new Set<number>();
+  /** Each canvas slide's keyframe pictures (by slide index), when open. */
+  private keyLists = new Map<number, HTMLDivElement>();
 
   constructor(private el: HTMLElement, private hooks: SlideListHooks, opts: SlideListOptions = {}) {
     this.grid = !!opts.grid;
@@ -120,6 +140,7 @@ export class SlideList {
     const kids: HTMLElement[] = [];
     this.items = [];
     this.heads = [];
+    this.keyLists.clear();
     const spans = deck.sections.length ? deck.sectionSpans() : [{ section: null, start: 0, count: deck.slides.length }];
     for (const sp of spans) {
       const folded = !!sp.section && deck.folded.has(sp.section.id);
@@ -132,6 +153,8 @@ export class SlideList {
         const item = this.item(deck, i);
         this.items[i] = item;
         kids.push(item);
+        const keys = this.keyList(deck, i);
+        if (keys) kids.push(keys);
       }
     }
     this.list.replaceChildren(...kids, this.dropMark);
@@ -200,6 +223,22 @@ export class SlideList {
     canvas.style.width = `${this.thumbW}px`;
     canvas.style.height = `${h}px`;
     item.append(num, canvas);
+    if (s.canvas && this.hooks.keyframe && !this.grid) {
+      const open = !this.keysFolded.has(s.id);
+      const fold = document.createElement('button');
+      fold.type = 'button';
+      fold.className = 'sl-keys-fold';
+      fold.textContent = open ? '▾' : '▸';
+      fold.title = open ? 'Fold away this canvas slide\'s keyframes' : 'Show this canvas slide\'s keyframes';
+      fold.setAttribute('aria-expanded', String(open));
+      fold.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (open) this.keysFolded.add(s.id); else this.keysFolded.delete(s.id);
+        this.rebuild();
+      });
+      item.classList.add('is-canvas');
+      item.append(fold);
+    }
     if (s.notes.trim()) {
       const n = document.createElement('span');
       n.className = 'sl-has-notes';
@@ -212,6 +251,79 @@ export class SlideList {
     item.addEventListener('dragstart', (e) => this.onDragStart(e, i));
     item.addEventListener('dragend', () => { this.dragFrom = null; this.dropMark.hidden = true; });
     return item;
+  }
+
+  /** A canvas slide's keyframe pictures under its entry (none when folded, or not a canvas slide). */
+  private keyList(deck: Deck, i: number): HTMLDivElement | null {
+    const s = deck.slides[i], kf = this.hooks.keyframe;
+    if (!s.canvas || !kf || this.grid || this.keysFolded.has(s.id)) return null;
+    const list = document.createElement('div');
+    list.className = 'sl-keys';
+    list.setAttribute('role', 'group');
+    list.setAttribute('aria-label', `Keyframes of slide ${i + 1}`);
+    const w = this.keyW(), h = Math.round((w * deck.size.h) / deck.size.w);
+    // go to the slide first, then to its keyframe
+    const go = (k: number) => { if (deck.index !== i) this.hooks.go(i); kf.go(k); };
+    s.canvas.keys.forEach((_, k) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sl-key';
+      b.dataset.k = String(k);
+      b.draggable = true;
+      b.title = `Keyframe ${k + 1}: click to go to it, drag to play it at another place, right-click for more`;
+      const n = document.createElement('span');
+      n.className = 'sl-key-num';
+      n.textContent = String(k + 1);
+      const c = document.createElement('canvas');
+      c.style.width = `${w}px`;
+      c.style.height = `${h}px`;
+      b.append(n, c);
+      b.addEventListener('click', (e) => { e.stopPropagation(); go(k); });
+      b.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); go(k); kf.menu(e.clientX, e.clientY); });
+      b.addEventListener('keydown', (e) => {
+        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+        e.preventDefault();
+        e.stopPropagation();
+        go(k);
+        kf.remove(k);
+      });
+      b.addEventListener('dragstart', (e) => {
+        e.stopPropagation();
+        e.dataTransfer?.setData(KEYFRAME_TYPE, `${s.id}:${k}`);
+        if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+      });
+      b.addEventListener('dragover', (e) => {
+        if (!e.dataTransfer?.types.includes(KEYFRAME_TYPE)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = 'move';
+      });
+      b.addEventListener('drop', (e) => {
+        const [sid, from] = (e.dataTransfer?.getData(KEYFRAME_TYPE) ?? '').split(':').map(Number);
+        if (sid !== s.id || !Number.isFinite(from)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (deck.index !== i) this.hooks.go(i);
+        if (from !== k) kf.move(from, k);
+      });
+      list.append(b);
+    });
+    this.keyLists.set(i, list);
+    return list;
+  }
+
+  /** Width of a keyframe's picture, in pixels. */
+  private keyW(): number {
+    return Math.max(48, Math.round(this.thumbW * 0.72));
+  }
+
+  /** The keyframe picked on the slide being edited is marked in its list. */
+  markKeyframe(): void {
+    const deck = this.deck;
+    const k = this.hooks.keyframe?.picked() ?? -1;
+    for (const [i, list] of this.keyLists) {
+      for (const b of list.querySelectorAll<HTMLElement>('.sl-key')) b.classList.toggle('current', i === deck?.index && Number(b.dataset.k) === k);
+    }
   }
 
   /** Another slide is being edited: only the marks move (the pictures stay as they are). */
@@ -232,6 +344,7 @@ export class SlideList {
       it.classList.toggle('picked', this.picked.has(i));
       it.setAttribute('aria-selected', String(this.picked.has(i)));
     });
+    this.markKeyframe();
   }
 
   /** The list got wider or narrower: the pictures take the new width at once, and are painted sharp again with `paint`. */
@@ -267,6 +380,16 @@ export class SlideList {
     const canvas = item.querySelector('canvas')!;
     const h = Math.round((this.thumbW * deck.size.h) / deck.size.w);
     paintSlide(canvas, this.thumbW, h, window.devicePixelRatio || 1, deck.page(i), deck.docOf(i));
+    const keys = this.keyLists.get(i);
+    if (keys) {
+      const w = this.keyW(), kh = Math.round((w * deck.size.h) / deck.size.w);
+      for (const c of keys.querySelectorAll('canvas')) {
+        const k = Number((c.parentElement as HTMLElement).dataset.k);
+        c.style.width = `${w}px`;
+        c.style.height = `${kh}px`;
+        paintSlide(c, w, kh, window.devicePixelRatio || 1, deck.page(i, k), deck.docOf(i));
+      }
+    }
   }
 
   // ---------------------------------------------------------------- picking

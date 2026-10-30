@@ -52,7 +52,7 @@ export class PresenterView {
   private pausedAt: number | null = null;
   private tick = 0;
   private notesSize = 20;
-  private els!: { cur: HTMLDivElement; canvas: HTMLCanvasElement; next: HTMLCanvasElement; nextBox: HTMLDivElement; nextLabel: HTMLElement; notes: HTMLDivElement; count: HTMLElement; timer: HTMLElement; clock: HTMLElement; pause: HTMLButtonElement; where: HTMLElement; blank: HTMLElement };
+  private els!: { cur: HTMLDivElement; canvas: HTMLCanvasElement; keys: HTMLDivElement; keysLabel: HTMLElement; next: HTMLCanvasElement; nextBox: HTMLDivElement; nextLabel: HTMLElement; notes: HTMLDivElement; count: HTMLElement; timer: HTMLElement; clock: HTMLElement; pause: HTMLButtonElement; where: HTMLElement; blank: HTMLElement };
   private keyHandler = (e: KeyboardEvent) => this.onKey(e);
   private sizer = new ResizeObserver(() => this.layout());
   private wasFullscreen = false;
@@ -99,6 +99,8 @@ export class PresenterView {
         <div class="pv-side">
           <div class="pv-label pv-next-label">Next</div>
           <div class="pv-next"><canvas></canvas></div>
+          <div class="pv-label pv-keys-label" hidden>Keyframes</div>
+          <div class="pv-keys" hidden title="Fly the show to a keyframe; it goes on from there"></div>
           <div class="pv-label">Notes
             <span class="pv-gap"></span>
             <button type="button" data-pv="smaller" title="Smaller notes" aria-label="Smaller notes">A−</button>
@@ -114,7 +116,7 @@ export class PresenterView {
       </div>`;
     const q = <T extends HTMLElement>(s: string) => root.querySelector<T>(s)!;
     this.els = {
-      cur: q('.pv-cur'), canvas: q('.pv-cur canvas'), next: q('.pv-next canvas'), nextBox: q('.pv-next'), nextLabel: q('.pv-next-label'),
+      cur: q('.pv-cur'), canvas: q('.pv-cur canvas'), keys: q('.pv-keys'), keysLabel: q('.pv-keys-label'), next: q('.pv-next canvas'), nextBox: q('.pv-next'), nextLabel: q('.pv-next-label'),
       notes: q('.pv-notes'), count: q('.pv-count'), timer: q('.pv-timer'), clock: q('.pv-clock'), pause: q('[data-pv="pause"]'), where: q('.pv-where'), blank: q('.pv-blank'),
     };
     this.els.notes.style.fontSize = `${this.notesSize}px`;
@@ -122,6 +124,8 @@ export class PresenterView {
     root.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-pv]');
       if (b) { this.button(b.dataset.pv!); return; }
+      const kb = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-pv-key]');
+      if (kb) { if (!this.blank) this.actions?.fly(Number(kb.dataset.pvKey), true); return; }
       if ((e.target as HTMLElement).closest('.show-tools')) return;
       if ((e.target as HTMLElement).closest('.pv-cur')) {
         const r = this.els.canvas.getBoundingClientRect();
@@ -136,6 +140,7 @@ export class PresenterView {
     this.els.cur.addEventListener('contextmenu', (e) => { e.preventDefault(); this.prev(); });
     const player = (this.player = new Player(this.els.canvas, deck, '#111317'));
     player.order = opts.order ?? null;
+    player.presenter = true;
     player.noAnimation = !!opts.noAnimation;
     player.noNarration = !!opts.noNarration;
     player.useTimings = !opts.manual;
@@ -148,6 +153,7 @@ export class PresenterView {
       go: (i) => this.go(i, false), next: () => this.next(), prev: () => this.prev(), end: () => this.stop(), open: (link) => void followLink(link),
       zoomed: (i, rect, out) => this.link?.send({ kind: 'zoom', i, rect: frac(rect), out }),
       tapped: (fx, fy) => this.link?.send({ kind: 'tap', fx, fy }),
+      flew: (key, go) => this.link?.send({ kind: 'fly', key, go }),
     }));
     const ink = (this.ink = new ShowInk(this.els.cur, this.els.canvas, {
       slide: () => player.i, place: () => player.slidePlace,
@@ -319,7 +325,9 @@ export class PresenterView {
     if (!this.root || !this.deck || !this.player) return;
     const i = this.player.i, n = this.deck.slides.length;
     const steps = this.player.stepCount, done = this.player.done;
-    this.els.count.textContent = `Slide ${i + 1} of ${n}${steps ? ` · animation ${done} of ${steps}` : ''}`;
+    const keys = this.deck.slides[i].canvas?.keys.length ?? 0;
+    this.els.count.textContent = `Slide ${i + 1} of ${n}${keys ? ` · keyframe ${this.player.key + 1} of ${keys}` : ''}${steps ? ` · animation ${done} of ${steps}` : ''}`;
+    this.keyMap();
     this.els.notes.textContent = this.deck.slides[i].notes || 'No notes for this slide.';
     this.els.notes.classList.toggle('muted', !this.deck.slides[i].notes);
     this.els.where.textContent = this.audience === 'other-screen' ? 'Audience: full screen on the second screen'
@@ -330,6 +338,27 @@ export class PresenterView {
     b.textContent = this.blank === 'end' ? 'End of slide show. Next ends it.' : this.blank === 'white' ? 'White screen (press W or click to go back)' : 'Black screen (press B or click to go back)';
     b.className = `pv-blank ${this.blank ?? ''}`;
     this.paintNext();
+  }
+
+  /** On a canvas slide, a button for each keyframe (the one showing lit): a click flies the show there. */
+  private keyMap(): void {
+    const keys = this.deck!.slides[this.player!.i].canvas?.keys ?? [];
+    const box = this.els.keys;
+    box.hidden = this.els.keysLabel.hidden = keys.length < 2;
+    const id = `${this.player!.i}:${keys.map((k) => `${k.id} ${k.title ?? ''}`).join('|')}`;
+    if (box.dataset.for !== id) {
+      box.dataset.for = id;
+      box.replaceChildren(...keys.map((k, n) => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.dataset.pvKey = String(n);
+        b.textContent = k.title ? `${n + 1}. ${k.title}` : String(n + 1);
+        b.title = `Fly to keyframe ${n + 1}${k.title ? `: ${k.title}` : ''}${k.detour ? ' (a detour)' : ''}`;
+        return b;
+      }));
+    }
+    const on = this.player!.key;
+    box.querySelectorAll<HTMLButtonElement>('button').forEach((b, n) => b.classList.toggle('on', n === on));
   }
 
   private layout(): void {
@@ -343,14 +372,18 @@ export class PresenterView {
   private paintNext(): void {
     if (!this.root || !this.deck || !this.player) return;
     // the next slide the show plays (hidden slides are skipped)
-    const d = this.deck, i = this.player.after(this.player.i);
+    const d = this.deck, now = this.player.i;
+    // on a canvas slide, the keyframe the next click moves to comes first
+    const after = this.player.keyAfter(this.player.done + 1);
+    const nextKey = d.slides[now].canvas && this.player.done < this.player.stepCount && after !== this.player.key ? after : -1;
+    const i = nextKey >= 0 ? now : this.player.after(now);
     const box = this.els.nextBox.getBoundingClientRect();
     const w = Math.max(1, box.width), h = Math.max(1, Math.min(box.height, (box.width * d.size.h) / d.size.w));
     const c = this.els.next;
     c.style.width = `${w}px`;
     c.style.height = `${h}px`;
     const more = this.player.done < this.player.stepCount;
-    this.els.nextLabel.textContent = more ? 'Next: more of this slide, then' : 'Next';
+    this.els.nextLabel.textContent = nextKey >= 0 ? 'Next: on to keyframe' : more ? 'Next: more of this slide, then' : 'Next';
     if (i < 0) {
       const ctx = c.getContext('2d')!;
       const dpr = window.devicePixelRatio || 1;
@@ -363,7 +396,7 @@ export class PresenterView {
       ctx.fillText('End of slide show', 12, 24);
       return;
     }
-    paintSlide(c, w, h, window.devicePixelRatio || 1, d.page(i), d.docOf(i), '#111317');
+    paintSlide(c, w, h, window.devicePixelRatio || 1, d.page(i, Math.max(0, nextKey)), d.docOf(i), '#111317');
   }
 
   private async fullscreen(on: boolean): Promise<void> {
