@@ -39,6 +39,7 @@ import type { Rect, Vec } from './geom';
 import { isCurved } from './objects';
 import { captionPlaces, fragmentRuns } from './chem/fragments';
 import { toMolfile, addMolfile } from './chem/molfile';
+import { molfileOrSmiles } from './chem/text-molfile';
 import { allSpecies, captionChemWarning, captionReading, captionSpecies, chargeSign, chemicalCaptions, groupedIons, placeSpecies, speciesSmiles, type PlacedSpecies } from './chem/species';
 import { bestFit, fitMove, fitMatters } from './chem/orient';
 import { invoke, isTauri } from '@tauri-apps/api/core';
@@ -1983,7 +1984,9 @@ const animateDialog = {
 const pickedCurved = (): boolean => [...editor.sel.arrows].some((id) => { const r = doc.arrows.get(id); return !!r && isCurved(r); });
 const pickedReactionArrow = (): number | undefined => [...editor.sel.arrows].find((id) => { const r = doc.arrows.get(id); return !!r && isReactionArrow(r); });
 const nameDialog = new NameDialog(async (name) => {
-  const got = await nameToMolfile(name);
+  // a SMILES string (or molfile) is drawn as it is; anything else is read as a name
+  const mb = chem.ready ? await molfileOrSmiles(name, (s) => chem.smilesToMol(s)) : null;
+  const got = mb ? { mb, attach: [], warnings: [] } : await nameToMolfile(name);
   if ('error' in got) return got;
   const c = pasteCentre();
   try {
@@ -4939,12 +4942,9 @@ async function textToStructure(text: string, style: DocStyle): Promise<{ content
   if (!t) return { error: 'Type a name or SMILES.' };
   if (!chem.ready) return { error: 'The chemistry engine is still loading; try again in a moment.' };
   let got: { mb: string; attach: number[]; warnings: string[] } | null = null;
-  if (t.includes('M  END')) got = { mb: t, attach: [], warnings: [] };
-  else if (!/\s/.test(t)) {
-    const mb = await chem.smilesToMol(t).catch(() => null);
-    if (mb) got = { mb, attach: [], warnings: [] };
-  }
-  if (!got) {
+  const mb = await molfileOrSmiles(text, (s) => chem.smilesToMol(s));
+  if (mb) got = { mb, attach: [], warnings: [] };
+  else {
     const named = await nameToMolfile(t);
     if ('error' in named) return { error: named.bad !== undefined || named.details ? `"${t}" isn't SMILES or a name that could be read. Check the spelling, or try a CAS number or a simpler name.` : named.error };
     got = named;
