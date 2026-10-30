@@ -1,4 +1,4 @@
-// Insert > Slides > References on Slide (also the slide's right-click menu): tick which of the
+// Insert > Presentation > References on Slide (also the slide's right-click menu): tick which of the
 // presentation's references the slide shows at its foot, and how the lines look: the short form,
 // the first author and the short form, or the full reference; numbered or not; where on the slide;
 // their size and colour. Apply keeps the look for the slides picked; Apply to All uses it on every
@@ -153,7 +153,7 @@ export function editSlideRefs(input: SlideRefsInput): Promise<SlideRefsResult | 
     form.addEventListener('input', showPreview);
     form.addEventListener('change', showPreview);
 
-    const note = el('p', 'muted small', `Ticks are for the ${input.picked > 1 ? `${input.picked} slides picked` : 'slide being edited'}. Apply gives ${input.picked > 1 ? 'them' : 'it'} this look of its own; Apply to All uses the look on every slide. The References slide (Insert > Slides > References Slide) lists them all.`);
+    const note = el('p', 'muted small', `Ticks are for the ${input.picked > 1 ? `${input.picked} slides picked` : 'slide being edited'}. Apply gives ${input.picked > 1 ? 'them' : 'it'} this look of its own; Apply to All uses the look on every slide. The References slide (Insert > Presentation > References Slide) lists them all.`);
     const buttons = el('p', 'ask-buttons');
     const cancel = el('button', '', 'Cancel');
     cancel.type = 'button';

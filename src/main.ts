@@ -3743,7 +3743,7 @@ function openReferences(): Promise<void> {
   return referencesWindow.open();
 }
 
-/** Insert > Slides > References on Slide: which of the presentation's references the slides picked show at their foot, and how. */
+/** Insert > Presentation > References on Slide: which of the presentation's references the slides picked show at their foot, and how. */
 async function slideReferences(): Promise<void> {
   const d = deckNow();
   if (!d?.current) return;
@@ -3776,7 +3776,7 @@ async function slideReferences(): Promise<void> {
   }
 }
 
-/** Insert > Slides > References Slide: a slide after the last one listing the references the slides show (or all of them), kept up to date. */
+/** Insert > Presentation > References Slide: a slide after the last one listing the references the slides show (or all of them), kept up to date. */
 async function referencesSlide(): Promise<void> {
   const d = deckNow();
   if (!d || ws.active.mode !== 'slides') return;

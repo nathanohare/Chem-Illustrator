@@ -541,7 +541,7 @@ export class ReferencesDialog {
     });
     d.append(
       el('div', { className: 'refs-head' }, el('h2', { textContent: 'References' }), this.search),
-      el('p', { className: 'muted', textContent: 'The references of every open file, each file in its own group. A document cites them (References > Insert Citation); a presentation shows them at the foot of its slides (Insert > Slides > References on Slide). Copy references between files with Copy To, by dragging them onto a file\'s name, or with Ctrl+C and Ctrl+V: each file keeps its own copy.' }),
+      el('p', { className: 'muted', textContent: 'The references of every open file, each file in its own group. A document cites them (References > Insert Citation); a presentation shows them at the foot of its slides (Insert > Presentation > References on Slide). Copy references between files with Copy To, by dragging them onto a file\'s name, or with Ctrl+C and Ctrl+V: each file keeps its own copy.' }),
       this.hint,
       el('div', { className: 'ask-row refs-style' }, el('label', { htmlFor: 'refs-style', textContent: 'Citation style' }), this.styleSel,
         button('Style Options…', 'Change any detail of the style: authors, "and", et al., title, year, volume, issue, article numbers, DOI…', () => void this.styleOptions())),
