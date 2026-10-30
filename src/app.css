@@ -1536,6 +1536,18 @@ dialog.refs-dialog > p { margin: 4px 0; max-width: 80ch; }
 .refs-table tr.uncited td:nth-child(4) { color: var(--muted); }
 .refs-table tr.picked td { background: var(--accent-soft); }
 .refs-buttons { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; margin-top: 10px; }
+.refs-table tr.refs-group th { position: static; background: var(--panel); cursor: pointer; font-weight: 600; padding: 5px 6px; border-top: 1px solid var(--line); user-select: none; }
+.refs-table tr.refs-group.current th { color: var(--accent); }
+.refs-table tr.refs-group.drop th { background: var(--accent-soft); outline: 1px dashed var(--accent); }
+.refs-hint:empty { display: none; }
+.refs-edit select { font: inherit; }
+dialog.slide-refs-dialog, dialog.insert-refs-dialog { width: min(94vw, 640px); }
+.slide-refs-list { max-height: 34vh; overflow: auto; border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; margin: 6px 0 8px; }
+.slide-refs-row { display: flex; gap: 6px; align-items: baseline; padding: 2px 0; font-size: 12px; }
+.slide-refs-sub { margin: 8px 0 2px; font-size: 12px; }
+.slide-refs-preview { border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; min-height: 2.4em; font-size: 12px; background: var(--panel); }
+.slide-refs-preview p { margin: 0 0 2px; }
+.slide-refs-colour { display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; }
 .refs-buttons > span { display: flex; flex-wrap: wrap; gap: 6px; }
 dialog.ref-edit { width: min(94vw, 620px); }
 dialog.ref-edit form { margin: 0; }
