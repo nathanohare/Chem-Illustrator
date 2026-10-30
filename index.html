@@ -51,7 +51,7 @@
     </div>
     <hr />
         <button role="menuitem" data-cmd="drawing-style" title="How structures are drawn: a journal's style (ACS, RSC, Nature…) or your own, with every number changeable">Drawing Style…</button>
-        <button role="menuitem" data-modes="drawing" data-cmd="page-setup" title="The drawing's paper size (Letter, A4… or your own) and way up, whether it adds pages as it grows, and the default for new drawings">Page Setup…</button>
+        <button role="menuitem" data-modes="drawing" data-cmd="page-setup" title="The drawing's paper size (Letter, A4… or your own) and way up, whether it adds pages as it grows or keeps to a set number, its fixed edges, and the default for new drawings">Page Setup…</button>
     <hr />
     <div class="submenu" data-modes="drawing slides design">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Import</button>
@@ -217,7 +217,9 @@
     <button role="menuitemcheckbox" aria-checked="true" data-modes="drawing" data-cmd="edge-arrows" title="Arrows at the edge of the window pointing to structures scrolled out of sight: click one to go there"><span>Edge Arrows</span></button>
     <button role="menuitemcheckbox" aria-checked="false" data-modes="drawing" data-cmd="dot-grid" title="Faint dots behind the drawing, on screen only (never saved, printed or copied)"><span>Dot Grid</span></button>
     <button role="menuitemcheckbox" aria-checked="false" data-modes="drawing" data-cmd="outside-tint" title="A faint tint on the empty space beyond everything drawn, on screen only"><span>Tint Outside the Drawing</span></button>
+    <button role="menuitemcheckbox" aria-checked="true" data-modes="drawing" data-cmd="page-grid" title="The drawing's pages: empty pages grey, page boundaries dashed, fixed edges hatched; pages are added as the drawing grows"><span>Page Grid</span></button>
     <hr />
+    <button role="menuitem" data-modes="drawing" data-cmd="page-grid-settings" title="How the page boundaries look, the grey of empty pages, fixed edges, and what a paste past a fixed edge does">Page Grid Settings…</button>
     <button role="menuitem" data-modes="drawing" data-cmd="navigation-settings" title="Navigator corner and size, what the edge arrows point to, dot spacing, tint strength and the status bar buttons">Navigation Settings…</button>
     </div>
     </div>

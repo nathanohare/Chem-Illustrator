@@ -11,6 +11,7 @@ import { paperOf } from './cdxml-print';
 import { lipDirection } from '../chem/polymer';
 import { Doc, Atom, Bond, BondDisplay, TextRun, Arrow, Shape, Entity, Kind, StereoLabel, Caption, StepRoles, MorphStep, CHIRAL_FLAGS, PARTIAL, PAPER, type Pin, type PictureFx, type ShapeMath } from '../model';
 import { TEXT_TAG, parseTextTag, runsFromChemDraw } from '../text/chemdraw-text';
+import { readPageTag } from '../page-grid';
 import { DocStyle } from '../style';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
 import { addNicknames } from '../chem/labels';
@@ -125,6 +126,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       const pw = sheet ? sheet.w - 72 : w, ph = sheet ? sheet.h - 72 : h;
       const paper = PAPER.find((p) => (Math.abs(p.w - pw) < 2 && Math.abs(p.h - ph) < 2) || (Math.abs(p.w - ph) < 2 && Math.abs(p.h - pw) < 2));
       doc.page = { w, h, grow: true, ...(paper ? { name: paper.name } : {}), ...(wp > 1 ? { across: wp } : {}), ...(hp > 1 ? { down: hp } : {}) };
+      // this program's page grid: which edges are fixed, and whether it is kept to its pages
+      const grid = readPageTag(kids(pg!).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === PAGE_TAG)?.getAttribute('Value'));
+      if (grid) Object.assign(doc.page, grid);
     }
   }
 
@@ -1096,6 +1100,8 @@ export const SPOKES_TAG = 'Chem Illustrator spokes';
 export const HIGHLIGHT_LOOK_TAG = 'Chem Illustrator highlight look';
 /** The tag that keeps a contracted label's group (SMILES), so its chemistry comes back with the file. */
 export const GROUP_TAG = 'Chem Illustrator group';
+/** On the page: its page grid's fixed edges, and whether it grows (page-grid.ts). */
+export const PAGE_TAG = 'Chem Illustrator page grid';
 /** The tag on turned text: degrees clockwise about the start of its first line (ChemDraw shows it level). */
 export const TURN_TAG = 'Chem Illustrator turn';
 /** The tag on the group that draws a design shape in ChemDraw: the shape as it is here. */

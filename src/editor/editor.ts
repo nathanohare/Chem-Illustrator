@@ -25,6 +25,7 @@ import { ASCENT, blankRoomAt } from '../text/layout';
 import { cellAlign, insertRow, nextCell, partAt, partRuns, setColumnWidth, setPart, spanOf, NOTE_SCALE, type TablePart } from '../table';
 import { slideCellLook, styledRuns, unstyledRuns } from '../deck/table-styles';
 import { Vec, Rect, add, sub, mul, norm, dist, dot, distToSegment, rectContains, angleOf, fromAngle, snapAngle, perp, DEG, exitParam, lockAxis, turnAbout, turnedCorners, normDegrees } from '../geom';
+import { clampMove, inWalls } from '../page-grid';
 
 /** A change to a text box's settings from the ribbon (see Editor.setTextBox). */
 export type TextBoxChange =
@@ -236,6 +237,8 @@ interface Drag {
   guide?: { box: Rect; targets: GuideTarget[]; stops?: { xs: number[]; ys: number[] } };
   /** The selection's box where the move started (for snapping to the grid and drawing guides). */
   snapBox?: Rect;
+  /** The selection's box where a move started, kept inside the page grid's fixed edges. */
+  wallBox?: Rect;
   /** How far the selection has been moved so far. */
   applied?: Vec;
   /** Drawing a template: the ways it can go here, and which one is picked (Tab, or the pointer). */
@@ -825,13 +828,13 @@ export class Editor {
     // the Sketch tool (or the pen, when it always sketches): ink, read when the pen lifts
     if (e.button === 0 && !this.painter && (this.tool.kind === 'sketch' || this.options.penSketch && e.pointerType === 'pen')) {
       this.r.overlay.setPointerCapture(e.pointerId);
-      const p = this.docPoint(e), rect = this.r.overlay.getBoundingClientRect();
+      const p = this.wallPoint(this.docPoint(e)), rect = this.r.overlay.getBoundingClientRect();
       this.drag = { start: p, startScreen: { x: e.clientX - rect.left, y: e.clientY - rect.top }, hit: null, button: 0, moved: false, shift: e.shiftKey, alt: e.altKey, ctrl: false, mode: 'sketch', last: p, path: [p] };
       return;
     }
     this.keyHot = null;
     this.r.overlay.setPointerCapture(e.pointerId);
-    const p = this.docPoint(e);
+    const p = this.wallPoint(this.docPoint(e));
     const rect = this.r.overlay.getBoundingClientRect();
     // drawing a curved arrow through points: each press puts the next point down (drag out from it to set the way the arrow runs through it)
     if (this.route && e.button === 0) {
@@ -884,7 +887,7 @@ export class Editor {
   }
 
   private onMove(e: PointerEvent): void {
-    const p = this.docPoint(e);
+    const p = this.wallPoint(this.docPoint(e));
     this.pointer = p;
     // (a card or menu closing over the drawing leaves the mouse on it without a pointerenter)
     this.pointerInside = true;
@@ -922,7 +925,7 @@ export class Editor {
     }
     if (d.mode === 'sketch') {
       // every point the pen reported, for smooth ink
-      for (const c of e.getCoalescedEvents?.() ?? [e]) d.path!.push(this.docPoint(c));
+      for (const c of e.getCoalescedEvents?.() ?? [e]) d.path!.push(this.wallPoint(this.docPoint(c)));
       d.moved = true;
       d.last = d.path![d.path!.length - 1];
       this.requestOverlay(e.timeStamp);
@@ -1005,6 +1008,12 @@ export class Editor {
       if (d.hit?.kind === 'atom' && d.charge === undefined && !d.ctrl && !e.altKey) {
         const t = this.joinTarget(d.hit.id, add(this.doc.atoms.get(d.hit.id)!, sub(to, done)));
         if (t) { d.joinTo = t.id; to = add(done, sub(t, this.doc.atoms.get(d.hit.id)!)); this.guideLines = []; }
+      }
+      // nothing goes past a fixed edge of the page grid
+      const walls = this.walls?.();
+      if (walls) {
+        if (!d.wallBox) { const b = this.selBox(); if (b) d.wallBox = { x1: b.x1 - done.x, y1: b.y1 - done.y, x2: b.x2 - done.x, y2: b.y2 - done.y }; }
+        if (d.wallBox) to = clampMove(d.wallBox, to, walls);
       }
       this.moveSelection(to.x - done.x, to.y - done.y);
       // arrows and lone pairs stuck to what moves go along with it as it goes
@@ -1137,7 +1146,7 @@ export class Editor {
     this.drag = null;
     if (!d) return;
     if (d.moved) this.showPointer(e.ctrlKey || e.metaKey);
-    const p = this.docPoint(e);
+    const p = this.wallPoint(this.docPoint(e));
     if (d.mode === 'sketch') {
       // a stroke we cancel ourselves (two fingers came down, or a long press) is not ink; one the
       // system cancels at the lift (Safari does, when iPadOS wants the pencil) still is
@@ -1329,6 +1338,14 @@ export class Editor {
 
   /** What the wheel scrolls over: it stops at this (with half a screen of room) as the scroll bars do. */
   scrollArea: (() => { x1: number; y1: number; x2: number; y2: number } | null) | null = null;
+  /** The fixed edges of the drawing's page grid (page-grid.ts): nothing is put or moved past them. Null: none. */
+  walls: (() => Rect | null) | null = null;
+
+  /** A point on the drawing kept inside the page grid's fixed edges. */
+  private wallPoint(p: Vec): Vec {
+    const w = this.walls?.();
+    return w ? inWalls(p, w) : p;
+  }
 
   /** What Fit shows instead of the whole drawing (the slide, in Slides mode). */
   fitArea: (() => { x1: number; y1: number; x2: number; y2: number }) | null = null;
@@ -3802,6 +3819,9 @@ export class Editor {
       this.changed();
       return true;
     }
+    const walls = this.walls?.(), b = walls && this.selBox();
+    if (walls && b) ({ x: dx, y: dy } = clampMove(b, { x: dx, y: dy }, walls));
+    if (!dx && !dy) return true;
     this.doc.edit('Nudge', () => this.moveSelection(dx, dy));
     this.changed();
     return true;
