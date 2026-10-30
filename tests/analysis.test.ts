@@ -98,6 +98,20 @@ describe('Joback estimates', () => {
     expect(b.tb! - 273.15).toBeCloseTo(258.6, 1);
   });
 
+  it("works out acetone's critical point, formation energies and heat capacity", () => {
+    // Joback and Reid's own worked sums for 2 × -CH3 + >C=O, 10 atoms
+    const a = joback(jsonOf('CC(C)=O'));
+    expect(a.tc).toBeCloseTo(321.91 / (0.584 + 0.965 * 0.0662 - 0.0662 ** 2), 3);
+    expect(a.pc).toBeCloseTo(48.025, 2);
+    expect(a.vc).toBeCloseTo(209.5, 6);
+    expect(a.hf).toBeCloseTo(-217.83, 2);
+    expect(a.gf).toBeCloseTo(-154.54, 2);
+    expect(a.hvap).toBeCloseTo(29.018, 3);
+    expect(a.hfus).toBeCloseTo(5.125, 3);
+    const T = 298.15;
+    expect(a.cp).toBeCloseTo(7.52 + 0.26084 * T - 1.207e-4 * T * T + 1.546e-8 * T ** 3, 3);
+  });
+
   it('knows esters, aldehydes, ketones, nitriles, nitro groups, amines and halides', () => {
     expect(joback(jsonOf('CC(=O)OC')).groups).toEqual({ '-CH3': 2, '-COO- (ester)': 1 });
     expect(joback(jsonOf('CC=O')).groups).toEqual({ '-CH3': 1, 'O=CH- (aldehyde)': 1 });
@@ -184,5 +198,42 @@ describe('descriptor captions (Attach Descriptors)', () => {
     expect(text(descriptorRuns(r, ['mw'], '[M+H]+'))).toBe('Mol. Wt.: 194.19');
     expect(text(descriptorRuns(r, ['mz'], '[M+Na]+'))).toBe('m/z: 217.0696 ([M+Na]+)');
     expect(text(descriptorRuns(r, [], '[M+H]+'))).toBe('');
+  });
+});
+
+describe('solubility and volatility', () => {
+  it("follows Delaney's ESOL equation", async () => {
+    const { esolLogS } = await import('../src/chem/analysis');
+    // benzene: Crippen logP 1.69, MW 78.11, no rotatable bonds, all aromatic (measured −1.64)
+    expect(esolLogS(1.6866, 78.114, 0, 1)).toBeCloseTo(0.16 - 0.63 * 1.6866 - 0.0062 * 78.114 - 0.74, 6);
+    expect(Math.abs(esolLogS(1.6866, 78.114, 0, 1) - -1.64)).toBeLessThan(0.5);
+  });
+
+  it("gives ethanol's vapour pressure from its boiling point", async () => {
+    const { vapourPressure } = await import('../src/chem/analysis');
+    // measured 7.9 kPa at 25 °C (bp 78.4 °C)
+    expect(vapourPressure(351.5, 1.3) / 1000).toBeCloseTo(7.9, 0);
+    // benzene: measured 12.7 kPa (bp 80.1 °C)
+    expect(Math.abs(vapourPressure(353.2, 1) / 1000 - 12.7)).toBeLessThan(1);
+    // acetone: measured 30.8 kPa (bp 56.1 °C)
+    expect(Math.abs(vapourPressure(329.2, 1.06) / 1000 - 30.8)).toBeLessThan(1);
+  });
+});
+
+describe('Analysis panel estimates', () => {
+  it('gives pKa sites, solubility, vapour pressure and thermochemistry for one structure', async () => {
+    const { analysisHtml } = await import('../src/ui/analysis-panel');
+    const m = RDKit.get_mol('OC(=O)c1ccccc1');
+    const p = panelProps(RDKit, m);
+    m.delete();
+    expect(p.pka[0]).toMatchObject({ kind: 'acid', group: 'carboxylic acid' });
+    expect(p.logS).toBeLessThan(0);
+    expect(p.vp).toBeGreaterThan(0);
+    expect(p.joback.tc).toBeGreaterThan(p.joback.tb!);
+    const html = analysisHtml({ formula: 'C7H6O2', exact: 122.0368, mw: 122.12, charge: 0, smiles: 'O=C(O)c1ccccc1', props: p }, 0, '[M+H]+', {});
+    expect(html).toContain('pKa (est.)');
+    expect(html).toContain('4.2');
+    expect(html).toContain('Critical temperature');
+    expect(html).toContain('logS (est.)');
   });
 });

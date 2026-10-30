@@ -9,6 +9,9 @@
 //   3–25): donors are the OH and NH hydrogens, acceptors the N and O atoms.
 // - Rotatable bonds: RDKit's standard (strict) definition: single bonds outside rings between
 //   two non-terminal heavy atoms, leaving out amide C–N bonds and the like.
+// - Estimates (see src/chem/analysis.ts and src/chem/pka.ts): logS by Delaney's ESOL equation,
+//   boiling and melting points by Joback and Reid's groups, pKa and pKaH by Perrin, Dempsey and
+//   Serjeant's Hammett and Taft rules.
 
 import { CellError, ERR, Value } from './values';
 import { ionMz, parseAdduct } from '../chem/hrms';
@@ -29,6 +32,12 @@ export interface MolProps {
   hbd: number;
   hba: number;
   rotb: number;
+  /** Estimated: water solubility (log mol/L), boiling and melting points (K), most acidic pKa and most basic pKaH. */
+  logS?: number;
+  bp?: number | null;
+  mp?: number | null;
+  pka?: number | null;
+  pkaH?: number | null;
 }
 
 export interface PropertyDef {
@@ -54,6 +63,11 @@ export const PROPERTIES: Record<string, PropertyDef> = {
   HBD: { label: 'H-bond donors', help: 'OH and NH hydrogens (Lipinski)', format: '0', extra: 0 },
   HBA: { label: 'H-bond acceptors', help: 'N and O atoms (Lipinski)', format: '0', extra: 0 },
   ROTB: { label: 'Rotatable bonds', help: 'Rotatable bonds (RDKit)', format: '0', extra: 0 },
+  LOGS: { label: 'logS', help: 'Estimated water solubility, log mol/L (Delaney ESOL)', format: '0.00', extra: 0 },
+  PKA: { label: 'pKa', help: 'Estimated pKa of the most acidic proton (Perrin–Dempsey–Serjeant rules)', format: '0.0', extra: 0 },
+  PKAH: { label: 'pKaH', help: 'Estimated pKa of the conjugate acid of the most basic atom', format: '0.0', extra: 0 },
+  BP: { label: 'bp (est.)', help: 'Estimated boiling point, °C (Joback–Reid)', format: '0', extra: 0 },
+  MP: { label: 'mp (est.)', help: 'Estimated melting point, °C (Joback–Reid)', format: '0', extra: 0 },
   SMILES: { label: 'SMILES', help: 'Canonical SMILES (RDKit)', format: 'General', extra: 0 },
   INCHIKEY: { label: 'InChIKey', help: 'Standard InChIKey', format: 'General', extra: 0 },
   DUPLICATE: { label: 'Duplicate of', help: 'Another row with the same compound (same InChIKey), or blank: DUPLICATE(B2,B:B)', format: 'General', extra: 1 },
@@ -81,6 +95,11 @@ export function propertyValue(name: string, m: MolProps, extra: Value[] = []): V
     case 'HBD': return m.hbd;
     case 'HBA': return m.hba;
     case 'ROTB': return m.rotb;
+    case 'LOGS': return m.logS ?? ERR.na('No estimate');
+    case 'PKA': return m.pka ?? ERR.na('No acidic group the rules cover');
+    case 'PKAH': return m.pkaH ?? ERR.na('No basic group the rules cover');
+    case 'BP': return m.bp == null ? ERR.na('No Joback estimate for this structure') : m.bp - 273.15;
+    case 'MP': return m.mp == null ? ERR.na('No Joback estimate for this structure') : m.mp - 273.15;
     case 'SMILES': return m.smiles;
     case 'INCHIKEY': return m.inchikey || ERR.na('No InChIKey for this structure');
   }
