@@ -168,6 +168,9 @@ import { addRecent, removeRecent, recentLabel } from './recent';
 import { canKeepHandles, forgetHandles, handleFor, isHandleEntry, keepHandle } from './recent-handles';
 import { groupWarnings } from './ui/warning-groups';
 import { NameReader, captionName, attachmentAtoms, cxNotes } from './chem/names';
+import { Model3dBuilder } from './chem/model3d';
+import { placeView } from './chem/place3d';
+import type { Viewer3d } from './ui/viewer3d';
 import { NameDialog } from './ui/name-dialog';
 import { ArrangeDialog } from './ui/arrange-dialog';
 import type { AnimateDialog } from './ui/animate-dialog';
@@ -1238,6 +1241,44 @@ function selectNewAtoms(ids: number[]): void {
   editor.sel = { atoms: new Set(ids), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() };
   for (const id of ids) for (const b of doc.adj.get(id) ?? []) editor.sel.bonds.add(b);
   editor.changed();
+}
+
+// ------------------------------------------------------------------ 3-D model
+
+const model3d = new Model3dBuilder(new URL('ocl-resources.json', document.baseURI).href);
+let viewer3d: Viewer3d | null = null;
+
+/**
+ * Chemistry > 3-D Model: the selected structure (or the one last drawn) built in 3-D in a window
+ * of its own, to turn and look at, and to turn the drawing to match (Place on Page).
+ */
+async function show3dModel(): Promise<void> {
+  const root = editor.sel.atoms.size ? [...editor.sel.atoms][0] : editor.lastEdited;
+  if (root === null || !doc.atoms.has(root)) { flash('Select a structure to see in 3-D.'); return; }
+  const ids = [...doc.fragmentOf(root)];
+  const ex = toMolfile(doc, ids, '');
+  if (ex.generic.length) { flash('A structure with R groups or labels that can\'t be read has no 3-D shape. Replace them with atoms first.'); return; }
+  if (!viewer3d) viewer3d = new (await import('./ui/viewer3d')).Viewer3d((m) => flash(m));
+  viewer3d.showBusy('3-D Model');
+  try {
+    const m = await model3d.build(ex.molblock, 12, 1);
+    const before = await chem.molToSmiles(ex.molblock);
+    viewer3d.show(m, '3-D Model', async (v) => {
+      if (!ids.every((id) => doc.atoms.has(id))) { flash('The structure has changed since the model was built. Open 3-D Model again.'); return; }
+      let unshown = 0;
+      doc.edit('Turn in 3-D', () => ({ unshown } = placeView(doc, ex.map, v.view)));
+      editor.changed();
+      // the drawing must still mean the same compound: a view where a wedge can't read right is taken back
+      const after = await chem.molToSmiles(toMolfile(doc, doc.fragmentOf(root), '').molblock);
+      if (unshown || (before && after && after !== before)) {
+        editor.undo();
+        flash('From this angle a stereocentre can\'t be drawn so it reads right (a bond points almost straight at you). Turn the model a little and place it again.', 7000);
+      }
+    }, ex.map.map((id) => { const a = id >= 0 ? doc.atoms.get(id) : undefined; return a ? { x: a.x, y: a.y } : null; }));
+  } catch (e) {
+    viewer3d.close();
+    flash((e as Error).message || 'Could not build a 3-D model of this structure.');
+  }
 }
 
 // ------------------------------------------------------------------ name to structure
@@ -5970,6 +6011,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'scheme-settings': () => settingsWindow.open('schemes'),
   'attach-descriptors': () => void attachDescriptors(),
   'pubchem-lookup': () => void lookUpChosen(),
+  'model-3d': () => void show3dModel(),
   'add-id-label': () => void addTiedText('label'),
   'lock-structures': () => toggleStructureLock(),
   'add-caption': () => void addTiedText('caption'),
@@ -8477,6 +8519,7 @@ function drawingMenu(): MenuItem[] {
         { cmd: 'check-structure' }, { cmd: 'save-template' }, { cmd: 'define-nickname' }, null,
         { cmd: 'pubchem-lookup' },
       ] },
+      { cmd: 'model-3d' },
     ] : []),
     ...(pickedCurved() ? [{ cmd: 'clean-up-arrow' }, { label: 'Mechanism Arrow', items: [
       { cmd: 'arrow-add-bend', ...(editor.contextSpot?.t !== undefined ? { label: 'Add Bend Here' } : {}) }, ...(editor.pickedJoin() ? [{ cmd: 'arrow-remove-bend' }, { cmd: 'arrow-smooth-join' }, { cmd: 'arrow-symmetric-join' }] : []), null,

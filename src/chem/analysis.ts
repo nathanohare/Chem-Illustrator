@@ -264,56 +264,76 @@ export function elementalAnalysis(counts: Map<string, number>, weights: Record<s
 
 // ---------------------------------------------------------------- Joback estimates
 
-/** Joback and Reid's groups: [Tb, Tm] contributions in K (Tm null where the paper gives none). */
-export const JOBACK: Record<string, [number, number | null]> = {
-  '-CH3': [23.58, -5.1],
-  '-CH2-': [22.88, 11.27],
-  '>CH-': [21.74, 12.64],
-  '>C<': [18.25, 46.43],
-  '=CH2': [18.18, -4.32],
-  '=CH-': [24.96, 8.73],
-  '=C<': [24.14, 11.14],
-  '=C=': [26.15, 17.78],
-  '≡CH': [9.2, -11.18],
-  '≡C-': [27.38, 64.32],
-  '-CH2- (ring)': [27.15, 7.75],
-  '>CH- (ring)': [21.78, 19.88],
-  '>C< (ring)': [21.32, 60.15],
-  '=CH- (ring)': [26.73, 8.13],
-  '=C< (ring)': [31.01, 37.02],
-  '-F': [-0.03, -15.78],
-  '-Cl': [38.13, 13.55],
-  '-Br': [66.86, 43.43],
-  '-I': [93.84, 41.69],
-  '-OH (alcohol)': [92.88, 44.45],
-  '-OH (phenol)': [76.34, 82.83],
-  '-O-': [22.42, 22.23],
-  '-O- (ring)': [31.22, 23.05],
-  '>C=O': [76.75, 61.2],
-  '>C=O (ring)': [94.97, 75.97],
-  'O=CH- (aldehyde)': [72.24, 36.9],
-  '-COOH': [169.09, 155.5],
-  '-COO- (ester)': [81.1, 53.6],
-  '=O (other)': [-10.5, 2.08],
-  '-NH2': [73.23, 66.89],
-  '>NH': [50.17, 52.66],
-  '>NH (ring)': [52.82, 101.51],
-  '>N-': [11.74, 48.84],
-  '-N=': [74.6, null],
-  '-N= (ring)': [57.55, 68.4],
-  '=NH': [83.08, 68.91],
-  '-CN': [125.66, 59.89],
-  '-NO2': [152.54, 127.24],
-  '-SH': [63.56, 20.09],
-  '-S-': [68.78, 34.4],
-  '-S- (ring)': [52.1, 79.93],
+/**
+ * Joback and Reid's groups (Chem. Eng. Commun. 1987, 57, 233), each contribution in the order of
+ * `JOBACK_KEYS`: critical temperature, pressure (bar) and volume (cm³/mol), boiling and melting
+ * points (K), enthalpy and Gibbs energy of formation of the ideal gas at 298 K (kJ/mol), the four
+ * heat capacity coefficients (J/mol·K), and enthalpies of fusion and vaporisation (kJ/mol). Null
+ * where the paper gives no value.
+ */
+export const JOBACK: Record<string, (number | null)[]> = {
+  '-CH3': [0.0141, -0.0012, 65.0, 23.58, -5.1, -76.45, -43.96, 19.5, -0.00808, 0.000153, -9.67e-08, 0.908, 2.373],
+  '-CH2-': [0.0189, 0.0, 56.0, 22.88, 11.27, -20.64, 8.42, -0.909, 0.095, -5.44e-05, 1.19e-08, 2.59, 2.226],
+  '>CH-': [0.0164, 0.002, 41.0, 21.74, 12.64, 29.89, 58.36, -23.0, 0.204, -0.000265, 1.2e-07, 0.749, 1.691],
+  '>C<': [0.0067, 0.0043, 27.0, 18.25, 46.43, 82.23, 116.02, -66.2, 0.427, -0.000641, 3.01e-07, -1.46, 0.636],
+  '=CH2': [0.0113, -0.0028, 56.0, 18.18, -4.32, -9.63, 3.77, 23.6, -0.0381, 0.000172, -1.03e-07, -0.473, 1.724],
+  '=CH-': [0.0129, -0.0006, 46.0, 24.96, 8.73, 37.97, 48.53, -8.0, 0.105, -9.63e-05, 3.56e-08, 2.691, 2.205],
+  '=C<': [0.0117, 0.0011, 38.0, 24.14, 11.14, 83.99, 92.36, -28.1, 0.208, -0.000306, 1.46e-07, 3.063, 2.138],
+  '=C=': [0.0026, 0.0028, 36.0, 26.15, 17.78, 142.14, 136.7, 27.4, -0.0557, 0.000101, -5.02e-08, 4.72, 2.661],
+  '≡CH': [0.0027, -0.0008, 46.0, 9.2, -11.18, 79.3, 77.71, 24.5, -0.0271, 0.000111, -6.78e-08, 2.322, 1.155],
+  '≡C-': [0.002, 0.0016, 37.0, 27.38, 64.32, 115.51, 109.82, 7.87, 0.0201, -8.33e-06, 1.39e-09, 4.151, 3.302],
+  '-CH2- (ring)': [0.01, 0.0025, 48.0, 27.15, 7.75, -26.8, -3.68, -6.03, 0.0854, -8e-06, -1.8e-08, 0.49, 2.398],
+  '>CH- (ring)': [0.0122, 0.0004, 38.0, 21.78, 19.88, 8.67, 40.99, -20.5, 0.162, -0.00016, 6.24e-08, 3.243, 1.942],
+  '>C< (ring)': [0.0042, 0.0061, 27.0, 21.32, 60.15, 79.72, 87.88, -90.9, 0.557, -0.0009, 4.69e-07, -1.373, 0.644],
+  '=CH- (ring)': [0.0082, 0.0011, 41.0, 26.73, 8.13, 2.09, 11.3, -2.14, 0.0574, -1.64e-06, -1.59e-08, 1.101, 2.544],
+  '=C< (ring)': [0.0143, 0.0008, 32.0, 31.01, 37.02, 46.43, 54.05, -8.25, 0.101, -0.000142, 6.78e-08, 2.394, 3.059],
+  '-F': [0.0111, -0.0057, 27.0, -0.03, -15.78, -251.92, -247.19, 26.5, -0.0913, 0.000191, -1.03e-07, 1.398, -0.67],
+  '-Cl': [0.0105, -0.0049, 58.0, 38.13, 13.55, -71.55, -64.31, 33.3, -0.0963, 0.000187, -9.96e-08, 2.515, 4.532],
+  '-Br': [0.0133, 0.0057, 71.0, 66.86, 43.43, -29.48, -38.06, 28.6, -0.0649, 0.000136, -7.45e-08, 3.603, 6.582],
+  '-I': [0.0068, -0.0034, 97.0, 93.84, 41.69, 21.06, 5.74, 32.1, -0.0641, 0.000126, -6.87e-08, 2.724, 9.52],
+  '-OH (alcohol)': [0.0741, 0.0112, 28.0, 92.88, 44.45, -208.04, -189.2, 25.7, -0.0691, 0.000177, -9.88e-08, 2.406, 16.826],
+  '-OH (phenol)': [0.024, 0.0184, -25.0, 76.34, 82.83, -221.65, -197.37, -2.81, 0.111, -0.000116, 4.94e-08, 4.49, 12.499],
+  '-O-': [0.0168, 0.0015, 18.0, 22.42, 22.23, -132.22, -105.0, 25.5, -0.0632, 0.000111, -5.48e-08, 1.188, 2.41],
+  '-O- (ring)': [0.0098, 0.0048, 13.0, 31.22, 23.05, -138.16, -98.22, 12.2, -0.0126, 6.03e-05, -3.86e-08, 5.879, 4.682],
+  '>C=O': [0.038, 0.0031, 62.0, 76.75, 61.2, -133.22, -120.5, 6.45, 0.067, -3.57e-05, 2.86e-09, 4.189, 8.972],
+  '>C=O (ring)': [0.0284, 0.0028, 55.0, 94.97, 75.97, -164.5, -126.27, 30.4, -0.0829, 0.000236, -1.31e-07, 0.0, 6.645],
+  'O=CH- (aldehyde)': [0.0379, 0.003, 82.0, 72.24, 36.9, -162.03, -143.48, 30.9, -0.0336, 0.00016, -9.88e-08, 3.197, 9.093],
+  '-COOH': [0.0791, 0.0077, 89.0, 169.09, 155.5, -426.72, -387.87, 24.1, 0.0427, 8.04e-05, -6.87e-08, 11.051, 19.537],
+  '-COO- (ester)': [0.0481, 0.0005, 82.0, 81.1, 53.6, -337.92, -301.95, 24.5, 0.0402, 4.02e-05, -4.52e-08, 6.959, 9.633],
+  '=O (other)': [0.0143, 0.0101, 36.0, -10.5, 2.08, -247.61, -250.83, 6.82, 0.0196, 1.27e-05, -1.78e-08, 3.624, 5.909],
+  '-NH2': [0.0243, 0.0109, 38.0, 73.23, 66.89, -22.02, 14.07, 26.9, -0.0412, 0.000164, -9.76e-08, 3.515, 10.788],
+  '>NH': [0.0295, 0.0077, 35.0, 50.17, 52.66, 53.47, 89.39, -1.21, 0.0762, -4.86e-05, 1.05e-08, 5.099, 6.436],
+  '>NH (ring)': [0.013, 0.0114, 29.0, 52.82, 101.51, 31.65, 75.61, 11.8, -0.023, 0.000107, -6.28e-08, 7.49, 6.93],
+  '>N-': [0.0169, 0.0074, 9.0, 11.74, 48.84, 123.34, 163.16, -31.1, 0.227, -0.00032, 1.46e-07, 4.703, 1.896],
+  '-N=': [0.0255, -0.0099, null, 74.6, null, 23.61, null, null, null, null, null, null, 3.335],
+  '-N= (ring)': [0.0085, 0.0076, 34.0, 57.55, 68.4, 55.52, 79.93, 8.83, -0.00384, 4.35e-05, -2.6e-08, 3.649, 6.528],
+  '=NH': [null, null, null, 83.08, 68.91, 93.7, 119.66, 5.69, -0.00412, 0.000128, -8.88e-08, null, 12.169],
+  '-CN': [0.0496, -0.0101, 91.0, 125.66, 59.89, 88.43, 89.22, 36.5, -0.0733, 0.000184, -1.03e-07, 2.414, 12.851],
+  '-NO2': [0.0437, 0.0064, 91.0, 152.54, 127.24, -66.57, -16.83, 25.9, -0.00374, 0.000129, -8.88e-08, 9.679, 16.738],
+  '-SH': [0.0031, 0.0084, 63.0, 63.56, 20.09, -17.33, -22.99, 35.3, -0.0758, 0.000185, -1.03e-07, 2.36, 6.884],
+  '-S-': [0.0119, 0.0049, 54.0, 68.78, 34.4, 41.87, 33.12, 19.6, -0.00561, 4.02e-05, -2.76e-08, 4.13, 6.817],
+  '-S- (ring)': [0.0019, 0.0051, 38.0, 52.1, 79.93, 39.1, 27.76, 16.7, 0.00481, 2.77e-05, -2.11e-08, 1.557, 5.984],
 };
+
+export const JOBACK_KEYS = ['tc', 'pc', 'vc', 'tb', 'tm', 'hf', 'gf', 'cpa', 'cpb', 'cpc', 'cpd', 'hfus', 'hvap'] as const;
 
 export interface JobackResult {
   /** Normal boiling point, K (null when a group can't be assigned). */
   tb: number | null;
   /** Melting point, K (null when a group can't be assigned or has no Tm value). */
   tm: number | null;
+  /** Critical temperature (K), pressure (bar) and volume (cm³/mol). */
+  tc?: number | null;
+  pc?: number | null;
+  vc?: number | null;
+  /** Enthalpy and Gibbs energy of formation of the ideal gas at 298 K, kJ/mol. */
+  hf?: number | null;
+  gf?: number | null;
+  /** Heat capacity of the ideal gas at 298 K, J/(mol·K). */
+  cp?: number | null;
+  /** Enthalpy of vaporisation at the boiling point and of fusion, kJ/mol. */
+  hvap?: number | null;
+  hfus?: number | null;
   /** How many of each group were counted. */
   groups: Record<string, number>;
   /** Why there is no estimate, in plain words. */
@@ -434,16 +454,78 @@ export function joback(json: string): JobackResult {
     }
   }
   if (!Object.keys(groups).length) return fail('No groups.');
-  let tb = 198, tm: number | null = 122.5;
-  for (const [g, k] of Object.entries(groups)) {
-    const [b, m] = JOBACK[g];
-    tb += k * b;
-    tm = tm === null || m === null ? null : tm + k * m;
-  }
-  return { tb, tm, groups, missing: tm === null ? 'No melting point: Joback\'s method has no value for an open-chain -N= group.' : undefined };
+  // each property's sum over the groups, null when a group has no value for it
+  const sum = (key: (typeof JOBACK_KEYS)[number]): number | null => {
+    const k = JOBACK_KEYS.indexOf(key);
+    let t = 0;
+    for (const [g, c] of Object.entries(groups)) {
+      const v = JOBACK[g][k];
+      if (v === null) return null;
+      t += c * v;
+    }
+    return t;
+  };
+  const plus = (v: number | null, base: number) => (v === null ? null : base + v);
+  const tb = 198 + sum('tb')!;
+  const tm = plus(sum('tm'), 122.5);
+  const sTc = sum('tc'), sPc = sum('pc');
+  // all atoms, hydrogens included, for the critical pressure
+  const atoms = z.filter((x) => x !== 1).length + hs.reduce((s, h, a) => s + (z[a] === 1 ? 0 : h), 0);
+  const tc = sTc === null ? null : tb / (0.584 + 0.965 * sTc - sTc * sTc);
+  const pc = sPc === null ? null : (0.113 + 0.0032 * atoms - sPc) ** -2;
+  const [a, b, c, d] = (['cpa', 'cpb', 'cpc', 'cpd'] as const).map(sum);
+  const T = 298.15;
+  const cp = a === null || b === null || c === null || d === null ? null
+    : a - 37.93 + (b + 0.21) * T + (c - 3.91e-4) * T * T + (d + 2.06e-7) * T * T * T;
+  return {
+    tb, tm, tc, pc, vc: plus(sum('vc'), 17.5), hf: plus(sum('hf'), 68.29), gf: plus(sum('gf'), 53.88), cp,
+    hvap: plus(sum('hvap'), 15.3), hfus: plus(sum('hfus'), -0.88), groups,
+    missing: tm === null ? 'No melting point: Joback\'s method has no value for an open-chain -N= group.' : undefined,
+  };
 }
 
 function elementName(z: number): string {
   const names: Record<number, string> = { 5: 'boron', 14: 'silicon', 15: 'phosphorus', 34: 'selenium', 0: 'R groups' };
   return names[z] ?? 'this element';
+}
+
+// ---------------------------------------------------------------- solubility and volatility
+
+/**
+ * Estimated water solubility, log10 of mol/L at 25 °C: Delaney's ESOL equation (J. Chem. Inf.
+ * Comput. Sci. 2004, 44, 1000) with Wildman–Crippen logP in place of Daylight's. `ap` is the
+ * fraction of heavy atoms that are aromatic. Typical error about 0.8 log units.
+ */
+export function esolLogS(clogp: number, mw: number, rotb: number, ap: number): number {
+  return 0.16 - 0.63 * clogp - 0.0062 * mw + 0.066 * rotb - 0.74 * ap;
+}
+
+/**
+ * Estimated vapour pressure (Pa) at temperature T from the normal boiling point: Lyman's
+ * Antoine-type method (Handbook of Chemical Property Estimation Methods, 1990, ch. 14) with
+ * Fishtine's factor `kf` for polar liquids. A solid (melting point above T) is corrected from the
+ * subcooled liquid with Walden's rule (entropy of melting 56.5 J/mol·K).
+ */
+export function vapourPressure(tb: number, kf = 1, tm: number | null = null, T = 298.15): number {
+  const R = 1.987;
+  const c2 = -18 + 0.19 * tb;
+  const dsb = kf * (8.75 + R * Math.log(tb));
+  let lnP = ((dsb * (tb - c2) ** 2) / (0.97 * R * tb)) * (1 / (tb - c2) - 1 / (T - c2));
+  if (tm !== null && tm > T) lnP -= (56.5 * (tm - T)) / (8.314 * T);
+  return Math.exp(lnP) * 101325;
+}
+
+/** Fishtine's factor for the most polar group present (1 for hydrocarbons and halides). */
+export function fishtine(groups: Record<string, number>): number {
+  if (groups['-OH (alcohol)']) return 1.3;
+  if (groups['-OH (phenol)'] || groups['-COOH']) return 1.15;
+  if (groups['-NH2'] || groups['>NH'] || groups['>NH (ring)']) return 1.1;
+  if (['>C=O', '>C=O (ring)', '-COO- (ester)', 'O=CH- (aldehyde)', '-CN', '-NO2'].some((g) => groups[g])) return 1.06;
+  if (groups['-O-'] || groups['-O- (ring)']) return 1.03;
+  return 1;
+}
+
+/** Henry's law constant (Pa·m³/mol) as vapour pressure over solubility (both estimated). */
+export function henryConstant(vpPa: number, logS: number): number {
+  return vpPa / (10 ** logS * 1000);
 }

@@ -4,7 +4,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { formulaFromJson, countsFromJson, hillFormula } from './formula';
 import { SYMBOLS } from './elements';
-import { joback, type JobackResult } from './analysis';
+import { joback, esolLogS, vapourPressure, fishtine, henryConstant, type JobackResult } from './analysis';
+import { estimatePka, type PkaSite } from './pka';
 import type { MolProps } from '../sheet/properties';
 
 /** Everything a sheet works out for one molecule (see src/sheet/properties.ts for the definitions). */
@@ -29,9 +30,16 @@ export function molProps(RDKit: any, input: string): MolProps | { error: string 
     } catch {
       inchikey = '';
     }
+    const json = mol.get_json();
+    let jb: JobackResult | null = null, pka: PkaSite[] = [];
+    try { jb = joback(json); } catch { jb = null; }
+    try { pka = estimatePka(json); } catch { pka = []; }
+    const acid = pka.find((p) => p.kind === 'acid'), base = pka.find((p) => p.kind === 'base');
     return {
       formula, charge, mw: d.amw, exact: d.exactmw, smiles: mol.get_smiles(), inchikey,
       clogp: d.CrippenClogP, tpsa: d.tpsa, hbd: d.lipinskiHBD, hba: d.lipinskiHBA, rotb: d.NumRotatableBonds,
+      logS: esolLogS(d.CrippenClogP, d.amw, d.NumRotatableBonds, aromaticProportion(json)),
+      bp: jb?.tb ?? null, mp: jb?.tm ?? null, pka: acid?.pka ?? null, pkaH: base?.pka ?? null,
     };
   } finally {
     mol.delete();
@@ -86,6 +94,13 @@ export interface PanelProps {
   heavy: number;
   fsp3: number;
   joback: JobackResult;
+  /** Estimated water solubility, log10 mol/L (ESOL). */
+  logS: number;
+  /** Estimated vapour pressure at 25 °C (Pa) and Henry's law constant (Pa·m³/mol); null without a boiling point. */
+  vp: number | null;
+  henry: number | null;
+  /** Estimated acidic and basic sites. */
+  pka: PkaSite[];
 }
 
 const weightCache = new Map<string, number>();
@@ -120,10 +135,28 @@ export function panelProps(RDKit: any, mol: any): PanelProps {
   } catch (e) {
     jb = { tb: null, tm: null, groups: {}, missing: String(e) };
   }
+  const logS = esolLogS(d.CrippenClogP, d.amw, d.NumRotatableBonds, aromaticProportion(json));
+  const vp = jb.tb === null ? null : vapourPressure(jb.tb, fishtine(jb.groups), jb.tm);
+  let pka: PkaSite[];
+  try {
+    pka = estimatePka(json);
+  } catch {
+    pka = [];
+  }
   return {
     counts, weights, clogp: d.CrippenClogP, mr: d.CrippenMR, tpsa: d.tpsa, hbd: d.lipinskiHBD, hba: d.lipinskiHBA,
     rotb: d.NumRotatableBonds, heavy: d.NumHeavyAtoms, fsp3: d.FractionCSP3, joback: jb,
+    logS, vp, henry: vp === null ? null : henryConstant(vp, logS), pka,
   };
+}
+
+/** The fraction of heavy atoms that are aromatic (ESOL's AP). */
+function aromaticProportion(json: string): number {
+  const mol = JSON.parse(json).molecules[0];
+  const z = mol.atoms.map((a: { z?: number }) => a.z ?? 6);
+  const heavy = z.filter((x: number) => x !== 1).length;
+  const ext = mol.extensions?.find((e: { name: string }) => e.name === 'rdkitRepresentation');
+  return heavy ? (ext?.aromaticAtoms?.length ?? 0) / heavy : 0;
 }
 
 export interface MassFragment {
