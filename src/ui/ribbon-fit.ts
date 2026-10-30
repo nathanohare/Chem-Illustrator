@@ -1,7 +1,8 @@
-// Ribbons in a narrow window, as Office does it: when the groups don't fit, the groups at the
-// right end drop their buttons' words first (icons only, the words stay in the tooltips), and
-// if that is not enough they fold into one button each, named after the group, that drops the
-// group's buttons down below it.
+// Ribbons in a narrow window, as Office does it: when the groups don't fit, galleries (Styles)
+// show fewer choices first, then the groups at the right end drop their buttons' words (icons
+// only, the words stay in the tooltips), and if that is not enough they fold into one button
+// each, with the group's picture and name, that drops the group's buttons down below it. Only as
+// many groups fold as need to: any that fit again afterwards open back up.
 //
 // A ribbon keeps one height whichever of its tabs is open (the height of its tallest tab), and
 // can be collapsed to its row of tabs (Ctrl+F1, a double-click on a tab, or the ˄ at the end of
@@ -16,6 +17,9 @@ function rows(): HTMLElement[] {
 
 const groupsOf = (row: HTMLElement) => [...row.children].filter((c): c is HTMLElement => c instanceof HTMLElement && c.classList.contains('rb-group'));
 
+/** The picture on a folded group whose buttons have none of their own (Editing: Find, Replace). */
+const GENERIC_GROUP = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="4.5" width="7" height="6" rx="1"/><rect x="13.5" y="4.5" width="7" height="6" rx="1"/><path d="M4 15h16M4 19h11"/></svg>';
+
 /** A folded group's button, made the first time the group folds. */
 function foldButton(g: HTMLElement): HTMLButtonElement {
   let b = g.querySelector<HTMLButtonElement>(':scope > .rb-fold-btn');
@@ -24,7 +28,10 @@ function foldButton(g: HTMLElement): HTMLButtonElement {
   b.type = 'button';
   b.className = 'rb-fold-btn';
   const name = g.querySelector('.rb-label')?.textContent?.trim() || 'More';
-  b.innerHTML = `<span>${name.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)}</span><span aria-hidden="true">▾</span>`;
+  // the group's first picture over its name, like a big button, so a folded group is never a bare word
+  const pic = g.querySelector('.rb-icon, button svg');
+  const icon = `<span class="rb-icon">${!pic ? GENERIC_GROUP : pic.classList.contains('rb-icon') ? pic.innerHTML : pic.outerHTML}</span>`;
+  b.innerHTML = `${icon}<span class="rb-fold-name">${name.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)} <span aria-hidden="true">▾</span></span>`;
   b.title = `${name}: show this group's buttons`;
   b.setAttribute('aria-expanded', 'false');
   b.addEventListener('click', (e) => {
@@ -54,17 +61,32 @@ function closePopped(): void {
 
 const overflows = (row: HTMLElement) => row.scrollWidth > row.clientWidth + 1;
 
-/** Fit one row of groups to its width: words off from the right, then groups folded from the right. */
+/** A gallery's choices that can be left out when room is short (all but the first three and More). */
+const galleryExtras = (row: HTMLElement) =>
+  [...row.querySelectorAll<HTMLElement>('.rb-styles')].flatMap((gal) => [...gal.querySelectorAll<HTMLElement>(':scope > .rb-style:not(.rb-styles-more)')].slice(3));
+
+/** Fit one row of groups to its width: fewer gallery choices, then words off from the right, then groups folded from the right. */
 export function fitRow(row: HTMLElement): void {
   if (!row.clientWidth) return;
   const groups = groupsOf(row);
   for (const g of groups) g.classList.remove('rb-compact', 'rb-folded', 'rb-popped');
+  const extras = galleryExtras(row);
+  for (const x of extras) x.classList.remove('rb-gal-out');
+  if (!overflows(row)) return;
+  for (let i = extras.length - 1; i >= 0 && overflows(row); i--) extras[i].classList.add('rb-gal-out');
   if (!overflows(row)) return;
   for (let i = groups.length - 1; i >= 0 && overflows(row); i--) groups[i].classList.add('rb-compact');
   // the first group (Clipboard, usually) keeps its place longest
   for (let i = groups.length - 1; i >= 1 && overflows(row); i--) {
     foldButton(groups[i]);
     groups[i].classList.add('rb-folded');
+  }
+  // folding a wide group (Styles) can make room for a narrow one folded before it: open those back up
+  for (let i = groups.length - 1; i >= 1; i--) {
+    const g = groups[i];
+    if (!g.classList.contains('rb-folded')) continue;
+    g.classList.remove('rb-folded');
+    if (overflows(row)) g.classList.add('rb-folded');
   }
   // folding can free more room than it needed: give the words back where they fit, from the left
   for (const g of groups) {

@@ -9,6 +9,8 @@ bench/results/.core.json
 public/RDKit_minimal.js
 public/RDKit_minimal.wasm
 public/ort-wasm-simd-threaded.mjs
+public/ocl-resources.json
+public/pyodide/
 
 # Made from @mdi/svg by scripts/build-icons.mjs
 src/design/icons/mdi.json

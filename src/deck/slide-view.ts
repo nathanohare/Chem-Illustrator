@@ -8,7 +8,8 @@ import { Renderer, withMeasure } from '../render/renderer';
 import { imageFor } from '../render/images';
 import { VectorContext, VecPath, Item } from '../render/vector';
 import { arialWidth } from '../text-metrics';
-import { Master, SlideSize, LayoutId, decorFrames, showsNumber, showsFooter, showsDate, dateText, type SlideHF, slideColours, slideBackground, decorShapes, layoutFrames, type DecorShape } from './deck';
+import { Master, SlideSize, LayoutId, decorFrames, showsNumber, showsFooter, showsDate, dateText, type SlideHF, slideColours, slideBackground, decorShapes, layoutFrames, placeRefs, type DecorShape } from './deck';
+import { lineGap, type RefBlock } from './slide-refs';
 import { backgroundColour, paintBackground, type Background } from './background';
 import type { Rect } from '../geom';
 import { shownRect, slidePlace, type CanvasData } from './canvas';
@@ -22,7 +23,7 @@ export const SURROUND = '#d5d8de';
  * master's shapes and logo are hidden on it. A canvas slide's page has the part of the canvas
  * shown (`view`, one of its keyframes) instead of the slide's own place.
  */
-export interface SlidePage { size: SlideSize; master: Master; layout: LayoutId; index: number; own?: Background; hideGraphics?: boolean; hf?: SlideHF; view?: Rect; canvas?: CanvasData; title?: string }
+export interface SlidePage { size: SlideSize; master: Master; layout: LayoutId; index: number; own?: Background; hideGraphics?: boolean; hf?: SlideHF; view?: Rect; canvas?: CanvasData; title?: string; /** Its reference lines, or the References slide's list. */ refs?: RefBlock }
 
 // Drawing whole slides never draws on screen through the renderer's own canvases.
 const noCanvas = { getContext: () => null } as unknown as HTMLCanvasElement;
@@ -73,6 +74,26 @@ export function drawScreen(ctx: CanvasRenderingContext2D, p: SlidePage): void {
   if (showsNumber(m, p.layout, p.hf)) text(String(p.index + 1), d.number, 'right');
   if (showsFooter(m, p.layout, p.hf)) text(m.footer, d.footer, 'center');
   if (showsDate(m, p.layout, p.hf)) text(dateText(m), d.date, 'left');
+  if (p.refs) drawRefs(ctx, p, p.refs.list ? colours.textColor : colours.footerColor);
+}
+
+/** The slide's reference lines (or the References slide's list), in the body font, with the style's italics and bold. */
+function drawRefs(ctx: CanvasRenderingContext2D, p: SlidePage, ink: string): void {
+  const family = `${cssFamily(p.master.bodyFont)}, Arial, sans-serif`;
+  const font = (size: number, italic: boolean, bold: boolean) => `${italic ? 'italic ' : ''}${bold ? 'bold ' : ''}${size}px ${family}`;
+  const placed = placeRefs(p, (t, size, italic, bold) => { ctx.font = font(size, italic, bold); return ctx.measureText(t).width; });
+  if (!placed) return;
+  ctx.save();
+  ctx.fillStyle = placed.color ?? ink;
+  placed.lines.forEach((l, k) => {
+    const x0 = placed.align === 'right' ? placed.x + placed.w - l.width : placed.align === 'center' ? placed.x + (placed.w - l.width) / 2 : placed.x;
+    const y = placed.top + ASCENT * placed.size + k * lineGap(placed.size);
+    for (const piece of l.pieces) {
+      ctx.font = font(placed.size, !!piece.italic, !!piece.bold);
+      ctx.fillText(piece.text, x0 + piece.x, y);
+    }
+  });
+  ctx.restore();
 }
 
 /**

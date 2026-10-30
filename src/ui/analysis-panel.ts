@@ -4,9 +4,11 @@
 import type { FragmentResult } from '../worker/chem-worker';
 import type { DescriptorKey, TextRun } from '../model';
 import { parseAdduct, ionMz, type Adduct } from '../chem/hrms';
-import { ionCounts, isotopePattern, elementalAnalysis, type IsotopePeak } from '../chem/analysis';
+import { ionCounts, isotopePattern, elementalAnalysis, type IsotopePeak, type JobackResult } from '../chem/analysis';
+import type { PkaSite } from '../chem/pka';
 import { chargeText, hillFormula, withoutCharge } from '../chem/formula';
 import { roman, sup, type MetalCount } from '../chem/electrons';
+import { nameRuns } from '../chem/namer';
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
@@ -111,7 +113,70 @@ export function electronsHtml(counts: MetalCount[]): string {
 const SUBS = '₀₁₂₃₄₅₆₇₈₉';
 const sub = (n: number) => String(n).replace(/\d/g, (d) => SUBS[Number(d)]);
 
-export function analysisHtml(r: FragmentResult, i: number, adductText: string, extras: { stereo?: string; unknown?: string[]; pubchem?: string; electrons?: string; rGroups?: string[] }): string {
+const PKA_TIP = 'Estimated in water by Perrin, Dempsey and Serjeant\'s rules (Hammett and Taft constants). Typical error 0.5–1 unit.';
+
+/** Solubility in words a chemist reads at a glance: mg/mL, or µg/mL when small. */
+function solubility(logS: number, mw: number): string {
+  const mgPerMl = 10 ** logS * mw;
+  return mgPerMl >= 1 ? `${mgPerMl >= 100 ? Math.round(mgPerMl) : mgPerMl.toPrecision(2)} mg/mL` : `${(mgPerMl * 1000).toPrecision(2)} µg/mL`;
+}
+
+/** The most acidic proton and the most basic atom. */
+function pkaRows(sites: PkaSite[]): string {
+  const acid = sites.find((s) => s.kind === 'acid'), base = sites.find((s) => s.kind === 'base');
+  const row = (label: string, title: string, s: PkaSite | undefined) =>
+    `<tr><th title="${esc(title)}">${label}</th><td>${s ? `${fmtPka(s.pka)} <span class="muted">(${esc(s.group)})</span>` : '<span class="muted">—</span>'}</td></tr>`;
+  return row('pKa (est.)', `Most acidic proton. ${PKA_TIP}`, acid) + row('pKaH (est.)', `pKa of the conjugate acid of the most basic atom. ${PKA_TIP}`, base);
+}
+
+const fmtPka = (x: number) => x.toFixed(1).replace('-', '−');
+
+/** Every site, when there are more than the two rows show. */
+function pkaSitesHtml(sites: PkaSite[]): string {
+  if (sites.length <= 2) return '';
+  const rows = sites.map((s) => `<tr><td>${s.kind === 'acid' ? 'Acid' : 'Base'}</td><td>${esc(s.group)}</td><td>${fmtPka(s.pka)}</td></tr>`);
+  return `<details class="pka-sites"><summary title="${esc(PKA_TIP + ' Each value is for that group alone; later protons of a polyprotic compound are not worked out.')}">All pKa sites</summary><table>${rows.join('')}</table></details>`;
+}
+
+/** Joback's critical constants and thermochemistry, and the volatility worked out from them. */
+function thermoHtml(jb: JobackResult, vp: number | null, henry: number | null, tip: string): string {
+  const v = (x: number | null | undefined, d: number, unit: string) => (x === null || x === undefined ? '<span class="muted">—</span>' : `${x.toFixed(d).replace('-', '−')} ${unit}`);
+  if (jb.tb === null) return '';
+  const sci = (x: number) => x.toExponential(1).replace('e', ' × 10^').replace(/\^\+?(-?\d+)$/, (_, e: string) => `<sup>${e.replace('-', '−')}</sup>`);
+  const vpTip = 'At 25 °C from the estimated boiling point, by Lyman\'s Antoine-type method (Handbook of Chemical Property Estimation Methods, ch. 14); a solid is corrected from the liquid with Walden\'s rule. Rough: often within a factor of 2–3.';
+  return `<details class="thermo"><summary title="${esc(tip)}">Critical point and thermochemistry (est.)</summary><table>
+    <tr><th>Critical temperature</th><td>${v(jb.tc === null || jb.tc === undefined ? null : jb.tc - 273.15, 0, '°C')}</td></tr>
+    <tr><th>Critical pressure</th><td>${v(jb.pc, 1, 'bar')}</td></tr>
+    <tr><th>Critical volume</th><td>${v(jb.vc, 0, 'cm³/mol')}</td></tr>
+    <tr><th title="Ideal gas at 298 K">ΔH<sub>f</sub>° (gas)</th><td>${v(jb.hf, 1, 'kJ/mol')}</td></tr>
+    <tr><th title="Ideal gas at 298 K">ΔG<sub>f</sub>° (gas)</th><td>${v(jb.gf, 1, 'kJ/mol')}</td></tr>
+    <tr><th title="Ideal gas at 298 K">C<sub>p</sub> (gas)</th><td>${v(jb.cp, 1, 'J/(mol·K)')}</td></tr>
+    <tr><th title="At the boiling point">ΔH<sub>vap</sub></th><td>${v(jb.hvap, 1, 'kJ/mol')}</td></tr>
+    <tr><th>ΔH<sub>fus</sub></th><td>${v(jb.hfus, 1, 'kJ/mol')}</td></tr>
+    <tr><th title="${esc(vpTip)}">Vapour pressure</th><td>${vp === null ? '—' : vp >= 0.1 ? v(vp >= 1000 ? vp / 1000 : vp, vp >= 1000 ? 1 : 2, vp >= 1000 ? 'kPa' : 'Pa') : `${sci(vp)} Pa`}</td></tr>
+    <tr><th title="${esc('Estimated vapour pressure over estimated solubility (ESOL), 25 °C. Rough: often within a factor of 10.')}">Henry's law constant</th><td>${henry === null ? '—' : `${sci(henry)} Pa·m³/mol`}</td></tr>
+    </table></details>`;
+}
+
+/** Where the systematic name of a structure in the Analysis panel has got to. */
+export type NameState =
+  | { kind: 'idle' }
+  | { kind: 'busy'; loading: boolean }
+  | { kind: 'found'; name: string }
+  | { kind: 'none'; message: string };
+
+/** The structure's systematic name, or the button that asks for it (the namer loads only when first asked). */
+export function nameHtml(state: NameState, i: number): string {
+  const ask = `<button type="button" data-name="${i}" title="Work out the systematic (IUPAC) name here, offline. It is shown only if reading it back gives exactly this structure. The namer loads the first time (about 14 MB); after that names appear by themselves.">IUPAC name</button>`;
+  if (state.kind === 'idle') return `<div class="an-name an-buttons">${ask}</div>`;
+  if (state.kind === 'busy') return `<p class="an-name muted small">${state.loading ? 'Loading the namer (first time only)…' : 'Naming…'}</p>`;
+  if (state.kind === 'none') return `<p class="an-name muted small">${esc(state.message)}</p>`;
+  const html = nameRuns(state.name).map((r) => (r.italic ? `<i>${esc(r.text)}</i>` : esc(r.text))).join('');
+  return `<div class="an-name"><span class="iupac" title="Systematic name (OpenClatura), checked by reading it back with OPSIN">${html}</span>
+    <button type="button" data-insert="name:${i}" title="Put the name under the structure; it follows the structure and can be edited like any text">Name caption</button></div>`;
+}
+
+export function analysisHtml(r: FragmentResult, i: number, adductText: string, extras: { stereo?: string; unknown?: string[]; pubchem?: string; electrons?: string; rGroups?: string[]; name?: string }): string {
   if (r.error) return `<div class="frag"><p class="warn">${esc(r.error)}</p></div>`;
   // with R groups only the core is known: no ion or elemental analysis for a compound not drawn
   const core = !!extras.rGroups?.length;
@@ -152,7 +217,9 @@ export function analysisHtml(r: FragmentResult, i: number, adductText: string, e
       <tr><th title="Fraction of carbons that are sp3">Fsp3</th><td>${p.fsp3.toFixed(2)}</td></tr>
       <tr><th title="${esc(tip)}">Boiling point (est.)</th><td>${jb.tb === null ? '<span class="muted">—</span>' : deg(jb.tb)}</td></tr>
       <tr><th title="${esc(tip)}">Melting point (est.)</th><td>${jb.tm === null ? '<span class="muted">—</span>' : deg(jb.tm)}</td></tr>
-      </table>${jb.missing ? `<p class="muted small">${esc(jb.missing)}</p>` : ''}</details>`;
+      <tr><th title="Water solubility at 25 °C by Delaney's ESOL equation (J. Chem. Inf. Comput. Sci. 2004, 44, 1000), log mol/L. Typical error 0.8 log units.">logS (est.)</th><td>${p.logS.toFixed(2).replace('-', '−')} <span class="muted">(${solubility(p.logS, r.mw)})</span></td></tr>
+      ${pkaRows(p.pka)}
+      </table>${jb.missing ? `<p class="muted small">${esc(jb.missing)}</p>` : ''}${thermoHtml(jb, p.vp, p.henry, tip)}${pkaSitesHtml(p.pka)}</details>`;
   }
   const buttons = `<div class="an-buttons">
       ${core ? '' : `<button type="button" data-insert="formula:${i}" title="Attach the formula and masses under the structure: they follow it and update when it changes (choose what is shown in the Style panel)">Attach descriptors</button>`}
@@ -162,6 +229,7 @@ export function analysisHtml(r: FragmentResult, i: number, adductText: string, e
   return `<div class="frag">
     <div class="formula">${formulaHtml(r.formula)}${core ? `·${extras.rGroups!.map(esc).join('·')} <span class="muted">(core only)</span>` : ''}</div>
     ${core ? `<p class="muted small">${extras.rGroups!.map(esc).join(', ')} could be anything, so there are no masses. Chemistry ▸ R-Group Table works out each compound.</p>` : ''}
+    ${extras.name ?? ''}
     <table>${rows.join('')}</table>
     ${extras.electrons ?? ''}${iso}${props}
     <div class="smiles" title="SMILES">${esc(r.smiles)}</div>

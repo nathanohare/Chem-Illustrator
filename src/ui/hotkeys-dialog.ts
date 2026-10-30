@@ -13,6 +13,8 @@ export interface HotkeysOptions {
   importKeys: () => void;
   /** ChemDraw's 1/0 behaviour, which some people find surprising. */
   keepHotspot: { get(): boolean; set(v: boolean): void };
+  /** ChemDraw's highlight that stays put while the mouse moves away. */
+  stickyHotspot: { get(): boolean; set(v: boolean): void };
 }
 
 interface Recording { ctx: KeyContext; action: string; button: HTMLButtonElement }
@@ -24,6 +26,7 @@ export class HotkeysDialog {
   private status: HTMLParagraphElement;
   private where: HTMLElement;
   private keepBox: HTMLInputElement;
+  private stickyBox: HTMLInputElement;
   private resetAllBtn: HTMLButtonElement;
   private recording: Recording | null = null;
   private resetTimer = 0;
@@ -39,6 +42,7 @@ export class HotkeysDialog {
       </div>
       <p class="muted">Click <b>+</b> next to an action and press the key you want for it. Click <b>×</b> on a key to take it away. Keys are case-sensitive: <kbd>f</kbd> and <kbd>Shift+F</kbd> are different keys.</p>
       <label class="hk-opt small"><input type="checkbox" data-opt="keep" /><span>After <kbd>1</kbd> or <kbd>0</kbd> on the atom under the mouse, keep the highlight there, as ChemDraw does (pressing 1 three times adds three bonds). Off: the highlight moves to the new atom, so 1 1 1 draws a chain.</span></label>
+      <label class="hk-opt small"><input type="checkbox" data-opt="sticky" /><span>Keep the highlight a key sets in place while the mouse moves off into empty space, as ChemDraw does (it gives way when the mouse rests on another atom or bond). Off: the highlight follows the mouse as soon as it moves.</span></label>
       <p class="hk-status" role="status" aria-live="polite"></p>
       <div class="hk-body"></div>
       <div class="hk-foot">
@@ -55,9 +59,11 @@ export class HotkeysDialog {
     this.status = d.querySelector('.hk-status')!;
     this.where = d.querySelector('.hk-where')!;
     this.keepBox = d.querySelector('input[data-opt=keep]')!;
+    this.stickyBox = d.querySelector('input[data-opt=sticky]')!;
     this.resetAllBtn = d.querySelector('[data-act=reset-all]')!;
     this.search.addEventListener('input', () => this.applyFilter());
     this.keepBox.addEventListener('change', () => opts.keepHotspot.set(this.keepBox.checked));
+    this.stickyBox.addEventListener('change', () => opts.stickyHotspot.set(this.stickyBox.checked));
     d.querySelector('[data-act=close]')!.addEventListener('click', () => d.close());
     d.querySelector('[data-act=export]')!.addEventListener('click', () => opts.exportKeys());
     d.querySelector('[data-act=import]')!.addEventListener('click', () => opts.importKeys());
@@ -75,6 +81,7 @@ export class HotkeysDialog {
     this.status.textContent = '';
     this.search.value = '';
     this.keepBox.checked = this.opts.keepHotspot.get();
+    this.stickyBox.checked = this.opts.stickyHotspot.get();
     this.render();
     void this.opts.location().then((w) => { this.where.textContent = w; });
     showDialog(this.d);

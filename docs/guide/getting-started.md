@@ -85,21 +85,23 @@ Chem Illustrator is in **beta**: it is still being built, new features arrive of
 
 ### The menu bar
 
-Along the top are the menus: **File**, **Edit**, **View**, **Insert**, **Format** and **Chemistry**. They are the same in every kind of tab: a command that doesn't work in the tab you are in is greyed out, and the commands for one kind of tab are in its own submenu (such as **Insert ▸ Spreadsheet**). Presentations, spreadsheets, documents and designs also have a ribbon of buttons under the menu bar, like Word, Excel and PowerPoint.
+Along the top are the menus: **File**, **Edit**, **View**, **Insert**, **Format**, **Chemistry** and **Help**. Each menu shows the commands for the kind of tab you are in; a command for another kind of tab is left out (Insert ▸ Chart shows in a spreadsheet, not in a canvas). Presentations, spreadsheets, documents and designs also have a ribbon of buttons under the menu bar, like Word, Excel and PowerPoint.
 
-To the right of the menus are:
+**Help** has this **User Guide** built in (it works without an internet connection), the hotkeys, and short notes on each part of the program. **F1** opens the guide at the part about the tool or kind of tab in use: with the ring tool, for example, it opens at Rings.
 
-- **Undo**, **Redo** and **Fit** (fit the whole drawing in the window). Undo and Redo are greyed out when there is nothing to take back, and resting the mouse on one names the step it would undo (**Undo Add Ring**); the Edit menu names it too;
-- **Locked**, which locks or unlocks all the toolboxes at once so they can be moved (each toolbox also has its own padlock; see [Canvas](drawing.md#toolboxes));
-- the **eye button**, which turns the dark page on and off;
-- the **Search** box;
-- **Help**, with this **User Guide** built in (it works without an internet connection), the hotkeys, and short notes on each part of the program. **F1** opens the guide at the part about the tool or kind of tab in use: with the ring tool, for example, it opens at Rings.
+To the right of the menus is the **quick bar** (like Office's Quick Access Toolbar), with buttons for **Save**, **Undo**, **Redo**, **Fit** (fit the whole drawing in the window), the **padlock** (locks or unlocks all the toolboxes at once so they can be moved; see [Canvas](drawing.md#toolboxes)) and the **eye** (the dark page). Undo and Redo are greyed out when there is nothing to take back, and resting the mouse on one names the step it would undo (**Undo Add Ring**). To choose its buttons:
+
+- click the **▾** at its end and tick the ones you want (Print, Copy, Paste, Focus View and more);
+- right-click any menu command, or a ribbon button that runs one, and pick **Add to Quick Access Toolbar**; right-click a quick button to take it off;
+- **More Commands…** on the ▾ (or **View ▸ Toolboxes ▸ Customize Quick Access Toolbar…**) lists every menu command to add, and puts the buttons in your order. **Reset** puts them back as they came. They are kept with your settings.
+
+After the quick bar is the **Search** box.
 
 The menus show each command's key beside it, so they are a good way to learn the shortcuts.
 
 ### Tabs
 
-Each open file has a tab under the menu bar, with its own icon and colour for its kind (blue for canvases, orange for presentations, green for spreadsheets, dark blue for documents, purple for designs). Ctrl+Tab and Ctrl+Shift+Tab move between tabs, and Ctrl+W closes one.
+Each open file has a tab in the menu bar, between the quick bar and Search, with its own icon and colour for its kind (teal for canvases, orange for presentations, green for spreadsheets, dark blue for documents, purple for designs). The open file's tab and the chosen ribbon tab are underlined in that colour. Ctrl+Tab and Ctrl+Shift+Tab move between tabs, and Ctrl+W closes one. When many files are open the tabs get narrower, then show only their icons; rest the mouse on one for its name. **View ▸ Window and Colours ▸ File Tabs in Menu Row** (untick it) puts the tabs back on a row of their own under the menu bar.
 
 New files are called **Canvas 1**, **Presentation 1**, **Spreadsheet 1** and so on, until they are saved with a name of their own. When there are more tabs than fit, **‹** and **›** scroll them (as does the mouse wheel over the tabs), and **▾** lists every open file to pick one. **+** at the end starts something new:
 
@@ -131,7 +133,9 @@ The **›** arrow at the top of the panel folds it away to give the drawing more
 
 ### A small window
 
-When the window is too narrow for a ribbon (in presentations, spreadsheets, documents and designs), its groups at the right end first show their buttons as icons only (rest the mouse on one to see its name), then fold into one button each, named after the group, that drops the group's buttons down. A slide or design page that was fitted to the window is fitted again when the window changes size.
+When the window is too narrow for a ribbon (in presentations, spreadsheets, documents and designs), a gallery (such as Styles) shows fewer choices first, then the groups at the right end show their buttons as icons only (rest the mouse on one to see its name), then fold into one button each, with the group's picture and name, that drops the group's buttons down. Only as many groups fold as must. A slide or design page that was fitted to the window is fitted again when the window changes size.
+
+On a short window (a laptop), **View ▸ Ribbon ▸ Fold on Short Windows** folds the ribbon to its row of tabs while the window is under 760 pixels tall; click a tab to use its buttons. It opens again when the window is taller. **Ctrl+F1** (or a double-click on a ribbon tab) folds or opens the ribbon yourself at any size.
 
 ### The hint line at the bottom
 

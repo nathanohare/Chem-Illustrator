@@ -93,9 +93,15 @@ export function withBoxLocked(st: ToolboxState, id: string, locked: boolean): To
   return { ...next, locked: shown.length ? shown.every((k) => boxLocked(next, k)) : locked };
 }
 
+/**
+ * Modes where the side panel starts folded, until it is opened there: with nothing chosen it has
+ * little to say beside a slide, a sheet or a page, and the room goes to the work instead.
+ */
+export const SIDE_FOLDED_AT_FIRST: readonly string[] = ['slides', 'sheet', 'document'];
+
 /** Whether the side panel is folded away in a mode. */
 export function sideFolded(st: ToolboxState, mode: string): boolean {
-  return st.sideByMode?.[mode] ?? st.sideCollapsed;
+  return st.sideByMode?.[mode] ?? (st.sideCollapsed || SIDE_FOLDED_AT_FIRST.includes(mode));
 }
 
 /** The side panel folded or opened in one mode only. */
@@ -719,7 +725,8 @@ export function menuCommands(): { menu: string; items: { cmd: string; label: str
     const seen = new Set<string>();
     for (const b of wrap.querySelectorAll<HTMLElement>('[data-cmd]')) {
       const cmd = b.dataset.cmd!;
-      if (seen.has(cmd) || b.hidden) continue;
+      // (left out of the menus only for being another mode's still counts)
+      if (seen.has(cmd) || (b.hidden && !b.dataset.modeHid)) continue;
       seen.add(cmd);
       const e = topMenuEntry(cmd);
       items.push({ cmd, label: e?.label ?? cmd });
