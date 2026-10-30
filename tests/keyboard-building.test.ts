@@ -14,6 +14,13 @@ type Hit = ReturnType<Editor['hotspot']>;
 
 // no painting here (jsdom has no canvas): only what the keys do to the drawing and the highlight
 window.requestAnimationFrame = () => 0;
+// a canvas that measures text (a label's size, for what the mouse points at) and draws nothing
+const noop = () => undefined;
+const ctx: unknown = new Proxy({}, {
+  get: (_t, k) => (k === 'measureText' ? (s: string) => ({ width: s.length * 5, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2, fontBoundingBoxAscent: 8, fontBoundingBoxDescent: 2 }) : noop),
+  set: () => true,
+});
+(HTMLCanvasElement.prototype as unknown as { getContext: () => unknown }).getContext = () => ctx;
 
 let last: Editor | null = null;
 
@@ -83,8 +90,7 @@ describe("the user guide's typed examples", () => {
     const [, end] = levelBond();
     pointAt(atom(end));
     type('3');
-    // the highlight is on the phenyl's far atom, and stays there with the mouse moved off
-    pointAt({ x: 40, y: 200 });
+    // the highlight is on the phenyl's far atom, and stays there while the mouse stays still
     expect(ed.hotspot()?.kind).toBe('atom');
     type('1B79←←←←o↓↓↓↓o→→9');
     // CH3–C6H4–B(pin): 4-tolyl pinacol boronate
@@ -141,6 +147,7 @@ describe('1 on the atom under the mouse', () => {
 
   it('keeps the highlight on that atom (ChemDraw), even after the mouse moves off it', () => {
     const { doc, ed, pointAt, atom, type } = env;
+    ed.options.stickyHotspot = true;
     const [r0] = ring();
     pointAt(atom(r0));
     type('1');
@@ -177,9 +184,71 @@ describe('1 on the atom under the mouse', () => {
 });
 
 describe('the keyboard highlight and the mouse', () => {
-  it('stays while the mouse passes over a bond, and gives way once the mouse rests on one', () => {
+  /** Move the mouse by a few screen pixels. */
+  const nudge = (p: { x: number; y: number }, px: number) => {
+    const s = env.r.toScreen(p);
+    env.overlay.dispatchEvent(new PointerEvent('pointermove', { clientX: s.x + px, clientY: s.y, bubbles: true }));
+  };
+
+  it('follows the mouse once it moves after 1 on an atom', () => {
+    const { doc, ed, pointAt, atom, type, levelBond } = env;
+    const [a, b] = levelBond();
+    pointAt(atom(b));
+    type('1');
+    expect(doc.atoms.size).toBe(3);
+    expect(ed.hotspot()).toEqual({ kind: 'atom', id: b });
+    // straight onto the other atom: no wait
+    pointAt(atom(a));
+    expect(ed.hotspot()).toEqual({ kind: 'atom', id: a });
+    // and into empty space: no highlight
+    type('1');
+    pointAt({ x: 300, y: 300 });
+    expect(ed.hotspot()).toBeNull();
+  });
+
+  it('holds a highlight that moved to a new atom while the mouse stays still (a nudge of the hand too)', () => {
+    const { doc, ed, pointAt, atom, type, levelBond } = env;
+    const [, b] = levelBond();
+    pointAt(atom(b));
+    type('8');
+    const hot = ed.hotspot() as NonNullable<Hit>;
+    expect(hot.kind).toBe('atom');
+    expect(hot.id).not.toBe(b);
+    nudge(atom(b), Editor.FOLLOW_PX - 1);
+    expect(ed.hotspot()).toEqual(hot);
+    // 8 then 1 still grows from the new atom
+    type('1');
+    expect(nbrs(doc, hot.id).length).toBe(2);
+    // a real move: the highlight goes back to what is under the mouse
+    nudge(atom(b), Editor.FOLLOW_PX * 3);
+    pointAt(atom(b));
+    expect(ed.hotspot()).toEqual({ kind: 'atom', id: b });
+  });
+
+  it('follows the mouse after a ring fused onto a bond', () => {
+    const { doc, ed, pointAt, atom, type, levelBond } = env;
+    const [a, b] = levelBond();
+    pointAt({ x: (atom(a).x + atom(b).x) / 2, y: atom(a).y });
+    type('6');
+    expect(doc.atoms.size).toBe(6);
+    pointAt(atom(a));
+    expect(ed.hotspot()).toEqual({ kind: 'atom', id: a });
+  });
+
+  it('looks again at what is under the mouse after a key deletes what it pointed at', () => {
+    const { doc, ed, pointAt, atom, type, levelBond } = env;
+    const [a, b] = levelBond();
+    pointAt({ x: (atom(a).x + atom(b).x) / 2, y: atom(a).y });
+    expect(ed.hotspot()?.kind).toBe('bond');
+    document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', code: 'Delete', bubbles: true, cancelable: true }));
+    expect(doc.bonds.size).toBe(0);
+    expect(ed.hotspot()).toBeNull();
+  });
+
+  it("in ChemDraw's way, stays while the mouse passes over a bond, and gives way once the mouse rests on one", () => {
     vi.useFakeTimers();
     const { ed, pointAt, atom, type, levelBond } = env;
+    ed.options.stickyHotspot = true;
     const [a, b] = levelBond();
     pointAt({ x: 300, y: 300 });
     const [c, d] = levelBond(100, 160);

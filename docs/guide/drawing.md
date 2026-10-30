@@ -263,6 +263,12 @@ R/S and E/Z are worked out for every structure as you draw.
 - **Polymer or Repeat Brackets (n, ×3)…**: put square brackets round a repeat unit with the bracket tool, select both brackets, and type `n` for a polymer or a number for a group repeated that many times. The Analysis panel then shows the formula as end groups plus the repeat unit.
 - **R-Group Table…**: draw a core with R1, R2 (or R, X, Ar) as labels, select it and choose this. Type one compound per line, its groups separated by commas (`Me, H`), or paste cells from Excel. You can set a compound number (2 gives 2a, 2b, 2c…), choose whether formula and MW are worked out, and add columns to fill in yourself (`Yield (%), ee (%)`). The table goes under the structure; double-click a cell to change it.
 
+### Structure to Name
+
+**Chemistry ▸ Look Up ▸ Structure to Name** (also on the right-click menu of a structure) puts the systematic (IUPAC) name of each selected structure under it, as a caption tied to the structure. The name is worked out on your computer by OpenClatura, a free rule-based namer that follows the IUPAC 2013 recommendations, so it works offline. Every name is then read back with the name reader (OPSIN), and it is given only if it reads back as exactly the structure you drew, stereochemistry and charges included; if not, you are told there is no confirmed name rather than given a wrong one. Stereodescriptors, *N*-locants, indicated hydrogen and fusion letters are set in italics, and brackets are nested the IUPAC way, ( ) inside [ ] inside { }.
+
+The namer loads the first time you ask (about 14 MB, a few seconds). After that, the **Analysis panel** shows the name of every structure you select by itself, with a **Name caption** button; before then, its **IUPAC name** button starts it. Structures with R groups or unreadable labels have no name. On a set of 270 everyday and drug-like structures, 267 got a confirmed name.
+
 ### 3-D model
 
 **Chemistry ▸ Look Up ▸ 3-D Model…** (also on the right-click menu of a structure) builds the selected structure in 3-D in a window of its own. The conformers come from OpenChemLib's torsion library and each is relaxed with the MMFF94s+ force field, lowest energy first; **‹** and **›** step through them, with each one's energy above the lowest. The model starts turned to look like your drawing.
@@ -373,6 +379,7 @@ A drawing is laid out on pages, as in ChemDraw, so you can see how it will print
 Select a structure and the **Analysis** panel on the right shows:
 
 - its formula, exact mass and molecular weight;
+- its systematic name (see [Structure to Name](#structure-to-name)), with a **Name caption** button. Until the namer has been loaded this session, an **IUPAC name** button loads it;
 - the m/z of the ion picked in the **Ion** box at the top of the panel ([M+H]+, [M+Na]+, [M−H]− and so on);
 - elemental analysis (percentages);
 - **Isotope pattern**: the peaks of that ion, drawn and listed (useful for Cl, Br and metals such as Pd, Ru, Ir and Pt). Every element with a stable isotope is known, so only Tc, Pm and the radioactive heavy elements give no pattern;

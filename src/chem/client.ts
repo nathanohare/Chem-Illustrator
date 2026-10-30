@@ -5,6 +5,7 @@ import type { ChemRequest, ChemResponse, FragmentResult } from '../worker/chem-w
 import type { StereoTags } from './stereo';
 import type { MolProps } from '../sheet/properties';
 import type { MassFragment } from './props';
+import type { NamerGraph } from './namer-graph';
 
 export class ChemClient {
   ready = false;
@@ -107,5 +108,17 @@ export class ChemClient {
   async fragments(molblock: string, cuts: [number, number][]): Promise<MassFragment[] | { error: string }> {
     const r = await this.request<Extract<ChemResponse, { type: 'fragments' }>>((id) => ({ type: 'fragments', id, molblock, cuts }));
     return r.results;
+  }
+
+  /** A molfile as the systematic namer reads it, and its SMILES; nulls when RDKit can't read it. */
+  async namerGraph(molblock: string): Promise<{ graph: NamerGraph | null; smiles: string | null }> {
+    const r = await this.request<Extract<ChemResponse, { type: 'namerGraph' }>>((id) => ({ type: 'namerGraph', id, molblock }));
+    return { graph: r.graph, smiles: r.smiles };
+  }
+
+  /** RDKit's own SMILES for a SMILES string, so two can be compared; null when it can't be read. */
+  async canonical(smiles: string): Promise<string | null> {
+    const r = await this.request<Extract<ChemResponse, { type: 'canonical' }>>((id) => ({ type: 'canonical', id, smiles }));
+    return r.smiles;
   }
 }
