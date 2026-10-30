@@ -62,3 +62,43 @@ export function joinWideEnds(ends: WideEnd[]): Map<number, EndJoin> {
   }
   return out;
 }
+
+/** A line's end at an atom where other lines meet it: `u` points from the atom along the line, `h` is its half width. */
+export interface LineEnd { id: number; u: Vec; h: number }
+
+/**
+ * Where square-ended (butt) lines meet at an atom, the turns that leave a notch: each turn wider
+ * than a straight line going round from one line to the next, as the pair of directions, keyed
+ * by the line that owns it. Each is drawn as a tiny two-segment polyline through the atom, so the
+ * stroke's own mitre join (or bevel, past the mitre limit) fills the notch.
+ */
+export function lineMitres(ends: LineEnd[]): Map<number, [Vec, Vec][]> {
+  const out = new Map<number, [Vec, Vec][]>();
+  if (ends.length < 2) return out;
+  const sorted = [...ends].sort((a, b) => angleOf(a.u) - angleOf(b.u));
+  for (let i = 0; i < sorted.length; i++) {
+    const a = sorted[i], b = sorted[(i + 1) % sorted.length];
+    let turn = angleOf(b.u) - angleOf(a.u);
+    if (turn <= 1e-6) turn += 2 * Math.PI;
+    if (turn <= Math.PI + 1e-3) continue;
+    const list = out.get(a.id) ?? [];
+    list.push([a.u, b.u]);
+    out.set(a.id, list);
+  }
+  return out;
+}
+
+/** The miter limit, in half line widths as a canvas measures it, that matches the bands' joins. */
+export const LINE_MITRE_LIMIT = MITRE_LIMIT;
+
+/**
+ * The tip of a butt-ended line at `end` (with `out` pointing away from the line), rounded part
+ * way: a short line across the end, from h − r one side to h − r the other, which stroked
+ * r·2 wide with round caps reaches `r` past the end with its corners rounded to radius `r`.
+ */
+export function endTip(path: Path2D, end: Vec, out: Vec, h: number, r: number): void {
+  if (r <= 0) return;
+  const n = mul(perp(out), Math.max(0, h - Math.min(r, h)));
+  path.moveTo(end.x + n.x, end.y + n.y);
+  path.lineTo(end.x - n.x, end.y - n.y);
+}

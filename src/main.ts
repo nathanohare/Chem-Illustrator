@@ -202,7 +202,7 @@ import { structurePlace } from './sheet/layout';
 import type { SheetFileDeps } from './io/sheet-files';
 import { fromEmbedSource, type Embedded } from './io/ole-object';
 import { objectPicture, type ObjectPicture } from './render/object-picture';
-import { ACS_1996, DocStyle } from './style';
+import { ACS_1996, BOND_END_CHOICES, bondEndPrefs, DocStyle } from './style';
 import { emptyTable, tableFromCells } from './table';
 import type { TableData } from './model';
 import { checkDrawing, checkDocument, checkWorkbook, repeatedTitles, structureAlt, setStructureAlt, type Issue, type IssuePlace } from './accessibility';
@@ -7229,6 +7229,8 @@ async function drawingPreferences(): Promise<void> {
       help: 'Off, a counterion typed without its charge is still read as that ion, and flagged until the charge is added.' },
     { name: 'saltGroups', label: 'Group a counterion typed as text with the structure or ion of opposite charge next to it, as one salt', type: 'checkbox', value: String(chemText.saltGroups),
       help: 'Grouped, the two count as one salt: one formula and mass, and a SMILES with both parts.' },
+    { name: 'bondEnds', label: 'Ends of bond lines', value: String(bondEndPrefs.round), options: BOND_END_CHOICES.map((c) => ({ value: String(c.value), label: c.label })),
+      help: 'How round the free ends of bonds are, on screen and in pictures and prints. Anything but Round also gives ring corners and chain bends a sharp, mitred point.' },
     { name: 'supR', label: 'R groups numbered R1, R12… show the number raised (R¹, R¹²)', type: 'checkbox', value: String(labelPrefs.superscriptR),
       help: 'Longer labels (OR1, CO2R1) and labels from files are left as they are.' },
     { name: 'reroute', label: 'Mechanism arrows find their own way round again when a change leaves them running into a structure, a label or another arrow', type: 'checkbox', value: String(editor.options.rerouteArrows),
@@ -7246,6 +7248,12 @@ async function drawingPreferences(): Promise<void> {
   const gap = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
   arrowGaps.start = gap(r.startGap);
   arrowGaps.end = gap(r.endGap);
+  const ends = Number(r.bondEnds);
+  if (isFinite(ends) && ends !== bondEndPrefs.round) {
+    bondEndPrefs.round = ends;
+    doc.allDirty = true;
+    editor.requestScene();
+  }
   if (labelPrefs.superscriptR !== (r.supR === 'true')) {
     labelPrefs.superscriptR = r.supR === 'true';
     doc.allDirty = true;
@@ -7377,6 +7385,7 @@ function currentSettings(): Settings {
     arrowStartGap: arrowGaps.start,
     arrowEndGap: arrowGaps.end,
     superscriptR: labelPrefs.superscriptR,
+    bondEnds: bondEndPrefs.round,
     linkSide,
     slideTemplate,
     slideThemes,
@@ -7606,6 +7615,7 @@ function applySettings(s: Settings): void {
   arrowGaps.start = s.arrowStartGap;
   arrowGaps.end = s.arrowEndGap;
   labelPrefs.superscriptR = s.superscriptR;
+  bondEndPrefs.round = s.bondEnds;
   linkSide = s.linkSide;
   slideTemplate = s.slideTemplate;
   slideThemes = s.slideThemes;
@@ -9614,7 +9624,7 @@ const guide = {
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files', open: generalPreferences },
-  { id: 'drawing', title: 'Drawing', words: 'methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute', open: drawingPreferences },
+  { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute', open: drawingPreferences },
   { id: 'style', title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
   { id: 'typing', title: 'Text and Spelling', words: 'typing spelling dictionary autocorrect replacements chemistry formulas subscripts', open: () => typingDialog.open() },
