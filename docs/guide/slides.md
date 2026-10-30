@@ -241,6 +241,23 @@ Double-click a chart (or right-click ▸ **Edit Chart…**) to change it. Draggi
 
 **Insert** tab ▸ **Equation** (Alt+=, or **Insert ▸ Equation…**) opens the equation window Document mode uses: type LaTeX (`x^2`, `k_{obs}`, `\frac{a}{b}`, `\alpha`) or start from an equation chemists use often (Arrhenius, Eyring, rate laws, Henderson–Hasselbalch). The equation goes in the middle of the slide in the master's body font, size and text colour. Drag a corner to make it larger or smaller, double-click it to change it, and set its colour in the **Style** panel. PowerPoint files keep it as a PowerPoint equation, which PowerPoint can edit; equations made in PowerPoint open here as equations too.
 
+## References
+
+A presentation keeps its own reference list, saved inside its PowerPoint file, as a Word document keeps its list.
+
+1. **Insert ▸ Reference Manager…** (or the **Reference Manager** button on the Insert tab) opens the references of every open file, each file in its own group, the one showing first. Add references to the presentation with **Add by DOI…**, **Add by Hand…**, **Import BibTeX / RIS…** or **Paste BibTeX / RIS…**, or copy them from another open file: pick them and choose the presentation in **Copy to…**, drag them onto the presentation's name, or press Ctrl+C and then Ctrl+V on its group. Each file keeps its own copy; a reference a file has already (the same DOI, or the same title and year) isn't added twice.
+2. **Insert ▸ Presentation ▸ References on Slide** ticks which references a slide shows. The app writes the lines at the foot of the slide, above the slide number and footer, and keeps them up to date when a reference is edited, as it does with slide numbers and footers. Pick several slides in the slide list first to tick the same references on all of them. The slide's right-click menu has it too.
+3. In the same window choose how the lines look:
+   - **Write each as**: journal, year, volume and first page (*Organometallics* **2010**, *29*, 2176.), the first author in front of that, or the full reference. The italics and bold follow the citation style picked in the Reference Manager (ACS until you pick another).
+   - **Numbers**: none, 1, 2, 3 on each slide, or numbered through the presentation so they match the References slide.
+   - **Place**: bottom left, centre or right, or top right. **Size** and an **Own colour** (the footer's colour otherwise). Lines that would take too much of the slide get smaller.
+   - **Apply** gives the slides picked this look; **Apply to All** uses it on every slide.
+4. **Insert ▸ Presentation ▸ References Slide** adds a slide at the end, titled References, listing the references shown on the slides in the order they first appear (or every reference in the presentation), in full. It keeps itself up to date.
+
+In PowerPoint the lines and the References slide's list are ordinary text boxes, so the slides look the same. When the file comes back here they are made again from the references. Slides copied into another presentation bring the references they show with them.
+
+To put a reference anywhere on a slide as text you can edit, use **Insert ▸ Formatted Reference…**.
+
 ## Transitions
 
 Open the **Design & Transitions** tab.

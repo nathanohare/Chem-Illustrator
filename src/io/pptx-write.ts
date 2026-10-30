@@ -41,8 +41,9 @@ import { viewPropsXml, slideGuidesExt } from '../deck/guides';
 import { handoutMasterXml, notesMasterXml } from '../deck/notes-pages';
 import { showPrXml, custShowsXml } from '../deck/show-setup';
 import {
-  Master, SlideSize, LayoutId, layoutFrames, deckLayouts, layoutDef, titleLook, isBuiltinLayout, type LayoutDef, type SectionCount, decorFrames, showsNumber, showsFooter, showsDate, dateText, type SlideHF, type DeckSettings, textStyles, isEmptyText, slideColours, slideBackground, decorShapes, type DecorShape,
+  Master, SlideSize, LayoutId, layoutFrames, deckLayouts, layoutDef, titleLook, isBuiltinLayout, type LayoutDef, type SectionCount, decorFrames, showsNumber, showsFooter, showsDate, dateText, type SlideHF, type DeckSettings, textStyles, isEmptyText, slideColours, slideBackground, decorShapes, type DecorShape, placeRefs, type PlacedRefs,
 } from '../deck/deck';
+import { lineGap, slideRefBlock, slideRefsTag, type RefListSpec, type RefLook } from '../deck/slide-refs';
 import { sameBackground, type Background } from '../deck/background';
 import { bgXml, type BlipIds } from './pptx-background';
 import { addChart, C_NS } from './office-chart';
@@ -100,6 +101,12 @@ export const TAG = {
    */
   canvasPart: 'CHEMILLUSTRATOR_CANVAS_PART',
   canvasKeep: 'CHEMILLUSTRATOR_CANVAS_KEEP',
+  /** The presentation's references, their style and the slide lines' look (on the presentation). */
+  refs: 'CHEMILLUSTRATOR_REFERENCES',
+  /** A slide's references: which it shows, its own look, whether it is the References slide. */
+  slideRefs: 'CHEMILLUSTRATOR_SLIDE_REFS',
+  /** The text box of a slide's reference lines, made from the references (read back from them, not from the box). */
+  refLines: 'CHEMILLUSTRATOR_REF_LINES',
 };
 
 /** Where a highlight is, for finding it again: one of its atoms, else the middle of one of its bonds. */
@@ -138,7 +145,7 @@ export interface DeckData {
   size: SlideSize;
   master: Master;
   /** `id` is the slide's id in the deck, for links to it (#slide=id). */
-  slides: { id?: number; layout: LayoutId; doc: Doc; notes: string; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; part?: CanvasPart }[];
+  slides: { id?: number; layout: LayoutId; doc: Doc; notes: string; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; part?: CanvasPart; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec }[];
   /** A design (Design mode): marked so it opens in Design mode again. */
   design?: boolean;
   /** The deck's sections, in order (none when left out). */
@@ -517,7 +524,7 @@ class Writer {
     pkg.add('ppt/tableStyles.xml', `${HEAD}<a:tblStyleLst xmlns:a="${NS.a}" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>`, CT.tableStyles);
     pkg.relate(P, REL.tableStyles, 'tableStyles.xml');
     pkg.relate(P, REL.theme, 'theme/theme1.xml');
-    const masterTags = this.addTags(P, { [TAG.master]: JSON.stringify(masterSettings(deck.master)), ...(deck.design ? { [TAG.design]: '1' } : {}) });
+    const masterTags = this.addTags(P, { [TAG.master]: JSON.stringify(masterSettings(deck.master)), ...(deck.design ? { [TAG.design]: '1' } : {}), ...(deck.settings?.refs?.list.length ? { [TAG.refs]: JSON.stringify(deck.settings.refs) } : {}) });
     const { w, h } = deck.size;
     // the free fonts the slides use go inside the file, so they look the same where they aren't installed
     const embed = await facesToEmbed(pkg.xmlTexts(), this.opts.fonts);
@@ -762,6 +769,10 @@ class Writer {
     if (showsNumber(m, s.layout, s.hf)) out.push(footerShape(id++, 'Slide Number', '<p:ph type="sldNum" sz="quarter" idx="12"/>', d.number, m, String(index + 1), true));
     if (showsFooter(m, s.layout, s.hf)) out.push(footerShape(id++, 'Footer', '<p:ph type="ftr" sz="quarter" idx="11"/>', d.footer, m, m.footer, true));
     if (showsDate(m, s.layout, s.hf)) out.push(footerShape(id++, 'Date', '<p:ph type="dt" sz="half" idx="10"/>', d.date, m, dateText(m), true));
+    // its reference lines (or the References slide's list), as a text box made from the references
+    const refs = slideRefBlock(this.deck.settings?.refs, this.deck.slides, index);
+    const placed = refs && placeRefs({ size: this.deck.size, master: m, layout: s.layout, hf: s.hf, refs }, (t, size, italic, bold) => this.measure(t, size, m.bodyFont, `${italic ? 'italic ' : ''}${bold ? 'bold' : ''}`.trim()));
+    if (placed) out.push(refLinesShape(id++, refs!.list ? 'References' : 'Reference Lines', placed, refs!.list ? slideColours(m, s.layout).textColor : slideColours(m, s.layout).footerColor, this.addTags(path, { [TAG.refLines]: '1' })));
     // a keyframe's slide: things named the same on each of the canvas's slides, so Morph glides
     // them from one to the next, and a print of what it holds
     let part: Record<string, string> = {};
@@ -776,7 +787,8 @@ class Writer {
       const { keep, ...where } = s.part;
       part = { [TAG.canvasPart]: JSON.stringify({ ...where, print: slidePrintXml(`<p:spTree ${XMLNS}>${GROUP}${out.join('')}</p:spTree>`) }), ...(keep ? { [TAG.canvasKeep]: JSON.stringify(keep) } : {}) };
     }
-    const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}), ...part });
+    const refTag = slideRefsTag(s);
+    const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(refTag ? { [TAG.slideRefs]: refTag } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}), ...part });
     const bg = s.background ? await this.background(path, s.background) : '';
     return `${HEAD}<p:sld ${XMLNS}${s.hideGraphics ? ' showMasterSp="0"' : ''}${s.hidden ? ' show="0"' : ''}><p:cSld>${bg}<p:spTree>${GROUP}${out.join('')}</p:spTree><p:custDataLst><p:tags r:id="${tags}"/></p:custDataLst></p:cSld>` +
       `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(s.transition)}${timingXml(expandParas(s.anims ?? [], (cid) => { const c = doc.captions.get(cid); return c ? plainText(c.runs).split('\n') : null; }), (a) => spids.get(targetKey(a.target)) ?? [], videos, (t) => spids.get(targetKey(t))?.[0])}` +
@@ -1514,6 +1526,36 @@ function phShape(id: number, name: string, ph: string, f: { x: number; y: number
     `<p:spPr>${xfrm({ x1: f.x, y1: f.y, x2: f.x + f.w, y2: f.y + f.h })}${ph.includes('type="title"') || ph.includes('type="body"') ? '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' : ''}</p:spPr>` +
     `<p:txBody><a:bodyPr vert="horz" lIns="0" tIns="0" rIns="0" bIns="0" rtlCol="0" ${bodyAttrs}><a:noAutofit/></a:bodyPr><a:lstStyle>${lst}</a:lstStyle>` +
     `<a:p><a:r><a:rPr ${lang}/><a:t>${xml(prompt)}</a:t></a:r><a:endParaRPr ${lang}/></a:p></p:txBody></p:sp>`;
+}
+
+/**
+ * A slide's reference lines, or a References slide's list: a text box with a paragraph for each
+ * reference, in the body font with the style's italics and bold, where the slide shows them
+ * (anchored at the bottom, so lines PowerPoint wraps otherwise grow upwards).
+ */
+function refLinesShape(id: number, name: string, p: PlacedRefs, ink: string, tags: string): string {
+  const h = Math.max(1, p.lines.length) * lineGap(p.size);
+  const box = { x1: p.x, y1: p.top, x2: p.x + p.w, y2: p.top + h };
+  const algn = p.align === 'right' ? 'r' : p.align === 'center' ? 'ctr' : 'l';
+  const colour = `<a:solidFill><a:srgbClr val="${hex6(p.color ?? ink)}"/></a:solidFill>`;
+  const run = (text: string, italic?: boolean, bold?: boolean) =>
+    `<a:r><a:rPr ${lang} sz="${Math.round(p.size * 100)}"${italic ? ' i="1"' : ''}${bold ? ' b="1"' : ''} dirty="0">${colour}<a:latin typeface="+mn-lt"/></a:rPr><a:t>${xml(text)}</a:t></a:r>`;
+  // a paragraph for each reference: its lines as laid out here, joined again for PowerPoint to wrap
+  const paras: string[] = [];
+  let cur: string[] = [];
+  let started = false;
+  for (const l of p.lines) {
+    const first = !!l.first;
+    if (first && started) { paras.push(cur.join('')); cur = []; }
+    started = true;
+    if (!first && cur.length) cur.push(run(' '));
+    for (const piece of l.pieces) if (piece.text) cur.push(run(piece.text, piece.italic, piece.bold));
+  }
+  if (cur.length) paras.push(cur.join(''));
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${xml(name)}"/><p:cNvSpPr txBox="1"/><p:nvPr><p:custDataLst><p:tags r:id="${tags}"/></p:custDataLst></p:nvPr></p:nvSpPr>` +
+    `<p:spPr>${xfrm(box)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>` +
+    `<p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" rtlCol="0" anchor="${p.list ? 't' : 'b'}"><a:noAutofit/></a:bodyPr><a:lstStyle/>` +
+    paras.map((r) => `<a:p><a:pPr algn="${algn}"><a:lnSpc><a:spcPct val="100000"/></a:lnSpc></a:pPr>${r}</a:p>`).join('') + '</p:txBody></p:sp>';
 }
 
 /** The footer or slide number box (in the master and layouts, and on each slide that shows it). */

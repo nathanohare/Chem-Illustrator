@@ -36,6 +36,8 @@ export const INSERT_MENU: MenuEntry[] = [
   { id: 'insert-icons', label: 'Icons…', modes: 'slides design document', title: 'About 7,000 icons, lab and science ones first: glassware, molecules, hazard and safety signs' },
   { id: 'insert-diagram', label: 'Diagram…', modes: 'drawing slides design document', title: 'Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint\'s SmartArt' },
   { id: 'insert-equation', label: 'Equation…', modes: 'slides design document', title: 'An equation typed as LaTeX (x^2, \\frac{a}{b}, \\alpha), shown as maths; a Word or PowerPoint equation in .docx and .pptx files' },
+  { id: 'insert-reference', label: 'Formatted Reference…', modes: 'drawing slides design', title: 'References from any open file (or looked up by DOI) put here as formatted text: full, or short (journal, year, volume, page), in the citation style you pick' },
+  { id: 'references', label: 'Reference Manager…', title: 'The references of every open document and presentation, grouped by file: add, edit, and copy them from one file to another' },
   '-',
   { id: 'insert-symbol', label: 'Symbol…', title: 'Greek letters, arrows, maths and chemistry signs, accented letters: find one by name (degree, angstrom) or code, with the ones you used lately first' },
   { id: 'insert-link', label: 'Link…', title: 'Link the selected text to a web page, a DOI, a file or a place in this file (Ctrl+K while typing). Ctrl+click a link to follow it' },
@@ -63,6 +65,8 @@ export const INSERT_MENU: MenuEntry[] = [
     { id: 'insert-video', label: 'Video…', modes: 'slides', title: 'A video from a file that plays in the slide show and in PowerPoint' },
     { id: 'insert-audio', label: 'Audio…', modes: 'slides', title: 'A sound from a file that plays in the slide show and in PowerPoint' },
     { id: 'header-footer', label: 'Header & Footer…', modes: 'slides', title: 'The date, slide number and footer on the slides, and the header and footer of notes pages and handouts' },
+    { id: 'slide-references', label: 'References on Slide…', modes: 'slides', title: 'Tick which of the presentation\'s references this slide shows at its foot; the lines are written, placed and formatted for you' },
+    { id: 'references-slide', label: 'References Slide…', modes: 'slides', title: 'A slide at the end listing the references shown on the slides, in full, kept up to date' },
   ] },
   { submenu: 'Spreadsheet', modes: 'sheet', items: [
     { id: 'new-note', label: 'New Note', modes: 'sheet' },

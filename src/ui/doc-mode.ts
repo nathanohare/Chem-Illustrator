@@ -45,7 +45,7 @@ import { combineDocuments, compareDocuments } from '../document/compare';
 import { ask } from './ask';
 import { askReviewName } from './review-name';
 import { askEquation } from './equation-dialog';
-import { ReferencesDialog, chooseReferences } from './references-dialog';
+import { chooseReferences } from './references-dialog';
 import { citeSuper, formatOf, type Reference } from '../document/references';
 import { dataUrl, fromDataUrl, imageSize } from '../render/images';
 import { shownSize } from '../document/doc-layout';
@@ -130,6 +130,8 @@ export interface DocModeHost {
   newTable(rows: number, cols: number, style: DocStyle): Contents;
   /** Choose a BibTeX or RIS file and read its text (References > Manage References > Import). */
   pickReferenceFile(): Promise<{ name: string; text: string } | null>;
+  /** The References window (every open file's references), on this document's group. */
+  openReferences(): Promise<void>;
   /** The person chose a reference style for new documents (save settings). */
   preferredChanged?(): void;
   /** The name put on tracked changes was changed (save settings). */
@@ -268,7 +270,6 @@ export class DocumentMode {
   private clip: (OwnCopy & { text: string }) | null = null;
   /** The pixel size of a picture copied here on its own (it goes out as a PNG): pasted back, it is the copy above. */
   private clipPicture: { w: number; h: number } | null = null;
-  private refs: ReferencesDialog;
   /** Review > New Comment: comments beside the page. */
   readonly comments: DocComments;
   /** View > Ruler: the paragraph's indents and tab stops above the pages. */
@@ -319,12 +320,6 @@ export class DocumentMode {
       focus: () => this.focus(),
       flash: (msg, ms) => this.host.flash(msg, ms),
       askName: () => this.askReviewName(),
-    });
-    this.refs = new ReferencesDialog({
-      file: () => this.file,
-      flash: (msg, ms) => this.host.flash(msg, ms),
-      pickFile: () => this.host.pickReferenceFile(),
-      preferredChanged: () => this.host.preferredChanged?.(),
     });
     this.ruler = new Ruler($('#doc-ruler'), {
       geometry: () => this.rulerGeometry(),
@@ -3855,7 +3850,7 @@ export class DocumentMode {
   /** References > Manage References: the document's reference list and citation style. */
   async manageReferences(): Promise<void> {
     if (!this.file) return;
-    await this.refs.open();
+    await this.host.openReferences();
     this.focus();
   }
 
@@ -3869,7 +3864,7 @@ export class DocumentMode {
     const ed = f.ed;
     const cur = this.pickedField('cite');
     const refs = await chooseReferences(f.t, cur?.o.refs ?? [], async () => {
-      await this.refs.open();
+      await this.host.openReferences();
       return this.file === f ? f.t : null;
     });
     this.focus();

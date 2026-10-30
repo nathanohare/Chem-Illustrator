@@ -91,6 +91,22 @@ export function fitFrom(SA: MScene, SB: MScene, pairs: NodeMap): Fit {
   const P = ks.map(([a]) => SA.nodes.get(a)!.xyz!), Q = ks.map(([, b]) => SB.nodes.get(b)!.xyz!);
   const n = P.length;
   if (n < 3) return { axis: [0, 0, 1], angle: 0, rmsd: 0, reflected: false, n };
+  const { axis, angle, det, pc, qc } = hornFit(P, Q);
+  const R = rotation(axis, angle);
+  let e = 0;
+  for (let i = 0; i < n; i++) {
+    const v = mul(R, [P[i][0] - pc[0], P[i][1] - pc[1], P[i][2] - pc[2]]);
+    e += (v[0] - Q[i][0] + qc[0]) ** 2 + (v[1] - Q[i][1] + qc[1]) ** 2 + (v[2] - Q[i][2] + qc[2]) ** 2;
+  }
+  return { axis, angle, rmsd: Math.sqrt(e / n), reflected: det < 0, n };
+}
+
+/**
+ * The turn (axis and angle) that best carries points P onto points Q about their centres (Horn's
+ * quaternion fit), and the determinant of their cross-covariance (negative: a mirror fits better).
+ */
+export function hornFit(P: V3[], Q: V3[]): { axis: V3; angle: number; det: number; pc: V3; qc: V3 } {
+  const n = P.length;
   const c3 = (L: V3[]): V3 => [0, 1, 2].map((i) => L.reduce((s, v) => s + v[i], 0) / L.length) as V3;
   const pc = c3(P), qc = c3(Q);
   const S = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
@@ -107,14 +123,8 @@ export function fitFrom(SA: MScene, SB: MScene, pairs: NodeMap): Fit {
   const sn = Math.hypot(x, y, z);
   const angle = 2 * Math.atan2(sn, w);
   const axis: V3 = sn > 1e-12 ? [x / sn, y / sn, z / sn] : [0, 0, 1];
-  const R = rotation(axis, angle);
-  let e = 0;
-  for (let i = 0; i < n; i++) {
-    const v = mul(R, [P[i][0] - pc[0], P[i][1] - pc[1], P[i][2] - pc[2]]);
-    e += (v[0] - Q[i][0] + qc[0]) ** 2 + (v[1] - Q[i][1] + qc[1]) ** 2 + (v[2] - Q[i][2] + qc[2]) ** 2;
-  }
   const det = xx * (yy * zz - yz * zy) - xy * (yx * zz - yz * zx) + xz * (yx * zy - yy * zx);
-  return { axis, angle, rmsd: Math.sqrt(e / n), reflected: det < 0, n };
+  return { axis, angle, det, pc, qc };
 }
 
 // ------------------------------------------------------------------ pairing

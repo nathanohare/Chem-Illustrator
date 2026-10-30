@@ -77,6 +77,13 @@ import { LayersPanel } from './ui/layers-panel';
 import { Scrollbars } from './ui/scrollbars';
 import type { Presenter, ShowOptions } from './ui/present';
 import { editHeaderFooter } from './ui/header-footer-dialog';
+import { ReferencesDialog, editReference, type RefHolder } from './ui/references-dialog';
+import { docHolder, deckHolder } from './ui/ref-holders';
+import { editSlideRefs } from './ui/slide-refs-dialog';
+import { chooseRefsToInsert, type RefGroup } from './ui/insert-ref-dialog';
+import { deckFormat, lookChanges, refLook, referenceRuns, slideRefBlock } from './deck/slide-refs';
+import { fetchDoi, type Reference } from './document/references';
+import { citeFormat as citeFormatOf, preferredStyle as preferredCiteStyle } from './document/cite-styles';
 import { defaultShow, showOrder } from './deck/show-setup';
 import { recordingToWav, NARRATION_NAME } from './deck/narration';
 import { clockText } from './deck/show-link';
@@ -165,6 +172,9 @@ import { addRecent, removeRecent, recentLabel } from './recent';
 import { canKeepHandles, forgetHandles, handleFor, isHandleEntry, keepHandle } from './recent-handles';
 import { groupWarnings } from './ui/warning-groups';
 import { NameReader, captionName, attachmentAtoms, cxNotes } from './chem/names';
+import { Model3dBuilder } from './chem/model3d';
+import { placeView } from './chem/place3d';
+import type { Viewer3d } from './ui/viewer3d';
 import { NameDialog } from './ui/name-dialog';
 import { ArrangeDialog } from './ui/arrange-dialog';
 import type { AnimateDialog } from './ui/animate-dialog';
@@ -1244,6 +1254,44 @@ function selectNewAtoms(ids: number[]): void {
   editor.sel = { atoms: new Set(ids), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() };
   for (const id of ids) for (const b of doc.adj.get(id) ?? []) editor.sel.bonds.add(b);
   editor.changed();
+}
+
+// ------------------------------------------------------------------ 3-D model
+
+const model3d = new Model3dBuilder(new URL('ocl-resources.json', document.baseURI).href);
+let viewer3d: Viewer3d | null = null;
+
+/**
+ * Chemistry > 3-D Model: the selected structure (or the one last drawn) built in 3-D in a window
+ * of its own, to turn and look at, and to turn the drawing to match (Place on Page).
+ */
+async function show3dModel(): Promise<void> {
+  const root = editor.sel.atoms.size ? [...editor.sel.atoms][0] : editor.lastEdited;
+  if (root === null || !doc.atoms.has(root)) { flash('Select a structure to see in 3-D.'); return; }
+  const ids = [...doc.fragmentOf(root)];
+  const ex = toMolfile(doc, ids, '');
+  if (ex.generic.length) { flash('A structure with R groups or labels that can\'t be read has no 3-D shape. Replace them with atoms first.'); return; }
+  if (!viewer3d) viewer3d = new (await import('./ui/viewer3d')).Viewer3d((m) => flash(m));
+  viewer3d.showBusy('3-D Model');
+  try {
+    const m = await model3d.build(ex.molblock, 12, 1);
+    const before = await chem.molToSmiles(ex.molblock);
+    viewer3d.show(m, '3-D Model', async (v) => {
+      if (!ids.every((id) => doc.atoms.has(id))) { flash('The structure has changed since the model was built. Open 3-D Model again.'); return; }
+      let unshown = 0;
+      doc.edit('Turn in 3-D', () => ({ unshown } = placeView(doc, ex.map, v.view)));
+      editor.changed();
+      // the drawing must still mean the same compound: a view where a wedge can't read right is taken back
+      const after = await chem.molToSmiles(toMolfile(doc, doc.fragmentOf(root), '').molblock);
+      if (unshown || (before && after && after !== before)) {
+        editor.undo();
+        flash('From this angle a stereocentre can\'t be drawn so it reads right (a bond points almost straight at you). Turn the model a little and place it again.', 7000);
+      }
+    }, ex.map.map((id) => { const a = id >= 0 ? doc.atoms.get(id) : undefined; return a ? { x: a.x, y: a.y } : null; }));
+  } catch (e) {
+    viewer3d.close();
+    flash((e as Error).message || 'Could not build a 3-D model of this structure.');
+  }
 }
 
 // ------------------------------------------------------------------ name to structure
@@ -3125,6 +3173,7 @@ function slideListMenu(): MenuItem[] {
     null,
     { label: 'Layout', items: deckLayouts(deckNow()?.master).map((l) => ({ cmd: `layout-${l.id}`, label: l.name })) },
     { cmd: 'format-background' },
+    { cmd: 'slide-references', label: 'References on Slide…' },
     { cmd: 'hide-slide' },
     null,
     { cmd: 'add-section' },
@@ -3735,6 +3784,123 @@ async function pickReferenceFile(): Promise<{ name: string; text: string } | nul
   const f = await openBytesDialog('BibTeX or RIS references', [], ['bib', 'ris', 'txt']);
   if (!f) return null;
   return { name: f.name, text: new TextDecoder().decode(f.bytes).replace(/^\uFEFF/, '') };
+}
+
+// ---------------------------------------------------------------- references (every open file's)
+
+/** The open files that keep references (documents, presentations, designs), the one showing first. */
+function refHolders(): RefHolder[] {
+  const here = ws.mainOf(ws.active);
+  const out: RefHolder[] = [];
+  for (const t of [here, ...ws.fileTabs.filter((x) => x !== here)]) {
+    const changed = () => ws.noteChange(t);
+    if (t.document) out.push(docHolder(String(t.id), t.name, t.document, changed));
+    else if (t.deck) out.push(deckHolder(String(t.id), t.name, t.deck, t.mode === 'design', changed));
+  }
+  return out;
+}
+
+/** The References window: every open file's references, grouped by file (Insert > References…, References > Manage References). */
+const referencesWindow = new ReferencesDialog({
+  holders: refHolders,
+  current: () => { const t = ws.mainOf(ws.active); return t.document || t.deck ? String(t.id) : null; },
+  currentKind: () => (ws.active.mode === 'sheet' ? 'A spreadsheet' : 'A canvas'),
+  flash,
+  pickFile: () => pickReferenceFile(),
+  preferredChanged: () => storeSettings(),
+});
+
+function openReferences(): Promise<void> {
+  finishTyping();
+  return referencesWindow.open();
+}
+
+/** Insert > Presentation > References on Slide: which of the presentation's references the slides picked show at their foot, and how. */
+async function slideReferences(): Promise<void> {
+  const d = deckNow();
+  if (!d?.current) return;
+  finishTyping();
+  const ix = ws.active.mode === 'design' ? [d.index] : pickedSlides();
+  const cur = d.current;
+  if (cur.refList) { void referencesSlideOptions(); return; }
+  const got = await editSlideRefs({
+    refs: () => d.references,
+    format: () => deckFormat(d.settings.refs),
+    chosen: cur.refs ?? [],
+    look: refLook(d.settings.refs, cur.refLook),
+    footerColor: d.master.footerColor,
+    picked: ix.length,
+    manage: () => referencesWindow.open(),
+    labels: (ids, l) => {
+      const slides = d.slides.map((s, k) => (ix.includes(k) ? { ...s, refs: ids, refLook: l, refList: undefined } : s));
+      return slideRefBlock(d.settings.refs, slides, d.index)?.entries.map((e) => e.label) ?? [];
+    },
+  });
+  if (!got || deckNow() !== d) return;
+  const look = lookChanges(got.look);
+  if (got.scope === 'all') d.setSlideRefs(ix, got.ids, null, look);
+  else {
+    // a look of its own only where it differs from the presentation's
+    const deckLook = refLook(d.settings.refs);
+    const own = Object.fromEntries(Object.entries(got.look).filter(([k, v]) => (deckLook as unknown as Record<string, unknown>)[k] !== v));
+    if (!got.look.color && deckLook.color) Object.assign(own, { color: undefined });
+    d.setSlideRefs(ix, got.ids, Object.keys(own).length ? own : null);
+  }
+}
+
+/** Insert > Presentation > References Slide: a slide after the last one listing the references the slides show (or all of them), kept up to date. */
+async function referencesSlide(): Promise<void> {
+  const d = deckNow();
+  if (!d || ws.active.mode !== 'slides') return;
+  finishTyping();
+  const existing = d.slides.findIndex((s) => s.refList);
+  if (existing >= 0) { d.go(existing); void referencesSlideOptions(); return; }
+  const got = await ask('References Slide', [{ name: 'which', label: 'List', value: 'shown', options: [{ value: 'shown', label: 'The references shown on slides, in the order they appear' }, { value: 'all', label: 'Every reference in the presentation' }] }], {
+    ok: 'Insert', note: 'A slide at the end, titled References, listing them in full in the presentation\'s citation style. It keeps itself up to date as you tick references on slides or edit them. Number them through the presentation (References on Slide > Numbers) to match the slide lines.',
+  });
+  if (!got || deckNow() !== d) return;
+  d.insertRefsSlide(d.slides.length, { which: got.which === 'all' ? 'all' : 'shown' });
+  if (!d.references.length) flash('The References slide lists the presentation\'s references: add them with Insert > References…, then tick them on slides with References on Slide.', 8000);
+}
+
+/** The References slide being edited: what it lists, or a normal slide again. */
+async function referencesSlideOptions(): Promise<void> {
+  const d = deckNow();
+  const s = d?.current;
+  if (!d || !s?.refList) return;
+  const got = await ask('References Slide', [{ name: 'which', label: 'List', value: s.refList.which, options: [{ value: 'shown', label: 'The references shown on slides, in the order they appear' }, { value: 'all', label: 'Every reference in the presentation' }, { value: 'none', label: 'Nothing (a normal slide again)' }] }], {
+    ok: 'Apply', note: 'This slide lists the presentation\'s references and keeps the list up to date. Its title is ordinary text.',
+  });
+  if (!got || deckNow() !== d) return;
+  d.setRefList(got.which === 'none' ? undefined : { which: got.which === 'all' ? 'all' : 'shown' });
+}
+
+/** Insert > Reference…: references from any open file put on the canvas or slide as formatted text. */
+async function insertReference(): Promise<void> {
+  if (docActive() || sheetActive()) { void openReferences(); return; }
+  finishTyping();
+  const groups = (): RefGroup[] => refHolders().map((h) => ({ name: h.name, refs: h.refs(), style: h.citeStyle() }));
+  const got = await chooseRefsToInsert(groups(), async () => {
+    const asked = await ask('Reference by DOI', [{ name: 'doi', label: 'DOI', value: '' }], { ok: 'Look Up', note: 'Paste a DOI (10.1021/om100106e) or a doi.org link. The details are filled in from Crossref, which needs the internet.' });
+    if (!asked?.doi.trim()) return null;
+    let found: Reference;
+    try { found = await fetchDoi(asked.doi); } catch (e) { flash(e instanceof Error ? e.message : String(e), 8000); return null; }
+    return editReference(found, 'Check the Reference', citeFormatOf(preferredCiteStyle().style, preferredCiteStyle().options), (x) => fetchDoi(x));
+  }, async () => { await referencesWindow.open(); return groups(); });
+  if (!got) return;
+  const f = citeFormatOf(got.style, got.style === preferredCiteStyle().style ? preferredCiteStyle().options : undefined);
+  const runs = referenceRuns(got.refs, got.form, f, got.numbered);
+  const size = doc.style.captionSize;
+  const c = pasteCentre();
+  const area = slideContentArea();
+  const w = area ? (area.x2 - area.x1) * 0.8 : doc.style.bondLength * 24;
+  let id = -1;
+  doc.edit(got.refs.length === 1 ? 'Insert reference' : 'Insert references', () => {
+    id = doc.addCaption({ x: c.x - w / 2, y: c.y, runs: runs.map((r) => ({ ...r, ...(r.text === '\n' ? {} : { size }) })), justify: 'left', wrap: w }).id;
+  });
+  editor.changed();
+  if (id >= 0) editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set([id]), arrows: new Set(), shapes: new Set() };
+  flash('Inserted as text: move it, or double-click it to edit.');
 }
 
 async function insertPicture(): Promise<void> {
@@ -4985,6 +5151,7 @@ function loadDocMode(): Promise<DocumentMode> {
       },
       clipboardObject: nativeClipboard ? () => clipboardObject() : undefined,
       pickReferenceFile: () => pickReferenceFile(),
+      openReferences: () => referencesWindow.open(),
       preferredChanged: () => storeSettings(),
       reviewNameChanged: () => storeSettings(),
       quickParts: () => docQuickParts,
@@ -5174,7 +5341,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 /** Menu commands that work the same whatever shows. */
-const ANY_TAB = new Set(['new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
+const ANY_TAB = new Set(['references', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
   'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
@@ -5438,7 +5605,7 @@ function setPictureStyle(look: PictureLook | undefined): boolean {
 }
 
 /** Slide commands that don't apply to a design's single page. */
-const SLIDE_ONLY = new Set(['compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
+const SLIDE_ONLY = new Set(['references-slide', 'compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
   'edit-layouts', 'view-sorter', 'add-section', 'rename-section', 'remove-section', 'remove-section-slides', 'remove-all-sections', 'section-up', 'section-down', 'collapse-sections', 'expand-sections',
   'slide-transitions', 'slide-animations', 'animation-pane', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-video', 'insert-audio',
   'reading-view', 'rehearse-timings', 'record-show', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
@@ -5629,6 +5796,11 @@ const COMMANDS: Record<string, () => unknown> = {
     showSlideState();
   },
   'header-footer': () => void headerFooter(),
+  references: () => void openReferences(),
+  'manage-references': () => void openReferences(),
+  'slide-references': () => void slideReferences(),
+  'references-slide': () => void referencesSlide(),
+  'insert-reference': () => void insertReference(),
   'insert-date-time': () => void headerFooter(),
   'insert-slide-number': () => void headerFooter(),
   cut: () => cut(),
@@ -5873,6 +6045,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'scheme-settings': () => settingsWindow.open('schemes'),
   'attach-descriptors': () => void attachDescriptors(),
   'pubchem-lookup': () => void lookUpChosen(),
+  'model-3d': () => void show3dModel(),
   'add-id-label': () => void addTiedText('label'),
   'lock-structures': () => toggleStructureLock(),
   'add-caption': () => void addTiedText('caption'),
@@ -8374,9 +8547,9 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'paste' }, { cmd: 'paste-smiles' }, { cmd: 'select-all' }, null,
       { cmd: 'undo' }, { cmd: 'redo' }, null,
       ...(ws.active.mode === 'slides' ? [{ cmd: 'new-comment', label: 'New Comment' }, { cmd: 'show-comments', label: 'Show Comments' }, null] : []),
-      ...(ws.active.mode === 'slides' || design ? [{ cmd: 'format-background', label: 'Format Background…' }, null] : []),
+      ...(ws.active.mode === 'slides' || design ? [{ cmd: 'format-background', label: 'Format Background…' }, { cmd: 'slide-references', label: 'References on Slide…' }, null] : []),
       ...(ws.active.mode === 'slides' && deckNow()?.current?.canvas ? [{ label: 'Keyframes', items: keyframeMenu() }, null] : []),
-      { label: 'Insert', items: [{ cmd: 'name-to-structure' }, { cmd: 'periodic-table' }, { cmd: 'insert-picture' }, { cmd: 'import-picture', label: 'Structure from Picture…' }, { cmd: 'text-box' }, { cmd: 'insert-symbol' }, ...(design ? [{ cmd: 'design-shapes', label: 'Shape…' }, { cmd: 'design-icons', label: 'Icon…' }, { cmd: 'connector-tool' }] : []), ...(ws.active.mode === 'slides' ? [{ cmd: 'slide-shapes', label: 'Shape…' }, { cmd: 'slide-icons', label: 'Icon…' }] : [])] },
+      { label: 'Insert', items: [{ cmd: 'name-to-structure' }, { cmd: 'periodic-table' }, { cmd: 'insert-picture' }, { cmd: 'import-picture', label: 'Structure from Picture…' }, { cmd: 'text-box' }, { cmd: 'insert-reference', label: 'Reference…' }, { cmd: 'insert-symbol' }, ...(design ? [{ cmd: 'design-shapes', label: 'Shape…' }, { cmd: 'design-icons', label: 'Icon…' }, { cmd: 'connector-tool' }] : []), ...(ws.active.mode === 'slides' ? [{ cmd: 'slide-shapes', label: 'Shape…' }, { cmd: 'slide-icons', label: 'Icon…' }] : [])] },
       { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }] },
       { cmd: 'drawing-style' },
       ...(ws.active.mode === 'drawing' && pageEdgesMenu() ? [pageEdgesMenu()!] : []),
@@ -8413,6 +8586,7 @@ function drawingMenu(): MenuItem[] {
         { cmd: 'check-structure' }, { cmd: 'save-template' }, { cmd: 'define-nickname' }, null,
         { cmd: 'pubchem-lookup' },
       ] },
+      { cmd: 'model-3d' },
     ] : []),
     ...(pickedCurved() ? [{ cmd: 'clean-up-arrow' }, { label: 'Mechanism Arrow', items: [
       { cmd: 'arrow-add-bend', ...(editor.contextSpot?.t !== undefined ? { label: 'Add Bend Here' } : {}) }, ...(editor.pickedJoin() ? [{ cmd: 'arrow-remove-bend' }, { cmd: 'arrow-smooth-join' }, { cmd: 'arrow-symmetric-join' }] : []), null,

@@ -262,6 +262,17 @@ R/S and E/Z are worked out for every structure as you draw.
 - **Polymer or Repeat Brackets (n, ×3)…**: put square brackets round a repeat unit with the bracket tool, select both brackets, and type `n` for a polymer or a number for a group repeated that many times. The Analysis panel then shows the formula as end groups plus the repeat unit.
 - **R-Group Table…**: draw a core with R1, R2 (or R, X, Ar) as labels, select it and choose this. Type one compound per line, its groups separated by commas (`Me, H`), or paste cells from Excel. You can set a compound number (2 gives 2a, 2b, 2c…), choose whether formula and MW are worked out, and add columns to fill in yourself (`Yield (%), ee (%)`). The table goes under the structure; double-click a cell to change it.
 
+### 3-D model
+
+**Chemistry ▸ Look Up ▸ 3-D Model…** (also on the right-click menu of a structure) builds the selected structure in 3-D in a window of its own. The conformers come from OpenChemLib's torsion library and each is relaxed with the MMFF94s+ force field, lowest energy first; **‹** and **›** step through them, with each one's energy above the lowest. The model starts turned to look like your drawing.
+
+- Drag to turn it, Shift+drag (or the right button) to move it, the wheel to zoom, the arrow keys to turn it in steps, and double-click to go back to the drawing's view. **Spin** turns it slowly.
+- Draw it as **Ball and stick**, **Sticks**, **Wire** or **Space filling**, with or without hydrogens and element labels.
+- **Place on Page** turns the drawn structure to match the view (one undoable step): bonds nearer you go in front where two cross, and each stereocentre gets a wedge or hashed wedge that reads right from that angle (in a crowded ring fusion, on a drawn H). The structure also keeps its 3-D positions in the CDXML file, so two placed views of one molecule with an arrow between them turn into each other in a reaction animation. If a bond points almost straight at you, so a stereocentre can't be shown clearly, the step is taken back and the window says so: turn the model a little and place it again.
+- **Copy Picture** copies the view as a PNG (three times the window's size); **Copy MOL** copies the conformer as a 3-D molfile with hydrogens, for Chem3D, Avogadro, PyMOL or a calculation.
+
+Structures with R groups or labels that can't be read have no 3-D shape. Metals mostly have no MMFF parameters, so their models are the generator's geometry, not relaxed.
+
 ### PubChem
 
 **Chemistry ▸ Look Up ▸ Look Up on PubChem** (also in the Analysis panel and the right-click menu) sends the selected structure to PubChem and shows its names, CAS number, a link to its PubChem page, GHS hazards, and measured melting point, boiling point and density where known. See [The Analysis panel](#the-analysis-panel).
@@ -365,7 +376,7 @@ Select a structure and the **Analysis** panel on the right shows:
 - elemental analysis (percentages);
 - **Isotope pattern**: the peaks of that ion, drawn and listed (useful for Cl, Br and metals such as Pd, Ru, Ir and Pt). Every element with a stable isotope is known, so only Tc, Pm and the radioactive heavy elements give no pattern;
 - **Electron count**, for a structure with a metal: the metal's oxidation state, its dⁿ count and the complex's electron count (18 for a closed shell), with its covalent bond classification (ML₃X for Wilkinson's catalyst). Each ligand is listed as L (gives two electrons), X (shares one) or Z (takes two), with the electrons it gives counted both ways: **Neutral** (covalent: the metal atom's electrons plus one per X and two per L) and **Ionic** (the metal ion's d electrons plus two per X⁻ and per L). Both give the same total. It reads ligand labels (PPh3, CO, Cl, Cp, COD, dppe, acac…), drawn ligands, hapto (η) bonds (η⁵-Cp is L₂X, η⁶-arene L₃, η³-allyl LX), dative arrows (to the metal: L; from the metal to a Lewis acid such as BF₃: Z), bridging ligands (a μ-Cl is X to one metal and L to the other), metal–metal bonds (one electron to each metal) and charges. A carbene drawn M=C counts as an alkylidene (X₂), so Grubbs' catalyst comes out Ru(IV), 16 electrons; drawn M–C with a lone pair (singlet) on the carbon, or as an NHC, it is L. A metal label with its ligands written in (PdCl2, Pd(PPh3)4) is counted too.
-- **Properties**: cLogP, molar refractivity, TPSA, H-bond donors and acceptors, rotatable bonds, heavy atoms, Fsp3, and estimated boiling and melting points (Joback method; treat these as rough guides);
+- **Properties**: cLogP, molar refractivity, TPSA, H-bond donors and acceptors, rotatable bonds, heavy atoms, Fsp3, and estimates (treat these as rough guides): boiling and melting points (Joback method), water solubility as logS and mg/mL (Delaney's ESOL), the most acidic pKa and the most basic pKaH with the group each belongs to (Perrin, Dempsey and Serjeant's Hammett and Taft rules, typically within 0.5–1 unit). **Critical point and thermochemistry** opens Joback's critical temperature, pressure and volume, gas-phase ΔHf°, ΔGf° and Cp, ΔHvap and ΔHfus, with vapour pressure and Henry's law constant at 25 °C worked out from them. **All pKa sites** lists every acidic and basic group when there are more than two. In Spreadsheet mode the same estimates are columns: `LOGS`, `PKA`, `PKAH`, `BP` and `MP`;
 - the structure's SMILES.
 
 Buttons put text under the structure:
@@ -402,6 +413,10 @@ Two readers can read pictures:
 ## Pictures and tables
 
 **Insert ▸ Picture…** puts a picture on the drawing (or drop a picture file on it). Drag a corner to resize it; it keeps its proportions unless you hold Alt. **Insert ▸ Picture Tools ▸ Crop Picture** crops it. **Insert ▸ Table…** adds an ACS-style table (rules above and below the heading row and under the last row) of the rows and columns you ask for; double-click a cell to type in it, and use the Style panel to change its lines, rows and columns (each column can line up left, centred or right; new tables start centred). Drag a structure into a cell to put it there: the cell grows to fit it, it sits centred at the top of the cell with any text under it, and it moves with the table. Drag it out to take it out of the cell.
+
+## References as text
+
+**Insert ▸ Formatted Reference…** puts references on the canvas as formatted text: tick them in any open document or presentation (or look one up with **By DOI…**), pick the citation style, write them in full or short (journal, year, volume, page), and number them if you like. The text is ordinary text afterwards. **Insert ▸ Reference Manager…** shows the references of every open file.
 
 ## Colours and palettes
 

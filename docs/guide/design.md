@@ -145,6 +145,10 @@ The **Layers** panel on the right lists the shapes, pictures and tables on the p
 - Click the eye to hide something, or the lock so clicks pass through it.
 - Double-click a name to rename it.
 
+## References
+
+A design keeps a reference list, as a presentation does. **References** on the Design tab ticks which ones the page shows at its foot, written and formatted for you (journal, year, volume and page by default). Add references, or copy them from another open file, in **Insert ▸ Reference Manager…**. **Insert ▸ Formatted Reference…** puts a reference anywhere on the page as text.
+
 ## Saving and exporting
 
 - **Save** (Ctrl+S) writes a one-slide PowerPoint file (.pptx). In PowerPoint the shapes look the same and connectors are PowerPoint connectors. Open it here again and everything is editable, with connectors still attached to their shapes.

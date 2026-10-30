@@ -2506,6 +2506,11 @@ export class SheetMode {
     add('HBD', String(m.hbd));
     add('HBA', String(m.hba));
     add('ROTB', String(m.rotb));
+    if (m.logS !== undefined) add('LOGS', num(m.logS, 2));
+    if (m.pka != null) add('PKA', num(m.pka, 1));
+    if (m.pkaH != null) add('PKAH', num(m.pkaH, 1));
+    if (m.bp != null) add('BP', num(m.bp - 273.15, 0));
+    if (m.mp != null) add('MP', num(m.mp - 273.15, 0));
     add('SMILES', m.smiles);
     add('INCHIKEY', m.inchikey);
     box.append(table);
