@@ -44,3 +44,21 @@ export function doubleBondGap(s: DocStyle): number {
 export function wedgeWidth(s: DocStyle): number {
   return 1.5 * s.boldWidth;
 }
+
+/**
+ * How round the free ends of bond lines are, an app setting (not saved with drawings): 1 is a
+ * half circle (a round cap), 0 a square end cut off at the atom (a butt cap); in between, the end
+ * reaches past by that fraction of the line's half width with its corners rounded to match.
+ * Below 1, lines that meet at an atom are mitred rather than overlapping round ends.
+ */
+/** Slightly round: square-cut ends with softened corners (Nate's pick, 2026-10-30). */
+export const DEFAULT_BOND_ENDS = 0.25;
+export const bondEndPrefs: { round: number } = { round: DEFAULT_BOND_ENDS };
+
+/** The choices offered for it (Settings > Drawing), from round to square. */
+export const BOND_END_CHOICES: { value: number; label: string }[] = [
+  { value: 1, label: 'Round' },
+  { value: 0.5, label: 'Half round' },
+  { value: 0.25, label: 'Slightly round' },
+  { value: 0, label: 'Square' },
+];
