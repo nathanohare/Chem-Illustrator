@@ -296,12 +296,19 @@ export class Editor {
   pointer: Vec = { x: 0, y: 0 };
   /**
    * A highlight set by the keyboard or by drawing (a new atom, or one reached with the arrow
-   * keys). It stays when the mouse moves into empty space, as in ChemDraw, and gives way when
-   * the mouse points at something else.
+   * keys). It holds while the mouse stays still, and gives way to the mouse once it moves
+   * (or, with `stickyHotspot`, stays when the mouse moves into empty space, as in ChemDraw,
+   * and gives way when the mouse rests on something else).
    */
   private keyHot: Hit = null;
   /** What the mouse pointed at when the keyboard highlight was set. */
   private keyHotHover: Hit = null;
+  /** Where the mouse was on screen when the keyboard highlight was set. */
+  private keyHotAt: Vec | null = null;
+  /** Where the mouse last was on screen (null before it has moved over the drawing). */
+  private lastClient: Vec | null = null;
+  /** How far, in screen pixels, the mouse moves before it takes over from the keyboard highlight (a nudge of the hand doesn't). */
+  static readonly FOLLOW_PX = 4;
   /**
    * Waiting for the mouse to rest on something new before that takes over from the keyboard
    * highlight (passing over a bond on the way out doesn't take it).
@@ -316,6 +323,8 @@ export class Editor {
     penSketch: false,
     /** After 1 or 0 on the atom under the mouse, the highlight stays there (ChemDraw). */
     keepHotspotOnBond: true,
+    /** A highlight set by a key stays when the mouse moves into empty space, as in ChemDraw; off, it follows the mouse once it moves. */
+    stickyHotspot: false,
     /** New bonds are one bond length long, unless Alt is held (Ctrl+L). */
     fixedLength: true,
     /** New bonds point in 15° steps, unless Alt is held (Ctrl+E). */
@@ -746,6 +755,7 @@ export class Editor {
     }
     this.keyHot = h;
     this.keyHotHover = this.hover;
+    this.keyHotAt = this.lastClient;
     this.cancelTakeover();
     this.requestOverlay();
   }
@@ -764,6 +774,24 @@ export class Editor {
       this.takeover = null;
       if (this.keyHot && sameHit(this.hover, h)) { this.keyHot = null; this.requestOverlay(); }
     }, Editor.TAKEOVER_MS);
+  }
+
+  /**
+   * After a key changes the drawing: what is under the mouse now (the atom it was on may have
+   * gone, or a new bond may be there), so the highlight and the next key go by the drawing as
+   * it is.
+   */
+  private refreshHover(): void {
+    const c = this.lastClient;
+    if (!this.pointerInside || this.drag || !c) return;
+    // from the screen point, as a key may have zoomed or scrolled the drawing under the mouse
+    const rect = this.r.overlay.getBoundingClientRect();
+    const p = (this.pointer = this.wallPoint(this.r.toDoc(c.x - rect.left, c.y - rect.top)));
+    const h = this.hitTest(p);
+    if (sameHit(h, this.hover)) return;
+    if (this.keyHot && sameHit(this.keyHotHover, this.hover)) this.keyHotHover = h;
+    this.hover = h;
+    this.requestOverlay();
   }
 
   private cancelTakeover(): void {
@@ -889,6 +917,7 @@ export class Editor {
   private onMove(e: PointerEvent): void {
     const p = this.wallPoint(this.docPoint(e));
     this.pointer = p;
+    this.lastClient = { x: e.clientX, y: e.clientY };
     // (a card or menu closing over the drawing leaves the mouse on it without a pointerenter)
     this.pointerInside = true;
     const d = this.drag;
@@ -907,8 +936,13 @@ export class Editor {
       const handle = onRotate ? null : this.handleAt(p);
       const h = handle || onRotate ? null : this.hitTest(p);
       if (!sameHit(h, this.hover)) { this.hover = h; }
-      // the keyboard highlight gives way once the mouse rests on something new
-      if (this.keyHot) {
+      // the keyboard highlight gives way to the mouse once it moves (a finger doesn't hover, so
+      // a touch leaves it); in ChemDraw's way, once the mouse rests on something new
+      if (this.keyHot && !this.options.stickyHotspot) {
+        const at = this.keyHotAt;
+        if (!at) this.keyHotAt = this.lastClient;
+        else if (e.pointerType !== 'touch' && Math.hypot(e.clientX - at.x, e.clientY - at.y) > Editor.FOLLOW_PX) this.keyHot = null;
+      } else if (this.keyHot) {
         if (!h) { this.keyHotHover = null; this.cancelTakeover(); }
         else if (sameHit(h, this.keyHotHover)) this.cancelTakeover();
         else this.takeoverSoon(h);
@@ -3992,6 +4026,7 @@ export class Editor {
       if (action && this.runAction(action, hs)) {
         e.preventDefault();
         this.inputTs = e.timeStamp;
+        this.refreshHover();
         return;
       }
     }

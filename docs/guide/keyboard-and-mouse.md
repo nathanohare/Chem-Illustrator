@@ -15,9 +15,11 @@ What a key does depends on what the mouse is pointing at:
 
 Letters are case-sensitive: `f` and Shift+F do different things.
 
-A key that grows something moves the highlight to the new atom, so you can carry on typing: `8` then `1` makes an E double bond, `1 1 1` draws a chain. `1` and `0` pressed with the mouse still on an atom keep the highlight there, so pressing `1` three times adds three bonds to the same atom; once the mouse moves off, the next `1` follows the new atom again. (The Hotkeys window has a box to turn this off, so `1` always follows.)
+A key that grows something moves the highlight to the new atom, so you can carry on typing: `8` then `1` makes an E double bond, `1 1 1` draws a chain. `1` and `0` pressed with the mouse still on an atom keep the highlight there, so pressing `1` three times adds three bonds to the same atom. (The Hotkeys window has a box to turn this off, so `1` always follows.)
 
-A highlight set by a key stays put when the mouse moves off into empty space or passes over other atoms and bonds. Rest the mouse on another atom or bond, or click, and that takes over. **Undo** puts the highlight back where the key found it, so you can carry on typing.
+A highlight set by a key holds while the mouse stays still. Once the mouse moves, the highlight follows it again: whatever atom or bond is under the pointer, or nothing in empty space. **Undo** puts the highlight back where the key found it, so you can carry on typing.
+
+If you prefer ChemDraw's way, tick the box in the Hotkeys window that keeps the highlight in place: a highlight set by a key then stays put when the mouse moves off into empty space or passes over other atoms and bonds, and gives way when you rest the mouse on another atom or bond, or click.
 
 If several atoms are selected and you point at one of them, a label key labels them all.
 

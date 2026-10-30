@@ -7180,6 +7180,7 @@ function currentSettings(): Settings {
   return {
     hotkeys: keymap.overrides(),
     keepHotspotOnBond: editor.options.keepHotspotOnBond,
+    stickyHotspot: editor.options.stickyHotspot,
     fixedLength: editor.options.fixedLength,
     fixedAngles: editor.options.fixedAngles,
     devTools,
@@ -7372,6 +7373,10 @@ const hotkeysDialog = new HotkeysDialog({
     get: () => editor.options.keepHotspotOnBond,
     set: (v) => { editor.options.keepHotspotOnBond = v; storeSettings(); },
   },
+  stickyHotspot: {
+    get: () => editor.options.stickyHotspot,
+    set: (v) => { editor.options.stickyHotspot = v; storeSettings(); },
+  },
   exportKeys: async () => {
     const target = await saveFileDialog('Chem Illustrator hotkeys.json', KEYMAP_FILE).catch((e) => { hotkeysDialog.say(String(e)); return null; });
     if (!target) return;
@@ -7398,6 +7403,7 @@ const hotkeysDialog = new HotkeysDialog({
 /** Use these settings: at start, and when settings are imported (Edit > Settings File > Import Settings). */
 function applySettings(s: Settings): void {
   editor.options.keepHotspotOnBond = s.keepHotspotOnBond;
+  editor.options.stickyHotspot = s.stickyHotspot;
   editor.options.fixedLength = s.fixedLength;
   editor.options.fixedAngles = s.fixedAngles;
   editor.showRoles = s.showRoles;
