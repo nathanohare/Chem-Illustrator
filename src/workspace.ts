@@ -154,11 +154,11 @@ export function hasStructures(t: DocText): boolean {
   return false;
 }
 
-/** What a new, unsaved file of each kind is called ("Drawing 1"). */
-export const MODE_NAMES: Record<Mode, string> = { drawing: 'Drawing', slides: 'Slides', sheet: 'Sheet', document: 'Document', design: 'Design' };
+/** What a new, unsaved file of each kind is called ("Canvas 1"). */
+export const MODE_NAMES: Record<Mode, string> = { drawing: 'Canvas', slides: 'Presentation', sheet: 'Spreadsheet', document: 'Document', design: 'Design' };
 
 /** Is this the name a new tab was given (not a file's own)? */
-export const isNewName = (name: string): boolean => /^(Drawing|Slides|Sheet|Document|Design) \d+\.[a-z]+$/.test(name) || /^Untitled/.test(name);
+export const isNewName = (name: string): boolean => /^(Canvas|Presentation|Spreadsheet|Document|Design|Drawing|Slides|Sheet) \d+\.[a-z]+$/.test(name) || /^Untitled/.test(name);
 
 export class Workspace {
   tabs: Tab[] = [];
@@ -193,7 +193,7 @@ export class Workspace {
       stamp: null, autoSave: null, changes: 0, savedAt: 0, savedHow: null };
   }
 
-  /** "Drawing 1", "Slides 2", "Design 1"… with the right extension, not already used by an open tab. */
+  /** "Canvas 1", "Presentation 2", "Design 1"… with the right extension, not already used by an open tab. */
   private untitled(mode: Mode, going?: Tab): string {
     const ext = SAVE_TYPES[mode][0].extension;
     for (let n = 1; ; n++) {
@@ -470,7 +470,7 @@ export class Workspace {
   async open(): Promise<void> {
     let f;
     try {
-      f = await openBytesDialog('Drawings, slides, sheets and documents', [CDXML, CDX, CDS, PPTX, XLSX, XLSM, DOCX, RTF, ODT, CSV, SDF], ['sd', ...SHEET_OPEN_ONLY, ...DOC_OPEN_ONLY, ...TABLE_TEXT_EXTENSIONS]);
+      f = await openBytesDialog('Canvases, presentations, spreadsheets and documents', [CDXML, CDX, CDS, PPTX, XLSX, XLSM, DOCX, RTF, ODT, CSV, SDF], ['sd', ...SHEET_OPEN_ONLY, ...DOC_OPEN_ONLY, ...TABLE_TEXT_EXTENSIONS]);
     } catch (e) {
       await showError('Could not open the file: ' + String(e));
       return;

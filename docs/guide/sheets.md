@@ -1,16 +1,16 @@
-# Sheets
+# Spreadsheet (tables, charts, dashboards)
 
-This page covers Sheet mode: cells and formulas, structures in cells, the chemistry functions, formatting, charts and isotope patterns, dashboards, and saving for Excel.
+This page covers Spreadsheet mode: cells and formulas, structures in cells, the chemistry functions, formatting, charts and isotope patterns, dashboards, and saving for Excel.
 
-![A sheet with structures and property columns](../images/sheet.png)
+![A spreadsheet with structures and property columns](../images/sheet.png)
 
-## Starting a sheet
+## Starting a spreadsheet
 
-Click **+ Sheet** at the end of the tab strip, or choose **File ▸ New ▸ New Sheet**. While a sheet is showing, Ctrl+N starts another one.
+Click **+** at the end of the tab strip and pick **Spreadsheet (tables, charts, dashboards)**, or choose **File ▸ New ▸ Spreadsheet**. While a spreadsheet is showing, Ctrl+N starts another one.
 
 **File ▸ New ▸ New from Template…** offers a **Reaction table** (one row per entry: catalyst, loading, solvent, temperature, time, conversion, yield, ee and dr, with the best yield and its entry found for you) and a **Reagent sheet** (the reagent table below, and a Yield sheet that works out the percent yield from the product's structure and its isolated mass).
 
-Sheets open from .xlsx, .xlsm, .xls and .ods files as well as text and SD files; see [File types](files-and-sharing.md#file-types).
+Spreadsheets open from .xlsx, .xlsm, .xls and .ods files as well as text and SD files; see [File types](files-and-sharing.md#file-types).
 
 The ribbon has **Home**, **Insert**, **Page Layout**, **Formulas**, **Data**, **Review** and **View** tabs. **Table Design**, **Chart**, **PivotTable**, **Sparkline** and **Dashboard** tabs appear when you click in a table, a chart, a PivotTable, a sparkline or a dashboard. The **Sheet** submenus of the **Edit**, **View**, **Insert** and **Format** menus hold many of the same commands.
 
@@ -26,7 +26,7 @@ Cells work as in Excel:
 
 ## The chemistry toolbox
 
-The drawing toolbox shows on the left in Sheet mode too. Pick a drawing tool there and the selected cell's structure opens for editing with that tool; if the cell is empty, a new drawing starts for it. Press **Done** above the drawing to put the structure in the cell.
+The drawing toolbox shows on the left in Spreadsheet mode too. Pick a drawing tool there and the selected cell's structure opens for editing with that tool; if the cell is empty, a new drawing starts for it. Press **Done** above the drawing to put the structure in the cell.
 
 When the pointer turns into a pointing hand over a cell, that cell holds a structure you can open: double-click it to change the drawing.
 
@@ -34,11 +34,11 @@ When the pointer turns into a pointing hand over a cell, that cell holds a struc
 
 - **Draw one:** select a cell and click **Home** tab ▸ **Structure** (or **Insert ▸ Structure in Cell**). The drawing tools open; draw, press **Done**, and the structure sits in the cell.
 - **From names or SMILES:** type a column of names or SMILES, select them and click **From Name** (Ctrl+Shift+N). Each one is drawn in a new column beside it.
-- **Paste:** copy a structure from a drawing tab, or from ChemDraw (Windows app), and paste it into a cell.
+- **Paste:** copy a structure from a canvas tab, or from ChemDraw (Windows app), and paste it into a cell.
 
 ### Property columns
 
-Click in your table and choose **Home** tab ▸ **Properties** (or **Insert ▸ Sheet ▸ Insert Property Columns…**). Tick the columns you want:
+Click in your table and choose **Home** tab ▸ **Properties** (or **Insert ▸ Spreadsheet ▸ Insert Property Columns…**). Tick the columns you want:
 
 Formula, MW, Exact mass, HRMS m/z, cLogP, TPSA, H-bond donors, H-bond acceptors, Rotatable bonds, SMILES, InChIKey and **Duplicate of**.
 
@@ -48,7 +48,7 @@ Any calculated value can be typed over, for example with a measured mass. The ce
 
 ### Reagent tables
 
-**Home** tab ▸ **Reagent Table** (or **Insert ▸ Sheet ▸ New Reagent Table**) adds a worksheet set up for a reaction. Type the limiting reagent's mmol, then for each reagent draw its structure (or type its SMILES or name into the **Structure** column, and it is drawn there) and its equivalents. MW, mmol and mass (mg) work themselves out; type a density (g/mL) or a concentration (M) and the volume (µL) appears. Any number can be typed over, for example the MW of a salt or hydrate, and the rest of the row follows.
+**Home** tab ▸ **Reagent Table** (or **Insert ▸ Spreadsheet ▸ New Reagent Table**) adds a worksheet set up for a reaction. Type the limiting reagent's mmol, then for each reagent draw its structure (or type its SMILES or name into the **Structure** column, and it is drawn there) and its equivalents. MW, mmol and mass (mg) work themselves out; type a density (g/mL) or a concentration (M) and the volume (µL) appears. Any number can be typed over, for example the MW of a salt or hydrate, and the rest of the row follows.
 
 ## Formulas
 
@@ -166,7 +166,7 @@ Notes and comments move with their cells when you sort, insert or delete rows, a
 
 ## Data validation
 
-**Home** tab ▸ **Validation…** (or **Format ▸ Sheet ▸ Data Validation…**) sets what may be typed in the selected cells, as Excel's Data Validation does:
+**Home** tab ▸ **Validation…** (or **Format ▸ Spreadsheet ▸ Data Validation…**) sets what may be typed in the selected cells, as Excel's Data Validation does:
 
 - **Settings:** allow a whole number, a decimal, a date or time, a text length (each between limits, or greater than, less than…), a **List**, or a **Custom** formula. A limit can be a number or a formula such as `=B1` or `=TODAY()`. A list is items separated by commas (`Pd(OAc)2, PdCl2, Pd(PPh3)4`) or a reference to cells that hold them (`=$H$2:$H$20`, or on another sheet, `=Reagents!$A$2:$A$40`).
 - **Input Message:** a title and message shown beside the cell while it is selected.
@@ -266,7 +266,7 @@ In the chart panel, each series of a scatter chart has **Sticks** (peaks drawn u
 To compare a measured HRMS isotope pattern with the calculated one:
 
 1. Put the compound in a cell: draw a structure, or type SMILES or a formula such as `C14H12BrNO`.
-2. With that cell selected, choose **Home** tab ▸ **Isotopes** (or **Insert ▸ Sheet ▸ Isotope Pattern…**, or the right-click menu).
+2. With that cell selected, choose **Home** tab ▸ **Isotopes** (or **Insert ▸ Spreadsheet ▸ Isotope Pattern…**, or the right-click menu).
 3. Fill in the window:
    - **Compound:** the cell you are on, or a formula typed in.
    - **Ion:** [M+H]+ to start; pick another or type any adduct ([M+Na]+, [M−H]−, [M+2H]2+…).
@@ -325,4 +325,4 @@ The **Page Layout** tab sets how a sheet prints, as in Excel: **Margins**, **Ori
 - Copy cells here and paste into Excel to get the values, with SMILES for structures. Cells copied in Excel paste here.
 - **File ▸ Print…** (Ctrl+P) prints the whole sheet or the selected cells, portrait or landscape, with or without gridlines. Structures print as pictures.
 
-Next: [Getting started](getting-started.md) · [Drawing](drawing.md) · [Keyboard and mouse](keyboard-and-mouse.md) · [Slides](slides.md) · [Documents](documents.md) · [Design](design.md) · [Files and sharing](files-and-sharing.md) · [Feedback](feedback.md)
+Next: [Getting started](getting-started.md) · [Canvas](drawing.md) · [Keyboard and mouse](keyboard-and-mouse.md) · [Presentation](slides.md) · [Document](documents.md) · [Design](design.md) · [Files and sharing](files-and-sharing.md) · [Feedback](feedback.md)

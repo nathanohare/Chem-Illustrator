@@ -1,4 +1,4 @@
-# Design
+# Design (TOC graphic, abstract, poster, figure)
 
 This page covers Design mode: single-page graphics such as TOC graphics, graphical abstracts, posters, flowcharts and workup schemes, and how to export them for a journal.
 
@@ -6,9 +6,9 @@ This page covers Design mode: single-page graphics such as TOC graphics, graphic
 
 ## Starting a design
 
-Click **+** at the end of the tab strip and pick **Design**, or choose **File ▸ New ▸ New Design…**. A gallery opens with a **Blank page** and six ready-made layouts.
+Click **+** at the end of the tab strip and pick **Design**, or choose **File ▸ New ▸ Design…**. A gallery opens with a **Blank page** and six ready-made layouts.
 
-A design is a single page. For several pages, use [Slides](slides.md) instead.
+A design is a single page. For several pages, use [Presentation](slides.md) instead.
 
 ## Page sizes
 
@@ -25,7 +25,7 @@ You can also type a custom size in in, cm, mm, pt or px. Journals change their r
 
 Structures are drawn larger on bigger pages so they stay readable: at their normal size on journal graphics and paper, twice as large on slides and four times as large on posters.
 
-The ribbon's **Page** group also sets the **Background** colour (**Format…** beside it gives the page a gradient, picture or pattern, as in Slides), shows a **Grid** (on screen only, never saved or printed) with its spacing, and turns **Guides** on and off.
+The ribbon's **Page** group also sets the **Background** colour (**Format…** beside it gives the page a gradient, picture or pattern, as in Presentation mode), shows a **Grid** (on screen only, never saved or printed) with its spacing, and turns **Guides** on and off.
 
 ## Ready-made layouts
 
@@ -63,21 +63,21 @@ An icon goes on the page like a shape (click it, then click or drag; or drag it 
 
 The ribbon's **Insert** group also adds a **Text Box**, a **Picture** or a **Table**, and **Crop** trims a picture.
 
-The **Chemistry** group adds a **Catalytic Cycle** or an **Energy Diagram** (the same as **Chemistry ▸ Reactions and Schemes**: see [Drawing](drawing.md#reactions-and-schemes)). A new one goes beside what is already on the page.
+The **Chemistry** group adds a **Catalytic Cycle** or an **Energy Diagram** (the same as **Chemistry ▸ Reactions and Schemes**: see [Canvas](drawing.md#reactions-and-schemes)). A new one goes beside what is already on the page.
 
 ### Structures
 
-All the drawing tools and hotkeys work on a design page, so you can draw structures, reaction arrows and schemes straight onto it, or paste them from a drawing tab or ChemDraw (Windows app).
+All the drawing tools and hotkeys work on a design page, so you can draw structures, reaction arrows and schemes straight onto it, or paste them from a canvas tab or ChemDraw (Windows app).
 
 ### Pictures with a white background
 
 Insert a PNG or JPEG (a logo, say), select it, and click **Remove white…** in the **Style** panel. You can remove only the white joined to the edges, or all white, and set how near to white counts. Undo puts the white back.
 
-**Picture Format** (on the ribbon, in the panel or on right-click) does more: it removes a background of any colour, recolours, corrects and crops pictures to shapes, and keeps the picture itself as it was, so you can change your mind later. See [Slides: Picture Format](slides.md#picture-format).
+**Picture Format** (on the ribbon, in the panel or on right-click) does more: it removes a background of any colour, recolours, corrects and crops pictures to shapes, and keeps the picture itself as it was, so you can change your mind later. See [Presentation: Picture Format](slides.md#picture-format).
 
 ## Diagrams
 
-**Insert** ▸ **Diagram…** (a **Diagram** button on the Design, Slides and Document ribbons) draws a diagram from lines of text, as PowerPoint's SmartArt does. Type one item per line; press <kbd>Tab</kbd> to move a line a level down (under the line above it) and <kbd>Shift+Tab</kbd> to move it back up. The picture on the right shows how it will look as you type.
+**Insert** ▸ **Diagram…** (a **Diagram** button on the Design, Presentation and Document ribbons) draws a diagram from lines of text, as PowerPoint's SmartArt does. Type one item per line; press <kbd>Tab</kbd> to move a line a level down (under the line above it) and <kbd>Shift+Tab</kbd> to move it back up. The picture on the right shows how it will look as you type.
 
 There are 26 layouts in eight kinds:
 
@@ -152,4 +152,4 @@ The **Layers** panel on the right lists the shapes, pictures and tables on the p
 - **Export PDF** (ribbon **Share** group, or **File ▸ Export ▸ Export PDF…**) saves the page at its exact size.
 - **File ▸ Print…** (Ctrl+P) prints the page at its own size.
 
-Next: [Getting started](getting-started.md) · [Drawing](drawing.md) · [Keyboard and mouse](keyboard-and-mouse.md) · [Slides](slides.md) · [Documents](documents.md) · [Sheets](sheets.md) · [Files and sharing](files-and-sharing.md) · [Feedback](feedback.md)
+Next: [Getting started](getting-started.md) · [Canvas](drawing.md) · [Keyboard and mouse](keyboard-and-mouse.md) · [Presentation](slides.md) · [Document](documents.md) · [Spreadsheet](sheets.md) · [Files and sharing](files-and-sharing.md) · [Feedback](feedback.md)

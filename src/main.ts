@@ -1018,7 +1018,7 @@ async function insertMedia(audio: boolean): Promise<void> {
  */
 async function insertZoom(summary: boolean): Promise<void> {
   const d = deckNow();
-  if (!d || ws.active.mode !== 'slides') { flash('Zooms go on slides: use File > New > New Slides, or open a PowerPoint file.'); return; }
+  if (!d || ws.active.mode !== 'slides') { flash('Zooms go on slides: use File > New > Presentation, or open a PowerPoint file.'); return; }
   finishTyping();
   refreshZooms(d);
   const pick = await pickReuseSlides('', d, false, summary
@@ -3025,7 +3025,7 @@ const sorterList = new SlideList(sorterEl, { ...slideListHooks, open: (i) => { g
 /** Slide Sorter on or off (Normal view). */
 function setSorter(on: boolean): void {
   const d = deckNow();
-  if (on && (!d || ws.active.mode !== 'slides')) { flash('Slide Sorter is for slides: use File > New > New Slides, or open a PowerPoint file.'); return; }
+  if (on && (!d || ws.active.mode !== 'slides')) { flash('Slide Sorter is for slides: use File > New > Presentation, or open a PowerPoint file.'); return; }
   if (on === sorterOn) { if (on) sorterList.focus(); return; }
   finishTyping();
   sorterOn = on;
@@ -3064,7 +3064,7 @@ function slideViewNow(): 'normal' | 'outline' | 'sorter' | 'notes' {
 /** Change the slides' view (Normal, Outline, Slide Sorter or Notes Page). */
 function setSlideView(v: 'normal' | 'outline' | 'sorter' | 'notes'): void {
   const d = deckNow();
-  if (v !== 'normal' && (!d || ws.active.mode !== 'slides')) { flash('That view is for slides: use File > New > New Slides, or open a PowerPoint file.'); return; }
+  if (v !== 'normal' && (!d || ws.active.mode !== 'slides')) { flash('That view is for slides: use File > New > Presentation, or open a PowerPoint file.'); return; }
   finishTyping();
   if (v !== 'sorter' && sorterOn) setSorter(false);
   if (v !== 'notes' && notesView.shown) { notesView.show(false); $('#notes-pane').classList.remove('np-hidden'); editor.paused = false; }
@@ -3202,7 +3202,7 @@ function copySlides(ix: number[], cut: boolean): void {
 function pasteSlides(keep?: boolean): void {
   const d = deckNow();
   if (!d || ws.active.mode !== 'slides') return;
-  if (!slideClip) { flash('Copy slides first: pick them in the slide list and press Ctrl+C (or Edit > Slides > Copy Slides).'); return; }
+  if (!slideClip) { flash('Copy slides first: pick them in the slide list and press Ctrl+C (or Edit > Presentation > Copy Slides).'); return; }
   finishTyping();
   const src = slideClip;
   const after = pickedSlides().at(-1) ?? d.index;
@@ -3215,7 +3215,7 @@ function pasteSlides(keep?: boolean): void {
     label: 'Keep source formatting',
     run: () => {
       // put them in again their own way, in place of the ones just pasted (if nothing has changed since)
-      if (deckNow() !== d || d.edits !== edits) { flash('Use Edit > Slides > Paste Slides (Keep Source Formatting) to paste them with their own look.'); return; }
+      if (deckNow() !== d || d.edits !== edits) { flash('Use Edit > Presentation > Paste Slides (Keep Source Formatting) to paste them with their own look.'); return; }
       d.undo();
       d.pasteSlides(src, true, after);
       flash(`Pasted ${what} with their own look.`);
@@ -3272,7 +3272,7 @@ function goSlide(i: number): void {
 
 function newSlide(layout?: LayoutId): void {
   const d = deckNow();
-  if (!d) { flash('Slides are for presentations: use File > New > New Slides, or open a PowerPoint file.'); return; }
+  if (!d) { flash('Slides are for presentations: use File > New > Presentation, or open a PowerPoint file.'); return; }
   finishTyping();
   d.addSlide(layout);
 }
@@ -3444,10 +3444,10 @@ for (const ev of ['pointerup', 'keyup'] as const) document.addEventListener(ev, 
 const tabSvg = (body: string) => `<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round" aria-hidden="true">${body}</svg>`;
 const TAB_ICONS: Record<Tab['mode'], [string, string]> = {
   // a hexagon (a ring), a page of lines, a screen, a grid, and a pen nib over shapes
-  drawing: [tabSvg('<polygon points="8,2 13.2,5 13.2,11 8,14 2.8,11 2.8,5"/>'), 'Drawing'],
+  drawing: [tabSvg('<polygon points="8,2 13.2,5 13.2,11 8,14 2.8,11 2.8,5"/>'), 'Canvas'],
   document: [tabSvg('<path d="M4 2.5h6l2.5 2.5v8.5h-8.5z"/><path d="M6 7.5h4.5M6 10h4.5"/>'), 'Document'],
-  slides: [tabSvg('<rect x="2" y="3" width="12" height="8.5" rx="1"/><path d="M8 11.5V14M5.5 14h5"/>'), 'Slides'],
-  sheet: [tabSvg('<rect x="2.5" y="2.5" width="11" height="11" rx="1"/><path d="M2.5 6.5h11M2.5 10h11M6.5 2.5v11"/>'), 'Sheet'],
+  slides: [tabSvg('<rect x="2" y="3" width="12" height="8.5" rx="1"/><path d="M8 11.5V14M5.5 14h5"/>'), 'Presentation'],
+  sheet: [tabSvg('<rect x="2.5" y="2.5" width="11" height="11" rx="1"/><path d="M2.5 6.5h11M2.5 10h11M6.5 2.5v11"/>'), 'Spreadsheet'],
   design: [tabSvg('<circle cx="5" cy="11" r="2.6"/><rect x="8.3" y="2.5" width="5.2" height="5.2" rx="0.6"/><path d="M3 4.5l3-2.2 1.5 3.4z"/>'), 'Design'],
 };
 
@@ -3517,7 +3517,7 @@ const tabButton = (cls: string, text: string, title: string) => {
 const tabLeft = tabButton('tab-left', '‹', 'Scroll the tabs left');
 const tabRight = tabButton('tab-right', '›', 'Scroll the tabs right');
 const tabList = tabButton('tab-list', '▾', 'List of open files');
-const tabAdd = tabButton('tab-add', '+', 'New file: drawing, slides, sheet, document or design');
+const tabAdd = tabButton('tab-add', '+', 'New file: canvas, presentation, spreadsheet, document or design');
 tabLeft.addEventListener('click', () => tabStrip.scrollBy({ left: -tabStrip.clientWidth * 0.7, behavior: 'smooth' }));
 tabRight.addEventListener('click', () => tabStrip.scrollBy({ left: tabStrip.clientWidth * 0.7, behavior: 'smooth' }));
 tabStrip.addEventListener('scroll', () => showTabArrows(), { passive: true });
@@ -3534,9 +3534,9 @@ tabList.addEventListener('click', () => {
 tabAdd.addEventListener('click', () => {
   const [x, y] = menuAt(tabAdd);
   showContextMenu(x, y, [
-    { cmd: 'new', label: 'Drawing' }, { cmd: 'new-slides', label: 'Slides' }, { cmd: 'new-sheet', label: 'Sheet' },
-    { cmd: 'new-document', label: 'Document' }, { cmd: 'new-design', label: 'Design (TOC graphic, abstract, poster, figure)' },
-    { cmd: 'new-from-template', label: 'Document or Sheet from Template…' },
+    { cmd: 'new', label: 'Canvas (chemistry)' }, { cmd: 'new-slides', label: 'Presentation (slideshow)' },
+    { cmd: 'new-sheet', label: 'Spreadsheet (tables, charts, dashboards)' }, { cmd: 'new-document', label: 'Document (text)' }, { cmd: 'new-design', label: 'Design (TOC graphic, abstract, poster, figure)' },
+    { cmd: 'new-from-template', label: 'Document or Spreadsheet from Template…' },
   ], { run: (cmd) => void command(cmd), key: commandKey });
 });
 tabsEl.replaceChildren(tabLeft, tabStrip, tabRight, tabList, tabAdd);
@@ -3869,7 +3869,7 @@ async function readPdf(f: { name: string; bytes: Uint8Array }, from: Tab): Promi
     if (gone) ws.newDrawing();
     else ws.activate(from);
     importHost.place(chosen);
-    if (gone) flash(`${from.name} was closed while the pages were read, so the structures were placed in a new drawing. Check them against the pictures.`, 8000);
+    if (gone) flash(`${from.name} was closed while the pages were read, so the structures were placed in a new canvas. Check them against the pictures.`, 8000);
   };
   await importPdfDrawings({ ...importHost, place }, drawings, pages, {
     file: f.name,
@@ -3975,11 +3975,11 @@ onImageReady(() => {
 // ---------------------------------------------------------------- File > Drawing Style
 
 const STYLE_KINDS: Record<StyleMode, { plural: string; where: string }> = {
-  drawing: { plural: 'drawings', where: 'this drawing' },
-  slides: { plural: 'slide decks', where: 'every slide of this deck' },
+  drawing: { plural: 'canvases', where: 'this canvas' },
+  slides: { plural: 'presentations', where: 'every slide of this presentation' },
   design: { plural: 'designs', where: 'this design' },
   document: { plural: 'documents', where: 'this document' },
-  sheet: { plural: 'sheets', where: 'this workbook\'s structure cells' },
+  sheet: { plural: 'spreadsheets', where: 'this spreadsheet\'s structure cells' },
 };
 
 /** Pick or change how structures are drawn in the tab showing (a journal's style, or your own). */
@@ -4040,7 +4040,7 @@ async function offerStyleSheet(tab: Tab, style: DocStyle): Promise<void> {
   const base = tab.name.replace(/\.cds$/i, '');
   const got = await ask('Use this style sheet?', [
     { name: 'name', label: 'Name', value: base },
-    { name: 'forNew', label: 'Start new drawings in it', value: 'false', type: 'checkbox' },
+    { name: 'forNew', label: 'Start new canvases in it', value: 'false', type: 'checkbox' },
   ], {
     ok: 'Add to My Styles',
     note: `${tab.name} is a ChemDraw style sheet: bond length ${style.bondLength} pt, line width ${style.lineWidth} pt, bold width ${style.boldWidth} pt, `
@@ -4053,7 +4053,7 @@ async function offerStyleSheet(tab: Tab, style: DocStyle): Promise<void> {
   ownStyles = had >= 0 ? ownStyles.map((s, i) => (i === had ? st : s)) : [...ownStyles, st];
   if (got.forNew === 'true') modeStyles.drawing = st.name;
   storeSettings();
-  flash(`${st.name} is now one of your drawing styles${got.forNew === 'true' ? ', and new drawings will start in it' : ''}.`, 4000);
+  flash(`${st.name} is now one of your drawing styles${got.forNew === 'true' ? ', and new canvases will start in it' : ''}.`, 4000);
 }
 
 async function slideMaster(): Promise<void> {
@@ -4129,14 +4129,14 @@ async function slideTemplates(): Promise<void> {
   if (got.forNew) {
     slideTemplate = t.id;
     storeSettings();
-    flash(`New slide decks will start with ${t.name}. Pick Plain to go back.`);
+    flash(`New presentations will start with ${t.name}. Pick Plain to go back.`);
   }
 }
 
 /** Slide Master > Edit Layouts: the deck's layouts and their placeholders. */
 async function editSlideLayouts(): Promise<void> {
   const d = deckNow();
-  if (!d?.current || ws.active.mode !== 'slides') { flash('Layouts are for slides: use File > New > New Slides, or open a PowerPoint file.'); return; }
+  if (!d?.current || ws.active.mode !== 'slides') { flash('Layouts are for slides: use File > New > Presentation, or open a PowerPoint file.'); return; }
   finishTyping();
   const used = new Map<LayoutId, number>();
   for (const s of d.slides) used.set(s.layout, (used.get(s.layout) ?? 0) + 1);
@@ -4155,7 +4155,7 @@ async function customSlideSize(): Promise<void> {
 
 function present(fromHere: boolean, notes = false, how: { custom?: number; windowed?: boolean; rehearse?: boolean; record?: boolean } = {}): void {
   const d = deckNow();
-  if (!d) { flash('Present shows slides: use File > New > New Slides, or open a PowerPoint file.'); return; }
+  if (!d) { flash('Present shows slides: use File > New > Presentation, or open a PowerPoint file.'); return; }
   if (shows?.presenter.running || shows?.presenterView.running) return;
   finishTyping();
   // Set Up Show: the slides it plays, how it goes on, and the rest
@@ -4416,7 +4416,7 @@ async function printNow(): Promise<void> {
       ] },
       { name: 'paper', label: 'Paper (handouts)', value: printChoices.paper, options: PAPER_OPTIONS },
       { name: 'frame', label: 'Frame the slides (handouts)', value: printChoices.frame, type: 'checkbox' },
-    ], { ok: 'Print…', note: 'Full page slides print at the slide\'s own shape, notes pages at 7.5 × 10 in; the next window fits them to the paper. Handouts and notes pages carry the header and footer from Insert > Slides > Header & Footer > Notes and Handouts. Copies and which pages are chosen in the next window.' });
+    ], { ok: 'Print…', note: 'Full page slides print at the slide\'s own shape, notes pages at 7.5 × 10 in; the next window fits them to the paper. Handouts and notes pages carry the header and footer from Insert > Presentation > Header & Footer > Notes and Handouts. Copies and which pages are chosen in the next window.' });
     if (!v) return;
     Object.assign(printChoices, v);
     if (v.handout === '1') { printPages({ pages: deck.slides.flatMap((_, i) => slidePages(deck, i).map((_p, k) => slide(i, k))), w: deck.size.w, h: deck.size.h }); return; }
@@ -4604,7 +4604,7 @@ async function pdfImage(src: string): Promise<PdfImage | null> {
 
 // ---------------------------------------------------------------- sheets: the grid, and structures drawn for cells
 
-const SHEET_HINT = 'Type in a cell, or double-click to change it. Insert > Structure in Cell puts a structure in a cell; Insert > Sheet > Insert Property Columns works out formula, MW, HRMS m/z and more.';
+const SHEET_HINT = 'Type in a cell, or double-click to change it. Insert > Structure in Cell puts a structure in a cell; Insert > Spreadsheet > Insert Property Columns works out formula, MW, HRMS m/z and more.';
 
 /** True when a sheet is showing (and no structure is being drawn for one of its cells). */
 function sheetActive(): boolean {
@@ -5292,7 +5292,7 @@ function command(name: string): boolean {
     if (!ANY_TAB.has(name) && !DOC_ANY.has(name)) return false;
   }
   if (ws.active.mode === 'design' && (SLIDE_ONLY.has(name) || name.startsWith('layout-'))) {
-    flash('A design is one page: use Page Size and Background on the Design ribbon. For several pages, use File > New > New Slides.');
+    flash('A design is one page: use Page Size and Background on the Design ribbon. For several pages, use File > New > Presentation.');
     return true;
   }
   if (name.startsWith('shape-fx:')) { void shapeEffect(name); return true; }
@@ -5446,8 +5446,8 @@ const COMMANDS: Record<string, () => unknown> = {
     const anchor = b && b.offsetParent ? b : document.querySelector<HTMLElement>('#ribbon .rb-tabs')!;
     shapeMenu.show(anchor, 'Click an icon, then click or drag on the slide. Change its colour in the Style panel.', (id) => { finishTyping(); editor.setTool(`geo:${id}`); }, 'icons');
   },
-  'design-shapes': () => { if (ws.active.mode === 'design') { lib.showTab('shapes'); lib.focusSearch(); } else flash('Shapes are in Design mode: use File > New > New Design.'); },
-  'design-icons': () => { if (ws.active.mode === 'design') { lib.showTab('icons'); lib.focusSearch(); } else flash('Icons are in Design, Slides and Document modes.'); },
+  'design-shapes': () => { if (ws.active.mode === 'design') { lib.showTab('shapes'); lib.focusSearch(); } else flash('Shapes are in Design mode: use File > New > Design.'); },
+  'design-icons': () => { if (ws.active.mode === 'design') { lib.showTab('icons'); lib.focusSearch(); } else flash('Icons are in Design, Presentation and Document modes.'); },
   // the Insert menu's Shapes and Icons, in whichever mode is showing (Documents have their own)
   'insert-shapes': () => (ws.active.mode === 'design' ? COMMANDS['design-shapes']() : ws.active.mode === 'slides' ? COMMANDS['slide-shapes']() : flash('Shapes go on slides, designs and documents.')),
   'insert-icons': () => (ws.active.mode === 'design' ? COMMANDS['design-icons']() : ws.active.mode === 'slides' ? COMMANDS['slide-icons']() : flash('Icons go on slides, designs and documents.')),
@@ -5681,7 +5681,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'dark-page': () => { showDark(!dark.on); storeSettings(); },
   'alignment-guides': () => {
     const m = guideMode();
-    if (!m) { flash('Alignment guides are for drawings, slides and designs. In a document, figures line up with the text.'); return; }
+    if (!m) { flash('Alignment guides are for canvases, presentations and designs. In a document, figures line up with the text.'); return; }
     guidesOn[m] = !guidesOn[m];
     showGuides();
     storeSettings();
@@ -6194,7 +6194,7 @@ function layoutSplit(): void {
   $('[data-cmd="split-view"]')?.setAttribute('aria-checked', String(!!st));
   if (!st) { $('#split-empty').hidden = true; return; }
   const opts = ws.tabs.filter((t) => t.mode === 'drawing').map((t) => new Option(t.name.replace(/\.(cdxml|cdx|cds)$/i, ''), String(t.id), false, t === st.drawing));
-  opts.push(new Option('New drawing', 'new'));
+  opts.push(new Option('New canvas', 'new'));
   splitPick.replaceChildren(...opts);
   $('#split-insert').textContent = st.main.mode === 'document' ? 'Insert into Document' : st.main.mode === 'sheet' ? 'Insert into Cell' : st.main.mode === 'design' ? 'Insert into Design' : 'Insert into Slide';
   // while a figure's or cell's structure is drawn, Done puts that in; the drawing beside waits
@@ -6292,7 +6292,7 @@ function toggleSplit(): void {
   if (splitState()) { closeSplit(); return; }
   const t = ws.active;
   if (t.mode === 'drawing') {
-    flash('Split view puts a drawing beside a document, sheet, slides or design: show one of those (or start one with the + tabs) and choose View > Split View there.', 8000);
+    flash('Split view puts a canvas beside a document, spreadsheet, presentation or design: show one of those (or start one with the + tabs) and choose View > Split View there.', 8000);
     return;
   }
   finishTyping();
@@ -9456,7 +9456,7 @@ async function pageGridSettings(): Promise<void> {
   const px = (vs: number[], now: number) => [...new Set([...vs, now])].sort((a, b) => a - b).map((v) => ({ value: String(v), label: `${v} px` }));
   const shade = [{ value: 'off', label: 'None' }, { value: 'faint', label: 'Faint' }, { value: 'light', label: 'Light' }, { value: 'strong', label: 'Stronger' }];
   const r = await ask('Page Grid', [
-    { name: 'grid', label: 'Show the drawing\'s pages (a new drawing starts with one, and pages are added as it grows)', type: 'checkbox', value: String(o.grid),
+    { name: 'grid', label: 'Show the drawing\'s pages (a new canvas starts with one, and pages are added as it grows)', type: 'checkbox', value: String(o.grid),
       help: 'On screen only. Off: the endless drawing with nothing fixed. The paper size and fixed edges are in File > Page Setup.' },
     { name: 'lineStyle', label: 'Page boundaries', value: o.lineStyle, options: [{ value: 'dashed', label: 'Dashed' }, { value: 'dotted', label: 'Dotted' }, { value: 'solid', label: 'Solid' }] },
     { name: 'lineWidth', label: 'Boundary thickness', value: String(o.lineWidth), options: [0.5, 1, 1.5, 2, 3].map((v) => ({ value: String(v), label: `${v} px` })) },
@@ -9612,8 +9612,8 @@ async function pageSetup(): Promise<void> {
     { name: 'across', label: 'Set number of pages: across', value: String(count.across), type: 'number' },
     { name: 'down', label: 'Set number of pages: down', value: String(count.down), type: 'number' },
     ...SIDES.map((sd) => ({ name: `fix-${sd}`, label: `Fixed ${SIDE_NAMES[sd]} edge`, type: 'checkbox' as const, value: String(walls[sd] !== undefined) })),
-    { name: 'dflt', label: 'Use this for new drawings', type: 'checkbox', value: 'false' },
-  ], { ok: 'OK', note: 'Sizes are the paper; the page drawn on is half an inch in from each edge, as in ChemDraw. When pages are added as the drawing grows, up to three edges can be fixed: nothing can go past them (a new drawing has its top and left edges fixed, as ChemDraw\'s pages grow right and down). Right-click the drawing for Page Edges to change them as you go.' });
+    { name: 'dflt', label: 'Use this for new canvases', type: 'checkbox', value: 'false' },
+  ], { ok: 'OK', note: 'Sizes are the paper; the page drawn on is half an inch in from each edge, as in ChemDraw. When pages are added as the drawing grows, up to three edges can be fixed: nothing can go past them (a new canvas has its top and left edges fixed, as ChemDraw\'s pages grow right and down). Right-click the drawing for Page Edges to change them as you go.' });
   if (!got) return;
   let next: PageSetup | null = null;
   if (got.paper !== 'none') {

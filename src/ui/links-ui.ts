@@ -211,7 +211,7 @@ export function askLink(q: LinkAsk): Promise<LinkAnswer | null> {
     pick.addEventListener('click', () => void browse().then((p) => { if (p) { pathIn.value = p; if (!textIn.value) textIn.value = p.split(/[\\/]/).pop() ?? p; } }));
     const fileHelp = document.createElement('p');
     fileHelp.className = 'ask-help muted';
-    fileHelp.textContent = 'Drawings, documents, slides and sheets open here; other files open in the program your computer uses for them. A path without a drive or folder at the start is next to this file.';
+    fileHelp.textContent = 'Canvases, documents, presentations and spreadsheets open here; other files open in the program your computer uses for them. A path without a drive or folder at the start is next to this file.';
     file.append(row('File', pathIn, pick), fileHelp);
     panes.set('file', file);
 

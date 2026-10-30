@@ -225,7 +225,7 @@ pub(crate) mod win {
         }
         if any {
             set_string(CAPABILITIES, Some("ApplicationName"), APP)?;
-            set_string(CAPABILITIES, Some("ApplicationDescription"), "Chemical structures, schemes, slides, sheets and documents")?;
+            set_string(CAPABILITIES, Some("ApplicationDescription"), "Chemical structures, schemes, presentations, spreadsheets and documents")?;
             set_string(r"Software\RegisteredApplications", Some(APP), CAPABILITIES)?;
         } else {
             delete_value(r"Software\RegisteredApplications", APP);
