@@ -75,6 +75,21 @@ export const COMMAND_ICONS: Record<string, string> = {
   'attach-descriptors': svg(hex(12, 7, 5) + txt(12, 21.5, 'MW', 8.5, 700)),
   'number-compounds': svg(hex(6.5, 7, 4.2) + hex(17.5, 7, 4.2) + txt(6.5, 21.5, '1', 9, 800) + txt(17.5, 21.5, '2', 9, 800)),
   'clean-up-reaction': svg('<path d="M3 12h14"/><path d="M14 9l3 3-3 3"/><path d="M19.5 3.5l.8 1.7 1.7.8-1.7.8-.8 1.7-.8-1.7-1.7-.8 1.7-.8z" fill="currentColor" stroke="none"/>'),
+  // ---- file, edit and view (the quick bar beside the menus)
+  new: svg('<path d="M6 2.5h8l4 4v15H6z"/><path d="M14 2.5v4h4"/><path d="M12 11v7M8.5 14.5h7"/>'),
+  open: svg('<path d="M2.5 6.5v13h16l3-9H7l-2.5 9"/><path d="M2.5 6.5V4.5h6l2 2h7v4"/>'),
+  save: svg('<path d="M4 3.5h13l3 3v14H4z"/><path d="M7.5 3.5v5h8v-5"/><rect x="7.5" y="13" width="9" height="7.5"/>'),
+  'save-as': svg('<path d="M14 20.5H4v-17h13l3 3v4"/><path d="M7.5 3.5v5h8v-5"/><path d="M7.5 20.5V13h5"/><path d="M14.5 21.5l.6-2.6 5.3-5.3 2 2-5.3 5.3z"/>'),
+  print: svg('<path d="M6.5 9V3.5h11V9"/><rect x="3" y="9" width="18" height="8" rx="1"/><path d="M6.5 14.5h11v6h-11z"/>'),
+  undo: svg('<path d="M9 5L4 10l5 5"/><path d="M4 10h10a6 6 0 0 1 0 12h-3"/>'),
+  redo: svg('<path d="M15 5l5 5-5 5"/><path d="M20 10H10a6 6 0 0 0 0 12h3"/>'),
+  cut: svg('<circle cx="6.5" cy="17.5" r="3"/><circle cx="17.5" cy="17.5" r="3"/><path d="M8.6 15.3L18 3.5M15.4 15.3L6 3.5"/>'),
+  copy: svg('<rect x="8" y="8" width="12.5" height="13" rx="1"/><path d="M16 8V3.5H3.5V17H8"/>'),
+  paste: svg('<rect x="4" y="4.5" width="16" height="17" rx="1"/><path d="M9 4.5V2.5h6v2M8.5 6.5h7"/>'),
+  'zoom-fit': svg('<path d="M3 8V3h5M16 3h5v5M21 16v5h-5M8 21H3v-5"/>' + hex(12, 12, 4.5)),
+  'focus-view': svg('<path d="M3 9V3h6M15 3h6v6M21 15v6h-6M9 21H3v-6"/><path d="M3 3l6 6M21 3l-6 6M21 21l-6-6M3 21l6-6"/>'),
+  find: svg('<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5l5 5"/>'),
+  'dark-page': svg('<path d="M1.5 12S5.5 4.5 12 4.5 22.5 12 22.5 12 18.5 19.5 12 19.5 1.5 12 1.5 12Z"/><circle cx="12" cy="12" r="3.5"/>'),
 };
 
 /** The icon for a command on a toolbox button, if it has one. */

@@ -323,12 +323,13 @@
     <button role="menuitem" data-cmd="customize-toolbox" title="Rearrange any toolbox's buttons by dragging them, put tools and commands in or take them out, change the fly-outs, and make, rename or delete toolboxes">Customize Toolboxes…</button>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="one-column-tools" title="In Presentation, Spreadsheet, Document and Design tabs, show toolboxes docked at the side in one column, to leave more room for the page"><span>One Column Outside Canvas</span></button>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="lock-toolboxes" title="Unlock to drag toolboxes by their titles: to an edge of the drawing to dock them, anywhere else to float"><span>Lock Toolboxes</span></button>
+    <button role="menuitem" data-cmd="customize-quick-bar" title="Choose the buttons on the quick bar beside the menus (Save, Undo, Redo…) and their order, like Office's Quick Access Toolbar">Customize Quick Access Toolbar…</button>
     <button role="menuitem" data-cmd="reset-toolboxes" title="Put every toolbox back where it starts: Drawing Tools docked at the left, the others hidden, all open and locked. What is in them is kept">Reset Toolboxes</button>
     </div>
     </div>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="focus-view" title="Hide the toolboxes, side panel and ribbon to give the page the whole window; press again (Ctrl+Shift+F1) to bring them back"><span>Focus View</span></button>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="fold-side" title="Fold the side panel to a strip at the right, to give the drawing more room"><span>Fold Side Panel</span></button>
-    <div class="submenu">
+    <div class="submenu" data-modes="slides sheet document design">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Ribbon</button>
     <div class="menu sub" role="menu" hidden>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="collapse-ribbon" title="Show the ribbon's tabs only, for more room; click a tab to use its buttons (Ctrl+F1, or double-click a tab)"><span>Collapse the Ribbon</span><kbd>Ctrl+F1</kbd></button>
@@ -748,28 +749,9 @@
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="fixed-angles"><span>Fixed Angles</span></button>
     </div>
     </div>
-    <span class="sep"></span>
-    <button id="btn-undo" title="Undo">Undo</button>
-    <button id="btn-redo" title="Redo">Redo</button>
-    <button id="btn-fit" title="Fit drawing to window">Fit</button>
-    <button id="btn-lock" type="button" aria-pressed="true" title="Lock or unlock the toolboxes (unlocked, drag one by its title to move it)"><span class="lock-icon"></span><span class="lock-text">Locked</span></button>
-    <div class="menu-wrap dev-only" hidden>
-      <button id="btn-developer" aria-haspopup="menu" aria-expanded="false" aria-controls="developer-menu" title="Developer Tools: the stress test and turning them off (View &gt; Developer Tools)">Developer</button>
-      <div id="developer-menu" class="menu" role="menu" hidden>
-        <button role="menuitem" data-cmd="stress-100" title="Draw 100 drug-sized molecules to test speed">Stress Test: 100 Molecules</button>
-        <button role="menuitem" data-cmd="stress-500" title="Draw 500 drug-sized molecules to test speed">Stress Test: 500 Molecules</button>
-        <button role="menuitem" data-cmd="stress-2000" title="Draw 2,000 drug-sized molecules to test speed">Stress Test: 2,000 Molecules</button>
-        <button role="menuitem" data-cmd="stress-5000" title="Draw 5,000 drug-sized molecules to test speed">Stress Test: 5,000 Molecules</button>
-        <hr />
-        <button role="menuitem" data-cmd="dev-tools" title="Turn off Developer Tools (the speed readout, stress test and Error Console); View &gt; Developer Tools turns them back on">Turn Off Developer Tools</button>
-      </div>
-    </div>
-    <span class="sep"></span>
-    <button id="btn-dark" type="button" aria-pressed="false" data-cmd="dark-page" title="Dark page: show the page dark on screen only (files, printing and copies are not changed)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 4.5 12 4.5 22.5 12 22.5 12 18.5 19.5 12 19.5 1.5 12 1.5 12Z"/><circle cx="12" cy="12" r="3.5"/></svg></button>
-    <button id="btn-search" type="button" class="search-box" title="Search for a command by name (Alt+Q)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><span>Search</span><kbd>Alt+Q</kbd></button>
     <div class="menu-wrap">
       <button id="btn-help" aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu" title="Hotkeys, the user guide, and sending feedback" aria-keyshortcuts="Alt+H"><span class="mn">H</span>elp</button>
-      <div id="help-menu" class="menu right" role="menu" hidden>
+      <div id="help-menu" class="menu" role="menu" hidden>
         <button role="menuitem" data-cmd="help" title="The most used hotkeys and tips, with a button to change any key">Hotkeys and Tips</button>
         <button role="menuitem" data-cmd="user-guide" title="How to use the program (built in: works without a connection)">User Guide</button>
         <button role="menuitem" data-cmd="help-here" title="The part of the User Guide about the tool or mode in use">Help on This Tool or Mode</button>
@@ -782,6 +764,20 @@
 <button role="menuitem" data-cmd="about">About Chem Illustrator</button>
       </div>
     </div>
+    <span class="sep"></span>
+    <div id="quick-bar" class="quick-bar" role="toolbar" aria-label="Quick Access Toolbar"></div>
+    <div class="menu-wrap dev-only" hidden>
+      <button id="btn-developer" aria-haspopup="menu" aria-expanded="false" aria-controls="developer-menu" title="Developer Tools: the stress test and turning them off (View &gt; Developer Tools)">Developer</button>
+      <div id="developer-menu" class="menu" role="menu" hidden>
+        <button role="menuitem" data-cmd="stress-100" title="Draw 100 drug-sized molecules to test speed">Stress Test: 100 Molecules</button>
+        <button role="menuitem" data-cmd="stress-500" title="Draw 500 drug-sized molecules to test speed">Stress Test: 500 Molecules</button>
+        <button role="menuitem" data-cmd="stress-2000" title="Draw 2,000 drug-sized molecules to test speed">Stress Test: 2,000 Molecules</button>
+        <button role="menuitem" data-cmd="stress-5000" title="Draw 5,000 drug-sized molecules to test speed">Stress Test: 5,000 Molecules</button>
+        <hr />
+        <button role="menuitem" data-cmd="dev-tools" title="Turn off Developer Tools (the speed readout, stress test and Error Console); View &gt; Developer Tools turns them back on">Turn Off Developer Tools</button>
+      </div>
+    </div>
+    <button id="btn-search" type="button" class="search-box" title="Search for a command by name (Alt+Q)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><span>Search</span><kbd>Alt+Q</kbd></button>
     <h1 class="app-name">Chem Illustrator</h1>
     <button id="stage-badge" type="button" class="stage-badge" title="Chem Illustrator is still being built: new features arrive often and some things may not work yet. Click for more.">Beta</button>
   </header>

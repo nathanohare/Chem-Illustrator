@@ -18,6 +18,7 @@ import { parseOwnTemplates, type Template } from './chem/templates';
 import { parsePalettes, type Palette } from './palettes';
 import { defaultToolboxes, parseToolboxes, type ToolboxState } from './ui/toolboxes';
 import { parseRibbons, type RibbonsPrefs } from './ui/ribbon-custom';
+import { parseQuick } from './ui/quick-bar';
 import { parseOwnStyles, parseModeStyles, type StyleMode } from './drawing-styles';
 import type { DocStyle } from './style';
 import { parseDarkPalettes, type DarkPalette } from './dark-page';
@@ -143,6 +144,8 @@ export interface Settings {
   toolboxes: ToolboxState;
   /** Each ribbon's tabs and groups as you put them (View > Ribbon > Customize the Ribbon). */
   ribbons: RibbonsPrefs;
+  /** The quick bar's commands, in order (null: as it comes). View > Toolboxes > Customize Quick Access Toolbar. */
+  quickBar: string[] | null;
   /** Your own drawing styles (File > Drawing Style > Save as My Style). */
   myStyles: DocStyle[];
   /** The style each kind of new tab starts with, by name (File > Drawing Style > Use for new…). */
@@ -215,7 +218,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
   modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', oneColumnTools: false, startView: true, groupTips: true, touchMode: 'auto', penSketch: false,
-  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {},
+  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
   orient: { ...DEFAULT_ORIENT },
@@ -237,7 +240,7 @@ const STORAGE_KEY = 'chem-illustrator.settings';
 
 /** Read settings saved as text, keeping only what makes sense. */
 export function parseSettings(text: string | null | undefined): Settings {
-  const s: Settings = { ...DEFAULT_SETTINGS, hotkeys: {}, replacements: DEFAULT_SETTINGS.replacements.map(([a, b]) => [a, b]), dictionary: [], modeColours: { ...DEFAULT_MODE_COLOURS }, nicknames: {}, templates: [], palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, myStyles: [], modeStyles: {}, darkPalettes: [], guides: { ...DEFAULT_SETTINGS.guides }, orient: { ...DEFAULT_ORIENT }, pageLook: { ...DEFAULT_PAGE_LOOK }, docPins: [], recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], scheme: { ...DEFAULT_SCHEME_PREFS }, keep: { ...DEFAULT_KEEP }, ai: { ...DEFAULT_AI } };
+  const s: Settings = { ...DEFAULT_SETTINGS, hotkeys: {}, replacements: DEFAULT_SETTINGS.replacements.map(([a, b]) => [a, b]), dictionary: [], modeColours: { ...DEFAULT_MODE_COLOURS }, nicknames: {}, templates: [], palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null, myStyles: [], modeStyles: {}, darkPalettes: [], guides: { ...DEFAULT_SETTINGS.guides }, orient: { ...DEFAULT_ORIENT }, pageLook: { ...DEFAULT_PAGE_LOOK }, docPins: [], recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], scheme: { ...DEFAULT_SCHEME_PREFS }, keep: { ...DEFAULT_KEEP }, ai: { ...DEFAULT_AI } };
   if (!text) return s;
   let raw: unknown;
   try { raw = JSON.parse(text); } catch { return s; }
@@ -287,6 +290,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   s.palettes = parsePalettes(r.palettes);
   s.toolboxes = parseToolboxes(r.toolboxes);
   s.ribbons = parseRibbons(r.ribbons);
+  s.quickBar = parseQuick(r.quickBar);
   s.myStyles = parseOwnStyles(r.myStyles);
   s.modeStyles = parseModeStyles(r.modeStyles);
   if (typeof r.darkPalette === 'string' && r.darkPalette.trim()) s.darkPalette = r.darkPalette.trim();

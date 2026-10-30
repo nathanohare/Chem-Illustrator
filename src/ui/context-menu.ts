@@ -6,7 +6,7 @@ import { COMMAND_NAMES } from '../editor/keymap';
 
 /** A command (named as in the top menus unless `label` says otherwise), a group, or a line. */
 export type MenuItem =
-  | { cmd: string; label?: string }
+  | { cmd: string; label?: string; checked?: boolean }
   | { label: string; items: MenuItem[] }
   | null;
 
@@ -111,9 +111,10 @@ function build(items: MenuItem[], hooks: MenuHooks, depth: number): HTMLDivEleme
       const top = topMenuEntry(it.cmd);
       // (a command no top menu has goes by its name in Keyboard Shortcuts, never its id)
       name.textContent = it.label ?? top?.label ?? COMMAND_NAMES[it.cmd] ?? it.cmd;
-      if (top?.checked != null) {
+      const checked = it.checked ?? top?.checked;
+      if (checked != null) {
         b.setAttribute('role', 'menuitemcheckbox');
-        b.setAttribute('aria-checked', String(top.checked));
+        b.setAttribute('aria-checked', String(checked));
       } else b.setAttribute('role', 'menuitem');
       const k = hooks.key(it.cmd);
       if (k) {

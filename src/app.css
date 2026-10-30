@@ -175,8 +175,6 @@ header .sep { height: 18px; margin: 0 3px; }
 body.own-title-bar header { position: relative; padding-right: 138px; user-select: none; }
 body.own-title-bar .win-controls { position: absolute; top: 0; right: 0; height: 32px; margin: 0; }
 header > button, header > select { white-space: nowrap; flex-shrink: 0; }
-/* the lock is an icon; its word stays for screen readers and its tooltip says what it does */
-#btn-lock .lock-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .menu button {
   display: flex;
   justify-content: space-between;
@@ -507,8 +505,6 @@ body.slides-mode #canvas-host, body.design-mode #canvas-host { background: var(-
 .toolbox.collapsed > .tb-body { display: none; }
 .tb-fold, .tb-lock { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 12px; line-height: 1; }
 .tb-fold:hover, .tb-lock:hover { color: var(--text); }
-#btn-lock:not([hidden]) { display: inline-flex; align-items: center; gap: 4px; }
-#btn-lock[aria-pressed='false'] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 aside {
   display: none;
   grid-area: side;
@@ -1871,9 +1867,6 @@ dialog.cf-manage { width: min(92vw, 640px); }
 /* View > Dark Page: the page canvases only, on screen (see dark-page.ts) */
 .dark-page #scene, .dark-page #overlay, .dark-page .navigator canvas, .dark-page .doc-canvas, .dark-page .sh-canvas, .dark-page #main-snap canvas, .dark-page #split-snap { filter: url(#dark-page-filter); }
 .dark-page #canvas-host { background: var(--dark-paper, #1e1e1e); }
-#btn-dark { display: inline-flex; align-items: center; justify-content: center; padding: 0 7px; }
-#btn-dark svg { width: 18px; height: 18px; }
-#btn-dark[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 /* short choices in the Layout ribbon need less room */
 #doc-ribbon #doc-orient, #doc-ribbon #doc-columns { min-width: 96px; }
 #doc-ribbon #doc-wrap { min-width: 128px; }
@@ -2764,3 +2757,30 @@ body:not(.mode-window) .rb-tabs button.rb-context[aria-selected='true'] { backgr
 body:is(.sheet-mode, .doc-mode):not(.floating-drawing):not(.split-view) .toolbox[data-id='main'] .tb-cells { display: flex; flex-direction: column; align-items: stretch; }
 body:is(.sheet-mode, .doc-mode):not(.floating-drawing):not(.split-view) .toolbox[data-id='main'] .tb-line { display: none; }
 body:is(.sheet-mode, .doc-mode):not(.floating-drawing):not(.split-view) .toolbox[data-id='main'] .tb-cell:not(:is([data-tool='select'], [data-tool='bond-single'], [data-tool='chain'], [data-tool='ring-benzene'], [data-tool='ring-6'], [data-tool='text']), :has(button:is([data-tool='select'], [data-tool='bond-single'], [data-tool='chain'], [data-tool='ring-benzene'], [data-tool='ring-6'], [data-tool='text']))) { display: none; }
+
+/* the quick bar beside the menus (Quick Access Toolbar, src/ui/quick-bar.ts): plain icon buttons, a frame only on hover */
+.quick-bar { display: flex; align-items: center; gap: 1px; flex-shrink: 0; margin-right: 6px; }
+.quick-bar > button { height: 26px; min-width: 26px; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; border-color: transparent; background: transparent; color: var(--text); }
+.quick-bar > button svg { width: 17px; height: 17px; }
+.quick-bar > button:hover:not(:disabled) { border-color: var(--line); background: var(--accent-soft); }
+.quick-bar > button:disabled { color: var(--muted); opacity: 0.45; }
+.quick-bar > button[aria-pressed='true'] { color: var(--accent); background: var(--accent-soft); }
+/* the lock shows unlocked as the one to notice */
+.quick-bar > button[data-qa='lock-toolboxes'][aria-pressed='false'] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.quick-bar > button[data-qa='lock-toolboxes'][aria-pressed='true'] { color: var(--text); background: transparent; }
+.quick-bar .qa-text { font-size: 12px; white-space: nowrap; }
+.quick-bar > .qa-more { min-width: 16px; padding: 0 2px; color: var(--muted); }
+body.mode-window .quick-bar > button { color: #fff; }
+body.mode-window .quick-bar > button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.6); }
+body.mode-window .quick-bar > button[aria-pressed='true'] { background: rgba(255, 255, 255, 0.22); }
+/* Customize Quick Access Toolbar */
+dialog.quick-editor { width: min(94vw, 640px); }
+.qe-cols { display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 8px; align-items: center; }
+.qe-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.qe-col select { width: 100%; min-height: 260px; font: inherit; }
+.qe-filter { font: inherit; padding: 3px 6px; }
+.qe-head { font-size: 12px; color: var(--muted); padding: 4px 0; }
+.qe-mid { display: flex; flex-direction: column; gap: 6px; }
+dialog.quick-editor .ask-buttons .spacer { flex: 1; }
+body.mode-window .quick-bar > button[data-qa='lock-toolboxes'][aria-pressed='true'] { color: #fff; background: transparent; }
+body.mode-window .quick-bar > button[data-qa='lock-toolboxes'][aria-pressed='false'] { color: #fff; border-color: #fff; background: rgba(255, 255, 255, 0.22); }

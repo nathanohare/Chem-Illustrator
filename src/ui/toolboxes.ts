@@ -725,7 +725,8 @@ export function menuCommands(): { menu: string; items: { cmd: string; label: str
     const seen = new Set<string>();
     for (const b of wrap.querySelectorAll<HTMLElement>('[data-cmd]')) {
       const cmd = b.dataset.cmd!;
-      if (seen.has(cmd) || b.hidden) continue;
+      // (left out of the menus only for being another mode's still counts)
+      if (seen.has(cmd) || (b.hidden && !b.dataset.modeHid)) continue;
       seen.add(cmd);
       const e = topMenuEntry(cmd);
       items.push({ cmd, label: e?.label ?? cmd });

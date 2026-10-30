@@ -93,6 +93,7 @@ import type { PptxOptions } from './io/pptx-write';
 import { EFFECTS, animName, newAnim, highlightParts } from './deck/animation';
 import { SLIDE_TEMPLATES, applyTemplate, type SlideTemplate } from './deck/templates';
 import { showContextMenu, topMenuEntry, type MenuItem } from './ui/context-menu';
+import { QuickBar } from './ui/quick-bar';
 import { defaultHandout, handoutLayout, handoutPageSvg, notesPageSize, notesPageSvg, type HandoutSetup } from './deck/notes-pages';
 import { OutlineView } from './ui/outline-view';
 import { NotesPageView, editHandoutMaster, editNotesMaster } from './ui/notes-page-view';
@@ -135,7 +136,7 @@ import { plainText, savableChar } from './richtext';
 import { htmlToRich } from './text/html';
 import { LiveStereo } from './chem/live-stereo';
 import { setStereoShown, shownDescriptor, axialStyle } from './chem/stereo';
-import { keymap, registerToolNames, displayChord, actionName, chordOf, parseAction, KeyContext, KeyOverrides } from './editor/keymap';
+import { keymap, COMMAND_NAMES, registerToolNames, displayChord, actionName, chordOf, parseAction, KeyContext, KeyOverrides } from './editor/keymap';
 import { loadSettings, saveSettings, settingsLocation, exportText, importSettings, Settings, SLIDE_PANE_MIN, SLIDE_PANE_MAX, NOTES_MIN, NOTES_MAX } from './settings';
 import { arrowGaps } from './chem/mechanism';
 import { showDialog } from './ui/dialog-host';
@@ -600,10 +601,9 @@ installTouchUi({
 
 // ---------------------------------------------------------------- top bar actions
 
-$('#btn-undo').addEventListener('click', () => undo());
-$('#btn-redo').addEventListener('click', () => redo());
-$('#btn-fit').addEventListener('click', () => command('zoom-fit'));
-$('#btn-dark').addEventListener('click', () => command('dark-page'));
+/** The quick bar beside the menus (made once the toolboxes are, further down). */
+let quickBar: QuickBar | null = null;
+
 /** Developer > Stress Test: how many drug-sized molecules it can draw. */
 const STRESS_SIZES = [100, 500, 2000, 5000];
 $('#help-hotkeys').addEventListener('click', () => { $<HTMLDialogElement>('#help').close(); hotkeysDialog.open(); });
@@ -3434,16 +3434,13 @@ function refreshHistory(): void {
     for (const [cmd, verb] of [['undo', 'Undo'], ['redo', 'Redo']] as const) {
       const step = historyStep(cmd === 'redo');
       const name = step ? `${verb} ${step}` : verb;
-      const k = commandKey(cmd);
-      const btn = $<HTMLButtonElement>(`#btn-${cmd}`);
-      btn.disabled = step === null;
-      btn.title = step === null ? `Nothing to ${verb.toLowerCase()}` : k ? `${name} (${k})` : name;
       for (const item of document.querySelectorAll<HTMLButtonElement>(`header .menu [data-cmd="${cmd}"]`)) {
         item.disabled = step === null;
         const label = item.firstChild;
         if (label?.nodeType === Node.TEXT_NODE) label.textContent = name;
       }
     }
+    quickBar?.refresh();
   });
 }
 for (const ev of ['pointerup', 'keyup'] as const) document.addEventListener(ev, refreshHistory, true);
@@ -5153,7 +5150,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 /** Menu commands that work the same whatever shows. */
-const ANY_TAB = new Set(['new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
+const ANY_TAB = new Set(['new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
   'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
@@ -5744,6 +5741,7 @@ const COMMANDS: Record<string, () => unknown> = {
   // the panel taken out as a toolbox folds up to its title bar; at the right it folds to a strip
   'fold-side': () => foldSide(!sideIsFolded()),
   'customize-toolbox': () => openCustomToolbox(),
+  'customize-quick-bar': () => quickBar?.edit(),
   'customize-ribbon': () => ribbonEditor.open(RIBBON_OF_MODE[ws.active.mode]),
   'export-settings': () => void exportSettings(),
   'import-settings': () => void importSettingsFile(),
@@ -6126,13 +6124,41 @@ function menuMode(): string { return drawingOnTop() ? 'drawing' : ws.active.mode
  */
 function tickMenuModes(): void {
   const mode = menuMode();
+  // what belongs to another mode is left out of the menus (marked, so what is hidden for other reasons stays hidden)
   for (const el of document.querySelectorAll<HTMLElement>('header .menu > button, header .menu > .submenu, header .menu.sub > button')) {
     const modes = el.dataset.modes ?? el.closest<HTMLElement>('[data-item-modes]')?.dataset.itemModes;
     if (!modes) continue;
     const on = modes.split(' ').includes(mode);
     const b = el instanceof HTMLButtonElement ? el : el.querySelector<HTMLButtonElement>(':scope > button');
-    if (b) b.disabled = !on;
+    if (b) b.disabled = false;
+    if (on && el.dataset.modeHid) { el.hidden = false; delete el.dataset.modeHid; }
+    else if (!on && !el.hidden) { el.hidden = true; el.dataset.modeHid = '1'; }
   }
+  for (const menu of document.querySelectorAll<HTMLElement>('header .menu')) {
+    const items = [...menu.children].filter((c): c is HTMLElement => c instanceof HTMLElement && c.tagName !== 'HR');
+    // a menu with nothing for this mode (Chemistry beside a sheet) shows its commands greyed out, so it is never empty
+    if (items.length && items.every((c) => c.hidden)) {
+      for (const c of items) if (c.dataset.modeHid) {
+        c.hidden = false;
+        delete c.dataset.modeHid;
+        const b = c instanceof HTMLButtonElement ? c : c.querySelector<HTMLButtonElement>(':scope > button');
+        if (b) b.disabled = true;
+      }
+    }
+    // no divider at the top or bottom, or two together, once items are left out
+    let seen = false, last: HTMLElement | null = null;
+    for (const c of menu.children) {
+      if (!(c instanceof HTMLElement)) continue;
+      if (c.tagName === 'HR') {
+        if (c.dataset.modeHid) { c.hidden = false; delete c.dataset.modeHid; }
+        if (!seen || last?.tagName === 'HR') { c.hidden = true; c.dataset.modeHid = '1'; } else last = c;
+        continue;
+      }
+      if (!c.hidden) { seen = true; last = c; }
+    }
+    if (last?.tagName === 'HR') { last.hidden = true; last.dataset.modeHid = '1'; }
+  }
+  quickBar?.refresh();
 }
 tickMenuModes();
 // (in the capture phase: the drawing takes a finger's press for itself, so it never bubbles up)
@@ -7070,6 +7096,7 @@ function currentSettings(): Settings {
     palettes: getPalettes(),
     toolboxes: toolboxState,
     ribbons: ribbonPrefs,
+    quickBar: quickPrefs,
     myStyles: ownStyles,
     modeStyles,
     darkPage: dark.on,
@@ -7172,15 +7199,11 @@ function refreshKeys(): void {
   for (const [cmd, on] of [['fixed-length', editor.options.fixedLength], ['fixed-angles', editor.options.fixedAngles]] as const) {
     $(`[data-cmd="${cmd}"]`)?.setAttribute('aria-checked', String(on));
   }
-  const tip = (id: string, text: string, cmd: string) => {
-    const k = commandKey(cmd);
-    $(id).title = k ? `${text} (${k})` : text;
-  };
   const sk = commandKey('command-search');
   $('#btn-search kbd').textContent = sk ?? '';
   $('#btn-search').title = sk ? `Search for a command by name (${sk})` : 'Search for a command by name';
   refreshHistory();
-  tip('#btn-fit', 'Fit drawing to window', 'zoom-fit');
+  quickBar?.refresh();
   toolbar.refreshTitles();
 }
 
@@ -7312,6 +7335,8 @@ function applySettings(s: Settings): void {
   toolboxState = withoutRetired(s.toolboxes);
   ribbonPrefs = s.ribbons;
   applyRibbons();
+  quickPrefs = s.quickBar;
+  quickBar?.render();
   ownStyles = s.myStyles;
   modeStyles = s.modeStyles;
   dark.palette = s.darkPalette;
@@ -8366,20 +8391,24 @@ function drawingMenu(): MenuItem[] {
     ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : []),
     ...(s.arrows.size || atoms ? [{ label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
     null,
-    { cmd: 'add-frame' },
     ...(atoms ? [{ label: 'Label the Structure', items: [{ cmd: 'add-id-label' }, { cmd: 'add-caption' }, { cmd: 'attach-descriptors' }, null, { cmd: 'number-compounds' }] }] : []),
-    { cmd: 'scale' },
     ...(atoms || shapes.some((x) => x.kind === 'ring') ? [{ label: 'Highlight and Fill', items: [{ cmd: 'highlight' }, { cmd: 'remove-highlight' }, { cmd: 'highlight-look' }, { cmd: 'select-highlight' }, null, { cmd: 'smooth-highlight' }, { cmd: 'centre-highlight' }, { cmd: 'soft-highlight' }, { cmd: 'outline-highlight' }, { cmd: 'shadow-highlight' }, { cmd: 'glow-highlight' }, { cmd: 'save-highlight-look' }, null, { cmd: 'fill-rings' }, { cmd: 'ring-shadow' }] }] : []),
     ...(s.captions.size ? [{ cmd: 'link-text' }] : []),
     ...([...s.captions].some((id) => doc.captions.get(id)?.runs.some((r) => r.link))
       ? [{ cmd: 'open-link', label: 'Open Link' }, { cmd: 'insert-link', label: 'Edit Link…' }, { cmd: 'remove-link', label: 'Remove Link' }]
       : s.captions.size ? [{ cmd: 'insert-link', label: 'Link…' }] : []),
     ...([...s.captions].some((id) => doc.captions.get(id)?.attach) ? [{ cmd: 'unlink-text' }] : []),
-    ...(selectedGroups(doc, s).size ? [{ cmd: 'ungroup' }] : []),
-    ...(s.atoms.size + s.captions.size + s.arrows.size + s.shapes.size > 1 ? [{ cmd: 'group' }] : []),
-    { label: 'Align', items: arrange },
-    { label: 'Rotate or Flip', items: turn },
-    ...(order.length ? [{ label: 'Order', items: order }] : []),
+    // grouping, lining up, turning and stacking in one group, so the menu stays short
+    { label: 'Arrange', items: [
+      ...(s.atoms.size + s.captions.size + s.arrows.size + s.shapes.size > 1 ? [{ cmd: 'group' }] : []),
+      ...(selectedGroups(doc, s).size ? [{ cmd: 'ungroup' }] : []),
+      null,
+      { label: 'Align', items: arrange },
+      { label: 'Rotate or Flip', items: turn },
+      ...(order.length ? [{ label: 'Order', items: order }] : []),
+      null,
+      { cmd: 'add-frame' },
+    ] },
     ...(shapes.some((x) => x.chart) ? [{ cmd: 'edit-chart', label: 'Edit Chart…' }] : []),
     ...((shapes.length === 1 && shapes[0].kind === 'picture') || (atoms && !shapes.length) ? [{ cmd: 'alt-text', label: 'Alt Text…' }] : []),
     ...(shapes.some((x) => x.kind === 'geo' && !x.diagram) ? [
@@ -8450,7 +8479,7 @@ function showDark(on: boolean): void {
   editor.dark = on;
   editor.requestOverlay();
   $('[data-cmd="dark-page"][role="menuitemcheckbox"]')?.setAttribute('aria-checked', String(on));
-  $('#btn-dark').setAttribute('aria-pressed', String(on));
+  quickBar?.refresh();
 }
 
 /** View > Window and Colours > Dark Page Colours…: pick a palette, change its paper and ink, or keep your own. */
@@ -8963,13 +8992,7 @@ function tickToolboxes(): void {
   fillToolboxMenu();
   $('[data-cmd="lock-toolboxes"]')?.setAttribute('aria-checked', String(toolboxState.locked));
   $('[data-cmd="fold-side"]')?.setAttribute('aria-checked', String(sideIsFolded()));
-  const lock = $('#btn-lock');
-  lock.setAttribute('aria-pressed', String(toolboxState.locked));
-  lock.querySelector('.lock-icon')!.innerHTML = lockIcon(toolboxState.locked);
-  lock.querySelector('.lock-text')!.textContent = toolboxState.locked ? 'Locked' : 'Unlocked';
-  lock.title = toolboxState.locked
-    ? 'Toolbox layout locked: the toolboxes stay where they are. Click to unlock every toolbox, then drag one by its title to move it. This locks the layout only, never the drawing.'
-    : 'Toolbox layout unlocked: drag a toolbox by its title to an edge to dock it, or anywhere to float it. Click to lock every toolbox where it is.';
+  quickBar?.refresh();
 }
 
 /** Show the side panel folded or open as the mode showing has it, and its arrow to match. */
@@ -9014,7 +9037,6 @@ addEventListener('resize', () => {
   placeSidePanel();
   tickToolboxes();
 });
-$('#btn-lock').addEventListener('click', () => command('lock-toolboxes'));
 
 /** Where View > Toolboxes' entries start (the line above them). */
 let toolboxMenuTop: Element | null = null;
@@ -9129,6 +9151,35 @@ function openCustomToolbox(id?: string): void {
 
 toolboxes.render();
 tickToolboxes();
+
+// ---------------------------------------------------------------- the quick bar beside the menus (Quick Access Toolbar)
+
+/** The quick bar's commands (null: as it comes; kept in the settings). */
+let quickPrefs: string[] | null = null;
+/** A command's name as its menu item shows it now (Undo Add Bond), or its name in Keyboard Shortcuts. */
+const menuLabel = (cmd: string) => topMenuEntry(cmd)?.label ?? COMMAND_NAMES[cmd] ?? cmd;
+quickBar = new QuickBar($('#quick-bar'), {
+  get: () => quickPrefs,
+  set: (list) => { quickPrefs = list; storeSettings(); },
+  run: (cmd) => { finishTyping(); if (!command(cmd)) flash(`${menuLabel(cmd)} isn't available here.`); },
+  label: menuLabel,
+  key: (cmd) => commandKey(cmd),
+  icon: (cmd) => (cmd === 'lock-toolboxes' ? lockIcon(toolboxState.locked) : commandIcon(cmd)),
+  state: (cmd) => {
+    const item = document.querySelector<HTMLButtonElement>(`header .menu-wrap [data-cmd="${cmd}"]`);
+    const e = topMenuEntry(cmd);
+    return { enabled: !item || (!item.disabled && !item.closest('[data-mode-hid]')), on: e?.checked ?? null };
+  },
+  all: () => menuCommands().map((g) => ({ name: `${g.menu} menu`, items: g.items.filter((c) => !c.cmd.startsWith('toolbox-')) })),
+});
+// right-click a menu item, or a ribbon button that runs a menu command, to put it on the quick bar (or take it off)
+document.addEventListener('contextmenu', (e) => {
+  const b = (e.target as Element).closest<HTMLButtonElement>('header .menu [data-cmd], .ribbon button[data-cmd]');
+  if (!b || !quickBar) return;
+  e.preventDefault();
+  const qb = quickBar;
+  showContextMenu(e.clientX, e.clientY, [...qb.menuFor(b.dataset.cmd!), { cmd: 'qa-edit', label: 'Customize Quick Access Toolbar…' }], { run: (c) => qb.run(c), key: () => undefined });
+});
 
 // ---------------------------------------------------------------- Search Commands (Alt+Q)
 

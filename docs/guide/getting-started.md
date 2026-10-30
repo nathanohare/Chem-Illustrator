@@ -85,15 +85,17 @@ Chem Illustrator is in **beta**: it is still being built, new features arrive of
 
 ### The menu bar
 
-Along the top are the menus: **File**, **Edit**, **View**, **Insert**, **Format** and **Chemistry**. They are the same in every kind of tab: a command that doesn't work in the tab you are in is greyed out, and the commands for one kind of tab are in its own submenu (such as **Insert ▸ Spreadsheet**). Presentations, spreadsheets, documents and designs also have a ribbon of buttons under the menu bar, like Word, Excel and PowerPoint.
+Along the top are the menus: **File**, **Edit**, **View**, **Insert**, **Format**, **Chemistry** and **Help**. Each menu shows the commands for the kind of tab you are in; a command for another kind of tab is left out (Insert ▸ Chart shows in a spreadsheet, not in a canvas). Presentations, spreadsheets, documents and designs also have a ribbon of buttons under the menu bar, like Word, Excel and PowerPoint.
 
-To the right of the menus are:
+**Help** has this **User Guide** built in (it works without an internet connection), the hotkeys, and short notes on each part of the program. **F1** opens the guide at the part about the tool or kind of tab in use: with the ring tool, for example, it opens at Rings.
 
-- **Undo**, **Redo** and **Fit** (fit the whole drawing in the window). Undo and Redo are greyed out when there is nothing to take back, and resting the mouse on one names the step it would undo (**Undo Add Ring**); the Edit menu names it too;
-- **Locked**, which locks or unlocks all the toolboxes at once so they can be moved (each toolbox also has its own padlock; see [Canvas](drawing.md#toolboxes));
-- the **eye button**, which turns the dark page on and off;
-- the **Search** box;
-- **Help**, with this **User Guide** built in (it works without an internet connection), the hotkeys, and short notes on each part of the program. **F1** opens the guide at the part about the tool or kind of tab in use: with the ring tool, for example, it opens at Rings.
+To the right of the menus is the **quick bar** (like Office's Quick Access Toolbar), with buttons for **Save**, **Undo**, **Redo**, **Fit** (fit the whole drawing in the window), the **padlock** (locks or unlocks all the toolboxes at once so they can be moved; see [Canvas](drawing.md#toolboxes)) and the **eye** (the dark page). Undo and Redo are greyed out when there is nothing to take back, and resting the mouse on one names the step it would undo (**Undo Add Ring**). To choose its buttons:
+
+- click the **▾** at its end and tick the ones you want (Print, Copy, Paste, Focus View and more);
+- right-click any menu command, or a ribbon button that runs one, and pick **Add to Quick Access Toolbar**; right-click a quick button to take it off;
+- **More Commands…** on the ▾ (or **View ▸ Toolboxes ▸ Customize Quick Access Toolbar…**) lists every menu command to add, and puts the buttons in your order. **Reset** puts them back as they came. They are kept with your settings.
+
+After the quick bar is the **Search** box.
 
 The menus show each command's key beside it, so they are a good way to learn the shortcuts.
 
