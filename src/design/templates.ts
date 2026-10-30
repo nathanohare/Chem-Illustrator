@@ -63,7 +63,7 @@ function poster(): Box[] {
     spot(M, 60, 260, 260, 'Logo', 36), spot(W - M - 260, 60, 260, 260, 'Logo', 36),
     head(0, 452, 'Introduction'), body(0, 590, 900, 'Why this matters, and what was known before.'),
     head(0, 1562, 'Approach'), body(0, 1700, 820, 'The plan, with the key reaction or scheme.'),
-    head(1, 452, 'Results'), body(1, 590, 1930, 'Schemes, tables and figures. Drag structures in from a drawing tab or paste them here.'),
+    head(1, 452, 'Results'), body(1, 590, 1930, 'Schemes, tables and figures. Drag structures in from a canvas tab or paste them here.'),
     head(2, 452, 'Conclusions'), body(2, 590, 820, '• First conclusion\n• Second conclusion\n• What comes next'),
     head(2, 1482, 'References'), body(2, 1620, 520, '1. Reference one.\n2. Reference two.'),
     head(2, 2212, 'Acknowledgements'), body(2, 2350, 170, 'Funding and thanks.'),

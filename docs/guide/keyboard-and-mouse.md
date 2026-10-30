@@ -1,6 +1,6 @@
 # Keyboard and mouse
 
-This page lists the hotkeys in Drawing mode, explains how to change them, and describes what the mouse does with Shift, Ctrl and Alt held and what each mouse pointer means.
+This page lists the hotkeys in Canvas mode, explains how to change them, and describes what the mouse does with Shift, Ctrl and Alt held and what each mouse pointer means.
 
 The keys are ChemDraw's wherever ChemDraw has one, so your fingers should already know most of them. On a Mac, Cmd works wherever this page says Ctrl, and Option wherever it says Alt; the menus show the Mac symbols (⌘, ⌥).
 
@@ -115,7 +115,7 @@ Start a sequence from a highlight a key set (as above), not from the mouse resti
 
 | Key | Command |
 |---|---|
-| Ctrl+N, Ctrl+O | New drawing, Open |
+| Ctrl+N, Ctrl+O | New canvas, Open |
 | Ctrl+S, Ctrl+Shift+S | Save, Save As |
 | Ctrl+P | Print |
 | Ctrl+W | Close the tab |
@@ -136,7 +136,7 @@ Start a sequence from a highlight a key set (as above), not from the mouse resti
 | Alt+← / Alt+→ | Turn 1° anticlockwise / clockwise |
 | Alt+↑ / Alt+↓ | Turn 15° anticlockwise / clockwise |
 | Ctrl+R | Rotate by an angle… |
-| Ctrl+K | Scale… (in documents, slides, sheets and text being typed: Insert Link…) |
+| Ctrl+K | Scale… (in documents, presentations, spreadsheets and text being typed: Insert Link…) |
 | Ctrl+Shift+H, Ctrl+Shift+V | Flip left to right, flip top to bottom |
 | Ctrl+Alt+Shift+L, C, R | Align left edges, centres across, right edges |
 | Ctrl+Alt+Shift+T, M, B | Align top edges, middles down, bottom edges |
@@ -169,13 +169,13 @@ Start a sequence from a highlight a key set (as above), not from the mouse resti
 | Ctrl+Shift+V | Paste as plain text |
 | Esc | Finish typing |
 
-Slides, sheets and documents have their own keys (PowerPoint's, Excel's and Word's), which take priority while that kind of tab is showing. For example, F5 starts a slide show in Slides, and Ctrl+D fills down in a sheet. See their pages.
+Presentations, spreadsheets and documents have their own keys (PowerPoint's, Excel's and Word's), which take priority while that kind of tab is showing. For example, F5 starts a slide show in a presentation, and Ctrl+D fills down in a spreadsheet. See their pages.
 
 ## Getting round without the mouse
 
 - **F10**, or **Alt** pressed and let go on its own, goes to the menu bar; press it again (or Esc) to go back. The left and right arrow keys move along the menus and the down arrow opens one. In a menu, the right arrow opens a submenu and the left arrow closes it.
 - **Alt** and a menu's underlined letter opens that menu: **F**ile, **E**dit, **V**iew, **I**nsert, F**o**rmat, **C**hemistry, **H**elp. The letters show while Alt is held.
-- **Ctrl+F6** moves on round the window: the menus, the file tabs, the ribbon, the drawing tools, the drawing (or sheet or document), and the side panel. **Ctrl+Shift+F6** goes back. They can be changed in the Hotkeys window.
+- **Ctrl+F6** moves on round the window: the menus, the file tabs, the ribbon, the drawing tools, the canvas (or spreadsheet or document), and the side panel. **Ctrl+Shift+F6** goes back. They can be changed in the Hotkeys window.
 - **Tab** moves through the buttons as usual. It selects the next structure only when the drawing has the keys (after clicking it, or with Ctrl+F6) or the mouse is over the drawing.
 - On the file tabs, the left and right arrow keys switch tabs and Delete closes one.
 - Screen readers hear which drawing tool is on, and what is selected ("Selected C6H5Br, 7 atoms").
@@ -184,7 +184,7 @@ Slides, sheets and documents have their own keys (PowerPoint's, Excel's and Word
 
 Every key can be changed. Open **Edit ▸ Hotkeys…**, or **Help ▸ Hotkeys and Tips** and then **Show and change all hotkeys…**.
 
-The window lists every action, grouped as above (pointing at an atom, at a bond, at empty space, anywhere, in slides, in sheets, in documents, and typing text), with the keys that do each one.
+The window lists every action, grouped as above (pointing at an atom, at a bond, at empty space, anywhere, in presentations, in spreadsheets, in documents, and typing text), with the keys that do each one.
 
 - Type in the box at the top to find an action or a key.
 - Click **+** next to an action and press the key you want. Press Esc to cancel.
@@ -203,7 +203,7 @@ Changes work straight away and are saved in the settings file; the window shows 
 - **Drag across empty space** with the select tool to select everything in the box. Hold Shift to add to what is already selected.
 - **Double-click** an atom or bond with the select tool to select the whole structure (Shift+double-click adds it to the selection). With other tools, double-clicking an atom types a label.
 - **Double-click** a caption to edit its text, or a table cell to type in it.
-- **Right-click** opens a menu for what you clicked (see [Drawing](drawing.md#the-right-click-menu)).
+- **Right-click** opens a menu for what you clicked (see [Canvas](drawing.md#the-right-click-menu)).
 - **Space** (pointing at empty space) switches to the select tool.
 
 ### Dragging
@@ -275,10 +275,10 @@ The pointer changes to show what a click or drag will do.
 | Curved arrow | Over the round handle above the selection | Drag to turn the selection. |
 | I-beam | Text tool, or over text being typed | Click to type. |
 
-In **Slides** and **Design**, the select tool keeps the usual arrow pointer over empty space, as in PowerPoint, and shows a four-headed arrow over things you can move. Over a text box it shows an I-beam, and one click there starts typing.
+In **Presentation** and **Design** tabs, the select tool keeps the usual arrow pointer over empty space, as in PowerPoint, and shows a four-headed arrow over things you can move. Over a text box it shows an I-beam, and one click there starts typing.
 
-In **Documents** and **Sheets**, a **pointing hand** over a structure means it is a drawing: a click picks it, and a **double-click** opens it for editing with the drawing tools.
+In **Document** and **Spreadsheet** tabs, a **pointing hand** over a structure means it is a drawing: a click picks it, and a **double-click** opens it for editing with the drawing tools.
 
 ---
 
-Next: [Getting started](getting-started.md) · [Drawing](drawing.md) · [Slides](slides.md) · [Documents](documents.md) · [Sheets](sheets.md) · [Design](design.md) · [Files and sharing](files-and-sharing.md) · [Feedback](feedback.md)
+Next: [Getting started](getting-started.md) · [Canvas](drawing.md) · [Presentation](slides.md) · [Document](documents.md) · [Spreadsheet](sheets.md) · [Design](design.md) · [Files and sharing](files-and-sharing.md) · [Feedback](feedback.md)

@@ -11,16 +11,16 @@
     <div class="menu-wrap">
       <button id="btn-file" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu" aria-keyshortcuts="Alt+F"><span class="mn">F</span>ile</button>
       <div id="file-menu" class="menu" role="menu" hidden>
-        <button role="menuitem" data-cmd="new">New Drawing</button>
+        <button role="menuitem" data-cmd="new" title="A new canvas: structures and reaction schemes, as in ChemDraw">New Canvas</button>
     <div class="submenu">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">New</button>
     <div class="menu sub" role="menu" hidden>
-        <button role="menuitem" data-cmd="new-slides">New Slides</button>
-        <button role="menuitem" data-cmd="new-design">New Design…</button>
-        <button role="menuitem" data-cmd="new-sheet">New Sheet</button>
-        <button role="menuitem" data-cmd="new-document">New Document</button>
+        <button role="menuitem" data-cmd="new-slides">Presentation (slideshow)</button>
+        <button role="menuitem" data-cmd="new-sheet">Spreadsheet (tables, charts, dashboards)</button>
+        <button role="menuitem" data-cmd="new-document">Document (text)</button>
+        <button role="menuitem" data-cmd="new-design">Design (TOC graphic, abstract, poster, figure)…</button>
     <hr />
-        <button role="menuitem" data-cmd="new-from-template" title="A new document or sheet from a ready-made template: lab report, supporting information, thesis chapter, reaction table, reagent sheet">New from Template…</button>
+        <button role="menuitem" data-cmd="new-from-template" title="A new document or spreadsheet from a ready-made template: lab report, supporting information, thesis chapter, reaction table, reagent sheet">New from Template…</button>
     </div>
     </div>
         <button role="menuitem" data-cmd="open">Open…</button>
@@ -51,7 +51,7 @@
     </div>
     <hr />
         <button role="menuitem" data-cmd="drawing-style" title="How structures are drawn: a journal's style (ACS, RSC, Nature…) or your own, with every number changeable">Drawing Style…</button>
-        <button role="menuitem" data-modes="drawing" data-cmd="page-setup" title="The drawing's paper size (Letter, A4… or your own) and way up, whether it adds pages as it grows, and the default for new drawings">Page Setup…</button>
+        <button role="menuitem" data-modes="drawing" data-cmd="page-setup" title="The drawing's paper size (Letter, A4… or your own) and way up, whether it adds pages as it grows or keeps to a set number, its fixed edges, and the default for new drawings">Page Setup…</button>
     <hr />
     <div class="submenu" data-modes="drawing slides design">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Import</button>
@@ -71,8 +71,8 @@
     </div>
         <button role="menuitem" data-cmd="check-accessibility" title="Look for what makes this file hard to use with a screen reader or to read: missing alt text, low-contrast text, slides without titles, headings that skip a level, things read out of order">Check Accessibility</button>
     <hr />
-        <button role="menuitem" data-cmd="print" title="Print the drawing, slides (or handouts), document or sheet">Print…</button>
-        <button data-modes="sheet" role="menuitem" data-cmd="print-preview" title="Every page of the sheet as it will print">Print Preview</button>
+        <button role="menuitem" data-cmd="print" title="Print the canvas, presentation (or handouts), document or spreadsheet">Print…</button>
+        <button data-modes="sheet" role="menuitem" data-cmd="print-preview" title="Every page of the spreadsheet as it will print">Print Preview</button>
     <hr />
         <button role="menuitem" data-cmd="close-tab">Close</button>
         <button role="menuitem" class="desktop-only" data-cmd="check-updates" title="Look on GitHub for a newer version of the app and install it" hidden>Check for Updates…</button>
@@ -112,7 +112,7 @@
     <button data-modes="sheet document" role="menuitem" data-cmd="replace">Replace…</button>
     <hr />
     <div class="submenu" data-modes="slides">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Slides</button>
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Presentation</button>
     <div class="menu sub" role="menu" hidden>
     <button data-modes="slides" role="menuitem" data-cmd="delete-slide">Delete Slide</button>
     <button data-modes="slides" role="menuitem" data-cmd="cut-slides" title="Cut the slides picked in the slide list, to paste into this deck or another">Cut Slides</button>
@@ -122,7 +122,7 @@
     </div>
     </div>
     <div class="submenu" data-modes="sheet">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Sheet</button>
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Spreadsheet</button>
     <div class="menu sub" role="menu" hidden>
     <button data-modes="sheet" role="menuitem" data-cmd="delete-cells">Delete Rows or Columns</button>
     <button data-modes="sheet" role="menuitem" data-cmd="go-to">Go To…</button>
@@ -217,17 +217,19 @@
     <button role="menuitemcheckbox" aria-checked="true" data-modes="drawing" data-cmd="edge-arrows" title="Arrows at the edge of the window pointing to structures scrolled out of sight: click one to go there"><span>Edge Arrows</span></button>
     <button role="menuitemcheckbox" aria-checked="false" data-modes="drawing" data-cmd="dot-grid" title="Faint dots behind the drawing, on screen only (never saved, printed or copied)"><span>Dot Grid</span></button>
     <button role="menuitemcheckbox" aria-checked="false" data-modes="drawing" data-cmd="outside-tint" title="A faint tint on the empty space beyond everything drawn, on screen only"><span>Tint Outside the Drawing</span></button>
+    <button role="menuitemcheckbox" aria-checked="true" data-modes="drawing" data-cmd="page-grid" title="The drawing's pages: empty pages grey, page boundaries dashed, fixed edges hatched; pages are added as the drawing grows"><span>Page Grid</span></button>
     <hr />
+    <button role="menuitem" data-modes="drawing" data-cmd="page-grid-settings" title="How the page boundaries look, the grey of empty pages, fixed edges, and what a paste past a fixed edge does">Page Grid Settings…</button>
     <button role="menuitem" data-modes="drawing" data-cmd="navigation-settings" title="Navigator corner and size, what the edge arrows point to, dot spacing, tint strength and the status bar buttons">Navigation Settings…</button>
     </div>
     </div>
     <hr />
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="show-stereo" title="Preview every R/S and E/Z label in red (on screen only; use Chemistry &gt; Show Stereo Labels to add them to the drawing)"><span>Show R/S Preview</span></button>
-    <button role="menuitemcheckbox" aria-checked="false" data-cmd="alignment-guides" title="While moving, edges and middles snap into line with other structures, text, shapes and the page (pink lines; hold Alt to move freely). Set separately for drawings, slides and designs"><span>Alignment Guides</span></button>
+    <button role="menuitemcheckbox" aria-checked="false" data-cmd="alignment-guides" title="While moving, edges and middles snap into line with other structures, text, shapes and the page (pink lines; hold Alt to move freely). Set separately for canvases, presentations and designs"><span>Alignment Guides</span></button>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="group-tips" title="Rest the mouse on an abbreviation such as OTBS, Boc or CO2Me to see the group written out, with its name and formula"><span>Group Tooltips</span></button>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="scroll-bars" title="Scroll bars along the bottom and right of the drawing, showing where you are"><span>Scroll Bars</span></button>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="dark-page" title="Show the page dark on screen only: files, printing, copying and exports are not changed"><span>Dark Page</span></button>
-    <button role="menuitemcheckbox" aria-checked="false" data-cmd="split-view" title="A drawing beside the document, sheet, slides or design, so you can draw and write without switching tabs"><span>Split View: Drawing Beside</span></button>
+    <button role="menuitemcheckbox" aria-checked="false" data-cmd="split-view" title="A canvas beside the document, spreadsheet, presentation or design, so you can draw and write without switching tabs"><span>Split View: Canvas Beside</span></button>
     <hr />
     <div class="submenu" data-modes="document">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Document</button>
@@ -251,7 +253,7 @@
     </div>
     </div>
     <div class="submenu" data-modes="sheet">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Sheet</button>
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Spreadsheet</button>
     <div class="menu sub" role="menu" hidden>
     <button data-modes="sheet" role="menuitem" data-cmd="freeze-header">Freeze Header Row</button>
     <div class="submenu" data-modes="sheet">
@@ -268,7 +270,7 @@
     </div>
     </div>
     <div class="submenu" data-modes="slides">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Slides</button>
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Presentation</button>
     <div class="menu sub" role="menu" hidden>
     <button data-modes="slides" role="menuitemradio" aria-checked="true" data-cmd="view-normal" title="The slide list beside the slide you are working on"><span>Normal</span></button>
     <button data-modes="slides" role="menuitemradio" aria-checked="false" data-cmd="view-sorter" title="Every slide in rows of larger pictures, by section: drag to reorder, double-click one to open it"><span>Slide Sorter</span></button>
@@ -319,7 +321,7 @@
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="toolbox-custom" title="Your own toolbox: any tools and commands you choose"><span>Toolbox: My Toolbox</span></button>
     <hr />
     <button role="menuitem" data-cmd="customize-toolbox" title="Rearrange any toolbox's buttons by dragging them, put tools and commands in or take them out, change the fly-outs, and make, rename or delete toolboxes">Customize Toolboxes…</button>
-    <button role="menuitemcheckbox" aria-checked="false" data-cmd="one-column-tools" title="In Slides, Sheet, Document and Design tabs, show toolboxes docked at the side in one column, to leave more room for the page"><span>One Column Outside Drawing</span></button>
+    <button role="menuitemcheckbox" aria-checked="false" data-cmd="one-column-tools" title="In Presentation, Spreadsheet, Document and Design tabs, show toolboxes docked at the side in one column, to leave more room for the page"><span>One Column Outside Canvas</span></button>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="lock-toolboxes" title="Unlock to drag toolboxes by their titles: to an edge of the drawing to dock them, anywhere else to float"><span>Lock Toolboxes</span></button>
     <button role="menuitem" data-cmd="reset-toolboxes" title="Put every toolbox back where it starts: Drawing Tools docked at the left, the others hidden, all open and locked. What is in them is kept">Reset Toolboxes</button>
     </div>
@@ -330,7 +332,7 @@
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Ribbon</button>
     <div class="menu sub" role="menu" hidden>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="collapse-ribbon" title="Show the ribbon's tabs only, for more room; click a tab to use its buttons (Ctrl+F1, or double-click a tab)"><span>Collapse the Ribbon</span><kbd>Ctrl+F1</kbd></button>
-    <button role="menuitem" data-cmd="customize-ribbon" title="Put the ribbon's tabs and groups in your order, rename or hide them, and make groups of your own commands (Slides, Documents, Sheets and Designs)">Customize the Ribbon…</button>
+    <button role="menuitem" data-cmd="customize-ribbon" title="Put the ribbon's tabs and groups in your order, rename or hide them, and make groups of your own commands (Presentations, Documents, Spreadsheets and Designs)">Customize the Ribbon…</button>
     </div>
     </div>
     <div class="submenu">
@@ -417,7 +419,7 @@
     <button data-modes="slides sheet" role="menuitem" data-cmd="new-comment">New Comment</button>
     <hr />
     <div class="submenu" data-modes="slides">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Slides</button>
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Presentation</button>
     <div class="menu sub" role="menu" hidden>
     <button data-modes="slides" role="menuitem" data-cmd="new-slide">New Slide</button>
     <button data-modes="slides" role="menuitem" data-cmd="new-canvas-slide" title="A slide with no edge: draw a whole route across it, then add keyframes, the windows the slide show steps through">New Canvas Slide</button>
@@ -442,7 +444,7 @@
     </div>
     </div>
     <div class="submenu" data-modes="sheet">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Sheet</button>
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Spreadsheet</button>
     <div class="menu sub" role="menu" hidden>
     <button data-modes="sheet" role="menuitem" data-cmd="new-note">New Note</button>
     <button data-modes="sheet" role="menuitem" data-cmd="property-column">Insert Property Columns…</button>
@@ -549,7 +551,7 @@
     <button data-modes="drawing slides design" role="menuitem" data-cmd="unlink-text" title="Leave the selected text where it is, no longer following its structure">Unlink Text</button>
     <hr />
     <div class="submenu" data-modes="slides">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Slides</button>
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Presentation</button>
     <div class="menu sub" role="menu" hidden>
     <div class="submenu" data-modes="slides">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Slide Layout</button>
@@ -599,7 +601,7 @@
     </div>
     </div>
     <div class="submenu" data-modes="sheet">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Sheet</button>
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Spreadsheet</button>
     <div class="menu sub" role="menu" hidden>
     <button data-modes="sheet" role="menuitem" data-cmd="new-rule">New Conditional Formatting Rule…</button>
     <button data-modes="sheet" role="menuitem" data-cmd="manage-rules">Manage Conditional Formatting…</button>
@@ -786,7 +788,7 @@
 
   <div id="tabs" role="tablist" aria-label="Open files"></div>
 
-  <div id="sheet-ribbon" class="ribbon tabbed sheet-only" role="toolbar" aria-label="Sheet" hidden>
+  <div id="sheet-ribbon" class="ribbon tabbed sheet-only" role="toolbar" aria-label="Spreadsheet" hidden>
     <div class="rb-tabs" role="tablist">
       <button role="tab" data-sh-tab="home" aria-selected="true">Home</button>
       <button role="tab" data-sh-tab="dashboard" aria-selected="false" hidden>Dashboard</button>
@@ -2145,7 +2147,7 @@
     </div>
   </div>
 
-  <div id="ribbon" class="ribbon tabbed slides-only" role="toolbar" aria-label="Slides" hidden>
+  <div id="ribbon" class="ribbon tabbed slides-only" role="toolbar" aria-label="Presentation" hidden>
     <div class="rb-tabs" role="tablist">
       <button role="tab" data-sl-tab="home" aria-selected="true">Home</button>
       <button role="tab" data-sl-tab="insert" aria-selected="false">Insert</button>
@@ -2773,16 +2775,16 @@
           <li><b>Paste</b> a SMILES or a molfile to get the structure, or type a name in <b>Insert ▸ Structure from Name or SMILES</b>.</li>
           <li><b>Find any command</b> with the search box at the top (<kbd>Alt</kbd>+<kbd>Q</kbd>).</li>
           <li><b>Right-click</b> anything for what you can do with it; the panel on the right shows its style and analysis.</li>
-          <li>Tabs at the top add <b>Slides</b>, <b>Sheets</b>, <b>Documents</b> and <b>Designs</b>, each with the drawing tools.</li>
+          <li>Tabs at the top add <b>Presentations</b>, <b>Spreadsheets</b>, <b>Documents</b> and <b>Designs</b>, each with the drawing tools.</li>
         </ul>
         <p class="welcome-buttons"><a href="#" data-cmd="user-guide">Open the user guide</a><span class="grow"></span><button type="button" class="primary" id="welcome-close">Start drawing</button></p>
       </section>
       <section id="start-view" class="welcome-card start-view" aria-label="Start" hidden>
         <div class="sv-new">
-          <button type="button" data-start="new-slides">New Slides</button>
-          <button type="button" data-start="new-sheet">New Sheet</button>
-          <button type="button" data-start="new-document">New Document</button>
-          <button type="button" data-start="new-design">New Design</button>
+          <button type="button" data-start="new-slides">New Presentation<small>slideshow</small></button>
+          <button type="button" data-start="new-sheet">New Spreadsheet<small>tables, charts, dashboards</small></button>
+          <button type="button" data-start="new-document">New Document<small>text</small></button>
+          <button type="button" data-start="new-design">New Design<small>TOC graphic, abstract, poster, figure</small></button>
           <button type="button" data-start="new-from-template">From Template…</button>
           <button type="button" data-start="open">Open…</button>
         </div>
@@ -2794,8 +2796,8 @@
     <div id="split-pane" hidden>
       <div id="split-handle" title="Drag to change how wide the drawing is"></div>
       <div id="split-bar">
-        <span class="split-label">Drawing</span>
-        <select id="split-pick" aria-label="Drawing shown beside" title="The drawing shown here: any drawing open in a tab, or a new one"></select>
+        <span class="split-label">Canvas</span>
+        <select id="split-pick" aria-label="Canvas shown beside" title="The canvas shown here: any canvas open in a tab, or a new one"></select>
         <button id="split-insert" type="button" title="Put the selected structures (or the whole drawing, when nothing is selected) into the document at the caret">Insert into Document</button>
         <span class="grow"></span>
         <button id="split-close" type="button" title="Close split view (the drawing stays open in its tab)" aria-label="Close split view">×</button>
@@ -2889,8 +2891,8 @@
         <h3>Drawing styles</h3>
         <ul>
           <li>File &gt; Drawing Style… sets how structures are drawn in the tab showing: bond length, line widths, double-bond spacing and label fonts. Built in are ACS 1996 (every ACS journal), RSC, Nature journals and a larger Slides style, with the source of each set of numbers shown. Every number can be changed</li>
-          <li>Save as My Style keeps your changes under a name, in every mode. Tick Use this style for new … to make new drawings, slides, designs, documents or sheets start in it</li>
-          <li>View &gt; Alignment Guides: while you move something, its edges and middle snap into line with other structures, text, arrows, shapes and the page, shown by pink lines. Hold <kbd>Alt</kbd> to move freely. It is on for slides and designs and off for drawings to start with; each remembers its own setting</li>
+          <li>Save as My Style keeps your changes under a name, in every mode. Tick Use this style for new … to make new canvases, presentations, designs, documents or spreadsheets start in it</li>
+          <li>View &gt; Alignment Guides: while you move something, its edges and middle snap into line with other structures, text, arrows, shapes and the page, shown by pink lines. Hold <kbd>Alt</kbd> to move freely. It is on for presentations and designs and off for canvases to start with; each remembers its own setting</li>
           <li>View &gt; Dark Page (or the eye button at the top) shows the page dark: black ink as light grey, white paper as dark grey, colours dimmed. It changes the screen only; files, printing, copies and exports stay as they are. View &gt; Window and Colours &gt; Dark Page Colours… picks Graphite, Slate or Warm dark, or your own paper and ink colours</li>
           <li>When there are structures already, choose Redraw (they take the new bond length and widths) or Keep their look (only new structures use the new style). One Undo puts it all back</li>
         </ul>
@@ -2906,9 +2908,9 @@
         <ul>
           <li>Mouse wheel scrolls, <kbd>Ctrl</kbd>+wheel zooms, middle or right drag pans; the View menu zooms too</li>
           <li>Copy puts the selection (or the whole drawing) on the clipboard; in the Windows app it pastes into ChemDraw, and into Word and PowerPoint as a picture. Paste takes drawings from ChemDraw, and SMILES or molfile text</li>
-          <li>File menu: New Drawing, New Slides, New Sheet, Open, Save and Save As (.cdxml, .cdx, .pptx, .xlsx, .csv, .sdf), Export PDF, Export Molfile. Each file has a tab; <kbd>Ctrl</kbd>+<kbd>Tab</kbd> moves between them. You can also drop files on the window</li>
+          <li>File menu: New Canvas, New ▸ Presentation, Spreadsheet, Document or Design, Open, Save and Save As (.cdxml, .cdx, .pptx, .xlsx, .csv, .sdf), Export PDF, Export Molfile. Each file has a tab; <kbd>Ctrl</kbd>+<kbd>Tab</kbd> moves between them. You can also drop files on the window</li>
         </ul>
-        <h3>Sheets</h3>
+        <h3>Spreadsheets</h3>
         <ul>
           <li>Excel's keys and formulas (SUM, AVERAGE, ROUND, IF…). Chemistry > Structure draws a structure in a cell; paste one from ChemDraw too. Double-click a structure to change it</li>
           <li>Properties adds columns that work out formula, MW, exact mass, HRMS m/z, cLogP, TPSA and more from each structure; =D2/MW(B2)*1000 gives mmol. Type over any value; Reset to Calculated puts it back</li>

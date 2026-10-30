@@ -78,7 +78,7 @@ describe('the gallery', () => {
     proto.close ??= function (this: HTMLDialogElement) { this.removeAttribute('open'); this.dispatchEvent(new Event('close')); };
     const got = pickFileTemplate('sheet');
     const cards = [...document.querySelectorAll('.file-templates .ft-card')] as HTMLButtonElement[];
-    expect(cards.map((c) => c.querySelector('strong')!.textContent)).toEqual(['Blank sheet', 'Reaction table', 'Reagent sheet', 'Blank document', 'Lab report', 'Supporting Information', 'Thesis chapter']);
+    expect(cards.map((c) => c.querySelector('strong')!.textContent)).toEqual(['Blank spreadsheet', 'Reaction table', 'Reagent sheet', 'Blank document', 'Lab report', 'Supporting Information', 'Thesis chapter']);
     cards[1].click();
     const choice = await got;
     expect(choice?.kind).toBe('sheet');

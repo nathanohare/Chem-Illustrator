@@ -136,7 +136,7 @@ export interface ModeColoursDialogOptions {
   set(c: ModeColours): void;
 }
 
-const NAMES: Record<ColourMode, string> = { drawing: 'Drawings', slides: 'Slides', sheet: 'Sheets', document: 'Documents', design: 'Designs' };
+const NAMES: Record<ColourMode, string> = { drawing: 'Canvases', slides: 'Presentations', sheet: 'Spreadsheets', document: 'Documents', design: 'Designs' };
 
 export class ModeColoursDialog {
   private d: HTMLDialogElement;
@@ -147,7 +147,7 @@ export class ModeColoursDialog {
     d.setAttribute('aria-label', 'Mode colours');
     d.innerHTML = `
       <h2>Mode colours</h2>
-      <p class="muted">Each kind of file has its own colour, so you can see at a glance whether you are working on a drawing, slides, a sheet or a document.</p>
+      <p class="muted">Each kind of file has its own colour, so you can see at a glance whether you are working on a canvas, a presentation, a spreadsheet, a document or a design.</p>
       <fieldset class="mc-styles">
         <legend>Use the colour for</legend>
         <label class="hk-opt"><input type="radio" name="mc-style" value="accent" /><span>Buttons, highlights and tab icons (the window keeps its usual look)</span></label>

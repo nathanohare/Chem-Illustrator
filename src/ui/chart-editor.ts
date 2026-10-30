@@ -74,7 +74,7 @@ export function editChart(start: ChartBox, isNew: boolean, flash: (msg: string, 
     const view = new SheetView($('.ce-grid'), {
       structureBox: () => ({ w: 0, h: 0 }),
       structureBitmap: () => null,
-      editStructure: () => flash('Charts take numbers and labels: structures go in Sheet mode.'),
+      editStructure: () => flash('Charts take numbers and labels: structures go in Spreadsheet mode.'),
       key: (e) => key(e),
       changed: () => {},
       contextMenu: () => {},

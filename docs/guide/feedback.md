@@ -40,4 +40,4 @@ You can also go to <https://github.com/nathanohare/Chem-Illustrator/issues> and 
 - **What you expected**, not only what happened. "The arrow head should stop at the bond" tells us more than "the arrow looks wrong".
 - **For drawings, a screenshot.** On Windows, Win+Shift+S takes one; on a Mac, Cmd+Shift+4.
 
-Next: [Getting started](getting-started.md) · [Drawing](drawing.md) · [Keyboard and mouse](keyboard-and-mouse.md) · [Slides](slides.md) · [Documents](documents.md) · [Sheets](sheets.md) · [Design](design.md) · [Files and sharing](files-and-sharing.md)
+Next: [Getting started](getting-started.md) · [Canvas](drawing.md) · [Keyboard and mouse](keyboard-and-mouse.md) · [Presentation](slides.md) · [Document](documents.md) · [Spreadsheet](sheets.md) · [Design](design.md) · [Files and sharing](files-and-sharing.md)

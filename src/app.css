@@ -455,8 +455,9 @@ body.slides-mode #canvas-host, body.design-mode #canvas-host { background: var(-
 .welcome-buttons { display: flex; align-items: center; margin: 0; }
 /* the start view: new tabs, recent files, and drawing straight away */
 .start-view { width: min(460px, calc(100% - 32px)); padding: 12px 14px 10px; }
-.sv-new { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
-.sv-new button { padding: 5px 6px; }
+.sv-new { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 8px; }
+.sv-new button { padding: 5px 6px; line-height: 1.3; }
+.sv-new button small { display: block; font-size: 11px; color: var(--muted); }
 .sv-recent h3 { margin: 4px 0 2px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
 .sv-recent[hidden] { display: none; }
 .sv-files { display: flex; flex-direction: column; margin-bottom: 8px; }

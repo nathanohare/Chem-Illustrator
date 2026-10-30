@@ -21,10 +21,11 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl } from '../render/images';
-import { ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
+import { PAGE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
 import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
+import { pageExtent, pageCount, pageTag } from '../page-grid';
 import { geoDef, moveSteps, outlineParts, textArea, type GeoStep } from '../design/geo';
 import { FADE, tint } from '../colours';
 import { fillInk, mix, ringShadowGroups, ringShadowSize, shadowLook } from '../render/fills';
@@ -242,12 +243,23 @@ class CdxmlWriter {
     this.changed = true;
   }
 
-  /** The page's attributes for the drawing's page (ChemDraw's US Letter page is 540 × 720 pt), grown to hold the drawing. */
+  /**
+   * The page's attributes for the drawing's page (ChemDraw's US Letter page is 540 × 720 pt): its
+   * page grid, which grows to hold the drawing (page-grid.ts).
+   */
   private pageAttrs(b: Rect | null): Record<string, string> {
-    const W = this.doc.page?.w ?? 540, H = this.doc.page?.h ?? 720;
-    // (at least as many sheets as the document was set to have)
-    const wp = Math.max(this.doc.page?.across ?? 1, Math.ceil(((b?.x2 ?? 0) + 36) / W)), hp = Math.max(this.doc.page?.down ?? 1, Math.ceil(((b?.y2 ?? 0) + 36) / H));
+    const p = this.doc.page;
+    const W = p?.w ?? 540, H = p?.h ?? 720;
+    let wp: number, hp: number;
+    if (p) ({ across: wp, down: hp } = pageCount(pageExtent(p, b)));
+    else { wp = Math.ceil(((b?.x2 ?? 0) + 36) / W); hp = Math.ceil(((b?.y2 ?? 0) + 36) / H); }
+    wp = Math.max(1, wp); hp = Math.max(1, hp);
     return { BoundingBox: `0 0 ${f2(W * wp)} ${f2(H * hp)}`, HeaderPosition: '36', FooterPosition: '36', PrintTrimMarks: 'yes', HeightPages: String(hp), WidthPages: String(wp) };
+  }
+
+  /** The page grid's fixed edges and whether it grows, kept for this program (ChemDraw takes no notice). */
+  private pageGridTag(): Element | null {
+    return kids(this.page).find((c) => c.nodeName === 'objecttag' && c.getAttribute('Name') === PAGE_TAG) ?? null;
   }
 
   /** Whether the file's page differs from the drawing's: another paper size, or the drawing has gone past it. */
@@ -258,13 +270,18 @@ class CdxmlWriter {
     if (bb.length !== 4 || !bb.every(isFinite)) return true;
     const wp = Math.max(1, Number(this.page.getAttribute('WidthPages')) || 1), hp = Math.max(1, Number(this.page.getAttribute('HeightPages')) || 1);
     if (Math.abs((bb[2] - bb[0]) / wp - p.w) > 0.5 || Math.abs((bb[3] - bb[1]) / hp - p.h) > 0.5) return true;
-    return !!b && (b.x2 > bb[2] || b.y2 > bb[3]);
+    const want = this.pageAttrs(b);
+    if (want.WidthPages !== String(wp) || want.HeightPages !== String(hp)) return true;
+    return (this.pageGridTag()?.getAttribute('Value') ?? null) !== pageTag(p);
   }
 
   /** Size the page to the drawing's page, grown to hold the drawing. */
   private sizePage(b: Rect | null): void {
     if (!this.page.getAttribute('id')) this.page.setAttribute('id', this.id());
     for (const [k, v] of Object.entries(this.pageAttrs(b))) this.page.setAttribute(k, v);
+    const old = this.pageGridTag(), tag = this.doc.page && pageTag(this.doc.page);
+    if (old && old.getAttribute('Value') !== tag) this.page.removeChild(old);
+    if (tag && old?.getAttribute('Value') !== tag) this.page.insertBefore(this.el('objecttag', { TagType: 'String', Name: PAGE_TAG, Value: tag, Visible: 'no' }), this.page.firstChild);
     this.writePaper();
   }
 
