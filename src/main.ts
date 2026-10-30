@@ -2,6 +2,8 @@
 // toolbar, the drawing area (with the slide list and notes in Slides mode, or the grid in Sheet
 // mode), and the panels on the right.
 
+// the menus made from the command list, before anything looks for their items
+import './commands/menus';
 import { newDocDesign, setNewDocDesign } from './document/themes';
 import { fieldEnv } from './document/fields';
 import type { QuickPart } from './document/quick-parts';
@@ -94,6 +96,7 @@ import { EFFECTS, animName, newAnim, highlightParts } from './deck/animation';
 import { SLIDE_TEMPLATES, applyTemplate, type SlideTemplate } from './deck/templates';
 import { showContextMenu, topMenuEntry, type MenuItem } from './ui/context-menu';
 import { QuickBar } from './ui/quick-bar';
+import { commandDef } from './commands/registry';
 import { defaultHandout, handoutLayout, handoutPageSvg, notesPageSize, notesPageSvg, type HandoutSetup } from './deck/notes-pages';
 import { OutlineView } from './ui/outline-view';
 import { NotesPageView, editHandoutMaster, editNotesMaster } from './ui/notes-page-view';
@@ -9201,7 +9204,7 @@ tickToolboxes();
 /** The quick bar's commands (null: as it comes; kept in the settings). */
 let quickPrefs: string[] | null = null;
 /** A command's name as its menu item shows it now (Undo Add Bond), or its name in Keyboard Shortcuts. */
-const menuLabel = (cmd: string) => topMenuEntry(cmd)?.label ?? COMMAND_NAMES[cmd] ?? cmd;
+const menuLabel = (cmd: string) => topMenuEntry(cmd)?.label ?? commandDef(cmd)?.label ?? COMMAND_NAMES[cmd] ?? cmd;
 quickBar = new QuickBar($('#quick-bar'), {
   get: () => quickPrefs,
   set: (list) => { quickPrefs = list; storeSettings(); },
