@@ -62,8 +62,8 @@ export async function placeTitleBar(where: TitleBarPlace): Promise<void> {
   if (!isTauri() || !header) return;
   const own = where === 'app';
   document.body.classList.toggle('own-title-bar', own);
-  // the empty parts of the menu bar (and the program's name) move the window
-  for (const el of [header, header.querySelector('h1.app-name')]) {
+  // the empty parts of the menu bar (and the program's name, and the tabs' row) move the window
+  for (const el of [header, header.querySelector('h1.app-name'), document.querySelector('#tabs')]) {
     if (!el) continue;
     if (own) el.setAttribute('data-tauri-drag-region', '');
     else el.removeAttribute('data-tauri-drag-region');

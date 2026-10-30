@@ -3504,6 +3504,7 @@ function renderTabs(): void {
     return el;
   });
   tabStrip.replaceChildren(...items);
+  fitTabs();
   tabStrip.querySelector('.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   showTabArrows();
 }
@@ -3547,6 +3548,26 @@ tabAdd.addEventListener('click', () => {
   ], { run: (cmd) => void command(cmd), key: commandKey });
 });
 tabsEl.replaceChildren(tabLeft, tabStrip, tabRight, tabList, tabAdd);
+new ResizeObserver(() => fitTabs()).observe(tabsEl);
+
+/** The file tabs sit in the menu bar beside the menus (to start with), or on a row of their own (View > Window and Colours). */
+let tabsInMenu = true;
+function placeTabs(inMenu: boolean): void {
+  tabsInMenu = inMenu;
+  if (inMenu) $('header').insertBefore(tabsEl, $('#btn-search'));
+  else $('header').after(tabsEl);
+  document.body.classList.toggle('tabs-in-menu', inMenu);
+  $('[data-cmd="tabs-in-menu"]')?.setAttribute('aria-checked', String(inMenu));
+  fitTabs();
+}
+
+/** When the tabs would be squeezed too narrow for their names, they show only their icons (the name is in each one's tooltip). */
+function fitTabs(): void {
+  const ctl = [tabList, tabAdd].reduce((w, b) => w + b.offsetWidth + 2, 0);
+  const room = tabsEl.clientWidth - ctl - 12;
+  tabsEl.classList.toggle('tabs-narrow', room > 0 && room / Math.max(1, ws.tabs.length) < 96);
+  showTabArrows();
+}
 
 function showTabArrows(): void {
   const over = tabStrip.scrollWidth > tabStrip.clientWidth + 1;
@@ -5659,7 +5680,9 @@ const COMMANDS: Record<string, () => unknown> = {
   'dev-tools': () => { showDevTools(!devTools); storeSettings(); },
   'show-stereo': () => previewStereo(!renderer.previewStereo),
   'scroll-bars': () => { showScrollBars(!scrollbars.shown); storeSettings(); },
-  'collapse-ribbon': () => { setRibbonCollapsed(!ribbonCollapsed()); storeSettings(); },
+  'collapse-ribbon': () => { ribbonChosen = !ribbonCollapsed(); setRibbonCollapsed(ribbonChosen); storeSettings(); },
+  'ribbon-auto-fold': () => { ribbonAutoFold = !ribbonAutoFold; autoFoldRibbon(true); storeSettings(); },
+  'tabs-in-menu': () => { placeTabs(!tabsInMenu); storeSettings(); },
   'ui-scale-in': () => sizeInterface(stepUiScale(uiScale(), 1)),
   'ui-scale-out': () => sizeInterface(stepUiScale(uiScale(), -1)),
   'ui-scale-reset': () => sizeInterface(1),
@@ -7049,7 +7072,9 @@ function currentSettings(): Settings {
     showRoles: editor.showRoles,
     scrollBars: scrollbars.shown,
     titleBar: titleBarPlace(),
-    ribbonCollapsed: ribbonCollapsed(),
+    ribbonCollapsed: ribbonChosen,
+    ribbonAutoFold,
+    tabsInMenu,
     uiScale: uiScale(),
     textBar: CaptionEditor.barPlace,
     appTheme,
@@ -7268,7 +7293,11 @@ function applySettings(s: Settings): void {
   setOrient(s.orient, false);
   setPageLook(s.pageLook, false);
   void placeTitleBar(s.titleBar);
-  setRibbonCollapsed(s.ribbonCollapsed);
+  ribbonChosen = s.ribbonCollapsed;
+  setRibbonCollapsed(ribbonChosen);
+  ribbonAutoFold = s.ribbonAutoFold;
+  autoFoldRibbon(true);
+  placeTabs(s.tabsInMenu);
   void setUiScale(s.uiScale);
   defaultPage = s.page;
   welcomed = s.welcomed;
@@ -8985,7 +9014,22 @@ function fadeDocks(): void {
   for (const d of document.querySelectorAll<HTMLElement>('.dock-v')) d.classList.toggle('more-below', d.scrollTop + d.clientHeight < d.scrollHeight - 2);
 }
 for (const d of document.querySelectorAll<HTMLElement>('.dock-v')) d.addEventListener('scroll', fadeDocks, { passive: true });
-addEventListener('resize', () => fitTools());
+addEventListener('resize', () => { fitTools(); autoFoldRibbon(); });
+
+/** The ribbon folded or whole as you last chose it (Ctrl+F1, View > Ribbon > Collapse the Ribbon). */
+let ribbonChosen = false;
+/** View > Ribbon > Fold on Short Windows: the ribbon folds to its tabs while the window is under SHORT_WINDOW pixels tall. */
+let ribbonAutoFold = false;
+const SHORT_WINDOW = 760;
+let wasShort = false;
+/** Fold the ribbon as the window becomes short, and give it back as you had it when it is tall again. */
+function autoFoldRibbon(force = false): void {
+  const short = ribbonAutoFold && innerHeight < SHORT_WINDOW;
+  $('[data-cmd="ribbon-auto-fold"]')?.setAttribute('aria-checked', String(ribbonAutoFold));
+  if (short === wasShort && !force) return;
+  wasShort = short;
+  setRibbonCollapsed(short || ribbonChosen);
+}
 
 /** Tick the shown toolboxes and the lock in the View menu, and show the lock on its button. */
 function tickToolboxes(): void {
@@ -9290,7 +9334,7 @@ const guide = {
     await (guideWindow ??= new GuideWindow(openWebPage)).open(page, anchor);
   },
 };
-watchRibbons(() => storeSettings());
+watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files', open: generalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute', open: drawingPreferences },

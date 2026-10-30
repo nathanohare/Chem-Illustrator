@@ -6,7 +6,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M16 3l11.3 6.5v13L16 29 4.7 22.5v-13z%22 fill=%22none%22 stroke=%22%232f6fdf%22 stroke-width=%222.6%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M16 8.5l6.5 3.75M9.5 20l6.5 3.75%22 stroke=%22%232f6fdf%22 stroke-width=%222.2%22 stroke-linecap=%22round%22/%3E%3C/svg%3E" />
   <title>Chem Illustrator</title>
 </head>
-<body>
+<body class="tabs-in-menu">
   <header>
     <div class="menu-wrap">
       <button id="btn-file" aria-haspopup="menu" aria-expanded="false" aria-controls="file-menu" aria-keyshortcuts="Alt+F"><span class="mn">F</span>ile</button>
@@ -333,6 +333,7 @@
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Ribbon</button>
     <div class="menu sub" role="menu" hidden>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="collapse-ribbon" title="Show the ribbon's tabs only, for more room; click a tab to use its buttons (Ctrl+F1, or double-click a tab)"><span>Collapse the Ribbon</span><kbd>Ctrl+F1</kbd></button>
+    <button role="menuitemcheckbox" aria-checked="false" data-cmd="ribbon-auto-fold" title="Fold the ribbon to its tabs while the window is short (under 760 pixels tall), so the page keeps its room on a laptop; click a tab to use its buttons. It opens again when the window is taller"><span>Fold on Short Windows</span></button>
     <button role="menuitem" data-cmd="customize-ribbon" title="Put the ribbon's tabs and groups in your order, rename or hide them, and make groups of your own commands (Presentations, Documents, Spreadsheets and Designs)">Customize the Ribbon…</button>
     </div>
     </div>
@@ -382,6 +383,7 @@
     </div>
     </div>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="title-bar-in-menu" class="desktop-only" hidden title="Desktop app: the window's minimise, maximise and close buttons at the right of this menu bar, in place of the system's title bar, to give the work a row more room. Drag an empty part of the menu bar to move the window"><span>Title Bar in Menu Row</span></button>
+    <button role="menuitemcheckbox" aria-checked="true" data-cmd="tabs-in-menu" title="The open files' tabs in the menu bar, beside the menus, to give the work a row more room (a row of their own when off). When many files are open the tabs show only their icons; rest the mouse on one for its name"><span>File Tabs in Menu Row</span></button>
     <hr />
     <button role="menuitem" data-cmd="dark-colours" title="Choose the dark page's colours (Graphite, Slate, Warm dark) or make your own">Dark Page Colours…</button>
     <button role="menuitem" data-cmd="mode-colours" title="Blue for drawings, orange for slides: choose how much of the window is coloured, and the colours">Mode Colours…</button>
@@ -777,12 +779,12 @@
         <button role="menuitem" data-cmd="dev-tools" title="Turn off Developer Tools (the speed readout, stress test and Error Console); View &gt; Developer Tools turns them back on">Turn Off Developer Tools</button>
       </div>
     </div>
+    <div id="tabs" role="tablist" aria-label="Open files"></div>
     <button id="btn-search" type="button" class="search-box" title="Search for a command by name (Alt+Q)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><span>Search</span><kbd>Alt+Q</kbd></button>
     <h1 class="app-name">Chem Illustrator</h1>
     <button id="stage-badge" type="button" class="stage-badge" title="Chem Illustrator is still being built: new features arrive often and some things may not work yet. Click for more.">Beta</button>
   </header>
 
-  <div id="tabs" role="tablist" aria-label="Open files"></div>
 
   <div id="sheet-ribbon" class="ribbon tabbed sheet-only" role="toolbar" aria-label="Spreadsheet" hidden>
     <div class="rb-tabs" role="tablist">

@@ -2789,3 +2789,21 @@ body.mode-window .quick-bar > button[data-qa='lock-toolboxes'][aria-pressed='tru
 body.mode-window .quick-bar > button[data-qa='lock-toolboxes'][aria-pressed='false'] { color: #fff; border-color: #fff; background: rgba(255, 255, 255, 0.22); }
 /* Cut and Copy show a picture before their names, as Format Painter does (src/ui/ribbon-icons.ts) */
 .rb-lead svg { width: 14px; height: 14px; vertical-align: -2px; margin-right: 4px; }
+
+/* the file tabs in the menu bar (View > Window and Colours > File Tabs in Menu Row): they take the room
+   between the quick bar and Search, shrink like a browser's, and show only their icons when there are many */
+header > #tabs { flex: 1 1 0; align-self: stretch; align-items: center; padding: 0 4px; background: transparent; border-bottom: 0; }
+header > #tabs .tab-strip { align-items: center; }
+header .tab { flex: 0 1 180px; min-width: 0; height: 26px; margin: 0; border: 1px solid transparent; border-radius: 3px; }
+header .tab.active { background: var(--bg); border-color: var(--line); box-shadow: inset 0 -2px 0 var(--accent); }
+header .tab-ctl { margin: 0; }
+body.tabs-in-menu header > h1.app-name { display: none; }
+body.tabs-in-menu header > .stage-badge { margin-left: 4px; }
+#tabs.tabs-narrow .tab { flex: none; min-width: 0; gap: 2px; padding: 0 3px 0 5px; }
+#tabs.tabs-narrow .tab-name { display: none; }
+#tabs.tabs-narrow .tab:not(.active) .tab-close { display: none; }
+body.mode-window header > #tabs { background: transparent; }
+body.mode-window header .tab { color: rgba(255, 255, 255, 0.85); }
+body.mode-window header .tab:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+body.mode-window header .tab.active { background: rgba(255, 255, 255, 0.22); border-color: rgba(255, 255, 255, 0.5); color: #fff; box-shadow: inset 0 -2px 0 #fff; }
+body.mode-window header .tab-close, body.mode-window header .tab-ctl { color: rgba(255, 255, 255, 0.85); }
