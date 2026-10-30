@@ -15,7 +15,7 @@ function recPath() {
   return {
     starts,
     moveTo(x: number, y: number) { starts.push({ x, y }); },
-    lineTo() {}, closePath() {}, quadraticCurveTo() {}, arc() {}, rect() {},
+    lineTo() {}, closePath() {}, quadraticCurveTo() {}, bezierCurveTo() {}, arc() {}, rect() {},
   };
 }
 
@@ -29,7 +29,7 @@ describe('hashed wedge', () => {
       doc.addBond(a, b, 1, 'hashWedge');
     });
     const bond = [...doc.bonds.values()][0];
-    const batch = { thin: recPath(), bold: recPath(), dashed: recPath(), fills: recPath() };
+    const batch = { thin: recPath(), bold: recPath(), dashed: recPath(), fills: recPath(), tips: recPath() };
     (new Renderer(noCanvas, noCanvas) as any).bondPaths(doc, bond, doc.atoms.get(a), doc.atoms.get(b), batch);
     const ys = batch.thin.starts.map((p) => p.y);
     expect(ys.length).toBeGreaterThanOrEqual(2);

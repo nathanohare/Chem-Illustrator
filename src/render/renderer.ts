@@ -12,8 +12,8 @@ import { ellipseArc, isCircleRing, ringCircle, ringsThroughBond, type RingCircle
 import { crossingGapsCached } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
-import { doubleBondGap, wedgeWidth } from '../style';
-import { joinWideEnds, type WideEnd, type EndJoin } from './bond-joins';
+import { bondEndPrefs, doubleBondGap, wedgeWidth } from '../style';
+import { joinWideEnds, lineMitres, endTip, LINE_MITRE_LIMIT, type WideEnd, type EndJoin, type LineEnd } from './bond-joins';
 import { chargeInk, labelBonds, labelSpec, layoutLabel, LabelLayout, labelLook } from '../chem/labels';
 import type { StructureChecks } from '../chem/warnings';
 import { isGenericLabel } from '../chem/labels';
@@ -405,6 +405,75 @@ export class Renderer {
       if (t > best) best = t;
     }
     return best;
+  }
+
+  /**
+   * Where one line of a centred double bond, running through `pt` along `u` (away from `at`),
+   * meets the nearest bond beside it on its own side at the bare atom `at`, carried back from `pt`;
+   * null when `at` has a label or no bond on that side for it to meet.
+   */
+  private meetNeighbour(doc: Doc, at: Atom, other: Atom, pt: Vec, u: Vec): Vec | null {
+    if (this.atomInfo(doc, at).boxes.length) return null;
+    const off = sub(pt, at);
+    if (len(off) < 1e-9) return null;
+    let best: Vec | null = null, bestT = -Infinity;
+    for (const bid of doc.adj.get(at.id) ?? []) {
+      const nb = doc.bonds.get(bid);
+      if (!nb || nb.spokes) continue;
+      const n = doc.atoms.get(nb.a1 === at.id ? nb.a2 : nb.a1);
+      if (!n || n.id === other.id) continue;
+      const nl = len(sub(n, at));
+      if (nl < 1e-9) continue;
+      const dn = mul(sub(n, at), 1 / nl);
+      if (dot(dn, off) <= 1e-9) continue;
+      // pt + t·u = at + w·dn
+      const den = u.x * dn.y - u.y * dn.x;
+      if (Math.abs(den) < 1e-6) continue;
+      const w0 = sub(at, pt);
+      const t = (w0.x * dn.y - w0.y * dn.x) / den;
+      const w = (w0.x * u.y - w0.y * u.x) / den;
+      // (back toward the atom, not too far: a bond almost along the line would be met a long way off)
+      if (t > 1e-9 || w <= 0 || w > nl / 2 || -t > len(off) * 3) continue;
+      if (t > bestT) { bestT = t; best = add(pt, mul(u, t)); }
+    }
+    return best;
+  }
+
+  /**
+   * The lines that end exactly on atom `a` (a bare atom): each bond's line through it and its
+   * half width. Square-ended lines that meet there are mitred into each other.
+   */
+  private joinsAt(doc: Doc, a: Atom): LineEnd[] {
+    const out: LineEnd[] = [];
+    if (this.atomInfo(doc, a).boxes.length) return out;
+    for (const bid of doc.adj.get(a.id) ?? []) {
+      const b = doc.bonds.get(bid);
+      if (!b || b.spokes || b.order === 4) continue;
+      const o = doc.atoms.get(b.a1 === a.id ? b.a2 : b.a1);
+      if (!o) continue;
+      const k = b.s ?? 1, ds = doc.style;
+      let h = (ds.lineWidth * k) / 2;
+      if (b.order === 1 || b.order === PARTIAL || b.display === 'dative') {
+        if (b.display === 'dative' || b.display === 'dash' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy') continue;
+        if (b.display === 'bold') h = (ds.boldWidth * k) / 2;
+        else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: ds.boldWidth * k }) / 2;
+      } else if (b.order === 2 || (b.order === 1.5 && !b.circle)) {
+        if (this.bondInfo(doc, b).side === 0 || b.display === 'dash') continue;
+        if (b.display === 'bold') h = (ds.boldWidth * k) / 2;
+      }
+      const [s, e] = this.bondEnds(doc, b.a1 === a.id ? a : o, b.a1 === a.id ? o : a);
+      const end = b.a1 === a.id ? s : e;
+      if (end.x !== a.x || end.y !== a.y) continue;
+      const d = sub(o, a), l = len(d);
+      if (l < 1e-9) continue;
+      out.push({ id: bid, u: mul(d, 1 / l), h });
+    }
+    return out;
+  }
+
+  /** The turns where square-ended lines meet at atom `a` that need a mitre, by the bond that owns each. */
+  private lineMitres(doc: Doc, a: Atom): Map<number, [Vec, Vec][]> {
+    return lineMitres(this.joinsAt(doc, a));
   }
 
   // ------------------------------------------------------------------ scene
@@ -815,11 +884,20 @@ export class Renderer {
 
   private strokeBatch(ctx: CanvasRenderingContext2D, bb: BondBatch, k: number, lw: number, bw: number, color: string): void {
     ctx.strokeStyle = ctx.fillStyle = color;
-    ctx.lineJoin = 'round';
-    ctx.lineCap = 'round';
+    // square or part-round ends: the lines are cut square and their ends and joins are filled in
+    const round = bondEndPrefs.round >= 1;
+    ctx.lineJoin = round ? 'round' : 'miter';
+    ctx.lineCap = round ? 'round' : 'butt';
+    ctx.miterLimit = LINE_MITRE_LIMIT;
     ctx.lineWidth = lw * k;
     ctx.stroke(bb.thin);
+    if (!round && bondEndPrefs.round > 0) {
+      ctx.lineCap = 'round';
+      ctx.lineWidth = bondEndPrefs.round * lw * k;
+      ctx.stroke(bb.tips);
+    }
     ctx.fill(bb.fills);
+    ctx.lineJoin = 'round';
     ctx.lineCap = 'butt';
     ctx.lineWidth = bw * k;
     ctx.stroke(bb.bold);
@@ -944,7 +1022,7 @@ export class Renderer {
   }
 
   private bondPaths(doc: Doc, b: Bond, p: Atom, q: Atom, bb: BondBatch): void {
-    const { thin, bold, dashed, fills } = bb;
+    const { thin, bold, dashed, fills, tips } = bb;
     const k = b.s ?? 1;
     const ds = doc.style;
     const st = { ...ds, lineWidth: ds.lineWidth * k, boldWidth: ds.boldWidth * k, hashSpacing: ds.hashSpacing * k, bondLength: ds.bondLength * k };
@@ -959,19 +1037,35 @@ export class Renderer {
     const gaps = crossingGapsCached(doc, b, ds.marginWidth * k + ds.lineWidth);
     const pq = sub(q, p), pq2 = dot(pq, pq) || 1;
     const along = (x: Vec) => dot(sub(x, p), pq) / pq2;
-    const line = (path: Path2D, a: Vec, c: Vec) => {
-      if (!gaps.length) { path.moveTo(a.x, a.y); path.lineTo(c.x, c.y); return; }
+    // Square or part-round ends (a setting): thin lines are cut square, each free end gets its
+    // rounded tip as a fill, and the ends that meet other lines at an atom are mitred instead.
+    const round = bondEndPrefs.round >= 1;
+    const tipR = Math.max(0, bondEndPrefs.round) * st.lineWidth / 2;
+    const seg = (path: Path2D, u: Vec, v: Vec, capU = true, capV = true) => {
+      path.moveTo(u.x, u.y); path.lineTo(v.x, v.y);
+      if (round || path !== thin) return;
+      const dv = sub(v, u), l2 = len(dv);
+      if (l2 < 1e-9) return;
+      const o = mul(dv, 1 / l2);
+      if (capU) endTip(tips, u, mul(o, -1), st.lineWidth / 2, tipR);
+      if (capV) endTip(tips, v, o, st.lineWidth / 2, tipR);
+    };
+    // (an end exactly on an atom where other lines meet it is joined, not capped)
+    const joinP = !round && this.joinsAt(doc, p).length > 1, joinQ = !round && this.joinsAt(doc, q).length > 1;
+    const capOf = (x: Vec) => !((joinP && x.x === p.x && x.y === p.y) || (joinQ && x.x === q.x && x.y === q.y));
+    const line = (path: Path2D, a: Vec, c: Vec, capA = capOf(a), capC = capOf(c)) => {
+      if (!gaps.length) { seg(path, a, c, capA, capC); return; }
       const fa = along(a), fc = along(c);
       if (Math.abs(fc - fa) < 1e-6) {
         // across the bond (a hash): left out if it falls in a gap
-        if (!gaps.some(([g0, g1]) => fa > g0 && fa < g1)) { path.moveTo(a.x, a.y); path.lineTo(c.x, c.y); }
+        if (!gaps.some(([g0, g1]) => fa > g0 && fa < g1)) seg(path, a, c, capA, capC);
         return;
       }
       let from = 0;
       const at = (t: number) => add(a, mul(sub(c, a), t));
       // a scrap left between a gap and the bond's end (or between two gaps) would show as a dot
       const scrap = (2 * st.lineWidth) / (len(sub(c, a)) || 1);
-      const piece = (t0: number, t1: number) => { if (t1 - t0 < scrap) return; const u = at(t0), v = at(t1); path.moveTo(u.x, u.y); path.lineTo(v.x, v.y); };
+      const piece = (t0: number, t1: number) => { if (t1 - t0 < scrap) return; seg(path, at(t0), at(t1), t0 > 0 || capA, t1 < 1 || capC); };
       for (const [g0, g1] of gaps) {
         let t0 = (g0 - fa) / (fc - fa), t1 = (g1 - fa) / (fc - fa);
         if (t0 > t1) [t0, t1] = [t1, t0];
@@ -982,7 +1076,15 @@ export class Renderer {
       if (from < 1) piece(from, 1);
     };
     // a line of a double or triple bond set off to one side can still run under a charge
-    const offLine = (path: Path2D, a: Vec, c: Vec) => { const [u, v] = this.clearCharges(doc, p, q, a, c); line(path, u, v); };
+    const offLine = (path: Path2D, a: Vec, c: Vec, capA = true, capC = true) => { const [u, v] = this.clearCharges(doc, p, q, a, c); line(path, u, v, capA, capC); };
+    // the mitres at this bond's joined ends that fall to it to fill
+    // (a tiny bend through the atom, whose stroked mitre join fills the notch outside the turn)
+    const bend = (at: Vec, [u1, u2]: [Vec, Vec]) => {
+      const d = st.lineWidth * 0.05, a = add(at, mul(u1, d)), c = add(at, mul(u2, d));
+      thin.moveTo(a.x, a.y); thin.lineTo(at.x, at.y); thin.lineTo(c.x, c.y);
+    };
+    if (joinP) for (const t of this.lineMitres(doc, p).get(b.id) ?? []) bend(p, t);
+    if (joinQ) for (const t of this.lineMitres(doc, q).get(b.id) ?? []) bend(q, t);
     // a point of attachment: a wavy line across the end of the bond
     if (p.attach === 'Wavy') attachWave(thin, p, nrm, st.bondLength);
     if (q.attach === 'Wavy') attachWave(thin, q, nrm, st.bondLength);
@@ -1082,9 +1184,14 @@ export class Renderer {
     const second = b.order === 1.5 ? dashed : thin;
     const main = b.display === 'bold' ? bold : b.display === 'dash' ? dashed : thin;
     if (info.side === 0) {
+      // Each line is carried in to meet the bond beside it at a bare atom (an exocyclic C=O on a
+      // ring), so it joins that bond with no gap; that end is then covered by the bond, not capped.
       const h = gap / 2;
-      offLine(main, add(s, mul(nrm, h)), add(e, mul(nrm, h)));
-      offLine(second, sub(s, mul(nrm, h)), sub(e, mul(nrm, h)));
+      for (const [path, sg] of [[main, 1], [second, -1]] as const) {
+        const a = add(s, mul(nrm, h * sg)), c = add(e, mul(nrm, h * sg));
+        const a2 = this.meetNeighbour(doc, p, q, a, dir), c2 = this.meetNeighbour(doc, q, p, c, mul(dir, -1));
+        offLine(path, a2 ?? a, c2 ?? c, !a2, !c2);
+      }
       return;
     }
     // The main line runs atom to atom; the second line is inset on the chosen side.
@@ -2320,9 +2427,11 @@ function shadowBand(ctx: CanvasRenderingContext2D, x: number, y: number, w: numb
   ctx.closePath();
 }
 
-interface BondBatch { thin: Path2D; bold: Path2D; dashed: Path2D; fills: Path2D }
+/** `tips`: the part-round tips of square-ended thin lines (see endTip). */
+interface BondBatch { thin: Path2D; bold: Path2D; dashed: Path2D; fills: Path2D; tips: Path2D }
+
 function newBatch(mk: () => Path2D): BondBatch {
-  return { thin: mk(), bold: mk(), dashed: mk(), fills: mk() };
+  return { thin: mk(), bold: mk(), dashed: mk(), fills: mk(), tips: mk() };
 }
 
 /** The wavy line marking a point of attachment, centred on `at` and running along `across`. */
