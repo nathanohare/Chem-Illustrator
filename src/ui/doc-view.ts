@@ -25,6 +25,9 @@ import { drawParaBorders, drawParaShading } from '../document/para-borders';
 const PAD_X = 24;
 const PAD_Y = 16;
 const SURROUND = '#d5d8de';
+/** The space round the pages: the dark theme's colour when the window is dark (main.ts sends it with 'surround-changed'). */
+let surround = getComputedStyle(document.documentElement).getPropertyValue('--surround').trim() || SURROUND;
+addEventListener('surround-changed', (e) => { surround = (e as CustomEvent<string | null>).detail ?? SURROUND; });
 const SELECTION = 'rgba(40, 120, 255, 0.25)';
 const OBJECT_FRAME = '#2f6fdf';
 /** 100%: a point of the page is a point on the screen (96 pixels to the inch). */
@@ -416,7 +419,7 @@ export class DocView {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     const endless = this.endless;
     // the views without pages are white right across
-    ctx.fillStyle = endless ? '#fff' : SURROUND;
+    ctx.fillStyle = endless ? '#fff' : surround;
     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     const file = this.file;
     const lay = this.layout;

@@ -200,7 +200,7 @@ import { Brush, paintObjects, pickObjectLook, type ObjectLook, type TextLook } f
 import { SymbolWindow } from './ui/symbol-window';
 import { Navigator, EdgeArrows, paintGrid, paintTint, type Target } from './ui/orientation';
 import { type OrientPrefs, DEFAULT_ORIENT } from './orientation-prefs';
-import { type PageLook, type Side, DEFAULT_PAGE_LOOK, SIDES, SIDE_NAMES, pageExtent, extentRect, pageCount, scrollBox, wallRect, wallsOf, setWall, usedPages, pagesToPrint, fixedCount, crossesWalls, clampMove, wrapPieces } from './page-grid';
+import { type PageLook, type Side, DEFAULT_PAGE_LOOK, SIDES, SIDE_NAMES, pageExtent, extentRect, pageCount, pageKey, scrollBox, wallRect, wallsOf, setWall, usedPages, pagesToPrint, fixedCount, crossesWalls, clampMove, wrapPieces } from './page-grid';
 import { paintPages } from './ui/page-grid-view';
 import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
@@ -531,7 +531,7 @@ const HINTS: Record<string, string> = {
   fragment: 'Drag a line across the bonds to break (or click one bond). Each piece gets a caption with its formula and exact mass, which you can edit.',
 };
 const ARROW_HINT = 'Drag to draw an arrow (Alt: any angle); click for a standard one. Drag the ends to move them, the middle to bend it.';
-const CURVE_HINT = 'Drag from where the electrons start (lone pair, bond, radical, charge) to where they go (atom, bond, or the gap where a new bond forms); swing out to one side to bend that way. Or click where it starts, click points it goes through, and click where it ends. Ctrl+drag (or the pen) draws it freehand. The arrow sticks to the structure. Drag the middle dot (an S: its diamonds, or its line) to change the curve.';
+const CURVE_HINT = 'Drag from where the electrons start to where they go. They start at a lone pair, bond, radical or charge and go to an atom, a bond, or the gap where a new bond forms; swing out to one side to bend that way. Or click where it starts, click points it goes through, and click where it ends. Ctrl+drag (or the pen) draws it freehand. The arrow sticks to the structure. Drag the middle dot (an S: its diamonds, or its line) to change the curve.';
 const SHAPE_HINT = 'Drag to draw. Drag the corner squares to resize; the Style panel changes dashes, fill, corners and shadow.';
 const BRACKET_HINT = 'Drag a box to put brackets round it, or click a structure to bracket it.';
 const BOND_HINT = 'Click empty space or an atom to draw; drag to aim. Point at an atom or bond and press a hotkey (Edit > Hotkeys lists them).';
@@ -570,13 +570,23 @@ editor.onToolChange = (name) => {
   markSketch(name === 'sketch');
   for (const b of document.querySelectorAll<HTMLElement>('.tb-tool')) b.classList.toggle('active', b.dataset.tool === name);
   designLib?.setActive(name);
-  if (name.startsWith('geo:')) { $('#hint').textContent = GEO_HINT; return; }
+  if (name.startsWith('geo:')) { setHint(GEO_HINT); return; }
   const t = TOOLS[name];
-  $('#hint').textContent = HINTS[name] ?? (t.kind === 'ring' ? RING_HINT : t.kind === 'arrow' ? (t.style.sweep ? CURVE_HINT : ARROW_HINT)
-    : t.kind === 'shape' ? SHAPE_HINT : t.kind === 'bracket' ? BRACKET_HINT : t.kind === 'template' ? TEMPLATE_HINT : BOND_HINT);
+  setHint(HINTS[name] ?? (t.kind === 'ring' ? RING_HINT : t.kind === 'arrow' ? (t.style.sweep ? CURVE_HINT : ARROW_HINT)
+    : t.kind === 'shape' ? SHAPE_HINT : t.kind === 'bracket' ? BRACKET_HINT : t.kind === 'template' ? TEMPLATE_HINT : BOND_HINT));
 };
+/** The status bar's hint: its first sentence, short enough to read at a glance; the whole of it when you point at it. */
+function setHint(text: string): void {
+  const el = $('#hint');
+  const dot = text.search(/\.(\s|$)/);
+  let short = dot > 0 ? text.slice(0, dot + 1) : text;
+  const semi = short.indexOf('; ');
+  if (short.length > 90 && semi > 0) short = short.slice(0, semi) + '.';
+  el.textContent = short;
+  el.title = short === text ? '' : text;
+}
 // a hint for the step in hand (drawing an arrow through points), and back to the tool's own after
-editor.onHint = (text) => { if (text) $('#hint').textContent = text; else editor.onToolChange(editor.toolName); };
+editor.onHint = (text) => { if (text) setHint(text); else editor.onToolChange(editor.toolName); };
 editor.setTool('bond-single');
 
 // tablets: bigger buttons, long-press menus, double taps and the atom keypad (View > Window and Colours > Touch Mode)
@@ -2329,8 +2339,8 @@ function enterTab(tab: Tab, opened: boolean): void {
   refreshKeys();
   analysisKey = '';
   scheduleAnalysis(true);
-  if (sheet && !splitDrawing) $('#hint').textContent = SHEET_HINT;
-  else if (words && !splitDrawing) $('#hint').textContent = DOC_HINT;
+  if (sheet && !splitDrawing) setHint(SHEET_HINT);
+  else if (words && !splitDrawing) setHint(DOC_HINT);
   else editor.onToolChange(editor.toolName);
 }
 
@@ -2340,7 +2350,7 @@ const slidePage = {
     const d = deckNow();
     if (!d?.current) return;
     // (a canvas slide: its background as the keyframe picked sees it, and the screen's title and footer there)
-    drawSlidePage(ctx, d.page(d.index, d.current.canvas ? canvasKeys.picked(d) : 0), SURROUND);
+    drawSlidePage(ctx, d.page(d.index, d.current.canvas ? canvasKeys.picked(d) : 0), darkSurround ?? SURROUND);
     // a canvas slide: no edge, so no slide grid or guides; its keyframes instead
     if (d.current.canvas && ws.active.mode === 'slides') { canvasKeys.draw(ctx, d, renderer.view.scale); slideCmts?.place(); return; }
     if (ws.active.mode === 'design' && designGrid.on) drawGrid(ctx, d.size, designGrid.step);
@@ -4604,7 +4614,7 @@ async function pdfImage(src: string): Promise<PdfImage | null> {
 
 // ---------------------------------------------------------------- sheets: the grid, and structures drawn for cells
 
-const SHEET_HINT = 'Type in a cell, or double-click to change it. Insert > Structure in Cell puts a structure in a cell; Insert > Spreadsheet > Insert Property Columns works out formula, MW, HRMS m/z and more.';
+const SHEET_HINT = 'Type in a cell; double-click to edit. Insert > Structure in Cell adds a structure.';
 
 /** True when a sheet is showing (and no structure is being drawn for one of its cells). */
 function sheetActive(): boolean {
@@ -4832,8 +4842,8 @@ function finishCellStructure(keep: boolean): void {
   if (ws.pane) { resize(); renderer.repaintAll(); }
   showSheetParts();
   refreshKeys();
-  if (sheet) $('#hint').textContent = SHEET_HINT;
-  if (words) $('#hint').textContent = DOC_HINT;
+  if (sheet) setHint(SHEET_HINT);
+  if (words) setHint(DOC_HINT);
   e.done(result);
   if (!result && sheet) sheetMode?.focus();
   if (!result && words) docMode?.focus();
@@ -4912,7 +4922,7 @@ const SHEET_COMMANDS: Record<string, () => unknown> = {
 
 // ---------------------------------------------------------------- documents: pages of text with structures in them
 
-const DOC_HINT = 'Type on the page. Insert > Structure draws a structure in the text (double-click it to change it); References > Insert Caption numbers figures and schemes. The small ⬊ buttons on the ribbon (or a right-click) open the Paragraph, Style, Page Setup and Header settings.';
+const DOC_HINT = 'Type on the page. Insert > Structure adds a structure; double-click it to edit.';
 
 /** True when a document is showing (and no structure is being drawn for it). */
 function docActive(): boolean {
@@ -6263,7 +6273,7 @@ function setSplitSide(drawing: boolean): void {
   analysisKey = '';
   scheduleAnalysis(true);
   if (drawing) editor.onToolChange(editor.toolName);
-  else $('#hint').textContent = ws.active.mode === 'sheet' ? SHEET_HINT : DOC_HINT;
+  else setHint(ws.active.mode === 'sheet' ? SHEET_HINT : DOC_HINT);
 }
 
 /** Beside slides: work on the drawing (true; the slide becomes a picture) or on the slide. */
@@ -6323,8 +6333,8 @@ function closeSplit(): void {
   refreshKeys();
   analysisKey = '';
   scheduleAnalysis(true);
-  if (sheet) { $('#hint').textContent = SHEET_HINT; sheetMode?.focus(); }
-  if (words) { $('#hint').textContent = DOC_HINT; docMode?.focus(); }
+  if (sheet) { setHint(SHEET_HINT); sheetMode?.focus(); }
+  if (words) { setHint(DOC_HINT); docMode?.focus(); }
   resize();
   renderer.repaintAll();
   mainResized();
@@ -9327,9 +9337,11 @@ editor.underlay = (ctx) => {
   if (!drawingShown()) return;
   const p = gridPage();
   // with the page grid, whole pages show what is in use, so the tint round the drawing is left off
-  if (p && pageLook.grid) paintPages(ctx, pageLook, renderer, p, pageExtent(p, doc.bounds()), pagesInUse(p), dark.on);
+  if (p && pageLook.grid) paintPages(ctx, pageLook, renderer, p, pageExtent(p, doc.bounds()), pagesInUse(p), dark.on, dark.on ? null : darkSurround);
   else paintTint(ctx, orientPrefs, renderer, doc.bounds(), doc.style.labelSize * 1.5 + doc.style.bondLength);
 };
+// Fit on an empty drawing shows its first page
+editor.emptyArea = () => { const p = gridPage(); return p ? { x1: 0, y1: 0, x2: p.w, y2: p.h } : null; };
 // nothing is drawn or moved past a fixed edge of the page grid
 editor.walls = () => { const p = gridPage(); return p ? wallRect(p) : null; };
 
@@ -9371,7 +9383,10 @@ function pagesInUse(p: PageSetup): Set<string> {
   for (const c of doc.captions.values()) boxes.push({ x1: c.x, y1: c.y - 10, x2: c.x + (c.width ?? 40), y2: c.y + 4 });
   for (const a of doc.arrows.values()) boxes.push({ x1: Math.min(a.tail.x, a.head.x), y1: Math.min(a.tail.y, a.head.y), x2: Math.max(a.tail.x, a.head.x), y2: Math.max(a.tail.y, a.head.y) });
   for (const sh of doc.shapes.values()) boxes.push({ x1: Math.min(sh.x1, sh.x2), y1: Math.min(sh.y1, sh.y2), x2: Math.max(sh.x1, sh.x2), y2: Math.max(sh.y1, sh.y2) });
-  usedCache = { doc, version: doc.version, w: p.w, h: p.h, set: usedPages(p, boxes) };
+  const set = usedPages(p, boxes);
+  // a new, empty drawing shows its first page white, ready to draw on, not greyed as unused
+  if (!set.size) set.add(pageKey(0, 0));
+  usedCache = { doc, version: doc.version, w: p.w, h: p.h, set };
   return usedCache.set;
 }
 
@@ -9673,8 +9688,24 @@ function setAppTheme(t: Settings['appTheme']): void {
   appTheme = t;
   if (t === 'system') delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = t;
+  themeChanged();
   for (const w of ['system', 'light', 'dark']) $(`[data-cmd="theme-${w}"]`)?.setAttribute('aria-checked', String(w === t));
 }
+
+/** The space round the drawing's pages in the dark theme (app.css --surround), or null in the light theme, where the page grid's light shading shows. */
+let darkSurround: string | null = null;
+const darkScheme = matchMedia('(prefers-color-scheme: dark)');
+function themeChanged(): void {
+  const t = document.documentElement.dataset.theme;
+  const isDark = t === 'dark' || (t !== 'light' && darkScheme.matches);
+  darkSurround = isDark ? getComputedStyle(document.documentElement).getPropertyValue('--surround').trim() || null : null;
+  // the slide's and the document's canvases paint the space round the page themselves
+  dispatchEvent(new CustomEvent('surround-changed', { detail: darkSurround }));
+  renderer.repaintAll();
+  editor.requestScene();
+}
+darkScheme.addEventListener('change', themeChanged);
+themeChanged();
 
 /** View > Focus View (Ctrl+Shift+F1): the toolboxes, side panel and ribbon hidden, the page given the whole window. */
 function setFocusView(on: boolean): void {

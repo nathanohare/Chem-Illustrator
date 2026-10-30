@@ -99,7 +99,7 @@ The menus show each command's key beside it, so they are a good way to learn the
 
 ### Tabs
 
-Each open file has a tab under the menu bar, with its own icon and colour for its kind (blue for canvases, orange for presentations, green for spreadsheets, dark blue for documents, purple for designs). Ctrl+Tab and Ctrl+Shift+Tab move between tabs, and Ctrl+W closes one.
+Each open file has a tab under the menu bar, with its own icon and colour for its kind (teal for canvases, orange for presentations, green for spreadsheets, dark blue for documents, purple for designs). The open file's tab and the chosen ribbon tab have a line in that colour. Ctrl+Tab and Ctrl+Shift+Tab move between tabs, and Ctrl+W closes one.
 
 New files are called **Canvas 1**, **Presentation 1**, **Spreadsheet 1** and so on, until they are saved with a name of their own. When there are more tabs than fit, **‹** and **›** scroll them (as does the mouse wheel over the tabs), and **▾** lists every open file to pick one. **+** at the end starts something new:
 

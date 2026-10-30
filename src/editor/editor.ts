@@ -1349,11 +1349,18 @@ export class Editor {
 
   /** What Fit shows instead of the whole drawing (the slide, in Slides mode). */
   fitArea: (() => { x1: number; y1: number; x2: number; y2: number }) | null = null;
+  /** What Fit shows when the drawing is empty (the first page), or null to leave the view alone. */
+  emptyArea: (() => Rect | null) | null = null;
 
   /** Zoom and scroll so the whole drawing (or the slide) fits the window. */
   fit(): void {
     const raw = this.fitArea ? this.fitArea() : this.doc.bounds();
-    if (!raw) return;
+    if (!raw) {
+      // an empty drawing: show its first page whole, so its size shows
+      const page = this.emptyArea?.();
+      if (page) this.fitTo(page, Math.min(page.x2 - page.x1, page.y2 - page.y1) * 0.04);
+      return;
+    }
     // room for atom labels, which reach past the atoms themselves (H3N, Re)
     this.fitTo(raw, this.fitArea ? 0 : this.doc.style.labelSize * 1.5);
   }

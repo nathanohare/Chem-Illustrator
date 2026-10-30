@@ -37,11 +37,11 @@ describe('mode colours', () => {
   });
   it('uses the drawing colour everywhere when switched off', () => {
     expect(modeColour('slides', DEFAULT_MODE_COLOURS)).toBe('#c8572a');
-    expect(modeColour('slides', { ...DEFAULT_MODE_COLOURS, style: 'off' })).toBe('#2f6fdf');
+    expect(modeColour('slides', { ...DEFAULT_MODE_COLOURS, style: 'off' })).toBe(DEFAULT_MODE_COLOURS.drawing);
     expect(modeColour('sheet', DEFAULT_MODE_COLOURS)).toBe('#1e8a50');
-    expect(modeColour('sheet', { ...DEFAULT_MODE_COLOURS, style: 'off' })).toBe('#2f6fdf');
+    expect(modeColour('sheet', { ...DEFAULT_MODE_COLOURS, style: 'off' })).toBe(DEFAULT_MODE_COLOURS.drawing);
     expect(modeColour('document', DEFAULT_MODE_COLOURS)).toBe('#2647a8');
-    expect(modeColour('document', { ...DEFAULT_MODE_COLOURS, style: 'off' })).toBe('#2f6fdf');
+    expect(modeColour('document', { ...DEFAULT_MODE_COLOURS, style: 'off' })).toBe(DEFAULT_MODE_COLOURS.drawing);
   });
   it('reads saved choices, ignoring anything that is not a colour', () => {
     expect(parseModeColours(undefined)).toEqual(DEFAULT_MODE_COLOURS);

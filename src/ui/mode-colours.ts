@@ -1,5 +1,5 @@
-// View > Window and Colours > Mode Colours…: each kind of file has its own colour (blue for drawings, orange for
-// slides, green for sheets, a deeper blue for documents, purple for designs), so you can tell at a glance which mode you are in. By default only the accent
+// View > Window and Colours > Mode Colours…: each kind of file has its own colour (teal for canvases, orange for
+// slides, green for sheets, Word's deep blue for documents, purple for designs), so you can tell at a glance which mode you are in. By default only the accent
 // colour changes (buttons, highlights, tab icons); "Whole window" also colours the menu bar.
 // Every colour can be changed, and the choice is saved in the settings file.
 
@@ -7,7 +7,7 @@ import { showDialog } from './dialog-host';
 export type ColourMode = 'drawing' | 'slides' | 'sheet' | 'document' | 'design';
 export type ModeColourStyle = 'accent' | 'window' | 'off';
 export interface ModeColours {
-  /** accent: buttons and highlights only; window: the menu bar too; off: the drawing colour everywhere. */
+  /** accent: buttons, highlights and a line under the chosen tabs; window: the menu bar and ribbon tabs as a band of colour too; off: the drawing colour everywhere. */
   style: ModeColourStyle;
   drawing: string;
   slides: string;
@@ -16,7 +16,8 @@ export interface ModeColours {
   design: string;
 }
 
-export const DEFAULT_MODE_COLOURS: ModeColours = { style: 'accent', drawing: '#2f6fdf', slides: '#c8572a', sheet: '#1e8a50', document: '#2647a8', design: '#7b3fbf' };
+// (canvases were blue #2f6fdf until 2026-10-30: too close to the documents' blue to tell the two apart at a glance)
+export const DEFAULT_MODE_COLOURS: ModeColours = { style: 'accent', drawing: '#0e7c93', slides: '#c8572a', sheet: '#1e8a50', document: '#2647a8', design: '#7b3fbf' };
 const STYLES: ModeColourStyle[] = ['accent', 'window', 'off'];
 const HEX = /^#[0-9a-f]{6}$/i;
 
