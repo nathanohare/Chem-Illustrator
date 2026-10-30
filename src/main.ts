@@ -33,7 +33,7 @@ import { pubchemName, pubchemCid, pubchemCompound, compoundPage } from './chem/p
 import { pubchemHtml, pubchemRuns, type PubChemState } from './ui/pubchem-panel';
 import { paragraphPages } from './document/doc-file';
 import { reviewAuthor, setReviewAuthor } from './document/revisions';
-import { analysisHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, DEFAULT_DESCRIPTORS, type RepeatUnit } from './ui/analysis-panel';
+import { analysisHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, DEFAULT_DESCRIPTORS, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
 import { attachedAtoms, attachWhereItIs, defaultGap, nearestStructure, placeAttached, structureSig } from './editor/attached';
 import { repeatGroups, lipDirection } from './chem/polymer';
 import { rGroupsOf, substituted, rowNumbers, parseRows, rGroupCells, type RowMass } from './chem/rgroup';
@@ -173,6 +173,7 @@ import { canKeepHandles, forgetHandles, handleFor, isHandleEntry, keepHandle } f
 import { groupWarnings } from './ui/warning-groups';
 import { NameReader, captionName, attachmentAtoms, cxNotes } from './chem/names';
 import { Model3dBuilder } from './chem/model3d';
+import { StructureNamer, confirmedName, nameRuns, type NameTools } from './chem/namer';
 import { placeView } from './chem/place3d';
 import type { Viewer3d } from './ui/viewer3d';
 import { NameDialog } from './ui/name-dialog';
@@ -1298,6 +1299,87 @@ async function show3dModel(): Promise<void> {
 
 const names = new NameReader(new URL('opsin/opsin-data.dat', document.baseURI).href);
 let namesReady = false;
+
+// ------------------------------------------------------------------ structure to name
+
+const namer = new StructureNamer(new URL('pyodide/', document.baseURI).href, new URL('namer/openclatura-0.4.3-py3-none-any.whl', document.baseURI).href);
+const nameTools: NameTools = {
+  graph: (molblock) => chem.namerGraph(molblock),
+  propose: (graph) => namer.propose(graph),
+  read: async (name) => { const r = await names.read(name); return r.ok ? r.smiles : null; },
+  canonical: (smiles) => chem.canonical(smiles),
+};
+/** Each structure's systematic name this session, by SMILES, for the Analysis panel. */
+const nameStates = new Map<string, NameState>();
+
+/** The checked systematic name of a structure (by its SMILES and molfile), kept for the Analysis panel. */
+async function nameOf(smiles: string, molblock: string): Promise<NameState> {
+  const known = nameStates.get(smiles);
+  if (known && known.kind !== 'idle' && known.kind !== 'busy') return known;
+  nameStates.set(smiles, { kind: 'busy', loading: !namer.ready });
+  let state: NameState;
+  try {
+    const r = await confirmedName(molblock, nameTools);
+    state = r.ok ? { kind: 'found', name: r.name } : { kind: 'none', message: r.message };
+  } catch (e) {
+    // the namer couldn't start: let the button try again
+    nameStates.delete(smiles);
+    throw e;
+  }
+  nameStates.set(smiles, state);
+  return state;
+}
+
+/** The Analysis panel's IUPAC name button (and names once the namer is running). */
+async function nameForPanel(smiles: string, molblock: string): Promise<void> {
+  const p = nameOf(smiles, molblock);
+  scheduleAnalysis(true);
+  await p.catch((e) => flash((e as Error).message));
+  scheduleAnalysis(true);
+}
+
+/**
+ * Chemistry > Look Up > Structure to Name (and the right-click menu): the systematic name of each
+ * chosen structure, put under it as a caption tied to it. A name is given only when the name
+ * reader reads it back as exactly the structure drawn.
+ */
+async function structureToName(): Promise<void> {
+  const frags = chosenStructures();
+  if (!frags.length) { flash('Select a structure to name.'); return; }
+  if (!chem.ready) { flash('The chemistry engine is still loading. Try again in a moment.'); return; }
+  const todo: { frag: Set<number>; smiles: string; molblock: string }[] = [];
+  let unreadable = '';
+  for (const f of frags) {
+    const ex = toMolfile(doc, f, '');
+    if (ex.generic.length) { unreadable = 'A structure with R groups or labels that can\'t be read has no name. Replace them with atoms first.'; continue; }
+    const smiles = await chem.molToSmiles(ex.molblock);
+    if (!smiles) { unreadable = 'That structure can\'t be read (check valences).'; continue; }
+    todo.push({ frag: f, smiles, molblock: ex.molblock });
+  }
+  if (!todo.length) { flash(unreadable || 'Select a structure to name.'); return; }
+  if (!namer.ready) flash('Loading the namer (first time only)…', 15000);
+  let states: NameState[];
+  try {
+    states = await Promise.all(todo.map((t) => nameOf(t.smiles, t.molblock)));
+  } catch (e) {
+    flash((e as Error).message);
+    return;
+  }
+  scheduleAnalysis(true);
+  const found = todo.flatMap((t, i) => { const s = states[i]; return s.kind === 'found' && [...t.frag].every((id) => doc.atoms.has(id)) ? [{ ...t, name: s.name }] : []; });
+  const none = states.find((s): s is Extract<NameState, { kind: 'none' }> => s.kind === 'none');
+  if (!found.length) { flash(none?.message ?? 'No name found.', 6000); return; }
+  const m = editor.measure();
+  doc.edit(found.length > 1 ? 'Name captions' : 'Name caption', () => {
+    for (const t of found) {
+      const c = doc.addCaption({ x: 0, y: 0, runs: nameRuns(t.name), justify: 'center', attach: { atoms: [...t.frag], side: 'below', gap: defaultGap(doc), shift: 0, role: 'caption' } });
+      placeAttached(doc, c, m);
+    }
+  });
+  editor.changed();
+  const missed = todo.length - found.length;
+  flash(missed ? `Named ${found.length} of ${todo.length} structures; the others have no name the namer could confirm.` : 'Added the name under the structure; it follows it. Double-click to edit.');
+}
 
 /** Names the name reader can't read are looked up on PubChem (Edit > Settings). */
 let pubchemNames = true;
@@ -6046,6 +6128,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'attach-descriptors': () => void attachDescriptors(),
   'pubchem-lookup': () => void lookUpChosen(),
   'model-3d': () => void show3dModel(),
+  'structure-to-name': () => void structureToName(),
   'add-id-label': () => void addTiedText('label'),
   'lock-structures': () => toggleStructureLock(),
   'add-caption': () => void addTiedText('caption'),
@@ -7242,6 +7325,7 @@ function currentSettings(): Settings {
   return {
     hotkeys: keymap.overrides(),
     keepHotspotOnBond: editor.options.keepHotspotOnBond,
+    stickyHotspot: editor.options.stickyHotspot,
     fixedLength: editor.options.fixedLength,
     fixedAngles: editor.options.fixedAngles,
     devTools,
@@ -7433,6 +7517,10 @@ const hotkeysDialog = new HotkeysDialog({
     get: () => editor.options.keepHotspotOnBond,
     set: (v) => { editor.options.keepHotspotOnBond = v; storeSettings(); },
   },
+  stickyHotspot: {
+    get: () => editor.options.stickyHotspot,
+    set: (v) => { editor.options.stickyHotspot = v; storeSettings(); },
+  },
   exportKeys: async () => {
     const target = await saveFileDialog('Chem Illustrator hotkeys.json', KEYMAP_FILE).catch((e) => { hotkeysDialog.say(String(e)); return null; });
     if (!target) return;
@@ -7459,6 +7547,7 @@ const hotkeysDialog = new HotkeysDialog({
 /** Use these settings: at start, and when settings are imported (Edit > Settings File > Import Settings). */
 function applySettings(s: Settings): void {
   editor.options.keepHotspotOnBond = s.keepHotspotOnBond;
+  editor.options.stickyHotspot = s.stickyHotspot;
   editor.options.fixedLength = s.fixedLength;
   editor.options.fixedAngles = s.fixedAngles;
   editor.showRoles = s.showRoles;
@@ -7766,7 +7855,7 @@ async function fragmentAt(p: { x: number; y: number }, q: { x: number; y: number
 
 let analysisTimer = 0;
 /** The structures last analysed, for the panel's buttons. */
-let lastAnalysis: { results: FragmentResult[]; frags: Set<number>[] } | null = null;
+let lastAnalysis: { results: FragmentResult[]; frags: Set<number>[]; molblocks: string[] } | null = null;
 const adductSel = $<HTMLSelectElement>('#analysis-adduct');
 adductSel.innerHTML = COMMON_ADDUCTS.map((a) => `<option>${a}</option>`).join('');
 adductSel.addEventListener('change', () => scheduleAnalysis(true));
@@ -7808,6 +7897,8 @@ $('#analysis-body').addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
   const page = t.closest<HTMLElement>('[data-pubchem-page]');
   if (page) { e.preventDefault(); openWebPage(compoundPage(Number(page.dataset.pubchemPage))); return; }
+  const nm = t.closest<HTMLButtonElement>('button[data-name]');
+  if (nm && lastAnalysis) { const k = Number(nm.dataset.name); const r = lastAnalysis.results[k]; if (r?.smiles && lastAnalysis.molblocks[k]) void nameForPanel(r.smiles, lastAnalysis.molblocks[k]); return; }
   const look = t.closest<HTMLButtonElement>('button[data-pubchem]');
   if (look && lastAnalysis) { const r = lastAnalysis.results[Number(look.dataset.pubchem)]; if (r?.smiles) void lookUpOnPubChem(r.smiles); return; }
   const b = t.closest<HTMLButtonElement>('button[data-insert]');
@@ -7815,14 +7906,15 @@ $('#analysis-body').addEventListener('click', (e) => {
   const [kind, n] = b.dataset.insert!.split(':');
   const r = lastAnalysis.results[Number(n)], frag = lastAnalysis.frags[Number(n)];
   if (kind === 'formula') { if (frag) void attachDescriptors([frag]); return; }
-  if (kind === 'pcname' || kind === 'pccas' || kind === 'pchaz') {
+  if (kind === 'pcname' || kind === 'pccas' || kind === 'pchaz' || kind === 'name') {
     const st = r && pubchemStates.get(r.smiles);
-    const runs = st?.kind === 'found' ? pubchemRuns(kind, st.c) : null;
+    const named = kind === 'name' && r ? nameStates.get(r.smiles) : undefined;
+    const runs = kind === 'name' ? (named?.kind === 'found' ? nameRuns(named.name) : null) : st?.kind === 'found' ? pubchemRuns(kind, st.c) : null;
     if (!runs || !frag) return;
     // tied to the structure like Add Caption's, so it follows it; edit or retype it like any text
     // (the structure stays selected, so the panel stays open for the other buttons)
     const m = editor.measure();
-    doc.edit(kind === 'pcname' ? 'Name caption' : kind === 'pccas' ? 'CAS caption' : 'Hazards caption', () => {
+    doc.edit(kind === 'pcname' || kind === 'name' ? 'Name caption' : kind === 'pccas' ? 'CAS caption' : 'Hazards caption', () => {
       const c = doc.addCaption({ x: 0, y: 0, runs, justify: 'center', attach: { atoms: [...frag], side: 'below', gap: defaultGap(doc), shift: 0, role: 'caption' } });
       placeAttached(doc, c, m);
     });
@@ -8033,9 +8125,11 @@ async function runAnalysis(force: boolean): Promise<void> {
     polymers.push(w.polymer);
   }
   if (seq !== analysisSeq) return;
-  lastAnalysis = { results, frags };
+  lastAnalysis = { results, frags, molblocks: exports.map((e) => e.molblock) };
+  // once the namer is running, every structure analysed gets its name without asking
+  if (namer.ready) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !nameStates.has(r.smiles)) void nameForPanel(r.smiles, exports[i].molblock); });
   saySelection(results);
-  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i) })).join('');
+  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i) })).join('');
   updatePanels();
 }
 
@@ -8586,6 +8680,7 @@ function drawingMenu(): MenuItem[] {
         { cmd: 'check-structure' }, { cmd: 'save-template' }, { cmd: 'define-nickname' }, null,
         { cmd: 'pubchem-lookup' },
       ] },
+      { cmd: 'structure-to-name' },
       { cmd: 'model-3d' },
     ] : []),
     ...(pickedCurved() ? [{ cmd: 'clean-up-arrow' }, { label: 'Mechanism Arrow', items: [

@@ -6,6 +6,8 @@ Chem Illustrator is licensed under the GNU General Public License, version 3 or 
 |---|---|---|
 | [RDKit](https://www.rdkit.org) (`@rdkit/rdkit`, MinimalLib WebAssembly build) | Chemistry: formula, masses, stereo, SMILES | BSD-3-Clause (full text below) |
 | [OpenChemLib](https://github.com/cheminfo/openchemlib-js) (`openchemlib`, the JavaScript build of Idorsia's OpenChemLib), with its torsion and MMFF94 tables (`public/ocl-resources.json`) | Chemistry ▸ 3-D Model: conformers and the MMFF94s+ force field | BSD-3-Clause (full text below) |
+| [OpenClatura](https://github.com/lamalab-org/openclatura) 0.4.3 by lamalab-org (`public/namer/openclatura-0.4.3-py3-none-any.whl`, unchanged from PyPI) | Chemistry ▸ Look Up ▸ Structure to Name: the systematic (IUPAC) name of a structure, offline | MIT (full text below) |
+| [Pyodide](https://pyodide.org) 314.0.7 (`pyodide`, copied to `public/pyodide/`), with the CPython 3.14 interpreter and standard library built into it | Runs OpenClatura (Python) inside the app on every platform | Pyodide: MPL-2.0. CPython: PSF License Version 2 (text below). Built in with them: the Emscripten runtime and musl libc (MIT), zlib (zlib licence), bzip2 (BSD-style), expat (MIT), mpdecimal (BSD-2-Clause), HACL\* (MIT), SQLite and liblzma (public domain). Pyodide's source, as MPL-2.0 asks, is at https://github.com/pyodide/pyodide (tag 314.0.7); the app uses it unchanged. |
 | [OPSIN](https://github.com/dan2097/opsin) 2.9.0, compiled to JavaScript (`src/vendor/opsin/opsin.js`, data in `public/opsin/opsin-data.dat`) | Name to Structure, offline | MIT (full text below) |
 | [dk.brics.automaton](https://www.brics.dk/automaton/) 1.12-4 (part of the OPSIN build) | OPSIN's name grammar | BSD-3-Clause (full text below) |
 | [TeaVM](https://teavm.org) 0.16.0 runtime and class library (part of the OPSIN build) | Runs OPSIN's Java code as JavaScript | Apache-2.0; includes code from Apache Harmony (Apache-2.0). Notice: "This product includes software developed by Alexey Andreev (http://teavm.org). This product includes software developed by The Apache Software Foundation (http://www.apache.org/)." |
@@ -425,3 +427,87 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 For more information, please refer to <http://unlicense.org>
 ```
+
+## OpenClatura licence
+
+```
+MIT License
+
+Copyright (c) 2026 lamalab-org
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Pyodide licence
+
+Pyodide is under the Mozilla Public License 2.0, whose text is at https://mozilla.org/MPL/2.0/. Its source is at https://github.com/pyodide/pyodide.
+
+## Python (CPython) licence
+
+```
+PYTHON SOFTWARE FOUNDATION LICENSE VERSION 2
+--------------------------------------------
+
+1. This LICENSE AGREEMENT is between the Python Software Foundation
+("PSF"), and the Individual or Organization ("Licensee") accessing and
+otherwise using this software ("Python") in source or binary form and
+its associated documentation.
+
+2. Subject to the terms and conditions of this License Agreement, PSF hereby
+grants Licensee a nonexclusive, royalty-free, world-wide license to reproduce,
+analyze, test, perform and/or display publicly, prepare derivative works,
+distribute, and otherwise use Python alone or in any derivative version,
+provided, however, that PSF's License Agreement and PSF's notice of copyright,
+i.e., "Copyright (c) 2001 Python Software Foundation; All Rights Reserved"
+are retained in Python alone or in any derivative version prepared by Licensee.
+
+3. In the event Licensee prepares a derivative work that is based on
+or incorporates Python or any part thereof, and wants to make
+the derivative work available to others as provided herein, then
+Licensee hereby agrees to include in any such work a brief summary of
+the changes made to Python.
+
+4. PSF is making Python available to Licensee on an "AS IS"
+basis.  PSF MAKES NO REPRESENTATIONS OR WARRANTIES, EXPRESS OR
+IMPLIED.  BY WAY OF EXAMPLE, BUT NOT LIMITATION, PSF MAKES NO AND
+DISCLAIMS ANY REPRESENTATION OR WARRANTY OF MERCHANTABILITY OR FITNESS
+FOR ANY PARTICULAR PURPOSE OR THAT THE USE OF PYTHON WILL NOT
+INFRINGE ANY THIRD PARTY RIGHTS.
+
+5. PSF SHALL NOT BE LIABLE TO LICENSEE OR ANY OTHER USERS OF PYTHON
+FOR ANY INCIDENTAL, SPECIAL, OR CONSEQUENTIAL DAMAGES OR LOSS AS
+A RESULT OF MODIFYING, DISTRIBUTING, OR OTHERWISE USING PYTHON,
+OR ANY DERIVATIVE THEREOF, EVEN IF ADVISED OF THE POSSIBILITY THEREOF.
+
+6. This License Agreement will automatically terminate upon a material
+breach of its terms and conditions.
+
+7. Nothing in this License Agreement shall be deemed to create any
+relationship of agency, partnership, or joint venture between PSF and
+Licensee.  This License Agreement does not grant permission to use PSF
+trademarks or trade name in a trademark sense to endorse or promote
+products or services of Licensee, or any third party.
+
+8. By copying, installing or otherwise using Python, Licensee
+agrees to be bound by the terms and conditions of this License
+Agreement.
+```
+
+Python in Pyodide is changed only to build it for WebAssembly (Pyodide's patches, in its source).
+
