@@ -110,6 +110,12 @@ export interface WorkspaceHooks {
   beforeWrite?(tab: Tab, ref: FileRef, name: string, how: SaveHow): Promise<'go' | 'stop' | 'save-as'>;
   /** A file was written (`was`: where the tab's file was before, which Save As changes). */
   saved?(tab: Tab, data: Uint8Array, how: SaveHow, was: FileRef): void;
+  /**
+   * A file has canvas slides whose keyframes' slides were changed in PowerPoint since they were
+   * saved here: keep each as the canvas (PowerPoint's changes to them left out) or PowerPoint's
+   * slides (as normal slides). The canvas when there is no one to ask.
+   */
+  canvasEdited?(name: string, n: number): Promise<'canvas' | 'slides'>;
   /** AutoSave couldn't write a file (no window is shown for it). */
   autoSaveFailed?(tab: Tab, message: string): void;
   /** A file was opened from disk into this tab. */
@@ -543,7 +549,9 @@ export class Workspace {
   private async openSlides(bytes: Uint8Array, name: string, ref: FileRef): Promise<boolean> {
     // the PowerPoint reader loads the first time one is opened
     const { readPptx } = await import('./io/pptx-read');
-    const got = readPptx(bytes);
+    let got = readPptx(bytes);
+    // canvas slides changed in PowerPoint: the canvas, or PowerPoint's slides?
+    if (got.canvasEdited && (await this.hooks.canvasEdited?.(name, got.canvasEdited)) === 'slides') got = readPptx(bytes, { edited: 'slides' });
     const spare = this.spare();
     const t = this.makeTab(got.design ? 'design' : 'slides', name, ref);
     const deck = new Deck(this.host);

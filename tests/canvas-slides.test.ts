@@ -14,6 +14,9 @@ import {
   withCameraMoves, PARALLAX_MAX, type CanvasData,
 } from '../src/deck/canvas';
 import { routeEnds } from '../src/deck/canvas-look';
+import { keyframeDoc, animSegments, hiddenAt, splitCanvas } from '../src/deck/canvas-export';
+import { slideParts } from '../src/deck/animation';
+import { unzipSync, zipSync, strFromU8, strToU8 } from 'fflate';
 import { buildSteps, type Anim } from '../src/deck/animation';
 import { writePptx, type PptxOptions } from '../src/io/pptx-write';
 import { readPptx } from '../src/io/pptx-read';
@@ -322,5 +325,92 @@ describe('the look of a canvas', () => {
     const [c, e] = routeEnds({ keys: [{ id: 1, x: 0, y: 0, zoom: 1 }, { id: 2, x: 1000, y: 0, zoom: 1 }, { id: 3, x: 100, y: 0, zoom: 1 }] }, size);
     expect(c.x).toBe(0);
     expect(e.x).toBe(1960);
+  });
+});
+
+describe('a canvas slide as a slide for each keyframe', () => {
+  const fade = (target: Anim['target'], exit = false): Anim => ({ target, effect: 'fade', start: 'click', dur: 0.5, delay: 0, ...(exit ? { exit: true } : {}) });
+
+  it('cuts the drawing to a keyframe, moved and scaled to fill the slide', () => {
+    const d = new Doc();
+    let a = 0, far = 0;
+    d.edit('x', () => {
+      a = d.addAtom(1000, 100).id;
+      far = d.addCaption({ x: 5000, y: 0, runs: [{ text: 'far away' }], justify: 'left' }).id;
+    });
+    const one = keyframeDoc(d, keyRect({ id: 1, x: 960, y: 0, zoom: 1 }, size), size);
+    expect(one.atoms.get(a)).toMatchObject({ x: 40, y: 100 });
+    expect(one.captions.has(far)).toBe(false);
+    // a keyframe twice the slide's size: everything half as big
+    const two = keyframeDoc(d, keyRect({ id: 1, x: 0, y: 0, zoom: 2 }, size), size);
+    expect(two.atoms.get(a)).toMatchObject({ x: 500, y: 50 });
+    expect(two.style.bondLength).toBeCloseTo(d.style.bondLength / 2);
+    // the canvas itself is not changed
+    expect(d.atoms.get(a)).toMatchObject({ x: 1000, y: 100 });
+  });
+
+  it('gives each keyframe the animations played there, and leaves off what is not in yet', () => {
+    const d = new Doc();
+    let p = 0, q = 0;
+    d.edit('x', () => {
+      p = d.addCaption({ x: 100, y: 100, runs: [{ text: 'A' }], justify: 'left' }).id;
+      q = d.addCaption({ x: 1100, y: 100, runs: [{ text: 'B' }], justify: 'left' }).id;
+    });
+    const c: CanvasData = { keys: [{ id: 1, x: 0, y: 0, zoom: 1 }, { id: 2, x: 960, y: 0, zoom: 1 }, { id: 3, x: 480, y: 0, zoom: 1 }] };
+    const [m2, m3] = syncCamera([], c.keys);
+    const anims = [fade({ kind: 'caption', id: p }), m2, fade({ kind: 'caption', id: q }), m3, fade({ kind: 'caption', id: p }, true)];
+    const { segs, moves } = animSegments(anims, c, size);
+    expect(segs.map((s) => s.length)).toEqual([1, 1, 1]);
+    expect(moves.map((m) => m?.target.id ?? null)).toEqual([null, 2, 3]);
+    const parts = slideParts(d);
+    const text = (id: number) => parts.find((x) => x.sel.captions.has(id));
+    expect(hiddenAt(parts, segs, 0)).toEqual([text(q)]);
+    expect(hiddenAt(parts, segs, 1)).toEqual([]);
+    expect(hiddenAt(parts, segs, 2)).toEqual([]);
+  });
+
+  it('turns the moves into transitions: Morph for a pan, a fade, nothing for a cut, a slide on the way for a fly-over', () => {
+    const doc = new Doc();
+    const keys = [{ id: 1, x: 0, y: 0, zoom: 1, title: 'Route' }, { id: 2, x: 960, y: 0, zoom: 1 }, { id: 3, x: 1920, y: 0, zoom: 1 }, { id: 4, x: 5000, y: 3000, zoom: 1 }, { id: 5, x: 0, y: 0, zoom: 1 }];
+    const moves = syncCamera([], keys).map((a, i) => ({ ...a, move: (['pan', 'fade', 'fly', 'cut'] as const)[i] }));
+    const master = Deck.blank(new Doc()).master;
+    const out = splitCanvas({ id: 7, layout: 'blank', doc, notes: 'Say this', anims: moves, canvas: { keys }, transition: { kind: 'push', dur: 1 } }, master, size);
+    expect(out.map((s) => s.transition?.kind ?? 'none')).toEqual(['push', 'morph', 'fade', 'morph', 'morph', 'none']);
+    // the fly-over's slide on the way moves on by itself
+    expect(out[3].part?.via).toBe(true);
+    expect(out[3].transition?.advanceAfter).toBeCloseTo(0.01);
+    expect(out.map((s) => s.part?.index)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(out.every((s) => s.part?.count === 6 && s.part.uid === out[0].part!.uid)).toBe(true);
+    // the first keeps the canvas slide and its id and notes; a titled keyframe has a title
+    expect(out[0].part?.keep?.canvas).toEqual({ keys });
+    expect(out[0]).toMatchObject({ id: 7, notes: 'Say this', layout: 'title-only' });
+    expect([...out[0].doc.captions.values()].map((c) => [c.ph, c.runs[0].text])).toEqual([['title', 'Route']]);
+    expect(out[1]).toMatchObject({ id: undefined, notes: '', layout: 'blank' });
+  });
+
+  it('opens again as the canvas, or as PowerPoint\'s slides when PowerPoint changed them and they are wanted', async () => {
+    const { d, host } = deck();
+    d.addCanvasSlide();
+    host.edit('Text', () => { host.addCaption({ x: 1200, y: 100, runs: [{ text: 'Step two' }], justify: 'left' }); });
+    d.setCanvas({ keys: [{ id: 1, x: 0, y: 0, zoom: 1 }, { id: 2, x: 960, y: 0, zoom: 1 }] });
+    const data = () => ({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, canvas: s.canvas, anims: s.anims })) });
+    const bytes = await writePptx(data(), opts);
+    const files = unzipSync(bytes);
+    expect(Object.keys(files).filter((f) => /^ppt\/slides\/slide\d+\.xml$/.test(f))).toHaveLength(3);
+    const back = readPptx(bytes);
+    expect(back.slides).toHaveLength(2);
+    expect(back.canvasEdited).toBeUndefined();
+    expect(back.slides[1].canvas).toEqual(d.slides[1].canvas);
+    expect(back.slides[1].contents.captions.map((c) => c.x)).toEqual([1200]);
+    // PowerPoint changes the text on keyframe 2's slide
+    const edited = { ...files, 'ppt/slides/slide3.xml': strToU8(strFromU8(files['ppt/slides/slide3.xml']).replace('Step two', 'Step 2')) };
+    const changed = zipSync(edited);
+    const asCanvas = readPptx(changed);
+    expect(asCanvas.canvasEdited).toBe(1);
+    expect(asCanvas.slides).toHaveLength(2);
+    const asSlides = readPptx(changed, { edited: 'slides' });
+    expect(asSlides.slides).toHaveLength(3);
+    expect(asSlides.slides[2].canvas).toBeUndefined();
+    expect(JSON.stringify(asSlides.slides[2].contents)).toContain('Step 2');
   });
 });

@@ -87,7 +87,7 @@ The slide show steps through the canvas's **keyframes**. A keyframe is a slide-s
 - **By distance** (on to start with): the move takes 0.6 s for a short step and up to 1.5 s for a long jump. Typing a **Duration** sets your own time.
 - **Start** and **Delay** work as they do for any animation.
 
-A move comes and goes with its keyframe, so it can't be removed on its own: delete the keyframe, or set the move to Cut. Picking a move in the pane shows its keyframe. Presenter View counts keyframes and shows the keyframe the next click moves to. Canvas slides keep their keyframes and moves in the PowerPoint file and open as canvas slides again. PowerPoint shows a canvas slide as a single slide for now (what lies where the slide would be); a slide for each keyframe comes in a later update.
+A move comes and goes with its keyframe, so it can't be removed on its own: delete the keyframe, or set the move to Cut. Picking a move in the pane shows its keyframe. Presenter View counts keyframes and shows the keyframe the next click moves to.
 
 **Design.** A canvas slide has no edge, so nothing with a hard edge scrolls past in the show:
 
@@ -95,6 +95,10 @@ A move comes and goes with its keyframe, so it can't be removed on its own: dele
 - **Canvas Background…** (Design & Transitions tab, or right-click a keyframe): a **route gradient**, two or three colours running from the first keyframe to the last, so the colour shifts as the talk moves along the route; a faint **pattern** (dots, grid or hexagons) that moves with the canvas; and **parallax**, the background moving slower than the drawing for a sense of depth (50% is half as fast).
 - **Zone…** gives a keyframe a soft tint that fades out over about half a slide. Give the keyframes of one part of the route the same colour to make one zone (one per fragment, say).
 - **Heading** puts a large, faint label in the middle of the window, such as "Fragment A" or "Endgame", to mark a part of the route. It is ordinary text.
+
+**PowerPoint and PDF.** Saved as a PowerPoint file, a canvas slide becomes an ordinary slide for each keyframe: what is in the keyframe's window, cut off at the slide's edge (a structure half in view stays whole), with the keyframe's title as the slide's title and the canvas's background cut to the window. Pans become **Morph** transitions, so PowerPoint 2019 and 365 glide from one to the next (older versions fade); a fly-over goes through an extra zoomed-out slide that moves on by itself. Each slide carries the animations played while the show is at its keyframe; things that came in earlier are already there, and things not in yet are left off. A PDF, a printout or a picture of the slide has a page for each keyframe in the same way.
+
+Opened here again, the slides come back as the canvas slide. If they were changed in PowerPoint since, you are asked whether to keep the canvas (PowerPoint's changes to them are left out) or PowerPoint's slides as normal slides.
 
 ## The slide master
 

@@ -59,12 +59,13 @@ import { shapeMathPicture, shapeMathScale, shapeMathSize } from './deck/equation
 import { solid } from './deck/background';
 import { pictureFormat } from './ui/picture-dialog';
 import { fxPng } from './render/picture-fx';
-import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND } from './deck/slide-view';
+import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND, type SlidePage } from './deck/slide-view';
 import { writePdf, jpegInfo, PdfPage, PdfImage } from './io/pdf';
 import { SlideList } from './ui/slide-list';
 import { CanvasKeys } from './ui/canvas-keys';
 import { addKeyframe, insertKeyframe, keyframeAround, keyRect, keysBounds, moveKeyframe, removeKeyframe, unionRect, ZOOM_IN_MAX, TEXTURES, PARALLAX_MAX, type CanvasLook, type Texture } from './deck/canvas';
 import { mix } from './render/fills';
+import { splitCanvas, type SplitSlide } from './deck/canvas-export';
 import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel } from './ui/design-panel';
 import { ShapeMenu } from './ui/shape-menu';
 import { whenIconsLoaded } from './design/icons';
@@ -2153,6 +2154,13 @@ const ws: Workspace = new Workspace(doc, {
   beforeWrite: (tab, ref, name, how) => keeper.beforeWrite(tab, ref, name, how),
   saved: (tab, data, how, was) => keeper.saved(tab, data, how, was),
   autoSaveFailed: (tab, msg) => keeper.autoSaveFailed(tab, msg),
+  canvasEdited: async (name, n) => {
+    const got = await ask('Canvas Slides Changed in PowerPoint', [{
+      name: 'keep', label: 'Keep', value: 'canvas',
+      options: [{ value: 'canvas', label: 'The canvas (as it was saved here)' }, { value: 'slides', label: 'PowerPoint\'s slides (as normal slides)' }],
+    }], { ok: 'Open', note: `${n === 1 ? 'A canvas slide' : `${n} canvas slides`} in ${name} ${n === 1 ? 'was' : 'were'} saved as a slide for each keyframe, and ${n === 1 ? 'its slides were' : 'their slides were'} changed in PowerPoint since. Keep the canvas to go on editing it here (PowerPoint's changes to those slides are left out), or keep PowerPoint's slides as normal slides.` });
+    return got?.keep === 'slides' ? 'slides' : 'canvas';
+  },
   opened: (tab) => keeper.opened(tab),
   styleSheet: (tab, style) => void offerStyleSheet(tab, style),
   dropped: (tab) => {
@@ -4248,7 +4256,18 @@ async function exportMolfile(): Promise<void> {
   flash(`Saved ${target.name}${left}`);
 }
 
-/** File > Export > Export PDF: every slide as a page, or the drawing on a page of its own size. */
+/**
+ * A slide as pages: a canvas slide's keyframes each as a slide of its own, as PowerPoint gets them
+ * (canvas-export.ts), any other slide as it is.
+ */
+function slidePages(deck: Deck, i: number): { page: SlidePage; doc: Doc }[] {
+  const s = deck.slides[i];
+  if (!s?.canvas) return [{ page: deck.page(i), doc: deck.docOf(i) }];
+  const split = splitCanvas<SplitSlide>({ id: s.id, layout: s.layout, doc: deck.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf, canvas: s.canvas }, deck.master, deck.size, i);
+  return split.filter((x) => !x.part?.via).map((x) => ({ page: { size: deck.size, master: deck.master, layout: x.layout, index: i, own: x.background, hideGraphics: x.hideGraphics, hf: s.hf }, doc: x.doc }));
+}
+
+/** File > Export > Export PDF: every slide as a page (a canvas slide's keyframes a page each), or the drawing on a page of its own size. */
 async function exportPdf(): Promise<void> {
   const tab = ws.active, deck = tab.deck;
   let pages: PdfPage[];
@@ -4257,10 +4276,10 @@ async function exportPdf(): Promise<void> {
     // the pages as laid out on screen, figures as shapes and text so they stay sharp
     pages = recordPages(docFile.t, docFile.printLayout(), (c, style) => figures.record(c, style).pic);
   } else if (deck) {
-    pages = deck.slides.map((_s, i) => ({
+    pages = deck.slides.flatMap((_s, i) => slidePages(deck, i).map((p) => ({
       w: deck.size.w, h: deck.size.h,
-      items: recordSlide(deck.page(i), deck.docOf(i)),
-    }));
+      items: recordSlide(p.page, p.doc),
+    })));
   } else {
     const pic = recordPicture(doc, 18);
     if (!pic) { flash('There is nothing to put in a PDF yet.'); return; }
@@ -4319,7 +4338,8 @@ async function printNow(): Promise<void> {
     return;
   }
   if (deck) {
-    const slide = (i: number) => itemsToSvg(recordSlide(deck.page(i), deck.docOf(i)), { x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h });
+    // (a canvas slide as its first keyframe; full-page slides print each keyframe)
+    const slide = (i: number, k = 0) => { const p = slidePages(deck, i)[k]; return itemsToSvg(recordSlide(p.page, p.doc), { x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h }); };
     if (tab.mode === 'design') { printPages({ pages: [slide(deck.index)], w: deck.size.w, h: deck.size.h }); return; }
     const m = deck.master;
     const v = await ask('Print', [
@@ -4334,7 +4354,7 @@ async function printNow(): Promise<void> {
     ], { ok: 'Print…', note: 'Full page slides print at the slide\'s own shape, notes pages at 7.5 × 10 in; the next window fits them to the paper. Handouts and notes pages carry the header and footer from Insert > Slides > Header & Footer > Notes and Handouts. Copies and which pages are chosen in the next window.' });
     if (!v) return;
     Object.assign(printChoices, v);
-    if (v.handout === '1') { printPages({ pages: deck.slides.map((_, i) => slide(i)), w: deck.size.w, h: deck.size.h }); return; }
+    if (v.handout === '1') { printPages({ pages: deck.slides.flatMap((_, i) => slidePages(deck, i).map((_p, k) => slide(i, k))), w: deck.size.w, h: deck.size.h }); return; }
     if (v.handout === 'notes') {
       const size = notesPageSize(m.notesPage);
       const pages = deck.slides.map((s, i) => notesPageSvg(m, deck.size, slide(i), s.notes, i + 1, (t, k) => measureText(t, k, m.notesPage?.font || m.bodyFont || 'Arial'), placeSvg));
@@ -4399,13 +4419,15 @@ async function exportPicture(): Promise<void> {
   let png: (k: number) => HTMLCanvasElement;
   if (deck) {
     const i = deck.index;
-    const page = clear ? { ...deck.page(i), own: solid(CLEAR) } : deck.page(i);
+    // a canvas slide: the keyframe picked, as a slide of its own
+    const at = slidePages(deck, i)[deck.current?.canvas ? canvasKeys.picked(deck) : 0];
+    const page = clear ? { ...at.page, own: solid(CLEAR) } : at.page;
     ({ w, h } = deck.size);
-    items = () => ({ items: recordSlide(page, deck.docOf(i)).filter((it) => !(it.kind === 'path' && it.fill === CLEAR)), box: { x1: 0, y1: 0, x2: w, y2: h } });
+    items = () => ({ items: recordSlide(page, at.doc).filter((it) => !(it.kind === 'path' && it.fill === CLEAR)), box: { x1: 0, y1: 0, x2: w, y2: h } });
     svg = () => { const p = items(); return itemsToSvg(p.items, p.box); };
     png = (k) => {
       const c = document.createElement('canvas');
-      paintSlide(c, w, h, k, page, deck.docOf(i));
+      paintSlide(c, w, h, k, page, at.doc);
       return c;
     };
   } else {
@@ -9513,7 +9535,7 @@ requestAnimationFrame(() => {
 
 // Hooks for the automated speed tests.
 (window as any).__app = { doc, editor, renderer, chem, live, command, addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
-  pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments })) }, pptxOptions()); } };
+  pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, canvas: s.canvas })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test
 

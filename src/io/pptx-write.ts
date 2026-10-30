@@ -53,6 +53,7 @@ import type { ChartBox } from '../sheet/chart-box';
 import { toOmml, mathText } from '../document/math';
 import { shapeMathPicture, shapeMathScale } from '../deck/equation';
 import { canvasTag, type CanvasData } from '../deck/canvas';
+import { splitCanvas, slidePrint, type CanvasPart } from '../deck/canvas-export';
 
 /** Tag names (PowerPoint keeps tags when it saves). */
 export const TAG = {
@@ -93,6 +94,12 @@ export const TAG = {
   math: 'CHEMILLUSTRATOR_MATH',
   /** A canvas slide's keyframes (its drawing is saved at its own places, the first keyframe's over the slide). */
   canvas: 'CHEMILLUSTRATOR_CANVAS',
+  /**
+   * A slide made from a canvas slide's keyframe: which canvas, which of its slides, and a print of
+   * what it held (to tell whether PowerPoint changed it). The first also has canvasKeep, the canvas itself.
+   */
+  canvasPart: 'CHEMILLUSTRATOR_CANVAS_PART',
+  canvasKeep: 'CHEMILLUSTRATOR_CANVAS_KEEP',
 };
 
 /** Where a highlight is, for finding it again: one of its atoms, else the middle of one of its bonds. */
@@ -131,7 +138,7 @@ export interface DeckData {
   size: SlideSize;
   master: Master;
   /** `id` is the slide's id in the deck, for links to it (#slide=id). */
-  slides: { id?: number; layout: LayoutId; doc: Doc; notes: string; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData }[];
+  slides: { id?: number; layout: LayoutId; doc: Doc; notes: string; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; part?: CanvasPart }[];
   /** A design (Design mode): marked so it opens in Design mode again. */
   design?: boolean;
   /** The deck's sections, in order (none when left out). */
@@ -755,7 +762,22 @@ class Writer {
     if (showsNumber(m, s.layout, s.hf)) out.push(footerShape(id++, 'Slide Number', '<p:ph type="sldNum" sz="quarter" idx="12"/>', d.number, m, String(index + 1), true));
     if (showsFooter(m, s.layout, s.hf)) out.push(footerShape(id++, 'Footer', '<p:ph type="ftr" sz="quarter" idx="11"/>', d.footer, m, m.footer, true));
     if (showsDate(m, s.layout, s.hf)) out.push(footerShape(id++, 'Date', '<p:ph type="dt" sz="half" idx="10"/>', d.date, m, dateText(m), true));
-    const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}) });
+    // a keyframe's slide: things named the same on each of the canvas's slides, so Morph glides
+    // them from one to the next, and a print of what it holds
+    let part: Record<string, string> = {};
+    if (s.part) {
+      const keyOf = new Map<number, string>();
+      for (const [k, ids] of spids) for (const sp of ids) if (!keyOf.has(sp)) keyOf.set(sp, k);
+      for (let i = 0; i < out.length; i++) out[i] = out[i].replace(/<p:cNvPr id="(\d+)" name="([^"]*)"/g, (all, sp: string, name: string) => {
+        const k = keyOf.get(Number(sp));
+        // (the slide number, footer and date are PowerPoint's own, and the title is one per slide)
+        return k && !/^(Title|Slide Number|Footer|Date)\b/.test(name) ? `<p:cNvPr id="${sp}" name="!!${xmlAttr(k)}"` : all;
+      });
+      const tree = new DOMParser().parseFromString(`<p:spTree ${XMLNS}>${GROUP}${out.join('')}</p:spTree>`, 'application/xml').documentElement;
+      const { keep, ...where } = s.part;
+      part = { [TAG.canvasPart]: JSON.stringify({ ...where, print: slidePrint(tree) }), ...(keep ? { [TAG.canvasKeep]: JSON.stringify(keep) } : {}) };
+    }
+    const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}), ...part });
     const bg = s.background ? await this.background(path, s.background) : '';
     return `${HEAD}<p:sld ${XMLNS}${s.hideGraphics ? ' showMasterSp="0"' : ''}${s.hidden ? ' show="0"' : ''}><p:cSld>${bg}<p:spTree>${GROUP}${out.join('')}</p:spTree><p:custDataLst><p:tags r:id="${tags}"/></p:custDataLst></p:cSld>` +
       `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(s.transition)}${timingXml(expandParas(s.anims ?? [], (cid) => { const c = doc.captions.get(cid); return c ? plainText(c.runs).split('\n') : null; }), (a) => spids.get(targetKey(a.target)) ?? [], videos, (t) => spids.get(targetKey(t))?.[0])}` +
@@ -1576,5 +1598,18 @@ export function masterSettings(m: Master): Partial<Master> {
 
 /** The deck as a PowerPoint file. */
 export function writePptx(deck: DeckData, opts: PptxOptions): Promise<Uint8Array> {
-  return new Writer(deck, opts).build();
+  return new Writer(withCanvasesSplit(deck), opts).build();
+}
+
+/** The deck with each canvas slide as a slide for each keyframe (canvas-export.ts), its sections counting them. */
+function withCanvasesSplit(deck: DeckData): DeckData {
+  if (!deck.slides.some((s) => s.canvas)) return deck;
+  const split = deck.slides.map((s, i) => splitCanvas(s, deck.master, deck.size, i));
+  let at = 0;
+  const sections = deck.sections?.map((sec) => {
+    const count = split.slice(at, at + sec.count).reduce((n, x) => n + x.length, 0);
+    at += sec.count;
+    return { ...sec, count };
+  });
+  return { ...deck, slides: split.flat(), ...(sections ? { sections } : {}) };
 }
