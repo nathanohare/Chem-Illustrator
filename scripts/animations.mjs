@@ -670,6 +670,14 @@ if (want('model-3d')) {
       await page.mouse.click(nb.x + nb.width / 2, nb.y + nb.height / 2);
       await page.waitForTimeout(1300);
     }
+    // the cleanest view, then the drawing turned to match it
+    for (const name of ['Best View', 'Place on Page']) {
+      const b = await page.locator('.viewer3d button', { hasText: name }).boundingBox();
+      await glide(page, b.x + b.width / 2, b.y + b.height / 2, 20);
+      await page.waitForTimeout(250);
+      await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+      await page.waitForTimeout(1700);
+    }
   }, { width: 1000, hold: 2500 });
   await browser.close();
 }
