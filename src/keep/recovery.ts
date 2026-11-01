@@ -86,6 +86,11 @@ export class Recovery {
   private locks: string[] = [];
   readonly started: number;
   private busy: Promise<unknown> = Promise.resolve();
+  /**
+   * Only one copy of the app can run at a time (the desktop app), so every other session has
+   * stopped, however lately it wrote: ended from Task Manager and started again straight away.
+   */
+  oneCopy = false;
 
   constructor(private store: KeepStore, readonly session = newSessionId(), private now: () => number = Date.now) {
     this.started = now();
@@ -172,11 +177,16 @@ export class Recovery {
     return this.tabs.size;
   }
 
+  /** Whether a session that last said it was running at `beat` still is. */
+  private alive(beat: number, now: number): boolean {
+    return !this.oneCopy && now - beat < STALE_MS;
+  }
+
   /** Whether another session is running now (it said so lately). */
   async running(session: string): Promise<boolean> {
     if (session === this.session) return true;
     const s = parseSession(await getText(this.store, `${FOLDER}/${keyPart(session)}/${MANIFEST}`));
-    return !!s && this.now() - s.beat < STALE_MS;
+    return !!s && this.alive(s.beat, this.now());
   }
 
   /** Lock files listed by sessions that stopped without closing (a crash, the app being ended from Task Manager). */
@@ -186,7 +196,7 @@ export class Recovery {
     for (const e of await this.store.list(FOLDER)) {
       if (!e.folder || e.name === keyPart(this.session)) continue;
       const s = parseSession(await getText(this.store, `${FOLDER}/${e.name}/${MANIFEST}`));
-      if (!s?.locks?.length || now - s.beat < STALE_MS) continue;
+      if (!s?.locks?.length || this.alive(s.beat, now)) continue;
       out.push({ session: s.session, paths: s.locks });
     }
     return out;
@@ -203,7 +213,7 @@ export class Recovery {
       if (!e.folder || e.name === keyPart(this.session)) continue;
       const s = parseSession(await getText(this.store, `${FOLDER}/${e.name}/${MANIFEST}`));
       const last = s?.beat ?? e.modified;
-      if (now - last < STALE_MS) continue; // still running (another window of the app)
+      if (this.alive(last, now)) continue; // still running (another window of the app)
       if (!s || !s.tabs.length || now - last > days * 86_400_000) {
         await this.store.remove(`${FOLDER}/${e.name}`);
         continue;
