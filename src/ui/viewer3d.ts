@@ -8,9 +8,9 @@ import { FloatBox } from './float-box';
 import { SYMBOLS } from '../chem/elements';
 import type { Model3d } from '../chem/model3d-build';
 import { hornFit, rotation } from '../morph/rotate';
+import { ident, mul, axisTurn, skeleton, cleanerNearby, cleanestView, type M3, type P3 } from '../chem/view3d';
 
 export type Style3d = 'ball-stick' | 'sticks' | 'wire' | 'spacefill';
-type M3 = [number, number, number, number, number, number, number, number, number];
 
 /** Jmol's element colours (CPK), the usual ones in molecular graphics. */
 const CPK: Record<number, string> = {
@@ -24,18 +24,6 @@ const colourOf = (z: number) => CPK[z] ?? '#b0b8c8';
 /** Covalent radii (Å, Cordero et al. 2008) for ball sizes, and van der Waals radii (Bondi 1964) for space filling. */
 const COV: Record<number, number> = { 1: 0.31, 5: 0.84, 6: 0.76, 7: 0.71, 8: 0.66, 9: 0.57, 14: 1.11, 15: 1.07, 16: 1.05, 17: 1.02, 35: 1.2, 53: 1.39 };
 const VDW: Record<number, number> = { 1: 1.2, 5: 1.92, 6: 1.7, 7: 1.55, 8: 1.52, 9: 1.47, 14: 2.1, 15: 1.8, 16: 1.8, 17: 1.75, 35: 1.85, 53: 1.98 };
-
-const ident = (): M3 => [1, 0, 0, 0, 1, 0, 0, 0, 1];
-const mul = (a: M3, b: M3): M3 => {
-  const r = new Array(9).fill(0) as M3;
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) for (let k = 0; k < 3; k++) r[i * 3 + j] += a[i * 3 + k] * b[k * 3 + j];
-  return r;
-};
-/** A turn by `t` radians about the unit axis (x, y, z). */
-function axisTurn(x: number, y: number, z: number, t: number): M3 {
-  const c = Math.cos(t), s = Math.sin(t), C = 1 - c;
-  return [c + x * x * C, x * y * C - z * s, x * z * C + y * s, y * x * C + z * s, c + y * y * C, y * z * C - x * s, z * x * C - y * s, z * y * C + x * s, c + z * z * C];
-}
 
 export interface PlaceView {
   /** Each atom's position as seen (Å): x right, y up, z towards the reader, centred on the model. */
@@ -116,8 +104,17 @@ export class Viewer3d {
     const place = document.createElement('button');
     place.type = 'button';
     place.textContent = 'Place on Page';
-    place.title = 'Turn the drawn structure to match this view (an undoable step); wedges and crossings follow the depth';
-    place.addEventListener('click', () => { if (this.onPlace) this.onPlace({ view: this.viewCoords() }); });
+    place.title = 'Turn the drawn structure to match this view (an undoable step); wedges and crossings follow the depth. If atoms would land on top of each other, the model is turned the least it takes to keep them apart.';
+    place.addEventListener('click', () => this.place());
+    const best = document.createElement('button');
+    best.type = 'button';
+    best.textContent = 'Best View';
+    best.title = 'Turn the model to the view that draws most cleanly: no atoms on top of each other, fewest crossing bonds';
+    best.addEventListener('click', () => {
+      if (!this.model) return;
+      this.rot = cleanestView(this.base(), this.skeleton(), this.drawn);
+      this.draw();
+    });
     const copyPic = document.createElement('button');
     copyPic.type = 'button';
     copyPic.textContent = 'Copy Picture';
@@ -128,7 +125,7 @@ export class Viewer3d {
     copyMol.textContent = 'Copy MOL';
     copyMol.title = 'Copy this conformer as a 3-D molfile (with hydrogens), for Chem3D, Avogadro, PyMOL or a calculation';
     copyMol.addEventListener('click', () => void this.copyMol());
-    actions.append(place, copyPic, copyMol);
+    actions.append(place, best, copyPic, copyMol);
     b.append(this.canvas, bar, confBar, actions);
     this.wire();
     new ResizeObserver(() => this.draw()).observe(this.canvas);
@@ -212,14 +209,40 @@ export class Viewer3d {
     return pts.map((p) => [p[0] - c[0], p[1] - c[1], p[2] - c[2]]);
   }
 
+  /** The positions before any turn: x right, y up, z towards the reader (OpenChemLib's y runs down the page, as the drawing's does). */
+  private base(): P3[] {
+    return this.coords().map(([x, y, z]) => [x, -y, -z]);
+  }
+
   /** Positions as seen: turned by the view (x right, y up, z towards the reader). */
-  private viewCoords(): [number, number, number][] {
+  private viewCoords(): P3[] {
     const r = this.rot;
-    // OpenChemLib's y runs down the page, as the drawing's does
-    return this.coords().map(([x, y, z]) => {
-      const yy = -y, zz = -z;
-      return [r[0] * x + r[1] * yy + r[2] * zz, r[3] * x + r[4] * yy + r[5] * zz, r[6] * x + r[7] * yy + r[8] * zz];
-    });
+    return this.base().map(([x, y, z]) => [r[0] * x + r[1] * y + r[2] * z, r[3] * x + r[4] * y + r[5] * z, r[6] * x + r[7] * y + r[8] * z]);
+  }
+
+  private skeleton() {
+    const m = this.model!;
+    return skeleton(m.atoms.map((a) => a.z), m.bonds, this.base());
+  }
+
+  /**
+   * Place on Page. From most angles some atoms would land on top of others (or on a bond) in the
+   * flat drawing, which tangles it, so the model is first turned the least it takes to keep them
+   * apart (up to 45°), or to the cleanest view when no view that near will do.
+   */
+  private place(): void {
+    if (!this.onPlace || !this.model) return;
+    const base = this.base(), sk = this.skeleton();
+    const near = cleanerNearby(base, this.rot, sk, 45);
+    if (!near) {
+      this.rot = cleanestView(base, sk, this.drawn);
+      this.flash('From this angle atoms would land on top of each other, so the model was turned to its cleanest view first.');
+    } else if (near.deg) {
+      this.rot = near.rot;
+      this.flash(`Turned the model ${near.deg}° first, so no atoms land on top of each other.`);
+    }
+    this.draw();
+    this.onPlace({ view: this.viewCoords() });
   }
 
   private wire(): void {
