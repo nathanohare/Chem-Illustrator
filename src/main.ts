@@ -21,7 +21,7 @@ import { readRibbons, applyRibbon, type RibbonInfo, type RibbonsPrefs } from './
 import { editPalettes, getPalettes, onPalettes, setPalettes, useDrawingColours, usePaletteMenus } from './ui/palette-ui';
 import { Doc, Atom, Caption, Shape, type TextRun, outsideValence, Contents, CHIRAL_FLAGS, PICTURE_STYLES, type PictureLook, type Attachment, type HighlightStyle, type ShapeMath, PAPER, keepOnPage, type PageSetup, type PageWalls } from './model';
 import { Renderer, measureText, forgetTextWidths } from './render/renderer';
-import { Editor, TOOLS, type HighlightToggle, type Selection } from './editor/editor';
+import { Editor, TOOLS, ringsWereFilled, type HighlightToggle, type Selection } from './editor/editor';
 import { BUILT_IN_LOOKS, type HighlightLookPreset } from './ui/highlight-looks';
 import { selectionBox, POINTS, type Align, units, moveUnit } from './editor/arrange';
 import { groupSelection, selectedGroups } from './editor/groups';
@@ -6028,7 +6028,13 @@ const COMMANDS: Record<string, () => unknown> = {
   'reset-toolboxes': () => { toolboxes.reset(); flash('Toolboxes reset: Drawing Tools docked at the left, the others hidden, all open and locked.', 6000); },
   'lock-toolboxes': () => { toolboxes.setLocked(!toolboxState.locked); flash(toolboxState.locked ? 'Toolboxes locked.' : 'Toolboxes unlocked: drag one by its title to an edge of the drawing to dock it, or anywhere else to float.', 6000); },
   'add-frame': () => editor.addFrame() || flash('Select what to frame: structures, text, arrows or shapes.'),
-  'fill-rings': () => flash(editor.fillRings(), 6000),
+  'fill-rings': () => {
+    const msg = editor.fillRings();
+    flash(msg, 6000);
+    // the message points at the Style panel, so it has to be showing (it starts folded on slides)
+    if (ringsWereFilled(msg)) revealStylePanel();
+  },
+  'show-style': () => revealStylePanel(true),
   'ring-shadow': () => {
     const r = editor.ringShadow();
     flash(!r ? 'Select filled rings (or their structure) first: Fill Rings fills them.' : r === 'on' ? 'Ring fills have a drop shadow. Change its size in the Style panel.' : 'Ring fill shadows off.', 5000);
@@ -7737,15 +7743,20 @@ const nicknames = new NicknameChooser();
 editor.say = (msg) => flash(msg, 6000);
 editor.onNickname = (atomId) => nicknames.open((name) => editor.runAction(`label ${name}`, { kind: 'atom', id: atomId }));
 // / or ? on an atom or bond: select it and show its settings in the Style panel
-editor.onProperties = () => {
-  // after the panel has caught up with the new selection
+editor.onProperties = () => revealStylePanel(true);
+/**
+ * Open the side panel if it is folded away (it starts folded in Presentation, Spreadsheet and
+ * Document) and bring the Style panel into view, after it has caught up with the selection.
+ */
+function revealStylePanel(focus = false): void {
+  if (sideIsFolded()) command('fold-side');
   setTimeout(() => {
     const sec = $('#style-section');
     if (sec.hidden || sec.classList.contains('empty')) return;
     sec.scrollIntoView({ block: 'nearest' });
-    sec.querySelector<HTMLElement>('input, select, button')?.focus();
+    if (focus) sec.querySelector<HTMLElement>('input, select, button')?.focus();
   }, 60);
-};
+}
 
 // Unsaved work: ask before the window closes.
 if (isTauri()) {
@@ -8738,6 +8749,7 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'remove-animation', label: 'Remove Animation' }, { cmd: 'animation-pane', label: 'Animation Pane' }, { cmd: 'preview-slide', label: 'Preview Slide' },
     ] }, { cmd: 'new-comment', label: 'New Comment' }] : []),
     null,
+    { cmd: 'show-style' },
     { cmd: 'select-all' },
     view,
   ];
