@@ -3145,7 +3145,7 @@ export class Editor {
     this.sel = emptySel();
     for (const id of ids) this.sel.shapes.add(id);
     this.changed();
-    return `${ids.length} ring${ids.length > 1 ? 's' : ''} filled: choose the colour, gradient or pattern in the Style panel.`;
+    return ringsFilledMessage(ids.length);
   }
 
   /**
@@ -5987,4 +5987,14 @@ export function insideLoop(loop: readonly Vec[], x: number, y: number): boolean 
     if ((a.y > y) !== (b.y > y) && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
   }
   return inside;
+}
+
+/** What Fill Rings says when it has filled n rings: it sends you to the Style panel. */
+export function ringsFilledMessage(n: number): string {
+  return `${n} ring${n > 1 ? 's' : ''} filled: choose the colour, gradient or pattern in the Style panel.`;
+}
+
+/** Fill Rings' message says rings were filled (not that there was nothing to fill), so the Style panel should show. */
+export function ringsWereFilled(msg: string): boolean {
+  return /^\d+ rings? filled:/.test(msg);
 }
