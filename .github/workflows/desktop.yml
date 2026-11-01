@@ -100,10 +100,12 @@ jobs:
             echo "AZURE_CLIENT_ID=$CLIENT_ID"
             echo "AZURE_CLIENT_SECRET=$CLIENT_SECRET"
             echo "AZURE_TENANT_ID=$TENANT_ID"
-            # merged into tauri.conf.json by the Tauri build; %1 is the file to sign, and the
-            # description is the name Windows shows when the .msi asks for permission
-            node -e 'const [e, a, c] = process.argv.slice(1); console.log("TAURI_CONFIG=" + JSON.stringify({ bundle: { windows: { signCommand: { cmd: "artifact-signing-cli", args: ["-e", e, "-a", a, "-c", c, "-d", "Chem Illustrator", "%1"] } } } }))' "$ENDPOINT" "$ACCOUNT" "$PROFILE"
           } >> "$GITHUB_ENV"
+          # Tauri merges tauri.windows.conf.json into tauri.conf.json on Windows builds; %1 is
+          # the file to sign, and the description is the name Windows shows when the .msi asks
+          # for permission
+          node -e 'const [e, a, c] = process.argv.slice(1); require("fs").writeFileSync("src-tauri/tauri.windows.conf.json", JSON.stringify({ bundle: { windows: { signCommand: { cmd: "artifact-signing-cli", args: ["-e", e, "-a", a, "-c", c, "-d", "Chem Illustrator", "%1"] } } } }, null, 2))' "$ENDPOINT" "$ACCOUNT" "$PROFILE"
+          cat src-tauri/tauri.windows.conf.json
       - run: npm ci
       - name: Number this version
         shell: bash
