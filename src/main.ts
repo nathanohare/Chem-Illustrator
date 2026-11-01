@@ -211,6 +211,7 @@ import { SlideComparePane } from './ui/slide-compare';
 import { pickFileTemplate } from './ui/file-templates';
 import type { PastedRows } from './io/table-clip';
 import { Keeper } from './keep/keeper';
+import { notice } from './ui/keep-ui';
 import { DEFAULT_KEEP, type KeepPrefs } from './keep/prefs';
 import { Brush, paintObjects, pickObjectLook, type ObjectLook, type TextLook } from './format-painter';
 import { SymbolWindow } from './ui/symbol-window';
@@ -250,7 +251,8 @@ const pickReuseSlides = later(() => import('./ui/reuse-slides'), 'pickReuseSlide
 // with a notice offering to report them through Send Feedback. The desktop app (not the iPad, whose
 // apps the system ends whenever it likes) also notices when it stopped without closing last time.
 const iPadApp = isTauri() && /Mac/.test(navigator.platform) && navigator.maxTouchPoints > 1;
-const diagnostics = new Diagnostics({ store: keepStore(), markers: isTauri() && !iPadApp });
+// (one copy of the desktop app runs at a time, so a marker left by another stopped, however recent)
+const diagnostics = new Diagnostics({ store: keepStore(), markers: isTauri() && !iPadApp, oneCopy: true });
 // (shown once the page has finished setting up: an error while it starts can come before the notice can show)
 catchErrors(window, { diagnostics, show: (e) => setTimeout(() => { try { errorNotice(e); } catch { /* the page never finished starting */ } }, 0) });
 const lastClose = diagnostics.start().catch(() => null);
@@ -7074,14 +7076,17 @@ function errorNotice(e: LogEntry): void {
     { label: 'Report It…', run: () => feedback.open('problem', errorReport(diagnostics, { entry: e })) });
 }
 
-/** The app stopped without closing last time: offer to report it, once nothing else is asking (the recovery question first). */
+/**
+ * The app stopped without closing last time: a corner notice offering to report it, which stays
+ * until it is answered (a passing message was hidden by the recovery question and the messages after it).
+ */
 function unexpectedCloseNotice(c: UnexpectedClose): void {
-  const wait = (): void => {
-    if (document.querySelector('dialog[open]')) { setTimeout(wait, 1500); return; }
-    flash(`Chem Illustrator closed unexpectedly last time (last running at ${stamp(c.beat).slice(11, 16)} on ${stamp(c.beat).slice(0, 10)}).`, 15000,
-      { label: 'Report It…', run: () => feedback.open('problem', errorReport(diagnostics, { closed: c })) });
-  };
-  setTimeout(wait, 2000);
+  const when = `${stamp(c.beat).slice(11, 16)} on ${stamp(c.beat).slice(0, 10)}`;
+  notice('unexpected-close', 'Chem Illustrator closed unexpectedly last time',
+    `It stopped without closing (last running at ${when}). Reporting it, with the log of what it was doing, helps find the cause.`, [
+      { label: 'Report It…', main: true, run: () => feedback.open('problem', errorReport(diagnostics, { closed: c })) },
+      { label: 'Dismiss', run: () => {} },
+    ]);
 }
 
 /** Help > Copy Diagnostics: the version, computer and mode, then the newest part of the log. */
