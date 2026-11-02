@@ -1849,7 +1849,13 @@ dialog.kb-window { position: fixed; inset: 56px 0 auto 0; margin: 0 auto; z-inde
 .kb-tab.none { color: var(--muted); }
 .kb-tab.personal > span:first-child::after { content: ' (yours)'; color: var(--muted); font-weight: 400; }
 .kb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.kb-about, .kb-sources { margin: 0; font-size: var(--fs-xs); }
+.kb-sources { margin: 0; font-size: var(--fs-xs); }
+.kb-head { gap: 6px 8px; flex-wrap: nowrap; align-items: center; }
+.kb-head h2 { width: 160px; flex: none; }
+.kb-top { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.kb-top .kb-title { margin: 0; font-size: var(--fs-md, 14px); white-space: nowrap; }
+.kb-top .kb-filters { margin: 0; }
+.kb-filters label { display: inline-flex; align-items: center; gap: 4px; }
 .kb-filters:empty { display: none; }
 .kb-table-wrap { max-height: 56vh; }
 .kb-table { width: max-content; min-width: 100%; }
@@ -1858,6 +1864,8 @@ dialog.kb-window { position: fixed; inset: 56px 0 auto 0; margin: 0 auto; z-inde
 .kb-table td:nth-child(4) { white-space: normal; }
 .kb-table th { cursor: pointer; user-select: none; white-space: nowrap; }
 .kb-table td:first-child { white-space: nowrap; }
+/* a very long name wraps inside its column instead of running into the next one */
+.kb-table td:first-child:not(.kb-pic) { white-space: normal; overflow-wrap: anywhere; min-width: 14ch; }
 .kb-table td.cas { white-space: nowrap; }
 .kb-table th.num, .kb-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .kb-table.kb-pictures td { vertical-align: middle; }
