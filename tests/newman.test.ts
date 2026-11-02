@@ -12,7 +12,7 @@ import { searchModel } from '../src/chem/model3d-build';
 import { bondRotamers } from '../src/chem/torsion-scan';
 import { mergeConformers } from '../src/chem/conformer-rank';
 import { newmanConformers, newmanView, sizeRanks, groupLabel, neighbours, type NewmanMol } from '../src/chem/newman';
-import { DEFAULT_NEWMAN_PREFS, NEWMAN_LOOK, captionText, newmanCentre, newmanFrameOf, parseNewmanPrefs, putMark, putNewman, refitNewman, reversedLabel, structureKey, type NewmanData } from '../src/design/newman';
+import { DEFAULT_NEWMAN_PREFS, NEWMAN_LOOK, OLD_RING_ARC, captionText, drawEyeMark, newmanCentre, newmanFrameOf, parseNewmanPrefs, putMark, putNewman, refitNewman, reversedLabel, structureKey, type NewmanData } from '../src/design/newman';
 import { plainMeasure } from '../src/chem/reaction';
 import { writeCdxml } from '../src/io/cdxml-write';
 import { readCdxml } from '../src/io/cdxml';
@@ -223,6 +223,69 @@ describe('Newman settings', () => {
     expect(p.kind).toBe('sawhorse');
     expect(p.chart.unit).toBe('kJ/mol');
     expect(p.chart.names).toBe('textbook');
+    // the ring arc and the eye: kept when right, the defaults when not
+    expect(p.look.arc).toEqual({ line: 'dashed', color: '#808080', bonds: false });
+    expect(p.look.eye).toBe('pupil');
+    const q = parseNewmanPrefs({ look: { arc: { line: 'solid', color: '#123456', bonds: true }, eye: 'almond' } });
+    expect(q.look.arc).toEqual({ line: 'solid', color: '#123456', bonds: true });
+    expect(q.look.eye).toBe('almond');
+    expect(parseNewmanPrefs({ look: { arc: { line: 'wavy', color: 'red' }, eye: 'wink' } }).look).toMatchObject({ arc: DEFAULT_NEWMAN_PREFS.look.arc, eye: 'pupil' });
+  });
+});
+
+describe('ring arc and eye', () => {
+  const g = (atom: number, angle: number, label: string, size: number, ring?: number) => ({ atom, angle, label, size, ...(ring !== undefined ? { ring } : {}) });
+  /** Looking down C1–C2 of a cyclohexane ring: a ring bond on each atom, joined by the arc. */
+  const ringView = (look: NewmanData['look']): NewmanData => ({
+    kind: 'newman', turn: 0, conformer: 0, source: 'stable', look,
+    front: [g(1, 300, '', 0, 0), g(2, 60, 'OH', 0.87), g(3, 180, 'H', 0)],
+    back: [g(4, 0, '', 0, 0), g(5, 120, 'CH3', 1.74), g(6, 240, 'H', 0)],
+  });
+  const draw = (look: NewmanData['look']) => {
+    const doc = new Doc(), m = plainMeasure(doc);
+    let id = 0;
+    doc.edit('Newman', () => { id = putNewman(doc, m, ringView(look), { x: 300, y: 300 }); });
+    const f = doc.shapes.get(id)!.frame!;
+    const arcs = f.arrows.map((x) => doc.arrows.get(x)!).filter((a) => a.sweep !== 0);
+    const near = (p: { x: number; y: number }, q: { x: number; y: number }) => Math.hypot(p.x - q.x, p.y - q.y) < 0.5;
+    const ringBonds = f.shapes.map((x) => doc.shapes.get(x)!).filter((x) => x.kind === 'line' && arcs.some((a) => near({ x: x.x2, y: x.y2 }, a.tail) || near({ x: x.x2, y: x.y2 }, a.head)));
+    return { arcs, ringBonds };
+  };
+
+  it('draws the rest of the ring as a grey dashed arc by default, and as the settings say', () => {
+    const { arcs, ringBonds } = draw(structuredClone(NEWMAN_LOOK));
+    expect(arcs.length).toBe(1);
+    expect(arcs[0]).toMatchObject({ line: 'dashed', color: '#808080' });
+    expect(ringBonds.length).toBe(2);
+    for (const b of ringBonds) expect(b.color).toBe('#000000');
+    // ring bonds greyed too
+    const grey = draw({ ...structuredClone(NEWMAN_LOOK), arc: { line: 'dashed', color: '#595959', bonds: true } });
+    expect(grey.ringBonds.length).toBe(2);
+    for (const b of grey.ringBonds) expect(b.color).toBe('#595959');
+    // a projection saved before the setting existed keeps its solid black arc
+    const { arc: _a, eye: _e, ...old } = structuredClone(NEWMAN_LOOK);
+    const before = draw(old);
+    expect(before.arcs[0].line).toBe(OLD_RING_ARC.line);
+    expect(before.arcs[0].color ?? '#000000').toBe('#000000');
+  });
+
+  it('draws the eye with its lids opening toward the bond, in each style', () => {
+    const front = { x: 100, y: 100 }, back = { x: 130, y: 100 }; // looking from the left, so the eye sits to the left
+    for (const eye of ['plain', 'inner', 'pupil', 'almond', 'lashes'] as const) {
+      const doc = new Doc();
+      let got = { arrows: [] as number[], shapes: [] as number[] };
+      doc.edit('eye', () => { got = drawEyeMark(doc, front, back, '#1a56db', eye); });
+      const arrow = doc.arrows.get(got.arrows[0])!;
+      expect(arrow.head.x).toBeGreaterThan(arrow.tail.x); // the dotted arrow points at the bond
+      // the eyeball: the widest solid arc, its ends nearer the bond than the corner the lids meet at
+      const ball = got.arrows.slice(1).map((x) => doc.arrows.get(x)!).sort((p, q) => Math.abs(q.tail.y - q.head.y) - Math.abs(p.tail.y - p.head.y))[0];
+      const corner = Math.min(...[...got.shapes.map((x) => doc.shapes.get(x)!).filter((x) => x.kind === 'line').map((x) => Math.min(x.x1, x.x2)), ...got.arrows.slice(1).map((x) => doc.arrows.get(x)!).flatMap((a) => [a.tail.x, a.head.x])]);
+      expect(ball.tail.x).toBeCloseTo(ball.head.x, 5);
+      expect(ball.tail.x).toBeGreaterThan(corner + 5);
+      expect(ball.tail.x).toBeLessThan(arrow.tail.x);
+      const dots = got.shapes.map((x) => doc.shapes.get(x)!).filter((x) => x.kind === 'oval');
+      expect(dots.length).toBe(eye === 'pupil' || eye === 'almond' ? 1 : 0);
+    }
   });
 });
 
