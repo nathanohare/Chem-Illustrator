@@ -7,6 +7,7 @@
 import { LIGAND_FAMILIES, bondingType, denticity, familyOf, searchLigands, type Ligand } from '../chem/ligands';
 import { templateById } from '../chem/templates';
 import { templateIcon } from './template-icons';
+import { svgNode } from './svg-node';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] => {
   const e = Object.assign(document.createElement(tag), props);
@@ -131,7 +132,7 @@ export class LigandLibraryWindow {
       card.setAttribute('aria-selected', String(l === this.current));
       card.setAttribute('aria-label', `${shownAs(l)}: ${l.name}`);
       const pic = el('div', { className: 'lig-pic' });
-      pic.innerHTML = t ? templateIcon(t, CARD) : '';
+      { const icon = t ? svgNode(templateIcon(t, CARD)) : null; if (icon) pic.append(icon); }
       card.append(pic, el('span', { className: 'lig-abbr', textContent: shownAs(l) }));
       return card;
     });
@@ -178,7 +179,7 @@ export class LigandLibraryWindow {
     if (!l) { this.details.replaceChildren(el('p', { className: 'muted', textContent: 'Pick a ligand to see it here.' })); return; }
     const t = templateById(l.tpl);
     const pic = el('div', { className: 'lig-big' });
-    pic.innerHTML = t ? templateIcon(t, BIG) : '';
+    { const icon = t ? svgNode(templateIcon(t, BIG)) : null; if (icon) pic.append(icon); }
     const row = (k: string, v: Node | string) => [el('dt', { textContent: k }), el('dd', {}, v)];
     const smiles = el('code', { className: 'lig-smiles', textContent: l.smiles, title: 'What the abbreviation stands for when typed as a label, starting at the atom that bonds. Click to copy' });
     smiles.addEventListener('click', () => this.host.copyText(l.smiles, `Copied the SMILES for ${l.abbr[0]}.`));
