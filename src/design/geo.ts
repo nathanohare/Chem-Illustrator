@@ -15,7 +15,7 @@ export type GeoStep =
   | ['C', number, number, number, number, number, number]
   | ['Z'];
 
-export type GeoGroup = 'Basic shapes' | 'Block arrows' | 'Flowchart' | 'Callouts' | 'Action buttons' | 'Lab equipment' | 'Icons' | 'Ink';
+export type GeoGroup = 'Basic shapes' | 'Block arrows' | 'Flowchart' | 'Callouts' | 'Action buttons' | 'Lab equipment' | 'Icons' | 'Ink' | 'Orbitals';
 
 export const GEO_GROUPS: GeoGroup[] = ['Basic shapes', 'Block arrows', 'Flowchart', 'Callouts', 'Action buttons', 'Lab equipment'];
 
@@ -465,6 +465,18 @@ const hexCellDef: GeoDef = {
   draw: (w, h) => ({ body: poly([[0.25 * w, 0], [0.75 * w, 0], [w, h / 2], [0.75 * w, h], [0.25 * w, h], [0, h / 2]]) }),
   text: [0.17, 0.08, 0.83, 0.92],
 };
+
+/**
+ * One lobe of an orbital (Chemistry ▸ Orbitals): a balloon whose point is at the bottom middle of
+ * its box, where the nucleus is. Turned with `rot` to point any way; not in the shapes library.
+ */
+export const ORBITAL_LOBE = 'orbLobe';
+GEOS.push({
+  id: ORBITAL_LOBE, name: 'Orbital lobe', group: 'Orbitals', size: [22, 36], keywords: 'orbital lobe p',
+  draw: (w, h) => ({
+    body: scaled([['M', 0.5, 1], ['C', 0.36, 0.86, 0, 0.64, 0, 0.38], ['C', 0, 0.16, 0.22, 0, 0.5, 0], ['C', 0.78, 0, 1, 0.16, 1, 0.38], ['C', 1, 0.64, 0.64, 0.86, 0.5, 1], ['Z']], w, h),
+  }),
+});
 
 export const GEO_BY_ID = new Map(GEOS.map((g) => [g.id, g]));
 

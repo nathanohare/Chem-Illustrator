@@ -32,6 +32,7 @@ import { colourButton } from './colour-picker';
 import { centreEnd, haptoText, splitHapto } from '../chem/hapto';
 import { straightenAt } from '../chem/chemgeom';
 import type { EnergyData } from '../design/energy';
+import { TLC_LOOKS, GEL_LOOKS, type PlateData } from '../design/plates';
 import { DIAGRAM_COLOURS, DIAGRAM_LAYOUTS, type DiagramData } from '../design/diagrams';
 
 /** What the table controls need from the editor. */
@@ -125,6 +126,7 @@ export class StylePanel {
   reaction: ReactionHooks | null = null;
   /** Energy diagrams (set up by the app): open the window, or redraw with some settings changed. */
   energy: { edit(shapeId: number): void; restyle(shapeId: number, patch: Partial<EnergyData>): void } | null = null;
+  plate: { edit(shapeId: number): void; restyle(shapeId: number, patch: Partial<PlateData>): void } | null = null;
   /** SmartArt-style diagrams: the window with their text, a change of layout or look, and Convert to Shapes. */
   diagram: { edit(shapeId: number): void; restyle(shapeId: number, patch: Partial<DiagramData>): void; ungroup(shapeId: number): void } | null = null;
   /** Tie captions to the structure nearest each (Tie to Structure). */
@@ -188,8 +190,9 @@ export class StylePanel {
     if (several) this.structureControls(selAtoms, selBonds);
     if (arrows.length) this.arrowControls(arrows);
     // an energy diagram is a frame drawn from its numbers: its own section, not a rectangle's
-    const diagram = all.length === 1 && (all[0].energy || all[0].diagram) ? all[0] : undefined;
+    const diagram = all.length === 1 && (all[0].energy || all[0].diagram || all[0].plate) ? all[0] : undefined;
     if (diagram?.energy) this.energyControls(diagram);
+    else if (diagram?.plate) this.plateControls(diagram);
     else if (diagram?.diagram) this.diagramControls(diagram);
     else if (shapes.length) this.shapeControls(shapes);
     if (rings.length) this.shapeControls(rings, rings.length > 1 ? `${rings.length} ring fills` : 'Ring fill');
@@ -465,6 +468,45 @@ export class StylePanel {
     b.textContent = 'Edit Energy Diagram…';
     b.title = 'Change the species, energies and pathways (or double-click the diagram)';
     b.addEventListener('click', () => this.energy?.edit(sh.id));
+    row.append(b);
+    this.body.append(row);
+  }
+
+  /** A TLC plate or gel: its stain or dye and what is written, and the window with its lanes. */
+  private plateControls(sh: Shape): void {
+    const d = sh.plate!;
+    if (d.kind === 'mo') {
+      this.heading('MO diagram');
+      if (d.mo) this.check('Energy arrow', d.mo.axis, (v) => this.plate?.restyle(sh.id, { mo: { ...d.mo!, axis: v } }));
+      this.note('Change the orbitals, energies and electrons in the window; drag a corner to resize it.');
+      const row = document.createElement('div');
+      row.className = 'style-buttons';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = 'Edit MO Diagram…';
+      b.title = 'Change the orbitals, their energies and electrons (or double-click it)';
+      b.addEventListener('click', () => this.plate?.edit(sh.id));
+      row.append(b);
+      this.body.append(row);
+      return;
+    }
+    const tlc = d.kind === 'tlc';
+    this.heading(tlc ? 'TLC plate' : 'Gel');
+    const set = (patch: Partial<PlateData>) => this.plate?.restyle(sh.id, patch);
+    if (tlc) this.select('Stain', TLC_LOOKS.map((l) => [l.id, l.name]), d.look, (v) => set({ look: v }));
+    else this.select('Dye', GEL_LOOKS.map((l) => [l.id, l.name]), d.look, (v) => set({ look: v }));
+    if (tlc) this.check('Write the Rf values', d.rf, (v) => set({ rf: v }));
+    if (tlc) this.check('Start and solvent-front lines', d.lines, (v) => set({ lines: v }));
+    if (!tlc) this.check('Write the marker sizes', d.sizes, (v) => set({ sizes: v }));
+    this.check('Lane names', d.labels, (v) => set({ labels: v }));
+    this.note(`${d.lanes.length} lane${d.lanes.length === 1 ? '' : 's'}. Change the ${tlc ? 'spots' : 'bands'} in the window; drag a corner to resize it.`);
+    const row = document.createElement('div');
+    row.className = 'style-buttons';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = tlc ? 'Edit TLC Plate…' : 'Edit Gel…';
+    b.title = `Change the lanes and their ${tlc ? 'spots' : 'bands'} (or double-click it)`;
+    b.addEventListener('click', () => this.plate?.edit(sh.id));
     row.append(b);
     this.body.append(row);
   }

@@ -37,6 +37,10 @@ export const INSERT_MENU: MenuEntry[] = [
   { id: 'insert-shapes', label: 'Shapes…', modes: 'slides design document', title: 'Basic shapes, block arrows, flowchart shapes, callouts and lab glassware' },
   { id: 'insert-icons', label: 'Icons…', modes: 'slides design document', title: 'About 7,000 icons, lab and science ones first: glassware, molecules, hazard and safety signs' },
   { id: 'insert-diagram', label: 'Diagram…', modes: 'drawing slides design document', title: 'Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint\'s SmartArt' },
+  { submenu: 'Lab Figures', modes: 'drawing slides design document', items: [
+    { id: 'tlc-plate', label: 'TLC Plate…', modes: 'drawing slides design document', title: 'A TLC plate drawn from each lane\'s Rf values: the stain\'s colours (UV, KMnO₄, anisaldehyde, CAM…) or a notebook sketch, with the Rf values, start and front lines and the eluent. Double-click it to change the spots' },
+    { id: 'gel', label: 'Gel…', modes: 'drawing slides design document', title: 'An agarose or SDS-PAGE gel drawn from each lane\'s band sizes, run on a log scale, with a size marker and its sizes. Double-click it to change the bands' },
+  ] },
   { id: 'insert-equation', label: 'Equation…', modes: 'slides design document', title: 'An equation typed as LaTeX (x^2, \\frac{a}{b}, \\alpha), shown as maths; a Word or PowerPoint equation in .docx and .pptx files' },
   { id: 'insert-reference', label: 'Formatted Reference…', modes: 'drawing slides design', title: 'References from any open file (or looked up by DOI) put here as formatted text: full, or short (journal, year, volume, page), in the citation style you pick' },
   { id: 'references', label: 'Reference Manager…', title: 'Your reference library (kept between sessions: collections, tags, PDFs, Zotero) and the references of every open document and presentation: add, edit, and copy them between your library and files' },

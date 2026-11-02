@@ -119,6 +119,7 @@ import { CommandSearch, uniqueCommands, type CommandItem } from './ui/command-se
 import { fillTemplate, templateSize } from './design/templates';
 import { putDiagram, type DiagramData } from './design/diagrams';
 import type { EnergyData } from './design/energy';
+import type { PlateData, PlateKind } from './design/plates';
 import { refreshZooms, summaryParts, zoomGrid, zoomShape } from './deck/zoom';
 import { AUDIO_TYPES, VIDEO_TYPES, mediaMime, probeAudio, probeVideo, speakerPng, filmPng } from './deck/media';
 import { newChartBox, sizedBox } from './sheet/chart-box';
@@ -149,6 +150,8 @@ import { stoichiometryBook, type StoichRow, type StoichRole } from './chem/stoic
 import { isReactionSmiles, isRxn, parseRxn, reactionSmiles, rxnBlock, splitReactionSmiles } from './chem/reaction-io';
 import { showBalance } from './ui/balance-dialog';
 import { withoutCharge } from './chem/formula';
+import { makePin } from './chem/pins';
+import { ORBITAL_KINDS, ORBITAL_LOOKS, orbitalShapes, shapeCentre, type OrbitalKind, type OrbitalLook } from './chem/orbitals';
 import { showLabCalculator } from './ui/lab-calc-dialog';
 import { BATCH_FORMATS, BATCH_INPUTS, readBatchFile, smilesLine, uniqueName, writeBatchItem, type BatchDeps, type BatchFormat } from './io/batch-convert';
 import { zipSync } from 'fflate';
@@ -266,6 +269,8 @@ const pickSlideSize = later(() => import('./ui/slide-size-dialog'), 'pickSlideSi
 const pickTemplate = later(() => import('./ui/template-gallery'), 'pickTemplate');
 const askCycle = later(() => import('./ui/cycle-dialog'), 'askCycle');
 const askEnergy = later(() => import('./ui/energy-dialog'), 'askEnergy');
+const askPlate = later(() => import('./ui/plate-dialog'), 'askPlate');
+const askMo = later(() => import('./ui/mo-dialog'), 'askMo');
 const askDiagram = later(() => import('./ui/diagram-dialog'), 'askDiagram');
 const editChart = later(() => import('./ui/chart-editor'), 'editChart');
 const editMedia = later(() => import('./ui/media-dialog'), 'editMedia');
@@ -953,6 +958,86 @@ async function energyDiagram(id: number | null): Promise<void> {
   if (got) editor.putEnergyDiagram(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);
 }
 editor.onEnergy = (id) => void energyDiagram(id);
+
+/** The TLC Plate and Gel windows' preview: the plate as it will be drawn, fitted to the canvas. */
+function paintPlatePreview(d: PlateData, canvas: HTMLCanvasElement): void {
+  const { doc: tmp, box } = editor.platePreview(d);
+  const w = canvas.clientWidth || 360, h = canvas.clientHeight || 200, dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const bw = box.x2 - box.x1, bh = box.y2 - box.y1, pad = 8;
+  const k = Math.min((w - 2 * pad) / bw, (h - 2 * pad) / bh);
+  ctx.setTransform(k * dpr, 0, 0, k * dpr, (w / 2 - (box.x1 + bw / 2) * k) * dpr, (h / 2 - (box.y1 + bh / 2) * k) * dpr);
+  drawDrawing(ctx, tmp);
+}
+
+/** Insert ▸ Lab Figures ▸ TLC Plate… or Gel…, or the selected plate's lanes to change (`id`, its frame). */
+async function plateFigure(kind: PlateKind | null, id: number | null): Promise<void> {
+  finishTyping();
+  const now = id !== null ? doc.shapes.get(id)?.plate ?? null : null;
+  const k = now?.kind ?? kind ?? 'tlc';
+  const got = k === 'mo' ? await askMo(now, doc.style.bondLength, paintPlatePreview) : await askPlate(k, now, doc.style.bondLength, paintPlatePreview);
+  if (got) editor.putPlateAt(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);
+}
+editor.onPlate = (id) => void plateFigure(null, id);
+
+/** How the last orbital was asked for, so the next starts the same way. */
+const orbitalChoice: Record<string, string> = { kind: 'p', look: 'shaded', size: '1.1', angle: 'auto', flip: 'false' };
+
+/** Which way an orbital on this atom points when left to choose: hybrids away from its bonds, others up. */
+function orbitalAngle(kind: OrbitalKind, atom: Atom | undefined): number {
+  if (!atom || (kind !== 'sp' && kind !== 'sp2' && kind !== 'sp3')) return 0;
+  let vx = 0, vy = 0;
+  for (const n of doc.neighbors(atom.id)) { const d = Math.hypot(n.x - atom.x, n.y - atom.y) || 1; vx -= (n.x - atom.x) / d; vy -= (n.y - atom.y) / d; }
+  if (Math.hypot(vx, vy) < 1e-3) return 0;
+  return (Math.atan2(vx, -vy) * 180) / Math.PI;
+}
+
+/** Chemistry ▸ Orbitals: an orbital on each selected atom (or in the middle of the view), its lobes stuck to the atom. */
+async function insertOrbital(quick: boolean): Promise<void> {
+  finishTyping();
+  const atoms = [...editor.sel.atoms].map((id) => doc.atoms.get(id)).filter((a): a is Atom => !!a && !a.multi);
+  if (quick && !atoms.length) { flash('Select the atoms of the π system first (drag round them, or Shift-click each).'); return; }
+  let v: Record<string, string> = { ...orbitalChoice, kind: 'p', angle: 'auto' };
+  if (!quick) {
+    const got = await ask('Orbital', [
+      { name: 'kind', label: 'Orbital', value: orbitalChoice.kind, options: ORBITAL_KINDS },
+      { name: 'look', label: 'Phases', value: orbitalChoice.look, options: ORBITAL_LOOKS },
+      { name: 'angle', label: 'Pointing', value: orbitalChoice.angle, options: [
+        { value: 'auto', label: 'By itself (hybrids away from the bonds, others up)' }, { value: '0', label: 'Up' }, { value: '90', label: 'Right' }, { value: '180', label: 'Down' }, { value: '270', label: 'Left' }, { value: '45', label: 'Up and right (45°)' }, { value: '315', label: 'Up and left (45°)' },
+      ] },
+      { name: 'size', label: 'Lobe length', value: orbitalChoice.size, type: 'number', unit: 'bond lengths' },
+      { name: 'flip', label: 'Swap the phases', value: orbitalChoice.flip, type: 'checkbox' },
+    ], { ok: 'Insert', note: atoms.length ? `One on each of the ${atoms.length} selected atom${atoms.length > 1 ? 's' : ''}; the lobes stay with the atoms.` : 'Select atoms first to put one on each; otherwise it goes in the middle of the view.' });
+    if (!got) return;
+    Object.assign(orbitalChoice, got);
+    v = got;
+  }
+  const L = doc.style.bondLength;
+  const kind = v.kind as OrbitalKind;
+  const size = Math.max(0.2, Math.min(5, Number(v.size) || 1.1)) * L;
+  const made: number[] = [];
+  doc.edit(kind === 'p' && quick ? 'p Orbitals' : 'Orbital', () => {
+    let top = 0;
+    for (const m of [doc.atoms, doc.captions, doc.arrows, doc.shapes] as Map<number, { grp?: number }>[]) for (const e of m.values()) if (e.grp !== undefined && e.grp > top) top = e.grp;
+    for (const at of atoms.length ? atoms : [undefined]) {
+      const c = at ?? pasteCentre();
+      const angle = v.angle === 'auto' ? orbitalAngle(kind, at) : Number(v.angle) || 0;
+      const grp = ++top;
+      for (const sh of orbitalShapes({ kind, look: v.look as OrbitalLook, angle, size, flip: v.flip === 'true' }, c)) {
+        const pin = at ? makePin(doc, 'atom', [at.id], shapeCentre(sh)) ?? undefined : undefined;
+        made.push(doc.addShape({ ...sh, grp, ...(pin ? { pin } : {}) }).id);
+      }
+    }
+  });
+  editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set(made) };
+  editor.changed();
+}
 
 /** A diagram drawn as an SVG picture, for the diagram window's preview and its layout buttons. */
 function diagramSvg(d: DiagramData): string {
@@ -7092,6 +7177,12 @@ const COMMANDS: Record<string, () => unknown> = {
   'catalytic-cycle': () => void insertCycle(),
   'ts-brackets': () => { if (!editor.tsBrackets()) flash('Select the transition state first (draw it with partial bonds: P over a bond).'); },
   'energy-diagram': () => void energyDiagram(null),
+  'tlc-plate': () => void plateFigure('tlc', null),
+  'mo-diagram': () => void plateFigure('mo', null),
+  'p-orbitals': () => void insertOrbital(true),
+  orbital: () => void insertOrbital(false),
+  gel: () => void plateFigure('gel', null),
+  'edit-plate': () => { const id = editor.selectedPlate(); if (id === null) flash('Select a TLC plate or gel first.'); else void plateFigure(null, id); },
   'insert-diagram': () => void smartDiagram(null),
   'edit-diagram': () => { const id = editor.selectedDiagram(); if (id === null) flash('Select a diagram first.'); else void smartDiagram(id); },
   'diagram-to-shapes': () => editor.ungroupSelectedDiagram() || flash('Select a diagram first.'),
@@ -9720,6 +9811,7 @@ function drawingMenu(): MenuItem[] {
     { cmd: 'cut' }, { cmd: 'copy' }, { cmd: 'paste' }, { cmd: 'delete', label: 'Delete' }, { cmd: 'format-painter' }, null,
     ...repeatLabelMenu(),
     ...(editor.selectedEnergy() !== null ? [{ cmd: 'edit-energy' }, null] : []),
+    ...(editor.selectedPlate() !== null ? [{ cmd: 'edit-plate' }, null] : []),
     ...(editor.selectedDiagram() !== null ? [{ cmd: 'edit-diagram' }, { cmd: 'diagram-to-shapes' }, null] : []),
     ...(atoms || texts ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }, null] : []),
     ...(s.captions.size ? [readAsMenu(), ...(texts && !atoms ? [{ cmd: 'expand-label', label: 'Expand to Structure' }] : []), null] : []),
@@ -9895,6 +9987,10 @@ stylePanel.diagram = {
   edit: (id) => void smartDiagram(id),
   restyle: (id, patch) => { const d = doc.shapes.get(id)?.diagram; if (d) editor.putDiagramAt({ ...d, ...patch }, pasteCentre(), id); },
   ungroup: (id) => editor.ungroupSelectedDiagram(id),
+};
+stylePanel.plate = {
+  edit: (id) => void plateFigure(null, id),
+  restyle: (id, patch) => { const d = doc.shapes.get(id)?.plate; if (d) editor.putPlateAt({ ...d, ...patch }, pasteCentre(), id); },
 };
 stylePanel.energy = {
   edit: (id) => void energyDiagram(id),
