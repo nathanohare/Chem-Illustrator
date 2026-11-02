@@ -880,14 +880,5 @@ export function withOverflow(st: ToolboxState, id: string, o: Overflow): Toolbox
   return { ...st, overflow: { ...st.overflow, [id]: o } };
 }
 
-/** An "i" whose tip says how to use something (hover, or focus it with the keyboard). */
-export function infoIcon(text: string, className: string): HTMLElement {
-  const i = document.createElement('span');
-  i.className = `info-icon ${className}`;
-  i.textContent = 'i';
-  i.title = text;
-  i.tabIndex = 0;
-  i.setAttribute('role', 'img');
-  i.setAttribute('aria-label', text);
-  return i;
-}
+import { infoIcon } from './info-tip';
+export { infoIcon };
