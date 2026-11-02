@@ -56,3 +56,27 @@ describe('mode colours', () => {
     expect(parseSettings(settingsText(s)).modeColours).toEqual(s.modeColours);
   });
 });
+
+describe('words on the accent colour (a Done button)', () => {
+  const DARK_PANEL = '#252a32';
+  it('read at WCAG AA (4.5:1) in every mode, in both themes', () => {
+    for (const mode of ['drawing', 'slides', 'sheet', 'document', 'design'] as const) {
+      const p = modePalette(DEFAULT_MODE_COLOURS[mode]);
+      expect(contrast(p.onAccent, p.accent), `${mode} light`).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(p.onAccentDark, p.accentDark), `${mode} dark`).toBeGreaterThanOrEqual(4.5);
+      // the dark theme's accent still stands out on its panels
+      expect(contrast(p.accentDark, DARK_PANEL)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+  it('the dark theme\'s bright green takes dark ink, not white', () => {
+    const p = modePalette(DEFAULT_MODE_COLOURS.sheet);
+    expect(p.onAccentDark).not.toBe('#ffffff');
+  });
+  it('any colour picked gets readable words', () => {
+    for (const c of ['#ffff00', '#00ffff', '#ff00ff', '#808080', '#123456', '#ffa500', '#7fff00']) {
+      const p = modePalette(c);
+      expect(contrast(p.onAccent, p.accent), c).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(p.onAccentDark, p.accentDark), c).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+});

@@ -31,6 +31,7 @@ import { parseRecent } from './text/symbols';
 import { DEFAULT_AI, parseAiPrefs, type AiPrefs } from './ai/link';
 import { clampUiScale } from './ui/ui-scale';
 import { wellFormed } from './io/xml';
+import { DEFAULT_CURSOR_AIDS, parseCursorAids, type CursorAidPrefs } from './editor/cursor-aids';
 
 export interface Settings {
   /** Changes to ChemDraw's default keys. */
@@ -208,6 +209,10 @@ export interface Settings {
   matchStructure: boolean;
   /** Straighten an alkyne or allene carbon left bent when a bond to it becomes triple or cumulated. */
   straightenLinear: boolean;
+  /** The angle (and length) beside the pointer while drawing, and the modifier keys' hints (Settings ▸ Drawing). */
+  cursorAids: CursorAidPrefs;
+  /** η³ and larger ligands on a metal drawn delocalized (a circle in the ring, an arc over an allyl). */
+  haptoDelocalized: boolean;
   /** The Windows app has offered to open the chemistry file types (once, at its first start). */
   fileTypesOffered: boolean;
   /** The Windows app has registered its drawings as objects Word can send back to edit (once, at its first start). */
@@ -261,6 +266,8 @@ export const DEFAULT_SETTINGS: Settings = {
   keep: DEFAULT_KEEP,
   ai: DEFAULT_AI,
   straightenLinear: true,
+  cursorAids: { ...DEFAULT_CURSOR_AIDS },
+  haptoDelocalized: true,
 };
 
 const STORAGE_KEY = 'chem-illustrator.settings';
@@ -354,6 +361,8 @@ export function parseSettings(text: string | null | undefined): Settings {
   s.ai = parseAiPrefs(r.ai);
   if (Array.isArray(r.dictionary)) s.dictionary = r.dictionary.filter((w): w is string => typeof w === 'string' && w.trim() !== '').map((w) => w.trim());
   if (typeof r.straightenLinear === 'boolean') s.straightenLinear = r.straightenLinear;
+  if (r.cursorAids) s.cursorAids = parseCursorAids(r.cursorAids);
+  if (typeof r.haptoDelocalized === 'boolean') s.haptoDelocalized = r.haptoDelocalized;
   return s;
 }
 
@@ -492,3 +501,4 @@ export async function settingsLocation(): Promise<string> {
   if (!isTauri()) return 'this browser’s storage for the page';
   try { return await invoke<string>('settings_path'); } catch { return 'the app’s settings folder'; }
 }
+

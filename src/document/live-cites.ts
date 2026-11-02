@@ -72,6 +72,9 @@ export interface ManagerCite {
   app: CiteManager;
   id?: string;
   items: { ref: Reference; extra: Json }[];
+  /** Zotero's field code as it is (ITEM CSL_CITATION {...}) and the text it showed (plainCitation). */
+  code?: string;
+  shown?: string;
 }
 
 const SCHEMA = 'https://github.com/citation-style-language/schema/raw/master/csl-citation.json';
@@ -271,7 +274,13 @@ export function endNoteRecord(r: Reference): string {
 export function readCiteField(instr: string, data?: string): ManagerCite | null {
   const ins = instr.trim();
   const zotero = /^ADDIN\s+ZOTERO_ITEM\s+(?:CSL_CITATION\s+)?(\{[\s\S]*\})\s*$/i.exec(ins);
-  if (zotero) { const j = parseJson(zotero[1]); return j ? fromCslCitation('zotero', j) : null; }
+  if (zotero) {
+    const j = parseJson(zotero[1]);
+    const c = j ? fromCslCitation('zotero', j) : null;
+    if (!c) return null;
+    const plain = (j as { properties?: { plainCitation?: unknown } }).properties?.plainCitation;
+    return { ...c, code: ins.replace(/^ADDIN\s+ZOTERO_/i, '').trim(), ...(typeof plain === 'string' ? { shown: plain } : {}) };
+  }
   const mendeley = /^ADDIN\s+CSL_CITATION\s+(\{[\s\S]*\})\s*$/i.exec(ins);
   if (mendeley) { const j = parseJson(mendeley[1]); return j ? fromCslCitation('mendeley', j) : null; }
   if (/^ADDIN\s+EN\.CITE(\s|$)/i.test(ins) && !/^ADDIN\s+EN\.CITE\.DATA/i.test(ins)) {
@@ -346,7 +355,8 @@ export function writeCite(app: CiteManager, refs: Reference[], live: CiteLive | 
   });
   if (app === 'zotero') {
     // Zotero's own code, while the citation cites what it did when Zotero set it
-    if (live?.app === 'zotero' && live.code && /^ITEM\b/.test(live.code) && live.for === refs.map((r) => r.id).join(' ')) return { instr: ` ADDIN ZOTERO_${live.code} ` };
+    // (and shows what it says it shows: Zotero takes a citation whose text is not its plainCitation for one changed by hand)
+    if (live?.app === 'zotero' && live.code && /^ITEM\b/.test(live.code) && live.for === refs.map((r) => r.id).join(' ') && zoteroPlain(live.code) === shown) return { instr: ` ADDIN ZOTERO_${live.code} ` };
     const json = { citationID, properties: { formattedCitation: shown, plainCitation: shown, noteIndex: 0 }, citationItems, schema: SCHEMA };
     return { instr: ` ADDIN ZOTERO_ITEM CSL_CITATION ${JSON.stringify(json)} ` };
   }
@@ -357,6 +367,14 @@ export function writeCite(app: CiteManager, refs: Reference[], live: CiteLive | 
   const cid = citationID.startsWith('MENDELEY_CITATION_') ? citationID : `MENDELEY_CITATION_${citationID}`;
   const json = { citationID: cid, properties: { noteIndex: 0 }, isEdited: false, manualOverride: { isManuallyOverridden: false, citeprocText: shown, manualOverrideText: '' }, citationItems: citationItems.map((c) => ({ ...c, isTemporary: false })) };
   return { instr: '', tag: `MENDELEY_CITATION_v3_${toBase64(JSON.stringify(json))}` };
+}
+
+/** The text a Zotero citation's code says it shows (its plainCitation), or undefined. */
+export function zoteroPlain(code: string): string | undefined {
+  const m = /^ITEM\s+(?:CSL_CITATION\s+)?(\{[\s\S]*\})\s*$/.exec(code.trim());
+  const j = m ? parseJson(m[1]) as { properties?: { plainCitation?: unknown } } | null : null;
+  const p = j?.properties?.plainCitation;
+  return typeof p === 'string' ? p : undefined;
 }
 
 /** A bibliography's field instruction for `app` (for Mendeley Cite, the tag of its content control). */

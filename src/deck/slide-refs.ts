@@ -49,13 +49,25 @@ export interface DeckRefs {
   style?: CiteStyle;
   options?: Partial<CiteFormat>;
   look?: Partial<RefLook>;
+  /** Zotero's preferences for the presentation (citing with Zotero, zotero-deck.ts): its style and settings. */
+  zoteroPrefs?: string;
 }
 
-/** What the References slide lists: the references shown on slides (in the order they first appear) or every reference in the list. */
-export interface RefListSpec { which: 'shown' | 'all' }
+/**
+ * What Zotero last set on a slide's references (citing with Zotero): its citation's id and code,
+ * the citation's text and each item's details (page and so on), kept while the slide shows the
+ * references it did then (`for`, their ids joined by spaces).
+ */
+export interface SlideZotero { id?: string; code?: string; text?: string; for?: string; items?: Record<string, Record<string, unknown>> }
 
-/** What a slide says about references: which it shows, its own look (Apply rather than Apply to All), and whether it is the References slide. */
-export interface SlideRefs { refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec }
+/** Zotero's bibliography on the References slide: its code, and its entries while they are for the references listed (`for`). */
+export interface ListZotero { code: string; entries?: { label: string; pieces: Piece[] }[]; for?: string }
+
+/** What the References slide lists: the references shown on slides (in the order they first appear) or every reference in the list. */
+export interface RefListSpec { which: 'shown' | 'all'; /** Zotero's bibliography, when Zotero keeps it. */ zotero?: ListZotero }
+
+/** What a slide says about references: which it shows, its own look (Apply rather than Apply to All), whether it is the References slide, and Zotero's citation. */
+export interface SlideRefs { refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec; zotero?: SlideZotero }
 
 /** The look of the lines on a slide: the deck's, with the slide's own changes. */
 export function refLook(d: DeckRefs | undefined, own?: Partial<RefLook>): RefLook {
@@ -106,7 +118,35 @@ export function cleanDeckRefs(raw: unknown): DeckRefs | undefined {
     const look = lookChanges(r.look as Partial<RefLook>);
     if (Object.keys(look).length) out.look = look;
   }
+  if (typeof r.zoteroPrefs === 'string' && r.zoteroPrefs) out.zoteroPrefs = r.zoteroPrefs;
   return out;
+}
+
+const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined);
+
+/** Zotero's say on a slide, read from a file (strings and plain objects only). */
+function cleanZotero(raw: unknown): SlideZotero | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: SlideZotero = {};
+  for (const k of ['id', 'code', 'text', 'for'] as const) { const v = str(r[k]); if (v !== undefined) out[k] = v; }
+  if (r.items && typeof r.items === 'object' && !Array.isArray(r.items)) out.items = r.items as Record<string, Record<string, unknown>>;
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** Zotero's bibliography on the References slide, read from a file. */
+function cleanListZotero(raw: unknown): ListZotero | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const code = str(r.code);
+  if (!code) return undefined;
+  const entries = Array.isArray(r.entries) ? r.entries.filter((e) => e && typeof e === 'object').map((e) => {
+    const x = e as Record<string, unknown>;
+    const pieces = (Array.isArray(x.pieces) ? x.pieces : []).filter((p) => p && typeof p === 'object' && typeof (p as Piece).text === 'string')
+      .map((p) => { const q = p as Piece; return { text: q.text, ...(q.italic ? { italic: true } : {}), ...(q.bold ? { bold: true } : {}) }; });
+    return { label: str(x.label) ?? '', pieces };
+  }) : undefined;
+  return { code, ...(entries ? { entries } : {}), ...(str(r.for) !== undefined ? { for: str(r.for) } : {}) };
 }
 
 /** A slide's references read from a file (ids only of strings, a look of the right kind). */
@@ -120,7 +160,13 @@ export function cleanSlideRefs(raw: unknown): SlideRefs {
     const look = lookChanges(r.refLook as Partial<RefLook>);
     if (Object.keys(look).length) out.refLook = look;
   }
-  if (r.refList && typeof r.refList === 'object') out.refList = { which: (r.refList as { which?: unknown }).which === 'all' ? 'all' : 'shown' };
+  if (r.refList && typeof r.refList === 'object') {
+    const l = r.refList as { which?: unknown; zotero?: unknown };
+    const z = cleanListZotero(l.zotero);
+    out.refList = { which: l.which === 'all' ? 'all' : 'shown', ...(z ? { zotero: z } : {}) };
+  }
+  const z = cleanZotero(r.zotero);
+  if (z) out.zotero = z;
   return out;
 }
 
@@ -129,7 +175,8 @@ export function slideRefsTag(s: SlideRefs): string | null {
   const out: SlideRefs = {};
   if (s.refs?.length) out.refs = s.refs;
   if (s.refLook && Object.keys(s.refLook).length) out.refLook = s.refLook;
-  if (s.refList) out.refList = { which: s.refList.which };
+  if (s.refList) out.refList = { which: s.refList.which, ...(s.refList.zotero ? { zotero: s.refList.zotero } : {}) };
+  if (s.zotero && Object.keys(s.zotero).length) out.zotero = s.zotero;
   return Object.keys(out).length ? JSON.stringify(out) : null;
 }
 
@@ -199,6 +246,12 @@ export function refsSlideBlock(d: DeckRefs | undefined, slides: SlideLike[], spe
   const f = deckFormat(d);
   const nums = deckNumbers(d, slides, spec.which === 'all');
   const byId = new Map(d.list.map((r) => [r.id, r]));
+  // Zotero's bibliography, while it lists what the slide lists
+  const order = [...nums.entries()].sort((a, b) => a[1] - b[1]).map(([id]) => id);
+  const z = spec.zotero;
+  if (z?.entries && z.for === order.join(' ')) {
+    return { entries: z.entries.map((e, i) => ({ id: order[i] ?? `zotero-${i}`, label: e.label, pieces: e.pieces })), look: { ...look, size: 16 }, list: true };
+  }
   const entries = [...nums.entries()].sort((a, b) => a[1] - b[1]).map(([id, n]): RefEntry => {
     const r = byId.get(id)!;
     return { id, label: look.numbering === 'none' ? '' : bibLabel(n, f), pieces: slideRefPieces(r, 'full', f) };

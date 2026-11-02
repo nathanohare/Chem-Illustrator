@@ -578,10 +578,10 @@ function cod(view = { tilt: 20, turnY: 50 }) {
 }
 
 /**
- * 1,1′-Bis(diphenylphosphino)ferrocene chelating M: the two Cp rings above and below the iron,
- * each with its PPh₂ bonded on to M.
+ * A 1,1′-bis(phosphino)ferrocene chelating M (dppf and its PR₂ kin): the two Cp rings above and
+ * below the iron, each with its PR₂ bonded on to M.
  */
-function dppf() {
+function ferroBis(label = 'PPh2') {
   const t = mol();
   const m = t.atom(v3(0, 0, 0), 'C', 'M');
   const fe = t.atom(v3(-2.45, 0, 0), 'Fe');
@@ -591,9 +591,180 @@ function dppf() {
     // the ring carbon nearest M carries the phosphorus
     const c = ring.reduce((best, i) => (t.atoms[i].x > t.atoms[best].x ? i : best), ring[0]);
     const q = t.atoms[c];
-    const p = t.atom(v3(q.x + 0.85, q.y * 1.15, q.z), 'P', 'PPh2');
+    const p = t.atom(v3(q.x + 0.85, q.y * 1.15, q.z), 'P', label);
     t.bond(c, p).bond(m, p);
   }
+  return project(t, SANDWICH);
+}
+const dppf = () => ferroBis('PPh2');
+
+/**
+ * A Josiphos ligand on M: the upper Cp ring of a ferrocene carries PR₂ (on the carbon nearest M)
+ * and, on the carbon beside it at the front, CH(CH₃)PR′₂; both phosphorus atoms bond to M,
+ * closing a six-membered chelate ring. The lower ring is plain.
+ */
+function josiphos(ringP = 'PPh2', armP = 'PCy2') {
+  const t = mol();
+  const m = t.atom(v3(0, 0, 0), 'C', 'M');
+  const fe = t.atom(v3(-2.6, -0.9, 0), 'Fe');
+  const top = hapto(t, fe, v3(0, 1, 0), 5, 180, { dist: 1.25 });
+  hapto(t, fe, v3(0, -1, 0), 5, 180, { dist: 1.25 });
+  const c1 = top.reduce((best, i) => (t.atoms[i].x > t.atoms[best].x ? i : best), top[0]);
+  const k = top.indexOf(c1);
+  // its neighbour round the ring towards the front
+  const [na, nb] = [top[(k + 1) % 5], top[(k + 4) % 5]];
+  const c2 = t.atoms[na].z > t.atoms[nb].z ? na : nb;
+  // PR₂ out and up from the ring like dppf's; the arm's CH(CH₃) out in front, its PR′₂ down
+  // and to the right, so the two phosphorus atoms sit one above the other with M beside them
+  const q = t.atoms[c1];
+  const p1 = t.atom(v3(q.x + 0.85, q.y + 0.55, q.z), 'P', ringP);
+  t.bond(c1, p1);
+  const cs = t.atom(addv(t.atoms[c2], v3(0.6, -0.5, 0.5)));
+  t.bond(c2, cs);
+  const p2 = t.atom(addv(t.atoms[cs], v3(0.8, -0.6, 0)), 'P', armP);
+  t.bond(cs, p2).bond(m, p2).bond(m, p1);
+  t.bond(cs, t.atom(addv(t.atoms[cs], v3(-0.6, -0.8, 0))));
+  bridgeMetal(t, m, p1, p2, 1.3);
+  return project(t, SANDWICH);
+}
+
+/** Puts metal `m` out beyond the middle of donors `a` and `b`, `d` from each, away from the rest. */
+function bridgeMetal(t, m, a, b, d) {
+  const A = t.atoms[a], B = t.atoms[b];
+  const mid = scl(addv(A, B), 0.5);
+  const half = len(sub3(A, B)) / 2;
+  const rest = t.atoms.filter((_, i) => i !== m && i !== a && i !== b);
+  const c = rest.reduce((s, p) => addv(s, scl(p, 1 / rest.length)), v3(0, 0, 0));
+  const ab = unit(sub3(B, A));
+  let out = sub3(mid, c);
+  out = unit(sub3(out, scl(ab, dot3(out, ab))));
+  Object.assign(t.atoms[m], addv(mid, scl(out, Math.sqrt(Math.max(0.25, d * d - half * half)))));
+}
+
+/** Q-Phos on M: a ferrocene with PtBu₂ on the upper ring (bonded to M) and five phenyls on the lower one. */
+function qphos() {
+  const t = mol();
+  const m = t.atom(v3(0, 0, 0), 'C', 'M');
+  const fe = t.atom(v3(-2.45, -0.8, 0), 'Fe');
+  const top = hapto(t, fe, v3(0, 1, 0), 5, 180, { dist: 1.25 });
+  const bottom = hapto(t, fe, v3(0, -1, 0), 5, 180, { dist: 1.25 });
+  const c = top.reduce((best, i) => (t.atoms[i].x > t.atoms[best].x ? i : best), top[0]);
+  const p = outward(t, top, c, 'P', 'P(t-Bu)2');
+  t.bond(m, p);
+  for (const i of bottom) outward(t, bottom, i, 'C', 'Ph');
+  // the metal a bond on from P, out and a little down from the ring
+  Object.assign(t.atoms[m], addv(t.atoms[p], v3(0.45, -1.0, 0)));
+  return project(t, SANDWICH);
+}
+
+/**
+ * Triphos-style tripod MeC(CH₂PR₂)₃ capping M (κ³): M at the bottom, two PR₂ in front (left and
+ * right) and one behind, spread so their labels stand apart, the CH₂ arms going up to the
+ * quaternary carbon over them; seen from above. (Its numbers were found by trying many and keeping
+ * the one with the most room between atoms and labels.)
+ */
+function tripod(label = 'PPh2') {
+  const t = mol();
+  const m = t.atom(v3(0, -0.5, 0), 'C', 'M');
+  const cq = t.atom(v3(0, 2.5, 0));
+  t.bond(cq, t.atom(v3(0, 3.5, 0)));
+  const at = (az, r, y) => v3(r * Math.sin(az * DEG), y, r * Math.cos(az * DEG));
+  for (const az of [60, 180, 300]) {
+    const p = t.atom(at(az, 1.6, 0.4), 'P', label);
+    // each arm swings round a little on its way up, so the one behind doesn't hide under the top
+    const ch2 = t.atom(at(az + 30, 1.2, 1.8));
+    t.bond(m, p).bond(p, ch2).bond(ch2, cq);
+  }
+  return project(t, { tilt: 20, turnY: 30 });
+}
+
+/**
+ * A tripodal N₄ amine on M (tren, Me₆tren): the bridgehead N straight above M and the three
+ * CH₂CH₂ arms coming down round it to amines (labelled `label`) below, one in front and two
+ * behind, each arm swinging round a little (a propeller) so the front one is not drawn over the
+ * M–N bond; seen from just above.
+ */
+function tripodN(label) {
+  const t = mol();
+  const m = t.atom(v3(0, 0, 0), 'C', 'M');
+  const na = t.atom(v3(0, 1.1, 0), 'N');
+  t.bond(m, na);
+  const at = (az, r, y) => v3(r * Math.sin(az * DEG), y, r * Math.cos(az * DEG));
+  for (const az of [0, 120, 240]) {
+    const d = t.atom(at(az, 1.3, -0.2), 'N', label);
+    const c1 = t.atom(at(az + 30, 1.2, 1.55));
+    const c2 = t.atom(at(az + 20, 1.9, 0.6));
+    t.bond(na, c1).bond(c1, c2).bond(c2, d).bond(m, d);
+  }
+  return project(t, { tilt: 30 });
+}
+
+/**
+ * BISBI-style 2,2′-bis(PR₂CH₂)biphenyl chelating M, drawn flat: M on the left, the two PR₂ above
+ * and below it, the biphenyl standing upright to their right so M sits outside the big ring.
+ */
+function bisbi(label = 'PPh2') {
+  const atoms = [{ x: 0, y: 0, el: 'C', label: 'M' }];
+  const bonds = [];
+  const add = (x, y, el = 'C', lab) => { atoms.push({ x, y, el, ...(lab ? { label: lab } : {}) }); return atoms.length - 1; };
+  const c1s = [];
+  for (const s of [-1, 1]) {
+    const p = add(0.75, 0.7 * s, 'P', label);
+    const ch2 = add(1.5, 1.366 * s);
+    // the ring: C2 (bonded to CH2), C1 (to the other ring), then round
+    const cx = 3.5, cy = 1.366 * s;
+    const ring = [180, 240, 300, 0, 60, 120].map((a) => add(cx + Math.cos(a * DEG), cy + s * Math.sin(a * DEG)));
+    for (let k = 0; k < 6; k++) bonds.push({ a: ring[k], b: ring[(k + 1) % 6], order: k % 2 ? 1 : 2 });
+    bonds.push({ a: 0, b: p, order: 1 }, { a: p, b: ch2, order: 1 }, { a: ch2, b: ring[0], order: 1 });
+    c1s.push(ring[1]);
+  }
+  bonds.push({ a: c1s[0], b: c1s[1], order: 1 });
+  return { atoms, bonds, hapto: [], circle: [] };
+}
+
+/** An η³-allyl with groups on it: [carbon (0 end, 1 middle, 2 other end), label or undefined for a methyl]. */
+function allylWith(subs) {
+  const t = mol();
+  const m = t.atom(v3(0, 0, 0), 'C', 'M');
+  const c = [t.atom(v3(-0.866, 0.95, 0)), t.atom(v3(0, 1.45, 0)), t.atom(v3(0.866, 0.95, 0))];
+  t.bond(c[0], c[1], 1.5).bond(c[1], c[2], 1.5);
+  t.hapto.push([m, c]);
+  for (const [k, label] of subs) {
+    // out from the allyl's middle: straight up from C2, out and up from an end (syn)
+    const d = k === 1 ? v3(0, 1, 0) : v3(k === 0 ? -0.87 : 0.87, 0.5, 0);
+    t.bond(c[k], t.atom(addv(t.atoms[c[k]], d), 'C', label));
+  }
+  return project(t);
+}
+
+/** η⁴-s-cis-1,3-butadiene: the four carbons in an arc over the metal, bonded to their middle. */
+function piButadiene() {
+  const t = mol();
+  const m = t.atom(v3(0, 0, 0), 'C', 'M');
+  const c = [t.atom(v3(-1.15, 0.85, 0.25)), t.atom(v3(-0.5, 1.6, 0)), t.atom(v3(0.5, 1.6, 0)), t.atom(v3(1.15, 0.85, 0.25))];
+  t.bond(c[0], c[1], 2).bond(c[1], c[2]).bond(c[2], c[3], 2);
+  t.hapto.push([m, c]);
+  return project(t, { tilt: 15 });
+}
+
+/** η²,η²-Norbornadiene: both C=C bonds upright and facing the metal, the bridgeheads above and below, the CH₂ bridge at the back. */
+function nbd(view = { tilt: 20, turnY: 50 }) {
+  const t = mol();
+  const m = t.atom(v3(0, 0, 0), 'C', 'M');
+  const X = 1.25, Y = 0.5, Z = 0.7;
+  const c2 = t.atom(v3(X, Y, Z)), c3 = t.atom(v3(X, -Y, Z)), c6 = t.atom(v3(X, Y, -Z)), c5 = t.atom(v3(X, -Y, -Z));
+  const c1 = t.atom(v3(X + 0.45, 1.15, 0)), c4 = t.atom(v3(X + 0.45, -1.15, 0)), c7 = t.atom(v3(X + 1.35, 0, 0));
+  t.bond(c2, c3, 2).bond(c6, c5, 2).bond(c1, c2).bond(c1, c6).bond(c4, c3).bond(c4, c5).bond(c1, c7).bond(c7, c4);
+  t.hapto.push([m, [c2, c3]], [m, [c6, c5]]);
+  return project(t, view);
+}
+
+/** A π ring on M with methyls on the atoms listed (by place round the ring). */
+function piRingMethyls(size, at) {
+  const t = mol();
+  const m = t.atom(v3(0, 0, 0), 'C', 'M');
+  const r = piOn(t, m, UP, size, { offset: size === 5 ? TOP_EDGE : 30 });
+  for (const k of at) outward(t, r, r[k]);
   return project(t, SANDWICH);
 }
 
@@ -627,6 +798,31 @@ const LIGANDS = [
   ['allyl', 'η³-Allyl', piAllyl()],
   ['ethylene', 'η²-Ethylene', piEthylene()],
   ['cod', 'η⁴-1,5-Cyclooctadiene COD', cod()],
+];
+
+/** Ligands for the Ligand Library only (not on the Ligands palette): shapes built in 3-D. */
+const LIBRARY_LIGANDS = [
+  ['dippf', 'dippf (chelating)', ferroBis('PiPr2')],
+  ['dcypf', 'dcypf (chelating)', ferroBis('PCy2')],
+  ['dtbpf', 'dtbpf (chelating)', ferroBis('P(t-Bu)2')],
+  ['josiphos', 'Josiphos SL-J001 (chelating)', josiphos('PPh2', 'PCy2')],
+  ['josiphos-tbu', 'Josiphos SL-J002 (chelating)', josiphos('PPh2', 'P(t-Bu)2')],
+  ['josiphos-cy', 'Josiphos SL-J009 (chelating)', josiphos('PCy2', 'P(t-Bu)2')],
+  ['qphos', 'Q-Phos', qphos()],
+  ['triphos', 'triphos (κ³)', tripod('PPh2')],
+  ['bisbi', 'BISBI (chelating)', bisbi('PPh2')],
+  ['tbuxantphos', 't-Bu-Xantphos (chelating)', rdLigand('[Pd]1[PH2+]c2cccc3c2Oc2c(cccc2C3(C)C)[PH2+]1', { P: 'P(t-Bu)2' })],
+  ['nixantphos', 'NiXantphos (chelating)', rdLigand('[Pd]1[PH2+]c2cccc3c2Oc2c(cccc2N3)[PH2+]1', { P: 'PPh2' })],
+  ['tren', 'tren (κ⁴)', tripodN('NH2')],
+  ['me6tren', 'Me₆tren (κ⁴)', tripodN('NMe2')],
+  ['cpme', 'η⁵-Methylcyclopentadienyl Cp′', piRingMethyls(5, [2])],
+  ['mesitylene', 'η⁶-Mesitylene', piRingMethyls(6, [0, 2, 4])],
+  ['c6me6', 'η⁶-Hexamethylbenzene', piRing(6, { methyls: true })],
+  ['nbd', 'η⁴-Norbornadiene NBD', nbd()],
+  ['butadiene', 'η⁴-1,3-Butadiene', piButadiene()],
+  ['methallyl', 'η³-2-Methylallyl', allylWith([[1]])],
+  ['crotyl', 'η³-Crotyl', allylWith([[0]])],
+  ['cinnamyl', 'η³-Cinnamyl', allylWith([[2, 'Ph']])],
 ];
 
 // ------------------------------------------------------------------ molfiles and output
@@ -666,7 +862,7 @@ function finish(t, group, id, name, extra = {}) {
     bonds: t.bonds.map((b) => [b.a, b.b, b.order, ...(b.display ? [b.display] : [])]),
     // the metal: put on a metal that is clicked (ligands), or the middle of the complex
     attach: attach ?? (group === 'metallocenes' ? 0 : t.atoms.findIndex((p) => p.label === 'M' || p.el === 'Fe')),
-    ...(group === 'ligands' || group === 'geometries' ? { onMetal: true } : {}),
+    ...(group === 'ligands' || group === 'ligand-lib' || group === 'geometries' ? { onMetal: true } : {}),
     ...more,
     ...(t.hapto.length ? { hapto: t.hapto.map(([m, ids]) => [m, ids]) } : {}),
     ...(t.circle.length ? { circle: t.circle } : {}),
@@ -678,6 +874,7 @@ const out = [
   ...COMPLEXES.map(([id, name, t]) => finish(t, 'organometallic', id, name)),
   ...METALLOCENES.map(([id, name, t, extra]) => finish(t, 'metallocenes', id, name, extra)),
   ...LIGANDS.map(([id, name, t]) => finish(t, 'ligands', id, name)),
+  ...LIBRARY_LIGANDS.map(([id, name, t]) => finish(t, 'ligand-lib', id, name)),
 ];
 for (const t of out) if (t.attach < 0) { console.error(`${t.id}: no metal`); process.exit(1); }
 const file = path.join(root, 'src', 'chem', 'metal-templates.json');

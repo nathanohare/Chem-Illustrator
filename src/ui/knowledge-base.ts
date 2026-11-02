@@ -9,9 +9,11 @@
 // (a book, papers, SI files): each one's text is read once and searched as a table of pages, with
 // an excerpt around the words found, and the file opens from its row.
 
-import { BUILT_IN_TABLES, LATER_TABLES } from '../kb/data';
+import { BUILT_IN_TABLES, LATER_ROWS, LATER_TABLES } from '../kb/data';
+import type { SafetyRecord } from '../kb/safety';
+import { safetyRow, sortSafety } from '../kb/safety-tables';
 import { explainPieces, glossaryEntry } from '../kb/glossary';
-import { PRESENT, cellShown, filterValues, findRows, isCas, parseUserTable, searchedShift, sortRows, tableTsv, type KbColumn, type KbTable, type RowMatch } from '../kb/tables';
+import { CANONICAL_ROWS, PRESENT, cellShown, filterValues, findRows, isCas, parseUserTable, searchedShift, sortRows, tableTsv, type KbColumn, type KbTable, type RowMatch } from '../kb/tables';
 import { pdfTable, type PdfIndex } from '../kb/pdf-library';
 import { ask } from './ask';
 
@@ -67,6 +69,10 @@ export interface KnowledgeBaseHost {
   removePdf?(id: string): Promise<void>;
   /** Open a file on this computer in the program that opens it. */
   openFile?(path: string): Promise<void>;
+  /** PubChem's compound number for a CAS number (the big tables carry no CAS numbers). */
+  cidForCas?(cas: string): Promise<number | null>;
+  /** A compound's hazard record read live from PubChem (a name, CAS number or SMILES), or null. */
+  lookUpSafety?(query: string): Promise<SafetyRecord | null>;
 }
 
 /** An excerpt with the words searched for marked. */
@@ -106,6 +112,8 @@ export class KnowledgeBaseWindow {
   private queryCanon: string | null = null;
   private searchToken = 0;
   private loaded = false;
+  /** The PubChem compound a CAS number typed belongs to, for rows that carry no CAS number. */
+  private casCid: number | null = null;
 
   constructor(private host: KnowledgeBaseHost) {}
 
@@ -165,6 +173,20 @@ export class KnowledgeBaseWindow {
         const t = await later();
         const at = this.tables.findIndex((x) => x.id === 'glossary');
         this.tables.splice(at < 0 ? this.tables.length : at, 0, t);
+      } catch { /* not there (offline web build): the window works without it */ }
+    }
+    // more rows for built-in tables (the big Reagent Safety table), merged in where they belong
+    for (const later of LATER_ROWS) {
+      try {
+        const extra = await later.rows();
+        const i = this.tables.findIndex((x) => x.id === later.table);
+        if (i < 0) continue;
+        const t = this.tables[i];
+        const have = new Set(t.rows.map((r) => r.cid));
+        const rows = [...t.rows, ...extra.filter((r) => !have.has(r.cid))];
+        const merged = { ...t, rows: t.id === 'reagent-safety' ? sortSafety(rows) : rows.sort((a, b) => String(a.name).localeCompare(String(b.name))) };
+        this.tables[i] = merged;
+        if (this.current === t) this.current = merged;
       } catch { /* not there (offline web build): the window works without it */ }
     }
     try {
@@ -244,7 +266,12 @@ export class KnowledgeBaseWindow {
   private matches(t: KbTable, withFilters = true): RowMatch[] {
     const same = this.queryCanon ? new Set(t.rows.filter((r) => typeof r.smiles === 'string' && this.canon.get(r.smiles) === this.queryCanon).map((r) => r.smiles as string)) : undefined;
     const filters = withFilters ? this.picked : {};
-    const found = findRows(t, this.queryCanon ? '' : this.search.value, filters, same).filter((m) => !this.queryCanon || same?.has(m.row.smiles as string));
+    let found = findRows(t, this.queryCanon ? '' : this.search.value, filters, same).filter((m) => !this.queryCanon || same?.has(m.row.smiles as string));
+    // a CAS number typed also finds rows without CAS numbers, by the compound PubChem gives it
+    if (this.casCid !== null) {
+      const seen = new Set(found.map((m) => m.row));
+      found = [...found, ...findRows(t, '', filters).filter((m) => m.row.cid === this.casCid && !seen.has(m.row))];
+    }
     // an abbreviation typed (THF, DCM, DMAP) also finds the rows that spell it out
     const full = !this.queryCanon && t.id !== 'glossary' ? glossaryEntry(this.search.value)?.full.replace(/\s*\(.*?\)/g, '').trim() : '';
     if (!full) return found;
@@ -256,7 +283,9 @@ export class KnowledgeBaseWindow {
     const q = this.search.value.trim();
     const token = ++this.searchToken;
     this.queryCanon = null;
+    this.casCid = null;
     if (looksLikeSmiles(q)) void this.smilesSearch(q, token);
+    if (isCas(q)) void this.casSearch(q, token);
     // jump to the first table with matches when the one showing has none
     if (q && !this.matches(this.current).length) {
       const other = this.tables.find((t) => this.matches(t, false).length);
@@ -266,11 +295,52 @@ export class KnowledgeBaseWindow {
     this.showTable();
   }
 
+  /** A CAS number typed: ask PubChem which compound it is, to find rows that carry no CAS number. */
+  private async casSearch(q: string, token: number): Promise<void> {
+    const cid = await this.host.cidForCas?.(q).catch(() => null) ?? null;
+    if (token !== this.searchToken || cid === null) return;
+    this.casCid = cid;
+    if (!this.matches(this.current).length) {
+      const other = this.tables.find((t) => this.matches(t, false).length);
+      if (other) { this.current = other; this.picked = {}; }
+    }
+    this.showList();
+    this.showTable();
+  }
+
+  /** Rate a compound that isn't in Reagent Safety, live from PubChem, and add it for this session. */
+  private async rateLive(q: string): Promise<void> {
+    const h = this.host;
+    if (!h.lookUpSafety) return;
+    h.flash(`Looking up ${q} on PubChem…`, 30000);
+    let r: SafetyRecord | null;
+    try {
+      r = await h.lookUpSafety(q);
+    } catch (e) {
+      h.flash(`Couldn't rate ${q}: ${e instanceof Error ? e.message : e}`, 6000);
+      return;
+    }
+    if (!r) { h.flash(`PubChem has no compound called “${q}”. Try another name, the CAS number or a SMILES.`, 6000); return; }
+    const i = this.tables.findIndex((t) => t.id === 'reagent-safety');
+    if (i < 0) return;
+    const t = this.tables[i];
+    if (!t.rows.some((x) => x.cid === r.cid)) {
+      const row = safetyRow(r);
+      row.sources = `Read live from PubChem, ${new Date().toISOString().slice(0, 10)}${row.sources ? '; ' + row.sources : ''}`;
+      this.tables[i] = { ...t, rows: sortSafety([...t.rows, row]) };
+    }
+    this.current = this.tables[i];
+    this.picked = {};
+    this.search.value = r.name;
+    this.searchChanged();
+    h.flash(`${r.name}: rated from PubChem's open records. It stays in the table until the program closes.`, 6000);
+  }
+
   /** A SMILES typed: match rows whose structure is the same compound (canonical SMILES equal). */
   private async smilesSearch(q: string, token: number): Promise<void> {
     const c = await this.host.canonical(q);
     if (token !== this.searchToken || !c) return;
-    for (const t of this.tables) if (t.canonicalSmiles) for (const r of t.rows) if (typeof r.smiles === 'string') this.canon.set(r.smiles, r.smiles);
+    for (const t of this.tables) for (const r of t.rows) if ((t.canonicalSmiles || CANONICAL_ROWS.has(r)) && typeof r.smiles === 'string') this.canon.set(r.smiles, r.smiles);
     const todo = this.tables.flatMap((t) => t.rows.map((r) => r.smiles)).filter((s): s is string => typeof s === 'string' && !this.canon.has(s));
     for (const s of todo) this.canon.set(s, await this.host.canonical(s));
     if (token !== this.searchToken) return;
@@ -348,7 +418,12 @@ export class KnowledgeBaseWindow {
     const table = el('table', { className: 'refs-table kb-table' }, el('thead', {}, el('tr', {}, ...t.columns.filter((c) => !c.hidden).map((c) => this.header(c)), ...(t.links ? [el('th', { textContent: 'Look up' })] : []))), body);
     if (!rows.length) {
       const q = this.search.value.trim();
-      this.wrap.replaceChildren(el('p', { className: 'muted kb-empty', textContent: q ? `Nothing in ${t.title} matches “${q}”.` : 'This table is empty.' }));
+      const empty = el('p', { className: 'muted kb-empty', textContent: q ? `Nothing in ${t.title} matches “${q}”.` : 'This table is empty.' });
+      // a compound the table doesn't have can be rated live from PubChem
+      const live = q && t.id === 'reagent-safety' && this.host.lookUpSafety && !Object.values(this.picked).some(Boolean)
+        ? [button(`Rate “${q.length > 40 ? q.slice(0, 39) + '…' : q}” from PubChem`, 'Look the compound up on PubChem and rate it with the same rules, from the same open sources (needs the internet)', () => void this.rateLive(q))]
+        : [];
+      this.wrap.replaceChildren(empty, ...live);
     } else this.wrap.replaceChildren(table);
     this.count.textContent = rows.length === t.rows.length ? `${t.rows.length} rows` : `${rows.length} of ${t.rows.length} rows`;
     // sources, each a link when it has one

@@ -4,6 +4,7 @@
 // spelling check knows chemistry words. The panel on the right shows the paragraph's formatting,
 // its style, the page and the figure picked, every value of which can be typed in.
 
+import { applyFormat } from '../text/format';
 import { placeTextMenu } from './text-menu';
 import { Doc, type Contents, type ParaStyle, type Shape, type TabStop, type TextRun } from '../model';
 
@@ -172,7 +173,7 @@ const ignored = new Set<string>();
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 /** Commands that, in a text box, work on its text (others leave the box first). */
-const BOX_COMMANDS = /^(format-painter$|(insert|remove|open)-link$|insert-symbol$|doc-(align-|justify|bold|italic|underline|sub|sup|formula|highlight|bullets|numbering|indent|outdent)|line-|font-|select-all$|undo$|redo$|zoom-|copy$|cut$|paste$|box-|find$|replace$|wrap-)/;
+const BOX_COMMANDS = /^(format-painter$|(insert|remove|open)-link$|insert-symbol$|doc-(align-|justify|bold|italic|underline|sub|sup|formula|stereo-italic|highlight|bullets|numbering|indent|outdent)|line-|font-|select-all$|undo$|redo$|zoom-|copy$|cut$|paste$|box-|find$|replace$|wrap-)/;
 
 /** Commands that, in a table cell, work there too (others leave the cell first). */
 const CELL_COMMANDS = /^(table-|tbl-|insert-table$|insert-structure$|structure-from-name-doc$|name-to-structure$|insert-picture$|insert-object$|paste-object$|edit-figure$|compound-number$|cross-reference$|insert-citation$)/;
@@ -1910,6 +1911,8 @@ export class DocumentMode {
       if (o.kind === 'ref' && ids.has(o.target)) objects[id] = { ...o, target: ids.get(o.target)! };
       // the structures in a pasted table's cells are its own copies
       if (o.kind === 'table') objects[id] = { ...o, table: { ...o.table, rows: o.table.rows.map((row) => row.map((cell) => ({ ...cell, runs: remap(cell.runs) }))) } };
+      // and the citations in a pasted footnote
+      if (o.kind === 'note') objects[id] = { ...o, runs: remap(o.runs) };
     }
     const b = f.box?.cell ? f.box : null;
     // into a table cell: no text boxes, bibliographies or notes inside it (a table goes in as a table in the cell)
@@ -3162,6 +3165,7 @@ export class DocumentMode {
       case 'doc-sub': ed.toggle('sub'); break;
       case 'doc-sup': ed.toggle('sup'); break;
       case 'doc-formula': ed.toggle('formula'); break;
+      case 'doc-stereo-italic': applyFormat(ed, { kind: 'stereo' }); break;
       case 'doc-highlight': {
         const on = ed.currentStyle().highlight;
         ed.setStyle({ highlight: on && on === this.highlighter ? undefined : this.highlighter });
@@ -3541,8 +3545,8 @@ export class DocumentMode {
   private async fromName(): Promise<void> {
     const f = this.file!;
     const spot = this.cellSpot();
-    const got = await ask('Structure from Name or SMILES', [{ name: 'text', label: 'Name or SMILES', value: '' }], {
-      ok: 'Insert', note: 'A systematic or common name (ethyl acetate, 4-bromoanisole) or a SMILES string. The structure goes in the text at the caret.',
+    const got = await ask('Structure from Name or SMILES', [{ name: 'text', label: 'Name, SMILES or CAS RN', value: '' }], {
+      ok: 'Insert', note: 'A systematic or common name (ethyl acetate, 4-bromoanisole), a SMILES string or a CAS RN (50-78-2). The structure goes in the text at the caret.',
     });
     this.focus();
     if (!got?.text.trim() || this.file !== f) return;
@@ -3935,9 +3939,9 @@ export class DocumentMode {
       },
       picked: () => (this.file === f ? this.pickedField('cite')?.id ?? this.pickedField('bib')?.id ?? null : null),
       canInsert: () => this.file === f && !(f.box && !f.box.cell),
-      insert: (o) => {
+      insert: (o, sup) => {
         const before = f.ed.typingStyle();
-        const id = this.insertObject(o, kind() ?? 'Zotero', { sup: citeSuper(formatOf(f.t)) || undefined, sub: undefined });
+        const id = this.insertObject(o, kind() ?? 'Zotero', { sup: (sup ?? citeSuper(formatOf(f.t))) || undefined, sub: undefined });
         f.ed.setStyle({ sup: before.sup });
         return id;
       },

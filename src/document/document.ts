@@ -846,9 +846,10 @@ export function objectRun(id: number, style: rt.RunStyle): TextRun {
   return { ...style, obj: id, text: OBJECT_CHAR };
 }
 
-/** The objects inside an object (structures in a table's cells), in order. */
+/** The objects inside an object (structures in a table's cells, citations in a footnote), in order. */
 export function innerObjects(o: DocObject | undefined): number[] {
   if (o?.kind === 'table') return o.table.rows.flatMap((row) => row.flatMap((c) => objectsInText(c.runs)));
+  if (o?.kind === 'note') return objectsInText(o.runs);
   return [];
 }
 
@@ -917,6 +918,8 @@ export function usedObjects(t: Pick<DocText, 'runs' | 'objects'> & Partial<Pick<
   const used = new Set(objectsInText(flatRuns(t)));
   // with those in the headers and footers
   if (t.hf) for (const id of hfObjectIds(allHf({ hf: t.hf, paras: t.paras }), t.objects)) used.add(id);
+  // and those inside them (citations in footnotes)
+  for (const id of [...used]) for (const x of innerObjects(t.objects[id])) used.add(x);
   return used;
 }
 
@@ -992,7 +995,8 @@ export function fieldTexts(t: Pick<DocText, 'runs' | 'objects'> & Partial<Pick<D
       shown.set(id, labelText(text, target, (i) => objectAtChar(t.runs, i), shown).trim());
     }
   }
-  if (order.some((id) => t.objects[id]?.kind === 'cite')) for (const [id, s] of citationTexts(t)) shown.set(id, s);
+  // (citations in footnotes too, as note styles put them)
+  if (Object.values(t.objects).some((o) => o.kind === 'cite')) for (const [id, s] of citationTexts(t)) shown.set(id, s);
   if (order.some((id) => t.objects[id]?.kind === 'field')) {
     const at = objectParas({ runs: top, objects: t.objects });
     const doc = { runs: top, paras: t.paras ?? [], props: t.props };

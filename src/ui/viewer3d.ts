@@ -3,6 +3,10 @@
 // (or the right button) to move it, the wheel to zoom, double-click to start again. Its other
 // conformers are a click away, lowest energy first. Place on Page turns the drawn structure to
 // match the view.
+//
+// Conformers come in tiers: Quick (a dozen, the default), Search Conformers (hundreds of starting
+// points, ranked with populations), Refine with xTB (the desktop app runs the person's own xtb),
+// and Gaussian/ORCA Input (files for a DFT calculation on the conformers found).
 
 import { FloatBox } from './float-box';
 import { SYMBOLS } from '../chem/elements';
@@ -10,6 +14,26 @@ import type { Model3d } from '../chem/model3d-build';
 import { hornFit, rotation } from '../morph/rotate';
 import { ident, mul, axisTurn, skeleton, cleanerNearby, cleanestView, type M3, type P3 } from '../chem/view3d';
 import { depthShadePrefs } from '../render/depth-shade';
+import { ask } from './ask';
+import { DEFAULT_SEARCH, type SearchOptions } from '../chem/conformer-rank';
+import { KCAL_PER_HARTREE, refineWithXtb, XTB_SOLVENTS, type XtbOptions, type XtbRunner } from '../chem/xtb';
+import { chargeAndMultiplicity, qmInput, QM_METHODS, type QmOptions, type QmProgram } from '../chem/qm-input';
+
+/** What the conformer tiers need from the app. */
+export interface ConformerTools {
+  /** A conformer search of the structure the window shows. */
+  search(opts: Omit<SearchOptions, 'progress'>, progress: (done: number, total: number) => void): Promise<Model3d>;
+  /** Stop a search. */
+  stop(): void;
+  /** Runs xtb on one conformer (desktop app only). */
+  xtb?: XtbRunner;
+  /** The version line of an xtb program, to check it. */
+  xtbVersion?(exe: string): Promise<string>;
+  /** Settings kept between sessions. */
+  prefs: { xtb: XtbOptions; qm: Partial<QmOptions>; save(): void };
+  /** Save these input files (one file, or several in a zip). */
+  saveFiles(files: { name: string; text: string }[], ext: string): Promise<void>;
+}
 
 export type Style3d = 'ball-stick' | 'sticks' | 'wire' | 'spacefill';
 
@@ -51,6 +75,12 @@ export class Viewer3d {
   private onPlace: ((v: PlaceView) => void) | null = null;
   private prev: HTMLButtonElement;
   private next: HTMLButtonElement;
+  /** The conformer tiers (set by the app). */
+  tools: ConformerTools | null = null;
+  private tierBar: HTMLDivElement;
+  private stopBtn: HTMLButtonElement;
+  private busy = false;
+  private stopped = false;
 
   constructor(private flash: (msg: string) => void) {
     this.box = new FloatBox('3-D Model', () => {});
@@ -132,7 +162,29 @@ export class Viewer3d {
     copyMol.title = 'Copy this conformer as a 3-D molfile (with hydrogens), for Chem3D, Avogadro, PyMOL or a calculation';
     copyMol.addEventListener('click', () => void this.copyMol());
     actions.append(place, best, copyPic, copyMol);
-    b.append(this.canvas, bar, confBar, actions);
+    this.tierBar = document.createElement('div');
+    this.tierBar.className = 'v3d-bar';
+    const tierButton = (label: string, title: string, run: () => Promise<void>) => {
+      const t = document.createElement('button');
+      t.type = 'button';
+      t.textContent = label;
+      t.title = title;
+      t.dataset.tier = '1';
+      t.addEventListener('click', () => { if (!this.busy) void run(); });
+      return t;
+    };
+    this.stopBtn = document.createElement('button');
+    this.stopBtn.type = 'button';
+    this.stopBtn.textContent = 'Stop';
+    this.stopBtn.hidden = true;
+    this.stopBtn.addEventListener('click', () => { this.stopped = true; this.tools?.stop(); });
+    this.tierBar.append(
+      tierButton('Search Conformers…', 'A wider search: hundreds of starting conformers, each relaxed with MMFF94s+, duplicates dropped, ranked by energy with their populations at 25 °C', () => this.searchConformers()),
+      tierButton('Refine with xTB…', 'Re-optimise the lowest conformers with GFN2-xTB, using the xtb program installed on this computer (desktop app)', () => this.refineXtb()),
+      tierButton('Gaussian/ORCA Input…', 'Save input files for a DFT calculation on this conformer or all of them', () => this.exportQm()),
+      this.stopBtn,
+    );
+    b.append(this.canvas, bar, confBar, actions, this.tierBar);
     this.wire();
     new ResizeObserver(() => this.draw()).observe(this.canvas);
   }
@@ -168,6 +220,7 @@ export class Viewer3d {
 
   close(): void {
     this.spinning = false;
+    if (this.busy) { this.stopped = true; this.tools?.stop(); }
     this.box.close();
   }
 
@@ -183,9 +236,14 @@ export class Viewer3d {
     const m = this.model;
     if (!m) return;
     this.conf = Math.max(0, Math.min(k, m.conformers.length - 1));
-    const n = m.conformers.length, e0 = m.conformers[0].energy, e = m.conformers[this.conf].energy;
-    this.info.textContent = `Conformer ${this.conf + 1} of ${n}` + (e !== null && e0 !== null ? (this.conf ? ` · +${(e - e0).toFixed(1)} kcal/mol` : ` · ${e.toFixed(1)} kcal/mol`) : '');
-    this.info.title = 'MMFF94s+ energies after relaxing each conformer; the first is the lowest found (not a full search)';
+    const n = m.conformers.length, e0 = m.conformers[0].energy, c = m.conformers[this.conf], e = c.energy;
+    const method = m.method ?? 'MMFF94s+';
+    const xtb = method.startsWith('GFN2');
+    // ranked by energy relative to the lowest (an absolute energy means little on its own; it is in the tooltip)
+    const energy = e !== null && e0 !== null ? ` · ΔE ${this.conf ? '+' : ''}${(e - e0).toFixed(1)} kcal/mol` : '';
+    const pop = c.population !== undefined && n > 1 ? ` · ${c.population >= 0.995 ? '>99' : c.population < 0.005 ? '<1' : Math.round(c.population * 100)}%` : '';
+    this.info.textContent = `Conformer ${this.conf + 1} of ${n}${energy}${pop}`;
+    this.info.title = `${method} energies${e !== null ? ` (this one ${xtb ? `${(e / KCAL_PER_HARTREE).toFixed(6)} Eh` : `${e.toFixed(2)} kcal/mol`})` : ''}, relative to the lowest${m.starts ? `, from a search of ${m.starts} starting conformers` : ', after relaxing a dozen likely conformers (not a full search: try Search Conformers…)'}. Percentages are Boltzmann populations at 25 °C among the conformers shown.`;
     this.prev.disabled = this.conf === 0;
     this.next.disabled = this.conf >= n - 1;
     this.draw();
@@ -454,6 +512,121 @@ export class Viewer3d {
     } catch {
       this.flash('Could not copy the picture here. Take a screenshot instead.');
     }
+  }
+
+  /** While a tier runs: the other tier buttons off, Stop on, the progress shown. */
+  private setBusy(on: boolean, text = ''): void {
+    this.busy = on;
+    for (const el of this.tierBar.querySelectorAll<HTMLButtonElement>('[data-tier]')) el.disabled = on;
+    this.stopBtn.hidden = !on;
+    if (on) { this.stopped = false; this.info.textContent = text; }
+    else if (this.model) this.pick(this.conf);
+  }
+
+  private replaceModel(m: Model3d): void {
+    this.model = m;
+    this.conf = 0;
+    this.pick(0);
+  }
+
+  /** Search Conformers…: settings, then the search in the background with its progress. */
+  private async searchConformers(): Promise<void> {
+    const t = this.tools;
+    if (!t || !this.model) return;
+    const got = await ask('Search Conformers', [
+      { name: 'starts', label: 'Starting conformers', value: String(DEFAULT_SEARCH.starts), type: 'number', help: 'More finds more conformers but takes longer (each is relaxed with MMFF94s+).' },
+      { name: 'window', label: 'Energy window', value: String(DEFAULT_SEARCH.window), type: 'number', unit: 'kcal/mol', help: 'Conformers higher than this above the lowest are left out.' },
+      { name: 'rmsd', label: 'Same shape within', value: String(DEFAULT_SEARCH.rmsd), type: 'number', unit: 'Å RMSD', help: 'Heavy atoms, after fitting one onto the other.' },
+    ], { ok: 'Search' });
+    if (!got) return;
+    const num = (v: string, d: number, lo: number, hi: number) => { const x = parseFloat(v); return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d; };
+    const opts = { starts: Math.round(num(got.starts, DEFAULT_SEARCH.starts, 10, 2000)), window: num(got.window, DEFAULT_SEARCH.window, 0.5, 50), rmsd: num(got.rmsd, DEFAULT_SEARCH.rmsd, 0.05, 2) };
+    this.setBusy(true, `Searching… 0 of ${opts.starts}`);
+    try {
+      const m = await t.search(opts, (done, total) => { if (this.busy) this.info.textContent = `Searching… ${done} of ${total}`; });
+      this.replaceModel(m);
+      this.flash(`Found ${m.conformers.length} conformer${m.conformers.length === 1 ? '' : 's'} within ${opts.window} kcal/mol from ${m.starts} starting points.`);
+    } catch (e) {
+      this.flash(this.stopped ? 'Search stopped.' : (e as Error).message);
+    } finally {
+      this.setBusy(false);
+    }
+  }
+
+  /** Refine with xTB…: the program, solvent and how many, then each conformer through xtb. */
+  private async refineXtb(): Promise<void> {
+    const t = this.tools, m = this.model;
+    if (!t || !m) return;
+    if (!t.xtb) {
+      this.flash('xTB runs in the desktop app, which starts the xtb program installed on your computer. Use Gaussian/ORCA Input… here instead.');
+      return;
+    }
+    const p = t.prefs.xtb;
+    const got = await ask('Refine with xTB', [
+      { name: 'exe', label: 'xtb program', value: p.exe, type: 'text', placeholder: 'xtb', help: '"xtb" finds it on your PATH; otherwise the full path to xtb (xtb.exe on Windows). Install it from conda-forge (conda install -c conda-forge xtb) or github.com/grimme-lab/xtb/releases. xtb is free software (LGPL 3.0).' },
+      { name: 'solvent', label: 'Solvent (ALPB)', value: p.solvent, options: [{ value: '', label: 'Gas phase' }, ...XTB_SOLVENTS.map((s) => ({ value: s, label: s }))] },
+      { name: 'opt', label: 'Optimise each conformer (otherwise energies only)', value: String(p.opt), type: 'checkbox' },
+      { name: 'count', label: 'Lowest conformers to refine', value: String(Math.min(p.count, m.conformers.length)), type: 'number', help: `Of the ${m.conformers.length} shown. Each takes seconds to minutes, depending on its size.` },
+    ], { ok: 'Refine', note: 'Runs on this computer: nothing is sent anywhere.' });
+    if (!got) return;
+    const opts: XtbOptions = { exe: got.exe.trim() || 'xtb', solvent: got.solvent, opt: got.opt === 'true', count: Math.max(1, Math.min(m.conformers.length, Math.round(parseFloat(got.count) || p.count))) };
+    Object.assign(t.prefs.xtb, opts);
+    t.prefs.save();
+    this.setBusy(true, 'Starting xtb…');
+    try {
+      if (t.xtbVersion) await t.xtbVersion(opts.exe);
+      const refined = await refineWithXtb(m, opts, t.xtb, (done, total) => { this.info.textContent = `xTB: ${done} of ${total} done…`; }, () => this.stopped);
+      if (refined !== m) {
+        this.replaceModel(refined);
+        this.flash(`Refined ${refined.conformers.length} conformer${refined.conformers.length === 1 ? '' : 's'} with ${refined.method}; ranked again by their xTB energies.`);
+      }
+    } catch (e) {
+      const msg = String((e as Error)?.message ?? e);
+      this.flash(/could not be started|No such file|not found|cannot find/i.test(msg) ? `xtb could not be started from "${opts.exe}". Install it, or give the full path to the program.` : msg);
+    } finally {
+      this.setBusy(false);
+    }
+  }
+
+  /** Gaussian/ORCA Input…: the program, method and job, then the file (or a zip of one per conformer). */
+  private async exportQm(): Promise<void> {
+    const t = this.tools, m = this.model;
+    if (!t || !m) return;
+    const q = t.prefs.qm;
+    const program: QmProgram = q.program ?? 'orca';
+    const { charge, multiplicity } = chargeAndMultiplicity(m);
+    const got = await ask('Gaussian/ORCA Input', [
+      { name: 'program', label: 'Program', value: program, options: [{ value: 'orca', label: 'ORCA (.inp)' }, { value: 'gaussian', label: 'Gaussian (.gjf)' }] },
+      { name: 'method', label: 'Method', value: q.method ?? QM_METHODS[program][0], type: 'text', suggestions: [...QM_METHODS.orca, ...QM_METHODS.gaussian], help: 'As the program writes it: "B3LYP D3BJ def2-SVP" for ORCA, "B3LYP/def2SVP EmpiricalDispersion=GD3BJ" for Gaussian.' },
+      { name: 'job', label: 'Job', value: q.job ?? 'opt freq', options: [{ value: 'opt freq', label: 'Optimise, then frequencies' }, { value: 'opt', label: 'Optimise' }, { value: 'sp', label: 'Single point' }, { value: 'freq', label: 'Frequencies' }] },
+      { name: 'solvent', label: 'Solvent (SMD)', value: q.solvent ?? '', type: 'text', placeholder: 'none (gas phase)', suggestions: ['water', 'methanol', 'acetonitrile', 'dichloromethane', 'chloroform', 'thf', 'toluene', 'dmso', 'dmf'] },
+      { name: 'charge', label: 'Charge', value: String(charge), type: 'number' },
+      { name: 'mult', label: 'Multiplicity', value: String(multiplicity), type: 'number' },
+      { name: 'cores', label: 'Cores', value: String(q.cores ?? 8), type: 'number' },
+      { name: 'memory', label: 'Memory', value: String(q.memory ?? 16), type: 'number', unit: 'GB' },
+      { name: 'which', label: 'Conformers', value: 'this', options: [{ value: 'this', label: `This one (${this.conf + 1})` }, { value: 'all', label: `All ${m.conformers.length} shown (one file each, in a zip)` }] },
+    ], { ok: 'Save', note: m.method ? `Geometries from ${m.method}.` : undefined });
+    if (!got) return;
+    const prog = got.program === 'gaussian' ? 'gaussian' : 'orca';
+    // a method typed for the other program is swapped for this one's usual one
+    const method = got.method.trim() && !(prog === 'orca' && got.method.includes('/')) ? got.method.trim() : QM_METHODS[prog][0];
+    const o: QmOptions = {
+      program: prog, method, job: (['opt freq', 'opt', 'sp', 'freq'] as const).find((j) => j === got.job) ?? 'opt freq',
+      solvent: got.solvent.trim().replace(/[^\w,-]/g, ''), charge: Math.round(parseFloat(got.charge) || 0), multiplicity: Math.max(1, Math.round(parseFloat(got.mult) || 1)),
+      cores: Math.max(1, Math.round(parseFloat(got.cores) || 1)), memory: Math.max(1, Math.round(parseFloat(got.memory) || 4)), title: '',
+    };
+    Object.assign(t.prefs.qm, { program: o.program, method: o.method, job: o.job, solvent: o.solvent, cores: o.cores, memory: o.memory });
+    t.prefs.save();
+    const base = (this.box.title || 'conformer').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') || 'conformer';
+    const which = got.which === 'all' ? m.conformers.map((_, i) => i) : [this.conf];
+    const files = which.map((i) => {
+      const name = `${base}_conf${i + 1}`;
+      const e = m.conformers[i].energy, e0 = m.conformers[0].energy;
+      const title = `${base} conformer ${i + 1}${e !== null && e0 !== null ? ` (+${(e - e0).toFixed(2)} kcal/mol, ${m.method ?? 'MMFF94s+'})` : ''}`;
+      const f = qmInput(m, i, { ...o, title }, name);
+      return { name: `${name}.${f.ext}`, text: f.text };
+    });
+    await t.saveFiles(files, prog === 'gaussian' ? 'gjf' : 'inp');
   }
 
   private async copyMol(): Promise<void> {

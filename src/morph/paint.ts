@@ -193,8 +193,9 @@ export function paintFrame(ctx: Ctx, F: FrameData, style: MStyle, t: number, swa
     ln.ends.slice(0, 2).forEach((k, i) => {
       const bx = F.boxes.get(k);
       if (!bx || bx.alpha <= 0.01) return;
-      // the box grows out of the atom with the label's opacity, so the bond end travels smoothly
-      const la = Math.min(1, Math.max(0, bx.alpha));
+      // the box grows out of the atom with the label's opacity, so the bond end travels smoothly;
+      // a bond fading in or out stops at the label's full box, as it is drawn at its own end
+      const la = ln.whole ? 1 : Math.min(1, Math.max(0, bx.alpha));
       const anchor = i === 0 ? at0 : at1, far = i === 0 ? at1 : at0;
       for (const r of bx.rects) {
         const g: Rect = { x1: anchor.x + la * (r.x1 - anchor.x), y1: anchor.y + la * (r.y1 - anchor.y), x2: anchor.x + la * (r.x2 - anchor.x), y2: anchor.y + la * (r.y2 - anchor.y) };
@@ -205,7 +206,8 @@ export function paintFrame(ctx: Ctx, F: FrameData, style: MStyle, t: number, swa
     if (t0 + t1 >= 0.95) { t0 = Math.min(t0, 0.45); t1 = Math.min(t1, 0.45); }
     const d = { x: p1.x - p0.x, y: p1.y - p0.y };
     [p0, p1] = [{ x: p0.x + d.x * t0, y: p0.y + d.y * t0 }, { x: p1.x - d.x * t1, y: p1.y - d.y * t1 }];
-    const labelled: [boolean, boolean] = [ln.ends[0] !== undefined && (F.boxes.get(ln.ends[0])?.alpha ?? 0) > 0.45, ln.ends[1] !== undefined && (F.boxes.get(ln.ends[1])?.alpha ?? 0) > 0.45];
+    const shown = (k: string | undefined) => k !== undefined && (F.boxes.get(k)?.alpha ?? 0) > (ln.whole ? 0.01 : 0.45);
+    const labelled: [boolean, boolean] = [shown(ln.ends[0]), shown(ln.ends[1])];
     let q0 = p0, q1 = p1;
     if (ln.inner) {
       // the second line, off the trimmed bond, stopping short of the bonds at each end

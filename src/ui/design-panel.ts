@@ -157,8 +157,8 @@ export function pickDesignSize(title: string, current?: SlideSize): Promise<Slid
   });
 }
 
-/** Draws a shape's picture for the library: bold lines in `colour` with a faint tint of it inside. */
-export function drawGeoIcon(c: HTMLCanvasElement, def: GeoDef, px: number, colour: string, bold = false): void {
+/** Draws a shape's picture for the library: lines in `colour` (bold ones for the Shapes menu) with a light wash of `tint` inside. */
+export function drawGeoIcon(c: HTMLCanvasElement, def: GeoDef, px: number, colour: string, tint = colour, bold = false): void {
   const dpr = window.devicePixelRatio || 1;
   c.width = Math.round(px * dpr);
   c.height = Math.round(px * dpr);
@@ -180,9 +180,11 @@ export function drawGeoIcon(c: HTMLCanvasElement, def: GeoDef, px: number, colou
   g.beginPath();
   traceSteps(g, o.body);
   if (!def.outline) {
+    g.save();
     g.globalAlpha = 0.14;
+    g.fillStyle = tint;
     g.fill();
-    g.globalAlpha = 1;
+    g.restore();
   }
   g.stroke();
   if (o.lines?.length) {
@@ -382,7 +384,9 @@ export class DesignLibrary {
       return words.every((w) => text.includes(w));
     });
     const css = getComputedStyle(this.el);
-    const colour = css.getPropertyValue(shapeInk === 'accent' ? '--accent' : '--text').trim() || '#1d2330';
+    // the lines black (white in the dark theme) or the mode's colour, as set; the wash always the mode's colour
+    const tint = css.getPropertyValue('--accent').trim() || '#7b3fbf';
+    const colour = shapeInk === 'accent' ? tint : css.getPropertyValue('--text').trim() || '#1d2330';
     const parts: HTMLElement[] = [];
     for (const group of GEO_GROUPS) {
       const inGroup = found.filter((g) => g.group === group);
@@ -393,10 +397,10 @@ export class DesignLibrary {
       grid.className = 'dl-grid';
       for (const def of inGroup) {
         const c = document.createElement('canvas');
-        drawGeoIcon(c, def, 26, colour, true);
+        drawGeoIcon(c, def, 26, colour, tint, true);
         grid.append(this.tile(def.id, def.name, c, () => {
           const large = document.createElement('canvas');
-          drawGeoIcon(large, def, PREVIEW_PX, colour, true);
+          drawGeoIcon(large, def, PREVIEW_PX, colour, tint, true);
           return large;
         }));
       }

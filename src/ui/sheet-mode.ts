@@ -60,6 +60,8 @@ import { SheetSparklines } from './sheet-sparkline-ui';
 import { SheetViews, formulaBarPrefs } from './sheet-views-ui';
 import type { SparkKind } from '../sheet/sparklines';
 import { themeOf } from '../sheet/themes';
+import { SHEET_PAPERS, type PaperName } from '../sheet/page-setup';
+import { defaultPaper } from '../print-layout';
 
 /** What a paste found on the clipboard, as far as a sheet cares. */
 export interface ClipboardCells {
@@ -613,6 +615,9 @@ export class SheetMode {
     const v = this.view;
     if (!this.book || !v.sheet) return false;
     const a = v.sheet.styleAt(v.sel.active.r, v.sel.active.c) ?? {};
+    // File > Print > Paper Size
+    const paper = name.startsWith('sheet-paper-') ? name.slice('sheet-paper-'.length) : '';
+    if (paper && paper in SHEET_PAPERS) { this.page.set('Paper size', { paper: paper as PaperName }); return true; }
     switch (name) {
       case 'cell-bold': this.style('Bold', { bold: !a.bold || undefined }); break;
       case 'cell-italic': this.style('Italic', { italic: !a.italic || undefined }); break;
@@ -742,9 +747,27 @@ export class SheetMode {
       case 'page-scale': void this.page.scaleWindow(); break;
       case 'print-gridlines': this.page.toggle('gridlines'); break;
       case 'print-headings': this.page.toggle('headings'); break;
-      case 'show-page-breaks': v.showPageBreaks = !v.showPageBreaks; v.refresh(); this.showRibbonState(); break;
+      case 'show-page-breaks': {
+        v.showPageBreaks = !v.showPageBreaks;
+        v.refresh();
+        this.showRibbonState();
+        // an empty sheet has no pages, so no breaks to show yet
+        if (v.showPageBreaks && !v.sheet.usedRange() && !v.sheet.pageSetup?.printArea?.length) this.host.flash('Page breaks show as dashed lines once the sheet has something to print.', 4000);
+        break;
+      }
       case 'insert-page-break': this.page.insertBreak(); break;
       case 'set-print-area': this.page.setPrintArea(false); break;
+      case 'add-print-area': this.page.setPrintArea(true); break;
+      case 'remove-page-break': this.page.removeBreak(); break;
+      case 'reset-page-breaks': this.page.set('Reset page breaks', { rowBreaks: undefined, colBreaks: undefined }); break;
+      case 'sheet-margins-normal': case 'sheet-margins-wide': case 'sheet-margins-narrow': this.page.margins(name.slice('sheet-margins-'.length) as 'normal' | 'wide' | 'narrow'); break;
+      case 'sheet-margins-custom': void this.page.pageSetupWindow('margins'); break;
+      case 'sheet-portrait': this.page.set('Orientation', { orientation: undefined }); break;
+      case 'sheet-landscape': this.page.set('Orientation', { orientation: 'landscape' }); break;
+      case 'sheet-no-scaling': this.page.scaling('none'); break;
+      case 'sheet-fit-page': this.page.scaling('page'); break;
+      case 'sheet-fit-columns': this.page.scaling('columns'); break;
+      case 'sheet-fit-rows': this.page.scaling('rows'); break;
       case 'clear-print-area': this.page.set('Clear print area', { printArea: undefined }); break;
       case 'print-preview': this.printPreview(); break;
       case 'data-analysis': this.analysis.dataAnalysis(); break;
@@ -1495,8 +1518,8 @@ export class SheetMode {
       return;
     }
     const { r, c } = v.sel.active;
-    const ans = await ask('Structure from name or SMILES', [{ name: 'text', label: 'Name or SMILES', value: '' }], {
-      ok: 'Draw', note: `Draws the structure in ${cellName(r, c)}. Names are read on this computer (OPSIN): systematic names and many common ones such as caffeine.`,
+    const ans = await ask('Structure from name or SMILES', [{ name: 'text', label: 'Name, SMILES or CAS RN', value: '' }], {
+      ok: 'Draw', note: `Draws the structure in ${cellName(r, c)}. Names are read on this computer (OPSIN): systematic names and many common ones such as caffeine. CAS RNs (50-78-2) are looked up on PubChem.`,
     });
     const text = ans?.text.trim();
     if (!text) return;
@@ -2295,6 +2318,17 @@ export class SheetMode {
     for (const m of document.querySelectorAll('[role="menuitemcheckbox"][data-cmd="show-all-notes"]')) m.setAttribute('aria-checked', String(this.notes.showAll));
     for (const m of document.querySelectorAll('[role="menuitemcheckbox"][data-cmd="circle-invalid"]')) m.setAttribute('aria-checked', String(this.view.circleInvalid));
     for (const m of document.querySelectorAll('[role="menuitemcheckbox"][data-cmd="show-page-breaks"]')) m.setAttribute('aria-checked', String(this.view.showPageBreaks));
+    // File > Print: ticks by the page setup in use
+    const ps = s.pageSetup;
+    const margins = this.page.marginPreset(), scaling = this.page.scalingNow(), paper = ps?.paper ?? defaultPaper(navigator.language);
+    const ticks: Record<string, boolean> = {
+      'print-gridlines': !!ps?.gridlines, 'print-headings': !!ps?.headings,
+      'sheet-portrait': ps?.orientation !== 'landscape', 'sheet-landscape': ps?.orientation === 'landscape',
+      'sheet-margins-normal': margins === 'normal', 'sheet-margins-wide': margins === 'wide', 'sheet-margins-narrow': margins === 'narrow',
+      'sheet-no-scaling': scaling === 'none', 'sheet-fit-page': scaling === 'page', 'sheet-fit-columns': scaling === 'columns', 'sheet-fit-rows': scaling === 'rows',
+    };
+    for (const k of Object.keys(SHEET_PAPERS)) ticks[`sheet-paper-${k}`] = k === paper;
+    for (const [cmd, on] of Object.entries(ticks)) for (const m of document.querySelectorAll(`[data-cmd="${cmd}"][role^="menuitem"]`)) m.setAttribute('aria-checked', String(on));
     const fmt = this.ribbon.querySelector<HTMLSelectElement>('#sh-numfmt')!;
     const code = st.numFmt ?? 'General';
     let opt = [...fmt.options].find((o) => o.value === code);

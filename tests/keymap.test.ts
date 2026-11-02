@@ -242,6 +242,8 @@ describe('the settings file', () => {
       keep: { ...DEFAULT_KEEP, autoSave: true, recoveryMinutes: 5, changedOnDisk: 'reload' as const, lockFiles: false },
       ai: { provider: 'anthropic' as const, model: 'claude-sonnet-5-5', base: '' },
       straightenLinear: false,
+      cursorAids: { angle: false, length: true, hints: false, units: 'cm' as const, look: 'solid' as const },
+      haptoDelocalized: false,
       appTheme: 'dark' as const, density: 'large' as const, iconLook: 'kind' as const, shapeInk: 'accent' as const, oneColumnTools: true, startView: false, lastVersion: '0.1.90',
     };
     const text = settingsText(s);

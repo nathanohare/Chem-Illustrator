@@ -64,7 +64,7 @@ export function pubchemHtml(state: PubChemState, i: number): string {
 /** The caption a PubChem button puts under the structure, or null when there's nothing to put. */
 export function pubchemRuns(kind: 'pcname' | 'pccas' | 'pchaz', c: Compound): TextRun[] | null {
   if (kind === 'pcname') return c.title ? [{ text: c.title }] : null;
-  if (kind === 'pccas') return c.cas.length ? [{ text: `CAS ${c.cas[0]}` }] : null;
+  if (kind === 'pccas') return c.cas.length ? [{ text: `CAS RN ${c.cas[0]}` }] : null;
   const h = c.hazards;
   if (!h.signal && !h.statements.length) return null;
   const lines = h.statements.map((s) => `${s.code} ${s.text}`);

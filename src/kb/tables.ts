@@ -73,6 +73,9 @@ export function cellNumbers(c: Cell): number[] {
 const ROW_TEXT = new WeakMap<Record<string, Cell>, string>();
 
 /** A row's text for searching: every cell, lower case (kept, since a PDF's pages are long). */
+/** Rows whose SMILES is already RDKit's canonical form (the big tables, made so when built). */
+export const CANONICAL_ROWS = new WeakSet<Record<string, Cell>>();
+
 export function rowText(row: Record<string, Cell>): string {
   let s = ROW_TEXT.get(row);
   if (s === undefined) {
