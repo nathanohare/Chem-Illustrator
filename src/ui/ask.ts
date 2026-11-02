@@ -21,7 +21,7 @@ export interface Field {
 }
 
 /** Show the fields; resolves with what was entered, or null if the window was cancelled. */
-export function ask(title: string, fields: Field[], opts: { ok?: string; note?: string; /** Only an OK button, for a message. */ noCancel?: boolean; /** A short list under the note (two columns: what, and its value). */ lines?: [string, string][] } = {}): Promise<Record<string, string> | null> {
+export function ask(title: string, fields: Field[], opts: { ok?: string; note?: string; /** Only an OK button, for a message. */ noCancel?: boolean; /** A short list under the note (two columns: what, and its value). */ lines?: [string, string][]; /** Called with the values as they are typed or picked (a live preview). */ onInput?: (values: Record<string, string>) => void } = {}): Promise<Record<string, string> | null> {
   return new Promise((resolve) => {
     const d = document.createElement('dialog');
     d.className = 'ask';
@@ -123,12 +123,21 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
       d.remove();
       resolve(v);
     };
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
+    const values = () => {
       const out: Record<string, string> = {};
       for (const [k, el] of inputs) out[k] = el instanceof HTMLInputElement && el.type === 'checkbox' ? String(el.checked) : el.value;
-      done(out);
+      return out;
+    };
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      done(values());
     });
+    if (opts.onInput) {
+      const live = () => opts.onInput!(values());
+      form.addEventListener('input', live);
+      form.addEventListener('change', live);
+      queueMicrotask(live);
+    }
     cancel.addEventListener('click', () => done(null));
     d.addEventListener('close', () => done(null));
     showDialog(d);
