@@ -85,8 +85,17 @@ async function extra() {
   const props = new Map();
   for (let i = 0; i < cids.length; i += 100) {
     const part = cids.slice(i, i + 100);
-    const j = await get(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${part.join(',')}/property/Title,MolecularFormula,MolecularWeight,SMILES,XLogP,Charge/JSON`, `props-${part[0]}-${part.length}.json`);
-    for (const p of j?.PropertyTable?.Properties ?? []) props.set(p.CID, p);
+    const url = (ids) => `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${ids.join(',')}/property/Title,MolecularFormula,MolecularWeight,SMILES,XLogP,Charge/JSON`;
+    // PubChem refuses a whole batch for one bad CID: then ask for each on its own, skipping any it refuses
+    let got = await get(url(part), `props-${part[0]}-${part.length}.json`).catch(() => undefined);
+    if (got === undefined) {
+      got = { PropertyTable: { Properties: [] } };
+      for (const c of part) {
+        const one = await get(url([c]), `props-${c}-1.json`).catch(() => null);
+        got.PropertyTable.Properties.push(...(one?.PropertyTable?.Properties ?? []));
+      }
+    }
+    for (const p of got?.PropertyTable?.Properties ?? []) props.set(p.CID, p);
   }
   // RDKit's own SMILES (the app's search compares these), made here once rather than in the window
   const RDKit = await createRequire(import.meta.url)('@rdkit/rdkit')();
@@ -101,7 +110,8 @@ async function extra() {
     const p = props.get(cid);
     // single named compounds only: no title, no structure or a polymer is left out
     if (!p?.Title || !p.SMILES || !p.MolecularWeight || /\*/.test(p.SMILES)) continue;
-    const view = await get(`https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/${cid}/JSON`, `view-${cid}.json`);
+    // one record PubChem won't serve is skipped (and tried again next run), not the whole build
+    const view = await get(`https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/${cid}/JSON`, `view-${cid}.json`).catch((e) => { console.warn(`\n! ${e.message}`); return null; });
     if (!view?.Record) continue;
     const r = safetyRecordFrom({ name: p.Title, cid, cas: null, formula: p.MolecularFormula, mw: p.MolecularWeight, smiles: canon(p.SMILES), xlogp: p.XLogP, view: view.Record });
     if (hasHazardData(r)) out.push(compactRecord(r));
