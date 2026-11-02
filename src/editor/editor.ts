@@ -1295,12 +1295,6 @@ export class Editor {
     this.requestScene(e.timeStamp);
   }
 
-  /**
-   * Right-click: what is under the pointer. Something not already selected becomes the
-   * selection first (a whole structure for an atom or bond), as in ChemDraw, so the menu's
-   * commands act on what was clicked. Empty space away from the selection clears it. Null on
-   * empty space.
-   */
   /** The point on the page under the pointer, and whether something there (or the selection's box) would take a click. */
   pointAt(e: MouseEvent): { p: Vec; taken: boolean } {
     const p = this.docPoint(e);
@@ -1310,6 +1304,12 @@ export class Editor {
     return { p, taken: onSel || !!this.hitTest(p) || !!this.captionEd?.hit(p) };
   }
 
+  /**
+   * Right-click: what is under the pointer. Something not already selected becomes the
+   * selection first: just that atom or bond, not its whole structure (issue #327), so the menu
+   * is for what was clicked (commands for whole structures still reach the structure from it).
+   * Empty space away from the selection clears it. Null on empty space.
+   */
   contextPick(e: MouseEvent): Hit {
     const p = this.docPoint(e);
     if (this.captionEd?.hit(p)) return null;
@@ -1319,13 +1319,7 @@ export class Editor {
       const b = this.selBox();
       if (!b || p.x < b.x1 || p.x > b.x2 || p.y < b.y1 || p.y > b.y2) this.clearSelection();
     }
-    if (h && !this.isSelected(h)) {
-      if (h.kind === 'atom' || h.kind === 'bond') this.selectFragment(h.kind === 'atom' ? h.id : this.doc.bonds.get(h.id)!.a1, false);
-      else {
-        this.selectOnly(h);
-        this.onChange();
-      }
-    }
+    if (h && !this.isSelected(h)) this.selectOnly(h);
     // a join or a place on a curved arrow's line: what Add Bend Here and the join commands work on
     this.contextSpot = this.pathSpotAt(p);
     return h;

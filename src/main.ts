@@ -1973,7 +1973,8 @@ function useOwnTemplates(list: Template[]): void {
 
 /** Chemistry > Nicknames and Templates > Save as Template: the selected structure goes into My templates. */
 async function saveTemplate(): Promise<void> {
-  const ids = [...editor.sel.atoms];
+  // a lone atom (one right-clicked) stands for its whole structure
+  const ids = editor.sel.atoms.size === 1 && !editor.sel.bonds.size ? chosenStructures().flatMap((f) => [...f]) : [...editor.sel.atoms];
   if (!ids.length) { flash('Select a structure first, then save it as a template.'); return; }
   const got = await ask('Save as Template', [{ name: 'name', label: 'Name', value: '' }],
     { ok: 'Save', note: 'The selected structure goes into My templates on the tool bar (the last template palette). It is kept in your settings file, so it is there every time.' });
@@ -9167,7 +9168,7 @@ editor.onContextMenu = (e) => {
   const picked = new Set(editor.sel.atoms);
   const h = editor.contextPick(e);
   contextBond = h?.kind === 'bond' ? h.id : null;
-  // (an atom not already picked selects its whole structure, but Repeat Label is for that atom only)
+  // (Repeat Label is for that atom only, unless it was one of several picked)
   contextAtom = h?.kind === 'atom' ? { id: h.id, all: picked.has(h.id) && picked.size > 1 } : null;
   rightClickAt = { left: e.clientX, bottom: e.clientY };
   showContextMenu(e.clientX, e.clientY, drawingMenu(), { run: (cmd) => void command(cmd), key: commandKey });
