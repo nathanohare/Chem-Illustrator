@@ -33,7 +33,18 @@ const button = (label: string, title: string, on: () => void, primary = false): 
 /** Text with its abbreviations explained on hover (each one an <abbr> with its meaning as the tooltip). */
 export function explained(text: string): DocumentFragment {
   const f = document.createDocumentFragment();
-  for (const p of explainPieces(text)) f.append(p.tip ? el('abbr', { textContent: p.text, title: p.tip }) : p.text);
+  for (const p of explainPieces(text)) f.append(p.tip ? el('abbr', { textContent: p.text, title: p.tip }) : withSigma(p.text));
+  return f;
+}
+
+/** Text with the m and p of Hammett's σm and σp as italic subscripts. */
+function withSigma(text: string): DocumentFragment | string {
+  if (!/σ[mpoIR]/.test(text)) return text;
+  const f = document.createDocumentFragment();
+  for (const part of text.split(/(σ[mpoIR](?![A-Za-z]))/)) {
+    if (/^σ[mpoIR]$/.test(part)) f.append('σ', el('sub', {}, el('i', { textContent: part[1] })));
+    else if (part) f.append(part);
+  }
   return f;
 }
 

@@ -10,6 +10,7 @@ import { Workbook } from '../src/sheet/workbook';
 import { hammettValue, hammettWhat, orthoAsPara } from '../src/sheet/hammett-fn';
 import { CellError } from '../src/sheet/values';
 import { usesChemistry } from '../src/io/xlsx';
+import { chemPieces, showsChem } from '../src/sheet/cell-text';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let RDKit: any;
@@ -96,5 +97,14 @@ describe('HAMMETT in a sheet', () => {
 
   it('is saved for Excel as its value (Excel has no HAMMETT)', () => {
     expect(usesChemistry('=HAMMETT(B2,"sigma","[NH2:1]c1ccc(*)cc1")')).toBe(true);
+  });
+});
+
+describe('σm and σp as chemistry', () => {
+  it('lowers and italicises the m and p after σ', () => {
+    expect(chemPieces('σp')).toEqual([{ text: 'σ', pos: 'base' }, { text: 'p', pos: 'sub', italic: true }]);
+    expect(chemPieces('Σσm')).toEqual([{ text: 'Σσ', pos: 'base' }, { text: 'm', pos: 'sub', italic: true }]);
+    expect(chemPieces('σ').map((p) => p.pos)).toEqual(['base']);
+    expect(showsChem(undefined, 'σp')).toBe(true);
   });
 });
