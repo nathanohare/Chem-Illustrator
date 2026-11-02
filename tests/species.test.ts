@@ -110,6 +110,28 @@ describe('reading a text box', () => {
       expect(speciesFormula(readSpecies(t)!), t).toBe(f);
     }
   });
+  it('reads simple formulas whose bonds are worked out from the hydrogens', () => {
+    for (const [t, smi] of [['CH2CH2', 'C=C'], ['HCCH', 'C#C'], ['C2H4', 'C=C'], ['C2H2', 'C#C'], ['CH2CHCH3', 'C=CC'], ['CH3NO2', 'C[N+](=O)[O-]'],
+      ['PhNO2', 'O=[N+]([O-])c1ccccc1'], ['OEt2', 'CCOCC'], ['PBu3', 'CCCCP(CCCC)CCCC']] as const) {
+      expect(engineSmiles(t), t).toBe(canonical(smi));
+    }
+    // groups and parts of molecules still aren't molecules on their own
+    for (const t of ['CH2', 'CH', 'OH', 'CH3', 'NO2', 'CO2H', 'CF3', 'CHO']) expect(readSpecies(t), t).toBeNull();
+  });
+  it('reads a group or atom set to Chemical as the radical or atom it stands for', () => {
+    const read = (t: string) => readSpecies(t, { fragments: true })!;
+    for (const [t, name, f] of [['OH', 'hydroxyl radical', 'HO'], ['CH3', 'methyl radical', 'CH3'], ['Me', 'methyl radical', 'CH3'], ['NO2', 'nitrogen dioxide', 'NO2'],
+      ['CO2H', 'carboxyl radical', 'CHO2'], ['CN', 'cyano radical', 'CN'], ['Ph', 'phenyl radical', 'C6H5'], ['Cl', 'chlorine atom', 'Cl'], ['OTBS', 'OTBS radical', 'C6H15OSi']] as const) {
+      expect(read(t)?.name, t).toBe(name);
+      expect(speciesFormula(read(t)), t).toBe(f);
+    }
+    expect(read('OH').kind).toBe('radical');
+    // whole molecules read the same way, and text still isn't chemistry
+    expect(speciesFormula(read('H2O'))).toBe('H2O');
+    expect(read('OH−').name).toBe('hydroxide');
+    expect(read('Ar').name).toBe('argon');
+    for (const t of ['Step 2', 'R', 'R1', 'X', 'NMR', 'rt', '85%']) expect(readSpecies(t, { fragments: true }), t).toBeNull();
+  });
   it('reads salts written as one formula', () => {
     expect(speciesSmiles(readSpecies('NaBF4')!)).toBe('[Na+].F[B-](F)(F)F');
     expect(speciesFormula(readSpecies('Cs2CO3')!)).toBe('CCs2O3');
@@ -185,6 +207,20 @@ describe('text boxes in a drawing', () => {
     expect(captionChemWarning(doc, ok)).toBeNull();
     const odd = text(doc, 'Step 2', 300, 100, { chem: true });
     expect(captionChemWarning(doc, odd)).toMatch(/can't be read as chemistry/);
+  });
+  it('reads a group typed on its own as chemistry once it is set to Chemical', () => {
+    const doc = new Doc();
+    const oh = text(doc, 'OH');
+    expect(captionSpecies(doc, oh)).toBeNull();
+    doc.edit('c', () => doc.updateCaption(oh.id, { chem: true }));
+    const c = doc.captions.get(oh.id)!;
+    expect(captionSpecies(doc, c)?.name).toBe('hydroxyl radical');
+    expect(captionChemWarning(doc, c)).toBeNull();
+    // counted as the radical, with its unpaired electron
+    const { molblock } = toMolfile(doc, [], '', { species: allSpecies(doc) });
+    const mol = RDKit.get_mol(molblock);
+    expect(mol.get_smiles()).toBe(canonical('[OH]'));
+    mol.delete();
   });
   it('counts an ion grouped with a structure as one salt', async () => {
     const doc = new Doc();
