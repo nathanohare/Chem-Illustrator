@@ -371,6 +371,8 @@
     <div class="menu sub" role="menu" hidden>
     <button role="menuitemradio" aria-checked="true" data-cmd="icons-mode" title="Gray icons with one part in the mode's colour (orange in Presentation, blue in Document, green in Spreadsheet, purple in Design)"><span>Mode Colour</span></button>
     <button role="menuitemradio" aria-checked="false" data-cmd="icons-kind" title="A colour for each kind of command, as Office does: pictures teal, charts green, media red, shapes purple, the same in every mode"><span>Colour by Kind</span></button>
+    <hr />
+    <button role="menuitemcheckbox" aria-checked="false" data-cmd="shape-ink-accent" title="Draw the Shapes menu's shapes in the mode's colour instead of black (white in the dark theme)"><span>Shapes in the Mode Colour</span></button>
     </div>
     </div>
     <div class="submenu desktop-only" hidden>
@@ -2116,7 +2118,8 @@
       <button role="tab" data-sl-tab="show" aria-selected="false">Slide Show</button>
       <button role="tab" data-sl-tab="review" aria-selected="false">Review</button>
       <button role="tab" data-sl-tab="view" aria-selected="false">View</button>
-      <button role="tab" data-sl-tab="format" aria-selected="false" class="rb-ctx-tab" hidden title="Shows while a shape or picture is selected">Shape Format</button>
+      <button role="tab" data-sl-tab="format" aria-selected="false" class="rb-ctx-tab" hidden title="Shows while a shape is selected">Shape Format</button>
+      <button role="tab" data-sl-tab="picture" aria-selected="false" class="rb-ctx-tab" hidden title="Shows while a picture is selected">Picture Format</button>
     </div>
     <div class="rb-panel" data-sl-panel="home">
       <div class="rb-group">
@@ -2309,7 +2312,7 @@
         <div class="rb-row">
           <button class="rb-big" data-cmd="text-box" title="Click on the slide to type, or drag to make a text box that wraps"><span class="rb-icon">T</span>Text Box</button>
           <div class="rb-fly">
-            <button class="rb-big rb-fly-btn" data-ic="header-footer-menu" title="Header &amp; Footer, the date and the slide number"><span class="rb-icon"></span>Header &amp; Footer ▾</button>
+            <button class="rb-big rb-fly-btn" data-ic="header-footer" title="Header &amp; Footer, the date and the slide number"><span class="rb-icon"></span>Header &amp; Footer ▾</button>
             <div class="rb-fly-menu" role="menu" hidden>
               <button data-cmd="header-footer" title="Header &amp; Footer: the date (today's, kept up to date, or fixed), slide number and footer on the slides picked or every slide; and the header and footer of notes pages and handouts. Saved as PowerPoint's own"><span class="rb-icon">▭</span>Header &amp; Footer</button><button data-cmd="insert-date-time" title="Date &amp; Time: the date on the slides, today's in the form you pick or fixed text (in Header &amp; Footer)"><span class="rb-icon"></span>Date &amp; Time</button><button data-cmd="insert-slide-number" title="Slide Number: the slides' numbers at the bottom right (in Header &amp; Footer)"><span class="rb-icon"></span>Slide Number</button>
             </div>
@@ -2361,6 +2364,33 @@
       </div>
       <div class="rb-group">
         <div class="rb-row">
+          <div class="rb-icongrid">
+            <button class="rb-iconbtn" data-cmd="rotate-cw" title="Rotate Right 90°: turn the selection a quarter turn clockwise" aria-label="Rotate Right 90°">↻</button>
+            <button class="rb-iconbtn" data-cmd="rotate-ccw" title="Rotate Left 90°: turn the selection a quarter turn anticlockwise" aria-label="Rotate Left 90°">↺</button>
+            <button class="rb-iconbtn" data-cmd="rotate-dialog" title="Rotate by any angle (Ctrl+R), or drag the round handle above the selection" aria-label="Rotate by">∠</button>
+            <button class="rb-iconbtn" data-cmd="flip-h" title="Flip Horizontal: left to right" aria-label="Flip Horizontal">⇋</button>
+            <button class="rb-iconbtn" data-cmd="flip-v" title="Flip Vertical: top to bottom" aria-label="Flip Vertical">⇵</button>
+            <button class="rb-iconbtn" data-cmd="group" title="Group the selected pictures and shapes (Ctrl+G)" aria-label="Group">▣</button>
+            <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: in front of all the others" aria-label="Bring to Front">⧉</button>
+            <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: behind all the others" aria-label="Send to Back">⧉</button>
+            <button class="rb-iconbtn" data-cmd="ungroup" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup">▢</button>
+            <button class="rb-iconbtn" data-cmd="align-left" title="Align left edges (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
+            <button class="rb-iconbtn" data-cmd="align-hcenter" title="Align centres, across" aria-label="Align Centre">↔</button>
+            <button class="rb-iconbtn" data-cmd="align-right" title="Align right edges" aria-label="Align Right">⇥</button>
+            <button class="rb-iconbtn" data-cmd="align-top" title="Align tops" aria-label="Align Top">⤒</button>
+            <button class="rb-iconbtn" data-cmd="align-vcenter" title="Align middles, up and down" aria-label="Align Middle">↕</button>
+            <button class="rb-iconbtn" data-cmd="align-bottom" title="Align bottoms" aria-label="Align Bottom">⤓</button>
+            <button class="rb-iconbtn" data-cmd="distribute-h" title="Space the selected things evenly across" aria-label="Distribute Horizontally">⋯</button>
+            <button class="rb-iconbtn" data-cmd="distribute-v" title="Space the selected things evenly up and down" aria-label="Distribute Vertically">⋮</button>
+          </div>
+          <button class="rb-big" data-cmd="selection-pane" aria-pressed="false" title="Selection Pane (Alt+F10): every text box, structure, picture and shape on the slide, front to back. Pick, hide, rename or reorder them there"><span class="rb-icon">☰</span>Selection Pane</button>
+        </div>
+        <div class="rb-label">Arrange</div>
+      </div>
+    </div>
+    <div class="rb-panel" data-sl-panel="picture" hidden>
+      <div class="rb-group">
+        <div class="rb-row">
           <button class="rb-big" data-cmd="crop" title="Cut the edges off the selected picture"><span class="rb-icon">⌗</span>Crop</button>
           <button class="rb-big" data-cmd="picture-format" title="Picture Format for the selected picture: brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions. Saved as PowerPoint's own picture settings"><span class="rb-icon">◐</span>Picture Format</button>
           <button class="rb-big" data-cmd="alt-text" title="Alt Text: words that describe the selected picture or shape for people who can't see it"><span class="rb-icon">🏷</span>Alt Text</button>
@@ -2392,7 +2422,6 @@
         </div>
         <div class="rb-label">Arrange</div>
       </div>
-    </div>
     <div class="rb-panel" data-sl-panel="show" hidden>
       <div class="rb-group">
         <div class="rb-row">
@@ -2643,7 +2672,8 @@
       <button role="tab" data-dz-tab="home" aria-selected="true">Home</button>
       <button role="tab" data-dz-tab="insert" aria-selected="false">Insert</button>
       <button role="tab" data-dz-tab="page" aria-selected="false">Page</button>
-      <button role="tab" data-dz-tab="format" aria-selected="false" class="rb-ctx-tab" hidden title="Shows while a shape or picture is selected">Shape Format</button>
+      <button role="tab" data-dz-tab="format" aria-selected="false" class="rb-ctx-tab" hidden title="Shows while a shape is selected">Shape Format</button>
+      <button role="tab" data-dz-tab="picture" aria-selected="false" class="rb-ctx-tab" hidden title="Shows while a picture is selected">Picture Format</button>
     </div>
     <div class="rb-panel" data-dz-panel="home">
       <div class="rb-group">
@@ -2741,6 +2771,8 @@
         </div>
         <div class="rb-label">Shape Styles</div>
       </div>
+    </div>
+    <div class="rb-panel" data-dz-panel="picture" hidden>
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="crop" title="Cut the edges off the selected picture"><span class="rb-icon">⌗</span>Crop</button>

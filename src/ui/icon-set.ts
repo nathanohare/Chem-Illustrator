@@ -253,7 +253,6 @@ export const ICON_SET: Record<string, IconDef> = {
   'insert-slide-zoom': { hue: 'amber', d: slide(2.75, 3.75, 13, 9) + '<circle class="p a" cx="15.5" cy="15.25" r="4.25"/><path class="a" d="M18.5 18.25l2.75 2.75M15.5 13.5v3.5M13.75 15.25h3.5"/>' },
   'insert-summary-zoom': { hue: 'amber', d: '<rect class="p" x="2.75" y="3.25" width="8" height="5.5" rx="1"/><rect class="p" x="13.25" y="3.25" width="8" height="5.5" rx="1"/><rect class="p" x="2.75" y="11.25" width="8" height="5.5" rx="1"/><circle class="p a" cx="16.75" cy="15.75" r="3.75"/><path class="a" d="M19.5 18.5l2 2"/>' },
   'action-settings': { hue: 'amber', d: '<rect class="p" x="2.75" y="4.75" width="13" height="10" rx="2"/><path class="f a" d="M11.75 10.75l9.25 3.5-4 1.75-1.75 4z"/>' },
-  'section-menu': { hue: 'amber', d: '<path class="a" d="M3 4.75h18"/><rect class="p" x="5.75" y="8.25" width="12.5" height="5" rx="1.25"/><rect class="p" x="5.75" y="15.75" width="12.5" height="5" rx="1.25"/><path d="M3 8.25v12.5"/>' },
   'delete-slide': { hue: 'red', d: slide(2.75, 3.75, 13.5, 9.5) + '<path class="a" d="M14.25 15.25l6 6M20.25 15.25l-6 6"/>' },
   // ---------------------------------------------------------------- document: Design and Layout
   'style-set': { hue: 'blue', d: page(4.75, 2.75, 14.5, 18.5, 4) + '<path class="a" d="M7.75 7.25h5.5" stroke-width="2.25"/><path class="a" d="M7.75 11h4"/><path d="M7.75 14h8.5M7.75 17h6" stroke-opacity=".5"/>' },
@@ -284,7 +283,6 @@ export const ICON_SET: Record<string, IconDef> = {
   'text-orientation': { hue: 'blue', d: '<path d="M3.5 14.5l4.25-10h1l4.25 10M5.25 10.75h5.5" transform="rotate(-40 8.25 9.5)"/><path class="a" d="M8.75 20.75l11.5-11.5M20.25 9.25h-4.25M20.25 9.25v4.25"/>' },
   // ---------------------------------------------------------------- group pictures for the dropdowns that hold several commands
   'media-menu': { hue: 'red', d: '<rect class="p" x="2.75" y="3.75" width="18.5" height="16.5" rx="2"/><path d="M2.75 8h18.5M7.25 3.75V8M12 3.75V8M16.75 3.75V8"/><path class="f a" d="M10 11v6.5l5.25-3.25z"/>' },
-  'header-footer-menu': { hue: 'blue', d: '<rect class="p" x="4.75" y="2.75" width="14.5" height="18.5" rx="2"/><path class="f a" d="M4.75 15.75h14.5v3.5a2 2 0 0 1-2 2H6.75a2 2 0 0 1-2-2z"/><path d="M7.75 6.5h8.5M7.75 9.5h8.5M7.75 12.5h5" stroke-opacity=".5"/>' },
   'symbols-menu': { hue: 'blue', d: '<path class="a" d="M3.25 20.25h3.5v-1.75a5.5 5.5 0 1 1 5 0v1.75h3.5"/><path d="M14.5 4.25h7M18 4.25v7.5M16.25 11.75h3.5" />' },
   'zoom-menu': { hue: 'amber', d: slide(2.75, 3.75, 18.5, 12.5) + '<circle class="p a" cx="11" cy="10" r="3.5"/><path class="a" d="M13.5 12.5l2.5 2.5"/><path d="M8.5 20.25h7"/>' },
   'references-menu': { hue: 'blue', d: '<rect class="f a" x="2.75" y="3.25" width="4.5" height="17.5" rx="1"/><rect class="p" x="7.25" y="3.25" width="4.5" height="17.5" rx="1"/><path d="M14.25 6.75h7M14.25 11h7M14.25 15.25h4.5"/><path class="a" d="M17.5 4.25l1.5-1v3.5" stroke-width="1.25"/>' },
@@ -312,7 +310,7 @@ export const ICON_FOR: Record<string, string> = {
   'sheet-new-window': 'new-window', 'doc-new-window': 'new-window', 'table-styles': 'table-style', 'new-comment': 'comment',
   'spelling-grammar': 'spelling', 'check-accessibility': 'accessibility', 'design-size': 'page-size', 'shape-front': 'bring-front', 'shape-back': 'send-back',
   'rotate-dialog': 'rotate-by', 'duplicate-slide': 'duplicate-slide', 'tr:preview': 'animation-preview', 'an:preview': 'animation-preview',
-  'an:pane': 'animation-pane', 'sh:orientation': 'text-orientation', 'doc:arrange-position': 'position', 'an:painter': 'animation-painter', 'structure-from-name': 'structure-from-name',
+  'an:pane': 'animation-pane', 'section-menu': 'section', 'sh:orientation': 'text-orientation', 'doc:arrange-position': 'position', 'an:painter': 'animation-painter', 'structure-from-name': 'structure-from-name',
 };
 
 /** The drawing for a button, from its data-sh, data-doc, data-tr, data-an or data-cmd. */

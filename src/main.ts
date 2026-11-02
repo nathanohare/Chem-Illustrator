@@ -71,7 +71,7 @@ import { CanvasKeys } from './ui/canvas-keys';
 import { addKeyframe, insertKeyframe, keyframeAround, keyRect, keysBounds, moveKeyframe, removeKeyframe, unionRect, ZOOM_IN_MAX, TEXTURES, PARALLAX_MAX, type CanvasLook, type CanvasShow, type Texture } from './deck/canvas';
 import { mix } from './render/fills';
 import { splitCanvas, type SplitSlide } from './deck/canvas-export';
-import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel } from './ui/design-panel';
+import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel, setShapeInk } from './ui/design-panel';
 import { ShapeMenu } from './ui/shape-menu';
 import { whenIconsLoaded } from './design/icons';
 import { SlideTextRibbon } from './ui/slide-text-ribbon';
@@ -3218,18 +3218,27 @@ const keyframeCommands = {
   },
 };
 
-/** Shape Format shows among the Presentation ribbon's tabs while a shape or picture is selected, as in PowerPoint. */
+/**
+ * The contextual tabs, as in PowerPoint: Shape Format while a shape is selected and Picture
+ * Format while a picture is, in Presentation and Design; a hidden tab that was open gives way to Home.
+ */
 function showContextTabs(): void {
-  const any = [...editor.sel.shapes].some((id) => doc.shapes.has(id));
-  const tab = document.querySelector<HTMLElement>('#ribbon [data-sl-tab="format"]');
-  if (tab && tab.hidden !== !(any && ws.active.mode === 'slides')) {
-    tab.hidden = !(any && ws.active.mode === 'slides');
-    if (tab.hidden && animUi?.tab === 'format') animUi.showTab('home');
-  }
-  const dz = document.querySelector<HTMLElement>('#design-ribbon [data-dz-tab="format"]');
-  if (dz && dz.hidden !== !(any && ws.active.mode === 'design')) {
-    dz.hidden = !(any && ws.active.mode === 'design');
-    if (dz.hidden && dz.getAttribute('aria-selected') === 'true') document.querySelector<HTMLElement>('#design-ribbon [data-dz-tab="home"]')?.click();
+  const picked = [...editor.sel.shapes].map((id) => doc.shapes.get(id)).filter((x) => !!x);
+  const shape = picked.some((x) => x.kind !== 'picture');
+  const picture = picked.some((x) => x.kind === 'picture');
+  const mode = ws.active.mode;
+  const want: [string, string, boolean][] = [
+    ['#ribbon [data-sl-tab="format"]', 'slides', shape], ['#ribbon [data-sl-tab="picture"]', 'slides', picture],
+    ['#design-ribbon [data-dz-tab="format"]', 'design', shape], ['#design-ribbon [data-dz-tab="picture"]', 'design', picture],
+  ];
+  for (const [sel, m, on] of want) {
+    const tab = document.querySelector<HTMLElement>(sel);
+    const hide = !(on && mode === m);
+    if (!tab || tab.hidden === hide) continue;
+    tab.hidden = hide;
+    if (!hide || tab.getAttribute('aria-selected') !== 'true') continue;
+    if (m === 'slides') animUi?.showTab('home');
+    else document.querySelector<HTMLElement>('#design-ribbon [data-dz-tab="home"]')?.click();
   }
 }
 
@@ -6506,7 +6515,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['view-warnings-pane', 'view-analysis-pane', 'references', 'compound-library', 'knowledge-base', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'icons-mode', 'icons-kind', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -7134,6 +7143,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'theme-dark': () => { setAppTheme('dark'); storeSettings(); },
   'icons-mode': () => { setIconLook('mode'); storeSettings(); },
   'icons-kind': () => { setIconLook('kind'); storeSettings(); },
+  'shape-ink-accent': () => { setShapesInk(shapeInkNow === 'accent' ? 'neutral' : 'accent'); storeSettings(); },
   'focus-view': () => setFocusView(!focusView),
   'one-column-tools': () => { setOneColumnTools(!oneColumnTools); storeSettings(); },
   'text-bar-floating': () => { placeTextBar('floating'); storeSettings(); },
@@ -8570,6 +8580,7 @@ function currentSettings(): Settings {
     textBar: CaptionEditor.barPlace,
     appTheme,
     iconLook,
+    shapeInk: shapeInkNow,
     oneColumnTools,
     startView,
     page: defaultPage,
@@ -8807,6 +8818,7 @@ function applySettings(s: Settings): void {
   placeTextBar(s.textBar);
   setAppTheme(s.appTheme);
   setIconLook(s.iconLook);
+  setShapesInk(s.shapeInk);
   setOneColumnTools(s.oneColumnTools);
   startView = s.startView;
   showGroupTips(s.groupTips);
@@ -10005,6 +10017,8 @@ function drawingMenu(): MenuItem[] {
     null,
     ...(atoms ? [{ label: 'Label the Structure', items: [{ cmd: 'add-id-label' }, { cmd: 'add-caption' }, { cmd: 'attach-descriptors' }, null, { cmd: 'number-compounds' }] }] : []),
     ...(atoms ? [{ cmd: 'add-to-compound-library', label: 'Add to Compound Library' }] : []),
+    // Presentation and Design keep Analysis hidden until it is wanted (View > Show turns it on for good)
+    ...(atoms && (ws.active.mode === 'slides' || ws.active.mode === 'design') && !chemPanes.analysis ? [{ cmd: 'view-analysis-pane', label: 'Show Analysis' }] : []),
     ...(atoms || shapes.some((x) => x.kind === 'ring') ? [{ label: 'Highlight and Fill', items: [{ cmd: 'highlight' }, { cmd: 'remove-highlight' }, { cmd: 'highlight-look' }, { cmd: 'select-highlight' }, null, { cmd: 'smooth-highlight' }, { cmd: 'centre-highlight' }, { cmd: 'soft-highlight' }, { cmd: 'outline-highlight' }, { cmd: 'shadow-highlight' }, { cmd: 'glow-highlight' }, { cmd: 'save-highlight-look' }, null, { cmd: 'fill-rings' }, { cmd: 'ring-shadow' }] }] : []),
     ...(s.captions.size ? [{ cmd: 'link-text' }] : []),
     ...([...s.captions].some((id) => doc.captions.get(id)?.runs.some((r) => r.link))
@@ -11411,6 +11425,14 @@ function setIconLook(l: Settings['iconLook']): void {
   if (l === 'kind') document.documentElement.dataset.icons = 'colour';
   else delete document.documentElement.dataset.icons;
   for (const w of ['mode', 'kind']) $(`[data-cmd="icons-${w}"]`)?.setAttribute('aria-checked', String(w === l));
+}
+
+/** View > Window and Colours > Icon Colours > Shapes in the Mode Colour. */
+let shapeInkNow: Settings['shapeInk'] = 'neutral';
+function setShapesInk(ink: Settings['shapeInk']): void {
+  shapeInkNow = ink;
+  setShapeInk(ink);
+  $('[data-cmd="shape-ink-accent"]')?.setAttribute('aria-checked', String(ink === 'accent'));
 }
 
 /** The space round the drawing's pages in the dark theme (app.css --surround), or null in the light theme, where the page grid's light shading shows. */

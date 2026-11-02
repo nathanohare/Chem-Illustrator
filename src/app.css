@@ -1008,11 +1008,13 @@ dialog.typing-dialog p { margin: 2px 0 6px; }
 .dl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 4px; }
 .dl-shape { display: flex; align-items: center; justify-content: center; padding: 2px; aspect-ratio: 1; border: 1px solid transparent; border-radius: var(--r-control); background: var(--tile); cursor: grab; }
 .dl-shape:hover { border-color: var(--accent); }
-.dl-shape.active { border-color: var(--tab-design); background: color-mix(in srgb, var(--tab-design) 14%, transparent); }
+.dl-shape.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+/* the shapes are drawn in bold lines straight on the menu, with no box behind them (the clip-art icons keep their light paper) */
+.dl-grid:not(.dl-icons) .dl-shape { background: transparent; }
 .dl-shape canvas, .dl-shape svg { pointer-events: none; }
 .dl-tabs { display: flex; gap: 2px; margin: 0 0 6px; border-bottom: 1px solid var(--line); }
 .dl-tabs button { font: inherit; font-size: var(--fs-sm); font-weight: 600; padding: 3px 10px 4px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--muted, #666); cursor: pointer; }
-.dl-tabs button.active { color: var(--fg); border-bottom-color: var(--tab-design); }
+.dl-tabs button.active { color: var(--fg); border-bottom-color: var(--accent); }
 .dl-head select.dl-group { width: 100%; box-sizing: border-box; font: inherit; margin-top: 4px; }
 .dl-head select.dl-group[hidden] { display: none; }
 .dl-icons .dl-shape { color: var(--tile-ink); }

@@ -242,7 +242,7 @@ describe('the settings file', () => {
       keep: { ...DEFAULT_KEEP, autoSave: true, recoveryMinutes: 5, changedOnDisk: 'reload' as const, lockFiles: false },
       ai: { provider: 'anthropic' as const, model: 'claude-sonnet-5-5', base: '' },
       straightenLinear: false,
-      appTheme: 'dark' as const, iconLook: 'kind' as const, oneColumnTools: true, startView: false, lastVersion: '0.1.90',
+      appTheme: 'dark' as const, iconLook: 'kind' as const, shapeInk: 'accent' as const, oneColumnTools: true, startView: false, lastVersion: '0.1.90',
     };
     const text = settingsText(s);
     expect(text).toContain('"app": "Chem Illustrator"');
