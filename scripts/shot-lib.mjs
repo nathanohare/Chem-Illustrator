@@ -26,7 +26,28 @@ export async function open(url = 'http://localhost:5173/', { width = 1440, heigh
   await page.addStyleTag({ content: '#welcome { display: none !important; }' });
   // the navigator map (on by default) only where a picture is about getting round a drawing
   if (!navigator) await page.evaluate(() => window.__app.command('navigator'));
+  // the side panel folded away and the ribbon collapsed to its tabs, so the drawing has the room
+  // (window.__shotBare() does it again after a change of mode: each mode keeps its own side panel)
+  await page.evaluate(() => {
+    window.__shotBare = () => {
+      const a = window.__app;
+      const side = document.querySelector('.toolbox[data-id="details"]');
+      if (side && !side.classList.contains('collapsed')) a.command('fold-side');
+      if (!document.body.classList.contains('ribbon-collapsed')) a.command('collapse-ribbon');
+    };
+    window.__shotBare();
+  });
+  // the main toolbox folded up to its strip, with its own menu's Fold Up
+  await page.evaluate(() => { const f = document.querySelector('.toolbox[data-id="main"]'); const r = f.getBoundingClientRect(); f.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 10, clientY: r.top + 10 })); });
+  await page.getByText('Fold Up', { exact: true }).click();
+  await page.waitForTimeout(300);
   return { browser, page, problems };
+}
+
+/** Fold the side panel away and collapse the ribbon, if they are not already (after a change of mode, say). */
+export async function bare(page) {
+  await page.evaluate(() => window.__shotBare());
+  await page.waitForTimeout(300);
 }
 
 /** A drawn mouse pointer that follows the mouse (pointer-events: none, so it never gets in the way). */
@@ -234,6 +255,7 @@ export async function helperSpot(page, arrowId, side) {
 
 /** Click a toolbar tool by name. */
 export async function tool(page, name, glideThere = true) {
+  if (await foldedTools(page)) { await page.evaluate((n) => document.querySelector(`[data-tool="${n}"]`).click(), name); return; }
   const b = await page.locator(`[data-tool="${name}"]`).first().boundingBox();
   // up and left of the middle: a tool with more like it has a "more" corner button over its lower right
   const p = { x: b.x + b.width * 0.35, y: b.y + b.height * 0.35 };
@@ -291,6 +313,7 @@ export async function contentClip(page, margin = 30) {
 
 /** Pick a tool from a palette: open it with its small arrow (the palette's button shows `first` until another is picked), then click the one named `label`. */
 export async function paletteTool(page, first, label) {
+  if (await foldedTools(page)) return pickFolded(page, first, `.flyout button[aria-label="${label}"]`);
   const m = await page.locator(`.palette-wrap:has([data-tool="${first}"]) .more`).boundingBox();
   await glide(page, m.x + m.width / 2, m.y + m.height / 2, 20);
   await page.mouse.click(m.x + m.width / 2, m.y + m.height / 2);
@@ -301,8 +324,22 @@ export async function paletteTool(page, first, label) {
   await page.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
 }
 
+/** The main toolbox is folded up (as the recordings have it): its tools are picked as a hotkey would, unseen. */
+const foldedTools = (page) => page.evaluate(() => !!document.querySelector('.toolbox[data-id="main"].collapsed'));
+/** A palette's tool picked with the main toolbox folded: its fly-out opened and used in one go, so it never shows. */
+async function pickFolded(page, first, sel, n = 0) {
+  await page.evaluate(([first, sel, n]) => {
+    const more = document.querySelector(`.palette-wrap:has([data-tool="${first}"]) .more`);
+    if (!document.querySelector('.flyout')) more.click();
+    (sel ? document.querySelector(sel) : document.querySelectorAll('.flyout button')[n]).click();
+    // shut, if picking left it open
+    if (document.querySelector('.flyout')) more.click();
+  }, [first, sel, n]);
+}
+
 /** Pick the n-th tool (from 0) in a palette's flyout, for palettes whose items share one long title style. */
 export async function paletteItem(page, first, n) {
+  if (await foldedTools(page)) return pickFolded(page, first, null, n);
   const m = await page.locator(`.palette-wrap:has([data-tool="${first}"]) .more`).boundingBox();
   await glide(page, m.x + m.width / 2, m.y + m.height / 2, 20);
   await page.mouse.click(m.x + m.width / 2, m.y + m.height / 2);

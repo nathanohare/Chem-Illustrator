@@ -6,7 +6,7 @@
 // reaction-animation) to
 // record only those.
 
-import { open, pointer, glide, look, addSmiles, record, canvasBox, screenOf, helperSpot, tool, drag, keys, newestAtom, atomAt, wordSpot, select, paletteTool, paletteItem, inputBadge, drawScheme, fitOnSlide } from './shot-lib.mjs';
+import { open, pointer, glide, look, addSmiles, record, canvasBox, screenOf, helperSpot, tool, drag, keys, newestAtom, atomAt, wordSpot, select, paletteTool, paletteItem, inputBadge, drawScheme, fitOnSlide, bare } from './shot-lib.mjs';
 
 const args = process.argv.slice(2);
 const url = args[0]?.startsWith('http') ? args.shift() : 'http://localhost:5173/';
@@ -51,7 +51,7 @@ if (want('smart-arrows')) {
   await roomy(page);
   await addSmiles(page, 'O=Cc1ccc(Br)cc1', 150, 250);
   await addSmiles(page, 'O=Cc1ccc(-c2ccccc2)cc1', 300, 250);
-  await page.evaluate(() => window.__app.command('fold-side'));
+  await page.evaluate(() => window.__shotBare());
   await page.waitForTimeout(300);
   await look(page, 3.6, 265, 250);
   await pointer(page);
@@ -144,7 +144,7 @@ if (want('catalytic-cycle')) {
     a.command('clean-up-reaction');
     e.clearSelection();
   });
-  await page.evaluate(() => window.__app.command('fold-side'));
+  await page.evaluate(() => window.__shotBare());
   await page.waitForTimeout(300);
   // room for the cycle, which is taller than the row it starts as
   await look(page, 1.6, 335, 300);
@@ -184,7 +184,7 @@ if (want('id-labels')) {
     a.editor.numberCompounds({ start: 1, style: 'numbers', prefix: '', suffix: '', bold: true });
     a.editor.clearSelection();
   });
-  await page.evaluate(() => window.__app.command('fold-side'));
+  await page.evaluate(() => window.__shotBare());
   await page.waitForTimeout(300);
   await look(page, 3.0, 232, 280);
   await pointer(page);
@@ -238,7 +238,7 @@ if (want('spelling')) {
     doc.edit('Text', () => { id = doc.addCaption({ x: 200, y: 200, runs: [{ text: 'The crude solid was recrystalized from\nCH2Cl2/hexanes (5mL) at 10-15 °C;\n1H NMR in CDCl3 matched the litterature.' }], justify: 'left' }).id; });
     a.editor.changed(); return id;
   });
-  await page.evaluate(() => window.__app.command('fold-side'));
+  await page.evaluate(() => window.__shotBare());
   await look(page, 3.2, 248, 205);
   await pointer(page);
   const c = await canvasBox(page);
@@ -386,7 +386,7 @@ if (want('mechanism')) {
     ...atoms.map(([el, x, y]) => `${f(x * 1.5)}${f(-y * 1.5)}${f(0)} ${el.padEnd(3)} 0  0  0  0  0  0  0  0  0  0  0  0`),
     ...bonds.map(([i, j, o]) => `${n(i + 1, 3)}${n(j + 1, 3)}${n(o, 3)}  0`), 'M  END'].join('\n');
   const ids = await page.evaluate((mol) => { const a = window.__app; let ids; a.doc.edit('Structures', () => { ids = a.addMolfile(a.doc, mol, 200, 150); }); a.editor.changed?.(); return ids; }, mol);
-  await page.evaluate(() => window.__app.command('fold-side'));
+  await page.evaluate(() => window.__shotBare());
   await page.waitForTimeout(300);
   // zoom in and centre the two structures in the canvas
   await page.evaluate(() => {
@@ -440,7 +440,7 @@ if (want('navigation')) {
   const text = readFileSync(new URL('../tests/morph/siccanin sequence.cdxml', import.meta.url), 'utf8');
   await page.evaluate((t) => window.__app.openText(t, 'siccanin sequence.cdxml'), text);
   await page.waitForTimeout(800);
-  await page.evaluate(() => { window.__app.command('fold-side'); window.__app.renderer.showWarnings = false; });
+  await page.evaluate(() => { window.__shotBare(); window.__app.renderer.showWarnings = false; });
   await page.waitForTimeout(300);
   const c = await canvasBox(page);
   // start zoomed in on the left end of the route
@@ -501,6 +501,7 @@ if (want('slide-highlights')) {
     const d = a.ws.active.deck; d.setMaster(t.applyTemplate(d.master, t.SLIDE_TEMPLATES.find((x) => x.id === 'harbor')));
     a.command('new-slide');
   });
+  await bare(page);
   await page.waitForTimeout(600);
   await page.evaluate(() => {
     const a = window.__app, doc = a.doc;
@@ -558,6 +559,7 @@ if (want('canvas-slides')) {
     const d = a.ws.active.deck; d.setMaster(t.applyTemplate(d.master, t.SLIDE_TEMPLATES.find((x) => x.id === 'harbor')));
     d.addCanvasSlide();
   });
+  await bare(page);
   await page.waitForTimeout(800);
   // a three-step route across the canvas, a slide width and a half apart
   await page.evaluate(async () => {
@@ -642,7 +644,14 @@ if (want('model-3d')) {
     await glide(page, p.x, p.y, 20);
     await page.mouse.dblclick(p.x, p.y);
     await page.waitForTimeout(700);
-    // the side panel's Properties: the pKa of each site, solubility, vapour pressure
+    // the side panel opened for its Properties: the pKa of each site, solubility, vapour pressure
+    const fold = async () => {
+      const f = await page.locator('#side-fold').boundingBox();
+      await glide(page, f.x + f.width / 2, f.y + f.height / 2, 18);
+      await page.mouse.click(f.x + f.width / 2, f.y + f.height / 2);
+      await page.waitForTimeout(600);
+    };
+    await fold();
     const sum = page.locator('summary', { hasText: 'Properties' }).first();
     await sum.scrollIntoViewIfNeeded();
     const sb = await sum.boundingBox();
@@ -651,6 +660,8 @@ if (want('model-3d')) {
     await page.waitForTimeout(500);
     await page.mouse.wheel(0, 260);
     await page.waitForTimeout(2200);
+    // and folded away again, so the 3-D model has the room
+    await fold();
     await menu(page, 'chemistry', 'model-3d');
     for (let i = 0; i < 60 && !(await page.locator('.v3d-canvas').isVisible()); i++) await page.waitForTimeout(250);
     for (let i = 0; i < 120 && (await page.locator('.viewer3d', { hasText: 'Building' }).count()); i++) await page.waitForTimeout(250);
@@ -687,7 +698,7 @@ if (want('page-grid')) {
   const { browser, page } = await open(url, { width: 1280, height: 760 });
   await roomy(page);
   // the first page's corner at the top left, with room for two pages across and most of two down
-  const pg = await page.evaluate(() => { const a = window.__app, r = a.renderer; r.view.scale = 0.55; r.view.ox = 24; r.view.oy = 24; a.editor.requestScene(); return a.doc.page; });
+  const pg = await page.evaluate(() => { const a = window.__app, r = a.renderer; r.view.scale = 0.7; r.view.ox = 24; r.view.oy = 24; a.editor.requestScene(); return a.doc.page; });
   console.log('page', JSON.stringify(pg));
   await pointer(page);
   const c = await canvasBox(page);
@@ -712,7 +723,7 @@ if (want('page-grid')) {
       await page.waitForTimeout(1300);
     }
     await page.waitForTimeout(800);
-  }, { clip: { x: c.x, y: c.y - 30, width: c.width, height: c.height + 30 }, width: 900, hold: 2500 });
+  }, { clip: { x: 0, y: 0, width: 1280, height: 760 }, width: 900, hold: 2500 });
   await browser.close();
 }
 
@@ -732,19 +743,20 @@ if (want('slide-references')) {
       ref('r-fulmer', ['Fulmer, Gregory R.', 'Miller, Alexander J. M.', 'Sherden, Nathaniel H.', 'Gottlieb, Hugo E.', 'Nudelman, Abraham', 'Stoltz, Brian M.', 'Bercaw, John E.', 'Goldberg, Karen I.'], 'NMR Chemical Shifts of Trace Impurities', 'Organometallics', '2010', '29', '2176–2179', '10.1021/om100106e'),
     ] });
   });
+  await bare(page);
   await page.waitForTimeout(600);
   await page.evaluate(() => {
     const doc = window.__app.doc;
     const ph = [...doc.captions.values()].filter((c) => c.ph);
     doc.edit('Text', () => { doc.updateCaption(ph[0].id, { runs: [{ text: 'Route to the enoate' }] }); for (const c of ph.slice(1)) doc.removeCaption(c.id); });
-    window.__app.command('fold-side');
+    window.__shotBare();
   });
   await page.waitForTimeout(400);
   await drawScheme(page, { xs: [150, 420, 740], y: 330, fit: false });
   await fitOnSlide(page, { width: 0.9, cy: 0.55 });
   await page.evaluate(() => window.__app.editor.clearSelection());
   // the side panel folded away, so the slide has the room
-  await page.evaluate(() => window.__app.command('fold-side'));
+  await page.evaluate(() => window.__shotBare());
   await page.waitForTimeout(600);
   await pointer(page);
   const W = 1280, H = 720;
@@ -818,7 +830,7 @@ if (want('perspective')) {
   await page.mouse.move(c.x + c.width * 0.8, c.y + c.height * 0.85);
   await record(page, 'perspective', async () => {
     await page.waitForTimeout(800);
-    if (await page.locator('[data-tool="perspective-3d"]').first().isVisible()) await tool(page, 'perspective-3d');
+    if (await page.locator('[data-tool="perspective-3d"]').count()) await tool(page, 'perspective-3d');
     else await paletteItem(page, 'perspective', 1);
     await page.waitForTimeout(600);
     // grab the structure by an atom of the lower naphthalene
@@ -840,8 +852,27 @@ if (want('journal-check')) {
   const { browser, page } = await open(url, { width: 1280, height: 760 });
   await drawScheme(page);
   await page.evaluate(() => window.__app.editor.clearSelection());
+  // the scheme in the left of the window, clear of the check's window at the right
+  await page.evaluate(() => {
+    const a = window.__app, r = a.renderer, xs = [...a.doc.atoms.values()].map((t) => t.x), ys = [...a.doc.atoms.values()].map((t) => t.y);
+    const x0 = Math.min(...xs) - 40, x1 = Math.max(...xs) + 40, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    r.view.scale = Math.min(r.view.scale, 880 / (x1 - x0));
+    r.view.ox = 30 - x0 * r.view.scale;
+    r.view.oy = r.height / 2 - cy * r.view.scale;
+    a.editor.requestScene();
+  });
   await pointer(page);
   const c = await canvasBox(page);
+  // the check's window moved once to the right of the window, where it opens again (not over the scheme)
+  await page.evaluate(() => window.__app.command('preflight'));
+  await page.waitForTimeout(1200);
+  const hd = await page.locator('.preflight-pane .fb-head, .preflight-pane .fb-title').first().boundingBox();
+  await page.mouse.move(hd.x + 20, hd.y + hd.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(1280 - 330, hd.y + hd.height / 2 + 40, { steps: 8 });
+  await page.mouse.up();
+  await page.locator('.preflight-pane .fb-close').first().click();
+  await page.waitForTimeout(400);
   await page.mouse.move(c.x + c.width * 0.8, c.y + c.height * 0.85);
   await record(page, 'journal-check', async () => {
     await page.waitForTimeout(800);
@@ -871,8 +902,9 @@ if (want('journal-check')) {
 if (want('reagent-table')) {
   const { browser, page } = await open(url, { width: 1280, height: 640 });
   await page.evaluate(() => { const a = window.__app; a.ws.newSheet(); });
+  await bare(page);
   await page.waitForTimeout(800);
-  await page.evaluate(() => { const a = window.__app; a.command('reagent-table'); a.command('fold-side'); });
+  await page.evaluate(() => { const a = window.__app; a.command('reagent-table'); window.__shotBare(); });
   await page.waitForTimeout(800);
   await page.evaluate(() => document.querySelector('#flash')?.classList.remove('show'));
   const k = page.keyboard;
