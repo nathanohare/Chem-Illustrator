@@ -229,7 +229,9 @@ import { SlideComparePane } from './ui/slide-compare';
 import { pickFileTemplate } from './ui/file-templates';
 import type { PastedRows } from './io/table-clip';
 import { Keeper } from './keep/keeper';
-import { notice } from './ui/keep-ui';
+import { choose as chooseButtons, notice } from './ui/keep-ui';
+import { runZoteroOn, type ZoteroCommand } from './document/zotero-live';
+import { DeckStore, type DeckZoteroHost } from './deck/zotero-deck';
 import { DEFAULT_KEEP, type KeepPrefs } from './keep/prefs';
 import { Brush, paintObjects, pickObjectLook, type ObjectLook, type TextLook } from './format-painter';
 import { SymbolWindow } from './ui/symbol-window';
@@ -4857,6 +4859,56 @@ async function slideReferences(): Promise<void> {
   }
 }
 
+/** Each open presentation's id for Zotero. */
+const zoteroDeckIds = new WeakMap<Deck, string>();
+let zoteroDeckBusy = false;
+
+/**
+ * Insert > Zotero (presentations): Zotero's commands on the presentation (zotero-deck.ts). Add/Edit
+ * Citation picks the references the slide shows in Zotero's window; Add/Edit Bibliography makes
+ * (or edits) the References slide in Zotero's style. Desktop app only: Zotero turns away web pages.
+ */
+async function zoteroSlides(command: ZoteroCommand): Promise<void> {
+  const d = deckNow();
+  if (!d || ws.active.mode !== 'slides') return;
+  finishTyping();
+  if (!isTauri() || iPadApp) { flash('Citing with Zotero works in the desktop app with Zotero running on the same computer (a browser can\'t reach it). Here, use References on Slide.', 8000); return; }
+  if (zoteroDeckBusy) { flash('Zotero is still working on this presentation (finish in Zotero\'s window first).'); return; }
+  zoteroDeckBusy = true;
+  let docId = zoteroDeckIds.get(d);
+  if (!docId) { docId = `chem-illustrator-${Math.random().toString(36).slice(2, 12)}`; zoteroDeckIds.set(d, docId); }
+  let join = false;
+  const host: DeckZoteroHost = {
+    docId,
+    state: () => ({ refs: d.settings.refs, slides: d.slides.map((s) => ({ id: s.id, hidden: s.hidden, refs: s.refs, refLook: s.refLook, refList: s.refList, zotero: s.zotero })), current: d.index }),
+    change: (refs, slides) => { d.setRefState(refs, slides, 'Zotero', join); join = true; },
+    addRefsSlide: () => { const s = d.insertRefsSlide(d.slides.length, { which: 'shown' }); join = false; return s.id; },
+    removeSlide: (id) => { const i = d.slides.findIndex((s) => s.id === id); if (i >= 0) d.remove([i]); join = false; },
+    goTo: (id) => { const i = d.slides.findIndex((s) => s.id === id); if (i >= 0 && deckNow() === d) d.go(i); },
+    choose: (text, labels) => chooseButtons('Zotero', text, labels, 0),
+    activate: () => { void invoke('zotero_activate').catch(() => {}); },
+  };
+  try {
+    const got = await runZoteroOn(command, new DeckStore(host, command), async (endpoint, body) => {
+      const r = await invoke<{ status: number; body: string }>('zotero_post', { endpoint, body });
+      return { status: r.status, text: r.body };
+    });
+    if (got === 'offline') flash('Zotero isn\'t running. Start the Zotero app (version 7 or later) on this computer, then try again.', 7000);
+    else if (got === 'busy') flash('Zotero is busy with a citation in another file. Finish there, then try again.', 6000);
+  } catch (e) {
+    flash(`Zotero: ${e instanceof Error ? e.message : String(e)}`, 8000);
+  } finally {
+    zoteroDeckBusy = false;
+  }
+}
+
+/** Insert > Zotero ▾ on a presentation: Zotero's commands in a menu under the button. */
+function zoteroSlidesMenu(): void {
+  const b = document.querySelector<HTMLElement>('[data-cmd="zotero-menu"]');
+  const r = b?.getBoundingClientRect();
+  showContextMenu(r ? r.left : 200, r ? r.bottom : 120, [{ cmd: 'zotero-cite' }, { cmd: 'zotero-bib' }, { cmd: 'zotero-refresh' }, null, { cmd: 'zotero-prefs' }, { cmd: 'zotero-unlink' }], { run: (cmd) => void command(cmd), key: commandKey });
+}
+
 /** Insert > Presentation > References Slide: a slide after the last one listing the references the slides show (or all of them), kept up to date. */
 async function referencesSlide(): Promise<void> {
   const d = deckNow();
@@ -6785,7 +6837,7 @@ function setPictureStyle(look: PictureLook | undefined): boolean {
 }
 
 /** Slide commands that don't apply to a design's single page. */
-const SLIDE_ONLY = new Set(['references-slide', 'compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
+const SLIDE_ONLY = new Set(['references-slide', 'zotero-menu', 'zotero-cite', 'zotero-bib', 'zotero-refresh', 'zotero-prefs', 'zotero-unlink', 'compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
   'edit-layouts', 'view-sorter', 'add-section', 'rename-section', 'remove-section', 'remove-section-slides', 'remove-all-sections', 'section-up', 'section-down', 'collapse-sections', 'expand-sections',
   'slide-transitions', 'slide-animations', 'animation-pane', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-video', 'insert-audio',
   'reading-view', 'rehearse-timings', 'record-show', 'rehearse-here', 'record-show-here', 'clear-timings-slide', 'clear-timings-all', 'clear-narration-slide', 'clear-narration-all', 'clear-show-menu', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
@@ -6996,6 +7048,12 @@ const COMMANDS: Record<string, () => unknown> = {
   references: () => void openReferences(),
   'manage-references': () => void openReferences(),
   'slide-references': () => void slideReferences(),
+  'zotero-menu': () => zoteroSlidesMenu(),
+  'zotero-cite': () => void zoteroSlides('addEditCitation'),
+  'zotero-bib': () => void zoteroSlides('addEditBibliography'),
+  'zotero-refresh': () => void zoteroSlides('refresh'),
+  'zotero-prefs': () => void zoteroSlides('setDocPrefs'),
+  'zotero-unlink': () => void zoteroSlides('removeCodes'),
   'references-slide': () => void referencesSlide(),
   'insert-reference': () => void insertReference(),
   'compound-library': () => void openCompoundLibrary(),

@@ -402,15 +402,17 @@ export interface Citing {
 export const formatOf = (t: Pick<Citing, 'citeStyle' | 'citeOptions'>): CiteFormat => citeFormat(t.citeStyle, t.citeOptions);
 const asFormat = (style: CiteStyle | CiteFormat | undefined): CiteFormat => (typeof style === 'object' ? style : citeFormat(style ?? DEFAULT_STYLE));
 
-/** The ids of the fields in the text, in order, with those in a table's cells after the table. */
+/** The ids of the fields in the text, in order, with those in a table's cells after the table and those in a footnote after its number. */
 export function fieldOrder(t: Pick<Citing, 'runs' | 'objects'>): number[] {
   const out: number[] = [];
   const walk = (runs: TextRun[]): void => {
     for (const r of runs) {
       if (r.obj === undefined) continue;
       for (let i = 0; i < r.text.length; i++) out.push(r.obj);
-      const o = t.objects[r.obj] as { kind: string; table?: { rows: { runs: TextRun[] }[][] } } | undefined;
+      const o = t.objects[r.obj] as { kind: string; table?: { rows: { runs: TextRun[] }[][] }; runs?: TextRun[] } | undefined;
       if (o?.kind === 'table' && o.table) for (const row of o.table.rows) for (const c of row) walk(c.runs);
+      // a footnote's citations (note styles) where its number is
+      if (o?.kind === 'note' && o.runs) walk(o.runs);
     }
   };
   walk(t.runs);

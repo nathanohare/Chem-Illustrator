@@ -229,7 +229,7 @@ export const COMMAND_NAMES: Record<string, string> = {
   'doc-bullets': 'Bullets', 'doc-numbering': 'Numbering', replace: 'Find and replace…', 'insert-structure': 'Insert a structure (draw it)',
   'insert-caption': 'Insert a caption…', 'cross-reference': 'Insert a cross-reference…', 'compound-number': 'Insert a compound number…', 'structure-from-name-doc': 'Insert a structure from a name or SMILES…',
   'insert-citation': 'Insert a citation…', 'insert-bibliography': 'Insert the bibliography', 'manage-references': 'Manage references…',
-  'zotero-cite': 'Zotero: add or edit a citation…', 'zotero-bib': 'Zotero: add or edit the bibliography…', 'zotero-refresh': 'Zotero: refresh citations and bibliography', 'zotero-prefs': 'Zotero: document preferences (citation style)…', 'zotero-unlink': 'Zotero: unlink citations (plain text)…',
+  'zotero-menu': 'Zotero (menu)', 'zotero-cite': 'Zotero: add or edit a citation…', 'zotero-bib': 'Zotero: add or edit the bibliography…', 'zotero-refresh': 'Zotero: refresh citations and bibliography', 'zotero-prefs': 'Zotero: document preferences (citation style)…', 'zotero-unlink': 'Zotero: unlink citations (plain text)…',
   references: 'References of every open file…', 'slide-references': 'References on the slide…', 'references-slide': 'Insert a References slide…', 'insert-reference': 'Insert a formatted reference…',
   'doc-go-to': 'Go to a page, section, line, bookmark, comment, note, table, figure, equation or heading…', 'doc-select': 'Select (menu)', 'select-similar': 'Select text with similar formatting',
   'spelling-grammar': 'Spelling and grammar…', 'thesaurus': 'Thesaurus…', 'word-count': 'Word count…', 'insert-date': 'Insert the date and time…', 'insert-field': 'Insert a field…',
