@@ -16,7 +16,7 @@ import { ident, mul, axisTurn, skeleton, cleanerNearby, cleanestView, type M3, t
 import { depthShadePrefs } from '../render/depth-shade';
 import { ask } from './ask';
 import { DEFAULT_SEARCH, type SearchOptions } from '../chem/conformer-rank';
-import { refineWithXtb, XTB_SOLVENTS, type XtbOptions, type XtbRunner } from '../chem/xtb';
+import { KCAL_PER_HARTREE, refineWithXtb, XTB_SOLVENTS, type XtbOptions, type XtbRunner } from '../chem/xtb';
 import { chargeAndMultiplicity, qmInput, QM_METHODS, type QmOptions, type QmProgram } from '../chem/qm-input';
 
 /** What the conformer tiers need from the app. */
@@ -239,11 +239,11 @@ export class Viewer3d {
     const n = m.conformers.length, e0 = m.conformers[0].energy, c = m.conformers[this.conf], e = c.energy;
     const method = m.method ?? 'MMFF94s+';
     const xtb = method.startsWith('GFN2');
-    // absolute energies only mean something for the force field; xTB's are shown relative
-    const energy = e !== null && e0 !== null ? (this.conf || xtb ? ` · +${(e - e0).toFixed(1)} kcal/mol` : ` · ${e.toFixed(1)} kcal/mol`) : '';
+    // ranked by energy relative to the lowest (an absolute energy means little on its own; it is in the tooltip)
+    const energy = e !== null && e0 !== null ? ` · ΔE ${this.conf ? '+' : ''}${(e - e0).toFixed(1)} kcal/mol` : '';
     const pop = c.population !== undefined && n > 1 ? ` · ${c.population >= 0.995 ? '>99' : c.population < 0.005 ? '<1' : Math.round(c.population * 100)}%` : '';
     this.info.textContent = `Conformer ${this.conf + 1} of ${n}${energy}${pop}`;
-    this.info.title = `${method} energies${m.starts ? `, from a search of ${m.starts} starting conformers` : ', after relaxing a dozen likely conformers (not a full search: try Search Conformers…)'}. Percentages are Boltzmann populations at 25 °C among the conformers shown.`;
+    this.info.title = `${method} energies${e !== null ? ` (this one ${xtb ? `${(e / KCAL_PER_HARTREE).toFixed(6)} Eh` : `${e.toFixed(2)} kcal/mol`})` : ''}, relative to the lowest${m.starts ? `, from a search of ${m.starts} starting conformers` : ', after relaxing a dozen likely conformers (not a full search: try Search Conformers…)'}. Percentages are Boltzmann populations at 25 °C among the conformers shown.`;
     this.prev.disabled = this.conf === 0;
     this.next.disabled = this.conf >= n - 1;
     this.draw();

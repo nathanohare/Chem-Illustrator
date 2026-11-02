@@ -27,7 +27,7 @@
 import { Doc, keepOnPage, shiftDrawing, type Arrow, type BondDisplay, type StepRoles } from '../model';
 import type { DocStyle } from '../style';
 import { elementNumber, SYMBOLS } from '../chem/elements';
-import { toMolfile } from '../chem/molfile';
+import { toMolfile, v3000Ctab, v3000Molfile, type MAtom, type MBond } from '../chem/molfile';
 import { plainMeasure, reactionSteps, schemeItems, itemFinder } from '../chem/reaction';
 import { placeSpecies } from '../chem/species';
 import { plainText } from '../richtext';
@@ -862,26 +862,39 @@ export function docToScene(doc: Doc): { scene: FScene; unknown: string[]; step: 
 
 const fx = (v: number, d = 4) => (Math.abs(v) < 5e-5 ? 0 : v).toFixed(d);
 
-/** Molecules → one V2000 molfile. */
-function molblockOf(mols: FMol[], name = ''): string {
-  const atoms = mols.flatMap((m) => m.atoms);
-  let off = 0;
-  const bonds = mols.flatMap((m) => { const o = off; off += m.atoms.length; return m.bonds.map((b) => ({ ...b, a: b.a + o, b: b.b + o })); });
+/** Molecules as molfile atoms and bonds (atoms counted from 0 across them all). */
+function ctabOf(mols: FMol[]): [MAtom[], MBond[]] {
+  const atoms: MAtom[] = [];
+  const bonds: MBond[] = [];
+  for (const m of mols) {
+    const o = atoms.length;
+    for (const a of m.atoms) {
+      const z = elementNumber(a.sym);
+      const sym = z === undefined ? (/^R\d*$/.test(a.sym) ? 'R#' : a.sym === '*' ? '*' : 'R') : a.sym;
+      atoms.push({ sym, x: a.x, y: a.y, charge: a.charge ?? 0, iso: a.iso ?? 0, rad: a.rad ?? 0, map: a.map ?? 0, ...(z === undefined && sym === 'R' ? { alias: a.sym } : {}) });
+    }
+    for (const b of m.bonds) {
+      bonds.push({ a: b.a + o, b: b.b + o, order: b.dative ? 9 : b.order === 1.5 ? 4 : b.order === 0.5 ? 1 : b.order,
+        stereo: b.stereo === 'wedge' ? 1 : b.stereo === 'hash' ? 6 : b.stereo === 'wavy' ? 4 : 0 });
+    }
+  }
+  return [atoms, bonds];
+}
+
+/** Molecules → one molfile: V2000, or V3000 when asked or when there are more than 999 atoms or bonds. */
+function molblockOf(mols: FMol[], name = '', v3000 = false): string {
+  const [atoms, bonds] = ctabOf(mols);
+  const head = [name.slice(0, 80), '  Chem Illustrator', ''];
+  if (v3000 || atoms.length > 999 || bonds.length > 999) return v3000Molfile(head, atoms, bonds);
   const i3 = (n: number) => String(n).padStart(3);
   const f10 = (v: number) => fx(v).padStart(10);
-  const lines = [name.slice(0, 80), '  Chem Illustrator', '', `${i3(atoms.length)}${i3(bonds.length)}  0  0  0  0  0  0  0  0999 V2000`];
+  const lines = [...head, `${i3(atoms.length)}${i3(bonds.length)}  0  0  0  0  0  0  0  0999 V2000`];
   const aliases: string[] = [];
   atoms.forEach((a, i) => {
-    const z = elementNumber(a.sym);
-    const sym = z === undefined ? (/^R\d*$/.test(a.sym) ? 'R#' : a.sym === '*' ? '*' : 'R') : a.sym;
-    if (z === undefined && sym !== 'R#' && sym !== '*') aliases.push(`A  ${i3(i + 1)}`, a.sym);
-    lines.push(`${f10(a.x)}${f10(a.y)}${f10(0)} ${sym.padEnd(3)} 0  0  0  0  0  0  0  0  0${i3(a.map ?? 0)}  0  0`);
+    if (a.alias) aliases.push(`A  ${i3(i + 1)}`, a.alias);
+    lines.push(`${f10(a.x)}${f10(a.y)}${f10(0)} ${a.sym.padEnd(3)} 0  0  0  0  0  0  0  0  0${i3(a.map ?? 0)}  0  0`);
   });
-  for (const b of bonds) {
-    const order = b.dative ? 9 : b.order === 1.5 ? 4 : b.order === 0.5 ? 1 : b.order;
-    const st = b.stereo === 'wedge' ? 1 : b.stereo === 'hash' ? 6 : b.stereo === 'wavy' ? 4 : 0;
-    lines.push(`${i3(b.a + 1)}${i3(b.b + 1)}${i3(order)}${i3(st)}`);
-  }
+  for (const b of bonds) lines.push(`${i3(b.a + 1)}${i3(b.b + 1)}${i3(b.order)}${i3(b.stereo)}`);
   lines.push(...aliases);
   const prop = (tag: string, vals: [number, number][]) => {
     for (let k = 0; k < vals.length; k += 8) {
@@ -889,33 +902,46 @@ function molblockOf(mols: FMol[], name = ''): string {
       lines.push(`M  ${tag}${i3(part.length)}` + part.map(([i, v]) => ` ${i3(i + 1)} ${i3(v)}`).join(''));
     }
   };
-  prop('CHG', atoms.map((a, i) => [i, a.charge ?? 0] as [number, number]).filter(([, v]) => v));
-  prop('ISO', atoms.map((a, i) => [i, a.iso ?? 0] as [number, number]).filter(([, v]) => v));
+  prop('CHG', atoms.map((a, i) => [i, a.charge] as [number, number]).filter(([, v]) => v));
+  prop('ISO', atoms.map((a, i) => [i, a.iso] as [number, number]).filter(([, v]) => v));
   prop('RAD', atoms.map((a, i) => [i, a.rad ?? 0] as [number, number]).filter(([, v]) => v));
   lines.push('M  END');
   return lines.join('\n') + '\n';
 }
 
+/** How molfiles, SD and RXN files are written: V2000 (the most widely read) unless asked for V3000 or too big for it. */
+export interface CtabOptions { v3000?: boolean }
+
 /** A drawing as a molfile: all its structures (and text read as chemistry) in one. */
-export function writeMolFile(doc: Doc, name = ''): { text: string; unknown: string[] } {
+export function writeMolFile(doc: Doc, name = '', o: CtabOptions = {}): { text: string; unknown: string[] } {
   const ids = [...doc.atoms.keys()];
-  const ex = toMolfile(doc, ids, name, { species: placeSpecies(doc, doc.captions.values(), plainMeasure(doc)) });
+  const species = placeSpecies(doc, doc.captions.values(), plainMeasure(doc));
+  // V2000 can't count past 999 atoms or bonds
+  const v3000 = o.v3000 || ids.length > 999 || doc.bonds.size > 999;
+  const ex = toMolfile(doc, ids, name, { species, v3000 });
   return { text: ex.molblock, unknown: ex.unknownLabels };
 }
 
 /** A drawing as an SD file: each structure a record of its own. */
-export function writeSdfFile(doc: Doc): { text: string; unknown: string[] } {
+export function writeSdfFile(doc: Doc, o: CtabOptions = {}): { text: string; unknown: string[] } {
   const { scene, unknown } = docToScene(doc);
-  return { text: scene.mols.map((m, i) => molblockOf([m], m.name ?? `Structure ${i + 1}`) + '$$$$\n').join(''), unknown };
+  return { text: scene.mols.map((m, i) => molblockOf([m], m.name ?? `Structure ${i + 1}`, o.v3000) + '$$$$\n').join(''), unknown };
 }
 
-/** A drawing's first reaction step as an RXN file (V2000); throws when there is none. */
-export function writeRxnFile(doc: Doc, name = ''): { text: string; unknown: string[] } {
+/** A drawing's first reaction step as an RXN file; throws when there is none. */
+export function writeRxnFile(doc: Doc, name = '', o: CtabOptions = {}): { text: string; unknown: string[] } {
   const { scene, unknown, step } = docToScene(doc);
   if (!step) throw new Error('There is no reaction to save as RXN: draw the starting materials, an arrow and the products.');
   const of = (role: FRole) => scene.mols.filter((m) => m.role === role);
   const r = of('reactant'), p = of('product'), a = of('agent');
   const i3 = (n: number) => String(n).padStart(3);
+  if (o.v3000 || [...r, ...p, ...a].some((m) => m.atoms.length > 999 || m.bonds.length > 999)) {
+    // $RXN V3000: the molecules' connection tables inside REACTANT, PRODUCT and AGENT blocks
+    const block = (tag: string, ms: FMol[]) => ms.length ? [`M  V30 BEGIN ${tag}`, ...ms.flatMap((m) => v3000Ctab(...ctabOf([m]))), `M  V30 END ${tag}`] : [];
+    const text = [`$RXN V3000`, name, '  Chem Illustrator', '', `M  V30 COUNTS ${r.length} ${p.length}${a.length ? ` ${a.length}` : ''}`,
+      ...block('REACTANT', r), ...block('PRODUCT', p), ...block('AGENT', a), 'M  END', ''].join('\n');
+    return { text, unknown };
+  }
   const text = `$RXN\n${name}\n  Chem Illustrator\n\n${i3(r.length)}${i3(p.length)}${a.length ? i3(a.length) : ''}\n` + [...r, ...p, ...a].map((m) => '$MOL\n' + molblockOf([m], m.name ?? '')).join('');
   return { text, unknown };
 }
