@@ -55,6 +55,7 @@ import { freeSpace } from './free-space';
 import { fillRings, refitRingFills, ringFillsOn } from '../chem/ring-fill';
 import { setMethylStyle, toggleChainEndLabels, toggleExplicitHydrogens, type MethylStyle } from '../chem/hydrogens';
 import { selectedGroup } from '../chem/group-smiles';
+import { restack as restackObjects, stackItems, usesStacking, type StackMove } from './stacking';
 import { groupMembers, groupSelection, selectedGroups, ungroupSelection, withGroups } from './groups';
 import { circleRing, circleRings, kekulize } from '../chem/aromatic';
 import { bondLayer, crossingBonds, layerByDepth } from '../chem/crossing';
@@ -727,6 +728,65 @@ export class Editor {
   }
 
   private hitTestNow(p: Vec): Hit {
+    if (this.stackRank()) return this.stackedHit(p);
+    const sh = this.structureAt(p);
+    if (sh) return sh;
+    return this.restAt(p);
+  }
+
+  private stackRankCache: { doc: Doc; version: number; rank: Map<string, number> | null } | null = null;
+
+  /**
+   * Where each thing sits in the drawing order, once objects have been put in order with Format >
+   * Order (keys 'a' + atom id, 'c', 'r', 's' + id; higher is in front). Null when they haven't.
+   */
+  private stackRank(): Map<string, number> | null {
+    const doc = this.doc, c = this.stackRankCache;
+    if (c && c.doc === doc && c.version === doc.version) return c.rank;
+    let rank: Map<string, number> | null = null;
+    if (usesStacking(doc)) {
+      rank = new Map();
+      const pre = { shape: 's', structure: 'a', arrow: 'r', caption: 'c' } as const;
+      stackItems(doc).forEach((it, i) => { for (const id of it.ids) rank!.set(pre[it.kind] + id, i); });
+    }
+    this.stackRankCache = { doc, version: doc.version, rank };
+    return rank;
+  }
+
+  /** With objects in an order of their own, the one in front under the point wins (issue #406). */
+  private stackedHit(p: Vec): Hit {
+    const rank = this.stackRank()!;
+    const doc = this.doc;
+    const found: Hit[] = [];
+    const sh = this.structureAt(p);
+    if (sh) found.push(sh);
+    let room: Hit = null;
+    for (const c of doc.captions.values()) {
+      if (c.hidden) continue;
+      const r = c.rot ? this.r.captionFrame(c) : this.r.captionBox(c);
+      const q = c.rot ? turnAbout(p, c, -c.rot) : p;
+      if (q.x >= r.x1 - 1 && q.x <= r.x2 + 1 && q.y >= r.y1 - 1 && q.y <= r.y2 + 1) {
+        if (c.ph && !this.overText(c, p)) { room ??= { kind: 'caption', id: c.id }; continue; }
+        found.push({ kind: 'caption', id: c.id });
+      }
+    }
+    const at = this.tol(5);
+    for (const r of doc.arrows.values()) if (arrowHit(r, p, at)) found.push({ kind: 'arrow', id: r.id });
+    for (const s of doc.shapes.values()) if (!s.hidden && !s.locked && shapeHit(s, p, at)) found.push({ kind: 'shape', id: s.id });
+    const key = (h: NonNullable<Hit>): string => {
+      if (h.kind === 'bond') { const b = doc.bonds.get(h.id); return 'a' + (b?.a1 ?? -1); }
+      return ({ atom: 'a', caption: 'c', arrow: 'r', shape: 's' } as Record<string, string>)[h.kind] + h.id;
+    };
+    let best: Hit = null, br = -Infinity;
+    for (const h of found) {
+      const k = rank.get(key(h!)) ?? -1;
+      if (k > br) { br = k; best = h; }
+    }
+    return best ?? room;
+  }
+
+  /** The atom or bond under a point. */
+  private structureAt(p: Vec): Hit {
     const doc = this.doc;
     const L = doc.style.bondLength;
     const atomR = Math.max(L * 0.28, this.tol(6));
@@ -754,6 +814,12 @@ export class Editor {
       if (d < bbd) { bbd = d; bb = b; }
     }
     if (bb) return { kind: 'bond', id: bb.id };
+    return null;
+  }
+
+  /** Text, arrows and shapes under a point, in the usual layers. */
+  private restAt(p: Vec): Hit {
+    const doc = this.doc;
     // a slide placeholder's empty room (all of it, while it shows only its prompt) gives way to a
     // picture or shape put over it
     let room: Hit = null;
@@ -4972,34 +5038,16 @@ export class Editor {
   }
 
   /**
-   * Bring the selected shapes (boxes, design shapes, pictures, tables) in front of the other
-   * shapes, or send them behind, or one step either way. False when no shape is selected.
+   * Bring the selected objects (shapes, pictures, tables, whole structures, text and arrows) in
+   * front of everything else, or send them behind, or one step either way (issue #406). False when
+   * no whole object is selected.
    */
-  setShapeLayer(how: 'front' | 'back' | 'forward' | 'backward'): boolean {
-    const doc = this.doc;
-    const picked = new Set(this.sel.shapes);
-    if (!picked.size) return false;
-    const order = shapeOrder([...doc.shapes.values()]);
-    const rest = order.filter((s) => !picked.has(s.id)), mine = order.filter((s) => picked.has(s.id));
-    let next: Shape[];
-    if (how === 'front') next = [...rest, ...mine];
-    else if (how === 'back') next = [...mine, ...rest];
-    else {
-      // one step: past the next shape (not picked) in that direction
-      next = [...order];
-      const step = how === 'forward' ? 1 : -1;
-      const idx = (how === 'forward' ? [...next.keys()].reverse() : [...next.keys()]);
-      for (const i of idx) {
-        if (!picked.has(next[i].id)) continue;
-        const j = i + step;
-        if (j < 0 || j >= next.length || picked.has(next[j].id)) continue;
-        [next[i], next[j]] = [next[j], next[i]];
-      }
-    }
+  setObjectLayer(how: StackMove): boolean {
     const label = { front: 'Bring to Front', back: 'Send to Back', forward: 'Bring Forward', backward: 'Send Backward' }[how];
-    doc.edit(label, () => next.forEach((s, i) => { if ((s.z ?? 0) !== i + 1) doc.updateShape(s.id, { z: i + 1 }); }));
-    this.changed();
-    return true;
+    let done = false;
+    this.doc.edit(label, () => { done = restackObjects(this.doc, this.sel, how); });
+    if (done) this.changed();
+    return done;
   }
 
   /** The next free compound number in this drawing. */

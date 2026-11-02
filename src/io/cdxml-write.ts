@@ -22,7 +22,8 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl } from '../render/images';
-import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
+import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG } from './cdxml';
+import { stackItems, usesStacking } from '../editor/stacking';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
 import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
@@ -177,6 +178,7 @@ class CdxmlWriter {
     this.writeRepeatGroups();
     this.writeSteps();
     this.writeGroups();
+    if (this.writeStack()) this.changed = true;
     this.raiseTableFigures();
     if (src) this.cleanUp();
 
@@ -1891,6 +1893,44 @@ class CdxmlWriter {
    * captions, arrows and shapes inside one group element. A file's own group is kept while it
    * holds just its members; things taken out of a group go back onto the page.
    */
+  /** The element written for a thing: a structure's fragment for an atom. */
+  private elementOf(kind: Kind, id: number, ided: () => Map<string, Element>): Element | null {
+    if (kind === 'a') return this.fragOfAtom.get(id) ?? null;
+    const names = kind === 'c' ? ['t'] : kind === 'r' ? ['arrow', 'graphic'] : ['graphic', 'embeddedobject', 'table', 'group'];
+    return this.source(kind, id, names) ?? (kind === 'r' ? this.findArrow(id) : null) ?? ided().get(String(id)) ?? null;
+  }
+
+  /**
+   * The drawing order set with Format > Order (issue #406): each object's place as ChemDraw's Z,
+   * and a tag on the page so this program reads the order back. True when anything changed.
+   */
+  private writeStack(): boolean {
+    const doc = this.doc;
+    const on = usesStacking(doc);
+    let changed = this.pageTag(STACK_TAG, on ? '1' : null);
+    if (!on) return changed;
+    let byId: Map<string, Element> | null = null;
+    const ided = () => {
+      if (!byId) {
+        byId = new Map();
+        for (const e of descendants(this.root)) { const id = e.getAttribute('id'); if (id && !byId.has(id)) byId.set(id, e); }
+      }
+      return byId;
+    };
+    const done = new Set<Element>();
+    const kindOf = { shape: 's', structure: 'a', arrow: 'r', caption: 'c' } as const;
+    stackItems(doc).forEach((it, i) => {
+      const z = String(i + 1);
+      for (const id of it.ids) {
+        const e = this.elementOf(kindOf[it.kind], id, ided);
+        if (!e || done.has(e)) continue;
+        done.add(e);
+        if (e.getAttribute('Z') !== z) { e.setAttribute('Z', z); changed = true; }
+      }
+    });
+    return changed;
+  }
+
   private writeGroups(): void {
     const doc = this.doc;
     // (every element by its id, only when something isn't found where it was read)
@@ -1902,11 +1942,7 @@ class CdxmlWriter {
       }
       return byId;
     };
-    const elementOf = (kind: Kind, id: number): Element | null => {
-      if (kind === 'a') return this.fragOfAtom.get(id) ?? null;
-      const names = kind === 'c' ? ['t'] : kind === 'r' ? ['arrow', 'graphic'] : ['graphic', 'embeddedobject', 'table', 'group'];
-      return this.source(kind, id, names) ?? (kind === 'r' ? this.findArrow(id) : null) ?? ided().get(String(id)) ?? null;
-    };
+    const elementOf = (kind: Kind, id: number): Element | null => this.elementOf(kind, id, ided);
     const plain = (g: Element | null): g is Element => !!g && g.nodeName === 'group'
       && !kids(g).some((k) => k.nodeName === 'table' || (k.nodeName === 'objecttag' && k.getAttribute('Name') === GEO_TAG));
     // the element that sits on the page (or in a group) for a thing: a structure's fragment, a symbol's too

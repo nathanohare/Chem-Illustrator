@@ -8087,10 +8087,10 @@ const ANIM_COMMANDS: { cmd: string; label: string }[] = [false, true].flatMap((e
 function restack(how: 'front' | 'back' | 'forward' | 'backward'): void {
   const label = { front: 'Bring to Front', back: 'Send to Back', forward: 'Bring Forward', backward: 'Send Backward' }[how];
   // one undo step for both
-  const [shapes, bonds] = editor.doc.edit(label, () => [editor.setShapeLayer(how), editor.setBondLayer(how)] as const);
-  if (shapes || bonds === true) return;
+  const [objects, bonds] = editor.doc.edit(label, () => [editor.setObjectLayer(how), editor.setBondLayer(how)] as const);
+  if (objects || bonds === true) return;
   const verb = { front: 'bring to the front', back: 'send to the back', forward: 'bring forward', backward: 'send backward' }[how];
-  flash(bonds === 'none' ? 'That bond doesn\'t cross another bond. Where bonds cross, the one behind has a gap.' : `Select the shapes or bonds to ${verb}.`);
+  flash(bonds === 'none' ? 'That bond doesn\'t cross another bond. Where bonds cross, the one behind has a gap.' : `Select the objects or bonds to ${verb}.`);
 }
 
 const COMMANDS: Record<string, () => unknown> = {
@@ -11533,7 +11533,7 @@ function drawingMenu(): MenuItem[] {
     { cmd: 'flip-h' }, { cmd: 'flip-v' }, { cmd: 'flip-h-keep' }, { cmd: 'flip-v-keep' }, null,
     { cmd: 'rotate-cw' }, { cmd: 'rotate-ccw' }, { cmd: 'rotate-180' }, { cmd: 'rotate-dialog' }, null, { cmd: 'scale' },
   ];
-  const order: MenuItem[] = shapes.length || s.bonds.size
+  const order: MenuItem[] = shapes.length || s.bonds.size || s.atoms.size || s.captions.size || s.arrows.size
     ? [{ cmd: 'shape-front', label: 'Bring to Front' }, { cmd: 'shape-forward', label: 'Bring Forward' }, { cmd: 'shape-backward', label: 'Send Backward' }, { cmd: 'shape-back', label: 'Send to Back' }]
     : [];
   return [

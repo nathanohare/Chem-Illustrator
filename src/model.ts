@@ -38,6 +38,8 @@ export interface Atom {
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
+  /** Place in the drawing order set by Format > Order (higher is in front); not set keeps the usual layers (issue #406, editor/stacking.ts). */
+  stack?: number;
   x: number;
   y: number;
   /** Atomic number; 6 for carbon. Ignored for display when `label` is set. */
@@ -429,6 +431,8 @@ export interface Caption {
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
+  /** Place in the drawing order set by Format > Order (higher is in front); not set keeps the usual layers (issue #406, editor/stacking.ts). */
+  stack?: number;
   /** Left end of the first line's baseline (for centred/right text, of the line box). */
   x: number;
   y: number;
@@ -590,6 +594,8 @@ export interface Arrow {
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
+  /** Place in the drawing order set by Format > Order (higher is in front); not set keeps the usual layers (issue #406, editor/stacking.ts). */
+  stack?: number;
   tail: Vec;
   head: Vec;
   headStyle: ArrowHead;
@@ -698,6 +704,8 @@ export interface Shape {
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
+  /** Place in the drawing order set by Format > Order (higher is in front); not set keeps the usual layers (issue #406, editor/stacking.ts). */
+  stack?: number;
   kind: 'line' | 'rect' | 'oval' | 'symbol' | 'bracket' | 'picture' | 'table' | 'geo' | 'ring';
   /**
    * A ring's fill (Chemistry > Highlight and Fill > Fill Rings): the ring's atoms in order. The fill follows them, and

@@ -1,7 +1,8 @@
 // The Layers panel (Design mode, in the right-hand panel): every shape, picture and table on the
 // page, front to back. Click one to select it (Shift or Ctrl adds), drag it up or down to put it
 // in front of or behind others, hide it, lock it so clicks pass through it, or double-click its
-// name to rename it. Structures, text and arrows always sit above the shapes.
+// name to rename it. Structures, text and arrows sit above the shapes until Format > Order
+// puts them in an order of their own (editor/stacking.ts).
 //
 // In Slides the same panel is PowerPoint's Selection Pane (Home > Selection Pane): it also lists
 // the slide's text boxes (which can be hidden and renamed too), structures and arrows, front
@@ -10,6 +11,7 @@
 import type { Caption, Doc, Shape } from '../model';
 import { plainText } from '../richtext';
 import { shapeOrder } from '../objects';
+import { usesStacking } from '../editor/stacking';
 import { geoDef } from '../design/geo';
 
 const icon = (body: string) => `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -329,7 +331,16 @@ export class LayersPanel {
       const ids = sel.includes(s.id) ? sel : [s.id];
       const next = reorderLayers(order.map((x) => x.id), ids, to);
       // back to front: the first drawn gets the lowest place
-      this.hooks.edit('Reorder', () => next.slice().reverse().forEach((id, i) => this.doc!.updateShape(id, { z: i + 1 })));
+      const doc = this.doc!;
+      this.hooks.edit('Reorder', () => {
+        const backToFront = next.slice().reverse();
+        if (!usesStacking(doc)) { backToFront.forEach((id, i) => doc.updateShape(id, { z: i + 1 })); return; }
+        // with structures, text and arrows in the order too (Format > Order), the shapes swap
+        // places among themselves and keep the places they held between the other things
+        const slots = backToFront.map((id) => doc.shapes.get(id)?.stack).filter((v): v is number => v !== undefined).sort((a, b) => a - b);
+        if (slots.length !== backToFront.length) { backToFront.forEach((id, i) => doc.updateShape(id, { z: i + 1, stack: undefined })); return; }
+        backToFront.forEach((id, i) => doc.updateShape(id, { z: slots[i], stack: slots[i] }));
+      });
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);

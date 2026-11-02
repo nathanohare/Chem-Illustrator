@@ -37,6 +37,10 @@ import type { TableData, TextRun } from '../model';
 import { repeatLabelPlace } from '../chem/polymer';
 import { paintChartBox } from './chart-box-paint';
 import { paintShapeMath } from '../deck/equation';
+import { stackItems, usesStacking } from '../editor/stacking';
+
+/** A run of objects of one kind in the drawing order (see editor/stacking.ts). */
+type StackRun = { kind: 'shape'; shapes: Shape[] } | { kind: 'arrow'; arrows: Arrow[] } | { kind: 'caption'; captions: Caption[] } | { kind: 'structure'; atoms: Set<number> };
 
 export { FONT_STACK };
 
@@ -840,25 +844,76 @@ export class Renderer {
   /** Draw everything that falls inside `vis` (document coordinates) with the current transform. */
   private drawContent(ctx: CanvasRenderingContext2D, doc: Doc, vis: Rect): void {
     this.useStyle(doc);
-    const st = doc.style;
     this.ringDoc = doc;
-
-    // Shapes behind the structures (filled boxes first).
     this.shadowsCast.clear();
-    for (const s of doc.onlyHighlights ? [] : this.sortedShapes(doc)) {
+    const shapes = doc.onlyHighlights ? [] : this.sortedShapes(doc);
+    const warns: Rect[] = [];
+    const checks = this.showWarnings ? this.checks : null;
+    const runs = doc.onlyHighlights ? null : this.stackRuns(doc);
+    if (!runs) {
+      // the usual layers: shapes behind the structures (filled boxes first), then arrows and text
+      this.drawShapeList(ctx, doc, shapes, vis);
+      if (!this.drawStructures(ctx, doc, vis, doc.atomsIn(vis), warns, checks)) return;
+      this.drawArrowList(ctx, doc, doc.arrows.values(), vis);
+      this.drawCaptionList(ctx, doc, doc.captions.values(), vis, warns, checks);
+    } else {
+      // objects put in order with Format > Order, back to front (issue #406)
+      for (const run of runs) {
+        if (run.kind === 'shape') this.drawShapeList(ctx, doc, run.shapes, vis);
+        else if (run.kind === 'arrow') this.drawArrowList(ctx, doc, run.arrows, vis);
+        else if (run.kind === 'caption') this.drawCaptionList(ctx, doc, run.captions, vis, warns, checks);
+        else this.drawStructures(ctx, doc, vis, doc.atomsIn(vis).filter((a) => run.atoms.has(a.id)), warns, checks);
+      }
+    }
+    if (warns.length) this.drawWarnMarks(ctx, warns);
+  }
+
+  private stackCache: { version: number; runs: StackRun[] | null } | null = null;
+
+  /** The drawing's objects as runs of one kind, back to front, when they have been put in order (else null). */
+  private stackRuns(doc: Doc): StackRun[] | null {
+    if (this.stackCache?.version === doc.version && this.stackDoc === doc) return this.stackCache.runs;
+    let runs: StackRun[] | null = null;
+    if (usesStacking(doc)) {
+      runs = [];
+      const shown = new Set(this.sortedShapes(doc));
+      for (const it of stackItems(doc)) {
+        let last = runs[runs.length - 1];
+        if (!last || last.kind !== it.kind) {
+          last = it.kind === 'shape' ? { kind: 'shape', shapes: [] } : it.kind === 'arrow' ? { kind: 'arrow', arrows: [] } : it.kind === 'caption' ? { kind: 'caption', captions: [] } : { kind: 'structure', atoms: new Set() };
+          runs.push(last);
+        }
+        if (last.kind === 'shape') { const s = doc.shapes.get(it.ids[0]); if (s && shown.has(s)) last.shapes.push(s); }
+        else if (last.kind === 'arrow') { const r = doc.arrows.get(it.ids[0]); if (r) last.arrows.push(r); }
+        else if (last.kind === 'caption') { const c = doc.captions.get(it.ids[0]); if (c) last.captions.push(c); }
+        else for (const id of it.ids) last.atoms.add(id);
+      }
+    }
+    this.stackCache = { version: doc.version, runs };
+    this.stackDoc = doc;
+    return runs;
+  }
+  private stackDoc: Doc | null = null;
+
+  private drawShapeList(ctx: CanvasRenderingContext2D, doc: Doc, list: Iterable<Shape>, vis: Rect): void {
+    const st = doc.style;
+    for (const s of list) {
       const b = s.kind === 'table' ? this.tableBox(s) : s.rot ? shapeBox(s) : { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
       if (b.x2 < vis.x1 || b.x1 > vis.x2 || b.y2 < vis.y1 || b.y1 > vis.y2) continue;
       this.drawShape(ctx, s, st.lineWidth, st.labelSize);
     }
+  }
 
+  /** Structures (the given atoms and their bonds): highlights, bonds, labels. False when only highlights are drawn. */
+  private drawStructures(ctx: CanvasRenderingContext2D, doc: Doc, vis: Rect, atoms: Atom[], warns: Rect[], checks: Renderer['checks'] | null): boolean {
+    const st = doc.style;
     // Only atoms near this area, and their bonds (found through the spatial index).
-    const atoms = doc.atomsIn(vis);
     const bondSet = new Set<Bond>();
     for (const a of atoms) for (const bid of doc.adj.get(a.id) ?? []) bondSet.add(doc.bonds.get(bid)!);
 
     // Highlights behind the structures: broad bands under bonds and discs under atoms
     this.drawHighlights(ctx, doc, atoms, bondSet);
-    if (doc.onlyHighlights) return;
+    if (doc.onlyHighlights) return false;
 
     // Bonds, batched by how they are stroked (and by size, for resized structures).
     const batches = new Map<number, BondBatch>();
@@ -899,8 +954,6 @@ export class Renderer {
     ctx.strokeStyle = ctx.fillStyle = '#000';
 
     // Atom labels and warnings.
-    const warns: Rect[] = [];
-    const checks = this.showWarnings ? this.checks : null;
     if (checks) {
       for (const b of bondSet) {
         if (!checks.forBond(b)) continue;
@@ -932,14 +985,22 @@ export class Renderer {
     curFont = this.drawStereoLabels(ctx, doc, atoms, bondSet, curFont);
     ctx.fillStyle = '#000';
 
-    for (const r of doc.arrows.values()) {
+    return true;
+  }
+
+  private drawArrowList(ctx: CanvasRenderingContext2D, doc: Doc, list: Iterable<Arrow>, vis: Rect): void {
+    const st = doc.style;
+    for (const r of list) {
       const lo = Math.min(r.tail.x, r.head.x), hi = Math.max(r.tail.x, r.head.x);
       const top = Math.min(r.tail.y, r.head.y), bot = Math.max(r.tail.y, r.head.y);
       const pad = r.sweep || r.bez ? Math.hypot(hi - lo, bot - top) * (r.bez ? 1.5 : 1) : 10;
       if (hi + pad < vis.x1 || lo - pad > vis.x2 || bot + pad < vis.y1 || top - pad > vis.y2) continue;
       this.drawArrow(ctx, r, r.lineWidth ?? st.lineWidth);
     }
-    for (const c of doc.captions.values()) {
+  }
+
+  private drawCaptionList(ctx: CanvasRenderingContext2D, _doc: Doc, list: Iterable<Caption>, vis: Rect, warns: Rect[], checks: Renderer['checks'] | null): void {
+    for (const c of list) {
       if (c.id === this.hiddenCaption || c.hidden) continue;
       const r = this.captionBox(c);
       if (r.x1 > vis.x2 || r.x2 < vis.x1 || r.y1 > vis.y2 || r.y2 < vis.y1) continue;
@@ -950,7 +1011,6 @@ export class Renderer {
       else if (mark) this.drawChemMark(ctx, r);
     }
 
-    if (warns.length) this.drawWarnMarks(ctx, warns);
   }
 
   /**

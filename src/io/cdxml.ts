@@ -898,6 +898,27 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     }
   };
 
+  /** Each object's place in the drawing order, from ChemDraw's Z (a structure's from its fragment's). */
+  const readStack = () => {
+    const zOf = (el: Element | undefined, top: boolean): number | undefined => {
+      let e: Element | null = el ?? null, found: number | undefined;
+      while (e && e !== pg) {
+        const v = e.getAttribute('Z');
+        if (v !== null && isFinite(Number(v))) { found = Number(v); if (!top) return found; }
+        const p = e.parentElement;
+        // a structure's place is its outermost fragment's (atoms carry Z of their own in ChemDraw's files)
+        if (top && e.nodeName === 'fragment' && (!p || p === pg || p.nodeName === 'group')) return v !== null && isFinite(Number(v)) ? Number(v) : found;
+        e = p;
+      }
+      return top ? undefined : found;
+    };
+    const at = (kind: Kind, id: number) => { const o = ord.get(kind + id); return o === undefined ? undefined : all[o]; };
+    for (const a of doc.atoms.values()) { const z = zOf(at('a', a.id), true); if (z !== undefined) a.stack = z; }
+    for (const c of doc.captions.values()) { const z = zOf(at('c', c.id), false); if (z !== undefined) c.stack = z; }
+    for (const r of doc.arrows.values()) { const z = zOf(at('r', r.id), false); if (z !== undefined) r.stack = z; }
+    for (const s of doc.shapes.values()) { const z = zOf(at('s', s.id), false); if (z !== undefined) { s.stack = z; s.z = z; } }
+  };
+
   doc.bulk(() => {
     walk(root);
     readSteps(all, refOf, doc);
@@ -930,6 +951,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     relinkNewman(doc);
     fillAttachments(doc);
     readGroups();
+    if (pg && kids(pg).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === STACK_TAG)) readStack();
   });
   doc.reserveIds(maxId);
   const orig = new Map<string, Entity>();
@@ -1136,6 +1158,8 @@ export const GROUP_TAG = 'Chem Illustrator group';
 export const PAGE_TAG = 'Chem Illustrator page grid';
 /** The drawing's guides (crosshairs, lines, grid, ticks), as JSON on the page: only this program reads it. */
 export const GUIDES_TAG = 'Chem Illustrator guides';
+/** On the page when objects have an order of their own (Format > Order): their places are then read from ChemDraw's Z. */
+export const STACK_TAG = 'Chem Illustrator order';
 /** The drawing style's text above and below arrows (size, font), as JSON on the page: ChemDraw has no setting for it. */
 export const ARROW_TEXT_TAG = 'Chem Illustrator arrows';
 /** On a MultiAttachment node: its π-system drawn in Kekulé form rather than delocalized (only this program reads it). */
