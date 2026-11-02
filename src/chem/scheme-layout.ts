@@ -192,8 +192,9 @@ function straighten(f: Frame): Frame {
  * Clean Up Reaction: a plan for tidying the steps of these arrows (all reaction arrows when none
  * are given). Returns null when there is no reaction step to tidy.
  */
-export function planCleanUp(doc: Doc, m: Measure, arrowIds?: Iterable<number>): SchemePlan | null {
+export function planCleanUp(doc: Doc, m: Measure, arrowIds?: Iterable<number>, override?: Partial<SchemePrefs>): SchemePlan | null {
   // (in the drawing style's own scheme settings, where it has them)
+  if (override) return withSchemePrefs({ ...prefsOf(doc), ...override }, () => planIn(doc, m, arrowIds));
   return doc.style.scheme ? withSchemePrefs(prefsOf(doc), () => planIn(doc, m, arrowIds)) : planIn(doc, m, arrowIds);
 }
 
