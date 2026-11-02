@@ -45,6 +45,8 @@ export interface KbTable {
   personal?: boolean;
   /** Links shown at the end of each row (the compound's PubChem page, its NIOSH entry…). */
   links?: (row: Record<string, Cell>) => KbSource[];
+  /** Its rows' SMILES are RDKit's canonical form already (no need to work them out to compare). */
+  canonicalSmiles?: boolean;
   /** One of your PDFs, a row a page: where the file is, when known. */
   pdf?: { path?: string };
 }

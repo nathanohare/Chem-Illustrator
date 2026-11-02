@@ -3,13 +3,13 @@
 // classification) and the rating in safety.ts.
 
 import data from './safety-data.json';
-import { badges, fmtIdlh, haveReady, incident, lethalByRoute, rate, vapourRatio, vpMmHg, type SafetyRecord } from './safety';
+import { badges, fmtIdlh, haveReady, incident, lethalByRoute, rate, skinKp, vapourRatio, vpMmHg, type SafetyRecord } from './safety';
 import type { Cell, KbSource, KbTable } from './tables';
 
 export const SAFETY_RECORDS = (data as unknown as { compounds: SafetyRecord[] }).compounds;
 
 /** A number with sensible significant figures: 0.0012, 0.68, 7.3, 162, 90,000. */
-function sig(n: number): string {
+export function sig(n: number): string {
   if (n === 0) return '0';
   const a = Math.abs(n);
   const d = a >= 100 ? 0 : a >= 10 ? 1 : a >= 1 ? 2 : Math.min(6, 1 - Math.floor(Math.log10(a)));
@@ -18,7 +18,7 @@ function sig(n: number): string {
 }
 
 /** "−95 °C" style text cut to its first value, with any note dropped. */
-function short(text: string | undefined): string | null {
+export function short(text: string | undefined): string | null {
   if (!text) return null;
   const t = text.replace(/\s+/g, ' ').trim();
   const cut = t.split(/(?<=°C|°F|g\/cu cm|g\/mL|g\/cm3)[;(,]/)[0].trim();
@@ -37,6 +37,16 @@ const rowLinks = (row: Record<string, Cell>): KbSource[] => {
   const r = byCid.get(Number(row.cid));
   return r ? links(r) : [];
 };
+
+/** The Potts–Guy skin permeability estimate, "2.1×10⁻² (high)". */
+function kpText(r: SafetyRecord): string | null {
+  const k = skinKp(r);
+  if (!k) return null;
+  let e = Math.floor(Math.log10(k.kp));
+  if (k.kp / 10 ** e >= 9.95) e++;
+  const sup = String(e).replace(/-/g, '⁻').replace(/\d/g, (d) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[Number(d)]);
+  return `${(k.kp / 10 ** e).toFixed(1)}×10${sup} (${k.band})`;
+}
 
 function safetyRow(r: SafetyRecord): Record<string, Cell> {
   const rating = rate(r);
@@ -61,6 +71,7 @@ function safetyRow(r: SafetyRecord): Record<string, Cell> {
     vp: vp === null ? null : vp > 760 ? 'gas' : sig(vp),
     ratio: ratio === null ? null : sig(ratio),
     badges: badges(r).join(', ') || null,
+    kp: kpText(r),
     ready: ready ? `${ready.what} (${ready.why})` : null,
     incompatible: r.incompatible ? r.incompatible.replace(/\s*\[Note:.*$/, '') : null,
     incident: inc ? inc.what : null,
@@ -88,6 +99,7 @@ export const REAGENT_SAFETY: KbTable = {
     { key: 'vp', label: 'VP (mmHg, ~25 °C)', numeric: true },
     { key: 'ratio', label: 'Saturated vapour ÷ IDLH', numeric: true },
     { key: 'badges', label: 'Badges' },
+    { key: 'kp', label: 'Skin Kp est. (cm/h)' },
     { key: 'ready', label: 'Have ready', filter: 'present' },
     { key: 'incompatible', label: 'Incompatible with' },
     { key: 'incident', label: 'Incident', filter: 'present' },
@@ -102,6 +114,7 @@ export const REAGENT_SAFETY: KbTable = {
     { label: 'NOAA CAMEO Chemicals (reactivity alerts)', url: 'https://cameochemicals.noaa.gov/' },
     { label: 'EU Regulation 1272/2008, Annex VI (harmonised classification)', url: 'https://eur-lex.europa.eu/eli/reg/2008/1272/oj' },
     { label: 'Tiers, badges, Have ready and incidents written for Chem Illustrator' },
+    { label: 'Skin Kp estimated with the Potts–Guy equation, Pharm. Res. 1992, 9, 663 (log Kow from HSDB, else PubChem XLogP3)', url: 'https://doi.org/10.1023/A:1015810312465' },
   ],
   links: rowLinks,
 };

@@ -44,6 +44,15 @@ export interface SafetyRecord {
   skin: boolean;
   incompatible: string | null;
   niosh: string | null;
+  /** log Kow (octanol/water), solubility, pKa in water and the like, as the source gives them. */
+  logKow?: Sourced | null;
+  /** PubChem's computed XLogP3. */
+  xlogp?: number | null;
+  pka?: Sourced | null;
+  water?: Sourced | null;
+  organic?: Sourced | null;
+  viscosity?: Sourced | null;
+  refractive?: Sourced | null;
 }
 
 export type Tier = 1 | 2 | 3 | 4;
@@ -287,4 +296,25 @@ export function lethalByRoute(r: SafetyRecord): Partial<Record<Lethal['route'], 
     out[route as Lethal['route']] = `${l.species.replace(/^rats$/, 'rat').replace(/^mice$/, 'mouse')} ${sig3(v)} ${u}${l.time ? ' / ' + l.time : ''}`;
   }
   return out;
+}
+
+/** The first number in a log Kow text ("log Kow = 0.46", "Log Kow= -0.31"). */
+export function logKowOf(r: SafetyRecord): { value: number; source: string } | null {
+  const m = r.logKow ? /(-?\d+(?:\.\d+)?)/.exec(r.logKow.text.replace(/^.*?(?:kow|log p)\s*[=:]?\s*/i, '')) : null;
+  if (m) return { value: Number(m[1]), source: r.logKow!.source };
+  return typeof r.xlogp === 'number' ? { value: r.xlogp, source: 'XLogP3 (computed)' } : null;
+}
+
+/**
+ * How fast the compound crosses skin from water, estimated by the Potts–Guy equation
+ * (Pharm. Res. 1992, 9, 663): log Kp (cm/h) = −2.72 + 0.71 log Kow − 0.0061 MW. Only for neutral
+ * organic molecules up to 500 g/mol; salts, metals and ions get none. A rough guide to which
+ * compounds go through skin quickly, never a substitute for the skin notation or glove data.
+ */
+export function skinKp(r: SafetyRecord): { kp: number; band: 'high' | 'moderate' | 'low'; source: string } | null {
+  if (!r.smiles || !r.mw || r.mw > 500 || /\.|[+-]\]|\[(?:Li|Na|K|Mg|Zn|Al|Cu|Pd|Hg|Tl|Ni|Co|Cs|Ca|Sn|Ti|B|Si|Os|Ru|Cr|Mn|Pb|Ag|Se|Ce)/.test(r.smiles) || !/C|c/.test(r.smiles)) return null;
+  const k = logKowOf(r);
+  if (!k) return null;
+  const kp = 10 ** (-2.72 + 0.71 * k.value - 0.0061 * r.mw);
+  return { kp, band: kp >= 1e-2 ? 'high' : kp >= 1e-3 ? 'moderate' : 'low', source: k.source };
 }
