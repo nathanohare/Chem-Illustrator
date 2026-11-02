@@ -390,6 +390,8 @@ export class Editor {
     groupOutline: true,
     /** Mechanism arrows left running into something by a change find their own way round (Edit > Settings). */
     rerouteArrows: true,
+    /** Draw Next Intermediate and Check Arrows are offered (Edit > Settings ▸ Drawing). */
+    arrowProducts: true,
   };
   /**
    * New arrows' line width and head size, in points, apart from the bonds' line width (the
@@ -3000,20 +3002,36 @@ export class Editor {
     const errors = reading.issues.filter((i) => i.level === 'error');
     if (!reading.steps.length && !errors.length) return 'none';
     if (errors.length || !out) { this.pickIssues(errors); return { drawn: false, issues: reading.issues }; }
-    // after what the arrows are drawn on (and the arrows), on the level of its middle
+    // after what the arrows are drawn on (and the arrows), with the reaction centre (the changed
+    // atoms of the main structure) on the same level in both, and the reaction arrow there too
     const L = doc.style.bondLength;
     const sp = spacing(L, prefsOf(doc));
+    const changed = pushedAtoms(reading);
     const atoms = new Set<number>();
-    for (const id of pushedAtoms(reading)) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
+    for (const id of changed) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
     const from = boxOf(doc, atoms, arrows.map((r) => r.id))!;
+    const main = out.fragments().filter((f) => [...f].some((id) => changed.has(id))).sort((p, q) => q.size - p.size)[0] ?? new Set<number>();
+    // (the changed atoms that stayed where they were drawn: a structure brought alongside doesn't count)
+    const inMain = [...changed].filter((id) => main.has(id));
+    const stayed = inMain.filter((id) => dist(out.atoms.get(id)!, doc.atoms.get(id)!) < 1e-6);
+    const centre = stayed.length ? stayed : inMain;
+    const meanY = (d: Doc) => centre.reduce((t, id) => t + d.atoms.get(id)!.y, 0) / Math.max(1, centre.length);
+    const level = centre.length ? meanY(doc) : (from.y1 + from.y2) / 2;
     const pb = out.bounds() ?? { x1: 0, y1: 0, x2: 0, y2: 0 };
+    const dy0 = level - (centre.length ? meanY(out) : (pb.y1 + pb.y2) / 2);
     const len = sp.minArrow;
-    const w = sp.gap + len + sp.gap + (pb.x2 - pb.x1), h = Math.max(pb.y2 - pb.y1, L);
-    const want = { x: from.x2 + w / 2, y: (from.y1 + from.y2) / 2 };
-    const c = freeSpace(doc, w, h, want, 0.5 * L);
-    const tail = { x: c.x - w / 2 + sp.gap, y: c.y }, head = { x: tail.x + len, y: c.y };
-    // the product drawn to the right of the arrow, centred on it
-    const dx = head.x + sp.gap - pb.x1, dy = c.y - (pb.y1 + pb.y2) / 2;
+    // the block (arrow and product) goes there if the space is free, else as near as it can
+    // (the block starts where the arrow does, a gap after what it follows)
+    const w = len + sp.gap + (pb.x2 - pb.x1);
+    const top = Math.min(pb.y1 + dy0, level - L / 2), bottom = Math.max(pb.y2 + dy0, level + L / 2);
+    const want = { x: from.x2 + sp.gap + w / 2, y: (top + bottom) / 2 };
+    const c = freeSpace(doc, w, bottom - top, want, 0.5 * L);
+    // (the free-space grid is coarse: a spot that is free, or free just along the line, stays exactly on the line)
+    const snap = (d: number) => (Math.abs(d) < 0.6 * L ? 0 : d);
+    const shift = { x: snap(c.x - want.x), y: snap(c.y - want.y) };
+    const tail = { x: from.x2 + sp.gap + shift.x, y: level + shift.y }, head = { x: tail.x + len, y: tail.y };
+    // the product drawn to the right of the arrow
+    const dx = head.x + sp.gap - pb.x1, dy = dy0 + shift.y;
     out.bulk(() => {
       for (const a of [...out.atoms.values()]) out.updateAtom(a.id, { x: a.x + dx, y: a.y + dy });
       for (const s of [...out.shapes.values()]) out.updateShape(s.id, { x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy });
@@ -4179,7 +4197,7 @@ export class Editor {
   measure(): Measure {
     this.r.invalidate(this.doc);
     if (this.sel.atoms.size > 5000) return { ...POINTS, captionBox: (c) => this.r.captionBox(c) };
-    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c) };
+    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c), bondSide: (b) => this.r.doubleSide(this.doc, b) };
   }
 
   private selBoxCache: { key: string; box: Rect | null } = { key: '', box: null };
@@ -4510,7 +4528,7 @@ export class Editor {
   /** Label and caption sizes for every atom (schemes need whole structures, however big the selection). */
   fullMeasure(): Measure {
     this.r.invalidate(this.doc);
-    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c) };
+    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c), bondSide: (b) => this.r.doubleSide(this.doc, b) };
   }
 
   /** An arrow's reaction roles: kept with it, or worked out from where things sit. */
