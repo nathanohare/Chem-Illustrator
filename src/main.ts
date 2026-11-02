@@ -92,7 +92,7 @@ import type { PresenterView } from './ui/presenter-view';
 import { editDrawingStyle } from './ui/style-dialog';
 import type { DocText } from './document/document';
 import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from './dark-page';
-import { STYLE_PRESETS, applyStyle, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
+import { STYLE_PRESETS, applyStyle, presetNamed, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
 import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
 import { pngWithDpi } from './render/emf-read';
 import { whiteToClear } from './render/background';
@@ -209,6 +209,9 @@ import { emptyTable, tableFromCells } from './table';
 import type { TableData } from './model';
 import { checkDrawing, checkDocument, checkWorkbook, repeatedTitles, structureAlt, setStructureAlt, type Issue, type IssuePlace } from './accessibility';
 import { AccessibilityPane, askAltText } from './ui/accessibility-pane';
+import { PreflightPane } from './ui/preflight-pane';
+import { enlargeText, thickenLines, useArial } from './preflight-fix';
+import { shapeBox } from './objects';
 import { SlideComparePane } from './ui/slide-compare';
 import { pickFileTemplate } from './ui/file-templates';
 import type { PastedRows } from './io/table-clip';
@@ -2814,7 +2817,7 @@ function showCanvasState(): void {
 let listKey = '';
 let masterSeen: unknown = null;
 let indexSeen = -1;
-const slideListKey = (d: Deck) => `${d.slides.map((s) => s.id + (s.notes.trim() ? 'n' : '') + (s.hidden ? 'h' : '') + (s.section !== undefined ? `s${s.section}` : '') + (s.canvas ? `k${s.canvas.keys.map((k) => k.id).join('.')}` : '')).join(',')}|${d.sections.map((x) => `${x.id}:${x.name}`).join('/')}|${d.size.w}x${d.size.h}|${d.looks}`;
+const slideListKey = (d: Deck) => `${d.slides.map((s, i) => s.id + (s.notes.trim() ? 'n' : '') + (s.hidden ? 'h' : '') + (s.section !== undefined ? `s${s.section}` : '') + (s.canvas ? `k${s.canvas.keys.map((k) => k.id).join('.')}` : '') + (s.transition?.advanceAfter !== undefined ? `t${s.transition.advanceAfter}` : '') + (d.narrated(i) ? 'v' : '')).join(',')}|${d.sections.map((x) => `${x.id}:${x.name}`).join('/')}|${d.size.w}x${d.size.h}|${d.looks}`;
 
 /** Told of every change to a deck (the Compare pane, which follows Undo). */
 const deckWatchers: ((deck: Deck) => void)[] = [];
@@ -4558,6 +4561,34 @@ function present(fromHere: boolean, notes = false, how: { custom?: number; windo
   });
 }
 
+/** The slides Clear works on: the ones picked in the slide list (the one showing), or all. */
+function clearTargets(d: Deck, which: 'slide' | 'all'): number[] {
+  if (which === 'all') return d.slides.map((_s, i) => i);
+  const picked = [...slideList.picked].filter((i) => i >= 0 && i < d.slides.length).sort((a, b) => a - b);
+  return picked.length ? picked : [d.index];
+}
+
+/** Slide Show > Clear > Timings: the slides go on with a click again, as before Rehearse Timings. */
+function clearShowTimings(which: 'slide' | 'all'): void {
+  const d = deckNow();
+  if (!d) return;
+  const ix = clearTargets(d, which);
+  if (!d.clearTimings(ix, which === 'all' ? 'Clear timings on all slides' : 'Clear timings')) { flash(which === 'all' ? 'No slide has a time to clear.' : 'This slide has no time to clear.'); return; }
+  flash(which === 'all' ? 'Timings cleared: every slide goes on with a click.' : 'Timing cleared: the slide goes on with a click.');
+}
+
+/** Slide Show > Clear > Narration: the recorded sounds come off the slides (their times stay). */
+function clearNarration(which: 'slide' | 'all'): void {
+  const d = deckNow();
+  if (!d) return;
+  const ix = clearTargets(d, which).filter((i) => d.narrated(i));
+  if (!ix.length) { flash(which === 'all' ? 'No slide has narration to clear.' : 'This slide has no narration to clear.'); return; }
+  d.editSlides(which === 'all' ? 'Clear narration on all slides' : 'Clear narration', ix, (sd) => {
+    for (const sh of [...sd.shapes.values()]) if (sh.video?.narration) sd.removeShape(sh.id);
+  });
+  flash(`Narration cleared from ${ix.length} slide${ix.length > 1 ? 's' : ''}. Their times stay (Clear > Timings takes those off).`);
+}
+
 /** The slide show and Presenter View: their code loads the first time a show starts. */
 let shows: { presenter: Presenter; presenterView: PresenterView } | null = null;
 let showsLoading: Promise<{ presenter: Presenter; presenterView: PresenterView }> | null = null;
@@ -4606,7 +4637,9 @@ function wireShows(presenter: Presenter, presenterView: PresenterView, inkShape:
         } else flash('Nothing was recorded (the microphone gave no sound).');
       }
       d.setTimings(r.times, r.recordings.size ? 'Record slide show timings' : 'Rehearse timings');
-      flash(`Kept: the show takes ${clockText(r.total)}${r.recordings.size ? ', with narration on the slides' : ''}. Set Up Show > Advance slides can turn the times off.`, 8000);
+      // the whole show, with the times of slides not played this time (rehearsing from one slide)
+      const whole = d.slides.reduce((n, s) => n + (s.hidden ? 0 : s.transition?.advanceAfter ?? 0), 0);
+      flash(`Kept: the show takes ${clockText(Math.max(whole, r.total))}${r.recordings.size ? ', with narration on the slides' : ''}. Set Up Show > Advance slides can turn the times off.`, 8000);
     })();
   };
 
@@ -4859,23 +4892,26 @@ async function printNow(): Promise<void> {
  * File > Export > Export Picture: the page (a design or the current slide) or the drawing as a PNG or
  * TIFF at the resolution picked, or as an SVG, EMF or EPS, on its background colour or see-through.
  */
-async function exportPicture(): Promise<void> {
+async function exportPicture(preset: { format?: string; dpi?: number; note?: string } = {}): Promise<void> {
   const tab = ws.active, deck = tab.deck;
   const what = deck ? (tab.mode === 'design' ? 'the page' : 'this slide') : 'the drawing';
+  // the figure check's journal sets the resolution it asks for
+  const checked = preflightPane.open ? preflightPane.last : null;
+  const dpiNow = preset.dpi ?? checked?.dpi ?? 300;
   const v = await ask('Export Picture', [
-    { name: 'format', label: 'Format', value: 'png', options: [
+    { name: 'format', label: 'Format', value: preset.format ?? 'png', options: [
       { value: 'png', label: 'PNG (a picture of dots: journals, Word, web)' },
       { value: 'tiff', label: 'TIFF (a picture of dots, LZW-compressed: what many journals ask for)' },
       { value: 'svg', label: 'SVG (shapes that stay sharp: Illustrator, Inkscape, web)' },
       { value: 'emf', label: 'EMF (shapes that stay sharp: Word, PowerPoint on Windows)' },
       { value: 'eps', label: 'EPS (shapes that stay sharp: older journal systems, Illustrator)' },
     ] },
-    { name: 'dpi', label: 'Resolution (PNG, TIFF)', value: '300', type: 'number', unit: 'dpi' },
+    { name: 'dpi', label: 'Resolution (PNG, TIFF)', value: String(dpiNow), type: 'number', unit: 'dpi' },
     { name: 'bg', label: 'Background', value: deck ? 'page' : 'clear', options: [
       { value: deck ? 'page' : 'white', label: deck ? 'The page colour' : 'White' },
       { value: 'clear', label: 'See-through' },
     ] },
-  ], { ok: 'Export…', note: `Saves ${what}. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line drawings.` });
+  ], { ok: 'Export…', note: preset.note ?? (checked ? `Saves ${what}. The ${checked.journal.name.replace(/ \(.*/, '')} guidelines ask for ${checked.dpi} dpi for this figure (File > Check Figure for Journal).` : `Saves ${what}. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line drawings.`) });
   if (!v) return;
   const dpi = Math.max(30, Math.min(2400, Number(v.dpi) || 300));
   const clear = v.bg === 'clear';
@@ -5595,6 +5631,69 @@ const accessibility = new AccessibilityPane({
   },
 });
 
+/** The journal drawing style for each journal the figure check knows (drawing-styles.ts). */
+const JOURNAL_STYLES: Record<string, string> = {
+  acs: 'ACS Document 1996', rsc: 'RSC', nature: 'Nature journals', wiley: 'Wiley (Angewandte, Chemistry Europe)', elsevier: 'Elsevier (Tetrahedron and others)',
+};
+
+/** File > Check Figure for Journal: the figure showing, as it draws (a drawing, a design page or a slide). */
+const preflightPane = new PreflightPane({
+  figure: () => {
+    if (sheetActive() || docActive()) return null;
+    const deck = deckNow();
+    if (deck) {
+      const i = deck.index;
+      const at = slidePages(deck, i)[deck.current?.canvas ? canvasKeys.picked(deck) : 0];
+      if (!at) return null;
+      return { items: recordSlide(at.page, at.doc), box: { x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h }, page: true };
+    }
+    const pic = recordPicture(doc, 0);
+    return pic ? { items: pic.items, box: pic.box } : null;
+  },
+  select: (where) => {
+    const sel = editor.touching(where);
+    editor.selectThese(sel);
+    const first = [...sel.atoms][0];
+    if (first !== undefined) editor.reveal('atom', first);
+    else if (sel.captions.size) editor.reveal('caption', [...sel.captions][0]);
+    else if (!sel.shapes.size && !sel.arrows.size) flash('That is part of a picture, chart or table: change it there.');
+  },
+  fix: (issue, r) => {
+    finishTyping();
+    const m = editor.measure();
+    const ctx = { captionBox: (id: number) => m.captionBox(doc.captions.get(id)!), shapeBox: (id: number) => shapeBox(doc.shapes.get(id)!) };
+    let done = false;
+    if (issue.fix === 'fit' && issue.want) {
+      editor.selectAll();
+      done = editor.scaleSelection(issue.want);
+      if (done) flash(`Scaled to ${Math.round(issue.want * 100)} % to fit ${r.size.name.replace(/ \(.*/, '').toLowerCase()}. Text in captions keeps its size; check it again.`, 6000);
+    } else if (issue.fix === 'text') done = enlargeText(doc, issue, ctx);
+    else if (issue.fix === 'lines') done = thickenLines(doc, issue, ctx);
+    else if (issue.fix === 'fonts') done = useArial(doc, issue.fonts ?? []);
+    if (done) editor.changed();
+    else if (issue.fix !== 'fit') flash('This is in a picture, chart or table: change it there.');
+    return done;
+  },
+  styleFor: (id) => (JOURNAL_STYLES[id] && presetNamed(JOURNAL_STYLES[id]) ? JOURNAL_STYLES[id] : undefined),
+  useStyle: (name) => {
+    const next = presetNamed(name)?.style;
+    if (!next) return;
+    finishTyping();
+    const deck = deckNow();
+    if (deck) deck.setDrawingStyle({ ...next }, 'restyle');
+    else { doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, { ...next }, 'restyle')); editor.changed(); }
+    flash(`Structures are now drawn in ${next.name}.`, 4000);
+  },
+  exportFor: (r) => {
+    finishTab();
+    const name = r.journal.name.replace(/ \(.*/, '');
+    if (r.journal.vectorPreferred) { void exportPdf(); return; }
+    const raster = r.journal.formats?.find((f) => f === 'tiff' || f === 'png') ?? 'tiff';
+    void exportPicture({ format: raster, dpi: r.dpi, note: `The ${name} guidelines ask for ${r.dpi} dpi for this figure${r.journal.formats ? `, as ${r.journal.formats.map((f) => f.toUpperCase()).join(', ')}` : ''}.` });
+  },
+  open: (url) => openWebPage(url),
+});
+
 const slideCompare = new SlideComparePane({
   deck: () => (ws.active.mode === 'slides' ? deckNow() : null),
   flash: (m, ms) => flash(m, ms),
@@ -5789,7 +5888,7 @@ function setPictureStyle(look: PictureLook | undefined): boolean {
 const SLIDE_ONLY = new Set(['references-slide', 'compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
   'edit-layouts', 'view-sorter', 'add-section', 'rename-section', 'remove-section', 'remove-section-slides', 'remove-all-sections', 'section-up', 'section-down', 'collapse-sections', 'expand-sections',
   'slide-transitions', 'slide-animations', 'animation-pane', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-video', 'insert-audio',
-  'reading-view', 'rehearse-timings', 'record-show', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
+  'reading-view', 'rehearse-timings', 'record-show', 'rehearse-here', 'record-show-here', 'clear-timings-slide', 'clear-timings-all', 'clear-narration-slide', 'clear-narration-all', 'clear-show-menu', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
 
 /** The animation commands: an effect for the selected objects (the right-click menu's Animation). */
 const ANIM_COMMANDS: { cmd: string; label: string }[] = [false, true].flatMap((exit) => EFFECTS.filter((e) => !(exit && e.emph)).map((e) => ({
@@ -5798,6 +5897,7 @@ const ANIM_COMMANDS: { cmd: string; label: string }[] = [false, true].flatMap((e
 
 const COMMANDS: Record<string, () => unknown> = {
   new: () => { finishTab(); ws.newDrawing(); },
+  'preflight': () => { finishTyping(); if (preflightPane.open) preflightPane.refresh(); else preflightPane.show(document.querySelector<HTMLElement>('[data-cmd="preflight"]:not([hidden])')); },
   'check-accessibility': () => { finishTyping(); if (accessibility.open) accessibility.refresh(); else accessibility.show(document.querySelector<HTMLElement>('[data-cmd="check-accessibility"]:not([hidden])')); },
   'alt-text': () => { finishTyping(); void drawingAltText(); },
   'new-slides': () => { finishTab(); ws.newSlides(); },
@@ -5956,8 +6056,23 @@ const COMMANDS: Record<string, () => unknown> = {
   'reading-view': () => present(true, false, { windowed: true }),
   'rehearse-timings': () => present(false, false, { rehearse: true }),
   'record-show': () => present(false, false, { rehearse: true, record: true }),
+  'rehearse-here': () => present(true, false, { rehearse: true }),
+  'record-show-here': () => present(true, false, { rehearse: true, record: true }),
+  'clear-timings-slide': () => clearShowTimings('slide'),
+  'clear-timings-all': () => clearShowTimings('all'),
+  'clear-narration-slide': () => clearNarration('slide'),
+  'clear-narration-all': () => clearNarration('all'),
   'set-up-show': () => void setUpShowCmd(),
   'custom-shows': () => void customShowsCmd(),
+  'clear-show-menu': () => {
+    const b = document.querySelector<HTMLElement>('#ribbon [data-cmd="clear-show-menu"]');
+    const at = (b && b.offsetParent ? b : document.querySelector<HTMLElement>('#ribbon .rb-tabs')!).getBoundingClientRect();
+    showContextMenu(at.left, at.bottom, [
+      { cmd: 'rehearse-here', label: 'Rehearse from This Slide' }, { cmd: 'record-show-here', label: 'Record from This Slide…' }, null,
+      { cmd: 'clear-timings-slide', label: 'Clear Timing on This Slide' }, { cmd: 'clear-timings-all', label: 'Clear Timings on All Slides' }, null,
+      { cmd: 'clear-narration-slide', label: 'Clear Narration on This Slide' }, { cmd: 'clear-narration-all', label: 'Clear Narration on All Slides' },
+    ], { run: (cmd) => void command(cmd), key: commandKey });
+  },
   'custom-show-menu': () => {
     const b = document.querySelector<HTMLElement>('#ribbon [data-cmd="custom-show-menu"]');
     customShowMenu(b && b.offsetParent ? b : document.querySelector<HTMLElement>('#ribbon .rb-tabs')!);

@@ -21,7 +21,7 @@ export interface Field {
 }
 
 /** Show the fields; resolves with what was entered, or null if the window was cancelled. */
-export function ask(title: string, fields: Field[], opts: { ok?: string; note?: string; /** Only an OK button, for a message. */ noCancel?: boolean } = {}): Promise<Record<string, string> | null> {
+export function ask(title: string, fields: Field[], opts: { ok?: string; note?: string; /** Only an OK button, for a message. */ noCancel?: boolean; /** A short list under the note (two columns: what, and its value). */ lines?: [string, string][] } = {}): Promise<Record<string, string> | null> {
   return new Promise((resolve) => {
     const d = document.createElement('dialog');
     d.className = 'ask';
@@ -34,6 +34,16 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
       p.className = 'muted';
       p.textContent = opts.note;
       form.append(p);
+    }
+    if (opts.lines?.length) {
+      const t = document.createElement('table');
+      t.className = 'ask-lines';
+      for (const [a, b] of opts.lines) {
+        const tr = t.insertRow();
+        tr.insertCell().textContent = a;
+        tr.insertCell().textContent = b;
+      }
+      form.append(t);
     }
     const inputs = new Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
     for (const f of fields) {
