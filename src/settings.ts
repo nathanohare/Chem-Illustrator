@@ -112,7 +112,7 @@ export interface Settings {
   oneColumnTools: boolean;
   /** The start view (new tabs, recent files) on the empty drawing the program opens with. */
   startView: boolean;
-  /** Settings ▸ Preferences: in Canvas mode, Enter finishes typing a text box and Alt+Enter (Option+Enter on a Mac) starts a new line. Off: Enter starts a new line and Esc finishes (ChemDraw). */
+  /** Settings ▸ Preferences: Enter finishes text typed with the Text tool (in every mode) and Alt+Enter (Option+Enter on a Mac) starts a new line. Off: Enter starts a new line and Esc finishes (ChemDraw). */
   enterFinishesText: boolean;
   /** Resting the mouse on an abbreviation shows the group written out (View > Group Tooltips). */
   groupTips: boolean;

@@ -2142,10 +2142,12 @@ function addNamed(got: { mb: string; attach: number[] }, x: number, y: number, t
 let structuresLocked = false;
 /** The start view shows on the empty drawing the program opens with (Settings > General). */
 let startView = true;
-/** Settings ▸ Preferences: Enter finishes typing a text box in Canvas mode, Alt+Enter starts a new line. */
+/** Settings ▸ Preferences: Enter finishes text typed with the Text tool, Alt+Enter starts a new line. */
 let enterFinishesText = false;
-// text typed on a drawing (Canvas mode, and the drawing beside a document or spreadsheet); slides and designs keep PowerPoint's keys
-editor.enterFinishesText = () => enterFinishesText && ws.active.mode !== 'slides' && ws.active.mode !== 'design';
+// everywhere the Text tool types (Canvas, structures in documents and spreadsheets, text boxes on
+// slides and designs); text in shapes, tables and slide placeholders follows it except on slides
+// and designs, which keep PowerPoint's keys there
+editor.enterFinishesText = (what) => enterFinishesText && (what === 'text' || (ws.active.mode !== 'slides' && ws.active.mode !== 'design'));
 /** View > Focus View is on. */
 let focusView = false;
 /** View > Toolboxes > One Column Outside Drawing is on; and whether the toolboxes on screen were built that way. */
@@ -9491,13 +9493,14 @@ async function generalPreferences(): Promise<void> {
 async function personalPreferences(): Promise<void> {
   const alt = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? 'Option+Enter' : 'Alt+Enter';
   const r = await ask('Preferences', [
-    { name: 'enterFinishes', label: `Enter finishes typing a text box in Canvas mode, and ${alt} starts a new line`, type: 'checkbox', value: String(enterFinishesText),
-      help: 'Off: Enter starts a new line and Esc finishes, as in ChemDraw. Ctrl+Enter and Esc always finish. Text on slides and designs keeps PowerPoint\'s keys.' },
+    { name: 'enterFinishes', label: 'Finish typing text from the Text tool with', value: enterFinishesText ? 'enter' : 'esc',
+      options: [{ value: 'esc', label: 'Esc (Enter starts a new line), as in ChemDraw' }, { value: 'enter', label: `Enter (${alt} starts a new line)` }],
+      help: 'Everywhere you draw: Canvas, structures in documents and spreadsheets, and text boxes on slides. Ctrl+Enter always finishes, and Shift+Enter always breaks the line.' },
     { name: 'alkylLook', label: 'Alkyl groups written as', value: alkylPrefs.look, options: ALKYL_LOOK_CHOICES,
       help: 'For the n-, i-, s- and t- of Pr and Bu (tBu, iPr, nBu, sBu, iBu), wherever they sit in a label or text (OtBu, N(iPr)2, KOtBu). Atom labels and text boxes take the look as you finish typing them; you are asked whether to change the ones already in the drawing. A dash is never put in or taken out where the letters would read as an element (PtBu3 stays as it is).' },
   ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(parseAlkylLook(v.alkylLook)) } });
   if (!r) return;
-  enterFinishesText = r.enterFinishes === 'true';
+  enterFinishesText = r.enterFinishes === 'enter';
   const look = parseAlkylLook(r.alkylLook);
   const changed = look !== alkylPrefs.look;
   alkylPrefs.look = look;
@@ -12203,7 +12206,7 @@ const guide = {
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files demo clips hover tool tips animation', open: generalPreferences },
-  { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
+  { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
