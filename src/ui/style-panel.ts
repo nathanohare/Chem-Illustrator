@@ -462,6 +462,7 @@ export class StylePanel {
     this.check('Show the energies', d.values, (v) => set({ values: v }));
     this.check('Axis and its titles', d.axis, (v) => set({ axis: v }));
     this.check('Mark the largest barrier', d.barrier, (v) => set({ barrier: v }), 'A double arrow from the lowest point up to the highest after it, on each pathway');
+    this.check('Mark the overall change', !!d.overall, (v) => set({ overall: v }), 'A double arrow from the first species to the last, on each pathway');
     this.number('Decimal places', d.digits, 1, 0, 3, (v) => set({ digits: v }));
     const n = Math.max(...d.paths.map((p) => p.points.length));
     this.note(`${d.paths.length === 1 ? 'One pathway' : `${d.paths.length} pathways`} through ${n} species. Change the names and energies in the window; drag a corner to resize it. Anything you draw inside stays when it is redrawn.`);
