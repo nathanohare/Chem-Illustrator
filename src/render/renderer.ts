@@ -13,6 +13,7 @@ import { crossingGapsCached } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
 import { bondEndPrefs, doubleBondGap, wedgeWidth } from '../style';
+import { depthFractions, depthShadePrefs, shadeLook, shadeStep } from './depth-shade';
 import { joinWideEnds, lineMitres, endTip, LINE_MITRE_LIMIT, type WideEnd, type EndJoin, type LineEnd } from './bond-joins';
 import { chargeInk, labelBonds, labelSpec, layoutLabel, LabelLayout, labelLook } from '../chem/labels';
 import type { StructureChecks } from '../chem/warnings';
@@ -795,17 +796,33 @@ export class Renderer {
     // Bonds, batched by how they are stroked (and by size, for resized structures).
     const batches = new Map<number, BondBatch>();
     const colored: Bond[] = [];
+    // depth shading: structures in 3-D fade from the near colour to the far one, by steps
+    const back = depthShadePrefs.on ? depthFractions(doc) : null;
+    const shaded = new Map<string, { bb: BondBatch; k: number; step: number }>();
     for (const b of bondSet) {
       const p = doc.atoms.get(b.a1), q = doc.atoms.get(b.a2);
       if (!p || !q) continue;
       if ((p.x < vis.x1 && q.x < vis.x1) || (p.x > vis.x2 && q.x > vis.x2) || (p.y < vis.y1 && q.y < vis.y1) || (p.y > vis.y2 && q.y > vis.y2)) continue;
       if (b.color) { colored.push(b); continue; }
+      const bp = back?.get(p.id), bq = back?.get(q.id);
+      if (bp !== undefined && bq !== undefined) {
+        const k = b.s ?? 1, step = shadeStep((bp + bq) / 2), key = `${step}/${k}`;
+        let sb = shaded.get(key);
+        if (!sb) shaded.set(key, (sb = { bb: newBatch(this.makePath), k, step }));
+        this.bondOrSpokes(doc, b, p, q, sb.bb);
+        continue;
+      }
       const k = b.s ?? 1;
       let bb = batches.get(k);
       if (!bb) { bb = newBatch(this.makePath); batches.set(k, bb); }
       this.bondOrSpokes(doc, b, p, q, bb);
     }
     for (const [k, bb] of batches) this.strokeBatch(ctx, bb, k, st.lineWidth, st.boldWidth, '#000');
+    // furthest first, so nearer lines lie over them
+    for (const sb of [...shaded.values()].sort((x, y) => y.step - x.step)) {
+      const look = shadeLook(sb.step);
+      this.strokeBatch(ctx, sb.bb, sb.k * look.width, st.lineWidth, st.boldWidth, look.color);
+    }
     for (const b of colored) {
       const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
       const bb = newBatch(this.makePath);
@@ -830,7 +847,8 @@ export class Renderer {
     for (const a of atoms) {
       const info = this.atomInfo(doc, a);
       if (info.layout && a.id !== this.hiddenLabel) {
-        ctx.fillStyle = a.color ?? '#000';
+        const ab = a.color ? undefined : back?.get(a.id);
+        ctx.fillStyle = a.color ?? (ab !== undefined ? shadeLook(shadeStep(ab)).color : '#000');
         for (const r of info.layout.runs) {
           const f = `${r.size}px ${this.labelStack}`;
           if (f !== curFont) { ctx.font = f; curFont = f; }

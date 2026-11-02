@@ -88,6 +88,7 @@ To make your own template, select a structure and click the first button on the 
 - **Text**: click an atom to type a label, or empty space for a caption. See [Text and captions](#text-and-captions).
 - **Periodic table**: pick an element, then click atoms to change them, or empty space to add a lone atom. Atoms already selected change at once. You can type a symbol in its box and press Enter. Open it from **Chemistry ▸ Look Up ▸ Periodic Table…** or Search (it is no longer a toolbox button).
 - **Mass fragmentation**: see [Mass fragmentation](#mass-fragmentation).
+- **Perspective** and **3-D Perspective** (one button, two tools): see [Turning a structure in perspective](#turning-a-structure-in-perspective).
 
 ### Arrows, mechanism symbols, shapes and brackets
 
@@ -183,6 +184,25 @@ Select a caption and a structure and choose **Format ▸ Link Text to Structure*
 ### Turning text
 
 Select a caption or text box on its own with the select tool, and a round handle appears above it. Drag the handle to turn the text; hold Shift or Alt to turn in 15° steps. When you turn a structure that has captions with it, the captions move round with the structure but stay upright. Labels attached to a structure (ID labels, descriptors) also stay upright.
+
+## Turning a structure in perspective
+
+Two tools turn a structure in 3-D as you drag it. Press on a structure (or on the selection, to turn everything selected together) and drag: across turns it about the up–down axis, up or down about the left–right axis, and the near side follows the pointer. Hold **Shift** to turn one way only, in 15° steps. Dragging on empty space draws a selection box. Each drag is one undoable step.
+
+- **Perspective** turns the drawing as a flat sheet, the way ChemDraw does: the structure is foreshortened as it tips, and once you turn it past edge-on (seeing it from behind) its wedges and hashed wedges swap so every stereocentre keeps its R or S. A structure that already has depth (a conformer template, or one turned before) turns with that depth.
+- **3-D Perspective** turns the structure's **real shape**. The first time, it builds the shape from your drawing (OpenChemLib conformers, the chosen one relaxed with MMFF94s+), which takes a second or a few for a large molecule; the status bar says "Building the 3-D shape…" and the turn starts as soon as it is ready. A molecule that isn't flat, such as BINAP with its two naphthalenes at right angles, then shows its true shape from every side, where the flat tool would treat it as a flat picture.
+  - Which shape is meant comes from the drawing. Every stereocentre drawn with a wedge keeps its configuration. Other wedges, **bold bonds** (nearer you) and **hashed bonds** (further away) pick between shapes the bonds alone can't tell apart, such as a biaryl's two twists: bold one ring of a naphthalene and that ring is the one turned towards you.
+  - While you turn, wedges move to whichever bond shows each stereocentre best from that angle, and where two bonds cross the one further back gets a small gap. If from some angle a stereocentre can't be drawn so it reads right (a bond points straight at you), the status bar says so, and letting go there puts the structure back at the last angle that worked.
+  - The structure stays live in 3-D: drag it again and it turns on from where it is. Once you change an atom or bond of it, the next turn builds the shape again from the drawing as it is then.
+  - If no 3-D shape can be built (R groups, labels that can't be read), or none matches the drawing (the bold bonds and wedges contradict each other), the structure is turned flat instead and a message says why.
+
+**Format ▸ Rotate and Flip ▸ Turn in 3-D…** (and **Perspective** on a structure's right-click menu) turns the selected structures by angles you type: about X (left–right; positive tips the top towards you), then Y (up–down; positive brings the left side towards you), then Z (in the page, clockwise), as the real 3-D shape or as a flat sheet. **Flatten** makes turned structures ordinary flat drawings again: they keep how they look but forget their depth.
+
+A turned structure keeps its 3-D positions in the CDXML file (ChemDraw's `xyz`), as **Place on Page** in the [3-D model](#3-d-model) window does.
+
+### Depth shading
+
+**Format ▸ Rotate and Flip ▸ Depth Shading** (also under **Perspective** on a structure's right-click menu) shades every structure drawn in 3-D by depth: the atoms and bonds nearest you are black, fading to grey the further back they lie. That covers structures turned with the Perspective tools, placed from the 3-D Model window, and drawn from the conformer templates. Each structure is shaded over its own depth, front to back; flat drawings are left as they are, and anything you have coloured yourself keeps its colour. **Depth Shading Settings…** sets the nearest and furthest colours (black and 60% grey, #999999, to start with), whether the fade is even or eased (slow at the front and back, quicker in the middle), and whether lines also thin with depth, and to what width at the back. It is a setting of the app, like the ends of bond lines: pictures you copy or export, and prints, keep the shading, but a CDXML file saves the structure's usual colours. The 3-D Model window has a **Depth** box that fades the back of its model in the same way.
 
 ## Moving, turning and the Format menu
 
@@ -473,7 +493,7 @@ To move a toolbox, unlock it first: click the padlock on its title bar (or right
 
 Right-click the drawing for a menu of what fits what you clicked. The names and keys match the top menus.
 
-- **On a structure**: it is selected first (the whole structure), and the menu has Cut, Copy, Paste and Delete; **Copy As** (SMILES, molfile, CDXML text); **Clean Up Structure**; on a bond of a ring drawn in 3-D, **Fuse a Ring Here** (see [Fusing conformers](#fusing-conformers)); a **Structure** group (stereo labels, aromatic circles, terminal methyls, H atoms, Contract and Expand Label, Join, Bring Bond to Front and Send Bond to Back, η bonds, stereo groups, chiral flag, repeat brackets, R-group table, Check Structure, templates and nicknames, PubChem); **Scheme**; **Add Frame**; **Label the Structure**; **Scale…**; **Highlight and Fill**; **Align**; **Rotate or Flip**; and **View**.
+- **On a structure**: it is selected first (the whole structure), and the menu has Cut, Copy, Paste and Delete; **Copy As** (SMILES, molfile, CDXML text); **Clean Up Structure**; on a bond of a ring drawn in 3-D, **Fuse a Ring Here** (see [Fusing conformers](#fusing-conformers)); a **Structure** group (stereo labels, aromatic circles, terminal methyls, H atoms, Contract and Expand Label, Join, Bring Bond to Front and Send Bond to Back, η bonds, stereo groups, chiral flag, repeat brackets, R-group table, Check Structure, templates and nicknames, PubChem); **Perspective** (Turn in 3-D…, Flatten); **Scheme**; **Add Frame**; **Label the Structure**; **Scale…**; **Highlight and Fill**; **Align**; **Rotate or Flip**; and **View**.
 - **On empty space**: Paste, Paste SMILES, Select All, Undo and Redo, an **Insert** group (Structure from Name or SMILES, Periodic Table, Picture, Structure from Picture, Text Box, Symbol), **Scheme**, **Drawing Style…** and **View**.
 
 Right-drag still scrolls the drawing; the menu only opens when the mouse doesn't move.

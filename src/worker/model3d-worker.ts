@@ -4,15 +4,19 @@
 
 import { Resources } from 'openchemlib';
 import { buildModel, type Model3d } from '../chem/model3d-build';
+import { buildPose, type PoseResult } from '../chem/pose3d';
+import type { DepthCues } from '../chem/perspective';
 
 export type Model3dRequest =
   | { type: 'init'; resources: string }
-  | { type: 'build'; id: number; molblock: string; count: number; seed: number };
+  | { type: 'build'; id: number; molblock: string; count: number; seed: number }
+  | { type: 'pose'; id: number; molblock: string; cues: DepthCues; L: number };
 
 export type Model3dResponse =
   | { type: 'ready'; ms: number }
   | { type: 'error'; id?: number; message: string }
-  | { type: 'build'; id: number; model: Model3d | null; message?: string };
+  | { type: 'build'; id: number; model: Model3d | null; message?: string }
+  | { type: 'pose'; id: number; result: PoseResult };
 
 const post = (m: Model3dResponse) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(m);
 
@@ -32,6 +36,12 @@ self.onmessage = async (e: MessageEvent<Model3dRequest>) => {
       post({ type: 'build', id: m.id, model, message: model ? undefined : 'Could not build a 3-D model of this structure.' });
     } catch (err) {
       post({ type: 'build', id: m.id, model: null, message: 'Could not build a 3-D model: ' + String((err as Error)?.message ?? err) });
+    }
+  } else if (m.type === 'pose') {
+    try {
+      post({ type: 'pose', id: m.id, result: buildPose(m.molblock, m.cues, m.L) });
+    } catch (err) {
+      post({ type: 'pose', id: m.id, result: { problem: 'build', message: 'No 3-D shape could be built: ' + String((err as Error)?.message ?? err) } });
     }
   }
 };

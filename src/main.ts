@@ -204,6 +204,7 @@ import type { SheetFileDeps } from './io/sheet-files';
 import { fromEmbedSource, type Embedded } from './io/ole-object';
 import { objectPicture, type ObjectPicture } from './render/object-picture';
 import { ACS_1996, BOND_END_CHOICES, bondEndPrefs, DocStyle } from './style';
+import { DEFAULT_DEPTH_SHADE, depthShadePrefs } from './render/depth-shade';
 import { emptyTable, tableFromCells } from './table';
 import type { TableData } from './model';
 import { checkDrawing, checkDocument, checkWorkbook, repeatedTitles, structureAlt, setStructureAlt, type Issue, type IssuePlace } from './accessibility';
@@ -427,6 +428,17 @@ const templatePalette = (group: Template['group'] | Template['group'][], palette
   icon: (name, size) => templateIcon(templateById(name.slice(4))!, size),
 });
 
+/** Turning structures in perspective: as a flat sheet (as ChemDraw does), or in their real 3-D shape. */
+const PERSPECTIVE_TOOLS: PaletteDef = {
+  palette: 'perspective',
+  title: 'Perspective',
+  items: [
+    { name: 'perspective', title: 'Perspective: drag a structure to turn it in 3-D as a flat sheet, the way it is drawn (Shift: 15° steps)' },
+    { name: 'perspective-3d', title: '3-D Perspective: drag a structure to turn its real 3-D shape, built from the drawing; wedges and bold bonds say which shape is meant (Shift: 15° steps)' },
+  ],
+  columns: 2,
+};
+
 /** Box select, with the lasso (freehand) on the same button. */
 const SELECT_TOOLS: PaletteDef = {
   palette: 'select',
@@ -466,6 +478,7 @@ const TOOL_GROUPS: ToolbarItem[][] = [
     BRACKETS,
     SHAPES,
     { name: 'fragment', title: 'Mass fragmentation: drag a line across bonds (or click a bond) to break them and label each piece with its formula and mass' },
+    PERSPECTIVE_TOOLS,
     { name: 'sketch', title: 'Sketch (for a pen): draw freehand. Lines become bonds, a loop with corners a ring, a circle benzene (inside a ring: aromatic), letters label atoms (C N O S P F Cl Br I H, + −), a scribble erases' },
   ],
   [
@@ -607,6 +620,7 @@ function setHint(text: string): void {
 }
 // a hint for the step in hand (drawing an arrow through points), and back to the tool's own after
 editor.onHint = (text) => { if (text) setHint(text); else editor.onToolChange(editor.toolName); };
+editor.onNotice = (text, ms) => flash(text, ms);
 editor.setTool('bond-single');
 
 // tablets: bigger buttons, long-press menus, double taps and the atom keypad (View > Window and Colours > Touch Mode)
@@ -1271,6 +1285,69 @@ let viewer3d: Viewer3d | null = null;
  * Chemistry > 3-D Model: the selected structure (or the one last drawn) built in 3-D in a window
  * of its own, to turn and look at, and to turn the drawing to match (Place on Page).
  */
+// the 3-D Perspective tool builds a structure's shape in the same worker, and checks a turn kept its meaning
+editor.perspectiveHost = {
+  pose: (molblock, cues, L) => model3d.pose(molblock, cues, L),
+  smiles: (molblock) => chem.molToSmiles(molblock),
+};
+
+let lastTurn3d = { x: '0', y: '30', z: '0', shape: 'real' };
+/** Turn in 3-D…: the selected structures turned by angles typed in, in their real shape or as a flat sheet. */
+async function turn3dDialog(): Promise<void> {
+  if (!editor.sel.atoms.size) { flash('Select a structure to turn in 3-D.'); return; }
+  const r = await ask('Turn in 3-D', [
+    { name: 'x', label: 'About X (left–right)', value: lastTurn3d.x, unit: 'degrees', type: 'number', help: 'Positive tips the top towards you.' },
+    { name: 'y', label: 'About Y (up–down)', value: lastTurn3d.y, unit: 'degrees', type: 'number', help: 'Positive brings the left side towards you.' },
+    { name: 'z', label: 'About Z (in the page)', value: lastTurn3d.z, unit: 'degrees', type: 'number', help: 'Positive turns it clockwise.' },
+    { name: 'shape', label: 'Turn', value: lastTurn3d.shape, options: [{ value: 'real', label: 'The real 3-D shape' }, { value: 'flat', label: 'The drawing as a flat sheet' }] },
+  ], { ok: 'Turn', note: 'Drag with the Perspective tools to turn by eye.' });
+  if (!r) return;
+  const [x, y, z] = [r.x, r.y, r.z].map((v) => parseFloat(v || '0'));
+  if (![x, y, z].every(Number.isFinite)) { flash('Type each angle in degrees.'); return; }
+  lastTurn3d = { x: r.x, y: r.y, z: r.z, shape: r.shape };
+  if (r.shape === 'real') flash('Building the 3-D shape…');
+  await editor.turnSelectionBy(x, y, z, r.shape === 'real');
+}
+
+/** Depth shading on or off (Format ▸ Depth Shading): structures in 3-D fade from black in front to grey behind. */
+function toggleDepthShading(): void {
+  depthShadePrefs.on = !depthShadePrefs.on;
+  depthShadingChanged();
+  storeSettings();
+  flash(depthShadePrefs.on ? 'Depth shading on: structures turned in 3-D fade from front to back.' : 'Depth shading off.');
+}
+
+/** Depth Shading Settings…: the colours in front and behind, how the fade goes, and whether lines thin with depth. */
+async function depthShadingDialog(): Promise<void> {
+  const s = depthShadePrefs;
+  const r = await ask('Depth Shading', [
+    { name: 'on', label: 'Shade structures drawn in 3-D by depth', type: 'checkbox', value: String(s.on),
+      help: 'Structures turned with the Perspective tools, placed from the 3-D Model window, or drawn from conformer templates. Each is shaded over its own depth.' },
+    { name: 'near', label: 'Nearest colour', type: 'color', value: s.near },
+    { name: 'far', label: 'Furthest colour', type: 'color', value: s.far },
+    { name: 'curve', label: 'Fade', value: s.curve, options: [{ value: 'linear', label: 'Even (linear)' }, { value: 'eased', label: 'Eased (slow at front and back)' }] },
+    { name: 'thin', label: 'Thin the lines with depth too', type: 'checkbox', value: String(s.thin) },
+    { name: 'thinTo', label: 'Line width at the back', type: 'number', unit: '% of the usual', value: String(Math.round(s.thinTo * 100)) },
+  ], { ok: 'Apply', note: `The usual look is black in front to ${DEFAULT_DEPTH_SHADE.far} grey behind, evenly, lines kept their width. Pictures you copy or export keep the shading.` });
+  if (!r) return;
+  const pct = Number(r.thinTo);
+  Object.assign(depthShadePrefs, {
+    on: r.on === 'true', near: r.near || s.near, far: r.far || s.far, curve: r.curve === 'eased' ? 'eased' : 'linear',
+    thin: r.thin === 'true', thinTo: isFinite(pct) ? Math.max(10, Math.min(100, pct)) / 100 : s.thinTo,
+  });
+  depthShadingChanged();
+  storeSettings();
+}
+
+/** Repaint with the depth shading as it now is, and tick the menu. */
+function depthShadingChanged(): void {
+  for (const el of document.querySelectorAll('[data-cmd="depth-shading"][role="menuitemcheckbox"]')) el.setAttribute('aria-checked', String(depthShadePrefs.on));
+  doc.allDirty = true;
+  renderer.repaintAll();
+  editor.requestScene();
+  viewer3d?.redraw();
+}
+
 async function show3dModel(): Promise<void> {
   const root = editor.sel.atoms.size ? [...editor.sel.atoms][0] : editor.lastEdited;
   if (root === null || !doc.atoms.has(root)) { flash('Select a structure to see in 3-D.'); return; }
@@ -6156,6 +6233,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'attach-descriptors': () => void attachDescriptors(),
   'pubchem-lookup': () => void lookUpChosen(),
   'model-3d': () => void show3dModel(),
+  'turn-3d': () => void turn3dDialog(),
+  'flatten-3d': () => editor.flattenSelection() || flash('Select a structure to flatten.'),
+  'depth-shading': () => toggleDepthShading(),
+  'depth-shading-settings': () => void depthShadingDialog(),
   'structure-to-name': () => void structureToName(),
   'add-id-label': () => void addTiedText('label'),
   'lock-structures': () => toggleStructureLock(),
@@ -7419,6 +7500,7 @@ function currentSettings(): Settings {
     arrowEndGap: arrowGaps.end,
     superscriptR: labelPrefs.superscriptR,
     bondEnds: bondEndPrefs.round,
+    depthShade: { ...depthShadePrefs },
     linkSide,
     slideTemplate,
     slideThemes,
@@ -7649,6 +7731,8 @@ function applySettings(s: Settings): void {
   arrowGaps.end = s.arrowEndGap;
   labelPrefs.superscriptR = s.superscriptR;
   bondEndPrefs.round = s.bondEnds;
+  Object.assign(depthShadePrefs, s.depthShade);
+  for (const el of document.querySelectorAll('[data-cmd="depth-shading"][role="menuitemcheckbox"]')) el.setAttribute('aria-checked', String(depthShadePrefs.on));
   linkSide = s.linkSide;
   slideTemplate = s.slideTemplate;
   slideThemes = s.slideThemes;
@@ -8762,6 +8846,7 @@ function drawingMenu(): MenuItem[] {
       ] },
       { cmd: 'structure-to-name' },
       { cmd: 'model-3d' },
+      { label: 'Perspective', items: [{ cmd: 'turn-3d' }, { cmd: 'flatten-3d' }, null, { cmd: 'depth-shading', checked: depthShadePrefs.on }, { cmd: 'depth-shading-settings' }] },
     ] : []),
     ...(pickedCurved() ? [{ cmd: 'clean-up-arrow' }, { label: 'Mechanism Arrow', items: [
       { cmd: 'arrow-add-bend', ...(editor.contextSpot?.t !== undefined ? { label: 'Add Bend Here' } : {}) }, ...(editor.pickedJoin() ? [{ cmd: 'arrow-remove-bend' }, { cmd: 'arrow-smooth-join' }, { cmd: 'arrow-symmetric-join' }] : []), null,

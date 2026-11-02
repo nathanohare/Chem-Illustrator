@@ -73,6 +73,8 @@ import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
 import { imageFor } from '../render/images';
 import { BEND, BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
+import { flatten, prepareTurn, stillMeans, structuresOf, type PerspectiveHost, type Prepared } from './perspective';
+import { anglesTurn, dragTurn, type M3 } from '../chem/perspective';
 import type { TextEditing } from '../text/editing';
 
 export type Tool =
@@ -96,7 +98,9 @@ export type Tool =
   /** Mass fragmentation: a line dragged across bonds (or a click on one) breaks them, and each piece gets its formula and mass. */
   | { kind: 'fragment' }
   /** Freehand with the pen: lines become bonds, loops rings, letters labels, a scribble erases (sketch.ts). */
-  | { kind: 'sketch' };
+  | { kind: 'sketch' }
+  /** Drag a structure to turn it in perspective: as a flat sheet, or (`real`) its true 3-D shape (perspective.ts). */
+  | { kind: 'perspective'; real: boolean };
 
 /** Marks put on atoms for mechanisms: a lone pair, a radical's dot, a circled charge, or δ+ / δ−. */
 export type SymbolKind = 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus' | 'DeltaPlus' | 'DeltaMinus';
@@ -121,6 +125,8 @@ export const TOOLS: Record<string, Tool> = {
   element: { kind: 'element' },
   fragment: { kind: 'fragment' },
   sketch: { kind: 'sketch' },
+  perspective: { kind: 'perspective', real: false },
+  'perspective-3d': { kind: 'perspective', real: true },
   'bond-single': { kind: 'bond', order: 1, display: 'solid' },
   'bond-double': { kind: 'bond', order: 2, display: 'solid' },
   'bond-triple': { kind: 'bond', order: 3, display: 'solid' },
@@ -224,7 +230,7 @@ interface Drag {
   shift: boolean;
   alt: boolean;
   ctrl: boolean;
-  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'reshape';
+  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'reshape' | 'turn3d';
   last: Vec;
   panOrigin?: { ox: number; oy: number };
   /** The arrow or shape handle being dragged. */
@@ -253,6 +259,22 @@ interface Drag {
   charge?: number;
   /** Moving an atom: the atom it has been dropped on, which it becomes one with at the lift (closing a ring). */
   joinTo?: number;
+  /** Turning structures in perspective (the Perspective tools). */
+  persp?: PerspDrag;
+}
+
+/** A drag with a Perspective tool: the structures, once ready (a 3-D shape may be building), and the drag so far in screen pixels. */
+interface PerspDrag {
+  real: boolean;
+  ready: Prepared | null;
+  begun: boolean;
+  dx: number;
+  dy: number;
+  shift: boolean;
+  /** Stereocentres that can't be drawn so they read right at the angle reached. */
+  unshown: number;
+  /** "Building…" has been said. */
+  told: boolean;
 }
 
 /** One way a template can go: where its atoms land, and which are shared with the drawing. */
@@ -385,6 +407,10 @@ export class Editor {
   onToolChange: (name: string) => void = () => {};
   /** Show a hint for the step in hand in the status bar (empty: the tool's own hint again). */
   onHint: (text: string) => void = () => {};
+  /** A message for the person, shown for a few seconds (ms). */
+  onNotice: (text: string, ms?: number) => void = () => {};
+  /** The 3-D builder and compound check behind the 3-D Perspective tool (none: it turns structures flat). */
+  perspectiveHost: PerspectiveHost | null = null;
   /** The fragmentation tool drew a line from p to q across these bonds (the app works out the masses). */
   onFragment: (p: Vec, q: Vec, bonds: number[]) => void = () => {};
   /** The atom most recently drawn or changed (its structure is analysed when nothing is selected). */
@@ -902,6 +928,8 @@ export class Editor {
       const c = this.chargeSignAt(p);
       if (c !== null) this.drag.charge = c;
     }
+    // a Perspective tool on a structure: a drag turns it (and everything selected with it)
+    if (e.button === 0 && !handle && !rotating && !painting && this.tool.kind === 'perspective' && (hit?.kind === 'atom' || hit?.kind === 'bond')) this.startTurn(this.drag, hit, this.tool.real);
     if (rotating) {
       const b = this.selBox()!;
       const center = { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 };
@@ -1072,6 +1100,15 @@ export class Editor {
       this.requestScene(e.timeStamp);
       return;
     }
+    if (d.mode === 'turn3d') {
+      const t = d.persp!;
+      t.dx = sp.x - d.startScreen.x;
+      t.dy = sp.y - d.startScreen.y;
+      t.shift = e.shiftKey;
+      d.last = p;
+      this.turnTo(d);
+      return;
+    }
     if (d.mode === 'route') {
       d.last = p;
       this.requestOverlay(e.timeStamp);
@@ -1131,6 +1168,8 @@ export class Editor {
   private dragModeFor(d: Drag): Drag['mode'] {
     if (d.paint) return 'marquee';
     if (d.charge !== undefined) return 'move';
+    // a Perspective tool turns a structure, selected or not
+    if (d.persp) return 'turn3d';
     // with any drawing tool, dragging what is already selected moves it (as in ChemDraw)
     if (d.hit && this.tool.kind !== 'eraser' && this.isSelected(d.hit)) return 'move';
     switch (this.tool.kind) {
@@ -1154,6 +1193,8 @@ export class Editor {
         return 'draw';
       case 'sketch':
         return 'none';
+      case 'perspective':
+        return 'marquee';
       case 'text':
         // dragging across empty space makes a text box that wide
         return d.hit && d.hit.kind === 'caption' ? 'move' : d.hit ? 'none' : 'draw';
@@ -1170,7 +1211,7 @@ export class Editor {
     if (!d) return;
     this.drag = null;
     this.guideLines = [];
-    if (d.moved && (d.mode === 'move' || d.mode === 'rotate' || d.mode === 'handle')) {
+    if (d.moved && (d.mode === 'move' || d.mode === 'rotate' || d.mode === 'handle' || (d.mode === 'turn3d' && d.persp?.begun))) {
       this.doc.abandon();
       this.afterUndo();
     }
@@ -1212,6 +1253,7 @@ export class Editor {
       return;
     }
     if (d.mode === 'reshape' && d.moved) { this.doc.commit(); this.changed(); return; }
+    if (d.mode === 'turn3d') { this.finishTurn(d); return; }
     if (d.mode === 'handle' || d.mode === 'rotate') {
       if (d.moved) { this.doc.commit(); this.changed(); }
       return;
@@ -1502,6 +1544,12 @@ export class Editor {
       case 'template': {
         doc.edit('Template', () => this.placeTemplateAt(t.id, h, d.start, null, d.alt, d));
         this.changed();
+        return;
+      }
+      case 'perspective': {
+        // a click on a structure picked it (startTurn); on empty space it lets go of everything
+        if (!h) { this.sel = emptySel(); this.onChange(); }
+        else if (h.kind !== 'atom' && h.kind !== 'bond') { this.selectOnly(h); this.onChange(); }
         return;
       }
       case 'fragment': {
@@ -3053,6 +3101,116 @@ export class Editor {
   hasSelection(): boolean {
     const s = this.sel;
     return s.atoms.size + s.bonds.size + s.captions.size + s.arrows.size + s.shapes.size > 0;
+  }
+
+  // ------------------------------------------------------------------ perspective
+
+  /**
+   * A Perspective tool pressed on a structure: it is picked (with the rest of the selection when
+   * it is part of it) and got ready to turn. A 3-D shape that has to be built starts building
+   * now, while the pointer is still down.
+   */
+  private startTurn(d: Drag, hit: Hit, real: boolean): void {
+    if (!hit || (hit.kind !== 'atom' && hit.kind !== 'bond')) return;
+    const atom = hit.kind === 'atom' ? hit.id : this.doc.bonds.get(hit.id)!.a1;
+    if (!this.isSelected(hit)) this.selectFragment(atom, d.shift);
+    const structures = structuresOf(this.doc, this.sel.atoms.size ? this.sel.atoms : [atom]);
+    if (!structures.length) return;
+    const t: PerspDrag = { real, ready: null, begun: false, dx: 0, dy: 0, shift: false, unshown: 0, told: false };
+    d.persp = t;
+    const doc = this.doc;
+    const host = real ? this.perspectiveHost : null;
+    if (real && !host) this.onNotice('3-D shapes can\'t be built here; turning the structure flat instead.');
+    void prepareTurn(doc, structures, real, host ?? (real ? null : this.perspectiveHost)).then((prep) => {
+      if (this.drag !== d || this.doc !== doc) {
+        // let go before the shape was ready: it is kept, so the next drag turns it at once
+        if (real && !prep.notes.length && t.told) this.onNotice('The 3-D shape is ready: drag the structure to turn it.');
+        return;
+      }
+      t.ready = prep;
+      if (prep.notes.length) this.onNotice(`${prep.notes[0]} Turning it flat instead.`, 7000);
+      if (d.moved) this.turnTo(d);
+    });
+  }
+
+  /** Turn the structures for the drag so far (nothing yet while a 3-D shape is building). */
+  private turnTo(d: Drag): void {
+    const t = d.persp!;
+    if (!t.ready) {
+      if (!t.told) { t.told = true; this.onHint('Building the 3-D shape…'); this.onNotice('Building the 3-D shape… (only the first time for a structure)'); }
+      return;
+    }
+    if (!t.begun) { this.doc.begin(t.real ? 'Turn in 3-D' : 'Turn in Perspective'); t.begun = true; }
+    const R = dragTurn(t.dx, t.dy, t.shift);
+    t.unshown = t.ready.turn.apply(this.doc, R);
+    if (!t.unshown) t.ready.turn.lastGood = R;
+    this.onHint(t.unshown ? 'From this angle a stereocentre can\'t be drawn so it reads right: let go and it goes back to the last angle that worked.' : t.shift ? 'Turning in 15° steps' : 'Shift: turn in 15° steps, one way at a time');
+    if (hasPins(this.doc)) followPins(this.doc);
+    this.requestScene();
+  }
+
+  /** The drag ends: wedges and crossings are settled, and the drawing must still mean the same compound. */
+  private finishTurn(d: Drag): void {
+    const t = d.persp;
+    if (!t?.begun || !t.ready) { this.requestScene(); return; }
+    const turn = t.ready.turn;
+    const R = t.unshown ? turn.lastGood : dragTurn(t.dx, t.dy, t.shift);
+    const left = turn.apply(this.doc, R, true);
+    turn.remember(this.doc);
+    this.doc.commit();
+    this.changed();
+    this.onHint('');
+    if (t.unshown) this.onNotice('From that angle a stereocentre can\'t be drawn so it reads right, so the structure went back to the last angle where it could.', 6000);
+    this.checkTurn(turn, left);
+  }
+
+  /** Take back a turn after which the drawing means another compound (a stereocentre that can't be shown from this side). */
+  private checkTurn(turn: Prepared['turn'], unshown: number): void {
+    const host = this.perspectiveHost;
+    const doc = this.doc, version = doc.version;
+    if (!host) return;
+    void stillMeans(doc, turn, host).then((same) => {
+      if (same !== false && !unshown) return;
+      if (this.doc !== doc || doc.version !== version) return;
+      doc.undo();
+      this.afterUndo();
+      this.onNotice('From that angle a stereocentre can\'t be drawn so it reads right, so the turn was taken back. Turn it a little less (or more).', 7000);
+    });
+  }
+
+  /**
+   * Turn the selected structures by angles (degrees): about x (left–right), then y (up–down),
+   * then z (in the page), as a flat sheet or (`real`) in their true 3-D shape. False when
+   * nothing is selected.
+   */
+  async turnSelectionBy(x: number, y: number, z: number, real: boolean): Promise<boolean> {
+    const structures = structuresOf(this.doc, this.sel.atoms);
+    if (!structures.length) return false;
+    const doc = this.doc;
+    const prep = await prepareTurn(doc, structures, real, this.perspectiveHost);
+    if (this.doc !== doc) return true;
+    if (prep.notes.length) this.onNotice(`${prep.notes[0]} Turning it flat instead.`, 7000);
+    const R: M3 = anglesTurn(x, y, z);
+    let left = 0;
+    doc.edit(real ? 'Turn in 3-D' : 'Turn in Perspective', () => {
+      left = prep.turn.apply(doc, R, true);
+      prep.turn.remember(doc);
+    });
+    if (hasPins(doc)) followPins(doc);
+    this.changed();
+    this.checkTurn(prep.turn, left);
+    return true;
+  }
+
+  /** Flatten: the selected structures become ordinary flat drawings, looking as they do now. False when nothing is selected. */
+  flattenSelection(): boolean {
+    const structures = structuresOf(this.doc, this.sel.atoms);
+    if (!structures.length) return false;
+    let n = 0;
+    this.doc.edit('Flatten', () => { n = flatten(this.doc, structures.flat()); });
+    if (!n) this.onNotice('The selected structures are already flat drawings.');
+    this.changed();
+    return true;
   }
 
   private selectFragment(atomId: number, add: boolean): void {
