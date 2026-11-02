@@ -54,6 +54,8 @@ import { readChart } from './office-chart';
 import { freshBox, sameBoxData, sizedBox } from '../sheet/chart-box';
 import { chartBoxPng } from '../render/chart-box-paint';
 import { contentsAlt } from '../accessibility';
+import { elementXml, readKeptParts, type ContentControl, type KeptParts } from './kept-parts';
+import { cmlGuid, contentsSig } from './cml';
 
 export interface DocxReadDeps {
   /** A ChemDraw drawing (CDX data) as a drawing in the document's style; null when it can't be read. */
@@ -66,6 +68,8 @@ export interface DocxReadDeps {
   convertChemDraw?: boolean;
   /** A drawing saved as CDXML (from inside a picture copied out of Chem Illustrator) in the document's style. */
   cdxml?(text: string, style: DocStyle): Contents | null;
+  /** A Chem4Word structure (its CML) as a drawing in the document's style; null when it can't be read. */
+  cml?(text: string, style: DocStyle): Contents | null;
   /** A drawing's own size in points (so it keeps the size it had in Word). */
   drawingSize?(contents: Contents, style: DocStyle): { w: number; h: number } | null;
   /** A table as a drawing, laid out with the fonts on screen (else with published font widths). */
@@ -223,6 +227,17 @@ class DocxReader {
   private liveRefs: Reference[] = [];
   /** The reference manager whose citations or bibliography the file has (the first met). */
   private manager: CiteManager | undefined;
+  /** Other programs' data in the file (custom XML, custom properties, add-in settings), kept to save back. */
+  private kept: KeptParts | undefined;
+  /** Chem4Word's CML parts, by the structure's id (c4w:customXmlPartGuid). */
+  private cml = new Map<string, string>();
+  /** Other programs' content controls met so far, by the id given them here. */
+  private controls: Record<string, ContentControl> = {};
+  /** The content control round the text being read, and the one round the paragraphs being read. */
+  private ccRun: string | undefined;
+  private ccBlock: string | undefined;
+  /** A Chem4Word content control being read: its structure goes in place of the first picture in it. */
+  private c4w: { guid: string; done: boolean } | null = null;
   /** The notes in footnotes.xml and endnotes.xml, by Word's id (read when first needed). */
   private noteEls: Partial<Record<'foot' | 'end', Map<string, Element>>> = {};
 
@@ -243,6 +258,7 @@ class DocxReader {
     this.readStyles();
     this.readNumbering();
     this.readModel();
+    this.readKept();
     // the sections: each paragraph's section properties end a section, the body's the last
     // (not those kept in a tracked change's record of what they were)
     const sects = Array.from(root.getElementsByTagNameNS(this.W, 'sectPr')).filter((e) => e.parentElement?.localName !== 'sectPrChange');
@@ -612,6 +628,70 @@ class DocxReader {
     }
   }
 
+  /** Other programs' data, kept as it is; Chem4Word's structures by their id. */
+  private readKept(): void {
+    this.kept = readKeptParts(this.pkg, { main: this.main, ours: (root) => root.namespaceURI === MODEL_NS, ownProp: (name) => /^ZOTERO_PREF_\d+$/.test(name) });
+    for (const x of this.kept?.xml ?? []) {
+      const guid = cmlGuid(x.xml);
+      if (guid) this.cml.set(guid, x.xml);
+    }
+    // Word's document variables (settings.xml), which templates and add-ins keep values in
+    const path = this.pkg.relOfType(this.main, DOCX_REL.settings);
+    const vars = path ? this.pkg.xml(path)?.getElementsByTagNameNS('*', 'docVars')[0] : undefined;
+    if (vars && vars.children.length) this.kept = { ...this.kept, vars: elementXml(vars).replaceAll(` xmlns:w="${W_NS}"`, '') };
+  }
+
+  /**
+   * Another program's content control (not a citation manager's): kept with its properties, and
+   * given an id here that the runs or paragraphs inside carry. Its id (w:id) is left to be given
+   * afresh on saving.
+   */
+  private control(el: Element): string {
+    const pr = kid(el, 'sdtPr'), end = kid(el, 'sdtEndPr');
+    const id = String(Object.keys(this.controls).length + 1);
+    // (each element as text declares Word's namespace again: left off, the document declares it)
+    const text = (c: Element) => elementXml(c).replaceAll(` xmlns:w="${W_NS}"`, '');
+    const all = kids(pr).filter((c) => c.localName !== 'id');
+    const isHead = (c: Element) => ['rPr', 'alias', 'tag'].includes(c.localName);
+    this.controls[id] = {
+      head: all.filter(isHead).map(text).join(''), rest: all.filter((c) => !isHead(c)).map(text).join(''),
+      ...(end && end.children.length ? { end: kids(end).map(text).join('') } : {}),
+    };
+    return id;
+  }
+
+  /** The Chem4Word structure a content control shows (its tag is the structure's id, with no prefix), or ''. */
+  private c4wGuid(el: Element): string {
+    const tag = this.sdtTag(el);
+    return tag && !tag.includes(':') && this.cml.has(tag) ? tag : '';
+  }
+
+  /**
+   * In a Chem4Word content control, its structure in place of the picture Chem4Word drew for it
+   * (Word's shapes, which aren't read here), at that picture's size. False when there is no
+   * structure to put there, or the picture is one of our own drawings (saved here before: read
+   * from our part, and linked to the structure as it is emitted), or the CML can't be read.
+   */
+  private c4wInstead(el: Element, r: RProps, ctx: Ctx): boolean {
+    const c4w = this.c4w;
+    if (!c4w || c4w.done || ctx.cell) return false;
+    const ours = Array.from(el.getElementsByTagNameNS('*', 'docPr')).some((d) => {
+      const m = new RegExp(`^${DRAWING_NAME} (\\d+)$`).exec(this.model?.floats?.[Number(d.getAttribute('id'))]?.was ?? d.getAttribute('name') ?? '');
+      return !!m && !!this.model?.drawings?.[Number(m[1])]?.contents;
+    });
+    if (ours) return false;
+    const text = this.cml.get(c4w.guid);
+    const contents = text ? this.deps.cml?.(text, this.drawingStyle) ?? null : null;
+    if (!contents) return false;
+    const ext = Array.from(el.getElementsByTagNameNS('*', 'extent'))[0];
+    const vml = Array.from(el.getElementsByTagNameNS('*', 'group')).concat(Array.from(el.getElementsByTagNameNS('*', 'shape')))[0];
+    const shown = ext ? { w: fromEmu(ext.getAttribute('cx')), h: fromEmu(ext.getAttribute('cy')) } : vml ? vmlSize(vml.getAttribute('style') ?? '') : { w: 0, h: 0 };
+    const own = this.deps.drawingSize?.(contents, this.drawingStyle);
+    const scale = own && own.w > 0 && shown.w > 0 && Math.abs(shownSize(own, 1, this.textW).w - shown.w) > 0.01 * shown.w ? round(shown.w / own.w, 1e4) : undefined;
+    this.emitObject(ctx, { kind: 'drawing', contents, scale }, r);
+    return true;
+  }
+
   private readModel(): void {
     for (const name of this.pkg.names()) {
       if (!/^customXml\/item\d+\.xml$/i.test(name)) continue;
@@ -767,10 +847,18 @@ class DocxReader {
       switch (el.localName) {
         case 'p': this.paragraph(el); break;
         case 'tbl': this.table(el); break;
-        case 'sdt':
+        case 'sdt': {
           if (this.sdtTag(el) === 'MENDELEY_BIBLIOGRAPHY') { this.managedBibliography(); break; }
+          // another program's content control round paragraphs (Chem4Word's structure, a template's field): kept round them
+          const before = this.ccBlock, c4w = this.c4w;
+          this.ccBlock = this.control(el);
+          const guid = this.c4wGuid(el);
+          if (guid) this.c4w = { guid, done: false };
           this.blocks(kids(kid(el, 'sdtContent')));
+          this.ccBlock = before;
+          this.c4w = c4w;
           break;
+        }
         case 'customXml': case 'ins': case 'moveTo': case 'smartTag': this.blocks(kids(el)); break;
         case 'AlternateContent': this.blocks(kids(this.alternate(el))); break;
         case 'bookmarkStart': this.markStart(el); break;
@@ -974,6 +1062,7 @@ class DocxReader {
       }
       if (pc.xe) q.xe = pc.xe;
       if (pc.ta) q.ta = pc.ta;
+      if (this.ccBlock) q.cc = this.ccBlock;
       q = cleanPara(q);
       // the paragraph mark inserted or deleted while Word tracked changes (on the last piece: the real mark)
       const mr = i === ctx.pieces.length - 1 ? markRevOf : undefined;
@@ -1035,7 +1124,7 @@ class DocxReader {
       text = rt.fromSymbolFont(plain);
       props = { ...r, font: ctx.base.font };
     }
-    this.piece(ctx).runs.push({ ...this.runStyle(props), ...(this.rev ? { rev: this.rev } : {}), ...(this.fmt ? { fmt: this.fmt } : {}), ...this.cmtMark(ctx), ...(this.link ? { link: this.link } : {}), text });
+    this.piece(ctx).runs.push({ ...this.runStyle(props), ...(this.rev ? { rev: this.rev } : {}), ...(this.fmt ? { fmt: this.fmt } : {}), ...this.cmtMark(ctx), ...(this.link ? { link: this.link } : {}), ...this.ccMark(ctx), text });
   }
 
   /** Where a Word link goes: a web page or file (through the part's relationships), or a bookmark here. */
@@ -1133,11 +1222,21 @@ class DocxReader {
   private emitObject(ctx: Ctx, o: DocObject, r: RProps, keepPos = false): number | null {
     if (ctx.cell) { if (o.kind !== 'seq' && o.kind !== 'ref') this.warn('cellObjects'); return null; }
     const id = this.nextId++;
+    // the first drawing in a Chem4Word content control is its structure: linked to the CML, to write afresh if changed here
+    if (o.kind === 'drawing' && this.c4w && !this.c4w.done) {
+      o = { ...o, c4w: { guid: this.c4w.guid, sig: contentsSig(o.contents) } };
+      this.c4w.done = true;
+    }
     this.objects[id] = o;
     const { formula: _f, sub, sup, ...style } = this.runStyle(r);
     // a citation keeps its superscript; caption numbers and references take the text's position
-    this.piece(ctx).runs.push({ ...style, ...(keepPos ? rt.cleanStyle({ sub, sup }) : {}), ...(this.rev ? { rev: this.rev } : {}), ...this.cmtMark(ctx), ...(this.link ? { link: this.link } : {}), obj: id, text: OBJECT_CHAR });
+    this.piece(ctx).runs.push({ ...style, ...(keepPos ? rt.cleanStyle({ sub, sup }) : {}), ...(this.rev ? { rev: this.rev } : {}), ...this.cmtMark(ctx), ...(this.link ? { link: this.link } : {}), ...this.ccMark(ctx), obj: id, text: OBJECT_CHAR });
     return id;
+  }
+
+  /** The content control round the text being read, for its runs (not in table cells, whose runs keep none). */
+  private ccMark(ctx: Ctx): { cc?: string } {
+    return this.ccRun && !ctx.cell ? { cc: this.ccRun } : {};
   }
 
   private pageBreak(ctx: Ctx, column = false): void {
@@ -1170,7 +1269,14 @@ class DocxReader {
           // a Mendeley Cite citation: its content control's tag holds the citation
           const m = !ctx.cell && !this.swallowing() ? readMendeleyTag(this.sdtTag(el)) : null;
           if (m && this.managedCite(m, ctx, merge<RProps>(ctx.base, this.readRPr(kid(kid(el, 'sdtContent'), 'r', 'rPr'))))) break;
+          // another program's content control round text (Chem4Word's structure, a form field): kept round it
+          const before = this.ccRun, c4w = this.c4w;
+          if (!ctx.cell) this.ccRun = this.control(el);
+          const guid = this.c4wGuid(el);
+          if (guid) this.c4w = { guid, done: false };
           this.inline(kids(kid(el, 'sdtContent')), ctx);
+          this.ccRun = before;
+          this.c4w = c4w;
           break;
         }
         // tracked changes: the text keeps its mark, to be accepted or rejected here or in Word
@@ -1234,12 +1340,13 @@ class DocxReader {
         }
         case 'fldChar': this.fieldChar(c, r, ctx); break;
         case 'instrText': case 'delInstrText': { const top = this.fields[this.fields.length - 1]; if (top?.phase === 'instr') top.instr += c.textContent ?? ''; break; }
-        case 'drawing': if (!this.swallowing()) this.drawing(c, r, ctx); break;
-        case 'pict': if (!this.swallowing()) this.vml(c, r, ctx, null); break;
-        case 'object': if (!this.swallowing()) this.vml(c, r, ctx, c); break;
+        case 'drawing': if (!this.swallowing() && !this.c4wInstead(c, r, ctx)) this.drawing(c, r, ctx); break;
+        case 'pict': if (!this.swallowing() && !this.c4wInstead(c, r, ctx)) this.vml(c, r, ctx, null); break;
+        case 'object': if (!this.swallowing() && !this.c4wInstead(c, r, ctx)) this.vml(c, r, ctx, c); break;
         case 'footnoteReference': case 'endnoteReference': this.noteRef(c, r, ctx, c.localName === 'endnoteReference'); break;
         case 'commentReference': this.cmtPoint(c, ctx); break;
         case 'AlternateContent': {
+          if (!this.swallowing() && this.c4wInstead(c, r, ctx)) break;
           const alt = this.alternate(c);
           // a run's choice holds run content (a picture, a shape)
           const wrap = c.ownerDocument.createElementNS(this.W, 'w:r');
@@ -2373,6 +2480,8 @@ class DocxReader {
       ...(typeof m?.citeStyle === 'string' && m.citeStyle in CITE_PRESETS ? { citeStyle: m.citeStyle } : zoteroStyle ? { citeStyle: zoteroStyle } : {}),
       ...(manager ? { citeManager: manager } : {}),
       ...(zoteroPrefs ? { zoteroPrefs } : {}),
+      ...(this.kept ? { kept: this.kept } : {}),
+      ...(usedControls(runs, out.map((p) => p.ps), this.controls) ?? {}),
       ...(m?.citeOptions && Object.keys(cleanOptions(m.citeOptions)).length ? { citeOptions: cleanOptions(m.citeOptions) } : {}),
     };
   }
@@ -2461,4 +2570,15 @@ function schemeFor(levels: Level[], ilvl: number): string | null {
   const fits = LIST_SCHEMES.filter((s) => same(levels[ilvl], ilvl, s));
   if (!fits.length) return null;
   return (fits.find((s) => levels.every((l, i) => !l || l.fmt === 'bullet' || l.fmt === 'none' || i > 8 || same(l, i, s))) ?? fits[0]).id;
+}
+
+/** The content controls the text still has (those round runs or paragraphs), for DocText.controls. */
+function usedControls(runs: TextRun[], paras: ParaStyle[], all: Record<string, ContentControl>): { controls: Record<string, ContentControl> } | null {
+  const used = new Set<string>();
+  for (const r of runs) if (r.cc) used.add(r.cc);
+  for (const p of paras) if (p.cc) used.add(p.cc);
+  if (!used.size) return null;
+  const controls: Record<string, ContentControl> = {};
+  for (const id of used) if (all[id]) controls[id] = all[id];
+  return { controls };
 }

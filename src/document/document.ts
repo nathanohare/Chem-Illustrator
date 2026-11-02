@@ -22,6 +22,7 @@ import { cleanPara, fitParas, paraCount, paraRange } from '../text/paragraphs';
 import { citationTexts, type CiteStyle, type Reference } from './references';
 import type { CiteFormat } from './cite-styles';
 import type { CiteLive, CiteManager } from './live-cites';
+import type { ContentControl, KeptParts } from '../io/kept-parts';
 import type { ChartBox } from '../sheet/chart-box';
 import type { DocHyphenation } from '../text/hyphenate';
 import { allHf, hfObjectIds } from './hf-bodies';
@@ -325,7 +326,7 @@ export interface Embedded {
 
 export type DocObject =
   /** A structure, scheme or table: a drawing, edited with the drawing tools. `scale` 1 is the drawing's own size. */
-  | { kind: 'drawing'; contents: Contents; scale?: number; look?: FigureLook; float?: Float; alt?: string; /** Turned and flipped, as a picture (Arrange > Rotate). */ rot?: number; flipH?: boolean; flipV?: boolean }
+  | { kind: 'drawing'; contents: Contents; scale?: number; look?: FigureLook; float?: Float; alt?: string; /** Turned and flipped, as a picture (Arrange > Rotate). */ rot?: number; flipH?: boolean; flipV?: boolean; /** A Chem4Word structure: its id in the file's CML part, and a fingerprint of the drawing as read (changed = the CML is written afresh). */ c4w?: { guid: string; sig: string } }
   /**
    * A picture: its own size is w × h points (`px` its pixels); `scale` 1 is that size. A chart
    * (Insert > Chart) is a picture with its chart and data: drawn from them, saved as Word's chart.
@@ -439,6 +440,13 @@ export interface DocText extends RichText {
   protect?: Protection;
   /** Design > Document Formatting: the theme, style set and paragraph spacing chosen (by name; see themes.ts). */
   design?: DocDesign;
+  /**
+   * Other programs' content controls (Chem4Word's structures, a template's fields), by id: the
+   * runs and paragraphs inside carry the id (`cc`), and the control goes back round them on saving.
+   */
+  controls?: Record<string, ContentControl>;
+  /** Other programs' data in the file that nothing here uses (custom XML, custom properties, add-in settings), saved back as it was. */
+  kept?: KeptParts;
 }
 
 /** What Design has set: names of the choices made (kept with the document, so the galleries show them). */

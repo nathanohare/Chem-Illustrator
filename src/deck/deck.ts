@@ -8,6 +8,7 @@
 // on a slide is undone on that slide (the deck goes back to it), and adding, deleting or
 // moving slides, or changing the master, are undone too.
 
+import type { KeptParts } from '../io/kept-parts';
 import type { SlideView } from './guides';
 import type { HandoutSetup, NotesPageSetup } from './notes-pages';
 import { copyPinned, type PinnedComment } from '../document/comments';
@@ -649,6 +650,8 @@ export class Deck {
   folded = new Set<number>();
   /** Set Up Show, custom shows and the rest of the deck's own settings. */
   settings: DeckSettings = {};
+  /** Other programs' data in the file read (custom XML, custom properties, add-ins' settings), saved back with it. */
+  kept: KeptParts | undefined = undefined;
   /** The slide being edited; its drawing is in `host`. */
   index = -1;
   /** Called whenever the deck changes in a way the slide list or title bar should show. */

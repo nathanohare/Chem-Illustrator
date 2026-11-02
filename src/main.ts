@@ -27,6 +27,7 @@ import { selectionBox, POINTS, type Align, units, moveUnit } from './editor/arra
 import { defaultColumns } from './editor/grid-arrange';
 import { groupSelection, selectedGroups } from './editor/groups';
 import { readCdxml, ReadStats } from './io/cdxml';
+import { readCml } from './io/cml';
 import { ChemClient } from './chem/client';
 import type { FragmentResult } from './worker/chem-worker';
 import { COMMON_ADDUCTS } from './chem/hrms';
@@ -2606,6 +2607,14 @@ const docRead: DocxReadDeps = {
   cdxml: (text, style) => {
     const d = readCdxml(text).doc;
     fitPasted(d, style);
+    return d.contents();
+  },
+  // a Chem4Word structure: its CML at the document's bond length
+  cml: (text, style) => {
+    const c = readCml(text);
+    if (!c) return null;
+    const d = structureDoc(c, style);
+    fitPasted(d, style, style.bondLength);
     return d.contents();
   },
   drawingSize: (contents, style) => {

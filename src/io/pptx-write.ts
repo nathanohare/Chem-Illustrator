@@ -30,6 +30,7 @@ import { extractDrawing } from './clipboard';
 import { contentsAlt, titleOverlaps, roughCaptionBox } from '../accessibility';
 import type { Selection } from '../editor/editor';
 import { Package, NS, REL, emu, xml, xmlAttr, hex6, MediaFiles, structureAltText } from './ooxml';
+import { writeKeptParts, type KeptParts } from './kept-parts';
 import { facesToEmbed, toEot, type FontSource } from './font-embed';
 import { dataUrl, fromDataUrl } from '../render/images';
 import { patternClear, patternInk, shadowLook } from '../render/fills';
@@ -152,6 +153,8 @@ export interface DeckData {
   sections?: SectionCount[];
   /** Set Up Show and custom shows. */
   settings?: DeckSettings;
+  /** Other programs' data kept from the file read (custom XML, custom properties, add-ins' settings). */
+  kept?: KeptParts;
 }
 
 /**
@@ -556,6 +559,7 @@ class Writer {
       // (the guides, also where PowerPoint 2013 and later look for them)
       sectionsXml(deck.sections, n, slideGuidesExt(deck.settings?.view)) +
       `</p:presentation>`, CT.presentation);
+    writeKeptParts(pkg, deck.kept, { main: P, firstItem: 1 });
     return pkg.build();
   }
 

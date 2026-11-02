@@ -239,6 +239,8 @@ export interface TextRun {
   allCaps?: boolean;
   /** Documents: the character style the text is in (Emphasis, Strong…), by id; its look is in the run itself. */
   cstyle?: string;
+  /** Documents: the content control (another program's, such as Chem4Word's) this text sits in, by id (see DocText.controls). */
+  cc?: string;
 }
 
 /**
@@ -350,6 +352,8 @@ export interface ParaStyle {
   xe?: IndexMark[];
   /** Documents: citations marked here for a table of authorities (References > Mark Citation; Word's TA fields). */
   ta?: AuthorityMark[];
+  /** Documents: the content control round whole paragraphs that this one is in, by id (see DocText.controls). */
+  cc?: string;
 }
 
 /**
