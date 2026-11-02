@@ -90,6 +90,29 @@ describe('info tips', () => {
     }
   });
 
+  it('a window focusing its "i" on opening does not open the tip; Tab onto it does', () => {
+    vi.useFakeTimers();
+    try {
+      document.dispatchEvent(new Event('pointerdown'));
+      const h = document.createElement('h2');
+      document.body.append(h);
+      const i = addInfo(h, 'Focus help')!;
+      const pop = () => [...document.querySelectorAll('.info-pop')].find((p) => p.textContent === 'Focus help');
+      i.focus();
+      vi.advanceTimersByTime(200);
+      expect(pop()).toBeUndefined();
+      i.dispatchEvent(new KeyboardEvent('keyup', { key: 'Tab' }));
+      vi.advanceTimersByTime(10);
+      expect(pop()).toBeDefined();
+      i.blur();
+      vi.advanceTimersByTime(200);
+      expect(pop()).toBeUndefined();
+      h.remove();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('ask() puts its note beside the title and field help beside the field name', () => {
     void ask('Page Setup', [{ name: 'w', label: 'Width', value: '1', help: 'In inches' }], { note: 'About the page' });
     const d = document.querySelector('dialog.ask')!;

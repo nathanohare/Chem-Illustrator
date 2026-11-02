@@ -124,11 +124,10 @@ export function infoIcon(text: string, className = ''): HTMLElement {
   i.addEventListener('pointerleave', (e) => {
     if (e.pointerType !== 'touch') hideSoon(i);
   });
-  i.addEventListener('focus', () => {
-    // keyboard focus only: a click focuses it too, and pins the tip itself
-    let keyboard = true;
-    try { keyboard = i.matches(':focus-visible'); } catch { /* older engines */ }
-    if (keyboard) showSoon(i, 0);
+  // Tab onto it shows the tip (the Tab's keyup lands on the newly focused "i"); plain focus does
+  // not, since a window that opens focuses its first control, often the "i" by its title
+  i.addEventListener('keyup', (e) => {
+    if (e.key === 'Tab') showSoon(i, 0);
   });
   i.addEventListener('blur', () => hideSoon(i));
   return i;
