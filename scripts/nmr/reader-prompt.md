@@ -22,8 +22,11 @@ null where the text does not say):
   words broken across lines and remove soft hyphens or stray spaces inside the name, but
   keep real hyphens, primes, stereodescriptors and locants. null when only a label is given.
 - `smiles`: your SMILES for the compound, from the name (and the procedure if it makes the
-  structure unambiguous). Include stereo only where the name gives it. null if you cannot
-  be confident.
+  structure unambiguous). Include stereo only where the name gives it. Give your best
+  SMILES whenever a full name is printed, even a long or trivial one (sugars, peptides,
+  metal complexes written as ligands plus metal): every structure is checked afterwards
+  against the printed formula and the H and C counts, so a wrong guess is caught, while a
+  missing one loses the compound. null only when there is no name at all.
 - `formula`: the molecular formula of the neutral compound if printed (e.g. "Anal. calcd for
   C10H12O2" or an HRMS "calcd for C17H17N6O5 [M+H]+": write the ion formula exactly as printed
   in `hrms_formula` and the adduct in `hrms_ion`). Keys: `formula`, `hrms_formula`, `hrms_ion`

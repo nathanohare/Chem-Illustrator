@@ -11,8 +11,10 @@ For every reading that is not skipped:
    OH/NH/SH protons), 13C peak count against symmetry-unique carbons (allowing extra
    lines from C-F/C-P splitting), and field consistency (13C field near 1H field / 4).
 3. Tier: "gold" when formula matches (or none printed and structure is from OPSIN) and
-   every 1H/13C list present passes exactly; "silver" when within one carbon or missing
-   only exchangeable protons; else "fail" with reasons.
+   every 1H/13C list present passes exactly; "silver" when the 13C list is within one
+   carbon, misses up to 20% of carbons (overlaps), has extra C-F/C-P lines, or the 1H list
+   misses only exchangeable protons or is off by one proton (formula confirmed, 15+ H);
+   else "fail" with reasons.
 4. Class tags from classes.py.
 Records keep DOI, licence, block id and the reading so any value can be traced to its source.
 """
@@ -40,7 +42,7 @@ def parse_formula(f):
     if not f:
         return None
     f = re.sub(r'[\s\[\]()]', '', str(f))
-    f = re.sub(r'[+\-−–]\d*$|\d*[+\-−–]$', '', f)
+    f = re.sub(r'[+\-−–•·]+$', '', f)  # charge sign only; a digit before it belongs to the element
     f = f.replace('·', '').replace('•', '')
     if not re.fullmatch(r'(?:[A-Z][a-z]?\d*)+', f):
         return None
@@ -72,7 +74,18 @@ def mol_formula(mol):
 
 
 def formula_status(mol, rd):
-    mf = mol_formula(mol)
+    mfs = [mol_formula(mol)]
+    frags = Chem.GetMolFrags(mol, asMols=True)
+    if len(frags) > 1:
+        # salts: the HRMS ion is usually the organic cation (or anion) alone
+        frags = sorted(frags, key=lambda m: -m.GetNumHeavyAtoms())
+        mfs.append(mol_formula(frags[0]))
+        big = [f for f in frags if f.GetNumHeavyAtoms() > 1]
+        if len(big) > 1:
+            c = Counter()
+            for f in big:
+                c += mol_formula(f)
+            mfs.append(c)
     want = parse_formula(rd.get('formula'))
     cands = []
     if want:
@@ -91,7 +104,7 @@ def formula_status(mol, rd):
             cands.append(parse_formula(rd['hrms_formula']))
     if not cands:
         return 'none'
-    return 'match' if any(c == mf for c in cands if c) else 'mismatch'
+    return 'match' if any(c == mf for c in cands if c for mf in mfs) else 'mismatch'
 
 
 def h_status(mol, sp):
@@ -126,6 +139,8 @@ def c_status(mol, sp, has_f_or_p):
         return 'match', unique
     if abs(n - unique) == 1 and unique >= 6:
         return 'close', unique
+    if 0.8 * unique <= n < unique:
+        return 'missing_some', unique  # overlapping or unobserved carbons; matching scores what is printed
     if has_f_or_p and unique < n <= unique * 2:
         return 'extra_lines_cf_cp', unique
     return f'mismatch({n}/{unique})', unique
@@ -224,12 +239,21 @@ def main():
                 h_mhz = h_mhz or sp.get('mhz')
                 if st == 'match_minus_exchangeable':
                     silver = True
-                elif st != 'match':
+                elif st.startswith('mismatch') and fs == 'match' and _ > 0:
+                    got = float(st[st.index('(') + 1:st.index('/')])
+                    if abs(got - _) <= 1 and _ >= 15:
+                        entry['check'] = 'close'
+                        silver = True
+                    else:
+                        reasons.append('1H_mismatch')
+                elif st != 'match' and not st.startswith('mismatch'):
                     reasons.append('1H_' + st.split('(')[0])
+                elif st.startswith('mismatch') and fs != 'match':
+                    reasons.append('1H_mismatch')
             elif nuc == '13C':
                 st, _ = c_status(mol, sp, bool(syms & {'F', 'P'}))
                 entry['check'] = st
-                if st in ('close', 'extra_lines_cf_cp'):
+                if st in ('close', 'extra_lines_cf_cp', 'missing_some'):
                     silver = True
                 elif st != 'match':
                     reasons.append('13C_' + st.split('(')[0])
