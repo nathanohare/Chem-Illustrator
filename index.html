@@ -1738,30 +1738,38 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-doc="insert-footnote" title="Insert Footnote (Ctrl+Alt+F): a number in the text and its note at the foot of the page, typed into there. Escape goes back to the text; deleting the number deletes the note"><span class="rb-icon">AB<sup>1</sup></span>Insert Footnote</button>
-          <button class="rb-big" data-doc="insert-endnote" title="Insert Endnote (Ctrl+Alt+D): a number in the text and its note after the end of the text"><span class="rb-icon"><sup>i</sup>≡</span>Insert Endnote</button>
-          <button class="rb-big" data-doc="note-options" title="How footnotes and endnotes are numbered (1, 2, 3; i, ii, iii; a, b, c; *, †, ‡), and turning footnotes into endnotes or back"><span class="rb-icon">⚙</span>Note Options…</button>
+          <div class="rb-col">
+            <button class="rb-labelled" data-doc="insert-endnote" title="Insert Endnote (Ctrl+Alt+D): a number in the text and its note after the end of the text"><span class="rb-lead"></span>Insert Endnote</button>
+            <button class="rb-labelled" data-doc="note-options" title="How footnotes and endnotes are numbered (1, 2, 3; i, ii, iii; a, b, c; *, †, ‡), and turning footnotes into endnotes or back"><span class="rb-lead"></span>Note Options…</button>
+          </div>
         </div>
         <div class="rb-label">Footnotes</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-doc="insert-caption" title="A numbered caption: Figure 1, Scheme 2, Table S1…"><span class="rb-icon">¶</span>Insert Caption</button>
-          <button class="rb-big" data-doc="insert-tof" title="Insert Table of Figures: the Figure, Scheme, Table or Chart captions (or all of them) with their page numbers. It updates by itself; double-click it to choose the captions listed"><span class="rb-icon">▤</span>Table of Figures</button>
-          <button class="rb-big" data-doc="cross-reference" title="&quot;Figure 2&quot; in the text: it follows the caption's number when captions are added or moved"><span class="rb-icon">↪</span>Cross-reference</button>
+          <div class="rb-col">
+            <button class="rb-labelled" data-doc="insert-tof" title="Insert Table of Figures: the Figure, Scheme, Table or Chart captions (or all of them) with their page numbers. It updates by itself; double-click it to choose the captions listed"><span class="rb-lead"></span>Table of Figures</button>
+            <button class="rb-labelled" data-doc="cross-reference" title="&quot;Figure 2&quot; in the text: it follows the caption's number when captions are added or moved"><span class="rb-lead"></span>Cross-reference</button>
+          </div>
         </div>
         <div class="rb-label">Captions</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-doc="mark-entry" title="Mark Entry (Alt+Shift+X): the selected word or phrase as an index entry (or a subentry), here or wherever it comes up (Mark All)"><span class="rb-icon">✓≡</span>Mark Entry</button>
-          <button class="rb-big" data-doc="insert-index" title="Insert Index: the entries marked, A to Z, with their page numbers, in columns. It updates by itself; double-click it to change its columns and look"><span class="rb-icon">A–Z</span>Insert Index</button>
+          <div class="rb-col">
+            <button class="rb-labelled" data-doc="insert-index" title="Insert Index: the entries marked, A to Z, with their page numbers, in columns. It updates by itself; double-click it to change its columns and look"><span class="rb-lead"></span>Insert Index</button>
+          </div>
         </div>
         <div class="rb-label">Index</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-doc="mark-citation" title="Mark Citation (Alt+Shift+I): the selected case, statute, rule or other authority for the table of authorities, with its long and short forms and its category"><span class="rb-icon">§✓</span>Mark Citation</button>
-          <button class="rb-big" data-doc="insert-toa" title="Insert Table of Authorities: the citations marked, by category, each with the pages it is cited on (or passim). It updates by itself; double-click it to change it"><span class="rb-icon">§≡</span>Table of Authorities</button>
+          <div class="rb-col">
+            <button class="rb-labelled" data-doc="insert-toa" title="Insert Table of Authorities: the citations marked, by category, each with the pages it is cited on (or passim). It updates by itself; double-click it to change it"><span class="rb-lead"></span>Table of Authorities</button>
+          </div>
         </div>
         <div class="rb-label">Table of Authorities</div>
       </div>
@@ -1774,8 +1782,10 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-doc="insert-citation" title="Cite one or more references: superscript numbers, in order of first citation, that change by themselves when text moves (double-click a citation to change it)"><span class="rb-icon">¹²</span>Insert Citation</button>
-          <button class="rb-big" data-doc="insert-bibliography" title="A References heading and the list of references cited, numbered, in the citation style"><span class="rb-icon">☰</span>Bibliography</button>
-          <button class="rb-big" data-doc="manage-references" title="The references of this document and every other open file, grouped by file: add by DOI, by hand or from BibTeX or RIS; edit, delete; copy between files; the citation style (ACS, Angewandte, RSC)"><span class="rb-icon">✎</span>Manage References…</button>
+          <div class="rb-col">
+            <button class="rb-labelled" data-doc="insert-bibliography" title="A References heading and the list of references cited, numbered, in the citation style"><span class="rb-lead"></span>Bibliography</button>
+            <button class="rb-labelled" data-doc="manage-references" title="The references of this document and every other open file, grouped by file: add by DOI, by hand or from BibTeX or RIS; edit, delete; copy between files; the citation style (ACS, Angewandte, RSC)"><span class="rb-lead"></span>Manage References…</button>
+          </div>
         </div>
         <div class="rb-label">Citations and Bibliography</div>
       </div>
@@ -2559,7 +2569,7 @@
       </div>
       <div class="rb-group">
         <div class="rb-row" id="an-effects"></div>
-        <div class="rb-label">Animation (select something on the slide first)</div>
+        <div class="rb-label" title="Select something on the slide first">Animation</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
@@ -2589,10 +2599,10 @@
       </div>
       <div class="rb-group">
         <div class="rb-row">
-          <button class="rb-big" data-an="pane" aria-pressed="false" title="List this slide's animations in the right-hand panel"><span class="rb-icon" data-icon="pane"></span>Animation Pane</button>
-          <button class="rb-big" data-an="painter" aria-pressed="false" title="Animation Painter: copy the selected object's animations, then click another object to give it the same ones. Double-click to keep painting until you press Esc or click this again"><span class="rb-icon" data-icon="painter"></span>Animation Painter</button>
           <div class="rb-col">
             <label class="rb-field" title="Trigger: the selected animations play in the slide's own order of clicks, or when an object on the slide is clicked in the show (a button, a picture, a label…)">Trigger <select id="an-trigger"><option value="">On Click Sequence</option></select></label>
+            <button class="rb-labelled" data-an="pane" aria-pressed="false" title="List this slide's animations in the right-hand panel"><span class="rb-lead"></span>Animation Pane</button>
+            <button class="rb-labelled" data-an="painter" aria-pressed="false" title="Animation Painter: copy the selected object's animations, then click another object to give it the same ones. Double-click to keep painting until you press Esc or click this again"><span class="rb-lead"></span>Animation Painter</button>
           </div>
         </div>
         <div class="rb-label">Advanced Animation</div>
