@@ -5,7 +5,8 @@
 import { previewSlot, showDialog } from './dialog-host';
 import type { DocStyle } from '../style';
 import { FONT_GROUPS } from '../fonts';
-import { STYLE_PRESETS, presetNamed, sameLook, scaleStyle, type RestyleHow } from '../drawing-styles';
+import { presetNamed, scaleStyle, type RestyleHow } from '../drawing-styles';
+import { cardFor, styleCardList, styleCards } from './style-cards';
 
 export interface StyleChoice {
   style: DocStyle;
@@ -29,6 +30,8 @@ export interface StyleDialogOptions {
   hasStructures: boolean;
   /** A sample drawing in the style shown, beside the settings (drawn again as they change). */
   preview?: (st: DocStyle) => Node;
+  /** Show the drawing itself in a style while the window is open (null: as it was). */
+  livePreview?(st: DocStyle | null): void;
 }
 
 
@@ -69,12 +72,11 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       return l;
     };
 
-    // which style
-    const pick = el('select');
+    // which style: a card for each, drawn in it
+    let picked = '';
     const source = el('p', { className: 'muted style-source' });
-    grid.append(el('h3', { textContent: 'Style' }));
-    row('Start from', pick);
-    grid.append(source);
+    const cardsAt = el('div', { className: 'style-cards-at' });
+    grid.append(el('h3', { textContent: 'Style' }), cardsAt, source);
 
     // its numbers
     grid.append(el('h3', { textContent: 'Structures' }));
@@ -155,43 +157,45 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       return st;
     };
 
+    // pointing at a card shows it on the drawing behind the window and in the sample
+    let sample: (st: DocStyle) => void = () => {};
+    // (the drawing itself only while a card is pointed at, so it is never left half-changed)
+    const show = () => sample(read());
+    let hovering = false;
     const fillPick = (select: string) => {
-      pick.replaceChildren();
-      const inFile = !STYLE_PRESETS.some((p) => sameLook(p.style, o.current)) && !own.some((s) => sameLook(s, o.current));
-      if (inFile) pick.add(new Option(`In this file: ${o.current.name}`, 'file:'));
-      const journals = el('optgroup', { label: 'Journals and presets' });
-      for (const p of STYLE_PRESETS) journals.append(new Option(p.style.name, 'preset:' + p.style.name));
-      pick.append(journals);
-      if (own.length) {
-        const mine = el('optgroup', { label: 'My styles' });
-        for (const s of own) mine.append(new Option(s.name, 'own:' + s.name));
-        pick.append(mine);
+      const cards = styleCards({
+        own,
+        chosen: select,
+        onPick: (c) => { picked = c.key; fill(chosen()); describe(); said.textContent = ''; show(); },
+        onHover: (c) => { hovering = !!c; o.livePreview?.(c ? c.style : null); sample(c ? c.style : read()); },
+        onSave: () => { name.focus(); name.select(); said.textContent = 'Type a name for it, then Save as My Style.'; },
+      });
+      cardsAt.replaceChildren(cards);
+      picked = select;
+      if (!select.startsWith('preset:') && !select.startsWith('own:')) {
+        const inFile = el('p', { className: 'muted small', textContent: `In use now: ${o.current.name} (from this file; none of the cards draws the same).` });
+        cardsAt.append(inFile);
       }
-      pick.value = select;
-      if (pick.selectedIndex < 0) pick.selectedIndex = 0;
     };
     const chosen = (): DocStyle => {
-      const v = pick.value;
+      const v = picked;
       if (v.startsWith('preset:')) return { ...presetNamed(v.slice(7))!.style };
       if (v.startsWith('own:')) return { ...own.find((s) => s.name === v.slice(4))! };
       return { ...o.current };
     };
     const describe = () => {
-      const v = pick.value;
+      const v = picked;
       const p = v.startsWith('preset:') ? presetNamed(v.slice(7)) : undefined;
       source.textContent = p ? `From: ${p.source}.${p.note ? ' ' + p.note : ''}` : v.startsWith('own:') ? 'One of your own styles.' : 'The style this file was saved with.';
       del.disabled = !v.startsWith('own:');
     };
 
     // start on whatever matches what is in use now
-    const now = own.find((s) => s.name === o.current.name && sameLook(s, o.current)) ? 'own:' + o.current.name
-      : STYLE_PRESETS.find((p) => sameLook(p.style, o.current)) ? 'preset:' + STYLE_PRESETS.find((p) => sameLook(p.style, o.current))!.style.name
-      : 'file:';
+    const now = cardFor(styleCardList(own), o.current)?.key ?? 'file:';
     fillPick(now);
     fill(o.current);
     describe();
 
-    pick.addEventListener('change', () => { fill(chosen()); describe(); said.textContent = ''; });
     const bondIn = inputs.get('bondLength')!;
     let lastBond = shown.bondLength;
     bondIn.addEventListener('focus', () => { lastBond = parseFloat(bondIn.value) || shown.bondLength; });
@@ -207,7 +211,8 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       lastBond = v;
       showCm();
     });
-    for (const i of inputs.values()) i.addEventListener('input', showCm);
+    for (const i of inputs.values()) i.addEventListener('input', () => { showCm(); if (!hovering) show(); });
+    for (const f of [labelFont, captionFont]) f.addEventListener('change', () => show());
 
     save.addEventListener('click', () => {
       const st = read();
@@ -220,7 +225,7 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       said.textContent = had >= 0 ? `Updated "${st.name}".` : `Saved "${st.name}". It is in the list in every mode.`;
     });
     del.addEventListener('click', () => {
-      const v = pick.value;
+      const v = picked;
       if (!v.startsWith('own:')) return;
       own = own.filter((s) => s.name !== v.slice(4));
       fillPick(now.startsWith('own:') && now.slice(4) === v.slice(4) ? 'file:' : now);
@@ -233,6 +238,7 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     const done = (v: StyleChoice | null) => {
       if (finished) return;
       finished = true;
+      o.livePreview?.(null);
       if (d.open) d.close();
       d.remove();
       resolve(v);
@@ -255,9 +261,9 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       box.replaceChildren(o.preview(read()));
       form.addEventListener('input', redraw);
       form.addEventListener('change', redraw);
-      pick.addEventListener('change', redraw);
+      sample = (st) => { cancelAnimationFrame(queued); queued = requestAnimationFrame(() => box.replaceChildren(o.preview!(st))); };
     }
-    pick.focus();
+    (cardsAt.querySelector<HTMLButtonElement>('[aria-checked=true]') ?? cardsAt.querySelector<HTMLButtonElement>('button'))?.focus();
   });
 }
 
