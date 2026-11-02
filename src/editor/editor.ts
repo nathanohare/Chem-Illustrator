@@ -389,6 +389,8 @@ export class Editor {
   onFragment: (p: Vec, q: Vec, bonds: number[]) => void = () => {};
   /** The atom most recently drawn or changed (its structure is analysed when nothing is selected). */
   lastEdited: number | null = null;
+  /** The last label typed in an atom's label box (with its raised and lowered marks), for Repeat Label. */
+  lastLabel: { text: string; marks?: string } | null = null;
   private labelInput: HTMLElement | null = null;
   /** The mouse is over the drawing, so keys are for the drawing even if a button has the focus. */
   private pointerInside = false;
@@ -4518,6 +4520,11 @@ export class Editor {
           const m = now.label !== null && /[\^_=]/.test(kept) ? kept : undefined;
           if (now.labelMarks !== m) doc.updateAtom(id, { labelMarks: m });
         });
+        // remembered for Repeat Label on the right-click menu (clearing a label is not a label)
+        if (text.trim()) {
+          const m = doc.atoms.get(id)?.labelMarks;
+          this.lastLabel = { text: text.trim(), ...(m ? { marks: m } : {}) };
+        }
         this.lastEdited = id;
         this.changed();
       }
@@ -4543,6 +4550,28 @@ export class Editor {
     });
     box.addEventListener('blur', () => finish(true));
     this.labelInput = box;
+  }
+
+  /**
+   * Repeat Label: give these atoms the label last typed in an atom's label box (NHAc, OTBS, CO2Me…),
+   * marks and all, in one step. False when no label has been typed or none of the atoms is left.
+   */
+  repeatLabel(ids: number[]): boolean {
+    const last = this.lastLabel;
+    const doc = this.doc;
+    const live = ids.filter((id) => doc.atoms.has(id));
+    if (!last || !live.length) return false;
+    doc.edit('Repeat Label', () => {
+      for (const id of live) {
+        this.applyLabel(id, last.text);
+        const now = doc.atoms.get(id)!;
+        const m = now.label !== null ? last.marks : undefined;
+        if (now.labelMarks !== m) doc.updateAtom(id, { labelMarks: m });
+      }
+    });
+    this.lastEdited = live[0];
+    this.changed();
+    return true;
   }
 
   private commitLabel(): void {

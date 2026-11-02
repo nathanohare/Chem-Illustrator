@@ -5585,6 +5585,7 @@ function command(name: string): boolean {
     flash('Select one metal first, then add the ligand to it.');
     return false;
   }
+  if (name === 'repeat-label:here') return repeatLabel(contextAtom);
   if (name.startsWith('fuse-ring:')) {
     const [, id, index] = name.split(':');
     return contextBond !== null && editor.fuseRing(contextBond, id, Number(index));
@@ -6152,6 +6153,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'delete-nickname': () => void deleteNickname(),
   'contract-label': () => void contractLabel(),
   'expand-label': () => void expandLabel(),
+  'repeat-label': () => repeatLabel(null),
   'hapto-bond': () => flash(editor.bondMetalToRing(), 5000),
   'split-hapto': () => flash(editor.splitHaptoBonds()),
   'chain-ends': () => void toggleTerminalMethyls(),
@@ -8609,6 +8611,32 @@ function unlinkText(): boolean {
  */
 /** The bond right-clicked last, for Fuse a Ring Here. */
 let contextBond: number | null = null;
+/** The atom the right-click menu opened on, and whether the menu's commands are for every selected atom (it was one of several picked before). */
+let contextAtom: { id: number; all: boolean } | null = null;
+
+/**
+ * Repeat Label (right-click an atom after typing a label on another): the label last typed goes on
+ * the atom right-clicked, or on every selected atom when it was one of several picked. From a key:
+ * the selected atoms, or else the atom under the pointer.
+ */
+function repeatLabel(at: { id: number; all: boolean } | null): boolean {
+  const last = editor.lastLabel;
+  if (!last) { flash('Type a label on an atom first (NHAc, OTBS…); then Repeat Label puts the same label on other atoms.'); return false; }
+  const hover = editor.hover?.kind === 'atom' ? [editor.hover.id] : [];
+  const ids = at ? (at.all ? [...editor.sel.atoms] : [at.id]) : editor.sel.atoms.size ? [...editor.sel.atoms] : hover;
+  if (editor.repeatLabel(ids)) return true;
+  flash(`Select the atoms to label “${last.text}”, or right-click one.`);
+  return false;
+}
+
+/** The right-click menu's Repeat “NHAc” Label, when a label has been typed and the menu opened on an atom. */
+function repeatLabelMenu(): MenuItem[] {
+  const last = editor.lastLabel;
+  if (!last || !contextAtom || !editor.doc.atoms.has(contextAtom.id)) return [];
+  const n = contextAtom.all ? editor.sel.atoms.size : 1;
+  const shown = [...last.text].length > 24 ? `${[...last.text].slice(0, 23).join('')}…` : last.text;
+  return [{ cmd: 'repeat-label:here', label: `Repeat “${shown}” Label${n > 1 ? ` on ${n} Atoms` : ''}` }, null];
+}
 /** The conformers Fuse a Ring Here offers, in this order. */
 const FUSE_RINGS = ['chair', 'boat', 'twist-boat', 'half-chair', 'cyclohexanone', 'envelope', 'c5-twist', 'cyclopentene', 'cyclobutane', 'c7-twist-chair'];
 
@@ -8695,6 +8723,7 @@ function drawingMenu(): MenuItem[] {
     : [];
   return [
     { cmd: 'cut' }, { cmd: 'copy' }, { cmd: 'paste' }, { cmd: 'delete', label: 'Delete' }, { cmd: 'format-painter' }, null,
+    ...repeatLabelMenu(),
     ...(editor.selectedEnergy() !== null ? [{ cmd: 'edit-energy' }, null] : []),
     ...(editor.selectedDiagram() !== null ? [{ cmd: 'edit-diagram' }, { cmd: 'diagram-to-shapes' }, null] : []),
     ...(atoms || texts ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }, null] : []),
@@ -8851,8 +8880,11 @@ editor.onContextMenu = (e) => {
   finishTyping();
   // on a keyframe's tab, corner or outline: the keyframe commands
   if (canvasKeys.menuAt(e) >= 0) { showContextMenu(e.clientX, e.clientY, keyframeMenu(), { run: (cmd) => void command(cmd), key: commandKey }); return; }
+  const picked = new Set(editor.sel.atoms);
   const h = editor.contextPick(e);
   contextBond = h?.kind === 'bond' ? h.id : null;
+  // (an atom not already picked selects its whole structure, but Repeat Label is for that atom only)
+  contextAtom = h?.kind === 'atom' ? { id: h.id, all: picked.has(h.id) && picked.size > 1 } : null;
   rightClickAt = { left: e.clientX, bottom: e.clientY };
   showContextMenu(e.clientX, e.clientY, drawingMenu(), { run: (cmd) => void command(cmd), key: commandKey });
 };
