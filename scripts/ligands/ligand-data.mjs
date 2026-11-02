@@ -261,7 +261,7 @@ export const FAMILIES = [
       ['tbupy', '4-tBupy|tBupy', '4-tert-Butylpyridine', '[n:1]1ccc(C(C)(C)C)cc1'],
       ['quinoline', 'quin', 'Quinoline', '[n:1]1cccc2ccccc12'],
       ['pyrazine', 'pyz', 'Pyrazine', '[n:1]1ccncc1', { note: 'Bridges two metals.' }],
-      ['imidazole', 'Him|imH', 'Imidazole', '[n:1]1cc[nH]c1'],
+      ['imidazole', 'ImH|HIm|imH', 'Imidazole', '[n:1]1cc[nH]c1'],
       ['nmi', 'NMI|N-MeIm|1-MeIm', '1-Methylimidazole', '[n:1]1ccn(C)c1'],
       ['pyrazole', 'Hpz|pzH', 'Pyrazole', '[n:1]1ccc[nH]1'],
       ['net3', 'NEt3|Et3N', 'Triethylamine', '[N:1](CC)(CC)CC'],

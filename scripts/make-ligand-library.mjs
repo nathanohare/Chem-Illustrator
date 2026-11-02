@@ -802,6 +802,21 @@ function stereoKey(tp) {
   return /[@/\\]/.test(s) ? s : '';
 }
 
+/** Whether the metal's letter lies on another label, or on an atom other than its donors. */
+function metalCrowded(tp) {
+  const A = tp.atoms, M = tp.attach;
+  const nb = (i) => tp.bonds.filter((b) => b[0] === i || b[1] === i).map((b) => (b[0] === i ? b[1] : b[0]));
+  const donors = nb(M);
+  const mBox = { x1: A[M][0] - 0.35, x2: A[M][0] + 0.35, y1: A[M][1] - 0.4, y2: A[M][1] + 0.4 };
+  return A.some((a, i) => {
+    if (i === M || donors.includes(i)) return false;
+    if (Math.hypot(a[0] - A[M][0], a[1] - A[M][1]) < 0.6) return true;
+    if (!a[4]) return false;
+    const ends = nb(i).map((n) => [A[n][0], A[n][1]]);
+    return boxOverlap(labelBox(a[0], a[1], a[4], runsRight(a[0], a[1], ends)), mBox) > 0.02;
+  });
+}
+
 /**
  * After the metal has moved: a donor whose wedges now read the other way round (against
  * `turns`, from donorTurns before the move) has them turned over (wedge ↔ hash), so it is the
@@ -1357,6 +1372,8 @@ for (const tp of templates) {
   if (stretchLabels(tp)) placeMetal(tp, m0);
   // (a chelate's labelled donors also given room round their metal)
   else if (tp.bonds.filter((b) => b[0] === tp.attach || b[1] === tp.attach).length >= 2) placeMetalStretched(tp, m0);
+  // (and an M on top of a label or an atom moved off it: BippyPhos's M was on a Ph)
+  else if (metalCrowded(tp)) placeMetal(tp, m0);
 }
 
 if (changed().length) throw new Error(`stereo changed while laying out: ${changed().join(', ')}`);
