@@ -172,7 +172,7 @@ import { zipSync } from 'fflate';
 import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
 import { plainText, savableChar } from './richtext';
 import { buildTextToolbox, type TextToolboxHooks } from './ui/text-toolbox';
-import { buildGuidesToolbox, type GuidesToolboxHooks } from './ui/guides-toolbox';
+import { buildGuidesToolbox, GUIDES_INFO, type GuidesToolboxHooks } from './ui/guides-toolbox';
 import { htmlToRich } from './text/html';
 import { LiveStereo } from './chem/live-stereo';
 import { setStereoShown, shownDescriptor, axialStyle } from './chem/stereo';
@@ -12230,6 +12230,7 @@ function toolboxDefs(): ToolboxDef[] {
   return ['main', ...ids.filter((id) => id !== 'main')].map((id) => ({
     id,
     title: boxTitle(toolboxState, id, BOX_TITLES[id]),
+    info: id === 'guides' ? GUIDES_INFO : undefined,
     build: (body: HTMLElement, vertical: boolean) => (SPECIAL_BOXES[id] && !isEditable(id) ? SPECIAL_BOXES[id](body, vertical) : buildBox(body, id, vertical)),
   }));
 }
@@ -13292,6 +13293,8 @@ const designText = new SlideTextRibbon($('#design-ribbon'), {
 });
 /** The text groups of the ribbon showing (Presentation or Design) follow the text being edited. */
 const textRibbonNow = () => (ws.active.mode === 'slides' ? slideText : ws.active.mode === 'design' ? designText : null);
+// the Text Formatting toolbox is the typing bar, so with it showing the bar above the text hides
+CaptionEditor.barElsewhere = () => toolboxes.isShown('text');
 CaptionEditor.onState = () => { textRibbonNow()?.refresh(); textToolbox?.refresh(); };
 // the Smart Scheme pane: the selected scheme's species, beside it
 const smartPane = new SmartPane({
