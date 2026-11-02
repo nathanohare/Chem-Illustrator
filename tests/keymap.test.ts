@@ -242,7 +242,7 @@ describe('the settings file', () => {
       scheme: { ...DEFAULT_SCHEME_PREFS, structGap: 14, textAlign: 'left', fit: false },
       newman: { ...parseNewmanPrefs(null), kind: 'sawhorse' as const, chart: { ...parseNewmanPrefs(null).chart, unit: 'kJ/mol' as const } },
       keep: { ...DEFAULT_KEEP, autoSave: true, recoveryMinutes: 5, changedOnDisk: 'reload' as const, lockFiles: false },
-      ai: { provider: 'anthropic' as const, model: 'claude-sonnet-5-5', base: '' },
+      ai: { provider: 'anthropic' as const, model: 'claude-sonnet-5-5', base: '', localOnly: true, assistant: true },
       straightenLinear: false,
       cursorAids: { angle: false, length: true, hints: false, units: 'cm' as const, look: 'solid' as const },
       haptoDelocalized: false, toolDemos: 'frames',
