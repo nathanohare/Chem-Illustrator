@@ -766,6 +766,9 @@ dialog.feedback-dialog .muted { margin: 4px 0 10px; max-width: 62ch; }
 .error-log .warning { color: #a86400; }
 .error-buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 dialog.name-dialog .muted { margin: 4px 0 10px; max-width: 60ch; }
+.sequence-input { resize: vertical; font-family: var(--mono, monospace); }
+.sequence-ends { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0 4px; }
+.sequence-opts { margin: 4px 0 0; }
 .name-input { width: 100%; box-sizing: border-box; font: inherit; padding: 5px 8px; }
 .name-status { min-height: 1.4em; margin: 8px 0 0; color: var(--muted); overflow-wrap: anywhere; }
 .name-status.error { color: var(--slow); }

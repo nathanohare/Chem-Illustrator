@@ -40,7 +40,8 @@ Cyclopropane to cyclooctane, benzene and cyclopentadiene.
 
 Ready-made structures in palettes on the tool bar, plus **My templates**:
 
-- **Ring systems**, **Heterocycles**, **Amino acids** and **Sugars** (pyranoses and furanoses flat and as ⁴C₁ chairs).
+- **Ring systems**, **Heterocycles**, **Amino acids** and **Sugars**: Haworth projections of both anomers of glucose, galactose, mannose, GlcNAc and GalNAc, plus glucuronic acid, xylose, L-fucose, L-rhamnose, ribose, 2-deoxyribose, L-arabinose and fructose, and the pyranoses as ⁴C₁ chairs. Each Haworth is checked, stereocentre by stereocentre, against its name.
+- **Nucleic acids**: the bases (A, G, C, T, U, joined by a new bond from N9 or N1 when you click a sugar's C1′), the eight ribo- and deoxyribonucleosides, their 5′-monophosphates, ADP and ATP, drawn on Haworth rings.
 - **Conformers and fused rings in 3-D**: the cyclohexane chair (both ring flips, bare and with every axial and equatorial bond) and boat; trans- and cis-decalin, trans-hydrindane, cis-hydrindane, perhydrophenanthrene and perhydroanthracene, the 5α and 5β steroid skeletons, adamantane and cubane.
 - **Crossing bonds in 3-D drawings**: in anything placed from these palettes (and rings fused onto them), the bond that is further back gets the small white gap where a nearer bond crosses it.
 - **Projections and stereocentres**: Newman, sawhorse and Fischer projections; tetrahedral centres drawn several ways; trigonal bipyramidal, octahedral, square pyramidal and square planar centres; zig-zag chains with wedges.
@@ -77,6 +78,8 @@ Metals know they are metals: a metal gets no hydrogens and no valence warning ho
 - Right-click a metal: **Add Ligand** puts a ligand from the list on it.
 - **Chemistry ▸ Metals ▸ Bond Metal to Ring (η)**: select a metal and the ring or π-bond atoms; their bonds become one hapto bond to the middle. **Split Hapto Bond** goes back to a bond to each atom.
 - **Chemistry ▸ Expand Label**: draws a label out as atoms. A ligand on a metal comes from its template (dppe gives both P atoms bonded to the metal); other abbreviations (OMe, Boc, CO₂Et) are laid out along the bond they hung from.
+
+**Insert ▸ Structure from Sequence…** draws a peptide in full from its sequence: one-letter codes (GLYPHS; small letters are D-amino acids, which can be turned off), or three-letter codes (Boc-Ala-D-Phe-Gly-OMe). Spaces, numbers and a FASTA header line are skipped. Pick the N-terminus (H, Ac, Boc, Fmoc, Cbz, Bz) and C-terminus (acid, amide, OMe, OEt, OtBu, OBn), or write them into a three-letter sequence. The backbone is a zig-zag with the side chains in turn up and down; the chain bends at each proline, whose ring is fused to the backbone.
 
 To make your own template, select a structure and click the first button on the **My templates** palette, or use **Chemistry ▸ Nicknames and Templates ▸ Save as Template…**. Give it a name and it appears in the palette. **Chemistry ▸ Nicknames and Templates ▸ Delete Template…** removes one.
 
