@@ -13,8 +13,8 @@ export interface KbColumn {
   numeric?: boolean;
   /** A chemical shift column (ppm): a number typed in the search box is matched against it. */
   shift?: '1H' | '13C';
-  /** Offer a filter list of this column's values. */
-  filter?: boolean;
+  /** Offer a filter list of this column's values ('present': only "with one" or all). */
+  filter?: boolean | 'present';
   /** Narrow column (multiplicity, units). */
   narrow?: boolean;
 }
@@ -34,7 +34,12 @@ export interface KbTable {
   sources: KbSource[];
   /** Kept on this computer only (imported by the user from their own copy): never part of the program. */
   personal?: boolean;
+  /** Links shown at the end of each row (the compound's PubChem page, its NIOSH entry…). */
+  links?: (row: Record<string, Cell>) => KbSource[];
 }
+
+/** The filter value meaning "has something in this column". */
+export const PRESENT = '\u0000present';
 
 /** How near a typed shift must be to match: 1H peaks within 0.05 ppm, 13C within 0.5 ppm. */
 export const SHIFT_TOLERANCE = { '1H': 0.05, '13C': 0.5 } as const;
@@ -80,7 +85,7 @@ export interface RowMatch {
  * exactly; extra SMILES the caller found equal (canonical forms) match too.
  */
 export function findRows(t: KbTable, query: string, filters: Record<string, string> = {}, sameSmiles?: Set<string>): RowMatch[] {
-  const rows = t.rows.filter((r) => Object.entries(filters).every(([k, v]) => !v || String(r[k] ?? '') === v));
+  const rows = t.rows.filter((r) => Object.entries(filters).every(([k, v]) => !v || (v === PRESENT ? r[k] !== null && r[k] !== undefined && r[k] !== '' : String(r[k] ?? '') === v)));
   const q = query.trim();
   if (!q) return rows.map((row) => ({ row }));
   const shift = searchedShift(q);

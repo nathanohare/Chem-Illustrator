@@ -8,8 +8,8 @@
 // this computer only, for data you have a copy of but the program can't carry.
 
 import { BUILT_IN_TABLES } from '../kb/data';
-import { explainPieces } from '../kb/glossary';
-import { filterValues, findRows, isCas, parseUserTable, searchedShift, sortRows, tableTsv, type KbColumn, type KbTable, type RowMatch } from '../kb/tables';
+import { explainPieces, glossaryEntry } from '../kb/glossary';
+import { PRESENT, filterValues, findRows, isCas, parseUserTable, searchedShift, sortRows, tableTsv, type KbColumn, type KbTable, type RowMatch } from '../kb/tables';
 import { ask } from './ask';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] => {
@@ -166,7 +166,13 @@ export class KnowledgeBaseWindow {
 
   private matches(t: KbTable, withFilters = true): RowMatch[] {
     const same = this.queryCanon ? new Set(t.rows.filter((r) => typeof r.smiles === 'string' && this.canon.get(r.smiles) === this.queryCanon).map((r) => r.smiles as string)) : undefined;
-    return findRows(t, this.queryCanon ? '' : this.search.value, withFilters ? this.picked : {}, same).filter((m) => !this.queryCanon || same?.has(m.row.smiles as string));
+    const filters = withFilters ? this.picked : {};
+    const found = findRows(t, this.queryCanon ? '' : this.search.value, filters, same).filter((m) => !this.queryCanon || same?.has(m.row.smiles as string));
+    // an abbreviation typed (THF, DCM, DMAP) also finds the rows that spell it out
+    const full = !this.queryCanon && t.id !== 'glossary' ? glossaryEntry(this.search.value)?.full.replace(/\s*\(.*?\)/g, '').trim() : '';
+    if (!full) return found;
+    const seen = new Set(found.map((m) => m.row));
+    return [...found, ...findRows(t, full, filters).filter((m) => !seen.has(m.row))];
   }
 
   private searchChanged(): void {
@@ -220,7 +226,9 @@ export class KnowledgeBaseWindow {
     // filter lists
     this.filters.replaceChildren(...t.columns.filter((c) => c.filter).map((c) => {
       const s = el('select', { title: `Show only one ${c.label.toLowerCase()}` });
-      s.append(el('option', { value: '', textContent: `All (${c.label})` }), ...filterValues(t, c.key).map((v) => el('option', { value: v, textContent: v })));
+      s.append(el('option', { value: '', textContent: `All (${c.label})` }));
+      if (c.filter === 'present') s.append(el('option', { value: PRESENT, textContent: `With ${c.label.toLowerCase()}` }));
+      else s.append(...filterValues(t, c.key).map((v) => el('option', { value: v, textContent: v })));
       s.value = this.picked[c.key] ?? '';
       s.addEventListener('change', () => { this.picked = { ...this.picked, [c.key]: s.value }; this.showTable(); });
       return el('label', {}, el('span', { textContent: c.label }), s);
@@ -242,9 +250,19 @@ export class KnowledgeBaseWindow {
         if (v !== null && v !== undefined && v !== '') td.append(typeof v === 'number' ? String(v) : cellExplained(v, !!c.narrow));
         tr.append(td);
       }
+      if (t.links) {
+        const td = el('td', { className: 'kb-links' });
+        t.links(m.row).forEach((l, i) => {
+          if (i) td.append(' · ');
+          const a = el('a', { href: l.url ?? '#', textContent: l.label });
+          a.addEventListener('click', (e) => { e.preventDefault(); if (l.url) this.host.openUrl(l.url); });
+          td.append(a);
+        });
+        tr.append(td);
+      }
       body.append(tr);
     }
-    const table = el('table', { className: 'refs-table kb-table' }, el('thead', {}, el('tr', {}, ...t.columns.map((c) => this.header(c)))), body);
+    const table = el('table', { className: 'refs-table kb-table' }, el('thead', {}, el('tr', {}, ...t.columns.map((c) => this.header(c)), ...(t.links ? [el('th', { textContent: 'Look up' })] : []))), body);
     if (!rows.length) {
       const q = this.search.value.trim();
       this.wrap.replaceChildren(el('p', { className: 'muted kb-empty', textContent: q ? `Nothing in ${t.title} matches “${q}”.` : 'This table is empty.' }));

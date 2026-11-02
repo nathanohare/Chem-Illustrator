@@ -1,10 +1,12 @@
-// The Knowledge Base's built-in tables. Only facts the program may carry: the residual peaks of the
+// The Knowledge Base's built-in tables. Only facts the program may carry: hazard numbers and
+// physical constants from public-domain records (safety-tables.ts), the residual peaks of the
 // common deuterated solvents (printed on every solvent maker's chart), the glossary written for
 // this program. Larger published tables (trace impurities in each solvent) are imported by the user
 // from their own copy and kept on their computer; see tables.ts parseUserTable.
 
 import { GLOSSARY } from './glossary';
 import type { KbTable } from './tables';
+import { PHYSICAL_CONSTANTS, REAGENT_SAFETY } from './safety-tables';
 
 /** The common NMR solvents: residual 1H and 13C peaks, the water peak, and boiling and melting points. */
 export const NMR_SOLVENTS: KbTable = {
@@ -58,4 +60,4 @@ export const GLOSSARY_TABLE: KbTable = {
 };
 
 /** The tables built in, in the order the window lists them. */
-export const BUILT_IN_TABLES: KbTable[] = [NMR_SOLVENTS, GLOSSARY_TABLE];
+export const BUILT_IN_TABLES: KbTable[] = [REAGENT_SAFETY, NMR_SOLVENTS, PHYSICAL_CONSTANTS, GLOSSARY_TABLE];
