@@ -110,6 +110,21 @@ describe('Smart Schemes', () => {
     expect(read.links[0].above.length).toBe(0);
   });
 
+  it('keeps a cycle where it is when a species is added, made a structure box or removed', () => {
+    const { doc, m, id } = line();
+    doc.edit('c', () => arrangeSmart(doc, m, id, { layout: 'cycle' }));
+    const middle = () => { const s = doc.shapes.get(id)!; return { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 }; };
+    const start = middle();
+    doc.edit('add', () => insertSlot(doc, m, id, 1, 'Int'));
+    doc.edit('box', () => slotToHolder(doc, m, id, 2));
+    doc.edit('add', () => insertSlot(doc, m, id, 3, 'Late'));
+    doc.edit('rm', () => removeSlot(doc, m, id, 0));
+    const end = middle();
+    // the frame grows and shrinks round the same middle (to within the text's lopsidedness)
+    expect(Math.hypot(end.x - start.x, end.y - start.y)).toBeLessThan(30);
+    expect(readSmart(doc, m, id)!.slots.length).toBe(4);
+  });
+
   it('switches to a cycle (closing the loop) and back to a line (opening it)', () => {
     const { doc, m, id } = line();
     doc.edit('c', () => arrangeSmart(doc, m, id, { layout: 'cycle' }));
