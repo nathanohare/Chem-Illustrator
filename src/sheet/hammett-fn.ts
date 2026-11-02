@@ -1,7 +1,8 @@
-// HAMMETT(B2, "sigma", "[NH2:1]c1ccc(*)cc1"): a Hammett constant of the group(s) a structure has
-// at the marked ring positions of a core (src/chem/hammett-match.ts), from Hansch, Leo and Taft,
-// Chem. Rev. 1991, 91, 165, Table I (src/kb/hammett.ts). With several marked positions the values
-// are added up (Σσ, ΣF, ΣR), as Hammett's additivity has it.
+// HAMMETT(B2, "sigma", "wavy"): a Hammett constant of the groups on a structure's benzene ring,
+// counted from its reference position: an attachment point drawn on the structure ("wavy",
+// "star", or a numbered diamond's number), or a core in SMILES with * where the group changes
+// (src/chem/hammett-match.ts). Values from Hansch, Leo and Taft, Chem. Rev. 1991, 91, 165,
+// Table I (src/kb/hammett.ts). Several groups add up (Σσ, ΣF, ΣR), as Hammett's additivity has it.
 //
 // What can be asked for:
 //   "sigma" (σ)   σm for a meta group, σp for a para one (ortho: blank, or σp with "ortho=sp")
@@ -9,7 +10,7 @@
 //   "F", "R"      the field and resonance parameters (Swain–Lupton, as modified by Hansch et al.)
 //   "group"       the group as chemists write it (OCH3, NO2), H for none
 
-import type { HammettResult, HammettSite } from '../chem/hammett-match';
+import { H_ROW, type HammettResult, type HammettSite } from '../chem/hammett-match';
 import { HAMMETT } from '../kb/hammett';
 import { CellError, ERR, Value } from './values';
 
@@ -57,7 +58,9 @@ export function hammettValue(res: HammettResult | CellError, what: HammettWhat, 
   }
   if (what === 'group') {
     const g = (s: HammettSite) => HAMMETT[s.row].group;
-    return sites.length === 1 ? g(sites[0]) : sites.map((s) => `${PLACE_PREFIX[s.place]}-${g(s)}`).join(', ');
+    if (sites.length === 1 && (sites[0].row === H_ROW || sites[0].locant === undefined)) return g(sites[0]);
+    // 4-OCH3, or 3-Cl, 4-Cl (locants from the reference position); m-Cl for a core's positions
+    return sites.map((s) => `${s.locant ?? PLACE_PREFIX[s.place]}-${g(s)}`).join(', ');
   }
   let sum = 0;
   for (const s of sites) {

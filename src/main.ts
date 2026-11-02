@@ -3344,7 +3344,7 @@ const modeTool: Record<Tab['mode'], string> = { drawing: 'bond-single', slides: 
 // ---------------------------------------------------------------- sheets
 
 // Properties of the structures in sheets (formula, MW, HRMS…), worked out by the chemistry engine
-const sheetChem = new SheetChem(chem, (c) => structureMolfile(c, ws.active.book?.drawingStyle ?? ACS_1996));
+const sheetChem = new SheetChem(chem, (c, o) => structureMolfile(c, ws.active.book?.drawingStyle ?? ACS_1996, o));
 
 // Pictures of structures for Excel files, drawn in the workbook's drawing style
 const filePictures = new WeakMap<DocStyle, StructurePictures>();

@@ -3,8 +3,10 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createRequire } from 'node:module';
-import { hammettSites, suggestCore, H_ROW, type HammettSite, type CoreSuggestion } from '../src/chem/hammett-match';
+import { hammettSites, H_ROW, type HammettSite } from '../src/chem/hammett-match';
 import { HAMMETT } from '../src/kb/hammett';
+import { Doc } from '../src/model';
+import { toMolfile } from '../src/chem/molfile';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let RDKit: any;
@@ -71,22 +73,56 @@ describe('Hammett groups on a marked ring', () => {
   });
 });
 
-describe('the core of a series', () => {
-  it('finds the shared part, the reaction centre and the position that changes', () => {
-    const para = suggestCore(RDKit, ['COc1ccc(N)cc1', 'Cc1ccc(N)cc1', 'Nc1ccccc1', 'Fc1ccc(N)cc1', 'Nc1ccc(cc1)[N+](=O)[O-]']);
-    expect(para).toEqual({ core: '*c1ccc([NH2:1])cc1', centre: 6, positions: [2], found: 5 });
-    const meta = suggestCore(RDKit, ['Nc1cccc(Cl)c1', 'Nc1cc(C)ccc1', 'Nc1ccccc1']) as CoreSuggestion;
-    expect(meta.core).toBe('*c1cccc([NH2:1])c1');
-    expect(meta.found).toBe(3);
-    // the centre is the shared atom on the ring: here an acetanilide N
-    expect((suggestCore(RDKit, ['CC(=O)Nc1ccc(OC)cc1', 'CC(=O)Nc1ccc(Cl)cc1']) as CoreSuggestion).core).toBe('*c1ccc([NH:1]C(C)=O)cc1');
+describe('counted from an attachment point', () => {
+  const at = (smiles: string, ref: string) => sites(smiles, ref);
+  it('places every group on the nearest benzene ring', () => {
+    const [x] = at('[102*]Nc1ccc(OC)cc1', 'wavy');
+    expect([group(x), x.place, x.locant]).toEqual(['OCH3', 'para', 4]);
+    const [y] = at('[102*]Nc1cccc(Cl)c1', 'wavy bond');
+    expect([group(y), y.place, y.locant]).toEqual(['Cl', 'meta', 3]);
+    // 3,4-dichloro: both, numbered the low way round
+    expect(at('[101*]Nc1ccc(Cl)c(Cl)c1', 'star').map((s) => [group(s), s.place, s.locant])).toEqual([['Cl', 'meta', 3], ['Cl', 'para', 4]]);
   });
 
-  it('takes the centre and positions clicked on the first structure', () => {
-    expect(suggestCore(RDKit, ['COc1ccc(N)cc1'])).toHaveProperty('error');
-    const got = suggestCore(RDKit, ['COc1ccc(N)cc1', 'Nc1ccccc1'], { centre: 6, positions: [2] }) as CoreSuggestion;
-    expect(got.core).toBe('*c1ccc([NH2:1])cc1');
-    // the suggested core reads back the same groups
-    expect(sites('COc1ccc(N)cc1', got.core).map(group)).toEqual(['OCH3']);
+  it('gives hydrogen for a bare ring, and counts through a chain to the ring', () => {
+    expect(at('[2*]Nc1ccccc1', '2').map(group)).toEqual(['H']);
+    // a benzylic reference: the CH2 joins the ring
+    expect(at('[102*]Cc1ccc(cc1)C(F)(F)F', 'wavy').map((s) => [group(s), s.place])).toEqual([['CF3', 'para']]);
+    // the reference group on the ring itself isn't counted
+    expect(at('[102*]C(=O)c1ccc([N+](=O)[O-])cc1', 'wavy').map(group)).toEqual(['NO2']);
+  });
+
+  it('reads a plain * typed in SMILES as the attachment point', () => {
+    expect(at('*Nc1ccc(C)cc1', 'wavy').map(group)).toEqual(['CH3']);
+  });
+
+  it('says what is wrong', () => {
+    expect(hammettSites(RDKit, '[101*]Nc1ccccc1', 'wavy')).toEqual({ error: expect.stringMatching(/no wavy-bond attachment point/) });
+    expect(hammettSites(RDKit, '[102*]Nc1ccc(N[102*])cc1', 'wavy')).toEqual({ error: expect.stringMatching(/2 wavy-bond attachment points/) });
+    expect(hammettSites(RDKit, '[102*]NC1CCCCC1', 'wavy')).toEqual({ error: expect.stringMatching(/no benzene ring/) });
+  });
+});
+
+describe('attachment points drawn on a structure', () => {
+  it('are written with their kinds, so the reference is found in the molfile', () => {
+    // p-anisidine fragment, ArNH–, with a wavy bond on N and a star on the methoxy C
+    const doc = new Doc();
+    doc.edit('Draw', () => {
+      const ring = Array.from({ length: 6 }, (_, i) => doc.addAtom(Math.cos((i * Math.PI) / 3) * 14.4, Math.sin((i * Math.PI) / 3) * 14.4));
+      ring.forEach((a, i) => doc.addBond(a.id, ring[(i + 1) % 6].id, i % 2 ? 2 : 1));
+      const n = doc.addAtom(28.8, 0, 7);
+      doc.addBond(ring[0].id, n.id);
+      const wavy = doc.addAtom(43.2, 0, 0, { attach: 'Wavy' });
+      doc.addBond(n.id, wavy.id);
+      const o = doc.addAtom(-28.8, 0, 8);
+      doc.addBond(ring[3].id, o.id);
+      const me = doc.addAtom(-43.2, 0);
+      doc.addBond(o.id, me.id);
+    });
+    const { molblock } = toMolfile(doc, doc.atoms.keys(), '', { attachKinds: true });
+    expect(molblock).toMatch(/M {2}ISO {2}1 +\d+ +102/);
+    expect(sites(molblock, 'wavy').map((s) => [group(s), s.place])).toEqual([['OCH3', 'para']]);
+    // the same drawing written plainly has no kinds: a wavy reference isn't found
+    expect(hammettSites(RDKit, toMolfile(doc, doc.atoms.keys()).molblock, 'wavy')).toHaveProperty('error');
   });
 });

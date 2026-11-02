@@ -57,8 +57,8 @@ export interface EvalHost {
   subtotalSkip?(sheet: string | undefined, row: number, col: number, hidden: boolean): boolean;
   /** A field of the compound card in a cell (Data > Data Types > Compound): undefined for a cell with no card, null for a field it doesn't have. */
   field?(sheet: string | undefined, row: number, col: number, name: string): Value | null | undefined;
-  /** The Hammett groups at a core's marked positions in a molecule (by its SMILES); #BUSY! while being worked out. */
-  hammett?(smiles: string, core: string): HammettResult | CellError;
+  /** The Hammett groups on the ring of the molecule in a cell (or SMILES), counted from the reference; #BUSY! while being worked out. */
+  hammett?(src: { sheet: string | undefined; row: number; col: number } | { smiles: string }, ref: string): HammettResult | CellError;
   /** SUM of one column, rows r1 to r2, from a running total down it; undefined when there is none to use. */
   sumColumn?(sheet: string | undefined, col: number, r1: number, r2: number): number | CellError | undefined;
 }
@@ -886,34 +886,36 @@ function chemistry(name: string, argNodes: Node[], host: EvalHost): Value {
 }
 
 /**
- * HAMMETT(B2,"sigma","[NH2:1]c1ccc(*)cc1",["ortho=sp"]): a Hammett constant of the group a
- * structure has at the core's marked position (see src/sheet/hammett-fn.ts).
+ * HAMMETT(B2,"sigma","wavy",["ortho=sp"]): a Hammett constant of the groups on a structure's
+ * benzene ring, counted from its reference position (see src/sheet/hammett-fn.ts).
  */
 function hammett(argNodes: Node[], host: EvalHost): Value {
-  const usage = 'HAMMETT needs a structure, what to give ("sigma", "sm", "sp", "F", "R" or "group") and the core with * where the group changes: HAMMETT(B2,"sigma","[NH2:1]c1ccc(*)cc1")';
+  const usage = 'HAMMETT needs a structure, what to give ("sigma", "sm", "sp", "F", "R" or "group") and the reference position, an attachment point ("wavy", "star" or a diamond\'s number): HAMMETT(B2,"sigma","wavy")';
   if (argNodes.length < 3 || argNodes.length > 4) return ERR.value(usage);
   const first = argNodes[0];
-  let mol: MolProps | CellError | null;
+  let src: { sheet: string | undefined; row: number; col: number } | { smiles: string };
   if (first.t === 'ref' && first.v.kind === 'cell' && !first.v.broken) {
     if (first.v.sheet !== undefined && !host.hasSheet(first.v.sheet)) return ERR.ref(`There is no sheet called "${first.v.sheet}"`);
-    mol = host.molecule({ sheet: first.v.sheet, row: first.v.a.row, col: first.v.a.col });
+    src = { sheet: first.v.sheet, row: first.v.a.row, col: first.v.a.col };
   } else {
     const v = scalar(evalNode(first, host));
     if (isError(v)) return v;
     if (v === null || v === '') return '';
     if (typeof v !== 'string') return ERR.value('HAMMETT needs a structure or SMILES, not a number');
-    mol = host.molecule({ smiles: v });
+    src = { smiles: v };
   }
-  const [w, c, o] = argNodes.slice(1).map((a) => scalar(evalNode(a, host)));
-  for (const x of [w, c, o]) if (isError(x)) return x;
+  const [w, r, o] = argNodes.slice(1).map((a) => scalar(evalNode(a, host)));
+  for (const x of [w, r, o]) if (isError(x)) return x;
   const what = hammettWhat(String(w ?? ''));
   if (!what) return ERR.value(`HAMMETT gives "sigma", "sm", "sp", "F", "R" or "group", not "${String(w ?? '')}"`);
-  const core = String(c ?? '').trim();
-  if (!core) return ERR.value(usage);
+  const ref = String(r ?? '').trim();
+  if (!ref) return ERR.value(usage);
+  // an empty cell gives nothing, and one that isn't a structure says why (as MW does)
+  const mol = host.molecule(src);
   if (mol === null) return '';
   if (isError(mol)) return mol;
   if (!host.hammett) return ERR.na('Hammett constants need the chemistry engine');
-  return hammettValue(host.hammett(mol.smiles, core), what, o !== undefined && o !== null && orthoAsPara(String(o)));
+  return hammettValue(host.hammett(src, ref), what, o !== undefined && o !== null && orthoAsPara(String(o)));
 }
 
 /**

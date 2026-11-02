@@ -31,8 +31,8 @@ export class SheetChem implements ChemHost {
   private bySmiles = new Map<string, Answer>();
   private matches = new Map<string, boolean | null>();
   private hammetts = new Map<string, HammettResult>();
-  /** Hammett questions not sent yet, by core: the SMILES asked about. */
-  private wantHammett = new Map<string, Set<string>>();
+  /** Hammett questions not sent yet, by reference: the molecules asked about, by key. */
+  private wantHammett = new Map<string, Map<string, () => string | null>>();
   private queryIds = new WeakMap<Contents, number>();
   private nextQuery = 1;
   /** Questions not sent yet. */
@@ -46,7 +46,7 @@ export class SheetChem implements ChemHost {
    * @param engine the chemistry engine
    * @param molfile a structure's drawing as a molfile, or null (with the reason) when it has no structure in it
    */
-  constructor(private engine: ChemEngine, private molfile: (c: Contents) => { molblock: string | null; problem?: string }) {}
+  constructor(private engine: ChemEngine, private molfile: (c: Contents, opts?: { attachKinds?: boolean }) => { molblock: string | null; problem?: string }) {}
 
   structure(s: Structure): Answer {
     const got = this.byStructure.get(s.id);
@@ -93,17 +93,26 @@ export class SheetChem implements ChemHost {
   }
 
   /**
-   * The Hammett groups at the core's marked positions in a molecule (its SMILES, as worked out
-   * for its properties). #BUSY! the first time, while the engine works it out.
+   * The Hammett groups on a molecule's ring, counted from the reference (an attachment point kind,
+   * or a core in SMILES; see src/chem/hammett-match.ts). The molecule is a cell's structure (its
+   * attachment points written with their kinds) or SMILES text. #BUSY! while being worked out.
    */
-  hammett(smiles: string, core: string): HammettResult | CellError {
-    const key = `${core}\n${smiles}`;
+  hammett(mol: Structure | string, ref: string): HammettResult | CellError {
+    const id = typeof mol === 'string' ? `t${mol}` : `s${mol.id}`;
+    const key = `${ref}\n${id}`;
     const got = this.hammetts.get(key);
     if (got) return got;
     if (!this.engine.hammett) return ERR.na('Hammett constants need the chemistry engine');
-    let want = this.wantHammett.get(core);
-    if (!want) { want = new Set(); this.wantHammett.set(core, want); }
-    if (!want.has(smiles)) { want.add(smiles); this.schedule(); }
+    let want = this.wantHammett.get(ref);
+    if (!want) { want = new Map(); this.wantHammett.set(ref, want); }
+    if (!want.has(id)) {
+      want.set(id, typeof mol === 'string' ? () => mol : () => {
+        const m = this.molfile(mol.contents, { attachKinds: true });
+        if (!m.molblock) { this.keep(this.hammetts, key, { error: m.problem ?? 'There is no structure in this cell' }); return null; }
+        return m.molblock;
+      });
+      this.schedule();
+    }
     return ERR.busy();
   }
 
@@ -185,12 +194,19 @@ export class SheetChem implements ChemHost {
         () => asked.forEach((k) => this.matches.set(k, false)),
       ));
     }
-    for (const [core, set] of hammetts) {
-      const mols = [...set];
-      const keep = (i: number, r: HammettResult) => this.keep(this.hammetts, `${core}\n${mols[i]}`, r);
-      jobs.push(this.engine.hammett!(core, mols).then(
+    for (const [ref, want] of hammetts) {
+      const ids: string[] = [], inputs: string[] = [];
+      for (const [id, input] of want) {
+        const text = input();
+        if (text === null) continue;
+        ids.push(id);
+        inputs.push(text);
+      }
+      if (!inputs.length) continue;
+      const keep = (i: number, r: HammettResult) => this.keep(this.hammetts, `${ref}\n${ids[i]}`, r);
+      jobs.push(this.engine.hammett!(ref, inputs).then(
         (res) => res.forEach((r, i) => keep(i, r)),
-        (e) => mols.forEach((_, i) => keep(i, { error: `The chemistry engine failed: ${String(e)}` })),
+        (e) => ids.forEach((_, i) => keep(i, { error: `The chemistry engine failed: ${String(e)}` })),
       ));
     }
     this.inFlight++;

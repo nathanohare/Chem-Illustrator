@@ -149,8 +149,8 @@ export interface ChemHost {
   smiles(text: string): MolProps | CellError;
   /** Does the structure contain the query? Null while being worked out. */
   substructure?(s: Structure, query: Contents): boolean | null;
-  /** The Hammett groups at a core's marked positions in a molecule (by its SMILES); #BUSY! while being worked out. */
-  hammett?(smiles: string, core: string): HammettResult | CellError;
+  /** The Hammett groups on a molecule's ring, counted from the reference (see src/chem/hammett-match.ts); #BUSY! while being worked out. */
+  hammett?(mol: Structure | string, ref: string): HammettResult | CellError;
 }
 
 /** A block of cells taken by Copy, to paste elsewhere. */
@@ -2264,7 +2264,14 @@ export class Workbook {
         if (!card) return undefined;
         return fieldValue(card, name) ?? null;
       },
-      hammett: (smiles, core) => this.chem?.hammett?.(smiles, core) ?? ERR.busy(),
+      hammett: (src, ref) => {
+        if (!this.chem?.hammett) return ERR.busy();
+        if ('smiles' in src) return this.chem.hammett(src.smiles.trim(), ref);
+        const c = sheetOf(src.sheet)?.cell(src.row, src.col);
+        if (c?.structure) return this.chem.hammett(c.structure, ref);
+        const v = sheetOf(src.sheet)?.values.get(keyOf(src.row, src.col));
+        return typeof v === 'string' ? this.chem.hammett(v.trim(), ref) : ERR.value('A structure or SMILES was wanted');
+      },
       molecule: (src) => {
         if (!this.chem) return ERR.busy();
         if ('smiles' in src) return src.smiles.trim() ? this.chem.smiles(src.smiles.trim()) : null;

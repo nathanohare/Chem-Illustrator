@@ -75,6 +75,18 @@ describe('HAMMETT in a sheet', () => {
     expect(err(2, 1).detail).toMatch(/core/);
   });
 
+  it('counts from an attachment point, naming each group with its locant', async () => {
+    const wb = await sheetOf([
+      ['*Nc1ccc(OC)cc1', '=HAMMETT(A1,"sigma","wavy")', '=HAMMETT(A1,"group","wavy")'],
+      ['*Nc1ccc(Cl)c(Cl)c1', '=HAMMETT(A2,"sigma","wavy")', '=HAMMETT(A2,"group","wavy")', '=HAMMETT(A2,"F","wavy")'],
+      ['*Nc1ccccc1', '=HAMMETT(A3,"sigma","wavy")', '=HAMMETT(A3,"group","wavy")', '=HAMMETT(A3,"F","wavy")'],
+    ]);
+    const s = wb.sheet;
+    expect([s.value(0, 1), s.value(0, 2)]).toEqual([-0.27, '4-OCH3']);
+    expect([s.value(1, 1), s.value(1, 2), s.value(1, 3)]).toEqual([0.6, '3-Cl, 4-Cl', 0.84]);
+    expect([s.value(2, 1), s.value(2, 2), s.value(2, 3)]).toEqual([0, 'H', 0.03]);
+  });
+
   it('reads the ways the quantity may be written', () => {
     expect(['σ', 'sigma', 'SIGMA', 'σm', 'sigma_p', 'F', 'r', 'Group', 'what'].map(hammettWhat)).toEqual(['sigma', 'sigma', 'sigma', 'sm', 'sp', 'F', 'R', 'group', null]);
     expect(orthoAsPara('ortho=σp')).toBe(true);
