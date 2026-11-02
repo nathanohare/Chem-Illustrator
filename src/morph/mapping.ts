@@ -4,7 +4,7 @@
 // A step's settings (the pairs the person chose, 1,2-shifts, lines that slide) turned into the
 // full pairing the animation runs on, with every request checked against the two structures.
 
-import { matchNodes, matchConnectivity, matchFragments, matchEquivalent, matchBonds, type NodeMap } from './match';
+import { matchNodes, matchConnectivity, matchFragments, matchEquivalent, matchBonds, motion, type NodeMap } from './match';
 import { turnPairs, mirroredRings } from './turn';
 import type { MScene } from './scene';
 
@@ -84,11 +84,14 @@ export function resolve(cfg: StepConfig, A: MScene, B: MScene, equiv = false): M
       }
     }
     nmap = new Map();
-    let best = -1;
+    let best = -1, bestMove = Infinity;
     for (const c of cands) {
       if (!c.size) continue;
+      // ties (a symmetric structure paired either way round) go to the pairing that moves atoms least
       const n = matchBonds(A, B, c).size;
-      if (n > best) { best = n; nmap = c; }
+      if (n < best) continue;
+      const move = motion(A, B, c);
+      if (n > best || move < bestMove - 1e-6) { best = n; nmap = c; bestMove = move; }
     }
   }
   if (!(cfg.exact && cfg.pairs)) {

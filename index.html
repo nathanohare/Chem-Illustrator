@@ -74,8 +74,77 @@
         <button role="menuitem" data-cmd="check-accessibility" title="Look for what makes this file hard to use with a screen reader or to read: missing alt text, low-contrast text, slides without titles, headings that skip a level, things read out of order">Check Accessibility</button>
         <button role="menuitem" data-modes="drawing slides design" data-cmd="preflight" title="Check the figure against a journal's author guidelines (ACS, RSC, Elsevier, Nature, Wiley) before export: width for one or two columns, height, smallest text and thinnest line once printed, fonts, picture resolution">Check Figure for Journal…</button>
     <hr />
-        <button role="menuitem" data-cmd="print" title="Print the canvas, presentation (or handouts), document or spreadsheet">Print…</button>
-        <button data-modes="sheet" role="menuitem" data-cmd="print-preview" title="Every page of the spreadsheet as it will print">Print Preview</button>
+        <button role="menuitem" data-modes="drawing slides design document" data-cmd="print" title="Print the canvas, presentation (or handouts) or document">Print…</button>
+    <div class="submenu" data-modes="sheet">
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Print</button>
+    <div class="menu sub" role="menu" hidden>
+        <button role="menuitem" data-cmd="print" title="Print the sheet, its print area or the selected cells">Print…</button>
+        <button role="menuitem" data-cmd="print-preview" title="Every page of the spreadsheet as it will print, with its header and footer">Print Preview</button>
+    <hr />
+        <button role="menuitem" data-cmd="page-setup" title="Paper, orientation, scaling, margins, centring, print area, titles and page order in one window">Page Setup…</button>
+    <div class="submenu">
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Margins</button>
+    <div class="menu sub" role="menu" hidden>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-margins-normal" title="0.7 in at the sides, 0.75 in top and bottom"><span>Normal</span></button>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-margins-wide" title="1 in all round"><span>Wide</span></button>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-margins-narrow" title="0.25 in at the sides, 0.75 in top and bottom"><span>Narrow</span></button>
+    <hr />
+        <button role="menuitem" data-cmd="sheet-margins-custom">Custom Margins…</button>
+    </div>
+    </div>
+    <div class="submenu">
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Orientation</button>
+    <div class="menu sub" role="menu" hidden>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-portrait"><span>Portrait</span></button>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-landscape"><span>Landscape</span></button>
+    </div>
+    </div>
+    <div class="submenu">
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Paper Size</button>
+    <div class="menu sub" role="menu" hidden>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-paper-letter"><span>Letter (8.5 × 11 in)</span></button>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-paper-legal"><span>Legal (8.5 × 14 in)</span></button>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-paper-tabloid"><span>Tabloid (11 × 17 in)</span></button>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-paper-a4"><span>A4 (210 × 297 mm)</span></button>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-paper-a3"><span>A3 (297 × 420 mm)</span></button>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-paper-a5"><span>A5 (148 × 210 mm)</span></button>
+    </div>
+    </div>
+    <div class="submenu">
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Scaling</button>
+    <div class="menu sub" role="menu" hidden>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-no-scaling" title="Print at the size the cells are"><span>No Scaling</span></button>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-fit-page" title="Shrink the printout to one page"><span>Fit Sheet on One Page</span></button>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-fit-columns" title="Shrink the printout to one page wide, as many tall as it takes"><span>Fit All Columns on One Page</span></button>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-fit-rows" title="Shrink the printout to one page tall, as many wide as it takes"><span>Fit All Rows on One Page</span></button>
+    <hr />
+        <button role="menuitem" data-cmd="page-scale" title="Print larger or smaller, as a percentage">Scale…</button>
+    </div>
+    </div>
+    <hr />
+    <div class="submenu">
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Print Area</button>
+    <div class="menu sub" role="menu" hidden>
+        <button role="menuitem" data-cmd="set-print-area" title="Print only the selected cells">Set Print Area</button>
+        <button role="menuitem" data-cmd="add-print-area" title="The selected cells print too, on pages of their own">Add to Print Area</button>
+        <button role="menuitem" data-cmd="clear-print-area" title="Print everything in use again">Clear Print Area</button>
+    </div>
+    </div>
+    <div class="submenu">
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Page Breaks</button>
+    <div class="menu sub" role="menu" hidden>
+        <button role="menuitem" data-cmd="insert-page-break" title="Start a new page above and to the left of the active cell">Insert Page Break</button>
+        <button role="menuitem" data-cmd="remove-page-break" title="Take away the page break above or to the left of the active cell">Remove Page Break</button>
+        <button role="menuitem" data-cmd="reset-page-breaks" title="Take away every page break put in by hand">Reset All Page Breaks</button>
+    </div>
+    </div>
+        <button role="menuitem" data-cmd="print-titles" title="Rows printed at the top of every page (a header row) and columns at the left (compound numbers)">Print Titles…</button>
+        <button role="menuitem" data-cmd="header-footer" title="Text at the top and bottom of every page, with the page number, date, file and sheet name">Header and Footer…</button>
+    <hr />
+        <button role="menuitemcheckbox" aria-checked="false" data-cmd="print-gridlines" title="Print the lines between cells (View Gridlines on the Page Layout tab shows them on the screen)"><span>Print Gridlines</span></button>
+        <button role="menuitemcheckbox" aria-checked="false" data-cmd="print-headings" title="Print the row numbers and column letters (View Headings on the Page Layout tab shows them on the screen)"><span>Print Headings</span></button>
+    </div>
+    </div>
     <hr />
         <button role="menuitem" data-cmd="close-tab">Close</button>
         <button role="menuitem" class="desktop-only" data-cmd="check-updates" title="Look on GitHub for a newer version of the app and install it" hidden>Check for Updates…</button>
@@ -531,12 +600,6 @@
     <button data-modes="sheet" role="menuitemcheckbox" aria-checked="false" data-cmd="circle-invalid"><span>Circle Invalid Data</span></button>
     <button data-modes="sheet" role="menuitem" data-cmd="insert-table">Format as Table</button>
     <hr />
-    <button data-modes="sheet" role="menuitem" data-cmd="page-setup">Page Setup…</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="header-footer">Header and Footer…</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="print-titles">Print Titles…</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="set-print-area">Set Print Area</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="clear-print-area">Clear Print Area</button>
-    <button data-modes="sheet" role="menuitem" data-cmd="insert-page-break">Insert Page Break</button>
     <button data-modes="sheet" role="menuitemcheckbox" aria-checked="false" data-cmd="show-page-breaks"><span>Show Page Breaks</span></button>
     </div>
     </div>
@@ -1095,35 +1158,6 @@
       </div>
       <div class="rb-group">
         <div class="rb-row">
-          <button class="rb-big" data-sh="page-margins" title="Margins: Normal, Wide, Narrow, or your own"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2.5" width="12" height="15"/><path d="M4 5.5h12M4 14.5h12M7 2.5v15M13 2.5v15" stroke-dasharray="1.5 1.5"/></svg></span>Margins ▾</button>
-          <button class="rb-big" data-sh="page-orientation" title="Portrait or landscape pages"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="15" height="10"/><path d="M6 3h7l-1.5-1.5M13 3l-1.5 1.5"/></svg></span>Orientation ▾</button>
-          <button class="rb-big" data-sh="page-size" title="Paper size: Letter, A4, Legal…"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M5 2.5h7l3.5 3.5v11.5H5z"/><path d="M12 2.5V6h3.5"/></svg></span>Size ▾</button>
-          <button class="rb-big" data-sh="print-area" title="Print Area: print only the selected cells (Set), more blocks on pages of their own (Add), or everything in use again (Clear). Saved in .xlsx"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="14" height="14"/><rect x="6" y="6" width="8" height="6" stroke-dasharray="2 1.5"/></svg></span>Print Area ▾</button>
-          <button class="rb-big" data-sh="page-breaks" title="Breaks: start a new page above and to the left of the active cell, take one away, or reset them all"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M4 2.5h12v6M4 2.5v6M4 11.5v6h12v-6"/><path d="M2 10h16" stroke-dasharray="2 1.5"/></svg></span>Breaks ▾</button>
-          <button class="rb-big" data-sh="print-titles" title="Print Titles: rows printed at the top of every page (a header row) and columns at the left (compound numbers)"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="14" height="14"/><path d="M3 7h14" stroke-width="3"/></svg></span>Print Titles</button>
-          <div class="rb-col">
-            <button data-sh="header-footer" title="Header and Footer: text at the top and bottom of every page, with the page number, date, file and sheet name">Header &amp; Footer…</button>
-            <button data-sh="page-setup" title="Page Setup: paper, orientation, scaling, margins, centring, print area, titles and page order in one window">Page Setup…</button>
-          </div>
-        </div>
-        <div class="rb-label">Page Setup</div>
-      </div>
-      <div class="rb-group">
-        <div class="rb-row">
-          <div class="rb-col">
-            <button data-sh="fit-wide" title="Shrink the printout to this many pages wide">Width ▾</button>
-            <button data-sh="fit-tall" title="Shrink the printout to this many pages tall">Height ▾</button>
-            <button data-sh="page-scale" title="Print larger or smaller, as a percentage">Scale…</button>
-          </div>
-        </div>
-        <div class="rb-label">Scale to Fit</div>
-      </div>
-      <div class="rb-group">
-        <div class="rb-row">
-          <div class="rb-col">
-            <button data-sh="print-gridlines" aria-pressed="false" title="Print the gridlines between cells">Print Gridlines</button>
-            <button data-sh="print-headings" aria-pressed="false" title="Print the row numbers and column letters">Print Headings</button>
-          </div>
           <div class="rb-col">
             <button data-sh="view-gridlines" aria-pressed="true" title="View Gridlines: show the lines between cells on the screen">View Gridlines</button>
             <button data-sh="view-headings" aria-pressed="true" title="View Headings: show the row numbers and column letters on the screen">View Headings</button>
@@ -1131,12 +1165,6 @@
           </div>
         </div>
         <div class="rb-label">Sheet Options</div>
-      </div>
-      <div class="rb-group">
-        <div class="rb-row">
-          <button class="rb-big" data-sh="print-preview" title="Print Preview: every page as it will print, with its header and footer"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M5 2.5h7l3.5 3.5v5"/><path d="M5 2.5v15h5"/><circle cx="13.5" cy="14" r="2.8"/><path d="M15.5 16l2.2 2.2"/></svg></span>Print Preview</button>
-        </div>
-        <div class="rb-label">Print</div>
       </div>
     </div>
     <div class="rb-panel" data-sh-panel="formulas" hidden>
@@ -2317,6 +2345,7 @@
           <div class="rb-col">
             <button data-cmd="insert-slide-zoom" title="Slide Zoom: pictures of slides you pick, on this slide. In the show a click zooms into that slide (and, with Return to Zoom, back here after). Saved as PowerPoint's own zoom">⊕ Slide Zoom</button>
             <button data-cmd="insert-summary-zoom" title="Summary Zoom: a new slide of zooms, one for each part of your talk; in the show a click plays that part and comes back. Pick the first slide of each part">⊞ Summary Zoom</button>
+            <button data-cmd="insert-action-button" title="Action Button: pick a ready-made button (back, next, home, return, information, document…) and what a click on it does in the show, or put the back, home and next set on the slide">▶ Action Button…</button>
             <button data-cmd="action-settings" title="Action: what a click on the selected shape or action button does in the show (next slide, a slide, the last one viewed, end the show, a web page). Action buttons are under Shapes">↪ Action…</button>
           </div>
         </div>

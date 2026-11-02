@@ -77,7 +77,8 @@ export function matchNodes(A: MScene, B: MScene, forced: NodeMap = new Map(), ma
   let best: [number, number, NodeMap] | null = null;
   for (const flip of [1, -1]) {
     const [m, resid] = fit(ka.map((k) => { const p = A.nodes.get(k)!.p; return { x: p.x * flip, y: p.y }; }));
-    if (!best || m.size > best[0] || (m.size === best[0] && -resid > best[1])) best = [m.size, -resid, m];
+    // (a symmetric structure fits as well both ways round: then it stays the way it is drawn, rather than flipping over)
+    if (!best || m.size > best[0] || (m.size === best[0] && -resid > best[1] + 1e-3 * (1 + Math.abs(best[1])))) best = [m.size, -resid, m];
   }
   return best![2];
 }
@@ -149,7 +150,7 @@ export function matchConnectivity(A: MScene, B: MScene, forced: NodeMap = new Ma
   };
   const cands: [string, string][] = [];
   for (const a of A.nodes.keys()) for (const b of B.nodes.keys()) if (compat(a, b)) cands.push([a, b]);
-  let best: NodeMap = new Map(), bestN = -1;
+  let best: NodeMap = new Map(), bestN = -1, bestMove = Infinity;
   for (const [a0, b0] of [...forced, ...cands]) {
     if (!compat(a0, b0)) continue;
     for (const flip of [false, true]) {
@@ -161,11 +162,30 @@ export function matchConnectivity(A: MScene, B: MScene, forced: NodeMap = new Ma
         for (const [k, v] of forced) keep.set(k, v);
         m = keep;
       }
+      // as many bonds carried as can be; of pairings that carry as many (a symmetric structure's
+      // equal ways round), the one that moves the atoms least
       const n = matchBonds(A, B, m).size;
-      if (n > bestN) { best = m; bestN = n; }
+      if (n < bestN) continue;
+      const move = motion(A, B, m);
+      if (n > bestN || move < bestMove - 1e-6) { best = m; bestN = n; bestMove = move; }
     }
   }
   return best;
+}
+
+/**
+ * How far a pairing moves the atoms, once the drawing is turned and shifted to fit (turned only:
+ * a reflection is a flip the animation has to show). Two pairings of a symmetric structure that
+ * carry the same bonds differ here: the one that swaps its mirror-image halves twists it over.
+ */
+export function motion(A: MScene, B: MScene, m: NodeMap): number {
+  const ks = [...m.keys()].filter((k) => A.nodes.has(k) && B.nodes.has(m.get(k)!));
+  if (ks.length < 2) return 0;
+  const X = ks.map((k) => A.nodes.get(k)!.p), Y = ks.map((k) => B.nodes.get(m.get(k)!)!.p);
+  const f = procrustes(X, Y, false);
+  let e = 0;
+  X.forEach((x, i) => { const q = apply(f, x); e += (q.x - Y[i].x) ** 2 + (q.y - Y[i].y) ** 2; });
+  return e;
 }
 
 /**
