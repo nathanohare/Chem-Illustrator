@@ -31,6 +31,9 @@ export const COMMAND_ICONS: Record<string, string> = {
   'align-bottom': svg('<line x1="3" y1="20" x2="21" y2="20"/><rect x="6" y="5" width="4" height="13"/><rect x="14" y="10" width="4" height="8"/>'),
   // ---- object: spread out evenly
   'distribute-h': svg('<line x1="3" y1="4" x2="3" y2="20"/><line x1="21" y1="4" x2="21" y2="20"/><rect x="6" y="8" width="3" height="8"/><rect x="10.5" y="8" width="3" height="8"/><rect x="15" y="8" width="3" height="8"/>'),
+  'arrange-row': svg('<rect x="2" y="9" width="5" height="6"/><rect x="9.5" y="9" width="5" height="6"/><rect x="17" y="9" width="5" height="6"/>'),
+  'arrange-column': svg('<rect x="9" y="2" width="6" height="5"/><rect x="9" y="9.5" width="6" height="5"/><rect x="9" y="17" width="6" height="5"/>'),
+  'arrange-grid': svg('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>'),
   'distribute-v': svg('<line x1="4" y1="3" x2="20" y2="3"/><line x1="4" y1="21" x2="20" y2="21"/><rect x="8" y="6" width="8" height="3"/><rect x="8" y="10.5" width="8" height="3"/><rect x="8" y="15" width="8" height="3"/>'),
   // ---- object: flip and turn
   'flip-h': svg('<line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="2 2"/><path d="M10 6v12L4 18z"' + filled() + '/><path d="M14 6v12l6 0z"/>'),

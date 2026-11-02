@@ -24,6 +24,7 @@ import { Renderer, measureText, forgetTextWidths } from './render/renderer';
 import { Editor, TOOLS, ringsWereFilled, type HighlightToggle, type Selection } from './editor/editor';
 import { BUILT_IN_LOOKS, type HighlightLookPreset } from './ui/highlight-looks';
 import { selectionBox, POINTS, type Align, units, moveUnit } from './editor/arrange';
+import { defaultColumns } from './editor/grid-arrange';
 import { groupSelection, selectedGroups } from './editor/groups';
 import { readCdxml, ReadStats } from './io/cdxml';
 import { ChemClient } from './chem/client';
@@ -1543,6 +1544,26 @@ async function structureKeys(): Promise<Map<number, string>> {
     if (r && !r.error && r.smiles) for (const a of f) out.set(a, r.smiles);
   });
   return out;
+}
+
+/** Space left between things set out in a row, column or grid: as last chosen, or one and a half bonds. */
+let lastGridGap: number | null = null;
+const gridGap = () => lastGridGap ?? 1.5 * doc.style.bondLength;
+
+/** Format ▸ Align ▸ Arrange in a Grid…: how many across, and the space between. */
+async function arrangeInGrid(): Promise<void> {
+  finishTyping();
+  const n = editor.gridCount();
+  if (n < 2) { flash('Select two or more structures or objects to put in a grid.'); return; }
+  const got = await ask('Arrange in a Grid', [
+    { name: 'cols', label: 'Columns (across)', value: String(defaultColumns(n)), type: 'number' },
+    { name: 'gap', label: 'Space between', value: String(Math.round(gridGap() * 10) / 10), type: 'number', unit: 'pt' },
+  ], { ok: 'Arrange', note: `${n} things, set out in reading order (left to right, then down). Compound numbers move with their structures.` });
+  if (!got) return;
+  const cols = Math.max(1, Math.min(n, Math.round(Number(got.cols)) || defaultColumns(n)));
+  const gap = Number(got.gap);
+  if (isFinite(gap) && gap >= 0) lastGridGap = Math.min(500, gap);
+  if (!editor.arrangeGrid({ kind: 'grid', cols, gap: gridGap() })) flash('They are already in that grid.');
 }
 
 /**
@@ -5935,6 +5956,9 @@ const COMMANDS: Record<string, () => unknown> = {
   'align-bottom': () => align('bottom'),
   'distribute-h': () => editor.distribute('h') || flash('Select three or more structures, captions, arrows or shapes to space them evenly.'),
   'distribute-v': () => editor.distribute('v') || flash('Select three or more structures, captions, arrows or shapes to space them evenly.'),
+  'arrange-row': () => editor.arrangeGrid({ kind: 'row', gap: gridGap() }) || flash('Select two or more structures or objects to put in a row (or they already are, evenly spaced).'),
+  'arrange-column': () => editor.arrangeGrid({ kind: 'column', gap: gridGap() }) || flash('Select two or more structures or objects to put in a column (or they already are, evenly spaced).'),
+  'arrange-grid': () => void arrangeInGrid(),
   'flip-h': () => flipped(editor.flip('h')),
   'flip-v': () => flipped(editor.flip('v')),
   'flip-h-keep': () => flipped(editor.flip('h', true)),
@@ -8755,7 +8779,8 @@ function drawingMenu(): MenuItem[] {
   const arrange: MenuItem[] = [
     { cmd: 'align-left' }, { cmd: 'align-hcenter' }, { cmd: 'align-right' }, null,
     { cmd: 'align-top' }, { cmd: 'align-vcenter' }, { cmd: 'align-bottom' }, null,
-    { cmd: 'distribute-h' }, { cmd: 'distribute-v' },
+    { cmd: 'distribute-h' }, { cmd: 'distribute-v' }, null,
+    { cmd: 'arrange-row' }, { cmd: 'arrange-column' }, { cmd: 'arrange-grid' },
   ];
   const turn: MenuItem[] = [
     { cmd: 'flip-h' }, { cmd: 'flip-v' }, { cmd: 'flip-h-keep' }, { cmd: 'flip-v-keep' }, null,
@@ -9148,7 +9173,7 @@ const cmds = (list: (string | null)[]) => list.map((c) => (c ? `cmd:${c}` : 'sep
 const BOX_ITEMS: Record<string, readonly string[]> = {
   main: MAIN_ITEMS,
   structure: cmds(['clean-up', 'add-frame', 'fill-rings', 'highlight', 'remove-highlight', null, 'chain-ends', 'explicit-h', 'aromatic-circles', 'stereo-labels', null, 'add-id-label', 'add-caption', 'attach-descriptors', 'number-compounds', null, 'contract-label', 'expand-label', 'hapto-bond', 'name-to-structure']),
-  arrange: cmds(['align-left', 'align-hcenter', 'align-right', 'align-top', 'align-vcenter', 'align-bottom', null, 'distribute-h', 'distribute-v', null, 'flip-h', 'flip-v', 'rotate-cw', 'rotate-ccw', null, 'shape-front', 'shape-back']),
+  arrange: cmds(['align-left', 'align-hcenter', 'align-right', 'align-top', 'align-vcenter', 'align-bottom', null, 'distribute-h', 'distribute-v', 'arrange-row', 'arrange-column', 'arrange-grid', null, 'flip-h', 'flip-v', 'rotate-cw', 'rotate-ccw', null, 'shape-front', 'shape-back']),
   highlight: [...cmds(['highlight', 'remove-highlight', null, 'smooth-highlight', 'centre-highlight', 'soft-highlight', 'outline-highlight', 'shadow-highlight', 'glow-highlight', null, 'save-highlight-look']), 'w:looks'],
   custom: defaultToolboxes().custom,
 };

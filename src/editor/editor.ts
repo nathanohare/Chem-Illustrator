@@ -74,6 +74,7 @@ import { bezFrom, fitPath, dragCurveAt, throughPoints, dragPathPoint, firstBend,
 import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
 import { imageFor } from '../render/images';
+import { gridOffsets, inferGrid, usualGap, withLabels, type GridHow } from './grid-arrange';
 import { BEND, BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
 import type { TextEditing } from '../text/editing';
 
@@ -3499,6 +3500,59 @@ export class Editor {
     if (us.length < 3) return false;
     const off = distributeOffsets(us, axis);
     this.doc.edit('Distribute', () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
+    this.changed();
+    return true;
+  }
+
+  /**
+   * The things to set out in a row, column or grid: the selected ones (everything, with nothing
+   * selected), each structure with its compound number even when the number isn't selected.
+   */
+  private gridUnits(): ReturnType<typeof units> {
+    const doc = this.doc, m = this.measure();
+    const none = !this.hasSelection();
+    const sel = none
+      ? { atoms: new Set(doc.atoms.keys()), bonds: new Set(doc.bonds.keys()), captions: new Set(doc.captions.keys()), arrows: new Set(doc.arrows.keys()), shapes: new Set(doc.shapes.keys()) }
+      : this.sel;
+    const chosen = units(doc, sel, m);
+    // numbers under the chosen structures come along, picked or not
+    const others = none ? [] : units(doc, { atoms: new Set(), bonds: new Set(), captions: new Set([...doc.captions.keys()].filter((id) => !sel.captions.has(id))), arrows: new Set(), shapes: new Set() }, m);
+    const folded = withLabels(doc, [...chosen, ...others], doc.style.bondLength);
+    const loose = new Set(others.flatMap((u) => u.captions));
+    return folded.filter((u) => u.atoms.length || !u.captions.every((id) => loose.has(id)) || u.arrows.length || u.shapes.length);
+  }
+
+  /** How many things Arrange in a Grid would set out. */
+  gridCount(): number {
+    return this.gridUnits().length;
+  }
+
+  /** Format ▸ Align ▸ Arrange in a Row, Column or Grid. False with fewer than two things, or nothing to move. */
+  arrangeGrid(how: GridHow): boolean {
+    const us = this.gridUnits();
+    if (us.length < 2) return false;
+    return this.applyGrid(us, how, how.kind === 'row' ? 'Arrange in a Row' : how.kind === 'column' ? 'Arrange in a Column' : 'Arrange in a Grid');
+  }
+
+  /**
+   * Clean Up's own arranging: when the picked structures (or, with nothing picked, a drawing of
+   * nothing but structures and their numbers) clearly sit in rows, a column or a grid, even them
+   * out, keeping the spacing they mostly have. False when it isn't clear or they are already even.
+   */
+  autoArrange(): boolean {
+    const us = this.gridUnits();
+    // three or more structures and nothing else (a scheme is Clean Up Reaction's to tidy)
+    if (us.length < 3 || us.some((u) => !u.atoms.length || u.arrows.length || u.shapes.length)) return false;
+    const boxes = us.map((u) => u.box);
+    const shape = inferGrid(boxes);
+    if (!shape) return false;
+    return this.applyGrid(us, { kind: shape.kind, cols: shape.cols, gap: usualGap(boxes, this.doc.style.bondLength) }, 'Clean Up: Arrange');
+  }
+
+  private applyGrid(us: ReturnType<typeof units>, how: GridHow, label: string): boolean {
+    const off = gridOffsets(us.map((u) => u.box), how);
+    if (off.every((d) => Math.hypot(d.x, d.y) < 0.05)) return false;
+    this.doc.edit(label, () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
     this.changed();
     return true;
   }
