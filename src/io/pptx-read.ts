@@ -1749,7 +1749,7 @@ class Reader {
   }
 
   /** How a shape is filled and outlined (its own settings, else its theme style). */
-  private look(sp: Element, spPr: Element | null): { fill: string | null; line: string | null; width: number; dashed: boolean; shaded: boolean } {
+  private look(sp: Element, spPr: Element | null): { fill: string | null; line: string | null; width: number; dashed: boolean; dotted?: boolean; shaded: boolean } {
     const style = kid(sp, 'style');
     let fill: string | null = null;
     let shaded = false;
@@ -1775,7 +1775,7 @@ class Reader {
     }
     const w = ln?.getAttribute('w');
     const dash = kid(ln, 'prstDash')?.getAttribute('val');
-    return { fill, line, width: w ? fromEmu(w) : 0.75, dashed: !!dash && dash !== 'solid', shaded };
+    return { fill, line, width: w ? fromEmu(w) : 0.75, dashed: !!dash && dash !== 'solid', dotted: dash === 'sysDot' || dash === 'dot', shaded };
   }
 
   /** A line or connector: an arrow when it has a head, else a line. */
@@ -1818,6 +1818,7 @@ class Reader {
     const sh: Omit<Shape, 'id'> = { kind: 'line', x1: a.x, y1: a.y, x2: b.x, y2: b.y };
     if (look.line.toLowerCase() !== '#000000') sh.color = look.line;
     if (look.dashed) sh.dashed = true;
+    if (look.dotted) sh.dotted = true;
     if (look.width > 1.75 * doc.style.lineWidth) sh.bold = true;
     doc.addShape(sh);
   }

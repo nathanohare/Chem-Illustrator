@@ -1496,7 +1496,7 @@ function patternOrGradient(s: Shape, fc: string, alpha: string): string | null {
 function shapeXml(s: Shape, id: number, lw: number): string {
   const width = (s.bold ? lw * 2.5 : lw);
   const color = hex6(s.color ?? '#000000');
-  const dash = s.dashed ? '<a:prstDash val="dash"/>' : '';
+  const dash = s.dotted ? '<a:prstDash val="sysDot"/>' : s.dashed ? '<a:prstDash val="dash"/>' : '';
   if (s.kind === 'line') {
     const flips = `${s.x2 < s.x1 ? ' flipH="1"' : ''}${s.y2 < s.y1 ? ' flipV="1"' : ''}`;
     const box = { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };

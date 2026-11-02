@@ -782,6 +782,12 @@ dialog.energy-dialog { width: min(96vw, 680px); max-height: 92vh; }
 .energy-table td input.energy-num { width: 5em; text-align: right; }
 .energy-table .energy-grip { cursor: grab; color: var(--muted); padding: 0 2px; user-select: none; }
 .energy-import-note { margin: 2px 0 4px; }
+.energy-brackets { margin: 4px 0 6px; }
+.energy-brackets-title { font-weight: 600; font-size: 0.9em; }
+.energy-bracket-list { list-style: none; margin: 2px 0 4px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.energy-bracket-list li { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.energy-bracket-list output { min-width: 7em; }
+.energy-table th select { font: inherit; margin-left: 4px; }
 .energy-rows { display: flex; gap: 8px; margin: 6px 0; }
 .energy-pair { display: flex; align-items: center; gap: 6px; }
 .energy-pair input { width: 5em; }

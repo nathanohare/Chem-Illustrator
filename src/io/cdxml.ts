@@ -690,7 +690,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       case 'Line': {
         if (bb.length < 4) return;
         const lt = g.getAttribute('LineType') ?? '';
-        add({ ...base, kind: 'line', x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], dashed: lt.includes('Dashed'), bold: lt.includes('Bold') });
+        add({ ...base, kind: 'line', x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], dashed: lt.includes('Dashed'), bold: lt.includes('Bold'), ...(g.getAttribute(DOTTED_ATTR) === 'yes' ? { dotted: true } : {}) });
         return;
       }
       case 'Rectangle': {
@@ -1148,6 +1148,8 @@ export const PIN_TAG = 'Chem Illustrator pin';
 export const CURVE_ARROW_TAG = 'Chem Illustrator arrow';
 /** The group's box when saved here (ChemDraw rewrites BoundingBox when the group is moved). */
 export const GEO_BOX_ATTR = 'ChemIllustratorBox';
+/** A line drawn dotted here (ChemDraw is given dashes). */
+export const DOTTED_ATTR = 'ChemIllustratorDotted';
 /** A chart (Insert > Chart on slides): the chart and its data, on the picture standing for it. */
 export const CHART_TAG = 'Chem Illustrator chart';
 /** An equation (Insert > Equation on slides): its LaTeX, size, colour and font, on the picture standing for it. */
