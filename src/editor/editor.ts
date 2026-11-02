@@ -849,6 +849,14 @@ export class Editor {
 
   private onDown(e: PointerEvent): void {
     this.commitLabel();
+    // Alt+click on a locked structure (Slides) edits it this once: the lock lifts for this press
+    // and comes back when the button is let go
+    if (this.structuresLocked && e.altKey && e.button === 0) {
+      this.structuresLocked = false;
+      const h = this.hitTestNow(this.docPoint(e));
+      if (h?.kind === 'atom' || h?.kind === 'bond') this.relockAfter = true;
+      else this.structuresLocked = true;
+    }
     // a press on the text being typed (or its width handle) goes to the text
     const cap = this.captionEd;
     if (cap && e.button === 2 && cap.hit(this.docPoint(e)) === 'text') {
@@ -1225,7 +1233,11 @@ export class Editor {
     this.requestScene();
   }
 
+  /** The structures were unlocked for one Alt+click: lock them again when it ends. */
+  private relockAfter = false;
+
   private onUp(e: PointerEvent): void {
+    if (this.relockAfter) queueMicrotask(() => { this.relockAfter = false; this.structuresLocked = true; this.lastHit = null; });
     const d = this.drag;
     this.drag = null;
     if (!d) return;

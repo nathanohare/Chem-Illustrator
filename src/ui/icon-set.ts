@@ -230,6 +230,37 @@ export const ICON_SET: Record<string, IconDef> = {
   'export-pdf': { hue: 'red', d: page(3.75, 2.75, 13.5, 18.5, 4) + '<path d="M6.75 11.5h5M6.75 14.5h3.5" stroke-opacity=".5"/><circle class="s" cx="17" cy="17" r="4.75"/><path class="k" d="M17 14.5v4.5M15 17.25l2 2 2-2"/>' },
   'export-picture': { hue: 'teal', d: '<rect class="p" x="2.75" y="3.75" width="15.5" height="13.5" rx="2"/><path d="M2.75 14l4.5-4.5 3.5 3.5 2-2 5.5 5.5"/><circle class="s" cx="17" cy="17" r="4.75"/><path class="k" d="M17 14.5v4.5M15 17.25l2 2 2-2"/>' },
   preflight: { hue: 'green', d: page(3.75, 2.75, 13.5, 18.5, 4) + '<path d="M6.75 11h7.5M6.75 14h4.5" stroke-opacity=".5"/><circle class="s" cx="17" cy="17" r="4.75"/><path class="k" d="M14.75 17l1.5 1.5 3-3"/>' },
+  // ---------------------------------------------------------------- arrange (small buttons)
+  'shape-forward': { hue: 'gray', d: '<rect x="2.75" y="6.75" width="11" height="11" rx="1.5"/><rect class="f a" x="8.75" y="11.25" width="11" height="10" rx="1.5"/><path class="a" d="M18.5 2.75v5M16.25 5l2.25-2.25L20.75 5"/>' },
+  'shape-backward': { hue: 'gray', d: '<rect class="f a" x="8.75" y="11.25" width="11" height="10" rx="1.5" stroke-dasharray="2 2"/><rect class="p" x="2.75" y="6.75" width="11" height="11" rx="1.5"/><path class="a" d="M18.5 2.75v5M16.25 5.5l2.25 2.25 2.25-2.25"/>' },
+  'align-left': { hue: 'gray', d: '<path class="a" d="M3.25 2.75v18.5"/><rect class="f a" x="6.25" y="5.25" width="14" height="5" rx="1"/><rect class="p" x="6.25" y="13.75" width="8.5" height="5" rx="1"/>' },
+  'align-hcenter': { hue: 'gray', d: '<path class="a" d="M12 2.75v18.5" stroke-dasharray="2 2"/><rect class="f a" x="4.5" y="5.25" width="15" height="5" rx="1"/><rect class="p" x="7.75" y="13.75" width="8.5" height="5" rx="1"/>' },
+  'align-right': { hue: 'gray', d: '<path class="a" d="M20.75 2.75v18.5"/><rect class="f a" x="3.75" y="5.25" width="14" height="5" rx="1"/><rect class="p" x="9.25" y="13.75" width="8.5" height="5" rx="1"/>' },
+  'align-top': { hue: 'gray', d: '<path class="a" d="M2.75 3.25h18.5"/><rect class="f a" x="5.25" y="6.25" width="5" height="14" rx="1"/><rect class="p" x="13.75" y="6.25" width="5" height="8.5" rx="1"/>' },
+  'align-vcenter': { hue: 'gray', d: '<path class="a" d="M2.75 12h18.5" stroke-dasharray="2 2"/><rect class="f a" x="5.25" y="4.5" width="5" height="15" rx="1"/><rect class="p" x="13.75" y="7.75" width="5" height="8.5" rx="1"/>' },
+  'align-bottom': { hue: 'gray', d: '<path class="a" d="M2.75 20.75h18.5"/><rect class="f a" x="5.25" y="3.75" width="5" height="14" rx="1"/><rect class="p" x="13.75" y="9.25" width="5" height="8.5" rx="1"/>' },
+  'distribute-h': { hue: 'gray', d: '<path class="a" d="M2.75 3.25v17.5M21.25 3.25v17.5"/><rect class="p" x="5.75" y="7.25" width="3" height="9.5" rx=".75"/><rect class="f a" x="10.5" y="7.25" width="3" height="9.5" rx=".75"/><rect class="p" x="15.25" y="7.25" width="3" height="9.5" rx=".75"/>' },
+  'distribute-v': { hue: 'gray', d: '<path class="a" d="M3.25 2.75h17.5M3.25 21.25h17.5"/><rect class="p" x="7.25" y="5.75" width="9.5" height="3" rx=".75"/><rect class="f a" x="7.25" y="10.5" width="9.5" height="3" rx=".75"/><rect class="p" x="7.25" y="15.25" width="9.5" height="3" rx=".75"/>' },
+  group: { hue: 'gray', d: '<rect class="a" x="2.75" y="2.75" width="18.5" height="18.5" rx="2" stroke-dasharray="2.5 2"/><rect class="p" x="6" y="6" width="6.5" height="6.5" rx="1"/><circle class="f a" cx="15" cy="15" r="3.25"/>' },
+  ungroup: { hue: 'gray', d: '<rect class="p" x="2.75" y="2.75" width="9" height="9" rx="1.5" stroke-dasharray="2.25 2"/><rect class="f a" x="12.25" y="12.25" width="9" height="9" rx="1.5" stroke-dasharray="2.25 2"/>' },
+  // ---------------------------------------------------------------- slides: smaller commands
+  'shape-effects': { hue: 'purple', d: '<rect x="5.75" y="5.75" width="12.5" height="12.5" rx="2" stroke-opacity=".35" transform="translate(2 2)"/><rect class="p a" x="3.75" y="3.75" width="12.5" height="12.5" rx="2"/><path class="a" d="M19.5 2.75v3M18 4.25h3"/>' },
+  'shape-picture-fill': { hue: 'purple', d: '<path class="p" d="M12 2.75l9.25 9.25L12 21.25 2.75 12z"/><path class="f a" d="M5.5 14.75l3.25-3.25 2.5 2.5 2-2 4.5 4.5L12 21.25z"/><circle class="s" cx="13" cy="8.5" r="1.25"/>' },
+  'insert-date-time': { hue: 'blue', d: '<rect class="p" x="2.75" y="4.25" width="13" height="13" rx="1.75"/><path d="M2.75 8.25h13M6.5 2.75v3M12 2.75v3"/><circle class="p a" cx="16.75" cy="16.75" r="4.5"/><path class="a" d="M16.75 14.5v2.25l1.5 1"/>' },
+  'insert-slide-number': { hue: 'blue', d: slide(2.75, 4.75, 18.5, 14.5) + '<path class="a" d="M13.25 12.25l-.75 4.5M16.25 12.25l-.75 4.5M12 13.5h4.75M11.5 15.5h4.75"/>' },
+  'references-slide': { hue: 'blue', d: slide(2.75, 4.75, 18.5, 14.5) + '<path class="a" d="M5.75 8.25h1M5.75 11.5h1M5.75 14.75h1" stroke-width="2"/><path d="M9 8.25h9M9 11.5h9M9 14.75h6"/>' },
+  references: { hue: 'blue', d: '<rect class="f a" x="2.75" y="3.25" width="4.5" height="17.5" rx="1"/><rect class="p" x="7.25" y="3.25" width="4.5" height="17.5" rx="1"/><rect class="p" x="11.75" y="3.25" width="4.5" height="17.5" rx="1"/><path class="p" d="M17.5 4.5l3.25-.75 1 16.5-3.25.75z"/>' },
+  'insert-slide-zoom': { hue: 'amber', d: slide(2.75, 3.75, 13, 9) + '<circle class="p a" cx="15.5" cy="15.25" r="4.25"/><path class="a" d="M18.5 18.25l2.75 2.75M15.5 13.5v3.5M13.75 15.25h3.5"/>' },
+  'insert-summary-zoom': { hue: 'amber', d: '<rect class="p" x="2.75" y="3.25" width="8" height="5.5" rx="1"/><rect class="p" x="13.25" y="3.25" width="8" height="5.5" rx="1"/><rect class="p" x="2.75" y="11.25" width="8" height="5.5" rx="1"/><circle class="p a" cx="16.75" cy="15.75" r="3.75"/><path class="a" d="M19.5 18.5l2 2"/>' },
+  'action-settings': { hue: 'amber', d: '<rect class="p" x="2.75" y="4.75" width="13" height="10" rx="2"/><path class="f a" d="M11.75 10.75l9.25 3.5-4 1.75-1.75 4z"/>' },
+  'section-menu': { hue: 'amber', d: '<path class="a" d="M3 4.75h18"/><rect class="p" x="5.75" y="8.25" width="12.5" height="5" rx="1.25"/><rect class="p" x="5.75" y="15.75" width="12.5" height="5" rx="1.25"/><path d="M3 8.25v12.5"/>' },
+  'delete-slide': { hue: 'red', d: slide(2.75, 3.75, 13.5, 9.5) + '<path class="a" d="M14.25 15.25l6 6M20.25 15.25l-6 6"/>' },
+  // ---------------------------------------------------------------- group pictures for the dropdowns that hold several commands
+  'media-menu': { hue: 'red', d: '<rect class="p" x="2.75" y="3.75" width="18.5" height="16.5" rx="2"/><path d="M2.75 8h18.5M7.25 3.75V8M12 3.75V8M16.75 3.75V8"/><path class="f a" d="M10 11v6.5l5.25-3.25z"/>' },
+  'header-footer-menu': { hue: 'blue', d: '<rect class="p" x="4.75" y="2.75" width="14.5" height="18.5" rx="2"/><path class="f a" d="M4.75 15.75h14.5v3.5a2 2 0 0 1-2 2H6.75a2 2 0 0 1-2-2z"/><path d="M7.75 6.5h8.5M7.75 9.5h8.5M7.75 12.5h5" stroke-opacity=".5"/>' },
+  'symbols-menu': { hue: 'blue', d: '<path class="a" d="M3.25 20.25h3.5v-1.75a5.5 5.5 0 1 1 5 0v1.75h3.5"/><path d="M14.5 4.25h7M18 4.25v7.5M16.25 11.75h3.5" />' },
+  'zoom-menu': { hue: 'amber', d: slide(2.75, 3.75, 18.5, 12.5) + '<circle class="p a" cx="11" cy="10" r="3.5"/><path class="a" d="M13.5 12.5l2.5 2.5"/><path d="M8.5 20.25h7"/>' },
+  'references-menu': { hue: 'blue', d: '<rect class="f a" x="2.75" y="3.25" width="4.5" height="17.5" rx="1"/><rect class="p" x="7.25" y="3.25" width="4.5" height="17.5" rx="1"/><path d="M14.25 6.75h7M14.25 11h7M14.25 15.25h4.5"/><path class="a" d="M17.5 4.25l1.5-1v3.5" stroke-width="1.25"/>' },
 };
 
 /** An icon from the set as an SVG element's markup, at the given size in pixels. */
@@ -260,6 +291,7 @@ export const ICON_FOR: Record<string, string> = {
 /** The drawing for a button, from its data-sh, data-doc, data-tr, data-an or data-cmd. */
 export function iconForButton(b: HTMLElement): string | undefined {
   const d = b.dataset;
+  if (d.ic && ICON_SET[d.ic]) return d.ic;
   const keys = d.sh ? ['sh:' + d.sh, d.sh] : d.doc ? ['doc:' + d.doc, d.doc] : d.tr ? ['tr:' + d.tr] : d.an ? ['an:' + d.an] : d.cmd ? [d.cmd] : [];
   for (const k of keys) {
     const n = ICON_FOR[k] ?? k;

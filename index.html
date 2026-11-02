@@ -2110,40 +2110,36 @@
       <button role="tab" data-sl-tab="show" aria-selected="false">Slide Show</button>
       <button role="tab" data-sl-tab="review" aria-selected="false">Review</button>
       <button role="tab" data-sl-tab="view" aria-selected="false">View</button>
+      <button role="tab" data-sl-tab="format" aria-selected="false" class="rb-ctx-tab" hidden title="Shows while a shape or picture is selected">Shape Format</button>
     </div>
     <div class="rb-panel" data-sl-panel="home">
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="paste" title="Paste text, a structure from ChemDraw, or a picture"><span class="rb-icon">⎘</span>Paste</button>
-          <div class="rb-col">
-            <button data-cmd="cut" title="Cut">Cut</button>
-            <button data-cmd="copy" title="Copy">Copy</button>
-            <button data-cmd="format-painter" aria-pressed="false" title="Format Painter: copy the look of what is selected to the next thing you click or drag over. Double-click to keep painting until Esc"><svg class="fp-icon" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="2.5" width="12" height="5" rx="1"/><path d="M15 5h2v4.5h-7V12"/><rect x="8.5" y="12" width="3" height="6" rx="0.8"/></svg> Format Painter</button>
+          <div class="rb-icongrid">
+            <button class="rb-iconbtn" data-cmd="cut" title="Cut" aria-label="Cut">✂</button>
+            <button class="rb-iconbtn" data-cmd="copy" title="Copy" aria-label="Copy">⧉</button>
+            <button class="rb-iconbtn" data-cmd="format-painter" aria-pressed="false" title="Format Painter: copy the look of what is selected to the next thing you click or drag over. Double-click to keep painting until Esc" aria-label="Format Painter">🖌</button>
           </div>
         </div>
         <div class="rb-label">Clipboard</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
-          <button class="rb-big" data-cmd="new-slide" title="New slide after this one"><span class="rb-icon">＋</span>New Slide</button>
+          <div class="rb-fly rb-split">
+            <button class="rb-big" data-cmd="new-slide" title="New Slide (Ctrl+M): a slide after this one, with this one's layout"><span class="rb-icon">＋</span>New Slide</button>
+            <button class="rb-fly-btn" title="Pick the new slide's layout, duplicate the picked slides or reuse slides from another file" aria-label="New Slide options">▾</button>
+            <div class="rb-fly-menu" id="new-slide-menu" role="menu" hidden>
+              <div class="rb-fly-head">New slide with this layout</div>
+              <div class="rb-layouts"><button data-cmd="new-slide-layout-title" title="Title Slide"><span class="rb-layout-pic"><i style="left:10px;top:8px;width:60px;height:14px"></i><i style="left:18px;top:26px;width:44px;height:8px"></i></span>Title Slide</button><button data-cmd="new-slide-layout-title-content" title="Title and Content"><span class="rb-layout-pic"><i style="left:6px;top:4px;width:68px;height:8px"></i><i style="left:6px;top:15px;width:68px;height:26px"></i></span>Title and Content</button><button data-cmd="new-slide-layout-two-content" title="Two Content"><span class="rb-layout-pic"><i style="left:6px;top:4px;width:68px;height:8px"></i><i style="left:6px;top:15px;width:32px;height:26px"></i><i style="left:42px;top:15px;width:32px;height:26px"></i></span>Two Content</button><button data-cmd="new-slide-layout-title-only" title="Title Only"><span class="rb-layout-pic"><i style="left:6px;top:4px;width:68px;height:8px"></i></span>Title Only</button><button data-cmd="new-slide-layout-blank" title="Blank"><span class="rb-layout-pic"></span>Blank</button></div>
+              <hr />
+              <button data-cmd="duplicate-slide" title="Copy the picked slides"><span class="rb-icon"></span>Duplicate Selected Slides</button>
+              <button data-cmd="reuse-slides" title="Slides from another PowerPoint file: see them all, pick the ones you want"><span class="rb-icon"></span>Reuse Slides…</button>
+            </div>
+          </div>
           <button class="rb-big" data-cmd="new-canvas-slide" title="A canvas slide after this one: no edge, so a whole route can be drawn across it; keyframes are the windows the slide show steps through"><span class="rb-icon">⇿</span>Canvas Slide</button>
           <div class="rb-col">
-            <label class="rb-field">Layout <select id="rb-layout">
-              <option value="title">Title Slide</option>
-              <option value="title-content">Title and Content</option>
-              <option value="two-content">Two Content</option>
-              <option value="title-only">Title Only</option>
-              <option value="blank">Blank</option>
-            </select></label>
-            <div class="rb-pair">
-              <button data-cmd="duplicate-slide" title="Copy the picked slides">Duplicate</button>
-              <button data-cmd="delete-slide" title="Delete the picked slides">Delete</button>
-              <button data-cmd="hide-slide" aria-pressed="false" title="The slide show skips the slides picked; they stay in the deck and in the PowerPoint file. Again to show them">Hide</button>
-            </div>
-            <div class="rb-pair">
-              <button data-cmd="section-menu" aria-haspopup="menu" title="Sections: add one from the slide picked, rename, remove or move them, fold them all or open them all">Section ▾</button>
-              <button data-cmd="reuse-slides" title="Slides from another PowerPoint file: see them all, pick the ones you want">Reuse…</button>
-            </div>
+            <button data-cmd="section-menu" aria-haspopup="menu" class="rb-labelled" title="Sections: add one from the slide picked, rename, remove or move them, fold them all or open them all"><span class="rb-lead"></span>Section ▾</button>
           </div>
         </div>
         <div class="rb-label">Slides</div>
@@ -2233,36 +2229,45 @@
       </div>
       <div class="rb-group">
         <div class="rb-row">
+          <button class="rb-big" data-cmd="slide-shapes" aria-haspopup="true" title="Basic shapes, block arrows, flowchart shapes, callouts and lab glassware: pick one, then click or drag on the slide"><span class="rb-icon">◇</span>Shapes ▾</button>
           <button class="rb-big" data-cmd="shape-styles" aria-haspopup="dialog" title="Shape Styles: a ready-made fill, outline and effects for the selected shapes, in the deck's colours, from an outline to a raised, shadowed fill"><span class="rb-icon">◩</span>Shape Styles ▾</button>
           <div class="rb-col">
-            <button data-cmd="shape-effects" aria-haspopup="menu" title="Shape Effects: a shadow, reflection, glow, soft edges or a bevel for the selected shapes. Saved as PowerPoint's own">Shape Effects ▾</button>
-            <button data-cmd="shape-picture-fill" title="Shape Fill > Picture: fill the selected shapes with a picture from a file, stretched to each">Picture Fill…</button>
-            <button data-cmd="slide-shapes" title="Basic shapes, block arrows, flowchart shapes, callouts and lab glassware">Shapes ▾</button>
+            <button data-cmd="shape-effects" aria-haspopup="menu" class="rb-labelled" title="Shape Effects: a shadow, reflection, glow, soft edges or a bevel for the selected shapes. Saved as PowerPoint's own"><span class="rb-lead"></span>Effects ▾</button>
+            <button data-cmd="shape-picture-fill" class="rb-labelled" title="Shape Fill > Picture: fill the selected shapes with a picture from a file, stretched to each"><span class="rb-lead"></span>Picture Fill…</button>
           </div>
         </div>
         <div class="rb-label">Drawing</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
+          <div class="rb-icongrid">
+            <button class="rb-iconbtn" data-cmd="rotate-cw" title="Rotate Right 90°: turn the selection a quarter turn clockwise" aria-label="Rotate Right 90°">↻</button>
+            <button class="rb-iconbtn" data-cmd="rotate-ccw" title="Rotate Left 90°: turn the selection a quarter turn anticlockwise" aria-label="Rotate Left 90°">↺</button>
+            <button class="rb-iconbtn" data-cmd="rotate-dialog" title="Rotate by any angle (Ctrl+R), or drag the round handle above the selection" aria-label="Rotate by">∠</button>
+            <button class="rb-iconbtn" data-cmd="flip-h" title="Flip Horizontal: left to right" aria-label="Flip Horizontal">⇋</button>
+            <button class="rb-iconbtn" data-cmd="flip-v" title="Flip Vertical: top to bottom" aria-label="Flip Vertical">⇵</button>
+            <button class="rb-iconbtn" data-cmd="group" title="Group the selected pictures and shapes (Ctrl+G)" aria-label="Group">▣</button>
+            <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: in front of all the others" aria-label="Bring to Front">⧉</button>
+            <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: behind all the others" aria-label="Send to Back">⧉</button>
+            <button class="rb-iconbtn" data-cmd="ungroup" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup">▢</button>
+            <button class="rb-iconbtn" data-cmd="align-left" title="Align left edges (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
+            <button class="rb-iconbtn" data-cmd="align-hcenter" title="Align centres, across" aria-label="Align Centre">↔</button>
+            <button class="rb-iconbtn" data-cmd="align-right" title="Align right edges" aria-label="Align Right">⇥</button>
+            <button class="rb-iconbtn" data-cmd="align-top" title="Align tops" aria-label="Align Top">⤒</button>
+            <button class="rb-iconbtn" data-cmd="align-vcenter" title="Align middles, up and down" aria-label="Align Middle">↕</button>
+            <button class="rb-iconbtn" data-cmd="align-bottom" title="Align bottoms" aria-label="Align Bottom">⤓</button>
+            <button class="rb-iconbtn" data-cmd="distribute-h" title="Space the selected things evenly across" aria-label="Distribute Horizontally">⋯</button>
+            <button class="rb-iconbtn" data-cmd="distribute-v" title="Space the selected things evenly up and down" aria-label="Distribute Vertically">⋮</button>
+          </div>
           <button class="rb-big" data-cmd="selection-pane" aria-pressed="false" title="Selection Pane (Alt+F10): every text box, structure, picture and shape on the slide, front to back. Pick, hide, rename or reorder them there"><span class="rb-icon">☰</span>Selection Pane</button>
-          <div class="rb-col">
-            <button data-cmd="rotate-cw" title="Turn the selection 90° clockwise">Rotate Right 90°</button>
-            <button data-cmd="rotate-ccw" title="Turn the selection 90° anticlockwise">Rotate Left 90°</button>
-            <button data-cmd="rotate-dialog" title="Turn the selection by any angle (Ctrl+R), or drag the round handle above it; the Rotation box in the panel sets a picture's or shape's own angle">Rotate by…</button>
-          </div>
-          <div class="rb-col">
-            <button data-cmd="flip-h" title="Flip the selection left to right">Flip Horizontal</button>
-            <button data-cmd="shape-front" title="Put the selected pictures and shapes in front of the others">Bring to Front</button>
-            <button data-cmd="shape-back" title="Put the selected pictures and shapes behind the others">Send to Back</button>
-          </div>
         </div>
         <div class="rb-label">Arrange</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
-          <button id="rb-lock-structures" class="rb-big" data-cmd="lock-structures" aria-pressed="false" title="Structures ignore clicks, so text and pictures near them are easy to work on. Click again to edit structures"><span class="rb-icon">⬡</span>Lock Structures</button>
+          <button id="rb-lock-structures" class="rb-big rb-keep-words" data-cmd="lock-structures" aria-pressed="false" title="Lock Structures: structures ignore clicks, so the text and pictures near them are easy to work on. Alt+click a locked structure to edit it once; click again to unlock"><span class="rb-icon">⬡</span>Lock<br />Structures</button>
         </div>
-        <div class="rb-label">Editing</div>
+        <div class="rb-label">Structures</div>
       </div>
     </div>
     <div class="rb-panel" data-sl-panel="insert" hidden>
@@ -2275,52 +2280,111 @@
       </div>
       <div class="rb-group">
         <div class="rb-row">
-          <button class="rb-big" data-cmd="insert-picture" title="Put a picture on the slide (or paste or drop one)"><span class="rb-icon">▣</span>Picture</button>
-          <button class="rb-big" data-cmd="text-box" title="Click on the slide to type, or drag to make a text box that wraps"><span class="rb-icon">T</span>Text Box</button>
           <button class="rb-big" data-cmd="insert-table" title="Put a table on the slide (or paste cells from Excel or a sheet)"><span class="rb-icon">▦</span>Table</button>
           <button class="rb-big" data-cmd="insert-chart" title="A chart with its own data, as in PowerPoint: type or paste the numbers, pick the kind of chart. Double-click it to change it"><span class="rb-icon">▥</span>Chart</button>
+          <button class="rb-big" data-cmd="insert-diagram" title="Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint's SmartArt. Double-click one to type into it"><span class="rb-icon">⧉</span>Diagram</button>
+        </div>
+        <div class="rb-label">Tables and Charts</div>
+      </div>
+      <div class="rb-group">
+        <div class="rb-row">
+          <div class="rb-fly">
+            <button class="rb-big rb-fly-btn" data-ic="media-menu" title="Media: a picture, a video or a sound from a file"><span class="rb-icon"></span>Media ▾</button>
+            <div class="rb-fly-menu" role="menu" hidden>
+              <button data-cmd="insert-picture" title="Put a picture on the slide (or paste or drop one)"><span class="rb-icon">▣</span>Picture</button><button data-cmd="insert-video" title="A video from a file (MP4 plays everywhere, PowerPoint too; MOV and WebM here). It starts when clicked in the show; double-click it to trim it, fade it or set how it plays"><span class="rb-icon">▶</span>Video</button><button data-cmd="insert-audio" title="A sound from a file (MP3, M4A, WAV, AAC or OGG), shown as a loudspeaker. Double-click it to trim it, fade it, hide it in the show or play it across slides"><span class="rb-icon">♪</span>Audio</button>
+            </div>
+          </div>
           <button class="rb-big" data-cmd="slide-shapes" aria-haspopup="true" title="Basic shapes, block arrows, flowchart shapes, callouts and lab glassware: pick one, then click or drag on the slide"><span class="rb-icon">◇</span>Shapes ▾</button>
           <button class="rb-big" data-cmd="slide-icons" aria-haspopup="true" title="About 7,000 icons, lab and science ones first (glassware, molecules, hazard signs): pick one, then click or drag on the slide"><span class="rb-icon">⚗</span>Icons ▾</button>
-          <button class="rb-big" data-cmd="insert-diagram" title="Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint's SmartArt. Double-click one to type into it"><span class="rb-icon">⧉</span>Diagram</button>
-          <button class="rb-big" data-cmd="insert-equation" title="An equation typed as LaTeX (x^2, \frac{a}{b}, \alpha) and shown as maths, or one of the usual ones (Arrhenius, Eyring…). Double-click it to change it. Saved as a PowerPoint equation (Alt+=)"><span class="rb-icon">π</span>Equation</button>
-          <button class="rb-big" data-cmd="header-footer" title="Header &amp; Footer: the date (today's, kept up to date, or fixed), slide number and footer on the slides picked or every slide; and the header and footer of notes pages and handouts. Saved as PowerPoint's own"><span class="rb-icon">▭</span>Header &amp; Footer</button>
-          <div class="rb-col">
-            <button data-cmd="insert-date-time" title="Date &amp; Time: the date on the slides, today's in the form you pick or fixed text (in Header &amp; Footer)">📅 Date &amp; Time</button>
-            <button data-cmd="insert-slide-number" title="Slide Number: the slides' numbers at the bottom right (in Header &amp; Footer)"># Slide Number</button>
-          </div>
-          <button class="rb-big" data-cmd="slide-references" title="References on Slide: tick which of the presentation's references the slides picked show at their foot. The lines are written, placed and formatted for you (short form, numbered or not), like the slide number and footer"><span class="rb-icon">¹⁾</span>References on Slide</button>
-          <div class="rb-col">
-            <button data-cmd="references-slide" title="References Slide: a slide at the end listing the references shown on the slides, in full, kept up to date">☰ References Slide</button>
-            <button data-cmd="references" title="Reference Manager: the references of every open file, grouped by file. Add by DOI, by hand or from BibTeX or RIS, and copy references between files">✎ Reference Manager</button>
-          </div>
-          <button class="rb-big" data-cmd="insert-symbol" title="Symbol: Greek letters, arrows, maths and chemistry signs, accented letters, typed into the text being edited (or a new text box). Find one by name or code; the ones you used lately come first"><span class="rb-icon">Ω</span>Symbol</button>
-          <button class="rb-big" data-cmd="crop" title="Cut the edges off the selected picture"><span class="rb-icon">⌗</span>Crop</button>
-          <button class="rb-big" data-cmd="picture-format" title="Picture Format for the selected picture: brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions. Saved as PowerPoint's own picture settings"><span class="rb-icon">◐</span>Picture Format</button>
         </div>
-        <div class="rb-label">Pictures, Text and Shapes</div>
+        <div class="rb-label">Illustrations</div>
+      </div>
+      <div class="rb-group">
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="text-box" title="Click on the slide to type, or drag to make a text box that wraps"><span class="rb-icon">T</span>Text Box</button>
+          <div class="rb-fly">
+            <button class="rb-big rb-fly-btn" data-ic="header-footer-menu" title="Header &amp; Footer, the date and the slide number"><span class="rb-icon"></span>Header &amp; Footer ▾</button>
+            <div class="rb-fly-menu" role="menu" hidden>
+              <button data-cmd="header-footer" title="Header &amp; Footer: the date (today's, kept up to date, or fixed), slide number and footer on the slides picked or every slide; and the header and footer of notes pages and handouts. Saved as PowerPoint's own"><span class="rb-icon">▭</span>Header &amp; Footer</button><button data-cmd="insert-date-time" title="Date &amp; Time: the date on the slides, today's in the form you pick or fixed text (in Header &amp; Footer)"><span class="rb-icon"></span>Date &amp; Time</button><button data-cmd="insert-slide-number" title="Slide Number: the slides' numbers at the bottom right (in Header &amp; Footer)"><span class="rb-icon"></span>Slide Number</button>
+            </div>
+          </div>
+          <div class="rb-fly">
+            <button class="rb-big rb-fly-btn" data-ic="symbols-menu" title="An equation or a symbol"><span class="rb-icon"></span>Symbols ▾</button>
+            <div class="rb-fly-menu" role="menu" hidden>
+              <button data-cmd="insert-equation" title="An equation typed as LaTeX (x^2, \frac{a}{b}, \alpha) and shown as maths, or one of the usual ones (Arrhenius, Eyring…). Double-click it to change it. Saved as a PowerPoint equation (Alt+=)"><span class="rb-icon">π</span>Equation</button><button data-cmd="insert-symbol" title="Symbol: Greek letters, arrows, maths and chemistry signs, accented letters, typed into the text being edited (or a new text box). Find one by name or code; the ones you used lately come first"><span class="rb-icon">Ω</span>Symbol</button>
+            </div>
+          </div>
+        </div>
+        <div class="rb-label">Text</div>
+      </div>
+      <div class="rb-group">
+        <div class="rb-row">
+          <div class="rb-fly">
+            <button class="rb-big rb-fly-btn" data-ic="references-menu" title="References on the slides picked, a slide listing them, and the Reference Manager"><span class="rb-icon"></span>References ▾</button>
+            <div class="rb-fly-menu" role="menu" hidden>
+              <button data-cmd="slide-references" title="References on Slide: tick which of the presentation's references the slides picked show at their foot. The lines are written, placed and formatted for you (short form, numbered or not), like the slide number and footer"><span class="rb-icon">¹⁾</span>References on Slide</button><button data-cmd="references-slide" title="References Slide: a slide at the end listing the references shown on the slides, in full, kept up to date"><span class="rb-icon"></span>References Slide</button><button data-cmd="references" title="Reference Manager: the references of every open file, grouped by file. Add by DOI, by hand or from BibTeX or RIS, and copy references between files"><span class="rb-icon"></span>Reference Manager</button>
+            </div>
+          </div>
+        </div>
+        <div class="rb-label">References</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="insert-link" title="Link (Ctrl+K): the selected text, or the selected text boxes, link to a web page, a DOI, a file, an e-mail address or another slide. Saved as PowerPoint's own links; in the slide show a click follows one. Ctrl+click a link while editing"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M8.5 11.5l3-3"/><path d="M10.5 5.5l1.2-1.2a3 3 0 0 1 4.2 4.2l-1.6 1.6a3 3 0 0 1-3.6.5"/><path d="M9.5 14.5l-1.2 1.2a3 3 0 0 1-4.2-4.2l1.6-1.6a3 3 0 0 1 3.6-.5"/></svg></span>Link</button>
+          <div class="rb-fly">
+            <button class="rb-big rb-fly-btn" data-ic="zoom-menu" title="Slide Zoom and Summary Zoom: in the show a click zooms into a slide or a part of the talk"><span class="rb-icon"></span>Zoom ▾</button>
+            <div class="rb-fly-menu" role="menu" hidden>
+              <button data-cmd="insert-slide-zoom" title="Slide Zoom: pictures of slides you pick, on this slide. In the show a click zooms into that slide (and, with Return to Zoom, back here after). Saved as PowerPoint's own zoom"><span class="rb-icon"></span>Slide Zoom</button><button data-cmd="insert-summary-zoom" title="Summary Zoom: a new slide of zooms, one for each part of your talk; in the show a click plays that part and comes back. Pick the first slide of each part"><span class="rb-icon"></span>Summary Zoom</button>
+            </div>
+          </div>
+          <button class="rb-big" data-cmd="action-settings" title="Action: what a click on the selected shape or action button does in the show (next slide, a slide, the last one viewed, end the show, a web page). Action buttons are under Shapes"><span class="rb-icon"></span>Action</button>
         </div>
         <div class="rb-label">Links</div>
       </div>
+    </div>
+    <div class="rb-panel" data-sl-panel="format" hidden>
       <div class="rb-group">
         <div class="rb-row">
+          <button class="rb-big" data-cmd="shape-styles" aria-haspopup="dialog" title="Shape Styles: a ready-made fill, outline and effects for the selected shapes, in the deck's colours"><span class="rb-icon">◩</span>Shape Styles ▾</button>
           <div class="rb-col">
-            <button data-cmd="insert-slide-zoom" title="Slide Zoom: pictures of slides you pick, on this slide. In the show a click zooms into that slide (and, with Return to Zoom, back here after). Saved as PowerPoint's own zoom">⊕ Slide Zoom</button>
-            <button data-cmd="insert-summary-zoom" title="Summary Zoom: a new slide of zooms, one for each part of your talk; in the show a click plays that part and comes back. Pick the first slide of each part">⊞ Summary Zoom</button>
-            <button data-cmd="action-settings" title="Action: what a click on the selected shape or action button does in the show (next slide, a slide, the last one viewed, end the show, a web page). Action buttons are under Shapes">↪ Action…</button>
+            <button data-cmd="shape-effects" aria-haspopup="menu" class="rb-labelled" title="Shape Effects: a shadow, reflection, glow, soft edges or a bevel for the selected shapes"><span class="rb-lead"></span>Effects ▾</button>
+            <button data-cmd="shape-picture-fill" class="rb-labelled" title="Fill the selected shapes with a picture from a file, stretched to each"><span class="rb-lead"></span>Picture Fill…</button>
           </div>
         </div>
-        <div class="rb-label">Zoom and Actions</div>
+        <div class="rb-label">Shape Styles</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
-          <button class="rb-big" data-cmd="insert-video" title="A video from a file (MP4 plays everywhere, PowerPoint too; MOV and WebM here). It starts when clicked in the show; double-click it to trim it, fade it or set how it plays"><span class="rb-icon">▶</span>Video</button>
-          <button class="rb-big" data-cmd="insert-audio" title="A sound from a file (MP3, M4A, WAV, AAC or OGG), shown as a loudspeaker. Double-click it to trim it, fade it, hide it in the show or play it across slides"><span class="rb-icon">♪</span>Audio</button>
+          <button class="rb-big" data-cmd="crop" title="Cut the edges off the selected picture"><span class="rb-icon">⌗</span>Crop</button>
+          <button class="rb-big" data-cmd="picture-format" title="Picture Format for the selected picture: brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions. Saved as PowerPoint's own picture settings"><span class="rb-icon">◐</span>Picture Format</button>
+          <button class="rb-big" data-cmd="alt-text" title="Alt Text: words that describe the selected picture or shape for people who can't see it"><span class="rb-icon">🏷</span>Alt Text</button>
         </div>
-        <div class="rb-label">Media</div>
+        <div class="rb-label">Picture</div>
+      </div>
+      <div class="rb-group">
+        <div class="rb-row">
+          <div class="rb-icongrid">
+            <button class="rb-iconbtn" data-cmd="rotate-cw" title="Rotate Right 90°: turn the selection a quarter turn clockwise" aria-label="Rotate Right 90°">↻</button>
+            <button class="rb-iconbtn" data-cmd="rotate-ccw" title="Rotate Left 90°: turn the selection a quarter turn anticlockwise" aria-label="Rotate Left 90°">↺</button>
+            <button class="rb-iconbtn" data-cmd="rotate-dialog" title="Rotate by any angle (Ctrl+R), or drag the round handle above the selection" aria-label="Rotate by">∠</button>
+            <button class="rb-iconbtn" data-cmd="flip-h" title="Flip Horizontal: left to right" aria-label="Flip Horizontal">⇋</button>
+            <button class="rb-iconbtn" data-cmd="flip-v" title="Flip Vertical: top to bottom" aria-label="Flip Vertical">⇵</button>
+            <button class="rb-iconbtn" data-cmd="group" title="Group the selected pictures and shapes (Ctrl+G)" aria-label="Group">▣</button>
+            <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: in front of all the others" aria-label="Bring to Front">⧉</button>
+            <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: behind all the others" aria-label="Send to Back">⧉</button>
+            <button class="rb-iconbtn" data-cmd="ungroup" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup">▢</button>
+            <button class="rb-iconbtn" data-cmd="align-left" title="Align left edges (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
+            <button class="rb-iconbtn" data-cmd="align-hcenter" title="Align centres, across" aria-label="Align Centre">↔</button>
+            <button class="rb-iconbtn" data-cmd="align-right" title="Align right edges" aria-label="Align Right">⇥</button>
+            <button class="rb-iconbtn" data-cmd="align-top" title="Align tops" aria-label="Align Top">⤒</button>
+            <button class="rb-iconbtn" data-cmd="align-vcenter" title="Align middles, up and down" aria-label="Align Middle">↕</button>
+            <button class="rb-iconbtn" data-cmd="align-bottom" title="Align bottoms" aria-label="Align Bottom">⤓</button>
+            <button class="rb-iconbtn" data-cmd="distribute-h" title="Space the selected things evenly across" aria-label="Distribute Horizontally">⋯</button>
+            <button class="rb-iconbtn" data-cmd="distribute-v" title="Space the selected things evenly up and down" aria-label="Distribute Vertically">⋮</button>
+          </div>
+          <button class="rb-big" data-cmd="selection-pane" aria-pressed="false" title="Selection Pane (Alt+F10): every text box, structure, picture and shape on the slide, front to back. Pick, hide, rename or reorder them there"><span class="rb-icon">☰</span>Selection Pane</button>
+        </div>
+        <div class="rb-label">Arrange</div>
       </div>
     </div>
     <div class="rb-panel" data-sl-panel="show" hidden>

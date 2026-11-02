@@ -569,31 +569,33 @@ export class StylePanel {
   /** A box: as a frame, the gap it keeps round what it surrounds and whether it follows them. */
   private frameControls(sh: Shape): void {
     const f = sh.frame;
+    // what a frame does, as the heading's tooltip rather than a paragraph in the panel
+    const about = 'A frame fits round what lies inside it, with a gap, and follows it from then on. Moving or resizing the frame by hand stops it fitting; tick Fit to Contents to fit it again.';
     this.heading('Frame');
-    if (!f) {
-      this.note('Make this box a frame: it fits round what lies inside it, with a gap, and follows it from then on.');
-    } else {
+    (this.body.lastElementChild as HTMLElement).title = about;
+    if (f) {
       const set = (label: string, patch: Partial<NonNullable<Shape['frame']>>) => this.edit(label, () => {
         const now = this.doc.shapes.get(sh.id)?.frame;
         if (now) this.doc.updateShape(sh.id, { frame: { ...now, ...patch } });
       });
-      this.check('Fit round its contents', f.fit, (v) => (v ? this.frames?.fit(sh.id) : set('Stop fitting frame', { fit: false })));
-      this.number('Gap across (pt)', round(f.padX, 10), 0.5, 0, 500, (v) => set('Frame gap', { padX: v }),
-        'Space between the frame and what it surrounds, left and right.');
-      this.number('Gap up and down (pt)', round(f.padY, 10), 0.5, 0, 500, (v) => set('Frame gap', { padY: v }),
-        'Space between the frame and what it surrounds, above and below.');
       // each structure counts once, however many of its atoms were selected
       const seen = new Set<number>();
       let n = f.captions.length + f.arrows.length + f.shapes.length;
       for (const id of f.atoms) if (this.doc.atoms.has(id) && !seen.has(id)) { n++; for (const a of this.doc.fragmentOf(id)) seen.add(a); }
-      this.note(`${f.fit ? 'Follows' : 'Surrounds'} ${n} ${n === 1 ? 'thing' : 'things'} (structures, text, arrows, shapes). Moving or resizing the frame by hand stops it fitting; tick the box to fit it again.`);
+      this.check('Fit to Contents', f.fit, (v) => (v ? this.frames?.fit(sh.id) : set('Stop fitting frame', { fit: false })),
+        `${f.fit ? 'Follows' : 'Surrounds'} ${n} ${n === 1 ? 'thing' : 'things'} (structures, text, arrows, shapes). ${about}`);
+      this.number('Gap across (pt)', round(f.padX, 10), 0.5, 0, 500, (v) => set('Frame gap', { padX: v }),
+        'Space between the frame and what it surrounds, left and right.');
+      this.number('Gap up and down (pt)', round(f.padY, 10), 0.5, 0, 500, (v) => set('Frame gap', { padY: v }),
+        'Space between the frame and what it surrounds, above and below.');
     }
     if (!f || !f.fit) {
       const row = document.createElement('div');
       row.className = 'style-buttons';
       const b = document.createElement('button');
       b.type = 'button';
-      b.textContent = f ? 'Fit now' : 'Fit round what is inside';
+      b.textContent = f ? 'Fit Now' : 'Fit to Contents';
+      b.title = about;
       b.addEventListener('click', () => this.frames?.fit(sh.id));
       row.append(b);
       this.body.append(row);

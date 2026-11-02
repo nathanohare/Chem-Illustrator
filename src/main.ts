@@ -138,6 +138,7 @@ import { installCombos } from './ui/combo';
 import { installFontList, registerBundledFonts, bundledFaces, pdfFonts } from './fonts';
 import { applyRibbonIcons } from './ui/ribbon-icons';
 import { applyIconSet } from './ui/icon-set';
+import { installRibbonFlyouts } from './ui/ribbon-flyout';
 import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templateFromAtoms, placeTemplate, freePlacement } from './chem/templates';
 import { centreEnd } from './chem/hapto';
 import { countElectrons } from './chem/electrons';
@@ -2688,7 +2689,6 @@ let lastStats: ReadStats | null = null;
 
 const tabsEl = $<HTMLDivElement>('#tabs');
 const notesBox = $<HTMLTextAreaElement>('#notes');
-const layoutSel = $<HTMLSelectElement>('#rb-layout');
 const sizeSel = $<HTMLSelectElement>('#rb-size');
 
 /** View > Window and Colours > Mode Colours: blue for drawings, orange for slides, green for sheets, or the person's own colours. */
@@ -3208,6 +3208,16 @@ const keyframeCommands = {
   },
 };
 
+/** Shape Format shows among the Presentation ribbon's tabs while a shape or picture is selected, as in PowerPoint. */
+function showContextTabs(): void {
+  const tab = document.querySelector<HTMLElement>('#ribbon [data-sl-tab="format"]');
+  if (!tab) return;
+  const any = ws.active.mode === 'slides' && [...editor.sel.shapes].some((id) => doc.shapes.has(id));
+  if (tab.hidden === !any) return;
+  tab.hidden = !any;
+  if (!any && animUi?.tab === 'format') animUi.showTab('home');
+}
+
 /** The keyframe ribbon group shows on canvas slides only; the menus' keyframe items are greyed elsewhere (menus keep their shape). */
 function showCanvasState(): void {
   const on = !!deckNow()?.current?.canvas && ws.active.mode === 'slides';
@@ -3272,7 +3282,29 @@ function slideSwitched(deck: Deck): void {
   slideCmts?.slideChanged();
 }
 
-/** The layouts last put in the Layout box and the Format menu (they change with the slide master). */
+/** The outline of each built-in layout's boxes, on an 80 × 45 picture, for New Slide's list. */
+const LAYOUT_PICS: Record<string, [number, number, number, number][]> = {
+  title: [[10, 8, 60, 14], [18, 26, 44, 8]], 'title-content': [[6, 4, 68, 8], [6, 15, 68, 26]],
+  'two-content': [[6, 4, 68, 8], [6, 15, 32, 26], [42, 15, 32, 26]], 'title-only': [[6, 4, 68, 8]], blank: [],
+};
+/** A layout in New Slide's list: a small picture of its boxes over its name. */
+function layoutButton(id: string, name: string, prefix: string): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.dataset.cmd = prefix + id;
+  b.title = name;
+  const pic = document.createElement('span');
+  pic.className = 'rb-layout-pic';
+  for (const [x, y, w, h] of LAYOUT_PICS[id] ?? [[6, 4, 68, 8]]) {
+    const i = document.createElement('i');
+    i.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px`;
+    pic.append(i);
+  }
+  b.append(pic, name);
+  return b;
+}
+
+/** The layouts last put in New Slide's list and the Format menu (they change with the slide master). */
 let layoutsShown = '';
 
 /** The Layout box and Format > Slides > Slide Layout list the deck's layouts: the five built in, as edited, then the ones made here. */
@@ -3281,7 +3313,8 @@ function showLayoutMenus(deck: Deck): void {
   const key = JSON.stringify(list.map((l) => [l.id, l.name]));
   if (key === layoutsShown) return;
   layoutsShown = key;
-  layoutSel.replaceChildren(...list.map((l) => new Option(l.name, l.id)));
+  const gallery = document.querySelector<HTMLElement>('#new-slide-menu .rb-layouts');
+  gallery?.replaceChildren(...list.map((l) => layoutButton(l.id, l.name, 'new-slide-layout-')));
   const sub = document.querySelector<HTMLElement>('#layout-menu');
   if (sub) {
     const items: HTMLElement[] = list.map((l) => {
@@ -3309,7 +3342,6 @@ function showSlideState(): void {
   showRulers();
   if (!deck?.current) return;
   showLayoutMenus(deck);
-  layoutSel.value = deck.current.layout;
   const named = deck.size.w === WIDE.w && deck.size.h === WIDE.h ? 'wide' : deck.size.w === STANDARD.w && deck.size.h === STANDARD.h ? 'standard' : 'custom';
   let custom = sizeSel.querySelector<HTMLOptionElement>('option[value="custom"]');
   if (named === 'custom') {
@@ -3952,7 +3984,6 @@ function setSlideSize(size: { w: number; h: number }, fit: SizeFit = 'centre'): 
   editor.fit();
 }
 
-layoutSel.addEventListener('change', () => { setLayout(layoutSel.value as LayoutId); layoutSel.blur(); });
 sizeSel.addEventListener('change', () => {
   if (sizeSel.value === 'wide') setSlideSize(WIDE);
   else if (sizeSel.value === 'standard') setSlideSize(STANDARD);
@@ -6687,6 +6718,7 @@ function command(name: string): boolean {
     return contextBond !== null && editor.fuseRing(contextBond, id, Number(index));
   }
   if (name.startsWith('layout-') && ws.active.mode === 'slides') { setLayout(name.slice('layout-'.length)); return true; }
+  if (name.startsWith('new-slide-layout-') && ws.active.mode === 'slides') { newSlide(name.slice('new-slide-layout-'.length)); return true; }
   const run = COMMANDS[name];
   return !!run && run() !== false;
 }
@@ -9710,6 +9742,7 @@ whenIconsLoaded(() => {
 });
 applyRibbonIcons();
 applyIconSet();
+installRibbonFlyouts();
 
 const stylePanel = new StylePanel($('#style-section'), $('#style-body'), doc, () => editor.sel, () => editor.changed());
 stylePanel.onEditChart = (id) => void editChartShape(id);
@@ -11393,7 +11426,7 @@ const slideText = new SlideTextRibbon($('#ribbon'), {
   boxLook: () => editor.textBoxLook(),
 });
 CaptionEditor.onState = () => { if (ws.active.mode === 'slides') slideText.refresh(); };
-editor.onChange = () => { welcomeWatch?.(); if (ws.active.mode === 'slides') slideText.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); if (ws.active.mode === 'slides') { slideText.refresh(); showContextTabs(); } animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();

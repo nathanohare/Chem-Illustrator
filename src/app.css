@@ -3026,3 +3026,32 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 /* a pressed button's drawing keeps its own colours */
 .ribbon button[aria-pressed='true'] .ci-ic { --ic-ink: var(--accent); }
 .rb-lead .ci-ic, .ci-ic.fp-icon { width: 16px; height: 16px; vertical-align: -3px; margin-right: 3px; }
+
+/* ---- ribbon dropdowns and split buttons (src/ui/ribbon-flyout.ts) */
+.rb-fly { position: relative; display: flex; align-items: stretch; }
+.rb-fly-menu { position: fixed; z-index: 60; min-width: 180px; padding: 4px; display: flex; flex-direction: column; gap: 1px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-panel); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16); }
+.rb-fly-menu[hidden] { display: none; }
+.ribbon .rb-fly-menu button, .ribbon .rb-fly-menu button.rb-big { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; min-width: 0; width: 100%; padding: 4px 8px 4px 6px; text-align: left; line-height: 20px; font-size: var(--fs-sm); }
+.rb-fly-menu .rb-icon { height: 20px; line-height: 20px; font-size: 16px; width: 20px; flex: none; }
+.rb-fly-menu .rb-icon .ci-ic { width: 20px; height: 20px; }
+.rb-fly-menu hr { width: 100%; margin: 3px 0; border: 0; border-top: 1px solid var(--line); }
+.rb-fly-menu .rb-fly-head { padding: 4px 8px 2px; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+/* a split button: the command on top, its arrow underneath, one outline when either is pointed at */
+.rb-split { flex-direction: column; }
+.rb-split > button.rb-big { padding-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.ribbon .rb-split > .rb-fly-btn { padding: 0 4px; line-height: 12px; font-size: 10px; min-width: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+.rb-split:hover > button { border-color: var(--line); }
+/* a gallery of layouts in a split button's list */
+.rb-fly-menu .rb-layouts { display: grid; grid-template-columns: repeat(3, 92px); gap: 6px; padding: 4px; }
+.ribbon .rb-fly-menu .rb-layouts button { flex-direction: column; align-items: center; gap: 3px; padding: 4px; font-size: var(--fs-xs); line-height: 1.2; text-align: center; white-space: normal; }
+.rb-layout-pic { width: 80px; height: 45px; border: 1px solid var(--line); border-radius: 2px; background: var(--ic-paper); position: relative; }
+.rb-layout-pic i { position: absolute; background: color-mix(in srgb, var(--accent) 22%, transparent); border-radius: 1px; }
+/* small buttons that show only their drawing, in a grid (Arrange) */
+.rb-icongrid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(3, 23px); gap: 1px 2px; }
+.rb-icongrid.rows2 { grid-template-rows: repeat(2, 23px); }
+.ribbon .rb-icongrid button { min-width: 26px; height: 23px; padding: 1px 4px; display: inline-flex; align-items: center; justify-content: center; }
+.ribbon button.rb-labelled { display: inline-flex; align-items: center; gap: 4px; }
+/* a button whose words always show, even when its group is short of room (Lock Structures) */
+.rb-group.rb-compact button.rb-big.rb-keep-words { font-size: var(--fs-sm); gap: 2px; }
+.rb-ctx-tab { color: var(--accent); font-weight: 600; }
+.rb-ctx-tab::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 1px; background: var(--accent); vertical-align: 1px; }
