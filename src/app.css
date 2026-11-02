@@ -3760,3 +3760,22 @@ dialog.key-views { width: min(96vw, 620px); max-height: 92vh; }
 .gt-range { flex: 1; min-width: 70px; max-width: 140px; }
 .gt-check { flex-wrap: nowrap; }
 .gt-vertical .gt-look .gt-label, .gt-vertical .gt-fade .gt-label { flex-basis: 100%; }
+
+/* Energy Diagram ▸ Structure ▸ Geometry View… */
+dialog.geom-view-dialog { width: min(96vw, 640px); }
+.geom-view-dialog .gv-looks, .geom-view-dialog .gv-pick, .geom-view-dialog .gv-turn { display: flex; flex-wrap: wrap; gap: 4px; }
+.geom-view-dialog .gv-looks { margin: 2px 0 8px; }
+.geom-view-dialog .gv-look, .geom-view-dialog .gv-pk { height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); font: inherit; font-size: 12px; cursor: pointer; }
+.geom-view-dialog .gv-look[aria-checked="true"], .geom-view-dialog .gv-pk[aria-checked="true"] { border-color: var(--accent, #2b7bd6); box-shadow: 0 0 0 1px var(--accent, #2b7bd6) inset; }
+.geom-view-dialog .gv-body { display: grid; grid-template-columns: minmax(0, 1fr) 210px; gap: 10px; }
+.geom-view-dialog .gv-canvas { width: 100%; height: 260px; border: 1px solid var(--line); border-radius: var(--r-control); background: #fff; cursor: grab; touch-action: none; }
+.geom-view-dialog .gv-side { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+.geom-view-dialog .gv-side > button { text-align: left; }
+.geom-view-dialog .gv-label { color: var(--muted); margin-top: 2px; }
+.geom-view-dialog .gv-row { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; align-items: center; gap: 4px; }
+.geom-view-dialog .gv-row select { grid-column: 2 / 4; min-width: 0; }
+.geom-view-dialog .gv-row input[type=range] { min-width: 0; }
+.geom-view-dialog .gv-check { display: flex; align-items: center; gap: 4px; font-size: 12px; }
+.geom-view-dialog .gv-gap { flex: 1; }
+.geom-view-dialog .gv-note { margin: 6px 0 4px; }
+@media (max-width: 560px) { .geom-view-dialog .gv-body { grid-template-columns: 1fr; } }
