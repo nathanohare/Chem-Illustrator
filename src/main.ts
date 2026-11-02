@@ -109,6 +109,7 @@ import { AnimationUI } from './ui/animation-ui';
 import { SlideComments } from './ui/slide-comments';
 import type { PptxOptions } from './io/pptx-write';
 import { EFFECTS, animName, newAnim, highlightParts } from './deck/animation';
+import { askKeyViews } from './ui/key-views';
 import { SLIDE_TEMPLATES, applyTemplate, type SlideTemplate } from './deck/templates';
 import { showContextMenu, topMenuEntry, type MenuItem } from './ui/context-menu';
 import { QuickBar } from './ui/quick-bar';
@@ -3742,6 +3743,36 @@ animUi = new AnimationUI($('#ribbon'), $('#anim-section'), {
   keyframe: (id) => {
     const i = deckNow()?.current?.canvas?.keys.findIndex((k) => k.id === id) ?? -1;
     if (i >= 0) goKeyframe(i);
+  },
+  keyViews: async (atom, views, dur) => {
+    const here = doc;
+    if (!here.atoms.has(atom)) return null;
+    // the structure alone, to turn in the window
+    const alone = (from: Doc) => {
+      const ids = from.fragmentOf(atom);
+      const c = from.contents();
+      const d = new Doc();
+      d.style = from.style;
+      d.restoreContents({ atoms: c.atoms.filter((a) => ids.has(a.id)), bonds: c.bonds.filter((b) => ids.has(b.a1) && ids.has(b.a2)), captions: [], arrows: [], shapes: [] });
+      return d;
+    };
+    const base = alone(here);
+    const got = await askKeyViews({
+      base, views, dur,
+      ...(editor.perspectiveHost ? {
+        real: async () => {
+          const copy = alone(here);
+          const why = await editor.realShape(atom, copy);
+          return why ? { note: `${why} It turns as a flat sheet.` } : { doc: copy };
+        },
+      } : {}),
+    });
+    if (!got) return null;
+    if (got.real && doc === here) {
+      const why = await editor.realShape(atom);
+      if (why) flash(`${why} It turns as a flat sheet.`, 6000);
+    }
+    return { views: got.views, dur: got.dur };
   },
 });
 

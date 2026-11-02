@@ -303,6 +303,15 @@ The same effects are on the right-click menu under **Animation**. Each animation
 
 A reagent written over an arrow animates with its whole scheme, because the scheme is a single picture in PowerPoint.
 
+**Turn in 3-D** (an emphasis effect, for structures) turns a structure smoothly from one view to the next in the slide show, one view per click. Select the structure and pick **Turn in 3-D**, or pick one of its turns in the Animation pane and click **Key Views…**. In the Key Views window:
+
+- Drag the structure to turn it. Shift+drag turns it in the page, and the arrow keys turn it by 15°.
+- **+ Add Key View** keeps the view showing. The views line up below in the order they play: click one to go back to it, **Update View** puts the view showing in its place, ◀ plays it earlier and × takes it out.
+- **▶ Play** shows the turns as the show will, from the structure as drawn. **Each turn** sets the seconds.
+- A flat drawing turns as a sheet. Tick **Its real 3-D shape** to build the molecule's shape first (as **3-D Perspective** does): the structure on the slide takes that shape, and then it turns as the molecule does, wedges following. A structure already turned with 3-D Perspective turns in its shape as it is.
+
+Each view is one Turn in 3-D animation in the Animation pane, so it can start on a click, with the one before or after it, like any other. PowerPoint has no 3-D turn, so it is given a Spin of next to nothing in its place and shows the structure still. The views are kept with the file and come back when it is opened here.
+
 **Auto-Animate Steps…** (Animations tab, or right-click ▸ **Animation**) builds a scheme up a step at a time. It is offered too: select a scheme of two steps or more (or a Smart Scheme) that isn't animated yet, and **▶ Animate n steps, one per click** shows at its top right corner (× hides it for that scheme). To use it, select the scheme (or a Smart Scheme, or nothing for every scheme on the slide) and choose the effect (Wipe runs along each arrow), when each product comes (right after its arrow, with it, or on a click of its own) and whether the first species comes in on a click too. Each click then brings the next arrow with its conditions, and what it makes. The scheme's pieces are kept apart for this, in the show and as separate pictures in PowerPoint. On a canvas slide, **Camera Follow** replaces the keyframes with one for each step, so the view travels along the route as it is built. The animations are ordinary ones: change or remove them in the Animation pane, and run Auto-Animate Steps again to start over.
 
 A highlight can animate on its own, like a shape in PowerPoint, so it can fade in over a structure that is already there. Click a highlighted atom or bond (or choose **Select Highlight** on the right-click menu or **Chemistry ▸ Highlight and Fill**), or pick the highlight under **Highlights** in the Animation pane, then pick an effect. Each run of highlight of one colour and look is one object. In PowerPoint the highlight is a picture of its own under its structure, and the animation stays on the highlight when the file comes back.
