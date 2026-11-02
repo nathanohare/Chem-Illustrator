@@ -291,7 +291,7 @@ Structures with R groups or labels that can't be read have no 3-D shape. Metals 
 
 ## Reactions and schemes
 
-- **Clean Up Reaction** (Ctrl+Shift+R): lines up the structures on the arrow, centres the reagents over and under it, and spaces everything evenly.
+- **Clean Up Reaction** (Ctrl+Shift+R): lines up the structures on the arrow, centres the reagents over and under it, and spaces everything evenly. Steps that follow on from one another go on one line, each structure centred on it, and every arrow is made as long as the longest one (the text above and below each stays centred on its arrow). A scheme wrapped onto more rows keeps its rows: each row is tidied on its own line, and later rows start under the first.
 - **Clean Up Reaction, Orienting Like the Start** does the same, first turning each structure so the part it shares with the starting material lies the same way round (see Orient Like First).
 - **Orient Like First**: select two or more structures. Each is turned so the part it shares with the first one (top left, as a scheme is read) lies the same way round. The shared part is the largest common substructure, with whole rings only. A structure that has to be turned over to match has its wedges and hashes swapped, so its configuration is kept. Structures that share less than a third of their atoms with the first are left alone.
 - **Arrange Scheme…**: lays out a multi-step scheme. Click the layouts to try each one: **Line**, **Rows**, **Snake**, **Down the page**, **Catalytic cycle** (select a caption such as the catalyst's name too, and it goes in the middle) and **Branching**. **Done** keeps it; **Cancel** puts it back.
@@ -306,6 +306,7 @@ Structures with R groups or labels that can't be read have no 3-D shape. Metals 
   - **Show + boxes above and below new arrows**.
   - **Text size**, **Text alignment** (left, centre or right) and **Gap between arrow and text** for reagents and conditions.
   - **Fit arrow length to its text**: the arrow grows or shrinks to its text, and the products, their + signs and their numbers move with the head. **Arrow before the text starts** and **Space between text and arrowhead** set how much arrow shows on each side of the text. Untick it to keep arrows the length you drew them, with the text centred on them.
+  - **Clean Up Reaction makes arrows the same length** (on by default): untick it to let each arrow keep its own length.
 
 ### Animating a reaction
 
