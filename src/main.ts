@@ -253,7 +253,8 @@ import type { TableData } from './model';
 import { checkDrawing, checkDocument, checkWorkbook, repeatedTitles, structureAlt, setStructureAlt, type Issue, type IssuePlace } from './accessibility';
 import { AccessibilityPane, askAltText } from './ui/accessibility-pane';
 import { PreflightPane } from './ui/preflight-pane';
-import { enlargeText, thickenLines, useArial } from './preflight-fix';
+import { enlargeText, thickenLines, useArial, fixUntilDone } from './preflight-fix';
+import { preflight } from './preflight';
 import { shapeBox } from './objects';
 import { SlideComparePane } from './ui/slide-compare';
 import { pickFileTemplate } from './ui/file-templates';
@@ -7549,16 +7550,30 @@ const preflightPane = new PreflightPane({
   },
   fix: (issue, r) => {
     finishTyping();
-    const m = editor.measure();
-    const ctx = { captionBox: (id: number) => m.captionBox(doc.captions.get(id)!), shapeBox: (id: number) => shapeBox(doc.shapes.get(id)!) };
-    let done = false;
-    if (issue.fix === 'fit' && issue.want) {
-      editor.selectAll();
-      done = editor.scaleSelection(issue.want);
-      if (done) flash(`Scaled to ${Math.round(issue.want * 100)} % to fit ${r.size.name.replace(/ \(.*/, '').toLowerCase()}. Text in captions keeps its size; check it again.`, 6000);
-    } else if (issue.fix === 'text') done = enlargeText(doc, issue, ctx);
-    else if (issue.fix === 'lines') done = thickenLines(doc, issue, ctx);
-    else if (issue.fix === 'fonts') done = useArial(doc, issue.fonts ?? []);
+    // measured afresh for each step (text made bigger has a bigger box)
+    const fixCtx = () => { const m = editor.measure(); return { captionBox: (id: number) => m.captionBox(doc.captions.get(id)!), shapeBox: (id: number) => shapeBox(doc.shapes.get(id)!) }; };
+    let scaled = 1;
+    const apply = (i: typeof issue): boolean => {
+      if (i.fix === 'fit' && i.want) {
+        editor.selectAll();
+        const ok = editor.scaleSelection(i.want);
+        if (ok) scaled *= i.want;
+        return ok;
+      }
+      if (i.fix === 'text') return enlargeText(doc, i, fixCtx());
+      if (i.fix === 'lines') return thickenLines(doc, i, fixCtx());
+      if (i.fix === 'fonts') return useArial(doc, i.fonts ?? []);
+      return false;
+    };
+    // checked again after each step: one fix can undo another's work by a hair
+    const again = () => {
+      const fig = preflightPane.figureNow();
+      return fig ? preflight(fig.items, fig.box, r.journal, r.size.id, r.how) : null;
+    };
+    // all the steps are one undo
+    const label = { fit: 'Make it fit', text: 'Enlarge small text', lines: 'Thicken thin lines', fonts: 'Change fonts to Arial', style: 'Drawing style' }[issue.fix ?? 'style'];
+    const done = doc.edit(label, () => fixUntilDone(issue, apply, again));
+    if (done && issue.fix === 'fit') flash(`Scaled to ${Math.round(scaled * 100)} % to fit ${r.size.name.replace(/ \(.*/, '').toLowerCase()}. Text in captions keeps its size.`, 6000);
     if (done) editor.changed();
     else if (issue.fix !== 'fit') flash('This is in a picture, chart or table: change it there.');
     return done;
