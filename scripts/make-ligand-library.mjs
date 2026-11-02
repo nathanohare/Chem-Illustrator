@@ -256,15 +256,15 @@ function shortenLongBranches(t, metal) {
  * (CoordGen stretches some bonds of a big chelate ring: Ph-BPE, VANOL). `metal` is the metal's
  * atom, or -1 when it is not in the layout.
  */
-function bestLayout(m, metal) {
+function bestLayout(m, metal, faults = layoutFaults) {
   m.set_new_coords(true);
   const a = parseMolblock(m.get_molblock());
-  const fa = layoutFaults(a, metal);
+  const fa = faults(a, metal);
   if (!fa) return a;
   const mb = m.get_molblock();
   m.set_new_coords(false);
   const b = parseMolblock(m.get_molblock());
-  if (layoutFaults(b, metal) < fa) return b;
+  if (faults(b, metal) < fa) return b;
   // keep CoordGen's (the molecule holds the last layout made, so put it back)
   const back = RDKit.get_mol(mb);
   const out = parseMolblock(back.get_molblock());
@@ -288,7 +288,8 @@ function layOut(id, smiles, opts) {
   });
   const m = RDKit.get_mol(`${metalAtom}${closures.join('')}.${bound}`);
   if (!m) throw new Error(`${id}: RDKit cannot read the ligand on its metal`);
-  const t = bestLayout(m, opts.free ? -1 : 0);
+  // (drawn in full: whichever layout has fewer crossing bonds and atoms on top of each other)
+  const t = bestLayout(m, opts.free ? -1 : 0, opts.full ? tangles : layoutFaults);
   m.delete();
   const metal = 0;
   // charges as the free ligand has them (the + on L donors was only so RDKit takes the bond)
@@ -423,6 +424,31 @@ function nicknameSmiles(id, smiles) {
 
 const ligands = [];
 const templates = [];
+// each ligand drawn out in full (Expand Label Fully): every phenyl on its P, the same way round
+const full = [];
+// (labels with more than an H on them: en's NH2 drawn out is only an N)
+const hasLabels = (t) => t.atoms.some((p, i) => i !== t.attach && p[4] && !/^[A-Z][a-z]?H\d*$/.test(p[4]));
+const skipped = [];
+
+/** How tangled a drawing is: bonds that cross, and (much worse) atoms closer than half a bond. */
+function tangles(t) {
+  const P = t.atoms;
+  const ls = t.bonds.map((b) => Math.hypot(P[b.a].x - P[b.b].x, P[b.a].y - P[b.b].y)).sort((p, q) => p - q);
+  const bl = ls.length ? ls[Math.floor(ls.length / 2)] : 1;
+  let n = 0;
+  for (let i = 0; i < P.length; i++) for (let j = i + 1; j < P.length; j++) if (Math.hypot(P[i].x - P[j].x, P[i].y - P[j].y) < 0.5 * bl) n += 10;
+  const cross = (a, b, c, d) => {
+    const o = (p, q, r) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+    return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0;
+  };
+  const B = t.bonds;
+  for (let i = 0; i < B.length; i++) for (let j = i + 1; j < B.length; j++) {
+    const [a, b, c, d] = [B[i].a, B[i].b, B[j].a, B[j].b];
+    if (a === c || a === d || b === c || b === d) continue;
+    if (cross(P[a], P[b], P[c], P[d])) n++;
+  }
+  return n;
+}
 const ids = new Set();
 const abbrs = new Map();
 for (const fam of FAMILIES) {
@@ -443,6 +469,19 @@ for (const fam of FAMILIES) {
     } else {
       tpl = `lig-${id}`;
       templates.push(template(tpl, name, opts.palette ? 'ligands' : 'ligand-lib', layOut(id, smiles, opts)));
+    }
+    // (not a ligand with a metal of its own (dppf's iron), nor a π-ligand: drawn out label by label)
+    const drawn = tpl.startsWith('lig-') ? templates[templates.length - 1] : metalTemplates.get(tpl);
+    if (!smiles.includes('.') && !opts.hapto && !opts.free && !drawn.hapto && hasLabels(drawn)) {
+      // on its metal, or (when that is crowded) laid out on its own with the metal in the middle
+      let laid = layOut(id, smiles, { ...opts, full: true, short: undefined });
+      if (tangles(laid)) {
+        const alone = layOut(id, smiles, { ...opts, full: true, short: undefined, free: true });
+        if (tangles(alone) < tangles(laid)) laid = alone;
+      }
+      // (a crowded one is still kept: drawing out its labels one by one would be worse)
+      if (tangles(laid) > 21) skipped.push(id);
+      full.push(template(`${tpl}-full`, name, 'ligand-lib', laid));
     }
     const pc = pubchem[id];
     ligands.push({
@@ -466,3 +505,7 @@ const out = {
 const file = path.join(root, 'src', 'chem', 'ligand-library.json');
 fs.writeFileSync(file, JSON.stringify(out).replace(/\},\{"id"/g, '},\n{"id"') + '\n');
 console.log(`Wrote ${ligands.length} ligands (${templates.length} drawings) to ${path.relative(root, file)}`);
+// kept apart, loaded only when Expand Label Fully needs it
+const fullFile = path.join(root, 'src', 'chem', 'ligand-library-full.json');
+fs.writeFileSync(fullFile, JSON.stringify(full).replace(/\},\{"id"/g, '},\n{"id"') + '\n');
+console.log(`Wrote ${full.length} drawings in full to ${path.relative(root, fullFile)} (crowded: ${skipped.join(', ')})`);

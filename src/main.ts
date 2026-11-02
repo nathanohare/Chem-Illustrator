@@ -143,6 +143,7 @@ import { installCombos } from './ui/combo';
 import { installFontList, registerBundledFonts, bundledFaces, pdfFonts } from './fonts';
 import { applyRibbonIcons } from './ui/ribbon-icons';
 import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templateFromAtoms, placeTemplate, freePlacement } from './chem/templates';
+import { freeLigandFor, loadFullLigands, placeFreeLigand } from './chem/expand';
 import { centreEnd, haptoLook } from './chem/hapto';
 import { viewNow, viewRingOf, type RingView } from './chem/ring-views';
 import { watchToolHover } from './ui/tool-demos';
@@ -2445,45 +2446,73 @@ async function deleteNickname(): Promise<void> {
 /** Chemistry > Contract Label…: fold the selected group into one label (Undo opens it again). */
 /**
  * Chemistry > Expand Label: the selected labels drawn out as atoms and bonds. Ligands on a
- * metal come from their templates; other abbreviations are laid out by the chemistry engine.
+ * metal come from their templates (BINAP keeps its PPh2 groups as labels); other abbreviations
+ * are laid out by the chemistry engine. Expand Label Fully (`full`) goes on drawing out the
+ * labels that brings in (PPh2, P(t-Bu)2, CHPh2) until none are left, as one step to undo.
  */
-async function expandLabel(): Promise<void> {
-  const list = editor.expandableLabels();
-  if (!list.length && selectedSpecies().length) { await expandText(selectedSpecies()); return; }
-  if (!list.length) { flash('Select a label to expand: an abbreviation such as OMe, Boc or CO2Et, or a ligand on a metal such as PPh3, dppe or Cp*.', 6000); return; }
-  const mbs = new Map<number, string>();
+async function expandLabel(full = false): Promise<void> {
+  if (full) await loadFullLigands();
+  let list = editor.expandableLabels();
+  let made: number[] = [];
+  if (!list.length && selectedSpecies().length) {
+    made = await expandText(selectedSpecies(), full);
+    if (!full || !made.length) return;
+    editor.selectThese({ atoms: new Set(made), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() });
+    list = editor.expandableLabels();
+    if (!list.length) return;
+  } else if (!list.length) { flash('Select a label to expand: an abbreviation such as OMe, Boc or CO2Et, a ligand such as BINAP or dppf, or a ligand on a metal such as PPh3, dppe or Cp*.', 6000); return; }
   const failed: string[] = [];
-  for (const x of list) {
-    if (x.template) continue;
-    const mb = x.smiles ? await chem.smilesToMol((doc.degree(x.id) ? '*' : '') + x.smiles) : null;
-    if (mb) mbs.set(x.id, mb);
-    else failed.push(doc.atoms.get(x.id)?.label ?? '');
+  let n = 0;
+  const all = new Set(made);
+  // a text box drawn out is a step already: the rounds after it join that step
+  let join = made.length > 0;
+  for (let round = 0; round < (full ? 5 : 1) && list.length; round++) {
+    const mbs = new Map<number, string>();
+    for (const x of list) {
+      if (x.template) continue;
+      const mb = x.smiles ? await chem.smilesToMol((doc.degree(x.id) === 1 ? '*' : '') + x.smiles) : null;
+      if (mb) mbs.set(x.id, mb);
+      else failed.push(doc.atoms.get(x.id)?.label ?? '');
+    }
+    const got = editor.expandLabels(list, mbs, join, full);
+    if (!got) break;
+    n += got;
+    join = true;
+    for (const id of editor.sel.atoms) all.add(id);
+    list = full ? editor.expandableLabels().filter((x) => !failed.includes(doc.atoms.get(x.id)?.label ?? '')) : [];
   }
-  const n = editor.expandLabels(list, mbs);
-  if (failed.length) flash(`Not expanded (not read as chemistry): ${failed.map((f) => `“${f}”`).join(', ')}`, 6000);
-  else if (!n) flash('Nothing to expand.');
+  if (full && all.size) editor.selectThese({ atoms: new Set([...all].filter((id) => doc.atoms.has(id))), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() });
+  if (failed.length) flash(`Not expanded (not read as chemistry): ${[...new Set(failed)].map((f) => `“${f}”`).join(', ')}`, 6000);
+  else if (!n && !made.length) flash('Nothing to expand.');
 }
 
-/** Expand Label on text boxes read as chemistry (DMAP, BF4⁻): each drawn as its structure, where the text was. */
-async function expandText(caps: Caption[]): Promise<void> {
-  if (!chem.ready) { flash('The chemistry engine is still loading.'); return; }
+/**
+ * Expand Label on text boxes read as chemistry (DMAP, BF4⁻): each drawn as its structure, where
+ * the text was. A ligand's name (BINAP, dppf) is drawn the usual way, from the Ligand Library.
+ * Returns the atoms drawn.
+ */
+async function expandText(caps: Caption[], full = false): Promise<number[]> {
   const m = editor.measure();
-  const drawn: { id: number; mb: string; x: number; y: number }[] = [];
+  const drawn: { id: number; mb?: string; lig?: Template; x: number; y: number }[] = [];
   const failed: string[] = [];
   for (const c of caps) {
+    const b = m.captionBox(c);
+    const at = { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 };
+    const lig = freeLigandFor(plainText(c.runs).trim(), full);
+    if (lig) { drawn.push({ id: c.id, lig, ...at }); continue; }
+    if (!chem.ready) { failed.push(plainText(c.runs).trim()); continue; }
     const sp = captionSpecies(doc, c, m);
     const mb = sp ? await chem.smilesToMol(speciesSmiles(sp)).catch(() => null) : null;
-    const b = m.captionBox(c);
-    if (mb) drawn.push({ id: c.id, mb, x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 });
+    if (mb) drawn.push({ id: c.id, mb, ...at });
     else failed.push(plainText(c.runs).trim());
   }
+  const made: number[] = [];
   if (drawn.length) {
-    const made: number[] = [];
     doc.edit('Expand text', () => {
       for (const d of drawn) {
         const grp = doc.captions.get(d.id)?.grp;
         doc.removeCaption(d.id);
-        const ids = addMolfile(doc, d.mb, d.x, d.y);
+        const ids = d.lig ? placeFreeLigand(doc, d.lig, d) : addMolfile(doc, d.mb!, d.x, d.y);
         // a salt's counterion stays in its group
         if (grp !== undefined) for (const id of ids) doc.updateAtom(id, { grp });
         made.push(...ids);
@@ -2492,7 +2521,8 @@ async function expandText(caps: Caption[]): Promise<void> {
     editor.selectThese({ atoms: new Set(made), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() });
     editor.changed();
   }
-  if (failed.length) flash(`Not expanded (not read as chemistry): ${failed.map((f) => `“${f}”`).join(', ')}`, 6000);
+  if (failed.length) flash(chem.ready ? `Not expanded (not read as chemistry): ${failed.map((f) => `“${f}”`).join(', ')}` : 'The chemistry engine is still loading.', 6000);
+  return made;
 }
 
 /** Canonical SMILES of each built-in nickname with its join point (worked out once). */
@@ -7649,6 +7679,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'delete-nickname': () => void deleteNickname(),
   'contract-label': () => void contractLabel(),
   'expand-label': () => void expandLabel(),
+  'expand-label-full': () => void expandLabel(true),
   'repeat-label': () => repeatLabel(null),
   'hapto-bond': () => flash(editor.bondMetalToRing(), 5000),
   'split-hapto': () => flash(editor.splitHaptoBonds()),
@@ -10270,7 +10301,7 @@ function metalMenu(): MenuItem[] {
   const hapto = (bid: number) => { const b = doc.bonds.get(bid); return !!b && !!centreEnd(doc, b); };
   if ((contextBond !== null && hapto(contextBond)) || [...editor.sel.atoms].some((id) => (doc.adj.get(id) ?? []).some(hapto))) out.push({ cmd: 'split-hapto' });
   if (editor.haptoCentresPicked(contextBond).length) out.push({ cmd: 'hapto-kekule' });
-  if (editor.expandableLabels().length) out.push({ cmd: 'expand-label' });
+  if (editor.expandableLabels().length) out.push({ cmd: 'expand-label' }, { cmd: 'expand-label-full' });
   return out;
 }
 
@@ -10346,7 +10377,7 @@ function drawingMenu(): MenuItem[] {
     ...(editor.selectedPlate() !== null ? [{ cmd: 'edit-plate' }, null] : []),
     ...(editor.selectedDiagram() !== null ? [{ cmd: 'edit-diagram' }, { cmd: 'diagram-to-shapes' }, null] : []),
     ...(atoms || texts ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }, null] : []),
-    ...(s.captions.size ? [readAsMenu(), ...(texts && !atoms ? [{ cmd: 'expand-label', label: 'Expand to Structure' }] : []), null] : []),
+    ...(s.captions.size ? [readAsMenu(), ...(texts && !atoms ? [{ cmd: 'expand-label', label: 'Expand to Structure' }, { cmd: 'expand-label-full', label: 'Expand to Full Structure' }] : []), null] : []),
     ...(atoms ? [
       { cmd: 'clean-up' },
       { cmd: 'clean-up-options' },
@@ -10355,7 +10386,7 @@ function drawingMenu(): MenuItem[] {
       ...metalMenu(),
       { label: 'Structure', items: [
         { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'chain-ends' }, { cmd: 'explicit-h' }, null,
-        { cmd: 'contract-label' }, { cmd: 'expand-label' }, { cmd: 'join' }, null,
+        { cmd: 'contract-label' }, { cmd: 'expand-label' }, { cmd: 'expand-label-full' }, { cmd: 'join' }, null,
         { cmd: 'hapto-bond' }, { cmd: 'split-hapto' }, { cmd: 'hapto-kekule' }, null,
         { cmd: 'enhanced-stereo' }, { cmd: 'chiral-flag' }, { cmd: 'repeat-group' }, { cmd: 'rgroup-table' }, null,
         { cmd: 'check-structure' }, { cmd: 'save-template' }, { cmd: 'define-nickname' }, null,
@@ -10772,7 +10803,7 @@ const BOX_TITLES: Record<string, string> = {
 const cmds = (list: (string | null)[]) => list.map((c) => (c ? `cmd:${c}` : 'sep'));
 const BOX_ITEMS: Record<string, readonly string[]> = {
   main: MAIN_ITEMS,
-  structure: cmds(['clean-up', 'clean-up-options', 'add-frame', 'fill-rings', 'highlight', 'remove-highlight', null, 'chain-ends', 'explicit-h', 'aromatic-circles', 'stereo-labels', null, 'add-id-label', 'add-caption', 'attach-descriptors', 'number-compounds', null, 'contract-label', 'expand-label', 'hapto-bond', 'name-to-structure']),
+  structure: cmds(['clean-up', 'clean-up-options', 'add-frame', 'fill-rings', 'highlight', 'remove-highlight', null, 'chain-ends', 'explicit-h', 'aromatic-circles', 'stereo-labels', null, 'add-id-label', 'add-caption', 'attach-descriptors', 'number-compounds', null, 'contract-label', 'expand-label', 'expand-label-full', 'hapto-bond', 'name-to-structure']),
   arrange: cmds(['align-left', 'align-hcenter', 'align-right', 'align-top', 'align-vcenter', 'align-bottom', null, 'distribute-h', 'distribute-v', 'arrange-row', 'arrange-column', 'arrange-grid', null, 'flip-h', 'flip-v', 'rotate-cw', 'rotate-ccw', null, 'shape-front', 'shape-back']),
   highlight: [...cmds(['highlight', 'remove-highlight', null, 'smooth-highlight', 'centre-highlight', 'soft-highlight', 'outline-highlight', 'shadow-highlight', 'glow-highlight', null, 'save-highlight-look']), 'w:looks'],
   custom: defaultToolboxes().custom,
