@@ -261,6 +261,8 @@ import { runZoteroOn, type ZoteroCommand } from './document/zotero-live';
 import { DeckStore, type DeckZoteroHost } from './deck/zotero-deck';
 import { DEFAULT_KEEP, type KeepPrefs } from './keep/prefs';
 import { Brush, paintObjects, pickObjectLook, type ObjectLook, type TextLook } from './format-painter';
+import { popupMenu } from './ui/popup-menu';
+import { favoriteSummary, freshFavoriteName, ribbonFavorites, withFavorite, type FormatFavorite } from './ui/format-favorites';
 import { SymbolWindow } from './ui/symbol-window';
 import { Navigator, EdgeArrows, paintGrid, paintTint, type Target } from './ui/orientation';
 import { type OrientPrefs, DEFAULT_ORIENT } from './orientation-prefs';
@@ -7625,6 +7627,8 @@ const COMMANDS: Record<string, () => unknown> = {
   'picture-format': () => { void formatPicture(); },
   'text-box': () => { editor.setTool('text'); flash('Click to type, or drag across to make a text box that wraps.'); },
   'format-painter': () => formatPainter(),
+  'save-format-favorite': () => void saveFavorite(),
+  'format-favorites': () => favoritesMenu(),
   'insert-symbol': () => symbolWindow.open(),
   'new-slide': () => newSlide(),
   'new-canvas-slide': () => { const d = deckNow(); if (!d) { newSlide(); return; } finishTyping(); d.addCanvasSlide(); },
@@ -8113,6 +8117,8 @@ const COMMANDS: Record<string, () => unknown> = {
   },
 };
 for (const p of PICTURE_STYLES) COMMANDS[`picture-style-${p.id}`] = () => setPictureStyle(p.look);
+// the right-click menu's Format Favorites (the first twenty)
+for (let i = 0; i < 20; i++) COMMANDS[`format-favorite-${i}`] = () => { const f = favorites[i]; if (f) applyFavorite(f); };
 // Developer > Stress Test (shown with View > Developer Tools)
 for (const n of STRESS_SIZES) COMMANDS[`stress-${n}`] = () => { void stressTest(n); };
 for (const [i, a] of ANIM_COMMANDS.entries()) {
@@ -9400,6 +9406,7 @@ function currentSettings(): Settings {
     newman: structuredClone(newmanPrefs),
     keep: keepPrefs,
     highlightLooks: ownLooks,
+    formatFavorites: favorites,
     quickParts: docQuickParts,
     docDesign: newDocDesign(),
   };
@@ -9619,6 +9626,8 @@ function applySettings(s: Settings): void {
   keepPrefs = s.keep;
   tickAutoSave();
   ownLooks = s.highlightLooks;
+  favorites = s.formatFavorites;
+  for (const r of favoriteStrips) r.refresh();
   renderRecent();
   setPalettes(s.palettes);
   toolboxState = withoutRetired(s.toolboxes);
@@ -10773,7 +10782,8 @@ function drawingMenu(): MenuItem[] {
     ? [{ cmd: 'shape-front', label: 'Bring to Front' }, { cmd: 'shape-forward', label: 'Bring Forward' }, { cmd: 'shape-backward', label: 'Send Backward' }, { cmd: 'shape-back', label: 'Send to Back' }]
     : [];
   return [
-    { cmd: 'cut' }, { cmd: 'copy' }, { cmd: 'paste' }, { cmd: 'delete', label: 'Delete' }, { cmd: 'format-painter' }, null,
+    { cmd: 'cut' }, { cmd: 'copy' }, { cmd: 'paste' }, { cmd: 'delete', label: 'Delete' }, { cmd: 'format-painter' }, { cmd: 'save-format-favorite' },
+    ...(favorites.length ? [{ label: 'Format Favorites', items: favorites.slice(0, 20).map((f, i): MenuItem => ({ cmd: `format-favorite-${i}`, label: f.name })) }] : []), null,
     ...repeatLabelMenu(),
     ...(editor.selectedEnergy() !== null ? [{ cmd: 'edit-energy' }, null] : []),
     ...(editor.selectedTorsion() !== null ? [{ cmd: 'edit-torsion' }, { cmd: 'copy-torsion-data' }, null] : []),
@@ -11048,6 +11058,109 @@ window.addEventListener('keydown', (e) => {
   brush.drop();
   flash('Format Painter off.');
 }, true);
+
+// ---------------------------------------------------------------- Format Favorites
+
+/** Your Format Favorites (kept in the settings, so in every mode and file). */
+let favorites: FormatFavorite[] = [];
+let favoriteStrips: { refresh(): void }[] = [];
+setTimeout(() => {
+  favoriteStrips = [...document.querySelectorAll<HTMLElement>('[data-favorites-gallery]')].map((host) => ribbonFavorites(host, {
+    list: () => favorites,
+    apply: (f) => applyFavorite(f),
+    save: () => void saveFavorite(),
+    menu: (f, at) => favoriteMenu(f, at),
+  }));
+}, 400);
+
+function favoritesChanged(): void {
+  storeSettings();
+  for (const r of favoriteStrips) r.refresh();
+}
+
+/** The look of what is selected, wherever it is: a document's text, a caption being typed in, or things on a drawing. */
+function selectionLook(): ObjectLook | null {
+  if (sheetActive()) return null;
+  if (docActive()) { const t = docMode.pickLook(); return t ? { text: t, colour: { color: t.run.color } } : null; }
+  const cap = editor.typingCaption;
+  if (cap) { const t = cap.ed.pickLook(); return { text: t, colour: { color: t.run.color } }; }
+  return pickObjectLook(editor.doc, editor.sel);
+}
+
+/** Right-click ▸ Save Format as Favorite…: keep the selection's look under a name. */
+async function saveFavorite(replacing?: FormatFavorite): Promise<void> {
+  const look = selectionLook();
+  if (!look) {
+    flash(sheetActive() ? 'Format Favorites keep the looks of shapes, structures, arrows, pictures and text; in a sheet, use cell styles.' : 'Select something with the look you want to keep (a shape, arrow, structure, picture or text) first.');
+    return;
+  }
+  let name = replacing?.name;
+  if (!name) {
+    const got = await ask('Save Format as Favorite', [{ name: 'name', label: 'Name', value: freshFavoriteName(favorites), placeholder: 'for example Key intermediate box' }], {
+      ok: 'Save', note: `Keeps ${favoriteSummary(look) || 'the look'} of what is selected. Click it under Format Favorites on the Home tab (or Edit ▸ Format Favorites…) to give that look to the selection, in any drawing, slide, design or document.`,
+    });
+    name = got?.name.trim();
+    if (!name) return;
+  }
+  favorites = withFavorite(favorites, { name, look });
+  favoritesChanged();
+  flash(replacing ? `“${name}” now has the selection's look.` : `Saved the look as “${name}”.`, 3000);
+}
+
+/** Give the selection a favorite's look (one undo step). */
+function applyFavorite(f: FormatFavorite): void {
+  const look = f.look;
+  if (sheetActive()) { flash('Format Favorites are for drawings, slides, designs and documents.'); return; }
+  if (docActive()) {
+    if (!look.text) { flash(`“${f.name}” has no text look to give to text.`); return; }
+    if (!docMode.paintLook(look.text)) flash('Put the caret in a word, or select some text, first.');
+    return;
+  }
+  const cap = editor.typingCaption;
+  if (cap) {
+    if (look.text && cap.ed.paintLook(look.text)) return;
+    finishTyping();
+  }
+  const sel = editor.sel;
+  if (!(sel.atoms.size + sel.bonds.size + sel.captions.size + sel.arrows.size + sel.shapes.size)) { flash('Select what should take this look first.'); return; }
+  let n = 0;
+  editor.doc.edit(`Format Favorite “${f.name}”`, () => { n = paintObjects(editor.doc, sel, look); });
+  if (n) editor.changed();
+  else flash(`“${f.name}” has no look for what is selected (a table or chart keeps its own).`);
+}
+
+/** A favorite's own menu (right-click its card): give, update from the selection, rename, delete. */
+function favoriteMenu(f: FormatFavorite, at: HTMLElement): void {
+  const r = at.getBoundingClientRect();
+  popupMenu(r.left, r.bottom + 2, [
+    [`Give the Selection “${f.name}”`, () => applyFavorite(f)],
+    ['Update to Match Selection', () => void saveFavorite(f)],
+    ['Rename…', async () => {
+      const got = await ask('Rename favorite', [{ name: 'name', label: 'Name', value: f.name }], { ok: 'Rename' });
+      const name = got?.name.trim();
+      if (!name || name === f.name) return;
+      favorites = favorites.filter((x) => x.name !== name).map((x) => (x.name === f.name ? { ...x, name } : x));
+      favoritesChanged();
+    }],
+    ['Move Earlier', () => {
+      const i = favorites.findIndex((x) => x.name === f.name);
+      if (i > 0) { favorites = [...favorites.slice(0, i - 1), favorites[i], favorites[i - 1], ...favorites.slice(i + 1)]; favoritesChanged(); }
+    }, favorites[0]?.name !== f.name],
+    null,
+    ['Delete', () => { favorites = favorites.filter((x) => x.name !== f.name); favoritesChanged(); flash(`Deleted “${f.name}”.`, 2500); }],
+  ]);
+}
+
+/** Edit ▸ Format Favorites…: the favorites as a menu, to give one to the selection (and save another). */
+function favoritesMenu(): void {
+  const host = document.querySelector<HTMLElement>('[data-favorites-gallery]:not([hidden])');
+  const r = host && host.offsetParent ? host.getBoundingClientRect() : { left: innerWidth / 2 - 100, bottom: 120 };
+  popupMenu(r.left, r.bottom + 2, [
+    ...favorites.map((f): [string, () => void] => [f.name, () => applyFavorite(f)]),
+    ...(favorites.length ? [null] : []),
+    ['Save Format as Favorite…', () => void saveFavorite()],
+  ]);
+}
 
 // ---------------------------------------------------------------- Insert > Symbol
 

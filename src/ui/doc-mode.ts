@@ -458,6 +458,11 @@ export class DocumentMode {
     return this.file && !this.reading ? this.ed.pickLook() : null;
   }
 
+  /** Format Favorites: give the selection (or the word at the caret) a text look kept. False when there was nothing to give it to. */
+  paintLook(look: TextLook): boolean {
+    return this.file && !this.reading ? this.ed.paintLook(look) : false;
+  }
+
   /** Insert > Symbol: type a character where the caret is. False when the text can't be typed in (Read Mode). */
   insertText(text: string): boolean {
     if (!this.file || this.reading) return false;
