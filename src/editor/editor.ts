@@ -43,7 +43,9 @@ import { extractDrawing, insertDrawing } from '../io/clipboard';
 import { isReactionArrow, itemFinder, rolesOf, ROLES, schemeItems, type Item, type Role } from '../chem/reaction';
 import { applySchemePlan, planCleanUp } from '../chem/scheme-layout';
 import { adoptSideCaption, arrowTexts, helperBox, setSideText, sideSlot, takesHelpers, textJustify, textSize, type ArrowSide } from '../chem/arrow-text';
-import { schemePrefs } from '../chem/scheme-layout';
+import { schemePrefs, spacing } from '../chem/scheme-layout';
+import { arrowEnd, boxOf, productDrawing, pushArrowsOf, pushedAtoms, readPushes, type PushIssue, type PushReading } from '../chem/push-electrons';
+import { freeSpace } from './free-space';
 import { fillRings, refitRingFills, ringFillsOn } from '../chem/ring-fill';
 import { setMethylStyle, toggleChainEndLabels, toggleExplicitHydrogens, type MethylStyle } from '../chem/hydrogens';
 import { selectedGroup } from '../chem/group-smiles';
@@ -72,6 +74,7 @@ import { bezFrom, fitPath, dragCurveAt, throughPoints, dragPathPoint, firstBend,
 import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
 import { imageFor } from '../render/images';
+import { gridOffsets, inferGrid, usualGap, withLabels, type GridHow } from './grid-arrange';
 import { BEND, BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
 import { flatten, prepareTurn, stillMeans, structuresOf, type PerspectiveHost, type Prepared } from './perspective';
 import { anglesTurn, dragTurn, type M3 } from '../chem/perspective';
@@ -2702,6 +2705,112 @@ export class Editor {
     return bonds.length;
   }
 
+  /**
+   * The electron-pushing arrows a mechanism command works on: all those of the step (the arrows
+   * drawn on structures that arrows join) with a picked arrow or structure in it, else all of
+   * them when there is only one step. 'many' when nothing is picked and there are several.
+   */
+  private mechanismArrows(): Arrow[] | 'many' {
+    const doc = this.doc;
+    const m = this.measure();
+    const all = pushArrowsOf(doc, doc.arrows.keys());
+    const on = (r: Arrow) => [arrowEnd(doc, m, r, 'tail'), arrowEnd(doc, m, r, 'head')].flatMap((e) => e.kind === 'atom' ? [e.id] : e.kind === 'gap' ? [e.a1, e.a2] : e.kind === 'bond' ? [doc.bonds.get(e.id)!.a1] : []);
+    // the steps: arrows, with the structures they are on, joined where they share one
+    const steps: { atoms: Set<number>; arrows: Arrow[] }[] = [];
+    for (const r of all) {
+      const atoms = new Set<number>();
+      for (const id of on(r)) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
+      const hit = atoms.size ? steps.filter((g) => [...atoms].some((id) => g.atoms.has(id))) : [];
+      const merged = { atoms: new Set<number>([...atoms, ...hit.flatMap((g) => [...g.atoms])]), arrows: [r, ...hit.flatMap((g) => g.arrows)] };
+      for (const g of hit) steps.splice(steps.indexOf(g), 1);
+      steps.push(merged);
+    }
+    const pickedAtoms = [...this.sel.atoms, ...[...this.sel.bonds].map((id) => doc.bonds.get(id)?.a1).filter((x): x is number => x !== undefined)];
+    if (this.sel.arrows.size || pickedAtoms.length) {
+      const chosen = steps.filter((g) => g.arrows.some((r) => this.sel.arrows.has(r.id)) || pickedAtoms.some((id) => g.atoms.has(id)));
+      return chosen.flatMap((g) => g.arrows).sort((a, b) => a.id - b.id);
+    }
+    return steps.length > 1 ? 'many' : all;
+  }
+
+  /**
+   * Check Arrows: read the mechanism arrows as electrons moving and say what doesn't make sense
+   * (an arrow from an atom with no lone pair, a five-bond carbon, a bond left with one electron).
+   * 'many' and 'none' when there is nothing to check.
+   */
+  checkArrows(): PushIssue[] | 'many' | 'none' {
+    const arrows = this.mechanismArrows();
+    if (arrows === 'many') return 'many';
+    if (!arrows.length) return 'none';
+    return this.readArrows(arrows).issues;
+  }
+
+  /** The arrows read and checked, with the checks the drawn product adds (labels with too many bonds). */
+  private readArrows(arrows: Arrow[]): PushReading {
+    const m = this.measure();
+    const reading = readPushes(this.doc, m, arrows);
+    productDrawing(this.doc, m, reading);
+    return reading;
+  }
+
+  /** Select what these problems are about, and bring the first into view. */
+  pickIssues(issues: PushIssue[]): void {
+    if (!issues.length) return;
+    const first = issues[0].atoms[0];
+    if (first !== undefined) this.reveal('atom', first);
+    this.sel = emptySel();
+    for (const i of issues) {
+      for (const id of i.arrows) this.sel.arrows.add(id);
+      for (const id of i.atoms) this.sel.atoms.add(id);
+      for (const id of i.bonds) this.sel.bonds.add(id);
+    }
+    this.requestOverlay();
+    this.onChange();
+  }
+
+  /**
+   * Draw Next Intermediate: what the mechanism arrows make, drawn after the structures they are
+   * on with a reaction arrow between, as one undo step (and selected). Nothing is drawn while
+   * the arrows don't make sense: the problems are given back and selected instead.
+   */
+  drawFromArrows(): { drawn: boolean; issues: PushIssue[] } | 'many' | 'none' {
+    const doc = this.doc;
+    const m = this.measure();
+    const arrows = this.mechanismArrows();
+    if (arrows === 'many') return 'many';
+    if (!arrows.length) return 'none';
+    const reading = readPushes(doc, m, arrows);
+    const out = productDrawing(doc, m, reading);
+    const errors = reading.issues.filter((i) => i.level === 'error');
+    if (!reading.steps.length && !errors.length) return 'none';
+    if (errors.length || !out) { this.pickIssues(errors); return { drawn: false, issues: reading.issues }; }
+    // after what the arrows are drawn on (and the arrows), on the level of its middle
+    const L = doc.style.bondLength;
+    const sp = spacing(L);
+    const atoms = new Set<number>();
+    for (const id of pushedAtoms(reading)) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
+    const from = boxOf(doc, atoms, arrows.map((r) => r.id))!;
+    const pb = out.bounds() ?? { x1: 0, y1: 0, x2: 0, y2: 0 };
+    const len = sp.minArrow;
+    const w = sp.gap + len + sp.gap + (pb.x2 - pb.x1), h = Math.max(pb.y2 - pb.y1, L);
+    const want = { x: from.x2 + w / 2, y: (from.y1 + from.y2) / 2 };
+    const c = freeSpace(doc, w, h, want, 0.5 * L);
+    const tail = { x: c.x - w / 2 + sp.gap, y: c.y }, head = { x: tail.x + len, y: c.y };
+    // the product drawn to the right of the arrow, centred on it
+    const dx = head.x + sp.gap - pb.x1, dy = c.y - (pb.y1 + pb.y2) / 2;
+    out.bulk(() => {
+      for (const a of [...out.atoms.values()]) out.updateAtom(a.id, { x: a.x + dx, y: a.y + dy });
+      for (const s of [...out.shapes.values()]) out.updateShape(s.id, { x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy });
+      const lw = doc.style.lineWidth;
+      out.addArrow({ tail, head, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: lw * 10, headWidth: lw * 2.5 });
+    });
+    const b = out.bounds()!;
+    const sel = insertDrawing(doc, out, { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 }, 'Draw next intermediate');
+    this.selectThese({ ...sel, arrows: new Set() });
+    this.changed();
+    return { drawn: true, issues: reading.issues };
+  }
+
   /** The box, circle or line a shape tool draws for a drag from a to b (Shift: square or circle). */
   private shapeGeometry(t: Extract<Tool, { kind: 'shape' }>, a: Vec, b: Vec, shift: boolean, alt: boolean): Pick<Shape, 'x1' | 'y1' | 'x2' | 'y2'> | null {
     if (t.shape.kind === 'line') {
@@ -3584,6 +3693,62 @@ export class Editor {
   }
 
   /**
+   * The things to set out in a row, column or grid: the selected ones (everything, with nothing
+   * selected), each structure with its compound number even when the number isn't selected.
+   */
+  private gridUnits(): ReturnType<typeof units> {
+    const doc = this.doc, m = this.measure();
+    const none = !this.hasSelection();
+    const sel = none
+      ? { atoms: new Set(doc.atoms.keys()), bonds: new Set(doc.bonds.keys()), captions: new Set(doc.captions.keys()), arrows: new Set(doc.arrows.keys()), shapes: new Set(doc.shapes.keys()) }
+      : this.sel;
+    const chosen = units(doc, sel, m);
+    // numbers under the chosen structures come along, picked or not
+    const others = none ? [] : units(doc, { atoms: new Set(), bonds: new Set(), captions: new Set([...doc.captions.keys()].filter((id) => !sel.captions.has(id))), arrows: new Set(), shapes: new Set() }, m);
+    const folded = withLabels(doc, [...chosen, ...others], doc.style.bondLength);
+    const loose = new Set(others.flatMap((u) => u.captions));
+    return folded.filter((u) => u.atoms.length || !u.captions.every((id) => loose.has(id)) || u.arrows.length || u.shapes.length);
+  }
+
+  /** How many things Arrange in a Grid would set out. */
+  gridCount(): number {
+    return this.gridUnits().length;
+  }
+
+  /** Format ▸ Align ▸ Arrange in a Row, Column or Grid. False with fewer than two things, or nothing to move. */
+  arrangeGrid(how: GridHow): boolean {
+    const us = this.gridUnits();
+    if (us.length < 2) return false;
+    return this.applyGrid(us, how, how.kind === 'row' ? 'Arrange in a Row' : how.kind === 'column' ? 'Arrange in a Column' : 'Arrange in a Grid');
+  }
+
+  /**
+   * Clean Up's own arranging: when the picked structures (or, with nothing picked, a drawing of
+   * nothing but structures and their numbers) clearly sit in rows, a column or a grid, even them
+   * out, keeping the spacing they mostly have. False when it isn't clear or they are already even.
+   */
+  autoArrange(): boolean {
+    // (quick look first: three or more structures)
+    const frags = this.sel.atoms.size ? this.doc.fragments().filter((f) => [...f].some((id) => this.sel.atoms.has(id))) : this.doc.fragments();
+    if (frags.length < 3) return false;
+    const us = this.gridUnits();
+    // three or more structures and nothing else (a scheme is Clean Up Reaction's to tidy)
+    if (us.length < 3 || us.some((u) => !u.atoms.length || u.arrows.length || u.shapes.length)) return false;
+    const boxes = us.map((u) => u.box);
+    const shape = inferGrid(boxes);
+    if (!shape) return false;
+    return this.applyGrid(us, { kind: shape.kind, cols: shape.cols, gap: usualGap(boxes, this.doc.style.bondLength) }, 'Clean Up: Arrange');
+  }
+
+  private applyGrid(us: ReturnType<typeof units>, how: GridHow, label: string): boolean {
+    const off = gridOffsets(us.map((u) => u.box), how);
+    if (off.every((d) => Math.hypot(d.x, d.y) < 0.05)) return false;
+    this.doc.edit(label, () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
+    this.changed();
+    return true;
+  }
+
+  /**
    * Mirror the selection left-to-right ('h') or top-to-bottom ('v'). A plain flip turns
    * stereocentres over (the mirror image, as in ChemDraw); with `keep`, wedges and hashes swap
    * too, so each centre keeps its configuration (the same molecule, turned over).
@@ -3667,7 +3832,13 @@ export class Editor {
     if (!options.length) return false;
     const cycle = { version: -1, key, options, k: 0 };
     this.cleanCycle = cycle;
-    if (!this.applyCleanUp(options.map((o) => o[0]))) {
+    // the structures, then what they sit in: their scheme, or rows and grids (one undo)
+    let did = false;
+    doc.edit('Clean Up Structure', () => {
+      did = this.applyCleanUp(options.map((o) => o[0]));
+      did = this.tidyLayout() || did;
+    });
+    if (!did) {
       // already tidy: show the next way instead, so the button always does something
       cycle.version = doc.version;
       return picked ? this.nextCleanUp(cycle) : false;
@@ -3684,6 +3855,26 @@ export class Editor {
     this.applyCleanUp(pick);
     c.version = this.doc.version;
     return { k: c.k, of, label: pick[0].label };
+  }
+
+  /**
+   * Clean Up's tidying round the structures: the reaction scheme they are in (as Clean Up
+   * Reaction), or, with no scheme, rows, a column or a grid they clearly sit in, evened out.
+   */
+  private tidyLayout(): boolean {
+    const picked = this.hasSelection();
+    if (!this.doc.arrows.size) return this.autoArrange();
+    const steps = picked ? this.selectedSteps() : undefined;
+    const anySteps = [...this.doc.arrows.values()].some((r) => { const q = !r.sweep && this.reactionRoles(r.id); return !!q && (q.reactants.length > 0 || q.products.length > 0); });
+    if (picked ? steps?.length : anySteps) {
+      const m = this.fullMeasure();
+      const plan = planCleanUp(this.doc, m, steps);
+      if (!plan) return false;
+      applySchemePlan(this.doc, m, plan, 'Clean Up Structure');
+      this.changed();
+      return true;
+    }
+    return this.autoArrange();
   }
 
   /** The ways Clean Up can lay out the target structures (for the Clean Up Options window). */

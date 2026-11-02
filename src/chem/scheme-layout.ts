@@ -1,13 +1,14 @@
 // Tidying and laying out reaction schemes. Clean Up Reaction spaces each step evenly: starting
 // materials in line before the arrow with + signs between them, products after it, conditions
 // centred above and below it, and the arrow sized to fit its conditions. Steps that follow on
-// from one another (a product that is the next step's starting material) are laid out in turn.
+// from one another (a product that is the next step's starting material) are laid out in turn, on
+// one line, with every arrow the same length; a scheme wrapped onto more rows keeps its rows.
 
 import type { Arrow, Doc, StepRoles } from '../model';
 import type { Rect, Vec } from '../geom';
 import { add, mul } from '../geom';
 import type { Measure } from '../editor/arrange';
-import { arrowFrame, inFrame, interpretArrow, isReactionArrow, isStep, itemFinder, schemeItems, type Frame, type Item } from './reaction';
+import { arrowFrame, inFrame, interpretArrow, isReactionArrow, isStep, itemFinder, linkRows, schemeItems, type Frame, type Item } from './reaction';
 import { plainText } from '../richtext';
 
 /** Spacing, as fractions of the bond length (ChemDraw-like: an arrow starts about half a bond from a structure). */
@@ -48,9 +49,11 @@ export interface SchemePrefs {
   /** With fit: arrow before the text starts, and between the text's end and the arrowhead. */
   lead: number | null;
   headGap: number | null;
+  /** Clean Up Reaction makes the arrows of a scheme that point the same way all the same length (the longest one's). */
+  sameLength: boolean;
 }
 
-export const DEFAULT_SCHEME_PREFS: SchemePrefs = { structGap: null, plusGap: null, textGap: null, textSize: null, textAlign: 'center', helpers: true, fit: true, lead: null, headGap: null };
+export const DEFAULT_SCHEME_PREFS: SchemePrefs = { structGap: null, plusGap: null, textGap: null, textSize: null, textAlign: 'center', helpers: true, fit: true, lead: null, headGap: null, sameLength: true };
 
 export const schemePrefs: SchemePrefs = { ...DEFAULT_SCHEME_PREFS };
 
@@ -70,6 +73,7 @@ export function parseSchemePrefs(raw: unknown): SchemePrefs {
   if (r.textAlign === 'left' || r.textAlign === 'center' || r.textAlign === 'right') out.textAlign = r.textAlign;
   if (typeof r.helpers === 'boolean') out.helpers = r.helpers;
   if (typeof r.fit === 'boolean') out.fit = r.fit;
+  if (typeof r.sameLength === 'boolean') out.sameLength = r.sameLength;
   return out;
 }
 
@@ -174,13 +178,15 @@ export function planCleanUp(doc: Doc, m: Measure, arrowIds?: Iterable<number>): 
   const items = schemeItems(doc, m);
   const find = itemFinder(items);
   const ids = arrowIds ? new Set(arrowIds) : null;
-  const steps: Step[] = [];
+  const all: Step[] = [];
   for (const r of doc.arrows.values()) {
     // (curved arrows, as round a catalytic cycle, are laid out by Chemistry > Reactions and Schemes > Arrange Scheme)
     if ((ids && !ids.has(r.id)) || !isReactionArrow(r) || r.sweep) continue;
-    const roles = rolesFor(r, items, bond);
-    if (isStep(roles) || roles.above.length || roles.below.length) steps.push({ arrow: r, roles });
+    all.push({ arrow: r, roles: rolesFor(r, items, bond) });
   }
+  // a row of a wrapped scheme goes on from the last product of the row above
+  linkRows(all, items);
+  const steps = all.filter(({ roles }) => isStep(roles) || roles.above.length || roles.below.length);
   if (!steps.length) return null;
 
   const used = new Set<Item>();
@@ -216,7 +222,22 @@ export function planCleanUp(doc: Doc, m: Measure, arrowIds?: Iterable<number>): 
   const g = sp.gap, pg = sp.plus;
   const plusSize = plusBox(doc, m);
 
-  for (const { arrow, roles } of order) {
+  // each arrow's own length (fitted to its conditions), and the length the arrows pointing the same
+  // way are all given: the longest of them, so a scheme's arrows match
+  const own = new Map<Step, number>();
+  const longest = new Map<string, number>();
+  const way = (f: Frame, s: Step) => (f.u.x % 1 === 0 && f.u.y % 1 === 0 ? `${f.u.x},${f.u.y}` : `arrow ${s.arrow.id}`);
+  for (const s of order) {
+    const f = straighten(arrowFrame(s.arrow));
+    const len = ownLength(s, f, find, bond, sp.minArrow);
+    own.set(s, len);
+    longest.set(way(f, s), Math.max(longest.get(way(f, s)) ?? 0, len));
+  }
+  /** Where the first row of a scheme starts across the page: later rows start there too. */
+  let rowStart: number | null = null;
+
+  for (const st of order) {
+    const { arrow, roles } = st;
     let f = straighten(arrowFrame(arrow));
     const R = uniq(roles.reactants.map(find));
     const P = uniq(roles.products.map(find));
@@ -230,15 +251,21 @@ export function planCleanUp(doc: Doc, m: Measure, arrowIds?: Iterable<number>): 
     // the starting material nearest the arrow (or one already placed by an earlier step) stays put
     const groupsR = clusters(R.sort((a, b) => inFrame(f, boxOf(b)).t2 - inFrame(f, boxOf(a)).t2), boxOf, f, 0.6 * bond);
     const anchor = groupsR.find((gr) => gr.some((it) => placed.has(it))) ?? groupsR[0];
+    // a step that goes on from the end of the row above starts a new row: it stays on its own line
+    let wrapped = false;
     if (anchor) {
       const q = span(anchor);
-      f = { ...f, tail: at(f, q.t2 + g, (q.s1 + q.s2) / 2) };
+      wrapped = anchor.some((it) => placed.has(it)) && q.t1 > -0.25 * bond && Math.abs((q.s1 + q.s2) / 2) > bond;
+      if (!wrapped) f = { ...f, tail: at(f, q.t2 + g, (q.s1 + q.s2) / 2) };
+      else if (rowStart !== null && f.u.x === 1 && f.u.y === 0) f = { ...f, tail: { x: rowStart, y: f.tail.y } };
     }
-    // the arrow fits its conditions
+    // the arrow fits its conditions, and matches the scheme's other arrows
     let widest = 0;
     for (const it of [...A, ...B]) { const q = span([it]); widest = Math.max(widest, q.t2 - q.t1); }
     const headLen = arrow.headStyle !== 'none' || arrow.tailStyle !== 'none' ? arrow.headLength : 0;
-    const L = schemePrefs.fit ? fittedLength(widest, headLen, bond) : Math.max(f.length, sp.minArrow);
+    const L = schemePrefs.sameLength ? longest.get(way(f, st))! : own.get(st)!;
+    // conditions stay centred on a lengthened arrow
+    const slack = schemePrefs.fit ? (L - own.get(st)!) / 2 : 0;
 
     const lineUp = (groups: Item[][], start: number, dir: 1 | -1, role: 'reactants' | 'products') => {
       let cursor = start;
@@ -268,7 +295,8 @@ export function planCleanUp(doc: Doc, m: Measure, arrowIds?: Iterable<number>): 
     };
     const moveIn = (it: Item, dt: number, ds: number) => move(it, add(mul(f.u, dt), mul(f.n, ds)));
 
-    lineUp(groupsR, -g, -1, 'reactants');
+    lineUp(wrapped ? groupsR.filter((gr) => gr !== anchor) : groupsR, -g, -1, 'reactants');
+    if (rowStart === null && f.u.x === 1 && f.u.y === 0) rowStart = R.length ? Math.min(...R.map((it) => boxOf(it).x1)) : f.tail.x;
     const groupsP = clusters(P.sort((a, b) => inFrame(f, boxOf(a)).t1 - inFrame(f, boxOf(b)).t1), boxOf, f, 0.6 * bond);
     lineUp(groupsP, L + g, 1, 'products');
 
@@ -278,7 +306,7 @@ export function planCleanUp(doc: Doc, m: Measure, arrowIds?: Iterable<number>): 
       const near = (it: Item) => { const q = span([it]); return sign > 0 ? q.s1 : -q.s2; };
       for (const it of its.sort((a, b) => near(a) - near(b))) {
         const q = span([it]);
-        const dt = lineStart(q.t2 - q.t1, widest, L, headLen, bond) - q.t1;
+        const dt = lineStart(q.t2 - q.t1, widest, L, headLen, bond) + slack - q.t1;
         const ds = sign > 0 ? cursor - q.s1 : -cursor - q.s2;
         moveIn(it, dt, ds);
         cursor += q.s2 - q.s1 + sp.stack;
@@ -289,7 +317,9 @@ export function planCleanUp(doc: Doc, m: Measure, arrowIds?: Iterable<number>): 
 
     const fwd = arrow.headStyle !== 'none' || arrow.tailStyle === 'none';
     const start = f.tail, end = at(f, L, 0);
-    const step: StepRoles = { ...roles, plusses: [...(roles.plusses ?? [])] };
+    // (no + signs: none listed, as the drawing keeps it, so a tidy scheme reads as unchanged)
+    const { plusses: had, ...bare } = roles;
+    const step: StepRoles = had?.length ? { ...bare, plusses: [...had] } : bare;
     plan.arrows.set(arrow.id, { tail: fwd ? start : end, head: fwd ? end : start, step });
   }
   // nothing moved and nothing to add: already tidy
@@ -303,6 +333,20 @@ export function planCleanUp(doc: Doc, m: Measure, arrowIds?: Iterable<number>): 
     return [...plan.arrows].some(([id, a]) => JSON.stringify(doc.arrows.get(id)!.step) !== JSON.stringify(a.step)) ? plan : null;
   }
   return plan;
+}
+
+/** How long a step's arrow is on its own: fitted to its conditions, or (not fitting) as drawn. */
+function ownLength(s: Step, f: Frame, find: (ref: string) => Item | undefined, bond: number, minArrow: number): number {
+  if (!schemePrefs.fit) return Math.max(f.length, minArrow);
+  let widest = 0;
+  for (const ref of [...s.roles.above, ...s.roles.below]) {
+    const it = find(ref);
+    if (!it) continue;
+    const q = inFrame(f, it.box);
+    widest = Math.max(widest, q.t2 - q.t1);
+  }
+  const headLen = s.arrow.headStyle !== 'none' || s.arrow.tailStyle !== 'none' ? s.arrow.headLength : 0;
+  return fittedLength(widest, headLen, bond);
 }
 
 const uniq = (xs: (Item | undefined)[]): Item[] => [...new Set(xs.filter((x): x is Item => !!x))];

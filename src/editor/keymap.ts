@@ -166,7 +166,7 @@ export const COMMAND_NAMES: Record<string, string> = {
   'nudge-far-left': 'Nudge left 10 pt', 'nudge-far-right': 'Nudge right 10 pt', 'nudge-far-up': 'Nudge up 10 pt', 'nudge-far-down': 'Nudge down 10 pt',
   'align-left': 'Align left edges', 'align-hcenter': 'Align centres across', 'align-right': 'Align right edges',
   'align-top': 'Align top edges', 'align-vcenter': 'Align middles down', 'align-bottom': 'Align bottom edges',
-  'distribute-h': 'Space evenly across', 'distribute-v': 'Space evenly down',
+  'distribute-h': 'Space evenly across', 'distribute-v': 'Space evenly down', 'arrange-row': 'Arrange in a Row', 'arrange-column': 'Arrange in a Column', 'arrange-grid': 'Arrange in a Grid…',
   'flip-h': 'Flip left to right', 'flip-v': 'Flip top to bottom',
   'rotate-cw': 'Rotate 90° clockwise', 'rotate-ccw': 'Rotate 90° anticlockwise', 'rotate-180': 'Rotate 180°',
   'turn-ccw-1': 'Turn 1° anticlockwise', 'turn-cw-1': 'Turn 1° clockwise',

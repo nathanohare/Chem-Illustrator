@@ -387,6 +387,28 @@ export interface RefHolder {
   warning?(): string | null;
   /** Documents: which reference manager the citations are saved for in the Word file. */
   manager?: { get(): CiteManager | undefined; set(app: CiteManager | undefined): void };
+  /**
+   * Controls of its own, shown above the list while this group is the one picked (your
+   * library's collections, tags, PDFs and Zotero). Made once; `update` after every change.
+   */
+  panel?(ctx: HolderPanelContext): { el: HTMLElement; update(): void };
+  /** Whether a reference shows in the list (a collection or tag picked in its panel). */
+  shows?(r: Reference): boolean;
+  /** A mark after its name in the list (a PDF, its tags). */
+  mark?(r: Reference): string;
+  /** A note under the group's name (where it is kept). */
+  note?(): string;
+}
+
+/** What a group's own controls can do in the References window. */
+export interface HolderPanelContext {
+  /** Its references picked in the list, in the list's order. */
+  picked(): Reference[];
+  /** Pick these of its references. */
+  select(ids: string[]): void;
+  /** Fill the window again (after a change the window can't see). */
+  refresh(): void;
+  flash(msg: string, ms?: number): void;
 }
 
 export interface ReferencesHost {
@@ -401,6 +423,8 @@ export interface ReferencesHost {
   pickFile(): Promise<{ name: string; text: string } | null>;
   /** Look a DOI up (Crossref); throws with a message to show. */
   lookup?(doi: string): Promise<Reference>;
+  /** Look PubMed ids up; throws with a message to show. Without it there is no Add by PubMed ID. */
+  pubmed?(ids: string[]): Promise<Reference[]>;
   /** The person chose a style for new documents (settings.json). */
   preferredChanged?(): void;
 }
@@ -431,6 +455,9 @@ export class ReferencesDialog {
   private copyTo!: HTMLSelectElement;
   private search!: HTMLInputElement;
   private hint!: HTMLElement;
+  /** The group's own controls (see RefHolder.panel), under the style. */
+  private extra!: HTMLElement;
+  private panels = new Map<string, { el: HTMLElement; update(): void }>();
   /** The rows picked (rowKey). */
   private selected = new Set<string>();
   private anchor: string | null = null;
@@ -498,6 +525,7 @@ export class ReferencesDialog {
     this.search.addEventListener('input', () => this.fill());
     this.warning = el('p', { className: 'refs-warning', role: 'status' });
     this.hint = el('p', { className: 'muted refs-hint' });
+    this.extra = el('div', { className: 'refs-extra' });
     this.groupLabel = el('strong');
     this.copyTo = el('select', { title: 'Copy the references picked into another open file (each file keeps its own copy)' });
     this.copyTo.setAttribute('aria-label', 'Copy to');
@@ -541,18 +569,20 @@ export class ReferencesDialog {
     });
     d.append(
       el('div', { className: 'refs-head' }, el('h2', { textContent: 'References' }), this.search),
-      el('p', { className: 'muted', textContent: 'The references of every open file, each file in its own group. A document cites them (References > Insert Citation); a presentation shows them at the foot of its slides (Insert > Presentation > References on Slide). Copy references between files with Copy To, by dragging them onto a file\'s name, or with Ctrl+C and Ctrl+V: each file keeps its own copy.' }),
+      el('p', { className: 'muted', textContent: 'Your library (kept between sessions, with collections, tags and PDFs) and the references of every open file, each in its own group. A document cites them (References > Insert Citation); a presentation shows them at the foot of its slides (Insert > Presentation > References on Slide). Copy references between your library and files with Copy To, by dragging them onto a group\'s name, or with Ctrl+C and Ctrl+V: each file keeps its own copy.' }),
       this.hint,
       el('div', { className: 'ask-row refs-style' }, el('label', { htmlFor: 'refs-style', textContent: 'Citation style' }), this.styleSel,
         button('Style Options…', 'Change any detail of the style: authors, "and", et al., title, year, volume, issue, article numbers, DOI…', () => void this.styleOptions())),
       el('p', { className: 'refs-style-note' }, el('span', { textContent: 'For ' }), this.groupLabel, el('span', { textContent: '. ' }), this.styleNote),
       (this.managerRow = el('div', { className: 'ask-row refs-style', title: 'How citations are saved in the Word file: as this program\'s own fields, or as Zotero\'s, Mendeley\'s or EndNote\'s, so that program can go on managing them in Word. Files from those programs open with their citations live and choose this for you.' },
         el('label', { htmlFor: 'refs-manager', textContent: 'Save citations for' }), this.managerSel)),
+      this.extra,
       this.warning,
       el('div', { className: 'refs-table-wrap' }, table),
       el('div', { className: 'refs-buttons' },
         el('span', { className: 'refs-add' },
           button('Add by DOI…', 'Paste a DOI; the details are filled in from Crossref (needs the internet)', () => void this.addByDoi()),
+          ...(this.host.pubmed ? [button('Add by PubMed ID…', 'Type one or more PubMed ids (PMID); the details are filled in from PubMed (needs the internet)', () => void this.addByPubmed())] : []),
           button('Add by Hand…', 'Type the details in', () => void this.addByHand()),
           button('Import BibTeX / RIS…', 'A file exported from Zotero, EndNote, Mendeley, or a journal\'s "Export citation"', () => void this.importFile()),
           button('Paste BibTeX / RIS…', 'Paste the text of BibTeX or RIS references', () => void this.pasteText())),
@@ -562,7 +592,7 @@ export class ReferencesDialog {
           button('Delete…', 'Delete the references picked', () => void this.remove()),
           button('Close', '', () => d.close(), true))),
     );
-    d.addEventListener('close', () => { d.remove(); this.d = null; this.closed?.(); this.closed = null; });
+    d.addEventListener('close', () => { d.remove(); this.d = null; this.panels.clear(); this.closed?.(); this.closed = null; });
     document.body.append(d);
     this.fill();
     d.showModal();
@@ -596,19 +626,21 @@ export class ReferencesDialog {
     const rows: HTMLTableRowElement[] = [];
     for (const g of holders) {
       const all = g.refs();
-      const refs = all.filter((r) => !q || `${describe(r)} ${r.authors.join(' ')} ${r.doi}`.toLowerCase().includes(q));
+      const refs = all.filter((r) => (!q || `${describe(r)} ${r.authors.join(' ')} ${r.doi}`.toLowerCase().includes(q)) && (g.shows?.(r) ?? true));
       const fold = this.folded.has(g.key) && !q;
+      const hidden = all.length - all.filter((r) => g.shows?.(r) ?? true).length;
       const head = el('tr', { className: 'refs-group' + (g.key === this.group ? ' current' : '') },
-        el('th', { colSpan: 4, textContent: `${fold ? '▸' : '▾'} ${g.name}  ·  ${g.kind}${g.key === cur ? ' (showing)' : ''}  ·  ${all.length} reference${all.length === 1 ? '' : 's'}` }));
+        el('th', { colSpan: 4, textContent: `${fold ? '▸' : '▾'} ${g.name}  ·  ${g.kind}${g.key === cur ? ' (showing)' : ''}  ·  ${all.length} reference${all.length === 1 ? '' : 's'}${hidden ? ` (${all.length - hidden} shown)` : ''}` }));
+      const note = g.note?.();
       head.dataset.group = g.key;
-      head.title = fold ? 'Click to show this file\'s references' : 'Click to fold this file\'s references away (and to add to this file)';
+      head.title = (note ? note + '\n' : '') + (fold ? 'Click to show these references' : 'Click to fold these references away (and to add to this group)');
       rows.push(head);
       if (fold) continue;
       const uses = g.uses();
       for (const r of refs) {
         const n = uses.get(r.id) ?? 0;
         const tr = el('tr', { draggable: true },
-          el('td', { textContent: shortLabel(r) + (r.typed !== undefined ? ' ✎' : '') }),
+          el('td', { textContent: shortLabel(r) + (r.typed !== undefined ? ' ✎' : '') + (g.mark ? g.mark(r) : '') }),
           el('td', { textContent: [r.journal || r.publisher, r.year].filter(Boolean).join(' ') }),
           el('td', { textContent: r.title }),
           el('td', { textContent: g.useText(n) }));
@@ -624,10 +656,30 @@ export class ReferencesDialog {
     this.body.replaceChildren(...rows);
     this.body.querySelector('tr.picked')?.scrollIntoView({ block: 'nearest' });
     this.warning.textContent = h?.warning?.() ?? '';
+    // the group's own controls
+    const panel = h?.panel ? this.panelOf(h) : null;
+    if (panel) panel.update();
+    if (this.extra.firstChild !== (panel?.el ?? null)) this.extra.replaceChildren(...(panel ? [panel.el] : []));
+    this.extra.hidden = !panel;
     // Copy To: the other open files
     const others = holders.filter((g) => !this.pickedHolders().has(g.key) || this.pickedHolders().size > 1);
     this.copyTo.replaceChildren(new Option(this.selected.size ? `Copy ${this.selected.size === 1 ? 'it' : `${this.selected.size}`} to…` : 'Copy to…', ''), ...others.map((g) => new Option(g.name, g.key)));
     this.copyTo.disabled = !this.selected.size || !others.length;
+  }
+
+  /** A group's own controls, made the first time it is picked. */
+  private panelOf(h: RefHolder): { el: HTMLElement; update(): void } | null {
+    let p = this.panels.get(h.key);
+    if (!p && h.panel) {
+      p = h.panel({
+        picked: () => this.pickedRefs().filter((r) => this.selected.has(rowKey(h.key, r.id))),
+        select: (ids) => { this.group = h.key; this.selected = new Set(ids.map((id) => rowKey(h.key, id))); this.anchor = [...this.selected][0] ?? null; this.fill(); },
+        refresh: () => this.fill(),
+        flash: (msg, ms) => this.host.flash(msg, ms),
+      });
+      this.panels.set(h.key, p);
+    }
+    return p ?? null;
   }
 
   private toggleGroup(key: string): void {
@@ -792,6 +844,39 @@ export class ReferencesDialog {
     if (findDuplicate(h.refs(), found)) { this.add(found); return; }
     const r = await editReference(found, 'Check the Reference', this.format(), this.lookup);
     if (r) this.add(r);
+  }
+
+  private async addByPubmed(): Promise<void> {
+    const h = this.holder();
+    if (!h || !this.host.pubmed) { this.host.flash('Open or make a document or a presentation to keep references in.'); return; }
+    const got = await ask('Add by PubMed ID', [{ name: 'ids', label: 'PubMed IDs', value: '' }], {
+      ok: 'Look Up', note: `One or more PubMed ids (31234567), or pubmed.ncbi.nlm.nih.gov links, separated by spaces or commas. The details come from PubMed (NCBI), which needs the internet; they are added to ${h.name}.`,
+    });
+    const ids = [...(got?.ids ?? '').matchAll(/(\d{1,9})/g)].map((m) => m[1]);
+    if (!ids.length) return;
+    let found: Reference[];
+    try {
+      this.host.flash('Looking the articles up on PubMed…', 3000);
+      found = await this.host.pubmed(ids);
+    } catch (e) {
+      this.host.flash(e instanceof Error ? e.message : String(e), 8000);
+      return;
+    }
+    if (found.length === 1) {
+      if (findDuplicate(h.refs(), found[0])) { this.add(found[0]); return; }
+      const r = await editReference(found[0], 'Check the Reference', this.format(), this.lookup);
+      if (r) this.add(r);
+      return;
+    }
+    const list = h.refs();
+    const added = newReferences(list, found);
+    if (added.length) {
+      this.selected = new Set(added.map((r) => rowKey(h.key, r.id)));
+      this.anchor = rowKey(h.key, added[0].id);
+      this.setRefs(h, 'Add references from PubMed', [...list, ...added]);
+    }
+    const skipped = found.length - added.length;
+    this.host.flash(`Added ${added.length} reference${added.length === 1 ? '' : 's'} from PubMed to ${h.name}.${skipped ? ` ${skipped} ${skipped === 1 ? 'was' : 'were'} already there.` : ''}`, 6000);
   }
 
   private async addByHand(start: Reference = blankRef()): Promise<void> {
