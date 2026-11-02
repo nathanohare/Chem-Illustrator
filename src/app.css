@@ -2994,3 +2994,35 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 .crystal-table td:first-child { color: var(--muted, #555); white-space: nowrap; }
 .crystal-page:has(.crystal-table-wrap) { flex-direction: column; }
 @media (max-width: 700px) { .crystal-page { flex-direction: column; } .crystal-side { width: auto; max-height: none; } }
+
+/* ---- the icon set (src/ui/icon-set.ts): each drawing's parts coloured by role, in the look picked
+   (html[data-icons]: accent = neutral outline with the mode's colour on one part, the default;
+   colour = a colour for each kind of command, as Office does; mono = all in the mode's colour) */
+:root {
+  --ic-ink: color-mix(in srgb, var(--text) 80%, var(--panel));
+  --ic-paper: var(--panel);
+  --ic-acc: var(--accent);
+  --ic-on: #fff;
+  --hue-blue: #1f6fd1; --hue-green: #18834a; --hue-red: #c8352e; --hue-amber: #c27c0e; --hue-purple: #7b47c4; --hue-teal: #0f8a8a;
+}
+:root[data-theme='dark'] { --hue-blue: #6aa5ff; --hue-green: #5cc98c; --hue-red: #ff7d75; --hue-amber: #f2b64e; --hue-purple: #b393f0; --hue-teal: #4fc6c3; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) { --hue-blue: #6aa5ff; --hue-green: #5cc98c; --hue-red: #ff7d75; --hue-amber: #f2b64e; --hue-purple: #b393f0; --hue-teal: #4fc6c3; } }
+.ci-ic { fill: none; stroke: var(--ic-ink); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; overflow: visible; flex: none; }
+.ci-ic .a { stroke: var(--ic-acc); }
+.ci-ic .f { fill: color-mix(in srgb, var(--ic-acc) 22%, transparent); }
+.ci-ic .p { fill: var(--ic-paper); }
+.ci-ic .s { fill: var(--ic-acc); stroke: none; }
+.ci-ic .k { stroke: var(--ic-on); }
+:root[data-icons='colour'] .ci-ic[data-hue='blue'] { --ic-acc: var(--hue-blue); }
+:root[data-icons='colour'] .ci-ic[data-hue='green'] { --ic-acc: var(--hue-green); }
+:root[data-icons='colour'] .ci-ic[data-hue='red'] { --ic-acc: var(--hue-red); }
+:root[data-icons='colour'] .ci-ic[data-hue='amber'] { --ic-acc: var(--hue-amber); }
+:root[data-icons='colour'] .ci-ic[data-hue='purple'] { --ic-acc: var(--hue-purple); }
+:root[data-icons='colour'] .ci-ic[data-hue='teal'] { --ic-acc: var(--hue-teal); }
+:root[data-icons='colour'] .ci-ic[data-hue='gray'] { --ic-acc: var(--ic-ink); }
+:root[data-icons='mono'] .ci-ic { --ic-ink: var(--accent); --ic-paper: transparent; --ic-on: var(--panel); }
+:root[data-icons='mono'] .ci-ic .f { fill: none; }
+.rb-icon:has(> .ci-ic) { display: flex; align-items: center; justify-content: center; }
+/* a pressed button's drawing keeps its own colours */
+.ribbon button[aria-pressed='true'] .ci-ic { --ic-ink: var(--accent); }
+.rb-lead .ci-ic, .ci-ic.fp-icon { width: 16px; height: 16px; vertical-align: -3px; margin-right: 3px; }
