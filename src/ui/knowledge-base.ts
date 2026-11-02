@@ -13,7 +13,7 @@ import { safetyRow, sortSafety } from '../kb/safety-tables';
 import { explainPieces, glossaryEntry } from '../kb/glossary';
 import { CANONICAL_ROWS, PRESENT, filterValues, findRows, isCas, parseUserTable, searchedShift, sortRows, tableTsv, type KbColumn, type KbTable, type RowMatch } from '../kb/tables';
 import { ask } from './ask';
-import { infoIcon } from './info-tip';
+import { infoIcon, setInfo } from './info-tip';
 import { templateIcon } from './template-icons';
 import { svgNode } from './svg-node';
 import { prettyChem } from '../kb/pretty';
@@ -120,7 +120,9 @@ export class KnowledgeBaseWindow {
   private search!: HTMLInputElement;
   private list!: HTMLDivElement;
   private filters!: HTMLDivElement;
-  private about!: HTMLParagraphElement;
+  private about!: HTMLElement;
+  private title!: HTMLHeadingElement;
+  private titleText!: HTMLSpanElement;
   private wrap!: HTMLDivElement;
   private sources!: HTMLParagraphElement;
   private count!: HTMLSpanElement;
@@ -154,16 +156,21 @@ export class KnowledgeBaseWindow {
     this.list = el('div', { className: 'kb-list', role: 'tablist' });
     this.list.setAttribute('aria-label', 'Tables');
     this.filters = el('div', { className: 'refs-filter kb-filters' });
-    this.about = el('p', { className: 'muted kb-about' });
+    // the table's name with its description behind an "i" (UI rule 2), and its filters, in the
+    // title row above the table: no line of their own
+    this.title = el('h3', { className: 'kb-title has-info' });
+    this.titleText = el('span');
+    this.about = infoIcon('');
+    this.title.append(this.titleText, this.about);
     this.wrap = el('div', { className: 'refs-table-wrap kb-table-wrap' });
     this.sources = el('p', { className: 'muted kb-sources' });
     this.count = el('span', { className: 'muted' });
     this.removeBtn = button('Remove Table…', 'Remove the imported table showing (only from this computer)', () => void this.removeImported());
     d.append(
-      el('div', { className: 'refs-head' }, el('h2', { textContent: 'Knowledge Base' }), this.search),
+      el('div', { className: 'refs-head kb-head' }, el('h2', { textContent: 'Knowledge Base' }), el('div', { className: 'kb-top' }, this.title, this.filters), this.search),
       el('div', { className: 'kb-body' },
         this.list,
-        el('div', { className: 'kb-main' }, this.about, this.filters, this.wrap, this.sources)),
+        el('div', { className: 'kb-main' }, this.wrap, this.sources)),
       el('div', { className: 'refs-buttons' },
         el('span', { className: 'refs-add' },
           button('Import Table…', 'Add a table of your own from a CSV or tab-separated file (or paste one from a spreadsheet). It is kept on this computer only', () => void this.importTable()),
@@ -357,12 +364,13 @@ export class KnowledgeBaseWindow {
   private showTable(): void {
     if (!this.d) return;
     const t = this.current;
-    this.about.textContent = prettyChem(t.about);
+    this.titleText.textContent = prettyChem(t.title);
+    setInfo(this.about, prettyChem(t.about));
     this.removeBtn.hidden = !t.personal;
     // filter lists
     this.filters.replaceChildren(...t.columns.filter((c) => c.filter).map((c) => {
       const s = el('select', { title: `Show only one ${c.label.toLowerCase()}` });
-      s.append(el('option', { value: '', textContent: `All (${c.label})` }));
+      s.append(el('option', { value: '', textContent: 'All' }));
       if (c.filter === 'present') s.append(el('option', { value: PRESENT, textContent: `With ${c.label.toLowerCase()}` }));
       else s.append(...filterValues(t, c.key).map((v) => el('option', { value: v, textContent: prettyChem(v, c.key === 'nucleus') })));
       const solvent = c === solventColumn(t);
@@ -398,7 +406,7 @@ export class KnowledgeBaseWindow {
           tr.append(td);
           continue;
         }
-        if (v !== null && v !== undefined && v !== '') td.append(typeof v === 'number' ? String(v) : cellExplained(v, !!c.narrow, c.key === 'nucleus'));
+        if (v !== null && v !== undefined && v !== '') td.append(typeof v === 'number' ? String(v) : c.key === 'atom' ? v : cellExplained(v, !!c.narrow, c.key === 'nucleus')); // atom labels (H2, C3) are not formulas
         tr.append(td);
       }
       if (t.links) {
