@@ -76,44 +76,40 @@ describe('Hammett groups on a marked ring', () => {
 describe('counted from an attachment point', () => {
   const at = (smiles: string, ref: string) => sites(smiles, ref);
   it('places every group on the nearest benzene ring', () => {
-    const [x] = at('[102*]Nc1ccc(OC)cc1', 'wavy');
+    const [x] = at('[102*]c1ccc(OC)cc1', 'wavy');
     expect([group(x), x.place, x.locant]).toEqual(['OCH3', 'para', 4]);
-    const [y] = at('[102*]Nc1cccc(Cl)c1', 'wavy bond');
+    const [y] = at('[102*]c1cccc(Cl)c1', 'wavy bond');
     expect([group(y), y.place, y.locant]).toEqual(['Cl', 'meta', 3]);
     // 3,4-dichloro: both, numbered the low way round
-    expect(at('[101*]Nc1ccc(Cl)c(Cl)c1', 'star').map((s) => [group(s), s.place, s.locant])).toEqual([['Cl', 'meta', 3], ['Cl', 'para', 4]]);
+    expect(at('[101*]c1ccc(Cl)c(Cl)c1', 'star').map((s) => [group(s), s.place, s.locant])).toEqual([['Cl', 'meta', 3], ['Cl', 'para', 4]]);
   });
 
-  it('gives hydrogen for a bare ring, and counts through a chain to the ring', () => {
-    expect(at('[2*]Nc1ccccc1', '2').map(group)).toEqual(['H']);
-    // a benzylic reference: the CH2 joins the ring
-    expect(at('[102*]Cc1ccc(cc1)C(F)(F)F', 'wavy').map((s) => [group(s), s.place])).toEqual([['CF3', 'para']]);
-    // the reference group on the ring itself isn't counted
-    expect(at('[102*]C(=O)c1ccc([N+](=O)[O-])cc1', 'wavy').map(group)).toEqual(['NO2']);
+  it('gives hydrogen for a bare phenyl', () => {
+    expect(at('[2*]c1ccccc1', '2').map(group)).toEqual(['H']);
+    expect(at('[102*]c1ccc(cc1)C(F)(F)F', 'wavy').map((s) => [group(s), s.place])).toEqual([['CF3', 'para']]);
   });
 
   it('reads a plain * typed in SMILES as the attachment point', () => {
-    expect(at('*Nc1ccc(C)cc1', 'wavy').map(group)).toEqual(['CH3']);
+    expect(at('*c1ccc(C)cc1', 'wavy').map(group)).toEqual(['CH3']);
   });
 
   it('says what is wrong', () => {
-    expect(hammettSites(RDKit, '[101*]Nc1ccccc1', 'wavy')).toEqual({ error: expect.stringMatching(/no wavy-bond attachment point/) });
-    expect(hammettSites(RDKit, '[102*]Nc1ccc(N[102*])cc1', 'wavy')).toEqual({ error: expect.stringMatching(/2 wavy-bond attachment points/) });
-    expect(hammettSites(RDKit, '[102*]NC1CCCCC1', 'wavy')).toEqual({ error: expect.stringMatching(/no benzene ring/) });
+    expect(hammettSites(RDKit, '[101*]c1ccccc1', 'wavy')).toEqual({ error: expect.stringMatching(/no wavy-bond attachment point/) });
+    expect(hammettSites(RDKit, '[102*]c1ccc([102*])cc1', 'wavy')).toEqual({ error: expect.stringMatching(/2 wavy-bond attachment points/) });
+    // the attachment point goes on the ring itself, not on a group beyond it
+    expect(hammettSites(RDKit, '[102*]Nc1ccc(OC)cc1', 'wavy')).toEqual({ error: expect.stringMatching(/on a benzene ring carbon/) });
   });
 });
 
 describe('attachment points drawn on a structure', () => {
   it('are written with their kinds, so the reference is found in the molfile', () => {
-    // p-anisidine fragment, ArNH–, with a wavy bond on N and a star on the methoxy C
+    // a 4-methoxyphenyl group, with a wavy bond on its ring carbon
     const doc = new Doc();
     doc.edit('Draw', () => {
       const ring = Array.from({ length: 6 }, (_, i) => doc.addAtom(Math.cos((i * Math.PI) / 3) * 14.4, Math.sin((i * Math.PI) / 3) * 14.4));
       ring.forEach((a, i) => doc.addBond(a.id, ring[(i + 1) % 6].id, i % 2 ? 2 : 1));
-      const n = doc.addAtom(28.8, 0, 7);
-      doc.addBond(ring[0].id, n.id);
-      const wavy = doc.addAtom(43.2, 0, 0, { attach: 'Wavy' });
-      doc.addBond(n.id, wavy.id);
+      const wavy = doc.addAtom(28.8, 0, 0, { attach: 'Wavy' });
+      doc.addBond(ring[0].id, wavy.id);
       const o = doc.addAtom(-28.8, 0, 8);
       doc.addBond(ring[3].id, o.id);
       const me = doc.addAtom(-43.2, 0);

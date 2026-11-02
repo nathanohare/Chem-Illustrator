@@ -1,8 +1,8 @@
 // Hammett constants of the groups on a drawn benzene ring, counted from a reference position.
 // The reference is normally an attachment point of the structure (a wavy bond, a star or a
 // numbered diamond: Atom.attach), written into the molfile as a "*" whose isotope says which kind
-// (src/chem/attach-codes.ts). Every group on the benzene ring nearest to it is placed ortho, meta
-// or para from the ring atom on the way to it, and looked up in the Hammett table
+// (src/chem/attach-codes.ts). It sits right on a ring carbon of the aryl group as drawn (4-MeC6H4–),
+// and every other group on that benzene ring is placed ortho, meta or para from it and looked up in the Hammett table
 // (src/kb/hammett.ts, Hansch, Leo and Taft, Chem. Rev. 1991, Table I) by its SMILES.
 //
 // A reference can also be a "core" in SMILES, for structures drawn without attachment points:
@@ -245,21 +245,13 @@ function fromAttachment(RDKit: any, input: string, ref: string): HammettResult {
     const ext = JSON.parse(mol.get_json()).molecules[0].extensions?.find((e: any) => e.name === 'rdkitRepresentation');
     const arom = new Set<number>(ext?.aromaticAtoms ?? []);
     const benzenes = g.rings.filter((r) => r.length === 6 && r.every((a) => arom.has(a) && zOf(g, a) === 6));
-    // the nearest benzene ring, and its atom on the way to the reference
-    let ring: number[] | undefined, rc = -1;
-    const seen = new Set([refs[0], start]);
-    let front = [start];
-    while (front.length && !ring) {
-      for (const a of front) { ring = benzenes.find((r) => r.includes(a)); if (ring) { rc = a; break; } }
-      if (ring) break;
-      const next: number[] = [];
-      for (const a of front) for (const b of g.nb[a]) if (!seen.has(b) && zOf(g, b) !== 0) { seen.add(b); next.push(b); }
-      front = next;
-    }
-    if (!ring) return { error: `There's no benzene ring joined to the ${name} attachment point` };
+    // the reference sits right on a benzene ring carbon (the aryl group as drawn, nothing between)
+    const ring = benzenes.find((r) => r.includes(start));
+    if (!ring) return { error: `The ${name} attachment point must be on a benzene ring carbon, with nothing between it and the ring` };
+    const rc = start;
     const inRing = new Set(ring);
     const i0 = ring.indexOf(rc);
-    const dist = (a: number) => { const d = Math.abs(ring!.indexOf(a) - i0); return Math.min(d, 6 - d); };
+    const dist = (a: number) => { const d = Math.abs(ring.indexOf(a) - i0); return Math.min(d, 6 - d); };
     const table = tableBySmiles(RDKit);
     const found: { at: number; site: Omit<HammettSite, 'place'> }[] = [];
     for (const c of ring) {
@@ -272,8 +264,8 @@ function fromAttachment(RDKit: any, input: string, ref: string): HammettResult {
     }
     if (!found.length) return { sites: [{ place: 'para', row: H_ROW, smiles: '' }] };
     // number the ring from the reference's atom (1) the way round that gives the lowest locants
-    const up = (a: number) => ((ring!.indexOf(a) - i0 + 6) % 6) + 1;
-    const down = (a: number) => ((i0 - ring!.indexOf(a) + 6) % 6) + 1;
+    const up = (a: number) => ((ring.indexOf(a) - i0 + 6) % 6) + 1;
+    const down = (a: number) => ((i0 - ring.indexOf(a) + 6) % 6) + 1;
     const lo = (f: (a: number) => number) => found.map((x) => f(x.at)).sort((p, q) => p - q);
     const [u, d] = [lo(up), lo(down)];
     const k = u.findIndex((x, i) => x !== d[i]);

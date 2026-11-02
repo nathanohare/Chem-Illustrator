@@ -78,9 +78,9 @@ describe('HAMMETT in a sheet', () => {
 
   it('counts from an attachment point, naming each group with its locant', async () => {
     const wb = await sheetOf([
-      ['*Nc1ccc(OC)cc1', '=HAMMETT(A1,"sigma","wavy")', '=HAMMETT(A1,"group","wavy")'],
-      ['*Nc1ccc(Cl)c(Cl)c1', '=HAMMETT(A2,"sigma","wavy")', '=HAMMETT(A2,"group","wavy")', '=HAMMETT(A2,"F","wavy")'],
-      ['*Nc1ccccc1', '=HAMMETT(A3,"sigma","wavy")', '=HAMMETT(A3,"group","wavy")', '=HAMMETT(A3,"F","wavy")'],
+      ['*c1ccc(OC)cc1', '=HAMMETT(A1,"sigma","wavy")', '=HAMMETT(A1,"group","wavy")'],
+      ['*c1ccc(Cl)c(Cl)c1', '=HAMMETT(A2,"sigma","wavy")', '=HAMMETT(A2,"group","wavy")', '=HAMMETT(A2,"F","wavy")'],
+      ['*c1ccccc1', '=HAMMETT(A3,"sigma","wavy")', '=HAMMETT(A3,"group","wavy")', '=HAMMETT(A3,"F","wavy")'],
     ]);
     const s = wb.sheet;
     expect([s.value(0, 1), s.value(0, 2)]).toEqual([-0.27, '4-OCH3']);
