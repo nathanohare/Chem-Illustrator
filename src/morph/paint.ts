@@ -297,7 +297,7 @@ export function paintFrame(ctx: Ctx, F: FrameData, style: MStyle, t: number, swa
   let font = '';
   for (const tx of F.texts) {
     if (tx.alpha <= 0.004) continue;
-    const f = `${tx.size}px ${style.font}`;
+    const f = `${tx.italic ? 'italic ' : ''}${tx.size}px ${style.font}`;
     if (f !== font) { ctx.font = f; font = f; }
     ctx.fillStyle = rgba(tx.color, tx.alpha);
     ctx.fillText(tx.text, tx.x, tx.y);

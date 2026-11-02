@@ -28,6 +28,7 @@ import { tidyFx } from '../render/picture-fx';
 import { TABLE_TAG, TABLE_PART_TAG, applyTableTag, gridOf, linesFromBorders, parseTableTag, type ReadCell } from './cdxml-table';
 import { layoutTable, NOTE_SCALE } from '../table';
 import { arialWidth } from '../text-metrics';
+import { cleanScheme } from '../drawing-styles';
 import { freshBox, type ChartBox } from '../sheet/chart-box';
 import { relinkNewman } from '../design/newman';
 
@@ -122,13 +123,15 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   const arrowText = pg && kids(pg).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === ARROW_TEXT_TAG)?.getAttribute('Value');
   if (arrowText) {
     try {
-      const v = JSON.parse(arrowText) as { size?: unknown; font?: unknown; width?: unknown; head?: unknown; headWidth?: unknown };
+      const v = JSON.parse(arrowText) as { size?: unknown; font?: unknown; width?: unknown; head?: unknown; headWidth?: unknown; scheme?: unknown };
       if (typeof v.size === 'number' && v.size > 0 && v.size < 400) doc.style.arrowTextSize = v.size;
       if (typeof v.font === 'string' && v.font.trim()) doc.style.arrowTextFont = v.font.trim().slice(0, 80);
       const pt = (x: unknown) => (typeof x === 'number' && x > 0 && x <= 30 ? x : undefined);
       if (pt(v.width)) doc.style.arrowWidth = pt(v.width);
       if (pt(v.head)) doc.style.arrowHeadLength = pt(v.head);
       if (pt(v.headWidth)) doc.style.arrowHeadWidth = pt(v.headWidth);
+      const scheme = cleanScheme(v.scheme);
+      if (scheme) doc.style.scheme = scheme;
     } catch { /* not ours to read */ }
   }
   const pb = pg?.getAttribute('BoundingBox')?.trim().split(/\s+/).map(Number);
@@ -1209,7 +1212,7 @@ export function labelLookOf(runs: TextRun[], text: string): { supDigits?: boolea
   runs.forEach((r, k) => {
     for (const _ of r.text) {
       const raisedR = raisedDigits && k === runs.length - 1;
-      const m = r.sup && !raisedR ? '^' : r.sub ? '_' : '.';
+      const m = r.sup && !raisedR ? '^' : r.sub ? '_' : r.italic ? '/' : '.';
       if (m !== '.') any = true;
       marks += m;
     }

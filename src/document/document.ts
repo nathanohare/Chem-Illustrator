@@ -294,6 +294,22 @@ export const FLOAT_GAP = 9;
 /** A text box's inner margins, in points (Word's: 0.1 in at the sides, 0.05 in above and below). */
 export const BOX_PAD = { x: 7.2, y: 3.6 };
 
+/** Nothing drawn (a figure waiting for its structures). */
+export function emptyContents(c: Contents): boolean {
+  return !c.atoms.length && !c.bonds.length && !c.arrows.length && !c.shapes.length && !c.captions.length;
+}
+
+/** A figure's area in its drawing's own points (x, y its top left). */
+export interface FigureFrame { x: number; y: number; w: number; h: number }
+
+/**
+ * A drawing's own size in points: its figure's area when it has one, else what its structures
+ * take up (`natural`, worked out only when needed).
+ */
+export function drawingOwnSize(o: { frame?: FigureFrame }, natural: () => { w: number; h: number }): { w: number; h: number } {
+  return o.frame ? { w: o.frame.w, h: o.frame.h } : natural();
+}
+
 /** A figure's, picture's or text box's frame and shadow (none for other objects). */
 export function lookOf(o: DocObject | undefined): FigureLook | undefined {
   return o && (o.kind === 'drawing' || o.kind === 'picture' || o.kind === 'textbox') ? o.look : undefined;
@@ -326,7 +342,7 @@ export interface Embedded {
 
 export type DocObject =
   /** A structure, scheme or table: a drawing, edited with the drawing tools. `scale` 1 is the drawing's own size. */
-  | { kind: 'drawing'; contents: Contents; scale?: number; look?: FigureLook; float?: Float; alt?: string; /** Turned and flipped, as a picture (Arrange > Rotate). */ rot?: number; flipH?: boolean; flipV?: boolean; /** A Chem4Word structure: its id in the file's CML part, and a fingerprint of the drawing as read (changed = the CML is written afresh). */ c4w?: { guid: string; sig: string } }
+  | { kind: 'drawing'; contents: Contents; scale?: number; look?: FigureLook; float?: Float; alt?: string; /** A figure: a set area of the page (in the drawing's points) its structures are drawn in, sized by it rather than by them, so drawing inside it never moves the text round it. Never drawn when printed. */ frame?: FigureFrame; /** Turned and flipped, as a picture (Arrange > Rotate). */ rot?: number; flipH?: boolean; flipV?: boolean; /** A Chem4Word structure: its id in the file's CML part, and a fingerprint of the drawing as read (changed = the CML is written afresh). */ c4w?: { guid: string; sig: string } }
   /**
    * A picture: its own size is w × h points (`px` its pixels); `scale` 1 is that size. A chart
    * (Insert > Chart) is a picture with its chart and data: drawn from them, saved as Word's chart.
@@ -340,7 +356,7 @@ export type DocObject =
    * A text box: text of its own (typed into in place), `w` wide; it grows to fit its text, and is
    * at least `h` tall when that is set. Always placed on the page. `fill` is its background.
    */
-  | { kind: 'textbox'; runs: TextRun[]; paras?: ParaStyle[]; w: number; h?: number; fill?: string; look?: FigureLook; float: Float }
+  | { kind: 'textbox'; runs: TextRun[]; paras?: ParaStyle[]; w: number; h?: number; fill?: string; look?: FigureLook; float: Float; /** A shape (Insert > Shapes): the library's outline (design/geo.ts) instead of a plain box, `w` × `h` (it doesn't grow down), its text in the middle; a click picks it and drags it, typing or a double-click goes into its text, as in PowerPoint. */ geo?: string }
   /**
    * A table in the text, typed into in place as in Word: its own paragraph, cells of text that
    * can hold structures and pictures (objects of the document, like those in the text), and

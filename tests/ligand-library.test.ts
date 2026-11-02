@@ -15,6 +15,8 @@ import { countElectrons } from '../src/chem/electrons';
 import { expandInPlace, expandLigand, freeLigandFor, inPlaceSmiles, labelSmiles, ligandTemplateFor, loadFullLigands } from '../src/chem/expand';
 import FULL from '../src/chem/ligand-library-full.json';
 import { templateIcon } from '../src/ui/template-icons';
+import { toMolfile } from '../src/chem/molfile';
+import { FAMILIES as SOURCE } from '../scripts/ligands/ligand-data.mjs';
 import { LigandLibraryWindow } from '../src/ui/ligand-library';
 
 /** How each label read before the library's abbreviations were added: first atom : the rest : bonds. */
@@ -226,15 +228,19 @@ describe('the Ligand Library', () => {
     expect(labels('IPr*').filter((x) => x === 'CHPh2').length).toBe(4);
   });
 
-  it('draws a chelate with the metal on the left of its donors', () => {
+  it('draws a chelate with the metal out beyond its donors, the same distance from each', () => {
+    // (which side it is on follows the drawings in Nate's inventory: dtbbpy with M below)
     for (const abbr of ['dtbbpy', 'DPEphos', 'Ph-BOX', 'TMEDA']) {
       const t = templateById(ligandByAbbr(abbr)!.tpl)!;
       const m = t.atoms[t.attach];
       const donors = t.bonds.filter((b) => b[0] === t.attach || b[1] === t.attach).map((b) => t.atoms[b[0] === t.attach ? b[1] : b[0]]);
       expect(donors.length, abbr).toBe(2);
-      for (const d of donors) expect(d[0], abbr).toBeGreaterThan(m[0] + 0.3);
-      // one above the other, the same distance from the metal's level
-      expect(Math.abs(donors[0][1] + donors[1][1] - 2 * m[1]), abbr).toBeLessThan(0.1);
+      const dist = (a: (typeof t.atoms)[number]) => Math.hypot(a[0] - m[0], a[1] - m[1]);
+      expect(Math.abs(dist(donors[0]) - dist(donors[1])), abbr).toBeLessThan(0.1);
+      const rest = t.atoms.filter((_, i) => i !== t.attach);
+      const c = [rest.reduce((s, a) => s + a[0], 0) / rest.length, rest.reduce((s, a) => s + a[1], 0) / rest.length];
+      const mid = [(donors[0][0] + donors[1][0]) / 2, (donors[0][1] + donors[1][1]) / 2];
+      expect(Math.hypot(m[0] - c[0], m[1] - c[1]), abbr).toBeGreaterThan(Math.hypot(mid[0] - c[0], mid[1] - c[1]));
     }
   });
 });
@@ -495,5 +501,198 @@ describe('a ligand drawn out on its own (review item 28)', () => {
     expect(labelGraph('C6F5')!.bonds.length).toBe(11);
     expect(labelGraph('C6H5')!.bonds.length).toBe(6);
     expect(labelGraph('C6H11')!.bonds.length).toBe(6);
+  });
+
+  describe('groups written short (Nate, 2026-11-02)', () => {
+    type T = { atoms: [number, number, string, number?, string?][]; bonds: [number, number, number, string?][]; attach: number };
+    const drawing = (abbr: string) => templateById(ligandByAbbr(abbr)!.tpl) as unknown as T;
+    const labels = (abbr: string) => drawing(abbr).atoms.map((a) => a[4]).filter(Boolean);
+    const lib = LIGANDS.map((l) => [l.abbr[0], templateById(l.tpl) as unknown as T] as const);
+    const degree = (t: T, i: number) => t.bonds.filter((b) => b[0] === i || b[1] === i).length;
+    const nbrs = (t: T, i: number) => t.bonds.filter((b) => b[0] === i || b[1] === i).map((b) => (b[0] === i ? b[1] : b[0]));
+    const bare = (t: T, i: number) => t.atoms[i][2] === 'C' && !t.atoms[i][4] && i !== t.attach;
+
+    it('methyls on N and O as NMe2, NMe and OMe', () => {
+      expect(labels('TMEDA').filter((l) => l === 'NMe2').length).toBe(2);
+      expect(labels('SPhos').filter((l) => l === 'OMe').length).toBe(2);
+      expect(labels('IMe').filter((l) => l === 'NMe').length).toBe(2);
+      expect(labels('DMAP')).toContain('NMe2');
+      for (const [abbr, t] of lib) t.atoms.forEach((a, i) => {
+        if ((a[2] !== 'N' && a[2] !== 'O') || a[4]) return;
+        expect(nbrs(t, i).some((j) => bare(t, j) && degree(t, j) === 1), `${abbr}: a methyl drawn on ${a[2]}`).toBe(false);
+      });
+    });
+
+    it('isopropyl, tert-butyl and CF3 named wherever they are', () => {
+      expect(labels('XPhos').filter((l) => l === 'i-Pr').length).toBe(3);
+      expect(labels('dtbbpy').filter((l) => l === 't-Bu').length).toBe(2);
+      expect(labels('dCF3bpy').filter((l) => l === 'CF3').length).toBe(2);
+      expect(labels('RuPhos').filter((l) => l === 'Oi-Pr').length).toBe(2);
+      for (const [abbr, t] of lib) t.atoms.forEach((a, i) => {
+        if (!bare(t, i)) return;
+        const ends = nbrs(t, i).filter((j) => bare(t, j) && degree(t, j) === 1).length;
+        const fs = nbrs(t, i).filter((j) => t.atoms[j][2] === 'F').length;
+        const d = degree(t, i);
+        expect(d === 3 && ends === 2 || d === 4 && ends === 3 || fs === 3, `${abbr}: an i-Pr, t-Bu or CF3 drawn out`).toBe(false);
+      });
+    });
+
+    it('phenyls as Ph, but a biaryl backbone stays drawn', () => {
+      expect(labels('PPh3').filter((l) => l === 'Ph').length).toBe(3);
+      expect(labels('BPhen').filter((l) => l === 'Ph').length).toBe(2);
+      expect(labels('JohnPhos')).not.toContain('Ph');
+      expect(drawing('JohnPhos').atoms.length).toBeGreaterThan(12);
+    });
+
+    it('never a label that reads as a metal (Ni-Pr, Pt-Bu)', () => {
+      for (const [abbr, t] of lib) for (const a of t.atoms) {
+        if (a[4]) expect(/^(N|P|As)[it]-/.test(a[4]) || a[4] === 'PiPr2', `${abbr}: ${a[4]}`).toBe(false);
+      }
+      expect(labels('TangPhos')).not.toContain('Pt-Bu');
+    });
+
+    it('the η⁴-butadiene and allyl icons draw an arc, their bonds single', () => {
+      for (const abbr of ['allyl', 'C4H6']) {
+        const svg = templateIcon(drawing(abbr) as never, 120, 26);
+        expect(svg, abbr).toMatch(/<path d="M[^"]*Q/);
+      }
+    });
+
+    it('a ring double bond has its second line inside the ring, whatever hangs off it', () => {
+      // a benzene whose double bond C0=C1 carries two groups outside (RuPhos's biaryl carbon and
+      // its Oi-Pr): the neighbours outside outnumber the ring's, the line still goes in
+      const ring = [0, 1, 2, 3, 4, 5].map((k) => [Math.cos((k * Math.PI) / 3), Math.sin((k * Math.PI) / 3)]);
+      // straight out from the bond (along its normal), so they outweigh the ring's own neighbours
+      const out = (k: number) => [ring[k][0] + Math.cos(Math.PI / 6), ring[k][1] + Math.sin(Math.PI / 6)];
+      const t = {
+        id: 'x', name: 'x', group: 'ligand-lib', attach: 8,
+        atoms: [...ring, out(0), out(1), [out(1)[0] - 1, out(1)[1]]].map(([x, y]) => [x, y, 'C']),
+        bonds: [[0, 1, 2], [1, 2, 1], [2, 3, 2], [3, 4, 1], [4, 5, 2], [5, 0, 1], [0, 6, 1], [1, 7, 1], [7, 8, 1]],
+      };
+      const svg = templateIcon(t as never, 300, 26);
+      const lines = [...svg.matchAll(/<line x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)" y2="([-\d.]+)"/g)].map((m) => m.slice(1).map(Number));
+      // the picture's ring centre: the middle of the ring's six atoms, found from the longest lines
+      const len = (l: number[]) => Math.hypot(l[2] - l[0], l[3] - l[1]);
+      const mid = (l: number[]) => [(l[0] + l[2]) / 2, (l[1] + l[3]) / 2];
+      const full = Math.max(...lines.map(len));
+      const bonds = lines.filter((l) => len(l) > 0.9 * full);
+      const cx = bonds.slice(0, 6).reduce((s, l) => s + mid(l)[0], 0) / 6, cy = bonds.slice(0, 6).reduce((s, l) => s + mid(l)[1], 0) / 6;
+      const inners = lines.filter((l) => len(l) < 0.85 * full && len(l) > 0.3 * full);
+      expect(inners.length).toBe(3);
+      // each inner line is nearer the centre than the bond it goes with
+      for (const l of inners) {
+        const near = bonds.reduce((b, m) => (Math.hypot(mid(m)[0] - mid(l)[0], mid(m)[1] - mid(l)[1]) < Math.hypot(mid(b)[0] - mid(l)[0], mid(b)[1] - mid(l)[1]) ? m : b));
+        expect(Math.hypot(mid(l)[0] - cx, mid(l)[1] - cy)).toBeLessThan(Math.hypot(mid(near)[0] - cx, mid(near)[1] - cy));
+      }
+    });
+  });
+});
+
+describe('chiral ligands, Et, and Nate\'s layouts (2026-11-02, round 2)', () => {
+  let RDKit: any;
+  beforeAll(async () => { RDKit = await createRequire(import.meta.url)('@rdkit/rdkit')(); });
+  type T = { atoms: [number, number, string, number?, string?][]; bonds: [number, number, number, string?][]; attach: number };
+  const drawing = (abbr: string) => templateById(ligandByAbbr(abbr)!.tpl) as unknown as T;
+  const canon = (mb: string) => { const m = RDKit.get_mol(mb); if (!m) return null; try { return m.get_smiles(); } finally { m.delete(); } };
+  /**
+   * The ligand as drawn on its metal, labels read out, as isomeric SMILES: the metal as a silicon
+   * bonded to each donor (an L donor then charged +1), so a P-stereogenic phosphine's wedges are
+   * read with its bond to the metal, as a chemist reads the drawing.
+   */
+  const drawnSmiles = (l: (typeof LIGANDS)[number], drawing?: unknown) => {
+    const t = (drawing ?? templateById(l.tpl)!) as Parameters<typeof placeTemplate>[1];
+    const doc = new Doc();
+    const ids = doc.edit('t', () => placeTemplate(doc, t, freePlacement({ x: 100, y: 100 }, doc.style.bondLength), { noMerge: true }));
+    doc.edit('m', () => {
+      const m = ids.map((id) => doc.atoms.get(id)!).find((a) => a.label === 'M')!;
+      m.label = null;
+      m.z = 14;
+      for (const bid of doc.adj.get(m.id) ?? []) {
+        const b = doc.bonds.get(bid)!;
+        const d = doc.atoms.get(b.a1 === m.id ? b.a2 : b.a1)!;
+        const order = (doc.adj.get(d.id) ?? []).reduce((s, x) => s + (doc.bonds.get(x)!.order ?? 1), 0);
+        if ((d.z === 15 || d.z === 7) && order === 4 || d.z === 8 && order === 3) d.charge = 1;
+      }
+    });
+    return tags(toMolfile(doc, ids).molblock);
+  };
+  /** Each stereocenter's element and R/S (RDKit's labels), sorted: what the wedges say. */
+  const tags = (mb: string) => {
+    const m = RDKit.get_mol(mb);
+    if (!m) return null;
+    try {
+      const els = (JSON.parse(m.get_json()).molecules[0].atoms as { z?: number }[]).map((a) => a.z ?? 6);
+      // (a donor N on the metal reads as a stereocenter it is never drawn as)
+      return (JSON.parse(m.get_stereo_tags()).CIP_atoms as [number, string][]).map(([i, l]) => `${els[i]}${l}`).filter((x) => x !== '7(?)').sort().join(' ');
+    } finally { m.delete(); }
+  };
+  /** The ligand's SMILES on the same silicon "metal", bonded where each donor's lone pair (or lost H) was. */
+  const onMetal = (smiles: string) => {
+    let k = 0;
+    const bound = smiles.replace(/\[([A-Z][a-z]?)(@{0,2})(H(\d?))?([+-]\d?)?:(\d+)\]/g, (_x, el, chi, _h, hn, chg, map) => {
+      let h = _h ? Number(hn || 1) : 0;
+      let c = chg ? (chg[0] === '+' ? 1 : -1) * Number(chg.slice(1) || 1) : 0;
+      if (Number(map) >= 50 && h) h -= 1; else c += 1;
+      return `[${el}${chi}${h ? 'H' + (h > 1 ? h : '') : ''}${c ? (c > 0 ? '+' : '-') + (Math.abs(c) > 1 ? Math.abs(c) : '') : ''}]%${81 + k++}`;
+    });
+    return `[Si]${Array.from({ length: k }, (_, i) => `%${81 + i}`).join('')}.${bound}`;
+  };
+  /** Each ligand's SMILES as written in scripts/ligands/ligand-data.mjs, stereo and all (the library keeps it without). */
+  const source = new Map<string, string>((SOURCE as { items: [string, string, string, string][] }[]).flatMap((f) => f.items.map((i) => [i[0], i[3]] as [string, string])));
+  const plain = (smiles: string) => canon(smiles.replace(/:\d+\]/g, ']'))!;
+  const chiral = () => LIGANDS.filter((l) => source.get(l.id)!.includes('@') && !source.get(l.id)!.includes('.'));
+
+  it('every ligand with stereocenters is drawn as the enantiomer its SMILES and label say, no other stereoisomer', () => {
+    expect(chiral().length).toBeGreaterThan(30);
+    // (a donor N's H, kept on the source, makes it look like a stereocenter: not one drawn)
+    const want = (l: (typeof LIGANDS)[number]) => tags(onMetal(source.get(l.id)!))!.split(' ').filter((x) => !x.endsWith('(?)')).join(' ');
+    const wrong = chiral().filter((l) => drawnSmiles(l) !== want(l)).map((l) => `${l.id}: ${drawnSmiles(l)} not ${want(l)}`);
+    expect(wrong.join('\n')).toBe('');
+    for (const l of chiral()) expect(l.drawn, `${l.id}: says which enantiomer is drawn`).toBeTruthy();
+    // and drawn in full (Expand Label Fully), the same
+    const full = new Map((FULL as unknown as { id: string }[]).map((t) => [t.id, t]));
+    const wrongFull = chiral().filter((l) => full.has(`${l.tpl}-full`) && drawnSmiles(l, full.get(`${l.tpl}-full`)) !== want(l)).map((l) => l.id);
+    expect(wrongFull.join(' ')).toBe('');
+  });
+
+  it('CHIRAPHOS, SKEWPHOS, DIPAMP, QuinoxP* and BenzP* are the chiral (R,R)/(S,S) isomers, not meso', () => {
+    for (const abbr of ['CHIRAPHOS', 'SKEWPHOS', 'DIPAMP', 'QuinoxP*', 'BenzP*']) {
+      const s = plain(source.get(ligandByAbbr(abbr)!.id)!);
+      // a meso compound is its own mirror image
+      const mirror = canon(s.replace(/@@|@/g, (x) => (x === '@' ? '@@' : '@')))!;
+      expect(mirror, abbr).not.toBe(s);
+    }
+    expect(ligandByAbbr('CHIRAPHOS')!.drawn).toBe('(R,R)');
+    expect(ligandByAbbr('DIOP')!.name).toContain('(4S,5S)');
+    expect(ligandByAbbr('DIOP')!.drawn).toBe('(S,S)');
+  });
+
+  it('atropisomeric and spiro ligands say which enantiomer they are, and Josiphos is (R,Sp)', () => {
+    for (const abbr of ['BINAP', 'SEGPHOS', 'BINOL', 'SDP', 'SIPHOS', 'MonoPhos']) expect(ligandByAbbr(abbr)!.drawn, abbr).toMatch(/^\((R|S)\)$/);
+    expect(ligandByAbbr('Josiphos')!.drawn).toBe('(R,Sp)');
+    // the stereocenter's methyl is wedged, so its configuration shows
+    expect(drawing('Josiphos').bonds.some((b) => b[3] === 'wedge')).toBe(true);
+    // a label only where the ligand is chiral: stereocenters in its SMILES, or a named axis
+    const axial = /BINAP|SEGPHOS|BIPHEP|SYNPHOS|DIFLUORPHOS|P-Phos|SDP|SIPHOS|BINOL|MonoPhos|PipPhos|BINAM|QUINAP|Josiphos|SL-J/;
+    for (const l of LIGANDS) if (l.drawn && !source.get(l.id)!.includes('@')) expect(l.abbr.join(' '), l.id).toMatch(axial);
+  });
+
+  it('ethyls as Et (PEt3, Et-DuPhos), but a ring\'s CH2CH2 stays drawn', () => {
+    expect(drawing('PEt3').atoms.some((a) => a[4] === 'PEt3' || a[4] === 'Et')).toBe(true);
+    const et = drawing('Et-DuPhos');
+    expect(et.atoms.filter((a) => a[4] === 'Et').length).toBe(4);
+    // the phospholane rings keep their carbons
+    expect(et.atoms.filter((a) => a[2] === 'C' && !a[4]).length).toBeGreaterThanOrEqual(14);
+  });
+
+  it('Xantphos is drawn upright as in Nate\'s inventory: O above, CMe2 below, both P up', () => {
+    const t = drawing('Xantphos');
+    const y = (el: string, label?: string) => t.atoms.filter((a) => a[2] === el && (label === undefined || a[4] === label)).map((a) => a[1]);
+    const o = y('O')[0];
+    const ps = t.atoms.filter((a) => a[2] === 'P').map((a) => a[1]);
+    const cs = t.atoms.filter((a) => a[2] === 'C' && !a[4]).map((a) => a[1]);
+    // page y runs down: O near the top of the backbone, the CMe2 carbons lower
+    expect(o).toBeLessThan(Math.max(...cs));
+    expect(Math.max(...ps)).toBeLessThan(Math.max(...cs));
   });
 });

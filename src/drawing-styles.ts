@@ -6,7 +6,7 @@
 // from ACS 1996 in proportion to the bond length, and the note says so.
 
 import { Doc, type Contents } from './model';
-import { ACS_1996, DocStyle } from './style';
+import { ACS_1996, DocStyle, type StyleScheme } from './style';
 
 /** What a style is for: the groups the Drawing Styles gallery shows ('Yours' is your own). */
 export type StyleUse = 'Journal' | 'Presentation' | 'Poster' | 'Thesis/Print';
@@ -129,7 +129,21 @@ const NUMBERS = ['bondLength', 'lineWidth', 'boldWidth', 'marginWidth', 'hashSpa
 export function sameLook(a: DocStyle, b: DocStyle): boolean {
   return NUMBERS.every((k) => Math.abs(a[k] - b[k]) < 1e-6) && a.labelFont === b.labelFont && a.captionFont === b.captionFont
     && Math.abs(arrowTextSizeOf(a) - arrowTextSizeOf(b)) < 1e-6 && arrowTextFontOf(a) === arrowTextFontOf(b)
-    && ARROW_SIZES.every((k) => (a[k] ?? null) === (b[k] ?? null));
+    && ARROW_SIZES.every((k) => (a[k] ?? null) === (b[k] ?? null))
+    && JSON.stringify(cleanScheme(a.scheme) ?? null) === JSON.stringify(cleanScheme(b.scheme) ?? null);
+}
+
+const SCHEME_DISTANCES = ['structGap', 'plusGap', 'textGap', 'lead', 'headGap'] as const;
+
+/** A style's own scheme settings, keeping only what makes sense (in a fixed order), or undefined when it has none. */
+export function cleanScheme(raw: unknown): StyleScheme | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: StyleScheme = {};
+  for (const k of SCHEME_DISTANCES) { const v = r[k]; if (typeof v === 'number' && Number.isFinite(v) && v >= 0) out[k] = Math.min(500, v); }
+  if (r.textAlign === 'left' || r.textAlign === 'center' || r.textAlign === 'right') out.textAlign = r.textAlign;
+  if (typeof r.fit === 'boolean') out.fit = r.fit;
+  return Object.keys(out).length ? out : undefined;
 }
 
 /** A style's own arrow sizes (absent: the usual for its line width). */
@@ -157,6 +171,8 @@ export function cleanStyle(raw: unknown): DocStyle | null {
   if (typeof r.arrowTextSize === 'number' && Number.isFinite(r.arrowTextSize) && r.arrowTextSize > 0) out.arrowTextSize = r.arrowTextSize;
   if (typeof r.arrowTextFont === 'string' && r.arrowTextFont.trim()) out.arrowTextFont = r.arrowTextFont.trim();
   for (const k of ARROW_SIZES) { const v = r[k]; if (typeof v === 'number' && Number.isFinite(v) && v > 0) out[k] = Math.min(30, v); }
+  const scheme = cleanScheme(r.scheme);
+  if (scheme) out.scheme = scheme;
   return out;
 }
 
@@ -273,5 +289,6 @@ export function scaleStyle(st: DocStyle, k: number): DocStyle {
     hashSpacing: r(st.hashSpacing), labelSize: r(st.labelSize), captionSize: r(st.captionSize),
     ...(st.arrowTextSize !== undefined ? { arrowTextSize: r(st.arrowTextSize) } : {}),
     ...Object.fromEntries(ARROW_SIZES.filter((x) => st[x] !== undefined).map((x) => [x, r(st[x]!)])),
+    ...(st.scheme ? { scheme: { ...st.scheme, ...Object.fromEntries(SCHEME_DISTANCES.filter((x) => st.scheme![x] !== undefined).map((x) => [x, r(st.scheme![x]!)])) } } : {}),
   };
 }

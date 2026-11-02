@@ -9,11 +9,11 @@ import { Doc, Atom, Bond, Arrow, PARTIAL, Caption, Shape, PICTURE_SHADOWS, pictu
 import { centredSpots, fullStyle, highlightPieces, highlightSizes, movePieces, tracePieces, type Piece } from './highlight';
 import { highlightFx, layerPaints, needsFx, patternMarks, regionOf, rgba, unionOf, type FxLayer, type FxPaint, type FxStep, type HighlightFx, type Region, shapeShadow } from './highlight-fx';
 import { ellipseArc, isCircleRing, ringCircle, ringsThroughBond, type RingCircle } from '../chem/aromatic';
-import { allylArc, piLooksOf } from '../chem/hapto';
+import { chainArc, piLooksOf } from '../chem/hapto';
 import { crossingGapsCached } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
-import { bondEndPrefs, doubleBondGap, wedgeWidth } from '../style';
+import { bondEndPrefs, doubleBondGap, mapLookPrefs, wedgeWidth } from '../style';
 import { depthFractions, depthShadePrefs, shadeLook, shadeStep } from './depth-shade';
 import { joinWideEnds, lineMitres, endTip, LINE_MITRE_LIMIT, type WideEnd, type EndJoin, type LineEnd } from './bond-joins';
 import { chargeInk, labelBonds, labelSpec, layoutLabel, LabelLayout, labelLook } from '../chem/labels';
@@ -22,7 +22,7 @@ import { isGenericLabel } from '../chem/labels';
 import { bracketPath, shaftOffset, shapeOrder, elbowRoute, boxOf, shapeBox, shapeMid, shapeTurn, bezPoints, bezHeadBack, bezPathAt, bezSlice, type PathStep } from '../objects';
 import { atomStereoText, bondStereoText, shownDescriptor, axialStyle, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
-import { attachDiamondSize, hasAttachDiamond } from './atom-marks';
+import { attachDiamondSize, hasAttachDiamond, isMapNumber, MAP_GREY, MAP_PEACH, mapBox, mapColour } from './atom-marks';
 import { layoutText, FONT_STACK, withStack, type TextLayout } from '../text/layout';
 import { drawLayout } from '../text/draw';
 import { geoDef, moveSteps, textArea, traceSteps, type GeoStep } from '../design/geo';
@@ -32,7 +32,7 @@ import { imageFor } from './images';
 import { hasShapeFx, shapeFx, type ShapeFxPaints } from './shape-fx';
 import { fxCanvas, fxSrc, shapeDef, traceShape } from './picture-fx';
 import { layoutTable, drawTable, type TableLayout, type TablePart } from '../table';
-import type { TableData } from '../model';
+import type { TableData, TextRun } from '../model';
 import { repeatLabelPlace } from '../chem/polymer';
 import { paintChartBox } from './chart-box-paint';
 import { paintShapeMath } from '../deck/equation';
@@ -50,6 +50,8 @@ export interface PageDecor {
 
 /** Words shown in an empty placeholder on screen. */
 const PROMPTS = { title: 'Click to add title', subtitle: 'Click to add subtitle', body: 'Click to add text' };
+/** What a Smart Scheme's dashed species box says on screen. */
+const HOLDER_HINT: { runs: TextRun[] } = { runs: [{ text: 'Draw the structure here, or select the box and paste', color: '#8a909b' }] };
 
 /** Something that can record a picture instead of drawing it (the vector recorder). */
 interface PictureSink { picture(s: Shape, radius?: number): void }
@@ -166,6 +168,8 @@ export class Renderer {
   lastSceneMs = 0;
   /** Drawing on screen for editing: empty placeholders show their prompts. */
   screen = false;
+  /** The drawing window: a Smart Scheme's dashed species boxes say how to fill them (never in pictures or print). */
+  holderHints = false;
   /** Drawn under everything (a slide and its master). */
   page: PageDecor | null = null;
   /** Placeholder text formatting of the document being drawn. */
@@ -353,17 +357,13 @@ export class Renderer {
       const looks = piLooksOf(doc, b);
       if (looks.length) {
         const gap = doubleBondGap(doc.style) * (b.s ?? 1);
-        c.pi = looks.map((lk) => {
-          if (lk.kind === 'ring') return { circle: ringCircle(doc, lk.ring) };
-          const [a, m, z] = lk.chain.map((id) => doc.atoms.get(id)!);
-          const q = allylArc(a, m, z, gap);
-          if (!q) return {};
-          // this bond's half of the curve (split in the middle, de Casteljau)
-          const mid = { x: (q.from.x + 2 * q.ctrl.x + q.to.x) / 4, y: (q.from.y + 2 * q.ctrl.y + q.to.y) / 4 };
-          const first = b.a1 === lk.chain[0] || b.a2 === lk.chain[0];
-          return { arc: first
-            ? { from: q.from, ctrl: { x: (q.from.x + q.ctrl.x) / 2, y: (q.from.y + q.ctrl.y) / 2 }, to: mid }
-            : { from: mid, ctrl: { x: (q.ctrl.x + q.to.x) / 2, y: (q.ctrl.y + q.to.y) / 2 }, to: q.to } };
+        c.pi = looks.flatMap((lk) => {
+          if (lk.kind === 'ring') return [{ circle: ringCircle(doc, lk.ring) }];
+          const pieces = chainArc(lk.chain.map((id) => doc.atoms.get(id)!), gap);
+          if (!pieces) return [{}];
+          // this bond's stretch of the curve
+          const k = lk.chain.findIndex((id, i) => i + 1 < lk.chain.length && ((id === b.a1 && lk.chain[i + 1] === b.a2) || (id === b.a2 && lk.chain[i + 1] === b.a1)));
+          return k < 0 ? [{}] : pieces[k].map((arc) => ({ arc }));
         });
         this.bondCache.set(b.id, c);
         return c;
@@ -741,7 +741,22 @@ export class Renderer {
     const p = this.stereoPlacer(doc).number(a);
     const f = `${p.size}px ${FONT_STACK}`;
     if (f !== curFont) { ctx.font = f; curFont = f; }
-    ctx.fillStyle = a.color ?? '#000';
+    let ink = a.color ?? '#000';
+    if (isMapNumber(a)) {
+      // an atom-map number: in a small rounded box (Chemistry ▸ Map Atoms)
+      const b = mapBox(p, measureText(a.atomNumber!, p.size));
+      const look = mapLookPrefs.look;
+      const r = Math.min(b.x2 - b.x1, b.y2 - b.y1) * 0.3;
+      ctx.beginPath();
+      ctx.roundRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1, r);
+      ctx.fillStyle = look === 'grey' ? '#ffffff' : look === 'tint' ? tint(mapColour(a.mapNo!), 0.45) : MAP_PEACH;
+      ctx.fill();
+      ctx.lineWidth = doc.style.lineWidth * (look === 'grey' ? 0.6 : 0.5);
+      ctx.strokeStyle = look === 'grey' ? MAP_GREY : '#000000';
+      ctx.stroke();
+      if (look === 'grey') ink = MAP_GREY;
+    }
+    ctx.fillStyle = ink;
     ctx.fillText(a.atomNumber!, p.x, p.y);
     return curFont;
   }
@@ -879,7 +894,7 @@ export class Renderer {
         const ab = a.color ? undefined : back?.get(a.id);
         ctx.fillStyle = a.color ?? (ab !== undefined ? shadeLook(shadeStep(ab)).color : '#000');
         for (const r of info.layout.runs) {
-          const f = `${r.size}px ${this.labelStack}`;
+          const f = `${r.italic ? 'italic ' : ''}${r.size}px ${this.labelStack}`;
           if (f !== curFont) { ctx.font = f; curFont = f; }
           ctx.fillText(r.text, a.x + r.dx, a.y + r.dy);
         }
@@ -2271,6 +2286,12 @@ export class Renderer {
     if (s.text && this.geoEdit !== s.id) {
       const g = this.geoText(s);
       if (g) drawLayout(ctx, g.lay, g.x, g.y);
+    } else if (s.holder && (this.screen || this.holderHints)) {
+      // a Smart Scheme species waiting for its structure says how, on screen only, small
+      const x1 = Math.min(s.x1, s.x2), x2 = Math.max(s.x1, s.x2), y1 = Math.min(s.y1, s.y2), y2 = Math.max(s.y1, s.y2);
+      const lay = layoutText({ runs: HOLDER_HINT.runs, justify: 'center', wrap: Math.max(4, x2 - x1 - 4) }, 0.62 * this.captionSize, (t, sz, family, style) => measureText(t, sz, family, style));
+      const th = lay.box.y2 - lay.box.y1;
+      if (th < y2 - y1) drawLayout(ctx, lay, x1 + 2, (y1 + y2) / 2 - th / 2 - lay.box.y1);
     }
   }
 

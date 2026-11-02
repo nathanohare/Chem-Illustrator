@@ -51,9 +51,9 @@ describe('the demos', () => {
 });
 
 describe('the setting', () => {
-  it('defaults to the card, and reads back each choice', () => {
-    expect(parseDemoLook(undefined)).toBe('card');
-    expect(parseDemoLook('nonsense')).toBe('card');
+  it('is off unless chosen, and reads back each choice', () => {
+    expect(parseDemoLook(undefined)).toBe('off');
+    expect(parseDemoLook('nonsense')).toBe('off');
     for (const l of DEMO_LOOKS) expect(parseDemoLook(l.value)).toBe(l.value);
   });
 });

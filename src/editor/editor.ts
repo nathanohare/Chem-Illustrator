@@ -10,6 +10,9 @@ import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAt
 import { CaptionEditor } from '../ui/caption-editor';
 import { followLink, linkTip } from '../ui/links-ui';
 import { stopAtEdge } from '../ui/scrollbars';
+
+/** Screen pixels of grey left showing past a fixed page edge when panned as far as it goes. */
+export const WALL_BAND = 14;
 import { linkAtPoint } from '../links';
 import { typingPrefs } from '../text/typing';
 import { geoDef, geoShapeStyle, moveSteps, traceSteps } from '../design/geo';
@@ -46,7 +49,7 @@ import { extractDrawing, insertDrawing } from '../io/clipboard';
 import { isReactionArrow, itemFinder, rolesOf, ROLES, schemeItems, type Item, type Role } from '../chem/reaction';
 import { applySchemePlan, planCleanUp } from '../chem/scheme-layout';
 import { adoptSideCaption, arrowTexts, helperBox, setSideText, sideSlot, takesHelpers, textJustify, textSize, type ArrowSide } from '../chem/arrow-text';
-import { schemePrefs, spacing } from '../chem/scheme-layout';
+import { prefsOf, schemePrefs, spacing } from '../chem/scheme-layout';
 import { arrowEnd, boxOf, productDrawing, pushArrowsOf, pushedAtoms, readPushes, type PushIssue, type PushReading } from '../chem/push-electrons';
 import { freeSpace } from './free-space';
 import { fillRings, refitRingFills, ringFillsOn } from '../chem/ring-fill';
@@ -63,16 +66,16 @@ import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '..
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
-import { arrangeSmart, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotText, setStepText, smartFrameOf, smartMarks, ungroupSmart, type SmartData, type StepPart } from '../chem/smart-scheme';
+import { arrangeSmart, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
 import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
 import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
-import { putTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
+import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
 import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
-import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, CAP, SUB_SCALE } from '../chem/labels';
+import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
 import {
   Handle, type HandleId, arrowHit, shapeHit, arrowHandles, shapeHandles, dragArrowHandle, dragShapeHandle, dragCropHandle, shapeBox, shapeMid, shapeTurn,
   arrowPoints, bracketHalves, type BracketForm, bracketLip, unionRect,
@@ -318,7 +321,7 @@ const HILITE = 'rgba(40, 120, 255, 0.28)';
 const PREVIEW = '#2f6fdf';
 
 /**
- * Colours of the marks drawn over the page. With View > Dark Page on, the marks go through the
+ * Colours of the marks drawn over the page. With View > Reading Mode on, the marks go through the
  * page's colour filter too (so text being typed shows in the ink colour), which turns lightness
  * round: these are picked to come out bright and clear on the dark page.
  */
@@ -360,6 +363,12 @@ export class Editor {
   /** Preferences from the settings file. */
   /** With one reaction arrow selected, outline what its starting materials, products and conditions are. */
   showRoles = true;
+  /**
+   * Enter finishes typing and Alt+Enter starts a new line (Settings ▸ Preferences; main.ts knows
+   * the mode): for text from the Text tool ('text'), or text in a shape, a table cell or a
+   * slide's title and text placeholders ('other').
+   */
+  enterFinishesText: (what: 'text' | 'other') => boolean = () => false;
 
   options = {
     /** The pen sketches whatever tool is picked (View > Window and Colours > Touch Mode > Pen Always Sketches). */
@@ -425,6 +434,8 @@ export class Editor {
   private drag: Drag | null = null;
   /** Something is being dragged (moved, rotated or resized) right now. */
   get dragging(): boolean { return !!this.drag?.moved; }
+  /** Text is being typed into a caption or label. */
+  captionOpen(): boolean { return !!this.captionEd?.isOpen; }
   private needScene = true;
   private needOverlay = true;
   private frameQueued = false;
@@ -559,10 +570,12 @@ export class Editor {
     window.addEventListener('blur', () => this.setMods({ shiftKey: false, altKey: false, ctrlKey: false, metaKey: false }));
     // frames that follow what they surround are refitted as each change finishes
     doc.beforeCommit = (before) => {
-      let frames = false, rings = false, tied = false, energy = false, tables = false, diagrams = false, plates = false, smart = false, newman = false;
-      for (const s of this.doc.shapes.values()) { if (s.frame?.fit) frames = true; if (s.kind === 'ring') rings = true; if (s.energy) energy = true; if (s.plate) plates = true; if (s.kind === 'table') tables = true; if (s.diagram) diagrams = true; if (s.smart) smart = true; if (s.newman?.link) newman = true; }
+      let frames = false, rings = false, tied = false, energy = false, tables = false, diagrams = false, plates = false, smart = false, newman = false, torsion = false;
+      for (const s of this.doc.shapes.values()) { if (s.frame?.fit) frames = true; if (s.kind === 'ring') rings = true; if (s.energy) energy = true; if (s.plate) plates = true; if (s.kind === 'table') tables = true; if (s.diagram) diagrams = true; if (s.smart) smart = true; if (s.newman?.link) newman = true; if (s.torsion) torsion = true; }
       // a linked Newman projection's viewing mark follows its bond; a changed structure is worked out again after
       if (newman) { const stale = refitNewman(this.doc, before); if (stale.length) queueMicrotask(() => this.onNewmanStale(stale)); }
+      // a torsion chart's barrier arrow or number dragged to the side: the pair moves together
+      if (torsion) refitTorsion(this.doc, this.fullMeasure(), before);
       for (const c of this.doc.captions.values()) if (c.attach) { tied = true; break; }
       // ring fills first, then labels beside their structures: a frame round a structure takes in both
       if (rings) refitRingFills(this.doc, before);
@@ -577,7 +590,7 @@ export class Editor {
       // structures in a diagram's items: room kept for them (the diagram growing to fit), and centred there
       if (diagrams) refitDiagramFigures(this.doc, before, this.measure());
       // a Smart Scheme's species moved by hand: its arrows and their conditions follow
-      if (smart) refitSmart(this.doc, before, this.measure());
+      if (smart) { fillHoldersDrawn(this.doc, before, this.measure()); refitSmart(this.doc, before, this.measure()); }
       if (frames) refitFrames(this.doc, before, this.measure());
       // mechanism arrows the change left running into something find their own way round again
       if (this.options.rerouteArrows) this.rerouteArrows(before);
@@ -612,6 +625,7 @@ export class Editor {
     this.frameQueued = false;
     const t0 = performance.now(), dragging = !!this.drag;
     if (this.needScene) {
+      this.keepByWalls();
       this.r.renderScene(this.doc, full ? Infinity : 10);
       this.needScene = this.r.incomplete;
     }
@@ -1536,6 +1550,24 @@ export class Editor {
 
   /** What the wheel scrolls over: it stops at this (with half a screen of room) as the scroll bars do. */
   scrollArea: (() => { x1: number; y1: number; x2: number; y2: number } | null) | null = null;
+  /**
+   * Panning and zooming stop with a thin band of grey past a fixed page edge (`WALL_BAND` screen
+   * pixels), rather than half a window of it. Where the pages are narrower or shorter than the
+   * window, they keep to the left and top fixed edges and the spare room opens to the right and down.
+   */
+  private keepByWalls(): void {
+    const w = this.walls?.();
+    if (!w) return;
+    const v = this.r.view, s = v.scale, band = WALL_BAND;
+    const keep = (o: number, lo1: number, hi2: number, size: number) => {
+      const hi = isFinite(lo1) ? band - lo1 * s : Infinity;
+      const lo = isFinite(hi2) ? size - band - hi2 * s : -Infinity;
+      return lo > hi ? hi : Math.min(Math.max(o, lo), hi);
+    };
+    v.ox = keep(v.ox, w.x1, w.x2, this.r.width);
+    v.oy = keep(v.oy, w.y1, w.y2, this.r.height);
+  }
+
   /** The fixed edges of the drawing's page grid (page-grid.ts): nothing is put or moved past them. Null: none. */
   walls: (() => Rect | null) | null = null;
 
@@ -2992,7 +3024,7 @@ export class Editor {
     if (errors.length || !out) { this.pickIssues(errors); return { drawn: false, issues: reading.issues }; }
     // after what the arrows are drawn on (and the arrows), on the level of its middle
     const L = doc.style.bondLength;
-    const sp = spacing(L);
+    const sp = spacing(L, prefsOf(doc));
     const atoms = new Set<number>();
     for (const id of pushedAtoms(reading)) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
     const from = boxOf(doc, atoms, arrows.map((r) => r.id))!;
@@ -3409,6 +3441,40 @@ export class Editor {
   smartMove(id: number, from: number, to: number): boolean { return this.smartEdit(id, 'Move Species', (m) => moveSlot(this.doc, m, id, from, to)); }
   smartSlotText(id: number, k: number, text: string): boolean { return this.smartEdit(id, 'Type Species', (m) => setSlotText(this.doc, m, id, k, text)); }
   smartStepText(id: number, k: number, part: StepPart, text: string): boolean { return this.smartEdit(id, 'Type Conditions', (m) => setStepText(this.doc, m, id, k, part, text)); }
+  /** Make species k of Smart Scheme `id` a dashed box to draw or paste its structure in (selected, ready for Ctrl+V). */
+  smartToHolder(id: number, k: number): boolean {
+    let box: number | null = null;
+    const ok = this.smartEdit(id, 'Make Species a Structure', (m) => (box = slotToHolder(this.doc, m, id, k)) !== null);
+    if (box !== null) { this.selectOnly({ kind: 'shape', id: box }); this.changed(); }
+    return ok;
+  }
+  /** Select one shape on its own (a Smart Scheme's dashed species box, from the species list). */
+  selectShape(id: number): void { if (this.doc.shapes.has(id)) { this.selectOnly({ kind: 'shape', id }); this.changed(); } }
+  /** Make species k's dashed box a text label again. */
+  smartToText(id: number, k: number): boolean { return this.smartEdit(id, 'Make Species Text', (m) => holderToSlotText(this.doc, m, id, k) !== null); }
+  /** The dashed species box selected on its own (a paste goes into it), or null. */
+  selectedHolder(): number | null {
+    const s = this.sel;
+    if (s.shapes.size !== 1 || s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size) return null;
+    const id = [...s.shapes][0];
+    return holderFrameOf(this.doc, id) !== null ? id : null;
+  }
+  /** Put a drawing in place of a dashed species box: it goes in the middle of the box and becomes that species. */
+  fillSpeciesBox(holder: number, drawing: Doc): boolean {
+    const sh = this.doc.shapes.get(holder);
+    const frame = holderFrameOf(this.doc, holder);
+    if (!sh || frame === null) return false;
+    let ok = false;
+    this.doc.edit('Paste into Species', () => {
+      const sel = insertDrawing(this.doc, drawing, { x: (sh.x1 + sh.x2) / 2, y: (sh.y1 + sh.y2) / 2 });
+      ok = fillHolder(this.doc, this.fullMeasure(), holder, [...sel.atoms], [...sel.captions]);
+    });
+    if (this.doc.shapes.has(frame)) this.selectOnly({ kind: 'shape', id: frame });
+    this.changed();
+    return ok;
+  }
+  smartSlotRuns(id: number, k: number, parts: TextPart[]): boolean { return this.smartEdit(id, 'Type Species', (m) => setSlotRuns(this.doc, m, id, k, parts)); }
+  smartStepRuns(id: number, k: number, part: StepPart, parts: TextPart[]): boolean { return this.smartEdit(id, 'Type Conditions', (m) => setStepRuns(this.doc, m, id, k, part, parts)); }
   /** Lay a Smart Scheme out again, with a new layout or other settings. */
   smartArrange(id: number, patch?: Partial<SmartData>): boolean { return this.smartEdit(id, 'Arrange Smart Scheme', (m) => arrangeSmart(this.doc, m, id, patch)); }
 
@@ -5522,6 +5588,7 @@ export class Editor {
         const span = document.createElement('span');
         span.textContent = p.text.replace(/−/g, '-');
         if (p.sub || p.sup) { span.className = p.sub ? 'sub' : 'sup'; span.style.fontSize = `${SUB_SCALE * 100}%`; }
+        if (p.italic) span.style.fontStyle = 'italic';
         box.appendChild(span);
       }
       // what the label shows can differ from what was typed (a minus for a hyphen): keep the typed text
@@ -5573,10 +5640,13 @@ export class Editor {
       if (ok && doc.atoms.has(id) && (text !== was || marks !== wasMarks)) {
         const lead = text.length - text.trimStart().length;
         const kept = marks.slice(lead, lead + text.trim().length);
+        // tBu, iPr… in the alkyl look chosen in Settings ▸ Preferences (t-Bu, an italic t)
+        const styled = styleLabel(text.trim(), kept);
         doc.edit('Label', () => {
-          this.applyLabel(id, text);
+          this.applyLabel(id, styled.label);
           const now = doc.atoms.get(id)!;
-          const m = now.label !== null && /[\^_=]/.test(kept) ? kept : undefined;
+          const sm = styled.marks ?? '';
+          const m = now.label !== null && /[\^_=/]/.test(sm) ? sm : undefined;
           if (now.labelMarks !== m) doc.updateAtom(id, { labelMarks: m });
         });
         // remembered for Repeat Label on the right-click menu (clearing a label is not a label)
@@ -5861,7 +5931,7 @@ export class Editor {
     const at = add(slot.mid, mul(slot.out, slot.gap + size * (side === 'above' ? 0.25 : 0.8)));
     this.sel = emptySel();
     this.openCaption(null, at, undefined, undefined, {
-      justify: textJustify(),
+      justify: textJustify(this.doc),
       size,
       font: this.doc.style.arrowTextFont,
       // once typed: counted as the arrow's conditions, the arrow fitted to it and the text lined up
@@ -5905,7 +5975,12 @@ export class Editor {
     }
     if (!best) return false;
     const id = best.id;
-    doc.edit('Text to Atom', () => { doc.removeCaption(caption); this.applyLabel(id, text); });
+    const styled = styleLabel(text.trim());
+    doc.edit('Text to Atom', () => {
+      doc.removeCaption(caption);
+      this.applyLabel(id, styled.label);
+      if (styled.marks && doc.atoms.get(id)?.label) doc.updateAtom(id, { labelMarks: styled.marks });
+    });
     this.lastEdited = id;
     this.say(`${text} is now an atom on the bond. Undo (Ctrl+Z) to keep it as text, or turn this off in Edit > Settings.`);
     return true;
@@ -5968,6 +6043,7 @@ export class Editor {
       defaultSize: base?.size ?? st.captionSize,
       defaultFont: base?.font ?? st.captionFont,
       redraw: () => this.requestOverlay(),
+      enterFinishes: () => this.enterFinishesText(c?.ph ? 'other' : 'text'),
     };
     const initial = c
       ? { runs: applyBase(c.runs, base), paras: c.paras, justify: c.justify, wrap: c.wrap, width: c.width, lineHeight: c.lineHeight, lineSpacing: c.lineSpacing, cols: c.cols, colGap: c.colGap, boxH: c.boxH, fit: c.fit }
@@ -6128,7 +6204,7 @@ export class Editor {
   moveSnap: ((box: Rect, raw: Vec, tol: number) => Vec) | null = null;
   /** Text boxes take a click as typing (Slides and Design), with an I-beam over them. */
   textFirst = false;
-  /** View > Dark Page is on: marks drawn over the page are made to show up on it. */
+  /** View > Reading Mode is on: marks drawn over the page are made to show up on it. */
   dark = false;
 
   /** What the pointer was last over (to change the pointer when Ctrl is pressed or let go). */
@@ -6252,6 +6328,7 @@ export class Editor {
       defaultSize: size,
       defaultFont: this.doc.style.captionFont,
       redraw: () => this.requestOverlay(),
+      enterFinishes: () => this.enterFinishesText('other'),
       hint: 'Enter: new line · Esc: done',
       around: () => shapeBox(doc.shapes.get(id) ?? s),
     };
@@ -6351,6 +6428,7 @@ export class Editor {
       defaultSize: size,
       defaultFont: this.doc.style.captionFont,
       redraw: () => this.requestOverlay(),
+      enterFinishes: () => this.enterFinishesText('other'),
       hint: typeof part === 'string' ? 'Enter: new paragraph · Esc: done' : 'Tab: next cell · Shift+Tab: back · Enter: new line · Esc: done',
       around: () => { const cur = doc.shapes.get(id); return cur ? this.r.tableBox(cur) : this.r.tableBox(s); },
       typed: (rich: { runs: Caption['runs']; paras?: Caption['paras'] }) => {
