@@ -10255,6 +10255,30 @@ for (const group of [...TOOL_GROUPS, OFF_BAR]) {
 }
 
 /**
+ * Document and Spreadsheet, with no structure being drawn: one Insert Structure button in place of
+ * the drawing tools (they do nothing until a structure is open). In a sheet the structure goes in
+ * the active cell; in a document, at the caret (or the picked drawing opens). While a structure is
+ * drawn, and in split view, the whole toolbox is back.
+ */
+const structureStart = document.createElement('button');
+structureStart.type = 'button';
+structureStart.id = 'structure-start';
+structureStart.innerHTML = `${ICONS['ring-benzene'] ?? '⬡'}<span>Insert<br>Structure</span>`;
+structureStart.addEventListener('click', () => {
+  const mode = ws.active.mode;
+  if (mode === 'sheet') command('draw-structure');
+  else if (mode === 'document') docMode?.drawWithTool();
+});
+structureStart.addEventListener('pointerenter', () => {
+  const sheet = ws.active.mode === 'sheet';
+  const cell = sheet ? $<HTMLInputElement>('#sh-name').value : '';
+  structureStart.title = sheet ? `Insert Structure: draw a structure in the active cell${cell ? ` (${cell})` : ''}. Double-click a structure to change it` : 'Insert Structure: draw a structure or scheme to put in the text at the caret (or change the picked drawing)';
+});
+structureStart.title = 'Insert Structure';
+structureStart.setAttribute('aria-label', 'Insert Structure');
+$('#dock-left').prepend(structureStart);
+
+/**
  * A tool picked from a toolbox. In Document and Sheet modes, with no drawing open, a drawing
  * tool opens one to use it on: a new structure at the text cursor, or the selected cell's.
  */
