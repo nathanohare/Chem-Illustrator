@@ -328,7 +328,9 @@ export class SmartPane {
       step.className = 'sp-step';
       const arrow = document.createElement('span');
       arrow.className = 'sp-arrow';
-      arrow.textContent = cycle && k === read.slots.length - 1 ? '↺' : '↓';
+      // A "T" text mark: this row holds the words written on the arrow.
+      arrow.innerHTML = '<svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2.5 2.75h9M7 2.75v8.5"/></svg>';
+      arrow.title = `Text on the arrow for step ${k + 1}`;
       arrow.setAttribute('aria-hidden', 'true');
       const part = (p: StepPart, ph: string, label: string) => field(`p${k}${p}`, stepParts(doc, l, p), ph, `${label}, step ${k + 1}`, (v) => this.hooks.stepRuns(id, k, p, v));
       const parts = cycle

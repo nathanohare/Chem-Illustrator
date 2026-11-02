@@ -3677,7 +3677,8 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .smart-pane .sp-step { padding-left: 20px; gap: 3px; }
 .smart-pane .sp-step-fields { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; }
 .smart-pane .sp-step-fields .sp-rich { min-height: 17px; }
-.smart-pane .sp-arrow { padding-top: 1px; }
+.smart-pane .sp-arrow { padding-top: 3px; }
+.smart-pane .sp-arrow svg { display: block; margin: 0 auto; }
 .smart-pane .sp-opts { font-size: var(--fs-xs); }
 .smart-pane .sp-foot .sp-ungroup { padding: 1px 6px; font-size: var(--fs-xs); }
 .smart-pane.docked { position: static; width: auto; min-width: 230px; max-width: 300px; max-height: none; border: none; border-radius: 0; box-shadow: none; padding: 4px 6px; }
