@@ -46,7 +46,7 @@ import { extractDrawing, insertDrawing } from '../io/clipboard';
 import { isReactionArrow, itemFinder, rolesOf, ROLES, schemeItems, type Item, type Role } from '../chem/reaction';
 import { applySchemePlan, planCleanUp } from '../chem/scheme-layout';
 import { adoptSideCaption, arrowTexts, helperBox, setSideText, sideSlot, takesHelpers, textJustify, textSize, type ArrowSide } from '../chem/arrow-text';
-import { schemePrefs, spacing } from '../chem/scheme-layout';
+import { prefsOf, schemePrefs, spacing } from '../chem/scheme-layout';
 import { arrowEnd, boxOf, productDrawing, pushArrowsOf, pushedAtoms, readPushes, type PushIssue, type PushReading } from '../chem/push-electrons';
 import { freeSpace } from './free-space';
 import { fillRings, refitRingFills, ringFillsOn } from '../chem/ring-fill';
@@ -3002,7 +3002,7 @@ export class Editor {
     if (errors.length || !out) { this.pickIssues(errors); return { drawn: false, issues: reading.issues }; }
     // after what the arrows are drawn on (and the arrows), on the level of its middle
     const L = doc.style.bondLength;
-    const sp = spacing(L);
+    const sp = spacing(L, prefsOf(doc));
     const atoms = new Set<number>();
     for (const id of pushedAtoms(reading)) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
     const from = boxOf(doc, atoms, arrows.map((r) => r.id))!;
@@ -5909,7 +5909,7 @@ export class Editor {
     const at = add(slot.mid, mul(slot.out, slot.gap + size * (side === 'above' ? 0.25 : 0.8)));
     this.sel = emptySel();
     this.openCaption(null, at, undefined, undefined, {
-      justify: textJustify(),
+      justify: textJustify(this.doc),
       size,
       font: this.doc.style.arrowTextFont,
       // once typed: counted as the arrow's conditions, the arrow fitted to it and the text lined up

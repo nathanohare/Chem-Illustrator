@@ -245,7 +245,7 @@ import { structurePlace } from './sheet/layout';
 import type { SheetFileDeps } from './io/sheet-files';
 import { fromEmbedSource, type Embedded } from './io/ole-object';
 import { objectPicture, type ObjectPicture } from './render/object-picture';
-import { ACS_1996, BOND_END_CHOICES, bondEndPrefs, DocStyle } from './style';
+import { ACS_1996, BOND_END_CHOICES, bondEndPrefs, DocStyle, MAP_LOOKS, mapLookPrefs, type MapLook } from './style';
 import { DEFAULT_DEPTH_SHADE, depthShadePrefs } from './render/depth-shade';
 import { emptyTable, tableFromCells } from './table';
 import type { TableData } from './model';
@@ -2672,7 +2672,7 @@ async function schemeSettings(): Promise<void> {
     { name: 'sameLength', label: 'Clean Up Reaction makes arrows the same length', value: String(p.sameLength), type: 'checkbox' },
     { name: 'lead', label: 'Arrow before the text starts', value: pt(p.lead), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
     { name: 'headGap', label: 'Space between text and arrowhead', value: pt(p.headGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
-  ], { ok: 'Save', note: 'Used when you type text beside an arrow, and by Clean Up Reaction and Arrange Scheme. The text\'s size and font are in Drawing Style. Leave a distance blank to scale it with the bond length. Existing schemes change when you next clean them up.' });
+  ], { ok: 'Save', note: 'Used when you type text beside an arrow, and by Clean Up Reaction and Arrange Scheme. These are the usual values for every file; a drawing style can have its own (Drawing Style ▸ Reaction arrows, with a preview), and those win. The text\'s size and font are in Drawing Style too. Leave a distance blank to scale it with the bond length. Existing schemes change when you next clean them up.' });
   if (!got) return;
   const len = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(500, n); };
   const next: Partial<SchemePrefs> = {
@@ -3149,11 +3149,17 @@ async function mapAtomsCommand(): Promise<void> {
   const got = await ask('Map Atoms', [
     ...(arrow !== undefined ? [{ name: 'which', label: 'Map', value: 'step', options: [{ value: 'step', label: 'The selected reaction step' }, { value: 'all', label: 'Every step in the drawing' }] }] : []),
     { name: 'numbers', label: 'Show the map numbers beside the atoms', type: 'checkbox', value: mapChoice.numbers },
+    { name: 'look', label: 'Map number boxes', value: mapLookPrefs.look, options: MAP_LOOKS.map((l) => ({ value: l.value, label: l.label })) },
     { name: 'colours', label: 'Colour each atom and where it goes the same', type: 'checkbox', value: mapChoice.colours },
     { name: 'bonds', label: 'Mark bonds made (green) and broken (red)', type: 'checkbox', value: mapChoice.bonds },
   ], { ok: 'Map', note: 'Atoms are paired the way Animate Reaction pairs them. To change a pair, pair it by hand in Animate Reaction and map again. Map numbers go into copied reaction SMILES and RXN files.' });
   if (!got) return;
   Object.assign(mapChoice, { numbers: got.numbers, colours: got.colours, bonds: got.bonds });
+  if (MAP_LOOKS.some((l) => l.value === got.look) && got.look !== mapLookPrefs.look) {
+    mapLookPrefs.look = got.look as MapLook;
+    doc.allDirty = true;
+    storeSettings();
+  }
   const { mapAtoms, applyAtomMap } = await import('./morph/atom-map');
   const res = mapAtoms(doc, renderer, { arrow: got.which === 'step' ? arrow : undefined, measure: editor.measure() });
   if (!res.steps) { flash('No reaction step to map: draw the starting materials, a reaction arrow and the products.', 6000); return; }
@@ -9695,6 +9701,7 @@ function currentSettings(): Settings {
     superscriptR: labelPrefs.superscriptR,
     alkylLook: alkylPrefs.look,
     bondEnds: bondEndPrefs.round,
+    mapLook: mapLookPrefs.look,
     depthShade: { ...depthShadePrefs },
     linkSide,
     slideTemplate,
@@ -9934,6 +9941,7 @@ function applySettings(s: Settings): void {
   labelPrefs.superscriptR = s.superscriptR;
   alkylPrefs.look = s.alkylLook;
   bondEndPrefs.round = s.bondEnds;
+  mapLookPrefs.look = s.mapLook;
   Object.assign(depthShadePrefs, s.depthShade);
   for (const el of document.querySelectorAll('[data-cmd="depth-shading"][role="menuitemcheckbox"]')) el.setAttribute('aria-checked', String(depthShadePrefs.on));
   linkSide = s.linkSide;
@@ -12275,7 +12283,7 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files demo clips hover tool tips animation', open: generalPreferences },
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
-  { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller', open: drawingStyleDialog },
+  { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
   { id: 'typing', title: 'Text and Spelling', words: 'typing spelling dictionary autocorrect replacements chemistry formulas subscripts', open: () => typingDialog.open() },
   { id: 'palettes', title: 'Colour Palettes', words: 'colours colors palette rows', open: () => editPalettes() },

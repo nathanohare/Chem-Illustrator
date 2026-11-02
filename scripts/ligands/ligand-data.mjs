@@ -162,7 +162,7 @@ export const FAMILIES = [
       ['biphep', 'BIPHEP', '2,2′-Bis(diphenylphosphino)-1,1′-biphenyl', `${PR2(1, Ph)}c1ccccc1-c1ccccc1${PR2end(2, Ph)}`],
       ['bisbi', 'BISBI', '2,2′-Bis(diphenylphosphinomethyl)-1,1′-biphenyl', `${PR2(1, Ph)}Cc1ccccc1-c1ccccc1C${PR2end(2, Ph)}`, { tpl: 'bisbi' }],
       ['dtbpx', 'dtbpx|DTBPMB', '1,2-Bis(di-tert-butylphosphinomethyl)benzene', `${PR2(1, tBu)}Cc1ccccc1C${PR2end(2, tBu)}`],
-      ['triphos', 'triphos|Triphos', '1,1,1-Tris(diphenylphosphinomethyl)ethane', `${PR2(1, Ph)}CC(C)(C${PR2end(2, Ph)})C${PR2end(3, Ph)}`, { pc: '1,1,1-Tris(diphenylphosphinomethyl)ethane', tpl: 'triphos' }],
+      ['triphos', 'triphos|Triphos', '1,1,1-Tris(diphenylphosphinomethyl)ethane', `${PR2(1, Ph)}CC(C)(C${PR2end(2, Ph)})C${PR2end(3, Ph)}`, { pc: '1,1,1-Tris(diphenylphosphinomethyl)ethane' }],
       ['ltriphos', 'PhP(CH2CH2PPh2)2|etp', 'Bis(2-diphenylphosphinoethyl)phenylphosphine', `${PR2(1, Ph)}CC[P:2](${Ph})CC${PR2end(3, Ph)}`],
     ],
   },
@@ -183,21 +183,21 @@ export const FAMILIES = [
       ['difluorphos', 'DIFLUORPHOS|Difluorphos', '5,5′-Bis(diphenylphosphino)-2,2,2′,2′-tetrafluoro-4,4′-bi-1,3-benzodioxole (DIFLUORPHOS)', `${PR2(1, Ph)}c1ccc2OC(F)(F)Oc2c1-c1c(${PR2end(2, Ph)})ccc2OC(F)(F)Oc12`, { pc: 'DIFLUORPHOS' }],
       ['pphos', 'P-Phos|PPhos', '2,2′,6,6′-Tetramethoxy-4,4′-bis(diphenylphosphino)-3,3′-bipyridine (P-Phos)', `${PR2(1, Ph)}c1cc(OC)nc(OC)c1-c1c(${PR2end(2, Ph)})cc(OC)nc1OC`, { pc: 'P-Phos' }],
       ['sdp', 'SDP', '7,7′-Bis(diphenylphosphino)-1,1′-spirobiindane (SDP)', `${PR2(1, Ph)}c1cccc2CCC3(CCc4cccc(${PR2end(2, Ph)})c43)c12`, { pc: '7,7\'-Bis(diphenylphosphino)-1,1\'-spirobiindane' }],
-      ['diop', 'DIOP', '(4R,5R)-2,2-Dimethyl-4,5-bis(diphenylphosphinomethyl)-1,3-dioxolane (DIOP)', `${PR2(1, Ph)}C[C@H]1OC(C)(C)O[C@@H]1C${PR2end(2, Ph)}`, { pc: 'DIOP' }],
-      ['chiraphos', 'CHIRAPHOS|Chiraphos', '(2S,3S)-2,3-Bis(diphenylphosphino)butane (CHIRAPHOS)', `${PR2(1, Ph)}[C@@H](C)[C@@H](C)${PR2end(2, Ph)}`, { pc: 'Chiraphos' }],
-      ['prophos', 'PROPHOS|Prophos', '(R)-1,2-Bis(diphenylphosphino)propane (PROPHOS)', `${PR2(1, Ph)}[C@H](C)C${PR2end(2, Ph)}`, { pc: '1,2-Bis(diphenylphosphino)propane' }],
-      ['skewphos', 'BDPP|SKEWPHOS|Skewphos', '(2S,4S)-2,4-Bis(diphenylphosphino)pentane (BDPP, SKEWPHOS)', `${PR2(1, Ph)}[C@@H](C)C[C@@H](C)${PR2end(2, Ph)}`, { pc: '2,4-Bis(diphenylphosphino)pentane' }],
-      ['norphos', 'NORPHOS|Norphos', '5,6-Bis(diphenylphosphino)bicyclo[2.2.1]hept-2-ene (NORPHOS)', `${PR2(1, Ph)}C1C2C=CC(C2)C1${PR2end(2, Ph)}`, { pc: 'Norphos' }],
-      ['dipamp', 'DIPAMP', '(R,R)-1,2-Bis[(2-methoxyphenyl)phenylphosphino]ethane (DIPAMP)', `[P@:1](c1ccccc1OC)(${Ph})CC[P@@:2](c1ccccc1OC)${Ph}`, { pc: 'DIPAMP', full: true }],
-      ['meduphos', 'Me-DuPhos|MeDuPhos', '1,2-Bis[(2R,5R)-2,5-dimethylphospholano]benzene (Me-DuPhos)', '[P:1]1([C@H](C)CC[C@H]1C)c1ccccc1[P:2]1[C@H](C)CC[C@H]1C', { pc: 'Me-DuPhos' }],
+      ['diop', 'DIOP', '(4S,5S)-2,2-Dimethyl-4,5-bis(diphenylphosphinomethyl)-1,3-dioxolane (DIOP)', `${PR2(1, Ph)}C[C@H]1OC(C)(C)O[C@@H]1C${PR2end(2, Ph)}`, { pc: 3084647 }],
+      ['chiraphos', 'CHIRAPHOS|Chiraphos', '(2R,3R)-2,3-Bis(diphenylphosphino)butane (CHIRAPHOS)', '[P:1](c1ccccc1)(c1ccccc1)[C@H](C)[C@@H](C)[P:2](c1ccccc1)c1ccccc1', { pc: 2724948 }],
+      ['prophos', 'PROPHOS|Prophos', '(R)-1,2-Bis(diphenylphosphino)propane (PROPHOS)', `${PR2(1, Ph)}[C@H](C)C${PR2end(2, Ph)}`, { pc: 2724539 }],
+      ['skewphos', 'BDPP|SKEWPHOS|Skewphos', '(2S,4S)-2,4-Bis(diphenylphosphino)pentane (BDPP, SKEWPHOS)', '[P:1](c1ccccc1)(c1ccccc1)[C@@H](C)C[C@H](C)[P:2](c1ccccc1)c1ccccc1', { pc: 2734567 }],
+      ['norphos', 'NORPHOS|Norphos', '(R,R)-5,6-Bis(diphenylphosphino)bicyclo[2.2.1]hept-2-ene (NORPHOS)', '[P:1](c1ccccc1)(c1ccccc1)[C@@H]1[C@H]2C=C[C@H](C2)[C@H]1[P:2](c1ccccc1)c1ccccc1', { pc: 10139589 }],
+      ['dipamp', 'DIPAMP', '(R,R)-1,2-Bis[(2-methoxyphenyl)phenylphosphino]ethane (DIPAMP)', '[P@@:1](c1ccccc1OC)(c1ccccc1)CC[P@@:2](c1ccccc1OC)c1ccccc1', { pc: 10884975, full: true }],
+      ['meduphos', 'Me-DuPhos|MeDuPhos', '1,2-Bis[(2R,5R)-2,5-dimethylphospholano]benzene (Me-DuPhos)', '[P:1]1([C@H](C)CC[C@H]1C)c1ccccc1[P:2]1[C@H](C)CC[C@H]1C', { pc: 2734551 }],
       ['etduphos', 'Et-DuPhos|EtDuPhos', '1,2-Bis[(2R,5R)-2,5-diethylphospholano]benzene (Et-DuPhos)', '[P:1]1([C@H](CC)CC[C@H]1CC)c1ccccc1[P:2]1[C@H](CC)CC[C@H]1CC', { pc: 'Et-DuPhos' }],
-      ['iprduphos', 'iPr-DuPhos|iPrDuPhos', '1,2-Bis[(2R,5R)-2,5-diisopropylphospholano]benzene (iPr-DuPhos)', '[P:1]1([C@H](C(C)C)CC[C@H]1C(C)C)c1ccccc1[P:2]1[C@H](C(C)C)CC[C@H]1C(C)C', { pc: 'iPr-DuPhos' }],
+      ['iprduphos', 'iPr-DuPhos|iPrDuPhos', '1,2-Bis[(2R,5R)-2,5-diisopropylphospholano]benzene (iPr-DuPhos)', '[P:1]1([C@@H](C(C)C)CC[C@@H]1C(C)C)c1ccccc1[P:2]1[C@@H](C(C)C)CC[C@@H]1C(C)C', { pc: 'iPr-DuPhos' }],
       ['mebpe', 'Me-BPE|MeBPE', '1,2-Bis[(2R,5R)-2,5-dimethylphospholano]ethane (Me-BPE)', '[P:1]1([C@H](C)CC[C@H]1C)CC[P:2]1[C@H](C)CC[C@H]1C', { pc: 'Me-BPE' }],
-      ['phbpe', 'Ph-BPE|PhBPE', '1,2-Bis[(2R,5R)-2,5-diphenylphospholano]ethane (Ph-BPE)', '[P:1]1([C@H](c2ccccc2)CC[C@H]1c1ccccc1)CC[P:2]1[C@H](c2ccccc2)CC[C@H]1c1ccccc1', { pc: 'Ph-BPE', short: ['Ph'] }],
-      ['tangphos', 'TangPhos', '1,1′-Di-tert-butyl-2,2′-biphospholane (TangPhos)', '[P:1]1(C(C)(C)C)CCC[C@@H]1[C@@H]1CCC[P:2]1C(C)(C)C', { pc: 'TangPhos' }],
-      ['duanphos', 'DuanPhos', '2,2′-Di-tert-butyl-2,3,2′,3′-tetrahydro-1H,1′H-1,1′-biisophosphindole (DuanPhos)', '[P:1]1(C(C)(C)C)Cc2ccccc2[C@@H]1[C@@H]1c2ccccc2C[P:2]1C(C)(C)C', { pc: 'DuanPhos' }],
-      ['quinoxp', 'QuinoxP*|Quinox-P*', '2,3-Bis(tert-butylmethylphosphino)quinoxaline (QuinoxP*)', '[P@:1](C)(C(C)(C)C)c1nc2ccccc2nc1[P@@:2](C)C(C)(C)C', { pc: 'QuinoxP*' }],
-      ['benzp', 'BenzP*|Benz-P*', '1,2-Bis(tert-butylmethylphosphino)benzene (BenzP*)', '[P@:1](C)(C(C)(C)C)c1ccccc1[P@@:2](C)C(C)(C)C', { pc: 'BenzP*' }],
+      ['phbpe', 'Ph-BPE|PhBPE', '1,2-Bis[(2R,5R)-2,5-diphenylphospholano]ethane (Ph-BPE)', '[P:1]1([C@@H](c2ccccc2)CC[C@@H]1c1ccccc1)CC[P:2]1[C@@H](c2ccccc2)CC[C@@H]1c1ccccc1', { pc: 'Ph-BPE', short: ['Ph'] }],
+      ['tangphos', 'TangPhos', '(1S,1′S,2R,2′R)-1,1′-Di-tert-butyl-2,2′-biphospholane (TangPhos)', '[P@:1]1(C(C)(C)C)CCC[C@@H]1[C@H]1CCC[P@:2]1C(C)(C)C', { pc: 10149434 }],
+      ['duanphos', 'DuanPhos', '(1R,1′R,2S,2′S)-2,2′-Di-tert-butyl-2,3,2′,3′-tetrahydro-1H,1′H-1,1′-biisophosphindole (DuanPhos)', '[P@:1]1(C(C)(C)C)Cc2ccccc2[C@@H]1[C@H]1c2ccccc2C[P@:2]1C(C)(C)C', { pc: 10309415 }],
+      ['quinoxp', 'QuinoxP*|Quinox-P*', '(R,R)-2,3-Bis(tert-butylmethylphosphino)quinoxaline (QuinoxP*)', '[P@:1](C)(C(C)(C)C)c1nc2ccccc2nc1[P@:2](C)C(C)(C)C', { pc: 11695692 }],
+      ['benzp', 'BenzP*|Benz-P*', '(R,R)-1,2-Bis(tert-butylmethylphosphino)benzene (BenzP*)', '[P@:1](C)(C(C)(C)C)c1ccccc1[P@:2](C)C(C)(C)C', { pc: 15953600 }],
       ['trostph', 'Trost ligand|DACH-phenyl Trost|DPPBA-DACH', '(R,R)-DACH-phenyl Trost ligand', `${PR2(1, Ph)}c1ccccc1C(=O)N[C@@H]1CCCC[C@H]1NC(=O)c1ccccc1${PR2end(2, Ph)}`, { pc: '(R,R)-DACH-phenyl Trost ligand' }],
       ['trostnaph', 'DACH-naphthyl Trost', '(R,R)-DACH-naphthyl Trost ligand', `${PR2(1, Ph)}c1ccc2ccccc2c1C(=O)N[C@@H]1CCCC[C@H]1NC(=O)c1c(${PR2end(2, Ph)})ccc2ccccc12`, { pc: '(R,R)-DACH-naphthyl Trost ligand' }],
       ['josiphos', 'Josiphos|SL-J001|PPF-PCy2', 'Josiphos SL-J001: (R)-1-[(SP)-2-(diphenylphosphino)ferrocenyl]ethyldicyclohexylphosphine', '[P:1](c1ccccc1)(c1ccccc1)C1=CC=C[C-]1[C@@H](C)[P:2](C1CCCCC1)C1CCCCC1.[Fe+2].[CH-]1C=CC=C1', { tpl: 'josiphos', pc: 'Josiphos SL-J001-1', check: 'ferrocene written as Fe²⁺ and two Cp⁻ rings; PubChem\'s record for the name writes the rings saturated' }],
@@ -261,7 +261,7 @@ export const FAMILIES = [
       ['tbupy', '4-tBupy|tBupy', '4-tert-Butylpyridine', '[n:1]1ccc(C(C)(C)C)cc1'],
       ['quinoline', 'quin', 'Quinoline', '[n:1]1cccc2ccccc12'],
       ['pyrazine', 'pyz', 'Pyrazine', '[n:1]1ccncc1', { note: 'Bridges two metals.' }],
-      ['imidazole', 'Him|imH', 'Imidazole', '[n:1]1cc[nH]c1'],
+      ['imidazole', 'ImH|HIm|imH', 'Imidazole', '[n:1]1cc[nH]c1'],
       ['nmi', 'NMI|N-MeIm|1-MeIm', '1-Methylimidazole', '[n:1]1ccn(C)c1'],
       ['pyrazole', 'Hpz|pzH', 'Pyrazole', '[n:1]1ccc[nH]1'],
       ['net3', 'NEt3|Et3N', 'Triethylamine', '[N:1](CC)(CC)CC'],
@@ -307,8 +307,8 @@ export const FAMILIES = [
       ['en', 'en', 'Ethylenediamine', '[NH2:1]CC[NH2:2]', { tpl: 'en', palette: true }],
       ['tmeda', 'TMEDA|tmeda', 'N,N,N′,N′-Tetramethylethylenediamine', '[N:1](C)(C)CC[N:2](C)C', { tpl: 'tmeda', palette: true }],
       ['dmeda', 'DMEDA|dmeda', 'N,N′-Dimethylethylenediamine', '[NH:1](C)CC[NH:2]C'],
-      ['dmcda', 'DMCDA|DMCHDA', 'trans-N,N′-Dimethylcyclohexane-1,2-diamine', '[NH:1](C)[C@@H]1CCCC[C@H]1[NH:2]C', { pc: 'trans-N,N\'-Dimethylcyclohexane-1,2-diamine', note: 'Buchwald\'s ligand for Cu-catalysed couplings.' }],
-      ['dach', 'DACH|dach|chxn', 'trans-1,2-Diaminocyclohexane', '[NH2:1][C@@H]1CCCC[C@H]1[NH2:2]', { pc: 'trans-1,2-Diaminocyclohexane' }],
+      ['dmcda', 'DMCDA|DMCHDA', '(1R,2R)-N,N′-Dimethylcyclohexane-1,2-diamine', '[NH:1](C)[C@@H]1CCCC[C@H]1[NH:2]C', { pc: 'trans-N,N\'-Dimethylcyclohexane-1,2-diamine', note: 'Buchwald\'s ligand for Cu-catalyzed couplings.' }],
+      ['dach', 'DACH|dach|chxn', '(1R,2R)-1,2-Diaminocyclohexane', '[NH2:1][C@@H]1CCCC[C@H]1[NH2:2]', { pc: 'trans-1,2-Diaminocyclohexane' }],
       ['dpen', 'DPEN|dpen', '(1R,2R)-1,2-Diphenylethylenediamine', '[NH2:1][C@H](c1ccccc1)[C@@H](c1ccccc1)[NH2:2]', { pc: '(1R,2R)-1,2-Diphenylethylenediamine' }],
       ['tsdpen', 'TsDPEN|Ts-DPEN', '(1R,2R)-N-(p-Toluenesulfonyl)-1,2-diphenylethylenediamine', '[NH2:1][C@H](c1ccccc1)[C@@H](c1ccccc1)[NH:51]S(=O)(=O)c1ccc(C)cc1', { pc: '(1R,2R)-(-)-N-(4-Toluenesulfonyl)-1,2-diphenylethylenediamine', note: 'Noyori\'s transfer-hydrogenation ligand: NH₂ gives a lone pair, NTs is an amide (X).' }],
       ['binam', 'BINAM', '1,1′-Binaphthyl-2,2′-diamine', '[NH2:1]c1ccc2ccccc2c1-c1c([NH2:2])ccc2ccccc12', { pc: '1,1\'-Binaphthyl-2,2\'-diamine' }],
@@ -471,3 +471,33 @@ export const FAMILIES = [
     ],
   },
 ];
+
+/**
+ * Chiral ligands come in two enantiomers; each is drawn as one of them, named here (shown on
+ * its card and in its details). Stereocenters are in the SMILES and drawn with wedges; a chiral
+ * axis (BINAP, BINOL) or spiro center (SDP, SIPHOS) is drawn flat, so the label says which one.
+ * Each configuration was checked against PubChem's record for that enantiomer (the whole
+ * InChIKey, stereo layer and all: PubChem's SMILES and RDKit read a phosphine's lone pair
+ * differently, so P-stereogenic SMILES are compared by InChIKey, never by SMILES), a vendor's
+ * catalog name, or the enantiomer in Nate's ligand inventory. PubChem keeps no axial stereo, so
+ * its record for a biaryl (BINAP, BINOL) stands for both enantiomers.
+ */
+export const DRAWN = {
+  // axially chiral biaryls and spiro compounds (drawn flat)
+  binap: '(R)', tolbinap: '(S)', xylbinap: '(R)', h8binap: '(S)',
+  segphos: '(R)', dmsegphos: '(R)', dtbmsegphos: '(R)', meobiphep: '(R)', synphos: '(R)',
+  difluorphos: '(R)', pphos: '(R)', sdp: '(R)', siphos: '(S)',
+  binol: '(R)', h8binol: '(R)', monophos: '(R)', pipphos: '(R)', binam: '(R)', quinap: '(R)',
+  feringa: '(S,R,R)',
+  // stereocenters (drawn with wedges)
+  diop: '(S,S)', chiraphos: '(R,R)', prophos: '(R)', skewphos: '(S,S)', dipamp: '(R,R)',
+  meduphos: '(R,R)', etduphos: '(R,R)', iprduphos: '(R,R)', mebpe: '(R,R)', phbpe: '(R,R)',
+  tangphos: '(1S,1′S,2R,2′R)', duanphos: '(1R,1′R,2S,2′S)', quinoxp: '(R,R)', benzp: '(R,R)',
+  norphos: '(R,R)', trostph: '(R,R)', trostnaph: '(R,R)',
+  josiphos: '(R,Sp)', 'josiphos-tbu': '(R,Sp)', 'josiphos-cy': '(R,Sp)',
+  iprphox: '(S)', tbuphox: '(S)', phphox: '(S)',
+  dmcda: '(1R,2R)', dach: '(1R,2R)', dpen: '(1R,2R)', tsdpen: '(1R,2R)', sparteine: '(−)',
+  pdp: '(S,S)', phbox: '(S,S)', tbubox: '(S,S)', iprbox: '(S,S)', bnbox: '(S,S)',
+  indabox: '(3aR,8aS)', iprpybox: '(S,S)', phpybox: '(S,S)', tbupyox: '(S)',
+  jacobsen: '(R,R)', taddol: '(R,R)',
+};

@@ -13,7 +13,7 @@ import { chainArc, piLooksOf } from '../chem/hapto';
 import { crossingGapsCached } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
-import { bondEndPrefs, doubleBondGap, wedgeWidth } from '../style';
+import { bondEndPrefs, doubleBondGap, mapLookPrefs, wedgeWidth } from '../style';
 import { depthFractions, depthShadePrefs, shadeLook, shadeStep } from './depth-shade';
 import { joinWideEnds, lineMitres, endTip, LINE_MITRE_LIMIT, type WideEnd, type EndJoin, type LineEnd } from './bond-joins';
 import { chargeInk, labelBonds, labelSpec, layoutLabel, LabelLayout, labelLook } from '../chem/labels';
@@ -22,7 +22,7 @@ import { isGenericLabel } from '../chem/labels';
 import { bracketPath, shaftOffset, shapeOrder, elbowRoute, boxOf, shapeBox, shapeMid, shapeTurn, bezPoints, bezHeadBack, bezPathAt, bezSlice, type PathStep } from '../objects';
 import { atomStereoText, bondStereoText, shownDescriptor, axialStyle, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
-import { attachDiamondSize, hasAttachDiamond } from './atom-marks';
+import { attachDiamondSize, hasAttachDiamond, isMapNumber, MAP_GREY, MAP_PEACH, mapBox, mapColour } from './atom-marks';
 import { layoutText, FONT_STACK, withStack, type TextLayout } from '../text/layout';
 import { drawLayout } from '../text/draw';
 import { geoDef, moveSteps, textArea, traceSteps, type GeoStep } from '../design/geo';
@@ -741,7 +741,22 @@ export class Renderer {
     const p = this.stereoPlacer(doc).number(a);
     const f = `${p.size}px ${FONT_STACK}`;
     if (f !== curFont) { ctx.font = f; curFont = f; }
-    ctx.fillStyle = a.color ?? '#000';
+    let ink = a.color ?? '#000';
+    if (isMapNumber(a)) {
+      // an atom-map number: in a small rounded box (Chemistry ▸ Map Atoms)
+      const b = mapBox(p, measureText(a.atomNumber!, p.size));
+      const look = mapLookPrefs.look;
+      const r = Math.min(b.x2 - b.x1, b.y2 - b.y1) * 0.3;
+      ctx.beginPath();
+      ctx.roundRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1, r);
+      ctx.fillStyle = look === 'grey' ? '#ffffff' : look === 'tint' ? tint(mapColour(a.mapNo!), 0.45) : MAP_PEACH;
+      ctx.fill();
+      ctx.lineWidth = doc.style.lineWidth * (look === 'grey' ? 0.6 : 0.5);
+      ctx.strokeStyle = look === 'grey' ? MAP_GREY : '#000000';
+      ctx.stroke();
+      if (look === 'grey') ink = MAP_GREY;
+    }
+    ctx.fillStyle = ink;
     ctx.fillText(a.atomNumber!, p.x, p.y);
     return curFont;
   }
