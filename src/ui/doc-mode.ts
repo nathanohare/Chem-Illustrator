@@ -32,6 +32,7 @@ import {
   type DocViewKind, type OutlineOp, type OutlineState, type ScreenView,
 } from '../document/doc-views';
 import { DocPanel, parseLength, showLength, type DocBoxKey } from './doc-panel';
+import { FontBox } from './font-box';
 import { WORD_HIGHLIGHTS } from '../io/docx-base';
 import { DocFind } from './doc-find';
 import { askLink, followLink, linkTip } from './links-ui';
@@ -241,6 +242,8 @@ export class DocumentMode {
   tab: Tab | null = null;
   private ta: HTMLTextAreaElement;
   private panel: DocPanel;
+  /** The Font group's corner box (made the first time it opens). */
+  private fontBox: FontBox | null = null;
   private ribbon: HTMLElement;
   private caretOn = true;
   private blink: ReturnType<typeof setInterval> | null = null;
@@ -943,6 +946,7 @@ export class DocumentMode {
     if (!f) {
       if (this.blink) { clearInterval(this.blink); this.blink = null; }
       this.panel.closeBoxes();
+      this.fontBox?.close();
       this.stylesPane.close();
       this.ruler.shown = false;
       this.comments.update();
@@ -3279,6 +3283,16 @@ export class DocumentMode {
       case 'find': case 'replace': this.find(cmd === 'replace'); return true;
       case 'paste': void this.paste(null); break;
       case 'copy': case 'cut': this.focus(); document.execCommand(cmd); break;
+      case 'font-box': {
+        this.fontBox ??= new FontBox({
+          look: () => (this.file ? this.ed.currentStyle() : null),
+          apply: (patch) => { if (this.file) this.setTextStyle(patch); },
+          changeCase: (mode) => { if (this.file) this.ed.changeCase(mode); },
+          allCaps: () => { if (this.file) this.ed.toggle('allCaps'); },
+        });
+        this.fontBox.toggle(this.ribbon.querySelector<HTMLElement>('[data-doc="font-box"]'));
+        return true;
+      }
       case 'box-para': case 'box-style': case 'box-page': case 'box-hf':
         this.panel.open(cmd.slice(4) as DocBoxKey);
         return true;
@@ -4736,6 +4750,7 @@ export class DocumentMode {
     if (!f) return;
     const ed = f.textEd;
     const s = ed.currentStyle();
+    if (this.fontBox?.open) this.fontBox.refresh();
     const para = ed.currentPara();
     const st = f.box ? styleOf(f.t, {}) : styleOf(f.t, para);
     const press = (cmd: string, on: boolean) => {

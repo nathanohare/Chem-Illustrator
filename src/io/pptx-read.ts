@@ -1913,11 +1913,26 @@ class Reader {
         if (strike && strike !== 'noStrike') r.strike = true;
         const spc = Number(get('spc') ?? 0);
         if (spc) r.spacing = spc / 100;
+        if (get('kern') === '0') r.noKern = true;
         const bl = Number(get('baseline') ?? 0);
         if (bl < 0) r.sub = true;
         else if (bl > 0) r.sup = true;
         const fillEl = inheritEl(rPr, chain, lvl, ['solidFill'], true);
         r.color = this.color(fillEl) ?? '#000000';
+        // the Font box's text effects: no fill, a see-through fill, an outline, a shadow
+        if (rPr) {
+          if (kid(rPr, 'noFill')) r.noFill = true;
+          const a = kid(rPr, 'solidFill')?.querySelector('alpha')?.getAttribute('val');
+          if (a && Number(a) < 100000) r.transparency = Math.round((1 - Number(a) / 100000) * 100) / 100;
+          const ln = kid(rPr, 'ln');
+          const lnCol = ln && !kid(ln, 'noFill') ? this.color(kid(ln, 'solidFill')) : undefined;
+          if (lnCol) {
+            r.outline = lnCol;
+            const w = Number(ln!.getAttribute('w') ?? 0);
+            if (w && Math.abs(w / 12700 - 0.75) > 0.01) r.outlineW = Math.round((w / 12700) * 100) / 100;
+          }
+          if (kid(rPr, 'effectLst')?.querySelector('outerShdw')) r.shadow = true;
+        }
         r.font = this.font(inheritEl(rPr, chain, lvl, ['latin'], true)?.getAttribute('typeface') ?? null, title);
         const link = this.hlinkOf(kid(rPr, 'hlinkClick'));
         if (link) {

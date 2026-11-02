@@ -3428,7 +3428,6 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .action-button-dialog [hidden] { display: none !important; }
 
 /* the Font group's corner box (Presentation and Design): Change Case */
-.fb-font .fb-body { width: 210px; }
 .fb-font .fb-section { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 2px 0 4px; }
 .fb-font .fb-case { display: flex; flex-direction: column; gap: 1px; }
 .fb-font .fb-case button { text-align: left; padding: 4px 8px; border: 0; border-radius: var(--r-control); background: none; color: var(--text); cursor: pointer; }
@@ -3451,3 +3450,10 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 #dock-right:has(> .toolbox[data-id='details']) { padding-top: 2px; }
 #side-content h2 { margin-top: 0; }
 .dock-v > .toolbox[data-id='details'] > #side-fold { top: 0; }
+.fb-font .fb-row { display: grid; grid-template-columns: 1fr 96px; align-items: center; gap: 6px; padding: 2px 0; font-size: var(--fs-sm); }
+.fb-font .fb-row input[type='number'], .fb-font .fb-row select { width: 100%; min-width: 0; }
+.fb-font .fb-row input[type='color'] { width: 100%; height: 22px; padding: 0 2px; }
+.fb-font .fb-check { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: var(--fs-sm); }
+.fb-font .fb-section:not(:first-child) { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.float-box.fb-font { width: 250px; }
+.fb-font .fb-body { max-height: 70vh; }
