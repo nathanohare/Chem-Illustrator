@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig, type Plugin } from 'vite';
 
 // The web version (GitHub Pages) has no server to send a Content-Security-Policy header, so its
@@ -47,4 +48,7 @@ export default defineConfig({
     },
   },
   worker: { format: 'iife', rollupOptions: { output: { entryFileNames: '[name].js' } } },
+  // Tests run on UTC, as on the Checks machines, so tests with clock times (Word comment dates)
+  // give the same answer on a computer in any time zone. A test about time zones sets its own.
+  test: { env: { TZ: 'UTC' } },
 });
