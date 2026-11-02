@@ -11402,7 +11402,7 @@ function favoritesChanged(): void {
 
 /** The look of what is selected, wherever it is: a document's text, a caption being typed in, or things on a drawing. */
 function selectionLook(): ObjectLook | null {
-  if (sheetActive()) return null;
+  if (sheetActive()) return sheetMode.favoriteLook();
   if (docActive()) { const t = docMode.pickLook(); return t ? { text: t, colour: { color: t.run.color } } : null; }
   const cap = editor.typingCaption;
   if (cap) { const t = cap.ed.pickLook(); return { text: t, colour: { color: t.run.color } }; }
@@ -11413,13 +11413,13 @@ function selectionLook(): ObjectLook | null {
 async function saveFavorite(replacing?: FormatFavorite): Promise<void> {
   const look = selectionLook();
   if (!look) {
-    flash(sheetActive() ? 'Format Favorites keep the looks of shapes, structures, arrows, pictures and text; in a sheet, use cell styles.' : 'Select something with the look you want to keep (a shape, arrow, structure, picture or text) first.');
+    flash(sheetActive() ? 'Select the cells or the shape with the look you want to keep first.' : 'Select something with the look you want to keep (a shape, arrow, structure, picture or text) first.');
     return;
   }
   let name = replacing?.name;
   if (!name) {
     const got = await ask('Save Format as Favorite', [{ name: 'name', label: 'Name', value: freshFavoriteName(favorites), placeholder: 'for example Key intermediate box' }], {
-      ok: 'Save', note: `Keeps ${favoriteSummary(look) || 'the look'} of what is selected. Click it under Format Favorites on the Home tab (or Edit ▸ Format Favorites…) to give that look to the selection, in any drawing, slide, design or document.`,
+      ok: 'Save', note: `Keeps ${favoriteSummary(look) || 'the look'} of what is selected. Click it under Format Favorites on the Home tab (or Edit ▸ Format Favorites…) to give that look to the selection, in any drawing, slide, design, document or sheet.`,
     });
     name = got?.name.trim();
     if (!name) return;
@@ -11432,7 +11432,7 @@ async function saveFavorite(replacing?: FormatFavorite): Promise<void> {
 /** Give the selection a favorite's look (one undo step). */
 function applyFavorite(f: FormatFavorite): void {
   const look = f.look;
-  if (sheetActive()) { flash('Format Favorites are for drawings, slides, designs and documents.'); return; }
+  if (sheetActive()) { if (!sheetMode.paintFavorite(look, f.name)) flash(`“${f.name}” has no look cells or this object can take.`); return; }
   if (docActive()) {
     if (!look.text) { flash(`“${f.name}” has no text look to give to text.`); return; }
     if (!docMode.paintLook(look.text)) flash('Put the caret in a word, or select some text, first.');

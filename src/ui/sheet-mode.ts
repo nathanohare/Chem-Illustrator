@@ -52,7 +52,9 @@ import type { TableDef } from '../sheet/table-styles';
 import type { Contents } from '../model';
 import type { DocStyle } from '../style';
 import type { Tab } from '../workspace';
-import { paintCells } from '../format-painter';
+import { paintCells, type ObjectLook, type RunLook } from '../format-painter';
+import { cellFavoriteLook, favoriteCellLook } from '../favorites';
+import { objectLook, type SheetObject } from '../sheet/sheet-objects';
 import { SheetLook, themeColourGrid } from './sheet-look-ui';
 import { SheetOutline } from './sheet-outline-ui';
 import { SheetSparklines } from './sheet-sparkline-ui';
@@ -970,6 +972,61 @@ export class SheetMode {
     let target = this.view.sel.range;
     this.edit('Format Painter', (sh) => { target = paintCells(sh, block, target); }, () => target);
     this.view.select(target, { r: target.r1, c: target.c1 });
+  }
+
+  /** Format Favorites: the look of the selected shape or text box, else of the active cell. */
+  favoriteLook(): ObjectLook | null {
+    const s = this.view.sheet;
+    if (!s) return null;
+    this.view.commitEdit();
+    const o = this.view.selectedObject;
+    if (o) {
+      if (o.kind === 'picture') return null;
+      const k = objectLook(o);
+      const run: RunLook = { ...(o.bold ? { bold: true } : {}), ...(o.italic ? { italic: true } : {}), ...(o.font ? { font: o.font } : {}), ...(o.size ? { size: o.size } : {}), color: k.color };
+      return {
+        shape: { filled: k.fill !== 'none', ...(k.fill !== 'none' ? { fillColor: k.fill } : {}), lineWidth: k.line === 'none' ? 0 : k.lineW, ...(k.line !== 'none' ? { color: k.line } : {}) },
+        text: { run, ...(o.align ? { justify: o.align } : {}) },
+        colour: { color: k.color },
+      };
+    }
+    return cellFavoriteLook(s.styleAt(this.view.sel.active.r, this.view.sel.active.c) ?? {});
+  }
+
+  /** Format Favorites: give the selected shape or text box, or the selected cells, a favorite's look (one undo step). */
+  paintFavorite(look: ObjectLook, name: string): boolean {
+    const s = this.view.sheet;
+    if (!s) return false;
+    this.view.commitEdit();
+    const o = this.view.selectedObject;
+    if (o) {
+      if (o.kind === 'picture') return false;
+      const next: SheetObject = { ...o };
+      const sh = look.shape, run = look.text?.run;
+      if (sh?.filled !== undefined) next.fill = sh.filled && sh.fillColor ? sh.fillColor : 'none';
+      if (sh?.lineWidth !== undefined) { if (sh.lineWidth <= 0) next.line = 'none'; else { next.lineW = sh.lineWidth; if (sh.color) next.line = sh.color; } }
+      else if (sh?.color) next.line = sh.color;
+      const color = run?.color ?? look.colour?.color;
+      if (color) next.color = color;
+      if (run?.bold !== undefined) next.bold = run.bold || undefined;
+      if (run?.italic !== undefined) next.italic = run.italic || undefined;
+      if (run?.font) next.font = run.font;
+      if (run?.size) next.size = run.size;
+      const j = look.text?.justify;
+      if (j === 'left' || j === 'center' || j === 'right') next.align = j;
+      this.view.replaceObject(next, `Format Favorite “${name}”`);
+      return true;
+    }
+    const got = favoriteCellLook(look);
+    if (!got) return false;
+    this.edit(`Format Favorite “${name}”`, (sh) => {
+      for (const a of this.view.areas()) {
+        const R = growToMerges(sh, a);
+        sh.patchStyle(R, got.patch);
+        if (got.borders) sh.patchStyle(R, { borders: got.borders });
+      }
+    });
+    return true;
   }
 
   private decimals(delta: 1 | -1): void {
