@@ -1056,6 +1056,7 @@ dialog.design-size { width: min(94vw, 500px); }
 .sl-item.current .sl-num { color: var(--accent); font-weight: 600; }
 .sl-list:focus-visible .sl-item.current .sl-thumb { box-shadow: 0 0 0 2px var(--accent), 0 0 0 5px var(--accent-soft); }
 .sl-has-notes { position: absolute; left: 6px; top: 18px; font-size: var(--fs-xs); color: var(--muted); }
+.sl-time { position: absolute; right: 4px; bottom: 4px; padding: 0 4px; border-radius: 3px; background: #000000b0; color: #fff; font-size: var(--fs-xs); line-height: 1.5; font-variant-numeric: tabular-nums; pointer-events: none; }
 /* Hide Slide: greyed, its number struck through and boxed, as PowerPoint marks it */
 .sl-item.is-hidden .sl-thumb { opacity: 0.45; }
 .sl-item.is-hidden .sl-num { text-decoration: line-through; }
@@ -2515,12 +2516,18 @@ button.sym:hover, button.sym:focus-visible { border-color: var(--accent); backgr
 .show-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 40px; display: flex; align-items: center; justify-content: center; gap: 10px; background: #1d2024; color: #e6e8ec; font: var(--fs-md) var(--ui-font, system-ui), sans-serif; }
 .show-bar button, .rehearse-bar button { background: #30343b; color: #e6e8ec; border: 1px solid #454b55; border-radius: var(--r-control); padding: 4px 12px; font: inherit; cursor: pointer; }
 .show-bar button:hover, .rehearse-bar button:hover { background: #3a3f48; }
+.rehearse-bar button:disabled { opacity: 0.5; cursor: default; }
 .show-bar button:last-child { position: absolute; right: 10px; }
 .show-count { min-width: 9em; text-align: center; font-variant-numeric: tabular-nums; }
 .rehearse-bar { position: absolute; top: 10px; left: 10px; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: var(--r-panel); background: #1d2024ee; color: #e6e8ec; font: var(--fs-md) var(--ui-font, system-ui), sans-serif; box-shadow: 0 2px 10px #0008; }
 .rehearse-bar .rh-what { font-weight: 600; }
 .rehearse-bar .rh-slide, .rehearse-bar .rh-total { font: 600 var(--fs-lg) var(--mono-font, monospace); font-variant-numeric: tabular-nums; min-width: 3.6em; text-align: center; }
 .rehearse-bar .rh-total { opacity: 0.7; }
+.rehearse-bar button.on { background: #4a5260; border-color: #6b7482; }
+.rehearse-notes { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); z-index: 3; width: min(900px, calc(100% - 32px)); max-height: 28vh; overflow: auto; padding: 10px 14px; border-radius: var(--r-panel); background: #1d2024e6; color: #f2f3f5; font: var(--fs-lg) / 1.45 var(--ui-font, system-ui), sans-serif; white-space: pre-wrap; box-shadow: 0 2px 10px #0008; }
+.rehearse-notes.off { display: none; }
+.rehearse-countdown { position: absolute; inset: 0; z-index: 4; display: grid; place-items: center; background: #0006; color: #fff; font: 700 160px / 1 var(--ui-font, system-ui), sans-serif; cursor: pointer; }
+@media (prefers-reduced-motion: no-preference) { .rehearse-countdown { transition: opacity 0.2s; } }
 /* Header and Footer, Set Up Show, Custom Shows */
 dialog.hf-dialog { width: min(94vw, 520px); }
 .hf-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line, #ccd); margin-bottom: 10px; }
@@ -2581,6 +2588,9 @@ dialog.show-setup { width: min(94vw, 600px); }
 .a11y-go:hover { text-decoration: underline; }
 .a11y-detail { flex-basis: 100%; }
 .a11y-fix { font-size: var(--fs-sm); }
+.ask-lines { border-collapse: collapse; margin: 0 0 8px; font-variant-numeric: tabular-nums; max-height: 40vh; }
+.ask-lines td { padding: 1px 16px 1px 0; }
+.ask-lines td:last-child { text-align: right; padding-right: 0; }
 .preflight-pane { width: 360px; }
 .pf-form { display: grid; gap: 4px; margin-bottom: 8px; }
 .pf-row { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 6px; }

@@ -489,7 +489,7 @@ export function preflight(items: Item[], box: Rect, journal: JournalRules, sizeI
   issues.push({
     rule: 'format', level: journal.vectorPreferred && kind !== 'combination' ? 'tip' : 'ok',
     title: journal.vectorPreferred ? `Send it as PDF or EPS (shapes, not dots)` : `A ${kindName}: export at ${dpi} dpi as a picture of dots`,
-    detail: [journal.formatNote ?? (fmt ? `Formats asked for: ${fmt}.` : undefined), journal.vectorPreferred ? undefined : `${journal.name.replace(/ \(.*/, '')} asks for ${dpi} dpi for a ${kindName}.`].filter(Boolean).join(' ') || undefined,
+    detail: journal.formatNote ?? (fmt ? `Formats asked for: ${fmt}.` : undefined),
   });
 
   return { journal, size, w, h, scale, kind, dpi, issues: sortIssues(issues) };

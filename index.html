@@ -305,6 +305,18 @@
     <button role="menuitem" data-cmd="set-up-show" title="How the show runs, which slides it plays, looping, narration, animations and timings">Set Up Show…</button>
     <button role="menuitem" data-cmd="rehearse-timings" title="Play the show timing each slide, and keep the times">Rehearse Timings</button>
     <button role="menuitem" data-cmd="record-show" title="Play the show recording narration and timing each slide">Record…</button>
+    <button role="menuitem" data-cmd="rehearse-here" title="Rehearse from the slide showing to the end; the slides before it keep their times">Rehearse from This Slide</button>
+    <button role="menuitem" data-cmd="record-show-here" title="Record from the slide showing to the end; the slides before it keep their times and narration">Record from This Slide…</button>
+    <div class="submenu">
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Clear</button>
+    <div class="menu sub" role="menu" hidden>
+    <button role="menuitem" data-cmd="clear-timings-slide" title="Take the rehearsed time off the slides picked: they go on with a click">Clear Timing on This Slide</button>
+    <button role="menuitem" data-cmd="clear-timings-all" title="Take the rehearsed times off every slide">Clear Timings on All Slides</button>
+    <hr />
+    <button role="menuitem" data-cmd="clear-narration-slide" title="Take the recorded narration off the slides picked (their times stay)">Clear Narration on This Slide</button>
+    <button role="menuitem" data-cmd="clear-narration-all" title="Take the recorded narration off every slide (their times stay)">Clear Narration on All Slides</button>
+    </div>
+    </div>
     </div>
     </div>
     </div>
@@ -2278,6 +2290,7 @@
           <button class="rb-big" data-cmd="hide-slide" aria-pressed="false" title="The slide show skips the slides picked; they stay in the deck and in the PowerPoint file. Again to show them"><span class="rb-icon">⊘</span>Hide Slide</button>
           <button class="rb-big" data-cmd="rehearse-timings" title="Rehearse Timings: play the show with a clock for each slide and the whole talk; at the end keep the times, so the show can go on by itself"><span class="rb-icon">⏱</span>Rehearse Timings</button>
           <button class="rb-big" data-cmd="record-show" title="Record: play the show recording your narration from the microphone, slide by slide, and timing each slide; at the end keep them (narration goes on each slide as a sound that plays as it comes in, PowerPoint too)"><span class="rb-icon">●</span>Record</button>
+          <button class="rb-big" data-cmd="clear-show-menu" aria-haspopup="true" title="Clear: take the rehearsed times or the recorded narration off this slide or every slide; or rehearse or record again from this slide"><span class="rb-icon">⌫</span>Clear ▾</button>
           <div class="rb-col">
             <label class="rb-field check" title="Play the narration recorded with Record (off: Show without narration)"><input type="checkbox" data-cmd="play-narrations" checked /> Play Narrations</label>
             <label class="rb-field check" title="Each slide goes on by itself after its time (off: only clicks go on)"><input type="checkbox" data-cmd="use-timings" checked /> Use Timings</label>

@@ -2721,7 +2721,7 @@ function showCanvasState(): void {
 let listKey = '';
 let masterSeen: unknown = null;
 let indexSeen = -1;
-const slideListKey = (d: Deck) => `${d.slides.map((s) => s.id + (s.notes.trim() ? 'n' : '') + (s.hidden ? 'h' : '') + (s.section !== undefined ? `s${s.section}` : '') + (s.canvas ? `k${s.canvas.keys.map((k) => k.id).join('.')}` : '')).join(',')}|${d.sections.map((x) => `${x.id}:${x.name}`).join('/')}|${d.size.w}x${d.size.h}|${d.looks}`;
+const slideListKey = (d: Deck) => `${d.slides.map((s, i) => s.id + (s.notes.trim() ? 'n' : '') + (s.hidden ? 'h' : '') + (s.section !== undefined ? `s${s.section}` : '') + (s.canvas ? `k${s.canvas.keys.map((k) => k.id).join('.')}` : '') + (s.transition?.advanceAfter !== undefined ? `t${s.transition.advanceAfter}` : '') + (d.narrated(i) ? 'v' : '')).join(',')}|${d.sections.map((x) => `${x.id}:${x.name}`).join('/')}|${d.size.w}x${d.size.h}|${d.looks}`;
 
 /** Told of every change to a deck (the Compare pane, which follows Undo). */
 const deckWatchers: ((deck: Deck) => void)[] = [];
@@ -4465,6 +4465,34 @@ function present(fromHere: boolean, notes = false, how: { custom?: number; windo
   });
 }
 
+/** The slides Clear works on: the ones picked in the slide list (the one showing), or all. */
+function clearTargets(d: Deck, which: 'slide' | 'all'): number[] {
+  if (which === 'all') return d.slides.map((_s, i) => i);
+  const picked = [...slideList.picked].filter((i) => i >= 0 && i < d.slides.length).sort((a, b) => a - b);
+  return picked.length ? picked : [d.index];
+}
+
+/** Slide Show > Clear > Timings: the slides go on with a click again, as before Rehearse Timings. */
+function clearShowTimings(which: 'slide' | 'all'): void {
+  const d = deckNow();
+  if (!d) return;
+  const ix = clearTargets(d, which);
+  if (!d.clearTimings(ix, which === 'all' ? 'Clear timings on all slides' : 'Clear timings')) { flash(which === 'all' ? 'No slide has a time to clear.' : 'This slide has no time to clear.'); return; }
+  flash(which === 'all' ? 'Timings cleared: every slide goes on with a click.' : 'Timing cleared: the slide goes on with a click.');
+}
+
+/** Slide Show > Clear > Narration: the recorded sounds come off the slides (their times stay). */
+function clearNarration(which: 'slide' | 'all'): void {
+  const d = deckNow();
+  if (!d) return;
+  const ix = clearTargets(d, which).filter((i) => d.narrated(i));
+  if (!ix.length) { flash(which === 'all' ? 'No slide has narration to clear.' : 'This slide has no narration to clear.'); return; }
+  d.editSlides(which === 'all' ? 'Clear narration on all slides' : 'Clear narration', ix, (sd) => {
+    for (const sh of [...sd.shapes.values()]) if (sh.video?.narration) sd.removeShape(sh.id);
+  });
+  flash(`Narration cleared from ${ix.length} slide${ix.length > 1 ? 's' : ''}. Their times stay (Clear > Timings takes those off).`);
+}
+
 /** The slide show and Presenter View: their code loads the first time a show starts. */
 let shows: { presenter: Presenter; presenterView: PresenterView } | null = null;
 let showsLoading: Promise<{ presenter: Presenter; presenterView: PresenterView }> | null = null;
@@ -4513,7 +4541,9 @@ function wireShows(presenter: Presenter, presenterView: PresenterView, inkShape:
         } else flash('Nothing was recorded (the microphone gave no sound).');
       }
       d.setTimings(r.times, r.recordings.size ? 'Record slide show timings' : 'Rehearse timings');
-      flash(`Kept: the show takes ${clockText(r.total)}${r.recordings.size ? ', with narration on the slides' : ''}. Set Up Show > Advance slides can turn the times off.`, 8000);
+      // the whole show, with the times of slides not played this time (rehearsing from one slide)
+      const whole = d.slides.reduce((n, s) => n + (s.hidden ? 0 : s.transition?.advanceAfter ?? 0), 0);
+      flash(`Kept: the show takes ${clockText(Math.max(whole, r.total))}${r.recordings.size ? ', with narration on the slides' : ''}. Set Up Show > Advance slides can turn the times off.`, 8000);
     })();
   };
 
@@ -4785,7 +4815,7 @@ async function exportPicture(preset: { format?: string; dpi?: number; note?: str
       { value: deck ? 'page' : 'white', label: deck ? 'The page colour' : 'White' },
       { value: 'clear', label: 'See-through' },
     ] },
-  ], { ok: 'Export…', note: preset.note ?? (checked ? `Saves ${what}. ${checked.journal.name.replace(/ \(.*/, '')} asks for ${checked.dpi} dpi for this figure (File > Check Figure for Journal).` : `Saves ${what}. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line drawings.`) });
+  ], { ok: 'Export…', note: preset.note ?? (checked ? `Saves ${what}. The ${checked.journal.name.replace(/ \(.*/, '')} guidelines ask for ${checked.dpi} dpi for this figure (File > Check Figure for Journal).` : `Saves ${what}. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line drawings.`) });
   if (!v) return;
   const dpi = Math.max(30, Math.min(2400, Number(v.dpi) || 300));
   const clear = v.bg === 'clear';
@@ -5563,7 +5593,7 @@ const preflightPane = new PreflightPane({
     const name = r.journal.name.replace(/ \(.*/, '');
     if (r.journal.vectorPreferred) { void exportPdf(); return; }
     const raster = r.journal.formats?.find((f) => f === 'tiff' || f === 'png') ?? 'tiff';
-    void exportPicture({ format: raster, dpi: r.dpi, note: `${name} asks for ${r.dpi} dpi for this figure${r.journal.formats ? ` and takes ${r.journal.formats.map((f) => f.toUpperCase()).join(', ')}` : ''}.` });
+    void exportPicture({ format: raster, dpi: r.dpi, note: `The ${name} guidelines ask for ${r.dpi} dpi for this figure${r.journal.formats ? `, as ${r.journal.formats.map((f) => f.toUpperCase()).join(', ')}` : ''}.` });
   },
   open: (url) => openWebPage(url),
 });
@@ -5762,7 +5792,7 @@ function setPictureStyle(look: PictureLook | undefined): boolean {
 const SLIDE_ONLY = new Set(['references-slide', 'compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
   'edit-layouts', 'view-sorter', 'add-section', 'rename-section', 'remove-section', 'remove-section-slides', 'remove-all-sections', 'section-up', 'section-down', 'collapse-sections', 'expand-sections',
   'slide-transitions', 'slide-animations', 'animation-pane', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-video', 'insert-audio',
-  'reading-view', 'rehearse-timings', 'record-show', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
+  'reading-view', 'rehearse-timings', 'record-show', 'rehearse-here', 'record-show-here', 'clear-timings-slide', 'clear-timings-all', 'clear-narration-slide', 'clear-narration-all', 'clear-show-menu', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
 
 /** The animation commands: an effect for the selected objects (the right-click menu's Animation). */
 const ANIM_COMMANDS: { cmd: string; label: string }[] = [false, true].flatMap((exit) => EFFECTS.filter((e) => !(exit && e.emph)).map((e) => ({
@@ -5930,8 +5960,23 @@ const COMMANDS: Record<string, () => unknown> = {
   'reading-view': () => present(true, false, { windowed: true }),
   'rehearse-timings': () => present(false, false, { rehearse: true }),
   'record-show': () => present(false, false, { rehearse: true, record: true }),
+  'rehearse-here': () => present(true, false, { rehearse: true }),
+  'record-show-here': () => present(true, false, { rehearse: true, record: true }),
+  'clear-timings-slide': () => clearShowTimings('slide'),
+  'clear-timings-all': () => clearShowTimings('all'),
+  'clear-narration-slide': () => clearNarration('slide'),
+  'clear-narration-all': () => clearNarration('all'),
   'set-up-show': () => void setUpShowCmd(),
   'custom-shows': () => void customShowsCmd(),
+  'clear-show-menu': () => {
+    const b = document.querySelector<HTMLElement>('#ribbon [data-cmd="clear-show-menu"]');
+    const at = (b && b.offsetParent ? b : document.querySelector<HTMLElement>('#ribbon .rb-tabs')!).getBoundingClientRect();
+    showContextMenu(at.left, at.bottom, [
+      { cmd: 'rehearse-here', label: 'Rehearse from This Slide' }, { cmd: 'record-show-here', label: 'Record from This Slide…' }, null,
+      { cmd: 'clear-timings-slide', label: 'Clear Timing on This Slide' }, { cmd: 'clear-timings-all', label: 'Clear Timings on All Slides' }, null,
+      { cmd: 'clear-narration-slide', label: 'Clear Narration on This Slide' }, { cmd: 'clear-narration-all', label: 'Clear Narration on All Slides' },
+    ], { run: (cmd) => void command(cmd), key: commandKey });
+  },
   'custom-show-menu': () => {
     const b = document.querySelector<HTMLElement>('#ribbon [data-cmd="custom-show-menu"]');
     customShowMenu(b && b.offsetParent ? b : document.querySelector<HTMLElement>('#ribbon .rb-tabs')!);
