@@ -9,7 +9,7 @@
 // (a book, papers, SI files): each one's text is read once and searched as a table of pages, with
 // an excerpt around the words found, and the file opens from its row.
 
-import { BUILT_IN_TABLES } from '../kb/data';
+import { BUILT_IN_TABLES, LATER_TABLES } from '../kb/data';
 import { explainPieces, glossaryEntry } from '../kb/glossary';
 import { PRESENT, cellShown, filterValues, findRows, isCas, parseUserTable, searchedShift, sortRows, tableTsv, type KbColumn, type KbTable, type RowMatch } from '../kb/tables';
 import { pdfTable, type PdfIndex } from '../kb/pdf-library';
@@ -159,6 +159,14 @@ export class KnowledgeBaseWindow {
 
   private async loadImported(): Promise<void> {
     this.loaded = true;
+    // the big built-in tables go before the glossary, which stays last of the built-in ones
+    for (const later of LATER_TABLES) {
+      try {
+        const t = await later();
+        const at = this.tables.findIndex((x) => x.id === 'glossary');
+        this.tables.splice(at < 0 ? this.tables.length : at, 0, t);
+      } catch { /* not there (offline web build): the window works without it */ }
+    }
     try {
       const text = await this.host.readImported();
       if (!text) return;
@@ -262,6 +270,7 @@ export class KnowledgeBaseWindow {
   private async smilesSearch(q: string, token: number): Promise<void> {
     const c = await this.host.canonical(q);
     if (token !== this.searchToken || !c) return;
+    for (const t of this.tables) if (t.canonicalSmiles) for (const r of t.rows) if (typeof r.smiles === 'string') this.canon.set(r.smiles, r.smiles);
     const todo = this.tables.flatMap((t) => t.rows.map((r) => r.smiles)).filter((s): s is string => typeof s === 'string' && !this.canon.has(s));
     for (const s of todo) this.canon.set(s, await this.host.canonical(s));
     if (token !== this.searchToken) return;

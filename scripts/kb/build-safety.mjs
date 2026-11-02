@@ -72,6 +72,16 @@ function items(record, heading) {
 }
 
 /** The first value from an open source, in order of preference (a test picks among several). */
+/** Every value under a heading from the first open source that has one (several pKa values, say). */
+function pickAll(record, heading, accept = () => true) {
+  const all = items(record, heading).filter((i) => OPEN.includes(i.source) && i.text && !/please visit/i.test(i.text) && accept(i));
+  for (const s of OPEN) {
+    const mine = all.filter((i) => i.source === s);
+    if (mine.length) return { text: [...new Set(mine.map((i) => i.text.replace(/\s+/g, ' ').trim()))].join('; ').slice(0, 240), source: SHORT[s] };
+  }
+  return null;
+}
+
 function pick(record, heading, prefer = () => true, accept = () => true) {
   const all = items(record, heading).filter((i) => OPEN.includes(i.source) && i.text && !/please visit/i.test(i.text) && accept(i));
   for (const s of OPEN) {
@@ -149,6 +159,9 @@ async function main() {
     if (!cid) { console.warn(`! ${c.name}: not found on PubChem`); continue; }
     const props = await get(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cid}/property/MolecularFormula,MolecularWeight,SMILES/JSON`, `prop-${cid}.json`);
     const p = props?.PropertyTable?.Properties?.[0] ?? {};
+    // PubChem's computed XLogP3 (public domain): the fallback for log Kow in the skin estimate
+    const xl = await get(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cid}/property/XLogP/JSON`, `xlogp-${cid}.json`);
+    const xlogp = xl?.PropertyTable?.Properties?.[0]?.XLogP;
     const view = await get(`https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/${cid}/JSON`, `view-${cid}.json`);
     const rec = view?.Record ?? {};
     const at25 = (i) => /25 ?°C|77 ?°F/.test(i.text);
@@ -180,6 +193,14 @@ async function main() {
       skin: items(rec, 'Exposure Routes').some((i) => SHORT[i.source] === 'NIOSH' && /skin absorption/i.test(i.text)),
       incompatible: items(rec, 'Hazardous Reactivities and Incompatibilities').find((i) => SHORT[i.source] === 'NIOSH')?.text ?? null,
       niosh: nioshUrl(rec),
+      // for the Solvents, Solubility and pKa tables, and the skin permeability estimate
+      xlogp: typeof xlogp === 'number' ? xlogp : null,
+      logKow: pick(rec, 'LogP', (i) => /log Kow/i.test(i.text), (i) => /-?\d/.test(i.text)),
+      pka: pickAll(rec, 'Dissociation Constants', (i) => /pK|\d/.test(i.text)),
+      water: pick(rec, 'Solubility', (i) => /^in water|water.*(at|°C)/i.test(i.text), (i) => /water/i.test(i.text)),
+      organic: pick(rec, 'Solubility', (i) => /miscible with|soluble in/i.test(i.text), (i) => !/water/i.test(i.text) && /miscible|soluble/i.test(i.text)),
+      viscosity: pick(rec, 'Viscosity', (i) => /2[05] ?°C/.test(i.text), (i) => /Pa|cP|poise/i.test(i.text)),
+      refractive: pick(rec, 'Refractive Index', (i) => /20 ?°C/.test(i.text), (i) => /\d\.\d/.test(i.text)),
     });
     process.stdout.write(`\r${n + 1}/${list.length} ${c.name.padEnd(50)}`);
   }
