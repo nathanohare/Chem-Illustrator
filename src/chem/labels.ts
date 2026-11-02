@@ -14,7 +14,7 @@ import { LIGANDS } from './ligands';
 export const NICKNAMES: Record<string, string> = {
   Me: 'C', Et: 'CC', Pr: 'CCC', 'n-Pr': 'CCC', 'i-Pr': 'C(C)C', iPr: 'C(C)C', Bu: 'CCCC', 'n-Bu': 'CCCC', nBu: 'CCCC',
   'i-Bu': 'CC(C)C', iBu: 'CC(C)C', 's-Bu': 'C(C)CC', sBu: 'C(C)CC', 't-Bu': 'C(C)(C)C', tBu: 'C(C)(C)C',
-  Ph: 'c1ccccc1', Bn: 'Cc1ccccc1', Bz: 'C(=O)c1ccccc1', Ac: 'C(C)=O', Piv: 'C(=O)C(C)(C)C', Pv: 'C(=O)C(C)(C)C',
+  Ph: 'c1ccccc1', C6H5: 'c1ccccc1', C6F5: 'c1c(F)c(F)c(F)c(F)c1F', C6H11: 'C1CCCCC1', Bn: 'Cc1ccccc1', Bz: 'C(=O)c1ccccc1', Ac: 'C(C)=O', Piv: 'C(=O)C(C)(C)C', Pv: 'C(=O)C(C)(C)C',
   Boc: 'C(=O)OC(C)(C)C', Cbz: 'C(=O)OCc1ccccc1', Fmoc: 'C(=O)OCC1c2ccccc2-c2ccccc21', Troc: 'C(=O)OCC(Cl)(Cl)Cl',
   Alloc: 'C(=O)OCC=C', Allyl: 'CC=C', Ts: 'S(=O)(=O)c1ccc(C)cc1', Tos: 'S(=O)(=O)c1ccc(C)cc1', Ms: 'S(=O)(=O)C',
   Tf: 'S(=O)(=O)C(F)(F)F', Ns: 'S(=O)(=O)c1ccc(cc1)[N+](=O)[O-]', TMS: '[Si](C)(C)C', TES: '[Si](CC)(CC)CC',

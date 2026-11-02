@@ -16,7 +16,7 @@ import { distinctChoices } from '../chem/template-choices';
 import { TEMPLATES, Template, Placement, templateById, templatePoints, placePoint, fusePlacements, atomPlacements, freePlacement, crowdingOf, placeTemplate, snap15 } from '../chem/templates';
 import { fusions3d } from '../chem/fuse3d';
 import { bondHapto, centreEnd, haptoTarget, haptoText, splitHapto } from '../chem/hapto';
-import { expandLigand, expandWithMolblock, labelSmiles, ligandTemplateFor } from '../chem/expand';
+import { expandInPlace, expandLigand, expandWithMolblock, freeLigandFor, inPlaceSmiles, labelSmiles, ligandTemplateFor } from '../chem/expand';
 import { styleFromFace, plainText } from '../richtext';
 import * as rt from '../richtext';
 import { applyFormat, formatWhole, type TextFormat } from '../text/format';
@@ -1969,8 +1969,9 @@ export class Editor {
       const a = doc.atoms.get(id);
       if (!a?.label) continue;
       const deg = doc.degree(id);
-      if (ligandTemplateFor(doc, a)) out.push({ id, template: true, smiles: null });
+      if (ligandTemplateFor(doc, a) || (!deg && freeLigandFor(a.label))) out.push({ id, template: true, smiles: null });
       else if (deg <= 1) out.push({ id, template: false, smiles: labelSmiles(a, deg) });
+      else { const smiles = inPlaceSmiles(doc, a); if (smiles) out.push({ id, template: false, smiles }); }
     }
     return out;
   }
@@ -1979,14 +1980,17 @@ export class Editor {
    * Chemistry > Expand Label: draw out labels as their atoms, given the molfiles the chemistry
    * engine laid out for those without a template (by atom id). Returns how many were expanded.
    */
-  expandLabels(list: { id: number; template: boolean }[], molblocks: Map<number, string>): number {
+  expandLabels(list: { id: number; template: boolean }[], molblocks: Map<number, string>, join = false, full = false): number {
     const doc = this.doc;
     const added: number[] = [];
     let n = 0;
-    doc.edit('Expand Label', () => {
+    // (full: ligands drawn in full; join: a further round of Expand Label Fully, taken back by the same undo)
+    const step = (fn: () => void) => (join ? doc.amend('Expand Label', fn) : doc.edit('Expand Label', fn));
+    step(() => {
       for (const { id, template } of list) {
         if (!doc.atoms.has(id)) continue;
-        const ids = template ? expandLigand(doc, id) : molblocks.has(id) ? expandWithMolblock(doc, id, molblocks.get(id)!) : null;
+        const mb = molblocks.get(id);
+        const ids = template ? expandLigand(doc, id, full) : mb ? (doc.degree(id) >= 2 ? expandInPlace(doc, id, mb) : expandWithMolblock(doc, id, mb)) : null;
         if (ids) { added.push(...ids); n++; }
       }
     });
