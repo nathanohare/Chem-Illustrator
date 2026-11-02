@@ -96,10 +96,9 @@ import { recordingToWav, NARRATION_NAME } from './deck/narration';
 import { clockText } from './deck/show-link';
 import type { PresenterView } from './ui/presenter-view';
 import { editDrawingStyle } from './ui/style-dialog';
-import { ribbonStyles, showStylePresets, styleNumbers } from './ui/style-cards';
 import { usedObjects, type DocText } from './document/document';
 import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from './dark-page';
-import { STYLE_PRESETS, applyStyle, presetNamed, restyleContents, sameLook, styleNamed, type RestyleHow, type StyleMode } from './drawing-styles';
+import { STYLE_PRESETS, applyStyle, presetNamed, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
 import { askCleanUpOption } from './ui/cleanup-picker';
 import { looksTangled, turnOption } from './chem/cleanup';
 import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
@@ -6037,68 +6036,20 @@ const STYLE_KINDS: Record<StyleMode, { plural: string; where: string }> = {
   sheet: { plural: 'spreadsheets', where: 'this spreadsheet\'s structure cells' },
 };
 
-/** The style structures are drawn in in the tab showing, and whether it has any yet. */
-function drawingStyleNow(): { tab: Tab; mode: StyleMode; current: DocStyle; hasStructures: boolean } {
+/** Pick or change how structures are drawn in the tab showing (a journal's style, or your own). */
+async function drawingStyleDialog(): Promise<void> {
   const tab = ws.active, mode = tab.mode as StyleMode;
+  finishTyping();
   const deck = tab.deck, book = tab.book, file = tab.document;
   const current = deck ? deck.master.drawing : book ? book.drawingStyle : file ? file.t.drawingStyle : doc.style;
   const hasStructures = deck ? deck.slides.some((_, i) => deck.docOf(i).atoms.size > 0)
     : file ? Object.values(file.t.objects).some((o) => o.kind === 'drawing' && o.contents.atoms.length > 0)
     : book ? book.sheets.some((s) => [...s.cells.values()].some((c) => !!c.structure)) : doc.atoms.size > 0 || doc.captions.size > 0;
-  return { tab, mode, current, hasStructures };
-}
-
-/** Draw the tab's structures in `next` (every slide, every figure of a document…), as one step to undo. */
-function applyDrawingStyle(tab: Tab, next: DocStyle, how: RestyleHow): void {
-  previewDrawingStyle(null);
-  const deck = tab.deck, book = tab.book, file = tab.document;
-  if (deck) deck.setDrawingStyle(next, how);
-  else if (book) {
-    book.setDrawingStyle(next, (c, old) => restyleContents(c, old, next, how));
-    sheetMode?.styleChanged();
-  } else if (file) {
-    const t = file.t, old = t.drawingStyle;
-    const objects = { ...t.objects };
-    for (const [k, o] of Object.entries(objects)) if (o.kind === 'drawing') objects[Number(k)] = { ...o, contents: restyleContents(o.contents, old, next, how) };
-    const changed: DocText = { ...t, objects, drawingStyle: { ...next } };
-    file.ed.update(changed, 'Drawing style');
-    docMode?.fontsChanged();
-  } else {
-    doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, next, how));
-    editor.changed();
-  }
-}
-
-/** A style being tried on the drawing showing (pointing at a Drawing Styles card): taken back with null. */
-let stylePreviewDoc: Doc | null = null;
-function previewDrawingStyle(st: DocStyle | null): void {
-  if (stylePreviewDoc) {
-    stylePreviewDoc.abandon();
-    stylePreviewDoc = null;
-    editor.requestScene();
-  }
-  if (!st) return;
-  // only where the drawing on screen is the editor's (a canvas, a design, the slide showing)
-  const mode = ws.active.mode;
-  if (mode !== 'drawing' && mode !== 'design' && mode !== 'slides') return;
-  const d = editor.doc;
-  if (d.editing || (!d.atoms.size && !d.captions.size) || (st.name === d.style.name && sameLook(st, d.style))) return;
-  d.begin('Drawing style preview');
-  applyStyle(d, st, 'restyle');
-  stylePreviewDoc = d;
-  editor.requestScene();
-}
-
-/** Pick or change how structures are drawn in the tab showing (a journal's style, or your own). */
-async function drawingStyleDialog(): Promise<void> {
-  finishTyping();
-  const { tab, mode, current, hasStructures } = drawingStyleNow();
   const got = await editDrawingStyle({
     current, own: ownStyles, kindPlural: STYLE_KINDS[mode].plural, where: STYLE_KINDS[mode].where,
     isDefault: modeStyleFor(mode) === current.name, hasStructures,
-    preview: (st) => stylePreview(st), livePreview: previewDrawingStyle,
+    preview: (st) => stylePreview(st),
   });
-  previewDrawingStyle(null);
   if (!got || ws.active !== tab) return;
   ownStyles = got.own;
   // Set as Default: new files start in it too
@@ -6114,59 +6065,23 @@ async function drawingStyleDialog(): Promise<void> {
     ownStyles = [...ownStyles, { ...got.style }];
   }
   storeSettings();
-  applyDrawingStyle(tab, got.style, got.how);
-  for (const r of ribbonStyleStrips) r.refresh();
-  flash(`Structures are now drawn in ${got.style.name}${got.forNew ? `, and new ${STYLE_KINDS[mode].plural} will start in it` : ''}.`, 4000);
-}
-
-/** Drawing Styles ▾ on the ribbon: the style cards; pointing at one shows the drawing in it, clicking applies it. */
-function drawingStylesGallery(at?: { left: number; bottom: number }): void {
-  finishTyping();
-  const { tab, current } = drawingStyleNow();
-  showStylePresets(at ?? dropAnchor('drawing-styles'), {
-    own: ownStyles, current,
-    preview: previewDrawingStyle,
-    pick: (st) => {
-      if (ws.active !== tab) return;
-      applyDrawingStyle(tab, st, 'restyle');
-      for (const r of ribbonStyleStrips) r.refresh();
-      flash(`Structures are now drawn in ${st.name}. Undo takes it back.`, 3000);
-    },
-    save: () => void saveCurrentStyle(),
-    more: () => void drawingStyleDialog(),
-  });
-}
-
-/** The Drawing Styles strips on the Presentation and Design ribbons (made once the app is up). */
-let ribbonStyleStrips: { refresh(): void }[] = [];
-setTimeout(() => {
-  ribbonStyleStrips = [...document.querySelectorAll<HTMLElement>('[data-style-gallery]')].map((host) => ribbonStyles(host, {
-    own: () => ownStyles,
-    current: () => drawingStyleNow().current,
-    preview: previewDrawingStyle,
-    pick: (st) => {
-      finishTyping();
-      applyDrawingStyle(ws.active, st, 'restyle');
-      flash(`Structures are now drawn in ${st.name}. Undo takes it back.`, 3000);
-    },
-    more: (b) => drawingStylesGallery(b.getBoundingClientRect()),
-  }));
-}, 400);
-
-/** Keep the style in use as one of your own (the gallery's "+ Save current"). */
-async function saveCurrentStyle(): Promise<void> {
-  const { current } = drawingStyleNow();
-  const got = await ask('Save as My Style', [{ name: 'name', label: 'Name', value: current.name.startsWith('My ') ? current.name : `My ${current.name}` }], {
-    ok: 'Save', note: `Keeps ${styleNumbers(current)} under this name, in the Drawing Styles gallery of every mode.`,
-  });
-  const name = got?.name.trim();
-  if (!name) return;
-  const st: DocStyle = { ...current, name };
-  const had = ownStyles.findIndex((s) => s.name === name);
-  ownStyles = had >= 0 ? ownStyles.map((s, i) => (i === had ? st : s)) : [...ownStyles, st];
-  storeSettings();
-  for (const r of ribbonStyleStrips) r.refresh();
-  flash(`${name} is now one of your drawing styles.`, 3000);
+  const next = got.style;
+  if (deck) deck.setDrawingStyle(next, got.how);
+  else if (book) {
+    book.setDrawingStyle(next, (c, old) => restyleContents(c, old, next, got.how));
+    sheetMode?.styleChanged();
+  } else if (file) {
+    const t = file.t, old = t.drawingStyle;
+    const objects = { ...t.objects };
+    for (const [k, o] of Object.entries(objects)) if (o.kind === 'drawing') objects[Number(k)] = { ...o, contents: restyleContents(o.contents, old, next, got.how) };
+    const changed: DocText = { ...t, objects, drawingStyle: { ...next } };
+    file.ed.update(changed, 'Drawing style');
+    docMode?.fontsChanged();
+  } else {
+    doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, next, got.how));
+    editor.changed();
+  }
+  flash(`Structures are now drawn in ${next.name}${got.forNew ? `, and new ${STYLE_KINDS[mode].plural} will start in it` : ''}.`, 4000);
 }
 
 /**
@@ -8035,7 +7950,6 @@ const COMMANDS: Record<string, () => unknown> = {
   'delete-all-comments': () => { if (ws.active.mode !== 'slides') return false; slideCmts?.removeAll(); return undefined; },
   'show-comments': () => { if (ws.active.mode !== 'slides' || !slideCmts) return false; slideCmts.show(!slideCmts.shown); return undefined; },
   'drawing-style': () => settingsWindow.open('style'),
-  'drawing-styles': () => drawingStylesGallery(),
   present: () => present(false),
   'present-current': () => present(true),
   'presenter-view': () => present(false, true),
