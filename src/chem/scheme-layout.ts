@@ -51,6 +51,8 @@ export interface SchemePrefs {
   headGap: number | null;
   /** Clean Up Reaction makes the arrows of a scheme that point the same way all the same length (the longest one's). */
   sameLength: boolean;
+  /** Shortest arrow, or null for the usual (from the bond length). A Smart Scheme's own format sets it. */
+  arrowLength?: number | null;
 }
 
 export const DEFAULT_SCHEME_PREFS: SchemePrefs = { structGap: null, plusGap: null, textGap: null, textSize: null, textAlign: 'center', helpers: true, fit: true, lead: null, headGap: null, sameLength: true };
@@ -104,7 +106,7 @@ export function spacing(bond: number, p: SchemePrefs = schemePrefs) {
     plus: p.plusGap ?? SPACING.plus * bond,
     conditions: p.textGap ?? SPACING.conditions * bond,
     stack: SPACING.stack * bond,
-    minArrow: SPACING.minArrow * bond,
+    minArrow: p.arrowLength ?? SPACING.minArrow * bond,
     lead: p.lead ?? over,
     headGap: p.headGap ?? over,
   };

@@ -7259,6 +7259,16 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
   finishCellStructure(true);
   const blank: Contents = { atoms: [], bonds: [], captions: [], arrows: [], shapes: [] };
   const drawing = structureDoc(contents ?? blank, style);
+  // in a mode whose page is the drawing area itself (Canvas, Presentation, Design), the structure
+  // is drawn in a box over a faded picture of the page, as a spreadsheet cell's is
+  const boxed = !inPlace && ws.active.mode !== 'sheet' && ws.active.mode !== 'document';
+  if (boxed) {
+    const back = $<HTMLDivElement>('#drawing-backdrop');
+    const scene = host.querySelector<HTMLCanvasElement>('#scene');
+    try { back.style.backgroundImage = scene ? `url(${scene.toDataURL('image/png')})` : ''; } catch { back.style.backgroundImage = ''; }
+    back.hidden = false;
+    document.body.classList.add('boxed-drawing');
+  }
   editor.clearSelection();
   doc.swap(drawing);
   // the drawing beside (split view) waits in `drawing`, its zoom kept for after
@@ -7268,7 +7278,7 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
   layoutSplit();
   $('#structure-title').textContent = title;
   $('#structure-bar').hidden = false;
-  if (ws.active.mode === 'sheet') setStructureSize(0);
+  if (ws.active.mode === 'sheet' || boxed) setStructureSize(0);
   showSheetParts();
   editor.paused = false;
   editor.lastEdited = null;
@@ -7329,7 +7339,9 @@ function finishCellStructure(keep: boolean): void {
   // the drawing beside is back as it was: not changed, at its own zoom
   if (ws.pane) ws.pane.seen = doc.version;
   renderer.view = e.view;
-  document.body.classList.remove('floating-drawing');
+  document.body.classList.remove('floating-drawing', 'boxed-drawing');
+  $('#drawing-backdrop').hidden = true;
+  $<HTMLDivElement>('#drawing-backdrop').style.backgroundImage = '';
   $('#structure-bar').hidden = true;
   const sheet = ws.active.mode === 'sheet';
   const words = ws.active.mode === 'document';
@@ -13342,11 +13354,14 @@ const smartPane = new SmartPane({
   stepRuns: (id, k, part, parts) => editor.smartStepRuns(id, k, part, parts),
   toStructure: (id, k) => editor.smartToHolder(id, k),
   toText: (id, k) => editor.smartToText(id, k),
+  stepToStructure: (id, k, part) => editor.smartStepToHolder(id, k, part),
+  stepToText: (id, k, part) => editor.smartStepToText(id, k, part),
   selectHolder: (shape) => editor.selectShape(shape),
   add: (id, after) => editor.smartInsert(id, after),
   remove: (id, k) => editor.smartRemove(id, k),
   move: (id, from, to) => editor.smartMove(id, from, to),
   arrange: (id, patch) => editor.smartArrange(id, patch),
+  format: (id, fmt) => editor.smartFormat(id, fmt),
   async secondLoop(id) {
     const st = editor.smartCycleStart(id);
     if (!st) return;

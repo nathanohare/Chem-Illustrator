@@ -1281,6 +1281,28 @@ body.sheet-mode.floating-drawing[data-structure-size='fill'] #canvas-host { heig
 body.sheet-mode.floating-drawing #structure-bar .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 #structure-bigger { display: none; }
 body.sheet-mode.floating-drawing #structure-bigger { display: inline-block; }
+/* Canvas, Presentation and Design: a structure for a window's cell (an energy diagram's species) is drawn the same way,
+   in the 6 × 4 in box, over a faded picture of the page (the page itself is the drawing area, so it can't show through) */
+#drawing-backdrop { grid-area: host; background: #fff center / 100% 100% no-repeat; opacity: 0.45; pointer-events: none; }
+#drawing-backdrop[hidden] { display: none; }
+body.boxed-drawing #canvas-host {
+  z-index: 3;
+  margin: 56px 28px 22px;
+  border: 2px solid var(--accent);
+  border-radius: var(--r-tab);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.28);
+  align-self: start;
+  height: min(var(--structure-h, 4in), calc(100% - 78px));
+}
+body.boxed-drawing #canvas-host, body.boxed-drawing #structure-bar {
+  justify-self: center;
+  width: min(var(--structure-w, 6in), calc(100% - 56px));
+  box-sizing: border-box;
+}
+body.boxed-drawing[data-structure-size='fill'] #canvas-host, body.boxed-drawing[data-structure-size='fill'] #structure-bar { width: auto; justify-self: stretch; }
+body.boxed-drawing[data-structure-size='fill'] #canvas-host { height: auto; align-self: stretch; }
+body.boxed-drawing #structure-bar .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+body.boxed-drawing #structure-bigger { display: inline-block; }
 /* the pop-out drawing area has no scroll bars (the wheel and Space+drag move round it) */
 body.floating-drawing #canvas-host .scrollbar { display: none; }
 body.floating-drawing #sheet-ribbon, body.floating-drawing #doc-ribbon { opacity: 0.55; pointer-events: none; }
@@ -3665,13 +3687,13 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .smart-pane .sp-struct[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .smart-pane .sp-holder { flex: 1; min-width: 0; text-align: left; padding: 2px 4px; border: 1px dashed var(--accent); border-radius: var(--r-control); background: none; color: var(--accent); font-size: var(--fs-xs); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* compact (Nate, choice 1): the layouts in the title row, steps' fields side by side; docked, it sits in its toolbox */
-.smart-pane { width: 264px; gap: 3px; padding: 4px 6px 6px; }
+.smart-pane { width: 288px; grid-template-columns: minmax(0, 1fr); gap: 3px; padding: 4px 6px 6px; }
 .smart-pane .sp-head { gap: 4px; font-size: var(--fs-sm); }
 .smart-pane .sp-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: move; user-select: none; }
 .smart-pane.docked .sp-head { justify-content: flex-end; }
 .smart-pane.docked .sp-head .sp-layouts { margin-right: auto; }
 .smart-pane .sp-head .sp-layouts { display: flex; gap: 1px; grid-template-columns: none; }
-.smart-pane .sp-head .sp-layout { display: grid; place-items: center; width: 24px; height: 22px; padding: 0; font-size: 0; }
+.smart-pane .sp-head .sp-layout { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; font-size: 0; }
 .smart-pane .sp-pin { border: none; background: none; color: var(--muted); padding: 2px 3px; line-height: 0; cursor: pointer; border-radius: var(--r-control); }
 .smart-pane .sp-pin:hover, .smart-pane .sp-fold:hover { color: var(--text); background: var(--accent-soft); }
 .smart-pane .sp-pin[aria-pressed='true'] { color: var(--accent); }
@@ -3684,7 +3706,8 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .smart-pane .sp-step { padding-left: 20px; gap: 3px; }
 .smart-pane .sp-step-fields { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 2px; }
 .smart-pane .sp-step-fields .sp-rich { min-height: 17px; }
-.smart-pane .sp-arrow { padding-top: 1px; }
+.smart-pane .sp-arrow { padding-top: 3px; }
+.smart-pane .sp-arrow svg { display: block; margin: 0 auto; }
 .smart-pane .sp-opts { font-size: var(--fs-xs); }
 .smart-pane .sp-foot .sp-ungroup { padding: 1px 6px; font-size: var(--fs-xs); }
 .smart-pane.docked { position: static; width: auto; min-width: 230px; max-width: 300px; max-height: none; border: none; border-radius: 0; box-shadow: none; padding: 4px 6px; }
@@ -3916,6 +3939,49 @@ dialog.geom-view-dialog { width: min(96vw, 640px); }
 .geom-view-dialog .gv-gap { flex: 1; }
 .geom-view-dialog .gv-note { margin: 6px 0 4px; }
 @media (max-width: 560px) { .geom-view-dialog .gv-body { grid-template-columns: 1fr; } }
+.smart-pane .sp-info { display: grid; place-items: center; width: 16px; height: 16px; color: var(--muted); cursor: help; flex: none; border-radius: 50%; }
+.smart-pane .sp-info:hover, .smart-pane .sp-info:focus-visible { color: var(--accent); }
+.smart-pane.docked .sp-head .sp-info { order: -1; }
+.smart-pane .sp-head .sp-title { flex: 0 1 auto; }
+.smart-pane .sp-head .sp-title + .sp-info { margin-right: auto; }
+.smart-pane .sp-gear { display: grid; place-items: center; width: 22px; padding: 0; margin-left: 2px; }
+.smart-pane .sp-gear.on { color: var(--accent); }
+.smart-format-pop { position: fixed; z-index: 60; width: 248px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-panel); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); font: var(--fs-sm) var(--ui-font); padding: 4px 8px 8px; display: grid; gap: 3px; }
+.smart-format-pop .sfp-head { display: flex; align-items: center; justify-content: space-between; font-weight: 600; }
+.smart-format-pop .sfp-x { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 2px; }
+.smart-format-pop .sfp-sec { margin-top: 4px; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 1px; }
+.smart-format-pop .sfp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.smart-format-pop .sfp-field { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 2px; font-size: var(--fs-xs); color: var(--muted); }
+.smart-format-pop .sfp-field > span { grid-column: 1 / -1; }
+.smart-format-pop .sfp-field.sfp-wide { grid-column: 1 / -1; grid-template-columns: 1fr; }
+.smart-format-pop .sfp-field i { font-style: normal; }
+.smart-format-pop input, .smart-format-pop select { font: inherit; font-size: var(--fs-sm); color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); padding: 1px 3px; min-width: 0; }
+.smart-format-pop input:disabled { opacity: 0.5; }
+.smart-format-pop .sfp-foot { display: flex; justify-content: flex-end; margin-top: 4px; }
+.smart-format-pop .sfp-foot button { font: inherit; font-size: var(--fs-xs); padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); color: var(--text); cursor: pointer; }
+.energy-dialog h2 { display: flex; align-items: center; gap: 6px; }
+.energy-dialog .energy-info { display: inline-grid; place-items: center; color: var(--muted); cursor: help; border-radius: 50%; font-weight: normal; }
+.energy-dialog .energy-info:hover, .energy-dialog .energy-info:focus-visible { color: var(--accent); }
+.energy-table td input.energy-x { width: 4em; }
+.energy-format { margin: 4px 0 6px; }
+.energy-format summary { cursor: pointer; font-weight: 600; font-size: 0.92em; }
+.energy-format-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; margin-top: 6px; }
+.energy-format-grid label { display: grid; grid-template-columns: 7em 1fr; align-items: center; gap: 4px; font-size: 0.9em; }
+.energy-format-grid label.wide { grid-column: 1 / -1; }
+.energy-format-grid input[type=number] { width: 4.5em; }
+.energy-format-grid input[type=color] { width: 2em; height: 1.5em; padding: 0; vertical-align: middle; }
+.energy-format-grid select, .energy-format-grid input:not([type]) { min-width: 0; width: 100%; box-sizing: border-box; }
+.smart-pane .sp-part { display: flex; gap: 1px; min-width: 0; align-items: stretch; }
+.smart-pane .sp-part > .sp-rich, .smart-pane .sp-part > .sp-holder, .smart-pane .sp-part > .sp-fixed { flex: 1; min-width: 0; }
+.smart-pane .sp-part .sp-part-struct { width: 15px; height: auto; min-height: 17px; border-color: transparent; background: none; color: var(--muted); }
+.smart-pane .sp-part .sp-part-struct svg { width: 11px; height: 11px; }
+.smart-pane .sp-part .sp-part-struct:hover { color: var(--accent); border-color: var(--line); }
+.smart-pane .sp-part .sp-part-struct[aria-pressed='true'] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+.smart-pane .sp-part .sp-holder { font-size: var(--fs-xs); padding: 0 3px; text-align: left; }
+.energy-dialog .ask-row .energy-info { vertical-align: -2px; margin-left: 2px; }
+/* checkboxes and radio buttons in these windows and panes take the mode's accent (teal in Canvas) */
+.smart-pane, .smart-format-pop, .energy-dialog, .geom-view-dialog { accent-color: var(--accent); }
+.smart-pane .sp-info.marked { color: var(--accent); }
 
 /* Shadows (View > Window and Colors > Shadows): light as the app comes, strong, or off. Light gives
    a slight shadow under the menus, docked toolboxes on raised cards like the ribbon panel, and a soft
