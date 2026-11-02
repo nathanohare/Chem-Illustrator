@@ -438,7 +438,7 @@ With an arrow selected, the **Reaction** section of the Style panel also has **A
 
 ## Warnings
 
-Red boxes mark atoms with too many or too few bonds, labels that can't be read, and atoms sitting on top of each other. Point at one to see why. The **Warnings** panel on the right lists them all, with **Ignore** to hide one. **Show on drawing** turns the red boxes off. They are never printed, saved or copied.
+A soft red disc marks atoms with too many or too few bonds, labels that can't be read, and atoms sitting on top of each other. Point at one to see why. The **Warnings** box at the right end of the ribbon's tabs counts them; click it (or look in the Warnings panel on the right) for the list, with **Ignore** to hide one. **Show on drawing** turns the marks off. They are never printed, saved or copied. **Settings ▸ Preferences** offers a thin red box, a circle, a dashed circle or corner marks instead of the disc.
 
 Rest the mouse on an abbreviation or condensed label (OTBS, NHBoc, CO2Me, CH2OH) to see the group written out, with its name and formula. **View ▸ Group Tooltips** turns this off.
 
@@ -545,6 +545,15 @@ Every color button opens a palette: Automatic, the standard colors, the colors a
 
 **Edit ▸ Color Palettes…** makes rows of your own colors, which show in every color menu in every mode. Start a **New palette**, add a ready-made row (colour-blind safe, grays, blues or warm), or make one from the drawing's colors.
 
+## The Canvas ribbon
+
+Above the drawing, a compact ribbon holds the chemistry commands that have no toolbox of their own. Its tabs are **Home** (Format Favorites, Schemes, Diagrams, Mechanism, Insert and Look Up), **Insert**, **Chemistry**, **Arrange** and **View**. The bigger commands (Smart Scheme, Catalytic Cycle, Energy Diagram, Animate) carry their names; the rest show their names when you rest the mouse on them. The arrow at the right end of the tabs folds the ribbon away to just its tabs.
+
+- **Tabs for what you're working on**: draw with an arrow tool or select an arrow and an **Arrow** tab comes up and opens, with its shape, path and structure commands. A ring tool or a selected ring brings up a **Ring** tab, and one or two selected bonds a **Bond** tab. When the selection or tool changes, the ribbon goes back to the tab you were on.
+- **Warnings**, at the far right of the tabs, counts the problems found in the drawing. Click it to see the list.
+- **Analysis**, at the right end of the buttons, shows the formula and molecular weight of what is selected (or the whole drawing) on one line. Click it to see everything the Analysis panel has, and **Pop Out** to put that in a window of its own, which you can move anywhere or pin at the right.
+- **Settings ▸ Toolboxes and Ribbon** offers the **Simplified** ribbon (one row of buttons) instead of the **Classic** two rows, and puts the group names under each group, up its side, or nowhere.
+
 ## Toolboxes
 
 **View ▸ Toolboxes** can show more toolboxes besides the drawing tools:
@@ -557,6 +566,14 @@ Every color button opens a palette: Automatic, the standard colors, the colors a
 - **Toolbox: Text Formatting**: the same bar that shows while you type, kept in a toolbox you can dock or float: bold, italic, underline, sub- and superscript, **CH₃** (a formula in one click: CH2Cl2 becomes CH₂Cl₂, charges go up), **(R)** (stereodescriptors and prefixes in italics in one click: (2R,3S)-, (E)-, cis-, tert-, n-Bu; again puts them back upright), font, size and color, alignment, bullets, numbering and indents, line and paragraph spacing and the box width, links, and the Greek letters and symbols (**αΩ**; Insert ▸ Symbol has every other character). It works on the text being typed, on the whole of each picked caption, and in documents (where the Home tab sets the font, size and spacing).
 - **Toolbox: Guides**: your own guides and grid, with ruler ticks and snapping (see [Moving, turning and the Format menu](#moving-turning-and-the-format-menu)).
 - **Toolbox: My Toolbox**: the tools and commands you choose yourself (see below).
+
+Five more toolboxes stay hidden until you open them, and come out on their own while their kind of object is selected (and go away again after). One you open yourself stays open, and one you close stays closed until you select something else.
+
+- **Toolbox: Smart Schemes**: make, convert, ungroup, lay out and set up Smart Schemes, with the stoichiometry table, Check Balance, Map Atoms and Animate.
+- **Toolbox: Diagrams**: energy, MO and torsional energy diagrams, orbitals, transition state brackets, Newman projections and other diagrams, and the commands that edit them.
+- **Toolbox: Tables and Charts**: tables, R-group and stoichiometry tables, charts, TLC plates and gels.
+- **Toolbox: Biopolymers**: Structure from Sequence and the amino acid, sugar and nucleic acid templates. (It has no object of its own, so it only opens from the menu.)
+- **Toolbox: Perspective and 3-D**: 3-D models, Turn in 3-D, Flatten, depth shading, chairs and ring flips, Newman projections, crystal structures, and the perspective, conformer and projection templates. It comes out for atoms with 3-D positions.
 
 ### Customize Toolboxes
 

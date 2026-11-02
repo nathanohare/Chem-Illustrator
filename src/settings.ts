@@ -118,6 +118,10 @@ export interface Settings {
   oneColumnTools: boolean;
   /** Settings ▸ Toolboxes: each toolbox button in a cell of its own, ruled off by lines, raised, or both. */
   toolCells: 'off' | 'grid' | 'raised' | 'both';
+  /** Settings ▸ Toolboxes: the Canvas ribbon in two rows of buttons (Classic) or one (Simplified). */
+  canvasRibbon: 'classic' | 'simple';
+  /** Settings ▸ Toolboxes and Ribbon: where every ribbon's group names go: along the dividers, across each group, or nowhere. */
+  ribbonNames: 'top' | 'side' | 'none';
   /** The start view (new tabs, recent files) on the empty drawing the program opens with. */
   startView: boolean;
   /** Settings ▸ Preferences: Enter finishes text typed with the Text tool (in every mode) and Alt+Enter (Option+Enter on a Mac) starts a new line. Off: Enter starts a new line and Esc finishes (ChemDraw). */
@@ -165,6 +169,8 @@ export interface Settings {
   superscriptR: boolean;
   /** How the n-, i-, s- and t- of alkyl groups (tBu, iPr) are written as labels and text are typed. */
   alkylLook: AlkylLook;
+  /** Settings ▸ Preferences: how a warning is marked on the drawing (soft red disc, thin red box, circle, dashed circle or corner marks). */
+  warnLook: 'disc' | 'box' | 'circle' | 'dashed' | 'corners';
   /** How round bond lines' free ends are, 1 (round) to 0 (square); see bondEndPrefs. */
   bondEnds: number;
   /** How atom-map numbers look (Chemistry ▸ Map Atoms); see mapLookPrefs. */
@@ -266,8 +272,8 @@ export const SLIDE_PANE_MIN = 120, SLIDE_PANE_MAX = 480, NOTES_MIN = 36, NOTES_M
 export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, stickyHotspot: false, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
-  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', density: 'compact', iconLook: 'mode', shapeInk: 'neutral', oneColumnTools: false, toolCells: 'off', startView: true, enterFinishesText: false, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
-  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowProducts: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'peach', depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
+  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', density: 'compact', iconLook: 'mode', shapeInk: 'neutral', oneColumnTools: false, toolCells: 'off', canvasRibbon: 'classic', ribbonNames: 'side', startView: true, enterFinishesText: false, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
+  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowProducts: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', warnLook: 'disc', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'peach', depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
   orient: { ...DEFAULT_ORIENT },
@@ -323,6 +329,8 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.uiScale === 'number') s.uiScale = clampUiScale(r.uiScale);
   if (r.updateChannel === 'stable' || r.updateChannel === 'latest') s.updateChannel = r.updateChannel;
   if (typeof r.textBar === 'string' && ['docked', 'floating', 'hidden'].includes(r.textBar)) s.textBar = r.textBar as Settings['textBar'];
+  if (r.canvasRibbon === 'classic' || r.canvasRibbon === 'simple') s.canvasRibbon = r.canvasRibbon;
+  if (r.ribbonNames === 'top' || r.ribbonNames === 'side' || r.ribbonNames === 'none') s.ribbonNames = r.ribbonNames;
   if (r.appTheme === 'system' || r.appTheme === 'light' || r.appTheme === 'dark' || r.appTheme === 'darkgray') s.appTheme = r.appTheme;
   if (r.density === 'compact' || r.density === 'standard' || r.density === 'large') s.density = r.density;
   if (r.iconLook === 'mode' || r.iconLook === 'kind') s.iconLook = r.iconLook;
@@ -371,6 +379,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (Array.isArray(r.docPins)) s.docPins = ['para', 'style', 'page', 'hf'].filter((k) => (r.docPins as unknown[]).includes(k));
   if (r.methylStyle === 'Me' || r.methylStyle === 'CH3') s.methylStyle = r.methylStyle;
   if (ALKYL_LOOKS.includes(r.alkylLook as AlkylLook)) s.alkylLook = r.alkylLook as AlkylLook;
+  if (['disc', 'box', 'circle', 'dashed', 'corners'].includes(r.warnLook as string)) s.warnLook = r.warnLook as Settings['warnLook'];
   if (r.groupClick === 'group' || r.groupClick === 'item') s.groupClick = r.groupClick;
   if (r.axialStyle === 'RaSa' || r.axialStyle === 'PM') s.axialStyle = r.axialStyle;
   if (typeof r.slideTemplate === 'string' || r.slideTemplate === null) s.slideTemplate = r.slideTemplate as string | null;

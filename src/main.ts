@@ -8,12 +8,12 @@ import { newDocDesign, setNewDocDesign } from './document/themes';
 import { fieldEnv } from './document/fields';
 import type { QuickPart } from './document/quick-parts';
 import { SLIDE_TABLE_STYLES, DEFAULT_SLIDE_TABLE_STYLE } from './deck/table-styles';
-import { commandIcon } from './ui/command-icons';
+import { commandIcon, RIBBON_ONLY_ICONS } from './ui/command-icons';
 import './app.css';
 import type { MethylStyle } from './chem/hydrogens';
 import { STANDARD_COLOURS, usedColours } from './colours';
 import { ICONS } from './icons';
-import { Toolboxes, lockIcon, sideFolded, commandButton, defaultToolboxes, menuCommands, boxIds, boxGrid, boxTitle, flyGrid, isEditable, withoutGoneItems, isOwnBox, overflowOf, type Pickable, type ToolboxDef, type ToolboxState } from './ui/toolboxes';
+import { Toolboxes, lockIcon, sideFolded, commandButton, defaultToolboxes, menuCommands, boxIds, boxGrid, boxTitle, flyGrid, isEditable, withoutGoneItems, isOwnBox, overflowOf, CONTEXT_BOXES, type ContextBox, type Pickable, type ToolboxDef, type ToolboxState } from './ui/toolboxes';
 import { gridItems, inBlock, oneColumn, shownGrid, wrapped, type Grid, type Shown } from './ui/toolbox-grid';
 import { ToolboxEditor } from './ui/toolbox-editor';
 import { RibbonEditor } from './ui/ribbon-editor';
@@ -38,7 +38,7 @@ import { casHtml, casRuns, type CasState } from './ui/cas-panel';
 import { pubchemHtml, pubchemRuns, type PubChemState } from './ui/pubchem-panel';
 import { paragraphPages } from './document/doc-file';
 import { reviewAuthor, setReviewAuthor } from './document/revisions';
-import { analysisHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, DEFAULT_DESCRIPTORS, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
+import { analysisHtml, formulaHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, DEFAULT_DESCRIPTORS, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
 import { attachedAtoms, attachWhereItIs, defaultGap, nearestStructure, placeAttached, structureSig } from './editor/attached';
 import { repeatGroups, lipDirection } from './chem/polymer';
 import { rGroupsOf, substituted, rowNumbers, parseRows, rGroupCells, type RowMass } from './chem/rgroup';
@@ -198,7 +198,9 @@ import { guideSpot } from './ui/guide-spot';
 import type { GuideWindow, GuideHeading } from './ui/guide-window';
 import { SettingsWindow, type SettingsHost, type SettingsPage } from './ui/settings-window';
 import { fileTypesPage, FILE_TYPES } from './ui/file-types-page';
-import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed } from './ui/ribbon-fit';
+import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed, addLookToggle, repaintArrows } from './ui/ribbon-fit';
+import { CanvasRibbon, type ContextKind } from './ui/canvas-ribbon';
+import { AnalysisBox, WarningsBox } from './ui/canvas-ribbon-boxes';
 import { placeTitleBar, titleBarPlace } from './ui/title-bar';
 import { canScaleUi, setUiScale, stepUiScale, uiScale, UI_SCALES } from './ui/ui-scale';
 import { installTouchUi, keypadShowing, markSketch, setTouchMode, showKeypad, touchMode, touchOn } from './ui/touch-ui';
@@ -558,14 +560,15 @@ const TOOL_GROUPS: ToolbarItem[][] = [
     { name: 'sketch', title: 'Sketch (for a pen): draw freehand. Lines become bonds, a loop with corners a ring, a circle benzene (inside a ring: aromatic), letters label atoms (C N O S P F Cl Br I H, + −), a scribble erases' },
   ],
   [
+    // (the aromatic rings first: the ones drawn most)
+    { name: 'ring-benzene', title: 'Benzene. Shift+click swaps the double bonds; Ctrl+click draws it with a circle' },
+    { name: 'ring-cp', title: 'Cyclopentadiene. Ctrl+click draws it with a circle' },
     { name: 'ring-3', title: 'Cyclopropane' },
     { name: 'ring-4', title: 'Cyclobutane' },
     { name: 'ring-5', title: 'Cyclopentane' },
     { name: 'ring-6', title: 'Cyclohexane' },
     { name: 'ring-7', title: 'Cycloheptane' },
     { name: 'ring-8', title: 'Cyclooctane' },
-    { name: 'ring-benzene', title: 'Benzene. Shift+click swaps the double bonds; Ctrl+click draws it with a circle' },
-    { name: 'ring-cp', title: 'Cyclopentadiene. Ctrl+click draws it with a circle' },
   ],
   [
     templatePalette('rings', 'tpl-rings', 'Ring systems', 5),
@@ -634,6 +637,86 @@ const toolbar = new Toolbar($<HTMLDivElement>('#tools'), TOOL_GROUPS, (name) => 
   return keys.length ? ` (${keys.join(', ')})` : '';
 }, (name, size) => TOOL_PALETTE.get(name)?.icon?.(name, size));
 
+// The Canvas ribbon: the chemistry commands without a toolbox of their own (Smart Schemes, energy
+// diagrams, mechanism checks, look-ups), with Analysis and the warnings in two small boxes
+const canvasRibbon = new CanvasRibbon({
+  command: (cmd) => { command(cmd); },
+  pickTool: (name) => pickTool(name),
+  hasTool: (name) => name in TOOLS,
+  icon: (it) => ('cmd' in it ? commandIcon(it.cmd) ?? RIBBON_ONLY_ICONS[it.cmd] ?? ICONS[it.cmd] : ICONS[it.tool]),
+}, $('#sheet-ribbon'));
+const analysisBox = new AnalysisBox($('#analysis-section'));
+const warningsBox = new WarningsBox($('#warnings-section'));
+canvasRibbon.bodyEnd.append(analysisBox.button);
+canvasRibbon.tabEnd.append(warningsBox.button);
+canvasRibbon.el.addEventListener('cr-tab', () => fitRibbons());
+
+/** The kind of object being drawn or selected that has a ribbon tab of its own (Arrow, Ring, Bond). */
+function ribbonContext(): ContextKind | null {
+  const t = TOOLS[editor.toolName];
+  const s = editor.sel;
+  if (t?.kind === 'arrow' || (s.arrows.size && !s.atoms.size && !s.captions.size)) return 'arrow';
+  if (t?.kind === 'ring') return 'ring';
+  if (!s.bonds.size || s.arrows.size || s.captions.size || s.shapes.size) return null;
+  // a ring selected (each of its atoms on two of its bonds): its tab; one or two bonds: theirs
+  const ends = new Map<number, number>();
+  for (const id of s.bonds) { const b = doc.bonds.get(id); if (b) for (const a of [b.a1, b.a2]) ends.set(a, (ends.get(a) ?? 0) + 1); }
+  if (s.bonds.size >= 3 && s.bonds.size <= 8 && s.atoms.size === s.bonds.size && [...ends.values()].every((n) => n === 2) && ends.size === s.bonds.size) return 'ring';
+  if (s.bonds.size <= 2 && [...s.atoms].every((a) => ends.has(a))) return 'bond';
+  return null;
+}
+const showRibbonContext = () => { canvasRibbon.setContext(ribbonContext()); contextBoxes.follow(); };
+
+/**
+ * The context toolboxes (Smart Schemes, Diagrams, Tables and Charts, Perspective and 3-D) come out
+ * while their kind of object is selected and go away with it. One opened by hand stays open, and
+ * one closed while its object is still selected stays closed until that selection goes.
+ */
+const contextBoxes = {
+  /** Set once the toolboxes are made (selections can change before that). */
+  ready: false,
+  auto: new Set<ContextBox>(),
+  dismissed: new Set<ContextBox>(),
+  wanted(): Set<ContextBox> {
+    const s = editor.sel;
+    const want = new Set<ContextBox>();
+    if (s.shapes.size + s.captions.size + s.arrows.size + s.atoms.size && editor.selectedSmart() !== null) want.add('schemes');
+    for (const id of s.shapes) {
+      const sh = doc.shapes.get(id);
+      if (!sh) continue;
+      if (sh.smart) want.add('schemes');
+      if (sh.energy || sh.torsion || sh.newman || sh.diagram) want.add('diagrams');
+      if (sh.table || sh.chart || sh.plate) want.add('tables');
+    }
+    for (const id of s.atoms) {
+      const a = doc.atoms.get(id);
+      if (a && (a.xyz || a.depth !== undefined)) { want.add('perspective'); break; }
+    }
+    return want;
+  },
+  follow(): void {
+    if (!this.ready) return;
+    const want = this.wanted();
+    for (const id of CONTEXT_BOXES) {
+      const shown = toolboxes.isShown(id);
+      if (want.has(id)) {
+        // (closed by hand while its object is still selected: left closed)
+        if (this.auto.has(id) && !shown) { this.auto.delete(id); this.dismissed.add(id); }
+        if (!shown && !this.dismissed.has(id)) { this.auto.add(id); toolboxes.toggle(id, true); }
+      } else {
+        this.dismissed.delete(id);
+        if (this.auto.delete(id) && shown) toolboxes.toggle(id, false);
+      }
+    }
+  },
+  /** View > Toolboxes: shown or hidden by hand, it stays that way. */
+  byHand(id: ContextBox): void {
+    this.auto.delete(id);
+    toolboxes.toggle(id);
+    if (!toolboxes.isShown(id)) this.dismissed.add(id);
+  },
+};
+
 // Design mode's shape library (made further down, once the page is ready)
 let designLib: DesignLibrary | null = null;
 /** Insert > Shapes in Slides and Documents. */
@@ -681,6 +764,7 @@ editor.onToolChange = (name) => {
   designLib?.setActive(name);
   toolStep = 0;
   showToolStatus();
+  showRibbonContext();
 };
 let statusReady = false;
 /** Which step of the tool in use the status bar marks (0: the first; 1 once the mouse is pressed). */
@@ -3704,6 +3788,7 @@ function enterTab(tab: Tab, opened: boolean): void {
   tickToolboxes();
   applyModeColours(tab.mode, modeColours);
   for (const el of document.querySelectorAll<HTMLElement>('.slides-only')) el.hidden = !slides;
+  canvasRibbon.show(!deck && !sheet && !words && !design);
   // another tab: back to Normal view
   if (sorterOn) {
     sorterOn = false;
@@ -7583,7 +7668,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 /** Menu commands that work the same whatever shows. */
-const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'toolbox-guides', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
+const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'toolbox-guides', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'toolbox-schemes', 'toolbox-diagrams', 'toolbox-tables', 'toolbox-biopolymers', 'toolbox-perspective', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
   'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'theme-darkgray', 'density-compact', 'density-standard', 'density-large', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
@@ -8326,6 +8411,11 @@ const COMMANDS: Record<string, () => unknown> = {
   'toolbox-text': () => toolboxes.toggle('text'),
   'toolbox-guides': () => toolboxes.toggle('guides'),
   'toolbox-custom': () => toolboxes.toggle('custom'),
+  'toolbox-schemes': () => { contextBoxes.byHand('schemes'); },
+  'toolbox-diagrams': () => { contextBoxes.byHand('diagrams'); },
+  'toolbox-tables': () => { contextBoxes.byHand('tables'); },
+  'toolbox-biopolymers': () => { contextBoxes.byHand('biopolymers'); },
+  'toolbox-perspective': () => { contextBoxes.byHand('perspective'); },
   // the panel taken out as a toolbox folds up to its title bar; at the right it folds to a strip
   'fold-side': () => foldSide(!sideIsFolded()),
   'customize-toolbox': () => openCustomToolbox(),
@@ -9700,19 +9790,44 @@ function setToolCells(v: Settings['toolCells']): void {
 }
 
 /** Settings ▸ Toolboxes: how the toolboxes' buttons look and what their tips say. */
+let ribbonLook: Settings['canvasRibbon'] = 'classic';
+let ribbonNames: Settings['ribbonNames'] = 'side';
+function setRibbonLook(look: Settings['canvasRibbon'], names: Settings['ribbonNames']): void {
+  ribbonLook = look;
+  ribbonNames = names;
+  canvasRibbon.setLook(look);
+  repaintArrows();
+  // (the names' place goes for every mode's ribbon)
+  for (const n of ['top', 'side', 'none'] as const) document.body.classList.toggle(`rb-names-${n}`, n === names);
+  fitRibbons();
+}
+
 async function toolboxPreferences(): Promise<void> {
-  const r = await ask('Toolboxes', [
+  const r = await ask('Toolboxes and Ribbon', [
+    { name: 'look', label: 'Canvas ribbon', value: ribbonLook, options: [{ value: 'classic', label: 'Classic: two rows of buttons' }, { value: 'simple', label: 'Simplified: one row' }],
+      help: 'Both keep the tabs and fold away with the arrow at the right of the tabs.' },
+    { name: 'names', label: 'Group names on every ribbon', value: ribbonNames, options: [{ value: 'side', label: 'Along the dividers, up the side of each group' }, { value: 'top', label: 'Across each group (above it on the Canvas, below it elsewhere)' }, { value: 'none', label: 'None (rest the mouse on a button for its name)' }] },
     { name: 'cells', label: 'Button cells', value: toolCells, options: [{ value: 'off', label: 'None' }, { value: 'grid', label: 'Grid lines' }, { value: 'raised', label: 'Raised buttons' }, { value: 'both', label: 'Grid lines and raised buttons' }],
       help: 'Gives each toolbox button a cell of its own, so the buttons are easier to tell apart and to hit.' },
     { name: 'tips', label: 'Detailed tooltips: hold the mouse on a tool to see what it does and what Alt, Shift and Ctrl change', type: 'checkbox', value: String(toolTip.enabled) },
   ], { ok: 'Save' });
   if (!r) return;
   setToolCells((['grid', 'raised', 'both'].includes(r.cells) ? r.cells : 'off') as Settings['toolCells']);
+  setRibbonLook(r.look === 'simple' ? 'simple' : 'classic', (['side', 'none'].includes(r.names) ? r.names : 'top') as Settings['ribbonNames']);
   showToolTips(r.tips === 'true');
   storeSettings();
 }
 
 /** Settings ▸ Preferences: how you like to work, and matters of taste such as how alkyl groups are written. */
+/** How problems are marked on the drawing (Settings ▸ Preferences). */
+function setWarnLook(look: Settings['warnLook']): void {
+  const now = (['disc', 'box', 'circle', 'dashed', 'corners'] as const).includes(look) ? look : 'disc';
+  if (now === renderer.warnLook) return;
+  renderer.warnLook = now;
+  doc.allDirty = true;
+  editor.requestScene?.();
+}
+
 async function personalPreferences(): Promise<void> {
   const alt = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? 'Option+Enter' : 'Alt+Enter';
   const r = await ask('Preferences', [
@@ -9721,9 +9836,14 @@ async function personalPreferences(): Promise<void> {
       help: 'Everywhere you draw: Canvas, structures in documents and spreadsheets, and text boxes on slides. Ctrl+Enter always finishes, and Shift+Enter always breaks the line.' },
     { name: 'alkylLook', label: 'Alkyl groups written as', value: alkylPrefs.look, options: ALKYL_LOOK_CHOICES,
       help: 'For the n-, i-, s- and t- of Pr and Bu (tBu, iPr, nBu, sBu, iBu), wherever they sit in a label or text (OtBu, N(iPr)2, KOtBu). Atom labels and text boxes take the look as you finish typing them; you are asked whether to change the ones already in the drawing. A dash is never put in or taken out where the letters would read as an element (PtBu3 stays as it is).' },
+    { name: 'warnLook', label: 'Mark problems on the drawing with', value: renderer.warnLook, options: [
+      { value: 'disc', label: 'A soft red disc' }, { value: 'box', label: 'A thin red box' }, { value: 'circle', label: 'A red circle' },
+      { value: 'dashed', label: 'A dashed red circle' }, { value: 'corners', label: 'Red corner marks' }],
+      help: 'Atoms with too many bonds, labels that can\'t be read and other problems the Warnings box lists. Untick Show on drawing (Warnings) to hide the marks.' },
   ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(parseAlkylLook(v.alkylLook)) } });
   if (!r) return;
   enterFinishesText = r.enterFinishes === 'enter';
+  setWarnLook(r.warnLook as Settings['warnLook']);
   const look = parseAlkylLook(r.alkylLook);
   const changed = look !== alkylPrefs.look;
   alkylPrefs.look = look;
@@ -9814,6 +9934,8 @@ function currentSettings(): Settings {
     shapeInk: shapeInkNow,
     oneColumnTools,
     toolCells,
+    canvasRibbon: ribbonLook,
+    ribbonNames,
     startView,
     enterFinishesText,
     page: defaultPage,
@@ -9855,6 +9977,7 @@ function currentSettings(): Settings {
     haptoDelocalized: haptoLook.delocalized,
     superscriptR: labelPrefs.superscriptR,
     alkylLook: alkylPrefs.look,
+    warnLook: renderer.warnLook,
     bondEnds: bondEndPrefs.round,
     mapLook: mapLookPrefs.look,
     depthShade: { ...depthShadePrefs },
@@ -10064,6 +10187,7 @@ function applySettings(s: Settings): void {
   setShapesInk(s.shapeInk);
   setOneColumnTools(s.oneColumnTools);
   setToolCells(s.toolCells);
+  setRibbonLook(s.canvasRibbon, s.ribbonNames);
   startView = s.startView;
   enterFinishesText = s.enterFinishesText;
   showGroupTips(s.groupTips);
@@ -10102,6 +10226,7 @@ function applySettings(s: Settings): void {
   haptoLook.delocalized = s.haptoDelocalized;
   labelPrefs.superscriptR = s.superscriptR;
   alkylPrefs.look = s.alkylLook;
+  setWarnLook(s.warnLook);
   bondEndPrefs.round = s.bondEnds;
   mapLookPrefs.look = s.mapLook;
   Object.assign(depthShadePrefs, s.depthShade);
@@ -10673,6 +10798,7 @@ async function runAnalysis(force: boolean): Promise<void> {
   const panel = $('#analysis-body');
   if (!frags.length) {
     panel.innerHTML = '<p class="muted">Select a structure (or text read as chemistry, such as BF4⁻ or DMAP), or draw one, to see its formula and masses.</p>';
+    analysisBox.set(null, null);
     return;
   }
   const seq = ++analysisSeq;
@@ -10711,6 +10837,9 @@ async function runAnalysis(force: boolean): Promise<void> {
   // once the namer is running, every structure analysed gets its name without asking
   if (namer.ready) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !nameStates.has(r.smiles)) void nameForPanel(r.smiles, exports[i].molblock); });
   saySelection(results);
+  // the ribbon's one line: the first structure's formula and weight (and how many more)
+  const first = results.find((r) => !r.error && r.formula);
+  analysisBox.set(first ? formulaHtml(first.formula) + (results.length > 1 ? ` <span class="muted">+${results.length - 1}</span>` : '') : null, first ? first.mw.toFixed(2) : null, first ? first.exact.toFixed(4) : null);
   panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
   updatePanels();
 }
@@ -10955,6 +11084,7 @@ function updateWarnings(): void {
   }
   const ignored = checks.ignoredCount() + [...doc.captions.values()].filter((c) => c.ignoreWarnings).length;
   $('#warnings-count').textContent = list.length ? String(list.length) : '';
+  warningsBox.set(list.length);
   const MAX = 100;
   // the same problem in many places is one row, with how many
   const groups = groupWarnings(list);
@@ -11876,6 +12006,7 @@ function looksList(vertical: boolean): HTMLElement {
 /** The toolboxes' names, as they come. */
 const BOX_TITLES: Record<string, string> = {
   main: 'Drawing Tools', structure: 'Structure', arrange: 'Object', templates: 'Templates', colours: 'Colors', highlight: 'Highlight', text: 'Text Formatting', guides: 'Guides', custom: 'My Toolbox', smart: 'Smart Scheme', details: 'Side Panel',
+  schemes: 'Smart Schemes', diagrams: 'Diagrams', tables: 'Tables and Charts', biopolymers: 'Biopolymers', perspective: 'Perspective and 3-D',
 };
 /** What the toolboxes of buttons come with ("cmd:", "tool:", "pal:", "w:looks", "sep"). */
 const cmds = (list: (string | null)[]) => list.map((c) => (c ? `cmd:${c}` : 'sep'));
@@ -11885,6 +12016,11 @@ const BOX_ITEMS: Record<string, readonly string[]> = {
   arrange: cmds(['align-left', 'align-hcenter', 'align-right', 'align-top', 'align-vcenter', 'align-bottom', null, 'distribute-h', 'distribute-v', 'arrange-row', 'arrange-column', 'arrange-grid', null, 'flip-h', 'flip-v', 'rotate-cw', 'rotate-ccw', null, 'shape-front', 'shape-back']),
   highlight: [...cmds(['highlight', 'remove-highlight', null, 'smooth-highlight', 'centre-highlight', 'soft-highlight', 'outline-highlight', 'shadow-highlight', 'glow-highlight', null, 'save-highlight-look']), 'w:looks'],
   custom: defaultToolboxes().custom,
+  schemes: cmds(['smart-scheme', 'catalytic-cycle', 'convert-smart-scheme', 'ungroup-smart-scheme', null, 'arrange-scheme', 'scheme-settings', null, 'stoichiometry-table', 'check-balance', 'map-atoms', 'animate-reaction']),
+  diagrams: cmds(['energy-diagram', 'edit-energy', 'mo-diagram', 'orbital', 'p-orbitals', 'ts-brackets', null, 'torsion-chart', 'edit-torsion', 'copy-torsion-data', null, 'newman-projection', 'edit-newman', 'unlink-newman', null, 'insert-diagram', 'edit-diagram', 'diagram-to-shapes']),
+  tables: cmds(['insert-table', 'rgroup-table', 'stoichiometry-table', null, 'insert-chart', 'edit-chart', null, 'tlc-plate', 'gel', 'edit-plate']),
+  biopolymers: ['cmd:sequence-to-structure', 'sep', 'pal:tpl-amino', 'pal:tpl-sugars', 'pal:tpl-nucleic'],
+  perspective: [...cmds(['model-3d', 'turn-3d', 'flatten-3d', null, 'depth-shading', 'depth-shading-settings', null, 'ring-chair', 'ring-chair-flip', 'newman-projection', 'crystal-structure']), 'sep', 'pal:tpl-perspective', 'pal:tpl-conformers', 'pal:tpl-projections'],
 };
 /** Short names on toolbox buttons for commands with no icon. */
 const SHORT_LABEL: Record<string, string> = {
@@ -12104,6 +12240,7 @@ const toolboxes = new Toolboxes(toolboxDefs, {
   say: (text) => flash(text),
   rendered: () => fitTools(),
 });
+contextBoxes.ready = true;
 
 /**
  * Put a toolbox's buttons in their cells on screen: as the grid has them, or wrapped when only
@@ -12528,6 +12665,8 @@ const guide = {
   },
 };
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
+// the Canvas ribbon's arrow switches it between Classic and Simplified (Settings ▸ Toolboxes and Ribbon has both too)
+addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: () => { setRibbonLook(ribbonLook === 'simple' ? 'classic' : 'simple', ribbonNames); storeSettings(); } });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files', open: generalPreferences },
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
@@ -12539,7 +12678,7 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'mode-colours', title: 'Mode Colors', words: 'tab colors accent window drawing slides sheet document design appearance', open: () => modeDialog.open() },
   { id: 'navigation', title: 'Navigation', words: 'document map navigator minimap map overview edge arrows off screen lost find dot grid dots tint outside fit go to selection orientation zoom', open: navigationSettings },
   { id: 'page-grid', title: 'Page Grid', words: 'pages page grid boundaries dashed dotted lines paper fixed edges hatched wall empty gray print chemdraw paste wrap', open: pageGridSettings },
-  { id: 'toolboxes', title: 'Toolboxes', words: 'toolbox buttons cells grid lines raised bevel borders tool tips tooltips hints keys modifiers shortcuts', open: toolboxPreferences },
+  { id: 'toolboxes', title: 'Toolboxes and Ribbon', words: 'toolbox ribbon classic simplified one row two rows group names buttons cells grid lines raised bevel borders tool tips tooltips hints keys modifiers shortcuts', open: toolboxPreferences },
   { id: 'dark', title: 'Reading Mode', words: 'reading mode dark page dark mode night paper ink graphite slate appearance colors', open: darkColours },
     { id: 'newman', title: 'Newman Projections', words: 'newman sawhorse projection conformation torsion dihedral gauche anti eclipsed color largest middle smallest group strain a-value energy chart rotation barrier kcal kj', open: () => newmanSettingsPage() },
   { id: 'schemes', title: 'Schemes', words: 'scheme arrow gap plus text reagents conditions boxes', open: schemeSettings },
@@ -13199,7 +13338,7 @@ const buildHint = new BuildHint({
 });
 editor.onOverlay = () => { smartPane.place(); buildHint.place(); };
 editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
-editor.onChange = () => { welcomeWatch?.(); showToolStatus(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); showToolStatus(); showRibbonContext(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();
@@ -13267,7 +13406,7 @@ requestAnimationFrame(() => {
 });
 
 // Hooks for the automated speed tests.
-(window as any).__app = { assistant: { items: assistantItems, apply: applyAssistantAction, markStep: markAssistantStep }, doc, editor, renderer, settingsWindow, toolboxes, chem, live, command, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
+(window as any).__app = { assistant: { items: assistantItems, apply: applyAssistantAction, markStep: markAssistantStep }, doc, editor, renderer, settingsWindow, toolboxes, chem, live, command, setRibbonLook, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
   pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, canvas: s.canvas })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test

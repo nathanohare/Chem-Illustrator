@@ -124,9 +124,14 @@ export function withSideFolded(st: ToolboxState, mode: string, folded: boolean):
 /**
  * The toolboxes and where they start: the drawing tools on the left, the rest hidden until wanted.
  * "details" is the side panel taken out of its place at the right, to float or dock elsewhere.
+ * Smart Schemes, Diagrams, Tables and Charts, Biopolymers and Perspective and 3-D are context
+ * toolboxes: hidden until opened, and brought out while their kind of object is selected.
  */
-export const TOOLBOX_IDS = ['main', 'structure', 'arrange', 'templates', 'colours', 'highlight', 'text', 'guides', 'custom', 'smart', 'details'] as const;
+export const TOOLBOX_IDS = ['main', 'structure', 'arrange', 'templates', 'colours', 'highlight', 'text', 'guides', 'custom', 'smart', 'schemes', 'diagrams', 'tables', 'biopolymers', 'perspective', 'details'] as const;
 export type ToolboxId = (typeof TOOLBOX_IDS)[number];
+/** The context toolboxes (see TOOLBOX_IDS). */
+export const CONTEXT_BOXES = ['schemes', 'diagrams', 'tables', 'biopolymers', 'perspective'] as const;
+export type ContextBox = (typeof CONTEXT_BOXES)[number];
 
 export function defaultToolboxes(): ToolboxState {
   const places: Record<string, BoxPlace> = {};

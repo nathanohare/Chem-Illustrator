@@ -155,6 +155,8 @@ export class Renderer {
   width = 0;
   height = 0;
   showWarnings = true;
+  /** How a warning is marked on the drawing (Settings ▸ Preferences). */
+  warnLook: WarnLook = 'disc';
   /** The drawing's chemistry warnings, drawn as red boxes when `showWarnings` is on. */
   checks: StructureChecks | null = null;
   /**
@@ -955,11 +957,60 @@ export class Renderer {
       else if (mark) this.drawChemMark(ctx, r);
     }
 
-    if (warns.length) {
-      ctx.strokeStyle = WARN_COLOR;
+    if (warns.length) this.drawWarnMarks(ctx, warns);
+  }
+
+  /**
+   * Mark what has a warning, in the look chosen in Settings ▸ Preferences: a soft red disc (the
+   * default), the thin red box, a circle, a dashed circle or corner marks. Round looks go round an
+   * atom and make a rounded band along a bond or text.
+   */
+  private drawWarnMarks(ctx: CanvasRenderingContext2D, warns: Rect[]): void {
+    const look = this.warnLook;
+    ctx.save();
+    ctx.strokeStyle = ctx.fillStyle = WARN_COLOR;
+    if (look === 'box') {
       ctx.lineWidth = 0.5;
       for (const w of warns) ctx.strokeRect(w.x1, w.y1, w.x2 - w.x1, w.y2 - w.y1);
+      ctx.restore();
+      return;
     }
+    if (look === 'corners') {
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      for (const w of warns) {
+        const p = 1, x1 = w.x1 - p, y1 = w.y1 - p, x2 = w.x2 + p, y2 = w.y2 + p;
+        const k = Math.min(x2 - x1, y2 - y1) * 0.35;
+        ctx.moveTo(x1, y1 + k); ctx.lineTo(x1, y1); ctx.lineTo(x1 + k, y1);
+        ctx.moveTo(x2 - k, y1); ctx.lineTo(x2, y1); ctx.lineTo(x2, y1 + k);
+        ctx.moveTo(x2, y2 - k); ctx.lineTo(x2, y2); ctx.lineTo(x2 - k, y2);
+        ctx.moveTo(x1 + k, y2); ctx.lineTo(x1, y2); ctx.lineTo(x1, y2 - k);
+      }
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    // round: a circle round a square (an atom), a band with round ends round anything longer
+    const round = (w: Rect, pad: number) => {
+      const x1 = w.x1 - pad, y1 = w.y1 - pad, x2 = w.x2 + pad, y2 = w.y2 + pad;
+      const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, ww = x2 - x1, hh = y2 - y1;
+      if (Math.abs(ww - hh) < Math.min(ww, hh) * 0.3) { ctx.moveTo(cx + Math.max(ww, hh) * 0.62, cy); ctx.arc(cx, cy, Math.max(ww, hh) * 0.62, 0, Math.PI * 2); return; }
+      const r = Math.min(ww, hh) / 2;
+      ctx.moveTo(x1 + r, y1);
+      ctx.arcTo(x2, y1, x2, y2, r); ctx.arcTo(x2, y2, x1, y2, r); ctx.arcTo(x1, y2, x1, y1, r); ctx.arcTo(x1, y1, x2, y1, r);
+      ctx.closePath();
+    };
+    ctx.beginPath();
+    for (const w of warns) round(w, look === 'disc' ? 1.2 : 0.8);
+    if (look === 'disc') {
+      ctx.globalAlpha = 0.22;
+      ctx.fill();
+    } else {
+      ctx.lineWidth = 0.75;
+      if (look === 'dashed') ctx.setLineDash([2, 1.6]);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /** The red box around an atom with a warning: around its whole label, or a small square on a bare carbon. */
@@ -2576,6 +2627,10 @@ export function attachWave(path: Path2D, at: Vec, across: Vec, bondLength: numbe
 }
 
 const WARN_COLOR = '#e0141e';
+
+/** The looks a warning's mark can take (Settings ▸ Preferences). */
+export const WARN_LOOKS = ['disc', 'box', 'circle', 'dashed', 'corners'] as const;
+export type WarnLook = (typeof WARN_LOOKS)[number];
 const CHEM_MARK_COLOR = '#1f8a7a';
 
 /**

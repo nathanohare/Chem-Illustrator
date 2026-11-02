@@ -216,7 +216,7 @@ header > button, header > select { white-space: nowrap; flex-shrink: 0; }
 .recent-files button > span { overflow: hidden; text-overflow: ellipsis; }
 .recent-files small.muted { color: var(--muted); font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; }
 button:focus-visible, select:focus-visible, #overlay:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-#side-content td { font-family: var(--mono-font); font-size: var(--fs-sm); }
+#side-content td, .cr-lent td { font-family: var(--mono-font); font-size: var(--fs-sm); }
 @media (prefers-reduced-motion: reduce) { #flash { transition: none; } }
 label.check { display: inline-flex; align-items: center; gap: 4px; color: var(--text); cursor: pointer; }
 
@@ -383,8 +383,9 @@ body.cells-raised .tb-cells .tool.active { background: var(--accent-soft); borde
   position: absolute;
   right: 2px;
   bottom: 2px;
-  border-left: 5px solid transparent;
-  border-bottom: 5px solid currentColor;
+  /* (big enough to see at a glance that the button opens a set) */
+  border-left: 8px solid transparent;
+  border-bottom: 8px solid currentColor;
 }
 .palette-wrap .more:hover { color: var(--accent); }
 .flyout {
@@ -587,10 +588,10 @@ aside {
   overflow-y: auto;
   padding: 10px 12px;
 }
-#side-content h2 { font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 6px 0 6px; font-weight: 600; }
+#side-content h2, .cr-lent h2 { font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 6px 0 6px; font-weight: 600; }
 #side-content section + section { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 8px; }
 #side-content section[hidden] + section { margin-top: 0; border-top: 0; padding-top: 0; }
-#side-content h3 { font-size: var(--fs-sm); font-weight: 600; margin: 2px 0 4px; }
+#side-content h3, .cr-lent h3 { font-size: var(--fs-sm); font-weight: 600; margin: 2px 0 4px; }
 .style-row { display: grid; grid-template-columns: 1fr 138px; align-items: center; gap: 8px; margin: 3px 0; }
 label.style-row.check { display: flex; gap: 6px; }
 /* groups of settings in the Style panel that fold away (a highlight's fill, outline, shadow…) */
@@ -616,9 +617,9 @@ details.style-group > :not(summary) { margin-left: 12px; }
 .style-row textarea.style-arrow-text { width: 100%; resize: vertical; padding: 2px 4px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
 .style-row select, .style-row input[type='number'] { width: 100%; padding: 2px 4px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
 .style-row input[type='color'] { width: 44px; height: 22px; padding: 0 2px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); }
-#side-content table { border-collapse: collapse; width: 100%; }
-#side-content th { text-align: left; font-weight: 500; color: var(--muted); padding: 2px 8px 2px 0; white-space: nowrap; vertical-align: top; }
-#side-content td { padding: 2px 0; font-variant-numeric: tabular-nums; }
+#side-content table, .cr-lent table { border-collapse: collapse; width: 100%; }
+#side-content th, .cr-lent th { text-align: left; font-weight: 500; color: var(--muted); padding: 2px 8px 2px 0; white-space: nowrap; vertical-align: top; }
+#side-content td, .cr-lent td { padding: 2px 0; font-variant-numeric: tabular-nums; }
 .frag + .frag { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
 .formula { font-size: var(--fs-lg); font-weight: 600; margin-bottom: 4px; }
 .smiles { font-family: var(--mono-font); font-size: var(--fs-xs); color: var(--muted); word-break: break-all; margin-top: 4px; }
@@ -627,9 +628,9 @@ details.style-group > :not(summary) { margin-left: 12px; }
 .warn { color: var(--warn); }
 
 /* chemistry warnings: the panel list and the hover tip */
-#side-content h2 .count { display: inline-block; min-width: 16px; padding: 0 5px; margin-left: 2px; border-radius: 8px; background: #e0141e; color: #fff; text-align: center; letter-spacing: 0; }
-#side-content h2 .count:empty { display: none; }
-#side-content h2 label.check { float: right; text-transform: none; letter-spacing: 0; font-weight: 400; }
+#side-content h2 .count, .cr-lent h2 .count { display: inline-block; min-width: 16px; padding: 0 5px; margin-left: 2px; border-radius: 8px; background: #e0141e; color: #fff; text-align: center; letter-spacing: 0; }
+#side-content h2 .count:empty, .cr-lent h2 .count:empty { display: none; }
+#side-content h2 label.check, .cr-lent h2 label.check { float: right; text-transform: none; letter-spacing: 0; font-weight: 400; }
 .warn-list { list-style: none; margin: 0; padding: 0; }
 .warn-list li { display: grid; grid-template-columns: 1fr auto; gap: 2px 6px; align-items: start; padding: 4px 0; }
 .warn-list li + li { border-top: 1px dashed var(--line); }
@@ -1604,6 +1605,77 @@ body.ribbon-collapsed .ribbon.rb-peek > .rb-tabs [role='tab'][aria-selected='tru
 .rb-group:has(> .rb-launch) { position: relative; padding-right: 18px; }
 .ribbon button.rb-launch { position: absolute; right: 2px; bottom: 0; width: 15px; height: 15px; min-width: 0; padding: 0; border: 0; border-radius: var(--r-control); background: none; color: var(--muted); font-size: 10px; line-height: 15px; cursor: pointer; }
 .ribbon button.rb-launch:hover { background: var(--hover, rgb(0 0 0 / 0.08)); color: var(--text); }
+/* ------------------------------------------------------------------ the Canvas ribbon */
+/* (only on a Canvas: the other modes have ribbons of their own) */
+body.slides-mode #canvas-ribbon, body.design-mode #canvas-ribbon, body.sheet-mode #canvas-ribbon, body.doc-mode #canvas-ribbon { display: none; }
+/* two rows of buttons under the tabs; the major commands picture over name, both rows tall */
+.canvas-ribbon > .rb-panel { padding: 2px 4px 3px; align-items: stretch; }
+.canvas-ribbon .rb-group { flex-direction: column; align-items: stretch; padding: 0 6px; }
+.canvas-ribbon .rb-label { order: -1; margin: 0 0 1px 3px; font-size: 10px; line-height: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.canvas-ribbon .cr-rows { display: grid; grid-auto-flow: column; grid-template-rows: 24px 24px; gap: 1px 2px; align-content: center; }
+.canvas-ribbon button.cr-minor { display: inline-flex; align-items: center; justify-content: center; width: 26px; min-width: 26px; height: 24px; padding: 0; color: var(--accent); }
+.canvas-ribbon button.cr-minor svg { width: 18px; height: 18px; }
+.canvas-ribbon button.cr-minor .cr-word { font-size: 10px; color: var(--text); padding: 0 3px; }
+.canvas-ribbon button.cr-minor:has(.cr-word) { width: auto; }
+.canvas-ribbon button.cr-major { grid-row: span 2; justify-content: center; gap: 1px; min-width: 40px; padding: 1px 4px; font-size: 11px; line-height: 11px; text-align: center; }
+.canvas-ribbon button.cr-major .rb-icon { height: 22px; line-height: 22px; }
+.canvas-ribbon button.cr-major .rb-icon svg { width: 22px; height: 22px; }
+.canvas-ribbon button[data-cr-tool] { color: var(--text); }
+.canvas-ribbon .cr-gallery { align-items: center; }
+.canvas-ribbon.cr-simple .cr-gallery { display: none; }
+/* Settings ▸ Toolboxes and Ribbon: every ribbon's group names along the dividers (reading bottom
+   to top, the group's buttons beside them in as many rows as they have), or none */
+body.rb-names-side .ribbon .rb-group:not(.rb-folded) { display: grid; grid-template-columns: auto auto; justify-content: start; align-items: center; column-gap: 4px; padding-left: 2px; }
+body.rb-names-side .ribbon .rb-group:not(.rb-folded) > * { grid-column: 2; }
+/* (a long name wraps onto a second line rather than making the ribbon taller) */
+body.rb-names-side .ribbon .rb-group:not(.rb-folded) > .rb-label { grid-column: 1; grid-row: 1 / span 8; align-self: center; margin: 0; writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; font-size: 8.5px; line-height: 9.5px; letter-spacing: 0.02em; text-transform: uppercase; max-height: var(--rb-side-name, 66px); white-space: normal; overflow: hidden; }
+.canvas-ribbon { --rb-side-name: 54px; }
+body.rb-names-none .ribbon .rb-label { display: none; }
+/* Simplified: one row, the major commands' names beside their pictures, no group names */
+.canvas-ribbon.cr-simple .cr-rows { grid-template-rows: 26px; }
+.canvas-ribbon.cr-simple .rb-label { display: none; }
+.canvas-ribbon.cr-simple button.cr-major { grid-row: auto; flex-direction: row; gap: 4px; height: 26px; padding: 0 6px; font-size: var(--fs-sm); }
+.canvas-ribbon button.cr-major .cr-line { display: block; }
+.canvas-ribbon.cr-simple button.cr-major .cr-line { display: inline; }
+.canvas-ribbon.cr-simple button.cr-major .rb-icon, .canvas-ribbon.cr-simple button.cr-major .rb-icon svg { width: 18px; height: 18px; line-height: 18px; }
+/* an object's own tab (Arrow, Ring, Bond): amber, as Office marks its tool tabs */
+.canvas-ribbon .rb-tabs button.cr-ctx-tab { color: #9a6a00; background: color-mix(in srgb, #e8a400 12%, transparent); }
+.canvas-ribbon .rb-tabs button.cr-ctx-tab[aria-selected='true'] { color: #8a5c00; background: color-mix(in srgb, #e8a400 18%, var(--panel)); box-shadow: inset 0 -3px 0 #d39400; }
+body.mode-window .canvas-ribbon .rb-tabs button.cr-ctx-tab:not([aria-selected='true']) { color: #ffd77a; }
+.canvas-ribbon > .rb-panel.cr-ctx-panel { background: color-mix(in srgb, #e8a400 6%, var(--panel)); }
+/* the warnings at the right of the tabs; Analysis at the right of the buttons */
+.canvas-ribbon .cr-tab-end { margin-left: auto; display: flex; align-items: center; padding: 0 2px 1px; }
+.canvas-ribbon .rb-tabs .rb-collapse { margin-left: 4px; }
+.canvas-ribbon .rb-tabs button.cr-warnings { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border: 1px solid color-mix(in srgb, currentColor 30%, transparent); border-radius: var(--r-control); background: transparent; box-shadow: none; font-size: var(--fs-sm); }
+.canvas-ribbon .rb-tabs button.cr-warnings.has { border-color: #e2b23c; background: rgb(242 176 30 / 0.18); color: var(--text); font-weight: 600; }
+body.mode-window .canvas-ribbon .rb-tabs button.cr-warnings.has { color: #fff; }
+.cr-warnings .cr-ok { color: #2e9e5b; font-weight: 700; }
+body.mode-window .cr-warnings .cr-ok { color: #7ddc9a; }
+.cr-body-end { margin-left: auto; display: flex; align-items: center; padding: 0 4px 0 12px; flex: none; }
+.ribbon button.cr-analysis { display: inline-flex; align-items: center; gap: 8px; width: 210px; height: 28px; padding: 0 6px 0 8px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--bg); text-align: left; }
+.ribbon button.cr-analysis:hover, .ribbon button.cr-analysis.open { border-color: var(--accent); background: var(--bg); }
+.cr-analysis .cr-an-f { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cr-analysis .cr-an-f.muted { font-weight: 400; color: var(--muted); }
+.cr-analysis .cr-an-mw, .cr-analysis .cr-an-ex { color: var(--muted); font-family: var(--mono-font); font-size: 11.5px; white-space: nowrap; }
+.cr-analysis .cr-an-k { margin-right: 5px; font-family: var(--ui-font, inherit); font-size: 10.5px; letter-spacing: 0.03em; }
+.cr-analysis .cr-chev { margin-left: auto; }
+/* Classic: a box of three lines (formula, weight, exact mass), the height of the two rows of buttons */
+.canvas-ribbon.cr-classic button.cr-analysis { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: repeat(3, 16px); align-content: center; row-gap: 0; column-gap: 6px; width: 180px; height: 54px; padding: 1px 6px 1px 9px; }
+.canvas-ribbon.cr-classic .cr-analysis .cr-an-f { grid-row: 1; grid-column: 1; height: 17px; line-height: 15px; }
+.cr-analysis .cr-an-f sub { line-height: 0; }
+.canvas-ribbon.cr-classic .cr-analysis .cr-an-mw { grid-row: 2; grid-column: 1; line-height: 16px; }
+.canvas-ribbon.cr-classic .cr-analysis .cr-an-ex { grid-row: 3; grid-column: 1; line-height: 16px; }
+.canvas-ribbon.cr-classic .cr-analysis .cr-chev { grid-row: 1 / 4; grid-column: 2; align-self: center; }
+/* Simplified: one line, formula and weight */
+.canvas-ribbon.cr-simple .cr-analysis .cr-an-ex, .canvas-ribbon.cr-simple .cr-analysis .cr-an-k { display: none; }
+.cr-chev { margin-left: auto; color: var(--muted); display: inline-flex; }
+/* their drop-downs: the side panel's own section, lent */
+.cr-pop { position: fixed; z-index: 60; width: 340px; overflow: auto; padding: 2px 10px 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: 0 6px 18px rgb(0 0 0 / 0.18); font-size: var(--fs-sm); }
+.cr-pop[hidden] { display: none; }
+.cr-pop > section { display: block !important; }
+.cr-popout { float: right; display: inline-flex; align-items: center; gap: 4px; margin: 6px 0 0 8px; padding: 1px 6px; border: 1px solid transparent; background: transparent; color: var(--accent); font-size: var(--fs-xs); }
+.cr-popout:hover { border-color: var(--line); background: var(--accent-soft); }
+.float-box.cr-analysis-float { width: 360px; }
 
 /* Document mode: Find and Replace, floating over the top right of the pages */
 .doc-find { position: absolute; top: 8px; right: 22px; z-index: 6; width: 330px; max-width: calc(100% - 44px); display: flex; flex-direction: column; gap: 5px;
@@ -1685,7 +1757,7 @@ dialog.periodic-table { position: fixed; inset: 64px 16px auto auto; max-height:
 .an-buttons button { padding: 2px 8px; font-size: var(--fs-sm); }
 .an-cas button { padding: 0 8px; font-size: var(--fs-sm); }
 .an-cas .cas-num { user-select: text; -webkit-user-select: text; }
-#side-content th sup, #side-content th sub { line-height: 0; }
+#side-content th sup, #side-content th sub, .cr-lent th sup, .cr-lent th sub { line-height: 0; }
 /* the Analysis panel's PubChem section */
 .pubchem { margin-top: 6px; }
 .pubchem .pc-name { overflow-wrap: anywhere; font-family: var(--ui-font); }
