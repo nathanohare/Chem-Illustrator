@@ -98,6 +98,12 @@ export interface Atom {
   /** Where the shown number sits, relative to the atom, when the file says or it was moved. */
   numberLabel?: { dx: number; dy: number; size: number };
   /**
+   * The atom-atom map number across a reaction (Chemistry ▸ Reactions and Schemes ▸ Map Atoms, or a
+   * mapped reaction SMILES or RXN file): an atom in a product has the number of the starting-material
+   * atom it came from. Written to molfiles (V2000 mmm) and reaction SMILES ([CH3:4]) when asked.
+   */
+  mapNo?: number;
+  /**
    * Enhanced stereo (ChemDraw's EnhancedStereoType): this stereocentre's configuration is known
    * as drawn ('abs'), or belongs to a group whose centres are a mixture of both forms ('and',
    * labelled &1) or are one form that isn't known ('or', labelled or1).

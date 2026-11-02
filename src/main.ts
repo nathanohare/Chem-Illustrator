@@ -23,7 +23,7 @@ import { Doc, Atom, Caption, Shape, type TextRun, outsideValence, Contents, CHIR
 import { Renderer, measureText, forgetTextWidths } from './render/renderer';
 import { Editor, TOOLS, ringsWereFilled, type HighlightToggle, type Selection } from './editor/editor';
 import { BUILT_IN_LOOKS, type HighlightLookPreset } from './ui/highlight-looks';
-import { selectionBox, POINTS, type Align, units, moveUnit } from './editor/arrange';
+import { selectionBox, atomsBox, POINTS, type Align, units, moveUnit } from './editor/arrange';
 import { defaultColumns } from './editor/grid-arrange';
 import { groupSelection, selectedGroups } from './editor/groups';
 import { readCdxml, ReadStats } from './io/cdxml';
@@ -1689,7 +1689,7 @@ function pickedStep(what: string): { step: ReturnType<typeof reactionSteps>[numb
  * and its products, each read by the chemistry engine; text that isn't a compound (a solvent and
  * temperature, a yield) comes back as the conditions.
  */
-async function stepSpecies(got: NonNullable<ReturnType<typeof pickedStep>>): Promise<StepSpecies[]> {
+async function stepSpecies(got: NonNullable<ReturnType<typeof pickedStep>>, maps = false): Promise<StepSpecies[]> {
   const { step, items, m } = got;
   const find = itemFinder(items);
   const wanted: { role: StoichRole; ref: string }[] = [
@@ -1710,7 +1710,7 @@ async function stepSpecies(got: NonNullable<ReturnType<typeof pickedStep>>): Pro
       continue;
     }
     const name = cap ? plainText(cap.runs).trim() : '';
-    const ex = toMolfile(doc, new Set(it.atoms), name.replace(/\s+/g, ' ').slice(0, 80), { species });
+    const ex = toMolfile(doc, new Set(it.atoms), name.replace(/\s+/g, ' ').slice(0, 80), { species, maps });
     at.push(rows.length);
     mols.push({ molblock: ex.molblock, map: ex.map });
     rows.push({ role: w.role, name, atoms: it.atoms, molblock: ex.molblock });
@@ -1762,7 +1762,7 @@ async function copyReaction(as: 'smiles' | 'rxn'): Promise<void> {
   if (!chem.ready) { flash('The chemistry engine is still loading.'); return; }
   const got = pickedStep('copy');
   if (!got) return;
-  const rows = await stepSpecies(got);
+  const rows = await stepSpecies(got, true);
   const bad = rows.filter((r) => r.role !== 'Conditions' && !r.smiles);
   if (bad.length) { flash(`Not copied: ${bad.map((r) => r.name || 'a structure').join(', ')} can't be read as a compound (check its valences).`, 8000); return; }
   const parts = <T,>(f: (r: StepSpecies) => T) => ({
@@ -1793,10 +1793,8 @@ async function pasteReaction(text: string, c: { x: number; y: number }): Promise
   renderer.useStyle(doc);
   const bl = doc.style.bondLength, gap = bl * 1.2, lw = doc.style.lineWidth;
   const made: number[] = [], arrows: number[] = [], caps: number[] = [];
-  const boxOf = (ids: number[]) => {
-    const pts = ids.map((i) => doc.atoms.get(i)!).filter(Boolean);
-    return { x1: Math.min(...pts.map((a) => a.x)), x2: Math.max(...pts.map((a) => a.x)), y1: Math.min(...pts.map((a) => a.y)), y2: Math.max(...pts.map((a) => a.y)) };
-  };
+  // (with the atoms' labels, so HO at the end of one structure doesn't run into the next)
+  const boxOf = (ids: number[]) => atomsBox(doc, ids, editor.measure());
   try {
     doc.edit('Paste reaction', () => {
       let x = 0;
@@ -2410,6 +2408,50 @@ const animateDialog = {
 /** Is a curved (mechanism) arrow among the selection? */
 const pickedCurved = (): boolean => [...editor.sel.arrows].some((id) => { const r = doc.arrows.get(id); return !!r && isCurved(r); });
 const pickedReactionArrow = (): number | undefined => [...editor.sel.arrows].find((id) => { const r = doc.arrows.get(id); return !!r && isReactionArrow(r); });
+
+const mapChoice: Record<string, string> = { numbers: 'true', colours: 'false', bonds: 'false' };
+/**
+ * Chemistry > Reactions and Schemes > Map Atoms: atom-atom map numbers across the selected reaction
+ * step (or every step), shown as numbers, colours or both, with bonds made and broken marked.
+ */
+async function mapAtomsCommand(): Promise<void> {
+  finishTyping();
+  const arrow = pickedReactionArrow();
+  const got = await ask('Map Atoms', [
+    ...(arrow !== undefined ? [{ name: 'which', label: 'Map', value: 'step', options: [{ value: 'step', label: 'The selected reaction step' }, { value: 'all', label: 'Every step in the drawing' }] }] : []),
+    { name: 'numbers', label: 'Show the map numbers beside the atoms', type: 'checkbox', value: mapChoice.numbers },
+    { name: 'colours', label: 'Colour each atom and where it goes the same', type: 'checkbox', value: mapChoice.colours },
+    { name: 'bonds', label: 'Mark bonds made (green) and broken (red)', type: 'checkbox', value: mapChoice.bonds },
+  ], { ok: 'Map', note: 'Atoms are paired the way Animate Reaction pairs them. To change a pair, pair it by hand in Animate Reaction and map again. Map numbers go into copied reaction SMILES and RXN files.' });
+  if (!got) return;
+  Object.assign(mapChoice, { numbers: got.numbers, colours: got.colours, bonds: got.bonds });
+  const { mapAtoms, applyAtomMap } = await import('./morph/atom-map');
+  const res = mapAtoms(doc, renderer, { arrow: got.which === 'step' ? arrow : undefined, measure: editor.measure() });
+  if (!res.steps) { flash('No reaction step to map: draw the starting materials, a reaction arrow and the products.', 6000); return; }
+  let kept = { keptNumbers: 0, keptColours: 0 };
+  doc.edit('Map Atoms', () => { kept = applyAtomMap(doc, res, { numbers: got.numbers === 'true', colours: got.colours === 'true', bonds: got.bonds === 'true' }); });
+  editor.changed();
+  const top = Math.max(0, ...res.numbers.values());
+  const notes = [
+    `Mapped ${top} atom${top === 1 ? '' : 's'} across ${res.steps} step${res.steps === 1 ? '' : 's'}`,
+    `${res.made.length} bond${res.made.length === 1 ? '' : 's'} made, ${res.broken.length} broken`,
+    res.unmatched ? `${res.unmatched} product atom${res.unmatched === 1 ? ' has' : 's have'} no starting-material atom (from a reagent?)` : '',
+    kept.keptNumbers ? `${kept.keptNumbers} atom number${kept.keptNumbers === 1 ? '' : 's'} you had put on kept` : '',
+    kept.keptColours ? `${kept.keptColours} highlight${kept.keptColours === 1 ? '' : 's'} you had put on kept` : '',
+    ...res.errors.map((e) => `Pairs saved in Animate Reaction left out: ${e}`),
+  ].filter(Boolean);
+  flash(notes.join('. ') + '.', 8000);
+}
+
+/** Chemistry > Reactions and Schemes > Clear Atom Map: on the selected structures, or everywhere. */
+async function clearAtomMapCommand(): Promise<void> {
+  finishTyping();
+  const { clearAtomMap } = await import('./morph/atom-map');
+  const scope = editor.sel.atoms.size ? new Set([...editor.sel.atoms].flatMap((id) => [...doc.fragmentOf(id)])) : undefined;
+  if (![...(scope ?? doc.atoms.keys())].some((id) => doc.atoms.get(id)?.mapNo)) { flash('Nothing here has an atom map.'); return; }
+  doc.edit('Clear Atom Map', () => { clearAtomMap(doc, scope); });
+  editor.changed();
+}
 const nameDialog = new NameDialog(async (name) => {
   // a SMILES string (or molfile) is drawn as it is; anything else is read as a name
   const mb = chem.ready ? await molfileOrSmiles(name, (s) => chem.smilesToMol(s)) : null;
@@ -7193,6 +7235,8 @@ const COMMANDS: Record<string, () => unknown> = {
     if (arrow === undefined) { flash('Select a reaction arrow first, or use Animate Reaction for the whole scheme.'); return; }
     animateDialog.open({ arrow });
   },
+  'map-atoms': () => void mapAtomsCommand(),
+  'clear-atom-map': () => void clearAtomMapCommand(),
   'number-compounds': () => void numberCompounds(),
   'scheme-settings': () => settingsWindow.open('schemes'),
   'attach-descriptors': () => void attachDescriptors(),
@@ -9839,7 +9883,7 @@ function drawingMenu(): MenuItem[] {
     ] }, { cmd: 'draw-from-arrows' }, { cmd: 'check-arrows' }] : []),
     ...(s.bonds.size && s.bonds.size <= 2 && !s.arrows.size ? [{ cmd: 'homolysis-arrows' }] : []),
     ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : []),
-    ...(s.arrows.size || atoms ? [{ label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
+    ...(s.arrows.size || atoms ? [{ label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'map-atoms' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
     null,
     ...(atoms ? [{ label: 'Label the Structure', items: [{ cmd: 'add-id-label' }, { cmd: 'add-caption' }, { cmd: 'attach-descriptors' }, null, { cmd: 'number-compounds' }] }] : []),
     ...(atoms ? [{ cmd: 'add-to-compound-library', label: 'Add to Compound Library' }] : []),
