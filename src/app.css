@@ -3064,8 +3064,8 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 .swatch-btn { width: 28px; height: 28px; padding: 2px; display: inline-flex; align-items: center; justify-content: center; color: var(--text); border: 1px solid transparent; background: transparent; border-radius: var(--r-control); }
 .swatch-btn:hover { border-color: var(--line); }
 .swatch-btn[aria-checked='true'] { border-color: var(--accent); background: var(--accent-soft); }
-.style-row .seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-control); overflow: hidden; }
-.style-row .seg button { border: 0; border-radius: 0; padding: 2px 8px; background: transparent; font-size: var(--fs-sm); }
+.style-row .seg { display: inline-flex; max-width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: var(--r-control); overflow: hidden; }
+.style-row .seg button { flex: 1 1 auto; min-width: 0; border: 0; border-radius: 0; padding: 2px 5px; background: transparent; font-size: var(--fs-xs); }
 .style-row .seg button + button { border-left: 1px solid var(--line); }
 .style-row .seg button[aria-checked='true'] { background: var(--accent-soft); color: var(--accent); }
 .shape-pick { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 4px; }
