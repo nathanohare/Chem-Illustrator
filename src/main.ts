@@ -11850,22 +11850,26 @@ const guidesToolboxHooks: GuidesToolboxHooks = {
 editor.onGuides = () => { ws.noteChange(); guidesToolbox?.refresh(); };
 
 const DOC_TOGGLES: Partial<Record<string, string>> = { bold: 'doc-bold', italic: 'doc-italic', underline: 'doc-underline', sub: 'doc-sub', sup: 'doc-sup', formula: 'doc-formula' };
+const DOC_ALIGN: Record<string, string> = { left: 'doc-align-left', center: 'doc-align-center', right: 'doc-align-right', justify: 'doc-justify' };
+const DOC_LINES: Record<number, string> = { 1: 'line-single', 1.5: 'line-1-5', 2: 'line-double' };
 const textToolboxHooks: TextToolboxHooks = {
   format: (f) => {
     if (docActive()) {
-      if (f.kind === 'style') { flash('In a document, the Home tab\'s Font and Size boxes set these.'); return true; }
-      const cmd = f.kind === 'stereo' ? 'doc-stereo-italic' : f.kind === 'toggle' ? DOC_TOGGLES[f.key] : undefined;
-      return !!cmd && docMode.run(cmd);
+      const cmd = f.kind === 'stereo' ? 'doc-stereo-italic' : f.kind === 'toggle' ? DOC_TOGGLES[f.key] : f.kind === 'align' ? DOC_ALIGN[f.j] : f.kind === 'line' ? DOC_LINES[f.v] : undefined;
+      if (!cmd) { flash('In a document, the Home tab\'s Font and Paragraph groups set these.'); return true; }
+      return docMode.run(cmd);
     }
     if (sheetActive()) return false;
-    const ok = editor.formatText(f);
-    editor.refocusText();
-    return ok;
+    return editor.formatText(f);
   },
-  type: (ch) => { const ok = insertSymbol(ch); editor.refocusText(); return ok; },
-  look: () => (docActive() || sheetActive() ? null : editor.textLook()?.style ?? null),
-  defaults: () => { if (docActive() || sheetActive()) return null; const l = editor.textLook(); return l ? { size: l.defaultSize, font: l.defaultFont } : null; },
-  moreSymbols: () => symbolWindow.open(),
+  type: (ch) => insertSymbol(ch),
+  link: () => { if (!docActive() && !sheetActive()) void insertLink(); },
+  look: () => {
+    if (docActive() || sheetActive()) return null;
+    const l = editor.textLook();
+    return l ? { style: l.style, align: l.align, list: l.list, line: l.line, before: l.before ?? 0, after: l.after ?? 0, wrap: l.wrap, link: !!l.link, defaultFont: l.defaultFont } : null;
+  },
+  back: () => editor.refocusText(),
   say: (t) => flash(t),
 };
 
