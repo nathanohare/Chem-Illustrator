@@ -10,7 +10,7 @@ import { guidesText } from '../editor/guides';
 import { Doc, Atom, Bond, Caption, Arrow, Shape, TextRun, Entity, Kind, StepRoles, enhancedText, CHIRAL_FLAGS, flagTextSize, type HighlightStyle } from '../model';
 import { interpretArrow, isReactionArrow, linkRows, isStep, plainMeasure, schemeItems, type Item } from '../chem/reaction';
 import { SYMBOLS } from '../chem/elements';
-import { labelBonds, labelSpec, layoutLabel, labelDir, labelGraph, tokenize, isGenericLabel, Measure, MiniGraph, kekulize, labelLook, alkylShown } from '../chem/labels';
+import { labelBonds, labelSpec, layoutLabel, labelDir, labelGraph, tokenize, isGenericLabel, Measure, MiniGraph, kekulize, labelLook } from '../chem/labels';
 import { Vec, DEG, arcCenter, norm, sub, Rect } from '../geom';
 import { bezPoints } from '../objects';
 import { kids, descendants, wellFormed, withoutDoctype } from './xml';
@@ -824,7 +824,7 @@ class CdxmlWriter {
     const size = this.doc.style.labelSize * (a.s ?? 1);
     const t = this.el('t', {});
     const color = this.colorAttr(a.color);
-    const runs = labelRuns(text, a.label !== null ? labelLook(a) : { supDigits: false }, a.label !== null);
+    const runs = labelRuns(text, a.label !== null ? labelLook(a) : { supDigits: false });
     for (const r of runs) {
       const s = this.el('s', { font: keepFont ?? this.fontId(this.doc.style.labelFont || 'Arial'), size: f2(size).replace(/\.00$/, ''), color: color ?? '0', face: (faceOf(r) ?? 0) | keepBits });
       s.textContent = r.text;
@@ -2016,20 +2016,18 @@ function orderAttr(order: number): string | null {
  * A label's text as runs: formula style (ChemDraw lowers the counts itself), with R numbers
  * raised when the label shows them so and characters raised, lowered or kept on the line by hand.
  */
-export function labelRuns(text: string, look: { supDigits: boolean; marks?: string }, styled = false): TextRun[] {
+export function labelRuns(text: string, look: { supDigits: boolean; marks?: string }): TextRun[] {
   const digits = look.supDigits ? /\d+$/.exec(text) : null;
   const out: TextRun[] = [];
-  // the alkyl prefixes as the label shows them (italic t, a dash added or taken out)
-  const shown = styled ? alkylShown(text) : null;
-  const chars = shown ? [...shown.text].map((ch, k) => ({ ch, i: shown.from[k], italic: shown.italic[k] })) : [...text].map((ch, i) => ({ ch, i, italic: false }));
-  for (const { ch, i, italic } of chars) {
-    const m = i === undefined ? undefined : look.marks?.[i];
-    const base: TextRun = m === '^' ? { text: ch, sup: true } : m === '_' ? { text: ch, sub: true } : m === '=' ? { text: ch } : digits && i !== undefined && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
-    const r: TextRun = italic ? { ...base, italic: true } : base;
+  [...text].forEach((ch, i) => {
+    const m = look.marks?.[i];
+    const base: TextRun = m === '^' ? { text: ch, sup: true } : m === '_' ? { text: ch, sub: true } : m === '=' ? { text: ch } : digits && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
+    // the t of tBu in italics (the alkyl look)
+    const r: TextRun = m === '/' ? { ...base, italic: true } : base;
     const last = out[out.length - 1];
     if (last && !!last.sup === !!r.sup && !!last.sub === !!r.sub && !!last.formula === !!r.formula && !!last.italic === !!r.italic) last.text += ch;
     else out.push(r);
-  }
+  });
   return out.length ? out : [{ text, formula: true }];
 }
 

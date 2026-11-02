@@ -150,7 +150,8 @@ import { centreEnd, haptoLook } from './chem/hapto';
 import { viewNow, viewRingOf, type RingView } from './chem/ring-views';
 import { watchToolHover } from './ui/tool-demos';
 import { countElectrons } from './chem/electrons';
-import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, alkylPrefs, tokenize as tokenizeLabel } from './chem/labels';
+import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, alkylPrefs, ALKYL_LOOKS, type AlkylLook, tokenize as tokenizeLabel } from './chem/labels';
+import { restyleAlkyl } from './text/alkyl-restyle';
 import { selectedGroup } from './chem/group-smiles';
 import { templateIcon } from './ui/template-icons';
 import { StructureChecks } from './chem/warnings';
@@ -9492,27 +9493,37 @@ async function personalPreferences(): Promise<void> {
   const r = await ask('Preferences', [
     { name: 'enterFinishes', label: `Enter finishes typing a text box in Canvas mode, and ${alt} starts a new line`, type: 'checkbox', value: String(enterFinishesText),
       help: 'Off: Enter starts a new line and Esc finishes, as in ChemDraw. Ctrl+Enter and Esc always finish. Text on slides and designs keeps PowerPoint\'s keys.' },
-    { name: 'alkylItalic', label: 'Alkyl prefixes in italics (the t of tBu, the i of iPr)', type: 'checkbox', value: String(alkylPrefs.italic) },
-    { name: 'alkylDash', label: 'A dash after alkyl prefixes (tBu shows as t-Bu, iPr as i-Pr)', type: 'checkbox', value: String(alkylPrefs.dash === true),
-      help: 'For the n-, i-, s- and t- of Pr and Bu, in atom labels (redrawn at once), in text boxes as you type, and in everything saved or exported. Only the look changes: a label still means the same group. Turned off, the dash comes out again (t-Bu shows as tBu), except where the letters would read as an element (PtBu3 stays as it is).' },
-  ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(v.alkylItalic === 'true', alkylDashChoice(v.alkylDash)) } });
+    { name: 'alkylLook', label: 'Alkyl groups written as', value: alkylPrefs.look, options: ALKYL_LOOK_CHOICES,
+      help: 'For the n-, i-, s- and t- of Pr and Bu (tBu, iPr, nBu, sBu, iBu), wherever they sit in a label or text (OtBu, N(iPr)2, KOtBu). Atom labels and text boxes take the look as you finish typing them; you are asked whether to change the ones already in the drawing. A dash is never put in or taken out where the letters would read as an element (PtBu3 stays as it is).' },
+  ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(parseAlkylLook(v.alkylLook)) } });
   if (!r) return;
   enterFinishesText = r.enterFinishes === 'true';
-  const italic = r.alkylItalic === 'true', dash = alkylDashChoice(r.alkylDash);
-  if (italic !== alkylPrefs.italic || dash !== alkylPrefs.dash) {
-    alkylPrefs.italic = italic;
-    alkylPrefs.dash = dash;
-    renderer.invalidate(doc);
-    doc.allDirty = true;
-    editor.requestScene();
-  }
+  const look = parseAlkylLook(r.alkylLook);
+  const changed = look !== alkylPrefs.look;
+  alkylPrefs.look = look;
   storeSettings();
+  if (changed && look !== 'typed') await offerAlkylRestyle(look);
 }
 
-/** The dash setting from its box: on adds dashes; off takes them out, once it has been on (until then labels stay as typed). */
-function alkylDashChoice(box: string | undefined): boolean | null {
-  if (box === 'true') return true;
-  return alkylPrefs.dash === null ? null : false;
+const ALKYL_LOOK_CHOICES: { value: AlkylLook; label: string }[] = [
+  { value: 'typed', label: 'As typed' },
+  { value: 'plain', label: 'tBu, iPr' },
+  { value: 'italic', label: 'tBu, iPr with the t and i in italics' },
+  { value: 'dash', label: 't-Bu, i-Pr' },
+  { value: 'both', label: 't-Bu, i-Pr with the t and i in italics' },
+];
+const parseAlkylLook = (v: string | undefined): AlkylLook => (ALKYL_LOOKS.includes(v as AlkylLook) ? v as AlkylLook : 'typed');
+
+/** After a new alkyl look is chosen: offer to give it to the labels and text boxes already in the drawing. */
+async function offerAlkylRestyle(look: AlkylLook): Promise<void> {
+  const n = restyleAlkyl(doc, look, false);
+  if (!n.labels && !n.texts) return;
+  const parts = [n.labels && `${n.labels} atom label${n.labels > 1 ? 's' : ''}`, n.texts && `${n.texts} text box${n.texts > 1 ? 'es' : ''}`].filter(Boolean).join(' and ');
+  const yes = await ask('Change Existing Alkyl Groups?', [], { ok: 'Change Them', note: `${parts} in this drawing ${n.labels + n.texts > 1 ? 'are' : 'is'} written another way. Change ${n.labels + n.texts > 1 ? 'them' : 'it'} to the new look? Cancel leaves ${n.labels + n.texts > 1 ? 'them' : 'it'} as ${n.labels + n.texts > 1 ? 'they are' : 'it is'}; new labels and text take the new look either way.` });
+  if (!yes) return;
+  restyleAlkyl(doc, look, true);
+  editor.requestScene();
+  flash(`Changed ${parts}`);
 }
 
 /** Settings ▸ Online: what the program asks the internet for. */
@@ -9612,8 +9623,7 @@ function currentSettings(): Settings {
     haptoDelocalized: haptoLook.delocalized,
     toolDemos,
     superscriptR: labelPrefs.superscriptR,
-    alkylItalic: alkylPrefs.italic,
-    alkylDash: alkylPrefs.dash,
+    alkylLook: alkylPrefs.look,
     bondEnds: bondEndPrefs.round,
     depthShade: { ...depthShadePrefs },
     linkSide,
@@ -9852,8 +9862,7 @@ function applySettings(s: Settings): void {
   haptoLook.delocalized = s.haptoDelocalized;
   toolDemos = s.toolDemos;
   labelPrefs.superscriptR = s.superscriptR;
-  alkylPrefs.italic = s.alkylItalic;
-  alkylPrefs.dash = s.alkylDash;
+  alkylPrefs.look = s.alkylLook;
   bondEndPrefs.round = s.bondEnds;
   Object.assign(depthShadePrefs, s.depthShade);
   for (const el of document.querySelectorAll('[data-cmd="depth-shading"][role="menuitemcheckbox"]')) el.setAttribute('aria-checked', String(depthShadePrefs.on));

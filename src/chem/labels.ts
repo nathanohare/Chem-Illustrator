@@ -240,11 +240,12 @@ export function tokenize(label: string): Token[] {
 }
 
 /** Text of one token as displayed, split into normal, subscript and superscript parts. */
-export interface Piece { text: string; sub?: boolean; sup?: boolean; italic?: boolean; /** Where it starts in the label text (none for a dash the prefix style adds). */ at?: number }
+export interface Piece { text: string; sub?: boolean; sup?: boolean; italic?: boolean; /** Where it starts in the label text. */ at?: number }
 
 /**
  * Raised and lowered characters set by hand in a label, one mark per character of its text:
- * "^" superscript, "_" subscript, "=" on the line, anything else as the label would show it.
+ * "^" superscript, "_" subscript, "=" on the line, "/" in italics (the t of tBu, by the alkyl
+ * look), anything else as the label would show it.
  */
 export type LabelMarks = string;
 
@@ -256,21 +257,26 @@ function tokenPieces(t: Token, supDigits = false, marks?: LabelMarks): Piece[] {
   const p: Piece[] = m ? [{ text: m[1], at }, { text: m[2], sub: !up, sup: up, at: at === undefined ? undefined : at + m[1].length }] : [{ text: t.text, at }];
   if (t.count > 1 || t.explicit) p.push({ text: String(t.count), sub: !up, sup: up, at: t.countAt });
   if (t.charge) p.push({ text: t.charge.replace('-', '−'), sup: true, at: t.chargeAt });
-  const styled = t.kind === 'nick' && styleWanted() ? prefixPieces(p) : p;
-  return marks ? markPieces(styled, marks) : styled;
+  return marks ? markPieces(p, marks) : p;
 }
 
 /**
- * How the n-, i-, s- and t- of alkyl groups (tBu, iPr, nBu, sBu, iBu) are shown in labels and
- * typed text: the letter in italics, and with or without a dash after it. Set from the
- * preferences; `dash` null leaves each as it was typed.
+ * How the n-, i-, s- and t- of alkyl groups (tBu, iPr, nBu, sBu, iBu) are written, from
+ * Settings ▸ Preferences: as typed, or one of four looks (no dash or a dash, upright or in
+ * italics). The look is given to labels and text as they are typed, and to what is already in a
+ * drawing when asked; it is kept in the text (the dash) and the label marks (the italics).
  */
-export const alkylPrefs: { italic: boolean; dash: boolean | null } = { italic: false, dash: null };
-const styleWanted = () => alkylPrefs.italic || alkylPrefs.dash !== null;
+export type AlkylLook = 'typed' | 'plain' | 'italic' | 'dash' | 'both';
+export const ALKYL_LOOKS: AlkylLook[] = ['typed', 'plain', 'italic', 'dash', 'both'];
+export const alkylPrefs: { look: AlkylLook } = { look: 'typed' };
+/** What a look asks for: the prefix in italics or not, and a dash after it or not (null: as typed). */
+export function alkylWants(look: AlkylLook = alkylPrefs.look): { italic: boolean; dash: boolean } | null {
+  return look === 'typed' ? null : { italic: look === 'italic' || look === 'both', dash: look === 'dash' || look === 'both' };
+}
 
 /**
  * The prefix letters of alkyl groups in some text: the letter's index, and whether a dash follows
- * it. A prefix counts at the start, after a non-letter (N(iPr)2, 2nBu) or after an capital
+ * it. A prefix counts at the start, after a non-letter (N(iPr)2, 2nBu) or after a capital
  * (OtBu, PtBu3), and only before Pr or Bu that ends the group (not t-Butyl).
  */
 export function alkylPrefixes(text: string): { at: number; dash: boolean }[] {
@@ -289,57 +295,32 @@ export function dashFree(text: string, at: number): boolean {
 }
 
 /**
- * A label's text as shown with the alkyl prefix style, character by character: each shown
- * character, where it came from in the label (none for an added dash), and whether it is in
- * italics. Null when the style changes nothing.
+ * A label (and its marks) in an alkyl look: a dash put in or taken out after each prefix of an
+ * abbreviation it reads as (the t of OtBu, not of Ts), and the prefix marked italic ("/") or not.
+ * The label is unchanged when the look is "as typed".
  */
-export function alkylShown(label: string): { text: string; from: (number | undefined)[]; italic: boolean[] } | null {
-  if (!styleWanted()) return null;
-  const at = new Map<number, { dash: boolean }>();
+export function styleLabel(label: string, marks?: LabelMarks, look: AlkylLook = alkylPrefs.look): { label: string; marks?: LabelMarks } {
+  const want = alkylWants(look);
+  const keep = { label, ...(marks ? { marks } : {}) };
+  if (!want) return keep;
+  const at = new Map<number, boolean>();
   for (const t of tokenize(label)) {
     if (t.kind !== 'nick' || t.at === undefined) continue;
-    for (const f of alkylPrefixes(t.text)) {
-      const k = t.at + f.at;
-      const free = dashFree(label, k);
-      at.set(k, { dash: alkylPrefs.dash === null || !free ? f.dash : alkylPrefs.dash });
-    }
+    for (const f of alkylPrefixes(t.text)) at.set(t.at + f.at, f.dash);
   }
-  if (!at.size) return null;
-  let text = '';
-  const from: (number | undefined)[] = [], italic: boolean[] = [];
-  const put = (ch: string, i: number | undefined, it = false) => { text += ch; from.push(i); italic.push(it); };
+  if (!at.size) return keep;
+  const was = (marks ?? '').padEnd(label.length, '.');
+  let text = '', m = '';
   for (let i = 0; i < label.length; i++) {
-    const p = at.get(i);
-    put(label[i], i, !!p && alkylPrefs.italic);
-    if (!p) continue;
-    const had = label[i + 1] === '-';
-    if (p.dash && !had) put('-', undefined);
-    else if (!p.dash && had) i++;
+    const had = at.get(i);
+    if (had === undefined) { text += label[i]; m += was[i]; continue; }
+    text += label[i];
+    m += want.italic ? '/' : was[i] === '/' ? '.' : was[i];
+    const dash = dashFree(label, i) ? want.dash : had;
+    if (dash && !had) { text += '-'; m += '.'; }
+    else if (!dash && had) i++;
   }
-  return { text, from, italic };
-}
-
-/** Pieces with the alkyl prefixes styled: the letter in italics, a dash added or taken out. */
-function prefixPieces(pieces: Piece[]): Piece[] {
-  const out: Piece[] = [];
-  for (const p of pieces) {
-    if (p.sub || p.sup) { out.push(p); continue; }
-    const found = alkylPrefixes(p.text);
-    if (!found.length) { out.push(p); continue; }
-    const at = (k: number) => (p.at === undefined ? undefined : p.at + k);
-    let from = 0;
-    for (const f of found) {
-      if (f.at > from) out.push({ text: p.text.slice(from, f.at), at: at(from) });
-      out.push({ text: p.text[f.at], at: at(f.at), ...(alkylPrefs.italic ? { italic: true } : {}) });
-      from = f.at + 1;
-      const free = dashFree(p.text, f.at);
-      const dash = alkylPrefs.dash === null || !free ? f.dash : alkylPrefs.dash;
-      if (dash && !f.dash) out.push({ text: '-' });
-      else if (!dash && f.dash) from++;
-    }
-    if (from < p.text.length) out.push({ text: p.text.slice(from), at: at(from) });
-  }
-  return out;
+  return { label: text, ...(/[\^_=/]/.test(m) ? { marks: m } : {}) };
 }
 
 /** Pieces with the hand-set marks applied, split where a mark changes how a character sits. */
@@ -351,9 +332,10 @@ export function markPieces(pieces: Piece[], marks: LabelMarks): Piece[] {
       const m = marks[p.at! + k];
       const sup = m === '^' ? true : m === '_' || m === '=' ? false : !!p.sup;
       const sub = m === '_' ? true : m === '^' || m === '=' ? false : !!p.sub;
+      const italic = m === '/' || !!p.italic;
       const last = out[out.length - 1];
-      if (k > 0 && last && !!last.sup === sup && !!last.sub === sub && !!last.italic === !!p.italic) last.text += ch;
-      else out.push({ text: ch, at: p.at! + k, ...(sup ? { sup } : {}), ...(sub ? { sub } : {}), ...(p.italic ? { italic: true } : {}) });
+      if (k > 0 && last && !!last.sup === sup && !!last.sub === sub && !!last.italic === italic) last.text += ch;
+      else out.push({ text: ch, at: p.at! + k, ...(sup ? { sup } : {}), ...(sub ? { sub } : {}), ...(italic ? { italic } : {}) });
     });
   }
   return out;
