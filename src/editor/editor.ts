@@ -66,6 +66,7 @@ import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } f
 import { arrangeSmart, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotText, setStepText, smartFrameOf, smartMarks, ungroupSmart, type SmartData, type StepPart } from '../chem/smart-scheme';
 import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
 import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
+import { putTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
@@ -456,6 +457,8 @@ export class Editor {
   onNewman: (bond: number, front: number) => void = () => {};
   /** A Newman projection double-clicked (its frame), to open its window again. */
   onNewmanEdit: (frame: number) => void = () => {};
+  /** A torsional energy chart double-clicked (its frame): change its look. */
+  onTorsionEdit: (frame: number) => void = () => {};
   /** Linked Newman projections whose structure just changed (their frames), to be worked out again. */
   onNewmanStale: (frames: number[]) => void = () => {};
   /** The atom most recently drawn or changed (its structure is analysed when nothing is selected). */
@@ -1459,6 +1462,8 @@ export class Editor {
     if (diagram !== null) { this.selectOnly({ kind: 'shape', id: diagram }); this.onEnergy(diagram); return; }
     const newman = h && h.kind !== 'atom' && h.kind !== 'bond' && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? newmanFrameOf(this.doc, h.kind, h.id) : null;
     if (newman !== null) { this.selectOnly({ kind: 'shape', id: newman }); this.onNewmanEdit(newman); return; }
+    const chart = h && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? torsionFrameOf(this.doc, h.kind, h.id) : null;
+    if (chart !== null) { this.selectOnly({ kind: 'shape', id: chart }); this.onTorsionEdit(chart); return; }
     const plate = h && h.kind !== 'atom' && h.kind !== 'bond' && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? plateFrameOf(this.doc, h.kind, h.id) : null;
     if (plate !== null) { this.selectOnly({ kind: 'shape', id: plate }); this.onPlate(plate); return; }
     // a SmartArt-style diagram: its words are typed into in place, as in PowerPoint; anywhere else opens its text and look
@@ -3176,7 +3181,7 @@ export class Editor {
    */
   private groupFirst(h: NonNullable<Hit>): NonNullable<Hit> {
     if (h.kind !== 'atom' && h.kind !== 'bond' && h.kind !== 'caption' && h.kind !== 'arrow' && h.kind !== 'shape') return h;
-    const g = energyFrameOf(this.doc, h.kind, h.id) ?? plateFrameOf(this.doc, h.kind, h.id) ?? newmanFrameOf(this.doc, h.kind, h.id) ?? (h.kind === 'shape' || h.kind === 'arrow' ? diagramFrameOf(this.doc, h.kind, h.id) : null) ?? smartFrameOf(this.doc, h.kind, h.id);
+    const g = energyFrameOf(this.doc, h.kind, h.id) ?? plateFrameOf(this.doc, h.kind, h.id) ?? newmanFrameOf(this.doc, h.kind, h.id) ?? torsionFrameOf(this.doc, h.kind, h.id) ?? (h.kind === 'shape' || h.kind === 'arrow' ? diagramFrameOf(this.doc, h.kind, h.id) : null) ?? smartFrameOf(this.doc, h.kind, h.id);
     return g !== null && g !== (h.kind === 'shape' ? h.id : null) && !this.sel.shapes.has(g) ? { kind: 'shape', id: g } : h;
   }
 
@@ -3240,6 +3245,55 @@ export class Editor {
     const label = old ? 'Edit Newman Projection' : 'Newman Projection';
     if (opts.amend) doc.amend(label, run); else doc.edit(label, run);
     if (frame !== null && !opts.amend) this.selectOnly({ kind: 'shape', id: frame });
+    this.changed();
+    return frame;
+  }
+
+  /** The torsional energy chart the selection is in (its frame), if any. */
+  selectedTorsion(): number | null {
+    for (const id of this.sel.shapes) if (this.doc.shapes.get(id)?.torsion) return id;
+    for (const [k, set] of [['caption', this.sel.captions], ['arrow', this.sel.arrows], ['shape', this.sel.shapes]] as const) {
+      for (const id of set) { const g = torsionFrameOf(this.doc, k, id); if (g !== null) return g; }
+    }
+    return null;
+  }
+
+  /** A torsional energy chart drawn on a page of its own, in this drawing's style (the Energy Chart tab's preview). */
+  torsionPreview(d: TorsionData): { doc: Doc; box: Rect } {
+    const tmp = new Doc();
+    tmp.style = { ...this.doc.style };
+    tmp.textStyles = this.doc.textStyles;
+    let id = 0;
+    tmp.edit('Preview', () => { id = putTorsion(tmp, this.fullMeasure(), d, { x: 0, y: 0 }); });
+    return { doc: tmp, box: shapeBox(tmp.shapes.get(id)!) };
+  }
+
+  /**
+   * Draw a torsional energy chart below its structure (or chart `id` again where it is), and
+   * select it.
+   */
+  putTorsionChart(d: TorsionData, opts: { id?: number; near?: number; page?: { w: number; h: number } } = {}): number | null {
+    const doc = this.doc, m = this.fullMeasure(), L = doc.style.bondLength;
+    const old = opts.id !== undefined ? doc.shapes.get(opts.id) : undefined;
+    let frame: number | null = null;
+    doc.edit(old ? 'Edit Torsional Energy Chart' : 'Torsional Energy Chart', () => {
+      let at: Vec;
+      if (old?.frame && old.torsion) {
+        // where its plot was: the frame keeps the plot's corner a fixed way from its own
+        const was = shapeBox(old);
+        const tmp = this.torsionPreview(old.torsion).box;
+        at = { x: was.x1 - tmp.x1, y: was.y1 - tmp.y1 };
+      } else {
+        // below its structure, the plot's left edge under the structure's
+        const atoms = opts.near !== undefined && doc.atoms.has(opts.near) ? doc.fragmentOf(opts.near) : new Set<number>();
+        const box = atoms.size ? atomsBox(doc, atoms, m) : null;
+        const prev = this.torsionPreview(d).box;
+        at = box ? { x: box.x1 - prev.x1, y: box.y2 + 1.5 * L - prev.y1 } : { x: 0, y: 0 };
+      }
+      frame = putTorsion(doc, m, d, at, old?.id);
+      if (!old) { this.sel = emptySel(); this.sel.shapes.add(frame); this.moveClear(opts.page); }
+    });
+    if (frame !== null) this.selectOnly({ kind: 'shape', id: frame });
     this.changed();
     return frame;
   }

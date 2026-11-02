@@ -4,6 +4,7 @@
 // anything changes. Tab and Shift+Tab in the preview step through the conformers.
 
 import { commonName, norm180, type NewmanConformer } from '../chem/newman';
+import { chartTab, type ChartChoice, type ChartHost } from './newman-chart-tab';
 
 /** What the window settles on; the caller makes the projection from it. */
 export interface NewmanChoice {
@@ -48,7 +49,17 @@ export function torsionText(c: NewmanConformer): string {
   return `${phi}°${name ? ' ' + name : ''}`;
 }
 
-export function askNewman(start: NewmanChoice, host: NewmanHost, editing: boolean): Promise<{ choice: NewmanChoice; conf: NewmanConformer } | null> {
+/** The Energy Chart tab, when the window offers one. */
+export interface ChartOffer<S> {
+  host: ChartHost<S>;
+  start: Omit<ChartChoice, 'a' | 'd'>;
+  /** Open on the chart tab. */
+  first?: boolean;
+}
+
+export type NewmanResult<S> = { choice: NewmanChoice; conf: NewmanConformer } | { choice: NewmanChoice; chart: ChartChoice; scan: S };
+
+export function askNewman<S = never>(start: NewmanChoice, host: NewmanHost, editing: boolean, offer?: ChartOffer<S>): Promise<NewmanResult<S> | null> {
   return new Promise((resolve) => {
     const choice: NewmanChoice = { ...start };
     let confs: NewmanConformer[] = [];
@@ -58,6 +69,9 @@ export function askNewman(start: NewmanChoice, host: NewmanHost, editing: boolea
     d.setAttribute('aria-label', 'Newman projection');
     const form = el('form', { method: 'dialog' });
     form.innerHTML = `<h2>${editing ? 'Edit Newman Projection' : 'Newman Projection'}</h2>
+      ${offer ? '<div class="np-tabs" role="tablist"><button type="button" role="tab" data-tab="proj">Projection</button><button type="button" role="tab" data-tab="chart">Energy Chart</button></div>' : ''}
+      <label class="ask-row np-end"><span>Looking from</span><select name="end"></select><button type="button" data-act="swap" title="Look from the other end">⇄</button></label>
+      <div class="np-page" data-page="proj">
       <div class="np-grid">
         <div class="np-left">
           <canvas class="np-preview" tabindex="0" role="img" aria-label="Preview. Tab and Shift+Tab step through the conformers"></canvas>
@@ -65,7 +79,6 @@ export function askNewman(start: NewmanChoice, host: NewmanHost, editing: boolea
           <p class="muted small np-tip">Tab in the preview: next conformer · Shift+Tab: previous</p>
         </div>
         <div class="np-right">
-          <label class="ask-row"><span>Looking from</span><select name="end"></select><button type="button" data-act="swap" title="Look from the other end">⇄</button></label>
           <div class="ask-row"><span>Draw as</span><span class="np-radios"><label><input type="radio" name="kind" value="newman" /> Newman</label><label><input type="radio" name="kind" value="sawhorse" /> Sawhorse</label></span></div>
           <label class="ask-row"><span>Conformation</span><select name="source"><option value="stable">Most stable (conformer search)</option><option value="drawn">As drawn (wedges)</option></select></label>
           <label class="ask-row"><span>Energies</span><select name="method"><option value="mmff">MMFF94s+ (fast)</option><option value="xtb">GFN2-xTB (your xtb)</option></select></label>
@@ -76,6 +89,8 @@ export function askNewman(start: NewmanChoice, host: NewmanHost, editing: boolea
       <label class="ask-row ask-check"><input name="mark" type="checkbox" /><span>Mark the viewing direction on the structure (eye and dotted arrow)</span></label>
       <label class="ask-row ask-check"><input name="linked" type="checkbox" /><span>Keep linked: draw it again when the structure changes</span></label>
       <p class="muted small">Groups are coloured by size on each atom (largest, middle, smallest by A-value): change this in Settings ▸ Newman Projections.</p>
+      </div>
+      ${offer ? '<div class="np-page" data-page="chart" hidden></div>' : ''}
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">${editing ? 'Redraw' : 'Insert'}</button></p>`;
     const $ = <T extends Element>(q: string) => form.querySelector<T>(q)!;
     const canvas = $<HTMLCanvasElement>('.np-preview');
@@ -96,7 +111,10 @@ export function askNewman(start: NewmanChoice, host: NewmanHost, editing: boolea
     }
 
     const current = (): NewmanConformer | null => (choice.source === 'drawn' ? drawnConf : confs[choice.index] ?? null);
+    let tab: 'proj' | 'chart' = offer?.first ? 'chart' : 'proj';
+    const chart = offer ? chartTab(form.querySelector<HTMLElement>('[data-page=chart]')!, offer.host, offer.start, () => choice.reversed, host.xtb, () => { if (tab === 'chart') paint(); }) : null;
     const paint = () => {
+      if (tab === 'chart') { submit.disabled = !chart?.result(); return; }
       const c = current();
       submit.disabled = !c || busy > 0;
       const ctx = canvas.getContext('2d');
@@ -165,7 +183,7 @@ export function askNewman(start: NewmanChoice, host: NewmanHost, editing: boolea
     turn.addEventListener('input', () => { choice.turn = Number(turn.value) || 0; turnOut.textContent = `${choice.turn}°`; paint(); });
     turn.addEventListener('dblclick', () => { choice.turn = 0; turn.value = '0'; turnOut.textContent = '0°'; paint(); });
     for (const r of form.querySelectorAll<HTMLInputElement>('input[name=kind]')) r.addEventListener('change', () => { choice.kind = r.value as NewmanChoice['kind']; paint(); });
-    endSel.addEventListener('change', () => { choice.reversed = endSel.value === '1'; choice.index = 0; void load(); });
+    endSel.addEventListener('change', () => { choice.reversed = endSel.value === '1'; choice.index = 0; void load(); chartStale = true; if (tab === 'chart') { chartStale = false; chart?.open(true); } });
     $<HTMLButtonElement>('[data-act=swap]').addEventListener('click', () => { endSel.value = endSel.value === '1' ? '0' : '1'; endSel.dispatchEvent(new Event('change')); });
     sourceSel.addEventListener('change', () => { choice.source = sourceSel.value as NewmanChoice['source']; methodSel.disabled = choice.source === 'drawn'; void load(); });
     methodSel.addEventListener('change', () => { choice.method = methodSel.value as NewmanChoice['method']; choice.index = 0; void load(); });
@@ -182,21 +200,44 @@ export function askNewman(start: NewmanChoice, host: NewmanHost, editing: boolea
       pick(next);
     });
 
+    // the tabs: the chart's scan starts the first time its tab is shown
+    let chartStale = false;
+    const show = (t: 'proj' | 'chart') => {
+      tab = t;
+      for (const b of form.querySelectorAll<HTMLButtonElement>('[data-tab]')) { b.setAttribute('aria-selected', String(b.dataset.tab === t)); b.tabIndex = b.dataset.tab === t ? 0 : -1; }
+      for (const p of form.querySelectorAll<HTMLElement>('[data-page]')) p.hidden = p.dataset.page !== t;
+      submit.textContent = t === 'chart' ? (editing ? 'Redraw Chart' : 'Insert Chart') : editing ? 'Redraw' : 'Insert';
+      if (t === 'chart') { chart?.open(chartStale); chartStale = false; }
+      paint();
+    };
+    for (const b of form.querySelectorAll<HTMLButtonElement>('[data-tab]')) {
+      b.addEventListener('click', () => show(b.dataset.tab as 'proj' | 'chart'));
+      b.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); const t = tab === 'proj' ? 'chart' : 'proj'; show(t); form.querySelector<HTMLButtonElement>(`[data-tab=${t}]`)!.focus(); } });
+    }
+
     d.append(form);
     document.body.append(d);
-    const finish = (v: { choice: NewmanChoice; conf: NewmanConformer } | null) => { busy = -1; if (!v) host.stop(); d.remove(); resolve(v); };
+    const finish = (v: NewmanResult<S> | null) => { busy = -1; chart?.stop(); if (!v) host.stop(); d.remove(); resolve(v); };
     $<HTMLButtonElement>('[data-act=cancel]').addEventListener('click', () => { d.close(); finish(null); });
     d.addEventListener('cancel', () => finish(null));
     d.addEventListener('keydown', (e) => { if (e.key !== 'Escape') e.stopPropagation(); });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      if (tab === 'chart') {
+        const r = chart?.result();
+        if (!r) return;
+        d.close();
+        finish({ choice: { ...choice }, ...r });
+        return;
+      }
       const c = current();
       if (!c) return;
       d.close();
       finish({ choice: { ...choice }, conf: c });
     });
     d.showModal();
-    canvas.focus();
+    if (offer) show(tab);
+    if (tab === 'proj') canvas.focus(); else form.querySelector<HTMLButtonElement>('[data-tab=chart]')!.focus();
     void load();
   });
 }

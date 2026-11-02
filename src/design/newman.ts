@@ -95,7 +95,9 @@ export function drawNewman(doc: Doc, m: Measure, d: NewmanData, c: Vec): NewmanP
       // an eclipsed back group: slid round the way it was turned until it sits beside the front one
       const t = { x: -u.y, y: u.x };
       const sgn = look.offset < 0 ? -1 : 1;
-      for (let k = 1; k < 80 && hits(boxAt(ctr)); k++) ctr = { x: ctr.x + t.x * sgn * 0.5, y: ctr.y + t.y * sgn * 0.5 };
+      // with a little space between them, so CH3 and CH3 don't read as one label
+      const roomy = (p: Vec) => { const r = boxAt(p), g = 0.12 * L; return { x1: r.x1 - g, y1: r.y1 - g, x2: r.x2 + g, y2: r.y2 + g }; };
+      for (let k = 1; k < 80 && hits(roomy(ctr)); k++) ctr = { x: ctr.x + t.x * sgn * 0.5, y: ctr.y + t.y * sgn * 0.5 };
     }
     placed.push(boxAt(ctr));
     doc.updateCaption(cap.id, { x: ctr.x - w / 2 - b.x1 + cap.x, y: ctr.y - h / 2 - b.y1 + cap.y });

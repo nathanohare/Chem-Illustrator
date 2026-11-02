@@ -13,7 +13,7 @@ import { chordLocal, shapeBox } from '../objects';
 import { frameBox } from '../editor/frames';
 import { profileAt, type Extremum, type Profile } from '../chem/torsion-profile';
 import { norm180, type NewmanGroup } from '../chem/newman';
-import { drawNewman, type NewmanLook } from './newman';
+import { drawEyeMark, drawNewman, type NewmanLook } from './newman';
 
 export type ConformerNames = 'textbook' | 'klyne' | 'none';
 
@@ -40,8 +40,10 @@ export interface TorsionData {
   h: number;
   method?: string;
   look: NewmanLook;
-  /** The drawn structure and bond it shows, while linked (drawn atom ids, front atom first). */
-  link?: { atoms: number[]; front: number; back: number };
+  /** A boxed sawhorse of the molecule above the plot, with the eye looking down the bond (as in textbook figures). */
+  sawhorse?: boolean;
+  /** The scan the curve was fitted to (φ in degrees, kcal/mol), for Copy Data. */
+  points?: { phi: number; energy: number }[];
 }
 
 export const TORSION_DEFAULTS = { unit: 'kcal/mol' as const, insets: 'all' as const, names: 'textbook' as const, barriers: true, barrierColor: '#1a56db', digits: 1 };
@@ -111,6 +113,9 @@ export function drawTorsion(doc: Doc, m: Measure, d: TorsionData, at: Vec): Tors
     if (i + 2 < P.length) bez.push(p2);
   }
   const tail = P[0], head = P[P.length - 1];
+  // the curve every half degree or so, for keeping words off it (steep parts jump between the 5° points)
+  const dense: Vec[] = [];
+  for (let i = 0; i + 1 < P.length; i++) for (let k = 0; k < 10; k++) dense.push({ x: P[i].x + ((P[i + 1].x - P[i].x) * k) / 10, y: P[i].y + ((P[i + 1].y - P[i].y) * k) / 10 });
   out.arrows.push(doc.addArrow({
     tail, head, headStyle: 'none', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0,
     headLength: 0, headWidth: 0, color: '#9a9a9a', lineWidth: lw * 1.6, bez: bez.map((q) => chordLocal(tail, head, q)), bent: true,
@@ -131,6 +136,7 @@ export function drawTorsion(doc: Doc, m: Measure, d: TorsionData, at: Vec): Tors
     const dy = fromTop ? yEdge - y1 : yEdge - y2;
     for (const id of parts.captions) { const c = doc.captions.get(id)!; doc.updateCaption(id, { y: c.y + dy }); }
     for (const id of parts.shapes) { const sh = doc.shapes.get(id)!; doc.updateShape(id, { y1: sh.y1 + dy, y2: sh.y2 + dy }); }
+    for (const id of parts.arrows) { const a = doc.arrows.get(id)!; doc.updateArrow(id, { tail: { x: a.tail.x, y: a.tail.y + dy }, head: { x: a.head.x, y: a.head.y + dy } }); }
     out.captions.push(...parts.captions); out.shapes.push(...parts.shapes); out.arrows.push(...parts.arrows);
     return { y1: y1 + dy, y2: y2 + dy };
   };
@@ -167,7 +173,7 @@ export function drawTorsion(doc: Doc, m: Measure, d: TorsionData, at: Vec): Tors
     const cost = (bx: number, by: number) => {
       if (bx < at.x + 2 || by + h > y0 - 1) return Infinity;
       let n = 0;
-      for (const q of P) if (q.x > bx - 2 && q.x < bx + w + 2 && q.y > by - 2 && q.y < by + h + 2) n++;
+      for (const q of dense) if (q.x > bx - 2 && q.x < bx + w + 2 && q.y > by - 2 && q.y < by + h + 2) n++;
       for (const o of others) if (bx < o.x2 && o.x1 < bx + w && by < o.y2 && o.y1 < by + h) n += 50;
       return n;
     };
@@ -181,7 +187,64 @@ export function drawTorsion(doc: Doc, m: Measure, d: TorsionData, at: Vec): Tors
     for (const t of tries) { const c = cost(t.x, t.y); if (c < bestCost) { bestCost = c; best = t; } }
     if (best) doc.updateCaption(cap.id, { x: cap.x + best.x - b0.x1, y: cap.y + best.y - b0.y1 });
   }
+  if (d.sawhorse) drawSawhorseBox(doc, m, d, at, out);
   return out;
+}
+
+/**
+ * The molecule as a sawhorse in a box above the plot's left end, with the eye and dotted arrow
+ * looking down the bond from the front, as in textbook figures of butane.
+ */
+function drawSawhorseBox(doc: Doc, m: Measure, d: TorsionData, at: Vec, out: TorsionParts): void {
+  const L = doc.style.bondLength;
+  // the most stable conformation, the one the reader compares the rest with
+  const lowest = [...d.extrema].filter((e) => e.kind === 'min').sort((p, q) => p.energy - q.energy)[0];
+  const turn = lowest ? norm180(lowest.phi - d.phi0) : 0;
+  const parts = drawNewman(doc, m, { kind: 'sawhorse', front: d.front, back: d.back, turn, conformer: 0, source: 'angle', look: d.look }, { x: 0, y: 0 });
+  // where the sawhorse put its two atoms (drawNewman: yaw 48°, pitch 32°, the atoms 1.35 bond lengths apart)
+  const sep = 1.35 * L, yaw = (48 * Math.PI) / 180, pitch = (32 * Math.PI) / 180;
+  const back = { x: sep * Math.sin(yaw), y: -sep * Math.cos(yaw) * Math.sin(pitch) };
+  const mark = drawEyeMark(doc, { x: 0, y: 0 }, back, d.barrierColor);
+  const ids = { captions: parts.captions, shapes: [...parts.shapes, ...mark.shapes], arrows: [...parts.arrows, ...mark.arrows] };
+  const boxes = [
+    ...ids.captions.map((id) => m.captionBox(doc.captions.get(id)!)),
+    ...ids.shapes.map((id) => shapeBox(doc.shapes.get(id)!)),
+    ...ids.arrows.flatMap((id) => { const a = doc.arrows.get(id)!; return [{ x1: Math.min(a.tail.x, a.head.x), y1: Math.min(a.tail.y, a.head.y), x2: Math.max(a.tail.x, a.head.x), y2: Math.max(a.tail.y, a.head.y) }]; }),
+  ];
+  const bx1 = Math.min(...boxes.map((r) => r.x1)), by1 = Math.min(...boxes.map((r) => r.y1)), bx2 = Math.max(...boxes.map((r) => r.x2)), by2 = Math.max(...boxes.map((r) => r.y2));
+  // above everything drawn so far, its left edge on the energy axis
+  const tops = [
+    ...out.captions.map((id) => m.captionBox(doc.captions.get(id)!).y1),
+    ...out.shapes.map((id) => shapeBox(doc.shapes.get(id)!).y1),
+    at.y - 0.5 * L,
+  ];
+  const pad = 0.3 * L;
+  const dx = at.x + pad - bx1, dy = Math.min(...tops) - 0.4 * L - pad - by2;
+  for (const id of ids.captions) { const c = doc.captions.get(id)!; doc.updateCaption(id, { x: c.x + dx, y: c.y + dy }); }
+  for (const id of ids.shapes) { const sh = doc.shapes.get(id)!; doc.updateShape(id, { x1: sh.x1 + dx, y1: sh.y1 + dy, x2: sh.x2 + dx, y2: sh.y2 + dy }); }
+  for (const id of ids.arrows) { const a = doc.arrows.get(id)!; doc.updateArrow(id, { tail: { x: a.tail.x + dx, y: a.tail.y + dy }, head: { x: a.head.x + dx, y: a.head.y + dy } }); }
+  const box = doc.addShape({ kind: 'rect', x1: bx1 + dx - pad, y1: by1 + dy - pad, x2: bx2 + dx + pad, y2: by2 + dy + pad, color: '#000000', filled: false });
+  out.captions.push(...ids.captions);
+  out.shapes.push(box.id, ...ids.shapes);
+  out.arrows.push(...ids.arrows);
+}
+
+/** The torsion diagram a thing belongs to (its frame's id), if any. */
+export function torsionFrameOf(doc: Doc, kind: 'atom' | 'bond' | 'caption' | 'arrow' | 'shape', id: number): number | null {
+  if (kind === 'shape' && doc.shapes.get(id)?.torsion) return id;
+  for (const s of doc.shapes.values()) {
+    if (!s.torsion || !s.frame) continue;
+    const f = s.frame;
+    if ((kind === 'caption' && f.captions.includes(id)) || (kind === 'arrow' && f.arrows.includes(id)) || (kind === 'shape' && f.shapes.includes(id))) return s.id;
+  }
+  return null;
+}
+
+/** The scan as text to paste into a spreadsheet: φ and the energy, one row each. */
+export function torsionCsv(d: Pick<TorsionData, 'points' | 'unit' | 'profile'>): string {
+  const k = d.unit === 'kJ/mol' ? KJ : 1;
+  const pts = d.points?.length ? d.points : Array.from({ length: 37 }, (_, i) => ({ phi: i * 10, energy: profileAt(d.profile, i * 10) }));
+  return [`phi (deg)\tE (${d.unit})`, ...pts.map((p) => `${p.phi}\t${(p.energy * k).toFixed(3)}`)].join('\n');
 }
 
 /** Draw a diagram in a frame of its own, or the one in frame `id` again. Returns the frame's id. Call inside an edit. */
