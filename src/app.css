@@ -3101,3 +3101,25 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 .ribbon .gal-swatch:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
 .gal-colour-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .rb-field > .rb-lead { display: inline-flex; vertical-align: -3px; margin-right: 3px; }
+
+/* Presentation and Design: Warnings and Analysis stay out of the side panel until View > Show asks for them */
+body:is(.slides-mode, .design-mode):not(.show-warnings-pane) #warnings-section,
+body:is(.slides-mode, .design-mode):not(.show-analysis-pane) #analysis-section { display: none; }
+/* the side panel closes all the way (no strip): the button at the bottom right, View > Side Panel or Ctrl+Alt+B bring it back */
+.dock-v > .toolbox[data-id="details"].collapsed { display: none; }
+/* its header is one row: the close button sits beside the first heading */
+.dock-v > .toolbox[data-id='details'] { position: relative; }
+.dock-v > .toolbox[data-id='details'] > #side-fold { position: absolute; top: 4px; right: 6px; z-index: 2; margin: 0; font-size: var(--fs-md, 15px); }
+.dock-v > .toolbox[data-id='details'] #side-content > section > h2 { padding-right: 24px; }
+#status-side { display: inline-grid; place-items: center; width: 26px; height: 22px; padding: 0; margin-left: 4px; border: 1px solid transparent; background: none; color: var(--muted); }
+#status-side:hover { color: var(--text); border-color: var(--line); }
+#status-side[aria-pressed='true'] { color: var(--accent); }
+#status-side[aria-pressed='false'] .sp-fill { opacity: 0; }
+/* a dock holding only the closed side panel takes no room */
+.dock:not(.drop):not(:has(> :not(.toolbox[data-id='details'].collapsed))) { display: none; }
+.gal-svg .gal-ab { font: 600 7px var(--font-ui, sans-serif); fill: var(--ink, currentColor); }
+.gal-svg .gal-arrow { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.ribbon button.rb-iconsel { display: inline-flex; align-items: center; gap: 1px; width: auto; padding: 0 3px; }
+.ribbon button.rb-iconsel .rb-caret { font-size: 9px; color: var(--muted); }
+.popup-menu .pm-ic { display: inline-flex; width: 20px; margin-right: 8px; vertical-align: -5px; }
+.popup-menu button:has(> .pm-ic) { display: flex; align-items: center; justify-content: flex-start; text-align: left; }

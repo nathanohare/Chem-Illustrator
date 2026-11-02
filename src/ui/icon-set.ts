@@ -278,6 +278,10 @@ export const ICON_SET: Record<string, IconDef> = {
   'indent-right': { hue: 'gray', d: '<path d="M2.75 5.25h11.5M2.75 10.25h11.5M2.75 15.25h11.5M2.75 20.25h7"/><path class="a" d="M21.25 8.75L17.75 12l3.5 3.25z" stroke-width="1.25"/>' },
   'space-before': { hue: 'gray', d: '<path d="M8.75 13.25h12.5M8.75 17.25h12.5M8.75 21.25h8"/><path class="a" d="M4.75 2.75v8.5M2.5 5l2.25-2.25L7 5M2.5 9l2.25 2.25L7 9"/><path class="a" d="M8.75 6.5h12.5" stroke-dasharray="2 2"/>' },
   'space-after': { hue: 'gray', d: '<path d="M8.75 2.75h12.5M8.75 6.75h12.5M8.75 10.75h8"/><path class="a" d="M4.75 12.75v8.5M2.5 15l2.25-2.25L7 15M2.5 19l2.25 2.25L7 19"/><path class="a" d="M8.75 17.5h12.5" stroke-dasharray="2 2"/>' },
+  'text-direction': { hue: 'blue', d: '<path d="M3.75 20.25V8.25M3.75 8.25l-1.5 2M3.75 8.25l1.5 2" class="a"/><path d="M9.5 19.5l4.5-13.5h1l4.5 13.5M11 15h7"/>' },
+  'text-box-columns': { hue: 'blue', d: '<rect class="p" x="2.75" y="3.75" width="18.5" height="16.5" rx="2"/><path class="a" d="M6 7.75h4.5M6 11h4.5M6 14.25h4.5M13.5 7.75h4.5M13.5 11h4.5M13.5 14.25h3"/>' },
+  autofit: { hue: 'blue', d: '<rect class="p" x="2.75" y="3.75" width="18.5" height="16.5" rx="2" stroke-dasharray="3 2"/><path d="M7 9.5h10M7 13h7"/><path class="a" d="M17.5 16.5l2.5 2.5M20 16.25v2.75h-2.75"/>' },
+  'text-orientation': { hue: 'blue', d: '<path d="M3.5 14.5l4.25-10h1l4.25 10M5.25 10.75h5.5" transform="rotate(-40 8.25 9.5)"/><path class="a" d="M8.75 20.75l11.5-11.5M20.25 9.25h-4.25M20.25 9.25v4.25"/>' },
   // ---------------------------------------------------------------- group pictures for the dropdowns that hold several commands
   'media-menu': { hue: 'red', d: '<rect class="p" x="2.75" y="3.75" width="18.5" height="16.5" rx="2"/><path d="M2.75 8h18.5M7.25 3.75V8M12 3.75V8M16.75 3.75V8"/><path class="f a" d="M10 11v6.5l5.25-3.25z"/>' },
   'header-footer-menu': { hue: 'blue', d: '<rect class="p" x="4.75" y="2.75" width="14.5" height="18.5" rx="2"/><path class="f a" d="M4.75 15.75h14.5v3.5a2 2 0 0 1-2 2H6.75a2 2 0 0 1-2-2z"/><path d="M7.75 6.5h8.5M7.75 9.5h8.5M7.75 12.5h5" stroke-opacity=".5"/>' },
@@ -308,7 +312,7 @@ export const ICON_FOR: Record<string, string> = {
   'sheet-new-window': 'new-window', 'doc-new-window': 'new-window', 'table-styles': 'table-style', 'new-comment': 'comment',
   'spelling-grammar': 'spelling', 'check-accessibility': 'accessibility', 'design-size': 'page-size', 'shape-front': 'bring-front', 'shape-back': 'send-back',
   'rotate-dialog': 'rotate-by', 'duplicate-slide': 'duplicate-slide', 'tr:preview': 'animation-preview', 'an:preview': 'animation-preview',
-  'an:pane': 'animation-pane', 'doc:arrange-position': 'position', 'an:painter': 'animation-painter', 'structure-from-name': 'structure-from-name',
+  'an:pane': 'animation-pane', 'sh:orientation': 'text-orientation', 'doc:arrange-position': 'position', 'an:painter': 'animation-painter', 'structure-from-name': 'structure-from-name',
 };
 
 /** The drawing for a button, from its data-sh, data-doc, data-tr, data-an or data-cmd. */

@@ -346,7 +346,7 @@
     </div>
     </div>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="focus-view" title="Hide the toolboxes, side panel and ribbon to give the page the whole window; press again (Ctrl+Shift+F1) to bring them back"><span>Focus View</span></button>
-    <button role="menuitemcheckbox" aria-checked="false" data-cmd="fold-side" title="Fold the side panel to a strip at the right, to give the drawing more room"><span>Fold Side Panel</span></button>
+    <button role="menuitemcheckbox" aria-checked="true" data-cmd="fold-side" title="The side panel at the right: Style, Warnings, Analysis, Format (Ctrl+Alt+B shows or closes it)"><span>Side Panel</span></button>
     <div class="submenu" data-modes="slides sheet document design">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Ribbon</button>
     <div class="menu sub" role="menu" hidden>
@@ -789,7 +789,7 @@
               <button data-sh="valign-middle" title="Middle">Middle</button>
               <button data-sh="valign-bottom" title="Bottom">Bottom</button>
               <button data-sh="wrap" aria-pressed="false" title="Wrap text onto more lines">Wrap</button>
-              <button data-sh="orientation" title="Orientation: turn the text up, down or at an angle, or stack its letters (for narrow column headings)"><span aria-hidden="true">ab↗</span> ▾</button>
+              <button data-sh="orientation" class="rb-labelled" title="Orientation: turn the text up, down or at an angle, or stack its letters (for narrow column headings)"><span class="rb-lead"></span>▾</button>
             </div>
             <div class="rb-pair">
               <button data-sh="align-left" aria-pressed="false" title="Align left">Left</button>
@@ -2207,15 +2207,15 @@
               <button class="rb-sq" data-sl-fmt="align-center" aria-pressed="false" title="Centre">Centre</button>
               <button class="rb-sq" data-sl-fmt="align-right" aria-pressed="false" title="Align right">Right</button>
               <button class="rb-sq" data-sl-fmt="justify" aria-pressed="false" title="Justify (both edges straight)">Justify</button>
-              <select data-tx="dir" title="Text Direction (of each picked text box)" aria-label="Text direction">
+              <div class="rb-fly rb-selgal" data-size="icon" data-name="Text Direction" data-ic="text-direction" data-pic="textdir" title="Text Direction"><select data-tx="dir" title="Text Direction (of each picked text box)" aria-label="Text direction">
                 <option value="horz">Horizontal</option><option value="vert">Rotate all text 90°</option><option value="vert270">Rotate all text 270°</option>
-              </select>
-              <select data-tx="cols" title="Columns in the text box" aria-label="Columns">
+              </select></div>
+              <div class="rb-fly rb-selgal" data-size="icon" data-name="Columns" data-ic="text-box-columns" data-pic="tcols" title="Columns"><select data-tx="cols" title="Columns in the text box" aria-label="Columns">
                 <option value="1">1 column</option><option value="2">2 columns</option><option value="3">3 columns</option><option value="more">More Columns…</option><option value="" hidden>Other</option>
-              </select>
-              <select data-tx="fit" title="AutoFit: what happens when the text is longer than its box" aria-label="AutoFit">
+              </select></div>
+              <div class="rb-fly rb-selgal" data-size="icon" data-name="AutoFit" data-ic="autofit" data-pic="fit" title="AutoFit"><select data-tx="fit" title="AutoFit: what happens when the text is longer than its box" aria-label="AutoFit">
                 <option value="grow">Resize shape to fit text</option><option value="shrink">Shrink text on overflow</option><option value="fixed">Do not Autofit</option>
-              </select>
+              </select></div>
             </div>
           </div>
         </div>
@@ -2425,6 +2425,10 @@
             <label class="rb-field check" title="Rulers along the top and left of the slide, from its middle (Grid Settings changes the units). Drag out of a ruler for a guide"><input type="checkbox" data-cmd="view-slide-ruler" /> Ruler</label>
             <label class="rb-field check" title="Gridlines over the slide, on screen only (Grid Settings sets the spacing and snapping)"><input type="checkbox" data-cmd="view-gridlines" /> Gridlines</label>
             <label class="rb-field check" title="Drawing guides: lines to line things up by. Drag one to move it, Ctrl+drag to copy, off the slide to take it away. Saved with the file"><input type="checkbox" data-cmd="view-guides" /> Guides</label>
+          </div>
+          <div class="rb-col">
+            <label class="rb-field check" title="Warnings: problems with the structures on the slide (bad valences, clashing atoms), in the side panel"><input type="checkbox" data-cmd="view-warnings-pane" /> Warnings</label>
+            <label class="rb-field check" title="Analysis: the formula, masses and isotope pattern of the structure picked, in the side panel"><input type="checkbox" data-cmd="view-analysis-pane" /> Analysis</label>
           </div>
           <div class="rb-col">
             <button data-cmd="grid-settings" title="Grid and Guides: snap to the grid and its spacing, show the gridlines, guides and smart guides, add guides, the rulers' units">Grid Settings…</button>
@@ -2759,6 +2763,15 @@
       </div>
       <div class="rb-group">
         <div class="rb-row">
+          <div class="rb-col">
+            <label class="rb-field check" title="Warnings: problems with the structures on the page (bad valences, clashing atoms), in the side panel"><input type="checkbox" data-cmd="view-warnings-pane" /> Warnings</label>
+            <label class="rb-field check" title="Analysis: the formula, masses and isotope pattern of the structure picked, in the side panel"><input type="checkbox" data-cmd="view-analysis-pane" /> Analysis</label>
+          </div>
+        </div>
+        <div class="rb-label">Show</div>
+      </div>
+      <div class="rb-group">
+        <div class="rb-row">
           <button class="rb-big" data-cmd="export-pdf" title="Save the design as a PDF at its page size"><span class="rb-icon">⎙</span>Export PDF</button>
             <button class="rb-big" data-cmd="export-picture" title="Save the design as a PNG (choose the dpi) or an SVG"><span class="rb-icon">▣</span>Export Picture</button>
             <button class="rb-big" data-cmd="preflight" title="Check Figure for Journal: is the page the width the journal prints at, is its text big enough and its lines thick enough once printed, are its fonts and pictures what the journal asks for"><span class="rb-icon">✓</span>Check for Journal</button>
@@ -2857,7 +2870,7 @@
   </main>
 
   <aside>
-    <button id="side-fold" type="button" title="Fold the side panel away (View > Fold Side Panel)" aria-label="Fold the side panel away">›</button>
+    <button id="side-fold" type="button" title="Close the side panel (Ctrl+Alt+B)" aria-label="Close the side panel">×</button>
     <div id="side-content">
     <section id="anim-section" hidden></section>
     <section id="cmt-section" hidden></section>
@@ -2903,7 +2916,7 @@
   <footer id="status"><span id="hint"></span><div id="doc-statusbar" class="doc-only" hidden><span id="doc-status"></span><button type="button" class="doc-viewbtn" data-doc="view-read" aria-pressed="false" title="Read Mode">📖</button><button type="button" class="doc-viewbtn" data-doc="view-print" aria-pressed="true" title="Print Layout">▯</button><button type="button" class="doc-viewbtn" data-doc="view-web" aria-pressed="false" title="Web Layout">🌐</button><button type="button" data-doc="zoom-out" title="Zoom out">−</button><span id="doc-zoom">100%</span><button type="button" data-doc="zoom-in" title="Zoom in">+</button><button type="button" data-doc="zoom-fit" title="Fit the page width in the window">Page Width</button></div><button type="button" id="status-notes" class="slides-only" data-cmd="view-notes" aria-pressed="true" title="Show or hide the speaker notes under the slide" hidden>✎ Notes</button><label class="zoom-pick canvas-only" title="Zoom (Ctrl+= and Ctrl+− also zoom; F6 fits the window)"><span class="sr-only">Zoom</span><select id="zoom-pick">
     <option value="fit">Fit</option><option value="actual">Actual size</option><option disabled>──</option>
     <option value="25">25%</option><option value="50">50%</option><option value="75">75%</option><option value="100">100%</option><option value="150">150%</option><option value="200">200%</option><option value="300">300%</option><option value="400">400%</option><option value="800">800%</option>
-    <option value="now" hidden></option></select></label><span id="go-buttons" class="go-buttons canvas-only"><button type="button" id="go-fit" title="Fit the whole drawing in the window (F6)">Fit</button><button type="button" id="go-sel" title="Go to Selection: bring what is selected into view (Shift+F6)">Go to Selection</button></span></footer>
+    <option value="now" hidden></option></select></label><span id="go-buttons" class="go-buttons canvas-only"><button type="button" id="go-fit" title="Fit the whole drawing in the window (F6)">Fit</button><button type="button" id="go-sel" title="Go to Selection: bring what is selected into view (Shift+F6)">Go to Selection</button></span><button type="button" id="status-side" data-cmd="fold-side" aria-pressed="true" title="Side panel: show or close it (Ctrl+Alt+B)" aria-label="Side panel"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor"/><path d="M10 2.5v11" stroke="currentColor"/><rect class="sp-fill" x="10.5" y="3" width="3.5" height="10" fill="currentColor" opacity=".35"/></svg></button></footer>
   <div id="flash" role="status" aria-live="polite"></div>
   <div id="sr-say" class="sr-only" aria-live="polite"></div>
 

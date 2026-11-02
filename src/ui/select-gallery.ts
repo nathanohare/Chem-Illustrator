@@ -25,6 +25,12 @@ function lines(x: number, y: number, w: number, h: number, gap = 4, last = 0.6):
   return s;
 }
 
+/** Text turned to an angle (degrees, counterclockwise as Excel counts), or its letters stacked, with an arrow along it. */
+export function textAnglePic(deg: number, stacked = false, size = 20): string {
+  if (stacked) return `<svg class="gal-svg" viewBox="0 0 20 20" width="${size}" height="${size}" aria-hidden="true"><text class="gal-ab" x="8" y="7.5" text-anchor="middle">a</text><text class="gal-ab" x="8" y="13.5" text-anchor="middle">b</text><path class="gal-arrow" d="M15 3.5v13M13.25 14.5L15 16.5l1.75-2"/></svg>`;
+  return `<svg class="gal-svg" viewBox="0 0 20 20" width="${size}" height="${size}" aria-hidden="true"><g transform="rotate(${-deg} 10 10)"><text class="gal-ab" x="8.5" y="9.5" text-anchor="middle">ab</text><path class="gal-arrow" d="M3.5 13h13M14.5 11.25l2 1.75-2 1.75"/></g></svg>`;
+}
+
 const MARGINS: Record<string, [number, number]> = { normal: [1, 1], narrow: [0.5, 0.5], moderate: [1, 0.75], wide: [1, 2] };
 const WRAPS: Record<string, string> = {
   inline: lines(3, 6, 26, 4, 4, 1) + '<rect class="gal-acc" x="3" y="12" width="10" height="9" rx="1"/>' + lines(15, 18, 14, 2, 4, 1) + lines(3, 25, 26, 4, 4, 0.7),
@@ -73,6 +79,20 @@ const PICS: Record<string, (v: string) => string> = {
     };
     return pic[v] ? svg(36, 46, pic[v]) : '';
   },
+  textdir: (v) => (v === 'horz' ? textAnglePic(0) : v === 'vert' ? textAnglePic(-90) : v === 'vert270' ? textAnglePic(90) : ''),
+  tcols: (v) => {
+    const n = Number(v);
+    if (!(n >= 1 && n <= 3)) return '';
+    const w = (14 - (n - 1) * 2) / n;
+    let o = '<rect class="gal-paper" x="1.5" y="2.5" width="17" height="15" rx="1"/>';
+    for (let i = 0; i < n; i++) o += lines(3 + i * (w + 2), 5, w, 11, 3, 1);
+    return svg(20, 20, o);
+  },
+  fit: (v) => ({
+    grow: svg(20, 20, '<rect class="gal-acc gal-soft" x="2.5" y="2.5" width="15" height="15" rx="1"/>' + lines(5, 5.5, 10, 10, 3, 0.6) + '<path class="gal-arrow" d="M10 17.5v2"/>'),
+    shrink: svg(20, 20, '<rect class="gal-paper" x="2.5" y="2.5" width="15" height="15" rx="1"/><text class="gal-ab" x="10" y="12" text-anchor="middle" style="font-size:6px">Aa</text><path class="gal-arrow" d="M14 6l2-2M14 4h2v2"/>'),
+    fixed: svg(20, 20, '<rect class="gal-paper" x="2.5" y="2.5" width="15" height="12" rx="1"/>' + lines(5, 5.5, 10, 13, 3, 0.6)),
+  } as Record<string, string>)[v] ?? '',
   wrap: (v) => (WRAPS[v] ? svg(32, 32, WRAPS[v]) : ''),
   watermark: (v) => {
     if (!/^\d+$/.test(v)) return '';
@@ -157,15 +177,16 @@ export function buildSelectGalleries(root: ParentNode = document): void {
     if (!sel || box.querySelector(':scope > .rb-fly-btn')) continue;
     sel.hidden = true;
     sel.tabIndex = -1;
-    const small = box.dataset.size === 'small';
+    const small = box.dataset.size === 'small', iconOnly = box.dataset.size === 'icon';
     const name = esc(box.dataset.name ?? '');
     const btn = document.createElement('button');
     btn.type = 'button';
-    btn.className = `${small ? 'rb-labelled' : 'rb-big'} rb-fly-btn`;
+    btn.className = `${iconOnly ? 'rb-sq rb-iconsel' : small ? 'rb-labelled' : 'rb-big'} rb-fly-btn`;
+    if (iconOnly) btn.setAttribute('aria-label', box.dataset.name ?? '');
     if (box.dataset.ic) btn.dataset.ic = box.dataset.ic;
     btn.title = box.title;
     box.removeAttribute('title');
-    btn.innerHTML = small ? `<span class="rb-lead"></span>${name} ▾` : `<span class="rb-icon"></span>${name} ▾`;
+    btn.innerHTML = iconOnly ? '<span class="rb-lead"></span><span class="rb-caret">▾</span>' : small ? `<span class="rb-lead"></span>${name} ▾` : `<span class="rb-icon"></span>${name} ▾`;
     const menu = document.createElement('div');
     menu.className = 'rb-fly-menu rb-gal-menu';
     menu.setAttribute('role', 'menu');

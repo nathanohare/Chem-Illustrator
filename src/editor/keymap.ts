@@ -366,7 +366,7 @@ export const DEFAULT_KEYS: Record<KeyContext, Record<string, string>> = {
     'Ctrl+Alt+=': 'ui-scale-in', 'Ctrl+Alt+Shift+=': 'ui-scale-in', 'Ctrl+Alt++': 'ui-scale-in', 'Ctrl+Alt+-': 'ui-scale-out', 'Ctrl+Alt+0': 'ui-scale-reset',
     'Ctrl+0': 'zoom-fit', 'Ctrl+=': 'zoom-in', 'Ctrl+Shift+=': 'zoom-in', 'Ctrl++': 'zoom-in', 'Ctrl+-': 'zoom-out',
     F5: 'zoom-actual', F6: 'zoom-fit', 'Shift+F6': 'zoom-selection', F7: 'zoom-in', F8: 'zoom-out',
-    'Ctrl+W': 'close-tab', 'Ctrl+Tab': 'next-tab', 'Ctrl+Shift+Tab': 'prev-tab', 'Alt+Q': 'command-search', F1: 'help-here', 'Ctrl+Shift+F1': 'focus-view', 'Ctrl+,': 'preferences', 'Ctrl+P': 'print', 'Ctrl+F6': 'next-region', 'Ctrl+Shift+F6': 'prev-region',
+    'Ctrl+W': 'close-tab', 'Ctrl+Tab': 'next-tab', 'Ctrl+Shift+Tab': 'prev-tab', 'Alt+Q': 'command-search', F1: 'help-here', 'Ctrl+Shift+F1': 'focus-view', 'Ctrl+,': 'preferences', 'Ctrl+P': 'print', 'Ctrl+F6': 'next-region', 'Ctrl+Alt+B': 'fold-side', 'Ctrl+Shift+F6': 'prev-region',
   }),
   // PowerPoint's keys
   slides: verbs('command', {

@@ -185,6 +185,8 @@ export interface Settings {
   sheetFormulaBar: boolean;
   /** Slides' View > Ruler and Gridlines, and how the rulers measure. */
   slideRuler: boolean;
+  /** Presentation and Design: the side panel's Warnings and Analysis shown (hidden at first). */
+  slidePanes: { warnings: boolean; analysis: boolean };
   slideGrid: boolean;
   rulerUnits: 'in' | 'cm';
   rulerFrom: 'centre' | 'corner';
@@ -245,6 +247,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sheetFormulaBar: true,
   updateCheck: true, updateChannel: 'latest', pubchemNames: true, convertChemDraw: false, matchStructure: true, fileTypesOffered: false, wordObjectsOffered: false, reviewName: '', skipVersion: null, lastVersion: null, recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], docDesign: null,
   slideRuler: false,
+  slidePanes: { warnings: false, analysis: false },
   slideGrid: false,
   rulerUnits: typeof navigator !== 'undefined' && /^[a-z]{2,3}-(US|LR|MM)\b/i.test(navigator.language) ? 'in' : 'cm',
   rulerFrom: 'centre',
@@ -322,6 +325,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.docRuler === 'boolean') s.docRuler = r.docRuler;
   if (typeof r.sheetFormulaBar === 'boolean') s.sheetFormulaBar = r.sheetFormulaBar;
   if (typeof r.slideRuler === 'boolean') s.slideRuler = r.slideRuler;
+  if (r.slidePanes && typeof r.slidePanes === 'object') { const sp = r.slidePanes as Record<string, unknown>; s.slidePanes = { warnings: sp.warnings === true, analysis: sp.analysis === true }; }
   if (typeof r.slideGrid === 'boolean') s.slideGrid = r.slideGrid;
   if (r.rulerUnits === 'in' || r.rulerUnits === 'cm') s.rulerUnits = r.rulerUnits;
   if (r.rulerFrom === 'centre' || r.rulerFrom === 'corner') s.rulerFrom = r.rulerFrom;

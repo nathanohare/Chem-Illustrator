@@ -612,6 +612,14 @@ let animUi: AnimationUI | null = null;
 let slideCmts: SlideComments | null = null;
 /** View > Ruler and Gridlines (kept in the settings); the rulers' units and where they count from. */
 const slideLook = { ruler: false, grid: false };
+/** Presentation and Design keep the side panel's Warnings and Analysis hidden until asked for (View > Show). */
+const chemPanes = { warnings: false, analysis: false };
+function showChemPanes(): void {
+  document.body.classList.toggle('show-warnings-pane', chemPanes.warnings);
+  document.body.classList.toggle('show-analysis-pane', chemPanes.analysis);
+  for (const b of document.querySelectorAll<HTMLInputElement>('[data-cmd="view-warnings-pane"]')) b.checked = chemPanes.warnings;
+  for (const b of document.querySelectorAll<HTMLInputElement>('[data-cmd="view-analysis-pane"]')) b.checked = chemPanes.analysis;
+}
 const rulerPrefs: RulerPrefs = { units: 'in', from: 'centre' };
 /** A guide being dragged: which, and the guides as they are while it moves. */
 let guideDrag: { which: { axis: 'x' | 'y'; i: number }; view: SlideView } | null = null;
@@ -6495,7 +6503,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 /** Menu commands that work the same whatever shows. */
-const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
+const ANY_TAB = new Set(['view-warnings-pane', 'view-analysis-pane', 'references', 'compound-library', 'knowledge-base', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
   'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
@@ -6847,6 +6855,8 @@ const COMMANDS: Record<string, () => unknown> = {
   'shape-styles': () => shapeStyles(),
   'view-notes': () => { slidePanes.notes = !slidePanes.notes; applySlidePanes(); storeSettings(); mainResized(); },
   'view-slide-ruler': () => { slideLook.ruler = !slideLook.ruler; showRulers(); storeSettings(); },
+  'view-warnings-pane': () => { chemPanes.warnings = !chemPanes.warnings; showChemPanes(); storeSettings(); if (chemPanes.warnings && sideIsFolded()) command('fold-side'); },
+  'view-analysis-pane': () => { chemPanes.analysis = !chemPanes.analysis; showChemPanes(); storeSettings(); if (chemPanes.analysis && sideIsFolded()) command('fold-side'); },
   'view-gridlines': () => { slideLook.grid = !slideLook.grid; showRulers(); storeSettings(); renderer.repaintAll(); editor.requestScene(); },
   'view-guides': () => toggleGuides(),
   'grid-settings': () => void gridSettings(),
@@ -8613,6 +8623,7 @@ function currentSettings(): Settings {
     docRuler: docRulerPrefs.shown,
     sheetFormulaBar: formulaBarPrefs.shown,
     slideRuler: slideLook.ruler,
+    slidePanes: { ...chemPanes },
     slideGrid: slideLook.grid,
     rulerUnits: rulerPrefs.units,
     rulerFrom: rulerPrefs.from,
@@ -8866,6 +8877,8 @@ function applySettings(s: Settings): void {
   formulaBarPrefs.shown = s.sheetFormulaBar !== false;
   sheetMode?.showFormulaBar();
   slideLook.ruler = !!s.slideRuler;
+  Object.assign(chemPanes, s.slidePanes);
+  showChemPanes();
   slideLook.grid = !!s.slideGrid;
   rulerPrefs.units = s.rulerUnits;
   rulerPrefs.from = s.rulerFrom;
@@ -10609,7 +10622,8 @@ function autoFoldRibbon(force = false): void {
 function tickToolboxes(): void {
   fillToolboxMenu();
   $('[data-cmd="lock-toolboxes"]')?.setAttribute('aria-checked', String(toolboxState.locked));
-  $('[data-cmd="fold-side"]')?.setAttribute('aria-checked', String(sideIsFolded()));
+  $('[data-cmd="fold-side"]')?.setAttribute('aria-checked', String(!sideIsFolded()));
+  $('#status-side')?.setAttribute('aria-pressed', String(!sideIsFolded()));
   quickBar?.refresh();
 }
 
@@ -10618,11 +10632,12 @@ function placeSidePanel(): void {
   const folded = sideIsFolded();
   $('.toolbox[data-id="details"]')?.classList.toggle('collapsed', folded);
   const fold = $('#side-fold');
-  fold.textContent = folded ? '‹' : '›';
-  fold.title = folded ? 'Open the side panel (View > Fold Side Panel)' : 'Fold the side panel away (View > Fold Side Panel)';
+  fold.textContent = '×';
+  fold.title = 'Close the side panel (Ctrl+Alt+B, or the panel button at the bottom right, opens it again)';
   fold.setAttribute('aria-label', fold.title);
 }
 $('#side-fold').addEventListener('click', () => command('fold-side'));
+$('#status-side').addEventListener('click', () => command('fold-side'));
 
 /** Below this window width the side panel folds by itself, so the drawing keeps its room. */
 const NARROW_WINDOW = 1200;

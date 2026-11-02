@@ -3620,7 +3620,8 @@ const clampC = (c: number) => Math.max(0, Math.min(MAX_COLS - 1, c));
 const sameRange = (a: Range, b: Range) => a.r1 === b.r1 && a.c1 === b.c1 && a.r2 === b.r2 && a.c2 === b.c2;
 
 /** A small menu at a point: [label, action, enabled?] items, null for a line. */
-export function popupMenu(x: number, y: number, items: ([string, () => void, boolean?] | null)[]): HTMLDivElement {
+/** A menu at (x, y): each item a label, what it does, whether it can be used (false greys it), and a small picture (SVG markup) before it. */
+export function popupMenu(x: number, y: number, items: ([string, () => void, boolean?, string?] | null)[]): HTMLDivElement {
   document.querySelector('.popup-menu')?.remove();
   // where the keys went before (a document's caret, a sheet's cell): Escape goes back there
   const back = document.activeElement;
@@ -3633,6 +3634,7 @@ export function popupMenu(x: number, y: number, items: ([string, () => void, boo
     b.type = 'button';
     b.setAttribute('role', 'menuitem');
     b.textContent = it[0];
+    if (it[3]) { const ic = document.createElement('span'); ic.className = 'pm-ic'; ic.innerHTML = it[3]; b.prepend(ic); }
     b.disabled = it[2] === false;
     b.addEventListener('click', () => { m.remove(); it[1](); });
     m.append(b);
