@@ -229,5 +229,12 @@ export function templateIcon(t: Template, size = 44, maxBond = 12): string {
     }
   });
   if (showCode) parts.push(`<text x="${size / 2}" y="${size - 2}" font-size="10" text-anchor="middle" fill="currentColor" stroke="none" font-weight="700">${codeOf(t)}</text>`);
+  // a large ring shows its size in the middle, so 13 and 14 tell apart at a glance
+  const ringSize = t.group === 'cycloalkanes' ? /\((\d+)\)/.exec(t.name)?.[1] : undefined;
+  if (ringSize && n > 0) {
+    let cx = 0, cy = 0;
+    for (let i = 0; i < n; i++) { const p = P(i); cx += p.x; cy += p.y; }
+    parts.push(`<text x="${f(cx / n)}" y="${f(cy / n)}" dominant-baseline="central" font-size="${f(Math.max(8, size * 0.2))}" font-weight="600" text-anchor="middle" fill="currentColor" stroke="var(--panel, #fff)" stroke-width="3" paint-order="stroke" font-family="system-ui, sans-serif">${ringSize}</text>`);
+  }
   return svg(size, parts.join(''));
 }

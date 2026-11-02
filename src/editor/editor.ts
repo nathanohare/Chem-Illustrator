@@ -10,6 +10,9 @@ import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAt
 import { CaptionEditor } from '../ui/caption-editor';
 import { followLink, linkTip } from '../ui/links-ui';
 import { stopAtEdge } from '../ui/scrollbars';
+
+/** Screen pixels of grey left showing past a fixed page edge when panned as far as it goes. */
+export const WALL_BAND = 14;
 import { linkAtPoint } from '../links';
 import { typingPrefs } from '../text/typing';
 import { geoDef, geoShapeStyle, moveSteps, traceSteps } from '../design/geo';
@@ -63,7 +66,7 @@ import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '..
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
-import { arrangeSmart, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotText, setStepText, smartFrameOf, smartMarks, ungroupSmart, type SmartData, type StepPart } from '../chem/smart-scheme';
+import { arrangeSmart, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
 import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
 import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
 import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
@@ -318,7 +321,7 @@ const HILITE = 'rgba(40, 120, 255, 0.28)';
 const PREVIEW = '#2f6fdf';
 
 /**
- * Colours of the marks drawn over the page. With View > Dark Page on, the marks go through the
+ * Colours of the marks drawn over the page. With View > Reading Mode on, the marks go through the
  * page's colour filter too (so text being typed shows in the ink colour), which turns lightness
  * round: these are picked to come out bright and clear on the dark page.
  */
@@ -587,7 +590,7 @@ export class Editor {
       // structures in a diagram's items: room kept for them (the diagram growing to fit), and centred there
       if (diagrams) refitDiagramFigures(this.doc, before, this.measure());
       // a Smart Scheme's species moved by hand: its arrows and their conditions follow
-      if (smart) refitSmart(this.doc, before, this.measure());
+      if (smart) { fillHoldersDrawn(this.doc, before, this.measure()); refitSmart(this.doc, before, this.measure()); }
       if (frames) refitFrames(this.doc, before, this.measure());
       // mechanism arrows the change left running into something find their own way round again
       if (this.options.rerouteArrows) this.rerouteArrows(before);
@@ -622,6 +625,7 @@ export class Editor {
     this.frameQueued = false;
     const t0 = performance.now(), dragging = !!this.drag;
     if (this.needScene) {
+      this.keepByWalls();
       this.r.renderScene(this.doc, full ? Infinity : 10);
       this.needScene = this.r.incomplete;
     }
@@ -1546,6 +1550,24 @@ export class Editor {
 
   /** What the wheel scrolls over: it stops at this (with half a screen of room) as the scroll bars do. */
   scrollArea: (() => { x1: number; y1: number; x2: number; y2: number } | null) | null = null;
+  /**
+   * Panning and zooming stop with a thin band of grey past a fixed page edge (`WALL_BAND` screen
+   * pixels), rather than half a window of it. Where the pages are narrower or shorter than the
+   * window, they keep to the left and top fixed edges and the spare room opens to the right and down.
+   */
+  private keepByWalls(): void {
+    const w = this.walls?.();
+    if (!w) return;
+    const v = this.r.view, s = v.scale, band = WALL_BAND;
+    const keep = (o: number, lo1: number, hi2: number, size: number) => {
+      const hi = isFinite(lo1) ? band - lo1 * s : Infinity;
+      const lo = isFinite(hi2) ? size - band - hi2 * s : -Infinity;
+      return lo > hi ? hi : Math.min(Math.max(o, lo), hi);
+    };
+    v.ox = keep(v.ox, w.x1, w.x2, this.r.width);
+    v.oy = keep(v.oy, w.y1, w.y2, this.r.height);
+  }
+
   /** The fixed edges of the drawing's page grid (page-grid.ts): nothing is put or moved past them. Null: none. */
   walls: (() => Rect | null) | null = null;
 
@@ -3419,6 +3441,40 @@ export class Editor {
   smartMove(id: number, from: number, to: number): boolean { return this.smartEdit(id, 'Move Species', (m) => moveSlot(this.doc, m, id, from, to)); }
   smartSlotText(id: number, k: number, text: string): boolean { return this.smartEdit(id, 'Type Species', (m) => setSlotText(this.doc, m, id, k, text)); }
   smartStepText(id: number, k: number, part: StepPart, text: string): boolean { return this.smartEdit(id, 'Type Conditions', (m) => setStepText(this.doc, m, id, k, part, text)); }
+  /** Make species k of Smart Scheme `id` a dashed box to draw or paste its structure in (selected, ready for Ctrl+V). */
+  smartToHolder(id: number, k: number): boolean {
+    let box: number | null = null;
+    const ok = this.smartEdit(id, 'Make Species a Structure', (m) => (box = slotToHolder(this.doc, m, id, k)) !== null);
+    if (box !== null) { this.selectOnly({ kind: 'shape', id: box }); this.changed(); }
+    return ok;
+  }
+  /** Select one shape on its own (a Smart Scheme's dashed species box, from the species list). */
+  selectShape(id: number): void { if (this.doc.shapes.has(id)) { this.selectOnly({ kind: 'shape', id }); this.changed(); } }
+  /** Make species k's dashed box a text label again. */
+  smartToText(id: number, k: number): boolean { return this.smartEdit(id, 'Make Species Text', (m) => holderToSlotText(this.doc, m, id, k) !== null); }
+  /** The dashed species box selected on its own (a paste goes into it), or null. */
+  selectedHolder(): number | null {
+    const s = this.sel;
+    if (s.shapes.size !== 1 || s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size) return null;
+    const id = [...s.shapes][0];
+    return holderFrameOf(this.doc, id) !== null ? id : null;
+  }
+  /** Put a drawing in place of a dashed species box: it goes in the middle of the box and becomes that species. */
+  fillSpeciesBox(holder: number, drawing: Doc): boolean {
+    const sh = this.doc.shapes.get(holder);
+    const frame = holderFrameOf(this.doc, holder);
+    if (!sh || frame === null) return false;
+    let ok = false;
+    this.doc.edit('Paste into Species', () => {
+      const sel = insertDrawing(this.doc, drawing, { x: (sh.x1 + sh.x2) / 2, y: (sh.y1 + sh.y2) / 2 });
+      ok = fillHolder(this.doc, this.fullMeasure(), holder, [...sel.atoms], [...sel.captions]);
+    });
+    if (this.doc.shapes.has(frame)) this.selectOnly({ kind: 'shape', id: frame });
+    this.changed();
+    return ok;
+  }
+  smartSlotRuns(id: number, k: number, parts: TextPart[]): boolean { return this.smartEdit(id, 'Type Species', (m) => setSlotRuns(this.doc, m, id, k, parts)); }
+  smartStepRuns(id: number, k: number, part: StepPart, parts: TextPart[]): boolean { return this.smartEdit(id, 'Type Conditions', (m) => setStepRuns(this.doc, m, id, k, part, parts)); }
   /** Lay a Smart Scheme out again, with a new layout or other settings. */
   smartArrange(id: number, patch?: Partial<SmartData>): boolean { return this.smartEdit(id, 'Arrange Smart Scheme', (m) => arrangeSmart(this.doc, m, id, patch)); }
 
@@ -6148,7 +6204,7 @@ export class Editor {
   moveSnap: ((box: Rect, raw: Vec, tol: number) => Vec) | null = null;
   /** Text boxes take a click as typing (Slides and Design), with an I-beam over them. */
   textFirst = false;
-  /** View > Dark Page is on: marks drawn over the page are made to show up on it. */
+  /** View > Reading Mode is on: marks drawn over the page are made to show up on it. */
   dark = false;
 
   /** What the pointer was last over (to change the pointer when Ctrl is pressed or let go). */

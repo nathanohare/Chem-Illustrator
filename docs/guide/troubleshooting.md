@@ -10,7 +10,7 @@ This page covers the problems people meet most often: the program won't install 
 
 **The window is bigger than the screen, or the status bar is cut off.** Maximise the window (double-click the menu bar), or make the whole interface smaller with **View ▸ Window and Colours ▸ Interface Size**.
 
-**The menus or the window are the wrong colours.** **View ▸ Window and Colours ▸ Theme** chooses light, dark, or as the computer is set. The drawing's page has its own dark look: **View ▸ Dark Page** (or the eye button).
+**The menus or the window are the wrong colours.** **View ▸ Window and Colours ▸ Theme** chooses light, dark, or as the computer is set. The drawing's page has its own dark look: **View ▸ Reading Mode** (or the eye button).
 
 ## Settings
 

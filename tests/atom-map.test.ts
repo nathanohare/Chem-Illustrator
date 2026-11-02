@@ -103,3 +103,31 @@ describe('atom mapping', () => {
     expect(e.atoms.get(ids[1])!.atomNumber).toBe('12');
   });
 });
+
+describe('map number boxes', () => {
+  it('boxes only a number that is the atom map number, and keeps the box clear of the atom', async () => {
+    const { isMapNumber, mapBox, numberBox } = await import('../src/render/atom-marks');
+    const { StereoPlacer } = await import('../src/chem/stereo');
+    const { parseSettings } = await import('../src/settings');
+    const doc = new Doc();
+    let id = 0;
+    doc.edit('Draw', () => {
+      const a = doc.addAtom(0, 0);
+      const b = doc.addAtom(30, 0);
+      doc.addBond(a.id, b.id);
+      doc.updateAtom(a.id, { mapNo: 3, atomNumber: '3', showNumber: true });
+      id = a.id;
+    });
+    const a = doc.atoms.get(id)!;
+    expect(isMapNumber(a)).toBe(true);
+    expect(isMapNumber({ ...a, atomNumber: '7' })).toBe(false);
+    const p = new StereoPlacer(doc, arialWidth).number(a);
+    const w = arialWidth('3', p.size);
+    const box = mapBox(p, w), inner = numberBox(p, w);
+    expect(box.x1).toBeLessThan(inner.x1);
+    expect(box.y2).toBeGreaterThan(inner.y2);
+    expect(box.x2 < a.x || box.x1 > a.x || box.y2 < a.y || box.y1 > a.y).toBe(true);
+    expect(parseSettings(JSON.stringify({ mapLook: 'grey' })).mapLook).toBe('grey');
+    expect(parseSettings(JSON.stringify({ mapLook: 'bogus' })).mapLook).toBe('peach');
+  });
+});
