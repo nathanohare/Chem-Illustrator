@@ -62,7 +62,7 @@ export type TemplateShape = ['line' | 'oval', number, number, number, number];
 
 export type TemplateGroup = 'rings' | 'heterocycles' | 'amino' | 'sugars' | 'own'
   | 'conformers' | 'fused' | 'projections' | 'stereo' | 'bicyclics' | 'cycloalkanes' | 'aromatics' | 'perspective'
-  | 'geometries' | 'organometallic' | 'metallocenes' | 'ligands';
+  | 'geometries' | 'organometallic' | 'metallocenes' | 'ligands' | 'nucleic';
 
 export const TEMPLATES = [...(data as Template[]), ...(conformerData as Template[]), ...(metalData as Template[])];
 const BY_ID = new Map(TEMPLATES.map((t) => [t.id, t]));

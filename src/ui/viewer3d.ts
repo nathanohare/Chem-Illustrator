@@ -9,6 +9,7 @@ import { SYMBOLS } from '../chem/elements';
 import type { Model3d } from '../chem/model3d-build';
 import { hornFit, rotation } from '../morph/rotate';
 import { ident, mul, axisTurn, skeleton, cleanerNearby, cleanestView, type M3, type P3 } from '../chem/view3d';
+import { depthShadePrefs } from '../render/depth-shade';
 
 export type Style3d = 'ball-stick' | 'sticks' | 'wire' | 'spacefill';
 
@@ -43,6 +44,9 @@ export class Viewer3d {
   private showH = true;
   private labels = false;
   private spinning = false;
+  /** Depth shading: the back of the model fades (follows Format ▸ Depth Shading; its own box here). */
+  private fog = depthShadePrefs.on;
+  private fogBox: HTMLInputElement | null = null;
   private frame = 0;
   private onPlace: ((v: PlaceView) => void) | null = null;
   private prev: HTMLButtonElement;
@@ -81,7 +85,9 @@ export class Viewer3d {
     spin.title = 'Turn the model slowly round and round';
     spin.setAttribute('aria-pressed', 'false');
     spin.addEventListener('click', () => { this.spinning = !this.spinning; spin.setAttribute('aria-pressed', String(this.spinning)); if (this.spinning) this.tick(); });
-    bar.append(style, check('H', 'Show hydrogens', this.showH, (v) => (this.showH = v)), check('Labels', 'Show element symbols (not C or H)', this.labels, (v) => (this.labels = v)), spin);
+    const fog = check('Depth', 'Depth shading: the back of the model fades, as Format ▸ Depth Shading fades structures on the page', this.fog, (v) => (this.fog = v));
+    this.fogBox = fog.querySelector('input');
+    bar.append(style, check('H', 'Show hydrogens', this.showH, (v) => (this.showH = v)), check('Labels', 'Show element symbols (not C or H)', this.labels, (v) => (this.labels = v)), fog, spin);
 
     const confBar = document.createElement('div');
     confBar.className = 'v3d-bar';
@@ -307,6 +313,13 @@ export class Viewer3d {
     });
   }
 
+  /** Draw again with the depth shading setting as it now is (Format ▸ Depth Shading changed). */
+  redraw(): void {
+    this.fog = depthShadePrefs.on;
+    if (this.fogBox) this.fogBox.checked = this.fog;
+    this.draw();
+  }
+
   /** Draw the model, back to front. */
   draw(ctx2?: CanvasRenderingContext2D, size?: { w: number; h: number }): void {
     const c = this.canvas;
@@ -393,7 +406,17 @@ export class Viewer3d {
       });
     }
     items.sort((p, q) => p.z - q.z);
-    for (const it of items) it.draw();
+    // depth shading: things further back fade into the background, as far as the far colour is from the near one
+    const zs = items.map((it) => it.z), zlo = Math.min(...zs), zhi = Math.max(...zs);
+    const fade = this.fog && zhi - zlo > 0.5 ? fadeAmount() : 0;
+    for (const it of items) {
+      if (fade) {
+        const t = (zhi - it.z) / (zhi - zlo);
+        ctx.globalAlpha = 1 - fade * (depthShadePrefs.curve === 'eased' ? t * t * (3 - 2 * t) : t);
+      }
+      it.draw();
+    }
+    ctx.globalAlpha = 1;
     if (this.labels || this.style === 'wire') {
       ctx.font = `600 ${Math.max(10, Math.min(16, 0.5 * scale))}px ${css.getPropertyValue('--ui-font') || 'sans-serif'}`;
       ctx.textAlign = 'center';
@@ -471,4 +494,10 @@ export function molfile3d(m: Model3d, conf: number, name = ''): string {
   }
   lines.push('M  END', '');
   return lines.join('\n');
+}
+
+/** How much the back of a model fades: how much lighter the far colour is than the near one (black to 60% grey: 0.6). */
+function fadeAmount(): number {
+  const lum = (c: string) => (parseInt(c.slice(1, 3), 16) * 0.299 + parseInt(c.slice(3, 5), 16) * 0.587 + parseInt(c.slice(5, 7), 16) * 0.114) / 255;
+  return Math.max(0, Math.min(0.9, lum(depthShadePrefs.far) - lum(depthShadePrefs.near)));
 }

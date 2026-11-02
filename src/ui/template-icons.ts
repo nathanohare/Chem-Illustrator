@@ -13,8 +13,10 @@ import { circleIn, ellipseAxes } from '../chem/aromatic';
 
 const SHORT: Record<string, string> = {};
 
-/** Three-letter code for an amino acid, from its name "L-Alanine (Ala, A)". */
-const codeOf = (t: Template) => (SHORT[t.id] ??= /\((\w{3}),/.exec(t.name)?.[1] ?? '');
+/** Three-letter code for an amino acid, from its name "L-Alanine (Ala, A)"; a nucleic acid's code, from "Thymidine (dT)". */
+const codeOf = (t: Template) => (SHORT[t.id] ??= (t.group === 'nucleic' ? /\(([^()]+)\)$/ : /\((\w{3}),/).exec(t.name)?.[1] ?? '');
+/** Templates shown with their code: on its own on a tool bar button, and under the picture in a palette. */
+const CODED = new Set<Template['group']>(['amino', 'nucleic']);
 
 /** Label size and clearance as fractions of the bond length (ACS Document 1996: 10 pt labels on 14.4 pt bonds). */
 const FONT = ACS_1996.labelSize / ACS_1996.bondLength;
@@ -32,10 +34,10 @@ function svg(size: number, body: string): string {
 export function templateIcon(t: Template, size = 44): string {
   const small = size < 40;
   // A tool bar button is too small for a whole amino acid: it shows the three-letter code.
-  if (small && t.group === 'amino') {
+  if (small && CODED.has(t.group)) {
     return svg(size, `<text x="${size / 2}" y="${size / 2 + 4}" font-size="12" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">${codeOf(t)}</text>`);
   }
-  const showCode = t.group === 'amino';
+  const showCode = CODED.has(t.group);
   // ...and a sugar shows its ring, with only the ring oxygen labelled.
   const ringOnly = small && t.group === 'sugars';
 
