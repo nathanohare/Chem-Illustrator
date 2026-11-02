@@ -559,6 +559,7 @@ export class Workspace {
     deck.master = got.master;
     deck.size = got.size;
     deck.load(got.slides.map((s) => deck.makeSlide(s.layout, s.contents, s.notes, s, got.master)), got.size, got.master, got.sections, got.settings);
+    deck.kept = got.kept;
     t.deck = deck;
     this.tabs.splice(this.tabs.indexOf(this.active) + 1, 0, t);
     this.activate(t, true);
@@ -740,7 +741,7 @@ export class Workspace {
       const deck = tab.deck;
       const { writePptx } = await import('./io/pptx-write');
       const bytes = await writePptx({
-        size: deck.size, master: deck.master, design: tab.mode === 'design', sections: deck.sectionCounts(), settings: deck.settings,
+        size: deck.size, master: deck.master, design: tab.mode === 'design', sections: deck.sectionCounts(), settings: deck.settings, kept: deck.kept,
         slides: deck.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: deck.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf, canvas: s.canvas, refs: s.refs, refLook: s.refLook, refList: s.refList })),
       }, { ...this.hooks.pptx, title: name.replace(/\.[^.]+$/, '') });
       return { data: bytes, type: PPTX, note: '' };

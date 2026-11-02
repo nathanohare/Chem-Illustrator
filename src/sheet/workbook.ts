@@ -7,6 +7,7 @@
 // one undo history across its sheets. After each change every formula is worked out again in
 // the order they depend on each other; a formula that depends on itself shows #CIRC!.
 
+import type { KeptParts } from '../io/kept-parts';
 import type { Contents } from '../model';
 import type { DocStyle } from '../style';
 import { ACS_1996 } from '../style';
@@ -1209,6 +1210,8 @@ export class Workbook {
   active = 0;
   /** How structures in cells are drawn: bond length, line widths, label size. */
   drawingStyle: DocStyle = { ...ACS_1996 };
+  /** Other programs' data in the file read (custom XML, custom properties, add-ins' settings), saved back with it. */
+  kept: KeptParts | undefined = undefined;
   chem: ChemHost | null = null;
   /**
    * Text typed into cells with a formula in it (CH2Cl2, Pd(PPh3)4) is shown as chemistry without

@@ -19,6 +19,7 @@ import { linesFromBorders, type Borders } from './cdxml-table';
 import { turnAbout, normDegrees, DEG, type Vec, type Rect } from '../geom';
 import { POINTS, rotation, snapshot, transform } from '../editor/arrange';
 import { PackageReader, NS, REL, kids, kid, rAttr, fromEmu } from './ooxml';
+import { readKeptParts, type KeptParts } from './kept-parts';
 import { linkFromTarget, officeTarget, slideOfLink } from '../links';
 import { readCdxml } from './cdxml';
 import { drawingInEmf } from '../render/emf';
@@ -78,6 +79,8 @@ export interface PptxRead {
   settings?: DeckSettings;
   /** Canvas slides whose keyframes' slides were changed outside (in PowerPoint) since they were saved here. */
   canvasEdited?: number;
+  /** Other programs' data in the file (custom XML, custom properties, add-ins' settings), to save back. */
+  kept?: KeptParts;
 }
 
 /** A plain box or oval that needs a design shape to keep its look: a picture or gradient fill, or effects past a shadow. */
@@ -367,10 +370,12 @@ class Reader {
     // PowerPoint 2013 and later keep the guides in presentation.xml (moved there, they are only there)
     const guides = readSlideGuides(root);
     if (guides) view = { ...(view ?? { showGuides: false, snapToGrid: true, grid: 7.2 }), guides };
+    const kept = readKeptParts(this.r, { main });
     const settings: DeckSettings = { ...(show ? { show } : {}), ...(customShows.length ? { customShows } : {}), ...(view ? { view } : {}), ...(this.refs?.list.length ? { refs: this.refs } : {}) };
     return {
       size: this.size, master: this.masterOut, slides, warnings: [...this.warnings], design: this.design, ...(sections ? { sections } : {}), ...(Object.keys(settings).length ? { settings } : {}),
       ...(joined.edited ? { canvasEdited: joined.edited } : {}),
+      ...(kept ? { kept } : {}),
     };
   }
 
