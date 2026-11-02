@@ -521,6 +521,19 @@ body.slides-mode #canvas-host, body.design-mode #canvas-host { background: var(-
    and resized the drawing on every select and deselect (a flicker) */
 .dock-v > .toolbox[data-id='details'] { flex-shrink: 1; min-height: 0; }
 .dock-v > .toolbox[data-id='details'] > .tb-body { min-height: 0; max-height: none; }
+/* along the top or bottom, the details panel is a strip across the window, as tall as its edge is dragged
+   (not the window's height, which left no drawing): its sections stand side by side and it scrolls sideways */
+.tb-strip-edge { display: none; }
+.dock-h > .toolbox[data-id='details'] { flex: 1 1 100%; max-width: none; position: relative; }
+.dock-h > .toolbox[data-id='details'] > .tb-body {
+  width: auto; height: var(--strip-h, 190px); max-height: none; overflow-x: auto; overflow-y: hidden;
+  columns: 290px auto; column-gap: 14px; column-rule: 1px solid var(--line); column-fill: auto;
+}
+.dock-h > .toolbox[data-id='details'] > .tb-body > * { break-inside: avoid; }
+.dock-h > .toolbox[data-id='details']:not(.collapsed) > .tb-strip-edge { display: block; position: absolute; left: 0; right: 0; height: 7px; cursor: ns-resize; z-index: 2; touch-action: none; }
+.toolbox[data-id='details'][data-dock='top'] > .tb-strip-edge { bottom: -7px; }
+.toolbox[data-id='details'][data-dock='bottom'] > .tb-strip-edge { top: -7px; }
+.tb-strip-edge:hover, .tb-strip-edge.dragging { background: linear-gradient(transparent 2px, var(--accent) 2px, var(--accent) 5px, transparent 5px); }
 .toolbox.collapsed > .tb-body { display: none; }
 .tb-fold, .tb-lock { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; background: none; color: var(--muted); font-size: var(--fs-sm); line-height: 1; }
 .tb-fold:hover, .tb-lock:hover { color: var(--text); }
