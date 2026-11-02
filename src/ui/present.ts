@@ -144,6 +144,7 @@ export class Presenter {
     this.player = player;
     const actions = (this.actions = new ShowActions(deck, player, canvas, {
       go: (i) => this.go(i, false), next: () => this.next(), prev: () => this.prev(), end: () => this.stop(), open: (link) => void followLink(link),
+      grid: () => this.openGrid(), look: () => this.updateCorner(),
     }));
     const ink = (this.ink = new ShowInk(root, canvas, { slide: () => player.i, place: () => player.slidePlace }));
     player.onChange = () => { actions.noteSlide(player.i); ink.paint(); this.slideShown(player.i); this.updateBar(); this.updateCorner(); };
@@ -175,7 +176,8 @@ export class Presenter {
     root.addEventListener('pointerup', endDrag);
     root.addEventListener('pointercancel', endDrag);
     root.addEventListener('pointermove', (e) => { if (this.canvas) this.canvas.style.cursor = this.thingUnder(e) ? 'pointer' : ''; });
-    root.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!opts.kiosk) this.prev(); });
+    // a right-click opens the show's menu (as in PowerPoint): look round freely, every slide, the map…
+    root.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!opts.kiosk) this.showMenu(e.clientX, e.clientY); });
     root.addEventListener('wheel', (e) => {
       if (opts.kiosk || this.grid) return;
       // a canvas slide zooms where the pointer is; any other slide goes on or back
@@ -428,6 +430,7 @@ export class Presenter {
   }
 
   stop(): void {
+    this.closeMenu();
     if (!this.root) return;
     const rehearsing = !!this.rehearse;
     if (rehearsing) this.closeSlide();
@@ -523,6 +526,7 @@ export class Presenter {
     e.preventDefault();
     e.stopPropagation();
     if (this.grid) { this.gridKey(e); return; }
+    if (this.menu) { this.menuKey(e); return; }
     if (this.ink?.key(e)) return;
     const k = e.key;
     if (/^[0-9]$/.test(k)) { this.typed += k; return; }
@@ -539,6 +543,7 @@ export class Presenter {
     else if (k === 'w' || k === 'W' || k === ',') { this.blank = this.blank === 'white' ? null : 'white'; this.paint(); }
     else if (k === 'g' || k === 'G') this.openGrid();
     else if (k === 'm' || k === 'M') this.toggleMap();
+    else if (k === 'l' || k === 'L') this.lookRound();
     else if (k === '+' || k === '=') this.player?.zoomAt(1.25);
     else if (k === '-' || k === '_') this.player?.zoomAt(0.8);
   }
@@ -612,7 +617,8 @@ export class Presenter {
       const num = document.createElement('span');
       num.textContent = String(n + 1);
       b.append(c, num);
-      b.addEventListener('click', (e) => { e.stopPropagation(); this.closeGrid(); this.go(i); });
+      // a Canvas slide picked opens to look round it freely (Esc goes back to where its show starts)
+      b.addEventListener('click', (e) => { e.stopPropagation(); this.closeGrid(); this.go(i); this.lookRound(true); });
       grid.append(b);
       todo.push([c, i]);
     }
@@ -631,6 +637,87 @@ export class Presenter {
       if (todo.length) setTimeout(paintSome, 0);
     };
     paintSome();
+  }
+
+  /** Look round the Canvas slide showing freely (L, the show's menu, an action button). */
+  private lookRound(quiet = false): void {
+    if (this.player?.startLookRound()) this.updateCorner();
+    else if (!quiet) this.flashNote('Looking round works on Canvas slides.');
+  }
+
+  /** A short note over the show, fading after a moment. */
+  private flashNote(text: string): void {
+    const root = this.root;
+    if (!root) return;
+    root.querySelector('.show-note')?.remove();
+    const n = document.createElement('div');
+    n.className = 'show-note';
+    n.textContent = text;
+    root.append(n);
+    setTimeout(() => n.remove(), 2200);
+  }
+
+  private menu: HTMLDivElement | null = null;
+
+  /** The show's right-click menu. */
+  private showMenu(x: number, y: number): void {
+    const root = this.root, p = this.player;
+    if (!root || !p) return;
+    this.closeMenu();
+    const m = document.createElement('div');
+    m.className = 'show-menu';
+    m.setAttribute('role', 'menu');
+    const item = (label: string, key: string, run: () => void, disabled = false) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'menuitem');
+      b.disabled = disabled;
+      b.innerHTML = `<span></span><kbd></kbd>`;
+      b.firstElementChild!.textContent = label;
+      b.lastElementChild!.textContent = key;
+      b.addEventListener('click', (e) => { e.stopPropagation(); this.closeMenu(); run(); root.focus(); });
+      m.append(b);
+    };
+    const line = () => m.append(Object.assign(document.createElement('hr'), { role: 'separator' }));
+    item('Next', 'N', () => this.next());
+    item('Previous', 'P', () => this.prev());
+    item('All Slides…', 'G', () => this.openGrid());
+    line();
+    if (p.lookingRound) item('Back to the Show', 'Esc', () => { p.lookBack(); });
+    else item('Look Around Freely', 'L', () => this.lookRound(), !p.canLookRound);
+    item(p.mapOn ? 'Hide the Map' : 'Show the Map', 'M', () => this.toggleMap(), !p.canLookRound);
+    line();
+    item(this.blank === 'black' ? 'Back from Black' : 'Black Screen', 'B', () => { this.blank = this.blank === 'black' ? null : 'black'; this.paint(); });
+    item('End Show', 'Esc', () => this.stop());
+    m.addEventListener('click', (e) => e.stopPropagation());
+    m.addEventListener('pointerdown', (e) => e.stopPropagation());
+    root.append(m);
+    const r = root.getBoundingClientRect();
+    m.style.left = `${Math.max(4, Math.min(x - r.left, r.width - m.offsetWidth - 4))}px`;
+    m.style.top = `${Math.max(4, Math.min(y - r.top, r.height - m.offsetHeight - 4))}px`;
+    this.menu = m;
+    m.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    const away = (e: Event) => { if (!m.contains(e.target as Node)) { e.stopPropagation(); this.closeMenu(); this.dragged = true; } };
+    setTimeout(() => { if (this.menu === m) { root.addEventListener('pointerdown', away, true); this.menuAway = () => root.removeEventListener('pointerdown', away, true); } });
+  }
+
+  private menuAway: (() => void) | null = null;
+
+  private closeMenu(): void {
+    this.menu?.remove();
+    this.menu = null;
+    this.menuAway?.();
+    this.menuAway = null;
+  }
+
+  private menuKey(e: KeyboardEvent): void {
+    const m = this.menu!;
+    const items = [...m.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+    const i = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === 'Escape') { this.closeMenu(); this.root?.focus(); }
+    else if (e.key === 'ArrowDown') items[(i + 1) % items.length]?.focus();
+    else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length]?.focus();
+    else if (e.key === 'Enter' || e.key === ' ') items[i]?.click();
   }
 
   private closeGrid(): void {

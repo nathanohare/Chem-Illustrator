@@ -44,6 +44,16 @@ describe('conformer search', () => {
     }
   }, 60000);
 
+  it('lists mirror-image and symmetry-swapped copies once, counted in the population', () => {
+    // pentane: anti-anti, then anti-gauche, whose mirror-image and end-swapped forms are one conformer
+    const m = searchModel(molOf('CCCCC'), { starts: 60, window: 10, rmsd: 0.5 })!;
+    const [aa, ag] = m.conformers;
+    expect(aa.degeneracy ?? 1).toBe(1);
+    expect(ag.degeneracy).toBeGreaterThanOrEqual(2);
+    const boltz = Math.exp(-(ag.energy! - aa.energy!) / (0.0019872 * 298.15));
+    expect(ag.population! / aa.population!).toBeCloseTo(ag.degeneracy! * boltz, 3);
+  }, 60000);
+
   it('keeps the drawn atoms first, so the drawing still matches', () => {
     const quick = buildModel(molOf('C[C@H](N)C(=O)O'), 4, 1)!;
     const search = searchModel(molOf('C[C@H](N)C(=O)O'), { starts: 20, window: 10, rmsd: 0.5 })!;

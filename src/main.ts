@@ -57,7 +57,7 @@ import { writeCdxml } from './io/cdxml-write';
 import { WORKSPACE, folderOf } from './io/workspace-file';
 import { askLink, followLink, setLinkHost, type LinkPlace } from './ui/links-ui';
 import { LigandLibraryWindow } from './ui/ligand-library';
-import { SHOW_JUMPS, cellOfLink, linkSpans, normalizeLink, removeLink, setLink, slideOfLink } from './links';
+import { SHOW_JUMPS, SHOW_TOOLS, cellOfLink, keyOfLink, linkSpans, normalizeLink, removeLink, setLink, slideOfLink } from './links';
 import { openFileDialog, openManyBytesDialog, openBytesDialog, CSV, openAnyBytesDialog, stampOf, readRef, saveFileDialog, writeFile, showError, baseName, readPath, withExtension, setEmbeddedWriter, KEYMAP_FILE, SETTINGS_FILE, MOL, PDF, SDF, PICTURE, SVG, TIFF, EMF, EPS, PPTX, DOCX, PICTURE_EXTENSIONS, type FileType } from './io/files';
 import { writeTiff } from './render/tiff';
 import { itemsToEps } from './render/eps';
@@ -180,7 +180,8 @@ import { typingPrefs, setTypingPrefs, onTypingPrefs } from './text/typing';
 import { NicknameChooser } from './ui/nickname-chooser';
 import { ask } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
-import { askActionButton } from './ui/action-button-dialog';
+import { BuildHint } from './ui/build-hint';
+import { actionSet, askActionButton } from './ui/action-button-dialog';
 import { bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepPieces, type AutoStepsOptions } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
@@ -1265,7 +1266,8 @@ async function insertActionButton(): Promise<void> {
   finishTyping();
   const i = d.index;
   const slides = d.slides.map((s, k) => ({ link: `#slide=${s.id}`, label: `Slide ${k + 1}${slideTitle(d, k) ? `: ${slideTitle(d, k)}` : ''}` }));
-  const got = await askActionButton(slides);
+  const regions = (d.slides[i].canvas?.keys ?? []).map((k, n) => ({ link: `#key=${k.id}`, label: k.title?.trim() || `View ${n + 1}` }));
+  const got = await askActionButton(slides, regions);
   if (!got || deckNow() !== d || d.index !== i) return;
   const sdoc = d.docOf(i), W = d.size.w, H = d.size.h, edge = 18;
   const made: number[] = [];
@@ -1278,7 +1280,7 @@ async function insertActionButton(): Promise<void> {
   sdoc.edit('Insert Action Button', () => {
     if (got.geo === 'set') {
       const side = 30, gap = 6;
-      ['actNext', 'actHome', 'actBack'].forEach((g, k) => put(g, W - edge - k * (side + gap), side, ACTION_LINKS[g] ?? ''));
+      actionSet(regions.length > 0).reverse().forEach((g, k) => put(g, W - edge - k * (side + gap), side, ACTION_LINKS[g] ?? ''));
     } else put(got.geo, W - edge, 40, got.link.startsWith('#') || !got.link ? got.link : normalizeLink(got.link) ?? '');
   });
   editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set(made) };
@@ -1291,11 +1293,12 @@ async function actionSettings(): Promise<void> {
   if (!d || !shapes.length) { flash('Select an action button or a shape on a slide first (Insert > Shapes > Action buttons).'); return; }
   const cur = shapes[0].link ?? '';
   const slides = d.slides.map((s, i) => ({ value: `#slide=${s.id}`, label: `Slide ${i + 1}${slideTitle(d, i) ? `: ${slideTitle(d, i)}` : ''}` }));
-  const jumps = Object.entries(SHOW_JUMPS).map(([value, label]) => ({ value, label }));
-  const kind = !cur ? 'none' : cur in SHOW_JUMPS || slideOfLink(cur) !== null ? 'place' : 'url';
+  const jumps = [...Object.entries(SHOW_JUMPS), ...Object.entries(SHOW_TOOLS)].map(([value, label]) => ({ value, label }));
+  const regions = (d.slides[d.index].canvas?.keys ?? []).map((k, n) => ({ value: `#key=${k.id}`, label: `Zoom to ${k.title?.trim() || `view ${n + 1}`}` }));
+  const kind = !cur ? 'none' : cur in SHOW_JUMPS || cur in SHOW_TOOLS || keyOfLink(cur) !== null || slideOfLink(cur) !== null ? 'place' : 'url';
   const got = await ask('Action Settings', [
     { name: 'kind', label: 'On a click', value: kind, options: [{ value: 'none', label: 'Nothing' }, { value: 'place', label: 'Go to a slide' }, { value: 'url', label: 'Open a web page or file' }] },
-    { name: 'place', label: 'Slide', value: kind === 'place' ? cur : '#next', options: [...jumps, ...slides] },
+    { name: 'place', label: 'Slide', value: kind === 'place' ? cur : '#next', options: [...jumps, ...regions, ...slides] },
     { name: 'url', label: 'Web page or file', value: kind === 'url' ? cur : '', placeholder: 'https://… or a file path' },
   ], { ok: 'OK', note: 'What happens when this is clicked in the slide show. Saved as PowerPoint\'s own action.' });
   if (!got) return;
@@ -5671,6 +5674,7 @@ async function autoAnimateSteps(): Promise<void> {
   if (out.canvas) d.setCanvas(out.canvas, 'Auto-Animate Steps', i);
   d.setAnims(out.anims, 'Auto-Animate Steps', i);
   if (animUi && !animUi.paneShown) animUi.showPane(true);
+  buildHint.refresh();
   flash(`Animated ${steps} step${steps > 1 ? 's' : ''}${out.canvas ? `, with ${out.canvas.keys.length} keyframes` : ''}. Preview plays them.`);
 }
 
@@ -7110,6 +7114,19 @@ const ANIM_COMMANDS: { cmd: string; label: string }[] = [false, true].flatMap((e
   cmd: `animate-${e.id}${exit ? '-out' : ''}`, label: animName(newAnim({ kind: 'shape', id: 0 }, e.id, exit)),
 })));
 
+/**
+ * Bring to Front, Send to Back, Bring Forward, Send Backward: the selected shapes among the
+ * shapes, and the selected bonds among the bonds they cross (the bond behind gets a gap).
+ */
+function restack(how: 'front' | 'back' | 'forward' | 'backward'): void {
+  const label = { front: 'Bring to Front', back: 'Send to Back', forward: 'Bring Forward', backward: 'Send Backward' }[how];
+  // one undo step for both
+  const [shapes, bonds] = editor.doc.edit(label, () => [editor.setShapeLayer(how), editor.setBondLayer(how)] as const);
+  if (shapes || bonds === true) return;
+  const verb = { front: 'bring to the front', back: 'send to the back', forward: 'bring forward', backward: 'send backward' }[how];
+  flash(bonds === 'none' ? 'That bond doesn\'t cross another bond. Where bonds cross, the one behind has a gap.' : `Select the shapes or bonds to ${verb}.`);
+}
+
 const COMMANDS: Record<string, () => unknown> = {
   new: () => { finishTab(); ws.newDrawing(); },
   'preflight': () => { finishTyping(); if (preflightPane.open) preflightPane.refresh(); else preflightPane.show(document.querySelector<HTMLElement>('[data-cmd="preflight"]:not([hidden])')); },
@@ -7145,10 +7162,10 @@ const COMMANDS: Record<string, () => unknown> = {
   // the Insert menu's Shapes and Icons, in whichever mode is showing (Documents have their own)
   'insert-shapes': () => (ws.active.mode === 'design' ? COMMANDS['design-shapes']() : ws.active.mode === 'slides' ? COMMANDS['slide-shapes']() : flash('Shapes go on slides, designs and documents.')),
   'insert-icons': () => (ws.active.mode === 'design' ? COMMANDS['design-icons']() : ws.active.mode === 'slides' ? COMMANDS['slide-icons']() : flash('Icons go on slides, designs and documents.')),
-  'shape-front': () => editor.setShapeLayer('front') || flash('Select the shapes to bring to the front.'),
-  'shape-back': () => editor.setShapeLayer('back') || flash('Select the shapes to send to the back.'),
-  'shape-forward': () => editor.setShapeLayer('forward') || flash('Select the shapes to bring forward.'),
-  'shape-backward': () => editor.setShapeLayer('backward') || flash('Select the shapes to send backward.'),
+  'shape-front': () => restack('front'),
+  'shape-back': () => restack('back'),
+  'shape-forward': () => restack('forward'),
+  'shape-backward': () => restack('backward'),
   'new-sheet': () => { finishTab(); ws.newSheet(); },
   'new-document': () => { finishTab(); ws.newDocument(); },
   'new-from-template': () => { void newFromTemplate(); },
@@ -7624,8 +7641,8 @@ const COMMANDS: Record<string, () => unknown> = {
   'smart-scheme': () => { finishTyping(); editor.insertSmartScheme(pasteCentre(), deckNow()?.size); },
   'convert-smart-scheme': () => editor.convertToSmart() || flash(editor.selectedSmart() !== null ? 'That is a Smart Scheme already.' : 'Select a reaction scheme (structures and the arrows between them) to make into a Smart Scheme.'),
   'ungroup-smart-scheme': () => editor.ungroupSmart() || flash('Select a Smart Scheme first.'),
-  'bring-front': () => editor.setBondLayer(true) || flash('Select the bond to bring to the front (where bonds cross, the one behind has a gap).'),
-  'send-back': () => editor.setBondLayer(false) || flash('Select the bond to send to the back (where bonds cross, the one behind has a gap).'),
+  'bring-front': () => restack('front'),
+  'send-back': () => restack('back'),
   'save-template': () => void saveTemplate(),
   'delete-template': () => void deleteTemplate(),
   'define-nickname': () => void defineNickname(),
@@ -10319,7 +10336,7 @@ function drawingMenu(): MenuItem[] {
     { cmd: 'flip-h' }, { cmd: 'flip-v' }, { cmd: 'flip-h-keep' }, { cmd: 'flip-v-keep' }, null,
     { cmd: 'rotate-cw' }, { cmd: 'rotate-ccw' }, { cmd: 'rotate-180' }, { cmd: 'rotate-dialog' }, null, { cmd: 'scale' },
   ];
-  const order: MenuItem[] = shapes.length
+  const order: MenuItem[] = shapes.length || s.bonds.size
     ? [{ cmd: 'shape-front', label: 'Bring to Front' }, { cmd: 'shape-forward', label: 'Bring Forward' }, { cmd: 'shape-backward', label: 'Send Backward' }, { cmd: 'shape-back', label: 'Send to Back' }]
     : [];
   return [
@@ -10338,7 +10355,7 @@ function drawingMenu(): MenuItem[] {
       ...metalMenu(),
       { label: 'Structure', items: [
         { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'chain-ends' }, { cmd: 'explicit-h' }, null,
-        { cmd: 'contract-label' }, { cmd: 'expand-label' }, { cmd: 'join' }, { cmd: 'bring-front' }, { cmd: 'send-back' }, null,
+        { cmd: 'contract-label' }, { cmd: 'expand-label' }, { cmd: 'join' }, null,
         { cmd: 'hapto-bond' }, { cmd: 'split-hapto' }, { cmd: 'hapto-kekule' }, null,
         { cmd: 'enhanced-stereo' }, { cmd: 'chiral-flag' }, { cmd: 'repeat-group' }, { cmd: 'rgroup-table' }, null,
         { cmd: 'check-structure' }, { cmd: 'save-template' }, { cmd: 'define-nickname' }, null,
@@ -11955,9 +11972,32 @@ const smartPane = new SmartPane({
   arrange: (id, patch) => editor.smartArrange(id, patch),
   ungroup: (id) => editor.ungroupSmart(id),
 });
-editor.onOverlay = () => smartPane.place();
+// Auto-Animate Steps offered when a scheme of two steps or more (or a Smart Scheme) is selected on a slide
+const buildHint = new BuildHint({
+  onSlide: () => ws.active.mode === 'slides' && !!deckNow(),
+  doc: () => editor.doc,
+  measure: () => editor.fullMeasure(),
+  scope: () => {
+    const s = editor.sel;
+    if (!s.atoms.size && !s.captions.size && !s.arrows.size && !s.shapes.size) return null;
+    const smart = editor.selectedSmart();
+    const f = smart !== null ? editor.doc.shapes.get(smart)?.frame : undefined;
+    return f
+      ? { scope: { atoms: new Set(f.atoms), captions: new Set(f.captions), arrows: new Set(f.arrows), shapes: new Set(f.shapes) }, smart: true }
+      : { scope: { atoms: new Set(s.atoms), captions: new Set(s.captions), arrows: new Set(s.arrows), shapes: new Set(s.shapes) }, smart: false };
+  },
+  anims: () => { const d = deckNow(); return d?.slides[d.index]?.anims ?? []; },
+  screenRect: (r) => {
+    const o = overlay.getBoundingClientRect();
+    const a = renderer.toScreen({ x: r.x1, y: r.y1 }), b = renderer.toScreen({ x: r.x2, y: r.y2 });
+    return { x1: a.x + o.left, y1: a.y + o.top, x2: b.x + o.left, y2: b.y + o.top };
+  },
+  area: () => { const o = host.getBoundingClientRect(); return { x1: o.left, y1: o.top, x2: o.right, y2: o.bottom }; },
+  run: () => void autoAnimateSteps(),
+});
+editor.onOverlay = () => { smartPane.place(); buildHint.place(); };
 editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
-editor.onChange = () => { welcomeWatch?.(); smartPane.refresh(); if (ws.active.mode === 'slides') slideText.refresh(); textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides') slideText.refresh(); textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();

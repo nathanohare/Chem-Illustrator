@@ -97,4 +97,36 @@ describe('looking round a canvas slide in the show', () => {
     p.show(0);
     expect(p.freeView).toBeNull();
   });
+
+  it('starts looking round on its own (a right-click, L, a button), and the map moves the view while looking', () => {
+    vi.useFakeTimers();
+    const { p } = canvasShow();
+    p.show(0);
+    expect(p.startLookRound()).toBe(false);
+    p.show(1);
+    expect(p.startLookRound()).toBe(true);
+    expect(p.lookingRound).toBe(true);
+    const v = p.freeView!;
+    expect(p.centreOn({ x: 2400, y: 200 })).toBe(true);
+    const c = p.freeView!;
+    expect((c.x1 + c.x2) / 2).toBeCloseTo(2400, 0);
+    expect(c.x2 - c.x1).toBeCloseTo(v.x2 - v.x1, 6);
+  });
+
+  it('follows the show\'s own links: the slide picker, looking round, a look at a keyframe', async () => {
+    vi.useFakeTimers();
+    const { d, p } = canvasShow();
+    const { ShowActions } = await import('../src/ui/show-actions');
+    const grid = vi.fn(), look = vi.fn();
+    const a = new ShowActions(d, p, document.createElement('canvas'), { go: noop, next: noop, prev: noop, end: noop, open: noop, grid, look });
+    p.show(1);
+    a.follow('#grid');
+    expect(grid).toHaveBeenCalled();
+    a.follow('#look');
+    expect(look).toHaveBeenCalled();
+    expect(p.lookingRound).toBe(true);
+    const fly = vi.spyOn(p, 'flyTo');
+    a.follow('#key=2');
+    expect(fly).toHaveBeenCalledWith(1, false);
+  });
 });
