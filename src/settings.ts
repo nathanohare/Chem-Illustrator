@@ -156,6 +156,8 @@ export interface Settings {
   groupOutline: boolean;
   /** Mechanism arrows left running into something by a change find their own way round. */
   rerouteArrows: boolean;
+  /** Draw Next Intermediate and Check Arrows: curved arrows read as electrons moving (Settings ▸ Drawing). Off hides them. */
+  arrowProducts: boolean;
   /** Space (pt) between a mechanism arrow's start, or end, and its atom or lone pair; null for the usual space. */
   arrowStartGap: number | null;
   arrowEndGap: number | null;
@@ -226,8 +228,6 @@ export interface Settings {
   cursorAids: CursorAidPrefs;
   /** η³ and larger ligands on a metal drawn delocalized (a circle in the ring, an arc over an allyl). */
   haptoDelocalized: boolean;
-  /** How a tool's demo shows when the pointer rests on its button (Settings ▸ General). */
-  toolDemos: DemoLook;
   /** The Windows app has offered to open the chemistry file types (once, at its first start). */
   fileTypesOffered: boolean;
   /** The Windows app has registered its drawings as objects Word can send back to edit (once, at its first start). */
@@ -267,7 +267,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, stickyHotspot: false, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
   modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', density: 'compact', iconLook: 'mode', shapeInk: 'neutral', oneColumnTools: false, toolCells: 'off', startView: true, enterFinishesText: false, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
-  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'peach', depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
+  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowProducts: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'peach', depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
   orient: { ...DEFAULT_ORIENT },
@@ -288,22 +288,7 @@ export const DEFAULT_SETTINGS: Settings = {
   straightenLinear: true,
   cursorAids: { ...DEFAULT_CURSOR_AIDS },
   haptoDelocalized: true,
-  toolDemos: 'off',
 };
-
-/**
- * How demos show: B, a card with the clip, its steps and Replay (the default); A, a small clip in a
- * tip; C, still frames only; or not at all. With the system's reduced motion on, A and B show the
- * still frames instead.
- */
-export type DemoLook = 'card' | 'tip' | 'frames' | 'off';
-export const DEMO_LOOKS: { value: DemoLook; label: string }[] = [
-  { value: 'card', label: 'A card with the clip and its steps' },
-  { value: 'tip', label: 'A small clip in the tool tip' },
-  { value: 'frames', label: 'Still pictures of each step' },
-  { value: 'off', label: 'Don\'t show demos' },
-];
-export const parseDemoLook = (v: unknown): DemoLook => (DEMO_LOOKS.some((l) => l.value === v) ? (v as DemoLook) : 'off');
 
 const STORAGE_KEY = 'chem-illustrator.settings';
 
@@ -316,7 +301,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (!raw || typeof raw !== 'object') return s;
   const r = raw as Record<string, unknown>;
   if (r.hotkeys && typeof r.hotkeys === 'object' && !Array.isArray(r.hotkeys)) s.hotkeys = r.hotkeys as KeyOverrides;
-  for (const k of ['keepHotspotOnBond', 'stickyHotspot', 'fixedLength', 'fixedAngles', 'devTools', 'showRoles', 'chemTyping', 'stereoItalic', 'boldNumbers', 'autoLinks', 'linkCtrlClick', 'spellCheck', 'scrollBars', 'ribbonCollapsed', 'ribbonAutoFold', 'tabsInMenu', 'welcomed', 'groupTips', 'toolTips', 'penSketch', 'askWholeDrawing', 'darkPage', 'circledCharges', 'textToAtom', 'ionCharges', 'saltGroups', 'groupOutline', 'rerouteArrows', 'superscriptR', 'updateCheck', 'pubchemNames', 'convertChemDraw', 'matchStructure', 'fileTypesOffered', 'wordObjectsOffered'] as const) if (typeof r[k] === 'boolean') s[k] = r[k] as boolean;
+  for (const k of ['keepHotspotOnBond', 'stickyHotspot', 'fixedLength', 'fixedAngles', 'devTools', 'showRoles', 'chemTyping', 'stereoItalic', 'boldNumbers', 'autoLinks', 'linkCtrlClick', 'spellCheck', 'scrollBars', 'ribbonCollapsed', 'ribbonAutoFold', 'tabsInMenu', 'welcomed', 'groupTips', 'toolTips', 'penSketch', 'askWholeDrawing', 'darkPage', 'circledCharges', 'textToAtom', 'ionCharges', 'saltGroups', 'groupOutline', 'rerouteArrows', 'arrowProducts', 'superscriptR', 'updateCheck', 'pubchemNames', 'convertChemDraw', 'matchStructure', 'fileTypesOffered', 'wordObjectsOffered'] as const) if (typeof r[k] === 'boolean') s[k] = r[k] as boolean;
   for (const k of ['arrowStartGap', 'arrowEndGap'] as const) if (typeof r[k] === 'number' && isFinite(r[k] as number) && (r[k] as number) >= 0) s[k] = Math.min(50, r[k] as number);
   if (typeof r.bondEnds === 'number' && isFinite(r.bondEnds)) s.bondEnds = Math.max(0, Math.min(1, r.bondEnds));
   if (MAP_LOOKS.some((l) => l.value === r.mapLook)) s.mapLook = r.mapLook as MapLook;
@@ -404,7 +389,6 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.straightenLinear === 'boolean') s.straightenLinear = r.straightenLinear;
   if (r.cursorAids) s.cursorAids = parseCursorAids(r.cursorAids);
   if (typeof r.haptoDelocalized === 'boolean') s.haptoDelocalized = r.haptoDelocalized;
-  if (r.toolDemos !== undefined) s.toolDemos = parseDemoLook(r.toolDemos);
   return s;
 }
 

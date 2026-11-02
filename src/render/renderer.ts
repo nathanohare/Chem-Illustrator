@@ -22,7 +22,7 @@ import { isGenericLabel } from '../chem/labels';
 import { bracketPath, shaftOffset, shapeOrder, elbowRoute, boxOf, shapeBox, shapeMid, shapeTurn, bezPoints, bezHeadBack, bezPathAt, bezSlice, type PathStep } from '../objects';
 import { atomStereoText, bondStereoText, shownDescriptor, axialStyle, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
-import { attachDiamondSize, hasAttachDiamond, isMapNumber, MAP_GREY, MAP_PEACH, mapBox, mapColour } from './atom-marks';
+import { attachDiamondSize, attachStarSize, hasAttachDiamond, isMapNumber, MAP_GREY, MAP_PEACH, mapBox, mapColour } from './atom-marks';
 import { layoutText, FONT_STACK, withStack, type TextLayout } from '../text/layout';
 import { drawLayout } from '../text/draw';
 import { geoDef, moveSteps, textArea, traceSteps, type GeoStep } from '../design/geo';
@@ -335,6 +335,11 @@ export class Renderer {
       const m = doc.style.marginWidth * k;
       for (const b of layout.boxes) boxes.push({ x1: a.x + b.x1 - m, y1: a.y + b.y1 - m, x2: a.x + b.x2 + m, y2: a.y + b.y2 + m });
     }
+    // a star point of attachment: the bond stops short of its asterisk, as at a label
+    if (a.attach === 'Star') {
+      const h = attachStarSize(size) + doc.style.marginWidth * k;
+      boxes.push({ x1: a.x - h, y1: a.y - h, x2: a.x + h, y2: a.y + h });
+    }
     c = { layout, boxes };
     if (layout?.charge !== undefined) {
       // a bond is cut short at the charge only where it would touch the sign itself
@@ -346,6 +351,11 @@ export class Renderer {
     }
     this.atomCache.set(a.id, c);
     return c;
+  }
+
+  /** Which side a double bond's second line is drawn on: +1 to the right of a1→a2 on screen, −1 the left, 0 centred. */
+  doubleSide(doc: Doc, b: Bond): number {
+    return this.bondInfo(doc, b).side;
   }
 
   private bondInfo(doc: Doc, b: Bond): BondCache {
@@ -761,6 +771,24 @@ export class Renderer {
     return curFont;
   }
 
+  /** A star point of attachment: an asterisk of three lines crossing where the bond ends. */
+  private drawAttachStar(ctx: CanvasRenderingContext2D, doc: Doc, a: Atom): void {
+    const k = a.s ?? 1;
+    const r = attachStarSize(doc.style.labelSize * k);
+    ctx.save();
+    ctx.strokeStyle = a.color ?? '#000';
+    ctx.lineWidth = doc.style.lineWidth * k;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const t = (90 + 60 * i) * DEG, dx = Math.cos(t) * r, dy = Math.sin(t) * r;
+      ctx.moveTo(a.x - dx, a.y - dy);
+      ctx.lineTo(a.x + dx, a.y + dy);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   /** A numbered point of attachment: a black diamond with the number in white. */
   private drawAttachDiamond(ctx: CanvasRenderingContext2D, doc: Doc, a: Atom, curFont: string): string {
     const L = doc.style.labelSize * (a.s ?? 1);
@@ -903,6 +931,7 @@ export class Renderer {
       }
       if (a.showNumber && a.atomNumber) curFont = this.drawAtomNumber(ctx, doc, a, curFont);
       if (hasAttachDiamond(a)) curFont = this.drawAttachDiamond(ctx, doc, a, curFont);
+      if (a.attach === 'Star') this.drawAttachStar(ctx, doc, a);
       if (checks?.forAtom(a)) warns.push(this.warningBox(doc, a, info));
     }
     curFont = this.drawStereoLabels(ctx, doc, atoms, bondSet, curFont);

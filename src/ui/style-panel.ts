@@ -962,7 +962,13 @@ export class StylePanel {
     }
     if (a.attach) {
       this.heading('Point of attachment');
-      this.number('Number', a.attachNum ?? 0, 1, 0, 99, (v) => set('Attachment number', { attachNum: v || undefined }),
+      const kind = a.attach === 'Unspecified' || a.attach === 'Diamond' ? 'Numbered' : a.attach;
+      const kinds: Opt<string>[] = [['Wavy', 'Wavy bond'], ['Star', 'Star (*)'], ['Numbered', 'Numbered (diamond)']];
+      if (!kinds.some(([v]) => v === kind)) kinds.push([kind, kind]);
+      this.select('Kind', kinds, kind, (v) => set('Attachment point', v === 'Numbered'
+        ? { attach: 'Unspecified', attachNum: a.attachNum ?? nextNumber(this.doc, a.id, (x) => (x.attach ? x.attachNum : undefined)) }
+        : { attach: v, attachNum: undefined }));
+      if (kind === 'Numbered') this.number('Number', a.attachNum ?? 0, 1, 0, 99, (v) => set('Attachment number', { attachNum: v || undefined }),
         'The number in the black diamond; 0 for none.');
       return;
     }

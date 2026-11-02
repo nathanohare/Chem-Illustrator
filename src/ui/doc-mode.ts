@@ -1073,7 +1073,8 @@ export class DocumentMode {
   }
 
   focus(): void {
-    if (this.file) this.ta.focus({ preventScroll: true });
+    // (not while a structure is drawn in place: the keys are the drawing tools')
+    if (this.file && !this.inPlace) this.ta.focus({ preventScroll: true });
   }
 
   /** Fonts finished loading: measure again. */
@@ -3052,7 +3053,7 @@ export class DocumentMode {
    * (null when they can't: turned, in a header or footer, or a view without pages). `grow`
    * gets the figure's new area when its structures outgrew it and Grow Figure was chosen.
    */
-  private placeFor(id: number, grow: (frame: FigureFrame) => void): InPlace | null {
+  private placeFor(id: number, grow: (frame: FigureFrame) => void, fresh = false): InPlace | null {
     const f = this.file;
     const o = f?.t.objects[id];
     if (!f || o?.kind !== 'drawing' || !this.host.editInPlace || this.reading || turnOf(o)) return null;
@@ -3061,14 +3062,17 @@ export class DocumentMode {
     const find = () => f.layout().objects.find((x) => x.id === id) ?? null;
     const at0 = find();
     if (!at0 || at0.w <= 0) return null;
-    const fr = o.frame;
+    // (a new structure's room is only room to draw in: not a figure, with no edges or Grow Figure)
+    const room = fresh ? o.frame : undefined;
+    const fr = fresh ? undefined : o.frame;
     const style = f.t.drawingStyle;
-    const box = fr ? { x1: fr.x, y1: fr.y, x2: fr.x + fr.w, y2: fr.y + fr.h } : figures.record(o.contents, style).pic?.box;
+    const edge = fr ?? room;
+    const box = edge ? { x1: edge.x, y1: edge.y, x2: edge.x + edge.w, y2: edge.y + edge.h } : figures.record(o.contents, style).pic?.box;
     if (!box) return null;
     // drawing points to the page's
     const s = at0.w / Math.max(1e-6, box.x2 - box.x1);
     const place: InPlace = {
-      title: fr ? 'Figure' : 'Structure',
+      title: fr ? 'Figure' : fresh ? 'New Structure' : 'Structure',
       rect: () => {
         const el = v.scroller;
         if (!el.isConnected) return null;
@@ -3100,12 +3104,13 @@ export class DocumentMode {
             ctx.translate(at.x - box.x1 * s, at.y - box.y1 * s);
             ctx.scale(s, s);
             // a figure's edges, while its structures are drawn (they may reach past them: nothing is cut off)
-            if (fr) {
+            // (and a new structure's room, to show where it goes)
+            if (edge) {
               const px = 1 / (s * v.zoom);
               ctx.strokeStyle = FIGURE_EDGE;
               ctx.lineWidth = px;
               ctx.setLineDash([5 * px, 4 * px]);
-              ctx.strokeRect(fr.x, fr.y, fr.w, fr.h);
+              ctx.strokeRect(edge.x, edge.y, edge.w, edge.h);
               ctx.setLineDash([]);
             }
             paint(ctx);
@@ -3925,6 +3930,7 @@ export class DocumentMode {
 
   private drawNew(): void {
     const f = this.file!;
+    if (this.drawNewInPlace()) return;
     const spot = this.cellSpot();
     this.host.editDrawing(null, 'New structure', (c) => {
       if (this.file === f) this.backToCell(spot);
@@ -3932,6 +3938,41 @@ export class DocumentMode {
       this.insertObject({ kind: 'drawing', contents: c }, 'Insert structure');
       this.focus();
     });
+  }
+
+  /**
+   * Insert > Structure, drawn in place on the page: room for it at the caret (2 × 1.25 in), the drawing
+   * tools over it, and on Done a plain structure sized to what was drawn. Cancel, or Done with nothing
+   * drawn, leaves the document as if nothing had been inserted (no Undo step). False when it can't be
+   * drawn in place here (a table cell, reading view, no pages): the pop-out editor draws it instead.
+   */
+  private drawNewInPlace(): boolean {
+    const f = this.file!;
+    if (!this.host.editInPlace || f.box || this.reading || (this.view.kind !== 'print' && this.view.kind !== 'web')) return false;
+    const ed = f.ed;
+    const empty: Contents = { atoms: [], bonds: [], captions: [], arrows: [], shapes: [] };
+    const id = this.insertObject({ kind: 'drawing', contents: empty, frame: { x: 0, y: 0, w: 2 * INCH, h: 1.25 * INCH } }, 'Insert structure');
+    const step = ed.lastStep as { t: DocText; anchor: number; focus: number } | undefined;
+    this.redraw();
+    const forget = () => {
+      // the room for it taken out again, as if it had never been put in
+      if (!step || ed.lastStep !== step) return;
+      ed.update(step.t, null, step.anchor, step.focus);
+      ed.dropStep(step, () => true);
+    };
+    const place = this.placeFor(id, () => {}, true);
+    if (!place) { forget(); return false; }
+    this.host.editInPlace(empty, place, (c) => {
+      this.inPlace = null;
+      if (this.file !== f) return;
+      const cur = f.t.objects[id];
+      if (!c || emptyContents(c) || cur?.kind !== 'drawing') { forget(); this.redraw(); this.focus(); return; }
+      const { frame: _room, ...plain } = cur;
+      // part of the insert's Undo step, so one Undo takes the structure out
+      ed.update({ ...f.t, objects: { ...f.t.objects, [id]: { ...plain, contents: c } } } as DocText, ed.lastStep === step ? null : 'Insert structure');
+      this.focus();
+    });
+    return true;
   }
 
   private async fromName(): Promise<void> {

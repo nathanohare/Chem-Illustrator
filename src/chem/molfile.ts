@@ -2,6 +2,7 @@
 // molfiles back (for pasted SMILES). Abbreviation labels are expanded into real atoms so
 // formula, mass and stereo come out right; "R"-type labels become dummy atoms.
 
+import { attachCode } from './attach-codes';
 import { Doc, Atom, isMetalAtom, outsideValence, radicalElectrons } from '../model';
 import { metalCarbonyl } from './hapto';
 import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, valenceOfBonds } from './elements';
@@ -42,6 +43,8 @@ export interface MolfileOptions {
   maps?: boolean;
   /** Write a V3000 molfile (otherwise V2000). */
   v3000?: boolean;
+  /** Write each attachment point's kind as its "*" atom's isotope (src/chem/attach-codes.ts), for Hammett's reference position. */
+  attachKinds?: boolean;
 }
 
 /** Stands in for R groups when working out R/S: oganesson, heavier than any atom in a real drawing. */
@@ -245,7 +248,8 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
       const rad = a.radical === 'singlet' || carbene.has(id) ? 1 : a.radical === 'doublet' ? 2 : a.radical === 'triplet' ? 3 : 0;
       const sym = a.label && !g ? generic : SYMBOLS[a.z] || generic;
       if (sym === generic) genericAt.push([atoms.length, a.label ?? '']);
-      atoms.push({ sym, x, y, charge: a.charge + (charged.get(id) ?? 0), iso: a.isotope, rad, ...(opts.maps && a.mapNo ? { map: a.mapNo } : {}) });
+      const iso = opts.attachKinds && a.attach ? attachCode(a.attach, a.attachNum) : a.isotope;
+      atoms.push({ sym, x, y, charge: a.charge + (charged.get(id) ?? 0), iso, rad, ...(opts.maps && a.mapNo ? { map: a.mapNo } : {}) });
       map.push(id);
       continue;
     }

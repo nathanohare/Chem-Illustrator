@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { Doc } from '../src/model';
 import { paintObjects, pickObjectLook } from '../src/format-painter';
 import { parseSettings } from '../src/settings';
+import { cellFavoriteLook, favoriteCellLook } from '../src/favorites';
 import { FAVORITES_MAX, favoriteSummary, favoriteThumb, freshFavoriteName, parseFavorites, ribbonFavorites, withFavorite, type FormatFavorite } from '../src/ui/format-favorites';
 
 const none = () => ({ atoms: [] as number[], bonds: [] as number[], captions: [] as number[], arrows: [] as number[], shapes: [] as number[] });
@@ -100,5 +101,18 @@ describe('the Home tab gallery', () => {
     expect(applied).toEqual(['Blue']);
     host.querySelector<HTMLButtonElement>('.rbs-all')!.click();
     expect(saved).toBe(1);
+  });
+
+  it('a favorite gives cells its fill, font and outline, and cells give one back', () => {
+    const got = favoriteCellLook({ shape: { filled: true, fillColor: '#ffd966', color: '#c00000', lineWidth: 1 }, text: { run: { bold: true, color: '#1f4e79', size: 12 }, justify: 'center' } })!;
+    expect(got.patch).toEqual({ fill: '#ffd966', bold: true, size: 12, color: '#1f4e79', align: 'center' });
+    expect(got.borders?.top).toEqual({ style: 'thin', color: '#c00000' });
+    // a black outline is the default line of a shape: cells keep their own borders
+    expect(favoriteCellLook({ shape: { filled: true, fillColor: '#eeeeee', color: '#000000' } })!.borders).toBeUndefined();
+    expect(favoriteCellLook({ bond: { color: '#000000' } as never })).toBeNull();
+    const back = cellFavoriteLook({ fill: '#ffd966', bold: true, color: '#1f4e79', align: 'right' });
+    expect(back.shape).toMatchObject({ filled: true, fillColor: '#ffd966' });
+    expect(back.text?.run).toMatchObject({ bold: true, color: '#1f4e79' });
+    expect(favoriteCellLook(back)!.patch).toMatchObject({ fill: '#ffd966', bold: true, color: '#1f4e79', align: 'right' });
   });
 });

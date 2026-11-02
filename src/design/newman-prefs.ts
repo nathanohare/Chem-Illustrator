@@ -11,6 +11,21 @@ export interface RankLook {
   bond: boolean;
 }
 
+/** The side-on eye that marks the viewing direction: its lids open toward the bond, the eyeball across the opening. */
+export type EyeStyle = 'plain' | 'inner' | 'pupil' | 'almond' | 'lashes';
+export const EYE_STYLES: readonly EyeStyle[] = ['plain', 'inner', 'pupil', 'almond', 'lashes'];
+
+/** The arc that stands in for the rest of a ring, looking down a ring bond. */
+export interface RingArcLook {
+  line: 'solid' | 'dashed';
+  color: string;
+  /** The two ring bonds take the arc's colour too. */
+  bonds: boolean;
+}
+
+/** How projections drawn before these settings existed look: a solid black arc and the plain eye. */
+export const OLD_RING_ARC: RingArcLook = { line: 'solid', color: '#000000', bonds: false };
+
 export interface NewmanLook {
   /** The circle's radius, as a fraction of the drawing's bond length. */
   radius: number;
@@ -22,6 +37,10 @@ export interface NewmanLook {
   dot: boolean;
   /** Largest, middle and smallest group on each atom, by A-value. */
   ranks: [RankLook, RankLook, RankLook];
+  /** Looking down a ring bond, the arc for the rest of the ring (absent: OLD_RING_ARC). */
+  arc?: RingArcLook;
+  /** The viewing mark's eye (absent: plain). */
+  eye?: EyeStyle;
 }
 
 export const NEWMAN_LOOK: NewmanLook = {
@@ -34,6 +53,8 @@ export const NEWMAN_LOOK: NewmanLook = {
     { color: '#000000', bold: false, italic: false, bond: false },
     { color: '#000000', bold: false, italic: false, bond: false },
   ],
+  arc: { line: 'dashed', color: '#808080', bonds: false },
+  eye: 'pupil',
 };
 
 /** Settings ▸ Newman Projections: how new projections and torsion charts look. */
@@ -70,8 +91,10 @@ export function parseNewmanPrefs(raw: unknown): NewmanPrefs {
     return { color: isColour(x.color) ? x.color : d.color, bold: typeof x.bold === 'boolean' ? x.bold : d.bold, italic: typeof x.italic === 'boolean' ? x.italic : d.italic, bond: typeof x.bond === 'boolean' ? x.bond : d.bond };
   }) as NewmanLook['ranks'];
   const c = (r.chart && typeof r.chart === 'object' ? r.chart : {}) as Record<string, unknown>;
+  const a = (l.arc && typeof l.arc === 'object' ? l.arc : {}) as Record<string, unknown>, da = D.look.arc!;
+  const arc: RingArcLook = { line: pick(a.line, ['solid', 'dashed'], da.line), color: isColour(a.color) ? a.color : da.color, bonds: typeof a.bonds === 'boolean' ? a.bonds : da.bonds };
   return {
-    look: { radius: num(l.radius, 0.2, 2, D.look.radius), reach: num(l.reach, 0.1, 3, D.look.reach), offset: num(l.offset, -45, 45, D.look.offset), dot: typeof l.dot === 'boolean' ? l.dot : D.look.dot, ranks },
+    look: { radius: num(l.radius, 0.2, 2, D.look.radius), reach: num(l.reach, 0.1, 3, D.look.reach), offset: num(l.offset, -45, 45, D.look.offset), dot: typeof l.dot === 'boolean' ? l.dot : D.look.dot, ranks, arc, eye: pick(l.eye, EYE_STYLES, D.look.eye!) },
     kind: pick(r.kind, ['newman', 'sawhorse'], D.kind),
     mark: typeof r.mark === 'boolean' ? r.mark : D.mark,
     markColor: isColour(r.markColor) ? r.markColor : D.markColor,

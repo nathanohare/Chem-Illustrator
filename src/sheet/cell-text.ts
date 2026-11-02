@@ -1,6 +1,7 @@
 // Text in a cell shown as chemistry (the cell's "Chemistry" look): the numbers of C9H8O4 and
 // CH2Cl2 lowered, charges and NMR nuclei raised, the d of d6-DMSO in italics. The same rules
-// as typing in a caption (src/text/chemtext.ts), applied to the whole text at once.
+// as typing in a caption (src/text/chemtext.ts), applied to the whole text at once; and the m
+// and p of Hammett's σm and σp as italic subscripts.
 
 import { typingFormats, WORD_ENDS, CharLook } from '../text/chemtext';
 import { SYMBOLS } from '../chem/elements';
@@ -49,6 +50,8 @@ export function chemPieces(text: string): Piece[] {
       }
     }
   }
+  // Hammett constants: the m, p (σp⁻, σp⁺), o, I and R after σ are italic subscripts (σm, σp)
+  for (const m of text.matchAll(/σ([mpoIR])(?![A-Za-z])/g)) looks[m.index! + 1] = { pos: 'sub', italic: true };
   const out: Piece[] = [];
   for (let i = 0; i < text.length; i++) {
     const l = looks[i];

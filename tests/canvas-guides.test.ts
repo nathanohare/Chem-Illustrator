@@ -71,6 +71,17 @@ describe('saving', () => {
     expect(guidesText({ ...k, list: [], grid: false })).toBeNull();
     expect(parseGuides('{"list":[{"kind":"x"}],"major":-3}')).toBeNull();
   });
+  it('keeps their colour and how see-through they are, and drops values out of range', () => {
+    const k = g({ grid: true, color: '#d81b8c', clear: 0.4 });
+    expect(parseGuides(guidesText(k))).toEqual(k);
+    const doc = new Doc();
+    doc.bulk(() => doc.addAtom(100, 100));
+    doc.guides = k;
+    expect(readCdxml(writeCdxml(doc)).doc.guides).toEqual(k);
+    const odd = parseGuides('{"list":[],"grid":true,"color":"pink","clear":2}')!;
+    expect([odd.color, odd.clear]).toEqual([undefined, undefined]);
+    expect(parseGuides('{"list":[],"grid":true,"color":"#ABCDEF","clear":0}')!.color).toBe('#abcdef');
+  });
   it('goes into a CDXML file as a tag on the page, and comes back', () => {
     const doc = new Doc();
     doc.bulk(() => doc.addAtom(100, 100));

@@ -85,7 +85,7 @@ import { bezFrom, fitPath, dragCurveAt, throughPoints, dragPathPoint, firstBend,
 import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
 import { imageFor } from '../render/images';
-import { gridOffsets, inferGrid, usualGap, withLabels, type GridHow } from './grid-arrange';
+import { gridOffsets, inferGrid, sharedAnchors, usualGap, withLabels, type GridHow } from './grid-arrange';
 import { BEND, BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
 import { flatten, prepareTurn, stillMeans, structuresOf, type PerspectiveHost, type Prepared } from './perspective';
 import { anglesTurn, dragTurn, IDENT as IDENT_TURN, type M3 } from '../chem/perspective';
@@ -393,6 +393,8 @@ export class Editor {
     groupOutline: true,
     /** Mechanism arrows left running into something by a change find their own way round (Edit > Settings). */
     rerouteArrows: true,
+    /** Draw Next Intermediate and Check Arrows are offered (Edit > Settings ▸ Drawing). */
+    arrowProducts: true,
   };
   /**
    * New arrows' line width and head size, in points, apart from the bonds' line width (the
@@ -3034,20 +3036,36 @@ export class Editor {
     const errors = reading.issues.filter((i) => i.level === 'error');
     if (!reading.steps.length && !errors.length) return 'none';
     if (errors.length || !out) { this.pickIssues(errors); return { drawn: false, issues: reading.issues }; }
-    // after what the arrows are drawn on (and the arrows), on the level of its middle
+    // after what the arrows are drawn on (and the arrows), with the reaction centre (the changed
+    // atoms of the main structure) on the same level in both, and the reaction arrow there too
     const L = doc.style.bondLength;
     const sp = spacing(L, prefsOf(doc));
+    const changed = pushedAtoms(reading);
     const atoms = new Set<number>();
-    for (const id of pushedAtoms(reading)) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
+    for (const id of changed) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
     const from = boxOf(doc, atoms, arrows.map((r) => r.id))!;
+    const main = out.fragments().filter((f) => [...f].some((id) => changed.has(id))).sort((p, q) => q.size - p.size)[0] ?? new Set<number>();
+    // (the changed atoms that stayed where they were drawn: a structure brought alongside doesn't count)
+    const inMain = [...changed].filter((id) => main.has(id));
+    const stayed = inMain.filter((id) => dist(out.atoms.get(id)!, doc.atoms.get(id)!) < 1e-6);
+    const centre = stayed.length ? stayed : inMain;
+    const meanY = (d: Doc) => centre.reduce((t, id) => t + d.atoms.get(id)!.y, 0) / Math.max(1, centre.length);
+    const level = centre.length ? meanY(doc) : (from.y1 + from.y2) / 2;
     const pb = out.bounds() ?? { x1: 0, y1: 0, x2: 0, y2: 0 };
+    const dy0 = level - (centre.length ? meanY(out) : (pb.y1 + pb.y2) / 2);
     const len = sp.minArrow;
-    const w = sp.gap + len + sp.gap + (pb.x2 - pb.x1), h = Math.max(pb.y2 - pb.y1, L);
-    const want = { x: from.x2 + w / 2, y: (from.y1 + from.y2) / 2 };
-    const c = freeSpace(doc, w, h, want, 0.5 * L);
-    const tail = { x: c.x - w / 2 + sp.gap, y: c.y }, head = { x: tail.x + len, y: c.y };
-    // the product drawn to the right of the arrow, centred on it
-    const dx = head.x + sp.gap - pb.x1, dy = c.y - (pb.y1 + pb.y2) / 2;
+    // the block (arrow and product) goes there if the space is free, else as near as it can
+    // (the block starts where the arrow does, a gap after what it follows)
+    const w = len + sp.gap + (pb.x2 - pb.x1);
+    const top = Math.min(pb.y1 + dy0, level - L / 2), bottom = Math.max(pb.y2 + dy0, level + L / 2);
+    const want = { x: from.x2 + sp.gap + w / 2, y: (top + bottom) / 2 };
+    const c = freeSpace(doc, w, bottom - top, want, 0.5 * L);
+    // (the free-space grid is coarse: a spot that is free, or free just along the line, stays exactly on the line)
+    const snap = (d: number) => (Math.abs(d) < 0.6 * L ? 0 : d);
+    const shift = { x: snap(c.x - want.x), y: snap(c.y - want.y) };
+    const tail = { x: from.x2 + sp.gap + shift.x, y: level + shift.y }, head = { x: tail.x + len, y: tail.y };
+    // the product drawn to the right of the arrow
+    const dx = head.x + sp.gap - pb.x1, dy = dy0 + shift.y;
     out.bulk(() => {
       for (const a of [...out.atoms.values()]) out.updateAtom(a.id, { x: a.x + dx, y: a.y + dy });
       for (const s of [...out.shapes.values()]) out.updateShape(s.id, { x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy });
@@ -4247,7 +4265,7 @@ export class Editor {
   measure(): Measure {
     this.r.invalidate(this.doc);
     if (this.sel.atoms.size > 5000) return { ...POINTS, captionBox: (c) => this.r.captionBox(c) };
-    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c) };
+    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c), bondSide: (b) => this.r.doubleSide(this.doc, b) };
   }
 
   private selBoxCache: { key: string; box: Rect | null } = { key: '', box: null };
@@ -4375,8 +4393,19 @@ export class Editor {
     return this.applyGrid(us, { kind: shape.kind, cols: shape.cols, gap: usualGap(boxes, this.doc.style.bondLength) }, 'Clean Up: Arrange');
   }
 
+  /** Where Arrange in a Grid would move things, without moving them (for its preview). */
+  gridPlan(how: GridHow): { units: ReturnType<typeof units>; offsets: Vec[] } {
+    const us = this.gridUnits();
+    return { units: us, offsets: this.gridMoves(us, how) };
+  }
+
+  private gridMoves(us: ReturnType<typeof units>, how: GridHow): Vec[] {
+    // structures that share a ring line up on it
+    return gridOffsets(us.map((u) => u.box), { anchors: sharedAnchors(this.doc, us), ...how });
+  }
+
   private applyGrid(us: ReturnType<typeof units>, how: GridHow, label: string): boolean {
-    const off = gridOffsets(us.map((u) => u.box), how);
+    const off = this.gridMoves(us, how);
     if (off.every((d) => Math.hypot(d.x, d.y) < 0.05)) return false;
     this.doc.edit(label, () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
     this.changed();
@@ -4578,7 +4607,7 @@ export class Editor {
   /** Label and caption sizes for every atom (schemes need whole structures, however big the selection). */
   fullMeasure(): Measure {
     this.r.invalidate(this.doc);
-    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c) };
+    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c), bondSide: (b) => this.r.doubleSide(this.doc, b) };
   }
 
   /** An arrow's reaction roles: kept with it, or worked out from where things sit. */
@@ -4610,14 +4639,28 @@ export class Editor {
    * Clean Up Reaction: space the selected steps (or every step) evenly, add missing + signs,
    * centre the conditions and fit the arrows to them. False when there is no step to tidy.
    */
-  cleanUpReaction(): boolean {
+  cleanUpReaction(): false | 'matched' | 'fitted' {
     const m = this.fullMeasure();
-    const plan = planCleanUp(this.doc, m, this.selectedSteps());
+    const steps = this.selectedSteps();
+    const key = steps ? [...steps].sort((a, b) => a - b).join(',') : 'all';
+    // pressed again on the same steps: each arrow shrinks to fit its own text (the structures
+    // move up to keep the spacing even); again, and they match once more
+    const c = this.reactionCycle;
+    const again = !!c && c.version === this.doc.version && c.key === key;
+    const fitted = again ? !c!.fitted : false;
+    const same = prefsOf(this.doc).sameLength;
+    const plan = planCleanUp(this.doc, m, steps, fitted ? { sameLength: !same, fit: true } : undefined);
+    if (plan) {
+      applySchemePlan(this.doc, m, plan);
+      this.changed();
+    }
+    this.reactionCycle = { version: this.doc.version, key, fitted };
     if (!plan) return false;
-    applySchemePlan(this.doc, m, plan);
-    this.changed();
-    return true;
+    return fitted === same ? 'fitted' : 'matched';
   }
+
+  /** The last Clean Up Reaction: which steps, and whether it fitted each arrow to its own text. */
+  private reactionCycle: { version: number; key: string; fitted: boolean } | null = null;
 
   /**
    * Arrange the selected scheme (or the whole drawing) in one go: in a line, in rows, as a
@@ -4974,6 +5017,36 @@ export class Editor {
     if (walls && b) ({ x: dx, y: dy } = clampMove(b, { x: dx, y: dy }, walls));
     if (!dx && !dy) return true;
     this.doc.edit('Nudge', () => this.moveSelection(dx, dy));
+    this.changed();
+    return true;
+  }
+
+  /**
+   * Right-click > Attachment Point: make an atom a point of attachment of this kind (a wavy bond,
+   * a star or a numbered diamond), or a plain carbon again (null). An atom at the end of a single
+   * bond becomes the point itself; an atom with more bonds (a ring carbon) gets a new bond out to
+   * one, so the point sits right on it. False when nothing changed.
+   */
+  setAttachPoint(id: number, kind: 'Wavy' | 'Star' | 'Numbered' | null): boolean {
+    const doc = this.doc, a = doc.atoms.get(id);
+    if (!a || a.multi) return false;
+    if (kind === null && !a.attach) return false;
+    const look = (at: number, num?: number): Partial<Atom> => kind === 'Numbered'
+      ? { attach: 'Unspecified', attachNum: num ?? nextNumber(doc, at, (x) => (x.attach ? x.attachNum : undefined)) }
+      : { attach: kind!, attachNum: undefined };
+    const plain: Partial<Atom> = { z: 0, label: null, charge: 0, fileLabel: false, isotope: 0 };
+    let at = id;
+    doc.edit(kind ? 'Attachment Point' : 'Remove Attachment Point', () => {
+      if (kind === null) doc.updateAtom(id, { attach: undefined, attachNum: undefined, z: 6 });
+      else if (a.attach) doc.updateAtom(id, look(id, a.attach === 'Unspecified' || a.attach === 'Diamond' ? a.attachNum : undefined));
+      else if (doc.degree(id) <= 1 && !doc.neighbors(id).some((n) => n.attach)) doc.updateAtom(id, { ...plain, ...look(id) });
+      else {
+        const t = sprout(doc, id, 1, 'solid', 0);
+        at = t.id;
+        doc.updateAtom(t.id, { ...plain, ...look(t.id) });
+      }
+    });
+    this.selectOnly({ kind: 'atom', id: at });
     this.changed();
     return true;
   }
@@ -5759,11 +5832,11 @@ export class Editor {
         const t = { runs: applyBase(c.runs, base), paras: c.paras, justify: c.justify, wrap: c.wrap, width: c.width, lineHeight: c.lineHeight, lineSpacing: c.lineSpacing };
         const res = formatWhole(t, f, defaults, base?.size ?? st.captionSize, (x, sz, family, style) => measureText(x, sz, family, style));
         doc.dirtyRects.push(this.r.captionBox(c));
-        doc.updateCaption(c.id, { runs: stripBase(res.runs, base), paras: res.paras, justify: res.justify, lineHeight: res.lineHeight, lineSpacing: res.lineSpacing });
+        doc.updateCaption(c.id, { runs: stripBase(res.runs, base), paras: res.paras, justify: res.justify, lineHeight: res.lineHeight, lineSpacing: res.lineSpacing, ...(f.kind === 'wrap' ? { wrap: res.wrap } : {}) });
       }
       for (const sh of shapes) {
-        // a shape's text: its look and lining up (line spacing and lists don't apply to it)
-        if (!sh.text?.runs.length || f.kind === 'line') continue;
+        // a shape's text: its look and lining up (line spacing, lists and a wrap width don't apply to it)
+        if (!sh.text?.runs.length || f.kind === 'line' || f.kind === 'wrap') continue;
         const res = formatWhole({ runs: sh.text.runs, paras: sh.text.paras, justify: sh.textAlign ?? 'center' }, f, {}, this.r.geoTextSize());
         const text = { runs: res.runs, ...(res.paras?.length ? { paras: res.paras } : {}) };
         doc.dirtyRects.push(shapeBox(sh));
@@ -5826,19 +5899,19 @@ export class Editor {
   }
 
   /** How the text the ribbon's Font and Paragraph buttons would change looks now (for showing which are on). */
-  textLook(): { style: rt.RunStyle; align: Justify; list?: 'bullet' | 'number'; line: number; defaultSize: number; defaultFont?: string } | null {
+  textLook(): { style: rt.RunStyle; align: Justify; list?: 'bullet' | 'number'; line: number; before?: number; after?: number; wrap?: number; link?: boolean; defaultSize: number; defaultFont?: string } | null {
     const st = this.doc.style;
     const ed = this.captionEd?.ed;
     if (ed) {
       const p = ed.currentPara();
-      return { style: ed.currentStyle(), align: ed.currentAlign(), list: p.list, line: ed.t.lineSpacing ?? 1, defaultSize: ed.defaultSize, defaultFont: ed.defaults.font ?? st.captionFont };
+      return { style: ed.currentStyle(), align: ed.currentAlign(), list: p.list, line: ed.t.lineSpacing ?? 1, before: p.spaceBefore, after: p.spaceAfter, wrap: ed.t.wrap, link: !!ed.linkHere(), defaultSize: ed.defaultSize, defaultFont: ed.defaults.font ?? st.captionFont };
     }
     const c = [...this.sel.captions].map((id) => this.doc.captions.get(id)).find((x): x is Caption => !!x);
     if (c) {
       const base = c.ph ? this.doc.textStyles?.[c.ph] : undefined;
       const runs = applyBase(c.runs, base);
       const len = plainText(runs).length;
-      return { style: len ? rt.commonStyle(runs, 0, len) : { ...(base ?? {}) }, align: c.justify ?? 'left', list: c.paras?.[0]?.list, line: c.lineSpacing ?? 1, defaultSize: base?.size ?? st.captionSize, defaultFont: base?.font ?? st.captionFont };
+      return { style: len ? rt.commonStyle(runs, 0, len) : { ...(base ?? {}) }, align: c.justify ?? 'left', list: c.paras?.[0]?.list, line: c.lineSpacing ?? 1, before: c.paras?.[0]?.spaceBefore, after: c.paras?.[0]?.spaceAfter, wrap: c.wrap, defaultSize: base?.size ?? st.captionSize, defaultFont: base?.font ?? st.captionFont };
     }
     const sh = [...this.sel.shapes].map((id) => this.doc.shapes.get(id)).find((x): x is Shape => !!x && x.kind === 'geo' && !!x.text?.runs.length);
     if (sh?.text) {
@@ -6180,14 +6253,16 @@ export class Editor {
     const g = this.doc.guides;
     if (!g?.shown || (!g.list.length && !g.grid)) return;
     const area = this.viewArea();
-    const colour = this.dark ? '#4fc3f7' : '#1b8fd0';
+    const colour = g.color ?? (this.dark ? '#4fc3f7' : '#1b8fd0');
+    // (Guides toolbox > Look: how see-through, on top of the grid's own lightness)
+    const solid = 1 - (g.clear ?? 0);
     const lines = guideLines(g, area);
     const minGap = 5 * px;
     ctx.save();
     ctx.strokeStyle = colour;
     for (const l of lines) {
       const snapped = this.drag?.mode === 'move' && this.guideSnapped.some((s) => s.axis === l.axis && s.at === l.at);
-      ctx.globalAlpha = l.guide === null ? 0.35 : snapped ? 1 : 0.8;
+      ctx.globalAlpha = (l.guide === null ? 0.35 : snapped ? 1 : 0.8) * (snapped ? 1 : solid);
       ctx.lineWidth = (snapped ? 2 : 1) * px;
       ctx.beginPath();
       if (l.axis === 'x') { ctx.moveTo(l.at, area.y1); ctx.lineTo(l.at, area.y2); } else { ctx.moveTo(area.x1, l.at); ctx.lineTo(area.x2, l.at); }
@@ -6199,7 +6274,7 @@ export class Editor {
       }
       ctx.stroke();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = Math.max(0.3, solid);
     ctx.lineWidth = 1.5 * px;
     ctx.fillStyle = this.dark ? '#10161f' : '#ffffff';
     for (const x of g.list) {

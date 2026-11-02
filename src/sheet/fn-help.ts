@@ -43,6 +43,7 @@ const LAMBDA_ARG = 'lambda: a LAMBDA giving the answer for each value, such as L
 
 const HELP: Record<string, Entry> = {
   // ---------------------------------------------------------------- chemistry (no structure needed)
+  HAMMETT: ['Chemistry', 'A Hammett constant of the groups on the benzene ring a structure\'s reference position sits on (Hansch, Leo and Taft, Chem. Rev. 1991): HAMMETT(B2,"sigma","wavy") gives σ of an aryl group drawn with a wavy bond on its ring carbon, each group counted meta or para from it. Several groups add up (Σσ).', 'structure: a cell holding a drawn structure or SMILES', 'quantity: "sigma" (σm for meta, σp for para), "sm", "sp", "F", "R" or "group"', 'reference: the attachment point counted from, "wavy", "star" or a diamond\'s number ("1"); or SMILES of a core shared by every row, with * at the position that changes and :1 on the reference position', '[ortho]: "ortho=sp" to give ortho groups σp (left out: #N/A, as Hammett σ has no ortho values)'],
   SIGMA: ['Chemistry', 'The Hammett substituent constant σ of a group, for Hammett plots: SIGMA("NO2") is 0.78.', 'group: the substituent, such as "NO2", "Cl", "OMe", "NMe2" or "CO2Me"', '[position]: "para" (left out), "meta", or "para-" for σp⁻'],
   // ---------------------------------------------------------------- maths
   SUM: [M, 'Adds up numbers.', NUMS],

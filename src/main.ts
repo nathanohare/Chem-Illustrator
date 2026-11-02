@@ -25,6 +25,7 @@ import { Editor, TOOLS, ringsWereFilled, type HighlightToggle, type Selection } 
 import { BUILT_IN_LOOKS, type HighlightLookPreset } from './ui/highlight-looks';
 import { selectionBox, atomsBox, POINTS, type Align, units, moveUnit } from './editor/arrange';
 import { defaultColumns } from './editor/grid-arrange';
+import { askGridLayout, type GridPick } from './ui/grid-picker';
 import { groupSelection, selectedGroups } from './editor/groups';
 import { readCdxml, ReadStats } from './io/cdxml';
 import { readCml } from './io/cml';
@@ -96,10 +97,9 @@ import { recordingToWav, NARRATION_NAME } from './deck/narration';
 import { clockText } from './deck/show-link';
 import type { PresenterView } from './ui/presenter-view';
 import { editDrawingStyle } from './ui/style-dialog';
-import { ribbonStyles, showStylePresets, styleNumbers } from './ui/style-cards';
 import { usedObjects, type DocText } from './document/document';
 import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from './dark-page';
-import { STYLE_PRESETS, applyStyle, presetNamed, restyleContents, sameLook, styleNamed, type RestyleHow, type StyleMode } from './drawing-styles';
+import { STYLE_PRESETS, applyStyle, presetNamed, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
 import { askCleanUpOption } from './ui/cleanup-picker';
 import { looksTangled, turnOption } from './chem/cleanup';
 import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
@@ -152,7 +152,6 @@ import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templ
 import { freeLigandFor, loadFullLigands, placeFreeLigand } from './chem/expand';
 import { centreEnd, haptoLook } from './chem/hapto';
 import { viewNow, viewRingOf, type RingView } from './chem/ring-views';
-import { watchToolHover } from './ui/tool-demos';
 import { countElectrons } from './chem/electrons';
 import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, alkylPrefs, ALKYL_LOOKS, type AlkylLook, tokenize as tokenizeLabel } from './chem/labels';
 import { restyleAlkyl } from './text/alkyl-restyle';
@@ -178,7 +177,7 @@ import { htmlToRich } from './text/html';
 import { LiveStereo } from './chem/live-stereo';
 import { setStereoShown, shownDescriptor, axialStyle } from './chem/stereo';
 import { keymap, COMMAND_NAMES, registerToolNames, displayChord, actionName, chordOf, parseAction, KeyContext, KeyOverrides } from './editor/keymap';
-import { loadSettings, saveSettings, settingsLocation, exportText, importSettings, Settings, DEMO_LOOKS, parseDemoLook, type DemoLook, SLIDE_PANE_MIN, SLIDE_PANE_MAX, NOTES_MIN, NOTES_MAX } from './settings';
+import { loadSettings, saveSettings, settingsLocation, exportText, importSettings, Settings, SLIDE_PANE_MIN, SLIDE_PANE_MAX, NOTES_MIN, NOTES_MAX } from './settings';
 import { arrowGaps } from './chem/mechanism';
 import { showDialog } from './ui/dialog-host';
 import { HotkeysDialog } from './ui/hotkeys-dialog';
@@ -258,7 +257,8 @@ import type { TableData } from './model';
 import { checkDrawing, checkDocument, checkWorkbook, repeatedTitles, structureAlt, setStructureAlt, type Issue, type IssuePlace } from './accessibility';
 import { AccessibilityPane, askAltText } from './ui/accessibility-pane';
 import { PreflightPane } from './ui/preflight-pane';
-import { enlargeText, thickenLines, useArial } from './preflight-fix';
+import { enlargeText, thickenLines, useArial, fixUntilDone } from './preflight-fix';
+import { preflight } from './preflight';
 import { shapeBox } from './objects';
 import { SlideComparePane } from './ui/slide-compare';
 import { pickFileTemplate } from './ui/file-templates';
@@ -2629,22 +2629,28 @@ async function structureKeys(): Promise<Map<number, string>> {
 
 /** Space left between things set out in a row, column or grid: as last chosen, or one and a half bonds. */
 let lastGridGap: number | null = null;
+let lastGridGaps: { rowGap: number; colGap: number } | null = null;
 const gridGap = () => lastGridGap ?? 1.5 * doc.style.bondLength;
 
-/** Format ▸ Align ▸ Arrange in a Grid…: how many across, and the space between. */
+/** Format ▸ Align ▸ Arrange in a Grid…: rows × columns and the spacing, with a live preview. */
 async function arrangeInGrid(): Promise<void> {
   finishTyping();
   const n = editor.gridCount();
   if (n < 2) { flash('Select two or more structures or objects to put in a grid.'); return; }
-  const got = await ask('Arrange in a Grid', [
-    { name: 'cols', label: 'Columns (across)', value: String(defaultColumns(n)), type: 'number' },
-    { name: 'gap', label: 'Space between', value: String(Math.round(gridGap() * 10) / 10), type: 'number', unit: 'pt' },
-  ], { ok: 'Arrange', note: `${n} things, set out in reading order (left to right, then down). Compound numbers move with their structures.` });
+  const start = { cols: defaultColumns(n), rowGap: lastGridGaps?.rowGap ?? gridGap(), colGap: lastGridGaps?.colGap ?? gridGap() };
+  const preview = (p: GridPick) => {
+    const { units: us, offsets } = editor.gridPlan({ kind: 'grid', cols: p.cols, gap: p.colGap, rowGap: p.rowGap, colGap: p.colGap });
+    const sel: Selection = { atoms: new Set(us.flatMap((u) => u.atoms)), bonds: new Set(), captions: new Set(us.flatMap((u) => u.captions)), arrows: new Set(us.flatMap((u) => u.arrows)), shapes: new Set(us.flatMap((u) => u.shapes)) };
+    sel.bonds = new Set([...doc.bonds.values()].filter((b) => sel.atoms.has(b.a1) && sel.atoms.has(b.a2)).map((b) => b.id));
+    const d = extractDrawing(doc, sel);
+    d.bulk(() => us.forEach((u, i) => moveUnit(d, u, offsets[i])));
+    const pic = recordPicture(d, 6);
+    return pic ? pictureSvg(pic).replace(/^<\?xml[^>]*>\s*/, '') : '';
+  };
+  const got = await askGridLayout(n, start, preview);
   if (!got) return;
-  const cols = Math.max(1, Math.min(n, Math.round(Number(got.cols)) || defaultColumns(n)));
-  const gap = Number(got.gap);
-  if (isFinite(gap) && gap >= 0) lastGridGap = Math.min(500, gap);
-  if (!editor.arrangeGrid({ kind: 'grid', cols, gap: gridGap() })) flash('They are already in that grid.');
+  lastGridGaps = { rowGap: got.rowGap, colGap: got.colGap };
+  if (!editor.arrangeGrid({ kind: 'grid', cols: got.cols, gap: got.colGap, rowGap: got.rowGap, colGap: got.colGap })) flash('They are already in that grid.');
 }
 
 // ---------------------------------------------------------------- Clean Up Structure
@@ -3465,7 +3471,7 @@ const modeTool: Record<Tab['mode'], string> = { drawing: 'bond-single', slides: 
 // ---------------------------------------------------------------- sheets
 
 // Properties of the structures in sheets (formula, MW, HRMS…), worked out by the chemistry engine
-const sheetChem = new SheetChem(chem, (c) => structureMolfile(c, ws.active.book?.drawingStyle ?? ACS_1996));
+const sheetChem = new SheetChem(chem, (c, o) => structureMolfile(c, ws.active.book?.drawingStyle ?? ACS_1996, o));
 
 // Pictures of structures for Excel files, drawn in the workbook's drawing style
 const filePictures = new WeakMap<DocStyle, StructurePictures>();
@@ -6112,68 +6118,20 @@ const STYLE_KINDS: Record<StyleMode, { plural: string; where: string }> = {
   sheet: { plural: 'spreadsheets', where: 'this spreadsheet\'s structure cells' },
 };
 
-/** The style structures are drawn in in the tab showing, and whether it has any yet. */
-function drawingStyleNow(): { tab: Tab; mode: StyleMode; current: DocStyle; hasStructures: boolean } {
+/** Pick or change how structures are drawn in the tab showing (a journal's style, or your own). */
+async function drawingStyleDialog(): Promise<void> {
   const tab = ws.active, mode = tab.mode as StyleMode;
+  finishTyping();
   const deck = tab.deck, book = tab.book, file = tab.document;
   const current = deck ? deck.master.drawing : book ? book.drawingStyle : file ? file.t.drawingStyle : doc.style;
   const hasStructures = deck ? deck.slides.some((_, i) => deck.docOf(i).atoms.size > 0)
     : file ? Object.values(file.t.objects).some((o) => o.kind === 'drawing' && o.contents.atoms.length > 0)
     : book ? book.sheets.some((s) => [...s.cells.values()].some((c) => !!c.structure)) : doc.atoms.size > 0 || doc.captions.size > 0;
-  return { tab, mode, current, hasStructures };
-}
-
-/** Draw the tab's structures in `next` (every slide, every figure of a document…), as one step to undo. */
-function applyDrawingStyle(tab: Tab, next: DocStyle, how: RestyleHow): void {
-  previewDrawingStyle(null);
-  const deck = tab.deck, book = tab.book, file = tab.document;
-  if (deck) deck.setDrawingStyle(next, how);
-  else if (book) {
-    book.setDrawingStyle(next, (c, old) => restyleContents(c, old, next, how));
-    sheetMode?.styleChanged();
-  } else if (file) {
-    const t = file.t, old = t.drawingStyle;
-    const objects = { ...t.objects };
-    for (const [k, o] of Object.entries(objects)) if (o.kind === 'drawing') objects[Number(k)] = { ...o, contents: restyleContents(o.contents, old, next, how) };
-    const changed: DocText = { ...t, objects, drawingStyle: { ...next } };
-    file.ed.update(changed, 'Drawing style');
-    docMode?.fontsChanged();
-  } else {
-    doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, next, how));
-    editor.changed();
-  }
-}
-
-/** A style being tried on the drawing showing (pointing at a Drawing Styles card): taken back with null. */
-let stylePreviewDoc: Doc | null = null;
-function previewDrawingStyle(st: DocStyle | null): void {
-  if (stylePreviewDoc) {
-    stylePreviewDoc.abandon();
-    stylePreviewDoc = null;
-    editor.requestScene();
-  }
-  if (!st) return;
-  // only where the drawing on screen is the editor's (a canvas, a design, the slide showing)
-  const mode = ws.active.mode;
-  if (mode !== 'drawing' && mode !== 'design' && mode !== 'slides') return;
-  const d = editor.doc;
-  if (d.editing || (!d.atoms.size && !d.captions.size) || (st.name === d.style.name && sameLook(st, d.style))) return;
-  d.begin('Drawing style preview');
-  applyStyle(d, st, 'restyle');
-  stylePreviewDoc = d;
-  editor.requestScene();
-}
-
-/** Pick or change how structures are drawn in the tab showing (a journal's style, or your own). */
-async function drawingStyleDialog(): Promise<void> {
-  finishTyping();
-  const { tab, mode, current, hasStructures } = drawingStyleNow();
   const got = await editDrawingStyle({
     current, own: ownStyles, kindPlural: STYLE_KINDS[mode].plural, where: STYLE_KINDS[mode].where,
     isDefault: modeStyleFor(mode) === current.name, hasStructures,
-    preview: (st) => stylePreview(st), livePreview: previewDrawingStyle,
+    preview: (st) => stylePreview(st),
   });
-  previewDrawingStyle(null);
   if (!got || ws.active !== tab) return;
   ownStyles = got.own;
   // Set as Default: new files start in it too
@@ -6189,59 +6147,23 @@ async function drawingStyleDialog(): Promise<void> {
     ownStyles = [...ownStyles, { ...got.style }];
   }
   storeSettings();
-  applyDrawingStyle(tab, got.style, got.how);
-  for (const r of ribbonStyleStrips) r.refresh();
-  flash(`Structures are now drawn in ${got.style.name}${got.forNew ? `, and new ${STYLE_KINDS[mode].plural} will start in it` : ''}.`, 4000);
-}
-
-/** Drawing Styles ▾ on the ribbon: the style cards; pointing at one shows the drawing in it, clicking applies it. */
-function drawingStylesGallery(at?: { left: number; bottom: number }): void {
-  finishTyping();
-  const { tab, current } = drawingStyleNow();
-  showStylePresets(at ?? dropAnchor('drawing-styles'), {
-    own: ownStyles, current,
-    preview: previewDrawingStyle,
-    pick: (st) => {
-      if (ws.active !== tab) return;
-      applyDrawingStyle(tab, st, 'restyle');
-      for (const r of ribbonStyleStrips) r.refresh();
-      flash(`Structures are now drawn in ${st.name}. Undo takes it back.`, 3000);
-    },
-    save: () => void saveCurrentStyle(),
-    more: () => void drawingStyleDialog(),
-  });
-}
-
-/** The Drawing Styles strips on the Presentation and Design ribbons (made once the app is up). */
-let ribbonStyleStrips: { refresh(): void }[] = [];
-setTimeout(() => {
-  ribbonStyleStrips = [...document.querySelectorAll<HTMLElement>('[data-style-gallery]')].map((host) => ribbonStyles(host, {
-    own: () => ownStyles,
-    current: () => drawingStyleNow().current,
-    preview: previewDrawingStyle,
-    pick: (st) => {
-      finishTyping();
-      applyDrawingStyle(ws.active, st, 'restyle');
-      flash(`Structures are now drawn in ${st.name}. Undo takes it back.`, 3000);
-    },
-    more: (b) => drawingStylesGallery(b.getBoundingClientRect()),
-  }));
-}, 400);
-
-/** Keep the style in use as one of your own (the gallery's "+ Save current"). */
-async function saveCurrentStyle(): Promise<void> {
-  const { current } = drawingStyleNow();
-  const got = await ask('Save as My Style', [{ name: 'name', label: 'Name', value: current.name.startsWith('My ') ? current.name : `My ${current.name}` }], {
-    ok: 'Save', note: `Keeps ${styleNumbers(current)} under this name, in the Drawing Styles gallery of every mode.`,
-  });
-  const name = got?.name.trim();
-  if (!name) return;
-  const st: DocStyle = { ...current, name };
-  const had = ownStyles.findIndex((s) => s.name === name);
-  ownStyles = had >= 0 ? ownStyles.map((s, i) => (i === had ? st : s)) : [...ownStyles, st];
-  storeSettings();
-  for (const r of ribbonStyleStrips) r.refresh();
-  flash(`${name} is now one of your drawing styles.`, 3000);
+  const next = got.style;
+  if (deck) deck.setDrawingStyle(next, got.how);
+  else if (book) {
+    book.setDrawingStyle(next, (c, old) => restyleContents(c, old, next, got.how));
+    sheetMode?.styleChanged();
+  } else if (file) {
+    const t = file.t, old = t.drawingStyle;
+    const objects = { ...t.objects };
+    for (const [k, o] of Object.entries(objects)) if (o.kind === 'drawing') objects[Number(k)] = { ...o, contents: restyleContents(o.contents, old, next, got.how) };
+    const changed: DocText = { ...t, objects, drawingStyle: { ...next } };
+    file.ed.update(changed, 'Drawing style');
+    docMode?.fontsChanged();
+  } else {
+    doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, next, got.how));
+    editor.changed();
+  }
+  flash(`Structures are now drawn in ${next.name}${got.forNew ? `, and new ${STYLE_KINDS[mode].plural} will start in it` : ''}.`, 4000);
 }
 
 /**
@@ -7702,16 +7624,30 @@ const preflightPane = new PreflightPane({
   },
   fix: (issue, r) => {
     finishTyping();
-    const m = editor.measure();
-    const ctx = { captionBox: (id: number) => m.captionBox(doc.captions.get(id)!), shapeBox: (id: number) => shapeBox(doc.shapes.get(id)!) };
-    let done = false;
-    if (issue.fix === 'fit' && issue.want) {
-      editor.selectAll();
-      done = editor.scaleSelection(issue.want);
-      if (done) flash(`Scaled to ${Math.round(issue.want * 100)} % to fit ${r.size.name.replace(/ \(.*/, '').toLowerCase()}. Text in captions keeps its size; check it again.`, 6000);
-    } else if (issue.fix === 'text') done = enlargeText(doc, issue, ctx);
-    else if (issue.fix === 'lines') done = thickenLines(doc, issue, ctx);
-    else if (issue.fix === 'fonts') done = useArial(doc, issue.fonts ?? []);
+    // measured afresh for each step (text made bigger has a bigger box)
+    const fixCtx = () => { const m = editor.measure(); return { captionBox: (id: number) => m.captionBox(doc.captions.get(id)!), shapeBox: (id: number) => shapeBox(doc.shapes.get(id)!) }; };
+    let scaled = 1;
+    const apply = (i: typeof issue): boolean => {
+      if (i.fix === 'fit' && i.want) {
+        editor.selectAll();
+        const ok = editor.scaleSelection(i.want);
+        if (ok) scaled *= i.want;
+        return ok;
+      }
+      if (i.fix === 'text') return enlargeText(doc, i, fixCtx());
+      if (i.fix === 'lines') return thickenLines(doc, i, fixCtx());
+      if (i.fix === 'fonts') return useArial(doc, i.fonts ?? []);
+      return false;
+    };
+    // checked again after each step: one fix can undo another's work by a hair
+    const again = () => {
+      const fig = preflightPane.figureNow();
+      return fig ? preflight(fig.items, fig.box, r.journal, r.size.id, r.how) : null;
+    };
+    // all the steps are one undo
+    const label = { fit: 'Make it fit', text: 'Enlarge small text', lines: 'Thicken thin lines', fonts: 'Change fonts to Arial', style: 'Drawing style' }[issue.fix ?? 'style'];
+    const done = doc.edit(label, () => fixUntilDone(issue, apply, again));
+    if (done && issue.fix === 'fit') flash(`Scaled to ${Math.round(scaled * 100)} % to fit ${r.size.name.replace(/ \(.*/, '').toLowerCase()}. Text in captions keeps its size.`, 6000);
     if (done) editor.changed();
     else if (issue.fix !== 'fit') flash('This is in a picture, chart or table: change it there.');
     return done;
@@ -8118,7 +8054,6 @@ const COMMANDS: Record<string, () => unknown> = {
   'delete-all-comments': () => { if (ws.active.mode !== 'slides') return false; slideCmts?.removeAll(); return undefined; },
   'show-comments': () => { if (ws.active.mode !== 'slides' || !slideCmts) return false; slideCmts.show(!slideCmts.shown); return undefined; },
   'drawing-style': () => settingsWindow.open('style'),
-  'drawing-styles': () => drawingStylesGallery(),
   present: () => present(false),
   'present-current': () => present(true),
   'presenter-view': () => present(false, true),
@@ -8409,6 +8344,7 @@ const COMMANDS: Record<string, () => unknown> = {
     else editor.addHomolysisArrows();
   },
   'draw-from-arrows': () => {
+    if (!editor.options.arrowProducts) { flash('Draw Next Intermediate is turned off in Edit ▸ Settings ▸ Drawing.'); return; }
     const r = editor.drawFromArrows();
     if (r === 'many') { flash('The arrows are on more than one step: select an arrow or the structure of the step to draw.', 5000); return; }
     if (r === 'none') { flash('Draw curved (mechanism) arrows on a structure first, each from a lone pair or bond to where its electrons go.', 5000); return; }
@@ -8434,7 +8370,11 @@ const COMMANDS: Record<string, () => unknown> = {
     await orientLikeFirst(true);
     if (!editor.cleanUpReaction()) flash('No reaction to tidy: draw starting materials, an arrow and products (the arrow pointing from one to the other), or the scheme is already tidy.', 6000);
   },
-  'clean-up-reaction': () => editor.cleanUpReaction() || flash('No reaction to tidy: draw starting materials, an arrow and products (the arrow pointing from one to the other), or the scheme is already tidy.', 6000),
+  'clean-up-reaction': () => {
+    const r = editor.cleanUpReaction();
+    if (!r) flash('No reaction to tidy: draw starting materials, an arrow and products (the arrow pointing from one to the other), or the scheme is already tidy. Press it again to fit each arrow to its own text.', 6000);
+    else if (r === 'fitted') flash('Each arrow fitted to its own text. Clean Up Reaction again to make them all the same length.', 4000);
+  },
   'arrange-scheme': () => arrangeDialog.open(),
   'stoichiometry-table': () => void stoichiometryTable(),
   'check-balance': () => void checkStepBalance(),
@@ -8466,6 +8406,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'attach-descriptors': () => void attachDescriptors(),
   'pubchem-lookup': () => void lookUpChosen(),
   'find-cas': () => void findCasChosen(),
+  'attach-wavy': () => attachPointCommand('Wavy'),
+  'attach-star': () => attachPointCommand('Star'),
+  'attach-numbered': () => attachPointCommand('Numbered'),
+  'attach-remove': () => attachPointCommand(null),
   'model-3d': () => void show3dModel(),
   'newman-projection': () => {
     const b = contextBond ?? (editor.sel.bonds.size === 1 ? [...editor.sel.bonds][0] : null);
@@ -9274,10 +9218,6 @@ function chooseMethylStyle(style: MethylStyle): void {
 
 /** Ask before a command with nothing selected changes every structure on the page (Edit > Settings). */
 let askWholeDrawing = true;
-/** How a tool's demo shows on a long hover over its button (Settings ▸ General). */
-// (off until it's settled which tools should have one)
-let toolDemos: DemoLook = 'off';
-watchToolHover(document, () => toolDemos);
 /** Where linked text goes (Edit > Settings). */
 let linkSide: Settings['linkSide'] = 'keep';
 
@@ -9616,6 +9556,8 @@ async function drawingPreferences(): Promise<void> {
       help: 'Longer labels (OR1, CO2R1) and labels from files are left as they are.' },
     { name: 'reroute', label: 'Mechanism arrows find their own way round again when a change leaves them running into a structure, a label or another arrow', type: 'checkbox', value: String(editor.options.rerouteArrows),
       help: 'Arrows you bent by hand stay as they are.' },
+    { name: 'arrowProducts', label: 'Offer Draw Next Intermediate and Check Arrows (Chemistry ▸ Mechanism Arrows): curved arrows read as electrons moving, checked, and the structure they make drawn', type: 'checkbox', value: String(editor.options.arrowProducts),
+      help: 'Off takes both commands out of the menus. The arrows themselves are drawn as before.' },
     { name: 'startGap', label: 'Gap between a mechanism arrow\'s start and its atom or lone pair', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic' },
     { name: 'endGap', label: 'Gap between a mechanism arrow\'s head and its atom', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic',
       help: 'Measured from the atom\'s label (or a bare carbon\'s corner) or the lone pair\'s dots. Leave blank for the usual gap, which grows with the bond length. New arrows, and arrows stuck to a structure, use it when they are next drawn; Clean Up Arrow redraws the selected ones now.' },
@@ -9634,6 +9576,8 @@ async function drawingPreferences(): Promise<void> {
   chemText.ionCharges = r.ionCharges === 'true';
   chemText.saltGroups = r.saltGroups === 'true';
   editor.options.rerouteArrows = r.reroute === 'true';
+  editor.options.arrowProducts = r.arrowProducts === 'true';
+  showArrowProducts();
   const gap = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
   arrowGaps.start = gap(r.startGap);
   arrowGaps.end = gap(r.endGap);
@@ -9670,8 +9614,6 @@ async function generalPreferences(): Promise<void> {
       help: 'Off: they keep the look they had in Word and become drawings when you edit one. On: each is redrawn here in the document\'s drawing style.' },
     { name: 'reviewer', label: 'Your name on tracked changes in documents', value: reviewAuthor() },
     { name: 'startView', label: 'Show the start view (new tabs, recent files) when the program opens', type: 'checkbox', value: String(startView) },
-    { name: 'toolDemos', label: 'Resting the pointer on a tool such as the curved arrow shows', value: toolDemos, options: DEMO_LOOKS,
-      help: 'A short demo of the tool, drawn as you watch. With animation turned off in your system\'s settings, it shows a still picture of each step.' },
   ], { ok: 'Save' });
   if (!r) return;
   editor.options.groupClick = r.groupClick === 'item' ? 'item' : 'group';
@@ -9683,7 +9625,6 @@ async function generalPreferences(): Promise<void> {
   straightenLinear.on = r.straightenLinear === 'true';
   setReviewAuthor(r.reviewer ?? '');
   startView = r.startView === 'true';
-  toolDemos = parseDemoLook(r.toolDemos);
   storeSettings();
 }
 
@@ -9845,11 +9786,11 @@ function currentSettings(): Settings {
     groupClick: editor.options.groupClick,
     groupOutline: editor.options.groupOutline,
     rerouteArrows: editor.options.rerouteArrows,
+    arrowProducts: editor.options.arrowProducts,
     arrowStartGap: arrowGaps.start,
     arrowEndGap: arrowGaps.end,
     cursorAids: { ...editor.aids },
     haptoDelocalized: haptoLook.delocalized,
-    toolDemos,
     superscriptR: labelPrefs.superscriptR,
     alkylLook: alkylPrefs.look,
     bondEnds: bondEndPrefs.round,
@@ -10091,11 +10032,12 @@ function applySettings(s: Settings): void {
   editor.options.groupClick = s.groupClick;
   editor.options.groupOutline = s.groupOutline;
   editor.options.rerouteArrows = s.rerouteArrows;
+  editor.options.arrowProducts = s.arrowProducts;
+  showArrowProducts();
   arrowGaps.start = s.arrowStartGap;
   arrowGaps.end = s.arrowEndGap;
   editor.aids = { ...s.cursorAids };
   haptoLook.delocalized = s.haptoDelocalized;
-  toolDemos = s.toolDemos;
   labelPrefs.superscriptR = s.superscriptR;
   alkylPrefs.look = s.alkylLook;
   bondEndPrefs.round = s.bondEnds;
@@ -10997,9 +10939,15 @@ function updateWarnings(): void {
 }
 
 /** Chemistry > Check Structure: go to the next problem after the one selected. */
+/** Draw Next Intermediate and Check Arrows in the menus, or not (Settings ▸ Drawing). */
+function showArrowProducts(): void {
+  for (const el of document.querySelectorAll<HTMLElement>('[data-cmd="draw-from-arrows"], [data-cmd="check-arrows"], #arrow-products-rule')) el.hidden = !editor.options.arrowProducts;
+}
+
 /** Check Arrows: each problem with the mechanism arrows in turn, selected and said (like Check Structure). */
 let arrowIssue = 0;
 function checkArrows(): void {
+  if (!editor.options.arrowProducts) { flash('Check Arrows is turned off in Edit ▸ Settings ▸ Drawing.'); return; }
   const list = editor.checkArrows();
   if (list === 'many') { flash('The arrows are on more than one step: select an arrow or the structure of the step to check.', 5000); return; }
   if (list === 'none') { flash('There are no curved (mechanism) arrows on a structure to check.'); return; }
@@ -11263,6 +11211,31 @@ function readAsMenu(): MenuItem {
   ] };
 }
 
+/** The atom a right-click > Attachment Point command is for: the atom clicked, or the one atom selected. */
+function attachPointAtom(): number | null {
+  if (contextAtom && !contextAtom.all) return contextAtom.id;
+  return editor.sel.atoms.size === 1 && !editor.sel.bonds.size ? [...editor.sel.atoms][0] : null;
+}
+
+/** Right-click > Attachment Point > Wavy Bond, Star, Numbered or Remove. */
+function attachPointCommand(kind: 'Wavy' | 'Star' | 'Numbered' | null): void {
+  const id = attachPointAtom();
+  if (id === null) { flash('Right-click the atom the attachment point goes on (a ring carbon gets a new bond out to it).'); return; }
+  editor.setAttachPoint(id, kind);
+}
+
+/** Right-click > Attachment Point, with the kind the atom has ticked. */
+function attachPointMenu(): MenuItem[] {
+  const id = attachPointAtom();
+  const a = id === null ? undefined : doc.atoms.get(id);
+  if (!a || a.multi) return [];
+  const kind = a.attach === 'Wavy' ? 'wavy' : a.attach === 'Star' ? 'star' : a.attach ? 'numbered' : '';
+  return [{ label: 'Attachment Point', items: [
+    { cmd: 'attach-wavy', label: 'Wavy Bond', checked: kind === 'wavy' }, { cmd: 'attach-star', label: 'Star', checked: kind === 'star' }, { cmd: 'attach-numbered', label: 'Numbered', checked: kind === 'numbered' },
+    ...(a.attach ? [null, { cmd: 'attach-remove', label: 'Remove Attachment Point' }] : []),
+  ] }];
+}
+
 function drawingMenu(): MenuItem[] {
   const s = editor.sel;
   const any = s.atoms.size + s.bonds.size + s.captions.size + s.arrows.size + s.shapes.size > 0;
@@ -11315,6 +11288,7 @@ function drawingMenu(): MenuItem[] {
       ...fuseRingMenu(),
       ...ringShapeMenu(),
       ...metalMenu(),
+      ...attachPointMenu(),
       { label: 'Structure', items: [
         { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'chain-ends' }, { cmd: 'explicit-h' }, null,
         { cmd: 'contract-label' }, { cmd: 'expand-label' }, { cmd: 'expand-label-full' }, { cmd: 'join' }, null,
@@ -11333,7 +11307,7 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'arrow-add-bend', ...(editor.contextSpot?.t !== undefined ? { label: 'Add Bend Here' } : {}) }, ...(editor.pickedJoin() ? [{ cmd: 'arrow-remove-bend' }, { cmd: 'arrow-smooth-join' }, { cmd: 'arrow-symmetric-join' }] : []), null,
       { label: 'Shape', items: [{ cmd: 'arrow-s-shape', label: 'S' }, { cmd: 'arrow-single-curve', label: 'Single Curve' }, { cmd: 'arrow-shape-u', label: 'U-Turn' }, { cmd: 'arrow-shape-loop', label: 'Loop' }] },
       { cmd: 'flip-arrow-bend' }, { cmd: 'arrow-reverse' }, { cmd: 'arrow-smooth-path' }, { cmd: 'arrow-simplify-path' }, null, { cmd: 'attach-arrow' }, { cmd: 'detach-arrow' },
-    ] }, { cmd: 'draw-from-arrows' }, { cmd: 'check-arrows' }] : []),
+    ] }, ...(editor.options.arrowProducts ? [{ cmd: 'draw-from-arrows' }, { cmd: 'check-arrows' }] : [])] : []),
     ...(s.bonds.size && s.bonds.size <= 2 && !s.arrows.size ? [{ cmd: 'homolysis-arrows' }] : []),
     ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : []),
     ...(s.arrows.size || atoms ? [...(editor.selectedSmart() !== null ? [{ cmd: 'ungroup-smart-scheme' }, null] : []), { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, ...(editor.selectedSmart() === null ? [{ cmd: 'convert-smart-scheme' }] : []), { cmd: 'smart-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'map-atoms' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
@@ -11604,7 +11578,7 @@ function favoritesChanged(): void {
 
 /** The look of what is selected, wherever it is: a document's text, a caption being typed in, or things on a drawing. */
 function selectionLook(): ObjectLook | null {
-  if (sheetActive()) return null;
+  if (sheetActive()) return sheetMode.favoriteLook();
   if (docActive()) { const t = docMode.pickLook(); return t ? { text: t, colour: { color: t.run.color } } : null; }
   const cap = editor.typingCaption;
   if (cap) { const t = cap.ed.pickLook(); return { text: t, colour: { color: t.run.color } }; }
@@ -11615,13 +11589,13 @@ function selectionLook(): ObjectLook | null {
 async function saveFavorite(replacing?: FormatFavorite): Promise<void> {
   const look = selectionLook();
   if (!look) {
-    flash(sheetActive() ? 'Format Favorites keep the looks of shapes, structures, arrows, pictures and text; in a sheet, use cell styles.' : 'Select something with the look you want to keep (a shape, arrow, structure, picture or text) first.');
+    flash(sheetActive() ? 'Select the cells or the shape with the look you want to keep first.' : 'Select something with the look you want to keep (a shape, arrow, structure, picture or text) first.');
     return;
   }
   let name = replacing?.name;
   if (!name) {
     const got = await ask('Save Format as Favorite', [{ name: 'name', label: 'Name', value: freshFavoriteName(favorites), placeholder: 'for example Key intermediate box' }], {
-      ok: 'Save', note: `Keeps ${favoriteSummary(look) || 'the look'} of what is selected. Click it under Format Favorites on the Home tab (or Edit ▸ Format Favorites…) to give that look to the selection, in any drawing, slide, design or document.`,
+      ok: 'Save', note: `Keeps ${favoriteSummary(look) || 'the look'} of what is selected. Click it under Format Favorites on the Home tab (or Edit ▸ Format Favorites…) to give that look to the selection, in any drawing, slide, design, document or sheet.`,
     });
     name = got?.name.trim();
     if (!name) return;
@@ -11634,7 +11608,7 @@ async function saveFavorite(replacing?: FormatFavorite): Promise<void> {
 /** Give the selection a favorite's look (one undo step). */
 function applyFavorite(f: FormatFavorite): void {
   const look = f.look;
-  if (sheetActive()) { flash('Format Favorites are for drawings, slides, designs and documents.'); return; }
+  if (sheetActive()) { if (!sheetMode.paintFavorite(look, f.name)) flash(`“${f.name}” has no look cells or this object can take.`); return; }
   if (docActive()) {
     if (!look.text) { flash(`“${f.name}” has no text look to give to text.`); return; }
     if (!docMode.paintLook(look.text)) flash('Put the caret in a word, or select some text, first.');
@@ -12007,22 +11981,26 @@ const guidesToolboxHooks: GuidesToolboxHooks = {
 editor.onGuides = () => { ws.noteChange(); guidesToolbox?.refresh(); };
 
 const DOC_TOGGLES: Partial<Record<string, string>> = { bold: 'doc-bold', italic: 'doc-italic', underline: 'doc-underline', sub: 'doc-sub', sup: 'doc-sup', formula: 'doc-formula' };
+const DOC_ALIGN: Record<string, string> = { left: 'doc-align-left', center: 'doc-align-center', right: 'doc-align-right', justify: 'doc-justify' };
+const DOC_LINES: Record<number, string> = { 1: 'line-single', 1.5: 'line-1-5', 2: 'line-double' };
 const textToolboxHooks: TextToolboxHooks = {
   format: (f) => {
     if (docActive()) {
-      if (f.kind === 'style') { flash('In a document, the Home tab\'s Font and Size boxes set these.'); return true; }
-      const cmd = f.kind === 'stereo' ? 'doc-stereo-italic' : f.kind === 'toggle' ? DOC_TOGGLES[f.key] : undefined;
-      return !!cmd && docMode.run(cmd);
+      const cmd = f.kind === 'stereo' ? 'doc-stereo-italic' : f.kind === 'toggle' ? DOC_TOGGLES[f.key] : f.kind === 'align' ? DOC_ALIGN[f.j] : f.kind === 'line' ? DOC_LINES[f.v] : undefined;
+      if (!cmd) { flash('In a document, the Home tab\'s Font and Paragraph groups set these.'); return true; }
+      return docMode.run(cmd);
     }
     if (sheetActive()) return false;
-    const ok = editor.formatText(f);
-    editor.refocusText();
-    return ok;
+    return editor.formatText(f);
   },
-  type: (ch) => { const ok = insertSymbol(ch); editor.refocusText(); return ok; },
-  look: () => (docActive() || sheetActive() ? null : editor.textLook()?.style ?? null),
-  defaults: () => { if (docActive() || sheetActive()) return null; const l = editor.textLook(); return l ? { size: l.defaultSize, font: l.defaultFont } : null; },
-  moreSymbols: () => symbolWindow.open(),
+  type: (ch) => insertSymbol(ch),
+  link: () => { if (!docActive() && !sheetActive()) void insertLink(); },
+  look: () => {
+    if (docActive() || sheetActive()) return null;
+    const l = editor.textLook();
+    return l ? { style: l.style, align: l.align, list: l.list, line: l.line, before: l.before ?? 0, after: l.after ?? 0, wrap: l.wrap, link: !!l.link, defaultFont: l.defaultFont } : null;
+  },
+  back: () => editor.refocusText(),
   say: (t) => flash(t),
 };
 
@@ -12485,7 +12463,7 @@ const guide = {
 };
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 const SETTINGS_PAGES: SettingsPage[] = [
-  { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files demo clips hover tool tips animation', open: generalPreferences },
+  { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files', open: generalPreferences },
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
