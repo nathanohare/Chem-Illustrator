@@ -8275,6 +8275,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'attach-descriptors': () => void attachDescriptors(),
   'pubchem-lookup': () => void lookUpChosen(),
   'find-cas': () => void findCasChosen(),
+  'attach-wavy': () => attachPointCommand('Wavy'),
+  'attach-star': () => attachPointCommand('Star'),
+  'attach-numbered': () => attachPointCommand('Numbered'),
+  'attach-remove': () => attachPointCommand(null),
   'model-3d': () => void show3dModel(),
   'newman-projection': () => {
     const b = contextBond ?? (editor.sel.bonds.size === 1 ? [...editor.sel.bonds][0] : null);
@@ -11021,6 +11025,31 @@ function readAsMenu(): MenuItem {
   ] };
 }
 
+/** The atom a right-click > Attachment Point command is for: the atom clicked, or the one atom selected. */
+function attachPointAtom(): number | null {
+  if (contextAtom && !contextAtom.all) return contextAtom.id;
+  return editor.sel.atoms.size === 1 && !editor.sel.bonds.size ? [...editor.sel.atoms][0] : null;
+}
+
+/** Right-click > Attachment Point > Wavy Bond, Star, Numbered or Remove. */
+function attachPointCommand(kind: 'Wavy' | 'Star' | 'Numbered' | null): void {
+  const id = attachPointAtom();
+  if (id === null) { flash('Right-click the atom the attachment point goes on (a ring carbon gets a new bond out to it).'); return; }
+  editor.setAttachPoint(id, kind);
+}
+
+/** Right-click > Attachment Point, with the kind the atom has ticked. */
+function attachPointMenu(): MenuItem[] {
+  const id = attachPointAtom();
+  const a = id === null ? undefined : doc.atoms.get(id);
+  if (!a || a.multi) return [];
+  const kind = a.attach === 'Wavy' ? 'wavy' : a.attach === 'Star' ? 'star' : a.attach ? 'numbered' : '';
+  return [{ label: 'Attachment Point', items: [
+    { cmd: 'attach-wavy', label: 'Wavy Bond', checked: kind === 'wavy' }, { cmd: 'attach-star', label: 'Star', checked: kind === 'star' }, { cmd: 'attach-numbered', label: 'Numbered', checked: kind === 'numbered' },
+    ...(a.attach ? [null, { cmd: 'attach-remove', label: 'Remove Attachment Point' }] : []),
+  ] }];
+}
+
 function drawingMenu(): MenuItem[] {
   const s = editor.sel;
   const any = s.atoms.size + s.bonds.size + s.captions.size + s.arrows.size + s.shapes.size > 0;
@@ -11073,6 +11102,7 @@ function drawingMenu(): MenuItem[] {
       ...fuseRingMenu(),
       ...ringShapeMenu(),
       ...metalMenu(),
+      ...attachPointMenu(),
       { label: 'Structure', items: [
         { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'chain-ends' }, { cmd: 'explicit-h' }, null,
         { cmd: 'contract-label' }, { cmd: 'expand-label' }, { cmd: 'expand-label-full' }, { cmd: 'join' }, null,
