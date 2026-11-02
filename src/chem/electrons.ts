@@ -12,6 +12,7 @@ import { Doc, isMetalAtom, outsideValence, radicalElectrons, type Atom, type Bon
 import { SYMBOLS, elementNumber, lowestValence, tablePosition, valenceOfBonds } from './elements';
 import { labelDonates, labelGraph } from './labels';
 import { metalCarbonyl } from './hapto';
+import { ligandByAbbr } from './ligands';
 
 export type LigandKind = 'L' | 'X' | 'Z' | 'M–M';
 
@@ -131,6 +132,9 @@ function metalLabelParts(label: string): { z: number; ligands: string[] } | null
 function labelClass(label: string, order: number, others: number): { l: number; x: number; hapto?: number } {
   const known = LABEL_CLASS[label];
   if (known) return known;
+  // a ligand from the Ligand Library: its L and X count (dtbbpy L₂, salen L₂X₂, Cp′ η⁵ L₂X)
+  const lig = ligandByAbbr(label);
+  if (lig) return { l: lig.l, x: lig.x, ...(lig.hapto ? { hapto: lig.hapto } : {}) };
   if (labelDonates(label, others)) return { l: 1, x: 0 };
   return { l: 0, x: order };
 }
@@ -239,7 +243,8 @@ export function countElectrons(doc: Doc, atomId: number): MetalCount[] {
 
     if (a.label) {
       const others = all.filter((b) => !outsideValence(b) && !toMetal.includes(b)).reduce((s, b) => s + b.order, 0);
-      const known = LABEL_CLASS[a.label];
+      const lib = LABEL_CLASS[a.label] ? undefined : ligandByAbbr(a.label);
+      const known = LABEL_CLASS[a.label] ?? (lib && { l: lib.l, x: lib.x, ...(lib.hapto ? { hapto: lib.hapto } : {}) });
       if (known) {
         for (const b of plain) { add(metalOf(b), { name: a.label, ...known, z: 0 }); xSoFar.set(metalOf(b), xSoFar.get(metalOf(b))! + known.x); }
         continue;
