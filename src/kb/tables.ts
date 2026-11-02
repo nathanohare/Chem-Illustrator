@@ -17,6 +17,8 @@ export interface KbColumn {
   filter?: boolean | 'present';
   /** Narrow column (multiplicity, units). */
   narrow?: boolean;
+  /** A column of sentences: given more room. */
+  prose?: boolean;
   /** Searched but not shown or copied (a PDF page's whole text). */
   hidden?: boolean;
   /** Shows a short excerpt of another column around the words searched for. */

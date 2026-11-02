@@ -317,6 +317,7 @@ export class KnowledgeBaseWindow {
         const td = el('td');
         if (c.numeric || c.shift) td.className = 'num';
         if (c.narrow) td.classList.add('narrow');
+        if (c.prose) td.classList.add('prose');
         if (c.key === 'cas') td.classList.add('cas');
         if (c.excerptOf) { td.classList.add('kb-excerpt'); if (v) td.append(marked(String(v), this.search.value)); }
         else if (v !== null && v !== undefined && v !== '') td.append(typeof v === 'number' ? String(v) : cellExplained(v, !!c.narrow));

@@ -1,10 +1,12 @@
 // The Knowledge Base's built-in tables. Only facts the program may carry: hazard numbers and
 // physical constants from public-domain records (safety-tables.ts), the residual peaks of the
-// common deuterated solvents (printed on every solvent maker's chart), the glossary written for
-// this program. Larger published tables (trace impurities in each solvent) are imported by the user
-// from their own copy and kept on their computer; see tables.ts parseUserTable.
+// common deuterated solvents (printed on every solvent maker's chart), and the glossary and the
+// purification and technique notes (handling.ts) written for this program. Larger published
+// tables (trace impurities in each solvent) are imported by the user from their own copy and kept
+// on their computer; see tables.ts parseUserTable.
 
 import { GLOSSARY } from './glossary';
+import { PURIFICATION_TABLE, TECHNIQUES_TABLE } from './handling';
 import type { KbTable } from './tables';
 import { PHYSICAL_CONSTANTS, REAGENT_SAFETY } from './safety-tables';
 
@@ -60,4 +62,4 @@ export const GLOSSARY_TABLE: KbTable = {
 };
 
 /** The tables built in, in the order the window lists them. */
-export const BUILT_IN_TABLES: KbTable[] = [REAGENT_SAFETY, NMR_SOLVENTS, PHYSICAL_CONSTANTS, GLOSSARY_TABLE];
+export const BUILT_IN_TABLES: KbTable[] = [REAGENT_SAFETY, PURIFICATION_TABLE, TECHNIQUES_TABLE, NMR_SOLVENTS, PHYSICAL_CONSTANTS, GLOSSARY_TABLE];
