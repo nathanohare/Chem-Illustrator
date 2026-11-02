@@ -177,7 +177,7 @@ A **Format Favorite** is a complete look kept under a name: fill (colour, gradie
 - **Use one:** select what should take the look and click the favorite's card in the gallery, or right-click ▸ **Format Favorites** ▸ its name, or **Edit ▸ Format Favorites…**. It is one step to undo.
 - **Change one:** right-click its card for **Update to Match Selection**, **Rename…**, **Move Earlier** and **Delete**.
 
-Favorites are kept with your settings, not in a file, so the same ones are there in every canvas, presentation, design and document (in a document, a favorite gives its text look). The things you paint keep their look when saved, in every format.
+Favorites are kept with your settings, not in a file, so the same ones are there in every canvas, presentation, design, document and spreadsheet (in a document, a favorite gives its text look). In a spreadsheet the gallery is on the **Home** tab beside **Styles**: a favorite gives the selected cells its fill, font, colour, alignment and, when its outline has a colour, thin borders of that colour, or gives a selected shape or text box its fill, outline and font; **+** there saves the look of the selected cells or shape. The things you paint keep their look when saved, in every format.
 
 ### Insert ▸ Symbol (every mode)
 
