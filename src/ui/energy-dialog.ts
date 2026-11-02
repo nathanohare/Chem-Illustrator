@@ -69,8 +69,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
     const form = document.createElement('form');
     form.method = 'dialog';
     form.innerHTML = `<h2>${editing ? 'Edit Energy Diagram' : 'Energy Diagram'} <span class="energy-info" tabindex="0" role="img" aria-label="${HELP}" title="${HELP}"><svg viewBox="0 0 14 14" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="7" cy="7" r="5.9"/><path d="M7 6.2v3.9" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="4.1" r=".85" fill="currentColor" stroke="none"/></svg></span></h2>
-      <label class="ask-row"${editing ? ' hidden' : ''}><span>Start from</span><select name="preset"></select></label>
-      <p class="muted energy-blurb"${editing ? ' hidden' : ''}></p>
+      <label class="ask-row"${editing ? ' hidden' : ''}><span>Start from <span class="energy-info energy-blurb" tabindex="0" role="img"><svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="7" cy="7" r="5.9"/><path d="M7 6.2v3.9" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="4.1" r=".85" fill="currentColor" stroke="none"/></svg></span></span><select name="preset"></select></label>
       <canvas class="energy-preview" aria-label="Preview of the diagram" role="img"></canvas>
       <div class="energy-table-wrap"><table class="energy-table"><thead></thead><tbody></tbody></table></div>
       <p class="energy-rows"><button type="button" data-act="row" title="Another species along the reaction coordinate">+ Species</button>
@@ -365,7 +364,12 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
     for (const p of ENERGY_PRESETS) presetSel.append(new Option(p.name, p.id));
     const fillPreset = () => {
       const p = ENERGY_PRESETS.find((x) => x.id === presetSel.value) ?? ENERGY_PRESETS[0];
-      $('.energy-blurb').textContent = p.blurb + ' The numbers are only examples: type your own.';
+      // what the starting point is, behind the "i" by its label (and on the list itself)
+      const blurb = p.blurb + ' The numbers are only examples: type your own.';
+      const i = $<HTMLElement>('.energy-blurb');
+      i.title = blurb;
+      i.setAttribute('aria-label', blurb);
+      presetSel.title = blurb;
       xs = [];
       load(p.data.paths);
     };

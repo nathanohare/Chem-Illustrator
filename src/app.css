@@ -3906,3 +3906,14 @@ dialog.geom-view-dialog { width: min(96vw, 640px); }
 .energy-format-grid input[type=number] { width: 4.5em; }
 .energy-format-grid input[type=color] { width: 2em; height: 1.5em; padding: 0; vertical-align: middle; }
 .energy-format-grid select, .energy-format-grid input:not([type]) { min-width: 0; width: 100%; box-sizing: border-box; }
+.smart-pane .sp-part { display: flex; gap: 1px; min-width: 0; align-items: stretch; }
+.smart-pane .sp-part > .sp-rich, .smart-pane .sp-part > .sp-holder, .smart-pane .sp-part > .sp-fixed { flex: 1; min-width: 0; }
+.smart-pane .sp-part .sp-part-struct { width: 15px; height: auto; min-height: 17px; border-color: transparent; background: none; color: var(--muted); }
+.smart-pane .sp-part .sp-part-struct svg { width: 11px; height: 11px; }
+.smart-pane .sp-part .sp-part-struct:hover { color: var(--accent); border-color: var(--line); }
+.smart-pane .sp-part .sp-part-struct[aria-pressed='true'] { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+.smart-pane .sp-part .sp-holder { font-size: var(--fs-xs); padding: 0 3px; text-align: left; }
+.energy-dialog .ask-row .energy-info { vertical-align: -2px; margin-left: 2px; }
+/* checkboxes and radio buttons in these windows and panes take the mode's accent (teal in Canvas) */
+.smart-pane, .smart-format-pop, .energy-dialog, .geom-view-dialog { accent-color: var(--accent); }
+.smart-pane .sp-info.marked { color: var(--accent); }

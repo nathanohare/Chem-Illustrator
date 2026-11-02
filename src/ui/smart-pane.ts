@@ -7,7 +7,7 @@
 import type { Doc } from '../model';
 import type { Rect } from '../geom';
 import type { Measure } from '../editor/arrange';
-import { readSmart, slotName, SMART_LAYOUTS, type SmartData, type SmartLayout, type SmartLink, type StepPart, type TextPart } from '../chem/smart-scheme';
+import { readSmart, slotName, stepHolder, stepPartKind, SMART_LAYOUTS, type SmartData, type SmartLayout, type SmartLink, type StepPart, type TextPart } from '../chem/smart-scheme';
 import type { TextRun } from '../model';
 import { RichField } from './rich-field';
 import { dropTarget, type BoxPlace } from './toolboxes';
@@ -30,6 +30,10 @@ export interface SmartPaneHooks {
   toStructure(id: number, k: number): void;
   /** Make species k's dashed box a text label again. */
   toText(id: number, k: number): void;
+  /** Make what joins or leaves at step k (above or below its arrow) a dashed box for a structure. */
+  stepToStructure(id: number, k: number, part: 'above' | 'below'): void;
+  /** Make a step's dashed reagent box text again. */
+  stepToText(id: number, k: number, part: 'above' | 'below'): void;
   /** Select a dashed species box on the page (a paste then goes into it). */
   selectHolder(shape: number): void;
   /** Make the list a toolbox at this place (a dock, or floating where it was dropped); null: float it beside the scheme again. */
@@ -260,10 +264,11 @@ export class SmartPane {
     this.el.append(head);
     this.el.append(this.formatBar(btn, gear));
     if (data.free) {
-      const p = document.createElement('p');
-      p.className = 'sp-note';
-      p.textContent = read.chain ? 'Laid out by hand. Pick a layout to lay it out again.' : 'This scheme branches or has two loops, so it keeps the layout it has. You can still retype its species and conditions.';
-      this.el.append(p);
+      // laid out by hand: said behind the "i" (marked), not on a line of its own
+      const why = read.chain ? 'Laid out by hand. Pick a layout to lay it out again.' : 'This scheme branches or has two loops, so it keeps the layout it has. You can still retype its species and conditions.';
+      info.title = `${why}\n\n${info.title}`;
+      info.setAttribute('aria-label', info.title);
+      info.classList.add('marked');
     }
     // the layout's own settings
     const opts = document.createElement('div');
@@ -278,7 +283,9 @@ export class SmartPane {
         l.append(i, document.createTextNode(' ' + label));
         return l;
       };
-      opts.append(check('Counterclockwise', !!data.anticlockwise, (v) => this.hooks.arrange(id, { anticlockwise: v })), check('Small arrows for reagents', !!data.reagentArrows, (v) => this.hooks.arrange(id, { reagentArrows: v })));
+      // what joins and leaves on small curved arrows into and out of the loop (else written outside it)
+      opts.append(check('Counterclockwise', !!data.anticlockwise, (v) => this.hooks.arrange(id, { anticlockwise: v })), check('Arrows in and out', !!data.reagentArrows, (v) => this.hooks.arrange(id, { reagentArrows: v })));
+      (opts.lastElementChild as HTMLElement).title = 'Draw what joins and leaves the cycle (each step\'s joins and leaves, text or a structure) on small curved arrows into and out of the loop; off, it is written outside the loop';
       if (read.chain && read.closed) {
         const two = btn('+ Second loop…', 'Add a second loop: two cycles turning together where two steps meet, sharing a species, or side by side', 'sp-loop2', () => this.hooks.secondLoop(id));
         opts.append(two);
@@ -358,7 +365,25 @@ export class SmartPane {
       arrow.innerHTML = '<svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2.5 2.75h9M7 2.75v8.5"/></svg>';
       arrow.title = `Text on the arrow for step ${k + 1}`;
       arrow.setAttribute('aria-hidden', 'true');
-      const part = (p: StepPart, ph: string, label: string) => field(`p${k}${p}`, stepParts(doc, l, p), ph, `${label}, step ${k + 1}`, (v) => this.hooks.stepRuns(id, k, p, v));
+      const part = (p: StepPart, ph: string, label: string): HTMLElement => {
+        if (p === 'inside') return field(`p${k}${p}`, stepParts(doc, l, p), ph, `${label}, step ${k + 1}`, (v) => this.hooks.stepRuns(id, k, p, v));
+        // text, or a structure: a dashed box to draw or paste it in, or the structure drawn
+        const wrap = document.createElement('div');
+        wrap.className = 'sp-part';
+        const kind = stepPartKind(doc, l, p);
+        const what = p === 'above' ? (cycle ? 'what joins the cycle' : 'the reagent above the arrow') : (cycle ? 'what leaves the cycle' : 'the reagent below the arrow');
+        if (kind === 'text') {
+          wrap.append(field(`p${k}${p}`, stepParts(doc, l, p), ph, `${label}, step ${k + 1}`, (v) => this.hooks.stepRuns(id, k, p, v)));
+          wrap.append(btn(HEXAGON, `Make ${what} a structure (a box to draw or paste in)`, 'sp-struct sp-part-struct', () => this.hooks.stepToStructure(id, k, p)));
+        } else if (kind === 'box') {
+          const h = stepHolder(doc, l, p)!;
+          wrap.append(btn('draw…', 'Select its box on the page: draw the structure in it, or paste one (Ctrl+V)', 'sp-holder', () => this.hooks.selectHolder(h)));
+          const b = btn(HEXAGON, 'Back to text', 'sp-struct sp-part-struct', () => this.hooks.stepToText(id, k, p));
+          b.setAttribute('aria-pressed', 'true');
+          wrap.append(b);
+        } else wrap.append(Object.assign(document.createElement('span'), { className: 'sp-fixed', textContent: 'structure', title: 'A drawn structure: edit it on the page (delete it there to type text instead)' }));
+        return wrap;
+      };
       const parts = cycle
         ? [part('inside', 'step name (OA)', 'Step name'), part('above', 'joins', 'What joins the cycle at this step, written outside its arrow'), part('below', 'leaves', 'What leaves the cycle at this step, written outside its arrow')]
         : [part('above', 'above the arrow', 'Above the arrow'), part('below', 'below the arrow', 'Below the arrow')];
