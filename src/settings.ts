@@ -109,7 +109,7 @@ export interface Settings {
   /** The window's own colours: as the computer is set (light or dark), or always light or dark (View > Window and Colours > Theme). The page has its own Reading Mode. */
   appTheme: 'system' | 'light' | 'dark' | 'darkgray';
   /** How roomy the toolboxes and ribbons are (View > Window and Colours > Density): Compact as the app comes, Standard or Large. */
-  density: 'compact' | 'standard' | 'large';
+  density: 'snug' | 'cozy' | 'compact' | 'standard' | 'large';
   /** Soft shadows under the menus and on the toolboxes, docked or floating (View > Window and Colors > Shadows): light as the app comes, strong, or off. */
   shadows: 'light' | 'strong' | 'off';
   /** The icons' colours (View > Window and Colours > Icon Colours): gray with one part in the mode's colour, or a colour for each kind of command as Office does. */
@@ -334,7 +334,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (r.canvasRibbon === 'classic' || r.canvasRibbon === 'simple') s.canvasRibbon = r.canvasRibbon;
   if (r.ribbonNames === 'top' || r.ribbonNames === 'side' || r.ribbonNames === 'none') s.ribbonNames = r.ribbonNames;
   if (r.appTheme === 'system' || r.appTheme === 'light' || r.appTheme === 'dark' || r.appTheme === 'darkgray') s.appTheme = r.appTheme;
-  if (r.density === 'compact' || r.density === 'standard' || r.density === 'large') s.density = r.density;
+  if (r.density === 'snug' || r.density === 'cozy' || r.density === 'compact' || r.density === 'standard' || r.density === 'large') s.density = r.density;
   if (r.shadows === 'light' || r.shadows === 'strong' || r.shadows === 'off') s.shadows = r.shadows;
   if (r.iconLook === 'mode' || r.iconLook === 'kind') s.iconLook = r.iconLook;
   if (r.shapeInk === 'neutral' || r.shapeInk === 'accent') s.shapeInk = r.shapeInk;

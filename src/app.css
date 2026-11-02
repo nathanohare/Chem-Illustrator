@@ -3868,3 +3868,26 @@ dialog.geom-view-dialog { width: min(96vw, 640px); }
 :root:not([data-shadows='off']) :is(#dock-left, #dock-right, #dock-top, #dock-bottom) { border: 0; }
 :root:not([data-shadows='off']) .dock > .toolbox:not(.floating) { background: var(--rb-surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--sh-dock); padding: 4px; }
 :root:not([data-shadows='off']) .dock > .toolbox:not(.floating) + .toolbox:not(.floating) { border: 1px solid var(--line); padding: 4px; }
+
+/* Density, tighter than as the app comes (Normal): Cozy and Compact keep the icons' size and take room
+   from round the toolbox buttons. (Compact's setting value is 'snug': 'compact' was already Normal's.) */
+html[data-density='cozy'] .tool { width: 31px; height: 30px; }
+html[data-density='cozy'] .tb-cells { gap: 2px; }
+html[data-density='cozy'] .tb-cells > .tb-gap { width: 31px; height: 30px; }
+html[data-density='cozy'] .tool-group { grid-template-columns: repeat(2, 31px); gap: 2px; }
+html[data-density='cozy'] .tb-cells > .tb-after-line { margin-top: 5px; }
+html[data-density='cozy'] .tb-cells > .tb-after-vline { margin-left: 5px; }
+html[data-density='cozy'] .dock-v { padding: 5px; }
+html[data-density='snug'] .tool { width: 26px; height: 25px; }
+html[data-density='snug'] .tb-cells { gap: 0; }
+html[data-density='snug'] .tb-cells > .tb-gap { width: 26px; height: 25px; }
+html[data-density='snug'] .tool-group { grid-template-columns: repeat(2, 26px); gap: 0; }
+html[data-density='snug'] .tb-cells > .tb-after-line { margin-top: 2px; }
+html[data-density='snug'] .tb-cells > .tb-after-vline { margin-left: 2px; }
+html[data-density='snug'] .dock-v { padding: 3px; }
+html[data-density='snug'] .dock > .toolbox:not(.floating), html[data-density='snug'] .toolbox.floating { padding: 2px; }
+/* with Button cells set to grid lines, each cell fills its track at the density's button size */
+html[data-density='cozy'] body.cells-grid .tb-cells > .tool, html[data-density='cozy'] body.cells-grid .tb-cells > .palette-wrap > .tool { min-width: 31px; min-height: 30px; }
+html[data-density='snug'] body.cells-grid .tb-cells > .tool, html[data-density='snug'] body.cells-grid .tb-cells > .palette-wrap > .tool { min-width: 26px; min-height: 25px; }
+html[data-density='snug'] .tb-cells > .tb-block { margin-left: 4px; }
+html[data-density='cozy'] .tb-cells > .tb-block { margin-left: 6px; }
