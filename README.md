@@ -63,6 +63,12 @@ Fill rings with a colour, a gradient, hatching or dots (patterns can be see-thro
 
 Select anything and the side panel shows its formula, exact mass, m/z for the ion you pick, elemental analysis, isotope pattern, cLogP and TPSA. R/S and E/Z come from the IUPAC 2013 rules, including axial chirality, and atoms with impossible valences get a red mark.
 
+### pKa, solubility and a 3-D model
+
+The side panel also estimates the pKa of each acidic and basic site, aqueous solubility, vapour pressure and boiling point. **Chemistry ▸ Look Up ▸ 3-D Model** builds the structure in 3-D: drag to turn it, step through its conformers, then **Place on Page** turns the drawing to the same view, keeping its wedges right.
+
+![Quinine selected: the side panel shows its pKa estimates and solubility, then the 3-D Model window opens, the model is turned and stepped through its conformers, and Best View and Place on Page turn the drawing to match](docs/images/model-3d.gif)
+
 ## Energy diagrams
 
 **Chemistry ▸ Energy Diagram** draws a reaction coordinate diagram from a table of levels: compare pathways in different colours, mark the barrier, and draw structures right on the levels.
@@ -89,6 +95,10 @@ Right-drag or middle-drag to pan, Ctrl+wheel to zoom in on the spot under the po
 
 ![Panning a long route with the right and middle mouse buttons, zooming at the pointer with Ctrl+wheel and scrolling sideways with Shift+wheel, with the keys and buttons shown as they are pressed](docs/images/navigation.gif)
 
+The canvas is laid out as pages, as in ChemDraw: whole pages are added as the drawing grows past them, empty pages are grey, and the fixed top and left edges are marked.
+
+![A route drawn across the first page adds a page to the right, then a row of pages below; the used pages turn white](docs/images/page-grid.gif)
+
 ## Make it yours
 
 Every hotkey can be changed (**Edit ▸ Hotkeys**), and the hotkeys can be exported and shared. Toolboxes unlock to dock on any edge or float anywhere, and **Customize Toolboxes** rearranges any of them (or new ones of your own) by dragging icons about, as on a phone's home screen. The dark page colours, each mode's accent colour, the scheme spacing, your own templates, nicknames and drawing styles are all settings, kept in one file you can export and import on another computer.
@@ -112,6 +122,18 @@ Chem Illustrator has five modes: **Canvas** (chemistry), **Presentation** (slide
 **Split View** puts a canvas beside a document, spreadsheet or presentation, so you can draw on one side and insert on the other.
 
 ![Split View: a document on the left, the scheme it describes on the right](docs/images/split-view.png)
+
+### Canvas slides
+
+Draw a whole synthesis once on an endless slide, then show it a step at a time: the show glides from one slide-shaped keyframe to the next, with the title fixed to the screen, and can fly out to the whole route. Saved as PowerPoint, each keyframe becomes a slide with a Morph transition.
+
+![A three-step route on a canvas slide: the show glides through it a step at a time, the title changing, then flies out to the whole route, with a mini-map in the corner](docs/images/canvas-slides.gif)
+
+### References on slides
+
+Tick the references a slide uses and their short lines are written at its foot in the journal style you pick. A References slide at the end lists them in full and keeps itself up to date.
+
+![References on Slide: two papers are ticked and their short lines appear at the foot of the slide, then a References slide is added that lists them in full](docs/images/slide-references.gif)
 
 ### A reference manager in your documents
 
