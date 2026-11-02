@@ -119,6 +119,11 @@ export function readSmart(doc: Doc, m: Measure, frameId: number): SmartRead | nu
   if (!s?.smart || !s.frame) return null;
   const scope = scopeOf(doc, s.frame);
   if (!scope.atoms.size && !scope.captions.size && !scope.arrows.size && !scope.shapes.size) return null;
+  return readSlots(doc, m, scope);
+}
+
+/** Any scheme (the arrows and species in `scope`, or the whole drawing when it is empty) read as slots in arrow order, as a Smart Scheme's are. */
+export function readSlots(doc: Doc, m: Measure, scope: Scope): SmartRead | null {
   const sh = readScheme(doc, m, scope);
   const order = sh.path ?? sh.nodes.map((_, i) => i);
   const at = new Map(order.map((n, i) => [n, i]));

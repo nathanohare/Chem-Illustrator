@@ -55,7 +55,7 @@ const emptySel = (): Selection => ({ atoms: new Set(), bonds: new Set(), caption
 export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlideParts {
   const L = doc.style.bondLength;
   const gap = 0.75 * L;
-  type Item = { box: Rect; chem: boolean; add: (s: Selection) => void; text?: Caption; shape?: Shape };
+  type Item = { box: Rect; chem: boolean; add: (s: Selection) => void; text?: Caption; shape?: Shape; piece?: number };
   const items: Item[] = [];
   const texts: Caption[] = [];
   const pictures: Shape[] = [];
@@ -65,8 +65,9 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
     const pts = [...frag].map((id) => doc.atoms.get(id)!);
     const b = boxOf(pts);
     const pad = doc.style.labelSize * 0.6;
+    const piece = pts.find((a) => a.piece !== undefined)?.piece;
     items.push({
-      box: { x1: b.x1 - pad, y1: b.y1 - pad, x2: b.x2 + pad, y2: b.y2 + pad }, chem: true,
+      box: { x1: b.x1 - pad, y1: b.y1 - pad, x2: b.x2 + pad, y2: b.y2 + pad }, chem: true, ...(piece !== undefined ? { piece } : {}),
       add: (s) => {
         for (const id of frag) {
           s.atoms.add(id);
@@ -78,7 +79,7 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
   const dia = slideDiagrams(doc);
   const connectors: Arrow[] = [];
   for (const r of doc.arrows.values()) if (!dia.arrows.has(r.id) && (r.from || r.to || r.elbow)) connectors.push(r);
-  for (const r of doc.arrows.values()) if (!dia.arrows.has(r.id) && !(r.from || r.to || r.elbow)) items.push({ box: boxOf(arrowPoints(r, 12)), chem: true, add: (s) => s.arrows.add(r.id) });
+  for (const r of doc.arrows.values()) if (!dia.arrows.has(r.id) && !(r.from || r.to || r.elbow)) items.push({ box: boxOf(arrowPoints(r, 12)), chem: true, add: (s) => s.arrows.add(r.id), ...(r.piece !== undefined ? { piece: r.piece } : {}) });
   for (const sh of doc.shapes.values()) {
     if (sh.picture) continue; // a stand-in for a picture from a ChemDraw file
     if (dia.shapes.has(sh.id)) continue;
@@ -91,21 +92,25 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
     // ring fills sit under their structure, in its picture
     const chem = sh.kind === 'bracket' || sh.kind === 'symbol' || sh.kind === 'ring';
     if (sh.hidden && !chem) { geos.push(sh); continue; }
-    items.push({ box: shapeBox(sh), chem, add: (s) => s.shapes.add(sh.id), shape: sh });
+    items.push({ box: shapeBox(sh), chem, add: (s) => s.shapes.add(sh.id), shape: sh, ...(sh.piece !== undefined ? { piece: sh.piece } : {}) });
   }
   for (const c of doc.captions.values()) {
     // titles, text placeholders and text boxes are always PowerPoint text
     // (and hidden text, kept hidden in PowerPoint rather than left out of a structure's picture)
     if (c.ph || c.wrap !== undefined || c.hidden) { texts.push(c); continue; }
     const lay = layoutText(c, doc.style.captionSize, measure);
-    items.push({ box: { x1: c.x + lay.box.x1, y1: c.y + lay.box.y1, x2: c.x + lay.box.x2, y2: c.y + lay.box.y2 }, chem: false, add: (s) => s.captions.add(c.id), text: c });
+    items.push({ box: { x1: c.x + lay.box.x1, y1: c.y + lay.box.y1, x2: c.x + lay.box.x2, y2: c.y + lay.box.y2 }, chem: false, add: (s) => s.captions.add(c.id), text: c, ...(c.piece !== undefined ? { piece: c.piece } : {}) });
   }
   // group things that touch (within the gap), by joining groups
   const parent = items.map((_, i) => i);
   const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
   const near = (a: Rect, b: Rect) => a.x1 - gap <= b.x2 && b.x1 - gap <= a.x2 && a.y1 - gap <= b.y2 && b.y1 - gap <= a.y2;
+  // pieces (Auto-Animate Steps) stay apart from everything else, and each is one whatever its gaps
   for (let i = 0; i < items.length; i++) {
-    for (let j = i + 1; j < items.length; j++) if (near(items[i].box, items[j].box)) parent[find(i)] = find(j);
+    for (let j = i + 1; j < items.length; j++) {
+      const a = items[i].piece, b = items[j].piece;
+      if (a !== undefined || b !== undefined ? a === b : near(items[i].box, items[j].box)) parent[find(i)] = find(j);
+    }
   }
   const groups = new Map<number, Item[]>();
   items.forEach((it, i) => {

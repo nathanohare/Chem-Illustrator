@@ -31,6 +31,8 @@ export function outsideValence(b: Pick<Bond, 'display' | 'order'>): boolean {
 export type DoublePos = 'auto' | 'left' | 'right' | 'center';
 
 export interface Atom {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -399,6 +401,8 @@ export interface TabStop {
 }
 
 export interface Caption {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -558,6 +562,8 @@ export interface Attachment {
 export type ArrowHead = 'none' | 'full' | 'halfLeft' | 'halfRight';
 
 export interface Arrow {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -664,6 +670,8 @@ export interface StepRoles {
 export type Pattern = 'hatch' | 'backhatch' | 'crosshatch' | 'horizontal' | 'vertical' | 'grid' | 'dots' | 'dense-dots';
 
 export interface Shape {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
