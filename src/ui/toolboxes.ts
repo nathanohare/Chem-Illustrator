@@ -407,6 +407,8 @@ export interface ToolboxDef {
   /** One of TOOLBOX_IDS, or a toolbox of your own ("own-…"). */
   id: string;
   title: string;
+  /** How to use it, shown on an "i" beside the title (instead of a line of help in the box). */
+  info?: string;
   /** Fill the toolbox's body; `vertical` when it is docked at the left or right. */
   build(body: HTMLElement, vertical: boolean): void;
 }
@@ -607,7 +609,9 @@ export class Toolboxes {
     lock.type = 'button';
     lock.className = 'tb-lock';
     lock.addEventListener('click', () => this.setBoxLocked(def.id, !boxLocked(this.hooks.get(), def.id)));
-    head.append(grip, name, lock, fold, close);
+    head.append(grip, name);
+    if (def.info) head.append(infoIcon(def.info, 'tb-info'));
+    head.append(lock, fold, close);
     // a locked docked box hides its title bar, so this slim arrow folds it instead (folded, the title shows again to open it)
     const tab = document.createElement('button');
     tab.type = 'button';
@@ -688,7 +692,7 @@ export class Toolboxes {
       ...DOCKS.map((d) => ({ cmd: `tbx:${d}`, label: DOCK_LABEL[d] })), null,
       { cmd: 'tbx:lock', label: boxLocked(st, def.id) ? `Unlock ${def.title}` : `Lock ${def.title}` },
       { cmd: 'tbx:lock-all', label: st.locked ? 'Unlock All Toolboxes' : 'Lock All Toolboxes' },
-      { cmd: 'tbx:fold', label: (this.hooks.folded?.(def.id) ?? st.places[def.id]?.collapsed) ? 'Open Out' : 'Fold Up' },
+      { cmd: 'tbx:fold', label: (this.hooks.folded?.(def.id) ?? st.places[def.id]?.collapsed) ? 'Expand' : 'Collapse' },
       { cmd: 'tbx:customize', label: isEditable(def.id) ? 'Customize This Toolbox…' : 'Customize Toolboxes…' },
       ...(def.id === 'details' ? [] : [{ cmd: 'tbx:hide', label: `Hide ${def.title}` }]),
     ];
@@ -874,4 +878,16 @@ export function overflowOf(st: ToolboxState, id: string): Overflow {
 
 export function withOverflow(st: ToolboxState, id: string, o: Overflow): ToolboxState {
   return { ...st, overflow: { ...st.overflow, [id]: o } };
+}
+
+/** An "i" whose tip says how to use something (hover, or focus it with the keyboard). */
+export function infoIcon(text: string, className: string): HTMLElement {
+  const i = document.createElement('span');
+  i.className = `info-icon ${className}`;
+  i.textContent = 'i';
+  i.title = text;
+  i.tabIndex = 0;
+  i.setAttribute('role', 'img');
+  i.setAttribute('aria-label', text);
+  return i;
 }

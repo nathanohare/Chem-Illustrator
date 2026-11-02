@@ -143,7 +143,7 @@ export class AnimationUI {
     dirSel.addEventListener('change', () => this.setTransition({ dir: dirSel.value as Transition['dir'] }));
     const fillSpeeds = (sel: HTMLSelectElement) => {
       for (const s of SPEEDS) sel.add(new Option(`${s.name} (${s.dur} s)`, String(s.dur)));
-      sel.add(new Option('Your own', 'own'));
+      sel.add(new Option('Custom', 'own'));
     };
     const trSpeed = this.$<HTMLSelectElement>('#tr-speed');
     fillSpeeds(trSpeed);
@@ -168,7 +168,7 @@ export class AnimationUI {
     const EMPH_TIPS: Record<string, string> = {
       pulse: 'the selected objects swell a little and back, to draw the eye',
       grow: 'the selected objects grow (or shrink) and stay that size; set the size in Effect Options',
-      spin: 'the selected objects turn round; set how far in Effect Options',
+      spin: 'the selected objects turn around; set how far in Effect Options',
       transparency: 'the selected objects become see-through and stay so; set how much in Effect Options',
       colour: 'a shape\'s fill, or text\'s color, changes (a structure or picture is colored all over); pick the color in Effect Options. PowerPoint can\'t recolor a structure or picture',
       turn3d: 'a structure turns smoothly in 3-D to each key view you set, one view per click (Key Views… in Effect Options). PowerPoint shows it still',
@@ -688,7 +688,7 @@ export class AnimationUI {
     const chosen = selectedParts(parts, this.hooks.selection()).filter((p) => p.kind === 'drawing' && p.sel.atoms.size);
     const part = chosen[0] ?? (pa?.effect === 'turn3d' ? partOf(parts, pa.target) : undefined);
     if (!part || part.kind !== 'drawing' || !part.sel.atoms.size || !this.hooks.keyViews) {
-      this.hooks.flash('Select a structure on the slide first: Turn in 3-D turns structures.');
+      this.hooks.flash('Select a structure on the slide first: 3-D Rotation turns structures.');
       return;
     }
     const mine = (a: Anim) => a.effect === 'turn3d' && partOf(parts, a.target) === part;
@@ -704,7 +704,7 @@ export class AnimationUI {
     const where = at < 0 ? rest.length : all.slice(0, at).filter((a) => !mine(a)).length;
     const anims = [...rest.slice(0, where), ...fresh, ...rest.slice(where)];
     this.picked = fresh.length ? where : null;
-    this.setAnims(anims, fresh.length ? 'Turn in 3-D' : 'Remove Turn in 3-D');
+    this.setAnims(anims, fresh.length ? '3-D Rotation' : 'Remove 3-D Rotation');
   }
 
   private changePicked(change: Partial<Anim>, label: string): void {

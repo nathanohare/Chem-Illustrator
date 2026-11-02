@@ -7,11 +7,13 @@
 import type { Doc } from '../model';
 import type { Rect } from '../geom';
 import type { Measure } from '../editor/arrange';
-import { readSmart, slotName, SMART_LAYOUTS, type SmartData, type SmartLayout, type SmartLink, type StepPart, type TextPart } from '../chem/smart-scheme';
+import { readSmart, slotName, stepHolder, stepPartKind, SMART_LAYOUTS, type SmartData, type SmartLayout, type SmartLink, type StepPart, type TextPart } from '../chem/smart-scheme';
 import type { TextRun } from '../model';
 import { RichField } from './rich-field';
 import { dropTarget, type BoxPlace } from './toolboxes';
 import { PIN_ICON, PINNED_ICON } from './float-box';
+import { formatDefaults, type SmartFormat } from '../chem/smart-format';
+import { toggleSmartFormat } from './smart-format-pop';
 
 export interface SmartPaneHooks {
   doc(): Doc;
@@ -28,6 +30,10 @@ export interface SmartPaneHooks {
   toStructure(id: number, k: number): void;
   /** Make species k's dashed box a text label again. */
   toText(id: number, k: number): void;
+  /** Make what joins or leaves at step k (above or below its arrow) a dashed box for a structure. */
+  stepToStructure(id: number, k: number, part: 'above' | 'below'): void;
+  /** Make a step's dashed reagent box text again. */
+  stepToText(id: number, k: number, part: 'above' | 'below'): void;
   /** Select a dashed species box on the page (a paste then goes into it). */
   selectHolder(shape: number): void;
   /** Make the list a toolbox at this place (a dock, or floating where it was dropped); null: float it beside the scheme again. */
@@ -40,6 +46,8 @@ export interface SmartPaneHooks {
   arrange(id: number, patch: Partial<SmartData>): void;
   /** Add a second loop to a cycle (the Catalytic Cycle window, filled with this one). */
   secondLoop(id: number): void;
+  /** Give the scheme its own font, text sizes, arrows and spacing (undefined: the drawing style's). */
+  format(id: number, fmt: SmartFormat | undefined): void;
   ungroup(id: number): void;
 }
 
@@ -215,6 +223,18 @@ export class SmartPane {
       head.title = 'Drag to an edge of the drawing to dock this list there, like a toolbox';
       this.wireDrag(head);
     }
+    // how the list works, kept behind an "i" so it doesn't take room in the pane
+    const info = document.createElement('span');
+    info.className = 'sp-info';
+    info.tabIndex = 0;
+    info.setAttribute('role', 'img');
+    info.innerHTML = '<svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="7" cy="7" r="5.9"/><path d="M7 6.2v3.9" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="4.1" r=".85" fill="currentColor" stroke="none"/></svg>';
+    const help = data.layout === 'cycle'
+      ? 'Each row is a species of the cycle, as it looks on the page; the T row under it is the text on the arrow to the next species: the step\'s name, what joins the cycle there and what leaves it. Type in the rows, drag a row by its dots to reorder, or drag a species on the page and its arrows follow. The + buttons on the page add a species there.'
+      : 'Each row is a species of the scheme, as it looks on the page; the T row under it is the text above and below the arrow to the next species. Type in the rows, drag a row by its dots to reorder, or drag a species on the page and its arrows follow. The + buttons on the page add a species there.';
+    info.title = help;
+    info.setAttribute('aria-label', help);
+    head.append(info);
     const lay = document.createElement('div');
     lay.className = 'sp-layouts';
     lay.setAttribute('role', 'radiogroup');
@@ -227,17 +247,28 @@ export class SmartPane {
       lay.append(b);
     }
     head.append(lay);
+    const gear = btn('<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><circle cx="8" cy="8" r="2.1"/><path d="M8 1.6v1.8M8 12.6v1.8M1.6 8h1.8M12.6 8h1.8M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M3.5 12.5l1.3-1.3M11.2 4.8l1.3-1.3" stroke-linecap="round"/><circle cx="8" cy="8" r="4.6"/></svg>',
+      'Scheme Format: its font, text sizes, arrows and spacing', 'sp-gear', () => toggleSmartFormat(gear, {
+        fmt: this.hooks.doc().shapes.get(id)?.smart?.fmt ?? {},
+        defaults: formatDefaults(this.hooks.doc()),
+        cycle: (this.hooks.doc().shapes.get(id)?.smart?.layout ?? data.layout) === 'cycle',
+        apply: (fmt) => this.hooks.format(id, fmt),
+      }));
+    gear.dataset.for = String(id);
+    gear.setAttribute('aria-haspopup', 'dialog');
+    if (data.fmt) gear.classList.add('on');
     const pin = btn(this.host ? PINNED_ICON : PIN_ICON, this.host ? 'Undock: float the list beside the scheme again' : 'Dock the list as a toolbox at the right (or drag its title to any edge)', 'sp-pin', () => this.hooks.dock(this.host ? null : { dock: 'right' }));
     pin.setAttribute('aria-pressed', String(!!this.host));
     head.append(pin);
     if (!this.host) head.append(btn('‹', 'Fold the species list away', 'sp-fold', () => { folded = true; this.render(id); this.place(); }));
     this.el.append(head);
-    this.el.append(this.formatBar(btn));
+    this.el.append(this.formatBar(btn, gear));
     if (data.free) {
-      const p = document.createElement('p');
-      p.className = 'sp-note';
-      p.textContent = read.chain ? 'Laid out by hand. Pick a layout to lay it out again.' : 'This scheme branches or has two loops, so it keeps the layout it has. You can still retype its species and conditions.';
-      this.el.append(p);
+      // laid out by hand: said behind the "i" (marked), not on a line of its own
+      const why = read.chain ? 'Laid out by hand. Pick a layout to lay it out again.' : 'This scheme branches or has two loops, so it keeps the layout it has. You can still retype its species and conditions.';
+      info.title = `${why}\n\n${info.title}`;
+      info.setAttribute('aria-label', info.title);
+      info.classList.add('marked');
     }
     // the layout's own settings
     const opts = document.createElement('div');
@@ -252,7 +283,9 @@ export class SmartPane {
         l.append(i, document.createTextNode(' ' + label));
         return l;
       };
-      opts.append(check('Counterclockwise', !!data.anticlockwise, (v) => this.hooks.arrange(id, { anticlockwise: v })), check('Small arrows for reagents', !!data.reagentArrows, (v) => this.hooks.arrange(id, { reagentArrows: v })));
+      // what joins and leaves on small curved arrows into and out of the loop (else written outside it)
+      opts.append(check('Counterclockwise', !!data.anticlockwise, (v) => this.hooks.arrange(id, { anticlockwise: v })), check('Arrows in and out', !!data.reagentArrows, (v) => this.hooks.arrange(id, { reagentArrows: v })));
+      (opts.lastElementChild as HTMLElement).title = 'Draw what joins and leaves the cycle (each step\'s joins and leaves, text or a structure) on small curved arrows into and out of the loop; off, it is written outside the loop';
       if (read.chain && read.closed) {
         const two = btn('+ Second loop…', 'Add a second loop: two cycles turning together where two steps meet, sharing a species, or side by side', 'sp-loop2', () => this.hooks.secondLoop(id));
         opts.append(two);
@@ -328,11 +361,31 @@ export class SmartPane {
       step.className = 'sp-step';
       const arrow = document.createElement('span');
       arrow.className = 'sp-arrow';
-      arrow.textContent = cycle && k === read.slots.length - 1 ? '↺' : '↓';
+      // A "T" text mark: this row holds the words written on the arrow.
+      arrow.innerHTML = '<svg viewBox="0 0 14 14" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2.5 2.75h9M7 2.75v8.5"/></svg>';
+      arrow.title = `Text on the arrow for step ${k + 1}`;
       arrow.setAttribute('aria-hidden', 'true');
-      const part = (p: StepPart, ph: string, label: string) => field(`p${k}${p}`, stepParts(doc, l, p), ph, `${label}, step ${k + 1}`, (v) => this.hooks.stepRuns(id, k, p, v));
+      const part = (p: StepPart, ph: string, label: string): HTMLElement => {
+        if (p === 'inside') return field(`p${k}${p}`, stepParts(doc, l, p), ph, `${label}, step ${k + 1}`, (v) => this.hooks.stepRuns(id, k, p, v));
+        // text, or a structure: a dashed box to draw or paste it in, or the structure drawn
+        const wrap = document.createElement('div');
+        wrap.className = 'sp-part';
+        const kind = stepPartKind(doc, l, p);
+        const what = p === 'above' ? (cycle ? 'what joins the cycle' : 'the reagent above the arrow') : (cycle ? 'what leaves the cycle' : 'the reagent below the arrow');
+        if (kind === 'text') {
+          wrap.append(field(`p${k}${p}`, stepParts(doc, l, p), ph, `${label}, step ${k + 1}`, (v) => this.hooks.stepRuns(id, k, p, v)));
+          wrap.append(btn(HEXAGON, `Make ${what} a structure (a box to draw or paste in)`, 'sp-struct sp-part-struct', () => this.hooks.stepToStructure(id, k, p)));
+        } else if (kind === 'box') {
+          const h = stepHolder(doc, l, p)!;
+          wrap.append(btn('draw…', 'Select its box on the page: draw the structure in it, or paste one (Ctrl+V)', 'sp-holder', () => this.hooks.selectHolder(h)));
+          const b = btn(HEXAGON, 'Back to text', 'sp-struct sp-part-struct', () => this.hooks.stepToText(id, k, p));
+          b.setAttribute('aria-pressed', 'true');
+          wrap.append(b);
+        } else wrap.append(Object.assign(document.createElement('span'), { className: 'sp-fixed', textContent: 'structure', title: 'A drawn structure: edit it on the page (delete it there to type text instead)' }));
+        return wrap;
+      };
       const parts = cycle
-        ? [part('inside', 'step name (OA)', 'Step name'), part('above', 'in', 'Comes in'), part('below', 'out', 'Goes out')]
+        ? [part('inside', 'step name (OA)', 'Step name'), part('above', 'joins', 'What joins the cycle at this step, written outside its arrow'), part('below', 'leaves', 'What leaves the cycle at this step, written outside its arrow')]
         : [part('above', 'above the arrow', 'Above the arrow'), part('below', 'below the arrow', 'Below the arrow')];
       const box = document.createElement('div');
       box.className = 'sp-step-fields';
@@ -389,7 +442,7 @@ export class SmartPane {
    * The formatting bar: subscript, superscript, chemical interpretation and symbols, for the row
    * being typed in. Its buttons keep the caret in the row.
    */
-  private formatBar(btn: (label: string, title: string, cls: string, f: () => void) => HTMLButtonElement): HTMLElement {
+  private formatBar(btn: (label: string, title: string, cls: string, f: () => void) => HTMLButtonElement, gear: HTMLElement): HTMLElement {
     const wrap = document.createElement('div');
     const bar = document.createElement('div');
     bar.className = 'sp-bar';
@@ -409,7 +462,7 @@ export class SmartPane {
     gap.className = 'sp-bar-gap';
     const sym = (c: string, name: string) => btn(c, `Insert ${name}`, 'sp-fmt sp-sym', on((r) => r.insert(c)));
     const more = btn('Ω ▾', 'Symbol… (Greek letters, arrows, charges and more)', 'sp-fmt sp-more', () => { this.symbols = !this.symbols; this.showState(); });
-    bar.append(sub, sup, chem, gap, sym('‡', '‡ (transition state)'), sym('′', 'prime'), sym('°', 'degree sign'), sym('•', 'dot (radical)'), more);
+    bar.append(sub, sup, chem, gap, sym('‡', '‡ (transition state)'), sym('′', 'prime'), sym('°', 'degree sign'), sym('•', 'dot (radical)'), more, gear);
     const grid = document.createElement('div');
     grid.className = 'sp-symbols';
     grid.setAttribute('role', 'group');

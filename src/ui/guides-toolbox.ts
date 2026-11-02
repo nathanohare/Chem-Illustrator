@@ -3,7 +3,8 @@
 // place of the red smart guides, which it can still turn on. The Select tool drags a guide; one
 // dropped outside the drawing goes.
 
-import { DEFAULT_GUIDES, GUIDE_COLOURS, GUIDE_SNAPS, type CanvasGuides, type Guide, type GuideKind, type GuideSnap } from '../editor/guides';
+import { infoIcon } from './toolboxes';
+import { DEFAULT_GUIDES, GUIDE_COLOURS, parseGuideLength, showGuideLength, GUIDE_SNAPS, type CanvasGuides, type Guide, type GuideKind, type GuideSnap } from '../editor/guides';
 
 export interface GuidesToolboxHooks {
   get(): CanvasGuides | null;
@@ -21,7 +22,6 @@ const SNAP_LABEL: Record<GuideSnap, [string, string]> = {
   major: ['Major', 'Snap to the major ticks only'],
   minor: ['Minor', 'Snap to the minor ticks between the major ones'],
   both: ['Both', 'Snap to every tick'],
-  none: ['None', 'No snapping: the guides only show'],
 };
 
 const svg = (body: string) => `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">${body}</svg>`;
@@ -32,9 +32,9 @@ const ADD: { kind: GuideKind | 'grid'; icon: string; title: string }[] = [
   { kind: 'grid', icon: svg('<path d="M1 5h14M1 11h14M5 1v14M11 1v14"/>'), title: 'Grid guides: lines every major tick across the whole drawing' },
 ];
 
-/** A length in points as the rulers write it, and back. */
-const toUnits = (pt: number, u: 'in' | 'cm') => Math.round((u === 'in' ? pt / 72 : (pt / 72) * 2.54) * 1000) / 1000;
-const fromUnits = (v: number, u: 'in' | 'cm') => (u === 'in' ? v * 72 : (v / 2.54) * 72);
+
+/** How to use the guides: the tip on the toolbox's "i". */
+export const GUIDES_INFO = 'Drag a guide with the Select tool to move it; drop it off the drawing to take it away. Hold Alt while dragging anything to move it freely.';
 
 export function buildGuidesToolbox(body: HTMLElement, vertical: boolean, h: GuidesToolboxHooks): { refresh(): void } {
   const d = body.ownerDocument;
@@ -71,42 +71,55 @@ export function buildGuidesToolbox(body: HTMLElement, vertical: boolean, h: Guid
     });
   }
   button(add, 'shown', svg('<path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/>'), 'Show the guides (hidden guides are kept, and don\'t snap)', () => change({ shown: !now().shown }));
-  button(add, 'clear', svg('<path d="M3 3l10 10M13 3L3 13"/>'), 'Take every guide away', () => change({ list: [], grid: false }));
+  button(add, 'clear', svg('<path d="M3 3l10 10M13 3L3 13"/>'), 'Clear All Guides', () => change({ list: [], grid: false }));
+  // the help, as on the title bar's "i", for when a locked docked box hides its title
+  add.append(infoIcon(GUIDES_INFO, 'gt-info'));
   body.append(add);
 
   // the ticks
   const ticks = d.createElement('div');
   ticks.className = 'gt-row gt-ticks';
-  const unit = d.createElement('span');
   const field = (label: string, key: 'major' | 'minor') => {
     const l = d.createElement('label');
     l.className = 'gt-field';
     const s = d.createElement('span');
     s.textContent = label;
     const input = d.createElement('input');
-    input.type = 'number';
-    input.min = '0.01';
-    input.step = 'any';
+    input.type = 'text';
+    input.inputMode = 'decimal';
+    input.spellcheck = false;
     input.className = 'gt-num';
     input.setAttribute('aria-label', `${label} tick spacing`);
+    input.title = `${label} tick spacing, with its unit: 1" (inches), 2.5 cm, 30 mm or 12 pt`;
     input.addEventListener('change', () => {
-      const v = Number(input.value);
-      if (!(v > 0)) { refresh(); return; }
-      const pt = fromUnits(v, h.units());
+      const pt = parseGuideLength(input.value, h.units());
+      if (pt === null) { refresh(); return; }
       const g = now();
       if (key === 'major') change({ major: pt, minor: Math.min(g.minor, pt) });
       else change({ minor: Math.min(pt, g.major) });
     });
-    input.addEventListener('keydown', (e) => e.stopPropagation());
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); input.dispatchEvent(new Event('change')); }
+      if (e.key === 'Escape') { e.preventDefault(); refresh(); }
+    });
     l.append(s, input);
     ticks.append(l);
     return input;
   };
   const major = field('Major', 'major');
   const minor = field('Minor', 'minor');
-  unit.className = 'gt-unit';
-  ticks.append(unit);
   body.append(ticks);
+
+  // snapping on or off: onto the guides and their ticks, and into line with other things (smart guides)
+  const smart = d.createElement('label');
+  smart.className = 'gt-row gt-check';
+  const box = d.createElement('input');
+  box.type = 'checkbox';
+  box.addEventListener('change', () => { h.setSmart(box.checked); change({ snapOff: box.checked ? undefined : true }); });
+  smart.append(box, d.createTextNode('Toggle object snapping'));
+  smart.title = 'What you drag snaps onto the guides and their ticks, and its edges and middle into line with other structures, text and the page (smart guides). Hold Alt while dragging to move freely.';
+  body.append(smart);
 
   // snapping
   const snap = d.createElement('div');
@@ -177,19 +190,7 @@ export function buildGuidesToolbox(body: HTMLElement, vertical: boolean, h: Guid
   fade.append(fadeLabel, range, pct);
   body.append(fade);
 
-  const smart = d.createElement('label');
-  smart.className = 'gt-row gt-check';
-  const box = d.createElement('input');
-  box.type = 'checkbox';
-  box.addEventListener('change', () => h.setSmart(box.checked));
-  smart.append(box, d.createTextNode('Line up with other things (smart guides)'));
-  smart.title = 'As something moves, its edges and middle snap into line with other structures, text and the page (View > Alignment Guides)';
-  body.append(smart);
 
-  const tip = d.createElement('div');
-  tip.className = 'gt-tip';
-  tip.textContent = 'Drag a guide with the Select tool; drop it off the drawing to take it away.';
-  body.append(tip);
 
   function refresh(): void {
     const g = h.get();
@@ -202,11 +203,11 @@ export function buildGuidesToolbox(body: HTMLElement, vertical: boolean, h: Guid
     buttons.get('clear')!.disabled = !any;
     const u = h.units();
     const at = g ?? DEFAULT_GUIDES;
-    if (d.activeElement !== major) major.value = String(toUnits(at.major, u));
-    if (d.activeElement !== minor) minor.value = String(toUnits(at.minor, u));
-    unit.textContent = u === 'in' ? 'in' : 'cm';
+    if (d.activeElement !== major) major.value = showGuideLength(at.major, u);
+    if (d.activeElement !== minor) minor.value = showGuideLength(at.minor, u);
     for (const [k, b] of snapButtons) { const on = at.snap === k; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }
-    box.checked = h.smart();
+    box.checked = !at.snapOff;
+    for (const b of snapButtons.values()) b.disabled = !!at.snapOff;
     for (const [v, b] of swatches) { const on = (at.color ?? undefined) === v; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
     own.value = at.color ?? '#1b8fd0';
     if (d.activeElement !== range) range.value = String(Math.round((at.clear ?? 0) * 100));

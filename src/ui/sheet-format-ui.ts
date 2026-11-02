@@ -20,7 +20,7 @@ export interface FormatHost {
   flash(msg: string, ms?: number): void;
 }
 
-const LOOK_OPTIONS = [...PRESET_LOOKS.map((p, i) => ({ value: String(i), label: p.name })), { value: 'custom', label: 'Your own colors…' }];
+const LOOK_OPTIONS = [...PRESET_LOOKS.map((p, i) => ({ value: String(i), label: p.name })), { value: 'custom', label: 'Custom Format…' }];
 
 /** A number when the text is one, else the text. */
 const numOrText = (s: string): number | string => (s.trim() !== '' && Number.isFinite(Number(s)) ? Number(s) : s.trim());
@@ -119,12 +119,12 @@ export class SheetFormatting {
         null,
         ...PRESET_BARS.map((b) => [`${b.name}, solid`, () => this.add(barRule(b.color, false), 'Data bars'), true, barPic(b.color, false)] as MenuItem),
         null,
-        ['Your own…', () => void this.ruleDialog(barRule('#638ec6', true))],
+        ['Custom…', () => void this.ruleDialog(barRule('#638ec6', true))],
       ]), [...PRESET_BARS.map((b) => barRule(b.color, true)), null, ...PRESET_BARS.map((b) => barRule(b.color, false))])],
       ['Color Scales ▸', () => this.liveMenu(popupMenu(x, y, [
         ...PRESET_SCALES.map((p) => [p.name, () => this.add(scaleRule(p.colors), 'Color scale'), true, scalePic(p.colors)] as MenuItem),
         null,
-        ['Your own…', () => void this.ruleDialog(scaleRule(['#f8696b', '#ffeb84', '#63be7b']))],
+        ['Custom…', () => void this.ruleDialog(scaleRule(['#f8696b', '#ffeb84', '#63be7b']))],
       ]), PRESET_SCALES.map((p) => scaleRule(p.colors)))],
       ['Icon Sets ▸', () => this.liveMenu(popupMenu(x, y, [
         ...(Object.keys(ICON_SETS) as IconSetName[]).map((k) => [ICON_SETS[k], () => this.add({ kind: 'icons', set: k }, 'Icon set'), true, iconSetPic(k)] as MenuItem),
@@ -139,7 +139,7 @@ export class SheetFormatting {
 
   private async pickLook(values: Record<string, string>): Promise<CfLook | null> {
     if (values.look !== 'custom') return { ...PRESET_LOOKS[Number(values.look)].look };
-    const got = await ask('Your own look', [
+    const got = await ask('Custom Format', [
       { name: 'fill', label: 'Fill', type: 'color', value: '#ffeb9c' },
       { name: 'nofill', label: 'No fill', type: 'checkbox', value: 'false' },
       { name: 'color', label: 'Text color', type: 'color', value: '#9c5700' },

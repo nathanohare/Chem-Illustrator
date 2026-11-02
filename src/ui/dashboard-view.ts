@@ -232,7 +232,7 @@ export class DashboardView {
       const path = part.drill.length ? part.drill : undefined;
       const pick = t.chart.kind === 'decomp' && path ? path.map((value, level) => ({ level, value })) : t.pick;
       const { path: _was, ...chart } = t.chart;
-      this.update(t.id, { chart: path ? { ...chart, path } : chart, pick } as Partial<ChartTile>, t.chart.kind === 'decomp' ? (path ? 'Expand tree' : 'Close up tree') : 'Drill up');
+      this.update(t.id, { chart: path ? { ...chart, path } : chart, pick } as Partial<ChartTile>, t.chart.kind === 'decomp' ? (path ? 'Expand tree' : 'Collapse tree') : 'Drill up');
       return;
     }
     const pick = part?.pick.length ? part.pick : null;

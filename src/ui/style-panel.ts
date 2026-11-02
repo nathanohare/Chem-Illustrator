@@ -72,7 +72,7 @@ const LINES: Opt<Arrow['line']>[] = [['solid', 'Solid'], ['dashed', 'Dashed'], [
 const SHAFTS: Opt<string>[] = [['one', 'One line'], ['equilibrium', 'Equilibrium (two half arrows)'], ['retro', 'Retrosynthetic (double line)']];
 const BRACKETS: Opt<NonNullable<Shape['bracket']>>[] = [['square', 'Square [ ]'], ['round', 'Round ( )'], ['curly', 'Curly { }']];
 const VALIGN: Opt<NonNullable<Shape['textValign']>>[] = [['top', 'Top'], ['middle', 'Middle'], ['bottom', 'Bottom']];
-const HL_SHAPES: Opt<HighlightShape>[] = [['round', 'Round (discs and bands)'], ['straight', 'Straight (sharp corners, discs round labels)']];
+const HL_SHAPES: Opt<HighlightShape>[] = [['round', 'Round (discs and bands)'], ['straight', 'Straight (sharp corners, discs around labels)']];
 const HL_ENDS: Opt<HighlightEnds>[] = [['round', 'Round'], ['square', 'Square'], ['pointed', 'Pointed']];
 const HL_FILLS: Opt<HighlightFill>[] = [['solid', 'One color'], ['linear', 'Gradient across'], ['edge', 'Gradient (bonds to edge)'], ['none', 'None (outline or texture only)']];
 const HL_LINES: Opt<HighlightLine>[] = [['none', 'None'], ['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']];
@@ -203,8 +203,8 @@ export class StylePanel {
     else if (diagram?.plate) this.plateControls(diagram);
     else if (diagram?.diagram) this.diagramControls(diagram);
     else if (diagram?.smart) {
+      // how its list works is behind the "i" by the list's title
       this.heading('Smart Scheme');
-      this.note('Switch its layout and type its species and conditions in the list beside it. Drag a species on the page and its arrows follow; the + buttons add a species there.');
     }
     else if (shapes.length) this.shapeControls(shapes);
     if (rings.length) this.shapeControls(rings, rings.length > 1 ? `${rings.length} ring fills` : 'Ring fill');
@@ -221,7 +221,7 @@ export class StylePanel {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = 'Add frame';
-      b.title = 'Draw a box round the selection that grows and moves with it (Chemistry > Labels and Numbers > Add Frame)';
+      b.title = 'Draw a box around the selection that grows and moves with it (Chemistry > Labels and Numbers > Add Frame)';
       b.addEventListener('click', () => this.frames?.add());
       row.append(b);
       this.body.append(row);
@@ -258,16 +258,16 @@ export class StylePanel {
       this.note('Stuck to shapes: it follows them when they move.');
       const b = document.createElement('button');
       b.type = 'button';
-      b.textContent = 'Unstick from shapes';
+      b.textContent = 'Detach from Shapes';
       b.title = 'Let the ends stay where they are when the shapes move';
-      b.addEventListener('click', () => set('Unstick connector', loose));
+      b.addEventListener('click', () => set('Detach Connector', loose));
       this.body.append(b);
     }
     if (r.pin) {
       this.note('Stuck to the structure: it follows it when it moves.');
       const b = document.createElement('button');
       b.type = 'button';
-      b.textContent = 'Unstick from structure';
+      b.textContent = 'Detach from Structure';
       b.title = 'Let the ends stay where they are when the structure moves';
       b.addEventListener('click', () => set('Detach', () => ({ pin: undefined })));
       this.body.append(b);
@@ -358,7 +358,7 @@ export class StylePanel {
     };
     button('Clean Up Reaction', 'Space this step evenly: starting materials and products in line with the arrow, conditions centered on it (Ctrl+Shift+R)', () => hooks.cleanUp());
     button('Arrange…', 'Lay the scheme out as a line, rows, a snake, down the page, a catalytic cycle or a branching tree', () => hooks.arrange());
-    if (r.step) button('Work out again', 'Forget the kept roles and work them out from where things sit', () => hooks.reset(r.id));
+    if (r.step) button('Reset to Automatic', 'Forget the kept roles and work them out from where things sit', () => hooks.reset(r.id));
     this.body.appendChild(buttons);
   }
 
@@ -370,7 +370,7 @@ export class StylePanel {
     const set = (label: string, ok: (x: Shape) => boolean, patch: (x: Shape) => Partial<Shape>) =>
       this.edit(label, () => { for (const x of shapes) if (ok(x)) this.doc.updateShape(x.id, patch(x)); });
     const any = (f: (x: Shape) => boolean) => shapes.find(f);
-    const names: Record<Shape['kind'], string> = { line: 'Line', rect: 'Box', oval: 'Oval', symbol: 'Symbol', bracket: 'Bracket', picture: 'Picture', table: 'Table', geo: 'Shape', ring: 'Ring fill' };
+    const names: Record<Shape['kind'], string> = { line: 'Line', rect: 'Rectangle', oval: 'Oval', symbol: 'Symbol', bracket: 'Bracket', picture: 'Picture', table: 'Table', geo: 'Shape', ring: 'Ring fill' };
     this.heading(title ?? (shapes.length > 1 ? `${shapes.length} shapes` : isCircle(s) ? 'Circle' : s.kind === 'geo' ? geoDef(s.geo).name : names[s.kind]));
     this.rotation(shapes);
     const geo = any((x) => x.kind === 'geo');
@@ -421,7 +421,7 @@ export class StylePanel {
         this.number('Pattern spacing (pt)', round(patternSpacing(f)), 0.25, 0.5, 40, (v) => set('Pattern spacing', fillable, () => ({ patternSize: v })), 'How far apart the lines or dots are');
         const ring = any((x) => x.kind === 'ring' && !!x.pattern);
         if (ring) this.check('Pattern under double bonds', !ring.patternClear, (v) => set('Pattern under double bonds', (x) => x.kind === 'ring', () => ({ patternClear: v ? undefined : true })),
-          'Run the lines or dots up to the bonds and under the double bonds; untick to keep them clear of the bonds and labels');
+          'Run the lines or dots up to the bonds and under the double bonds; clear to keep them clear of the bonds and labels');
       }
     }
     // ring fills and design shapes: a drop shadow, with its colour, darkness, direction and blur folded away
@@ -439,7 +439,7 @@ export class StylePanel {
         // fused ring fills cast one shadow round their outer edge unless asked for one between them
         const ring = any((x) => x.kind === 'ring' && !!x.shadow);
         if (ring) this.check('Shadow between fused rings', !!ring.shadowBetween, (v) => set('Shadow between fused rings', (x) => x.kind === 'ring', () => ({ shadowBetween: v || undefined })),
-          'Each ring casts its own shadow, onto the rings fused to it too; untick for one shadow round the outer edge');
+          'Each ring casts its own shadow, onto the rings fused to it too; clear for one shadow around the outer edge');
       });
     }
     if (geo) {
@@ -592,7 +592,7 @@ export class StylePanel {
   private frameControls(sh: Shape): void {
     const f = sh.frame;
     // what a frame does, as the heading's tooltip rather than a paragraph in the panel
-    const about = 'A frame fits round what lies inside it, with a gap, and follows it from then on. Moving or resizing the frame by hand stops it fitting; tick Fit to Contents to fit it again.';
+    const about = 'A frame fits around what lies inside it, with a gap, and follows it from then on. Moving or resizing the frame by hand stops it fitting; check Fit to Contents to fit it again.';
     this.heading('Frame');
     (this.body.lastElementChild as HTMLElement).title = about;
     if (f) {
@@ -747,13 +747,13 @@ export class StylePanel {
     const same = (a: PictureLook | undefined, b: PictureLook | undefined) => JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
     const preset = PICTURE_STYLES.find((p) => same(p.look, pics[0].look))?.id ?? 'custom';
     const opts: Opt<string>[] = PICTURE_STYLES.map((p) => [p.id, p.name]);
-    if (preset === 'custom') opts.push(['custom', 'Your own']);
+    if (preset === 'custom') opts.push(['custom', 'Custom']);
     this.select('Frame style', opts, preset, (v) => {
       const p = PICTURE_STYLES.find((x) => x.id === v);
       if (p) setLook('Picture style', () => p.look && { ...p.look });
     });
     this.number('Frame line (pt)', look.line ?? 0, 0.5, 0, 72, (v) => setLook('Picture frame', (l) => ({ ...l, line: v })),
-      'The width of the line round the picture; 0 for none.');
+      'The width of the line around the picture; 0 for none.');
     if (look.line) this.color('Frame color', look.lineColor, (v) => setLook('Picture frame color', (l) => ({ ...l, lineColor: v ?? '#000000' })));
     this.number('Rounded corners (%)', round((look.round ?? 0) * 100, 10), 1, 0, 50, (v) => setLook('Rounded corners', (l) => ({ ...l, round: v / 100 })),
       'How round the corners are, as a percentage of the shorter side (50 makes a circle or a pill).');
@@ -907,13 +907,13 @@ export class StylePanel {
       this.body.appendChild(row);
     };
     if (!tied.length) {
-      if (this.tie) button('Tie to nearest structure', 'Keep this caption beside the structure nearest it: it follows when the structure moves', () => this.tie?.(loose.map((x) => x.id)));
+      if (this.tie) button('Pin to Nearest Structure', 'Keep this caption beside the structure nearest it: it follows when the structure moves', () => this.tie?.(loose.map((x) => x.id)));
       return;
     }
     const a = tied[0].attach!;
     const setA = (label: string, patch: (x: Attachment) => Partial<Attachment>) =>
       this.edit(label, () => { for (const x of tied) this.doc.updateCaption(x.id, { attach: { ...x.attach!, ...patch(x.attach!) } }); });
-    this.heading(a.role === 'descriptors' ? 'Tied descriptors' : a.role === 'label' ? 'Tied ID label' : 'Tied to its structure');
+    this.heading(a.role === 'descriptors' ? 'Attached Descriptors' : a.role === 'label' ? 'Attached ID Label' : 'Attached to Structure');
     // text beside a structure lines up towards it; above and below, centred (Line up changes it back)
     this.select<AttachSide>('Sits', SIDES, a.side, (v) => this.edit('Caption side', () => {
       for (const x of tied) this.doc.updateCaption(x.id, { attach: { ...x.attach!, side: v, shift: 0 }, justify: v === 'right' ? 'left' : v === 'left' ? 'right' : 'center' });
@@ -941,8 +941,8 @@ export class StylePanel {
       this.check('Update when the structure changes', !desc[0].attach!.keepText, (v) => setA(v ? 'Update descriptors' : 'Keep descriptor text', (x) => (x.role === 'descriptors' ? { keepText: v ? undefined : true, sig: v ? undefined : x.sig } : {})),
         'Turn off to keep the text as it is, for instance after typing over it by hand.');
     }
-    button('Untie from structure', 'Leave the caption where it is as ordinary text: it no longer follows the structure', () =>
-      this.edit('Untie caption', () => { for (const x of tied) this.doc.updateCaption(x.id, { attach: undefined }); }));
+    button('Unpin from Structure', 'Leave the caption where it is as ordinary text: it no longer follows the structure', () =>
+      this.edit('Unpin Caption', () => { for (const x of tied) this.doc.updateCaption(x.id, { attach: undefined }); }));
     if (loose.length && this.tie) button('Tie the others too', 'Tie the selected captions that are loose to the structure nearest each', () => this.tie?.(loose.map((x) => x.id)));
   }
 
@@ -1059,8 +1059,8 @@ export class StylePanel {
 
     this.group('Placement', [st.centre && 'centred', !st.fit && 'labels not held'].filter(Boolean).join(', ') || 'on the bonds', () => {
       this.check('Center on double bonds', st.centre, (v) => set(v ? 'Center highlight on double bonds' : 'Highlight on the bonds', { centre: v }),
-        'Run the highlight midway between a double bond\'s two lines, and round a ring midway between the ring and its inner double-bond lines (Chemistry > Highlight and Fill > Center Highlight on Double Bonds).');
-      this.check('Grow round atom labels', st.fit, (v) => set(v ? 'Highlight round labels' : 'Highlight not round labels', { fit: v }),
+        'Run the highlight midway between a double bond\'s two lines, and around a ring midway between the ring and its inner double-bond lines (Chemistry > Highlight and Fill > Center Highlight on Double Bonds).');
+      this.check('Grow around atom labels', st.fit, (v) => set(v ? 'Highlight around labels' : 'Highlight not around labels', { fit: v }),
         'Make the highlight under a labeled atom (Me, OTBS, CO2Et) big enough to hold its whole label.');
     });
 
@@ -1086,7 +1086,7 @@ export class StylePanel {
     });
 
     this.group('Outline', st.line === 'none' ? 'none' : HL_LINES.find(([v]) => v === st.line)![1].toLowerCase(), () => {
-      this.select<HighlightLine>('Line round it', HL_LINES, st.line, (v) => set('Highlight outline', { line: v }));
+      this.select<HighlightLine>('Line around it', HL_LINES, st.line, (v) => set('Highlight outline', { line: v }));
       if (st.line !== 'none') {
         this.color('Line color', st.lineColour || undefined, (v) => set('Highlight outline color', { lineColour: v ?? '' }), 'A darker shade', '#808080');
         this.number('Line width (pt)', st.lineWidth, 0.25, 0.25, 10, (v) => set('Highlight outline width', { lineWidth: v }));
@@ -1114,7 +1114,7 @@ export class StylePanel {
     });
 
     this.group('Glow', st.glow ? `${pct(st.glowSize)}%` : 'off', () => {
-      this.check('Glow', st.glow, (v) => set(v ? 'Highlight glow' : 'No highlight glow', { glow: v }), 'A soft halo of color round the outside (Chemistry > Highlight and Fill > Highlight Glow).');
+      this.check('Glow', st.glow, (v) => set(v ? 'Highlight glow' : 'No highlight glow', { glow: v }), 'A soft halo of color around the outside (Chemistry > Highlight and Fill > Highlight Glow).');
       if (st.glow) {
         this.color('Glow color', st.glowColour || undefined, (v) => set('Glow color', { glowColour: v ?? '' }), 'The highlight\'s', '#ffe680');
         this.number('Glow size (% of a bond)', pct(st.glowSize), 1, 1, 200, (v) => set('Glow size', { glowSize: v / 100 }));
@@ -1127,7 +1127,7 @@ export class StylePanel {
     const save = document.createElement('button');
     save.type = 'button';
     save.textContent = 'Save look…';
-    save.title = 'Keep this highlight\'s look (and color) under a name, to use again in any drawing (Chemistry > Highlight and Fill > Save Highlight Look)';
+    save.title = 'Keep this highlight\'s look (and color) under a name, to use again in any drawing (Chemistry > Highlight and Fill > Save Highlight Style)';
     save.addEventListener('click', () => this.highlightLooks.save());
     row.append(save);
     this.body.append(row);

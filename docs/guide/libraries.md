@@ -34,7 +34,7 @@ When you save or open a file, the library notes which of its compounds are in th
 
 **File ▸ Find Structure in Files…** searches a folder for a structure: ChemDraw drawings (`.cdxml`, `.cdx`), Word documents, PowerPoint presentations and Excel workbooks.
 
-1. Choose the folder. Leave **And the folders inside it** ticked to search those too.
+1. Choose the folder. Leave **And the folders inside it** checked to search those too.
 2. Select a structure in the drawing and click **Use Selected**, or type a name or SMILES. From the compound library, **Find in Files…** starts with the compound picked.
 3. Pick **Any structure containing it** (a substructure search, the default) or **Only the same structure**, and click **Search** (or press Enter). **Stop** stops a long search.
 

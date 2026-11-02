@@ -204,7 +204,7 @@ export function removeSubtotals(s: Sheet, R: Range): Range {
  */
 export function addSubtotals(s: Sheet, R: Range, o: SubtotalOptions): Range | string {
   if (R.r2 <= R.r1) return 'Subtotal needs a table with a header row and rows of data under it.';
-  if (!o.cols.length) return 'Tick at least one column to add a subtotal to.';
+  if (!o.cols.length) return 'Select at least one column to add a subtotal to.';
   let T = o.replace ? removeSubtotals(s, R) : { ...R };
   const key = (r: number) => s.shownText(r, o.by);
   const fnName = SUBTOTAL_FUNCTIONS.find(([, n]) => n === o.fn)?.[0] ?? 'Total';

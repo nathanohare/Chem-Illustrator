@@ -268,7 +268,7 @@ export class DocPanel {
     this.row(s, 'Wrap text', this.select('fig-wrap', [['inline', 'In Line with Text'], ['square', 'Square'], ['topBottom', 'Top and Bottom'], ['behind', 'Behind Text'], ['front', 'In Front of Text']], (v) => {
       const id = this.host.picked();
       if (id !== null) this.host.setWrap(id, v as WrapKind | 'inline');
-    }), 'In the line like a letter, or on the page with the text going round it (or under or over it). Drag it on the page to move it');
+    }), 'In the line like a letter, or on the page with the text going around it (or under or over it). Drag it on the page to move it');
     const fl = (patch: Partial<Float>) => {
       const id = this.host.picked();
       const f = this.host.file();
@@ -279,12 +279,12 @@ export class DocPanel {
     this.row(s, '… from', this.select('fig-xfrom', [['margin', 'Margin'], ['page', 'Page']], (v) => this.refrom('x', v)));
     this.row(s, 'Down (in)', this.input('fig-y', (v) => { const n = parseLength(v, 'in'); if (n !== null) fl({ y: n }); }), 'From the top of its paragraph (it moves with that text), of the margin, or of the page');
     this.row(s, '… from', this.select('fig-yfrom', [['para', 'Paragraph'], ['margin', 'Margin'], ['page', 'Page']], (v) => this.refrom('y', v)));
-    this.row(s, 'Text gap (pt)', this.input('fig-gap', (v) => { const n = parseLength(v, 'pt'); if (n !== null) fl({ gap: Math.max(0, n) }); }), `Room kept between it and the text round it (Word's is ${FLOAT_GAP} pt, 0.13 in)`);
+    this.row(s, 'Text gap (pt)', this.input('fig-gap', (v) => { const n = parseLength(v, 'pt'); if (n !== null) fl({ gap: Math.max(0, n) }); }), `Room kept between it and the text around it (Word's is ${FLOAT_GAP} pt, 0.13 in)`);
     const look = (patch: Partial<FigureLook>) => { const id = this.host.picked(); if (id !== null) this.host.setLook(id, patch); };
     this.row(s, 'Frame (pt)', this.input('fig-frame', (v) => {
       const n = v.trim() === '' || /^none$/i.test(v.trim()) ? 0 : parseLength(v, 'pt');
       if (n !== null) look({ frame: n > 0 ? Math.min(n, 20) : undefined });
-    }, { list: 'dp-frames', placeholder: 'None' }), 'A line round it, this many points wide (0.5 is a hairline, 0.75 thin, 1.5 medium, 3 thick). Clear it for none');
+    }, { list: 'dp-frames', placeholder: 'None' }), 'A line around it, this many points wide (0.5 is a hairline, 0.75 thin, 1.5 medium, 3 thick). Clear it for none');
     const frames = document.createElement('datalist');
     frames.id = 'dp-frames';
     for (const v of ['0.5', '0.75', '1', '1.5', '2.25', '3']) frames.append(new Option(v));

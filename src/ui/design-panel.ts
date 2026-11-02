@@ -54,7 +54,7 @@ export function pickDesignSize(title: string, current?: SlideSize): Promise<Slid
       list.append(choice(s.id, s.name, sizeLabel(s.size)));
     }
     const g = document.createElement('h3');
-    g.textContent = 'Your own';
+    g.textContent = 'Custom';
     list.append(g, choice('custom', 'Custom size', ''));
 
     const custom = document.createElement('div');

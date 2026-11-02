@@ -53,7 +53,7 @@ const HELP: Record<string, Entry> = {
   SUMIFS: [M, 'Adds up the cells whose rows meet every condition.', 'sum_range: the cells to add up', 'criteria_range…: cells to test', 'criteria…: the condition for those cells'],
   ROUND: [M, 'Rounds a number to a number of decimal places (halves away from zero).', 'number: the number to round', '[num_digits]: decimal places (negative rounds to tens, hundreds…); 0 when left out'],
   ROUNDUP: [M, 'Rounds a number away from zero.', 'number: the number to round', '[num_digits]: decimal places'],
-  ROUNDDOWN: [M, 'Rounds a number towards zero.', 'number: the number to round', '[num_digits]: decimal places'],
+  ROUNDDOWN: [M, 'Rounds a number toward zero.', 'number: the number to round', '[num_digits]: decimal places'],
   INT: [M, 'Rounds a number down to a whole number.', 'number: the number'],
   ABS: [M, 'The number without its sign.', 'number: the number'],
   SQRT: [M, 'The square root.', 'number: a number of 0 or more'],
@@ -63,8 +63,8 @@ const HELP: Record<string, Entry> = {
   LOG: [M, 'The logarithm to a base.', 'number: a number above 0', '[base]: the base; 10 when left out'],
   POWER: [M, 'A number raised to a power.', 'number: the base', 'power: the power'],
   MOD: [M, 'The remainder after dividing (with the sign of the divisor).', 'number: the number to divide', 'divisor: what to divide by'],
-  CEILING: [M, 'Rounds a number up to a multiple of the significance (a negative number towards zero, or away from it with a negative significance).', 'number: the number to round', 'significance: the multiple, such as 0.05'],
-  FLOOR: [M, 'Rounds a number down to a multiple of the significance (a negative number away from zero, or towards it with a negative significance).', 'number: the number to round', 'significance: the multiple, such as 0.05'],
+  CEILING: [M, 'Rounds a number up to a multiple of the significance (a negative number toward zero, or away from it with a negative significance).', 'number: the number to round', 'significance: the multiple, such as 0.05'],
+  FLOOR: [M, 'Rounds a number down to a multiple of the significance (a negative number away from zero, or toward it with a negative significance).', 'number: the number to round', 'significance: the multiple, such as 0.05'],
   FACT: [M, 'The factorial: 1 × 2 × 3 × … × the number.', 'number: a whole number from 0 to 170'],
   COMBIN: [M, 'The number of ways to choose some items from a set, order not mattering.', 'number: how many items there are', 'number_chosen: how many are chosen'],
   // ---------------------------------------------------------------- financial
@@ -187,7 +187,7 @@ const HELP: Record<string, Entry> = {
   // ---------------------------------------------------------------- dates
   TODAY: [D, "Today's date (worked out again after every change)."],
   NOW: [D, 'The date and time now (worked out again after every change).'],
-  DATE: [D, 'The date of a year, month and day. Months and days past the end carry on: DATE(2026,13,1) is 1 January 2027.', 'year: 1900 to 9999 (0 to 1899 count from 1900)', 'month: 1 to 12', 'day: 1 to 31'],
+  DATE: [D, 'The date of a year, month and day. Months and days past the end continue: DATE(2026,13,1) is 1 January 2027.', 'year: 1900 to 9999 (0 to 1899 count from 1900)', 'month: 1 to 12', 'day: 1 to 31'],
   TIME: [D, 'A time of day from hours, minutes and seconds.', 'hour: 0 to 23', 'minute: 0 to 59', 'second: 0 to 59'],
   YEAR: [D, 'The year of a date.', DATE],
   MONTH: [D, 'The month of a date, 1 to 12.', DATE],

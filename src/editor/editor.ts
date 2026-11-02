@@ -67,7 +67,8 @@ import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
 import { rebuildSmartCycle, smartCycleStart, type SmartCycleStart } from '../chem/smart-cycle';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
-import { arrangeSmart, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
+import { arrangeSmart, formatSmart, stepToHolder, stepHolderToText, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
+import type { SmartFormat } from '../chem/smart-format';
 import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
 import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
 import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
@@ -1135,7 +1136,7 @@ export class Editor {
       const x = g?.list[gg.index];
       if (g && x) {
         // a guide snaps to the drawing's major ticks (from its top left) unless Alt is held
-        const at = e.altKey || g.snap === 'none' ? p : { x: Math.round(p.x / g.minor) * g.minor, y: Math.round(p.y / g.minor) * g.minor };
+        const at = e.altKey || g.snapOff ? p : { x: Math.round(p.x / g.minor) * g.minor, y: Math.round(p.y / g.minor) * g.minor };
         const list = g.list.slice();
         list[gg.index] = movedGuide(x, gg.part, at);
         this.doc.guides = { ...g, list };
@@ -2046,7 +2047,7 @@ export class Editor {
     const rest = sel.filter((a) => !isMetalAtom(a));
     if (metals.length !== 1 || rest.length < 2) return 'Select one metal and the atoms of the ring or π-bond it is bonded to (two or more).';
     const m = metals[0];
-    doc.edit('Bond Metal to Ring', () => {
+    doc.edit('Add Hapto Bond', () => {
       for (const a of rest) { const b = doc.bondBetween(m.id, a.id); if (b) doc.removeBond(b.id); }
       bondHapto(doc, m.id, rest.map((a) => a.id));
     });
@@ -3481,6 +3482,15 @@ export class Editor {
   }
   /** Select one shape on its own (a Smart Scheme's dashed species box, from the species list). */
   selectShape(id: number): void { if (this.doc.shapes.has(id)) { this.selectOnly({ kind: 'shape', id }); this.changed(); } }
+  /** Make what joins or leaves at step k (above or below its arrow) a dashed box to draw or paste a structure in; the box is selected. */
+  smartStepToHolder(id: number, k: number, part: 'above' | 'below'): boolean {
+    let box: number | null = null;
+    const ok = this.smartEdit(id, 'Make Reagent a Structure', (m) => (box = stepToHolder(this.doc, m, id, k, part)) !== null);
+    if (box !== null) { this.selectOnly({ kind: 'shape', id: box }); this.changed(); }
+    return ok;
+  }
+  /** Make a step's dashed reagent box text again. */
+  smartStepToText(id: number, k: number, part: 'above' | 'below'): boolean { return this.smartEdit(id, 'Make Reagent Text', (m) => stepHolderToText(this.doc, m, id, k, part)); }
   /** Make species k's dashed box a text label again. */
   smartToText(id: number, k: number): boolean { return this.smartEdit(id, 'Make Species Text', (m) => holderToSlotText(this.doc, m, id, k) !== null); }
   /** The dashed species box selected on its own (a paste goes into it), or null. */
@@ -3524,6 +3534,7 @@ export class Editor {
     this.changed();
     return smart !== null;
   }
+  smartFormat(id: number, fmt: SmartFormat | undefined): boolean { return this.smartEdit(id, 'Format Smart Scheme', (m) => formatSmart(this.doc, m, id, fmt)); }
   smartArrange(id: number, patch?: Partial<SmartData>): boolean { return this.smartEdit(id, 'Arrange Smart Scheme', (m) => arrangeSmart(this.doc, m, id, patch)); }
 
   /** Chemistry ▸ Scheme ▸ Convert to Smart Scheme: the selected scheme becomes one object. */
@@ -3886,7 +3897,7 @@ export class Editor {
       if (!t.told) { t.told = true; this.onHint('Building the 3-D shape…'); this.onNotice('Building the 3-D shape… (only the first time for a structure)'); }
       return;
     }
-    if (!t.begun) { this.doc.begin(t.real ? 'Turn in 3-D' : 'Turn in Perspective'); t.begun = true; }
+    if (!t.begun) { this.doc.begin(t.real ? '3-D Rotation' : 'Rotate in Perspective'); t.begun = true; }
     const R = dragTurn(t.dx, t.dy, t.shift);
     t.unshown = t.ready.turn.apply(this.doc, R);
     if (!t.unshown) t.ready.turn.lastGood = R;
@@ -3938,7 +3949,7 @@ export class Editor {
     if (prep.notes.length) this.onNotice(`${prep.notes[0]} Turning it flat instead.`, 7000);
     const R: M3 = anglesTurn(x, y, z);
     let left = 0;
-    doc.edit(real ? 'Turn in 3-D' : 'Turn in Perspective', () => {
+    doc.edit(real ? '3-D Rotation' : 'Rotate in Perspective', () => {
       left = prep.turn.apply(doc, R, true);
       prep.turn.remember(doc);
     });
@@ -4847,7 +4858,7 @@ export class Editor {
     if (!label) return 'Type a name for the label.';
     // a built-in nickname is fine when the selection is that group (Ph, TBS, Boc), not otherwise
     const same = builtIn.includes(label);
-    if (isBuiltInNickname(label) && !same) return `“${label}” is already a nickname for a different group${builtIn.length ? ` (this one is ${builtIn.slice(0, 3).join(', ')})` : ''}. Choose another name.`;
+    if (isBuiltInNickname(label) && !same) return `“${label}” is already an abbreviation for a different group${builtIn.length ? ` (this one is ${builtIn.slice(0, 3).join(', ')})` : ''}. Choose another name.`;
     if (!same) addNicknames({ [label]: g.smiles });
     const ids = [...this.sel.atoms].filter((id) => id !== g.start && doc.atoms.has(id));
     doc.edit('Contract Label', () => {
@@ -6245,7 +6256,7 @@ export class Editor {
   /** Moves snap to the drawing's guides. */
   private guidesSnap(): boolean {
     const g = this.doc.guides;
-    return !!g && g.shown && g.snap !== 'none' && (g.list.length > 0 || g.grid);
+    return !!g && g.shown && !g.snapOff && (g.list.length > 0 || g.grid);
   }
 
   /** The guide under a point (the Select tool drags it). */

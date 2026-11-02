@@ -153,7 +153,7 @@ export class FigureOffer {
     const n = plainStructures(f.t).length;
     if (!n) return;
     this.file = f;
-    this.show(`${n === 1 ? 'A structure in this document isn\'t a figure' : `${n} structures in this document aren't figures`}. A figure keeps its area on the page, so drawing in it never moves the text round it.`, [
+    this.show(`${n === 1 ? 'A structure in this document isn\'t a figure' : `${n} structures in this document aren't figures`}. A figure keeps its area on the page, so drawing in it never moves the text around it.`, [
       ['Preview Figures…', () => this.preview(f), true],
       ['Not Now', () => this.close(), false],
     ]);

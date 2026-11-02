@@ -88,7 +88,7 @@ export const EFFECTS: { id: Effect; name: string; sides: boolean; emph?: boolean
   { id: 'spin', name: 'Spin', sides: false, emph: true },
   { id: 'transparency', name: 'Transparency', sides: false, emph: true },
   { id: 'colour', name: 'Color Change', sides: false, emph: true },
-  { id: 'turn3d', name: 'Turn in 3-D', sides: false, emph: true },
+  { id: 'turn3d', name: '3-D Rotation', sides: false, emph: true },
 ];
 
 /** The keyframe moves, as the ribbon offers them. */
@@ -205,14 +205,14 @@ export type PathKind = 'down' | 'up' | 'left' | 'right' | 'arc' | 'turn' | 'circ
 
 /** The ready-made motion paths, as PowerPoint's gallery has them (Lines, Arcs, Turns, Shapes, Loops). */
 export const PATHS: { id: PathKind; name: string; tip: string }[] = [
-  { id: 'down', name: 'Line Down', tip: 'straight down' },
-  { id: 'up', name: 'Line Up', tip: 'straight up' },
-  { id: 'left', name: 'Line Left', tip: 'straight to the left' },
-  { id: 'right', name: 'Line Right', tip: 'straight to the right' },
+  { id: 'down', name: 'Lines: Down', tip: 'straight down' },
+  { id: 'up', name: 'Lines: Up', tip: 'straight up' },
+  { id: 'left', name: 'Lines: Left', tip: 'straight to the left' },
+  { id: 'right', name: 'Lines: Right', tip: 'straight to the right' },
   { id: 'arc', name: 'Arc', tip: 'in an arc, down and back up to the right' },
-  { id: 'turn', name: 'Turn', tip: 'to the right, then round a corner and down' },
-  { id: 'circle', name: 'Circle', tip: 'round in a circle, back to where it started' },
-  { id: 'square', name: 'Square', tip: 'round a square, back to where it started' },
+  { id: 'turn', name: 'Turn', tip: 'to the right, then around a corner and down' },
+  { id: 'circle', name: 'Circle', tip: 'around in a circle, back to where it started' },
+  { id: 'square', name: 'Square', tip: 'around a square, back to where it started' },
   { id: 'loop', name: 'Loop', tip: 'to the right with a loop in the middle' },
   { id: 'wave', name: 'Wave', tip: 'to the right in a wave' },
   { id: 'custom', name: 'Custom Path', tip: 'along a path you click out on the slide (double-click to finish)' },
