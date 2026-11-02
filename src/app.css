@@ -12,7 +12,7 @@
   --r-tab: 3px;
   --r-panel: 4px;
   /* words on the accent colour, and the colour of errors */
-  --on-accent: #fff;
+  --on-accent: var(--mode-on-accent, #fff);
   --danger: #c62828;
   --bg: #eef0f3;
   --panel: #ffffff;
@@ -49,6 +49,7 @@
     --muted: #9aa3b5;
     --line: #3a414d;
     --accent: var(--mode-accent-dark, #7aa7ff);
+    --on-accent: var(--mode-on-accent-dark, #14171c);
     --accent-soft: var(--mode-soft-dark, #2c3b57);
     --bar: var(--mode-bar-dark, #264b8b);
     --ok: #5fd39a;
@@ -67,6 +68,7 @@
   --muted: #9aa3b5;
   --line: #3a414d;
   --accent: var(--mode-accent-dark, #7aa7ff);
+  --on-accent: var(--mode-on-accent-dark, #14171c);
   --accent-soft: var(--mode-soft-dark, #2c3b57);
   --bar: var(--mode-bar-dark, #264b8b);
   --ok: #5fd39a;
@@ -816,7 +818,7 @@ dialog.hotkeys > p { margin: 4px 0; }
 .hk-chip { display: inline-flex; align-items: center; }
 .hk-chip button, button.hk-add { border: 0; background: none; padding: 0 4px; color: var(--muted); cursor: pointer; font-size: var(--fs-lg); line-height: 1; }
 .hk-chip button:hover, button.hk-add:hover { color: var(--accent); }
-button.hk-add.recording { color: var(--panel); background: var(--accent); border-radius: var(--r-control); font-size: var(--fs-sm); padding: 2px 6px; }
+button.hk-add.recording { color: var(--on-accent); background: var(--accent); border-radius: var(--r-control); font-size: var(--fs-sm); padding: 2px 6px; }
 .hk-addlabel { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 6px; }
 .hk-addlabel input { font: inherit; padding: 2px 6px; width: 12em; }
 .hk-addlabel button.hk-add { border: 1px solid var(--line); border-radius: var(--r-control); font-size: var(--fs-sm); padding: 3px 8px; color: var(--text); }
