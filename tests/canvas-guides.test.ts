@@ -4,7 +4,7 @@
 // and that they are kept in a CDXML file (where ChemDraw passes over them).
 
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_GUIDES, guideAt, guideLines, guidesText, movedGuide, parseGuides, snapToGuides, tickNear, ticksBetween, type CanvasGuides } from '../src/editor/guides';
+import { DEFAULT_GUIDES, parseGuideLength, showGuideLength, guideAt, guideLines, guidesText, movedGuide, parseGuides, snapToGuides, tickNear, ticksBetween, type CanvasGuides } from '../src/editor/guides';
 import { buildGuidesToolbox } from '../src/ui/guides-toolbox';
 import { Doc } from '../src/model';
 import { writeCdxml } from '../src/io/cdxml-write';
@@ -19,7 +19,7 @@ describe('ticks', () => {
     expect(tickNear(80, 0, { ...t, snap: 'major' })).toBe(72);
     expect(tickNear(80, 0, { ...t, snap: 'both' })).toBe(72);
     expect(tickNear(80, 0, { ...t, snap: 'minor' })).toBe(90);
-    expect(tickNear(80, 0, { ...t, snap: 'none' })).toBeNull();
+    expect(tickNear(80, 0, { ...t, snapOff: true })).toBeNull();
     // counted from the crosshair's middle
     expect(tickNear(130, 100, { ...t, snap: 'both' })).toBe(136);
   });
@@ -40,7 +40,7 @@ describe('snapping the grabbed atom', () => {
   });
   it('stays put away from the guides, with snapping off, or with the guides hidden', () => {
     expect(snapToGuides({ x: 300, y: 300 }, g(), guideLines(g(), area), 6).at).toEqual({ x: 300, y: 300 });
-    expect(snapToGuides({ x: 103, y: 150 }, g({ snap: 'none' }), guideLines(g(), area), 6).at).toEqual({ x: 103, y: 150 });
+    expect(snapToGuides({ x: 103, y: 150 }, g({ snapOff: true }), guideLines(g(), area), 6).at).toEqual({ x: 103, y: 150 });
     expect(snapToGuides({ x: 103, y: 150 }, g({ shown: false }), guideLines(g(), area), 6).at).toEqual({ x: 103, y: 150 });
   });
   it('uses the grid lines too', () => {
@@ -70,6 +70,10 @@ describe('saving', () => {
     expect(parseGuides(guidesText(k))).toEqual(k);
     expect(guidesText({ ...k, list: [], grid: false })).toBeNull();
     expect(parseGuides('{"list":[{"kind":"x"}],"major":-3}')).toBeNull();
+    // older files kept "none" as a snap choice: now snapping off, with the ticks at Both
+    const old = parseGuides('{"list":[],"grid":true,"snap":"none"}')!;
+    expect([old.snap, old.snapOff]).toEqual(['both', true]);
+    expect(parseGuides(guidesText(old))).toEqual(old);
   });
   it('keeps their colour and how see-through they are, and drops values out of range', () => {
     const k = g({ grid: true, color: '#d81b8c', clear: 0.4 });
@@ -107,15 +111,47 @@ describe('the toolbox', () => {
     [...body.querySelectorAll<HTMLButtonElement>('.gt-seg')].find((b) => b.textContent === 'Major')!.click();
     expect(now!.snap).toBe('major');
     const major = body.querySelector<HTMLInputElement>('.gt-num')!;
-    expect(major.value).toBe('1');
-    major.value = '0.5';
+    // the boxes say their units; any unit can be typed
+    expect(major.value).toBe('1"');
+    major.value = '0.5"';
     major.dispatchEvent(new Event('change'));
     expect(now!.major).toBe(36);
     expect(now!.minor).toBe(18);
-    const box = body.querySelector<HTMLInputElement>('.gt-check input')!;
+    expect(major.value).toBe('0.5"');
+    major.value = '25.4 mm';
+    major.dispatchEvent(new Event('change'));
+    expect(now!.major).toBeCloseTo(72, 6);
+    major.value = 'lots';
+    major.dispatchEvent(new Event('change'));
+    expect(major.value).toBe('1"');
+    // no separate unit, no "None", and the help is behind an "i"
+    expect([...body.querySelectorAll('.gt-seg')].map((b) => b.textContent)).toEqual(['Major', 'Minor', 'Both']);
+    expect(body.textContent).not.toContain('Drag a guide');
+    expect(body.querySelector('.gt-info')!.getAttribute('title')).toContain('Drag a guide');
+    // one checkbox, above the snap choices, turns snapping on and off
+    const check = body.querySelector<HTMLElement>('.gt-check')!;
+    expect(check.textContent).toBe('Toggle object snapping');
+    expect(check.compareDocumentPosition(body.querySelector('.gt-snap')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const box = check.querySelector('input')!;
+    // on to start: the guides snap
+    expect(box.checked).toBe(true);
     box.checked = true;
     box.dispatchEvent(new Event('change'));
-    expect(smart).toBe(true);
+    expect([smart, now!.snapOff]).toEqual([true, undefined]);
+    box.checked = false;
+    box.dispatchEvent(new Event('change'));
+    expect([smart, now!.snapOff, now!.snap]).toEqual([false, true, 'major']);
+    expect(body.querySelector<HTMLButtonElement>('.gt-seg')!.disabled).toBe(true);
+  });
+  it('reads lengths with their units', () => {
+    expect(parseGuideLength('1"', 'cm')).toBe(72);
+    expect(parseGuideLength('1 in', 'cm')).toBe(72);
+    expect(parseGuideLength('30mm', 'in')).toBeCloseTo(85.04, 2);
+    expect(parseGuideLength('2,54 cm', 'in')).toBeCloseTo(72, 6);
+    expect(parseGuideLength('12 pt', 'in')).toBe(12);
+    expect(parseGuideLength('0.5', 'in')).toBe(36);
+    expect(parseGuideLength('0', 'in')).toBeNull();
+    expect([showGuideLength(18, 'in'), showGuideLength(72, 'cm')]).toEqual(['0.25"', '2.54 cm']);
   });
 });
 
