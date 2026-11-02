@@ -18,15 +18,24 @@ import { drawVeil } from './canvas-look';
 import { cameraAt, compoundId, distanceDur, isCamera, keyRect, keysBounds, shownRect, slidePlace, slideShaped, timedCamera, unionRect, viewBetween, type CameraAt, type CanvasData, type Keyframe } from './canvas';
 import { selectionBox, POINTS } from '../editor/arrange';
 import { plainMeasure } from '../chem/reaction';
-import type { Rect } from '../geom';
+import type { Rect, Vec } from '../geom';
 import type { Selection } from '../editor/editor';
 import { plainText } from '../richtext';
+import { Turner } from './turn-render';
+import { isSameView } from './turn3d';
 import {
   buildSteps, partStates, slideParts, partOf, hostOf, mainAnims, triggerSeqs, splitParas, expandParas, moved,
   type Anim, type Part, type Step, type Transition, type Side,
 } from './animation';
 
 const ease = (p: number) => 1 - (1 - p) ** 3;
+
+/** A part lifted off the slide to move on its own: its picture, where it goes, and (Turn in 3-D) what draws it turned. */
+interface Layer {
+  part: Part; canvas: HTMLCanvasElement; box: Rect; x: number; y: number;
+  turner?: Turner;
+  turned?: { canvas: HTMLCanvasElement; key: string };
+}
 
 /**
  * A copy of the slide's drawing with only some of its objects (kept with their ids), with the
@@ -92,7 +101,7 @@ export class SlideFrames {
   readonly steps: Step[];
   private base = document.createElement('canvas');
   /** Each moving part painted on its own, cut to its box; `x`, `y`: where its canvas goes (device pixels). */
-  private layers: { part: Part; canvas: HTMLCanvasElement; box: Rect; x: number; y: number }[] = [];
+  private layers: Layer[] = [];
   private parts: Part[] = [];
   /** Where the slide sits on the canvas: its corner and scale (CSS pixels per point). */
   private at = { x: 0, y: 0, k: 1 };
@@ -139,7 +148,7 @@ export class SlideFrames {
     // background and screen layer under it for wherever the view is)
     this.at = paintSlide(this.base, w, h, dpr, page, still, page.view ? null : fill, !page.view);
     for (const part of this.parts.filter((p) => lifted.has(p))) {
-      let box: Rect, one: Doc;
+      let box: Rect, one: Doc, turner: Turner | undefined;
       if (part.para !== undefined) {
         // the text box painted in the band of its paragraph, so the paragraph can move on its own
         const id = Math.min(...part.sel.captions);
@@ -154,6 +163,13 @@ export class SlideFrames {
         // room for frames, shadows, glows and arrowheads
         const pad = part.kind === 'highlight' ? doc.style.bondLength : 8;
         box = { x1: b.x1 - pad, y1: b.y1 - pad, x2: b.x2 + pad, y2: b.y2 + pad };
+        // turned in 3-D: room for it at any angle
+        if (part.kind === 'drawing' && live.some((a) => a.effect === 'turn3d' && partOf(this.parts, a.target) === part)) {
+          turner = new Turner(one);
+          const r = turner.reach + doc.style.bondLength;
+          const c = turner.centre;
+          box = { x1: Math.min(box.x1, c.x - r), y1: Math.min(box.y1, c.y - r), x2: Math.max(box.x2, c.x + r), y2: Math.max(box.y2, c.y + r) };
+        }
       }
       // a canvas only the size of the part's box, not of the whole screen
       const { x: ox, y: oy, k } = this.at;
@@ -162,10 +178,22 @@ export class SlideFrames {
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.min(W, Math.ceil((ox + box.x2 * k) * dpr)) - x);
       canvas.height = Math.max(1, Math.min(H, Math.ceil((oy + box.y2 * k) * dpr)) - y);
-      const L = { part, canvas, box, x, y };
+      const L: Layer = { part, canvas, box, x, y, ...(turner && !turner.empty ? { turner } : {}) };
       this.paintLayer(L, one);
       this.layers.push(L);
     }
+  }
+
+  /** A layer's part turned to `view` (Turn in 3-D), painted on a canvas of its own. */
+  private turnedLayer(L: Layer, view: number[]): HTMLCanvasElement {
+    const key = view.map((v) => v.toFixed(5)).join(',');
+    if (L.turned?.key === key) return L.turned.canvas;
+    const canvas = L.turned?.canvas ?? document.createElement('canvas');
+    canvas.width = L.canvas.width;
+    canvas.height = L.canvas.height;
+    this.paintLayer({ canvas, box: L.box, x: L.x, y: L.y }, L.turner!.at(view));
+    L.turned = { canvas, key };
+    return canvas;
   }
 
   /** Paint a part (`one`: a drawing of it alone) on its layer's canvas, in its place on the slide. */
@@ -316,6 +344,8 @@ export class SlideFrames {
         ctx.globalAlpha *= Math.max(0, Math.min(1, e.alpha));
       }
       const paint = () => {
+        // turned in 3-D: drawn turned (again only when the view has changed)
+        if (L.turner && e?.view && !isSameView(e.view)) { ctx.drawImage(this.turnedLayer(L, e.view), L.x, L.y); return; }
         if (!e?.color || (e.mix <= 0 && !e.was)) { ctx.drawImage(L.canvas, L.x, L.y); return; }
         // changing colour: the colour it had (or its own), the new one over it
         const a0 = ctx.globalAlpha;
@@ -1047,6 +1077,15 @@ export class Player {
     ctx.restore();
   }
 
+  /** The canvas point under a point (CSS pixels) on the mini-map, if it shows: null off it. */
+  minimapPointAt(px: number, py: number): Vec | null {
+    const c = this.deck.slides[this.i]?.canvas;
+    if (!c?.keys.length || !this.minimapShown(c)) return null;
+    const { box, area, k } = this.minimapPlace(c);
+    if (px < box.x1 || px > box.x2 || py < box.y1 || py > box.y2) return null;
+    return { x: area.x1 + (px - box.x1) / k, y: area.y1 + (py - box.y1) / k };
+  }
+
   /** The keyframe under a point (CSS pixels) on the mini-map, if it shows: -1 off it. */
   minimapKeyAt(px: number, py: number): number {
     const c = this.deck.slides[this.i]?.canvas;
@@ -1192,6 +1231,22 @@ export class Player {
     // once it stops moving, the view is painted sharp at the size it is seen
     this.freeTimer = window.setTimeout(() => { if (this.free === fr && !fr.back) { fr.settled = true; this.paint(); } }, 180);
     this.onChange();
+  }
+
+  /** Start looking round by hand from where the show is (a right-click, L, an action button). False: not a canvas slide. */
+  startLookRound(): boolean {
+    if (!this.lookRound()) return false;
+    this.paint();
+    this.onChange();
+    return true;
+  }
+
+  /** While looking round, move the view so canvas point `q` is in the middle (a click on the mini-map). */
+  centreOn(q: Vec): boolean {
+    if (!this.lookingRound) return false;
+    const v = this.free!.view, w = v.x2 - v.x1, h = v.y2 - v.y1;
+    this.setFreeView({ x1: q.x - w / 2, y1: q.y - h / 2, x2: q.x + w / 2, y2: q.y + h / 2 });
+    return true;
   }
 
   /** Drag the canvas by (dx, dy) CSS pixels. */

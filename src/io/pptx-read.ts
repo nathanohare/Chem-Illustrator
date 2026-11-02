@@ -584,6 +584,8 @@ class Reader {
     const canvas = readCanvasTag(tags[TAG.canvas]);
     // its keyframe moves (which PowerPoint can't hold) back among its animations
     if (canvas) anims = withCameraMoves(anims, tags[TAG.canvas]);
+    // Turn in 3-D (written for PowerPoint as a Spin of next to nothing): its views back
+    if (tags[TAG.turn3d]) anims = withTurns(anims, tags[TAG.turn3d]);
     // the references its lines show (the lines themselves are made again from them)
     let refs: SlideRefs = {};
     if (tags[TAG.slideRefs]) {
@@ -1749,7 +1751,7 @@ class Reader {
   }
 
   /** How a shape is filled and outlined (its own settings, else its theme style). */
-  private look(sp: Element, spPr: Element | null): { fill: string | null; line: string | null; width: number; dashed: boolean; shaded: boolean } {
+  private look(sp: Element, spPr: Element | null): { fill: string | null; line: string | null; width: number; dashed: boolean; dotted?: boolean; shaded: boolean } {
     const style = kid(sp, 'style');
     let fill: string | null = null;
     let shaded = false;
@@ -1775,7 +1777,7 @@ class Reader {
     }
     const w = ln?.getAttribute('w');
     const dash = kid(ln, 'prstDash')?.getAttribute('val');
-    return { fill, line, width: w ? fromEmu(w) : 0.75, dashed: !!dash && dash !== 'solid', shaded };
+    return { fill, line, width: w ? fromEmu(w) : 0.75, dashed: !!dash && dash !== 'solid', dotted: dash === 'sysDot' || dash === 'dot', shaded };
   }
 
   /** A line or connector: an arrow when it has a head, else a line. */
@@ -1818,6 +1820,7 @@ class Reader {
     const sh: Omit<Shape, 'id'> = { kind: 'line', x1: a.x, y1: a.y, x2: b.x, y2: b.y };
     if (look.line.toLowerCase() !== '#000000') sh.color = look.line;
     if (look.dashed) sh.dashed = true;
+    if (look.dotted) sh.dotted = true;
     if (look.width > 1.75 * doc.style.lineWidth) sh.bold = true;
     doc.addShape(sh);
   }
@@ -2206,4 +2209,18 @@ function readSections(root: Element, sldIds: string[]): SectionCount[] | undefin
     out.push({ name: sec.getAttribute('name') ?? 'Untitled Section', count: ids.length });
   }
   return out.length ? out : undefined;
+}
+
+/** Turn in 3-D animations back from the Spins of next to nothing PowerPoint was given, with their views from the tag. */
+export function withTurns(anims: Anim[], tag: string): Anim[] {
+  let views: unknown;
+  try { views = JSON.parse(tag); } catch { return anims; }
+  if (!Array.isArray(views)) return anims;
+  let k = 0;
+  return anims.map((a) => {
+    if (a.effect !== 'spin' || a.turn !== 0 || k >= views.length) return a;
+    const v = views[k++];
+    const { turn: _, ...rest } = a;
+    return { ...rest, effect: 'turn3d', ...(Array.isArray(v) && v.length === 9 && v.every((x) => typeof x === 'number') ? { view: v as number[] } : {}) };
+  });
 }

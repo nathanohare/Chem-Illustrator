@@ -8,6 +8,7 @@
 //   file:///… or a plain path      a file on this computer (or a path next to the file)
 //   #name                          a bookmark in this document
 //   #slide=7, #next, #prev, #first, #last, #return, #end   a slide in this deck (by its id), or one of the show's own jumps
+//   #grid, #look, #key=3           the slide picker, looking round a Canvas slide, a look at one of its keyframes
 //   #Sheet1!A1                     a cell in this workbook
 // Pure functions: no screen, no files, so every rule can be tested on its own.
 
@@ -205,6 +206,19 @@ export function slideIdLinks<T>(contents: T, ids: number[]): T {
 
 /** The slide-show jumps PowerPoint has without naming a slide. */
 export const SHOW_JUMPS: Record<string, string> = { '#first': 'First slide', '#last': 'Last slide', '#next': 'Next slide', '#prev': 'Previous slide', '#return': 'Last slide viewed', '#end': 'End show' };
+
+/**
+ * The show's own places that PowerPoint has no action for: every slide as pictures to pick
+ * (#grid), and on a Canvas slide, looking round freely (#look) or a look at one of its keyframes
+ * (#key=<keyframe id>), the show going on from where it was afterwards.
+ */
+export const SHOW_TOOLS: Record<string, string> = { '#grid': 'Slide picker (every slide)', '#look': 'Look around freely (Canvas slides)' };
+
+/** The keyframe a #key= link looks at, or null. */
+export function keyOfLink(link: string): number | null {
+  const m = /^#key=(\d+)$/.exec(link);
+  return m ? Number(m[1]) : null;
+}
 
 /** A link to a cell (#Sheet1!B4 or #'My sheet'!B4): the sheet's name and the cell. */
 export function cellOfLink(link: string): { sheet: string | null; cell: string } | null {

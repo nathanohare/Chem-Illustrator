@@ -11,7 +11,7 @@ import { plainText } from '../richtext';
 import * as rt from '../richtext';
 import { formulaDigits } from '../text/chemtext';
 import { arrowFrame, inFrame, isReactionArrow, itemFinder, rolesOf, schemeItems, type Frame, type Item } from './reaction';
-import { fittedLength, labelsOf, lineStart, schemePrefs, spacing } from './scheme-layout';
+import { fittedLength, labelsOf, lineStart, prefsOf, schemePrefs, spacing } from './scheme-layout';
 
 export type ArrowSide = 'above' | 'below';
 
@@ -37,7 +37,7 @@ const headOf = (r: Arrow) => (r.headStyle !== 'none' || r.tailStyle !== 'none' ?
 export function sideSlot(doc: Doc, m: Measure, r: Arrow, side: ArrowSide, have = arrowTexts(doc, m, r)[side]): { mid: Vec; out: Vec; gap: number } {
   const f = arrowFrame(r);
   const sign = side === 'above' ? 1 : -1;
-  const sp = spacing(doc.style.bondLength);
+  const sp = spacing(doc.style.bondLength, prefsOf(doc));
   let gap = sp.conditions;
   for (const c of have) {
     const q = inFrame(f, m.captionBox(c));
@@ -53,7 +53,7 @@ export function helperBox(doc: Doc, r: Arrow, side: ArrowSide): Rect {
   const shaft = Math.max(1, f.length - headOf(r));
   const w = Math.min(shaft * 0.9, 2.6 * bond), h = textSize(doc) * 1.5;
   const sign = side === 'above' ? 1 : -1;
-  const c = add(add(f.tail, mul(f.u, shaft / 2)), mul(f.n, sign * (spacing(bond).conditions + h / 2)));
+  const c = add(add(f.tail, mul(f.u, shaft / 2)), mul(f.n, sign * (spacing(bond, prefsOf(doc)).conditions + h / 2)));
   return { x1: c.x - w / 2, y1: c.y - h / 2, x2: c.x + w / 2, y2: c.y + h / 2 };
 }
 
@@ -68,7 +68,7 @@ export function takesHelpers(r: Arrow): boolean {
 export const textSize = (doc: Doc) => doc.style.arrowTextSize ?? schemePrefs.textSize ?? doc.style.captionSize;
 
 /** How new text's lines line up. */
-export const textJustify = (): Justify => schemePrefs.textAlign;
+export const textJustify = (doc: Doc): Justify => prefsOf(doc).textAlign;
 
 /** The look of new text: the settings' size when it differs from the drawing's caption size. */
 export function newTextLook(doc: Doc): Partial<TextRun> {
@@ -97,14 +97,14 @@ export function lineUpText(doc: Doc, m: Measure, r: Arrow): void {
   const t = arrowTexts(doc, m, r);
   const f = arrowFrame(r);
   const bond = doc.style.bondLength;
-  const sp = spacing(bond);
+  const sp = spacing(bond, prefsOf(doc));
   const all = [...t.above, ...t.below];
   const widest = Math.max(0, ...all.map((c) => { const q = inFrame(f, m.captionBox(c)); return q.t2 - q.t1; }));
   for (const [side, sign] of [['above', 1], ['below', -1]] as const) {
     let cursor = sp.conditions;
     for (const c of t[side]) {
       const q = inFrame(f, m.captionBox(c));
-      const dt = lineStart(q.t2 - q.t1, widest, f.length, headOf(r), bond) - q.t1;
+      const dt = lineStart(q.t2 - q.t1, widest, f.length, headOf(r), bond, prefsOf(doc)) - q.t1;
       const ds = sign > 0 ? cursor - q.s1 : -cursor - q.s2;
       const d = add(mul(f.u, dt), mul(f.n, ds));
       if (Math.hypot(d.x, d.y) > 1e-6) doc.updateCaption(c.id, { x: c.x + d.x, y: c.y + d.y });
@@ -121,14 +121,14 @@ export function lineUpText(doc: Doc, m: Measure, r: Arrow): void {
 export function fitArrowToText(doc: Doc, m: Measure, r0: Arrow): void {
   const r = doc.arrows.get(r0.id);
   if (!r) return;
-  if (!schemePrefs.fit) { lineUpText(doc, m, r); return; }
+  if (!prefsOf(doc).fit) { lineUpText(doc, m, r); return; }
   const t = arrowTexts(doc, m, r);
   const all = [...t.above, ...t.below];
   if (!all.length) return;
   const f = arrowFrame(r);
   const widest = Math.max(...all.map((c) => { const q = inFrame(f, m.captionBox(c)); return q.t2 - q.t1; }));
   const bond = doc.style.bondLength;
-  const L = fittedLength(widest, headOf(r), bond);
+  const L = fittedLength(widest, headOf(r), bond, prefsOf(doc));
   const dl = L - f.length;
   if (Math.abs(dl) > 0.01) {
     const d = mul(f.u, dl);
@@ -193,7 +193,7 @@ export function setSideText(doc: Doc, m: Measure, r: Arrow, side: ArrowSide, tex
   if (!t.trim()) return;
   const slot = sideSlot(doc, m, r, side, have);
   const at = add(slot.mid, mul(slot.out, slot.gap));
-  const c = doc.addCaption({ x: at.x, y: at.y, runs: textRuns(t, [newTextLook(doc)]), justify: textJustify() });
+  const c = doc.addCaption({ x: at.x, y: at.y, runs: textRuns(t, [newTextLook(doc)]), justify: textJustify(doc) });
   // a first rough place on this side; adopting it centres it, fitting puts it exactly
   const f = arrowFrame(r);
   const q = inFrame(f, m.captionBox(c));

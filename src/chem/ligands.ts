@@ -28,6 +28,8 @@ export interface Ligand {
   x: number;
   /** Atoms bonded side-on to the metal, for π ligands (η⁵ for Cp). */
   hapto?: number;
+  /** For a chiral ligand, the enantiomer drawn: (R), (S,S), (R,Sp)… */
+  drawn?: string;
   /** PubChem compound record. */
   cid?: number;
   note?: string;

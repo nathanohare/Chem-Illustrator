@@ -22,7 +22,7 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl } from '../render/images';
-import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
+import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
 import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
@@ -37,6 +37,7 @@ import { TABLE_TAG, TABLE_PART_TAG, tableBorders, type TableTag } from './cdxml-
 import { bondLayer, crossingBondsCached } from '../chem/crossing';
 import { repeatGroups, repeatCount, repeatLabelPlace } from '../chem/polymer';
 import { ellipseAxes, isCircleRing, ringCircle, ringsThroughBond } from '../chem/aromatic';
+import { newmanForFile } from '../design/newman';
 
 /** Numbers in an attribute such as "12.5 30 0". */
 const pts = (v: string | null): number[] => (v ?? '').trim().split(/\s+/).filter(Boolean).map(Number);
@@ -264,7 +265,7 @@ class CdxmlWriter {
   private writeGuides(): boolean {
     const st = this.doc.style;
     // the drawing style's text over arrows and arrow sizes (ChemDraw's style has no place for them)
-    const own = { size: st.arrowTextSize, font: st.arrowTextFont, width: st.arrowWidth, head: st.arrowHeadLength, headWidth: st.arrowHeadWidth };
+    const own = { size: st.arrowTextSize, font: st.arrowTextFont, width: st.arrowWidth, head: st.arrowHeadLength, headWidth: st.arrowHeadWidth, scheme: st.scheme };
     const arrow = Object.values(own).some((v) => v !== undefined && v !== '') ? JSON.stringify(own) : null;
     const a = this.pageTag(GUIDES_TAG, guidesText(this.doc.guides));
     const b = this.pageTag(ARROW_TEXT_TAG, arrow);
@@ -810,7 +811,9 @@ class CdxmlWriter {
     // keep the old label's font and bold/italic style
     const oldS = this.child(this.child(n, 't') ?? n, 's');
     const keepFont = oldS?.getAttribute('font') ?? null;
-    const keepBits = Number(oldS?.getAttribute('face') ?? 0) & 7;
+    // (the bits every run had, so an italic alkyl prefix doesn't spread to the whole label)
+    const oldRuns = [...(this.child(n, 't')?.childNodes ?? [])].filter((c): c is Element => c.nodeName === 's');
+    const keepBits = oldRuns.length ? oldRuns.reduce((m, e) => m & Number(e.getAttribute('face') ?? 0), 7) : Number(oldS?.getAttribute('face') ?? 0) & 7;
     for (const c of kids(n)) if (c.nodeName === 't' || (rebuildInner && c.nodeName === 'fragment')) n.removeChild(c);
     if (rebuildInner) for (const k of ['NodeType', 'GenericNickname', 'Warning', 'NumHydrogens', 'NeedsClean']) n.removeAttribute(k);
     if (!labelSpec(a.z, a.label, a.charge, a.isotope, this.doc.valenceSum(a.id), this.doc.degree(a.id), !a.hideCharge, !!a.showCarbon)) return;
@@ -1463,6 +1466,7 @@ class CdxmlWriter {
     const { id: _, ...look } = s;
     // a frame takes what lies inside it again on opening (ids change between files)
     if (look.frame) look.frame = { ...look.frame, atoms: [], captions: [], arrows: [], shapes: [] };
+    if (look.newman) look.newman = newmanForFile(this.doc, look.newman);
     if (ringPts) look.poly = ringPts.map((p) => ({ x: p.x, y: p.y }));
     g.appendChild(this.el('objecttag', { TagType: 'String', Name: GEO_TAG, Value: JSON.stringify(look), Visible: 'no' }));
     this.set(g, 'BoundingBox', box(b));
@@ -1659,7 +1663,9 @@ class CdxmlWriter {
       case 'line':
         set('GraphicType', 'Line');
         set('BoundingBox', box(s));
-        set('LineType', style);
+        // ChemDraw has no dotted line: it shows dashes, and the dots come back on opening here
+        set('LineType', s.dotted ? [s.bold && 'Bold', 'Dashed'].filter(Boolean).join(' ') : style);
+        set(DOTTED_ATTR, s.dotted ? 'yes' : null);
         break;
       case 'rect':
         set('GraphicType', 'Rectangle');
@@ -2015,9 +2021,11 @@ export function labelRuns(text: string, look: { supDigits: boolean; marks?: stri
   const out: TextRun[] = [];
   [...text].forEach((ch, i) => {
     const m = look.marks?.[i];
-    const r: TextRun = m === '^' ? { text: ch, sup: true } : m === '_' ? { text: ch, sub: true } : m === '=' ? { text: ch } : digits && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
+    const base: TextRun = m === '^' ? { text: ch, sup: true } : m === '_' ? { text: ch, sub: true } : m === '=' ? { text: ch } : digits && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
+    // the t of tBu in italics (the alkyl look)
+    const r: TextRun = m === '/' ? { ...base, italic: true } : base;
     const last = out[out.length - 1];
-    if (last && !!last.sup === !!r.sup && !!last.sub === !!r.sub && !!last.formula === !!r.formula) last.text += ch;
+    if (last && !!last.sup === !!r.sup && !!last.sub === !!r.sub && !!last.formula === !!r.formula && !!last.italic === !!r.italic) last.text += ch;
     else out.push(r);
   });
   return out.length ? out : [{ text, formula: true }];

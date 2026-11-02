@@ -455,7 +455,8 @@ export class StylePanel {
     if (shapes.some((x) => x.kind !== 'ring')) this.color(f?.filled && f.fillColor ? 'Line color' : 'Color', s.color, (v) => set('Color', (x) => x.kind !== 'ring', () => ({ color: v })));
     if (geo) this.number('Outline (pt)', round(geo.lineWidth ?? (geo.bold ? lw * 2.5 : lw)), 0.25, 0, 50, (v) => set('Outline width', isGeo, () => ({ lineWidth: v, bold: undefined })), '0 for no outline');
     if (l) {
-      this.check('Dashed', !!l.dashed, (v) => set('Dashed', lined, () => ({ dashed: v })));
+      this.check('Dashed', !!l.dashed && !l.dotted, (v) => set('Dashed', lined, () => ({ dashed: v, dotted: false })));
+      if (l.kind === 'line') this.check('Dotted', !!l.dotted, (v) => set('Dotted', (x) => x.kind === 'line', () => ({ dotted: v, dashed: v })));
       if (!geo) this.check('Bold', !!l.bold, (v) => set('Bold', lined, () => ({ bold: v })));
     }
     if (box) {

@@ -32,7 +32,7 @@ When the pointer turns into a pointing hand over a cell, that cell holds a struc
 
 ## Structures in cells
 
-- **Draw one:** select a cell and click **Home** tab ▸ **Structure** (or **Insert ▸ Structure in Cell**). The drawing tools open; draw, press **Done**, and the structure sits in the cell.
+- **Draw one:** select a cell and click **Home** tab ▸ **Structure** (or **Insert ▸ Structure in Cell**). The drawing tools open in a 6 × 4 in drawing area over the sheet (**Bigger** makes it 9 × 6 in, then the whole window, then back); draw, press **Done** (or Ctrl+Enter), and the structure sits in the cell. **Cancel**, or Esc with nothing picked, leaves the cell as it was.
 - **From names or SMILES:** type a column of names or SMILES, select them and click **From Name** (Ctrl+Shift+N). Each one is drawn in a new column beside it.
 - **Paste:** copy a structure from a canvas tab, or from ChemDraw (Windows app), and paste it into a cell.
 

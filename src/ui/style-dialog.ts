@@ -3,9 +3,11 @@
 // structures already drawn (redrawn in the new style, or left as they look now).
 
 import { previewSlot, showDialog } from './dialog-host';
-import type { DocStyle } from '../style';
+import type { DocStyle, StyleScheme } from '../style';
+import { schemePrefs, spacing } from '../chem/scheme-layout';
 import { FONT_GROUPS } from '../fonts';
-import { STYLE_PRESETS, presetNamed, sameLook, scaleStyle, type RestyleHow } from '../drawing-styles';
+import { presetNamed, scaleStyle, type RestyleHow } from '../drawing-styles';
+import { cardFor, styleCardList, styleCards } from './style-cards';
 
 export interface StyleChoice {
   style: DocStyle;
@@ -29,6 +31,8 @@ export interface StyleDialogOptions {
   hasStructures: boolean;
   /** A sample drawing in the style shown, beside the settings (drawn again as they change). */
   preview?: (st: DocStyle) => Node;
+  /** Show the drawing itself in a style while the window is open (null: as it was). */
+  livePreview?(st: DocStyle | null): void;
 }
 
 
@@ -68,10 +72,10 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       return l;
     };
 
-    // which style
-    const pick = el('select');
-    grid.append(el('h3', { textContent: 'Style' }));
-    row('Start from', pick);
+    // which style: a card for each, drawn in it (where a journal's numbers come from is on its card's tip)
+    let picked = '';
+    const cardsAt = el('div', { className: 'style-cards-at' });
+    grid.append(el('h3', { textContent: 'Style' }), cardsAt);
 
     // its numbers
     grid.append(el('h3', { textContent: 'Structures' }));
@@ -102,6 +106,7 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     arrowSize.title = 'Leave blank for the captions\' size';
     const smaller = el('button', { type: 'button', textContent: '1 pt smaller', title: 'One point smaller than the captions' });
     smaller.addEventListener('click', () => { const c = parseFloat(captionSize.value); if (c > 1) { arrowSize.value = String(+(c - 1).toFixed(3)); arrowSize.dispatchEvent(new Event('input', { bubbles: true })); } });
+    grid.append(el('h3', { textContent: 'Reaction arrows' }));
     row('Text above and below arrows', arrowFont, arrowSize, el('span', { className: 'muted', textContent: 'pt' }), smaller);
     const showArrowSize = () => { arrowSize.placeholder = captionSize.value; };
     captionSize.addEventListener('input', showArrowSize);
@@ -110,8 +115,31 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     const arrowWidth = arrowNum('Leave blank for the bonds\' line width');
     const headLength = arrowNum('Leave blank for ten line widths');
     const headWidth = arrowNum('Leave blank for 2.5 line widths each side');
-    row('Reaction arrows: line width', arrowWidth, el('span', { className: 'muted', textContent: 'pt' }));
+    row('Line width', arrowWidth, el('span', { className: 'muted', textContent: 'pt' }));
     row('Arrowhead length, width', headLength, headWidth, el('span', { className: 'muted', textContent: 'pt' }));
+    // how arrows sit in a scheme: as Clean Up Reaction and typing text by an arrow lay them out
+    const align = el('select');
+    for (const [v, t] of [['center', 'Centered'], ['left', 'Left'], ['right', 'Right']]) align.append(new Option(t, v));
+    row('Lines of text line up', align);
+    const textGap = arrowNum('Leave blank to scale with the bond length');
+    row('Gap between arrow and text', textGap, el('span', { className: 'muted', textContent: 'pt' }));
+    const fit = el('input', { type: 'checkbox' });
+    row('', fit, el('span', { className: 'muted', textContent: 'Fit the arrow to its text (moves the products)' }));
+    const lead = arrowNum('Leave blank to scale with the bond length'), headGap = arrowNum('Leave blank to scale with the bond length');
+    const beyond = row('Arrow before and after the text', lead, headGap, el('span', { className: 'muted', textContent: 'pt' }));
+    const structGap = arrowNum('Leave blank to scale with the bond length'), plusGap = arrowNum('Leave blank to scale with the bond length');
+    row('Gap to the structures', structGap, el('span', { className: 'muted', textContent: 'pt' }));
+    row('Space either side of +', plusGap, el('span', { className: 'muted', textContent: 'pt' }));
+    const showScheme = () => {
+      // blank: the app's scheme settings, most of them growing with the bond length
+      const sp = spacing(parseFloat(inputs.get('bondLength')!.value) || shown.bondLength);
+      const auto = (v: number) => String(Math.round(v * 10) / 10);
+      textGap.placeholder = auto(sp.conditions); lead.placeholder = auto(sp.lead); headGap.placeholder = auto(sp.headGap);
+      structGap.placeholder = auto(sp.gap); plusGap.placeholder = auto(sp.plus);
+      beyond.style.opacity = fit.checked ? '' : '0.5';
+    };
+    fit.addEventListener('change', showScheme);
+    inputs.get('bondLength')!.addEventListener('input', showScheme);
     const showArrowLook = () => {
       const lw = parseFloat(arrowWidth.value) > 0 ? parseFloat(arrowWidth.value) : parseFloat(inputs.get('lineWidth')!.value);
       arrowWidth.placeholder = inputs.get('lineWidth')!.value;
@@ -162,6 +190,12 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       headLength.value = pt(st.arrowHeadLength);
       headWidth.value = pt(st.arrowHeadWidth);
       showArrowLook();
+      const sc = st.scheme ?? {};
+      align.value = sc.textAlign ?? schemePrefs.textAlign;
+      textGap.value = pt(sc.textGap); lead.value = pt(sc.lead); headGap.value = pt(sc.headGap);
+      structGap.value = pt(sc.structGap); plusGap.value = pt(sc.plusGap);
+      fit.checked = sc.fit ?? schemePrefs.fit;
+      showScheme();
       name.value = st.name;
       showCm();
     };
@@ -187,47 +221,51 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       own(arrowWidth, 'arrowWidth');
       own(headLength, 'arrowHeadLength');
       own(headWidth, 'arrowHeadWidth');
+      const sc: StyleScheme = {};
+      const dist = (i: HTMLInputElement) => { const v = parseFloat(i.value); return Number.isFinite(v) && v >= 0 ? Math.min(500, v) : undefined; };
+      for (const [k, i] of [['textGap', textGap], ['lead', lead], ['headGap', headGap], ['structGap', structGap], ['plusGap', plusGap]] as const) { const v = dist(i); if (v !== undefined) sc[k] = v; }
+      if (align.value !== schemePrefs.textAlign && (align.value === 'left' || align.value === 'center' || align.value === 'right')) sc.textAlign = align.value;
+      if (fit.checked !== schemePrefs.fit) sc.fit = fit.checked;
+      if (Object.keys(sc).length) st.scheme = sc; else delete st.scheme;
       return st;
     };
 
+    // pointing at a card shows it on the drawing behind the window and in the sample
+    let sample: (st: DocStyle) => void = () => {};
+    // (the drawing itself only while a card is pointed at, so it is never left half-changed)
+    const show = () => sample(read());
+    let hovering = false;
     const fillPick = (select: string) => {
-      pick.replaceChildren();
-      const inFile = !STYLE_PRESETS.some((p) => sameLook(p.style, o.current)) && !own.some((s) => sameLook(s, o.current));
-      if (inFile) pick.add(new Option(`In this file: ${o.current.name}`, 'file:'));
-      const journals = el('optgroup', { label: 'Journals and presets' });
-      for (const p of STYLE_PRESETS) journals.append(new Option(p.style.name, 'preset:' + p.style.name));
-      pick.append(journals);
-      if (own.length) {
-        const mine = el('optgroup', { label: 'My styles' });
-        for (const s of own) mine.append(new Option(s.name, 'own:' + s.name));
-        pick.append(mine);
+      const cards = styleCards({
+        own,
+        chosen: select,
+        onPick: (c) => { picked = c.key; fill(chosen()); describe(); said.textContent = ''; show(); },
+        onHover: (c) => { hovering = !!c; o.livePreview?.(c ? c.style : null); sample(c ? c.style : read()); },
+        onSave: () => { name.focus(); name.select(); said.textContent = 'Type a name for it, then Save as My Style.'; },
+      });
+      cardsAt.replaceChildren(cards);
+      picked = select;
+      if (!select.startsWith('preset:') && !select.startsWith('own:')) {
+        const inFile = el('p', { className: 'muted small', textContent: `In use now: ${o.current.name} (from this file; none of the cards draws the same).` });
+        cardsAt.append(inFile);
       }
-      pick.value = select;
-      if (pick.selectedIndex < 0) pick.selectedIndex = 0;
     };
     const chosen = (): DocStyle => {
-      const v = pick.value;
+      const v = picked;
       if (v.startsWith('preset:')) return { ...presetNamed(v.slice(7))!.style };
       if (v.startsWith('own:')) return { ...own.find((s) => s.name === v.slice(4))! };
       return { ...o.current };
     };
     const describe = () => {
-      const v = pick.value;
-      const p = v.startsWith('preset:') ? presetNamed(v.slice(7)) : undefined;
-      // where a journal's numbers come from shows on the list's tip, not as a line of its own
-      pick.title = p ? `From: ${p.source}.${p.note ? ' ' + p.note : ''}` : v.startsWith('own:') ? 'One of your own styles.' : 'The style this file was saved with.';
-      del.disabled = !v.startsWith('own:');
+      del.disabled = !picked.startsWith('own:');
     };
 
     // start on whatever matches what is in use now
-    const now = own.find((s) => s.name === o.current.name && sameLook(s, o.current)) ? 'own:' + o.current.name
-      : STYLE_PRESETS.find((p) => sameLook(p.style, o.current)) ? 'preset:' + STYLE_PRESETS.find((p) => sameLook(p.style, o.current))!.style.name
-      : 'file:';
+    const now = cardFor(styleCardList(own), o.current)?.key ?? 'file:';
     fillPick(now);
     fill(o.current);
     describe();
 
-    pick.addEventListener('change', () => { fill(chosen()); describe(); said.textContent = ''; });
     const bondIn = inputs.get('bondLength')!;
     let lastBond = shown.bondLength;
     bondIn.addEventListener('focus', () => { lastBond = parseFloat(bondIn.value) || shown.bondLength; });
@@ -243,7 +281,8 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       lastBond = v;
       showCm();
     });
-    for (const i of inputs.values()) i.addEventListener('input', showCm);
+    for (const i of inputs.values()) i.addEventListener('input', () => { showCm(); if (!hovering) show(); });
+    for (const f of [labelFont, captionFont]) f.addEventListener('change', () => show());
 
     save.addEventListener('click', () => {
       const st = read();
@@ -256,7 +295,7 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       said.textContent = had >= 0 ? `Updated "${st.name}".` : `Saved "${st.name}". It is in the list in every mode.`;
     });
     del.addEventListener('click', () => {
-      const v = pick.value;
+      const v = picked;
       if (!v.startsWith('own:')) return;
       own = own.filter((s) => s.name !== v.slice(4));
       fillPick(now.startsWith('own:') && now.slice(4) === v.slice(4) ? 'file:' : now);
@@ -269,6 +308,7 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     const done = (v: StyleChoice | null) => {
       if (finished) return;
       finished = true;
+      o.livePreview?.(null);
       if (d.open) d.close();
       d.remove();
       resolve(v);
@@ -291,9 +331,9 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       box.replaceChildren(o.preview(read()));
       form.addEventListener('input', redraw);
       form.addEventListener('change', redraw);
-      pick.addEventListener('change', redraw);
+      sample = (st) => { cancelAnimationFrame(queued); queued = requestAnimationFrame(() => box.replaceChildren(o.preview!(st))); };
     }
-    pick.focus();
+    (cardsAt.querySelector<HTMLButtonElement>('[aria-checked=true]') ?? cardsAt.querySelector<HTMLButtonElement>('button'))?.focus();
   });
 }
 

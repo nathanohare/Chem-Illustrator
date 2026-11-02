@@ -31,7 +31,7 @@ import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed'
 import { fromDataUrl } from '../render/images';
 import { embeddedPart } from './ole-object';
 import { BULLETS, fitParas, listInfo, paraCount, schemeOf, splitParagraphs } from '../text/paragraphs';
-import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FLOAT_GAP, FOOT_FORMAT, columnsOf, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
+import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FLOAT_GAP, FOOT_FORMAT, columnsOf, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
 import { ACS_LINE, GRID_LINE, bibHang, docCellAlign, shownSize } from '../document/doc-layout';
 import { sectionsOf, type Section } from '../document/sections';
 import { bibliography, piecesText, type Reference } from '../document/references';
@@ -47,7 +47,7 @@ import { toOmml } from '../document/math';
 import { documentMeasure } from '../text/font-measure';
 import { arialWidth } from '../text-metrics';
 import { PAD_X, PAD_Y, cellAlign, coveringCell, isCovered, rowSpanOf, spanOf } from '../table';
-import { connectorSpPr, geoSpPr, xfrm } from './pptx-write';
+import { connectorSpPr, geoGeomXml, geoSpPr, xfrm } from './pptx-write';
 import { geoDef } from '../design/geo';
 import { shapeOrder } from '../objects';
 import { addChart, C_NS } from './office-chart';
@@ -62,7 +62,8 @@ import {
 
 export interface DocxDeps {
   /** A drawing's picture for Word: PNG bytes, an SVG Word shows instead when it can, and its own size in points. */
-  picture(contents: Contents, style: DocStyle): Promise<{ png: Uint8Array; svg?: string; w: number; h: number; x?: number; y?: number } | null>;
+  /** A drawing's picture: just round what is drawn, or a figure's whole area (`frame`, never cut short of what is drawn). */
+  picture(contents: Contents, style: DocStyle, frame?: FigureFrame): Promise<{ png: Uint8Array; svg?: string; w: number; h: number; x?: number; y?: number } | null>;
   /** A PNG of an SVG picture, for Word versions that can't show SVG (w × h pixels). */
   svgToPng?(svg: string, w: number, h: number): Promise<Uint8Array>;
   /**
@@ -844,7 +845,8 @@ class DocxWriter {
     for (let p = 0; p < n; p++) ps.push(await this.paragraph(main, paras[p], runsOf[p] ?? [], 0));
     const N = styleOf(this.t, {});
     const lines = o.runs.reduce((a, r) => a + (r.text.match(/\n/g)?.length ?? 0), 1);
-    const h = Math.max(o.h ?? 0, lines * N.size * 1.25 + 2 * BOX_PAD.y);
+    // a shape keeps its own height (its text in the middle); a text box grows to fit its text
+    const h = o.geo && o.h ? o.h : Math.max(o.h ?? 0, lines * N.size * 1.25 + 2 * BOX_PAD.y);
     const cx = emu(o.w), cy = emu(h);
     const k = this.docPr++;
     const look = lookOf(o);
@@ -852,11 +854,14 @@ class DocxWriter {
     // the look's own white fill (under a shadow) gives way to the box's fill
     const lookRest = lookXml(look).replace(/^<a:solidFill>.*?<\/a:solidFill>/, '');
     const line = look?.frame ? '' : '<a:ln><a:noFill/></a:ln>';
-    const shape = `<wp:docPr id="${k}" name="Text Box ${id}"/><wp:cNvGraphicFramePr/>` +
-      `<a:graphic><a:graphicData uri="${WPS_NS}"><wps:wsp><wps:cNvSpPr txBox="1"/>` +
-      `<wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${fill}${line}${lookRest}</wps:spPr>` +
+    // a shape (Insert > Shapes): Word's shape with its outline (and which of ours it is, for the ones Word has no preset for)
+    const geom = o.geo ? geoGeomXml(o.geo, o.w, h) : '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
+    if (o.geo) (this.model.geos ??= {})[id] = o.geo;
+    const shape = `<wp:docPr id="${k}" name="${o.geo ? 'Shape' : 'Text Box'} ${id}"/><wp:cNvGraphicFramePr/>` +
+      `<a:graphic><a:graphicData uri="${WPS_NS}"><wps:wsp><wps:cNvSpPr${o.geo ? '' : ' txBox="1"'}/>` +
+      `<wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>${geom}${fill}${line}${lookRest}</wps:spPr>` +
       `<wps:txbx><w:txbxContent>${ps.join('') || '<w:p/>'}</w:txbxContent></wps:txbx>` +
-      `<wps:bodyPr rot="0" vert="horz" wrap="square" lIns="${emu(BOX_PAD.x)}" tIns="${emu(BOX_PAD.y)}" rIns="${emu(BOX_PAD.x)}" bIns="${emu(BOX_PAD.y)}" anchor="t" anchorCtr="0"><a:spAutoFit/></wps:bodyPr></wps:wsp></a:graphicData></a:graphic>`;
+      `<wps:bodyPr rot="0" vert="horz" wrap="square" lIns="${emu(BOX_PAD.x)}" tIns="${emu(BOX_PAD.y)}" rIns="${emu(BOX_PAD.x)}" bIns="${emu(BOX_PAD.y)}" anchor="${o.geo ? 'ctr' : 't'}" anchorCtr="0">${o.geo ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</wps:bodyPr></wps:wsp></a:graphicData></a:graphic>`;
     return `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ''}<mc:AlternateContent><mc:Choice Requires="wps"><w:drawing>${this.placed(o, cx, cy, shape)}</w:drawing></mc:Choice><mc:Fallback/></mc:AlternateContent></w:r>`;
   }
 
@@ -950,7 +955,7 @@ class DocxWriter {
     // a diagram in the document's own text: Word gets its shapes as a group (the picture for older Words)
     let group: ((docPr: string) => string) | null = null;
     if (o.kind === 'drawing') {
-      const pic = await this.deps.picture(o.contents, t.drawingStyle);
+      const pic = await this.deps.picture(o.contents, t.drawingStyle, o.frame);
       if (!pic) return '';
       if (main === 'word/document.xml' && pic.x !== undefined && pic.y !== undefined) {
         const kids = diagramShapesXml(o.contents, t.drawingStyle);
@@ -959,7 +964,7 @@ class DocxWriter {
           `<wpg:grpSpPr><a:xfrm${turnAttrs(o)}><a:off x="0" y="0"/><a:ext cx="${emu(size.w)}" cy="${emu(size.h)}"/><a:chOff x="${emu(at.x)}" y="${emu(at.y)}"/><a:chExt cx="${emu(at.w)}" cy="${emu(at.h)}"/></a:xfrm></wpg:grpSpPr>` +
           `${kids}</wpg:wgp></a:graphicData></a:graphic>`;
       }
-      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png) };
+      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), ...(o.frame ? { frame: o.frame } : {}) };
       blip = this.media(main, pic.png, 'png');
       if (pic.svg) svgId = this.media(main, new TextEncoder().encode(pic.svg), 'svg');
       size = shownSize({ w: pic.w, h: pic.h }, o.scale ?? 1, this.textW);

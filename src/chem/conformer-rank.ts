@@ -25,7 +25,8 @@ const R_KCAL = 0.0019872043;
 export function withPopulations(cs: Conformer[], T = 298.15): Conformer[] {
   if (!cs.length || cs.some((c) => c.energy === null)) return cs;
   const e0 = Math.min(...cs.map((c) => c.energy!));
-  const w = cs.map((c) => Math.exp(-(c.energy! - e0) / (R_KCAL * T)));
+  // a conformer found more than once in equivalent forms (degeneracy) counts that many times
+  const w = cs.map((c) => (c.degeneracy ?? 1) * Math.exp(-(c.energy! - e0) / (R_KCAL * T)));
   const sum = w.reduce((a, b) => a + b, 0);
   return cs.map((c, i) => ({ ...c, population: w[i] / sum }));
 }
@@ -69,4 +70,21 @@ export function fittedRmsd(p: number[], q: number[], idx: number[]): number {
   const lambda = [0, 1, 2, 3].reduce((t, r) => t + v[r] * N[r].reduce((s, x, c) => s + x * v[c], 0), 0);
   const msd = Math.max(0, (gp + gq - 2 * lambda) / n);
   return Math.sqrt(msd);
+}
+
+/**
+ * Conformers added to a search's (rotamers about one bond it may have missed): those already
+ * found (energy within 0.1 kcal/mol and heavy atoms within 0.3 Å) are left out, the rest kept
+ * within `window` kcal/mol of the lowest, and the shares worked out again.
+ */
+export function mergeConformers(atoms: { z: number }[], found: Conformer[], extra: { xyz: number[]; energy: number }[], window = 8): Conformer[] {
+  const heavy = atoms.map((x, i) => (x.z === 1 ? -1 : i)).filter((i) => i >= 0);
+  const all: Conformer[] = found.map((c) => ({ xyz: c.xyz, energy: c.energy }));
+  for (const r of extra) {
+    if (all.some((k) => k.energy !== null && Math.abs(k.energy - r.energy) < 0.1 && fittedRmsd(k.xyz, r.xyz, heavy) < 0.3)) continue;
+    all.push(r);
+  }
+  all.sort((p, q) => (p.energy ?? 0) - (q.energy ?? 0));
+  const e0 = all[0]?.energy ?? 0;
+  return withPopulations(all.filter((c) => (c.energy ?? 0) - e0 <= window));
 }

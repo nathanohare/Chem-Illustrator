@@ -62,6 +62,25 @@ export function setSchemePrefs(p: Partial<SchemePrefs>): void {
   Object.assign(schemePrefs, p);
 }
 
+/**
+ * The scheme settings for a drawing: its drawing style's own (gaps, how text lines up, fitting
+ * the arrow to its text), and the app's for the rest.
+ */
+export function prefsOf(doc: Doc): SchemePrefs {
+  const own = doc.style.scheme;
+  if (!own) return schemePrefs;
+  const p = { ...schemePrefs };
+  for (const [k, v] of Object.entries(own)) if (v !== undefined) (p as Record<string, unknown>)[k] = v;
+  return p;
+}
+
+/** Run `fn` with these scheme settings in place of the saved ones (a preview of settings not kept yet). */
+export function withSchemePrefs<T>(p: Partial<SchemePrefs>, fn: () => T): T {
+  const was = { ...schemePrefs };
+  Object.assign(schemePrefs, p);
+  try { return fn(); } finally { Object.assign(schemePrefs, was); }
+}
+
 /** Read saved scheme settings, keeping only what makes sense. */
 export function parseSchemePrefs(raw: unknown): SchemePrefs {
   const out = { ...DEFAULT_SCHEME_PREFS };
@@ -174,6 +193,11 @@ function straighten(f: Frame): Frame {
  * are given). Returns null when there is no reaction step to tidy.
  */
 export function planCleanUp(doc: Doc, m: Measure, arrowIds?: Iterable<number>): SchemePlan | null {
+  // (in the drawing style's own scheme settings, where it has them)
+  return doc.style.scheme ? withSchemePrefs(prefsOf(doc), () => planIn(doc, m, arrowIds)) : planIn(doc, m, arrowIds);
+}
+
+function planIn(doc: Doc, m: Measure, arrowIds?: Iterable<number>): SchemePlan | null {
   const bond = doc.style.bondLength;
   const items = schemeItems(doc, m);
   const find = itemFinder(items);

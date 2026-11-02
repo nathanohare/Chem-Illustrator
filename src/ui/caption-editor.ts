@@ -41,6 +41,11 @@ export interface EditorHost {
   hint?: string;
   /** An area the bar keeps clear of, besides the text (the whole table, for a cell). */
   around?(): Rect;
+  /**
+   * Enter finishes typing and Alt+Enter (Option+Enter on a Mac) starts a new line (Settings ▸
+   * Preferences). Otherwise Enter starts a new line and Esc finishes.
+   */
+  enterFinishes?(): boolean;
 }
 
 /** A finished caption: the text and where it now starts. */
@@ -70,6 +75,13 @@ const FORMATTING = '#2f6fdf';
 const ignored = new Set<string>();
 const FRAME = 'rgba(47, 111, 223, 0.6)';
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
+/** The keys shown at the end of the bar, with Enter finishing the text when `enterDone`. */
+export function keyHint(hint: string, enterDone: boolean, mac = isMac): string {
+  if (!enterDone) return hint;
+  const alt = mac ? 'Option+Enter' : 'Alt+Enter';
+  return hint.replace(/(^| )Enter: /g, `$1${alt}: `).replace('Esc: done', 'Enter: done');
+}
 
 export class CaptionEditor {
   readonly ed: TextEditing;
@@ -570,6 +582,8 @@ export class CaptionEditor {
     const ctrl = isMac ? e.metaKey : e.ctrlKey;
     const run = (f: () => void) => { e.preventDefault(); f(); };
     if (e.key === 'Escape' || (e.key === 'Enter' && ctrl)) return run(() => this.finish());
+    // Settings ▸ Preferences: Enter finishes, Alt+Enter starts a new paragraph (Shift+Enter still breaks the line)
+    if (e.key === 'Enter' && !e.altKey && !e.shiftKey && this.h.enterFinishes?.()) return run(() => this.finish());
     // styling keys come from the key map (Edit > Hotkeys), so they can be changed
     const chord = chordOf(e);
     const action = chord ? keymap.lookup('text', chord) : undefined;
@@ -809,7 +823,7 @@ export class CaptionEditor {
 
     const hint = d.createElement('span');
     hint.className = 'cb-hint';
-    hint.textContent = this.h.hint ?? 'Enter: new paragraph · Tab: indent · Esc: done';
+    hint.textContent = keyHint(this.h.hint ?? 'Enter: new paragraph · Tab: indent · Esc: done', !!this.h.enterFinishes?.());
     this.bar.appendChild(hint);
   }
 

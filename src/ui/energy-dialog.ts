@@ -2,17 +2,39 @@
 // along the reaction coordinate and a pair of columns (name, energy) for each pathway, then how
 // the diagram looks. Names take _ and ^ for sub- and superscripts (TS1^‡ or just TS1‡).
 
-import { ENERGY_DEFAULTS, ENERGY_PRESETS, PATH_COLOURS, type EnergyData, type EnergyPath } from '../design/energy';
+import { bracketText, largestBarrier, ENERGY_DEFAULTS, ENERGY_PRESETS, PATH_COLOURS, type EnergyBracket, type EnergyDash, type EnergyData, type EnergyPath, type EnergyPoint } from '../design/energy';
 import { HARTREE, pickEnergy, readQmOutput, speciesName, type QmAtom, type QmResult } from '../chem/qm-output';
+import { qmBonds, skeletonMolfile } from '../chem/qm-bonds';
 
 /** How the last diagram looked, so a new one starts the same way. */
 let lastLook: Pick<EnergyData, 'style' | 'values' | 'digits' | 'axis' | 'barrier' | 'overall' | 'quantity' | 'unit'> = { ...ENERGY_DEFAULTS, quantity: 'ΔG', unit: 'kcal/mol' };
 
 /** A cell of the table: what is typed, and what came from a Gaussian or ORCA file. */
-interface Cell { label: string; g: string; eh?: number; geom?: QmAtom[] }
+interface Cell { label: string; g: string; eh?: number; geom?: QmAtom[]; ehs?: EnergyPoint['ehs']; flat?: EnergyPoint['flat'] }
+
+/** Which of a file's energies an axis quantity uses: free energy for ΔG, enthalpy for ΔH, else the electronic energy. */
+export function energyKind(quantity: string): 'G' | 'H' | 'E' {
+  return /^ΔG/.test(quantity) ? 'G' : /^ΔH/.test(quantity) ? 'H' : 'E';
+}
+
+const dashOf = (v: string): { dash?: EnergyDash } => (v === 'solid' || v === 'dashed' || v === 'dotted' ? { dash: v } : {});
+
+/** The 2-D layout of a geometry's drawn atoms, by the chemistry engine (null: it could not). */
+export type LayoutFn = (molblock: string) => Promise<[number, number][] | null>;
+
+/** A geometry's 2-D layout, one entry per atom (null where an atom is left out of the drawing). */
+export async function flatFor(geom: QmAtom[], label: string, layout: LayoutFn): Promise<([number, number] | null)[] | null> {
+  const bonds = qmBonds(geom, /‡/.test(label));
+  const { molblock, index } = skeletonMolfile(geom, bonds);
+  const xy = await layout(molblock).catch(() => null);
+  if (!xy || xy.length !== index.length) return null;
+  const out: ([number, number] | null)[] = geom.map(() => null);
+  index.forEach((k, n) => { out[k] = [Math.round(xy[n][0] * 1000) / 1000, Math.round(xy[n][1] * 1000) / 1000]; });
+  return out;
+}
 
 /** Ask for a diagram: a new one (from a preset), or `editing` with its numbers to change. */
-export function askEnergy(editing: EnergyData | null, size: { w: number; h: number }, preview?: (d: EnergyData, canvas: HTMLCanvasElement) => void): Promise<EnergyData | null> {
+export function askEnergy(editing: EnergyData | null, size: { w: number; h: number }, preview?: (d: EnergyData, canvas: HTMLCanvasElement) => void, layout?: LayoutFn): Promise<EnergyData | null> {
   return new Promise((resolve) => {
     const d = document.createElement('dialog');
     d.className = 'ask energy-dialog';
@@ -31,7 +53,9 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         <input type="file" name="qm" multiple accept=".log,.out,.txt" hidden /></p>
       <p class="muted small energy-import-note" hidden></p>
       <p class="muted small">Leave an energy empty where a pathway has nothing (so a one-step route can sit beside a two-step one). Name transition states with ‡ (TS1‡): the ‡ button adds one to the name box you were last in.</p>
-      <label class="ask-row"><span>Axis</span><span class="energy-pair"><select name="quantity"><option>ΔG</option><option>ΔG°</option><option>ΔH</option><option>E</option><option>ΔE</option></select>
+      <div class="energy-brackets"><span class="energy-brackets-title">Brackets</span><ul class="energy-bracket-list"></ul>
+        <button type="button" data-act="bracket" title="A double arrow between any two species, labeled with the change (ΔG‡ up to a transition state, else ΔG)">+ Bracket</button></div>
+      <label class="ask-row"><span>Axis</span><span class="energy-pair"><select name="quantity" title="With energies read from files: ΔG uses the free energies, ΔH the enthalpies, E and ΔE the electronic energies"><option>ΔG</option><option>ΔG°</option><option>ΔH</option><option>E</option><option>ΔE</option></select>
         <select name="unit"><option>kcal/mol</option><option>kJ/mol</option><option>eV</option></select></span></label>
       <label class="ask-row"><span>Joined by</span><select name="style"><option value="levels">Levels and dashed lines</option><option value="curve">A smooth curve</option></select></label>
       <label class="ask-row"><span>Decimal places</span><span class="energy-pair"><input name="digits" type="number" min="0" max="3" /></span></label>
@@ -40,12 +64,14 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       <label class="ask-row ask-check"><input name="axis" type="checkbox" /><span>Axis with its title, and "Reaction coordinate" along the bottom</span></label>
       <label class="ask-row ask-check"><input name="barrier" type="checkbox" /><span>Mark the largest barrier on each pathway (ΔG‡)</span></label>
       <label class="ask-row ask-check"><input name="overall" type="checkbox" /><span>Mark the overall change on each pathway (ΔG), first species to last</span></label>
-      <label class="ask-row ask-check"><input name="structures" type="checkbox" /><span>Show the structures read from files, as balls and sticks</span></label>
+      <label class="ask-row"><span>Structures</span><select name="structures" title="The geometries read from files, beside their levels"><option value="">None</option><option value="3d">3-D, balls and sticks</option><option value="2d">2-D structures</option></select></label>
+      <label class="ask-row ask-check"><input name="distances" type="checkbox" /><span>Bond distances on transition states (the bonds being made and broken, Å)</span></label>
       <label class="ask-row"><span>Level of theory</span><input name="theory" placeholder="e.g. B3LYP-D3(BJ)/def2-TZVP, SMD(THF)" /></label>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">${editing ? 'Redraw' : 'Insert'}</button></p>`;
     const $ = <T extends Element>(q: string) => form.querySelector<T>(q)!;
     const table = $<HTMLTableElement>('.energy-table');
-    let paths: { name: string; color: string }[] = [];
+    let paths: { name: string; color: string; dash?: EnergyDash }[] = [];
+    let brackets: EnergyBracket[] = editing?.brackets ? editing.brackets.map((b) => ({ ...b })) : [];
     let rows: Cell[][] = [];
 
     /** Read what is typed back into paths and rows (before the table is redrawn). */
@@ -53,12 +79,15 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       paths = paths.map((p, j) => ({
         name: table.querySelector<HTMLInputElement>(`thead input[data-p="${j}"]`)?.value ?? p.name,
         color: table.querySelector<HTMLInputElement>(`thead input[data-c="${j}"]`)?.value ?? p.color,
+        ...dashOf(table.querySelector<HTMLSelectElement>(`thead select[data-d="${j}"]`)?.value ?? p.dash ?? ''),
       }));
       rows = [...table.tBodies[0].rows].map((tr, i) => paths.map((_, j) => {
         const gi = tr.querySelector<HTMLInputElement>(`input[data-g="${j}"]`);
         const was = rows[i]?.[j];
         const cell: Cell = { label: tr.querySelector<HTMLInputElement>(`input[data-l="${j}"]`)?.value ?? '', g: gi?.value ?? '' };
         if (was?.geom) cell.geom = was.geom;
+        if (was?.ehs) cell.ehs = was.ehs;
+        if (was?.flat) cell.flat = was.flat;
         // an energy typed over is the one wanted, not the file's
         if (was?.eh !== undefined && gi && gi.value === gi.dataset.v) cell.eh = was.eh;
         return cell;
@@ -79,10 +108,20 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         const col = Object.assign(document.createElement('input'), { type: 'color', value: p.color });
         col.dataset.c = String(j);
         col.setAttribute('aria-label', `Pathway ${j + 1} color`);
-        th.append(name, col);
+        const dash = document.createElement('select');
+        dash.dataset.d = String(j);
+        dash.setAttribute('aria-label', `Pathway ${j + 1} line style`);
+        dash.title = 'How its species are joined';
+        for (const [v, t] of [['', 'Usual lines'], ['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]) dash.append(new Option(t, v));
+        dash.value = p.dash ?? '';
+        th.append(name, col, dash);
         if (paths.length > 1) {
           const del = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', title: 'Take out this pathway' });
-          del.addEventListener('click', () => { read(); paths.splice(j, 1); for (const r of rows) r.splice(j, 1); draw(); });
+          del.addEventListener('click', () => {
+            read(); paths.splice(j, 1); for (const r of rows) r.splice(j, 1);
+            brackets = brackets.filter((b) => b.path !== j).map((b) => (b.path > j ? { ...b, path: b.path - 1 } : b));
+            draw();
+          });
           th.append(del);
         }
         tr1.append(th);
@@ -104,6 +143,11 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
           read();
           const [moved] = rows.splice(dragFrom, 1);
           rows.splice(i, 0, moved);
+          // brackets follow their species
+          const was = Array.from({ length: rows.length }, (_, k) => k);
+          const [w] = was.splice(dragFrom, 1);
+          was.splice(i, 0, w);
+          brackets = brackets.map((b) => ({ ...b, from: was.indexOf(b.from), to: was.indexOf(b.to) }));
           dragFrom = null;
           draw();
           redraw();
@@ -122,17 +166,54 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
           tr.insertCell().append(g);
         });
         const del = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', title: 'Take out this species' });
-        del.addEventListener('click', () => { read(); if (rows.length > 2) rows.splice(i, 1); draw(); });
+        del.addEventListener('click', () => {
+          read();
+          if (rows.length <= 2) return;
+          rows.splice(i, 1);
+          brackets = brackets.filter((b) => b.from !== i && b.to !== i).map((b) => ({ ...b, from: b.from > i ? b.from - 1 : b.from, to: b.to > i ? b.to - 1 : b.to }));
+          draw();
+        });
         tr.insertCell().append(del);
+      });
+      drawBrackets();
+    };
+    /** The brackets' rows: pathway, from, to, what it will say. */
+    const bracketList = $<HTMLUListElement>('.energy-bracket-list');
+    const drawBrackets = () => {
+      bracketList.innerHTML = '';
+      const name = (k: number, j: number) => rows[k]?.[j]?.label || rows[k]?.find((c) => c.label)?.label || `species ${k + 1}`;
+      brackets.forEach((b, n) => {
+        const li = document.createElement('li');
+        const pick = (what: string, value: number, count: number, text: (k: number) => string, set: (v: number) => void) => {
+          const sel = document.createElement('select');
+          sel.setAttribute('aria-label', `Bracket ${n + 1} ${what}`);
+          for (let k = 0; k < count; k++) sel.append(new Option(text(k), String(k)));
+          sel.value = String(value);
+          sel.addEventListener('change', () => { read(); set(Number(sel.value)); drawBrackets(); });
+          return sel;
+        };
+        if (paths.length > 1) li.append(pick('pathway', b.path, paths.length, (j) => paths[j].name || `pathway ${j + 1}`, (v) => { b.path = v; }));
+        li.append(pick('from', b.from, rows.length, (k) => name(k, b.path), (v) => { b.from = v; }), ' to ', pick('to', b.to, rows.length, (k) => name(k, b.path), (v) => { b.to = v; }));
+        const out = document.createElement('output');
+        out.className = 'muted';
+        const g = (k: number) => { const v = parseFloat((rows[k]?.[b.path]?.g ?? '').replace(/[−–]/g, '-')); return isFinite(v) ? v : null; };
+        const a = g(b.from), z = g(b.to);
+        out.textContent = a === null || z === null || b.from === b.to ? 'pick two species with energies'
+          : bracketText({ quantity: $<HTMLSelectElement>('select[name=quantity]').value }, { label: name(b.from, b.path), g: a }, { label: name(b.to, b.path), g: z }, (v) => (v < 0 ? '−' : '') + Math.abs(v).toFixed(Number($<HTMLInputElement>('input[name=digits]').value) || 0)).replace('^‡', '‡');
+        const del = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', title: 'Take out this bracket' });
+        del.setAttribute('aria-label', `Take out bracket ${n + 1}`);
+        del.addEventListener('click', () => { brackets.splice(n, 1); drawBrackets(); redraw(); });
+        li.append(' ', out, ' ', del);
+        bracketList.append(li);
       });
     };
     let dragFrom: number | null = null;
     const load = (ps: EnergyPath[]) => {
-      paths = ps.map((p) => ({ name: p.name, color: p.color }));
+      paths = ps.map((p) => ({ name: p.name, color: p.color, ...(p.dash ? { dash: p.dash } : {}) }));
       const n = Math.max(...ps.map((p) => p.points.length));
       rows = Array.from({ length: n }, (_, i) => ps.map((p): Cell => {
         const q = p.points[i];
-        return { label: q?.label ?? '', g: q?.g === null || q === undefined ? '' : String(q.g), ...(q?.eh !== undefined ? { eh: q.eh } : {}), ...(q?.geom ? { geom: q.geom } : {}) };
+        return { label: q?.label ?? '', g: q?.g === null || q === undefined ? '' : String(q.g), ...(q?.eh !== undefined ? { eh: q.eh } : {}), ...(q?.geom ? { geom: q.geom } : {}), ...(q?.ehs ? { ehs: q.ehs } : {}), ...(q?.flat ? { flat: q.flat } : {}) };
       }));
       draw();
     };
@@ -157,15 +238,53 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
     $<HTMLInputElement>('input[name=axis]').checked = look.axis;
     $<HTMLInputElement>('input[name=barrier]').checked = look.barrier;
     $<HTMLInputElement>('input[name=overall]').checked = !!look.overall;
-    $<HTMLInputElement>('input[name=structures]').checked = !!editing?.structures;
+    $<HTMLSelectElement>('select[name=structures]').value = editing?.structures === '2d' ? '2d' : editing?.structures ? '3d' : '';
+    $<HTMLInputElement>('input[name=distances]').checked = !!editing?.distances;
     $<HTMLInputElement>('input[name=theory]').value = editing?.theory ?? '';
     form.querySelector('[data-act=row]')!.addEventListener('click', () => { read(); rows.push(paths.map(() => ({ label: '', g: '' }))); draw(); });
     form.querySelector('[data-act=path]')!.addEventListener('click', () => {
       read();
       if (paths.length >= PATH_COLOURS.length) return;
-      paths.push({ name: '', color: PATH_COLOURS.find((c) => !paths.some((p) => p.color === c)) ?? '#000000' });
+      // a new pathway takes the next colour and a line style of its own
+      const dashes: EnergyDash[] = ['dashed', 'dotted', 'solid'];
+      paths.push({ name: '', color: PATH_COLOURS.find((c) => !paths.some((p) => p.color === c)) ?? '#000000', ...(paths.length ? { dash: dashes[(paths.length - 1) % dashes.length] } : {}) });
       for (const r of rows) r.push({ label: r[0]?.label ?? '', g: '' });
       draw();
+    });
+
+    form.querySelector('[data-act=bracket]')!.addEventListener('click', () => {
+      read();
+      // a first guess on the pathway last typed in: its largest climb, then first to last, then each step in turn
+      const j = Math.min(lastPath(), paths.length - 1);
+      const gs = rows.map((r) => { const v = parseFloat((r[j]?.g ?? '').replace(/[−–]/g, '-')); return isFinite(v) ? v : null; });
+      const at = gs.map((g, k) => (g === null ? -1 : k)).filter((k) => k >= 0);
+      if (at.length < 2) return;
+      const big = largestBarrier({ name: '', color: '', points: gs.map((g) => ({ label: '', g })) });
+      const guesses: [number, number][] = [...(big ? [[big.from, big.top] as [number, number]] : []), [at[0], at[at.length - 1]], ...at.slice(1).map((k, n): [number, number] => [at[n], k])];
+      const [from, to] = guesses.find(([f, t]) => !brackets.some((x) => x.path === j && x.from === f && x.to === t)) ?? guesses[0];
+      brackets.push({ path: j, from, to });
+      drawBrackets();
+      redraw();
+    });
+    // energies from files follow the axis: free energies for ΔG, enthalpies for ΔH, electronic energies for E
+    $<HTMLSelectElement>('select[name=quantity]').addEventListener('change', () => {
+      read();
+      const kind = energyKind($<HTMLSelectElement>('select[name=quantity]').value);
+      const note = $<HTMLParagraphElement>('.energy-import-note');
+      const missing = new Set<string>();
+      paths.forEach((_, j) => {
+        const cells = rows.map((r) => r[j]).filter((c) => c?.ehs);
+        if (!cells.length) return;
+        if (cells.some((c) => c.ehs![kind] === undefined)) { for (const c of cells) if (c.ehs![kind] === undefined) missing.add(c.label || '?'); return; }
+        for (const c of cells) c.eh = c.ehs![kind];
+      });
+      relative();
+      draw();
+      if (missing.size) {
+        note.hidden = false;
+        note.textContent = `${kind === 'G' ? 'No free energy' : kind === 'H' ? 'No enthalpy' : 'No electronic energy'} in the file for ${[...missing].join(', ')} (it needs a frequency job): the energies are unchanged.`;
+      }
+      redraw();
     });
 
     d.append(form);
@@ -181,8 +300,11 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       read();
       return {
         paths: paths.map((p, j) => ({
-          name: p.name.trim(), color: p.color,
-          points: rows.map((r) => ({ label: r[j].label.trim(), g: num(r[j].g), ...(r[j].eh !== undefined ? { eh: r[j].eh } : {}), ...(r[j].geom ? { geom: r[j].geom } : {}) })),
+          name: p.name.trim(), color: p.color, ...(p.dash ? { dash: p.dash } : {}),
+          points: rows.map((r) => ({
+            label: r[j].label.trim(), g: num(r[j].g), ...(r[j].eh !== undefined ? { eh: r[j].eh } : {}), ...(r[j].geom ? { geom: r[j].geom } : {}),
+            ...(r[j].ehs ? { ehs: r[j].ehs } : {}), ...(r[j].flat ? { flat: r[j].flat } : {}),
+          })),
         })),
         quantity: $<HTMLSelectElement>('select[name=quantity]').value,
         unit: $<HTMLSelectElement>('select[name=unit]').value,
@@ -192,7 +314,9 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         axis: $<HTMLInputElement>('input[name=axis]').checked,
         barrier: $<HTMLInputElement>('input[name=barrier]').checked,
         overall: $<HTMLInputElement>('input[name=overall]').checked,
-        structures: $<HTMLInputElement>('input[name=structures]').checked,
+        structures: ($<HTMLSelectElement>('select[name=structures]').value || false) as EnergyData['structures'],
+        distances: $<HTMLInputElement>('input[name=distances]').checked,
+        brackets: brackets.filter((b) => b.from !== b.to && b.path < paths.length && b.from < rows.length && b.to < rows.length).map((b) => ({ ...b })),
         theory: $<HTMLInputElement>('input[name=theory]').value.trim(),
         w: Math.max(60, Number($<HTMLInputElement>('input[name=w]').value) || size.w),
         h: Math.max(40, Number($<HTMLInputElement>('input[name=h]').value) || size.h),
@@ -257,6 +381,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       const j = Math.min(lastPath(), paths.length - 1);
       const cells = got.map((r): Cell => ({
         label: speciesName(r), g: '', eh: pick.kind === 'free' ? r.free! : r.scf!,
+        ehs: { ...(r.free !== null ? { G: r.free } : {}), ...(r.enthalpy !== null ? { H: r.enthalpy } : {}), ...(r.scf !== null ? { E: r.scf } : {}) },
         ...(r.atoms.length ? { geom: r.atoms.map((a) => ({ el: a.el, x: +a.x.toFixed(3), y: +a.y.toFixed(3), z: +a.z.toFixed(3) })) } : {}),
       }));
       // a preset's made-up numbers go; a table being worked on keeps its other pathways
@@ -272,12 +397,14 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       const theory = got.find((r) => r.theory)?.theory ?? '';
       const t = $<HTMLInputElement>('input[name=theory]');
       if (!t.value.trim() && theory) t.value = theory + (pick.kind === 'free' ? '' : ' (electronic energies)');
-      if (got.some((r) => r.atoms.length)) $<HTMLInputElement>('input[name=structures]').checked = true;
+      const st = $<HTMLSelectElement>('select[name=structures]');
+      if (got.some((r) => r.atoms.length) && !st.value) st.value = '3d';
+      if (got.some((r) => r.imaginary === 1 && r.atoms.length)) $<HTMLInputElement>('input[name=distances]').checked = true;
       const ts = got.filter((r) => r.imaginary === 1).length;
       const odd = got.filter((r) => (r.imaginary ?? 0) > 1).map((r) => r.name);
       const theories = new Set(got.map((r) => r.theory).filter(Boolean));
       note.textContent = [
-        `Read ${got.length} file${got.length > 1 ? 's' : ''} (${[...new Set(got.map((r) => r.program))].join(', ')}): ${pick.kind === 'free' ? 'free energies' : 'electronic energies (no frequency job in every file)'}, relative to ${got[0].name}.`,
+        `Read ${got.length} file${got.length > 1 ? 's' : ''} (${[...new Set(got.map((r) => r.program))].join(', ')}): ${pick.kind === 'free' ? 'free energies' : 'electronic energies (no frequency job in every file)'}, relative to ${got[0].name}.${got.every((r) => r.enthalpy !== null) ? ' Choose ΔH on the axis for the enthalpies.' : ''}`,
         ts ? `${ts} transition state${ts > 1 ? 's' : ''} (one imaginary frequency) marked ‡.` : '',
         odd.length ? `More than one imaginary frequency: ${odd.join(', ')}.` : '',
         theories.size > 1 ? `The files use different levels of theory (${[...theories].join('; ')}).` : '',
@@ -286,8 +413,20 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       ].filter(Boolean).join(' ');
       redraw();
     });
-    form.addEventListener('submit', (e) => {
+    // 2-D structures: each geometry laid out flat by the chemistry engine (once; kept with the diagram)
+    const ensureFlat = async () => {
+      if (!layout || $<HTMLSelectElement>('select[name=structures]').value !== '2d') return;
+      read();
+      const todo = rows.flat().filter((c) => c.geom?.length && !c.flat);
+      for (const c of todo) {
+        const f = await flatFor(c.geom!, c.label, layout);
+        if (f) c.flat = f;
+      }
+    };
+    $<HTMLSelectElement>('select[name=structures]').addEventListener('change', () => { void ensureFlat().then(redraw); });
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      await ensureFlat();
       const out = gather();
       if (!out.paths.some((p) => p.points.some((q) => q.g !== null))) return;
       const { style, values, digits, axis, barrier, overall, quantity, unit } = out;

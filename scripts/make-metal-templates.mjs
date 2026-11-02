@@ -601,7 +601,10 @@ const dppf = () => ferroBis('PPh2');
 /**
  * A Josiphos ligand on M: the upper Cp ring of a ferrocene carries PR₂ (on the carbon nearest M)
  * and, on the carbon beside it at the front, CH(CH₃)PR′₂; both phosphorus atoms bond to M,
- * closing a six-membered chelate ring. The lower ring is plain.
+ * closing a six-membered chelate ring. The lower ring is plain. Drawn as the (R,Sp) enantiomer
+ * Solvias sells (SL-J001-1 and its kin): M on the left, so that going from the PR₂ carbon to
+ * the CH carbon runs left to right along the ring's front edge, as in Nate's inventory drawing
+ * of (R)-(S)-Josiphos, and the methyl on the stereocenter comes forward (wedged) to make it (R).
  */
 function josiphos(ringP = 'PPh2', armP = 'PCy2') {
   const t = mol();
@@ -623,8 +626,10 @@ function josiphos(ringP = 'PPh2', armP = 'PCy2') {
   t.bond(c2, cs);
   const p2 = t.atom(addv(t.atoms[cs], v3(0.8, -0.6, 0)), 'P', armP);
   t.bond(cs, p2).bond(m, p2).bond(m, p1);
-  t.bond(cs, t.atom(addv(t.atoms[cs], v3(-0.6, -0.8, 0))));
+  t.bond(cs, t.atom(addv(t.atoms[cs], v3(0.15, -0.9, 0.3))), 1, 'wedge');
   bridgeMetal(t, m, p1, p2, 1.3);
+  // built with M on the right, then mirrored left to right: the other enantiomer would be wrong
+  for (const a of t.atoms) a.x = -a.x;
   return project(t, SANDWICH);
 }
 

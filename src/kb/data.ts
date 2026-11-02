@@ -69,6 +69,7 @@ export const BUILT_IN_TABLES: KbTable[] = [REAGENT_SAFETY, PURIFICATION_TABLE, T
 /** Big tables loaded when the window first opens, kept out of the program's start-up. */
 export const LATER_TABLES: (() => Promise<KbTable>)[] = [
   async () => (await import('./solubility')).SOLUBILITY_TABLE,
+  async () => (await import('./green-nmr')).GREEN_NMR_TABLE,
 ];
 
 /** More rows for built-in tables, loaded the same way: the big Reagent Safety table. */

@@ -181,6 +181,8 @@
     </div>
     </div>
     <button role="menuitem" data-cmd="format-painter" title="Format Painter: copy the look of what is selected to the next thing you click or drag over. Double-click to keep painting until Esc">Format Painter</button>
+    <button role="menuitem" data-cmd="save-format-favorite" title="Keep the look of what is selected (fill, pattern, shadow, transparency, line, effects, text) under a name, to give to other things with one click in any mode">Save Format as Favorite…</button>
+    <button role="menuitem" data-cmd="format-favorites" title="Your Format Favorites: click one to give the selection its look">Format Favorites…</button>
     <hr />
     <button role="menuitem" data-cmd="select-all">Select All</button>
     <button data-modes="sheet document" role="menuitem" data-cmd="find">Find…</button>
@@ -547,10 +549,10 @@
     <div class="submenu" data-modes="drawing slides design">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Order</button>
     <div class="menu sub" role="menu" hidden>
-    <button data-modes="drawing slides design" role="menuitem" data-cmd="shape-front" title="Put the selected shapes in front of everything else">Bring to Front</button>
-    <button data-modes="drawing slides design" role="menuitem" data-cmd="shape-back" title="Put the selected shapes behind everything else">Send to Back</button>
-    <button data-modes="drawing slides design" role="menuitem" data-cmd="bring-front">Bring Bond to Front</button>
-    <button data-modes="drawing slides design" role="menuitem" data-cmd="send-back">Send Bond to Back</button>
+    <button data-modes="drawing slides design" role="menuitem" data-cmd="shape-front" title="Put the selected shapes in front of everything else, and the selected bonds in front of the bonds they cross">Bring to Front</button>
+    <button data-modes="drawing slides design" role="menuitem" data-cmd="shape-forward" title="Put the selected shapes, or bonds, one step forward">Bring Forward</button>
+    <button data-modes="drawing slides design" role="menuitem" data-cmd="shape-backward" title="Put the selected shapes, or bonds, one step back">Send Backward</button>
+    <button data-modes="drawing slides design" role="menuitem" data-cmd="shape-back" title="Put the selected shapes behind everything else, and the selected bonds behind the bonds they cross">Send to Back</button>
     </div>
     </div>
     <button data-modes="drawing slides design" role="menuitem" data-cmd="scale">Scale…</button>
@@ -632,7 +634,8 @@
     <button role="menuitem" data-cmd="orient-like" title="Turn each selected structure so the part it shares with the first one (top left) lies the same way round; structures turned over have their wedges swapped, so configuration is kept">Orient Like First</button>
     <button role="menuitem" data-cmd="check-structure">Check Structure (next warning)</button>
     <button role="menuitem" data-cmd="join">Join</button>
-    <button role="menuitem" data-cmd="expand-label" title="Draw the selected labels out as atoms and bonds: abbreviations (OMe, Boc, CO2Et) and ligands on a metal (PPh3, dppe, Cp*, COD)">Expand Label</button>
+    <button role="menuitem" data-cmd="expand-label" title="Draw the selected labels out as atoms and bonds: abbreviations (OMe, Boc, CO2Et), ligands drawn the usual way (BINAP keeps its PPh2 groups) and ligands on a metal (PPh3, dppe, Cp*, COD)">Expand Label</button>
+    <button role="menuitem" data-cmd="expand-label-full" title="Draw the selected labels out completely: as Expand Label, then the labels that brings in (PPh2, P(t-Bu)2, CHPh2) drawn out too, down to every atom">Expand Label Fully</button>
     <button role="menuitem" data-cmd="contract-label">Contract Label…</button>
     <hr />
     <div class="submenu">
@@ -706,6 +709,8 @@
     <button role="menuitem" data-cmd="structure-to-name" title="Put the selected structure's systematic (IUPAC) name under it, worked out offline. A name is given only if reading it back gives exactly the structure drawn. The namer loads the first time (about 14 MB).">Structure to Name</button>
     <button role="menuitem" data-cmd="find-cas" title="Show the selected structure's CAS Registry Number (CAS RN) in the Analysis panel: from your Compound Library, numbers found before, or PubChem, the free NIH database (sends the structure as SMILES)">Find CAS RN</button>
     <button role="menuitem" data-cmd="model-3d" title="Build the selected structure in 3-D (conformers relaxed with the MMFF94 force field) in a window where you can turn it, see its other conformers, and turn the drawing to match">3-D Model…</button>
+    <button role="menuitem" data-cmd="newman-projection" title="The selected single bond seen end on, as a Newman or sawhorse projection of its most stable conformers (or as the wedges draw it), colored by group size. It stays linked to the structure">Newman Projection…</button>
+    <button role="menuitem" data-cmd="torsion-chart" title="The selected single bond turned through 360° (a relaxed MMFF94s+ scan, or xTB energies), drawn as a torsional energy chart with a Newman projection at each minimum and maximum, their names and the barriers">Torsional Energy Chart…</button>
     <button role="menuitem" data-cmd="pubchem-lookup" title="Send the selected structure (as SMILES) to PubChem, the free NIH database, and show its name, CAS number, hazards and measured values in the Analysis panel">Look Up on PubChem</button>
     <button role="menuitem" data-cmd="periodic-table">Periodic Table…</button>
     </div>
@@ -1463,6 +1468,7 @@
         </div>
         <div class="rb-label">Clipboard</div>
       </div>
+      <div class="rb-group"><div class="rb-row"><div class="rb-styles-host" data-favorites-gallery></div></div><div class="rb-label" title="Looks you keep under a name (fill, line, shadow, effects, text): click one to give it to the selection">Format Favorites</div></div>
       <div class="rb-group">
         <div class="rb-row">
           <div class="rb-col">
@@ -1570,6 +1576,7 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-doc="insert-structure" title="Draw a structure or scheme with the drawing tools; it goes in the text at the caret"><span class="rb-icon">⬡</span>Structure</button>
+          <button class="rb-big" data-doc="insert-figure" title="Figure: drag on the page to mark out an area for structures, with the text wrapping round it (even while it is empty). Drawing in it never moves the text round it; it is not printed, and shows light gray when the pointer is over it. Right-click a structure for Make Figure"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" stroke-dasharray="2.6 2"/><path d="M7.5 8.2l2.5-1.4 2.5 1.4v2.8l-2.5 1.4-2.5-1.4z"/></svg></span>Figure</button>
           <button class="rb-big" data-doc="structure-from-name-doc" title="A structure from its name or SMILES"><span class="rb-icon">Aa</span>From Name</button>
           <button class="rb-big" data-doc="edit-figure" title="Change the picked structure or scheme with the drawing tools (or double-click it)"><span class="rb-icon">✎</span>Edit Drawing</button>
         </div>
@@ -2172,6 +2179,7 @@
         </div>
         <div class="rb-label">Clipboard</div>
       </div>
+      <div class="rb-group"><div class="rb-row"><div class="rb-styles-host" data-favorites-gallery></div></div><div class="rb-label" title="Looks you keep under a name (fill, line, shadow, effects, text): click one to give it to the selection">Format Favorites</div></div>
       <div class="rb-group">
         <div class="rb-row">
           <div class="rb-fly rb-split">
@@ -2293,8 +2301,8 @@
             <button class="rb-iconbtn" data-cmd="flip-h" title="Flip Horizontal: left to right" aria-label="Flip Horizontal">⇋</button>
             <button class="rb-iconbtn" data-cmd="flip-v" title="Flip Vertical: top to bottom" aria-label="Flip Vertical">⇵</button>
             <button class="rb-iconbtn" data-cmd="group" title="Group the selected pictures and shapes (Ctrl+G)" aria-label="Group">▣</button>
-            <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: in front of all the others" aria-label="Bring to Front">⧉</button>
-            <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: behind all the others" aria-label="Send to Back">⧉</button>
+            <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: the selected pictures and shapes in front of all the others, and the selected bonds in front of the bonds they cross" aria-label="Bring to Front">⧉</button>
+            <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: the selected pictures and shapes behind all the others, and the selected bonds behind the bonds they cross" aria-label="Send to Back">⧉</button>
             <button class="rb-iconbtn" data-cmd="ungroup" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup">▢</button>
             <button class="rb-iconbtn" data-cmd="align-left" title="Align left edges (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
             <button class="rb-iconbtn" data-cmd="align-hcenter" title="Align centers, across" aria-label="Align Center">↔</button>
@@ -2410,8 +2418,8 @@
             <button class="rb-iconbtn" data-cmd="flip-h" title="Flip Horizontal: left to right" aria-label="Flip Horizontal">⇋</button>
             <button class="rb-iconbtn" data-cmd="flip-v" title="Flip Vertical: top to bottom" aria-label="Flip Vertical">⇵</button>
             <button class="rb-iconbtn" data-cmd="group" title="Group the selected pictures and shapes (Ctrl+G)" aria-label="Group">▣</button>
-            <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: in front of all the others" aria-label="Bring to Front">⧉</button>
-            <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: behind all the others" aria-label="Send to Back">⧉</button>
+            <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: the selected pictures and shapes in front of all the others, and the selected bonds in front of the bonds they cross" aria-label="Bring to Front">⧉</button>
+            <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: the selected pictures and shapes behind all the others, and the selected bonds behind the bonds they cross" aria-label="Send to Back">⧉</button>
             <button class="rb-iconbtn" data-cmd="ungroup" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup">▢</button>
             <button class="rb-iconbtn" data-cmd="align-left" title="Align left edges (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
             <button class="rb-iconbtn" data-cmd="align-hcenter" title="Align centers, across" aria-label="Align Center">↔</button>
@@ -2445,8 +2453,8 @@
             <button class="rb-iconbtn" data-cmd="flip-h" title="Flip Horizontal: left to right" aria-label="Flip Horizontal">⇋</button>
             <button class="rb-iconbtn" data-cmd="flip-v" title="Flip Vertical: top to bottom" aria-label="Flip Vertical">⇵</button>
             <button class="rb-iconbtn" data-cmd="group" title="Group the selected pictures and shapes (Ctrl+G)" aria-label="Group">▣</button>
-            <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: in front of all the others" aria-label="Bring to Front">⧉</button>
-            <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: behind all the others" aria-label="Send to Back">⧉</button>
+            <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: the selected pictures and shapes in front of all the others, and the selected bonds in front of the bonds they cross" aria-label="Bring to Front">⧉</button>
+            <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: the selected pictures and shapes behind all the others, and the selected bonds behind the bonds they cross" aria-label="Send to Back">⧉</button>
             <button class="rb-iconbtn" data-cmd="ungroup" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup">▢</button>
             <button class="rb-iconbtn" data-cmd="align-left" title="Align left edges (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
             <button class="rb-iconbtn" data-cmd="align-hcenter" title="Align centers, across" aria-label="Align Center">↔</button>
@@ -2610,6 +2618,10 @@
         <div class="rb-label">Design</div>
       </div>
       <div class="rb-group">
+        <div class="rb-row"><div class="rb-styles-host" data-style-gallery></div></div>
+        <div class="rb-label">Drawing Styles</div>
+      </div>
+      <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="format-background" title="The background of this slide, the slides picked, or every slide: a color, gradient, picture or pattern, see-through as you like"><span class="rb-icon">▨</span>Format Background</button>
           <button class="rb-big keyframes-only" hidden data-cmd="canvas-background" title="A canvas slide's endless background: a gradient along the route, a faint pattern, parallax. Zones: right-click a keyframe"><span class="rb-icon">◌</span>Canvas Background</button>
@@ -2683,6 +2695,7 @@
             <label class="rb-field" title="Wipe and Fly: the side it comes in from (or goes out to)">Effect <select id="an-from"></select></label>
             <label class="rb-field" id="an-amount-box" style="display: none">Amount <input id="an-amount" type="number" step="5" style="width: 60px" /> <span id="an-amount-unit"></span></label>
             <label class="rb-field" id="an-colour-box" style="display: none" title="Color Change: the color it changes to">Color <input id="an-colour" type="color" /></label>
+            <button id="an-views" style="display: none" title="Turn in 3-D: set the views the structure turns to, one per click, and watch them play">Key Views…</button>
             <label class="rb-field" id="an-move-box" style="display: none" title="Keyframe move: how the view gets to this keyframe on a canvas slide">Move <select id="an-move"></select></label>
             <label class="rb-field" id="an-bydist-box" style="display: none" title="By distance: the move takes longer the further it goes (0.6 s for a short step, up to 1.5 s for a long jump). Typing a duration turns this off"><input id="an-bydist" type="checkbox" /> By distance</label>
             <label class="rb-field" title="Text: comes in (or goes, or is emphasized) as one object, or one paragraph at a time (each starting as the first does: on its own click, with or after the one before)">Sequence <select id="an-seq">
@@ -2756,6 +2769,11 @@
         </div>
         <div class="rb-label">Shapes and Icons</div>
       </div>
+      <div class="rb-group"><div class="rb-row"><div class="rb-styles-host" data-favorites-gallery></div></div><div class="rb-label" title="Looks you keep under a name (fill, line, shadow, effects, text): click one to give it to the selection">Format Favorites</div></div>
+      <div class="rb-group">
+        <div class="rb-row"><div class="rb-styles-host" data-style-gallery></div></div>
+        <div class="rb-label">Drawing Styles</div>
+      </div>
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="shape-styles" aria-haspopup="dialog" title="Shape Styles: a ready-made fill, outline and effects for the selected shapes"><span class="rb-icon">◩</span>Shape Styles ▾</button>
@@ -2775,8 +2793,8 @@
             <button class="rb-iconbtn" data-cmd="flip-h" title="Flip Horizontal: left to right" aria-label="Flip Horizontal">⇋</button>
             <button class="rb-iconbtn" data-cmd="flip-v" title="Flip Vertical: top to bottom" aria-label="Flip Vertical">⇵</button>
             <button class="rb-iconbtn" data-cmd="group" title="Group the selected pictures and shapes (Ctrl+G)" aria-label="Group">▣</button>
-            <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: in front of all the others" aria-label="Bring to Front">⧉</button>
-            <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: behind all the others" aria-label="Send to Back">⧉</button>
+            <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: the selected pictures and shapes in front of all the others, and the selected bonds in front of the bonds they cross" aria-label="Bring to Front">⧉</button>
+            <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: the selected pictures and shapes behind all the others, and the selected bonds behind the bonds they cross" aria-label="Send to Back">⧉</button>
             <button class="rb-iconbtn" data-cmd="ungroup" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup">▢</button>
             <button class="rb-iconbtn" data-cmd="align-left" title="Align left edges (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
             <button class="rb-iconbtn" data-cmd="align-hcenter" title="Align centers, across" aria-label="Align Center">↔</button>
@@ -2921,6 +2939,7 @@
     <div id="structure-bar" role="toolbar" aria-label="Structure" hidden>
       <span id="structure-title"></span>
       <span class="muted">Draw with the tools on the left.</span>
+      <button id="structure-bigger" type="button" title="Make the drawing area bigger (again: bigger still, then back to 6 × 4 in)">Bigger</button>
       <button id="structure-done" type="button" class="primary" title="Put the structure in place (Ctrl+Enter)">Done</button>
       <button id="structure-cancel" type="button" title="Leave it as it was">Cancel</button>
     </div>

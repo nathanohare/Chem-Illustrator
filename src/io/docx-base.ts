@@ -11,6 +11,7 @@ import type { CiteStyle, Reference } from '../document/references';
 import type { CiteFormat } from '../document/cite-styles';
 import type { ChartBox } from '../sheet/chart-box';
 import type { CiteManager } from '../document/live-cites';
+import type { FigureFrame } from '../document/document';
 
 export const W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 export const WP_NS = 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing';
@@ -109,7 +110,9 @@ export interface DocxModel {
    * (its alt text as written) tell it from a picture Word copied in from another of our files
    * under the same name.
    */
-  drawings: Record<number, { contents: Contents; w: number; h: number; png?: string; alt?: string }>;
+  drawings: Record<number, { contents: Contents; w: number; h: number; png?: string; alt?: string; /** A figure's area (Insert > Figure): the picture is of all of it. */ frame?: FigureFrame }>;
+  /** Each shape's library outline (Insert > Shapes in a document), by its id ("Shape 3"): Word keeps those without a preset as custom shapes. */
+  geos?: Record<number, string>;
   /** Each table by its id, with its text (used when the text is the same in the file). */
   tables: Record<number, { table: TableData; text: string }>;
   /** The document's references and citation style (citations are ADDIN fields naming them). */

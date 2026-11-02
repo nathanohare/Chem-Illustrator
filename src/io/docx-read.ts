@@ -56,6 +56,7 @@ import { chartBoxPng } from '../render/chart-box-paint';
 import { contentsAlt } from '../accessibility';
 import { elementXml, readKeptParts, type ContentControl, type KeptParts } from './kept-parts';
 import { cmlGuid, contentsSig } from './cml';
+import { GEOS, GEO_BY_ID } from '../design/geo';
 
 export interface DocxReadDeps {
   /** A ChemDraw drawing (CDX data) as a drawing in the document's style; null when it can't be read. */
@@ -1662,6 +1663,19 @@ class DocxReader {
 
   // ---------------------------------------------------------------- pictures and structures
 
+  /**
+   * A Word shape's outline as one of the library's: ours by its name ("Shape 3"), else Word's
+   * preset of the same look (none for a plain rectangle, which is a text box).
+   */
+  private shapeGeo(spPr: Element | null, name: string): string | undefined {
+    const mine = /^Shape (\d+)$/.exec(name);
+    const kept = mine ? this.model?.geos?.[Number(mine[1])] : undefined;
+    if (kept && GEO_BY_ID.has(kept)) return kept;
+    const prst = kid(spPr, 'prstGeom')?.getAttribute('prst');
+    if (!prst || prst === 'rect') return undefined;
+    return GEOS.find((g) => g.prst === prst)?.id;
+  }
+
   private drawing(el: Element, r: RProps, ctx: Ctx): void {
     const box = kid(el, 'inline') ?? kid(el, 'anchor');
     if (!box) return;
@@ -1685,8 +1699,20 @@ class DocxReader {
       const fill = fillClr && /^[0-9a-f]{6}$/i.test(fillClr) ? `#${fillClr.toLowerCase()}` : kid(spPr, 'noFill') ? undefined : kid(spPr, 'solidFill') ? '#ffffff' : undefined;
       const float = (box.localName === 'anchor' ? this.floatOf(box, look, shown.w) : null) ?? { wrap: 'topBottom' as const, x: 0, y: 0 };
       const { runs, paras } = this.boxText(content);
-      const o: DocObject = { kind: 'textbox', runs, w: round(shown.w), float, ...(paras.some((q) => Object.keys(q).length) ? { paras } : {}), ...(fill ? { fill } : {}), ...(look ? { look } : {}) };
+      const geo = this.shapeGeo(spPr, name);
+      const o: DocObject = { kind: 'textbox', runs, w: round(shown.w), float, ...(geo ? { geo, h: round(shown.h) } : {}), ...(paras.some((q) => Object.keys(q).length) ? { paras } : {}), ...(fill ? { fill } : {}), ...(look ? { look } : {}) };
       this.emitObject(ctx, o, r);
+      return;
+    }
+    // a shape with no text in it (Word's Insert > Shapes): one of ours, empty
+    const bare = wsp ? kid(wsp, 'spPr') : null;
+    const bareGeo = bare && (kid(bare, 'prstGeom') || kid(bare, 'custGeom')) ? this.shapeGeo(bare, name) ?? (kid(bare, 'prstGeom')?.getAttribute('prst') === 'rect' ? 'rect' : null) : null;
+    if (wsp && bareGeo) {
+      const look = readLook(bare);
+      const fillClr = kid(bare, 'solidFill', 'srgbClr')?.getAttribute('val');
+      const fill = fillClr && /^[0-9a-f]{6}$/i.test(fillClr) ? `#${fillClr.toLowerCase()}` : kid(bare, 'noFill') ? undefined : kid(bare, 'solidFill') ? '#ffffff' : undefined;
+      const float = (box.localName === 'anchor' ? this.floatOf(box, look, shown.w) : null) ?? { wrap: 'topBottom' as const, x: 0, y: 0 };
+      this.emitObject(ctx, { kind: 'textbox', geo: bareGeo, runs: [], w: round(shown.w), h: round(shown.h), float, ...(fill ? { fill } : {}), ...(look ? { look } : {}) }, r);
       return;
     }
     const chartEl = kid(data, 'chart');
@@ -1719,7 +1745,7 @@ class DocxReader {
       const xf = kid(pic ? kid(pic, 'spPr') : kid(group!, 'grpSpPr'), 'xfrm');
       const rot = (((Number(xf?.getAttribute('rot') ?? 0) / 60000 || 0) % 360) + 360) % 360;
       const turn = { ...(rot ? { rot: round(rot) } : {}), ...(yes(xf?.getAttribute('flipH') ?? null) ? { flipH: true } : {}), ...(yes(xf?.getAttribute('flipV') ?? null) ? { flipV: true } : {}) };
-      this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(look ? { look } : {}), ...(float ? { float } : {}), ...(contentsAlt(contents) ? {} : alt), ...turn }, r);
+      this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(m.frame ? { frame: structuredClone(m.frame) } : {}), ...(look ? { look } : {}), ...(float ? { float } : {}), ...(contentsAlt(contents) ? {} : alt), ...turn }, r);
       return;
     }
     if (!pic) { this.warn('shapes'); return; }

@@ -31,6 +31,9 @@ export interface LigandLibraryHost {
 }
 
 const CARD = 72;
+
+/** The usual abbreviation, with the enantiomer drawn in front for a chiral ligand: (R)-BINAP. */
+const shownAs = (l: Ligand): string => (l.drawn ? `${l.drawn}-${l.abbr[0]}` : l.abbr[0]);
 const BIG = 200;
 
 export class LigandLibraryWindow {
@@ -122,14 +125,14 @@ export class LigandLibraryWindow {
     this.shown = searchLigands(this.search.value, this.family);
     const cards = this.shown.map((l) => {
       const t = templateById(l.tpl);
-      const card = el('div', { className: 'lig-card' + (l === this.current ? ' on' : ''), title: `${l.name}\n${bondingType(l)}` });
+      const card = el('div', { className: 'lig-card' + (l === this.current ? ' on' : ''), title: `${l.name}\n${bondingType(l)}${l.drawn ? `\nDrawn as ${shownAs(l)}` : ''}` });
       card.dataset.id = l.id;
       card.setAttribute('role', 'option');
       card.setAttribute('aria-selected', String(l === this.current));
-      card.setAttribute('aria-label', `${l.abbr[0]}: ${l.name}`);
+      card.setAttribute('aria-label', `${shownAs(l)}: ${l.name}`);
       const pic = el('div', { className: 'lig-pic' });
       pic.innerHTML = t ? templateIcon(t, CARD) : '';
-      card.append(pic, el('span', { className: 'lig-abbr', textContent: l.abbr[0] }));
+      card.append(pic, el('span', { className: 'lig-abbr', textContent: shownAs(l) }));
       return card;
     });
     this.grid.replaceChildren(...(cards.length ? cards : [el('p', { className: 'muted kb-empty', textContent: this.search.value.trim() ? `No ligand matches “${this.search.value.trim()}”. Try part of its name, or another family.` : 'No ligands in this family.' })]));
@@ -184,12 +187,13 @@ export class LigandLibraryWindow {
       : el('span', { className: 'muted', textContent: 'not in PubChem' });
     this.details.replaceChildren(
       pic,
-      el('h3', { textContent: l.abbr[0] }),
+      el('h3', { textContent: shownAs(l) }),
       el('p', { className: 'lig-name', textContent: l.name }),
       el('dl', {},
         ...(l.abbr.length > 1 ? row('Also', l.abbr.slice(1).join(', ')) : []),
         ...row('Family', familyOf(l)?.name ?? ''),
         ...row('Bonds as', `${bondingType(l)}, ${denticity(l)}`),
+        ...(l.drawn ? row('Drawn as', el('span', { textContent: `the ${l.drawn} enantiomer`, title: 'A chiral ligand is drawn as one enantiomer; its mirror image is the other. Flip the drawing to get it' })) : []),
         ...row('PubChem', cid),
         ...row('SMILES', smiles),
       ),
