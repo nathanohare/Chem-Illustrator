@@ -16,7 +16,8 @@ describe('template data', () => {
     expect(count('amino')).toBe(20);
     expect(count('rings')).toBeGreaterThan(8);
     expect(count('heterocycles')).toBeGreaterThan(30);
-    expect(count('sugars')).toBeGreaterThan(4);
+    expect(count('sugars')).toBeGreaterThan(15);
+    expect(count('nucleic')).toBeGreaterThan(20);
     expect(new Set(TEMPLATES.map((t) => t.id)).size).toBe(TEMPLATES.length);
   });
   for (const t of TEMPLATES) {
@@ -32,8 +33,8 @@ describe('template data', () => {
         expect(metal ? [1, 1.5, 2, 3, 4] : [1, 2, 3]).toContain(o);
         const d = Math.hypot(t.atoms[a][0] - t.atoms[b][0], t.atoms[a][1] - t.atoms[b][1]);
         expect(d).toBeGreaterThan(persp ? 0.25 : 0.45);
-        // Haworth rings are drawn wide
-        expect(d).toBeLessThan(t.group === 'sugars' ? 2.2 : 1.6);
+        // Haworth rings (sugars, nucleosides and nucleotides) are drawn wide
+        expect(d).toBeLessThan(t.group === 'sugars' || t.group === 'nucleic' ? 2.2 : 1.6);
       }
       // no two atoms on top of each other (shapes seen in perspective may come closer; C60's
       // far side lies behind its near side)

@@ -132,7 +132,7 @@ import { StylePanel, tidyStyle } from './ui/style-panel';
 import { installCombos } from './ui/combo';
 import { installFontList, registerBundledFonts, bundledFaces, pdfFonts } from './fonts';
 import { applyRibbonIcons } from './ui/ribbon-icons';
-import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templateFromAtoms } from './chem/templates';
+import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templateFromAtoms, placeTemplate, freePlacement } from './chem/templates';
 import { centreEnd } from './chem/hapto';
 import { countElectrons } from './chem/electrons';
 import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, tokenize as tokenizeLabel } from './chem/labels';
@@ -178,6 +178,7 @@ import { StructureNamer, confirmedName, nameRuns, type NameTools } from './chem/
 import { placeView } from './chem/place3d';
 import type { Viewer3d } from './ui/viewer3d';
 import { NameDialog } from './ui/name-dialog';
+import { SequenceDialog } from './ui/sequence-dialog';
 import { ArrangeDialog } from './ui/arrange-dialog';
 import type { AnimateDialog } from './ui/animate-dialog';
 import { PeriodicTable } from './ui/periodic-table';
@@ -481,7 +482,8 @@ const TOOL_GROUPS: ToolbarItem[][] = [
     templatePalette('rings', 'tpl-rings', 'Ring systems', 5),
     templatePalette('heterocycles', 'tpl-heterocycles', 'Heterocycles', 7),
     templatePalette('amino', 'tpl-amino', 'Amino acids', 5, 64),
-    templatePalette('sugars', 'tpl-sugars', 'Sugars', 4, 64),
+    templatePalette('sugars', 'tpl-sugars', 'Sugars (Haworth)', 5, 64),
+    templatePalette('nucleic', 'tpl-nucleic', 'Nucleic acids: bases, nucleosides and nucleotides', 6, 64),
     templatePalette(['conformers', 'fused'], 'tpl-conformers', 'Conformers and fused rings in 3-D', 5, 64),
     templatePalette(['projections', 'stereo'], 'tpl-projections', 'Projections and stereocentres', 6, 56),
     templatePalette('cycloalkanes', 'tpl-cycloalkanes', 'Large rings', 6, 56),
@@ -2018,6 +2020,23 @@ const nameDialog = new NameDialog(async (name) => {
   if (got.warnings.length) flash('Note: ' + got.warnings.join(' '), 9000);
   return null;
 }, () => !namesReady);
+
+/** Insert > Structure from Sequence: a peptide drawn out in full, put in the middle of the view (or the slide). */
+const sequenceDialog = new SequenceDialog((t) => {
+  const c = pasteCentre();
+  try {
+    let ids: number[] = [];
+    doc.edit('Structure from Sequence', () => {
+      ids = placeTemplate(doc, t, freePlacement(c, doc.style.bondLength), { noMerge: true });
+      editor.sel = { atoms: new Set(ids), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() };
+      editor.placeClear(placingPage());
+    });
+    selectNewAtoms(ids);
+  } catch (err) {
+    return String(err);
+  }
+  return null;
+});
 
 /**
  * Chemistry > Name to Structure. Selected captions are read as names and replaced by their
@@ -6180,6 +6199,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'split-view': () => toggleSplit(),
   'repeat-group': () => { void setRepeatGroup(); },
   'name-to-structure': () => nameToStructure(),
+  'sequence-to-structure': () => sequenceDialog.open(),
   'clipboard-formats': async () => {
     const names = await clipboardFormats().catch((err) => [String(err)]);
     flash(names.length ? 'On the clipboard: ' + names.join(', ') : 'The clipboard is empty.', 15000);
@@ -8725,7 +8745,7 @@ function drawingMenu(): MenuItem[] {
       ...(ws.active.mode === 'slides' ? [{ cmd: 'new-comment', label: 'New Comment' }, { cmd: 'show-comments', label: 'Show Comments' }, null] : []),
       ...(ws.active.mode === 'slides' || design ? [{ cmd: 'format-background', label: 'Format Background…' }, { cmd: 'slide-references', label: 'References on Slide…' }, null] : []),
       ...(ws.active.mode === 'slides' && deckNow()?.current?.canvas ? [{ label: 'Keyframes', items: keyframeMenu() }, null] : []),
-      { label: 'Insert', items: [{ cmd: 'name-to-structure' }, { cmd: 'periodic-table' }, { cmd: 'insert-picture' }, { cmd: 'import-picture', label: 'Structure from Picture…' }, { cmd: 'text-box' }, { cmd: 'insert-reference', label: 'Reference…' }, { cmd: 'insert-symbol' }, ...(design ? [{ cmd: 'design-shapes', label: 'Shape…' }, { cmd: 'design-icons', label: 'Icon…' }, { cmd: 'connector-tool' }] : []), ...(ws.active.mode === 'slides' ? [{ cmd: 'slide-shapes', label: 'Shape…' }, { cmd: 'slide-icons', label: 'Icon…' }] : [])] },
+      { label: 'Insert', items: [{ cmd: 'name-to-structure' }, { cmd: 'sequence-to-structure' }, { cmd: 'periodic-table' }, { cmd: 'insert-picture' }, { cmd: 'import-picture', label: 'Structure from Picture…' }, { cmd: 'text-box' }, { cmd: 'insert-reference', label: 'Reference…' }, { cmd: 'insert-symbol' }, ...(design ? [{ cmd: 'design-shapes', label: 'Shape…' }, { cmd: 'design-icons', label: 'Icon…' }, { cmd: 'connector-tool' }] : []), ...(ws.active.mode === 'slides' ? [{ cmd: 'slide-shapes', label: 'Shape…' }, { cmd: 'slide-icons', label: 'Icon…' }] : [])] },
       { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }] },
       { cmd: 'drawing-style' },
       ...(ws.active.mode === 'drawing' && pageEdgesMenu() ? [pageEdgesMenu()!] : []),
