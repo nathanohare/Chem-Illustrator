@@ -42,12 +42,20 @@ def headers(text):
     return out
 
 
+HEADING = re.compile(r'\n(?=[^\n]{0,200}\(\s*\d{1,3}[a-z]{0,3}\'?\s*\)\s*[.:]?\s*\n|[A-Z0-9(][^\n]{3,200}\n(?:[^\n]*\n){0,1}[^\n]*(?:was|were)\s+(?:prepared|obtained|synthesi[sz]ed|isolated))')
+
+
+def para_end(text, start, limit):
+    """End of the paragraph that starts at `start`: a blank line, or a line ending in '.'
+    followed by a line that starts a new heading, whichever comes first."""
+    seg = text[start:limit]
+    m = re.search(r'\n\s*\n|(?<=[.;])[ \t]*\n(?=[A-Z0-9(\[][^\n]{0,200}\n)', seg)
+    return start + (m.start() if m else len(seg))
+
+
 def list_end(text, start, nxt):
-    """End of an NMR list: next header, a blank line, or an HRMS/IR line, whichever first."""
-    seg = text[start:nxt]
-    stop = re.search(r'\n\s*\n|(?<=\.)\s*\n(?=[A-Z][a-z]{2,}[^\n]{0,80}\n)', seg)
-    end = start + (stop.start() if stop else len(seg))
-    return min(end, start + 2500)
+    """End of an NMR list: next header or the end of its paragraph."""
+    return min(para_end(text, start, nxt), start + 2500)
 
 
 def blocks(text):
@@ -56,7 +64,7 @@ def blocks(text):
     for i, (pos, nuc) in enumerate(hs):
         new = not groups or (nuc == '1H' and '1H' in groups[-1]['nucs']) or \
             (nuc == '13C' and '13C' in groups[-1]['nucs'] and '1H' not in groups[-1]['nucs']) or \
-            pos - groups[-1]['last'] > 1500
+            pos - groups[-1]['end'] > 400
         if new:
             groups.append({'start': pos, 'nucs': [], 'last': pos, 'end': pos})
         g = groups[-1]
@@ -68,9 +76,12 @@ def blocks(text):
     prev_end = 0
     for i, g in enumerate(groups):
         nxt = groups[i + 1]['start'] if i + 1 < len(groups) else len(text)
-        tail = END_AFTER.search(text, g['end'], min(nxt, g['end'] + 600))
-        end = tail.end() if tail else g['end']
-        end = min(max(end, g['end']), nxt)
+        # HRMS / IR / analysis lines that follow the lists in the same paragraph or the next short line
+        end = g['end']
+        tail = END_AFTER.match(text, end + len(text[end:end + 40]) - len(text[end:end + 40].lstrip(' ;,.\n')))
+        if tail and tail.start() - end < 40:
+            end = para_end(text, tail.start(), min(nxt, tail.start() + 600))
+        end = min(end, nxt)
         ctx = max(prev_end, g['start'] - MAXCTX)
         body = text[ctx:end].strip()
         if len(body) > MAXBLOCK:
