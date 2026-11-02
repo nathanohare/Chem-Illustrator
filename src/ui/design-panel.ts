@@ -158,7 +158,7 @@ export function pickDesignSize(title: string, current?: SlideSize): Promise<Slid
 }
 
 /** Draws a shape's picture for the library. */
-export function drawGeoIcon(c: HTMLCanvasElement, def: GeoDef, px: number, colour: string): void {
+export function drawGeoIcon(c: HTMLCanvasElement, def: GeoDef, px: number, colour: string, tint = '#7b3fbf'): void {
   const dpr = window.devicePixelRatio || 1;
   c.width = Math.round(px * dpr);
   c.height = Math.round(px * dpr);
@@ -178,8 +178,12 @@ export function drawGeoIcon(c: HTMLCanvasElement, def: GeoDef, px: number, colou
   g.beginPath();
   traceSteps(g, o.body);
   if (!def.outline) {
-    g.fillStyle = 'rgba(123, 63, 191, 0.14)';
+    // a light wash of the mode's accent colour
+    g.save();
+    g.globalAlpha = 0.14;
+    g.fillStyle = tint;
     g.fill();
+    g.restore();
   }
   g.stroke();
   if (o.lines?.length) {
@@ -364,7 +368,10 @@ export class DesignLibrary {
       const text = `${g.name} ${g.group} ${g.keywords ?? ''} ${g.id}`.toLowerCase();
       return words.every((w) => text.includes(w));
     });
-    const colour = getComputedStyle(this.el).getPropertyValue('--tile-ink').trim() || '#222';
+    const css = getComputedStyle(this.el);
+    const colour = css.getPropertyValue('--tile-ink').trim() || '#222';
+    // the accent of the mode showing (Design's purple only in Design)
+    const tint = css.getPropertyValue('--accent').trim() || '#7b3fbf';
     const parts: HTMLElement[] = [];
     for (const group of GEO_GROUPS) {
       const inGroup = found.filter((g) => g.group === group);
@@ -375,10 +382,10 @@ export class DesignLibrary {
       grid.className = 'dl-grid';
       for (const def of inGroup) {
         const c = document.createElement('canvas');
-        drawGeoIcon(c, def, 26, colour);
+        drawGeoIcon(c, def, 26, colour, tint);
         grid.append(this.tile(def.id, def.name, c, () => {
           const large = document.createElement('canvas');
-          drawGeoIcon(large, def, PREVIEW_PX, colour);
+          drawGeoIcon(large, def, PREVIEW_PX, colour, tint);
           return large;
         }));
       }

@@ -379,8 +379,8 @@ const ARROWS: PaletteDef = {
     { name: 'arrow-equilibrium', title: 'Equilibrium arrows' },
     { name: 'arrow-retro', title: 'Retrosynthetic arrow' },
     { name: 'arrow-nogo', title: 'Crossed-out arrow (reaction does not go)' },
-    { name: 'arrow-curved', title: 'Curved arrow (electron pair). Drag from an atom or bond to an atom or bond and it snaps like a mechanism arrow; hold Alt to draw freely' },
-    { name: 'arrow-fishhook', title: 'Curved half-headed arrow (one electron). Snaps between atoms and bonds like the curved arrow; hold Alt to draw freely' },
+    { name: 'arrow-curved', title: 'Curved arrow (electron pair). Drag from an atom or bond to an atom or bond and it snaps like a mechanism arrow; hold Alt or Space to draw freely' },
+    { name: 'arrow-fishhook', title: 'Curved half-headed arrow (one electron). Snaps between atoms and bonds like the curved arrow; hold Alt or Space to draw freely' },
     { name: 'arrow-s', title: 'S-shaped curved arrow (two bends), for electrons that have to go round something. Snaps like the curved arrow; hold Alt to draw freely' },
     { name: 'arrow-s-fishhook', title: 'S-shaped half-headed arrow (one electron, two bends). Snaps like the curved arrow; hold Alt to draw freely' },
   ],
@@ -594,11 +594,11 @@ const HINTS: Record<string, string> = {
   'bond-hapto': 'Drag from a metal into a ring (η⁵, η⁶) or onto a bond (η²), or the other way. Click inside a ring or on a bond for a new metal M there; select an allyl or diene, then click the metal. Click a hapto bond to draw it to each atom.',
   fragment: 'Drag a line across the bonds to break (or click one bond). Each piece gets a caption with its formula and exact mass, which you can edit.',
 };
-const ARROW_HINT = 'Drag to draw an arrow (Alt: any angle); click for a standard one. Drag the ends to move them, the middle to bend it.';
+const ARROW_HINT = 'Drag to draw an arrow (hold Alt or Space: any angle); click for a standard one. Drag the ends to move them, the middle to bend it.';
 const CURVE_HINT = 'Drag from where the electrons start to where they go. They start at a lone pair, bond, radical or charge and go to an atom, a bond, or the gap where a new bond forms; swing out to one side to bend that way. Or click where it starts, click points it goes through, and click where it ends. Ctrl+drag (or the pen) draws it freehand. The arrow sticks to the structure. Drag the middle dot (an S: its diamonds, or its line) to change the curve.';
 const SHAPE_HINT = 'Drag to draw. Drag the corner squares to resize; the Style panel changes dashes, fill, corners and shadow.';
 const BRACKET_HINT = 'Drag a box to put brackets round it, or click a structure to bracket it.';
-const BOND_HINT = 'Click empty space or an atom to draw; drag to aim. Point at an atom or bond and press a hotkey (Edit > Hotkeys lists them).';
+const BOND_HINT = 'Click empty space or an atom to draw; drag to aim (hold Alt or Space: any angle). Point at an atom or bond and press a hotkey (Edit > Hotkeys lists them).';
 const RING_HINT = 'Click empty space, an atom (spiro; Alt+click to attach by a bond) or a bond (fused). Drag to orient.';
 const TEMPLATE_HINT = 'Click empty space to place it (drag to turn it), a bond to fuse it on, or an atom to join it there (Alt: the other way: by a new bond, or sharing the atom).';
 
@@ -2643,7 +2643,7 @@ function reactionStep(dir: 'right' | 'left' | 'down' | 'up'): void {
 
 const OPTION_TEXT = {
   fixedLength: ['Fixed bond lengths on: new bonds are the standard length (hold Alt to drag any length).', 'Fixed bond lengths off: new bonds are as long as you drag them.'],
-  fixedAngles: ['Fixed angles on: new bonds point in 15° steps (hold Alt for any angle).', 'Fixed angles off: new bonds point wherever you drag.'],
+  fixedAngles: ['Fixed angles on: new bonds point in 15° steps (hold Alt or Space for any angle).', 'Fixed angles off: new bonds point wherever you drag.'],
 };
 function toggleOption(key: 'fixedLength' | 'fixedAngles'): void {
   editor.options[key] = !editor.options[key];
@@ -7573,8 +7573,10 @@ function cycleRegion(step: 1 | -1): void {
 }
 
 let altAlone = false;
+/** A mouse button or pen is down: Alt then frees a bond's or an arrow's angle, so letting it go doesn't open the menus. */
+let pointerHeld = false;
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Alt') { altAlone = !e.repeat && !e.ctrlKey && !e.metaKey && !e.shiftKey; if (altAlone) document.body.classList.add('show-mnemonics'); return; }
+  if (e.key === 'Alt') { altAlone = !e.repeat && !e.ctrlKey && !e.metaKey && !e.shiftKey && !pointerHeld; if (altAlone) document.body.classList.add('show-mnemonics'); return; }
   altAlone = false;
   // Ctrl+F6 works from anywhere, a text box too
   const chord = chordOf(e);
@@ -7604,14 +7606,15 @@ window.addEventListener('keyup', (e) => {
   if (e.key !== 'Alt') return;
   const alone = altAlone;
   altAlone = false;
-  if (!alone) { if (!inMenuBar()) document.body.classList.remove('show-mnemonics'); return; }
+  if (!alone || pointerHeld) { if (!inMenuBar()) document.body.classList.remove('show-mnemonics'); return; }
   if (isTyping(e.target) || (e.target as HTMLElement | null)?.closest?.('dialog')) { document.body.classList.remove('show-mnemonics'); return; }
   e.preventDefault();
   if (inMenuBar() || openMenu) leaveMenuBar();
   else enterMenuBar();
 });
-window.addEventListener('pointerdown', () => { altAlone = false; }, true);
-window.addEventListener('blur', () => { altAlone = false; document.body.classList.remove('show-mnemonics'); });
+window.addEventListener('pointerdown', () => { altAlone = false; pointerHeld = true; }, true);
+for (const type of ['pointerup', 'pointercancel'] as const) window.addEventListener(type, () => { pointerHeld = false; }, true);
+window.addEventListener('blur', () => { altAlone = false; pointerHeld = false; document.body.classList.remove('show-mnemonics'); });
 document.addEventListener('focusin', () => { if (!inMenuBar() && !openMenu) document.body.classList.remove('show-mnemonics'); });
 
 /** The mode the menus serve: drawing a structure for a cell or a document counts as Drawing. */
@@ -10250,6 +10253,30 @@ for (const group of [...TOOL_GROUPS, OFF_BAR]) {
     }
   }
 }
+
+/**
+ * Document and Spreadsheet, with no structure being drawn: one Insert Structure button in place of
+ * the drawing tools (they do nothing until a structure is open). In a sheet the structure goes in
+ * the active cell; in a document, at the caret (or the picked drawing opens). While a structure is
+ * drawn, and in split view, the whole toolbox is back.
+ */
+const structureStart = document.createElement('button');
+structureStart.type = 'button';
+structureStart.id = 'structure-start';
+structureStart.innerHTML = `${ICONS['ring-benzene'] ?? '⬡'}<span>Insert<br>Structure</span>`;
+structureStart.addEventListener('click', () => {
+  const mode = ws.active.mode;
+  if (mode === 'sheet') command('draw-structure');
+  else if (mode === 'document') docMode?.drawWithTool();
+});
+structureStart.addEventListener('pointerenter', () => {
+  const sheet = ws.active.mode === 'sheet';
+  const cell = sheet ? $<HTMLInputElement>('#sh-name').value : '';
+  structureStart.title = sheet ? `Insert Structure: draw a structure in the active cell${cell ? ` (${cell})` : ''}. Double-click a structure to change it` : 'Insert Structure: draw a structure or scheme to put in the text at the caret (or change the picked drawing)';
+});
+structureStart.title = 'Insert Structure';
+structureStart.setAttribute('aria-label', 'Insert Structure');
+$('#dock-left').prepend(structureStart);
 
 /**
  * A tool picked from a toolbox. In Document and Sheet modes, with no drawing open, a drawing

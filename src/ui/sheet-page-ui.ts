@@ -152,6 +152,9 @@ export class SheetPage {
   toggle(which: 'gridlines' | 'headings'): void {
     const on = !this.setup?.[which];
     this.set(which === 'gridlines' ? 'Print gridlines' : 'Print headings', { [which]: on || undefined });
+    // nothing changes on the screen (View Gridlines and View Headings are the screen's), so say what it did
+    const what = which === 'gridlines' ? 'The lines between cells' : 'The row numbers and column letters';
+    this.host.flash(`${what} ${on ? 'will print' : 'won\'t print'} (only on paper and in PDFs: Print Preview shows them).`, 4000);
   }
 
   async printTitles(): Promise<void> {

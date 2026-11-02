@@ -737,7 +737,14 @@ export class SheetMode {
       case 'page-scale': void this.page.scaleWindow(); break;
       case 'print-gridlines': this.page.toggle('gridlines'); break;
       case 'print-headings': this.page.toggle('headings'); break;
-      case 'show-page-breaks': v.showPageBreaks = !v.showPageBreaks; v.refresh(); this.showRibbonState(); break;
+      case 'show-page-breaks': {
+        v.showPageBreaks = !v.showPageBreaks;
+        v.refresh();
+        this.showRibbonState();
+        // an empty sheet has no pages, so no breaks to show yet
+        if (v.showPageBreaks && !v.sheet.usedRange() && !v.sheet.pageSetup?.printArea?.length) this.host.flash('Page breaks show as dashed lines once the sheet has something to print.', 4000);
+        break;
+      }
       case 'insert-page-break': this.page.insertBreak(); break;
       case 'set-print-area': this.page.setPrintArea(false); break;
       case 'clear-print-area': this.page.set('Clear print area', { printArea: undefined }); break;
