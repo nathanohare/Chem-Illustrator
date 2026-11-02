@@ -4,6 +4,7 @@
 // their size and colour. Apply keeps the look for the slides picked; Apply to All uses it on every
 // slide. The lines are written, placed and formatted by the app, like the slide number and footer.
 
+import { withInfo } from './info-tip';
 import type { CiteFormat } from '../document/cite-styles';
 import { shortLabel, type Piece, type Reference } from '../document/references';
 import { REF_FORMS, REF_NUMBERINGS, REF_PLACES, slideRefPieces, type RefForm, type RefLook, type RefNumbering, type RefPlace } from '../deck/slide-refs';
@@ -166,14 +167,14 @@ export function editSlideRefs(input: SlideRefsInput): Promise<SlideRefsResult | 
     const spacer = el('span', 'spacer');
     buttons.append(manage, spacer, cancel, apply, all);
     form.append(
-      el('h2', '', 'References on Slide'),
+      withInfo(el('h2', '', 'References on Slide'), note.textContent ?? ''),
       list,
       row('Write each as', formSel),
       row('Numbers', numSel),
       row('Place', placeSel),
       row('Size (pt)', size, colourBox),
       el('h3', 'slide-refs-sub', 'On the slide'),
-      preview, note, buttons,
+      preview, buttons,
     );
     fillList();
 

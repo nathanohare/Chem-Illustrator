@@ -4,6 +4,7 @@
 // and its PubChem record; Use Template picks its drawing as the tool, to click on a metal (or
 // anywhere) in the drawing. The window stays open beside the drawing while you work.
 
+import { withInfo } from './info-tip';
 import { LIGAND_FAMILIES, bondingType, denticity, familyOf, searchLigands, type Ligand } from '../chem/ligands';
 import { templateById } from '../chem/templates';
 import { templateIcon } from './template-icons';
@@ -92,10 +93,10 @@ export class LigandLibraryWindow {
     this.count = el('span', { className: 'muted' });
     this.useBtn = button('Use Template', 'Pick the ligand\'s drawing as the tool, then click a metal in the drawing to put it on (or click anywhere). Double-click a ligand, or press Enter, to do the same and close this window', () => this.use(false), true);
     d.append(
-      el('div', { className: 'refs-head' }, el('h2', { textContent: 'Ligand Library' }), this.search),
+      el('div', { className: 'refs-head' }, withInfo(el('h2', { textContent: 'Ligand Library' }), 'Each abbreviation also works typed as a label: type dppf, XPhos or salen on a metal\'s bond.'), this.search),
       el('div', { className: 'kb-body lig-body' }, this.families, this.grid, this.details),
       el('div', { className: 'refs-buttons' },
-        el('span', { className: 'muted lig-hint', textContent: 'Each abbreviation also works typed as a label: type dppf, XPhos or salen on a metal\'s bond.' }),
+        el('span', { className: 'lig-hint' }),
         el('span', { className: 'refs-edit' }, this.count, this.useBtn, button('Close', '', () => d.close()))),
     );
     d.addEventListener('close', () => { d.remove(); this.d = null; });

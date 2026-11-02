@@ -162,8 +162,7 @@ export class ModeColoursDialog {
     d.className = 'mode-dialog';
     d.setAttribute('aria-label', 'Mode colors');
     d.innerHTML = `
-      <h2>Mode colors</h2>
-      <p class="muted">Each kind of file has its own color, so you can see at a glance whether you are working on a canvas, a presentation, a spreadsheet, a document or a design.</p>
+      <h2 data-info="Each kind of file has its own color, so you can see at a glance whether you are working on a canvas, a presentation, a spreadsheet, a document or a design.">Mode colors</h2>
       <fieldset class="mc-styles">
         <legend>Use the color for</legend>
         <label class="hk-opt"><input type="radio" name="mc-style" value="accent" /><span>Buttons, highlights and tab icons (the window keeps its usual look)</span></label>

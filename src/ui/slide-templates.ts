@@ -4,6 +4,7 @@
 // structures and pictures stay. New Theme makes a theme of your own from any of them (or from
 // the deck's look); your themes can be changed or deleted here, the ready-made ones copied.
 
+import { foldIntoInfo } from './info-tip';
 import { Doc } from '../model';
 import { Master, SlideSize, LayoutId, layoutFrames, frameFields, textStyles, slideColours } from '../deck/deck';
 import { paintSlide } from '../deck/slide-view';
@@ -30,6 +31,7 @@ export function pickSlideTemplate(m: Master, size: SlideSize, defaultId: string 
     const note = document.createElement('p');
     note.className = 'muted';
     note.textContent = 'A template sets the fonts, colors, background and shapes of every slide. Your text, structures, logo, footer and slide numbers stay as they are, and Slide Master changes any part of the look afterwards.';
+    foldIntoInfo(note, h);
     const tools = document.createElement('div');
     tools.className = 'st-tools';
     const tool = (label: string, title: string, run: () => void) => {

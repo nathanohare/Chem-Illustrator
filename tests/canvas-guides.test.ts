@@ -127,7 +127,7 @@ describe('the toolbox', () => {
     // no separate unit, no "None", and the help is behind an "i"
     expect([...body.querySelectorAll('.gt-seg')].map((b) => b.textContent)).toEqual(['Major', 'Minor', 'Both']);
     expect(body.textContent).not.toContain('Drag a guide');
-    expect(body.querySelector('.gt-info')!.getAttribute('title')).toContain('Drag a guide');
+    expect(body.querySelector('.gt-info')!.getAttribute('data-tip')).toContain('Drag a guide');
     // one checkbox, above the snap choices, turns snapping on and off
     const check = body.querySelector<HTMLElement>('.gt-check')!;
     expect(check.textContent).toBe('Toggle object snapping');

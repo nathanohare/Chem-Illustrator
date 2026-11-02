@@ -3,6 +3,7 @@
 // say how what is on the slides fits the new size: as it is, centred; as big as fits (Ensure Fit);
 // or as big as the slide allows (Maximize).
 
+import { foldIntoInfo } from './info-tip';
 import type { SlideSize, SizeFit } from '../deck/deck';
 
 /** The usual slide sizes, in points (PowerPoint's own list, from its published page sizes). */
@@ -74,6 +75,7 @@ export function pickSlideSize(now: SlideSize): Promise<SlideSizeChoice | null> {
     const note = document.createElement('p');
     note.className = 'muted';
     note.textContent = 'Placeholders always move to their layouts\' places. Sizes from 1 to 56 inches, as in PowerPoint.';
+    foldIntoInfo(note, h);
     form.append(note);
 
     // the size in points as typed

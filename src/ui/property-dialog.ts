@@ -75,8 +75,7 @@ export function askProperties(opts: PropertyDialogOptions): Promise<PropertyAnsw
     d.setAttribute('aria-label', 'Insert property columns');
     const form = document.createElement('form');
     form.method = 'dialog';
-    form.innerHTML = `<h2>Insert property columns</h2>
-      <p class="muted">Each property gets a column that works itself out from the structure in the same row, and updates when the structure changes. Type over any value to replace it; Reset to Calculated puts it back.</p>
+    form.innerHTML = `<h2 data-info="Each property gets a column that works itself out from the structure in the same row, and updates when the structure changes. Type over any value to replace it; Reset to Calculated puts it back.">Insert property columns</h2>
       <label class="ask-row"><span>Structures in</span><select name="col"></select></label>
       <div class="prop-list" role="group" aria-label="Properties"></div>
       <section class="hm-section" aria-label="Hammett constants" hidden>

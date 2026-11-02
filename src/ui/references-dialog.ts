@@ -10,6 +10,7 @@
 // bibliography's text for it typed over, with Reset to go back to the automatic text), and
 // References > Insert Citation's list to choose references from.
 
+import { withInfo } from './info-tip';
 import type { DocText } from '../document/document';
 import { CITE_PRESETS, changedOptions, citeFormat, preferredStyle, setPreferredStyle, type CiteFormat } from '../document/cite-styles';
 import {
@@ -206,8 +207,7 @@ export function chooseReferences(t: DocText, chosen: string[], manage: () => Pro
     const ok = el('button', { type: 'submit', className: 'primary', textContent: 'Insert' });
     ok.disabled = !ticked.length;
     const form = el('form', {},
-      el('h2', { textContent: 'Insert Citation' }),
-      el('p', { className: 'muted', textContent: 'Check one or more references: they make one citation (3,5–7). References are numbered in order of first citation, and the numbers change by themselves when text moves. The number shown is the one each has now.' }),
+      withInfo(el('h2', { textContent: 'Insert Citation' }), 'Check one or more references: they make one citation (3,5–7). References are numbered in order of first citation, and the numbers change by themselves when text moves. The number shown is the one each has now.'),
       search, list, empty,
       el('p', { className: 'ask-buttons' },
         button('Manage References…', 'Add, edit or import references', async () => {
@@ -339,10 +339,9 @@ export function editCiteStyle(style: string, options: Partial<CiteFormat>): Prom
     const reset = button('Reset', 'Put every detail back as the style has it', () => { f = citeFormat(cur, {}); show(); });
     const forNew = el('input', { type: 'checkbox' });
     d.append(
-      el('h2', { textContent: 'Reference style' }),
+      withInfo(el('h2', { textContent: 'Reference style' }), 'Change any detail below; the preview shows real references as they will print. Choosing another style starts from that style\'s own details.'),
       el('label', { className: 'ask-row refs-style' }, el('span', { textContent: 'Style' }), pick),
       source,
-      el('p', { className: 'muted', textContent: 'Change any detail below; the preview shows real references as they will print. Choosing another style starts from that style\'s own details.' }),
       el('div', { className: 'cite-groups' }, ...groups),
       el('h3', { textContent: 'Preview' }),
       preview,
@@ -568,8 +567,7 @@ export class ReferencesDialog {
       this.copyInto(tr.dataset.group, this.pickedRefs());
     });
     d.append(
-      el('div', { className: 'refs-head' }, el('h2', { textContent: 'References' }), this.search),
-      el('p', { className: 'muted', textContent: 'Your library (kept between sessions, with collections, tags and PDFs) and the references of every open file, each in its own group. A document cites them (References > Insert Citation); a presentation shows them at the foot of its slides (Insert > Presentation > References on Slide). Copy references between your library and files with Copy To, by dragging them onto a group\'s name, or with Ctrl+C and Ctrl+V: each file keeps its own copy.' }),
+      el('div', { className: 'refs-head' }, withInfo(el('h2', { textContent: 'References' }), 'Your library (kept between sessions, with collections, tags and PDFs) and the references of every open file, each in its own group. A document cites them (References > Insert Citation); a presentation shows them at the foot of its slides (Insert > Presentation > References on Slide). Copy references between your library and files with Copy To, by dragging them onto a group\'s name, or with Ctrl+C and Ctrl+V: each file keeps its own copy.'), this.search),
       this.hint,
       el('div', { className: 'ask-row refs-style' }, el('label', { htmlFor: 'refs-style', textContent: 'Citation style' }), this.styleSel,
         button('Style Options…', 'Change any detail of the style: authors, "and", et al., title, year, volume, issue, article numbers, DOI…', () => void this.styleOptions())),
@@ -904,8 +902,7 @@ export class ReferencesDialog {
       area.setAttribute('autofocus', '');
       area.spellcheck = false;
       const form = el('form', {},
-        el('h2', { textContent: 'Paste BibTeX or RIS' }),
-        el('p', { className: 'muted', textContent: 'Paste references copied from Zotero, EndNote, Mendeley, Google Scholar or a journal\'s "Export citation" (BibTeX or RIS). References already in the list are not added again.' }),
+        withInfo(el('h2', { textContent: 'Paste BibTeX or RIS' }), 'Paste references copied from Zotero, EndNote, Mendeley, Google Scholar or a journal\'s "Export citation" (BibTeX or RIS). References already in the list are not added again.'),
         area,
         el('p', { className: 'ask-buttons' }, button('Cancel', '', () => done(null)), el('button', { type: 'submit', className: 'primary', textContent: 'Import' })));
       form.addEventListener('submit', (e) => { e.preventDefault(); done(area.value); });

@@ -21,8 +21,7 @@ export function askCleanUpOption(labels: string[], preview: (k: number, turn: nu
     d.setAttribute('aria-label', 'Clean Up options');
     const form = document.createElement('form');
     form.method = 'dialog';
-    form.innerHTML = `<h2>Clean Up Options</h2>
-      <p class="muted small">Pick a layout. Turn or flip them all first if you like; flipping keeps the molecule the same (its wedges turn over).</p>
+    form.innerHTML = `<h2 data-info="Pick a layout. Turn or flip them all first if you like; flipping keeps the molecule the same (its wedges turn over).">Clean Up Options</h2>
       <div class="cleanup-picks" role="radiogroup" aria-label="Layouts"></div>
       <div class="cleanup-turns">
         <button type="button" data-turn="15" title="Rotate 15° counterclockwise">⟲ 15°</button>

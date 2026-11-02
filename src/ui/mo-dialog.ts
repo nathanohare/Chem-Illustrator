@@ -3,6 +3,7 @@
 // and for a molecular orbital the atomic orbitals it is made from. Starts from a preset (H₂, N₂,
 // O₂, CO, ethylene π) and previews as you type.
 
+import { foldIntoInfo } from './info-tip';
 import { MO_PRESETS, type MoColumn, type MoLevel, type MoSpec } from '../design/mo';
 import { newPlate, type PlateData } from '../design/plates';
 
@@ -20,12 +21,13 @@ export function askMo(editing: PlateData | null, L: number, preview?: (d: PlateD
       <canvas class="plate-preview" aria-label="Preview" role="img"></canvas>
       <div class="plate-table-wrap"><table class="plate-table mo-table"><thead><tr><th>Column</th><th>Name</th><th title="Sets the order and spacing only">Energy</th><th title="Degenerate orbitals at this level">Orbitals</th><th>Electrons</th><th title="A molecular orbital: the atomic orbitals it is made from, by name, joined to it by dashed lines">Made from</th><th></th></tr></thead><tbody></tbody></table></div>
       <p class="plate-rows"><button type="button" data-act="row">+ Orbital</button></p>
-      <p class="muted small">Electrons go in by Hund's rule: one in each orbital of a level, then pairs. Energies only set the order and spacing. Names take _ and ^ for sub- and superscripts (σ_{2s}, π^*).</p>
+      <p class="muted small mo-help">Electrons go in by Hund's rule: one in each orbital of a level, then pairs. Energies only set the order and spacing. Names take _ and ^ for sub- and superscripts (σ_{2s}, π^*).</p>
       <label class="ask-row"><span>Titles</span><span class="mo-titles"><input name="t0" aria-label="Left title" /><input name="t1" aria-label="Middle title" /><input name="t2" aria-label="Right title" /></span></label>
       <label class="ask-row"><span>Size</span><span class="energy-pair"><input name="w" type="number" min="40" step="any" aria-label="Width" /> × <input name="h" type="number" min="40" step="any" aria-label="Height" /> pt</span></label>
       <label class="ask-row ask-check"><input name="axis" type="checkbox" /><span>Energy arrow up the left side</span></label>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">${editing ? 'Redraw' : 'Insert'}</button></p>`;
     const $ = <T extends Element>(q: string) => form.querySelector<T>(q)!;
+    foldIntoInfo($('.mo-help'), $('h2'));
     const body = $<HTMLTableElement>('.mo-table').tBodies[0];
     const num = (t: string, dflt: number) => { const v = parseFloat(t.replace(/[−–]/g, '-').replace(',', '.')); return Number.isFinite(v) ? v : dflt; };
     const read = () => {

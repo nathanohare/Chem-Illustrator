@@ -3,6 +3,7 @@
 // bond (label, charge, atom number; order and style).
 // Anything the drawing tools set automatically can be changed here by hand.
 
+import { addInfo, setInfo } from './info-tip';
 import { Doc, Arrow, Shape, Caption, Atom, Bond, PICTURE_STYLES, turnsFreely, type PictureLook, type StepRoles, type Pattern, type AttachSide, type Attachment, type DescriptorKey, type HighlightEnds, type HighlightFill, type HighlightLine, type HighlightShape, type HighlightSoftSide, type HighlightStyle } from '../model';
 import { fullStyle, tidyStyle } from '../render/highlight';
 import type { HighlightLookPreset } from './highlight-looks';
@@ -161,6 +162,7 @@ export class StylePanel {
     const focused = this.body.contains(document.activeElement) ? document.activeElement!.closest('.style-row')?.textContent : null;
     this.body.textContent = '';
     this.titled = false;
+    for (const i of this.section.querySelectorAll(':scope > h2 > .style-help')) i.remove();
     this.subtitle('');
     const arrows = [...s.arrows].map((id) => this.doc.arrows.get(id)).filter((x): x is Arrow => !!x);
     const all = [...s.shapes].map((id) => this.doc.shapes.get(id)).filter((x): x is Shape => !!x && !x.picture);
@@ -345,7 +347,7 @@ export class StylePanel {
     if (hooks.others()) {
       const opts: Opt<string>[] = [['', 'Choose…'], ['reactants', 'Starting materials'], ['products', 'Products'], ['above', 'Above the arrow'], ['below', 'Below the arrow'], ['none', 'Not part of this step']];
       this.select('Set Selection As', opts, '', (v) => { if (v) hooks.setRole(r.id, v as Role | 'none'); },);
-    } else this.note('To change a role by hand, select the arrow and the things with Shift, then choose what they are here.');
+    } else this.help('To change a role by hand, select the arrow and the things with Shift, then choose what they are here.');
     const buttons = document.createElement('div');
     buttons.className = 'style-buttons';
     const button = (text: string, title: string, on: () => void) => {
@@ -482,7 +484,8 @@ export class StylePanel {
     this.check('Mark the overall change', !!d.overall, (v) => set({ overall: v }), 'A double arrow from the first species to the last, on each pathway');
     this.number('Decimal places', d.digits, 1, 0, 3, (v) => set({ digits: v }));
     const n = Math.max(...d.paths.map((p) => p.points.length));
-    this.note(`${d.paths.length === 1 ? 'One pathway' : `${d.paths.length} pathways`} through ${n} species. Change the names and energies in the window; drag a corner to resize it. Anything you draw inside stays when it is redrawn.`);
+    this.note(`${d.paths.length === 1 ? 'One pathway' : `${d.paths.length} pathways`} through ${n} species.`);
+    this.help('Change the names and energies in the window; drag a corner to resize it. Anything you draw inside stays when it is redrawn.');
     const row = document.createElement('div');
     row.className = 'style-buttons';
     const b = document.createElement('button');
@@ -500,7 +503,7 @@ export class StylePanel {
     if (d.kind === 'mo') {
       this.heading('MO diagram');
       if (d.mo) this.check('Energy arrow', d.mo.axis, (v) => this.plate?.restyle(sh.id, { mo: { ...d.mo!, axis: v } }));
-      this.note('Change the orbitals, energies and electrons in the window; drag a corner to resize it.');
+      this.help('Change the orbitals, energies and electrons in the window; drag a corner to resize it.');
       const row = document.createElement('div');
       row.className = 'style-buttons';
       const b = document.createElement('button');
@@ -522,7 +525,7 @@ export class StylePanel {
         this.check('Color', c.view.colour, (v) => view({ colour: v }));
         this.check('Atom labels', c.view.labels, (v) => view({ labels: v }));
       }
-      this.note('Turn it, change the ellipsoids or see the crystal data in the window; drag a corner to resize it.');
+      this.help('Turn it, change the ellipsoids or see the crystal data in the window; drag a corner to resize it.');
       const row = document.createElement('div');
       row.className = 'style-buttons';
       const b = document.createElement('button');
@@ -543,7 +546,8 @@ export class StylePanel {
     if (tlc) this.check('Start and solvent-front lines', d.lines, (v) => set({ lines: v }));
     if (!tlc) this.check('Write the marker sizes', d.sizes, (v) => set({ sizes: v }));
     this.check('Lane names', d.labels, (v) => set({ labels: v }));
-    this.note(`${d.lanes.length} lane${d.lanes.length === 1 ? '' : 's'}. Change the ${tlc ? 'spots' : 'bands'} in the window; drag a corner to resize it.`);
+    this.note(`${d.lanes.length} lane${d.lanes.length === 1 ? '' : 's'}.`);
+    this.help(`Change the ${tlc ? 'spots' : 'bands'} in the window; drag a corner to resize it.`);
     const row = document.createElement('div');
     row.className = 'style-buttons';
     const b = document.createElement('button');
@@ -569,7 +573,7 @@ export class StylePanel {
     this.check('Shadow', d.shadow, (v) => set({ shadow: v }));
     this.check('AutoFit Text', d.size === undefined, (v) => set({ size: v ? undefined : 14 }), 'The text as big as fits, the same size in every shape; off, a size of your own');
     if (d.size !== undefined) this.number('Text size', d.size, 1, 4, 96, (v) => set({ size: v }));
-    this.note('Double-click a shape to type in it, or change all the text in the window. Drag a corner to resize it: it is drawn again to fill the box.');
+    this.help('Double-click a shape to type in it, or change all the text in the window. Drag a corner to resize it: it is drawn again to fill the box.');
     const row = document.createElement('div');
     row.className = 'style-buttons';
     const b = document.createElement('button');
@@ -645,9 +649,9 @@ export class StylePanel {
     if (pics.every((x) => x.math)) { this.equationControls(pics); return; }
     this.heading(charts ? (pics.length > 1 ? `${pics.length} charts` : 'Chart') : pics.length > 1 ? `${pics.length} pictures` : 'Picture');
     // vector pictures (SVG, Windows metafiles) have no pixels to count
-    if (charts) this.note('A chart with its own data. Double-click it to change the data, the kind of chart and its look; resizing it lays it out again.');
+    if (charts) this.help('A chart with its own data. Double-click it to change the data, the kind of chart and its look; resizing it lays it out again.');
     else if (pics.every((x) => x.zoom)) {
-      this.note('A Slide Zoom: in the slide show a click zooms into its slide. Its picture follows the slide.');
+      this.help('A Slide Zoom: in the slide show a click zooms into its slide. Its picture follows the slide.');
       this.check('Return to Zoom', !!p.zoom?.back, (v) => set('Return to Zoom', (x) => ({ zoom: { ...x.zoom, back: v || undefined } })), 'After its slide (or its part of a Summary Zoom), the show comes back to this slide');
     } else if (pics.length === 1 && p.video) {
       const v = p.video;
@@ -723,7 +727,7 @@ export class StylePanel {
   private equationControls(maths: Shape[]): void {
     const p = maths[0];
     this.heading(maths.length > 1 ? `${maths.length} equations` : 'Equation');
-    this.note('Double-click it to change it in the equation window. Drag a corner to make it larger or smaller. PowerPoint opens it as its own equation.');
+    this.help('Double-click it to change it in the equation window. Drag a corner to make it larger or smaller. PowerPoint opens it as its own equation.');
     this.color('Color', p.math!.color ?? '#000000', (v) => this.onEquationColour(maths.map((x) => x.id), v ?? '#000000'));
     if (maths.length === 1) {
       const buttons = document.createElement('div');
@@ -886,9 +890,9 @@ export class StylePanel {
     if (caps.length !== 1) return;
     const r = captionReading(this.doc, caps[0]);
     if (r.species) this.note(`Chemistry: ${speciesSummary(r.species)}. It counts in the formula, mass and SMILES of what it is selected with.`);
-    else if (r.why === 'arrow') this.note('Text above or below a reaction arrow stays text. Choose Chemical to count it.');
+    else if (r.why === 'arrow') this.help('Text above or below a reaction arrow stays text. Choose Chemical to count it.');
     else if (r.why === 'unread' && r.forced) this.note('Set to Chemical, but this text can\'t be read as chemistry.');
-    else if (r.why === 'tied') this.note('Text tied to a structure stays text.');
+    else if (r.why === 'tied') this.help('Text tied to a structure stays text.');
   }
 
   /** Where a caption tied to a structure sits, what descriptors it shows; tie or untie it. */
@@ -957,7 +961,7 @@ export class StylePanel {
       const note = document.createElement('p');
       note.className = 'muted';
       note.textContent = 'Where a metal\'s hapto bond ends. It stays in the middle of its atoms; delete it to remove the bond.';
-      this.body.appendChild(note);
+      this.help(note.textContent);
       return;
     }
     if (a.attach) {
@@ -1091,7 +1095,7 @@ export class StylePanel {
         this.color('Line color', st.lineColour || undefined, (v) => set('Highlight outline color', { lineColour: v ?? '' }), 'A darker shade', '#808080');
         this.number('Line width (pt)', st.lineWidth, 0.25, 0.25, 10, (v) => set('Highlight outline width', { lineWidth: v }));
       }
-      if (st.fill !== 'none') this.note('For an outline on its own, set Fill to None (Chemistry > Highlight and Fill > Outline-Only Highlight).');
+      if (st.fill !== 'none') this.help('For an outline on its own, set Fill to None (Chemistry > Highlight and Fill > Outline-Only Highlight).');
     });
 
     this.group('Soft edges', st.soft ? `${pct(st.softAmount)}%, ${HL_SOFT_SIDES.find(([v]) => v === st.softSide)![1].split(' (')[0].toLowerCase()}` : 'off', () => {
@@ -1229,6 +1233,21 @@ export class StylePanel {
       this.text('Label text', l?.manual ? l.text : '', auto ? `(${auto}), worked out` : 'worked out', (v) => this.edit('Stereo label text', () => setStereoText(this.doc, a ? 'a' : 'b', a ? a.id : b.id, v, arialWidth)),
         'Type your own label (for example (R*) or rel-(S)); leave empty to show the worked-out one.');
     }
+  }
+
+  /**
+   * How to use what is selected, in an "i" beside the last heading (the section title for the
+   * first thing styled): help never gets a line of its own.
+   */
+  private help(text: string): void {
+    const hs = this.body.querySelectorAll<HTMLElement>(':scope > h3');
+    const at = hs.length ? hs[hs.length - 1] : this.section.querySelector<HTMLElement>(':scope > h2');
+    if (at?.querySelector(':scope > .info-icon')) {
+      const i = at.querySelector<HTMLElement>(':scope > .info-icon')!;
+      setInfo(i, `${i.dataset.tip ?? ''} ${text}`.trim());
+      return;
+    }
+    if (!addInfo(at, text, 'style-help')) this.note(text);
   }
 
   private note(text: string): void {
