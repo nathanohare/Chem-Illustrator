@@ -55,6 +55,11 @@ export interface Template {
    * turned, only flipped left to right to face the other way.
    */
   upright?: boolean;
+  /**
+   * Attachment points (a group's pictures in the Knowledge Base): these atoms are not drawn, and a
+   * wavy line crosses the bond to each one where the group joins the rest of a molecule.
+   */
+  stubs?: number[];
 }
 
 export type TemplateHapto = [number, number[], BondDisplay?];

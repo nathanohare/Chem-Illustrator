@@ -1860,10 +1860,12 @@ dialog.kb-window { position: fixed; inset: 56px 0 auto 0; margin: 0 auto; z-inde
 .kb-table td:first-child { white-space: nowrap; }
 .kb-table td.cas { white-space: nowrap; }
 .kb-table th.num, .kb-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.kb-table.kb-pictures td { vertical-align: middle; }
+.kb-table td.kb-pic { padding: 1px 4px; width: 48px; min-width: 48px; color: var(--text); }
+.kb-table td.kb-pic svg { display: block; }
+.kb-table th.kb-pic { cursor: default; }
 .kb-table th.narrow, .kb-table td.narrow { width: 1%; white-space: nowrap; }
 .kb-table td.prose { min-width: 26ch; max-width: 46ch; white-space: normal; line-height: 1.35; }
-.kb-table td.kb-excerpt { max-width: 80ch; min-width: 40ch; white-space: normal; line-height: 1.35; }
-.kb-table td.kb-excerpt mark { background: color-mix(in srgb, var(--accent) 28%, transparent); color: inherit; padding: 0 1px; border-radius: 2px; }
 .kb-window abbr[title] { text-decoration: underline dotted var(--muted); text-underline-offset: 2px; cursor: help; }
 .kb-empty { padding: 12px; margin: 0; }
 /* Chemistry > Metals > Ligand Library: families on the left, the ligands' drawings, the one picked on the right */

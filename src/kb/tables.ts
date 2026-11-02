@@ -4,6 +4,8 @@
 // how a stray NMR peak is looked up. Columns of a few repeated values (Solvent, Nucleus) can be
 // filtered to one value.
 
+import type { Template } from '../chem/templates';
+
 export type Cell = string | number | null;
 
 export interface KbColumn {
@@ -19,18 +21,17 @@ export interface KbColumn {
   narrow?: boolean;
   /** A column of sentences: given more room. */
   prose?: boolean;
-  /** Searched but not shown or copied (a PDF page's whole text). */
+  /** Searched but not shown or copied (SMILES, a CAS number kept for searching). */
   hidden?: boolean;
-  /** Shows a short excerpt of another column around the words searched for. */
-  excerptOf?: string;
+  /** What the column's scale or class means and where it comes from, behind an "i" by its heading. */
+  info?: string;
+  /** A picture of the row's structure (the table's `picture`), not text. */
+  picture?: boolean;
 }
 
 export interface KbSource {
   label: string;
   url?: string;
-  /** A file on this computer (one of your PDFs), and the page to open it at. */
-  path?: string;
-  page?: number;
 }
 
 export interface KbTable {
@@ -47,8 +48,8 @@ export interface KbTable {
   links?: (row: Record<string, Cell>) => KbSource[];
   /** Its rows' SMILES are RDKit's canonical form already (no need to work them out to compare). */
   canonicalSmiles?: boolean;
-  /** One of your PDFs, a row a page: where the file is, when known. */
-  pdf?: { path?: string };
+  /** The drawing shown in a `picture` column (a Hammett group with its attachment point). */
+  picture?: (row: Record<string, Cell>) => Template | null;
 }
 
 /** The filter value meaning "has something in this column". */
@@ -85,7 +86,7 @@ export function cellShiftRanges(c: Cell): [number, number][] {
 
 const ROW_TEXT = new WeakMap<Record<string, Cell>, string>();
 
-/** A row's text for searching: every cell, lower case (kept, since a PDF's pages are long). */
+/** A row's text for searching: every cell, lower case (kept, so a long table searches quickly). */
 /** Rows whose SMILES is already RDKit's canonical form (the big tables, made so when built). */
 export const CANONICAL_ROWS = new WeakSet<Record<string, Cell>>();
 
@@ -179,34 +180,10 @@ export function sortRows(rows: RowMatch[], col: KbColumn, down: boolean): RowMat
 }
 
 /** The rows as tab-separated text with a header line: to paste into a sheet, a Word table or Excel. */
-export function tableTsv(t: KbTable, rows: RowMatch[], query = ''): string {
-  const cols = t.columns.filter((c) => !c.hidden);
+export function tableTsv(t: KbTable, rows: RowMatch[]): string {
+  const cols = t.columns.filter((c) => !c.hidden && !c.picture);
   const clean = (v: Cell) => (v === null || v === undefined ? '' : String(v).replace(/[\t\n]+/g, ' '));
-  return [cols.map((c) => c.label).join('\t'), ...rows.map((m) => cols.map((c) => clean(cellShown(m.row, c, query))).join('\t'))].join('\n');
-}
-
-/** What a column shows for a row: its value, or an excerpt of another column around the search. */
-export function cellShown(row: Record<string, Cell>, c: KbColumn, query = ''): Cell {
-  if (!c.excerptOf) return row[c.key] ?? null;
-  const v = row[c.excerptOf];
-  return v === null || v === undefined ? null : excerpt(String(v), query);
-}
-
-/** About `size` characters around the first place a word of the search is found. */
-export function excerpt(text: string, query: string, size = 240): string {
-  const low = text.toLowerCase();
-  let at = -1;
-  for (const w of query.toLowerCase().split(/\s+/).filter(Boolean)) {
-    const i = low.indexOf(w);
-    if (i >= 0 && (at < 0 || i < at)) at = i;
-  }
-  if (at < 0) return text.length > size ? text.slice(0, size).trimEnd() + '…' : text;
-  let start = Math.max(0, at - Math.floor(size / 3));
-  // start and end on whole words
-  if (start > 0 && text[start - 1] !== ' ') { const sp = text.indexOf(' ', start); if (sp >= 0 && sp < at) start = sp + 1; }
-  let end = Math.min(text.length, start + size);
-  if (end < text.length) { const sp = text.lastIndexOf(' ', end); if (sp > at) end = sp; }
-  return (start > 0 ? '…' : '') + text.slice(start, end).trim() + (end < text.length ? '…' : '');
+  return [cols.map((c) => c.label).join('\t'), ...rows.map((m) => cols.map((c) => clean(m.row[c.key])).join('\t'))].join('\n');
 }
 
 /**
