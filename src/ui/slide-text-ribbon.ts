@@ -65,14 +65,14 @@ export class SlideTextRibbon {
 
   constructor(private root: HTMLElement, private hooks: SlideTextHooks) {
     const q = <T extends HTMLElement>(s: string) => root.querySelector<T>(s)!;
-    this.font = q('#sl-font');
-    this.size = q('#sl-size');
-    this.colour = q('#sl-colour');
-    this.line = q('#sl-line');
-    this.spacing = q('#sl-spacing');
-    this.dir = q('#sl-dir');
-    this.cols = q('#sl-cols');
-    this.fit = q('#sl-fit');
+    this.font = q('[data-tx="font"]');
+    this.size = q('[data-tx="size"]');
+    this.colour = q('[data-tx="colour"]');
+    this.line = q('[data-tx="line"]');
+    this.spacing = q('[data-tx="spacing"]');
+    this.dir = q('[data-tx="dir"]');
+    this.cols = q('[data-tx="cols"]');
+    this.fit = q('[data-tx="fit"]');
     const run = (f: TextFormat) => {
       if (!hooks.format(f)) hooks.nothing();
       hooks.refocus();
@@ -103,7 +103,7 @@ export class SlideTextRibbon {
     });
     this.colour.addEventListener('change', () => run({ kind: 'style', patch: { color: this.colour.value.toLowerCase() === '#000000' ? undefined : this.colour.value } }));
     this.line.addEventListener('change', () => { const v = parseFloat(this.line.value); if (v > 0) run({ kind: 'line', v }); });
-    const kase = q<HTMLSelectElement>('#sl-case');
+    const kase = q<HTMLSelectElement>('[data-tx="case"]');
     kase.addEventListener('change', () => { const mode = kase.value as rt.CaseMode; kase.value = ''; if (mode) run({ kind: 'case', mode }); });
     this.spacing.addEventListener('change', async () => {
       let v = this.spacing.value;

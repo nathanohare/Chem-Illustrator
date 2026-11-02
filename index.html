@@ -2169,12 +2169,12 @@
         <div class="rb-row">
           <div class="rb-col">
             <div class="rb-pair">
-              <input id="sl-font" class="rb-text rb-font" list="ci-fonts" spellcheck="false" aria-label="Font" title="Font of the selected text, or of the whole of each picked text box (type any installed font)" />
-              <input id="sl-size" class="rb-text rb-num" list="sl-size-list" spellcheck="false" aria-label="Font size" title="Font size in points" />
+              <input data-tx="font" class="rb-text rb-font" list="ci-fonts" spellcheck="false" aria-label="Font" title="Font of the selected text, or of the whole of each picked text box (type any installed font)" />
+              <input data-tx="size" class="rb-text rb-num" list="sl-size-list" spellcheck="false" aria-label="Font size" title="Font size in points" />
               <datalist id="sl-size-list"><option>8</option><option>9</option><option>10</option><option>10.5</option><option>11</option><option>12</option><option>14</option><option>16</option><option>18</option><option>20</option><option>24</option><option>28</option><option>32</option><option>36</option><option>40</option><option>44</option><option>48</option><option>54</option><option>60</option><option>66</option><option>72</option><option>80</option><option>88</option><option>96</option></datalist>
               <button class="rb-sq" data-sl-fmt="grow" title="Increase font size">A<sup>+</sup></button>
               <button class="rb-sq" data-sl-fmt="shrink" title="Decrease font size">A<sup>−</sup></button>
-              <select id="sl-case" title="Change Case" aria-label="Change Case">
+              <select data-tx="case" title="Change Case" aria-label="Change Case">
                 <option value="" hidden selected>Aa</option><option value="sentence">Sentence case.</option><option value="lower">lowercase</option><option value="upper">UPPERCASE</option><option value="title">Capitalize Each Word</option><option value="toggle">tOGGLE cASE</option>
               </select>
               <button class="rb-sq" data-sl-fmt="clear" title="Clear All Formatting: back to plain text in the box's own font and size">A<sub>⌫</sub></button>
@@ -2187,10 +2187,10 @@
               <button class="rb-sq" data-sl-fmt="sup" aria-pressed="false" title="Superscript (Ctrl+Shift+=)">x<sup>2</sup></button>
               <button class="rb-sq" data-sl-fmt="strike" aria-pressed="false" title="Strikethrough"><s>abc</s></button>
               <button class="rb-sq" data-sl-fmt="formula" aria-pressed="false" title="Formula style: numbers lowered (CH₂Cl₂), charges raised">C₉H₈</button>
-              <select id="sl-spacing" title="Character spacing" aria-label="Character spacing">
+              <select data-tx="spacing" title="Character spacing" aria-label="Character spacing">
                 <option value="-3">Very Tight</option><option value="-1.5">Tight</option><option value="0">Normal</option><option value="3">Loose</option><option value="6">Very Loose</option><option value="more">More Spacing…</option><option value="" hidden>Other</option>
               </select>
-              <label class="rb-sq rb-colour" title="Text colour"><span>A</span><input id="sl-colour" type="color" aria-label="Text colour" /></label>
+              <label class="rb-sq rb-colour" title="Text colour"><span>A</span><input data-tx="colour" type="color" aria-label="Text colour" /></label>
             </div>
           </div>
         </div>
@@ -2204,7 +2204,7 @@
               <button class="rb-sq" data-sl-fmt="numbering" aria-pressed="false" title="Numbering">1. ≡</button>
               <button class="rb-sq" data-sl-fmt="outdent" title="Decrease list level (Shift+Tab)">⇤</button>
               <button class="rb-sq" data-sl-fmt="indent" title="Increase list level (Tab)">⇥</button>
-              <select id="sl-line" title="Line spacing" aria-label="Line spacing">
+              <select data-tx="line" title="Line spacing" aria-label="Line spacing">
                 <option value="1">1.0</option><option value="1.15">1.15</option><option value="1.5">1.5</option><option value="2">2.0</option><option value="2.5">2.5</option><option value="3">3.0</option><option value="" hidden>Other</option>
               </select>
             </div>
@@ -2213,13 +2213,13 @@
               <button class="rb-sq" data-sl-fmt="align-center" aria-pressed="false" title="Centre">Centre</button>
               <button class="rb-sq" data-sl-fmt="align-right" aria-pressed="false" title="Align right">Right</button>
               <button class="rb-sq" data-sl-fmt="justify" aria-pressed="false" title="Justify (both edges straight)">Justify</button>
-              <select id="sl-dir" title="Text Direction (of each picked text box)" aria-label="Text direction">
+              <select data-tx="dir" title="Text Direction (of each picked text box)" aria-label="Text direction">
                 <option value="horz">Horizontal</option><option value="vert">Rotate all text 90°</option><option value="vert270">Rotate all text 270°</option>
               </select>
-              <select id="sl-cols" title="Columns in the text box" aria-label="Columns">
+              <select data-tx="cols" title="Columns in the text box" aria-label="Columns">
                 <option value="1">1 column</option><option value="2">2 columns</option><option value="3">3 columns</option><option value="more">More Columns…</option><option value="" hidden>Other</option>
               </select>
-              <select id="sl-fit" title="AutoFit: what happens when the text is longer than its box" aria-label="AutoFit">
+              <select data-tx="fit" title="AutoFit: what happens when the text is longer than its box" aria-label="AutoFit">
                 <option value="grow">Resize shape to fit text</option><option value="shrink">Shrink text on overflow</option><option value="fixed">Do not Autofit</option>
               </select>
             </div>
@@ -2633,55 +2633,60 @@
       <button role="tab" data-dz-tab="home" aria-selected="true">Home</button>
       <button role="tab" data-dz-tab="insert" aria-selected="false">Insert</button>
       <button role="tab" data-dz-tab="page" aria-selected="false">Page</button>
+      <button role="tab" data-dz-tab="format" aria-selected="false" class="rb-ctx-tab" hidden title="Shows while a shape or picture is selected">Shape Format</button>
     </div>
     <div class="rb-panel" data-dz-panel="home">
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="paste" title="Paste a structure, a picture or text"><span class="rb-icon">⎘</span>Paste</button>
-          <div class="rb-col">
-            <button data-cmd="cut" title="Cut">Cut</button>
-            <button data-cmd="copy" title="Copy">Copy</button>
-            <button data-cmd="format-painter" aria-pressed="false" title="Format Painter: copy the look of what is selected to the next thing you click or drag over. Double-click to keep painting until Esc"><svg class="fp-icon" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="2.5" width="12" height="5" rx="1"/><path d="M15 5h2v4.5h-7V12"/><rect x="8.5" y="12" width="3" height="6" rx="0.8"/></svg> Format Painter</button>
+          <div class="rb-icongrid">
+            <button class="rb-iconbtn" data-cmd="cut" title="Cut" aria-label="Cut">✂</button>
+            <button class="rb-iconbtn" data-cmd="copy" title="Copy" aria-label="Copy">⧉</button>
+            <button class="rb-iconbtn" data-cmd="format-painter" aria-pressed="false" title="Format Painter: copy the look of what is selected to the next thing you click or drag over. Double-click to keep painting until Esc" aria-label="Format Painter">🖌</button>
           </div>
         </div>
         <div class="rb-label">Clipboard</div>
+      </div>
+      <div data-tx-slot hidden></div>
+      <div class="rb-group">
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="design-shapes" title="Find a shape in the library on the left"><span class="rb-icon">◇</span>Shapes</button>
+          <button class="rb-big" data-cmd="design-icons" title="Find an icon in the library on the left: about 7,000, lab and science ones first"><span class="rb-icon">⚗</span>Icons</button>
+        </div>
+        <div class="rb-label">Shapes and Icons</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="shape-styles" aria-haspopup="dialog" title="Shape Styles: a ready-made fill, outline and effects for the selected shapes"><span class="rb-icon">◩</span>Shape Styles ▾</button>
           <div class="rb-col">
-            <button data-cmd="shape-effects" aria-haspopup="menu" title="Shape Effects: a shadow, reflection, glow, soft edges or a bevel for the selected shapes">Shape Effects ▾</button>
-            <button data-cmd="shape-picture-fill" title="Fill the selected shapes with a picture from a file, stretched to each">Picture Fill…</button>
+            <button data-cmd="shape-effects" aria-haspopup="menu" class="rb-labelled" title="Shape Effects: a shadow, reflection, glow, soft edges or a bevel for the selected shapes"><span class="rb-lead"></span>Effects ▾</button>
+            <button data-cmd="shape-fill-menu" aria-haspopup="menu" class="rb-labelled" title="Shape Fill: a colour, gradient, pattern or picture inside the selected shapes"><span class="rb-lead"></span>Fill ▾</button>
           </div>
         </div>
         <div class="rb-label">Shape Styles</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
-          <div class="rb-col">
-            <button data-cmd="shape-front" title="Put the selected shapes in front of all the others">Bring to Front</button>
-            <button data-cmd="shape-forward" title="Put the selected shapes one step forward">Bring Forward</button>
+          <div class="rb-icongrid">
+            <button class="rb-iconbtn" data-cmd="rotate-cw" title="Rotate Right 90°: turn the selection a quarter turn clockwise" aria-label="Rotate Right 90°">↻</button>
+            <button class="rb-iconbtn" data-cmd="rotate-ccw" title="Rotate Left 90°: turn the selection a quarter turn anticlockwise" aria-label="Rotate Left 90°">↺</button>
+            <button class="rb-iconbtn" data-cmd="rotate-dialog" title="Rotate by any angle (Ctrl+R), or drag the round handle above the selection" aria-label="Rotate by">∠</button>
+            <button class="rb-iconbtn" data-cmd="flip-h" title="Flip Horizontal: left to right" aria-label="Flip Horizontal">⇋</button>
+            <button class="rb-iconbtn" data-cmd="flip-v" title="Flip Vertical: top to bottom" aria-label="Flip Vertical">⇵</button>
+            <button class="rb-iconbtn" data-cmd="group" title="Group the selected pictures and shapes (Ctrl+G)" aria-label="Group">▣</button>
+            <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: in front of all the others" aria-label="Bring to Front">⧉</button>
+            <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: behind all the others" aria-label="Send to Back">⧉</button>
+            <button class="rb-iconbtn" data-cmd="ungroup" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup">▢</button>
+            <button class="rb-iconbtn" data-cmd="align-left" title="Align left edges (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
+            <button class="rb-iconbtn" data-cmd="align-hcenter" title="Align centres, across" aria-label="Align Centre">↔</button>
+            <button class="rb-iconbtn" data-cmd="align-right" title="Align right edges" aria-label="Align Right">⇥</button>
+            <button class="rb-iconbtn" data-cmd="align-top" title="Align tops" aria-label="Align Top">⤒</button>
+            <button class="rb-iconbtn" data-cmd="align-vcenter" title="Align middles, up and down" aria-label="Align Middle">↕</button>
+            <button class="rb-iconbtn" data-cmd="align-bottom" title="Align bottoms" aria-label="Align Bottom">⤓</button>
+            <button class="rb-iconbtn" data-cmd="distribute-h" title="Space the selected things evenly across" aria-label="Distribute Horizontally">⋯</button>
+            <button class="rb-iconbtn" data-cmd="distribute-v" title="Space the selected things evenly up and down" aria-label="Distribute Vertically">⋮</button>
           </div>
-          <div class="rb-col">
-            <button data-cmd="shape-back" title="Put the selected shapes behind all the others">Send to Back</button>
-            <button data-cmd="shape-backward" title="Put the selected shapes one step back">Send Backward</button>
-          </div>
-          <div class="rb-col">
-            <div class="rb-pair">
-              <button class="rb-sq" data-cmd="align-left" title="Line up the left edges">⇤</button>
-              <button class="rb-sq" data-cmd="align-hcenter" title="Line up the centres, across">↔</button>
-              <button class="rb-sq" data-cmd="align-right" title="Line up the right edges">⇥</button>
-            </div>
-            <div class="rb-pair">
-              <button class="rb-sq" data-cmd="align-top" title="Line up the tops">⤒</button>
-              <button class="rb-sq" data-cmd="align-vcenter" title="Line up the middles, up and down">↕</button>
-              <button class="rb-sq" data-cmd="align-bottom" title="Line up the bottoms">⤓</button>
-            </div>
-          </div>
-          <div class="rb-col">
-            <button data-cmd="distribute-h" title="Space the selected things evenly across">Space Across</button>
-            <button data-cmd="distribute-v" title="Space the selected things evenly up and down">Space Down</button>
-          </div>
+          <button class="rb-big" data-cmd="selection-pane" aria-pressed="false" title="Selection Pane (Alt+F10): every text box, structure, picture and shape on the slide, front to back. Pick, hide, rename or reorder them there"><span class="rb-icon">☰</span>Selection Pane</button>
         </div>
         <div class="rb-label">Arrange</div>
       </div>
@@ -2689,17 +2694,13 @@
     <div class="rb-panel" data-dz-panel="insert" hidden>
       <div class="rb-group">
         <div class="rb-row">
-          <button class="rb-big" data-cmd="design-shapes" title="Find a shape in the library on the left"><span class="rb-icon">◇</span>Shapes</button>
-          <button class="rb-big" data-cmd="design-icons" title="Find an icon in the library on the left: about 7,000, lab and science ones first"><span class="rb-icon">⚗</span>Icons</button>
-          <button class="rb-big" data-cmd="insert-diagram" title="Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint's SmartArt"><span class="rb-icon">⧉</span>Diagram</button>
           <button class="rb-big" data-cmd="text-box" title="Click on the page to type, or drag to make a text box that wraps"><span class="rb-icon">T</span>Text Box</button>
           <button class="rb-big" data-cmd="insert-picture" title="Put a picture on the page (or paste or drop one)"><span class="rb-icon">▣</span>Picture</button>
           <button class="rb-big" data-cmd="insert-table" title="Put a table on the page (or paste cells from Excel or a sheet)"><span class="rb-icon">▦</span>Table</button>
           <button class="rb-big" data-cmd="insert-chart" title="A chart with its own data: type or paste the numbers, pick the kind of chart. Double-click it to change it"><span class="rb-icon">▥</span>Chart</button>
+          <button class="rb-big" data-cmd="insert-diagram" title="Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint's SmartArt"><span class="rb-icon">⧉</span>Diagram</button>
           <button class="rb-big" data-cmd="insert-symbol" title="Symbol: Greek letters, arrows, maths and chemistry signs, accented letters, typed into the text being edited (or a new text box). Find one by name or code"><span class="rb-icon">Ω</span>Symbol</button>
           <button class="rb-big" data-cmd="slide-references" title="References on Page: tick which of the design's references the page shows at its foot, written and formatted for you (short form by default). Reference Manager to add them or copy them from another file"><span class="rb-icon">¹⁾</span>References</button>
-          <button class="rb-big" data-cmd="crop" title="Cut the edges off the selected picture"><span class="rb-icon">⌗</span>Crop</button>
-          <button class="rb-big" data-cmd="picture-format" title="Picture Format for the selected picture: brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions. Saved as PowerPoint's own picture settings"><span class="rb-icon">◐</span>Picture Format</button>
         </div>
         <div class="rb-label">Insert</div>
       </div>
@@ -2716,6 +2717,27 @@
           <button class="rb-big" data-cmd="energy-diagram" title="Draw a reaction energy diagram from a table of energies (double-click one to change its numbers)"><span class="rb-icon">⩘</span>Energy Diagram</button>
         </div>
         <div class="rb-label">Chemistry</div>
+      </div>
+    </div>
+    <div class="rb-panel" data-dz-panel="format" hidden>
+      <div class="rb-group">
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="shape-styles" aria-haspopup="dialog" title="Shape Styles: a ready-made fill, outline and effects for the selected shapes"><span class="rb-icon">◩</span>Shape Styles ▾</button>
+          <div class="rb-col">
+            <button data-cmd="shape-effects" aria-haspopup="menu" class="rb-labelled" title="Shape Effects: a shadow, reflection, glow, soft edges or a bevel"><span class="rb-lead"></span>Effects ▾</button>
+            <button data-cmd="shape-fill-menu" aria-haspopup="menu" class="rb-labelled" title="Shape Fill: a colour, gradient, pattern or picture"><span class="rb-lead"></span>Fill ▾</button>
+            <button data-cmd="shape-picture-fill" class="rb-labelled" title="Fill the selected shapes with a picture from a file, stretched to each"><span class="rb-lead"></span>Picture Fill…</button>
+          </div>
+        </div>
+        <div class="rb-label">Shape Styles</div>
+      </div>
+      <div class="rb-group">
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="crop" title="Cut the edges off the selected picture"><span class="rb-icon">⌗</span>Crop</button>
+          <button class="rb-big" data-cmd="picture-format" title="Picture Format for the selected picture: brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions. Saved as PowerPoint's own picture settings"><span class="rb-icon">◐</span>Picture Format</button>
+          <button class="rb-big" data-cmd="alt-text" title="Alt Text: words that describe the selected picture or shape for people who can't see it"><span class="rb-icon">🏷</span>Alt Text</button>
+        </div>
+        <div class="rb-label">Picture</div>
       </div>
     </div>
     <div class="rb-panel" data-dz-panel="page" hidden>

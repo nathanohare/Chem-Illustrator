@@ -3210,12 +3210,17 @@ const keyframeCommands = {
 
 /** Shape Format shows among the Presentation ribbon's tabs while a shape or picture is selected, as in PowerPoint. */
 function showContextTabs(): void {
+  const any = [...editor.sel.shapes].some((id) => doc.shapes.has(id));
   const tab = document.querySelector<HTMLElement>('#ribbon [data-sl-tab="format"]');
-  if (!tab) return;
-  const any = ws.active.mode === 'slides' && [...editor.sel.shapes].some((id) => doc.shapes.has(id));
-  if (tab.hidden === !any) return;
-  tab.hidden = !any;
-  if (!any && animUi?.tab === 'format') animUi.showTab('home');
+  if (tab && tab.hidden !== !(any && ws.active.mode === 'slides')) {
+    tab.hidden = !(any && ws.active.mode === 'slides');
+    if (tab.hidden && animUi?.tab === 'format') animUi.showTab('home');
+  }
+  const dz = document.querySelector<HTMLElement>('#design-ribbon [data-dz-tab="format"]');
+  if (dz && dz.hidden !== !(any && ws.active.mode === 'design')) {
+    dz.hidden = !(any && ws.active.mode === 'design');
+    if (dz.hidden && dz.getAttribute('aria-selected') === 'true') document.querySelector<HTMLElement>('#design-ribbon [data-dz-tab="home"]')?.click();
+  }
 }
 
 /** The keyframe ribbon group shows on canvas slides only; the menus' keyframe items are greyed elsewhere (menus keep their shape). */
@@ -6953,6 +6958,11 @@ const COMMANDS: Record<string, () => unknown> = {
   'size-standard': () => setSlideSize(STANDARD),
   'size-custom': () => customSlideSize(),
   'edit-layouts': () => editSlideLayouts(),
+  'shape-fill-menu': () => {
+    const b = [...document.querySelectorAll<HTMLElement>('.ribbon [data-cmd="shape-fill-menu"]')].find((x) => x.offsetParent);
+    const r = b?.getBoundingClientRect();
+    showContextMenu(r ? r.left : 200, r ? r.bottom + 2 : 120, [{ cmd: 'shape-picture-fill', label: 'Picture…' }, { cmd: 'shape-no-picture-fill', label: 'No Picture' }], { run: (cmd) => void command(cmd), key: commandKey });
+  },
   'section-menu': () => {
     const b = document.querySelector<HTMLElement>('#ribbon [data-cmd="section-menu"]');
     const r = b?.getBoundingClientRect();
@@ -9740,6 +9750,17 @@ whenIconsLoaded(() => {
   figures.forget();
   docMode?.fontsChanged();
 });
+// Design's Home tab has the same Font and Paragraph groups as the Presentation ribbon: one copy
+// of them in the page, cloned into Design's ribbon, run by a second SlideTextRibbon
+{
+  const slot = document.querySelector<HTMLElement>('#design-ribbon [data-tx-slot]');
+  if (slot) slot.replaceWith(...[...document.querySelectorAll<HTMLElement>('#ribbon [data-sl-text]')].map((g) => {
+    const c = g.cloneNode(true) as HTMLElement;
+    // the font sizes' list stays one (the copy's box uses it by its id)
+    c.querySelectorAll('datalist, [id]').forEach((x) => (x instanceof HTMLDataListElement ? x.remove() : x.removeAttribute('id')));
+    return c;
+  }));
+}
 applyRibbonIcons();
 applyIconSet();
 installRibbonFlyouts();
@@ -9980,7 +10001,8 @@ function drawingMenu(): MenuItem[] {
     ] },
     ...(shapes.some((x) => x.chart) ? [{ cmd: 'edit-chart', label: 'Edit Chart…' }] : []),
     ...((shapes.length === 1 && shapes[0].kind === 'picture') || (atoms && !shapes.length) ? [{ cmd: 'alt-text', label: 'Alt Text…' }] : []),
-    ...(shapes.some((x) => x.kind === 'geo' && !x.diagram) ? [
+    // (Design keeps fill and effects on its ribbon: Home and Shape Format)
+    ...(shapes.some((x) => x.kind === 'geo' && !x.diagram) && ws.active.mode !== 'design' ? [
       { cmd: 'shape-styles-here', label: 'Shape Style…' },
       { label: 'Shape Effects', items: effectsMenu() },
       { label: 'Shape Fill', items: [{ cmd: 'shape-picture-fill', label: 'Picture…' }, { cmd: 'shape-no-picture-fill', label: 'No Picture' }] },
@@ -11425,8 +11447,18 @@ const slideText = new SlideTextRibbon($('#ribbon'), {
   box: (c) => editor.setTextBox(c),
   boxLook: () => editor.textBoxLook(),
 });
-CaptionEditor.onState = () => { if (ws.active.mode === 'slides') slideText.refresh(); };
-editor.onChange = () => { welcomeWatch?.(); if (ws.active.mode === 'slides') { slideText.refresh(); showContextTabs(); } animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+const designText = new SlideTextRibbon($('#design-ribbon'), {
+  format: (f) => editor.formatText(f),
+  look: () => editor.textLook(),
+  refocus: () => editor.refocusText(),
+  nothing: () => flash('Click into some text, or pick a text box or a shape with text, first.'),
+  box: (c) => editor.setTextBox(c),
+  boxLook: () => editor.textBoxLook(),
+});
+/** The text groups of the ribbon showing (Presentation or Design) follow the text being edited. */
+const textRibbonNow = () => (ws.active.mode === 'slides' ? slideText : ws.active.mode === 'design' ? designText : null);
+CaptionEditor.onState = () => textRibbonNow()?.refresh();
+editor.onChange = () => { welcomeWatch?.(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();

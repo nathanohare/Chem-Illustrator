@@ -3055,3 +3055,6 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 .rb-group.rb-compact button.rb-big.rb-keep-words { font-size: var(--fs-sm); gap: 2px; }
 .rb-ctx-tab { color: var(--accent); font-weight: 600; }
 .rb-ctx-tab::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 1px; background: var(--accent); vertical-align: 1px; }
+/* the text box's direction, columns and AutoFit sit beside the alignment buttons, kept narrow */
+.ribbon select[data-tx='dir'], .ribbon select[data-tx='cols'], .ribbon select[data-tx='fit'] { max-width: 88px; }
+.ribbon select[data-tx='line'] { max-width: 60px; }
