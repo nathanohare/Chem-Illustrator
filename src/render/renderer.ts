@@ -9,7 +9,7 @@ import { Doc, Atom, Bond, Arrow, PARTIAL, Caption, Shape, PICTURE_SHADOWS, pictu
 import { centredSpots, fullStyle, highlightPieces, highlightSizes, movePieces, tracePieces, type Piece } from './highlight';
 import { highlightFx, layerPaints, needsFx, patternMarks, regionOf, rgba, unionOf, type FxLayer, type FxPaint, type FxStep, type HighlightFx, type Region, shapeShadow } from './highlight-fx';
 import { ellipseArc, isCircleRing, ringCircle, ringsThroughBond, type RingCircle } from '../chem/aromatic';
-import { allylArc, piLooksOf } from '../chem/hapto';
+import { chainArc, piLooksOf } from '../chem/hapto';
 import { crossingGapsCached } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
@@ -353,17 +353,13 @@ export class Renderer {
       const looks = piLooksOf(doc, b);
       if (looks.length) {
         const gap = doubleBondGap(doc.style) * (b.s ?? 1);
-        c.pi = looks.map((lk) => {
-          if (lk.kind === 'ring') return { circle: ringCircle(doc, lk.ring) };
-          const [a, m, z] = lk.chain.map((id) => doc.atoms.get(id)!);
-          const q = allylArc(a, m, z, gap);
-          if (!q) return {};
-          // this bond's half of the curve (split in the middle, de Casteljau)
-          const mid = { x: (q.from.x + 2 * q.ctrl.x + q.to.x) / 4, y: (q.from.y + 2 * q.ctrl.y + q.to.y) / 4 };
-          const first = b.a1 === lk.chain[0] || b.a2 === lk.chain[0];
-          return { arc: first
-            ? { from: q.from, ctrl: { x: (q.from.x + q.ctrl.x) / 2, y: (q.from.y + q.ctrl.y) / 2 }, to: mid }
-            : { from: mid, ctrl: { x: (q.ctrl.x + q.to.x) / 2, y: (q.ctrl.y + q.to.y) / 2 }, to: q.to } };
+        c.pi = looks.flatMap((lk) => {
+          if (lk.kind === 'ring') return [{ circle: ringCircle(doc, lk.ring) }];
+          const pieces = chainArc(lk.chain.map((id) => doc.atoms.get(id)!), gap);
+          if (!pieces) return [{}];
+          // this bond's stretch of the curve
+          const k = lk.chain.findIndex((id, i) => i + 1 < lk.chain.length && ((id === b.a1 && lk.chain[i + 1] === b.a2) || (id === b.a2 && lk.chain[i + 1] === b.a1)));
+          return k < 0 ? [{}] : pieces[k].map((arc) => ({ arc }));
         });
         this.bondCache.set(b.id, c);
         return c;
@@ -879,7 +875,7 @@ export class Renderer {
         const ab = a.color ? undefined : back?.get(a.id);
         ctx.fillStyle = a.color ?? (ab !== undefined ? shadeLook(shadeStep(ab)).color : '#000');
         for (const r of info.layout.runs) {
-          const f = `${r.size}px ${this.labelStack}`;
+          const f = `${r.italic ? 'italic ' : ''}${r.size}px ${this.labelStack}`;
           if (f !== curFont) { ctx.font = f; curFont = f; }
           ctx.fillText(r.text, a.x + r.dx, a.y + r.dy);
         }

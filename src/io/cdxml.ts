@@ -1209,7 +1209,7 @@ export function labelLookOf(runs: TextRun[], text: string): { supDigits?: boolea
   runs.forEach((r, k) => {
     for (const _ of r.text) {
       const raisedR = raisedDigits && k === runs.length - 1;
-      const m = r.sup && !raisedR ? '^' : r.sub ? '_' : '.';
+      const m = r.sup && !raisedR ? '^' : r.sub ? '_' : r.italic ? '/' : '.';
       if (m !== '.') any = true;
       marks += m;
     }

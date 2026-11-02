@@ -4,6 +4,8 @@
 // and can be expanded into a structure. Ordinary text ("Step 2", "rt, 12 h", "1a") is left as
 // text; text above and below reaction arrows (the conditions) stays text too. Each text box can
 // be set to Chemical or Plain text by hand (Caption.chem), which wins over the reading here.
+// A box set to Chemical also reads a group or atom written on its own (OH, CH3, NO2, CO2H, Cl)
+// as the radical or atom it stands for, which a box left to read itself keeps as text.
 
 import type { Caption, Doc } from '../model';
 import { plainText } from '../richtext';
@@ -27,7 +29,7 @@ export interface Species {
   graph: MiniGraph;
   /** What it is, for the panel and tooltips ("tetrafluoroborate"). */
   name?: string;
-  kind: SpeciesKind | 'formula' | 'ion';
+  kind: SpeciesKind | 'formula' | 'ion' | 'radical' | 'atom';
   /** An ion written without its charge (or with the wrong one): the charge it should carry. */
   expected?: number;
 }
@@ -144,8 +146,11 @@ function readSalt(body: string): Species | null {
   return null;
 }
 
-const ELEMENT_NAMES: Record<string, string> = { Li: 'lithium', Na: 'sodium', K: 'potassium', Rb: 'rubidium', Cs: 'caesium', Ag: 'silver', Tl: 'thallium', Be: 'beryllium', Mg: 'magnesium', Ca: 'calcium', Sr: 'strontium', Ba: 'barium', Zn: 'zinc' };
+const ELEMENT_NAMES: Record<string, string> = {
+  He: 'helium', Ne: 'neon', Ar: 'argon', Kr: 'krypton', Xe: 'xenon', H: 'hydrogen', B: 'boron', C: 'carbon', N: 'nitrogen', O: 'oxygen', F: 'fluorine', Si: 'silicon', P: 'phosphorus', S: 'sulfur', Cl: 'chlorine', Br: 'bromine', I: 'iodine',
+  Li: 'lithium', Na: 'sodium', K: 'potassium', Rb: 'rubidium', Cs: 'cesium', Ag: 'silver', Tl: 'thallium', Be: 'beryllium', Mg: 'magnesium', Ca: 'calcium', Sr: 'strontium', Ba: 'barium', Zn: 'zinc' };
 const elementName = (s: string) => ELEMENT_NAMES[s] ?? s;
+const NOBLE_GASES = new Set(['He', 'Ne', 'Ar', 'Kr', 'Xe']);
 
 // Words written like formulas that are not ones: mechanisms, transition states, assay and cell names.
 const NOT_FORMULAS = /^(?:S[NE][12]'?|E[12]|TS\d*|IC\d+|EC\d+|LD\d+|ED\d+|CC\d+|PS[12]|OD\d+|SI\d*|NMR|HPLC|HRMS|ESI|MS|IR|UV|CD|NOE|COSY|HSQC|HMBC|NOESY|DFT|TLC|GC|LC|LCMS|EE|ER|DR|RT)$/i;
@@ -200,22 +205,130 @@ function readFormula(body: string, written: number): Species | null {
   if (parts.some((t) => t.kind === 'el' && (t.text === 'D' || t.text === 'T'))) return null;
   // one abbreviation or one element on its own is a group or an atom label, not a molecule
   if (parts.length === 1 && parts[0].count <= 1) return null;
-  // a group's own abbreviation (CO2H, CF3, NO2) is part of a molecule, not one
-  if (NICKNAMES[body]) return null;
+  // a group's own abbreviation (CO2H, CF3, NO2) is part of a molecule, not one: read on its own
+  // it would take hydrogens that aren't written, which the count of H below finds; one that is a
+  // whole molecule (C2H4, OEt2, PBu3) is read
   if (Math.abs(written) > 1) return null;
   const label = body + (written > 0 ? '+' : written < 0 ? '-' : '');
-  const g = labelGraph(label, 0);
-  if (!g || g.atoms.some((a) => a.dummy) || labelOverValent(label, 0).length || openValence(g)) return null;
+  let g = labelGraph(label, 0);
+  if (!g || g.atoms.some((a) => a.dummy)) return null;
+  if (labelOverValent(label, 0).length) {
+    // a nitro group inside a formula (CH3NO2, PhNO2) is N⁺(=O)O⁻
+    g = chargedNitro(g);
+    if (!g) return null;
+  } else if (openValence(g)) {
+    // hydrogens written atom by atom leave the multiple bonds to be worked out (CH2CH2, HCCH)
+    g = unsaturated(g);
+    if (!g) return null;
+  }
   const h = writtenH(body);
   if (h === null || h !== hydrogens(groupFormula(g, 0))) return null;
   return { body, written, charge: netCharge(g), graph: g, kind: 'formula' };
+}
+
+/** A copy of a graph to change (the label reader keeps the ones it makes). */
+const copyGraph = (g: MiniGraph): MiniGraph => ({ atoms: g.atoms.map((a) => ({ ...a })), bonds: g.bonds.map((b) => ({ ...b })) });
+
+/** How many bonds each atom has free, counting the hydrogens written on it (0 for ones without). */
+function freeValence(g: MiniGraph): number[] {
+  const bonds = kekulize(g);
+  return g.atoms.map((a, i) => {
+    if (a.dummy || a.hCount === undefined || !hasImplicitH(a.z)) return 0;
+    const used = bonds.reduce((s, b) => s + (b.a === i || b.b === i ? b.order : 0), 0);
+    return Math.max(0, implicitHydrogens(a.z, used, a.charge) - a.hCount);
+  });
+}
+
+/**
+ * The formula with its free bonds paired up as double and triple bonds between neighbors
+ * (CH2CH2 is ethylene, HCCH acetylene, CH2CHCH3 propene), or null when one is left over.
+ */
+function unsaturated(g0: MiniGraph): MiniGraph | null {
+  const g = copyGraph(g0);
+  const free = freeValence(g);
+  for (let pass = 0; pass < 2; pass++) {
+    for (const b of g.bonds) {
+      if (b.order === 1.5 || b.order >= 3) continue;
+      const n = Math.min(free[b.a], free[b.b], 3 - b.order);
+      if (n <= 0) continue;
+      b.order += n;
+      free[b.a] -= n;
+      free[b.b] -= n;
+    }
+  }
+  return free.some((f) => f > 0) ? null : g;
+}
+
+/** A neutral N with one O double-bonded and one O on its own (N(=O)O, too many bonds) as the nitro group N⁺(=O)O⁻. */
+function chargedNitro(g0: MiniGraph): MiniGraph | null {
+  const g = copyGraph(g0);
+  let fixed = false;
+  g.atoms.forEach((a, i) => {
+    if (a.z !== 7 || a.charge) return;
+    const mine = g.bonds.filter((b) => b.a === i || b.b === i);
+    const o = (b: typeof mine[number]) => g.atoms[b.a === i ? b.b : b.a];
+    const lone = (b: typeof mine[number]) => { const j = b.a === i ? b.b : b.a; return g.bonds.filter((x) => x.a === j || x.b === j).length === 1; };
+    const dbl = mine.find((b) => b.order === 2 && o(b).z === 8 && lone(b));
+    const sgl = mine.find((b) => b.order === 1 && o(b).z === 8 && !o(b).charge && lone(b) && !o(b).hCount);
+    if (!dbl || !sgl || mine.reduce((s, b) => s + b.order, 0) !== 4) return;
+    a.charge = 1;
+    const j = sgl.a === i ? sgl.b : sgl.a;
+    g.atoms[j].charge = -1;
+    g.atoms[j].hCount = 0;
+    fixed = true;
+  });
+  if (!fixed) return null;
+  const bonds = kekulize(g);
+  const over = g.atoms.some((a, i) => {
+    if (a.dummy || !hasImplicitH(a.z)) return false;
+    const used = bonds.reduce((s, b) => s + (b.a === i || b.b === i ? b.order : 0), 0);
+    return implicitHydrogens(a.z, used, a.charge) < (a.hCount ?? 0) || (a.z === 7 && used > (a.charge > 0 ? 4 : 3));
+  });
+  return over ? null : g;
+}
+
+/** Radicals a group or atom written on its own is usually called, set to Chemical. */
+const RADICAL_NAMES: Record<string, string> = {
+  OH: 'hydroxyl radical', HO: 'hydroxyl radical', CH3: 'methyl radical', Me: 'methyl radical', NO2: 'nitrogen dioxide', NO: 'nitric oxide',
+  CN: 'cyano radical', NC: 'cyano radical', CO2H: 'carboxyl radical', COOH: 'carboxyl radical', NH2: 'aminyl radical', H2N: 'aminyl radical',
+  Ph: 'phenyl radical', CF3: 'trifluoromethyl radical', OMe: 'methoxyl radical', MeO: 'methoxyl radical', SH: 'sulfanyl radical', HS: 'sulfanyl radical',
+  Et: 'ethyl radical', C2H5: 'ethyl radical', tBu: 'tert-butyl radical', 't-Bu': 'tert-butyl radical', Bn: 'benzyl radical', CHO: 'formyl radical',
+  CH2: 'methylene (carbene)', OOH: 'hydroperoxyl radical', HOO: 'hydroperoxyl radical', SO3H: 'sulfo radical',
+};
+
+/**
+ * A group written on its own, in a text box set to Chemical (OH, CH3, NO2, CO2H, Ph): the
+ * radical it stands for, the bond it would make to a molecule left as an unpaired electron.
+ */
+function readFragment(body: string): Species | null {
+  if (NOT_FORMULAS.test(body) || !/^[A-Z(\[]/.test(body)) return null;
+  const toks = tokenize(body);
+  if (!toks.some((t) => t.kind !== 'other') || toks.some((t) => t.kind === 'generic' || (t.kind === 'other' && !/^[()]$/.test(t.text)))) return null;
+  const g0 = labelGraph(body, 1);
+  if (!g0 || !g0.atoms.length || g0.atoms.some((a) => a.dummy) || labelOverValent(body, 1).length) return null;
+  const g = copyGraph(g0);
+  const a = g.atoms[0];
+  if (a.hCount === undefined) {
+    if (!hasImplicitH(a.z)) return null;
+    const used = kekulize(g).reduce((s, b) => s + (b.a === 0 || b.b === 0 ? b.order : 0), 0);
+    a.hCount = implicitHydrogens(a.z, used + 1, a.charge);
+  }
+  const h = writtenH(body);
+  if (h === null || h !== hydrogens(groupFormula(g, 0))) return null;
+  return { body, written: 0, charge: netCharge(g), graph: g, name: RADICAL_NAMES[body] ?? `${body} radical`, kind: 'radical' };
+}
+
+/** What a text box can hold besides what reads by itself. */
+export interface ReadOptions {
+  /** The box is set to Chemical: a group or atom on its own (OH, CH3, NO2, Cl) is read as the radical or atom it stands for. */
+  fragments?: boolean;
 }
 
 /**
  * What a text box's whole text is, as chemistry, or null when it is ordinary text. One line,
  * one species; BF4 without its charge is still tetrafluoroborate (with `expected` set).
  */
-export function readSpecies(text: string): Species | null {
+export function readSpecies(text: string, opts: ReadOptions = {}): Species | null {
   const raw = text.trim();
   if (!raw || raw.length > 40 || /[\n\r\t]/.test(raw)) return null;
   const split = splitCharge(raw);
@@ -227,13 +340,17 @@ export function readSpecies(text: string): Species | null {
   // Na+, Fe3+, Cl−: one element with its charge
   const z = elementNumber(body);
   if (z !== undefined && body !== 'D' && body !== 'T') {
-    if (!written) return null;
+    if (!written) {
+      if (!opts.fragments) return null;
+      // set to Chemical, an element on its own is an atom of it (Cl, H)
+      return { body, written: 0, charge: 0, graph: { atoms: [{ z, charge: 0, aromatic: false, dummy: false, hCount: 0 }], bonds: [] }, name: NOBLE_GASES.has(body) ? elementName(body) : `${elementName(body)} atom`, kind: 'atom' };
+    }
     return { body, written, charge: written, graph: { atoms: [{ z, charge: written, aromatic: false, dummy: false, hCount: 0 }], bonds: [] }, kind: 'ion' };
   }
   // adducts: BF3·OEt2, CuBr·SMe2, Pd2(dba)3·CHCl3
   const pieces = body.split(/[·•]/);
   if (pieces.length > 1) {
-    const read = pieces.map((p) => readSpecies(p));
+    const read = pieces.map((p) => readSpecies(p, opts));
     if (read.some((r) => !r || r.expected) || written) return null;
     const parts = read as Species[];
     return { body, written: 0, charge: parts.reduce((s, p) => s + p.charge, 0), graph: joined(parts.map((p) => p.graph)), kind: 'reagent', name: parts.map((p) => p.name ?? p.body).join(' · ') };
@@ -242,7 +359,7 @@ export function readSpecies(text: string): Species | null {
     const salt = readSalt(body);
     if (salt) return salt;
   }
-  return readFormula(body, written);
+  return readFormula(body, written) ?? (opts.fragments && !written ? readFragment(body) : null);
 }
 
 /** A species' SMILES, molecules joined by dots. */
@@ -359,7 +476,7 @@ export function captionReading(doc: Doc, c: Caption, m?: Measure): CaptionReadin
   else if (!forced && !mayHold(c)) r = { species: null, why: 'tied', forced };
   else if (!forced && s.arrowText.has(c.id)) r = { species: null, why: 'arrow', forced };
   else {
-    const sp = readSpecies(plainText(c.runs));
+    const sp = readSpecies(plainText(c.runs), { fragments: c.chem === true });
     r = sp ? { species: sp, forced } : { species: null, why: 'unread', forced };
   }
   s.read.set(c.id, r);

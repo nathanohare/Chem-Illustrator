@@ -72,7 +72,7 @@ import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './att
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
 import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
-import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, CAP, SUB_SCALE } from '../chem/labels';
+import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
 import {
   Handle, type HandleId, arrowHit, shapeHit, arrowHandles, shapeHandles, dragArrowHandle, dragShapeHandle, dragCropHandle, shapeBox, shapeMid, shapeTurn,
   arrowPoints, bracketHalves, type BracketForm, bracketLip, unionRect,
@@ -360,6 +360,12 @@ export class Editor {
   /** Preferences from the settings file. */
   /** With one reaction arrow selected, outline what its starting materials, products and conditions are. */
   showRoles = true;
+  /**
+   * Enter finishes typing and Alt+Enter starts a new line (Settings ▸ Preferences; main.ts knows
+   * the mode): for text from the Text tool ('text'), or text in a shape, a table cell or a
+   * slide's title and text placeholders ('other').
+   */
+  enterFinishesText: (what: 'text' | 'other') => boolean = () => false;
 
   options = {
     /** The pen sketches whatever tool is picked (View > Window and Colours > Touch Mode > Pen Always Sketches). */
@@ -425,6 +431,8 @@ export class Editor {
   private drag: Drag | null = null;
   /** Something is being dragged (moved, rotated or resized) right now. */
   get dragging(): boolean { return !!this.drag?.moved; }
+  /** Text is being typed into a caption or label. */
+  captionOpen(): boolean { return !!this.captionEd?.isOpen; }
   private needScene = true;
   private needOverlay = true;
   private frameQueued = false;
@@ -5522,6 +5530,7 @@ export class Editor {
         const span = document.createElement('span');
         span.textContent = p.text.replace(/−/g, '-');
         if (p.sub || p.sup) { span.className = p.sub ? 'sub' : 'sup'; span.style.fontSize = `${SUB_SCALE * 100}%`; }
+        if (p.italic) span.style.fontStyle = 'italic';
         box.appendChild(span);
       }
       // what the label shows can differ from what was typed (a minus for a hyphen): keep the typed text
@@ -5573,10 +5582,13 @@ export class Editor {
       if (ok && doc.atoms.has(id) && (text !== was || marks !== wasMarks)) {
         const lead = text.length - text.trimStart().length;
         const kept = marks.slice(lead, lead + text.trim().length);
+        // tBu, iPr… in the alkyl look chosen in Settings ▸ Preferences (t-Bu, an italic t)
+        const styled = styleLabel(text.trim(), kept);
         doc.edit('Label', () => {
-          this.applyLabel(id, text);
+          this.applyLabel(id, styled.label);
           const now = doc.atoms.get(id)!;
-          const m = now.label !== null && /[\^_=]/.test(kept) ? kept : undefined;
+          const sm = styled.marks ?? '';
+          const m = now.label !== null && /[\^_=/]/.test(sm) ? sm : undefined;
           if (now.labelMarks !== m) doc.updateAtom(id, { labelMarks: m });
         });
         // remembered for Repeat Label on the right-click menu (clearing a label is not a label)
@@ -5905,7 +5917,12 @@ export class Editor {
     }
     if (!best) return false;
     const id = best.id;
-    doc.edit('Text to Atom', () => { doc.removeCaption(caption); this.applyLabel(id, text); });
+    const styled = styleLabel(text.trim());
+    doc.edit('Text to Atom', () => {
+      doc.removeCaption(caption);
+      this.applyLabel(id, styled.label);
+      if (styled.marks && doc.atoms.get(id)?.label) doc.updateAtom(id, { labelMarks: styled.marks });
+    });
     this.lastEdited = id;
     this.say(`${text} is now an atom on the bond. Undo (Ctrl+Z) to keep it as text, or turn this off in Edit > Settings.`);
     return true;
@@ -5968,6 +5985,7 @@ export class Editor {
       defaultSize: base?.size ?? st.captionSize,
       defaultFont: base?.font ?? st.captionFont,
       redraw: () => this.requestOverlay(),
+      enterFinishes: () => this.enterFinishesText(c?.ph ? 'other' : 'text'),
     };
     const initial = c
       ? { runs: applyBase(c.runs, base), paras: c.paras, justify: c.justify, wrap: c.wrap, width: c.width, lineHeight: c.lineHeight, lineSpacing: c.lineSpacing, cols: c.cols, colGap: c.colGap, boxH: c.boxH, fit: c.fit }
@@ -6252,6 +6270,7 @@ export class Editor {
       defaultSize: size,
       defaultFont: this.doc.style.captionFont,
       redraw: () => this.requestOverlay(),
+      enterFinishes: () => this.enterFinishesText('other'),
       hint: 'Enter: new line · Esc: done',
       around: () => shapeBox(doc.shapes.get(id) ?? s),
     };
@@ -6351,6 +6370,7 @@ export class Editor {
       defaultSize: size,
       defaultFont: this.doc.style.captionFont,
       redraw: () => this.requestOverlay(),
+      enterFinishes: () => this.enterFinishesText('other'),
       hint: typeof part === 'string' ? 'Enter: new paragraph · Esc: done' : 'Tab: next cell · Shift+Tab: back · Enter: new line · Esc: done',
       around: () => { const cur = doc.shapes.get(id); return cur ? this.r.tableBox(cur) : this.r.tableBox(s); },
       typed: (rich: { runs: Caption['runs']; paras?: Caption['paras'] }) => {

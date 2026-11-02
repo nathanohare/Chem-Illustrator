@@ -68,6 +68,7 @@ import { solid } from './deck/background';
 import { pictureFormat } from './ui/picture-dialog';
 import { fxPng } from './render/picture-fx';
 import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND, type SlidePage } from './deck/slide-view';
+import { sameView, type InPlace, type PlaceView } from './ui/in-place';
 import { writePdf, jpegInfo, PdfPage, PdfImage } from './io/pdf';
 import { SlideList } from './ui/slide-list';
 import { CanvasKeys } from './ui/canvas-keys';
@@ -149,7 +150,8 @@ import { centreEnd, haptoLook } from './chem/hapto';
 import { viewNow, viewRingOf, type RingView } from './chem/ring-views';
 import { watchToolHover } from './ui/tool-demos';
 import { countElectrons } from './chem/electrons';
-import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, tokenize as tokenizeLabel } from './chem/labels';
+import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, alkylPrefs, ALKYL_LOOKS, type AlkylLook, tokenize as tokenizeLabel } from './chem/labels';
+import { restyleAlkyl } from './text/alkyl-restyle';
 import { selectedGroup } from './chem/group-smiles';
 import { templateIcon } from './ui/template-icons';
 import { StructureChecks } from './chem/warnings';
@@ -184,7 +186,7 @@ import { ask } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
 import { actionSet, askActionButton } from './ui/action-button-dialog';
-import { bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
+import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepPieces, type AutoStepsOptions } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
 import { canUpdate, appVersion, portableInfo, STAGE, STAGE_NOTE, UPDATE_CHANNELS, type UpdateChannel } from './updates';
@@ -271,6 +273,7 @@ import { paintPages } from './ui/page-grid-view';
 import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
+import type { AssistantAction, SendItem } from './ai/assistant';
 import { aiSettingsDialog } from './ui/ai-settings';
 import { freeSpace } from './editor/free-space';
 import { canReadStructures, importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
@@ -2139,6 +2142,12 @@ function addNamed(got: { mb: string; attach: number[] }, x: number, y: number, t
 let structuresLocked = false;
 /** The start view shows on the empty drawing the program opens with (Settings > General). */
 let startView = true;
+/** Settings ▸ Preferences: Enter finishes text typed with the Text tool, Alt+Enter starts a new line. */
+let enterFinishesText = false;
+// everywhere the Text tool types (Canvas, structures in documents and spreadsheets, text boxes on
+// slides and designs); text in shapes, tables and slide placeholders follows it except on slides
+// and designs, which keep PowerPoint's keys there
+editor.enterFinishesText = (what) => enterFinishesText && (what === 'text' || (ws.active.mode !== 'slides' && ws.active.mode !== 'design'));
 /** View > Focus View is on. */
 let focusView = false;
 /** View > Toolboxes > One Column Outside Drawing is on; and whether the toolboxes on screen were built that way. */
@@ -2232,6 +2241,122 @@ async function stepSpecies(got: NonNullable<ReturnType<typeof pickedStep>>, maps
     if (!rows[r].name) rows[r].name = one.formula;
   });
   return rows;
+}
+
+// ------------------------------------------------------------------ the Assistant (review item 35)
+
+/**
+ * What the Assistant could send about the page, each as an item of the "Will send" list: in a
+ * drawing (or on a slide or design page) the selected structures as SMILES, the scheme's steps
+ * as reaction SMILES with their conditions, or every structure when nothing is selected; in a
+ * Document the selected text (the whole text is listed, off); in a Spreadsheet the selected cells.
+ * Nothing else is gathered.
+ */
+async function assistantItems(): Promise<SendItem[]> {
+  const mode = ws.active.mode;
+  const items: SendItem[] = [];
+  if (mode === 'document') {
+    if (!docMode?.file) return items;
+    const sel = docMode.selectedText().trim();
+    if (sel) items.push({ id: 'text', label: 'the selected text', text: sel.slice(0, 20000), on: true });
+    const all = docMode.documentText();
+    if (all.trim()) items.push({ id: 'document', label: 'the whole document\'s text', text: all, on: !sel });
+    return items;
+  }
+  if (mode === 'sheet') {
+    const got = sheetMode?.selectedCellsText();
+    if (got) items.push({ id: 'sheet', label: `the selected cells (${got.at})`, text: got.text, on: true });
+    return items;
+  }
+  if (!chem.ready) return items;
+  const smilesOf = async (atoms: Set<number>): Promise<string | null> => {
+    const ex = toMolfile(doc, atoms, '');
+    return ex.generic.length ? null : chem.molToSmiles(ex.molblock).catch(() => null);
+  };
+  const picked = editor.sel.atoms.size ? chosenStructures() : [];
+  if (picked.length) {
+    const got = (await Promise.all(picked.map(smilesOf))).filter((s): s is string => !!s);
+    if (got.length) items.push({ id: 'selection', label: got.length === 1 ? 'the selected structure as SMILES' : `the ${got.length} selected structures as SMILES`, text: got.join('\n'), on: true });
+  }
+  const m = editor.measure();
+  const schemeAt = schemeItems(doc, m);
+  const steps = reactionSteps(doc, schemeAt);
+  if (steps.length) {
+    const lines: string[] = [];
+    for (const [i, step] of steps.entries()) {
+      const rows = await stepSpecies({ step, items: schemeAt, m });
+      const part = (role: StoichRole) => rows.filter((r) => r.role === role).map((r) => r.smiles ?? `[${r.name || 'unreadable structure'}]`);
+      const conditions = rows.filter((r) => r.role === 'Conditions').map((r) => r.name).filter(Boolean);
+      lines.push(`Step ${i + 1}: ${part('Starting material').join('.')}>${part('Reagent').join('.')}>${part('Product').join('.')}${conditions.length ? `  (conditions: ${conditions.join('; ')})` : ''}`);
+    }
+    items.push({ id: 'scheme', label: steps.length === 1 ? 'the reaction step as reaction SMILES, with its conditions' : `the scheme's ${steps.length} steps as reaction SMILES, with their conditions`, text: lines.join('\n'), on: !picked.length });
+  }
+  if (!picked.length && !steps.length && doc.atoms.size) {
+    const seen = new Set<number>();
+    const frags: Set<number>[] = [];
+    for (const id of doc.atoms.keys()) {
+      if (seen.has(id) || frags.length >= 50) continue;
+      const f = doc.fragmentOf(id);
+      for (const x of f) seen.add(x);
+      frags.push(f);
+    }
+    const got = (await Promise.all(frags.map(smilesOf))).filter((s): s is string => !!s);
+    if (got.length) items.push({ id: 'drawing', label: got.length === 1 ? 'the structure in the drawing as SMILES' : `the ${got.length} structures in the drawing as SMILES`, text: got.join('\n'), on: true });
+  }
+  return items;
+}
+
+/**
+ * Carry out a proposal the person accepted, as one step of Undo; what happened, for the pane.
+ * Structures are read again by RDKit first, and one that doesn't read isn't drawn.
+ */
+async function applyAssistantAction(a: AssistantAction): Promise<string> {
+  const mode = ws.active.mode;
+  if (a.type === 'check') return 'Nothing to change.';
+  if (a.type === 'text') {
+    if (mode === 'document') return docMode?.writeText(a.text, a.replace) ? (a.replace ? 'Replaced the selected text.' : 'Added the text.') : 'The document can\'t be typed in now (Read Mode?).';
+    if (mode === 'sheet') { await copyText(a.text, 'Copied the text: paste it where you want it.'); return 'Copied the text.'; }
+    await pasteText(a.text);
+    return 'Added the text as a text box.';
+  }
+  if (!chem.ready) return 'The chemistry engine is still loading. Try again in a moment.';
+  const mb = await chem.smilesToMol(a.smiles).catch(() => null);
+  if (!mb) return `The proposed structure (${a.smiles}) doesn't read as a valid structure, so it wasn't drawn.`;
+  if (mode === 'document' || mode === 'sheet') {
+    await copyText(a.smiles, 'Copied the structure as SMILES: paste it into a drawing, a cell or the document.');
+    return 'Copied the structure as SMILES.';
+  }
+  const old = a.replace ? chosenStructures() : [];
+  let ids: number[] = [];
+  if (old.length) {
+    const atoms = old.flatMap((f) => [...f]);
+    const xs = atoms.map((id) => doc.atoms.get(id)!.x), ys = atoms.map((id) => doc.atoms.get(id)!.y);
+    const c = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
+    doc.edit('Assistant: Replace Structure', () => {
+      for (const id of atoms) doc.removeAtom(id);
+      ids = addMolfile(doc, mb, c.x, c.y);
+    });
+  } else {
+    const c = pastePoint();
+    doc.edit('Assistant: Draw Structure', () => {
+      ids = addMolfile(doc, mb, c.x, c.y);
+      editor.sel = { atoms: new Set(ids), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() };
+      editor.placeClear(placingPage());
+    });
+  }
+  selectNewAtoms(ids);
+  await keepPasteInside();
+  return old.length ? 'Replaced the selected structure.' : 'Drew the structure.';
+}
+
+/** "Mark on drawing" for a finding about a step: select that step's arrow. False when there is no such step. */
+function markAssistantStep(n: number): boolean {
+  const steps = reactionSteps(doc, schemeItems(doc, editor.measure()));
+  const step = steps[n - 1];
+  if (!step) return false;
+  editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set([step.arrow.id]), shapes: new Set() };
+  editor.changed();
+  return true;
 }
 
 /**
@@ -3253,9 +3378,12 @@ const sheetFiles: SheetFileDeps = {
 /** Pictures of a document's drawings for Word files (300 dots to the inch, as for PowerPoint). */
 const docFiles: DocxDeps = {
   pages: (t) => paragraphPages.get(t),
-  picture: async (contents, style) => {
+  picture: async (contents, style, frame) => {
     const d = structureDoc(contents, style);
-    const pic = recordPicture(d, FIGURE_MARGIN);
+    const drawn = recordPicture(d, FIGURE_MARGIN);
+    // a figure: a picture of its whole area (an empty one is clear), never cutting off what reaches past it
+    const fb = frame && { x1: frame.x, y1: frame.y, x2: frame.x + frame.w, y2: frame.y + frame.h };
+    const pic = fb ? { items: drawn?.items ?? [], box: drawn ? { x1: Math.min(fb.x1, drawn.box.x1), y1: Math.min(fb.y1, drawn.box.y1), x2: Math.max(fb.x2, drawn.box.x2), y2: Math.max(fb.y2, drawn.box.y2) } : fb } : drawn;
     if (!pic) return null;
     const png = new Uint8Array(await (await canvasPng(pictureCanvas(d, pic).canvas)).arrayBuffer());
     return { png, svg: pictureSvg(pic), w: pic.box.x2 - pic.box.x1, h: pic.box.y2 - pic.box.y1, x: pic.box.x1, y: pic.box.y1 };
@@ -6814,7 +6942,44 @@ function activeStructureDoc(): Doc | null {
 // leaves that document empty), so every drawing tool, key and check works on it as usual.
 let cellEdit: { done: (c: Contents | null) => void; saved: Doc; view: typeof renderer.view } | null = null;
 
-function editCellStructure(contents: Contents | null, title: string, done: (c: Contents | null) => void, style: DocStyle = sheetStyle()): void {
+// A document's structure drawn in place on its page (see ui/in-place.ts): the drawing area is a
+// clear layer over the pages, which show the structure as it is drawn and follow its zoom and scrolling.
+let place: InPlace | null = null;
+let placeSeen: PlaceView | null = null;
+let placeVersion = -1;
+
+/** Line the drawing tools up with the structure on its page. */
+function pullPlace(): void {
+  const v = place?.view();
+  if (!v) return;
+  renderer.view = { ...renderer.view, ...v };
+  placeSeen = { ...v };
+  editor.requestScene();
+}
+
+/** The drawing layer over the pages, and the bar over them. */
+function placeHost(): void {
+  const r = place?.rect();
+  if (!r) return;
+  Object.assign(host.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+  const bar = $('#structure-bar');
+  Object.assign(bar.style, { left: `${r.left + r.width / 2}px`, top: `${r.top + 10}px` });
+  resize();
+  pullPlace();
+}
+window.addEventListener('resize', () => { if (place) requestAnimationFrame(placeHost); });
+
+/** Done: a figure first checks its structures still fit it (or the user goes back to drawing). */
+async function doneCellStructure(): Promise<void> {
+  const p = place;
+  if (p?.beforeDone && cellEdit && doc.canUndo()) {
+    if (!(await p.beforeDone(doc.contents()))) { overlay.focus(); return; }
+    if (place !== p || !cellEdit) return;
+  }
+  finishCellStructure(true);
+}
+
+function editCellStructure(contents: Contents | null, title: string, done: (c: Contents | null) => void, style: DocStyle = sheetStyle(), inPlace?: InPlace): void {
   finishCellStructure(true);
   const blank: Contents = { atoms: [], bonds: [], captions: [], arrows: [], shapes: [] };
   const drawing = structureDoc(contents ?? blank, style);
@@ -6827,6 +6992,7 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
   layoutSplit();
   $('#structure-title').textContent = title;
   $('#structure-bar').hidden = false;
+  if (ws.active.mode === 'sheet') setStructureSize(0);
   showSheetParts();
   editor.paused = false;
   editor.lastEdited = null;
@@ -6835,12 +7001,24 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
   if (editor.toolName !== modeTool[mode]) editor.setTool(modeTool[mode]);
   editor.onToolChange(editor.toolName);
   resize();
-  // the structure in the middle, at a comfortable size (a new one starts at the middle)
-  const b = doc.bounds();
-  const w = renderer.width, h = renderer.height;
-  const k = b ? Math.min(2.5, 0.8 * Math.min(w / Math.max(20, b.x2 - b.x1), h / Math.max(20, b.y2 - b.y1))) : 2;
-  renderer.view = { ...renderer.view, scale: k, ox: w / 2 - (b ? (b.x1 + b.x2) / 2 : 0) * k, oy: h / 2 - (b ? (b.y1 + b.y2) / 2 : 0) * k };
+  if (inPlace) {
+    // in place: over the pages, lined up with the structure where it is on its page
+    place = inPlace;
+    placeVersion = -1;
+    document.body.classList.add('drawing-in-place');
+    inPlace.moved = () => pullPlace();
+    inPlace.show((ctx) => drawDrawing(ctx, doc));
+    placeHost();
+  } else {
+    // the structure in the middle, at a comfortable size (a new one starts at the middle)
+    const b = doc.bounds();
+    const w = renderer.width, h = renderer.height;
+    const k = b ? Math.min(2.5, 0.8 * Math.min(w / Math.max(20, b.x2 - b.x1), h / Math.max(20, b.y2 - b.y1))) : 2;
+    renderer.view = { ...renderer.view, scale: k, ox: w / 2 - (b ? (b.x1 + b.x2) / 2 : 0) * k, oy: h / 2 - (b ? (b.y1 + b.y2) / 2 : 0) * k };
+  }
   renderer.repaintAll();
+  // paint the structure now: the drawing area still shows the last one edited until the scene is asked for
+  editor.requestScene();
   editor.frame(true);
   refreshKeys();
   analysisKey = '';
@@ -6865,6 +7043,13 @@ function finishCellStructure(keep: boolean): void {
   editor.cropping = null;
   doc.swap(e.saved);
   ws.aside = null;
+  if (place) {
+    place.show(null);
+    place.moved = () => {};
+    place = placeSeen = null;
+    document.body.classList.remove('drawing-in-place');
+    for (const k of ['left', 'top', 'width', 'height'] as const) { host.style[k] = ''; $('#structure-bar').style[k] = ''; }
+  }
   // the drawing beside is back as it was: not changed, at its own zoom
   if (ws.pane) ws.pane.seen = doc.version;
   renderer.view = e.view;
@@ -6885,7 +7070,23 @@ function finishCellStructure(keep: boolean): void {
   if (!result && words) docMode?.focus();
 }
 
-$('#structure-done').addEventListener('click', () => finishCellStructure(true));
+/** A cell's drawing area: 6 × 4 in, then 9 × 6 in, then the whole window (Bigger steps through them, then back). */
+const STRUCTURE_SIZES = [{ w: '6in', h: '4in' }, { w: '9in', h: '6in' }, null] as const;
+let structureSize = 0;
+function setStructureSize(i: number): void {
+  structureSize = i % STRUCTURE_SIZES.length;
+  const sz = STRUCTURE_SIZES[structureSize];
+  const body = document.body;
+  if (sz) { body.style.setProperty('--structure-w', sz.w); body.style.setProperty('--structure-h', sz.h); delete body.dataset.structureSize; }
+  else body.dataset.structureSize = 'fill';
+  const last = structureSize === STRUCTURE_SIZES.length - 1;
+  const b = $('#structure-bigger');
+  b.textContent = last ? 'Smaller' : 'Bigger';
+  b.title = last ? 'Back to the 6 × 4 in drawing area' : 'Make the drawing area bigger';
+  if (cellEdit) { const before = { w: renderer.width, h: renderer.height }; resize(); renderer.view = { ...renderer.view, ox: renderer.view.ox + (renderer.width - before.w) / 2, oy: renderer.view.oy + (renderer.height - before.h) / 2 }; renderer.repaintAll(); editor.requestScene(); }
+}
+$('#structure-bigger').addEventListener('click', () => setStructureSize(structureSize + 1));
+$('#structure-done').addEventListener('click', () => void doneCellStructure());
 $('#structure-cancel').addEventListener('click', () => finishCellStructure(false));
 // clicking the sheet or pages behind the drawing finishes it (as Done)
 for (const pane of ['#sheet-pane', '#doc-pane']) {
@@ -6893,15 +7094,35 @@ for (const pane of ['#sheet-pane', '#doc-pane']) {
     if (!cellEdit) return;
     e.preventDefault();
     e.stopPropagation();
-    finishCellStructure(true);
+    void doneCellStructure();
   }, true);
 }
+// in place: a click on the page away from the structure (or outside its figure) is Done, as in Word
+host.addEventListener('pointerdown', (e) => {
+  if (!place || !cellEdit || e.button !== 0) return;
+  const r = overlay.getBoundingClientRect(), v = renderer.view;
+  const x = (e.clientX - r.left - v.ox) / v.scale, y = (e.clientY - r.top - v.oy) / v.scale;
+  const a = place.area(doc.bounds());
+  if (x >= a.x1 && x <= a.x2 && y >= a.y1 && y <= a.y2) return;
+  e.preventDefault();
+  e.stopPropagation();
+  void doneCellStructure();
+}, true);
+// Esc with nothing picked: Cancel (with something picked, Esc lets it go first)
+window.addEventListener('keydown', (e) => {
+  if (!cellEdit || e.key !== 'Escape' || e.defaultPrevented || isTyping(e.target) || (e.target as HTMLElement | null)?.closest?.('dialog, .menu')) return;
+  const s = editor.sel;
+  if (s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size || s.shapes.size || editor.dragging || editor.captionOpen()) return;
+  e.preventDefault();
+  e.stopPropagation();
+  finishCellStructure(false);
+}, true);
 window.addEventListener('keydown', (e) => {
   // Ctrl+Enter: Done
   if (cellEdit && e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !isTyping(e.target)) {
     e.preventDefault();
     e.stopPropagation();
-    finishCellStructure(true);
+    void doneCellStructure();
   }
 }, true);
 // keys while a sheet shows but the grid doesn't have the focus (after clicking a tab or a menu)
@@ -6983,6 +7204,7 @@ function loadDocMode(): Promise<DocumentMode> {
       command: (name) => command(name),
       changed: () => ws.noteChange(),
       editDrawing: (contents, title, done) => editCellStructure(contents, title, done, docStyle()),
+      editInPlace: (contents, p, done) => editCellStructure(contents, p.title, done, docStyle(), p),
       editDiagram: (contents) => documentDiagram(contents),
       copyDrawing: async (contents, style) => (await copyDrawing(structureDoc(contents, style), null)).replace(/^Copied the whole drawing/, 'Copied the structure'),
       copiedOther: () => forgetCopy(),
@@ -9268,6 +9490,46 @@ async function generalPreferences(): Promise<void> {
   storeSettings();
 }
 
+/** Settings ▸ Preferences: how you like to work, and matters of taste such as how alkyl groups are written. */
+async function personalPreferences(): Promise<void> {
+  const alt = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? 'Option+Enter' : 'Alt+Enter';
+  const r = await ask('Preferences', [
+    { name: 'enterFinishes', label: 'Finish typing text from the Text tool with', value: enterFinishesText ? 'enter' : 'esc',
+      options: [{ value: 'esc', label: 'Esc (Enter starts a new line), as in ChemDraw' }, { value: 'enter', label: `Enter (${alt} starts a new line)` }],
+      help: 'Everywhere you draw: Canvas, structures in documents and spreadsheets, and text boxes on slides. Ctrl+Enter always finishes, and Shift+Enter always breaks the line.' },
+    { name: 'alkylLook', label: 'Alkyl groups written as', value: alkylPrefs.look, options: ALKYL_LOOK_CHOICES,
+      help: 'For the n-, i-, s- and t- of Pr and Bu (tBu, iPr, nBu, sBu, iBu), wherever they sit in a label or text (OtBu, N(iPr)2, KOtBu). Atom labels and text boxes take the look as you finish typing them; you are asked whether to change the ones already in the drawing. A dash is never put in or taken out where the letters would read as an element (PtBu3 stays as it is).' },
+  ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(parseAlkylLook(v.alkylLook)) } });
+  if (!r) return;
+  enterFinishesText = r.enterFinishes === 'enter';
+  const look = parseAlkylLook(r.alkylLook);
+  const changed = look !== alkylPrefs.look;
+  alkylPrefs.look = look;
+  storeSettings();
+  if (changed && look !== 'typed') await offerAlkylRestyle(look);
+}
+
+const ALKYL_LOOK_CHOICES: { value: AlkylLook; label: string }[] = [
+  { value: 'typed', label: 'As typed' },
+  { value: 'plain', label: 'tBu, iPr' },
+  { value: 'italic', label: 'tBu, iPr with the t and i in italics' },
+  { value: 'dash', label: 't-Bu, i-Pr' },
+  { value: 'both', label: 't-Bu, i-Pr with the t and i in italics' },
+];
+const parseAlkylLook = (v: string | undefined): AlkylLook => (ALKYL_LOOKS.includes(v as AlkylLook) ? v as AlkylLook : 'typed');
+
+/** After a new alkyl look is chosen: offer to give it to the labels and text boxes already in the drawing. */
+async function offerAlkylRestyle(look: AlkylLook): Promise<void> {
+  const n = restyleAlkyl(doc, look, false);
+  if (!n.labels && !n.texts) return;
+  const parts = [n.labels && `${n.labels} atom label${n.labels > 1 ? 's' : ''}`, n.texts && `${n.texts} text box${n.texts > 1 ? 'es' : ''}`].filter(Boolean).join(' and ');
+  const yes = await ask('Change Existing Alkyl Groups?', [], { ok: 'Change Them', note: `${parts} in this drawing ${n.labels + n.texts > 1 ? 'are' : 'is'} written another way. Change ${n.labels + n.texts > 1 ? 'them' : 'it'} to the new look? Cancel leaves ${n.labels + n.texts > 1 ? 'them' : 'it'} as ${n.labels + n.texts > 1 ? 'they are' : 'it is'}; new labels and text take the new look either way.` });
+  if (!yes) return;
+  restyleAlkyl(doc, look, true);
+  editor.requestScene();
+  flash(`Changed ${parts}`);
+}
+
 /** Settings ▸ Online: what the program asks the internet for. */
 /** Edit > Settings > AI Model. */
 async function aiSettings(): Promise<void> {
@@ -9327,6 +9589,7 @@ function currentSettings(): Settings {
     appTheme,
     oneColumnTools,
     startView,
+    enterFinishesText,
     page: defaultPage,
     welcomed,
     groupTips: labelTips.enabled,
@@ -9364,6 +9627,7 @@ function currentSettings(): Settings {
     haptoDelocalized: haptoLook.delocalized,
     toolDemos,
     superscriptR: labelPrefs.superscriptR,
+    alkylLook: alkylPrefs.look,
     bondEnds: bondEndPrefs.round,
     depthShade: { ...depthShadePrefs },
     linkSide,
@@ -9568,6 +9832,7 @@ function applySettings(s: Settings): void {
   setAppTheme(s.appTheme);
   setOneColumnTools(s.oneColumnTools);
   startView = s.startView;
+  enterFinishesText = s.enterFinishesText;
   showGroupTips(s.groupTips);
   setTouchMode(s.touchMode);
   editor.options.penSketch = s.penSketch;
@@ -9601,6 +9866,7 @@ function applySettings(s: Settings): void {
   haptoLook.delocalized = s.haptoDelocalized;
   toolDemos = s.toolDemos;
   labelPrefs.superscriptR = s.superscriptR;
+  alkylPrefs.look = s.alkylLook;
   bondEndPrefs.round = s.bondEnds;
   Object.assign(depthShadePrefs, s.depthShade);
   for (const el of document.querySelectorAll('[data-cmd="depth-shading"][role="menuitemcheckbox"]')) el.setAttribute('aria-checked', String(depthShadePrefs.on));
@@ -11941,6 +12207,7 @@ const guide = {
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files demo clips hover tool tips animation', open: generalPreferences },
+  { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
@@ -12482,6 +12749,12 @@ zoomPick.addEventListener('change', () => {
 });
 
 editor.onFrame = () => {
+  // in place: the pages follow the drawing tools' zoom and scrolling, and show the structure as it is drawn
+  if (place && cellEdit) {
+    const v = renderer.view;
+    if (placeSeen && !sameView(v, placeSeen)) { place.follow({ scale: v.scale, ox: v.ox, oy: v.oy }); pullPlace(); }
+    if (doc.version !== placeVersion || editor.dragging) { placeVersion = doc.version; place.show((ctx) => drawDrawing(ctx, doc)); }
+  }
   showZoom();
   rulers.update();
   // what is typed on the slide shows in the outline
@@ -12616,7 +12889,7 @@ requestAnimationFrame(() => {
 });
 
 // Hooks for the automated speed tests.
-(window as any).__app = { doc, editor, renderer, settingsWindow, toolboxes, chem, live, command, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
+(window as any).__app = { assistant: { items: assistantItems, apply: applyAssistantAction, markStep: markAssistantStep }, doc, editor, renderer, settingsWindow, toolboxes, chem, live, command, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
   pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, canvas: s.canvas })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test

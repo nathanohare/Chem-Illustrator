@@ -19,7 +19,7 @@ const alternatives = (words: string[]) => [...words].sort((a, b) => b.length - a
 
 // one unit of a formula: an element, a group, or an alkyl group with an i/n/s/t in front
 // (iPr2NEt, nBu4NI, tBu3P, N(iPr)2, Ti(OiPr)4)
-const UNIT = `(?:(?<![A-Za-z])[inst]-?(?:Pr|Bu)|(?<=O)[int](?:Pr|Bu)|${alternatives([...ELEMENTS, ...GROUPS])})`;
+const UNIT = `(?:(?<![A-Za-z])[inst]-?(?:Pr|Bu)|(?<=O)[int]-?(?:Pr|Bu)|${alternatives([...ELEMENTS, ...GROUPS])})`;
 const INNER = `(?:${alternatives(LIGANDS)}|${UNIT})`;
 const PAREN = `\\((?:${INNER}\\d*)+\\)\\d*`;
 const BRACKET = `\\[(?:${INNER}\\d*|${PAREN})+\\]\\d*`;

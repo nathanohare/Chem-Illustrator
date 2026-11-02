@@ -496,4 +496,88 @@ describe('a ligand drawn out on its own (review item 28)', () => {
     expect(labelGraph('C6H5')!.bonds.length).toBe(6);
     expect(labelGraph('C6H11')!.bonds.length).toBe(6);
   });
+
+  describe('groups written short (Nate, 2026-11-02)', () => {
+    type T = { atoms: [number, number, string, number?, string?][]; bonds: [number, number, number, string?][]; attach: number };
+    const drawing = (abbr: string) => templateById(ligandByAbbr(abbr)!.tpl) as unknown as T;
+    const labels = (abbr: string) => drawing(abbr).atoms.map((a) => a[4]).filter(Boolean);
+    const lib = LIGANDS.map((l) => [l.abbr[0], templateById(l.tpl) as unknown as T] as const);
+    const degree = (t: T, i: number) => t.bonds.filter((b) => b[0] === i || b[1] === i).length;
+    const nbrs = (t: T, i: number) => t.bonds.filter((b) => b[0] === i || b[1] === i).map((b) => (b[0] === i ? b[1] : b[0]));
+    const bare = (t: T, i: number) => t.atoms[i][2] === 'C' && !t.atoms[i][4] && i !== t.attach;
+
+    it('methyls on N and O as NMe2, NMe and OMe', () => {
+      expect(labels('TMEDA').filter((l) => l === 'NMe2').length).toBe(2);
+      expect(labels('SPhos').filter((l) => l === 'OMe').length).toBe(2);
+      expect(labels('IMe').filter((l) => l === 'NMe').length).toBe(2);
+      expect(labels('DMAP')).toContain('NMe2');
+      for (const [abbr, t] of lib) t.atoms.forEach((a, i) => {
+        if ((a[2] !== 'N' && a[2] !== 'O') || a[4]) return;
+        expect(nbrs(t, i).some((j) => bare(t, j) && degree(t, j) === 1), `${abbr}: a methyl drawn on ${a[2]}`).toBe(false);
+      });
+    });
+
+    it('isopropyl, tert-butyl and CF3 named wherever they are', () => {
+      expect(labels('XPhos').filter((l) => l === 'i-Pr').length).toBe(3);
+      expect(labels('dtbbpy').filter((l) => l === 't-Bu').length).toBe(2);
+      expect(labels('dCF3bpy').filter((l) => l === 'CF3').length).toBe(2);
+      expect(labels('RuPhos').filter((l) => l === 'Oi-Pr').length).toBe(2);
+      for (const [abbr, t] of lib) t.atoms.forEach((a, i) => {
+        if (!bare(t, i)) return;
+        const ends = nbrs(t, i).filter((j) => bare(t, j) && degree(t, j) === 1).length;
+        const fs = nbrs(t, i).filter((j) => t.atoms[j][2] === 'F').length;
+        const d = degree(t, i);
+        expect(d === 3 && ends === 2 || d === 4 && ends === 3 || fs === 3, `${abbr}: an i-Pr, t-Bu or CF3 drawn out`).toBe(false);
+      });
+    });
+
+    it('phenyls as Ph, but a biaryl backbone stays drawn', () => {
+      expect(labels('PPh3').filter((l) => l === 'Ph').length).toBe(3);
+      expect(labels('BPhen').filter((l) => l === 'Ph').length).toBe(2);
+      expect(labels('JohnPhos')).not.toContain('Ph');
+      expect(drawing('JohnPhos').atoms.length).toBeGreaterThan(12);
+    });
+
+    it('never a label that reads as a metal (Ni-Pr, Pt-Bu)', () => {
+      for (const [abbr, t] of lib) for (const a of t.atoms) {
+        if (a[4]) expect(/^(N|P|As)[it]-/.test(a[4]) || a[4] === 'PiPr2', `${abbr}: ${a[4]}`).toBe(false);
+      }
+      expect(labels('TangPhos')).not.toContain('Pt-Bu');
+    });
+
+    it('the η⁴-butadiene and allyl icons draw an arc, their bonds single', () => {
+      for (const abbr of ['allyl', 'C4H6']) {
+        const svg = templateIcon(drawing(abbr) as never, 120, 26);
+        expect(svg, abbr).toMatch(/<path d="M[^"]*Q/);
+      }
+    });
+
+    it('a ring double bond has its second line inside the ring, whatever hangs off it', () => {
+      // a benzene whose double bond C0=C1 carries two groups outside (RuPhos's biaryl carbon and
+      // its Oi-Pr): the neighbours outside outnumber the ring's, the line still goes in
+      const ring = [0, 1, 2, 3, 4, 5].map((k) => [Math.cos((k * Math.PI) / 3), Math.sin((k * Math.PI) / 3)]);
+      // straight out from the bond (along its normal), so they outweigh the ring's own neighbours
+      const out = (k: number) => [ring[k][0] + Math.cos(Math.PI / 6), ring[k][1] + Math.sin(Math.PI / 6)];
+      const t = {
+        id: 'x', name: 'x', group: 'ligand-lib', attach: 8,
+        atoms: [...ring, out(0), out(1), [out(1)[0] - 1, out(1)[1]]].map(([x, y]) => [x, y, 'C']),
+        bonds: [[0, 1, 2], [1, 2, 1], [2, 3, 2], [3, 4, 1], [4, 5, 2], [5, 0, 1], [0, 6, 1], [1, 7, 1], [7, 8, 1]],
+      };
+      const svg = templateIcon(t as never, 300, 26);
+      const lines = [...svg.matchAll(/<line x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)" y2="([-\d.]+)"/g)].map((m) => m.slice(1).map(Number));
+      // the picture's ring centre: the middle of the ring's six atoms, found from the longest lines
+      const len = (l: number[]) => Math.hypot(l[2] - l[0], l[3] - l[1]);
+      const mid = (l: number[]) => [(l[0] + l[2]) / 2, (l[1] + l[3]) / 2];
+      const full = Math.max(...lines.map(len));
+      const bonds = lines.filter((l) => len(l) > 0.9 * full);
+      const cx = bonds.slice(0, 6).reduce((s, l) => s + mid(l)[0], 0) / 6, cy = bonds.slice(0, 6).reduce((s, l) => s + mid(l)[1], 0) / 6;
+      const inners = lines.filter((l) => len(l) < 0.85 * full && len(l) > 0.3 * full);
+      expect(inners.length).toBe(3);
+      // each inner line is nearer the centre than the bond it goes with
+      for (const l of inners) {
+        const near = bonds.reduce((b, m) => (Math.hypot(mid(m)[0] - mid(l)[0], mid(m)[1] - mid(l)[1]) < Math.hypot(mid(b)[0] - mid(l)[0], mid(b)[1] - mid(l)[1]) ? m : b));
+        expect(Math.hypot(mid(l)[0] - cx, mid(l)[1] - cy)).toBeLessThan(Math.hypot(mid(near)[0] - cx, mid(near)[1] - cy));
+      }
+    });
+  });
 });

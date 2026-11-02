@@ -4,6 +4,7 @@
 // single choice (bond ends, charges). Each is drawn again as the settings change.
 
 import { newTextLook } from '../chem/arrow-text';
+import { labelPieces, styleLabel, type AlkylLook } from '../chem/labels';
 import { Doc } from '../model';
 import type { DocStyle } from '../style';
 import { freeRing, placeRing, sprout } from '../chem/chemgeom';
@@ -240,6 +241,27 @@ export function bondEndSwatch(round: number): HTMLElement {
 }
 
 /** "N⁺" or "N⊕", as the + key will put a charge. */
+/**
+ * Sample labels in an alkyl look (italic t, a dash or none), as atom labels show them, counts
+ * lowered: typed as tBu, iPr…, and one typed with a dash.
+ */
+export function alkylPreview(look: AlkylLook): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'alkyl-preview';
+  for (const typed of ['OtBu', 'N(iPr)2', 'Si(iPr)3', 'nBu', 'sBu', 'P(t-Bu)2']) {
+    const s = document.createElement('span');
+    s.className = 'ask-swatch';
+    const { label, marks } = styleLabel(typed, undefined, look);
+    for (const p of labelPieces(label, false, marks)) {
+      const el = document.createElement(p.italic ? 'i' : p.sub ? 'sub' : 'span');
+      el.textContent = p.text;
+      s.append(el);
+    }
+    box.append(s);
+  }
+  return box;
+}
+
 export function chargeSwatch(circled: boolean): HTMLElement {
   const s = document.createElement('span');
   s.className = 'ask-swatch';
