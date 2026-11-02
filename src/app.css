@@ -2474,6 +2474,20 @@ dialog.sd-find { position: fixed; inset: 64px 18px auto auto; max-height: calc(1
 .show-tools .show-swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.6); }
 .show-tools .show-swatch[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 1px; }
 .present.no-cursor .show-tools { opacity: 0; }
+.show-corner { position: absolute; right: 12px; top: 12px; z-index: 3; display: flex; gap: 2px; align-items: center; padding: 3px; border-radius: var(--r-tab); background: rgba(30, 32, 36, 0.72); opacity: 0.28; transition: opacity 0.15s; }
+.show-corner:hover, .show-corner:focus-within { opacity: 1; }
+.present.no-cursor .show-corner { opacity: 0; }
+.show-corner button { min-width: 30px; height: 28px; border: 0; border-radius: var(--r-control); background: transparent; color: #f2f2f2; font: var(--fs-md) var(--ui-font, system-ui), sans-serif; cursor: pointer; padding: 0 6px; }
+.show-corner button[hidden] { display: none; }
+.show-corner button:hover { background: rgba(255, 255, 255, 0.14); }
+.show-corner button[aria-pressed="true"] { background: rgba(255, 255, 255, 0.28); }
+.present.panning, .present.panning canvas { cursor: grabbing !important; }
+.show-grid { position: absolute; inset: 0; z-index: 5; overflow: auto; background: rgba(12, 13, 16, 0.95); display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 16px; padding: 32px; align-content: start; }
+.show-grid-slide { display: grid; justify-items: center; gap: 4px; padding: 6px; border: 2px solid transparent; border-radius: var(--r-panel); background: none; color: #d8dbe0; font: var(--fs-md) var(--ui-font, system-ui), sans-serif; cursor: pointer; }
+.show-grid-slide canvas { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); background: #fff; }
+.show-grid-slide:hover { border-color: rgba(255, 255, 255, 0.35); }
+.show-grid-slide:focus-visible { outline: none; border-color: #7fb2ff; }
+.show-grid-slide.now { border-color: #2b7bd6; }
 .present.laser-on canvas, .pv-cur.laser-on canvas { cursor: none !important; }
 .show-ink { z-index: 2; }
 
