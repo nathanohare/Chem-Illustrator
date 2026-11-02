@@ -470,6 +470,33 @@ export class DocumentMode {
     return true;
   }
 
+  /** The Assistant: the selected text where typing goes ('' when nothing is selected). */
+  selectedText(): string {
+    if (!this.file) return '';
+    const ed = this.ed;
+    return ed.text.slice(ed.start, ed.end);
+  }
+
+  /** The Assistant: the document's body text, cut at `max` characters. */
+  documentText(max = 20000): string {
+    return this.file ? this.file.ed.text.slice(0, max) : '';
+  }
+
+  /**
+   * The Assistant: write text in place of the selection, or after it (on a paragraph of its
+   * own), as one step of Undo. False when the text can't be typed in (Read Mode).
+   */
+  writeText(text: string, replace: boolean): boolean {
+    if (!this.file || this.reading) return false;
+    const ed = this.ed;
+    if (!replace) {
+      ed.setCaret(ed.end);
+      if (ed.text.length && ed.text[ed.end - 1] !== '\n') text = '\n' + text;
+    }
+    ed.pastePlain(text);
+    return true;
+  }
+
   /** Start typing into a text box (the caret at the end of its text, or at a point on it). */
   private startBox(id: number, at?: { x: number; y: number }): boolean {
     const f = this.file;
