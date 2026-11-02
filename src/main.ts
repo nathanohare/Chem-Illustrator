@@ -5879,7 +5879,7 @@ async function printNow(): Promise<void> {
         ...(area ? [{ value: 'used', label: 'The whole sheet (ignore the print area)' }] : []),
         { value: 'sel', label: 'The selected cells' },
       ] },
-    ], { ok: 'Print…', note: 'Paper, orientation, margins, scaling, titles, headers and footers come from the Page Layout tab (Page Setup…). Copies and the printer are chosen in the next window: set its paper to match.' });
+    ], { ok: 'Print…', note: 'Paper, orientation, margins, scaling, titles, headers and footers are in File > Print (Page Setup… has them all). Copies and the printer are chosen in the next window: set its paper to match.' });
     if (!v) return;
     Object.assign(printChoices, v);
     const got = sheetMode.printedSheet({ selection: v.sheet === 'sel', ignoreArea: v.sheet === 'used', file: tab.name });

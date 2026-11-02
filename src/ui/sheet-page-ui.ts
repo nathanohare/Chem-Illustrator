@@ -1,4 +1,4 @@
-// Sheet mode's Page Layout tab: margins, orientation, paper size, the print area, page breaks,
+// Sheet mode's print settings (File > Print, once the Page Layout tab's): margins, orientation, paper size, the print area, page breaks,
 // print titles, scaling (a percentage or fit to pages), printing gridlines and headings, the Page
 // Setup window and the Header and Footer window.
 
@@ -59,6 +59,31 @@ export class SheetPage {
       null,
       ['Custom Margins…', () => void this.pageSetupWindow('margins')],
     ]);
+  }
+
+  /** File > Print > Margins: Normal, Wide or Narrow. */
+  margins(k: keyof typeof MARGIN_PRESETS): void {
+    this.set('Margins', { margins: k === 'normal' ? undefined : MARGIN_PRESETS[k].m });
+  }
+
+  /** The margin preset in use, if any. */
+  marginPreset(): keyof typeof MARGIN_PRESETS | null {
+    const cur = this.setup?.margins ?? DEFAULT_MARGINS;
+    const same = (m: typeof cur) => (Object.keys(m) as (keyof typeof m)[]).every((k) => Math.abs(m[k] - cur[k]) < 1e-6);
+    return (Object.keys(MARGIN_PRESETS) as (keyof typeof MARGIN_PRESETS)[]).find((k) => same(MARGIN_PRESETS[k].m)) ?? null;
+  }
+
+  /** File > Print > Scaling, as Excel's Print page offers it: none, or fit to one page (or one page wide or tall). */
+  scaling(how: 'none' | 'page' | 'columns' | 'rows'): void {
+    const fit = how === 'page' ? { wide: 1, tall: 1 } : how === 'columns' ? { wide: 1, tall: 0 } : how === 'rows' ? { wide: 0, tall: 1 } : undefined;
+    this.set('Scaling', { fit, scale: undefined });
+  }
+
+  /** Which of File > Print > Scaling's choices the page setup is (null: a percentage, or some other number of pages). */
+  scalingNow(): 'none' | 'page' | 'columns' | 'rows' | null {
+    const ps = this.setup, f = ps?.fit;
+    if (!f) return ps?.scale && ps.scale !== 100 ? null : 'none';
+    return f.wide === 1 && f.tall === 1 ? 'page' : f.wide === 1 && !f.tall ? 'columns' : !f.wide && f.tall === 1 ? 'rows' : null;
   }
 
   orientationMenu(x: number, y: number): void {
@@ -202,7 +227,7 @@ export class SheetPage {
     ];
     // Custom Margins… opens with the margins first
     if (focus === 'margins') fields.sort((a, b) => Number(!/margin|header|footer|center/.test(a.name + a.label.toLowerCase())) - Number(!/margin|header|footer|center/.test(b.name + b.label.toLowerCase())));
-    const got = await ask('Page Setup', fields, { ok: 'OK', note: 'Saved with the sheet in .xlsx files, as Excel\'s own page setup. Headers and footers are on the Page Layout tab.' });
+    const got = await ask('Page Setup', fields, { ok: 'OK', note: 'Saved with the sheet in .xlsx files, as Excel\'s own page setup. Headers and footers are in File > Print > Header and Footer.' });
     if (!got) return;
     const num = (k: string, d: number, lo: number, hi: number) => { const x = Number(got[k]); return Number.isFinite(x) && got[k].trim() !== '' ? Math.min(hi, Math.max(lo, x)) : d; };
     const area = got.area.trim() ? readRanges(got.area) : [];

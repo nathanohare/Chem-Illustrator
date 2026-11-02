@@ -221,6 +221,11 @@ export const COMMAND_NAMES: Record<string, string> = {
   'page-setup': 'Page setup…', 'header-footer': 'Header and footer…', 'print-titles': 'Print titles…', 'page-scale': 'Print scale…',
   'set-print-area': 'Set the print area to the selection', 'clear-print-area': 'Clear the print area', 'insert-page-break': 'Insert a page break',
   'print-gridlines': 'Print gridlines (on or off)', 'print-headings': 'Print row and column headings (on or off)', 'show-page-breaks': 'Show page breaks (on or off)', 'print-preview': 'Print preview',
+  'add-print-area': 'Add the selection to the print area', 'remove-page-break': 'Remove a page break', 'reset-page-breaks': 'Reset all page breaks',
+  'sheet-margins-normal': 'Print margins: Normal', 'sheet-margins-wide': 'Print margins: Wide', 'sheet-margins-narrow': 'Print margins: Narrow', 'sheet-margins-custom': 'Custom print margins…',
+  'sheet-portrait': 'Print in portrait', 'sheet-landscape': 'Print in landscape',
+  'sheet-paper-letter': 'Paper size: Letter', 'sheet-paper-legal': 'Paper size: Legal', 'sheet-paper-tabloid': 'Paper size: Tabloid', 'sheet-paper-a4': 'Paper size: A4', 'sheet-paper-a3': 'Paper size: A3', 'sheet-paper-a5': 'Paper size: A5',
+  'sheet-no-scaling': 'Print with no scaling', 'sheet-fit-page': 'Fit the sheet on one page', 'sheet-fit-columns': 'Fit all columns on one page', 'sheet-fit-rows': 'Fit all rows on one page',
   // documents
   'new-document': 'New document', 'doc-align-left': 'Align text left', 'doc-align-center': 'Centre text', 'doc-align-right': 'Align text right',
   'doc-justify': 'Justify text', 'style-normal': 'Normal style', 'style-title': 'Title style', 'style-h1': 'Heading 1 style', 'style-h2': 'Heading 2 style',
