@@ -3442,28 +3442,3 @@ dialog.key-views { width: min(96vw, 620px); max-height: 92vh; }
 .key-views .kv-item .kv-del { right: 2px; }
 .key-views .kv-item .kv-move:disabled { display: none; }
 
-/* A tool's demo on a long hover (src/ui/tool-demos.ts): card (B), small tip (A) or still frames (C). */
-.tool-demo {
-  position: fixed;
-  z-index: 45;
-  background: var(--panel);
-  color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: var(--r-panel);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
-  padding: 6px 8px 8px;
-  font-size: var(--fs-sm);
-  line-height: 1.4;
-}
-.tool-demo canvas { display: block; border: 1px solid var(--line); border-radius: var(--r-control); }
-.tool-demo .td-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
-.tool-demo .td-replay { border: 0; background: none; color: var(--accent); font: inherit; padding: 0 2px; cursor: pointer; }
-.tool-demo .td-replay:hover { text-decoration: underline; }
-.tool-demo .td-steps { margin: 6px 0 0 18px; padding: 0; width: 232px; color: var(--muted); }
-.tool-demo .td-steps li.done { color: var(--muted); }
-.tool-demo .td-steps li.now { color: var(--accent); font-weight: 600; }
-.tool-demo .td-say { width: 200px; margin-top: 4px; color: var(--muted); min-height: 2.8em; }
-.tool-demo .td-strip { display: flex; gap: 4px; }
-.tool-demo .td-strip figure { margin: 0; width: 88px; }
-.tool-demo .td-strip figure:has(canvas[style*="70px"]) { width: 70px; }
-.tool-demo .td-strip figcaption { font-size: var(--fs-xs); color: var(--muted); margin-top: 2px; line-height: 1.3; }
