@@ -10503,7 +10503,7 @@ for (const group of [...TOOL_GROUPS, OFF_BAR]) {
 const structureStart = document.createElement('button');
 structureStart.type = 'button';
 structureStart.id = 'structure-start';
-structureStart.innerHTML = `${ICONS['ring-benzene'] ?? '⬡'}<span>Insert<br>Structure</span>`;
+structureStart.innerHTML = `${ICONS['insert-structure']}<span>Insert<br>Structure</span>`;
 structureStart.addEventListener('click', () => {
   const mode = ws.active.mode;
   if (mode === 'sheet') command('draw-structure');
