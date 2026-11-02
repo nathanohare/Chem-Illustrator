@@ -174,6 +174,8 @@ import { ModeColoursDialog, ModeColours, DEFAULT_MODE_COLOURS, applyModeColours 
 import { typingPrefs, setTypingPrefs, onTypingPrefs } from './text/typing';
 import { NicknameChooser } from './ui/nickname-chooser';
 import { ask } from './ui/ask';
+import { ACTION_LINKS, geoShapeStyle } from './design/geo';
+import { askActionButton } from './ui/action-button-dialog';
 import { bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepPieces, type AutoStepsOptions } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
@@ -1245,6 +1247,33 @@ async function insertZoom(summary: boolean): Promise<void> {
 }
 
 /** What a click does in the slide show (Insert > Slides > Action), for the selected shapes or action buttons. */
+/** Insert ▸ Action Button…: a ready-made button with its action, or the back, home and next set, in the slide's bottom right corner. */
+async function insertActionButton(): Promise<void> {
+  const d = deckNow();
+  if (!d) { flash('Action buttons work in the slide show: use them in a presentation.'); return; }
+  finishTyping();
+  const i = d.index;
+  const slides = d.slides.map((s, k) => ({ link: `#slide=${s.id}`, label: `Slide ${k + 1}${slideTitle(d, k) ? `: ${slideTitle(d, k)}` : ''}` }));
+  const got = await askActionButton(slides);
+  if (!got || deckNow() !== d || d.index !== i) return;
+  const sdoc = d.docOf(i), W = d.size.w, H = d.size.h, edge = 18;
+  const made: number[] = [];
+  const put = (geo: string, x2: number, side: number, link: string) => {
+    const look = geoShapeStyle(geo, editor.geoLook);
+    if (!look) return;
+    const y2 = H - edge;
+    made.push(sdoc.addShape({ ...(look as Shape), x1: x2 - side, y1: y2 - side, x2, y2, link: link || undefined }).id);
+  };
+  sdoc.edit('Insert Action Button', () => {
+    if (got.geo === 'set') {
+      const side = 30, gap = 6;
+      ['actNext', 'actHome', 'actBack'].forEach((g, k) => put(g, W - edge - k * (side + gap), side, ACTION_LINKS[g] ?? ''));
+    } else put(got.geo, W - edge, 40, got.link.startsWith('#') || !got.link ? got.link : normalizeLink(got.link) ?? '');
+  });
+  editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set(made) };
+  editor.changed();
+}
+
 async function actionSettings(): Promise<void> {
   const d = deckNow();
   const shapes = [...editor.sel.shapes].map((id) => doc.shapes.get(id)).filter((s): s is Shape => !!s && s.kind === 'geo' && !s.diagram && !s.energy);
@@ -6973,7 +7002,7 @@ function setPictureStyle(look: PictureLook | undefined): boolean {
 /** Slide commands that don't apply to a design's single page. */
 const SLIDE_ONLY = new Set(['references-slide', 'zotero-menu', 'zotero-cite', 'zotero-bib', 'zotero-refresh', 'zotero-prefs', 'zotero-unlink', 'compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
   'edit-layouts', 'view-sorter', 'add-section', 'rename-section', 'remove-section', 'remove-section-slides', 'remove-all-sections', 'section-up', 'section-down', 'collapse-sections', 'expand-sections',
-  'slide-transitions', 'slide-animations', 'animation-pane', 'auto-animate-steps', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-video', 'insert-audio',
+  'slide-transitions', 'slide-animations', 'animation-pane', 'auto-animate-steps', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-action-button', 'insert-video', 'insert-audio',
   'reading-view', 'rehearse-timings', 'record-show', 'rehearse-here', 'record-show-here', 'clear-timings-slide', 'clear-timings-all', 'clear-narration-slide', 'clear-narration-all', 'clear-show-menu', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
 
 /** The animation commands: an effect for the selected objects (the right-click menu's Animation). */
@@ -7051,6 +7080,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'insert-slide-zoom': () => void insertZoom(false),
   'insert-summary-zoom': () => void insertZoom(true),
   'action-settings': () => void actionSettings(),
+  'insert-action-button': () => void insertActionButton(),
   'insert-audio': () => void insertMedia(true),
   'media-playback': () => { const id = [...editor.sel.shapes].find((x) => doc.shapes.get(x)?.video); if (id === undefined) { flash('Click a video or sound first.'); return; } void editMediaShape(id); },
   'insert-table': () => { void insertTable(); },

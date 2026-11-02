@@ -3145,3 +3145,10 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .smart-pane .sp-foot { display: flex; justify-content: space-between; gap: 6px; }
 .smart-pane .sp-add { border: none; background: none; color: var(--accent); font-weight: 600; cursor: pointer; padding: 2px 0; }
 .smart-pane .sp-ungroup { padding: 2px 8px; }
+
+/* Insert ▸ Action Button… */
+.ab-gallery { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; }
+.ab-tile { display: grid; place-items: center; min-width: 40px; height: 40px; padding: 3px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); cursor: pointer; }
+.ab-tile:hover { background: var(--hover, rgba(0, 0, 0, 0.05)); }
+.ab-tile[aria-checked="true"] { border-color: var(--accent, #2b7bd6); box-shadow: 0 0 0 1px var(--accent, #2b7bd6) inset; }
+.action-button-dialog [hidden] { display: none !important; }

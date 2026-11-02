@@ -187,6 +187,8 @@ The small bar that appears above text while you type has the same buttons, plus 
 
 **Insert** tab ▸ **Shapes** opens the shape library: basic shapes, block arrows, flowchart shapes, callouts, action buttons and lab glassware. Type in its box to find one (for example "flask"). Click a shape, then click on the slide to place it at its usual size, or drag to draw it the size you want. Double-click a shape to type in it. Its fill, outline and text are in the **Style** panel, and shapes save to PowerPoint as PowerPoint's own shapes where it has a matching one.
 
+**Insert** tab ▸ **Action Button…** picks a ready-made button (back, next, beginning, end, home, return, information, document or blank) from a gallery, with what a click on it does in the show in the drop-down under it: each button starts with its usual action (next goes to the next slide, return to the last slide viewed), and the drop-down changes it to another jump, a particular slide, a web page or file, or nothing. The last tile puts the back, home and next set on the slide at once. Buttons go in the slide's bottom right corner; **Action…** changes what one does later.
+
 **Insert** tab ▸ **Diagram** draws a list, process, cycle, hierarchy, Venn diagram, matrix or pyramid from lines of text, like PowerPoint's SmartArt, saved to PowerPoint as a group of shapes. See [Design: Diagrams](design.md#diagrams).
 
 **Insert** tab ▸ **Icons** opens the same library on its **Icons** tab: about 7,000 icons, with a **Lab and science** group first (glassware, molecules, lab equipment, hazard and safety signs). Search by name or by what it means ("hazard", "rbf"). An icon is placed like a shape, filled in one colour; change its colour in the **Style** panel. See [Design: Icons](design.md#icons).
