@@ -2,7 +2,8 @@
 // along the reaction coordinate and a pair of columns (name, energy) for each pathway, then how
 // the diagram looks. Names take _ and ^ for sub- and superscripts (TS1^‡ or just TS1‡).
 
-import { bracketText, largestBarrier, ENERGY_DEFAULTS, ENERGY_PRESETS, PATH_COLOURS, type EnergyBracket, type EnergyDash, type EnergyData, type EnergyPath, type EnergyPoint } from '../design/energy';
+import { bracketText, largestBarrier, ENERGY_DEFAULTS, ENERGY_PRESETS, PATH_COLOURS, type EnergyBracket, type EnergyDash, type EnergyData, type EnergyPath, type EnergyPoint, type GeomLook, type GeomView } from '../design/energy';
+import { askGeomView } from './geom-view-dialog';
 import { HARTREE, pickEnergy, readQmOutput, speciesName, type QmAtom, type QmResult } from '../chem/qm-output';
 import { qmBonds, skeletonMolfile } from '../chem/qm-bonds';
 import type { Contents } from '../model';
@@ -12,7 +13,7 @@ import { popupMenu } from './popup-menu';
 let lastLook: Pick<EnergyData, 'style' | 'values' | 'digits' | 'axis' | 'barrier' | 'overall' | 'quantity' | 'unit'> = { ...ENERGY_DEFAULTS, quantity: 'ΔG', unit: 'kcal/mol' };
 
 /** A cell of the table: what is typed, and what came from a Gaussian or ORCA file. */
-interface Cell { label: string; g: string; eh?: number; geom?: QmAtom[]; ehs?: EnergyPoint['ehs']; flat?: EnergyPoint['flat']; drawn?: Contents }
+interface Cell { label: string; g: string; eh?: number; geom?: QmAtom[]; ehs?: EnergyPoint['ehs']; flat?: EnergyPoint['flat']; drawn?: Contents; view?: GeomView }
 
 /** Drawing a species' structure from the window: in the drawing area, from the clipboard, from a name or SMILES, and a small picture of one. */
 export interface EnergyStructureHooks {
@@ -29,6 +30,14 @@ export interface EnergyStructureHooks {
 /** Which of a file's energies an axis quantity uses: free energy for ΔG, enthalpy for ΔH, else the electronic energy. */
 export function energyKind(quantity: string): 'G' | 'H' | 'E' {
   return /^ΔG/.test(quantity) ? 'G' : /^ΔH/.test(quantity) ? 'H' : 'E';
+}
+
+/** The File geometries choice as the diagram's settings: none, 3-D in a look, or 2-D. */
+function structuresOf(v: string): Pick<EnergyData, 'structures' | 'look3d'> {
+  if (v === '2d') return { structures: '2d' };
+  if (!v.startsWith('3d')) return { structures: false };
+  const look = v.slice(3) as GeomLook;
+  return look ? { structures: '3d', look3d: look } : { structures: '3d' };
 }
 
 const dashOf = (v: string): { dash?: EnergyDash } => (v === 'solid' || v === 'dashed' || v === 'dotted' ? { dash: v } : {});
@@ -78,7 +87,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       <label class="ask-row ask-check"><input name="axis" type="checkbox" /><span>Axis with its title, and "Reaction coordinate" along the bottom</span></label>
       <label class="ask-row ask-check"><input name="barrier" type="checkbox" /><span>Mark the largest barrier on each pathway (ΔG‡)</span></label>
       <label class="ask-row ask-check"><input name="overall" type="checkbox" /><span>Mark the overall change on each pathway (ΔG), first species to last</span></label>
-      <label class="ask-row"><span>File geometries</span><select name="structures" title="The geometries read from Gaussian or ORCA files, beside their levels (structures drawn in the Structure column always show)"><option value="">None</option><option value="3d">3-D, balls and sticks</option><option value="2d">2-D structures</option></select></label>
+      <label class="ask-row"><span>File geometries</span><select name="structures" title="The geometries read from Gaussian or ORCA files, beside their levels (structures drawn in the Structure column always show)"><option value="">None</option><option value="3d">3-D, balls and sticks</option><option value="3d-stick">3-D, sticks</option><option value="3d-fill">3-D, space-filling</option><option value="3d-wire">3-D, lines</option><option value="2d">2-D structures</option></select></label>
       <label class="ask-row"><span>Place structures</span><select name="place"><option value="above">Above each level</option><option value="auto">Above peaks, below valleys</option><option value="below">Below each level</option></select></label>
       <label class="ask-row ask-check"><input name="distances" type="checkbox" /><span>Bond distances on transition states (the bonds being made and broken, Å)</span></label>
       <label class="ask-row"><span>Level of theory</span><input name="theory" placeholder="e.g. B3LYP-D3(BJ)/def2-TZVP, SMD(THF)" /></label>
@@ -104,6 +113,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         if (was?.ehs) cell.ehs = was.ehs;
         if (was?.flat) cell.flat = was.flat;
         if (was?.drawn) cell.drawn = was.drawn;
+        if (was?.view) cell.view = was.view;
         // an energy typed over is the one wanted, not the file's
         if (was?.eh !== undefined && gi && gi.value === gi.dataset.v) cell.eh = was.eh;
         return cell;
@@ -148,6 +158,34 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         d.showModal();
         if (got) set(got);
       };
+      // how the file's geometry is drawn: its look, the angle, parts hidden or faded; or none
+      const viewIt = async () => {
+        read();
+        const cell = rows[i]?.[j];
+        if (!cell?.geom?.length) return;
+        const sv = $<HTMLSelectElement>('select[name=structures]').value;
+        const look = (sv.startsWith('3d-') ? sv.slice(3) : 'ball') as GeomLook;
+        d.close();
+        const got = await askGeomView(who, cell.geom, qmBonds(cell.geom, /‡/.test(cell.label)), cell.view ?? {}, look);
+        d.showModal();
+        if (!got) return;
+        if (got === 'remove') { delete cell.geom; delete cell.flat; delete cell.view; }
+        else {
+          cell.view = got.view;
+          // the look and hydrogens for every species (each keeps its own angle and parts)
+          if (got.all) for (const c of rows.flat()) if (c !== cell && c.geom?.length) {
+            const own: GeomView = { ...c.view };
+            for (const key of ['style', 'hydrogens', 'fade'] as const) { if (got.view[key] !== undefined) (own as Record<string, unknown>)[key] = got.view[key]; else delete own[key]; }
+            c.view = own;
+          }
+          // the diagram shows file geometries once a species has a look of its own
+          const st = $<HTMLSelectElement>('select[name=structures]');
+          if (!st.value) st.value = got.view.style === '2d' ? '2d' : '3d';
+        }
+        draw();
+        await ensureFlat();
+        redraw();
+      };
       b.addEventListener('click', () => {
         const has = !!rows[i]?.[j]?.drawn;
         if (!has && !rows[i]?.[j]?.geom) { void editIt(); return; }
@@ -162,6 +200,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
             if ('error' in got) note(got.error); else set(got);
           }],
           ...(rows[i]?.[j]?.geom ? [['Use the File\'s Geometry', () => set(null), has] as [string, () => void, boolean]] : []),
+          ...(rows[i]?.[j]?.geom?.length ? [['Geometry View…', () => void viewIt(), !has] as [string, () => void, boolean]] : []),
           null,
           ['Remove Structure', () => { read(); const cell = rows[i]?.[j]; if (cell) { delete cell.drawn; delete cell.geom; delete cell.flat; } draw(); redraw(); }, has || !!rows[i]?.[j]?.geom],
         ]);
@@ -290,7 +329,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       const n = Math.max(...ps.map((p) => p.points.length));
       rows = Array.from({ length: n }, (_, i) => ps.map((p): Cell => {
         const q = p.points[i];
-        return { label: q?.label ?? '', g: q?.g === null || q === undefined ? '' : String(q.g), ...(q?.eh !== undefined ? { eh: q.eh } : {}), ...(q?.geom ? { geom: q.geom } : {}), ...(q?.ehs ? { ehs: q.ehs } : {}), ...(q?.flat ? { flat: q.flat } : {}), ...(q?.drawn ? { drawn: q.drawn } : {}) };
+        return { label: q?.label ?? '', g: q?.g === null || q === undefined ? '' : String(q.g), ...(q?.eh !== undefined ? { eh: q.eh } : {}), ...(q?.geom ? { geom: q.geom } : {}), ...(q?.ehs ? { ehs: q.ehs } : {}), ...(q?.flat ? { flat: q.flat } : {}), ...(q?.drawn ? { drawn: q.drawn } : {}), ...(q?.view ? { view: q.view } : {}) };
       }));
       draw();
     };
@@ -315,7 +354,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
     $<HTMLInputElement>('input[name=axis]').checked = look.axis;
     $<HTMLInputElement>('input[name=barrier]').checked = look.barrier;
     $<HTMLInputElement>('input[name=overall]').checked = !!look.overall;
-    $<HTMLSelectElement>('select[name=structures]').value = editing?.structures === '2d' ? '2d' : editing?.structures ? '3d' : '';
+    $<HTMLSelectElement>('select[name=structures]').value = editing?.structures === '2d' ? '2d' : editing?.structures ? (editing.look3d && editing.look3d !== 'ball' ? `3d-${editing.look3d}` : '3d') : '';
     $<HTMLInputElement>('input[name=distances]').checked = !!editing?.distances;
     $<HTMLSelectElement>('select[name=place]').value = editing?.place ?? 'above';
     $<HTMLInputElement>('input[name=theory]').value = editing?.theory ?? '';
@@ -381,7 +420,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
           name: p.name.trim(), color: p.color, ...(p.dash ? { dash: p.dash } : {}),
           points: rows.map((r) => ({
             label: r[j].label.trim(), g: num(r[j].g), ...(r[j].eh !== undefined ? { eh: r[j].eh } : {}), ...(r[j].geom ? { geom: r[j].geom } : {}),
-            ...(r[j].ehs ? { ehs: r[j].ehs } : {}), ...(r[j].flat ? { flat: r[j].flat } : {}), ...(r[j].drawn ? { drawn: r[j].drawn } : {}),
+            ...(r[j].ehs ? { ehs: r[j].ehs } : {}), ...(r[j].flat ? { flat: r[j].flat } : {}), ...(r[j].drawn ? { drawn: r[j].drawn } : {}), ...(r[j].view && Object.keys(r[j].view!).length ? { view: r[j].view } : {}),
           })),
         })),
         quantity: $<HTMLSelectElement>('select[name=quantity]').value,
@@ -392,7 +431,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         axis: $<HTMLInputElement>('input[name=axis]').checked,
         barrier: $<HTMLInputElement>('input[name=barrier]').checked,
         overall: $<HTMLInputElement>('input[name=overall]').checked,
-        structures: ($<HTMLSelectElement>('select[name=structures]').value || false) as EnergyData['structures'],
+        ...structuresOf($<HTMLSelectElement>('select[name=structures]').value),
         distances: $<HTMLInputElement>('input[name=distances]').checked,
         place: $<HTMLSelectElement>('select[name=place]').value as EnergyData['place'],
         brackets: brackets.filter((b) => b.from !== b.to && b.path < paths.length && b.from < rows.length && b.to < rows.length).map((b) => ({ ...b })),
@@ -494,9 +533,10 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
     });
     // 2-D structures: each geometry laid out flat by the chemistry engine (once; kept with the diagram)
     const ensureFlat = async () => {
-      if (!layout || $<HTMLSelectElement>('select[name=structures]').value !== '2d') return;
+      if (!layout) return;
+      const all2d = $<HTMLSelectElement>('select[name=structures]').value === '2d';
       read();
-      const todo = rows.flat().filter((c) => c.geom?.length && !c.flat);
+      const todo = rows.flat().filter((c) => c.geom?.length && !c.flat && (c.view?.style ? c.view.style === '2d' : all2d));
       for (const c of todo) {
         const f = await flatFor(c.geom!, c.label, layout);
         if (f) c.flat = f;

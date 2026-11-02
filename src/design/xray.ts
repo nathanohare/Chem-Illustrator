@@ -48,7 +48,11 @@ export interface XView {
   /** Å → screen axes (rows). */
   rotation: M3;
   zoom: number;
-  style: 'ortep' | 'ball';
+  /**
+   * ortep: thermal ellipsoids; ball: balls and sticks; stick: sticks only (capped); fill:
+   * space-filling (van der Waals spheres); wire: thin lines.
+   */
+  style: 'ortep' | 'ball' | 'stick' | 'fill' | 'wire';
   probability: 30 | 50 | 70 | 90;
   hydrogens: boolean;
   colour: boolean;
@@ -59,6 +63,20 @@ export interface XView {
   labelOffsets: Record<string, [number, number]>;
   hiddenMolecules: number[];
   hiddenParts: string[];
+  /** Atoms (by index) left out, and atoms drawn faded (see-through), `fade` of the way to white (0.6 when not set). */
+  hiddenAtoms?: number[];
+  fadedAtoms?: number[];
+  fade?: number;
+}
+
+/** Van der Waals radii (Å, Bondi), for space-filling; others 2.0. */
+const VDW: Record<string, number> = { H: 1.2, D: 1.2, B: 1.92, C: 1.7, N: 1.55, O: 1.52, F: 1.47, Si: 2.1, P: 1.8, S: 1.8, Cl: 1.75, Br: 1.85, I: 1.98, Li: 1.82, Na: 2.27, K: 2.75, Mg: 1.73, Ni: 1.63, Cu: 1.4, Zn: 1.39, Pd: 1.63, Ag: 1.72, Pt: 1.75, Au: 1.66, Se: 1.9, Sn: 2.17 };
+
+/** A colour `f` of the way to white (a faded part). */
+function towardWhite(colour: string, f: number): string {
+  if (!/^#[0-9a-f]{6}$/i.test(colour)) return colour;
+  const rgb = [1, 3, 5].map((k) => parseInt(colour.slice(k, k + 2), 16));
+  return '#' + rgb.map((v) => Math.round(v + (255 - v) * f).toString(16).padStart(2, '0')).join('');
 }
 
 /** A crystal structure figure: what is drawn and how it is seen. */
@@ -147,6 +165,11 @@ export interface XShape {
   anchor?: [number, number];
   /** A stick half (ball-and-stick): 0 runs from its atom to the bond's middle, 1 from the middle to its atom. */
   half?: 0 | 1;
+  /** The atom a ball is (by index), or the two a bond joins. */
+  atom?: number;
+  atoms?: [number, number];
+  /** Drawn faded. */
+  faded?: boolean;
 }
 
 function visible(c: CrystalSpec, v: XView): number[] {
@@ -154,6 +177,7 @@ function visible(c: CrystalSpec, v: XView): number[] {
   c.atoms.forEach((a, i) => {
     if (v.hiddenMolecules.includes(a.mol) || (a.part && v.hiddenParts.includes(a.part))) return;
     if (isH(a.el) && !v.hydrogens) return;
+    if (v.hiddenAtoms?.includes(i)) return;
     out.push(i);
   });
   return out;
@@ -175,6 +199,17 @@ function eig2(a: number, b: number, d: number): { w: [number, number]; major: [n
   return { w: [w0, w1], major };
 }
 
+/** Where crystalShapes draws each shown atom's centre (pt, y down, centred as it centres them): for picking atoms by pointing. */
+export function atomPoints(c: CrystalSpec, v: XView): Map<number, [number, number]> {
+  const keep = visible(c, v);
+  const out = new Map<number, [number, number]>();
+  if (!keep.length) return out;
+  const centre: V3 = [0, 1, 2].map((k) => keep.reduce((s, i) => s + c.atoms[i].xyz[k], 0) / keep.length) as V3;
+  const scale = PT_PER_A * v.zoom;
+  for (const i of keep) { const s = mvec(v.rotation, sub3(c.atoms[i].xyz, centre)); out.set(i, [s[0] * scale, -s[1] * scale]); }
+  return out;
+}
+
 /** The shapes of the drawing, back to front, in points (y down), centred on the structure. */
 export function crystalShapes(c: CrystalSpec, v: XView): XShape[] {
   const r = v.rotation;
@@ -188,16 +223,24 @@ export function crystalShapes(c: CrystalSpec, v: XView): XShape[] {
   const radius = new Map<number, number>();
   const outline = new Map<number, number | { c: number; inv: [number, number, number] }>();
   const cc = PROBABILITY_SCALE[v.probability] ?? 1.5382;
+  // sticks: the atoms with a stick to another shown atom
+  const stuck = new Set<number>();
+  if (v.style === 'stick') { const shownSet = new Set(keep); for (const [p, q] of c.bonds) if (shownSet.has(p) && shownSet.has(q)) { stuck.add(p); stuck.add(q); } }
   for (const i of keep) {
     const a = c.atoms[i], s = screen.get(i)!;
     const colour = v.colour ? COLOURS[a.el] ?? '#b0b0b0' : '#ffffff';
     const hyd = isH(a.el);
-    if (v.style === 'ball' || hyd) {
+    if (v.style === 'wire') { radius.set(i, 0); outline.set(i, 0); continue; }
+    if (v.style !== 'ortep' || hyd) {
       let rad = hyd && v.style !== 'ball' ? H_RADIUS : Math.max(0.15, 0.38 * (COVALENT[a.el] ?? 1) + 0.05);
       if (hyd && v.style === 'ball') rad = 0.17;
+      // sticks: each atom a cap as wide as its sticks; space-filling: its van der Waals sphere
+      // (an atom with no sticks, as at either end of a bond being made, a small ball)
+      if (v.style === 'stick') rad = stuck.has(i) ? STICK_RADIUS : 0.28;
+      if (v.style === 'fill') rad = VDW[a.el] ?? 2.0;
       radius.set(i, rad);
-      outline.set(i, rad);
-      out.push({ kind: v.style === 'ball' || v.colour ? 'ball' : 'ellipse', depth: s[2], centre: pt(s), axes: [rad * scale, rad * scale], angle: 0, fill: colour, stroke: '#000000', width: hyd ? 0.5 : 0.6 });
+      outline.set(i, v.style === 'stick' ? 0 : rad);
+      out.push({ kind: v.style !== 'ortep' || v.colour ? 'ball' : 'ellipse', depth: s[2] + (v.style === 'stick' ? 2e-3 : 0), centre: pt(s), axes: [rad * scale, rad * scale], angle: 0, fill: colour, stroke: v.style === 'stick' ? colour : '#000000', width: v.style === 'stick' ? 0 : hyd ? 0.5 : 0.6, atom: i });
       continue;
     }
     // ORTEP: the outline of the ellipsoid, and its principal ellipses
@@ -236,8 +279,28 @@ export function crystalShapes(c: CrystalSpec, v: XView): XShape[] {
     a = [a[0] + d[0] * (ra / length), a[1] + d[1] * (ra / length), a[2] + d[2] * (ra / length)];
     b = [b[0] - d[0] * (rb / length), b[1] - d[1] * (rb / length), b[2] - d[2] * (rb / length)];
     const hyd = isH(c.atoms[i].el) || isH(c.atoms[j].el);
-    if (v.style === 'ball') { out.push(...stick(a, b, scale, c, i, j, v, pt)); continue; }
-    out.push({ kind: 'polyline', depth: (a[2] + b[2]) / 2 - 1e-3, points: [pt(a), pt(b)], fill: 'none', stroke: '#000000', width: BOND_WIDTH * (hyd ? 0.6 : 1) * scale });
+    if (v.style === 'ball' || v.style === 'stick') { out.push(...stick(a, b, scale, c, i, j, v, pt).map((x) => ({ ...x, atoms: [i, j] as [number, number] }))); continue; }
+    if (v.style === 'fill') continue;
+    if (v.style === 'wire') {
+      // two halves in their atoms' colours (black when not in colour)
+      const mid: V3 = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+      for (const [p, q, k] of [[a, mid, i], [mid, b, j]] as [V3, V3, number][]) {
+        out.push({ kind: 'polyline', depth: (p[2] + q[2]) / 2, points: [pt(p), pt(q)], fill: 'none', stroke: v.colour ? COLOURS[c.atoms[k].el] ?? '#808080' : '#000000', width: BOND_WIDTH * 1.4 * scale, atoms: [i, j] });
+      }
+      continue;
+    }
+    out.push({ kind: 'polyline', depth: (a[2] + b[2]) / 2 - 1e-3, points: [pt(a), pt(b)], fill: 'none', stroke: '#000000', width: BOND_WIDTH * (hyd ? 0.6 : 1) * scale, atoms: [i, j] });
+  }
+  // faded parts: an atom, and a bond with a faded atom at either end
+  const faded = new Set(v.fadedAtoms ?? []);
+  if (faded.size) {
+    const f = v.fade ?? 0.6;
+    for (const x of out) {
+      if (!(x.atom !== undefined && faded.has(x.atom)) && !(x.atoms && (faded.has(x.atoms[0]) || faded.has(x.atoms[1])))) continue;
+      x.fill = towardWhite(x.fill, f);
+      x.stroke = towardWhite(x.stroke, f);
+      x.faded = true;
+    }
   }
   out.sort((p, q) => p.depth - q.depth);
   if (v.labels) out.push(...labels(c, keep, screen, radius, scale, v, pt));

@@ -13,7 +13,7 @@ import { frameBox, frameMembers } from '../editor/frames';
 import { shapeBox } from '../objects';
 import { isInkId } from './geo';
 import { bestRotation, crystalPlacer, defaultView, drawCrystal, type CrystalSpec } from './xray';
-import { COVALENT, mvec, type V3 } from '../chem/crystal';
+import { COVALENT, mvec, type M3, type V3 } from '../chem/crystal';
 import { hydrogensOn, qmBonds, type QmBond } from '../chem/qm-bonds';
 import type { QmAtom } from '../chem/qm-output';
 
@@ -30,6 +30,29 @@ export interface EnergyPoint {
   flat?: ([number, number] | null)[];
   /** A structure drawn for this species (in the Energy Diagram window), shown beside its level in place of the file's geometry. */
   drawn?: Contents;
+  /** How its file's geometry is drawn, when set for it on its own (Structure ▸ Geometry View…). */
+  view?: GeomView;
+}
+
+/** The 3-D looks a geometry can have: balls and sticks, sticks, space-filling, or thin lines. */
+export type GeomLook = 'ball' | 'stick' | 'fill' | 'wire';
+
+/**
+ * How one species' geometry is drawn (review of #321: its look, the angle it is seen from, and
+ * parts hidden or faded). What isn't set follows the diagram.
+ */
+export interface GeomView {
+  /** A 3-D look, or a 2-D structure. */
+  style?: GeomLook | '2d';
+  /** Turned this way (Å → the page's axes, rows), instead of from the side that spreads it out most. */
+  rot?: M3;
+  /** Hydrogens: all of them (the default), only those on the bonds being made or broken, or none. */
+  hydrogens?: 'all' | 'moving' | 'none';
+  /** Atoms (by index in the file) left out, and atoms drawn faded. */
+  hidden?: number[];
+  faded?: number[];
+  /** How far faded atoms go toward white, 0 to 1 (0.6 when not set). */
+  fade?: number;
 }
 
 /** A bracket between two species on one pathway, marking the change from one to the other (ΔG‡ when it climbs to a transition state). */
@@ -67,6 +90,8 @@ export interface EnergyData {
   theory?: string;
   /** Draw each species' geometry (read from its file) beside its level: as balls and sticks (true or '3d') or as a 2-D structure. */
   structures?: boolean | '2d' | '3d';
+  /** The 3-D look of the geometries (balls and sticks when not set); a species' own view can change it. */
+  look3d?: GeomLook;
   /** On transition states' structures, the length (Å) of each bond being made or broken. */
   distances?: boolean;
   /** Where structures go: above each level (the default), above peaks and below valleys, or below each level. */
@@ -351,9 +376,10 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
         for (let n = 0; n < 40 && !clear(at2(top)); n++) top += up * 0.25 * L;
         const ts = /‡/.test(q.label);
         const bonds = qmBonds(q.geom!, ts);
-        const parts = d.structures === '2d'
-          ? drawSkeleton(doc, m, q.geom!, bonds, q.flat, at2(top), L, ts && !!d.distances)
-          : drawBalls(doc, m, q.geom!, bonds, at2(top), ts && !!d.distances);
+        const flat2d = q.view?.style ? q.view.style === '2d' : d.structures === '2d';
+        const parts = flat2d
+          ? drawSkeleton(doc, m, q.geom!, bonds, q.flat, at2(top), L, ts && !!d.distances, geomHidden(q.geom!, bonds, q.view))
+          : drawBalls(doc, m, q.geom!, bonds, at2(top), ts && !!d.distances, q.view, d.look3d);
         taken.push(at2(top));
         out.captions.push(...parts.captions);
         out.shapes.push(...parts.shapes);
@@ -516,14 +542,39 @@ export function refitEnergy(doc: Doc, before: ReadonlyMap<string, Entity | null>
   }
 }
 
-/** A geometry read from a file as a ball-and-stick figure: bonds from the covalent radii, turned to show it spread out. */
-export function geomSpec(atoms: QmAtom[], found: QmBond[] = qmBonds(atoms)): CrystalSpec {
+/** The atoms a species' view leaves out: those hidden by hand, and hydrogens as it asks. */
+export function geomHidden(atoms: QmAtom[], bonds: QmBond[], view?: GeomView): Set<number> {
+  const out = new Set(view?.hidden ?? []);
+  const h = view?.hydrogens ?? 'all';
+  if (h !== 'all') {
+    const moving = new Set(bonds.filter((b) => b.partial).flatMap((b) => [b.i, b.j]));
+    atoms.forEach((a, i) => { if ((a.el === 'H' || a.el === 'D') && (h === 'none' || !moving.has(i))) out.add(i); });
+  }
+  return out;
+}
+
+/** The side a geometry is seen from when not turned by hand: the one that spreads it out most. */
+export function geomBestRotation(atoms: QmAtom[]): M3 {
+  return bestRotation(atoms.map((a): V3 => [a.x, a.y, a.z]));
+}
+
+/**
+ * A geometry read from a file as a 3-D figure: bonds from the covalent radii, turned to show it
+ * spread out (or as its view says), in the diagram's look (balls and sticks) or its own.
+ */
+export function geomSpec(atoms: QmAtom[], found: QmBond[] = qmBonds(atoms), view?: GeomView, look?: GeomLook): CrystalSpec {
   const xyz = atoms.map((a): V3 => [a.x, a.y, a.z]);
   const bonds = found.filter((b) => !b.partial).map((b): [number, number] => [b.i, b.j]);
+  const style: GeomLook = view?.style && view.style !== '2d' ? view.style : look ?? 'ball';
+  const hidden = geomHidden(atoms, found, view);
   return {
     name: '', bonds,
     atoms: atoms.map((a, i) => ({ label: a.el + (i + 1), el: a.el, xyz: xyz[i], u: [0.02, 0.02, 0.02, 0, 0, 0], mol: 0 })),
-    view: { ...defaultView(), rotation: bestRotation(xyz), style: 'ball', labels: false, principal: false },
+    view: {
+      ...defaultView(), rotation: view?.rot ?? bestRotation(xyz), style, labels: false, principal: false,
+      ...(hidden.size ? { hiddenAtoms: [...hidden] } : {}),
+      ...(view?.faded?.length ? { fadedAtoms: view.faded.filter((i) => !hidden.has(i)), fade: view.fade ?? 0.6 } : {}),
+    },
   };
 }
 
@@ -547,15 +598,18 @@ function distanceLabel(doc: Doc, m: Measure, a: Vec, b: Vec, centre: Vec, len: n
 }
 
 /** A geometry as balls and sticks, the bonds being made or broken (a transition state) dashed, with their lengths when asked. */
-function drawBalls(doc: Doc, m: Measure, atoms: QmAtom[], bonds: QmBond[], r: Rect, distances: boolean): Drawn {
-  const spec = geomSpec(atoms, bonds);
+function drawBalls(doc: Doc, m: Measure, atoms: QmAtom[], bonds: QmBond[], r: Rect, distances: boolean, view?: GeomView, look?: GeomLook): Drawn {
+  const spec = geomSpec(atoms, bonds, view, look);
+  const hidden = new Set(spec.view.hiddenAtoms ?? []), faded = new Set(spec.view.fadedAtoms ?? []);
   const w = r.x2 - r.x1, h = r.y2 - r.y1;
   const parts = drawCrystal(doc, m, spec, { x: r.x1, y: r.y1 }, w, h);
   const out: Drawn = { captions: [...parts.captions], shapes: [...parts.shapes] };
-  const partial = bonds.filter((b) => b.partial);
+  const partial = bonds.filter((b) => b.partial && !hidden.has(b.i) && !hidden.has(b.j));
   if (!partial.length) return out;
   const { place, scale } = crystalPlacer(spec, { x: r.x1, y: r.y1 }, w, h);
-  const ball = (el: string) => (el === 'H' ? 0.17 : Math.max(0.15, 0.38 * (COVALENT[el] ?? 1) + 0.05)) * scale;
+  // the dashed bond runs from ball to ball (space-filling spheres cover it)
+  const style = spec.view.style;
+  const ball = (el: string) => (style === 'wire' ? 0 : style === 'stick' ? 0.1 : style === 'fill' ? Infinity : el === 'H' ? 0.17 : Math.max(0.15, 0.38 * (COVALENT[el] ?? 1) + 0.05)) * scale;
   const pts = atoms.map((_, i) => place(i)).filter((p): p is Vec => !!p);
   const centre = { x: pts.reduce((s, p) => s + p.x, 0) / (pts.length || 1), y: pts.reduce((s, p) => s + p.y, 0) / (pts.length || 1) };
   const lw = doc.style.lineWidth;
@@ -567,7 +621,8 @@ function drawBalls(doc: Doc, m: Measure, atoms: QmAtom[], bonds: QmBond[], r: Re
     if (L <= ra + rb) continue;
     const u = { x: (q.x - p.x) / L, y: (q.y - p.y) / L };
     const a = { x: p.x + u.x * ra, y: p.y + u.y * ra }, z = { x: q.x - u.x * rb, y: q.y - u.y * rb };
-    out.shapes.push(doc.addShape({ kind: 'line', x1: a.x, y1: a.y, x2: z.x, y2: z.y, color: '#000000', dashed: true, lineWidth: lw * 1.2 }).id);
+    const pale = faded.has(b.i) || faded.has(b.j);
+    out.shapes.push(doc.addShape({ kind: 'line', x1: a.x, y1: a.y, x2: z.x, y2: z.y, color: pale ? '#a0a0a0' : '#000000', dashed: true, lineWidth: lw * 1.2 }).id);
     if (distances) out.captions.push(distanceLabel(doc, m, a, z, centre, b.d, doc.style.captionSize * 0.8));
   }
   return out;
@@ -579,12 +634,12 @@ function drawBalls(doc: Doc, m: Measure, atoms: QmAtom[], bonds: QmBond[], r: Re
  * broken dashed (with their lengths when asked). Laid out by `flat` (the engine's 2-D layout)
  * when given, else the geometry seen from its best side.
  */
-export function drawSkeleton(doc: Doc, m: Measure, atoms: QmAtom[], bonds: QmBond[], flat: ([number, number] | null)[] | undefined, r: Rect, L: number, distances: boolean): Drawn {
+export function drawSkeleton(doc: Doc, m: Measure, atoms: QmAtom[], bonds: QmBond[], flat: ([number, number] | null)[] | undefined, r: Rect, L: number, distances: boolean, hidden: Set<number> = new Set()): Drawn {
   const out: Drawn = { captions: [], shapes: [] };
   const moving = new Set(bonds.filter((b) => b.partial).flatMap((b) => [b.i, b.j]));
-  const shown = (i: number) => atoms[i].el !== 'H' || moving.has(i);
+  const shown = (i: number) => !hidden.has(i) && (atoms[i].el !== 'H' || moving.has(i));
   let raw: ([number, number] | null)[];
-  if (flat && flat.length === atoms.length) raw = flat;
+  if (flat && flat.length === atoms.length) raw = flat.map((q, i) => (hidden.has(i) ? null : q));
   else {
     // seen from the side that spreads it out most
     const keep = atoms.map((_, i) => i).filter(shown);
