@@ -53,7 +53,7 @@ import { writeCdxml } from './io/cdxml-write';
 import { WORKSPACE, folderOf } from './io/workspace-file';
 import { askLink, followLink, setLinkHost, type LinkPlace } from './ui/links-ui';
 import { SHOW_JUMPS, cellOfLink, linkSpans, normalizeLink, removeLink, setLink, slideOfLink } from './links';
-import { openFileDialog, openManyBytesDialog, pickFolder, openBytesDialog, openAnyBytesDialog, stampOf, readRef, saveFileDialog, writeFile, showError, baseName, readPath, withExtension, setEmbeddedWriter, KEYMAP_FILE, SETTINGS_FILE, MOL, PDF, PICTURE, SVG, TIFF, EMF, EPS, PPTX, DOCX, PICTURE_EXTENSIONS, type FileType } from './io/files';
+import { openFileDialog, openManyBytesDialog, openBytesDialog, openAnyBytesDialog, stampOf, readRef, saveFileDialog, writeFile, showError, baseName, readPath, withExtension, setEmbeddedWriter, KEYMAP_FILE, SETTINGS_FILE, MOL, PDF, SDF, PICTURE, SVG, TIFF, EMF, EPS, PPTX, DOCX, PICTURE_EXTENSIONS, type FileType } from './io/files';
 import { writeTiff } from './render/tiff';
 import { itemsToEps } from './render/eps';
 import { Workspace, Tab } from './workspace';
@@ -90,7 +90,7 @@ import { recordingToWav, NARRATION_NAME } from './deck/narration';
 import { clockText } from './deck/show-link';
 import type { PresenterView } from './ui/presenter-view';
 import { editDrawingStyle } from './ui/style-dialog';
-import type { DocText } from './document/document';
+import { usedObjects, type DocText } from './document/document';
 import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from './dark-page';
 import { STYLE_PRESETS, applyStyle, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
 import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
@@ -132,7 +132,7 @@ import { StylePanel, tidyStyle } from './ui/style-panel';
 import { installCombos } from './ui/combo';
 import { installFontList, registerBundledFonts, bundledFaces, pdfFonts } from './fonts';
 import { applyRibbonIcons } from './ui/ribbon-icons';
-import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templateFromAtoms } from './chem/templates';
+import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templateFromAtoms, placeTemplate, freePlacement } from './chem/templates';
 import { centreEnd } from './chem/hapto';
 import { countElectrons } from './chem/electrons';
 import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, tokenize as tokenizeLabel } from './chem/labels';
@@ -140,7 +140,7 @@ import { selectedGroup } from './chem/group-smiles';
 import { templateIcon } from './ui/template-icons';
 import { StructureChecks } from './chem/warnings';
 import { idText, labelClashes, parseIdStart, type IdStyle } from './chem/compound-numbers';
-import { schemeItems, isReactionArrow, reactionSteps, itemFinder } from './chem/reaction';
+import { schemeItems, isReactionArrow, reactionSteps, itemFinder, plainMeasure } from './chem/reaction';
 import { stoichiometryBook, type StoichRow, type StoichRole } from './chem/stoichiometry';
 import { isReactionSmiles, isRxn, parseRxn, reactionSmiles, rxnBlock, splitReactionSmiles } from './chem/reaction-io';
 import { showBalance } from './ui/balance-dialog';
@@ -184,6 +184,7 @@ import { StructureNamer, confirmedName, nameRuns, type NameTools } from './chem/
 import { placeView } from './chem/place3d';
 import type { Viewer3d } from './ui/viewer3d';
 import { NameDialog } from './ui/name-dialog';
+import { SequenceDialog } from './ui/sequence-dialog';
 import { ArrangeDialog } from './ui/arrange-dialog';
 import type { AnimateDialog } from './ui/animate-dialog';
 import { PeriodicTable } from './ui/periodic-table';
@@ -233,7 +234,15 @@ import { freeSpace } from './editor/free-space';
 import { canReadStructures, importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
 import { placeRead } from './recognise/check';
 import { Diagnostics, catchErrors, errorReport, formatEntry, stamp, type LogEntry, type UnexpectedClose } from './diagnostics';
-import { keepStore } from './keep/store';
+import { keepStore, getText, putText } from './keep/store';
+import { Library, storePlace, folderPlace, readPlaceChoice, writePlaceChoice, LIBRARY_FILE } from './library/library-store';
+import { noteMentions, type LibCompound } from './library/library';
+import { fetchPubmed, type ZoteroLink } from './library/online';
+import { structuresIn, foundInContents, foundInDocument, foundInWorkbook, foundInFile, type Found, type Spot, type FileReaders } from './library/structures';
+import { parseIndex, indexText } from './library/file-index';
+import { libraryHolder } from './ui/library-refs';
+import { CompoundLibraryWindow, addStructures, type StructureIn } from './ui/compound-library';
+import { FindInFilesWindow, type ListedFile } from './ui/find-in-files';
 import { later } from './lazy';
 
 // dialogs for slides, design and charts load the first time they open
@@ -487,7 +496,8 @@ const TOOL_GROUPS: ToolbarItem[][] = [
     templatePalette('rings', 'tpl-rings', 'Ring systems', 5),
     templatePalette('heterocycles', 'tpl-heterocycles', 'Heterocycles', 7),
     templatePalette('amino', 'tpl-amino', 'Amino acids', 5, 64),
-    templatePalette('sugars', 'tpl-sugars', 'Sugars', 4, 64),
+    templatePalette('sugars', 'tpl-sugars', 'Sugars (Haworth)', 5, 64),
+    templatePalette('nucleic', 'tpl-nucleic', 'Nucleic acids: bases, nucleosides and nucleotides', 6, 64),
     templatePalette(['conformers', 'fused'], 'tpl-conformers', 'Conformers and fused rings in 3-D', 5, 64),
     templatePalette(['projections', 'stereo'], 'tpl-projections', 'Projections and stereocentres', 6, 56),
     templatePalette('cycloalkanes', 'tpl-cycloalkanes', 'Large rings', 6, 56),
@@ -1713,6 +1723,7 @@ async function schemeSettings(): Promise<void> {
     { name: 'textAlign', label: 'Text alignment', value: p.textAlign, options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Centre' }, { value: 'right', label: 'Right' }] },
     { name: 'textGap', label: 'Gap between arrow and text', value: pt(p.textGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.conditions) },
     { name: 'fit', label: 'Fit arrow length to its text (moves the products)', value: String(p.fit), type: 'checkbox' },
+    { name: 'sameLength', label: 'Clean Up Reaction makes arrows the same length', value: String(p.sameLength), type: 'checkbox' },
     { name: 'lead', label: 'Arrow before the text starts', value: pt(p.lead), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
     { name: 'headGap', label: 'Space between text and arrowhead', value: pt(p.headGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
   ], { ok: 'Save', note: 'Used when you type text beside an arrow, and by Clean Up Reaction and Arrange Scheme. Leave a distance blank to scale it with the bond length. Existing schemes change when you next clean them up.' });
@@ -1722,7 +1733,7 @@ async function schemeSettings(): Promise<void> {
     structGap: len(got.structGap), plusGap: len(got.plusGap), textGap: len(got.textGap), lead: len(got.lead), headGap: len(got.headGap),
     textSize: len(got.textSize) || null,
     textAlign: got.textAlign === 'left' || got.textAlign === 'right' ? got.textAlign : 'center',
-    helpers: got.helpers === 'true', fit: got.fit === 'true',
+    helpers: got.helpers === 'true', fit: got.fit === 'true', sameLength: got.sameLength === 'true',
   };
   setSchemePrefs(next);
   storeSettings();
@@ -2170,6 +2181,23 @@ const nameDialog = new NameDialog(async (name) => {
   return null;
 }, () => !namesReady);
 
+/** Insert > Structure from Sequence: a peptide drawn out in full, put in the middle of the view (or the slide). */
+const sequenceDialog = new SequenceDialog((t) => {
+  const c = pasteCentre();
+  try {
+    let ids: number[] = [];
+    doc.edit('Structure from Sequence', () => {
+      ids = placeTemplate(doc, t, freePlacement(c, doc.style.bondLength), { noMerge: true });
+      editor.sel = { atoms: new Set(ids), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() };
+      editor.placeClear(placingPage());
+    });
+    selectNewAtoms(ids);
+  } catch (err) {
+    return String(err);
+  }
+  return null;
+});
+
 /**
  * Chemistry > Name to Structure. Selected captions are read as names and replaced by their
  * structures (Undo puts them back); with no caption selected, a window asks for a name.
@@ -2458,7 +2486,7 @@ const ws: Workspace = new Workspace(doc, {
   newPage: () => (defaultPage ? { ...defaultPage } : null),
   newMaster: (m) => { const t = themeById(slideTemplate); return t && t.id !== 'plain' ? applyTemplate(m, t) : null; },
   beforeWrite: (tab, ref, name, how) => keeper.beforeWrite(tab, ref, name, how),
-  saved: (tab, data, how, was) => keeper.saved(tab, data, how, was),
+  saved: (tab, data, how, was) => { keeper.saved(tab, data, how, was); if (how !== 'autosaved') void noteFileCompounds(tab).catch(() => {}); },
   autoSaveFailed: (tab, msg) => keeper.autoSaveFailed(tab, msg),
   canvasEdited: async (name, n) => {
     const got = await ask('Canvas Slides Changed in PowerPoint', [{
@@ -2467,7 +2495,7 @@ const ws: Workspace = new Workspace(doc, {
     }], { ok: 'Open', note: `${n === 1 ? 'A canvas slide' : `${n} canvas slides`} in ${name} ${n === 1 ? 'was' : 'were'} saved as a slide for each keyframe, and ${n === 1 ? 'its slides were' : 'their slides were'} changed in PowerPoint since. Keep the canvas to go on editing it here (PowerPoint's changes to those slides are left out), or keep PowerPoint's slides as normal slides.` });
     return got?.keep === 'slides' ? 'slides' : 'canvas';
   },
-  opened: (tab) => keeper.opened(tab),
+  opened: (tab) => { keeper.opened(tab); void noteFileCompounds(tab).catch(() => {}); },
   styleSheet: (tab, style) => void offerStyleSheet(tab, style),
   dropped: (tab) => {
     keeper.dropped(tab);
@@ -4024,10 +4052,389 @@ async function pickReferenceFile(): Promise<{ name: string; text: string } | nul
   return { name: f.name, text: new TextDecoder().decode(f.bytes).replace(/^\uFEFF/, '') };
 }
 
+// ---------------------------------------------------------------- your library (compounds and references)
+
+/** The desktop app on a computer (not the iPad app, which can't look through folders). */
+const desktopFolders = isTauri() && !iPadApp;
+
+/** Your own library of references and compounds, kept between sessions (src/library). Read the first time it is needed. */
+const library = new Library(storePlace(keepStore()));
+let libraryReady: Promise<Library> | null = null;
+function useLibrary(): Promise<Library> {
+  return (libraryReady ??= (async () => {
+    // this computer may keep it in a folder of its own choosing (OneDrive, a lab drive)
+    const choice = isTauri() ? await readPlaceChoice(keepStore()).catch(() => ({ folder: null })) : { folder: null };
+    if (choice.folder) library.place = folderPlace(choice.folder);
+    await library.load();
+    return library;
+  })());
+}
+library.onChange(() => { referencesWindow.fill(); });
+window.addEventListener('beforeunload', () => { void library.flush(); });
+
+/** A web address's text: the desktop app reads it itself, a browser where the site allows it (PubMed and Zotero do). */
+async function webText(url: string): Promise<string> {
+  if (isTauri()) return new TextDecoder().decode(new Uint8Array(await invoke<ArrayBuffer>('web_get', { url })));
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`answered with an error (${res.status}).`);
+  return res.text();
+}
+
+/** Open a file the library keeps (a PDF) in its own program. */
+async function openLibraryFile(name: string, bytes: Uint8Array, path: string | null): Promise<void> {
+  if (path && isTauri()) {
+    try {
+      const { openPath } = await import('@tauri-apps/plugin-opener');
+      await openPath(path);
+      return;
+    } catch (e) {
+      flash(`Could not open ${name}: ${String(e)}`, 8000);
+      return;
+    }
+  }
+  const url = URL.createObjectURL(new Blob([bytes.slice()], { type: 'application/pdf' }));
+  window.open(url, '_blank');
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+/** Pick a folder (desktop app). */
+async function pickFolder(start = ''): Promise<string | null> {
+  if (!isTauri()) return null;
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const got = await open({ directory: true, multiple: false, ...(start ? { defaultPath: start } : {}) });
+  return typeof got === 'string' ? got : null;
+}
+
+/** Chemistry > Compound Library > Library Location: on this computer, or in a folder (to use it on other computers, or share it). */
+async function libraryLocation(): Promise<void> {
+  const lib = await useLibrary();
+  const where = await lib.place.where().catch(() => '');
+  if (!isTauri()) {
+    await ask('Library Location', [], { ok: 'OK', noCancel: true, note: `Your library is kept in this browser's storage for the page (${where}). In the desktop app it can be kept in a folder instead, such as one in OneDrive, to use it on other computers or share it with your group.` });
+    return;
+  }
+  const choice = await readPlaceChoice(keepStore());
+  const got = await ask('Library Location', [{
+    name: 'place', label: 'Keep it', value: choice.folder ? 'folder' : 'here',
+    options: [{ value: 'here', label: 'On this computer (the app\'s own folder)' }, { value: 'folder', label: 'In a folder I choose (OneDrive, a lab drive)…' }],
+  }], { ok: 'Continue', note: `Now: ${where}. In a folder, the library is one file (${LIBRARY_FILE}) with its PDFs in a folder beside it; every computer that keeps it there shares it, and changes made on two at once are merged. What is in the library now goes with it.` });
+  if (!got) return;
+  if (got.place === 'here') {
+    if (!choice.folder) return;
+    await lib.moveTo(storePlace(keepStore()));
+    await writePlaceChoice(keepStore(), { folder: null });
+    flash('Your library is kept on this computer now (what was in the folder came with it).', 6000);
+    return;
+  }
+  const folder = await pickFolder(choice.folder ?? '');
+  if (!folder) return;
+  await lib.moveTo(folderPlace(folder));
+  await writePlaceChoice(keepStore(), { folder });
+  flash(`Your library is kept in ${folder} now. Choose the same folder on your other computers to share it.`, 8000);
+  referencesWindow.fill();
+  compoundWindow.fill();
+}
+
+const ZOTERO_KEY = 'library/zotero.json';
+
+/** The library as the References window's first group. */
+const libraryRefs = libraryHolder(library, {
+  files: () => fileRefHolders(),
+  pickPdf: async () => { const f = await openBytesDialog('PDF', [PDF]); return f ? { name: f.name, bytes: f.bytes } : null; },
+  openFile: (name, bytes, path) => openLibraryFile(name, bytes, path),
+  get: webText,
+  zotero: {
+    read: async () => { try { return JSON.parse((await getText(keepStore(), ZOTERO_KEY)) ?? 'null') as ZoteroLink | null; } catch { return null; } },
+    write: (link) => (link ? putText(keepStore(), ZOTERO_KEY, JSON.stringify(link)) : keepStore().remove(ZOTERO_KEY)),
+  },
+  styleChanged: () => storeSettings(),
+  location: () => libraryLocation(),
+  flash,
+});
+
+/** SMILES, formula and weight for molfiles (null where the chemistry engine can't read one). */
+async function weighMolfiles(mbs: string[]): Promise<(FragmentResult | null)[]> {
+  if (!mbs.length) return [];
+  const res = await chem.analyze(mbs.map((molblock) => ({ molblock, map: [] }))).catch(() => null);
+  return mbs.map((_, i) => { const r = res?.results[i]; return r && !r.error && r.smiles ? r : null; });
+}
+
+/** Structures of a drawing (each fragment's atoms, with its number) ready for the library. */
+async function structuresFor(d: Doc, parts: { atoms: number[]; label?: string }[]): Promise<StructureIn[]> {
+  const mbs = parts.map((p) => toMolfile(d, p.atoms).molblock);
+  const w = await weighMolfiles(mbs);
+  const out: StructureIn[] = [];
+  parts.forEach((p, i) => {
+    const r = w[i];
+    if (!r) return;
+    const atoms = new Set(p.atoms);
+    const bonds = new Set([...d.bonds.values()].filter((b) => atoms.has(b.a1) && atoms.has(b.a2)).map((b) => b.id));
+    const part = extractDrawing(d, { atoms, bonds, captions: new Set(), arrows: new Set(), shapes: new Set() });
+    out.push({ molfile: mbs[i], smiles: r.smiles, formula: r.formula, mw: r.mw, drawing: part.contents(), ...(p.label ? { label: p.label } : {}) });
+  });
+  return out;
+}
+
+/** The structures of a drawing, a figure or a cell, as structuresIn finds them, keeping only those whose atoms are in `only`. */
+function partsOf(d: Doc, only?: Set<number>): { atoms: number[]; label?: string }[] {
+  return structuresIn(d).filter((p) => !only || p.atoms.some((a) => only.has(a)));
+}
+
+/** The drawing picked where the tab showing keeps structures: a document's figure, a cell's structure. */
+function pickedDrawing(): Doc | null {
+  if (docActive()) {
+    const id = docMode.pickedObject();
+    const o = id !== null ? docMode.file?.t.objects[id] : undefined;
+    return o?.kind === 'drawing' ? structureDoc(o.contents, docStyle()) : null;
+  }
+  if (sheetActive()) {
+    const c = sheetMode.activeStructure();
+    return c ? structureDoc(c, ws.active.book?.drawingStyle ?? ACS_1996) : null;
+  }
+  return null;
+}
+
+/** The structures selected in the tab showing; a string says why there are none. */
+async function selectedForLibrary(): Promise<StructureIn[] | string> {
+  if (!chem.ready) return 'The chemistry engine is still loading; try again in a moment.';
+  if (docActive() || sheetActive()) {
+    const d = pickedDrawing();
+    if (!d?.atoms.size) return docActive() ? 'Click a structure in the document first.' : 'Click a cell with a structure in it first.';
+    const got = await structuresFor(d, partsOf(d));
+    return got.length ? got : 'The structure couldn\'t be read (check its valences).';
+  }
+  const frags = chosenStructures();
+  if (!frags.length) return 'Select one or more structures in the drawing first.';
+  const atoms = new Set(frags.flatMap((f) => [...f]));
+  const got = await structuresFor(doc, partsOf(doc, atoms));
+  return got.length ? got : 'The structure couldn\'t be read (check its valences).';
+}
+
+/** Every structure with a compound number in the tab showing. */
+async function numberedForLibrary(): Promise<StructureIn[] | string> {
+  if (!chem.ready) return 'The chemistry engine is still loading; try again in a moment.';
+  const t = ws.mainOf(ws.active);
+  const out: StructureIn[] = [];
+  const docs: Doc[] = [];
+  if (t.deck) t.deck.slides.forEach((_, i) => docs.push(t.deck!.docOf(i)));
+  else if (t.document) for (const id of usedObjects(t.document.t)) { const o = t.document.t.objects[id]; if (o?.kind === 'drawing') docs.push(structureDoc(o.contents, t.document.t.drawingStyle)); }
+  else if (t.book) return 'Add Numbered works on drawings, slides and documents: in a spreadsheet, pick a cell and use Add Selected.';
+  else docs.push(ws.docOf(t));
+  for (const d of docs) out.push(...await structuresFor(d, partsOf(d).filter((p) => p.label)));
+  return out.length ? out : 'No structure in this file has a compound number under it (Chemistry > Number Compounds adds them).';
+}
+
+/** A library compound as a drawing in `style`, with its number under it. */
+function compoundDrawing(c: LibCompound, style: DocStyle, withLabel: boolean): Doc {
+  const d = c.drawing?.atoms.length ? structureDoc(c.drawing, style) : (() => { const x = new Doc(); x.style = { ...style }; x.bulk(() => { addMolfile(x, c.molfile, 0, 0); }); return x; })();
+  fitPasted(d, style);
+  if (withLabel && c.label && d.atoms.size) {
+    d.bulk(() => {
+      const cap = d.addCaption({ x: 0, y: 0, runs: [{ text: c.label, bold: numbering.bold ? true : undefined }], justify: 'center', attach: { atoms: [...d.atoms.keys()], side: 'below', gap: defaultGap(d), shift: 0, role: 'label' } });
+      placeAttached(d, cap, plainMeasure(d));
+    });
+  }
+  return d;
+}
+
+/** What Insert in the Compound Library puts a compound into. */
+function compoundInsertsInto(): string | null {
+  if (docActive()) return 'the document, at the caret';
+  if (sheetActive()) return 'the cell picked';
+  if (cellEdit) return null;
+  return deckNow() ? (ws.active.mode === 'design' ? 'the design' : 'the slide') : 'the drawing';
+}
+
+function insertCompound(c: LibCompound): string {
+  if (docActive()) { docMode.insertDrawing(compoundDrawing(c, docStyle(), true).contents()); return ''; }
+  if (sheetActive()) { sheetMode.putStructure(compoundDrawing(c, ws.active.book?.drawingStyle ?? ACS_1996, false).contents()); return ''; }
+  if (cellEdit) return 'Finish the structure being drawn first.';
+  const d = compoundDrawing(c, doc.style, true);
+  if (!d.atoms.size) return 'This compound\'s structure couldn\'t be drawn.';
+  void pasteFrom(() => ({ kind: 'drawing', doc: d }));
+  return '';
+}
+
+/** A picture of a compound for the library's list. */
+function compoundPicture(c: LibCompound): string | null {
+  try {
+    const d = compoundDrawing(c, ACS_1996, false);
+    const pic = recordPicture(d, 2);
+    return pic ? 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(pictureSvg(pic)) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Open a file and go to a place in it (a structure found in it). */
+async function openAt(path: string, spot: Spot | null, atoms: number[] = []): Promise<void> {
+  await openRecent(path);
+  const t = ws.mainOf(ws.active);
+  if (t.ref.kind !== 'path' || t.ref.path !== path || !spot) return;
+  if (t.mode === 'document') await loadDocMode();
+  if (t.mode === 'sheet') await loadSheetMode();
+  await new Promise((r) => requestAnimationFrame(() => r(null)));
+  if (spot.kind === 'figure') goToIssue({ kind: 'doc-object', id: spot.object });
+  else if (spot.kind === 'cell') goToIssue({ kind: 'cell', sheet: spot.sheet, row: spot.row, col: spot.col });
+  else goToIssue({ kind: 'drawing', ...(spot.kind === 'slide' ? { slide: spot.slide } : {}), atoms: atoms.filter((a) => doc.atoms.has(a)) });
+}
+
+/** The structures in an open tab, as they are now (not as saved). */
+function foundInTab(t: Tab): Found[] {
+  if (t.deck) return t.deck.slides.flatMap((_, i) => foundInContents(t.deck!.docOf(i).contents(), { kind: 'slide', slide: i }, t.deck!.docOf(i).style));
+  if (t.document) return foundInDocument(t.document.t);
+  if (t.book) return foundInWorkbook(t.book);
+  const d = ws.docOf(t);
+  return structuresIn(d).map((s) => ({ spot: { kind: 'drawing' as const }, atoms: s.atoms, ...(s.label ? { label: s.label } : {}), molblock: toMolfile(d, s.atoms).molblock }));
+}
+
+/** A file was saved or opened: the library's compounds in it remember it. */
+async function noteFileCompounds(tab: Tab): Promise<void> {
+  const t = ws.mainOf(tab);
+  if (t.ref.kind !== 'path' || !chem.ready) return;
+  const path = t.ref.path;
+  const lib = await useLibrary();
+  if (!lib.now.compounds.length) return;
+  const found = foundInTab(t);
+  if (!found.length) return;
+  const w = await weighMolfiles(found.map((f) => f.molblock));
+  lib.change((l) => noteMentions(l, path, found.map((f, i) => ({ smiles: w[i]?.smiles ?? '', ...(f.label ? { label: f.label } : {}) }))));
+}
+
+const compoundWindow = new CompoundLibraryWindow(library, {
+  flash,
+  selected: () => selectedForLibrary(),
+  numbered: () => numberedForLibrary(),
+  fromText: async (text) => {
+    const r = await textToStructure(text, ACS_1996);
+    if ('error' in r) return r;
+    const d = structureDoc(r.contents, ACS_1996);
+    const [s] = await structuresFor(d, [{ atoms: [...d.atoms.keys()] }]);
+    if (!s) return { error: 'The structure couldn\'t be read.' };
+    // a name typed is kept as its name; SMILES isn't one
+    const smiles = chem.ready ? await molfileOrSmiles(text.trim(), (x) => chem.smilesToMol(x)).catch(() => null) : null;
+    return smiles ? s : { ...s, name: text.trim() };
+  },
+  fromMolfiles: async (mbs) => {
+    const w = await weighMolfiles(mbs);
+    return mbs.map((mb, i) => {
+      const r = w[i];
+      if (!r) return null;
+      const d = new Doc();
+      try { d.bulk(() => { addMolfile(d, mb, 0, 0); }); } catch { return null; }
+      return { molfile: mb, smiles: r.smiles, formula: r.formula, mw: r.mw, drawing: d.contents() };
+    });
+  },
+  insert: (c) => insertCompound(c),
+  insertsInto: () => compoundInsertsInto(),
+  picture: (c) => compoundPicture(c),
+  contains: async (q, smiles) => (await chem.substructure(q, smiles)).results,
+  openFile: async (path, c) => {
+    if (!isTauri()) { flash('Files can be opened from here in the desktop app (File > Open finds it in a browser).'); return; }
+    await openRecent(path);
+    // the compound picked, if it is in the file
+    const t = ws.mainOf(ws.active);
+    if (t.ref.kind !== 'path' || t.ref.path !== path) return;
+    const found = foundInTab(t);
+    const w = await weighMolfiles(found.map((f) => f.molblock));
+    const i = w.findIndex((r) => r?.smiles === c.smiles);
+    if (i >= 0) await openAt(path, found[i].spot, found[i].atoms);
+  },
+  findInFiles: desktopFolders ? (c) => void findWindow.open({ smiles: c.smiles, label: c.label }) : undefined,
+  pickSdf: async () => { const f = await openBytesDialog('SD file', [SDF], ['sd']); return f ? { name: f.name, text: new TextDecoder().decode(f.bytes) } : null; },
+  saveSdf: async (name, text) => {
+    const target = await saveFileDialog(name, SDF).catch(() => null);
+    if (!target) return;
+    await writeFile(target.ref, target.name, text, SDF);
+    flash(`Saved ${target.name}.`);
+  },
+  fileName: () => { const t = ws.mainOf(ws.active); return t.ref.kind === 'path' ? t.ref.path : ''; },
+  location: () => libraryLocation(),
+});
+
+/** Chemistry > Compound Library > Add Selected to Compound Library. */
+async function addToCompoundLibrary(): Promise<void> {
+  finishTyping();
+  const lib = await useLibrary();
+  const got = await selectedForLibrary();
+  if (typeof got === 'string') { flash(got, 6000); return; }
+  const t = ws.mainOf(ws.active);
+  let res: ReturnType<typeof addStructures> | null = null;
+  lib.change((l) => (res = addStructures(l, got, t.ref.kind === 'path' ? t.ref.path : '')).lib);
+  const r = res as ReturnType<typeof addStructures> | null;
+  if (!r) return;
+  const names = [...r.added, ...r.known].map((c) => c.label || c.name || c.formula).filter(Boolean).slice(0, 4).join(', ');
+  flash(r.added.length ? `Added ${r.added.length} compound${r.added.length === 1 ? '' : 's'} to your library${names ? ` (${names})` : ''}.` : `Already in your library${names ? ` (${names})` : ''}.`, 5000,
+    { label: 'Show', run: () => void openCompoundLibrary([...r.added, ...r.known].map((c) => c.id)) });
+}
+
+async function openCompoundLibrary(select: string[] = []): Promise<void> {
+  finishTyping();
+  await useLibrary();
+  await compoundWindow.open(select);
+}
+
+// ---------------------------------------------------------------- File > Find Structure in Files (desktop app)
+
+const INDEX_KEY = 'library/file-index.json';
+
+/** How files found in a folder are read: with the app's own readers, ChemDraw objects in Word files read as structures. */
+const folderReaders: FileReaders = {
+  document: async (bytes, name) => (await (await import('./io/doc-files')).readDocumentFile(bytes, name, { ...docRead, convertChemDraw: true })).doc,
+  sheet: async (bytes, name) => (await (await import('./io/sheet-files')).readSheetFile(bytes, name, sheetFiles)).book,
+  slides: async (bytes) => (await import('./io/pptx-read')).readPptx(bytes).slides.map((s) => s.contents),
+};
+
+const findWindow = new FindInFilesWindow({
+  flash,
+  pickFolder: (start) => pickFolder(start),
+  listFolder: (path, extensions, sub) => invoke<{ files: ListedFile[]; complete: boolean }>('list_folder', { path, extensions, sub }),
+  selected: async () => {
+    const got = await selectedForLibrary();
+    if (typeof got === 'string') return got;
+    return { smiles: got[0].smiles, ...(got[0].label ? { label: got[0].label } : {}) };
+  },
+  toSmiles: async (text) => {
+    if (!chem.ready) return { error: 'The chemistry engine is still loading; try again in a moment.' };
+    const r = await textToStructure(text, ACS_1996);
+    if ('error' in r) return r;
+    const d = structureDoc(r.contents, ACS_1996);
+    const [w] = await weighMolfiles([toMolfile(d, d.atoms.keys()).molblock]);
+    return w?.smiles ?? { error: 'The structure couldn\'t be read.' };
+  },
+  deps: {
+    read: (path) => readPath(path),
+    found: (bytes, path) => foundInFile(bytes, path, folderReaders),
+    smiles: async (mbs) => (await weighMolfiles(mbs)).map((r) => r?.smiles ?? null),
+    contains: async (q, smiles) => (await chem.substructure(q, smiles)).results,
+  },
+  index: {
+    read: async () => parseIndex(await getText(keepStore(), INDEX_KEY)),
+    write: (ix) => putText(keepStore(), INDEX_KEY, indexText(ix)),
+  },
+  open: (h) => openAt(h.path, h.structure.spot, h.structure.atoms),
+  lastFolder: {
+    get: () => { try { return localStorage.getItem('ci-find-folder') ?? ''; } catch { return ''; } },
+    set: (p) => { try { localStorage.setItem('ci-find-folder', p); } catch { /* not kept */ } },
+  },
+});
+
+function findStructureInFiles(): void {
+  finishTyping();
+  if (!desktopFolders) { flash('Find Structure in Files looks through a folder, which the desktop app (Windows, Mac or Linux) can do and a browser can\'t.', 7000); return; }
+  if (!chem.ready) { flash('The chemistry engine is still loading; try again in a moment.'); return; }
+  void findWindow.open();
+}
+
 // ---------------------------------------------------------------- references (every open file's)
 
-/** The open files that keep references (documents, presentations, designs), the one showing first. */
+/** Your library, then the open files that keep references (documents, presentations, designs), the one showing first. */
 function refHolders(): RefHolder[] {
+  return [libraryRefs, ...fileRefHolders()];
+}
+
+/** The open files that keep references, the one showing first. */
+function fileRefHolders(): RefHolder[] {
   const here = ws.mainOf(ws.active);
   const out: RefHolder[] = [];
   for (const t of [here, ...ws.fileTabs.filter((x) => x !== here)]) {
@@ -4045,11 +4452,13 @@ const referencesWindow = new ReferencesDialog({
   currentKind: () => (ws.active.mode === 'sheet' ? 'A spreadsheet' : 'A canvas'),
   flash,
   pickFile: () => pickReferenceFile(),
+  pubmed: (ids) => fetchPubmed(ids, webText),
   preferredChanged: () => storeSettings(),
 });
 
 function openReferences(): Promise<void> {
   finishTyping();
+  void useLibrary();
   return referencesWindow.open();
 }
 
@@ -5647,7 +6056,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 /** Menu commands that work the same whatever shows. */
-const ANY_TAB = new Set(['references', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
+const ANY_TAB = new Set(['references', 'compound-library', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
   'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
@@ -5807,6 +6216,7 @@ function command(name: string): boolean {
     flash('Select one metal first, then add the ligand to it.');
     return false;
   }
+  if (name === 'repeat-label:here') return repeatLabel(contextAtom);
   if (name.startsWith('fuse-ring:')) {
     const [, id, index] = name.split(':');
     return contextBond !== null && editor.fuseRing(contextBond, id, Number(index));
@@ -6108,6 +6518,11 @@ const COMMANDS: Record<string, () => unknown> = {
   'slide-references': () => void slideReferences(),
   'references-slide': () => void referencesSlide(),
   'insert-reference': () => void insertReference(),
+  'compound-library': () => void openCompoundLibrary(),
+  'insert-compound': () => void openCompoundLibrary(),
+  'add-to-compound-library': () => void addToCompoundLibrary(),
+  'library-location': () => void libraryLocation(),
+  'find-structure-files': () => findStructureInFiles(),
   'insert-date-time': () => void headerFooter(),
   'insert-slide-number': () => void headerFooter(),
   cut: () => cut(),
@@ -6323,6 +6738,15 @@ const COMMANDS: Record<string, () => unknown> = {
     else if (n > 4) flash('Select just the bond (or bonds) that break: click one with the selection tool, Shift+click for more.', 5000);
     else editor.addHomolysisArrows();
   },
+  'draw-from-arrows': () => {
+    const r = editor.drawFromArrows();
+    if (r === 'many') { flash('The arrows are on more than one step: select an arrow or the structure of the step to draw.', 5000); return; }
+    if (r === 'none') { flash('Draw curved (mechanism) arrows on a structure first, each from a lone pair or bond to where its electrons go.', 5000); return; }
+    const errors = r.issues.filter((i) => i.level === 'error'), warnings = r.issues.filter((i) => i.level === 'warning');
+    if (!r.drawn) flash(`Not drawn: ${errors[0]?.text ?? 'the arrows can\'t be read.'}${errors.length > 1 ? ` (${errors.length - 1} more: Check Arrows goes through them)` : ''}`, 9000);
+    else flash(warnings.length ? `Drawn. ${warnings[0].text}` : 'Next intermediate drawn from the arrows.', warnings.length ? 7000 : 3000);
+  },
+  'check-arrows': () => checkArrows(),
   'attach-arrow': () => {
     const n = editor.attachArrows();
     flash(n ? `${n === 1 ? 'It follows' : `${n} things follow`} the structure now.` : 'Select curved arrows whose ends sit on atoms, bonds or lone pairs (or lone pairs and charges) first.');
@@ -6379,6 +6803,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'delete-nickname': () => void deleteNickname(),
   'contract-label': () => void contractLabel(),
   'expand-label': () => void expandLabel(),
+  'repeat-label': () => repeatLabel(null),
   'hapto-bond': () => flash(editor.bondMetalToRing(), 5000),
   'split-hapto': () => flash(editor.splitHaptoBonds()),
   'chain-ends': () => void toggleTerminalMethyls(),
@@ -6396,6 +6821,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'split-view': () => toggleSplit(),
   'repeat-group': () => { void setRepeatGroup(); },
   'name-to-structure': () => nameToStructure(),
+  'sequence-to-structure': () => sequenceDialog.open(),
   'clipboard-formats': async () => {
     const names = await clipboardFormats().catch((err) => [String(err)]);
     flash(names.length ? 'On the clipboard: ' + names.join(', ') : 'The clipboard is empty.', 15000);
@@ -8679,6 +9105,20 @@ function updateWarnings(): void {
 }
 
 /** Chemistry > Check Structure: go to the next problem after the one selected. */
+/** Check Arrows: each problem with the mechanism arrows in turn, selected and said (like Check Structure). */
+let arrowIssue = 0;
+function checkArrows(): void {
+  const list = editor.checkArrows();
+  if (list === 'many') { flash('The arrows are on more than one step: select an arrow or the structure of the step to check.', 5000); return; }
+  if (list === 'none') { flash('There are no curved (mechanism) arrows on a structure to check.'); return; }
+  if (!list.length) { flash('The arrows make sense: each starts at electrons that are there, and nothing ends up past an octet.', 5000); return; }
+  arrowIssue = arrowIssue % list.length;
+  const w = list[arrowIssue];
+  editor.pickIssues([w]);
+  flash(`${list.length > 1 ? `${arrowIssue + 1} of ${list.length}: ` : ''}${w.level === 'warning' ? 'Worth a look: ' : ''}${w.text}`, 9000);
+  arrowIssue++;
+}
+
 function checkStructure(): void {
   const list = checks.list();
   if (!list.length) {
@@ -8838,6 +9278,32 @@ function unlinkText(): boolean {
  */
 /** The bond right-clicked last, for Fuse a Ring Here. */
 let contextBond: number | null = null;
+/** The atom the right-click menu opened on, and whether the menu's commands are for every selected atom (it was one of several picked before). */
+let contextAtom: { id: number; all: boolean } | null = null;
+
+/**
+ * Repeat Label (right-click an atom after typing a label on another): the label last typed goes on
+ * the atom right-clicked, or on every selected atom when it was one of several picked. From a key:
+ * the selected atoms, or else the atom under the pointer.
+ */
+function repeatLabel(at: { id: number; all: boolean } | null): boolean {
+  const last = editor.lastLabel;
+  if (!last) { flash('Type a label on an atom first (NHAc, OTBS…); then Repeat Label puts the same label on other atoms.'); return false; }
+  const hover = editor.hover?.kind === 'atom' ? [editor.hover.id] : [];
+  const ids = at ? (at.all ? [...editor.sel.atoms] : [at.id]) : editor.sel.atoms.size ? [...editor.sel.atoms] : hover;
+  if (editor.repeatLabel(ids)) return true;
+  flash(`Select the atoms to label “${last.text}”, or right-click one.`);
+  return false;
+}
+
+/** The right-click menu's Repeat “NHAc” Label, when a label has been typed and the menu opened on an atom. */
+function repeatLabelMenu(): MenuItem[] {
+  const last = editor.lastLabel;
+  if (!last || !contextAtom || !editor.doc.atoms.has(contextAtom.id)) return [];
+  const n = contextAtom.all ? editor.sel.atoms.size : 1;
+  const shown = [...last.text].length > 24 ? `${[...last.text].slice(0, 23).join('')}…` : last.text;
+  return [{ cmd: 'repeat-label:here', label: `Repeat “${shown}” Label${n > 1 ? ` on ${n} Atoms` : ''}` }, null];
+}
 /** The conformers Fuse a Ring Here offers, in this order. */
 const FUSE_RINGS = ['chair', 'boat', 'twist-boat', 'half-chair', 'cyclohexanone', 'envelope', 'c5-twist', 'cyclopentene', 'cyclobutane', 'c7-twist-chair'];
 
@@ -8903,7 +9369,7 @@ function drawingMenu(): MenuItem[] {
       ...(ws.active.mode === 'slides' ? [{ cmd: 'new-comment', label: 'New Comment' }, { cmd: 'show-comments', label: 'Show Comments' }, null] : []),
       ...(ws.active.mode === 'slides' || design ? [{ cmd: 'format-background', label: 'Format Background…' }, { cmd: 'slide-references', label: 'References on Slide…' }, null] : []),
       ...(ws.active.mode === 'slides' && deckNow()?.current?.canvas ? [{ label: 'Keyframes', items: keyframeMenu() }, null] : []),
-      { label: 'Insert', items: [{ cmd: 'name-to-structure' }, { cmd: 'periodic-table' }, { cmd: 'insert-picture' }, { cmd: 'import-picture', label: 'Structure from Picture…' }, { cmd: 'text-box' }, { cmd: 'insert-reference', label: 'Reference…' }, { cmd: 'insert-symbol' }, ...(design ? [{ cmd: 'design-shapes', label: 'Shape…' }, { cmd: 'design-icons', label: 'Icon…' }, { cmd: 'connector-tool' }] : []), ...(ws.active.mode === 'slides' ? [{ cmd: 'slide-shapes', label: 'Shape…' }, { cmd: 'slide-icons', label: 'Icon…' }] : [])] },
+      { label: 'Insert', items: [{ cmd: 'name-to-structure' }, { cmd: 'sequence-to-structure' }, { cmd: 'periodic-table' }, { cmd: 'insert-picture' }, { cmd: 'import-picture', label: 'Structure from Picture…' }, { cmd: 'text-box' }, { cmd: 'insert-reference', label: 'Reference…' }, { cmd: 'insert-symbol' }, ...(design ? [{ cmd: 'design-shapes', label: 'Shape…' }, { cmd: 'design-icons', label: 'Icon…' }, { cmd: 'connector-tool' }] : []), ...(ws.active.mode === 'slides' ? [{ cmd: 'slide-shapes', label: 'Shape…' }, { cmd: 'slide-icons', label: 'Icon…' }] : [])] },
       { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }] },
       { cmd: 'drawing-style' },
       ...(ws.active.mode === 'drawing' && pageEdgesMenu() ? [pageEdgesMenu()!] : []),
@@ -8924,6 +9390,7 @@ function drawingMenu(): MenuItem[] {
     : [];
   return [
     { cmd: 'cut' }, { cmd: 'copy' }, { cmd: 'paste' }, { cmd: 'delete', label: 'Delete' }, { cmd: 'format-painter' }, null,
+    ...repeatLabelMenu(),
     ...(editor.selectedEnergy() !== null ? [{ cmd: 'edit-energy' }, null] : []),
     ...(editor.selectedDiagram() !== null ? [{ cmd: 'edit-diagram' }, { cmd: 'diagram-to-shapes' }, null] : []),
     ...(atoms || texts ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }, null] : []),
@@ -8947,12 +9414,13 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'arrow-add-bend', ...(editor.contextSpot?.t !== undefined ? { label: 'Add Bend Here' } : {}) }, ...(editor.pickedJoin() ? [{ cmd: 'arrow-remove-bend' }, { cmd: 'arrow-smooth-join' }, { cmd: 'arrow-symmetric-join' }] : []), null,
       { label: 'Shape', items: [{ cmd: 'arrow-s-shape', label: 'S' }, { cmd: 'arrow-single-curve', label: 'Single Curve' }, { cmd: 'arrow-shape-u', label: 'U-Turn' }, { cmd: 'arrow-shape-loop', label: 'Loop' }] },
       { cmd: 'flip-arrow-bend' }, { cmd: 'arrow-reverse' }, { cmd: 'arrow-smooth-path' }, { cmd: 'arrow-simplify-path' }, null, { cmd: 'attach-arrow' }, { cmd: 'detach-arrow' },
-    ] }] : []),
+    ] }, { cmd: 'draw-from-arrows' }, { cmd: 'check-arrows' }] : []),
     ...(s.bonds.size && s.bonds.size <= 2 && !s.arrows.size ? [{ cmd: 'homolysis-arrows' }] : []),
     ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : []),
     ...(s.arrows.size || atoms ? [{ label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
     null,
     ...(atoms ? [{ label: 'Label the Structure', items: [{ cmd: 'add-id-label' }, { cmd: 'add-caption' }, { cmd: 'attach-descriptors' }, null, { cmd: 'number-compounds' }] }] : []),
+    ...(atoms ? [{ cmd: 'add-to-compound-library', label: 'Add to Compound Library' }] : []),
     ...(atoms || shapes.some((x) => x.kind === 'ring') ? [{ label: 'Highlight and Fill', items: [{ cmd: 'highlight' }, { cmd: 'remove-highlight' }, { cmd: 'highlight-look' }, { cmd: 'select-highlight' }, null, { cmd: 'smooth-highlight' }, { cmd: 'centre-highlight' }, { cmd: 'soft-highlight' }, { cmd: 'outline-highlight' }, { cmd: 'shadow-highlight' }, { cmd: 'glow-highlight' }, { cmd: 'save-highlight-look' }, null, { cmd: 'fill-rings' }, { cmd: 'ring-shadow' }] }] : []),
     ...(s.captions.size ? [{ cmd: 'link-text' }] : []),
     ...([...s.captions].some((id) => doc.captions.get(id)?.runs.some((r) => r.link))
@@ -9080,8 +9548,11 @@ editor.onContextMenu = (e) => {
   finishTyping();
   // on a keyframe's tab, corner or outline: the keyframe commands
   if (canvasKeys.menuAt(e) >= 0) { showContextMenu(e.clientX, e.clientY, keyframeMenu(), { run: (cmd) => void command(cmd), key: commandKey }); return; }
+  const picked = new Set(editor.sel.atoms);
   const h = editor.contextPick(e);
   contextBond = h?.kind === 'bond' ? h.id : null;
+  // (an atom not already picked selects its whole structure, but Repeat Label is for that atom only)
+  contextAtom = h?.kind === 'atom' ? { id: h.id, all: picked.has(h.id) && picked.size > 1 } : null;
   rightClickAt = { left: e.clientX, bottom: e.clientY };
   showContextMenu(e.clientX, e.clientY, drawingMenu(), { run: (cmd) => void command(cmd), key: commandKey });
 };

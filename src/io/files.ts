@@ -217,14 +217,6 @@ export async function openManyBytesDialog(label: string, exts: string[]): Promis
   return Promise.all(files.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
 }
 
-/** Ask for a folder (desktop app). Null when the user cancels. */
-export async function pickFolder(): Promise<string | null> {
-  if (!desktop) return null;
-  const { open } = await import('@tauri-apps/plugin-dialog');
-  const got = await open({ multiple: false, directory: true });
-  return typeof got === 'string' ? got : null;
-}
-
 function uploadBox(types: FileType[]): Promise<File | null> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
