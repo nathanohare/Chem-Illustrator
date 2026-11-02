@@ -79,6 +79,12 @@ describe('butane turned about its middle bond', () => {
     expect(frame.shapes.filter((s) => doc.shapes.get(s)!.kind === 'oval').length).toBe(7);
     expect(frame.shapes.filter((s) => doc.shapes.get(s)!.kind === 'rect').length).toBe(1);
     expect(torsionFrameOf(doc, 'caption', frame.captions[0])).toBe(id);
+    // a scan's turning point at 0° can land a few degrees off: it is still shown at 0° and 360°
+    const off = { ...butane, sawhorse: false, extrema: butane.extrema.map((e) => (e.kind === 'max' && (e.phi < 10 || e.phi > 350) ? { ...e, phi: 6.5 } : e)) };
+    let id3 = 0;
+    doc.edit('Off', () => { id3 = putTorsion(doc, m, off, { x: 100, y: 800 }); });
+    expect(doc.shapes.get(id3)!.frame!.shapes.filter((s) => doc.shapes.get(s)!.kind === 'oval').length).toBe(7);
+    expect(off.extrema.some((e) => e.phi === 6.5)).toBe(true);
     // kJ/mol: the same chart in other units
     doc.edit('kJ', () => { putTorsion(doc, m, { ...butane, unit: 'kJ/mol', insets: 'minima', sawhorse: false }, { x: 100, y: 200 }, id); });
     const f2 = doc.shapes.get(id)!.frame!;

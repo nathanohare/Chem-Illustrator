@@ -122,9 +122,10 @@ export function drawTorsion(doc: Doc, m: Measure, d: TorsionData, at: Vec): Tors
   }).id);
 
   // each minimum and maximum: a level, its projection and name, and the climb to it
-  const ext = [...d.extrema];
-  // the curve's ends are the same conformation: show the one at 0° at 360° too
-  const atZero = ext.find((e) => e.phi < 3 || e.phi > 357);
+  const ext = d.extrema.map((e) => ({ ...e }));
+  // the curve's ends are the same conformation: show the one at 0° at 360° too (a scan's
+  // turning point there can sit a few degrees off, as the fit is not quite symmetric)
+  const atZero = ext.find((e) => e.phi < 10 || e.phi > 350);
   if (atZero) { atZero.phi = 0; ext.push({ ...atZero, phi: 360 }); }
   const bar = 0.9 * L;
   const fmt = (e: number) => (e * k).toFixed(d.digits).replace(/^-/, '−');
