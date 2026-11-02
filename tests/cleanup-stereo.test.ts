@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { Doc } from '../src/model';
 import { readCdxml } from '../src/io/cdxml';
 import { addMolfile, toMolfile } from '../src/chem/molfile';
-import { cleanUpMoves } from '../src/chem/cleanup';
+import { cleanUpWays } from '../src/chem/cleanup';
 import { dist } from '../src/geom';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -28,6 +28,17 @@ const closestIn = (doc: Doc, ids: Iterable<number>) => {
   let c = Infinity;
   for (let a = 0; a < atoms.length; a++) for (let b = a + 1; b < atoms.length; b++) c = Math.min(c, dist(atoms[a], atoms[b]));
   return c;
+};
+
+/** Clean up each structure the best way: atoms moved, and any wedges turned over to keep stereocentres. */
+const cleanAll = (doc: Doc, frags: Set<number>[]) => {
+  const ways = frags.map((f) => cleanUpWays(doc, f)[0]).filter(Boolean);
+  doc.bulk(() => {
+    for (const w of ways) {
+      for (const [id, p] of w.moves) doc.updateAtom(id, { x: p.x, y: p.y });
+      for (const [id, d] of w.displays) doc.updateBond(id, { display: d });
+    }
+  });
 };
 
 const CASES: [string, string][] = [
@@ -70,8 +81,7 @@ describe('Clean Up Structure keeps the chemistry', () => {
       expect(smilesOfDoc(doc)).toBe(want);
       const closest = () => closestIn(doc, doc.atoms.keys());
       const before = closest();
-      const moves = cleanUpMoves(doc, doc.fragments());
-      doc.bulk(() => { for (const [id, p] of moves) doc.updateAtom(id, { x: p.x, y: p.y }); });
+      cleanAll(doc, doc.fragments());
       expect(smilesOfDoc(doc)).toBe(want);
       // nothing lands on top of anything else (bridged ring systems keep their drawn shape, so
       // they can't be better than they were drawn)
@@ -91,8 +101,7 @@ describe.skipIf(!dir || !existsSync(dir))('Clean Up Structure on real ChemDraw f
       // structures the chemistry engine can't read (unknown labels) are left out of the comparison
       const before = frags.map((s) => { try { return smilesOfDoc(doc, s); } catch { return null; } });
       const crowd = frags.map((s) => closestIn(doc, s));
-      const moves = cleanUpMoves(doc, frags);
-      doc.bulk(() => { for (const [id, p] of moves) doc.updateAtom(id, { x: p.x, y: p.y }); });
+      cleanAll(doc, frags);
       frags.forEach((s, i) => {
         if (before[i]) expect(smilesOfDoc(doc, s)).toBe(before[i]);
         expect(closestIn(doc, s)).toBeGreaterThan(Math.min(L * 0.5, crowd[i] * 0.9));

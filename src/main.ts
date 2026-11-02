@@ -93,6 +93,8 @@ import { editDrawingStyle } from './ui/style-dialog';
 import type { DocText } from './document/document';
 import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from './dark-page';
 import { STYLE_PRESETS, applyStyle, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
+import { askCleanUpOption } from './ui/cleanup-picker';
+import { looksTangled, turnOption } from './chem/cleanup';
 import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
 import { pngWithDpi } from './render/emf-read';
 import { whiteToClear } from './render/background';
@@ -1541,6 +1543,66 @@ async function structureKeys(): Promise<Map<number, string>> {
     if (r && !r.error && r.smiles) for (const a of f) out.set(a, r.smiles);
   });
   return out;
+}
+
+// ---------------------------------------------------------------- Clean Up Structure
+
+/**
+ * The chemistry engine's own layouts of the target structures that look tangled (bonds crossing,
+ * atoms on top of one another), for Clean Up to try alongside its own. Empty when the engine
+ * isn't ready or nothing is tangled.
+ */
+async function engineLayouts(): Promise<Map<number, Vec>[]> {
+  if (!chem.ready) return [];
+  const out: Map<number, Vec>[] = [];
+  for (const f of editor.cleanUpTargets()) {
+    if (!looksTangled(doc, f)) continue;
+    try {
+      const mf = toMolfile(doc, f);
+      const layouts = await chem.layouts(mf.molblock);
+      for (const coords of layouts) {
+        const m = new Map<number, Vec>();
+        mf.map.forEach((id, i) => { if (id >= 0 && coords[i]) m.set(id, { x: coords[i][0], y: coords[i][1] }); });
+        out.push(m);
+      }
+    } catch { /* the engine can't read it: Clean Up manages on its own */ }
+  }
+  return out;
+}
+
+/** Structure > Clean Up Structure. Pressed again on the same structures, it steps through other ways of laying them out. */
+async function cleanUpStructures(): Promise<void> {
+  const seeds = await engineLayouts();
+  const r = editor.cleanUp(seeds);
+  if (!r) flash('Nothing to clean up: the structures are already tidy.');
+  else if (r.k > 0) flash(`${r.label} (${r.k + 1} of ${r.of}). Clean Up again for the next, or Clean Up Options… to see them all.`, 4000);
+}
+
+/** Structure > Clean Up Options…: every way Clean Up can lay out the picked structures, to choose from. */
+async function cleanUpChoices(): Promise<void> {
+  finishTyping();
+  const seeds = await engineLayouts();
+  const { frags, options } = editor.cleanUpChoices(seeds);
+  if (!options.length) { flash('Draw or select a structure first.'); return; }
+  const count = Math.max(...options.map((o) => o.length));
+  const labels = Array.from({ length: count }, (_, k) => options[0][Math.min(k, options[0].length - 1)].label);
+  const atoms = new Set(frags.flatMap((f) => [...f]));
+  const sel: Selection = { atoms, bonds: new Set([...doc.bonds.values()].filter((b) => atoms.has(b.a1)).map((b) => b.id)), captions: new Set(), arrows: new Set(), shapes: new Set() };
+  const pickOf = (k: number, turn: number, mirror: boolean) => options.map((o) => turnOption(o[Math.min(k, o.length - 1)], turn, mirror));
+  const preview = (k: number, turn: number, mirror: boolean) => {
+    const d = extractDrawing(doc, sel);
+    d.bulk(() => {
+      for (const o of pickOf(k, turn, mirror)) {
+        for (const [id, p] of o.pos) if (d.atoms.has(id)) d.updateAtom(id, { x: p.x, y: p.y });
+        for (const [id, look] of o.displays) if (d.bonds.has(id)) d.updateBond(id, { display: look });
+      }
+    });
+    const pic = recordPicture(d, 6);
+    return pic ? pictureSvg(pic).replace(/^<\?xml[^>]*>\s*/, '') : '';
+  };
+  const got = await askCleanUpOption(labels, preview);
+  if (!got) return;
+  editor.applyCleanUp(pickOf(got.option, got.turn, got.mirror));
 }
 
 /**
@@ -6063,7 +6125,8 @@ const COMMANDS: Record<string, () => unknown> = {
   },
   'save-highlight-look': () => void saveHighlightLook(),
   'delete-highlight-look': () => void deleteHighlightLook(),
-  'clean-up': () => editor.cleanUp() || flash('Nothing to clean up: the structures are already tidy.'),
+  'clean-up': () => void cleanUpStructures(),
+  'clean-up-options': () => void cleanUpChoices(),
   'clean-up-arrow': () => {
     if (!pickedCurved()) { flash('Select one or more curved (mechanism) arrows first.'); return; }
     const n = editor.cleanUpArrows();
@@ -8730,6 +8793,7 @@ function drawingMenu(): MenuItem[] {
     ...(s.captions.size ? [readAsMenu(), ...(texts && !atoms ? [{ cmd: 'expand-label', label: 'Expand to Structure' }] : []), null] : []),
     ...(atoms ? [
       { cmd: 'clean-up' },
+      { cmd: 'clean-up-options' },
       ...fuseRingMenu(),
       ...metalMenu(),
       { label: 'Structure', items: [
@@ -9104,7 +9168,7 @@ const BOX_TITLES: Record<string, string> = {
 const cmds = (list: (string | null)[]) => list.map((c) => (c ? `cmd:${c}` : 'sep'));
 const BOX_ITEMS: Record<string, readonly string[]> = {
   main: MAIN_ITEMS,
-  structure: cmds(['clean-up', 'add-frame', 'fill-rings', 'highlight', 'remove-highlight', null, 'chain-ends', 'explicit-h', 'aromatic-circles', 'stereo-labels', null, 'add-id-label', 'add-caption', 'attach-descriptors', 'number-compounds', null, 'contract-label', 'expand-label', 'hapto-bond', 'name-to-structure']),
+  structure: cmds(['clean-up', 'clean-up-options', 'add-frame', 'fill-rings', 'highlight', 'remove-highlight', null, 'chain-ends', 'explicit-h', 'aromatic-circles', 'stereo-labels', null, 'add-id-label', 'add-caption', 'attach-descriptors', 'number-compounds', null, 'contract-label', 'expand-label', 'hapto-bond', 'name-to-structure']),
   arrange: cmds(['align-left', 'align-hcenter', 'align-right', 'align-top', 'align-vcenter', 'align-bottom', null, 'distribute-h', 'distribute-v', null, 'flip-h', 'flip-v', 'rotate-cw', 'rotate-ccw', null, 'shape-front', 'shape-back']),
   highlight: [...cmds(['highlight', 'remove-highlight', null, 'smooth-highlight', 'centre-highlight', 'soft-highlight', 'outline-highlight', 'shadow-highlight', 'glow-highlight', null, 'save-highlight-look']), 'w:looks'],
   custom: defaultToolboxes().custom,

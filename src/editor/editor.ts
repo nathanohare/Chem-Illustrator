@@ -18,7 +18,7 @@ import { expandLigand, expandWithMolblock, labelSmiles, ligandTemplateFor } from
 import { styleFromFace, plainText } from '../richtext';
 import * as rt from '../richtext';
 import { applyFormat, formatWhole, type TextFormat } from '../text/format';
-import { cleanUpMoves } from '../chem/cleanup';
+import { cleanUpOptions, type CleanUpOption } from '../chem/cleanup';
 import { Renderer, measureText } from '../render/renderer';
 import { tidyStyle } from '../render/highlight';
 import { ASCENT, blankRoomAt } from '../text/layout';
@@ -3449,18 +3449,79 @@ export class Editor {
     return true;
   }
 
+  /** What the last Clean Up did, so pressing it again on the same structures steps through the other ways. */
+  private cleanCycle: { version: number; key: string; options: CleanUpOption[][]; k: number } | null = null;
+
+  /** The structures Clean Up works on: the selected ones, or all of them when no atom is selected. */
+  cleanUpTargets(): Set<number>[] {
+    const doc = this.doc;
+    const frags = this.sel.atoms.size ? doc.fragments().filter((f) => [...f].some((id) => this.sel.atoms.has(id))) : doc.fragments();
+    return frags.filter((f) => f.size > 1);
+  }
+
   /**
    * Redraw structures with even bonds and angles: the selected ones, or all of them when no atom
-   * is selected. Returns false when there was nothing to change.
+   * is selected. The first time keeps each structure where it was and turned the way it was
+   * drawn; pressing it again straight away steps through other layouts and turns of the same
+   * structures. `seeds` are other starting places for atoms (the chemistry engine's layouts),
+   * tried for ring systems that need untangling. Returns which way was used (and how many there
+   * are), or false when there was nothing to change.
    */
-  cleanUp(): boolean {
+  cleanUp(seeds: Map<number, Vec>[] = []): false | { k: number; of: number; label: string } {
     const doc = this.doc;
-    const frags = this.sel.atoms.size
-      ? doc.fragments().filter((f) => [...f].some((id) => this.sel.atoms.has(id)))
-      : doc.fragments();
-    const moves = cleanUpMoves(doc, frags);
-    if (!moves.length) return false;
-    doc.edit('Clean Up Structure', () => { for (const [id, p] of moves) doc.updateAtom(id, { x: p.x, y: p.y }); });
+    const frags = this.cleanUpTargets();
+    const key = frags.map((f) => Math.min(...f)).sort((a, b) => a - b).join(',');
+    // stepping through other ways is for picked structures, not a whole drawing's worth
+    const picked = this.sel.atoms.size > 0;
+    const c = this.cleanCycle;
+    if (picked && c && c.version === doc.version && c.key === key) return this.nextCleanUp(c);
+    const options = frags.map((f) => cleanUpOptions(doc, f, seeds)).filter((o) => o.length);
+    if (!options.length) return false;
+    const cycle = { version: -1, key, options, k: 0 };
+    this.cleanCycle = cycle;
+    if (!this.applyCleanUp(options.map((o) => o[0]))) {
+      // already tidy: show the next way instead, so the button always does something
+      cycle.version = doc.version;
+      return picked ? this.nextCleanUp(cycle) : false;
+    }
+    cycle.version = doc.version;
+    return { k: 0, of: Math.max(...options.map((o) => o.length)), label: options[0][0].label };
+  }
+
+  private nextCleanUp(c: { version: number; options: CleanUpOption[][]; k: number }): false | { k: number; of: number; label: string } {
+    const of = Math.max(...c.options.map((o) => o.length));
+    if (of < 2) return false;
+    c.k = (c.k + 1) % of;
+    const pick = c.options.map((o) => o[Math.min(c.k, o.length - 1)]);
+    this.applyCleanUp(pick);
+    c.version = this.doc.version;
+    return { k: c.k, of, label: pick[0].label };
+  }
+
+  /** The ways Clean Up can lay out the target structures (for the Clean Up Options window). */
+  cleanUpChoices(seeds: Map<number, Vec>[] = []): { frags: Set<number>[]; options: CleanUpOption[][] } {
+    const c = this.cleanCycle;
+    const frags = this.cleanUpTargets();
+    const key = frags.map((f) => Math.min(...f)).sort((a, b) => a - b).join(',');
+    // straight after a Clean Up, offer the ways worked out from the drawing as it was before it
+    if (c && c.version === this.doc.version && c.key === key) return { frags, options: c.options };
+    return { frags, options: frags.map((f) => cleanUpOptions(this.doc, f, seeds)).filter((o) => o.length) };
+  }
+
+  /** Put structures as the options say, as one undoable step. False when nothing changes. */
+  applyCleanUp(options: CleanUpOption[]): boolean {
+    const doc = this.doc;
+    const moves: [number, Vec][] = [];
+    const looks: [number, BondDisplay][] = [];
+    for (const o of options) {
+      for (const [id, p] of o.pos) { const a = doc.atoms.get(id); if (a && Math.hypot(a.x - p.x, a.y - p.y) > 1e-3) moves.push([id, p]); }
+      for (const [id, d] of o.displays) { const b = doc.bonds.get(id); if (b && b.display !== d) looks.push([id, d]); }
+    }
+    if (!moves.length && !looks.length) return false;
+    doc.edit('Clean Up Structure', () => {
+      for (const [id, p] of moves) doc.updateAtom(id, { x: p.x, y: p.y });
+      for (const [id, d] of looks) doc.updateBond(id, { display: d });
+    });
     this.changed();
     return true;
   }

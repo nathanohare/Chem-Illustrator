@@ -214,6 +214,9 @@ To start a reaction quickly, select a structure and press Ctrl+→ (or Ctrl+←,
 ### Tidying and checking
 
 - **Clean Up Structure** (Ctrl+Shift+K): evens out bond lengths and angles of the selected structures (or all of them) while keeping their shape, stereocentres and cis/trans double bonds. Undo puts it back.
+  - **Tangled cages** (a bridged alkaloid pasted from SMILES with bonds crossing, say) are untangled: the rings are laid down as regular polygons and whatever bridges are left are drawn across, with as few crossing bonds as possible. The chemistry engine's own layouts are tried too, and the tidiest wins. Wedges are turned over where needed so every stereocentre stays as it was.
+  - The first Clean Up keeps the structure where it was. Press it again straight away (with the structure selected) to step through other layouts, then the best one turned 30° either way and flipped.
+  - **Clean Up Options…** (Structure toolbox, or right-click a structure) shows every layout side by side. Turn or flip them all with the buttons underneath, then pick one.
 - **Check Structure (next warning)**: goes to the next problem; see [Warnings](#warnings).
 - **Aromatic Rings: Circle or Double Bonds** (Alt+K): switches selected rings (or all) between a circle and alternating double bonds.
 - **H Atoms: Hide or Draw**: hides hydrogens that add nothing (not ones on wedges, charged ones, or ones on N or O); with nothing to hide, it draws the selected atoms' hydrogens.
@@ -438,7 +441,7 @@ Every colour button opens a palette: Automatic, the standard colours, the colour
 
 **View ▸ Toolboxes** can show more toolboxes besides the drawing tools:
 
-- **Toolbox: Structure**: Clean Up, frames, fills, highlights, terminal methyls, H atoms, aromatic circles, stereo labels, ID labels, captions, descriptors, Number Compounds, Contract Label, Expand Label, Bond Metal to Ring (η) and Structure from Name or SMILES.
+- **Toolbox: Structure**: Clean Up, Clean Up Options, frames, fills, highlights, terminal methyls, H atoms, aromatic circles, stereo labels, ID labels, captions, descriptors, Number Compounds, Contract Label, Expand Label, Bond Metal to Ring (η) and Structure from Name or SMILES.
 - **Toolbox: Object**: align, space evenly, flip, rotate, and bring to front or send to back.
 - **Toolbox: Templates**: every template in one scrolling grid, under the names of their palettes.
 - **Toolbox: Colours**: pick **Colour**, **Highlight** or **Fill**, then click a swatch to apply it to the selection. Your palettes are there too, and in Highlight mode your highlight looks.
@@ -470,7 +473,7 @@ To move a toolbox, unlock it first: click the padlock on its title bar (or right
 
 Right-click the drawing for a menu of what fits what you clicked. The names and keys match the top menus.
 
-- **On a structure**: it is selected first (the whole structure), and the menu has Cut, Copy, Paste and Delete; **Copy As** (SMILES, molfile, CDXML text); **Clean Up Structure**; on a bond of a ring drawn in 3-D, **Fuse a Ring Here** (see [Fusing conformers](#fusing-conformers)); a **Structure** group (stereo labels, aromatic circles, terminal methyls, H atoms, Contract and Expand Label, Join, Bring Bond to Front and Send Bond to Back, η bonds, stereo groups, chiral flag, repeat brackets, R-group table, Check Structure, templates and nicknames, PubChem); **Scheme**; **Add Frame**; **Label the Structure**; **Scale…**; **Highlight and Fill**; **Align**; **Rotate or Flip**; and **View**.
+- **On a structure**: it is selected first (the whole structure), and the menu has Cut, Copy, Paste and Delete; **Copy As** (SMILES, molfile, CDXML text); **Clean Up Structure** and **Clean Up Options…**; on a bond of a ring drawn in 3-D, **Fuse a Ring Here** (see [Fusing conformers](#fusing-conformers)); a **Structure** group (stereo labels, aromatic circles, terminal methyls, H atoms, Contract and Expand Label, Join, Bring Bond to Front and Send Bond to Back, η bonds, stereo groups, chiral flag, repeat brackets, R-group table, Check Structure, templates and nicknames, PubChem); **Scheme**; **Add Frame**; **Label the Structure**; **Scale…**; **Highlight and Fill**; **Align**; **Rotate or Flip**; and **View**.
 - **On empty space**: Paste, Paste SMILES, Select All, Undo and Redo, an **Insert** group (Structure from Name or SMILES, Periodic Table, Picture, Structure from Picture, Text Box, Symbol), **Scheme**, **Drawing Style…** and **View**.
 
 Right-drag still scrolls the drawing; the menu only opens when the mouse doesn't move.
