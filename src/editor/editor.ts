@@ -6168,14 +6168,16 @@ export class Editor {
     const g = this.doc.guides;
     if (!g?.shown || (!g.list.length && !g.grid)) return;
     const area = this.viewArea();
-    const colour = this.dark ? '#4fc3f7' : '#1b8fd0';
+    const colour = g.color ?? (this.dark ? '#4fc3f7' : '#1b8fd0');
+    // (Guides toolbox > Look: how see-through, on top of the grid's own lightness)
+    const solid = 1 - (g.clear ?? 0);
     const lines = guideLines(g, area);
     const minGap = 5 * px;
     ctx.save();
     ctx.strokeStyle = colour;
     for (const l of lines) {
       const snapped = this.drag?.mode === 'move' && this.guideSnapped.some((s) => s.axis === l.axis && s.at === l.at);
-      ctx.globalAlpha = l.guide === null ? 0.35 : snapped ? 1 : 0.8;
+      ctx.globalAlpha = (l.guide === null ? 0.35 : snapped ? 1 : 0.8) * (snapped ? 1 : solid);
       ctx.lineWidth = (snapped ? 2 : 1) * px;
       ctx.beginPath();
       if (l.axis === 'x') { ctx.moveTo(l.at, area.y1); ctx.lineTo(l.at, area.y2); } else { ctx.moveTo(area.x1, l.at); ctx.lineTo(area.x2, l.at); }
@@ -6187,7 +6189,7 @@ export class Editor {
       }
       ctx.stroke();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = Math.max(0.3, solid);
     ctx.lineWidth = 1.5 * px;
     ctx.fillStyle = this.dark ? '#10161f' : '#ffffff';
     for (const x of g.list) {

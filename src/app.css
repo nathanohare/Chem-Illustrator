@@ -3420,3 +3420,14 @@ dialog.key-views { width: min(96vw, 620px); max-height: 92vh; }
 .key-views .kv-item .kv-del { right: 2px; }
 .key-views .kv-item .kv-move:disabled { display: none; }
 
+/* Guides toolbox: the guides' color and transparency */
+.gt-look { gap: 3px; }
+.gt-look .gt-label, .gt-fade .gt-label { margin-right: 3px; }
+.gt-swatch { width: 18px; height: 18px; min-width: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--sw); }
+.gt-swatch:hover { border-color: var(--text); background: var(--sw); }
+.gt-swatch.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+.gt-own { width: 22px; height: 20px; padding: 0; border: 1px solid var(--line); border-radius: var(--r-control); background: none; cursor: pointer; }
+.gt-fade { gap: 6px; }
+.gt-range { flex: 1; min-width: 70px; max-width: 140px; }
+.gt-check { flex-wrap: nowrap; }
+.gt-vertical .gt-look .gt-label, .gt-vertical .gt-fade .gt-label { flex-basis: 100%; }
