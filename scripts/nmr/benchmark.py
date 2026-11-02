@@ -9,7 +9,7 @@ into predict_13c / predict_1h.
 
 Scoring (SI lists are rarely assigned to atoms):
 - 13C: one predicted value per symmetry-unique carbon against the printed peaks, paired
-  by optimal one-to-one matching (Hungarian); "(2C)" peaks count twice.
+  by optimal one-to-one matching (Hungarian); each printed peak counts once.
 - 1H: one predicted value per proton (each heavy atom's prediction repeated by its H
   count) against the printed signals repeated by their integrals (ranges use the
   midpoint); unmatched predicted protons (often OH/NH not observed) are ignored.
@@ -152,8 +152,7 @@ def exp_13c(sp):
     for p in sp.get('peaks') or []:
         if not p or not isinstance(p[0], (int, float)):
             continue
-        k = p[3] if len(p) > 3 and isinstance(p[3], (int, float)) and p[3] and p[3] < 10 else 1
-        out += [p[0]] * int(k)
+        out.append(p[0])
     return out
 
 

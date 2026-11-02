@@ -57,15 +57,28 @@ ADDUCT = {'h': Counter({'H': 1}), 'na': Counter({'Na': 1}), 'k': Counter({'K': 1
 
 
 def neutral_from_hrms(f, ion):
+    """Ion formula minus what the adduct notation adds: [M+H]+, [M+Na]+, [M-H]-,
+    [M+H-H2O]+, [M-CF3]+, [2M+Na]+ ..."""
     c = parse_formula(f)
     if c is None:
         return None
-    ion = (ion or '').lower().replace(' ', '').replace('−', '-').replace('–', '-')
-    m = re.search(r'm([+-])(\d*)(h|na|k|nh4|li|ag)\b', ion) or re.search(r'm([+-])(\d*)(h|na|k|nh4|li|ag)', ion)
-    if m:
-        sign, k, ad = m.group(1), int(m.group(2) or 1), m.group(3)
-        for el, n in ADDUCT[ad].items():
-            c[el] += (-n if sign == '+' else n) * k
+    ion = (ion or '').replace(' ', '').replace('−', '-').replace('–', '-')
+    m = re.search(r'\[?(\d*)M((?:[+-]\d*[A-Z][A-Za-z0-9]*)*)\]?', ion)
+    if not m:
+        return Counter({k: v for k, v in c.items() if v})
+    mult = int(m.group(1) or 1)
+    for sign, k, term in re.findall(r'([+-])(\d*)([A-Z][A-Za-z0-9]*)', m.group(2)):
+        t = parse_formula(term)
+        if t is None:
+            return None
+        for el, n in t.items():
+            c[el] += (-n if sign == '+' else n) * int(k or 1)
+    if any(v < 0 for v in c.values()):
+        return None
+    if mult > 1:
+        if any(v % mult for v in c.values()):
+            return None
+        c = Counter({k: v // mult for k, v in c.items()})
     return Counter({k: v for k, v in c.items() if v})
 
 
@@ -130,23 +143,34 @@ def h_status(mol, sp):
 
 
 def c_status(mol, sp, has_f_or_p):
+    """Printed 13C list against the structure. A printed "(2C)" can mean two equivalent
+    carbons (already one symmetry class) or two overlapping ones, so the list passes if
+    either the plain peak count or the weighted count fits."""
     rank = list(Chem.CanonicalRankAtoms(mol, breakTies=False))
     unique = len({rank[a.GetIdx()] for a in mol.GetAtoms() if a.GetAtomicNum() == 6})
+    total = sum(1 for a in mol.GetAtoms() if a.GetAtomicNum() == 6)
     peaks = sp.get('peaks') or []
-    n = 0
+    plain = weighted = 0
     for p in peaks:
         if not isinstance(p, list) or not p:
             return 'bad_list', unique
-        n += p[3] if len(p) > 3 and isinstance(p[3], (int, float)) and p[3] and p[3] < 10 else 1
-    # a coupled carbon printed with its J counts once; extra lines only if printed as separate values
-    if n == unique:
+        plain += 1
+        weighted += p[3] if len(p) > 3 and isinstance(p[3], (int, float)) and p[3] and p[3] < 10 else 1
+    if unique in (plain, weighted) or weighted == total:
         return 'match', unique
+    n = plain
     if abs(n - unique) == 1 and unique >= 6:
         return 'close', unique
     if 0.8 * unique <= n < unique:
         return 'missing_some', unique  # overlapping or unobserved carbons; matching scores what is printed
     if has_f_or_p and unique < n <= unique * 2:
         return 'extra_lines_cf_cp', unique
+    flags = set(sp.get('flags') or [])
+    if unique < n <= 2 * unique and flags & {'rotamers', 'major_isomer'}:
+        return 'rotamer_doubling', unique
+    centres = Chem.FindMolChiralCenters(mol, includeUnassigned=True, useLegacyImplementation=False)
+    if centres and unique < n <= unique + 2:
+        return 'diastereotopic_possible', unique
     return f'mismatch({n}/{unique})', unique
 
 
@@ -257,7 +281,7 @@ def main():
             elif nuc == '13C':
                 st, _ = c_status(mol, sp, bool(syms & {'F', 'P'}))
                 entry['check'] = st
-                if st in ('close', 'extra_lines_cf_cp', 'missing_some'):
+                if st in ('close', 'extra_lines_cf_cp', 'missing_some', 'rotamer_doubling', 'diastereotopic_possible'):
                     silver = True
                 elif st != 'match':
                     reasons.append('13C_' + st.split('(')[0])
