@@ -38,6 +38,8 @@ export interface SmartPaneHooks {
   remove(id: number, k: number): void;
   move(id: number, from: number, to: number): void;
   arrange(id: number, patch: Partial<SmartData>): void;
+  /** Add a second loop to a cycle (the Catalytic Cycle window, filled with this one). */
+  secondLoop(id: number): void;
   ungroup(id: number): void;
 }
 
@@ -251,6 +253,10 @@ export class SmartPane {
         return l;
       };
       opts.append(check('Counterclockwise', !!data.anticlockwise, (v) => this.hooks.arrange(id, { anticlockwise: v })), check('Small arrows for reagents', !!data.reagentArrows, (v) => this.hooks.arrange(id, { reagentArrows: v })));
+      if (read.chain && read.closed) {
+        const two = btn('+ Second loop…', 'Add a second loop: two cycles turning together where two steps meet, sharing a species, or side by side', 'sp-loop2', () => this.hooks.secondLoop(id));
+        opts.append(two);
+      }
     } else if ((data.layout === 'rows' || data.layout === 'snake') && !data.free) {
       const l = document.createElement('label');
       const i = document.createElement('input');

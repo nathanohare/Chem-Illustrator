@@ -188,7 +188,7 @@ import { NicknameChooser } from './ui/nickname-chooser';
 import { ask } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
-import { actionSet, askActionButton } from './ui/action-button-dialog';
+import { actionLook, actionSet, askActionButton } from './ui/action-button-dialog';
 import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepClicks, stepPieces, type AutoStepsOptions, type StepPiece } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
@@ -1412,17 +1412,20 @@ async function insertActionButton(): Promise<void> {
   if (!got || deckNow() !== d || d.index !== i) return;
   const sdoc = d.docOf(i), W = d.size.w, H = d.size.h, edge = 18;
   const made: number[] = [];
+  const al = actionLook(got.look);
   const put = (geo: string, x2: number, side: number, link: string) => {
     const look = geoShapeStyle(geo, editor.geoLook);
     if (!look) return;
     const y2 = H - edge;
-    made.push(sdoc.addShape({ ...(look as Shape), x1: x2 - side, y1: y2 - side, x2, y2, link: link || undefined }).id);
+    // the look picked in the window: its fill, line and line width
+    const paint: Partial<Shape> = { filled: al.fill !== null, fillColor: al.fill ?? undefined, color: al.line, lineWidth: al.width };
+    made.push(sdoc.addShape({ ...(look as Shape), ...paint, x1: x2 - side, y1: y2 - side, x2, y2, link: link || undefined }).id);
   };
   sdoc.edit('Insert Action Button', () => {
     if (got.geo === 'set') {
-      const side = 30, gap = 6;
+      const side = Math.round(al.size * 0.75), gap = Math.max(4, Math.round(side / 5));
       actionSet(regions.length > 0).reverse().forEach((g, k) => put(g, W - edge - k * (side + gap), side, ACTION_LINKS[g] ?? ''));
-    } else put(got.geo, W - edge, 40, got.link.startsWith('#') || !got.link ? got.link : normalizeLink(got.link) ?? '');
+    } else put(got.geo, W - edge, al.size, got.link.startsWith('#') || !got.link ? got.link : normalizeLink(got.link) ?? '');
   });
   editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set(made) };
   editor.changed();
@@ -13158,6 +13161,12 @@ const smartPane = new SmartPane({
   remove: (id, k) => editor.smartRemove(id, k),
   move: (id, from, to) => editor.smartMove(id, from, to),
   arrange: (id, patch) => editor.smartArrange(id, patch),
+  async secondLoop(id) {
+    const st = editor.smartCycleStart(id);
+    if (!st) return;
+    const got = await askCycle(0, { spec: { loops: [st.loop] }, look: st.look, drawn: st.drawn });
+    if (got?.rows) editor.smartRebuildCycle(id, got.spec, got.look, got.rows);
+  },
   ungroup: (id) => editor.ungroupSmart(id),
   dock: (where) => {
     if (where === null) { smartDockBody = null; toolboxes.toggle('smart', false); smartPane.float(); return; }
