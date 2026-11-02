@@ -37,9 +37,6 @@ export async function open(url = 'http://localhost:5173/', { width = 1440, heigh
     };
     window.__shotBare();
   });
-  // the main toolbox folded up to its strip, with its own menu's Fold Up
-  await page.evaluate(() => { const f = document.querySelector('.toolbox[data-id="main"]'); const r = f.getBoundingClientRect(); f.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: r.left + 10, clientY: r.top + 10 })); });
-  await page.getByText('Fold Up', { exact: true }).click();
   await page.waitForTimeout(300);
   return { browser, page, problems };
 }

@@ -319,7 +319,7 @@ if (want('dark-mode')) {
       await glide(page, s.x + s.width / 2, s.y + s.height / 2, 12);
       await page.locator('dialog[open] select').first().selectOption(name);
       await page.waitForTimeout(500);
-      await press(page, 'Use');
+      await press(page, 'Apply');
       await page.waitForTimeout(1300);
     }
     await glide(page, c.x + c.width * 0.5, c.y + c.height * 0.8, 15);
@@ -646,7 +646,7 @@ if (want('model-3d')) {
     await page.waitForTimeout(700);
     // the side panel opened for its Properties: the pKa of each site, solubility, vapour pressure
     const fold = async () => {
-      const f = await page.locator('#side-fold').boundingBox();
+      const f = await page.locator('#status-side').boundingBox();
       await glide(page, f.x + f.width / 2, f.y + f.height / 2, 18);
       await page.mouse.click(f.x + f.width / 2, f.y + f.height / 2);
       await page.waitForTimeout(600);
@@ -675,8 +675,8 @@ if (want('model-3d')) {
     await page.mouse.up();
     await page.waitForTimeout(600);
     // the next conformers, higher in energy
-    for (let i = 0; i < 2; i++) {
-      const nb = await page.locator('.viewer3d button[title^="Next conformer"]').boundingBox();
+    for (let i = 1; i < 3; i++) {
+      const nb = await page.locator('.viewer3d tbody tr').nth(i).boundingBox();
       await glide(page, nb.x + nb.width / 2, nb.y + nb.height / 2, 15);
       await page.mouse.click(nb.x + nb.width / 2, nb.y + nb.height / 2);
       await page.waitForTimeout(1300);
@@ -895,6 +895,54 @@ if (want('journal-check')) {
       await page.waitForTimeout(1800);
     }
   }, { width: 1000, hold: 2500 });
+  await browser.close();
+}
+
+// ---------------------------------------------------------------- Canvas: a whole route on one canvas (Nate's slides 23 to 27, joined into one line)
+if (want('canvas-route')) {
+  const { readFileSync } = await import('node:fs');
+  const { browser, page } = await open(url, { width: 1440, height: 760, navigator: true });
+  const text = readFileSync(new URL('../docs/images/src/manzamine-route.cdxml', import.meta.url), 'utf8');
+  await page.evaluate((t) => window.__app.openText(t, 'manzamine route.cdxml'), text);
+  await page.waitForTimeout(800);
+  await page.evaluate(() => { window.__shotBare(); window.__app.renderer.showWarnings = false; window.__app.editor.fit(); });
+  await page.waitForTimeout(300);
+  const c = await canvasBox(page);
+  const at = (fx, fy) => ({ x: c.x + c.width * fx, y: c.y + c.height * fy });
+  await pointer(page);
+  await page.mouse.move(at(0.5, 0.8).x, at(0.5, 0.8).y);
+  // let the "Opened …" note fade first
+  await page.waitForTimeout(5000);
+  const wheel = async (key, dy, n) => {
+    await page.keyboard.down(key);
+    for (let i = 0; i < n; i++) { await page.mouse.wheel(0, dy); await page.waitForTimeout(110); }
+    await page.keyboard.up(key);
+  };
+  await record(page, 'canvas-route', async () => {
+    await page.waitForTimeout(1800);
+    // in on the first ring-closing metathesis
+    const rcm = await page.evaluate(() => { const a = window.__app, r = a.renderer; const ar = [...a.doc.arrows.values()].sort((p, q) => p.tail.x - q.tail.x)[3]; return { x: r.view.ox + ar.tail.x * r.view.scale, y: r.view.oy + ar.tail.y * r.view.scale }; });
+    await glide(page, c.x + rcm.x, c.y + rcm.y, 20);
+    await inputBadge(page, { keys: ['Ctrl'], button: 'wheel', text: 'zoom in where the pointer is' });
+    await wheel('Control', -120, 6);
+    await page.waitForTimeout(1500);
+    // along the route to manzamine A
+    await inputBadge(page, { button: 'right', text: 'pan along the route' });
+    for (let i = 0; i < 2; i++) {
+      await glide(page, at(0.85, 0.5).x, at(0.85, 0.5).y, 10);
+      await page.mouse.down({ button: 'right' });
+      await page.mouse.move(at(0.2, 0.5).x, at(0.2, 0.5).y, { steps: 50 });
+      await page.mouse.up({ button: 'right' });
+      await page.waitForTimeout(900);
+    }
+    await inputBadge(page, null);
+    // and the whole route again
+    const fit = page.locator('button:visible', { hasText: /^Fit$/ }).first();
+    const fb = await fit.boundingBox();
+    await glide(page, fb.x + fb.width / 2, fb.y + fb.height / 2, 20);
+    await page.mouse.click(fb.x + fb.width / 2, fb.y + fb.height / 2);
+    await page.waitForTimeout(1200);
+  }, { width: 1100, hold: 2500 });
   await browser.close();
 }
 
