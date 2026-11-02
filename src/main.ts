@@ -480,8 +480,8 @@ const SELECT_TOOLS: PaletteDef = {
   palette: 'select',
   title: 'Select',
   items: [
-    { name: 'select', title: 'Select and move: drag a box round what to select' },
-    { name: 'lasso', title: 'Lasso select: drag a loop round what to select, to pick pieces out of a crowded scheme' },
+    { name: 'select', title: 'Select and move: drag a box around what to select' },
+    { name: 'lasso', title: 'Lasso select: drag a loop around what to select, to pick pieces out of a crowded scheme' },
   ],
   columns: 2,
 };
@@ -8601,7 +8601,7 @@ async function toolboxPreferences(): Promise<void> {
   const r = await ask('Toolboxes', [
     { name: 'cells', label: 'Button cells', value: toolCells, options: [{ value: 'off', label: 'None' }, { value: 'grid', label: 'Grid lines' }, { value: 'raised', label: 'Raised buttons' }, { value: 'both', label: 'Grid lines and raised buttons' }],
       help: 'Gives each toolbox button a cell of its own, so the buttons are easier to tell apart and to hit.' },
-    { name: 'tips', label: 'Detailed tooltips: what a tool does and what Alt, Shift and Ctrl change', type: 'checkbox', value: String(toolTip.enabled) },
+    { name: 'tips', label: 'Detailed tooltips: hold the mouse on a tool to see what it does and what Alt, Shift and Ctrl change', type: 'checkbox', value: String(toolTip.enabled) },
   ], { ok: 'Save' });
   if (!r) return;
   setToolCells((['grid', 'raised', 'both'].includes(r.cells) ? r.cells : 'off') as Settings['toolCells']);
@@ -10727,6 +10727,9 @@ function layCells(cells: HTMLElement, fit?: number): void {
     el.style.gridColumn = el.classList.contains('tb-wide') ? `${p.c + 1} / span ${Math.max(1, room)}` : String(p.c + 1);
     el.classList.toggle('tb-after-line', lineRows.has(o.r));
     el.classList.toggle('tb-after-vline', lineCols.has(o.c));
+    // (with grid lines on, the cell before a division carries it as a bold edge)
+    el.classList.toggle('tb-before-line', lineRows.has(o.r + 1));
+    el.classList.toggle('tb-before-vline', lineCols.has(o.c + 1));
     el.classList.toggle('tb-block', p.start);
   }
   // the lines themselves, across each block of the grid (or down it, turned on its side)

@@ -1,6 +1,7 @@
-// The tooltip for a drawing tool's button: its name and hotkey, what it does, and the keys that
-// change it (Alt, Shift, Ctrl…), as a small card beside the button. It takes over from the
-// browser's own one-line tip, which the button keeps for when this one is off.
+// The tooltip for a drawing tool's button: its name and hotkey first, as a small card beside the
+// button; held there longer, the card opens out to what the tool does and the keys that change it
+// (Alt, Shift, Ctrl…). It takes over from the browser's own one-line tip, which the button keeps
+// for when this one is off.
 
 /** What the card shows for a tool. */
 export interface ToolTipContent {
@@ -14,11 +15,14 @@ export interface ToolTipContent {
 
 /** How long the mouse rests on a button before the card shows (ms); once one shows, the next comes at once. */
 const DELAY = 500;
+/** How long it rests there before the card opens out to the details and keys (ms from first resting on it). */
+export const LONG_HOVER = 1600;
 
 export class ToolTip {
   enabled = true;
   private el: HTMLDivElement;
   private timer = 0;
+  private longTimer = 0;
   private over: HTMLElement | null = null;
   private warm = 0;
 
@@ -49,11 +53,14 @@ export class ToolTip {
     // the browser's tip would show as well: kept aside while the mouse is on the button
     for (const x of this.titled(b)) if (x.title) { x.dataset.tipTitle = x.title; x.removeAttribute('title'); }
     const wait = performance.now() - this.warm < 800 ? 0 : DELAY;
-    this.timer = window.setTimeout(() => this.show(b), wait);
+    this.timer = window.setTimeout(() => this.show(b, false), wait);
+    // the details only for a long rest on the one button (moving on starts again)
+    this.longTimer = window.setTimeout(() => this.show(b, true), Math.max(LONG_HOVER, wait));
   }
 
   private leave(now = false): void {
     clearTimeout(this.timer);
+    clearTimeout(this.longTimer);
     const b = this.over;
     for (const x of b ? this.titled(b) : []) if (x.dataset.tipTitle != null) { if (!x.title) x.title = x.dataset.tipTitle; delete x.dataset.tipTitle; }
     if (b) b.removeAttribute('aria-describedby');
@@ -68,16 +75,18 @@ export class ToolTip {
     return more ? [b, more] : [b];
   }
 
-  private show(b: HTMLElement): void {
+  private show(b: HTMLElement, full: boolean): void {
     if (!b.isConnected || this.over !== b) return;
     const c = this.content(b);
     if (!c) return;
     const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
     const key = (k: string) => `<kbd>${esc(this.mac ? k.replace(/^Ctrl\b/, '⌘').replace(/^Alt\b/, '⌥') : k)}</kbd>`;
-    this.el.innerHTML = `<div class="tt-head"><span>${esc(c.name)}</span>${c.hotkey ? key(c.hotkey) : ''}</div>`
+    const head = `<div class="tt-head"><span>${esc(c.name)}</span>${c.hotkey ? key(c.hotkey) : ''}</div>`;
+    this.el.innerHTML = !full ? head : head
       + (c.body ? `<div class="tt-body">${esc(c.body)}</div>` : '')
       + (c.keys.length ? `<div class="tt-keys">${c.keys.map(([k, what]) => `${key(k)}<span>${esc(what)}</span>`).join('')}</div>` : '')
       + (c.more ? `<div class="tt-more">${esc(c.more)}</div>` : '');
+    this.el.classList.toggle('short', !full);
     this.el.hidden = false;
     b.setAttribute('aria-describedby', this.el.id);
     // beside the button, on whichever side has room, kept on the screen

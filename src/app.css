@@ -287,8 +287,20 @@ label.check { display: inline-flex; align-items: center; gap: 4px; color: var(--
 .tb-cells { display: grid; gap: 3px; align-items: center; justify-items: center; }
 .tb-cells > .tb-gap { width: 34px; height: 32px; }
 /* Settings ▸ Toolboxes ▸ Button cells: each button in a cell of its own, ruled off or raised */
-body.cells-grid .tb-cells { gap: 0; border-top: 1px solid var(--line); border-left: 1px solid var(--line); width: max-content; }
-body.cells-grid .tb-cells > * { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+/* grid lines: every cell fills its track, so the lines run straight and unbroken; a group's last
+   row (or column) gets one bold edge where the gap between groups would be */
+body.cells-grid .tb-cells { --cell-line: var(--line); --group-line: color-mix(in srgb, var(--text) 55%, var(--line)); gap: 0; align-items: stretch; justify-items: stretch; border-top: 1px solid var(--cell-line); border-left: 1px solid var(--cell-line); width: max-content; }
+body.cells-grid .tb-cells > .tb-cell { box-sizing: border-box; border-right: 1px solid var(--cell-line); border-bottom: 1px solid var(--cell-line); margin: 0; }
+/* (the bold edge is drawn over the cell's own line and on across the corner, so it has no breaks
+   and the cell keeps its size) */
+body.cells-grid .tb-cells > .tb-cell { position: relative; }
+body.cells-grid .tb-cells > .tb-before-line::after, body.cells-grid .tb-cells > .tb-before-vline::before, body.cells-grid .tb-cells > .tb-block::before { content: ''; position: absolute; z-index: 1; background: var(--group-line); pointer-events: none; }
+body.cells-grid .tb-cells > .tb-before-line::after { left: -1px; right: -1px; bottom: -1px; height: 2px; }
+body.cells-grid .tb-cells > .tb-before-vline::before { top: -1px; bottom: -1px; right: -1px; width: 2px; }
+body.cells-grid .tb-cells > .tb-block::before { top: -1px; bottom: -1px; left: -1px; width: 2px; }
+body.cells-grid .toolbox[data-dock='top'] .tb-cells > .tb-block::before, body.cells-grid .toolbox[data-dock='bottom'] .tb-cells > .tb-block::before { top: -1px; bottom: auto; left: -1px; right: -1px; width: auto; height: 2px; }
+body.cells-grid .tb-cells > .tb-line { display: none; }
+body.cells-grid .tb-cells > .tool, body.cells-grid .tb-cells > .palette-wrap > .tool { width: 100%; height: 100%; min-width: 34px; min-height: 32px; }
 body.cells-grid .tb-cells .tool { border-radius: 0; }
 body.cells-raised .tb-cells .tool { border: 1px solid var(--line); background: linear-gradient(var(--panel), color-mix(in srgb, var(--bg) 70%, var(--panel))); box-shadow: 0 1px 0 rgb(0 0 0 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.5); }
 body.cells-raised .tb-cells .tool.active { background: var(--accent-soft); border-color: var(--accent); box-shadow: inset 0 1px 2px rgb(0 0 0 / 0.15); }
