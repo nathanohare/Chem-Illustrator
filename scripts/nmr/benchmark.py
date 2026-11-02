@@ -246,6 +246,7 @@ def main():
         'by_tier': {n: {c: summarise(e) for c, e in d.items()} for n, d in by_tier.items()},
     }
     rep['worst_spectra'] = sorted(per, key=lambda x: -x['mae'])[:25]
+    rep['per_spectrum'] = per
     json.dump(rep, open(out_p, 'w'), indent=1)
     if md_p:
         lines = ['| Class | 1H atoms | 1H MAE (ppm) | 13C atoms | 13C MAE (ppm) |', '|---|---|---|---|---|']
@@ -260,6 +261,7 @@ def main():
         lines.append(f"| NMRShiftDB2 held-out (reference) | {hr['1H']['atoms']} | {hr['1H']['MAE']} | {hr['13C']['atoms']} | {hr['13C']['MAE']} |")
         open(md_p, 'w').write('\n'.join(lines) + '\n')
     print(json.dumps({k: rep[k] for k in ('nmrshiftdb2_heldout',)}, indent=1))
+    print(json.dumps({'si_compounds': rep['si_test']['compounds']}))
     print(json.dumps(rep['si_test']['overall'], indent=1))
 
 
