@@ -9,6 +9,7 @@ import { Doc, Atom, Bond, Arrow, PARTIAL, Caption, Shape, PICTURE_SHADOWS, pictu
 import { centredSpots, fullStyle, highlightPieces, highlightSizes, movePieces, tracePieces, type Piece } from './highlight';
 import { highlightFx, layerPaints, needsFx, patternMarks, regionOf, rgba, unionOf, type FxLayer, type FxPaint, type FxStep, type HighlightFx, type Region, shapeShadow } from './highlight-fx';
 import { ellipseArc, isCircleRing, ringCircle, ringsThroughBond, type RingCircle } from '../chem/aromatic';
+import { allylArc, piLooksOf } from '../chem/hapto';
 import { crossingGapsCached } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
@@ -83,6 +84,11 @@ interface BondCache {
   trim2: number;
   /** An aromatic bond drawn with a circle: the circles of the rings it is in. */
   circles?: RingCircle[];
+  /**
+   * A bond of a π-system bonded to a metal as one (η³ and up), drawn delocalized: one line, and
+   * its stretch of the ring's circle or the allyl's arc.
+   */
+  pi?: { circle?: RingCircle; arc?: { from: Vec; ctrl: Vec; to: Vec } }[];
 }
 
 let mctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
@@ -275,6 +281,8 @@ export class Renderer {
       for (let d = 0; d < 4 && frontier.length; d++) {
         const next: number[] = [];
         for (const id of frontier) {
+          // a multicentre point changed (bonded to a metal, or switched to Kekulé form): its ring's bonds are drawn again
+          for (const m of doc.atoms.get(id)?.multi ?? []) if (!seen.has(m)) { seen.add(m); next.push(m); }
           for (const bid of doc.adj.get(id) ?? []) {
             this.bondCache.delete(bid);
             const b = doc.bonds.get(bid);
@@ -340,6 +348,27 @@ export class Renderer {
     let c = this.bondCache.get(b.id);
     if (c) return c;
     c = { side: 0, trim1: 0, trim2: 0 };
+    // a ring or allyl bonded to a metal as one, drawn delocalized (the bonds stay as they are)
+    if ((b.order === 1 || b.order === 2 || (b.order === 1.5 && !b.circle)) && (b.display ?? 'solid') === 'solid') {
+      const looks = piLooksOf(doc, b);
+      if (looks.length) {
+        const gap = doubleBondGap(doc.style) * (b.s ?? 1);
+        c.pi = looks.map((lk) => {
+          if (lk.kind === 'ring') return { circle: ringCircle(doc, lk.ring) };
+          const [a, m, z] = lk.chain.map((id) => doc.atoms.get(id)!);
+          const q = allylArc(a, m, z, gap);
+          if (!q) return {};
+          // this bond's half of the curve (split in the middle, de Casteljau)
+          const mid = { x: (q.from.x + 2 * q.ctrl.x + q.to.x) / 4, y: (q.from.y + 2 * q.ctrl.y + q.to.y) / 4 };
+          const first = b.a1 === lk.chain[0] || b.a2 === lk.chain[0];
+          return { arc: first
+            ? { from: q.from, ctrl: { x: (q.from.x + q.ctrl.x) / 2, y: (q.from.y + q.ctrl.y) / 2 }, to: mid }
+            : { from: mid, ctrl: { x: (q.ctrl.x + q.to.x) / 2, y: (q.ctrl.y + q.to.y) / 2 }, to: q.to } };
+        });
+        this.bondCache.set(b.id, c);
+        return c;
+      }
+    }
     if (b.order === 1.5 && b.circle) {
       c.circles = ringsThroughBond(doc, b.id).filter((r) => isCircleRing(doc, r)).map((r) => ringCircle(doc, r));
     } else if (b.order === 2 || b.order === 1.5) {
@@ -454,7 +483,7 @@ export class Renderer {
       if (!o) continue;
       const k = b.s ?? 1, ds = doc.style;
       let h = (ds.lineWidth * k) / 2;
-      if (b.order === 1 || b.order === PARTIAL || b.display === 'dative') {
+      if (b.order === 1 || b.order === PARTIAL || b.display === 'dative' || this.bondInfo(doc, b).pi) {
         if (b.display === 'dative' || b.display === 'dash' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy') continue;
         if (b.display === 'bold') h = (ds.boldWidth * k) / 2;
         else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: ds.boldWidth * k }) / 2;
@@ -1106,6 +1135,32 @@ export class Renderer {
     // a point of attachment: a wavy line across the end of the bond
     if (p.attach === 'Wavy') attachWave(thin, p, nrm, st.bondLength);
     if (q.attach === 'Wavy') attachWave(thin, q, nrm, st.bondLength);
+
+    // a ring or allyl bonded to a metal as one: a plain line, and its stretch of the circle or arc
+    const pi = this.bondInfo(doc, b).pi;
+    if (pi) {
+      line(thin, s, e);
+      for (const x of pi) {
+        if (x.arc) {
+          thin.moveTo(x.arc.from.x, x.arc.from.y);
+          thin.quadraticCurveTo(x.arc.ctrl.x, x.arc.ctrl.y, x.arc.to.x, x.arc.to.y);
+          continue;
+        }
+        if (!x.circle) continue;
+        const { center, radius, ellipse } = x.circle;
+        if (ellipse) {
+          ellipseArc(center, ellipse, p, q).forEach((pt, k) => (k ? thin.lineTo(pt.x, pt.y) : thin.moveTo(pt.x, pt.y)));
+          continue;
+        }
+        const a1 = angleOf(sub(p, center)), a2 = angleOf(sub(q, center));
+        let da = a2 - a1;
+        while (da > Math.PI) da -= 2 * Math.PI;
+        while (da < -Math.PI) da += 2 * Math.PI;
+        thin.moveTo(center.x + Math.cos(a1) * radius, center.y + Math.sin(a1) * radius);
+        thin.arc(center.x, center.y, radius, a1, a1 + da, da < 0);
+      }
+      return;
+    }
 
     // an aromatic ring drawn with a circle: a plain line, and the stretch of each ring's circle
     // that faces this bond

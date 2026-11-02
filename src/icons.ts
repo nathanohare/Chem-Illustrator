@@ -58,6 +58,8 @@ export const ICONS: Record<string, string> = {
   'bond-dash': svg('<line x1="5" y1="18" x2="19" y2="6" stroke-dasharray="2 2.2"/>'),
   // a bond forming in a transition state: dashed between two atoms, marked ‡
   'bond-partial': svg('<line x1="5" y1="18.5" x2="15" y2="9.5" stroke-dasharray="2 2"/><circle cx="4.2" cy="19.2" r="1.7" fill="currentColor" stroke="none"/><circle cx="15.8" cy="8.8" r="1.7" fill="currentColor" stroke="none"/><path d="M19.5 2.5v9M17 5h5M17 8.8h5" stroke-width="1.4"/>'),
+  // the Ligand Library: a metal held by a chelate ring, beside the lines of a list
+  'ligand-library-open': svg('<circle cx="7" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M7 12l4-4M7 12l4 4M11 8c2.5 1 2.5 7 0 8"/><path d="M15.5 5h5M15.5 9.5h5M15.5 14h5M15.5 18.5h5" stroke-width="1.4"/>'),
   'own-template-add': svg('<polygon points="12,3 19,7 19,15 12,19 5,15 5,7" stroke-dasharray="2 2"/><path d="M12 8v7M8.5 11.5h7"/>'),
   // a chain cut in two, the pieces moving apart
   sketch: svg('<path d="M3 19c3-1 4-6 7-6s2 5 5 4 3-6 6-8"/><path d="M15.5 3.5l3 3-7.5 7.5h-3v-3z" stroke-width="1.4"/>'),
@@ -102,6 +104,8 @@ export const ICONS: Record<string, string> = {
   'shape-rect-shadow': svg('<rect x="3.5" y="5" width="15" height="12"/><path d="M20 7.2v11.8H6" stroke-width="2.4" opacity="0.45" stroke-linecap="butt"/>'),
   'shape-rect-rounded-shadow': svg('<rect x="3.5" y="5" width="15" height="12" rx="3"/><path d="M20 8.5v7.5a3 3 0 0 1-3 3H7.5" stroke-width="2.4" opacity="0.45" stroke-linecap="butt"/>'),
   'shape-rect-dashed': svg('<rect x="4" y="6" width="16" height="12" stroke-dasharray="2.6 2"/>'),
+  /** Insert Structure (Document and Spreadsheet): the dashed "+" box a reaction arrow shows on hover, where a structure can go. */
+  'insert-structure': svg('<rect x="3.5" y="5.5" width="17" height="13" stroke-dasharray="3 2.4"/><path d="M12 8.6v6.8M8.6 12h6.8" stroke-width="1.7"/>'),
   'shape-circle': svg('<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>'),
   'shape-circle-filled': svg('<circle cx="12" cy="12" r="5" fill="currentColor"/>'),
   'shape-oval': svg('<ellipse cx="12" cy="12" rx="9" ry="6"/>'),

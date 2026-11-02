@@ -3,6 +3,7 @@
 // the viewing mark, where energies come from, and the defaults for torsion energy charts, with a
 // preview that redraws as anything changes.
 
+import { previewSlot, showDialog } from './dialog-host';
 import { DEFAULT_NEWMAN_PREFS, type NewmanLook, type NewmanPrefs, type RankLook } from '../design/newman-prefs';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}): HTMLElementTagNameMap[K] => Object.assign(document.createElement(tag), props);
@@ -38,7 +39,7 @@ export function newmanSettings(now: NewmanPrefs, preview: (look: NewmanLook, kin
             <tbody>${rankRow(0, 'Largest')}${rankRow(1, 'Middle')}${rankRow(2, 'Smallest')}</tbody></table>
           <p class="ns-presets"><button type="button" data-preset="red">Largest red</button> <button type="button" data-preset="rbb">Red, blue, black</button> <button type="button" data-preset="black">All black</button></p>
         </div>
-        <canvas class="ns-preview" role="img" aria-label="Preview"></canvas>
+        <div class="ns-at"><canvas class="ns-preview" role="img" aria-label="Preview"></canvas></div>
       </div>
       <h3>Look</h3>
       <label class="ask-row"><span>Draw as</span><select name="kind"><option value="newman">Newman</option><option value="sawhorse">Sawhorse</option></select></label>
@@ -106,10 +107,10 @@ export function newmanSettings(now: NewmanPrefs, preview: (look: NewmanLook, kin
     $<HTMLButtonElement>('[data-act=reset]').addEventListener('click', () => { Object.assign(p, structuredClone(DEFAULT_NEWMAN_PREFS)); show(); redraw(); });
 
     d.append(form);
-    document.body.append(d);
     const finish = () => { d.remove(); resolve(); };
     $<HTMLButtonElement>('[data-act=cancel]').addEventListener('click', () => { d.close(); finish(); });
     d.addEventListener('cancel', () => finish());
+    d.addEventListener('close', () => { if (d.isConnected) finish(); });
     d.addEventListener('keydown', (e) => { if (e.key !== 'Escape') e.stopPropagation(); });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -120,7 +121,10 @@ export function newmanSettings(now: NewmanPrefs, preview: (look: NewmanLook, kin
       finish();
     });
     show();
-    d.showModal();
+    showDialog(d);
+    // in the Settings window, the preview goes in its pane on the right
+    const slot = previewSlot('Preview');
+    if (slot) { slot.append(canvas); form.querySelector('.ns-grid')!.classList.add('ns-one'); form.querySelector('.ns-at')!.remove(); }
     redraw();
   });
 }

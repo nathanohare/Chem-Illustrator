@@ -17,6 +17,7 @@ import { paintSlide, drawDrawing, drawCanvasUnder, drawScreen, drawKeyTitle, pag
 import { drawVeil } from './canvas-look';
 import { cameraAt, compoundId, distanceDur, isCamera, keyRect, keysBounds, shownRect, slidePlace, slideShaped, timedCamera, unionRect, viewBetween, type CameraAt, type CanvasData, type Keyframe } from './canvas';
 import { selectionBox, POINTS } from '../editor/arrange';
+import { plainMeasure } from '../chem/reaction';
 import type { Rect } from '../geom';
 import type { Selection } from '../editor/editor';
 import { plainText } from '../richtext';
@@ -148,7 +149,8 @@ export class SlideFrames {
         one = subDoc(doc, (kind, x) => kind === 'caption' && x === id);
       } else {
         one = part.kind === 'highlight' ? highlightDoc(doc, part.sel) : subDoc(doc, (kind, id) => inPart(part, kind, id), strip);
-        const b = selectionBox(doc, part.sel, POINTS) ?? { x1: 0, y1: 0, x2: page.size.w, y2: page.size.h };
+        // (text measured as it is laid out, so a caption's picture holds all of its text)
+        const b = selectionBox(doc, part.sel, plainMeasure(doc)) ?? { x1: 0, y1: 0, x2: page.size.w, y2: page.size.h };
         // room for frames, shadows, glows and arrowheads
         const pad = part.kind === 'highlight' ? doc.style.bondLength : 8;
         box = { x1: b.x1 - pad, y1: b.y1 - pad, x2: b.x2 + pad, y2: b.y2 + pad };

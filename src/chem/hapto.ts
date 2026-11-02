@@ -90,6 +90,86 @@ export function haptoTarget(doc: Doc, p: Vec, skip?: number): { centre?: Atom; a
   return null;
 }
 
+/** η³ and larger ligands bonded to a metal are drawn delocalized (Settings > Drawing). */
+export const haptoLook = { delocalized: true };
+
+/** How a π-system bonded as one is drawn delocalized: a ring (a circle inside it) or an allyl (an arc). */
+export type PiLook = { kind: 'ring'; ring: number[] } | { kind: 'arc'; chain: [number, number, number] };
+
+/**
+ * The delocalized look of a multicentre point's π-system, when it is drawn that way: bonded to
+ * a metal, η³ over three atoms in a row (an allyl) or η⁵ and up over a whole ring (Cp, an arene,
+ * a cycloheptatrienyl), unless switched to its Kekulé form. Null otherwise.
+ */
+export function piLook(doc: Doc, c: Atom): PiLook | null {
+  const m = c.multi;
+  if (!haptoLook.delocalized || c.kekule || !m || m.length < 3 || m.length === 4 || !(doc.adj.get(c.id)?.length)) return null;
+  const set = new Set(m);
+  const nbrs = (id: number) => (doc.adj.get(id) ?? []).map((bid) => { const b = doc.bonds.get(bid)!; return b.a1 === id ? b.a2 : b.a1; }).filter((o) => set.has(o));
+  if (m.length === 3) {
+    const mid = m.find((id) => nbrs(id).length === 2);
+    if (mid === undefined) return null;
+    const [a, b] = nbrs(mid);
+    return { kind: 'arc', chain: [a, mid, b] };
+  }
+  // a ring: each atom bonded to two others of it, all in one loop
+  if (!m.every((id) => nbrs(id).length === 2)) return null;
+  const ring = [m[0]];
+  let prev = -1, at = m[0];
+  for (;;) {
+    const next = nbrs(at).find((o) => o !== prev)!;
+    if (next === m[0]) break;
+    if (ring.includes(next)) return null;
+    ring.push(next);
+    prev = at;
+    at = next;
+  }
+  return ring.length === m.length ? { kind: 'ring', ring } : null;
+}
+
+/** The delocalized π-systems a bond is drawn in (none for most bonds). */
+export function piLooksOf(doc: Doc, b: Bond): PiLook[] {
+  const out: PiLook[] = [];
+  const c1 = doc.centresOf.get(b.a1);
+  if (!c1?.length) return out;
+  for (const cid of c1) {
+    const c = doc.atoms.get(cid);
+    if (!c?.multi?.includes(b.a2)) continue;
+    const look = piLook(doc, c);
+    if (!look) continue;
+    const list = look.kind === 'ring' ? look.ring : look.chain;
+    const i = list.indexOf(b.a1), j = list.indexOf(b.a2);
+    const next = (x: number, y: number) => Math.abs(x - y) === 1 || (look.kind === 'ring' && Math.abs(x - y) === list.length - 1);
+    if (i >= 0 && j >= 0 && next(i, j)) out.push(look);
+  }
+  return out;
+}
+
+/**
+ * The arc drawn over an allyl a–b–c: a curve inside the angle at b, a double bond's spacing in
+ * from the bonds and running along them at its ends, which stop short of a and c as a double
+ * bond's inner line does. A quadratic curve: its start, its control point (where the two inner
+ * lines meet) and its end; null when the three atoms are in a straight line.
+ */
+export function allylArc(a: Vec, b: Vec, c: Vec, gap: number): { from: Vec; ctrl: Vec; to: Vec } | null {
+  const u1 = { x: a.x - b.x, y: a.y - b.y }, u2 = { x: c.x - b.x, y: c.y - b.y };
+  const l1 = Math.hypot(u1.x, u1.y), l2 = Math.hypot(u2.x, u2.y);
+  if (l1 < 1e-9 || l2 < 1e-9) return null;
+  const d1 = { x: u1.x / l1, y: u1.y / l1 }, d2 = { x: u2.x / l2, y: u2.y / l2 };
+  const bis = { x: d1.x + d2.x, y: d1.y + d2.y }, bl = Math.hypot(bis.x, bis.y);
+  if (bl < 1e-6) return null;
+  const inward = { x: bis.x / bl, y: bis.y / bl };
+  // half the angle at b: the inner lines meet gap / sin(half) from b along the bisector
+  const half = Math.acos(Math.max(-1, Math.min(1, d1.x * d2.x + d1.y * d2.y))) / 2;
+  const ctrl = { x: b.x + inward.x * gap / Math.sin(half), y: b.y + inward.y * gap / Math.sin(half) };
+  // each bond's inner side, toward the bisector
+  const side = (d: Vec) => { const n = { x: -d.y, y: d.x }; return n.x * inward.x + n.y * inward.y >= 0 ? n : { x: d.y, y: -d.x }; };
+  const n1 = side(d1), n2 = side(d2);
+  const from = { x: a.x - d1.x * l1 * 0.2 + n1.x * gap, y: a.y - d1.y * l1 * 0.2 + n1.y * gap };
+  const to = { x: c.x - d2.x * l2 * 0.2 + n2.x * gap, y: c.y - d2.y * l2 * 0.2 + n2.y * gap };
+  return { from, ctrl, to };
+}
+
 /** The multicentre point standing for these atoms, made if there isn't one. Call inside an edit. */
 export function centreFor(doc: Doc, atoms: number[], scale?: number): Atom {
   const want = [...new Set(atoms)].sort((a, b) => a - b);

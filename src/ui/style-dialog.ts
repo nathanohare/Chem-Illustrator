@@ -2,10 +2,11 @@
 // as your own, make it the style new tabs of this kind start with, and say what happens to the
 // structures already drawn (redrawn in the new style, or left as they look now).
 
-import { showDialog } from './dialog-host';
+import { previewSlot, showDialog } from './dialog-host';
 import type { DocStyle } from '../style';
 import { FONT_GROUPS } from '../fonts';
-import { STYLE_PRESETS, presetNamed, sameLook, scaleStyle, type RestyleHow } from '../drawing-styles';
+import { presetNamed, scaleStyle, type RestyleHow } from '../drawing-styles';
+import { cardFor, styleCardList, styleCards } from './style-cards';
 
 export interface StyleChoice {
   style: DocStyle;
@@ -27,6 +28,10 @@ export interface StyleDialogOptions {
   isDefault: boolean;
   /** There are structures already, so ask what happens to them. */
   hasStructures: boolean;
+  /** A sample drawing in the style shown, beside the settings (drawn again as they change). */
+  preview?: (st: DocStyle) => Node;
+  /** Show the drawing itself in a style while the window is open (null: as it was). */
+  livePreview?(st: DocStyle | null): void;
 }
 
 
@@ -56,7 +61,6 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     d.append(form);
     form.append(
       el('h2', { textContent: 'Drawing style' }),
-      el('p', { className: 'muted', textContent: `How structures are drawn in ${o.where}: bond length, line widths and label fonts. Pick a journal's style or your own, and change any number.` }),
     );
 
     const grid = el('div', { className: 'md-grid' });
@@ -67,12 +71,10 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       return l;
     };
 
-    // which style
-    const pick = el('select');
-    const source = el('p', { className: 'muted style-source' });
-    grid.append(el('h3', { textContent: 'Style' }));
-    row('Start from', pick);
-    grid.append(source);
+    // which style: a card for each, drawn in it (where a journal's numbers come from is on its card's tip)
+    let picked = '';
+    const cardsAt = el('div', { className: 'style-cards-at' });
+    grid.append(el('h3', { textContent: 'Style' }), cardsAt);
 
     // its numbers
     grid.append(el('h3', { textContent: 'Structures' }));
@@ -97,6 +99,29 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     row('Captions', captionFont, captionSize, el('span', { className: 'muted', textContent: 'pt' }));
     inputs.set('labelSize', labelSize);
     inputs.set('captionSize', captionSize);
+    // reagents and conditions over and under reaction arrows: often a point smaller than captions
+    const arrowFont = fontSelect(), arrowSize = el('input', { type: 'number', className: 'md-num', step: 'any', min: '0' });
+    arrowFont.prepend(new Option('Same as captions', ''));
+    arrowSize.title = 'Leave blank for the captions\' size';
+    const smaller = el('button', { type: 'button', textContent: '1 pt smaller', title: 'One point smaller than the captions' });
+    smaller.addEventListener('click', () => { const c = parseFloat(captionSize.value); if (c > 1) { arrowSize.value = String(+(c - 1).toFixed(3)); arrowSize.dispatchEvent(new Event('input', { bubbles: true })); } });
+    row('Text above and below arrows', arrowFont, arrowSize, el('span', { className: 'muted', textContent: 'pt' }), smaller);
+    const showArrowSize = () => { arrowSize.placeholder = captionSize.value; };
+    captionSize.addEventListener('input', showArrowSize);
+    // reaction arrows: their own line width and head, apart from the bonds' (blank: the usual)
+    const arrowNum = (title: string) => { const i = el('input', { type: 'number', className: 'md-num', step: 'any', min: '0' }); i.title = title; return i; };
+    const arrowWidth = arrowNum('Leave blank for the bonds\' line width');
+    const headLength = arrowNum('Leave blank for ten line widths');
+    const headWidth = arrowNum('Leave blank for 2.5 line widths each side');
+    row('Reaction arrows: line width', arrowWidth, el('span', { className: 'muted', textContent: 'pt' }));
+    row('Arrowhead length, width', headLength, headWidth, el('span', { className: 'muted', textContent: 'pt' }));
+    const showArrowLook = () => {
+      const lw = parseFloat(arrowWidth.value) > 0 ? parseFloat(arrowWidth.value) : parseFloat(inputs.get('lineWidth')!.value);
+      arrowWidth.placeholder = inputs.get('lineWidth')!.value;
+      headLength.placeholder = lw > 0 ? String(+(lw * 10).toFixed(2)) : '';
+      headWidth.placeholder = lw > 0 ? String(+(lw * 2.5).toFixed(2)) : '';
+    };
+    for (const i of [arrowWidth, inputs.get('lineWidth')!]) i.addEventListener('input', showArrowLook);
 
     // your own
     grid.append(el('h3', { textContent: 'Your own styles' }));
@@ -132,6 +157,14 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       for (const [k, i] of inputs) i.value = String(+st[k].toFixed(3));
       pickFont(labelFont, st.labelFont);
       pickFont(captionFont, st.captionFont);
+      if (st.arrowTextFont) pickFont(arrowFont, st.arrowTextFont); else arrowFont.value = '';
+      arrowSize.value = st.arrowTextSize !== undefined ? String(+st.arrowTextSize.toFixed(3)) : '';
+      showArrowSize();
+      const pt = (v: number | undefined) => (v !== undefined ? String(+v.toFixed(3)) : '');
+      arrowWidth.value = pt(st.arrowWidth);
+      headLength.value = pt(st.arrowHeadLength);
+      headWidth.value = pt(st.arrowHeadWidth);
+      showArrowLook();
       name.value = st.name;
       showCm();
     };
@@ -150,46 +183,52 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       }
       st.labelFont = labelFont.value.trim() || shown.labelFont;
       st.captionFont = captionFont.value.trim() || shown.captionFont;
+      const af = arrowFont.value.trim(), as = parseFloat(arrowSize.value);
+      if (af && af !== st.captionFont) st.arrowTextFont = af; else delete st.arrowTextFont;
+      if (Number.isFinite(as) && as > 0 && Math.abs(as - st.captionSize) > 1e-6) st.arrowTextSize = as; else delete st.arrowTextSize;
+      const own = (i: HTMLInputElement, k: 'arrowWidth' | 'arrowHeadLength' | 'arrowHeadWidth') => { const v = parseFloat(i.value); if (Number.isFinite(v) && v >= 0.05) st[k] = Math.min(30, v); else delete st[k]; };
+      own(arrowWidth, 'arrowWidth');
+      own(headLength, 'arrowHeadLength');
+      own(headWidth, 'arrowHeadWidth');
       return st;
     };
 
+    // pointing at a card shows it on the drawing behind the window and in the sample
+    let sample: (st: DocStyle) => void = () => {};
+    // (the drawing itself only while a card is pointed at, so it is never left half-changed)
+    const show = () => sample(read());
+    let hovering = false;
     const fillPick = (select: string) => {
-      pick.replaceChildren();
-      const inFile = !STYLE_PRESETS.some((p) => sameLook(p.style, o.current)) && !own.some((s) => sameLook(s, o.current));
-      if (inFile) pick.add(new Option(`In this file: ${o.current.name}`, 'file:'));
-      const journals = el('optgroup', { label: 'Journals and presets' });
-      for (const p of STYLE_PRESETS) journals.append(new Option(p.style.name, 'preset:' + p.style.name));
-      pick.append(journals);
-      if (own.length) {
-        const mine = el('optgroup', { label: 'My styles' });
-        for (const s of own) mine.append(new Option(s.name, 'own:' + s.name));
-        pick.append(mine);
+      const cards = styleCards({
+        own,
+        chosen: select,
+        onPick: (c) => { picked = c.key; fill(chosen()); describe(); said.textContent = ''; show(); },
+        onHover: (c) => { hovering = !!c; o.livePreview?.(c ? c.style : null); sample(c ? c.style : read()); },
+        onSave: () => { name.focus(); name.select(); said.textContent = 'Type a name for it, then Save as My Style.'; },
+      });
+      cardsAt.replaceChildren(cards);
+      picked = select;
+      if (!select.startsWith('preset:') && !select.startsWith('own:')) {
+        const inFile = el('p', { className: 'muted small', textContent: `In use now: ${o.current.name} (from this file; none of the cards draws the same).` });
+        cardsAt.append(inFile);
       }
-      pick.value = select;
-      if (pick.selectedIndex < 0) pick.selectedIndex = 0;
     };
     const chosen = (): DocStyle => {
-      const v = pick.value;
+      const v = picked;
       if (v.startsWith('preset:')) return { ...presetNamed(v.slice(7))!.style };
       if (v.startsWith('own:')) return { ...own.find((s) => s.name === v.slice(4))! };
       return { ...o.current };
     };
     const describe = () => {
-      const v = pick.value;
-      const p = v.startsWith('preset:') ? presetNamed(v.slice(7)) : undefined;
-      source.textContent = p ? `From: ${p.source}.${p.note ? ' ' + p.note : ''}` : v.startsWith('own:') ? 'One of your own styles.' : 'The style this file was saved with.';
-      del.disabled = !v.startsWith('own:');
+      del.disabled = !picked.startsWith('own:');
     };
 
     // start on whatever matches what is in use now
-    const now = own.find((s) => s.name === o.current.name && sameLook(s, o.current)) ? 'own:' + o.current.name
-      : STYLE_PRESETS.find((p) => sameLook(p.style, o.current)) ? 'preset:' + STYLE_PRESETS.find((p) => sameLook(p.style, o.current))!.style.name
-      : 'file:';
+    const now = cardFor(styleCardList(own), o.current)?.key ?? 'file:';
     fillPick(now);
     fill(o.current);
     describe();
 
-    pick.addEventListener('change', () => { fill(chosen()); describe(); said.textContent = ''; });
     const bondIn = inputs.get('bondLength')!;
     let lastBond = shown.bondLength;
     bondIn.addEventListener('focus', () => { lastBond = parseFloat(bondIn.value) || shown.bondLength; });
@@ -205,7 +244,8 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       lastBond = v;
       showCm();
     });
-    for (const i of inputs.values()) i.addEventListener('input', showCm);
+    for (const i of inputs.values()) i.addEventListener('input', () => { showCm(); if (!hovering) show(); });
+    for (const f of [labelFont, captionFont]) f.addEventListener('change', () => show());
 
     save.addEventListener('click', () => {
       const st = read();
@@ -218,7 +258,7 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       said.textContent = had >= 0 ? `Updated "${st.name}".` : `Saved "${st.name}". It is in the list in every mode.`;
     });
     del.addEventListener('click', () => {
-      const v = pick.value;
+      const v = picked;
       if (!v.startsWith('own:')) return;
       own = own.filter((s) => s.name !== v.slice(4));
       fillPick(now.startsWith('own:') && now.slice(4) === v.slice(4) ? 'file:' : now);
@@ -231,6 +271,7 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     const done = (v: StyleChoice | null) => {
       if (finished) return;
       finished = true;
+      o.livePreview?.(null);
       if (d.open) d.close();
       d.remove();
       resolve(v);
@@ -243,7 +284,19 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     d.addEventListener('close', () => done(null));
     document.body.append(d);
     showDialog(d);
-    pick.focus();
+    if (o.preview) {
+      // in the Settings window's pane on the right, or at the top of the window
+      let slot = previewSlot('Preview');
+      if (!slot) { slot = el('div', { className: 'ask-preview' }); form.insertBefore(slot, grid); }
+      const box = slot;
+      let queued = 0;
+      const redraw = () => { cancelAnimationFrame(queued); queued = requestAnimationFrame(() => box.replaceChildren(o.preview!(read()))); };
+      box.replaceChildren(o.preview(read()));
+      form.addEventListener('input', redraw);
+      form.addEventListener('change', redraw);
+      sample = (st) => { cancelAnimationFrame(queued); queued = requestAnimationFrame(() => box.replaceChildren(o.preview!(st))); };
+    }
+    (cardsAt.querySelector<HTMLButtonElement>('[aria-checked=true]') ?? cardsAt.querySelector<HTMLButtonElement>('button'))?.focus();
   });
 }
 
