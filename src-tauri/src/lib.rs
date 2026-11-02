@@ -5,6 +5,7 @@
 mod ai;
 mod clipboard;
 mod file_types;
+mod folders;
 mod keep;
 mod ole;
 mod open_dialog;
@@ -510,6 +511,8 @@ pub fn run() {
             clipboard::clipboard_read,
             clipboard::clipboard_formats,
             open_dialog::open_shared_dialog,
+            folders::list_folder,
+            folders::make_folder,
             file_types::launch_files,
             file_types::file_types_get,
             file_types::file_types_set,
