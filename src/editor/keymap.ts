@@ -172,7 +172,7 @@ export const COMMAND_NAMES: Record<string, string> = {
   'turn-ccw-1': 'Turn 1° anticlockwise', 'turn-cw-1': 'Turn 1° clockwise',
   'turn-ccw-15': 'Turn 15° anticlockwise', 'turn-cw-15': 'Turn 15° clockwise',
   'rotate-dialog': 'Rotate by an angle…', scale: 'Scale…',
-  'turn-3d': 'Turn in 3-D…', 'flatten-3d': 'Flatten (forget 3-D depth)', 'newman-projection': 'Newman Projection…', 'edit-newman': 'Edit Newman Projection…', 'unlink-newman': 'Unlink from Structure',
+  'turn-3d': 'Turn in 3-D…', 'flatten-3d': 'Flatten (forget 3-D depth)', 'newman-projection': 'Newman Projection…', 'edit-newman': 'Edit Newman Projection…', 'unlink-newman': 'Unlink from Structure', 'torsion-chart': 'Torsional Energy Chart…', 'edit-torsion': 'Edit Torsional Energy Chart…', 'copy-torsion-data': 'Copy Chart Data',
   'depth-shading': 'Depth Shading (on or off)', 'depth-shading-settings': 'Depth Shading Settings…',
   'reaction-right': 'Reaction: arrow and copy to the right', 'reaction-left': 'Reaction: arrow and copy to the left',
   'reaction-down': 'Reaction: arrow and copy below', 'reaction-up': 'Reaction: arrow and copy above',

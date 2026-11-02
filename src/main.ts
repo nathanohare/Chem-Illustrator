@@ -206,14 +206,17 @@ import { Model3dBuilder } from './chem/model3d';
 import { StructureNamer, confirmedName, nameRuns, type NameTools } from './chem/namer';
 import { placeView } from './chem/place3d';
 import type { ConformerTools, Viewer3d } from './ui/viewer3d';
-import { DEFAULT_XTB, refineWithXtb, type XtbOptions } from './chem/xtb';
+import { DEFAULT_XTB, KCAL_PER_HARTREE, refineWithXtb, type XtbOptions } from './chem/xtb';
 import type { Model3d } from './chem/model3d-build';
-import { fittedRmsd, withPopulations } from './chem/conformer-rank';
-import { groupLabel, neighbours, newmanConformers, newmanView, type NewmanConformer } from './chem/newman';
+import { mergeConformers } from './chem/conformer-rank';
+import { groupLabel, neighbours, newmanConformers, newmanView, norm360, torsion, type NewmanConformer, type NewmanGroup } from './chem/newman';
+import { extrema, fitProfile, type Extremum, type Profile } from './chem/torsion-profile';
+import { torsionCsv, type TorsionData } from './design/torsion';
+import type { ChartChoice } from './ui/newman-chart-tab';
 import { parseNewmanPrefs, structureKey, type NewmanData, type NewmanLook, type NewmanPrefs } from './design/newman';
 import { depthCues } from './editor/perspective';
 import type { NewmanChoice } from './ui/newman-dialog';
-import type { QmOptions } from './chem/qm-input';
+import { chargeAndMultiplicity, xyzFile, type QmOptions } from './chem/qm-input';
 import { NameDialog } from './ui/name-dialog';
 import { SequenceDialog } from './ui/sequence-dialog';
 import { ArrangeDialog } from './ui/arrange-dialog';
@@ -1659,8 +1662,56 @@ function newmanWork(frontId: number, backId: number) {
     return p;
   };
   const ends = (rev: boolean) => (rev ? [bi, fi] : [fi, bi]);
+  const scans = new Map<string, Promise<ChartScan>>();
   return {
     ids, ex, fi, bi,
+    /** The pairs of groups (one on each atom) a torsion chart can be measured between, the biggest pair first. */
+    async pairs(rev: boolean): Promise<{ label: string; a: number; d: number }[]> {
+      const m = await modelFor('mmff', () => {});
+      const [f, b] = ends(rev);
+      const v = newmanView(m, m.conformers[0].xyz, f, b, { drawn });
+      if (v.front.some((g) => g.ring !== undefined)) throw new Error('This bond is in a ring, so it can\'t turn all the way round: there is no torsion chart for it.');
+      const heavy = (gs: NewmanGroup[]) => { const h = gs.filter((g) => m.atoms[g.atom].z !== 1); return h.length ? h : gs.slice(0, 1); };
+      const out: { label: string; a: number; d: number; size: number }[] = [];
+      for (const p of heavy(v.front)) for (const q of heavy(v.back)) out.push({ label: `${p.label} (front) and ${q.label} (back)`, a: p.atom, d: q.atom, size: p.size + q.size });
+      return out.sort((x, y) => y.size - x.size);
+    },
+    /** A relaxed scan of the bond, the torsion measured between groups c.a and c.d (once for each way of asking). */
+    scan(rev: boolean, c: ChartChoice, progress: (t: string) => void): Promise<ChartScan> {
+      const key = `${rev}|${c.a}|${c.d}|${c.step}|${c.method}`;
+      let p = scans.get(key);
+      if (!p) {
+        p = (async () => {
+          const m = await modelFor('mmff', progress);
+          const [f, b] = ends(rev);
+          const xyz0 = m.conformers[0].xyz;
+          const r = await model3d.scan(ex.molblock, xyz0, [c.a, f, b, c.d], c.step, (done, total) => progress(`Scanning the bond… ${Math.round((100 * done) / total)}%`));
+          let points = r.points.map((q) => ({ phi: q.phi, energy: q.energy }));
+          let method = r.relaxed ? `${r.method}, relaxed scan` : `${r.method}, rigid scan`;
+          if (c.method === 'xtb') {
+            const run = conformerTools(ex.molblock).xtb;
+            if (!run) throw new Error('xTB runs in the desktop app, with the xtb program installed.');
+            const shapes: Model3d = { ...m, conformers: r.points.map((q) => ({ xyz: q.xyz, energy: q.energy })) };
+            const { charge, multiplicity } = chargeAndMultiplicity(m);
+            const es: number[] = [];
+            for (let k = 0; k < r.points.length; k++) {
+              const got = await run({ exe: conformerPrefs.xtb.exe, xyz: xyzFile(shapes, k, `phi ${r.points[k].phi}`), charge, uhf: multiplicity - 1, solvent: conformerPrefs.xtb.solvent || null, opt: false });
+              es.push(got.energy * KCAL_PER_HARTREE);
+              progress(`xTB energies: ${k + 1} of ${r.points.length}…`);
+            }
+            const e0 = Math.min(...es);
+            points = points.map((q, i) => ({ phi: q.phi, energy: es[i] - e0 }));
+            method = `GFN2-xTB${conformerPrefs.xtb.solvent ? ` (ALPB ${conformerPrefs.xtb.solvent})` : ''} at MMFF94s+ scan shapes`;
+          }
+          const profile = fitProfile(points);
+          const view = newmanView(m, xyz0, f, b, { drawn });
+          return { points, profile, extrema: extrema(profile), front: view.front, back: view.back, phi0: norm360(torsion(xyz0, c.a, f, b, c.d)), method };
+        })();
+        scans.set(key, p);
+        p.catch(() => scans.delete(key));
+      }
+      return p;
+    },
     /** Each end named by its group as written from the other end (CH(OH)CH3), once the conformers are in. */
     async names(): Promise<[string, string]> {
       const m = await modelFor('mmff', () => {});
@@ -1703,15 +1754,45 @@ async function withBondRotamers(m: Model3d, molblock: string, fi: number, bi: nu
   if (a === undefined || d === undefined || m.conformers.some((c) => c.energy === null)) return m;
   progress('Turning the bond to its other rotamers…');
   const extra = await model3d.rotamers(molblock, m.conformers.slice(0, 3).map((c) => c.xyz), [a, fi, bi, d]).catch(() => []);
-  const heavy = m.atoms.map((x, i) => (x.z === 1 ? -1 : i)).filter((i) => i >= 0);
-  const all = m.conformers.map((c) => ({ xyz: c.xyz, energy: c.energy }));
-  for (const r of extra) {
-    if (all.some((k) => Math.abs(k.energy! - r.energy) < 0.1 && fittedRmsd(k.xyz, r.xyz, heavy) < 0.3)) continue;
-    all.push(r);
-  }
-  all.sort((p, q) => p.energy! - q.energy!);
-  const e0 = all[0].energy!;
-  return { ...m, conformers: withPopulations(all.filter((c) => c.energy! - e0 <= 8)) };
+  return { ...m, conformers: mergeConformers(m.atoms, m.conformers, extra) };
+}
+
+/** A bond's scan, ready to draw as a torsional energy chart. */
+interface ChartScan {
+  points: { phi: number; energy: number }[];
+  profile: Profile;
+  extrema: Extremum[];
+  front: NewmanGroup[];
+  back: NewmanGroup[];
+  phi0: number;
+  method: string;
+}
+
+/** The chart a choice on the Energy Chart tab makes. */
+function torsionData(s: ChartScan, c: ChartChoice, look = newmanPrefs.look): TorsionData {
+  const L = doc.style.bondLength || 14.4;
+  return {
+    profile: s.profile, extrema: s.extrema, front: s.front, back: s.back, phi0: s.phi0,
+    unit: c.unit, insets: c.insets, names: c.names, barriers: c.barriers, barrierColor: newmanPrefs.chart.barrierColor,
+    digits: 1, w: 26 * L, h: 8 * L, method: s.method, look: structuredClone(look), sawhorse: c.sawhorse, points: s.points,
+  };
+}
+
+/** The Energy Chart tab's preview: the chart fitted to the canvas. */
+function paintTorsionPreview(d: TorsionData, canvas: HTMLCanvasElement): void {
+  const { doc: tmp, box } = editor.torsionPreview(d);
+  const w = canvas.clientWidth || 560, h = canvas.clientHeight || 300, dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const bw = box.x2 - box.x1, bh = box.y2 - box.y1, pad = 8;
+  const k = Math.min((w - 2 * pad) / bw, (h - 2 * pad) / bh, 3);
+  ctx.setTransform(k * dpr, 0, 0, k * dpr, (w / 2 - (box.x1 + bw / 2) * k) * dpr, (h / 2 - (box.y1 + bh / 2) * k) * dpr);
+  drawDrawing(ctx, tmp);
 }
 
 /** The projection a choice in the Newman window makes. */
@@ -1749,7 +1830,7 @@ function paintNewmanPreview(d: NewmanData, canvas: HTMLCanvasElement): void {
  * Chemistry ▸ Newman Projection… (right-click a single bond, or the Newman tool): the bond seen
  * end on, from `frontId`'s end; or projection `editId` (its frame) to change.
  */
-async function newmanProjection(bondId: number | null, frontId: number | null, editId?: number): Promise<void> {
+async function newmanProjection(bondId: number | null, frontId: number | null, editId?: number, chartFirst = false): Promise<void> {
   finishTyping();
   const old = editId !== undefined ? doc.shapes.get(editId)?.newman : undefined;
   let front: number, back: number;
@@ -1783,9 +1864,22 @@ async function newmanProjection(bondId: number | null, frontId: number | null, e
     drawn: (rev) => w.drawn(rev),
     paint: (choice, conf, canvas) => paintNewmanPreview(newmanData(w, choice, conf, front, back, old?.look), canvas),
     stop: () => model3d.stop(),
-  }, !!old);
+  }, !!old, old ? undefined : {
+    first: chartFirst,
+    start: { ...newmanPrefs.chart, step: 10, sawhorse: true, method: newmanPrefs.method },
+    host: {
+      pairs: (rev) => w.pairs(rev),
+      scan: (rev, c, progress) => w.scan(rev, c, progress),
+      paint: (_rev, c, scan, canvas) => paintTorsionPreview(torsionData(scan as ChartScan, c), canvas),
+      copy: (c, scan) => void copyText(torsionCsv(torsionData(scan as ChartScan, c)), `Copied ${(scan as ChartScan).points.length} angles and energies: paste them into a spreadsheet.`),
+    },
+  });
   if (!got) return;
   lastNewman = { kind: got.choice.kind, source: got.choice.source, linked: got.choice.linked };
+  if ('chart' in got) {
+    editor.putTorsionChart(torsionData(got.scan as ChartScan, got.chart), { near: front, page: deckNow()?.size });
+    return;
+  }
   if (!doc.atoms.has(front) || !doc.atoms.has(back)) { flash('The structure was changed while the window was open. Open Newman Projection again.'); return; }
   const data = newmanData(w, got.choice, got.conf, front, back, old?.look);
   editor.putNewmanProjection(data, { id: editId, mark: got.choice.mark ? (old?.mark?.color ?? newmanPrefs.markColor) : null, linked: got.choice.linked, page: deckNow()?.size });
@@ -1846,6 +1940,32 @@ async function newmanSettingsPage(): Promise<void> {
 
 editor.onNewman = (bond, front) => void newmanProjection(bond, front);
 editor.onNewmanEdit = (frame) => void newmanProjection(null, null, frame);
+editor.onTorsionEdit = (frame) => void editTorsion(frame);
+
+/** A torsional energy chart's look: its projections, names, units, barriers and sawhorse (the scan stays as it was). */
+async function editTorsion(id: number): Promise<void> {
+  finishTyping();
+  const d = doc.shapes.get(id)?.torsion;
+  if (!d) return;
+  const r = await ask('Edit Torsional Energy Chart', [
+    { name: 'insets', label: 'Projections', value: d.insets, options: [{ value: 'all', label: 'At every minimum and maximum' }, { value: 'minima', label: 'At the minima' }, { value: 'none', label: 'None' }] },
+    { name: 'names', label: 'Names', value: d.names, options: [{ value: 'textbook', label: 'Textbook (gauche, eclipsed, anti…)' }, { value: 'klyne', label: 'Klyne–Prelog (synclinal…)' }, { value: 'none', label: 'None' }] },
+    { name: 'unit', label: 'Units', value: d.unit, options: [{ value: 'kcal/mol', label: 'kcal/mol' }, { value: 'kJ/mol', label: 'kJ/mol' }] },
+    { name: 'barriers', label: 'Barrier heights (dotted arrows)', type: 'checkbox', value: String(d.barriers) },
+    { name: 'sawhorse', label: 'Sawhorse with the eye above the chart', type: 'checkbox', value: String(!!d.sawhorse) },
+    { name: 'look', label: 'Projections\' look', value: 'keep', options: [{ value: 'keep', label: 'Keep its own look' }, { value: 'settings', label: 'Use Settings ▸ Newman Projections' }] },
+  ], { ok: 'Redraw', note: `Energies: ${d.method ?? 'MMFF94s+'}. To scan the bond again (another step, pair of groups or xTB), right-click the bond ▸ Torsional Energy Chart….` });
+  if (!r) return;
+  editor.putTorsionChart({
+    ...d,
+    insets: r.insets === 'minima' || r.insets === 'none' ? r.insets : 'all',
+    names: r.names === 'klyne' || r.names === 'none' ? r.names : 'textbook',
+    unit: r.unit === 'kJ/mol' ? 'kJ/mol' : 'kcal/mol',
+    barriers: r.barriers === 'true', sawhorse: r.sawhorse === 'true',
+    look: r.look === 'settings' ? structuredClone(newmanPrefs.look) : d.look,
+    ...(r.look === 'settings' ? { barrierColor: newmanPrefs.chart.barrierColor } : {}),
+  }, { id });
+}
 
 // ------------------------------------------------------------------ name to structure
 
@@ -7928,6 +8048,12 @@ const COMMANDS: Record<string, () => unknown> = {
     const b = contextBond ?? (editor.sel.bonds.size === 1 ? [...editor.sel.bonds][0] : null);
     void newmanProjection(b, null);
   },
+  'torsion-chart': () => {
+    const b = contextBond ?? (editor.sel.bonds.size === 1 ? [...editor.sel.bonds][0] : null);
+    void newmanProjection(b, null, undefined, true);
+  },
+  'edit-torsion': () => { const id = editor.selectedTorsion(); if (id === null) flash('Select a torsional energy chart first.'); else void editTorsion(id); },
+  'copy-torsion-data': () => { const d = editor.selectedTorsion() !== null ? doc.shapes.get(editor.selectedTorsion()!)?.torsion : undefined; if (d) void copyText(torsionCsv(d), 'Copied the angles and energies: paste them into a spreadsheet.'); },
   'edit-newman': () => { const id = editor.selectedNewman(); if (id === null) flash('Select a Newman projection first.'); else void newmanProjection(null, null, id); },
   'unlink-newman': () => { const id = editor.selectedNewman(); if (id !== null) { editor.unlinkNewman(id); flash('Unlinked: the projection stays as it is when the structure changes.'); } },
   'turn-3d': () => void turn3dDialog(),
@@ -10650,6 +10776,7 @@ function drawingMenu(): MenuItem[] {
     { cmd: 'cut' }, { cmd: 'copy' }, { cmd: 'paste' }, { cmd: 'delete', label: 'Delete' }, { cmd: 'format-painter' }, null,
     ...repeatLabelMenu(),
     ...(editor.selectedEnergy() !== null ? [{ cmd: 'edit-energy' }, null] : []),
+    ...(editor.selectedTorsion() !== null ? [{ cmd: 'edit-torsion' }, { cmd: 'copy-torsion-data' }, null] : []),
     ...(editor.selectedNewman() !== null ? [{ cmd: 'edit-newman' }, ...(doc.shapes.get(editor.selectedNewman()!)?.newman?.link ? [{ cmd: 'unlink-newman' }] : []), null] : []),
     ...(editor.selectedPlate() !== null ? [{ cmd: 'edit-plate' }, null] : []),
     ...(editor.selectedDiagram() !== null ? [{ cmd: 'edit-diagram' }, { cmd: 'diagram-to-shapes' }, null] : []),
@@ -10672,7 +10799,7 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'structure-to-name' },
       { cmd: 'find-cas' },
       { cmd: 'model-3d' },
-      ...(contextBond !== null && doc.bonds.get(contextBond)?.order === 1 ? [{ cmd: 'newman-projection' }] : []),
+      ...(contextBond !== null && doc.bonds.get(contextBond)?.order === 1 ? [{ cmd: 'newman-projection' }, { cmd: 'torsion-chart' }] : []),
       { label: 'Perspective', items: [{ cmd: 'turn-3d' }, { cmd: 'flatten-3d' }, null, { cmd: 'depth-shading', checked: depthShadePrefs.on }, { cmd: 'depth-shading-settings' }] },
     ] : []),
     ...(pickedCurved() ? [{ cmd: 'clean-up-arrow' }, { label: 'Mechanism Arrow', items: [
