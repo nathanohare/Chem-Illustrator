@@ -9,6 +9,7 @@ import { Vec, dist, angleOf } from '../geom';
 import { SYMBOLS, elementNumber } from './elements';
 import { NICKNAMES, labelGraph, type MiniGraph } from './labels';
 import { templateById, atomPlacements, crowdingOf, placeTemplate } from './templates';
+import { ligandByAbbr } from './ligands';
 
 /** Ligand abbreviations with a template, by the label written on the drawing. */
 const LIGAND_TEMPLATE: Record<string, string> = {
@@ -29,7 +30,7 @@ function metalOf(doc: Doc, a: Atom): Atom | null {
 
 /** The template a ligand label on a metal expands to, if there is one. */
 export function ligandTemplateFor(doc: Doc, a: Atom): string | null {
-  return a.label && metalOf(doc, a) ? LIGAND_TEMPLATE[a.label] ?? null : null;
+  return a.label && metalOf(doc, a) ? LIGAND_TEMPLATE[a.label] ?? ligandByAbbr(a.label)?.tpl ?? null : null;
 }
 
 /** SMILES (the first atom where the label joins) for what a label stands for, or null. */

@@ -1621,6 +1621,33 @@ dialog.kb-window { position: fixed; inset: 56px 0 auto 0; margin: 0 auto; z-inde
 .kb-table td.kb-excerpt mark { background: color-mix(in srgb, var(--accent) 28%, transparent); color: inherit; padding: 0 1px; border-radius: 2px; }
 .kb-window abbr[title] { text-decoration: underline dotted var(--muted); text-underline-offset: 2px; cursor: help; }
 .kb-empty { padding: 12px; margin: 0; }
+/* Chemistry > Metals > Ligand Library: families on the left, the ligands' drawings, the one picked on the right */
+dialog.ligand-library { width: min(96vw, 1080px); max-width: min(96vw, 1080px); }
+.lig-body { height: min(60vh, 560px); }
+.lig-body .kb-list { width: 170px; max-height: none; }
+.lig-grid { flex: 1; min-width: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); align-content: start; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: var(--r-tab); outline: none; }
+.lig-card { display: flex; flex-direction: column; align-items: center; padding: 2px 2px 3px; border: 1px solid transparent; border-radius: var(--r-control); cursor: default; color: var(--text); }
+.lig-card:hover { background: var(--accent-soft); }
+.lig-card.on { background: var(--accent-soft); border-color: var(--accent); }
+.lig-grid:focus-visible .lig-card.on { outline: 2px solid var(--accent); outline-offset: -1px; }
+.lig-pic svg, .lig-big svg { display: block; }
+.lig-abbr { font-size: var(--fs-xs); max-width: 80px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lig-details { width: 240px; flex: none; overflow: auto; font-size: var(--fs-sm); color: var(--text); }
+.lig-big { display: flex; justify-content: center; border: 1px solid var(--line); border-radius: var(--r-tab); }
+.lig-details h3 { margin: 6px 0 0; font-size: var(--fs-md); }
+.lig-name { margin: 2px 0 6px; }
+.lig-details dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; margin: 0; }
+.lig-details dt { color: var(--muted); }
+.lig-details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.lig-smiles { font-size: var(--fs-xs); cursor: copy; }
+.lig-note { margin: 6px 0 0; font-size: var(--fs-xs); }
+.lig-hint { align-self: center; font-size: var(--fs-xs); }
+@media (max-width: 720px) {
+  .lig-body { flex-direction: column; height: auto; }
+  .lig-body .kb-list { width: auto; flex-direction: row; overflow-x: auto; max-height: none; }
+  .lig-grid { max-height: 40vh; }
+  .lig-details { width: auto; }
+}
 .refs-table tr.refs-group.drop th { background: var(--accent-soft); outline: 1px dashed var(--accent); }
 .refs-hint:empty { display: none; }
 .refs-edit select { font: inherit; }

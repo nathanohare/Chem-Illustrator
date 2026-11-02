@@ -6,6 +6,7 @@ import { SYMBOLS, hasImplicitH, implicitHydrogens } from './elements';
 import { hillFormula } from './formula';
 import { isGenericLabel, kekulize, labelGraph, type MiniGraph } from './labels';
 import { graphSmiles } from './group-smiles';
+import { ligandByAbbr } from './ligands';
 
 /** Full names of the common abbreviations (IUPAC substituent names where there is one). */
 export const GROUP_NAMES: Record<string, string> = {
@@ -40,6 +41,11 @@ export interface LabelTip {
   formula: string;
   /** The full name, for labels in the list above. */
   name?: string;
+  /**
+   * For a ligand from the Ligand Library (dppf, XPhos, salen): the template drawn in the tooltip,
+   * the ligand on a metal M the usual way round, with PPh2-style labels kept.
+   */
+  ligand?: string;
 }
 
 /**
@@ -71,7 +77,8 @@ export function labelTip(label: string, ext: number[] = [1]): LabelTip | null {
     atoms: order.map((i) => withStar.atoms[i]),
     bonds: withStar.bonds.map((b) => ({ a: at.get(b.a)!, b: at.get(b.b)!, order: b.order })),
   };
-  return { smiles: graphSmiles(reordered), formula, name: GROUP_NAMES[text] };
+  const lig = ligandByAbbr(text);
+  return { smiles: graphSmiles(reordered), formula, name: GROUP_NAMES[text] ?? lig?.name, ...(lig ? { ligand: lig.tpl } : {}) };
 }
 
 /** Formula of the group's own atoms, with hydrogens worked out as for a drawn atom. */
