@@ -4992,6 +4992,36 @@ export class Editor {
   }
 
   /**
+   * Right-click > Attachment Point: make an atom a point of attachment of this kind (a wavy bond,
+   * a star or a numbered diamond), or a plain carbon again (null). An atom at the end of a single
+   * bond becomes the point itself; an atom with more bonds (a ring carbon) gets a new bond out to
+   * one, so the point sits right on it. False when nothing changed.
+   */
+  setAttachPoint(id: number, kind: 'Wavy' | 'Star' | 'Numbered' | null): boolean {
+    const doc = this.doc, a = doc.atoms.get(id);
+    if (!a || a.multi) return false;
+    if (kind === null && !a.attach) return false;
+    const look = (at: number, num?: number): Partial<Atom> => kind === 'Numbered'
+      ? { attach: 'Unspecified', attachNum: num ?? nextNumber(doc, at, (x) => (x.attach ? x.attachNum : undefined)) }
+      : { attach: kind!, attachNum: undefined };
+    const plain: Partial<Atom> = { z: 0, label: null, charge: 0, fileLabel: false, isotope: 0 };
+    let at = id;
+    doc.edit(kind ? 'Attachment Point' : 'Remove Attachment Point', () => {
+      if (kind === null) doc.updateAtom(id, { attach: undefined, attachNum: undefined, z: 6 });
+      else if (a.attach) doc.updateAtom(id, look(id, a.attach === 'Unspecified' || a.attach === 'Diamond' ? a.attachNum : undefined));
+      else if (doc.degree(id) <= 1 && !doc.neighbors(id).some((n) => n.attach)) doc.updateAtom(id, { ...plain, ...look(id) });
+      else {
+        const t = sprout(doc, id, 1, 'solid', 0);
+        at = t.id;
+        doc.updateAtom(t.id, { ...plain, ...look(t.id) });
+      }
+    });
+    this.selectOnly({ kind: 'atom', id: at });
+    this.changed();
+    return true;
+  }
+
+  /**
    * Make the selection bigger or smaller about its middle: positions, bond lengths, labels and
    * line widths together (captions keep their font size). False with nothing selected.
    */

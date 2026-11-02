@@ -1423,6 +1423,21 @@ dialog.prop-dialog { width: min(94vw, 520px); }
 .prop-row:hover { background: var(--accent-soft); }
 .prop-row > span { flex: 1 1 auto; min-width: 0; }
 .prop-adduct { width: 104px; font: var(--fs-sm) var(--mono-font); padding: 2px 4px; }
+dialog.prop-dialog:has(.hm-section:not([hidden])) { width: min(94vw, 600px); }
+dialog.prop-dialog:has(.hm-section:not([hidden])) .prop-list { max-height: 24vh; }
+.hm-section { border-top: 1px solid var(--line); padding-top: 8px; margin-bottom: 4px; }
+.hm-section h3 { margin: 0 0 6px; font-size: var(--fs-sm); }
+.hm-section h3 .muted { font-weight: 400; }
+.hm-body { display: grid; grid-template-columns: 190px 1fr; gap: 14px; align-items: start; }
+.hm-pic { position: relative; width: 190px; height: 120px; border: 1px solid var(--line); border-radius: var(--r-control); background: #fff; overflow: hidden; }
+.hm-pic canvas { position: absolute; }
+.hm-pos { position: absolute; transform: translate(-50%, -50%); font: italic 600 11px/1 Georgia, 'Times New Roman', serif; color: #c25e0f; }
+.hm-ref { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; border: 2px solid #1e6fd9; background: rgba(30, 111, 217, 0.12); }
+.hm-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.hm-note { margin: 0 0 6px; font-size: var(--fs-sm); }
+.hm-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; margin-bottom: 6px; }
+.hm-cols label { display: flex; gap: 6px; align-items: center; }
+.hm-cols sub { font-size: 0.78em; }
 
 /* ------------------------------------------------------------------ Document mode: pages, Word-style ribbon, Format panel */
 

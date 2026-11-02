@@ -22,7 +22,8 @@ import { parseDelimited, toDelimited } from '../sheet/csv';
 import { SheetChem } from '../sheet/sheet-chem';
 import { isBlankDrawing } from '../sheet/structure-doc';
 import { StructurePictures } from './structure-pictures';
-import { askProperties, PropertyChoice } from './property-dialog';
+import { askProperties, PropertyChoice, type HammettChoice, type HammettColumn, type HammettSetup, type PropertyAnswer } from './property-dialog';
+import { attachRefs, refAtoms, refLabel, refMarks } from '../sheet/hammett-refs';
 import { ask } from './ask';
 import { SheetFormatting } from './sheet-format-ui';
 import { SheetCharts } from './sheet-chart-ui';
@@ -63,6 +64,9 @@ import type { SparkKind } from '../sheet/sparklines';
 import { themeOf } from '../sheet/themes';
 import { SHEET_PAPERS, type PaperName } from '../sheet/page-setup';
 import { defaultPaper } from '../print-layout';
+
+/** The header of each Hammett column (σm and σp show their m and p as italic subscripts). */
+const HAMMETT_HEADS: Record<HammettColumn, string> = { group: 'Group', sigma: 'σ', F: 'F', R: 'R', sm: 'σm', sp: 'σp' };
 
 /** What a paste found on the clipboard, as far as a sheet cares. */
 export interface ClipboardCells {
@@ -1743,7 +1747,7 @@ export class SheetMode {
   }
 
   /** Chemistry > Insert Property Column…: pick properties to work out from a column of structures. */
-  private async propertyColumns(choice?: { col: number; props: PropertyChoice[] }): Promise<void> {
+  private async propertyColumns(choice?: PropertyAnswer): Promise<void> {
     const v = this.view;
     const s = v.sheet!;
     const { r, c } = v.sel.active;
@@ -1754,14 +1758,61 @@ export class SheetMode {
         this.host.flash('Click in a table with a column of structures (or SMILES) first. To start one, draw a structure in a cell (Chemistry > Structure).', 8000);
         return;
       }
-      const got = await askProperties({ columns: cols, col: cols.some((x) => x.col === c) ? c : cols[0].col });
+      const got = await askProperties({ columns: cols, col: cols.some((x) => x.col === c) ? c : cols[0].col, hammett: this.hammettSetup(s, region) });
       if (!got) return;
       choice = got;
     }
-    this.insertPropertyColumns(s, choice.col, choice.props, region);
+    this.insertPropertyColumns(s, choice.col, choice.props, region, choice.hammett);
   }
 
-  private insertPropertyColumns(s: Sheet, col: number, props: PropertyChoice[], region: Range): void {
+  /** The Hammett section of Insert Property Columns: the reference positions a column's structures offer, and a picture of one marked up. */
+  private hammettSetup(s: Sheet, region: Range): HammettSetup {
+    const structures = (col: number): Structure[] => {
+      const out: Structure[] = [];
+      for (let r = region.r1; r <= Math.min(region.r2, region.r1 + 500); r++) { const st = s.cell(r, col)?.structure; if (st) out.push(st); }
+      return out;
+    };
+    const ORDER = ['wavy', 'star', 'numbered'];
+    const rank = (ref: string) => (ORDER.includes(ref) ? ORDER.indexOf(ref) : 2 + Number(ref) / 100);
+    return {
+      refs: (col) => {
+        const used = new Map<string, number>();
+        for (const st of structures(col)) for (const ref of attachRefs(this.pictures.doc(st)).keys()) used.set(ref, (used.get(ref) ?? 0) + 1);
+        return [...used].sort((a, b) => b[1] - a[1] || rank(a[0]) - rank(b[0])).map(([value]) => ({ value, label: refLabel(value) }));
+      },
+      look: (col, ref, w, h) => {
+        const sts = structures(col);
+        const SAYS = 'Every group on the ring it sits on is placed o, m or p from it; two or more add up (Σσ).';
+        if (!sts.length) return { picture: null, note: `SMILES are read as the values are worked out: write the reference position as * on a ring carbon, e.g. *c1ccc(OC)cc1. ${SAYS}` };
+        let once = 0, several = 0;
+        let onRing = null as Structure | null;
+        for (const st of sts) {
+          const d = this.pictures.doc(st), n = refAtoms(d, ref).length;
+          if (n === 1) once++;
+          if (n > 1) several++;
+          if (!onRing && n && refMarks(d, ref)) onRing = st;
+        }
+        const n = sts.length, none = n - once - several, name = refLabel(ref).replace(/^\S+ /, '').toLowerCase();
+        let note = once === n ? (n === 1 ? 'Found in the structure.' : `Found once in each of the ${n} structures.`)
+          : once || several ? `Found once in ${once} of the ${n} structures${none ? `; ${none} ${none === 1 ? 'has' : 'have'} none and will show #N/A` : ''}${several ? `; ${several} ${several === 1 ? 'has' : 'have'} more than one and will show #N/A` : ''}.`
+          : `None of the structures has a ${name} attachment point yet: right-click a ring carbon and pick Attachment Point.`;
+        if (once + several && !onRing) note += ' It must sit on a benzene ring carbon, with nothing between it and the ring.';
+        else if (once + several) note += ` ${SAYS}`;
+        const fit = onRing && this.pictures.fitted(onRing, w, h);
+        const m = fit && refMarks(fit.doc, ref);
+        if (!fit || !m) return { picture: null, note };
+        const c = fit.at(m.centre);
+        // (inside the ring, clear of the groups on it)
+        const marks = m.places.map(({ atom, place }) => {
+          const p = fit.at(atom);
+          return { x: c.x + (p.x - c.x) * 0.5, y: c.y + (p.y - c.y) * 0.5, text: place };
+        });
+        return { picture: { canvas: fit.canvas, w: fit.w, h: fit.h, ref: fit.at(m.ref), marks }, note };
+      },
+    };
+  }
+
+  private insertPropertyColumns(s: Sheet, col: number, props: PropertyChoice[], region: Range, hammett?: HammettChoice): void {
     // the first row of data: the first structure (or SMILES) in the column; the row above it is the header
     let first = -1;
     for (let r = region.r1; r <= region.r2; r++) {
@@ -1774,8 +1825,9 @@ export class SheetMode {
     const at = region.c2 + 1;
     const ref = cellName(first, col);
     const headStyle = header >= 0 ? s.styleAt(header, col) : undefined;
-    this.edit(props.length > 1 ? 'Insert property columns' : 'Insert property column', (sh) => {
-      sh.insertCols(at, props.length);
+    const hm = hammett?.columns ?? [];
+    this.edit(props.length + hm.length > 1 ? 'Insert property columns' : 'Insert property column', (sh) => {
+      sh.insertCols(at, props.length + hm.length);
       props.forEach((p, i) => {
         const def = PROPERTIES[p.name];
         const target = at + i;
@@ -1791,8 +1843,21 @@ export class SheetMode {
         }
         sh.setColWidth(target, p.name === 'SMILES' ? 220 : p.name === 'INCHIKEY' ? 200 : p.name === 'FORMULA' || p.name === 'DUPLICATE' ? 96 : 80);
       });
+      // Hammett constants, counted from the reference position picked
+      hm.forEach((what, i) => {
+        const target = at + props.length + i;
+        const extra = hammett!.orthoSp && what !== 'group' ? ',"ortho=sp"' : '';
+        sh.setColDef(target, { formula: `=HAMMETT(${ref},"${what}","${hammett!.ref}"${extra})`, firstRow: first, style: what === 'group' ? { chem: true } : { numFmt: '0.00' } });
+        if (header >= 0 && !sh.cell(header, target)?.input) {
+          sh.setInput(header, target, HAMMETT_HEADS[what]);
+          const italic = what === 'F' || what === 'R' ? true : headStyle?.italic;
+          if (headStyle || italic) sh.patchStyle({ r1: header, c1: target, r2: header, c2: target }, { bold: headStyle?.bold, fill: headStyle?.fill, align: headStyle?.align, borders: headStyle?.borders, italic });
+        }
+        sh.setColWidth(target, what === 'group' ? 96 : 64);
+      });
     });
-    this.host.flash(`Added ${props.map((p) => PROPERTIES[p.name].label).join(', ')}. Type over any value to replace it; Reset to Calculated puts it back.`, 6000);
+    const names = [...props.map((p) => PROPERTIES[p.name].label), ...hm.map((w) => HAMMETT_HEADS[w])];
+    this.host.flash(`Added ${names.join(', ')}. Type over any value to replace it; Reset to Calculated puts it back.`, 6000);
   }
 
   /**
