@@ -2344,6 +2344,12 @@ async function applyAssistantAction(a: AssistantAction): Promise<string> {
 
 let assistantBarEl: AssistantBar | null = null;
 
+/** Edit > Assistant is only there once an AI model is linked. */
+function showAssistantMenu(): void {
+  for (const b of document.querySelectorAll<HTMLElement>('[data-cmd="assistant"]')) b.hidden = aiPrefs.provider === 'none';
+  if (aiPrefs.provider === 'none') assistantBarEl?.close();
+}
+
 /** Edit > Assistant (Ctrl+/): the prompt bar, made the first time. */
 function assistantBar(): AssistantBar {
   assistantBarEl ??= new AssistantBar({
@@ -8036,7 +8042,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'open-log-folder': () => openLogFolder(),
   'open-inspector': () => { invoke('open_inspector').catch((e) => flash(String(e))); },
   'command-search': () => commandSearch.open(),
-  assistant: () => assistantBar().toggle(),
+  assistant: () => {
+    if (aiPrefs.provider === 'none') { flash('Link an AI model in Edit > Settings > AI Model to use the Assistant.', 6000, { label: 'AI Model…', run: () => void aiSettings() }); return; }
+    assistantBar().toggle();
+  },
   'next-region': () => cycleRegion(1),
   'prev-region': () => cycleRegion(-1),
   'toolbox-main': () => toolboxes.toggle('main'),
@@ -9408,7 +9417,7 @@ async function generalPreferences(): Promise<void> {
 /** Settings ▸ Online: what the program asks the internet for. */
 /** Edit > Settings > AI Model. */
 async function aiSettings(): Promise<void> {
-  await aiSettingsDialog(aiPrefs, (p) => { aiPrefs = p; storeSettings(); });
+  await aiSettingsDialog(aiPrefs, (p) => { aiPrefs = p; storeSettings(); showAssistantMenu(); });
 }
 
 async function onlinePreferences(): Promise<void> {
@@ -9749,6 +9758,7 @@ function applySettings(s: Settings): void {
   updateChannel = s.updateChannel;
   pubchemNames = s.pubchemNames;
   aiPrefs = s.ai;
+  showAssistantMenu();
   docRead.convertChemDraw = s.convertChemDraw;
   matchStructure.on = s.matchStructure;
   straightenLinear.on = s.straightenLinear;

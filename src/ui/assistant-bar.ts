@@ -1,11 +1,12 @@
 // The Assistant's prompt bar (review item 35, layout C): a slim bar at the bottom of the work
 // area, opened with Ctrl+/ or Edit > Assistant, in every mode. Answers and the changes they
 // propose show just above it; "Open as Pane" makes it a taller pane down the right for a long
-// chat. Under the box, "Will send" names each thing a question would carry (click one to leave
+// chat, and "Float as Window" a window of its own to move and size (layout B). The look chosen
+// is kept. Under the box, "Will send" names each thing a question would carry (click one to leave
 // it out), and Local only can be switched on right there. Nothing is sent until the person has
 // turned the Assistant on once, having been told what goes where.
 
-import { aiAsk, aiName, aiBase, isLocalAddress, localOnlyBlock, type AiPrefs } from '../ai/link';
+import { aiAsk, aiName, aiBase, isLocalAddress, localOnlyBlock, type AiPrefs, type AssistantLook } from '../ai/link';
 import { buildQuestion, clearRequestLog, logRequest, parseAnswer, requestLog, sendSummary, type AssistantAction, type AssistantMode, type SendItem } from '../ai/assistant';
 import { showDialog } from './dialog-host';
 
@@ -58,19 +59,25 @@ export class AssistantBar {
   private sendBtn: HTMLButtonElement;
   private local: HTMLInputElement;
   private chips: HTMLDivElement;
-  private paneBtn: HTMLButtonElement;
+  private looks: HTMLSpanElement;
+  private head: HTMLDivElement;
   private items: SendItem[] = [];
   /** Things the person switched off, kept while the bar is open between questions. */
   private off = new Set<SendItem['id']>();
   private busy = 0;
-  private wide = false;
   private tab: object | null = null;
+  /** Where the floating window was left, and whether it has been given its size yet. */
+  private at: { x: number; y: number } | null = null;
+  private sized = false;
 
   constructor(private host: AssistantHost) {
     this.el = h('div', 'ai-bar');
     this.el.hidden = true;
     this.el.setAttribute('role', 'dialog');
     this.el.setAttribute('aria-label', 'Assistant');
+    this.head = h('div', 'ai-head');
+    this.head.append(h('span', 'ai-title', 'Assistant'), button('×', () => this.close(), 'ai-x', 'Close (Esc)'));
+    this.wireDrag(this.head);
     this.msgs = h('div', 'ai-msgs');
     this.msgs.setAttribute('aria-live', 'polite');
 
@@ -98,15 +105,15 @@ export class AssistantBar {
     const foot = h('div', 'ai-foot');
     this.chips = h('div', 'ai-chips');
     const links = h('div', 'ai-links');
-    this.paneBtn = button('Open as Pane', () => this.setWide(!this.wide), 'ai-link');
+    this.looks = h('span', 'ai-looks');
     links.append(
       button('Request Log', () => this.showLog(), 'ai-link', 'Every question sent, kept on this computer'),
-      this.paneBtn,
-      button('Settings', () => void this.host.openSettings().then(() => this.refresh()), 'ai-link', 'Edit > Settings > AI Model'),
+      this.looks,
+      button('Settings', () => void this.host.openSettings().then(() => { this.applyLook(); return this.refresh(); }), 'ai-link', 'Edit > Settings > AI Model'),
     );
     foot.append(this.chips, links);
     box.append(row, foot);
-    this.el.append(this.msgs, box);
+    this.el.append(this.head, this.msgs, box);
     this.el.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopPropagation(); this.close(); } });
     document.body.append(this.el);
     window.addEventListener('resize', () => { if (this.open) this.place(); });
@@ -121,7 +128,7 @@ export class AssistantBar {
     // a conversation is about one tab's page; Accept on another's proposals would land in the wrong place
     const tab = this.host.tab();
     if (tab !== this.tab) { this.tab = tab; this.msgs.replaceChildren(); this.off.clear(); this.busy++; }
-    this.place();
+    this.applyLook();
     this.input.placeholder = MODE_HINT[this.host.mode()];
     await this.refresh();
     this.input.focus();
@@ -136,13 +143,54 @@ export class AssistantBar {
     else void this.show();
   }
 
-  /** Sit over the bottom middle of the work area, or down its right side as a pane. */
+  private get look(): AssistantLook {
+    return this.host.prefs().assistantLook ?? 'bar';
+  }
+
+  /** Show it as a bar, a pane or a floating window, and keep that for next time. */
+  private setLook(look: AssistantLook): void {
+    const { assistantLook: _old, ...p } = this.host.prefs();
+    this.host.savePrefs(look === 'bar' ? p : { ...p, assistantLook: look });
+    this.applyLook();
+  }
+
+  private applyLook(): void {
+    const look = this.look;
+    this.el.classList.toggle('wide', look !== 'bar');
+    this.el.classList.toggle('float', look === 'window');
+    this.head.hidden = look !== 'window';
+    const names: Record<AssistantLook, [string, string]> = {
+      bar: ['Make Bar', 'A slim bar at the bottom of the page'],
+      pane: ['Open as Pane', 'A taller pane down the right, for a longer conversation'],
+      window: ['Float as Window', 'A window of its own that you can move and size'],
+    };
+    this.looks.replaceChildren(...(['bar', 'pane', 'window'] as const).filter((l) => l !== look).map((l) => button(names[l][0], () => this.setLook(l), 'ai-link', names[l][1])));
+    this.place();
+  }
+
+  /** Sit over the bottom middle of the work area, down its right side as a pane, or where the window was left. */
   private place(): void {
     const a = this.host.area();
     if (!a) return;
     const s = this.el.style;
+    const look = this.look;
+    if (look === 'window') {
+      if (!this.sized) {
+        s.width = `${Math.min(420, a.width - 24)}px`;
+        s.height = `${Math.min(560, a.height - 24)}px`;
+        this.sized = true;
+      }
+      const w = this.el.offsetWidth || 420, ht = this.el.offsetHeight || 560;
+      const at = this.at ?? { x: a.right - w - 12, y: a.top + 12 };
+      s.left = `${Math.max(0, Math.min(at.x, window.innerWidth - w))}px`;
+      s.top = `${Math.max(0, Math.min(at.y, window.innerHeight - ht))}px`;
+      s.bottom = '';
+      return;
+    }
+    s.height = '';
+    this.sized = false;
     s.bottom = `${Math.max(8, window.innerHeight - a.bottom + 12)}px`;
-    if (this.wide) {
+    if (look === 'pane') {
       const w = Math.min(420, a.width - 24);
       s.width = `${w}px`;
       s.left = `${a.right - w - 12}px`;
@@ -155,11 +203,19 @@ export class AssistantBar {
     }
   }
 
-  private setWide(on: boolean): void {
-    this.wide = on;
-    this.el.classList.toggle('wide', on);
-    this.paneBtn.textContent = on ? 'Make Bar' : 'Open as Pane';
-    this.place();
+  /** The floating window moves by its title bar. */
+  private wireDrag(head: HTMLElement): void {
+    head.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
+      const r = this.el.getBoundingClientRect();
+      const dx = e.clientX - r.left, dy = e.clientY - r.top;
+      head.setPointerCapture(e.pointerId);
+      const move = (m: PointerEvent) => { this.at = { x: m.clientX - dx, y: m.clientY - dy }; this.place(); };
+      const up = () => { head.removeEventListener('pointermove', move); head.removeEventListener('pointerup', up); };
+      head.addEventListener('pointermove', move);
+      head.addEventListener('pointerup', up);
+      e.preventDefault();
+    });
   }
 
   private fit(): void {

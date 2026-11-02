@@ -80,6 +80,21 @@ describe('the Assistant bar', () => {
     expect(s.host.undo).toHaveBeenCalledOnce();
   });
 
+  it('shows as a bar, a pane or a floating window, and keeps the choice', async () => {
+    const s = setup({ assistant: true });
+    await s.bar.show();
+    expect(s.bar.el.classList.contains('float')).toBe(false);
+    click(s.bar, 'Float as Window');
+    expect(s.prefs().assistantLook).toBe('window');
+    expect(s.bar.el.classList.contains('float')).toBe(true);
+    expect(s.bar.el.querySelector<HTMLElement>('.ai-head')!.hidden).toBe(false);
+    click(s.bar, 'Open as Pane');
+    expect(s.prefs().assistantLook).toBe('pane');
+    click(s.bar, 'Make Bar');
+    expect(s.prefs()).not.toHaveProperty('assistantLook');
+    expect(s.bar.el.querySelector<HTMLElement>('.ai-head')!.hidden).toBe(true);
+  });
+
   it('blocks a cloud model under Local only, from the bar', async () => {
     const fetch = vi.fn();
     vi.stubGlobal('fetch', fetch);

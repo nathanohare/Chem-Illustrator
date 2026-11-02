@@ -30,11 +30,17 @@ export async function aiSettingsDialog(now: AiPrefs, save: (p: AiPrefs) => void)
       ...(isTauri() ? [] : [{ name: 'remember', label: 'Remember the key in this browser', type: 'checkbox' as const, value: String(aiKeyRemembered(cur)) }]),
       { name: 'localOnly', label: 'Local only: never send anything off this computer', type: 'checkbox', value: String(cur.localOnly),
         help: 'Only a model on this computer (Ollama or LM Studio, under Other, at a localhost address) is asked; requests to any other address are blocked. For unpublished structures.' },
+      { name: 'look', label: 'Assistant shows as', value: cur.assistantLook ?? 'bar', options: [
+        { value: 'bar', label: 'A prompt bar at the bottom of the page' },
+        { value: 'pane', label: 'A pane down the right' },
+        { value: 'window', label: 'A floating window' },
+      ], help: 'Edit > Assistant (Ctrl+/), there once a model is linked. It can be changed from the Assistant too.' },
       { name: 'forget', label: 'Forget the saved key for this service', type: 'checkbox', value: 'false' },
     ], { ok: 'Save and Test', note: NOTE });
     if (!r) return;
     const provider = (r.provider as AiProvider) || 'none';
-    const next: AiPrefs = { provider, model: r.model.trim(), base: r.base.trim(), localOnly: r.localOnly === 'true', assistant: cur.assistant };
+    const next: AiPrefs = { provider, model: r.model.trim(), base: r.base.trim(), localOnly: r.localOnly === 'true', assistant: cur.assistant,
+      ...(r.look === 'pane' || r.look === 'window' ? { assistantLook: r.look } : {}) };
     if (provider === 'compatible' && !/^https?:\/\//i.test(next.base)) {
       await ask('AI Model', [], { noCancel: true, note: 'For Other, type the service\'s address, starting with http:// or https://.' });
       cur = next;
