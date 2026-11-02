@@ -52,8 +52,8 @@ export const SOLVENTS_TABLE: KbTable = {
   about: 'Common solvents: ICH Q3C residual-solvent class and limit (Class 1 avoid, 2 limit, 3 low toxicity), with boiling and melting points, density, flash point, viscosity, refractive index, solubility in water, what they mix with, and log Kow.',
   columns: [
     { key: 'name', label: 'Solvent' },
-    { key: 'ich', label: 'ICH Q3C class', filter: true },
-    { key: 'limit', label: 'ICH limit (ppm)', numeric: true },
+    { key: 'ich', label: 'ICH Q3C class', filter: true, info: 'ICH Q3C(R8) residual-solvent class: how much of a solvent may be left in a medicine, set by its toxicity. Class 1: avoid (known or suspected carcinogens, environmental hazards). Class 2: limit (a ppm cap for each). Class 3: low toxic potential (up to 5,000 ppm). "No adequate data": listed, but no limit set. A safety limit for drug products, not a green-chemistry ranking. Source: ICH Q3C(R8), 2021.' },
+    { key: 'limit', label: 'ICH limit (ppm)', numeric: true, info: 'The most a medicine may contain, in ppm, under ICH Q3C(R8): the solvent\'s permitted daily exposure for a 10 g daily dose. Class 3 solvents: 5,000 ppm (0.5%). Lower means more toxic. Source: ICH Q3C(R8), 2021.' },
     { key: 'bp', label: 'bp', numeric: true },
     { key: 'mp', label: 'mp', numeric: true },
     { key: 'density', label: 'Density', numeric: true },

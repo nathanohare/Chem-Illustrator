@@ -134,7 +134,7 @@ export function greenNmrRows(src = text): Record<string, Cell>[] {
 export const GREEN_NMR_TABLE: KbTable = {
   id: 'green-nmr',
   title: 'Green Solvents in NMR',
-  about: 'Where green solvents, acids and bases (Cyrene, GVL, 2,5-dimethyl-THF, DBU, ionic liquids…) appear as trace impurities in eight NMR solvents, 1H and 13C. Pick a solvent and type a shift (2.27) to find what it could be. Atom labels follow the paper\'s numbering.',
+  about: 'Where green solvents, acids and bases (Cyrene, GVL, 2,5-dimethyl-THF, DBU, ionic liquids…) appear as trace impurities in eight NMR solvents, ¹H and ¹³C. Pick a solvent and type a shift (2.27) to find what it could be. Atom labels follow the paper\'s numbering.',
   columns: [
     { key: 'name', label: 'Compound' },
     { key: 'solvent', label: 'Solvent', filter: true, narrow: true },

@@ -4,7 +4,7 @@
 // it (and when), and the window shows the ones not yet checked.
 //
 // Never copied from a book: Purification of Laboratory Chemicals and the like are for the reader's
-// own PDF library (Add PDFs…), and the notes here point to primary papers instead.
+// own copy, and the notes here point to primary papers instead.
 
 import { SAFETY_RECORDS } from './safety-tables';
 import type { Cell, KbSource, KbTable } from './tables';
@@ -31,7 +31,7 @@ export const REFS: Record<string, KbSource & { cite: string }> = {
   prudent2011: { label: 'Prudent Practices 2011', url: 'https://doi.org/10.17226/12654', cite: 'National Research Council. Prudent Practices in the Laboratory, updated ed.; National Academies Press, 2011 (free to read)' },
   fieser1967: { label: 'Fieser & Fieser 1967', cite: 'Fieser, L. F.; Fieser, M. Reagents for Organic Synthesis, Vol. 1; Wiley, 1967, p 584 (the n, n, 3n LiAlH4 work-up)' },
   shriver1986: { label: 'Shriver & Drezdzon 1986', cite: 'Shriver, D. F.; Drezdzon, M. A. The Manipulation of Air-Sensitive Compounds, 2nd ed.; Wiley, 1986' },
-  // further reading only: nothing here is taken from it; the reader's own copy can go in Add PDFs…
+  // further reading only: nothing here is taken from it
   armarego2017: { label: 'Armarego & Chai (your copy)', cite: 'Armarego, W. L. F.; Chai, C. L. L. Purification of Laboratory Chemicals, 8th ed.; Butterworth-Heinemann, 2017 (further reading, not quoted)' },
 };
 
@@ -154,7 +154,7 @@ export const PURIFICATION_TABLE: KbTable = {
     { key: 'store', prose: true, label: 'Store' },
     { key: 'check', prose: true, label: 'Check it is good' },
     { key: 'refs', label: 'Sources' },
-    { key: 'checked', label: 'Status', filter: true },
+    { key: 'checked', label: 'Status', filter: true, info: 'Whether someone in the department has checked this note against the lab\'s own practice. Written for Chem Illustrator from the papers in Sources.' },
     { key: 'cas', label: 'CAS' },
   ],
   rows: HANDLING.map((h): Record<string, Cell> => {
@@ -182,7 +182,7 @@ export const TECHNIQUES_TABLE: KbTable = {
     { key: 'steps', prose: true, label: 'How' },
     { key: 'watch', prose: true, label: 'Watch out' },
     { key: 'refs', label: 'Sources' },
-    { key: 'checked', label: 'Status', filter: true },
+    { key: 'checked', label: 'Status', filter: true, info: 'Whether someone in the department has checked this note against the lab\'s own practice. Written for Chem Illustrator from the papers in Sources.' },
   ],
   rows: TECHNIQUES.map((t): Record<string, Cell> => ({ name: t.name, kind: t.kind, steps: t.steps, watch: t.watch, refs: refText(t.refs), checked: status(t.checked) })),
   sources: ROW_SOURCES,

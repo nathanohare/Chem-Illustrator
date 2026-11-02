@@ -128,7 +128,8 @@ describe('abbreviations', () => {
     const div = document.createElement('div');
     div.append(explained('LD50 (rat, po)'));
     const abbr = [...div.querySelectorAll('abbr')].map((a) => a.textContent);
-    expect(abbr).toContain('LD50');
-    expect(div.textContent).toBe('LD50 (rat, po)');
+    // written LD₅₀ on screen (the data and a copy keep LD50)
+    expect(abbr).toContain('LD₅₀');
+    expect(div.textContent).toBe('LD₅₀ (rat, po)');
   });
 });

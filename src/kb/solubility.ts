@@ -25,7 +25,7 @@ export const SOLUBILITY_TABLE: KbTable = {
     { key: 'logs', label: 'log S (mol/L)', numeric: true },
     { key: 'gl', label: 'g/L', numeric: true },
     { key: 'mw', label: 'MW', numeric: true },
-    { key: 'reliability', label: 'Reliability', filter: true },
+    { key: 'reliability', label: 'Reliability', filter: true, info: 'How many of the datasets AqSolDB merged measured this compound, and whether their values agreed (within 0.5 log units). More sources agreeing means a more reliable value. Source: Sorkun, Khetan and Er, Sci. Data 2019.' },
     { key: 'smiles', label: 'SMILES', hidden: true },
   ],
   rows: (data as unknown as { rows: Row[] }).rows.map(([name, smiles, logS, mw, g]): Record<string, Cell> => ({

@@ -5,7 +5,9 @@
 // a copy can import the rest with Import Table. Each group's SMILES ([*] where it joins the ring)
 // is written here, for matching groups on a drawn ring.
 
-import type { KbTable } from './tables';
+import type { Template, TemplateAtom, TemplateBond } from '../chem/templates';
+import type { Cell, KbTable } from './tables';
+import PICS from './hammett-pics.json';
 
 export interface Hammett {
   /** The group as chemists write it. */
@@ -172,6 +174,16 @@ export function onBenzene(x: Hammett): string | null {
   return x.smiles.replace('[*]', 'c1ccccc1');
 }
 
+/** Each group's drawing (scripts/kb/build-hammett-pics.mjs), with a wavy line where it joins the ring. */
+export function groupPicture(group: string): Template | null {
+  const p = (PICS as unknown as Record<string, { atoms: TemplateAtom[]; bonds: TemplateBond[]; stubs: number[] }>)[group];
+  return p ? { id: `hammett-${group}`, name: group, group: 'own', atoms: p.atoms, bonds: p.bonds, attach: p.stubs[0], stubs: p.stubs } : null;
+}
+
+/** What the four constants mean (the ⓘ by their headings). */
+const SIGMA_INFO = 'Hammett substituent constant: how much the group pulls electrons from (positive) or pushes them into (negative) a benzene ring, measured from the acidity of the substituted benzoic acid in water at 25 °C (σm with the group meta to the reaction site, σp para). An electronic effect, not a safety or green score. Source: Hansch, Leo and Taft, Chem. Rev. 1991, Table I.';
+const FR_INFO = 'The field/inductive (F) and resonance (R) parts of the group\'s electronic effect (Swain–Lupton, as modified by Hansch, Leo and Taft; σp ≈ F + R). Positive pulls electrons, negative pushes them. Source: Chem. Rev. 1991, Table I.';
+
 // a plain minus sign, so the values sort and paste into Excel as numbers
 const fmt = (n: number) => (n === 0 ? '0.00' : n.toFixed(2));
 
@@ -180,14 +192,16 @@ export const HAMMETT_TABLE: KbTable = {
   title: 'Hammett Constants',
   about: 'Hammett σm and σp, and the field (F) and resonance (R) parameters (Swain–Lupton, as modified by Hansch, Leo and Taft; σp ≈ F + R), of common substituents on a benzene ring. Search by group (NO2, OMe) or name. Values in brackets are ones the paper marks as less certain. A selection: the paper lists about 530 groups, and Import Table adds the rest from your copy.',
   columns: [
+    { key: 'pic', label: 'Structure', picture: true },
     { key: 'group', label: 'Group' },
     { key: 'name', label: 'Name' },
-    { key: 'sm', label: 'σm', numeric: true },
-    { key: 'sp', label: 'σp', numeric: true },
-    { key: 'F', label: 'F', numeric: true },
-    { key: 'R', label: 'R', numeric: true },
+    { key: 'sm', label: 'σm', numeric: true, info: SIGMA_INFO },
+    { key: 'sp', label: 'σp', numeric: true, info: SIGMA_INFO },
+    { key: 'F', label: 'F', numeric: true, info: FR_INFO },
+    { key: 'R', label: 'R', numeric: true, info: FR_INFO },
     { key: 'row', label: 'Table I no.', numeric: true, narrow: true },
   ],
+  picture: (row: Record<string, Cell>) => groupPicture(String(row.group)),
   rows: HAMMETT.map((x) => {
     const v = (n: number) => (x.approx ? `(${fmt(n)})` : fmt(n));
     return { group: x.group, name: x.name, sm: v(x.sm), sp: v(x.sp), F: v(x.F), R: v(x.R), row: x.row, smiles: onBenzene(x) };

@@ -12,6 +12,18 @@ import { PHYSICAL_CONSTANTS, REAGENT_SAFETY } from './safety-tables';
 import { PKA_TABLE, SOLVENTS_TABLE } from './property-tables';
 import { HAMMETT_TABLE } from './hammett';
 
+/** Each shift with its multiplicity after it: "3.31, 4.87 (OH)" and "quint, s" give "3.31 (quint), 4.87 (s, OH)". */
+export function withMult(shifts: Cell, mults: Cell): Cell {
+  if (shifts === null || mults === null) return shifts;
+  const ms = String(mults).split(/,\s*/);
+  return String(shifts).split(/,\s*/).map((part, i) => {
+    const m = ms[i];
+    if (!m) return part;
+    const note = /^(\S+)\s*\((.+)\)$/.exec(part);
+    return note ? `${note[1]} (${m}, ${note[2]})` : `${part} (${m})`;
+  }).join(', ');
+}
+
 /** The common NMR solvents: residual 1H and 13C peaks, the water peak, and boiling and melting points. */
 export const NMR_SOLVENTS: KbTable = {
   id: 'nmr-solvents',
@@ -21,15 +33,14 @@ export const NMR_SOLVENTS: KbTable = {
     { key: 'name', label: 'Solvent' },
     { key: 'formula', label: 'Formula', narrow: true },
     { key: 'h', label: '1H residual (ppm)', shift: '1H' },
-    { key: 'hm', label: 'Mult.', narrow: true },
     { key: 'c', label: '13C (ppm)', shift: '13C' },
-    { key: 'cm', label: 'Mult.', narrow: true },
     { key: 'water', label: 'HDO / H2O (ppm)', shift: '1H' },
     { key: 'bp', label: 'bp (°C)', numeric: true },
     { key: 'mp', label: 'mp (°C)', numeric: true },
-    { key: 'cas', label: 'CAS' },
+    // not shown (Nate: not helpful here), still found by a CAS number typed in the search box
+    { key: 'cas', label: 'CAS', hidden: true },
   ],
-  rows: [
+  rows: ([
     { name: 'Chloroform-d', formula: 'CDCl3', h: '7.26', hm: 's', c: '77.16', cm: 't', water: '1.56', bp: 61, mp: -64, cas: '865-49-6', smiles: '[2H]C(Cl)(Cl)Cl' },
     { name: 'Acetone-d6', formula: '(CD3)2CO', h: '2.05', hm: 'quint', c: '29.84, 206.26', cm: 'sept, s', water: '2.84', bp: 56, mp: -95, cas: '666-52-4', smiles: '[2H]C([2H])([2H])C(=O)C([2H])([2H])[2H]' },
     { name: 'Dimethyl sulfoxide-d6', formula: '(CD3)2SO', h: '2.50', hm: 'quint', c: '39.52', cm: 'sept', water: '3.33', bp: 189, mp: 18, cas: '2206-27-1', smiles: '[2H]C([2H])([2H])S(=O)C([2H])([2H])[2H]' },
@@ -41,7 +52,7 @@ export const NMR_SOLVENTS: KbTable = {
     { name: 'Tetrahydrofuran-d8', formula: 'C4D8O', h: '3.58, 1.72', hm: 'm, m', c: '67.21, 25.31', cm: 'quint, quint', water: '2.46', bp: 65, mp: -108, cas: '1693-74-9', smiles: '[2H]C1([2H])OC([2H])([2H])C([2H])([2H])C1([2H])[2H]' },
     { name: 'Toluene-d8', formula: 'C6D5CD3', h: '7.09, 7.01, 6.97, 2.08', hm: 'm, m, m, quint', c: '137.48, 128.87, 127.96, 125.13, 20.43', cm: 's, t, t, t, sept', water: '0.43', bp: 111, mp: -95, cas: '2037-26-5', smiles: '[2H]c1c([2H])c([2H])c(C([2H])([2H])[2H])c([2H])c1[2H]' },
     { name: 'Pyridine-d5', formula: 'C5D5N', h: '8.74, 7.58, 7.22', hm: 'br, br, br', c: '150.35, 135.91, 123.87', cm: 't, t, t', water: null, bp: 115, mp: -42, cas: '7291-22-7', smiles: '[2H]c1nc([2H])c([2H])c([2H])c1[2H]' },
-  ],
+  ] as Record<string, Cell>[]).map(({ hm, cm, ...r }) => ({ ...r, h: withMult(r.h, hm), c: withMult(r.c, cm) })),
   sources: [
     { label: 'Fulmer, G. R. et al. Organometallics 2010, 29, 2176', url: 'https://doi.org/10.1021/om100106e' },
     { label: 'Gottlieb, H. E.; Kotlyar, V.; Nudelman, A. J. Org. Chem. 1997, 62, 7512', url: 'https://doi.org/10.1021/jo971176v' },
