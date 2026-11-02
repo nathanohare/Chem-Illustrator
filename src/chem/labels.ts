@@ -5,6 +5,7 @@ import { passParam, type Rect } from '../geom';
 import type { Atom, Doc } from '../model';
 import { doubleBondGap } from '../style';
 import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, lowestValence, maxValence, valenceOfBonds } from './elements';
+import { LIGANDS } from './ligands';
 
 /**
  * Abbreviations, each written as SMILES whose first atom is the one bonded to the structure.
@@ -48,15 +49,20 @@ export const NICKNAMES: Record<string, string> = {
   'Cp*': 'C1(C)C(C)=C(C)C(C)=C1C', Ind: 'C1C=Cc2ccccc12', COD: 'C1=CCCC=CCC1', NBD: 'C1=CC2C=CC1C2',
   dba: 'O=C(C=Cc1ccccc1)C=Cc1ccccc1', 'p-cymene': 'c1cc(C(C)C)ccc1C', C6Me6: 'c1(C)c(C)c(C)c(C)c(C)c1C',
   acac: 'OC(C)=CC(C)=O', hfac: 'OC(C(F)(F)F)=CC(C(F)(F)F)=O', OPiv: 'OC(=O)C(C)(C)C', TFA: 'OC(=O)C(F)(F)F',
+  // groups on phosphorus in the Ligand Library's drawings (P(3,5-Xyl)2 on Xyl-BINAP, PAd2, P(DTBM)2)
+  Ad: 'C12CC3CC(CC(C3)C1)C2', '3,5-Xyl': 'c1cc(C)cc(C)c1', DTBM: 'c1cc(C(C)(C)C)c(OC)c(C(C)(C)C)c1',
+  '2-Fur': 'c1ccco1', PMP: 'c1ccc(OC)cc1',
 };
 
 /**
  * Ligands that give the metal a lone pair or a π-bond (L-type): their bond to a metal takes no
  * hydrogen off them, so PPh₃, COD and THF keep every hydrogen they have as free molecules.
  */
-const L_LIGANDS: ReadonlySet<string> = new Set(['CO', 'OC', 'THF', 'DMF', 'DMSO', 'Et2O', 'DME', 'MeCN', 'PhCN', 'PPh3', 'PCy3', 'PMe3', 'PEt3', 'PtBu3', 'PnBu3',
+const L_LIGANDS: Set<string> = new Set(['CO', 'OC', 'THF', 'DMF', 'DMSO', 'Et2O', 'DME', 'MeCN', 'PhCN', 'PPh3', 'PCy3', 'PMe3', 'PEt3', 'PtBu3', 'PnBu3',
   'dppm', 'dppe', 'dppp', 'dppb', 'BINAP', 'Xantphos', 'XPhos', 'SPhos', 'RuPhos', 'JohnPhos', 'DavePhos', 'py', 'bpy', 'bipy',
   'phen', 'tmeda', 'TMEDA', 'en', 'IMes', 'SIMes', 'IPr', 'SIPr', 'COD', 'NBD', 'dba', 'p-cymene', 'C6Me6']);
+// and the Ligand Library's neutral ligands (dppf, dtbbpy, IPr*, 18-crown-6)
+for (const lig of LIGANDS) if (!lig.x) for (const a of lig.abbr) L_LIGANDS.add(a);
 /** The L-type ligand labels (whole molecules when written on their own). */
 export const L_LIGAND_NAMES = L_LIGANDS;
 
@@ -89,12 +95,30 @@ export function isGenericLabel(label: string): boolean {
   return !!m && m[0] === label;
 }
 
+/**
+ * Ligand Library abbreviations read only as a whole label, never as part of a longer one: those
+ * that read as a formula too (PNP, IMe: P–N–P, I–Me), so labels such as PNPh keep their meaning.
+ */
+const WHOLE_ONLY = new Set<string>();
+
 // Formula-like entries (CO2Me, NO2, CF3…) are shown as their elements so they can be
 // reversed the ChemDraw way (MeO2C, O2N, F3C); true abbreviations stay whole.
 const nickNames = () => Object.keys(NICKNAMES)
-  .filter((k) => !/^[CNOSB][A-Z0-9]/.test(k))
+  .filter((k) => !/^[CNOSB][A-Z0-9]/.test(k) && !WHOLE_ONLY.has(k))
   .sort((a, b) => b.length - a.length);
 let NICK_NAMES = nickNames();
+
+// Every ligand in the Ligand Library works as a typed label (dppf, dtbbpy, IPr*, Cp′), unless the
+// label already means something (Cp, PPh3, CO). Ones that also read as a formula, or have a
+// space, are read only as the whole label.
+for (const lig of LIGANDS) {
+  for (const a of lig.abbr) {
+    if (a in NICKNAMES || a === 'CO' || a === 'OC') continue;
+    if (/\s/.test(a) || tokenize(a).every((t) => t.kind !== 'other' || t.text === '(' || t.text === ')')) WHOLE_ONLY.add(a);
+    NICKNAMES[a] = lig.smiles;
+  }
+}
+NICK_NAMES = nickNames();
 
 /** The built-in nicknames, which one of the person's own can't replace. */
 const BUILT_IN = new Set(Object.keys(NICKNAMES));
@@ -366,6 +390,24 @@ export function labelDir(spec: LabelSpec, bondDirs: { x: number; y: number }[], 
 }
 
 /**
+ * The tokens after a label's first in reading units, a bracketed abbreviation and its count
+ * (the "(t-Bu)2" of P(t-Bu)2) as one, or null if the label has other punctuation in it.
+ */
+function bracketUnits(tail: Token[]): Token[][] | null {
+  const units: Token[][] = [];
+  for (let i = 0; i < tail.length; i++) {
+    const t = tail[i];
+    if (t.kind !== 'other') { units.push([t]); continue; }
+    if (t.text !== '(' || tail[i + 2]?.kind !== 'other' || tail[i + 2].text !== ')') return null;
+    const inside = tail[i + 1];
+    if (inside.kind === 'other') return null;
+    units.push([t, inside, tail[i + 2]]);
+    i += 2;
+  }
+  return units;
+}
+
+/**
  * Lay out a label. `bondDirs` are unit vectors from the atom to its neighbours, with the bonds'
  * lengths when known (so a charge can move out of the way of a short bond).
  * Follows ChemDraw's automatic justification: the bonded atom sits on the atom
@@ -419,7 +461,7 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
       for (let i = start; i < runs.length; i++) runs[i].dy += yOff;
       for (let i = start; i < boxes.length; i++) { boxes[i].y1 += yOff; boxes[i].y2 += yOff; }
     }
-  } else if (spec.tokens.some((t) => t.kind === 'other')) {
+  } else if (spec.tokens.some((t) => t.kind === 'other') && (head.kind === 'other' || !bracketUnits(tail))) {
     // Text that is not a formula ("(3,4)-MDP", "Aryl") is never reversed: ChemDraw keeps its
     // reading order and puts the last letter or digit on the atom.
     const pieces: Piece[] = [];
@@ -433,8 +475,9 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
     const end = pushPieces(pieces, -anchor);
     if (chargeText) pushCharge(end);
   } else {
-    // Reversed: rest of the label to the left, abbreviations kept whole (THPO, not PHTO).
-    const leftTokens: Token[] = [...tail].reverse();
+    // Reversed: rest of the label to the left, abbreviations kept whole (THPO, not PHTO), and a
+    // bracketed group with its count too ((t-Bu)2P, not )2t-Bu(P).
+    const leftTokens: Token[] = (bracketUnits(tail) ?? tail.map((t) => [t])).reverse().flat();
     const leftPieces: Piece[] = [];
     for (const t of leftTokens) leftPieces.push(...tokenPieces(t, sd, mk));
     if (hTok) leftPieces.push(...tokenPieces(hTok));
@@ -573,8 +616,10 @@ export function parseSmiles(smi: string): MiniGraph {
     if (c === '*') { add(0, false, 0, true); i++; continue; }
     // a dot starts a new molecule (salts: [Li+].[AlH4-])
     if (c === '.') { prev = -1; pendingOrder = 0; i++; continue; }
-    if (/\d/.test(c)) {
-      const n = Number(c);
+    if (/\d/.test(c) || (c === '%' && /^\d\d/.test(smi.slice(i + 1, i + 3)))) {
+      // a ring number: one digit, or %nn for ten and over
+      const n = c === '%' ? Number(smi.slice(i + 1, i + 3)) + 100 : Number(c);
+      if (c === '%') i += 2;
       const open = rings.get(n);
       if (open) {
         const ord = pendingOrder || open.order || (atoms[open.atom].aromatic && atoms[prev].aromatic ? 1.5 : 1);
