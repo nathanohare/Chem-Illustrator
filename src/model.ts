@@ -10,6 +10,7 @@ import { followPins } from './chem/pins';
 import type { EnergyData } from './design/energy';
 import type { PlateData } from './design/plates';
 import type { DiagramData } from './design/diagrams';
+import type { SmartData } from './chem/smart-scheme';
 import type { ChartBox } from './sheet/chart-box';
 import { isMetal, isMetalLabel, lowestValence } from './chem/elements';
 import { NICKNAMES } from './chem/labels';
@@ -827,6 +828,8 @@ export interface Shape {
   plate?: PlateData;
   /** A SmartArt-style diagram's text and look, kept on the invisible frame round its shapes (design/diagrams.ts). */
   diagram?: DiagramData;
+  /** A Smart Scheme's layout, kept on the invisible frame round the scheme (chem/smart-scheme.ts). */
+  smart?: SmartData;
 }
 
 /** Can this shape be turned to any angle (Slides and Design), keeping its box and turning it as a whole? */

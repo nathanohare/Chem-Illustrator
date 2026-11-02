@@ -59,6 +59,7 @@ import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '..
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
+import { arrangeSmart, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotText, setStepText, smartFrameOf, smartMarks, ungroupSmart, type SmartData, type StepPart } from '../chem/smart-scheme';
 import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
@@ -507,8 +508,8 @@ export class Editor {
     window.addEventListener('keyup', ctrlKey);
     // frames that follow what they surround are refitted as each change finishes
     doc.beforeCommit = (before) => {
-      let frames = false, rings = false, tied = false, energy = false, tables = false, diagrams = false, plates = false;
-      for (const s of this.doc.shapes.values()) { if (s.frame?.fit) frames = true; if (s.kind === 'ring') rings = true; if (s.energy) energy = true; if (s.plate) plates = true; if (s.kind === 'table') tables = true; if (s.diagram) diagrams = true; }
+      let frames = false, rings = false, tied = false, energy = false, tables = false, diagrams = false, plates = false, smart = false;
+      for (const s of this.doc.shapes.values()) { if (s.frame?.fit) frames = true; if (s.kind === 'ring') rings = true; if (s.energy) energy = true; if (s.plate) plates = true; if (s.kind === 'table') tables = true; if (s.diagram) diagrams = true; if (s.smart) smart = true; }
       for (const c of this.doc.captions.values()) if (c.attach) { tied = true; break; }
       // ring fills first, then labels beside their structures: a frame round a structure takes in both
       if (rings) refitRingFills(this.doc, before);
@@ -522,6 +523,8 @@ export class Editor {
       if (diagrams) refitDiagrams(this.doc, before, this.measure());
       // structures in a diagram's items: room kept for them (the diagram growing to fit), and centred there
       if (diagrams) refitDiagramFigures(this.doc, before, this.measure());
+      // a Smart Scheme's species moved by hand: its arrows and their conditions follow
+      if (smart) refitSmart(this.doc, before, this.measure());
       if (frames) refitFrames(this.doc, before, this.measure());
       // mechanism arrows the change left running into something find their own way round again
       if (this.options.rerouteArrows) this.rerouteArrows(before);
@@ -876,6 +879,11 @@ export class Editor {
         void followLink(link);
         return;
       }
+    }
+    // a click on a selected Smart Scheme's + adds a species there
+    if (e.button === 0 && !e.shiftKey && !e.altKey) {
+      const add = this.smartAddAt(this.docPoint(e));
+      if (add) { e.preventDefault(); this.closeCaption(); this.smartInsert(add.frame, add.after); return; }
     }
     // a click on a "+" box above or below a reaction arrow starts the text there
     // (Alt+click goes to what is under the box instead)
@@ -2981,7 +2989,7 @@ export class Editor {
    */
   private groupFirst(h: NonNullable<Hit>): NonNullable<Hit> {
     if (h.kind !== 'atom' && h.kind !== 'bond' && h.kind !== 'caption' && h.kind !== 'arrow' && h.kind !== 'shape') return h;
-    const g = energyFrameOf(this.doc, h.kind, h.id) ?? plateFrameOf(this.doc, h.kind, h.id) ?? (h.kind === 'shape' || h.kind === 'arrow' ? diagramFrameOf(this.doc, h.kind, h.id) : null);
+    const g = energyFrameOf(this.doc, h.kind, h.id) ?? plateFrameOf(this.doc, h.kind, h.id) ?? (h.kind === 'shape' || h.kind === 'arrow' ? diagramFrameOf(this.doc, h.kind, h.id) : null) ?? smartFrameOf(this.doc, h.kind, h.id);
     return g !== null && g !== (h.kind === 'shape' ? h.id : null) && !this.sel.shapes.has(g) ? { kind: 'shape', id: g } : h;
   }
 
@@ -2992,6 +3000,156 @@ export class Editor {
       for (const id of set) { const g = energyFrameOf(this.doc, k, id); if (g !== null) return g; }
     }
     return null;
+  }
+
+  /** The Smart Scheme the selection is in (its frame), if any. */
+  selectedSmart(): number | null {
+    for (const id of this.sel.shapes) if (this.doc.shapes.get(id)?.smart) return id;
+    for (const [k, set] of [['caption', this.sel.captions], ['arrow', this.sel.arrows], ['shape', this.sel.shapes], ['atom', this.sel.atoms]] as const) {
+      for (const id of set) { const g = smartFrameOf(this.doc, k, id); if (g !== null) return g; }
+    }
+    return null;
+  }
+
+  /** Called each time the overlay is drawn (the Smart Scheme pane keeps beside its scheme). */
+  onOverlay: () => void = () => {};
+
+  private smartMarksCache: { key: string; marks: ReturnType<typeof smartMarks> } | null = null;
+  private smartMarksOf(id: number): ReturnType<typeof smartMarks> {
+    const key = `${id} ${this.doc.version}`;
+    if (this.smartMarksCache?.key !== key) this.smartMarksCache = { key, marks: smartMarks(this.doc, this.measure(), id) };
+    return this.smartMarksCache.marks;
+  }
+
+  private drawSmartMarks(ctx: CanvasRenderingContext2D, id: number, px: number): void {
+    const marks = this.smartMarksOf(id);
+    if (!marks) return;
+    const blue = this.dark ? '#6aa8ee' : '#2b7bd6';
+    ctx.save();
+    ctx.strokeStyle = blue;
+    ctx.lineWidth = px;
+    ctx.setLineDash([4 * px, 3 * px]);
+    marks.boxes.forEach((b) => ctx.strokeRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1));
+    ctx.setLineDash([]);
+    ctx.font = `600 ${9 * px}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    marks.boxes.forEach((b, i) => {
+      const w = 13 * px, h = 11 * px;
+      ctx.fillStyle = blue;
+      ctx.fillRect(b.x1, b.y1 - h, w, h);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(String(i + 1), b.x1 + w / 2, b.y1 - h / 2 + 0.5 * px);
+    });
+    for (const a of marks.adds) {
+      const r = 7 * px;
+      ctx.fillStyle = this.dark ? '#23262e' : '#ffffff';
+      ctx.beginPath(); ctx.arc(a.at.x, a.at.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(a.at.x - 3.5 * px, a.at.y); ctx.lineTo(a.at.x + 3.5 * px, a.at.y);
+      ctx.moveTo(a.at.x, a.at.y - 3.5 * px); ctx.lineTo(a.at.x, a.at.y + 3.5 * px);
+      ctx.lineWidth = 1.5 * px;
+      ctx.stroke();
+      ctx.lineWidth = px;
+    }
+    ctx.restore();
+  }
+
+  /** A selected Smart Scheme's + button under a point, if any. */
+  private smartAddAt(p: Vec): { frame: number; after: number } | null {
+    const id = this.selectedSmart();
+    if (id === null) return null;
+    const marks = this.smartMarksOf(id);
+    const r = 8 / this.r.view.scale;
+    const hit = marks?.adds.find((a) => dist(a.at, p) <= r);
+    return hit ? { frame: id, after: hit.after } : null;
+  }
+
+  /** Run a change to a Smart Scheme as one undoable step, keeping the scheme selected. */
+  private smartEdit(id: number, label: string, f: (m: Measure) => unknown): boolean {
+    if (!this.doc.shapes.get(id)?.smart) return false;
+    let ok = false;
+    this.doc.edit(label, () => { ok = !!f(this.fullMeasure()); });
+    if (this.doc.shapes.has(id)) this.selectOnly({ kind: 'shape', id });
+    this.changed();
+    return ok;
+  }
+
+  /** Add a species after slot `after` of Smart Scheme `id` (−1: before the first), and start typing it. */
+  smartInsert(id: number, after: number): boolean {
+    let cap: number | null = null;
+    const ok = this.smartEdit(id, 'Add Species', (m) => (cap = insertSlot(this.doc, m, id, after)) !== null);
+    if (ok && cap !== null) this.onSmartAdded(id, cap);
+    return ok;
+  }
+
+  /** After a species is added: the pane puts the caret in its row. */
+  onSmartAdded: (frame: number, caption: number) => void = () => {};
+
+  smartRemove(id: number, k: number): boolean { return this.smartEdit(id, 'Remove Species', (m) => removeSlot(this.doc, m, id, k)); }
+  smartMove(id: number, from: number, to: number): boolean { return this.smartEdit(id, 'Move Species', (m) => moveSlot(this.doc, m, id, from, to)); }
+  smartSlotText(id: number, k: number, text: string): boolean { return this.smartEdit(id, 'Type Species', (m) => setSlotText(this.doc, m, id, k, text)); }
+  smartStepText(id: number, k: number, part: StepPart, text: string): boolean { return this.smartEdit(id, 'Type Conditions', (m) => setStepText(this.doc, m, id, k, part, text)); }
+  /** Lay a Smart Scheme out again, with a new layout or other settings. */
+  smartArrange(id: number, patch?: Partial<SmartData>): boolean { return this.smartEdit(id, 'Arrange Smart Scheme', (m) => arrangeSmart(this.doc, m, id, patch)); }
+
+  /** Chemistry ▸ Scheme ▸ Convert to Smart Scheme: the selected scheme becomes one object. */
+  convertToSmart(): boolean {
+    if (this.selectedSmart() !== null) return false;
+    const sel = withFrameContents(this.doc, this.sel);
+    let id: number | null = null;
+    this.doc.edit('Convert to Smart Scheme', () => { id = makeSmart(this.doc, this.fullMeasure(), sel); });
+    if (id === null) return false;
+    this.selectOnly({ kind: 'shape', id });
+    this.changed();
+    return true;
+  }
+
+  /**
+   * Insert ▸ Smart Scheme: the selected structures joined by arrows in reading order, or (with
+   * none selected) three species to type over, as a Smart Scheme in a line. It is selected.
+   */
+  insertSmartScheme(at: Vec, page?: { w: number; h: number }): boolean {
+    const doc = this.doc, m = this.fullMeasure();
+    const picked = this.selectedStructures();
+    let id: number | null = null;
+    doc.edit('Smart Scheme', () => {
+      let sel = withFrameContents(doc, this.sel);
+      if (picked.length < 2) {
+        const L = doc.style.bondLength, lw = doc.style.lineWidth;
+        const names = ['Starting material', 'Intermediate', 'Product'];
+        const caps = names.map((t, i) => doc.addCaption({ x: at.x + (i - 1) * 9 * L, y: at.y, runs: [{ text: t }], justify: 'center' }));
+        sel = emptySel();
+        for (const c of caps) sel.captions.add(c.id);
+        for (let i = 0; i + 1 < caps.length; i++) {
+          const r = doc.addArrow({
+            headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: lw * 10, headWidth: lw * 2.5,
+            tail: { x: at.x + (i - 1) * 9 * L + 3.5 * L, y: at.y - 0.3 * L }, head: { x: at.x + (i - 1) * 9 * L + 5.5 * L, y: at.y - 0.3 * L },
+            step: { reactants: ['c' + caps[i].id], products: ['c' + caps[i + 1].id], above: [], below: [], manual: true },
+          });
+          sel.arrows.add(r.id);
+        }
+      }
+      id = makeSmart(doc, m, sel, { layout: 'line' });
+      if (id !== null) arrangeSmart(doc, m, id, { layout: 'line' });
+      if (id !== null && picked.length < 2) { this.sel = emptySel(); this.sel.shapes.add(id); this.moveClear(page); }
+    });
+    if (id === null) return false;
+    this.selectOnly({ kind: 'shape', id });
+    this.changed();
+    return true;
+  }
+
+  /** Ungroup a Smart Scheme: back to ordinary structures, text and arrows (selected). */
+  ungroupSmart(frame?: number): boolean {
+    const id = frame ?? this.selectedSmart();
+    if (id === null) return false;
+    let members: Selection | null = null;
+    this.doc.edit('Ungroup Smart Scheme', () => { members = ungroupSmart(this.doc, id); });
+    if (!members) return false;
+    this.sel = members;
+    this.changed();
+    return true;
   }
 
   /** The TLC plate or gel the selection is in (its frame), if any. */
@@ -3985,7 +4143,7 @@ export class Editor {
   }
 
   /** Label and caption sizes for every atom (schemes need whole structures, however big the selection). */
-  private fullMeasure(): Measure {
+  fullMeasure(): Measure {
     this.r.invalidate(this.doc);
     return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c) };
   }
@@ -4056,6 +4214,7 @@ export class Editor {
    */
   insertCycle(spec: CycleSpec, look: CycleLook, at: Vec, page?: { w: number; h: number }): void {
     const stations = this.selectedStructures();
+    let smart: number | null = null;
     this.doc.edit('Catalytic Cycle', () => {
       const made = buildCycle(this.doc, this.fullMeasure(), spec, look, at, stations);
       this.sel = emptySel();
@@ -4065,7 +4224,11 @@ export class Editor {
       for (const id of made.arrows) this.sel.arrows.add(id);
       // drawn round selected structures it stays put; otherwise it goes beside what is there
       if (!stations.length) this.moveClear(page);
+      // the cycle is a Smart Scheme: one object, laid out round a loop
+      for (const r of this.doc.arrows.values()) if (r.reagentFor !== undefined && this.sel.arrows.has(r.reagentFor)) this.sel.arrows.add(r.id);
+      smart = makeSmart(this.doc, this.fullMeasure(), this.sel, { layout: 'cycle', ...(look.anticlockwise ? { anticlockwise: true } : {}), ...(look.reagentArrows ? { reagentArrows: true } : {}) });
     });
+    if (smart !== null) this.selectOnly({ kind: 'shape', id: smart });
     this.changed();
   }
 
@@ -5820,6 +5983,10 @@ export class Editor {
       }
     }
     if (this.showRoles && s.arrows.size === 1 && !this.drag) this.drawRoles(ctx, [...s.arrows][0], px);
+    // a selected Smart Scheme: a dashed box round each species, numbered, and + buttons to add one
+    const smartId = this.drag?.moved ? null : this.selectedSmart();
+    if (smartId !== null) this.drawSmartMarks(ctx, smartId, px);
+    this.onOverlay();
     // hotspot
     const join = this.drag?.joinTo;
     const h: Hit = join !== undefined ? { kind: 'atom', id: join } : this.drag?.mode === 'move' || this.drag?.mode === 'rotate' ? null : this.hotspot();
