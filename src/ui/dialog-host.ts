@@ -27,3 +27,27 @@ export function showDialog(d: HTMLDialogElement): void {
   } else if (!d.isConnected) document.body.append(d);
   if (!d.open) d.showModal();
 }
+
+let previews: HTMLElement | null = null;
+
+/** Where a settings page shows its preview: the Settings window's right-hand pane (null: none, show it in the page). */
+export function setPreviewSlot(el: HTMLElement | null): void {
+  previews = el;
+}
+
+/**
+ * A place for a page's preview, titled: the Settings window's right-hand pane when the page is
+ * in it, or null (the page then shows its preview itself).
+ */
+export function previewSlot(title: string): HTMLElement | null {
+  const p = previews;
+  if (!p?.isConnected) return null;
+  p.hidden = false;
+  p.closest('dialog')?.classList.add('with-preview');
+  const h = document.createElement('h3');
+  h.textContent = title;
+  const body = document.createElement('div');
+  body.className = 'sw-preview';
+  p.replaceChildren(h, body);
+  return body;
+}
