@@ -273,7 +273,7 @@ export const DEFAULT_SETTINGS: Settings = {
   straightenLinear: true,
   cursorAids: { ...DEFAULT_CURSOR_AIDS },
   haptoDelocalized: true,
-  toolDemos: 'card',
+  toolDemos: 'off',
 };
 
 /**
@@ -288,7 +288,7 @@ export const DEMO_LOOKS: { value: DemoLook; label: string }[] = [
   { value: 'frames', label: 'Still pictures of each step' },
   { value: 'off', label: 'Don\'t show demos' },
 ];
-export const parseDemoLook = (v: unknown): DemoLook => (DEMO_LOOKS.some((l) => l.value === v) ? (v as DemoLook) : 'card');
+export const parseDemoLook = (v: unknown): DemoLook => (DEMO_LOOKS.some((l) => l.value === v) ? (v as DemoLook) : 'off');
 
 const STORAGE_KEY = 'chem-illustrator.settings';
 
