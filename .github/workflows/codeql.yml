@@ -1,0 +1,44 @@
+name: CodeQL
+
+# Code scanning, only on pushes to main (and once a week, plus by hand).
+# Pull requests and pushes to staging or feature branches skip it.
+# This replaces GitHub's CodeQL "default setup", which also ran on every
+# pull request into main. Default setup must be off (Settings > Code security
+# > CodeQL analysis > Switch to advanced) or GitHub rejects these results.
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 6 * * 1' # Mondays 06:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # the same languages default setup scanned, none of which need a build
+        language: [actions, javascript-typescript, python, rust, java-kotlin]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
