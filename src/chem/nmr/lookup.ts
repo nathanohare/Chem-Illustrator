@@ -20,6 +20,8 @@ export interface ShiftHit {
   radius: number;
   /** Measured atoms behind the deepest match. */
   n: number;
+  /** Set when the value is this structure's own measured shift (see measured.ts), not a prediction. */
+  measured?: { source: string; solvent: string | null };
 }
 
 export interface AtomShifts {

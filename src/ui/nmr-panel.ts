@@ -5,6 +5,7 @@
 import type { NamerGraph } from '../chem/namer-graph';
 import { envCodes } from '../chem/nmr/env';
 import { ShiftTable, type AtomShifts, type ShiftHit } from '../chem/nmr/lookup';
+import { MeasuredStore } from '../chem/nmr/measured';
 
 export const NMR_SOLVENTS = ['CDCl3', 'DMSO-d6', 'CD3OD', 'C6D6', 'acetone-d6', 'CD2Cl2', 'CD3CN', 'D2O'] as const;
 
@@ -74,6 +75,10 @@ export function nmrRows(g: NamerGraph, shifts: AtomShifts[]): NmrRow[] {
 /** The row's source chip: how many measured atoms back it, or ~ for a loose match. */
 function chip(h: ShiftHit | null, wide: number): string {
   if (!h) return '';
+  if (h.measured) {
+    const where = h.measured.source.startsWith('PMC') ? `article ${h.measured.source}` : h.measured.source;
+    return `<span class="nmr-src measured" title="${esc(`Measured for this structure (${where}${h.measured.solvent ? `, ${h.measured.solvent}` : ''})`)}">M</span>`;
+  }
   // loose: the matched atoms disagree (wide spread) or only the atom type matched
   const loose = h.radius === 0 || h.spread > wide;
   const tip = loose
@@ -132,6 +137,8 @@ interface Shown { rows: NmrRow[]; /** doc atom id per graph atom */ ids: (number
 
 export interface NmrHost {
   url: string;
+  /** The measured-shift store (whole structures); optional, predictions stand without it. */
+  measuredUrl?: string;
   graph(molblock: string): Promise<{ graph: NamerGraph | null }>;
   redraw(): void;
   copy(text: string): Promise<void>;
@@ -141,6 +148,7 @@ export interface NmrHost {
 /** The NMR section of the Analysis panel and its markers on the drawing. */
 export class NmrPanel {
   private table: Promise<ShiftTable> | null = null;
+  private store: Promise<MeasuredStore | null> | null = null;
   private shown = new Map<number, Shown>();
   private items: (Item | null)[] = [];
   private marks = false;
@@ -168,6 +176,13 @@ export class NmrPanel {
     return this.table;
   }
 
+  private loadStore(): Promise<MeasuredStore | null> {
+    const url = this.host.measuredUrl;
+    if (!url) return Promise.resolve(null);
+    this.store ??= fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => (b ? new MeasuredStore(b) : null)).catch(() => null);
+    return this.store;
+  }
+
   /** Adds an NMR section to each structure's block in the panel (after the panel is rebuilt). */
   attach(panel: HTMLElement, items: (Item | null)[]): void {
     this.items = items;
@@ -182,7 +197,7 @@ export class NmrPanel {
       d.className = 'nmr';
       d.dataset.item = String(i);
       d.open = this.open;
-      d.innerHTML = `<summary>NMR (predicted) <span class="info-icon" tabindex="0" role="img" title="Predicted from measured shifts of atoms with the same surroundings (NMRShiftDB2 and CC BY journal data). ± is how far those measured shifts spread. The chip is how many measured atoms agree; ~ means only a loose match. Marker numbers on the drawing match the Atoms column." aria-label="About predicted NMR">i</span>
+      d.innerHTML = `<summary>NMR (predicted) <span class="info-icon" tabindex="0" role="img" title="Predicted from measured shifts of atoms with the same surroundings (NMRShiftDB2 and CC BY journal data). ± is how far those measured shifts spread. The chip is how many measured atoms agree; ~ means only a loose match; M means this structure's own measured shift. Marker numbers on the drawing match the Atoms column." aria-label="About predicted NMR">i</span>
         <span class="nmr-nuc" role="group" aria-label="Nucleus"${this.report ? ' hidden' : ''}>${(['1H', '13C'] as const).map((n) => `<button type="button" data-nuc="${n}" aria-pressed="${n === this.nuc}"><sup>${n.slice(0, -1)}</sup>${n.slice(-1)}</button>`).join('')}</span>
         <select class="nmr-solvent" title="Solvent">${NMR_SOLVENTS.map((s) => `<option value="${s}"${s === this.solvent ? ' selected' : ''}>${s}</option>`).join('')}</select></summary>
         <div class="nmr-body"><p class="muted small">Loading…</p></div>
@@ -235,11 +250,12 @@ export class NmrPanel {
     const body = d.querySelector<HTMLElement>('.nmr-body')!;
     if (!item) return;
     try {
-      const [table, { graph }] = await Promise.all([this.load(), this.host.graph(item.molblock)]);
+      const [table, store, { graph }] = await Promise.all([this.load(), this.loadStore(), this.host.graph(item.molblock)]);
       if (seq !== this.seq) return;
       const heavy = molfileHeavyAtoms(item.molblock);
       if (!graph || graph.atoms.length !== heavy.length) { body.innerHTML = '<p class="muted small">No prediction for this structure.</p>'; return; }
       const shifts = table.predictAll(graph, this.solvent);
+      store?.apply(graph, shifts, this.solvent);
       const rows = nmrRows(graph, shifts);
       const ids = heavy.map((k) => { const id = item.map[k]; return id !== undefined && id >= 0 ? id : null; });
       const ring = new Set<string>();

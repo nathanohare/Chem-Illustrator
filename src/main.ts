@@ -2186,7 +2186,7 @@ async function editTorsion(id: number): Promise<void> {
 
 const names = new NameReader(new URL('opsin/opsin-data.dat', document.baseURI).href);
 const nmrPanel = new NmrPanel({
-  url: new URL('nmr/nmr-hose.dat', document.baseURI).href,
+  url: new URL('nmr/nmr-hose.dat', document.baseURI).href, measuredUrl: new URL('nmr/nmr-measured.dat', document.baseURI).href,
   graph: (molblock) => chem.namerGraph(molblock),
   redraw: () => editor.requestOverlay(),
   copy: (text) => navigator.clipboard.writeText(text),

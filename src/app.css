@@ -4016,6 +4016,7 @@ details.nmr > summary .nmr-solvent { float: right; font: inherit; font-size: var
 .nmr-table th:first-child, .nmr-table td:first-child { text-align: left; }
 .nmr-table tbody tr:hover td { background: var(--accent-soft); }
 .nmr-src { display: inline-block; min-width: 14px; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 13px; text-align: center; background: var(--accent-soft); color: var(--accent); }
+.nmr-src.measured { background: var(--accent); color: #fff; }
 .nmr-src.loose { background: color-mix(in srgb, #d99a1e 22%, transparent); color: #8a5a00; }
 details.nmr .an-buttons { margin-top: 3px; }
 details.nmr .nmr-marks[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }

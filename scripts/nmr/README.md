@@ -50,8 +50,13 @@ Run every script with `python3 -I` from the repository root.
 | 2. Codes | `env_codes.ts` (esbuild bundle, Node) | environment codes per atom from the app's own `src/chem/nmr/env.ts` |
 | 3. Train | `train_lookup.py WORK --rounds 2 --nb nmrbank06.jsonl --w-nb 1.0 --export nmr-hose.dat` | NMRBank lists assigned to atoms by matching (two rounds), tuned on held-out NMRBank papers, pruned, written for the app |
 | 4. Parity | `parity.ts` (esbuild bundle, Node) | checks the app's reader (`src/chem/nmr/lookup.ts`) gives the script's numbers |
+| 5. Measured store | `train_lookup.py … --export … --store nmr-measured.dat` | whole structures up to 500 Da with their own measured shifts (NMRShiftDB2 + CC BY NMRBank, atoms as assigned above); read by `src/chem/nmr/measured.ts`. Inputs are cached beside it as `.inputs.pkl` |
 
 Results (2026-11-02, SI test set v1, compounds under 500 Da, shipped CC BY/NMRShiftDB2 table):
 13C MAE 2.62 ppm, 1H MAE 0.223 ppm (phase 0 baseline 2.82 and 0.245 on all compounds).
 The file is 10.3 MB (6.9 MB gzipped), 0.5 ms per compound, and the app's reader matches the
 script to 0.01 ppm on 8,572 atoms.
+
+The measured store holds 98,522 structures (7.0 MB, 4.1 MB gzipped). Structures are matched by a
+key over their atom environments, so stereoisomers share an entry; the panel marks measured
+values with an M chip naming the source.
