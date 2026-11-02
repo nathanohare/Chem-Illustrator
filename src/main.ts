@@ -6506,7 +6506,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['view-warnings-pane', 'view-analysis-pane', 'references', 'compound-library', 'knowledge-base', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'icons-mode', 'icons-kind', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -7132,6 +7132,8 @@ const COMMANDS: Record<string, () => unknown> = {
   'theme-system': () => { setAppTheme('system'); storeSettings(); },
   'theme-light': () => { setAppTheme('light'); storeSettings(); },
   'theme-dark': () => { setAppTheme('dark'); storeSettings(); },
+  'icons-mode': () => { setIconLook('mode'); storeSettings(); },
+  'icons-kind': () => { setIconLook('kind'); storeSettings(); },
   'focus-view': () => setFocusView(!focusView),
   'one-column-tools': () => { setOneColumnTools(!oneColumnTools); storeSettings(); },
   'text-bar-floating': () => { placeTextBar('floating'); storeSettings(); },
@@ -8567,6 +8569,7 @@ function currentSettings(): Settings {
     uiScale: uiScale(),
     textBar: CaptionEditor.barPlace,
     appTheme,
+    iconLook,
     oneColumnTools,
     startView,
     page: defaultPage,
@@ -8803,6 +8806,7 @@ function applySettings(s: Settings): void {
   if (!doc.page && !doc.source && !doc.atoms.size && !deckNow()) doc.page = defaultPage && { ...defaultPage };
   placeTextBar(s.textBar);
   setAppTheme(s.appTheme);
+  setIconLook(s.iconLook);
   setOneColumnTools(s.oneColumnTools);
   startView = s.startView;
   showGroupTips(s.groupTips);
@@ -11398,6 +11402,15 @@ function setAppTheme(t: Settings['appTheme']): void {
   else document.documentElement.dataset.theme = t;
   themeChanged();
   for (const w of ['system', 'light', 'dark']) $(`[data-cmd="theme-${w}"]`)?.setAttribute('aria-checked', String(w === t));
+}
+
+/** View > Window and Colours > Icon Colours: the mode's colour on one part of each icon (the default), or a colour for each kind of command. */
+let iconLook: Settings['iconLook'] = 'mode';
+function setIconLook(l: Settings['iconLook']): void {
+  iconLook = l;
+  if (l === 'kind') document.documentElement.dataset.icons = 'colour';
+  else delete document.documentElement.dataset.icons;
+  for (const w of ['mode', 'kind']) $(`[data-cmd="icons-${w}"]`)?.setAttribute('aria-checked', String(w === l));
 }
 
 /** The space round the drawing's pages in the dark theme (app.css --surround), or null in the light theme, where the page grid's light shading shows. */
