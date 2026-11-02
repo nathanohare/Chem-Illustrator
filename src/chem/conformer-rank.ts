@@ -70,3 +70,20 @@ export function fittedRmsd(p: number[], q: number[], idx: number[]): number {
   const msd = Math.max(0, (gp + gq - 2 * lambda) / n);
   return Math.sqrt(msd);
 }
+
+/**
+ * Conformers added to a search's (rotamers about one bond it may have missed): those already
+ * found (energy within 0.1 kcal/mol and heavy atoms within 0.3 Å) are left out, the rest kept
+ * within `window` kcal/mol of the lowest, and the shares worked out again.
+ */
+export function mergeConformers(atoms: { z: number }[], found: Conformer[], extra: { xyz: number[]; energy: number }[], window = 8): Conformer[] {
+  const heavy = atoms.map((x, i) => (x.z === 1 ? -1 : i)).filter((i) => i >= 0);
+  const all: Conformer[] = found.map((c) => ({ xyz: c.xyz, energy: c.energy }));
+  for (const r of extra) {
+    if (all.some((k) => k.energy !== null && Math.abs(k.energy - r.energy) < 0.1 && fittedRmsd(k.xyz, r.xyz, heavy) < 0.3)) continue;
+    all.push(r);
+  }
+  all.sort((p, q) => (p.energy ?? 0) - (q.energy ?? 0));
+  const e0 = all[0]?.energy ?? 0;
+  return withPopulations(all.filter((c) => (c.energy ?? 0) - e0 <= window));
+}

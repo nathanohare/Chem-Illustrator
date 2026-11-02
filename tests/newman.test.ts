@@ -9,6 +9,8 @@ import { Resources } from 'openchemlib';
 import { Doc } from '../src/model';
 import { addMolfile, toMolfile } from '../src/chem/molfile';
 import { searchModel } from '../src/chem/model3d-build';
+import { bondRotamers } from '../src/chem/torsion-scan';
+import { mergeConformers } from '../src/chem/conformer-rank';
 import { newmanConformers, newmanView, sizeRanks, groupLabel, neighbours, type NewmanMol } from '../src/chem/newman';
 import { DEFAULT_NEWMAN_PREFS, NEWMAN_LOOK, captionText, newmanCentre, newmanFrameOf, parseNewmanPrefs, putMark, putNewman, refitNewman, reversedLabel, structureKey, type NewmanData } from '../src/design/newman';
 import { plainMeasure } from '../src/chem/reaction';
@@ -91,8 +93,10 @@ describe('the view down a bond', () => {
   });
 
   it('keeps each picture down the bond once: butane has anti and two gauche', () => {
-    const { model } = drawn('CCCC');
-    const pics = newmanConformers(model, model.conformers, 1, 2);
+    const { model, ex } = drawn('CCCC');
+    // as the window does: the search can miss a rotamer (it is random), so the bond is also turned 120° and 240°
+    const extra = bondRotamers(ex.molblock, model.conformers.slice(0, 3).map((c) => c.xyz), [0, 1, 2, 3]);
+    const pics = newmanConformers(model, mergeConformers(model.atoms, model.conformers, extra), 1, 2);
     expect(pics.length).toBe(3);
     expect(pics[0].energy).toBe(0);
     expect(Math.abs(Math.abs(pics[0].view.dihedral) - 180)).toBeLessThan(15);
