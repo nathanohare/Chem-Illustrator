@@ -262,6 +262,23 @@ export class PackageReader {
     return m;
   }
 
+  private types: { overrides: Map<string, string>; defaults: Map<string, string> } | null = null;
+
+  /** A part's content type, from [Content_Types].xml (its own entry, else its extension's); null when none is given. */
+  contentType(path: string): string | null {
+    if (!this.types) {
+      this.types = { overrides: new Map(), defaults: new Map() };
+      const doc = this.xml('[Content_Types].xml');
+      for (const el of Array.from(doc?.documentElement.children ?? [])) {
+        const type = el.getAttribute('ContentType') ?? '';
+        if (el.localName === 'Override') this.types.overrides.set((el.getAttribute('PartName') ?? '').replace(/^\//, '').toLowerCase(), type);
+        else if (el.localName === 'Default') this.types.defaults.set((el.getAttribute('Extension') ?? '').toLowerCase(), type);
+      }
+    }
+    const ext = /\.([^./]+)$/.exec(path)?.[1]?.toLowerCase() ?? '';
+    return this.types.overrides.get(path.toLowerCase()) ?? this.types.defaults.get(ext) ?? null;
+  }
+
   /** The first relationship of a type from a part. */
   relOfType(from: string, type: string): string | null {
     for (const r of this.rels(from).values()) if (r.type === type) return r.target;

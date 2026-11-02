@@ -152,6 +152,12 @@ To embed cells from Excel, copy them in Excel and choose **Edit** ▸ **Paste Sp
 
 Objects are saved in Word files as Word's own embedded objects, so double-clicking one in Word opens it in its program too (Office files as Word keeps them; other files as Windows packages). Objects in Word files you open here are kept as they are and saved back unchanged. ChemDraw objects are kept the same way, with the look they had in Word, until you double-click one (or right-click ▸ **Edit Drawing**): then it becomes a structure here that you can change. To have every ChemDraw object redrawn here as the file opens instead, turn on **Settings ▸ General ▸ Redraw ChemDraw objects in Word files as they open**. Objects stay in line with the text.
 
+### Chem4Word structures and other programs' data
+
+Structures drawn with Chem4Word (the free Chemistry Add-in for Word) open here as structures you can change, at the size they had in Word. Saving keeps them linked to Chem4Word, so it can still edit them in Word: an unchanged structure keeps Chem4Word's own data exactly, and one changed here is written back for Chem4Word in its new form.
+
+Other programs' data in Word, PowerPoint and Excel files is kept as it was and saved back with the file, even though it isn't shown here: content controls round text and paragraphs (a template's fields, a form's boxes), custom XML data, custom document properties (**File ▸ Properties ▸ Custom** in Office), Word's document variables, and the settings Office add-ins store in the document.
+
 ## Captions and cross-references
 
 On the **References** tab:

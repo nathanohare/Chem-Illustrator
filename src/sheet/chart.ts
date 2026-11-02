@@ -25,6 +25,8 @@ export interface SeriesFit {
   showR2?: boolean;
   /** Fix where the line crosses x = 0 (straight line and polynomials; exponential: its value at 0). */
   intercept?: number;
+  /** Arrhenius and Eyring fits: the x values are temperatures in °C (else kelvin). */
+  celsius?: boolean;
   /** Extend the line beyond the data, in x units. */
   forward?: number;
   backward?: number;

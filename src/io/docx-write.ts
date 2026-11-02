@@ -54,8 +54,10 @@ import { addChart, C_NS } from './office-chart';
 import { CX_NS, CX1_NS } from './xlsx-chart';
 import { isChartEx } from '../sheet/chart';
 import type { ChartBox } from '../sheet/chart-box';
+import { writeKeptParts, type ContentControl } from './kept-parts';
+import { cmlGuid, contentsSig, writeCml } from './cml';
 import {
-  BIB_MARK, CHART_NAME, CITE_FIELD, CUSTOM_PROPS_FMTID, DOCX_CT, W14_NS, W15_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_NAME, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
+  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_NAME, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
 } from './docx-base';
 
 export interface DocxDeps {
@@ -226,7 +228,7 @@ class DocxWriter {
     pkg.relate(main, DOCX_REL.settings, 'settings.xml');
     const settings = (embed: boolean) => `${HEAD}<w:settings xmlns:w="${W_NS}"><w:zoom w:percent="100"/>${this.t.pageColor ? '<w:displayBackgroundShape/>' : ''}${embed ? '<w:embedTrueTypeFonts/><w:saveSubsetFonts/>' : ''}${this.t.track ? '<w:trackRevisions/>' : ''}${protectionXml(this.t.protect)}<w:defaultTabStop w:val="720"/>${hyphenXml(this.t.hyphen)}${allHf(this.t).some((h) => h.oddEven) ? '<w:evenAndOddHeaders/>' : ''}` +
       `<w:characterSpacingControl w:val="doNotCompress"/>${notes}` +
-      `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`;
+      `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>${this.t.kept?.vars ?? ''}</w:settings>`;
     pkg.add('word/settings.xml', settings(false), DOCX_CT.settings);
     // our own part: each structure's drawing, and each table as made here
     pkg.relate(main, DOCX_REL.customXml, '../customXml/item1.xml');
@@ -245,13 +247,13 @@ class DocxWriter {
       `${tag('dc:title', name)}${tag('dc:subject', pr.subject)}${tag('dc:creator', pr.author)}${tag('cp:keywords', pr.keywords)}${pr.author ? `<cp:lastModifiedBy>${xml(pr.author)}</cp:lastModifiedBy>` : ''}` +
       `<dcterms:created xsi:type="dcterms:W3CDTF">${xml(pr.created ?? now)}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`, DOCX_CT.core);
     pkg.add('docProps/app.xml', `${HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Chem Illustrator</Application>${tag('Company', pr.company)}</Properties>`, DOCX_CT.app);
-    // Zotero's document preferences (its style and settings), as custom document properties
-    if (this.t.citeManager === 'zotero') {
-      const prefs = splitPrefs(this.t.zoteroPrefs ?? newZoteroPrefs(this.t.citeStyle ?? preferredStyle().style));
-      pkg.relate('', REL.customProps, 'docProps/custom.xml');
-      pkg.add('docProps/custom.xml', `${HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">` +
-        prefs.map((v, i) => `<property fmtid="${CUSTOM_PROPS_FMTID}" pid="${i + 2}" name="ZOTERO_PREF_${i + 1}"><vt:lpwstr>${xml(v)}</vt:lpwstr></property>`).join('') + '</Properties>', DOCX_CT.custom);
-    }
+    // Zotero's document preferences (its style and settings) as custom document properties, with
+    // other programs' data kept from the file read: custom XML (Chem4Word's structures written
+    // afresh where they were changed here), custom properties and add-ins' settings
+    const ownProps: [string, string][] = this.t.citeManager === 'zotero'
+      ? splitPrefs(this.t.zoteroPrefs ?? newZoteroPrefs(this.t.citeStyle ?? preferredStyle().style)).map((v, i) => [`ZOTERO_PREF_${i + 1}`, v])
+      : [];
+    writeKeptParts(pkg, this.t.kept, { main, firstItem: 2, ownProps, replaceXml: changedCml(this.t) });
     // the free fonts the document uses go inside it, so it looks the same where they aren't installed
     const embed = await facesToEmbed(pkg.xmlTexts(), this.deps.fonts);
     if (embed.length) {
@@ -296,9 +298,19 @@ class DocxWriter {
     const secs = sectionsOf({ ...t, paras });
     const endsSection = new Map<number, Section>();
     for (const s of secs.slice(0, -1)) endsSection.set(s.end - 1, s);
+    // other programs' content controls round whole paragraphs (kept from the file read), opened and closed as they change
+    let block: string | undefined;
+    const blockTo = (cc: string | undefined) => {
+      const want = cc && t.controls?.[cc] ? cc : undefined;
+      if (want === block) return;
+      if (block !== undefined) out.push(`</w:sdtContent></w:sdt>`);
+      block = want;
+      if (want !== undefined) out.push(this.sdtStart(t.controls![want]));
+    };
     for (let p = 0; p < n; p++) {
       const runs = runsOf[p] ?? [];
       const ps = paras[p];
+      blockTo(ps.cc);
       const ending = endsSection.get(p);
       const sectXml = ending ? await this.section(main, ending) : '';
       // a section ending with a table, contents or bibliography: an empty paragraph after it holds the section's properties
@@ -343,6 +355,7 @@ class DocxWriter {
       } else out.push(await this.paragraph(main, ps, runs, listNum, p, sectXml));
       lastWasTable = false;
     }
+    blockTo(undefined);
     // comments still open (on a table, say) close in a paragraph of their own
     const left = [...this.cmtOpen].map((id) => this.cmtEnd(id)).join('');
     if (left) { out.push(`<w:p>${left}</w:p>`); lastWasTable = false; }
@@ -504,7 +517,18 @@ class DocxWriter {
     // an equation on its own in its paragraph is a display equation (Word's equation paragraph)
     const shownRuns = runs.filter((r) => r.obj !== undefined || r.text.trim());
     const display = shownRuns.length === 1 && shownRuns[0].obj !== undefined && this.t.objects[shownRuns[0].obj]?.kind === 'math';
+    // other programs' content controls round runs (Chem4Word's structures, a form's fields): links go inside them
+    let control: string | undefined;
+    const controlTo = (cc: string | undefined) => {
+      const want = cc && this.t.controls?.[cc] && cc !== ps.cc ? cc : undefined;
+      if (want === control) return;
+      linkTo(undefined);
+      if (control !== undefined) out.push(`</w:sdtContent></w:sdt>`);
+      control = want;
+      if (want !== undefined) out.push(this.sdtStart(this.t.controls![want]));
+    };
     for (const r of runs) {
+      controlTo(r.cc);
       linkTo(r.link);
       out.push(this.cmtBefore(r));
       if (r.obj === undefined) { out.push(this.tracked(r.rev, this.textRuns(r, st)), this.cmtAfter(r)); continue; }
@@ -521,9 +545,15 @@ class DocxWriter {
       if (open && r.obj === open.seq) { out.push(`<w:bookmarkEnd w:id="${open.id}"/>`); open = null; }
       out.push(this.cmtAfter(r));
     }
+    controlTo(undefined);
     linkTo(undefined);
     for (const m of marks) out.push(`<w:bookmarkEnd w:id="${m.id}"/>`);
     return `<w:p>${pPr.length ? `<w:pPr>${pPr.join('')}</w:pPr>` : ''}${colBreak}${out.join('')}</w:p>`;
+  }
+
+  /** The start of a content control kept from the file read: its properties as they were, with a fresh id. */
+  private sdtStart(c: ContentControl): string {
+    return `<w:sdt><w:sdtPr>${c.head}<w:id w:val="${this.sdtId++}"/>${c.rest}</w:sdtPr>${c.end ? `<w:sdtEndPr>${c.end}</w:sdtEndPr>` : ''}<w:sdtContent>`;
   }
 
   /** The start of a Word link: to a bookmark here (w:anchor), or through a relationship of the part it is in. */
@@ -1654,5 +1684,25 @@ export function hyphenXml(h: DocText['hyphen']): string {
   if (h.limit) out += `<w:consecutiveHyphenLimit w:val="${Math.round(h.limit)}"/>`;
   if (h.zone !== undefined) out += `<w:hyphenationZone w:val="${twips(h.zone)}"/>`;
   if (h.caps === false) out += '<w:doNotHyphenateCaps/>';
+  return out;
+}
+
+/**
+ * Chem4Word's CML parts to write afresh, by their place among the kept custom XML parts: those
+ * whose structure was changed here (its drawing no longer matches the fingerprint taken when the
+ * file was read). Unchanged structures keep their CML exactly as Chem4Word wrote it.
+ */
+function changedCml(t: DocText): Map<number, string> {
+  const out = new Map<number, string>();
+  const parts = t.kept?.xml ?? [];
+  if (!parts.length) return out;
+  const index = new Map<string, number>();
+  parts.forEach((x, i) => { const g = cmlGuid(x.xml); if (g) index.set(g, i); });
+  for (const o of Object.values(t.objects)) {
+    if (o?.kind !== 'drawing' || !o.c4w) continue;
+    const i = index.get(o.c4w.guid);
+    if (i === undefined || out.has(i) || contentsSig(o.contents) === o.c4w.sig) continue;
+    out.set(i, writeCml(o.contents, o.c4w.guid));
+  }
   return out;
 }

@@ -56,6 +56,7 @@ Type `=` to start a formula. References with `$`, references to other sheets and
 
 Common functions include `SUM`, `AVERAGE`, `MIN`, `MAX`, `MEDIAN`, `STDEV`, `COUNT`, `COUNTA`, `ROUND`, `IF`, `IFERROR`, `AND`, `OR`, `CONCATENATE`, `LN`, `LOG10`, `EXP`, `SQRT`, and the line-fit functions `SLOPE`, `INTERCEPT`, `RSQ`, `STEYX` and `FORECAST`. These Excel functions work too, with the same results as Excel:
 
+- **Chemistry:** `SIGMA(group, position)` gives a Hammett substituent constant (Hansch, Leo and Taft, *Chem. Rev.* 1991, 91, 165): `=SIGMA("NO2","para")` is 0.78. Positions are `"para"`, `"meta"` and `"para-"` (σp⁻, for a lone pair or negative charge the group takes through the ring, as in phenol and anilinium acidities). Groups are written as formulas or abbreviations: NO2, CN, CF3, Cl, Br, OMe, NMe2, CO2Me, Me, H.
 - **Looking things up:** `VLOOKUP`, `HLOOKUP`, `XLOOKUP`, `INDEX`, `MATCH`, `XMATCH`, `CHOOSE`, `OFFSET`, `INDIRECT`, `ROWS`, `COLUMNS`.
 - **Conditions:** `SUMIF`, `SUMIFS`, `COUNTIF`, `COUNTIFS`, `AVERAGEIF`, `AVERAGEIFS`, `MAXIFS`, `MINIFS`, `IFS`, `SWITCH`, `IFNA`. Conditions are written as in Excel: `">5"`, `"<>done"`, `"Pd*"` (`*` and `?` are wildcards; `~*` is a real star).
 - **Text:** `LEFT`, `RIGHT`, `MID`, `FIND`, `SEARCH`, `SUBSTITUTE`, `REPLACE`, `TEXT`, `VALUE`, `CONCAT`, `TEXTJOIN`, `TEXTSPLIT`.
@@ -232,6 +233,7 @@ Select a block of cells and choose **Insert** tab ▸ **Scatter**, **Line**, **C
 - **Titles…**, **Legend**, **Colours**, **Axes…** (limits, log scale, grid lines, number format) and **Data Labels**. Titles take subscripts and superscripts: `k_{obs}` and `s^{-1}`.
 - **Error Bars**.
 - **Fit Line**: straight line, polynomial (x² or x³), exponential, logarithmic or power. The equation and R² appear in an empty corner of the chart, and you can drag the label. In the panel, **Put in cells…** writes the slope, intercept, R² and standard error to the sheet as live formulas.
+- **Chemistry fits** (under **Fit Line**, after the line): **First-order decay** (y = y₀·e^(−kt), with k and t½; leave the intercept free or set y₀), **Second-order** (1/y = 1/y₀ + kt), **Arrhenius** (k against T: Eₐ in kJ/mol and A), **Eyring** (k against T: ΔH‡, ΔS‡ and ΔG‡ at 298 K) and **Hammett** (log(k/k₀) against σ: ρ, optionally through the origin). Each is fitted on its straight-line form (ln y against t, 1/y against t, ln k or ln(k/T) against 1/T) and drawn on your axes, with the results under the equation. For Arrhenius and Eyring, choose whether T is in kelvin or °C. Excel has no such trendlines, so a first-order fit is saved as Excel's exponential trendline and a Hammett fit as a straight line; the others keep this program's picture of the chart.
 - **Copy as Picture** to paste the chart into Word, PowerPoint or a document or slide here; **Save as Picture…** for a PNG or SVG; **Delete Chart**.
 
 ### Stick spectra

@@ -68,6 +68,7 @@
         <button role="menuitem" data-modes="drawing slides design document" data-cmd="export-pdf">Export PDF…</button>
         <button role="menuitem" data-modes="drawing slides design" data-cmd="export-picture">Export Picture…</button>
         <button role="menuitem" data-modes="drawing slides design" data-cmd="export-mol">Export Molfile…</button>
+        <button role="menuitem" data-cmd="batch-convert" title="Turn many drawings or structure files (CDXML, CDX, molfiles, SD files, SMILES lists) into CDXML, CDX, molfiles, SVG or PNG pictures, or one SMILES list, in a folder or a zip">Batch Convert…</button>
     </div>
     </div>
         <button role="menuitem" data-cmd="check-accessibility" title="Look for what makes this file hard to use with a screen reader or to read: missing alt text, low-contrast text, slides without titles, headings that skip a level, things read out of order">Check Accessibility</button>
@@ -105,6 +106,9 @@
     <button role="menuitem" data-cmd="copy-smiles">Copy as SMILES</button>
     <button role="menuitem" data-cmd="copy-mol">Copy as Molfile Text</button>
     <button role="menuitem" data-cmd="copy-cdxml">Copy as CDXML Text</button>
+    <hr />
+    <button role="menuitem" data-cmd="copy-reaction-smiles" title="The selected reaction step (or the only one) as reaction SMILES: starting materials &gt; reagents &gt; products, which ELN and reaction databases read">Copy Reaction as SMILES</button>
+    <button role="menuitem" data-cmd="copy-rxn" title="The selected reaction step (or the only one) as an MDL RXN file, with reagents as agents">Copy Reaction as RXN</button>
     </div>
     </div>
     <button role="menuitem" data-cmd="format-painter" title="Format Painter: copy the look of what is selected to the next thing you click or drag over. Double-click to keep painting until Esc">Format Painter</button>
@@ -635,6 +639,8 @@
     <div class="menu sub" role="menu" hidden>
     <button role="menuitem" data-cmd="arrange-scheme">Arrange Scheme…</button>
     <button role="menuitem" data-cmd="stoichiometry-table" title="A sheet of the amounts for the selected reaction step (or the only one): each starting material, reagent and product with its formula and weight; type the equivalents, the millimoles of the first starting material and any densities, and the masses and volumes follow">Stoichiometry Table…</button>
+    <button role="menuitem" data-cmd="check-balance" title="Count every element and the charge on each side of the selected reaction step (or the only one) and say what is missing, such as water or HCl">Check Balance…</button>
+    <button role="menuitem" data-cmd="lab-calculator" title="Mass, mmol and volume of a compound (neat or as a solution, with purity and equivalents), the mass to weigh for a solution, and dilutions; the selected structure's molecular weight is filled in">Lab Calculator…</button>
     <button role="menuitem" data-cmd="scheme-settings" title="Spacing between structures, the text above and below arrows, the + boxes on new arrows and fitting arrows to their text">Scheme Settings…</button>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="show-roles"><span>Show Reaction Roles</span></button>
     <button role="menuitem" data-cmd="catalytic-cycle" title="Draw a catalytic cycle: a ready-made one from the list (Suzuki, Heck, Sonogashira's two loops…) or a blank one, or the selected structures put round a loop, with step names and what comes in and goes out">Catalytic Cycle…</button>
