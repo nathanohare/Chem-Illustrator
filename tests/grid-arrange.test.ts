@@ -142,6 +142,26 @@ describe('in the editor', () => {
     r2.forEach((r, i) => { const c = centre(doc2, r.atoms); expect(c.x).toBeCloseTo(b2[i].x, 3); expect(c.y).toBeCloseTo(b2[i].y, 3); });
   });
 
+  it('Clean Up tidies the scheme the structures are in, in the same undo step', () => {
+    const doc = new Doc();
+    const L = doc.style.bondLength;
+    const ids = doc.edit('build', () => {
+      const a = pyridine(doc, 0, 0, 1);
+      const r = doc.addArrow({ tail: { x: 1.6 * L, y: 9 }, head: { x: 4.5 * L, y: 9 }, sweep: 0, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, headLength: 6, headWidth: 1.5 }).id;
+      const b = pyridine(doc, 6.5 * L, 14, 2);
+      return { a, r, b };
+    });
+    const ed = editorFor(doc);
+    const before = centre(doc, ids.b.atoms);
+    expect(ed.cleanUp()).not.toBe(false);
+    const arr = doc.arrows.get(ids.r)!;
+    expect(arr.tail.y).toBeCloseTo(arr.head.y, 6);
+    // the product is centred on the arrow now
+    expect(centre(doc, ids.b.atoms).y).not.toBeCloseTo(before.y, 1);
+    doc.undo();
+    expect(centre(doc, ids.b.atoms).y).toBeCloseTo(before.y, 6);
+  });
+
   it('Arrange in a Grid sets out a row of nine three across', () => {
     const doc = new Doc();
     const rings = doc.edit('build', () => [...Array(9)].map((_, i) => pyridine(doc, i * 70, (i % 2) * 8, i + 1)));
