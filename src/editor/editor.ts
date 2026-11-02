@@ -3902,6 +3902,19 @@ export class Editor {
     return { deg, which: (c) => turns && !c.attach, shapes: this.textFirst };
   }
 
+  /**
+   * Whether the selection's dashed box would only clutter the blue highlight: one bond, or atoms
+   * and bonds lying in a thin strip (a chain drawn straight across or down).
+   */
+  private boxInsideHighlight(b: Rect): boolean {
+    const s = this.sel;
+    if (s.captions.size || s.arrows.size || s.shapes.size || !s.bonds.size) return false;
+    // one bond (with its atoms): the highlight shows it well enough at any angle
+    const one = s.bonds.size === 1 ? this.doc.bonds.get([...s.bonds][0]) : undefined;
+    if (one && [...s.atoms].every((id) => id === one.a1 || id === one.a2)) return true;
+    return Math.min(b.x2 - b.x1, b.y2 - b.y1) < this.doc.style.bondLength * 0.3;
+  }
+
   /** The handle above the selection that turns it (none when turning would do nothing). */
   rotateHandle(): Vec | null {
     const s = this.sel;
@@ -4444,18 +4457,37 @@ export class Editor {
 
   /**
    * Where crossing bonds are drawn bring the selected bonds in front of (or behind) the bonds they
-   * cross: the bond behind gets a gap. False when no bond is selected.
+   * cross, or one step either way: the bond behind gets a gap. False when no bond is selected,
+   * 'none' when none of the selected bonds crosses another bond.
    */
-  setBondLayer(front: boolean): boolean {
+  setBondLayer(how: 'front' | 'back' | 'forward' | 'backward'): boolean | 'none' {
     const doc = this.doc;
-    const ids = [...this.sel.bonds];
+    const ids = [...this.sel.bonds].filter((id) => doc.bonds.has(id));
     if (!ids.length) return false;
+    const picked = new Set(ids);
+    const crossing = new Map(ids.map((id) => [id, crossingBonds(doc, doc.bonds.get(id)!).filter((o) => !picked.has(o.id))]));
+    if (![...crossing.values()].some((c) => c.length)) return 'none';
     let hi = -Infinity, lo = Infinity;
     for (const b of doc.bonds.values()) { const l = bondLayer(b); hi = Math.max(hi, l); lo = Math.min(lo, l); }
-    doc.edit(front ? 'Bring to Front' : 'Send to Back', () => {
-      ids.forEach((id, i) => doc.updateBond(id, { z: front ? hi + 1 + i : lo - ids.length + i }));
+    // the selected bonds keep their order among themselves
+    const order = ids.sort((a, b) => bondLayer(doc.bonds.get(a)!) - bondLayer(doc.bonds.get(b)!) || a - b);
+    const label = { front: 'Bring to Front', back: 'Send to Back', forward: 'Bring Forward', backward: 'Send Backward' }[how];
+    doc.edit(label, () => {
+      if (how === 'front' || how === 'back') {
+        order.forEach((id, i) => doc.updateBond(id, { z: how === 'front' ? hi + 1 + i : lo - order.length + i }));
+      } else {
+        // one step: just past the nearest bond it crosses in that direction (between it and the next)
+        const up = how === 'forward';
+        for (const id of up ? [...order].reverse() : order) {
+          const me = bondLayer(doc.bonds.get(id)!);
+          const ls = crossing.get(id)!.map(bondLayer).filter((l) => (up ? l > me : l < me)).sort((a, b) => (up ? a - b : b - a));
+          if (!ls.length) continue;
+          const past = ls.find((l) => l !== ls[0]);
+          doc.updateBond(id, { z: past === undefined ? ls[0] + (up ? 1 : -1) : (ls[0] + past) / 2 });
+        }
+      }
       // the bonds crossing them are redrawn too (their gaps change)
-      for (const id of ids) for (const o of crossingBonds(doc, doc.bonds.get(id)!)) doc.updateBond(o.id, {});
+      for (const c of crossing.values()) for (const o of c) doc.updateBond(o.id, {});
     });
     this.changed();
     return true;
@@ -6321,9 +6353,12 @@ export class Editor {
       const b = this.selBox()!;
       ctx.lineWidth = px;
       ctx.strokeStyle = mk.box;
-      ctx.setLineDash([3 * px, 3 * px]);
-      ctx.strokeRect(b.x1 - 2 * px, b.y1 - 2 * px, b.x2 - b.x1 + 4 * px, b.y2 - b.y1 + 4 * px);
-      ctx.setLineDash([]);
+      // no box round a bond or a straight run of bonds: it would sit inside their blue highlight
+      if (!this.boxInsideHighlight(b)) {
+        ctx.setLineDash([3 * px, 3 * px]);
+        ctx.strokeRect(b.x1 - 2 * px, b.y1 - 2 * px, b.x2 - b.x1 + 4 * px, b.y2 - b.y1 + 4 * px);
+        ctx.setLineDash([]);
+      }
       ctx.beginPath();
       ctx.moveTo(rh.x, b.y1 - 2 * px);
       ctx.lineTo(rh.x, rh.y + 4.5 * px);
