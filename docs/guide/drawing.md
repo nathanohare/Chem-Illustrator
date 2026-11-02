@@ -416,13 +416,20 @@ Rest the mouse on an abbreviation or condensed label (OTBS, NHBoc, CO2Me, CH2OH)
 
 **File ▸ Drawing Style…** sets how structures are drawn in the tab showing: bond length, line, bold and margin widths, hash spacing, double bond spacing, chain angle, the fonts and sizes of atom labels and captions, the font and size of text above and below reaction arrows (**1 pt smaller** sets it a point under the captions), and the reaction arrows' own line width and arrowhead length and width (blank: the bonds' line width, and a head ten line widths long and 2.5 wide). The preview beside it redraws as you type.
 
-- **Start from** picks a built-in style: **ACS Document 1996** (every ACS journal), **RSC**, **Nature journals**, **Thieme (Synthesis, Synlett)**, **Wiley (Angewandte, Chemistry Europe)**, **Elsevier (Tetrahedron and others)**, or **Slides (ACS 1996 × 2)**. The line under it says where the numbers come from. Wiley and Elsevier publish only the text size and font, so their bonds are ACS 1996 scaled to 7 pt text; the note under the style says so.
+- The **Style** cards show each style with a small structure drawn in it, grouped by use. Point at a card to see your drawing in it (and in the preview); click it to start from it.
+  - **Journal**: **ACS Document 1996** (every ACS journal), **RSC**, **Nature journals**, **Thieme (Synthesis, Synlett)**, **Wiley (Angewandte, Chemistry Europe)** and **Elsevier (Tetrahedron and others)**. The line under the cards says where the numbers come from. Wiley and Elsevier publish only the text size and font, so their bonds are ACS 1996 scaled to 7 pt text; the note under the style says so.
+  - **Presentation**: **Slides (ACS 1996 × 2)**, and **Slides, heavy lines** for big rooms and dim projectors.
+  - **Poster**: **Poster (ACS 1996 × 3)**, with 30 pt labels and heavier lines, readable from about 2 m, and **Poster, compact** for long schemes.
+  - **Thesis/Print**: **Thesis (ACS 1996 × 1.2)**, with 12 pt labels to match 12 pt body text, and **Thesis, serif captions**.
+  - **Yours**: the styles you have saved. **+ Save current** keeps the style in use under a name.
 - Every number can be typed over. With **Change widths and font sizes with it** ticked, changing the bond length scales the rest in proportion.
 - **Save as My Style** keeps your settings under a name, in every mode. **Delete** removes one of your own.
 - When there are structures already, choose **Redraw the structures already there in the new style** or **Keep their look; only new structures use it**.
 - Tick **Use this style for new canvases** to make every new canvas start in it.
 
 Press **Apply**. One Undo puts everything back.
+
+In Presentation (**Design & Transitions** tab) and Design (**Home** tab) the same cards sit on the ribbon under **Drawing Styles**, as Word shows its Styles. Point at one to see the slide or page in it, and click to use it; one Undo puts it back. ▲ and ▼ scroll the row, and ▾ opens every card with **+ Save current** and **More Settings…** (the Drawing Style page).
 
 ## Finding your way round
 

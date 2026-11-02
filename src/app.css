@@ -3184,3 +3184,29 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .ab-tile:hover { background: var(--hover, rgba(0, 0, 0, 0.05)); }
 .ab-tile[aria-checked="true"] { border-color: var(--accent, #2b7bd6); box-shadow: 0 0 0 1px var(--accent, #2b7bd6) inset; }
 .action-button-dialog [hidden] { display: none !important; }
+
+/* Drawing style cards (Drawing Style window, Drawing Styles gallery) */
+.style-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(116px, 1fr)); gap: 6px; margin: 2px 0 6px; }
+.style-card { display: grid; grid-template-rows: auto 60px auto; gap: 2px; padding: 4px 6px 5px; text-align: left; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-control); cursor: pointer; min-width: 0; }
+.style-card:hover { border-color: var(--accent); }
+.style-card[aria-checked='true'] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.style-card .sc-use { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
+.style-card .sc-pic, .rbs-card .sc-pic { display: flex; align-items: center; justify-content: center; background: #fff; border-radius: 2px; overflow: hidden; }
+.style-card .sc-name { font-size: var(--fs-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.style-card.sc-save { border-style: dashed; color: var(--accent); align-content: center; justify-items: center; grid-template-rows: auto auto; }
+.style-card.sc-save .sc-plus { font-size: 20px; line-height: 1; }
+.style-dialog .style-cards-at { max-height: 300px; overflow-y: auto; }
+.style-preset-pop { position: fixed; z-index: 60; width: min(560px, calc(100vw - 8px)); max-height: calc(100vh - 16px); overflow-y: auto; background: var(--panel, #fff); color: var(--text, #222); border: 1px solid var(--line, #ccc); border-radius: var(--r-tab); box-shadow: 0 6px 18px rgba(0,0,0,0.18); padding: 8px; }
+.style-preset-pop .spp-head { font-size: var(--fs-sm); margin: 0 0 6px; opacity: 0.8; }
+.style-preset-pop .spp-foot { display: flex; justify-content: flex-end; border-top: 1px solid var(--line); padding-top: 6px; }
+/* inline on the ribbon, as Word shows its Styles */
+.rb-styles { display: flex; align-items: stretch; height: 100%; }
+.rbs-strip { display: flex; flex-wrap: wrap; gap: 2px; width: 336px; height: 52px; overflow: hidden; border: 1px solid var(--line); border-right: none; padding: 1px; scroll-behavior: smooth; }
+.rbs-card { display: grid; grid-template-rows: 32px auto; width: 64px; height: 48px; padding: 1px; gap: 1px; background: none; border: 1px solid transparent; border-radius: 2px; cursor: pointer; color: var(--text); }
+.rbs-card:hover { border-color: var(--line); background: var(--accent-soft); }
+.rbs-card[aria-checked='true'] { border-color: var(--accent); }
+.rbs-card .sc-name { font-size: 9px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rbs-side { display: flex; flex-direction: column; border: 1px solid var(--line); }
+.rbs-side button { flex: 1; width: 16px; padding: 0; font-size: 8px; line-height: 1; background: none; border: none; color: var(--text); cursor: pointer; }
+.rbs-side button:hover { background: var(--accent-soft); }
+.rbs-side .rbs-all { border-top: 1px solid var(--line); font-size: 10px; }
