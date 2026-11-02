@@ -16,7 +16,7 @@ The ribbon has Word's tabs: **Home**, **Insert**, **Design**, **Layout**, **Refe
 
 The drawing toolbox shows on the left in Document mode too. Pick a drawing tool there and the selected structure opens for editing with that tool; if no structure is selected, a new drawing starts at the caret. Press **Done** above the drawing to put it back in the text.
 
-When the pointer turns into a pointing hand over a structure, it is a drawing you can open: double-click it (or pick it and use **Insert** tab ▸ **Edit Drawing**). It opens in place on its page: the drawing tools work right there, at the page's zoom (Ctrl+wheel zooms both together), and the rest of the page fades and stays as it is until you press **Done** (or Ctrl+Enter, or click the page away from the structure). **Cancel**, or Esc with nothing picked, leaves it as it was. A new structure (**Insert** tab ▸ **Structure**) is drawn in a window over the page, then put in the text at the caret.
+When the pointer turns into a pointing hand over a structure, it is a drawing you can open: double-click it (or pick it and use **Insert** tab ▸ **Edit Drawing**). It opens in place on its page: the drawing tools work right there, at the page's zoom (Ctrl+wheel zooms both together), and the rest of the page fades and stays as it is until you press **Done** (or Ctrl+Enter, or click the page away from the structure). **Cancel**, or Esc with nothing picked, leaves it as it was. A new structure (**Insert** tab ▸ **Structure**) is drawn the same way, in a dashed space at the caret; Done with nothing drawn, or Cancel, leaves the document as it was. (In a table cell, a new structure is drawn in a window over the page.)
 
 ## Formatting text
 
@@ -61,7 +61,7 @@ Formatting you set by hand stays as it is. The theme and style set are saved in 
 
 ## Structures and pictures in the text
 
-- **Insert** tab ▸ **Structure** opens the drawing tools. Draw, press **Done**, and the structure sits in the text at the caret.
+- **Insert** tab ▸ **Structure** opens the drawing tools right at the caret. Draw, press **Done**, and the structure sits in the text there.
 - **Insert** tab ▸ **From Name** draws a structure from a name or SMILES.
 - Paste a structure copied from a canvas tab, or from ChemDraw (Windows app).
 - **Insert** tab ▸ **Picture** adds a picture from a file; you can also paste or drop one.
