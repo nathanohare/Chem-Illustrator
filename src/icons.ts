@@ -62,6 +62,10 @@ export const ICONS: Record<string, string> = {
   // a chain cut in two, the pieces moving apart
   sketch: svg('<path d="M3 19c3-1 4-6 7-6s2 5 5 4 3-6 6-8"/><path d="M15.5 3.5l3 3-7.5 7.5h-3v-3z" stroke-width="1.4"/>'),
   fragment: svg('<polyline points="2.5,17 6,13 9.5,17"/><polyline points="14.5,12 18,8 21.5,12"/><line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="2 2"/><path d="M9 7.5l-2.5 2M15 16.5l2.5-2" stroke-width="1.3"/>'),
+  // a ring tipped back into the page, and the way it turns
+  perspective: svg('<polygon points="3.5,15 8,11.5 16,11.5 20.5,15 16,18.5 8,18.5"/><path d="M5 8.5C8 4.5 16 4.5 19 8.5"/><path d="M19.4 4.6l-.4 3.9-3.8-.7" stroke-width="1.4"/>'),
+  // two rings at right angles (a biaryl seen in 3-D), and the way they turn
+  'perspective-3d': svg('<polygon points="7,10.5 10.5,12.5 10.5,16.5 7,18.5 3.5,16.5 3.5,12.5"/><line x1="10.5" y1="14.5" x2="14" y2="14.5"/><polygon points="14,14.5 16,10.5 19.5,11.5 21,15.5 19,19.5 15.5,18.5"/><path d="M5 7C8 3 16 3 19 7"/><path d="M19.4 3.1l-.4 3.9-3.8-.7" stroke-width="1.4"/>'),
   element: svg('<rect x="3" y="4" width="5" height="5"/><rect x="3" y="9" width="5" height="5"/><rect x="8" y="9" width="5" height="5"/><rect x="16" y="4" width="5" height="5"/><rect x="16" y="9" width="5" height="5"/><rect x="8" y="16" width="8" height="4"/>'),
   'bond-quadruple': svg('<line x1="3" y1="14" x2="14" y2="4"/><line x1="5" y1="16.3" x2="16.3" y2="6"/><line x1="7.5" y1="18.5" x2="18.8" y2="8"/><line x1="10" y1="20.5" x2="21" y2="10.5"/>'),
   'bond-dative': svg('<line x1="4" y1="19" x2="17" y2="7"/><path d="M20 4l-7.2 2.3 4.8 5z" fill="currentColor"/>'),

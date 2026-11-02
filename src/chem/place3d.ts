@@ -43,12 +43,38 @@ export function placeView(doc: Doc, map: number[], view: [number, number, number
     // ChemDraw's xyz has the reader at −z
     doc.updateAtom(id, { x: px, y: py, depth, xyz: [px, py, -depth] });
   }
-  // each stereocentre drawn with a wedge gets one again, on the bond that leaves it most steeply
-  // towards or away from the reader (a wedge or a hashed wedge as it points): on a turned
-  // structure the old wedge can lie nearly flat, or point the wrong way for the hydrogen the
-  // reader no longer sees
+  const centres = wedgeCentres(doc, at.keys());
+  // a crowded centre's hydrogen, where the model has it
+  const hydrogen = (c: number): [number, number, number] | null => {
+    const vc = view[map.indexOf(c)];
+    const h = vc ? view.findIndex((p, i) => i >= map.length && Math.hypot(p[0] - vc[0], p[1] - vc[1], p[2] - vc[2]) < 1.25) : -1;
+    if (h < 0) return null;
+    const [x, y, z] = view[h];
+    return [cx + (x - mx) * s, cy - (y - my) * s, (z - mz) * s];
+  };
+  const unshown = redrawWedges(doc, centres, new Set(at.keys()), hydrogen);
+  layerByDepth(doc, at.keys());
+  return { unshown };
+}
+
+/** The stereocentres among these atoms that are drawn with a wedge or hashed wedge (its narrow end). */
+export function wedgeCentres(doc: Doc, atomIds: Iterable<number>): Set<number> {
+  const at = new Set(atomIds);
   const centres = new Set<number>();
   for (const b of doc.bonds.values()) if ((b.display === 'wedge' || b.display === 'hashWedge') && at.has(b.a1) && at.has(b.a2)) centres.add(b.a1);
+  return centres;
+}
+
+/**
+ * Draw the wedges of these stereocentres again for where their atoms now lie in 3-D (x, y and
+ * depth): each gets one on the bond that leaves it most steeply towards or away from the reader
+ * (a wedge or a hashed wedge as it points), on a bond to another atom in `at`. On a turned
+ * structure the old wedge can lie nearly flat, or point the wrong way for the hydrogen the
+ * reader no longer sees. A centre left with no bond that reads right (a crowded ring fusion)
+ * gets its hydrogen drawn, wedged, when `hydrogen` says where it is. Call inside an edit.
+ * Returns how many centres could not be shown.
+ */
+export function redrawWedges(doc: Doc, centres: Set<number>, at: Set<number>, hydrogen?: (centre: number) => [number, number, number] | null): number {
   for (const b of doc.bonds.values()) if (centres.has(b.a1) && (b.display === 'wedge' || b.display === 'hashWedge')) doc.updateBond(b.id, { display: 'solid' });
   const taken = new Set<number>();
   const L = doc.style.bondLength || 14.4;
@@ -95,11 +121,9 @@ export function placeView(doc: Doc, map: number[], view: [number, number, number
     const best = choices.get(c)!.find((ch) => !taken.has(ch.id));
     if (!best) {
       // no bond left that reads right (a crowded ring fusion): draw the centre's hydrogen, wedged
-      const vc = view[map.indexOf(c)];
-      const h = vc && view.findIndex((p, i) => i >= map.length && Math.hypot(p[0] - vc[0], p[1] - vc[1], p[2] - vc[2]) < 1.25);
-      if (h === undefined || h < 0) { unshown++; continue; }
-      const [x, y, z] = view[h];
-      const hx = cx + (x - mx) * s, hy = cy - (y - my) * s, depth = (z - mz) * s;
+      const h = hydrogen?.(c);
+      if (!h) { unshown++; continue; }
+      const [hx, hy, depth] = h;
       const atom = doc.addAtom(hx, hy, 1, { depth, xyz: [hx, hy, -depth] });
       doc.addBond(c, atom.id, 1, depth >= P(c)[2] ? 'wedge' : 'hashWedge');
       continue;
@@ -107,6 +131,5 @@ export function placeView(doc: Doc, map: number[], view: [number, number, number
     taken.add(best.id);
     doc.updateBond(best.id, { a1: c, a2: best.n, display: best.toward ? 'wedge' : 'hashWedge' });
   }
-  layerByDepth(doc, at.keys());
-  return { unshown };
+  return unshown;
 }
