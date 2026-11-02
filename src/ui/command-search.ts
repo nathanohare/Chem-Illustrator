@@ -31,6 +31,40 @@ const US: [RegExp, string][] = [[/colour/g, 'color'], [/centre/g, 'center'], [/^
 const american = (w: string) => US.reduce((x, [re, to]) => x.replace(re, to), w);
 
 /**
+ * Words from the names commands had before they took their standard names (2026-11), so
+ * typing an old name ("Space Evenly", "Hotkeys", "Nickname") still finds the command.
+ */
+const FORMER_NAMES: [RegExp, string][] = [
+  [/^Align (Left|Right|Top|Bottom)$/, 'line up edges'],
+  [/^Align (Center|Middle)$/, 'line up centres centers middles across down'],
+  [/^Distribute (Horizontally|Vertically)$/, 'space evenly across down'],
+  [/^Flip Horizontal/, 'flip left to right'],
+  [/^Flip Vertical/, 'flip top to bottom'],
+  [/Preserve Stereochemistry/, 'keeping configuration'],
+  [/^Rotate\b/, 'turn'],
+  [/3-D Rotation/, 'turn in 3-d'],
+  [/Collapse/, 'fold'],
+  [/^(Select|Deselect) All$/, 'tick all none'],
+  [/Rectangle/, 'box'],
+  [/Highlight Style/, 'highlight look'],
+  [/^(Detach|Unpin)/, 'unstick untie'],
+  [/^Pin to/, 'tie stick'],
+  [/^Custom/, 'your own'],
+  [/Abbreviation/, 'nickname'],
+  [/Keyboard Shortcuts/, 'hotkeys'],
+  [/Chemical Abbreviation Tooltips/, 'group tooltips'],
+  [/Show\/Hide Explicit Hydrogens/, 'h atoms hide draw'],
+  [/Add Hapto Bond/, 'bond metal to ring'],
+  [/Import .*Picture|^Import \d/, 'read'],
+];
+
+/** Old names of a command now known by `label`, as search words (empty when it kept its name). */
+export function formerNames(label: string): string {
+  return FORMER_NAMES.filter(([re]) => re.test(label)).map(([, w]) => w).join(' ');
+}
+
+
+/**
  * How well an item matches what was typed: every typed word must start a word of its name,
  * be inside its name, or start a word of where it lives or its tool tip. Names that start with
  * what was typed come first. Null when it doesn't match.
@@ -39,7 +73,7 @@ export function matchScore(item: Pick<CommandItem, 'label' | 'place' | 'more'> &
   const q = words(query).map(american);
   if (!q.length) return 0;
   const name = words(item.label), joined = item.label.toLowerCase();
-  const other = [...words(item.place), ...words(item.more ?? '')];
+  const other = [...words(item.place), ...words(item.more ?? ''), ...words(formerNames(item.label))];
   let score = 0;
   for (const w of q) {
     if (name.includes(w)) score += 5;

@@ -1,6 +1,6 @@
 # Getting started
 
-This page covers installing Chem Illustrator, finding your way round the window, opening your first ChemDraw file, saving, and the Settings window.
+This page covers installing Chem Illustrator, finding your way around the window, opening your first ChemDraw file, saving, and the Settings window.
 
 Chem Illustrator is free. It draws structures the way ChemDraw does (the same hotkeys, the same ACS Document 1996 look) and opens and saves ChemDraw's `.cdxml` and `.cdx` files. Besides the chemistry **Canvas**, it has four more modes, each in its own tab: **Presentation** (slideshows), **Spreadsheet** (tables, charts, dashboards), **Document** (text) and **Design** (TOC graphics, abstracts, posters, figures).
 
@@ -16,7 +16,7 @@ Download the newest installer from the **Releases** page of the project on GitHu
 2. Windows may say **"Windows protected your PC"**. This is Windows SmartScreen: it warns about any program that has not been signed with a paid Windows certificate. Click **More info**, then **Run anyway**.
 3. Follow the installer. A newer installer can be run over an older version; you don't need to remove the old one first.
 
-The installer puts the app in your own user folder, so it doesn't need administrator rights. On a computer managed by an IT department, their rules may still block programs that aren't signed; if so, ask them, since neither the installer nor the portable copy below gets round those rules.
+The installer puts the app in your own user folder, so it doesn't need administrator rights. On a computer managed by an IT department, their rules may still block programs that aren't signed; if so, ask them, since neither the installer nor the portable copy below gets around those rules.
 
 ### Windows, without installing (portable copy)
 
@@ -91,7 +91,7 @@ Along the top are the menus: **File**, **Edit**, **View**, **Insert**, **Format*
 
 To the right of the menus is the **quick bar** (like Office's Quick Access Toolbar), with buttons for **Save**, **Undo**, **Redo**, **Fit** (fit the whole drawing in the window), the **padlock** (locks or unlocks all the toolboxes at once so they can be moved; see [Canvas](drawing.md#toolboxes)) and the **eye** (Reading Mode). Undo and Redo are grayed out when there is nothing to take back, and resting the mouse on one names the step it would undo (**Undo Add Ring**). To choose its buttons:
 
-- click the **▾** at its end and tick the ones you want (Print, Copy, Paste, Focus View and more);
+- click the **▾** at its end and check the ones you want (Print, Copy, Paste, Focus View and more);
 - right-click any menu command, or a ribbon button that runs one, and pick **Add to Quick Access Toolbar**; right-click a quick button to take it off;
 - **More Commands…** on the ▾ (or **View ▸ Toolboxes ▸ Customize Quick Access Toolbar…**) lists every menu command to add, and puts the buttons in your order. **Reset** puts them back as they came. They are kept with your settings.
 
@@ -101,7 +101,7 @@ The menus show each command's key beside it, so they are a good way to learn the
 
 ### Tabs
 
-Each open file has a tab in the menu bar, between the quick bar and Search, with its own icon and color for its kind (teal for canvases, orange for presentations, green for spreadsheets, dark blue for documents, purple for designs). The open file's tab and the chosen ribbon tab are underlined in that color. Ctrl+Tab and Ctrl+Shift+Tab move between tabs, and Ctrl+W closes one. When many files are open the tabs get narrower, then show only their icons; rest the mouse on one for its name. **View ▸ Window and Colors ▸ File Tabs in Menu Row** (untick it) puts the tabs back on a row of their own under the menu bar.
+Each open file has a tab in the menu bar, between the quick bar and Search, with its own icon and color for its kind (teal for canvases, orange for presentations, green for spreadsheets, dark blue for documents, purple for designs). The open file's tab and the chosen ribbon tab are underlined in that color. Ctrl+Tab and Ctrl+Shift+Tab move between tabs, and Ctrl+W closes one. When many files are open the tabs get narrower, then show only their icons; rest the mouse on one for its name. **View ▸ Window and Colors ▸ File Tabs in Menu Row** (clear it) puts the tabs back on a row of their own under the menu bar.
 
 New files are called **Canvas 1**, **Presentation 1**, **Spreadsheet 1** and so on, until they are saved with a name of their own. When there are more tabs than fit, **‹** and **›** scroll them (as does the mouse wheel over the tabs), and **▾** lists every open file to pick one. **+** at the end starts something new:
 
@@ -127,7 +127,7 @@ The panel on the right changes with what you are doing. In a canvas it has:
 - **Warnings**: possible problems in the structures, such as a carbon with five bonds (see [Canvas](drawing.md#warnings)).
 - **Analysis**: formula, masses and more for the selected structure (see [Canvas](drawing.md#the-analysis-panel)).
 
-The **›** arrow at the top of the panel folds it away to give the drawing more room (also **View ▸ Fold Side Panel**). Each kind of tab remembers this on its own, so you can keep the panel folded in spreadsheets and open in canvases. In a window narrower than about 1,200 pixels the panel folds by itself so the drawing keeps its room, and opens again when the window is widened; **›** still opens it while the window is narrow.
+The **›** arrow at the top of the panel folds it away to give the drawing more room (also **View ▸ Collapse Side Panel**). Each kind of tab remembers this on its own, so you can keep the panel folded in spreadsheets and open in canvases. In a window narrower than about 1,200 pixels the panel folds by itself so the drawing keeps its room, and opens again when the window is widened; **›** still opens it while the window is narrow.
 
 **View ▸ Focus View** (Ctrl+Shift+F1) hides the toolboxes, the side panel and the ribbon at once, to give the page the whole window on a laptop; the same key brings them back. In Presentation, Spreadsheet, Document and Design tabs, **View ▸ Toolboxes ▸ One Column Outside Canvas** shows the toolboxes docked at the side in one narrow column.
 
@@ -135,9 +135,9 @@ The **›** arrow at the top of the panel folds it away to give the drawing more
 
 When the window is too narrow for a ribbon (in presentations, spreadsheets, documents and designs), a gallery (such as Styles) shows fewer choices first, then the groups at the right end show their buttons as icons only (rest the mouse on one to see its name), then fold into one button each, with the group's picture and name, that drops the group's buttons down. Only as many groups fold as must. A slide or design page that was fitted to the window is fitted again when the window changes size.
 
-On a short window (a laptop), **View ▸ Ribbon ▸ Fold on Short Windows** folds the ribbon to its row of tabs while the window is under 760 pixels tall; click a tab to use its buttons. It opens again when the window is taller. **Ctrl+F1** (or a double-click on a ribbon tab) folds or opens the ribbon yourself at any size.
+On a short window (a laptop), **View ▸ Ribbon ▸ Auto-Collapse on Short Windows** folds the ribbon to its row of tabs while the window is under 760 pixels tall; click a tab to use its buttons. It opens again when the window is taller. **Ctrl+F1** (or a double-click on a ribbon tab) folds or opens the ribbon yourself at any size.
 
-### The hint line at the bottom
+### The status bar
 
 The line along the bottom of the window tells you what the tool you have picked does, and which keys change it. For example, with the select tool it says that Shift or Ctrl+click adds to the selection and Ctrl+drag copies. Look there when you try a tool for the first time.
 
@@ -147,7 +147,7 @@ The **zoom box** at the right end of that line shows how big the drawing is show
 
 The first time you open the app, a small card on the empty page lists the tips most people need first: drawing bonds and rings, typing atom labels, pasting SMILES or names, Search and the right-click menu. Close it with **Start drawing**; it doesn't come back.
 
-After that, each time the app opens on an empty canvas, a smaller **start view** offers a new Presentation, Spreadsheet, Document or Design tab, a template, Open, and your recent files. Start drawing (or click **Start drawing**) and it goes. Untick **Show at start** to stop it, or turn it back on in **Edit ▸ Settings ▸ General**.
+After that, each time the app opens on an empty canvas, a smaller **start view** offers a new Presentation, Spreadsheet, Document or Design tab, a template, Open, and your recent files. Start drawing (or click **Start drawing**) and it goes. Clear **Show at start** to stop it, or turn it back on in **Edit ▸ Settings ▸ General**.
 
 ### Search (Alt+Q)
 
@@ -227,28 +227,28 @@ Presentations, spreadsheets, documents and designs save in their own formats; se
 | Page | What it holds |
 |---|---|
 | **General** | The start view, what a click on a grouped thing selects, outlining the rest of a group, where linked text goes, asking before a command changes every structure on the page, and your name on tracked changes in documents. |
-| **Drawing** | Terminal methyls as Me or CH3; axial chirality as Ra / Sa or P / M (Ra is the same as M, and Sa as P); charges from the + and − keys plain (N+) or circled (⊕, ⊖); text typed beside a bond end becoming an atom; raised R-group numbers; mechanism arrows finding their own way round. |
+| **Drawing** | Terminal methyls as Me or CH3; axial chirality as Ra / Sa or P / M (Ra is the same as M, and Sa as P); charges from the + and − keys plain (N+) or circled (⊕, ⊖); text typed beside a bond end becoming an atom; raised R-group numbers; mechanism arrows finding their own way around. |
 | **Drawing Style** | Bond length, line widths, fonts and journal styles (see [Canvas](drawing.md#drawing-styles)). |
 | **Hotkeys** | Every key, to change, import or export (see [Keyboard and mouse](keyboard-and-mouse.md)). |
 | **Text and Spelling** | Chemistry typing (subscripts in formulas), spelling, your dictionary and replacements. |
 | **Color Palettes**, **Mode Colors**, **Reading Mode** | Your rows of colors, the color of each kind of tab, and Reading Mode's colors. |
-| **Schemes** | Gaps round arrows and + signs, text size above and below arrows, and the + boxes on new arrows. |
+| **Schemes** | Gaps around arrows and + signs, text size above and below arrows, and the + boxes on new arrows. |
 | **AutoSave and Recovery** | AutoSave, how often unsaved work is copied for recovery, and how many versions are kept. |
 | **File Types** | Which kinds of file Chem Illustrator is offered for under **Open with** in Explorer, and a button to Windows' Default apps page (see [Files and sharing](files-and-sharing.md#opening-files-from-explorer-or-finder-desktop-app)). |
-| **Online** | Looking up names on PubChem (sends the name typed to PubChem; untick it to keep everything on your computer) and the update check and whether to get Stable or Latest updates (desktop app only). |
+| **Online** | Looking up names on PubChem (sends the name typed to PubChem; clear it to keep everything on your computer) and the update check and whether to get Stable or Latest updates (desktop app only). |
 
-Your preferences, hotkeys, own templates, nicknames, palettes and toolbox layout are kept in a small settings file, `settings.json`. **Edit ▸ Hotkeys…** shows where it is on your computer.
+Your preferences, hotkeys, own templates, abbreviations, palettes and toolbox layout are kept in a small settings file, `settings.json`. **Edit ▸ Keyboard Shortcuts…** shows where it is on your computer.
 
 ### Customize the Ribbon
 
 **View ▸ Ribbon ▸ Customize the Ribbon…** (or right-click a ribbon's tabs or a group's name) rearranges the ribbons of Presentations, Spreadsheets, Documents and Designs, with the same jiggling icons as Customize Toolboxes. Pick the ribbon at the top; its tabs show as a row:
 
-- Drag a tab to put the tabs in your order, type a new **Tab** name, or untick **Shown** to hide it.
+- Drag a tab to put the tabs in your order, type a new **Tab** name, or clear **Shown** to hide it.
 - Click a tab to see its groups. Drag a group to move it, drop it on another tab to move it there, or drag it out (or click its **×**) to hide it. Hidden groups are listed on the left, to drag back in.
 - Click a group to rename it. **New Group** makes a group of your own: drag commands into it from the list on the left (every button of that ribbon, and every menu command), or click **+**.
 - **Undo** (Ctrl+Z) takes changes back one at a time; **Reset This Ribbon** puts a ribbon back as it came.
 
-To set up a new install or another computer the same way, use **Edit ▸ Settings File ▸ Export Settings…** to save every setting in one file (hotkeys, toolboxes and what is in them, preferences, your templates, nicknames, drawing styles, color palettes, slide themes and highlight looks), then **Edit ▸ Settings File ▸ Import Settings…** on the other one. The same two buttons are on the **Import and Export** page of the Settings window. Recent files stay on each computer. A file saved from the Hotkeys window's Export imports too, and changes only the keys.
+To set up a new install or another computer the same way, use **Edit ▸ Settings File ▸ Export Settings…** to save every setting in one file (hotkeys, toolboxes and what is in them, preferences, your templates, abbreviations, drawing styles, color palettes, slide themes and highlight styles), then **Edit ▸ Settings File ▸ Import Settings…** on the other one. The same two buttons are on the **Import and Export** page of the Settings window. Recent files stay on each computer. A file saved from the Keyboard Shortcuts window's Export imports too, and changes only the keys.
 
 ---
 

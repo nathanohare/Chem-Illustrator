@@ -35,7 +35,7 @@ export class HotkeysDialog {
   constructor(private opts: HotkeysOptions) {
     const d = (this.d = document.createElement('dialog'));
     d.className = 'hotkeys';
-    d.setAttribute('aria-label', 'Hotkeys');
+    d.setAttribute('aria-label', 'Keyboard Shortcuts');
     d.innerHTML = `
       <div class="hk-head">
         <h2>Hotkeys</h2>

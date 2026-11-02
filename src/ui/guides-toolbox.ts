@@ -71,7 +71,7 @@ export function buildGuidesToolbox(body: HTMLElement, vertical: boolean, h: Guid
     });
   }
   button(add, 'shown', svg('<path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/>'), 'Show the guides (hidden guides are kept, and don\'t snap)', () => change({ shown: !now().shown }));
-  button(add, 'clear', svg('<path d="M3 3l10 10M13 3L3 13"/>'), 'Take every guide away', () => change({ list: [], grid: false }));
+  button(add, 'clear', svg('<path d="M3 3l10 10M13 3L3 13"/>'), 'Clear All Guides', () => change({ list: [], grid: false }));
   body.append(add);
 
   // the ticks
@@ -182,7 +182,7 @@ export function buildGuidesToolbox(body: HTMLElement, vertical: boolean, h: Guid
   const box = d.createElement('input');
   box.type = 'checkbox';
   box.addEventListener('change', () => h.setSmart(box.checked));
-  smart.append(box, d.createTextNode('Line up with other things (smart guides)'));
+  smart.append(box, d.createTextNode('Smart Guides'));
   smart.title = 'As something moves, its edges and middle snap into line with other structures, text and the page (View > Alignment Guides)';
   body.append(smart);
 

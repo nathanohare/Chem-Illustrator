@@ -42,10 +42,10 @@ describe('views', () => {
     expect(viewAngle(viewTimes(axisView('x', 30), axisView('x', 60)), axisView('x', 90))).toBeLessThan(1e-4);
   });
 
-  it('is an emphasis effect named Turn in 3-D', () => {
+  it('is an emphasis effect named 3-D Rotation', () => {
     expect(EFFECTS.some((e) => e.id === 'turn3d' && e.emph)).toBe(true);
     expect(isEmphasis('turn3d')).toBe(true);
-    expect(animName(newAnim({ kind: 'atom', id: 1 }, 'turn3d'))).toBe('Turn in 3-D');
+    expect(animName(newAnim({ kind: 'atom', id: 1 }, 'turn3d'))).toBe('3-D Rotation');
   });
 
   it('plays each key view on its own click, from the view before', () => {

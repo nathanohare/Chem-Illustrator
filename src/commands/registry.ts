@@ -60,7 +60,7 @@ export const INSERT_MENU: MenuEntry[] = [
     { id: 'fit-keyframe', label: 'Fit Keyframe to Selection', className: 'keyframes-only', title: 'The keyframe picked shows what is selected' },
     { id: 'delete-keyframe', label: 'Delete Keyframe', className: 'keyframes-only', title: 'Take away the keyframe picked' },
     { id: 'keyframe-title', label: 'Keyframe Title…', className: 'keyframes-only', title: 'The title shown fixed to the screen while the show is at the keyframe picked' },
-    { id: 'keyframe-zone', label: 'Zone Color…', className: 'keyframes-only', title: 'A soft tint in the background round the keyframe picked: give a part of the route its own color' },
+    { id: 'keyframe-zone', label: 'Zone Color…', className: 'keyframes-only', title: 'A soft tint in the background around the keyframe picked: give a part of the route its own color' },
     { id: 'canvas-heading', label: 'Canvas Heading', className: 'keyframes-only', title: 'A large, faint label marking a part of the route, such as Fragment A or Endgame' },
     { id: 'keyframe-spotlight', label: 'Spotlight Selection', className: 'keyframes-only', title: 'In the show, what is selected stays bright and the rest of the keyframe picked dims (nothing selected: take the spotlight away)' },
     { id: 'keyframe-detour', label: 'Mark as Detour', className: 'keyframes-only', title: 'The keyframe picked is a detour off the route (a side reaction, a failed attempt): after it the show glides back to where it left the route. Again to put it back on the route' },
@@ -72,7 +72,7 @@ export const INSERT_MENU: MenuEntry[] = [
     { id: 'insert-video', label: 'Video…', modes: 'slides', title: 'A video from a file that plays in the slide show and in PowerPoint' },
     { id: 'insert-audio', label: 'Audio…', modes: 'slides', title: 'A sound from a file that plays in the slide show and in PowerPoint' },
     { id: 'header-footer', label: 'Header & Footer…', modes: 'slides', title: 'The date, slide number and footer on the slides, and the header and footer of notes pages and handouts' },
-    { id: 'slide-references', label: 'References on Slide…', modes: 'slides', title: 'Tick which of the presentation\'s references this slide shows at its foot; the lines are written, placed and formatted for you' },
+    { id: 'slide-references', label: 'References on Slide…', modes: 'slides', title: 'Select which of the presentation\'s references this slide shows at its foot; the lines are written, placed and formatted for you' },
     { id: 'references-slide', label: 'References Slide…', modes: 'slides', title: 'A slide at the end listing the references shown on the slides, in full, kept up to date' },
   ] },
   { submenu: 'Spreadsheet', modes: 'sheet', items: [

@@ -52,8 +52,8 @@ export function askGeomView(name: string, atoms: QmAtom[], bonds: QmBond[], view
           <div class="gv-label">Turn</div>
           <div class="gv-turn">
             <button type="button" data-turn="best" title="Back to the side that spreads it out most">Best side</button>
-            <button type="button" data-turn="cw" title="Turn 90° clockwise in the page">↻ 90°</button>
-            <button type="button" data-turn="flip" title="Turn it round (180° about the vertical)">⇄ Flip</button>
+            <button type="button" data-turn="cw" title="Rotate 90° clockwise in the page">↻ 90°</button>
+            <button type="button" data-turn="flip" title="Turn it around (180° about the vertical)">⇄ Flip</button>
           </div>
         </div>
       </div>

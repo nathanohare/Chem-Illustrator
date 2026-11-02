@@ -131,11 +131,11 @@ PowerPoint and Word get a diagram as one group of shapes, so it can be moved, re
 
 ## Smart guides
 
-As you drag a shape near another, pink lines show when edges or centers line up, and the shape snaps into line. Page edges count too. Hold **Alt** to drag freely, or untick **Guides** on the ribbon to turn them off.
+As you drag a shape near another, pink lines show when edges or centers line up, and the shape snaps into line. Page edges count too. Hold **Alt** to drag freely, or clear **Guides** on the ribbon to turn them off.
 
 ## Arranging
 
-The ribbon's **Arrange** group has **Bring to Front**, **Bring Forward**, **Send to Back** and **Send Backward**, buttons to line up left edges, centers, right edges, tops, middles and bottoms, and **Space Across** and **Space Down** to space things evenly.
+The ribbon's **Arrange** group has **Bring to Front**, **Bring Forward**, **Send to Back** and **Send Backward**, **Align Left**, **Align Center**, **Align Right**, **Align Top**, **Align Middle** and **Align Bottom**, and **Distribute Horizontally** and **Distribute Vertically** to space things evenly.
 
 ## The Layers panel
 
@@ -147,7 +147,7 @@ The **Layers** panel on the right lists the shapes, pictures and tables on the p
 
 ## References
 
-A design keeps a reference list, as a presentation does. **References** on the Design tab ticks which ones the page shows at its foot, written and formatted for you (journal, year, volume and page by default). Add references, or copy them from another open file, in **Insert ▸ Reference Manager…**. **Insert ▸ Formatted Reference…** puts a reference anywhere on the page as text.
+A design keeps a reference list, as a presentation does. **References** on the Design tab checks which ones the page shows at its foot, written and formatted for you (journal, year, volume and page by default). Add references, or copy them from another open file, in **Insert ▸ Reference Manager…**. **Insert ▸ Formatted Reference…** puts a reference anywhere on the page as text.
 
 ## Saving and exporting
 

@@ -2282,7 +2282,7 @@ export class SheetMode {
       ['Isotope pattern…', () => void this.isotopePattern()],
       ['Formula Style ▸', () => popupMenu(x, y, [
         [this.chemShown() ? 'Turn Off for These Cells' : 'Turn On for These Cells', () => this.run('format-chem')],
-        [`${s.wb.autoChem ? '✓ ' : ''}Spot Formulas in Typed Text (CH2Cl2 → CH₂Cl₂)`, () => s.wb.edit('Spot formulas in typed text', () => s.wb.setAutoChem(!s.wb.autoChem))],
+        [`${s.wb.autoChem ? '✓ ' : ''}AutoFormat Chemical Formulas (CH2Cl2 → CH₂Cl₂)`, () => s.wb.edit('AutoFormat chemical formulas', () => s.wb.setAutoChem(!s.wb.autoChem))],
       ])],
       ['Reset to calculated', () => this.resetCalculated(), overrides],
       null,

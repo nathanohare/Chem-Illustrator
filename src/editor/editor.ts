@@ -2047,7 +2047,7 @@ export class Editor {
     const rest = sel.filter((a) => !isMetalAtom(a));
     if (metals.length !== 1 || rest.length < 2) return 'Select one metal and the atoms of the ring or π-bond it is bonded to (two or more).';
     const m = metals[0];
-    doc.edit('Bond Metal to Ring', () => {
+    doc.edit('Add Hapto Bond', () => {
       for (const a of rest) { const b = doc.bondBetween(m.id, a.id); if (b) doc.removeBond(b.id); }
       bondHapto(doc, m.id, rest.map((a) => a.id));
     });
@@ -3888,7 +3888,7 @@ export class Editor {
       if (!t.told) { t.told = true; this.onHint('Building the 3-D shape…'); this.onNotice('Building the 3-D shape… (only the first time for a structure)'); }
       return;
     }
-    if (!t.begun) { this.doc.begin(t.real ? 'Turn in 3-D' : 'Turn in Perspective'); t.begun = true; }
+    if (!t.begun) { this.doc.begin(t.real ? '3-D Rotation' : 'Rotate in Perspective'); t.begun = true; }
     const R = dragTurn(t.dx, t.dy, t.shift);
     t.unshown = t.ready.turn.apply(this.doc, R);
     if (!t.unshown) t.ready.turn.lastGood = R;
@@ -3940,7 +3940,7 @@ export class Editor {
     if (prep.notes.length) this.onNotice(`${prep.notes[0]} Turning it flat instead.`, 7000);
     const R: M3 = anglesTurn(x, y, z);
     let left = 0;
-    doc.edit(real ? 'Turn in 3-D' : 'Turn in Perspective', () => {
+    doc.edit(real ? '3-D Rotation' : 'Rotate in Perspective', () => {
       left = prep.turn.apply(doc, R, true);
       prep.turn.remember(doc);
     });
@@ -4849,7 +4849,7 @@ export class Editor {
     if (!label) return 'Type a name for the label.';
     // a built-in nickname is fine when the selection is that group (Ph, TBS, Boc), not otherwise
     const same = builtIn.includes(label);
-    if (isBuiltInNickname(label) && !same) return `“${label}” is already a nickname for a different group${builtIn.length ? ` (this one is ${builtIn.slice(0, 3).join(', ')})` : ''}. Choose another name.`;
+    if (isBuiltInNickname(label) && !same) return `“${label}” is already an abbreviation for a different group${builtIn.length ? ` (this one is ${builtIn.slice(0, 3).join(', ')})` : ''}. Choose another name.`;
     if (!same) addNicknames({ [label]: g.smiles });
     const ids = [...this.sel.atoms].filter((id) => id !== g.start && doc.atoms.has(id));
     doc.edit('Contract Label', () => {

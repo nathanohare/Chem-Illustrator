@@ -15,11 +15,11 @@ What a key does depends on what the mouse is pointing at:
 
 Letters are case-sensitive: `f` and Shift+F do different things.
 
-A key that grows something moves the highlight to the new atom, so you can carry on typing: `8` then `1` makes an E double bond, `1 1 1` draws a chain. `1` and `0` pressed with the mouse still on an atom keep the highlight there, so pressing `1` three times adds three bonds to the same atom. (The Hotkeys window has a box to turn this off, so `1` always follows.)
+A key that grows something moves the highlight to the new atom, so you can keep typing: `8` then `1` makes an E double bond, `1 1 1` draws a chain. `1` and `0` pressed with the mouse still on an atom keep the highlight there, so pressing `1` three times adds three bonds to the same atom. (The Hotkeys window has a box to turn this off, so `1` always follows.)
 
-A highlight set by a key holds while the mouse stays still. Once the mouse moves, the highlight follows it again: whatever atom or bond is under the pointer, or nothing in empty space. **Undo** puts the highlight back where the key found it, so you can carry on typing.
+A highlight set by a key holds while the mouse stays still. Once the mouse moves, the highlight follows it again: whatever atom or bond is under the pointer, or nothing in empty space. **Undo** puts the highlight back where the key found it, so you can keep typing.
 
-If you prefer ChemDraw's way, tick the box in the Hotkeys window that keeps the highlight in place: a highlight set by a key then stays put when the mouse moves off into empty space or passes over other atoms and bonds, and gives way when you rest the mouse on another atom or bond, or click.
+If you prefer ChemDraw's way, check the box in the Keyboard Shortcuts window that keeps the highlight in place: a highlight set by a key then stays put when the mouse moves off into empty space or passes over other atoms and bonds, and gives way when you rest the mouse on another atom or bond, or click.
 
 If several atoms are selected and you point at one of them, a label key labels them all.
 
@@ -51,7 +51,7 @@ If several atoms are selected and you point at one of them, a label key labels t
 |---|---|
 | `1` | Grow a bond (zig-zag) |
 | `0` | Grow a bond, ring style (the other side; longer on busy atoms) |
-| `2` | C=O (an end atom becomes the C=O and the chain carries on past it) |
+| `2` | C=O (an end atom becomes the C=O and the chain continues past it) |
 | `3` or `a` | Phenyl |
 | `4` | Wedge (plus Me on an end atom) |
 | `5` | Hashed wedge (plus Me on an end atom) |
@@ -68,7 +68,7 @@ If several atoms are selected and you point at one of them, a label key labels t
 | `+` / `-` | Charge +1 / −1 |
 | `'` | Show or hide the atom number |
 | `.` | Attachment point |
-| `=` | Choose a nickname from a list |
+| `=` | Choose an abbreviation from a list |
 | `/` or `?` | The atom's settings in the Style panel |
 | Enter | Type a label |
 | Backspace or Delete | Remove the label, then the atom |
@@ -135,14 +135,14 @@ Start a sequence from a highlight a key set (as above), not from the mouse resti
 | Esc | Clear the selection |
 | Arrow keys | Nudge the selection 1 pt |
 | Shift+arrow keys | Nudge the selection 10 pt |
-| Alt+← / Alt+→ | Turn 1° counterclockwise / clockwise |
-| Alt+↑ / Alt+↓ | Turn 15° counterclockwise / clockwise |
+| Alt+← / Alt+→ | Rotate 1° counterclockwise / clockwise |
+| Alt+↑ / Alt+↓ | Rotate 15° counterclockwise / clockwise |
 | Ctrl+R | Rotate by an angle… |
 | Ctrl+K | Scale… (in documents, presentations, spreadsheets and text being typed: Insert Link…) |
-| Ctrl+Shift+H, Ctrl+Shift+V | Flip left to right, flip top to bottom |
-| Ctrl+Alt+Shift+L, C, R | Align left edges, centers across, right edges |
-| Ctrl+Alt+Shift+T, M, B | Align top edges, middles down, bottom edges |
-| Ctrl+Alt+Shift+H, V | Space evenly across, down |
+| Ctrl+Shift+H, Ctrl+Shift+V | Flip horizontal (left-right), flip vertical (top-bottom) |
+| Ctrl+Alt+Shift+L, C, R | Align left, center, right |
+| Ctrl+Alt+Shift+T, M, B | Align top, middle, bottom |
+| Ctrl+Alt+Shift+H, V | Distribute horizontally, vertically |
 | Ctrl+→ (or ←, ↑, ↓) | Reaction arrow and a copy of the selection that way |
 | Ctrl+J | Join two selected atoms or bonds |
 | Ctrl+G, Ctrl+Shift+G | Group, Ungroup |
@@ -150,7 +150,7 @@ Start a sequence from a highlight a key set (as above), not from the mouse resti
 | Ctrl+E | Fixed angles on or off |
 | Ctrl+Shift+K | Clean Up Structure |
 | Ctrl+Shift+R | Clean Up Reaction |
-| Alt+K | Aromatic rings: circle or double bonds |
+| Alt+K | Aromatic rings: circle or Kekulé |
 | Ctrl+Shift+N | Name to Structure |
 | Ctrl+= or Ctrl+Shift+=, Ctrl+- | Zoom in, zoom out |
 | Ctrl+0 | Fit the drawing in the window |
@@ -173,18 +173,18 @@ Start a sequence from a highlight a key set (as above), not from the mouse resti
 
 Presentations, spreadsheets and documents have their own keys (PowerPoint's, Excel's and Word's), which take priority while that kind of tab is showing. For example, F5 starts a slide show in a presentation, and Ctrl+D fills down in a spreadsheet. See their pages.
 
-## Getting round without the mouse
+## Navigating with the keyboard
 
 - **F10**, or **Alt** pressed and let go on its own, goes to the menu bar; press it again (or Esc) to go back. The left and right arrow keys move along the menus and the down arrow opens one. In a menu, the right arrow opens a submenu and the left arrow closes it.
 - **Alt** and a menu's underlined letter opens that menu: **F**ile, **E**dit, **V**iew, **I**nsert, F**o**rmat, **C**hemistry, **H**elp. The letters show while Alt is held.
-- **Ctrl+F6** moves on round the window: the menus, the file tabs, the ribbon, the drawing tools, the canvas (or spreadsheet or document), and the side panel. **Ctrl+Shift+F6** goes back. They can be changed in the Hotkeys window.
+- **Ctrl+F6** moves on around the window: the menus, the file tabs, the ribbon, the drawing tools, the canvas (or spreadsheet or document), and the side panel. **Ctrl+Shift+F6** goes back. They can be changed in the Keyboard Shortcuts window.
 - **Tab** moves through the buttons as usual. It selects the next structure only when the drawing has the keys (after clicking it, or with Ctrl+F6) or the mouse is over the drawing.
 - On the file tabs, the left and right arrow keys switch tabs and Delete closes one.
 - Screen readers hear which drawing tool is on, and what is selected ("Selected C6H5Br, 7 atoms").
 
 ## Changing hotkeys
 
-Every key can be changed. Open **Edit ▸ Hotkeys…**, or **Help ▸ Hotkeys and Tips** and then **Show and change all hotkeys…**.
+Every key can be changed. Open **Edit ▸ Keyboard Shortcuts…**, or **Help ▸ Hotkeys and Tips** and then **Show and change all keyboard shortcuts…**.
 
 The window lists every action, grouped as above (pointing at an atom, at a bond, at empty space, anywhere, in presentations, in spreadsheets, in documents, and typing text), with the keys that do each one.
 
@@ -217,7 +217,7 @@ Changes work straight away and are saved in the settings file; the window shows 
 - **Alt while drawing** a bond, arrow or line lets it point at any angle instead of 15° steps (and ignores fixed bond lengths).
 - **Holding the mouse with a template** on a bond shows a blue outline of where it will go. Move the pointer, or press **Tab** / **Shift+Tab**, to try the other ways it can join (trans or cis for conformers), and release to place it. See [Fusing conformers](drawing.md#fusing-conformers).
 
-### Turning
+### Rotating
 
 Drag the **round handle** above the selection to turn it, in 1° steps. Hold **Alt or Shift** while turning to go in 15° steps.
 

@@ -85,7 +85,7 @@ export class PresenterView {
     root.innerHTML = `
       <div class="pv-top">
         <span class="pv-timer" title="Time since the show started">0:00</span>
-        <button type="button" data-pv="pause" title="Pause or carry on the timer">Pause</button>
+        <button type="button" data-pv="pause" title="Pause or resume the timer">Pause</button>
         <button type="button" data-pv="reset" title="Start the timer again from 0:00">Reset</button>
         <span class="pv-clock" title="The time now"></span>
         <span class="pv-where"></span>
@@ -315,7 +315,7 @@ export class PresenterView {
     if (!this.root) return;
     const now = this.pausedAt ?? performance.now();
     this.els.timer.textContent = clockText((now - this.started) / 1000);
-    this.els.pause.textContent = this.pausedAt === null ? 'Pause' : 'Carry On';
+    this.els.pause.textContent = this.pausedAt === null ? 'Pause' : 'Resume';
     this.els.timer.classList.toggle('paused', this.pausedAt !== null);
     this.els.clock.textContent = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   }

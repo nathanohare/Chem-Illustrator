@@ -184,10 +184,10 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
   inputs.color = color;
 
   g = group();
-  button(g, 'left', lineIcon('left'), 'Line up on the left', () => run({ kind: 'align', j: 'left' }));
-  button(g, 'center', lineIcon('center'), 'Center the lines', () => run({ kind: 'align', j: 'center' }));
-  button(g, 'right', lineIcon('right'), 'Line up on the right', () => run({ kind: 'align', j: 'right' }));
-  button(g, 'justify', lineIcon('justify'), 'Stretch lines to both edges of the text box', () => run({ kind: 'align', j: 'justify' }));
+  button(g, 'left', lineIcon('left'), 'Align Left', () => run({ kind: 'align', j: 'left' }));
+  button(g, 'center', lineIcon('center'), 'Center', () => run({ kind: 'align', j: 'center' }));
+  button(g, 'right', lineIcon('right'), 'Align Right', () => run({ kind: 'align', j: 'right' }));
+  button(g, 'justify', lineIcon('justify'), 'Justify', () => run({ kind: 'align', j: 'justify' }));
 
   g = group();
   button(g, 'bullet', listIcon(['<circle cx="2.5" cy="Y" r="1.4"/>', '<circle cx="2.5" cy="Y" r="1.4"/>', '<circle cx="2.5" cy="Y" r="1.4"/>']),

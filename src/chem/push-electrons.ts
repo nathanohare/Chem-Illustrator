@@ -178,7 +178,7 @@ export function readPushes(doc: Doc, m: Measure, arrows: Arrow[]): PushReading {
     const [a1, a2] = unkey(kk);
     const b = doc.bondBetween(a1, a2);
     const about = { arrows: arrowsAt([a1, a2]), atoms: [a1, a2], bonds: b ? [b.id] : [] };
-    if (b && b.order === 1.5) { say('error', 'Arrows can\'t be read round an aromatic ring drawn with a circle or dashed bonds. Draw it with alternating single and double bonds.', about); continue; }
+    if (b && b.order === 1.5) { say('error', 'Arrows can\'t be read around an aromatic ring drawn with a circle or dashed bonds. Draw it with alternating single and double bonds.', about); continue; }
     if (b && (outsideValence(b) || b.display === 'dative')) { say('error', 'Arrows into or out of a partial, dative or hapto bond can\'t be read.', about); continue; }
     const after = (b?.order ?? 0) + d / 2;
     if (!Number.isInteger(after)) say('error', 'A bond would be left with one electron. Each fishhook (half-headed) arrow moves one electron, so a bond made or broken that way needs two: one from each side.', about);
@@ -212,7 +212,7 @@ export function readPushes(doc: Doc, m: Measure, arrows: Arrow[]): PushReading {
       else text = `More arrows start at ${who} than it has lone pairs for.`;
       // a backwards arrow: from where electrons are wanted to where they are
       const back = (gaveTo.get(id) ?? []).some((o) => { const eo = electronsOf(doc, o); return !!eo && eo.nb >= 2; });
-      if (back) text += ' Is the arrow drawn the wrong way round? It should run from the electrons to where they go.';
+      if (back) text += ' Is the arrow drawn the wrong way around? It should run from the electrons to where they go.';
       say('error', text, about);
       continue;
     }

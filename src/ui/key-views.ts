@@ -46,7 +46,7 @@ export function askKeyViews(o: KeyViewsOptions): Promise<KeyViewsResult | null> 
     d.setAttribute('aria-label', 'Key views');
     const form = document.createElement('form');
     form.method = 'dialog';
-    form.innerHTML = `<h2>Turn in 3-D: Key Views</h2>
+    form.innerHTML = `<h2>3-D Rotation: Key Views</h2>
       <p class="muted small">Drag the structure to turn it (Shift+drag turns it in the page; the arrow keys turn it by 15°), then <b>Add Key View</b>. In the slide show each click turns it smoothly from where it is to the next view.</p>
       <canvas class="kv-canvas" tabindex="0" role="img" aria-label="The structure: drag to turn it"></canvas>
       <p class="kv-tools"><button type="button" data-act="add" class="primary-soft">+ Add Key View</button>

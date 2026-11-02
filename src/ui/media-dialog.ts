@@ -83,7 +83,7 @@ export function editMedia(m: Media): Promise<Media | null> {
     start.add(new Option('Automatically, as the slide comes in', 'auto'));
     start.add(new Option('When Clicked On', 'click'));
     start.value = m.start ?? 'auto';
-    const loop = check('Loop until stopped', !m.once, 'Play round and round until the slide changes (or it is clicked)');
+    const loop = check('Loop until stopped', !m.once, 'Play around and around until the slide changes (or it is clicked)');
     const rewind = check('Rewind after playing', !!m.rewind, 'Go back to the start when it has played');
     const full = check('Play full screen', !!m.full, 'Fill the screen while it plays');
     const hide = check('Hide during show', !!m.hide, 'The loudspeaker isn\'t shown in the slide show (the sound still plays)');

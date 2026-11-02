@@ -72,7 +72,7 @@ const SHORT: Record<string, string> = {
   'atom bond': 'Bond', 'atom ring-bond': 'Bond ⟲', 'atom carbonyl': 'C=O', 'atom phenyl': 'Ph', 'atom wedge': 'Wedge', 'atom hash-wedge': 'Hash',
   'atom cyclohexyl': 'C₆ ring', 'atom cyclopentyl': 'C₅ ring', 'atom cyclobutyl': 'C₄ ring', 'atom cyclopropyl': 'C₃ ring', 'atom methylidene': '=CH₂',
   'atom dimethyl': 'Me₂', 'atom tbu': 'tBu', 'atom cp-hapto': 'η⁵-Cp', 'atom arene-hapto': 'η⁶-Ar', 'atom alkyne': 'C≡C', 'atom sulfonyl': 'SO₂',
-  'atom plus': '+1', 'atom minus': '−1', 'atom number': 'Number', 'atom attach': 'Attach', 'atom nickname': 'Nickname', 'atom properties': 'Style',
+  'atom plus': '+1', 'atom minus': '−1', 'atom number': 'Number', 'atom attach': 'Attach', 'atom nickname': 'Abbreviation', 'atom properties': 'Style',
   'atom edit-label': 'Label', 'atom clear': 'Clear', 'atom select': 'Select',
   'bond left': 'Left', 'bond center': 'Center', 'bond right': 'Right', 'bond dashed-double': 'Dash dbl', 'bond bold-double': 'Bold dbl', 'bond hash-wedge': 'Hash',
   'bond properties': 'Style', 'bond select': 'Select', 'bond delete': 'Delete',

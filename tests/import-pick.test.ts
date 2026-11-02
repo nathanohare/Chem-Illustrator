@@ -50,11 +50,11 @@ describe('picking the drawings to read', () => {
     expect(d.querySelectorAll('.import-page').length).toBe(2);
     expect(marks[1].style.left).toBe('40%');
     expect([...marks].every((m) => m.classList.contains('on'))).toBe(true);
-    expect(button(d, /^Read /).textContent).toBe('Read 3 Structures');
-    button(d, /Tick None/).click();
-    expect(button(d, /^Read /).disabled).toBe(true);
+    expect(button(d, /^Import /).textContent).toBe('Import 3 Structures');
+    button(d, /Deselect All/).click();
+    expect(button(d, /^Import /).disabled).toBe(true);
     marks[2].click();
-    button(d, /^Read /).click();
+    button(d, /^Import /).click();
     const r = await done;
     expect(r?.chosen.map((f) => f.pixels.width)).toEqual([3]);
     expect(document.querySelector('dialog')).toBeNull();
@@ -65,9 +65,9 @@ describe('picking the drawings to read', () => {
     const done = importPdfDrawings(host, found, pages, { file: 'paper.pdf', title: 'T', note: '', tickDoubtful: false, photo: false });
     await tick();
     const d = document.querySelector('dialog.import-pick')!;
-    expect(d.textContent).toMatch(/Only the ticked ones are sent to the AI model/);
+    expect(d.textContent).toMatch(/Only the checked ones are sent to the AI model/);
     d.querySelectorAll<HTMLButtonElement>('.import-mark')[0].click();
-    button(d, /^Read /).click();
+    button(d, /^Import /).click();
     await done;
     expect(sent).toEqual([2, 3]);
   });
