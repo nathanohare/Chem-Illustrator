@@ -153,8 +153,8 @@ function thermoHtml(jb: JobackResult, vp: number | null, henry: number | null, t
     <tr><th title="Ideal gas at 298 K">C<sub>p</sub> (gas)</th><td>${v(jb.cp, 1, 'J/(mol·K)')}</td></tr>
     <tr><th title="At the boiling point">ΔH<sub>vap</sub></th><td>${v(jb.hvap, 1, 'kJ/mol')}</td></tr>
     <tr><th>ΔH<sub>fus</sub></th><td>${v(jb.hfus, 1, 'kJ/mol')}</td></tr>
-    <tr><th title="${esc(vpTip)}">Vapour pressure</th><td>${vp === null ? '—' : vp >= 0.1 ? v(vp >= 1000 ? vp / 1000 : vp, vp >= 1000 ? 1 : 2, vp >= 1000 ? 'kPa' : 'Pa') : `${sci(vp)} Pa`}</td></tr>
-    <tr><th title="${esc('Estimated vapour pressure over estimated solubility (ESOL), 25 °C. Rough: often within a factor of 10.')}">Henry's law constant</th><td>${henry === null ? '—' : `${sci(henry)} Pa·m³/mol`}</td></tr>
+    <tr><th title="${esc(vpTip)}">Vapor pressure</th><td>${vp === null ? '—' : vp >= 0.1 ? v(vp >= 1000 ? vp / 1000 : vp, vp >= 1000 ? 1 : 2, vp >= 1000 ? 'kPa' : 'Pa') : `${sci(vp)} Pa`}</td></tr>
+    <tr><th title="${esc('Estimated vapor pressure over estimated solubility (ESOL), 25 °C. Rough: often within a factor of 10.')}">Henry's law constant</th><td>${henry === null ? '—' : `${sci(henry)} Pa·m³/mol`}</td></tr>
     </table></details>`;
 }
 

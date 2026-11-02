@@ -111,7 +111,7 @@ export const JOURNALS: JournalRules[] = [
     dpi: { line: 600, photo: 600, combination: 600, colour: 600, gray: 600 },
     formats: ['tiff', 'eps', 'pdf'],
     formatNote: 'RSC: "Figures, Schemes and Charts should be supplied as TIFF files, with a resolution of 600 dpi or greater." EPS or PDF are taken but turned into TIFF.',
-    colourNote: 'RSC: "Colour images may be used free of charge both online and in print."',
+    colourNote: 'RSC: "Color images may be used free of charge both online and in print."',
   },
   {
     id: 'elsevier',
@@ -134,7 +134,7 @@ export const JOURNALS: JournalRules[] = [
     dpi: { line: 1000, photo: 300, gray: 300, colour: 300, combination: 500 },
     formats: ['eps', 'pdf', 'tiff'],
     formatNote: 'Elsevier recommends EPS (or PDF) for drawings made of shapes, and TIFF or JPEG for pictures.',
-    colourNote: 'Elsevier: colour should be "in the preferred RGB colorspace" (exports from here are RGB).',
+    colourNote: 'Elsevier: color should be "in the preferred RGB colorspace" (exports from here are RGB).',
   },
   {
     id: 'nature',
@@ -493,8 +493,8 @@ export function preflight(items: Item[], box: Rect, journal: JournalRules, sizeI
   const dpi = kind === 'combination' ? (d.combination ?? Math.max(d.line ?? 0, d.photo ?? 0, 300))
     : kind === 'colour' ? Math.max(d.line ?? 0, d.colour ?? 0, d.combination ?? 0, 300)
     : (d.line ?? d.combination ?? 600);
-  if (coloured && journal.colourNote) issues.push({ rule: 'colour', level: journal.id === 'acs' ? 'tip' : 'ok', title: 'In colour', detail: journal.colourNote });
-  const kindName = kind === 'combination' ? 'drawing with pictures in it (combination art)' : kind === 'colour' ? 'drawing in colour' : 'black and white drawing (line art)';
+  if (coloured && journal.colourNote) issues.push({ rule: 'colour', level: journal.id === 'acs' ? 'tip' : 'ok', title: 'In color', detail: journal.colourNote });
+  const kindName = kind === 'combination' ? 'drawing with pictures in it (combination art)' : kind === 'colour' ? 'drawing in color' : 'black and white drawing (line art)';
   const fmt = journal.formats?.map((f) => f.toUpperCase()).join(', ');
   issues.push({
     rule: 'format', level: journal.vectorPreferred && kind !== 'combination' ? 'tip' : 'ok',

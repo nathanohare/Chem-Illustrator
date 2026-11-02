@@ -61,7 +61,7 @@ export class ArrangeDialog {
     const perLabel = label('Arrows in each row', perRow);
     const anti = document.createElement('input');
     anti.type = 'checkbox';
-    const antiLabel = label('Go round anticlockwise', anti);
+    const antiLabel = label('Go round counterclockwise', anti);
     const reagents = document.createElement('input');
     reagents.type = 'checkbox';
     const reagentLabel = label('Reagents in and by-products out on small arrows (conditions above go in, below come out)', reagents);

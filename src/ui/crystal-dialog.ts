@@ -70,7 +70,7 @@ export function askCrystal(editing: PlateData | null, L: number, opts: CrystalOp
             <label class="ask-check"><input type="radio" name="style" value="ball" /> <span>Ball-and-stick</span></label>
             <label class="crystal-row"><span>Ellipsoids at</span> <select name="probability"><option value="30">30%</option><option value="50">50%</option><option value="70">70%</option><option value="90">90%</option></select></label>
             <label class="ask-check"><input type="checkbox" name="hydrogens" /> <span>Hydrogen atoms</span></label>
-            <label class="ask-check"><input type="checkbox" name="colour" /> <span>Colour (else black and white)</span></label>
+            <label class="ask-check"><input type="checkbox" name="colour" /> <span>Color (else black and white)</span></label>
             <label class="ask-check"><input type="checkbox" name="principal" /> <span>Principal ellipses</span></label>
             <label class="ask-check"><input type="checkbox" name="labels" /> <span>Atom labels</span></label>
             <label class="crystal-row"><span>Label size</span> <input name="labelSize" type="number" min="4" max="30" step="0.5" /> pt</label>

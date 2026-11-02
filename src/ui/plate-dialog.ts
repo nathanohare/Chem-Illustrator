@@ -24,8 +24,8 @@ export function askPlate(kind: PlateKind, editing: PlateData | null, L: number, 
       <div class="plate-table-wrap"><table class="plate-table"><thead><tr><th>Lane</th><th>${tlc ? 'Spots (Rf)' : 'Bands (size)'}</th>${tlc ? '' : '<th title="A size marker: its sizes are written beside the gel">Marker</th>'}<th></th></tr></thead><tbody></tbody></table></div>
       <p class="plate-rows"><button type="button" data-act="lane">+ Lane</button>${tlc ? ' <button type="button" data-act="co" title="A lane with every spot of the lanes either side of it, as a co-spot shows">+ Co-spot lane</button>' : ` <label class="plate-ladder">Marker <select name="ladder"><option value="">Add a marker lane…</option>${LADDERS.map((l) => `<option value="${l.id}">${l.name}</option>`).join('')}</select></label>`}</p>
       <p class="muted small">${tlc
-        ? 'Type each spot\'s Rf, with commas between: 0.45, 0.2. After a number: faint or strong, big or small, streak, or a colour (blue, pink, yellow…).'
-        : 'Type each band\'s size, with commas between: 3, 1.2 faint. Bands run by size on a log scale. After a number: faint or strong, big or small, or a colour.'}</p>
+        ? 'Type each spot\'s Rf, with commas between: 0.45, 0.2. After a number: faint or strong, big or small, streak, or a color (blue, pink, yellow…).'
+        : 'Type each band\'s size, with commas between: 3, 1.2 faint. Bands run by size on a log scale. After a number: faint or strong, big or small, or a color.'}</p>
       <label class="ask-row"><span>${tlc ? 'Stain' : 'Dye'}</span><select name="look">${looks}</select></label>
       ${tlc ? '' : '<label class="ask-row"><span>Sizes in</span><select name="unit"><option value="bp">bp</option><option value="kb">kb</option><option value="kDa">kDa</option></select></label>'}
       <label class="ask-row"><span>${tlc ? 'Eluent' : 'Caption'}</span><input name="note" placeholder="${tlc ? '20% EtOAc/hexanes' : 'optional'}" /></label>

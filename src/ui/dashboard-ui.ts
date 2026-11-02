@@ -383,8 +383,8 @@ export class DashboardUi {
         ta.addEventListener('change', () => this.update(t.id, { text: ta.value } as Partial<TextTile>, 'Tile text'));
         out.push(ta);
         out.push(row('Size', numberBox(t.size, (v) => this.update(t.id, { size: v } as Partial<TextTile>), '16', 'px'), check(!!t.bold, (v) => this.update(t.id, { bold: v || undefined } as Partial<TextTile>), 'Bold')));
-        out.push(row('Align', select([['left', 'Left'], ['center', 'Centre'], ['right', 'Right']], t.align ?? 'left', (v) => this.update(t.id, { align: v as TextTile['align'] } as Partial<TextTile>))));
-        out.push(row('Colour', colour(t.color ?? '#1f2937', (v) => this.update(t.id, { color: v } as Partial<TextTile>))));
+        out.push(row('Align', select([['left', 'Left'], ['center', 'Center'], ['right', 'Right']], t.align ?? 'left', (v) => this.update(t.id, { align: v as TextTile['align'] } as Partial<TextTile>))));
+        out.push(row('Color', colour(t.color ?? '#1f2937', (v) => this.update(t.id, { color: v } as Partial<TextTile>))));
         break;
       }
     }

@@ -272,7 +272,7 @@ export class Presenter {
     const next = b('Next ▶', 'Go on to the next animation or slide (→ or a click)', () => this.next());
     const pause = b('❚❚ Pause', 'Stop the clock (and the recording) for now', () => this.pauseRehearsal());
     const repeat = b('↺ Repeat', 'Start this slide\'s time again (and its recording)', () => this.repeatSlide());
-    const notesBtn = b('Notes', 'Show your speaker notes for each slide under it while you practise or record (only you see them here)', () => this.toggleNotes());
+    const notesBtn = b('Notes', 'Show your speaker notes for each slide under it while you practice or record (only you see them here)', () => this.toggleNotes());
     bar.append(label, next, pause, slide, repeat, total, notesBtn);
     const notes = document.createElement('div');
     notes.className = 'rehearse-notes';
@@ -774,6 +774,6 @@ export class Presenter {
 
 /** At the end of a show with ink: keep it on the slides, or throw it away (as PowerPoint asks). */
 export async function askKeepInk(): Promise<boolean> {
-  const got = await ask('Keep Ink?', [], { ok: 'Keep', note: 'Do you want to keep your ink annotations? Kept, they go on the slides as shapes you can move, recolour or delete (and they go to PowerPoint). Cancel discards them.' });
+  const got = await ask('Keep Ink?', [], { ok: 'Keep', note: 'Do you want to keep your ink annotations? Kept, they go on the slides as shapes you can move, recolor or delete (and they go to PowerPoint). Cancel discards them.' });
   return !!got;
 }

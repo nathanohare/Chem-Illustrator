@@ -22,7 +22,7 @@ export interface ActionChoice {
 export interface ActionLook { id: string; name: string; fill: string | null; line: string; width: number; size: number }
 export const ACTION_LOOKS: ActionLook[] = [
   { id: 'office', name: 'Standard', fill: '#dae3f3', line: '#2f5597', width: 1, size: 40 },
-  { id: 'subtle', name: 'Subtle grey', fill: '#f2f2f2', line: '#a6a6a6', width: 0.75, size: 30 },
+  { id: 'subtle', name: 'Subtle gray', fill: '#f2f2f2', line: '#a6a6a6', width: 0.75, size: 30 },
   { id: 'outline', name: 'Small outline', fill: null, line: '#8c8c8c', width: 0.75, size: 22 },
   { id: 'dark', name: 'Dark', fill: '#3a3f47', line: '#ffffff', width: 1, size: 32 },
 ];

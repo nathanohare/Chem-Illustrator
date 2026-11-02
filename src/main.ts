@@ -76,7 +76,7 @@ import { CanvasKeys } from './ui/canvas-keys';
 import { addKeyframe, insertKeyframe, keyframeAround, keyRect, keysBounds, moveKeyframe, removeKeyframe, unionRect, ZOOM_IN_MAX, TEXTURES, PARALLAX_MAX, type CanvasLook, type CanvasShow, type Texture } from './deck/canvas';
 import { mix } from './render/fills';
 import { splitCanvas, type SplitSlide } from './deck/canvas-export';
-import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel } from './ui/design-panel';
+import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel, setShapeInk } from './ui/design-panel';
 import { ShapeMenu } from './ui/shape-menu';
 import { whenIconsLoaded } from './design/icons';
 import { SlideTextRibbon } from './ui/slide-text-ribbon';
@@ -144,6 +144,10 @@ import { StylePanel, tidyStyle } from './ui/style-panel';
 import { installCombos } from './ui/combo';
 import { installFontList, registerBundledFonts, bundledFaces, pdfFonts } from './fonts';
 import { applyRibbonIcons } from './ui/ribbon-icons';
+import { applyIconSet } from './ui/icon-set';
+import { RibbonLive } from './ui/ribbon-live';
+import { installRibbonFlyouts } from './ui/ribbon-flyout';
+import { buildColourGalleries, buildSelectGalleries } from './ui/select-gallery';
 import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templateFromAtoms, placeTemplate, freePlacement } from './chem/templates';
 import { freeLigandFor, loadFullLigands, placeFreeLigand } from './chem/expand';
 import { centreEnd, haptoLook } from './chem/hapto';
@@ -434,8 +438,8 @@ const SHAPES: PaletteDef = {
     { name: 'shape-rect-rounded-shadow', title: 'Round-cornered box with a shadow' },
     { name: 'shape-rect-dashed', title: 'Dashed box' },
     { name: 'shape-oval', title: 'Oval (Shift: circle)' },
-    { name: 'shape-circle', title: 'Circle, drawn from its centre' },
-    { name: 'shape-circle-filled', title: 'Filled circle, drawn from its centre' },
+    { name: 'shape-circle', title: 'Circle, drawn from its center' },
+    { name: 'shape-circle-filled', title: 'Filled circle, drawn from its center' },
     { name: 'shape-line', title: 'Line' },
     { name: 'shape-line-dashed', title: 'Dashed line' },
     { name: 'shape-line-bold', title: 'Bold line' },
@@ -570,7 +574,7 @@ const TOOL_GROUPS: ToolbarItem[][] = [
     templatePalette('sugars', 'tpl-sugars', 'Sugars (Haworth)', 5, 64),
     templatePalette('nucleic', 'tpl-nucleic', 'Nucleic acids: bases, nucleosides and nucleotides', 6, 64),
     templatePalette(['conformers', 'fused'], 'tpl-conformers', 'Conformers and fused rings in 3-D', 5, 64),
-    templatePalette(['projections', 'stereo'], 'tpl-projections', 'Projections and stereocentres', 6, 56),
+    templatePalette(['projections', 'stereo'], 'tpl-projections', 'Projections and stereocenters', 6, 56),
     templatePalette('cycloalkanes', 'tpl-cycloalkanes', 'Large rings', 6, 56),
     templatePalette('aromatics', 'tpl-aromatics', 'Aromatics', 6, 56),
     templatePalette('perspective', 'tpl-perspective', 'Rings in perspective', 6, 56),
@@ -588,6 +592,10 @@ const OFF_BAR: ToolbarItem[] = [
 ];
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+/** Text that names the Ctrl key, as a Mac reads it (Cmd: the app takes ⌘ wherever it takes Ctrl). */
+const macKeys = (text: string) => (isMac ? text.replace(/\bCtrl\+/g, 'Cmd+') : text);
+// the ribbons' and menus' own tool tips, once
+if (isMac) for (const el of document.querySelectorAll<HTMLElement>('[title*="Ctrl+"]')) el.title = macKeys(el.title);
 
 /** The keys that do an action, as people read them. */
 function keysOf(ctx: KeyContext, action: string): string[] {
@@ -635,6 +643,14 @@ let animUi: AnimationUI | null = null;
 let slideCmts: SlideComments | null = null;
 /** View > Ruler and Gridlines (kept in the settings); the rulers' units and where they count from. */
 const slideLook = { ruler: false, grid: false };
+/** Presentation and Design keep the side panel's Warnings and Analysis hidden until asked for (View > Show). */
+const chemPanes = { warnings: false, analysis: false };
+function showChemPanes(): void {
+  document.body.classList.toggle('show-warnings-pane', chemPanes.warnings);
+  document.body.classList.toggle('show-analysis-pane', chemPanes.analysis);
+  for (const b of document.querySelectorAll<HTMLInputElement>('[data-cmd="view-warnings-pane"]')) b.checked = chemPanes.warnings;
+  for (const b of document.querySelectorAll<HTMLInputElement>('[data-cmd="view-analysis-pane"]')) b.checked = chemPanes.analysis;
+}
 const rulerPrefs: RulerPrefs = { units: 'in', from: 'centre' };
 /** A guide being dragged: which, and the guides as they are while it moves. */
 let guideDrag: { which: { axis: 'x' | 'y'; i: number }; view: SlideView } | null = null;
@@ -692,14 +708,14 @@ function showToolStatus(): void {
     if (g) { setStatus({ name: g.name, steps: g.handles, numbered: false, at: -1, keys: g.keys, full: `${g.name}. ${g.handles.join('. ')}.` }); return; }
   }
   const h = toolHelp(name, t);
-  setStatus({ name: toolLabel(name), steps: h.steps, numbered: h.steps.length > 1, at: Math.min(toolStep, h.steps.length - 1), keys: h.keys, full: h.what });
+  setStatus({ name: toolLabel(name), steps: h.steps, numbered: h.steps.length > 1 && name !== 'select', at: Math.min(toolStep, h.steps.length - 1), keys: h.keys, full: h.what });
 }
 /** The status bar's step-by-step hint: the tool, its steps (the one in hand marked), then its keys. */
 function setStatus(s: { name: string; steps: string[]; numbered: boolean; at: number; keys: [string, string][]; full: string }): void {
   const el = $('#hint');
   const esc = (x: string) => x.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
   const kbd = (k: string) => `<kbd>${esc(isMac ? k.replace(/^Ctrl\b/, '⌘').replace(/^Alt\b/, '⌥') : k)}</kbd>`;
-  const steps = s.steps.map((x, i) => `<span class="st-step${s.numbered && i < s.at ? ' done' : ''}${s.numbered && i === s.at ? ' now' : ''}">${s.numbered ? `<i>${i + 1}</i>` : ''}${esc(x)}</span>`);
+  const steps = s.steps.map((x, i) => `<span class="st-step${s.numbered && i < s.at ? ' done' : ''}${s.numbered && i === s.at ? ' now' : ''}">${s.numbered ? `<i>${i + 1}</i>` : ''}${esc(macKeys(x))}</span>`);
   el.innerHTML = `<b class="st-tool">${esc(s.name)}</b>${steps.join(s.numbered ? '<span class="st-sep">›</span>' : '<span class="st-sep">·</span>')}`
     + s.keys.map(([k, what]) => `<span class="st-key">${kbd(k)} ${esc(what)}</span>`).join('');
   el.classList.add('steps');
@@ -721,9 +737,14 @@ window.addEventListener('pointerup', () => { if (toolStep) { toolStep = 0; showT
 /** The status bar's hint: its first sentence, short enough to read at a glance; the whole of it when you point at it. */
 function setHint(text: string): void {
   const el = $('#hint');
+  text = macKeys(text);
   el.classList.remove('steps');
   const dot = text.search(/\.(\s|$)/);
   let short = dot > 0 ? text.slice(0, dot + 1) : text;
+  // a second short sentence fits too ("Ctrl+drag to copy. Hold Shift while dragging to lock orientation.")
+  const rest = text.slice(short.length);
+  const dot2 = rest.search(/\.(\s|$)/);
+  if (dot > 0 && dot2 > 0 && short.length + dot2 + 1 <= 80) short = text.slice(0, short.length + dot2 + 1);
   const semi = short.indexOf('; ');
   if (short.length > 90 && semi > 0) short = short.slice(0, semi) + '.';
   el.textContent = short;
@@ -937,7 +958,7 @@ async function insertTable(): Promise<void> {
     { name: 'rows', label: 'Rows', value: '4', type: 'number' },
     { name: 'cols', label: 'Columns', value: '3', type: 'number' },
     ...(onSlide ? [{ name: 'style', label: 'Style', value: lastTableStyle, options: [{ value: '', label: 'ACS rules' }, ...SLIDE_TABLE_STYLES.map((st) => ({ value: st.id, label: st.name }))] }] : []),
-  ], { ok: 'Insert', note: onSlide ? 'The Style panel changes the style, its options, the cells\' colours and which cells are merged.' : 'An ACS-style table: a rule above and below the heading row and under the last row. The Style panel changes the lines, headings, rows and columns.' });
+  ], { ok: 'Insert', note: onSlide ? 'The Style panel changes the style, its options, the cells\' colors and which cells are merged.' : 'An ACS-style table: a rule above and below the heading row and under the last row. The Style panel changes the lines, headings, rows and columns.' });
   if (!got) return;
   const rows = Math.max(1, Math.min(500, Math.round(Number(got.rows) || 4)));
   const cols = Math.max(1, Math.min(60, Math.round(Number(got.cols) || 3)));
@@ -1635,12 +1656,12 @@ async function depthShadingDialog(): Promise<void> {
   const r = await ask('Depth Shading', [
     { name: 'on', label: 'Shade structures drawn in 3-D by depth', type: 'checkbox', value: String(s.on),
       help: 'Structures turned with the Perspective tools, placed from the 3-D Model window, or drawn from conformer templates. Each is shaded over its own depth.' },
-    { name: 'near', label: 'Nearest colour', type: 'color', value: s.near },
-    { name: 'far', label: 'Furthest colour', type: 'color', value: s.far },
+    { name: 'near', label: 'Nearest color', type: 'color', value: s.near },
+    { name: 'far', label: 'Furthest color', type: 'color', value: s.far },
     { name: 'curve', label: 'Fade', value: s.curve, options: [{ value: 'linear', label: 'Even (linear)' }, { value: 'eased', label: 'Eased (slow at front and back)' }] },
     { name: 'thin', label: 'Thin the lines with depth too', type: 'checkbox', value: String(s.thin) },
     { name: 'thinTo', label: 'Line width at the back', type: 'number', unit: '% of the usual', value: String(Math.round(s.thinTo * 100)) },
-  ], { ok: 'Apply', note: `The usual look is black in front to ${DEFAULT_DEPTH_SHADE.far} grey behind, evenly, lines kept their width. Pictures you copy or export keep the shading.` });
+  ], { ok: 'Apply', note: `The usual look is black in front to ${DEFAULT_DEPTH_SHADE.far} gray behind, evenly, lines kept their width. Pictures you copy or export keep the shading.` });
   if (!r) return;
   const pct = Number(r.thinTo);
   Object.assign(depthShadePrefs, {
@@ -1722,7 +1743,7 @@ async function show3dModel(): Promise<void> {
       const after = await chem.molToSmiles(toMolfile(doc, doc.fragmentOf(root), '').molblock);
       if (unshown || (before && after && after !== before)) {
         editor.undo();
-        flash('From this angle a stereocentre can\'t be drawn so it reads right (a bond points almost straight at you). Turn the model a little and place it again.', 7000);
+        flash('From this angle a stereocenter can\'t be drawn so it reads right (a bond points almost straight at you). Turn the model a little and place it again.', 7000);
       }
     }, ex.map.map((id) => { const a = id >= 0 ? doc.atoms.get(id) : undefined; return a ? { x: a.x, y: a.y } : null; }));
   } catch (e) {
@@ -2710,7 +2731,7 @@ async function schemeSettings(): Promise<void> {
     { name: 'structGap', label: 'Gap between arrow and structures', value: pt(p.structGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.gap) },
     { name: 'plusGap', label: 'Space either side of +', value: pt(p.plusGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.plus) },
     { name: 'helpers', label: 'Show + boxes above and below new arrows', value: String(p.helpers), type: 'checkbox' },
-    { name: 'textAlign', label: 'Text alignment', value: p.textAlign, options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Centre' }, { value: 'right', label: 'Right' }] },
+    { name: 'textAlign', label: 'Text alignment', value: p.textAlign, options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }] },
     { name: 'textGap', label: 'Gap between arrow and text', value: pt(p.textGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.conditions) },
     { name: 'fit', label: 'Fit arrow length to its text (moves the products)', value: String(p.fit), type: 'checkbox' },
     { name: 'sameLength', label: 'Clean Up Reaction makes arrows the same length', value: String(p.sameLength), type: 'checkbox' },
@@ -3194,7 +3215,7 @@ async function mapAtomsCommand(): Promise<void> {
     ...(arrow !== undefined ? [{ name: 'which', label: 'Map', value: 'step', options: [{ value: 'step', label: 'The selected reaction step' }, { value: 'all', label: 'Every step in the drawing' }] }] : []),
     { name: 'numbers', label: 'Show the map numbers beside the atoms', type: 'checkbox', value: mapChoice.numbers },
     { name: 'look', label: 'Map number boxes', value: mapLookPrefs.look, options: MAP_LOOKS.map((l) => ({ value: l.value, label: l.label })) },
-    { name: 'colours', label: 'Colour each atom and where it goes the same', type: 'checkbox', value: mapChoice.colours },
+    { name: 'colours', label: 'Color each atom and where it goes the same', type: 'checkbox', value: mapChoice.colours },
     { name: 'bonds', label: 'Mark bonds made (green) and broken (red)', type: 'checkbox', value: mapChoice.bonds },
   ], { ok: 'Map', note: 'Atoms are paired the way Animate Reaction pairs them. To change a pair, pair it by hand in Animate Reaction and map again. Map numbers go into copied reaction SMILES and RXN files.' });
   if (!got) return;
@@ -3363,7 +3384,7 @@ async function rotateDialog(): Promise<void> {
   if (!editor.hasSelection()) { flash('Select something to rotate.'); return; }
   const r = await ask('Rotate', [
     { name: 'angle', label: 'Angle', value: lastTurn.angle, unit: 'degrees', type: 'number' },
-    { name: 'dir', label: 'Direction', value: lastTurn.dir, options: [{ value: 'cw', label: 'Clockwise' }, { value: 'ccw', label: 'Anticlockwise' }] },
+    { name: 'dir', label: 'Direction', value: lastTurn.dir, options: [{ value: 'cw', label: 'Clockwise' }, { value: 'ccw', label: 'Counterclockwise' }] },
   ], { ok: 'Rotate' });
   if (!r) return;
   const a = parseFloat(r.angle);
@@ -3421,7 +3442,7 @@ function align(how: Align): void {
 let flashTimer = 0;
 function flash(msg: string, ms = 3500, action?: { label: string; run: () => void }): void {
   const el = $('#flash');
-  el.textContent = msg;
+  el.textContent = macKeys(msg);
   el.classList.toggle('has-action', !!action);
   if (action) {
     const b = document.createElement('button');
@@ -3442,7 +3463,6 @@ let lastStats: ReadStats | null = null;
 
 const tabsEl = $<HTMLDivElement>('#tabs');
 const notesBox = $<HTMLTextAreaElement>('#notes');
-const layoutSel = $<HTMLSelectElement>('#rb-layout');
 const sizeSel = $<HTMLSelectElement>('#rb-size');
 
 /** View > Window and Colours > Mode Colours: blue for drawings, orange for slides, green for sheets, or the person's own colours. */
@@ -3857,8 +3877,8 @@ const keyframeCommands = {
     if (!key) return;
     const got = await ask(`Keyframe ${at + 1} Zone`, [
       { name: 'on', label: 'Tint the background round this keyframe', value: String(!!key.tint), type: 'checkbox' },
-      { name: 'tint', label: 'Colour', value: key.tint ?? k.d.master.accent, type: 'color' },
-    ], { ok: 'Set Zone', note: 'A zone fades out softly over about half a slide, so it never shows an edge. Give the keyframes of one part of the route (a fragment, a campaign) the same colour to make one zone.' });
+      { name: 'tint', label: 'Color', value: key.tint ?? k.d.master.accent, type: 'color' },
+    ], { ok: 'Set Zone', note: 'A zone fades out softly over about half a slide, so it never shows an edge. Give the keyframes of one part of the route (a fragment, a campaign) the same color to make one zone.' });
     if (got === null) return;
     const tint = got.on === 'true' && /^#[0-9a-f]{6}$/i.test(got.tint) ? got.tint.toLowerCase() : '';
     setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === at ? (({ tint: _, ...rest }) => (tint ? { ...rest, tint } : rest))(x) : x)) }, at, tint ? 'Keyframe zone' : 'Remove keyframe zone');
@@ -3873,15 +3893,15 @@ const keyframeCommands = {
     const got = await ask('Canvas Background', [
       {
         name: 'route', label: 'Background', value: look.route ? (look.route.length > 2 ? '3' : '2') : '0',
-        options: [{ value: '0', label: 'Plain (the slide master\'s colour)' }, { value: '2', label: 'Route gradient: two colours' }, { value: '3', label: 'Route gradient: three colours' }],
-        help: 'A wide, slow gradient from the first keyframe to the last, so the colour shifts as the talk moves along the route.',
+        options: [{ value: '0', label: 'Plain (the slide master\'s color)' }, { value: '2', label: 'Route gradient: two colors' }, { value: '3', label: 'Route gradient: three colors' }],
+        help: 'A wide, slow gradient from the first keyframe to the last, so the color shifts as the talk moves along the route.',
       },
-      { name: 'c1', label: 'Start colour', value: route[0], type: 'color' },
-      { name: 'c2', label: route.length > 2 ? 'Middle colour' : 'End colour', value: route[1], type: 'color' },
-      { name: 'c3', label: 'End colour (three colours)', value: route[2] ?? route[1], type: 'color' },
+      { name: 'c1', label: 'Start color', value: route[0], type: 'color' },
+      { name: 'c2', label: route.length > 2 ? 'Middle color' : 'End color', value: route[1], type: 'color' },
+      { name: 'c3', label: 'End color (three colors)', value: route[2] ?? route[1], type: 'color' },
       { name: 'texture', label: 'Pattern', value: look.texture ?? '', options: [{ value: '', label: 'None' }, ...TEXTURES.map((t) => ({ value: t.id, label: t.name }))], help: 'Faint, and it moves with the canvas, so a pan across empty space still feels like moving.' },
       { name: 'parallax', label: 'Parallax', value: String(Math.round((look.parallax ?? 0) * 100)), type: 'number', unit: '%', help: `How much slower the background moves than the drawing, for a sense of depth (0 to ${PARALLAX_MAX * 100}; 50 is half as fast).` },
-    ], { ok: 'Apply', note: 'Zones: right-click a keyframe for Zone Colour. The background has no edges, so nothing sharp scrolls past in the show.' });
+    ], { ok: 'Apply', note: 'Zones: right-click a keyframe for Zone Color. The background has no edges, so nothing sharp scrolls past in the show.' });
     if (got === null) return;
     const next: CanvasLook = {};
     const colours = [got.c1, got.c2, got.c3].filter((c) => /^#[0-9a-f]{6}$/i.test(c)).map((c) => c.toLowerCase());
@@ -3965,6 +3985,38 @@ const keyframeCommands = {
   },
 };
 
+/**
+ * The contextual tabs, as in PowerPoint: Shape Format while a shape is selected and Picture
+ * Format while a picture is, in Presentation and Design; a hidden tab that was open gives way to Home.
+ */
+let geoHintOn = false;
+function showContextTabs(): void {
+  const picked = [...editor.sel.shapes].map((id) => doc.shapes.get(id)).filter((x) => !!x);
+  const shape = picked.some((x) => x.kind !== 'picture');
+  const picture = picked.some((x) => x.kind === 'picture');
+  const mode = ws.active.mode;
+  // a shape picked: the status bar says how to type in it (back to the tool's hint after)
+  const geo = picked.some((x) => x.kind === 'geo') && !editor.typingCaption;
+  if (geo !== geoHintOn) {
+    geoHintOn = geo;
+    if (geo) setHint('Double-click the shape to type in it.');
+    else editor.onToolChange(editor.toolName);
+  }
+  const want: [string, string, boolean][] = [
+    ['#ribbon [data-sl-tab="format"]', 'slides', shape], ['#ribbon [data-sl-tab="picture"]', 'slides', picture],
+    ['#design-ribbon [data-dz-tab="format"]', 'design', shape], ['#design-ribbon [data-dz-tab="picture"]', 'design', picture],
+  ];
+  for (const [sel, m, on] of want) {
+    const tab = document.querySelector<HTMLElement>(sel);
+    const hide = !(on && mode === m);
+    if (!tab || tab.hidden === hide) continue;
+    tab.hidden = hide;
+    if (!hide || tab.getAttribute('aria-selected') !== 'true') continue;
+    if (m === 'slides') animUi?.showTab('home');
+    else document.querySelector<HTMLElement>('#design-ribbon [data-dz-tab="home"]')?.click();
+  }
+}
+
 /** The keyframe ribbon group shows on canvas slides only; the menus' keyframe items are greyed elsewhere (menus keep their shape). */
 function showCanvasState(): void {
   const on = !!deckNow()?.current?.canvas && ws.active.mode === 'slides';
@@ -4029,7 +4081,29 @@ function slideSwitched(deck: Deck): void {
   slideCmts?.slideChanged();
 }
 
-/** The layouts last put in the Layout box and the Format menu (they change with the slide master). */
+/** The outline of each built-in layout's boxes, on an 80 × 45 picture, for New Slide's list. */
+const LAYOUT_PICS: Record<string, [number, number, number, number][]> = {
+  title: [[10, 8, 60, 14], [18, 26, 44, 8]], 'title-content': [[6, 4, 68, 8], [6, 15, 68, 26]],
+  'two-content': [[6, 4, 68, 8], [6, 15, 32, 26], [42, 15, 32, 26]], 'title-only': [[6, 4, 68, 8]], blank: [],
+};
+/** A layout in New Slide's list: a small picture of its boxes over its name. */
+function layoutButton(id: string, name: string, prefix: string): HTMLButtonElement {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.dataset.cmd = prefix + id;
+  b.title = name;
+  const pic = document.createElement('span');
+  pic.className = 'rb-layout-pic';
+  for (const [x, y, w, h] of LAYOUT_PICS[id] ?? [[6, 4, 68, 8]]) {
+    const i = document.createElement('i');
+    i.style.cssText = `left:${x}px;top:${y}px;width:${w}px;height:${h}px`;
+    pic.append(i);
+  }
+  b.append(pic, name);
+  return b;
+}
+
+/** The layouts last put in New Slide's list and the Format menu (they change with the slide master). */
 let layoutsShown = '';
 
 /** The Layout box and Format > Slides > Slide Layout list the deck's layouts: the five built in, as edited, then the ones made here. */
@@ -4038,7 +4112,8 @@ function showLayoutMenus(deck: Deck): void {
   const key = JSON.stringify(list.map((l) => [l.id, l.name]));
   if (key === layoutsShown) return;
   layoutsShown = key;
-  layoutSel.replaceChildren(...list.map((l) => new Option(l.name, l.id)));
+  const gallery = document.querySelector<HTMLElement>('#new-slide-menu .rb-layouts');
+  gallery?.replaceChildren(...list.map((l) => layoutButton(l.id, l.name, 'new-slide-layout-')));
   const sub = document.querySelector<HTMLElement>('#layout-menu');
   if (sub) {
     const items: HTMLElement[] = list.map((l) => {
@@ -4066,7 +4141,6 @@ function showSlideState(): void {
   showRulers();
   if (!deck?.current) return;
   showLayoutMenus(deck);
-  layoutSel.value = deck.current.layout;
   const named = deck.size.w === WIDE.w && deck.size.h === WIDE.h ? 'wide' : deck.size.w === STANDARD.w && deck.size.h === STANDARD.h ? 'standard' : 'custom';
   let custom = sizeSel.querySelector<HTMLOptionElement>('option[value="custom"]');
   if (named === 'custom') {
@@ -4739,7 +4813,6 @@ function setSlideSize(size: { w: number; h: number }, fit: SizeFit = 'centre'): 
   editor.fit();
 }
 
-layoutSel.addEventListener('change', () => { setLayout(layoutSel.value as LayoutId); layoutSel.blur(); });
 sizeSel.addEventListener('change', () => {
   if (sizeSel.value === 'wide') setSlideSize(WIDE);
   else if (sizeSel.value === 'standard') setSlideSize(STANDARD);
@@ -4818,7 +4891,7 @@ async function orientLikeFirst(scheme = false): Promise<number | null> {
 /** After a flip: nothing selected, or a plain flip that made the mirror image of a structure with wedges. */
 function flipped(r: boolean | 'stereo'): void {
   if (!r) flash('Select something to flip.');
-  else if (r === 'stereo') flash('Flipped: the wedged centres are now the mirror image (the enantiomer). To keep the configuration, undo and use Flip, Keeping Configuration.', 7000, { label: 'Undo', run: () => undo() });
+  else if (r === 'stereo') flash('Flipped: the wedged centers are now the mirror image (the enantiomer). To keep the configuration, undo and use Flip, Keeping Configuration.', 7000, { label: 'Undo', run: () => undo() });
 }
 
 /** Undo and Redo: in Slides mode the deck's history covers every slide and the slide list; a sheet has its own. */
@@ -4909,13 +4982,13 @@ function renderTabs(): void {
         $('#tabs').querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
       } else if (e.key === 'Delete') { e.preventDefault(); void ws.close(t); }
     });
-    el.title = (t.ref.kind === 'path' ? t.ref.path : t.name) + (t.dirty ? ' (not saved)' : '')
+    // the file's name first: a tab squeezed to its icon shows it only here
+    el.title = `${ws.label(t)} (${TAB_ICONS[t.mode][1]})` + (t.ref.kind === 'path' ? `\n${t.ref.path}` : '') + (t.dirty ? '\nNot saved' : '')
       + (t.savedAt ? `\n${t.savedHow === 'autosaved' ? 'AutoSaved' : 'Saved'} ${new Date(t.savedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : '')
       + (keeper.autoSaveWanted(t) && ws.canAutoSave(t) ? ' (AutoSave on)' : '');
     const icon = document.createElement('span');
     icon.className = 'tab-icon';
     icon.innerHTML = TAB_ICONS[t.mode][0];
-    icon.title = TAB_ICONS[t.mode][1];
     const name = document.createElement('span');
     name.className = 'tab-name';
     name.textContent = ws.label(t);
@@ -4995,6 +5068,7 @@ function placeTabs(inMenu: boolean): void {
 function fitTabs(): void {
   const ctl = [tabList, tabAdd].reduce((w, b) => w + b.offsetWidth + 2, 0);
   const room = tabsEl.clientWidth - ctl - 12;
+  // squeezed, the other tabs show their icons only; the active one keeps its name (about 140 px of it)
   tabsEl.classList.toggle('tabs-narrow', room > 0 && room / Math.max(1, ws.tabs.length) < 96);
   showTabArrows();
 }
@@ -5799,7 +5873,7 @@ function placePicture(bytes: Uint8Array, mime: string, at: { x: number; y: numbe
   });
   editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set([made!.id]) };
   editor.changed();
-  if (mime === 'image/tiff' || mime === 'image/x-wmf' || !showableSrc(made!.src ?? '')) flash('This kind of picture shows as a grey box here for now; it is kept, and saved with the file.', 8000);
+  if (mime === 'image/tiff' || mime === 'image/x-wmf' || !showableSrc(made!.src ?? '')) flash('This kind of picture shows as a gray box here for now; it is kept, and saved with the file.', 8000);
 }
 
 /**
@@ -5990,7 +6064,7 @@ async function removeWhite(ids: number[]): Promise<void> {
       { value: 'all', label: 'All white, everywhere' },
     ] },
     { name: 'tol', label: 'How near white counts', value: '24', type: 'number', unit: 'of 255' },
-  ], { ok: 'Remove', note: 'Raise the number if a grey haze is left round the picture; lower it if pale parts of the picture disappear. Undo puts it back.' });
+  ], { ok: 'Remove', note: 'Raise the number if a gray haze is left round the picture; lower it if pale parts of the picture disappear. Undo puts it back.' });
   if (!v) return;
   const tol = Math.max(0, Math.min(200, Number(v.tol) || 0));
   const done: { id: number; src: string }[] = [];
@@ -6434,7 +6508,7 @@ function wireShows(presenter: Presenter, presenterView: PresenterView, inkShape:
       for (const st of ink.get(i) ?? []) { const sh = inkShape(st); if (sh) sd.addShape(sh); }
     });
     editor.requestScene();
-    flash(`Ink kept on ${indices.length} slide${indices.length === 1 ? '' : 's'}. Each line is a shape: move it, recolour it or delete it.`, 6000);
+    flash(`Ink kept on ${indices.length} slide${indices.length === 1 ? '' : 's'}. Each line is a shape: move it, recolor it or delete it.`, 6000);
   };
 
   presenter.onEnd = presenterView.onEnd = (i) => {
@@ -6731,7 +6805,7 @@ async function printNow(): Promise<void> {
     { name: 'paper', label: 'Paper', value: printChoices.paper, options: PAPER_OPTIONS },
     { name: 'orient', label: 'Orientation', value: printChoices.orient, options: [{ value: 'auto', label: 'To suit the drawing' }, { value: 'portrait', label: 'Portrait' }, { value: 'landscape', label: 'Landscape' }] },
     { name: 'size', label: 'Size', value: printChoices.size, options: [{ value: 'actual', label: 'Actual size (smaller only if it would not fit)' }, { value: 'fit', label: 'As large as fits the page' }] },
-  ], { ok: 'Print…', note: 'The drawing is centred on the page with half-inch margins. Copies and the printer are chosen in the next window.' });
+  ], { ok: 'Print…', note: 'The drawing is centered on the page with half-inch margins. Copies and the printer are chosen in the next window.' });
   if (!v) return;
   Object.assign(printChoices, v);
   const b = pic.box, w = b.x2 - b.x1, h = b.y2 - b.y1;
@@ -6760,10 +6834,10 @@ async function exportPicture(preset: { format?: string; dpi?: number; note?: str
     ] },
     { name: 'dpi', label: 'Resolution (PNG, TIFF)', value: String(dpiNow), type: 'number', unit: 'dpi' },
     { name: 'bg', label: 'Background', value: deck ? 'page' : 'clear', options: [
-      { value: deck ? 'page' : 'white', label: deck ? 'The page colour' : 'White' },
-      { value: 'clear', label: 'See-through' },
+      { value: deck ? 'page' : 'white', label: deck ? 'The page color' : 'White' },
+      { value: 'clear', label: 'Transparent' },
     ] },
-  ], { ok: 'Export…', note: preset.note ?? (checked ? `Saves ${what}. The ${checked.journal.name.replace(/ \(.*/, '')} guidelines ask for ${checked.dpi} dpi for this figure (File > Check Figure for Journal).` : `Saves ${what}. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line drawings.`) });
+  ], { ok: 'Export…', note: preset.note ?? (checked ? `Saves ${what}. The ${checked.journal.name.replace(/ \(.*/, '')} guidelines ask for ${checked.dpi} dpi for this figure (File > Check Figure for Journal).` : `Saves ${what}. Journals usually ask for 300 dpi for color pictures and 600 to 1200 dpi for line drawings.`) });
   if (!v) return;
   const dpi = Math.max(30, Math.min(2400, Number(v.dpi) || 300));
   const clear = v.bg === 'clear';
@@ -7451,13 +7525,13 @@ const DOC_COMMANDS: Record<string, () => unknown> = {
   'insert-shapes': () => {
     const b = document.querySelector<HTMLElement>('#doc-ribbon [data-doc="insert-shapes"]');
     const anchor = b && b.offsetParent ? b : document.querySelector<HTMLElement>('#doc-ribbon .rb-tabs')!;
-    shapeMenu.show(anchor, 'Click a shape to put it in the text at the caret. Double-click it there to change its size, colour or text.', (id) => docMode.insertShape(id));
+    shapeMenu.show(anchor, 'Click a shape to put it in the text at the caret. Double-click it there to change its size, color or text.', (id) => docMode.insertShape(id));
   },
   'insert-diagram': () => void docMode.insertDiagram(),
   'insert-icons': () => {
     const b = document.querySelector<HTMLElement>('#doc-ribbon [data-doc="insert-icons"]');
     const anchor = b && b.offsetParent ? b : document.querySelector<HTMLElement>('#doc-ribbon .rb-tabs')!;
-    shapeMenu.show(anchor, 'Click an icon to put it in the text at the caret. Double-click it there to change its size or colour.', (id) => docMode.insertShape(id), 'icons');
+    shapeMenu.show(anchor, 'Click an icon to put it in the text at the caret. Double-click it there to change its size or color.', (id) => docMode.insertShape(id), 'icons');
   },
   'copy-smiles': async () => {
     const d = pickedFigureDoc();
@@ -7510,7 +7584,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'toolbox-guides', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'theme-darkgray', 'density-compact', 'density-standard', 'density-large', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -7752,6 +7826,7 @@ function command(name: string): boolean {
     return contextBond !== null && editor.fuseRing(contextBond, id, Number(index));
   }
   if (name.startsWith('layout-') && ws.active.mode === 'slides') { setLayout(name.slice('layout-'.length)); return true; }
+  if (name.startsWith('new-slide-layout-') && ws.active.mode === 'slides') { newSlide(name.slice('new-slide-layout-'.length)); return true; }
   const run = COMMANDS[name];
   return !!run && run() !== false;
 }
@@ -7804,7 +7879,7 @@ async function shapeEffect(cmd: string): Promise<boolean> {
   if (cmd === 'shape-fx:glow:options') {
     const g = shapes[0].glow ?? { color: shapes[0].fillColor ?? shapes[0].color ?? '#ffc000', size: 8, transparency: 0.4 };
     const v = await ask('Glow', [
-      { name: 'color', label: 'Colour', value: g.color, type: 'color' },
+      { name: 'color', label: 'Color', value: g.color, type: 'color' },
       { name: 'size', label: 'Size (pt)', value: String(g.size), type: 'number' },
       { name: 'clear', label: 'Transparency (%)', value: String(Math.round(g.transparency * 100)), type: 'number' },
     ], { ok: 'Apply' });
@@ -7887,6 +7962,8 @@ const COMMANDS: Record<string, () => unknown> = {
   'shape-styles': () => shapeStyles(),
   'view-notes': () => { slidePanes.notes = !slidePanes.notes; applySlidePanes(); storeSettings(); mainResized(); },
   'view-slide-ruler': () => { slideLook.ruler = !slideLook.ruler; showRulers(); storeSettings(); },
+  'view-warnings-pane': () => { chemPanes.warnings = !chemPanes.warnings; showChemPanes(); storeSettings(); if (chemPanes.warnings && sideIsFolded()) command('fold-side'); },
+  'view-analysis-pane': () => { chemPanes.analysis = !chemPanes.analysis; showChemPanes(); storeSettings(); if (chemPanes.analysis && sideIsFolded()) command('fold-side'); },
   'view-gridlines': () => { slideLook.grid = !slideLook.grid; showRulers(); storeSettings(); renderer.repaintAll(); editor.requestScene(); },
   'view-guides': () => toggleGuides(),
   'grid-settings': () => void gridSettings(),
@@ -7902,7 +7979,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'slide-icons': () => {
     const b = document.querySelector<HTMLElement>('#ribbon [data-cmd="slide-icons"]:not([hidden])');
     const anchor = b && b.offsetParent ? b : document.querySelector<HTMLElement>('#ribbon .rb-tabs')!;
-    shapeMenu.show(anchor, 'Click an icon, then click or drag on the slide. Change its colour in the Style panel.', (id) => { finishTyping(); editor.setTool(`geo:${id}`); }, 'icons');
+    shapeMenu.show(anchor, 'Click an icon, then click or drag on the slide. Change its color in the Style panel.', (id) => { finishTyping(); editor.setTool(`geo:${id}`); }, 'icons');
   },
   'design-shapes': () => { if (ws.active.mode === 'design') { lib.showTab('shapes'); lib.focusSearch(); } else flash('Shapes are in Design mode: use File > New > Design.'); },
   'design-icons': () => { if (ws.active.mode === 'design') { lib.showTab('icons'); lib.focusSearch(); } else flash('Icons are in Design, Presentation and Document modes.'); },
@@ -8002,6 +8079,11 @@ const COMMANDS: Record<string, () => unknown> = {
   'size-standard': () => setSlideSize(STANDARD),
   'size-custom': () => customSlideSize(),
   'edit-layouts': () => editSlideLayouts(),
+  'shape-fill-menu': () => {
+    const b = [...document.querySelectorAll<HTMLElement>('.ribbon [data-cmd="shape-fill-menu"]')].find((x) => x.offsetParent);
+    const r = b?.getBoundingClientRect();
+    showContextMenu(r ? r.left : 200, r ? r.bottom + 2 : 120, [{ cmd: 'shape-picture-fill', label: 'Picture…' }, { cmd: 'shape-no-picture-fill', label: 'No Picture' }], { run: (cmd) => void command(cmd), key: commandKey });
+  },
   'section-menu': () => {
     const b = document.querySelector<HTMLElement>('#ribbon [data-cmd="section-menu"]');
     const r = b?.getBoundingClientRect();
@@ -8166,6 +8248,13 @@ const COMMANDS: Record<string, () => unknown> = {
   'theme-system': () => { setAppTheme('system'); storeSettings(); },
   'theme-light': () => { setAppTheme('light'); storeSettings(); },
   'theme-dark': () => { setAppTheme('dark'); storeSettings(); },
+  'theme-darkgray': () => { setAppTheme('darkgray'); storeSettings(); },
+  'density-compact': () => { setDensity('compact'); storeSettings(); },
+  'density-standard': () => { setDensity('standard'); storeSettings(); },
+  'density-large': () => { setDensity('large'); storeSettings(); },
+  'icons-mode': () => { setIconLook('mode'); storeSettings(); },
+  'icons-kind': () => { setIconLook('kind'); storeSettings(); },
+  'shape-ink-accent': () => { setShapesInk(shapeInkNow === 'accent' ? 'neutral' : 'accent'); storeSettings(); },
   'focus-view': () => setFocusView(!focusView),
   'one-column-tools': () => { setOneColumnTools(!oneColumnTools); storeSettings(); },
   'text-bar-floating': () => { placeTextBar('floating'); storeSettings(); },
@@ -8176,7 +8265,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'touch-mode-on': () => { setTouchMode('on'); storeSettings(); },
   'touch-mode-off': () => { setTouchMode('off'); storeSettings(); },
   'atom-keypad': () => {
-    if (!touchOn()) { flash('The atom keypad is part of Touch Mode: View > Window and Colours > Touch Mode > On.'); return; }
+    if (!touchOn()) { flash('The atom keypad is part of Touch Mode: View > Window and Colors > Touch Mode > On.'); return; }
     showKeypad(!keypadShowing());
     $('[data-cmd="atom-keypad"]')?.setAttribute('aria-checked', String(keypadShowing()));
   },
@@ -8218,7 +8307,7 @@ const COMMANDS: Record<string, () => unknown> = {
   about: () => void appVersion().then((v) => ask('About Chem Illustrator', [], {
     noCancel: true,
     note: `${STAGE_NOTE} Version ${v === 'web' ? 'for the browser' : v} (${STAGE.toLowerCase()}). Free software under the GNU General Public License, version 3: `
-      + 'see the licence and the source on GitHub (github.com/nathanohare/Chem-Illustrator). ChemDraw is a trademark of Revvity Signals; '
+      + 'see the license and the source on GitHub (github.com/nathanohare/Chem-Illustrator). ChemDraw is a trademark of Revvity Signals; '
       + 'Chem Illustrator is not made by or affiliated with Revvity Signals.',
   })),
   'report-problem': () => feedback.open('problem'),
@@ -8258,13 +8347,13 @@ const COMMANDS: Record<string, () => unknown> = {
     const r = editor.ringShadow();
     flash(!r ? 'Select filled rings (or their structure) first: Fill Rings fills them.' : r === 'on' ? 'Ring fills have a drop shadow. Change its size in the Style panel.' : 'Ring fill shadows off.', 5000);
   },
-  'highlight': () => editor.highlight(highlightColour, highlightStyle) ? flash('Highlighted. Change the colour with Highlight in the Style panel.', 5000) : flash('Select the atoms and bonds to highlight.'),
+  'highlight': () => editor.highlight(highlightColour, highlightStyle) ? flash('Highlighted. Change the color with Highlight in the Style panel.', 5000) : flash('Select the atoms and bonds to highlight.'),
   'remove-highlight': () => editor.highlight(undefined) || flash('Select the atoms and bonds to take the highlight off.'),
   'smooth-highlight': () => toggleHighlight('smooth', 'Round highlights smoothed: one even band, with no disc at each atom. Straight highlights are always one band.', 'Round highlights back to a disc at each atom.'),
-  'centre-highlight': () => toggleHighlight('centre', 'Highlight centred between the lines of the double bonds (and inside rings drawn with their double bonds inside).', 'Highlight back on the bonds.'),
+  'centre-highlight': () => toggleHighlight('centre', 'Highlight centered between the lines of the double bonds (and inside rings drawn with their double bonds inside).', 'Highlight back on the bonds.'),
   'soft-highlight': () => toggleHighlight('soft', 'Soft edges on. Choose how much fades, and which way, under Soft edges in the Style panel.', 'Sharp edges.'),
-  'shadow-highlight': () => toggleHighlight('shadow', 'Highlight shadow on. Change its colour, direction and blur under Shadow in the Style panel.', 'No highlight shadow.'),
-  'glow-highlight': () => toggleHighlight('glow', 'Glow on. Change its colour and size under Glow in the Style panel.', 'No glow.'),
+  'shadow-highlight': () => toggleHighlight('shadow', 'Highlight shadow on. Change its color, direction and blur under Shadow in the Style panel.', 'No highlight shadow.'),
+  'glow-highlight': () => toggleHighlight('glow', 'Glow on. Change its color and size under Glow in the Style panel.', 'No glow.'),
   'outline-highlight': () => toggleHighlight('outline', 'Outline only: no fill, a line round the highlight. Change the line under Outline in the Style panel.', 'Filled highlight.'),
   'highlight-look': () => void chooseHighlightLook(),
   'select-highlight': () => {
@@ -9129,7 +9218,7 @@ async function chooseHighlightLook(): Promise<void> {
   const looks = allLooks();
   const got = await ask('Highlight look', [
     { name: 'look', label: 'Look', value: '0', options: looks.map((l, i) => ({ value: String(i), label: i >= BUILT_IN_LOOKS.length ? `${l.name} (yours)` : l.name })) },
-  ], { ok: 'Use', note: 'The ready-made looks keep the highlight\'s colour; your own looks have their colour too. Save the look of a highlight you have set up with Chemistry > Highlight and Fill > Save Highlight Look.' });
+  ], { ok: 'Use', note: 'The ready-made looks keep the highlight\'s color; your own looks have their color too. Save the look of a highlight you have set up with Chemistry > Highlight and Fill > Save Highlight Look.' });
   const look = got && looks[Number(got.look)];
   if (look) applyHighlightLook(look);
 }
@@ -9147,7 +9236,7 @@ async function saveHighlightLook(): Promise<void> {
   if (!h) { flash('Select a highlight that looks the way you want first.'); return; }
   const got = await ask('Save highlight look', [
     { name: 'name', label: 'Name', value: '', placeholder: 'for example Reacting bonds' },
-    { name: 'colour', label: 'Keep its colour too', value: 'true', type: 'checkbox' },
+    { name: 'colour', label: 'Keep its color too', value: 'true', type: 'checkbox' },
   ], { ok: 'Save', note: 'It is offered in Chemistry > Highlight and Fill > Highlight Look, in the Style panel and in the Highlight toolbox, in every drawing.' });
   const name = got?.name.trim();
   if (!got || !name) return;
@@ -9538,7 +9627,7 @@ async function drawingPreferences(): Promise<void> {
       help: 'Only the look: the bonds stay as drawn for SMILES and saving. Chemistry ▸ Structure ▸ Kekulé Form for η Ligand switches one back.' },
     { name: 'aidAngle', label: 'Show the angle beside the pointer while drawing bonds, arrows and lines', type: 'checkbox', value: String(editor.aids.angle) },
     { name: 'aidLength', label: 'Show the length there too', type: 'checkbox', value: String(editor.aids.length),
-      help: 'In the rulers\' units (inches or centimetres).' },
+      help: 'In the rulers\' units (inches or centimeters).' },
     { name: 'aidLook', label: 'How the angle and hints look', value: editor.aids.look, options: [{ value: 'plain', label: 'Plain blue words' }, { value: 'box', label: 'Blue words on a pale box' }, { value: 'solid', label: 'White words on a blue box' }] },
     { name: 'aidHints', label: 'Show what Shift, Alt and Ctrl do beside the pointer', type: 'checkbox', value: String(editor.aids.hints),
       help: 'While dragging, the keys that change what the tool does are listed in blue (the one held in bold). With the button up they show as a key is held.' },
@@ -9580,7 +9669,7 @@ async function generalPreferences(): Promise<void> {
     { name: 'linkSide', label: 'Text linked to a structure goes', value: linkSide, options: [{ value: 'keep', label: 'Where it is' }, { value: 'below', label: 'Below' }, { value: 'above', label: 'Above' }, { value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }] },
     { name: 'ask', label: 'Ask before changing every structure on the page when nothing is selected', type: 'checkbox', value: String(askWholeDrawing) },
     { name: 'matchStructure', label: 'New bonds match the structure they\'re added to', type: 'checkbox', value: String(matchStructure.on),
-      help: 'Bonds, rings and chains added to a structure take its own bond length, line widths and colours, so a structure drawn with other settings stays consistent. Off: they always take the document\'s drawing settings.' },
+      help: 'Bonds, rings and chains added to a structure take its own bond length, line widths and colors, so a structure drawn with other settings stays consistent. Off: they always take the document\'s drawing settings.' },
     { name: 'straightenLinear', label: 'Straighten alkynes and allenes when a bond becomes triple', type: 'checkbox', value: String(straightenLinear.on),
       help: 'Making a bond triple (or giving an allene carbon its second double bond) swings the smaller side round so the sp carbon\'s two bonds lie in a straight line. Off: atoms stay where they are. New bonds always go straight on.' },
     { name: 'convertChemDraw', label: 'Redraw ChemDraw objects in Word files as they open', type: 'checkbox', value: String(!!docRead.convertChemDraw),
@@ -9720,6 +9809,9 @@ function currentSettings(): Settings {
     uiScale: uiScale(),
     textBar: CaptionEditor.barPlace,
     appTheme,
+    density,
+    iconLook,
+    shapeInk: shapeInkNow,
     oneColumnTools,
     toolCells,
     startView,
@@ -9786,6 +9878,7 @@ function currentSettings(): Settings {
     docRuler: docRulerPrefs.shown,
     sheetFormulaBar: formulaBarPrefs.shown,
     slideRuler: slideLook.ruler,
+    slidePanes: { ...chemPanes },
     slideGrid: slideLook.grid,
     rulerUnits: rulerPrefs.units,
     rulerFrom: rulerPrefs.from,
@@ -9841,7 +9934,7 @@ function settingsTransfer(): void {
   const d = document.createElement('dialog');
   d.className = 'ask settings-transfer';
   d.innerHTML = `<h2>Import and Export Settings</h2>
-    <p class="muted">One file holds every setting: hotkeys, toolboxes (and what is in them), preferences, your templates, nicknames, drawing styles, colour palettes, slide themes and highlight looks. Export it to keep a copy, or to set up another computer or a new install the same way; Import uses one. Recent files stay on each computer.</p>
+    <p class="muted">One file holds every setting: hotkeys, toolboxes (and what is in them), preferences, your templates, nicknames, drawing styles, color palettes, slide themes and highlight looks. Export it to keep a copy, or to set up another computer or a new install the same way; Import uses one. Recent files stay on each computer.</p>
     <div class="ask-buttons"><button type="button" data-act="export">Export Settings…</button><button type="button" data-act="import">Import Settings…</button><button type="button" class="primary" data-act="close">Close</button></div>
     <p class="muted small" aria-live="polite"></p>`;
   const say = (t: string) => { d.querySelector('p.small')!.textContent = t; };
@@ -9966,6 +10059,9 @@ function applySettings(s: Settings): void {
   if (!doc.page && !doc.source && !doc.atoms.size && !deckNow()) doc.page = defaultPage && { ...defaultPage };
   placeTextBar(s.textBar);
   setAppTheme(s.appTheme);
+  setDensity(s.density);
+  setIconLook(s.iconLook);
+  setShapesInk(s.shapeInk);
   setOneColumnTools(s.oneColumnTools);
   setToolCells(s.toolCells);
   startView = s.startView;
@@ -10053,6 +10149,8 @@ function applySettings(s: Settings): void {
   formulaBarPrefs.shown = s.sheetFormulaBar !== false;
   sheetMode?.showFormulaBar();
   slideLook.ruler = !!s.slideRuler;
+  Object.assign(chemPanes, s.slidePanes);
+  showChemPanes();
   slideLook.grid = !!s.slideGrid;
   rulerPrefs.units = s.rulerUnits;
   rulerPrefs.from = s.rulerFrom;
@@ -10624,7 +10722,7 @@ async function runAnalysis(force: boolean): Promise<void> {
 async function setStereoGroup(): Promise<void> {
   const sel = [...editor.sel.atoms].map((id) => doc.atoms.get(id)).filter((a): a is Atom => !!a);
   const centres = sel.filter((a) => live.atom(a.id) || a.enhStereo);
-  if (!centres.length) { flash(sel.length ? 'None of the selected atoms is a stereocentre.' : 'Select the stereocentres to group first.'); return; }
+  if (!centres.length) { flash(sel.length ? 'None of the selected atoms is a stereocenter.' : 'Select the stereocenters to group first.'); return; }
   // the next free group number in these structures, for each kind
   const used = { and: new Set<number>(), or: new Set<number>() };
   for (const a of centres) for (const id of doc.fragmentOf(a.id)) {
@@ -10641,7 +10739,7 @@ async function setStereoGroup(): Promise<void> {
       { value: 'none', label: 'None' },
     ] },
     { name: 'group', label: 'Number', value: String(first && first.type !== 'abs' ? first.group ?? 1 : free(first?.type === 'or' ? 'or' : 'and')), type: 'number' },
-  ], { ok: 'Set', note: `${centres.length} stereocentre${centres.length === 1 ? '' : 's'}. Centres with the same group and number change together: &1 centres are a racemic pair, or1 centres are one unknown enantiomer.` });
+  ], { ok: 'Set', note: `${centres.length} stereocenter${centres.length === 1 ? '' : 's'}. Centers with the same group and number change together: &1 centers are a racemic pair, or1 centers are one unknown enantiomer.` });
   if (!got) return;
   const type = got.type as 'abs' | 'and' | 'or' | 'none';
   const group = Math.max(1, Math.round(Number(got.group) || 1));
@@ -10726,7 +10824,7 @@ async function rGroupTable(): Promise<void> {
   placeTable(t, 'R-group table', top);
   const bad = masses.filter((m) => !m).length;
   flash(cols.formula && bad
-    ? `Made the table. ${bad} compound${bad === 1 ? '\'s' : 's\''} formula couldn't be worked out (a group left empty or not recognised), shown as ?. Double-click a cell to type it in.`
+    ? `Made the table. ${bad} compound${bad === 1 ? '\'s' : 's\''} formula couldn't be worked out (a group left empty or not recognized), shown as ?. Double-click a cell to type it in.`
     : 'Made the table. Double-click any cell to change it; the Style panel has its rows, columns and lines.', 8000);
 }
 
@@ -10773,7 +10871,7 @@ function toggleStereoLabels(): void {
   const labelled = [...atoms].filter((id) => live.atom(id)).map((id) => doc.atoms.get(id)!);
   const labelledB = [...bonds].filter((id) => live.bond(id)).map((id) => doc.bonds.get(id)!);
   if (!labelled.length && !labelledB.length) {
-    flash(chem.ready ? 'No stereocentres or E/Z double bonds here.' : 'The chemistry engine is still loading.');
+    flash(chem.ready ? 'No stereocenters or E/Z double bonds here.' : 'The chemistry engine is still loading.');
     return;
   }
   const show = ![...labelled, ...labelledB].every((x) => x.showStereo || x.stereoLabel);
@@ -11010,15 +11108,31 @@ whenIconsLoaded(() => {
   figures.forget();
   docMode?.fontsChanged();
 });
+// Design's Home tab has the same Font and Paragraph groups as the Presentation ribbon: one copy
+// of them in the page, cloned into Design's ribbon, run by a second SlideTextRibbon
+{
+  const slot = document.querySelector<HTMLElement>('#design-ribbon [data-tx-slot]');
+  if (slot) slot.replaceWith(...[...document.querySelectorAll<HTMLElement>('#ribbon [data-sl-text]')].map((g) => {
+    const c = g.cloneNode(true) as HTMLElement;
+    // the font sizes' list stays one (the copy's box uses it by its id)
+    c.querySelectorAll('datalist, [id]').forEach((x) => (x instanceof HTMLDataListElement ? x.remove() : x.removeAttribute('id')));
+    return c;
+  }));
+}
+buildSelectGalleries();
+buildColourGalleries();
 applyRibbonIcons();
+applyIconSet();
+installRibbonFlyouts();
 
 const stylePanel = new StylePanel($('#style-section'), $('#style-body'), doc, () => editor.sel, () => editor.changed());
 stylePanel.onEditChart = (id) => void editChartShape(id);
 stylePanel.turnable = () => editor.textFirst;
 stylePanel.onEditMedia = (id) => void editMediaShape(id);
+stylePanel.pickShape = (anchor, pick) => shapeMenu.show(anchor, 'Click a shape: the one selected changes to it, keeping its size, colors and text.', pick);
 stylePanel.onEditEquation = (id) => void editEquationShape(id);
 stylePanel.onEquationColour = (ids, color) => {
-  doc.edit('Equation colour', () => {
+  doc.edit('Equation color', () => {
     for (const id of ids) {
       const s = doc.shapes.get(id);
       if (!s?.math) continue;
@@ -11262,6 +11376,8 @@ function drawingMenu(): MenuItem[] {
     null,
     ...(atoms ? [{ label: 'Label the Structure', items: [{ cmd: 'add-id-label' }, { cmd: 'add-caption' }, { cmd: 'attach-descriptors' }, null, { cmd: 'number-compounds' }] }] : []),
     ...(atoms ? [{ cmd: 'add-to-compound-library', label: 'Add to Compound Library' }] : []),
+    // Presentation and Design keep Analysis hidden until it is wanted (View > Show turns it on for good)
+    ...(atoms && (ws.active.mode === 'slides' || ws.active.mode === 'design') && !chemPanes.analysis ? [{ cmd: 'view-analysis-pane', label: 'Show Analysis' }] : []),
     ...(atoms || shapes.some((x) => x.kind === 'ring') ? [{ label: 'Highlight and Fill', items: [{ cmd: 'highlight' }, { cmd: 'remove-highlight' }, { cmd: 'highlight-look' }, { cmd: 'select-highlight' }, null, { cmd: 'smooth-highlight' }, { cmd: 'centre-highlight' }, { cmd: 'soft-highlight' }, { cmd: 'outline-highlight' }, { cmd: 'shadow-highlight' }, { cmd: 'glow-highlight' }, { cmd: 'save-highlight-look' }, null, { cmd: 'fill-rings' }, { cmd: 'ring-shadow' }] }] : []),
     ...(s.captions.size ? [{ cmd: 'link-text' }] : []),
     ...([...s.captions].some((id) => doc.captions.get(id)?.runs.some((r) => r.link))
@@ -11281,7 +11397,8 @@ function drawingMenu(): MenuItem[] {
     ] },
     ...(shapes.some((x) => x.chart) ? [{ cmd: 'edit-chart', label: 'Edit Chart…' }] : []),
     ...((shapes.length === 1 && shapes[0].kind === 'picture') || (atoms && !shapes.length) ? [{ cmd: 'alt-text', label: 'Alt Text…' }] : []),
-    ...(shapes.some((x) => x.kind === 'geo' && !x.diagram) ? [
+    // (Design keeps fill and effects on its ribbon: Home and Shape Format)
+    ...(shapes.some((x) => x.kind === 'geo' && !x.diagram) && ws.active.mode !== 'design' ? [
       { cmd: 'shape-styles-here', label: 'Shape Style…' },
       { label: 'Shape Effects', items: effectsMenu() },
       { label: 'Shape Fill', items: [{ cmd: 'shape-picture-fill', label: 'Picture…' }, { cmd: 'shape-no-picture-fill', label: 'No Picture' }] },
@@ -11366,7 +11483,7 @@ function showDark(on: boolean): void {
 async function darkColours(): Promise<void> {
   const all = (): DarkPalette[] => [...DARK_PALETTES, ...dark.own];
   const cur = darkPaletteNamed(dark.palette, dark.own);
-  const got = await ask('Reading Mode colours', [
+  const got = await ask('Reading Mode colors', [
     { name: 'palette', label: 'Palette', value: cur.name, options: [...all().map((p) => ({ value: p.name, label: dark.own.includes(p) ? `${p.name} (yours)` : p.name }))] },
     { name: 'paper', label: 'Paper shows as', value: cur.paper, type: 'color' },
     { name: 'ink', label: 'Black ink shows as', value: cur.ink, type: 'color' },
@@ -11375,7 +11492,7 @@ async function darkColours(): Promise<void> {
     const base = darkPaletteNamed(v.palette, dark.own);
     const untouched = v.paper === cur.paper && v.ink === cur.ink;
     return readingPreview(untouched ? base : { name: '', paper: v.paper || base.paper, ink: v.ink || base.ink }, doc.style);
-  } }, note: 'Only the screen changes: files, printing, copying and exports keep their white paper and black ink. The colours shown are the palette in use now: pick another palette and leave them alone to use it as it is, or change them (and give a name) to keep your own.' });
+  } }, note: 'Only the screen changes: files, printing, copying and exports keep their white paper and black ink. The colors shown are the palette in use now: pick another palette and leave them alone to use it as it is, or change them (and give a name) to keep your own.' });
   if (!got) return;
   const base = darkPaletteNamed(got.palette, dark.own);
   // colours left as they were mean "this palette as it is"
@@ -11749,7 +11866,7 @@ function looksList(vertical: boolean): HTMLElement {
     dot.style.background = look.colour ?? 'transparent';
     if (!look.colour) dot.classList.add('keeps');
     b.append(dot, look.name);
-    b.title = `${look.name}${look.colour ? '' : ' (keeps the highlight\'s colour)'}`;
+    b.title = `${look.name}${look.colour ? '' : ' (keeps the highlight\'s color)'}`;
     b.addEventListener('click', () => { finishTyping(); applyHighlightLook(look); });
     box.append(b);
   }
@@ -11758,7 +11875,7 @@ function looksList(vertical: boolean): HTMLElement {
 
 /** The toolboxes' names, as they come. */
 const BOX_TITLES: Record<string, string> = {
-  main: 'Drawing Tools', structure: 'Structure', arrange: 'Object', templates: 'Templates', colours: 'Colours', highlight: 'Highlight', text: 'Text Formatting', guides: 'Guides', custom: 'My Toolbox', smart: 'Smart Scheme', details: 'Side Panel',
+  main: 'Drawing Tools', structure: 'Structure', arrange: 'Object', templates: 'Templates', colours: 'Colors', highlight: 'Highlight', text: 'Text Formatting', guides: 'Guides', custom: 'My Toolbox', smart: 'Smart Scheme', details: 'Side Panel',
 };
 /** What the toolboxes of buttons come with ("cmd:", "tool:", "pal:", "w:looks", "sep"). */
 const cmds = (list: (string | null)[]) => list.map((c) => (c ? `cmd:${c}` : 'sep'));
@@ -11771,7 +11888,7 @@ const BOX_ITEMS: Record<string, readonly string[]> = {
 };
 /** Short names on toolbox buttons for commands with no icon. */
 const SHORT_LABEL: Record<string, string> = {
-  'smooth-highlight': 'Smooth', 'centre-highlight': 'Centre', 'soft-highlight': 'Soft', 'outline-highlight': 'Outline only',
+  'smooth-highlight': 'Smooth', 'centre-highlight': 'Center', 'soft-highlight': 'Soft', 'outline-highlight': 'Outline only',
   'shadow-highlight': 'Shadow', 'glow-highlight': 'Glow', 'save-highlight-look': 'Save look…',
 };
 
@@ -11866,7 +11983,7 @@ const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => vo
     // in Highlight mode, the saved looks too
     const looks = looksList(vertical);
     looks.hidden = colourMode !== 'highlight';
-    for (const [m, label, title] of [['line', 'Colour', 'Colour the lines and text'], ['highlight', 'Highlight', 'A band of colour behind atoms and bonds'], ['fill', 'Fill', 'Fill shapes and ring fills']] as const) {
+    for (const [m, label, title] of [['line', 'Color', 'Color the lines and text'], ['highlight', 'Highlight', 'A band of color behind atoms and bonds'], ['fill', 'Fill', 'Fill shapes and ring fills']] as const) {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = label;
@@ -11882,10 +11999,10 @@ const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => vo
       b.type = 'button';
       b.className = 'tb-swatch';
       if (c) b.style.background = c; else { b.textContent = '∅'; b.style.fontSize = '11px'; }
-      b.title = c ? c.toUpperCase() : 'None: take the colour, highlight or fill off';
+      b.title = c ? c.toUpperCase() : 'None: take the color, highlight or fill off';
       b.setAttribute('aria-label', b.title);
       b.addEventListener('click', () => {
-        if (!editor.colourSelection(c, colourMode)) flash('Select what to colour first.');
+        if (!editor.colourSelection(c, colourMode)) flash('Select what to color first.');
         else if (colourMode === 'highlight' && c) highlightColour = c;
       });
       return b;
@@ -12092,7 +12209,8 @@ function autoFoldRibbon(force = false): void {
 function tickToolboxes(): void {
   fillToolboxMenu();
   $('[data-cmd="lock-toolboxes"]')?.setAttribute('aria-checked', String(toolboxState.locked));
-  $('[data-cmd="fold-side"]')?.setAttribute('aria-checked', String(sideIsFolded()));
+  $('[data-cmd="fold-side"]')?.setAttribute('aria-checked', String(!sideIsFolded()));
+  $('#status-side')?.setAttribute('aria-pressed', String(!sideIsFolded()));
   quickBar?.refresh();
 }
 
@@ -12101,11 +12219,12 @@ function placeSidePanel(): void {
   const folded = sideIsFolded();
   $('.toolbox[data-id="details"]')?.classList.toggle('collapsed', folded);
   const fold = $('#side-fold');
-  fold.textContent = folded ? '‹' : '›';
-  fold.title = folded ? 'Open the side panel (View > Fold Side Panel)' : 'Fold the side panel away (View > Fold Side Panel)';
+  fold.textContent = '×';
+  fold.title = 'Close the side panel (Ctrl+Alt+B, or the panel button at the bottom right, opens it again)';
   fold.setAttribute('aria-label', fold.title);
 }
 $('#side-fold').addEventListener('click', () => command('fold-side'));
+$('#status-side').addEventListener('click', () => command('fold-side'));
 
 /** Below this window width the side panel folds by itself, so the drawing keeps its room. */
 const NARROW_WINDOW = 1200;
@@ -12226,13 +12345,30 @@ function applyRibbons(): void {
   fitRibbons();
 }
 
+/** The top menus' commands, in groups, for adding to the ribbons. */
+const ribbonMenus = () => menuCommands().filter((g) => g.items.length).map((g) => ({ name: `${g.menu} menu`, items: g.items.filter((c) => !c.cmd.startsWith('toolbox-')).map((c) => ({ key: `cmd:${c.cmd}`, label: c.label, icon: commandIcon(c.cmd) })) }));
 const ribbonEditor = new RibbonEditor({
   ribbons: ribbonsNow,
   get: () => ribbonPrefs,
   set: (p) => { ribbonPrefs = p; applyRibbons(); storeSettings(); },
-  menus: () => menuCommands().filter((g) => g.items.length).map((g) => ({ name: `${g.menu} menu`, items: g.items.filter((c) => !c.cmd.startsWith('toolbox-')).map((c) => ({ key: `cmd:${c.cmd}`, label: c.label, icon: commandIcon(c.cmd) })) })),
+  menus: ribbonMenus,
   jiggle: () => toolboxState.jiggle !== false,
 });
+// the gear at the right of each ribbon's tabs: edit the ribbon where it is
+const ribbonLive = new RibbonLive({
+  ribbons: ribbonsNow,
+  get: () => ribbonPrefs,
+  set: (p) => { ribbonPrefs = p; applyRibbons(); storeSettings(); },
+  customize: (id) => ribbonEditor.open(id),
+  saveText: async (name, text) => {
+    const target = await saveFileDialog(name, SETTINGS_FILE).catch((e) => { flash(String(e)); return null; });
+    if (target) await writeFile(target.ref, target.name, text, SETTINGS_FILE).then(() => flash(`Saved the layout in ${target.name}.`), (e) => flash(`Could not save the layout: ${e}`));
+  },
+  openText: async () => (await openFileDialog([SETTINGS_FILE]).catch((e) => { flash(String(e)); return null; }))?.text ?? null,
+  flash: (m) => flash(m, 6000),
+  menus: ribbonMenus,
+});
+ribbonLive.install();
 // right-click a ribbon's tabs (or a group's name) to customize it
 for (const [mode, id] of [['slides', '#ribbon'], ['document', '#doc-ribbon'], ['sheet', '#sheet-ribbon'], ['design', '#design-ribbon']] as const) {
   $(id).addEventListener('contextmenu', (e) => {
@@ -12399,13 +12535,13 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
   { id: 'typing', title: 'Text and Spelling', words: 'typing spelling dictionary autocorrect replacements chemistry formulas subscripts', open: () => typingDialog.open() },
-  { id: 'palettes', title: 'Colour Palettes', words: 'colours colors palette rows', open: () => editPalettes() },
-  { id: 'mode-colours', title: 'Mode Colours', words: 'tab colours accent window drawing slides sheet document design appearance', open: () => modeDialog.open() },
+  { id: 'palettes', title: 'Color Palettes', words: 'colors colors palette rows', open: () => editPalettes() },
+  { id: 'mode-colours', title: 'Mode Colors', words: 'tab colors accent window drawing slides sheet document design appearance', open: () => modeDialog.open() },
   { id: 'navigation', title: 'Navigation', words: 'document map navigator minimap map overview edge arrows off screen lost find dot grid dots tint outside fit go to selection orientation zoom', open: navigationSettings },
-  { id: 'page-grid', title: 'Page Grid', words: 'pages page grid boundaries dashed dotted lines paper fixed edges hatched wall empty grey print chemdraw paste wrap', open: pageGridSettings },
+  { id: 'page-grid', title: 'Page Grid', words: 'pages page grid boundaries dashed dotted lines paper fixed edges hatched wall empty gray print chemdraw paste wrap', open: pageGridSettings },
   { id: 'toolboxes', title: 'Toolboxes', words: 'toolbox buttons cells grid lines raised bevel borders tool tips tooltips hints keys modifiers shortcuts', open: toolboxPreferences },
-  { id: 'dark', title: 'Reading Mode', words: 'reading mode dark page dark mode night paper ink graphite slate appearance colours', open: darkColours },
-    { id: 'newman', title: 'Newman Projections', words: 'newman sawhorse projection conformation torsion dihedral gauche anti eclipsed colour largest middle smallest group strain a-value energy chart rotation barrier kcal kj', open: () => newmanSettingsPage() },
+  { id: 'dark', title: 'Reading Mode', words: 'reading mode dark page dark mode night paper ink graphite slate appearance colors', open: darkColours },
+    { id: 'newman', title: 'Newman Projections', words: 'newman sawhorse projection conformation torsion dihedral gauche anti eclipsed color largest middle smallest group strain a-value energy chart rotation barrier kcal kj', open: () => newmanSettingsPage() },
   { id: 'schemes', title: 'Schemes', words: 'scheme arrow gap plus text reagents conditions boxes', open: schemeSettings },
   { id: 'autosave', title: 'AutoSave and Recovery', words: 'autosave recovery versions backup copies shared folders onedrive', open: () => keeper.optionsCommand() },
   { id: 'ai', title: 'AI Model', words: 'ai artificial intelligence claude anthropic chatgpt gpt openai gemini google ollama openrouter api key llm model link connect', open: () => aiSettings() },
@@ -12655,7 +12791,7 @@ async function pageGridSettings(): Promise<void> {
       help: 'On screen only. Off: the endless drawing with nothing fixed. The paper size and fixed edges are in File > Page Setup.' },
     { name: 'lineStyle', label: 'Page boundaries', value: o.lineStyle, options: [{ value: 'dashed', label: 'Dashed' }, { value: 'dotted', label: 'Dotted' }, { value: 'solid', label: 'Solid' }] },
     { name: 'lineWidth', label: 'Boundary thickness', value: String(o.lineWidth), options: [0.5, 1, 1.5, 2, 3].map((v) => ({ value: String(v), label: `${v} px` })) },
-    { name: 'lineColour', label: 'Boundary colour', value: o.lineColour, type: 'color' },
+    { name: 'lineColour', label: 'Boundary color', value: o.lineColour, type: 'color' },
     { name: 'lineOpacity', label: 'Boundary strength', value: String(o.lineOpacity), options: [[0.2, 'Very faint'], [0.35, 'Faint'], [0.55, 'Light'], [0.8, 'Strong'], [1, 'Solid']].map(([v, l]) => ({ value: String(v), label: `${l} (${Math.round(Number(v) * 100)}%)` })) },
     { name: 'emptyShade', label: 'Pages with nothing on them', value: o.emptyShade, options: shade },
     { name: 'outsideShade', label: 'The space round the pages', value: o.outsideShade, options: shade },
@@ -12870,10 +13006,40 @@ function placeTextBar(where: Settings['textBar']): void {
 let appTheme: Settings['appTheme'] = 'system';
 function setAppTheme(t: Settings['appTheme']): void {
   appTheme = t;
-  if (t === 'system') delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = t;
+  const root = document.documentElement;
+  // Dark Gray is the light theme with its own colours over it
+  if (t === 'system') delete root.dataset.theme;
+  else root.dataset.theme = t === 'darkgray' ? 'light' : t;
+  if (t === 'darkgray') root.dataset.gray = ''; else delete root.dataset.gray;
   themeChanged();
-  for (const w of ['system', 'light', 'dark']) $(`[data-cmd="theme-${w}"]`)?.setAttribute('aria-checked', String(w === t));
+  for (const w of ['system', 'light', 'dark', 'darkgray']) $(`[data-cmd="theme-${w}"]`)?.setAttribute('aria-checked', String(w === t));
+}
+
+/** View > Window and Colours > Density: bigger icons and more room between the toolboxes' and ribbons' buttons. */
+let density: Settings['density'] = 'compact';
+function setDensity(d: Settings['density']): void {
+  density = d;
+  if (d === 'compact') delete document.documentElement.dataset.density;
+  else document.documentElement.dataset.density = d;
+  for (const w of ['compact', 'standard', 'large']) $(`[data-cmd="density-${w}"]`)?.setAttribute('aria-checked', String(w === d));
+  fitRibbons();
+}
+
+/** View > Window and Colours > Icon Colours: the mode's colour on one part of each icon (the default), or a colour for each kind of command. */
+let iconLook: Settings['iconLook'] = 'mode';
+function setIconLook(l: Settings['iconLook']): void {
+  iconLook = l;
+  if (l === 'kind') document.documentElement.dataset.icons = 'colour';
+  else delete document.documentElement.dataset.icons;
+  for (const w of ['mode', 'kind']) $(`[data-cmd="icons-${w}"]`)?.setAttribute('aria-checked', String(w === l));
+}
+
+/** View > Window and Colours > Icon Colours > Shapes in the Mode Colour. */
+let shapeInkNow: Settings['shapeInk'] = 'neutral';
+function setShapesInk(ink: Settings['shapeInk']): void {
+  shapeInkNow = ink;
+  setShapeInk(ink);
+  $('[data-cmd="shape-ink-accent"]')?.setAttribute('aria-checked', String(ink === 'accent'));
 }
 
 /** The space round the drawing's pages in the dark theme (app.css --surround), or null in the light theme, where the page grid's light shading shows. */
@@ -12964,7 +13130,17 @@ const slideText = new SlideTextRibbon($('#ribbon'), {
   box: (c) => editor.setTextBox(c),
   boxLook: () => editor.textBoxLook(),
 });
-CaptionEditor.onState = () => { if (ws.active.mode === 'slides') slideText.refresh(); textToolbox?.refresh(); };
+const designText = new SlideTextRibbon($('#design-ribbon'), {
+  format: (f) => editor.formatText(f),
+  look: () => editor.textLook(),
+  refocus: () => editor.refocusText(),
+  nothing: () => flash('Click into some text, or pick a text box or a shape with text, first.'),
+  box: (c) => editor.setTextBox(c),
+  boxLook: () => editor.textBoxLook(),
+});
+/** The text groups of the ribbon showing (Presentation or Design) follow the text being edited. */
+const textRibbonNow = () => (ws.active.mode === 'slides' ? slideText : ws.active.mode === 'design' ? designText : null);
+CaptionEditor.onState = () => { textRibbonNow()?.refresh(); textToolbox?.refresh(); };
 // the Smart Scheme pane: the selected scheme's species, beside it
 const smartPane = new SmartPane({
   doc: () => editor.doc,
@@ -13023,7 +13199,7 @@ const buildHint = new BuildHint({
 });
 editor.onOverlay = () => { smartPane.place(); buildHint.place(); };
 editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
-editor.onChange = () => { welcomeWatch?.(); showToolStatus(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides') slideText.refresh(); textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); showToolStatus(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();

@@ -29,7 +29,7 @@ export function pickSlideTemplate(m: Master, size: SlideSize, defaultId: string 
     h.textContent = 'Slide Templates';
     const note = document.createElement('p');
     note.className = 'muted';
-    note.textContent = 'A template sets the fonts, colours, background and shapes of every slide. Your text, structures, logo, footer and slide numbers stay as they are, and Slide Master changes any part of the look afterwards.';
+    note.textContent = 'A template sets the fonts, colors, background and shapes of every slide. Your text, structures, logo, footer and slide numbers stay as they are, and Slide Master changes any part of the look afterwards.';
     const tools = document.createElement('div');
     tools.className = 'st-tools';
     const tool = (label: string, title: string, run: () => void) => {
@@ -63,7 +63,7 @@ export function pickSlideTemplate(m: Master, size: SlideSize, defaultId: string 
       return n;
     };
     tool('New Theme…', 'A theme of your own, starting from the Plain template', () => void edit(fresh(SLIDE_TEMPLATES[0], uniqueName('My Theme')), true));
-    tool('New Theme from This Deck…', 'A theme of your own with this deck\'s fonts, colours and shapes', () => void edit(themeFromMaster(m, uniqueName(m.template ? `${m.template} (mine)` : 'My Theme'), newThemeId(mine)), true));
+    tool('New Theme from This Deck…', 'A theme of your own with this deck\'s fonts, colors and shapes', () => void edit(themeFromMaster(m, uniqueName(m.template ? `${m.template} (mine)` : 'My Theme'), newThemeId(mine)), true));
 
     function card(t: SlideTemplate): HTMLElement {
       const wrap = document.createElement('div');

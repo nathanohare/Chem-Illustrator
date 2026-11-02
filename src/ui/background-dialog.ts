@@ -35,9 +35,9 @@ type Gradient = Extract<Background, { kind: 'gradient' }>;
 type Picture = Extract<Background, { kind: 'picture' }>;
 type Pattern = Extract<Background, { kind: 'pattern' }>;
 
-const KINDS: [Kind, string][] = [['solid', 'Solid colour'], ['gradient', 'Gradient'], ['picture', 'Picture or texture'], ['pattern', 'Pattern']];
+const KINDS: [Kind, string][] = [['solid', 'Solid color'], ['gradient', 'Gradient'], ['picture', 'Picture or texture'], ['pattern', 'Pattern']];
 const FITS: [Picture['fit'], string][] = [['stretch', 'Stretch to the slide'], ['fill', 'Fill the slide (keep proportions, cut the edges)'], ['fit', 'Fit in the slide (keep proportions, whole picture)'], ['tile', 'Tile as a texture']];
-const ALIGNS: [TileAlign, string][] = [['tl', 'Top left'], ['t', 'Top'], ['tr', 'Top right'], ['l', 'Left'], ['ctr', 'Centre'], ['r', 'Right'], ['bl', 'Bottom left'], ['b', 'Bottom'], ['br', 'Bottom right']];
+const ALIGNS: [TileAlign, string][] = [['tl', 'Top left'], ['t', 'Top'], ['tr', 'Top right'], ['l', 'Left'], ['ctr', 'Center'], ['r', 'Right'], ['bl', 'Bottom left'], ['b', 'Bottom'], ['br', 'Bottom right']];
 const MIRRORS: [TileMirror, string][] = [['none', 'None'], ['x', 'Side to side'], ['y', 'Top to bottom'], ['xy', 'Both']];
 const SHAPES: [Gradient['shape'], string][] = [['linear', 'Linear'], ['radial', 'Radial'], ['rect', 'Rectangular']];
 
@@ -157,7 +157,7 @@ export function formatBackground(o: BackgroundDialogOptions): Promise<Background
 
     // ------------------------------------------------ solid colour
     const solidBox = section();
-    row(solidBox, 'Colour', color(solid.color, (v) => { solid = { ...solid, color: v }; draw(); }));
+    row(solidBox, 'Color', color(solid.color, (v) => { solid = { ...solid, color: v }; draw(); }));
     row(solidBox, 'Transparency', clear(solid.transparency, (v) => { solid = { ...solid, transparency: v || undefined }; draw(); }));
 
     // ------------------------------------------------ gradient
@@ -195,7 +195,7 @@ export function formatBackground(o: BackgroundDialogOptions): Promise<Background
       }
       const head = document.createElement('div');
       head.className = 'bg-stops-head muted';
-      head.textContent = 'Colour stops: colour, how far along the gradient, and transparency';
+      head.textContent = 'Color stops: color, how far along the gradient, and transparency';
       gradControls.append(head);
       gradient.stops.forEach((s, k) => {
         const put = (v: Partial<GradientStop>) => { gradient = { ...gradient, stops: gradient.stops.map((x, j) => (j === k ? { ...x, ...v } : x)) }; draw(); };
@@ -213,7 +213,7 @@ export function formatBackground(o: BackgroundDialogOptions): Promise<Background
       const add = document.createElement('button');
       add.type = 'button';
       add.textContent = 'Add stop';
-      add.title = 'A new colour stop between the two farthest apart';
+      add.title = 'A new color stop between the two farthest apart';
       add.addEventListener('click', () => {
         const st = sortedStops(gradient.stops);
         let best = 0;

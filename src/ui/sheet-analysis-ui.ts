@@ -651,7 +651,7 @@ export class SheetAnalysis {
       let kept = false;
       st.onClose = () => {
         if (kept) return;
-        this.wb.edit('Goal Seek (cancelled)', () => sh.setCell(b.range.r1, b.range.c1, { ...was }), this.view.place());
+        this.wb.edit('Goal Seek (canceled)', () => sh.setCell(b.range.r1, b.range.c1, { ...was }), this.view.place());
         this.view.refresh();
       };
       st.actions('OK', () => { kept = true; });
