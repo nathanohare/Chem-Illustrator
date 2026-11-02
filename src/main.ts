@@ -138,6 +138,7 @@ import { installCombos } from './ui/combo';
 import { installFontList, registerBundledFonts, bundledFaces, pdfFonts } from './fonts';
 import { applyRibbonIcons } from './ui/ribbon-icons';
 import { applyIconSet } from './ui/icon-set';
+import { RibbonLive } from './ui/ribbon-live';
 import { installRibbonFlyouts } from './ui/ribbon-flyout';
 import { buildColourGalleries, buildSelectGalleries } from './ui/select-gallery';
 import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templateFromAtoms, placeTemplate, freePlacement } from './chem/templates';
@@ -4167,13 +4168,13 @@ function renderTabs(): void {
         $('#tabs').querySelector<HTMLElement>('[aria-selected="true"]')?.focus();
       } else if (e.key === 'Delete') { e.preventDefault(); void ws.close(t); }
     });
-    el.title = (t.ref.kind === 'path' ? t.ref.path : t.name) + (t.dirty ? ' (not saved)' : '')
+    // the file's name first: a tab squeezed to its icon shows it only here
+    el.title = `${ws.label(t)} (${TAB_ICONS[t.mode][1]})` + (t.ref.kind === 'path' ? `\n${t.ref.path}` : '') + (t.dirty ? '\nNot saved' : '')
       + (t.savedAt ? `\n${t.savedHow === 'autosaved' ? 'AutoSaved' : 'Saved'} ${new Date(t.savedAt).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}` : '')
       + (keeper.autoSaveWanted(t) && ws.canAutoSave(t) ? ' (AutoSave on)' : '');
     const icon = document.createElement('span');
     icon.className = 'tab-icon';
     icon.innerHTML = TAB_ICONS[t.mode][0];
-    icon.title = TAB_ICONS[t.mode][1];
     const name = document.createElement('span');
     name.className = 'tab-name';
     name.textContent = ws.label(t);
@@ -4253,6 +4254,7 @@ function placeTabs(inMenu: boolean): void {
 function fitTabs(): void {
   const ctl = [tabList, tabAdd].reduce((w, b) => w + b.offsetWidth + 2, 0);
   const room = tabsEl.clientWidth - ctl - 12;
+  // squeezed, the other tabs show their icons only; the active one keeps its name (about 140 px of it)
   tabsEl.classList.toggle('tabs-narrow', room > 0 && room / Math.max(1, ws.tabs.length) < 96);
   showTabArrows();
 }
@@ -10765,6 +10767,20 @@ const ribbonEditor = new RibbonEditor({
   menus: () => menuCommands().filter((g) => g.items.length).map((g) => ({ name: `${g.menu} menu`, items: g.items.filter((c) => !c.cmd.startsWith('toolbox-')).map((c) => ({ key: `cmd:${c.cmd}`, label: c.label, icon: commandIcon(c.cmd) })) })),
   jiggle: () => toolboxState.jiggle !== false,
 });
+// the gear at the right of each ribbon's tabs: edit the ribbon where it is
+const ribbonLive = new RibbonLive({
+  ribbons: ribbonsNow,
+  get: () => ribbonPrefs,
+  set: (p) => { ribbonPrefs = p; applyRibbons(); storeSettings(); },
+  customize: (id) => ribbonEditor.open(id),
+  saveText: async (name, text) => {
+    const target = await saveFileDialog(name, SETTINGS_FILE).catch((e) => { flash(String(e)); return null; });
+    if (target) await writeFile(target.ref, target.name, text, SETTINGS_FILE).then(() => flash(`Saved the layout in ${target.name}.`), (e) => flash(`Could not save the layout: ${e}`));
+  },
+  openText: async () => (await openFileDialog([SETTINGS_FILE]).catch((e) => { flash(String(e)); return null; }))?.text ?? null,
+  flash: (m) => flash(m, 6000),
+});
+ribbonLive.install();
 // right-click a ribbon's tabs (or a group's name) to customize it
 for (const [mode, id] of [['slides', '#ribbon'], ['document', '#doc-ribbon'], ['sheet', '#sheet-ribbon'], ['design', '#design-ribbon']] as const) {
   $(id).addEventListener('contextmenu', (e) => {

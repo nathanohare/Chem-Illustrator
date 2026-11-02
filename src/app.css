@@ -2906,7 +2906,8 @@ header .tab-ctl { margin: 0; }
 body.tabs-in-menu header > h1.app-name { display: none; }
 body.tabs-in-menu header > .stage-badge { margin-left: 4px; }
 #tabs.tabs-narrow .tab { flex: none; min-width: 0; gap: 2px; padding: 0 3px 0 5px; }
-#tabs.tabs-narrow .tab-name { display: none; }
+#tabs.tabs-narrow .tab:not(.active) .tab-name { display: none; }
+#tabs.tabs-narrow .tab.active .tab-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #tabs.tabs-narrow .tab:not(.active) .tab-close { display: none; }
 body.mode-window header > #tabs { background: transparent; }
 body.mode-window header .tab { color: rgba(255, 255, 255, 0.85); }
@@ -3132,3 +3133,21 @@ body:is(.slides-mode, .design-mode):not(.show-analysis-pane) #analysis-section {
 .cg-item { display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 4px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); font-size: var(--fs-sm); color: var(--text); }
 .cg-item:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
 .cg-pic { width: 100%; height: auto; aspect-ratio: 300 / 186; display: block; background: #fff; }
+
+/* editing a ribbon where it is (ribbon-live.ts) */
+.rb-tabs .rb-gear { align-self: center; display: inline-grid; place-items: center; width: 24px; height: 20px; margin-left: auto; padding: 0; border: 0; border-radius: var(--r-control); background: transparent; color: var(--muted); }
+.rb-tabs .rb-gear + .rb-collapse { margin-left: 2px; }
+.rb-tabs .rb-gear:hover, .rb-tabs .rb-gear[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); }
+.rb-live-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 10px; background: var(--accent-soft); border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+.rb-live-say { flex: 1 1 260px; color: var(--text); }
+.rb-live-bar button { padding: 2px 10px; }
+.ribbon.rb-live .rb-group[draggable='true'] { position: relative; outline: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: -2px; cursor: grab; }
+.ribbon.rb-live .rb-group[draggable='true'] > .rb-label { cursor: grab; }
+.ribbon.rb-live .rb-group.rb-user-hidden { display: flex !important; opacity: 0.38; }
+.ribbon.rb-live .rb-group.rb-live-dragging { opacity: 0.4; }
+.ribbon.rb-live .rb-group.rb-live-before { box-shadow: inset 3px 0 0 var(--accent); }
+.ribbon.rb-live .rb-group.rb-live-after { box-shadow: inset -3px 0 0 var(--accent); }
+.ribbon.rb-live .rb-tabs [role=tab].rb-live-tab { background: var(--accent-soft); outline: 2px solid var(--accent); }
+.rb-live-x { position: absolute; top: 2px; right: 2px; z-index: 3; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: var(--panel); color: var(--muted); font-size: 12px; line-height: 16px; box-shadow: 0 0 0 1px var(--line); }
+.rb-live-x:hover { color: var(--text); background: var(--accent-soft); }
+.ribbon.rb-live .rb-group.rb-user-hidden .rb-live-x { opacity: 1; }
