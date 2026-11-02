@@ -1879,6 +1879,36 @@ dialog.toolbox-dialog { width: min(96vw, 900px); }
 .combo-group.foldable { cursor: pointer; }
 .combo-group.foldable:hover { color: var(--accent); }
 
+/* Tool tips: a tool's name and hotkey, what it does, and the keys that change it */
+.tool-tip {
+  position: fixed; z-index: 2000; pointer-events: none;
+  max-width: 300px; padding: 7px 9px;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-tab);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  font: var(--fs-sm) var(--ui-font); line-height: 1.4; white-space: normal;
+}
+.tool-tip[hidden] { display: none; }
+.tool-tip kbd, #hint.steps kbd {
+  font: 600 var(--fs-xs) var(--ui-font); padding: 0 4px; border: 1px solid var(--line); border-bottom-width: 2px;
+  border-radius: 3px; background: var(--bg); color: var(--text); white-space: nowrap;
+}
+.tt-head { display: flex; align-items: baseline; gap: 10px; font-weight: 600; }
+.tt-head kbd { margin-left: auto; }
+.tt-body { margin-top: 2px; }
+.tt-keys { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); display: grid; grid-template-columns: auto 1fr; gap: 3px 8px; align-items: baseline; }
+.tt-keys kbd { justify-self: start; }
+.tt-keys span, .tt-more { color: var(--muted); }
+.tt-more { margin-top: 5px; font-size: var(--fs-xs); }
+/* The status bar's step-by-step hint */
+#hint.steps > * { margin-right: 8px; }
+#hint .st-tool { color: var(--text); font-weight: 600; }
+#hint .st-step i { display: inline-block; min-width: 14px; height: 14px; margin-right: 4px; border-radius: 7px; background: var(--line); color: var(--text); font: 600 10px/14px var(--ui-font); text-align: center; font-style: normal; vertical-align: 1px; }
+#hint .st-step.now { color: var(--text); }
+#hint .st-step.now i { background: var(--accent); color: #fff; }
+#hint .st-step.done { opacity: 0.6; }
+#hint .st-sep { opacity: 0.6; }
+#hint .st-key { color: var(--muted); }
+
 /* Group tooltips: what OTBS, Boc, CO2Me… stand for. Light like the page, so the drawing reads in either theme. */
 .label-tip {
   position: fixed; z-index: 2000; pointer-events: none;

@@ -213,6 +213,8 @@ import { SheetChem } from './sheet/sheet-chem';
 import { structureDoc, structureMolfile } from './sheet/structure-doc';
 import { StructurePictures } from './ui/structure-pictures';
 import { LabelTooltip } from './ui/label-tooltip';
+import { ToolTip } from './ui/tool-tip';
+import { toolHelp, arrowHandleHelp, shapeHandleHelp, splitTitle, withoutKeys } from './ui/tool-help';
 import { starAtoms } from './chem/label-tip';
 import { structurePlace } from './sheet/layout';
 // sheet and document files' readers and writers load the first time one is opened or saved
@@ -558,9 +560,11 @@ function keysOf(ctx: KeyContext, action: string): string[] {
 
 // Tool names for the Hotkeys window: the tool tip up to its first full stop or colon.
 const toolNames: Record<string, string> = {};
+/** Each tool's whole tool tip, as its button has it. */
+const toolTitles: Record<string, string> = {};
 for (const group of [...TOOL_GROUPS, OFF_BAR]) {
   for (const item of group) {
-    for (const t of 'palette' in item ? item.items : [item]) toolNames[t.name] = t.title.replace(/\s*\(.*?\)/g, '').split(/[.:] /)[0];
+    for (const t of 'palette' in item ? item.items : [item]) { toolTitles[t.name] = t.title; toolNames[t.name] = t.title.replace(/\s*\(.*?\)/g, '').split(/[.:] /)[0]; }
   }
 }
 registerToolNames(toolNames);
@@ -584,26 +588,6 @@ const toolbar = new Toolbar($<HTMLDivElement>('#tools'), TOOL_GROUPS, (name) => 
   const keys = keysOf('space', `tool ${name}`);
   return keys.length ? ` (${keys.join(', ')})` : '';
 }, (name, size) => TOOL_PALETTE.get(name)?.icon?.(name, size));
-
-const HINTS: Record<string, string> = {
-  sketch: 'Draw freehand: a line is a bond, a zig-zag a chain, over a bond doubles it; a loop with corners is a ring, a circle benzene; write C, N, O, Cl, Br, + or − on an atom; scribble to erase.',
-  connector: 'Drag from one shape\'s blue dot to another\'s: the connector sticks to both and follows them when they move.',
-  'connector-elbow': 'Drag from one shape\'s blue dot to another\'s: the connector bends square and follows the shapes when they move.',
-  select: 'Click to select (Shift or Ctrl+click adds), drag to box-select or move. Ctrl+drag copies; Shift keeps a drag straight. Double-click selects a whole structure. Delete removes.',
-  eraser: 'Click an atom, bond, caption, arrow or shape to remove it.',
-  chain: 'Drag from empty space or an atom; the number shows how many bonds. Click to type how many atoms; Alt+click repeats the last number.',
-  text: 'Click an atom to type a label (OMe, CO2Et, NHBoc…), or click empty space for a caption.',
-  element: 'Click atoms to make them the element picked in the periodic table, or empty space to add one.',
-  'bond-hapto': 'Drag from a metal into a ring (η⁵, η⁶) or onto a bond (η²), or the other way. Click inside a ring or on a bond for a new metal M there; select an allyl or diene, then click the metal. Click a hapto bond to draw it to each atom.',
-  fragment: 'Drag a line across the bonds to break (or click one bond). Each piece gets a caption with its formula and exact mass, which you can edit.',
-};
-const ARROW_HINT = 'Drag to draw an arrow (hold Alt or Space: any angle); click for a standard one. Drag the ends to move them, the middle to bend it.';
-const CURVE_HINT = 'Drag from where the electrons start to where they go. They start at a lone pair, bond, radical or charge and go to an atom, a bond, or the gap where a new bond forms; swing out to one side to bend that way. Or click where it starts, click points it goes through, and click where it ends. Ctrl+drag (or the pen) draws it freehand. The arrow sticks to the structure. Drag the middle dot (an S: its diamonds, or its line) to change the curve.';
-const SHAPE_HINT = 'Drag to draw. Drag the corner squares to resize; the Style panel changes dashes, fill, corners and shadow.';
-const BRACKET_HINT = 'Drag a box to put brackets round it, or click a structure to bracket it.';
-const BOND_HINT = 'Click empty space or an atom to draw; drag to aim (hold Alt or Space: any angle). Point at an atom or bond and press a hotkey (Edit > Hotkeys lists them).';
-const RING_HINT = 'Click empty space, an atom (spiro; Alt+click to attach by a bond) or a bond (fused). Drag to orient.';
-const TEMPLATE_HINT = 'Click empty space to place it (drag to turn it), a bond to fuse it on, or an atom to join it there (Alt: the other way: by a new bond, or sharing the atom).';
 
 // Design mode's shape library (made further down, once the page is ready)
 let designLib: DesignLibrary | null = null;
@@ -630,21 +614,71 @@ function showGuides(): void {
   $('[data-cmd="alignment-guides"]')?.setAttribute('aria-checked', String(editor.smartGuides));
   if (m === 'design') $<HTMLInputElement>('#dz-guides').checked = guidesOn.design;
 }
-const GEO_HINT = 'Click on the page to put the shape down, or drag to draw it at any size (Shift keeps its shape). Double-click a shape to type in it.';
 
 editor.onToolChange = (name) => {
   toolbar.setActive(name);
   markSketch(name === 'sketch');
   for (const b of document.querySelectorAll<HTMLElement>('.tb-tool')) b.classList.toggle('active', b.dataset.tool === name);
   designLib?.setActive(name);
-  if (name.startsWith('geo:')) { setHint(GEO_HINT); return; }
-  const t = TOOLS[name];
-  setHint(HINTS[name] ?? (t.kind === 'ring' ? RING_HINT : t.kind === 'arrow' ? (t.style.sweep ? CURVE_HINT : ARROW_HINT)
-    : t.kind === 'shape' ? SHAPE_HINT : t.kind === 'bracket' ? BRACKET_HINT : t.kind === 'template' ? TEMPLATE_HINT : BOND_HINT));
+  toolStep = 0;
+  showToolStatus();
 };
+let statusReady = false;
+/** Which step of the tool in use the status bar marks (0: the first; 1 once the mouse is pressed). */
+let toolStep = 0;
+/** The tool's name as its button says it ("Wedge", "Curved arrow (electron pair)"). */
+function toolLabel(name: string): string {
+  const title = toolTitles[name];
+  return title ? splitTitle(title, false).name : name.startsWith('geo:') ? 'Shape' : TOOLS[name]?.kind === 'template' ? 'Template' : name;
+}
+/**
+ * The status bar for the tool in use, step by step, with the keys that change it; with one arrow
+ * or shape selected (by the Select tool, or an arrow tool on an arrow), what each of its handles does.
+ */
+function showToolStatus(): void {
+  // (the first tool is picked before the tabs exist: its hint comes once they do)
+  if (!statusReady) { queueMicrotask(() => { statusReady = true; showToolStatus(); }); return; }
+  if (stepHintOn || (ws.active.mode === 'sheet' || ws.active.mode === 'document') && !splitDrawing) return;
+  const name = editor.toolName, t = TOOLS[name];
+  const sel = editor.sel;
+  const one = sel.atoms.size + sel.bonds.size + sel.captions.size === 0 && sel.arrows.size + sel.shapes.size === 1;
+  if (one && toolStep === 0 && (t?.kind === 'select' || t?.kind === 'arrow' && sel.arrows.size)) {
+    const r = sel.arrows.size ? editor.doc.arrows.get([...sel.arrows][0]) : undefined;
+    const sh = sel.shapes.size ? editor.doc.shapes.get([...sel.shapes][0]) : undefined;
+    const g = r ? arrowHandleHelp(r) : sh && (sh.kind === 'rect' || sh.kind === 'oval' || sh.kind === 'line') ? shapeHandleHelp(sh.kind === 'line') : null;
+    if (g) { setStatus({ name: g.name, steps: g.handles, numbered: false, at: -1, keys: g.keys, full: `${g.name}. ${g.handles.join('. ')}.` }); return; }
+  }
+  const h = toolHelp(name, t);
+  setStatus({ name: toolLabel(name), steps: h.steps, numbered: h.steps.length > 1, at: Math.min(toolStep, h.steps.length - 1), keys: h.keys, full: h.what });
+}
+/** The status bar's step-by-step hint: the tool, its steps (the one in hand marked), then its keys. */
+function setStatus(s: { name: string; steps: string[]; numbered: boolean; at: number; keys: [string, string][]; full: string }): void {
+  const el = $('#hint');
+  const esc = (x: string) => x.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
+  const kbd = (k: string) => `<kbd>${esc(isMac ? k.replace(/^Ctrl\b/, '⌘').replace(/^Alt\b/, '⌥') : k)}</kbd>`;
+  const steps = s.steps.map((x, i) => `<span class="st-step${s.numbered && i < s.at ? ' done' : ''}${s.numbered && i === s.at ? ' now' : ''}">${s.numbered ? `<i>${i + 1}</i>` : ''}${esc(x)}</span>`);
+  el.innerHTML = `<b class="st-tool">${esc(s.name)}</b>${steps.join(s.numbered ? '<span class="st-sep">›</span>' : '<span class="st-sep">·</span>')}`
+    + s.keys.map(([k, what]) => `<span class="st-key">${kbd(k)} ${esc(what)}</span>`).join('');
+  el.classList.add('steps');
+  el.title = s.full;
+}
+// resting the mouse on a tool: what it does and the keys that change it
+const toolTip = new ToolTip((b) => {
+  const name = b.dataset.tipTool!, t = TOOLS[name];
+  const title = b.getAttribute('aria-label') ?? toolTitles[name] ?? name;
+  const known = !!t || name.startsWith('geo:');
+  const h = known ? toolHelp(name, t) : null;
+  const { name: label, rest } = splitTitle(title, !!h?.keys.length);
+  return { name: label, hotkey: keysOf('space', `tool ${name}`)[0] ?? '', body: rest || (h ? withoutKeys(h.what) : ''), keys: h?.keys ?? [], more: b.dataset.tipMore };
+}, isMac);
+// the step in hand: pressing on the drawing starts the second step, letting go goes back to the first
+host.addEventListener('pointerdown', (e) => { if (e.button === 0 && toolStep === 0) { toolStep = 1; showToolStatus(); } });
+window.addEventListener('pointerup', () => { if (toolStep) { toolStep = 0; showToolStatus(); } });
+
 /** The status bar's hint: its first sentence, short enough to read at a glance; the whole of it when you point at it. */
 function setHint(text: string): void {
   const el = $('#hint');
+  el.classList.remove('steps');
   const dot = text.search(/\.(\s|$)/);
   let short = dot > 0 ? text.slice(0, dot + 1) : text;
   const semi = short.indexOf('; ');
@@ -653,7 +687,9 @@ function setHint(text: string): void {
   el.title = short === text ? '' : text;
 }
 // a hint for the step in hand (drawing an arrow through points), and back to the tool's own after
-editor.onHint = (text) => { if (text) setHint(text); else editor.onToolChange(editor.toolName); };
+/** A hint for the step in hand is showing (it stays until the editor takes it back). */
+let stepHintOn = false;
+editor.onHint = (text) => { stepHintOn = !!text; if (text) setHint(text); else editor.onToolChange(editor.toolName); };
 editor.onNotice = (text, ms) => flash(text, ms);
 editor.setTool('bond-single');
 
@@ -6540,7 +6576,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -7169,6 +7205,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'text-bar-floating': () => { placeTextBar('floating'); storeSettings(); },
   'text-bar-hidden': () => { placeTextBar('hidden'); storeSettings(); },
   'group-tips': () => { showGroupTips(!labelTips.enabled); storeSettings(); },
+  'tool-tips': () => { showToolTips(!toolTip.enabled); storeSettings(); },
   'touch-mode-auto': () => { setTouchMode('auto'); storeSettings(); },
   'touch-mode-on': () => { setTouchMode('on'); storeSettings(); },
   'touch-mode-off': () => { setTouchMode('off'); storeSettings(); },
@@ -8611,6 +8648,7 @@ function currentSettings(): Settings {
     page: defaultPage,
     welcomed,
     groupTips: labelTips.enabled,
+    toolTips: toolTip.enabled,
     touchMode: touchMode(),
     penSketch: editor.options.penSketch,
     chemTyping: typingPrefs.chemistry,
@@ -8844,6 +8882,7 @@ function applySettings(s: Settings): void {
   setOneColumnTools(s.oneColumnTools);
   startView = s.startView;
   showGroupTips(s.groupTips);
+  showToolTips(s.toolTips);
   setTouchMode(s.touchMode);
   editor.options.penSketch = s.penSketch;
   $('[data-cmd="pen-sketch"]')?.setAttribute('aria-checked', String(s.penSketch));
@@ -10023,7 +10062,7 @@ function drawingMenu(): MenuItem[] {
   const texts = selectedSpecies().length > 0;
   const shapes = [...s.shapes].map((id) => doc.shapes.get(id)).filter((x): x is Shape => !!x);
   const design = ws.active.mode === 'design';
-  const view: MenuItem = { label: 'View', items: [{ cmd: 'zoom-in' }, { cmd: 'zoom-out' }, { cmd: 'zoom-fit' }, { cmd: 'zoom-selection' }, { cmd: 'zoom-actual' }, null, { cmd: 'show-stereo' }, { cmd: 'group-tips' }, { cmd: 'scroll-bars' }, { cmd: 'alignment-guides' }, null, { cmd: 'dark-page' }, { cmd: 'dark-colours' }] };
+  const view: MenuItem = { label: 'View', items: [{ cmd: 'zoom-in' }, { cmd: 'zoom-out' }, { cmd: 'zoom-fit' }, { cmd: 'zoom-selection' }, { cmd: 'zoom-actual' }, null, { cmd: 'show-stereo' }, { cmd: 'group-tips' }, { cmd: 'tool-tips' }, { cmd: 'scroll-bars' }, { cmd: 'alignment-guides' }, null, { cmd: 'dark-page' }, { cmd: 'dark-colours' }] };
   if (!any) {
     return [
       { cmd: 'paste' }, { cmd: 'paste-smiles' }, { cmd: 'select-all' }, null,
@@ -10204,6 +10243,10 @@ async function darkColours(): Promise<void> {
   storeSettings();
 }
 
+function showToolTips(on: boolean): void {
+  toolTip.enabled = on;
+  $('[data-cmd="tool-tips"]')?.setAttribute('aria-checked', String(on));
+}
 function showGroupTips(on: boolean): void {
   labelTips.enabled = on;
   if (!on) labelTips.hide();
@@ -11598,7 +11641,7 @@ const smartPane = new SmartPane({
 });
 editor.onOverlay = () => smartPane.place();
 editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
-editor.onChange = () => { welcomeWatch?.(); smartPane.refresh(); if (ws.active.mode === 'slides') slideText.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); showToolStatus(); smartPane.refresh(); if (ws.active.mode === 'slides') slideText.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();
