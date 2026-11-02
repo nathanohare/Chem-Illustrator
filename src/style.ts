@@ -80,17 +80,56 @@ export const DEFAULT_BOND_ENDS = 0.25;
 export const bondEndPrefs: { round: number } = { round: DEFAULT_BOND_ENDS };
 
 /**
- * How atom-map numbers (Chemistry ▸ Map Atoms) look, an app setting: a small rounded box beside
- * the atom, filled light peach (Nate's pick), a light tint of the number's own colour (so an atom
- * and where it goes match at a glance), or ChemDraw's grey outline.
+ * How atom-map numbers look (Chemistry ▸ Map Atoms), an app setting: a small rounded box beside
+ * the atom with ChemDraw's gray outline (Nate's pick, 2026-11-02), a light tint of the number's own
+ * color (so an atom and where it goes match at a glance), or a format of the user's own
+ * (Map Number Format…) used for every box.
  */
-export type MapLook = 'peach' | 'tint' | 'grey';
+export type MapLook = 'grey' | 'tint' | 'custom';
 export const MAP_LOOKS: { value: MapLook; label: string }[] = [
-  { value: 'peach', label: 'Light peach boxes' },
-  { value: 'tint', label: 'Each number in its own light color' },
   { value: 'grey', label: 'Gray outlines (as ChemDraw)' },
+  { value: 'tint', label: 'Each number in its own light color' },
+  { value: 'custom', label: 'My own format (Map Number Format…)' },
 ];
-export const mapLookPrefs: { look: MapLook } = { look: 'peach' };
+
+/** A format of the user's own for every map-number box. Colors are #rrggbb; '' is none. */
+export interface MapBoxStyle {
+  fill: string;
+  pattern: 'none' | 'lines' | 'cross' | 'dots';
+  patternColor: string;
+  border: string;
+  /** Outline width in points (0 for none). */
+  borderWidth: number;
+  text: string;
+  bold: boolean;
+  shadow: boolean;
+  /** Rounded corners (else square). */
+  rounded: boolean;
+}
+/** The custom format to start from: light peach with a dark outline, as in Nate's picture. */
+export const DEFAULT_MAP_BOX: MapBoxStyle = { fill: '#fbdcc2', pattern: 'none', patternColor: '#c96a2b', border: '#000000', borderWidth: 0.6, text: '#000000', bold: false, shadow: false, rounded: true };
+export const MAP_PATTERNS: { value: MapBoxStyle['pattern']; label: string }[] = [
+  { value: 'none', label: 'None' }, { value: 'lines', label: 'Diagonal lines' }, { value: 'cross', label: 'Cross-hatch' }, { value: 'dots', label: 'Dots' },
+];
+
+/** A stored map-box format, checked, with anything missing or wrong from the default. */
+export function mapBoxStyle(raw: unknown): MapBoxStyle {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const color = (v: unknown, d: string, empty = true) => typeof v === 'string' && (/^#[0-9a-f]{6}$/i.test(v) || (empty && v === '')) ? v : d;
+  const d = DEFAULT_MAP_BOX;
+  return {
+    fill: color(r.fill, d.fill),
+    pattern: MAP_PATTERNS.some((p) => p.value === r.pattern) ? r.pattern as MapBoxStyle['pattern'] : d.pattern,
+    patternColor: color(r.patternColor, d.patternColor, false),
+    border: color(r.border, d.border),
+    borderWidth: typeof r.borderWidth === 'number' && isFinite(r.borderWidth) ? Math.max(0, Math.min(5, r.borderWidth)) : d.borderWidth,
+    text: color(r.text, d.text, false),
+    bold: typeof r.bold === 'boolean' ? r.bold : d.bold,
+    shadow: typeof r.shadow === 'boolean' ? r.shadow : d.shadow,
+    rounded: typeof r.rounded === 'boolean' ? r.rounded : d.rounded,
+  };
+}
+export const mapLookPrefs: { look: MapLook; custom: MapBoxStyle } = { look: 'grey', custom: { ...DEFAULT_MAP_BOX } };
 
 /** The choices offered for it (Settings > Drawing), from round to square. */
 export const BOND_END_CHOICES: { value: number; label: string }[] = [

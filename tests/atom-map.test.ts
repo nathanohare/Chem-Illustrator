@@ -128,6 +128,11 @@ describe('map number boxes', () => {
     expect(box.y2).toBeGreaterThan(inner.y2);
     expect(box.x2 < a.x || box.x1 > a.x || box.y2 < a.y || box.y1 > a.y).toBe(true);
     expect(parseSettings(JSON.stringify({ mapLook: 'grey' })).mapLook).toBe('grey');
-    expect(parseSettings(JSON.stringify({ mapLook: 'bogus' })).mapLook).toBe('peach');
+    expect(parseSettings(JSON.stringify({ mapLook: 'bogus' })).mapLook).toBe('grey');
+    // the first version's light peach became the starting custom format
+    expect(parseSettings(JSON.stringify({ mapLook: 'peach' })).mapLook).toBe('custom');
+    expect(parseSettings('{}').mapBox.fill).toBe('#fbdcc2');
+    const own = parseSettings(JSON.stringify({ mapBox: { fill: '', pattern: 'dots', border: 'red', borderWidth: 99, shadow: true } })).mapBox;
+    expect(own).toMatchObject({ fill: '', pattern: 'dots', border: '#000000', borderWidth: 5, shadow: true, rounded: true });
   });
 });

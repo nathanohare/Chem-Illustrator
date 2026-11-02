@@ -22,7 +22,8 @@ import { isGenericLabel } from '../chem/labels';
 import { bracketPath, shaftOffset, shapeOrder, elbowRoute, boxOf, shapeBox, shapeMid, shapeTurn, bezPoints, bezHeadBack, bezPathAt, bezSlice, type PathStep } from '../objects';
 import { atomStereoText, bondStereoText, shownDescriptor, axialStyle, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
-import { attachDiamondSize, attachStarSize, hasAttachDiamond, isMapNumber, MAP_GREY, MAP_PEACH, mapBox, mapColour } from './atom-marks';
+import { attachDiamondSize, attachStarSize, hasAttachDiamond, isMapNumber, mapBox } from './atom-marks';
+import { paintMapBox } from './map-box';
 import { layoutText, FONT_STACK, withStack, type TextLayout } from '../text/layout';
 import { drawLayout } from '../text/draw';
 import { geoDef, moveSteps, textArea, traceSteps, type GeoStep } from '../design/geo';
@@ -751,23 +752,15 @@ export class Renderer {
   /** The atom number shown with the ' key, on the open side of the atom or its label. */
   private drawAtomNumber(ctx: CanvasRenderingContext2D, doc: Doc, a: Atom, curFont: string): string {
     const p = this.stereoPlacer(doc).number(a);
-    const f = `${p.size}px ${FONT_STACK}`;
-    if (f !== curFont) { ctx.font = f; curFont = f; }
+    let f = `${p.size}px ${FONT_STACK}`;
     let ink = a.color ?? '#000';
     if (isMapNumber(a)) {
-      // an atom-map number: in a small rounded box (Chemistry ▸ Map Atoms)
-      const b = mapBox(p, measureText(a.atomNumber!, p.size));
-      const look = mapLookPrefs.look;
-      const r = Math.min(b.x2 - b.x1, b.y2 - b.y1) * 0.3;
-      ctx.beginPath();
-      ctx.roundRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1, r);
-      ctx.fillStyle = look === 'grey' ? '#ffffff' : look === 'tint' ? tint(mapColour(a.mapNo!), 0.45) : MAP_PEACH;
-      ctx.fill();
-      ctx.lineWidth = doc.style.lineWidth * (look === 'grey' ? 0.6 : 0.5);
-      ctx.strokeStyle = look === 'grey' ? MAP_GREY : '#000000';
-      ctx.stroke();
-      if (look === 'grey') ink = MAP_GREY;
+      // an atom-map number: in a small box (Chemistry ▸ Map Atoms), in the chosen look
+      const look = paintMapBox(ctx, mapBox(p, measureText(a.atomNumber!, p.size)), a.mapNo!, doc.style.lineWidth, mapLookPrefs.look, mapLookPrefs.custom);
+      ink = look.ink;
+      if (look.bold) f = `bold ${f}`;
     }
+    if (f !== curFont) { ctx.font = f; curFont = f; }
     ctx.fillStyle = ink;
     ctx.fillText(a.atomNumber!, p.x, p.y);
     return curFont;

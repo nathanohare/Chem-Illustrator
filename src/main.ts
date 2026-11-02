@@ -3351,6 +3351,8 @@ async function mapAtomsCommand(): Promise<void> {
     mapLookPrefs.look = got.look as MapLook;
     doc.allDirty = true;
     storeSettings();
+    // your own format: set it now (it starts as light peach with a dark outline)
+    if (mapLookPrefs.look === 'custom') await mapFormatCommand(false);
   }
   const { mapAtoms, applyAtomMap } = await import('./morph/atom-map');
   const res = mapAtoms(doc, renderer, { arrow: got.which === 'step' ? arrow : undefined, measure: editor.measure() });
@@ -3368,6 +3370,22 @@ async function mapAtomsCommand(): Promise<void> {
     ...res.errors.map((e) => `Pairs saved in Animate Reaction left out: ${e}`),
   ].filter(Boolean);
   flash(notes.join('. ') + '.', 8000);
+}
+
+/**
+ * Chemistry > Reactions and Schemes > Map Number Format…: the user's own format for every
+ * map-number box; choosing it also switches the boxes to that format.
+ */
+async function mapFormatCommand(switchLook = true): Promise<void> {
+  finishTyping();
+  const { askMapFormat } = await import('./ui/map-format');
+  const got = await askMapFormat(mapLookPrefs.custom);
+  if (!got) return;
+  mapLookPrefs.custom = got;
+  if (switchLook) mapLookPrefs.look = 'custom';
+  doc.allDirty = true;
+  editor.requestScene();
+  storeSettings();
 }
 
 /** Chemistry > Reactions and Schemes > Clear Atom Map: on the selected structures, or everywhere. */
@@ -8617,6 +8635,7 @@ const COMMANDS: Record<string, () => unknown> = {
   },
   'map-atoms': () => void mapAtomsCommand(),
   'clear-atom-map': () => void clearAtomMapCommand(),
+  'map-format': () => void mapFormatCommand(),
   'number-compounds': () => void numberCompounds(),
   'scheme-settings': () => settingsWindow.open('schemes'),
   'attach-descriptors': () => void attachDescriptors(),
@@ -10045,6 +10064,7 @@ function currentSettings(): Settings {
     warnLook: renderer.warnLook,
     bondEnds: bondEndPrefs.round,
     mapLook: mapLookPrefs.look,
+    mapBox: { ...mapLookPrefs.custom },
     depthShade: { ...depthShadePrefs },
     linkSide,
     slideTemplate,
@@ -10294,6 +10314,7 @@ function applySettings(s: Settings): void {
   setWarnLook(s.warnLook);
   bondEndPrefs.round = s.bondEnds;
   mapLookPrefs.look = s.mapLook;
+  mapLookPrefs.custom = { ...s.mapBox };
   Object.assign(depthShadePrefs, s.depthShade);
   for (const el of document.querySelectorAll('[data-cmd="depth-shading"][role="menuitemcheckbox"]')) el.setAttribute('aria-checked', String(depthShadePrefs.on));
   linkSide = s.linkSide;
