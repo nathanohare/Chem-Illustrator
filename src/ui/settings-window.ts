@@ -4,8 +4,8 @@
 // page shows it again with what it now holds.
 //
 // Every page ends the same way, in a bar along the window's foot: Apply uses the page's
-// settings now (until the program closes; on a page about the open file, for that file only),
-// and Set as Default keeps them for next time and for new files too. Leaving a page, or the
+// settings now and keeps them. On a page about the open file (Drawing Style), Apply is for that
+// file and Set as Default is for new files too; elsewhere the two do the same. Leaving a page, or the
 // window, with changes not yet applied asks whether to apply them or throw them away.
 
 import { hostNextDialog, setPreviewSlot } from './dialog-host';
@@ -19,6 +19,8 @@ export interface SettingsPage {
   open: () => void | Promise<void>;
   /** A page of buttons that do things (export, file types), with no settings to apply: no Apply bar. */
   actions?: boolean;
+  /** A page about the open file (Drawing Style): Apply is for that file, Set as Default for new files too. */
+  perFile?: boolean;
 }
 
 /** How a page's settings were put to use: for now, or kept as the default. */
@@ -193,8 +195,11 @@ export class SettingsWindow {
   }
 
   private refreshBar(): void {
-    const actions = this.pageOf(this.page).actions;
+    const page = this.pageOf(this.page);
+    const actions = page.actions;
     this.foot.classList.toggle('sw-actions', !!actions);
+    this.applyBtn.title = page.perFile ? 'Use these settings in the open file' : 'Use these settings now and keep them for next time';
+    this.foot.querySelector<HTMLElement>('.sw-default')!.title = page.perFile ? 'Use these settings in the open file, and for new files too' : 'Here the same as Apply: the settings are used now and kept for next time';
     const dirty = this.dirty();
     this.applyBtn.disabled = !dirty;
     const note = this.foot.querySelector('.sw-note')!;

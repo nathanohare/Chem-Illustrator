@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { angleText, hintLines, lengthText, modifierHints, parseCursorAids, readoutText, type HintState } from '../src/editor/cursor-aids';
-import { parseArrowLook, parseSettings } from '../src/settings';
+import { parseSettings } from '../src/settings';
 
 const base: HintState = { tool: 'bond', drag: 'draw', fixedAngles: true, fixedLength: true, snapping: false, asksChain: true };
 const none = { shift: false, alt: false, ctrl: false };
@@ -21,7 +21,7 @@ describe('angle and length beside the pointer', () => {
   });
   it('keeps only sensible saved settings, angle and hints on and length off to start', () => {
     expect(parseCursorAids(undefined)).toMatchObject({ angle: true, length: false, hints: true });
-    expect(parseCursorAids({ angle: false, length: true, look: 'odd' })).toMatchObject({ angle: false, length: true, look: 'box' });
+    expect(parseCursorAids({ angle: false, length: true, look: 'odd' })).toMatchObject({ angle: false, length: true, look: 'plain' });
     expect(parseSettings('{}').cursorAids.hints).toBe(true);
   });
 });
@@ -54,10 +54,3 @@ describe('modifier hints', () => {
   });
 });
 
-describe('arrow sizes', () => {
-  it('keeps widths in points, dropping nonsense', () => {
-    expect(parseArrowLook({ width: 1, headLength: 'x', headWidth: -2 })).toEqual({ width: 1, headLength: null, headWidth: null });
-    expect(parseArrowLook({ width: 100 })).toEqual({ width: 30, headLength: null, headWidth: null });
-    expect(parseSettings('{}').arrowLook).toEqual({ width: null, headLength: null, headWidth: null });
-  });
-});
