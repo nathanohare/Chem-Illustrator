@@ -334,9 +334,15 @@ Undo works for every change. Comments are saved in the .pptx as PowerPoint comme
 | Back one click | ← or Backspace |
 | Jump to a slide | Type its number, then Enter |
 | Black or white screen | B or W (B or W again, or the next or back key, brings the slide back) |
+| Every slide, to pick one | G (arrow keys and Enter, or a click; Esc or G goes back) |
+| Look round a canvas slide | Drag, and scroll (or + and −) to zoom |
+| Back to where the show was | Esc, a click or the next key |
+| The canvas's map | M |
 | End the show | Esc |
 
 Each click plays the next animation, then moves on to the next slide with its transition. A click while something is moving finishes it at once.
+
+On a canvas slide you can leave the route to look round: drag to pan and scroll to zoom anywhere on the canvas (up to twelve times closer, or out to the whole canvas). While you look round, the map of the whole canvas shows in the corner with where you are. Esc, a click or the next key glides back to where the show was, and the show goes on from there. The controls in the top right corner (they fade until you move the mouse) zoom, take you back, show the map and show every slide.
 
 ### Presenter View
 

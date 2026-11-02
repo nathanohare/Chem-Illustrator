@@ -110,6 +110,7 @@ import { EFFECTS, animName, newAnim, highlightParts } from './deck/animation';
 import { SLIDE_TEMPLATES, applyTemplate, type SlideTemplate } from './deck/templates';
 import { showContextMenu, topMenuEntry, type MenuItem } from './ui/context-menu';
 import { QuickBar } from './ui/quick-bar';
+import { SmartPane } from './ui/smart-pane';
 import { commandDef } from './commands/registry';
 import { defaultHandout, handoutLayout, handoutPageSvg, notesPageSize, notesPageSvg, type HandoutSetup } from './deck/notes-pages';
 import { OutlineView } from './ui/outline-view';
@@ -192,7 +193,9 @@ import { NameReader, captionName, attachmentAtoms, cxNotes } from './chem/names'
 import { Model3dBuilder } from './chem/model3d';
 import { StructureNamer, confirmedName, nameRuns, type NameTools } from './chem/namer';
 import { placeView } from './chem/place3d';
-import type { Viewer3d } from './ui/viewer3d';
+import type { ConformerTools, Viewer3d } from './ui/viewer3d';
+import { DEFAULT_XTB, type XtbOptions } from './chem/xtb';
+import type { QmOptions } from './chem/qm-input';
 import { NameDialog } from './ui/name-dialog';
 import { SequenceDialog } from './ui/sequence-dialog';
 import { ArrangeDialog } from './ui/arrange-dialog';
@@ -1486,6 +1489,47 @@ function depthShadingChanged(): void {
   viewer3d?.redraw();
 }
 
+/** The 3-D Model window's settings for xTB and Gaussian/ORCA input, kept in this browser or app between sessions. */
+const conformerPrefs = (() => {
+  const KEY = 'ci.conformerTools';
+  let saved: { xtb?: Partial<XtbOptions>; qm?: Partial<QmOptions> } = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') ?? {}; } catch { saved = {}; }
+  const prefs = {
+    xtb: { ...DEFAULT_XTB, ...(saved.xtb ?? {}) } as XtbOptions,
+    qm: { ...(saved.qm ?? {}) } as Partial<QmOptions>,
+    save() { try { localStorage.setItem(KEY, JSON.stringify({ xtb: prefs.xtb, qm: prefs.qm })); } catch { /* not kept */ } },
+  };
+  return prefs;
+})();
+
+/** The conformer tiers of the 3-D Model window, for the structure `molblock`. */
+function conformerTools(molblock: string): ConformerTools {
+  return {
+    search: (opts, progress) => model3d.search(molblock, opts, progress),
+    stop: () => model3d.stop(),
+    ...(isTauri() ? {
+      xtb: (job) => invoke<{ xyz: string; energy: number }>('xtb_run', { job }),
+      xtbVersion: (exe: string) => invoke<string>('xtb_version', { exe }),
+    } : {}),
+    prefs: conformerPrefs,
+    async saveFiles(files, ext) {
+      const what = ext === 'gjf' ? 'Gaussian input' : 'ORCA input';
+      const one: FileType = { description: what, extension: ext, mime: 'text/plain' };
+      const zip: FileType = { description: `${what} files (zip)`, extension: 'zip', mime: 'application/zip' };
+      const single = files.length === 1;
+      const target = await saveFileDialog(single ? files[0].name : files[0].name.replace(/_conf\d+\.\w+$/, '') + `_${ext}.zip`, single ? one : zip).catch(async (e) => { await showError(String(e)); return null; });
+      if (!target) return;
+      try {
+        if (single) await writeFile(target.ref, target.name, files[0].text, one);
+        else await writeFile(target.ref, target.name, zipSync(Object.fromEntries(files.map((f) => [f.name, new TextEncoder().encode(f.text)]))), zip);
+        flash(`Saved ${target.name}.`);
+      } catch (e) {
+        await showError(`Could not save ${target.name}: ${String(e)}`);
+      }
+    },
+  };
+}
+
 async function show3dModel(): Promise<void> {
   const root = editor.sel.atoms.size ? [...editor.sel.atoms][0] : editor.lastEdited;
   if (root === null || !doc.atoms.has(root)) { flash('Select a structure to see in 3-D.'); return; }
@@ -1495,6 +1539,7 @@ async function show3dModel(): Promise<void> {
   if (!viewer3d) viewer3d = new (await import('./ui/viewer3d')).Viewer3d((m) => flash(m));
   viewer3d.showBusy('3-D Model');
   try {
+    viewer3d.tools = conformerTools(ex.molblock);
     const m = await model3d.build(ex.molblock, 12, 1);
     const before = await chem.molToSmiles(ex.molblock);
     viewer3d.show(m, '3-D Model', async (v) => {
@@ -7385,7 +7430,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'link-text': () => linkText() || flash('Select the text to link (and the structure to link it to; else it goes to the nearest).'),
   'unlink-text': () => unlinkText() || flash('Select linked text, or a structure with text linked to it.'),
   group: () => editor.group() || flash('Select two or more things to group: structures, text, arrows or shapes.'),
-  ungroup: () => editor.ungroup() || flash('Select a group to take apart.'),
+  ungroup: () => editor.ungroupSmart() || editor.ungroup() || flash('Select a group to take apart.'),
+  'smart-scheme': () => { finishTyping(); editor.insertSmartScheme(pasteCentre(), deckNow()?.size); },
+  'convert-smart-scheme': () => editor.convertToSmart() || flash(editor.selectedSmart() !== null ? 'That is a Smart Scheme already.' : 'Select a reaction scheme (structures and the arrows between them) to make into a Smart Scheme.'),
+  'ungroup-smart-scheme': () => editor.ungroupSmart() || flash('Select a Smart Scheme first.'),
   'bring-front': () => editor.setBondLayer(true) || flash('Select the bond to bring to the front (where bonds cross, the one behind has a gap).'),
   'send-back': () => editor.setBondLayer(false) || flash('Select the bond to send to the back (where bonds cross, the one behind has a gap).'),
   'save-template': () => void saveTemplate(),
@@ -10105,7 +10153,7 @@ function drawingMenu(): MenuItem[] {
     ] }, { cmd: 'draw-from-arrows' }, { cmd: 'check-arrows' }] : []),
     ...(s.bonds.size && s.bonds.size <= 2 && !s.arrows.size ? [{ cmd: 'homolysis-arrows' }] : []),
     ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : []),
-    ...(s.arrows.size || atoms ? [{ label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'map-atoms' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
+    ...(s.arrows.size || atoms ? [...(editor.selectedSmart() !== null ? [{ cmd: 'ungroup-smart-scheme' }, null] : []), { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, ...(editor.selectedSmart() === null ? [{ cmd: 'convert-smart-scheme' }] : []), { cmd: 'smart-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'map-atoms' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
     null,
     ...(atoms ? [{ label: 'Label the Structure', items: [{ cmd: 'add-id-label' }, { cmd: 'add-caption' }, { cmd: 'attach-descriptors' }, null, { cmd: 'number-compounds' }] }] : []),
     ...(atoms ? [{ cmd: 'add-to-compound-library', label: 'Add to Compound Library' }] : []),
@@ -11639,7 +11687,28 @@ const slideText = new SlideTextRibbon($('#ribbon'), {
   boxLook: () => editor.textBoxLook(),
 });
 CaptionEditor.onState = () => { if (ws.active.mode === 'slides') slideText.refresh(); };
-editor.onChange = () => { welcomeWatch?.(); if (ws.active.mode === 'slides') slideText.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+// the Smart Scheme pane: the selected scheme's species, beside it
+const smartPane = new SmartPane({
+  doc: () => editor.doc,
+  measure: () => editor.fullMeasure(),
+  selected: () => (editor.sel.shapes.size + editor.sel.captions.size + editor.sel.arrows.size + editor.sel.atoms.size ? editor.selectedSmart() : null),
+  screenRect: (r) => {
+    const o = overlay.getBoundingClientRect();
+    const a = renderer.toScreen({ x: r.x1, y: r.y1 }), b = renderer.toScreen({ x: r.x2, y: r.y2 });
+    return { x1: a.x + o.left, y1: a.y + o.top, x2: b.x + o.left, y2: b.y + o.top };
+  },
+  area: () => { const o = host.getBoundingClientRect(); return { x1: o.left, y1: o.top, x2: o.right, y2: o.bottom }; },
+  slotText: (id, k, t) => editor.smartSlotText(id, k, t),
+  stepText: (id, k, part, t) => editor.smartStepText(id, k, part, t),
+  add: (id, after) => editor.smartInsert(id, after),
+  remove: (id, k) => editor.smartRemove(id, k),
+  move: (id, from, to) => editor.smartMove(id, from, to),
+  arrange: (id, patch) => editor.smartArrange(id, patch),
+  ungroup: (id) => editor.ungroupSmart(id),
+});
+editor.onOverlay = () => smartPane.place();
+editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
+editor.onChange = () => { welcomeWatch?.(); smartPane.refresh(); if (ws.active.mode === 'slides') slideText.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();

@@ -9,6 +9,7 @@
 // lines, arrows and tables. What has no place here yet (charts, rotated things) is noted in
 // warnings, never refused.
 
+import { remapFrames, remapStep } from './remap-refs';
 import { fromDataUrl } from '../render/images';
 import type { PinnedComment } from '../document/comments';
 import { COMMENT_REL, readCommentAuthors, readLegacyComments, readModernComments } from './pptx-comments';
@@ -2048,20 +2049,24 @@ export function mergeDrawing(doc: Doc, src: Doc, map: (p: Vec) => Vec): void {
     const { id: _id, ...rest } = structuredClone(b);
     doc.addBond(a1, a2, b.order, b.display, { ...rest, a1, a2 });
   }
+  const caps = new Map<number, number>(), shapes = new Map<number, number>(), arrows = new Map<number, number>();
+  const maps = { atoms: ids, captions: caps, shapes, arrows };
   for (const c of src.captions.values()) {
-    const { id: _id, ...rest } = structuredClone(c);
+    const { id, ...rest } = structuredClone(c);
     const p = map(c);
-    doc.addCaption({ ...rest, x: p.x, y: p.y });
-  }
-  for (const r of src.arrows.values()) {
-    const { id: _id, ...rest } = structuredClone(r);
-    doc.addArrow({ ...rest, tail: map(r.tail), head: map(r.head) });
+    caps.set(id, doc.addCaption({ ...rest, x: p.x, y: p.y }).id);
   }
   for (const s of src.shapes.values()) {
-    const { id: _id, ...rest } = structuredClone(s);
+    const { id, ...rest } = structuredClone(s);
     const a = map({ x: s.x1, y: s.y1 }), b = map({ x: s.x2, y: s.y2 });
-    doc.addShape({ ...rest, x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+    shapes.set(id, doc.addShape({ ...rest, x1: a.x, y1: a.y, x2: b.x, y2: b.y }).id);
   }
+  for (const r of src.arrows.values()) {
+    const { id, ...rest } = structuredClone(r);
+    if (rest.step) rest.step = remapStep(rest.step, maps);
+    arrows.set(id, doc.addArrow({ ...rest, tail: map(r.tail), head: map(r.head) }).id);
+  }
+  remapFrames(doc, maps);
 }
 
 /** Read a PowerPoint file. Throws only when the file is not a PowerPoint file at all. */

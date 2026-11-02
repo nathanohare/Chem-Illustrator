@@ -3,6 +3,7 @@
 
 import type { Model3dRequest, Model3dResponse } from '../worker/model3d-worker';
 import type { Model3d } from './model3d-build';
+import type { SearchOptions } from './conformer-rank';
 import type { PoseResult } from './pose3d';
 import type { DepthCues } from './perspective';
 
@@ -12,6 +13,7 @@ export class Model3dBuilder {
   private nextId = 1;
   private pending = new Map<number, (m: Extract<Model3dResponse, { type: 'build' }>) => void>();
   private poses = new Map<number, (r: PoseResult) => void>();
+  private progress = new Map<number, (done: number, total: number) => void>();
   /** How long starting took (download and set-up of the force field tables), once ready. */
   loadMs = 0;
 
@@ -36,6 +38,8 @@ export class Model3dBuilder {
         else if (m.type === 'build') {
           const cb = this.pending.get(m.id);
           if (cb) { this.pending.delete(m.id); cb(m); }
+        } else if (m.type === 'progress') {
+          this.progress.get(m.id)?.(m.done, m.total);
         } else if (m.type === 'pose') {
           const cb = this.poses.get(m.id);
           if (cb) { this.poses.delete(m.id); cb(m.result); }
@@ -63,6 +67,38 @@ export class Model3dBuilder {
     });
     if (!r.model) throw new Error(r.message ?? 'Could not build a 3-D model of this structure.');
     return r.model;
+  }
+
+  /**
+   * A conformer search (hundreds of starting points relaxed, duplicates dropped, populations),
+   * `progress` told as it goes. Rejects with a readable reason, or 'stopped' after stop().
+   */
+  async search(molblock: string, opts: Omit<SearchOptions, 'progress'>, progress?: (done: number, total: number) => void): Promise<Model3d> {
+    await this.start();
+    const id = this.nextId++;
+    if (progress) this.progress.set(id, progress);
+    try {
+      const r = await new Promise<Extract<Model3dResponse, { type: 'build' }>>((resolve) => {
+        this.pending.set(id, resolve);
+        this.send({ type: 'search', id, molblock, opts, seed: 1 });
+      });
+      if (!r.model) throw new Error(r.message ?? 'Could not search the conformers of this structure.');
+      return r.model;
+    } finally {
+      this.progress.delete(id);
+    }
+  }
+
+  /** Stop whatever the worker is doing (a long search): it is started afresh when next needed, and calls waiting get 'stopped'. */
+  stop(): void {
+    this.worker?.terminate();
+    this.worker = null;
+    this.started = null;
+    for (const [id, cb] of this.pending) cb({ type: 'build', id, model: null, message: 'stopped' });
+    this.pending.clear();
+    for (const [, cb] of this.poses) cb({ problem: 'build', message: 'stopped' });
+    this.poses.clear();
+    this.progress.clear();
   }
 
   /** The drawing's own shape in 3-D (for the 3-D Perspective tool), picked by its wedges and bold bonds. */

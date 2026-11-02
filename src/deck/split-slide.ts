@@ -84,6 +84,8 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
     if (dia.shapes.has(sh.id)) continue;
     if (sh.kind === 'picture') { pictures.push(sh); continue; }
     if (sh.kind === 'table') { if (sh.table) tables.push(sh); continue; }
+    // a Smart Scheme's frame goes in its scheme's picture (in the scheme's ChemDraw data), so it finds its scheme again when read back
+    if (sh.smart) { items.push({ box: shapeBox(sh), chem: true, add: (s) => s.shapes.add(sh.id), shape: sh }); continue; }
     // design shapes stay PowerPoint shapes even beside structures (boxes round a structure, flasks under one)
     if (sh.kind === 'geo') { geos.push(sh); continue; }
     // ring fills sit under their structure, in its picture

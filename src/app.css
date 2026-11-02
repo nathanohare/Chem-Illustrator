@@ -747,6 +747,8 @@ dialog.energy-dialog { width: min(96vw, 680px); max-height: 92vh; }
 .energy-table td { padding: 1px 2px; }
 .energy-table td input { width: 8em; font: inherit; padding: 2px 4px; box-sizing: border-box; }
 .energy-table td input.energy-num { width: 5em; text-align: right; }
+.energy-table .energy-grip { cursor: grab; color: var(--muted); padding: 0 2px; user-select: none; }
+.energy-import-note { margin: 2px 0 4px; }
 .energy-rows { display: flex; gap: 8px; margin: 6px 0; }
 .energy-pair { display: flex; align-items: center; gap: 6px; }
 .energy-pair input { width: 5em; }
@@ -2484,6 +2486,20 @@ dialog.sd-find { position: fixed; inset: 64px 18px auto auto; max-height: calc(1
 .show-tools .show-swatch { width: 18px; height: 18px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.6); }
 .show-tools .show-swatch[aria-pressed="true"] { outline: 2px solid #fff; outline-offset: 1px; }
 .present.no-cursor .show-tools { opacity: 0; }
+.show-corner { position: absolute; right: 12px; top: 12px; z-index: 3; display: flex; gap: 2px; align-items: center; padding: 3px; border-radius: var(--r-tab); background: rgba(30, 32, 36, 0.72); opacity: 0.28; transition: opacity 0.15s; }
+.show-corner:hover, .show-corner:focus-within { opacity: 1; }
+.present.no-cursor .show-corner { opacity: 0; }
+.show-corner button { min-width: 30px; height: 28px; border: 0; border-radius: var(--r-control); background: transparent; color: #f2f2f2; font: var(--fs-md) var(--ui-font, system-ui), sans-serif; cursor: pointer; padding: 0 6px; }
+.show-corner button[hidden] { display: none; }
+.show-corner button:hover { background: rgba(255, 255, 255, 0.14); }
+.show-corner button[aria-pressed="true"] { background: rgba(255, 255, 255, 0.28); }
+.present.panning, .present.panning canvas { cursor: grabbing !important; }
+.show-grid { position: absolute; inset: 0; z-index: 5; overflow: auto; background: rgba(12, 13, 16, 0.95); display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 16px; padding: 32px; align-content: start; }
+.show-grid-slide { display: grid; justify-items: center; gap: 4px; padding: 6px; border: 2px solid transparent; border-radius: var(--r-panel); background: none; color: #d8dbe0; font: var(--fs-md) var(--ui-font, system-ui), sans-serif; cursor: pointer; }
+.show-grid-slide canvas { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5); background: #fff; }
+.show-grid-slide:hover { border-color: rgba(255, 255, 255, 0.35); }
+.show-grid-slide:focus-visible { outline: none; border-color: #7fb2ff; }
+.show-grid-slide.now { border-color: #2b7bd6; }
 .present.laser-on canvas, .pv-cur.laser-on canvas { cursor: none !important; }
 .show-ink { z-index: 2; }
 
@@ -3067,3 +3083,38 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .kb-pick select { font: inherit; max-width: 24em; margin-left: 4px; }
 .kb-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--fs-sm, 0.85em); }
 .kb-kind::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; background: var(--kb); vertical-align: -1px; }
+
+/* the Smart Scheme pane: beside the selected scheme, like SmartArt's text pane */
+.smart-pane { position: fixed; z-index: 40; width: 300px; max-height: min(70vh, 560px); overflow: auto; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-panel); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14); font: var(--fs-sm) var(--ui-font); display: grid; gap: 6px; padding: 6px 8px 8px; }
+.smart-pane[hidden] { display: none; }
+.smart-pane.folded { width: auto; padding: 2px; }
+.smart-pane button { font: inherit; }
+.smart-pane .sp-head { display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: var(--fs-md); }
+.smart-pane .sp-fold, .smart-pane .sp-unfold { border: none; background: none; color: var(--muted); font-size: 16px; line-height: 1; padding: 2px 6px; cursor: pointer; }
+.smart-pane .sp-unfold { padding: 8px 4px; }
+.smart-pane .sp-layouts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+.smart-pane .sp-layout { display: grid; justify-items: center; gap: 1px; padding: 3px 0 2px; border: 1px solid var(--line); border-radius: var(--r-control); background: none; color: var(--text); font-size: var(--fs-xs); cursor: pointer; }
+.smart-pane .sp-layout svg { color: var(--muted); }
+.smart-pane .sp-layout[aria-checked='true'] { background: var(--accent-soft); border-color: var(--accent); }
+.smart-pane .sp-layout[aria-checked='true'] svg { color: var(--accent); }
+.smart-pane .sp-opts { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); }
+.smart-pane .sp-opts input[type='number'] { width: 44px; margin-left: 4px; }
+.smart-pane .sp-note { margin: 0; color: var(--muted); font-size: var(--fs-xs); }
+.smart-pane .sp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.smart-pane .sp-slot { display: flex; align-items: center; gap: 4px; padding: 2px; border: 1px solid transparent; border-radius: var(--r-control); }
+.smart-pane .sp-slot.drop { border-color: var(--accent); background: var(--accent-soft); }
+.smart-pane .sp-slot.dragging { opacity: 0.45; }
+.smart-pane .sp-grip { color: var(--muted); cursor: grab; font-size: 10px; letter-spacing: -2px; padding: 0 2px; }
+.smart-pane .sp-num { min-width: 14px; height: 13px; background: var(--accent); color: var(--on-accent); font-size: 10px; font-weight: 600; text-align: center; line-height: 13px; border-radius: 1px; }
+.smart-pane .sp-slot input, .smart-pane .sp-fixed { flex: 1; min-width: 0; }
+.smart-pane .sp-fixed { color: var(--muted); font-style: italic; padding: 2px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.smart-pane input[type='text'] { font: inherit; padding: 2px 4px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); color: var(--text); }
+.smart-pane .sp-x { border: none; background: none; color: var(--muted); cursor: pointer; padding: 0 4px; font-size: 14px; }
+.smart-pane .sp-x:hover { color: var(--danger); }
+.smart-pane .sp-step { display: flex; align-items: flex-start; gap: 4px; padding-left: 22px; }
+.smart-pane .sp-arrow { color: var(--muted); width: 14px; text-align: center; padding-top: 3px; }
+.smart-pane .sp-step-fields { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.smart-pane .sp-step-fields input { font-size: var(--fs-xs); }
+.smart-pane .sp-foot { display: flex; justify-content: space-between; gap: 6px; }
+.smart-pane .sp-add { border: none; background: none; color: var(--accent); font-weight: 600; cursor: pointer; padding: 2px 0; }
+.smart-pane .sp-ungroup { padding: 2px 8px; }

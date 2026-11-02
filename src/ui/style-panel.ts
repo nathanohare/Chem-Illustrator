@@ -190,10 +190,14 @@ export class StylePanel {
     if (several) this.structureControls(selAtoms, selBonds);
     if (arrows.length) this.arrowControls(arrows);
     // an energy diagram is a frame drawn from its numbers: its own section, not a rectangle's
-    const diagram = all.length === 1 && (all[0].energy || all[0].diagram || all[0].plate) ? all[0] : undefined;
+    const diagram = all.length === 1 && (all[0].energy || all[0].diagram || all[0].plate || all[0].smart) ? all[0] : undefined;
     if (diagram?.energy) this.energyControls(diagram);
     else if (diagram?.plate) this.plateControls(diagram);
     else if (diagram?.diagram) this.diagramControls(diagram);
+    else if (diagram?.smart) {
+      this.heading('Smart Scheme');
+      this.note('Switch its layout and type its species and conditions in the list beside it. Drag a species on the page and its arrows follow; the + buttons add a species there.');
+    }
     else if (shapes.length) this.shapeControls(shapes);
     if (rings.length) this.shapeControls(rings, rings.length > 1 ? `${rings.length} ring fills` : 'Ring fill');
     if (pictures.length) this.pictureControls(pictures);
@@ -458,6 +462,7 @@ export class StylePanel {
     this.check('Show the energies', d.values, (v) => set({ values: v }));
     this.check('Axis and its titles', d.axis, (v) => set({ axis: v }));
     this.check('Mark the largest barrier', d.barrier, (v) => set({ barrier: v }), 'A double arrow from the lowest point up to the highest after it, on each pathway');
+    this.check('Mark the overall change', !!d.overall, (v) => set({ overall: v }), 'A double arrow from the first species to the last, on each pathway');
     this.number('Decimal places', d.digits, 1, 0, 3, (v) => set({ digits: v }));
     const n = Math.max(...d.paths.map((p) => p.points.length));
     this.note(`${d.paths.length === 1 ? 'One pathway' : `${d.paths.length} pathways`} through ${n} species. Change the names and energies in the window; drag a corner to resize it. Anything you draw inside stays when it is redrawn.`);
