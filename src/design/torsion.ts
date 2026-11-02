@@ -235,7 +235,7 @@ function drawSawhorseBox(doc: Doc, m: Measure, d: TorsionData, at: Vec, out: Tor
   // where the sawhorse put its two atoms (drawNewman: yaw 48°, pitch 32°, the atoms 1.35 bond lengths apart)
   const sep = 1.35 * L, yaw = (48 * Math.PI) / 180, pitch = (32 * Math.PI) / 180;
   const back = { x: sep * Math.sin(yaw), y: -sep * Math.cos(yaw) * Math.sin(pitch) };
-  const mark = drawEyeMark(doc, { x: 0, y: 0 }, back, d.barrierColor);
+  const mark = drawEyeMark(doc, { x: 0, y: 0 }, back, d.barrierColor, d.look.eye ?? 'plain');
   const ids = { captions: parts.captions, shapes: [...parts.shapes, ...mark.shapes], arrows: [...parts.arrows, ...mark.arrows] };
   const boxes = [
     ...ids.captions.map((id) => m.captionBox(doc.captions.get(id)!)),

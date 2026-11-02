@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest';
 import type { Rect } from '../src/geom';
 import { Doc } from '../src/model';
 import { plainMeasure } from '../src/chem/reaction';
-import { defaultColumns, gridOffsets, inferGrid, readRows, usualGap } from '../src/editor/grid-arrange';
+import { defaultColumns, gridOffsets, inferGrid, readRows, sharedAnchors, usualGap } from '../src/editor/grid-arrange';
+import { askGridLayout } from '../src/ui/grid-picker';
 import { Editor } from '../src/editor/editor';
 import { Renderer } from '../src/render/renderer';
 
@@ -181,5 +182,59 @@ describe('in the editor', () => {
     expect(ed.arrangeGrid({ kind: 'column', gap: 20 })).toBe(true);
     const col = rings.map((r) => centre(doc, r.atoms));
     for (let i = 1; i < 9; i++) { expect(col[i].x).toBeCloseTo(col[0].x, 3); expect(col[i].y).toBeGreaterThan(col[i - 1].y); }
+  });
+
+  it('structures that share a ring line up on it, not on their boxes (an aldehyde sticking up)', () => {
+    const doc = new Doc();
+    const L = doc.style.bondLength;
+    const rings = doc.edit('build', () => {
+      const out = [pyridine(doc, 0, 0, 1), pyridine(doc, 90, 6, 2), pyridine(doc, 180, -4, 3)];
+      // a CHO on the middle one, pointing up: its box reaches higher
+      const top = out[1].atoms.reduce((p, q) => (doc.atoms.get(q)!.y < doc.atoms.get(p)!.y ? q : p));
+      const c = doc.addAtom(doc.atoms.get(top)!.x, doc.atoms.get(top)!.y - L, 6).id, o = doc.addAtom(doc.atoms.get(top)!.x + 0.87 * L, doc.atoms.get(top)!.y - 1.5 * L, 8).id;
+      doc.addBond(top, c, 1); doc.addBond(c, o, 2);
+      out[1].atoms.push(c, o);
+      return out;
+    });
+    const ringCentre = (r: { atoms: number[] }) => centre(doc, r.atoms.slice(0, 6));
+    const ed = editorFor(doc);
+    ed.sel.atoms = new Set(doc.atoms.keys());
+    expect(ed.arrangeGrid({ kind: 'row', gap: 20 })).toBe(true);
+    const ys = rings.map((r) => ringCentre(r).y);
+    expect(ys[1]).toBeCloseTo(ys[0], 3);
+    expect(ys[2]).toBeCloseTo(ys[0], 3);
+    // and the anchors are those rings
+    const us = ed.gridPlan({ kind: 'row', gap: 20 }).units;
+    const anchors = sharedAnchors(doc, us);
+    expect(anchors.every((p) => p !== null)).toBe(true);
+  });
+
+  it('keeps row and column spacing apart', () => {
+    const bs = [box(0, 0), box(50, 0), box(0, 50), box(50, 50)];
+    const off = gridOffsets(bs, { kind: 'grid', cols: 2, gap: 0, rowGap: 30, colGap: 10 });
+    const after = bs.map((b, i) => moved(b, off[i]));
+    expect(after[1].x1 - after[0].x2).toBeCloseTo(10, 6);
+    expect(after[2].y1 - after[0].y2).toBeCloseTo(30, 6);
+  });
+});
+
+describe('the Arrange in a Grid window', () => {
+  it('says how many are picked, keeps rows and columns in step, and redraws the preview as numbers change', async () => {
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) { this.open = true; };
+    HTMLDialogElement.prototype.close ??= function (this: HTMLDialogElement) { this.open = false; };
+    const seen: string[] = [];
+    const got = askGridLayout(10, { cols: 4, rowGap: 20, colGap: 15 }, (p) => { seen.push(`${p.cols}/${p.rowGap}/${p.colGap}`); return '<svg></svg>'; });
+    const d = document.querySelector('dialog.grid-picker')!;
+    expect(d.querySelector('.grid-pick-count')!.textContent).toBe('10 items selected');
+    const input = (n: string) => d.querySelector<HTMLInputElement>(`input[name=${n}]`)!;
+    expect(input('rows').value).toBe('3');
+    input('rows').value = '2';
+    input('rows').dispatchEvent(new Event('input'));
+    expect(input('cols').value).toBe('5');
+    input('rowGap').value = '40';
+    input('rowGap').dispatchEvent(new Event('input'));
+    expect(seen).toEqual(['4/20/15', '5/20/15', '5/40/15']);
+    d.querySelector<HTMLFormElement>('form')!.requestSubmit();
+    expect(await got).toEqual({ cols: 5, rowGap: 40, colGap: 15 });
   });
 });

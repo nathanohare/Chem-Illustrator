@@ -20,8 +20,8 @@ const BOND_KEYS: [string, string][] = [['Alt', 'Toggle angle snapping'], ['Hotke
 /** Help for tools named one by one; the rest go by their kind (below). */
 const BY_NAME: Record<string, ToolHelp> = {
   select: {
-    what: 'Click to select (Shift or Ctrl+click adds), drag to box-select or move. Ctrl+drag copies; Shift keeps a drag straight. Double-click selects a whole structure. Delete removes.',
-    steps: ['Click or drag a box', 'Drag to move'],
+    what: 'Ctrl+drag to copy. Hold Shift while dragging to lock orientation. Double-click selects a whole structure; Shift or Ctrl+click adds to the selection. Delete removes.',
+    steps: ['Ctrl+drag to copy', 'Hold Shift while dragging to lock orientation'],
     keys: [['Shift', 'Add to selection; move straight'], ['Ctrl', 'Move a copy'], ['Alt', 'Toggle snapping'], ['Double-click', 'Select whole structure']],
   },
   lasso: {

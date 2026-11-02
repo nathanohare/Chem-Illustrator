@@ -64,9 +64,11 @@ import { arrowClash, bendSide, cleanUpArrow, endCentre, endPointToward, headEnd,
 import { followPins, hasPins, makePin, mirrorBend } from '../chem/pins';
 import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '../chem/scheme-arrange';
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
+import { rebuildSmartCycle, smartCycleStart, type SmartCycleStart } from '../chem/smart-cycle';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
-import { arrangeSmart, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
+import { arrangeSmart, formatSmart, stepToHolder, stepHolderToText, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
+import type { SmartFormat } from '../chem/smart-format';
 import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
 import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
 import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
@@ -85,7 +87,7 @@ import { bezFrom, fitPath, dragCurveAt, throughPoints, dragPathPoint, firstBend,
 import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
 import { imageFor } from '../render/images';
-import { gridOffsets, inferGrid, usualGap, withLabels, type GridHow } from './grid-arrange';
+import { gridOffsets, inferGrid, sharedAnchors, usualGap, withLabels, type GridHow } from './grid-arrange';
 import { BEND, BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
 import { flatten, prepareTurn, stillMeans, structuresOf, type PerspectiveHost, type Prepared } from './perspective';
 import { anglesTurn, dragTurn, IDENT as IDENT_TURN, type M3 } from '../chem/perspective';
@@ -317,18 +319,39 @@ interface TemplateChoice {
   note?: string;
 }
 
-const HILITE = 'rgba(40, 120, 255, 0.28)';
-const PREVIEW = '#2f6fdf';
+let PREVIEW = '#2f6fdf';
 
 /**
  * Colours of the marks drawn over the page. With View > Reading Mode on, the marks go through the
  * page's colour filter too (so text being typed shows in the ink colour), which turns lightness
  * round: these are picked to come out bright and clear on the dark page.
  */
-const MARKS = {
-  light: { selFill: 'rgba(40, 120, 255, 0.18)', selLine: 'rgba(40, 120, 255, 0.35)', hot: HILITE, box: 'rgba(47, 111, 223, 0.55)', hover: 'rgba(40,120,255,0.7)', marquee: '#333', next: '#19a34a' },
-  dark: { selFill: 'rgba(0, 70, 190, 0.34)', selLine: 'rgba(0, 70, 190, 0.6)', hot: 'rgba(0, 70, 190, 0.5)', box: 'rgba(0, 60, 158, 0.9)', hover: 'rgba(0, 60, 158, 0.95)', marquee: '#000', next: '#0b6b2f' },
+const marksIn = (light: [number, number, number], dark: [number, number, number]) => {
+  const a = (c: [number, number, number], o: number) => `rgba(${c.join(', ')}, ${o})`;
+  return {
+    light: { selFill: a(light, 0.18), selLine: a(light, 0.35), hot: a(light, 0.28), box: a(light, 0.55), hover: a(light, 0.7), marquee: '#333', next: '#19a34a' },
+    dark: { selFill: a(dark, 0.34), selLine: a(dark, 0.6), hot: a(dark, 0.5), box: a(dark, 0.9), hover: a(dark, 0.95), marquee: '#000', next: '#0b6b2f' },
+  };
 };
+const BLUE_MARKS = marksIn([40, 120, 255], [0, 70, 190]);
+let MARKS = BLUE_MARKS;
+
+/**
+ * Draw the selection, hover and drawing previews in `hex` (Canvas mode's teal, so the marks
+ * match the mode's accent), or in the usual blue (null).
+ */
+export function setMarkTint(hex: string | null): void {
+  if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) {
+    MARKS = BLUE_MARKS;
+    PREVIEW = '#2f6fdf';
+    return;
+  }
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+  // the Reading Mode page turns lightness round, so its marks are a darker shade that comes out bright
+  const dark = c.map((v) => Math.round(v * 0.55)) as [number, number, number];
+  MARKS = marksIn(c, dark);
+  PREVIEW = hex;
+}
 
 /** A highlight setting the Chemistry menu and Highlight toolbox turn on and off. */
 export type HighlightToggle = 'smooth' | 'centre' | 'soft' | 'shadow' | 'glow' | 'outline';
@@ -393,6 +416,8 @@ export class Editor {
     groupOutline: true,
     /** Mechanism arrows left running into something by a change find their own way round (Edit > Settings). */
     rerouteArrows: true,
+    /** Draw Next Intermediate and Check Arrows are offered (Edit > Settings ▸ Drawing). */
+    arrowProducts: true,
   };
   /**
    * New arrows' line width and head size, in points, apart from the bonds' line width (the
@@ -919,6 +944,14 @@ export class Editor {
 
   private onDown(e: PointerEvent): void {
     this.commitLabel();
+    // Alt+click on a locked structure (Slides) edits it this once: the lock lifts for this press
+    // and comes back when the button is let go
+    if (this.structuresLocked && e.altKey && e.button === 0) {
+      this.structuresLocked = false;
+      const h = this.hitTestNow(this.docPoint(e));
+      if (h?.kind === 'atom' || h?.kind === 'bond') this.relockAfter = true;
+      else this.structuresLocked = true;
+    }
     // a press on the text being typed (or its width handle) goes to the text
     const cap = this.captionEd;
     if (cap && e.button === 2 && cap.hit(this.docPoint(e)) === 'text') {
@@ -1124,7 +1157,7 @@ export class Editor {
       const x = g?.list[gg.index];
       if (g && x) {
         // a guide snaps to the drawing's major ticks (from its top left) unless Alt is held
-        const at = e.altKey || g.snap === 'none' ? p : { x: Math.round(p.x / g.minor) * g.minor, y: Math.round(p.y / g.minor) * g.minor };
+        const at = e.altKey || g.snapOff ? p : { x: Math.round(p.x / g.minor) * g.minor, y: Math.round(p.y / g.minor) * g.minor };
         const list = g.list.slice();
         list[gg.index] = movedGuide(x, gg.part, at);
         this.doc.guides = { ...g, list };
@@ -1336,7 +1369,11 @@ export class Editor {
     this.requestScene();
   }
 
+  /** The structures were unlocked for one Alt+click: lock them again when it ends. */
+  private relockAfter = false;
+
   private onUp(e: PointerEvent): void {
+    if (this.relockAfter) queueMicrotask(() => { this.relockAfter = false; this.structuresLocked = true; this.lastHit = null; });
     const d = this.drag;
     this.drag = null;
     if (!d) return;
@@ -2031,7 +2068,7 @@ export class Editor {
     const rest = sel.filter((a) => !isMetalAtom(a));
     if (metals.length !== 1 || rest.length < 2) return 'Select one metal and the atoms of the ring or π-bond it is bonded to (two or more).';
     const m = metals[0];
-    doc.edit('Bond Metal to Ring', () => {
+    doc.edit('Add Hapto Bond', () => {
       for (const a of rest) { const b = doc.bondBetween(m.id, a.id); if (b) doc.removeBond(b.id); }
       bondHapto(doc, m.id, rest.map((a) => a.id));
     });
@@ -3022,20 +3059,36 @@ export class Editor {
     const errors = reading.issues.filter((i) => i.level === 'error');
     if (!reading.steps.length && !errors.length) return 'none';
     if (errors.length || !out) { this.pickIssues(errors); return { drawn: false, issues: reading.issues }; }
-    // after what the arrows are drawn on (and the arrows), on the level of its middle
+    // after what the arrows are drawn on (and the arrows), with the reaction centre (the changed
+    // atoms of the main structure) on the same level in both, and the reaction arrow there too
     const L = doc.style.bondLength;
     const sp = spacing(L, prefsOf(doc));
+    const changed = pushedAtoms(reading);
     const atoms = new Set<number>();
-    for (const id of pushedAtoms(reading)) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
+    for (const id of changed) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
     const from = boxOf(doc, atoms, arrows.map((r) => r.id))!;
+    const main = out.fragments().filter((f) => [...f].some((id) => changed.has(id))).sort((p, q) => q.size - p.size)[0] ?? new Set<number>();
+    // (the changed atoms that stayed where they were drawn: a structure brought alongside doesn't count)
+    const inMain = [...changed].filter((id) => main.has(id));
+    const stayed = inMain.filter((id) => dist(out.atoms.get(id)!, doc.atoms.get(id)!) < 1e-6);
+    const centre = stayed.length ? stayed : inMain;
+    const meanY = (d: Doc) => centre.reduce((t, id) => t + d.atoms.get(id)!.y, 0) / Math.max(1, centre.length);
+    const level = centre.length ? meanY(doc) : (from.y1 + from.y2) / 2;
     const pb = out.bounds() ?? { x1: 0, y1: 0, x2: 0, y2: 0 };
+    const dy0 = level - (centre.length ? meanY(out) : (pb.y1 + pb.y2) / 2);
     const len = sp.minArrow;
-    const w = sp.gap + len + sp.gap + (pb.x2 - pb.x1), h = Math.max(pb.y2 - pb.y1, L);
-    const want = { x: from.x2 + w / 2, y: (from.y1 + from.y2) / 2 };
-    const c = freeSpace(doc, w, h, want, 0.5 * L);
-    const tail = { x: c.x - w / 2 + sp.gap, y: c.y }, head = { x: tail.x + len, y: c.y };
-    // the product drawn to the right of the arrow, centred on it
-    const dx = head.x + sp.gap - pb.x1, dy = c.y - (pb.y1 + pb.y2) / 2;
+    // the block (arrow and product) goes there if the space is free, else as near as it can
+    // (the block starts where the arrow does, a gap after what it follows)
+    const w = len + sp.gap + (pb.x2 - pb.x1);
+    const top = Math.min(pb.y1 + dy0, level - L / 2), bottom = Math.max(pb.y2 + dy0, level + L / 2);
+    const want = { x: from.x2 + sp.gap + w / 2, y: (top + bottom) / 2 };
+    const c = freeSpace(doc, w, bottom - top, want, 0.5 * L);
+    // (the free-space grid is coarse: a spot that is free, or free just along the line, stays exactly on the line)
+    const snap = (d: number) => (Math.abs(d) < 0.6 * L ? 0 : d);
+    const shift = { x: snap(c.x - want.x), y: snap(c.y - want.y) };
+    const tail = { x: from.x2 + sp.gap + shift.x, y: level + shift.y }, head = { x: tail.x + len, y: tail.y };
+    // the product drawn to the right of the arrow
+    const dx = head.x + sp.gap - pb.x1, dy = dy0 + shift.y;
     out.bulk(() => {
       for (const a of [...out.atoms.values()]) out.updateAtom(a.id, { x: a.x + dx, y: a.y + dy });
       for (const s of [...out.shapes.values()]) out.updateShape(s.id, { x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy });
@@ -3450,6 +3503,15 @@ export class Editor {
   }
   /** Select one shape on its own (a Smart Scheme's dashed species box, from the species list). */
   selectShape(id: number): void { if (this.doc.shapes.has(id)) { this.selectOnly({ kind: 'shape', id }); this.changed(); } }
+  /** Make what joins or leaves at step k (above or below its arrow) a dashed box to draw or paste a structure in; the box is selected. */
+  smartStepToHolder(id: number, k: number, part: 'above' | 'below'): boolean {
+    let box: number | null = null;
+    const ok = this.smartEdit(id, 'Make Reagent a Structure', (m) => (box = stepToHolder(this.doc, m, id, k, part)) !== null);
+    if (box !== null) { this.selectOnly({ kind: 'shape', id: box }); this.changed(); }
+    return ok;
+  }
+  /** Make a step's dashed reagent box text again. */
+  smartStepToText(id: number, k: number, part: 'above' | 'below'): boolean { return this.smartEdit(id, 'Make Reagent Text', (m) => stepHolderToText(this.doc, m, id, k, part)); }
   /** Make species k's dashed box a text label again. */
   smartToText(id: number, k: number): boolean { return this.smartEdit(id, 'Make Species Text', (m) => holderToSlotText(this.doc, m, id, k) !== null); }
   /** The dashed species box selected on its own (a paste goes into it), or null. */
@@ -3476,6 +3538,24 @@ export class Editor {
   smartSlotRuns(id: number, k: number, parts: TextPart[]): boolean { return this.smartEdit(id, 'Type Species', (m) => setSlotRuns(this.doc, m, id, k, parts)); }
   smartStepRuns(id: number, k: number, part: StepPart, parts: TextPart[]): boolean { return this.smartEdit(id, 'Type Conditions', (m) => setStepRuns(this.doc, m, id, k, part, parts)); }
   /** Lay a Smart Scheme out again, with a new layout or other settings. */
+  /** A Smart Scheme's single loop as the Catalytic Cycle window's table, to add a second loop to (null for other schemes). */
+  smartCycleStart(id: number): SmartCycleStart | null { return smartCycleStart(this.doc, this.fullMeasure(), id); }
+  /**
+   * Draw Smart Scheme `id`'s cycle again with the loops from the Catalytic Cycle window (`rows`:
+   * the species each row of loop 1 keeps). It is a Smart Scheme again afterwards, selected.
+   */
+  smartRebuildCycle(id: number, spec: CycleSpec, look: CycleLook, rows: (number | null)[]): boolean {
+    let smart: number | null = null;
+    this.doc.edit('Add a Second Loop', () => {
+      const m = this.fullMeasure();
+      const made = rebuildSmartCycle(this.doc, m, id, spec, look, rows);
+      if (made) smart = this.cycleSmart(made, made.atoms, look, made.kept, made.shapes);
+    });
+    if (smart !== null) this.selectOnly({ kind: 'shape', id: smart });
+    this.changed();
+    return smart !== null;
+  }
+  smartFormat(id: number, fmt: SmartFormat | undefined): boolean { return this.smartEdit(id, 'Format Smart Scheme', (m) => formatSmart(this.doc, m, id, fmt)); }
   smartArrange(id: number, patch?: Partial<SmartData>): boolean { return this.smartEdit(id, 'Arrange Smart Scheme', (m) => arrangeSmart(this.doc, m, id, patch)); }
 
   /** Chemistry ▸ Scheme ▸ Convert to Smart Scheme: the selected scheme becomes one object. */
@@ -3838,11 +3918,11 @@ export class Editor {
       if (!t.told) { t.told = true; this.onHint('Building the 3-D shape…'); this.onNotice('Building the 3-D shape… (only the first time for a structure)'); }
       return;
     }
-    if (!t.begun) { this.doc.begin(t.real ? 'Turn in 3-D' : 'Turn in Perspective'); t.begun = true; }
+    if (!t.begun) { this.doc.begin(t.real ? '3-D Rotation' : 'Rotate in Perspective'); t.begun = true; }
     const R = dragTurn(t.dx, t.dy, t.shift);
     t.unshown = t.ready.turn.apply(this.doc, R);
     if (!t.unshown) t.ready.turn.lastGood = R;
-    this.onHint(t.unshown ? 'From this angle a stereocentre can\'t be drawn so it reads right: let go and it goes back to the last angle that worked.' : t.shift ? 'Turning in 15° steps' : 'Shift: turn in 15° steps, one way at a time');
+    this.onHint(t.unshown ? 'From this angle a stereocenter can\'t be drawn so it reads right: let go and it goes back to the last angle that worked.' : t.shift ? 'Turning in 15° steps' : 'Shift: turn in 15° steps, one way at a time');
     if (hasPins(this.doc)) followPins(this.doc);
     this.requestScene();
   }
@@ -3858,7 +3938,7 @@ export class Editor {
     this.doc.commit();
     this.changed();
     this.onHint('');
-    if (t.unshown) this.onNotice('From that angle a stereocentre can\'t be drawn so it reads right, so the structure went back to the last angle where it could.', 6000);
+    if (t.unshown) this.onNotice('From that angle a stereocenter can\'t be drawn so it reads right, so the structure went back to the last angle where it could.', 6000);
     this.checkTurn(turn, left);
   }
 
@@ -3872,7 +3952,7 @@ export class Editor {
       if (this.doc !== doc || doc.version !== version) return;
       doc.undo();
       this.afterUndo();
-      this.onNotice('From that angle a stereocentre can\'t be drawn so it reads right, so the turn was taken back. Turn it a little less (or more).', 7000);
+      this.onNotice('From that angle a stereocenter can\'t be drawn so it reads right, so the turn was taken back. Turn it a little less (or more).', 7000);
     });
   }
 
@@ -3890,7 +3970,7 @@ export class Editor {
     if (prep.notes.length) this.onNotice(`${prep.notes[0]} Turning it flat instead.`, 7000);
     const R: M3 = anglesTurn(x, y, z);
     let left = 0;
-    doc.edit(real ? 'Turn in 3-D' : 'Turn in Perspective', () => {
+    doc.edit(real ? '3-D Rotation' : 'Rotate in Perspective', () => {
       left = prep.turn.apply(doc, R, true);
       prep.turn.remember(doc);
     });
@@ -4062,7 +4142,7 @@ export class Editor {
     const doc = this.doc, s = this.sel;
     if (!this.hasSelection()) return false;
     const black = colour?.toLowerCase() === '#000000' ? undefined : colour;
-    doc.edit(what === 'highlight' ? 'Highlight' : what === 'fill' ? 'Fill colour' : 'Colour', () => {
+    doc.edit(what === 'highlight' ? 'Highlight' : what === 'fill' ? 'Fill color' : 'Color', () => {
       if (what === 'highlight') {
         for (const id of s.atoms) doc.updateAtom(id, { highlight: colour });
         for (const id of s.bonds) doc.updateBond(id, { highlight: colour });
@@ -4125,7 +4205,7 @@ export class Editor {
     const on = ![...atoms, ...bonds].every((x) => has(x.hl));
     const patch: HighlightStyle = key === 'outline' ? (on ? { fill: 'none', line: 'solid' } : { fill: 'solid', line: 'none' }) : { [key]: on };
     const labels: Record<HighlightToggle, [string, string]> = {
-      smooth: ['Smooth highlight', 'Highlight with discs'], centre: ['Centre highlight on double bonds', 'Highlight on the bonds'],
+      smooth: ['Smooth highlight', 'Highlight with discs'], centre: ['Center highlight on double bonds', 'Highlight on the bonds'],
       soft: ['Soft highlight', 'Sharp highlight'], shadow: ['Highlight shadow', 'No highlight shadow'], glow: ['Highlight glow', 'No highlight glow'],
       outline: ['Outline-only highlight', 'Filled highlight'],
     };
@@ -4235,7 +4315,7 @@ export class Editor {
   measure(): Measure {
     this.r.invalidate(this.doc);
     if (this.sel.atoms.size > 5000) return { ...POINTS, captionBox: (c) => this.r.captionBox(c) };
-    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c) };
+    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c), bondSide: (b) => this.r.doubleSide(this.doc, b) };
   }
 
   private selBoxCache: { key: string; box: Rect | null } = { key: '', box: null };
@@ -4363,8 +4443,19 @@ export class Editor {
     return this.applyGrid(us, { kind: shape.kind, cols: shape.cols, gap: usualGap(boxes, this.doc.style.bondLength) }, 'Clean Up: Arrange');
   }
 
+  /** Where Arrange in a Grid would move things, without moving them (for its preview). */
+  gridPlan(how: GridHow): { units: ReturnType<typeof units>; offsets: Vec[] } {
+    const us = this.gridUnits();
+    return { units: us, offsets: this.gridMoves(us, how) };
+  }
+
+  private gridMoves(us: ReturnType<typeof units>, how: GridHow): Vec[] {
+    // structures that share a ring line up on it
+    return gridOffsets(us.map((u) => u.box), { anchors: sharedAnchors(this.doc, us), ...how });
+  }
+
   private applyGrid(us: ReturnType<typeof units>, how: GridHow, label: string): boolean {
-    const off = gridOffsets(us.map((u) => u.box), how);
+    const off = this.gridMoves(us, how);
     if (off.every((d) => Math.hypot(d.x, d.y) < 0.05)) return false;
     this.doc.edit(label, () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
     this.changed();
@@ -4566,7 +4657,7 @@ export class Editor {
   /** Label and caption sizes for every atom (schemes need whole structures, however big the selection). */
   fullMeasure(): Measure {
     this.r.invalidate(this.doc);
-    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c) };
+    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c), bondSide: (b) => this.r.doubleSide(this.doc, b) };
   }
 
   /** An arrow's reaction roles: kept with it, or worked out from where things sit. */
@@ -4598,14 +4689,28 @@ export class Editor {
    * Clean Up Reaction: space the selected steps (or every step) evenly, add missing + signs,
    * centre the conditions and fit the arrows to them. False when there is no step to tidy.
    */
-  cleanUpReaction(): boolean {
+  cleanUpReaction(): false | 'matched' | 'fitted' {
     const m = this.fullMeasure();
-    const plan = planCleanUp(this.doc, m, this.selectedSteps());
+    const steps = this.selectedSteps();
+    const key = steps ? [...steps].sort((a, b) => a - b).join(',') : 'all';
+    // pressed again on the same steps: each arrow shrinks to fit its own text (the structures
+    // move up to keep the spacing even); again, and they match once more
+    const c = this.reactionCycle;
+    const again = !!c && c.version === this.doc.version && c.key === key;
+    const fitted = again ? !c!.fitted : false;
+    const same = prefsOf(this.doc).sameLength;
+    const plan = planCleanUp(this.doc, m, steps, fitted ? { sameLength: !same, fit: true } : undefined);
+    if (plan) {
+      applySchemePlan(this.doc, m, plan);
+      this.changed();
+    }
+    this.reactionCycle = { version: this.doc.version, key, fitted };
     if (!plan) return false;
-    applySchemePlan(this.doc, m, plan);
-    this.changed();
-    return true;
+    return fitted === same ? 'fitted' : 'matched';
   }
+
+  /** The last Clean Up Reaction: which steps, and whether it fitted each arrow to its own text. */
+  private reactionCycle: { version: number; key: string; fitted: boolean } | null = null;
 
   /**
    * Arrange the selected scheme (or the whole drawing) in one go: in a line, in rows, as a
@@ -4638,19 +4743,28 @@ export class Editor {
     let smart: number | null = null;
     this.doc.edit('Catalytic Cycle', () => {
       const made = buildCycle(this.doc, this.fullMeasure(), spec, look, at, stations);
-      this.sel = emptySel();
-      for (const st of stations) for (const a of st.atoms) this.sel.atoms.add(a);
-      for (const a of this.sel.atoms) for (const b of this.doc.adj.get(a) ?? []) this.sel.bonds.add(b);
-      for (const id of made.captions) this.sel.captions.add(id);
-      for (const id of made.arrows) this.sel.arrows.add(id);
       // drawn round selected structures it stays put; otherwise it goes beside what is there
-      if (!stations.length) this.moveClear(page);
-      // the cycle is a Smart Scheme: one object, laid out round a loop
-      for (const r of this.doc.arrows.values()) if (r.reagentFor !== undefined && this.sel.arrows.has(r.reagentFor)) this.sel.arrows.add(r.id);
-      smart = makeSmart(this.doc, this.fullMeasure(), this.sel, { layout: 'cycle', ...(look.anticlockwise ? { anticlockwise: true } : {}), ...(look.reagentArrows ? { reagentArrows: true } : {}) });
+      smart = this.cycleSmart(made, stations.flatMap((st) => st.atoms), look, [], [], stations.length ? undefined : () => this.moveClear(page));
     });
     if (smart !== null) this.selectOnly({ kind: 'shape', id: smart });
     this.changed();
+  }
+
+  /**
+   * A cycle just drawn (with these structures as species, and extra text or pictures that go
+   * with it) made a Smart Scheme: one object, laid out round a loop. `place` moves it first,
+   * selected. Call inside an edit.
+   */
+  private cycleSmart(made: { captions: number[]; arrows: number[] }, atoms: number[], look: CycleLook, captions: number[], shapes: number[], place?: () => void): number | null {
+    this.sel = emptySel();
+    for (const a of atoms) this.sel.atoms.add(a);
+    for (const a of this.sel.atoms) for (const b of this.doc.adj.get(a) ?? []) this.sel.bonds.add(b);
+    for (const id of [...made.captions, ...captions]) this.sel.captions.add(id);
+    for (const id of made.arrows) this.sel.arrows.add(id);
+    for (const id of shapes) this.sel.shapes.add(id);
+    place?.();
+    for (const r of this.doc.arrows.values()) if (r.reagentFor !== undefined && this.sel.arrows.has(r.reagentFor)) this.sel.arrows.add(r.id);
+    return makeSmart(this.doc, this.fullMeasure(), this.sel, { layout: 'cycle', ...(look.anticlockwise ? { anticlockwise: true } : {}), ...(look.reagentArrows ? { reagentArrows: true } : {}) });
   }
 
   /** Where the mouse is on the drawing, or null when it is somewhere else (a menu, a panel). */
@@ -4765,7 +4879,7 @@ export class Editor {
     if (!label) return 'Type a name for the label.';
     // a built-in nickname is fine when the selection is that group (Ph, TBS, Boc), not otherwise
     const same = builtIn.includes(label);
-    if (isBuiltInNickname(label) && !same) return `“${label}” is already a nickname for a different group${builtIn.length ? ` (this one is ${builtIn.slice(0, 3).join(', ')})` : ''}. Choose another name.`;
+    if (isBuiltInNickname(label) && !same) return `“${label}” is already an abbreviation for a different group${builtIn.length ? ` (this one is ${builtIn.slice(0, 3).join(', ')})` : ''}. Choose another name.`;
     if (!same) addNicknames({ [label]: g.smiles });
     const ids = [...this.sel.atoms].filter((id) => id !== g.start && doc.atoms.has(id));
     doc.edit('Contract Label', () => {
@@ -4962,6 +5076,36 @@ export class Editor {
     if (walls && b) ({ x: dx, y: dy } = clampMove(b, { x: dx, y: dy }, walls));
     if (!dx && !dy) return true;
     this.doc.edit('Nudge', () => this.moveSelection(dx, dy));
+    this.changed();
+    return true;
+  }
+
+  /**
+   * Right-click > Attachment Point: make an atom a point of attachment of this kind (a wavy bond,
+   * a star or a numbered diamond), or a plain carbon again (null). An atom at the end of a single
+   * bond becomes the point itself; an atom with more bonds (a ring carbon) gets a new bond out to
+   * one, so the point sits right on it. False when nothing changed.
+   */
+  setAttachPoint(id: number, kind: 'Wavy' | 'Star' | 'Numbered' | null): boolean {
+    const doc = this.doc, a = doc.atoms.get(id);
+    if (!a || a.multi) return false;
+    if (kind === null && !a.attach) return false;
+    const look = (at: number, num?: number): Partial<Atom> => kind === 'Numbered'
+      ? { attach: 'Unspecified', attachNum: num ?? nextNumber(doc, at, (x) => (x.attach ? x.attachNum : undefined)) }
+      : { attach: kind!, attachNum: undefined };
+    const plain: Partial<Atom> = { z: 0, label: null, charge: 0, fileLabel: false, isotope: 0 };
+    let at = id;
+    doc.edit(kind ? 'Attachment Point' : 'Remove Attachment Point', () => {
+      if (kind === null) doc.updateAtom(id, { attach: undefined, attachNum: undefined, z: 6 });
+      else if (a.attach) doc.updateAtom(id, look(id, a.attach === 'Unspecified' || a.attach === 'Diamond' ? a.attachNum : undefined));
+      else if (doc.degree(id) <= 1 && !doc.neighbors(id).some((n) => n.attach)) doc.updateAtom(id, { ...plain, ...look(id) });
+      else {
+        const t = sprout(doc, id, 1, 'solid', 0);
+        at = t.id;
+        doc.updateAtom(t.id, { ...plain, ...look(t.id) });
+      }
+    });
+    this.selectOnly({ kind: 'atom', id: at });
     this.changed();
     return true;
   }
@@ -5747,11 +5891,11 @@ export class Editor {
         const t = { runs: applyBase(c.runs, base), paras: c.paras, justify: c.justify, wrap: c.wrap, width: c.width, lineHeight: c.lineHeight, lineSpacing: c.lineSpacing };
         const res = formatWhole(t, f, defaults, base?.size ?? st.captionSize, (x, sz, family, style) => measureText(x, sz, family, style));
         doc.dirtyRects.push(this.r.captionBox(c));
-        doc.updateCaption(c.id, { runs: stripBase(res.runs, base), paras: res.paras, justify: res.justify, lineHeight: res.lineHeight, lineSpacing: res.lineSpacing });
+        doc.updateCaption(c.id, { runs: stripBase(res.runs, base), paras: res.paras, justify: res.justify, lineHeight: res.lineHeight, lineSpacing: res.lineSpacing, ...(f.kind === 'wrap' ? { wrap: res.wrap } : {}) });
       }
       for (const sh of shapes) {
-        // a shape's text: its look and lining up (line spacing and lists don't apply to it)
-        if (!sh.text?.runs.length || f.kind === 'line') continue;
+        // a shape's text: its look and lining up (line spacing, lists and a wrap width don't apply to it)
+        if (!sh.text?.runs.length || f.kind === 'line' || f.kind === 'wrap') continue;
         const res = formatWhole({ runs: sh.text.runs, paras: sh.text.paras, justify: sh.textAlign ?? 'center' }, f, {}, this.r.geoTextSize());
         const text = { runs: res.runs, ...(res.paras?.length ? { paras: res.paras } : {}) };
         doc.dirtyRects.push(shapeBox(sh));
@@ -5814,19 +5958,19 @@ export class Editor {
   }
 
   /** How the text the ribbon's Font and Paragraph buttons would change looks now (for showing which are on). */
-  textLook(): { style: rt.RunStyle; align: Justify; list?: 'bullet' | 'number'; line: number; defaultSize: number; defaultFont?: string } | null {
+  textLook(): { style: rt.RunStyle; align: Justify; list?: 'bullet' | 'number'; line: number; before?: number; after?: number; wrap?: number; link?: boolean; defaultSize: number; defaultFont?: string } | null {
     const st = this.doc.style;
     const ed = this.captionEd?.ed;
     if (ed) {
       const p = ed.currentPara();
-      return { style: ed.currentStyle(), align: ed.currentAlign(), list: p.list, line: ed.t.lineSpacing ?? 1, defaultSize: ed.defaultSize, defaultFont: ed.defaults.font ?? st.captionFont };
+      return { style: ed.currentStyle(), align: ed.currentAlign(), list: p.list, line: ed.t.lineSpacing ?? 1, before: p.spaceBefore, after: p.spaceAfter, wrap: ed.t.wrap, link: !!ed.linkHere(), defaultSize: ed.defaultSize, defaultFont: ed.defaults.font ?? st.captionFont };
     }
     const c = [...this.sel.captions].map((id) => this.doc.captions.get(id)).find((x): x is Caption => !!x);
     if (c) {
       const base = c.ph ? this.doc.textStyles?.[c.ph] : undefined;
       const runs = applyBase(c.runs, base);
       const len = plainText(runs).length;
-      return { style: len ? rt.commonStyle(runs, 0, len) : { ...(base ?? {}) }, align: c.justify ?? 'left', list: c.paras?.[0]?.list, line: c.lineSpacing ?? 1, defaultSize: base?.size ?? st.captionSize, defaultFont: base?.font ?? st.captionFont };
+      return { style: len ? rt.commonStyle(runs, 0, len) : { ...(base ?? {}) }, align: c.justify ?? 'left', list: c.paras?.[0]?.list, line: c.lineSpacing ?? 1, before: c.paras?.[0]?.spaceBefore, after: c.paras?.[0]?.spaceAfter, wrap: c.wrap, defaultSize: base?.size ?? st.captionSize, defaultFont: base?.font ?? st.captionFont };
     }
     const sh = [...this.sel.shapes].map((id) => this.doc.shapes.get(id)).find((x): x is Shape => !!x && x.kind === 'geo' && !!x.text?.runs.length);
     if (sh?.text) {
@@ -6133,7 +6277,7 @@ export class Editor {
   /** Moves snap to the drawing's guides. */
   private guidesSnap(): boolean {
     const g = this.doc.guides;
-    return !!g && g.shown && g.snap !== 'none' && (g.list.length > 0 || g.grid);
+    return !!g && g.shown && !g.snapOff && (g.list.length > 0 || g.grid);
   }
 
   /** The guide under a point (the Select tool drags it). */
@@ -6168,14 +6312,16 @@ export class Editor {
     const g = this.doc.guides;
     if (!g?.shown || (!g.list.length && !g.grid)) return;
     const area = this.viewArea();
-    const colour = this.dark ? '#4fc3f7' : '#1b8fd0';
+    const colour = g.color ?? (this.dark ? '#4fc3f7' : '#1b8fd0');
+    // (Guides toolbox > Look: how see-through, on top of the grid's own lightness)
+    const solid = 1 - (g.clear ?? 0);
     const lines = guideLines(g, area);
     const minGap = 5 * px;
     ctx.save();
     ctx.strokeStyle = colour;
     for (const l of lines) {
       const snapped = this.drag?.mode === 'move' && this.guideSnapped.some((s) => s.axis === l.axis && s.at === l.at);
-      ctx.globalAlpha = l.guide === null ? 0.35 : snapped ? 1 : 0.8;
+      ctx.globalAlpha = (l.guide === null ? 0.35 : snapped ? 1 : 0.8) * (snapped ? 1 : solid);
       ctx.lineWidth = (snapped ? 2 : 1) * px;
       ctx.beginPath();
       if (l.axis === 'x') { ctx.moveTo(l.at, area.y1); ctx.lineTo(l.at, area.y2); } else { ctx.moveTo(area.x1, l.at); ctx.lineTo(area.x2, l.at); }
@@ -6187,7 +6333,7 @@ export class Editor {
       }
       ctx.stroke();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = Math.max(0.3, solid);
     ctx.lineWidth = 1.5 * px;
     ctx.fillStyle = this.dark ? '#10161f' : '#ffffff';
     for (const x of g.list) {
@@ -7334,7 +7480,7 @@ export function insideLoop(loop: readonly Vec[], x: number, y: number): boolean 
 
 /** What Fill Rings says when it has filled n rings: it sends you to the Style panel. */
 export function ringsFilledMessage(n: number): string {
-  return `${n} ring${n > 1 ? 's' : ''} filled: choose the colour, gradient or pattern in the Style panel.`;
+  return `${n} ring${n > 1 ? 's' : ''} filled: choose the color, gradient or pattern in the Style panel.`;
 }
 
 /** Fill Rings' message says rings were filled (not that there was nothing to fill), so the Style panel should show. */

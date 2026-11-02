@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 //
-// The Text Formatting toolbox: italic stereodescriptors in one click, formula subscripts, symbols.
+// The Text Formatting toolbox: the same bar as above text being typed, with italic stereodescriptors
+// in one click, formula subscripts, symbols, spacing and links.
 
 import { describe, it, expect } from 'vitest';
 import { stereoLetters, stereoItalics } from '../src/text/chemtext';
 import { TextEditing } from '../src/text/editing';
 import { applyFormat, formatWhole, type TextFormat } from '../src/text/format';
-import { buildTextToolbox, TEXT_SYMBOLS } from '../src/ui/text-toolbox';
-import { savableChar, type RunStyle } from '../src/richtext';
+import { buildTextToolbox } from '../src/ui/text-toolbox';
+import { buildTextBar, TEXT_SYMBOL_ROWS, type TextBarState } from '../src/ui/text-bar';
+import { savableChar } from '../src/richtext';
 
 const letters = (t: string) => stereoLetters(t).map((i) => t[i]).join('');
 
@@ -60,27 +62,34 @@ describe('the italic stereodescriptor button', () => {
   });
 });
 
-describe('the toolbox', () => {
-  const make = (look: RunStyle | null = null) => {
+describe('the toolbox: the same bar as above text being typed', () => {
+  const state: TextBarState = { style: { bold: true, sub: true }, align: 'center', list: 'bullet', line: 1.5, before: 6, after: 0, wrap: 200, link: false, defaultFont: 'Arial' };
+  const make = (look: TextBarState | null = null, ok = true) => {
     const done: TextFormat[] = [];
     const typed: string[] = [];
     const said: string[] = [];
+    let links = 0, backs = 0;
     const body = document.createElement('div');
     document.body.append(body);
-    const box = buildTextToolbox(body, false, { format: (f) => { done.push(f); return true; }, type: (c) => { typed.push(c); return true; }, look: () => look, moreSymbols: () => typed.push('more'), say: (t) => said.push(t) });
-    return { body, box, done, typed, said };
+    const box = buildTextToolbox(body, false, { format: (f) => { done.push(f); return ok; }, type: (c) => { typed.push(c); return ok; }, link: () => { links++; }, look: () => look, back: () => { backs++; }, say: (t) => said.push(t) });
+    return { body, box, done, typed, said, links: () => links, backs: () => backs };
   };
-  it('has the format buttons, the symbols and More', () => {
+  const btn = (body: HTMLElement, label: string) => [...body.querySelectorAll<HTMLButtonElement>('.cb-btn')].find((b) => b.title.startsWith(label))!;
+  it('has exactly the buttons, boxes and panels of the bar shown while typing', () => {
     const { body } = make();
-    expect(body.querySelectorAll('.tt-btn').length).toBe(7);
-    for (const ch of ['‡', '°', 'α', 'β', 'Δ']) expect([...body.querySelectorAll('.tt-sym')].some((b) => b.textContent === ch)).toBe(true);
-    expect(body.querySelector('.tt-more')).not.toBeNull();
+    const bar = document.createElement('div');
+    buildTextBar(bar, { format: () => true, type: () => true, link: () => {}, state: () => null, back: () => {} });
+    const shape = (el: HTMLElement) => [...el.querySelectorAll('button, input')].map((b) => `${b.tagName}:${b.className}:${b.getAttribute('aria-label')}`);
+    expect(shape(body)).toEqual(shape(bar));
+    expect(body.querySelectorAll('.cb-group').length).toBe(6);
+    expect(body.querySelector('.caption-symbols')).not.toBeNull();
+    expect(body.querySelector('.caption-spacing')).not.toBeNull();
     // a click in it keeps the text being typed open
     expect(body.closest('[data-keeps-typing]')).toBe(body);
   });
   it('sets the font and size, and shows the text\'s own', () => {
     const { body, done, box } = make();
-    const font = body.querySelector<HTMLInputElement>('.tt-font')!, size = body.querySelector<HTMLInputElement>('.tt-size')!;
+    const font = body.querySelector<HTMLInputElement>('.cb-font')!, size = body.querySelector<HTMLInputElement>('.cb-size')!;
     font.value = 'Helvetica';
     font.dispatchEvent(new Event('change'));
     size.value = '9';
@@ -89,23 +98,52 @@ describe('the toolbox', () => {
     box.refresh();
     expect(size.value).toBe('');
   });
-  it('sends formula, stereo and symbols', () => {
-    const { body, done, typed } = make();
-    const btn = (title: string) => [...body.querySelectorAll<HTMLButtonElement>('.tt-btn')].find((b) => b.title.startsWith(title))!;
-    btn('Formula').click();
-    btn('Stereodescriptors').click();
-    [...body.querySelectorAll<HTMLButtonElement>('.tt-sym')].find((b) => b.textContent === '‡')!.click();
-    expect(done).toEqual([{ kind: 'toggle', key: 'formula' }, { kind: 'stereo' }]);
+  it('sends every kind of change, and links and symbols', () => {
+    const { body, done, typed, links, backs } = make();
+    for (const t of ['Formula', 'Stereodescriptors', 'Center', 'Numbering', 'More indent', 'Link']) btn(body, t).click();
+    btn(body, 'Greek').click();
+    expect(body.querySelector<HTMLElement>('.caption-symbols')!.hidden).toBe(false);
+    [...body.querySelectorAll<HTMLButtonElement>('.cs-row button')].find((b) => b.textContent === '‡')!.click();
+    btn(body, 'Line and paragraph').click();
+    expect(body.querySelector<HTMLElement>('.caption-symbols')!.hidden).toBe(true);
+    const field = (label: string, v: string) => { const i = body.querySelector<HTMLInputElement>(`input[aria-label^="${label}"]`)!; i.value = v; i.dispatchEvent(new Event('change')); };
+    field('Line spacing', '2');
+    field('Space before', '4');
+    field('Width the lines wrap', '');
+    expect(done).toEqual([
+      { kind: 'toggle', key: 'formula' }, { kind: 'stereo' }, { kind: 'align', j: 'center' }, { kind: 'list', list: 'number' }, { kind: 'indent', by: 1 },
+      { kind: 'line', v: 2 }, { kind: 'para', patch: { spaceBefore: 4 } }, { kind: 'wrap', w: undefined },
+    ]);
     expect(typed).toEqual(['‡']);
+    expect(links()).toBe(1);
+    expect(backs()).toBeGreaterThan(5);
   });
-  it('shows which styles are on', () => {
-    const { body } = make({ bold: true, sub: true });
-    const on = [...body.querySelectorAll('.tt-btn.on')].map((b) => b.getAttribute('aria-label')!.split(' ')[0]);
-    expect(on).toEqual(['Bold', 'Subscript']);
+  it('shows which styles are on, and the spacing', () => {
+    const { body } = make(state);
+    const on = [...body.querySelectorAll('.cb-btn.on')].map((b) => b.getAttribute('aria-label')!.split(' ')[0]);
+    expect(on).toEqual(['Bold', 'Subscript', 'Center', 'Bullets']);
+    const val = (label: string) => body.querySelector<HTMLInputElement>(`input[aria-label^="${label}"]`)!.value;
+    expect([val('Line spacing'), val('Space before'), val('Width the lines wrap')]).toEqual(['1.5', '6', '200']);
+    expect(body.querySelector<HTMLInputElement>('.cb-font')!.placeholder).toBe('Arial');
+  });
+  it('says so when there is no text to change', () => {
+    const { body, said } = make(null, false);
+    btn(body, 'Bold').click();
+    expect(said.length).toBe(1);
   });
   it('offers only symbols a ChemDraw file can keep', () => {
-    const shown = [...make().body.querySelectorAll('.tt-sym')].map((b) => b.textContent!);
+    const shown = [...make().body.querySelectorAll('.cs-row button')].map((b) => b.textContent!);
     expect(shown.every(savableChar)).toBe(true);
-    expect(shown.length).toBeGreaterThan(TEXT_SYMBOLS[1].chars.length);
+    expect(shown.length).toBe(TEXT_SYMBOL_ROWS.flat().length);
+    for (const ch of ['‡', '°', 'α', 'β', 'Δ']) expect(shown).toContain(ch);
+  });
+});
+
+describe('a whole picked caption', () => {
+  it('takes paragraph spacing and a wrap width', () => {
+    const t = { runs: [{ text: 'one\ntwo' }], paras: [{}, {}] };
+    const spaced = formatWhole(t, { kind: 'para', patch: { spaceAfter: 6 } }, {}, 10);
+    expect(spaced.paras?.every((p) => p.spaceAfter === 6)).toBe(true);
+    expect(formatWhole(t, { kind: 'wrap', w: 120 }, {}, 10).wrap).toBe(120);
   });
 });

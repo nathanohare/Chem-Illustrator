@@ -6,6 +6,7 @@
 // effect; each animation has its start (on a click, with or after the one before), its length
 // and a delay, and the pane lists them in the order they play.
 
+import { foldIntoInfo } from './info-tip';
 import type { Doc } from '../model';
 import type { Deck } from '../deck/deck';
 import type { Selection } from '../editor/editor';
@@ -143,7 +144,7 @@ export class AnimationUI {
     dirSel.addEventListener('change', () => this.setTransition({ dir: dirSel.value as Transition['dir'] }));
     const fillSpeeds = (sel: HTMLSelectElement) => {
       for (const s of SPEEDS) sel.add(new Option(`${s.name} (${s.dur} s)`, String(s.dur)));
-      sel.add(new Option('Your own', 'own'));
+      sel.add(new Option('Custom', 'own'));
     };
     const trSpeed = this.$<HTMLSelectElement>('#tr-speed');
     fillSpeeds(trSpeed);
@@ -168,9 +169,9 @@ export class AnimationUI {
     const EMPH_TIPS: Record<string, string> = {
       pulse: 'the selected objects swell a little and back, to draw the eye',
       grow: 'the selected objects grow (or shrink) and stay that size; set the size in Effect Options',
-      spin: 'the selected objects turn round; set how far in Effect Options',
+      spin: 'the selected objects turn around; set how far in Effect Options',
       transparency: 'the selected objects become see-through and stay so; set how much in Effect Options',
-      colour: 'a shape\'s fill, or text\'s colour, changes (a structure or picture is coloured all over); pick the colour in Effect Options. PowerPoint can\'t recolour a structure or picture',
+      colour: 'a shape\'s fill, or text\'s color, changes (a structure or picture is colored all over); pick the color in Effect Options. PowerPoint can\'t recolor a structure or picture',
       turn3d: 'a structure turns smoothly in 3-D to each key view you set, one view per click (Key Views… in Effect Options). PowerPoint shows it still',
     };
     for (const exit of [false, true, null]) {
@@ -207,7 +208,7 @@ export class AnimationUI {
       else this.refresh();
     });
     const colour = this.$<HTMLInputElement>('#an-colour');
-    colour.addEventListener('change', () => this.changePicked({ color: colour.value }, 'Colour Change colour'));
+    colour.addEventListener('change', () => this.changePicked({ color: colour.value }, 'Color Change color'));
     // keyframe moves on a canvas slide: how the view moves, and whether its time follows the distance
     const move = this.$<HTMLSelectElement>('#an-move');
     for (const m of MOVES) {
@@ -310,6 +311,7 @@ export class AnimationUI {
     // the slide's highlights, to pick one as an object (it is part of its structure on the slide)
     this.highlights = document.createElement('div');
     this.highlights.className = 'an-highlights';
+    foldIntoInfo(note, h);
     section.replaceChildren(h, bar, this.list, this.highlights, note);
   }
 
@@ -575,8 +577,8 @@ export class AnimationUI {
     const amount = this.$<HTMLInputElement>('#an-amount'), unit = this.$<HTMLElement>('#an-amount-unit'), amountBox = this.$<HTMLElement>('#an-amount-box');
     const colour = this.$<HTMLInputElement>('#an-colour'), colourBox = this.$<HTMLElement>('#an-colour-box');
     const amt = a?.effect === 'grow' ? { v: Math.round((a.scale ?? EMPH_DEFAULTS.scale) * 100), u: '% size', tip: 'The size it grows or shrinks to: 150 is half as big again, 50 half the size' }
-      : a?.effect === 'spin' ? { v: a.turn ?? EMPH_DEFAULTS.turn, u: '°', tip: 'How far it turns, in degrees (negative turns anticlockwise)' }
-        : a?.effect === 'transparency' ? { v: Math.round((a.opacity ?? EMPH_DEFAULTS.opacity) * 100), u: '% clear', tip: 'How see-through it becomes: 0 solid, 100 gone' } : null;
+      : a?.effect === 'spin' ? { v: a.turn ?? EMPH_DEFAULTS.turn, u: '°', tip: 'How far it turns, in degrees (negative turns counterclockwise)' }
+        : a?.effect === 'transparency' ? { v: Math.round((a.opacity ?? EMPH_DEFAULTS.opacity) * 100), u: '% transparent', tip: 'Transparency it ends at: 0 solid, 100 gone' } : null;
     amountBox.style.display = amt ? '' : 'none';
     if (amt) {
       amountBox.title = amt.tip;
@@ -688,7 +690,7 @@ export class AnimationUI {
     const chosen = selectedParts(parts, this.hooks.selection()).filter((p) => p.kind === 'drawing' && p.sel.atoms.size);
     const part = chosen[0] ?? (pa?.effect === 'turn3d' ? partOf(parts, pa.target) : undefined);
     if (!part || part.kind !== 'drawing' || !part.sel.atoms.size || !this.hooks.keyViews) {
-      this.hooks.flash('Select a structure on the slide first: Turn in 3-D turns structures.');
+      this.hooks.flash('Select a structure on the slide first: 3-D Rotation turns structures.');
       return;
     }
     const mine = (a: Anim) => a.effect === 'turn3d' && partOf(parts, a.target) === part;
@@ -704,7 +706,7 @@ export class AnimationUI {
     const where = at < 0 ? rest.length : all.slice(0, at).filter((a) => !mine(a)).length;
     const anims = [...rest.slice(0, where), ...fresh, ...rest.slice(where)];
     this.picked = fresh.length ? where : null;
-    this.setAnims(anims, fresh.length ? 'Turn in 3-D' : 'Remove Turn in 3-D');
+    this.setAnims(anims, fresh.length ? '3-D Rotation' : 'Remove 3-D Rotation');
   }
 
   private changePicked(change: Partial<Anim>, label: string): void {
@@ -965,6 +967,7 @@ export class AnimationUI {
     close.textContent = 'Close';
     close.className = 'primary';
     buttons.append(again, close);
+    foldIntoInfo(note, h);
     d.append(h, canvas, note, buttons);
     document.body.append(d);
     const w = Math.min(720, window.innerWidth - 80), ht = w * deck.size.h / deck.size.w;

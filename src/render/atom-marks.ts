@@ -79,6 +79,11 @@ export function attachDiamondSize(labelSize: number): number {
   return 0.6 * labelSize;
 }
 
+/** The asterisk of a star point of attachment: the length of each of its arms, from the label size. */
+export function attachStarSize(labelSize: number): number {
+  return 0.32 * labelSize;
+}
+
 /** Whether an attachment point is drawn as a numbered diamond (rather than a wavy line). */
 export function hasAttachDiamond(a: Atom): boolean {
   return !!a.attach && a.attachNum !== undefined && (a.attach === 'Unspecified' || a.attach === 'Diamond');

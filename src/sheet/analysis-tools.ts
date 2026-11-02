@@ -138,7 +138,7 @@ export interface DescriptiveOptions {
 }
 
 export function descriptive(groups: Group[], o: DescriptiveOptions): ToolOutput | string {
-  if (!o.summary && o.confidence === undefined && o.kLargest === undefined && o.kSmallest === undefined) return 'Tick at least one of Summary statistics, Confidence Level for Mean, Kth Largest or Kth Smallest.';
+  if (!o.summary && o.confidence === undefined && o.kLargest === undefined && o.kSmallest === undefined) return 'Select at least one of Summary statistics, Confidence Level for Mean, Kth Largest or Kth Smallest.';
   const out = new Out();
   groups.forEach((g, gi) => {
     const xs = nums(g), n = xs.length, c = gi * 2;

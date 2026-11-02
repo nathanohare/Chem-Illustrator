@@ -24,14 +24,19 @@ export interface AiPrefs {
   localOnly: boolean;
   /** The Assistant is switched on (it is off until the person turns it on). */
   assistant: boolean;
+  /** How the Assistant shows: a prompt bar (the usual), a pane down the right, or a floating window. */
+  assistantLook?: AssistantLook;
 }
+
+export type AssistantLook = 'bar' | 'pane' | 'window';
 
 export const DEFAULT_AI: AiPrefs = { provider: 'none', model: '', base: '', localOnly: false, assistant: false };
 
 export function parseAiPrefs(v: unknown): AiPrefs {
   const r = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
   const provider = (['none', 'anthropic', 'openai', 'gemini', 'compatible'] as const).find((p) => p === r.provider) ?? 'none';
-  return { provider, model: typeof r.model === 'string' ? r.model.trim() : '', base: typeof r.base === 'string' ? r.base.trim() : '', localOnly: r.localOnly === true, assistant: r.assistant === true };
+  return { provider, model: typeof r.model === 'string' ? r.model.trim() : '', base: typeof r.base === 'string' ? r.base.trim() : '', localOnly: r.localOnly === true, assistant: r.assistant === true,
+    ...(r.assistantLook === 'pane' || r.assistantLook === 'window' ? { assistantLook: r.assistantLook } : {}) };
 }
 
 interface ProviderInfo {

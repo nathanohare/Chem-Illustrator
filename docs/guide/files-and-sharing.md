@@ -66,15 +66,15 @@ A figure wider than the column is shrunk by the journal, which makes its text an
 - **Many files at once:** **File ▸ Export ▸ Batch Convert…** turns a set of CDXML, CDX, molfile, SD, SMILES, RXN, Marvin, Ketcher, CML and ChemDoodle files into CDXML, CDX, molfiles, SVG or PNG pictures, or one SMILES list. Each record of an SD file and each line of a SMILES file becomes a file of its own, named after its title. The desktop app saves them in a folder you pick or in one zip; the web version saves a zip.
 - **SD files (.sdf):** open in a spreadsheet with one row per structure and its data fields as columns.
 - **PDF:** **File ▸ Export ▸ Export PDF…** for canvases, presentations, designs and documents. Structures and text stay sharp at any zoom. The fonts go inside the file, so it looks the same everywhere and passes journals' "all fonts embedded" checks. Arial, Helvetica and similar fonts are drawn with Arimo, Times with Tinos and Courier with Cousine: free fonts with exactly the same letter widths. A character none of those has (an arrow such as →) uses the reader's Symbol font.
-- **Pictures:** **File ▸ Export ▸ Export Picture…** for a canvas, the current slide or a design page. Pick a white or page-coloured background or a see-through one.
-  - **PNG** and **TIFF** are pictures made of dots. Type the dpi (300 for colour, 600 to 1200 for line art). TIFF files are LZW-compressed, the kind many journals ask for.
-  - **SVG**, **EMF** and **EPS** keep shapes and text sharp at any size. SVG suits Illustrator, Inkscape and web pages; EMF suits Word and PowerPoint on Windows; EPS suits older journal systems. EPS uses the standard PostScript fonts (Helvetica, Times, Courier and Symbol), and has no see-through colours, so those are mixed with white.
+- **Pictures:** **File ▸ Export ▸ Export Picture…** for a canvas, the current slide or a design page. Pick a white or page-colored background or a see-through one.
+  - **PNG** and **TIFF** are pictures made of dots. Type the dpi (300 for color, 600 to 1200 for line art). TIFF files are LZW-compressed, the kind many journals ask for.
+  - **SVG**, **EMF** and **EPS** keep shapes and text sharp at any size. SVG suits Illustrator, Inkscape and web pages; EMF suits Word and PowerPoint on Windows; EPS suits older journal systems. EPS uses the standard PostScript fonts (Helvetica, Times, Courier and Symbol), and has no see-through colors, so those are mixed with white.
 
 ### Opening files from Explorer or Finder (desktop app)
 
 Double-click a file, or right-click it and choose **Open with ▸ Chem Illustrator**, and it opens in a new tab. A file opened while the program is already running goes to the open window rather than starting a second copy.
 
-- **Windows**: the first time it starts, Chem Illustrator adds itself to the **Open with** list of .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket and .cml files, for you only. **Edit ▸ Settings ▸ File Types** chooses which kinds of file it is offered for, including .docx, .pptx and .xlsx. It never makes itself the program that opens a file on a double-click: Windows keeps that choice for you. **Choose Defaults in Windows Settings…** on that page opens Windows' Default apps page, where you can pick Chem Illustrator for each kind of file. A portable copy leaves the computer's file types alone until you tick them yourself. Uninstalling takes it off the lists again.
+- **Windows**: the first time it starts, Chem Illustrator adds itself to the **Open with** list of .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket and .cml files, for you only. **Edit ▸ Settings ▸ File Types** chooses which kinds of file it is offered for, including .docx, .pptx and .xlsx. It never makes itself the program that opens a file on a double-click: Windows keeps that choice for you. **Choose Defaults in Windows Settings…** on that page opens Windows' Default apps page, where you can pick Chem Illustrator for each kind of file. A portable copy leaves the computer's file types alone until you check them yourself. Uninstalling takes it off the lists again.
 - **macOS**: right-click a file and choose **Open With ▸ Chem Illustrator**. To open a kind of file here every time, select one in Finder, choose **File ▸ Get Info**, pick Chem Illustrator under **Open with** and click **Change All**.
 - **Linux**: Chem Illustrator is in your file manager's **Open With** list for these files; your desktop's Default Applications settings choose the default.
 
@@ -98,7 +98,7 @@ A drawing copied here and pasted into Word, PowerPoint or Excel is a Chem Illust
 - The document keeps a picture of the drawing, so it looks right on computers without Chem Illustrator, in PDFs and when printed. Only editing needs the app.
 - Copying the object out of Word and pasting it here gives the drawing back, editable.
 - AutoSave doesn't save these tabs: Word gets the drawing when you press Save. If you close the Word document first, the drawing stays here as an unsaved drawing.
-- The installed app sets this up the first time it starts, for you only (no administrator needed). **Edit ▸ Settings ▸ File Types** turns it off, and then drawings paste as pictures (which still hold the drawing, so copying one back here keeps it editable). A portable copy leaves it off unless you tick it there. Uninstalling removes it.
+- The installed app sets this up the first time it starts, for you only (no administrator needed). **Edit ▸ Settings ▸ File Types** turns it off, and then drawings paste as pictures (which still hold the drawing, so copying one back here keeps it editable). A portable copy leaves it off unless you check it there. Uninstalling removes it.
 
 Tables travel too:
 
@@ -140,7 +140,7 @@ Every kind of tab (canvases, presentations, spreadsheets, documents and designs)
 
 ### Recovery copies
 
-While you work, each tab with unsaved changes is copied every 2 minutes (choose 1 to 30 minutes, or never) to the app's own data folder. Closing the app normally deletes the copies. If it stops without closing (a crash, a power cut, Windows restarting for updates), the next start shows **Recover Unsaved Work**: tick the files to reopen and click **Reopen**. Reopened files come back unsaved, under their own names; Save puts a file that had been saved back where it was. **Not Now** keeps the copies for later in **File ▸ Versions and Recovery ▸ Recover Unsaved Work…**, and they are deleted after 7 days (you can change this).
+While you work, each tab with unsaved changes is copied every 2 minutes (choose 1 to 30 minutes, or never) to the app's own data folder. Closing the app normally deletes the copies. If it stops without closing (a crash, a power cut, Windows restarting for updates), the next start shows **Recover Unsaved Work**: check the files to reopen and click **Reopen**. Reopened files come back unsaved, under their own names; Save puts a file that had been saved back where it was. **Not Now** keeps the copies for later in **File ▸ Versions and Recovery ▸ Recover Unsaved Work…**, and they are deleted after 7 days (you can change this).
 
 ### AutoSave
 
@@ -178,7 +178,7 @@ The web version keeps a recent list too in Chrome and Edge, which let a page ope
 
 ## Printing
 
-**File ▸ Print…** (Ctrl+P) asks a question or two, then opens your system's Print window, where you pick the printer and copies, or save a PDF. In the Windows app the printer, copies and pages are picked in Chem Illustrator's own Print window instead, so pages print at their own size and the right way round (pick **Microsoft Print to PDF** to save a PDF).
+**File ▸ Print…** (Ctrl+P) asks a question or two, then opens your system's Print window, where you pick the printer and copies, or save a PDF. In the Windows app the printer, copies and pages are picked in Chem Illustrator's own Print window instead, so pages print at their own size and the right way around (pick **Microsoft Print to PDF** to save a PDF).
 
 | Tab | Choices |
 |---|---|

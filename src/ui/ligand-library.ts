@@ -4,9 +4,11 @@
 // and its PubChem record; Use Template picks its drawing as the tool, to click on a metal (or
 // anywhere) in the drawing. The window stays open beside the drawing while you work.
 
+import { withInfo } from './info-tip';
 import { LIGAND_FAMILIES, bondingType, denticity, familyOf, searchLigands, type Ligand } from '../chem/ligands';
 import { templateById } from '../chem/templates';
 import { templateIcon } from './template-icons';
+import { svgNode } from './svg-node';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] => {
   const e = Object.assign(document.createElement(tag), props);
@@ -91,10 +93,10 @@ export class LigandLibraryWindow {
     this.count = el('span', { className: 'muted' });
     this.useBtn = button('Use Template', 'Pick the ligand\'s drawing as the tool, then click a metal in the drawing to put it on (or click anywhere). Double-click a ligand, or press Enter, to do the same and close this window', () => this.use(false), true);
     d.append(
-      el('div', { className: 'refs-head' }, el('h2', { textContent: 'Ligand Library' }), this.search),
+      el('div', { className: 'refs-head' }, withInfo(el('h2', { textContent: 'Ligand Library' }), 'Each abbreviation also works typed as a label: type dppf, XPhos or salen on a metal\'s bond.'), this.search),
       el('div', { className: 'kb-body lig-body' }, this.families, this.grid, this.details),
       el('div', { className: 'refs-buttons' },
-        el('span', { className: 'muted lig-hint', textContent: 'Each abbreviation also works typed as a label: type dppf, XPhos or salen on a metal\'s bond.' }),
+        el('span', { className: 'lig-hint' }),
         el('span', { className: 'refs-edit' }, this.count, this.useBtn, button('Close', '', () => d.close()))),
     );
     d.addEventListener('close', () => { d.remove(); this.d = null; });
@@ -131,7 +133,7 @@ export class LigandLibraryWindow {
       card.setAttribute('aria-selected', String(l === this.current));
       card.setAttribute('aria-label', `${shownAs(l)}: ${l.name}`);
       const pic = el('div', { className: 'lig-pic' });
-      pic.innerHTML = t ? templateIcon(t, CARD) : '';
+      { const icon = t ? svgNode(templateIcon(t, CARD)) : null; if (icon) pic.append(icon); }
       card.append(pic, el('span', { className: 'lig-abbr', textContent: shownAs(l) }));
       return card;
     });
@@ -178,7 +180,7 @@ export class LigandLibraryWindow {
     if (!l) { this.details.replaceChildren(el('p', { className: 'muted', textContent: 'Pick a ligand to see it here.' })); return; }
     const t = templateById(l.tpl);
     const pic = el('div', { className: 'lig-big' });
-    pic.innerHTML = t ? templateIcon(t, BIG) : '';
+    { const icon = t ? svgNode(templateIcon(t, BIG)) : null; if (icon) pic.append(icon); }
     const row = (k: string, v: Node | string) => [el('dt', { textContent: k }), el('dd', {}, v)];
     const smiles = el('code', { className: 'lig-smiles', textContent: l.smiles, title: 'What the abbreviation stands for when typed as a label, starting at the atom that bonds. Click to copy' });
     smiles.addEventListener('click', () => this.host.copyText(l.smiles, `Copied the SMILES for ${l.abbr[0]}.`));

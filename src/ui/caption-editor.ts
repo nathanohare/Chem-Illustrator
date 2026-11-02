@@ -19,6 +19,8 @@ import { linkAtPoint } from '../links';
 import { askLink, followLink, linkTip, type LinkPlace } from './links-ui';
 import { touchOn } from './touch-ui';
 import { placeTextMenu } from './text-menu';
+import { buildTextBar, type TextBar } from './text-bar';
+import { applyFormat } from '../text/format';
 
 /** What the editor needs from the drawing it sits on. */
 export interface EditorHost {
@@ -55,16 +57,6 @@ export interface CaptionResult extends Omit<RichText, 'paras'> {
   y: number;
 }
 
-const SIZES = [5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72];
-const SPACINGS = [1, 1.15, 1.5, 2, 2.5, 3];
-
-// Greek letters and signs chemists put in captions; all of them can be saved for ChemDraw.
-const SYMBOLS = [
-  'αβγδεζηθικλμνξπρστυφχψω',
-  'ΓΔΘΛΞΠΣΦΨΩ',
-  '°±×÷·•→←↑↓↔⇒≤≥≠≈≡∞′″…–—‡†‰Å',
-].map((row) => [...row].filter(rt.savableChar));
-
 /** In a window marked to type into the text being edited (Insert > Symbol): moving there doesn't end the editing. */
 const keepsTyping = (n: Node | null): boolean => !!(n instanceof Element && n.closest('[data-keeps-typing]'));
 
@@ -87,13 +79,10 @@ export class CaptionEditor {
   readonly ed: TextEditing;
   private ta: HTMLTextAreaElement;
   private bar: HTMLDivElement;
-  private symbols: HTMLDivElement;
-  private spacing: HTMLDivElement;
+  private textBar!: TextBar;
   private closed = false;
   private caretOn = true;
   private blink: ReturnType<typeof setInterval> | null = null;
-  private buttons = new Map<string, HTMLButtonElement>();
-  private inputs: Record<'font' | 'size' | 'color' | 'line' | 'before' | 'after' | 'wrap', HTMLInputElement> = {} as never;
   private plainPaste = false;
   private clicks = { n: 0, time: 0, at: { x: 0, y: 0 } };
   private dragging: 'text' | 'wrap' | null = null;
@@ -137,17 +126,12 @@ export class CaptionEditor {
     this.bar.className = 'caption-bar';
     this.bar.setAttribute('role', 'toolbar');
     this.bar.setAttribute('aria-label', 'Text style');
-    this.symbols = d.createElement('div');
-    this.symbols.className = 'caption-symbols';
-    this.symbols.hidden = true;
-    this.spacing = d.createElement('div');
-    this.spacing.className = 'caption-spacing';
-    this.spacing.hidden = true;
     this.buildBar();
     // View > Window and Colours > Text Formatting Bar: along the top of the drawing (so it never covers what is
     // drawn), floating by the text, or hidden (the keys still work)
     this.bar.classList.toggle('docked', CaptionEditor.barPlace === 'docked');
-    this.bar.hidden = CaptionEditor.barPlace === 'hidden';
+    // (and with the Text Formatting toolbox showing, that is the bar: the same one isn't shown twice)
+    this.bar.hidden = CaptionEditor.barPlace === 'hidden' || !!CaptionEditor.barElsewhere?.();
     h.host.append(this.ta, this.bar);
 
     const ta = this.ta;
@@ -513,6 +497,9 @@ export class CaptionEditor {
     this.bar.style.top = `${below ? br.y + 8 : tl.y - hb - 8}px`;
   }
 
+  /** True when the same bar shows elsewhere (the Text Formatting toolbox), so this one stays hidden. */
+  static barElsewhere: (() => boolean) | null = null;
+
   /** Where the bar goes (View > Window and Colours > Text Formatting Bar). */
   static barPlace: 'docked' | 'floating' | 'hidden' = 'docked';
 
@@ -555,7 +542,7 @@ export class CaptionEditor {
     this.caretOn = true;
     if (kind === 'text' || !this.ed.composing) this.syncInput();
     if (kind === 'text') this.h.typed?.(this.ed.t);
-    this.updateBar();
+    this.textBar.refresh();
     this.place();
     this.h.redraw();
     CaptionEditor.onState?.();
@@ -672,192 +659,22 @@ export class CaptionEditor {
   // ------------------------------------------------------------------ the bar
 
   private buildBar(): void {
-    const d = this.h.host.ownerDocument;
     const ed = this.ed;
-    const group = () => { const g = d.createElement('span'); g.className = 'cb-group'; this.bar.appendChild(g); return g; };
-    const button = (g: HTMLElement, id: string, html: string, title: string, on: () => void) => {
-      const b = d.createElement('button');
-      b.type = 'button';
-      b.className = 'cb-btn';
-      b.innerHTML = html;
-      b.title = title;
-      b.setAttribute('aria-label', title);
-      b.setAttribute('aria-pressed', 'false');
-      // keep the caret in the text while clicking
-      b.addEventListener('mousedown', (e) => e.preventDefault());
-      b.addEventListener('click', () => { on(); this.ta.focus({ preventScroll: true }); });
-      g.appendChild(b);
-      this.buttons.set(id, b);
-      return b;
-    };
-    const number = (g: HTMLElement, id: keyof CaptionEditor['inputs'], title: string, opts: { min: number; max: number; step: number; list?: number[]; cls: string; blank?: string }, apply: (v: number | null) => void) => {
-      const input = d.createElement('input');
-      input.type = 'number';
-      input.min = String(opts.min);
-      input.max = String(opts.max);
-      input.step = String(opts.step);
-      input.className = opts.cls;
-      input.title = title;
-      input.setAttribute('aria-label', title);
-      if (opts.blank) input.placeholder = opts.blank;
-      if (opts.list) {
-        const list = d.createElement('datalist');
-        list.id = `cb-${id}-${Math.random().toString(36).slice(2)}`;
-        for (const v of opts.list) { const o = d.createElement('option'); o.value = String(v); list.appendChild(o); }
-        input.setAttribute('list', list.id);
-        g.appendChild(list);
-      }
-      const go = () => {
-        const v = input.value.trim() === '' ? null : Number(input.value);
-        if (v === null || (Number.isFinite(v) && v >= opts.min)) apply(v === null ? null : Math.min(opts.max, v));
-      };
-      input.addEventListener('change', go);
-      input.addEventListener('keydown', (e) => {
-        e.stopPropagation();
-        if (e.key === 'Enter') { e.preventDefault(); go(); this.ta.focus({ preventScroll: true }); }
-        if (e.key === 'Escape') { e.preventDefault(); this.ta.focus({ preventScroll: true }); }
-      });
-      g.appendChild(input);
-      this.inputs[id] = input;
-      return input;
-    };
-    const svg = (body: string) => `<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">${body}</svg>`;
-
-    let g = group();
-    button(g, 'bold', '<b>B</b>', 'Bold (Ctrl+B)', () => ed.toggle('bold'));
-    button(g, 'italic', '<i>I</i>', 'Italic (Ctrl+I)', () => ed.toggle('italic'));
-    button(g, 'underline', '<u>U</u>', 'Underline (Ctrl+U)', () => ed.toggle('underline'));
-    g = group();
-    button(g, 'sub', 'x<sub>2</sub>', 'Subscript (Ctrl+=)', () => ed.toggle('sub'));
-    button(g, 'sup', 'x<sup>2</sup>', 'Superscript (Ctrl+Shift+=)', () => ed.toggle('sup'));
-    button(g, 'formula', 'CH<sub>3</sub>', 'Formula: numbers after letters go down, charges go up', () => ed.toggle('formula'));
-
-    g = group();
-    const font = d.createElement('input');
-    font.type = 'text';
-    font.className = 'cb-font font-box';
-    font.title = 'Font: free fonts that come with the app, or any font on this computer';
-    font.setAttribute('aria-label', 'Font');
-    font.setAttribute('list', 'ci-fonts');
-    font.spellcheck = false;
-    const setFont = () => { const v = font.value.trim(); ed.setStyle({ font: v && v !== this.h.defaultFont ? v : undefined }); };
-    font.addEventListener('change', setFont);
-    font.addEventListener('keydown', (e) => {
-      e.stopPropagation();
-      if (e.key === 'Enter') { e.preventDefault(); setFont(); this.ta.focus({ preventScroll: true }); }
-      if (e.key === 'Escape') { e.preventDefault(); this.ta.focus({ preventScroll: true }); }
+    // the same bar as the Text Formatting toolbox's (src/ui/text-bar.ts)
+    this.textBar = buildTextBar(this.bar, {
+      format: (f) => { applyFormat(ed, f); return true; },
+      type: (ch) => { ed.type(ch); return true; },
+      link: () => void this.editLink(),
+      state: () => {
+        const p = ed.currentPara();
+        return { style: ed.currentStyle(), align: ed.currentAlign(), list: p.list, line: ed.t.lineSpacing ?? 1, before: p.spaceBefore ?? 0, after: p.spaceAfter ?? 0, wrap: ed.t.wrap, link: !!ed.linkHere(), defaultFont: this.h.defaultFont };
+      },
+      back: () => { if (!this.closed) this.ta.focus({ preventScroll: true }); },
+      resized: () => this.place(),
     });
-    g.appendChild(font);
-    this.inputs.font = font;
-    number(g, 'size', 'Text size (points)', { min: 1, max: 400, step: 0.5, list: SIZES, cls: 'cb-size' }, (v) => { if (v) ed.setStyle({ size: v }); });
-    const color = d.createElement('input');
-    color.type = 'color';
-    color.className = 'cb-color';
-    color.title = 'Text colour';
-    color.setAttribute('aria-label', 'Text colour');
-    color.addEventListener('change', () => { ed.setStyle({ color: color.value.toLowerCase() === '#000000' ? undefined : color.value }); this.ta.focus({ preventScroll: true }); });
-    g.appendChild(color);
-    this.inputs.color = color;
-
-    g = group();
-    const lineIcon = (j: string) => {
-      const rows = [14, 9, 14, 9].map((w0, i) => {
-        const w = j === 'justify' ? 14 : w0;
-        const left = j === 'left' || j === 'justify' ? 0 : j === 'center' ? (14 - w) / 2 : 14 - w;
-        return `<rect x="${left + 1}" y="${2 + i * 3.5}" width="${w}" height="1.6"/>`;
-      });
-      return svg(rows.join(''));
-    };
-    button(g, 'left', lineIcon('left'), 'Line up on the left', () => ed.align('left'));
-    button(g, 'center', lineIcon('center'), 'Centre the lines', () => ed.align('center'));
-    button(g, 'right', lineIcon('right'), 'Line up on the right', () => ed.align('right'));
-    button(g, 'justify', lineIcon('justify'), 'Stretch lines to both edges of the text box', () => ed.align('justify'));
-
-    g = group();
-    const listIcon = (marks: string[]) => svg(marks.map((m, i) => `${m.replace(/Y/g, String(3 + i * 5))}<rect x="6" y="${2 + i * 5}" width="9" height="1.6"/>`).join(''));
-    button(g, 'bullet', listIcon(['<circle cx="2.5" cy="Y" r="1.4"/>', '<circle cx="2.5" cy="Y" r="1.4"/>', '<circle cx="2.5" cy="Y" r="1.4"/>']),
-      'Bullets', () => ed.list('bullet'));
-    button(g, 'number', svg('<text x="0" y="5" font-size="5.5" font-family="Arial">1</text><text x="0" y="10" font-size="5.5" font-family="Arial">2</text><text x="0" y="15" font-size="5.5" font-family="Arial">3</text><rect x="6" y="2" width="9" height="1.6"/><rect x="6" y="7" width="9" height="1.6"/><rect x="6" y="12" width="9" height="1.6"/>'),
-      'Numbering', () => ed.list('number'));
-    button(g, 'outdent', svg('<rect x="1" y="2" width="14" height="1.6"/><rect x="7" y="6" width="8" height="1.6"/><rect x="7" y="10" width="8" height="1.6"/><rect x="1" y="14" width="14" height="1.6"/><path d="M5 6.5v4.5L1.5 8.75z"/>'),
-      'Less indent (Shift+Tab)', () => ed.indent(-1));
-    button(g, 'indent', svg('<rect x="1" y="2" width="14" height="1.6"/><rect x="7" y="6" width="8" height="1.6"/><rect x="7" y="10" width="8" height="1.6"/><rect x="1" y="14" width="14" height="1.6"/><path d="M1.5 6.5v4.5L5 8.75z"/>'),
-      'More indent (Tab)', () => ed.indent(1));
-    button(g, 'spacing', svg('<rect x="7" y="2" width="8" height="1.6"/><rect x="7" y="7.2" width="8" height="1.6"/><rect x="7" y="12.4" width="8" height="1.6"/><path d="M3 1l2.5 3h-5zM3 15l2.5-3h-5z"/><rect x="2.4" y="3.5" width="1.2" height="9"/>'),
-      'Line and paragraph spacing, text box width', () => { this.spacing.hidden = !this.spacing.hidden; this.symbols.hidden = true; this.updateBar(); this.place(); });
-
-    g = group();
-    button(g, 'link', svg('<path d="M6.6 9.4a.8.8 0 0 1 0-1.1l1.7-1.7a.8.8 0 1 1 1.1 1.1L7.7 9.4a.8.8 0 0 1-1.1 0z"/><path d="M8.9 3.2a3 3 0 0 1 4.2 4.2l-1.6 1.6a.8.8 0 1 1-1.1-1.1L12 6.3a1.4 1.4 0 0 0-2-2L8.4 5.9a.8.8 0 1 1-1.1-1.1zM4 9.7l1.6-1.6a.8.8 0 1 1 1.1 1.1L5.1 10.8a1.4 1.4 0 0 0 2 2l1.6-1.6a.8.8 0 1 1 1.1 1.1l-1.6 1.6a3 3 0 0 1-4.2-4.2z"/>'),
-      'Link to a web page, DOI, file or slide (Ctrl+K)', () => void this.editLink());
-    button(g, 'symbols', 'αΩ', 'Greek letters and symbols', () => { this.symbols.hidden = !this.symbols.hidden; this.spacing.hidden = true; this.updateBar(); this.place(); });
-    for (const row of SYMBOLS) {
-      const r = d.createElement('div');
-      r.className = 'cs-row';
-      for (const ch of row) {
-        const b = d.createElement('button');
-        b.type = 'button';
-        b.textContent = ch;
-        b.title = `Insert ${ch}`;
-        b.addEventListener('mousedown', (e) => e.preventDefault());
-        b.addEventListener('click', () => { ed.type(ch); this.ta.focus({ preventScroll: true }); });
-        r.appendChild(b);
-      }
-      this.symbols.appendChild(r);
-    }
-
-    // the spacing panel: every value here can be typed in
-    const row = (label: string) => {
-      const l = d.createElement('label');
-      l.className = 'csp-row';
-      const s = d.createElement('span');
-      s.textContent = label;
-      l.appendChild(s);
-      this.spacing.appendChild(l);
-      return l;
-    };
-    number(row('Line spacing'), 'line', 'Line spacing (1 = single)', { min: 0.5, max: 10, step: 0.05, list: SPACINGS, cls: 'cb-num' }, (v) => ed.lineSpacing(v ?? 1));
-    number(row('Space before (pt)'), 'before', 'Space before the selected paragraphs, in points', { min: 0, max: 200, step: 1, cls: 'cb-num' }, (v) => ed.paraSpacing({ spaceBefore: v ?? 0 }));
-    number(row('Space after (pt)'), 'after', 'Space after the selected paragraphs, in points', { min: 0, max: 200, step: 1, cls: 'cb-num' }, (v) => ed.paraSpacing({ spaceAfter: v ?? 0 }));
-    number(row('Box width (pt)'), 'wrap', 'Width the lines wrap to, in points (blank: lines break only where you press Enter)', { min: 4, max: 5000, step: 1, cls: 'cb-num', blank: 'none' }, (v) => ed.setWrap(v ?? undefined));
-    this.bar.append(this.symbols, this.spacing);
-
-    const hint = d.createElement('span');
+    const hint = this.h.host.ownerDocument.createElement('span');
     hint.className = 'cb-hint';
     hint.textContent = keyHint(this.h.hint ?? 'Enter: new paragraph · Tab: indent · Esc: done', !!this.h.enterFinishes?.());
     this.bar.appendChild(hint);
-  }
-
-  private updateBar(): void {
-    if (this.closed) return;
-    const ed = this.ed;
-    const s = ed.currentStyle();
-    for (const k of ['bold', 'italic', 'underline', 'sub', 'sup', 'formula'] as const) this.press(k, !!s[k]);
-    this.press('link', !!ed.linkHere());
-    const align = ed.currentAlign();
-    for (const j of ['left', 'center', 'right', 'justify'] as const) this.press(j, align === j);
-    const p = ed.currentPara();
-    this.press('bullet', p.list === 'bullet');
-    this.press('number', p.list === 'number');
-    this.press('symbols', !this.symbols.hidden);
-    this.press('spacing', !this.spacing.hidden);
-    const active = this.h.host.ownerDocument.activeElement;
-    const show = (k: keyof CaptionEditor['inputs'], v: string) => { if (active !== this.inputs[k]) this.inputs[k].value = v; };
-    const r2 = (v: number) => String(Math.round(v * 100) / 100);
-    show('font', s.font ?? '');
-    this.inputs.font.placeholder = s.font === undefined ? this.h.defaultFont ?? 'Font' : '';
-    show('size', s.size !== undefined ? r2(s.size) : '');
-    this.inputs.size.placeholder = s.size === undefined ? '—' : '';
-    show('color', s.color ?? '#000000');
-    show('line', r2(ed.t.lineSpacing ?? 1));
-    show('before', r2(p.spaceBefore ?? 0));
-    show('after', r2(p.spaceAfter ?? 0));
-    show('wrap', ed.t.wrap !== undefined ? r2(ed.t.wrap) : '');
-  }
-
-  private press(id: string, on: boolean): void {
-    const b = this.buttons.get(id);
-    if (!b) return;
-    b.classList.toggle('on', on);
-    b.setAttribute('aria-pressed', String(on));
   }
 }

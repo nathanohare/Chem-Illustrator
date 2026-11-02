@@ -1,6 +1,6 @@
 // The box round an atom-map number (Chemistry ▸ Map Atoms), drawn on the canvas and in the
-// Map Number Format window's preview. Three looks (style.ts, mapLookPrefs): ChemDraw's grey
-// outline, a light tint of the number's own colour, or the user's own format for every box.
+// Map Number Format window's preview. Three looks (style.ts, mapLookPrefs): ChemDraw's gray
+// outline, a light tint of the number's own color, or the user's own format for every box.
 
 import type { Rect } from '../geom';
 import { tint } from '../colours';
@@ -9,7 +9,7 @@ import { MAP_GREY, mapColour } from './atom-marks';
 
 /**
  * Paint the box `b` for map number `n` (fill, pattern, outline and shadow) and say how its number
- * is written. `lw` is the drawing's line width, which the grey and tinted outlines follow.
+ * is written. `lw` is the drawing's line width, which the gray and tinted outlines follow.
  */
 export function paintMapBox(ctx: CanvasRenderingContext2D, b: Rect, n: number, lw: number, look: MapLook, own: MapBoxStyle): { ink: string; bold: boolean } {
   const w = b.x2 - b.x1, h = b.y2 - b.y1;

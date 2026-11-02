@@ -159,8 +159,7 @@ export class QuickBar {
   edit(): void {
     const d = document.createElement('dialog');
     d.className = 'quick-editor';
-    d.innerHTML = `<h2>Customize Quick Access Toolbar</h2>
-      <p class="muted">Pick a command on the left and Add it. The bar shows them in the order on the right.</p>
+    d.innerHTML = `<h2 data-info="Pick a command on the left and Add it. The bar shows them in the order on the right.">Customize Quick Access Toolbar</h2>
       <div class="qe-cols">
         <div class="qe-col"><input type="search" class="qe-filter" placeholder="Find a command" aria-label="Find a command"><select class="qe-all" size="14" aria-label="Commands"></select></div>
         <div class="qe-mid"><button type="button" class="qe-add">Add ›</button><button type="button" class="qe-remove">‹ Remove</button></div>

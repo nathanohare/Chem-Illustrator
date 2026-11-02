@@ -209,7 +209,7 @@ export class AnimateDialog {
     mp4.addEventListener('click', () => void this.saveMp4());
     const gif = button('Save GIF…');
     gif.addEventListener('click', () => void this.saveGif());
-    const slide = button('Put on Slide', 'Add the clip to this slide as a video that plays in the slide show (and in PowerPoint)');
+    const slide = button('Insert on Slide', 'Add the clip to this slide as a video that plays in the slide show (and in PowerPoint)');
     slide.addEventListener('click', () => void this.putOnSlide());
     slide.hidden = !this.hooks.onSlide();
     (this.hooks.onSlide() ? slide : gif).classList.add('primary');
@@ -356,7 +356,7 @@ export class AnimateDialog {
     let hover: { side: 'A' | 'B'; key: string } | null = null;
     const pane = this.pairPane;
     pane.replaceChildren();
-    const intro = el('p', 'muted', 'Click an atom on the left, then the atom it becomes on the right. Click a paired atom on the left again to unpair it. Your pairs are kept; the rest is matched automatically unless you tick the box. Red bonds break and green bonds form. Numbers are blue for pairs you chose, grey for pairs matched automatically and orange for atoms with no partner.');
+    const intro = el('p', 'muted', 'Click an atom on the left, then the atom it becomes on the right. Click a paired atom on the left again to unpair it. Your pairs are kept; the rest is matched automatically unless you check the box. Red bonds break and green bonds form. Numbers are blue for pairs you chose, gray for pairs matched automatically and orange for atoms with no partner.');
     const row = el('div', 'animate-pair-canvases');
     const cA = el('canvas', 'animate-pair-canvas');
     const cB = el('canvas', 'animate-pair-canvas');

@@ -51,6 +51,8 @@ export interface SchemePrefs {
   headGap: number | null;
   /** Clean Up Reaction makes the arrows of a scheme that point the same way all the same length (the longest one's). */
   sameLength: boolean;
+  /** Shortest arrow, or null for the usual (from the bond length). A Smart Scheme's own format sets it. */
+  arrowLength?: number | null;
 }
 
 export const DEFAULT_SCHEME_PREFS: SchemePrefs = { structGap: null, plusGap: null, textGap: null, textSize: null, textAlign: 'center', helpers: true, fit: true, lead: null, headGap: null, sameLength: true };
@@ -104,7 +106,7 @@ export function spacing(bond: number, p: SchemePrefs = schemePrefs) {
     plus: p.plusGap ?? SPACING.plus * bond,
     conditions: p.textGap ?? SPACING.conditions * bond,
     stack: SPACING.stack * bond,
-    minArrow: SPACING.minArrow * bond,
+    minArrow: p.arrowLength ?? SPACING.minArrow * bond,
     lead: p.lead ?? over,
     headGap: p.headGap ?? over,
   };
@@ -192,8 +194,9 @@ function straighten(f: Frame): Frame {
  * Clean Up Reaction: a plan for tidying the steps of these arrows (all reaction arrows when none
  * are given). Returns null when there is no reaction step to tidy.
  */
-export function planCleanUp(doc: Doc, m: Measure, arrowIds?: Iterable<number>): SchemePlan | null {
+export function planCleanUp(doc: Doc, m: Measure, arrowIds?: Iterable<number>, override?: Partial<SchemePrefs>): SchemePlan | null {
   // (in the drawing style's own scheme settings, where it has them)
+  if (override) return withSchemePrefs({ ...prefsOf(doc), ...override }, () => planIn(doc, m, arrowIds));
   return doc.style.scheme ? withSchemePrefs(prefsOf(doc), () => planIn(doc, m, arrowIds)) : planIn(doc, m, arrowIds);
 }
 

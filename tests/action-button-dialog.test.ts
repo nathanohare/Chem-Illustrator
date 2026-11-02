@@ -3,7 +3,7 @@
 // the action it usually has, the action changed from the drop-down under it, and the back,
 // home and next set at once.
 import { describe, expect, it } from 'vitest';
-import { actionSet, askActionButton } from '../src/ui/action-button-dialog';
+import { ACTION_LOOKS, actionLook, actionSet, askActionButton } from '../src/ui/action-button-dialog';
 import { GEO_BY_ID } from '../src/design/geo';
 
 (HTMLDialogElement.prototype as unknown as { showModal: () => void }).showModal = function (this: HTMLDialogElement) { this.open = true; };
@@ -22,7 +22,7 @@ describe('Action Button window', () => {
     // next is picked to start, going to the next slide
     expect(action().value).toBe('#next');
     submit();
-    expect(await p).toEqual({ geo: 'actNext', link: '#next' });
+    expect(await p).toMatchObject({ geo: 'actNext', link: '#next' });
   });
 
   it('a button starts with its usual action, which the drop-down changes, to a slide too', async () => {
@@ -33,7 +33,7 @@ describe('Action Button window', () => {
     action().dispatchEvent(new Event('change'));
     document.querySelector<HTMLSelectElement>('.action-button-dialog select[name=slide]')!.value = '#slide=7';
     submit();
-    expect(await p).toEqual({ geo: 'actReturn', link: '#slide=7' });
+    expect(await p).toMatchObject({ geo: 'actReturn', link: '#slide=7' });
   });
 
   it('the navigation set needs no action of its own', async () => {
@@ -41,7 +41,7 @@ describe('Action Button window', () => {
     tile('set').click();
     expect(action().disabled).toBe(true);
     submit();
-    expect(await p).toEqual({ geo: 'set', link: '' });
+    expect(await p).toMatchObject({ geo: 'set', link: '' });
   });
 
   it('has the show\'s own buttons: go to a slide, the slide picker, looking round, and a region of a Canvas slide', async () => {
@@ -60,11 +60,31 @@ describe('Action Button window', () => {
     expect(action().value).toBe('key');
     expect(document.querySelector<HTMLElement>('.action-button-dialog [data-for=key]')!.hidden).toBe(false);
     submit();
-    expect(await p).toEqual({ geo: 'actZoom', link: '#key=4' });
+    expect(await p).toMatchObject({ geo: 'actZoom', link: '#key=4' });
   });
 
   it('the set adds the slide picker, and on a Canvas slide looking round', () => {
     expect(actionSet(false)).toEqual(['actBack', 'actHome', 'actNext', 'actGrid']);
     expect(actionSet(true)).toContain('actLook');
+  });
+  it('offers quieter, smaller looks too, and the next window starts on the last one picked', async () => {
+    expect(ACTION_LOOKS.length).toBeGreaterThanOrEqual(4);
+    const sizes = ACTION_LOOKS.map((l) => l.size);
+    expect(Math.min(...sizes)).toBeLessThan(actionLook('office').size);
+    expect(actionLook('nonsense').id).toBe('office');
+    let p = askActionButton(slides);
+    const chip = (id: string) => document.querySelector<HTMLButtonElement>(`.ab-look[data-look="${id}"]`)!;
+    expect(chip('office').getAttribute('aria-checked')).toBe('true');
+    chip('outline').click();
+    expect(chip('outline').getAttribute('aria-checked')).toBe('true');
+    // the gallery redraws in the look picked (no fill for the outline look)
+    expect(tile('actNext').querySelector('path')!.getAttribute('fill')).toBe('none');
+    submit();
+    expect(await p).toMatchObject({ geo: 'actNext', look: 'outline' });
+    p = askActionButton(slides);
+    expect(chip('outline').getAttribute('aria-checked')).toBe('true');
+    chip('office').click();
+    submit();
+    expect(await p).toMatchObject({ look: 'office' });
   });
 });

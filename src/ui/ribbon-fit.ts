@@ -65,15 +65,29 @@ const overflows = (row: HTMLElement) => row.scrollWidth > row.clientWidth + 1;
 const galleryExtras = (row: HTMLElement) =>
   [...row.querySelectorAll<HTMLElement>('.rb-styles')].flatMap((gal) => [...gal.querySelectorAll<HTMLElement>(':scope > .rb-style:not(.rb-styles-more)')].slice(3));
 
-/** Fit one row of groups to its width: fewer gallery choices, then words off from the right, then groups folded from the right. */
+/** A group of large buttons only (Insert's Tables, Images): it can step down to small buttons with their words, three to a column. */
+const canShrink = (g: HTMLElement) => {
+  const row = g.querySelector<HTMLElement>(':scope > .rb-row');
+  if (!row) return false;
+  const kids = [...row.children].filter((c) => !(c as HTMLElement).hidden);
+  return kids.length >= 2 && kids.every((c) => c.matches('button.rb-big:not(.rb-keep-big), .rb-fly:has(> button.rb-big)'));
+};
+
+/**
+ * Fit one row of groups to its width, as Office does: fewer gallery choices; then, from the right,
+ * large buttons become small ones with their words; then words off (icons only); then groups
+ * folded into one button each.
+ */
 export function fitRow(row: HTMLElement): void {
   if (!row.clientWidth) return;
   const groups = groupsOf(row);
-  for (const g of groups) g.classList.remove('rb-compact', 'rb-folded', 'rb-popped');
+  for (const g of groups) g.classList.remove('rb-small', 'rb-compact', 'rb-folded', 'rb-popped');
   const extras = galleryExtras(row);
   for (const x of extras) x.classList.remove('rb-gal-out');
   if (!overflows(row)) return;
   for (let i = extras.length - 1; i >= 0 && overflows(row); i--) extras[i].classList.add('rb-gal-out');
+  if (!overflows(row)) return;
+  for (let i = groups.length - 1; i >= 0 && overflows(row); i--) if (canShrink(groups[i])) groups[i].classList.add('rb-small');
   if (!overflows(row)) return;
   for (let i = groups.length - 1; i >= 0 && overflows(row); i--) groups[i].classList.add('rb-compact');
   // the first group (Clipboard, usually) keeps its place longest
@@ -92,7 +106,14 @@ export function fitRow(row: HTMLElement): void {
   for (const g of groups) {
     if (!g.classList.contains('rb-compact') || g.classList.contains('rb-folded')) continue;
     g.classList.remove('rb-compact');
-    if (overflows(row)) { g.classList.add('rb-compact'); break; }
+    // (one that doesn't fit stays as it is; the next may still fit)
+    if (overflows(row)) g.classList.add('rb-compact');
+  }
+  // and the large buttons, where they fit
+  for (const g of groups) {
+    if (!g.classList.contains('rb-small') || g.classList.contains('rb-folded') || g.classList.contains('rb-compact')) continue;
+    g.classList.remove('rb-small');
+    if (overflows(row)) g.classList.add('rb-small');
   }
 }
 
@@ -119,15 +140,39 @@ export function setRibbonCollapsed(on: boolean): void {
   collapsed = on;
   document.body.classList.toggle('ribbon-collapsed', on);
   for (const r of document.querySelectorAll('.ribbon.rb-peek')) r.classList.remove('rb-peek');
-  for (const b of document.querySelectorAll<HTMLElement>('.rb-collapse')) {
-    b.textContent = on ? '˅' : '˄';
-    b.title = on ? 'Pin the ribbon open (Ctrl+F1)' : 'Collapse the ribbon to its tabs, for more room (Ctrl+F1). Click a tab to use its buttons';
-    b.setAttribute('aria-label', b.title);
-  }
+  for (const b of document.querySelectorAll<HTMLElement>('.rb-collapse')) paintArrow(b);
   document.querySelector('[data-cmd="collapse-ribbon"]')?.setAttribute('aria-checked', String(on));
   if (!on) fitRibbons();
 }
 export const ribbonCollapsed = () => collapsed;
+
+/**
+ * A ribbon whose arrow switches it between its Classic look (two rows) and its Simplified one (one
+ * row), as Office's does, instead of folding it to its tabs. Double-clicking a tab or Ctrl+F1
+ * still folds it, and when folded the arrow opens it again.
+ */
+const lookToggles = new Map<Element, { simple: () => boolean; toggle: () => void }>();
+export function addLookToggle(ribbon: HTMLElement, look: { simple: () => boolean; toggle: () => void }): void {
+  lookToggles.set(ribbon, look);
+  repaintArrows();
+}
+export function repaintArrows(): void {
+  for (const b of document.querySelectorAll<HTMLElement>('.rb-collapse')) paintArrow(b);
+}
+
+function paintArrow(b: HTMLElement): void {
+  const look = lookToggles.get(b.closest('.ribbon') as Element);
+  if (look && !collapsed) {
+    const simple = look.simple();
+    b.textContent = simple ? '˅' : '˄';
+    b.title = simple ? 'Classic ribbon: two rows of buttons, with group names' : 'Simplified ribbon: one row of buttons, for more room';
+    b.title += '. Double-click a tab (or Ctrl+F1) to fold the ribbon to its tabs';
+  } else {
+    b.textContent = collapsed ? '˅' : '˄';
+    b.title = collapsed ? 'Pin the ribbon open (Ctrl+F1)' : 'Collapse the ribbon to its tabs, for more room (Ctrl+F1). Click a tab to use its buttons';
+  }
+  b.setAttribute('aria-label', b.title);
+}
 
 function toggleCollapsed(): void {
   setRibbonCollapsed(!collapsed);
@@ -141,8 +186,13 @@ function addCollapseButtons(): void {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'rb-collapse';
-    b.addEventListener('click', (e) => { e.stopPropagation(); toggleCollapsed(); });
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const look = lookToggles.get(b.closest('.ribbon') as Element);
+      if (look && !collapsed) { look.toggle(); paintArrow(b); } else toggleCollapsed();
+    });
     tabs.append(b);
+    paintArrow(b);
   }
 }
 

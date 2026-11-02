@@ -94,7 +94,7 @@ describe('drawing the next intermediate from curved arrows', () => {
     expect(good.out.atoms.get(nu)!.charge).toBe(0);
   });
 
-  it('says an arrow from a carbocation to a nucleophile is the wrong way round', () => {
+  it('says an arrow from a carbocation to a nucleophile is the wrong way around', () => {
     const doc = new Doc();
     const { o, c } = doc.edit('build', () => {
       const c = doc.addAtom(200, 100, 6, { charge: 1 }).id;
@@ -105,7 +105,7 @@ describe('drawing the next intermediate from curved arrows', () => {
     push(doc, atom(c), atom(o));
     const { errors } = run(doc);
     expect(errors.length).toBe(1);
-    expect(errors[0].text).toMatch(/no lone pair to give.*wrong way round/);
+    expect(errors[0].text).toMatch(/no lone pair to give.*wrong way around/);
   });
 
   it('turns a C=O π bond and an enolate round (aldol-type step), with no complaints', () => {

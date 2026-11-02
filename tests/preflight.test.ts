@@ -10,7 +10,7 @@ import { recordPicture } from '../src/render/picture';
 import { plainMeasure } from '../src/chem/reaction';
 import { shapeBox } from '../src/objects';
 import { journalById, preflight, pictureDpi, isColour, preflightSummary, type PreflightIssue } from '../src/preflight';
-import { enlargeText, thickenLines, useArial } from '../src/preflight-fix';
+import { enlargeText, thickenLines, useArial, fixUntilDone } from '../src/preflight-fix';
 import type { Item } from '../src/render/vector';
 
 const acs = journalById('acs')!;
@@ -162,5 +162,42 @@ describe('journal figure preflight', () => {
     expect(r.w).toBeGreaterThan(3.25 * 72);
     expect(issue(r, 'width').level).toBe('warning');
     expect(r.scale).toBeLessThan(1);
+  });
+  it('counts a figure within half a point of the width as fitting, so it is not shrunk', () => {
+    const items: Item[] = [{ kind: 'path', segs: [{ k: 'M', x: 0, y: 0 }, { k: 'L', x: 240.3, y: 0 }], stroke: { color: '#000', width: 0.5, cap: 'butt', join: 'miter' } }];
+    const r = preflight(items, { x1: 0, y1: -0.25, x2: 240.3, y2: 0.25 }, acs, 'single');
+    expect(r.scale).toBe(1);
+    expect(issue(r, 'width').level).toBe('ok');
+    expect(issue(r, 'line-min').level).toBe('ok');
+  });
+
+  it('aims fixes a little past the least size, and Make It Fit a little inside the width', () => {
+    const doc = chain(30);
+    const r = check(doc);
+    expect(issue(r, 'width').want).toBeCloseTo((240 - 1) / r.w, 6);
+    const l = r.issues.find((i) => i.rule === 'line-min' && i.level === 'error')!;
+    expect(l.want).toBeCloseTo((0.5 / r.scale) * 1.02, 6);
+  });
+
+  it('keeps fixing while one fix undoes another by a hair', () => {
+    // thin bonds and a caption that sets the width: each check finds the lines thin again until they are not
+    const doc = chain(4, { size: 10, font: 'Arial' });
+    doc.edit('thin', () => doc.setStyle({ ...doc.style, lineWidth: 0.2 }));
+    const again = () => check(doc);
+    let calls = 0;
+    const first = again().issues.find((i) => i.rule === 'line-min' && i.level === 'error')!;
+    const done = fixUntilDone(first, (i) => { calls++; return thickenLines(doc, i, ctx(doc)); }, again);
+    expect(done).toBe(true);
+    expect(calls).toBeGreaterThanOrEqual(1);
+    expect(issue(again(), 'line-min').level).toBe('ok');
+    // with a check that keeps finding it, it stops after the passes it is given
+    let n = 0;
+    const stuck = { ...first };
+    expect(fixUntilDone(stuck, () => { n++; return true; }, () => ({ ...again(), issues: [stuck] }), 3)).toBe(true);
+    expect(n).toBe(3);
+    // nothing changed: no further passes
+    let m = 0;
+    expect(fixUntilDone(stuck, () => { m++; return false; }, again)).toBe(false);
+    expect(m).toBe(1);
   });
 });

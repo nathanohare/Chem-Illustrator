@@ -141,7 +141,7 @@ export function modifierHints(s: HintState, m: Mods): ModHint[] {
           break;
         case 'ring':
           if (s.over === 'atom') add('Alt', 'on a new bond');
-          add('Shift', 'move the double bonds round');
+          add('Shift', 'move the double bonds around');
           if (s.aromatic) add('Ctrl', 'with a circle');
           break;
         case 'chain':
@@ -166,8 +166,19 @@ export function hintLines(hints: ModHint[], mac = IS_MAC): { text: string; on: b
   return hints.map((h) => ({ text: `${keyName(h.key, mac)}${mac ? ' ' : ': '}${h.text}`, on: h.on }));
 }
 
-const BLUE = '#2f6fdf';
-const BLUE_DARK = '#8ab4ff';
+let BLUE = '#2f6fdf';
+let BLUE_DARK = '#8ab4ff';
+let EDGE = 'rgba(47, 111, 223, 0.35)';
+
+/** The pointer readout in `hex` (Canvas mode's teal), or the usual blue (null). */
+export function setAidTint(hex: string | null): void {
+  const ok = !!hex && /^#[0-9a-f]{6}$/i.test(hex);
+  BLUE = ok ? hex! : '#2f6fdf';
+  const c = ok ? [1, 3, 5].map((i) => parseInt(hex!.slice(i, i + 2), 16)) : [47, 111, 223];
+  // lighter for the dark page: halfway to white
+  BLUE_DARK = ok ? `rgb(${c.map((v) => Math.round(v + (255 - v) * 0.45)).join(', ')})` : '#8ab4ff';
+  EDGE = `rgba(${c.join(', ')}, 0.35)`;
+}
 
 /**
  * Draw the readout (first, larger) and the hints under it, a little below and right of the
@@ -190,7 +201,7 @@ export function drawCursorAids(ctx: CanvasRenderingContext2D, at: Vec, px: numbe
   const blue = o.dark ? BLUE_DARK : BLUE;
   if (o.look !== 'plain') {
     ctx.fillStyle = o.look === 'solid' ? blue : o.dark ? 'rgba(24, 28, 36, 0.88)' : 'rgba(255, 255, 255, 0.9)';
-    ctx.strokeStyle = o.look === 'solid' ? blue : o.dark ? 'rgba(138, 180, 255, 0.45)' : 'rgba(47, 111, 223, 0.35)';
+    ctx.strokeStyle = o.look === 'solid' ? blue : o.dark ? 'rgba(138, 180, 255, 0.45)' : EDGE;
     ctx.lineWidth = px;
     const r = 3 * px;
     ctx.beginPath();

@@ -7,6 +7,7 @@
 import type { Contents } from '../model';
 import { CellError, ERR } from './values';
 import type { MolProps } from './properties';
+import type { HammettResult } from '../chem/hammett-match';
 import type { ChemHost, Structure } from './workbook';
 
 /** The chemistry engine (the worker), or a stand-in for tests. */
@@ -14,6 +15,8 @@ export interface ChemEngine {
   readonly ready: boolean;
   props(mols: string[]): Promise<(MolProps | { error: string })[]>;
   substructure(query: string, mols: string[]): Promise<{ results: (boolean | null)[]; error?: string }>;
+  /** The Hammett groups at a core's marked positions in each molecule (SMILES). */
+  hammett?(core: string, mols: string[]): Promise<HammettResult[]>;
 }
 
 type Answer = MolProps | CellError;
@@ -27,6 +30,9 @@ export class SheetChem implements ChemHost {
   private byStructure = new Map<number, Answer>();
   private bySmiles = new Map<string, Answer>();
   private matches = new Map<string, boolean | null>();
+  private hammetts = new Map<string, HammettResult>();
+  /** Hammett questions not sent yet, by reference: the molecules asked about, by key. */
+  private wantHammett = new Map<string, Map<string, () => string | null>>();
   private queryIds = new WeakMap<Contents, number>();
   private nextQuery = 1;
   /** Questions not sent yet. */
@@ -40,7 +46,7 @@ export class SheetChem implements ChemHost {
    * @param engine the chemistry engine
    * @param molfile a structure's drawing as a molfile, or null (with the reason) when it has no structure in it
    */
-  constructor(private engine: ChemEngine, private molfile: (c: Contents) => { molblock: string | null; problem?: string }) {}
+  constructor(private engine: ChemEngine, private molfile: (c: Contents, opts?: { attachKinds?: boolean }) => { molblock: string | null; problem?: string }) {}
 
   structure(s: Structure): Answer {
     const got = this.byStructure.get(s.id);
@@ -86,6 +92,30 @@ export class SheetChem implements ChemHost {
     return null;
   }
 
+  /**
+   * The Hammett groups on a molecule's ring, counted from the reference (an attachment point kind,
+   * or a core in SMILES; see src/chem/hammett-match.ts). The molecule is a cell's structure (its
+   * attachment points written with their kinds) or SMILES text. #BUSY! while being worked out.
+   */
+  hammett(mol: Structure | string, ref: string): HammettResult | CellError {
+    const id = typeof mol === 'string' ? `t${mol}` : `s${mol.id}`;
+    const key = `${ref}\n${id}`;
+    const got = this.hammetts.get(key);
+    if (got) return got;
+    if (!this.engine.hammett) return ERR.na('Hammett constants need the chemistry engine');
+    let want = this.wantHammett.get(ref);
+    if (!want) { want = new Map(); this.wantHammett.set(ref, want); }
+    if (!want.has(id)) {
+      want.set(id, typeof mol === 'string' ? () => mol : () => {
+        const m = this.molfile(mol.contents, { attachKinds: true });
+        if (!m.molblock) { this.keep(this.hammetts, key, { error: m.problem ?? 'There is no structure in this cell' }); return null; }
+        return m.molblock;
+      });
+      this.schedule();
+    }
+    return ERR.busy();
+  }
+
   /** Waits until every question asked so far has its answer. */
   settled(): Promise<void> {
     if (!this.busy) return Promise.resolve();
@@ -93,7 +123,7 @@ export class SheetChem implements ChemHost {
   }
 
   get busy(): boolean {
-    return this.scheduled || this.inFlight > 0 || this.wantProps.size > 0 || this.wantMatch.size > 0;
+    return this.scheduled || this.inFlight > 0 || this.wantProps.size > 0 || this.wantMatch.size > 0 || this.wantHammett.size > 0;
   }
 
   /** Send what's waiting (call when the engine has just become ready). */
@@ -108,6 +138,7 @@ export class SheetChem implements ChemHost {
     this.byStructure.clear();
     this.bySmiles.clear();
     this.matches.clear();
+    this.hammetts.clear();
   }
 
   private schedule(): void {
@@ -124,8 +155,10 @@ export class SheetChem implements ChemHost {
   private async send(): Promise<void> {
     const props = [...this.wantProps.values()];
     const matches = [...this.wantMatch.values()];
+    const hammetts = [...this.wantHammett.entries()];
     this.wantProps.clear();
     this.wantMatch.clear();
+    this.wantHammett.clear();
     const jobs: Promise<void>[] = [];
     if (props.length) {
       const asked: { store: (a: Answer) => void }[] = [];
@@ -159,6 +192,21 @@ export class SheetChem implements ChemHost {
       jobs.push(this.engine.substructure(qm, inputs).then(
         (res) => res.results.forEach((r, i) => this.keep(this.matches, asked[i], r ?? false)),
         () => asked.forEach((k) => this.matches.set(k, false)),
+      ));
+    }
+    for (const [ref, want] of hammetts) {
+      const ids: string[] = [], inputs: string[] = [];
+      for (const [id, input] of want) {
+        const text = input();
+        if (text === null) continue;
+        ids.push(id);
+        inputs.push(text);
+      }
+      if (!inputs.length) continue;
+      const keep = (i: number, r: HammettResult) => this.keep(this.hammetts, `${ref}\n${ids[i]}`, r);
+      jobs.push(this.engine.hammett!(ref, inputs).then(
+        (res) => res.forEach((r, i) => keep(i, r)),
+        (e) => ids.forEach((_, i) => keep(i, { error: `The chemistry engine failed: ${String(e)}` })),
       ));
     }
     this.inFlight++;

@@ -211,7 +211,7 @@ export class DocInsertUI {
       { name: 'subject', label: 'Subtitle', value: p.subject ?? '' },
       { name: 'author', label: 'Author', value: p.author ?? this.host.author() },
       { name: 'company', label: 'Institution or group', value: p.company ?? '' },
-      { name: 'accent', label: 'Colour', value: ACCENTS[0][0], options: ACCENTS.map(([v, label]) => ({ value: v, label })) },
+      { name: 'accent', label: 'Color', value: ACCENTS[0][0], options: ACCENTS.map(([v, label]) => ({ value: v, label })) },
     ], { ok: 'Insert', note: 'These are the document\'s properties: the cover shows them as fields, so changing them (Quick Parts > Document Properties…) changes the cover. The date is today\'s, kept up to date. The first page gets no page number.' });
     this.host.focus();
     if (!got || this.file() !== f) return;

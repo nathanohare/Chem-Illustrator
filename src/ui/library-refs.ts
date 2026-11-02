@@ -135,7 +135,7 @@ function libraryPanel(lib: Library, host: LibraryRefsHost, show: Show, ctx: Hold
       ...cols.map((c) => ({ name: `col:${c.id}`, label: c.path, type: 'checkbox' as const, value: String(p.every((r) => r.collections?.includes(c.id))) })),
       { name: 'newcol', label: 'New collection', value: '', placeholder: 'a name, to make one and put them in it' },
     ];
-    const got = await ask(p.length === 1 ? 'Tags and Collections' : `Tags and Collections (${p.length} references)`, fields, { ok: 'Apply', note: cols.length ? 'Tick the collections they belong in.' : 'Collections group references (Zotero\'s collections come in as collections too).' });
+    const got = await ask(p.length === 1 ? 'Tags and Collections' : `Tags and Collections (${p.length} references)`, fields, { ok: 'Apply', note: cols.length ? 'Check the collections they belong in.' : 'Collections group references (Zotero\'s collections come in as collections too).' });
     if (!got) return;
     const before = common((r) => r.tags);
     const typed = parseTags(got.tags);

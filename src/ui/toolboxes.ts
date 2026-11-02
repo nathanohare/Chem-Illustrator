@@ -124,15 +124,22 @@ export function withSideFolded(st: ToolboxState, mode: string, folded: boolean):
 /**
  * The toolboxes and where they start: the drawing tools on the left, the rest hidden until wanted.
  * "details" is the side panel taken out of its place at the right, to float or dock elsewhere.
+ * Smart Schemes, Diagrams, Tables and Charts, Biopolymers and Perspective and 3-D are context
+ * toolboxes: hidden until opened, and brought out while their kind of object is selected.
  */
-export const TOOLBOX_IDS = ['main', 'structure', 'arrange', 'templates', 'colours', 'highlight', 'text', 'guides', 'custom', 'details'] as const;
+export const TOOLBOX_IDS = ['main', 'structure', 'arrange', 'templates', 'colours', 'highlight', 'text', 'guides', 'custom', 'smart', 'schemes', 'diagrams', 'tables', 'biopolymers', 'perspective', 'details'] as const;
 export type ToolboxId = (typeof TOOLBOX_IDS)[number];
+/** The context toolboxes (see TOOLBOX_IDS). */
+export const CONTEXT_BOXES = ['schemes', 'diagrams', 'tables', 'biopolymers', 'perspective'] as const;
+export type ContextBox = (typeof CONTEXT_BOXES)[number];
 
 export function defaultToolboxes(): ToolboxState {
   const places: Record<string, BoxPlace> = {};
   TOOLBOX_IDS.forEach((id, i) => { places[id] = { shown: id === 'main', dock: id === 'main' ? 'left' : 'float', x: 110 + i * 24, y: 90 + i * 64 }; });
   // the side panel (Style, Warnings, Analysis) is always shown, docked at the right to start with
   places.details = { shown: true, dock: 'right', x: 900, y: 90 };
+  // the Smart Scheme species list floats beside its scheme until docked (then it is a toolbox, at the right to start with)
+  places.smart = { shown: false, dock: 'right', x: 900, y: 140 };
   return { locked: true, places, custom: ['cmd:clean-up', 'cmd:add-frame', 'cmd:fill-rings', 'cmd:highlight', 'cmd:chain-ends'], sideCollapsed: false };
 }
 
@@ -400,6 +407,8 @@ export interface ToolboxDef {
   /** One of TOOLBOX_IDS, or a toolbox of your own ("own-…"). */
   id: string;
   title: string;
+  /** How to use it, shown on an "i" beside the title (instead of a line of help in the box). */
+  info?: string;
   /** Fill the toolbox's body; `vertical` when it is docked at the left or right. */
   build(body: HTMLElement, vertical: boolean): void;
 }
@@ -555,6 +564,11 @@ export class Toolboxes {
     this.change(withSideFolded(this.hooks.get(), mode, collapsed));
   }
 
+  /** Show a toolbox at a place (a dock, or floating at x, y). */
+  put(id: string, p: Partial<BoxPlace>): void {
+    this.place(id, { ...p, shown: true });
+  }
+
   private place(id: string, p: Partial<BoxPlace>): void {
     const st = this.hooks.get();
     this.change({ ...st, places: { ...st.places, [id]: { ...st.places[id], ...p } } });
@@ -595,7 +609,9 @@ export class Toolboxes {
     lock.type = 'button';
     lock.className = 'tb-lock';
     lock.addEventListener('click', () => this.setBoxLocked(def.id, !boxLocked(this.hooks.get(), def.id)));
-    head.append(grip, name, lock, fold, close);
+    head.append(grip, name);
+    if (def.info) head.append(infoIcon(def.info, 'tb-info'));
+    head.append(lock, fold, close);
     // a locked docked box hides its title bar, so this slim arrow folds it instead (folded, the title shows again to open it)
     const tab = document.createElement('button');
     tab.type = 'button';
@@ -676,7 +692,7 @@ export class Toolboxes {
       ...DOCKS.map((d) => ({ cmd: `tbx:${d}`, label: DOCK_LABEL[d] })), null,
       { cmd: 'tbx:lock', label: boxLocked(st, def.id) ? `Unlock ${def.title}` : `Lock ${def.title}` },
       { cmd: 'tbx:lock-all', label: st.locked ? 'Unlock All Toolboxes' : 'Lock All Toolboxes' },
-      { cmd: 'tbx:fold', label: (this.hooks.folded?.(def.id) ?? st.places[def.id]?.collapsed) ? 'Open Out' : 'Fold Up' },
+      { cmd: 'tbx:fold', label: (this.hooks.folded?.(def.id) ?? st.places[def.id]?.collapsed) ? 'Expand' : 'Collapse' },
       { cmd: 'tbx:customize', label: isEditable(def.id) ? 'Customize This Toolbox…' : 'Customize Toolboxes…' },
       ...(def.id === 'details' ? [] : [{ cmd: 'tbx:hide', label: `Hide ${def.title}` }]),
     ];
@@ -863,3 +879,6 @@ export function overflowOf(st: ToolboxState, id: string): Overflow {
 export function withOverflow(st: ToolboxState, id: string, o: Overflow): ToolboxState {
   return { ...st, overflow: { ...st.overflow, [id]: o } };
 }
+
+import { infoIcon } from './info-tip';
+export { infoIcon };

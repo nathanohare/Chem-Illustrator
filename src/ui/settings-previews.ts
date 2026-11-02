@@ -133,17 +133,17 @@ export function drawingCrop(doc: Doc, view: { x1: number; y1: number; x2: number
   return out.canvas;
 }
 
-/** Drawing Style: a sample drawn in it. */
-export function stylePreview(style: DocStyle, scheme: Partial<SchemePrefs> = {}): HTMLElement {
+/** Drawing Style: a sample drawn in it, `w` CSS pixels wide (the wide preview column). */
+export function stylePreview(style: DocStyle, scheme: Partial<SchemePrefs> = {}, w = 352): HTMLElement {
   const box = document.createElement('div');
   const doc = sampleDrawing(style, { ...style.scheme, ...scheme });
-  box.append(drawingCanvas(doc, 236, 110, 6));
+  box.append(drawingCanvas(doc, w, Math.round(w * 0.42), 6));
   // the arrow close up, where its gaps and the text's place show
   const r = [...doc.arrows.values()][0];
   if (r) {
     const L = style.bondLength;
     const x1 = Math.min(r.tail.x, r.head.x), x2 = Math.max(r.tail.x, r.head.x);
-    const crop = drawingCrop(doc, { x1: x1 - 1.6 * L, y1: r.tail.y - 1.3 * L, x2: x2 + 1.6 * L, y2: r.tail.y + 1.3 * L }, 236, 96);
+    const crop = drawingCrop(doc, { x1: x1 - 1.6 * L, y1: r.tail.y - 1.3 * L, x2: x2 + 1.6 * L, y2: r.tail.y + 1.3 * L }, w, Math.round(w * 0.36));
     crop.classList.add('sw-zoom');
     box.append(crop);
   }

@@ -311,8 +311,8 @@ export class ShowInk {
       b.type = 'button';
       b.className = 'show-swatch';
       b.style.background = c;
-      b.title = `Ink colour ${c}`;
-      b.setAttribute('aria-label', `Ink colour ${c}`);
+      b.title = `Ink color ${c}`;
+      b.setAttribute('aria-label', `Ink color ${c}`);
       b.setAttribute('aria-pressed', String(c === cur));
       b.addEventListener('click', (e) => { e.stopPropagation(); if (hl) this.highlightColour = c; else this.penColour = c; this.showSwatches(); });
       return b;

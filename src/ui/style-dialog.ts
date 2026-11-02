@@ -116,7 +116,7 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     row('Arrowhead length, width', headLength, headWidth, el('span', { className: 'muted', textContent: 'pt' }));
     // how arrows sit in a scheme: as Clean Up Reaction and typing text by an arrow lay them out
     const align = el('select');
-    for (const [v, t] of [['center', 'Centred'], ['left', 'Left'], ['right', 'Right']]) align.append(new Option(t, v));
+    for (const [v, t] of [['center', 'Centered'], ['left', 'Left'], ['right', 'Right']]) align.append(new Option(t, v));
     row('Lines of text line up', align);
     const textGap = arrowNum('Leave blank to scale with the bond length');
     row('Gap between arrow and text', textGap, el('span', { className: 'muted', textContent: 'pt' }));
@@ -148,7 +148,7 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     // your own
     grid.append(el('h3', { textContent: 'Your own styles' }));
     const name = el('input', { type: 'text', placeholder: 'e.g. My group meeting style' });
-    const save = el('button', { type: 'button', textContent: 'Save as My Style', title: 'Keep these settings under this name, in every mode' });
+    const save = el('button', { type: 'button', textContent: 'Save', title: 'Save as My Style: keep these settings under this name, in every mode' });
     const del = el('button', { type: 'button', textContent: 'Delete', title: 'Remove this one of your own styles' });
     row('Name', name, save, del);
     const said = el('p', { className: 'muted', textContent: '' });
@@ -320,7 +320,7 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     showDialog(d);
     if (o.preview) {
       // in the Settings window's pane on the right, or at the top of the window
-      let slot = previewSlot('Preview');
+      let slot = previewSlot('Preview', true);
       if (!slot) { slot = el('div', { className: 'ask-preview' }); form.insertBefore(slot, grid); }
       const box = slot;
       let queued = 0;

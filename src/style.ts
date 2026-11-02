@@ -81,18 +81,18 @@ export const bondEndPrefs: { round: number } = { round: DEFAULT_BOND_ENDS };
 
 /**
  * How atom-map numbers look (Chemistry ▸ Map Atoms), an app setting: a small rounded box beside
- * the atom with ChemDraw's grey outline (Nate's pick, 2026-11-02), a light tint of the number's own
- * colour (so an atom and where it goes match at a glance), or a format of the user's own
+ * the atom with ChemDraw's gray outline (Nate's pick, 2026-11-02), a light tint of the number's own
+ * color (so an atom and where it goes match at a glance), or a format of the user's own
  * (Map Number Format…) used for every box.
  */
 export type MapLook = 'grey' | 'tint' | 'custom';
 export const MAP_LOOKS: { value: MapLook; label: string }[] = [
-  { value: 'grey', label: 'Grey outlines (as ChemDraw)' },
-  { value: 'tint', label: 'Each number in its own light colour' },
+  { value: 'grey', label: 'Gray outlines (as ChemDraw)' },
+  { value: 'tint', label: 'Each number in its own light color' },
   { value: 'custom', label: 'My own format (Map Number Format…)' },
 ];
 
-/** A format of the user's own for every map-number box. Colours are #rrggbb; '' is none. */
+/** A format of the user's own for every map-number box. Colors are #rrggbb; '' is none. */
 export interface MapBoxStyle {
   fill: string;
   pattern: 'none' | 'lines' | 'cross' | 'dots';
@@ -115,15 +115,15 @@ export const MAP_PATTERNS: { value: MapBoxStyle['pattern']; label: string }[] = 
 /** A stored map-box format, checked, with anything missing or wrong from the default. */
 export function mapBoxStyle(raw: unknown): MapBoxStyle {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
-  const colour = (v: unknown, d: string, empty = true) => typeof v === 'string' && (/^#[0-9a-f]{6}$/i.test(v) || (empty && v === '')) ? v : d;
+  const color = (v: unknown, d: string, empty = true) => typeof v === 'string' && (/^#[0-9a-f]{6}$/i.test(v) || (empty && v === '')) ? v : d;
   const d = DEFAULT_MAP_BOX;
   return {
-    fill: colour(r.fill, d.fill),
+    fill: color(r.fill, d.fill),
     pattern: MAP_PATTERNS.some((p) => p.value === r.pattern) ? r.pattern as MapBoxStyle['pattern'] : d.pattern,
-    patternColor: colour(r.patternColor, d.patternColor, false),
-    border: colour(r.border, d.border),
+    patternColor: color(r.patternColor, d.patternColor, false),
+    border: color(r.border, d.border),
     borderWidth: typeof r.borderWidth === 'number' && isFinite(r.borderWidth) ? Math.max(0, Math.min(5, r.borderWidth)) : d.borderWidth,
-    text: colour(r.text, d.text, false),
+    text: color(r.text, d.text, false),
     bold: typeof r.bold === 'boolean' ? r.bold : d.bold,
     shadow: typeof r.shadow === 'boolean' ? r.shadow : d.shadow,
     rounded: typeof r.rounded === 'boolean' ? r.rounded : d.rounded,

@@ -18,6 +18,10 @@ export interface RibbonPrefs {
   groupNames?: Record<string, string>;
   /** Groups of your own: their names and commands ("cmd:", "sh:", "doc:" keys). */
   own?: Record<string, { title: string; items: string[] }>;
+  /** Single buttons taken off the ribbon's own groups: "<group key> <command key>" (dragged off while editing the ribbon). */
+  hiddenItems?: string[];
+  /** Commands added to the ribbon's own groups, after their buttons (dragged in while editing the ribbon). */
+  extra?: Record<string, string[]>;
 }
 
 /** Every ribbon's changes, by ribbon (sheet, doc, slides, design). */
@@ -27,6 +31,7 @@ export const RIBBON_IDS = ['slides', 'doc', 'sheet', 'design'] as const;
 const NAME = /^[\w-]{1,60}$/;
 const GROUP = /^(?:g:[\w-]{1,60}|own:[a-z0-9]{1,16})$/;
 const ITEM = /^(?:cmd|sh|doc):[^\s"'<>`]{1,80}$/;
+const GROUP_ITEM = /^g:[\w-]{1,60} (?:cmd|sh|doc):[^\s"'<>`]{1,80}$/;
 
 const strings = (v: unknown, ok: RegExp, max = 200): string[] => (Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && ok.test(x)))].slice(0, max) : []);
 const names = (v: unknown, ok: RegExp): Record<string, string> => {
@@ -73,9 +78,46 @@ export function parseRibbons(raw: unknown): RibbonsPrefs {
       }
       if (Object.keys(own).length) p.own = own;
     }
+    const hiddenItems = strings(v.hiddenItems, GROUP_ITEM, 400);
+    if (hiddenItems.length) p.hiddenItems = hiddenItems;
+    if (v.extra && typeof v.extra === 'object' && !Array.isArray(v.extra)) {
+      const extra: Record<string, string[]> = {};
+      for (const [g, list] of Object.entries(v.extra as Record<string, unknown>)) {
+        if (!/^g:[\w-]{1,60}$/.test(g)) continue;
+        const items = strings(list, ITEM, 30);
+        if (items.length) extra[g] = items;
+      }
+      if (Object.keys(extra).length) p.extra = extra;
+    }
     if (Object.keys(p).length) out[id] = p;
   }
   return out;
+}
+
+/** A ribbon button's command key ("cmd:", "sh:" or "doc:"), or '' for one with none. */
+export const itemKey = (b: HTMLElement): string => (b.dataset.cmd ? `cmd:${b.dataset.cmd}` : b.dataset.sh ? `sh:${b.dataset.sh}` : b.dataset.doc ? `doc:${b.dataset.doc}` : b.dataset.ownCmd ? `cmd:${b.dataset.ownCmd}` : '');
+
+/** Single buttons: the ones taken off a group shown or not, and the commands added to it after its own. */
+function applyItems(info: RibbonInfo, key: string, el: HTMLElement, p: RibbonPrefs, hooks: OwnGroupHooks): void {
+  el.querySelector(':scope > .rb-row > .rb-extra')?.remove();
+  const off = new Set((p.hiddenItems ?? []).filter((x) => x.startsWith(key + ' ')).map((x) => x.slice(key.length + 1)));
+  for (const b of el.querySelectorAll<HTMLElement>('button[data-cmd], button[data-sh], button[data-doc]')) {
+    if (b.closest('.rb-extra, .rb-fold-btn, .rb-fly-menu')) continue;
+    b.classList.toggle('rb-user-hidden', off.has(itemKey(b)));
+  }
+  const extra = p.extra?.[key] ?? [];
+  const row = el.querySelector<HTMLElement>(':scope > .rb-row');
+  if (!extra.length || !row) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'rb-extra';
+  const buttons = extra.map((k) => ownButton(info, k, hooks)).filter((b): b is HTMLElement => !!b);
+  for (let i = 0; i < buttons.length; i += 3) {
+    const col = document.createElement('div');
+    col.className = 'rb-col';
+    col.append(...buttons.slice(i, i + 3));
+    wrap.append(col);
+  }
+  row.append(wrap);
 }
 
 /** A ribbon as it comes: its tabs in order, each with its groups in order. */
@@ -185,13 +227,13 @@ export function ownButton(info: RibbonInfo, key: string, hooks: OwnGroupHooks): 
   const name = rest.join(':');
   const attr = kind === 'cmd' ? 'data-cmd' : kind === 'sh' ? 'data-sh' : kind === 'doc' ? 'data-doc' : '';
   if (!attr) return null;
-  const src = [...info.el.querySelectorAll<HTMLElement>(`button[${attr}="${CSS.escape(name)}"]`)].find((b) => !b.closest('.rb-own'));
+  const src = [...info.el.querySelectorAll<HTMLElement>(`button[${attr}="${CSS.escape(name)}"]`)].find((b) => !b.closest('.rb-own, .rb-extra'));
   let b: HTMLElement;
   if (src) {
     b = src.cloneNode(true) as HTMLElement;
     b.removeAttribute('id');
     b.removeAttribute('hidden');
-    b.classList.remove('rb-big');
+    b.classList.remove('rb-big', 'rb-user-hidden');
   } else if (kind === 'cmd' && topMenuEntry(name)) {
     b = document.createElement('button');
     b.setAttribute('type', 'button');
@@ -275,6 +317,7 @@ export function applyRibbon(info: RibbonInfo, p: RibbonPrefs = {}, hooks: OwnGro
         if (label && label.textContent !== name) label.textContent = name;
         const fold = el.querySelector<HTMLElement>(':scope > .rb-fold-btn > span');
         if (fold && fold.textContent !== name) fold.textContent = name;
+        applyItems(info, key, el, p, hooks);
       } else if (p.groupNames?.[key]) el.querySelector<HTMLElement>(':scope > .rb-label')!.textContent = p.groupNames[key];
       el.classList.toggle('rb-user-hidden', !!p.hiddenGroups?.includes(key));
       panel.append(el);
