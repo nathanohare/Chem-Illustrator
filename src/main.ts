@@ -272,6 +272,7 @@ const askCycle = later(() => import('./ui/cycle-dialog'), 'askCycle');
 const askEnergy = later(() => import('./ui/energy-dialog'), 'askEnergy');
 const askPlate = later(() => import('./ui/plate-dialog'), 'askPlate');
 const askMo = later(() => import('./ui/mo-dialog'), 'askMo');
+const askCrystal = later(() => import('./ui/crystal-dialog'), 'askCrystal');
 const askDiagram = later(() => import('./ui/diagram-dialog'), 'askDiagram');
 const editChart = later(() => import('./ui/chart-editor'), 'editChart');
 const editMedia = later(() => import('./ui/media-dialog'), 'editMedia');
@@ -711,6 +712,8 @@ async function dropFiles(files: File[], at: { x: number; y: number }): Promise<v
   const inside = at.x >= r.left && at.x <= r.right && at.y >= r.top && at.y <= r.bottom;
   for (const f of files) {
     const bytes = new Uint8Array(await f.arrayBuffer());
+    // a crystal structure: into the crystal structure window, to turn and place
+    if (/\.cif$/i.test(f.name) && !sheetActive() && !docActive()) { await plateFigure('crystal', null, { name: f.name, text: new TextDecoder().decode(bytes) }); continue; }
     const mime = /\.(cdxml|cdx|cds|pptx|xlsx|xlsm|xls|ods|docx|csv|tsv|txt|sdf?)$/i.test(f.name) ? null : pictureMime(f.name, bytes);
     if (mime && sheetActive()) flash('Pictures can\'t go in a cell yet. Drop sheet files (.xlsx, .csv, .sdf) to open them.');
     else if (mime && docActive()) docMode.dropPicture(bytes, mime);
@@ -978,14 +981,34 @@ function paintPlatePreview(d: PlateData, canvas: HTMLCanvasElement): void {
 }
 
 /** Insert ▸ Lab Figures ▸ TLC Plate… or Gel…, or the selected plate's lanes to change (`id`, its frame). */
-async function plateFigure(kind: PlateKind | null, id: number | null): Promise<void> {
+async function plateFigure(kind: PlateKind | null, id: number | null, file?: { name: string; text: string }): Promise<void> {
   finishTyping();
   const now = id !== null ? doc.shapes.get(id)?.plate ?? null : null;
   const k = now?.kind ?? kind ?? 'tlc';
-  const got = k === 'mo' ? await askMo(now, doc.style.bondLength, paintPlatePreview) : await askPlate(k, now, doc.style.bondLength, paintPlatePreview);
+  const got = k === 'mo' ? await askMo(now, doc.style.bondLength, paintPlatePreview)
+    : k === 'crystal' ? await askCrystal(now, doc.style.bondLength, crystalOptions(file))
+    : await askPlate(k, now, doc.style.bondLength, paintPlatePreview);
   if (got) editor.putPlateAt(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);
 }
 editor.onPlate = (id) => void plateFigure(null, id);
+
+/** What the crystal structure window needs from here: a CIF file to open, and the clipboard. */
+function crystalOptions(file?: { name: string; text: string }) {
+  return {
+    file,
+    async pickFile() {
+      const f = await openBytesDialog('CIF files', [], ['cif']).catch(() => null);
+      return f ? { name: f.name, text: new TextDecoder().decode(f.bytes) } : null;
+    },
+    async copy(text: string, html: string) {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'text/plain': new Blob([text], { type: 'text/plain' }), 'text/html': new Blob([html], { type: 'text/html' }) })]);
+      } catch {
+        await navigator.clipboard.writeText(text).catch(() => flash('Could not use the clipboard.'));
+      }
+    },
+  };
+}
 
 /** How the last orbital was asked for, so the next starts the same way. */
 const orbitalChoice: Record<string, string> = { kind: 'p', look: 'shaded', size: '1.1', angle: 'auto', flip: 'false' };
@@ -7239,7 +7262,8 @@ const COMMANDS: Record<string, () => unknown> = {
   'p-orbitals': () => void insertOrbital(true),
   orbital: () => void insertOrbital(false),
   gel: () => void plateFigure('gel', null),
-  'edit-plate': () => { const id = editor.selectedPlate(); if (id === null) flash('Select a TLC plate or gel first.'); else void plateFigure(null, id); },
+  'crystal-structure': () => void plateFigure('crystal', null),
+  'edit-plate': () => { const id = editor.selectedPlate(); if (id === null) flash('Select a lab figure (TLC plate, gel, MO diagram or crystal structure) first.'); else void plateFigure(null, id); },
   'insert-diagram': () => void smartDiagram(null),
   'edit-diagram': () => { const id = editor.selectedDiagram(); if (id === null) flash('Select a diagram first.'); else void smartDiagram(id); },
   'diagram-to-shapes': () => editor.ungroupSelectedDiagram() || flash('Select a diagram first.'),

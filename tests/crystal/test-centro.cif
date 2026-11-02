@@ -1,0 +1,28 @@
+# A made-up structure for Chem Illustrator's tests: a molecule on an inversion centre (idealised, not measured)
+data_test_centro
+_space_group_name_H-M_alt 'P 21/c'
+_cell_length_a 6.100
+_cell_length_b 5.800
+_cell_length_c 13.200
+_cell_angle_alpha 90
+_cell_angle_beta 105.00
+_cell_angle_gamma 90
+loop_
+_symmetry_equiv_pos_as_xyz
+x,y,z
+-x,1/2+y,1/2-z
+-x,-y,-z
+x,1/2-y,1/2+z
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_U_iso_or_equiv
+C1 C 0.06106 -0.00000 0.10902 0.030
+C2 C 0.18170 0.13341 0.05451 0.030
+C3 C 0.12064 0.13341 -0.05451 0.030
+Br1 Br 0.14452 -0.00000 0.25803 0.030
+H2 H 0.30588 0.22459 0.09176 0.040
+H3 H 0.20310 0.22459 -0.09176 0.040

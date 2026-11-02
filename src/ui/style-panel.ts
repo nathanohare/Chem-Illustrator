@@ -490,6 +490,28 @@ export class StylePanel {
       this.body.append(row);
       return;
     }
+    if (d.kind === 'crystal') {
+      this.heading('Crystal structure');
+      const c = d.crystal;
+      if (c) {
+        const view = (patch: Partial<typeof c.view>) => this.plate?.restyle(sh.id, { crystal: { ...c, view: { ...c.view, ...patch } } });
+        this.select('Drawing', [['ortep', 'Thermal ellipsoids'], ['ball', 'Ball-and-stick']], c.view.style, (v) => view({ style: v as typeof c.view.style }));
+        this.check('Hydrogen atoms', c.view.hydrogens, (v) => view({ hydrogens: v }));
+        this.check('Colour', c.view.colour, (v) => view({ colour: v }));
+        this.check('Atom labels', c.view.labels, (v) => view({ labels: v }));
+      }
+      this.note('Turn it, change the ellipsoids or see the crystal data in the window; drag a corner to resize it.');
+      const row = document.createElement('div');
+      row.className = 'style-buttons';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = 'Edit Crystal Structure…';
+      b.title = 'Turn it, change how it is drawn, see the crystal data (or double-click it)';
+      b.addEventListener('click', () => this.plate?.edit(sh.id));
+      row.append(b);
+      this.body.append(row);
+      return;
+    }
     const tlc = d.kind === 'tlc';
     this.heading(tlc ? 'TLC plate' : 'Gel');
     const set = (patch: Partial<PlateData>) => this.plate?.restyle(sh.id, patch);

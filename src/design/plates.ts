@@ -11,9 +11,11 @@ import { frameBox, frameMembers } from '../editor/frames';
 import { shapeBox } from '../objects';
 import { chemRuns } from '../text/chemtext';
 import { drawMo, MO_PRESETS, type MoSpec } from './mo';
+import { drawCrystal, type CrystalSpec } from './xray';
+import { isInkId } from './geo';
 
 /** A TLC plate, a gel, or a molecular orbital diagram (design/mo.ts), which is kept and redrawn the same way. */
-export type PlateKind = 'tlc' | 'gel' | 'mo';
+export type PlateKind = 'tlc' | 'gel' | 'mo' | 'crystal';
 
 export interface PlateLane {
   /** Under a TLC lane or over a gel lane ("SM", "co", "P", "1"). */
@@ -45,6 +47,8 @@ export interface PlateData {
   sizes: boolean;
   /** An MO diagram's levels and titles. */
   mo?: MoSpec;
+  /** A crystal structure from a CIF file (kind 'crystal'). */
+  crystal?: CrystalSpec;
   /** How far the plate sits inside its frame on each side, as last drawn. */
   margins?: { l: number; t: number; r: number; b: number };
 }
@@ -148,6 +152,7 @@ export interface PlateParts { captions: number[]; arrows: number[]; shapes: numb
 
 /** Starting lanes for a new plate or gel. */
 export function newPlate(kind: PlateKind, L: number): PlateData {
+  if (kind === 'crystal') return { kind, look: '', w: Math.round(20 * L), h: Math.round(14 * L), rf: false, lines: false, labels: true, note: '', unit: 'bp', sizes: false, lanes: [] };
   if (kind === 'mo') {
     const spec = MO_PRESETS[0].spec;
     return { kind, look: '', w: Math.round(12 * L), h: Math.round(9 * L), rf: false, lines: false, labels: true, note: '', unit: 'bp', sizes: false, lanes: [], mo: { ...spec, levels: spec.levels.map((l) => ({ ...l })) } };
@@ -171,6 +176,7 @@ export function newPlate(kind: PlateKind, L: number): PlateData {
  */
 export function drawPlate(doc: Doc, m: Measure, d: PlateData, at: Vec): PlateParts {
   if (d.kind === 'mo') return d.mo ? drawMo(doc, m, d.mo, at, d.w, d.h) : { captions: [], arrows: [], shapes: [] };
+  if (d.kind === 'crystal') return d.crystal ? drawCrystal(doc, m, d.crystal, at, d.w, d.h) : { captions: [], arrows: [], shapes: [] };
   const out: PlateParts = { captions: [], arrows: [], shapes: [] };
   const lw = doc.style.lineWidth, L = doc.style.bondLength;
   const n = Math.max(1, d.lanes.length);
@@ -292,7 +298,7 @@ export function putPlate(doc: Doc, m: Measure, d: PlateData, at: Vec, id?: numbe
     for (const r of f.arrows) doc.removeArrow(r);
     for (const s of f.shapes) {
       const sh = doc.shapes.get(s);
-      if (sh && (sh.kind === 'line' || sh.kind === 'rect' || sh.kind === 'oval')) doc.removeShape(s); else if (sh) kept.shapes.push(s);
+      if (sh && (sh.kind === 'line' || sh.kind === 'rect' || sh.kind === 'oval' || (sh.kind === 'geo' && isInkId(sh.geo)))) doc.removeShape(s); else if (sh) kept.shapes.push(s);
     }
     kept.atoms = f.atoms.filter((a) => doc.atoms.has(a));
   }
@@ -302,7 +308,7 @@ export function putPlate(doc: Doc, m: Measure, d: PlateData, at: Vec, id?: numbe
   const b = frameBox(doc, frame, m) ?? { x1: at.x, y1: at.y, x2: at.x + d.w, y2: at.y + d.h };
   const r = (v: number) => Math.round(v * 100) / 100;
   const plate: PlateData = { ...d, margins: { l: r(at.x - b.x1), t: r(at.y - b.y1), r: r(b.x2 - at.x - d.w), b: r(b.y2 - at.y - d.h) } };
-  const name = d.kind === 'tlc' ? 'TLC plate' : d.kind === 'gel' ? 'Gel' : 'MO diagram';
+  const name = d.kind === 'tlc' ? 'TLC plate' : d.kind === 'gel' ? 'Gel' : d.kind === 'crystal' ? 'Crystal structure' : 'MO diagram';
   if (old) { doc.updateShape(old.id, { ...b, frame, plate }); return old.id; }
   return doc.addShape({ kind: 'geo', geo: 'rect', ...b, filled: false, lineWidth: 0, color: '#000000', frame, plate, name }).id;
 }

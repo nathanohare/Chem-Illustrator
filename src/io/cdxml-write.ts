@@ -1642,8 +1642,11 @@ class CdxmlWriter {
         set('GraphicType', 'Oval');
         set('BoundingBox', box(s));
         set('Center3D', pt3(c));
-        set('MajorAxisEnd3D', pt3({ x: c.x + rx, y: c.y }));
-        set('MinorAxisEnd3D', pt3({ x: c.x, y: c.y + ry }));
+        // a turned oval (an ellipsoid of a crystal structure) has its axes turned: ChemDraw draws
+        // an oval along whatever axes it is given
+        const t = ((s.rot ?? 0) * Math.PI) / 180, cos = Math.cos(t), sin = Math.sin(t);
+        set('MajorAxisEnd3D', pt3({ x: c.x + rx * cos, y: c.y + rx * sin }));
+        set('MinorAxisEnd3D', pt3({ x: c.x - ry * sin, y: c.y + ry * cos }));
         set('OvalType', [Math.abs(rx - ry) < 0.01 && 'Circle', filled, s.dashed && 'Dashed', s.bold && 'Bold', s.shadow && 'Shadowed'].filter(Boolean).join(' ') || null);
         break;
       }
