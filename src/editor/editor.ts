@@ -11,6 +11,7 @@ import { stopAtEdge } from '../ui/scrollbars';
 import { linkAtPoint } from '../links';
 import { typingPrefs } from '../text/typing';
 import { geoDef, geoShapeStyle, moveSteps, traceSteps } from '../design/geo';
+import { distinctChoices } from '../chem/template-choices';
 import { TEMPLATES, Template, Placement, templateById, templatePoints, placePoint, fusePlacements, atomPlacements, freePlacement, crowdingOf, placeTemplate, snap15 } from '../chem/templates';
 import { fusions3d } from '../chem/fuse3d';
 import { bondHapto, centreEnd, haptoTarget, haptoText, splitHapto } from '../chem/hapto';
@@ -1752,8 +1753,8 @@ export class Editor {
         const c = placePoint(pl, 0, 0);
         return Math.sign(dot(sub(c, mid), n)) === Math.sign(dot(sub(start, mid), n)) ? 0 : 0.01;
       };
-      return rank(fusePlacements(t, p, q), new Set([p.id, q.id]), side).map((pl) => (
-        { pl, existing: new Map([[t.fuse![0], nearest(pl, t.fuse![0], [p.id, q.id])], [t.fuse![1], nearest(pl, t.fuse![1], [p.id, q.id])]]), scale: b.s }));
+      return distinctChoices(doc, t, rank(fusePlacements(t, p, q), new Set([p.id, q.id]), side).map((pl) => (
+        { pl, existing: new Map([[t.fuse![0], nearest(pl, t.fuse![0], [p.id, q.id])], [t.fuse![1], nearest(pl, t.fuse![1], [p.id, q.id])]]), scale: b.s })), true);
     }
     if (h && h.kind === 'atom') {
       const a = doc.atoms.get(h.id)!;
@@ -1763,15 +1764,15 @@ export class Editor {
       if (t.onMetal) byBond = false;
       else if (!byBond && doc.degree(a.id) >= 3) byBond = true;
       const dir = cursor && dist(cursor, a) > L * 0.3 ? norm(fromAngle(snapAngle(angleOf(sub(cursor, a))))) : byBond ? sproutDir(doc, a.id) : ringDir(doc, a.id);
-      return rank(atomPlacements(t, a, dir, L, byBond), new Set([a.id])).map((pl) => (
-        byBond ? { pl, existing: new Map(), bondFrom: a.id, scale: a.s } : { pl, existing: new Map([[t.attach, a.id]]), scale: a.s }));
+      return distinctChoices(doc, t, rank(atomPlacements(t, a, dir, L, byBond), new Set([a.id])).map((pl): TemplateChoice => (
+        byBond ? { pl, existing: new Map(), bondFrom: a.id, scale: a.s } : { pl, existing: new Map([[t.attach, a.id]]), scale: a.s })), true);
     }
     const L = doc.style.bondLength;
     let angle = 0;
     if (cursor && dist(cursor, start) > L * 0.3) angle = alt ? angleOf(sub(cursor, start)) : snap15(angleOf(sub(cursor, start)));
     // as drawn, mirrored top to bottom, mirrored left to right, and turned round
-    return [[false, 0], [true, 0], [true, Math.PI], [false, Math.PI]].map(([mirror, turn]) => (
-      { pl: { ...freePlacement(start, L, angle + (turn as number)), mirror: mirror as boolean }, existing: new Map() }));
+    return distinctChoices(doc, t, [[false, 0], [true, 0], [true, Math.PI], [false, Math.PI]].map(([mirror, turn]): TemplateChoice => (
+      { pl: { ...freePlacement(start, L, angle + (turn as number)), mirror: mirror as boolean }, existing: new Map() })), false);
   }
 
   /**
