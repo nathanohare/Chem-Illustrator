@@ -250,7 +250,7 @@ export class SmartPane {
         l.append(i, document.createTextNode(' ' + label));
         return l;
       };
-      opts.append(check('Anticlockwise', !!data.anticlockwise, (v) => this.hooks.arrange(id, { anticlockwise: v })), check('Small arrows for reagents', !!data.reagentArrows, (v) => this.hooks.arrange(id, { reagentArrows: v })));
+      opts.append(check('Counterclockwise', !!data.anticlockwise, (v) => this.hooks.arrange(id, { anticlockwise: v })), check('Small arrows for reagents', !!data.reagentArrows, (v) => this.hooks.arrange(id, { reagentArrows: v })));
     } else if ((data.layout === 'rows' || data.layout === 'snake') && !data.free) {
       const l = document.createElement('label');
       const i = document.createElement('input');

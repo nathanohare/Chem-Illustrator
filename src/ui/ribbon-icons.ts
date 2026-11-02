@@ -31,6 +31,9 @@ export const RIBBON_ICONS: Record<string, string> = {
   'sh:align-left': lines('left'), 'sh:align-center': lines('center'), 'sh:align-right': lines('right'),
   'sh:valign-top': valign('top'), 'sh:valign-middle': valign('middle'), 'sh:valign-bottom': valign('bottom'),
   'doc-bullets': bullets, 'doc-numbering': numbering, 'doc-outdent': indent(false), 'doc-indent': indent(true),
+  // the same buttons on the Presentation ribbon
+  'sl:align-left': lines('left'), 'sl:align-center': lines('center'), 'sl:align-right': lines('right'), 'sl:justify': lines('justify'),
+  'sl:bullets': bullets, 'sl:numbering': numbering, 'sl:outdent': indent(false), 'sl:indent': indent(true),
 };
 
 /** Small buttons in words that also get a picture before the words, as Format Painter has (and Cut and Copy have in Office). */
@@ -47,7 +50,7 @@ export function applyRibbonIcons(root: ParentNode = document): void {
     b.prepend(lead);
   }
   for (const b of root.querySelectorAll<HTMLButtonElement>('.ribbon button:not(.rb-big)')) {
-    const key = b.dataset.doc ?? (b.dataset.sh ? 'sh:' + b.dataset.sh : undefined) ?? (b.classList.contains('rb-sq') ? b.dataset.cmd : undefined);
+    const key = b.dataset.doc ?? (b.dataset.sh ? 'sh:' + b.dataset.sh : undefined) ?? (b.dataset.slFmt ? 'sl:' + b.dataset.slFmt : undefined) ?? (b.classList.contains('rb-sq') ? b.dataset.cmd : undefined);
     const icon = key ? RIBBON_ICONS[key] ?? (b.dataset.cmd ? COMMAND_ICONS[b.dataset.cmd] : undefined) : undefined;
     if (!icon || b.dataset.iconed) continue;
     const name = b.title || b.textContent?.trim() || key!;

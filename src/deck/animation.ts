@@ -87,7 +87,7 @@ export const EFFECTS: { id: Effect; name: string; sides: boolean; emph?: boolean
   { id: 'grow', name: 'Grow/Shrink', sides: false, emph: true },
   { id: 'spin', name: 'Spin', sides: false, emph: true },
   { id: 'transparency', name: 'Transparency', sides: false, emph: true },
-  { id: 'colour', name: 'Colour Change', sides: false, emph: true },
+  { id: 'colour', name: 'Color Change', sides: false, emph: true },
   { id: 'turn3d', name: 'Turn in 3-D', sides: false, emph: true },
 ];
 
@@ -954,7 +954,7 @@ function readEmphasis(tn: Element, preset: number, warn: (s: string) => void): P
     const k = Number.isFinite(x) && x ? (Number.isFinite(y) && y ? (x + y) / 2 : x) : NaN;
     return { effect: 'grow', scale: Number.isFinite(k) ? +(k / 100000).toFixed(3) : EMPH_DEFAULTS.scale };
   }
-  if (preset !== 26) warn('Emphasis effects other than Pulse, Grow/Shrink, Spin, Transparency and colour changes came in as Pulse.');
+  if (preset !== 26) warn('Emphasis effects other than Pulse, Grow/Shrink, Spin, Transparency and color changes came in as Pulse.');
   return { effect: 'pulse' };
 }
 

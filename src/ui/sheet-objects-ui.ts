@@ -67,7 +67,7 @@ export class SheetObjects {
     const o: SheetObject = { id: newObjectId(), kind: 'shape', shape: kind, at: this.view.newObjectPlace(), w: line ? 120 : 110, h: line ? 0 : 70 };
     if (line) o.h = 40;
     this.add(o, `Insert ${SHAPE_NAMES[kind].toLowerCase()}`);
-    if (!line) this.host.flash('Type to put text in the shape (or double-click it). Format Shape changes its colours.');
+    if (!line) this.host.flash('Type to put text in the shape (or double-click it). Format Shape changes its colors.');
   }
 
   insertTextBox(): void {
@@ -173,18 +173,18 @@ export class SheetObjects {
     const pic = o.kind === 'picture', line = isLine(o);
     const fields = [
       ...(!pic && !line ? [
-        { name: 'fill', label: 'Fill colour', value: look.fill === 'none' ? '#ffffff' : look.fill, type: 'color' as const },
+        { name: 'fill', label: 'Fill color', value: look.fill === 'none' ? '#ffffff' : look.fill, type: 'color' as const },
         { name: 'noFill', label: 'No fill', value: String(look.fill === 'none'), type: 'checkbox' as const },
       ] : []),
-      { name: 'line', label: pic ? 'Border colour' : 'Line colour', value: look.line === 'none' ? '#000000' : look.line, type: 'color' as const },
+      { name: 'line', label: pic ? 'Border color' : 'Line color', value: look.line === 'none' ? '#000000' : look.line, type: 'color' as const },
       { name: 'noLine', label: pic ? 'No border' : 'No line', value: String(look.line === 'none'), type: 'checkbox' as const },
       { name: 'lineW', label: 'Line width', value: String(look.lineW), type: 'number' as const, unit: 'pt' },
       ...(!pic && !line ? [
         { name: 'size', label: 'Text size', value: String(o.size ?? 11), type: 'number' as const, unit: 'pt' },
-        { name: 'color', label: 'Text colour', value: look.color, type: 'color' as const },
+        { name: 'color', label: 'Text color', value: look.color, type: 'color' as const },
         { name: 'bold', label: 'Bold', value: String(!!o.bold), type: 'checkbox' as const },
         { name: 'italic', label: 'Italic', value: String(!!o.italic), type: 'checkbox' as const },
-        { name: 'align', label: 'Text across', value: o.align ?? (o.kind === 'text' ? 'left' : 'center'), options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Centre' }, { value: 'right', label: 'Right' }] },
+        { name: 'align', label: 'Text across', value: o.align ?? (o.kind === 'text' ? 'left' : 'center'), options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }] },
         { name: 'valign', label: 'Text up and down', value: o.valign ?? (o.kind === 'text' ? 'top' : 'middle'), options: [{ value: 'top', label: 'Top' }, { value: 'middle', label: 'Middle' }, { value: 'bottom', label: 'Bottom' }] },
       ] : []),
       { name: 'w', label: 'Width', value: String(o.w), type: 'number' as const, unit: 'px' },

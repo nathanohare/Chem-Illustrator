@@ -1011,8 +1011,10 @@ dialog.typing-dialog p { margin: 2px 0 6px; }
   border-bottom: 1px solid var(--line);
 }
 .ribbon[hidden] { display: none; }
+/* the lines between a ribbon's groups: darker than the panel's hairlines, so the groups read apart */
+.ribbon { --rb-divider: color-mix(in srgb, var(--text) 30%, var(--panel)); }
 .rb-group { display: flex; flex-direction: column; align-items: center; padding: 0 6px; flex: none; }
-.rb-group + .rb-group { border-left: 1px solid var(--line); }
+.rb-group + .rb-group { border-left: 1px solid var(--rb-divider); }
 .rb-row { display: flex; align-items: stretch; gap: 2px; flex: 1 1 auto; }
 .rb-col { display: flex; flex-direction: column; justify-content: center; gap: 1px; }
 .rb-pair { display: flex; gap: 2px; }
@@ -1084,6 +1086,8 @@ dialog.typing-dialog p { margin: 2px 0 6px; }
 .dl-shape { display: flex; align-items: center; justify-content: center; padding: 2px; aspect-ratio: 1; border: 1px solid transparent; border-radius: var(--r-control); background: var(--tile); cursor: grab; }
 .dl-shape:hover { border-color: var(--accent); }
 .dl-shape.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+/* the shapes are drawn in bold lines straight on the menu, with no box behind them (the clip-art icons keep their light paper) */
+.dl-grid:not(.dl-icons) .dl-shape { background: transparent; }
 .dl-shape canvas, .dl-shape svg { pointer-events: none; }
 .dl-tabs { display: flex; gap: 2px; margin: 0 0 6px; border-bottom: 1px solid var(--line); }
 .dl-tabs button { font: inherit; font-size: var(--fs-sm); font-weight: 600; padding: 3px 10px 4px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--muted, #666); cursor: pointer; }
@@ -2528,7 +2532,7 @@ dialog.settings-window { max-width: none; }
 .ribbon select.rb-mini.rb-drop { width: 15px; max-width: 15px; padding: 0; font-size: 9px; text-align: center; appearance: none; -webkit-appearance: none; border: 1px solid transparent; background: transparent; color: inherit; cursor: pointer; }
 .ribbon select.rb-mini.rb-drop:hover { border-color: var(--line); }
 .rb-eraser { font-size: 9px; margin-left: 1px; color: var(--danger); }
-.ribbon button.rb-style.rb-styles-more { width: 62px; align-items: center; }
+.ribbon button.rb-style.rb-styles-more { width: auto; min-width: 62px; align-items: center; }
 .ribbon button.rb-style.rb-styles-more span { font: var(--fs-xl)/1 var(--ui-font); color: var(--muted); }
 /* the ruler above the pages (View > Ruler): margins grey, indent markers and tab stops to drag */
 #doc-ruler { position: relative; flex: none; height: 24px; background: var(--surround); border-bottom: 1px solid var(--line); user-select: none; touch-action: none; }
@@ -3145,7 +3149,8 @@ header .tab-ctl { margin: 0; }
 body.tabs-in-menu header > h1.app-name { display: none; }
 body.tabs-in-menu header > .stage-badge { margin-left: 4px; }
 #tabs.tabs-narrow .tab { flex: none; min-width: 0; gap: 2px; padding: 0 3px 0 5px; }
-#tabs.tabs-narrow .tab-name { display: none; }
+#tabs.tabs-narrow .tab:not(.active) .tab-name { display: none; }
+#tabs.tabs-narrow .tab.active .tab-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #tabs.tabs-narrow .tab:not(.active) .tab-close { display: none; }
 body.mode-window header > #tabs { background: transparent; }
 body.mode-window header .tab { color: rgba(255, 255, 255, 0.85); }
@@ -3249,6 +3254,243 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 .crystal-table td:first-child { color: var(--muted, #555); white-space: nowrap; }
 .crystal-page:has(.crystal-table-wrap) { flex-direction: column; }
 @media (max-width: 700px) { .crystal-page { flex-direction: column; } .crystal-side { width: auto; max-height: none; } }
+
+/* ---- the icon set (src/ui/icon-set.ts): each drawing's parts coloured by role, in the look picked
+   (html[data-icons]: accent = neutral outline with the mode's colour on one part, the default;
+   colour = a colour for each kind of command, as Office does; mono = all in the mode's colour) */
+:root {
+  --ic-ink: color-mix(in srgb, var(--text) 80%, var(--panel));
+  --ic-paper: var(--panel);
+  --ic-acc: var(--accent);
+  --ic-on: #fff;
+  --hue-blue: #1f6fd1; --hue-green: #18834a; --hue-red: #c8352e; --hue-amber: #c27c0e; --hue-purple: #7b47c4; --hue-teal: #0f8a8a;
+}
+:root[data-theme='dark'] { --hue-blue: #6aa5ff; --hue-green: #5cc98c; --hue-red: #ff7d75; --hue-amber: #f2b64e; --hue-purple: #b393f0; --hue-teal: #4fc6c3; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme]) { --hue-blue: #6aa5ff; --hue-green: #5cc98c; --hue-red: #ff7d75; --hue-amber: #f2b64e; --hue-purple: #b393f0; --hue-teal: #4fc6c3; } }
+.ci-ic { fill: none; stroke: var(--ic-ink); stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; overflow: visible; flex: none; }
+.ci-ic .a { stroke: var(--ic-acc); }
+.ci-ic .f { fill: color-mix(in srgb, var(--ic-acc) 22%, transparent); }
+.ci-ic .p { fill: var(--ic-paper); }
+.ci-ic .s { fill: var(--ic-acc); stroke: none; }
+.ci-ic .k { stroke: var(--ic-on); }
+:root[data-icons='colour'] .ci-ic[data-hue='blue'] { --ic-acc: var(--hue-blue); }
+:root[data-icons='colour'] .ci-ic[data-hue='green'] { --ic-acc: var(--hue-green); }
+:root[data-icons='colour'] .ci-ic[data-hue='red'] { --ic-acc: var(--hue-red); }
+:root[data-icons='colour'] .ci-ic[data-hue='amber'] { --ic-acc: var(--hue-amber); }
+:root[data-icons='colour'] .ci-ic[data-hue='purple'] { --ic-acc: var(--hue-purple); }
+:root[data-icons='colour'] .ci-ic[data-hue='teal'] { --ic-acc: var(--hue-teal); }
+:root[data-icons='colour'] .ci-ic[data-hue='gray'] { --ic-acc: var(--ic-ink); }
+:root[data-icons='mono'] .ci-ic { --ic-ink: var(--accent); --ic-paper: transparent; --ic-on: var(--panel); }
+:root[data-icons='mono'] .ci-ic .f { fill: none; }
+.rb-icon:has(> .ci-ic) { display: flex; align-items: center; justify-content: center; }
+/* a pressed button's drawing keeps its own colours */
+.ribbon button[aria-pressed='true'] .ci-ic { --ic-ink: var(--accent); }
+.rb-lead .ci-ic, .ci-ic.fp-icon { width: 16px; height: 16px; vertical-align: -3px; margin-right: 3px; }
+
+/* ---- ribbon dropdowns and split buttons (src/ui/ribbon-flyout.ts) */
+.rb-fly { position: relative; display: flex; align-items: stretch; }
+.rb-fly-menu { position: fixed; z-index: 60; min-width: 180px; padding: 4px; display: flex; flex-direction: column; gap: 1px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-panel); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16); }
+.rb-fly-menu[hidden] { display: none; }
+.ribbon .rb-fly-menu button, .ribbon .rb-fly-menu button.rb-big { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; gap: 8px; min-width: 0; width: 100%; padding: 4px 8px 4px 6px; text-align: left; line-height: 20px; font-size: var(--fs-sm); }
+.rb-fly-menu .rb-icon { height: 20px; line-height: 20px; font-size: 16px; width: 20px; flex: none; }
+.rb-fly-menu .rb-icon .ci-ic { width: 20px; height: 20px; }
+.rb-fly-menu hr { width: 100%; margin: 3px 0; border: 0; border-top: 1px solid var(--line); }
+.rb-fly-menu .rb-fly-head { padding: 4px 8px 2px; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+/* a split button: the command on top, its arrow underneath, one outline when either is pointed at */
+.rb-split { flex-direction: column; }
+.rb-split > button.rb-big { padding-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.ribbon .rb-split > .rb-fly-btn { padding: 0 4px; line-height: 12px; font-size: 10px; min-width: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
+.rb-split:hover > button { border-color: var(--line); }
+/* a gallery of layouts in a split button's list */
+.rb-fly-menu .rb-layouts { display: grid; grid-template-columns: repeat(3, 92px); gap: 6px; padding: 4px; }
+.ribbon .rb-fly-menu .rb-layouts button { flex-direction: column; align-items: center; gap: 3px; padding: 4px; font-size: var(--fs-xs); line-height: 1.2; text-align: center; white-space: normal; }
+.rb-layout-pic { width: 80px; height: 45px; border: 1px solid var(--line); border-radius: 2px; background: var(--ic-paper); position: relative; }
+.rb-layout-pic i { position: absolute; background: color-mix(in srgb, var(--accent) 22%, transparent); border-radius: 1px; }
+/* small buttons that show only their drawing, in a grid (Arrange) */
+.rb-icongrid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(3, 23px); gap: 1px 2px; }
+.rb-icongrid.rows2 { grid-template-rows: repeat(2, 23px); }
+.ribbon .rb-icongrid button { min-width: 26px; height: 23px; padding: 1px 4px; display: inline-flex; align-items: center; justify-content: center; }
+.ribbon button.rb-labelled { display: inline-flex; align-items: center; gap: 4px; }
+/* a button whose words always show, even when its group is short of room (Lock Structures) */
+.rb-group.rb-compact button.rb-big.rb-keep-words { font-size: var(--fs-sm); gap: 2px; }
+.rb-ctx-tab { color: var(--accent); font-weight: 600; }
+.rb-ctx-tab::before { content: ''; display: inline-block; width: 6px; height: 6px; margin-right: 5px; border-radius: 1px; background: var(--accent); vertical-align: 1px; }
+/* the text box's direction, columns and AutoFit sit beside the alignment buttons, kept narrow */
+.ribbon select[data-tx='dir'], .ribbon select[data-tx='cols'], .ribbon select[data-tx='fit'] { max-width: 88px; }
+.ribbon select[data-tx='line'] { max-width: 60px; }
+/* side panel: pattern swatches, dot density and the shape picker */
+.swatch-grid { display: flex; flex-wrap: wrap; gap: 3px; }
+.swatch-btn { width: 28px; height: 28px; padding: 2px; display: inline-flex; align-items: center; justify-content: center; color: var(--text); border: 1px solid transparent; background: transparent; border-radius: var(--r-control); }
+.swatch-btn:hover { border-color: var(--line); }
+.swatch-btn[aria-checked='true'] { border-color: var(--accent); background: var(--accent-soft); }
+.style-row .seg { display: inline-flex; max-width: 100%; min-width: 0; border: 1px solid var(--line); border-radius: var(--r-control); overflow: hidden; }
+.style-row .seg button { flex: 1 1 auto; min-width: 0; border: 0; border-radius: 0; padding: 2px 5px; background: transparent; font-size: var(--fs-xs); }
+.style-row .seg button + button { border-left: 1px solid var(--line); }
+.style-row .seg button[aria-checked='true'] { background: var(--accent-soft); color: var(--accent); }
+.shape-pick { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 4px; }
+.shape-pick canvas { width: 20px; height: 20px; }
+
+/* Ribbon galleries in Word's style (select-gallery.ts): each choice with a small picture of it */
+.rb-gal-menu { min-width: 200px; max-height: min(70vh, 560px); overflow-y: auto; }
+.rb-gal-menu .gal-items { display: flex; flex-direction: column; gap: 1px; }
+.rb-gal-menu .gal-grid { display: grid; grid-template-columns: repeat(3, auto); gap: 4px; padding: 2px; }
+.ribbon .rb-gal-menu button.gal-it { display: flex; align-items: center; gap: 10px; padding: 4px 8px 4px 4px; border: 1px solid transparent; border-radius: var(--r-ctl, 3px); text-align: left; line-height: 1.25; }
+.ribbon .rb-gal-menu .gal-grid button.gal-it { flex-direction: column; gap: 3px; padding: 5px 6px; text-align: center; min-width: 76px; }
+.ribbon .rb-gal-menu button.gal-it.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.ribbon .rb-gal-menu button.gal-plain { padding-left: 10px; }
+.gal-pic { flex: none; display: grid; place-items: center; min-width: 36px; }
+.gal-words { display: flex; flex-direction: column; min-width: 0; }
+.gal-name { font-size: var(--fs-sm); color: var(--ink); }
+.gal-sub { font-size: var(--fs-xs); color: var(--muted); }
+.gal-svg { display: block; overflow: visible; }
+.gal-svg .gal-paper { fill: var(--ic-paper, #fff); stroke: var(--line-strong, #9aa3ad); stroke-width: 1; }
+.gal-svg .gal-text { fill: var(--muted); opacity: 0.55; }
+.gal-svg .gal-head { fill: var(--accent); }
+.gal-svg .gal-guide { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 1.5; }
+.gal-svg .gal-acc { fill: color-mix(in srgb, var(--accent) 30%, transparent); stroke: var(--accent); stroke-width: 1; }
+.gal-svg .gal-soft { fill: color-mix(in srgb, var(--accent) 15%, transparent); }
+.gal-svg .gal-cut { stroke: var(--accent); stroke-width: 1.25; stroke-dasharray: 3 2; fill: none; }
+.gal-svg .gal-sec { stroke-dasharray: 1.5 1.5; }
+.gal-svg .gal-cap { font: 600 7px var(--font-ui, sans-serif); fill: var(--muted); }
+.gal-svg .gal-num { font: 700 7px var(--font-ui, sans-serif); fill: var(--accent); }
+.gal-svg .gal-wm { font: 700 6px var(--font-ui, sans-serif); fill: var(--muted); opacity: 0.45; letter-spacing: 0.04em; }
+.gal-aa { font-size: 22px; line-height: 26px; color: var(--ink); }
+.gal-theme { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 6px; background: var(--ic-paper, #fff); border: 1px solid var(--line); border-radius: 2px; }
+.gal-swatches { display: grid; grid-template-columns: repeat(6, 22px); gap: 4px; padding: 4px 8px; }
+.ribbon .gal-swatch { width: 22px; height: 22px; min-width: 0; padding: 0; border: 1px solid var(--line-strong, #9aa3ad); border-radius: 2px; }
+.ribbon .gal-swatch:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+.gal-colour-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.rb-field > .rb-lead { display: inline-flex; vertical-align: -3px; margin-right: 3px; }
+
+/* Presentation and Design: Warnings and Analysis stay out of the side panel until View > Show asks for them */
+body:is(.slides-mode, .design-mode):not(.show-warnings-pane) #warnings-section,
+body:is(.slides-mode, .design-mode):not(.show-analysis-pane) #analysis-section { display: none; }
+/* the side panel closes all the way (no strip): the button at the bottom right, View > Side Panel or Ctrl+Alt+B bring it back */
+.dock-v > .toolbox[data-id="details"].collapsed { display: none; }
+/* its header is one row: the close button sits beside the first heading */
+.dock-v > .toolbox[data-id='details'] { position: relative; }
+.dock-v > .toolbox[data-id='details'] > #side-fold { position: absolute; top: 4px; right: 6px; z-index: 2; margin: 0; font-size: var(--fs-md, 15px); }
+.dock-v > .toolbox[data-id='details'] #side-content > section > h2 { padding-right: 24px; }
+#status-side { display: inline-grid; place-items: center; width: 26px; height: 22px; padding: 0; margin-left: 4px; border: 1px solid transparent; background: none; color: var(--muted); }
+#status-side:hover { color: var(--text); border-color: var(--line); }
+#status-side[aria-pressed='true'] { color: var(--accent); }
+#status-side[aria-pressed='false'] .sp-fill { opacity: 0; }
+/* a dock holding only the closed side panel takes no room */
+.dock:not(.drop):not(:has(> :not(.toolbox[data-id='details'].collapsed))) { display: none; }
+.gal-svg .gal-ab { font: 600 7px var(--font-ui, sans-serif); fill: var(--ink, currentColor); }
+.gal-svg .gal-arrow { fill: none; stroke: var(--accent); stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.ribbon button.rb-iconsel { display: inline-flex; align-items: center; gap: 1px; width: auto; padding: 0 3px; }
+.ribbon button.rb-iconsel .rb-caret { font-size: 9px; color: var(--muted); }
+.popup-menu .pm-ic { display: inline-flex; width: 20px; margin-right: 8px; vertical-align: -5px; }
+.popup-menu button:has(> .pm-ic) { display: flex; align-items: center; justify-content: flex-start; text-align: left; }
+
+/* Insert > All Charts (chart-gallery.ts): every kind of chart drawn from the selection */
+.chart-gallery .fb-body { width: 372px; max-height: min(78vh, 720px); overflow-y: auto; padding: 4px 8px 8px; }
+.cg-note { margin: 2px 0 6px; font-size: var(--fs-xs); }
+.cg-list h3 { margin: 8px 0 4px; font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.cg-row { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.cg-item { display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 4px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); font-size: var(--fs-sm); color: var(--text); }
+.cg-item:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.cg-pic { width: 100%; height: auto; aspect-ratio: 300 / 186; display: block; background: #fff; }
+
+/* editing a ribbon where it is (ribbon-live.ts) */
+.rb-tabs .rb-gear { align-self: center; display: inline-grid; place-items: center; width: 24px; height: 20px; margin-left: auto; padding: 0; border: 0; border-radius: var(--r-control); background: transparent; color: var(--muted); }
+.rb-tabs .rb-gear + .rb-collapse { margin-left: 2px; }
+.rb-tabs .rb-gear:hover, .rb-tabs .rb-gear[aria-pressed='true'] { background: var(--accent-soft); color: var(--accent); }
+.rb-live-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 10px; background: var(--accent-soft); border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+.rb-live-say { flex: 1 1 260px; color: var(--text); }
+.rb-live-bar button { padding: 2px 10px; }
+.ribbon.rb-live .rb-group[draggable='true'] { position: relative; outline: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: -2px; cursor: grab; }
+.ribbon.rb-live .rb-group[draggable='true'] > .rb-label { cursor: grab; }
+.ribbon.rb-live .rb-group.rb-user-hidden { display: flex !important; opacity: 0.38; }
+.ribbon.rb-live .rb-group.rb-live-dragging { opacity: 0.4; }
+.ribbon.rb-live .rb-group.rb-live-before { box-shadow: inset 3px 0 0 var(--accent); }
+.ribbon.rb-live .rb-group.rb-live-after { box-shadow: inset -3px 0 0 var(--accent); }
+.ribbon.rb-live .rb-tabs [role=tab].rb-live-tab { background: var(--accent-soft); outline: 2px solid var(--accent); }
+.rb-live-x { position: absolute; top: 2px; right: 2px; z-index: 3; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: var(--panel); color: var(--muted); font-size: 12px; line-height: 16px; box-shadow: 0 0 0 1px var(--line); }
+.rb-live-x:hover { color: var(--text); background: var(--accent-soft); }
+.ribbon.rb-live .rb-group.rb-user-hidden .rb-live-x { opacity: 1; }
+
+/* Spreadsheet > Insert > Charts: a gallery of the common charts, like the Styles gallery, with All Charts for the rest (item 57) */
+.ribbon button.rb-style.rb-chart-tile { width: 66px; align-items: center; gap: 1px; color: var(--muted); }
+.rb-chart-tile svg { display: block; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.rb-chart-tile .cx { stroke: var(--ic-ink); stroke-width: 1.2; stroke-opacity: 0.55; }
+.rb-chart-tile .c1 { fill: var(--accent); }
+.rb-chart-tile .c2 { fill: color-mix(in srgb, var(--accent) 45%, var(--panel)); }
+.rb-chart-tile .c3 { fill: color-mix(in srgb, var(--ic-ink) 35%, var(--panel)); }
+.rb-chart-tile .l1 { stroke: var(--accent); stroke-width: 2; }
+.rb-chart-tile .l2 { stroke: color-mix(in srgb, var(--accent) 45%, var(--panel)); stroke-width: 2; }
+.rb-chart-tile .lt { stroke: var(--ic-ink); stroke-width: 1; stroke-dasharray: 3 2; stroke-opacity: 0.6; }
+.rb-chart-tile .d1 { fill: var(--accent); }
+.rb-group.rb-compact .rb-chart-tile { font-size: 0; }
+
+/* editing the ribbon in place: single buttons drag too; ones taken off show faintly (a click brings one back) */
+.ribbon.rb-live .rb-live-item { cursor: grab; }
+.ribbon.rb-live button.rb-user-hidden.rb-live-item { display: inline-flex !important; opacity: 0.35; outline: 1px dashed var(--muted); outline-offset: -2px; }
+.ribbon.rb-live .rb-live-item.rb-live-dragging { opacity: 0.4; }
+.ribbon.rb-live .rb-group.rb-live-into { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.rb-extra { display: flex; gap: 2px; }
+.rb-live-palette { display: flex; flex-direction: column; gap: 4px; position: fixed; right: 8px; z-index: 60; width: 260px; max-height: 360px; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: 0 6px 18px rgb(0 0 0 / 0.18); }
+.rb-live-palette input { width: 100%; box-sizing: border-box; font: inherit; font-size: var(--fs-sm); padding: 3px 6px; }
+.rb-live-list { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
+.rb-live-list-head { margin: 6px 0 2px; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.rb-live-cmd { padding: 3px 6px; font-size: var(--fs-sm); border-radius: var(--r-control); cursor: grab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rb-live-cmd:hover { background: var(--accent-soft); }
+
+/* a narrow window's second step (src/ui/ribbon-fit.ts): a group of large buttons becomes small buttons with their words, three to a column */
+.rb-group.rb-small > .rb-row { display: grid; grid-auto-flow: column; grid-template-rows: repeat(3, auto); align-content: center; column-gap: 2px; row-gap: 1px; }
+.rb-group.rb-small > .rb-row > .rb-fly { display: flex; }
+.ribbon .rb-group.rb-small button.rb-big { flex-direction: row; align-items: center; justify-content: flex-start; gap: 4px; min-width: 0; padding: 1px 5px; line-height: 17px; }
+.ribbon .rb-group.rb-small button.rb-big br { display: none; }
+.rb-group.rb-small button.rb-big .rb-icon { font-size: 14px; line-height: 1; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+.rb-group.rb-small button.rb-big .rb-icon svg { width: 16px; height: 16px; }
+.rb-group.rb-small.rb-compact button.rb-big { font-size: 0; gap: 0; }
+
+/* ---- item 68: each region on its own surface. The title bar, the ribbon's tabs and the status bar
+   share one chrome tone; the ribbon's buttons sit on a rounded, slightly tinted panel with a soft
+   shadow; the formula bar, docks and side panel have their own pane tone; the page or grid stays white. */
+:root { --chrome: #e9ebef; --rb-surface: #fbfbfc; --pane: #f4f5f7; --rb-shadow: 0 1px 3px rgb(0 0 0 / 0.1), 0 1px 1px rgb(0 0 0 / 0.04); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --chrome: #14171b; --rb-surface: #262b33; --pane: #20242b; --rb-shadow: 0 1px 4px rgb(0 0 0 / 0.5); } }
+:root[data-theme='dark'] { --chrome: #14171b; --rb-surface: #262b33; --pane: #20242b; --rb-shadow: 0 1px 4px rgb(0 0 0 / 0.5); }
+header, footer { background: var(--chrome); }
+.ribbon.tabbed, .doc-ribbon { background: var(--chrome); border-bottom: 0; }
+body:not(.mode-window) .rb-tabs { background: var(--chrome); border-bottom: 0; }
+.ribbon.tabbed > .rb-panel:not([hidden]), .doc-ribbon > .rb-panel:not([hidden]) { margin: 0 6px 5px; background: var(--rb-surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--rb-shadow); }
+.ribbon.tabbed > .rb-panel .rb-group, .doc-ribbon > .rb-panel .rb-group { background: transparent; }
+#formula-bar { background: var(--pane); }
+.dock, aside { background: var(--pane); }
+
+/* ---- item 38: Dark Gray (View > Window and Colours > Theme), like Office's: a dark title bar and
+   tab band, the ribbon and the panels a lighter gray so the icons read easily; the page stays white.
+   It is the light theme underneath (data-theme="light"), with these colours over it. */
+:root[data-gray] { --chrome: #2e3137; --rb-surface: #d3d6db; --pane: #dfe1e5; --bg: #b4b8bf; --surround: #9fa4ad; --line: #bfc3ca; --rb-shadow: 0 1px 3px rgb(0 0 0 / 0.25); }
+:root[data-gray] header, :root[data-gray] footer, :root[data-gray] .rb-tabs { --bg: #23262b; --text: #eceef2; --muted: #b9bec8; --line: #474b53; --accent-soft: #41464f; --panel: #3a3e45; color: var(--text); }
+:root[data-gray] .ribbon > .rb-panel, :root[data-gray] .doc-ribbon > .rb-panel { --panel: #d3d6db; --accent-soft: #c1c7d1; --line: #b3b8c0; }
+:root[data-gray] .dock, :root[data-gray] aside { --panel: #dfe1e5; --line: #c4c8cf; }
+
+/* ---- item 37: interface density (View > Window and Colours > Density). Compact is as the app comes;
+   Standard and Large make the icons bigger and give the toolbox and ribbon buttons more room, rather
+   than zooming everything (Interface Size does that). */
+html[data-density='standard'] .tool { width: 40px; height: 38px; }
+html[data-density='standard'] .tool > :is(svg, img) { width: 24px; height: 24px; }
+html[data-density='standard'] .tb-cells { gap: 5px; }
+html[data-density='standard'] .tb-cells > .tb-gap { width: 40px; height: 38px; }
+html[data-density='standard'] .ribbon button { padding: 3px 7px; line-height: 19px; }
+html[data-density='standard'] .ribbon .rb-group:not(.rb-small) button.rb-big { padding: 4px 7px; min-width: 52px; gap: 3px; }
+html[data-density='standard'] .ribbon .rb-group:not(.rb-small) .rb-icon { height: 30px; line-height: 30px; font-size: 24px; }
+html[data-density='standard'] .ribbon .rb-group:not(.rb-small) .rb-icon .ci-ic { width: 28px; height: 28px; }
+html[data-density='standard'] .ribbon :is(.rb-lead, .rb-iconbtn) .ci-ic { width: 18px; height: 18px; }
+html[data-density='standard'] .rb-group { padding: 0 9px; }
+html[data-density='large'] .tool { width: 46px; height: 44px; }
+html[data-density='large'] .tool > :is(svg, img) { width: 28px; height: 28px; }
+html[data-density='large'] .tb-cells { gap: 7px; }
+html[data-density='large'] .tb-cells > .tb-gap { width: 46px; height: 44px; }
+html[data-density='large'] .ribbon button { padding: 5px 9px; line-height: 21px; }
+html[data-density='large'] .ribbon .rb-group:not(.rb-small) button.rb-big { padding: 5px 9px; min-width: 62px; gap: 4px; }
+html[data-density='large'] .ribbon .rb-group:not(.rb-small) .rb-icon { height: 36px; line-height: 36px; font-size: 29px; }
+html[data-density='large'] .ribbon .rb-group:not(.rb-small) .rb-icon .ci-ic { width: 34px; height: 34px; }
+html[data-density='large'] .ribbon :is(.rb-lead, .rb-iconbtn) .ci-ic { width: 20px; height: 20px; }
+html[data-density='large'] .rb-group { padding: 0 12px; }
 /* small pictures of a choice, beside its box; and a page's bigger preview when it isn't in the Settings window */
 .ask-inline { display: inline-flex; align-items: center; margin-left: 8px; min-width: 54px; }
 .ask-swatch { font: 600 15px Arial, sans-serif; padding: 0 6px; border: 1px solid var(--line); border-radius: var(--r-control); background: #fff; color: #111; line-height: 20px; }
@@ -3417,6 +3659,36 @@ dialog.newman-settings { width: min(96vw, 600px); max-height: 92vh; }
 .ab-tile[aria-checked="true"] { border-color: var(--accent, #2b7bd6); box-shadow: 0 0 0 1px var(--accent, #2b7bd6) inset; }
 .action-button-dialog [hidden] { display: none !important; }
 
+/* the Font group's corner box (Presentation and Design): Change Case */
+.fb-font .fb-section { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 2px 0 4px; }
+.fb-font .fb-case { display: flex; flex-direction: column; gap: 1px; }
+.fb-font .fb-case button { text-align: left; padding: 4px 8px; border: 0; border-radius: var(--r-control); background: none; color: var(--text); cursor: pointer; }
+.fb-font .fb-case button:hover, .fb-font .fb-case button:focus-visible { background: var(--hover, rgb(0 0 0 / 0.08)); }
+
+/* the Style panel: "Style – Box" in its title, and a small label over a shape's border rows */
+#style-section > h2 .style-of { color: var(--text); }
+#style-body .style-sub { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 8px 0 2px; padding-top: 6px; border-top: 1px solid var(--line); }
+
+/* Presentation and Design's Font group: two rows the same width, no gaps at their ends. The
+   longer row sets the width; the font box, then the buttons, stretch to fill the other */
+.rb-fontcol { align-items: stretch; }
+.rb-fontcol > .rb-pair { width: 100%; }
+.ribbon .rb-fontcol input.rb-font { flex: 1 1 84px; width: 84px; min-width: 0; }
+.ribbon .rb-fontcol input.rb-num { flex: 0 0 auto; width: 36px; }
+.ribbon .rb-fontcol .rb-sq { flex: 1 1 auto; min-width: 22px; padding: 2px 3px; }
+.ribbon .rb-fontcol select[data-tx='spacing'] { flex: 0 0 auto; width: 74px; }
+
+/* less room above the side panel's first heading (STYLE) */
+#dock-right:has(> .toolbox[data-id='details']) { padding-top: 2px; }
+#side-content h2 { margin-top: 0; }
+.dock-v > .toolbox[data-id='details'] > #side-fold { top: 0; }
+.fb-font .fb-row { display: grid; grid-template-columns: 1fr 96px; align-items: center; gap: 6px; padding: 2px 0; font-size: var(--fs-sm); }
+.fb-font .fb-row input[type='number'], .fb-font .fb-row select { width: 100%; min-width: 0; }
+.fb-font .fb-row input[type='color'] { width: 100%; height: 22px; padding: 0 2px; }
+.fb-font .fb-check { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: var(--fs-sm); }
+.fb-font .fb-section:not(:first-child) { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); }
+.float-box.fb-font { width: 250px; }
+.fb-font .fb-body { max-height: 70vh; }
 /* a gallery inline on the ribbon, as Word shows its Styles (Format Favorites) */
 .rb-styles { display: flex; align-items: stretch; height: 100%; }
 .rbs-strip { display: flex; flex-wrap: wrap; gap: 2px; width: 336px; height: 52px; overflow: hidden; border: 1px solid var(--line); border-right: none; padding: 1px; scroll-behavior: smooth; }

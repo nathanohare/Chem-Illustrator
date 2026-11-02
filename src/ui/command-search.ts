@@ -25,6 +25,10 @@ const COMMON = new Set(['cmd:new', 'cmd:open', 'cmd:save', 'cmd:save-as', 'cmd:p
   'cmd:insert-table', 'cmd:check-structure', 'cmd:new-slide', 'cmd:hotkeys', 'cmd:preferences']);
 
 const words = (s: string) => s.toLowerCase().replace(/[…'’]/g, '').split(/[^a-z0-9α-ω+#]+/).filter(Boolean);
+/** British spellings typed into the search find the commands, which are spelt the American way. */
+const US: [RegExp, string][] = [[/colour/g, 'color'], [/centre/g, 'center'], [/^grey/, 'gray'], [/^anticlockwise$/, 'counterclockwise'], [/(behavi|favo|neighb)our/, '$1or'],
+  [/^(analy|recogni|organi|customi|optimi|normali|minimi|maximi|summari|visuali|categori|randomi)s(e|ed|es|ing|ation)$/, '$1z$2'], [/^(label|cancel|model)led$/, '$1ed'], [/^maths$/, 'math']];
+const american = (w: string) => US.reduce((x, [re, to]) => x.replace(re, to), w);
 
 /**
  * How well an item matches what was typed: every typed word must start a word of its name,
@@ -32,7 +36,7 @@ const words = (s: string) => s.toLowerCase().replace(/[…'’]/g, '').split(/[^
  * what was typed come first. Null when it doesn't match.
  */
 export function matchScore(item: Pick<CommandItem, 'label' | 'place' | 'more'> & { id?: string }, query: string): number | null {
-  const q = words(query);
+  const q = words(query).map(american);
   if (!q.length) return 0;
   const name = words(item.label), joined = item.label.toLowerCase();
   const other = [...words(item.place), ...words(item.more ?? '')];

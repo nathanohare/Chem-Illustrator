@@ -39,7 +39,7 @@ export const WORKBOOK_THEMES: WorkbookTheme[] = [
   T('Violet', 'Inter', 'Inter', '2D2147 FFFFFF 3A2D5C F1EEF8 6C4AB6 E0A43A 3FA7A0 D45D79 7FA1D6 9AA5B1 4A55C9 8A4AA8'),
   T('Sunrise', 'Lato', 'Lato', '3B2A1A FFFFFF 4A3524 FBF4EA F2A541 F2545B 3E8E7E 5B6EAE C46A2F 8C6A8F 2F6FB2 8C4A7E'),
   // Okabe and Ito's eight colours, which people with colour blindness can tell apart
-  T('Colour-blind safe', 'Inter', 'Inter', '000000 FFFFFF 1F2933 F2F2F2 0072B2 E69F00 009E73 D55E00 56B4E9 CC79A7 0072B2 7A4E9A'),
+  T('Color-blind safe', 'Inter', 'Inter', '000000 FFFFFF 1F2933 F2F2F2 0072B2 E69F00 009E73 D55E00 56B4E9 CC79A7 0072B2 7A4E9A'),
 ];
 
 /** The theme a workbook shows in (its own, or Excel's default). */

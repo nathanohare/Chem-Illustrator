@@ -29,7 +29,7 @@ export interface AskPreview {
 }
 
 /** Show the fields; resolves with what was entered, or null if the window was cancelled. */
-export function ask(title: string, fields: Field[], opts: { ok?: string; note?: string; /** Only an OK button, for a message. */ noCancel?: boolean; /** A short list under the note (two columns: what, and its value). */ lines?: [string, string][]; preview?: AskPreview } = {}): Promise<Record<string, string> | null> {
+export function ask(title: string, fields: Field[], opts: { ok?: string; note?: string; /** Only an OK button, for a message. */ noCancel?: boolean; /** A short list under the note (two columns: what, and its value). */ lines?: [string, string][]; preview?: AskPreview; /** Called with the values as they are typed or picked (a live preview). */ onInput?: (values: Record<string, string>) => void } = {}): Promise<Record<string, string> | null> {
   return new Promise((resolve) => {
     const d = document.createElement('dialog');
     d.className = 'ask';
@@ -149,6 +149,12 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
       e.preventDefault();
       done(values());
     });
+    if (opts.onInput) {
+      const live = () => opts.onInput!(values());
+      form.addEventListener('input', live);
+      form.addEventListener('change', live);
+      queueMicrotask(live);
+    }
     cancel.addEventListener('click', () => done(null));
     d.addEventListener('close', () => done(null));
     showDialog(d);

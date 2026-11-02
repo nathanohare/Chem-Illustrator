@@ -160,9 +160,9 @@ export class SheetCharts {
     const c = this.chart;
     if (!c) return;
     popupMenu(x, y, [
-      ...Object.entries(CHART_PALETTES).map(([k, p]) => [`${(c.palette ?? 'office') === k ? '✓ ' : ''}${p.name}`, () => this.patch((x2) => ({ ...x2, palette: k === 'office' ? undefined : k, series: x2.series.map((s) => ({ ...s, color: undefined })) }), 'Chart colours')] as MenuItem),
+      ...Object.entries(CHART_PALETTES).map(([k, p]) => [`${(c.palette ?? 'office') === k ? '✓ ' : ''}${p.name}`, () => this.patch((x2) => ({ ...x2, palette: k === 'office' ? undefined : k, series: x2.series.map((s) => ({ ...s, color: undefined })) }), 'Chart colors')] as MenuItem),
       null,
-      ['Each Series Its Own Colour…', () => this.focusPanel()],
+      ['Each Series Its Own Color…', () => this.focusPanel()],
     ]);
   }
 
@@ -349,7 +349,7 @@ export class SheetCharts {
       ['Titles…', () => void this.titles()],
       ['Axes…', () => void this.axes(), c.kind !== 'pie'],
       ['Legend ▸', () => this.legendMenu(lastX, lastY)],
-      ['Colours ▸', () => this.paletteMenu(lastX, lastY)],
+      ['Colors ▸', () => this.paletteMenu(lastX, lastY)],
       ['Error Bars ▸', () => this.errorsMenu(lastX, lastY), FITTED.has(c.kind)],
       ['Add Series…', () => void this.addSeries()],
       [`${c.series.every((s) => s.labels) ? '✓ ' : ''}Data Labels`, () => this.toggleLabels()],
@@ -407,7 +407,7 @@ export class SheetCharts {
     out.push(row('Type', select(KINDS.map((k) => [k, CHART_NAMES[k]]), c.kind, (v) => this.setKind(v as ChartKind))));
     out.push(row('Title', text(c.title ?? '', (v) => this.patch((x) => clean({ ...x, title: v || undefined }), 'Chart title'), 'none')));
     out.push(row('Legend', select([['right', 'Right'], ['bottom', 'Bottom'], ['top', 'Top'], ['none', 'None']], c.legend, (v) => this.patch((x) => ({ ...x, legend: v as Chart['legend'] }), 'Legend'))));
-    out.push(row('Colours', select(Object.entries(CHART_PALETTES).map(([k, p]) => [k, p.name]), c.palette ?? 'office', (v) => this.patch((x) => clean({ ...x, palette: v === 'office' ? undefined : v }), 'Chart colours'))));
+    out.push(row('Colors', select(Object.entries(CHART_PALETTES).map(([k, p]) => [k, p.name]), c.palette ?? 'office', (v) => this.patch((x) => clean({ ...x, palette: v === 'office' ? undefined : v }), 'Chart colors'))));
     if (c.kind === 'column' || c.kind === 'bar' || c.kind === 'area') out.push(row('Stacked', check(!!c.stacked, (v) => this.patch((x) => clean({ ...x, stacked: v || undefined }), 'Stacked'))));
     if (c.kind === 'radar') out.push(row('Filled', check(!!c.filled, (v) => this.patch((x) => clean({ ...x, filled: v || undefined }), 'Filled radar'), 'Shapes filled in')));
     if (c.kind === 'histogram') {
@@ -431,7 +431,7 @@ export class SheetCharts {
     out.push(row('Font size', numberBox(c.fontSize, (v) => this.patch((x) => clean({ ...x, fontSize: v }), 'Chart font size'), '12', 'px')));
     if (!this.ownData) out.push(row('Size', numberBox(c.w, (v) => v && this.patch((x) => ({ ...x, w: Math.max(80, v) }), 'Resize chart'), '', '×'), numberBox(c.h, (v) => v && this.patch((x) => ({ ...x, h: Math.max(80, v) }), 'Resize chart'), '', 'px')));
     out.push(row('Background', colour(c.background && c.background !== 'none' ? c.background : '#ffffff', (v) => this.patch((x) => ({ ...x, background: v === '#ffffff' ? undefined : v }), 'Chart background')),
-      check(c.background === 'none', (v) => this.patch((x) => clean({ ...x, background: v ? 'none' : undefined }), 'Chart background'), 'See-through')));
+      check(c.background === 'none', (v) => this.patch((x) => clean({ ...x, background: v ? 'none' : undefined }), 'Chart background'), 'No Fill (transparent)')));
     out.push(row('Border', check(c.border !== false, (v) => this.patch((x) => clean({ ...x, border: v ? undefined : false }), 'Chart border'))));
     if (!this.ownData) out.push(row('Hidden rows', check(!!c.showHidden, (v) => this.patch((x) => clean({ ...x, showHidden: v || undefined }), 'Chart hidden rows'), 'Chart them too (off: a filtered table charts what shows)')));
 
@@ -480,8 +480,8 @@ export class SheetCharts {
           check(onSecondAxis(s, i), (v) => this.patchSeries(i, { secondary: v === i > 0 ? undefined : v }, 'Second axis'), 'Second axis')));
       }
       if (c.kind !== 'pie') {
-        out.push(row('Colour', colour(data[i]?.color ?? '#4472c4', (v) => this.patchSeries(i, { color: v }, 'Series colour')),
-          s.color ? button('Auto', () => this.patchSeries(i, { color: undefined }, 'Series colour')) : null));
+        out.push(row('Color', colour(data[i]?.color ?? '#4472c4', (v) => this.patchSeries(i, { color: v }, 'Series color')),
+          s.color ? button('Auto', () => this.patchSeries(i, { color: undefined }, 'Series color')) : null));
       }
       const lineLike = c.kind === 'scatter' || c.kind === 'line' || (c.kind === 'radar' && !c.filled) || (c.kind === 'combo' && comboAs(s, i) === 'line');
       if (lineLike) {
@@ -515,7 +515,7 @@ export class SheetCharts {
         if (f.kind === 'linear' || f.kind.startsWith('poly') || f.kind === 'exp' || f.kind === 'order1' || f.kind === 'hammett') out.push(row(f.kind === 'exp' || f.kind === 'order1' ? 'Value at x = 0' : 'Crosses y at', numberBox(f.intercept, (v) => setFit({ intercept: v }), 'fitted')));
         if (isTemperatureFit(f.kind)) out.push(row('x is in', select([['K', 'kelvin (K)'], ['C', 'degrees Celsius (°C)']], f.celsius ? 'C' : 'K', (v) => setFit({ celsius: v === 'C' || undefined }))));
         out.push(row('Extend', numberBox(f.backward, (v) => setFit({ backward: v }), '0', 'back'), numberBox(f.forward, (v) => setFit({ forward: v }), '0', 'forward')));
-        out.push(row('Colour', colour(f.color ?? data[i]?.color ?? '#4472c4', (v) => setFit({ color: v })), f.color ? button('Auto', () => setFit({ color: undefined })) : null));
+        out.push(row('Color', colour(f.color ?? data[i]?.color ?? '#4472c4', (v) => setFit({ color: v })), f.color ? button('Auto', () => setFit({ color: undefined })) : null));
         out.push(row('Legend', check(f.legend !== false, (v) => setFit({ legend: v ? undefined : false }), 'List it')));
         if (f.labelAt) out.push(row('Equation', button('Put back beside the line', () => setFit({ labelAt: undefined }))));
         const fit = fits[i];

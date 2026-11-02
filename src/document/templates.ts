@@ -73,7 +73,7 @@ function labReport(): DocText {
     H1('Procedure'),
     P('[What was done, in order, with times and temperatures: set-up, addition, monitoring (TLC, eluent, Rf), work-up and purification.]'),
     H1('Observations'),
-    P('[Colour changes, exotherms, precipitates, anything unexpected.]'),
+    P('[Color changes, exotherms, precipitates, anything unexpected.]'),
     H1('Results'),
     P('[Product, appearance, mass, yield (mmol and %), and the data that show what it is.]'),
     H1('Discussion'),
@@ -102,7 +102,7 @@ function supportingInformation(): DocText {
     P('[Procedure or "Following General Procedure A with…", amounts, purification, and the yield.]'),
     P('[Appearance]; Rf = [value] ([eluent]); ¹H NMR ([MHz] MHz, [solvent]) δ [shifts]; ¹³C NMR ([MHz] MHz, [solvent]) δ [shifts]; HRMS ([method]) m/z [M+H]⁺ calcd for [formula] [mass], found [mass].'),
     H1('NMR Spectra'),
-    P('[One spectrum per compound, each labelled with its number, nucleus and solvent.]'),
+    P('[One spectrum per compound, each labeled with its number, nucleus and solvent.]'),
     H1('References'),
     P('[References cited in this document.]'),
   ]);

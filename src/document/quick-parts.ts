@@ -84,7 +84,7 @@ export const COVER_PAGES: CoverDesign[] = [
     ],
   },
   {
-    id: 'banded', name: 'Banded', help: 'The title in white on a band of the accent colour',
+    id: 'banded', name: 'Banded', help: 'The title in white on a band of the accent color',
     paras: (accent) => [
       { pieces: [''], look: { size: 12 }, ps: { spaceBefore: 160, shade: accent } },
       { pieces: [{ field: 'title' }], look: { size: 30, bold: true, color: '#ffffff' }, ps: { indent: 18, shade: accent, spaceAfter: 0 } },

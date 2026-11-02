@@ -16,7 +16,7 @@ export function pickTemplate(): Promise<DesignTemplate | 'blank' | null> {
     h.textContent = 'New Design';
     const note = document.createElement('p');
     note.className = 'muted';
-    note.textContent = 'Start from a blank page or a ready-made layout. Everything in a layout can be moved, retyped, recoloured or deleted, and Page Size changes the page later.';
+    note.textContent = 'Start from a blank page or a ready-made layout. Everything in a layout can be moved, retyped, recolored or deleted, and Page Size changes the page later.';
     const grid = document.createElement('div');
     grid.className = 'tg-grid';
     let result: DesignTemplate | 'blank' | null = null;

@@ -921,6 +921,14 @@ export class Editor {
 
   private onDown(e: PointerEvent): void {
     this.commitLabel();
+    // Alt+click on a locked structure (Slides) edits it this once: the lock lifts for this press
+    // and comes back when the button is let go
+    if (this.structuresLocked && e.altKey && e.button === 0) {
+      this.structuresLocked = false;
+      const h = this.hitTestNow(this.docPoint(e));
+      if (h?.kind === 'atom' || h?.kind === 'bond') this.relockAfter = true;
+      else this.structuresLocked = true;
+    }
     // a press on the text being typed (or its width handle) goes to the text
     const cap = this.captionEd;
     if (cap && e.button === 2 && cap.hit(this.docPoint(e)) === 'text') {
@@ -1338,7 +1346,11 @@ export class Editor {
     this.requestScene();
   }
 
+  /** The structures were unlocked for one Alt+click: lock them again when it ends. */
+  private relockAfter = false;
+
   private onUp(e: PointerEvent): void {
+    if (this.relockAfter) queueMicrotask(() => { this.relockAfter = false; this.structuresLocked = true; this.lastHit = null; });
     const d = this.drag;
     this.drag = null;
     if (!d) return;
@@ -3860,7 +3872,7 @@ export class Editor {
     const R = dragTurn(t.dx, t.dy, t.shift);
     t.unshown = t.ready.turn.apply(this.doc, R);
     if (!t.unshown) t.ready.turn.lastGood = R;
-    this.onHint(t.unshown ? 'From this angle a stereocentre can\'t be drawn so it reads right: let go and it goes back to the last angle that worked.' : t.shift ? 'Turning in 15° steps' : 'Shift: turn in 15° steps, one way at a time');
+    this.onHint(t.unshown ? 'From this angle a stereocenter can\'t be drawn so it reads right: let go and it goes back to the last angle that worked.' : t.shift ? 'Turning in 15° steps' : 'Shift: turn in 15° steps, one way at a time');
     if (hasPins(this.doc)) followPins(this.doc);
     this.requestScene();
   }
@@ -3876,7 +3888,7 @@ export class Editor {
     this.doc.commit();
     this.changed();
     this.onHint('');
-    if (t.unshown) this.onNotice('From that angle a stereocentre can\'t be drawn so it reads right, so the structure went back to the last angle where it could.', 6000);
+    if (t.unshown) this.onNotice('From that angle a stereocenter can\'t be drawn so it reads right, so the structure went back to the last angle where it could.', 6000);
     this.checkTurn(turn, left);
   }
 
@@ -3890,7 +3902,7 @@ export class Editor {
       if (this.doc !== doc || doc.version !== version) return;
       doc.undo();
       this.afterUndo();
-      this.onNotice('From that angle a stereocentre can\'t be drawn so it reads right, so the turn was taken back. Turn it a little less (or more).', 7000);
+      this.onNotice('From that angle a stereocenter can\'t be drawn so it reads right, so the turn was taken back. Turn it a little less (or more).', 7000);
     });
   }
 
@@ -4080,7 +4092,7 @@ export class Editor {
     const doc = this.doc, s = this.sel;
     if (!this.hasSelection()) return false;
     const black = colour?.toLowerCase() === '#000000' ? undefined : colour;
-    doc.edit(what === 'highlight' ? 'Highlight' : what === 'fill' ? 'Fill colour' : 'Colour', () => {
+    doc.edit(what === 'highlight' ? 'Highlight' : what === 'fill' ? 'Fill color' : 'Color', () => {
       if (what === 'highlight') {
         for (const id of s.atoms) doc.updateAtom(id, { highlight: colour });
         for (const id of s.bonds) doc.updateBond(id, { highlight: colour });
@@ -4143,7 +4155,7 @@ export class Editor {
     const on = ![...atoms, ...bonds].every((x) => has(x.hl));
     const patch: HighlightStyle = key === 'outline' ? (on ? { fill: 'none', line: 'solid' } : { fill: 'solid', line: 'none' }) : { [key]: on };
     const labels: Record<HighlightToggle, [string, string]> = {
-      smooth: ['Smooth highlight', 'Highlight with discs'], centre: ['Centre highlight on double bonds', 'Highlight on the bonds'],
+      smooth: ['Smooth highlight', 'Highlight with discs'], centre: ['Center highlight on double bonds', 'Highlight on the bonds'],
       soft: ['Soft highlight', 'Sharp highlight'], shadow: ['Highlight shadow', 'No highlight shadow'], glow: ['Highlight glow', 'No highlight glow'],
       outline: ['Outline-only highlight', 'Filled highlight'],
     };
@@ -7409,7 +7421,7 @@ export function insideLoop(loop: readonly Vec[], x: number, y: number): boolean 
 
 /** What Fill Rings says when it has filled n rings: it sends you to the Style panel. */
 export function ringsFilledMessage(n: number): string {
-  return `${n} ring${n > 1 ? 's' : ''} filled: choose the colour, gradient or pattern in the Style panel.`;
+  return `${n} ring${n > 1 ? 's' : ''} filled: choose the color, gradient or pattern in the Style panel.`;
 }
 
 /** Fill Rings' message says rings were filled (not that there was nothing to fill), so the Style panel should show. */

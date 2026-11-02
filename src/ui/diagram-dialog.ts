@@ -43,8 +43,8 @@ export function askDiagram(editing: DiagramData | null, o: DiagramDialogOptions)
         <div class="dg-preview" aria-label="How it will look"></div>
       </div>
       <div class="dg-look">
-        <label class="ask-row"><span>Colours</span><select name="colours"></select></label>
-        <label class="ask-row"><span>Accent colour</span><input name="accent" type="color" /></label>
+        <label class="ask-row"><span>Colors</span><select name="colours"></select></label>
+        <label class="ask-row"><span>Accent color</span><input name="accent" type="color" /></label>
         <label class="ask-row"><span>Text size</span><span class="energy-pair"><input name="size" type="number" min="4" max="96" step="0.5" placeholder="fit" aria-label="Text size in points (empty: as big as fits)" /> pt</span></label>
         <label class="ask-row"><span>Size</span><span class="energy-pair"><input name="w" type="number" min="40" step="any" aria-label="Width" /> × <input name="h" type="number" min="30" step="any" aria-label="Height" /> pt</span></label>
         <label class="ask-row ask-check"><input name="rounded" type="checkbox" /><span>Rounded corners</span></label>

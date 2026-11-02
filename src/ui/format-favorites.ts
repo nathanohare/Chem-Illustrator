@@ -31,7 +31,7 @@ export function favoriteSummary(look: ObjectLook): string {
     if (s.glow || s.softEdge || s.bevel || s.reflection) parts.push('effects');
   }
   if (look.arrow) parts.push('arrows');
-  if (look.atom || look.bond) parts.push(look.atom?.highlight || look.bond?.highlight || look.atom?.hl || look.bond?.hl ? 'structure colour and highlight' : 'structure colour');
+  if (look.atom || look.bond) parts.push(look.atom?.highlight || look.bond?.highlight || look.atom?.hl || look.bond?.hl ? 'structure color and highlight' : 'structure color');
   if (look.picture) parts.push('picture look');
   if (look.text) parts.push('text');
   return parts.join(', ');

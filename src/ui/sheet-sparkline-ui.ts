@@ -45,7 +45,7 @@ export function colourPopup(x: number, y: number, wb: Workbook | null, pick: (c:
     input.type = 'color';
     input.dataset.systemPicker = '';
     input.addEventListener('change', () => done(input.value));
-    more.append('More colours ', input);
+    more.append('More colors ', input);
     m.append(grid, more);
   });
 }
@@ -139,7 +139,7 @@ export class SheetSparklines {
     if (!h) return;
     const w = h.group.weight ?? 0.75;
     popupMenu(x, y, [
-      ['Colour…', () => colourPopup(x, y, this.view.wb, (c) => this.setGroup('Sparkline colour', { color: c }))],
+      ['Color…', () => colourPopup(x, y, this.view.wb, (c) => this.setGroup('Sparkline color', { color: c }))],
       null,
       ...[0.25, 0.5, 0.75, 1, 1.5, 2.25, 3].map((pt) => [`${pt === w ? '✓ ' : ''}Weight ${pt} pt`, () => this.setGroup('Sparkline weight', { weight: pt === 0.75 ? undefined : pt })] as [string, () => void]),
     ]);
@@ -149,7 +149,7 @@ export class SheetSparklines {
     const h = this.here();
     if (!h) return;
     const one = (label: string, key: 'negColor' | 'markerColor' | 'highColor' | 'lowColor' | 'firstColor' | 'lastColor'): [string, () => void] =>
-      [`${label}…`, () => colourPopup(x, y, this.view.wb, (c) => this.setGroup(`${label} colour`, { [key]: c }))];
+      [`${label}…`, () => colourPopup(x, y, this.view.wb, (c) => this.setGroup(`${label} color`, { [key]: c }))];
     popupMenu(x, y, [
       one('Negative Points', 'negColor'),
       one('Markers', 'markerColor'),

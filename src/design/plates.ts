@@ -73,10 +73,10 @@ export const TLC_LOOKS: TlcLook[] = [
   { id: 'pencil', name: 'Notebook sketch (circled spots)', plate: '#ffffff', spot: '#333333', outline: true },
   { id: 'uv', name: 'UV 254 nm (dark spots on green)', plate: '#d8f0cf', spot: '#4a3c6e' },
   { id: 'kmno4', name: 'KMnO₄ (yellow on purple)', plate: '#c27bb3', spot: '#f1d27b' },
-  { id: 'anisaldehyde', name: 'p-Anisaldehyde (coloured spots on pink)', plate: '#f7e8ec', spot: '#7b3c8f' },
+  { id: 'anisaldehyde', name: 'p-Anisaldehyde (colored spots on pink)', plate: '#f7e8ec', spot: '#7b3c8f' },
   { id: 'cam', name: 'CAM / Hanessian\'s (blue spots)', plate: '#eef3fb', spot: '#22408c' },
   { id: 'pma', name: 'Phosphomolybdic acid (dark green on yellow-green)', plate: '#e9eec3', spot: '#2c4a3b' },
-  { id: 'vanillin', name: 'Vanillin (coloured spots on cream)', plate: '#fbf6e9', spot: '#4f5d8a' },
+  { id: 'vanillin', name: 'Vanillin (colored spots on cream)', plate: '#fbf6e9', spot: '#4f5d8a' },
   { id: 'ninhydrin', name: 'Ninhydrin (purple spots)', plate: '#ffffff', spot: '#9a3b8c' },
   { id: 'iodine', name: 'Iodine (brown spots)', plate: '#fbf4d8', spot: '#8a5a2b' },
 ];

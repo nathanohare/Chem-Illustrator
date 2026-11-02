@@ -61,7 +61,7 @@ async function chooseReader(host: ImportHost, preferAi: boolean): Promise<'here'
     { value: 'ai', label: `${aiName(ai)} (sends the pictures to it)` },
   ] }] : [], {
     ok: linked ? 'Continue' : 'Download',
-    note: `The structure reader runs on this computer, so nothing is sent anywhere. It needs a one-time download of about ${PACK_MB} MB (the MolScribe model, MIT licence).`,
+    note: `The structure reader runs on this computer, so nothing is sent anywhere. It needs a one-time download of about ${PACK_MB} MB (the MolScribe model, MIT license).`,
   });
   if (!r) return null;
   if (r.how === 'ai') return 'ai';
