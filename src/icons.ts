@@ -102,6 +102,8 @@ export const ICONS: Record<string, string> = {
   'shape-rect-shadow': svg('<rect x="3.5" y="5" width="15" height="12"/><path d="M20 7.2v11.8H6" stroke-width="2.4" opacity="0.45" stroke-linecap="butt"/>'),
   'shape-rect-rounded-shadow': svg('<rect x="3.5" y="5" width="15" height="12" rx="3"/><path d="M20 8.5v7.5a3 3 0 0 1-3 3H7.5" stroke-width="2.4" opacity="0.45" stroke-linecap="butt"/>'),
   'shape-rect-dashed': svg('<rect x="4" y="6" width="16" height="12" stroke-dasharray="2.6 2"/>'),
+  /** Insert Structure (Document and Spreadsheet): the dashed "+" box a reaction arrow shows on hover, where a structure can go. */
+  'insert-structure': svg('<rect x="3.5" y="5.5" width="17" height="13" stroke-dasharray="3 2.4"/><path d="M12 8.6v6.8M8.6 12h6.8" stroke-width="1.7"/>'),
   'shape-circle': svg('<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>'),
   'shape-circle-filled': svg('<circle cx="12" cy="12" r="5" fill="currentColor"/>'),
   'shape-oval': svg('<ellipse cx="12" cy="12" rx="9" ry="6"/>'),

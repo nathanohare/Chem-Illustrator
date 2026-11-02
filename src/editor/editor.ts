@@ -2,6 +2,7 @@
 // pan. The editor changes the document and asks for a repaint; hover and drawing previews
 // only repaint the overlay layer.
 
+import { guideAt, guideLines, movedGuide, snapToGuides, ticksBetween, type GuideLine as CanvasGuideLine } from './guides';
 import { DEFAULT_CURSOR_AIDS, drawCursorAids, hintLines, modifierHints, readoutText, type CursorAidPrefs, type HintState, type Mods } from './cursor-aids';
 import { Sketcher } from './sketch';
 import { installPenAndTouch } from './touch';
@@ -15,7 +16,7 @@ import { geoDef, geoShapeStyle, moveSteps, traceSteps } from '../design/geo';
 import { distinctChoices } from '../chem/template-choices';
 import { TEMPLATES, Template, Placement, templateById, templatePoints, placePoint, fusePlacements, atomPlacements, freePlacement, crowdingOf, placeTemplate, snap15 } from '../chem/templates';
 import { fusions3d } from '../chem/fuse3d';
-import { bondHapto, centreEnd, haptoTarget, haptoText, splitHapto } from '../chem/hapto';
+import { bondHapto, centreEnd, haptoLook, haptoTarget, haptoText, splitHapto } from '../chem/hapto';
 import { expandInPlace, expandLigand, expandWithMolblock, freeLigandFor, inPlaceSmiles, labelSmiles, ligandTemplateFor } from '../chem/expand';
 import { styleFromFace, plainText } from '../richtext';
 import * as rt from '../richtext';
@@ -240,7 +241,7 @@ interface Drag {
   shift: boolean;
   alt: boolean;
   ctrl: boolean;
-  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'reshape' | 'turn3d';
+  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'reshape' | 'turn3d' | 'guide';
   last: Vec;
   panOrigin?: { ox: number; oy: number };
   /** The arrow or shape handle being dragged. */
@@ -271,6 +272,10 @@ interface Drag {
   joinTo?: number;
   /** Turning structures in perspective (the Perspective tools). */
   persp?: PerspDrag;
+  /** A guide being dragged: which, and by its middle or one of its lines. */
+  guideGrab?: { index: number; part: 'middle' | 'x' | 'y' };
+  /** Moving with guides: the grabbed atom's (or bond end's) place where the move began. */
+  grabbed?: Vec;
 }
 
 /** A drag with a Perspective tool: the structures, once ready (a 3-D shape may be building), and the drag so far in screen pixels. */
@@ -375,11 +380,14 @@ export class Editor {
     rerouteArrows: true,
   };
   /**
-   * New arrows' line width and head size, in points, apart from the bonds' line width
-   * (Settings ▸ Drawing); null for the usual: the drawing style's line width, and a head ten
-   * line widths long and 2.5 wide.
+   * New arrows' line width and head size, in points, apart from the bonds' line width (the
+   * drawing style's, Drawing Style ▸ Reaction arrows); null for the usual: the style's line
+   * width, and a head ten line widths long and 2.5 wide.
    */
-  arrowLook: ArrowLook = { width: null, headLength: null, headWidth: null };
+  get arrowLook(): ArrowLook {
+    const s = this.doc.style;
+    return { width: s.arrowWidth ?? null, headLength: s.arrowHeadLength ?? null, headWidth: s.arrowHeadWidth ?? null };
+  }
   /** The line width new arrows get. */
   arrowWidth(): number { return this.arrowLook.width ?? this.doc.style.lineWidth; }
   /** Tell the person something in the status bar. */
@@ -958,6 +966,9 @@ export class Editor {
       ...(e.pointerType === 'pen' ? { pen: true } : {}),
     };
     if (handle) this.drag.handle = handle;
+    // the selection tool on a guide (where nothing else is): the guide is dragged
+    const gh = e.button === 0 && !handle && !rotating && !painting && !hit && this.tool.kind === 'select' ? this.guideUnder(p) : null;
+    if (gh) { this.drag.mode = 'guide'; this.drag.guideGrab = gh; }
     // a curved arrow tool on a selected S-shaped (or longer) arrow's line: dragging there reshapes it
     if (e.button === 0 && !handle && !rotating && !painting && !e.shiftKey && hit?.kind === 'arrow' && this.curvedTool() && this.isSelected(hit)) {
       const r = this.pathArrow(hit.id);
@@ -1028,6 +1039,8 @@ export class Editor {
       const slot = near && (!h || h.kind === 'arrow' && h.id === near.id) ? near : null;
       if (slot?.id !== this.helperHover?.id || slot?.side !== this.helperHover?.side) this.helperHover = slot;
       this.showPointer(e.ctrlKey || e.metaKey);
+      const gh = !h && !handle && !onRotate && !slot && this.tool.kind === 'select' ? this.guideUnder(p) : null;
+      if (gh) this.r.overlay.style.cursor = gh.part === 'middle' ? 'move' : gh.part === 'x' ? 'col-resize' : 'row-resize';
       if (slot) this.r.overlay.style.cursor = 'pointer';
       this.requestOverlay(e.timeStamp);
       return;
@@ -1076,6 +1089,21 @@ export class Editor {
       if (d.mode === 'pan') this.r.overlay.style.cursor = 'grabbing';
     }
     if (!d.moved) return;
+    if (d.mode === 'guide') {
+      const g = this.doc.guides, gg = d.guideGrab!;
+      const x = g?.list[gg.index];
+      if (g && x) {
+        // a guide snaps to the drawing's major ticks (from its top left) unless Alt is held
+        const at = e.altKey || g.snap === 'none' ? p : { x: Math.round(p.x / g.minor) * g.minor, y: Math.round(p.y / g.minor) * g.minor };
+        const list = g.list.slice();
+        list[gg.index] = movedGuide(x, gg.part, at);
+        this.doc.guides = { ...g, list };
+        this.onGuides();
+      }
+      d.last = p;
+      this.requestOverlay(e.timeStamp);
+      return;
+    }
     if (d.mode === 'pan') {
       this.r.view.ox = d.panOrigin!.ox + (sp.x - d.startScreen.x);
       this.r.view.oy = d.panOrigin!.oy + (sp.y - d.startScreen.y);
@@ -1102,6 +1130,18 @@ export class Editor {
           to = { x: upDown ? 0 : g.offset.x, y: across ? 0 : g.offset.y };
           // (a straight move keeps only the guides along its way)
           this.guideLines = g.lines.filter((l) => !(across && l.y1 === l.y2 && l.x1 !== l.x2) && !(upDown && l.x1 === l.x2 && l.y1 !== l.y2));
+        }
+      }
+      // the drawing's guides: the atom or bond end grabbed goes onto a guide and its ticks (Alt: off)
+      this.guideSnapped = [];
+      if (this.guidesSnap() && !e.altKey) {
+        if (!d.grabbed) { const g0 = this.grabbedPoint(d); if (g0) d.grabbed = sub(g0, done); }
+        if (d.grabbed) {
+          const target = add(d.grabbed, to);
+          const sn = snapToGuides(target, this.doc.guides!, guideLines(this.doc.guides!, this.viewArea()), this.tol(6));
+          const across = want.y === 0 && e.shiftKey, upDown = want.x === 0 && e.shiftKey;
+          to = { x: upDown ? to.x : to.x + sn.at.x - target.x, y: across ? to.y : to.y + sn.at.y - target.y };
+          this.guideSnapped = sn.on;
         }
       }
       // the grid and drawing guides (Slides; Alt: off)
@@ -1292,6 +1332,15 @@ export class Editor {
       if (ctx && !d.moved) this.onContextMenu(ctx);
     }
     if (d.mode === 'pan') { this.requestScene(e.timeStamp); return; }
+    if (d.mode === 'guide') {
+      // a guide dropped outside the drawing area goes, as in PowerPoint
+      const rect = this.r.overlay.getBoundingClientRect();
+      const out = e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom;
+      const g = this.doc.guides;
+      if (out && g) { this.doc.guides = { ...g, list: g.list.filter((_, i) => i !== d.guideGrab!.index) }; this.onGuides(); }
+      this.requestOverlay(e.timeStamp);
+      return;
+    }
     if (d.mode === 'route') {
       // a point dragged out: the arrow runs through it the way it was dragged
       if (d.moved) this.routePoint(d.start, sub(d.last, d.start));
@@ -1959,6 +2008,39 @@ export class Editor {
     this.sel = emptySel();
     this.changed();
     return `Split into ${n} bonds.`;
+  }
+
+  /**
+   * The multicentre points (η³ and up) of what is picked: hapto bonds, metals with them, and
+   * atoms of a bonded ring or allyl (or the right-clicked bond).
+   */
+  haptoCentresPicked(contextBond: number | null = null): number[] {
+    const doc = this.doc;
+    const out = new Set<number>();
+    const big = (c: Atom | undefined | null) => !!c?.multi && c.multi.length >= 3;
+    const fromBond = (bid: number) => { const b = doc.bonds.get(bid); const c = b && centreEnd(doc, b); if (big(c)) out.add(c!.id); };
+    for (const bid of this.sel.bonds) {
+      fromBond(bid);
+      const b = doc.bonds.get(bid);
+      if (b) for (const cid of doc.centresOf.get(b.a1) ?? []) if (doc.atoms.get(cid)?.multi?.includes(b.a2) && big(doc.atoms.get(cid))) out.add(cid);
+    }
+    for (const aid of this.sel.atoms) {
+      for (const bid of doc.adj.get(aid) ?? []) fromBond(bid);
+      for (const cid of doc.centresOf.get(aid) ?? []) if (big(doc.atoms.get(cid)) && doc.adj.get(cid)?.length) out.add(cid);
+    }
+    if (contextBond !== null) fromBond(contextBond);
+    return [...out];
+  }
+
+  /** Chemistry > Structure > Kekulé Form for η Ligand: the picked η³–η⁸ ligands drawn with their double bonds, or delocalized again. */
+  toggleHaptoKekule(contextBond: number | null = null): string {
+    const ids = this.haptoCentresPicked(contextBond);
+    if (!ids.length) return 'Select an η ligand\'s ring or allyl, its hapto bond, or the metal.';
+    const doc = this.doc;
+    const kekule = !ids.every((id) => doc.atoms.get(id)?.kekule);
+    doc.edit(kekule ? 'Kekulé Form' : 'Delocalized Form', () => { for (const id of ids) doc.updateAtom(id, { kekule: kekule || undefined }); });
+    this.changed();
+    return kekule ? 'Drawn with its double bonds (Kekulé form).' : (haptoLook.delocalized ? 'Drawn delocalized again.' : 'Drawn delocalized when that is on in Settings ▸ Drawing.');
   }
 
   /** The selected labels Expand Label can draw out: ligands on a metal (by template) and other labels (by SMILES). */
@@ -3351,7 +3433,7 @@ export class Editor {
   private addArrow(tail: Vec, head: Vec, style: ArrowStyle = {}, side = 1): Arrow {
     const lw = this.arrowWidth();
     const { retro, connector: _, s: sShape, ...rest } = style;
-    // ChemDraw's defaults: heads ten line widths long and 2.5 wide (unless Settings ▸ Drawing gives sizes)
+    // ChemDraw's defaults: heads ten line widths long and 2.5 wide (unless the drawing style gives sizes)
     const own = this.arrowLook;
     const a: Omit<Arrow, 'id'> = {
       tail, head, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false,
@@ -3906,9 +3988,12 @@ export class Editor {
     return { deg, which: (c) => turns && !c.attach, shapes: this.textFirst };
   }
 
-    private rotateHandle(): Vec | null {
+  /** The handle above the selection that turns it (none when turning would do nothing). */
+  rotateHandle(): Vec | null {
     const s = this.sel;
     if (this.tool.kind !== 'select' || (!s.atoms.size && !s.arrows.size && !s.shapes.size && !s.captions.size)) return null;
+    // one atom on its own turns round itself, which does nothing (its label stays level): no handle
+    if (s.atoms.size === 1 && !s.arrows.size && !s.shapes.size && !s.captions.size) return null;
     const b = this.selBox();
     return b ? { x: (b.x1 + b.x2) / 2, y: b.y1 - this.tol(24) } : null;
   }
@@ -5523,6 +5608,7 @@ export class Editor {
     this.openCaption(null, at, undefined, undefined, {
       justify: textJustify(),
       size,
+      font: this.doc.style.arrowTextFont,
       // once typed: counted as the arrow's conditions, the arrow fitted to it and the text lined up
       done: (cid) => {
         const a = this.doc.arrows.get(id);
@@ -5602,14 +5688,14 @@ export class Editor {
    * one, with the caret at `click`. New text takes the document's caption style; everything
    * can be restyled in the bar above the text.
    */
-  private openCaption(c: Caption | null, at: Vec, click?: Vec, wrap?: number, opts?: { justify?: Justify; size?: number; done?: (id: number) => void }): void {
+  private openCaption(c: Caption | null, at: Vec, click?: Vec, wrap?: number, opts?: { justify?: Justify; size?: number; font?: string; done?: (id: number) => void }): void {
     this.closeCaption();
     this.commitLabel();
     const doc = this.doc;
     const st = doc.style;
     // a slide's title and text placeholders take the slide master's formatting
     const base = c?.ph ? doc.textStyles?.[c.ph] : captionBase(st);
-    const defaults = c?.ph && base ? { ...base } : { ...styleFromFace(st.captionFace), size: opts?.size ?? st.captionSize, ...base };
+    const defaults = c?.ph && base ? { ...base } : { ...styleFromFace(st.captionFace), size: opts?.size ?? st.captionSize, ...(opts?.font && opts.font !== st.captionFont ? { font: opts.font } : {}), ...base };
     const hide = (id: number | null) => {
       const shown = this.r.hiddenCaption !== null ? doc.captions.get(this.r.hiddenCaption) : null;
       if (shown) doc.dirtyRects.push(this.r.captionBox(shown));
@@ -5708,6 +5794,81 @@ export class Editor {
 
   /** Smart guides: things moved snap into line with other structures, text, shapes and the page (View > Alignment Guides; Alt turns them off while dragging). */
   smartGuides = false;
+  /** The drawing's guides changed (added, moved, taken away): the file has changed, and the Guides toolbox shows it. */
+  onGuides: () => void = () => {};
+  /** The guide lines the grabbed atom snapped onto in the move going on (shown brighter). */
+  private guideSnapped: CanvasGuideLine[] = [];
+
+  /** Moves snap to the drawing's guides. */
+  private guidesSnap(): boolean {
+    const g = this.doc.guides;
+    return !!g && g.shown && g.snap !== 'none' && (g.list.length > 0 || g.grid);
+  }
+
+  /** The guide under a point (the Select tool drags it). */
+  private guideUnder(p: Vec): { index: number; part: 'middle' | 'x' | 'y' } | null {
+    const g = this.doc.guides;
+    return g ? guideAt(p, g, this.tol(4)) : null;
+  }
+
+  /** What part of the drawing the window shows, in points. */
+  viewArea(): { x1: number; y1: number; x2: number; y2: number } {
+    const a = this.r.toDoc(0, 0), b = this.r.toDoc(this.r.overlay.clientWidth, this.r.overlay.clientHeight);
+    return { x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y), x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y) };
+  }
+
+  /** The point a move snaps to guides by: the atom grabbed, the end of the bond grabbed nearer the press, or a caption's corner. */
+  private grabbedPoint(d: Drag): Vec | null {
+    const h = d.hit;
+    if (!h) return null;
+    if (h.kind === 'atom') { const a = this.doc.atoms.get(h.id); return a ? { x: a.x, y: a.y } : null; }
+    if (h.kind === 'bond') {
+      const b = this.doc.bonds.get(h.id);
+      const p = b && this.doc.atoms.get(b.a1), q = b && this.doc.atoms.get(b.a2);
+      if (!p || !q) return null;
+      return dist(p, d.start) <= dist(q, d.start) ? { x: p.x, y: p.y } : { x: q.x, y: q.y };
+    }
+    if (h.kind === 'caption') { const c = this.doc.captions.get(h.id); return c ? { x: c.x, y: c.y } : null; }
+    return null;
+  }
+
+  /** Draw the guides: their lines across the window, ruler ticks along them, and a crosshair's middle. */
+  private drawGuides(ctx: CanvasRenderingContext2D, px: number): void {
+    const g = this.doc.guides;
+    if (!g?.shown || (!g.list.length && !g.grid)) return;
+    const area = this.viewArea();
+    const colour = this.dark ? '#4fc3f7' : '#1b8fd0';
+    const lines = guideLines(g, area);
+    const minGap = 5 * px;
+    ctx.save();
+    ctx.strokeStyle = colour;
+    for (const l of lines) {
+      const snapped = this.drag?.mode === 'move' && this.guideSnapped.some((s) => s.axis === l.axis && s.at === l.at);
+      ctx.globalAlpha = l.guide === null ? 0.35 : snapped ? 1 : 0.8;
+      ctx.lineWidth = (snapped ? 2 : 1) * px;
+      ctx.beginPath();
+      if (l.axis === 'x') { ctx.moveTo(l.at, area.y1); ctx.lineTo(l.at, area.y2); } else { ctx.moveTo(area.x1, l.at); ctx.lineTo(area.x2, l.at); }
+      // the ticks, as on a ruler (the grid's own lines carry only their minor ticks where they cross nothing)
+      const [a, b] = l.axis === 'x' ? [area.y1, area.y2] : [area.x1, area.x2];
+      for (const t of ticksBetween(a, b, l.origin, g, minGap)) {
+        const half = (t.major ? 6 : 3) * px;
+        if (l.axis === 'x') { ctx.moveTo(l.at - half, t.at); ctx.lineTo(l.at + half, t.at); } else { ctx.moveTo(t.at, l.at - half); ctx.lineTo(t.at, l.at + half); }
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 1.5 * px;
+    ctx.fillStyle = this.dark ? '#10161f' : '#ffffff';
+    for (const x of g.list) {
+      if (x.kind !== 'cross') continue;
+      ctx.beginPath();
+      ctx.arc(x.x, x.y, 4 * px, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   /** Where a moved selection (its box at the start, dragged `raw`) lands on the grid and drawing guides, when there are any (Slides). */
   moveSnap: ((box: Rect, raw: Vec, tol: number) => Vec) | null = null;
   /** Text boxes take a click as typing (Slides and Design), with an I-beam over them. */
@@ -6073,7 +6234,7 @@ export class Editor {
       handle: h && (h.kind === 'arrow' || h.kind === 'shape') ? { kind: h.kind, which: h.which, line: h.kind === 'shape' && this.doc.shapes.get(h.id)?.kind === 'line' } : undefined,
       fixedAngles: this.options.fixedAngles,
       fixedLength: this.options.fixedLength,
-      snapping: this.smartGuides || !!this.moveSnap,
+      snapping: this.smartGuides || !!this.moveSnap || this.guidesSnap(),
       asksChain: !!this.askChainLength,
     };
   }
@@ -6353,6 +6514,7 @@ export class Editor {
       }
     }
     this.drawPorts(ctx, px);
+    this.drawGuides(ctx, px);
     if (this.guideLines.length && this.drag?.mode === 'move') {
       ctx.save();
       ctx.strokeStyle = '#e8336d';

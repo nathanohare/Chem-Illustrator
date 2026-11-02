@@ -8,6 +8,8 @@
 //     swallowed (H300), a volatile category 1A/1B carcinogen or mutagen, pyrophoric, or explosive.
 //   Tier 3, standard: what a hood, normal PPE and good technique handle.
 //   Tier 4, low: little hazard beyond normal care (salts, sugars, silica).
+//   Not rated: no open source gives anything to rate it by. Never shown as Tier 3, which would
+//     read as "standard" when nothing is known.
 //
 // Only the harmonised EU classification (Regulation 1272/2008 Annex VI) is used, never the merged
 // supplier notifications that give dichloromethane H350 and acetone H372. The numbers come from
@@ -133,6 +135,70 @@ const NO_WARNING = new Set(['77-78-1', '64-67-5', '75-44-5', '503-38-8', '32315-
 /** Ethers and others that form explosive peroxides on standing (in addition to CAMEO's alerts). */
 const PEROXIDE = new Set(['109-99-9', '60-29-7', '108-20-3', '123-91-1', '110-71-4', '96-47-9', '111-96-6']);
 
+/** Common reagents the open sources give nothing to rate by, rated here by PubChem CID (written for
+ * this program from well-known chemistry and suppliers' SDSs; reviewed like the lists above). */
+const NAMED: Record<number, { tier: 2 | 3; why: string; water?: boolean }> = {
+  21889599: { tier: 3, why: 'Highly flammable; the vapour is heavier than air' },
+  13529: { tier: 3, why: 'Corrosive to eyes and skin' },
+  6409: { tier: 3, why: 'Toxic if swallowed or inhaled; flammable' },
+  62406: { tier: 3, why: 'Superacid: severe burns; fumes in moist air', water: true },
+  10796: { tier: 3, why: 'Irritant base' },
+  23665647: { tier: 3, why: 'Corrosive strong base; moisture can make it self-heat', water: true },
+  24758: { tier: 3, why: 'Gives hydrogen with water, which can ignite; runaway decomposition with DMF, DMSO or DMAc on warming', water: true },
+  81184: { tier: 3, why: 'Corrosive base' },
+  81531: { tier: 3, why: 'Flammable; corrosive' },
+  14284: { tier: 2, why: 'Toxic through the skin and if swallowed (suppliers\' SDSs give H310 and H301)' },
+  2724682: { tier: 3, why: 'Reacts violently with water; solutions flammable', water: true },
+  57426343: { tier: 3, why: 'Reacts with water; corrosive; solutions flammable', water: true },
+  2724254: { tier: 3, why: 'Reacts with water; corrosive; solutions flammable', water: true },
+  3251421: { tier: 3, why: 'Reacts with water; corrosive; solutions flammable', water: true },
+  2724141: { tier: 3, why: 'Fluoride source: corrosive, toxic' },
+  25953: { tier: 3, why: 'Toxic if swallowed; fluoride gives HF with acid' },
+  53629015: { tier: 3, why: 'Reacts violently with water; solutions flammable', water: true },
+  101914: { tier: 3, why: 'Reacts violently with water; the ether solution is very flammable', water: true },
+  101955: { tier: 3, why: 'Reacts violently with water; the THF solution is very flammable', water: true },
+  5003444: { tier: 2, why: 'Gives HCN with acid; toxic' },
+  5049666: { tier: 3, why: 'Gives hydrogen with water', water: true },
+  6365270: { tier: 3, why: 'Gives hydrogen with water; flammable; old bottles can build pressure', water: true },
+  9833925: { tier: 3, why: 'Gives hydrogen with water; flammable; stench', water: true },
+  6327450: { tier: 3, why: 'Gives hydrogen with water; flammable', water: true },
+  23712863: { tier: 3, why: 'Reacts violently with water; the THF solution is flammable', water: true },
+  12052: { tier: 3, why: 'Flammable; gives hydrogen with bases, acids or fluoride' },
+  5948: { tier: 2, why: 'Organotin: toxic, absorbed through the skin' },
+  23938: { tier: 3, why: 'Dry or used catalyst ignites solvent vapour and hydrogen: keep it wet' },
+  345198: { tier: 3, why: 'Oxidiser; once reduced, the platinum can ignite solvent vapour' },
+  53393272: { tier: 2, why: 'Osmium(VI): toxic; oxidants turn it into volatile OsO4' },
+  46846327: { tier: 2, why: 'Chromium(VI): carcinogen; toxic' },
+  159879: { tier: 2, why: 'Chromium(VI): carcinogen; toxic' },
+  158115057: { tier: 3, why: 'Strong oxidiser; corrosive' },
+  159087: { tier: 3, why: 'Oxidiser; impure samples have been reported shock-sensitive' },
+  108794: { tier: 2, why: 'Explodes on impact or on heating above about 200 °C' },
+  23712892: { tier: 3, why: 'Oxidiser; corrosive' },
+  180504: { tier: 3, why: 'Strong oxidiser' },
+  6775: { tier: 2, why: 'Gives HCN with water; toxic' },
+  2724126: { tier: 3, why: 'Corrosive' },
+  82029: { tier: 3, why: 'Oxidiser; irritant' },
+  31398: { tier: 3, why: 'Oxidiser; corrosive' },
+  120273: { tier: 3, why: 'Oxidiser; irritant; light-sensitive' },
+  2735153: { tier: 3, why: 'Strong alkylating agent; corrosive; reacts with moisture', water: true },
+  12192: { tier: 2, why: 'Diazo compound: can decompose violently on heating; toxic' },
+  65578: { tier: 3, why: 'Reacts violently with water giving HCl, CO and CO2; toxic, corrosive', water: true },
+  6326975: { tier: 3, why: 'Reacts violently with water; corrosive', water: true },
+  9845: { tier: 3, why: 'Reacts violently with water; corrosive and volatile', water: true },
+  67749: { tier: 3, why: 'Reacts violently with water; severe burns', water: true },
+  7397: { tier: 3, why: 'Corrosive; gives HCl with water' },
+  90495: { tier: 2, why: 'Very toxic if inhaled (suppliers\' SDSs give H330); melts near room temperature' },
+  68263: { tier: 3, why: 'Gives CO2 with water (pressure in closed vessels); corrosive', water: true },
+  15908: { tier: 3, why: 'Skin sensitiser; corrosive' },
+  8000: { tier: 3, why: 'Reacts violently with water, fuming; corrosive; flammable', water: true },
+  65367: { tier: 3, why: 'Reacts violently with water; corrosive; flammable', water: true },
+  28928: { tier: 3, why: 'Corrosive; gives HCl with water' },
+  123414: { tier: 2, why: 'Organic azide: toxic; gives HN3 with acid' },
+  24288: { tier: 3, why: 'Carcinogen by inhalation of dust (1B); sensitiser' },
+  11979704: { tier: 3, why: 'Air-sensitive; irritant' },
+  167845: { tier: 3, why: 'Irritant' },
+};
+
 export interface HaveReady { what: string; why: string; source: string }
 
 /** What to set out before opening the bottle, by CAS number. Your institution's protocol comes first. */
@@ -203,7 +269,13 @@ const pyrophoric = (r: SafetyRecord) => has(r, 'H250') || PYROPHORIC.has(r.cas ?
 /** Saturated vapour at least this many times the IDLH: the compound can readily reach it in air. */
 const REACHES_IDLH = 1000;
 
-export interface Rating { tier: Tier; why: string[] }
+export interface Rating { tier: Tier | null; why: string[] }
+
+/** Something an open source gave to rate a compound by (or it is on one of the lists above). */
+function rateable(r: SafetyRecord): boolean {
+  const cas = r.cas ?? '';
+  return !!(r.idlh || r.lethal.some((l) => l.kind === 'LD50' || l.kind === 'LC50') || r.ghs?.codes.length || r.alerts.length || r.incompatible || TIER_1[cas] || TIER_2[cas] || TIER_4.has(cas) || WATER_REACTIVE.has(cas) || PYROPHORIC.has(cas) || NAMED[r.cid]);
+}
 
 /** The tier and the reasons for it, most important first. */
 export function rate(r: SafetyRecord): Rating {
@@ -222,6 +294,7 @@ export function rate(r: SafetyRecord): Rating {
   if (has(r, 'H310')) why1.push('Fatal in contact with skin (H310, harmonised)');
   if (why1.length) return { tier: 1, why: [...new Set(why1)] };
   if (TIER_2[cas]) why2.push(TIER_2[cas]);
+  if (NAMED[r.cid]?.tier === 2) why2.push(NAMED[r.cid].why);
   // an IDLH in mg/m3 for a solid or mist that doesn't evaporate is about dust, not vapour: left out
   const dust = r.idlh?.unit === 'mg/m3' && (vp === null || nonVolatile);
   if (ppm !== null && ppm <= 10 && !dust) why2.push(`IDLH ${fmtIdlh(r)}, but ${vp === null ? 'how volatile it is isn\'t known' : 'it evaporates slowly'}`);
@@ -235,10 +308,11 @@ export function rate(r: SafetyRecord): Rating {
   if (has(r, 'H200', 'H201', 'H202', 'H203', 'H204', 'H240', 'H241') || alert(r, /\bexplosive\b/i)) why2.push('Explosive or shock-sensitive');
   if (why2.length) return { tier: 2, why: [...new Set(why2)] };
   if (TIER_4.has(cas)) return { tier: 4, why: ['Little hazard beyond normal care'] };
-  const why3: string[] = [];
+  if (!rateable(r)) return { tier: null, why: ['Not rated: the open sources give no hazard data for it. Read the SDS'] };
+  const why3: string[] = NAMED[r.cid] ? [NAMED[r.cid].why] : [];
   if (has(r, 'H224', 'H225')) why3.push('Highly flammable');
   if (has(r, 'H314')) why3.push('Corrosive');
-  if (has(r, 'H260', 'H261') || WATER_REACTIVE.has(cas)) why3.push('Reacts with water');
+  if ((has(r, 'H260', 'H261') || WATER_REACTIVE.has(cas)) && !NAMED[r.cid]?.water) why3.push('Reacts with water');
   if (has(r, 'H351')) why3.push('Suspected carcinogen only');
   return { tier: 3, why: why3.length ? why3 : ['Standard handling: hood, gloves, goggles'] };
 }
@@ -260,7 +334,7 @@ export function badges(r: SafetyRecord): string[] {
   if (NO_WARNING.has(cas)) out.push('No warning');
   if (PEROXIDE.has(cas) || alert(r, /peroxid/i)) out.push('Peroxide former');
   if (pyrophoric(r)) out.push('Pyrophoric');
-  if (has(r, 'H260', 'H261', 'EUH014') || alert(r, /water-reactive/i) || WATER_REACTIVE.has(cas)) out.push('Water-reactive');
+  if (has(r, 'H260', 'H261', 'EUH014') || alert(r, /water-reactive/i) || WATER_REACTIVE.has(cas) || NAMED[r.cid]?.water) out.push('Water-reactive');
   if (has(r, 'H200', 'H201', 'H202', 'H203', 'H240', 'H241') || alert(r, /\bexplosive\b/i)) out.push('Explosive');
   if (has(r, 'H271', 'H272') || alert(r, /strong oxidizing/i)) out.push('Oxidiser');
   if (has(r, 'H350', 'H340')) out.push('Carcinogen 1A/1B');

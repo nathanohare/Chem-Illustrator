@@ -264,6 +264,32 @@ describe('writing drawings in other programs\' formats', () => {
     expect(() => writeRxnFile(draw(readScene('mol', ETHANOL_V2000)))).toThrow(/no reaction/);
   });
 
+  it('writes V3000 molfiles, SD and RXN files when asked, and reads them back the same', () => {
+    const d = draw(readScene('mol', ACETATE_V3000));
+    const text = writeMolFile(d, 'acetate', { v3000: true }).text;
+    expect(text).toMatch(/V3000\nM {2}V30 BEGIN CTAB\nM {2}V30 COUNTS \d+ \d+ 0 0 0/);
+    expect(text).toMatch(/CHG=-1/);
+    expect(text).toMatch(/CFG=[13]/);
+    expect(text.split('\n').every((l) => l.length <= 80)).toBe(true);
+    const back = roundTrip('mol', text);
+    expect(elements(back)).toBe(elements(d));
+    expect([...back.bonds.values()].filter((b) => b.display === 'wedge')).toHaveLength(1);
+    const sdf = writeSdfFile(reaction(), { v3000: true }).text;
+    expect(sdf.match(/V3000/g)).toHaveLength(2);
+    expect(readSdfMols(sdf).map((m) => m.atoms.length)).toEqual([4, 4]);
+    const rxn = writeRxnFile(reaction(), '', { v3000: true }).text;
+    expect(rxn.startsWith('$RXN V3000')).toBe(true);
+    expect(readRxnFile(rxn)!.mols.map((m) => [m.role, m.bonds.filter((b) => b.order === 2).length])).toEqual([['reactant', 1], ['product', 0]]);
+  });
+
+  it('switches to V3000 by itself for a structure too big for V2000', () => {
+    const chain = { mols: [{ atoms: Array.from({ length: 1200 }, (_, i) => ({ sym: 'C', x: i * 0.87, y: i % 2 ? 0.5 : 0 })), bonds: Array.from({ length: 1199 }, (_, i) => ({ a: i, b: i + 1, order: 1 })) }], arrows: [], pluses: [], texts: [] } as FScene;
+    const text = writeMolFile(draw(chain)).text;
+    expect(text).toMatch(/V3000/);
+    expect(readMolfile(text)!.atoms).toHaveLength(1200);
+    expect(readMolfile(text)!.bonds).toHaveLength(1199);
+  });
+
   for (const [fmt, write] of [['mrv', writeMrvFile], ['ket', writeKetFile], ['cml', writeCmlFile], ['cdjson', writeChemDoodleJson]] as const) {
     it(`keeps a reaction step through ${fmt}`, () => {
       const d = reaction();
