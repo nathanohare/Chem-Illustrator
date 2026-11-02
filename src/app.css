@@ -1574,6 +1574,29 @@ dialog.refs-dialog > p { margin: 4px 0; max-width: 80ch; }
 .refs-buttons { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px; margin-top: 10px; }
 .refs-table tr.refs-group th { position: static; background: var(--panel); cursor: pointer; font-weight: 600; padding: 5px 6px; border-top: 1px solid var(--line); user-select: none; }
 .refs-table tr.refs-group.current th { color: var(--accent); }
+
+/* Chemistry > Look Up > Knowledge Base: tables listed on the left, the one picked on the right */
+dialog.kb-window { position: fixed; inset: 56px 0 auto 0; margin: 0 auto; z-index: 45; width: min(96vw, 1100px); max-width: min(96vw, 1100px); max-height: calc(100vh - 72px); box-shadow: 0 8px 28px rgb(0 0 0 / 0.2); }
+.kb-body { display: flex; gap: 8px; min-height: 0; }
+.kb-list { display: flex; flex-direction: column; gap: 1px; width: 160px; flex: none; overflow: auto; max-height: 60vh; }
+.kb-tab { display: flex; justify-content: space-between; gap: 6px; text-align: left; padding: 4px 6px; border: 0; border-radius: var(--r-control); background: none; color: var(--text); font-size: var(--fs-sm); cursor: pointer; }
+.kb-tab:hover { background: var(--accent-soft); }
+.kb-tab.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.kb-tab.none { color: var(--muted); }
+.kb-tab.personal > span:first-child::after { content: ' (yours)'; color: var(--muted); font-weight: 400; }
+.kb-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.kb-about, .kb-sources { margin: 0; font-size: var(--fs-xs); }
+.kb-filters:empty { display: none; }
+.kb-table-wrap { max-height: 56vh; }
+.kb-table td:nth-child(3) { width: auto; }
+.kb-table td:nth-child(4) { white-space: normal; }
+.kb-table th { cursor: pointer; user-select: none; white-space: nowrap; }
+.kb-table td:first-child { white-space: nowrap; }
+.kb-table td.cas { white-space: nowrap; }
+.kb-table th.num, .kb-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.kb-table th.narrow, .kb-table td.narrow { width: 1%; white-space: nowrap; }
+.kb-window abbr[title] { text-decoration: underline dotted var(--muted); text-underline-offset: 2px; cursor: help; }
+.kb-empty { padding: 12px; margin: 0; }
 .refs-table tr.refs-group.drop th { background: var(--accent-soft); outline: 1px dashed var(--accent); }
 .refs-hint:empty { display: none; }
 .refs-edit select { font: inherit; }
