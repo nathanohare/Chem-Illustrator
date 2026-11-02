@@ -161,6 +161,7 @@ import { BATCH_FORMATS, BATCH_INPUTS, readBatchFile, smilesLine, uniqueName, wri
 import { zipSync } from 'fflate';
 import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
 import { plainText, savableChar } from './richtext';
+import { buildTextToolbox, type TextToolboxHooks } from './ui/text-toolbox';
 import { htmlToRich } from './text/html';
 import { LiveStereo } from './chem/live-stereo';
 import { setStereoShown, shownDescriptor, axialStyle } from './chem/stereo';
@@ -6643,7 +6644,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 /** Menu commands that work the same whatever shows. */
-const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
+const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
   'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
@@ -7337,6 +7338,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'toolbox-templates': () => toolboxes.toggle('templates'),
   'toolbox-colours': () => toolboxes.toggle('colours'),
   'toolbox-highlight': () => toolboxes.toggle('highlight'),
+  'toolbox-text': () => toolboxes.toggle('text'),
   'toolbox-custom': () => toolboxes.toggle('custom'),
   // the panel taken out as a toolbox folds up to its title bar; at the right it folds to a strip
   'fold-side': () => foldSide(!sideIsFolded()),
@@ -10452,23 +10454,26 @@ window.addEventListener('keydown', (e) => {
 
 // ---------------------------------------------------------------- Insert > Symbol
 
+/** Type a symbol where the caret is: a cell, a document, the text being typed, or a new caption (Insert > Symbol, the Text Formatting toolbox). */
+function insertSymbol(ch: string): boolean {
+  if (sheetActive()) {
+    if (sheetMode.view.typeText(ch)) return true;
+    flash('Pick a cell to type the symbol into.');
+    return false;
+  }
+  if (docActive()) {
+    if (docMode.insertText(ch)) return true;
+    flash('Symbols can\'t be typed in Read Mode: go back to Print Layout (View).');
+    return false;
+  }
+  const cap = editor.typingCaption;
+  if (cap) cap.ed.type(ch);
+  else editor.typeNew(ch);
+  return true;
+}
+
 const symbolWindow = new SymbolWindow({
-  insert: (ch) => {
-    if (sheetActive()) {
-      if (sheetMode.view.typeText(ch)) return true;
-      flash('Pick a cell to type the symbol into.');
-      return false;
-    }
-    if (docActive()) {
-      if (docMode.insertText(ch)) return true;
-      flash('Symbols can\'t be typed in Read Mode: go back to Print Layout (View).');
-      return false;
-    }
-    const cap = editor.typingCaption;
-    if (cap) cap.ed.type(ch);
-    else editor.typeNew(ch);
-    return true;
-  },
+  insert: insertSymbol,
   recent: () => recentSymbols,
   used: (ch) => { recentSymbols = addRecentSymbol(recentSymbols, ch); storeSettings(); },
   warn: (ch) => (ws.active.mode === 'drawing' && !savableChar(ch) ? 'ChemDraw may not show this character in a ChemDraw file (it isn\'t in its usual fonts or the Symbol font).' : ''),
@@ -10600,7 +10605,7 @@ function looksList(vertical: boolean): HTMLElement {
 
 /** The toolboxes' names, as they come. */
 const BOX_TITLES: Record<string, string> = {
-  main: 'Drawing Tools', structure: 'Structure', arrange: 'Object', templates: 'Templates', colours: 'Colours', highlight: 'Highlight', custom: 'My Toolbox', details: 'Side Panel',
+  main: 'Drawing Tools', structure: 'Structure', arrange: 'Object', templates: 'Templates', colours: 'Colours', highlight: 'Highlight', text: 'Text Formatting', custom: 'My Toolbox', details: 'Side Panel',
 };
 /** What the toolboxes of buttons come with ("cmd:", "tool:", "pal:", "w:looks", "sep"). */
 const cmds = (list: (string | null)[]) => list.map((c) => (c ? `cmd:${c}` : 'sep'));
@@ -10748,6 +10753,27 @@ const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => vo
   // docked at the right to start with. Its arrow goes with it, so it shows even when the title bar is
   // locked away.
   details: (body) => { body.before($('#side-fold')); body.append(sideContent); },
+  text: (body, vertical) => { textToolbox = buildTextToolbox(body, vertical, textToolboxHooks); },
+};
+
+/** The Text Formatting toolbox's buttons, while it is shown (they show which are on). */
+let textToolbox: { refresh(): void } | null = null;
+const DOC_TOGGLES: Partial<Record<string, string>> = { bold: 'doc-bold', italic: 'doc-italic', underline: 'doc-underline', sub: 'doc-sub', sup: 'doc-sup', formula: 'doc-formula' };
+const textToolboxHooks: TextToolboxHooks = {
+  format: (f) => {
+    if (docActive()) {
+      const cmd = f.kind === 'stereo' ? 'doc-stereo-italic' : f.kind === 'toggle' ? DOC_TOGGLES[f.key] : undefined;
+      return !!cmd && docMode.run(cmd);
+    }
+    if (sheetActive()) return false;
+    const ok = editor.formatText(f);
+    editor.refocusText();
+    return ok;
+  },
+  type: (ch) => { const ok = insertSymbol(ch); editor.refocusText(); return ok; },
+  look: () => (docActive() || sheetActive() ? null : editor.textLook()?.style ?? null),
+  moreSymbols: () => symbolWindow.open(),
+  say: (t) => flash(t),
 };
 
 /** The toolboxes there are now (the drawing tools first, as the others' buttons may come from its bar). */
@@ -11752,7 +11778,7 @@ const slideText = new SlideTextRibbon($('#ribbon'), {
   box: (c) => editor.setTextBox(c),
   boxLook: () => editor.textBoxLook(),
 });
-CaptionEditor.onState = () => { if (ws.active.mode === 'slides') slideText.refresh(); };
+CaptionEditor.onState = () => { if (ws.active.mode === 'slides') slideText.refresh(); textToolbox?.refresh(); };
 // the Smart Scheme pane: the selected scheme's species, beside it
 const smartPane = new SmartPane({
   doc: () => editor.doc,
@@ -11774,7 +11800,7 @@ const smartPane = new SmartPane({
 });
 editor.onOverlay = () => smartPane.place();
 editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
-editor.onChange = () => { welcomeWatch?.(); smartPane.refresh(); if (ws.active.mode === 'slides') slideText.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); smartPane.refresh(); if (ws.active.mode === 'slides') slideText.refresh(); textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();
@@ -11842,7 +11868,7 @@ requestAnimationFrame(() => {
 });
 
 // Hooks for the automated speed tests.
-(window as any).__app = { doc, editor, renderer, settingsWindow, chem, live, command, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
+(window as any).__app = { doc, editor, renderer, settingsWindow, toolboxes, chem, live, command, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
   pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, canvas: s.canvas })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test

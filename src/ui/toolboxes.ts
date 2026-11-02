@@ -1,5 +1,5 @@
 // Toolboxes (View > Toolboxes): the drawing tools down the left, and others to show as wanted:
-// structure commands, arranging, templates, colours, and one of your own that mixes any tools
+// structure commands, arranging, templates, colours, text formatting, and one of your own that mixes any tools
 // and commands. Unlocked, a toolbox is dragged by its title to float anywhere, or to an edge of
 // the drawing to dock there. Where each one is, and what is in your own, is kept with the settings.
 
@@ -125,7 +125,7 @@ export function withSideFolded(st: ToolboxState, mode: string, folded: boolean):
  * The toolboxes and where they start: the drawing tools on the left, the rest hidden until wanted.
  * "details" is the side panel taken out of its place at the right, to float or dock elsewhere.
  */
-export const TOOLBOX_IDS = ['main', 'structure', 'arrange', 'templates', 'colours', 'highlight', 'custom', 'details'] as const;
+export const TOOLBOX_IDS = ['main', 'structure', 'arrange', 'templates', 'colours', 'highlight', 'text', 'custom', 'details'] as const;
 export type ToolboxId = (typeof TOOLBOX_IDS)[number];
 
 export function defaultToolboxes(): ToolboxState {
