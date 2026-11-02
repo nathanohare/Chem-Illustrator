@@ -80,6 +80,12 @@ export class ChemClient {
     return r.molblock;
   }
 
+  /** The engine's own 2-D layouts of a molfile (atoms in the same order; y down, in bond lengths). */
+  async layouts(molblock: string): Promise<[number, number][][]> {
+    const r = await this.request<Extract<ChemResponse, { type: 'layouts' }>>((id) => ({ type: 'layouts', id, molblock }));
+    return r.coords;
+  }
+
   /** SMILES for a molfile; `loose` writes it as drawn, without checking valences. */
   async molToSmiles(molblock: string, loose = false): Promise<string | null> {
     const r = await this.request<Extract<ChemResponse, { type: 'molToSmiles' }>>((id) => ({ type: 'molToSmiles', id, molblock, ...(loose ? { loose } : {}) }));

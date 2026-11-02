@@ -23,6 +23,23 @@ import { ask } from './ask';
 import { clockText } from '../deck/show-link';
 import { Recorder } from '../deck/narration';
 
+const NOTES_KEY = 'chem-illustrator.rehearse-notes';
+
+/** Whether the notes show under the slide in a rehearsal (on unless turned off). */
+function notesWanted(): boolean {
+  try { return localStorage.getItem(NOTES_KEY) !== 'off'; } catch { return true; }
+}
+
+function rememberNotes(on: boolean): void {
+  try { localStorage.setItem(NOTES_KEY, on ? 'on' : 'off'); } catch { /* for this show only */ }
+}
+
+/** Each slide's time in a rehearsal, in slide order, for the window that asks to keep them. */
+export function rehearsalLines(times: Map<number, number>, recordings: Map<number, unknown>, count: number): [string, string][] {
+  return [...times.entries()].filter(([i]) => i >= 0 && (count === 0 || i < count)).sort((a, b) => a[0] - b[0])
+    .map(([i, t]) => [`Slide ${i + 1}`, `${clockText(t)}${recordings.has(i) ? '  🎙' : ''}`]);
+}
+
 /** How a show runs (from Set Up Show, or Rehearse Timings, Record and Reading View). */
 export interface ShowOptions {
   /** The slides it plays, in order (null: every slide not hidden). */
@@ -74,6 +91,10 @@ export class Presenter {
     bar: HTMLDivElement; slide: HTMLSpanElement; total: HTMLSpanElement; pause: HTMLButtonElement;
     i: number; t0: number; paused: number | null; before: number; times: Map<number, number>; recordings: Map<number, Blob>;
     rec: Recorder | null; tick: number; pending: Promise<void>[];
+    /** Your notes for the slide showing, under the slide (Record's teleprompter); null when turned off. */
+    notes: HTMLDivElement; notesBtn: HTMLButtonElement;
+    /** The 3, 2, 1 before recording starts: the clock waits for it. */
+    countdown: number;
   } | null = null;
 
   constructor() {
@@ -117,7 +138,7 @@ export class Presenter {
     player.onChange = () => { actions.noteSlide(player.i); ink.paint(); this.slideShown(player.i); this.updateBar(); };
     // a click on a link, action button, zoom, video or sound acts on it, as in PowerPoint's slide show; anywhere else goes on (not at a kiosk)
     root.addEventListener('click', (e) => {
-      if ((e.target as HTMLElement).closest('.show-bar, .rehearse-bar')) return;
+      if ((e.target as HTMLElement).closest('.show-bar, .rehearse-bar, .rehearse-notes')) return;
       if (!this.clickThing(e) && !opts.kiosk) this.next();
     });
     root.addEventListener('pointermove', (e) => { if (this.canvas) this.canvas.style.cursor = this.thingUnder(e) ? 'pointer' : ''; });
@@ -137,6 +158,7 @@ export class Presenter {
     // the first slide comes in with its transition too, as in PowerPoint
     const start = player.order ? (player.order.includes(from) ? from : player.first) : from;
     player.show(Math.max(0, Math.min(deck.slides.length - 1, start)), { transition: true });
+    if (this.rehearse?.rec) this.startCountdown();
     this.showCursor();
     // painted again once the fonts it asked for have come (not when none was still to come)
     if (document.fonts && document.fonts.status !== 'loaded') void document.fonts.ready.then(() => { if (this.player === player) player.refresh(); });
@@ -203,11 +225,83 @@ export class Presenter {
     const next = b('Next ▶', 'Go on to the next animation or slide (→ or a click)', () => this.next());
     const pause = b('❚❚ Pause', 'Stop the clock (and the recording) for now', () => this.pauseRehearsal());
     const repeat = b('↺ Repeat', 'Start this slide\'s time again (and its recording)', () => this.repeatSlide());
-    bar.append(label, next, pause, slide, repeat, total);
-    root.append(bar);
-    this.rehearse = { bar, slide, total, pause, i: -1, t0: performance.now(), paused: null, before: 0, times: new Map(), recordings: new Map(), rec, tick: 0, pending: [] };
+    const notesBtn = b('Notes', 'Show your speaker notes for each slide under it while you practise or record (only you see them here)', () => this.toggleNotes());
+    bar.append(label, next, pause, slide, repeat, total, notesBtn);
+    const notes = document.createElement('div');
+    notes.className = 'rehearse-notes';
+    notes.setAttribute('aria-live', 'polite');
+    root.append(bar, notes);
+    this.rehearse = {
+      bar, slide, total, pause, i: -1, t0: performance.now(), paused: null, before: 0, times: new Map(), recordings: new Map(), rec, tick: 0, pending: [],
+      notes, notesBtn, countdown: 0,
+    };
+    this.showNotes(notesWanted());
     this.rehearse.tick = window.setInterval(() => this.updateRehearsal(), 250);
   }
+
+  /** Show or hide the notes under the slide (remembered for next time). */
+  private toggleNotes(): void {
+    const r = this.rehearse;
+    if (!r) return;
+    const on = r.notes.classList.contains('off');
+    this.showNotes(on);
+    rememberNotes(on);
+  }
+
+  private showNotes(on: boolean): void {
+    const r = this.rehearse;
+    if (!r) return;
+    r.notes.classList.toggle('off', !on);
+    r.notesBtn.setAttribute('aria-pressed', String(on));
+    r.notesBtn.classList.toggle('on', on);
+    this.fillNotes();
+  }
+
+  private fillNotes(): void {
+    const r = this.rehearse, d = this.deck, p = this.player;
+    if (!r || !d || !p) return;
+    const text = d.slides[p.i]?.notes.trim() ?? '';
+    r.notes.textContent = text;
+    r.notes.hidden = !text || r.notes.classList.contains('off');
+  }
+
+  /**
+   * Record: 3, 2, 1 on the slide before the clock and the microphone start, so the first words
+   * aren't cut off. A key or click starts at once.
+   */
+  private startCountdown(): void {
+    const r = this.rehearse;
+    if (!r || !this.root) return;
+    this.pauseRehearsal();
+    // the clock isn't paused by you: Pause waits for the countdown
+    r.pause.textContent = '❚❚ Pause';
+    r.pause.disabled = true;
+    const box = document.createElement('div');
+    box.className = 'rehearse-countdown';
+    this.root.append(box);
+    let n = 3;
+    const done = () => {
+      if (!this.rehearse || this.rehearse.countdown === 0) return;
+      clearInterval(this.rehearse.countdown);
+      this.rehearse.countdown = 0;
+      box.remove();
+      this.rehearse.pause.disabled = false;
+      if (this.rehearse.paused !== null) this.pauseRehearsal();
+    };
+    const tick = () => {
+      if (n <= 0) { done(); return; }
+      box.textContent = String(n);
+      box.title = 'Recording starts at 0 (a click or key starts it now)';
+      n--;
+    };
+    tick();
+    r.countdown = window.setInterval(tick, 1000);
+    box.addEventListener('click', (e) => { e.stopPropagation(); done(); });
+    this.endCountdown = done;
+  }
+
+  /** Ends the countdown at once (a key or click while it runs). */
+  private endCountdown: (() => void) | null = null;
 
   private elapsed(): number {
     const r = this.rehearse;
@@ -232,6 +326,7 @@ export class Presenter {
     r.t0 = performance.now();
     if (r.paused !== null) r.paused = r.t0;
     if (r.rec) { r.rec.start(); if (r.paused !== null) r.rec.pause(true); }
+    this.fillNotes();
   }
 
   /** Keep the time (and recording) of the slide showing in the rehearsal. */
@@ -269,15 +364,22 @@ export class Presenter {
     if (!r) return;
     this.closeSlide();
     clearInterval(r.tick);
+    if (r.countdown) clearInterval(r.countdown);
+    this.endCountdown = null;
     await Promise.all(r.pending);
     r.rec?.close();
     this.rehearse = null;
     if (!r.times.size) return;
-    const got = await ask(r.rec ? 'Keep Recording?' : 'Keep Timings?', [], {
+    const lines = rehearsalLines(r.times, r.recordings, this.deck?.slides.length ?? 0);
+    const recorded = r.recordings.size > 0;
+    const got = await ask(r.rec ? 'Keep Recording?' : 'Keep Timings?', recorded ? [
+      { name: 'narration', label: 'Keep the narration too', type: 'checkbox', value: 'true', help: 'Untick to keep only the times (the slides keep any narration they had)' },
+    ] : [], {
       ok: 'Keep',
-      note: `The show took ${clockText(r.before)}. Keep each slide's time${r.rec ? ' and its narration' : ''}, so the show goes on by itself when it is played? (${r.rec ? 'Narration goes on each slide as a sound that plays as it comes in. ' : ''}Set Up Show can turn timings off.)`,
+      note: `This run took ${clockText(r.before)}. Keep each slide's time${recorded ? ' and its narration' : ''}, so the show goes on by itself when it is played? Slides not shown keep what they had. (${recorded ? 'Narration goes on each slide as a sound that plays as it comes in. ' : ''}Set Up Show can turn timings off.)`,
+      lines,
     });
-    if (got) this.onRehearsed({ times: r.times, recordings: r.recordings, total: r.before });
+    if (got) this.onRehearsed({ times: r.times, recordings: got.narration === 'false' ? new Map() : r.recordings, total: r.before });
   }
 
   stop(): void {
@@ -349,6 +451,7 @@ export class Presenter {
   }
 
   private next(): void {
+    if (this.rehearse?.countdown) { this.endCountdown?.(); return; }
     if (this.blank === 'black' || this.blank === 'white') { this.blank = null; this.paint(); return; }
     if (this.blank === 'end') { this.stop(); return; }
     this.player?.next();
