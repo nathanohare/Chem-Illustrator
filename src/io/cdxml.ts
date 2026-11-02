@@ -231,6 +231,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (type === 'MultiAttachment') {
         // the middle of a ring or π-bond a metal is bonded to: its atoms are read once they all are
         const a = doc.addAtom(x, y, 0, { id, multi: [] });
+        if (kids(n).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === KEKULE_TAG)) a.kekule = true;
         pendingMulti.push({ id: a.id, key: n.getAttribute('id') ?? '', ids: (n.getAttribute('Attachments') ?? '').trim().split(/\s+/).filter(Boolean) });
         from('a', a.id, n);
         nodeIds.set(n.getAttribute('id') ?? '', id);
@@ -1127,6 +1128,8 @@ export const PAGE_TAG = 'Chem Illustrator page grid';
 export const GUIDES_TAG = 'Chem Illustrator guides';
 /** The drawing style's text above and below arrows (size, font), as JSON on the page: ChemDraw has no setting for it. */
 export const ARROW_TEXT_TAG = 'Chem Illustrator arrow text';
+/** On a MultiAttachment node: its π-system drawn in Kekulé form rather than delocalized (only this program reads it). */
+export const KEKULE_TAG = 'Chem Illustrator Kekule';
 /** The tag on turned text: degrees clockwise about the start of its first line (ChemDraw shows it level). */
 export const TURN_TAG = 'Chem Illustrator turn';
 /** The tag on the group that draws a design shape in ChemDraw: the shape as it is here. */

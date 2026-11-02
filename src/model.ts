@@ -119,6 +119,12 @@ export interface Atom {
    * sits at their centre, follows them when they move, and goes when fewer than two are left.
    */
   multi?: number[];
+  /**
+   * On a multicentre point: its π-system drawn with its double bonds (Kekulé form) rather than
+   * delocalized (a circle in an η⁵/η⁶ ring, an arc over an η³-allyl), which is how it is drawn
+   * when bonded to a metal. Only the look: the bonds are the same either way.
+   */
+  kekule?: boolean;
 }
 
 /** A metal atom: a metal element, or a label written for one (Pd, PdCl2, LnPd, [M]). */
@@ -1544,6 +1550,8 @@ export class Doc {
         }
       }
       if (was?.multi) this.unlinkCentre(was);
+      // (a multicentre point's atoms are drawn by how it is: a ring bonded to a metal is drawn delocalized)
+      for (const m of [...(was?.multi ?? []), ...((e as Atom | null)?.multi ?? [])]) this.dirtyAtoms.add(m);
       if (e) {
         this.atoms.set(id, e as Atom);
         if (!this.adj.has(id)) this.adj.set(id, []);

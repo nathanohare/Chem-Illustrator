@@ -142,7 +142,7 @@ import { installCombos } from './ui/combo';
 import { installFontList, registerBundledFonts, bundledFaces, pdfFonts } from './fonts';
 import { applyRibbonIcons } from './ui/ribbon-icons';
 import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templateFromAtoms, placeTemplate, freePlacement } from './chem/templates';
-import { centreEnd } from './chem/hapto';
+import { centreEnd, haptoLook } from './chem/hapto';
 import { countElectrons } from './chem/electrons';
 import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, tokenize as tokenizeLabel } from './chem/labels';
 import { selectedGroup } from './chem/group-smiles';
@@ -7512,6 +7512,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'repeat-label': () => repeatLabel(null),
   'hapto-bond': () => flash(editor.bondMetalToRing(), 5000),
   'split-hapto': () => flash(editor.splitHaptoBonds()),
+  'hapto-kekule': () => flash(editor.toggleHaptoKekule(contextBond)),
   'chain-ends': () => void toggleTerminalMethyls(),
   'methyls-ch3': () => chooseMethylStyle('CH3'),
   'methyls-me': () => chooseMethylStyle('Me'),
@@ -8615,6 +8616,8 @@ async function drawingPreferences(): Promise<void> {
     { name: 'headLength', label: 'Arrowhead length', value: editor.arrowLook.headLength === null ? '' : String(editor.arrowLook.headLength), type: 'number', unit: 'pt', placeholder: 'Automatic' },
     { name: 'headWidth', label: 'Arrowhead width (each side of the line)', value: editor.arrowLook.headWidth === null ? '' : String(editor.arrowLook.headWidth), type: 'number', unit: 'pt', placeholder: 'Automatic',
       help: 'For new arrows, whatever the bonds\' line width. Leave blank for the usual: the drawing style\'s line width, and a head ten line widths long and 2.5 wide. Arrows already drawn keep their size (change them in the Style panel).' },
+    { name: 'haptoDeloc', label: 'Draw η³, η⁵ and η⁶ ligands on a metal delocalized (a circle in the ring, an arc over an allyl)', type: 'checkbox', value: String(haptoLook.delocalized),
+      help: 'Only the look: the bonds stay as drawn for SMILES and saving. Chemistry ▸ Structure ▸ Kekulé Form for η Ligand switches one back.' },
     { name: 'aidAngle', label: 'Show the angle beside the pointer while drawing bonds, arrows and lines', type: 'checkbox', value: String(editor.aids.angle) },
     { name: 'aidLength', label: 'Show the length there too', type: 'checkbox', value: String(editor.aids.length),
       help: 'In the rulers\' units (inches or centimetres).' },
@@ -8636,6 +8639,7 @@ async function drawingPreferences(): Promise<void> {
   arrowGaps.end = gap(r.endGap);
   const size = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0.05 ? null : Math.min(30, n); };
   editor.arrowLook = { width: size(r.arrowWidth), headLength: size(r.headLength), headWidth: size(r.headWidth) };
+  if ((r.haptoDeloc === 'true') !== haptoLook.delocalized) { haptoLook.delocalized = r.haptoDeloc === 'true'; renderer.invalidate(doc); editor.requestScene(); }
   editor.aids = { ...editor.aids, angle: r.aidAngle === 'true', length: r.aidLength === 'true', hints: r.aidHints === 'true', look: r.aidLook === 'box' || r.aidLook === 'solid' ? r.aidLook : 'plain' };
   const ends = Number(r.bondEnds);
   if (isFinite(ends) && ends !== bondEndPrefs.round) {
@@ -8775,6 +8779,7 @@ function currentSettings(): Settings {
     arrowStartGap: arrowGaps.start,
     arrowEndGap: arrowGaps.end,
     cursorAids: { ...editor.aids },
+    haptoDelocalized: haptoLook.delocalized,
     arrowLook: { ...editor.arrowLook },
     superscriptR: labelPrefs.superscriptR,
     bondEnds: bondEndPrefs.round,
@@ -9008,6 +9013,7 @@ function applySettings(s: Settings): void {
   arrowGaps.start = s.arrowStartGap;
   arrowGaps.end = s.arrowEndGap;
   editor.aids = { ...s.cursorAids };
+  haptoLook.delocalized = s.haptoDelocalized;
   editor.arrowLook = { ...s.arrowLook };
   labelPrefs.superscriptR = s.superscriptR;
   bondEndPrefs.round = s.bondEnds;
@@ -10119,6 +10125,7 @@ function metalMenu(): MenuItem[] {
   if (metal !== null && sel.length >= 3) out.push({ cmd: 'hapto-bond' });
   const hapto = (bid: number) => { const b = doc.bonds.get(bid); return !!b && !!centreEnd(doc, b); };
   if ((contextBond !== null && hapto(contextBond)) || [...editor.sel.atoms].some((id) => (doc.adj.get(id) ?? []).some(hapto))) out.push({ cmd: 'split-hapto' });
+  if (editor.haptoCentresPicked(contextBond).length) out.push({ cmd: 'hapto-kekule' });
   if (editor.expandableLabels().length) out.push({ cmd: 'expand-label' });
   return out;
 }
@@ -10204,7 +10211,7 @@ function drawingMenu(): MenuItem[] {
       { label: 'Structure', items: [
         { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'chain-ends' }, { cmd: 'explicit-h' }, null,
         { cmd: 'contract-label' }, { cmd: 'expand-label' }, { cmd: 'join' }, { cmd: 'bring-front' }, { cmd: 'send-back' }, null,
-        { cmd: 'hapto-bond' }, { cmd: 'split-hapto' }, null,
+        { cmd: 'hapto-bond' }, { cmd: 'split-hapto' }, { cmd: 'hapto-kekule' }, null,
         { cmd: 'enhanced-stereo' }, { cmd: 'chiral-flag' }, { cmd: 'repeat-group' }, { cmd: 'rgroup-table' }, null,
         { cmd: 'check-structure' }, { cmd: 'save-template' }, { cmd: 'define-nickname' }, null,
         { cmd: 'pubchem-lookup' },

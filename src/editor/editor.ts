@@ -16,7 +16,7 @@ import { geoDef, geoShapeStyle, moveSteps, traceSteps } from '../design/geo';
 import { distinctChoices } from '../chem/template-choices';
 import { TEMPLATES, Template, Placement, templateById, templatePoints, placePoint, fusePlacements, atomPlacements, freePlacement, crowdingOf, placeTemplate, snap15 } from '../chem/templates';
 import { fusions3d } from '../chem/fuse3d';
-import { bondHapto, centreEnd, haptoTarget, haptoText, splitHapto } from '../chem/hapto';
+import { bondHapto, centreEnd, haptoLook, haptoTarget, haptoText, splitHapto } from '../chem/hapto';
 import { expandLigand, expandWithMolblock, labelSmiles, ligandTemplateFor } from '../chem/expand';
 import { styleFromFace, plainText } from '../richtext';
 import * as rt from '../richtext';
@@ -2005,6 +2005,39 @@ export class Editor {
     this.sel = emptySel();
     this.changed();
     return `Split into ${n} bonds.`;
+  }
+
+  /**
+   * The multicentre points (η³ and up) of what is picked: hapto bonds, metals with them, and
+   * atoms of a bonded ring or allyl (or the right-clicked bond).
+   */
+  haptoCentresPicked(contextBond: number | null = null): number[] {
+    const doc = this.doc;
+    const out = new Set<number>();
+    const big = (c: Atom | undefined | null) => !!c?.multi && c.multi.length >= 3;
+    const fromBond = (bid: number) => { const b = doc.bonds.get(bid); const c = b && centreEnd(doc, b); if (big(c)) out.add(c!.id); };
+    for (const bid of this.sel.bonds) {
+      fromBond(bid);
+      const b = doc.bonds.get(bid);
+      if (b) for (const cid of doc.centresOf.get(b.a1) ?? []) if (doc.atoms.get(cid)?.multi?.includes(b.a2) && big(doc.atoms.get(cid))) out.add(cid);
+    }
+    for (const aid of this.sel.atoms) {
+      for (const bid of doc.adj.get(aid) ?? []) fromBond(bid);
+      for (const cid of doc.centresOf.get(aid) ?? []) if (big(doc.atoms.get(cid)) && doc.adj.get(cid)?.length) out.add(cid);
+    }
+    if (contextBond !== null) fromBond(contextBond);
+    return [...out];
+  }
+
+  /** Chemistry > Structure > Kekulé Form for η Ligand: the picked η³–η⁸ ligands drawn with their double bonds, or delocalized again. */
+  toggleHaptoKekule(contextBond: number | null = null): string {
+    const ids = this.haptoCentresPicked(contextBond);
+    if (!ids.length) return 'Select an η ligand\'s ring or allyl, its hapto bond, or the metal.';
+    const doc = this.doc;
+    const kekule = !ids.every((id) => doc.atoms.get(id)?.kekule);
+    doc.edit(kekule ? 'Kekulé Form' : 'Delocalized Form', () => { for (const id of ids) doc.updateAtom(id, { kekule: kekule || undefined }); });
+    this.changed();
+    return kekule ? 'Drawn with its double bonds (Kekulé form).' : (haptoLook.delocalized ? 'Drawn delocalized again.' : 'Drawn delocalized when that is on in Settings ▸ Drawing.');
   }
 
   /** The selected labels Expand Label can draw out: ligands on a metal (by template) and other labels (by SMILES). */

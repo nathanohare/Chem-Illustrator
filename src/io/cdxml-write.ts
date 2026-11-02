@@ -22,7 +22,7 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl } from '../render/images';
-import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
+import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
 import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
@@ -596,7 +596,11 @@ class CdxmlWriter {
   }
 
   private buildNode(a: Atom): Element {
-    if (a.multi) return this.el('n', { id: a.id, p: pt(a), NodeType: 'MultiAttachment', Attachments: this.attachments(a) });
+    if (a.multi) {
+      const n = this.el('n', { id: a.id, p: pt(a), NodeType: 'MultiAttachment', Attachments: this.attachments(a) });
+      this.kekuleTag(n, a);
+      return n;
+    }
     if (a.attach) return this.el('n', { id: a.id, p: pt(a), NodeType: 'ExternalConnectionPoint', ExternalConnectionType: a.attach === 'Unspecified' ? null : a.attach, ExternalConnectionNum: a.attachNum ?? null });
     const n = this.el('n', { id: a.id, p: pt(a) });
     this.nodeCore(n, a);
@@ -649,6 +653,13 @@ class CdxmlWriter {
   }
 
   /** A multicentre point's atoms, as the ids their nodes have in the file. */
+  /** A multicentre point's π-system shown in Kekulé form, kept for this program (ChemDraw draws the bonds as they are anyway). */
+  private kekuleTag(n: Element, a: Atom): void {
+    const old = kids(n).find((c) => c.nodeName === 'objecttag' && c.getAttribute('Name') === KEKULE_TAG);
+    if (old && !a.kekule) n.removeChild(old);
+    if (!old && a.kekule) n.appendChild(this.el('objecttag', { TagType: 'String', Name: KEKULE_TAG, Value: 'yes', Visible: 'no' }));
+  }
+
   private attachments(a: Atom): string {
     return (a.multi ?? []).filter((id) => this.doc.atoms.has(id)).map((id) => this.nodeId(id)).join(' ');
   }
@@ -659,6 +670,7 @@ class CdxmlWriter {
     if (a.multi) {
       this.set(n, 'NodeType', 'MultiAttachment');
       this.set(n, 'Attachments', this.attachments(a));
+      this.kekuleTag(n, a);
       return;
     }
     if (a.attach) {

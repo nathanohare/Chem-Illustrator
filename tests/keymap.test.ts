@@ -243,7 +243,7 @@ describe('the settings file', () => {
       ai: { provider: 'anthropic' as const, model: 'claude-sonnet-5-5', base: '' },
       straightenLinear: false,
       cursorAids: { angle: false, length: true, hints: false, units: 'cm' as const, look: 'solid' as const },
-      arrowLook: { width: 1.2, headLength: null, headWidth: 3 },
+      arrowLook: { width: 1.2, headLength: null, headWidth: 3 }, haptoDelocalized: false,
       appTheme: 'dark' as const, oneColumnTools: true, startView: false, lastVersion: '0.1.90',
     };
     const text = settingsText(s);
