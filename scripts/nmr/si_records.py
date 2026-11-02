@@ -70,7 +70,11 @@ def neutral_from_hrms(f, ion):
 
 
 def mol_formula(mol):
-    return parse_formula(CalcMolFormula(mol))
+    c = Counter()
+    for a in mol.GetAtoms():
+        c[a.GetSymbol()] += 1
+        c['H'] += a.GetTotalNumHs()
+    return Counter({k: v for k, v in c.items() if v})
 
 
 def formula_status(mol, rd):
@@ -262,11 +266,23 @@ def main():
                     entry['flags'] = (entry['flags'] or []) + ['field_inconsistent']
             else:
                 entry['check'] = 'not_checked'
+            lo, hi = {'1H': (-6, 20), '13C': (-15, 250)}.get(nuc, (-1e9, 1e9))
+            vals = [x[0] for x in (sp.get('signals') or sp.get('peaks') or []) if x and isinstance(x[0], (int, float))]
+            if nuc == '1H':
+                for x in sp.get('signals') or []:
+                    if x and len(x) > 1 and isinstance(x[1], (int, float)) and isinstance(x[0], (int, float)):
+                        vals.append(x[1])
+                        if abs(x[1] - x[0]) > 1.5:
+                            vals.append(1e9)  # "8.22-820": a range end with a lost decimal point
+            if any(not lo <= v <= hi for v in vals):
+                reasons.append(nuc + '_value_out_of_range')
             if any(f in (sp.get('flags') or []) for f in ('mixture', 'list_truncated', 'minor_isomer')):
                 reasons.append('list_' + '_'.join(f for f in sp['flags'] if f in ('mixture', 'list_truncated', 'minor_isomer')))
             rec['spectra'].append(entry)
         if 'two_compounds' in (rd.get('flags') or []):
             silver = True
+        if src == 'reader' and set(rd.get('flags') or []) & {'name_unclear', 'structure_from_procedure', 'label_only'}:
+            silver = True  # structure inferred by the reader, so the formula check is less independent
         if not any(s['nuc'] in ('1H', '13C') for s in rec['spectra']):
             reasons.append('no_1H_or_13C')
         rec['tier'] = 'fail' if reasons else ('silver' if silver else 'gold')

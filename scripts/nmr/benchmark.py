@@ -33,6 +33,7 @@ RDLogger.DisableLog('rdApp.*')
 MAXR = 4
 GEN = rdFingerprintGenerator.GetMorganGenerator(radius=MAXR, includeRedundantEnvironments=True)
 BIG = {'13C': 10.0, '1H': 1.0}
+RANGE = {'13C': (-15.0, 250.0), '1H': (-6.0, 20.0)}  # values outside are typos or the wrong nucleus
 
 
 def env_keys(mol):
@@ -73,7 +74,17 @@ def load_db(path):
         mol = Chem.MolFromSmiles(r['smiles'])
         if mol is None:
             continue
-        sp = [s for s in r['spectra'] if s['nuc'] in ('13C', '1H') and 'conflict' not in s['flags']]
+        sp = []
+        for s in r['spectra']:
+            if s['nuc'] not in ('13C', '1H') or 'conflict' in s['flags']:
+                continue
+            lo, hi = RANGE[s['nuc']]
+            vals = [p[0] for p in s['peaks']]
+            if any(not lo <= v <= hi for v in vals):
+                continue
+            if s['nuc'] == '1H' and vals and sum(vals) / len(vals) > 12:
+                continue  # a 13C list filed as 1H
+            sp.append(s)
         if sp:
             out.append((r, mol, sp))
     return out
@@ -139,6 +150,8 @@ def predict_1h(lk, mol, keys):
 def exp_13c(sp):
     out = []
     for p in sp.get('peaks') or []:
+        if not p or not isinstance(p[0], (int, float)):
+            continue
         k = p[3] if len(p) > 3 and isinstance(p[3], (int, float)) and p[3] and p[3] < 10 else 1
         out += [p[0]] * int(k)
     return out
@@ -147,8 +160,11 @@ def exp_13c(sp):
 def exp_1h(sp):
     out = []
     for s in sp.get('signals') or []:
-        mid = (s[0] + s[1]) / 2 if s[1] is not None else s[0]
-        out += [mid] * int(round(s[4] or 1))
+        if not s or not isinstance(s[0], (int, float)):
+            continue
+        mid = (s[0] + s[1]) / 2 if len(s) > 1 and isinstance(s[1], (int, float)) else s[0]
+        n = s[4] if len(s) > 4 and isinstance(s[4], (int, float)) else 1
+        out += [mid] * max(1, int(round(n)))
     return out
 
 
