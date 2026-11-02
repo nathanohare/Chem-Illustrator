@@ -205,6 +205,8 @@ export interface Settings {
   cursorAids: CursorAidPrefs;
   /** η³ and larger ligands on a metal drawn delocalized (a circle in the ring, an arc over an allyl). */
   haptoDelocalized: boolean;
+  /** How a tool's demo shows when the pointer rests on its button (Settings ▸ General). */
+  toolDemos: DemoLook;
   /** The Windows app has offered to open the chemistry file types (once, at its first start). */
   fileTypesOffered: boolean;
   /** The Windows app has registered its drawings as objects Word can send back to edit (once, at its first start). */
@@ -259,7 +261,22 @@ export const DEFAULT_SETTINGS: Settings = {
   straightenLinear: true,
   cursorAids: { ...DEFAULT_CURSOR_AIDS },
   haptoDelocalized: true,
+  toolDemos: 'card',
 };
+
+/**
+ * How demos show: B, a card with the clip, its steps and Replay (the default); A, a small clip in a
+ * tip; C, still frames only; or not at all. With the system's reduced motion on, A and B show the
+ * still frames instead.
+ */
+export type DemoLook = 'card' | 'tip' | 'frames' | 'off';
+export const DEMO_LOOKS: { value: DemoLook; label: string }[] = [
+  { value: 'card', label: 'A card with the clip and its steps' },
+  { value: 'tip', label: 'A small clip in the tool tip' },
+  { value: 'frames', label: 'Still pictures of each step' },
+  { value: 'off', label: 'Don\'t show demos' },
+];
+export const parseDemoLook = (v: unknown): DemoLook => (DEMO_LOOKS.some((l) => l.value === v) ? (v as DemoLook) : 'card');
 
 const STORAGE_KEY = 'chem-illustrator.settings';
 
@@ -350,6 +367,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.straightenLinear === 'boolean') s.straightenLinear = r.straightenLinear;
   if (r.cursorAids) s.cursorAids = parseCursorAids(r.cursorAids);
   if (typeof r.haptoDelocalized === 'boolean') s.haptoDelocalized = r.haptoDelocalized;
+  if (r.toolDemos !== undefined) s.toolDemos = parseDemoLook(r.toolDemos);
   return s;
 }
 

@@ -145,6 +145,7 @@ import { applyRibbonIcons } from './ui/ribbon-icons';
 import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templateFromAtoms, placeTemplate, freePlacement } from './chem/templates';
 import { centreEnd, haptoLook } from './chem/hapto';
 import { viewNow, viewRingOf, type RingView } from './chem/ring-views';
+import { watchToolHover } from './ui/tool-demos';
 import { countElectrons } from './chem/electrons';
 import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, tokenize as tokenizeLabel } from './chem/labels';
 import { selectedGroup } from './chem/group-smiles';
@@ -169,7 +170,7 @@ import { htmlToRich } from './text/html';
 import { LiveStereo } from './chem/live-stereo';
 import { setStereoShown, shownDescriptor, axialStyle } from './chem/stereo';
 import { keymap, COMMAND_NAMES, registerToolNames, displayChord, actionName, chordOf, parseAction, KeyContext, KeyOverrides } from './editor/keymap';
-import { loadSettings, saveSettings, settingsLocation, exportText, importSettings, Settings, SLIDE_PANE_MIN, SLIDE_PANE_MAX, NOTES_MIN, NOTES_MAX } from './settings';
+import { loadSettings, saveSettings, settingsLocation, exportText, importSettings, Settings, DEMO_LOOKS, parseDemoLook, type DemoLook, SLIDE_PANE_MIN, SLIDE_PANE_MAX, NOTES_MIN, NOTES_MAX } from './settings';
 import { arrowGaps } from './chem/mechanism';
 import { showDialog } from './ui/dialog-host';
 import { HotkeysDialog } from './ui/hotkeys-dialog';
@@ -8400,6 +8401,9 @@ function chooseMethylStyle(style: MethylStyle): void {
 
 /** Ask before a command with nothing selected changes every structure on the page (Edit > Settings). */
 let askWholeDrawing = true;
+/** How a tool's demo shows on a long hover over its button (Settings ▸ General). */
+let toolDemos: DemoLook = 'card';
+watchToolHover(document, () => toolDemos);
 /** Where linked text goes (Edit > Settings). */
 let linkSide: Settings['linkSide'] = 'keep';
 
@@ -8792,6 +8796,8 @@ async function generalPreferences(): Promise<void> {
       help: 'Off: they keep the look they had in Word and become drawings when you edit one. On: each is redrawn here in the document\'s drawing style.' },
     { name: 'reviewer', label: 'Your name on tracked changes in documents', value: reviewAuthor() },
     { name: 'startView', label: 'Show the start view (new tabs, recent files) when the program opens', type: 'checkbox', value: String(startView) },
+    { name: 'toolDemos', label: 'Resting the pointer on a tool such as the curved arrow shows', value: toolDemos, options: DEMO_LOOKS,
+      help: 'A short demo of the tool, drawn as you watch. With animation turned off in your system\'s settings, it shows a still picture of each step.' },
   ], { ok: 'Save' });
   if (!r) return;
   editor.options.groupClick = r.groupClick === 'item' ? 'item' : 'group';
@@ -8803,6 +8809,7 @@ async function generalPreferences(): Promise<void> {
   straightenLinear.on = r.straightenLinear === 'true';
   setReviewAuthor(r.reviewer ?? '');
   startView = r.startView === 'true';
+  toolDemos = parseDemoLook(r.toolDemos);
   storeSettings();
 }
 
@@ -8900,6 +8907,7 @@ function currentSettings(): Settings {
     arrowEndGap: arrowGaps.end,
     cursorAids: { ...editor.aids },
     haptoDelocalized: haptoLook.delocalized,
+    toolDemos,
     superscriptR: labelPrefs.superscriptR,
     bondEnds: bondEndPrefs.round,
     depthShade: { ...depthShadePrefs },
@@ -9133,6 +9141,7 @@ function applySettings(s: Settings): void {
   arrowGaps.end = s.arrowEndGap;
   editor.aids = { ...s.cursorAids };
   haptoLook.delocalized = s.haptoDelocalized;
+  toolDemos = s.toolDemos;
   labelPrefs.superscriptR = s.superscriptR;
   bondEndPrefs.round = s.bondEnds;
   Object.assign(depthShadePrefs, s.depthShade);
@@ -11364,7 +11373,7 @@ const guide = {
 };
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 const SETTINGS_PAGES: SettingsPage[] = [
-  { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files', open: generalPreferences },
+  { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files demo clips hover tool tips animation', open: generalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
