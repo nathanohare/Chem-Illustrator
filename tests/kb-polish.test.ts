@@ -13,6 +13,7 @@ import { REAGENT_SAFETY } from '../src/kb/safety-tables';
 import { findRows, tableTsv } from '../src/kb/tables';
 import { matchSolvent } from '../src/ui/knowledge-base';
 import { templateIcon } from '../src/ui/template-icons';
+import { svgNode } from '../src/ui/svg-node';
 
 describe('chemistry written properly', () => {
   it('subscripts the counts in formulas', () => {
@@ -90,6 +91,10 @@ describe('Hammett group pictures', () => {
     const svg = templateIcon(cf3, 48, 14);
     expect(svg).toContain('<svg');
     expect(svg).toMatch(/<path[^>]*d="M/);
+    // built with DOM calls in the window (no innerHTML): the wavy line and the F labels survive
+    const node = svgNode(svg)!;
+    expect(node.querySelector('path')?.getAttribute('d')).toMatch(/^M/);
+    expect([...node.querySelectorAll('text')].map((t) => t.textContent)).toContain('F');
   });
 
   it('shows the picture first, and leaves it out of a copied table', () => {

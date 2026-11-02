@@ -11,9 +11,9 @@ import type { MenuItem } from './context-menu';
 
 /** The six strengths of a Shape Style, lightest first. */
 export const STYLE_LOOKS = [
-  { id: 'outline', name: 'Coloured Outline' },
-  { id: 'fill', name: 'Coloured Fill' },
-  { id: 'light', name: 'Light Fill, Coloured Outline' },
+  { id: 'outline', name: 'Colored Outline' },
+  { id: 'fill', name: 'Colored Fill' },
+  { id: 'light', name: 'Light Fill, Colored Outline' },
   { id: 'subtle', name: 'Subtle Effect' },
   { id: 'moderate', name: 'Moderate Effect' },
   { id: 'intense', name: 'Intense Effect' },
@@ -72,7 +72,7 @@ export function effectsMenu(): MenuItem[] {
     ] },
     { label: 'Glow', items: [
       { cmd: 'shape-fx:glow:none', label: 'No Glow' }, null,
-      ...GLOW_SIZES.map((g) => ({ cmd: `shape-fx:glow:${g}`, label: `${g} pt glow, the shape's colour` })),
+      ...GLOW_SIZES.map((g) => ({ cmd: `shape-fx:glow:${g}`, label: `${g} pt glow, the shape's color` })),
       null, { cmd: 'shape-fx:glow:options', label: 'Glow Options…' },
     ] },
     { label: 'Soft Edges', items: [

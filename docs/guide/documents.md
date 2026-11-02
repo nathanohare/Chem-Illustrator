@@ -16,17 +16,17 @@ The ribbon has Word's tabs: **Home**, **Insert**, **Design**, **Layout**, **Refe
 
 The drawing toolbox shows on the left in Document mode too. Pick a drawing tool there and the selected structure opens for editing with that tool; if no structure is selected, a new drawing starts at the caret. Press **Done** above the drawing to put it back in the text.
 
-When the pointer turns into a pointing hand over a structure, it is a drawing you can open: double-click it (or pick it and use **Insert** tab ▸ **Edit Drawing**). It opens in place on its page: the drawing tools work right there, at the page's zoom (Ctrl+wheel zooms both together), and the rest of the page fades and stays as it is until you press **Done** (or Ctrl+Enter, or click the page away from the structure). **Cancel**, or Esc with nothing picked, leaves it as it was. A new structure (**Insert** tab ▸ **Structure**) is drawn in a window over the page, then put in the text at the caret.
+When the pointer turns into a pointing hand over a structure, it is a drawing you can open: double-click it (or pick it and use **Insert** tab ▸ **Edit Drawing**). It opens in place on its page: the drawing tools work right there, at the page's zoom (Ctrl+wheel zooms both together), and the rest of the page fades and stays as it is until you press **Done** (or Ctrl+Enter, or click the page away from the structure). **Cancel**, or Esc with nothing picked, leaves it as it was. A new structure (**Insert** tab ▸ **Structure**) is drawn the same way, in a dashed space at the caret; Done with nothing drawn, or Cancel, leaves the document as it was. (In a table cell, a new structure is drawn in a window over the page.)
 
 ## Formatting text
 
-- **Home** tab: font, size, colour, bold (Ctrl+B), italic (Ctrl+I), underline (Ctrl+U), subscript (Ctrl+=), superscript (Ctrl+Shift+=), bigger and smaller (Ctrl+] and Ctrl+[).
+- **Home** tab: font, size, color, bold (Ctrl+B), italic (Ctrl+I), underline (Ctrl+U), subscript (Ctrl+=), superscript (Ctrl+Shift+=), bigger and smaller (Ctrl+] and Ctrl+[).
 - **C₉H₈** sets the selection in formula style: numbers lowered, charges raised.
 - **Format Painter** (beside **Copy**) copies the look of the selected text, or of the paragraph the caret is in, to the next text you click or drag over; double-click it to keep painting until Esc. See [Getting started](getting-started.md#format-painter-every-mode).
 - **Insert** tab ▸ **Symbol** types Greek letters, arrows, °, Å and other signs, found by name; see [Insert ▸ Symbol](getting-started.md#insert--symbol-every-mode).
-- **Highlight:** the **ab** button highlights the selected text; the arrow beside it picks the colour.
+- **Highlight:** the **ab** button highlights the selected text; the arrow beside it picks the color.
 - The chemistry typing helpers work as in the other modes: type CH2Cl2 or CDCl3 and the numbers drop down once you type a space or punctuation after it.
-- Misspelt words get a red line, and right-click offers corrections. Chemistry words are in the dictionary; add your own with right-click ▸ **Add to Dictionary**. **Edit ▸ Typing and Spelling…** has the settings.
+- Misspelled words get a red line, and right-click offers corrections. Chemistry words are in the dictionary; add your own with right-click ▸ **Add to Dictionary**. **Edit ▸ Typing and Spelling…** has the settings.
 
 ## Paragraphs and lists
 
@@ -35,7 +35,7 @@ When the pointer turns into a pointing hand over a structure, it is a drawing yo
 - Indents and space before and after: **Layout** tab ▸ **Paragraph** group. Lengths are in inches; type `cm`, `mm` or `pt` after a number to use those instead.
 - **Bullets** and **Numbering** on the **Home** tab make lists. Tab and Shift+Tab change the level.
 - The small ⬊ in the corner of a ribbon group opens all of that group's settings. Its pin button docks the box in the right-hand panel so it stays open while you work.
-- **Borders** (the ▦ ▾ button on the **Home** tab) puts lines above, below, beside or round the selected paragraphs, as Word's Borders menu. Choosing a side again takes it off. **Borders and Shading…** sets the kind of line, its width and colour, and a shading colour; the shading button beside it shades paragraphs quickly. Paragraphs one after another with the same borders share one box.
+- **Borders** (the ▦ ▾ button on the **Home** tab) puts lines above, below, beside or around the selected paragraphs, as Word's Borders menu. Choosing a side again takes it off. **Borders and Shading…** sets the kind of line, its width and color, and a shading color; the shading button beside it shades paragraphs quickly. Paragraphs one after another with the same borders share one box.
 - **Sort** (A↓Z) puts the selected paragraphs in order (as text, numbers or dates, by the whole paragraph or by a field cut at tabs or commas), or, with the caret in a table, the table's rows by a column. A heading row stays at the top; rows with cells merged down can't be sorted.
 
 ## Styles
@@ -51,9 +51,9 @@ To change a style, open the ⬊ in the corner of **Styles** (or the **Format** p
 
 The **Design** tab changes the look of the whole document at once, as Word's Document Formatting does:
 
-- **Theme** sets the fonts and colours together: Journal (Times New Roman, black), Report, Technical, Clean, Classic, Field Notes and Poster. All of them use free fonts that come with the app.
+- **Theme** sets the fonts and colors together: Journal (Times New Roman, black), Report, Technical, Clean, Classic, Field Notes and Poster. All of them use free fonts that come with the app.
 - **Style Set** changes the styles' layout: Journal (justified 11 pt text, bold headings), Simple, Centered, Compact, Open and Thesis (double-spaced, for a thesis or dissertation).
-- **Colors** and **Fonts** change one half of the theme on its own: the heading colour and the accents in the colour boxes, or the heading and body fonts.
+- **Colors** and **Fonts** change one half of the theme on its own: the heading color and the accents in the color boxes, or the heading and body fonts.
 - **Paragraph Spacing** sets the space between paragraphs and lines for every style: No Paragraph Space, Compact, Tight, Open, Relaxed or Double.
 - **Set as Default** makes the current theme, style set and spacing the start of every new document.
 
@@ -61,19 +61,19 @@ Formatting you set by hand stays as it is. The theme and style set are saved in 
 
 ## Structures and pictures in the text
 
-- **Insert** tab ▸ **Structure** opens the drawing tools. Draw, press **Done**, and the structure sits in the text at the caret.
+- **Insert** tab ▸ **Structure** opens the drawing tools right at the caret. Draw, press **Done**, and the structure sits in the text there.
 - **Insert** tab ▸ **From Name** draws a structure from a name or SMILES.
 - Paste a structure copied from a canvas tab, or from ChemDraw (Windows app).
 - **Insert** tab ▸ **Picture** adds a picture from a file; you can also paste or drop one.
-- **Insert** tab ▸ **Figure**: drag on the page to mark out an area for structures (a click gives one 3 × 2 in). Text wraps round it, even while it is empty, and it opens at once for drawing. A figure keeps its size whatever you draw in it, so changing a structure never moves the text round it. If what you draw reaches past its edges, **Done** asks to grow the figure (or go back to drawing); nothing is cut off. A figure has no border or background on paper or in files; on screen an empty one has a faint dashed outline, and any figure shows light grey when the pointer is over it. Drag its corner handle to change its area. Right-click a structure for **Make Figure** (an area just round it), and a figure for **Fit Figure to Structure** or **Remove Figure**.
+- **Insert** tab ▸ **Figure**: drag on the page to mark out an area for structures (a click gives one 3 × 2 in). Text wraps around it, even while it is empty, and it opens at once for drawing. A figure keeps its size whatever you draw in it, so changing a structure never moves the text around it. If what you draw reaches past its edges, **Done** asks to grow the figure (or go back to drawing); nothing is cut off. A figure has no border or background on paper or in files; on screen an empty one has a faint dashed outline, and any figure shows light gray when the pointer is over it. Drag its corner handle to change its area. Right-click a structure for **Make Figure** (an area just around it), and a figure for **Fit Figure to Structure** or **Remove Figure**.
 - When you open a document whose structures aren't figures, a bar over the pages offers to make them figures. **Preview Figures…** shows how they would be grouped (structures side by side in one line become one figure) with each figure's area drawn on the page: drag its edges or corners to change it, click its label to leave it out, then **Make Figures** (one step to undo). Right-click a structure ▸ **Make All Structures Figures…** does the same later.
-- **Insert** tab ▸ **Shapes**: pick a shape (basic shapes, block arrows, flowchart shapes, callouts, lab glassware), then drag on the page to draw it, or click for one of its usual size. It works as on a slide: click it to pick it and drag it to move it, drag its corner handle to change its width and height, and type (or double-click it) to write in it; its text sits in its middle. Text wraps round it (see the wrapping settings below), and the panel sets its fill and outline. In Word it is Word's own shape. **Icons** are still put in the text at the caret, as drawings.
+- **Insert** tab ▸ **Shapes**: pick a shape (basic shapes, block arrows, flowchart shapes, callouts, lab glassware), then drag on the page to draw it, or click for one of its usual size. It works as on a slide: click it to pick it and drag it to move it, drag its corner handle to change its width and height, and type (or double-click it) to write in it; its text sits in its middle. Text wraps around it (see the wrapping settings below), and the panel sets its fill and outline. In Word it is Word's own shape. **Icons** are still put in the text at the caret, as drawings.
 - **Insert** tab ▸ **Diagram** puts a SmartArt-style diagram (lists, processes, cycles, hierarchies and more) in the text at the caret, drawn from lines of text. Double-click it to change its text or look. Word gets it as a group of shapes. See [Design: Diagrams](design.md#diagrams).
 - **Insert** tab ▸ **Icons** puts an icon in the text the same way: about 7,000, lab and science ones (glassware, molecules, hazard and safety signs) first. See [Design: Icons](design.md#icons).
 
-Click a structure or picture to pick it (a structure shows just its four corner handles). Drag a corner handle, or type a **Size (%)** in the panel; **Own Size** puts it back to 100%. Right-click it for **Add Frame** and **Add Shadow**; the panel sets the frame's width and colour and a soft or sharp shadow.
+Click a structure or picture to pick it (a structure shows just its four corner handles). Drag a corner handle, or type a **Size (%)** in the panel; **Own Size** puts it back to 100%. Right-click it for **Add Frame** and **Add Shadow**; the panel sets the frame's width and color and a soft or sharp shadow.
 
-For a picture, **Picture Format** (**Insert** tab, the panel, or right-click) changes its brightness, contrast and sharpness, recolours it (greyscale, sepia, washout, black and white, two colours), makes a colour or the whole picture see-through, removes its background, and crops it to a shape or to proportions (1:1, 4:3, 16:9…). It works as in [Presentation: Picture Format](slides.md#picture-format), and is saved as Word's own picture settings.
+For a picture, **Picture Format** (**Insert** tab, the panel, or right-click) changes its brightness, contrast and sharpness, recolors it (grayscale, sepia, washout, black and white, two colors), makes a color or the whole picture see-through, removes its background, and crops it to a shape or to proportions (1:1, 4:3, 16:9…). It works as in [Presentation: Picture Format](slides.md#picture-format), and is saved as Word's own picture settings.
 
 ### Wrapping and text boxes
 
@@ -88,13 +88,13 @@ Pick a structure, picture or text box, then use **Layout** tab ▸ **Wrap Text**
 
 A floating item can be dragged anywhere and moves with the paragraph it is dropped beside. One in line with the text is dragged to another place in the text, as in Word: the caret shows where it will land (Ctrl+Z puts it back).
 
-**Insert** tab ▸ **Text Box** (also on the **Layout** tab) puts a box at the left margin with the text wrapping round it. Type in it, then press Esc to pick the box. Drag its edge to move it and its corner to make it wider. Fill colour, frame and wrapping are in the panel.
+**Insert** tab ▸ **Text Box** (also on the **Layout** tab) puts a box at the left margin with the text wrapping around it. Type in it, then press Esc to pick the box. Drag its edge to move it and its corner to make it wider. Fill color, frame and wrapping are in the panel.
 
 ### Position, order, rotate and group
 
 On the **Layout** tab, **Arrange** (folded into one **Arrange ▾** button when the window is narrow):
 
-- **Position ▾** puts the figure picked at one of nine places on the page (top, middle or bottom; left, centre or right) with **Square** wrapping. **In Line with Text** puts it back in the line.
+- **Position ▾** puts the figure picked at one of nine places on the page (top, middle or bottom; left, center or right) with **Square** wrapping. **In Line with Text** puts it back in the line.
 - **Bring Forward ▾** and **Send Backward ▾** put one floating figure over or under another, a step at a time or to the front or back of all.
 - **Rotate ▾** turns a picture 90° right or left, flips it, or turns it by any angle (**More Rotation Options…**).
 - **Selection Pane** lists every floating figure, front first. Click a name to pick it, Ctrl+click to pick more, double-click to rename it. The eye hides a figure from its page (it stays in the document); **Show All** and **Hide All** do every one; ▲ and ▼ change the order.
@@ -119,7 +119,7 @@ While you are in a table, the **Table** tab offers:
 - **Merge Right**, **Merge Down**, **Split Cell**, **Table in Cell**, **Select Table**;
 - **Lines** (grid, ACS rules or none) and **Heading rows**;
 - **Shading** and **No Shading**;
-- alignment **Across** (Left, Centre, Right, for the column) and **Down** (Top, Middle, Bottom, for the cell);
+- alignment **Across** (Left, Center, Right, for the column) and **Down** (Top, Middle, Bottom, for the cell);
 - **Column width**, **Fit to Contents**, **Fit to Page** and **Even Columns**.
 
 The same commands are on the right-click menu. Esc picks the whole table, and Delete then removes it.
@@ -136,17 +136,17 @@ Word files keep both: merged cells are saved and opened as Word's merged cells, 
 
 For a substrate-scope or screening table, put the caret in a cell and use **Insert** tab ▸ **Structure**, **From Name** or **Picture**, or paste a structure. It goes into that cell, shrinks to fit the column if needed, and the row grows to hold it.
 
-- Set the column to **Centre** to line the structures up.
+- Set the column to **Center** to line the structures up.
 - Set the other cells in the row to **Middle** so their text sits level with the structure.
 - **Fit to Contents** widens the columns so structures show at full size.
 
 ## Charts
 
-**Insert** ▸ **Chart** puts a chart in the text at the caret, as Word's Insert Chart does. The chart window shows the chart's own data in a grid: type over the sample numbers or paste from Excel or a spreadsheet, pick the kind of chart along the top, and change titles, axes, colours, error bars and fitted lines in the panel on the right. Double-click the chart to change it again. Charts sit in the text like pictures (wrap, frame, captions), and are saved in Word files as Word charts with their data inside, so **Edit Data** works in Word. Charts made in Word open here as charts.
+**Insert** ▸ **Chart** puts a chart in the text at the caret, as Word's Insert Chart does. The chart window shows the chart's own data in a grid: type over the sample numbers or paste from Excel or a spreadsheet, pick the kind of chart along the top, and change titles, axes, colors, error bars and fitted lines in the panel on the right. Double-click the chart to change it again. Charts sit in the text like pictures (wrap, frame, captions), and are saved in Word files as Word charts with their data inside, so **Edit Data** works in Word. Charts made in Word open here as charts.
 
 ## Objects from other programs
 
-**Insert** ▸ **Object** puts another program's file in the document whole, as Word's Insert Object does: an Excel workbook, a PDF, a Word file or a presentation, or any other file. It shows what it holds where it can (a workbook's cells as Excel shows them, a PDF's first page, a picture), or an icon with the file's name: tick **Display as icon** for that. Right-click it to switch between the two.
+**Insert** ▸ **Object** puts another program's file in the document whole, as Word's Insert Object does: an Excel workbook, a PDF, a Word file or a presentation, or any other file. It shows what it holds where it can (a workbook's cells as Excel shows them, a PDF's first page, a picture), or an icon with the file's name: check **Display as icon** for that. Right-click it to switch between the two.
 
 Double-click the object (or right-click ▸ **Open Object**) to open the file in its own program. Each time you save it there, the document takes the changes and a new picture of them, so a table of results can be kept up to date in Excel. This needs the desktop app; in a browser the file is downloaded instead.
 
@@ -158,7 +158,7 @@ Objects are saved in Word files as Word's own embedded objects, so double-clicki
 
 Structures drawn with Chem4Word (the free Chemistry Add-in for Word) open here as structures you can change, at the size they had in Word. Saving keeps them linked to Chem4Word, so it can still edit them in Word: an unchanged structure keeps Chem4Word's own data exactly, and one changed here is written back for Chem4Word in its new form.
 
-Other programs' data in Word, PowerPoint and Excel files is kept as it was and saved back with the file, even though it isn't shown here: content controls round text and paragraphs (a template's fields, a form's boxes), custom XML data, custom document properties (**File ▸ Properties ▸ Custom** in Office), Word's document variables, and the settings Office add-ins store in the document.
+Other programs' data in Word, PowerPoint and Excel files is kept as it was and saved back with the file, even though it isn't shown here: content controls around text and paragraphs (a template's fields, a form's boxes), custom XML data, custom document properties (**File ▸ Properties ▸ Custom** in Office), Word's document variables, and the settings Office add-ins store in the document.
 
 ## Captions and cross-references
 
@@ -196,7 +196,7 @@ Pick the **Citation style** in **Manage References…**. Every citation and the 
 | Beilstein | Beilstein J. Org. Chem. |
 | MDPI | Molecules, Catalysts |
 
-**Style Options…** opens every detail of the style, with a preview: how citation numbers look, whether 1,2,3 becomes 1–3, how the list is numbered, how author names are written and when "et al." is used, the journal title, year, volume, pages and DOI. A changed detail is marked with a dot, and **Reset to …** puts the style's own details back. Tick **Use for new documents** to start every new document with your choice.
+**Style Options…** opens every detail of the style, with a preview: how citation numbers look, whether 1,2,3 becomes 1–3, how the list is numbered, how author names are written and when "et al." is used, the journal title, year, volume, pages and DOI. A changed detail is marked with a dot, and **Reset to …** puts the style's own details back. Check **Use for new documents** to start every new document with your choice.
 
 Journal requirements change, so check the result against a recent issue of your target journal.
 
@@ -204,7 +204,7 @@ Journal requirements change, so check the result against a recent issue of your 
 
 A Word file with citations made by Zotero, Mendeley (Desktop or Cite) or EndNote opens with them live: their references go into **Manage References…** and the citations and bibliography are numbered and styled here like any others. A Zotero file also keeps its citation style when it is one of the styles above.
 
-Saving writes the citations back as that program's own, with its item ids, so in Word its **Refresh** (Zotero, Mendeley) or **Update Citations and Bibliography** (EndNote) still works on them. References added here go out with their details: Zotero and Mendeley keep them as items in the document, EndNote adds them to the document's travelling library.
+Saving writes the citations back as that program's own, with its item ids, so in Word its **Refresh** (Zotero, Mendeley) or **Update Citations and Bibliography** (EndNote) still works on them. References added here go out with their details: Zotero and Mendeley keep them as items in the document, EndNote adds them to the document's traveling library.
 
 To choose the program for a document made here, use **Save citations for** in **Manage References…**. **Chem Illustrator only** saves the numbers as text that Word shows as they are.
 
@@ -222,7 +222,7 @@ In the desktop app, the **Zotero** group on the **References** tab works with th
 
 The first time you use Zotero in a document, Zotero asks for the citation style. Each command undoes in one step. If you change a citation here (with **Insert Citation** or **Manage References…**), it is numbered in the document's own style until the next **Refresh**.
 
-Saving as a Word file writes the citations (in the text or in footnotes) and the bibliography as Zotero's Word fields, with its preferences. So you can carry on with Zotero's Word plugin in Word, and a Word file with Zotero citations carries on here.
+Saving as a Word file writes the citations (in the text or in footnotes) and the bibliography as Zotero's Word fields, with its preferences. So you can continue with Zotero's Word plugin in Word, and a Word file with Zotero citations continues here.
 
 The browser version can't reach the Zotero app, so these buttons work only in the desktop app. If Zotero isn't running, or is busy with a citation in another document, a message says so.
 
@@ -233,7 +233,7 @@ On the **Layout** tab:
 - **Margins**, **Paper** (Letter, A4 or your own size), **Orientation**.
 - **Breaks**: **Page** (Ctrl+Enter), **Column** (Ctrl+Shift+Enter) and the section breaks (below).
 - **Columns**: One, Two, Three or Four; **More Columns…** sets the gap.
-- **Page numbers**: top or bottom, left, centre or right. **S1, S2… numbering** numbers the pages as Supporting Information is numbered. **Number Format…** writes them 1, 2, 3 or i, ii, iii (or I, II; a, b; A, B) and sets where the numbering starts.
+- **Page numbers**: top or bottom, left, center or right. **S1, S2… numbering** numbers the pages as Supporting Information is numbered. **Number Format…** writes them 1, 2, 3 or i, ii, iii (or I, II; a, b; A, B) and sets where the numbering starts.
 - **Header…** and **Footer…** set the text at the top and bottom of every page. The ⬊ in the corner of the group sets where they sit, the first page number and whether the first page is numbered.
 - **Line Numbers**: numbers down the left margin, as journals ask for in manuscripts under review: **Continuous**, **Restart Each Page** or **Restart Each Section**. **Suppress for Current Paragraph** leaves the selected paragraphs out (a title, say). **Line Numbering Options…** sets the first number, shows only every 5th (or any nth) number, and sets how far they sit from the text.
 - **Hyphenation**: **Automatic** breaks long words at the ends of lines, with a hyphen, where English allows (US English patterns). **Don't Hyphenate This Paragraph** keeps the selected paragraphs whole. **Hyphenation Options…** sets the hyphenation zone (a word is broken only if leaving it whole would leave more room than this at the end of the line), a limit on hyphens in a row, and whether words in capitals are broken. Words with digits and formulas are never broken.
@@ -245,7 +245,7 @@ In the Header and Footer settings (the ⬊ in the corner of the group, or **Head
 
 - **Different first page** gives the first page of the section its own header and footer (or none), as a title page has.
 - **Different odd and even pages** gives even pages their own header and footer, and puts the page number on the outside edge, as a bound thesis has.
-- **Picture…** puts a picture (a logo or a crest) at the left, centre or right of the header or footer, on every page, the first page or even pages, at the height you give.
+- **Picture…** puts a picture (a logo or a crest) at the left, center or right of the header or footer, on every page, the first page or even pages, at the height you give.
 - Headers and footers from Word with pictures, tables or formatting are shown and saved as they are. The settings say which ones; **Plain Text** turns them back into plain text you can type in the boxes.
 
 ### Sections
@@ -256,9 +256,9 @@ A section break starts a new section, which can have its own paper size, orienta
 - **Continuous**: the new section starts on the same page. Use it for a title and abstract across the page with two columns of text under them. Columns before a continuous break are evened up, as in Word.
 - **Even Page** and **Odd Page**: the new section starts on the next even or odd page (a blank page is left when needed), as chapters of a thesis do.
 
-The margins, paper, orientation, columns, page numbers and line numbers on the ribbon and in the ⬊ settings are for the section the caret is in (the status bar says which). In the Page Setup settings, **Apply to: Whole document** changes every section at once. A new section's header and footer are **Same as previous section** (Word's Link to Previous) until you type a header or footer of its own or untick it; its page numbers carry on from the section before unless you untick **Continue from previous section** and give a first page number.
+The margins, paper, orientation, columns, page numbers and line numbers on the ribbon and in the ⬊ settings are for the section the caret is in (the status bar says which). In the Page Setup settings, **Apply to: Whole document** changes every section at once. A new section's header and footer are **Same as previous section** (Word's Link to Previous) until you type a header or footer of its own or clear it; its page numbers continue from the section before unless you clear **Continue from previous section** and give a first page number.
 
-To remove a section break, put the caret at the start of the paragraph after it and press **Backspace** (the text joins the section before). **Draft** view shows section breaks as double dotted lines, labelled with their kind. Sections, their headers and footers, page numbering and line numbers are saved in Word files as Word's own and open again here as they were.
+To remove a section break, put the caret at the start of the paragraph after it and press **Backspace** (the text joins the section before). **Draft** view shows section breaks as double dotted lines, labeled with their kind. Sections, their headers and footers, page numbering and line numbers are saved in Word files as Word's own and open again here as they were.
 
 ## Fields, dates and Quick Parts
 
@@ -281,10 +281,10 @@ The contents keep themselves up to date: page numbers change as text moves, and 
 
 1. Select a word or phrase (or just click in a word) and choose **References** tab ▸ **Mark Entry** (Alt+Shift+X, also **Insert ▸ Document ▸ Tables and Indexes ▸ Mark Index Entry…**).
 2. Check the **Main entry**, and type a **Subentry** to list it under the main one (Aldol reaction ▸ asymmetric).
-3. Leave **Current page** for its page number (in bold or italic if you tick them), or choose **Cross-reference** and type "See Enolates" to send readers elsewhere instead.
-4. Tick **Mark All** to mark every paragraph where the text comes up, once each, as Word does.
+3. Leave **Current page** for its page number (in bold or italic if you check them), or choose **Cross-reference** and type "See Enolates" to send readers elsewhere instead.
+4. Check **Mark All** to mark every paragraph where the text comes up, once each, as Word does.
 
-Each entry is kept on its paragraph, so it moves with the text. Open Mark Entry in a marked paragraph to see its entries, and tick **Take this paragraph's entries off** to remove them.
+Each entry is kept on its paragraph, so it moves with the text. Open Mark Entry in a marked paragraph to see its entries, and check **Take this paragraph's entries off** to remove them.
 
 **References** tab ▸ **Insert Index** (also **Insert ▸ Document ▸ Tables and Indexes ▸ Index…**) puts an Index heading and the index after the caret's paragraph: the entries A to Z, ignoring case and accents, with the subentries indented under them and each page once. It is set in two columns unless you choose another number (it gets a section of its own, with continuous section breaks before and after, as Word does). **Right align page numbers** puts them at the right after dots, and **A letter over each letter's entries** adds A, B, C headings. Like the contents, it keeps itself up to date; double-click it to change it. In Word, entries are Word's XE fields and the index is Word's own INDEX field.
 
@@ -319,22 +319,22 @@ For legal writing (cases, statutes, rules and other authorities), as Word does i
 ## Tracked changes
 
 1. **Review** tab ▸ **Track Changes** (Ctrl+Shift+E). The first time, it asks for the name to put on your changes; change it later with **Your Name…** or in **Edit ▸ Settings…**.
-2. Text you type is underlined in your colour; text you delete stays, struck through.
+2. Text you type is underlined in your color; text you delete stays, struck through.
 3. **◀ Previous** and **Next ▶** step through the changes; the bar at the bottom says who made each one and when.
 4. **Accept** or **Reject** decides the change at the caret (or every change in a selection) and moves to the next. **Accept All** and **Reject All** do the whole document. Right-click a change for Accept and Reject too.
 
-Changes made by other people in Word open here as changes, in a different colour for each person.
+Changes made by other people in Word open here as changes, in a different color for each person.
 
 ### Markup views and reviewers
 
 **Review** tab ▸ **Display** (in the **Tracking** group) chooses how changes show:
 
-- **All Markup**: insertions and deletions in each reviewer's colour, a grey bar in the margin beside every changed line.
+- **All Markup**: insertions and deletions in each reviewer's color, a gray bar in the margin beside every changed line.
 - **Simple Markup**: the text as it will read once the changes are accepted, with a red bar in the margin where something changed.
 - **No Markup**: the text with the changes accepted (nothing is accepted until you say so).
 - **Original**: the text as it was before the changes.
 
-**Show Markup ▾** shows or hides **Insertions and Deletions** and **Formatting**, and the changes of each reviewer (or **All Reviewers**). **Track Formatting Changes** (on by default) marks bold, italic, font, size, colour and the like changed while tracking: they show with a bar in the margin, the bar at the bottom says what changed, and **Accept** keeps the new look while **Reject** puts the old one back. Formatting changes are Word's own, so Word shows and decides them too.
+**Show Markup ▾** shows or hides **Insertions and Deletions** and **Formatting**, and the changes of each reviewer (or **All Reviewers**). **Track Formatting Changes** (on by default) marks bold, italic, font, size, color and the like changed while tracking: they show with a bar in the margin, the bar at the bottom says what changed, and **Accept** keeps the new look while **Reject** puts the old one back. Formatting changes are Word's own, so Word shows and decides them too.
 
 ### Compare and Combine
 
@@ -355,7 +355,7 @@ A structure, picture, table or equation counts as one word: if it changed, the o
 
 Give a password if you want one: it is needed to stop the protection. Click **Restrict Editing** again to stop it. The protection and password are saved in the .docx the way Word keeps them, so the document is protected in Word too, with the same password, and a document protected in Word opens protected here. As in Word, this stops changes made by mistake; it does not encrypt the file, and the text can still be read.
 
-**Form fields** (Word's legacy form fields) go in from the same group, or from **Insert**: **Text Field** (a shaded box to type into), **Check Box** and **Drop-Down** (one of a list of items). Each has a name, a default and an optional line of help. Double-click a field to change its settings. In a document protected for filling in forms, click a field to fill it in (a check box ticks at once), press **Tab** to go to the next field and **Space** or **Enter** to fill in the one picked.
+**Form fields** (Word's legacy form fields) go in from the same group, or from **Insert**: **Text Field** (a shaded box to type into), **Check Box** and **Drop-Down** (one of a list of items). Each has a name, a default and an optional line of help. Double-click a field to change its settings. In a document protected for filling in forms, click a field to fill it in (a check box is checked at once), press **Tab** to go to the next field and **Space** or **Enter** to fill in the one picked.
 
 ## Comments
 
@@ -366,7 +366,7 @@ Give a password if you want one: it is needed to stop the protection. Click **Re
 On a card:
 
 - **Reply** adds an answer under the comment, with your name and the time.
-- **Resolve** marks it as dealt with: it stays, greyed, until you delete it. **Reopen** brings it back.
+- **Resolve** marks it as dealt with: it stays, grayed, until you delete it. **Reopen** brings it back.
 - **Edit** changes the text, and **Delete** removes the comment with its replies. Replies have their own Edit and Delete.
 
 The Review tab also has **◀ Previous** and **Next ▶** to step through the comments, **Delete All**, and **Show Comments** to hide or show the cards. Undo works for every change. If you delete all the words a comment is on, the comment goes with them (and comes back with Undo).
@@ -378,9 +378,9 @@ Comments are saved in the .docx as Word's own, with their replies and Resolved m
 **Insert** tab ▸ **Equation** (or **Insert ▸ Equation…**, or Alt+=) opens the equation window.
 
 - Type LaTeX in the box, for example `\Delta G = \Delta H - T\Delta S`. The preview updates as you type.
-- Or use the buttons above the box (fraction, scripts, root, brackets, sum, integral, arrow with conditions, Greek letters and signs). Select text first and the piece goes round it.
+- Or use the buttons above the box (fraction, scripts, root, brackets, sum, integral, arrow with conditions, Greek letters and signs). Select text first and the piece goes around it.
 - Or pick a common one from **Start from**: Gibbs, Arrhenius, Eyring, Beer–Lambert, ee, Henderson–Hasselbalch and others.
-- **On a line of its own, centred** is ticked for you on an empty line. Untick it to put the equation in the line of text.
+- **On a line of its own, centered** is checked for you on an empty line. Clear it to put the equation in the line of text.
 
 Letters are set in italic as variables. Use `\mathrm{…}` for element symbols, `\text{…}` for words and units, and `{-}` for a dash that is a bond rather than a minus sign. Double-click an equation (or right-click ▸ **Edit Equation…**) to change it.
 
@@ -396,7 +396,7 @@ The **Make it** buttons change how the replacement looks: formula, bold, italic,
 
 On the **Review** tab:
 
-- **Spelling & Grammar** (F7) goes through the document from the caret: misspelled words, chemistry formatting slips (formulas without subscripts, solvents, units, ranges) and a few grammar slips (a word written twice, two spaces, a space before a comma or full stop, "a" or "an" before the wrong sound, a sentence starting with a small letter). For each: **Ignore Once**, **Ignore All**, **Add to Dictionary**, **Change** or **Change All**. Untick **Check grammar as well** to look at spelling only.
+- **Spelling & Grammar** (F7) goes through the document from the caret: misspelled words, chemistry formatting slips (formulas without subscripts, solvents, units, ranges) and a few grammar slips (a word written twice, two spaces, a space before a comma or full stop, "a" or "an" before the wrong sound, a sentence starting with a small letter). For each: **Ignore Once**, **Ignore All**, **Add to Dictionary**, **Change** or **Change All**. Clear **Check grammar as well** to look at spelling only.
 - **Thesaurus** (Shift+F7) gives words with the same meaning as the word at the caret, and related words; click one to put it in. It looks the word up online (Datamuse), sending only that word.
 - **Word Count** (Ctrl+Shift+G) shows pages, words, characters with and without spaces, paragraphs and lines, of the document or the selection, with or without text boxes, footnotes and endnotes. The status bar shows the word count all the time.
 
@@ -407,7 +407,7 @@ The **View** tab has Word's ways of looking at a document. The text is the same 
 - **Print Layout** shows the pages as they print. This is the usual view.
 - **Read Mode** fills the window with two pages at a time and nothing else. The arrow keys, Page Up and Page Down, Space or the mouse wheel turn the pages. Text can be picked and copied but not changed. **Edit Document** at the top, or Esc, goes back.
 - **Web Layout** wraps the text to the width of the window, with no pages, the way a web page shows it.
-- **Outline** shows the headings indented by level, each with the text under it. A **⊕** beside a heading means there is something under it, **⊖** means there is nothing, and a dot marks body text. Click a **⊕** to pick the heading with everything under it. Double-click it to fold or unfold the heading; a folded heading is underlined in grey. The **Outlining** tab that appears has Promote (Alt+Shift+←) and Demote (Alt+Shift+→), the level of the paragraph, Move Up (Alt+Shift+↑) and Move Down (Alt+Shift+↓), Expand (Alt+Shift++) and Collapse (Alt+Shift+−), **Show Level** (Alt+Shift+1 to 9, or Alt+Shift+A for all), **Show Text Formatting** and **Show First Line Only**. A folded heading moves, promotes and demotes together with everything under it. Headings are paragraphs in the Heading 1 to 9 styles.
+- **Outline** shows the headings indented by level, each with the text under it. A **⊕** beside a heading means there is something under it, **⊖** means there is nothing, and a dot marks body text. Click a **⊕** to pick the heading with everything under it. Double-click it to fold or unfold the heading; a folded heading is underlined in gray. The **Outlining** tab that appears has Promote (Alt+Shift+←) and Demote (Alt+Shift+→), the level of the paragraph, Move Up (Alt+Shift+↑) and Move Down (Alt+Shift+↓), Expand (Alt+Shift++) and Collapse (Alt+Shift+−), **Show Level** (Alt+Shift+1 to 9, or Alt+Shift+A for all), **Show Text Formatting** and **Show First Line Only**. A folded heading moves, promotes and demotes together with everything under it. Headings are paragraphs in the Heading 1 to 9 styles.
 - **Draft** (Ctrl+Alt+N) shows the text on one long page at its printed width, without headers and footers. Page and column breaks show as dotted lines.
 
 **Page Movement** sets how the pages sit in Print Layout: **Vertical**, one under another, or **Side to Side**, two at a time in a row that the mouse wheel scrolls across. Under **Zoom**, **One Page** fits a whole page in the window, **Multiple Pages** puts two pages in each row, and **Page Width** fits the page across the window.

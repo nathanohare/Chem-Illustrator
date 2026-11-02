@@ -45,6 +45,9 @@ function gridPath(ctx: CanvasRenderingContext2D, p: PageSetup, box: Rect): void 
  * usedPages). `dark`: the page is shown dark. `surround`: a solid colour for the space round the
  * pages (the dark theme's, so a white page does not sit in a glare of light grey), or null for the shading.
  */
+/** A screen pixel at 100% zoom, in drawing units (points): the fixed edge's sizes are given in these. */
+const EDGE_UNIT = 72 / 96;
+
 export function paintPages(ctx: CanvasRenderingContext2D, look: PageLook, r: OrientView, p: PageSetup, e: Extent, used: Set<string>, dark: boolean, surround: string | null = null): void {
   if (!look.grid) return;
   const s = r.view.scale;
@@ -138,20 +141,24 @@ export function paintPages(ctx: CanvasRenderingContext2D, look: PageLook, r: Ori
   ctx.setLineDash([]);
   ctx.lineCap = 'butt';
   const wallInk = rgba(lineHex, Math.min(1, look.lineOpacity + 0.35));
-  if (look.wallStyle === 'hatch') {
+  // (the edge is part of the page: it grows and shrinks with the zoom, its sizes being screen pixels
+  // at 100%, so zooming in on an empty page is seen to happen. Lines never go thinner than a pixel,
+  // and hatching too fine to see is left out.)
+  const ep = EDGE_UNIT;
+  if (look.wallStyle === 'hatch' && look.hatchSpacing * ep * s >= 2) {
     ctx.strokeStyle = wallInk;
-    ctx.lineWidth = look.hatchWidth * px;
+    ctx.lineWidth = Math.max(look.hatchWidth * ep, 0.75 * px);
     for (const side of ['l', 't', 'r', 'b'] as Side[]) {
       if (ws[side] === undefined) continue;
-      const band = hatchBand(side, walls, look.hatchLength * px, view);
+      const band = hatchBand(side, walls, look.hatchLength * ep, view);
       if (!band) continue;
       // the side edges' strokes lean the other way when mirrored, meeting the others in a chevron
       const turned = look.hatchCorner === 'mirror' && (side === 'l' || side === 'r');
-      hatch(ctx, band, turned ? 180 - look.hatchAngle : look.hatchAngle, look.hatchSpacing * px);
+      hatch(ctx, band, turned ? 180 - look.hatchAngle : look.hatchAngle, look.hatchSpacing * ep);
     }
   }
   ctx.strokeStyle = wallInk;
-  ctx.lineWidth = look.wallWidth * px;
+  ctx.lineWidth = Math.max(look.wallWidth * ep, px);
   ctx.lineCap = 'square';
   ctx.beginPath();
   for (const side of ['l', 't', 'r', 'b'] as Side[]) {

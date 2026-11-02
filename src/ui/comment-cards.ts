@@ -136,7 +136,7 @@ export function threadCard(c: CommentThread, opts: { active: boolean; editing: b
     });
     const resolve = el('button', 'cmt-btn', c.done ? 'Reopen' : 'Resolve');
     resolve.type = 'button';
-    resolve.title = c.done ? 'Mark the comment as still open' : 'Mark the comment as dealt with (it stays, greyed, until deleted)';
+    resolve.title = c.done ? 'Mark the comment as still open' : 'Mark the comment as dealt with (it stays, grayed, until deleted)';
     resolve.addEventListener('click', () => a.resolve(!c.done));
     const edit = el('button', 'cmt-btn', 'Edit');
     edit.type = 'button';

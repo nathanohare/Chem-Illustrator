@@ -13,7 +13,9 @@ import { safetyRow, sortSafety } from '../kb/safety-tables';
 import { explainPieces, glossaryEntry } from '../kb/glossary';
 import { CANONICAL_ROWS, PRESENT, filterValues, findRows, isCas, parseUserTable, searchedShift, sortRows, tableTsv, type KbColumn, type KbTable, type RowMatch } from '../kb/tables';
 import { ask } from './ask';
+import { infoIcon } from './info-tip';
 import { templateIcon } from './template-icons';
+import { svgNode } from './svg-node';
 import { prettyChem } from '../kb/pretty';
 
 /** A structure picture in a table cell, in pixels. */
@@ -36,7 +38,18 @@ const button = (label: string, title: string, on: () => void, primary = false): 
 export function explained(text: string, nuclei = false): DocumentFragment {
   const f = document.createDocumentFragment();
   // formulas with real subscripts (CDCl₃), nuclei with superscripts (¹H): shown so, searched as typed
-  for (const p of explainPieces(text)) { const t = prettyChem(p.text, nuclei); f.append(p.tip ? el('abbr', { textContent: t, title: p.tip }) : t); }
+  for (const p of explainPieces(text)) { const t = prettyChem(p.text, nuclei); f.append(p.tip ? el('abbr', { textContent: t, title: p.tip }) : withSigma(t)); }
+  return f;
+}
+
+/** Text with the m and p of Hammett's σm and σp as italic subscripts. */
+function withSigma(text: string): DocumentFragment | string {
+  if (!/σ[mpoIR]/.test(text)) return text;
+  const f = document.createDocumentFragment();
+  for (const part of text.split(/(σ[mpoIR](?![A-Za-z]))/)) {
+    if (/^σ[mpoIR]$/.test(part)) f.append('σ', el('sub', {}, el('i', { textContent: part[1] })));
+    else if (part) f.append(part);
+  }
   return f;
 }
 
@@ -329,14 +342,8 @@ export class KnowledgeBaseWindow {
     const th = el('th', {}, explained(c.label, true));
     if (c.numeric || c.shift) th.classList.add('num');
     if (c.narrow) th.classList.add('narrow');
-    if (c.info) {
-      // what the scale means: hover for the tooltip; a click shows it too, without sorting
-      const i = el('span', { className: 'kb-info', textContent: 'ⓘ', title: c.info, tabIndex: 0 });
-      i.setAttribute('role', 'img');
-      i.setAttribute('aria-label', `${c.label}: ${c.info}`);
-      i.addEventListener('click', (e) => { e.stopPropagation(); this.host.flash(c.info!, 12000); });
-      th.append(' ', i);
-    }
+    // what the scale means: hover for the tip, a click pins it (and doesn't sort)
+    if (c.info) th.append(' ', infoIcon(c.info));
     if (c.picture) { th.classList.add('kb-pic'); return th; }
     th.title = `Sort by ${c.label}`;
     if (this.sort?.key === c.key) th.append(this.sort.down ? ' ▾' : ' ▴');
@@ -387,7 +394,7 @@ export class KnowledgeBaseWindow {
         if (c.picture) {
           const tpl = t.picture?.(m.row);
           td.className = 'kb-pic';
-          if (tpl) td.innerHTML = templateIcon(tpl, PIC, 14);
+          { const icon = tpl ? svgNode(templateIcon(tpl, PIC, 14)) : null; if (icon) td.append(icon); }
           tr.append(td);
           continue;
         }

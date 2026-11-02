@@ -3,6 +3,7 @@
 // keeps that choice for the person: no app can make itself the default). On macOS and Linux the
 // installer lists the types, and the page says where to choose the default.
 
+import { addInfo, foldIntoInfo } from './info-tip';
 import { showDialog } from './dialog-host';
 
 export const FILE_TYPES: { ext: string; label: string; chemistry: boolean }[] = [
@@ -63,7 +64,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     form.append(buttons);
     form.addEventListener('submit', (e) => { e.preventDefault(); done(); });
   } else {
-    note('Ticked kinds of file show Chem Illustrator under "Open with" when you right-click them in Explorer. This never changes the program that opens them now: ChemDraw, Word, PowerPoint and Excel stay the default unless you change it.');
+    addInfo(h, 'Checked kinds of file show Chem Illustrator under "Open with" when you right-click them in Explorer. This never changes the program that opens them now: ChemDraw, Word, PowerPoint and Excel stay the default unless you change it.');
     const now = new Set(await host.get().catch(() => [] as string[]));
     const boxes = new Map<string, HTMLInputElement>();
     for (const t of FILE_TYPES) {
@@ -85,6 +86,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     open.type = 'button';
     open.textContent = 'Choose Defaults in Windows Settings…';
     open.addEventListener('click', () => void host.openDefaults().catch((e) => host.flash(String(e))));
+    foldIntoInfo(defaults, open);
     form.append(defaults, open);
     const objRow = document.createElement('label');
     objRow.className = 'ask-row ask-check';
@@ -98,6 +100,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     const objHelp = document.createElement('p');
     objHelp.className = 'ask-help muted';
     objHelp.textContent = 'Copied drawings paste as Chem Illustrator objects: double-click one in Word to edit it here, and Save puts it back. Without this they paste as pictures (they still hold the drawing, so copying one back here keeps it editable). Also in Word under Insert ▸ Document ▸ Object.';
+    foldIntoInfo(objHelp, objName);
     form.append(objRow, objHelp);
     const cancel = document.createElement('button');
     cancel.type = 'button';

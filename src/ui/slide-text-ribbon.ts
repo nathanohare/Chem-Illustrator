@@ -7,6 +7,8 @@ import type * as rt from '../richtext';
 import type { TextFormat } from '../text/format';
 import type { TextBoxChange } from '../editor/editor';
 import { ask } from './ask';
+import { FontBox } from './font-box';
+
 
 export interface TextLook {
   style: rt.RunStyle;
@@ -62,17 +64,18 @@ export class SlideTextRibbon {
   private dir: HTMLSelectElement;
   private cols: HTMLSelectElement;
   private fit: HTMLSelectElement;
+  private fontBox: FontBox | null = null;
 
   constructor(private root: HTMLElement, private hooks: SlideTextHooks) {
     const q = <T extends HTMLElement>(s: string) => root.querySelector<T>(s)!;
-    this.font = q('#sl-font');
-    this.size = q('#sl-size');
-    this.colour = q('#sl-colour');
-    this.line = q('#sl-line');
-    this.spacing = q('#sl-spacing');
-    this.dir = q('#sl-dir');
-    this.cols = q('#sl-cols');
-    this.fit = q('#sl-fit');
+    this.font = q('[data-tx="font"]');
+    this.size = q('[data-tx="size"]');
+    this.colour = q('[data-tx="colour"]');
+    this.line = q('[data-tx="line"]');
+    this.spacing = q('[data-tx="spacing"]');
+    this.dir = q('[data-tx="dir"]');
+    this.cols = q('[data-tx="cols"]');
+    this.fit = q('[data-tx="fit"]');
     const run = (f: TextFormat) => {
       if (!hooks.format(f)) hooks.nothing();
       hooks.refocus();
@@ -103,8 +106,17 @@ export class SlideTextRibbon {
     });
     this.colour.addEventListener('change', () => run({ kind: 'style', patch: { color: this.colour.value.toLowerCase() === '#000000' ? undefined : this.colour.value } }));
     this.line.addEventListener('change', () => { const v = parseFloat(this.line.value); if (v > 0) run({ kind: 'line', v }); });
-    const kase = q<HTMLSelectElement>('#sl-case');
-    kase.addEventListener('change', () => { const mode = kase.value as rt.CaseMode; kase.value = ''; if (mode) run({ kind: 'case', mode }); });
+    // the Font group's corner button: Change Case, spacing and kerning, and text effects
+    const launch = root.querySelector<HTMLButtonElement>('[data-tx="font-box"]');
+    launch?.addEventListener('mousedown', (e) => e.preventDefault());
+    launch?.addEventListener('click', () => {
+      this.fontBox ??= new FontBox({
+        look: () => hooks.look()?.style ?? null,
+        apply: (patch) => run({ kind: 'style', patch }),
+        changeCase: (mode) => run({ kind: 'case', mode }),
+      });
+      this.fontBox.toggle(launch);
+    });
     this.spacing.addEventListener('change', async () => {
       let v = this.spacing.value;
       if (v === 'more') {
@@ -135,6 +147,8 @@ export class SlideTextRibbon {
 
   /** Show how the text looks now (call after the selection or the text changes). */
   refresh(): void {
+    // (closed once its ribbon is no longer showing: another kind of tab)
+    if (this.fontBox?.open) { if (this.root.offsetParent) this.fontBox.refresh(); else this.fontBox.close(); }
     const look = this.hooks.look();
     const s = look?.style ?? {};
     const press = (id: string, on: boolean) => {

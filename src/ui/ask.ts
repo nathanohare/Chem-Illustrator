@@ -2,6 +2,7 @@
 // the browser's own prompt boxes, so these are drawn by the page.
 
 import { previewSlot, showDialog } from './dialog-host';
+import { addInfo } from './info-tip';
 export interface Field {
   name: string;
   label: string;
@@ -16,7 +17,7 @@ export interface Field {
   options?: { value: string; label: string }[];
   /** Offered in a list under a text box, which can still be typed in. */
   suggestions?: string[];
-  /** A line of help shown under the box. */
+  /** Help for the field, behind an "i" beside its name. */
   help?: string;
   /** A small picture of the choice beside the box, drawn again as it changes. */
   inline?: (value: string) => Node;
@@ -29,15 +30,19 @@ export interface AskPreview {
 }
 
 /** Show the fields; resolves with what was entered, or null if the window was cancelled. */
-export function ask(title: string, fields: Field[], opts: { ok?: string; note?: string; /** Only an OK button, for a message. */ noCancel?: boolean; /** A short list under the note (two columns: what, and its value). */ lines?: [string, string][]; preview?: AskPreview } = {}): Promise<Record<string, string> | null> {
+export function ask(title: string, fields: Field[], opts: { ok?: string; note?: string; /** Only an OK button, for a message. */ noCancel?: boolean; /** A short list under the note (two columns: what, and its value). */ lines?: [string, string][]; preview?: AskPreview; /** Called with the values as they are typed or picked (a live preview). */ onInput?: (values: Record<string, string>) => void } = {}): Promise<Record<string, string> | null> {
   return new Promise((resolve) => {
     const d = document.createElement('dialog');
     d.className = 'ask';
     const form = document.createElement('form');
+    form.className = 'ask-form';
     const h = document.createElement('h2');
     h.textContent = title;
     form.append(h);
-    if (opts.note) {
+    // the window's help sits in an "i" beside its title; a window with nothing to fill in is a
+    // message, and its note is the message
+    if (opts.note && fields.length) addInfo(h, opts.note);
+    else if (opts.note) {
       const p = document.createElement('p');
       p.className = 'muted';
       p.textContent = opts.note;
@@ -59,6 +64,7 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
       const row = document.createElement('label');
       row.className = 'ask-row';
       const name = document.createElement('span');
+      name.className = 'ask-name';
       name.textContent = f.label;
       let input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
       if (f.type === 'textarea') {
@@ -110,13 +116,8 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
         const el = input;
         inlines.push(() => slot.replaceChildren(f.inline!(el instanceof HTMLInputElement && el.type === 'checkbox' ? String(el.checked) : el.value)));
       }
+      if (f.help) addInfo(name, f.help);
       form.append(row);
-      if (f.help) {
-        const help = document.createElement('p');
-        help.className = 'ask-help muted';
-        help.textContent = f.help;
-        form.append(help);
-      }
     }
     const buttons = document.createElement('p');
     buttons.className = 'ask-buttons';
@@ -149,6 +150,12 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
       e.preventDefault();
       done(values());
     });
+    if (opts.onInput) {
+      const live = () => opts.onInput!(values());
+      form.addEventListener('input', live);
+      form.addEventListener('change', live);
+      queueMicrotask(live);
+    }
     cancel.addEventListener('click', () => done(null));
     d.addEventListener('close', () => done(null));
     showDialog(d);

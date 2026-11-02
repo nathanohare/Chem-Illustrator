@@ -178,8 +178,8 @@ export const isXY = (k: ChartKind): boolean => k === 'scatter' || k === 'bubble'
 /** Colour sets for series, the first as Excel's Office colours. */
 export const CHART_PALETTES: Record<string, { name: string; colors: string[] }> = {
   office: { name: 'Office', colors: ['#4472c4', '#ed7d31', '#a5a5a5', '#ffc000', '#5b9bd5', '#70ad47', '#264478', '#9e480e', '#636363', '#997300'] },
-  safe: { name: 'Colour-blind safe (Okabe–Ito)', colors: ['#0072b2', '#e69f00', '#009e73', '#d55e00', '#56b4e9', '#cc79a7', '#f0e442', '#000000'] },
-  journal: { name: 'Black and greys (for print)', colors: ['#000000', '#555555', '#888888', '#bbbbbb', '#333333', '#777777'] },
+  safe: { name: 'Color-blind safe (Okabe–Ito)', colors: ['#0072b2', '#e69f00', '#009e73', '#d55e00', '#56b4e9', '#cc79a7', '#f0e442', '#000000'] },
+  journal: { name: 'Black and grays (for print)', colors: ['#000000', '#555555', '#888888', '#bbbbbb', '#333333', '#777777'] },
   blues: { name: 'Blues', colors: ['#08306b', '#2171b5', '#6baed6', '#9ecae1', '#4292c6', '#c6dbef'] },
   warm: { name: 'Warm', colors: ['#b2182b', '#ef8a62', '#f4a582', '#d6604d', '#fddbc7', '#67001f'] },
   muted: { name: 'Muted', colors: ['#4e79a7', '#f28e2b', '#e15759', '#76b7b2', '#59a14f', '#edc948', '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac'] },

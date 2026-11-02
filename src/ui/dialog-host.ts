@@ -39,10 +39,12 @@ export function setPreviewSlot(el: HTMLElement | null): void {
  * A place for a page's preview, titled: the Settings window's right-hand pane when the page is
  * in it, or null (the page then shows its preview itself).
  */
-export function previewSlot(title: string): HTMLElement | null {
+export function previewSlot(title: string, wide = false): HTMLElement | null {
   const p = previews;
   if (!p?.isConnected) return null;
   p.hidden = false;
+  // (a page whose preview has more to show, such as Drawing Style's, gets a wider column)
+  p.classList.toggle('wide', wide);
   p.closest('dialog')?.classList.add('with-preview');
   const h = document.createElement('h3');
   h.textContent = title;

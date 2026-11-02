@@ -128,6 +128,11 @@ export class PreflightPane {
     return this.box.open;
   }
 
+  /** The figure showing, as it draws now (to check it again after a fix). */
+  figureNow(): PreflightFigure | null {
+    return this.host.figure();
+  }
+
   show(near?: HTMLElement | null): void {
     this.refresh();
     this.box.show(near);

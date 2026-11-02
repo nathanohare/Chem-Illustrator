@@ -3,6 +3,7 @@
 // Special (Ctrl+Alt+V), Text to Columns, Remove Duplicates, Flash Fill (Ctrl+E), Sort with
 // several levels, Advanced Filter, and Freeze Panes and Split on the View tab.
 
+import { withInfo, addInfo } from './info-tip';
 import type { SheetView } from './sheet-view';
 import { popupMenu } from './sheet-view';
 import type { Sheet } from '../sheet/workbook';
@@ -183,8 +184,7 @@ export class SheetData {
     const matchCase = check('Match case', !!o.matchCase);
     const whole = check('Match entire cell contents', !!o.whole);
     const opts = el('details', 'sd-find-opts');
-    opts.append(el('summary', undefined, 'Options'), row('Within', within), row('Search', order), row('Look in', lookIn), matchCase.row, whole.row,
-      el('p', 'muted small', 'Wildcards: ? any one character, * any run of them; ~ before either finds it as itself.'));
+    opts.append(withInfo(el('summary', undefined, 'Options'), 'Wildcards: ? any one character, * any run of them; ~ before either finds it as itself.'), row('Within', within), row('Search', order), row('Look in', lookIn), matchCase.row, whole.row);
     const status = el('p', 'muted small sd-find-status');
     const list = el('div', 'sd-find-list');
     const buttons = el('p', 'ask-buttons');
@@ -438,8 +438,8 @@ export class SheetData {
     stop.placeholder = 'optional';
     const top = el('div', 'sd-series-top');
     top.append(by.box, type.box, unit.box);
-    w.form.append(top, trend.row, row('Step value', step), row('Stop value', stop),
-      el('p', 'muted small', 'Starts from the first cell of each row or column (dates are typed as dates, such as 2026-01-31). With a stop value and one cell selected, the series runs on until it reaches it.'));
+    w.form.append(top, trend.row, row('Step value', step), row('Stop value', stop));
+    addInfo(w.form.querySelector('h2'), 'Starts from the first cell of each row or column (dates are typed as dates, such as 2026-01-31). With a stop value and one cell selected, the series runs on until it reaches it.');
     const sync = () => {
       unit.box.disabled = type.value() !== 'date';
       trend.box.disabled = type.value() === 'date' || type.value() === 'auto';
@@ -481,8 +481,8 @@ export class SheetData {
     op.box.classList.add('sd-two-cols');
     const skip = check('Skip blanks');
     const transpose = check('Transpose (rows become columns)');
-    w.form.append(what.box, op.box, skip.row, transpose.row,
-      el('p', 'muted small', 'Operation combines the copied numbers with the numbers already in the cells (multiply a column of mmol by 1000 to get µmol, say).'));
+    w.form.append(what.box, op.box, skip.row, transpose.row);
+    addInfo(w.form.querySelector('h2'), 'Operation combines the copied numbers with the numbers already in the cells (multiply a column of mmol by 1000 to get µmol, say).');
     w.onOk(() => { this.host.pasteSpecial({ what: what.value(), op: op.value(), skipBlanks: skip.box.checked, transpose: transpose.box.checked }); });
     open(w, what.inputs.get('all'));
   }
@@ -585,7 +585,7 @@ export class SheetData {
     update();
     w.onOk(() => {
       const o = options();
-      if (o.mode === 'delimited' && !o.delimiters) return 'Tick at least one delimiter.';
+      if (o.mode === 'delimited' && !o.delimiters) return 'Select at least one delimiter.';
       if (o.mode === 'fixed' && !o.breaks!.length) return 'Give where to break each line (characters from the start, such as 10, 18).';
       const at = readCell(dest.value);
       if (!at) return `"${dest.value}" isn't a cell (for example $B$2).`;
@@ -630,10 +630,10 @@ export class SheetData {
     none.addEventListener('click', () => boxes.forEach((b) => { b.checked = false; }));
     const btns = el('div', 'cp-buttons');
     btns.append(selAll, none);
-    w.form.append(el('p', 'muted small', `In ${rangeName(all)}: rows whose ticked columns match an earlier row (ignoring capitals; structures by their SMILES) are removed.`), btns, header.row, list);
+    w.form.append(el('p', 'muted small', `In ${rangeName(all)}: rows whose checked columns match an earlier row (ignoring capitals; structures by their SMILES) are removed.`), btns, header.row, list);
     w.onOk(() => {
       const cols = boxes.filter((b) => b.checked).map((b) => Number(b.value));
-      if (!cols.length) return 'Tick at least one column.';
+      if (!cols.length) return 'Select at least one column.';
       let got = { removed: 0, kept: 0 };
       this.host.edit('Remove Duplicates', (sh) => { got = removeDuplicates(sh, all, cols, header.box.checked); });
       this.host.flash(got.removed ? `${got.removed} duplicate row${got.removed === 1 ? '' : 's'} found and removed; ${got.kept} unique row${got.kept === 1 ? '' : 's'} remain.` : 'No duplicate rows found.', 6000);
@@ -804,8 +804,8 @@ export class SheetData {
     to.placeholder = 'e.g. $K$1';
     const toRow = row('Copy to', to);
     const unique = check('Unique records only');
-    w.form.append(action.box, row('List range', list), row('Criteria range', crit), toRow, unique.row,
-      el('p', 'muted small', 'Criteria: a row of headers from the list, with tests under them (>50, <>THF, Pd* for "begins with", = for blank). Tests on one row must all pass; each row is another way to pass. A formula under a header that isn\'t in the list (=B2>AVERAGE($B$2:$B$40)) tests each row from the first.'));
+    w.form.append(action.box, row('List range', list), row('Criteria range', crit), toRow, unique.row);
+    addInfo(w.form.querySelector('h2'), 'Criteria: a row of headers from the list, with tests under them (>50, <>THF, Pd* for "begins with", = for blank). Tests on one row must all pass; each row is another way to pass. A formula under a header that isn\'t in the list (=B2>AVERAGE($B$2:$B$40)) tests each row from the first.');
     const sync = () => { toRow.hidden = action.value() !== 'copy'; };
     for (const r of action.inputs.values()) r.addEventListener('change', sync);
     sync();

@@ -44,7 +44,7 @@ const TIER_NAMES: Record<Tier, string> = { quick: 'Quick', search: 'Full Search'
 const TIER_TIPS: Record<Tier, string> = {
   quick: 'About a dozen likely shapes, each relaxed with the MMFF94s+ force field. Takes seconds.',
   search: 'Hundreds of starting shapes, each relaxed with MMFF94s+, duplicates removed. Finds shapes Quick misses; under a minute for most molecules.',
-  xtb: 'The lowest few re-optimised with GFN2-xTB, a fast quantum-chemical method: more trustworthy energies than a force field. Minutes; desktop app, with xtb installed.',
+  xtb: 'The lowest few re-optimized with GFN2-xTB, a fast quantum-chemical method: more trustworthy energies than a force field. Minutes; desktop app, with xtb installed.',
 };
 
 /** The model's background: light grey, so white hydrogens stand out. */
@@ -130,7 +130,7 @@ export class Viewer3d {
     const spin = document.createElement('button');
     spin.type = 'button';
     spin.textContent = 'Spin';
-    spin.title = 'Turn the model slowly round and round';
+    spin.title = 'Turn the model slowly around and around';
     spin.setAttribute('aria-pressed', 'false');
     spin.addEventListener('click', () => { this.spinning = !this.spinning; spin.setAttribute('aria-pressed', String(this.spinning)); if (this.spinning) this.tick(); });
     const fog = check('Depth', 'Depth shading: the back of the model fades, as Format ▸ Depth Shading fades structures on the page', this.fog, (v) => (this.fog = v));
@@ -323,8 +323,8 @@ export class Viewer3d {
     const n = m?.conformers.length ?? 0;
     const text = this.tier === 'quick' ? `Quick: about a dozen likely shapes, each relaxed with the MMFF94s+ force field. Fast, but it can miss shapes: try Full Search.`
       : this.tier === 'search' ? (m ? `Full Search: ${n} distinct conformer${n === 1 ? '' : 's'} from ${m.starts} starting shapes, each relaxed with MMFF94s+, duplicates removed.` : 'Full Search: hundreds of starting shapes, each relaxed with MMFF94s+, duplicates removed.')
-      : m ? `xTB Refine: the lowest ${n} re-optimised with ${m.method}, a fast quantum-chemical method, and ranked again.`
-      : `xTB Refine: re-optimises the lowest few with GFN2-xTB, a fast quantum-chemical method, using the xtb program on this computer.${this.tools?.xtb ? '' : ' Desktop app only.'}`;
+      : m ? `xTB Refine: the lowest ${n} re-optimized with ${m.method}, a fast quantum-chemical method, and ranked again.`
+      : `xTB Refine: re-optimizes the lowest few with GFN2-xTB, a fast quantum-chemical method, using the xtb program on this computer.${this.tools?.xtb ? '' : ' Desktop app only.'}`;
     this.note.textContent = text + ' ';
     if (m && this.tier !== 'quick') this.note.append(this.again);
   }
@@ -730,7 +730,7 @@ export class Viewer3d {
     const got = await ask('xTB Refine', [
       { name: 'exe', label: 'xtb program', value: p.exe, type: 'text', placeholder: 'xtb', help: '"xtb" finds it on your PATH; otherwise the full path to xtb (xtb.exe on Windows). Install it from conda-forge (conda install -c conda-forge xtb) or github.com/grimme-lab/xtb/releases. xtb is free software (LGPL 3.0).' },
       { name: 'solvent', label: 'Solvent (ALPB)', value: p.solvent, options: [{ value: '', label: 'Gas phase' }, ...XTB_SOLVENTS.map((s) => ({ value: s, label: s }))] },
-      { name: 'opt', label: 'Optimise each conformer (otherwise energies only)', value: String(p.opt), type: 'checkbox' },
+      { name: 'opt', label: 'Optimize each conformer (otherwise energies only)', value: String(p.opt), type: 'checkbox' },
       { name: 'count', label: 'Lowest conformers to refine', value: String(Math.min(p.count, m.conformers.length)), type: 'number', help: `Of the ${m.conformers.length} shown. Each takes seconds to minutes, depending on its size.` },
     ], { ok: 'Refine', note: 'Runs on this computer: nothing is sent anywhere.' });
     if (!got) return;
@@ -763,7 +763,7 @@ export class Viewer3d {
     const got = await ask('Gaussian/ORCA Input', [
       { name: 'program', label: 'Program', value: program, options: [{ value: 'orca', label: 'ORCA (.inp)' }, { value: 'gaussian', label: 'Gaussian (.gjf)' }] },
       { name: 'method', label: 'Method', value: q.method ?? QM_METHODS[program][0], type: 'text', suggestions: [...QM_METHODS.orca, ...QM_METHODS.gaussian], help: 'As the program writes it: "B3LYP D3BJ def2-SVP" for ORCA, "B3LYP/def2SVP EmpiricalDispersion=GD3BJ" for Gaussian.' },
-      { name: 'job', label: 'Job', value: q.job ?? 'opt freq', options: [{ value: 'opt freq', label: 'Optimise, then frequencies' }, { value: 'opt', label: 'Optimise' }, { value: 'sp', label: 'Single point' }, { value: 'freq', label: 'Frequencies' }] },
+      { name: 'job', label: 'Job', value: q.job ?? 'opt freq', options: [{ value: 'opt freq', label: 'Optimize, then frequencies' }, { value: 'opt', label: 'Optimize' }, { value: 'sp', label: 'Single point' }, { value: 'freq', label: 'Frequencies' }] },
       { name: 'solvent', label: 'Solvent (SMD)', value: q.solvent ?? '', type: 'text', placeholder: 'none (gas phase)', suggestions: ['water', 'methanol', 'acetonitrile', 'dichloromethane', 'chloroform', 'thf', 'toluene', 'dmso', 'dmf'] },
       { name: 'charge', label: 'Charge', value: String(charge), type: 'number' },
       { name: 'mult', label: 'Multiplicity', value: String(multiplicity), type: 'number' },

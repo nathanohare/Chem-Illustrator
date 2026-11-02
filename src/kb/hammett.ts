@@ -180,7 +180,7 @@ export function groupPicture(group: string): Template | null {
   return p ? { id: `hammett-${group}`, name: group, group: 'own', atoms: p.atoms, bonds: p.bonds, attach: p.stubs[0], stubs: p.stubs } : null;
 }
 
-/** What the four constants mean (the ⓘ by their headings). */
+/** What the four constants mean (the "i" by their headings). */
 const SIGMA_INFO = 'Hammett substituent constant: how much the group pulls electrons from (positive) or pushes them into (negative) a benzene ring, measured from the acidity of the substituted benzoic acid in water at 25 °C (σm with the group meta to the reaction site, σp para). An electronic effect, not a safety or green score. Source: Hansch, Leo and Taft, Chem. Rev. 1991, Table I.';
 const FR_INFO = 'The field/inductive (F) and resonance (R) parts of the group\'s electronic effect (Swain–Lupton, as modified by Hansch, Leo and Taft; σp ≈ F + R). Positive pulls electrons, negative pushes them. Source: Chem. Rev. 1991, Table I.';
 

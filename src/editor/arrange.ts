@@ -18,6 +18,8 @@ export interface Selection {
 /** How big things are on the page: label boxes round atoms, and caption boxes. */
 export interface Measure {
   atomBoxes(a: Atom): Rect[];
+  /** Which side a double bond's second line is drawn on (+1 right of a1→a2 on screen, −1 left, 0 centred), as drawn. */
+  bondSide?(b: Bond): number;
   captionBox(c: Caption): Rect;
 }
 

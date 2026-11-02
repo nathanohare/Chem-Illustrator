@@ -162,7 +162,7 @@ export class SheetOutline {
     const below = w.check('Summary below data', !s.outline?.summaryAbove);
     w.actions('OK', () => {
       const picked = ticks.filter(([, b]) => b.checked).map(([c]) => c);
-      if (!picked.length) return 'Tick at least one column to add a subtotal to.';
+      if (!picked.length) return 'Select at least one column to add a subtotal to.';
       let out: Range | string = R;
       this.host.edit('Subtotal', (sh) => {
         out = addSubtotals(sh, R, { by: Number(by.value), fn: Number(fn.value), cols: picked, replace: replace.checked, pageBreaks: breaks.checked, above: !below.checked });

@@ -244,13 +244,18 @@ function runXml(r: TextRun, explicit: { size: number; font: string } | null, hli
     if (r.underline) attrs.push('u="sng"');
     if (r.strike) attrs.push('strike="sngStrike"');
     if (r.spacing) attrs.push(`spc="${Math.round(r.spacing * 100)}"`);
+    if (r.noKern) attrs.push('kern="0"');
     if (p.pos === 'sub') attrs.push('baseline="-25000"');
     else if (p.pos === 'sup') attrs.push('baseline="30000"');
     attrs.push('dirty="0"');
-    const color = r.color ?? (explicit ? '#000000' : undefined);
-    const fill = color ? `<a:solidFill><a:srgbClr val="${hex6(color)}"/></a:solidFill>` : '';
+    const color = r.color ?? (explicit || r.transparency ? '#000000' : undefined);
+    const alpha = r.transparency ? `<a:alpha val="${Math.round((1 - r.transparency) * 100000)}"/>` : '';
+    const fill = r.noFill ? '<a:noFill/>' : color ? `<a:solidFill><a:srgbClr val="${hex6(color)}"${alpha ? `>${alpha}</a:srgbClr>` : '/>'}</a:solidFill>` : '';
+    // the Font box's text effects: an outline round the letters (a:ln comes first) and a shadow
+    const ln = r.outline ? `<a:ln w="${Math.round((r.outlineW ?? 0.75) * 12700)}"><a:solidFill><a:srgbClr val="${hex6(r.outline)}"/></a:solidFill></a:ln>` : '';
+    const shadow = r.shadow ? '<a:effectLst><a:outerShdw blurRad="38100" dist="38100" dir="2700000" algn="tl" rotWithShape="0"><a:prstClr val="black"><a:alpha val="40000"/></a:prstClr></a:outerShdw></a:effectLst>' : '';
     const latin = font ? `<a:latin typeface="${xml(font)}"/><a:cs typeface="${xml(font)}"/>` : '';
-    return `<a:r><a:rPr ${attrs.join(' ')}>${fill}${latin}${ownColour(click, color)}</a:rPr><a:t>${xml(p.text)}</a:t></a:r>`;
+    return `<a:r><a:rPr ${attrs.join(' ')}>${ln}${fill}${shadow}${latin}${ownColour(click, color)}</a:rPr><a:t>${xml(p.text)}</a:t></a:r>`;
   }).join('');
 }
 

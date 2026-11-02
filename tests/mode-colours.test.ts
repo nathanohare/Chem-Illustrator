@@ -18,7 +18,8 @@ describe('mode colours', () => {
     const p = modePalette('#2f6fdf');
     expect(p.accent).toBe('#2f6fdf'); // already readable on white
     expect(p.soft).toBe('#e2ebfb'); // was #e3ecfc
-    expect(p.accentDark).toBe('#7babff'); // was #7aa7ff
+    expect(p.accentDark).toBe('#819ecf'); // muted for the dark theme (was #7babff)
+    expect(modePalette('#0e7c93').accentDark).toBe('#4ea9bc'); // Canvas teal, Nate's pick (was #3fdeff)
   });
   it('makes every colour readable, however pale or dark it is chosen', () => {
     for (const c of ['#c8572a', '#ffd800', '#00ff66', '#ffffff', '#000000', '#1e8a50', '#7f3fbf']) {

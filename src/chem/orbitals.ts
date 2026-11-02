@@ -22,8 +22,8 @@ export const ORBITAL_KINDS: { value: OrbitalKind; label: string }[] = [
 ];
 
 export const ORBITAL_LOOKS: { value: OrbitalLook; label: string }[] = [
-  { value: 'shaded', label: 'One phase shaded grey' },
-  { value: 'colour', label: 'Phases in two colours' },
+  { value: 'shaded', label: 'One phase shaded gray' },
+  { value: 'colour', label: 'Phases in two colors' },
   { value: 'outline', label: 'Outlines only (no phases)' },
 ];
 

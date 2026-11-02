@@ -151,7 +151,7 @@ export const GREEN_NMR_TABLE: KbTable = {
   rows: greenNmrRows(),
   sources: [
     { label: 'Cseri, L.; Kumar, S.; Palchuk, P.; Szekely, G. ACS Sustainable Chem. Eng. 2023, 11, 5696 (Tables 1-3, CC BY 4.0; retyped, footnotes reworded)', url: 'https://doi.org/10.1021/acssuschemeng.3c00244' },
-    { label: 'Licence: CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' },
+    { label: 'License: CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' },
   ],
   canonicalSmiles: true,
   links: (row) => [{ label: 'PubChem', url: `https://pubchem.ncbi.nlm.nih.gov/#query=${encodeURIComponent(String(row.name).replace(/\s*\(.*\)$/, ''))}` }],

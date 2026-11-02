@@ -12,8 +12,8 @@ export type GuideKind = 'cross' | 'h' | 'v';
 export interface Guide { kind: GuideKind; x: number; y: number }
 
 /** What a grabbed atom or bond snaps to along a guide. */
-export type GuideSnap = 'major' | 'minor' | 'both' | 'none';
-export const GUIDE_SNAPS: GuideSnap[] = ['major', 'minor', 'both', 'none'];
+export type GuideSnap = 'major' | 'minor' | 'both';
+export const GUIDE_SNAPS: GuideSnap[] = ['major', 'minor', 'both'];
 
 export interface CanvasGuides {
   list: Guide[];
@@ -25,6 +25,45 @@ export interface CanvasGuides {
   snap: GuideSnap;
   /** The guides show (and snap); off keeps them for later. */
   shown: boolean;
+  /** Snapping is off: the guides only show (the tick choice is kept for when it is on again). */
+  snapOff?: boolean;
+  /** Their colour (#rrggbb; absent: the usual blue, lighter on a dark page). */
+  color?: string;
+  /** How see-through they are, 0 (as usual) to 0.9 (faint). */
+  clear?: number;
+}
+
+/** The colours offered for guides: the usual blue first. */
+export const GUIDE_COLOURS: { value: string | undefined; name: string }[] = [
+  { value: undefined, name: 'Blue (the usual)' },
+  { value: '#00a8b5', name: 'Teal' },
+  { value: '#d81b8c', name: 'Magenta' },
+  { value: '#e53935', name: 'Red' },
+  { value: '#2e9b46', name: 'Green' },
+  { value: '#ef8a00', name: 'Orange' },
+  { value: '#8a8f98', name: 'Gray' },
+];
+
+/**
+ * A tick spacing typed with its unit, in points: 1" or 1 in, 2.5 cm, 30 mm, 12 pt. A bare number
+ * is in the rulers' unit. Null when it isn't a length above 0.
+ */
+export function parseGuideLength(text: string, unit: 'in' | 'cm'): number | null {
+  const m = /^\s*(\d*[.,]?\d+)\s*(in|inch|inches|"|”|″|''|cm|mm|pt|points?)?\s*$/i.exec(text);
+  if (!m) return null;
+  const v = Number(m[1].replace(',', '.'));
+  if (!(v > 0)) return null;
+  const u = (m[2] ?? unit).toLowerCase();
+  if (u === 'cm') return (v / 2.54) * 72;
+  if (u === 'mm') return (v / 25.4) * 72;
+  if (u.startsWith('p')) return v;
+  return v * 72;
+}
+
+/** A tick spacing written with its unit, in the rulers' unit: 1", 0.25", 2.5 cm. */
+export function showGuideLength(pt: number, unit: 'in' | 'cm'): string {
+  const v = Math.round((unit === 'in' ? pt / 72 : (pt / 72) * 2.54) * 1000) / 1000;
+  return unit === 'in' ? `${v}"` : `${v} cm`;
 }
 
 export const DEFAULT_GUIDES: CanvasGuides = { list: [], grid: false, major: 72, minor: 18, snap: 'both', shown: true };
@@ -49,8 +88,14 @@ export function parseGuides(raw: unknown): CanvasGuides | null {
   }
   const major = num(o.major, 1, 2000) ?? DEFAULT_GUIDES.major;
   const minor = Math.min(major, num(o.minor, 0.5, 2000) ?? Math.min(major, DEFAULT_GUIDES.minor));
+  // (files from before the snapping checkbox kept "none" as a snap choice)
   const snap = GUIDE_SNAPS.includes(o.snap as GuideSnap) ? (o.snap as GuideSnap) : DEFAULT_GUIDES.snap;
+  const snapOff = o.snapOff === true || o.snap === 'none';
   const g: CanvasGuides = { list, grid: o.grid === true, major, minor, snap, shown: o.shown !== false };
+  if (snapOff) g.snapOff = true;
+  if (typeof o.color === 'string' && /^#[0-9a-f]{6}$/i.test(o.color)) g.color = o.color.toLowerCase();
+  const clear = num(o.clear, 0, 0.9);
+  if (clear) g.clear = clear;
   return g.list.length || g.grid ? g : null;
 }
 
@@ -58,7 +103,7 @@ export function parseGuides(raw: unknown): CanvasGuides | null {
 export function guidesText(g: CanvasGuides | null): string | null {
   if (!g || (!g.list.length && !g.grid)) return null;
   const r = (v: number) => Math.round(v * 100) / 100;
-  return JSON.stringify({ list: g.list.map((x) => ({ kind: x.kind, x: r(x.x), y: r(x.y) })), grid: g.grid || undefined, major: r(g.major), minor: r(g.minor), snap: g.snap, shown: g.shown ? undefined : false });
+  return JSON.stringify({ list: g.list.map((x) => ({ kind: x.kind, x: r(x.x), y: r(x.y) })), grid: g.grid || undefined, major: r(g.major), minor: r(g.minor), snap: g.snap, snapOff: g.snapOff || undefined, shown: g.shown ? undefined : false, color: g.color, clear: g.clear ? r(g.clear) : undefined });
 }
 
 /** A line of a guide: up and down (at `at` = x) or across (at `at` = y), its ticks counted from `origin` along it. */
@@ -88,8 +133,8 @@ export function guideLines(g: CanvasGuides, area: { x1: number; y1: number; x2: 
 const near = (v: number, step: number, origin: number) => origin + Math.round((v - origin) / step) * step;
 
 /** The tick nearest `v` along a line whose ticks count from `origin`, of the kind snapped to (null: none). */
-export function tickNear(v: number, origin: number, g: Pick<CanvasGuides, 'major' | 'minor' | 'snap'>): number | null {
-  if (g.snap === 'none') return null;
+export function tickNear(v: number, origin: number, g: Pick<CanvasGuides, 'major' | 'minor' | 'snap' | 'snapOff'>): number | null {
+  if (g.snapOff) return null;
   if (g.snap === 'major') return near(v, g.major, origin);
   const m = near(v, g.minor, origin);
   if (g.snap === 'both') return m;
@@ -106,7 +151,7 @@ export function tickNear(v: number, origin: number, g: Pick<CanvasGuides, 'major
  * Each coordinate snaps on its own; `lines` are the lines it snapped onto (to show them).
  */
 export function snapToGuides(p: Vec, g: CanvasGuides, lines: GuideLine[], tol: number): { at: Vec; on: GuideLine[] } {
-  if (!g.shown || g.snap === 'none') return { at: p, on: [] };
+  if (!g.shown || g.snapOff) return { at: p, on: [] };
   const best = (axis: 'x' | 'y') => {
     let pick: GuideLine | null = null, d = tol;
     for (const l of lines) if (l.axis === axis) { const e = Math.abs((axis === 'x' ? p.x : p.y) - l.at); if (e <= d) { d = e; pick = l; } }

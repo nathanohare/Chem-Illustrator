@@ -40,6 +40,11 @@ export class StructurePictures {
     return r;
   }
 
+  /** The drawing a structure's picture is made from (don't change it). */
+  doc(s: Structure): Doc {
+    return this.record(s).doc;
+  }
+
   /** The picture's size in points. */
   box(s: Structure): { w: number; h: number } {
     const p = this.record(s).pic;
@@ -65,6 +70,19 @@ export class StructurePictures {
     this.bitmaps.set(key, canvas);
     if (this.bitmaps.size > KEEP) this.bitmaps.delete(this.bitmaps.keys().next().value as string);
     return canvas;
+  }
+
+  /**
+   * The drawing a structure's picture is made from, and the picture fitted into w × h CSS pixels:
+   * `at` turns a point of the drawing into those pixels, to mark atoms on it.
+   */
+  fitted(s: Structure, w: number, h: number): { doc: Doc; canvas: HTMLCanvasElement; w: number; h: number; at(p: { x: number; y: number }): { x: number; y: number } } | null {
+    const r = this.record(s);
+    if (!r.pic) return null;
+    const b = r.pic.box, pw = b.x2 - b.x1, ph = b.y2 - b.y1;
+    const k = Math.min(w / pw, h / ph, 3);
+    const { canvas } = pictureCanvas(r.doc, r.pic, k * 72 * (globalThis.devicePixelRatio || 1) * 1.5);
+    return { doc: r.doc, canvas, w: pw * k, h: ph * k, at: (p) => ({ x: (p.x - b.x1) * k, y: (p.y - b.y1) * k }) };
   }
 
   /** Forget everything (the drawing style changed). */

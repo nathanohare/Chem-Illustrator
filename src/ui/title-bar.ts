@@ -37,14 +37,14 @@ function windowButtons(header: HTMLElement): HTMLElement {
     box.append(b);
     return b;
   };
-  button('win-min', 'Minimise', ICONS.min, () => w.minimize());
-  const max = button('win-max', 'Maximise', ICONS.max, () => w.toggleMaximize());
+  button('win-min', 'Minimize', ICONS.min, () => w.minimize());
+  const max = button('win-max', 'Maximize', ICONS.max, () => w.toggleMaximize());
   // closing asks about unsaved work as the system's close button does (onCloseRequested)
   button('win-close', 'Close', ICONS.close, () => w.close());
   const showMax = async () => {
     const big = await w.isMaximized().catch(() => false);
     max.innerHTML = big ? ICONS.restore : ICONS.max;
-    max.title = big ? 'Restore Down' : 'Maximise';
+    max.title = big ? 'Restore Down' : 'Maximize';
     max.setAttribute('aria-label', max.title);
   };
   void w.onResized(() => { void showMax(); });

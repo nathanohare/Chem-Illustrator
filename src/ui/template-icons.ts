@@ -37,7 +37,7 @@ export function templateIcon(t: Template, size = 44, maxBond = 12): string {
   const small = size < 40;
   // A tool bar button is too small for a whole amino acid: it shows the three-letter code.
   if (small && CODED.has(t.group)) {
-    return svg(size, `<text x="${size / 2}" y="${size / 2 + 4}" font-size="12" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">${codeOf(t)}</text>`);
+    return svg(size, `<text x="${size / 2}" y="${size / 2 + 4}" font-size="12" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">${esc(codeOf(t))}</text>`);
   }
   const showCode = CODED.has(t.group);
   // ...and a sugar shows its ring, with only the ring oxygen labelled.
@@ -228,7 +228,7 @@ export function templateIcon(t: Template, size = 44, maxBond = 12): string {
       parts.push(`<text x="${f(p.x + r.dx * k)}" y="${f(p.y + r.dy * k)}" font-size="${f(r.size * k)}"${r.italic ? ' font-style="italic"' : ''} fill="currentColor" stroke="none">${esc(r.text)}</text>`);
     }
   });
-  if (showCode) parts.push(`<text x="${size / 2}" y="${size - 2}" font-size="10" text-anchor="middle" fill="currentColor" stroke="none" font-weight="700">${codeOf(t)}</text>`);
+  if (showCode) parts.push(`<text x="${size / 2}" y="${size - 2}" font-size="10" text-anchor="middle" fill="currentColor" stroke="none" font-weight="700">${esc(codeOf(t))}</text>`);
   // a large ring shows its size in the middle, so 13 and 14 tell apart at a glance
   const ringSize = t.group === 'cycloalkanes' ? /\((\d+)\)/.exec(t.name)?.[1] : undefined;
   if (ringSize && n > 0) {

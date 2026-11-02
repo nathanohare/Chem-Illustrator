@@ -10,8 +10,36 @@ import { flatten, geoDef, moveSteps } from '../design/geo';
 export const PATTERNS: [Pattern, string][] = [
   ['hatch', 'Diagonal lines ////'], ['backhatch', 'Diagonal lines \\\\\\\\'], ['crosshatch', 'Cross-hatch'],
   ['horizontal', 'Horizontal lines'], ['vertical', 'Vertical lines'], ['grid', 'Grid'],
-  ['dots', 'Dots (stippling)'], ['dense-dots', 'Dense dots'],
+  ['dots', 'Dots'], ['dense-dots', 'Dense dots'],
 ];
+
+/** The patterns offered to pick from: one Dots (how dense is its own setting; older files' Dense dots show as Dots, dense). */
+export const PATTERN_CHOICES: [Pattern, string][] = PATTERNS.filter(([p]) => p !== 'dense-dots');
+
+/** How dense the dots are, as their spacing in points (a ring's own, being small, are finer). */
+export const DOT_DENSITY: { name: string; gap: number; ring: number }[] = [
+  { name: 'Sparse', gap: 3.6, ring: 2.2 }, { name: 'Medium', gap: 2.6, ring: 1.6 }, { name: 'Dense', gap: 1.6, ring: 1.1 },
+];
+
+/** A small square picture of a pattern (24 × 24, in the current text colour), for the pickers. */
+export function patternSwatch(p: string): string {
+  const lines: string[] = [];
+  const clip = (x1: number, y1: number, x2: number, y2: number) => lines.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>`);
+  const step = 4;
+  for (const a of patternAngles(p as Pattern)) {
+    for (let k = -24; k <= 48; k += step) {
+      if (a === 0) clip(2, k, 22, k);
+      else if (a === 90) clip(k, 2, k, 22);
+      else if (a === -45) clip(k, 2, k - 20, 22);
+      else clip(k - 20, 2, k, 22);
+    }
+  }
+  if (p === 'dots' || p === 'dense-dots') {
+    const g = p === 'dense-dots' ? 3 : 4;
+    for (let y = 3, row = 0; y < 22; y += g, row++) for (let x = 3 + (row % 2 ? g / 2 : 0); x < 22; x += g) lines.push(`<circle cx="${x}" cy="${y}" r="0.8" fill="currentColor" stroke="none"/>`);
+  }
+  return `<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><defs><clipPath id="psw"><rect x="2" y="2" width="20" height="20" rx="1.5"/></clipPath></defs><g clip-path="url(#psw)" stroke="currentColor" stroke-width="1">${lines.join('')}</g><rect x="2" y="2" width="20" height="20" rx="1.5" fill="none" stroke="currentColor" stroke-opacity=".45"/>${p === 'none' ? '<path d="M5 19L19 5" stroke="var(--danger, #c62828)" stroke-width="1.3"/>' : ''}</svg>`;
+}
 
 /** The pattern's line angles in degrees (0 across, 90 down the page; y points down). */
 export function patternAngles(p: Pattern): number[] {

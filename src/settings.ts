@@ -22,7 +22,7 @@ import { parseRibbons, type RibbonsPrefs } from './ui/ribbon-custom';
 import { DEFAULT_DEPTH_SHADE, readDepthShade, type DepthShade } from './render/depth-shade';
 import { parseQuick } from './ui/quick-bar';
 import { parseOwnStyles, parseModeStyles, type StyleMode } from './drawing-styles';
-import { DEFAULT_BOND_ENDS, MAP_LOOKS, type DocStyle, type MapLook } from './style';
+import { DEFAULT_BOND_ENDS, DEFAULT_MAP_BOX, MAP_LOOKS, mapBoxStyle, type DocStyle, type MapBoxStyle, type MapLook } from './style';
 import { ALKYL_LOOKS, type AlkylLook } from './chem/labels';
 import { parseDarkPalettes, type DarkPalette } from './dark-page';
 import { DEFAULT_SCHEME_PREFS, parseSchemePrefs, type SchemePrefs } from './chem/scheme-layout';
@@ -107,11 +107,23 @@ export interface Settings {
   /** Where the text formatting bar goes while typing text (View > Window and Colours > Text Formatting Bar). */
   textBar: 'docked' | 'floating' | 'hidden';
   /** The window's own colours: as the computer is set (light or dark), or always light or dark (View > Window and Colours > Theme). The page has its own Reading Mode. */
-  appTheme: 'system' | 'light' | 'dark';
+  appTheme: 'system' | 'light' | 'dark' | 'darkgray';
+  /** How roomy the toolboxes and ribbons are (View > Window and Colours > Density): Compact as the app comes, Standard or Large. */
+  density: 'snug' | 'cozy' | 'normal' | 'standard' | 'large';
+  /** Soft shadows under the menus and on the toolboxes, docked or floating (View > Window and Colors > Shadows): light as the app comes, strong, or off. */
+  shadows: 'light' | 'strong' | 'off';
+  /** The icons' colours (View > Window and Colours > Icon Colours): gray with one part in the mode's colour, or a colour for each kind of command as Office does. */
+  iconLook: 'mode' | 'kind';
+  /** The Shapes menu's pictures: neutral (black on light, white on dark) or in the mode's colour (View > Window and Colours > Icon Colours). */
+  shapeInk: 'neutral' | 'accent';
   /** Toolboxes docked at a side show in one column in Slides, Sheet, Document and Design tabs (View > Toolboxes). */
   oneColumnTools: boolean;
   /** Settings ▸ Toolboxes: each toolbox button in a cell of its own, ruled off by lines, raised, or both. */
   toolCells: 'off' | 'grid' | 'raised' | 'both';
+  /** Settings ▸ Toolboxes: the Canvas ribbon in two rows of buttons (Classic) or one (Simplified). */
+  canvasRibbon: 'classic' | 'simple';
+  /** Settings ▸ Toolboxes and Ribbon: where every ribbon's group names go: along the dividers, across each group, or nowhere. */
+  ribbonNames: 'top' | 'side' | 'none';
   /** The start view (new tabs, recent files) on the empty drawing the program opens with. */
   startView: boolean;
   /** Settings ▸ Preferences: Enter finishes text typed with the Text tool (in every mode) and Alt+Enter (Option+Enter on a Mac) starts a new line. Off: Enter starts a new line and Esc finishes (ChemDraw). */
@@ -150,6 +162,8 @@ export interface Settings {
   groupOutline: boolean;
   /** Mechanism arrows left running into something by a change find their own way round. */
   rerouteArrows: boolean;
+  /** Draw Next Intermediate and Check Arrows: curved arrows read as electrons moving (Settings ▸ Drawing). Off hides them. */
+  arrowProducts: boolean;
   /** Space (pt) between a mechanism arrow's start, or end, and its atom or lone pair; null for the usual space. */
   arrowStartGap: number | null;
   arrowEndGap: number | null;
@@ -157,10 +171,14 @@ export interface Settings {
   superscriptR: boolean;
   /** How the n-, i-, s- and t- of alkyl groups (tBu, iPr) are written as labels and text are typed. */
   alkylLook: AlkylLook;
+  /** Settings ▸ Preferences: how a warning is marked on the drawing (soft red disc, thin red box, circle, dashed circle or corner marks). */
+  warnLook: 'disc' | 'box' | 'circle' | 'dashed' | 'corners';
   /** How round bond lines' free ends are, 1 (round) to 0 (square); see bondEndPrefs. */
   bondEnds: number;
   /** How atom-map numbers look (Chemistry ▸ Map Atoms); see mapLookPrefs. */
   mapLook: MapLook;
+  /** The user's own map-number box format (mapLook 'custom'). */
+  mapBox: MapBoxStyle;
   /** Depth shading of structures drawn in 3-D (see render/depth-shade.ts). */
   depthShade: DepthShade;
   /** Where Format > Link Text to Structure puts the text: where it is, or a side of the structure. */
@@ -199,6 +217,8 @@ export interface Settings {
   sheetFormulaBar: boolean;
   /** Slides' View > Ruler and Gridlines, and how the rulers measure. */
   slideRuler: boolean;
+  /** Presentation and Design: the side panel's Warnings and Analysis shown (hidden at first). */
+  slidePanes: { warnings: boolean; analysis: boolean };
   slideGrid: boolean;
   rulerUnits: 'in' | 'cm';
   rulerFrom: 'centre' | 'corner';
@@ -218,8 +238,6 @@ export interface Settings {
   cursorAids: CursorAidPrefs;
   /** η³ and larger ligands on a metal drawn delocalized (a circle in the ring, an arc over an allyl). */
   haptoDelocalized: boolean;
-  /** How a tool's demo shows when the pointer rests on its button (Settings ▸ General). */
-  toolDemos: DemoLook;
   /** The Windows app has offered to open the chemistry file types (once, at its first start). */
   fileTypesOffered: boolean;
   /** The Windows app has registered its drawings as objects Word can send back to edit (once, at its first start). */
@@ -258,8 +276,8 @@ export const SLIDE_PANE_MIN = 120, SLIDE_PANE_MAX = 480, NOTES_MIN = 36, NOTES_M
 export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, stickyHotspot: false, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
-  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', oneColumnTools: false, toolCells: 'off', startView: true, enterFinishesText: false, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
-  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'peach', depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
+  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', density: 'cozy', shadows: 'light', iconLook: 'mode', shapeInk: 'neutral', oneColumnTools: false, toolCells: 'off', canvasRibbon: 'classic', ribbonNames: 'side', startView: true, enterFinishesText: false, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
+  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowProducts: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', warnLook: 'disc', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'grey', mapBox: { ...DEFAULT_MAP_BOX }, depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
   orient: { ...DEFAULT_ORIENT },
@@ -269,6 +287,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sheetFormulaBar: true,
   updateCheck: true, updateChannel: 'latest', pubchemNames: true, convertChemDraw: false, matchStructure: true, fileTypesOffered: false, wordObjectsOffered: false, reviewName: '', skipVersion: null, lastVersion: null, recentFiles: [], recentSymbols: [], highlightLooks: [], formatFavorites: [], quickParts: [], docDesign: null,
   slideRuler: false,
+  slidePanes: { warnings: false, analysis: false },
   slideGrid: false,
   rulerUnits: typeof navigator !== 'undefined' && /^[a-z]{2,3}-(US|LR|MM)\b/i.test(navigator.language) ? 'in' : 'cm',
   rulerFrom: 'centre',
@@ -279,22 +298,7 @@ export const DEFAULT_SETTINGS: Settings = {
   straightenLinear: true,
   cursorAids: { ...DEFAULT_CURSOR_AIDS },
   haptoDelocalized: true,
-  toolDemos: 'off',
 };
-
-/**
- * How demos show: B, a card with the clip, its steps and Replay (the default); A, a small clip in a
- * tip; C, still frames only; or not at all. With the system's reduced motion on, A and B show the
- * still frames instead.
- */
-export type DemoLook = 'card' | 'tip' | 'frames' | 'off';
-export const DEMO_LOOKS: { value: DemoLook; label: string }[] = [
-  { value: 'card', label: 'A card with the clip and its steps' },
-  { value: 'tip', label: 'A small clip in the tool tip' },
-  { value: 'frames', label: 'Still pictures of each step' },
-  { value: 'off', label: 'Don\'t show demos' },
-];
-export const parseDemoLook = (v: unknown): DemoLook => (DEMO_LOOKS.some((l) => l.value === v) ? (v as DemoLook) : 'off');
 
 const STORAGE_KEY = 'chem-illustrator.settings';
 
@@ -307,10 +311,13 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (!raw || typeof raw !== 'object') return s;
   const r = raw as Record<string, unknown>;
   if (r.hotkeys && typeof r.hotkeys === 'object' && !Array.isArray(r.hotkeys)) s.hotkeys = r.hotkeys as KeyOverrides;
-  for (const k of ['keepHotspotOnBond', 'stickyHotspot', 'fixedLength', 'fixedAngles', 'devTools', 'showRoles', 'chemTyping', 'stereoItalic', 'boldNumbers', 'autoLinks', 'linkCtrlClick', 'spellCheck', 'scrollBars', 'ribbonCollapsed', 'ribbonAutoFold', 'tabsInMenu', 'welcomed', 'groupTips', 'toolTips', 'penSketch', 'askWholeDrawing', 'darkPage', 'circledCharges', 'textToAtom', 'ionCharges', 'saltGroups', 'groupOutline', 'rerouteArrows', 'superscriptR', 'updateCheck', 'pubchemNames', 'convertChemDraw', 'matchStructure', 'fileTypesOffered', 'wordObjectsOffered'] as const) if (typeof r[k] === 'boolean') s[k] = r[k] as boolean;
+  for (const k of ['keepHotspotOnBond', 'stickyHotspot', 'fixedLength', 'fixedAngles', 'devTools', 'showRoles', 'chemTyping', 'stereoItalic', 'boldNumbers', 'autoLinks', 'linkCtrlClick', 'spellCheck', 'scrollBars', 'ribbonCollapsed', 'ribbonAutoFold', 'tabsInMenu', 'welcomed', 'groupTips', 'toolTips', 'penSketch', 'askWholeDrawing', 'darkPage', 'circledCharges', 'textToAtom', 'ionCharges', 'saltGroups', 'groupOutline', 'rerouteArrows', 'arrowProducts', 'superscriptR', 'updateCheck', 'pubchemNames', 'convertChemDraw', 'matchStructure', 'fileTypesOffered', 'wordObjectsOffered'] as const) if (typeof r[k] === 'boolean') s[k] = r[k] as boolean;
   for (const k of ['arrowStartGap', 'arrowEndGap'] as const) if (typeof r[k] === 'number' && isFinite(r[k] as number) && (r[k] as number) >= 0) s[k] = Math.min(50, r[k] as number);
   if (typeof r.bondEnds === 'number' && isFinite(r.bondEnds)) s.bondEnds = Math.max(0, Math.min(1, r.bondEnds));
   if (MAP_LOOKS.some((l) => l.value === r.mapLook)) s.mapLook = r.mapLook as MapLook;
+  // 'peach' (the first default) is the light peach box, now the starting custom format
+  else if (r.mapLook === 'peach') s.mapLook = 'custom';
+  if (r.mapBox !== undefined) s.mapBox = mapBoxStyle(r.mapBox);
   if (r.depthShade) s.depthShade = readDepthShade(r.depthShade);
   if (r.touchMode === 'auto' || r.touchMode === 'on' || r.touchMode === 'off') s.touchMode = r.touchMode;
   s.orient = parseOrient(r.orient);
@@ -329,8 +336,16 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.uiScale === 'number') s.uiScale = clampUiScale(r.uiScale);
   if (r.updateChannel === 'stable' || r.updateChannel === 'latest') s.updateChannel = r.updateChannel;
   if (typeof r.textBar === 'string' && ['docked', 'floating', 'hidden'].includes(r.textBar)) s.textBar = r.textBar as Settings['textBar'];
+  if (r.canvasRibbon === 'classic' || r.canvasRibbon === 'simple') s.canvasRibbon = r.canvasRibbon;
+  if (r.ribbonNames === 'top' || r.ribbonNames === 'side' || r.ribbonNames === 'none') s.ribbonNames = r.ribbonNames;
+  if (r.appTheme === 'system' || r.appTheme === 'light' || r.appTheme === 'dark' || r.appTheme === 'darkgray') s.appTheme = r.appTheme;
+  if (r.density === 'snug' || r.density === 'cozy' || r.density === 'normal' || r.density === 'standard' || r.density === 'large') s.density = r.density;
+  // ('compact' was the old name for the default, now Cozy)
+  else if (r.density === 'compact') s.density = 'cozy';
+  if (r.shadows === 'light' || r.shadows === 'strong' || r.shadows === 'off') s.shadows = r.shadows;
+  if (r.iconLook === 'mode' || r.iconLook === 'kind') s.iconLook = r.iconLook;
+  if (r.shapeInk === 'neutral' || r.shapeInk === 'accent') s.shapeInk = r.shapeInk;
   if (typeof r.toolCells === 'string' && ['off', 'grid', 'raised', 'both'].includes(r.toolCells)) s.toolCells = r.toolCells as Settings['toolCells'];
-  if (r.appTheme === 'system' || r.appTheme === 'light' || r.appTheme === 'dark') s.appTheme = r.appTheme;
   if (typeof r.oneColumnTools === 'boolean') s.oneColumnTools = r.oneColumnTools;
   if (typeof r.startView === 'boolean') s.startView = r.startView;
   if (typeof r.enterFinishesText === 'boolean') s.enterFinishesText = r.enterFinishesText;
@@ -367,12 +382,14 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.docRuler === 'boolean') s.docRuler = r.docRuler;
   if (typeof r.sheetFormulaBar === 'boolean') s.sheetFormulaBar = r.sheetFormulaBar;
   if (typeof r.slideRuler === 'boolean') s.slideRuler = r.slideRuler;
+  if (r.slidePanes && typeof r.slidePanes === 'object') { const sp = r.slidePanes as Record<string, unknown>; s.slidePanes = { warnings: sp.warnings === true, analysis: sp.analysis === true }; }
   if (typeof r.slideGrid === 'boolean') s.slideGrid = r.slideGrid;
   if (r.rulerUnits === 'in' || r.rulerUnits === 'cm') s.rulerUnits = r.rulerUnits;
   if (r.rulerFrom === 'centre' || r.rulerFrom === 'corner') s.rulerFrom = r.rulerFrom;
   if (Array.isArray(r.docPins)) s.docPins = ['para', 'style', 'page', 'hf'].filter((k) => (r.docPins as unknown[]).includes(k));
   if (r.methylStyle === 'Me' || r.methylStyle === 'CH3') s.methylStyle = r.methylStyle;
   if (ALKYL_LOOKS.includes(r.alkylLook as AlkylLook)) s.alkylLook = r.alkylLook as AlkylLook;
+  if (['disc', 'box', 'circle', 'dashed', 'corners'].includes(r.warnLook as string)) s.warnLook = r.warnLook as Settings['warnLook'];
   if (r.groupClick === 'group' || r.groupClick === 'item') s.groupClick = r.groupClick;
   if (r.axialStyle === 'RaSa' || r.axialStyle === 'PM') s.axialStyle = r.axialStyle;
   if (typeof r.slideTemplate === 'string' || r.slideTemplate === null) s.slideTemplate = r.slideTemplate as string | null;
@@ -391,7 +408,6 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.straightenLinear === 'boolean') s.straightenLinear = r.straightenLinear;
   if (r.cursorAids) s.cursorAids = parseCursorAids(r.cursorAids);
   if (typeof r.haptoDelocalized === 'boolean') s.haptoDelocalized = r.haptoDelocalized;
-  if (r.toolDemos !== undefined) s.toolDemos = parseDemoLook(r.toolDemos);
   return s;
 }
 

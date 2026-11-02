@@ -53,7 +53,7 @@ export function editChart(start: ChartBox, isNew: boolean, flash: (msg: string, 
         <div class="ce-left">
           <div class="ce-kinds" role="radiogroup" aria-label="Chart type"></div>
           <div class="ce-preview"><canvas aria-label="The chart as it will look"></canvas></div>
-          <div class="ce-data-head"><b>Data</b><span class="muted small">Type over it, or paste from Excel or a sheet. Rows and columns added beside it join the chart.</span>
+          <div class="ce-data-head"><b data-info="Type over it, or paste from Excel or a sheet. Rows and columns added beside it join the chart.">Data</b>
             <button type="button" data-act="whole" title="Chart every row and column of the data again (the series follow the table's columns)">Chart All the Data</button></div>
           <div class="ce-grid"></div>
         </div>

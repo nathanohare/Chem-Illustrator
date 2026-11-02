@@ -3,6 +3,7 @@
 // picked here: full, short (journal, year, volume, page) or the first author and the short form,
 // numbered or not. The text is ordinary text afterwards, to move and edit.
 
+import { withInfo } from './info-tip';
 import { CITE_PRESETS, citeFormat, preferredStyle } from '../document/cite-styles';
 import { describe, shortLabel, type Reference } from '../document/references';
 import { REF_FORMS, referenceRuns, type RefForm } from '../deck/slide-refs';
@@ -49,7 +50,7 @@ export function chooseRefsToInsert(groups: RefGroup[], byDoi: () => Promise<Refe
         if (r.bold) { const b = el('b'); b.append(n); n = b; }
         p.append(n);
       }
-      preview.replaceChildren(picked.length ? p : el('p', 'muted', 'Tick the references to insert.'));
+      preview.replaceChildren(picked.length ? p : el('p', 'muted', 'Check the references to insert.'));
       ok.disabled = !picked.length;
     };
     const fill = (gs: RefGroup[]) => {
@@ -105,8 +106,7 @@ export function chooseRefsToInsert(groups: RefGroup[], byDoi: () => Promise<Refe
     ok.type = 'submit';
     buttons.append(doi, manageBtn, el('span', 'spacer'), cancel, ok);
     form.append(
-      el('h2', '', 'Insert Reference'),
-      el('p', 'muted', 'References from the open files, put here as formatted text in the style picked. Tick them in the order you want them.'),
+      withInfo(el('h2', '', 'Insert Reference'), 'References from the open files, put here as formatted text in the style picked. Check them in the order you want them.'),
       list, row('Style', styleSel), row('Write each as', formSel), numRow, preview, buttons,
     );
     form.addEventListener('change', show);

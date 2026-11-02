@@ -23,7 +23,7 @@ export interface KbColumn {
   prose?: boolean;
   /** Searched but not shown or copied (SMILES, a CAS number kept for searching). */
   hidden?: boolean;
-  /** What the column's scale or class means and where it comes from, behind an ⓘ by its heading. */
+  /** What the column's scale or class means and where it comes from, behind an "i" by its heading. */
   info?: string;
   /** A picture of the row's structure (the table's `picture`), not text. */
   picture?: boolean;

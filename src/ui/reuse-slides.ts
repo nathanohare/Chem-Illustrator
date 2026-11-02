@@ -2,6 +2,7 @@
 // as small pictures. Click slides to pick them (Shift+click for a run of them), then insert
 // them after the slide being edited, in this deck's look or each keeping its own.
 
+import { foldIntoInfo } from './info-tip';
 import type { Deck } from '../deck/deck';
 import { paintSlide } from '../deck/slide-view';
 
@@ -73,8 +74,8 @@ export function pickReuseSlides(name: string, from: Deck, keep: boolean, wording
     keepBox.checked = keep;
     const opt = document.createElement('label');
     opt.className = 'st-option';
-    opt.title = 'Off: the slides take this deck\'s fonts, colours and background, as PowerPoint\'s Use Destination Theme. On: each keeps the look it has in the other file';
-    opt.append(keepBox, document.createTextNode(' Keep source formatting (the slides keep their own background, fonts and colours)'));
+    opt.title = 'Off: the slides take this deck\'s fonts, colors and background, as PowerPoint\'s Use Destination Theme. On: each keeps the look it has in the other file';
+    opt.append(keepBox, document.createTextNode(' Keep source formatting (the slides keep their own background, fonts and colors)'));
     const buttons = document.createElement('p');
     buttons.className = 'ask-buttons';
     const cancel = document.createElement('button');
@@ -91,6 +92,7 @@ export function pickReuseSlides(name: string, from: Deck, keep: boolean, wording
     cancel.addEventListener('click', () => d.close());
     all.addEventListener('click', () => { for (let i = 0; i < n; i++) picked.add(i); finish(); });
     insert.addEventListener('click', finish);
+    foldIntoInfo(note, h);
     d.append(h, note, grid, ...(wording ? [] : [opt]), buttons);
     d.addEventListener('close', () => { d.remove(); resolve(result); });
     document.body.append(d);

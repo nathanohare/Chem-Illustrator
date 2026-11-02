@@ -7,7 +7,8 @@
 // one way and then the other. The ends are pinned to what they start and end on (pins.ts), so
 // the arrow goes with the structure when it is moved.
 
-import type { Arrow, Doc, Pin, Shape } from '../model';
+import type { Arrow, Bond, Doc, Pin, Shape } from '../model';
+import { doubleBondGap } from '../style';
 import type { Rect, Vec } from '../geom';
 import { add, angleOf, arcCenter, DEG, dist, distToSegment, dot, fromAngle, mul, norm, normAngle, perp, sub } from '../geom';
 import type { Measure } from '../editor/arrange';
@@ -129,6 +130,80 @@ function endPair(doc: Doc, e: PushEnd): [number, number] | null {
   if (e.kind !== 'bond') return null;
   const b = doc.bonds.get(e.id)!;
   return [b.a1, b.a2];
+}
+
+/** A bond drawn with a π bond beside its σ line: a double bond, or an aromatic one drawn with a dashed second line. */
+const drawnDouble = (b: Bond): boolean => (b.order === 2 || (b.order === 1.5 && !b.circle)) && (b.display ?? 'solid') === 'solid';
+
+/** Which side a double bond's second line is on when the renderer isn't there to say: as set, else inside its ring, else centred. */
+function sideOf(doc: Doc, b: Bond): number {
+  if (b.dpos === 'right') return 1;
+  if (b.dpos === 'left') return -1;
+  if (b.dpos === 'center') return 0;
+  const ring = doc.ringThroughBond(b.id);
+  if (!ring) return 0;
+  const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
+  const cen = ring.reduce((t, id) => add(t, mul(doc.atoms.get(id)!, 1 / ring.length)), { x: 0, y: 0 });
+  return dot(sub(cen, p), perp(norm(sub(q, p)))) >= 0 ? 1 : -1;
+}
+
+/**
+ * The middle of a bond as drawn: for a double bond with its second line off to one side (in a
+ * ring), half way between its two lines, where a π bond's arrow starts or ends.
+ */
+export function bondMiddle(doc: Doc, m: Measure, id: number): Vec {
+  const b = doc.bonds.get(id)!;
+  const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
+  const mid = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+  if (!drawnDouble(b)) return mid;
+  const side = m.bondSide ? m.bondSide(b) : sideOf(doc, b);
+  return add(mid, mul(perp(norm(sub(q, p))), (side * doubleBondGap(doc.style) * (b.s ?? 1)) / 2));
+}
+
+/** Is this end a bond with a π bond in it (an arrow from or to it goes from or to its middle as drawn)? */
+function piEnd(doc: Doc, e: PushEnd): e is { kind: 'bond'; id: number } {
+  const b = e.kind === 'bond' ? doc.bonds.get(e.id) : undefined;
+  return !!b && (drawnDouble(b) || (b.order === 3 && (b.display ?? 'solid') === 'solid'));
+}
+
+/**
+ * How far an arrow leaves its start at a slant (0 when it sets off within 40° of the way it
+ * should: out from the lone pair, or straight off a bond on the side it bends to).
+ */
+function slant(first: Vec, t0: Vec, want: Vec | null): number {
+  if (!want) return 0;
+  const a = angleBetween(sub(first, t0), want);
+  return Math.max(0, a - 40 * DEG) / (50 * DEG);
+}
+
+/**
+ * How badly an arrow's head comes in on an atom along one of its bonds (hiding in the bond), or
+ * lies across the atom's bonds: 0 when it comes in through open space.
+ */
+function headOnBonds(doc: Doc, id: number, c1: Vec, head: Vec, near: Vec[], hl: number): number {
+  const L = doc.style.bondLength;
+  const d = norm(sub(head, c1));
+  let bad = bondDirs(doc, id).reduce((t, b) => t + Math.max(0, dot(d, b) - Math.cos(55 * DEG)), 0);
+  const own = (doc.adj.get(id) ?? []).map((bid) => doc.bonds.get(bid)!).map((b) => [doc.atoms.get(b.a1)!, doc.atoms.get(b.a2)!] as const);
+  for (const p of near) {
+    if (dist(p, head) > hl) continue;
+    for (const [p1, p2] of own) { const g = distToSegment(p, p1, p2); if (g < 0.08 * L) bad += ((0.08 * L - g) / (0.08 * L)) ** 2; }
+  }
+  return bad;
+}
+
+/**
+ * The open ways into an atom, between its bonds: the middle of each gap between neighbouring
+ * bonds (all round for an atom with one bond or none), the gaps facing `from` first.
+ */
+function openWays(doc: Doc, id: number, from: Vec): Vec[] {
+  const a = doc.atoms.get(id)!;
+  const angs = bondDirs(doc, id).map(angleOf).sort((x, y) => x - y);
+  const toward = norm(sub(from, a));
+  let ways: Vec[];
+  if (angs.length < 2) ways = [toward, ...(angs.length ? [fromAngle(angs[0] + Math.PI)] : [])];
+  else ways = angs.map((x, i) => { const next = i + 1 < angs.length ? angs[i + 1] : angs[0] + 2 * Math.PI; return fromAngle((x + next) / 2); });
+  return ways.sort((p, q) => dot(q, toward) - dot(p, toward)).slice(0, 2);
 }
 
 /** Directions of the bonds round an atom. */
@@ -256,7 +331,7 @@ function pushArrowAt(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, o: PushOp
   // a bond's electrons moving onto one of its own atoms (C=O to O, C–Br to Br): a short loop
   // from beside the bond's middle round to beside the atom
   if (to.kind === 'atom' && from.kind === 'bond' && p0?.includes(to.id) && chord < 0.9 * L && !o.s) {
-    const t2 = add(tail, mul(out, 0.1 * L));
+    const t2 = piEnd(doc, from) ? bondMiddle(doc, m, from.id) : add(tail, mul(out, 0.1 * L));
     // try heads round the atom's outer side and loops of a few sizes; keep the one whose head
     // points most nearly at the atom
     let best: PushArrow | null = null, bestScore = Infinity;
@@ -291,10 +366,17 @@ function pushArrowAt(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, o: PushOp
   /** Where a side's arrow starts and what it points at (a new bond from the side it comes from). */
   const ends = (sd: number) => {
     const ob = mul(left, sd);
-    // a bond's electrons leave from beside it, on the side the arrow bends to
-    const t0 = from.kind === 'bond' ? add(c0, mul(ob, 0.08 * L)) : tail;
+    // a bond's electrons leave from beside it, on the side the arrow bends to; a π bond's from
+    // its middle as drawn (between its two lines)
+    const t0 = from.kind === 'bond' ? (piEnd(doc, from) ? bondMiddle(doc, m, from.id) : add(c0, mul(ob, 0.08 * L))) : tail;
     let end = c1;
-    if (p1) {
+    if (piEnd(doc, to)) {
+      const mid = bondMiddle(doc, m, to.id);
+      const [q1, q2] = p1!.map((id) => doc.atoms.get(id)!);
+      let n = perp(norm(sub(q2, q1)));
+      if (dot(sub(t0, mid), n) < 0) n = mul(n, -1);
+      end = add(mid, mul(n, 0.05 * L));
+    } else if (p1) {
       const [q1, q2] = p1.map((id) => doc.atoms.get(id)!);
       let n = perp(norm(sub(q2, q1)));
       if (dot(sub(t0, c1), n) < 0) n = mul(n, -1);
@@ -304,18 +386,37 @@ function pushArrowAt(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, o: PushOp
     }
     return { t0, end };
   };
+  /** The way an arrow should set off: out from its lone pair, or straight off its bond on the side it bends to. */
+  const departure = (sd: number): Vec | null => {
+    if (from.kind !== 'bond') return lean;
+    const [q1, q2] = p0!.map((id) => doc.atoms.get(id)!);
+    const n = perp(norm(sub(q2, q1)));
+    return dot(n, left) * sd >= 0 ? n : mul(n, -1);
+  };
+  const hl = doc.style.lineWidth * 10;
   let best: PushArrow | null = null, bestScore = Infinity, bestClash = Infinity;
   if (!o.s) {
     for (const sd of sides) {
       const ob = mul(left, sd);
       const { t0, end } = ends(sd);
-      for (const deg of [60, 75, 90, 105, 120, 135, 150]) {
+      // heads into an atom: where the curve meets it, or (a bare carbon) in the open space round it
+      // nearest the way the arrow comes from, so the head doesn't lie along one of its bonds
+      // (a label's atom is pointed at where the curve meets its label)
+      const opens: (Vec | null)[] = to.kind === 'atom' && !m.atomBoxes(doc.atoms.get(to.id)!).length ? [null, ...openWays(doc, to.id, t0)] : [null];
+      for (const deg of [60, 75, 90, 105, 120, 135, 150]) for (const way of opens) {
         const size = deg * DEG;
-        const sweep0 = dot(sub(arcMid(t0, end, size), t0), ob) > 0 ? size : -size;
-        const arc = to.kind === 'atom' ? trimHead(doc, m, t0, c1, sweep0, to.id) : { head: end, sweep: sweep0 };
+        const target = way ? add(c1, mul(way, stopAt(doc, m, (to as { id: number }).id, way))) : end;
+        const sweep0 = dot(sub(arcMid(t0, target, size), t0), ob) > 0 ? size : -size;
+        const arc = to.kind === 'atom' && !way ? trimHead(doc, m, t0, c1, sweep0, to.id) : { head: target, sweep: sweep0 };
         if (!arc) continue;
         const clash = arcClash(doc, m, t0, arc.head, arc.sweep, skip, o.self);
-        const score = clash + 0.35 * Math.abs(size - prefer) / (90 * DEG) + (sd !== usual ? 0.25 : 0);
+        const pts = arcPoints(t0, arc.head, arc.sweep);
+        // it sets off the way it should (not at a slant), and its head comes in through open space
+        // pointing at the atom
+        const off = slant(pts[0], t0, departure(sd));
+        const onBonds = to.kind === 'atom' ? headOnBonds(doc, to.id, c1, arc.head, pts, hl) : 0;
+        const aim = way ? Math.max(0, angleBetween(sub(arc.head, pts[pts.length - 1]), sub(c1, arc.head)) - 30 * DEG) / (60 * DEG) : 0;
+        const score = clash + 0.35 * Math.abs(size - prefer) / (90 * DEG) + (sd !== usual ? 0.25 : 0) + 0.6 * off + 3 * onBonds + aim;
         if (score < bestScore) { bestScore = score; bestClash = clash; best = { tail: t0, head: arc.head, sweep: arc.sweep, start: from }; }
       }
     }
@@ -332,7 +433,8 @@ function pushArrowAt(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, o: PushOp
         const clash = pathClash(doc, m, sampleBez(pts), t0, shaped.head, skip, o.self);
         // coming in along one of the atom's bonds hides the head in the bond
         const along = to.kind === 'atom' ? bondDirs(doc, to.id).reduce((t, b) => t + Math.max(0, dot(norm(sub(shaped.head, c1)), b) - Math.cos(55 * DEG)), 0) : 0;
-        const score = clash + 3 * along + (sd !== usual ? 0.25 : 0) + 0.1 * Math.abs(Math.abs(shaped.bez[0].y) - 0.8);
+        const off = slant(chordPoint(t0, shaped.head, shaped.bez[0]), t0, departure(sd));
+        const score = clash + 3 * along + (sd !== usual ? 0.25 : 0) + 0.1 * Math.abs(Math.abs(shaped.bez[0].y) - 0.8) + 0.6 * off;
         if (score < sScore) { sScore = score; sClash = clash; bestS = { tail: t0, head: shaped.head, sweep: 0, bez: shaped.bez, start: from }; }
       }
     }

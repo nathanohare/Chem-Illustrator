@@ -33,6 +33,7 @@ import {
   type DocViewKind, type OutlineOp, type OutlineState, type ScreenView,
 } from '../document/doc-views';
 import { DocPanel, parseLength, showLength, type DocBoxKey } from './doc-panel';
+import { FontBox } from './font-box';
 import { WORD_HIGHLIGHTS } from '../io/docx-base';
 import { DocFind } from './doc-find';
 import { askLink, followLink, linkTip } from './links-ui';
@@ -250,6 +251,8 @@ export class DocumentMode {
   tab: Tab | null = null;
   private ta: HTMLTextAreaElement;
   private panel: DocPanel;
+  /** The Font group's corner box (made the first time it opens). */
+  private fontBox: FontBox | null = null;
   private ribbon: HTMLElement;
   private caretOn = true;
   private blink: ReturnType<typeof setInterval> | null = null;
@@ -961,6 +964,12 @@ export class DocumentMode {
   }
 
   /** Stop typing into the text box (`pick`: and pick the box, as Escape does in Word). */
+  /** What a box opened from a ribbon list sits under: the list's gallery button (the list itself is hidden). */
+  private ribbonAnchor(sel: string): HTMLElement | null {
+    const el = this.ribbon.querySelector<HTMLElement>(sel);
+    return el?.closest<HTMLElement>('.rb-fly')?.querySelector<HTMLElement>(':scope > .rb-fly-btn') ?? el;
+  }
+
   private stopBox(pick = false): void {
     const f = this.file;
     this.cellRange = null;
@@ -992,6 +1001,7 @@ export class DocumentMode {
     if (!f) {
       if (this.blink) { clearInterval(this.blink); this.blink = null; }
       this.panel.closeBoxes();
+      this.fontBox?.close();
       this.stylesPane.close();
       this.ruler.shown = false;
       this.comments.update();
@@ -1063,7 +1073,8 @@ export class DocumentMode {
   }
 
   focus(): void {
-    if (this.file) this.ta.focus({ preventScroll: true });
+    // (not while a structure is drawn in place: the keys are the drawing tools')
+    if (this.file && !this.inPlace) this.ta.focus({ preventScroll: true });
   }
 
   /** Fonts finished loading: measure again. */
@@ -1216,7 +1227,7 @@ export class DocumentMode {
     if (!ranges.length) { this.host.flash('There is no text here to match.'); return; }
     ed.select(ranges[0][0], ranges[0][1]);
     this.similar = { t: f.t, ranges, at: [ed.start, ed.end] };
-    this.host.flash(`${ranges.length} place${ranges.length === 1 ? '' : 's'} with this formatting selected: bold, italic, the font, size, colour, highlight or a style now changes them all.`, 6000);
+    this.host.flash(`${ranges.length} place${ranges.length === 1 ? '' : 's'} with this formatting selected: bold, italic, the font, size, color, highlight or a style now changes them all.`, 6000);
     this.redraw();
   }
 
@@ -1319,7 +1330,7 @@ export class DocumentMode {
       [tick(!hidden.length, 'All Reviewers'), () => set({ hidden: hidden.length ? [] : people })],
       ...people.map((p): [string, () => void] => [tick(!hidden.includes(p), p || 'Unknown'), () => set({ hidden: hidden.includes(p) ? hidden.filter((h) => h !== p) : [...hidden, p] })]),
       null,
-      [tick(trackingFormatting(), 'Track Formatting Changes'), () => { setTrackFormatting(!trackingFormatting()); this.host.flash(trackingFormatting() ? 'Formatting changes will be tracked (bold, fonts, sizes, colours).' : 'Formatting changes won\'t be tracked; only text typed and deleted.'); }],
+      [tick(trackingFormatting(), 'Track Formatting Changes'), () => { setTrackFormatting(!trackingFormatting()); this.host.flash(trackingFormatting() ? 'Formatting changes will be tracked (bold, fonts, sizes, colors).' : 'Formatting changes won\'t be tracked; only text typed and deleted.'); }],
     ]);
   }
 
@@ -1510,8 +1521,8 @@ export class DocumentMode {
       const pd = this.file?.t.objects[picked];
       if (pd?.kind === 'drawing') {
         cmd('Edit Drawing', 'edit-figure');
-        if (pd.frame) cmd('Fit Figure to Structure', 'figure-fit', 'Its area just round what is drawn in it (the text round it moves to fit)');
-        else cmd('Make Figure', 'make-figure', 'Give the structure an area of its own on the page: drawing in it never moves the text round it, and text wraps round the area, even an empty one');
+        if (pd.frame) cmd('Fit Figure to Structure', 'figure-fit', 'Its area just around what is drawn in it (the text around it moves to fit)');
+        else cmd('Make Figure', 'make-figure', 'Give the structure an area of its own on the page: drawing in it never moves the text around it, and text wraps around the area, even an empty one');
         if (pd.frame) cmd('Remove Figure', 'remove-figure', 'Back to a plain structure, sized by what is drawn');
         cmd('Make All Structures Figures…', 'make-figures', 'Every structure in the document a figure: see how they would be grouped and change their areas first');
       }
@@ -1522,11 +1533,11 @@ export class DocumentMode {
         else cmd('Open Object', 'open-object', `Open the ${objectKind(po.embed)} in its own program; save it there to change it here`);
         item(po.embed.icon ? 'Show Contents' : 'Display as Icon', () => void this.embeddedIcon(picked, !po.embed?.icon), po.embed.icon ? 'Show what the object holds instead of its icon' : 'Show an icon with the file\'s name instead of what it holds');
       }
-      if (po?.kind === 'picture' && !po.chart && !po.embed) cmd('Picture Format…', 'picture-format', 'Brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions');
+      if (po?.kind === 'picture' && !po.chart && !po.embed) cmd('Picture Format…', 'picture-format', 'Brightness, contrast, sharpen, recolor, transparency, Remove Background, crop to a shape or proportions');
       if (po?.kind === 'drawing' || po?.kind === 'picture') cmd('Alt Text…', 'alt-text', 'What it shows, for people who can\'t see it (screen readers); kept as its alt text in Word');
       cmd('Insert Caption…', 'insert-caption');
       const look = this.lookOf(picked);
-      item(look?.frame ? 'Remove Frame' : 'Add Frame', () => this.setLook(picked, { frame: look?.frame ? undefined : 0.75, frameColor: undefined }), 'A thin black line round it (Format in the panel sets its width and colour)');
+      item(look?.frame ? 'Remove Frame' : 'Add Frame', () => this.setLook(picked, { frame: look?.frame ? undefined : 0.75, frameColor: undefined }), 'A thin black line around it (Format in the panel sets its width and color)');
       item(look?.shadow ? 'Remove Shadow' : 'Add Shadow', () => this.setLook(picked, { shadow: look?.shadow ? undefined : 'soft' }), 'A soft shadow down and to the right');
       menu.appendChild(document.createElement('hr'));
       const nested = this.file ? cellHolding(this.file.t, picked) !== null : false;
@@ -1621,14 +1632,14 @@ export class DocumentMode {
     row.className = 'hl-row';
     const none = document.createElement('button');
     none.type = 'button';
-    none.textContent = 'No Colour';
+    none.textContent = 'No Color';
     none.title = 'Take the highlight off the selected text';
     none.addEventListener('mousedown', (e) => e.preventDefault());
     none.addEventListener('click', () => use(undefined));
     const other = document.createElement('input');
     other.type = 'color';
     other.value = this.highlighter;
-    other.title = 'Any other colour (saved to Word as shading, which it shows the same way)';
+    other.title = 'Any other color (saved to Word as shading, which it shows the same way)';
     other.addEventListener('change', () => use(other.value));
     row.append(none, other);
     menu.append(grid, row);
@@ -3042,7 +3053,7 @@ export class DocumentMode {
    * (null when they can't: turned, in a header or footer, or a view without pages). `grow`
    * gets the figure's new area when its structures outgrew it and Grow Figure was chosen.
    */
-  private placeFor(id: number, grow: (frame: FigureFrame) => void): InPlace | null {
+  private placeFor(id: number, grow: (frame: FigureFrame) => void, fresh = false): InPlace | null {
     const f = this.file;
     const o = f?.t.objects[id];
     if (!f || o?.kind !== 'drawing' || !this.host.editInPlace || this.reading || turnOf(o)) return null;
@@ -3051,14 +3062,17 @@ export class DocumentMode {
     const find = () => f.layout().objects.find((x) => x.id === id) ?? null;
     const at0 = find();
     if (!at0 || at0.w <= 0) return null;
-    const fr = o.frame;
+    // (a new structure's room is only room to draw in: not a figure, with no edges or Grow Figure)
+    const room = fresh ? o.frame : undefined;
+    const fr = fresh ? undefined : o.frame;
     const style = f.t.drawingStyle;
-    const box = fr ? { x1: fr.x, y1: fr.y, x2: fr.x + fr.w, y2: fr.y + fr.h } : figures.record(o.contents, style).pic?.box;
+    const edge = fr ?? room;
+    const box = edge ? { x1: edge.x, y1: edge.y, x2: edge.x + edge.w, y2: edge.y + edge.h } : figures.record(o.contents, style).pic?.box;
     if (!box) return null;
     // drawing points to the page's
     const s = at0.w / Math.max(1e-6, box.x2 - box.x1);
     const place: InPlace = {
-      title: fr ? 'Figure' : 'Structure',
+      title: fr ? 'Figure' : fresh ? 'New Structure' : 'Structure',
       rect: () => {
         const el = v.scroller;
         if (!el.isConnected) return null;
@@ -3090,12 +3104,13 @@ export class DocumentMode {
             ctx.translate(at.x - box.x1 * s, at.y - box.y1 * s);
             ctx.scale(s, s);
             // a figure's edges, while its structures are drawn (they may reach past them: nothing is cut off)
-            if (fr) {
+            // (and a new structure's room, to show where it goes)
+            if (edge) {
               const px = 1 / (s * v.zoom);
               ctx.strokeStyle = FIGURE_EDGE;
               ctx.lineWidth = px;
               ctx.setLineDash([5 * px, 4 * px]);
-              ctx.strokeRect(fr.x, fr.y, fr.w, fr.h);
+              ctx.strokeRect(edge.x, edge.y, edge.w, edge.h);
               ctx.setLineDash([]);
             }
             paint(ctx);
@@ -3120,7 +3135,7 @@ export class DocumentMode {
         if (need.x1 >= fr.x - 0.5 && need.y1 >= fr.y - 0.5 && need.x2 <= fr.x + fr.w + 0.5 && need.y2 <= fr.y + fr.h + 0.5) return true;
         const ok = await ask('Grow the Figure?', [], {
           ok: 'Grow Figure',
-          note: 'The structure reaches past the edges of its figure. Grow the figure to fit it (the text round it moves to make room), or Cancel to go back to the drawing. Nothing is cut off.',
+          note: 'The structure reaches past the edges of its figure. Grow the figure to fit it (the text around it moves to make room), or Cancel to go back to the drawing. Nothing is cut off.',
         });
         if (!ok) return false;
         // grown round the picture of it (with its margin)
@@ -3431,7 +3446,7 @@ export class DocumentMode {
     if (!b) return;
     const r = (x: number) => Math.round(x * 100) / 100;
     f.ed.update({ ...f.t, objects: { ...f.t.objects, [id]: { ...o, frame: { x: r(b.x1), y: r(b.y1), w: r(b.x2 - b.x1), h: r(b.y2 - b.y1) } } } } as DocText, 'Make figure');
-    this.host.flash('It is a figure now: drag its corner handle to give it room, and drawing in it won\'t move the text round it.', 6000);
+    this.host.flash('It is a figure now: drag its corner handle to give it room, and drawing in it won\'t move the text around it.', 6000);
   }
 
   /** Fit Figure to Structure (its area just round what is drawn), or Remove Figure (a plain structure again). */
@@ -3549,7 +3564,7 @@ export class DocumentMode {
       case 'undo': this.undo(false); break;
       case 'redo': this.undo(true); break;
       case 'insert-structure': this.drawNew(); break;
-      case 'insert-figure': this.placeNext = {}; this.view.scroller.style.cursor = 'crosshair'; this.host.flash('Drag on the page to draw the figure\'s area (Esc to stop). Text wraps round it; double-click it to draw in it.', 6000); break;
+      case 'insert-figure': this.placeNext = {}; this.view.scroller.style.cursor = 'crosshair'; this.host.flash('Drag on the page to draw the figure\'s area (Esc to stop). Text wraps around it; double-click it to draw in it.', 6000); break;
       case 'make-figures': this.figureOffer.start(f); break;
       case 'make-figure': { const id = this.pickedObject(); if (id !== null) this.makeFigure(id); break; }
       case 'figure-fit': { const id = this.pickedObject(); if (id !== null) this.fitFigure(id, false); break; }
@@ -3562,7 +3577,7 @@ export class DocumentMode {
       case 'insert-text-box': this.insertTextBox(); break;
       case 'wrap-inline': case 'wrap-square': case 'wrap-topBottom': case 'wrap-behind': case 'wrap-front': {
         const id = this.pickedObject() ?? f.box?.id ?? null;
-        if (id === null) { this.host.flash('Click a structure, picture or text box first, then choose how text wraps round it.'); break; }
+        if (id === null) { this.host.flash('Click a structure, picture or text box first, then choose how text wraps around it.'); break; }
         this.setWrap(id, cmd.slice(5) as WrapKind | 'inline');
         break;
       }
@@ -3651,11 +3666,21 @@ export class DocumentMode {
       case 'find': case 'replace': this.find(cmd === 'replace'); return true;
       case 'paste': void this.paste(null); break;
       case 'copy': case 'cut': this.focus(); document.execCommand(cmd); break;
+      case 'font-box': {
+        this.fontBox ??= new FontBox({
+          look: () => (this.file ? this.ed.currentStyle() : null),
+          apply: (patch) => { if (this.file) this.setTextStyle(patch); },
+          changeCase: (mode) => { if (this.file) this.ed.changeCase(mode); },
+          allCaps: () => { if (this.file) this.ed.toggle('allCaps'); },
+        });
+        this.fontBox.toggle(this.ribbon.querySelector<HTMLElement>('[data-doc="font-box"]'));
+        return true;
+      }
       case 'box-para': case 'box-style': case 'box-page': case 'box-hf':
         this.panel.open(cmd.slice(4) as DocBoxKey);
         return true;
       case 'margins-custom': case 'paper-custom':
-        this.panel.open('page', this.ribbon.querySelector<HTMLElement>(cmd === 'paper-custom' ? '#doc-paper' : '#doc-margins'), cmd === 'paper-custom' ? 'pg-w' : 'pg-top');
+        this.panel.open('page', this.ribbonAnchor(cmd === 'paper-custom' ? '#doc-paper' : '#doc-margins'), cmd === 'paper-custom' ? 'pg-w' : 'pg-top');
         this.updateRibbon();
         return true;
       case 'header-edit': this.panel.open('hf', null, 'hf-header0'); return true;
@@ -3731,7 +3756,7 @@ export class DocumentMode {
     } else if (what === 'orient') {
       if ((v === 'landscape') !== land) page({ w: pg.h, h: pg.w });
     } else if (what === 'columns') {
-      if (v === 'more') { this.panel.open('page', this.ribbon.querySelector<HTMLElement>('#doc-columns'), 'pg-cols'); return true; }
+      if (v === 'more') { this.panel.open('page', this.ribbonAnchor('#doc-columns'), 'pg-cols'); return true; }
       const n = Number(v);
       if (!(n >= 1 && n <= 4)) return false;
       page({ cols: n > 1 ? n : undefined });
@@ -3780,7 +3805,7 @@ export class DocumentMode {
     const got = await ask('Picture in Header or Footer', [
       { name: 'where', label: 'Put it in the', value: 'header', options: [{ value: 'header', label: 'Header' }, { value: 'footer', label: 'Footer' }] },
       { name: 'which', label: 'On', value: '', options: [{ value: '', label: hf.oddEven ? 'Odd pages' : 'Every page' }, ...(hf.firstPage ? [{ value: 'first', label: 'The first page' }] : []), ...(hf.oddEven ? [{ value: 'even', label: 'Even pages' }] : [])] },
-      { name: 'zone', label: 'At the', value: '0', options: [{ value: '0', label: 'Left' }, { value: '1', label: 'Centre' }, { value: '2', label: 'Right' }] },
+      { name: 'zone', label: 'At the', value: '0', options: [{ value: '0', label: 'Left' }, { value: '1', label: 'Center' }, { value: '2', label: 'Right' }] },
       { name: 'height', label: 'Height', value: '0.5', unit: 'in' },
     ], { ok: 'Choose Picture…', note: 'For this section. Saved as a picture in Word\'s header or footer. Plain Text (in the Header and Footer settings) takes it out again.' });
     this.focus();
@@ -3905,6 +3930,7 @@ export class DocumentMode {
 
   private drawNew(): void {
     const f = this.file!;
+    if (this.drawNewInPlace()) return;
     const spot = this.cellSpot();
     this.host.editDrawing(null, 'New structure', (c) => {
       if (this.file === f) this.backToCell(spot);
@@ -3912,6 +3938,41 @@ export class DocumentMode {
       this.insertObject({ kind: 'drawing', contents: c }, 'Insert structure');
       this.focus();
     });
+  }
+
+  /**
+   * Insert > Structure, drawn in place on the page: room for it at the caret (2 × 1.25 in), the drawing
+   * tools over it, and on Done a plain structure sized to what was drawn. Cancel, or Done with nothing
+   * drawn, leaves the document as if nothing had been inserted (no Undo step). False when it can't be
+   * drawn in place here (a table cell, reading view, no pages): the pop-out editor draws it instead.
+   */
+  private drawNewInPlace(): boolean {
+    const f = this.file!;
+    if (!this.host.editInPlace || f.box || this.reading || (this.view.kind !== 'print' && this.view.kind !== 'web')) return false;
+    const ed = f.ed;
+    const empty: Contents = { atoms: [], bonds: [], captions: [], arrows: [], shapes: [] };
+    const id = this.insertObject({ kind: 'drawing', contents: empty, frame: { x: 0, y: 0, w: 2 * INCH, h: 1.25 * INCH } }, 'Insert structure');
+    const step = ed.lastStep as { t: DocText; anchor: number; focus: number } | undefined;
+    this.redraw();
+    const forget = () => {
+      // the room for it taken out again, as if it had never been put in
+      if (!step || ed.lastStep !== step) return;
+      ed.update(step.t, null, step.anchor, step.focus);
+      ed.dropStep(step, () => true);
+    };
+    const place = this.placeFor(id, () => {}, true);
+    if (!place) { forget(); return false; }
+    this.host.editInPlace(empty, place, (c) => {
+      this.inPlace = null;
+      if (this.file !== f) return;
+      const cur = f.t.objects[id];
+      if (!c || emptyContents(c) || cur?.kind !== 'drawing') { forget(); this.redraw(); this.focus(); return; }
+      const { frame: _room, ...plain } = cur;
+      // part of the insert's Undo step, so one Undo takes the structure out
+      ed.update({ ...f.t, objects: { ...f.t.objects, [id]: { ...plain, contents: c } } } as DocText, ed.lastStep === step ? null : 'Insert structure');
+      this.focus();
+    });
+    return true;
   }
 
   private async fromName(): Promise<void> {
@@ -4759,7 +4820,7 @@ export class DocumentMode {
   /** Design > Set as Default: new documents start with this one's theme, style set and spacing. */
   private async designDefault(): Promise<void> {
     const d = this.file?.t.design;
-    const what = d ? [d.theme && `the ${d.theme} theme`, !d.theme && d.fonts && `${d.fonts} fonts`, !d.theme && d.colors && `${d.colors} colours`, d.styleSet && `the ${d.styleSet} style set`, d.spacing && `${d.spacing} spacing`].filter(Boolean).join(', ') : '';
+    const what = d ? [d.theme && `the ${d.theme} theme`, !d.theme && d.fonts && `${d.fonts} fonts`, !d.theme && d.colors && `${d.colors} colors`, d.styleSet && `the ${d.styleSet} style set`, d.spacing && `${d.spacing} spacing`].filter(Boolean).join(', ') : '';
     const got = await ask('Set as Default', [], { ok: what ? 'Set as Default' : 'Use the Standard Look', note: what ? `New documents will start with ${what}. (Documents already made keep their own look.)` : 'This document uses the standard look, so new documents will too.' });
     if (!got) return;
     this.host.setNewDesign?.(d && Object.keys(d).length ? d : null);
@@ -4782,7 +4843,7 @@ export class DocumentMode {
     const got = await ask('Watermark', [
       { name: 'text', label: 'Text', value: w.text, suggestions: WATERMARKS },
       { name: 'font', label: 'Font', value: w.font, suggestions: ['Calibri', 'Arial', 'Times New Roman', 'Inter', 'IBM Plex Sans'] },
-      { name: 'color', label: 'Colour', value: w.color, type: 'color' },
+      { name: 'color', label: 'Color', value: w.color, type: 'color' },
       { name: 'layout', label: 'Layout', value: w.layout, options: [{ value: 'diagonal', label: 'Diagonal' }, { value: 'horizontal', label: 'Horizontal' }] },
       { name: 'faded', label: 'Semitransparent', value: String(w.faded), type: 'checkbox' },
     ], { ok: 'Apply', note: 'Words across every page, behind the text. Saved in Word files as Word’s own watermark, so Word shows and edits it too.' });
@@ -4797,10 +4858,10 @@ export class DocumentMode {
     const f = this.file!;
     const b: PageBorder = f.t.pageBorder ?? defaultPageBorder();
     const got = await ask('Page Borders', [
-      { name: 'on', label: 'A border round every page', value: String(!!f.t.pageBorder), type: 'checkbox' },
+      { name: 'on', label: 'A border around every page', value: String(!!f.t.pageBorder), type: 'checkbox' },
       { name: 'style', label: 'Style', value: b.style, options: [{ value: 'single', label: 'Single line' }, { value: 'double', label: 'Double line' }, { value: 'thick', label: 'Thick and thin' }, { value: 'dotted', label: 'Dotted' }, { value: 'dashed', label: 'Dashed' }] },
       { name: 'width', label: 'Width', value: String(b.width), unit: 'pt', options: ['0.25', '0.5', '0.75', '1', '1.5', '2.25', '3', '4.5', '6'].map((x) => ({ value: x, label: `${x} pt` })) },
-      { name: 'color', label: 'Colour', value: b.color, type: 'color' },
+      { name: 'color', label: 'Color', value: b.color, type: 'color' },
       { name: 'from', label: 'Measure from', value: b.from, options: [{ value: 'page', label: 'Edge of page' }, { value: 'text', label: 'Text' }] },
       { name: 'space', label: 'Distance', value: String(b.space), unit: 'pt', type: 'number' },
     ], { ok: 'OK', note: 'Saved in Word files as Word’s own page border. From the edge of the page, Word allows up to 31 pt; from the text, up to 31 pt outside the margins.' });
@@ -4821,7 +4882,7 @@ export class DocumentMode {
     const shown = cur.map((t) => `${showLength(t.pos, 'in')} in ${t.kind === 'center' ? 'centre' : t.kind}${t.leader ? ` ${t.leader === 'underscore' ? 'line' : t.leader}` : ''}`).join('\n');
     const got = await ask('Tabs', [
       { name: 'tabs', label: 'Tab stops, one per line', value: shown, type: 'textarea', placeholder: '1 in left\n3.25 in decimal\n6.5 in right dot' },
-    ], { ok: 'OK', note: 'Each line: where (from the left margin, in inches unless you give cm, mm or pt), then left, centre, right or decimal, then dot, hyphen or line for a leader. Past the last one, tabs stop every half inch. The ruler (View > Ruler) sets them by clicking too.' });
+    ], { ok: 'OK', note: 'Each line: where (from the left margin, in inches unless you give cm, mm or pt), then left, center, right or decimal, then dot, hyphen or line for a leader. Past the last one, tabs stop every half inch. The ruler (View > Ruler) sets them by clicking too.' });
     this.focus();
     if (!got || this.file !== f) return;
     const tabs: TabStop[] = [];
@@ -4894,7 +4955,7 @@ export class DocumentMode {
     const got = await ask('New Style', [
       { name: 'name', label: 'Name', value: '' , placeholder: 'Experimental heading' },
       { name: 'kind', label: 'Style type', value: ed.collapsed ? 'para' : 'char', options: [{ value: 'para', label: 'Paragraph (the whole paragraph’s look and spacing)' }, { value: 'char', label: 'Character (the look of the words picked)' }] },
-    ], { ok: 'Make Style', note: 'The new style takes the look of the text the caret is in, and is given to it. Change it later with Modify; every paragraph or word in it follows.' });
+    ], { ok: 'Create Style', note: 'The new style takes the look of the text the caret is in, and is given to it. Change it later with Modify; every paragraph or word in it follows.' });
     this.focus();
     if (!got || this.file !== f || !got.name.trim()) return;
     const look = ed.currentStyle();
@@ -4930,8 +4991,8 @@ export class DocumentMode {
       { name: 'italic', label: 'Italic', value: yesNo(s.italic), options: tri },
       { name: 'underline', label: 'Underline', value: String(!!s.underline), type: 'checkbox' },
       { name: 'smallCaps', label: 'Small caps', value: String(!!s.smallCaps), type: 'checkbox' },
-      { name: 'colorOn', label: 'Own colour', value: String(!!s.color), type: 'checkbox' },
-      { name: 'color', label: 'Colour', value: s.color ?? '#000000', type: 'color' },
+      { name: 'colorOn', label: 'Own color', value: String(!!s.color), type: 'checkbox' },
+      { name: 'color', label: 'Color', value: s.color ?? '#000000', type: 'color' },
     ], { ok: 'OK', note: 'Every word in this style changes with it (except what was formatted by hand).' });
     this.focus();
     if (!got || this.file !== f) return;
@@ -5108,6 +5169,7 @@ export class DocumentMode {
     if (!f) return;
     const ed = f.textEd;
     const s = ed.currentStyle();
+    if (this.fontBox?.open) this.fontBox.refresh();
     const para = ed.currentPara();
     const st = f.box ? styleOf(f.t, {}) : styleOf(f.t, para);
     const press = (cmd: string, on: boolean) => {
