@@ -11,9 +11,19 @@ import { chemRuns } from '../text/chemtext';
 import type { Measure } from '../editor/arrange';
 import { frameBox, frameMembers } from '../editor/frames';
 import { shapeBox } from '../objects';
+import { isInkId } from './geo';
+import { bestRotation, defaultView, drawCrystal, type CrystalSpec } from './xray';
+import { COVALENT, type V3 } from '../chem/crystal';
+import type { QmAtom } from '../chem/qm-output';
 
 /** A species at one column: its name and energy (null: this pathway has nothing in that column). */
-export interface EnergyPoint { label: string; g: number | null }
+export interface EnergyPoint {
+  label: string;
+  g: number | null;
+  /** Read from a Gaussian or ORCA file: its energy in hartree (so the unit can change) and its last geometry (Å). */
+  eh?: number;
+  geom?: QmAtom[];
+}
 
 export interface EnergyPath {
   name: string;
@@ -36,6 +46,12 @@ export interface EnergyData {
   axis: boolean;
   /** Mark the largest barrier on each pathway (from the lowest point before it to the highest after). */
   barrier: boolean;
+  /** Mark the overall change on each pathway (ΔG), first species to last. */
+  overall?: boolean;
+  /** The level of theory, written at the top left (B3LYP-D3(BJ)/def2-TZVP, SMD(THF)). */
+  theory?: string;
+  /** Draw each species' geometry (read from its file) beside its level, as balls and sticks. */
+  structures?: boolean;
   /** The plot's size in points. */
   w: number;
   h: number;
@@ -171,6 +187,26 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
     }
   });
 
+  if (d.overall) {
+    // the overall change: a double arrow past the last species, with a dashed line back to the first
+    d.paths.forEach((p, pi) => {
+      const shown = p.points.map((q, k) => ({ q, k })).filter(({ q }) => q.g !== null && isFinite(q.g));
+      if (shown.length < 2) return;
+      const a = shown[0], b = shown[shown.length - 1];
+      if (Math.abs(b.q.g! - a.q.g!) < 1e-9) return;
+      const color = p.color || '#000000';
+      const tint = color !== '#000000' ? { color } : {};
+      const xx = x(b.k) + bar / 2 + (0.6 + 1.1 * pi) * L;
+      line(x(a.k) + bar / 2, y(a.q.g!), xx + 0.3 * L, y(a.q.g!), { dashed: true, color });
+      if (d.style === 'curve') line(x(b.k), y(b.q.g!), xx + 0.3 * L, y(b.q.g!), { dashed: true, color });
+      trace({ x: xx, y: y(a.q.g!) }, { x: xx, y: y(b.q.g!) });
+      arrow({ x: xx, y: y(a.q.g!) }, { x: xx, y: y(b.q.g!) }, { headStyle: 'full', tailStyle: 'full', ...tint });
+      const q0 = d.quantity.replace(/‡$/, '');
+      caption(`${q0} = ${fmt(b.q.g! - a.q.g!)}`, { x: xx + gap, y: (y(a.q.g!) + y(b.q.g!)) / 2 }, 'right', color);
+    });
+  }
+
+
   if (d.axis) {
     const ax = at.x - 0.6 * L, top = at.y - 1.6 * L, bottom = at.y + d.h + 2.4 * L;
     arrow({ x: ax, y: bottom }, { x: ax, y: top }, { headStyle: 'full' });
@@ -228,6 +264,43 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
       ky += Math.max(b.y2 - b.y1, 0.8 * L);
     }
   }
+  if (d.structures) {
+    // each species' geometry over its level when it is a peak, under it otherwise, moved on
+    // until it is clear of the text, lines and other structures
+    const box = Math.min(colW * 0.92, 5 * L), h = box * 0.8;
+    const taken: Rect[] = out.captions.map((id) => m.captionBox(doc.captions.get(id)!));
+    const clear = (r: Rect) => !taken.some((o) => o.x1 < r.x2 && r.x1 < o.x2 && o.y1 < r.y2 && r.y1 < o.y2)
+      && !ink.some((q) => q.x > r.x1 && q.x < r.x2 && q.y > r.y1 && q.y < r.y2);
+    const done = new Set<number>();
+    d.paths.forEach((p) => {
+      const shown = p.points.map((q, k) => ({ q, k })).filter(({ q }) => q.g !== null && isFinite(q.g));
+      shown.forEach(({ q, k }, i) => {
+        if (!q.geom?.length || done.has(k)) return;
+        done.add(k);
+        const prev = shown[i - 1]?.q.g ?? -Infinity, next = shown[i + 1]?.q.g ?? -Infinity;
+        const up = q.g! > prev && q.g! > next ? -1 : 1;
+        const yy = y(q.g!);
+        let top = up < 0 ? yy - gap - h : yy + gap;
+        const at2 = (t: number): Rect => ({ x1: x(k) - box / 2, y1: t, x2: x(k) + box / 2, y2: t + h });
+        for (let n = 0; n < 40 && !clear(at2(top)); n++) top += up * 0.25 * L;
+        const parts = drawCrystal(doc, m, geomSpec(q.geom), { x: x(k) - box / 2, y: top }, box, h);
+        taken.push(at2(top));
+        out.captions.push(...parts.captions);
+        out.shapes.push(...parts.shapes);
+      });
+    });
+  }
+
+  if (d.theory?.trim()) {
+    // under everything, at the left
+    const all = [...out.captions.map((id) => m.captionBox(doc.captions.get(id)!)), ...out.shapes.map((id) => shapeBox(doc.shapes.get(id)!))];
+    const low = Math.max(at.y + d.h, ...all.map((r) => r.y2));
+    caption(d.theory.trim(), { x: d.axis ? at.x - 0.6 * L : at.x, y: low + gap }, 'right', undefined, { runs: [{ text: d.theory.trim(), size: doc.style.captionSize * 0.85 }] });
+    const c = doc.captions.get(out.captions[out.captions.length - 1])!;
+    const b = m.captionBox(c);
+    doc.updateCaption(c.id, { y: c.y + (low + gap - b.y1) });
+  }
+
   return out;
 }
 
@@ -293,7 +366,11 @@ export function putEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec, id?: num
     const f = old.frame;
     for (const c of f.captions) doc.removeCaption(c);
     for (const r of f.arrows) doc.removeArrow(r);
-    for (const s of f.shapes) { if (doc.shapes.get(s)?.kind === 'line') doc.removeShape(s); else if (doc.shapes.has(s)) kept.shapes.push(s); }
+    for (const s of f.shapes) {
+      const sh = doc.shapes.get(s);
+      // lines, and the balls and sticks of structures read from files, are drawn again
+      if (sh && (sh.kind === 'line' || (sh.kind === 'oval' && sh.fill === 'shaded') || (sh.kind === 'geo' && isInkId(sh.geo)))) doc.removeShape(s); else if (sh) kept.shapes.push(s);
+    }
     kept.atoms = f.atoms.filter((a) => doc.atoms.has(a));
   }
   const parts = drawEnergy(doc, m, d, at);
@@ -340,4 +417,21 @@ export function refitEnergy(doc: Doc, before: ReadonlyMap<string, Entity | null>
     const p = plotFromBox(b, s.energy, doc.style.bondLength);
     putEnergy(doc, m, { ...s.energy, w: p.w, h: p.h }, p.at, s.id);
   }
+}
+
+/** A geometry read from a file as a ball-and-stick figure: bonds from the covalent radii, turned to show it spread out. */
+export function geomSpec(atoms: QmAtom[]): CrystalSpec {
+  const xyz = atoms.map((a): V3 => [a.x, a.y, a.z]);
+  const bonds: [number, number][] = [];
+  for (let i = 0; i < atoms.length; i++) {
+    for (let j = i + 1; j < atoms.length; j++) {
+      const d = Math.hypot(xyz[i][0] - xyz[j][0], xyz[i][1] - xyz[j][1], xyz[i][2] - xyz[j][2]);
+      if (d > 0.4 && d < (COVALENT[atoms[i].el] ?? 1.5) + (COVALENT[atoms[j].el] ?? 1.5) + 0.4) bonds.push([i, j]);
+    }
+  }
+  return {
+    name: '', bonds,
+    atoms: atoms.map((a, i) => ({ label: a.el + (i + 1), el: a.el, xyz: xyz[i], u: [0.02, 0.02, 0.02, 0, 0, 0], mol: 0 })),
+    view: { ...defaultView(), rotation: bestRotation(xyz), style: 'ball', labels: false, principal: false },
+  };
 }
