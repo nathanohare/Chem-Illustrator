@@ -7,6 +7,7 @@
 import type { Contents } from '../model';
 import { CellError, ERR } from './values';
 import type { MolProps } from './properties';
+import type { HammettResult } from '../chem/hammett-match';
 import type { ChemHost, Structure } from './workbook';
 
 /** The chemistry engine (the worker), or a stand-in for tests. */
@@ -14,6 +15,8 @@ export interface ChemEngine {
   readonly ready: boolean;
   props(mols: string[]): Promise<(MolProps | { error: string })[]>;
   substructure(query: string, mols: string[]): Promise<{ results: (boolean | null)[]; error?: string }>;
+  /** The Hammett groups at a core's marked positions in each molecule (SMILES). */
+  hammett?(core: string, mols: string[]): Promise<HammettResult[]>;
 }
 
 type Answer = MolProps | CellError;
@@ -27,6 +30,9 @@ export class SheetChem implements ChemHost {
   private byStructure = new Map<number, Answer>();
   private bySmiles = new Map<string, Answer>();
   private matches = new Map<string, boolean | null>();
+  private hammetts = new Map<string, HammettResult>();
+  /** Hammett questions not sent yet, by core: the SMILES asked about. */
+  private wantHammett = new Map<string, Set<string>>();
   private queryIds = new WeakMap<Contents, number>();
   private nextQuery = 1;
   /** Questions not sent yet. */
@@ -86,6 +92,21 @@ export class SheetChem implements ChemHost {
     return null;
   }
 
+  /**
+   * The Hammett groups at the core's marked positions in a molecule (its SMILES, as worked out
+   * for its properties). #BUSY! the first time, while the engine works it out.
+   */
+  hammett(smiles: string, core: string): HammettResult | CellError {
+    const key = `${core}\n${smiles}`;
+    const got = this.hammetts.get(key);
+    if (got) return got;
+    if (!this.engine.hammett) return ERR.na('Hammett constants need the chemistry engine');
+    let want = this.wantHammett.get(core);
+    if (!want) { want = new Set(); this.wantHammett.set(core, want); }
+    if (!want.has(smiles)) { want.add(smiles); this.schedule(); }
+    return ERR.busy();
+  }
+
   /** Waits until every question asked so far has its answer. */
   settled(): Promise<void> {
     if (!this.busy) return Promise.resolve();
@@ -93,7 +114,7 @@ export class SheetChem implements ChemHost {
   }
 
   get busy(): boolean {
-    return this.scheduled || this.inFlight > 0 || this.wantProps.size > 0 || this.wantMatch.size > 0;
+    return this.scheduled || this.inFlight > 0 || this.wantProps.size > 0 || this.wantMatch.size > 0 || this.wantHammett.size > 0;
   }
 
   /** Send what's waiting (call when the engine has just become ready). */
@@ -108,6 +129,7 @@ export class SheetChem implements ChemHost {
     this.byStructure.clear();
     this.bySmiles.clear();
     this.matches.clear();
+    this.hammetts.clear();
   }
 
   private schedule(): void {
@@ -124,8 +146,10 @@ export class SheetChem implements ChemHost {
   private async send(): Promise<void> {
     const props = [...this.wantProps.values()];
     const matches = [...this.wantMatch.values()];
+    const hammetts = [...this.wantHammett.entries()];
     this.wantProps.clear();
     this.wantMatch.clear();
+    this.wantHammett.clear();
     const jobs: Promise<void>[] = [];
     if (props.length) {
       const asked: { store: (a: Answer) => void }[] = [];
@@ -159,6 +183,14 @@ export class SheetChem implements ChemHost {
       jobs.push(this.engine.substructure(qm, inputs).then(
         (res) => res.results.forEach((r, i) => this.keep(this.matches, asked[i], r ?? false)),
         () => asked.forEach((k) => this.matches.set(k, false)),
+      ));
+    }
+    for (const [core, set] of hammetts) {
+      const mols = [...set];
+      const keep = (i: number, r: HammettResult) => this.keep(this.hammetts, `${core}\n${mols[i]}`, r);
+      jobs.push(this.engine.hammett!(core, mols).then(
+        (res) => res.forEach((r, i) => keep(i, r)),
+        (e) => mols.forEach((_, i) => keep(i, { error: `The chemistry engine failed: ${String(e)}` })),
       ));
     }
     this.inFlight++;

@@ -150,7 +150,7 @@ export const BUILTIN_FORMATS: Record<number, string> = {
 };
 
 // FIELDVALUE too: Excel has it, but for its own data types, and would find no compound here
-const CHEM_FUNCTION = new RegExp(`\\b(${[...Object.keys(PROPERTIES), ...Object.keys(ISOTOPE_FUNCTIONS), 'FIELDVALUE'].join('|')})\\s*\\(`, 'i');
+const CHEM_FUNCTION = new RegExp(`\\b(${[...Object.keys(PROPERTIES), ...Object.keys(ISOTOPE_FUNCTIONS), 'HAMMETT', 'FIELDVALUE'].join('|')})\\s*\\(`, 'i');
 // Functions newer than Excel 2007 are written in the file with a prefix (_xlfn.), which Excel
 // needs to know them; reading a file takes the prefix off, so saving puts it back.
 const XLFN = new Set(['AGGREGATE', 'BETA.DIST', 'BETA.INV', 'BINOM.DIST', 'BINOM.INV', 'CEILING.MATH', 'CHISQ.DIST', 'CHISQ.DIST.RT',

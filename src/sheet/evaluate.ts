@@ -16,6 +16,8 @@ import { STATS_FUNCTIONS } from './fn-stats';
 import { ANALYSIS_FUNCTIONS } from './fn-analysis';
 import { CHEM_FUNCTIONS } from './fn-chem';
 import { MolProps, PROPERTIES, propertyValue } from './properties';
+import { hammettValue, hammettWhat, orthoAsPara } from './hammett-fn';
+import type { HammettResult } from '../chem/hammett-match';
 import { ISOTOPE_FUNCTIONS, isotopeValue, readsAsFormula, type IsotopeSource } from './isotopes';
 
 /** Where a formula reads its cells and structures from. */
@@ -55,6 +57,8 @@ export interface EvalHost {
   subtotalSkip?(sheet: string | undefined, row: number, col: number, hidden: boolean): boolean;
   /** A field of the compound card in a cell (Data > Data Types > Compound): undefined for a cell with no card, null for a field it doesn't have. */
   field?(sheet: string | undefined, row: number, col: number, name: string): Value | null | undefined;
+  /** The Hammett groups at a core's marked positions in a molecule (by its SMILES); #BUSY! while being worked out. */
+  hammett?(smiles: string, core: string): HammettResult | CellError;
   /** SUM of one column, rows r1 to r2, from a running total down it; undefined when there is none to use. */
   sumColumn?(sheet: string | undefined, col: number, r1: number, r2: number): number | CellError | undefined;
 }
@@ -724,7 +728,7 @@ function rowCol(argNodes: Node[], host: EvalHost, row: boolean): Arg {
 export const VOLATILE_FUNCTIONS = ['OFFSET', 'INDIRECT', 'TODAY', 'NOW'];
 
 /** Every function name, for the formula bar's suggestions. */
-export const FUNCTION_NAMES = [...Object.keys(FUNCTIONS), ...Object.keys(LAZY), ...Object.keys(PROPERTIES), ...Object.keys(ISOTOPE_FUNCTIONS)].sort();
+export const FUNCTION_NAMES = [...Object.keys(FUNCTIONS), ...Object.keys(LAZY), ...Object.keys(PROPERTIES), ...Object.keys(ISOTOPE_FUNCTIONS), 'HAMMETT'].sort();
 
 /** A reference worked out in a formula: as written, or made by INDIRECT or OFFSET. */
 function refOf(n: Node, host: EvalHost): RefToken | CellError {
@@ -815,6 +819,7 @@ function call(name: string, argNodes: Node[], host: EvalHost): Arg {
   const lazy = LAZY[name];
   if (lazy) return lazy(argNodes, host);
   if (name === 'DUPLICATE') return duplicate(argNodes, host);
+  if (name === 'HAMMETT') return hammett(argNodes, host);
   if (ISOTOPE_FUNCTIONS[name]) return isotope(name, argNodes, host);
   const prop = PROPERTIES[name];
   if (prop) return chemistry(name, argNodes, host);
@@ -878,6 +883,37 @@ function chemistry(name: string, argNodes: Node[], host: EvalHost): Value {
   if (isError(mol)) return mol;
   const extra: Value[] = argNodes.slice(1).map((a) => scalar(evalNode(a, host)));
   return propertyValue(name, mol, extra);
+}
+
+/**
+ * HAMMETT(B2,"sigma","[NH2:1]c1ccc(*)cc1",["ortho=sp"]): a Hammett constant of the group a
+ * structure has at the core's marked position (see src/sheet/hammett-fn.ts).
+ */
+function hammett(argNodes: Node[], host: EvalHost): Value {
+  const usage = 'HAMMETT needs a structure, what to give ("sigma", "sm", "sp", "F", "R" or "group") and the core with * where the group changes: HAMMETT(B2,"sigma","[NH2:1]c1ccc(*)cc1")';
+  if (argNodes.length < 3 || argNodes.length > 4) return ERR.value(usage);
+  const first = argNodes[0];
+  let mol: MolProps | CellError | null;
+  if (first.t === 'ref' && first.v.kind === 'cell' && !first.v.broken) {
+    if (first.v.sheet !== undefined && !host.hasSheet(first.v.sheet)) return ERR.ref(`There is no sheet called "${first.v.sheet}"`);
+    mol = host.molecule({ sheet: first.v.sheet, row: first.v.a.row, col: first.v.a.col });
+  } else {
+    const v = scalar(evalNode(first, host));
+    if (isError(v)) return v;
+    if (v === null || v === '') return '';
+    if (typeof v !== 'string') return ERR.value('HAMMETT needs a structure or SMILES, not a number');
+    mol = host.molecule({ smiles: v });
+  }
+  const [w, c, o] = argNodes.slice(1).map((a) => scalar(evalNode(a, host)));
+  for (const x of [w, c, o]) if (isError(x)) return x;
+  const what = hammettWhat(String(w ?? ''));
+  if (!what) return ERR.value(`HAMMETT gives "sigma", "sm", "sp", "F", "R" or "group", not "${String(w ?? '')}"`);
+  const core = String(c ?? '').trim();
+  if (!core) return ERR.value(usage);
+  if (mol === null) return '';
+  if (isError(mol)) return mol;
+  if (!host.hammett) return ERR.na('Hammett constants need the chemistry engine');
+  return hammettValue(host.hammett(mol.smiles, core), what, o !== undefined && o !== null && orthoAsPara(String(o)));
 }
 
 /**

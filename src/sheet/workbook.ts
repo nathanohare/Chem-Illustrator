@@ -35,6 +35,7 @@ import { type SheetViewOpts, type CustomView, renameInViews } from './views';
 import type { WorkbookTheme } from './themes';
 import { type CompoundCard, fieldValue } from './compound';
 import type { Query } from './query';
+import type { HammettResult } from '../chem/hammett-match';
 
 export type BorderStyle = 'thin' | 'medium' | 'thick' | 'double' | 'dashed' | 'dotted';
 export interface Border { style: BorderStyle; color?: string }
@@ -148,6 +149,8 @@ export interface ChemHost {
   smiles(text: string): MolProps | CellError;
   /** Does the structure contain the query? Null while being worked out. */
   substructure?(s: Structure, query: Contents): boolean | null;
+  /** The Hammett groups at a core's marked positions in a molecule (by its SMILES); #BUSY! while being worked out. */
+  hammett?(smiles: string, core: string): HammettResult | CellError;
 }
 
 /** A block of cells taken by Copy, to paste elsewhere. */
@@ -2261,6 +2264,7 @@ export class Workbook {
         if (!card) return undefined;
         return fieldValue(card, name) ?? null;
       },
+      hammett: (smiles, core) => this.chem?.hammett?.(smiles, core) ?? ERR.busy(),
       molecule: (src) => {
         if (!this.chem) return ERR.busy();
         if ('smiles' in src) return src.smiles.trim() ? this.chem.smiles(src.smiles.trim()) : null;

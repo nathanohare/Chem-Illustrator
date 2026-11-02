@@ -8,6 +8,7 @@ import { stereoTags, StereoTags } from '../chem/stereo';
 import { molProps, substructureMatches, panelProps, massFragments, type PanelProps, type MassFragment } from '../chem/props';
 import type { MolProps } from '../sheet/properties';
 import { namerGraph, type NamerGraph } from '../chem/namer-graph';
+import { hammettSites, type HammettResult } from '../chem/hammett-match';
 type InitRDKit = (opts: { locateFile: () => string }) => Promise<any>;
 
 export type ChemRequest =
@@ -21,6 +22,8 @@ export type ChemRequest =
   | { type: 'props'; id: number; mols: string[] }
   /** Which molecules (molfiles or SMILES) contain the query (a molfile): its atoms and bonds, with anything else attached. */
   | { type: 'substructure'; id: number; query: string; mols: string[] }
+  /** The Hammett groups at a core's marked (*) positions in each molecule (see src/chem/hammett-match.ts). */
+  | { type: 'hammett'; id: number; core: string; mols: string[] }
   /** The pieces a molfile falls into when bonds (pairs of molfile atoms, 0-based) are broken. */
   | { type: 'fragments'; id: number; molblock: string; cuts: [number, number][] }
   /** The largest part `mol` shares with `ref` (both molfiles): pairs of matching atoms, [ref atom, mol atom], 0-based. */
@@ -51,6 +54,7 @@ export type ChemResponse =
   | { type: 'molToSmiles'; id: number; smiles: string | null }
   | { type: 'props'; id: number; results: (MolProps | { error: string })[] }
   | { type: 'substructure'; id: number; results: (boolean | null)[]; error?: string }
+  | { type: 'hammett'; id: number; results: HammettResult[] }
   | { type: 'fragments'; id: number; results: MassFragment[] | { error: string } }
   | { type: 'common'; id: number; results: ([number, number][] | null)[] }
   | { type: 'namerGraph'; id: number; graph: NamerGraph | null; smiles: string | null }
@@ -190,6 +194,8 @@ self.onmessage = async (e: MessageEvent<ChemRequest>) => {
       post({ type: 'props', id: m.id, results: m.mols.map((x) => molProps(RDKit, x)) });
     } else if (m.type === 'substructure') {
       post({ type: 'substructure', id: m.id, ...substructureMatches(RDKit, m.query, m.mols) });
+    } else if (m.type === 'hammett') {
+      post({ type: 'hammett', id: m.id, results: m.mols.map((x) => hammettSites(RDKit, x, m.core)) });
     } else if (m.type === 'fragments') {
       post({ type: 'fragments', id: m.id, results: massFragments(RDKit, m.molblock, m.cuts) });
     } else if (m.type === 'common') {
