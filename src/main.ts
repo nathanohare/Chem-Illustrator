@@ -186,7 +186,7 @@ import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
 import { actionSet, askActionButton } from './ui/action-button-dialog';
 import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
-import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepPieces, type AutoStepsOptions } from './deck/auto-steps';
+import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepClicks, stepPieces, type AutoStepsOptions, type StepPiece } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
 import { canUpdate, appVersion, portableInfo, STAGE, STAGE_NOTE, UPDATE_CHANNELS, type UpdateChannel } from './updates';
 import { computerName } from './feedback';
@@ -6242,7 +6242,7 @@ async function autoAnimateSteps(): Promise<void> {
     { name: 'product', label: 'Each product', value: autoSteps.product, options: [{ value: 'after', label: 'Right after its arrow' }, { value: 'with', label: 'With its arrow' }, { value: 'click', label: 'On a click of its own' }] },
     { name: 'first', label: 'The first species comes in on the first click too', value: String(autoSteps.first), type: 'checkbox' },
     ...(canvas ? [{ name: 'camera', label: 'Camera Follow: a keyframe for each step, the view moving along the route (replaces this canvas slide\'s keyframes)', value: String(autoSteps.camera), type: 'checkbox' as const }] : []),
-  ], { ok: 'Animate', note: `${steps} step${steps > 1 ? 's' : ''} found. Each click brings the next arrow with its conditions, then what it makes. The animations are ordinary ones: change them in the Animation Pane.` });
+  ], { ok: 'Animate', note: `${steps} step${steps > 1 ? 's' : ''} found. Each click brings the next arrow with its conditions, then what it makes. The animations are ordinary ones: change them in the Animation Pane.`, preview: { title: 'Preview: the first clicks', draw: (v) => stepPreview(sdoc, pieces, v) } });
   if (!got || deckNow() !== d || d.index !== i) return;
   autoSteps = { effect: got.effect as AutoStepsOptions['effect'], product: got.product as AutoStepsOptions['product'], first: got.first === 'true', camera: got.camera === 'true' };
   sdoc.edit('Auto-Animate Steps', () => markPieces(sdoc, pieces));
@@ -6252,6 +6252,65 @@ async function autoAnimateSteps(): Promise<void> {
   if (animUi && !animUi.paneShown) animUi.showPane(true);
   buildHint.refresh();
   flash(`Animated ${steps} step${steps > 1 ? 's' : ''}${out.canvas ? `, with ${out.canvas.keys.length} keyframes` : ''}. Preview plays them.`);
+}
+
+/**
+ * The Auto-Animate Steps window's preview: the scheme as it stands before the first click and
+ * after each of the first few, played over and over (Play Again starts it from the top).
+ */
+function stepPreview(sdoc: Doc, pieces: StepPiece[], v: Record<string, string>): Node {
+  const { clicks } = stepClicks(pieces, { product: v.product as AutoStepsOptions['product'], first: v.first === 'true' });
+  const shown = Math.min(clicks.length, 4);
+  const wrap = document.createElement('div');
+  wrap.className = 'auto-steps-preview';
+  const canvas = document.createElement('canvas');
+  const W = 340, H = 190;
+  canvas.style.width = `${W}px`;
+  canvas.style.height = `${H}px`;
+  const label = document.createElement('div');
+  label.className = 'asp-label';
+  const again = document.createElement('button');
+  again.type = 'button';
+  again.textContent = '▶ Play Again';
+  const foot = document.createElement('div');
+  foot.className = 'asp-foot';
+  foot.append(label, again);
+  wrap.append(canvas, foot);
+  const all = sdoc.contents();
+  const L = sdoc.style.bondLength;
+  const box = pieces.reduce((b, p) => ({ x1: Math.min(b.x1, p.box.x1), y1: Math.min(b.y1, p.box.y1), x2: Math.max(b.x2, p.box.x2), y2: Math.max(b.y2, p.box.y2) }), { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity });
+  const frame = (k: number) => {
+    const gone = clicks.slice(k).flat();
+    const sets = { atoms: new Set(gone.flatMap((p) => [...p.sel.atoms])), bonds: new Set(gone.flatMap((p) => [...p.sel.bonds])), captions: new Set(gone.flatMap((p) => [...p.sel.captions])), arrows: new Set(gone.flatMap((p) => [...p.sel.arrows])), shapes: new Set(gone.flatMap((p) => [...p.sel.shapes])) };
+    const atoms = all.atoms.filter((a) => !sets.atoms.has(a.id));
+    const kept = new Set(atoms.map((a) => a.id));
+    const c: Contents = {
+      atoms, bonds: all.bonds.filter((b) => !sets.bonds.has(b.id) && kept.has(b.a1) && kept.has(b.a2)),
+      captions: all.captions.filter((t) => !sets.captions.has(t.id)), arrows: all.arrows.filter((r) => !sets.arrows.has(r.id)), shapes: all.shapes.filter((x) => !sets.shapes.has(x.id)),
+    };
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const pad = L, bw = box.x2 - box.x1 + 2 * pad, bh = box.y2 - box.y1 + 2 * pad;
+    const z = Math.min((W - 8) / Math.max(1, bw), (H - 8) / Math.max(1, bh), 2);
+    ctx.setTransform(z * dpr, 0, 0, z * dpr, (W / 2 - ((box.x1 + box.x2) / 2) * z) * dpr, (H / 2 - ((box.y1 + box.y2) / 2) * z) * dpr);
+    drawDrawing(ctx, structureDoc(c, sdoc.style));
+    label.textContent = k === 0 ? 'Before the first click' : `After click ${k} of ${clicks.length}${k === shown && shown < clicks.length ? ' (the rest go on the same way)' : ''}`;
+  };
+  let timer = 0;
+  const play = (k = 0) => {
+    clearTimeout(timer);
+    if (!canvas.isConnected && k > 0) return;
+    frame(k);
+    timer = window.setTimeout(() => { if (canvas.isConnected) play(k >= shown ? 0 : k + 1); }, k >= shown ? 1800 : 1000);
+  };
+  again.addEventListener('click', () => play(0));
+  play(0);
+  return wrap;
 }
 
 function present(fromHere: boolean, notes = false, how: { custom?: number; windowed?: boolean; rehearse?: boolean; record?: boolean } = {}): void {
@@ -11637,7 +11696,7 @@ function looksList(vertical: boolean): HTMLElement {
 
 /** The toolboxes' names, as they come. */
 const BOX_TITLES: Record<string, string> = {
-  main: 'Drawing Tools', structure: 'Structure', arrange: 'Object', templates: 'Templates', colours: 'Colours', highlight: 'Highlight', text: 'Text Formatting', guides: 'Guides', custom: 'My Toolbox', details: 'Side Panel',
+  main: 'Drawing Tools', structure: 'Structure', arrange: 'Object', templates: 'Templates', colours: 'Colours', highlight: 'Highlight', text: 'Text Formatting', guides: 'Guides', custom: 'My Toolbox', smart: 'Smart Scheme', details: 'Side Panel',
 };
 /** What the toolboxes of buttons come with ("cmd:", "tool:", "pal:", "w:looks", "sep"). */
 const cmds = (list: (string | null)[]) => list.map((c) => (c ? `cmd:${c}` : 'sep'));
@@ -11787,7 +11846,11 @@ const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => vo
   details: (body) => { body.before($('#side-fold')); body.append(sideContent); },
   text: (body, vertical) => { textToolbox = buildTextToolbox(body, vertical, textToolboxHooks); },
   guides: (body, vertical) => { guidesToolbox = buildGuidesToolbox(body, vertical, guidesToolboxHooks); },
+  // the Smart Scheme species list, docked (it floats beside the scheme otherwise)
+  smart: (body) => { smartDockBody = body; queueMicrotask(() => { if (smartDockBody === body && body.isConnected) smartPane.dockInto(body); }); },
 };
+/** Where the docked Smart Scheme species list goes (its toolbox's body). */
+let smartDockBody: HTMLElement | null = null;
 
 const guidesToolboxHooks: GuidesToolboxHooks = {
   get: () => editor.doc.guides,
@@ -12857,6 +12920,11 @@ const smartPane = new SmartPane({
   move: (id, from, to) => editor.smartMove(id, from, to),
   arrange: (id, patch) => editor.smartArrange(id, patch),
   ungroup: (id) => editor.ungroupSmart(id),
+  dock: (where) => {
+    if (where === null) { smartDockBody = null; toolboxes.toggle('smart', false); smartPane.float(); return; }
+    toolboxes.put('smart', where);
+  },
+  work: () => $('#work').getBoundingClientRect(),
 });
 // Auto-Animate Steps offered when a scheme of two steps or more (or a Smart Scheme) is selected on a slide
 const buildHint = new BuildHint({

@@ -176,3 +176,18 @@ export function stepAnims(doc: Doc, pieces: StepPiece[], o: AutoStepsOptions, wa
   // the steps' keyframes take the place of the canvas's old route
   return { anims, canvas: { ...canvas!.data, keys } };
 }
+
+/**
+ * What each click of the build brings in, for the preview in the Auto-Animate Steps window:
+ * the pieces there from the start, then the pieces each click shows (with what comes after it
+ * or with it), as stepAnims plays them.
+ */
+export function stepClicks(pieces: StepPiece[], o: Pick<AutoStepsOptions, 'product' | 'first'>): { start: StepPiece[]; clicks: StepPiece[][] } {
+  const start: StepPiece[] = [], clicks: StepPiece[][] = [];
+  for (const p of pieces) {
+    if (p.kind === 'first') { if (o.first) clicks.push([p]); else start.push(p); continue; }
+    if (p.kind === 'arrow' || o.product === 'click' || !clicks.length) { clicks.push([p]); continue; }
+    clicks[clicks.length - 1].push(p);
+  }
+  return { start, clicks };
+}

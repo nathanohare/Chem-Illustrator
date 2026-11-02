@@ -11,7 +11,7 @@ import { chemRuns } from '../src/text/chemtext';
 import type { Selection } from '../src/editor/arrange';
 import { slideParts } from '../src/deck/animation';
 import { splitSlide } from '../src/deck/split-slide';
-import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepPieces } from '../src/deck/auto-steps';
+import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepClicks, stepPieces } from '../src/deck/auto-steps';
 import { buildOffer } from '../src/ui/build-hint';
 
 const all = (): Selection => ({ atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() });
@@ -48,6 +48,21 @@ describe('Auto-Animate Steps', () => {
     expect(pieces[1].sel.arrows.size).toBe(1);
     expect(pieces[1].sel.captions.size).toBe(1);
     expect(pieces[1].from).toBe('left');
+  });
+
+  it('the preview knows what each click brings in, as the build plays it', () => {
+    const { doc, m } = scheme();
+    const pieces = stepPieces(doc, m, all())!;
+    const tag = (ps: typeof pieces) => ps.map((p) => `${p.kind}${p.step}`).join('+');
+    let c = stepClicks(pieces, { product: 'after', first: false });
+    expect(tag(c.start)).toBe('first0');
+    expect(c.clicks.map(tag)).toEqual(['arrow1+product1', 'arrow2+product2']);
+    c = stepClicks(pieces, { product: 'click', first: true });
+    expect(c.start.length).toBe(0);
+    expect(c.clicks.map(tag)).toEqual(['first0', 'arrow1', 'product1', 'arrow2', 'product2']);
+    // the same number of clicks as the animations it makes
+    const anims = stepAnims(doc, pieces, { ...AUTO_STEPS_DEFAULTS, product: 'click', first: true }, []).anims;
+    expect(anims.filter((a) => a.start === 'click').length).toBe(c.clicks.length);
   });
 
   it('keeps each piece apart in the show and in PowerPoint', () => {
