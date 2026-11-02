@@ -2,7 +2,7 @@
 // Start the program first (npm run dev), then: node scripts/animations.mjs [address] [name …]
 // Needs Playwright with Chromium (as scripts/screenshots.mjs does) and ffmpeg. Give names
 // (smart-arrows, frames, catalytic-cycle, id-labels, spelling, name-to-structure, dark-mode,
-// metal-complex, mechanism, navigation, slide-highlights, canvas-slides, model-3d, page-grid, slide-references, reagent-table,
+// metal-complex, mechanism, navigation, slide-highlights, canvas-slides, model-3d, page-grid, slide-references, sequence, perspective, journal-check, reagent-table,
 // reaction-animation) to
 // record only those.
 
@@ -771,6 +771,99 @@ if (want('slide-references')) {
     await page.evaluate(() => { const d = window.__app.ws.active.deck; d.go(d.slides.length - 1); });
     await page.waitForTimeout(2000);
   }, { clip: { x: 0, y: 0, width: W, height: H }, width: 900, hold: 2000 });
+  await browser.close();
+}
+
+// ---------------------------------------------------------------- Canvas: a peptide drawn from its sequence
+if (want('sequence')) {
+  const { browser, page } = await open(url, { width: 1280, height: 760 });
+  await pointer(page);
+  const c = await canvasBox(page);
+  await page.mouse.move(c.x + c.width * 0.6, c.y + c.height * 0.8);
+  await record(page, 'sequence', async () => {
+    await page.waitForTimeout(600);
+    await menu(page, 'insert', 'sequence-to-structure');
+    await page.waitForTimeout(600);
+    await page.keyboard.type('Boc-Tyr-Gly-Gly-Phe-Leu-OMe', { delay: 60 });
+    await page.waitForTimeout(1200);
+    await press(page, 'Insert');
+    await page.waitForFunction(() => window.__app.doc.atoms.size > 0, null, { timeout: 30000 });
+    await page.waitForTimeout(300);
+    await page.evaluate(() => window.__app.editor.fit());
+    await page.waitForTimeout(2200);
+  }, { width: 1000, hold: 2000 });
+  await browser.close();
+}
+
+// ---------------------------------------------------------------- Canvas: BINAP turned in 3-D with the 3-D Perspective tool
+if (want('perspective')) {
+  const { browser, page } = await open(url, { width: 1280, height: 760 });
+  const binap = await addSmiles(page, 'c1ccc(P(c2ccccc2)c2ccc3ccccc3c2-c2c(P(c3ccccc3)c3ccccc3)ccc3ccccc23)cc1', 300, 250);
+  await page.evaluate(() => window.__app.editor.fit());
+  await page.waitForTimeout(400);
+  await pointer(page);
+  const c = await canvasBox(page);
+  // the 3-D shape is built on the first turn: build it now, so the recorded drag turns at once
+  {
+    await paletteItem(page, 'perspective', 1).catch(async () => tool(page, 'perspective-3d'));
+    const g = await atomAt(page, binap[14]);
+    await page.mouse.move(g.x, g.y); await page.mouse.down(); await page.mouse.move(g.x + 40, g.y, { steps: 8 }); await page.mouse.up();
+    await page.waitForTimeout(5000);
+    // back to the drawing as it was, if the drag turned it
+    await page.evaluate((n) => { const a = window.__app; if (a.doc.atoms.size === n && a.editor.canUndo?.() !== false) a.editor.undo(); if (a.doc.atoms.size !== n) a.editor.redo(); a.editor.clearSelection(); }, binap.length);
+    await tool(page, 'bond-single', false);
+    await page.waitForTimeout(500);
+  }
+  await page.evaluate(() => document.querySelector('#flash')?.classList.remove('show'));
+  await page.mouse.move(c.x + c.width * 0.8, c.y + c.height * 0.85);
+  await record(page, 'perspective', async () => {
+    await page.waitForTimeout(800);
+    if (await page.locator('[data-tool="perspective-3d"]').first().isVisible()) await tool(page, 'perspective-3d');
+    else await paletteItem(page, 'perspective', 1);
+    await page.waitForTimeout(600);
+    // grab the structure by an atom of the lower naphthalene
+    const g = await atomAt(page, binap[14]);
+    const cx = g.x, cy = g.y;
+    await glide(page, cx, cy, 20);
+    await page.mouse.down();
+    await glide(page, cx + 160, cy + 10, 45);
+    await glide(page, cx + 120, cy - 120, 40);
+    await glide(page, cx - 60, cy - 60, 40);
+    await page.mouse.up();
+    await page.waitForTimeout(1600);
+  }, { width: 1000, hold: 2000 });
+  await browser.close();
+}
+
+// ---------------------------------------------------------------- Canvas: a figure checked against a journal's guidelines
+if (want('journal-check')) {
+  const { browser, page } = await open(url, { width: 1280, height: 760 });
+  await drawScheme(page);
+  await page.evaluate(() => window.__app.editor.clearSelection());
+  await pointer(page);
+  const c = await canvasBox(page);
+  await page.mouse.move(c.x + c.width * 0.8, c.y + c.height * 0.85);
+  await record(page, 'journal-check', async () => {
+    await page.waitForTimeout(800);
+    await menu(page, 'file', 'preflight');
+    await page.waitForTimeout(1800);
+    // each fix in turn, the list checking again after it
+    // a scheme this wide goes across both columns
+    const size = page.locator('.pf-form select').nth(1);
+    const sb = await size.boundingBox();
+    await glide(page, sb.x + sb.width / 2, sb.y + sb.height / 2, 18);
+    await size.selectOption({ index: 1 });
+    await page.waitForTimeout(1600);
+    for (const name of ['Make It Fit', 'Enlarge Text', 'Thicken Lines']) {
+      const b = page.locator('.pf-item button', { hasText: name }).first();
+      if (!(await b.count()) || !(await b.isVisible())) continue;
+      const bb = await b.boundingBox();
+      await glide(page, bb.x + bb.width / 2, bb.y + bb.height / 2, 18);
+      await page.waitForTimeout(300);
+      await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2);
+      await page.waitForTimeout(1800);
+    }
+  }, { width: 1000, hold: 2500 });
   await browser.close();
 }
 
