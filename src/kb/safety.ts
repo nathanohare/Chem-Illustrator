@@ -69,7 +69,7 @@ const TIER_1: Record<string, string> = {
   '74-90-8': 'Hydrogen cyanide: fast-acting poison',
   '7677-24-9': 'Releases HCN with water or acid',
   '75-86-5': 'Releases HCN',
-  '75-44-5': 'Phosgene: no reliable warning odour, delayed lung damage',
+  '75-44-5': 'Phosgene: no reliable warning odor, delayed lung damage',
   '503-38-8': 'Diphosgene: a phosgene source',
   '32315-10-9': 'Triphosgene: a phosgene source',
   '334-88-3': 'Diazomethane: toxic and explosive',
@@ -95,7 +95,7 @@ const TIER_2: Record<string, string> = {
   '917-54-4': 'Pyrophoric in concentrated solution',
   '1191-15-7': 'Pyrophoric neat; solutions ignite on spills',
   '7440-09-7': 'Ignites with water; old potassium grows an explosive superoxide crust',
-  '74-83-9': 'Toxic gas with no warning odour; nerve damage',
+  '74-83-9': 'Toxic gas with no warning odor; nerve damage',
   '544-92-3': 'Cyanide: releases HCN with acid',
   '1333-82-0': 'Chromium(VI): carcinogen, fatal if inhaled as dust',
   '20427-56-9': 'RuO4: volatile like OsO4; explodes with many organics',
@@ -109,12 +109,12 @@ const TIER_2: Record<string, string> = {
   '26628-22-8': 'Azide: toxic, forms HN3 with acid and explosive metal azides',
   '7783-06-4': 'Hydrogen sulfide: dulls the sense of smell',
   '630-08-0': 'Carbon monoxide: no warning',
-  '7439-97-6': 'Mercury vapour from spills',
+  '7439-97-6': 'Mercury vapor from spills',
   '7487-94-7': 'Mercury(II) chloride: highly toxic',
   '563-68-8': 'Thallium salts are highly toxic',
   '88-89-1': 'Picric acid: explosive when dry',
   '302-01-2': 'Hydrazine: toxic, carcinogen, unstable',
-  '7726-95-6': 'Bromine: severe burns and toxic vapour',
+  '7726-95-6': 'Bromine: severe burns and toxic vapor',
   '7782-50-5': 'Chlorine: toxic gas',
   '10102-44-0': 'Nitrogen dioxide: toxic gas, delayed lung damage',
   '108-95-2': 'Phenol: absorbed through skin, can be fatal',
@@ -138,7 +138,7 @@ const PEROXIDE = new Set(['109-99-9', '60-29-7', '108-20-3', '123-91-1', '110-71
 /** Common reagents the open sources give nothing to rate by, rated here by PubChem CID (written for
  * this program from well-known chemistry and suppliers' SDSs; reviewed like the lists above). */
 const NAMED: Record<number, { tier: 2 | 3; why: string; water?: boolean }> = {
-  21889599: { tier: 3, why: 'Highly flammable; the vapour is heavier than air' },
+  21889599: { tier: 3, why: 'Highly flammable; the vapor is heavier than air' },
   13529: { tier: 3, why: 'Corrosive to eyes and skin' },
   6409: { tier: 3, why: 'Toxic if swallowed or inhaled; flammable' },
   62406: { tier: 3, why: 'Superacid: severe burns; fumes in moist air', water: true },
@@ -165,21 +165,21 @@ const NAMED: Record<number, { tier: 2 | 3; why: string; water?: boolean }> = {
   23712863: { tier: 3, why: 'Reacts violently with water; the THF solution is flammable', water: true },
   12052: { tier: 3, why: 'Flammable; gives hydrogen with bases, acids or fluoride' },
   5948: { tier: 2, why: 'Organotin: toxic, absorbed through the skin' },
-  23938: { tier: 3, why: 'Dry or used catalyst ignites solvent vapour and hydrogen: keep it wet' },
-  345198: { tier: 3, why: 'Oxidiser; once reduced, the platinum can ignite solvent vapour' },
+  23938: { tier: 3, why: 'Dry or used catalyst ignites solvent vapor and hydrogen: keep it wet' },
+  345198: { tier: 3, why: 'Oxidizer; once reduced, the platinum can ignite solvent vapor' },
   53393272: { tier: 2, why: 'Osmium(VI): toxic; oxidants turn it into volatile OsO4' },
   46846327: { tier: 2, why: 'Chromium(VI): carcinogen; toxic' },
   159879: { tier: 2, why: 'Chromium(VI): carcinogen; toxic' },
-  158115057: { tier: 3, why: 'Strong oxidiser; corrosive' },
-  159087: { tier: 3, why: 'Oxidiser; impure samples have been reported shock-sensitive' },
+  158115057: { tier: 3, why: 'Strong oxidizer; corrosive' },
+  159087: { tier: 3, why: 'Oxidizer; impure samples have been reported shock-sensitive' },
   108794: { tier: 2, why: 'Explodes on impact or on heating above about 200 °C' },
-  23712892: { tier: 3, why: 'Oxidiser; corrosive' },
-  180504: { tier: 3, why: 'Strong oxidiser' },
+  23712892: { tier: 3, why: 'Oxidizer; corrosive' },
+  180504: { tier: 3, why: 'Strong oxidizer' },
   6775: { tier: 2, why: 'Gives HCN with water; toxic' },
   2724126: { tier: 3, why: 'Corrosive' },
-  82029: { tier: 3, why: 'Oxidiser; irritant' },
-  31398: { tier: 3, why: 'Oxidiser; corrosive' },
-  120273: { tier: 3, why: 'Oxidiser; irritant; light-sensitive' },
+  82029: { tier: 3, why: 'Oxidizer; irritant' },
+  31398: { tier: 3, why: 'Oxidizer; corrosive' },
+  120273: { tier: 3, why: 'Oxidizer; irritant; light-sensitive' },
   2735153: { tier: 3, why: 'Strong alkylating agent; corrosive; reacts with moisture', water: true },
   12192: { tier: 2, why: 'Diazo compound: can decompose violently on heating; toxic' },
   65578: { tier: 3, why: 'Reacts violently with water giving HCl, CO and CO2; toxic, corrosive', water: true },
@@ -189,12 +189,12 @@ const NAMED: Record<number, { tier: 2 | 3; why: string; water?: boolean }> = {
   7397: { tier: 3, why: 'Corrosive; gives HCl with water' },
   90495: { tier: 2, why: 'Very toxic if inhaled (suppliers\' SDSs give H330); melts near room temperature' },
   68263: { tier: 3, why: 'Gives CO2 with water (pressure in closed vessels); corrosive', water: true },
-  15908: { tier: 3, why: 'Skin sensitiser; corrosive' },
+  15908: { tier: 3, why: 'Skin sensitizer; corrosive' },
   8000: { tier: 3, why: 'Reacts violently with water, fuming; corrosive; flammable', water: true },
   65367: { tier: 3, why: 'Reacts violently with water; corrosive; flammable', water: true },
   28928: { tier: 3, why: 'Corrosive; gives HCl with water' },
   123414: { tier: 2, why: 'Organic azide: toxic; gives HN3 with acid' },
-  24288: { tier: 3, why: 'Carcinogen by inhalation of dust (1B); sensitiser' },
+  24288: { tier: 3, why: 'Carcinogen by inhalation of dust (1B); sensitizer' },
   11979704: { tier: 3, why: 'Air-sensitive; irritant' },
   167845: { tier: 3, why: 'Irritant' },
 };
@@ -208,14 +208,14 @@ const HAVE_READY: { cas: string[]; ready: HaveReady }[] = [
   { cas: ['108-95-2'], ready: { what: 'PEG 300 or 400 for skin', why: 'Water alone spreads phenol; swab with PEG first', source: 'HSDB first aid' } },
   { cas: ['594-19-4', '598-30-1', '109-72-8', '917-54-4', '557-20-0', '544-97-8', '75-24-1', '97-93-8', '594-09-2', '13716-12-6'], ready: { what: 'Dry sand or a Class D extinguisher; dilute isopropanol in hexane for quenching residues', why: 'Ignites in air; water and CO2 make it worse', source: 'NOAA CAMEO' } },
   { cas: ['7440-23-5', '7440-09-7', '7439-93-2', '7646-69-7', '7693-26-7', '16853-85-3', '7789-78-8'], ready: { what: 'Dry sand or a Class D extinguisher; an alcohol for quenching (t-BuOH for K)', why: 'Reacts violently with water', source: 'NOAA CAMEO' } },
-  { cas: ['7726-95-6'], ready: { what: 'Sodium thiosulfate solution', why: 'Neutralises spills and splashes', source: 'NOAA CAMEO' } },
+  { cas: ['7726-95-6'], ready: { what: 'Sodium thiosulfate solution', why: 'Neutralizes spills and splashes', source: 'NOAA CAMEO' } },
   { cas: ['20816-12-0', '10022-66-9'], ready: { what: 'Corn oil or aqueous sodium sulfite for spills', why: 'Reduces OsO4; the oil turning black shows it worked', source: 'Published spill guidance' } },
   { cas: ['937-14-4', '7722-84-1', '75-91-2', '94-36-0', '124-43-6'], ready: { what: 'Sodium thiosulfate or sulfite solution', why: 'Quenches peroxides before workup or waste', source: 'Standard practice' } },
   { cas: ['77-78-1', '64-67-5', '74-88-4', '333-27-7'], ready: { what: 'Aqueous ammonia or NaOH to destroy spills and waste', why: 'Alkylating agents: destroy them, don\'t just dilute', source: 'HSDB' } },
   { cas: ['334-88-3', '18107-18-1'], ready: { what: 'Acetic acid', why: 'Quenches excess diazo compound safely', source: 'Standard practice' } },
   { cas: ['26628-22-8', '26386-88-9', '4648-54-8'], ready: { what: 'Keep away from acid, DCM and metal drains; nitrous acid for waste', why: 'Forms HN3 or explosive metal azides', source: 'NOAA CAMEO' } },
-  { cas: ['75-44-5', '503-38-8', '32315-10-9'], ready: { what: 'Phosgene indicator badge; aqueous ammonia or NaOH for quenching', why: 'No reliable warning odour at harmful levels', source: 'CDC/NIOSH emergency response card' } },
-  { cas: ['7439-97-6', '593-74-8'], ready: { what: 'Mercury spill kit (sulfur or zinc powder)', why: 'Spilled droplets keep giving off vapour', source: 'NOAA CAMEO' } },
+  { cas: ['75-44-5', '503-38-8', '32315-10-9'], ready: { what: 'Phosgene indicator badge; aqueous ammonia or NaOH for quenching', why: 'No reliable warning odor at harmful levels', source: 'CDC/NIOSH emergency response card' } },
+  { cas: ['7439-97-6', '593-74-8'], ready: { what: 'Mercury spill kit (sulfur or zinc powder)', why: 'Spilled droplets keep giving off vapor', source: 'NOAA CAMEO' } },
 ];
 
 export interface Incident { what: string; source: string; url?: string }
@@ -289,21 +289,21 @@ export function rate(r: SafetyRecord): Rating {
   const airborne = ratio !== null && ratio >= REACHES_IDLH;
   const nonVolatile = vp !== null && vp < 0.01;
   if (TIER_1[cas]) why1.push(TIER_1[cas]);
-  if (ppm !== null && ppm <= 10 && airborne) why1.push(`IDLH ${fmtIdlh(r)}; saturated vapour ${Math.round(ratio!).toLocaleString('en-US')} × IDLH`);
-  if (has(r, 'H330') && !nonVolatile) why1.push('Fatal if inhaled (H330, harmonised)');
-  if (has(r, 'H310')) why1.push('Fatal in contact with skin (H310, harmonised)');
+  if (ppm !== null && ppm <= 10 && airborne) why1.push(`IDLH ${fmtIdlh(r)}; saturated vapor ${Math.round(ratio!).toLocaleString('en-US')} × IDLH`);
+  if (has(r, 'H330') && !nonVolatile) why1.push('Fatal if inhaled (H330, harmonized)');
+  if (has(r, 'H310')) why1.push('Fatal in contact with skin (H310, harmonized)');
   if (why1.length) return { tier: 1, why: [...new Set(why1)] };
   if (TIER_2[cas]) why2.push(TIER_2[cas]);
   if (NAMED[r.cid]?.tier === 2) why2.push(NAMED[r.cid].why);
   // an IDLH in mg/m3 for a solid or mist that doesn't evaporate is about dust, not vapour: left out
   const dust = r.idlh?.unit === 'mg/m3' && (vp === null || nonVolatile);
   if (ppm !== null && ppm <= 10 && !dust) why2.push(`IDLH ${fmtIdlh(r)}, but ${vp === null ? 'how volatile it is isn\'t known' : 'it evaporates slowly'}`);
-  else if (ppm !== null && ppm <= 100 && airborne) why2.push(`IDLH ${fmtIdlh(r)}; saturated vapour ${Math.round(ratio!).toLocaleString('en-US')} × IDLH`);
-  if (has(r, 'H330') && nonVolatile) why2.push('Fatal if inhaled as dust or mist (H330, harmonised)');
+  else if (ppm !== null && ppm <= 100 && airborne) why2.push(`IDLH ${fmtIdlh(r)}; saturated vapor ${Math.round(ratio!).toLocaleString('en-US')} × IDLH`);
+  if (has(r, 'H330') && nonVolatile) why2.push('Fatal if inhaled as dust or mist (H330, harmonized)');
   const ld = oralLd50(r);
   if (ld !== null && ld <= 50) why2.push(`Oral LD50 ${sig3(ld)} mg/kg`);
-  if (has(r, 'H300')) why2.push('Fatal if swallowed (H300, harmonised)');
-  if (has(r, 'H340', 'H350') && (vp === null || vp >= 1)) why2.push('Carcinogen or mutagen 1A/1B (harmonised), volatile');
+  if (has(r, 'H300')) why2.push('Fatal if swallowed (H300, harmonized)');
+  if (has(r, 'H340', 'H350') && (vp === null || vp >= 1)) why2.push('Carcinogen or mutagen 1A/1B (harmonized), volatile');
   if (pyrophoric(r) && !why2.some((w) => /pyrophoric/i.test(w))) why2.push('Pyrophoric');
   if (has(r, 'H200', 'H201', 'H202', 'H203', 'H204', 'H240', 'H241') || alert(r, /\bexplosive\b/i)) why2.push('Explosive or shock-sensitive');
   if (why2.length) return { tier: 2, why: [...new Set(why2)] };
@@ -336,7 +336,7 @@ export function badges(r: SafetyRecord): string[] {
   if (pyrophoric(r)) out.push('Pyrophoric');
   if (has(r, 'H260', 'H261', 'EUH014') || alert(r, /water-reactive/i) || WATER_REACTIVE.has(cas) || NAMED[r.cid]?.water) out.push('Water-reactive');
   if (has(r, 'H200', 'H201', 'H202', 'H203', 'H240', 'H241') || alert(r, /\bexplosive\b/i)) out.push('Explosive');
-  if (has(r, 'H271', 'H272') || alert(r, /strong oxidizing/i)) out.push('Oxidiser');
+  if (has(r, 'H271', 'H272') || alert(r, /strong oxidizing/i)) out.push('Oxidizer');
   if (has(r, 'H350', 'H340')) out.push('Carcinogen 1A/1B');
   return out;
 }

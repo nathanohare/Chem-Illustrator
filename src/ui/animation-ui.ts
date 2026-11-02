@@ -163,7 +163,7 @@ export class AnimationUI {
       grow: 'the selected objects grow (or shrink) and stay that size; set the size in Effect Options',
       spin: 'the selected objects turn round; set how far in Effect Options',
       transparency: 'the selected objects become transparent and stay so; set how much in Effect Options',
-      colour: 'a shape\'s fill, or text\'s colour, changes (a structure or picture is coloured all over); pick the colour in Effect Options. PowerPoint can\'t recolour a structure or picture',
+      colour: 'a shape\'s fill, or text\'s color, changes (a structure or picture is colored all over); pick the color in Effect Options. PowerPoint can\'t recolor a structure or picture',
     };
     for (const exit of [false, true, null]) {
       for (const e of EFFECTS) {
@@ -199,7 +199,7 @@ export class AnimationUI {
       else this.refresh();
     });
     const colour = this.$<HTMLInputElement>('#an-colour');
-    colour.addEventListener('change', () => this.changePicked({ color: colour.value }, 'Colour Change colour'));
+    colour.addEventListener('change', () => this.changePicked({ color: colour.value }, 'Color Change color'));
     // keyframe moves on a canvas slide: how the view moves, and whether its time follows the distance
     const move = this.$<HTMLSelectElement>('#an-move');
     for (const m of MOVES) {
@@ -567,7 +567,7 @@ export class AnimationUI {
     const amount = this.$<HTMLInputElement>('#an-amount'), unit = this.$<HTMLElement>('#an-amount-unit'), amountBox = this.$<HTMLElement>('#an-amount-box');
     const colour = this.$<HTMLInputElement>('#an-colour'), colourBox = this.$<HTMLElement>('#an-colour-box');
     const amt = a?.effect === 'grow' ? { v: Math.round((a.scale ?? EMPH_DEFAULTS.scale) * 100), u: '% size', tip: 'The size it grows or shrinks to: 150 is half as big again, 50 half the size' }
-      : a?.effect === 'spin' ? { v: a.turn ?? EMPH_DEFAULTS.turn, u: '°', tip: 'How far it turns, in degrees (negative turns anticlockwise)' }
+      : a?.effect === 'spin' ? { v: a.turn ?? EMPH_DEFAULTS.turn, u: '°', tip: 'How far it turns, in degrees (negative turns counterclockwise)' }
         : a?.effect === 'transparency' ? { v: Math.round((a.opacity ?? EMPH_DEFAULTS.opacity) * 100), u: '% transparent', tip: 'Transparency it ends at: 0 solid, 100 gone' } : null;
     amountBox.style.display = amt ? '' : 'none';
     if (amt) {

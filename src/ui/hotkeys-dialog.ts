@@ -93,7 +93,7 @@ export class HotkeysDialog {
     show('board');
     // while waiting for a key, every key press is the new key (Esc cancels)
     d.addEventListener('keydown', (e) => this.onRecordKey(e), true);
-    d.addEventListener('cancel', (e) => { if (this.recording) { e.preventDefault(); this.stopRecording('Cancelled: no key changed.'); } });
+    d.addEventListener('cancel', (e) => { if (this.recording) { e.preventDefault(); this.stopRecording('Canceled: no key changed.'); } });
     d.addEventListener('close', () => this.stopRecording(''));
     keymap.onChange(() => { if (d.open) this.render(); });
     document.body.append(d);
@@ -260,7 +260,7 @@ export class HotkeysDialog {
     const action = btn.closest<HTMLTableRowElement>('tr')?.dataset.action;
     if (!action) return;
     if (btn.classList.contains('hk-add')) {
-      if (this.recording?.button === btn) this.stopRecording('Cancelled: no key changed.');
+      if (this.recording?.button === btn) this.stopRecording('Canceled: no key changed.');
       else this.startRecording(ctx, action, btn);
     } else if (btn.classList.contains('hk-remove')) {
       const chord = btn.dataset.chord!;
@@ -297,7 +297,7 @@ export class HotkeysDialog {
     e.preventDefault();
     e.stopPropagation();
     if (!chord) return; // a modifier on its own: wait for the rest
-    if (chord === 'Escape') { this.stopRecording('Cancelled: no key changed.'); return; }
+    if (chord === 'Escape') { this.stopRecording('Canceled: no key changed.'); return; }
     const { ctx, action } = this.recording;
     this.stopRecording('');
     this.say(this.assign(ctx, action, chord));

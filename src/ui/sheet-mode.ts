@@ -530,7 +530,7 @@ export class SheetMode {
       rb.querySelector<HTMLInputElement>(id)!.addEventListener('change', (e) => {
         const t = table();
         if (!t) return;
-        this.formatting.setTable(t, { custom: { ...t.custom, [key]: (e.target as HTMLInputElement).value } }, 'Table colours');
+        this.formatting.setTable(t, { custom: { ...t.custom, [key]: (e.target as HTMLInputElement).value } }, 'Table colors');
       });
     }
   }
@@ -686,7 +686,7 @@ export class SheetMode {
       case 'new-rule': void this.formatting.ruleDialog(null); break;
       case 'insert-table': if (v.sheet.dashboard) void this.dashUi.addTile('table'); else void this.formatting.formatAsTable(this.tableHere()?.style ?? 'TableStyleMedium2'); break;
       case 'table-convert': { const t = this.tableHere(); if (t) this.formatting.convertToRange(t); break; }
-      case 'table-colours-reset': { const t = this.tableHere(); if (t) this.formatting.setTable(t, { custom: undefined }, 'Table colours'); break; }
+      case 'table-colours-reset': { const t = this.tableHere(); if (t) this.formatting.setTable(t, { custom: undefined }, 'Table colors'); break; }
       case 'chart-scatter': case 'chart-line': case 'chart-column': case 'chart-bar': case 'chart-area': case 'chart-pie':
       case 'chart-combo': case 'chart-histogram': case 'chart-box': case 'chart-bubble': case 'chart-radar': case 'chart-sankey':
       case 'chart-treemap': case 'chart-decomp':
@@ -998,7 +998,7 @@ export class SheetMode {
     if (R.r2 - R.r1 > 5000 || R.c2 - R.c1 > 500) { this.host.flash('That is too large a block to merge.'); return; }
     const filled = s.keysIn(R).filter((k) => s.cells.get(k)?.input || s.cells.get(k)?.structure);
     if (filled.length > 1) this.host.flash('Merging keeps only the top-left value, as in Excel (Undo brings the others back).', 6000);
-    this.edit('Merge and centre', (sh) => {
+    this.edit('Merge and center', (sh) => {
       for (const k of filled) if (k !== keyOf(R.r1, R.c1)) sh.setCell(rowOf(k), colOf(k), { style: sh.cell(rowOf(k), colOf(k))?.style });
       sh.merge(R);
       sh.patchStyle({ r1: R.r1, c1: R.c1, r2: R.r1, c2: R.c1 }, { align: 'center' });
@@ -1014,7 +1014,7 @@ export class SheetMode {
     grid.className = 'colour-grid';
     const pick = (c: string | undefined) => {
       m.remove();
-      this.style(which === 'fill' ? 'Fill colour' : 'Text colour', which === 'fill' ? { fill: c } : { color: c });
+      this.style(which === 'fill' ? 'Fill color' : 'Text color', which === 'fill' ? { fill: c } : { color: c });
       this.view.focus();
     };
     for (const c of COLOURS) {
@@ -1037,7 +1037,7 @@ export class SheetMode {
     input.type = 'color';
     input.dataset.systemPicker = '';
     input.addEventListener('change', () => pick(input.value));
-    more.append('More colours ', input);
+    more.append('More colors ', input);
     m.append(themeColourGrid(this.look.theme, pick), grid, paletteRows(undefined, pick, () => m.remove()), none, more);
     document.body.append(m);
     m.style.left = `${Math.min(x, innerWidth - m.offsetWidth - 4)}px`;

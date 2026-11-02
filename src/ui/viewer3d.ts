@@ -180,7 +180,7 @@ export class Viewer3d {
     this.stopBtn.addEventListener('click', () => { this.stopped = true; this.tools?.stop(); });
     this.tierBar.append(
       tierButton('Search Conformers…', 'A wider search: hundreds of starting conformers, each relaxed with MMFF94s+, duplicates dropped, ranked by energy with their populations at 25 °C', () => this.searchConformers()),
-      tierButton('Refine with xTB…', 'Re-optimise the lowest conformers with GFN2-xTB, using the xtb program installed on this computer (desktop app)', () => this.refineXtb()),
+      tierButton('Refine with xTB…', 'Re-optimize the lowest conformers with GFN2-xTB, using the xtb program installed on this computer (desktop app)', () => this.refineXtb()),
       tierButton('Gaussian/ORCA Input…', 'Save input files for a DFT calculation on this conformer or all of them', () => this.exportQm()),
       this.stopBtn,
     );
@@ -565,7 +565,7 @@ export class Viewer3d {
     const got = await ask('Refine with xTB', [
       { name: 'exe', label: 'xtb program', value: p.exe, type: 'text', placeholder: 'xtb', help: '"xtb" finds it on your PATH; otherwise the full path to xtb (xtb.exe on Windows). Install it from conda-forge (conda install -c conda-forge xtb) or github.com/grimme-lab/xtb/releases. xtb is free software (LGPL 3.0).' },
       { name: 'solvent', label: 'Solvent (ALPB)', value: p.solvent, options: [{ value: '', label: 'Gas phase' }, ...XTB_SOLVENTS.map((s) => ({ value: s, label: s }))] },
-      { name: 'opt', label: 'Optimise each conformer (otherwise energies only)', value: String(p.opt), type: 'checkbox' },
+      { name: 'opt', label: 'Optimize each conformer (otherwise energies only)', value: String(p.opt), type: 'checkbox' },
       { name: 'count', label: 'Lowest conformers to refine', value: String(Math.min(p.count, m.conformers.length)), type: 'number', help: `Of the ${m.conformers.length} shown. Each takes seconds to minutes, depending on its size.` },
     ], { ok: 'Refine', note: 'Runs on this computer: nothing is sent anywhere.' });
     if (!got) return;
@@ -598,7 +598,7 @@ export class Viewer3d {
     const got = await ask('Gaussian/ORCA Input', [
       { name: 'program', label: 'Program', value: program, options: [{ value: 'orca', label: 'ORCA (.inp)' }, { value: 'gaussian', label: 'Gaussian (.gjf)' }] },
       { name: 'method', label: 'Method', value: q.method ?? QM_METHODS[program][0], type: 'text', suggestions: [...QM_METHODS.orca, ...QM_METHODS.gaussian], help: 'As the program writes it: "B3LYP D3BJ def2-SVP" for ORCA, "B3LYP/def2SVP EmpiricalDispersion=GD3BJ" for Gaussian.' },
-      { name: 'job', label: 'Job', value: q.job ?? 'opt freq', options: [{ value: 'opt freq', label: 'Optimise, then frequencies' }, { value: 'opt', label: 'Optimise' }, { value: 'sp', label: 'Single point' }, { value: 'freq', label: 'Frequencies' }] },
+      { name: 'job', label: 'Job', value: q.job ?? 'opt freq', options: [{ value: 'opt freq', label: 'Optimize, then frequencies' }, { value: 'opt', label: 'Optimize' }, { value: 'sp', label: 'Single point' }, { value: 'freq', label: 'Frequencies' }] },
       { name: 'solvent', label: 'Solvent (SMD)', value: q.solvent ?? '', type: 'text', placeholder: 'none (gas phase)', suggestions: ['water', 'methanol', 'acetonitrile', 'dichloromethane', 'chloroform', 'thf', 'toluene', 'dmso', 'dmf'] },
       { name: 'charge', label: 'Charge', value: String(charge), type: 'number' },
       { name: 'mult', label: 'Multiplicity', value: String(multiplicity), type: 'number' },

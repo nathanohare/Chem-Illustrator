@@ -7,6 +7,16 @@ import type * as rt from '../richtext';
 import type { TextFormat } from '../text/format';
 import type { TextBoxChange } from '../editor/editor';
 import { ask } from './ask';
+import { FloatBox } from './float-box';
+
+/** Change Case's choices, as Word words them. */
+const CASES: [rt.CaseMode, string, string][] = [
+  ['sentence', 'Sentence case.', 'A capital at the start of each sentence'],
+  ['lower', 'lowercase', 'Every letter small'],
+  ['upper', 'UPPERCASE', 'Every letter a capital'],
+  ['title', 'Capitalize Each Word', 'A capital at the start of each word'],
+  ['toggle', 'tOGGLE cASE', 'Capitals made small and small letters made capitals'],
+];
 
 export interface TextLook {
   style: rt.RunStyle;
@@ -103,8 +113,35 @@ export class SlideTextRibbon {
     });
     this.colour.addEventListener('change', () => run({ kind: 'style', patch: { color: this.colour.value.toLowerCase() === '#000000' ? undefined : this.colour.value } }));
     this.line.addEventListener('change', () => { const v = parseFloat(this.line.value); if (v > 0) run({ kind: 'line', v }); });
-    const kase = q<HTMLSelectElement>('[data-tx="case"]');
-    kase.addEventListener('change', () => { const mode = kase.value as rt.CaseMode; kase.value = ''; if (mode) run({ kind: 'case', mode }); });
+    // the Font group's corner button: a box with Change Case in it, as Word's Font box
+    let fontBox: FloatBox | null = null;
+    const launch = root.querySelector<HTMLButtonElement>('[data-tx="font-box"]');
+    launch?.addEventListener('mousedown', (e) => e.preventDefault());
+    launch?.addEventListener('click', () => {
+      if (!fontBox) {
+        const box = new FloatBox('Font', () => {});
+        box.el.classList.add('fb-font');
+        box.el.querySelector<HTMLElement>('.fb-pin')!.hidden = true;
+        const h = document.createElement('div');
+        h.className = 'fb-section';
+        h.textContent = 'Change Case';
+        const list = document.createElement('div');
+        list.className = 'fb-case';
+        for (const [mode, label, tip] of CASES) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = label;
+          b.title = tip;
+          b.addEventListener('mousedown', (e) => e.preventDefault());
+          b.addEventListener('click', () => { box.close(); run({ kind: 'case', mode }); });
+          list.append(b);
+        }
+        box.body.append(h, list);
+        fontBox = box;
+      }
+      if (fontBox.open) fontBox.close();
+      else fontBox.show(launch);
+    });
     this.spacing.addEventListener('change', async () => {
       let v = this.spacing.value;
       if (v === 'more') {

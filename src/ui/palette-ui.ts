@@ -100,7 +100,7 @@ function openFor(input: HTMLInputElement): void {
   const p = document.createElement('div');
   p.className = 'colour-pop';
   p.setAttribute('role', 'dialog');
-  p.setAttribute('aria-label', 'Colours');
+  p.setAttribute('aria-label', 'Colors');
   const value = input.value;
   const pick = (c: string) => {
     closePop();
@@ -119,7 +119,7 @@ function openFor(input: HTMLInputElement): void {
   sys.dataset.systemPicker = '';
   sys.value = value || '#000000';
   sys.addEventListener('change', () => pick(sys.value.toLowerCase()));
-  more.append(document.createTextNode('More colours…'), sys);
+  more.append(document.createTextNode('More colors…'), sys);
   p.append(grid, paletteRows(value, pick, closePop), more);
   // inside an open window the menu has to be in the window too, or it can't be clicked
   (input.closest('dialog[open]') ?? document.body).append(p);
@@ -181,7 +181,7 @@ function fillDialog(d: HTMLDialogElement): void {
   h.textContent = 'Your palettes';
   const intro = document.createElement('p');
   intro.className = 'muted';
-  intro.textContent = 'Rows of colours shown in every colour menu, in every mode. Click a colour to change it; × takes it out.';
+  intro.textContent = 'Rows of colors shown in every color menu, in every mode. Click a color to change it; × takes it out.';
   d.append(h, intro);
 
   const list = document.createElement('div');
@@ -256,7 +256,7 @@ function fillDialog(d: HTMLDialogElement): void {
     });
     const add = document.createElement('label');
     add.className = 'palette-add-colour';
-    add.title = 'Add a colour';
+    add.title = 'Add a color';
     const addInp = document.createElement('input');
     addInp.type = 'color';
     addInp.dataset.systemPicker = '';
@@ -272,7 +272,7 @@ function fillDialog(d: HTMLDialogElement): void {
     hex.type = 'text';
     hex.className = 'palette-hex';
     hex.placeholder = '#1f5fbf';
-    hex.setAttribute('aria-label', 'Add a colour by its code');
+    hex.setAttribute('aria-label', 'Add a color by its code');
     hex.addEventListener('keydown', (e) => {
       if (e.key !== 'Enter') return;
       e.preventDefault();
@@ -311,14 +311,14 @@ function fillDialog(d: HTMLDialogElement): void {
   });
   const fromDrawing = document.createElement('button');
   fromDrawing.type = 'button';
-  fromDrawing.textContent = 'New palette from the drawing’s colours';
-  fromDrawing.title = 'A row of every colour used in the drawing you have open';
+  fromDrawing.textContent = 'New palette from the drawing’s colors';
+  fromDrawing.title = 'A row of every color used in the drawing you have open';
   fromDrawing.disabled = full;
   fromDrawing.addEventListener('click', () => {
     const used = drawingColours().map(cleanColour).filter((c): c is string => !!c);
-    let p: Palette = { name: freshName(palettes, 'Drawing colours'), colors: [] };
+    let p: Palette = { name: freshName(palettes, 'Drawing colors'), colors: [] };
     for (const c of used) p = withColour(p, c);
-    if (!p.colors.length) { fromDrawing.textContent = 'The drawing has no colours yet'; return; }
+    if (!p.colors.length) { fromDrawing.textContent = 'The drawing has no colors yet'; return; }
     change([...palettes, p]);
   });
   left.append(newRow, fromDrawing, preset);

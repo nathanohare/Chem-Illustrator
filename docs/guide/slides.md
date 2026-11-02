@@ -53,7 +53,7 @@ New slides go in the section of the slide before them. Sections are saved as Pow
 
 ### Copying slides between decks
 
-Pick slides in one deck's list and press Ctrl+C, then click in the list of another deck (or the same one) and press Ctrl+V: the copies go in after the slide picked. They take the look of the deck they go into, as PowerPoint's *Use Destination Theme* does. When that changes how they look, a **Keep source formatting** button appears for a few seconds to paste them again with their own background, fonts and colours; **Edit ▸ Presentation ▸ Paste Slides (Keep Source Formatting)** (or right-click ▸ **Paste (Keep Source Formatting)**) does that straight away. Structures drawn in another drawing style are redrawn in this deck's, or keep their look when you keep the source formatting. Slides from a deck of another size stay centred, with their titles and text boxes moved to this deck's places.
+Pick slides in one deck's list and press Ctrl+C, then click in the list of another deck (or the same one) and press Ctrl+V: the copies go in after the slide picked. They take the look of the deck they go into, as PowerPoint's *Use Destination Theme* does. When that changes how they look, a **Keep source formatting** button appears for a few seconds to paste them again with their own background, fonts and colors; **Edit ▸ Presentation ▸ Paste Slides (Keep Source Formatting)** (or right-click ▸ **Paste (Keep Source Formatting)**) does that straight away. Structures drawn in another drawing style are redrawn in this deck's, or keep their look when you keep the source formatting. Slides from a deck of another size stay centered, with their titles and text boxes moved to this deck's places.
 
 ### Reusing slides from another file
 
@@ -65,7 +65,7 @@ Pick slides in one deck's list and press Ctrl+C, then click in the list of anoth
 
 ### Hidden slides
 
-**Hide Slide** keeps a slide in the deck but leaves it out of the slide show: its picture in the list is greyed and its number struck through. The show skips it going forwards and back, and starting from the beginning starts at the first slide that isn't hidden. **From This Slide** on a hidden slide still shows it, and typing its number then Enter jumps to it, as in PowerPoint. Hidden slides stay hidden in the PowerPoint file. Click **Hide Slide** again to show it.
+**Hide Slide** keeps a slide in the deck but leaves it out of the slide show: its picture in the list is grayed and its number struck through. The show skips it going forwards and back, and starting from the beginning starts at the first slide that isn't hidden. **From This Slide** on a hidden slide still shows it, and typing its number then Enter jumps to it, as in PowerPoint. Hidden slides stay hidden in the PowerPoint file. Click **Hide Slide** again to show it.
 
 ### Canvas slides
 
@@ -92,8 +92,8 @@ A move comes and goes with its keyframe, so it can't be removed on its own: dele
 **Design.** A canvas slide has no edge, so nothing with a hard edge scrolls past in the show:
 
 - **The screen layer.** The template's bars, the logo, slide number and footer stay fixed to the screen, so a canvas slide looks like the slides round it. Give a keyframe a **Title** (Home tab, Keyframes group, or right-click a keyframe) and it shows where a slide's title goes. The next keyframes you add take the same title. When the title changes, the show cross-fades it; when it stays the same, it stays still.
-- **Canvas Background…** (Design & Transitions tab, or right-click a keyframe): a **route gradient**, two or three colours running from the first keyframe to the last, so the colour shifts as the talk moves along the route; a faint **pattern** (dots, grid or hexagons) that moves with the canvas; and **parallax**, the background moving slower than the drawing for a sense of depth (50% is half as fast).
-- **Zone…** gives a keyframe a soft tint that fades out over about half a slide. Give the keyframes of one part of the route the same colour to make one zone (one per fragment, say).
+- **Canvas Background…** (Design & Transitions tab, or right-click a keyframe): a **route gradient**, two or three colors running from the first keyframe to the last, so the color shifts as the talk moves along the route; a faint **pattern** (dots, grid or hexagons) that moves with the canvas; and **parallax**, the background moving slower than the drawing for a sense of depth (50% is half as fast).
+- **Zone…** gives a keyframe a soft tint that fades out over about half a slide. Give the keyframes of one part of the route the same color to make one zone (one per fragment, say).
 - **Heading** puts a large, faint label in the middle of the window, such as "Fragment A" or "Endgame", to mark a part of the route. It is ordinary text.
 
 **In the show.** The Keyframes group on the Home tab (and right-click on a keyframe) has more for the show:
@@ -112,11 +112,11 @@ Opened here again, the slides come back as the canvas slide. If they were change
 
 **Design & Transitions** tab ▸ **Slide Master…** (or **Format ▸ Presentation ▸ Slide Master…**) sets the look of every slide at once:
 
-- **Background:** colour, the template's shapes and its accent colours.
-- **Title slides:** their own background and text colours, if you want them different.
-- **Titles** and **Text:** font, size, colour and bold; a separate size for subtitles.
+- **Background:** color, the template's shapes and its accent colors.
+- **Title slides:** their own background and text colors, if you want them different.
+- **Titles** and **Text:** font, size, color and bold; a separate size for subtitles.
 - **Logo:** a picture in any corner, at the width you choose.
-- **Slide numbers and footer:** on or off, also on title slides if you like, with the footer's size and colour.
+- **Slide numbers and footer:** on or off, also on title slides if you like, with the footer's size and color.
 - **Structures:** the bond length structures are drawn at, and whether pasted structures are resized to it.
 
 Click **Apply to all slides**. Text you formatted by hand keeps its own formatting. Ctrl+Z puts the old settings back in one step.
@@ -127,8 +127,8 @@ Click **Apply to all slides**. Text you formatted by hand keeps its own formatti
 
 - **Move or size a placeholder:** drag it, or drag one of its corners. The arrow keys nudge the one picked (Shift for bigger steps); X, Y, W and H set its place and size in per cent of the slide.
 - **Add a placeholder:** **+ Title**, **+ Text** or **+ Subtitle**. A layout has one title. **Delete Placeholder** (or Delete) takes the one picked off.
-- **Line up the text** in the placeholder picked: Left, Centre or Right.
-- **Rename** a layout by typing in **Name**. **Title slide colours and background** gives slides with the layout the title slide's own colours (set in Slide Master).
+- **Line up the text** in the placeholder picked: Left, Center or Right.
+- **Rename** a layout by typing in **Name**. **Title slide colors and background** gives slides with the layout the title slide's own colors (set in Slide Master).
 - **New Layout** makes a layout with a title and a text box; **Duplicate** copies the one picked, to change. **Delete** removes a layout you made (its slides get Title and Content). The five built-in layouts can be changed and **Reset**, not deleted.
 
 Click **Apply**: slides with a changed layout move their placeholders to its places, keeping their text. Undo puts it all back. Layouts are saved as PowerPoint's own (your layouts as its custom layouts, with their names), so they show in PowerPoint's Layout menu, and PowerPoint's custom layouts come in here. Slides pasted from another deck bring their own layouts with them.
@@ -137,10 +137,10 @@ Click **Apply**: slides with a changed layout move their placeholders to its pla
 
 **Design & Transitions** tab ▸ **Format Background** (or **Format ▸ Presentation ▸ Format Background…**, or right-click an empty part of the slide) gives the slide a background of its own:
 
-- **Solid colour**, as see-through as you like (see-through backgrounds show white behind them).
-- **Gradient:** linear, radial or rectangular, in any direction or angle, with as many colour stops as you want, each with its own place and transparency. **Preset** offers ten ready-made ones to start from.
+- **Solid color**, as see-through as you like (see-through backgrounds show white behind them).
+- **Gradient:** linear, radial or rectangular, in any direction or angle, with as many color stops as you want, each with its own place and transparency. **Preset** offers ten ready-made ones to start from.
 - **Picture or texture:** a picture stretched to the slide, filling it (keeping its proportions and cutting the edges that stick out), fitting in it whole, or tiled as a texture (with its scale, where the tiles start, and mirrored tiles). Stretched pictures can be moved in from the edges or past them. Pictures can be see-through too, so text stays easy to read over a photo.
-- **Pattern:** PowerPoint's 54 patterns (dots, lines, grids, checks, bricks, diamonds and more), in the two colours you pick.
+- **Pattern:** PowerPoint's 54 patterns (dots, lines, grids, checks, bricks, diamonds and more), in the two colors you pick.
 
 **Hide background graphics** leaves the template's shapes and the logo off the slide, as in PowerPoint. The preview at the top shows the slide as it will look.
 
@@ -150,23 +150,23 @@ Backgrounds are saved as PowerPoint's own, so PowerPoint (and LibreOffice) shows
 
 ## Design templates
 
-**Design & Transitions** tab ▸ **Templates…** (or **Format ▸ Presentation ▸ Slide Templates…**) offers 21 ready-made looks in three groups: **Light**, **Dark title slide** and **Bright**. Picking one changes the fonts, colours, background and the shapes behind every slide. Your text, structures and pictures stay where they are, and Undo puts the old look back.
+**Design & Transitions** tab ▸ **Templates…** (or **Format ▸ Presentation ▸ Slide Templates…**) offers 21 ready-made looks in three groups: **Light**, **Dark title slide** and **Bright**. Picking one changes the fonts, colors, background and the shapes behind every slide. Your text, structures and pictures stay where they are, and Undo puts the old look back.
 
 Tick **Also start new presentations with the template I pick** to make it the starting look for new decks. You can change any part of a template afterwards with **Slide Master…**.
 
 ### Themes of your own
 
-In the Templates window, **New Theme…** starts a theme of your own from the Plain template, **New Theme from This Deck…** from the deck's own look, and **Copy** (on any ready-made template, shown when you point at it) from that template. The theme window sets its name, the title and text fonts (and bold titles), the background, title, text and footer colours, the shapes behind every slide and their two accent colours, and a title slide with its own dark colours. **Start from** fills it all in from another template. The previews show the title slide and a content slide as you change them; click **Save Theme**.
+In the Templates window, **New Theme…** starts a theme of your own from the Plain template, **New Theme from This Deck…** from the deck's own look, and **Copy** (on any ready-made template, shown when you point at it) from that template. The theme window sets its name, the title and text fonts (and bold titles), the background, title, text and footer colors, the shapes behind every slide and their two accent colors, and a title slide with its own dark colors. **Start from** fills it all in from another template. The previews show the title slide and a content slide as you change them; click **Save Theme**.
 
 Your themes appear under **Your themes** at the top of the window, ready to pick for any deck (and for new decks). Point at one for **Edit** and **Delete**; deleting a theme leaves decks that use it as they are. Themes are kept in your settings, and the PowerPoint theme in each saved file is named after the theme used.
 
 ## Slide size
 
-**Design & Transitions** tab ▸ **Size** ▸ **Custom Slide Size…** (or **Format ▸ Presentation ▸ Slide Size ▸ Custom Slide Size…**) sets any size: pick one of the usual ones (Widescreen, Standard, 16:10, Letter, A4, A3, B4, 35 mm slides, Overhead, Banner, posters) or type the width and height in inches or centimetres, from 1 to 56 inches, and turn it to portrait. Choose how what is on the slides fits the new size:
+**Design & Transitions** tab ▸ **Size** ▸ **Custom Slide Size…** (or **Format ▸ Presentation ▸ Slide Size ▸ Custom Slide Size…**) sets any size: pick one of the usual ones (Widescreen, Standard, 16:10, Letter, A4, A3, B4, 35 mm slides, Overhead, Banner, posters) or type the width and height in inches or centimeters, from 1 to 56 inches, and turn it to portrait. Choose how what is on the slides fits the new size:
 
 - **Ensure Fit** makes everything as big as fits on the new slide.
 - **Maximize** makes it as big as the slide allows, which can run off the edges.
-- **Don't scale** keeps everything its size, centred.
+- **Don't scale** keeps everything its size, centered.
 
 Titles and text boxes always move to their layouts' places. Structures scale with their bond lengths and labels. The size is saved in the PowerPoint file.
 
@@ -176,8 +176,8 @@ Click a placeholder or a text box to type in it. **Insert** tab ▸ **Text Box**
 
 The **Font** and **Paragraph** groups on the **Home** tab work as in PowerPoint. While you are typing they change the selected words (or what you type next); with a text box or a shape picked, they change all of its text at once.
 
-- **Font:** font, size, **A+** and **A−** (bigger and smaller in PowerPoint's steps), bold, italic, underline, subscript, superscript, formula style (CH₂Cl₂ with the numbers lowered) and colour.
-- **Paragraph:** bullets, numbering, list level (or indent), line spacing, and lining up left, centre, right or both edges.
+- **Font:** font, size, **A+** and **A−** (bigger and smaller in PowerPoint's steps), bold, italic, underline, subscript, superscript, formula style (CH₂Cl₂ with the numbers lowered) and color.
+- **Paragraph:** bullets, numbering, list level (or indent), line spacing, and lining up left, center, right or both edges.
 
 The small bar that appears above text while you type has the same buttons, plus Greek letters and symbols and the paragraph spacing. **Insert** tab ▸ **Symbol** has many more, found by name.
 
@@ -191,7 +191,7 @@ The small bar that appears above text while you type has the same buttons, plus 
 
 **Insert** tab ▸ **Diagram** draws a list, process, cycle, hierarchy, Venn diagram, matrix or pyramid from lines of text, like PowerPoint's SmartArt, saved to PowerPoint as a group of shapes. See [Design: Diagrams](design.md#diagrams).
 
-**Insert** tab ▸ **Icons** opens the same library on its **Icons** tab: about 7,000 icons, with a **Lab and science** group first (glassware, molecules, lab equipment, hazard and safety signs). Search by name or by what it means ("hazard", "rbf"). An icon is placed like a shape, filled in one colour; change its colour in the **Style** panel. See [Design: Icons](design.md#icons).
+**Insert** tab ▸ **Icons** opens the same library on its **Icons** tab: about 7,000 icons, with a **Lab and science** group first (glassware, molecules, lab equipment, hazard and safety signs). Search by name or by what it means ("hazard", "rbf"). An icon is placed like a shape, filled in one color; change its color in the **Style** panel. See [Design: Icons](design.md#icons).
 
 ## Structures on slides
 
@@ -216,16 +216,16 @@ An animated reaction can go on a slide as a video: in Presentation mode, open **
 
 ### Frames, rounded corners and shadows
 
-Select a picture, then use the **Style** panel: **Frame style**, frame line and colour, **Rounded corners (%)** and **Shadow** (None, Soft or Hard). For a ready-made look, right-click the picture and choose **Picture Style**. These looks are kept when you save to PowerPoint.
+Select a picture, then use the **Style** panel: **Frame style**, frame line and color, **Rounded corners (%)** and **Shadow** (None, Soft or Hard). For a ready-made look, right-click the picture and choose **Picture Style**. These looks are kept when you save to PowerPoint.
 
 ### Picture Format
 
 Select a picture and click **Picture Format** (**Insert** tab, the **Style** panel, or right-click). The window shows the picture as it will look while you change it:
 
 - **Corrections:** brightness, contrast, and sharpen (above 0) or soften (below 0).
-- **Colour:** recolour as greyscale, sepia, washout, black and white (with where black stops), or two colours of your own running dark to light. **See-through colour** makes one colour clear: click **Pick in the picture**, then click the colour in the preview. **Transparency** makes the whole picture see-through.
-- **Remove background:** takes out the background joined to the picture's edges. **How near counts** says how close a colour must be to go. If the subject loses parts, click **Mark to keep** and click them in the preview; if background is left, **Mark to remove** and click it.
-- **Crop:** **Crop to shape** cuts the picture to an oval, triangle, star, heart and other shapes (a frame and shadow follow the shape). **Crop to proportions** crops to 1:1, 4:3, 16:9 and others, centred.
+- **Color:** recolor as grayscale, sepia, washout, black and white (with where black stops), or two colors of your own running dark to light. **See-through color** makes one color clear: click **Pick in the picture**, then click the color in the preview. **Transparency** makes the whole picture see-through.
+- **Remove background:** takes out the background joined to the picture's edges. **How near counts** says how close a color must be to go. If the subject loses parts, click **Mark to keep** and click them in the preview; if background is left, **Mark to remove** and click it.
+- **Crop:** **Crop to shape** cuts the picture to an oval, triangle, star, heart and other shapes (a frame and shadow follow the shape). **Crop to proportions** crops to 1:1, 4:3, 16:9 and others, centered.
 
 The picture itself is never changed, so **Reset Picture** (or setting a value back to 0) takes any of it off again. Saved as PowerPoint's own picture settings, so PowerPoint can change them too.
 
@@ -235,13 +235,13 @@ The picture itself is never changed, so **Reset Picture** (or setting a value ba
 
 ## Charts
 
-**Insert** tab ▸ **Chart** (or **Insert ▸ Chart…**) opens the chart window, as PowerPoint's Insert Chart does. The chart keeps its own data, shown in a grid under the chart: type over the sample numbers, or paste a block from Excel or a sheet. Rows and columns typed next to the data join the chart; **Chart All the Data** charts the whole table again. The buttons along the top change the kind of chart (scatter, line, column, bar, area, pie, combo with a second axis, histogram, box and whisker, bubble, radar), and the panel on the right has every setting Spreadsheet mode's charts have: titles, axes, log scales, colours, markers, error bars and fitted lines with their equation and R².
+**Insert** tab ▸ **Chart** (or **Insert ▸ Chart…**) opens the chart window, as PowerPoint's Insert Chart does. The chart keeps its own data, shown in a grid under the chart: type over the sample numbers, or paste a block from Excel or a sheet. Rows and columns typed next to the data join the chart; **Chart All the Data** charts the whole table again. The buttons along the top change the kind of chart (scatter, line, column, bar, area, pie, combo with a second axis, histogram, box and whisker, bubble, radar), and the panel on the right has every setting Spreadsheet mode's charts have: titles, axes, log scales, colors, markers, error bars and fitted lines with their equation and R².
 
 Double-click a chart (or right-click ▸ **Edit Chart…**) to change it. Dragging its corners lays it out again at the new size rather than stretching it. Charts are saved in PowerPoint files as PowerPoint charts with their data inside, so **Edit Data** works in PowerPoint, and charts made in PowerPoint open here as charts.
 
 ## Equations
 
-**Insert** tab ▸ **Equation** (Alt+=, or **Insert ▸ Equation…**) opens the equation window Document mode uses: type LaTeX (`x^2`, `k_{obs}`, `\frac{a}{b}`, `\alpha`) or start from an equation chemists use often (Arrhenius, Eyring, rate laws, Henderson–Hasselbalch). The equation goes in the middle of the slide in the master's body font, size and text colour. Drag a corner to make it larger or smaller, double-click it to change it, and set its colour in the **Style** panel. PowerPoint files keep it as a PowerPoint equation, which PowerPoint can edit; equations made in PowerPoint open here as equations too.
+**Insert** tab ▸ **Equation** (Alt+=, or **Insert ▸ Equation…**) opens the equation window Document mode uses: type LaTeX (`x^2`, `k_{obs}`, `\frac{a}{b}`, `\alpha`) or start from an equation chemists use often (Arrhenius, Eyring, rate laws, Henderson–Hasselbalch). The equation goes in the middle of the slide in the master's body font, size and text color. Drag a corner to make it larger or smaller, double-click it to change it, and set its color in the **Style** panel. PowerPoint files keep it as a PowerPoint equation, which PowerPoint can edit; equations made in PowerPoint open here as equations too.
 
 ## References
 
@@ -252,7 +252,7 @@ A presentation keeps its own reference list, saved inside its PowerPoint file, a
 3. In the same window choose how the lines look:
    - **Write each as**: journal, year, volume and first page (*Organometallics* **2010**, *29*, 2176.), the first author in front of that, or the full reference. The italics and bold follow the citation style picked in the Reference Manager (ACS until you pick another).
    - **Numbers**: none, 1, 2, 3 on each slide, or numbered through the presentation so they match the References slide.
-   - **Place**: bottom left, centre or right, or top right. **Size** and an **Own colour** (the footer's colour otherwise). Lines that would take too much of the slide get smaller.
+   - **Place**: bottom left, center or right, or top right. **Size** and an **Own color** (the footer's color otherwise). Lines that would take too much of the slide get smaller.
    - **Apply** gives the slides picked this look; **Apply to All** uses it on every slide.
 4. **Insert ▸ Presentation ▸ References Slide** adds a slide at the end, titled References, listing the references shown on the slides in the order they first appear (or every reference in the presentation), in full. It keeps itself up to date.
 
@@ -305,7 +305,7 @@ A reagent written over an arrow animates with its whole scheme, because the sche
 
 **Auto-Animate Steps…** (Animations tab, or right-click ▸ **Animation**) builds a scheme up a step at a time: select the scheme (or a Smart Scheme, or nothing for every scheme on the slide) and choose the effect (Wipe runs along each arrow), when each product comes (right after its arrow, with it, or on a click of its own) and whether the first species comes in on a click too. Each click then brings the next arrow with its conditions, and what it makes. The scheme's pieces are kept apart for this, in the show and as separate pictures in PowerPoint. On a canvas slide, **Camera Follow** replaces the keyframes with one for each step, so the view travels along the route as it is built. The animations are ordinary ones: change or remove them in the Animation pane, and run Auto-Animate Steps again to start over.
 
-A highlight can animate on its own, like a shape in PowerPoint, so it can fade in over a structure that is already there. Click a highlighted atom or bond (or choose **Select Highlight** on the right-click menu or **Chemistry ▸ Highlight and Fill**), or pick the highlight under **Highlights** in the Animation pane, then pick an effect. Each run of highlight of one colour and look is one object. In PowerPoint the highlight is a picture of its own under its structure, and the animation stays on the highlight when the file comes back.
+A highlight can animate on its own, like a shape in PowerPoint, so it can fade in over a structure that is already there. Click a highlighted atom or bond (or choose **Select Highlight** on the right-click menu or **Chemistry ▸ Highlight and Fill**), or pick the highlight under **Highlights** in the Animation pane, then pick an effect. Each run of highlight of one color and look is one object. In PowerPoint the highlight is a picture of its own under its structure, and the animation stays on the highlight when the file comes back.
 
 ### The Animation pane
 
@@ -322,7 +322,7 @@ A highlight can animate on its own, like a shape in PowerPoint, so it can fade i
 **Review** tab ▸ **New Comment** (Ctrl+Alt+M, **Insert ▸ New Comment**, or right-click ▸ **New Comment**) pins a note to the slide, beside what is selected or in the slide's top corner. The **Comments** pane opens in the right-hand panel with a card to type in; press Enter to save it.
 
 - Each comment shows on the slide as a small marker with the writer's initials and its number. Drag a marker to move it; click it to see its card.
-- On a card: **Reply**, **Resolve** (greyed until deleted; **Reopen** brings it back), **Edit** and **Delete**.
+- On a card: **Reply**, **Resolve** (grayed until deleted; **Reopen** brings it back), **Edit** and **Delete**.
 - **◀ Previous** and **Next ▶** step through every comment in the deck, going to each one's slide. **Delete All on Slide** clears the slide being edited.
 - **Show Comments** hides or shows the markers and the pane. Markers are only on screen: they are never shown in the slide show, in pictures or in print.
 
@@ -365,7 +365,7 @@ With only one screen, the audience's slides open in a window of their own. Drag 
 
 ### Rehearse Timings and Record
 
-**Slide Show** tab ▸ **Rehearse Timings** plays the show with a bar at the top: the time on this slide, the time for the whole talk, **Pause**, **Repeat** (start this slide's time again) and **Notes**, which shows your speaker notes under the slide while you practise (it remembers whether you want them). **Record** does the same while recording your voice from the microphone, one recording for each slide; it counts 3, 2, 1 on the first slide before the clock and the microphone start (a click or key starts at once).
+**Slide Show** tab ▸ **Rehearse Timings** plays the show with a bar at the top: the time on this slide, the time for the whole talk, **Pause**, **Repeat** (start this slide's time again) and **Notes**, which shows your speaker notes under the slide while you practice (it remembers whether you want them). **Record** does the same while recording your voice from the microphone, one recording for each slide; it counts 3, 2, 1 on the first slide before the clock and the microphone start (a click or key starts at once).
 
 When the show ends, a window lists each slide's time (🎙 marks the ones with narration) and asks whether to keep them. Kept times make the show go on by itself; kept narration goes on each slide as a sound that plays as the slide comes in, and PowerPoint plays it too. Untick **Keep the narration too** to keep only the times. Each slide's time shows on its picture in the slide list.
 

@@ -92,7 +92,7 @@ export function editSlideRefs(input: SlideRefsInput): Promise<SlideRefsResult | 
     };
     const colourBox = el('span', 'slide-refs-colour');
     const colourLabel = el('label');
-    colourLabel.append(ownColour, ' Own colour ');
+    colourLabel.append(ownColour, ' Own color ');
     colourBox.append(colourLabel, colour);
 
     const look = (): RefLook => ({

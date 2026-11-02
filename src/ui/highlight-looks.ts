@@ -14,7 +14,7 @@ export interface HighlightLookPreset {
 export const BUILT_IN_LOOKS: HighlightLookPreset[] = [
   { name: 'Classic', style: {} },
   { name: 'Smooth band', style: { smooth: true } },
-  { name: 'Straight, centred on double bonds', style: { shape: 'straight', centre: true } },
+  { name: 'Straight, centered on double bonds', style: { shape: 'straight', centre: true } },
   { name: 'Soft marker', style: { smooth: true, soft: true, softAmount: 0.5 } },
   { name: 'Hollow (soft middle)', style: { smooth: true, soft: true, softSide: 'inner', softAmount: 0.7 } },
   { name: 'Outline only', style: { smooth: true, fill: 'none', line: 'solid' } },

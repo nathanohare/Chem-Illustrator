@@ -978,7 +978,7 @@ export const PICTURE_SHADOWS: Record<'soft' | 'hard', { off: number; blur: numbe
 export const PICTURE_STYLES: { id: string; name: string; look: PictureLook | undefined }[] = [
   { id: 'none', name: 'No frame', look: undefined },
   { id: 'thin', name: 'Thin line', look: { line: 1, lineColor: '#000000' } },
-  { id: 'grey', name: 'Grey line', look: { line: 1.5, lineColor: '#7f7f7f' } },
+  { id: 'grey', name: 'Gray line', look: { line: 1.5, lineColor: '#7f7f7f' } },
   { id: 'thick', name: 'Thick line', look: { line: 4, lineColor: '#000000' } },
   { id: 'white', name: 'White frame', look: { line: 10, lineColor: '#ffffff', shadow: 'soft' } },
   { id: 'black', name: 'Black frame', look: { line: 10, lineColor: '#000000' } },

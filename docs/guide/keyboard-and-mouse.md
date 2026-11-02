@@ -96,7 +96,7 @@ Start a sequence from a highlight a key set (as above), not from the mouse resti
 | `3` | Triple | `b` | Bold |
 | `w` | Wedge (again to reverse) | Shift+B | Bold double |
 | `h` or Shift+W | Hashed wedge (again to reverse) | `y` | Wavy |
-| Shift+H | Hashed | `l` / `c` / `r` | Double bond: second line left, centred, right |
+| Shift+H | Hashed | `l` / `c` / `r` | Double bond: second line left, centered, right |
 | `a` | Fuse benzene | `z` | Fuse cyclopentadiene |
 | `v`, `4` to `8` | Fuse a 3-membered, or a 4- to 8-membered ring | `9` / `0` | Fuse a chair cyclohexane (trans / cis on a chair) |
 | `/` or `?` | The bond's settings in the Style panel | `g` | Select the bond |
@@ -135,12 +135,12 @@ Start a sequence from a highlight a key set (as above), not from the mouse resti
 | Esc | Clear the selection |
 | Arrow keys | Nudge the selection 1 pt |
 | Shift+arrow keys | Nudge the selection 10 pt |
-| Alt+← / Alt+→ | Turn 1° anticlockwise / clockwise |
-| Alt+↑ / Alt+↓ | Turn 15° anticlockwise / clockwise |
+| Alt+← / Alt+→ | Turn 1° counterclockwise / clockwise |
+| Alt+↑ / Alt+↓ | Turn 15° counterclockwise / clockwise |
 | Ctrl+R | Rotate by an angle… |
 | Ctrl+K | Scale… (in documents, presentations, spreadsheets and text being typed: Insert Link…) |
 | Ctrl+Shift+H, Ctrl+Shift+V | Flip left to right, flip top to bottom |
-| Ctrl+Alt+Shift+L, C, R | Align left edges, centres across, right edges |
+| Ctrl+Alt+Shift+L, C, R | Align left edges, centers across, right edges |
 | Ctrl+Alt+Shift+T, M, B | Align top edges, middles down, bottom edges |
 | Ctrl+Alt+Shift+H, V | Space evenly across, down |
 | Ctrl+→ (or ←, ↑, ↓) | Reaction arrow and a copy of the selection that way |
@@ -238,12 +238,12 @@ Boxes, ovals, frames and pictures have square handles on their corners and sides
 
 ## Pen and touch (tablets)
 
-On a tablet or touch screen (an iPad with Apple Pencil, a Surface pen), **View ▸ Window and Colours ▸ Touch Mode** makes the buttons, menus and toolboxes big enough for a fingertip. It is **Automatic** to start with: it comes on by itself on a touch screen, or the first time a pen or finger touches the window.
+On a tablet or touch screen (an iPad with Apple Pencil, a Surface pen), **View ▸ Window and Colors ▸ Touch Mode** makes the buttons, menus and toolboxes big enough for a fingertip. It is **Automatic** to start with: it comes on by itself on a touch screen, or the first time a pen or finger touches the window.
 
 - **The pen** works like the mouse with every tool, except that with a curved arrow tool it draws the arrow freehand.
 - **Two fingers** pan and pinch-zoom the drawing. Once you have used the pen, **one finger** pans too, so a resting palm never draws.
 - **Hold** the pen or a finger still for half a second for the right-click menu. **Two quick taps** are a double-click.
-- **The atom keypad** along the bottom of the drawing gives the keys a keyboard would: element labels, charges, a new bond, double and triple bonds, wedges, rings, Undo and Redo. A key acts on the atom or bond you last drew, or the one selected. Hide it with its ×, or show it again with **View ▸ Window and Colours ▸ Touch Mode ▸ Atom Keypad**.
+- **The atom keypad** along the bottom of the drawing gives the keys a keyboard would: element labels, charges, a new bond, double and triple bonds, wedges, rings, Undo and Redo. A key acts on the atom or bond you last drew, or the one selected. Hide it with its ×, or show it again with **View ▸ Window and Colors ▸ Touch Mode ▸ Atom Keypad**.
 
 ### Sketching with the pen
 
@@ -252,9 +252,9 @@ Pick the **Sketch** tool (the pen and squiggle in the toolbox, or ✎ on the key
 - a **line** becomes a bond, and a **zig-zag** a chain (one bond for each straight stretch). Lines start and end on atoms they touch; a line drawn **along a bond** makes it double (again: triple);
 - a **loop with corners** becomes a ring with that many atoms, and a **circle** a benzene ring. Drawn over a bond, the ring is fused there. A **circle inside a ring** makes it aromatic;
 - a **scribble** (back and forth) erases the atoms and bonds under it;
-- **letters** label the atom they are written on (C, N, O, S, P, F, Cl, Br, I, H, B), or make a new atom in empty space; **+** and **−** charge the nearest atom. Write a letter centred on the atom, up to about a bond high; in empty space keep it smaller than a bond, or it is read as a bond or ring.
+- **letters** label the atom they are written on (C, N, O, S, P, F, Cl, Br, I, H, B), or make a new atom in empty space; **+** and **−** charge the nearest atom. Write a letter centered on the atom, up to about a bond high; in empty space keep it smaller than a bond, or it is read as a bond or ring.
 
-To sketch with the pen whatever tool is picked (a finger or mouse still uses the tool), turn on **View ▸ Window and Colours ▸ Touch Mode ▸ Pen Always Sketches**.
+To sketch with the pen whatever tool is picked (a finger or mouse still uses the tool), turn on **View ▸ Window and Colors ▸ Touch Mode ▸ Pen Always Sketches**.
 
 In a text box, Apple Pencil's **Scribble** works in Touch Mode: write over the text box (or just to its right or below it) and your handwriting is typed where the pencil first touched. A tap with the pencil puts the caret there.
 

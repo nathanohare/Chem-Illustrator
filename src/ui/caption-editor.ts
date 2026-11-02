@@ -739,8 +739,8 @@ export class CaptionEditor {
     const color = d.createElement('input');
     color.type = 'color';
     color.className = 'cb-color';
-    color.title = 'Text colour';
-    color.setAttribute('aria-label', 'Text colour');
+    color.title = 'Text color';
+    color.setAttribute('aria-label', 'Text color');
     color.addEventListener('change', () => { ed.setStyle({ color: color.value.toLowerCase() === '#000000' ? undefined : color.value }); this.ta.focus({ preventScroll: true }); });
     g.appendChild(color);
     this.inputs.color = color;
@@ -755,7 +755,7 @@ export class CaptionEditor {
       return svg(rows.join(''));
     };
     button(g, 'left', lineIcon('left'), 'Line up on the left', () => ed.align('left'));
-    button(g, 'center', lineIcon('center'), 'Centre the lines', () => ed.align('center'));
+    button(g, 'center', lineIcon('center'), 'Center the lines', () => ed.align('center'));
     button(g, 'right', lineIcon('right'), 'Line up on the right', () => ed.align('right'));
     button(g, 'justify', lineIcon('justify'), 'Stretch lines to both edges of the text box', () => ed.align('justify'));
 

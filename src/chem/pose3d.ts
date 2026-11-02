@@ -21,7 +21,7 @@ export type PoseResult = { pose: Pose } | { problem: PoseProblem | 'build'; mess
 
 const PROBLEM: Record<PoseProblem | 'build', string> = {
   build: 'No 3-D shape could be built for this structure.',
-  stereo: 'No 3-D shape keeps the stereocentres as they are drawn.',
+  stereo: 'No 3-D shape keeps the stereocenters as they are drawn.',
   hints: 'The wedges and bold bonds don\'t say which 3-D shape is meant (or no shape of this structure looks like that).',
 };
 

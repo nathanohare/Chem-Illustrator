@@ -102,7 +102,7 @@ export const RULES: Record<Rule, { name: string; level: IssueLevel; why: string;
   'heading-order': { name: 'Skipped heading level', level: 'warning', why: 'Headings give a document its outline. A heading more than one level below the one before it makes the outline hard to follow.', fix: 'Use the next level down (Heading 2 after Heading 1).' },
   'table-header': { name: 'Missing table header', level: 'warning', why: 'Header rows let screen readers say which column a cell is in.', fix: 'Make the first row a heading row (Table Design > Header Row, or Format Table).' },
   floating: { name: 'Object not in line with text', level: 'warning', why: 'Screen readers can lose their place round things that float over or behind the text.', fix: 'Set Wrap Text to In Line with Text (right-click), and put it after the paragraph it belongs to.' },
-  'merged-cells': { name: 'Merged cells', level: 'warning', why: 'Screen readers count cells across and down to say where they are; merged cells throw the count out.', fix: 'Unmerge them (Home > Merge & Centre), and use Centre Across Selection for a title instead.' },
+  'merged-cells': { name: 'Merged cells', level: 'warning', why: 'Screen readers count cells across and down to say where they are; merged cells throw the count out.', fix: 'Unmerge them (Home > Merge & Center), and use Center Across Selection for a title instead.' },
   'sheet-name': { name: 'Default sheet name', level: 'tip', why: 'A name that says what a sheet holds helps everyone find their way round the workbook.', fix: 'Double-click the sheet\'s tab and give it a name.' },
 };
 

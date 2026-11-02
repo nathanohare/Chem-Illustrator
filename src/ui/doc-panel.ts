@@ -30,10 +30,10 @@ export interface DocPanelHost {
 }
 
 
-const ALIGNS: [Justify, string][] = [['left', 'Left'], ['center', 'Centre'], ['right', 'Right'], ['justify', 'Justified']];
+const ALIGNS: [Justify, string][] = [['left', 'Left'], ['center', 'Center'], ['right', 'Right'], ['justify', 'Justified']];
 const PLACES: [NumberPlace, string][] = [
-  ['none', 'None'], ['footer-center', 'Bottom, centre'], ['footer-right', 'Bottom, right'], ['footer-left', 'Bottom, left'],
-  ['header-right', 'Top, right'], ['header-center', 'Top, centre'], ['header-left', 'Top, left'],
+  ['none', 'None'], ['footer-center', 'Bottom, center'], ['footer-right', 'Bottom, right'], ['footer-left', 'Bottom, left'],
+  ['header-right', 'Top, right'], ['header-center', 'Top, center'], ['header-left', 'Top, left'],
 ];
 
 /**
@@ -293,13 +293,13 @@ export class DocPanel {
     fc.type = 'color';
     fc.addEventListener('change', () => { look({ frameColor: fc.value.toLowerCase() === '#000000' ? undefined : fc.value }); this.host.focus(); });
     this.fields.set('fig-frame-colour', fc);
-    this.row(s, 'Frame colour', fc);
+    this.row(s, 'Frame color', fc);
     this.row(s, 'Shadow', this.select('fig-shadow', [['none', 'None'], ['soft', 'Soft'], ['hard', 'Sharp']], (v) => look({ shadow: v === 'none' ? undefined : v as 'soft' | 'hard' })),
       'Down and to the right; the figure gets a white background so the shadow is a box\'s');
     this.figButtons = this.buttons(s, [
       ['Edit Drawing', 'Change it with the drawing tools (or double-click it)', () => { const id = this.host.picked(); if (id !== null) this.host.editFigure(id); }],
       ['Own Size', 'Back to 100%', () => { const id = this.host.picked(); if (id !== null) this.host.setScale(id, 1); }],
-      ['Picture Format…', 'Brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions', () => this.host.run('picture-format')],
+      ['Picture Format…', 'Brightness, contrast, sharpen, recolor, transparency, Remove Background, crop to a shape or proportions', () => this.host.run('picture-format')],
     ]);
   }
 
@@ -402,7 +402,7 @@ export class DocPanel {
     colour.type = 'color';
     colour.addEventListener('change', () => { set({ color: colour.value.toLowerCase() === '#000000' ? undefined : colour.value }); this.host.focus(); });
     this.fields.set('s-colour', colour);
-    this.row(s, 'Colour', colour);
+    this.row(s, 'Color', colour);
     this.row(s, 'Alignment', this.select('s-align', ALIGNS, (v) => set({ align: v as Justify })));
     this.row(s, 'Space before (pt)', this.input('s-before', (v) => { const n = parseLength(v, 'pt'); if (n !== null) set({ spaceBefore: Math.max(0, n) }); }));
     this.row(s, 'Space after (pt)', this.input('s-after', (v) => { const n = parseLength(v, 'pt'); if (n !== null) set({ spaceAfter: Math.max(0, n) }); }));
@@ -529,10 +529,10 @@ export class DocPanel {
         return { ...h, [part]: three };
       })), 'On every page; a page number placed here goes after this text');
     zone('header', 0, 'Header, left');
-    zone('header', 1, 'Header, centre');
+    zone('header', 1, 'Header, center');
     zone('header', 2, 'Header, right');
     zone('footer', 0, 'Footer, left');
-    zone('footer', 1, 'Footer, centre');
+    zone('footer', 1, 'Footer, center');
     zone('footer', 2, 'Footer, right');
     // a first page and even pages of their own (Word's Different First Page and Different Odd & Even Pages)
     const blank = (): HfZones => ({ header: ['', '', ''], footer: ['', '', ''] });
@@ -552,7 +552,7 @@ export class DocPanel {
         }), { placeholder: ['left', 'centre', 'right'][i] });
         box.append(el);
       }
-      this.row(s, label, box, 'Left, centre and right');
+      this.row(s, label, box, 'Left, center and right');
     };
     three('first', 'header', 'First page header');
     three('first', 'footer', 'First page footer');
@@ -618,7 +618,7 @@ export class DocPanel {
       put('fig-frame', lk?.frame ? String(lk.frame) : '');
       put('fig-frame-colour', lk?.frameColor ?? '#000000');
       put('fig-shadow', lk?.shadow ?? 'none');
-      this.figureInfo.textContent = (isBox ? 'A text box: click inside it to type, drag its edge to move it. ' : o?.kind === 'picture' ? 'A picture. ' : o?.kind === 'drawing' && o.contents.shapes.some((x) => x.diagram) ? 'A diagram: double-click it to change its text, layout or colours (Edit Drawing opens the drawing tools on it). ' : 'A drawing: double-click it to change it with the drawing tools. ')
+      this.figureInfo.textContent = (isBox ? 'A text box: click inside it to type, drag its edge to move it. ' : o?.kind === 'picture' ? 'A picture. ' : o?.kind === 'drawing' && o.contents.shapes.some((x) => x.diagram) ? 'A diagram: double-click it to change its text, layout or colors (Edit Drawing opens the drawing tools on it). ' : 'A drawing: double-click it to change it with the drawing tools. ')
         + (sz ? `Shown ${showLength(sz.w, 'in')} × ${showLength(sz.h, 'in')} in${fitted ? ', made smaller to fit between the margins' : ''}.` : '');
       const [edit, own, format] = this.figButtons.querySelectorAll('button');
       edit.style.display = o?.kind === 'drawing' ? '' : 'none';

@@ -90,7 +90,7 @@ export const LINEAR_DIRECTIONS: { name: string; angle: number }[] = [
 ];
 
 export const FOCUS_POINTS: { name: string; x: number; y: number }[] = [
-  { name: 'From the centre', x: 0.5, y: 0.5 },
+  { name: 'From the center', x: 0.5, y: 0.5 },
   { name: 'From the top left corner', x: 0, y: 0 }, { name: 'From the top right corner', x: 1, y: 0 },
   { name: 'From the bottom left corner', x: 0, y: 1 }, { name: 'From the bottom right corner', x: 1, y: 1 },
   { name: 'From the top', x: 0.5, y: 0 }, { name: 'From the bottom', x: 0.5, y: 1 },
@@ -98,7 +98,7 @@ export const FOCUS_POINTS: { name: string; x: number; y: number }[] = [
 
 /** Ready-made gradients to start from (light ones keep black structures easy to read). */
 export const GRADIENT_PRESETS: { name: string; bg: Background }[] = [
-  { name: 'White to light grey', bg: { kind: 'gradient', shape: 'linear', angle: 90, stops: [{ pos: 0, color: '#ffffff' }, { pos: 1, color: '#e3e6ea' }] } },
+  { name: 'White to light gray', bg: { kind: 'gradient', shape: 'linear', angle: 90, stops: [{ pos: 0, color: '#ffffff' }, { pos: 1, color: '#e3e6ea' }] } },
   { name: 'Pale blue', bg: { kind: 'gradient', shape: 'linear', angle: 90, stops: [{ pos: 0, color: '#ffffff' }, { pos: 1, color: '#d6e4f5' }] } },
   { name: 'Mint', bg: { kind: 'gradient', shape: 'linear', angle: 45, stops: [{ pos: 0, color: '#f7fbf8' }, { pos: 1, color: '#d3eadb' }] } },
   { name: 'Warm paper', bg: { kind: 'gradient', shape: 'linear', angle: 90, stops: [{ pos: 0, color: '#fffdf8' }, { pos: 1, color: '#efe6d6' }] } },

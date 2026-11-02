@@ -105,7 +105,7 @@ const WARN = {
   cellObjects: 'Pictures and structures inside table cells were left out.',
   cellBoxes: 'Text boxes inside table cells were left out.',
   wmf: 'Some pictures are in the older Windows Metafile (WMF) format, which can\'t be shown here yet. They are kept, and saved back to Word unchanged.',
-  pictureFx: 'Some picture effects (artistic effects, saturation, colour temperature) were left off.',
+  pictureFx: 'Some picture effects (artistic effects, saturation, color temperature) were left off.',
   numbering: 'Some numbered lists use numbering that shows here as 1., a., i.',
   citations: 'Citations from a reference manager were kept as plain text.',
   pageText: 'Text after the page number in the header or footer was left out.',

@@ -332,7 +332,7 @@ export const GEOS: GeoDef[] = [
     text: [0.38, 0.4, 0.62, 0.9],
   },
   {
-    id: 'labBath', name: 'Bath (dish)', group: 'Lab equipment', outline: true, size: [90, 40], keywords: 'ice oil water bath crystallising dish',
+    id: 'labBath', name: 'Bath (dish)', group: 'Lab equipment', outline: true, size: [90, 40], keywords: 'ice oil water bath crystallizing dish',
     draw: (w, h) => ({ body: scaled([['M', 0, 0], ['L', 0, 0.9], ['C', 0, 0.97, 0.02, 1, 0.06, 1], ['L', 0.94, 1], ['C', 0.98, 1, 1, 0.97, 1, 0.9], ['L', 1, 0]], w, h), lines: scaled([['M', 0, 0.3], ['L', 1, 0.3]], w, h) }),
     text: [0.05, 0.35, 0.95, 0.95],
   },

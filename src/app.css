@@ -3426,3 +3426,14 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .ab-tile:hover { background: var(--hover, rgba(0, 0, 0, 0.05)); }
 .ab-tile[aria-checked="true"] { border-color: var(--accent, #2b7bd6); box-shadow: 0 0 0 1px var(--accent, #2b7bd6) inset; }
 .action-button-dialog [hidden] { display: none !important; }
+
+/* the Font group's corner box (Presentation and Design): Change Case */
+.fb-font .fb-body { width: 210px; }
+.fb-font .fb-section { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); margin: 2px 0 4px; }
+.fb-font .fb-case { display: flex; flex-direction: column; gap: 1px; }
+.fb-font .fb-case button { text-align: left; padding: 4px 8px; border: 0; border-radius: var(--r-control); background: none; color: var(--text); cursor: pointer; }
+.fb-font .fb-case button:hover, .fb-font .fb-case button:focus-visible { background: var(--hover, rgb(0 0 0 / 0.08)); }
+
+/* the Style panel: "Style – Box" in its title, and a small label over a shape's border rows */
+#style-section > h2 .style-of { color: var(--text); }
+#style-body .style-sub { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 8px 0 2px; padding-top: 6px; border-top: 1px solid var(--line); }

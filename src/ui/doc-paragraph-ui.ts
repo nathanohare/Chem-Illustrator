@@ -89,9 +89,9 @@ export class DocParagraphUI {
       side('top', 'Top'), side('bottom', 'Bottom'), side('left', 'Left'), side('right', 'Right'), side('between', 'Between paragraphs'),
       { name: 'style', label: 'Line', value: any.style === 'none' ? 'single' : any.style, options: LINE_STYLES.map(([v, label]) => ({ value: v, label })) },
       { name: 'w', label: 'Width', value: String(any.w), unit: 'pt', options: LINE_WIDTHS.map((v) => ({ value: v, label: `${v} pt` })) },
-      { name: 'color', label: 'Colour', value: any.color || '#000000', type: 'color' },
+      { name: 'color', label: 'Color', value: any.color || '#000000', type: 'color' },
       { name: 'shaded', label: 'Shade the paragraphs', value: String(!!shade), type: 'checkbox' },
-      { name: 'fill', label: 'Shading colour', value: shade ?? '#d9e2f3', type: 'color' },
+      { name: 'fill', label: 'Shading color', value: shade ?? '#d9e2f3', type: 'color' },
     ], { ok: 'OK', note: 'For the selected paragraphs. Paragraphs one after another with the same borders share one box. Saved as Word\'s paragraph borders and shading.' });
     this.host.focus();
     if (!got || this.host.file() !== f) return;

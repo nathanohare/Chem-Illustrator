@@ -32,7 +32,7 @@ export { docRulerPrefs } from './mode-prefs';
 
 const KINDS: TabStop['kind'][] = ['left', 'center', 'right', 'decimal'];
 const KIND_MARK: Record<TabStop['kind'], string> = { left: 'L', center: '⊥', right: '⅃', decimal: '⊥.' };
-const KIND_NAME: Record<TabStop['kind'], string> = { left: 'Left tab', center: 'Centre tab', right: 'Right tab', decimal: 'Decimal tab' };
+const KIND_NAME: Record<TabStop['kind'], string> = { left: 'Left tab', center: 'Center tab', right: 'Right tab', decimal: 'Decimal tab' };
 /** Indents and tab stops land on sixteenths of an inch (hold Alt to place them freely). */
 const SNAP = 72 / 16;
 const H = 24;

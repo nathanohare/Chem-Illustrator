@@ -327,7 +327,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     for (const m of pendingMulti.splice(0)) {
       const atoms = m.ids.map((x) => nodeIds.get(x)).filter((x): x is number => x !== undefined);
       if (atoms.length >= 2) doc.updateAtom(m.id, { multi: atoms });
-      else { doc.removeAtom(m.id); nodeIds.delete(m.key); skip('multicentre attachment without its atoms'); }
+      else { doc.removeAtom(m.id); nodeIds.delete(m.key); skip('multicenter attachment without its atoms'); }
     }
     for (const b of kids(frag)) {
       if (b.nodeName === 'graphic') readGraphic(b); // circled charges and lone pairs sit with their structure

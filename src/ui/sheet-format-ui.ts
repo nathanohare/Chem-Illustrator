@@ -20,7 +20,7 @@ export interface FormatHost {
   flash(msg: string, ms?: number): void;
 }
 
-const LOOK_OPTIONS = [...PRESET_LOOKS.map((p, i) => ({ value: String(i), label: p.name })), { value: 'custom', label: 'Your own colours…' }];
+const LOOK_OPTIONS = [...PRESET_LOOKS.map((p, i) => ({ value: String(i), label: p.name })), { value: 'custom', label: 'Your own colors…' }];
 
 /** A number when the text is one, else the text. */
 const numOrText = (s: string): number | string => (s.trim() !== '' && Number.isFinite(Number(s)) ? Number(s) : s.trim());
@@ -121,8 +121,8 @@ export class SheetFormatting {
         null,
         ['Your own…', () => void this.ruleDialog(barRule('#638ec6', true))],
       ]), [...PRESET_BARS.map((b) => barRule(b.color, true)), null, ...PRESET_BARS.map((b) => barRule(b.color, false))])],
-      ['Colour Scales ▸', () => this.liveMenu(popupMenu(x, y, [
-        ...PRESET_SCALES.map((p) => [p.name, () => this.add(scaleRule(p.colors), 'Colour scale'), true, scalePic(p.colors)] as MenuItem),
+      ['Color Scales ▸', () => this.liveMenu(popupMenu(x, y, [
+        ...PRESET_SCALES.map((p) => [p.name, () => this.add(scaleRule(p.colors), 'Color scale'), true, scalePic(p.colors)] as MenuItem),
         null,
         ['Your own…', () => void this.ruleDialog(scaleRule(['#f8696b', '#ffeb84', '#63be7b']))],
       ]), PRESET_SCALES.map((p) => scaleRule(p.colors)))],
@@ -142,7 +142,7 @@ export class SheetFormatting {
     const got = await ask('Your own look', [
       { name: 'fill', label: 'Fill', type: 'color', value: '#ffeb9c' },
       { name: 'nofill', label: 'No fill', type: 'checkbox', value: 'false' },
-      { name: 'color', label: 'Text colour', type: 'color', value: '#9c5700' },
+      { name: 'color', label: 'Text color', type: 'color', value: '#9c5700' },
       { name: 'bold', label: 'Bold', type: 'checkbox', value: 'false' },
       { name: 'italic', label: 'Italic', type: 'checkbox', value: 'false' },
     ]);
@@ -221,7 +221,7 @@ export class SheetFormatting {
   /** The window for a new rule (or changing one): what kind, its settings, its look. */
   async ruleDialog(start: CfRule | null, existing?: CondFormat): Promise<void> {
     const kinds = [
-      { value: 'scale', label: 'Colour scale' },
+      { value: 'scale', label: 'Color scale' },
       { value: 'bar', label: 'Data bar' },
       { value: 'icons', label: 'Icon set' },
       { value: 'cells', label: 'Cells whose value is…' },
@@ -246,7 +246,7 @@ export class SheetFormatting {
     const lookFields = (l?: CfLook): Field[] => [
       { name: 'fill', label: 'Fill', type: 'color', value: l?.fill ?? '#ffc7ce' },
       { name: 'nofill', label: 'No fill', type: 'checkbox', value: String(!!l && !l.fill) },
-      { name: 'color', label: 'Text colour', type: 'color', value: l?.color ?? '#9c0006' },
+      { name: 'color', label: 'Text color', type: 'color', value: l?.color ?? '#9c0006' },
       { name: 'bold', label: 'Bold', type: 'checkbox', value: String(!!l?.bold) },
       { name: 'italic', label: 'Italic', type: 'checkbox', value: String(!!l?.italic) },
     ];
@@ -264,10 +264,10 @@ export class SheetFormatting {
         const three = s.stops.length >= 3;
         const st = (i: number) => s.stops[Math.min(i, s.stops.length - 1)];
         fields = [
-          { name: 'n', label: 'Colours', value: three ? '3' : '2', options: [{ value: '2', label: 'Two' }, { value: '3', label: 'Three' }] },
-          { name: 't0', label: 'Lowest is', value: st(0).at.type, options: pointOpts }, { name: 'v0', label: 'Number', value: String(st(0).at.value ?? '') }, { name: 'c0', label: 'Colour', type: 'color', value: st(0).color },
-          { name: 't1', label: 'Middle is', value: three ? st(1).at.type : 'percentile', options: pointOpts }, { name: 'v1', label: 'Number', value: String(three ? st(1).at.value ?? 50 : 50) }, { name: 'c1', label: 'Colour', type: 'color', value: three ? st(1).color : '#ffeb84' },
-          { name: 't2', label: 'Highest is', value: st(2).at.type, options: pointOpts }, { name: 'v2', label: 'Number', value: String(st(2).at.value ?? '') }, { name: 'c2', label: 'Colour', type: 'color', value: st(2).color },
+          { name: 'n', label: 'Colors', value: three ? '3' : '2', options: [{ value: '2', label: 'Two' }, { value: '3', label: 'Three' }] },
+          { name: 't0', label: 'Lowest is', value: st(0).at.type, options: pointOpts }, { name: 'v0', label: 'Number', value: String(st(0).at.value ?? '') }, { name: 'c0', label: 'Color', type: 'color', value: st(0).color },
+          { name: 't1', label: 'Middle is', value: three ? st(1).at.type : 'percentile', options: pointOpts }, { name: 'v1', label: 'Number', value: String(three ? st(1).at.value ?? 50 : 50) }, { name: 'c1', label: 'Color', type: 'color', value: three ? st(1).color : '#ffeb84' },
+          { name: 't2', label: 'Highest is', value: st(2).at.type, options: pointOpts }, { name: 'v2', label: 'Number', value: String(st(2).at.value ?? '') }, { name: 'c2', label: 'Color', type: 'color', value: st(2).color },
         ];
         build = (g) => ({ kind: 'scale', stops: (g.n === '3' ? [0, 1, 2] : [0, 2]).map((i) => ({ at: pt(g[`t${i}`], g[`v${i}`]), color: g[`c${i}`] })) });
         break;
@@ -275,7 +275,7 @@ export class SheetFormatting {
       case 'bar': {
         const b = r?.kind === 'bar' ? r : { kind: 'bar' as const, color: '#638ec6', gradient: true };
         fields = [
-          { name: 'color', label: 'Colour', type: 'color', value: b.color },
+          { name: 'color', label: 'Color', type: 'color', value: b.color },
           { name: 'gradient', label: 'Shaded (fades to white)', type: 'checkbox', value: String(b.gradient !== false) },
           { name: 'barOnly', label: 'Show the bar only (hide the value)', type: 'checkbox', value: String(!!b.barOnly) },
           { name: 'tmin', label: 'Shortest bar', value: b.min?.type ?? 'auto', options: pointOpts }, { name: 'vmin', label: 'Number', value: String(b.min?.value ?? '') },

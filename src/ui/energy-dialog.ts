@@ -25,7 +25,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       <canvas class="energy-preview" aria-label="Preview of the diagram" role="img"></canvas>
       <div class="energy-table-wrap"><table class="energy-table"><thead></thead><tbody></tbody></table></div>
       <p class="energy-rows"><button type="button" data-act="row" title="Another species along the reaction coordinate">+ Species</button>
-        <button type="button" data-act="path" title="Another pathway drawn on the same diagram, in its own colour">+ Pathway</button>
+        <button type="button" data-act="path" title="Another pathway drawn on the same diagram, in its own color">+ Pathway</button>
         <button type="button" data-act="ddagger" title="Put a double dagger (‡) at the end of the species name you were last in, for a transition state">‡</button>
         <button type="button" data-act="import" title="Read energies, transition states, the level of theory and geometries from Gaussian or ORCA output files, into the pathway you were last in">Import Gaussian/ORCA…</button>
         <input type="file" name="qm" multiple accept=".log,.out,.txt" hidden /></p>
@@ -78,7 +78,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         name.setAttribute('aria-label', `Pathway ${j + 1} name`);
         const col = Object.assign(document.createElement('input'), { type: 'color', value: p.color });
         col.dataset.c = String(j);
-        col.setAttribute('aria-label', `Pathway ${j + 1} colour`);
+        col.setAttribute('aria-label', `Pathway ${j + 1} color`);
         th.append(name, col);
         if (paths.length > 1) {
           const del = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', title: 'Take out this pathway' });

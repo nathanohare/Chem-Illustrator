@@ -982,7 +982,7 @@ class Reader {
   private pictureFx(from: string, pic: Element, img: { src: string; px: { w: number; h: number }; mime: string }, tag: string | undefined, origTag?: string): PictureFx | undefined {
     const blip = kid(pic, 'blipFill', 'blip');
     const got = readPictureFx(blip, kid(pic, 'spPr'));
-    if (got.dropped) this.warnings.add('Some picture effects (artistic effects, saturation, colour temperature) were left off.');
+    if (got.dropped) this.warnings.add('Some picture effects (artistic effects, saturation, color temperature) were left off.');
     // ours: the original kept beside the picture, named by the tag with what was worked in
     let t: { tol?: unknown; orig?: unknown; fx?: { bg?: unknown; sharpen?: unknown } } = {};
     try { if (tag) t = JSON.parse(tag) ?? {}; } catch { /* not ours */ }
@@ -1467,7 +1467,7 @@ class Reader {
     const def = kids(this.r.xml(this.r.relOfType(this.r.relOfType('', REL.officeDocument) ?? '', REL.tableStyles) ?? '')?.documentElement ?? null, 'tblStyle')
       .find((e) => e.getAttribute('styleId') === id);
     if (!def) {
-      this.warnings.add('A table\'s PowerPoint style wasn\'t in the file, so its colours were left out (pick a style in the Style panel).');
+      this.warnings.add('A table\'s PowerPoint style wasn\'t in the file, so its colors were left out (pick a style in the Style panel).');
       return { table: t };
     }
     const n = t.rows.length, m = t.cols.length;
@@ -1761,7 +1761,7 @@ class Reader {
       shaded = true;
     } else if (kid(spPr, 'pattFill')) {
       fill = this.color(kid(spPr, 'pattFill', 'fgClr'));
-      this.warnings.add('Patterned fills came in as plain colours.');
+      this.warnings.add('Patterned fills came in as plain colors.');
     } else if (!kid(spPr, 'noFill') && !kid(spPr, 'blipFill')) {
       const ref = kid(style, 'fillRef');
       if (ref && ref.getAttribute('idx') !== '0') fill = this.color(ref);

@@ -413,8 +413,8 @@ const SHAPES: PaletteDef = {
     { name: 'shape-rect-rounded-shadow', title: 'Round-cornered box with a shadow' },
     { name: 'shape-rect-dashed', title: 'Dashed box' },
     { name: 'shape-oval', title: 'Oval (Shift: circle)' },
-    { name: 'shape-circle', title: 'Circle, drawn from its centre' },
-    { name: 'shape-circle-filled', title: 'Filled circle, drawn from its centre' },
+    { name: 'shape-circle', title: 'Circle, drawn from its center' },
+    { name: 'shape-circle-filled', title: 'Filled circle, drawn from its center' },
     { name: 'shape-line', title: 'Line' },
     { name: 'shape-line-dashed', title: 'Dashed line' },
     { name: 'shape-line-bold', title: 'Bold line' },
@@ -548,7 +548,7 @@ const TOOL_GROUPS: ToolbarItem[][] = [
     templatePalette('sugars', 'tpl-sugars', 'Sugars (Haworth)', 5, 64),
     templatePalette('nucleic', 'tpl-nucleic', 'Nucleic acids: bases, nucleosides and nucleotides', 6, 64),
     templatePalette(['conformers', 'fused'], 'tpl-conformers', 'Conformers and fused rings in 3-D', 5, 64),
-    templatePalette(['projections', 'stereo'], 'tpl-projections', 'Projections and stereocentres', 6, 56),
+    templatePalette(['projections', 'stereo'], 'tpl-projections', 'Projections and stereocenters', 6, 56),
     templatePalette('cycloalkanes', 'tpl-cycloalkanes', 'Large rings', 6, 56),
     templatePalette('aromatics', 'tpl-aromatics', 'Aromatics', 6, 56),
     templatePalette('perspective', 'tpl-perspective', 'Rings in perspective', 6, 56),
@@ -873,7 +873,7 @@ async function insertTable(): Promise<void> {
     { name: 'rows', label: 'Rows', value: '4', type: 'number' },
     { name: 'cols', label: 'Columns', value: '3', type: 'number' },
     ...(onSlide ? [{ name: 'style', label: 'Style', value: lastTableStyle, options: [{ value: '', label: 'ACS rules' }, ...SLIDE_TABLE_STYLES.map((st) => ({ value: st.id, label: st.name }))] }] : []),
-  ], { ok: 'Insert', note: onSlide ? 'The Style panel changes the style, its options, the cells\' colours and which cells are merged.' : 'An ACS-style table: a rule above and below the heading row and under the last row. The Style panel changes the lines, headings, rows and columns.' });
+  ], { ok: 'Insert', note: onSlide ? 'The Style panel changes the style, its options, the cells\' colors and which cells are merged.' : 'An ACS-style table: a rule above and below the heading row and under the last row. The Style panel changes the lines, headings, rows and columns.' });
   if (!got) return;
   const rows = Math.max(1, Math.min(500, Math.round(Number(got.rows) || 4)));
   const cols = Math.max(1, Math.min(60, Math.round(Number(got.cols) || 3)));
@@ -1518,12 +1518,12 @@ async function depthShadingDialog(): Promise<void> {
   const r = await ask('Depth Shading', [
     { name: 'on', label: 'Shade structures drawn in 3-D by depth', type: 'checkbox', value: String(s.on),
       help: 'Structures turned with the Perspective tools, placed from the 3-D Model window, or drawn from conformer templates. Each is shaded over its own depth.' },
-    { name: 'near', label: 'Nearest colour', type: 'color', value: s.near },
-    { name: 'far', label: 'Furthest colour', type: 'color', value: s.far },
+    { name: 'near', label: 'Nearest color', type: 'color', value: s.near },
+    { name: 'far', label: 'Furthest color', type: 'color', value: s.far },
     { name: 'curve', label: 'Fade', value: s.curve, options: [{ value: 'linear', label: 'Even (linear)' }, { value: 'eased', label: 'Eased (slow at front and back)' }] },
     { name: 'thin', label: 'Thin the lines with depth too', type: 'checkbox', value: String(s.thin) },
     { name: 'thinTo', label: 'Line width at the back', type: 'number', unit: '% of the usual', value: String(Math.round(s.thinTo * 100)) },
-  ], { ok: 'Apply', note: `The usual look is black in front to ${DEFAULT_DEPTH_SHADE.far} grey behind, evenly, lines kept their width. Pictures you copy or export keep the shading.` });
+  ], { ok: 'Apply', note: `The usual look is black in front to ${DEFAULT_DEPTH_SHADE.far} gray behind, evenly, lines kept their width. Pictures you copy or export keep the shading.` });
   if (!r) return;
   const pct = Number(r.thinTo);
   Object.assign(depthShadePrefs, {
@@ -1605,7 +1605,7 @@ async function show3dModel(): Promise<void> {
       const after = await chem.molToSmiles(toMolfile(doc, doc.fragmentOf(root), '').molblock);
       if (unshown || (before && after && after !== before)) {
         editor.undo();
-        flash('From this angle a stereocentre can\'t be drawn so it reads right (a bond points almost straight at you). Turn the model a little and place it again.', 7000);
+        flash('From this angle a stereocenter can\'t be drawn so it reads right (a bond points almost straight at you). Turn the model a little and place it again.', 7000);
       }
     }, ex.map.map((id) => { const a = id >= 0 ? doc.atoms.get(id) : undefined; return a ? { x: a.x, y: a.y } : null; }));
   } catch (e) {
@@ -2121,7 +2121,7 @@ async function schemeSettings(): Promise<void> {
     { name: 'structGap', label: 'Gap between arrow and structures', value: pt(p.structGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.gap) },
     { name: 'plusGap', label: 'Space either side of +', value: pt(p.plusGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.plus) },
     { name: 'helpers', label: 'Show + boxes above and below new arrows', value: String(p.helpers), type: 'checkbox' },
-    { name: 'textAlign', label: 'Text alignment', value: p.textAlign, options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Centre' }, { value: 'right', label: 'Right' }] },
+    { name: 'textAlign', label: 'Text alignment', value: p.textAlign, options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }] },
     { name: 'textGap', label: 'Gap between arrow and text', value: pt(p.textGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.conditions) },
     { name: 'fit', label: 'Fit arrow length to its text (moves the products)', value: String(p.fit), type: 'checkbox' },
     { name: 'sameLength', label: 'Clean Up Reaction makes arrows the same length', value: String(p.sameLength), type: 'checkbox' },
@@ -2574,7 +2574,7 @@ async function mapAtomsCommand(): Promise<void> {
   const got = await ask('Map Atoms', [
     ...(arrow !== undefined ? [{ name: 'which', label: 'Map', value: 'step', options: [{ value: 'step', label: 'The selected reaction step' }, { value: 'all', label: 'Every step in the drawing' }] }] : []),
     { name: 'numbers', label: 'Show the map numbers beside the atoms', type: 'checkbox', value: mapChoice.numbers },
-    { name: 'colours', label: 'Colour each atom and where it goes the same', type: 'checkbox', value: mapChoice.colours },
+    { name: 'colours', label: 'Color each atom and where it goes the same', type: 'checkbox', value: mapChoice.colours },
     { name: 'bonds', label: 'Mark bonds made (green) and broken (red)', type: 'checkbox', value: mapChoice.bonds },
   ], { ok: 'Map', note: 'Atoms are paired the way Animate Reaction pairs them. To change a pair, pair it by hand in Animate Reaction and map again. Map numbers go into copied reaction SMILES and RXN files.' });
   if (!got) return;
@@ -2738,7 +2738,7 @@ async function rotateDialog(): Promise<void> {
   if (!editor.hasSelection()) { flash('Select something to rotate.'); return; }
   const r = await ask('Rotate', [
     { name: 'angle', label: 'Angle', value: lastTurn.angle, unit: 'degrees', type: 'number' },
-    { name: 'dir', label: 'Direction', value: lastTurn.dir, options: [{ value: 'cw', label: 'Clockwise' }, { value: 'ccw', label: 'Anticlockwise' }] },
+    { name: 'dir', label: 'Direction', value: lastTurn.dir, options: [{ value: 'cw', label: 'Clockwise' }, { value: 'ccw', label: 'Counterclockwise' }] },
   ], { ok: 'Rotate' });
   if (!r) return;
   const a = parseFloat(r.angle);
@@ -3228,8 +3228,8 @@ const keyframeCommands = {
     if (!key) return;
     const got = await ask(`Keyframe ${at + 1} Zone`, [
       { name: 'on', label: 'Tint the background round this keyframe', value: String(!!key.tint), type: 'checkbox' },
-      { name: 'tint', label: 'Colour', value: key.tint ?? k.d.master.accent, type: 'color' },
-    ], { ok: 'Set Zone', note: 'A zone fades out softly over about half a slide, so it never shows an edge. Give the keyframes of one part of the route (a fragment, a campaign) the same colour to make one zone.' });
+      { name: 'tint', label: 'Color', value: key.tint ?? k.d.master.accent, type: 'color' },
+    ], { ok: 'Set Zone', note: 'A zone fades out softly over about half a slide, so it never shows an edge. Give the keyframes of one part of the route (a fragment, a campaign) the same color to make one zone.' });
     if (got === null) return;
     const tint = got.on === 'true' && /^#[0-9a-f]{6}$/i.test(got.tint) ? got.tint.toLowerCase() : '';
     setKeyframes(k.d, { keys: k.c.keys.map((x, j) => (j === at ? (({ tint: _, ...rest }) => (tint ? { ...rest, tint } : rest))(x) : x)) }, at, tint ? 'Keyframe zone' : 'Remove keyframe zone');
@@ -3244,15 +3244,15 @@ const keyframeCommands = {
     const got = await ask('Canvas Background', [
       {
         name: 'route', label: 'Background', value: look.route ? (look.route.length > 2 ? '3' : '2') : '0',
-        options: [{ value: '0', label: 'Plain (the slide master\'s colour)' }, { value: '2', label: 'Route gradient: two colours' }, { value: '3', label: 'Route gradient: three colours' }],
-        help: 'A wide, slow gradient from the first keyframe to the last, so the colour shifts as the talk moves along the route.',
+        options: [{ value: '0', label: 'Plain (the slide master\'s color)' }, { value: '2', label: 'Route gradient: two colors' }, { value: '3', label: 'Route gradient: three colors' }],
+        help: 'A wide, slow gradient from the first keyframe to the last, so the color shifts as the talk moves along the route.',
       },
-      { name: 'c1', label: 'Start colour', value: route[0], type: 'color' },
-      { name: 'c2', label: route.length > 2 ? 'Middle colour' : 'End colour', value: route[1], type: 'color' },
-      { name: 'c3', label: 'End colour (three colours)', value: route[2] ?? route[1], type: 'color' },
+      { name: 'c1', label: 'Start color', value: route[0], type: 'color' },
+      { name: 'c2', label: route.length > 2 ? 'Middle color' : 'End color', value: route[1], type: 'color' },
+      { name: 'c3', label: 'End color (three colors)', value: route[2] ?? route[1], type: 'color' },
       { name: 'texture', label: 'Pattern', value: look.texture ?? '', options: [{ value: '', label: 'None' }, ...TEXTURES.map((t) => ({ value: t.id, label: t.name }))], help: 'Faint, and it moves with the canvas, so a pan across empty space still feels like moving.' },
       { name: 'parallax', label: 'Parallax', value: String(Math.round((look.parallax ?? 0) * 100)), type: 'number', unit: '%', help: `How much slower the background moves than the drawing, for a sense of depth (0 to ${PARALLAX_MAX * 100}; 50 is half as fast).` },
-    ], { ok: 'Apply', note: 'Zones: right-click a keyframe for Zone Colour. The background has no edges, so nothing sharp scrolls past in the show.' });
+    ], { ok: 'Apply', note: 'Zones: right-click a keyframe for Zone Color. The background has no edges, so nothing sharp scrolls past in the show.' });
     if (got === null) return;
     const next: CanvasLook = {};
     const colours = [got.c1, got.c2, got.c3].filter((c) => /^#[0-9a-f]{6}$/i.test(c)).map((c) => c.toLowerCase());
@@ -3340,11 +3340,19 @@ const keyframeCommands = {
  * The contextual tabs, as in PowerPoint: Shape Format while a shape is selected and Picture
  * Format while a picture is, in Presentation and Design; a hidden tab that was open gives way to Home.
  */
+let geoHintOn = false;
 function showContextTabs(): void {
   const picked = [...editor.sel.shapes].map((id) => doc.shapes.get(id)).filter((x) => !!x);
   const shape = picked.some((x) => x.kind !== 'picture');
   const picture = picked.some((x) => x.kind === 'picture');
   const mode = ws.active.mode;
+  // a shape picked: the status bar says how to type in it (back to the tool's hint after)
+  const geo = picked.some((x) => x.kind === 'geo') && !editor.typingCaption;
+  if (geo !== geoHintOn) {
+    geoHintOn = geo;
+    if (geo) setHint('Double-click the shape to type in it.');
+    else editor.onToolChange(editor.toolName);
+  }
   const want: [string, string, boolean][] = [
     ['#ribbon [data-sl-tab="format"]', 'slides', shape], ['#ribbon [data-sl-tab="picture"]', 'slides', picture],
     ['#design-ribbon [data-dz-tab="format"]', 'design', shape], ['#design-ribbon [data-dz-tab="picture"]', 'design', picture],
@@ -4204,7 +4212,7 @@ async function orientLikeFirst(scheme = false): Promise<number | null> {
 /** After a flip: nothing selected, or a plain flip that made the mirror image of a structure with wedges. */
 function flipped(r: boolean | 'stereo'): void {
   if (!r) flash('Select something to flip.');
-  else if (r === 'stereo') flash('Flipped: the wedged centres are now the mirror image (the enantiomer). To keep the configuration, undo and use Flip, Keeping Configuration.', 7000, { label: 'Undo', run: () => undo() });
+  else if (r === 'stereo') flash('Flipped: the wedged centers are now the mirror image (the enantiomer). To keep the configuration, undo and use Flip, Keeping Configuration.', 7000, { label: 'Undo', run: () => undo() });
 }
 
 /** Undo and Redo: in Slides mode the deck's history covers every slide and the slide list; a sheet has its own. */
@@ -5186,7 +5194,7 @@ function placePicture(bytes: Uint8Array, mime: string, at: { x: number; y: numbe
   });
   editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set([made!.id]) };
   editor.changed();
-  if (mime === 'image/tiff' || mime === 'image/x-wmf' || !showableSrc(made!.src ?? '')) flash('This kind of picture shows as a grey box here for now; it is kept, and saved with the file.', 8000);
+  if (mime === 'image/tiff' || mime === 'image/x-wmf' || !showableSrc(made!.src ?? '')) flash('This kind of picture shows as a gray box here for now; it is kept, and saved with the file.', 8000);
 }
 
 /**
@@ -5377,7 +5385,7 @@ async function removeWhite(ids: number[]): Promise<void> {
       { value: 'all', label: 'All white, everywhere' },
     ] },
     { name: 'tol', label: 'How near white counts', value: '24', type: 'number', unit: 'of 255' },
-  ], { ok: 'Remove', note: 'Raise the number if a grey haze is left round the picture; lower it if pale parts of the picture disappear. Undo puts it back.' });
+  ], { ok: 'Remove', note: 'Raise the number if a gray haze is left round the picture; lower it if pale parts of the picture disappear. Undo puts it back.' });
   if (!v) return;
   const tol = Math.max(0, Math.min(200, Number(v.tol) || 0));
   const done: { id: number; src: string }[] = [];
@@ -5761,7 +5769,7 @@ function wireShows(presenter: Presenter, presenterView: PresenterView, inkShape:
       for (const st of ink.get(i) ?? []) { const sh = inkShape(st); if (sh) sd.addShape(sh); }
     });
     editor.requestScene();
-    flash(`Ink kept on ${indices.length} slide${indices.length === 1 ? '' : 's'}. Each line is a shape: move it, recolour it or delete it.`, 6000);
+    flash(`Ink kept on ${indices.length} slide${indices.length === 1 ? '' : 's'}. Each line is a shape: move it, recolor it or delete it.`, 6000);
   };
 
   presenter.onEnd = presenterView.onEnd = (i) => {
@@ -6058,7 +6066,7 @@ async function printNow(): Promise<void> {
     { name: 'paper', label: 'Paper', value: printChoices.paper, options: PAPER_OPTIONS },
     { name: 'orient', label: 'Orientation', value: printChoices.orient, options: [{ value: 'auto', label: 'To suit the drawing' }, { value: 'portrait', label: 'Portrait' }, { value: 'landscape', label: 'Landscape' }] },
     { name: 'size', label: 'Size', value: printChoices.size, options: [{ value: 'actual', label: 'Actual size (smaller only if it would not fit)' }, { value: 'fit', label: 'As large as fits the page' }] },
-  ], { ok: 'Print…', note: 'The drawing is centred on the page with half-inch margins. Copies and the printer are chosen in the next window.' });
+  ], { ok: 'Print…', note: 'The drawing is centered on the page with half-inch margins. Copies and the printer are chosen in the next window.' });
   if (!v) return;
   Object.assign(printChoices, v);
   const b = pic.box, w = b.x2 - b.x1, h = b.y2 - b.y1;
@@ -6087,10 +6095,10 @@ async function exportPicture(preset: { format?: string; dpi?: number; note?: str
     ] },
     { name: 'dpi', label: 'Resolution (PNG, TIFF)', value: String(dpiNow), type: 'number', unit: 'dpi' },
     { name: 'bg', label: 'Background', value: deck ? 'page' : 'clear', options: [
-      { value: deck ? 'page' : 'white', label: deck ? 'The page colour' : 'White' },
+      { value: deck ? 'page' : 'white', label: deck ? 'The page color' : 'White' },
       { value: 'clear', label: 'Transparent' },
     ] },
-  ], { ok: 'Export…', note: preset.note ?? (checked ? `Saves ${what}. The ${checked.journal.name.replace(/ \(.*/, '')} guidelines ask for ${checked.dpi} dpi for this figure (File > Check Figure for Journal).` : `Saves ${what}. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line drawings.`) });
+  ], { ok: 'Export…', note: preset.note ?? (checked ? `Saves ${what}. The ${checked.journal.name.replace(/ \(.*/, '')} guidelines ask for ${checked.dpi} dpi for this figure (File > Check Figure for Journal).` : `Saves ${what}. Journals usually ask for 300 dpi for color pictures and 600 to 1200 dpi for line drawings.`) });
   if (!v) return;
   const dpi = Math.max(30, Math.min(2400, Number(v.dpi) || 300));
   const clear = v.bg === 'clear';
@@ -6684,13 +6692,13 @@ const DOC_COMMANDS: Record<string, () => unknown> = {
   'insert-shapes': () => {
     const b = document.querySelector<HTMLElement>('#doc-ribbon [data-doc="insert-shapes"]');
     const anchor = b && b.offsetParent ? b : document.querySelector<HTMLElement>('#doc-ribbon .rb-tabs')!;
-    shapeMenu.show(anchor, 'Click a shape to put it in the text at the caret. Double-click it there to change its size, colour or text.', (id) => docMode.insertShape(id));
+    shapeMenu.show(anchor, 'Click a shape to put it in the text at the caret. Double-click it there to change its size, color or text.', (id) => docMode.insertShape(id));
   },
   'insert-diagram': () => void docMode.insertDiagram(),
   'insert-icons': () => {
     const b = document.querySelector<HTMLElement>('#doc-ribbon [data-doc="insert-icons"]');
     const anchor = b && b.offsetParent ? b : document.querySelector<HTMLElement>('#doc-ribbon .rb-tabs')!;
-    shapeMenu.show(anchor, 'Click an icon to put it in the text at the caret. Double-click it there to change its size or colour.', (id) => docMode.insertShape(id), 'icons');
+    shapeMenu.show(anchor, 'Click an icon to put it in the text at the caret. Double-click it there to change its size or color.', (id) => docMode.insertShape(id), 'icons');
   },
   'copy-smiles': async () => {
     const d = pickedFigureDoc();
@@ -7024,7 +7032,7 @@ async function shapeEffect(cmd: string): Promise<boolean> {
   if (cmd === 'shape-fx:glow:options') {
     const g = shapes[0].glow ?? { color: shapes[0].fillColor ?? shapes[0].color ?? '#ffc000', size: 8, transparency: 0.4 };
     const v = await ask('Glow', [
-      { name: 'color', label: 'Colour', value: g.color, type: 'color' },
+      { name: 'color', label: 'Color', value: g.color, type: 'color' },
       { name: 'size', label: 'Size (pt)', value: String(g.size), type: 'number' },
       { name: 'clear', label: 'Transparency (%)', value: String(Math.round(g.transparency * 100)), type: 'number' },
     ], { ok: 'Apply' });
@@ -7111,7 +7119,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'slide-icons': () => {
     const b = document.querySelector<HTMLElement>('#ribbon [data-cmd="slide-icons"]:not([hidden])');
     const anchor = b && b.offsetParent ? b : document.querySelector<HTMLElement>('#ribbon .rb-tabs')!;
-    shapeMenu.show(anchor, 'Click an icon, then click or drag on the slide. Change its colour in the Style panel.', (id) => { finishTyping(); editor.setTool(`geo:${id}`); }, 'icons');
+    shapeMenu.show(anchor, 'Click an icon, then click or drag on the slide. Change its color in the Style panel.', (id) => { finishTyping(); editor.setTool(`geo:${id}`); }, 'icons');
   },
   'design-shapes': () => { if (ws.active.mode === 'design') { lib.showTab('shapes'); lib.focusSearch(); } else flash('Shapes are in Design mode: use File > New > Design.'); },
   'design-icons': () => { if (ws.active.mode === 'design') { lib.showTab('icons'); lib.focusSearch(); } else flash('Icons are in Design, Presentation and Document modes.'); },
@@ -7394,7 +7402,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'touch-mode-on': () => { setTouchMode('on'); storeSettings(); },
   'touch-mode-off': () => { setTouchMode('off'); storeSettings(); },
   'atom-keypad': () => {
-    if (!touchOn()) { flash('The atom keypad is part of Touch Mode: View > Window and Colours > Touch Mode > On.'); return; }
+    if (!touchOn()) { flash('The atom keypad is part of Touch Mode: View > Window and Colors > Touch Mode > On.'); return; }
     showKeypad(!keypadShowing());
     $('[data-cmd="atom-keypad"]')?.setAttribute('aria-checked', String(keypadShowing()));
   },
@@ -7436,7 +7444,7 @@ const COMMANDS: Record<string, () => unknown> = {
   about: () => void appVersion().then((v) => ask('About Chem Illustrator', [], {
     noCancel: true,
     note: `${STAGE_NOTE} Version ${v === 'web' ? 'for the browser' : v} (${STAGE.toLowerCase()}). Free software under the GNU General Public License, version 3: `
-      + 'see the licence and the source on GitHub (github.com/nathanohare/Chem-Illustrator). ChemDraw is a trademark of Revvity Signals; '
+      + 'see the license and the source on GitHub (github.com/nathanohare/Chem-Illustrator). ChemDraw is a trademark of Revvity Signals; '
       + 'Chem Illustrator is not made by or affiliated with Revvity Signals.',
   })),
   'report-problem': () => feedback.open('problem'),
@@ -7476,13 +7484,13 @@ const COMMANDS: Record<string, () => unknown> = {
     const r = editor.ringShadow();
     flash(!r ? 'Select filled rings (or their structure) first: Fill Rings fills them.' : r === 'on' ? 'Ring fills have a drop shadow. Change its size in the Style panel.' : 'Ring fill shadows off.', 5000);
   },
-  'highlight': () => editor.highlight(highlightColour, highlightStyle) ? flash('Highlighted. Change the colour with Highlight in the Style panel.', 5000) : flash('Select the atoms and bonds to highlight.'),
+  'highlight': () => editor.highlight(highlightColour, highlightStyle) ? flash('Highlighted. Change the color with Highlight in the Style panel.', 5000) : flash('Select the atoms and bonds to highlight.'),
   'remove-highlight': () => editor.highlight(undefined) || flash('Select the atoms and bonds to take the highlight off.'),
   'smooth-highlight': () => toggleHighlight('smooth', 'Round highlights smoothed: one even band, with no disc at each atom. Straight highlights are always one band.', 'Round highlights back to a disc at each atom.'),
-  'centre-highlight': () => toggleHighlight('centre', 'Highlight centred between the lines of the double bonds (and inside rings drawn with their double bonds inside).', 'Highlight back on the bonds.'),
+  'centre-highlight': () => toggleHighlight('centre', 'Highlight centered between the lines of the double bonds (and inside rings drawn with their double bonds inside).', 'Highlight back on the bonds.'),
   'soft-highlight': () => toggleHighlight('soft', 'Soft edges on. Choose how much fades, and which way, under Soft edges in the Style panel.', 'Sharp edges.'),
-  'shadow-highlight': () => toggleHighlight('shadow', 'Highlight shadow on. Change its colour, direction and blur under Shadow in the Style panel.', 'No highlight shadow.'),
-  'glow-highlight': () => toggleHighlight('glow', 'Glow on. Change its colour and size under Glow in the Style panel.', 'No glow.'),
+  'shadow-highlight': () => toggleHighlight('shadow', 'Highlight shadow on. Change its color, direction and blur under Shadow in the Style panel.', 'No highlight shadow.'),
+  'glow-highlight': () => toggleHighlight('glow', 'Glow on. Change its color and size under Glow in the Style panel.', 'No glow.'),
   'outline-highlight': () => toggleHighlight('outline', 'Outline only: no fill, a line round the highlight. Change the line under Outline in the Style panel.', 'Filled highlight.'),
   'highlight-look': () => void chooseHighlightLook(),
   'select-highlight': () => {
@@ -8316,7 +8324,7 @@ async function chooseHighlightLook(): Promise<void> {
   const looks = allLooks();
   const got = await ask('Highlight look', [
     { name: 'look', label: 'Look', value: '0', options: looks.map((l, i) => ({ value: String(i), label: i >= BUILT_IN_LOOKS.length ? `${l.name} (yours)` : l.name })) },
-  ], { ok: 'Use', note: 'The ready-made looks keep the highlight\'s colour; your own looks have their colour too. Save the look of a highlight you have set up with Chemistry > Highlight and Fill > Save Highlight Look.' });
+  ], { ok: 'Use', note: 'The ready-made looks keep the highlight\'s color; your own looks have their color too. Save the look of a highlight you have set up with Chemistry > Highlight and Fill > Save Highlight Look.' });
   const look = got && looks[Number(got.look)];
   if (look) applyHighlightLook(look);
 }
@@ -8334,7 +8342,7 @@ async function saveHighlightLook(): Promise<void> {
   if (!h) { flash('Select a highlight that looks the way you want first.'); return; }
   const got = await ask('Save highlight look', [
     { name: 'name', label: 'Name', value: '', placeholder: 'for example Reacting bonds' },
-    { name: 'colour', label: 'Keep its colour too', value: 'true', type: 'checkbox' },
+    { name: 'colour', label: 'Keep its color too', value: 'true', type: 'checkbox' },
   ], { ok: 'Save', note: 'It is offered in Chemistry > Highlight and Fill > Highlight Look, in the Style panel and in the Highlight toolbox, in every drawing.' });
   const name = got?.name.trim();
   if (!got || !name) return;
@@ -8723,7 +8731,7 @@ async function drawingPreferences(): Promise<void> {
       help: 'Only the look: the bonds stay as drawn for SMILES and saving. Chemistry ▸ Structure ▸ Kekulé Form for η Ligand switches one back.' },
     { name: 'aidAngle', label: 'Show the angle beside the pointer while drawing bonds, arrows and lines', type: 'checkbox', value: String(editor.aids.angle) },
     { name: 'aidLength', label: 'Show the length there too', type: 'checkbox', value: String(editor.aids.length),
-      help: 'In the rulers\' units (inches or centimetres).' },
+      help: 'In the rulers\' units (inches or centimeters).' },
     { name: 'aidLook', label: 'How the angle and hints look', value: editor.aids.look, options: [{ value: 'plain', label: 'Plain blue words' }, { value: 'box', label: 'Blue words on a pale box' }, { value: 'solid', label: 'White words on a blue box' }] },
     { name: 'aidHints', label: 'Show what Shift, Alt and Ctrl do beside the pointer', type: 'checkbox', value: String(editor.aids.hints),
       help: 'While dragging, the keys that change what the tool does are listed in blue (the one held in bold). With the button up they show as a key is held.' },
@@ -8763,7 +8771,7 @@ async function generalPreferences(): Promise<void> {
     { name: 'linkSide', label: 'Text linked to a structure goes', value: linkSide, options: [{ value: 'keep', label: 'Where it is' }, { value: 'below', label: 'Below' }, { value: 'above', label: 'Above' }, { value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }] },
     { name: 'ask', label: 'Ask before changing every structure on the page when nothing is selected', type: 'checkbox', value: String(askWholeDrawing) },
     { name: 'matchStructure', label: 'New bonds match the structure they\'re added to', type: 'checkbox', value: String(matchStructure.on),
-      help: 'Bonds, rings and chains added to a structure take its own bond length, line widths and colours, so a structure drawn with other settings stays consistent. Off: they always take the document\'s drawing settings.' },
+      help: 'Bonds, rings and chains added to a structure take its own bond length, line widths and colors, so a structure drawn with other settings stays consistent. Off: they always take the document\'s drawing settings.' },
     { name: 'straightenLinear', label: 'Straighten alkynes and allenes when a bond becomes triple', type: 'checkbox', value: String(straightenLinear.on),
       help: 'Making a bond triple (or giving an allene carbon its second double bond) swings the smaller side round so the sp carbon\'s two bonds lie in a straight line. Off: atoms stay where they are. New bonds always go straight on.' },
     { name: 'convertChemDraw', label: 'Redraw ChemDraw objects in Word files as they open', type: 'checkbox', value: String(!!docRead.convertChemDraw),
@@ -8958,7 +8966,7 @@ function settingsTransfer(): void {
   const d = document.createElement('dialog');
   d.className = 'ask settings-transfer';
   d.innerHTML = `<h2>Import and Export Settings</h2>
-    <p class="muted">One file holds every setting: hotkeys, toolboxes (and what is in them), preferences, your templates, nicknames, drawing styles, colour palettes, slide themes and highlight looks. Export it to keep a copy, or to set up another computer or a new install the same way; Import uses one. Recent files stay on each computer.</p>
+    <p class="muted">One file holds every setting: hotkeys, toolboxes (and what is in them), preferences, your templates, nicknames, drawing styles, color palettes, slide themes and highlight looks. Export it to keep a copy, or to set up another computer or a new install the same way; Import uses one. Recent files stay on each computer.</p>
     <div class="ask-buttons"><button type="button" data-act="export">Export Settings…</button><button type="button" data-act="import">Import Settings…</button><button type="button" class="primary" data-act="close">Close</button></div>
     <p class="muted small" aria-live="polite"></p>`;
   const say = (t: string) => { d.querySelector('p.small')!.textContent = t; };
@@ -9736,7 +9744,7 @@ async function runAnalysis(force: boolean): Promise<void> {
 async function setStereoGroup(): Promise<void> {
   const sel = [...editor.sel.atoms].map((id) => doc.atoms.get(id)).filter((a): a is Atom => !!a);
   const centres = sel.filter((a) => live.atom(a.id) || a.enhStereo);
-  if (!centres.length) { flash(sel.length ? 'None of the selected atoms is a stereocentre.' : 'Select the stereocentres to group first.'); return; }
+  if (!centres.length) { flash(sel.length ? 'None of the selected atoms is a stereocenter.' : 'Select the stereocenters to group first.'); return; }
   // the next free group number in these structures, for each kind
   const used = { and: new Set<number>(), or: new Set<number>() };
   for (const a of centres) for (const id of doc.fragmentOf(a.id)) {
@@ -9753,7 +9761,7 @@ async function setStereoGroup(): Promise<void> {
       { value: 'none', label: 'None' },
     ] },
     { name: 'group', label: 'Number', value: String(first && first.type !== 'abs' ? first.group ?? 1 : free(first?.type === 'or' ? 'or' : 'and')), type: 'number' },
-  ], { ok: 'Set', note: `${centres.length} stereocentre${centres.length === 1 ? '' : 's'}. Centres with the same group and number change together: &1 centres are a racemic pair, or1 centres are one unknown enantiomer.` });
+  ], { ok: 'Set', note: `${centres.length} stereocenter${centres.length === 1 ? '' : 's'}. Centers with the same group and number change together: &1 centers are a racemic pair, or1 centers are one unknown enantiomer.` });
   if (!got) return;
   const type = got.type as 'abs' | 'and' | 'or' | 'none';
   const group = Math.max(1, Math.round(Number(got.group) || 1));
@@ -9838,7 +9846,7 @@ async function rGroupTable(): Promise<void> {
   placeTable(t, 'R-group table', top);
   const bad = masses.filter((m) => !m).length;
   flash(cols.formula && bad
-    ? `Made the table. ${bad} compound${bad === 1 ? '\'s' : 's\''} formula couldn't be worked out (a group left empty or not recognised), shown as ?. Double-click a cell to type it in.`
+    ? `Made the table. ${bad} compound${bad === 1 ? '\'s' : 's\''} formula couldn't be worked out (a group left empty or not recognized), shown as ?. Double-click a cell to type it in.`
     : 'Made the table. Double-click any cell to change it; the Style panel has its rows, columns and lines.', 8000);
 }
 
@@ -9885,7 +9893,7 @@ function toggleStereoLabels(): void {
   const labelled = [...atoms].filter((id) => live.atom(id)).map((id) => doc.atoms.get(id)!);
   const labelledB = [...bonds].filter((id) => live.bond(id)).map((id) => doc.bonds.get(id)!);
   if (!labelled.length && !labelledB.length) {
-    flash(chem.ready ? 'No stereocentres or E/Z double bonds here.' : 'The chemistry engine is still loading.');
+    flash(chem.ready ? 'No stereocenters or E/Z double bonds here.' : 'The chemistry engine is still loading.');
     return;
   }
   const show = ![...labelled, ...labelledB].every((x) => x.showStereo || x.stereoLabel);
@@ -10137,10 +10145,10 @@ const stylePanel = new StylePanel($('#style-section'), $('#style-body'), doc, ()
 stylePanel.onEditChart = (id) => void editChartShape(id);
 stylePanel.turnable = () => editor.textFirst;
 stylePanel.onEditMedia = (id) => void editMediaShape(id);
-stylePanel.pickShape = (anchor, pick) => shapeMenu.show(anchor, 'Click a shape: the one selected changes to it, keeping its size, colours and text.', pick);
+stylePanel.pickShape = (anchor, pick) => shapeMenu.show(anchor, 'Click a shape: the one selected changes to it, keeping its size, colors and text.', pick);
 stylePanel.onEditEquation = (id) => void editEquationShape(id);
 stylePanel.onEquationColour = (ids, color) => {
-  doc.edit('Equation colour', () => {
+  doc.edit('Equation color', () => {
     for (const id of ids) {
       const s = doc.shapes.get(id);
       if (!s?.math) continue;
@@ -10460,7 +10468,7 @@ function showDark(on: boolean): void {
 async function darkColours(): Promise<void> {
   const all = (): DarkPalette[] => [...DARK_PALETTES, ...dark.own];
   const cur = darkPaletteNamed(dark.palette, dark.own);
-  const got = await ask('Dark page colours', [
+  const got = await ask('Dark page colors', [
     { name: 'palette', label: 'Palette', value: cur.name, options: [...all().map((p) => ({ value: p.name, label: dark.own.includes(p) ? `${p.name} (yours)` : p.name }))] },
     { name: 'paper', label: 'Paper shows as', value: cur.paper, type: 'color' },
     { name: 'ink', label: 'Black ink shows as', value: cur.ink, type: 'color' },
@@ -10469,7 +10477,7 @@ async function darkColours(): Promise<void> {
     const base = darkPaletteNamed(v.palette, dark.own);
     const untouched = v.paper === cur.paper && v.ink === cur.ink;
     return readingPreview(untouched ? base : { name: '', paper: v.paper || base.paper, ink: v.ink || base.ink }, doc.style);
-  } }, note: 'Only the screen changes: files, printing, copying and exports keep their white paper and black ink. The colours shown are the palette in use now: pick another palette and leave them alone to use it as it is, or change them (and give a name) to keep your own.' });
+  } }, note: 'Only the screen changes: files, printing, copying and exports keep their white paper and black ink. The colors shown are the palette in use now: pick another palette and leave them alone to use it as it is, or change them (and give a name) to keep your own.' });
   if (!got) return;
   const base = darkPaletteNamed(got.palette, dark.own);
   // colours left as they were mean "this palette as it is"
@@ -10736,7 +10744,7 @@ function looksList(vertical: boolean): HTMLElement {
     dot.style.background = look.colour ?? 'transparent';
     if (!look.colour) dot.classList.add('keeps');
     b.append(dot, look.name);
-    b.title = `${look.name}${look.colour ? '' : ' (keeps the highlight\'s colour)'}`;
+    b.title = `${look.name}${look.colour ? '' : ' (keeps the highlight\'s color)'}`;
     b.addEventListener('click', () => { finishTyping(); applyHighlightLook(look); });
     box.append(b);
   }
@@ -10745,7 +10753,7 @@ function looksList(vertical: boolean): HTMLElement {
 
 /** The toolboxes' names, as they come. */
 const BOX_TITLES: Record<string, string> = {
-  main: 'Drawing Tools', structure: 'Structure', arrange: 'Object', templates: 'Templates', colours: 'Colours', highlight: 'Highlight', text: 'Text Formatting', guides: 'Guides', custom: 'My Toolbox', details: 'Side Panel',
+  main: 'Drawing Tools', structure: 'Structure', arrange: 'Object', templates: 'Templates', colours: 'Colors', highlight: 'Highlight', text: 'Text Formatting', guides: 'Guides', custom: 'My Toolbox', details: 'Side Panel',
 };
 /** What the toolboxes of buttons come with ("cmd:", "tool:", "pal:", "w:looks", "sep"). */
 const cmds = (list: (string | null)[]) => list.map((c) => (c ? `cmd:${c}` : 'sep'));
@@ -10758,7 +10766,7 @@ const BOX_ITEMS: Record<string, readonly string[]> = {
 };
 /** Short names on toolbox buttons for commands with no icon. */
 const SHORT_LABEL: Record<string, string> = {
-  'smooth-highlight': 'Smooth', 'centre-highlight': 'Centre', 'soft-highlight': 'Soft', 'outline-highlight': 'Outline only',
+  'smooth-highlight': 'Smooth', 'centre-highlight': 'Center', 'soft-highlight': 'Soft', 'outline-highlight': 'Outline only',
   'shadow-highlight': 'Shadow', 'glow-highlight': 'Glow', 'save-highlight-look': 'Save look…',
 };
 
@@ -10853,7 +10861,7 @@ const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => vo
     // in Highlight mode, the saved looks too
     const looks = looksList(vertical);
     looks.hidden = colourMode !== 'highlight';
-    for (const [m, label, title] of [['line', 'Colour', 'Colour the lines and text'], ['highlight', 'Highlight', 'A band of colour behind atoms and bonds'], ['fill', 'Fill', 'Fill shapes and ring fills']] as const) {
+    for (const [m, label, title] of [['line', 'Color', 'Color the lines and text'], ['highlight', 'Highlight', 'A band of color behind atoms and bonds'], ['fill', 'Fill', 'Fill shapes and ring fills']] as const) {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = label;
@@ -10869,10 +10877,10 @@ const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => vo
       b.type = 'button';
       b.className = 'tb-swatch';
       if (c) b.style.background = c; else { b.textContent = '∅'; b.style.fontSize = '11px'; }
-      b.title = c ? c.toUpperCase() : 'None: take the colour, highlight or fill off';
+      b.title = c ? c.toUpperCase() : 'None: take the color, highlight or fill off';
       b.setAttribute('aria-label', b.title);
       b.addEventListener('click', () => {
-        if (!editor.colourSelection(c, colourMode)) flash('Select what to colour first.');
+        if (!editor.colourSelection(c, colourMode)) flash('Select what to color first.');
         else if (colourMode === 'highlight' && c) highlightColour = c;
       });
       return b;
@@ -11380,11 +11388,11 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
   { id: 'typing', title: 'Text and Spelling', words: 'typing spelling dictionary autocorrect replacements chemistry formulas subscripts', open: () => typingDialog.open() },
-  { id: 'palettes', title: 'Colour Palettes', words: 'colours colors palette rows', open: () => editPalettes() },
-  { id: 'mode-colours', title: 'Mode Colours', words: 'tab colours accent window drawing slides sheet document design appearance', open: () => modeDialog.open() },
+  { id: 'palettes', title: 'Color Palettes', words: 'colors colors palette rows', open: () => editPalettes() },
+  { id: 'mode-colours', title: 'Mode Colors', words: 'tab colors accent window drawing slides sheet document design appearance', open: () => modeDialog.open() },
   { id: 'navigation', title: 'Navigation', words: 'navigator minimap map overview edge arrows off screen lost find dot grid dots tint outside fit go to selection orientation zoom', open: navigationSettings },
-  { id: 'page-grid', title: 'Page Grid', words: 'pages page grid boundaries dashed dotted lines paper fixed edges hatched wall empty grey print chemdraw paste wrap', open: pageGridSettings },
-  { id: 'dark', title: 'Dark Page', words: 'dark mode night paper ink graphite slate appearance colours', open: darkColours },
+  { id: 'page-grid', title: 'Page Grid', words: 'pages page grid boundaries dashed dotted lines paper fixed edges hatched wall empty gray print chemdraw paste wrap', open: pageGridSettings },
+  { id: 'dark', title: 'Dark Page', words: 'dark mode night paper ink graphite slate appearance colors', open: darkColours },
   { id: 'schemes', title: 'Schemes', words: 'scheme arrow gap plus text reagents conditions boxes', open: schemeSettings },
   { id: 'autosave', title: 'AutoSave and Recovery', words: 'autosave recovery versions backup copies shared folders onedrive', open: () => keeper.optionsCommand() },
   { id: 'ai', title: 'AI Model', words: 'ai artificial intelligence claude anthropic chatgpt gpt openai gemini google ollama openrouter api key llm model link connect', open: () => aiSettings() },
@@ -11634,7 +11642,7 @@ async function pageGridSettings(): Promise<void> {
       help: 'On screen only. Off: the endless drawing with nothing fixed. The paper size and fixed edges are in File > Page Setup.' },
     { name: 'lineStyle', label: 'Page boundaries', value: o.lineStyle, options: [{ value: 'dashed', label: 'Dashed' }, { value: 'dotted', label: 'Dotted' }, { value: 'solid', label: 'Solid' }] },
     { name: 'lineWidth', label: 'Boundary thickness', value: String(o.lineWidth), options: [0.5, 1, 1.5, 2, 3].map((v) => ({ value: String(v), label: `${v} px` })) },
-    { name: 'lineColour', label: 'Boundary colour', value: o.lineColour, type: 'color' },
+    { name: 'lineColour', label: 'Boundary color', value: o.lineColour, type: 'color' },
     { name: 'lineOpacity', label: 'Boundary strength', value: String(o.lineOpacity), options: [[0.2, 'Very faint'], [0.35, 'Faint'], [0.55, 'Light'], [0.8, 'Strong'], [1, 'Solid']].map(([v, l]) => ({ value: String(v), label: `${l} (${Math.round(Number(v) * 100)}%)` })) },
     { name: 'emptyShade', label: 'Pages with nothing on them', value: o.emptyShade, options: shade },
     { name: 'outsideShade', label: 'The space round the pages', value: o.outsideShade, options: shade },

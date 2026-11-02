@@ -55,7 +55,7 @@ const heading = (text: string) => {
 /** The theme's colours (ten columns with their shades) for the top of a colour menu. */
 export function themeColourGrid(theme: WorkbookTheme, pick: (c: string) => void): HTMLElement {
   const box = document.createElement('div');
-  box.append(heading('Theme Colours'));
+  box.append(heading('Theme Colors'));
   const grid = document.createElement('div');
   grid.className = 'colour-grid theme-grid';
   const cols = themePalette(theme);
@@ -73,7 +73,7 @@ export function themeColourGrid(theme: WorkbookTheme, pick: (c: string) => void)
       grid.append(b);
     }
   }
-  box.append(grid, heading('Standard Colours'));
+  box.append(grid, heading('Standard Colors'));
   return box;
 }
 
@@ -211,7 +211,7 @@ export class SheetLook {
   }
 
   coloursMenu(x: number, y: number): void {
-    this.themeGallery(x, y, 'Colours', (t) => mixTheme(this.theme, t, null), (t) => this.setTheme(mixTheme(this.theme, t, null), `Theme colours: ${t.name}`));
+    this.themeGallery(x, y, 'Colors', (t) => mixTheme(this.theme, t, null), (t) => this.setTheme(mixTheme(this.theme, t, null), `Theme colors: ${t.name}`));
   }
 
   fontsMenu(x: number, y: number): void {
