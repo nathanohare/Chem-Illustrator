@@ -8,7 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { Doc } from '../src/model';
 import { plainMeasure } from '../src/chem/reaction';
 import { CYCLE_PRESETS, buildCycle } from '../src/chem/cycles';
-import { arrangeSmart, cleanSmart, insertSlot, makeSmart, markupRuns, moveSlot, readSmart, refitSmart, removeSlot, runsMarkup, setSlotText, setStepText, slotName, smartFrameOf, smartMarks, ungroupSmart } from '../src/chem/smart-scheme';
+import { arrangeSmart, cleanSmart, fillHolder, fillHoldersDrawn, holderToSlotText, insertSlot, makeSmart, markupRuns, moveSlot, readSmart, refitSmart, removeSlot, runsMarkup, setSlotRuns, setSlotText, setStepRuns, setStepText, slotName, slotToHolder, smartFrameOf, smartMarks, ungroupSmart } from '../src/chem/smart-scheme';
 import { chemRuns } from '../src/text/chemtext';
 import { plainText } from '../src/richtext';
 import { writeCdxml } from '../src/io/cdxml-write';
@@ -250,5 +250,82 @@ describe('Smart Schemes', () => {
       const runs = markupRuns(t);
       expect(runsMarkup(runs), t).toBe(t);
     }
+  });
+
+  it('takes formatted text from the species list as it is, without working the chemistry out again', () => {
+    const { doc, m, id } = line();
+    doc.edit('t', () => setSlotRuns(doc, m, id, 0, [{ text: 'Step 2' }, { text: 'a', sup: true }]));
+    const c = doc.captions.get(readSmart(doc, m, id)!.slots[0].caption!)!;
+    expect(c.runs.map((r) => [r.text, !!r.sub, !!r.sup])).toEqual([['Step 2', false, false], ['a', false, true]]);
+    // a plain 2 after a letter stays plain when it was typed so
+    doc.edit('t', () => setStepRuns(doc, m, id, 1, 'below', [{ text: ' H2O ' }]));
+    const read = readSmart(doc, m, id)!;
+    const below = doc.captions.get(read.links[1].below[0].caption!)!;
+    expect(below.runs.map((r) => r.text)).toEqual(['H2O']);
+  });
+
+  it('turns a species into a dashed box to draw in, and back to its text', () => {
+    const { doc, m, id } = line();
+    let box: number | null = null;
+    doc.edit('s', () => { box = slotToHolder(doc, m, id, 1); });
+    expect(box).not.toBeNull();
+    const sh = doc.shapes.get(box!)!;
+    expect(sh.dashed).toBe(true);
+    expect(plainText(sh.holder!.runs!)).toBe('ArAr′');
+    const read = readSmart(doc, m, id)!;
+    expect(read.slots.length).toBe(3);
+    expect(read.slots[1].holder).toBe(box);
+    expect(slotName(doc, read.slots[1])).toMatch(/draw or paste/);
+    // the steps lead to and from the box
+    expect(read.links[0].to).toBe(1);
+    expect(read.links[1].from).toBe(1);
+    doc.edit('t', () => { holderToSlotText(doc, m, id, 1); });
+    expect(doc.shapes.has(box!)).toBe(false);
+    expect(names(doc, m, id)).toEqual(['ArBr', 'ArAr′', 'ArCHO']);
+  });
+
+  it('a structure pasted into the box becomes that species', () => {
+    const { doc, m, id } = line();
+    let box = 0;
+    doc.edit('s', () => { box = slotToHolder(doc, m, id, 1)!; });
+    const src = new Doc();
+    src.edit('d', () => { const a = src.addAtom(0, 0), b = src.addAtom(26, 15), c = src.addAtom(52, 0); src.addBond(a.id, b.id, 1); src.addBond(b.id, c.id, 1); });
+    doc.edit('p', () => {
+      const sh = doc.shapes.get(box)!;
+      const got = insertDrawing(doc, src, { x: (sh.x1 + sh.x2) / 2, y: (sh.y1 + sh.y2) / 2 });
+      expect(fillHolder(doc, m, box, [...got.atoms])).toBe(true);
+    });
+    expect(doc.shapes.has(box)).toBe(false);
+    const read = readSmart(doc, m, id)!;
+    expect(read.slots.length).toBe(3);
+    expect(read.slots[1].items[0].atoms.length).toBe(3);
+    expect(names(doc, m, id)).toEqual(['ArBr', 'Structure', 'ArCHO']);
+    expect(read.links.map((l) => [l.from, l.to])).toEqual([[0, 1], [1, 2]]);
+  });
+
+  it('atoms drawn inside the box become that species, where they were drawn', () => {
+    const { doc, m, id } = line();
+    let box = 0;
+    doc.edit('s', () => { box = slotToHolder(doc, m, id, 1)!; });
+    doc.beforeCommit = (before) => fillHoldersDrawn(doc, before, m);
+    const sh = doc.shapes.get(box)!;
+    const cx = (sh.x1 + sh.x2) / 2, cy = (sh.y1 + sh.y2) / 2;
+    let first = 0;
+    doc.edit('bond', () => { const a = doc.addAtom(cx - 13, cy), b = doc.addAtom(cx + 13, cy); doc.addBond(a.id, b.id, 1); first = a.id; });
+    expect(doc.shapes.has(box)).toBe(false);
+    expect(doc.atoms.get(first)!.x).toBeCloseTo(cx - 13);
+    expect(smartFrameOf(doc, 'atom', first)).toBe(id);
+    expect(readSmart(doc, m, id)!.slots[1].items[0].atoms).toContain(first);
+  });
+
+  it('keeps a dashed species box when saved to CDXML', () => {
+    const { doc, m, id } = line();
+    doc.edit('s', () => { slotToHolder(doc, m, id, 2); });
+    const back = readCdxml(writeCdxml(doc)).doc;
+    const frame = [...back.shapes.values()].find((x) => x.smart)!;
+    const read = readSmart(back, plainMeasure(back), frame.id)!;
+    expect(read.slots.length).toBe(3);
+    expect(read.slots[2].holder).toBeDefined();
+    expect(plainText(back.shapes.get(read.slots[2].holder!)!.holder!.runs!)).toBe('ArCHO');
   });
 });

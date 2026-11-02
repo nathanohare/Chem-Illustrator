@@ -182,7 +182,7 @@ export const COMMAND_NAMES: Record<string, string> = {
   'name-to-structure': 'Name to Structure…',
   'sequence-to-structure': 'Structure from Sequence…',
   'ui-scale-in': 'Interface size larger (menus, ribbons, toolboxes)', 'ui-scale-out': 'Interface size smaller', 'ui-scale-reset': 'Interface size back to 100%',
-  'zoom-in': 'Zoom in', 'zoom-out': 'Zoom out', 'zoom-fit': 'Fit the drawing in the window', 'zoom-selection': 'Go to Selection', 'zoom-actual': 'Actual size', navigator: 'Navigator (on or off)', 'edge-arrows': 'Edge Arrows (on or off)', 'dot-grid': 'Dot Grid (on or off)', 'outside-tint': 'Tint Outside the Drawing (on or off)', 'navigation-settings': 'Navigation Settings…', 'page-grid': 'Page Grid (on or off)', 'page-grid-settings': 'Page Grid Settings…',
+  'zoom-in': 'Zoom in', 'zoom-out': 'Zoom out', 'zoom-fit': 'Fit the drawing in the window', 'zoom-selection': 'Go to Selection', 'zoom-actual': 'Actual size', navigator: 'Document Map (on or off)', 'edge-arrows': 'Edge Arrows (on or off)', 'dot-grid': 'Dot Grid (on or off)', 'outside-tint': 'Tint Outside the Drawing (on or off)', 'navigation-settings': 'Navigation Settings…', 'page-grid': 'Page Grid (on or off)', 'page-grid-settings': 'Page Grid Settings…',
   hotkeys: 'Hotkeys…', 'typing-spelling': 'Typing and Spelling…', 'mode-colours': 'Mode Colors…', 'edit-palettes': 'Color Palettes…', preferences: 'Settings…',
   'new-slides': 'New presentation', 'close-tab': 'Close the file', 'next-tab': 'Next file', 'prev-tab': 'Previous file',
   'export-pdf': 'Export PDF…', 'insert-picture': 'Insert a picture…', 'import-pdf': 'Import Structures from PDF…', 'import-picture': 'Import Structures from Picture…', 'import-paste': 'Paste Picture as Structure', crop: 'Crop the selected picture',

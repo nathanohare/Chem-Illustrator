@@ -77,23 +77,23 @@ Text on canvases, slides and documents is spell-checked, and a second check catc
 
 ## Dark mode
 
-The eye button shows the page dark on screen, with your structures in light ink. Files, printing and copies keep their white paper. Choose Graphite, Slate or Warm dark, or mix your own in **View ▸ Window and Colours ▸ Dark Page Colours**.
+The eye button shows the page dark on screen, with your structures in light ink. Files, printing and copies keep their white paper. Choose Graphite, Slate or Warm dark, or mix your own in **View ▸ Window and Colours ▸ Reading Mode Colours**.
 
-![Turning the dark page on, then switching its colours between palettes](docs/images/dark-mode.gif)
+![Turning Reading Mode on, then switching its colours between palettes](docs/images/dark-mode.gif)
 
 The interface itself follows your system's dark setting in every mode, as in the screenshots on this page.
 
 ## Getting round a big drawing
 
-Right-drag or middle-drag to pan, Ctrl+wheel to zoom in on the spot under the pointer, and Shift+wheel to scroll sideways. A small navigator map in the corner shows where you are in the whole drawing.
+Right-drag or middle-drag to pan, Ctrl+wheel to zoom in on the spot under the pointer, and Shift+wheel to scroll sideways. A small Document Map in the corner shows where you are in the whole drawing.
 
 ![Panning a long route with the right and middle mouse buttons, zooming at the pointer with Ctrl+wheel and scrolling sideways with Shift+wheel, with the keys and buttons shown as they are pressed](docs/images/navigation.gif)
 
 ## Make it yours
 
-Every hotkey can be changed (**Edit ▸ Hotkeys**), and the hotkeys can be exported and shared. Toolboxes unlock to dock on any edge or float anywhere, and **Customize Toolboxes** rearranges any of them (or new ones of your own) by dragging icons about, as on a phone's home screen. The dark page colours, each mode's accent colour, the scheme spacing, your own templates, nicknames and drawing styles are all settings, kept in one file you can export and import on another computer.
+Every hotkey can be changed (**Edit ▸ Hotkeys**), and the hotkeys can be exported and shared. Toolboxes unlock to dock on any edge or float anywhere, and **Customize Toolboxes** rearranges any of them (or new ones of your own) by dragging icons about, as on a phone's home screen. The Reading Mode colours, each mode's accent colour, the scheme spacing, your own templates, nicknames and drawing styles are all settings, kept in one file you can export and import on another computer.
 
-![Toolboxes moved to new places, the dark page in Slate colours, and the Hotkeys window open](docs/images/customize.png)
+![Toolboxes moved to new places, Reading Mode in Slate colours, and the Hotkeys window open](docs/images/customize.png)
 
 ## Presentations, spreadsheets, documents and designs
 

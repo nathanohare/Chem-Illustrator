@@ -7,7 +7,9 @@
 import type { Doc } from '../model';
 import type { Rect } from '../geom';
 import type { Measure } from '../editor/arrange';
-import { readSmart, runsMarkup, slotName, stepText, SMART_LAYOUTS, type SmartData, type SmartLayout, type StepPart } from '../chem/smart-scheme';
+import { readSmart, slotName, SMART_LAYOUTS, type SmartData, type SmartLayout, type SmartLink, type StepPart, type TextPart } from '../chem/smart-scheme';
+import type { TextRun } from '../model';
+import { RichField } from './rich-field';
 
 export interface SmartPaneHooks {
   doc(): Doc;
@@ -18,8 +20,14 @@ export interface SmartPaneHooks {
   screenRect(r: Rect): Rect;
   /** Where the drawing shows on the screen (the pane keeps inside it). */
   area(): Rect;
-  slotText(id: number, k: number, text: string): void;
-  stepText(id: number, k: number, part: StepPart, text: string): void;
+  slotRuns(id: number, k: number, parts: TextPart[]): void;
+  stepRuns(id: number, k: number, part: StepPart, parts: TextPart[]): void;
+  /** Make species k a dashed box to draw or paste its structure in. */
+  toStructure(id: number, k: number): void;
+  /** Make species k's dashed box a text label again. */
+  toText(id: number, k: number): void;
+  /** Select a dashed species box on the page (a paste then goes into it). */
+  selectHolder(shape: number): void;
   add(id: number, after: number): void;
   remove(id: number, k: number): void;
   move(id: number, from: number, to: number): void;
@@ -37,12 +45,42 @@ const ICONS: Record<SmartLayout, string> = {
 
 let folded = false;
 
+/** Chemical interpretation of what is typed in the rows (remembered between uses). */
+let chemOn = (() => { try { return localStorage.getItem('smartPaneChem') !== 'off'; } catch { return true; } })();
+
+/** The symbols the Ω button offers, with their names. */
+const SYMBOLS: [string, string][] = [
+  ['α', 'alpha'], ['β', 'beta'], ['γ', 'gamma'], ['δ', 'delta'], ['ε', 'epsilon'], ['η', 'eta'], ['θ', 'theta'], ['κ', 'kappa'],
+  ['λ', 'lambda'], ['μ', 'mu'], ['ν', 'nu'], ['π', 'pi'], ['σ', 'sigma'], ['τ', 'tau'], ['φ', 'phi'], ['χ', 'chi'],
+  ['ψ', 'psi'], ['ω', 'omega'], ['Δ', 'Delta (heat)'], ['Σ', 'Sigma'], ['Ω', 'Omega'], ['→', 'arrow'], ['⇌', 'equilibrium'], ['↑', 'gas given off'],
+  ['↓', 'precipitate'], ['⊕', 'circled plus'], ['⊖', 'circled minus'], ['+', 'plus'], ['−', 'minus'], ['±', 'plus or minus'], ['·', 'middle dot'], ['×', 'times'],
+  ['≡', 'triple bond'], ['≈', 'about'], ['″', 'double prime'], ['‰', 'per mille'], ['℃', 'degrees Celsius'], ['Å', 'ångström'], ['ħ', 'h-bar'], ['ν̃', 'wavenumber'],
+];
+
+/** Caption runs as the pieces a row shows. */
+const runParts = (runs: TextRun[]): TextPart[] => runs.map((r) => ({ text: r.text, ...(r.sub ? { sub: true } : r.sup ? { sup: true } : {}) }));
+
+/** The first text box of a step's conditions above or below its arrow (or its name inside a cycle), as pieces. */
+function stepParts(doc: Doc, l: SmartLink, part: StepPart): TextPart[] {
+  const it = l[part].find((x) => x.caption !== undefined);
+  const c = it ? doc.captions.get(it.caption!) : undefined;
+  return c ? runParts(c.runs) : [];
+}
+
+const HEXAGON = '<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 L13.6 4.75 L13.6 11.25 L8 14.5 L2.4 11.25 L2.4 4.75 Z" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>';
+
 export class SmartPane {
   private el: HTMLDivElement;
   private shown: number | null = null;
   /** What the rows were drawn from, so they are drawn again only when the scheme changes. */
   private drawnFor = '';
   private dragFrom: number | null = null;
+  /** The row last typed in (the formatting bar works on it), by its key. */
+  private active: RichField | null = null;
+  private activeKey = '';
+  private fields = new Map<string, RichField>();
+  private bar: HTMLDivElement | null = null;
+  private symbols = false;
 
   constructor(private hooks: SmartPaneHooks) {
     this.el = document.createElement('div');
@@ -63,7 +101,8 @@ export class SmartPane {
     const doc = this.hooks.doc();
     const key = `${id} ${doc.version} ${folded}`;
     // a row being typed in is left alone until it is finished
-    if (this.shown === id && this.el.contains(document.activeElement) && (document.activeElement as HTMLElement).tagName === 'INPUT') { this.place(); return; }
+    const typing = document.activeElement as HTMLElement | null;
+    if (this.shown === id && typing && this.el.contains(typing) && (typing.tagName === 'INPUT' || typing.isContentEditable)) { this.place(); return; }
     if (this.shown !== id || key !== this.drawnFor) this.render(id);
     this.place();
   }
@@ -122,6 +161,7 @@ export class SmartPane {
     title.textContent = 'Smart Scheme';
     head.append(title, btn('‹', 'Fold the species list away', 'sp-fold', () => { folded = true; this.render(id); this.place(); }));
     this.el.append(head);
+    this.el.append(this.formatBar(btn));
 
     // the layouts, as small pictures
     const lay = document.createElement('div');
@@ -173,18 +213,15 @@ export class SmartPane {
     const cycle = data.layout === 'cycle';
     const list = document.createElement('ol');
     list.className = 'sp-list';
-    const field = (value: string, placeholder: string, label: string, done: (v: string) => void): HTMLInputElement => {
-      const i = document.createElement('input');
-      i.type = 'text';
-      i.value = value;
-      i.placeholder = placeholder;
-      i.setAttribute('aria-label', label);
-      i.spellcheck = false;
-      let was = value;
-      const commit = () => { if (i.value !== was) { was = i.value; done(i.value); } };
-      i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); commit(); i.blur(); } else if (e.key === 'Escape') { i.value = was; i.blur(); } });
-      i.addEventListener('blur', () => { commit(); setTimeout(() => this.refresh(), 0); });
-      return i;
+    this.fields.clear();
+    const field = (key: string, value: TextPart[], placeholder: string, label: string, done: (v: TextPart[]) => void): HTMLDivElement => {
+      const f = new RichField(value, { placeholder, label, chem: () => chemOn, done, onState: (x) => { if (x === this.active) this.showState(); } });
+      this.fields.set(key, f);
+      f.el.dataset.key = key;
+      f.el.addEventListener('focus', () => { this.active = f; this.activeKey = key; this.showState(); });
+      f.el.addEventListener('blur', () => setTimeout(() => { if (!this.el.contains(document.activeElement)) this.showState(); this.refresh(); }, 0));
+      if (key === this.activeKey && this.active) this.active = f;
+      return f.el;
     };
     read.slots.forEach((slot, k) => {
       const li = document.createElement('li');
@@ -198,10 +235,19 @@ export class SmartPane {
       const num = document.createElement('span');
       num.className = 'sp-num';
       num.textContent = String(k + 1);
-      const name = slot.caption !== undefined
-        ? field(runsMarkup(doc.captions.get(slot.caption)?.runs ?? []), 'Species', `Species ${k + 1}`, (v) => this.hooks.slotText(id, k, v))
-        : Object.assign(document.createElement('span'), { className: 'sp-fixed', textContent: slotName(doc, slot), title: 'A drawn structure: edit it on the page' });
+      let name: HTMLElement;
+      if (slot.caption !== undefined) name = field(`s${k}`, runParts(doc.captions.get(slot.caption)?.runs ?? []), 'Species', `Species ${k + 1}`, (v) => this.hooks.slotRuns(id, k, v));
+      else if (slot.holder !== undefined) {
+        const h = slot.holder;
+        name = btn(slotName(doc, slot), 'Select the box on the page: draw the structure in it, or paste one (Ctrl+V)', 'sp-holder', () => this.hooks.selectHolder(h));
+      } else name = Object.assign(document.createElement('span'), { className: 'sp-fixed', textContent: slotName(doc, slot), title: 'A drawn structure: edit it on the page' });
       li.append(grip, num, name);
+      if (slot.caption !== undefined) li.append(btn(HEXAGON, 'Make this species a structure (a box to draw or paste in)', 'sp-struct', () => this.hooks.toStructure(id, k)));
+      else if (slot.holder !== undefined) {
+        const b = btn(HEXAGON, 'Back to a text label', 'sp-struct', () => this.hooks.toText(id, k));
+        b.setAttribute('aria-pressed', 'true');
+        li.append(b);
+      }
       if (read.chain && read.slots.length > 2) li.append(btn('×', `Remove species ${k + 1} and the step after it`, 'sp-x', () => this.hooks.remove(id, k)));
       list.append(li);
       li.addEventListener('dragstart', (e) => { this.dragFrom = k; e.dataTransfer?.setData('text/plain', String(k)); li.classList.add('dragging'); });
@@ -223,7 +269,7 @@ export class SmartPane {
       arrow.className = 'sp-arrow';
       arrow.textContent = cycle && k === read.slots.length - 1 ? '↺' : '↓';
       arrow.setAttribute('aria-hidden', 'true');
-      const part = (p: StepPart, ph: string, label: string) => field(stepText(doc, l, p), ph, `${label}, step ${k + 1}`, (v) => this.hooks.stepText(id, k, p, v));
+      const part = (p: StepPart, ph: string, label: string) => field(`p${k}${p}`, stepParts(doc, l, p), ph, `${label}, step ${k + 1}`, (v) => this.hooks.stepRuns(id, k, p, v));
       const parts = cycle
         ? [part('inside', 'step name (OA)', 'Step name'), part('above', 'in', 'Comes in'), part('below', 'out', 'Goes out')]
         : [part('above', 'above the arrow', 'Above the arrow'), part('below', 'below the arrow', 'Below the arrow')];
@@ -241,14 +287,64 @@ export class SmartPane {
     this.el.append(foot);
   }
 
-  /** Put the caret in the row of a species just added. */
+  /** Put the caret in the row of a species just added (all its text selected, to type over). */
   focusCaption(frame: number, caption: number): void {
     this.refresh();
     if (this.shown !== frame) return;
     const read = readSmart(this.hooks.doc(), this.hooks.measure(), frame);
     const k = read?.slots.findIndex((s) => s.caption === caption) ?? -1;
-    const input = this.el.querySelector<HTMLInputElement>(`li.sp-slot[data-k="${k}"] input`);
-    input?.focus();
-    input?.select();
+    this.fields.get(`s${k}`)?.focusAll();
+  }
+
+  /**
+   * The formatting bar: subscript, superscript, chemical interpretation and symbols, for the row
+   * being typed in. Its buttons keep the caret in the row.
+   */
+  private formatBar(btn: (label: string, title: string, cls: string, f: () => void) => HTMLButtonElement): HTMLElement {
+    const wrap = document.createElement('div');
+    const bar = document.createElement('div');
+    bar.className = 'sp-bar';
+    bar.setAttribute('role', 'toolbar');
+    bar.setAttribute('aria-label', 'Text formatting');
+    const on = (f: (r: RichField) => void) => () => { const r = this.active; if (r && document.activeElement === r.el) f(r); };
+    const sub = btn('X<sub>2</sub>', 'Subscript (Ctrl+=)', 'sp-fmt sp-sub', on((r) => r.toggle('sub')));
+    const sup = btn('X<sup>2</sup>', 'Superscript (Ctrl+Shift+=)', 'sp-fmt sp-sup', on((r) => r.toggle('sup')));
+    const chem = btn('Chem', 'Chemical interpretation: numbers in formulas become subscripts as you type (off: the text stays as typed)', 'sp-fmt sp-chem', () => {
+      chemOn = !chemOn;
+      try { localStorage.setItem('smartPaneChem', chemOn ? 'on' : 'off'); } catch { /* not kept */ }
+      const r = this.active;
+      if (r && document.activeElement === r.el) r.rechem();
+      this.showState();
+    });
+    const gap = document.createElement('span');
+    gap.className = 'sp-bar-gap';
+    const sym = (c: string, name: string) => btn(c, `Insert ${name}`, 'sp-fmt sp-sym', on((r) => r.insert(c)));
+    const more = btn('Ω ▾', 'Symbol… (Greek letters, arrows, charges and more)', 'sp-fmt sp-more', () => { this.symbols = !this.symbols; this.showState(); });
+    bar.append(sub, sup, chem, gap, sym('‡', '‡ (transition state)'), sym('′', 'prime'), sym('°', 'degree sign'), sym('•', 'dot (radical)'), more);
+    const grid = document.createElement('div');
+    grid.className = 'sp-symbols';
+    grid.setAttribute('role', 'group');
+    grid.setAttribute('aria-label', 'Symbols');
+    for (const [c, name] of SYMBOLS) grid.append(sym(c, name));
+    // pressing a button doesn't take the caret out of the row
+    wrap.addEventListener('mousedown', (e) => { if ((e.target as HTMLElement).closest('button')) e.preventDefault(); });
+    wrap.append(bar, grid);
+    this.bar = wrap;
+    this.showState();
+    return wrap;
+  }
+
+  /** The bar shows what is on where the caret is, and is usable only while a row is being typed in. */
+  private showState(): void {
+    const w = this.bar;
+    if (!w) return;
+    const r = this.active && document.activeElement === this.active.el ? this.active : null;
+    for (const b of w.querySelectorAll<HTMLButtonElement>('.sp-sub, .sp-sup, .sp-sym')) b.disabled = !r;
+    const press = (cls: string, v: boolean) => w.querySelector(cls)?.setAttribute('aria-pressed', String(v));
+    press('.sp-sub', !!r?.state('sub'));
+    press('.sp-sup', !!r?.state('sup'));
+    press('.sp-chem', chemOn);
+    press('.sp-more', this.symbols);
+    w.querySelector<HTMLElement>('.sp-symbols')!.hidden = !this.symbols;
   }
 }

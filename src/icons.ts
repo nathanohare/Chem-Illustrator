@@ -22,6 +22,18 @@ function hashes(n: number, from: number, to: number, x1 = 5, y1 = 18.5, x2 = 19,
   return `<g stroke-width="1.4" stroke-linecap="butt">${out}</g>`;
 }
 
+/** A sine wave of `waves` whole waves and amplitude `amp` along the line from (x1,y1) to (x2,y2), as path data. */
+function sineAlong(x1: number, y1: number, x2: number, y2: number, waves: number, amp: number): string {
+  const len = Math.hypot(x2 - x1, y2 - y1), ux = (x2 - x1) / len, uy = (y2 - y1) / len;
+  const steps = waves * 24;
+  const pts: string[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps, a = amp * Math.sin(t * waves * 2 * Math.PI);
+    pts.push(`${(x1 + ux * len * t - uy * a).toFixed(2)} ${(y1 + uy * len * t + ux * a).toFixed(2)}`);
+  }
+  return 'M' + pts.join(' L');
+}
+
 function poly(n: number, r = 8, inner = false, flat = false, label = ''): string {
   const pts: [number, number][] = [];
   const start = flat ? -Math.PI / 2 + Math.PI / n : -Math.PI / 2;
@@ -75,8 +87,10 @@ export const ICONS: Record<string, string> = {
   'bond-dative': svg('<line x1="4" y1="19" x2="17" y2="7"/><path d="M20 4l-7.2 2.3 4.8 5z" fill="currentColor"/>'),
   // a ring bonded through its middle to a metal, M
   'bond-hapto': svg('<polygon points="12,2.8 17.4,6.3 15.3,11.5 8.7,11.5 6.6,6.3"/><line x1="12" y1="7.8" x2="12" y2="15"/><text x="12" y="22.2" font-size="8" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none" font-family="system-ui, sans-serif">M</text>'),
-  'bond-wavy': svg('<path d="M4 18c2-1 1-3 3-4s2 1 4 0 1-3 3-4 2 1 4 0 1-3 3-4"/>'),
-  chain: svg('<polyline points="3,15 7.5,9 12,15 16.5,9 21,15"/>'),
+  // a smooth sine wave along the bond, three waves long
+  'bond-wavy': svg(`<path d="${sineAlong(3.5, 18.5, 20.5, 5.5, 3, 1.7)}"/>`),
+  // a zig-zag chain with the drawing's real 120° angles (each bond 30° off level)
+  chain: svg('<polyline points="3,13.3 7.5,10.7 12,13.3 16.5,10.7 21,13.3"/>'),
   'ring-3': poly(3),
   'ring-4': poly(4, 8, false, true),
   'ring-5': poly(5),

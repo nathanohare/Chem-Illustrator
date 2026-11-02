@@ -5,12 +5,26 @@
 import { bracketText, largestBarrier, ENERGY_DEFAULTS, ENERGY_PRESETS, PATH_COLOURS, type EnergyBracket, type EnergyDash, type EnergyData, type EnergyPath, type EnergyPoint } from '../design/energy';
 import { HARTREE, pickEnergy, readQmOutput, speciesName, type QmAtom, type QmResult } from '../chem/qm-output';
 import { qmBonds, skeletonMolfile } from '../chem/qm-bonds';
+import type { Contents } from '../model';
+import { popupMenu } from './popup-menu';
 
 /** How the last diagram looked, so a new one starts the same way. */
 let lastLook: Pick<EnergyData, 'style' | 'values' | 'digits' | 'axis' | 'barrier' | 'overall' | 'quantity' | 'unit'> = { ...ENERGY_DEFAULTS, quantity: 'ΔG', unit: 'kcal/mol' };
 
 /** A cell of the table: what is typed, and what came from a Gaussian or ORCA file. */
-interface Cell { label: string; g: string; eh?: number; geom?: QmAtom[]; ehs?: EnergyPoint['ehs']; flat?: EnergyPoint['flat'] }
+interface Cell { label: string; g: string; eh?: number; geom?: QmAtom[]; ehs?: EnergyPoint['ehs']; flat?: EnergyPoint['flat']; drawn?: Contents }
+
+/** Drawing a species' structure from the window: in the drawing area, from the clipboard, from a name or SMILES, and a small picture of one. */
+export interface EnergyStructureHooks {
+  /** Draw or edit it in the drawing area (the window waits); null when cancelled. */
+  edit(contents: Contents | null, title: string): Promise<Contents | null>;
+  /** The structure on the clipboard, or a reason there is none. */
+  paste(): Promise<Contents | { error: string }>;
+  /** A structure from a name, SMILES or CAS number, or a reason it could not be read. */
+  fromText(text: string): Promise<Contents | { error: string }>;
+  /** Paint a small picture of it. */
+  thumb(contents: Contents, canvas: HTMLCanvasElement): void;
+}
 
 /** Which of a file's energies an axis quantity uses: free energy for ΔG, enthalpy for ΔH, else the electronic energy. */
 export function energyKind(quantity: string): 'G' | 'H' | 'E' {
@@ -34,7 +48,7 @@ export async function flatFor(geom: QmAtom[], label: string, layout: LayoutFn): 
 }
 
 /** Ask for a diagram: a new one (from a preset), or `editing` with its numbers to change. */
-export function askEnergy(editing: EnergyData | null, size: { w: number; h: number }, preview?: (d: EnergyData, canvas: HTMLCanvasElement) => void, layout?: LayoutFn): Promise<EnergyData | null> {
+export function askEnergy(editing: EnergyData | null, size: { w: number; h: number }, preview?: (d: EnergyData, canvas: HTMLCanvasElement) => void, layout?: LayoutFn, structure?: EnergyStructureHooks): Promise<EnergyData | null> {
   return new Promise((resolve) => {
     const d = document.createElement('dialog');
     d.className = 'ask energy-dialog';
@@ -64,7 +78,8 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       <label class="ask-row ask-check"><input name="axis" type="checkbox" /><span>Axis with its title, and "Reaction coordinate" along the bottom</span></label>
       <label class="ask-row ask-check"><input name="barrier" type="checkbox" /><span>Mark the largest barrier on each pathway (ΔG‡)</span></label>
       <label class="ask-row ask-check"><input name="overall" type="checkbox" /><span>Mark the overall change on each pathway (ΔG), first species to last</span></label>
-      <label class="ask-row"><span>Structures</span><select name="structures" title="The geometries read from files, beside their levels"><option value="">None</option><option value="3d">3-D, balls and sticks</option><option value="2d">2-D structures</option></select></label>
+      <label class="ask-row"><span>File geometries</span><select name="structures" title="The geometries read from Gaussian or ORCA files, beside their levels (structures drawn in the Structure column always show)"><option value="">None</option><option value="3d">3-D, balls and sticks</option><option value="2d">2-D structures</option></select></label>
+      <label class="ask-row"><span>Place structures</span><select name="place"><option value="above">Above each level</option><option value="auto">Above peaks, below valleys</option><option value="below">Below each level</option></select></label>
       <label class="ask-row ask-check"><input name="distances" type="checkbox" /><span>Bond distances on transition states (the bonds being made and broken, Å)</span></label>
       <label class="ask-row"><span>Level of theory</span><input name="theory" placeholder="e.g. B3LYP-D3(BJ)/def2-TZVP, SMD(THF)" /></label>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">${editing ? 'Redraw' : 'Insert'}</button></p>`;
@@ -88,10 +103,71 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         if (was?.geom) cell.geom = was.geom;
         if (was?.ehs) cell.ehs = was.ehs;
         if (was?.flat) cell.flat = was.flat;
+        if (was?.drawn) cell.drawn = was.drawn;
         // an energy typed over is the one wanted, not the file's
         if (was?.eh !== undefined && gi && gi.value === gi.dataset.v) cell.eh = was.eh;
         return cell;
       }));
+    };
+    /** A species' Structure cell: a picture of its structure (or + Draw), with a menu to draw, paste, name, use the file's or remove it. */
+    const structureCell = (i: number, j: number): HTMLButtonElement => {
+      const c = rows[i]?.[j];
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'energy-structure';
+      const who = c?.label || `species ${i + 1}`;
+      if (c?.drawn?.atoms.length) {
+        const pic = document.createElement('canvas');
+        pic.width = 72; pic.height = 36;
+        b.append(pic);
+        requestAnimationFrame(() => structure!.thumb(c.drawn!, pic));
+        b.title = `The structure drawn for ${who}: click to edit, paste over or remove it`;
+        b.setAttribute('aria-label', `Structure for ${who}`);
+      } else if (c?.geom?.length) {
+        b.textContent = 'from file';
+        b.classList.add('es-file');
+        b.title = `${who} has the geometry read from its file: click to draw a structure in its place`;
+      } else {
+        b.textContent = '+ Draw';
+        b.classList.add('es-empty');
+        b.title = `Draw a structure for ${who}, shown by its level`;
+      }
+      const set = (drawn: Contents | null) => {
+        read();
+        const cell = rows[i]?.[j];
+        if (!cell) return;
+        if (drawn && drawn.atoms.length) cell.drawn = drawn; else delete cell.drawn;
+        draw();
+        redraw();
+      };
+      const note = (text: string) => { const n = $<HTMLParagraphElement>('.energy-import-note'); n.hidden = false; n.textContent = text; };
+      const editIt = async () => {
+        read();
+        d.close();
+        const got = await structure!.edit(rows[i]?.[j]?.drawn ?? null, `Structure for ${who} (Energy Diagram)`);
+        d.showModal();
+        if (got) set(got);
+      };
+      b.addEventListener('click', () => {
+        const has = !!rows[i]?.[j]?.drawn;
+        if (!has && !rows[i]?.[j]?.geom) { void editIt(); return; }
+        const r = b.getBoundingClientRect();
+        popupMenu(r.left, r.bottom + 2, [
+          [has ? 'Edit Structure…' : 'Draw Structure…', () => void editIt()],
+          ['Paste Structure', async () => { const got = await structure!.paste(); if ('error' in got) note(got.error); else set(got); }],
+          ['From Name or SMILES…', async () => {
+            const text = prompt(`A name, SMILES or CAS number for ${who}`)?.trim();
+            if (!text) return;
+            const got = await structure!.fromText(text);
+            if ('error' in got) note(got.error); else set(got);
+          }],
+          ...(rows[i]?.[j]?.geom ? [['Use the File\'s Geometry', () => set(null), has] as [string, () => void, boolean]] : []),
+          null,
+          ['Remove Structure', () => { read(); const cell = rows[i]?.[j]; if (cell) { delete cell.drawn; delete cell.geom; delete cell.flat; } draw(); redraw(); }, has || !!rows[i]?.[j]?.geom],
+        ]);
+      });
+      b.addEventListener('contextmenu', (e) => { e.preventDefault(); b.click(); });
+      return b;
     };
     const draw = () => {
       const head = table.tHead!;
@@ -101,7 +177,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       tr2.append(document.createElement('th'));
       paths.forEach((p, j) => {
         const th = document.createElement('th');
-        th.colSpan = 2;
+        th.colSpan = structure ? 3 : 2;
         const name = Object.assign(document.createElement('input'), { value: p.name, placeholder: paths.length > 1 ? `pathway ${j + 1}` : 'pathway (optional)' });
         name.dataset.p = String(j);
         name.setAttribute('aria-label', `Pathway ${j + 1} name`);
@@ -125,7 +201,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
           th.append(del);
         }
         tr1.append(th);
-        for (const t of ['Species', 'Energy']) tr2.append(Object.assign(document.createElement('th'), { textContent: t }));
+        for (const t of structure ? ['Species', 'Energy', 'Structure'] : ['Species', 'Energy']) tr2.append(Object.assign(document.createElement('th'), { textContent: t }));
       });
       const body = table.tBodies[0];
       body.innerHTML = '';
@@ -164,6 +240,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
           g.setAttribute('aria-label', `Energy ${i + 1}, pathway ${j + 1}`);
           tr.insertCell().append(l);
           tr.insertCell().append(g);
+          if (structure) tr.insertCell().append(structureCell(i, j));
         });
         const del = Object.assign(document.createElement('button'), { type: 'button', textContent: '×', title: 'Take out this species' });
         del.addEventListener('click', () => {
@@ -213,7 +290,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       const n = Math.max(...ps.map((p) => p.points.length));
       rows = Array.from({ length: n }, (_, i) => ps.map((p): Cell => {
         const q = p.points[i];
-        return { label: q?.label ?? '', g: q?.g === null || q === undefined ? '' : String(q.g), ...(q?.eh !== undefined ? { eh: q.eh } : {}), ...(q?.geom ? { geom: q.geom } : {}), ...(q?.ehs ? { ehs: q.ehs } : {}), ...(q?.flat ? { flat: q.flat } : {}) };
+        return { label: q?.label ?? '', g: q?.g === null || q === undefined ? '' : String(q.g), ...(q?.eh !== undefined ? { eh: q.eh } : {}), ...(q?.geom ? { geom: q.geom } : {}), ...(q?.ehs ? { ehs: q.ehs } : {}), ...(q?.flat ? { flat: q.flat } : {}), ...(q?.drawn ? { drawn: q.drawn } : {}) };
       }));
       draw();
     };
@@ -240,6 +317,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
     $<HTMLInputElement>('input[name=overall]').checked = !!look.overall;
     $<HTMLSelectElement>('select[name=structures]').value = editing?.structures === '2d' ? '2d' : editing?.structures ? '3d' : '';
     $<HTMLInputElement>('input[name=distances]').checked = !!editing?.distances;
+    $<HTMLSelectElement>('select[name=place]').value = editing?.place ?? 'above';
     $<HTMLInputElement>('input[name=theory]').value = editing?.theory ?? '';
     form.querySelector('[data-act=row]')!.addEventListener('click', () => { read(); rows.push(paths.map(() => ({ label: '', g: '' }))); draw(); });
     form.querySelector('[data-act=path]')!.addEventListener('click', () => {
@@ -303,7 +381,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
           name: p.name.trim(), color: p.color, ...(p.dash ? { dash: p.dash } : {}),
           points: rows.map((r) => ({
             label: r[j].label.trim(), g: num(r[j].g), ...(r[j].eh !== undefined ? { eh: r[j].eh } : {}), ...(r[j].geom ? { geom: r[j].geom } : {}),
-            ...(r[j].ehs ? { ehs: r[j].ehs } : {}), ...(r[j].flat ? { flat: r[j].flat } : {}),
+            ...(r[j].ehs ? { ehs: r[j].ehs } : {}), ...(r[j].flat ? { flat: r[j].flat } : {}), ...(r[j].drawn ? { drawn: r[j].drawn } : {}),
           })),
         })),
         quantity: $<HTMLSelectElement>('select[name=quantity]').value,
@@ -316,6 +394,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         overall: $<HTMLInputElement>('input[name=overall]').checked,
         structures: ($<HTMLSelectElement>('select[name=structures]').value || false) as EnergyData['structures'],
         distances: $<HTMLInputElement>('input[name=distances]').checked,
+        place: $<HTMLSelectElement>('select[name=place]').value as EnergyData['place'],
         brackets: brackets.filter((b) => b.from !== b.to && b.path < paths.length && b.from < rows.length && b.to < rows.length).map((b) => ({ ...b })),
         theory: $<HTMLInputElement>('input[name=theory]').value.trim(),
         w: Math.max(60, Number($<HTMLInputElement>('input[name=w]').value) || size.w),
