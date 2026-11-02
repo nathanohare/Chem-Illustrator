@@ -117,7 +117,7 @@ export class CanvasRibbon {
   constructor(private host: CanvasRibbonHost, place: HTMLElement) {
     this.el = document.createElement('div');
     this.el.id = 'canvas-ribbon';
-    this.el.className = 'ribbon tabbed canvas-ribbon cr-classic cr-names-top';
+    this.el.className = 'ribbon tabbed canvas-ribbon cr-classic';
     this.el.setAttribute('role', 'toolbar');
     this.el.setAttribute('aria-label', 'Canvas');
     this.tabRow = document.createElement('div');
@@ -213,11 +213,14 @@ export class CanvasRibbon {
     this.el.hidden = !on;
   }
 
-  /** The look: two rows (Classic) or one (Simplified), and where the group names go. */
-  setLook(look: RibbonLook, names: GroupNames): void {
+  /** The look: two rows (Classic) or one (Simplified). (Where group names go is set on the body, for every ribbon.) */
+  setLook(look: RibbonLook): void {
     this.el.classList.toggle('cr-classic', look === 'classic');
     this.el.classList.toggle('cr-simple', look === 'simple');
-    for (const n of ['top', 'side', 'none'] as const) this.el.classList.toggle(`cr-names-${n}`, n === names);
+  }
+
+  get look(): RibbonLook {
+    return this.el.classList.contains('cr-simple') ? 'simple' : 'classic';
   }
 
   get tab(): string {

@@ -194,7 +194,7 @@ import { guideSpot } from './ui/guide-spot';
 import type { GuideWindow, GuideHeading } from './ui/guide-window';
 import { SettingsWindow, type SettingsHost, type SettingsPage } from './ui/settings-window';
 import { fileTypesPage, FILE_TYPES } from './ui/file-types-page';
-import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed } from './ui/ribbon-fit';
+import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed, addLookToggle, repaintArrows } from './ui/ribbon-fit';
 import { CanvasRibbon, type ContextKind } from './ui/canvas-ribbon';
 import { AnalysisBox, WarningsBox } from './ui/canvas-ribbon-boxes';
 import { placeTitleBar, titleBarPlace } from './ui/title-bar';
@@ -9635,11 +9635,14 @@ function setToolCells(v: Settings['toolCells']): void {
 
 /** Settings ▸ Toolboxes: how the toolboxes' buttons look and what their tips say. */
 let ribbonLook: Settings['canvasRibbon'] = 'classic';
-let ribbonNames: Settings['ribbonNames'] = 'top';
+let ribbonNames: Settings['ribbonNames'] = 'side';
 function setRibbonLook(look: Settings['canvasRibbon'], names: Settings['ribbonNames']): void {
   ribbonLook = look;
   ribbonNames = names;
-  canvasRibbon.setLook(look, names);
+  canvasRibbon.setLook(look);
+  repaintArrows();
+  // (the names' place goes for every mode's ribbon)
+  for (const n of ['top', 'side', 'none'] as const) document.body.classList.toggle(`rb-names-${n}`, n === names);
   fitRibbons();
 }
 
@@ -9647,7 +9650,7 @@ async function toolboxPreferences(): Promise<void> {
   const r = await ask('Toolboxes and Ribbon', [
     { name: 'look', label: 'Canvas ribbon', value: ribbonLook, options: [{ value: 'classic', label: 'Classic: two rows of buttons' }, { value: 'simple', label: 'Simplified: one row' }],
       help: 'Both keep the tabs and fold away with the arrow at the right of the tabs.' },
-    { name: 'names', label: 'Group names on the ribbon', value: ribbonNames, options: [{ value: 'top', label: 'Under each group' }, { value: 'side', label: 'Up the side of each group' }, { value: 'none', label: 'None (hover for names)' }] },
+    { name: 'names', label: 'Group names on every ribbon', value: ribbonNames, options: [{ value: 'side', label: 'Along the dividers, up the side of each group' }, { value: 'top', label: 'Across each group (above it on the Canvas, below it elsewhere)' }, { value: 'none', label: 'None (rest the mouse on a button for its name)' }] },
     { name: 'cells', label: 'Button cells', value: toolCells, options: [{ value: 'off', label: 'None' }, { value: 'grid', label: 'Grid lines' }, { value: 'raised', label: 'Raised buttons' }, { value: 'both', label: 'Grid lines and raised buttons' }],
       help: 'Gives each toolbox button a cell of its own, so the buttons are easier to tell apart and to hit.' },
     { name: 'tips', label: 'Detailed tooltips: hold the mouse on a tool to see what it does and what Alt, Shift and Ctrl change', type: 'checkbox', value: String(toolTip.enabled) },
@@ -9660,6 +9663,15 @@ async function toolboxPreferences(): Promise<void> {
 }
 
 /** Settings ▸ Preferences: how you like to work, and matters of taste such as how alkyl groups are written. */
+/** How problems are marked on the drawing (Settings ▸ Preferences). */
+function setWarnLook(look: Settings['warnLook']): void {
+  const now = (['disc', 'box', 'circle', 'dashed', 'corners'] as const).includes(look) ? look : 'disc';
+  if (now === renderer.warnLook) return;
+  renderer.warnLook = now;
+  doc.allDirty = true;
+  editor.requestScene?.();
+}
+
 async function personalPreferences(): Promise<void> {
   const alt = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? 'Option+Enter' : 'Alt+Enter';
   const r = await ask('Preferences', [
@@ -9668,9 +9680,14 @@ async function personalPreferences(): Promise<void> {
       help: 'Everywhere you draw: Canvas, structures in documents and spreadsheets, and text boxes on slides. Ctrl+Enter always finishes, and Shift+Enter always breaks the line.' },
     { name: 'alkylLook', label: 'Alkyl groups written as', value: alkylPrefs.look, options: ALKYL_LOOK_CHOICES,
       help: 'For the n-, i-, s- and t- of Pr and Bu (tBu, iPr, nBu, sBu, iBu), wherever they sit in a label or text (OtBu, N(iPr)2, KOtBu). Atom labels and text boxes take the look as you finish typing them; you are asked whether to change the ones already in the drawing. A dash is never put in or taken out where the letters would read as an element (PtBu3 stays as it is).' },
+    { name: 'warnLook', label: 'Mark problems on the drawing with', value: renderer.warnLook, options: [
+      { value: 'disc', label: 'A soft red disc' }, { value: 'box', label: 'A thin red box' }, { value: 'circle', label: 'A red circle' },
+      { value: 'dashed', label: 'A dashed red circle' }, { value: 'corners', label: 'Red corner marks' }],
+      help: 'Atoms with too many bonds, labels that can\'t be read and other problems the Warnings box lists. Untick Show on drawing (Warnings) to hide the marks.' },
   ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(parseAlkylLook(v.alkylLook)) } });
   if (!r) return;
   enterFinishesText = r.enterFinishes === 'enter';
+  setWarnLook(r.warnLook as Settings['warnLook']);
   const look = parseAlkylLook(r.alkylLook);
   const changed = look !== alkylPrefs.look;
   alkylPrefs.look = look;
@@ -9800,6 +9817,7 @@ function currentSettings(): Settings {
     haptoDelocalized: haptoLook.delocalized,
     superscriptR: labelPrefs.superscriptR,
     alkylLook: alkylPrefs.look,
+    warnLook: renderer.warnLook,
     bondEnds: bondEndPrefs.round,
     mapLook: mapLookPrefs.look,
     depthShade: { ...depthShadePrefs },
@@ -10042,6 +10060,7 @@ function applySettings(s: Settings): void {
   haptoLook.delocalized = s.haptoDelocalized;
   labelPrefs.superscriptR = s.superscriptR;
   alkylPrefs.look = s.alkylLook;
+  setWarnLook(s.warnLook);
   bondEndPrefs.round = s.bondEnds;
   mapLookPrefs.look = s.mapLook;
   Object.assign(depthShadePrefs, s.depthShade);
@@ -10652,7 +10671,7 @@ async function runAnalysis(force: boolean): Promise<void> {
   saySelection(results);
   // the ribbon's one line: the first structure's formula and weight (and how many more)
   const first = results.find((r) => !r.error && r.formula);
-  analysisBox.set(first ? formulaHtml(first.formula) + (results.length > 1 ? ` <span class="muted">+${results.length - 1}</span>` : '') : null, first ? first.mw.toFixed(2) : null);
+  analysisBox.set(first ? formulaHtml(first.formula) + (results.length > 1 ? ` <span class="muted">+${results.length - 1}</span>` : '') : null, first ? first.mw.toFixed(2) : null, first ? first.exact.toFixed(4) : null);
   panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
   updatePanels();
 }
@@ -12430,6 +12449,8 @@ const guide = {
   },
 };
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
+// the Canvas ribbon's arrow switches it between Classic and Simplified (Settings ▸ Toolboxes and Ribbon has both too)
+addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: () => { setRibbonLook(ribbonLook === 'simple' ? 'classic' : 'simple', ribbonNames); storeSettings(); } });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files', open: generalPreferences },
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },

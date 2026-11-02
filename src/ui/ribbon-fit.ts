@@ -119,15 +119,39 @@ export function setRibbonCollapsed(on: boolean): void {
   collapsed = on;
   document.body.classList.toggle('ribbon-collapsed', on);
   for (const r of document.querySelectorAll('.ribbon.rb-peek')) r.classList.remove('rb-peek');
-  for (const b of document.querySelectorAll<HTMLElement>('.rb-collapse')) {
-    b.textContent = on ? '˅' : '˄';
-    b.title = on ? 'Pin the ribbon open (Ctrl+F1)' : 'Collapse the ribbon to its tabs, for more room (Ctrl+F1). Click a tab to use its buttons';
-    b.setAttribute('aria-label', b.title);
-  }
+  for (const b of document.querySelectorAll<HTMLElement>('.rb-collapse')) paintArrow(b);
   document.querySelector('[data-cmd="collapse-ribbon"]')?.setAttribute('aria-checked', String(on));
   if (!on) fitRibbons();
 }
 export const ribbonCollapsed = () => collapsed;
+
+/**
+ * A ribbon whose arrow switches it between its Classic look (two rows) and its Simplified one (one
+ * row), as Office's does, instead of folding it to its tabs. Double-clicking a tab or Ctrl+F1
+ * still folds it, and when folded the arrow opens it again.
+ */
+const lookToggles = new Map<Element, { simple: () => boolean; toggle: () => void }>();
+export function addLookToggle(ribbon: HTMLElement, look: { simple: () => boolean; toggle: () => void }): void {
+  lookToggles.set(ribbon, look);
+  repaintArrows();
+}
+export function repaintArrows(): void {
+  for (const b of document.querySelectorAll<HTMLElement>('.rb-collapse')) paintArrow(b);
+}
+
+function paintArrow(b: HTMLElement): void {
+  const look = lookToggles.get(b.closest('.ribbon') as Element);
+  if (look && !collapsed) {
+    const simple = look.simple();
+    b.textContent = simple ? '˅' : '˄';
+    b.title = simple ? 'Classic ribbon: two rows of buttons, with group names' : 'Simplified ribbon: one row of buttons, for more room';
+    b.title += '. Double-click a tab (or Ctrl+F1) to fold the ribbon to its tabs';
+  } else {
+    b.textContent = collapsed ? '˅' : '˄';
+    b.title = collapsed ? 'Pin the ribbon open (Ctrl+F1)' : 'Collapse the ribbon to its tabs, for more room (Ctrl+F1). Click a tab to use its buttons';
+  }
+  b.setAttribute('aria-label', b.title);
+}
 
 function toggleCollapsed(): void {
   setRibbonCollapsed(!collapsed);
@@ -141,8 +165,13 @@ function addCollapseButtons(): void {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'rb-collapse';
-    b.addEventListener('click', (e) => { e.stopPropagation(); toggleCollapsed(); });
+    b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const look = lookToggles.get(b.closest('.ribbon') as Element);
+      if (look && !collapsed) { look.toggle(); paintArrow(b); } else toggleCollapsed();
+    });
     tabs.append(b);
+    paintArrow(b);
   }
 }
 

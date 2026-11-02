@@ -438,7 +438,7 @@ With an arrow selected, the **Reaction** section of the Style panel also has **A
 
 ## Warnings
 
-Red boxes mark atoms with too many or too few bonds, labels that can't be read, and atoms sitting on top of each other. Point at one to see why. The **Warnings** panel on the right lists them all, with **Ignore** to hide one. **Show on drawing** turns the red boxes off. They are never printed, saved or copied.
+A soft red disc marks atoms with too many or too few bonds, labels that can't be read, and atoms sitting on top of each other. Point at one to see why. The **Warnings** box at the right end of the ribbon's tabs counts them; click it (or look in the Warnings panel on the right) for the list, with **Ignore** to hide one. **Show on drawing** turns the marks off. They are never printed, saved or copied. **Settings ▸ Preferences** offers a thin red box, a circle, a dashed circle or corner marks instead of the disc.
 
 Rest the mouse on an abbreviation or condensed label (OTBS, NHBoc, CO2Me, CH2OH) to see the group written out, with its name and formula. **View ▸ Group Tooltips** turns this off.
 

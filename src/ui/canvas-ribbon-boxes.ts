@@ -95,7 +95,8 @@ export class AnalysisBox extends DropBox {
 
   constructor(section: HTMLElement) {
     super(section, 'cr-analysis', 'Analysis: formula, masses, m/z, elemental analysis, name. Click for all of it');
-    this.button.innerHTML = `<span class="cr-an-f muted">No structure</span><span class="cr-an-mw"></span><span class="cr-chev">${CHEVRON}</span>`;
+    // three lines in the Classic ribbon (formula, weight, exact mass); one in the Simplified (formula and weight)
+    this.button.innerHTML = `<span class="cr-an-f muted">No structure</span><span class="cr-an-mw"></span><span class="cr-an-ex"></span><span class="cr-chev">${CHEVRON}</span>`;
     this.popOut = document.createElement('button');
     this.popOut.type = 'button';
     this.popOut.className = 'cr-popout';
@@ -129,12 +130,22 @@ export class AnalysisBox extends DropBox {
     this.float.show(this.button);
   }
 
-  /** Show what was analysed: a formula (HTML, with subscripts) and its weight, or nothing. */
-  set(formulaHtml: string | null, mw: string | null): void {
+  /** Show what was analysed: a formula (HTML, with subscripts), its weight and exact mass, or nothing. */
+  set(formulaHtml: string | null, mw: string | null, exact: string | null = null): void {
     const f = this.button.querySelector<HTMLElement>('.cr-an-f')!;
     f.classList.toggle('muted', !formulaHtml);
     f.innerHTML = formulaHtml ?? 'No structure';
-    this.button.querySelector<HTMLElement>('.cr-an-mw')!.textContent = mw ?? '';
+    const line = (cls: string, key: string, v: string | null) => {
+      const el = this.button.querySelector<HTMLElement>(cls)!;
+      el.replaceChildren();
+      if (!v) return;
+      const k = document.createElement('span');
+      k.className = 'cr-an-k';
+      k.textContent = key;
+      el.append(k, v);
+    };
+    line('.cr-an-mw', 'MW', mw);
+    line('.cr-an-ex', 'Exact', exact);
   }
 }
 
