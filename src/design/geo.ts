@@ -505,6 +505,8 @@ function actionButtons(): GeoDef[] {
     def('actLast', 'End', 'actionButtonEnd', 'last end', [[[0.05, 0], [0.7, 0.5], [0.05, 1]], [[0.8, 0], [0.92, 0], [0.92, 1], [0.8, 1]]]),
     def('actHome', 'Home', 'actionButtonHome', 'home first house', [[[0.5, 0.02], [1, 0.5], [0.84, 0.5], [0.84, 1], [0.16, 1], [0.16, 0.5], [0, 0.5]]]),
     def('actReturn', 'Return', 'actionButtonReturn', 'return back last viewed', [[[0.15, 0.25], [0.45, 0], [0.45, 0.15], [0.75, 0.15], [0.95, 0.35], [0.95, 0.8], [0.75, 1], [0.35, 1], [0.35, 0.82], [0.72, 0.82], [0.78, 0.76], [0.78, 0.4], [0.72, 0.33], [0.45, 0.33], [0.45, 0.5]]]),
+    def('actInfo', 'Information', 'actionButtonInformation', 'information info about', [[[0.42, 0.02], [0.58, 0.02], [0.58, 0.2], [0.42, 0.2]], [[0.42, 0.32], [0.58, 0.32], [0.58, 0.98], [0.42, 0.98]]]),
+    def('actDoc', 'Document', 'actionButtonDocument', 'document file open', [[[0.18, 0], [0.62, 0], [0.82, 0.2], [0.82, 1], [0.18, 1]], [[0.62, 0], [0.62, 0.2], [0.82, 0.2]]]),
     def('actBlank', 'Blank action button', 'actionButtonBlank', 'blank custom', []),
   ];
 }
