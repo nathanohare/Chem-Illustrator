@@ -10,7 +10,7 @@
 // by hand keeps its new place, and the arrows to and from it follow it.
 
 import type { Arrow, Caption, Doc, Entity, Frame, Shape, StepRoles, TextRun } from '../model';
-import type { Rect, Vec } from '../geom';
+import { arcCenter, type Rect, type Vec } from '../geom';
 import { chemRuns } from '../text/chemtext';
 import { plainText } from '../richtext';
 import { frameBox, frameMembers } from '../editor/frames';
@@ -262,6 +262,10 @@ export function arrangeSmart(doc: Doc, m: Measure, frameId: number, patch?: Part
     for (const r of [...doc.arrows.values()]) if (r.reagentFor === l.arrow.id) doc.removeArrow(r.id);
     doc.removeArrow(l.arrow.id);
   }
+  // a cycle laid out again (a species added, removed or made a structure) keeps its middle where it was:
+  // the middle of the circle its curved step arrows lie on
+  const steps = read.links.map((l) => l.arrow.id);
+  const was = s.smart.layout === 'cycle' && data.layout === 'cycle' ? circleMiddle(doc, steps) : null;
   // its own look first, so it is laid out at the sizes it will have
   restyleSmart(doc, frameId, data.fmt, smartParts(read));
   const scope = scopeOf(doc, doc.shapes.get(frameId)!.frame!);
@@ -282,8 +286,34 @@ export function arrangeSmart(doc: Doc, m: Measure, frameId: number, patch?: Part
   doc.updateShape(frameId, { frame: { ...f, arrows }, ...(data.free ? { smart: { ...data, free: undefined } } : {}) });
   // the frame fits round it again now (as it would at the end of the change), so it is right in a file saved straight after
   const b = frameBox(doc, doc.shapes.get(frameId)!.frame!, m);
-  if (b) doc.updateShape(frameId, b);
+  const mid = was && circleMiddle(doc, steps);
+  if (b && was && mid && Math.hypot(was.x - mid.x, was.y - mid.y) > 1e-6) {
+    const dx = was.x - mid.x, dy = was.y - mid.y;
+    moveFrameBy(doc, doc.shapes.get(frameId)!.frame!, dx, dy);
+    doc.updateShape(frameId, { x1: b.x1 + dx, y1: b.y1 + dy, x2: b.x2 + dx, y2: b.y2 + dy });
+  } else if (b) doc.updateShape(frameId, b);
   return true;
+}
+
+/** The middle of the circle a cycle's curved step arrows lie on (their arcs' centres, averaged), or null. */
+function circleMiddle(doc: Doc, arrows: number[]): Vec | null {
+  let x = 0, y = 0, n = 0;
+  for (const id of arrows) {
+    const r = doc.arrows.get(id);
+    if (!r?.sweep || r.bez?.length) continue;
+    const c = arcCenter(r.tail, r.head, r.sweep).center;
+    x += c.x; y += c.y; n++;
+  }
+  return n ? { x: x / n, y: y / n } : null;
+}
+
+/** Move everything in a frame by (dx, dy). Call inside an edit. */
+function moveFrameBy(doc: Doc, f: Frame, dx: number, dy: number): void {
+  const mem = frameMembers(doc, f);
+  doc.moveAtoms([...mem.atoms], dx, dy);
+  for (const id of mem.captions) { const c = doc.captions.get(id); if (c) doc.updateCaption(id, { x: c.x + dx, y: c.y + dy }); }
+  for (const id of mem.arrows) { const a = doc.arrows.get(id); if (a) doc.updateArrow(id, { tail: { x: a.tail.x + dx, y: a.tail.y + dy }, head: { x: a.head.x + dx, y: a.head.y + dy } }); }
+  for (const id of mem.shapes) { const h = doc.shapes.get(id); if (h) doc.updateShape(id, { x1: h.x1 + dx, y1: h.y1 + dy, x2: h.x2 + dx, y2: h.y2 + dy }); }
 }
 
 /** The scheme's text: species typed as text, and the conditions on its arrows. */

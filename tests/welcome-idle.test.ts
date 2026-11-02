@@ -6,7 +6,8 @@ import { readFileSync } from 'node:fs';
 
 describe('the welcome card', () => {
   it('runs no code on each frame while it shows', () => {
-    const main = readFileSync('src/main.ts', 'utf8');
+    // (Windows line endings, as git checks the file out on Windows, read as plain ones)
+    const main = readFileSync('src/main.ts', 'utf8').replace(/\r\n/g, '\n');
     const at = main.indexOf('function showWelcome(');
     expect(at).toBeGreaterThan(0);
     const body = main.slice(at, main.indexOf('\n}\n', at));

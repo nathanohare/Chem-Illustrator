@@ -27,12 +27,13 @@ concurrency:
 jobs:
   mark:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       WANTED: ${{ inputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Find the version
         id: pick
         run: |
