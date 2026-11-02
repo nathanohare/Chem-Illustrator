@@ -110,10 +110,11 @@ function inkOn(bg: string): string {
 export function modePalette(colour: string): Palette {
   const c = rgb(HEX.test(colour) ? colour : DEFAULT_MODE_COLOURS.drawing);
   const accent = until(c, BLACK, WHITE, 4.5);
-  const [h, s, l] = toHsl(c);
-  // the dark theme's accent: the same hue, lighter and stronger (blue #2f6fdf gives #7babff)
-  const lighter = fromHsl(h, Math.min(1, s + 0.27), l + (1 - l) * 0.45);
-  const accentDark = until(lighter, WHITE, DARK_PANEL, 4.5);
+  const [h, s] = toHsl(c);
+  // the dark theme's accent: the same hue, muted (saturation at most 0.45, so it does not glow against
+  // the dark grays) and lightened until it reads at 5.2:1 on the panels (Canvas teal #0e7c93 gives #4ea9bc)
+  let accentDark = fromHsl(h, Math.min(s, 0.45), 0.5);
+  for (let L = 0.5; contrast(hex(accentDark), hex(DARK_PANEL)) < 5.2 && L < 1; L += 0.01) accentDark = fromHsl(h, Math.min(s, 0.45), L);
   return {
     accent: hex(accent),
     soft: hex(mix(WHITE, c, 0.14)),
