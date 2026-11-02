@@ -82,9 +82,34 @@ function chip(h: ShiftHit | null, wide: number): string {
   return `<span class="nmr-src${loose ? ' loose' : ''}" title="${esc(tip)}">${loose ? '~' : h.n > 99 ? '99+' : h.n}</span>`;
 }
 
-export function nmrTableHtml(rows: NmrRow[]): string {
-  const body = rows.map((r, k) => `<tr data-row="${k}"><td>${esc(r.label)}</td><td>${r.c13 ? r.c13.value.toFixed(1) : ''}</td><td>${r.h1 ? `${r.h1.value.toFixed(2)} <span class="muted">${r.hCount}H</span>` : ''}</td><td>${r.c13 ? chip(r.c13, 3) : chip(r.h1, 0.3)}</td></tr>`).join('');
-  return `<table class="nmr-table"><thead><tr><th>Atom</th><th>δC</th><th>δH</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+export type Nucleus = '1H' | '13C';
+
+const pm = (h: ShiftHit, wide: number) => `<span class="muted">±${h.spread.toFixed(wide > 1 ? 1 : 2)}</span>`;
+
+/** The list for one nucleus, highest shift first: shift, how many atoms, which atoms, source chip. */
+export function nmrListHtml(rows: NmrRow[], nuc: Nucleus): string {
+  const c = nuc === '13C';
+  const list = rows.map((r, k) => ({ r, k, h: c ? r.c13 : r.h1 })).filter((x) => x.h && (c || x.r.hCount)).sort((a, b) => b.h!.value - a.h!.value);
+  if (!list.length) return `<p class="muted small">No ${c ? 'carbons' : 'hydrogens'} to predict.</p>`;
+  const body = list.map(({ r, k, h }) => `<tr data-row="${k}"><td>${h!.value.toFixed(c ? 1 : 2)} ${pm(h!, c ? 3 : 0.3)}</td><td>${c ? (r.atoms.length > 1 ? `${r.atoms.length}C` : '') : `${r.hCount}H`}</td><td>${esc(r.label)}</td><td>${chip(h, c ? 3 : 0.3)}</td></tr>`).join('');
+  return `<table class="nmr-table"><thead><tr><th>δ (ppm)</th><th></th><th>Atoms</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
+/** The peak report: the 1H and 13C lines as a journal prints them, each peak hoverable. */
+export function nmrReportHtml(rows: NmrRow[], solvent: string, mhz = 400): string {
+  const sol = esc(solvent).replace(/(\d+)/g, '<sub>$1</sub>');
+  const hs: { v: number; n: number; k: number[] }[] = [];
+  for (const [k, r] of rows.entries()) if (r.h1 && r.hCount) hs.push({ v: r.h1.value, n: r.hCount, k: [k] });
+  hs.sort((a, b) => b.v - a.v);
+  const merged: typeof hs = [];
+  for (const h of hs) {
+    const last = merged[merged.length - 1];
+    if (last && last.v.toFixed(2) === h.v.toFixed(2)) { last.n += h.n; last.k.push(...h.k); } else merged.push({ ...h, k: [...h.k] });
+  }
+  const cs = [...rows.entries()].filter(([, r]) => r.c13).sort((a, b) => b[1].c13!.value - a[1].c13!.value);
+  const h = merged.map((x) => `<span data-row="${x.k.join(',')}">${x.v.toFixed(2)} (${x.n}H)</span>`).join(', ');
+  const c = cs.map(([k, r]) => `<span data-row="${k}">${r.c13!.value.toFixed(1)}</span>`).join(', ');
+  return `<p class="nmr-report"><sup>1</sup>H NMR (${mhz} MHz, ${sol}) δ ${h || '—'}.</p><p class="nmr-report"><sup>13</sup>C NMR (${Math.round(mhz / 3.97)} MHz, ${sol}) δ ${c || '—'}.</p>`;
 }
 
 /** The predicted spectra as an SI writes them (ACS style), highest shift first. */
@@ -128,6 +153,12 @@ export class NmrPanel {
   private set open(v: boolean) { try { localStorage.setItem('ci-nmr-open', v ? '1' : '0'); } catch { /* not remembered */ } }
   get solvent(): string { try { return localStorage.getItem('ci-nmr-solvent') || 'CDCl3'; } catch { return 'CDCl3'; } }
   set solvent(v: string) { try { localStorage.setItem('ci-nmr-solvent', v); } catch { /* not remembered */ } }
+  /** Which nucleus the list shows. */
+  get nuc(): Nucleus { try { return localStorage.getItem('ci-nmr-nuc') === '13C' ? '13C' : '1H'; } catch { return '1H'; } }
+  set nuc(v: Nucleus) { try { localStorage.setItem('ci-nmr-nuc', v); } catch { /* not remembered */ } }
+  /** The peak report (journal lines) instead of the list. */
+  get report(): boolean { try { return localStorage.getItem('ci-nmr-view') === 'report'; } catch { return false; } }
+  set report(v: boolean) { try { localStorage.setItem('ci-nmr-view', v ? 'report' : 'list'); } catch { /* not remembered */ } }
 
   private load(): Promise<ShiftTable> {
     this.table ??= fetch(this.host.url).then((r) => {
@@ -149,11 +180,13 @@ export class NmrPanel {
       if (!item || !frag) return;
       const d = document.createElement('details');
       d.className = 'nmr';
+      d.dataset.item = String(i);
       d.open = this.open;
-      d.innerHTML = `<summary>NMR (predicted) <span class="info-icon" tabindex="0" role="img" title="Predicted from measured shifts of atoms with the same surroundings (NMRShiftDB2 and CC BY journal data). The number by each row is how many measured atoms agree; ~ means only a loose match. Marker numbers on the drawing match the Atom column." aria-label="About predicted NMR">i</span>
+      d.innerHTML = `<summary>NMR (predicted) <span class="info-icon" tabindex="0" role="img" title="Predicted from measured shifts of atoms with the same surroundings (NMRShiftDB2 and CC BY journal data). ± is how far those measured shifts spread. The chip is how many measured atoms agree; ~ means only a loose match. Marker numbers on the drawing match the Atoms column." aria-label="About predicted NMR">i</span>
+        <span class="nmr-nuc" role="group" aria-label="Nucleus"${this.report ? ' hidden' : ''}>${(['1H', '13C'] as const).map((n) => `<button type="button" data-nuc="${n}" aria-pressed="${n === this.nuc}"><sup>${n.slice(0, -1)}</sup>${n.slice(-1)}</button>`).join('')}</span>
         <select class="nmr-solvent" title="Solvent">${NMR_SOLVENTS.map((s) => `<option value="${s}"${s === this.solvent ? ' selected' : ''}>${s}</option>`).join('')}</select></summary>
         <div class="nmr-body"><p class="muted small">Loading…</p></div>
-        <div class="an-buttons"><button type="button" class="nmr-copy" title="Copy the predicted 1H and 13C lines as an SI writes them">Copy as SI Text</button><button type="button" class="nmr-marks" aria-pressed="${this.marks}" title="Number the carbons on the drawing to match the table">Show on Drawing</button></div>`;
+        <div class="an-buttons"><button type="button" class="nmr-copy" title="Copy the predicted 1H and 13C lines as an SI writes them">Copy as SI Text</button><button type="button" class="nmr-view" aria-pressed="${this.report}" title="Show the predicted 1H and 13C lines as a journal prints them">Peak Report</button><button type="button" class="nmr-marks" aria-pressed="${this.marks}" title="Show the predictions on the drawing">Show on Drawing</button><select class="nmr-mode" title="What Show on Drawing shows: shifts by each atom, atom numbers matching the list, or confidence dots (green: measured atoms agree; amber: loose match; red: measured atoms disagree widely or only the atom type matched)">${(['shifts', 'numbers', 'confidence'] as const).map((m) => `<option value="${m}"${m === this.mode ? ' selected' : ''}>${{ shifts: 'Shifts', numbers: 'Atom Numbers', confidence: 'Confidence' }[m]}</option>`).join('')}</select></div>`;
       const buttons = [...frag.querySelectorAll(':scope > .an-buttons')].pop();
       frag.insertBefore(d, buttons ?? null);
       d.addEventListener('toggle', () => { this.open = d.open; if (d.open) void this.fill(i, d, seq); else if (this.marks) this.host.redraw(); });
@@ -161,12 +194,24 @@ export class NmrPanel {
       d.querySelector('select')!.addEventListener('change', (e) => {
         this.solvent = (e.target as HTMLSelectElement).value;
         for (const s of panel.querySelectorAll<HTMLSelectElement>('.nmr-solvent')) s.value = this.solvent;
-        for (const [k, el] of panel.querySelectorAll<HTMLDetailsElement>('details.nmr').entries()) if (el.open) void this.fill(k, el, this.seq);
+        for (const el of panel.querySelectorAll<HTMLDetailsElement>('details.nmr')) if (el.open) void this.fill(Number(el.dataset.item), el, this.seq);
       });
+      for (const b of d.querySelectorAll<HTMLButtonElement>('.nmr-nuc button')) b.addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        this.nuc = b.dataset.nuc as Nucleus;
+        this.restyle(panel);
+      });
+      d.querySelector('.nmr-view')!.addEventListener('click', () => { this.report = !this.report; this.restyle(panel); });
       d.querySelector('.nmr-copy')!.addEventListener('click', () => {
         const s = this.shown.get(i);
         if (!s) return;
         this.host.copy(siText(s.rows, this.solvent)).then(() => this.host.flash('Copied the predicted NMR lines.'), () => this.host.flash('Copying was refused by the system.'));
+      });
+      d.querySelector('.nmr-mode')!.addEventListener('change', (e) => {
+        this.mode = (e.target as HTMLSelectElement).value as DrawMode;
+        for (const m of panel.querySelectorAll<HTMLSelectElement>('.nmr-mode')) m.value = this.mode;
+        if (!this.marks) { this.marks = true; for (const b of panel.querySelectorAll('.nmr-marks')) b.setAttribute('aria-pressed', 'true'); }
+        this.host.redraw();
       });
       d.querySelector('.nmr-marks')!.addEventListener('click', () => {
         this.marks = !this.marks;
@@ -174,9 +219,9 @@ export class NmrPanel {
         this.host.redraw();
       });
       d.querySelector('.nmr-body')!.addEventListener('pointerover', (e) => {
-        const tr = (e.target as HTMLElement).closest<HTMLElement>('tr[data-row]');
+        const el = (e.target as HTMLElement).closest<HTMLElement>('[data-row]');
         const s = this.shown.get(i);
-        this.hot = tr && s ? s.rows[Number(tr.dataset.row)].atoms.map((a) => s.ids[a]).filter((x): x is number => x !== null) : [];
+        this.hot = el && s ? el.dataset.row!.split(',').flatMap((k) => s.rows[Number(k)].atoms).map((a) => s.ids[a]).filter((x): x is number => x !== null) : [];
         if (this.marks) this.host.redraw();
       });
       d.querySelector('.nmr-body')!.addEventListener('pointerleave', () => { this.hot = []; if (this.marks) this.host.redraw(); });
@@ -203,24 +248,46 @@ export class NmrPanel {
         if (b.ring && u !== null && v !== null) { ring.add(`${u},${v}`); ring.add(`${v},${u}`); }
       }
       this.shown.set(i, { rows, ids, ring });
-      body.innerHTML = rows.length ? nmrTableHtml(rows) : '<p class="muted small">No carbons or hydrogens to predict.</p>';
+      this.render(i, d);
       if (this.marks) this.host.redraw();
     } catch (e) {
       if (seq === this.seq) body.innerHTML = `<p class="warn small">${esc(e instanceof Error ? e.message : String(e))}</p>`;
     }
   }
 
-  /** Numbered markers beside the carbons (drawn on the overlay, in drawing coordinates). */
+  /** Shows the list or the peak report for one structure from its predicted rows. */
+  private render(i: number, d: HTMLElement): void {
+    const s = this.shown.get(i);
+    if (!s) return;
+    d.querySelector<HTMLElement>('.nmr-body')!.innerHTML = !s.rows.length ? '<p class="muted small">No carbons or hydrogens to predict.</p>'
+      : this.report ? nmrReportHtml(s.rows, this.solvent) : nmrListHtml(s.rows, this.nuc);
+  }
+
+  /** Brings every NMR section in line with the nucleus and view settings. */
+  private restyle(panel: HTMLElement): void {
+    for (const d of panel.querySelectorAll<HTMLElement>('details.nmr')) {
+      for (const b of d.querySelectorAll<HTMLElement>('.nmr-nuc button')) b.setAttribute('aria-pressed', String(b.dataset.nuc === this.nuc));
+      d.querySelector<HTMLElement>('.nmr-nuc')!.hidden = this.report;
+      d.querySelector('.nmr-view')!.setAttribute('aria-pressed', String(this.report));
+      this.render(Number(d.dataset.item), d);
+    }
+  }
+
+  /** What Show on Drawing puts on the structure. */
+  get mode(): DrawMode { try { const m = localStorage.getItem('ci-nmr-draw'); return m === 'numbers' || m === 'confidence' ? m : 'shifts'; } catch { return 'shifts'; } }
+  set mode(v: DrawMode) { try { localStorage.setItem('ci-nmr-draw', v); } catch { /* not remembered */ } }
+
+  /** The predicted shifts, atom numbers or confidence dots on the drawing (overlay, drawing coordinates). */
   drawMarks(ctx: CanvasRenderingContext2D, scale: number, atom: (id: number) => { x: number; y: number } | undefined, neighbours: (id: number) => { id: number; x: number; y: number }[], accent: string): void {
     if (!this.marks || !this.open) return;
+    const mode = this.mode;
     const px = 1 / scale;
     const r = 7.5 * px;
     ctx.save();
-    ctx.font = `600 ${9.5 * px}px system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const s of this.shown.values()) {
-      // the structure's middle: of equally wide gaps, the marker takes the one facing away from it
+      // the structure's middle: of equally wide gaps, a label takes the one facing away from it
       const pts = s.ids.map((id) => (id !== null ? atom(id) : undefined)).filter((q): q is { x: number; y: number } => !!q);
       const cx = pts.reduce((t, q) => t + q.x, 0) / (pts.length || 1), cy = pts.reduce((t, q) => t + q.y, 0) / (pts.length || 1);
       for (const row of s.rows) {
@@ -228,30 +295,48 @@ export class NmrPanel {
           const n = row.numbers[k];
           const id = s.ids[a];
           const p = id !== null ? atom(id) : undefined;
-          if (n === null || id === null || !p) return;
-          // in the widest gap between the atom's bonds
-          const nb = neighbours(id).map((q) => ({ a: Math.atan2(q.y - p.y, q.x - p.x), ring: s.ring.has(`${id},${q.id}`) })).sort((u, v) => u.a - v.a);
-          const angles = nb.map((q) => q.a);
-          let dir = -Math.PI / 4;
-          if (angles.length === 1) dir = angles[0] + Math.PI;
-          else if (angles.length > 1) {
-            const out = Math.atan2(p.y - cy, p.x - cx);
-            let best = -Infinity;
-            angles.forEach((u, k) => {
-              const v = k + 1 < angles.length ? angles[k + 1] : angles[0] + 2 * Math.PI;
-              const mid = (u + v) / 2;
-              // gap width first (within about 10°), never inside a ring, then facing outward
-              const inRing = nb.length > 2 && nb[k].ring && nb[(k + 1) % nb.length].ring;
-              const score = Math.round((v - u) / 0.17) - (inRing ? 100 : 0) + 0.5 * Math.cos(mid - out);
-              if (score > best) { best = score; dir = mid; }
-            });
+          if (id === null || !p) return;
+          const hot = this.hot.includes(id);
+          if (mode === 'confidence') {
+            const h = row.c13 ?? row.h1;
+            if (!h) return;
+            ctx.fillStyle = confidenceColour(h, row.c13 ? 3 : 0.3);
+            if (hot) { ctx.strokeStyle = accent; ctx.lineWidth = 1.5 * px; ctx.beginPath(); ctx.arc(p.x, p.y, 7.5 * px, 0, Math.PI * 2); ctx.stroke(); }
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1 * px;
+            ctx.beginPath(); ctx.arc(p.x, p.y, 4.5 * px, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            return;
           }
-          const x = p.x + Math.cos(dir) * 15 * px, y = p.y + Math.sin(dir) * 15 * px;
-          if (this.hot.includes(id)) { ctx.strokeStyle = accent; ctx.lineWidth = 1.5 * px; ctx.beginPath(); ctx.arc(x, y, r + 2.5 * px, 0, Math.PI * 2); ctx.stroke(); }
-          ctx.fillStyle = accent;
-          ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#ffffff';
-          ctx.fillText(String(n), x, y + 0.5 * px);
+          if (mode === 'numbers' && n === null) return;
+          const dir = labelDirection(p, id, neighbours(id), s.ring, cx, cy);
+          const ux = Math.cos(dir), uy = Math.sin(dir);
+          if (mode === 'numbers') {
+            const x = p.x + ux * 15 * px, y = p.y + uy * 15 * px;
+            if (hot) { ctx.strokeStyle = accent; ctx.lineWidth = 1.5 * px; ctx.beginPath(); ctx.arc(x, y, r + 2.5 * px, 0, Math.PI * 2); ctx.stroke(); }
+            ctx.font = `600 ${9.5 * px}px system-ui, sans-serif`;
+            ctx.fillStyle = accent;
+            ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ffffff';
+            ctx.fillText(String(n), x, y + 0.5 * px);
+            return;
+          }
+          // shifts: δC by the atom, δH beyond it (stacked under δC when the label points sideways)
+          const labels: { text: string; colour: string; bold: boolean }[] = [];
+          if (row.c13) labels.push({ text: row.c13.value.toFixed(1), colour: '#555555', bold: false });
+          if (row.h1 && row.hCount) labels.push({ text: row.h1.value.toFixed(2), colour: accent, bold: true });
+          if (!labels.length) return;
+          const side = Math.abs(ux) > 0.6;
+          const at = labels.map((_, j) => side
+            ? { x: p.x + ux * 22 * px, y: p.y + uy * 22 * px + (labels.length > 1 ? (j ? 6.5 : -6.5) : 0) * px }
+            : { x: p.x + ux * (16 + 12 * j) * px, y: p.y + uy * (16 + 12 * j) * px });
+          labels.forEach((l, j) => {
+            ctx.font = `${l.bold ? 600 : 400} ${10.5 * px}px system-ui, sans-serif`;
+            const w = ctx.measureText(l.text).width;
+            // a paper-coloured backing keeps the number clear of bonds it crosses
+            ctx.fillStyle = hot ? 'rgba(14,124,134,0.16)' : 'rgba(255,255,255,0.85)';
+            ctx.fillRect(at[j].x - w / 2 - 1.5 * px, at[j].y - 6 * px, w + 3 * px, 12 * px);
+            ctx.fillStyle = l.colour;
+            ctx.fillText(l.text, at[j].x, at[j].y + 0.5 * px);
+          });
         });
       }
     }
@@ -259,3 +344,29 @@ export class NmrPanel {
   }
 }
 
+export type DrawMode = 'shifts' | 'numbers' | 'confidence';
+
+/** Green when the measured atoms agree (as the list's number chip), amber for a loose match, red when they disagree widely or only the atom type matched. */
+export function confidenceColour(h: ShiftHit, wide: number): string {
+  if (h.radius === 0 || h.spread > 2 * wide) return '#c8423b';
+  return h.spread > wide ? '#d99a1e' : '#2e9d5b';
+}
+
+/** The direction for an atom's label: the widest gap between its bonds, never inside a ring, facing out. */
+function labelDirection(p: { x: number; y: number }, id: number, nbrs: { id: number; x: number; y: number }[], ring: Set<string>, cx: number, cy: number): number {
+  const nb = nbrs.map((q) => ({ a: Math.atan2(q.y - p.y, q.x - p.x), ring: ring.has(`${id},${q.id}`) })).sort((u, v) => u.a - v.a);
+  const angles = nb.map((q) => q.a);
+  if (!angles.length) return -Math.PI / 4;
+  if (angles.length === 1) return angles[0] + Math.PI;
+  const out = Math.atan2(p.y - cy, p.x - cx);
+  let best = -Infinity, dir = -Math.PI / 4;
+  angles.forEach((u, k) => {
+    const v = k + 1 < angles.length ? angles[k + 1] : angles[0] + 2 * Math.PI;
+    const mid = (u + v) / 2;
+    // gap width first (within about 10°), never inside a ring, then facing outward
+    const inRing = nb.length > 2 && nb[k].ring && nb[(k + 1) % nb.length].ring;
+    const score = Math.round((v - u) / 0.17) - (inRing ? 100 : 0) + 0.5 * Math.cos(mid - out);
+    if (score > best) { best = score; dir = mid; }
+  });
+  return dir;
+}

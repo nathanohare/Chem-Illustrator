@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { NamerGraph } from '../src/chem/namer-graph';
-import { molfileHeavyAtoms, nmrRows, siText } from '../src/ui/nmr-panel';
+import { confidenceColour, molfileHeavyAtoms, nmrListHtml, nmrReportHtml, nmrRows, siText } from '../src/ui/nmr-panel';
 
 const atom = (el: string, h: number, arom = false) => ({ el, q: 0, iso: 0, legacy: null, cip: null, tag: null, arom, xh: 0, h, rad: 0, deg: 0 });
 const bond = (u: number, v: number, o = 1) => ({ u, v, o, ez: null, ring: false });
@@ -34,5 +34,29 @@ describe('NMR panel rows', () => {
       '    0.0000    0.0000    0.0000 C   0  0', '    1.0000    0.0000    0.0000 H   0  0', '    2.0000    0.0000    0.0000 O   0  0',
       '  1  2  1  0', '  1  3  1  0', 'M  END'].join('\n');
     expect(molfileHeavyAtoms(mol)).toEqual([0, 2]);
+  });
+});
+
+describe('NMR panel views', () => {
+  const rows = nmrRows(ethanol, [
+    { atom: 0, c13: hit(18.4), h1: hit(1.22), hCount: 3 },
+    { atom: 1, c13: hit(58.3), h1: hit(3.70), hCount: 2 },
+    { atom: 2, c13: null, h1: hit(1.5), hCount: 1 },
+  ]);
+  it('lists one nucleus by shift, highest first', () => {
+    const h = nmrListHtml(rows, '1H');
+    expect(h.indexOf('3.70')).toBeLessThan(h.indexOf('1.50'));
+    expect(h).toContain('OH');
+    expect(nmrListHtml(rows, '13C')).not.toContain('OH');
+  });
+  it('peak report subscripts the solvent and links each peak to its row', () => {
+    const r = nmrReportHtml(rows, 'CDCl3');
+    expect(r).toContain('CDCl<sub>3</sub>');
+    expect(r).toContain('data-row="1">3.70 (2H)');
+  });
+  it('colours confidence by agreement', () => {
+    expect(confidenceColour({ value: 1, spread: 0.5, radius: 4, n: 9 }, 3)).toBe('#2e9d5b');
+    expect(confidenceColour({ value: 1, spread: 4, radius: 4, n: 9 }, 3)).toBe('#d99a1e');
+    expect(confidenceColour({ value: 1, spread: 0.5, radius: 0, n: 9 }, 3)).toBe('#c8423b');
   });
 });
