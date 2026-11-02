@@ -9,7 +9,8 @@ import type { Contents } from '../model';
 import type { DocStyle } from '../style';
 import { drawLayout } from '../text/draw';
 import { BOX_PAD, SHADOWS, borderRect, lookOf, styleOf, watermarkPlace, type DocText, type HeaderFooter, type NumberPlace, type PageBorder, type Watermark } from './document';
-import { withStack } from '../text/layout';
+import { withStack, type TextLayout } from '../text/layout';
+import { geoDef, moveSteps, traceSteps } from '../design/geo';
 import type { DocLayout, PageBox, PlacedObject, TableBox } from './doc-layout';
 import type { BorderLine, TableData } from '../model';
 import { coveringCell, spanOf } from '../table';
@@ -236,7 +237,8 @@ export function recordPages(t: DocText, lay: DocLayout, drawing: (c: Contents, s
       const cut = obj?.kind === 'picture' ? obj.fx?.shape : undefined;
       const outline = (dx: number) => {
         c.beginPath();
-        if (!cut || !traceShape(c, cut, o.x + dx, o.y + dx, o.w, o.h)) c.rect(o.x + dx, o.y + dx, o.w, o.h);
+        if (obj?.kind === 'textbox' && obj.geo) traceGeo(c, obj.geo, { x: o.x + dx, y: o.y + dx, w: o.w, h: o.h }, dx === 0);
+        else if (!cut || !traceShape(c, cut, o.x + dx, o.y + dx, o.w, o.h)) c.rect(o.x + dx, o.y + dx, o.w, o.h);
       };
       if (look?.shadow) {
         // a PDF has no blur: the shadow is a grey box, lighter when soft
@@ -253,15 +255,18 @@ export function recordPages(t: DocText, lay: DocLayout, drawing: (c: Contents, s
         const tb = lay.tables.get(o.id);
         if (tb) drawDocTable(c, obj.table, tb, p.index, null, t.tableStyles);
       } else if (obj?.kind === 'textbox') {
-        if (obj.fill) { c.fillStyle = obj.fill; c.fillRect(o.x, o.y, o.w, o.h); }
+        if (obj.fill) { c.fillStyle = obj.fill; if (obj.geo) { c.beginPath(); traceGeo(c, obj.geo, o); c.fill(); } else c.fillRect(o.x, o.y, o.w, o.h); }
         const bl = lay.boxes.get(o.id);
-        if (bl) drawLayout(c, bl, o.x + BOX_PAD.x, o.y + BOX_PAD.y - bl.box.y1);
+        if (bl) drawLayout(c, bl, o.x + BOX_PAD.x, boxTextTop(obj, o, bl));
       } else if (obj?.kind === 'math') {
         const m = lay.maths.get(o.id);
         if (m) drawMath(c, m, o.x, o.y + m.ascent, m.family, m.color);
       } else if (obj?.kind === 'picture') ctx.items.push({ kind: 'image', src: fxSrc(obj) ?? obj.src, x: o.x, y: o.y, w: o.w, h: o.h, px: obj.px, ...(obj.crop ? { crop: obj.crop } : {}), ...(obj.rot ? { rot: obj.rot } : {}), ...(obj.flipH ? { flipH: true } : {}), ...(obj.flipV ? { flipV: true } : {}) });
       else if (obj?.kind === 'drawing') {
-        const pic = drawing(obj.contents, t.drawingStyle);
+        const drawn = drawing(obj.contents, t.drawingStyle);
+        // a figure's area is what fills its place (its structures where they are in it; nothing of the area itself is printed)
+        const fr = obj.frame;
+        const pic = drawn && fr ? { ...drawn, box: { x1: fr.x, y1: fr.y, x2: fr.x + fr.w, y2: fr.y + fr.h } } : drawn;
         const turn = turnOf(obj);
         if (pic) ctx.items.push(...(turn ? turnItems(placeItems(pic, o), o, turn) : placeItems(pic, o)));
       }
@@ -279,6 +284,23 @@ export function recordPages(t: DocText, lay: DocLayout, drawing: (c: Contents, s
     }
     return { w: p.w, h: p.h, items: ctx.items, origin: { x: p.x, y: p.top } };
   });
+}
+
+/**
+ * A shape's outline (Insert > Shapes in a document) filling its place; with `lines`, its
+ * details drawn as lines only too (a cylinder's rim), for stroking.
+ */
+export function traceGeo(ctx: Parameters<typeof traceSteps>[0], geo: string, at: { x: number; y: number; w: number; h: number }, lines = false): void {
+  const out = geoDef(geo).draw(at.w, at.h);
+  traceSteps(ctx, moveSteps(out.body, at.x, at.y));
+  if (lines && out.lines) traceSteps(ctx, moveSteps(out.lines, at.x, at.y));
+}
+
+/** Where a text box's text starts down the page: at its top, or a shape's in its middle (as PowerPoint puts it). */
+export function boxTextTop(o: { geo?: string }, at: { y: number; h: number }, bl: TextLayout): number {
+  const textH = bl.box.y2 - bl.box.y1;
+  const top = o.geo ? at.y + Math.max(BOX_PAD.y, (at.h - textH) / 2) : at.y + BOX_PAD.y;
+  return top - bl.box.y1;
 }
 
 /** A recorded picture's shapes and text scaled and moved to fill a box. */

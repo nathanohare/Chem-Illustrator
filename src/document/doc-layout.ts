@@ -17,7 +17,7 @@ import { withStack, layoutText, type Glyphs, type InlineBox, type LaidLine, type
 import { fitParas, listMarkers, paraCount, splitParagraphs } from '../text/paragraphs';
 import { isCovered, rowSpanOf, spanOf } from '../table';
 import * as rt from '../richtext';
-import { nestedTables, BOX_PAD, FLOAT_GAP, LINE_NUMBER_GAP, OBJECT_CHAR, columnsOf, fieldTexts, floatOf, lookExtent, lookOf, noteStyle, objectsInText, styleOf, FORM_SHADE, type DocObject, type DocText, type HeaderFooter, type NamedStyle, type PageSetup, type WrapKind } from './document';
+import { drawingOwnSize, nestedTables, BOX_PAD, FLOAT_GAP, LINE_NUMBER_GAP, OBJECT_CHAR, columnsOf, fieldTexts, floatOf, lookExtent, lookOf, noteStyle, objectsInText, styleOf, FORM_SHADE, type DocObject, type DocText, type HeaderFooter, type NamedStyle, type PageSetup, type WrapKind } from './document';
 import { pageNumText, samePaper, sectionOfParas, sectionsOf } from './sections';
 import { bibliography, type BibEntry } from './references';
 import { emptyTof, tocEntries, tocLines, tofEntries, type TocEntry } from './toc';
@@ -388,7 +388,7 @@ export class DocLayouter {
     const inline = (id: number): InlineBox | null => {
       const o = t.objects[id];
       const k = o && (o.kind === 'drawing' || o.kind === 'picture') ? o.scale ?? 1 : 1;
-      const own = o?.kind === 'drawing' ? this.deps.drawingSize(o.contents, t.drawingStyle) : o?.kind === 'picture' ? { w: o.w, h: o.h } : null;
+      const own = o?.kind === 'drawing' ? drawingOwnSize(o, () => this.deps.drawingSize(o.contents, t.drawingStyle)) : o?.kind === 'picture' ? { w: o.w, h: o.h } : null;
       if (own) {
         const [l, tp, r, b] = lookExtent(lookOf(o));
         return { w: own.w * k + l + r, ascent: own.h * k + tp, descent: b };
@@ -479,7 +479,7 @@ export class DocLayouter {
     const sizes = new Map<number, { w: number; h: number }>();
     for (const [k, o] of Object.entries(t.objects)) {
       const room = objWidth.get(Number(k)) ?? textW;
-      if (o.kind === 'drawing') sizes.set(Number(k), shownSize(this.deps.drawingSize(o.contents, t.drawingStyle), o.scale ?? 1, room));
+      if (o.kind === 'drawing') sizes.set(Number(k), shownSize(drawingOwnSize(o, () => this.deps.drawingSize(o.contents, t.drawingStyle)), o.scale ?? 1, room));
       else if (o.kind === 'picture') sizes.set(Number(k), shownSize({ w: o.w, h: o.h }, o.scale ?? 1, room));
     }
     // equations: laid out in the font and size of the text round them
@@ -520,7 +520,7 @@ export class DocLayouter {
         const room = Math.max(6, xs[c + spanOf(tb, r, c)] - xs[c] - m.left - m.right);
         for (const x of cell.runs) {
           const n = x.obj !== undefined ? t.objects[x.obj] : undefined;
-          if (n?.kind === 'drawing') sizes.set(x.obj!, shownSize(this.deps.drawingSize(n.contents, t.drawingStyle), n.scale ?? 1, room));
+          if (n?.kind === 'drawing') sizes.set(x.obj!, shownSize(drawingOwnSize(n, () => this.deps.drawingSize(n.contents, t.drawingStyle)), n.scale ?? 1, room));
           else if (n?.kind === 'picture') sizes.set(x.obj!, shownSize({ w: n.w, h: n.h }, n.scale ?? 1, room));
         }
       }));

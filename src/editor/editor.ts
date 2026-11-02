@@ -425,6 +425,8 @@ export class Editor {
   private drag: Drag | null = null;
   /** Something is being dragged (moved, rotated or resized) right now. */
   get dragging(): boolean { return !!this.drag?.moved; }
+  /** Text is being typed into a caption or label. */
+  captionOpen(): boolean { return !!this.captionEd?.isOpen; }
   private needScene = true;
   private needOverlay = true;
   private frameQueued = false;
