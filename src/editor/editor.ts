@@ -319,18 +319,39 @@ interface TemplateChoice {
   note?: string;
 }
 
-const HILITE = 'rgba(40, 120, 255, 0.28)';
-const PREVIEW = '#2f6fdf';
+let PREVIEW = '#2f6fdf';
 
 /**
  * Colours of the marks drawn over the page. With View > Reading Mode on, the marks go through the
  * page's colour filter too (so text being typed shows in the ink colour), which turns lightness
  * round: these are picked to come out bright and clear on the dark page.
  */
-const MARKS = {
-  light: { selFill: 'rgba(40, 120, 255, 0.18)', selLine: 'rgba(40, 120, 255, 0.35)', hot: HILITE, box: 'rgba(47, 111, 223, 0.55)', hover: 'rgba(40,120,255,0.7)', marquee: '#333', next: '#19a34a' },
-  dark: { selFill: 'rgba(0, 70, 190, 0.34)', selLine: 'rgba(0, 70, 190, 0.6)', hot: 'rgba(0, 70, 190, 0.5)', box: 'rgba(0, 60, 158, 0.9)', hover: 'rgba(0, 60, 158, 0.95)', marquee: '#000', next: '#0b6b2f' },
+const marksIn = (light: [number, number, number], dark: [number, number, number]) => {
+  const a = (c: [number, number, number], o: number) => `rgba(${c.join(', ')}, ${o})`;
+  return {
+    light: { selFill: a(light, 0.18), selLine: a(light, 0.35), hot: a(light, 0.28), box: a(light, 0.55), hover: a(light, 0.7), marquee: '#333', next: '#19a34a' },
+    dark: { selFill: a(dark, 0.34), selLine: a(dark, 0.6), hot: a(dark, 0.5), box: a(dark, 0.9), hover: a(dark, 0.95), marquee: '#000', next: '#0b6b2f' },
+  };
 };
+const BLUE_MARKS = marksIn([40, 120, 255], [0, 70, 190]);
+let MARKS = BLUE_MARKS;
+
+/**
+ * Draw the selection, hover and drawing previews in `hex` (Canvas mode's teal, so the marks
+ * match the mode's accent), or in the usual blue (null).
+ */
+export function setMarkTint(hex: string | null): void {
+  if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) {
+    MARKS = BLUE_MARKS;
+    PREVIEW = '#2f6fdf';
+    return;
+  }
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+  // the Reading Mode page turns lightness round, so its marks are a darker shade that comes out bright
+  const dark = c.map((v) => Math.round(v * 0.55)) as [number, number, number];
+  MARKS = marksIn(c, dark);
+  PREVIEW = hex;
+}
 
 /** A highlight setting the Chemistry menu and Highlight toolbox turn on and off. */
 export type HighlightToggle = 'smooth' | 'centre' | 'soft' | 'shadow' | 'glow' | 'outline';

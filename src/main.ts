@@ -22,7 +22,8 @@ import { readRibbons, applyRibbon, type RibbonInfo, type RibbonsPrefs } from './
 import { editPalettes, getPalettes, onPalettes, setPalettes, useDrawingColours, usePaletteMenus } from './ui/palette-ui';
 import { Doc, Atom, Caption, Shape, type TextRun, outsideValence, Contents, CHIRAL_FLAGS, PICTURE_STYLES, type PictureLook, type Attachment, type HighlightStyle, type ShapeMath, PAPER, keepOnPage, type PageSetup, type PageWalls } from './model';
 import { Renderer, measureText, forgetTextWidths } from './render/renderer';
-import { Editor, TOOLS, ringsWereFilled, type HighlightToggle, type Selection } from './editor/editor';
+import { Editor, TOOLS, ringsWereFilled, setMarkTint, type HighlightToggle, type Selection } from './editor/editor';
+import { setAidTint } from './editor/cursor-aids';
 import { BUILT_IN_LOOKS, type HighlightLookPreset } from './ui/highlight-looks';
 import { selectionBox, atomsBox, POINTS, type Align, units, moveUnit } from './editor/arrange';
 import { defaultColumns } from './editor/grid-arrange';
@@ -183,7 +184,7 @@ import { arrowGaps } from './chem/mechanism';
 import { showDialog } from './ui/dialog-host';
 import { HotkeysDialog } from './ui/hotkeys-dialog';
 import { TypingDialog } from './ui/typing-dialog';
-import { ModeColoursDialog, ModeColours, DEFAULT_MODE_COLOURS, applyModeColours } from './ui/mode-colours';
+import { ModeColoursDialog, ModeColours, DEFAULT_MODE_COLOURS, applyModeColours as applyModeColoursOnly, modeColour } from './ui/mode-colours';
 import { typingPrefs, setTypingPrefs, onTypingPrefs } from './text/typing';
 import { NicknameChooser } from './ui/nickname-chooser';
 import { ask } from './ui/ask';
@@ -346,6 +347,18 @@ const scene = $<HTMLCanvasElement>('#scene');
 const overlay = $<HTMLCanvasElement>('#overlay');
 const renderer = new Renderer(scene, overlay);
 const editor = new Editor(doc, renderer, host);
+
+/**
+ * Colour the window for a mode; in Canvas mode the selection, hover and drawing marks take the
+ * mode's teal too, so the accent is the same everywhere (UI rule 5).
+ */
+function applyModeColours(mode: Parameters<typeof applyModeColoursOnly>[0], c: ModeColours): void {
+  applyModeColoursOnly(mode, c);
+  const tint = mode === 'drawing' ? modeColour('drawing', c) : null;
+  setMarkTint(tint);
+  setAidTint(tint);
+  editor.requestScene();
+}
 editor.lengthUnits = () => rulerPrefs.units;
 const chem = new ChemClient(document.baseURI);
 const checks = new StructureChecks(doc);
