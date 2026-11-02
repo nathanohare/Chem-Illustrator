@@ -12,6 +12,8 @@ import type { TextRun } from '../model';
 import { RichField } from './rich-field';
 import { dropTarget, type BoxPlace } from './toolboxes';
 import { PIN_ICON, PINNED_ICON } from './float-box';
+import { formatDefaults, type SmartFormat } from '../chem/smart-format';
+import { toggleSmartFormat } from './smart-format-pop';
 
 export interface SmartPaneHooks {
   doc(): Doc;
@@ -40,6 +42,8 @@ export interface SmartPaneHooks {
   arrange(id: number, patch: Partial<SmartData>): void;
   /** Add a second loop to a cycle (the Catalytic Cycle window, filled with this one). */
   secondLoop(id: number): void;
+  /** Give the scheme its own font, text sizes, arrows and spacing (undefined: the drawing style's). */
+  format(id: number, fmt: SmartFormat | undefined): void;
   ungroup(id: number): void;
 }
 
@@ -239,12 +243,22 @@ export class SmartPane {
       lay.append(b);
     }
     head.append(lay);
+    const gear = btn('<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><circle cx="8" cy="8" r="2.1"/><path d="M8 1.6v1.8M8 12.6v1.8M1.6 8h1.8M12.6 8h1.8M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M3.5 12.5l1.3-1.3M11.2 4.8l1.3-1.3" stroke-linecap="round"/><circle cx="8" cy="8" r="4.6"/></svg>',
+      'Scheme Format: its font, text sizes, arrows and spacing', 'sp-gear', () => toggleSmartFormat(gear, {
+        fmt: this.hooks.doc().shapes.get(id)?.smart?.fmt ?? {},
+        defaults: formatDefaults(this.hooks.doc()),
+        cycle: (this.hooks.doc().shapes.get(id)?.smart?.layout ?? data.layout) === 'cycle',
+        apply: (fmt) => this.hooks.format(id, fmt),
+      }));
+    gear.dataset.for = String(id);
+    gear.setAttribute('aria-haspopup', 'dialog');
+    if (data.fmt) gear.classList.add('on');
     const pin = btn(this.host ? PINNED_ICON : PIN_ICON, this.host ? 'Undock: float the list beside the scheme again' : 'Dock the list as a toolbox at the right (or drag its title to any edge)', 'sp-pin', () => this.hooks.dock(this.host ? null : { dock: 'right' }));
     pin.setAttribute('aria-pressed', String(!!this.host));
     head.append(pin);
     if (!this.host) head.append(btn('‹', 'Fold the species list away', 'sp-fold', () => { folded = true; this.render(id); this.place(); }));
     this.el.append(head);
-    this.el.append(this.formatBar(btn));
+    this.el.append(this.formatBar(btn, gear));
     if (data.free) {
       const p = document.createElement('p');
       p.className = 'sp-note';
@@ -403,7 +417,7 @@ export class SmartPane {
    * The formatting bar: subscript, superscript, chemical interpretation and symbols, for the row
    * being typed in. Its buttons keep the caret in the row.
    */
-  private formatBar(btn: (label: string, title: string, cls: string, f: () => void) => HTMLButtonElement): HTMLElement {
+  private formatBar(btn: (label: string, title: string, cls: string, f: () => void) => HTMLButtonElement, gear: HTMLElement): HTMLElement {
     const wrap = document.createElement('div');
     const bar = document.createElement('div');
     bar.className = 'sp-bar';
@@ -423,7 +437,7 @@ export class SmartPane {
     gap.className = 'sp-bar-gap';
     const sym = (c: string, name: string) => btn(c, `Insert ${name}`, 'sp-fmt sp-sym', on((r) => r.insert(c)));
     const more = btn('Ω ▾', 'Symbol… (Greek letters, arrows, charges and more)', 'sp-fmt sp-more', () => { this.symbols = !this.symbols; this.showState(); });
-    bar.append(sub, sup, chem, gap, sym('‡', '‡ (transition state)'), sym('′', 'prime'), sym('°', 'degree sign'), sym('•', 'dot (radical)'), more);
+    bar.append(sub, sup, chem, gap, sym('‡', '‡ (transition state)'), sym('′', 'prime'), sym('°', 'degree sign'), sym('•', 'dot (radical)'), more, gear);
     const grid = document.createElement('div');
     grid.className = 'sp-symbols';
     grid.setAttribute('role', 'group');

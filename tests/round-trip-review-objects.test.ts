@@ -10,7 +10,7 @@ import { describe, expect, it } from 'vitest';
 import { unzipSync, strFromU8 } from 'fflate';
 import { Doc, type Contents } from '../src/model';
 import { plainMeasure } from '../src/chem/reaction';
-import { makeSmart, readSmart, slotName } from '../src/chem/smart-scheme';
+import { formatSmart, makeSmart, readSmart, slotName } from '../src/chem/smart-scheme';
 import { chemRuns } from '../src/text/chemtext';
 import { ENERGY_DEFAULTS, putEnergy, type EnergyData } from '../src/design/energy';
 import { paintObjects, pickObjectLook } from '../src/format-painter';
@@ -41,7 +41,9 @@ function smartScheme(doc: Doc): void {
       tail: { x: 400 + i * 120 + 35, y: 50 }, head: { x: 400 + i * 120 + 85, y: 50 },
       step: { reactants: ['c' + caps[i].id], products: ['c' + caps[i + 1].id], above: i === 0 ? ['c' + cond.id] : [], below: [], manual: true },
     }).id);
-    makeSmart(doc, m, { atoms: new Set(), bonds: new Set(), shapes: new Set(), captions: new Set([...caps.map((c) => c.id), cond.id]), arrows: new Set(arrows) });
+    const id = makeSmart(doc, m, { atoms: new Set(), bonds: new Set(), shapes: new Set(), captions: new Set([...caps.map((c) => c.id), cond.id]), arrows: new Set(arrows) })!;
+    // its own look, from the gear on its species list
+    formatSmart(doc, m, id, { font: 'Lato', textSize: 9, arrowWidth: 1.25 });
   });
 }
 
@@ -86,6 +88,7 @@ function expectKept(c: Contents | Doc): void {
   expect(frame).toBeTruthy();
   const read = readSmart(doc, plainMeasure(doc), frame!.id)!;
   expect(read.slots.map((sl) => slotName(doc, sl))).toEqual(['ArBr', 'ArAr′', 'ArCHO']);
+  expect(frame!.smart!.fmt).toEqual({ font: 'Lato', textSize: 9, arrowWidth: 1.25 });
   // the energy diagram: still editable, its bracket and dotted pathway kept
   const e = [...doc.shapes.values()].find((s) => s.energy);
   expect(e?.energy?.brackets).toEqual([{ path: 0, from: 2, to: 3 }]);

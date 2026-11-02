@@ -3857,3 +3857,18 @@ dialog.geom-view-dialog { width: min(96vw, 640px); }
 .smart-pane.docked .sp-head .sp-info { order: -1; }
 .smart-pane .sp-head .sp-title { flex: 0 1 auto; }
 .smart-pane .sp-head .sp-title + .sp-info { margin-right: auto; }
+.smart-pane .sp-gear { display: grid; place-items: center; width: 22px; padding: 0; margin-left: 2px; }
+.smart-pane .sp-gear.on { color: var(--accent); }
+.smart-format-pop { position: fixed; z-index: 60; width: 248px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-panel); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18); font: var(--fs-sm) var(--ui-font); padding: 4px 8px 8px; display: grid; gap: 3px; }
+.smart-format-pop .sfp-head { display: flex; align-items: center; justify-content: space-between; font-weight: 600; }
+.smart-format-pop .sfp-x { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 14px; padding: 0 2px; }
+.smart-format-pop .sfp-sec { margin-top: 4px; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); border-bottom: 1px solid var(--line); padding-bottom: 1px; }
+.smart-format-pop .sfp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.smart-format-pop .sfp-field { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 2px; font-size: var(--fs-xs); color: var(--muted); }
+.smart-format-pop .sfp-field > span { grid-column: 1 / -1; }
+.smart-format-pop .sfp-field.sfp-wide { grid-column: 1 / -1; grid-template-columns: 1fr; }
+.smart-format-pop .sfp-field i { font-style: normal; }
+.smart-format-pop input, .smart-format-pop select { font: inherit; font-size: var(--fs-sm); color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); padding: 1px 3px; min-width: 0; }
+.smart-format-pop input:disabled { opacity: 0.5; }
+.smart-format-pop .sfp-foot { display: flex; justify-content: flex-end; margin-top: 4px; }
+.smart-format-pop .sfp-foot button { font: inherit; font-size: var(--fs-xs); padding: 2px 8px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); color: var(--text); cursor: pointer; }

@@ -17,7 +17,8 @@ import { frameBox, frameMembers } from '../editor/frames';
 import type { Measure, Selection } from '../editor/arrange';
 import { applyArrange, planArrange, readScheme, type ArrangeKind, type Scope } from './scheme-arrange';
 import type { Item } from './reaction';
-import { spacing } from './scheme-layout';
+import { spacing, withSchemePrefs } from './scheme-layout';
+import { cleanFormat, formatPrefs, restyleSmart, type SmartFormat } from './smart-format';
 import { arrowMid } from '../objects';
 
 export type SmartLayout = Extract<ArrangeKind, 'line' | 'rows' | 'snake' | 'down' | 'cycle'>;
@@ -44,6 +45,8 @@ export interface SmartData {
    * can be retyped and its arrows follow its species, but it isn't laid out again by itself.
    */
   free?: boolean;
+  /** Its own font, text sizes, arrows and spacing (from the gear on its species list); unset parts follow the drawing style. */
+  fmt?: SmartFormat;
 }
 
 /** One species of the scheme: what it holds and where it is. */
@@ -90,6 +93,8 @@ export function cleanSmart(raw: unknown): SmartData | null {
   if (r.anticlockwise === true) out.anticlockwise = true;
   if (r.reagentArrows === true) out.reagentArrows = true;
   if (r.free === true) out.free = true;
+  const fmt = cleanFormat(r.fmt);
+  if (fmt) out.fmt = fmt;
   return out;
 }
 
@@ -257,14 +262,20 @@ export function arrangeSmart(doc: Doc, m: Measure, frameId: number, patch?: Part
     for (const r of [...doc.arrows.values()]) if (r.reagentFor === l.arrow.id) doc.removeArrow(r.id);
     doc.removeArrow(l.arrow.id);
   }
+  // its own look first, so it is laid out at the sizes it will have
+  restyleSmart(doc, frameId, data.fmt, smartParts(read));
   const scope = scopeOf(doc, doc.shapes.get(frameId)!.frame!);
   const first = read.slots[0]?.items[0]?.ref;
-  const plan = planArrange(doc, m, scope, {
-    kind: data.layout, perRow: data.perRow ?? 3, anticlockwise: data.anticlockwise, reagentArrows: data.reagentArrows,
-    ...(data.layout === 'cycle' && first ? { start: first, startAngle: -Math.PI / 2 } : {}),
-  });
-  if (!plan) return false;
-  const added = applyArrange(doc, m, plan, 'Arrange Smart Scheme');
+  const lay = () => {
+    const plan = planArrange(doc, m, scope, {
+      kind: data.layout, perRow: data.perRow ?? 3, anticlockwise: data.anticlockwise, reagentArrows: data.reagentArrows,
+      ...(data.layout === 'cycle' && first ? { start: first, startAngle: -Math.PI / 2 } : {}),
+    });
+    return plan ? applyArrange(doc, m, plan, 'Arrange Smart Scheme') : null;
+  };
+  const own = formatPrefs(doc, data.fmt);
+  const added = own ? withSchemePrefs(own, lay) : lay();
+  if (!added) return false;
   const now = doc.shapes.get(frameId)!;
   const f = now.frame!;
   const arrows = [...f.arrows.filter((id) => doc.arrows.has(id)), ...added];
@@ -273,6 +284,44 @@ export function arrangeSmart(doc: Doc, m: Measure, frameId: number, patch?: Part
   const b = frameBox(doc, doc.shapes.get(frameId)!.frame!, m);
   if (b) doc.updateShape(frameId, b);
   return true;
+}
+
+/** The scheme's text: species typed as text, and the conditions on its arrows. */
+function smartParts(read: SmartRead): { species: number[]; conditions: number[] } {
+  const caps = (its: Item[]) => its.flatMap((it) => (it.caption !== undefined ? [it.caption] : []));
+  return {
+    species: read.slots.flatMap((s) => (s.caption !== undefined ? [s.caption] : [])),
+    conditions: read.links.flatMap((l) => [...caps(l.above), ...caps(l.below), ...caps(l.inside)]),
+  };
+}
+
+/**
+ * Give the scheme its own look (the gear on its species list): undefined parts follow the
+ * drawing style again. Its text and arrows change, and it is laid out again with its spacing
+ * (one laid out by hand keeps its places). Call inside an edit.
+ */
+export function formatSmart(doc: Doc, m: Measure, frameId: number, fmt: SmartFormat | undefined): boolean {
+  const s = doc.shapes.get(frameId);
+  if (!s?.smart || !s.frame) return false;
+  const was = s.smart.fmt;
+  const data: SmartData = { ...s.smart };
+  const clean = cleanFormat(fmt);
+  if (clean) data.fmt = clean; else delete data.fmt;
+  doc.updateShape(frameId, { smart: data });
+  const read = readSmart(doc, m, frameId);
+  if (!read) return false;
+  // parts going back to the drawing style lose the look they were given
+  const back: SmartFormat = {};
+  const st = doc.style;
+  if (was?.font !== undefined && clean?.font === undefined) back.font = st.captionFont;
+  if (was?.speciesSize !== undefined && clean?.speciesSize === undefined) back.speciesSize = st.captionSize;
+  if (was?.textSize !== undefined && clean?.textSize === undefined) back.textSize = st.arrowTextSize ?? st.captionSize;
+  if (was?.arrowWidth !== undefined && clean?.arrowWidth === undefined) back.arrowWidth = st.lineWidth;
+  if (was?.headType !== undefined && clean?.headType === undefined) back.headType = 'solid';
+  if (was?.headLength !== undefined && clean?.headLength === undefined) back.headLength = st.lineWidth * 10;
+  if (Object.keys(back).length) restyleSmart(doc, frameId, back, smartParts(read));
+  if (data.free) { restyleSmart(doc, frameId, data.fmt, smartParts(read)); return true; }
+  return arrangeSmart(doc, m, frameId) || true;
 }
 
 /** A step's roles, joining slot `a` to slot `b`, with its conditions. */
@@ -560,7 +609,7 @@ export function refitSmart(doc: Doc, before: ReadonlyMap<string, Entity | null>,
     if (!moved) continue;
     const read = readSmart(doc, m, s.id);
     if (!read) continue;
-    const gap = spacing(doc.style.bondLength).gap;
+    const gap = s.smart.fmt?.structGap ?? spacing(doc.style.bondLength).gap;
     for (const l of read.links) {
       const a = read.slots[l.from], b = read.slots[l.to];
       if (!a || !b) continue;

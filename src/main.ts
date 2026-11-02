@@ -13300,6 +13300,7 @@ const smartPane = new SmartPane({
   remove: (id, k) => editor.smartRemove(id, k),
   move: (id, from, to) => editor.smartMove(id, from, to),
   arrange: (id, patch) => editor.smartArrange(id, patch),
+  format: (id, fmt) => editor.smartFormat(id, fmt),
   async secondLoop(id) {
     const st = editor.smartCycleStart(id);
     if (!st) return;
