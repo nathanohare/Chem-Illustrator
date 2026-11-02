@@ -17,19 +17,19 @@ export interface ToolHelp {
 const BOND_STEPS = ['Click empty space or an atom to draw a bond', 'Drag to aim it; let go on an atom to join them'];
 const BOND_KEYS: [string, string][] = [
   ['Alt', 'any angle and length while dragging (or hold Space)'],
-  ['Hotkey', 'point at an atom or bond and press a key to change it (Edit ▸ Hotkeys)'],
+  ['Hotkey', 'point at an atom or bond and press a key to change it (Edit ▸ Keyboard Shortcuts)'],
 ];
 
 /** Help for tools named one by one; the rest go by their kind (below). */
 const BY_NAME: Record<string, ToolHelp> = {
   select: {
     what: 'Click to select (Shift or Ctrl+click adds), drag to box-select or move. Ctrl+drag copies; Shift keeps a drag straight. Double-click selects a whole structure. Delete removes.',
-    steps: ['Click something, or drag a box round it', 'Drag what is selected to move it'],
+    steps: ['Click something, or drag a box around it', 'Drag what is selected to move it'],
     keys: [['Shift', 'click: add or take out; drag: keep the move straight'], ['Ctrl', 'click: add or take out; drag: move a copy'], ['Alt', 'drag without snapping to guides or onto atoms'], ['Double-click', 'select the whole structure']],
   },
   lasso: {
-    what: 'Drag a loop round what to select, to pick pieces out of a crowded scheme. Then drag what is selected to move it.',
-    steps: ['Drag a loop round what to select', 'Drag what is selected to move it'],
+    what: 'Drag a loop around what to select, to pick pieces out of a crowded scheme. Then drag what is selected to move it.',
+    steps: ['Drag a loop around what to select', 'Drag what is selected to move it'],
     keys: [['Shift', 'add to what is selected'], ['Ctrl', 'drag the selection: move a copy']],
   },
   eraser: { what: 'Click an atom, bond, caption, arrow or shape to remove it.', steps: ['Click what to remove'], keys: [] },
@@ -90,11 +90,11 @@ export function toolHelp(name: string, t: Tool | undefined): ToolHelp {
       if (t.shape.kind === 'line') return { what: 'Drag to draw a line, in 15° steps. Drag its ends to move them.', steps: ['Press where the line starts', 'Drag to where it ends and let go'], keys: [['Alt', 'any angle']] };
       return {
         what: 'Drag to draw. Drag the corner squares to resize; the Style panel changes dashes, fill, corners and shadow.',
-        steps: [t.from === 'center' ? 'Press where its centre goes' : 'Press at one corner', 'Drag out and let go'],
+        steps: [t.from === 'center' ? 'Press where its center goes' : 'Press at one corner', 'Drag out and let go'],
         keys: t.from === 'center' ? [] : [['Shift', 'a square or circle']],
       };
     case 'bracket':
-      return { what: 'Drag a box to put brackets round it, or click a structure to bracket it.', steps: ['Click a structure, or press at a corner', 'Drag a box round what to bracket and let go'], keys: [] };
+      return { what: 'Drag a box to put brackets around it, or click a structure to bracket it.', steps: ['Click a structure, or press at a corner', 'Drag a box around what to bracket and let go'], keys: [] };
     case 'template':
       return {
         what: 'Click empty space to place it (drag to turn it), a bond to fuse it on, or an atom to join it there (Alt: the other way: by a new bond, or sharing the atom).',
@@ -103,8 +103,8 @@ export function toolHelp(name: string, t: Tool | undefined): ToolHelp {
       };
     case 'symbol':
       return {
-        what: 'Click an atom to put the mark in its most open space, or press on the atom and drag round it to aim it.',
-        steps: ['Click an atom', 'Or press on it and drag round it to aim the mark'],
+        what: 'Click an atom to put the mark in its most open space, or press on the atom and drag around it to aim it.',
+        steps: ['Click an atom', 'Or press on it and drag around it to aim the mark'],
         keys: [['Alt', 'aim in 15° steps'], ['Shift', 'aim in 15° steps']],
       };
     case 'mark':
@@ -119,7 +119,7 @@ export function toolHelp(name: string, t: Tool | undefined): ToolHelp {
       };
     case 'bond':
     default:
-      return { what: 'Click empty space or an atom to draw; drag to aim (hold Alt or Space: any angle). Point at an atom or bond and press a hotkey (Edit > Hotkeys lists them).', steps: BOND_STEPS, keys: BOND_KEYS };
+      return { what: 'Click empty space or an atom to draw; drag to aim (hold Alt or Space: any angle). Point at an atom or bond and press a hotkey (Edit > Keyboard Shortcuts lists them).', steps: BOND_STEPS, keys: BOND_KEYS };
   }
 }
 
@@ -154,7 +154,7 @@ export function shapeHandleHelp(line: boolean): { name: string; handles: string[
 }
 
 /**
- * A tool's name and the rest of its tool tip: "Wedge. Click again to reverse" → "Wedge",
+ * A tool's name and the rest of its tooltip: "Wedge. Click again to reverse" → "Wedge",
  * "Click again to reverse". Parts that only say what a key does are left out of the rest when
  * the tip lists the keys itself.
  */

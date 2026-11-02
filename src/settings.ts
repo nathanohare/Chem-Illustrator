@@ -112,7 +112,7 @@ export interface Settings {
   startView: boolean;
   /** Resting the mouse on an abbreviation shows the group written out (View > Group Tooltips). */
   groupTips: boolean;
-  /** Tool tips that show what a tool does and its keys (off: the plain one-line tip). */
+  /** Tooltips that show what a tool does and its keys (off: the plain one-line tip). */
   toolTips: boolean;
   /** View > Window and Colours > Touch Mode: bigger buttons, the atom keypad and long-press menus. Automatic turns it on once a pen or finger is used. */
   touchMode: 'auto' | 'on' | 'off';
@@ -177,7 +177,7 @@ export interface Settings {
   darkPalettes: DarkPalette[];
   /** Alignment guides on or off in each kind of tab (View > Alignment Guides). */
   guides: { drawing: boolean; slides: boolean; design: boolean };
-  /** Finding your way round drawings: the Document Map, edge arrows, dot grid, outside tint, Fit and Go to Selection buttons (Settings ▸ Navigation). */
+  /** Finding your way around drawings: the Document Map, edge arrows, dot grid, outside tint, Fit and Go to Selection buttons (Settings ▸ Navigation). */
   orient: OrientPrefs;
   /** How the drawing's page grid looks, and what a paste past a fixed edge does (Settings ▸ Page Grid). */
   pageLook: PageLook;

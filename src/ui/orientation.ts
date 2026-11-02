@@ -117,7 +117,7 @@ export class Navigator {
     this.el = document.createElement('div');
     this.el.className = 'navigator';
     this.el.hidden = true;
-    this.el.title = 'Document Map: click or drag to move round the drawing; double-click to fit it all in the window (Settings ▸ Navigation)';
+    this.el.title = 'Document Map: click or drag to move around the drawing; double-click to fit it all in the window (Settings ▸ Navigation)';
     this.canvas = document.createElement('canvas');
     this.el.append(this.canvas);
     host.append(this.el);

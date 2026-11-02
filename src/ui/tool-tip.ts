@@ -1,4 +1,4 @@
-// The tool tip for a drawing tool's button: its name and hotkey, what it does, and the keys that
+// The tooltip for a drawing tool's button: its name and hotkey, what it does, and the keys that
 // change it (Alt, Shift, Ctrl…), as a small card beside the button. It takes over from the
 // browser's own one-line tip, which the button keeps for when this one is off.
 

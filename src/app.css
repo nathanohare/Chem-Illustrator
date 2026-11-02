@@ -1885,7 +1885,7 @@ dialog.toolbox-dialog { width: min(96vw, 900px); }
 .combo-group.foldable { cursor: pointer; }
 .combo-group.foldable:hover { color: var(--accent); }
 
-/* Tool tips: a tool's name and hotkey, what it does, and the keys that change it */
+/* Tooltips: a tool's name and hotkey, what it does, and the keys that change it */
 .tool-tip {
   position: fixed; z-index: 2000; pointer-events: none;
   max-width: 300px; padding: 7px 9px;
