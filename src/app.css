@@ -3446,3 +3446,8 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .ribbon .rb-fontcol input.rb-num { flex: 0 0 auto; width: 36px; }
 .ribbon .rb-fontcol .rb-sq { flex: 1 1 auto; min-width: 22px; padding: 2px 3px; }
 .ribbon .rb-fontcol select[data-tx='spacing'] { flex: 0 0 auto; width: 74px; }
+
+/* less room above the side panel's first heading (STYLE) */
+#dock-right:has(> .toolbox[data-id='details']) { padding-top: 2px; }
+#side-content h2 { margin-top: 0; }
+.dock-v > .toolbox[data-id='details'] > #side-fold { top: 0; }

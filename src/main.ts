@@ -566,6 +566,10 @@ const OFF_BAR: ToolbarItem[] = [
 ];
 
 const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+/** Text that names the Ctrl key, as a Mac reads it (Cmd: the app takes ⌘ wherever it takes Ctrl). */
+const macKeys = (text: string) => (isMac ? text.replace(/\bCtrl\+/g, 'Cmd+') : text);
+// the ribbons' and menus' own tool tips, once
+if (isMac) for (const el of document.querySelectorAll<HTMLElement>('[title*="Ctrl+"]')) el.title = macKeys(el.title);
 
 /** The keys that do an action, as people read them. */
 function keysOf(ctx: KeyContext, action: string): string[] {
@@ -606,7 +610,7 @@ const HINTS: Record<string, string> = {
   sketch: 'Draw freehand: a line is a bond, a zig-zag a chain, over a bond doubles it; a loop with corners is a ring, a circle benzene; write C, N, O, Cl, Br, + or − on an atom; scribble to erase.',
   connector: 'Drag from one shape\'s blue dot to another\'s: the connector sticks to both and follows them when they move.',
   'connector-elbow': 'Drag from one shape\'s blue dot to another\'s: the connector bends square and follows the shapes when they move.',
-  select: 'Click to select (Shift or Ctrl+click adds), drag to box-select or move. Ctrl+drag copies; Shift keeps a drag straight. Double-click selects a whole structure. Delete removes.',
+  select: 'Ctrl+drag to copy. Hold Shift while dragging to lock orientation. Double-click selects a whole structure; Shift or Ctrl+click adds to the selection. Delete removes.',
   eraser: 'Click an atom, bond, caption, arrow or shape to remove it.',
   chain: 'Drag from empty space or an atom; the number shows how many bonds. Click to type how many atoms; Alt+click repeats the last number.',
   text: 'Click an atom to type a label (OMe, CO2Et, NHBoc…), or click empty space for a caption.',
@@ -676,8 +680,13 @@ editor.onToolChange = (name) => {
 /** The status bar's hint: its first sentence, short enough to read at a glance; the whole of it when you point at it. */
 function setHint(text: string): void {
   const el = $('#hint');
+  text = macKeys(text);
   const dot = text.search(/\.(\s|$)/);
   let short = dot > 0 ? text.slice(0, dot + 1) : text;
+  // a second short sentence fits too ("Ctrl+drag to copy. Hold Shift while dragging to lock orientation.")
+  const rest = text.slice(short.length);
+  const dot2 = rest.search(/\.(\s|$)/);
+  if (dot > 0 && dot2 > 0 && short.length + dot2 + 1 <= 80) short = text.slice(0, short.length + dot2 + 1);
   const semi = short.indexOf('; ');
   if (short.length > 90 && semi > 0) short = short.slice(0, semi) + '.';
   el.textContent = short;
@@ -2796,7 +2805,7 @@ function align(how: Align): void {
 let flashTimer = 0;
 function flash(msg: string, ms = 3500, action?: { label: string; run: () => void }): void {
   const el = $('#flash');
-  el.textContent = msg;
+  el.textContent = macKeys(msg);
   el.classList.toggle('has-action', !!action);
   if (action) {
     const b = document.createElement('button');
