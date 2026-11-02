@@ -41,3 +41,17 @@ Run every script with `python3 -I` from the repository root.
 - Baseline (radius-4 atom environment lookup on 90% of NMRShiftDB2), MAE on the SI set:
   1H 0.245 ppm, 13C 2.82 ppm, against 0.254 and 2.70 on held-out NMRShiftDB2. Weakest
   classes for 13C: organometallic 5.5, strained 4.0, charged 3.8, B/Si/Sn 3.5 ppm.
+
+## Phase 1: shift lookup shipped with the app
+
+| Step | Script | Output |
+|---|---|---|
+| 1. NMRBank | `nmrbank.py NMRBank_….json test_pmcids.txt nmrbank.jsonl` | peak lists as numbers, with article licence; test-set papers removed |
+| 2. Codes | `env_codes.ts` (esbuild bundle, Node) | environment codes per atom from the app's own `src/chem/nmr/env.ts` |
+| 3. Train | `train_lookup.py WORK --rounds 2 --nb nmrbank06.jsonl --w-nb 1.0 --export nmr-hose.dat` | NMRBank lists assigned to atoms by matching (two rounds), tuned on held-out NMRBank papers, pruned, written for the app |
+| 4. Parity | `parity.ts` (esbuild bundle, Node) | checks the app's reader (`src/chem/nmr/lookup.ts`) gives the script's numbers |
+
+Results (2026-11-02, SI test set v1, compounds under 500 Da, shipped CC BY/NMRShiftDB2 table):
+13C MAE 2.62 ppm, 1H MAE 0.223 ppm (phase 0 baseline 2.82 and 0.245 on all compounds).
+The file is 10.3 MB (6.9 MB gzipped), 0.5 ms per compound, and the app's reader matches the
+script to 0.01 ppm on 8,572 atoms.
