@@ -2581,6 +2581,17 @@ dialog.show-setup { width: min(94vw, 600px); }
 .a11y-go:hover { text-decoration: underline; }
 .a11y-detail { flex-basis: 100%; }
 .a11y-fix { font-size: var(--fs-sm); }
+.preflight-pane { width: 360px; }
+.pf-form { display: grid; gap: 4px; margin-bottom: 8px; }
+.pf-row { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 6px; }
+.pf-row select { min-width: 0; width: 100%; }
+.pf-item { margin-left: 0; padding: 3px 0; border-bottom: 1px solid var(--line); }
+.pf-title { flex: 1 1 60%; }
+.pf-error .pf-title { color: var(--danger); }
+.pf-ok .pf-title { color: var(--muted); }
+.pf-foot { margin-top: 8px; }
+.pf-buttons { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.pf-source { margin: 6px 0 0; }
 
 /* Review > Compare (slides) */
 .sc-pane { width: 380px; }

@@ -92,7 +92,7 @@ import type { PresenterView } from './ui/presenter-view';
 import { editDrawingStyle } from './ui/style-dialog';
 import type { DocText } from './document/document';
 import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from './dark-page';
-import { STYLE_PRESETS, applyStyle, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
+import { STYLE_PRESETS, applyStyle, presetNamed, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
 import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
 import { pngWithDpi } from './render/emf-read';
 import { whiteToClear } from './render/background';
@@ -207,6 +207,9 @@ import { emptyTable, tableFromCells } from './table';
 import type { TableData } from './model';
 import { checkDrawing, checkDocument, checkWorkbook, repeatedTitles, structureAlt, setStructureAlt, type Issue, type IssuePlace } from './accessibility';
 import { AccessibilityPane, askAltText } from './ui/accessibility-pane';
+import { PreflightPane } from './ui/preflight-pane';
+import { enlargeText, thickenLines, useArial } from './preflight-fix';
+import { shapeBox } from './objects';
 import { SlideComparePane } from './ui/slide-compare';
 import { pickFileTemplate } from './ui/file-templates';
 import type { PastedRows } from './io/table-clip';
@@ -4763,23 +4766,26 @@ async function printNow(): Promise<void> {
  * File > Export > Export Picture: the page (a design or the current slide) or the drawing as a PNG or
  * TIFF at the resolution picked, or as an SVG, EMF or EPS, on its background colour or see-through.
  */
-async function exportPicture(): Promise<void> {
+async function exportPicture(preset: { format?: string; dpi?: number; note?: string } = {}): Promise<void> {
   const tab = ws.active, deck = tab.deck;
   const what = deck ? (tab.mode === 'design' ? 'the page' : 'this slide') : 'the drawing';
+  // the figure check's journal sets the resolution it asks for
+  const checked = preflightPane.open ? preflightPane.last : null;
+  const dpiNow = preset.dpi ?? checked?.dpi ?? 300;
   const v = await ask('Export Picture', [
-    { name: 'format', label: 'Format', value: 'png', options: [
+    { name: 'format', label: 'Format', value: preset.format ?? 'png', options: [
       { value: 'png', label: 'PNG (a picture of dots: journals, Word, web)' },
       { value: 'tiff', label: 'TIFF (a picture of dots, LZW-compressed: what many journals ask for)' },
       { value: 'svg', label: 'SVG (shapes that stay sharp: Illustrator, Inkscape, web)' },
       { value: 'emf', label: 'EMF (shapes that stay sharp: Word, PowerPoint on Windows)' },
       { value: 'eps', label: 'EPS (shapes that stay sharp: older journal systems, Illustrator)' },
     ] },
-    { name: 'dpi', label: 'Resolution (PNG, TIFF)', value: '300', type: 'number', unit: 'dpi' },
+    { name: 'dpi', label: 'Resolution (PNG, TIFF)', value: String(dpiNow), type: 'number', unit: 'dpi' },
     { name: 'bg', label: 'Background', value: deck ? 'page' : 'clear', options: [
       { value: deck ? 'page' : 'white', label: deck ? 'The page colour' : 'White' },
       { value: 'clear', label: 'See-through' },
     ] },
-  ], { ok: 'Export…', note: `Saves ${what}. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line drawings.` });
+  ], { ok: 'Export…', note: preset.note ?? (checked ? `Saves ${what}. ${checked.journal.name.replace(/ \(.*/, '')} asks for ${checked.dpi} dpi for this figure (File > Check Figure for Journal).` : `Saves ${what}. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line drawings.`) });
   if (!v) return;
   const dpi = Math.max(30, Math.min(2400, Number(v.dpi) || 300));
   const clear = v.bg === 'clear';
@@ -5499,6 +5505,69 @@ const accessibility = new AccessibilityPane({
   },
 });
 
+/** The journal drawing style for each journal the figure check knows (drawing-styles.ts). */
+const JOURNAL_STYLES: Record<string, string> = {
+  acs: 'ACS Document 1996', rsc: 'RSC', nature: 'Nature journals', wiley: 'Wiley (Angewandte, Chemistry Europe)', elsevier: 'Elsevier (Tetrahedron and others)',
+};
+
+/** File > Check Figure for Journal: the figure showing, as it draws (a drawing, a design page or a slide). */
+const preflightPane = new PreflightPane({
+  figure: () => {
+    if (sheetActive() || docActive()) return null;
+    const deck = deckNow();
+    if (deck) {
+      const i = deck.index;
+      const at = slidePages(deck, i)[deck.current?.canvas ? canvasKeys.picked(deck) : 0];
+      if (!at) return null;
+      return { items: recordSlide(at.page, at.doc), box: { x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h }, page: true };
+    }
+    const pic = recordPicture(doc, 0);
+    return pic ? { items: pic.items, box: pic.box } : null;
+  },
+  select: (where) => {
+    const sel = editor.touching(where);
+    editor.selectThese(sel);
+    const first = [...sel.atoms][0];
+    if (first !== undefined) editor.reveal('atom', first);
+    else if (sel.captions.size) editor.reveal('caption', [...sel.captions][0]);
+    else if (!sel.shapes.size && !sel.arrows.size) flash('That is part of a picture, chart or table: change it there.');
+  },
+  fix: (issue, r) => {
+    finishTyping();
+    const m = editor.measure();
+    const ctx = { captionBox: (id: number) => m.captionBox(doc.captions.get(id)!), shapeBox: (id: number) => shapeBox(doc.shapes.get(id)!) };
+    let done = false;
+    if (issue.fix === 'fit' && issue.want) {
+      editor.selectAll();
+      done = editor.scaleSelection(issue.want);
+      if (done) flash(`Scaled to ${Math.round(issue.want * 100)} % to fit ${r.size.name.replace(/ \(.*/, '').toLowerCase()}. Text in captions keeps its size; check it again.`, 6000);
+    } else if (issue.fix === 'text') done = enlargeText(doc, issue, ctx);
+    else if (issue.fix === 'lines') done = thickenLines(doc, issue, ctx);
+    else if (issue.fix === 'fonts') done = useArial(doc, issue.fonts ?? []);
+    if (done) editor.changed();
+    else if (issue.fix !== 'fit') flash('This is in a picture, chart or table: change it there.');
+    return done;
+  },
+  styleFor: (id) => (JOURNAL_STYLES[id] && presetNamed(JOURNAL_STYLES[id]) ? JOURNAL_STYLES[id] : undefined),
+  useStyle: (name) => {
+    const next = presetNamed(name)?.style;
+    if (!next) return;
+    finishTyping();
+    const deck = deckNow();
+    if (deck) deck.setDrawingStyle({ ...next }, 'restyle');
+    else { doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, { ...next }, 'restyle')); editor.changed(); }
+    flash(`Structures are now drawn in ${next.name}.`, 4000);
+  },
+  exportFor: (r) => {
+    finishTab();
+    const name = r.journal.name.replace(/ \(.*/, '');
+    if (r.journal.vectorPreferred) { void exportPdf(); return; }
+    const raster = r.journal.formats?.find((f) => f === 'tiff' || f === 'png') ?? 'tiff';
+    void exportPicture({ format: raster, dpi: r.dpi, note: `${name} asks for ${r.dpi} dpi for this figure${r.journal.formats ? ` and takes ${r.journal.formats.map((f) => f.toUpperCase()).join(', ')}` : ''}.` });
+  },
+  open: (url) => openWebPage(url),
+});
+
 const slideCompare = new SlideComparePane({
   deck: () => (ws.active.mode === 'slides' ? deckNow() : null),
   flash: (m, ms) => flash(m, ms),
@@ -5702,6 +5771,7 @@ const ANIM_COMMANDS: { cmd: string; label: string }[] = [false, true].flatMap((e
 
 const COMMANDS: Record<string, () => unknown> = {
   new: () => { finishTab(); ws.newDrawing(); },
+  'preflight': () => { finishTyping(); if (preflightPane.open) preflightPane.refresh(); else preflightPane.show(document.querySelector<HTMLElement>('[data-cmd="preflight"]:not([hidden])')); },
   'check-accessibility': () => { finishTyping(); if (accessibility.open) accessibility.refresh(); else accessibility.show(document.querySelector<HTMLElement>('[data-cmd="check-accessibility"]:not([hidden])')); },
   'alt-text': () => { finishTyping(); void drawingAltText(); },
   'new-slides': () => { finishTab(); ws.newSlides(); },

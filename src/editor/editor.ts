@@ -3100,6 +3100,36 @@ export class Editor {
   }
 
   /**
+   * The atoms, text, arrows and shapes that overlap any of these areas (from the figure preflight,
+   * whose findings are places on the drawing). Bonds come with both their atoms.
+   */
+  touching(rects: readonly Rect[]): Selection {
+    const sel = emptySel();
+    if (!rects.length) return sel;
+    const doc = this.doc;
+    const overlaps = (b: Rect) => rects.some((r) => b.x1 <= r.x2 && b.x2 >= r.x1 && b.y1 <= r.y2 && b.y2 >= r.y1);
+    const near = (x: number, y: number) => rects.some((r) => x >= r.x1 - 1 && x <= r.x2 + 1 && y >= r.y1 - 1 && y <= r.y2 + 1);
+    for (const r of rects) for (const at of doc.atomsIn({ x1: r.x1 - 1, y1: r.y1 - 1, x2: r.x2 + 1, y2: r.y2 + 1 })) sel.atoms.add(at.id);
+    // a bond whose middle is in a place takes both its atoms
+    for (const b of doc.bonds.values()) {
+      const p = doc.atoms.get(b.a1), q = doc.atoms.get(b.a2);
+      if (p && q && near((p.x + q.x) / 2, (p.y + q.y) / 2)) { sel.atoms.add(b.a1); sel.atoms.add(b.a2); }
+    }
+    for (const c of doc.captions.values()) if (!c.hidden && overlaps(this.r.captionBox(c))) sel.captions.add(c.id);
+    for (const ar of doc.arrows.values()) {
+      const pts = arrowPoints(ar);
+      const b = { x1: Math.min(...pts.map((q) => q.x)), y1: Math.min(...pts.map((q) => q.y)), x2: Math.max(...pts.map((q) => q.x)), y2: Math.max(...pts.map((q) => q.y)) };
+      if (overlaps({ x1: b.x1 - 2, y1: b.y1 - 2, x2: b.x2 + 2, y2: b.y2 + 2 })) sel.arrows.add(ar.id);
+    }
+    for (const s of doc.shapes.values()) {
+      if (s.hidden || s.locked) continue;
+      const b = s.kind === 'bracket' ? { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) } : shapeBox(s);
+      if (overlaps(b)) sel.shapes.add(s.id);
+    }
+    return sel;
+  }
+
+  /**
    * Chemistry > Labels and Numbers > Add Frame: a box round the selection, with a gap, that follows what it surrounds.
    * False when nothing is selected.
    */
