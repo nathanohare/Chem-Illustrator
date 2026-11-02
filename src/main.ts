@@ -281,7 +281,8 @@ import { paintPages } from './ui/page-grid-view';
 import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
-import type { AssistantAction, SendItem } from './ai/assistant';
+import type { AssistantAction, AssistantMode, SendItem } from './ai/assistant';
+import { AssistantBar } from './ui/assistant-bar';
 import { aiSettingsDialog } from './ui/ai-settings';
 import { freeSpace } from './editor/free-space';
 import { canReadStructures, importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
@@ -2555,6 +2556,31 @@ async function applyAssistantAction(a: AssistantAction): Promise<string> {
   selectNewAtoms(ids);
   await keepPasteInside();
   return old.length ? 'Replaced the selected structure.' : 'Drew the structure.';
+}
+
+let assistantBarEl: AssistantBar | null = null;
+
+/** Edit > Assistant is only there once an AI model is linked. */
+function showAssistantMenu(): void {
+  for (const b of document.querySelectorAll<HTMLElement>('[data-cmd="assistant"]')) b.hidden = aiPrefs.provider === 'none';
+  if (aiPrefs.provider === 'none') assistantBarEl?.close();
+}
+
+/** Edit > Assistant (Ctrl+/): the prompt bar, made the first time. */
+function assistantBar(): AssistantBar {
+  assistantBarEl ??= new AssistantBar({
+    prefs: () => aiPrefs,
+    savePrefs: (p) => { aiPrefs = p; storeSettings(); },
+    mode: () => ws.active.mode as AssistantMode,
+    items: assistantItems,
+    apply: applyAssistantAction,
+    markStep: markAssistantStep,
+    undo: () => { command('undo'); },
+    openSettings: aiSettings,
+    area: () => document.getElementById('work')?.getBoundingClientRect() ?? null,
+    tab: () => ws.active,
+  });
+  return assistantBarEl;
 }
 
 /** "Mark on drawing" for a finding about a step: select that step's arrow. False when there is no such step. */
@@ -7670,7 +7696,7 @@ window.addEventListener('keydown', (e) => {
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'toolbox-guides', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'toolbox-schemes', 'toolbox-diagrams', 'toolbox-tables', 'toolbox-biopolymers', 'toolbox-perspective', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
   'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'theme-darkgray', 'density-compact', 'density-standard', 'density-large', 'shadows-light', 'shadows-strong', 'shadows-off', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
-  'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
+  'assistant', 'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
 
@@ -8403,6 +8429,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'open-log-folder': () => openLogFolder(),
   'open-inspector': () => { invoke('open_inspector').catch((e) => flash(String(e))); },
   'command-search': () => commandSearch.open(),
+  assistant: () => {
+    if (aiPrefs.provider === 'none') { flash('Link an AI model in Edit > Settings > AI Model to use the Assistant.', 6000, { label: 'AI Model…', run: () => void aiSettings() }); return; }
+    assistantBar().toggle();
+  },
   'next-region': () => cycleRegion(1),
   'prev-region': () => cycleRegion(-1),
   'toolbox-main': () => toolboxes.toggle('main'),
@@ -9878,7 +9908,7 @@ async function offerAlkylRestyle(look: AlkylLook): Promise<void> {
 /** Settings ▸ Online: what the program asks the internet for. */
 /** Edit > Settings > AI Model. */
 async function aiSettings(): Promise<void> {
-  await aiSettingsDialog(aiPrefs, (p) => { aiPrefs = p; storeSettings(); });
+  await aiSettingsDialog(aiPrefs, (p) => { aiPrefs = p; storeSettings(); showAssistantMenu(); });
 }
 
 async function onlinePreferences(): Promise<void> {
@@ -10244,6 +10274,7 @@ function applySettings(s: Settings): void {
   updateChannel = s.updateChannel;
   pubchemNames = s.pubchemNames;
   aiPrefs = s.ai;
+  showAssistantMenu();
   docRead.convertChemDraw = s.convertChemDraw;
   matchStructure.on = s.matchStructure;
   straightenLinear.on = s.straightenLinear;
