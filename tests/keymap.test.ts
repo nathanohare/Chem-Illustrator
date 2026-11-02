@@ -246,7 +246,7 @@ describe('the settings file', () => {
       straightenLinear: false,
       cursorAids: { angle: false, length: true, hints: false, units: 'cm' as const, look: 'solid' as const },
       haptoDelocalized: false, toolDemos: 'frames',
-      appTheme: 'dark' as const, oneColumnTools: true, startView: false, lastVersion: '0.1.90',
+      appTheme: 'dark' as const, oneColumnTools: true, startView: false, enterFinishesText: true, lastVersion: '0.1.90',
     };
     const text = settingsText(s);
     expect(text).toContain('"app": "Chem Illustrator"');

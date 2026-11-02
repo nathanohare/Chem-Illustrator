@@ -153,7 +153,7 @@ Pick the text tool (`t` over empty space) and:
 - **click empty space** for a one-line caption;
 - **drag across empty space** to make a text box that wraps its lines. Drag the small handle on its right side to make it wider or narrower.
 
-Double-click a caption to edit it again. Press Esc to finish.
+Double-click a caption to edit it again. Press Esc to finish. If you'd rather finish with Enter, turn on **Edit ▸ Settings ▸ Preferences ▸ Enter finishes typing a text box**: Enter then finishes the text, and Alt+Enter (Option+Enter on a Mac) starts a new line.
 
 ### Typing an atom label
 
