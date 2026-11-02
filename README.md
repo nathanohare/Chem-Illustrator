@@ -16,6 +16,12 @@ Nothing to install: the browser version opens straight away. The desktop app add
 
 ![A two-step reaction scheme in Canvas mode (dark interface), with the Analysis panel showing the product's formula and masses](docs/images/drawing-dark-ui.png)
 
+## A whole route on one canvas
+
+Canvas mode has room for a whole synthesis. This is the endgame of Martin's manzamine A route, joined from five slides into one line: zoom in where the pointer is with Ctrl+wheel, pan along with the right mouse button, and **Fit** brings the whole route back.
+
+![The manzamine A endgame as one linear scheme in Canvas mode: zooming in on the first ring-closing metathesis, panning along through the second to ircinol A and manzamine A, then Fit showing the whole route again](docs/images/canvas-route.gif)
+
 ## Smart reaction arrows
 
 Draw an arrow between two structures and a **+** box appears above and below it. Click one and type the reagents: formulas get their subscripts as you type, the text sits just clear of the arrow, and the arrow grows to fit it, pushing the products along so nothing overlaps. **Chemistry ▸ Reactions and Schemes ▸ Scheme Settings** sets the gaps, the text size and alignment, and whether arrows fit their text.
@@ -41,9 +47,9 @@ Draw an arrow between two structures and a **+** box appears above and below it.
 | ![Moving, growing and flipping structures: each compound number stays underneath its structure](docs/images/id-labels.gif) | ![A frame round a structure grows as bonds are added with hotkeys, and moves with it when it is dragged](docs/images/frames.gif) |
 | **Number Compounds** ties each ID label to its structure. Move it, rotate it, flip it or add to it, and the number keeps its place underneath. | **Add Frame** draws a box that follows its contents: it grows as the structure grows and moves when it moves. |
 
-## Colour that means something
+## Color that means something
 
-Fill rings with a colour, a gradient, hatching or dots (patterns can be see-through over a colour), add a drop shadow, and pick out parts of a structure with round or straight highlights, soft-edged, with a shadow, or centred between a double bond's lines. Fills and highlights move with their atoms and come along when you copy a structure.
+Fill rings with a color, a gradient, hatching or dots (patterns can be see-through over a color), add a drop shadow, and pick out parts of a structure with round or straight highlights, soft-edged, with a shadow, or centered between a double bond's lines. Fills and highlights move with their atoms and come along when you copy a structure.
 
 ![Estrone with each ring filled differently (gradient, hatching, dots, solid), and a kinase inhibitor with its parts highlighted in round, diamond and square shapes](docs/images/ring-fills.png)
 
@@ -71,7 +77,7 @@ The side panel also estimates the pKa of each acidic and basic site, aqueous sol
 
 ## Energy diagrams
 
-**Chemistry ▸ Energy Diagram** draws a reaction coordinate diagram from a table of levels: compare pathways in different colours, mark the barrier, and draw structures right on the levels.
+**Chemistry ▸ Energy Diagram** draws a reaction coordinate diagram from a table of levels: compare pathways in different colors, mark the barrier, and draw structures right on the levels.
 
 ![An energy diagram comparing a thermal and a BF₃-catalysed Diels–Alder pathway, with ΔG‡ marked and the diene, dienophile and product drawn on their levels (illustrative values)](docs/images/energy-diagram.png)
 
@@ -85,7 +91,7 @@ Text on canvases, slides and documents is spell-checked, and a second check catc
 
 The eye button shows the page dark on screen, with your structures in light ink. Files, printing and copies keep their white paper. Choose Graphite, Slate or Warm dark, or mix your own in **View ▸ Window and Colours ▸ Reading Mode Colours**.
 
-![Turning Reading Mode on, then switching its colours between palettes](docs/images/dark-mode.gif)
+![Turning Reading Mode on, then switching its colors between palettes](docs/images/dark-mode.gif)
 
 The interface itself follows your system's dark setting in every mode, as in the screenshots on this page.
 
@@ -97,9 +103,9 @@ Right-drag or middle-drag to pan, Ctrl+wheel to zoom in on the spot under the po
 
 ## Make it yours
 
-Every hotkey can be changed (**Edit ▸ Hotkeys**), and the hotkeys can be exported and shared. Toolboxes unlock to dock on any edge or float anywhere, and **Customize Toolboxes** rearranges any of them (or new ones of your own) by dragging icons about, as on a phone's home screen. The Reading Mode colours, each mode's accent colour, the scheme spacing, your own templates, nicknames and drawing styles are all settings, kept in one file you can export and import on another computer.
+Every hotkey can be changed (**Edit ▸ Hotkeys**), and the hotkeys can be exported and shared. Toolboxes unlock to dock on any edge or float anywhere, and **Customize Toolboxes** rearranges any of them (or new ones of your own) by dragging icons about, as on a phone's home screen. The Reading Mode colors, each mode's accent color, the scheme spacing, your own templates, nicknames and drawing styles are all settings, kept in one file you can export and import on another computer.
 
-![Toolboxes moved to new places, Reading Mode in Slate colours, and the Hotkeys window open](docs/images/customize.png)
+![Toolboxes moved to new places, Reading Mode in Slate colors, and the Hotkeys window open](docs/images/customize.png)
 
 ## Presentations, spreadsheets, documents and designs
 
@@ -177,11 +183,11 @@ Ideas, problems and questions are welcome. In the program, use **Help ▸ Send F
 
 Chem Illustrator is written in TypeScript and runs as a [Tauri](https://tauri.app) desktop app, with [RDKit](https://www.rdkit.org) for the chemistry. [For developers](docs/developers.md) explains how to run it from the source code, how releases are made, and where things are in the code; [TECH-DECISION.md](TECH-DECISION.md) explains why it is built this way.
 
-## Licence
+## License
 
 Chem Illustrator is free software: you can use, share and change it under the terms of the [GNU General Public License](LICENSE), version 3 or (at your option) any later version. It comes with no warranty. An [additional permission](APP-STORE-EXCEPTION.md) allows it to be distributed through Apple's App Store and TestFlight.
 
-Everything it uses is free and open source, and keeps its own licence: RDKit (BSD-3-Clause), OPSIN (MIT), cdxmorph (MIT), Tauri (MIT or Apache-2.0), the bundled fonts (SIL Open Font License) and others listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+Everything it uses is free and open source, and keeps its own license: RDKit (BSD-3-Clause), OPSIN (MIT), cdxmorph (MIT), Tauri (MIT or Apache-2.0), the bundled fonts (SIL Open Font License) and others listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 Reaction animation (Chemistry ▸ Animate ▸ Animate Reaction) is based on [cdxmorph](https://github.com/rshenvi/cdxmorph) by Ryan Shenvi (Shenvi Lab), used with permission.
 
