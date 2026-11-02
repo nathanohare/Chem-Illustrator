@@ -28,3 +28,16 @@ Run every script with `python3 -I` from the repository root.
 - Test-set records stay out of the public repository until after phase 2, when the CC BY
   set is published as an open benchmark. Private copies: the project's shared files
   (`nmr-prediction/testset-v1/`) and, for raw SI, `C:\Users\npo00\Documents\SIs for NMR Prediction`.
+
+## Phase 0 results (test set v1, 2026-11-02)
+
+- 901 CC BY papers, 15,837 compound blocks; 5,670 read (at most 8 per paper), 5,124 kept after
+  dropping duplicates: 1,732 gold, 1,322 silver, 2,070 failed checks.
+- Gold plus silver: 3,054 compounds from 667 papers. Most failures had no structure (the
+  compound was named only by a label in a scheme image) or a peak list that did not fit.
+- Audit of 150 random records: 2% our own reading errors (1 transcription, 2 wrong
+  structures), 6.7% serious errors in the source itself; 300 outlier spectra were also checked.
+  Every record judged wrong was removed.
+- Baseline (radius-4 atom environment lookup on 90% of NMRShiftDB2), MAE on the SI set:
+  1H 0.245 ppm, 13C 2.82 ppm, against 0.254 and 2.70 on held-out NMRShiftDB2. Weakest
+  classes for 13C: organometallic 5.5, strained 4.0, charged 3.8, B/Si/Sn 3.5 ppm.
