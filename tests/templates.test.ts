@@ -24,7 +24,10 @@ describe('template data', () => {
     it(`${t.name}: sensible shape`, () => {
       const n = t.atoms.length;
       // rings bonded side-on to a metal are seen in perspective too
-      const persp = !!(t.z || t.hapto);
+      // drawings copied from textbooks and other sources keep their perspective as drawn: short
+      // foreshortened bonds, long bridges (a norbornane bridge is drawn 1.6-1.8 bonds long)
+      const copied = t.group === 'sources';
+      const persp = !!(t.z || t.hapto) || copied;
       // an η³-allyl's bonds are 1½, a metal–metal bond may be quadruple
       const metal = t.group === 'organometallic' || t.group === 'ligands' || t.group === 'ligand-lib';
       // the Ligand Library's drawings are laid out by RDKit round their metal: a crown ether or
@@ -37,7 +40,7 @@ describe('template data', () => {
         const d = Math.hypot(t.atoms[a][0] - t.atoms[b][0], t.atoms[a][1] - t.atoms[b][1]);
         expect(d).toBeGreaterThan(persp ? 0.25 : 0.45);
         // Haworth rings (sugars, nucleosides and nucleotides) are drawn wide
-        expect(d).toBeLessThan(t.group === 'sugars' || t.group === 'nucleic' ? 2.2 : lib ? (a === t.attach || b === t.attach ? 4 : 1.9) : 1.6);
+        expect(d).toBeLessThan(t.group === 'sugars' || t.group === 'nucleic' || copied ? 2.2 : lib ? (a === t.attach || b === t.attach ? 4 : 1.9) : 1.6);
       }
       // no two atoms on top of each other (shapes seen in perspective may come closer; C60's
       // far side lies behind its near side)

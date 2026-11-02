@@ -5,6 +5,7 @@
 import { layerByDepth } from './crossing';
 import data from './templates.json';
 import conformerData from './conformers.json';
+import sourceData from './source-templates.json';
 import metalData from './metal-templates.json';
 import ligandData from './ligand-library.json';
 import type { Doc, BondDisplay } from '../model';
@@ -68,11 +69,13 @@ export type TemplateShape = ['line' | 'oval', number, number, number, number];
 
 export type TemplateGroup = 'rings' | 'heterocycles' | 'amino' | 'sugars' | 'own'
   | 'conformers' | 'fused' | 'projections' | 'stereo' | 'bicyclics' | 'cycloalkanes' | 'aromatics' | 'perspective'
+  /** Drawings copied from textbooks, Commons, Enamine and other sources (source-templates.json), under review. */
+  | 'sources'
   | 'geometries' | 'organometallic' | 'metallocenes' | 'ligands' | 'nucleic'
   /** In the Ligand Library (Chemistry > Ligand Library) but not on the Ligands palette. */
   | 'ligand-lib';
 
-export const TEMPLATES = [...(data as Template[]), ...(conformerData as Template[]), ...(metalData as Template[]), ...(ligandData.templates as Template[])];
+export const TEMPLATES = [...(data as Template[]), ...(conformerData as Template[]), ...(sourceData as unknown as Template[]), ...(metalData as Template[]), ...(ligandData.templates as Template[])];
 const BY_ID = new Map(TEMPLATES.map((t) => [t.id, t]));
 export const templateById = (id: string): Template | undefined => BY_ID.get(id);
 

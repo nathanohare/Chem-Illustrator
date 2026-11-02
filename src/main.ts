@@ -594,6 +594,7 @@ const TOOL_GROUPS: ToolbarItem[][] = [
     templatePalette('sugars', 'tpl-sugars', 'Sugars (Haworth)', 5, 64),
     templatePalette('nucleic', 'tpl-nucleic', 'Nucleic acids: bases, nucleosides and nucleotides', 6, 64),
     templatePalette(['conformers', 'fused'], 'tpl-conformers', 'Conformers and fused rings in 3-D', 5, 64),
+    templatePalette('sources', 'tpl-sources', 'Templates copied from textbooks and other sources (under review)', 6, 64),
     templatePalette(['projections', 'stereo'], 'tpl-projections', 'Projections and stereocenters', 6, 56),
     templatePalette('cycloalkanes', 'tpl-cycloalkanes', 'Large rings', 6, 56),
     templatePalette('aromatics', 'tpl-aromatics', 'Aromatics', 6, 56),
@@ -12092,7 +12093,7 @@ const BOX_ITEMS: Record<string, readonly string[]> = {
   diagrams: cmds(['energy-diagram', 'edit-energy', 'mo-diagram', 'orbital', 'p-orbitals', 'ts-brackets', null, 'torsion-chart', 'edit-torsion', 'copy-torsion-data', null, 'newman-projection', 'edit-newman', 'unlink-newman', null, 'insert-diagram', 'edit-diagram', 'diagram-to-shapes']),
   tables: cmds(['insert-table', 'rgroup-table', 'stoichiometry-table', null, 'insert-chart', 'edit-chart', null, 'tlc-plate', 'gel', 'edit-plate']),
   biopolymers: ['cmd:sequence-to-structure', 'sep', 'pal:tpl-amino', 'pal:tpl-sugars', 'pal:tpl-nucleic'],
-  perspective: [...cmds(['model-3d', 'turn-3d', 'flatten-3d', null, 'depth-shading', 'depth-shading-settings', null, 'ring-chair', 'ring-chair-flip', 'newman-projection', 'crystal-structure']), 'sep', 'pal:tpl-perspective', 'pal:tpl-conformers', 'pal:tpl-projections'],
+  perspective: [...cmds(['model-3d', 'turn-3d', 'flatten-3d', null, 'depth-shading', 'depth-shading-settings', null, 'ring-chair', 'ring-chair-flip', 'newman-projection', 'crystal-structure']), 'sep', 'pal:tpl-perspective', 'pal:tpl-conformers', 'pal:tpl-sources', 'pal:tpl-projections'],
 };
 /** Short names on toolbox buttons for commands with no icon. */
 const SHORT_LABEL: Record<string, string> = {
