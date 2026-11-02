@@ -24,6 +24,7 @@ import { parseOwnStyles, parseModeStyles, type StyleMode } from './drawing-style
 import { DEFAULT_BOND_ENDS, type DocStyle } from './style';
 import { parseDarkPalettes, type DarkPalette } from './dark-page';
 import { DEFAULT_SCHEME_PREFS, parseSchemePrefs, type SchemePrefs } from './chem/scheme-layout';
+import { DEFAULT_NEWMAN_PREFS, parseNewmanPrefs, type NewmanPrefs } from './design/newman-prefs';
 import { CITE_PRESETS, DEFAULT_STYLE, cleanOptions, type CiteFormat } from './document/cite-styles';
 import { DEFAULT_KEEP, parseKeepPrefs, type KeepPrefs } from './keep/prefs';
 import { parseThemes, type SlideTemplate } from './deck/templates';
@@ -205,6 +206,8 @@ export interface Settings {
   cursorAids: CursorAidPrefs;
   /** η³ and larger ligands on a metal drawn delocalized (a circle in the ring, an arc over an allyl). */
   haptoDelocalized: boolean;
+  /** How a tool's demo shows when the pointer rests on its button (Settings ▸ General). */
+  toolDemos: DemoLook;
   /** The Windows app has offered to open the chemistry file types (once, at its first start). */
   fileTypesOffered: boolean;
   /** The Windows app has registered its drawings as objects Word can send back to edit (once, at its first start). */
@@ -227,6 +230,8 @@ export interface Settings {
   docDesign: DocDesign | null;
   /** Spacing in schemes and the text above and below arrows (Chemistry > Reactions and Schemes > Scheme Settings). */
   scheme: SchemePrefs;
+  /** How Newman projections and torsion energy charts look (Settings > Newman Projections). */
+  newman: NewmanPrefs;
   /** AutoSave, recovery copies, Version History and shared folders (File > Versions and Recovery > AutoSave and Recovery Options). */
   keep: KeepPrefs;
   /** The person's own AI model, if they linked one (Edit > Settings > AI Model). Its key is kept apart, never here. */
@@ -254,18 +259,34 @@ export const DEFAULT_SETTINGS: Settings = {
   rulerUnits: typeof navigator !== 'undefined' && /^[a-z]{2,3}-(US|LR|MM)\b/i.test(navigator.language) ? 'in' : 'cm',
   rulerFrom: 'centre',
   scheme: DEFAULT_SCHEME_PREFS,
+  newman: DEFAULT_NEWMAN_PREFS,
   keep: DEFAULT_KEEP,
   ai: DEFAULT_AI,
   straightenLinear: true,
   cursorAids: { ...DEFAULT_CURSOR_AIDS },
   haptoDelocalized: true,
+  toolDemos: 'card',
 };
+
+/**
+ * How demos show: B, a card with the clip, its steps and Replay (the default); A, a small clip in a
+ * tip; C, still frames only; or not at all. With the system's reduced motion on, A and B show the
+ * still frames instead.
+ */
+export type DemoLook = 'card' | 'tip' | 'frames' | 'off';
+export const DEMO_LOOKS: { value: DemoLook; label: string }[] = [
+  { value: 'card', label: 'A card with the clip and its steps' },
+  { value: 'tip', label: 'A small clip in the tool tip' },
+  { value: 'frames', label: 'Still pictures of each step' },
+  { value: 'off', label: 'Don\'t show demos' },
+];
+export const parseDemoLook = (v: unknown): DemoLook => (DEMO_LOOKS.some((l) => l.value === v) ? (v as DemoLook) : 'card');
 
 const STORAGE_KEY = 'chem-illustrator.settings';
 
 /** Read settings saved as text, keeping only what makes sense. */
 export function parseSettings(text: string | null | undefined): Settings {
-  const s: Settings = { ...DEFAULT_SETTINGS, hotkeys: {}, replacements: DEFAULT_SETTINGS.replacements.map(([a, b]) => [a, b]), dictionary: [], modeColours: { ...DEFAULT_MODE_COLOURS }, nicknames: {}, templates: [], palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null, myStyles: [], modeStyles: {}, darkPalettes: [], guides: { ...DEFAULT_SETTINGS.guides }, orient: { ...DEFAULT_ORIENT }, pageLook: { ...DEFAULT_PAGE_LOOK }, docPins: [], recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], scheme: { ...DEFAULT_SCHEME_PREFS }, keep: { ...DEFAULT_KEEP }, ai: { ...DEFAULT_AI } };
+  const s: Settings = { ...DEFAULT_SETTINGS, hotkeys: {}, replacements: DEFAULT_SETTINGS.replacements.map(([a, b]) => [a, b]), dictionary: [], modeColours: { ...DEFAULT_MODE_COLOURS }, nicknames: {}, templates: [], palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null, myStyles: [], modeStyles: {}, darkPalettes: [], guides: { ...DEFAULT_SETTINGS.guides }, orient: { ...DEFAULT_ORIENT }, pageLook: { ...DEFAULT_PAGE_LOOK }, docPins: [], recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], scheme: { ...DEFAULT_SCHEME_PREFS }, newman: parseNewmanPrefs(null), keep: { ...DEFAULT_KEEP }, ai: { ...DEFAULT_AI } };
   if (!text) return s;
   let raw: unknown;
   try { raw = JSON.parse(text); } catch { return s; }
@@ -344,12 +365,14 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.skipVersion === 'string' || r.skipVersion === null) s.skipVersion = r.skipVersion as string | null;
   if (typeof r.lastVersion === 'string') s.lastVersion = r.lastVersion;
   s.scheme = parseSchemePrefs(r.scheme);
+  s.newman = parseNewmanPrefs(r.newman);
   s.keep = parseKeepPrefs(r.keep);
   s.ai = parseAiPrefs(r.ai);
   if (Array.isArray(r.dictionary)) s.dictionary = r.dictionary.filter((w): w is string => typeof w === 'string' && w.trim() !== '').map((w) => w.trim());
   if (typeof r.straightenLinear === 'boolean') s.straightenLinear = r.straightenLinear;
   if (r.cursorAids) s.cursorAids = parseCursorAids(r.cursorAids);
   if (typeof r.haptoDelocalized === 'boolean') s.haptoDelocalized = r.haptoDelocalized;
+  if (r.toolDemos !== undefined) s.toolDemos = parseDemoLook(r.toolDemos);
   return s;
 }
 

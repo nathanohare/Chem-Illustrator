@@ -4,14 +4,16 @@
 // dtbbpy, IPr*) read as the ligand, tooltips, Expand Label, electron counting, the search, and
 // the window. Adding several hundred abbreviations must not change how other labels read.
 
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { createRequire } from 'node:module';
 import { Doc } from '../src/model';
 import { LIGANDS, LIGAND_FAMILIES, bondingType, denticity, ligandByAbbr, searchLigands } from '../src/chem/ligands';
 import { TEMPLATES, templateById, placeTemplate, freePlacement } from '../src/chem/templates';
 import { labelGraph, parseSmiles, tokenize } from '../src/chem/labels';
 import { labelTip } from '../src/chem/label-tip';
 import { countElectrons } from '../src/chem/electrons';
-import { expandLigand, ligandTemplateFor } from '../src/chem/expand';
+import { expandInPlace, expandLigand, freeLigandFor, inPlaceSmiles, labelSmiles, ligandTemplateFor, loadFullLigands } from '../src/chem/expand';
+import FULL from '../src/chem/ligand-library-full.json';
 import { templateIcon } from '../src/ui/template-icons';
 import { LigandLibraryWindow } from '../src/ui/ligand-library';
 
@@ -377,5 +379,121 @@ describe('templates', () => {
     const lib = TEMPLATES.filter((t) => t.group === 'ligand-lib');
     expect(lib.length).toBeGreaterThan(200);
     expect(TEMPLATES.filter((t) => t.group === 'ligands').length).toBeLessThan(50);
+  });
+});
+
+describe('a ligand drawn out on its own (review item 28)', () => {
+  let RDKit: any;
+  beforeAll(async () => { RDKit = await createRequire(import.meta.url)('@rdkit/rdkit')(); });
+  const molblock = (smiles: string) => { const m = RDKit.get_mol(smiles); try { m.set_new_coords(true); return m.get_molblock(); } finally { m.delete(); } };
+  const labels = (doc: Doc) => [...doc.atoms.values()].map((a) => a.label).filter(Boolean).sort();
+
+  it('BINAP on its own expands to the usual drawing, PPh2 groups kept, no metal', () => {
+    const doc = new Doc();
+    const a = doc.edit('a', () => doc.addAtom(100, 100, 6, { label: 'BINAP' }));
+    doc.edit('x', () => expandLigand(doc, a.id));
+    expect(doc.atoms.size).toBe(22);
+    expect(labels(doc)).toEqual(['PPh2', 'PPh2']);
+    expect([...doc.atoms.values()].some((x) => x.label === 'M')).toBe(false);
+    // the two PPh2 groups side by side on the left, the naphthyls to the right
+    const p = [...doc.atoms.values()].filter((x) => x.label === 'PPh2');
+    const cx = [...doc.atoms.values()].reduce((s, x) => s + x.x, 0) / doc.atoms.size;
+    expect(p.every((x) => x.x < cx)).toBe(true);
+    expect(Math.abs(p[0].x - p[1].x)).toBeLessThan(5);
+  });
+
+  it('every chelating library ligand has a free drawing; π-ligands and one-atom ligands do not', () => {
+    expect(freeLigandFor('Cp')).toBeNull();
+    expect(freeLigandFor('COD')).toBeNull();
+    expect(freeLigandFor('CO')).toBeNull();
+    for (const ab of ['dppf', 'Xantphos', 'salen', 'dtbbpy', 'XPhos', 'tBuXPhos', 'iPr-PyBOX', 'IPr']) {
+      const t = freeLigandFor(ab);
+      expect(t, ab).not.toBeNull();
+      expect(t!.atoms.some((x) => x[4] === 'M'), ab).toBe(false);
+    }
+    const onPi = (id: string) => { const t = templateById(id)!; return !!t.hapto?.some(([m]) => m === t.attach); };
+    const chelates = LIGANDS.filter((l) => l.l + l.x >= 2 && !onPi(l.tpl));
+    const missing = chelates.filter((l) => !freeLigandFor(l.abbr[0])).map((l) => l.abbr[0]);
+    expect(missing).toEqual([]);
+  });
+
+  it('PPh2 in BINAP on a metal reads as P with two phenyls kept on that P', () => {
+    const doc = new Doc();
+    const l = doc.edit('a', () => {
+      const pd = doc.addAtom(0, 0, 46);
+      const x = doc.addAtom(30, 0, 6, { label: 'BINAP' });
+      doc.addBond(pd.id, x.id, 1);
+      return x;
+    });
+    doc.edit('x', () => expandLigand(doc, l.id));
+    const p = [...doc.atoms.values()].filter((x) => x.label === 'PPh2');
+    expect(p.length).toBe(2);
+    expect(inPlaceSmiles(doc, p[0])).toBe(labelSmiles(p[0], 2));
+    const before = doc.atoms.size;
+    doc.edit('y', () => { for (const x of p) expandInPlace(doc, x.id, molblock(inPlaceSmiles(doc, x)!)); });
+    expect(doc.atoms.size).toBe(before + 24);
+    expect(labels(doc)).toEqual([]);
+    for (const x of p) {
+      expect(doc.atoms.get(x.id)!.z).toBe(15);
+      expect(doc.degree(x.id)).toBe(4);
+    }
+    // the phenyls go into the room round each P: none on top of another atom
+    const atoms = [...doc.atoms.values()];
+    let close = 0;
+    for (let i = 0; i < atoms.length; i++) for (let j = i + 1; j < atoms.length; j++) if (Math.hypot(atoms[i].x - atoms[j].x, atoms[i].y - atoms[j].y) < doc.style.bondLength * 0.35) close++;
+    expect(close).toBe(0);
+  });
+
+  it('Expand Label Fully draws BINAP with every phenyl, the same way round, on its own or on a metal', async () => {
+    await loadFullLigands();
+    const doc = new Doc();
+    const [f, l] = doc.edit('a', () => {
+      const f = doc.addAtom(0, 0, 6, { label: 'BINAP' });
+      const pd = doc.addAtom(300, 0, 46);
+      const x = doc.addAtom(330, 0, 6, { label: 'BINAP' });
+      doc.addBond(pd.id, x.id, 1);
+      return [f, x];
+    });
+    doc.edit('x', () => { expandLigand(doc, f.id, true); expandLigand(doc, l.id, true); });
+    expect(labels(doc)).toEqual([]);
+    const count = (z: number) => [...doc.atoms.values()].filter((a) => a.z === z).length;
+    // two BINAPs, C44H32P2 each, and the Pd
+    expect(count(15)).toBe(4);
+    expect(count(6)).toBe(88);
+    expect(count(46)).toBe(1);
+    // the free one: its two P on the left, the binaphthyl to the right, as in the usual drawing
+    const free = [...doc.atoms.values()].filter((a) => a.x < 150);
+    const ps = free.filter((a) => a.z === 15);
+    const cx = free.reduce((t, a) => t + a.x, 0) / free.length;
+    expect(ps.every((p) => p.x < cx)).toBe(true);
+  });
+
+  it('every ligand drawn in full is the same ligand as its usual drawing, labels drawn out', () => {
+    const heavy = (t: { atoms: unknown[][] }) => t.atoms.length - 1;
+    for (const t of FULL as unknown as { id: string; atoms: unknown[][] }[]) {
+      const base = templateById(t.id.replace(/-full$/, ''))!;
+      expect(base, t.id).toBeDefined();
+      expect(t.atoms.every((a, i) => i === 0 || !a[4]), t.id).toBe(true);
+      expect(heavy(t), t.id).toBeGreaterThan(heavy(base));
+    }
+    expect(FULL.length).toBeGreaterThan(70);
+  });
+
+  it('a chain label with two bonds is not drawn out on its first atom', () => {
+    const doc = new Doc();
+    const c = doc.edit('a', () => {
+      const a = doc.addAtom(0, 0, 6), b = doc.addAtom(60, 0, 6), x = doc.addAtom(30, 0, 6, { label: 'CH2CH2' });
+      doc.addBond(a.id, x.id, 1);
+      doc.addBond(x.id, b.id, 1);
+      return x;
+    });
+    expect(inPlaceSmiles(doc, c)).toBeNull();
+  });
+
+  it('C6F5, C6H5 and C6H11 read as rings, not chains', () => {
+    expect(labelGraph('C6F5')!.atoms.filter((x) => x.z === 9).length).toBe(5);
+    expect(labelGraph('C6F5')!.bonds.length).toBe(11);
+    expect(labelGraph('C6H5')!.bonds.length).toBe(6);
+    expect(labelGraph('C6H11')!.bonds.length).toBe(6);
   });
 });

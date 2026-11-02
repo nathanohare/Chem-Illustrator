@@ -8,6 +8,8 @@ import { DocStyle, ACS_1996 } from './style';
 import { arrowPoints, gluePoint } from './objects';
 import { followPins } from './chem/pins';
 import type { EnergyData } from './design/energy';
+import type { NewmanData } from './design/newman';
+import type { TorsionData } from './design/torsion';
 import type { PlateData } from './design/plates';
 import type { DiagramData } from './design/diagrams';
 import type { SmartData } from './chem/smart-scheme';
@@ -840,6 +842,10 @@ export interface Shape {
   frame?: Frame;
   /** An energy diagram's numbers and look, kept on the invisible frame round its drawing (design/energy.ts). */
   energy?: EnergyData;
+  /** A Newman or sawhorse projection's groups, look and the bond it shows, kept on the invisible frame round it (design/newman.ts). */
+  newman?: NewmanData;
+  /** A torsional energy diagram's curve, look and the bond it shows, kept on the invisible frame round it (design/torsion.ts). */
+  torsion?: TorsionData;
   /** A TLC plate's or gel's lanes and look, kept on the invisible frame round its drawing (design/plates.ts). */
   plate?: PlateData;
   /** A SmartArt-style diagram's text and look, kept on the invisible frame round its shapes (design/diagrams.ts). */

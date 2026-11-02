@@ -1,6 +1,7 @@
 // The key map: how key presses are named, ChemDraw's default keys, and the person's changes
 // (which are saved, so they must survive bad input).
 
+import { parseNewmanPrefs } from '../src/design/newman-prefs';
 import { DEFAULT_KEEP } from '../src/keep/prefs';
 import { defaultToolboxes } from '../src/ui/toolboxes';
 import { DEFAULT_SCHEME_PREFS } from '../src/chem/scheme-layout';
@@ -239,11 +240,12 @@ describe('the settings file', () => {
       quickBar: ['save', 'undo', 'print'],
       myStyles: [], modeStyles: { document: 'RSC' }, darkPage: true, darkPalette: 'Slate', darkPalettes: [], guides: { drawing: true, slides: false, design: true }, orient: { navigator: false, navCorner: 'tl' as const, navSize: 'large' as const, navHideAll: true, edgeArrows: false, arrowsTo: 'everything' as const, dotGrid: true, gridSpacing: 'fine' as const, gridStrength: 'strong' as const, tint: true, tintStrength: 'faint' as const, goButtons: false }, pageLook: { grid: false, lineWidth: 2, lineStyle: 'dotted' as const, lineColour: '#336699', lineOpacity: 0.8, emptyShade: 'strong' as const, outsideShade: 'off' as const, ghost: false, wallStyle: 'line' as const, pasteAtWall: 'wrap' as const, wallWidth: 3, hatchSpacing: 5, hatchLength: 8, hatchWidth: 0.75, hatchAngle: 135, hatchCorner: 'mirror' as const }, highlightLooks: [{ name: 'Mine', colour: '#abcdef', style: { glow: true } }], docPins: ['style', 'hf'], docRuler: true, sheetFormulaBar: false, slideRuler: false, slideGrid: false, rulerUnits: 'in', rulerFrom: 'centre', updateCheck: false, updateChannel: 'stable', pubchemNames: false, convertChemDraw: true, matchStructure: false, fileTypesOffered: true, wordObjectsOffered: true, reviewName: 'Nate O.', skipVersion: '0.1.80', recentFiles: ['C:\\Work\\a.cdxml'], recentSymbols: ['°', 'Å', '⇌'], quickParts: [{ name: 'Lab address', runs: [{ text: 'Auburn', bold: true }], paras: [{ align: 'center' as const }] }], docDesign: { theme: 'Report', spacing: 'Open' },
       scheme: { ...DEFAULT_SCHEME_PREFS, structGap: 14, textAlign: 'left', fit: false },
+      newman: { ...parseNewmanPrefs(null), kind: 'sawhorse' as const, chart: { ...parseNewmanPrefs(null).chart, unit: 'kJ/mol' as const } },
       keep: { ...DEFAULT_KEEP, autoSave: true, recoveryMinutes: 5, changedOnDisk: 'reload' as const, lockFiles: false },
       ai: { provider: 'anthropic' as const, model: 'claude-sonnet-5-5', base: '' },
       straightenLinear: false,
       cursorAids: { angle: false, length: true, hints: false, units: 'cm' as const, look: 'solid' as const },
-      haptoDelocalized: false,
+      haptoDelocalized: false, toolDemos: 'frames',
       appTheme: 'dark' as const, oneColumnTools: true, startView: false, lastVersion: '0.1.90',
     };
     const text = settingsText(s);

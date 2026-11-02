@@ -119,6 +119,8 @@ The same commands are in the **File** menu (**New Canvas**, and **Presentation**
 
 In a canvas, the drawing tools run down the left side: select, eraser, bonds, then text, arrows, mechanism symbols, brackets, shapes and mass fragmentation, then rings and templates. A button with a small arrow in its corner holds a set of related tools: click the corner, click the button a second time, or right-click it to see them all. Rest the mouse on any button to see its name and hotkey. [Canvas](drawing.md) explains each tool.
 
+Some tools take more than a click: the curved and half-headed mechanism arrows, the hapto (η) bond, the chain, the cyclohexane (and its chair shapes), the lone pair and mass fragmentation. Keep the mouse on one of these for a second and a short demo plays beside it, drawn by the app as you watch, with its steps numbered beside it and a **Replay** button. Move away, click the tool or press Esc and it goes. **Edit ▸ Settings ▸ General** changes how it shows: the card, a small clip in the tool tip, still pictures of each step, or no demos. If animation is turned off in your system's settings, you get the still pictures.
+
 ### The side panel on the right
 
 The panel on the right changes with what you are doing. In a canvas it has:
@@ -216,7 +218,7 @@ Presentations, spreadsheets, documents and designs save in their own formats; se
 
 | Page | What it holds |
 |---|---|
-| **General** | The start view, what a click on a grouped thing selects, outlining the rest of a group, where linked text goes, asking before a command changes every structure on the page, and your name on tracked changes in documents. |
+| **General** | The start view, the tool demos on a long hover, what a click on a grouped thing selects, outlining the rest of a group, where linked text goes, asking before a command changes every structure on the page, and your name on tracked changes in documents. |
 | **Drawing** | Terminal methyls as Me or CH3; axial chirality as Ra / Sa or P / M (Ra is the same as M, and Sa as P); charges from the + and − keys plain (N+) or circled (⊕, ⊖); text typed beside a bond end becoming an atom; raised R-group numbers; mechanism arrows finding their own way round. |
 | **Drawing Style** | Bond length, line widths, fonts and journal styles (see [Canvas](drawing.md#drawing-styles)). |
 | **Hotkeys** | Every key, to change, import or export (see [Keyboard and mouse](keyboard-and-mouse.md)). |

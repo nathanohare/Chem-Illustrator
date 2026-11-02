@@ -3199,6 +3199,35 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .smart-pane .sp-foot { display: flex; justify-content: space-between; gap: 6px; }
 .smart-pane .sp-add { border: none; background: none; color: var(--accent); font-weight: 600; cursor: pointer; padding: 2px 0; }
 .smart-pane .sp-ungroup { padding: 2px 8px; }
+/* Chemistry > Newman Projection */
+dialog.newman-dialog { width: min(96vw, 600px); max-height: 92vh; }
+.np-grid { display: grid; grid-template-columns: 230px 1fr; gap: 14px; align-items: start; }
+.np-preview { display: block; width: 230px; height: 200px; border: 1px solid var(--line); border-radius: var(--r-tab); background: #fff; }
+.np-preview:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.np-left .ask-row { grid-template-columns: auto 1fr 3em; margin: 6px 0 0; }
+.np-right .ask-row { grid-template-columns: 7.5em 1fr auto; margin: 0 0 6px; }
+.np-tip { margin: 2px 0; }
+.np-radios { display: flex; gap: 12px; }
+.np-list { border: 1px solid var(--line); max-height: 132px; overflow-y: auto; font-size: 12px; }
+.np-list table { width: 100%; border-collapse: collapse; }
+.np-list th { text-align: left; font-weight: 600; padding: 2px 6px; position: sticky; top: 0; background: var(--panel, #f3f4f6); }
+.np-list td { padding: 2px 6px; cursor: default; }
+.np-list .num { text-align: right; }
+.np-list tr.on td { background: var(--accent-soft, #dbeafe); }
+.np-status { min-height: 1.3em; margin: 4px 0 0; }
+@media (max-width: 560px) { .np-grid { grid-template-columns: 1fr; } .np-preview { width: 100%; } }
+/* Settings > Newman Projections */
+dialog.newman-settings { width: min(96vw, 600px); max-height: 92vh; }
+.newman-settings h3 { margin: 12px 0 2px; font-size: 13px; }
+.newman-settings .ns-grid { display: grid; grid-template-columns: 1fr 190px; gap: 12px; align-items: start; }
+.ns-preview { display: block; width: 190px; height: 170px; border: 1px solid var(--line); border-radius: var(--r-tab); background: #fff; margin-top: 18px; }
+.ns-ranks { border-collapse: collapse; font-size: 13px; }
+.ns-ranks th, .ns-ranks td { padding: 2px 8px; text-align: center; font-weight: normal; }
+.ns-ranks th[scope=row] { text-align: left; }
+.ns-ranks thead th { font-size: 12px; color: var(--muted); }
+.ns-ranks input[type=color] { width: 34px; height: 22px; padding: 0; }
+.ns-presets { margin: 6px 0; }
+@media (max-width: 560px) { .newman-settings .ns-grid { grid-template-columns: 1fr; } .ns-preview { margin-top: 0; } }
 
 /* Insert ▸ Action Button… */
 .ab-gallery { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; }
@@ -3232,6 +3261,9 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .rbs-side button { flex: 1; width: 16px; padding: 0; font-size: 8px; line-height: 1; background: none; border: none; color: var(--text); cursor: pointer; }
 .rbs-side button:hover { background: var(--accent-soft); }
 .rbs-side .rbs-all { border-top: 1px solid var(--line); font-size: 10px; }
+.newman-settings .ns-grid.ns-one { grid-template-columns: 1fr; }
+.sw-preview .ns-preview { margin: 0 auto; width: 100%; height: 230px; }
+.newman-settings .ask-row input[type=number] { width: 6em; justify-self: start; }
 /* the slide show's right-click menu, and short notes over the show */
 .present .show-menu { position: absolute; z-index: 5; min-width: 200px; padding: 3px 0; background: #26282d; color: #eee; border: 1px solid #444; border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,0.4); font: 13px system-ui, sans-serif; }
 .present .show-menu button { display: flex; width: 100%; justify-content: space-between; gap: 18px; padding: 4px 12px; background: none; border: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
@@ -3263,3 +3295,29 @@ dialog.key-views { width: min(96vw, 620px); max-height: 92vh; }
 .key-views .kv-item .kv-move { left: 2px; }
 .key-views .kv-item .kv-del { right: 2px; }
 .key-views .kv-item .kv-move:disabled { display: none; }
+
+/* A tool's demo on a long hover (src/ui/tool-demos.ts): card (B), small tip (A) or still frames (C). */
+.tool-demo {
+  position: fixed;
+  z-index: 45;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: var(--r-panel);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
+  padding: 6px 8px 8px;
+  font-size: var(--fs-sm);
+  line-height: 1.4;
+}
+.tool-demo canvas { display: block; border: 1px solid var(--line); border-radius: var(--r-control); }
+.tool-demo .td-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.tool-demo .td-replay { border: 0; background: none; color: var(--accent); font: inherit; padding: 0 2px; cursor: pointer; }
+.tool-demo .td-replay:hover { text-decoration: underline; }
+.tool-demo .td-steps { margin: 6px 0 0 18px; padding: 0; width: 232px; color: var(--muted); }
+.tool-demo .td-steps li.done { color: var(--muted); }
+.tool-demo .td-steps li.now { color: var(--accent); font-weight: 600; }
+.tool-demo .td-say { width: 200px; margin-top: 4px; color: var(--muted); min-height: 2.8em; }
+.tool-demo .td-strip { display: flex; gap: 4px; }
+.tool-demo .td-strip figure { margin: 0; width: 88px; }
+.tool-demo .td-strip figure:has(canvas[style*="70px"]) { width: 70px; }
+.tool-demo .td-strip figcaption { font-size: var(--fs-xs); color: var(--muted); margin-top: 2px; line-height: 1.3; }
