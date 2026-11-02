@@ -102,7 +102,7 @@ export interface Settings {
   welcomed: boolean;
   /** Where the text formatting bar goes while typing text (View > Window and Colours > Text Formatting Bar). */
   textBar: 'docked' | 'floating' | 'hidden';
-  /** The window's own colours: as the computer is set (light or dark), or always light or dark (View > Window and Colours > Theme). The page has its own Dark Page. */
+  /** The window's own colours: as the computer is set (light or dark), or always light or dark (View > Window and Colours > Theme). The page has its own Reading Mode. */
   appTheme: 'system' | 'light' | 'dark';
   /** Toolboxes docked at a side show in one column in Slides, Sheet, Document and Design tabs (View > Toolboxes). */
   oneColumnTools: boolean;
@@ -169,15 +169,15 @@ export interface Settings {
   myStyles: DocStyle[];
   /** The style each kind of new tab starts with, by name (File > Drawing Style > Use for new…). */
   modeStyles: Partial<Record<StyleMode, string>>;
-  /** Show the page dark on screen (View > Dark Page, or the eye button). */
+  /** Show the page dark on screen (View > Reading Mode, or the eye button). */
   darkPage: boolean;
   /** Which dark palette, by name. */
   darkPalette: string;
-  /** Your own dark palettes (View > Window and Colours > Dark Page Colours). */
+  /** Your own dark palettes (View > Window and Colours > Reading Mode Colours). */
   darkPalettes: DarkPalette[];
   /** Alignment guides on or off in each kind of tab (View > Alignment Guides). */
   guides: { drawing: boolean; slides: boolean; design: boolean };
-  /** Finding your way round drawings: navigator, edge arrows, dot grid, outside tint, Fit and Go to Selection buttons (Settings ▸ Navigation). */
+  /** Finding your way round drawings: the Document Map, edge arrows, dot grid, outside tint, Fit and Go to Selection buttons (Settings ▸ Navigation). */
   orient: OrientPrefs;
   /** How the drawing's page grid looks, and what a paste past a fixed edge does (Settings ▸ Page Grid). */
   pageLook: PageLook;

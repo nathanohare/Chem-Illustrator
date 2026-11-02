@@ -306,7 +306,7 @@ const HILITE = 'rgba(40, 120, 255, 0.28)';
 const PREVIEW = '#2f6fdf';
 
 /**
- * Colours of the marks drawn over the page. With View > Dark Page on, the marks go through the
+ * Colours of the marks drawn over the page. With View > Reading Mode on, the marks go through the
  * page's colour filter too (so text being typed shows in the ink colour), which turns lightness
  * round: these are picked to come out bright and clear on the dark page.
  */
@@ -5698,7 +5698,7 @@ export class Editor {
   moveSnap: ((box: Rect, raw: Vec, tol: number) => Vec) | null = null;
   /** Text boxes take a click as typing (Slides and Design), with an I-beam over them. */
   textFirst = false;
-  /** View > Dark Page is on: marks drawn over the page are made to show up on it. */
+  /** View > Reading Mode is on: marks drawn over the page are made to show up on it. */
   dark = false;
 
   /** What the pointer was last over (to change the pointer when Ctrl is pressed or let go). */

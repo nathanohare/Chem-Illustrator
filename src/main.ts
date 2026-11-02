@@ -340,7 +340,7 @@ let modeStyles: Partial<Record<StyleMode, string>> = {};
 /** The style each mode's new tabs take when you haven't chosen one: slides are seen from the back of a room, so their structures are twice ACS size. */
 const MODE_STYLE_DEFAULTS: Partial<Record<StyleMode, string>> = { slides: 'Slides (ACS 1996 × 2)' };
 const modeStyleFor = (mode: StyleMode): string | undefined => modeStyles[mode] ?? MODE_STYLE_DEFAULTS[mode];
-/** View > Dark Page: on or off, which palette, and your own palettes. */
+/** View > Reading Mode: on or off, which palette, and your own palettes. */
 const dark = { on: false, palette: 'Graphite', own: [] as DarkPalette[] };
 /** Finding your way round drawings (Settings ▸ Navigation): navigator, edge arrows, dot grid, outside tint, Fit and Go to Selection buttons. */
 let orientPrefs: OrientPrefs = { ...DEFAULT_ORIENT };
@@ -10242,7 +10242,7 @@ function showDark(on: boolean): void {
   quickBar?.refresh();
 }
 
-/** View > Window and Colours > Dark Page Colours…: pick a palette, change its paper and ink, or keep your own. */
+/** View > Window and Colours > Reading Mode Colours…: pick a palette, change its paper and ink, or keep your own. */
 async function darkColours(): Promise<void> {
   const all = (): DarkPalette[] => [...DARK_PALETTES, ...dark.own];
   const cur = darkPaletteNamed(dark.palette, dark.own);

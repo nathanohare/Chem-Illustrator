@@ -393,7 +393,7 @@ body.slides-mode #canvas-host, body.design-mode #canvas-host { background: var(-
 .scrollbar-h .scroll-thumb { top: 2px; bottom: 2px; left: 0; }
 .scrollbar-v .scroll-thumb { left: 2px; right: 2px; top: 0; }
 .scroll-thumb:hover, .scroll-thumb.dragging { background: rgba(70, 80, 100, 0.6); }
-/* Settings > Navigation: the navigator map and the arrows at the edge (ui/orientation.ts) */
+/* Settings > Navigation: the Document Map and the arrows at the edge (ui/orientation.ts) */
 .navigator { position: absolute; left: 0; top: 0; z-index: 5; border: 1px solid var(--line); border-radius: var(--r-tab); overflow: hidden; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14); cursor: crosshair; opacity: 0.94; touch-action: none; }
 .navigator:hover { opacity: 1; }
 .navigator[hidden] { display: none; }
@@ -2003,7 +2003,7 @@ dialog.cf-manage { width: min(92vw, 640px); }
 #cell-body .cp-textarea { flex: 1 1 auto; min-width: 0; min-height: 54px; font: var(--fs-sm) var(--ui-font); padding: 3px 6px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); color: var(--text); resize: vertical; }
 #formula-bar[hidden] { display: none; }
 
-/* View > Dark Page: the page canvases only, on screen (see dark-page.ts) */
+/* View > Reading Mode: the page canvases only, on screen (see dark-page.ts) */
 .dark-page #scene, .dark-page #overlay, .dark-page .navigator canvas, .dark-page .doc-canvas, .dark-page .sh-canvas, .dark-page #main-snap canvas, .dark-page #split-snap { filter: url(#dark-page-filter); }
 .dark-page #canvas-host { background: var(--dark-paper, #1e1e1e); }
 /* short choices in the Layout ribbon need less room */
