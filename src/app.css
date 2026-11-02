@@ -3069,3 +3069,35 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 .style-row .seg button[aria-checked='true'] { background: var(--accent-soft); color: var(--accent); }
 .shape-pick { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 4px; }
 .shape-pick canvas { width: 20px; height: 20px; }
+
+/* Ribbon galleries in Word's style (select-gallery.ts): each choice with a small picture of it */
+.rb-gal-menu { min-width: 200px; max-height: min(70vh, 560px); overflow-y: auto; }
+.rb-gal-menu .gal-items { display: flex; flex-direction: column; gap: 1px; }
+.rb-gal-menu .gal-grid { display: grid; grid-template-columns: repeat(3, auto); gap: 4px; padding: 2px; }
+.ribbon .rb-gal-menu button.gal-it { display: flex; align-items: center; gap: 10px; padding: 4px 8px 4px 4px; border: 1px solid transparent; border-radius: var(--r-ctl, 3px); text-align: left; line-height: 1.25; }
+.ribbon .rb-gal-menu .gal-grid button.gal-it { flex-direction: column; gap: 3px; padding: 5px 6px; text-align: center; min-width: 76px; }
+.ribbon .rb-gal-menu button.gal-it.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.ribbon .rb-gal-menu button.gal-plain { padding-left: 10px; }
+.gal-pic { flex: none; display: grid; place-items: center; min-width: 36px; }
+.gal-words { display: flex; flex-direction: column; min-width: 0; }
+.gal-name { font-size: var(--fs-sm); color: var(--ink); }
+.gal-sub { font-size: var(--fs-xs); color: var(--muted); }
+.gal-svg { display: block; overflow: visible; }
+.gal-svg .gal-paper { fill: var(--ic-paper, #fff); stroke: var(--line-strong, #9aa3ad); stroke-width: 1; }
+.gal-svg .gal-text { fill: var(--muted); opacity: 0.55; }
+.gal-svg .gal-head { fill: var(--accent); }
+.gal-svg .gal-guide { fill: none; stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 1.5; }
+.gal-svg .gal-acc { fill: color-mix(in srgb, var(--accent) 30%, transparent); stroke: var(--accent); stroke-width: 1; }
+.gal-svg .gal-soft { fill: color-mix(in srgb, var(--accent) 15%, transparent); }
+.gal-svg .gal-cut { stroke: var(--accent); stroke-width: 1.25; stroke-dasharray: 3 2; fill: none; }
+.gal-svg .gal-sec { stroke-dasharray: 1.5 1.5; }
+.gal-svg .gal-cap { font: 600 7px var(--font-ui, sans-serif); fill: var(--muted); }
+.gal-svg .gal-num { font: 700 7px var(--font-ui, sans-serif); fill: var(--accent); }
+.gal-svg .gal-wm { font: 700 6px var(--font-ui, sans-serif); fill: var(--muted); opacity: 0.45; letter-spacing: 0.04em; }
+.gal-aa { font-size: 22px; line-height: 26px; color: var(--ink); }
+.gal-theme { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 6px; background: var(--ic-paper, #fff); border: 1px solid var(--line); border-radius: 2px; }
+.gal-swatches { display: grid; grid-template-columns: repeat(6, 22px); gap: 4px; padding: 4px 8px; }
+.ribbon .gal-swatch { width: 22px; height: 22px; min-width: 0; padding: 0; border: 1px solid var(--line-strong, #9aa3ad); border-radius: 2px; }
+.ribbon .gal-swatch:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
+.gal-colour-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.rb-field > .rb-lead { display: inline-flex; vertical-align: -3px; margin-right: 3px; }

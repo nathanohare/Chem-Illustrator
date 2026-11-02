@@ -255,6 +255,29 @@ export const ICON_SET: Record<string, IconDef> = {
   'action-settings': { hue: 'amber', d: '<rect class="p" x="2.75" y="4.75" width="13" height="10" rx="2"/><path class="f a" d="M11.75 10.75l9.25 3.5-4 1.75-1.75 4z"/>' },
   'section-menu': { hue: 'amber', d: '<path class="a" d="M3 4.75h18"/><rect class="p" x="5.75" y="8.25" width="12.5" height="5" rx="1.25"/><rect class="p" x="5.75" y="15.75" width="12.5" height="5" rx="1.25"/><path d="M3 8.25v12.5"/>' },
   'delete-slide': { hue: 'red', d: slide(2.75, 3.75, 13.5, 9.5) + '<path class="a" d="M14.25 15.25l6 6M20.25 15.25l-6 6"/>' },
+  // ---------------------------------------------------------------- document: Design and Layout
+  'style-set': { hue: 'blue', d: page(4.75, 2.75, 14.5, 18.5, 4) + '<path class="a" d="M7.75 7.25h5.5" stroke-width="2.25"/><path class="a" d="M7.75 11h4"/><path d="M7.75 14h8.5M7.75 17h6" stroke-opacity=".5"/>' },
+  'theme-colors': { hue: 'purple', d: '<rect class="f a" x="2.75" y="5.25" width="6" height="13.5" rx="1.25"/><rect class="p" x="9" y="5.25" width="6" height="13.5" rx="1.25"/><rect class="s" x="15.25" y="5.25" width="6" height="13.5" rx="1.25"/>' },
+  'theme-fonts': { hue: 'blue', d: '<path class="a" d="M2.75 19.25L8 4.75h1.5l5.25 14.5M5 13.75h7.5"/><path d="M15.75 12.75a2.75 2.75 0 1 1 0 .01M21.25 10v9.25" />' },
+  'para-spacing': { hue: 'blue', d: '<path d="M10.25 4.75h11M10.25 9.25h11M10.25 14.75h11M10.25 19.25h11"/><path class="a" d="M5.25 3.75v16.5M2.75 6.25l2.5-2.5 2.5 2.5M2.75 17.75l2.5 2.5 2.5-2.5"/>' },
+  'design-default': { hue: 'green', d: page(4.75, 2.75, 14.5, 18.5, 4) + '<path d="M7.75 9h5M7.75 12h4" stroke-opacity=".5"/><circle class="s" cx="16.75" cy="16.75" r="4.5"/><path class="k" d="M14.75 16.75l1.5 1.5 2.75-2.75"/>' },
+  watermark: { hue: 'gray', d: page(4.75, 2.75, 14.5, 18.5, 4) + '<path class="a" d="M7.5 17.5l8.5-8.5" stroke-width="2.25" stroke-opacity=".55"/><path d="M7.75 7h3" stroke-opacity=".5"/>' },
+  'page-color': { hue: 'amber', d: '<path class="f a" d="M4.75 4.25a1.5 1.5 0 0 1 1.5-1.5h7.5l5.5 5.5v11.5a1.5 1.5 0 0 1-1.5 1.5h-11.5a1.5 1.5 0 0 1-1.5-1.5z"/><path d="M13.75 2.75v4a1.5 1.5 0 0 0 1.5 1.5h4"/>' },
+  'page-borders': { hue: 'blue', d: page(4.75, 2.75, 14.5, 18.5, 4) + '<rect class="a" x="7.25" y="8.75" width="9.5" height="10" rx=".5" stroke-dasharray="2 1.5"/>' },
+  'text-columns': { hue: 'blue', d: '<path class="a" d="M3.25 4.75h7M3.25 8.25h7M3.25 11.75h7M3.25 15.25h7M3.25 18.75h4.5"/><path d="M13.75 4.75h7M13.75 8.25h7M13.75 11.75h7M13.75 15.25h5"/>' },
+  'line-numbers': { hue: 'blue', d: '<path class="a" d="M3.5 4.25l1.25-1v4M2.75 10.5a1.5 1.5 0 1 1 2.5 1.25L2.75 14h3M2.75 17.25h2.5l-1.5 1.75a1.5 1.5 0 1 1-1 2.5" stroke-width="1.25"/><path d="M9.25 5h12M9.25 12h12M9.25 19h9"/>' },
+  hyphenation: { hue: 'blue', d: '<path d="M2.75 5.75h18.5M2.75 10.75h10M2.75 15.75h18.5M2.75 20.25h8"/><path class="a" d="M15.25 10.75h4" stroke-width="2.25"/>' },
+  'page-numbers': { hue: 'blue', d: page(4.75, 2.75, 14.5, 18.5, 4) + '<path d="M7.75 7h5M7.75 10h8.5M7.75 13h6" stroke-opacity=".5"/><path class="a" d="M11.25 16.5l1-.75v3.75" stroke-width="1.5"/>' },
+  'header-edit': { hue: 'blue', d: '<rect class="p" x="4.75" y="2.75" width="14.5" height="18.5" rx="2"/><path class="f a" d="M4.75 4.75a2 2 0 0 1 2-2h10.5a2 2 0 0 1 2 2v3.5H4.75z"/><path d="M7.75 11.5h8.5M7.75 14.5h8.5M7.75 17.5h5" stroke-opacity=".5"/>' },
+  'footer-edit': { hue: 'blue', d: '<rect class="p" x="4.75" y="2.75" width="14.5" height="18.5" rx="2"/><path class="f a" d="M4.75 15.75h14.5v3.5a2 2 0 0 1-2 2H6.75a2 2 0 0 1-2-2z"/><path d="M7.75 6.5h8.5M7.75 9.5h8.5M7.75 12.5h5" stroke-opacity=".5"/>' },
+  'page-number-format': { hue: 'blue', d: '<path class="a" d="M3.5 6.5l1.5-1.25v6M9 5.25h1.5M9 11.25h1.5M9.75 5.25v6" stroke-width="1.5"/><path d="M13.75 8.25h7.5"/><path class="a" d="M4 15h4.5l-3.5 6M12 15v6M15 15v6M15 15l3.75 6M18.75 15v6" stroke-width="1.25" stroke-opacity=".75"/>' },
+  'numbers-s': { hue: 'teal', d: page(4.75, 2.75, 14.5, 18.5, 4) + '<path class="a" d="M13 11.25a2 2 0 0 0-2-1.5c-1.25 0-2 .75-2 1.5 0 2 4.25 1.25 4.25 3.5 0 .9-.9 1.75-2.25 1.75a2.25 2.25 0 0 1-2.25-1.5M15.25 10.5l1-.75v6.5"/>' },
+  position: { hue: 'gray', d: page(4.75, 2.75, 14.5, 18.5, 4) + '<rect class="f a" x="7.75" y="7.5" width="5" height="5" rx=".75"/><path d="M14.5 9h2M14.5 11.25h2M7.75 15h8.75M7.75 17.75h6" stroke-opacity=".5"/>' },
+  'wrap-text': { hue: 'gray', d: '<path d="M2.75 4.25h18.5M12.75 8.75h8.5M12.75 13.25h8.5M2.75 19.25h12"/><rect class="f a" x="2.75" y="7.75" width="7.5" height="7.5" rx="1"/><path class="a" d="M15 19.25h3.5a2.25 2.25 0 0 0 0-4.5h-.5M17 13.25l1.5 1.5-1.5 1.5"/>' },
+  'indent-left': { hue: 'gray', d: '<path d="M9.75 5.25h11.5M9.75 10.25h11.5M9.75 15.25h11.5M9.75 20.25h7"/><path class="a" d="M2.75 8.75l3.5 3.25-3.5 3.25z" stroke-width="1.25"/>' },
+  'indent-right': { hue: 'gray', d: '<path d="M2.75 5.25h11.5M2.75 10.25h11.5M2.75 15.25h11.5M2.75 20.25h7"/><path class="a" d="M21.25 8.75L17.75 12l3.5 3.25z" stroke-width="1.25"/>' },
+  'space-before': { hue: 'gray', d: '<path d="M8.75 13.25h12.5M8.75 17.25h12.5M8.75 21.25h8"/><path class="a" d="M4.75 2.75v8.5M2.5 5l2.25-2.25L7 5M2.5 9l2.25 2.25L7 9"/><path class="a" d="M8.75 6.5h12.5" stroke-dasharray="2 2"/>' },
+  'space-after': { hue: 'gray', d: '<path d="M8.75 2.75h12.5M8.75 6.75h12.5M8.75 10.75h8"/><path class="a" d="M4.75 12.75v8.5M2.5 15l2.25-2.25L7 15M2.5 19l2.25 2.25L7 19"/><path class="a" d="M8.75 17.5h12.5" stroke-dasharray="2 2"/>' },
   // ---------------------------------------------------------------- group pictures for the dropdowns that hold several commands
   'media-menu': { hue: 'red', d: '<rect class="p" x="2.75" y="3.75" width="18.5" height="16.5" rx="2"/><path d="M2.75 8h18.5M7.25 3.75V8M12 3.75V8M16.75 3.75V8"/><path class="f a" d="M10 11v6.5l5.25-3.25z"/>' },
   'header-footer-menu': { hue: 'blue', d: '<rect class="p" x="4.75" y="2.75" width="14.5" height="18.5" rx="2"/><path class="f a" d="M4.75 15.75h14.5v3.5a2 2 0 0 1-2 2H6.75a2 2 0 0 1-2-2z"/><path d="M7.75 6.5h8.5M7.75 9.5h8.5M7.75 12.5h5" stroke-opacity=".5"/>' },
@@ -285,7 +308,7 @@ export const ICON_FOR: Record<string, string> = {
   'sheet-new-window': 'new-window', 'doc-new-window': 'new-window', 'table-styles': 'table-style', 'new-comment': 'comment',
   'spelling-grammar': 'spelling', 'check-accessibility': 'accessibility', 'design-size': 'page-size', 'shape-front': 'bring-front', 'shape-back': 'send-back',
   'rotate-dialog': 'rotate-by', 'duplicate-slide': 'duplicate-slide', 'tr:preview': 'animation-preview', 'an:preview': 'animation-preview',
-  'an:pane': 'animation-pane', 'an:painter': 'animation-painter', 'structure-from-name': 'structure-from-name',
+  'an:pane': 'animation-pane', 'doc:arrange-position': 'position', 'an:painter': 'animation-painter', 'structure-from-name': 'structure-from-name',
 };
 
 /** The drawing for a button, from its data-sh, data-doc, data-tr, data-an or data-cmd. */
@@ -306,6 +329,7 @@ export function iconForButton(b: HTMLElement): string | undefined {
  * set keep what they had.
  */
 export function applyIconSet(root: ParentNode = document): void {
+  for (const s of root.querySelectorAll<HTMLElement>('.ribbon [data-ic-lead]')) s.innerHTML = iconSvg(s.dataset.icLead!, 16) ?? '';
   for (const b of root.querySelectorAll<HTMLElement>('.ribbon button')) {
     const n = iconForButton(b);
     if (!n) continue;

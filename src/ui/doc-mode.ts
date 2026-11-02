@@ -905,6 +905,12 @@ export class DocumentMode {
   }
 
   /** Stop typing into the text box (`pick`: and pick the box, as Escape does in Word). */
+  /** What a box opened from a ribbon list sits under: the list's gallery button (the list itself is hidden). */
+  private ribbonAnchor(sel: string): HTMLElement | null {
+    const el = this.ribbon.querySelector<HTMLElement>(sel);
+    return el?.closest<HTMLElement>('.rb-fly')?.querySelector<HTMLElement>(':scope > .rb-fly-btn') ?? el;
+  }
+
   private stopBox(pick = false): void {
     const f = this.file;
     this.cellRange = null;
@@ -3273,7 +3279,7 @@ export class DocumentMode {
         this.panel.open(cmd.slice(4) as DocBoxKey);
         return true;
       case 'margins-custom': case 'paper-custom':
-        this.panel.open('page', this.ribbon.querySelector<HTMLElement>(cmd === 'paper-custom' ? '#doc-paper' : '#doc-margins'), cmd === 'paper-custom' ? 'pg-w' : 'pg-top');
+        this.panel.open('page', this.ribbonAnchor(cmd === 'paper-custom' ? '#doc-paper' : '#doc-margins'), cmd === 'paper-custom' ? 'pg-w' : 'pg-top');
         this.updateRibbon();
         return true;
       case 'header-edit': this.panel.open('hf', null, 'hf-header0'); return true;
@@ -3349,7 +3355,7 @@ export class DocumentMode {
     } else if (what === 'orient') {
       if ((v === 'landscape') !== land) page({ w: pg.h, h: pg.w });
     } else if (what === 'columns') {
-      if (v === 'more') { this.panel.open('page', this.ribbon.querySelector<HTMLElement>('#doc-columns'), 'pg-cols'); return true; }
+      if (v === 'more') { this.panel.open('page', this.ribbonAnchor('#doc-columns'), 'pg-cols'); return true; }
       const n = Number(v);
       if (!(n >= 1 && n <= 4)) return false;
       page({ cols: n > 1 ? n : undefined });

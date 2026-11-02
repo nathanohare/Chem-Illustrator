@@ -1578,37 +1578,38 @@
     <div class="rb-panel" data-doc-panel="design" hidden>
       <div class="rb-group">
         <div class="rb-row">
+          <div class="rb-fly rb-selgal" data-name="Themes" data-ic="themes" data-pic="theme" data-gal="grid" title="Themes: fonts for the headings and the text, and colours for the headings, all at once. Every paragraph in a style changes (not what you formatted by hand)"><select id="doc-theme" data-doc-prefix="design-theme"></select></div>
+          <div class="rb-fly rb-selgal" data-name="Style Set" data-ic="style-set" data-pic="styleset" data-gal="grid" title="Style Set: how the title, headings and text are laid out (sizes, bold, alignment, spacing), keeping the theme's fonts and colours"><select id="doc-styleset" data-doc-prefix="design-styleset"></select></div>
+          <div class="rb-fly rb-selgal" data-name="Colors" data-ic="theme-colors" data-pic="colors" title="Colors: the headings' and title's colour"><select id="doc-theme-colors" data-doc-prefix="design-colors"></select></div>
+          <div class="rb-fly rb-selgal" data-name="Fonts" data-ic="theme-fonts" data-pic="fonts" title="Fonts: one for the headings and title, one for the text"><select id="doc-theme-fonts" data-doc-prefix="design-fonts"></select></div>
           <div class="rb-col">
-            <label class="rb-field" title="Themes: fonts for the headings and the text, and colours for the headings, all at once. Every paragraph in a style changes (not what you formatted by hand)">Theme <select id="doc-theme" data-doc-prefix="design-theme"></select></label>
-            <label class="rb-field" title="Style Set: how the title, headings and text are laid out (sizes, bold, alignment, spacing), keeping the theme's fonts and colours">Style Set <select id="doc-styleset" data-doc-prefix="design-styleset"></select></label>
-          </div>
-          <div class="rb-col">
-            <label class="rb-field" title="Colors: the headings' and title's colour">Colors <select id="doc-theme-colors" data-doc-prefix="design-colors"></select></label>
-            <label class="rb-field" title="Fonts: one for the headings and title, one for the text">Fonts <select id="doc-theme-fonts" data-doc-prefix="design-fonts"></select></label>
-          </div>
-          <div class="rb-col">
-            <label class="rb-field" title="Paragraph Spacing: the text's space between paragraphs and between lines">Paragraph Spacing <select id="doc-para-spacing" data-doc-prefix="design-spacing"></select></label>
-            <button data-doc="design-default" title="Set as Default: new documents start with this document's theme, style set and spacing">Set as Default</button>
+            <div class="rb-fly rb-selgal" data-size="small" data-name="Paragraph Spacing" data-ic="para-spacing" data-pic="spacing" title="Paragraph Spacing: the text's space between paragraphs and between lines"><select id="doc-para-spacing" data-doc-prefix="design-spacing"></select></div>
+            <button data-doc="design-default" class="rb-labelled" title="Set as Default: new documents start with this document's theme, style set and spacing"><span class="rb-lead"></span>Set as Default</button>
           </div>
         </div>
         <div class="rb-label">Document Formatting</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
-          <div class="rb-col">
-            <label class="rb-field" title="Words across every page behind the text (saved as Word's watermark)">Watermark <select id="doc-watermark" data-doc-prefix="watermark">
+          <div class="rb-fly rb-selgal" data-name="Watermark" data-ic="watermark" data-pic="watermark" data-gal="grid" title="Words across every page behind the text (saved as Word's watermark)"><select id="doc-watermark" data-doc-prefix="watermark">
               <option value="" hidden>None</option>
               <option value="0">CONFIDENTIAL</option><option value="1">DRAFT</option><option value="2">DO NOT COPY</option><option value="3">SAMPLE</option><option value="4">PRELIMINARY</option><option value="5">NOT FOR DISTRIBUTION</option><option value="6">ASAP</option><option value="7">URGENT</option>
               <option value="other" hidden>Your own</option>
               <option value="custom">Custom Watermark…</option>
               <option value="remove">Remove Watermark</option>
-            </select></label>
-            <div class="rb-pair">
-              <label class="rb-field" title="Page Color: the colour of the paper on screen and in print (Word prints it only when set to)">Page Color <input id="doc-page-colour" type="color" aria-label="Page colour" /></label>
+            </select></div>
+          <div class="rb-fly rb-colgal">
+            <button class="rb-big rb-fly-btn" data-ic="page-color" title="Page Color: the colour of the paper on screen and in print (Word prints it only when set to)"><span class="rb-icon"></span>Page Color ▾</button>
+            <div class="rb-fly-menu" role="menu" hidden>
+              <div class="rb-fly-head">Paper colours</div>
+              <div class="gal-swatches" data-colours="#fffdf5 #fdf6e3 #fff8dc #fef3e2 #fdecec #f3e8fd #e8f0fe #e6f4f1 #eaf6e7 #f2f2f2 #e0e0e0 #263238"></div>
+              <hr/>
+              <button type="button" class="gal-more">More Colors…</button>
               <button data-doc="page-color-none" title="No page colour (white paper)">No Color</button>
+              <input id="doc-page-colour" class="gal-colour-input" type="color" aria-label="Page colour" tabindex="-1" />
             </div>
-            <button data-doc="page-borders" title="Page Borders: a line round every page, from the edge of the paper or round the text">▢ Page Borders…</button>
           </div>
+          <button class="rb-big" data-doc="page-borders" data-ic="page-borders" title="Page Borders: a line round every page, from the edge of the paper or round the text"><span class="rb-icon"></span>Page Borders</button>
         </div>
         <div class="rb-label">Page Background</div>
       </div>
@@ -1616,37 +1617,33 @@
     <div class="rb-panel" data-doc-panel="layout" hidden>
       <div class="rb-group">
         <div class="rb-row">
-          <div class="rb-col">
-            <label class="rb-field">Margins <select id="doc-margins" data-doc-prefix="margins">
+          <div class="rb-fly rb-selgal" data-name="Margins" data-ic="page-margins" data-pic="margins" title="Margins: the room round the text on every page of this section"><select id="doc-margins" data-doc-prefix="margins">
               <option value="normal">Normal (1 in)</option>
               <option value="narrow">Narrow (0.5 in)</option>
               <option value="moderate">Moderate (1 in, 0.75 in sides)</option>
               <option value="wide">Wide (1 in, 2 in sides)</option>
               <option value="other" hidden>Other</option>
               <option value="custom">Custom Margins…</option>
-            </select></label>
-            <label class="rb-field">Paper <select id="doc-paper" data-doc-prefix="paper">
+            </select></div>
+          <div class="rb-fly rb-selgal" data-name="Orientation" data-ic="page-orientation" data-pic="orient" title="Orientation: pages upright (portrait) or on their side (landscape)"><select id="doc-orient" data-doc-prefix="orient">
+              <option value="portrait">Portrait</option>
+              <option value="landscape">Landscape</option>
+            </select></div>
+          <div class="rb-fly rb-selgal" data-name="Size" data-ic="page-size" data-pic="paper" title="Size: the paper the pages are set on"><select id="doc-paper" data-doc-prefix="paper">
               <option value="letter">Letter (8.5 × 11 in)</option>
               <option value="a4">A4 (21 × 29.7 cm)</option>
               <option value="other" hidden>Other size</option>
               <option value="custom">More Paper Sizes…</option>
-            </select></label>
-          </div>
-          <div class="rb-col">
-            <label class="rb-field">Orientation <select id="doc-orient" data-doc-prefix="orient">
-              <option value="portrait">Portrait</option>
-              <option value="landscape">Landscape</option>
-            </select></label>
-            <label class="rb-field" title="Text in columns, as journals set it">Columns <select id="doc-columns" data-doc-prefix="columns">
+            </select></div>
+          <div class="rb-fly rb-selgal" data-name="Columns" data-ic="text-columns" data-pic="columns" title="Text in columns, as journals set it"><select id="doc-columns" data-doc-prefix="columns">
               <option value="1">One</option>
               <option value="2">Two</option>
               <option value="3">Three</option>
               <option value="4" hidden>Four</option>
               <option value="more">More Columns…</option>
-            </select></label>
-          </div>
+            </select></div>
           <div class="rb-col">
-            <label class="rb-field" title="Page and column breaks, and section breaks: a new section can have its own paper, margins, columns, header and footer, page numbering and line numbers">Breaks <select id="doc-breaks" data-doc-prefix="breaks">
+            <div class="rb-fly rb-selgal" data-size="small" data-name="Breaks" data-ic="page-breaks" data-pic="breaks" title="Page and column breaks, and section breaks: a new section can have its own paper, margins, columns, header and footer, page numbering and line numbers"><select id="doc-breaks" data-doc-prefix="breaks">
               <option value="" hidden>Insert…</option>
               <option value="page">Page (Ctrl+Enter)</option>
               <option value="column">Column (Ctrl+Shift+Enter)</option>
@@ -1654,21 +1651,21 @@
               <option value="continuous">Section: Continuous</option>
               <option value="evenPage">Section: Even Page</option>
               <option value="oddPage">Section: Odd Page</option>
-            </select></label>
-            <label class="rb-field" title="Numbers down the margin beside each line of text (for manuscripts under review), in this section">Line Numbers <select id="doc-linenums" data-doc-prefix="linenums">
+            </select></div>
+            <div class="rb-fly rb-selgal" data-size="small" data-name="Line Numbers" data-ic="line-numbers" title="Numbers down the margin beside each line of text (for manuscripts under review), in this section"><select id="doc-linenums" data-doc-prefix="linenums">
               <option value="none">None</option>
               <option value="continuous">Continuous</option>
               <option value="page">Restart Each Page</option>
               <option value="section">Restart Each Section</option>
               <option value="suppress">Suppress for Current Paragraph</option>
               <option value="options">Line Numbering Options…</option>
-            </select></label>
-            <label class="rb-field" title="Hyphenation: break words at the ends of lines where English allows (whole document), or keep this paragraph unbroken">Hyphenation <select id="doc-hyphen" data-doc-prefix="hyphen">
+            </select></div>
+            <div class="rb-fly rb-selgal" data-size="small" data-name="Hyphenation" data-ic="hyphenation" title="Hyphenation: break words at the ends of lines where English allows (whole document), or keep this paragraph unbroken"><select id="doc-hyphen" data-doc-prefix="hyphen">
               <option value="none">None</option>
               <option value="auto">Automatic</option>
               <option value="para">Don't Hyphenate This Paragraph</option>
               <option value="options">Hyphenation Options…</option>
-            </select></label>
+            </select></div>
           </div>
         </div>
         <div class="rb-label">Page Setup</div>
@@ -1678,13 +1675,13 @@
         <div class="rb-row">
           <div class="rb-col">
             <span class="rb-caption">Indent</span>
-            <label class="rb-field" title="From the left margin, in inches (or type cm, mm or pt)">Left <input id="doc-ind-left" class="rb-text rb-num" spellcheck="false" /></label>
-            <label class="rb-field" title="From the right margin, in inches (or type cm, mm or pt)">Right <input id="doc-ind-right" class="rb-text rb-num" spellcheck="false" /></label>
+            <label class="rb-field" title="From the left margin, in inches (or type cm, mm or pt)"><span class="rb-lead" data-ic-lead="indent-left"></span>Left <input id="doc-ind-left" class="rb-text rb-num" spellcheck="false" /></label>
+            <label class="rb-field" title="From the right margin, in inches (or type cm, mm or pt)"><span class="rb-lead" data-ic-lead="indent-right"></span>Right <input id="doc-ind-right" class="rb-text rb-num" spellcheck="false" /></label>
           </div>
           <div class="rb-col">
             <span class="rb-caption">Spacing</span>
-            <label class="rb-field" title="Space above the paragraph, in points">Before <input id="doc-sp-before" class="rb-text rb-num" spellcheck="false" /></label>
-            <label class="rb-field" title="Space below the paragraph, in points">After <input id="doc-sp-after" class="rb-text rb-num" spellcheck="false" /></label>
+            <label class="rb-field" title="Space above the paragraph, in points"><span class="rb-lead" data-ic-lead="space-before"></span>Before <input id="doc-sp-before" class="rb-text rb-num" spellcheck="false" /></label>
+            <label class="rb-field" title="Space below the paragraph, in points"><span class="rb-lead" data-ic-lead="space-after"></span>After <input id="doc-sp-after" class="rb-text rb-num" spellcheck="false" /></label>
           </div>
         </div>
         <div class="rb-label">Paragraph</div>
@@ -1692,8 +1689,7 @@
       </div>
       <div class="rb-group">
         <div class="rb-row">
-          <div class="rb-col">
-            <label class="rb-field">Page numbers <select id="doc-numbers" data-doc-prefix="numbers">
+          <div class="rb-fly rb-selgal" data-name="Page Number" data-ic="page-numbers" data-pic="numbers" title="Page numbers: where on the page they go, in this section"><select id="doc-numbers" data-doc-prefix="numbers">
               <option value="none">None</option>
               <option value="footer-center">Bottom, centre</option>
               <option value="footer-right">Bottom, right</option>
@@ -1701,13 +1697,14 @@
               <option value="header-right">Top, right</option>
               <option value="header-center">Top, centre</option>
               <option value="header-left">Top, left</option>
-            </select></label>
-            <button data-doc="numbers-s" aria-pressed="false" title="Number pages S1, S2… as Supporting Information is">S1, S2… numbering</button>
+            </select></div>
+          <div class="rb-col">
+            <button data-doc="header-edit" class="rb-labelled" title="Text at the top of every page in this section (left, centre, right)"><span class="rb-lead"></span>Header…</button>
+            <button data-doc="footer-edit" class="rb-labelled" title="Text at the bottom of every page in this section (left, centre, right)"><span class="rb-lead"></span>Footer…</button>
+            <button data-doc="page-number-format" class="rb-labelled" title="Page numbers as 1, 2, 3 or i, ii, iii, and where this section's numbering starts"><span class="rb-lead"></span>Number Format…</button>
           </div>
           <div class="rb-col">
-            <button data-doc="header-edit" title="Text at the top of every page in this section (left, centre, right)">Header…</button>
-            <button data-doc="footer-edit" title="Text at the bottom of every page in this section (left, centre, right)">Footer…</button>
-            <button data-doc="page-number-format" title="Page numbers as 1, 2, 3 or i, ii, iii, and where this section's numbering starts">Number Format…</button>
+            <button data-doc="numbers-s" class="rb-labelled" aria-pressed="false" title="Number pages S1, S2… as Supporting Information is"><span class="rb-lead"></span>S1, S2…</button>
           </div>
         </div>
         <div class="rb-label">Header and Footer</div>
@@ -1715,25 +1712,22 @@
       </div>
       <div class="rb-group">
         <div class="rb-row">
-          <div class="rb-col">
-            <label class="rb-field" title="How the text goes round the structure, picture or text box picked">Wrap Text <select id="doc-wrap" data-doc-prefix="wrap">
+          <button class="rb-big" data-doc="arrange-position" data-ic="position" aria-haspopup="true" title="Position: put the structure, picture or text box picked at the top, middle or bottom of the page, left, centre or right, with the text wrapping round it"><span class="rb-icon"></span>Position ▾</button>
+          <div class="rb-fly rb-selgal" data-name="Wrap Text" data-ic="wrap-text" data-pic="wrap" title="How the text goes round the structure, picture or text box picked"><select id="doc-wrap" data-doc-prefix="wrap">
               <option value="inline">In Line with Text</option>
               <option value="square">Square</option>
               <option value="topBottom">Top and Bottom</option>
               <option value="behind">Behind Text</option>
               <option value="front">In Front of Text</option>
-            </select></label>
-            <button data-doc="insert-text-box" title="A box of text on the page, with the page's text wrapping round it">Text Box</button>
+            </select></div>
+          <div class="rb-col">
+            <button data-doc="arrange-forward" class="rb-labelled" data-ic="shape-forward" aria-haspopup="true" title="Bring Forward: the figure picked over the one in front of it, or to the front of all"><span class="rb-lead"></span>Bring Forward ▾</button>
+            <button data-doc="arrange-backward" class="rb-labelled" data-ic="shape-backward" aria-haspopup="true" title="Send Backward: the figure picked under the one behind it, or to the back of all"><span class="rb-lead"></span>Send Backward ▾</button>
+            <button data-doc="selection-pane" class="rb-labelled" title="Selection Pane: every figure floating on the pages, front first, to pick, rename, hide or group"><span class="rb-lead"></span>Selection Pane</button>
           </div>
           <div class="rb-col">
-            <button data-doc="arrange-position" aria-haspopup="true" title="Position: put the structure, picture or text box picked at the top, middle or bottom of the page, left, centre or right, with the text wrapping round it">Position ▾</button>
-            <button data-doc="arrange-forward" aria-haspopup="true" title="Bring Forward: the figure picked over the one in front of it, or to the front of all">Bring Forward ▾</button>
-            <button data-doc="arrange-backward" aria-haspopup="true" title="Send Backward: the figure picked under the one behind it, or to the back of all">Send Backward ▾</button>
-          </div>
-          <div class="rb-col">
-            <button data-doc="selection-pane" title="Selection Pane: every figure floating on the pages, front first, to pick, rename, hide or group">Selection Pane</button>
-            <button data-doc="arrange-group" aria-haspopup="true" title="Group: figures picked in the Selection Pane (Ctrl+click) move together; Ungroup parts them again">Group ▾</button>
-            <button data-doc="arrange-rotate" aria-haspopup="true" title="Rotate: turn the picture picked a quarter right or left, flip it, or turn it by any angle">Rotate ▾</button>
+            <button data-doc="arrange-group" class="rb-labelled" data-ic="group" aria-haspopup="true" title="Group: figures picked in the Selection Pane (Ctrl+click) move together; Ungroup parts them again"><span class="rb-lead"></span>Group ▾</button>
+            <button data-doc="arrange-rotate" class="rb-labelled" data-ic="rotate-by" aria-haspopup="true" title="Rotate: turn the picture picked a quarter right or left, flip it, or turn it by any angle"><span class="rb-lead"></span>Rotate ▾</button>
           </div>
         </div>
         <div class="rb-label">Arrange</div>

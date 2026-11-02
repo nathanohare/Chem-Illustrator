@@ -21,6 +21,7 @@ function close(): void {
 function show(menu: HTMLElement, by: HTMLElement): void {
   close();
   const r = (by.closest('.rb-fly') ?? by).getBoundingClientRect();
+  menu.dispatchEvent(new CustomEvent('rb-fly-open')); // a gallery fills itself with the choices as they are now
   menu.hidden = false;
   menu.style.left = `${Math.max(4, Math.min(r.left, innerWidth - menu.offsetWidth - 4))}px`;
   menu.style.top = `${r.bottom + 2}px`;

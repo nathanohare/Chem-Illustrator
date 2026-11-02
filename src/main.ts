@@ -139,6 +139,7 @@ import { installFontList, registerBundledFonts, bundledFaces, pdfFonts } from '.
 import { applyRibbonIcons } from './ui/ribbon-icons';
 import { applyIconSet } from './ui/icon-set';
 import { installRibbonFlyouts } from './ui/ribbon-flyout';
+import { buildColourGalleries, buildSelectGalleries } from './ui/select-gallery';
 import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templateFromAtoms, placeTemplate, freePlacement } from './chem/templates';
 import { centreEnd } from './chem/hapto';
 import { countElectrons } from './chem/electrons';
@@ -9761,6 +9762,8 @@ whenIconsLoaded(() => {
     return c;
   }));
 }
+buildSelectGalleries();
+buildColourGalleries();
 applyRibbonIcons();
 applyIconSet();
 installRibbonFlyouts();
