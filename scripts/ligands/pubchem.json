@@ -878,72 +878,67 @@
   "cite": 12086160
  },
  "diop": {
-  "q": "DIOP",
+  "q": 3084647,
   "ours": "VCHDBLPQYJAQSQ-LOYHVIPDSA-N",
   "cid": 3084647,
   "inchikey": "VCHDBLPQYJAQSQ-LOYHVIPDSA-N",
   "title": "(+)-2,2-Dimethyl-4,5-((diphenylphosphino)dimethyl)dioxolane",
-  "how": "structure",
-  "named": {
-   "cid": 33934,
-   "inchikey": "IJFPVINAQGWBRJ-UHFFFAOYSA-N",
-   "title": "Diisooctyl phthalate"
-  },
+  "how": "name",
   "cite": 3084647
  },
  "chiraphos": {
-  "q": "Chiraphos",
-  "ours": "FWXAUDSWDBGCMN-PSWAGMNNSA-N",
-  "cid": 3882352,
-  "inchikey": "FWXAUDSWDBGCMN-UHFFFAOYSA-N",
-  "title": "Chiraphos",
+  "q": 2724948,
+  "ours": "FWXAUDSWDBGCMN-DNQXCXABSA-N",
+  "cid": 2724948,
+  "inchikey": "FWXAUDSWDBGCMN-DNQXCXABSA-N",
+  "title": "Chiraphos, (R,R)-",
   "how": "name",
-  "cite": 3882352
+  "cite": 2724948
  },
  "prophos": {
-  "q": "1,2-Bis(diphenylphosphino)propane",
+  "q": 2724539,
   "ours": "WGOBPPNNYVSJTE-HSZRJFAPSA-N",
-  "cid": 3640685,
-  "inchikey": "WGOBPPNNYVSJTE-UHFFFAOYSA-N",
-  "title": "1,2-Bis(diphenylphosphino)propane",
+  "cid": 2724539,
+  "inchikey": "WGOBPPNNYVSJTE-HSZRJFAPSA-N",
+  "title": "1,1'-((1R)-1-Methyl-1,2-ethanediyl)bis(diphenylphosphine)",
   "how": "name",
-  "cite": 3640685
+  "cite": 2724539
  },
  "skewphos": {
-  "q": "2,4-Bis(diphenylphosphino)pentane",
-  "ours": "CTYPJIUQROQJBG-PLQXJYEYSA-N",
-  "cid": 4185894,
-  "inchikey": "CTYPJIUQROQJBG-UHFFFAOYSA-N",
-  "title": "2,4-Bis(diphenylphosphino)pentane",
+  "q": 2734567,
+  "ours": "CTYPJIUQROQJBG-DQEYMECFSA-N",
+  "cid": 2734567,
+  "inchikey": "CTYPJIUQROQJBG-DQEYMECFSA-N",
+  "title": "(2S,4S)-2,4-Bis(diphenylphosphino)pentane",
   "how": "name",
-  "cite": 4185894
+  "cite": 2734567
  },
  "norphos": {
-  "q": "Norphos",
-  "ours": "CDJHPMXMJUCLPA-UHFFFAOYSA-N",
-  "cid": 10183166,
-  "inchikey": "CDJHPMXMJUCLPA-QHNMYUOLSA-N",
-  "title": "(2S,3S)-(+)-2,3-Bis(diphenylphosphino)bicyclo(2.2.1)hept-5-ene",
+  "q": 10139589,
+  "ours": "CDJHPMXMJUCLPA-RMDVPPNSSA-N",
+  "cid": 10139589,
+  "inchikey": "CDJHPMXMJUCLPA-RMDVPPNSSA-N",
+  "title": "1,1'-[(1R,2R,3R,4S)-Bicyclo[2.2.1]hept-5-ene-2,3-diyl]bis[1,1-diphenylphosphine]",
   "how": "name",
-  "cite": 10183166
+  "cite": 10139589
  },
  "dipamp": {
-  "q": "DIPAMP",
-  "ours": "QKZWXPLBVCKXNQ-MEKGRNQZSA-N",
-  "cid": 2734557,
-  "inchikey": "QKZWXPLBVCKXNQ-UHFFFAOYSA-N",
-  "title": "1,2-Bis[(2-methoxyphenyl)phenylphosphino]ethane",
+  "q": 10884975,
+  "ours": "QKZWXPLBVCKXNQ-ROJLCIKYSA-N",
+  "cid": 10884975,
+  "inchikey": "QKZWXPLBVCKXNQ-ROJLCIKYSA-N",
+  "title": "Dipamp, (R,R)-",
   "how": "name",
-  "cite": 2734557
+  "cite": 10884975
  },
  "meduphos": {
-  "q": "Me-DuPhos",
+  "q": 2734551,
   "ours": "AJNZWRKTWQLAJK-KLHDSHLOSA-N",
-  "cid": 4189393,
-  "inchikey": "AJNZWRKTWQLAJK-UHFFFAOYSA-N",
-  "title": "1,2-Bis(2,5-dimethylphospholan-1-yl)benzene",
+  "cid": 2734551,
+  "inchikey": "AJNZWRKTWQLAJK-KLHDSHLOSA-N",
+  "title": "Methyl-duphos, (R,R)-",
   "how": "name",
-  "cite": 4189393
+  "cite": 2734551
  },
  "etduphos": {
   "q": "Et-DuPhos",
@@ -956,12 +951,12 @@
  },
  "iprduphos": {
   "q": "iPr-DuPhos",
-  "ours": "RBVGOQHQBUPSGX-ZJZGAYNASA-N",
-  "cid": 11520495,
-  "inchikey": "RBVGOQHQBUPSGX-ZJZGAYNASA-N",
-  "title": "rel-1,2-Bis((2S,5S)-2,5-diisopropylphospholan-1-yl)benzene",
+  "ours": "RBVGOQHQBUPSGX-MOUTVQLLSA-N",
+  "cid": 11327562,
+  "inchikey": "RBVGOQHQBUPSGX-MOUTVQLLSA-N",
+  "title": "1,2-Bis[(2R,5R)-2,5-diisopropylphospholan-1-yl]benzene",
   "how": "structure",
-  "cite": 11520495
+  "cite": 11327562
  },
  "mebpe": {
   "q": "Me-BPE",
@@ -974,48 +969,48 @@
  },
  "phbpe": {
   "q": "Ph-BPE",
-  "ours": "VHHAZLMVLLIMHT-CUPIEXAXSA-N",
-  "cid": 16218207,
-  "inchikey": "VHHAZLMVLLIMHT-CUPIEXAXSA-N",
-  "title": "(+)-1,2-Bis((2S,5S)-2,5-diphenylphospholano)ethane",
+  "ours": "VHHAZLMVLLIMHT-YFRBGRBWSA-N",
+  "cid": 11420783,
+  "inchikey": "VHHAZLMVLLIMHT-YFRBGRBWSA-N",
+  "title": "(2R,5R)-1-(2-((2R,5R)-2,5-diphenylphospholan-1-yl)ethyl)-2,5-diphenylphospholane",
   "how": "structure",
-  "cite": 16218207
+  "cite": 11420783
  },
  "tangphos": {
-  "q": "TangPhos",
-  "ours": "SJNUZTRUIDRSJK-MWABVPJASA-N",
-  "cid": 97988209,
-  "inchikey": "SJNUZTRUIDRSJK-MWABVPJASA-N",
-  "title": "",
-  "how": "structure",
-  "cite": 97988209
+  "q": 10149434,
+  "ours": "SJNUZTRUIDRSJK-KNCCTNLNSA-N",
+  "cid": 10149434,
+  "inchikey": "SJNUZTRUIDRSJK-KNCCTNLNSA-N",
+  "title": "(S,S',R,R')-TangPhos",
+  "how": "name",
+  "cite": 10149434
  },
  "duanphos": {
-  "q": "DuanPhos",
-  "ours": "HCBRTCFUVLYSKU-PJYWLYPCSA-N",
-  "cid": 97102591,
-  "inchikey": "HCBRTCFUVLYSKU-PJYWLYPCSA-N",
-  "title": "(1R)-2-tert-butyl-1-[(1S)-2-tert-butyl-1,3-dihydroisophosphindol-1-yl]-1,3-dihydroisophosphindole",
-  "how": "structure",
-  "cite": 97102591
+  "q": 10309415,
+  "ours": "HCBRTCFUVLYSKU-PWGHIRGTSA-N",
+  "cid": 10309415,
+  "inchikey": "HCBRTCFUVLYSKU-PWGHIRGTSA-N",
+  "title": "(1R,1'R,2S,2'S)-DuanPhos",
+  "how": "name",
+  "cite": 10309415
  },
  "quinoxp": {
-  "q": "QuinoxP*",
-  "ours": "DRZBLHZZDMCPGX-SZPZYZBQSA-N",
-  "cid": 88929973,
-  "inchikey": "DRZBLHZZDMCPGX-SZPZYZBQSA-N",
-  "title": "CID 88929973",
-  "how": "structure",
-  "cite": 88929973
+  "q": 11695692,
+  "ours": "DRZBLHZZDMCPGX-VXKWHMMOSA-N",
+  "cid": 11695692,
+  "inchikey": "DRZBLHZZDMCPGX-VXKWHMMOSA-N",
+  "title": "2,3-Bis((R)-tert-butyl(methyl)phosphino)quinoxaline",
+  "how": "name",
+  "cite": 11695692
  },
  "benzp": {
-  "q": "BenzP*",
-  "ours": "JFUWTGUCFKJVST-HDICACEKSA-N",
-  "cid": 168434777,
-  "inchikey": "JFUWTGUCFKJVST-HDICACEKSA-N",
-  "title": "rel-1-((R)-tert-Butyl(methyl)phosphino)-2-((S)-tert-butyl(methyl)phosphino)benzene",
-  "how": "structure",
-  "cite": 168434777
+  "q": 15953600,
+  "ours": "JFUWTGUCFKJVST-ROUUACIJSA-N",
+  "cid": 15953600,
+  "inchikey": "JFUWTGUCFKJVST-ROUUACIJSA-N",
+  "title": "1,2-Bis((R)-tert-butyl(methyl)phosphino)benzene",
+  "how": "name",
+  "cite": 15953600
  },
  "trostph": {
   "q": "(R,R)-DACH-phenyl Trost ligand",
