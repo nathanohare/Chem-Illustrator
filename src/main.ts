@@ -1777,7 +1777,7 @@ interface ChartScan {
 function torsionData(s: ChartScan, c: ChartChoice, look = newmanPrefs.look): TorsionData {
   const L = doc.style.bondLength || 14.4;
   return {
-    profile: s.profile, extrema: s.extrema, front: s.front, back: s.back, phi0: s.phi0,
+    profile: s.profile, extrema: s.extrema, front: s.front, back: s.back, phi0: s.phi0, a: c.a, d: c.d,
     unit: c.unit, insets: c.insets, names: c.names, barriers: c.barriers, barrierColor: newmanPrefs.chart.barrierColor,
     digits: 1, w: 26 * L, h: 8 * L, method: s.method, look: structuredClone(look), sawhorse: c.sawhorse, points: s.points,
   };

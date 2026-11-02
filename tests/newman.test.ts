@@ -225,3 +225,42 @@ describe('Newman settings', () => {
     expect(p.chart.names).toBe('textbook');
   });
 });
+
+describe('labels on their bonds', () => {
+  it('puts every group\'s label at the end of its own bond, even round a crowded projection (CO2Me, Br, H in front of C(CH3)3)', () => {
+    const doc = new Doc();
+    const m = plainMeasure(doc);
+    const L = doc.style.bondLength;
+    const g = (atom: number, angle: number, label: string, size: number) => ({ atom, angle, label, size });
+    const d: NewmanData = {
+      kind: 'newman', turn: 0, conformer: 0, source: 'stable', look: structuredClone(NEWMAN_LOOK),
+      front: [g(1, 0, 'CO2Me', 1.27), g(2, 120, 'H', 0), g(3, 240, 'Br', 0.48)],
+      back: [g(4, 60, 'CH3', 1.74), g(5, 180, 'CH3', 1.74), g(6, 300, 'CH3', 1.74)],
+    };
+    for (const turn of [0, 60, 15]) {
+      let id = 0;
+      doc.edit('Newman', () => { id = putNewman(doc, m, { ...d, turn }, { x: 300, y: 300 }); });
+      const f = doc.shapes.get(id)!.frame!;
+      const circle = f.shapes.map((x) => doc.shapes.get(x)!).find((x) => x.kind === 'oval')!;
+      const cx = (circle.x1 + circle.x2) / 2, cy = (circle.y1 + circle.y2) / 2;
+      // each bond's outer end
+      const ends = f.shapes.map((x) => doc.shapes.get(x)!).filter((x) => x.kind === 'line').map((x) => ({ x: x.x2, y: x.y2 }));
+      expect(ends.length).toBe(6);
+      const boxes = f.captions.map((c) => m.captionBox(doc.captions.get(c)!));
+      expect(boxes.length).toBe(6);
+      const gapTo = (b: { x1: number; y1: number; x2: number; y2: number }, p: { x: number; y: number }) => Math.hypot(Math.max(b.x1 - p.x, 0, p.x - b.x2), Math.max(b.y1 - p.y, 0, p.y - b.y2));
+      // each label is next to a bond end, a different one for each (some one-to-one pairing works),
+      // and never further from the middle than its bond reaches plus a label
+      const near = boxes.map((b) => ends.map((e) => gapTo(b, e) < 0.3 * L));
+      const match = (i: number, used: Set<number>): boolean => i === boxes.length || ends.some((_, j) => near[i][j] && !used.has(j) && match(i + 1, new Set([...used, j])));
+      expect(match(0, new Set())).toBe(true);
+      for (const b of boxes) expect(Math.hypot((b.x1 + b.x2) / 2 - cx, (b.y1 + b.y2) / 2 - cy)).toBeLessThan(3 * L);
+      // and no two labels overlap
+      for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+        const a = boxes[i], b = boxes[j];
+        const overlap = Math.max(0, Math.min(a.x2, b.x2) - Math.max(a.x1, b.x1)) * Math.max(0, Math.min(a.y2, b.y2) - Math.max(a.y1, b.y1));
+        expect(overlap / ((a.x2 - a.x1) * (a.y2 - a.y1))).toBeLessThan(0.35);
+      }
+    }
+  });
+});

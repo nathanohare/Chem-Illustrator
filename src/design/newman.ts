@@ -74,33 +74,89 @@ export function drawNewman(doc: Doc, m: Measure, d: NewmanData, c: Vec): NewmanP
   const ranks = (gs: NewmanGroup[]): (0 | 1 | 2)[] => { const own = gs.filter((g) => g.ring === undefined); const r = sizeRanks(own); return gs.map((g) => (g.ring === undefined ? r[own.indexOf(g)] : 2)); };
   const fr = ranks(d.front), br = ranks(d.back);
   const ringTips: { front: boolean; tip: Vec; u: Vec }[] = [];
-  const line = (a: Vec, b: Vec, color = '#000000') => out.shapes.push(doc.addShape({ kind: 'line', x1: a.x, y1: a.y, x2: b.x, y2: b.y, color }).id);
+  const line = (a: Vec, b: Vec, color = '#000000'): number => { const id = doc.addShape({ kind: 'line', x1: a.x, y1: a.y, x2: b.x, y2: b.y, color }).id; out.shapes.push(id); return id; };
   const bondInk = (rank: number) => (look.ranks[rank].bond ? look.ranks[rank].color : '#000000');
   // labels go on after the lines: the front ones first, then the back ones, slid round clear of them
-  const jobs: { g: NewmanGroup; rank: number; u: Vec; tip: Vec; back: boolean }[] = [];
+  const jobs: { g: NewmanGroup; rank: number; u: Vec; tip: Vec; back: boolean; bond: number }[] = [];
   const placed: { x1: number; y1: number; x2: number; y2: number }[] = [];
-  const label = (g: NewmanGroup, rank: number, u: Vec, tip: Vec, back: boolean) => {
+  /**
+   * A group's label, at the end of its own bond: beside the bond's end for a bond running left
+   * or right (the attached atom nearest it, so H3C and HO on the left), above or below it for one
+   * running up or down. A label that would sit on another is moved out along its bond (the bond
+   * drawn longer) or a little round (the bond's end turned to meet it), whichever is the smaller
+   * move, so the bond always reaches its label.
+   */
+  const label = (g: NewmanGroup, rank: number, u: Vec, tip: Vec, bond: number) => {
     const rl = look.ranks[rank];
-    const text = u.x < -0.3 ? reversedLabel(g.label) : g.label;
-    const runs = chemRuns(text).map((r) => ({ ...r, ...(rl.color !== '#000000' ? { color: rl.color } : {}), ...(rl.bold ? { bold: true } : {}), ...(rl.italic ? { italic: true } : {}) }));
-    const cap = doc.addCaption({ x: 0, y: 0, runs, justify: 'left', chem: false });
-    const b = m.captionBox(cap);
-    const w = b.x2 - b.x1, h = b.y2 - b.y1, gap = 0.1 * L;
-    // the box's edge facing the bond just clear of its end
-    const reach = Math.abs(u.x) * w / 2 + Math.abs(u.y) * h / 2 + gap;
-    let ctr = { x: tip.x + u.x * reach, y: tip.y + u.y * reach };
-    const boxAt = (p: Vec) => ({ x1: p.x - w / 2, y1: p.y - h / 2, x2: p.x + w / 2, y2: p.y + h / 2 });
-    const hits = (r: { x1: number; y1: number; x2: number; y2: number }) => placed.some((q) => r.x1 < q.x2 - 0.5 && q.x1 < r.x2 - 0.5 && r.y1 < q.y2 - 0.5 && q.y1 < r.y2 - 0.5);
-    if (back && hits(boxAt(ctr))) {
-      // an eclipsed back group: slid round the way it was turned until it sits beside the front one
-      const t = { x: -u.y, y: u.x };
-      const sgn = look.offset < 0 ? -1 : 1;
-      // with a little space between them, so CH3 and CH3 don't read as one label
-      const roomy = (p: Vec) => { const r = boxAt(p), g = 0.12 * L; return { x1: r.x1 - g, y1: r.y1 - g, x2: r.x2 + g, y2: r.y2 + g }; };
-      for (let k = 1; k < 80 && hits(roomy(ctr)); k++) ctr = { x: ctr.x + t.x * sgn * 0.5, y: ctr.y + t.y * sgn * 0.5 };
+    const style = (text: string) => chemRuns(text).map((r) => ({ ...r, ...(rl.color !== '#000000' ? { color: rl.color } : {}), ...(rl.bold ? { bold: true } : {}), ...(rl.italic ? { italic: true } : {}) }));
+    const measure = (text: string) => { const c = doc.addCaption({ x: 0, y: 0, runs: style(text), justify: 'left', chem: false }); const b = m.captionBox(c); doc.removeCaption(c.id); return b; };
+    // written forwards, or backwards when it sits to the left of its bond (H3C, HO)
+    const fwd = g.label, rev = reversedLabel(g.label);
+    const bf = measure(fwd), br = rev === fwd ? bf : measure(rev);
+    const h = bf.y2 - bf.y1, gap = 0.08 * L;
+    // the letters fill about the middle 70% of the line's height: the box's edges are kept that close
+    const ink = 0.35 * h;
+    // above or below its bond, a label is centred on the atom the bond meets (the C of CO2Me)
+    let atomShift = 0;
+    const sym = /^[A-Z][a-z]?/.exec(fwd)?.[0];
+    if (sym && sym !== fwd) { const ob = measure(sym); atomShift = (bf.x2 - bf.x1) / 2 - (ob.x2 - ob.x1) / 2; }
+    type Mode = 'right' | 'left' | 'up' | 'down';
+    const width = (mode: Mode) => (mode === 'left' ? br.x2 - br.x1 : bf.x2 - bf.x1);
+    const centreFor = (t: Vec, mode: Mode): Vec => {
+      const w = width(mode);
+      if (mode === 'right') return { x: t.x + w / 2 + gap, y: t.y + u.y * ink * 0.6 };
+      if (mode === 'left') return { x: t.x - w / 2 - gap, y: t.y + u.y * ink * 0.6 };
+      // above it, the bond stops short of any subscript
+      return { x: t.x + atomShift, y: mode === 'up' ? t.y - (0.5 * h + gap * 0.5) : t.y + ink + gap };
+    };
+    const boxAt = (p: Vec, mode: Mode) => { const w = width(mode); return { x1: p.x - w / 2, y1: p.y - ink, x2: p.x + w / 2, y2: p.y + ink }; };
+    // clear of the other labels, the circle, and every other bond
+    const hits = (p: Vec, mode: Mode) => {
+      const r = boxAt(p, mode), e = 0.06 * L;
+      if (placed.some((q) => r.x1 - e < q.x2 && q.x1 < r.x2 + e && r.y1 - e < q.y2 && q.y1 < r.y2 + e)) return true;
+      if (d.kind === 'newman' && Math.hypot(Math.max(r.x1 - c.x, 0, c.x - r.x2), Math.max(r.y1 - c.y, 0, c.y - r.y2)) < R + 0.04 * L) return true;
+      for (const id of out.shapes) {
+        const l = id === bond ? undefined : doc.shapes.get(id);
+        if (l?.kind !== 'line') continue;
+        for (let i = 0; i <= 12; i++) {
+          const q = { x: l.x1 + ((l.x2 - l.x1) * i) / 12, y: l.y1 + ((l.y2 - l.y1) * i) / 12 };
+          if (q.x > r.x1 - e && q.x < r.x2 + e && q.y > r.y1 - e && q.y < r.y2 + e) return true;
+        }
+      }
+      return false;
+    };
+    // the bond may not cross another label on its way out
+    const from = (() => { const l = doc.shapes.get(bond); return l ? { x: l.x1, y: l.y1 } : tip; })();
+    const crosses = (e: Vec) => {
+      for (let i = 1; i <= 24; i++) {
+        const q = { x: from.x + ((e.x - from.x) * i) / 24, y: from.y + ((e.y - from.y) * i) / 24 };
+        if (placed.some((r) => q.x > r.x1 + 0.5 && q.x < r.x2 - 0.5 && q.y > r.y1 + 0.5 && q.y < r.y2 - 0.5)) return true;
+      }
+      return false;
+    };
+    const first: Mode = Math.abs(u.x) > 0.34 ? (u.x > 0 ? 'right' : 'left') : u.y < 0 ? 'up' : 'down';
+    // where it can go, the least change first: at the bond's end as usual; beside (or above or
+    // below) the bond's end instead, the way eclipsed groups are written side by side; then
+    // the bond drawn longer, or its end turned a little, so the bond always reaches the label
+    const tries: { at: Vec; mode: Mode; cost: number }[] = [{ at: tip, mode: first, cost: 0 }];
+    const others: Mode[] = first === 'up' || first === 'down' ? ['right', 'left'] : ['up', 'down'];
+    for (const mode of others) tries.push({ at: tip, mode, cost: 0.2 * L + (mode === 'left' && u.x > 0.1 ? 0.1 * L : 0) + (mode === 'right' && u.x < -0.1 ? 0.1 * L : 0) });
+    const t = { x: -u.y, y: u.x };
+    for (let k = 1; k <= 60; k++) {
+      const st = k * 0.05 * L;
+      tries.push({ at: { x: tip.x + u.x * st, y: tip.y + u.y * st }, mode: first, cost: 0.2 * L + st });
+      tries.push({ at: { x: tip.x + t.x * st, y: tip.y + t.y * st }, mode: first, cost: 0.2 * L + st * 1.4 });
+      tries.push({ at: { x: tip.x - t.x * st, y: tip.y - t.y * st }, mode: first, cost: 0.2 * L + st * 1.4 });
     }
-    placed.push(boxAt(ctr));
-    doc.updateCaption(cap.id, { x: ctr.x - w / 2 - b.x1 + cap.x, y: ctr.y - h / 2 - b.y1 + cap.y });
+    tries.sort((p, q) => p.cost - q.cost);
+    const pick = tries.find((x) => !hits(centreFor(x.at, x.mode), x.mode) && !crosses(x.at)) ?? tries.find((x) => !hits(centreFor(x.at, x.mode), x.mode)) ?? tries[0];
+    if (pick.at !== tip) doc.updateShape(bond, { x2: pick.at.x, y2: pick.at.y });
+    const text = pick.mode === 'left' ? rev : fwd;
+    const cap = doc.addCaption({ x: 0, y: 0, runs: style(text), justify: 'left', chem: false });
+    const b = m.captionBox(cap);
+    const ctr = centreFor(pick.at, pick.mode);
+    placed.push(boxAt(ctr, pick.mode));
+    doc.updateCaption(cap.id, { x: ctr.x - (b.x2 - b.x1) / 2 - b.x1 + cap.x, y: ctr.y - h / 2 - b.y1 + cap.y });
     out.captions.push(cap.id);
   };
 
@@ -110,15 +166,15 @@ export function drawNewman(doc: Doc, m: Measure, d: NewmanData, c: Vec): NewmanP
     d.back.forEach((g, i) => {
       const u = dir(back[i]);
       const a = { x: c.x + u.x * R, y: c.y + u.y * R }, b = { x: c.x + u.x * end, y: c.y + u.y * end };
-      line(a, b, bondInk(br[i]));
-      jobs.push({ g, rank: br[i], u, tip: b, back: true });
+      const bond = line(a, b, bondInk(br[i]));
+      jobs.push({ g, rank: br[i], u, tip: b, back: true, bond });
     });
     out.shapes.push(doc.addShape({ kind: 'oval', x1: c.x - R, y1: c.y - R, x2: c.x + R, y2: c.y + R, color: '#000000', filled: true, fillColor: '#ffffff' }).id);
     d.front.forEach((g, i) => {
       const u = dir(g.angle);
       const b = { x: c.x + u.x * end, y: c.y + u.y * end };
-      line(c, b, bondInk(fr[i]));
-      jobs.push({ g, rank: fr[i], u, tip: b, back: false });
+      const bond = line(c, b, bondInk(fr[i]));
+      jobs.push({ g, rank: fr[i], u, tip: b, back: false, bond });
     });
     if (look.dot) out.shapes.push(doc.addShape({ kind: 'oval', x1: c.x - 1.6 * lw, y1: c.y - 1.6 * lw, x2: c.x + 1.6 * lw, y2: c.y + 1.6 * lw, color: '#000000', filled: true, fillColor: '#000000', lineWidth: 0 }).id);
   } else {
@@ -138,14 +194,14 @@ export function drawNewman(doc: Doc, m: Measure, d: NewmanData, c: Vec): NewmanP
     const unit = (a: Vec, b: Vec) => { const l = Math.hypot(b.x - a.x, b.y - a.y) || 1; return { x: (b.x - a.x) / l, y: (b.y - a.y) / l }; };
     d.back.forEach((g, i) => {
       const b = spoke(g.angle + d.turn, sep, 0.333);
-      line(cb, b, bondInk(br[i]));
-      jobs.push({ g, rank: br[i], u: unit(cb, b), tip: b, back: true });
+      const bond = line(cb, b, bondInk(br[i]));
+      jobs.push({ g, rank: br[i], u: unit(cb, b), tip: b, back: true, bond });
     });
     line(c, cb);
     d.front.forEach((g, i) => {
       const b = spoke(g.angle, 0, -0.333);
-      line(c, b, bondInk(fr[i]));
-      jobs.push({ g, rank: fr[i], u: unit(c, b), tip: b, back: false });
+      const bond = line(c, b, bondInk(fr[i]));
+      jobs.push({ g, rank: fr[i], u: unit(c, b), tip: b, back: false, bond });
     });
   }
   for (const j of jobs) if (j.g.ring !== undefined) ringTips.push({ front: !j.back, tip: j.tip, u: j.u });
@@ -158,8 +214,8 @@ export function drawNewman(doc: Doc, m: Measure, d: NewmanData, c: Vec): NewmanP
     const sweep = (outward > 0 ? -1 : 1) * 110 * RAD;
     out.arrows.push(doc.addArrow({ tail: fTip.tip, head: bTip.tip, headStyle: 'none', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep, headLength: 0, headWidth: 0 } as Omit<Arrow, 'id'>).id);
   }
-  for (const j of jobs.filter((j) => !j.back && (j.g.ring === undefined || !bTip))) label(j.g, j.rank, j.u, j.tip, false);
-  for (const j of jobs.filter((j) => j.back && (j.g.ring === undefined || !fTip))) label(j.g, j.rank, j.u, j.tip, true);
+  for (const j of jobs.filter((j) => !j.back && (j.g.ring === undefined || !bTip))) label(j.g, j.rank, j.u, j.tip, j.bond);
+  for (const j of jobs.filter((j) => j.back && (j.g.ring === undefined || !fTip))) label(j.g, j.rank, j.u, j.tip, j.bond);
   return out;
 }
 

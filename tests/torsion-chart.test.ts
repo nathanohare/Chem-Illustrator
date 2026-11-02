@@ -13,7 +13,7 @@ import { searchModel } from '../src/chem/model3d-build';
 import { scanTorsion } from '../src/chem/torsion-scan';
 import { extrema, fitProfile } from '../src/chem/torsion-profile';
 import { newmanView, norm360, torsion } from '../src/chem/newman';
-import { extremumName, putTorsion, torsionCsv, torsionFrameOf, type TorsionData } from '../src/design/torsion';
+import { extremumName, idealView, putTorsion, refitTorsion, torsionCsv, torsionFrameOf, type TorsionData } from '../src/design/torsion';
 import { NEWMAN_LOOK } from '../src/design/newman';
 import { plainMeasure } from '../src/chem/reaction';
 import { writeCdxml } from '../src/io/cdxml-write';
@@ -116,6 +116,55 @@ describe('butane turned about its middle bond', () => {
     const f0 = doc.shapes.get(id)!.frame!, f1 = s.frame!;
     expect(f1.captions.length).toBe(f0.captions.length);
     expect(f1.arrows.length).toBe(f0.arrows.length);
+  });
+});
+
+describe('the chart as a textbook draws it', () => {
+  it('draws each projection at ideal staggered angles: a gauche minimum at 65° has its bottom bond straight down', () => {
+    const gauche = butane.extrema.find((e) => e.kind === 'min' && e.phi > 30 && e.phi < 90)!;
+    const v = idealView(butane, gauche.phi);
+    const front = v.front.map((g) => g.angle), back = v.back.map((g) => norm360(g.angle + v.turn));
+    // 120° apart on each atom, the compared groups 60° apart, and one back bond at 180° (straight down)
+    for (const set of [front, back]) for (let i = 0; i < 3; i++) for (let j = i + 1; j < 3; j++) expect(Math.abs(((set[i] - set[j] + 540) % 360) - 180) % 120).toBeCloseTo(0, 6);
+    expect(back.some((a) => Math.abs(a - 180) < 1e-6)).toBe(true);
+    expect(front.some((a) => Math.abs(a) < 1e-6 || Math.abs(a - 360) < 1e-6)).toBe(true);
+  });
+
+  it('moves a barrier arrow and its number to the side together, with a dashed grey line back to its level, and keeps the move through a file', () => {
+    const doc = new Doc();
+    const m = plainMeasure(doc);
+    doc.beforeCommit = (before) => refitTorsion(doc, m, before);
+    let id = 0;
+    doc.edit('Chart', () => { id = putTorsion(doc, m, { ...butane, sawhorse: false }, { x: 100, y: 200 }); });
+    const barrier = (d: Doc, frame: number) => {
+      const f = d.shapes.get(frame)!.frame!;
+      const arrows = f.arrows.map((a) => d.arrows.get(a)!).filter((a) => a.line === 'dashed' && a.color === '#1a56db' && Math.abs(a.tail.x - a.head.x) < 0.5);
+      return arrows.sort((p, q) => (p.head.y - p.tail.y) - (q.head.y - q.tail.y))[0]; // the tallest: synperiplanar
+    };
+    const greyLines = (d: Doc, frame: number) => d.shapes.get(frame)!.frame!.shapes.filter((x) => d.shapes.get(x)!.dashed && d.shapes.get(x)!.color === '#9a9a9a').length;
+    const before = barrier(doc, id);
+    expect(greyLines(doc, id)).toBe(0);
+    // drag it 50 points to the left (and a little down: only the sideways part counts)
+    doc.edit('Drag', () => doc.updateArrow(before.id, { tail: { x: before.tail.x - 50, y: before.tail.y + 4 }, head: { x: before.head.x - 50, y: before.head.y + 4 } }));
+    const d = doc.shapes.get(id)!.torsion!;
+    expect(Object.values(d.shifts ?? {})).toEqual([-50]);
+    const after = barrier(doc, id);
+    expect(after.tail.x).toBeCloseTo(before.tail.x - 50, 5);
+    expect(after.tail.y).toBeCloseTo(before.tail.y, 5);
+    expect(greyLines(doc, id)).toBe(1);
+    // its number went with it: the 5.x kcal/mol caption sits beside the moved arrow
+    const num = doc.shapes.get(id)!.frame!.captions.map((c) => doc.captions.get(c)!).find((c) => c.runs[0]?.color === '#1a56db' && /^5\./.test(c.runs[0].text))!;
+    const nb = m.captionBox(num);
+    expect(Math.min(Math.abs(nb.x1 - after.tail.x), Math.abs(nb.x2 - after.tail.x))).toBeLessThan(0.5 * doc.style.bondLength);
+    // through a file, and dragged again there
+    const back = readCdxml(writeCdxml(doc)).doc;
+    const s2 = [...back.shapes.values()].find((x) => x.torsion)!;
+    expect(s2.torsion!.shifts).toEqual(d.shifts);
+    const m2 = plainMeasure(back);
+    back.beforeCommit = (b) => refitTorsion(back, m2, b);
+    const a2 = barrier(back, s2.id);
+    back.edit('Drag', () => back.updateArrow(a2.id, { tail: { x: a2.tail.x + 20, y: a2.tail.y }, head: { x: a2.head.x + 20, y: a2.head.y } }));
+    expect(Object.values(back.shapes.get(s2.id)!.torsion!.shifts ?? {})).toEqual([-30]);
   });
 });
 
