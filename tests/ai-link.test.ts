@@ -9,7 +9,7 @@ describe('AI model link', () => {
   it('is off unless linked, and keeps no key in settings', () => {
     expect(parseSettings(null).ai.provider).toBe('none');
     const s = parseSettings(JSON.stringify({ ai: { provider: 'openai', model: 'gpt-5', key: 'sk-secret' } }));
-    expect(s.ai).toEqual({ provider: 'openai', model: 'gpt-5', base: '' });
+    expect(s.ai).toEqual({ provider: 'openai', model: 'gpt-5', base: '', localOnly: false, assistant: false });
     expect(parseAiPrefs({ provider: 'nonsense' }).provider).toBe('none');
   });
 

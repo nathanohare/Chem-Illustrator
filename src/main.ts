@@ -271,6 +271,7 @@ import { paintPages } from './ui/page-grid-view';
 import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
+import type { AssistantAction, SendItem } from './ai/assistant';
 import { aiSettingsDialog } from './ui/ai-settings';
 import { freeSpace } from './editor/free-space';
 import { canReadStructures, importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
@@ -2232,6 +2233,122 @@ async function stepSpecies(got: NonNullable<ReturnType<typeof pickedStep>>, maps
     if (!rows[r].name) rows[r].name = one.formula;
   });
   return rows;
+}
+
+// ------------------------------------------------------------------ the Assistant (review item 35)
+
+/**
+ * What the Assistant could send about the page, each as an item of the "Will send" list: in a
+ * drawing (or on a slide or design page) the selected structures as SMILES, the scheme's steps
+ * as reaction SMILES with their conditions, or every structure when nothing is selected; in a
+ * Document the selected text (the whole text is listed, off); in a Spreadsheet the selected cells.
+ * Nothing else is gathered.
+ */
+async function assistantItems(): Promise<SendItem[]> {
+  const mode = ws.active.mode;
+  const items: SendItem[] = [];
+  if (mode === 'document') {
+    if (!docMode?.file) return items;
+    const sel = docMode.selectedText().trim();
+    if (sel) items.push({ id: 'text', label: 'the selected text', text: sel.slice(0, 20000), on: true });
+    const all = docMode.documentText();
+    if (all.trim()) items.push({ id: 'document', label: 'the whole document\'s text', text: all, on: !sel });
+    return items;
+  }
+  if (mode === 'sheet') {
+    const got = sheetMode?.selectedCellsText();
+    if (got) items.push({ id: 'sheet', label: `the selected cells (${got.at})`, text: got.text, on: true });
+    return items;
+  }
+  if (!chem.ready) return items;
+  const smilesOf = async (atoms: Set<number>): Promise<string | null> => {
+    const ex = toMolfile(doc, atoms, '');
+    return ex.generic.length ? null : chem.molToSmiles(ex.molblock).catch(() => null);
+  };
+  const picked = editor.sel.atoms.size ? chosenStructures() : [];
+  if (picked.length) {
+    const got = (await Promise.all(picked.map(smilesOf))).filter((s): s is string => !!s);
+    if (got.length) items.push({ id: 'selection', label: got.length === 1 ? 'the selected structure as SMILES' : `the ${got.length} selected structures as SMILES`, text: got.join('\n'), on: true });
+  }
+  const m = editor.measure();
+  const schemeAt = schemeItems(doc, m);
+  const steps = reactionSteps(doc, schemeAt);
+  if (steps.length) {
+    const lines: string[] = [];
+    for (const [i, step] of steps.entries()) {
+      const rows = await stepSpecies({ step, items: schemeAt, m });
+      const part = (role: StoichRole) => rows.filter((r) => r.role === role).map((r) => r.smiles ?? `[${r.name || 'unreadable structure'}]`);
+      const conditions = rows.filter((r) => r.role === 'Conditions').map((r) => r.name).filter(Boolean);
+      lines.push(`Step ${i + 1}: ${part('Starting material').join('.')}>${part('Reagent').join('.')}>${part('Product').join('.')}${conditions.length ? `  (conditions: ${conditions.join('; ')})` : ''}`);
+    }
+    items.push({ id: 'scheme', label: steps.length === 1 ? 'the reaction step as reaction SMILES, with its conditions' : `the scheme's ${steps.length} steps as reaction SMILES, with their conditions`, text: lines.join('\n'), on: !picked.length });
+  }
+  if (!picked.length && !steps.length && doc.atoms.size) {
+    const seen = new Set<number>();
+    const frags: Set<number>[] = [];
+    for (const id of doc.atoms.keys()) {
+      if (seen.has(id) || frags.length >= 50) continue;
+      const f = doc.fragmentOf(id);
+      for (const x of f) seen.add(x);
+      frags.push(f);
+    }
+    const got = (await Promise.all(frags.map(smilesOf))).filter((s): s is string => !!s);
+    if (got.length) items.push({ id: 'drawing', label: got.length === 1 ? 'the structure in the drawing as SMILES' : `the ${got.length} structures in the drawing as SMILES`, text: got.join('\n'), on: true });
+  }
+  return items;
+}
+
+/**
+ * Carry out a proposal the person accepted, as one step of Undo; what happened, for the pane.
+ * Structures are read again by RDKit first, and one that doesn't read isn't drawn.
+ */
+async function applyAssistantAction(a: AssistantAction): Promise<string> {
+  const mode = ws.active.mode;
+  if (a.type === 'check') return 'Nothing to change.';
+  if (a.type === 'text') {
+    if (mode === 'document') return docMode?.writeText(a.text, a.replace) ? (a.replace ? 'Replaced the selected text.' : 'Added the text.') : 'The document can\'t be typed in now (Read Mode?).';
+    if (mode === 'sheet') { await copyText(a.text, 'Copied the text: paste it where you want it.'); return 'Copied the text.'; }
+    await pasteText(a.text);
+    return 'Added the text as a text box.';
+  }
+  if (!chem.ready) return 'The chemistry engine is still loading. Try again in a moment.';
+  const mb = await chem.smilesToMol(a.smiles).catch(() => null);
+  if (!mb) return `The proposed structure (${a.smiles}) doesn't read as a valid structure, so it wasn't drawn.`;
+  if (mode === 'document' || mode === 'sheet') {
+    await copyText(a.smiles, 'Copied the structure as SMILES: paste it into a drawing, a cell or the document.');
+    return 'Copied the structure as SMILES.';
+  }
+  const old = a.replace ? chosenStructures() : [];
+  let ids: number[] = [];
+  if (old.length) {
+    const atoms = old.flatMap((f) => [...f]);
+    const xs = atoms.map((id) => doc.atoms.get(id)!.x), ys = atoms.map((id) => doc.atoms.get(id)!.y);
+    const c = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 };
+    doc.edit('Assistant: Replace Structure', () => {
+      for (const id of atoms) doc.removeAtom(id);
+      ids = addMolfile(doc, mb, c.x, c.y);
+    });
+  } else {
+    const c = pastePoint();
+    doc.edit('Assistant: Draw Structure', () => {
+      ids = addMolfile(doc, mb, c.x, c.y);
+      editor.sel = { atoms: new Set(ids), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() };
+      editor.placeClear(placingPage());
+    });
+  }
+  selectNewAtoms(ids);
+  await keepPasteInside();
+  return old.length ? 'Replaced the selected structure.' : 'Drew the structure.';
+}
+
+/** "Mark on drawing" for a finding about a step: select that step's arrow. False when there is no such step. */
+function markAssistantStep(n: number): boolean {
+  const steps = reactionSteps(doc, schemeItems(doc, editor.measure()));
+  const step = steps[n - 1];
+  if (!step) return false;
+  editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set([step.arrow.id]), shapes: new Set() };
+  editor.changed();
+  return true;
 }
 
 /**
@@ -12615,7 +12732,7 @@ requestAnimationFrame(() => {
 });
 
 // Hooks for the automated speed tests.
-(window as any).__app = { doc, editor, renderer, settingsWindow, toolboxes, chem, live, command, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
+(window as any).__app = { assistant: { items: assistantItems, apply: applyAssistantAction, markStep: markAssistantStep }, doc, editor, renderer, settingsWindow, toolboxes, chem, live, command, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
   pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, canvas: s.canvas })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test
