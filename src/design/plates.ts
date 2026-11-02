@@ -10,8 +10,10 @@ import type { Measure } from '../editor/arrange';
 import { frameBox, frameMembers } from '../editor/frames';
 import { shapeBox } from '../objects';
 import { chemRuns } from '../text/chemtext';
+import { drawMo, MO_PRESETS, type MoSpec } from './mo';
 
-export type PlateKind = 'tlc' | 'gel';
+/** A TLC plate, a gel, or a molecular orbital diagram (design/mo.ts), which is kept and redrawn the same way. */
+export type PlateKind = 'tlc' | 'gel' | 'mo';
 
 export interface PlateLane {
   /** Under a TLC lane or over a gel lane ("SM", "co", "P", "1"). */
@@ -41,6 +43,8 @@ export interface PlateData {
   /** Gel: what the sizes are in, and whether the marker's sizes are written beside it. */
   unit: 'bp' | 'kb' | 'kDa';
   sizes: boolean;
+  /** An MO diagram's levels and titles. */
+  mo?: MoSpec;
   /** How far the plate sits inside its frame on each side, as last drawn. */
   margins?: { l: number; t: number; r: number; b: number };
 }
@@ -144,6 +148,10 @@ export interface PlateParts { captions: number[]; arrows: number[]; shapes: numb
 
 /** Starting lanes for a new plate or gel. */
 export function newPlate(kind: PlateKind, L: number): PlateData {
+  if (kind === 'mo') {
+    const spec = MO_PRESETS[0].spec;
+    return { kind, look: '', w: Math.round(12 * L), h: Math.round(9 * L), rf: false, lines: false, labels: true, note: '', unit: 'bp', sizes: false, lanes: [], mo: { ...spec, levels: spec.levels.map((l) => ({ ...l })) } };
+  }
   if (kind === 'tlc') {
     return {
       kind, look: 'pencil', w: Math.round(9 * L), h: Math.round(11 * L), rf: true, lines: true, labels: true, note: '', unit: 'bp', sizes: true,
@@ -162,6 +170,7 @@ export function newPlate(kind: PlateKind, L: number): PlateData {
  * it in a frame). Call inside an edit.
  */
 export function drawPlate(doc: Doc, m: Measure, d: PlateData, at: Vec): PlateParts {
+  if (d.kind === 'mo') return d.mo ? drawMo(doc, m, d.mo, at, d.w, d.h) : { captions: [], arrows: [], shapes: [] };
   const out: PlateParts = { captions: [], arrows: [], shapes: [] };
   const lw = doc.style.lineWidth, L = doc.style.bondLength;
   const n = Math.max(1, d.lanes.length);
@@ -170,7 +179,7 @@ export function drawPlate(doc: Doc, m: Measure, d: PlateData, at: Vec): PlatePar
   const gap = 0.3 * L;
   const caption = (text: string, target: Vec, anchor: 'above' | 'below' | 'left' | 'right', extra: Partial<Caption> = {}, color?: string): Rect => {
     const runs = chemRuns(text).map((r) => (color ? { ...r, color } : r));
-    const c = doc.addCaption({ x: 0, y: 0, runs, justify: 'left', ...extra });
+    const c = doc.addCaption({ x: 0, y: 0, runs, justify: 'left', chem: false, ...extra });
     const b = m.captionBox(c);
     const w = b.x2 - b.x1, h = b.y2 - b.y1;
     const want = anchor === 'above' ? { x: target.x - w / 2, y: target.y - h } : anchor === 'below' ? { x: target.x - w / 2, y: target.y }
@@ -293,7 +302,7 @@ export function putPlate(doc: Doc, m: Measure, d: PlateData, at: Vec, id?: numbe
   const b = frameBox(doc, frame, m) ?? { x1: at.x, y1: at.y, x2: at.x + d.w, y2: at.y + d.h };
   const r = (v: number) => Math.round(v * 100) / 100;
   const plate: PlateData = { ...d, margins: { l: r(at.x - b.x1), t: r(at.y - b.y1), r: r(b.x2 - at.x - d.w), b: r(b.y2 - at.y - d.h) } };
-  const name = d.kind === 'tlc' ? 'TLC plate' : 'Gel';
+  const name = d.kind === 'tlc' ? 'TLC plate' : d.kind === 'gel' ? 'Gel' : 'MO diagram';
   if (old) { doc.updateShape(old.id, { ...b, frame, plate }); return old.id; }
   return doc.addShape({ kind: 'geo', geo: 'rect', ...b, filled: false, lineWidth: 0, color: '#000000', frame, plate, name }).id;
 }

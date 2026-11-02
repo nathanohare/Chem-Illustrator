@@ -2930,3 +2930,8 @@ dialog.plate-dialog { width: min(96vw, 560px); max-height: 92vh; }
 .plate-table td:last-child, .plate-table th:last-child { width: 2em; }
 .plate-rows { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
 .plate-ladder { display: flex; align-items: center; gap: 6px; }
+dialog.mo-dialog { width: min(96vw, 720px); }
+.mo-table td input.mo-num { width: 4.5em; text-align: right; }
+.mo-table td select { font: inherit; }
+.mo-titles { display: flex; gap: 6px; }
+.mo-titles input { width: 7em; min-width: 0; }

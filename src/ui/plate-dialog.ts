@@ -5,7 +5,7 @@
 import { GEL_LOOKS, LADDERS, TLC_LOOKS, newPlate, type PlateData, type PlateKind, type PlateLane } from '../design/plates';
 
 /** How the last plate and gel looked, so a new one starts the same way. */
-const lastLook: Record<PlateKind, Partial<PlateData>> = { tlc: {}, gel: {} };
+const lastLook: Record<PlateKind, Partial<PlateData>> = { tlc: {}, gel: {}, mo: {} };
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}): HTMLElementTagNameMap[K] => Object.assign(document.createElement(tag), props);
 

@@ -3017,7 +3017,7 @@ export class Editor {
   putPlateAt(d: PlateData, at: Vec, id?: number, page?: { w: number; h: number }): void {
     const m = this.fullMeasure();
     let frame = id;
-    const what = d.kind === 'tlc' ? 'TLC Plate' : 'Gel';
+    const what = d.kind === 'tlc' ? 'TLC Plate' : d.kind === 'gel' ? 'Gel' : 'MO Diagram';
     this.doc.edit(id === undefined ? what : `Edit ${what}`, () => {
       const s = id !== undefined ? this.doc.shapes.get(id) : undefined;
       const corner = s?.plate ? plateFromBox(shapeBox(s), s.plate, this.doc.style.bondLength).at : { x: at.x - d.w / 2, y: at.y - d.h / 2 };

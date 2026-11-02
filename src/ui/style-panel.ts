@@ -475,6 +475,21 @@ export class StylePanel {
   /** A TLC plate or gel: its stain or dye and what is written, and the window with its lanes. */
   private plateControls(sh: Shape): void {
     const d = sh.plate!;
+    if (d.kind === 'mo') {
+      this.heading('MO diagram');
+      if (d.mo) this.check('Energy arrow', d.mo.axis, (v) => this.plate?.restyle(sh.id, { mo: { ...d.mo!, axis: v } }));
+      this.note('Change the orbitals, energies and electrons in the window; drag a corner to resize it.');
+      const row = document.createElement('div');
+      row.className = 'style-buttons';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = 'Edit MO Diagram…';
+      b.title = 'Change the orbitals, their energies and electrons (or double-click it)';
+      b.addEventListener('click', () => this.plate?.edit(sh.id));
+      row.append(b);
+      this.body.append(row);
+      return;
+    }
     const tlc = d.kind === 'tlc';
     this.heading(tlc ? 'TLC plate' : 'Gel');
     const set = (patch: Partial<PlateData>) => this.plate?.restyle(sh.id, patch);
