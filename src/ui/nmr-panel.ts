@@ -89,7 +89,7 @@ function chip(h: ShiftHit | null, wide: number): string {
 
 export type Nucleus = '1H' | '13C';
 
-const pm = (h: ShiftHit, wide: number) => `<span class="muted">±${h.spread.toFixed(wide > 1 ? 1 : 2)}</span>`;
+const pm = (h: ShiftHit, wide: number) => (h.measured ? '' : `<span class="muted">±${h.spread.toFixed(wide > 1 ? 1 : 2)}</span>`);
 
 /** The list for one nucleus, highest shift first: shift, how many atoms, which atoms, source chip. */
 export function nmrListHtml(rows: NmrRow[], nuc: Nucleus): string {
