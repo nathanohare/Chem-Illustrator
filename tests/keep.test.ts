@@ -100,6 +100,22 @@ describe('recovery copies', () => {
     expect([...store.files.keys()].some((k) => k.startsWith('recovery/old/'))).toBe(false);
     expect(BEAT_MS).toBeLessThan(STALE_MS);
   });
+
+  it('in the desktop app, finds what a session ended straight before this one left', async () => {
+    let now = 20_000_000;
+    const store = memoryStore(() => now);
+    const ended = new Recovery(store, 'ended', () => now);
+    await ended.copy([copyable(1)]);
+    await ended.setLocks(['C:\\Work\\.~lock.Scheme.cdxml#']);
+    now += 10_000;
+    const me = new Recovery(store, 'me', () => now);
+    expect((await me.leftOver(7)).length).toBe(0);
+    me.oneCopy = true;
+    expect((await me.leftOver(7)).map((s) => s.session)).toEqual(['ended']);
+    expect(await me.running('ended')).toBe(false);
+    expect(await me.running('me')).toBe(true);
+    expect((await me.strayLocks()).map((s) => s.session)).toEqual(['ended']);
+  });
 });
 
 describe('version history', () => {

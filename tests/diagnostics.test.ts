@@ -78,6 +78,18 @@ describe('closing unexpectedly', () => {
     expect(await new Diagnostics({ store, markers: true, now: () => now }).start()).toBeNull();
     await running.end();
   });
+  it('notices a desktop app ended from Task Manager and started again straight away', async () => {
+    let now = 7_000_000;
+    const store = memoryStore(() => now);
+    await new Diagnostics({ store, markers: true, oneCopy: true, now: () => now, version: 'Version 2.0' }).start();
+    now += 5_000;
+    const again = new Diagnostics({ store, markers: true, oneCopy: true, now: () => now });
+    expect((await again.start())?.version).toBe('Version 2.0');
+    // its own marker isn't taken for one left behind
+    now += 5_000;
+    await again.end();
+    expect(await new Diagnostics({ store, markers: true, oneCopy: true, now: () => now }).start()).toBeNull();
+  });
   it('reads what the desktop app wrote when it panicked, once', async () => {
     const store = memoryStore();
     await putText(store, 'diagnostics/panic-123.txt', "Version 1.0, thread 'main' panicked at src/lib.rs:4:5:\noops");

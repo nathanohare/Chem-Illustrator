@@ -40,7 +40,8 @@ Cyclopropane to cyclooctane, benzene and cyclopentadiene.
 
 Ready-made structures in palettes on the tool bar, plus **My templates**:
 
-- **Ring systems**, **Heterocycles**, **Amino acids** and **Sugars** (pyranoses and furanoses flat and as ⁴C₁ chairs).
+- **Ring systems**, **Heterocycles**, **Amino acids** and **Sugars**: Haworth projections of both anomers of glucose, galactose, mannose, GlcNAc and GalNAc, plus glucuronic acid, xylose, L-fucose, L-rhamnose, ribose, 2-deoxyribose, L-arabinose and fructose, and the pyranoses as ⁴C₁ chairs. Each Haworth is checked, stereocentre by stereocentre, against its name.
+- **Nucleic acids**: the bases (A, G, C, T, U, joined by a new bond from N9 or N1 when you click a sugar's C1′), the eight ribo- and deoxyribonucleosides, their 5′-monophosphates, ADP and ATP, drawn on Haworth rings.
 - **Conformers and fused rings in 3-D**: the cyclohexane chair (both ring flips, bare and with every axial and equatorial bond) and boat; trans- and cis-decalin, trans-hydrindane, cis-hydrindane, perhydrophenanthrene and perhydroanthracene, the 5α and 5β steroid skeletons, adamantane and cubane.
 - **Crossing bonds in 3-D drawings**: in anything placed from these palettes (and rings fused onto them), the bond that is further back gets the small white gap where a nearer bond crosses it.
 - **Projections and stereocentres**: Newman, sawhorse and Fischer projections; tetrahedral centres drawn several ways; trigonal bipyramidal, octahedral, square pyramidal and square planar centres; zig-zag chains with wedges.
@@ -78,6 +79,8 @@ Metals know they are metals: a metal gets no hydrogens and no valence warning ho
 - **Chemistry ▸ Metals ▸ Bond Metal to Ring (η)**: select a metal and the ring or π-bond atoms; their bonds become one hapto bond to the middle. **Split Hapto Bond** goes back to a bond to each atom.
 - **Chemistry ▸ Expand Label**: draws a label out as atoms. A ligand on a metal comes from its template (dppe gives both P atoms bonded to the metal); other abbreviations (OMe, Boc, CO₂Et) are laid out along the bond they hung from.
 
+**Insert ▸ Structure from Sequence…** draws a peptide in full from its sequence: one-letter codes (GLYPHS; small letters are D-amino acids, which can be turned off), or three-letter codes (Boc-Ala-D-Phe-Gly-OMe). Spaces, numbers and a FASTA header line are skipped. Pick the N-terminus (H, Ac, Boc, Fmoc, Cbz, Bz) and C-terminus (acid, amide, OMe, OEt, OtBu, OBn), or write them into a three-letter sequence. The backbone is a zig-zag with the side chains in turn up and down; the chain bends at each proline, whose ring is fused to the backbone.
+
 To make your own template, select a structure and click the first button on the **My templates** palette, or use **Chemistry ▸ Nicknames and Templates ▸ Save as Template…**. Give it a name and it appears in the palette. **Chemistry ▸ Nicknames and Templates ▸ Delete Template…** removes one.
 
 ### Text, periodic table and fragmentation
@@ -85,6 +88,7 @@ To make your own template, select a structure and click the first button on the 
 - **Text**: click an atom to type a label, or empty space for a caption. See [Text and captions](#text-and-captions).
 - **Periodic table**: pick an element, then click atoms to change them, or empty space to add a lone atom. Atoms already selected change at once. You can type a symbol in its box and press Enter. Open it from **Chemistry ▸ Look Up ▸ Periodic Table…** or Search (it is no longer a toolbox button).
 - **Mass fragmentation**: see [Mass fragmentation](#mass-fragmentation).
+- **Perspective** and **3-D Perspective** (one button, two tools): see [Turning a structure in perspective](#turning-a-structure-in-perspective).
 
 ### Arrows, mechanism symbols, shapes and brackets
 
@@ -138,6 +142,7 @@ Double-click a caption to edit it again. Press Esc to finish.
 The label box opens right on the atom: its first letter sits where the atom is, in the label font, and the box grows as you type. Counts drop and charges rise as you type them (CH₂CO₂Me, NH₃⁺), just as the label will show. Press Enter or click away to finish.
 
 - To raise or lower other characters, select them in the box and press **Ctrl+Shift+=** (raise) or **Ctrl+=** (lower). Press it again to put them back. The marks are saved in the .cdxml file, so ChemDraw shows them too.
+- **Repeat label:** after typing a label (say NHAc), right-click another atom and choose **Repeat “NHAc” Label** to give it the same label, raised and lowered characters included. Right-click one of several selected atoms and it labels them all (the menu says how many). It is also in **Edit ▸ Hotkeys…** as **Repeat Last Label**, with no key to start: give it one and it labels the selected atoms, or the atom under the pointer.
 - A label that is just R and a number (R1, R12) shows the number raised: R¹, R¹². Longer labels such as OR1 or CO2R1 keep their numbers lowered, and labels from files keep the look they were saved with. **Edit ▸ Settings** turns raised R numbers off.
 
 While you type, a bar along the top of the drawing has bold, italic and underline, subscript and superscript, **formula style**, font, size and colour, alignment, bullets and numbering, indents, line and paragraph spacing, and a set of Greek letters and symbols (**αΩ**). It sits along the top so it never covers what you have drawn; **View ▸ Window and Colours ▸ Text Formatting Bar** can float it just above the text instead, or hide it (the keys below still work).
@@ -180,6 +185,25 @@ Select a caption and a structure and choose **Format ▸ Link Text to Structure*
 
 Select a caption or text box on its own with the select tool, and a round handle appears above it. Drag the handle to turn the text; hold Shift or Alt to turn in 15° steps. When you turn a structure that has captions with it, the captions move round with the structure but stay upright. Labels attached to a structure (ID labels, descriptors) also stay upright.
 
+## Turning a structure in perspective
+
+Two tools turn a structure in 3-D as you drag it. Press on a structure (or on the selection, to turn everything selected together) and drag: across turns it about the up–down axis, up or down about the left–right axis, and the near side follows the pointer. Hold **Shift** to turn one way only, in 15° steps. Dragging on empty space draws a selection box. Each drag is one undoable step.
+
+- **Perspective** turns the drawing as a flat sheet, the way ChemDraw does: the structure is foreshortened as it tips, and once you turn it past edge-on (seeing it from behind) its wedges and hashed wedges swap so every stereocentre keeps its R or S. A structure that already has depth (a conformer template, or one turned before) turns with that depth.
+- **3-D Perspective** turns the structure's **real shape**. The first time, it builds the shape from your drawing (OpenChemLib conformers, the chosen one relaxed with MMFF94s+), which takes a second or a few for a large molecule; the status bar says "Building the 3-D shape…" and the turn starts as soon as it is ready. A molecule that isn't flat, such as BINAP with its two naphthalenes at right angles, then shows its true shape from every side, where the flat tool would treat it as a flat picture.
+  - Which shape is meant comes from the drawing. Every stereocentre drawn with a wedge keeps its configuration. Other wedges, **bold bonds** (nearer you) and **hashed bonds** (further away) pick between shapes the bonds alone can't tell apart, such as a biaryl's two twists: bold one ring of a naphthalene and that ring is the one turned towards you.
+  - While you turn, wedges move to whichever bond shows each stereocentre best from that angle, and where two bonds cross the one further back gets a small gap. If from some angle a stereocentre can't be drawn so it reads right (a bond points straight at you), the status bar says so, and letting go there puts the structure back at the last angle that worked.
+  - The structure stays live in 3-D: drag it again and it turns on from where it is. Once you change an atom or bond of it, the next turn builds the shape again from the drawing as it is then.
+  - If no 3-D shape can be built (R groups, labels that can't be read), or none matches the drawing (the bold bonds and wedges contradict each other), the structure is turned flat instead and a message says why.
+
+**Format ▸ Rotate and Flip ▸ Turn in 3-D…** (and **Perspective** on a structure's right-click menu) turns the selected structures by angles you type: about X (left–right; positive tips the top towards you), then Y (up–down; positive brings the left side towards you), then Z (in the page, clockwise), as the real 3-D shape or as a flat sheet. **Flatten** makes turned structures ordinary flat drawings again: they keep how they look but forget their depth.
+
+A turned structure keeps its 3-D positions in the CDXML file (ChemDraw's `xyz`), as **Place on Page** in the [3-D model](#3-d-model) window does.
+
+### Depth shading
+
+**Format ▸ Rotate and Flip ▸ Depth Shading** (also under **Perspective** on a structure's right-click menu) shades every structure drawn in 3-D by depth: the atoms and bonds nearest you are black, fading to grey the further back they lie. That covers structures turned with the Perspective tools, placed from the 3-D Model window, and drawn from the conformer templates. Each structure is shaded over its own depth, front to back; flat drawings are left as they are, and anything you have coloured yourself keeps its colour. **Depth Shading Settings…** sets the nearest and furthest colours (black and 60% grey, #999999, to start with), whether the fade is even or eased (slow at the front and back, quicker in the middle), and whether lines also thin with depth, and to what width at the back. It is a setting of the app, like the ends of bond lines: pictures you copy or export, and prints, keep the shading, but a CDXML file saves the structure's usual colours. The 3-D Model window has a **Depth** box that fades the back of its model in the same way.
+
 ## Moving, turning and the Format menu
 
 Select something and:
@@ -213,6 +237,9 @@ To start a reaction quickly, select a structure and press Ctrl+→ (or Ctrl+←,
 ### Tidying and checking
 
 - **Clean Up Structure** (Ctrl+Shift+K): evens out bond lengths and angles of the selected structures (or all of them) while keeping their shape, stereocentres and cis/trans double bonds. Undo puts it back.
+  - **Tangled cages** (a bridged alkaloid pasted from SMILES with bonds crossing, say) are untangled: the rings are laid down as regular polygons and whatever bridges are left are drawn across, with as few crossing bonds as possible. The chemistry engine's own layouts are tried too, and the tidiest wins. Wedges are turned over where needed so every stereocentre stays as it was.
+  - The first Clean Up keeps the structure where it was. Press it again straight away (with the structure selected) to step through other layouts, then the best one turned 30° either way and flipped.
+  - **Clean Up Options…** (Structure toolbox, or right-click a structure) shows every layout side by side. Turn or flip them all with the buttons underneath, then pick one.
 - **Check Structure (next warning)**: goes to the next problem; see [Warnings](#warnings).
 - **Aromatic Rings: Circle or Double Bonds** (Alt+K): switches selected rings (or all) between a circle and alternating double bonds.
 - **H Atoms: Hide or Draw**: hides hydrogens that add nothing (not ones on wedges, charged ones, or ones on N or O); with nothing to hide, it draws the selected atoms' hydrogens.
@@ -437,7 +464,7 @@ Every colour button opens a palette: Automatic, the standard colours, the colour
 
 **View ▸ Toolboxes** can show more toolboxes besides the drawing tools:
 
-- **Toolbox: Structure**: Clean Up, frames, fills, highlights, terminal methyls, H atoms, aromatic circles, stereo labels, ID labels, captions, descriptors, Number Compounds, Contract Label, Expand Label, Bond Metal to Ring (η) and Structure from Name or SMILES.
+- **Toolbox: Structure**: Clean Up, Clean Up Options, frames, fills, highlights, terminal methyls, H atoms, aromatic circles, stereo labels, ID labels, captions, descriptors, Number Compounds, Contract Label, Expand Label, Bond Metal to Ring (η) and Structure from Name or SMILES.
 - **Toolbox: Object**: align, space evenly, flip, rotate, and bring to front or send to back.
 - **Toolbox: Templates**: every template in one scrolling grid, under the names of their palettes.
 - **Toolbox: Colours**: pick **Colour**, **Highlight** or **Fill**, then click a swatch to apply it to the selection. Your palettes are there too, and in Highlight mode your highlight looks.
@@ -469,7 +496,7 @@ To move a toolbox, unlock it first: click the padlock on its title bar (or right
 
 Right-click the drawing for a menu of what fits what you clicked. The names and keys match the top menus.
 
-- **On a structure**: it is selected first (the whole structure), and the menu has Cut, Copy, Paste and Delete; **Copy As** (SMILES, molfile, CDXML text); **Clean Up Structure**; on a bond of a ring drawn in 3-D, **Fuse a Ring Here** (see [Fusing conformers](#fusing-conformers)); a **Structure** group (stereo labels, aromatic circles, terminal methyls, H atoms, Contract and Expand Label, Join, Bring Bond to Front and Send Bond to Back, η bonds, stereo groups, chiral flag, repeat brackets, R-group table, Check Structure, templates and nicknames, PubChem); **Scheme**; **Add Frame**; **Label the Structure**; **Scale…**; **Highlight and Fill**; **Align**; **Rotate or Flip**; and **View**.
+- **On a structure**: it is selected first (the whole structure), and the menu has Cut, Copy, Paste and Delete; **Copy As** (SMILES, molfile, CDXML text); **Clean Up Structure** and **Clean Up Options…**; on a bond of a ring drawn in 3-D, **Fuse a Ring Here** (see [Fusing conformers](#fusing-conformers)); a **Structure** group (stereo labels, aromatic circles, terminal methyls, H atoms, Contract and Expand Label, Join, Bring Bond to Front and Send Bond to Back, η bonds, stereo groups, chiral flag, repeat brackets, R-group table, Check Structure, templates and nicknames, PubChem); **Perspective** (Turn in 3-D…, Flatten); **Scheme**; **Add Frame**; **Label the Structure**; **Scale…**; **Highlight and Fill**; **Align**; **Rotate or Flip**; and **View**.
 - **On empty space**: Paste, Paste SMILES, Select All, Undo and Redo, an **Insert** group (Structure from Name or SMILES, Periodic Table, Picture, Structure from Picture, Text Box, Symbol), **Scheme**, **Drawing Style…** and **View**.
 
 Right-drag still scrolls the drawing; the menu only opens when the mouse doesn't move.

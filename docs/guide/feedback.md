@@ -21,7 +21,7 @@ Nothing is sent by the program itself: you always see the text first, in your br
 
 If the program hits an error it didn't expect, a notice at the bottom of the window says so, with a **Report It…** button. That opens **Report a Problem**, already filled in with the error and the few things the program noted just before it. Under **Include the error details the program wrote down**, click **Show them** to read exactly what would be sent, or untick the box to leave them out. Add what you were doing, then send it as above.
 
-If the desktop app closed unexpectedly last time (it crashed, or Windows ended it), the next start says so, after offering your unsaved work back, with the same **Report It…** button.
+If the desktop app closed unexpectedly last time (it crashed, or Windows ended it), the next start says so in a notice at the bottom left, with the same **Report It…** button. The notice stays until you click **Report It…** or **Dismiss**.
 
 The program keeps a small error log **on your computer only**, and never sends it anywhere by itself. File paths in it have your user name replaced with `~`.
 

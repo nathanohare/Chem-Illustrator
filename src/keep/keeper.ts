@@ -72,6 +72,8 @@ export class Keeper {
 
   constructor(private host: KeeperHost, store: KeepStore = keepStore()) {
     this.recovery = new Recovery(store);
+    // the desktop app runs one copy at a time (its single-instance plugin)
+    this.recovery.oneCopy = desktop;
     this.versions = new Versions(store);
   }
 

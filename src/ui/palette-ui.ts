@@ -89,9 +89,11 @@ let pop: HTMLElement | null = null;
 let popFor: HTMLInputElement | null = null;
 
 function closePop(): void {
-  pop?.remove();
+  // forgotten first, as taking it out can blur its colour box and close it again (#326)
+  const p = pop;
   pop = null;
   popFor = null;
+  p?.remove();
 }
 
 /** Open the colour menu for a plain colour box: picking sets the box and tells its owner, as the system picker would. */

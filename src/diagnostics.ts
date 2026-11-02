@@ -110,6 +110,12 @@ export interface DiagnosticsOptions {
   version?: string;
   /** Whether to watch for the app stopping without closing (the desktop app). */
   markers?: boolean;
+  /**
+   * Only one copy of the app can run at a time (the desktop app), so any other marker is from a
+   * copy that stopped, however lately it wrote (it was ended from Task Manager and started again
+   * straight away).
+   */
+  oneCopy?: boolean;
   now?: () => number;
 }
 
@@ -241,7 +247,7 @@ export class Diagnostics {
           const key = `${SESSIONS}/${keyPart(e.name)}`;
           const m = parseMarker(await getText(store, key));
           const beat = m?.beat ?? e.modified;
-          if (now - beat < STALE_MS) continue; // another copy of the app, still running
+          if (!this.opts.oneCopy && now - beat < STALE_MS) continue; // another copy of the app, still running
           await store.remove(key);
           if (!found || beat > found.beat) found = { started: m?.started ?? beat, beat, version: m?.version ?? '', panics: [] };
         }
