@@ -3,7 +3,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { createRequire } from 'node:module';
-import { hammettSites, H_ROW, type HammettSite } from '../src/chem/hammett-match';
+import { hammettSites, suggestCore, H_ROW, type HammettSite, type CoreSuggestion } from '../src/chem/hammett-match';
 import { HAMMETT } from '../src/kb/hammett';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -68,5 +68,25 @@ describe('Hammett groups on a marked ring', () => {
   it('explains what is wrong', () => {
     expect(hammettSites(RDKit, 'Nc1ccccc1', 'Nc1ccccc1')).toEqual({ error: expect.stringMatching(/\*/) });
     expect(hammettSites(RDKit, 'CCO', PARA)).toEqual({ error: expect.stringMatching(/core/) });
+  });
+});
+
+describe('the core of a series', () => {
+  it('finds the shared part, the reaction centre and the position that changes', () => {
+    const para = suggestCore(RDKit, ['COc1ccc(N)cc1', 'Cc1ccc(N)cc1', 'Nc1ccccc1', 'Fc1ccc(N)cc1', 'Nc1ccc(cc1)[N+](=O)[O-]']);
+    expect(para).toEqual({ core: '*c1ccc([NH2:1])cc1', centre: 6, positions: [2], found: 5 });
+    const meta = suggestCore(RDKit, ['Nc1cccc(Cl)c1', 'Nc1cc(C)ccc1', 'Nc1ccccc1']) as CoreSuggestion;
+    expect(meta.core).toBe('*c1cccc([NH2:1])c1');
+    expect(meta.found).toBe(3);
+    // the centre is the shared atom on the ring: here an acetanilide N
+    expect((suggestCore(RDKit, ['CC(=O)Nc1ccc(OC)cc1', 'CC(=O)Nc1ccc(Cl)cc1']) as CoreSuggestion).core).toBe('*c1ccc([NH:1]C(C)=O)cc1');
+  });
+
+  it('takes the centre and positions clicked on the first structure', () => {
+    expect(suggestCore(RDKit, ['COc1ccc(N)cc1'])).toHaveProperty('error');
+    const got = suggestCore(RDKit, ['COc1ccc(N)cc1', 'Nc1ccccc1'], { centre: 6, positions: [2] }) as CoreSuggestion;
+    expect(got.core).toBe('*c1ccc([NH2:1])cc1');
+    // the suggested core reads back the same groups
+    expect(sites('COc1ccc(N)cc1', got.core).map(group)).toEqual(['OCH3']);
   });
 });
