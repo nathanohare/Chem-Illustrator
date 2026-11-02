@@ -9769,6 +9769,7 @@ const stylePanel = new StylePanel($('#style-section'), $('#style-body'), doc, ()
 stylePanel.onEditChart = (id) => void editChartShape(id);
 stylePanel.turnable = () => editor.textFirst;
 stylePanel.onEditMedia = (id) => void editMediaShape(id);
+stylePanel.pickShape = (anchor, pick) => shapeMenu.show(anchor, 'Click a shape: the one selected changes to it, keeping its size, colours and text.', pick);
 stylePanel.onEditEquation = (id) => void editEquationShape(id);
 stylePanel.onEquationColour = (ids, color) => {
   doc.edit('Equation colour', () => {

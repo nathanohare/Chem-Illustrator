@@ -11,7 +11,7 @@ export { tidyStyle };
 import { DESCRIPTORS } from './analysis-panel';
 import { captionReading, speciesSummary } from '../chem/species';
 import { COMMON_ADDUCTS } from '../chem/hrms';
-import { PATTERNS, RING_FILL_COLOUR, RING_PATTERN_COLOUR, patternSpacing, ringShadowSize, shadowLook } from '../render/fills';
+import { DOT_DENSITY, PATTERN_CHOICES, PATTERNS, RING_FILL_COLOUR, patternSwatch, RING_PATTERN_COLOUR, patternSpacing, ringShadowSize, shadowLook } from '../render/fills';
 import type { Role } from '../chem/reaction';
 import { setStereoShown, setStereoText } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
@@ -20,6 +20,7 @@ import { DEG, normDegrees } from '../geom';
 import { isCircle, cropTo, isCurved, headBend, swapHalf } from '../objects';
 import { firstBend, shapeBez, shapeOf } from '../arrow-path';
 import { GEOS, geoDef } from '../design/geo';
+import { drawGeoIcon } from './design-panel';
 import { nextNumber } from '../chem/sprouts';
 import { ringFillsOn } from '../chem/ring-fill';
 import { frameMembers } from '../editor/frames';
@@ -90,6 +91,8 @@ type Fill = 'none' | 'solid' | 'faded' | 'shaded' | 'gradient';
 const FILLS: Opt<Fill>[] = [['none', 'None'], ['solid', 'Solid colour'], ['faded', 'Faded (light tint)'], ['shaded', 'Shaded (light to dark)'], ['gradient', 'Gradient (two colours)']];
 const GRAD_DIRS: Opt<string>[] = [['90', 'Top to bottom'], ['270', 'Bottom to top'], ['0', 'Left to right'], ['180', 'Right to left'], ['45', 'Diagonal, top left to bottom right'], ['-45', 'Diagonal, bottom left to top right'], ['radial', 'Out from the middle']];
 const PATTERN_OPTS: Opt<string>[] = [['none', 'None'], ...PATTERNS];
+/** The patterns shown as swatches (one Dots: its density is a setting of its own). */
+const PATTERN_PICKS: Opt<string>[] = [['none', 'None'], ...PATTERN_CHOICES];
 
 const BOND_ORDERS: Opt<string>[] = [['1', 'Single'], ['2', 'Double'], ['3', 'Triple'], ['1.5', 'Aromatic'], ['4', 'Quadruple'], ['0.5', 'Partial (transition state)']];
 const BOND_STYLES: Opt<Bond['display']>[] = [['solid', 'Plain'], ['wedge', 'Wedge'], ['hashWedge', 'Hashed wedge'], ['hash', 'Hashed'], ['bold', 'Bold'], ['dash', 'Dashed'], ['wavy', 'Wavy'], ['dative', 'Dative (arrow to the acceptor)']];
@@ -367,8 +370,11 @@ export class StylePanel {
       // another shape from the library, keeping the size, colours and text
       // (an icon is listed too, so it can be swapped for a shape and back)
       const own = geoDef(geo.geo);
-      const opts = [...(own.icon ? [own] : []), ...GEOS].map((g): Opt<string> => [g.id, `${g.name} (${g.group.toLowerCase()})`]);
-      this.select('Shape', opts, own.id, (v) => set('Change shape', isGeo, () => ({ geo: v })));
+      if (this.pickShape) this.shapePicker(own.id, (v) => set('Change shape', isGeo, () => ({ geo: v })));
+      else {
+        const opts = [...(own.icon ? [own] : []), ...GEOS].map((g): Opt<string> => [g.id, `${g.name} (${g.group.toLowerCase()})`]);
+        this.select('Shape', opts, own.id, (v) => set('Change shape', isGeo, () => ({ geo: v })));
+      }
     }
     const lined = (x: Shape) => x.kind !== 'symbol' && x.kind !== 'ring';
     const l = any(lined);
@@ -397,7 +403,11 @@ export class StylePanel {
         this.number('See-through (%)', Math.round((see.transparency ?? 0) * 100), 5, 0, 100, (v) => set('Transparency', seeable, () => ({ transparency: v ? v / 100 : undefined })), 'How much shows through the fill: 0 is solid');
       }
       // hatching and stippling, over the fill or on their own
-      this.select('Pattern', PATTERN_OPTS, f.pattern ?? 'none', (v) => set('Pattern', fillable, () => ({ pattern: v === 'none' ? undefined : (v as Pattern) })));
+      this.patternPicker('Pattern', f.pattern ?? 'none', (v) => set('Pattern', fillable, () => ({ pattern: v === 'none' ? undefined : (v as Pattern) })));
+      if (f.pattern === 'dots' || f.pattern === 'dense-dots') {
+        const ring = f.kind === 'ring';
+        this.densityPicker(patternSpacing(f), ring, (gap) => set('Dot density', fillable, () => ({ pattern: 'dots', patternSize: gap })));
+      }
       if (f.pattern) {
         this.color('Pattern colour', f.patternColor, (v) => set('Pattern colour', fillable, () => ({ patternColor: v })),
           f.kind === 'ring' ? 'Light grey' : 'Same as the line', f.kind === 'ring' ? RING_PATTERN_COLOUR : f.color ?? '#000000');
@@ -1047,7 +1057,10 @@ export class StylePanel {
         }
       }
       this.number('See-through (%)', pct(st.transparency), 5, 0, 100, (v) => set('Highlight transparency', { transparency: v / 100 }), 'How much shows through the fill and texture: 0 is solid');
-      this.select<string>('Texture', PATTERN_OPTS, st.pattern, (v) => set('Highlight texture', { pattern: v as HighlightStyle['pattern'] }));
+      this.patternPicker('Texture', st.pattern, (v) => set('Highlight texture', { pattern: v as HighlightStyle['pattern'] }));
+      if (st.pattern === 'dots' || st.pattern === 'dense-dots') {
+        this.densityPicker(st.patternSize || (st.pattern === 'dense-dots' ? DOT_DENSITY[2].gap : DOT_DENSITY[1].gap), false, (gap) => set('Highlight dot density', { pattern: 'dots', patternSize: gap }));
+      }
       if (st.pattern !== 'none') {
         this.color('Texture colour', st.patternColour || undefined, (v) => set('Highlight texture colour', { patternColour: v ?? '' }), 'A darker shade', '#808080');
         this.number('Texture spacing (pt)', st.patternSize, 0.25, 0, 40, (v) => set('Highlight texture spacing', { patternSize: v }), 'How far apart the lines or dots are: 0 for the usual spacing');
@@ -1237,6 +1250,80 @@ export class StylePanel {
     l.append(span, control);
     if (help) l.title = help;
     this.body.appendChild(l);
+  }
+
+  /** A row of pattern swatches to click (None, the lines, Dots), with the one in use pressed. */
+  private patternPicker(label: string, value: string, on: (v: string) => void): void {
+    const now = value === 'dense-dots' ? 'dots' : value;
+    const row = document.createElement('div');
+    row.className = 'style-row';
+    const span = document.createElement('span');
+    span.textContent = label;
+    const grid = document.createElement('div');
+    grid.className = 'swatch-grid';
+    grid.setAttribute('role', 'radiogroup');
+    grid.setAttribute('aria-label', label);
+    for (const [v, name] of PATTERN_PICKS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'swatch-btn';
+      b.title = name;
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(v === now));
+      b.innerHTML = patternSwatch(v);
+      b.addEventListener('click', () => { if (v !== now) on(v); });
+      grid.append(b);
+    }
+    row.append(span, grid);
+    this.body.append(row);
+  }
+
+  /** Sparse, Medium or Dense dots: their spacing. */
+  private densityPicker(gap: number, ring: boolean, on: (gap: number) => void): void {
+    const row = document.createElement('div');
+    row.className = 'style-row';
+    const span = document.createElement('span');
+    span.textContent = 'Density';
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    seg.setAttribute('role', 'radiogroup');
+    seg.setAttribute('aria-label', 'Dot density');
+    for (const d of DOT_DENSITY) {
+      const g = ring ? d.ring : d.gap;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = d.name;
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(Math.abs(g - gap) < 0.05));
+      b.addEventListener('click', () => on(g));
+      seg.append(b);
+    }
+    row.append(span, seg);
+    this.body.append(row);
+  }
+
+  /** Design shapes: the library's shapes in a drop-down of pictures (set up by the app). */
+  pickShape?: (anchor: HTMLElement, pick: (id: string) => void) => void;
+
+  /** The shape in use as a picture and its name; a click opens the library's shapes to pick another. */
+  private shapePicker(id: string, on: (id: string) => void): void {
+    const def = geoDef(id);
+    const row = document.createElement('div');
+    row.className = 'style-row';
+    const span = document.createElement('span');
+    span.textContent = 'Shape';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'shape-pick';
+    b.title = 'Change to another shape, keeping the size, colours and text';
+    const c = document.createElement('canvas');
+    drawGeoIcon(c, def, 20, getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#1d2330');
+    const name = document.createElement('span');
+    name.textContent = def.name;
+    b.append(c, name, ' ▾');
+    b.addEventListener('click', () => this.pickShape?.(b, on));
+    row.append(span, b);
+    this.body.append(row);
   }
 
   private select<T extends string>(label: string, opts: Opt<T>[], value: T, on: (v: T) => void): void {
