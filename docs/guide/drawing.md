@@ -316,6 +316,19 @@ Structures with R groups or labels that can't be read have no 3-D shape. Metals 
 
 **Chemistry ▸ Look Up ▸ Look Up on PubChem** (also in the Analysis panel and the right-click menu) sends the selected structure to PubChem and shows its names, CAS number, a link to its PubChem page, GHS hazards, and measured melting point, boiling point and density where known. See [The Analysis panel](#the-analysis-panel).
 
+### Knowledge Base
+
+**Chemistry ▸ Look Up ▸ Knowledge Base…** (in every mode) opens reference tables to look things up while you work. The search box searches every table at once, and the list on the left shows how many rows of each table match:
+
+- **A name or any word** (chloroform, CD3): rows containing every word.
+- **A CAS number** (865-49-6): that compound exactly.
+- **SMILES** (ClC([2H])(Cl)Cl): the same compound however it is written.
+- **A number** (7.26, 2.17 ppm): the peaks near it, within 0.05 ppm in 1H and 0.5 ppm in 13C, nearest first. Use this to identify a stray NMR peak.
+
+Click a column heading to sort by it; some tables have a filter list (Kind, Solvent). **Copy Table** copies the rows shown, to paste into a sheet, a Word table or Excel. Rest the mouse on an underlined abbreviation (IDLH, LD50, quint) to see what it means; the **Abbreviations** table lists them all.
+
+Built in: **NMR Solvents** (the residual 1H and 13C peaks, the water peak, boiling and melting points and CAS numbers of the common deuterated solvents, from Fulmer 2010 and Gottlieb 1997) and **Abbreviations**. **Import Table…** adds a table of your own: paste it, or pick a CSV or tab-separated file whose first line names the columns. Columns named 1H, 13C, shift or ppm are searched as shifts, and a column called Solvent, Nucleus, Kind, Type, Class or Group gets a filter list. Use this for the trace-impurity tables from your own copy of a paper. Imported tables are kept on this computer only; **Remove Table…** deletes one.
+
 ## Reactions and schemes
 
 - **Clean Up Reaction** (Ctrl+Shift+R): lines up the structures on the arrow, centres the reagents over and under it, and spaces everything evenly. Steps that follow on from one another go on one line, each structure centred on it, and every arrow is made as long as the longest one (the text above and below each stays centred on its arrow). A scheme wrapped onto more rows keeps its rows: each row is tidied on its own line, and later rows start under the first.
