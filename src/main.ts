@@ -8587,6 +8587,28 @@ async function generalPreferences(): Promise<void> {
   storeSettings();
 }
 
+/** Settings ▸ Toolboxes: each button in a cell of its own (lines, raised, or both). */
+let toolCells: Settings['toolCells'] = 'off';
+function setToolCells(v: Settings['toolCells']): void {
+  toolCells = v;
+  document.body.classList.toggle('cells-grid', v === 'grid' || v === 'both');
+  document.body.classList.toggle('cells-raised', v === 'raised' || v === 'both');
+  window.dispatchEvent(new Event('resize'));
+}
+
+/** Settings ▸ Toolboxes: how the toolboxes' buttons look and what their tips say. */
+async function toolboxPreferences(): Promise<void> {
+  const r = await ask('Toolboxes', [
+    { name: 'cells', label: 'Button cells', value: toolCells, options: [{ value: 'off', label: 'None' }, { value: 'grid', label: 'Grid lines' }, { value: 'raised', label: 'Raised buttons' }, { value: 'both', label: 'Grid lines and raised buttons' }],
+      help: 'Gives each toolbox button a cell of its own, so the buttons are easier to tell apart and to hit.' },
+    { name: 'tips', label: 'Detailed tool tips: what a tool does and what Alt, Shift and Ctrl change', type: 'checkbox', value: String(toolTip.enabled) },
+  ], { ok: 'Save' });
+  if (!r) return;
+  setToolCells((['grid', 'raised', 'both'].includes(r.cells) ? r.cells : 'off') as Settings['toolCells']);
+  showToolTips(r.tips === 'true');
+  storeSettings();
+}
+
 /** Settings ▸ Online: what the program asks the internet for. */
 /** Edit > Settings > AI Model. */
 async function aiSettings(): Promise<void> {
@@ -8644,6 +8666,7 @@ function currentSettings(): Settings {
     textBar: CaptionEditor.barPlace,
     appTheme,
     oneColumnTools,
+    toolCells,
     startView,
     page: defaultPage,
     welcomed,
@@ -8880,6 +8903,7 @@ function applySettings(s: Settings): void {
   placeTextBar(s.textBar);
   setAppTheme(s.appTheme);
   setOneColumnTools(s.oneColumnTools);
+  setToolCells(s.toolCells);
   startView = s.startView;
   showGroupTips(s.groupTips);
   showToolTips(s.toolTips);
@@ -11087,6 +11111,7 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'mode-colours', title: 'Mode Colours', words: 'tab colours accent window drawing slides sheet document design appearance', open: () => modeDialog.open() },
   { id: 'navigation', title: 'Navigation', words: 'document map navigator minimap map overview edge arrows off screen lost find dot grid dots tint outside fit go to selection orientation zoom', open: navigationSettings },
   { id: 'page-grid', title: 'Page Grid', words: 'pages page grid boundaries dashed dotted lines paper fixed edges hatched wall empty grey print chemdraw paste wrap', open: pageGridSettings },
+  { id: 'toolboxes', title: 'Toolboxes', words: 'toolbox buttons cells grid lines raised bevel borders tool tips tooltips hints keys modifiers', open: toolboxPreferences },
   { id: 'dark', title: 'Reading Mode', words: 'reading mode dark page dark mode night paper ink graphite slate appearance colours', open: darkColours },
   { id: 'schemes', title: 'Schemes', words: 'scheme arrow gap plus text size reagents conditions boxes', open: schemeSettings },
   { id: 'autosave', title: 'AutoSave and Recovery', words: 'autosave recovery versions backup copies shared folders onedrive', open: () => keeper.optionsCommand() },
