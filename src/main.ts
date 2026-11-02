@@ -38,6 +38,7 @@ import { casHtml, casRuns, type CasState } from './ui/cas-panel';
 import { pubchemHtml, pubchemRuns, type PubChemState } from './ui/pubchem-panel';
 import { paragraphPages } from './document/doc-file';
 import { reviewAuthor, setReviewAuthor } from './document/revisions';
+import { NmrPanel } from './ui/nmr-panel';
 import { analysisHtml, formulaHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, DEFAULT_DESCRIPTORS, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
 import { attachedAtoms, attachWhereItIs, defaultGap, nearestStructure, placeAttached, structureSig } from './editor/attached';
 import { repeatGroups, lipDirection } from './chem/polymer';
@@ -2184,6 +2185,13 @@ async function editTorsion(id: number): Promise<void> {
 // ------------------------------------------------------------------ name to structure
 
 const names = new NameReader(new URL('opsin/opsin-data.dat', document.baseURI).href);
+const nmrPanel = new NmrPanel({
+  url: new URL('nmr/nmr-hose.dat', document.baseURI).href,
+  graph: (molblock) => chem.namerGraph(molblock),
+  redraw: () => editor.requestOverlay(),
+  copy: (text) => navigator.clipboard.writeText(text),
+  flash: (text) => flash(text),
+});
 let namesReady = false;
 
 // ------------------------------------------------------------------ structure to name
@@ -10891,6 +10899,7 @@ async function runAnalysis(force: boolean): Promise<void> {
   const first = results.find((r) => !r.error && r.formula);
   analysisBox.set(first ? formulaHtml(first.formula) + (results.length > 1 ? ` <span class="muted">+${results.length - 1}</span>` : '') : null, first ? first.mw.toFixed(2) : null, first ? first.exact.toFixed(4) : null);
   panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
+  nmrPanel.attach(panel, results.map((r, i) => (r.error || !r.smiles || polymers[i] || rGroupNames(frags[i]).length ? null : { molblock: exports[i].molblock, map: exports[i].map })));
   updatePanels();
 }
 
@@ -12844,6 +12853,7 @@ editor.underlay = (ctx) => {
   // with the page grid, whole pages show what is in use, so the tint round the drawing is left off
   if (p && pageLook.grid) paintPages(ctx, pageLook, renderer, p, pageExtent(p, doc.bounds()), pagesInUse(p), dark.on, dark.on ? null : darkSurround);
   else paintTint(ctx, orientPrefs, renderer, doc.bounds(), doc.style.labelSize * 1.5 + doc.style.bondLength);
+  nmrPanel.drawMarks(ctx, renderer.view.scale, (id) => doc.atoms.get(id), (id) => doc.neighbors(id), getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0e7c86');
 };
 // Fit on an empty drawing shows its first page
 editor.emptyArea = () => { const p = gridPage(); return p ? { x1: 0, y1: 0, x2: p.w, y2: p.h } : null; };

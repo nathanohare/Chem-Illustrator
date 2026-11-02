@@ -4004,3 +4004,18 @@ dialog.geom-view-dialog { width: min(96vw, 640px); }
    Only the gap changes; the buttons and icons keep their size. (Compact's setting value is 'snug'.) */
 html[data-density='normal'] body:not(.cells-grid) .tb-cells, html[data-density='normal'] .tool-group { gap: 2px; }
 html[data-density='snug'] .tb-cells, html[data-density='snug'] .tool-group { gap: 0; }
+
+/* Analysis ▸ NMR (predicted) */
+details.nmr { margin-top: 4px; }
+details.nmr > summary { cursor: pointer; line-height: 20px; }
+details.nmr > summary .info-icon { vertical-align: -2px; margin-left: 3px; }
+details.nmr > summary .nmr-solvent { float: right; font: inherit; font-size: var(--fs-xs); padding: 0 2px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
+.nmr-table { border-collapse: collapse; width: 100%; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.nmr-table th { font-weight: 500; font-size: var(--fs-xs); color: var(--muted); text-align: right; padding: 0 3px; }
+.nmr-table td { text-align: right; padding: 0 3px; line-height: 17px; }
+.nmr-table th:first-child, .nmr-table td:first-child { text-align: left; }
+.nmr-table tbody tr:hover td { background: var(--accent-soft); }
+.nmr-src { display: inline-block; min-width: 14px; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 13px; text-align: center; background: var(--accent-soft); color: var(--accent); }
+.nmr-src.loose { background: color-mix(in srgb, #d99a1e 22%, transparent); color: #8a5a00; }
+details.nmr .an-buttons { margin-top: 3px; }
+details.nmr .nmr-marks[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
