@@ -360,6 +360,8 @@ export class Editor {
   /** Preferences from the settings file. */
   /** With one reaction arrow selected, outline what its starting materials, products and conditions are. */
   showRoles = true;
+  /** Enter finishes typing a text box here, and Alt+Enter starts a new line (Settings ▸ Preferences; main.ts knows the mode). */
+  enterFinishesText: () => boolean = () => false;
 
   options = {
     /** The pen sketches whatever tool is picked (View > Window and Colours > Touch Mode > Pen Always Sketches). */
@@ -425,6 +427,8 @@ export class Editor {
   private drag: Drag | null = null;
   /** Something is being dragged (moved, rotated or resized) right now. */
   get dragging(): boolean { return !!this.drag?.moved; }
+  /** Text is being typed into a caption or label. */
+  captionOpen(): boolean { return !!this.captionEd?.isOpen; }
   private needScene = true;
   private needOverlay = true;
   private frameQueued = false;
@@ -5968,6 +5972,7 @@ export class Editor {
       defaultSize: base?.size ?? st.captionSize,
       defaultFont: base?.font ?? st.captionFont,
       redraw: () => this.requestOverlay(),
+      enterFinishes: () => this.enterFinishesText(),
     };
     const initial = c
       ? { runs: applyBase(c.runs, base), paras: c.paras, justify: c.justify, wrap: c.wrap, width: c.width, lineHeight: c.lineHeight, lineSpacing: c.lineSpacing, cols: c.cols, colGap: c.colGap, boxH: c.boxH, fit: c.fit }
@@ -6252,6 +6257,7 @@ export class Editor {
       defaultSize: size,
       defaultFont: this.doc.style.captionFont,
       redraw: () => this.requestOverlay(),
+      enterFinishes: () => this.enterFinishesText(),
       hint: 'Enter: new line · Esc: done',
       around: () => shapeBox(doc.shapes.get(id) ?? s),
     };
@@ -6351,6 +6357,7 @@ export class Editor {
       defaultSize: size,
       defaultFont: this.doc.style.captionFont,
       redraw: () => this.requestOverlay(),
+      enterFinishes: () => this.enterFinishesText(),
       hint: typeof part === 'string' ? 'Enter: new paragraph · Esc: done' : 'Tab: next cell · Shift+Tab: back · Enter: new line · Esc: done',
       around: () => { const cur = doc.shapes.get(id); return cur ? this.r.tableBox(cur) : this.r.tableBox(s); },
       typed: (rich: { runs: Caption['runs']; paras?: Caption['paras'] }) => {

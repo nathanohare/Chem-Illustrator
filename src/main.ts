@@ -68,6 +68,7 @@ import { solid } from './deck/background';
 import { pictureFormat } from './ui/picture-dialog';
 import { fxPng } from './render/picture-fx';
 import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND, type SlidePage } from './deck/slide-view';
+import { sameView, type InPlace, type PlaceView } from './ui/in-place';
 import { writePdf, jpegInfo, PdfPage, PdfImage } from './io/pdf';
 import { SlideList } from './ui/slide-list';
 import { CanvasKeys } from './ui/canvas-keys';
@@ -2140,6 +2141,10 @@ function addNamed(got: { mb: string; attach: number[] }, x: number, y: number, t
 let structuresLocked = false;
 /** The start view shows on the empty drawing the program opens with (Settings > General). */
 let startView = true;
+/** Settings ▸ Preferences: Enter finishes typing a text box in Canvas mode, Alt+Enter starts a new line. */
+let enterFinishesText = false;
+// text typed on a drawing (Canvas mode, and the drawing beside a document or spreadsheet); slides and designs keep PowerPoint's keys
+editor.enterFinishesText = () => enterFinishesText && ws.active.mode !== 'slides' && ws.active.mode !== 'design';
 /** View > Focus View is on. */
 let focusView = false;
 /** View > Toolboxes > One Column Outside Drawing is on; and whether the toolboxes on screen were built that way. */
@@ -3370,9 +3375,12 @@ const sheetFiles: SheetFileDeps = {
 /** Pictures of a document's drawings for Word files (300 dots to the inch, as for PowerPoint). */
 const docFiles: DocxDeps = {
   pages: (t) => paragraphPages.get(t),
-  picture: async (contents, style) => {
+  picture: async (contents, style, frame) => {
     const d = structureDoc(contents, style);
-    const pic = recordPicture(d, FIGURE_MARGIN);
+    const drawn = recordPicture(d, FIGURE_MARGIN);
+    // a figure: a picture of its whole area (an empty one is clear), never cutting off what reaches past it
+    const fb = frame && { x1: frame.x, y1: frame.y, x2: frame.x + frame.w, y2: frame.y + frame.h };
+    const pic = fb ? { items: drawn?.items ?? [], box: drawn ? { x1: Math.min(fb.x1, drawn.box.x1), y1: Math.min(fb.y1, drawn.box.y1), x2: Math.max(fb.x2, drawn.box.x2), y2: Math.max(fb.y2, drawn.box.y2) } : fb } : drawn;
     if (!pic) return null;
     const png = new Uint8Array(await (await canvasPng(pictureCanvas(d, pic).canvas)).arrayBuffer());
     return { png, svg: pictureSvg(pic), w: pic.box.x2 - pic.box.x1, h: pic.box.y2 - pic.box.y1, x: pic.box.x1, y: pic.box.y1 };
@@ -6931,7 +6939,44 @@ function activeStructureDoc(): Doc | null {
 // leaves that document empty), so every drawing tool, key and check works on it as usual.
 let cellEdit: { done: (c: Contents | null) => void; saved: Doc; view: typeof renderer.view } | null = null;
 
-function editCellStructure(contents: Contents | null, title: string, done: (c: Contents | null) => void, style: DocStyle = sheetStyle()): void {
+// A document's structure drawn in place on its page (see ui/in-place.ts): the drawing area is a
+// clear layer over the pages, which show the structure as it is drawn and follow its zoom and scrolling.
+let place: InPlace | null = null;
+let placeSeen: PlaceView | null = null;
+let placeVersion = -1;
+
+/** Line the drawing tools up with the structure on its page. */
+function pullPlace(): void {
+  const v = place?.view();
+  if (!v) return;
+  renderer.view = { ...renderer.view, ...v };
+  placeSeen = { ...v };
+  editor.requestScene();
+}
+
+/** The drawing layer over the pages, and the bar over them. */
+function placeHost(): void {
+  const r = place?.rect();
+  if (!r) return;
+  Object.assign(host.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+  const bar = $('#structure-bar');
+  Object.assign(bar.style, { left: `${r.left + r.width / 2}px`, top: `${r.top + 10}px` });
+  resize();
+  pullPlace();
+}
+window.addEventListener('resize', () => { if (place) requestAnimationFrame(placeHost); });
+
+/** Done: a figure first checks its structures still fit it (or the user goes back to drawing). */
+async function doneCellStructure(): Promise<void> {
+  const p = place;
+  if (p?.beforeDone && cellEdit && doc.canUndo()) {
+    if (!(await p.beforeDone(doc.contents()))) { overlay.focus(); return; }
+    if (place !== p || !cellEdit) return;
+  }
+  finishCellStructure(true);
+}
+
+function editCellStructure(contents: Contents | null, title: string, done: (c: Contents | null) => void, style: DocStyle = sheetStyle(), inPlace?: InPlace): void {
   finishCellStructure(true);
   const blank: Contents = { atoms: [], bonds: [], captions: [], arrows: [], shapes: [] };
   const drawing = structureDoc(contents ?? blank, style);
@@ -6944,6 +6989,7 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
   layoutSplit();
   $('#structure-title').textContent = title;
   $('#structure-bar').hidden = false;
+  if (ws.active.mode === 'sheet') setStructureSize(0);
   showSheetParts();
   editor.paused = false;
   editor.lastEdited = null;
@@ -6952,12 +6998,24 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
   if (editor.toolName !== modeTool[mode]) editor.setTool(modeTool[mode]);
   editor.onToolChange(editor.toolName);
   resize();
-  // the structure in the middle, at a comfortable size (a new one starts at the middle)
-  const b = doc.bounds();
-  const w = renderer.width, h = renderer.height;
-  const k = b ? Math.min(2.5, 0.8 * Math.min(w / Math.max(20, b.x2 - b.x1), h / Math.max(20, b.y2 - b.y1))) : 2;
-  renderer.view = { ...renderer.view, scale: k, ox: w / 2 - (b ? (b.x1 + b.x2) / 2 : 0) * k, oy: h / 2 - (b ? (b.y1 + b.y2) / 2 : 0) * k };
+  if (inPlace) {
+    // in place: over the pages, lined up with the structure where it is on its page
+    place = inPlace;
+    placeVersion = -1;
+    document.body.classList.add('drawing-in-place');
+    inPlace.moved = () => pullPlace();
+    inPlace.show((ctx) => drawDrawing(ctx, doc));
+    placeHost();
+  } else {
+    // the structure in the middle, at a comfortable size (a new one starts at the middle)
+    const b = doc.bounds();
+    const w = renderer.width, h = renderer.height;
+    const k = b ? Math.min(2.5, 0.8 * Math.min(w / Math.max(20, b.x2 - b.x1), h / Math.max(20, b.y2 - b.y1))) : 2;
+    renderer.view = { ...renderer.view, scale: k, ox: w / 2 - (b ? (b.x1 + b.x2) / 2 : 0) * k, oy: h / 2 - (b ? (b.y1 + b.y2) / 2 : 0) * k };
+  }
   renderer.repaintAll();
+  // paint the structure now: the drawing area still shows the last one edited until the scene is asked for
+  editor.requestScene();
   editor.frame(true);
   refreshKeys();
   analysisKey = '';
@@ -6982,6 +7040,13 @@ function finishCellStructure(keep: boolean): void {
   editor.cropping = null;
   doc.swap(e.saved);
   ws.aside = null;
+  if (place) {
+    place.show(null);
+    place.moved = () => {};
+    place = placeSeen = null;
+    document.body.classList.remove('drawing-in-place');
+    for (const k of ['left', 'top', 'width', 'height'] as const) { host.style[k] = ''; $('#structure-bar').style[k] = ''; }
+  }
   // the drawing beside is back as it was: not changed, at its own zoom
   if (ws.pane) ws.pane.seen = doc.version;
   renderer.view = e.view;
@@ -7002,7 +7067,23 @@ function finishCellStructure(keep: boolean): void {
   if (!result && words) docMode?.focus();
 }
 
-$('#structure-done').addEventListener('click', () => finishCellStructure(true));
+/** A cell's drawing area: 6 × 4 in, then 9 × 6 in, then the whole window (Bigger steps through them, then back). */
+const STRUCTURE_SIZES = [{ w: '6in', h: '4in' }, { w: '9in', h: '6in' }, null] as const;
+let structureSize = 0;
+function setStructureSize(i: number): void {
+  structureSize = i % STRUCTURE_SIZES.length;
+  const sz = STRUCTURE_SIZES[structureSize];
+  const body = document.body;
+  if (sz) { body.style.setProperty('--structure-w', sz.w); body.style.setProperty('--structure-h', sz.h); delete body.dataset.structureSize; }
+  else body.dataset.structureSize = 'fill';
+  const last = structureSize === STRUCTURE_SIZES.length - 1;
+  const b = $('#structure-bigger');
+  b.textContent = last ? 'Smaller' : 'Bigger';
+  b.title = last ? 'Back to the 6 × 4 in drawing area' : 'Make the drawing area bigger';
+  if (cellEdit) { const before = { w: renderer.width, h: renderer.height }; resize(); renderer.view = { ...renderer.view, ox: renderer.view.ox + (renderer.width - before.w) / 2, oy: renderer.view.oy + (renderer.height - before.h) / 2 }; renderer.repaintAll(); editor.requestScene(); }
+}
+$('#structure-bigger').addEventListener('click', () => setStructureSize(structureSize + 1));
+$('#structure-done').addEventListener('click', () => void doneCellStructure());
 $('#structure-cancel').addEventListener('click', () => finishCellStructure(false));
 // clicking the sheet or pages behind the drawing finishes it (as Done)
 for (const pane of ['#sheet-pane', '#doc-pane']) {
@@ -7010,15 +7091,35 @@ for (const pane of ['#sheet-pane', '#doc-pane']) {
     if (!cellEdit) return;
     e.preventDefault();
     e.stopPropagation();
-    finishCellStructure(true);
+    void doneCellStructure();
   }, true);
 }
+// in place: a click on the page away from the structure (or outside its figure) is Done, as in Word
+host.addEventListener('pointerdown', (e) => {
+  if (!place || !cellEdit || e.button !== 0) return;
+  const r = overlay.getBoundingClientRect(), v = renderer.view;
+  const x = (e.clientX - r.left - v.ox) / v.scale, y = (e.clientY - r.top - v.oy) / v.scale;
+  const a = place.area(doc.bounds());
+  if (x >= a.x1 && x <= a.x2 && y >= a.y1 && y <= a.y2) return;
+  e.preventDefault();
+  e.stopPropagation();
+  void doneCellStructure();
+}, true);
+// Esc with nothing picked: Cancel (with something picked, Esc lets it go first)
+window.addEventListener('keydown', (e) => {
+  if (!cellEdit || e.key !== 'Escape' || e.defaultPrevented || isTyping(e.target) || (e.target as HTMLElement | null)?.closest?.('dialog, .menu')) return;
+  const s = editor.sel;
+  if (s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size || s.shapes.size || editor.dragging || editor.captionOpen()) return;
+  e.preventDefault();
+  e.stopPropagation();
+  finishCellStructure(false);
+}, true);
 window.addEventListener('keydown', (e) => {
   // Ctrl+Enter: Done
   if (cellEdit && e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !isTyping(e.target)) {
     e.preventDefault();
     e.stopPropagation();
-    finishCellStructure(true);
+    void doneCellStructure();
   }
 }, true);
 // keys while a sheet shows but the grid doesn't have the focus (after clicking a tab or a menu)
@@ -7100,6 +7201,7 @@ function loadDocMode(): Promise<DocumentMode> {
       command: (name) => command(name),
       changed: () => ws.noteChange(),
       editDrawing: (contents, title, done) => editCellStructure(contents, title, done, docStyle()),
+      editInPlace: (contents, p, done) => editCellStructure(contents, p.title, done, docStyle(), p),
       editDiagram: (contents) => documentDiagram(contents),
       copyDrawing: async (contents, style) => (await copyDrawing(structureDoc(contents, style), null)).replace(/^Copied the whole drawing/, 'Copied the structure'),
       copiedOther: () => forgetCopy(),
@@ -9384,14 +9486,18 @@ async function generalPreferences(): Promise<void> {
   storeSettings();
 }
 
-/** Settings ▸ Preferences: matters of taste, such as how alkyl groups are written. */
+/** Settings ▸ Preferences: how you like to work, and matters of taste such as how alkyl groups are written. */
 async function personalPreferences(): Promise<void> {
+  const alt = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? 'Option+Enter' : 'Alt+Enter';
   const r = await ask('Preferences', [
+    { name: 'enterFinishes', label: `Enter finishes typing a text box in Canvas mode, and ${alt} starts a new line`, type: 'checkbox', value: String(enterFinishesText),
+      help: 'Off: Enter starts a new line and Esc finishes, as in ChemDraw. Ctrl+Enter and Esc always finish. Text on slides and designs keeps PowerPoint\'s keys.' },
     { name: 'alkylItalic', label: 'Alkyl prefixes in italics (the t of tBu, the i of iPr)', type: 'checkbox', value: String(alkylPrefs.italic) },
     { name: 'alkylDash', label: 'A dash after alkyl prefixes (tBu shows as t-Bu, iPr as i-Pr)', type: 'checkbox', value: String(alkylPrefs.dash === true),
       help: 'For the n-, i-, s- and t- of Pr and Bu, in atom labels (redrawn at once), in text boxes as you type, and in everything saved or exported. Only the look changes: a label still means the same group. Turned off, the dash comes out again (t-Bu shows as tBu), except where the letters would read as an element (PtBu3 stays as it is).' },
   ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(v.alkylItalic === 'true', alkylDashChoice(v.alkylDash)) } });
   if (!r) return;
+  enterFinishesText = r.enterFinishes === 'true';
   const italic = r.alkylItalic === 'true', dash = alkylDashChoice(r.alkylDash);
   if (italic !== alkylPrefs.italic || dash !== alkylPrefs.dash) {
     alkylPrefs.italic = italic;
@@ -9468,6 +9574,7 @@ function currentSettings(): Settings {
     appTheme,
     oneColumnTools,
     startView,
+    enterFinishesText,
     page: defaultPage,
     welcomed,
     groupTips: labelTips.enabled,
@@ -9711,6 +9818,7 @@ function applySettings(s: Settings): void {
   setAppTheme(s.appTheme);
   setOneColumnTools(s.oneColumnTools);
   startView = s.startView;
+  enterFinishesText = s.enterFinishesText;
   showGroupTips(s.groupTips);
   setTouchMode(s.touchMode);
   editor.options.penSketch = s.penSketch;
@@ -12086,7 +12194,7 @@ const guide = {
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files demo clips hover tool tips animation', open: generalPreferences },
-  { id: 'preferences', title: 'Preferences', words: 'preferences personal taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
+  { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
@@ -12628,6 +12736,12 @@ zoomPick.addEventListener('change', () => {
 });
 
 editor.onFrame = () => {
+  // in place: the pages follow the drawing tools' zoom and scrolling, and show the structure as it is drawn
+  if (place && cellEdit) {
+    const v = renderer.view;
+    if (placeSeen && !sameView(v, placeSeen)) { place.follow({ scale: v.scale, ox: v.ox, oy: v.oy }); pullPlace(); }
+    if (doc.version !== placeVersion || editor.dragging) { placeVersion = doc.version; place.show((ctx) => drawDrawing(ctx, doc)); }
+  }
   showZoom();
   rulers.update();
   // what is typed on the slide shows in the outline
