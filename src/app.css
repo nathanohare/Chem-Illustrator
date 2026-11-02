@@ -329,22 +329,13 @@ body.cells-raised .tb-cells .tool.active { background: var(--accent-soft); borde
 .tb-look-dot.keeps { background: conic-gradient(#ffe680, #9ed9a8, #a9c8ff, #f2a7c3, #ffe680) !important; }
 .toolbox.vertical .tb-looks { max-width: 150px; }
 .tb-modes { display: flex; gap: 2px; }
-.tt-box { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; max-width: 640px; }
-.tt-box.tt-vertical { flex-direction: column; align-items: stretch; max-width: 156px; }
-.tt-faces { display: flex; gap: 3px; margin-bottom: 3px; }
-.tt-faces input { font: inherit; font-size: var(--fs-sm, 12px); height: 22px; padding: 0 4px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); color: var(--text); min-width: 0; }
-.tt-font { flex: 1 1 110px; }
-.tt-size { width: 44px; flex: 0 0 44px; }
-.tt-vertical .tt-faces { flex-wrap: wrap; }
-.tt-format, .tt-symbols { display: flex; flex-wrap: wrap; gap: 1px; }
-.tt-vertical .tt-symbols { display: grid; grid-template-columns: repeat(6, 1fr); }
-.tt-btn, .tt-sym { min-width: 24px; height: 24px; padding: 0 4px; border-color: transparent; background: transparent; font: var(--fs-md) var(--ui-font); line-height: 1; }
-.tt-btn:hover, .tt-sym:hover { background: var(--accent-soft); border-color: transparent; }
-.tt-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
-.tt-btn sub, .tt-btn sup { font-size: 9px; }
-.tt-symbols + .tt-symbols { padding-left: 8px; border-left: 1px solid var(--line); }
-.tt-vertical .tt-symbols + .tt-symbols { padding: 4px 0 0; border-left: 0; border-top: 1px solid var(--line); }
-.tt-more { height: 24px; padding: 0 6px; font-size: var(--fs-sm); }
+.tt-box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; max-width: 640px; font: var(--fs-sm) var(--ui-font); }
+.tt-box.tt-vertical { flex-direction: column; align-items: flex-start; max-width: 196px; }
+.tt-vertical .cb-group { flex-wrap: wrap; }
+.tt-vertical .cb-group + .cb-group { padding-left: 0; border-left: 0; }
+.tt-vertical .cb-font { width: 110px; }
+.tt-vertical .caption-symbols, .tt-vertical .caption-spacing { flex-basis: auto; align-self: stretch; }
+.tt-vertical .caption-spacing { grid-template-columns: 1fr; }
 .gt-box { display: flex; flex-direction: column; gap: 6px; max-width: 300px; font-size: var(--fs-sm); }
 .gt-box.gt-vertical { max-width: 196px; }
 .gt-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
@@ -1423,6 +1414,21 @@ dialog.prop-dialog { width: min(94vw, 520px); }
 .prop-row:hover { background: var(--accent-soft); }
 .prop-row > span { flex: 1 1 auto; min-width: 0; }
 .prop-adduct { width: 104px; font: var(--fs-sm) var(--mono-font); padding: 2px 4px; }
+dialog.prop-dialog:has(.hm-section:not([hidden])) { width: min(94vw, 600px); }
+dialog.prop-dialog:has(.hm-section:not([hidden])) .prop-list { max-height: 24vh; }
+.hm-section { border-top: 1px solid var(--line); padding-top: 8px; margin-bottom: 4px; }
+.hm-section h3 { margin: 0 0 6px; font-size: var(--fs-sm); }
+.hm-section h3 .muted { font-weight: 400; }
+.hm-body { display: grid; grid-template-columns: 190px 1fr; gap: 14px; align-items: start; }
+.hm-pic { position: relative; width: 190px; height: 120px; border: 1px solid var(--line); border-radius: var(--r-control); background: #fff; overflow: hidden; }
+.hm-pic canvas { position: absolute; }
+.hm-pos { position: absolute; transform: translate(-50%, -50%); font: italic 600 11px/1 Georgia, 'Times New Roman', serif; color: #c25e0f; }
+.hm-ref { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; border: 2px solid #1e6fd9; background: rgba(30, 111, 217, 0.12); }
+.hm-row { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.hm-note { margin: 0 0 6px; font-size: var(--fs-sm); }
+.hm-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 10px; margin-bottom: 6px; }
+.hm-cols label { display: flex; gap: 6px; align-items: center; }
+.hm-cols sub { font-size: 0.78em; }
 
 /* ------------------------------------------------------------------ Document mode: pages, Word-style ribbon, Format panel */
 
@@ -3466,3 +3472,15 @@ dialog.key-views { width: min(96vw, 620px); max-height: 92vh; }
 .auto-steps-preview { display: grid; gap: 4px; }
 .auto-steps-preview canvas { border: 1px solid var(--line); border-radius: var(--r-control); background: #fff; }
 .auto-steps-preview .asp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--fs-xs); color: var(--muted); }
+
+/* Guides toolbox: the guides' color and transparency */
+.gt-look { gap: 3px; }
+.gt-look .gt-label, .gt-fade .gt-label { margin-right: 3px; }
+.gt-swatch { width: 18px; height: 18px; min-width: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--sw); }
+.gt-swatch:hover { border-color: var(--text); background: var(--sw); }
+.gt-swatch.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+.gt-own { width: 22px; height: 20px; padding: 0; border: 1px solid var(--line); border-radius: var(--r-control); background: none; cursor: pointer; }
+.gt-fade { gap: 6px; }
+.gt-range { flex: 1; min-width: 70px; max-width: 140px; }
+.gt-check { flex-wrap: nowrap; }
+.gt-vertical .gt-look .gt-label, .gt-vertical .gt-fade .gt-label { flex-basis: 100%; }

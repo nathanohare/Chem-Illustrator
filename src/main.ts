@@ -253,7 +253,8 @@ import type { TableData } from './model';
 import { checkDrawing, checkDocument, checkWorkbook, repeatedTitles, structureAlt, setStructureAlt, type Issue, type IssuePlace } from './accessibility';
 import { AccessibilityPane, askAltText } from './ui/accessibility-pane';
 import { PreflightPane } from './ui/preflight-pane';
-import { enlargeText, thickenLines, useArial } from './preflight-fix';
+import { enlargeText, thickenLines, useArial, fixUntilDone } from './preflight-fix';
+import { preflight } from './preflight';
 import { shapeBox } from './objects';
 import { SlideComparePane } from './ui/slide-compare';
 import { pickFileTemplate } from './ui/file-templates';
@@ -3450,7 +3451,7 @@ const modeTool: Record<Tab['mode'], string> = { drawing: 'bond-single', slides: 
 // ---------------------------------------------------------------- sheets
 
 // Properties of the structures in sheets (formula, MW, HRMS…), worked out by the chemistry engine
-const sheetChem = new SheetChem(chem, (c) => structureMolfile(c, ws.active.book?.drawingStyle ?? ACS_1996));
+const sheetChem = new SheetChem(chem, (c, o) => structureMolfile(c, ws.active.book?.drawingStyle ?? ACS_1996, o));
 
 // Pictures of structures for Excel files, drawn in the workbook's drawing style
 const filePictures = new WeakMap<DocStyle, StructurePictures>();
@@ -7608,16 +7609,30 @@ const preflightPane = new PreflightPane({
   },
   fix: (issue, r) => {
     finishTyping();
-    const m = editor.measure();
-    const ctx = { captionBox: (id: number) => m.captionBox(doc.captions.get(id)!), shapeBox: (id: number) => shapeBox(doc.shapes.get(id)!) };
-    let done = false;
-    if (issue.fix === 'fit' && issue.want) {
-      editor.selectAll();
-      done = editor.scaleSelection(issue.want);
-      if (done) flash(`Scaled to ${Math.round(issue.want * 100)} % to fit ${r.size.name.replace(/ \(.*/, '').toLowerCase()}. Text in captions keeps its size; check it again.`, 6000);
-    } else if (issue.fix === 'text') done = enlargeText(doc, issue, ctx);
-    else if (issue.fix === 'lines') done = thickenLines(doc, issue, ctx);
-    else if (issue.fix === 'fonts') done = useArial(doc, issue.fonts ?? []);
+    // measured afresh for each step (text made bigger has a bigger box)
+    const fixCtx = () => { const m = editor.measure(); return { captionBox: (id: number) => m.captionBox(doc.captions.get(id)!), shapeBox: (id: number) => shapeBox(doc.shapes.get(id)!) }; };
+    let scaled = 1;
+    const apply = (i: typeof issue): boolean => {
+      if (i.fix === 'fit' && i.want) {
+        editor.selectAll();
+        const ok = editor.scaleSelection(i.want);
+        if (ok) scaled *= i.want;
+        return ok;
+      }
+      if (i.fix === 'text') return enlargeText(doc, i, fixCtx());
+      if (i.fix === 'lines') return thickenLines(doc, i, fixCtx());
+      if (i.fix === 'fonts') return useArial(doc, i.fonts ?? []);
+      return false;
+    };
+    // checked again after each step: one fix can undo another's work by a hair
+    const again = () => {
+      const fig = preflightPane.figureNow();
+      return fig ? preflight(fig.items, fig.box, r.journal, r.size.id, r.how) : null;
+    };
+    // all the steps are one undo
+    const label = { fit: 'Make it fit', text: 'Enlarge small text', lines: 'Thicken thin lines', fonts: 'Change fonts to Arial', style: 'Drawing style' }[issue.fix ?? 'style'];
+    const done = doc.edit(label, () => fixUntilDone(issue, apply, again));
+    if (done && issue.fix === 'fit') flash(`Scaled to ${Math.round(scaled * 100)} % to fit ${r.size.name.replace(/ \(.*/, '').toLowerCase()}. Text in captions keeps its size.`, 6000);
     if (done) editor.changed();
     else if (issue.fix !== 'fit') flash('This is in a picture, chart or table: change it there.');
     return done;
@@ -8360,6 +8375,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'attach-descriptors': () => void attachDescriptors(),
   'pubchem-lookup': () => void lookUpChosen(),
   'find-cas': () => void findCasChosen(),
+  'attach-wavy': () => attachPointCommand('Wavy'),
+  'attach-star': () => attachPointCommand('Star'),
+  'attach-numbered': () => attachPointCommand('Numbered'),
+  'attach-remove': () => attachPointCommand(null),
   'model-3d': () => void show3dModel(),
   'newman-projection': () => {
     const b = contextBond ?? (editor.sel.bonds.size === 1 ? [...editor.sel.bonds][0] : null);
@@ -11123,6 +11142,31 @@ function readAsMenu(): MenuItem {
   ] };
 }
 
+/** The atom a right-click > Attachment Point command is for: the atom clicked, or the one atom selected. */
+function attachPointAtom(): number | null {
+  if (contextAtom && !contextAtom.all) return contextAtom.id;
+  return editor.sel.atoms.size === 1 && !editor.sel.bonds.size ? [...editor.sel.atoms][0] : null;
+}
+
+/** Right-click > Attachment Point > Wavy Bond, Star, Numbered or Remove. */
+function attachPointCommand(kind: 'Wavy' | 'Star' | 'Numbered' | null): void {
+  const id = attachPointAtom();
+  if (id === null) { flash('Right-click the atom the attachment point goes on (a ring carbon gets a new bond out to it).'); return; }
+  editor.setAttachPoint(id, kind);
+}
+
+/** Right-click > Attachment Point, with the kind the atom has ticked. */
+function attachPointMenu(): MenuItem[] {
+  const id = attachPointAtom();
+  const a = id === null ? undefined : doc.atoms.get(id);
+  if (!a || a.multi) return [];
+  const kind = a.attach === 'Wavy' ? 'wavy' : a.attach === 'Star' ? 'star' : a.attach ? 'numbered' : '';
+  return [{ label: 'Attachment Point', items: [
+    { cmd: 'attach-wavy', label: 'Wavy Bond', checked: kind === 'wavy' }, { cmd: 'attach-star', label: 'Star', checked: kind === 'star' }, { cmd: 'attach-numbered', label: 'Numbered', checked: kind === 'numbered' },
+    ...(a.attach ? [null, { cmd: 'attach-remove', label: 'Remove Attachment Point' }] : []),
+  ] }];
+}
+
 function drawingMenu(): MenuItem[] {
   const s = editor.sel;
   const any = s.atoms.size + s.bonds.size + s.captions.size + s.arrows.size + s.shapes.size > 0;
@@ -11175,6 +11219,7 @@ function drawingMenu(): MenuItem[] {
       ...fuseRingMenu(),
       ...ringShapeMenu(),
       ...metalMenu(),
+      ...attachPointMenu(),
       { label: 'Structure', items: [
         { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'chain-ends' }, { cmd: 'explicit-h' }, null,
         { cmd: 'contract-label' }, { cmd: 'expand-label' }, { cmd: 'expand-label-full' }, { cmd: 'join' }, null,
@@ -11868,22 +11913,26 @@ const guidesToolboxHooks: GuidesToolboxHooks = {
 editor.onGuides = () => { ws.noteChange(); guidesToolbox?.refresh(); };
 
 const DOC_TOGGLES: Partial<Record<string, string>> = { bold: 'doc-bold', italic: 'doc-italic', underline: 'doc-underline', sub: 'doc-sub', sup: 'doc-sup', formula: 'doc-formula' };
+const DOC_ALIGN: Record<string, string> = { left: 'doc-align-left', center: 'doc-align-center', right: 'doc-align-right', justify: 'doc-justify' };
+const DOC_LINES: Record<number, string> = { 1: 'line-single', 1.5: 'line-1-5', 2: 'line-double' };
 const textToolboxHooks: TextToolboxHooks = {
   format: (f) => {
     if (docActive()) {
-      if (f.kind === 'style') { flash('In a document, the Home tab\'s Font and Size boxes set these.'); return true; }
-      const cmd = f.kind === 'stereo' ? 'doc-stereo-italic' : f.kind === 'toggle' ? DOC_TOGGLES[f.key] : undefined;
-      return !!cmd && docMode.run(cmd);
+      const cmd = f.kind === 'stereo' ? 'doc-stereo-italic' : f.kind === 'toggle' ? DOC_TOGGLES[f.key] : f.kind === 'align' ? DOC_ALIGN[f.j] : f.kind === 'line' ? DOC_LINES[f.v] : undefined;
+      if (!cmd) { flash('In a document, the Home tab\'s Font and Paragraph groups set these.'); return true; }
+      return docMode.run(cmd);
     }
     if (sheetActive()) return false;
-    const ok = editor.formatText(f);
-    editor.refocusText();
-    return ok;
+    return editor.formatText(f);
   },
-  type: (ch) => { const ok = insertSymbol(ch); editor.refocusText(); return ok; },
-  look: () => (docActive() || sheetActive() ? null : editor.textLook()?.style ?? null),
-  defaults: () => { if (docActive() || sheetActive()) return null; const l = editor.textLook(); return l ? { size: l.defaultSize, font: l.defaultFont } : null; },
-  moreSymbols: () => symbolWindow.open(),
+  type: (ch) => insertSymbol(ch),
+  link: () => { if (!docActive() && !sheetActive()) void insertLink(); },
+  look: () => {
+    if (docActive() || sheetActive()) return null;
+    const l = editor.textLook();
+    return l ? { style: l.style, align: l.align, list: l.list, line: l.line, before: l.before ?? 0, after: l.after ?? 0, wrap: l.wrap, link: !!l.link, defaultFont: l.defaultFont } : null;
+  },
+  back: () => editor.refocusText(),
   say: (t) => flash(t),
 };
 

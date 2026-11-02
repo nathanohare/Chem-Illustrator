@@ -35,6 +35,7 @@ import { type SheetViewOpts, type CustomView, renameInViews } from './views';
 import type { WorkbookTheme } from './themes';
 import { type CompoundCard, fieldValue } from './compound';
 import type { Query } from './query';
+import type { HammettResult } from '../chem/hammett-match';
 
 export type BorderStyle = 'thin' | 'medium' | 'thick' | 'double' | 'dashed' | 'dotted';
 export interface Border { style: BorderStyle; color?: string }
@@ -148,6 +149,8 @@ export interface ChemHost {
   smiles(text: string): MolProps | CellError;
   /** Does the structure contain the query? Null while being worked out. */
   substructure?(s: Structure, query: Contents): boolean | null;
+  /** The Hammett groups on a molecule's ring, counted from the reference (see src/chem/hammett-match.ts); #BUSY! while being worked out. */
+  hammett?(mol: Structure | string, ref: string): HammettResult | CellError;
 }
 
 /** A block of cells taken by Copy, to paste elsewhere. */
@@ -2260,6 +2263,14 @@ export class Workbook {
         const card = sheetOf(sheet)?.cell(row, col)?.compound;
         if (!card) return undefined;
         return fieldValue(card, name) ?? null;
+      },
+      hammett: (src, ref) => {
+        if (!this.chem?.hammett) return ERR.busy();
+        if ('smiles' in src) return this.chem.hammett(src.smiles.trim(), ref);
+        const c = sheetOf(src.sheet)?.cell(src.row, src.col);
+        if (c?.structure) return this.chem.hammett(c.structure, ref);
+        const v = sheetOf(src.sheet)?.values.get(keyOf(src.row, src.col));
+        return typeof v === 'string' ? this.chem.hammett(v.trim(), ref) : ERR.value('A structure or SMILES was wanted');
       },
       molecule: (src) => {
         if (!this.chem) return ERR.busy();

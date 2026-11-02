@@ -221,7 +221,7 @@ export function groupLabel(mol: NewmanMol, a: number, from: number, nb = neighbo
   if (mol.atoms[a].z === 1) return 'H';
   if (isPhenyl(mol, a, from, nb)) return 'Ph';
   const atoms = groupAtoms(mol, a, from, nb);
-  const key = shapeKey(mol, a, from, nb).replace(/\(c\)/g, '(c)');
+  const key = shapeKey(mol, a, from, nb);
   const known = KNOWN[key] ?? (atoms ? KNOWN[benzylKey(mol, a, from, nb)] : undefined);
   if (known && atoms) return known[0];
   // in a ring through the bond, or anything else: the atom and its hydrogens (CH2), then the rest if it is a short unbranched chain

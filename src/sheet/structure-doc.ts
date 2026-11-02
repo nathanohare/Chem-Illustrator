@@ -24,10 +24,10 @@ export function isBlankDrawing(c: Contents): boolean {
 }
 
 /** A cell's drawing as one molfile (all its molecules together), or why it can't be. */
-export function structureMolfile(contents: Contents, style: DocStyle): { molblock: string | null; problem?: string } {
+export function structureMolfile(contents: Contents, style: DocStyle, opts: { attachKinds?: boolean } = {}): { molblock: string | null; problem?: string } {
   if (!contents.atoms.length) return { molblock: null, problem: 'There is no structure in this cell' };
   const d = structureDoc(contents, style);
-  const m = toMolfile(d, d.atoms.keys());
+  const m = toMolfile(d, d.atoms.keys(), '', opts.attachKinds ? { attachKinds: true } : {});
   if (m.unknownLabels.length) return { molblock: null, problem: `Can't read the label${m.unknownLabels.length > 1 ? 's' : ''} ${m.unknownLabels.join(', ')}` };
   return { molblock: m.molblock };
 }

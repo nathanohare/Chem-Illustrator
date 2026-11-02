@@ -6,7 +6,7 @@
 
 import type { Doc, TextRun } from './model';
 import type { Rect } from './geom';
-import type { PreflightIssue } from './preflight';
+import type { PreflightFix, PreflightIssue, PreflightResult } from './preflight';
 
 export interface FixContext {
   /** Where a caption's text is drawn. */
@@ -125,4 +125,22 @@ export function useArial(doc: Doc, fonts: string[]): boolean {
     }
   });
   return changed;
+}
+
+/**
+ * Put a finding right, then check again and go on while the same kind of finding is still there
+ * (at most `passes` times): one fix can undo another's work by a hair (a caption made bigger
+ * widens the figure, which the journal then shrinks, lines and all), and a figure whose captions
+ * keep their size needs more than one scaling to fit. True when anything changed.
+ */
+export function fixUntilDone(first: PreflightIssue, apply: (issue: PreflightIssue) => boolean, check: () => PreflightResult | null, passes = 4): boolean {
+  const kind: PreflightFix | undefined = first.fix;
+  let issue: PreflightIssue | undefined = first;
+  let any = false;
+  for (let n = 0; n < passes && issue; n++) {
+    if (!apply(issue)) break;
+    any = true;
+    issue = check()?.issues.find((i) => i.fix === kind && (i.level === 'error' || i.level === 'warning'));
+  }
+  return any;
 }
