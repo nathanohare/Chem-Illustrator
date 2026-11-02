@@ -25,6 +25,7 @@ import { StructurePictures } from './structure-pictures';
 import { askProperties, PropertyChoice } from './property-dialog';
 import { ask } from './ask';
 import { SheetFormatting } from './sheet-format-ui';
+import { ChartGallery } from './chart-gallery';
 import { SheetCharts } from './sheet-chart-ui';
 import { DASH_CHART_KINDS } from './dashboard-ui';
 import { SheetNotes } from './sheet-notes-ui';
@@ -120,6 +121,8 @@ export class SheetMode {
   readonly formatting: SheetFormatting;
   /** Charts on the sheets. */
   readonly charts: SheetCharts;
+  /** Insert > All Charts: every kind drawn from the selection. */
+  private chartGallery: ChartGallery;
   /** Dashboard sheets: adding tiles, their menus and settings. */
   readonly dashUi: DashboardUi;
   /** Notes and comments on cells. */
@@ -214,6 +217,7 @@ export class SheetMode {
       edit: (label, fn) => this.edit(label, fn),
       flash: (m, ms) => this.host.flash(m, ms),
     });
+    this.chartGallery = new ChartGallery(() => this.view, (k) => this.run(`chart-${k}`));
     this.notes = new SheetNotes({
       view: this.view,
       edit: (label, fn) => this.edit(label, fn),
@@ -686,6 +690,7 @@ export class SheetMode {
           else this.host.flash('Dashboard tiles take scatter, line, column, bar, area, pie, Sankey, treemap and decomposition tree charts: make this one on a sheet.', 5000);
         } else this.charts.insert(name.slice(6) as ChartKind);
         break;
+      case 'chart-gallery': this.chartGallery.toggle(this.ribbon.querySelector<HTMLElement>('[data-sh="chart-gallery"]')); break;
       case 'dash-add-chart': void this.dashUi.addTile('chart'); break;
       case 'dash-add-kpi': void this.dashUi.addTile('kpi'); break;
       case 'dash-add-table': void this.dashUi.addTile('table'); break;
@@ -2191,6 +2196,7 @@ export class SheetMode {
       this.panelQueued = false;
       this.renderPanel();
       this.showRibbonState();
+      this.chartGallery.refresh(true);
     });
   }
 
