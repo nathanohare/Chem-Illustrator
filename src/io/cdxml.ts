@@ -2,6 +2,7 @@
 // their formatting, arrows, and the common graphics (lines, boxes, circles, brackets,
 // charge symbols). Anything not understood yet is counted and skipped, never fatal.
 
+import { parseGuides } from '../editor/guides';
 import { fillFrameMembers, frameFromTag } from '../editor/frames';
 import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachFromTag, fillAttachments } from '../editor/attached';
 import { readSpecies } from '../chem/species';
@@ -27,7 +28,9 @@ import { tidyFx } from '../render/picture-fx';
 import { TABLE_TAG, TABLE_PART_TAG, applyTableTag, gridOf, linesFromBorders, parseTableTag, type ReadCell } from './cdxml-table';
 import { layoutTable, NOTE_SCALE } from '../table';
 import { arialWidth } from '../text-metrics';
+import { cleanScheme } from '../drawing-styles';
 import { freshBox, type ChartBox } from '../sheet/chart-box';
+import { relinkNewman } from '../design/newman';
 
 export interface ReadStats {
   atoms: number;
@@ -116,6 +119,21 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   if (bg !== null && colors[Number(bg)]) doc.background = colors[Number(bg)];
   // the page: one sheet's drawing area (the page's box over how many sheets it spans)
   const pg = all.find((e) => e.nodeName === 'page');
+  if (pg) doc.guides = parseGuides(kids(pg).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === GUIDES_TAG)?.getAttribute('Value'));
+  const arrowText = pg && kids(pg).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === ARROW_TEXT_TAG)?.getAttribute('Value');
+  if (arrowText) {
+    try {
+      const v = JSON.parse(arrowText) as { size?: unknown; font?: unknown; width?: unknown; head?: unknown; headWidth?: unknown; scheme?: unknown };
+      if (typeof v.size === 'number' && v.size > 0 && v.size < 400) doc.style.arrowTextSize = v.size;
+      if (typeof v.font === 'string' && v.font.trim()) doc.style.arrowTextFont = v.font.trim().slice(0, 80);
+      const pt = (x: unknown) => (typeof x === 'number' && x > 0 && x <= 30 ? x : undefined);
+      if (pt(v.width)) doc.style.arrowWidth = pt(v.width);
+      if (pt(v.head)) doc.style.arrowHeadLength = pt(v.head);
+      if (pt(v.headWidth)) doc.style.arrowHeadWidth = pt(v.headWidth);
+      const scheme = cleanScheme(v.scheme);
+      if (scheme) doc.style.scheme = scheme;
+    } catch { /* not ours to read */ }
+  }
   const pb = pg?.getAttribute('BoundingBox')?.trim().split(/\s+/).map(Number);
   if (pb && pb.length === 4 && pb.every(isFinite)) {
     const wp = Math.max(1, Number(pg!.getAttribute('WidthPages')) || 1), hp = Math.max(1, Number(pg!.getAttribute('HeightPages')) || 1);
@@ -221,6 +239,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (type === 'MultiAttachment') {
         // the middle of a ring or π-bond a metal is bonded to: its atoms are read once they all are
         const a = doc.addAtom(x, y, 0, { id, multi: [] });
+        if (kids(n).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === KEKULE_TAG)) a.kekule = true;
         pendingMulti.push({ id: a.id, key: n.getAttribute('id') ?? '', ids: (n.getAttribute('Attachments') ?? '').trim().split(/\s+/).filter(Boolean) });
         from('a', a.id, n);
         nodeIds.set(n.getAttribute('id') ?? '', id);
@@ -272,6 +291,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (groupTag) extra.group = groupTag;
       const altTag = kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === ALT_TAG)?.getAttribute('Value');
       if (altTag) extra.alt = altTag;
+      const mapTag = Number(kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === MAP_TAG)?.getAttribute('Value'));
+      if (Number.isInteger(mapTag) && mapTag > 0) extra.mapNo = mapTag;
       const hlA = kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_TAG)?.getAttribute('Value');
       if (hlA && /^#[0-9a-f]{6}$/i.test(hlA)) extra.highlight = hlA.toLowerCase();
       const lookA = highlightStyleFromTag(kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_LOOK_TAG)?.getAttribute('Value'));
@@ -310,7 +331,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     for (const m of pendingMulti.splice(0)) {
       const atoms = m.ids.map((x) => nodeIds.get(x)).filter((x): x is number => x !== undefined);
       if (atoms.length >= 2) doc.updateAtom(m.id, { multi: atoms });
-      else { doc.removeAtom(m.id); nodeIds.delete(m.key); skip('multicentre attachment without its atoms'); }
+      else { doc.removeAtom(m.id); nodeIds.delete(m.key); skip('multicenter attachment without its atoms'); }
     }
     for (const b of kids(frag)) {
       if (b.nodeName === 'graphic') readGraphic(b); // circled charges and lone pairs sit with their structure
@@ -673,7 +694,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       case 'Line': {
         if (bb.length < 4) return;
         const lt = g.getAttribute('LineType') ?? '';
-        add({ ...base, kind: 'line', x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], dashed: lt.includes('Dashed'), bold: lt.includes('Bold') });
+        add({ ...base, kind: 'line', x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], dashed: lt.includes('Dashed'), bold: lt.includes('Bold'), ...(g.getAttribute(DOTTED_ATTR) === 'yes' ? { dotted: true } : {}) });
         return;
       }
       case 'Rectangle': {
@@ -696,11 +717,19 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       case 'Orbital': {
         const cen = pts(g.getAttribute('Center3D')), maj = pts(g.getAttribute('MajorAxisEnd3D')), min = pts(g.getAttribute('MinorAxisEnd3D'));
         if (cen.length < 2 || maj.length < 2) return;
-        const rx = Math.hypot(maj[0] - cen[0], maj[1] - cen[1]);
-        const ry = min.length >= 2 ? Math.hypot(min[0] - cen[0], min[1] - cen[1]) : rx;
+        let rx = Math.hypot(maj[0] - cen[0], maj[1] - cen[1]);
+        let ry = min.length >= 2 ? Math.hypot(min[0] - cen[0], min[1] - cen[1]) : rx;
+        // an oval whose axes are turned: upright when they lie along the page, else turned
+        let rot = 0;
+        if (Math.abs(rx - ry) > 0.01) {
+          let deg = (Math.atan2(maj[1] - cen[1], maj[0] - cen[0]) * 180) / Math.PI;
+          deg = ((deg % 180) + 180) % 180;
+          if (Math.abs(deg - 90) < 0.05) [rx, ry] = [ry, rx];
+          else if (deg > 0.05 && deg < 179.95) rot = +deg.toFixed(3);
+        }
         const ot = g.getAttribute('OvalType') ?? '';
         const filled = ot.includes('Filled') || ot.includes('Shaded');
-        const oval = () => add({ ...base, kind: 'oval', x1: cen[0] - rx, y1: cen[1] - ry, x2: cen[0] + rx, y2: cen[1] + ry, filled, ...(ot.includes('Shaded') ? { fill: 'shaded' as const } : {}), dashed: ot.includes('Dashed'), bold: ot.includes('Bold'), shadow: ot.includes('Shadow') });
+        const oval = () => add({ ...base, kind: 'oval', x1: cen[0] - rx, y1: cen[1] - ry, x2: cen[0] + rx, y2: cen[1] + ry, ...(rot ? { rot } : {}), filled, ...(ot.includes('Shaded') ? { fill: 'shaded' as const } : {}), dashed: ot.includes('Dashed'), bold: ot.includes('Bold'), shadow: ot.includes('Shadow') });
         // a plain circle kept with a structure may be an aromatic ring's circle (checked once the bonds are in)
         if (g.parentElement?.nodeName === 'fragment' && ot.includes('Circle') && !filled) pendingCircles.push({ x: cen[0], y: cen[1], oval });
         else oval();
@@ -897,6 +926,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     // lone pairs, radical dots and circled charges go with their atoms
     pinSymbols(doc);
     fillFrameMembers(doc);
+    // Newman projections find their bonds and viewing marks again by where they are drawn
+    relinkNewman(doc);
     fillAttachments(doc);
     readGroups();
   });
@@ -994,7 +1025,8 @@ function readSteps(all: Element[], refs: () => Map<Element, string>, doc: Doc): 
   if (!all.some((el) => el.nodeName === 'step')) return;
   const refOf = refs();
   const byId = new Map<string, Element>();
-  for (const el of all) { const id = el.getAttribute('id'); if (id && !byId.has(id)) byId.set(id, el); }
+  // (fonts are numbered on their own: a font's id can be the same as a drawn object's)
+  for (const el of all) { const id = el.getAttribute('id'); if (id && el.nodeName !== 'font' && !byId.has(id)) byId.set(id, el); }
   const refsOf = (el: Element | undefined, out: string[]) => {
     if (!el) return;
     const own = refOf.get(el);
@@ -1102,18 +1134,28 @@ export const HIGHLIGHT_LOOK_TAG = 'Chem Illustrator highlight look';
 export const GROUP_TAG = 'Chem Illustrator group';
 /** On the page: its page grid's fixed edges, and whether it grows (page-grid.ts). */
 export const PAGE_TAG = 'Chem Illustrator page grid';
+/** The drawing's guides (crosshairs, lines, grid, ticks), as JSON on the page: only this program reads it. */
+export const GUIDES_TAG = 'Chem Illustrator guides';
+/** The drawing style's text above and below arrows (size, font), as JSON on the page: ChemDraw has no setting for it. */
+export const ARROW_TEXT_TAG = 'Chem Illustrator arrows';
+/** On a MultiAttachment node: its π-system drawn in Kekulé form rather than delocalized (only this program reads it). */
+export const KEKULE_TAG = 'Chem Illustrator Kekule';
 /** The tag on turned text: degrees clockwise about the start of its first line (ChemDraw shows it level). */
 export const TURN_TAG = 'Chem Illustrator turn';
 /** The tag on the group that draws a design shape in ChemDraw: the shape as it is here. */
 export const GEO_TAG = 'Chem Illustrator shape';
 /** A reaction arrow's animation settings (MorphStep as JSON, atoms by the file's node ids). */
 export const MORPH_TAG = 'Chem Illustrator animation';
+/** An atom's atom-atom map number across a reaction (Atom.mapNo). */
+export const MAP_TAG = 'Chem Illustrator map';
 /** An electron-pushing arrow's pins (what its ends are stuck to: Pin as JSON without `was`, atoms by node id). */
 export const PIN_TAG = 'Chem Illustrator pin';
 /** An S-shaped arrow saved as a ChemDraw curve: its heads as they are here (JSON). */
 export const CURVE_ARROW_TAG = 'Chem Illustrator arrow';
 /** The group's box when saved here (ChemDraw rewrites BoundingBox when the group is moved). */
 export const GEO_BOX_ATTR = 'ChemIllustratorBox';
+/** A line drawn dotted here (ChemDraw is given dashes). */
+export const DOTTED_ATTR = 'ChemIllustratorDotted';
 /** A chart (Insert > Chart on slides): the chart and its data, on the picture standing for it. */
 export const CHART_TAG = 'Chem Illustrator chart';
 /** An equation (Insert > Equation on slides): its LaTeX, size, colour and font, on the picture standing for it. */
@@ -1170,7 +1212,7 @@ export function labelLookOf(runs: TextRun[], text: string): { supDigits?: boolea
   runs.forEach((r, k) => {
     for (const _ of r.text) {
       const raisedR = raisedDigits && k === runs.length - 1;
-      const m = r.sup && !raisedR ? '^' : r.sub ? '_' : '.';
+      const m = r.sup && !raisedR ? '^' : r.sub ? '_' : r.italic ? '/' : '.';
       if (m !== '.') any = true;
       marks += m;
     }

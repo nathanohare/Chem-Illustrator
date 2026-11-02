@@ -4,8 +4,9 @@
 // Edit > Typing and Spelling.
 
 import type { TextEditing } from './editing';
-import { DEFAULT_REPLACEMENTS, WORD_ENDS, nameFormats, replacementAt, typingFormats } from './chemtext';
+import { DEFAULT_REPLACEMENTS, WORD_ENDS, nameFormats, replacementAt, typingFormats, type FixEdit } from './chemtext';
 import { linkOfChar, typedLink, typedLinkLength } from '../links';
+import { alkylWants, alkylPrefixes, dashFree, type AlkylLook } from '../chem/labels';
 
 /** The text since the last space, tab or line break before `end`. */
 function tokenBefore(text: string, end: number): { from: number; word: string } {
@@ -78,6 +79,37 @@ export function afterTyping(ed: TextEditing, typed: string, prefs: TypingPrefs =
     const edits = nameFormats(ed.text.slice(from, end + 1), end - from, { stereo: prefs.stereoItalic, numbers: prefs.boldNumbers });
     if (edits.length) ed.fix(edits.map((e) => ({ ...e, start: e.start + from, end: e.end + from })), 'format');
   }
+  alkylWord(ed, end);
+}
+
+/**
+ * The word ending at `end` with the alkyl prefix style of Settings ▸ Preferences: the n, i, s
+ * or t of nBuLi, KOtBu or iPr2NEt in italics, and a dash put in or taken out (its own undo step).
+ */
+function alkylWord(ed: TextEditing, end: number): void {
+  if (!alkylWants()) return;
+  const { from, word } = tokenBefore(ed.text, end);
+  const looks = ed.looksBetween(from, end);
+  const edits = alkylEdits(word, (i) => !!looks[i]?.italic).map((e) => ({ ...e, start: e.start + from, end: e.end + from }));
+  if (edits.length) ed.fix(edits, 'format');
+}
+
+/**
+ * The changes that give `text` an alkyl look (the one in Settings ▸ Preferences unless given);
+ * `italicAt(i)` tells whether character i is italic now. None for the look "as typed".
+ */
+export function alkylEdits(text: string, italicAt: (i: number) => boolean, look?: AlkylLook): FixEdit[] {
+  const want = alkylWants(look);
+  const out: FixEdit[] = [];
+  if (!want) return out;
+  for (const f of alkylPrefixes(text)) {
+    if (want.italic !== italicAt(f.at)) out.push({ start: f.at, end: f.at + 1, italic: want.italic });
+    if (want.dash === f.dash || !dashFree(text, f.at)) continue;
+    // the letter after the prefix is replaced along with the dash, so the dash takes its (upright) look
+    const next = f.at + 1 + (f.dash ? 1 : 0);
+    out.push({ start: f.at + 1, end: next + 1, text: (want.dash ? '-' : '') + text[next] });
+  }
+  return out;
 }
 
 /** How far back the chemistry rules look for the word just finished: they need it and the word before. */
@@ -123,6 +155,7 @@ export function finishWord(ed: TextEditing, prefs: TypingPrefs = typingPrefs): v
     }
   }
   if (prefs.chemistry) formatWord(ed, end);
+  alkylWord(ed, end);
 }
 
 const listeners = new Set<() => void>();

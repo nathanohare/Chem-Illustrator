@@ -10,6 +10,7 @@ import { arialWidth } from '../text-metrics';
 import { exitParam, type Rect } from '../geom';
 import { ACS_1996 } from '../style';
 import { circleIn, ellipseAxes } from '../chem/aromatic';
+import { chainArc, chainOrder } from '../chem/hapto';
 
 const SHORT: Record<string, string> = {};
 
@@ -31,11 +32,12 @@ function svg(size: number, body: string): string {
   return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" font-family="Arial, Helvetica, sans-serif" aria-hidden="true">${body}</svg>`;
 }
 
-export function templateIcon(t: Template, size = 44): string {
+/** `maxBond`: the longest a bond is drawn, in pixels (a big picture of a small ligand stays in scale). */
+export function templateIcon(t: Template, size = 44, maxBond = 12): string {
   const small = size < 40;
   // A tool bar button is too small for a whole amino acid: it shows the three-letter code.
   if (small && CODED.has(t.group)) {
-    return svg(size, `<text x="${size / 2}" y="${size / 2 + 4}" font-size="12" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">${codeOf(t)}</text>`);
+    return svg(size, `<text x="${size / 2}" y="${size / 2 + 4}" font-size="12" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">${esc(codeOf(t))}</text>`);
   }
   const showCode = CODED.has(t.group);
   // ...and a sugar shows its ring, with only the ring oxygen labelled.
@@ -59,8 +61,9 @@ export function templateIcon(t: Template, size = 44): string {
   });
 
   // Labels in bond-length units, relative to their atom.
+  const stub = new Set(t.stubs ?? []);
   const layouts: (LabelLayout | null)[] = t.atoms.map(([x, y, el, charge, text], i) => {
-    if (ringOnly && nbrs[i].length < 2) return null;
+    if ((ringOnly && nbrs[i].length < 2) || stub.has(i)) return null;
     const z = elementNumber(el) ?? 6;
     const spec = labelSpec(z, text ?? null, charge ?? 0, 0, order[i], nbrs[i].length);
     if (!spec) return null;
@@ -82,7 +85,7 @@ export function templateIcon(t: Template, size = 44): string {
   });
   const pad = small ? 2 : 3;
   const h = showCode ? size - CODE_H : size;
-  const k = Math.min((size - 2 * pad) / Math.max(1, x2 - x1), (h - 2 * pad) / Math.max(1, y2 - y1), t.z && !small ? size / 3.4 : small ? 13 : 12);
+  const k = Math.min((size - 2 * pad) / Math.max(1, x2 - x1), (h - 2 * pad) / Math.max(1, y2 - y1), t.z && !small ? size / 3.4 : small ? 13 : maxBond);
   const ox = size / 2 - ((x1 + x2) / 2) * k, oy = h / 2 - ((y1 + y2) / 2) * k;
   const P = (i: number) => ({ x: t.atoms[i][0] * k + ox, y: t.atoms[i][1] * k + oy });
 
@@ -104,6 +107,41 @@ export function templateIcon(t: Template, size = 44): string {
   const line = (p: { x: number; y: number }, q: { x: number; y: number }, w = 1, dash = false) =>
     parts.push(`<line x1="${f(p.x)}" y1="${f(p.y)}" x2="${f(q.x)}" y2="${f(q.y)}" stroke-width="${w}"${dash ? ' stroke-dasharray="2 1.6"' : ''}/>`);
   const off = Math.max(1.8, (ACS_1996.bondSpacing / 100) * k);
+  // π chains on a metal (an allyl, an η⁴-butadiene): plain bonds and one arc along them
+  const arcs: string[] = [];
+  const onArc = new Set<string>();
+  const arcEnd = new Map<string, { x: number; y: number }>();
+  const key = (a: number, b: number) => (a < b ? `${a} ${b}` : `${b} ${a}`);
+  for (const [, members] of t.hapto ?? []) {
+    const set = new Set(members);
+    const chain = chainOrder(members, (i) => nbrs[i].filter((j) => set.has(j)));
+    if (!chain) continue;
+    const pieces = chainArc(chain.map(P), off);
+    if (!pieces) continue;
+    chain.slice(1).forEach((b, i) => onArc.add(key(chain[i], b)));
+    // the hapto bond stops at the arc, where its middle is
+    const flat = pieces.flat();
+    const mid = flat[Math.floor(flat.length / 2)];
+    arcEnd.set(members.join(' '), flat.length % 2 ? { x: (mid.from.x + 2 * mid.ctrl.x + mid.to.x) / 4, y: (mid.from.y + 2 * mid.ctrl.y + mid.to.y) / 4 } : mid.from);
+    for (const q of flat) arcs.push(`<path d="M${f(q.from.x)} ${f(q.from.y)}Q${f(q.ctrl.x)} ${f(q.ctrl.y)} ${f(q.to.x)} ${f(q.to.y)}" stroke-width="1"/>`);
+  }
+  parts.push(...arcs);
+  /** The smallest ring (up to 8 atoms) through a bond, for which side its second line goes. */
+  const ringThrough = (a: number, b: number): number[] | null => {
+    const prev = new Map<number, number>([[b, -1]]);
+    let front = [b];
+    for (let depth = 1; depth < 8 && front.length; depth++) {
+      const next: number[] = [];
+      for (const i of front) for (const o of nbrs[i]) {
+        if ((i === b && o === a) || prev.has(o) || metal[o]) continue;
+        prev.set(o, i);
+        if (o === a) { const path = [a]; let c = i; while (c !== -1) { path.push(c); c = prev.get(c)!; } return path; }
+        next.push(o);
+      }
+      front = next;
+    }
+    return null;
+  };
   const wedge = Math.max(1.6, 0.12 * k);
   for (const [a, b, o, disp] of t.bonds) {
     const [p, q] = ends(a, b);
@@ -121,6 +159,7 @@ export function templateIcon(t: Template, size = 44): string {
       for (const u of [-1.5, -0.5, 0.5, 1.5]) line({ x: p.x + nx * off * u, y: p.y + ny * off * u }, { x: q.x + nx * off * u, y: q.y + ny * off * u });
       continue;
     }
+    if (onArc.has(key(a, b))) { line(p, q); continue; }
     if (o === 2 && !nbrs[a].some((i) => i !== b) !== !nbrs[b].some((i) => i !== a)) {
       // C=O and the like: two lines either side of the bond line, as in a drawing
       line({ x: p.x + (nx * off) / 2, y: p.y + (ny * off) / 2 }, { x: q.x + (nx * off) / 2, y: q.y + (ny * off) / 2 });
@@ -129,10 +168,11 @@ export function templateIcon(t: Template, size = 44): string {
     }
     line(p, q);
     if (o < 2) continue;
-    // the second line goes on the side where the neighbours are (inside a ring)
+    // the second line goes inside its ring, else on the side where the neighbours are
     const others = [...nbrs[a], ...nbrs[b]].filter((i) => i !== a && i !== b);
+    const ring = ringThrough(a, b);
     let side = 0;
-    for (const i of others) { const r = P(i); side += (r.x - p.x) * nx + (r.y - p.y) * ny; }
+    for (const i of ring ?? others) { const r = P(i); side += (r.x - p.x) * nx + (r.y - p.y) * ny; }
     const sgn = side >= 0 ? 1 : -1;
     if (o === 3 || !others.length) {
       line({ x: p.x + nx * off, y: p.y + ny * off }, { x: q.x + nx * off, y: q.y + ny * off });
@@ -143,9 +183,22 @@ export function templateIcon(t: Template, size = 44): string {
       line({ x: p.x + dx * sa + nx * off * sgn, y: p.y + dy * sa + ny * off * sgn }, { x: q.x - dx * sb + nx * off * sgn, y: q.y - dy * sb + ny * off * sgn });
     }
   }
+  // attachment points: a wavy line across the bond, where the group joins the molecule
+  for (const i of stub) {
+    const j = nbrs[i][0];
+    if (j === undefined) continue;
+    const p = P(i), q = P(j), d = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+    const ux = (q.x - p.x) / d, uy = (q.y - p.y) / d, half = 0.42 * k, amp = 0.09 * k;
+    let path = '';
+    for (let s = 0; s <= 16; s++) {
+      const u = -half + (2 * half * s) / 16, w = amp * Math.sin((s / 16) * 4 * Math.PI);
+      path += `${s ? 'L' : 'M'}${f(p.x - uy * u + ux * w)} ${f(p.y + ux * u + uy * w)}`;
+    }
+    parts.push(`<path d="${path}" stroke-width="1"/>`);
+  }
   // hapto bonds: from the metal (clear of its label) to the middle of the ring or π-bond
   for (const [m, members, disp] of t.hapto ?? []) {
-    const c = members.reduce((acc, i) => ({ x: acc.x + P(i).x / members.length, y: acc.y + P(i).y / members.length }), { x: 0, y: 0 });
+    const c = arcEnd.get(members.join(' ')) ?? members.reduce((acc, i) => ({ x: acc.x + P(i).x / members.length, y: acc.y + P(i).y / members.length }), { x: 0, y: 0 });
     const p = P(m);
     let u = 0;
     for (const r of clear[m]) u = Math.max(u, exitParam(p, c, r));
@@ -172,9 +225,16 @@ export function templateIcon(t: Template, size = 44): string {
     if (!lay) return;
     const p = P(i);
     for (const r of lay.runs) {
-      parts.push(`<text x="${f(p.x + r.dx * k)}" y="${f(p.y + r.dy * k)}" font-size="${f(r.size * k)}" fill="currentColor" stroke="none">${esc(r.text)}</text>`);
+      parts.push(`<text x="${f(p.x + r.dx * k)}" y="${f(p.y + r.dy * k)}" font-size="${f(r.size * k)}"${r.italic ? ' font-style="italic"' : ''} fill="currentColor" stroke="none">${esc(r.text)}</text>`);
     }
   });
-  if (showCode) parts.push(`<text x="${size / 2}" y="${size - 2}" font-size="10" text-anchor="middle" fill="currentColor" stroke="none" font-weight="700">${codeOf(t)}</text>`);
+  if (showCode) parts.push(`<text x="${size / 2}" y="${size - 2}" font-size="10" text-anchor="middle" fill="currentColor" stroke="none" font-weight="700">${esc(codeOf(t))}</text>`);
+  // a large ring shows its size in the middle, so 13 and 14 tell apart at a glance
+  const ringSize = t.group === 'cycloalkanes' ? /\((\d+)\)/.exec(t.name)?.[1] : undefined;
+  if (ringSize && n > 0) {
+    let cx = 0, cy = 0;
+    for (let i = 0; i < n; i++) { const p = P(i); cx += p.x; cy += p.y; }
+    parts.push(`<text x="${f(cx / n)}" y="${f(cy / n)}" dominant-baseline="central" font-size="${f(Math.max(8, size * 0.2))}" font-weight="600" text-anchor="middle" fill="currentColor" stroke="var(--panel, #fff)" stroke-width="3" paint-order="stroke" font-family="system-ui, sans-serif">${ringSize}</text>`);
+  }
   return svg(size, parts.join(''));
 }

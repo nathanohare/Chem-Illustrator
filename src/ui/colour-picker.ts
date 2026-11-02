@@ -54,7 +54,7 @@ function openPalette(btn: HTMLElement, doc: Doc, value: string | undefined, on: 
   const pop = document.createElement('div');
   pop.className = 'colour-pop';
   pop.setAttribute('role', 'dialog');
-  pop.setAttribute('aria-label', 'Colours');
+  pop.setAttribute('aria-label', 'Colors');
   const pick = (v: string | undefined) => { closePalette(); on(v); };
 
   const autoBtn = document.createElement('button');
@@ -87,7 +87,7 @@ function openPalette(btn: HTMLElement, doc: Doc, value: string | undefined, on: 
   inp.dataset.systemPicker = '';
   inp.value = value ?? '#000000';
   inp.addEventListener('change', () => pick(inp.value.toLowerCase()));
-  more.append(document.createTextNode('More colours…'), inp);
+  more.append(document.createTextNode('More colors…'), inp);
 
   pop.append(autoBtn, grid, paletteRows(value, pick, closePalette), more);
   // in a window (a modal dialog) the menu goes inside it, or it would sit behind it out of reach

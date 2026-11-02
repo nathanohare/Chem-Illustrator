@@ -63,7 +63,7 @@ export function askEquation(opts: { tex: string; display?: boolean; font: string
       <textarea name="tex" rows="3" spellcheck="false" aria-label="Equation (LaTeX)"></textarea>
       <div class="eq-preview" aria-label="How it looks"><canvas></canvas></div>
       <label class="ask-row"><span>Start from</span><select name="example"><option value="">An equation chemists use often…</option></select></label>
-      <label class="ask-row ask-check" data-display><input type="checkbox" name="display"><span>On a line of its own, centred</span></label>
+      <label class="ask-row ask-check" data-display><input type="checkbox" name="display"><span>On a line of its own, centered</span></label>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary"></button></p>`;
     d.append(form);
     const ta = form.querySelector<HTMLTextAreaElement>('textarea')!;

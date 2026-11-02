@@ -27,7 +27,7 @@ interface JsonMol {
 }
 
 /** Hammett constants [σm, σp, σp⁻] (σp⁻ for a para group that takes a ring's lone pair). */
-const SIGMA: Record<string, [number, number, number]> = {
+export const SIGMA: Record<string, [number, number, number]> = {
   Me: [-0.07, -0.17, -0.17], alkyl: [-0.07, -0.15, -0.15], aryl: [0.06, -0.01, 0.02], vinyl: [0.06, -0.04, 0.0],
   alkynyl: [0.21, 0.23, 0.53], CF3: [0.43, 0.54, 0.65], CCl3: [0.4, 0.46, 0.5],
   F: [0.34, 0.06, -0.03], Cl: [0.37, 0.23, 0.19], Br: [0.39, 0.23, 0.25], I: [0.35, 0.18, 0.27],

@@ -17,15 +17,25 @@ import { paintSlide, drawDrawing, drawCanvasUnder, drawScreen, drawKeyTitle, pag
 import { drawVeil } from './canvas-look';
 import { cameraAt, compoundId, distanceDur, isCamera, keyRect, keysBounds, shownRect, slidePlace, slideShaped, timedCamera, unionRect, viewBetween, type CameraAt, type CanvasData, type Keyframe } from './canvas';
 import { selectionBox, POINTS } from '../editor/arrange';
-import type { Rect } from '../geom';
+import { plainMeasure } from '../chem/reaction';
+import type { Rect, Vec } from '../geom';
 import type { Selection } from '../editor/editor';
 import { plainText } from '../richtext';
+import { Turner } from './turn-render';
+import { isSameView } from './turn3d';
 import {
   buildSteps, partStates, slideParts, partOf, hostOf, mainAnims, triggerSeqs, splitParas, expandParas, moved,
   type Anim, type Part, type Step, type Transition, type Side,
 } from './animation';
 
 const ease = (p: number) => 1 - (1 - p) ** 3;
+
+/** A part lifted off the slide to move on its own: its picture, where it goes, and (Turn in 3-D) what draws it turned. */
+interface Layer {
+  part: Part; canvas: HTMLCanvasElement; box: Rect; x: number; y: number;
+  turner?: Turner;
+  turned?: { canvas: HTMLCanvasElement; key: string };
+}
 
 /**
  * A copy of the slide's drawing with only some of its objects (kept with their ids), with the
@@ -91,7 +101,7 @@ export class SlideFrames {
   readonly steps: Step[];
   private base = document.createElement('canvas');
   /** Each moving part painted on its own, cut to its box; `x`, `y`: where its canvas goes (device pixels). */
-  private layers: { part: Part; canvas: HTMLCanvasElement; box: Rect; x: number; y: number }[] = [];
+  private layers: Layer[] = [];
   private parts: Part[] = [];
   /** Where the slide sits on the canvas: its corner and scale (CSS pixels per point). */
   private at = { x: 0, y: 0, k: 1 };
@@ -138,7 +148,7 @@ export class SlideFrames {
     // background and screen layer under it for wherever the view is)
     this.at = paintSlide(this.base, w, h, dpr, page, still, page.view ? null : fill, !page.view);
     for (const part of this.parts.filter((p) => lifted.has(p))) {
-      let box: Rect, one: Doc;
+      let box: Rect, one: Doc, turner: Turner | undefined;
       if (part.para !== undefined) {
         // the text box painted in the band of its paragraph, so the paragraph can move on its own
         const id = Math.min(...part.sel.captions);
@@ -148,10 +158,18 @@ export class SlideFrames {
         one = subDoc(doc, (kind, x) => kind === 'caption' && x === id);
       } else {
         one = part.kind === 'highlight' ? highlightDoc(doc, part.sel) : subDoc(doc, (kind, id) => inPart(part, kind, id), strip);
-        const b = selectionBox(doc, part.sel, POINTS) ?? { x1: 0, y1: 0, x2: page.size.w, y2: page.size.h };
+        // (text measured as it is laid out, so a caption's picture holds all of its text)
+        const b = selectionBox(doc, part.sel, plainMeasure(doc)) ?? { x1: 0, y1: 0, x2: page.size.w, y2: page.size.h };
         // room for frames, shadows, glows and arrowheads
         const pad = part.kind === 'highlight' ? doc.style.bondLength : 8;
         box = { x1: b.x1 - pad, y1: b.y1 - pad, x2: b.x2 + pad, y2: b.y2 + pad };
+        // turned in 3-D: room for it at any angle
+        if (part.kind === 'drawing' && live.some((a) => a.effect === 'turn3d' && partOf(this.parts, a.target) === part)) {
+          turner = new Turner(one);
+          const r = turner.reach + doc.style.bondLength;
+          const c = turner.centre;
+          box = { x1: Math.min(box.x1, c.x - r), y1: Math.min(box.y1, c.y - r), x2: Math.max(box.x2, c.x + r), y2: Math.max(box.y2, c.y + r) };
+        }
       }
       // a canvas only the size of the part's box, not of the whole screen
       const { x: ox, y: oy, k } = this.at;
@@ -160,10 +178,22 @@ export class SlideFrames {
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.min(W, Math.ceil((ox + box.x2 * k) * dpr)) - x);
       canvas.height = Math.max(1, Math.min(H, Math.ceil((oy + box.y2 * k) * dpr)) - y);
-      const L = { part, canvas, box, x, y };
+      const L: Layer = { part, canvas, box, x, y, ...(turner && !turner.empty ? { turner } : {}) };
       this.paintLayer(L, one);
       this.layers.push(L);
     }
+  }
+
+  /** A layer's part turned to `view` (Turn in 3-D), painted on a canvas of its own. */
+  private turnedLayer(L: Layer, view: number[]): HTMLCanvasElement {
+    const key = view.map((v) => v.toFixed(5)).join(',');
+    if (L.turned?.key === key) return L.turned.canvas;
+    const canvas = L.turned?.canvas ?? document.createElement('canvas');
+    canvas.width = L.canvas.width;
+    canvas.height = L.canvas.height;
+    this.paintLayer({ canvas, box: L.box, x: L.x, y: L.y }, L.turner!.at(view));
+    L.turned = { canvas, key };
+    return canvas;
   }
 
   /** Paint a part (`one`: a drawing of it alone) on its layer's canvas, in its place on the slide. */
@@ -314,6 +344,8 @@ export class SlideFrames {
         ctx.globalAlpha *= Math.max(0, Math.min(1, e.alpha));
       }
       const paint = () => {
+        // turned in 3-D: drawn turned (again only when the view has changed)
+        if (L.turner && e?.view && !isSameView(e.view)) { ctx.drawImage(this.turnedLayer(L, e.view), L.x, L.y); return; }
         if (!e?.color || (e.mix <= 0 && !e.was)) { ctx.drawImage(L.canvas, L.x, L.y); return; }
         // changing colour: the colour it had (or its own), the new one over it
         const a0 = ctx.globalAlpha;
@@ -732,6 +764,7 @@ export class Player {
     // the same size again (a resize event as the show starts): the slide's pictures still do
     if (w === this.w && h === this.h && dpr === this.dpr) return;
     this.w = w; this.h = h; this.dpr = dpr;
+    if (this.free) { this.free.frames = null; this.free.sharp = null; }
     this.canvas.style.width = `${w}px`;
     this.canvas.style.height = `${h}px`;
     this.canvas.width = Math.max(1, Math.round(w * dpr));
@@ -754,6 +787,7 @@ export class Player {
   stop(): void {
     cancelAnimationFrame(this.raf);
     clearTimeout(this.timer);
+    this.dropFree();
     this.moving = null;
     this.videos(false);
   }
@@ -992,7 +1026,7 @@ export class Player {
   }
 
   private minimapShown(c: CanvasData): boolean {
-    return c.show?.minimap === 'show' || (c.show?.minimap === 'presenter' && this.presenter);
+    return this.mapOn || this.free !== null || c.show?.minimap === 'show' || (c.show?.minimap === 'presenter' && this.presenter);
   }
 
   /**
@@ -1041,6 +1075,15 @@ export class Player {
     ctx.lineWidth = 1;
     ctx.strokeRect(box.x1, box.y1, w, h);
     ctx.restore();
+  }
+
+  /** The canvas point under a point (CSS pixels) on the mini-map, if it shows: null off it. */
+  minimapPointAt(px: number, py: number): Vec | null {
+    const c = this.deck.slides[this.i]?.canvas;
+    if (!c?.keys.length || !this.minimapShown(c)) return null;
+    const { box, area, k } = this.minimapPlace(c);
+    if (px < box.x1 || px > box.x2 || py < box.y1 || py > box.y2) return null;
+    return { x: area.x1 + (px - box.x1) / k, y: area.y1 + (py - box.y1) / k };
   }
 
   /** The keyframe under a point (CSS pixels) on the mini-map, if it shows: -1 off it. */
@@ -1119,6 +1162,155 @@ export class Player {
   /** Where the show is looking away to (a compound's keyframe), or null. */
   get lookingAway(): number | null { return this.away; }
 
+  // ---------------------------------------------------------------- free navigation
+
+  /**
+   * On a canvas slide, a look round the canvas by hand (drag to pan, scroll to zoom): the part in
+   * view, the part painted once to glide over (`sweep`, `f` times the screen's size), a sharp
+   * painting of the view once it stops moving, and the glide back to where the show was.
+   */
+  private free: { view: Rect; sweep: Rect; f: number; frames: SlideFrames | null; sharp: { id: string; frames: SlideFrames } | null; settled: boolean; back?: { from: Rect; to: Rect; t0: number } } | null = null;
+  private freeTimer = 0;
+  private freeRaf = 0;
+  /** The mini-map shows whatever the canvas says (the show's Map button). */
+  mapOn = false;
+
+  /** The slide showing is a canvas slide, so it can be looked round freely. */
+  get canLookRound(): boolean {
+    return !!this.deck.slides[this.i]?.canvas?.keys.length && this.moving?.kind !== 'transition';
+  }
+
+  /** Looking round by hand, away from where the show was. */
+  get lookingRound(): boolean { return this.free !== null && !this.free.back; }
+
+  /** The part of the canvas in view while looking round (canvas points), or null. */
+  get freeView(): Rect | null { return this.free?.view ?? null; }
+
+  /** Where the show's own view is now on a canvas slide. */
+  private showView(): Rect {
+    const keys = this.deck.slides[this.i].canvas!.keys, size = this.deck.size;
+    return keyRect(keys[this.away ?? this.keyAfter(this.done)] ?? keys[0], size);
+  }
+
+  /** Start looking round from where the show is (false: not a canvas slide). */
+  private lookRound(): boolean {
+    if (!this.canLookRound) return false;
+    if (this.free?.back) { cancelAnimationFrame(this.freeRaf); this.free.back = undefined; }
+    if (this.free) return true;
+    if (this.moving) this.finish();
+    const size = this.deck.size, c = this.deck.slides[this.i].canvas!;
+    const view = this.showView();
+    const b = this.deck.docOf(this.i).bounds();
+    const all = unionRect(keysBounds(c, size), b);
+    const m = 0.08 * Math.max(all.x2 - all.x1, all.y2 - all.y1);
+    const sweep = slideShaped({ x1: all.x1 - m, y1: all.y1 - m, x2: all.x2 + m, y2: all.y2 + m }, size);
+    const W = this.canvas.width, H = this.canvas.height;
+    const f = Math.max(1, Math.min((sweep.x2 - sweep.x1) / (view.x2 - view.x1), 3, Math.sqrt(36e6 / Math.max(1, W * H))));
+    this.free = { view, sweep, f, frames: null, sharp: null, settled: false };
+    return true;
+  }
+
+  /** Keep a view inside the canvas, no bigger than all of it and no smaller than a twelfth of a slide. */
+  private clampView(v: Rect): Rect {
+    const fr = this.free!, size = this.deck.size;
+    let w = v.x2 - v.x1;
+    w = Math.max(size.w / 12, Math.min(w, (fr.sweep.x2 - fr.sweep.x1) * 1.1));
+    const h = (w * size.h) / size.w;
+    let cx = (v.x1 + v.x2) / 2, cy = (v.y1 + v.y2) / 2;
+    cx = Math.max(fr.sweep.x1, Math.min(fr.sweep.x2, cx));
+    cy = Math.max(fr.sweep.y1, Math.min(fr.sweep.y2, cy));
+    return { x1: cx - w / 2, y1: cy - h / 2, x2: cx + w / 2, y2: cy + h / 2 };
+  }
+
+  private setFreeView(v: Rect): void {
+    const fr = this.free!;
+    fr.view = this.clampView(v);
+    fr.settled = false;
+    this.paint();
+    clearTimeout(this.freeTimer);
+    // once it stops moving, the view is painted sharp at the size it is seen
+    this.freeTimer = window.setTimeout(() => { if (this.free === fr && !fr.back) { fr.settled = true; this.paint(); } }, 180);
+    this.onChange();
+  }
+
+  /** Start looking round by hand from where the show is (a right-click, L, an action button). False: not a canvas slide. */
+  startLookRound(): boolean {
+    if (!this.lookRound()) return false;
+    this.paint();
+    this.onChange();
+    return true;
+  }
+
+  /** While looking round, move the view so canvas point `q` is in the middle (a click on the mini-map). */
+  centreOn(q: Vec): boolean {
+    if (!this.lookingRound) return false;
+    const v = this.free!.view, w = v.x2 - v.x1, h = v.y2 - v.y1;
+    this.setFreeView({ x1: q.x - w / 2, y1: q.y - h / 2, x2: q.x + w / 2, y2: q.y + h / 2 });
+    return true;
+  }
+
+  /** Drag the canvas by (dx, dy) CSS pixels. */
+  panBy(dx: number, dy: number): boolean {
+    if (!this.lookRound()) return false;
+    const v = this.free!.view, k = this.placeOf(v).k;
+    this.setFreeView({ x1: v.x1 - dx / k, y1: v.y1 - dy / k, x2: v.x2 - dx / k, y2: v.y2 - dy / k });
+    return true;
+  }
+
+  /** Zoom by `factor` (over 1: in) keeping the point (px, py) (CSS pixels) where it is; the middle of the slide when not given. */
+  zoomAt(factor: number, px?: number, py?: number): boolean {
+    if (!this.lookRound()) return false;
+    const v = this.free!.view, at = this.placeOf(v), size = this.deck.size;
+    const sx = px ?? at.x + (size.w * at.k) / 2, sy = py ?? at.y + (size.h * at.k) / 2;
+    const q = { x: v.x1 + (sx - at.x) / at.k, y: v.y1 + (sy - at.y) / at.k };
+    const z = 1 / factor;
+    this.setFreeView({ x1: q.x + (v.x1 - q.x) * z, y1: q.y + (v.y1 - q.y) * z, x2: q.x + (v.x2 - q.x) * z, y2: q.y + (v.y2 - q.y) * z });
+    return true;
+  }
+
+  /** Glide back from looking round to where the show was. False when not looking round. */
+  lookBack(): boolean {
+    const fr = this.free;
+    if (!fr || fr.back) return false;
+    clearTimeout(this.freeTimer);
+    fr.back = { from: fr.view, to: this.showView(), t0: performance.now() };
+    fr.settled = false;
+    const tick = () => {
+      if (this.free !== fr || !fr.back) return;
+      const p = Math.min(1, (performance.now() - fr.back.t0) / 450);
+      const e = ease(p), a = fr.back.from, b = fr.back.to;
+      fr.view = { x1: a.x1 + (b.x1 - a.x1) * e, y1: a.y1 + (b.y1 - a.y1) * e, x2: a.x2 + (b.x2 - a.x2) * e, y2: a.y2 + (b.y2 - a.y2) * e };
+      if (p >= 1) { this.free = null; this.paint(); this.onChange(); return; }
+      this.paint();
+      this.freeRaf = requestAnimationFrame(tick);
+    };
+    this.freeRaf = requestAnimationFrame(tick);
+    return true;
+  }
+
+  /** Stop looking round at once (a new slide). */
+  private dropFree(): void {
+    cancelAnimationFrame(this.freeRaf);
+    clearTimeout(this.freeTimer);
+    this.free = null;
+  }
+
+  /** The canvas slide seen where the hand has put the view. */
+  private drawFree(ctx: CanvasRenderingContext2D, t: number, fired: Map<string, { done: number; t: number }>): void {
+    const fr = this.free!, view = fr.view;
+    fr.frames ??= new SlideFrames({ ...this.deck.page(this.i), view: fr.sweep }, this.deck.docOf(this.i), this.animsOf(this.i), this.w * fr.f, this.h * fr.f, this.dpr, this.fill);
+    ctx.save();
+    this.drawUnder(ctx, view);
+    fr.frames.drawAt(ctx, this.placeOf(view), this.done, t, fired);
+    if (fr.settled) {
+      const id = [view.x1, view.y1, view.x2, view.y2].map((v) => v.toFixed(2)).join(' ');
+      if (fr.sharp?.id !== id) fr.sharp = { id, frames: new SlideFrames({ ...this.deck.page(this.i, this.keyNow), view }, this.deck.docOf(this.i), this.animsOf(this.i), this.w, this.h, this.dpr, this.fill) };
+      fr.sharp.frames.draw(ctx, this.done, t, fired);
+    }
+    this.drawOver(ctx, view, [], []);
+    ctx.restore();
+  }
+
   /** A canvas slide at keyframe `key`: its background, screen layer and drawing. */
   private drawKey(ctx: CanvasRenderingContext2D, key: number, t: number, fired: Map<string, { done: number; t: number }>): void {
     const k = this.deck.slides[this.i].canvas!.keys[key];
@@ -1185,6 +1377,7 @@ export class Player {
   /** Draw the slide showing, `t` seconds into the step being played (t < 0: none is). */
   private drawNow(ctx: CanvasRenderingContext2D, t: number, fired: Map<string, { done: number; t: number }>): void {
     if (!this.deck.slides[this.i]?.canvas) { this.current.draw(ctx, this.done, t, fired); return; }
+    if (this.free) { this.drawFree(ctx, t, fired); return; }
     const m = this.moving;
     if (m?.kind === 'fly') {
       this.drawMove(ctx, { from: m.from, to: m.to, p: Math.min(1, (performance.now() - m.t0) / 1000 / m.dur), move: 'fly' }, t, fired);
@@ -1312,6 +1505,7 @@ export class Player {
   /** A click: finish what is moving, else play the next animations, else go on to the next slide that isn't hidden. */
   next(): void {
     if (this.moving) { this.finish(); return; }
+    if (this.lookBack()) return;
     if (this.away !== null) { this.flyBack(); return; }
     if (this.done < this.current.stepCount) { this.playStep(); return; }
     if (this.beforeNextSlide()) return;
@@ -1324,6 +1518,7 @@ export class Player {
   /** Back: undo the last animations, else the previous slide with everything played. */
   prev(): void {
     if (this.moving) this.finish();
+    if (this.lookBack()) return;
     if (this.away !== null) { this.flyBack(); return; }
     if (this.done > 0 && !(this.done === 1 && this.current.steps[0]?.auto)) {
       this.done--;

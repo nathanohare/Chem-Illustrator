@@ -4,6 +4,7 @@
 // or to every slide (Apply to All), and Reset Background gives the slides the master's again.
 // A preview shows the slide as it will look; nothing changes until Apply, and Undo puts it back.
 
+import { foldIntoInfo } from './info-tip';
 import type { Image } from '../deck/deck';
 import {
   type Background, type GradientStop, type PatternId, type TileAlign, type TileMirror,
@@ -35,9 +36,9 @@ type Gradient = Extract<Background, { kind: 'gradient' }>;
 type Picture = Extract<Background, { kind: 'picture' }>;
 type Pattern = Extract<Background, { kind: 'pattern' }>;
 
-const KINDS: [Kind, string][] = [['solid', 'Solid colour'], ['gradient', 'Gradient'], ['picture', 'Picture or texture'], ['pattern', 'Pattern']];
+const KINDS: [Kind, string][] = [['solid', 'Solid color'], ['gradient', 'Gradient'], ['picture', 'Picture or texture'], ['pattern', 'Pattern']];
 const FITS: [Picture['fit'], string][] = [['stretch', 'Stretch to the slide'], ['fill', 'Fill the slide (keep proportions, cut the edges)'], ['fit', 'Fit in the slide (keep proportions, whole picture)'], ['tile', 'Tile as a texture']];
-const ALIGNS: [TileAlign, string][] = [['tl', 'Top left'], ['t', 'Top'], ['tr', 'Top right'], ['l', 'Left'], ['ctr', 'Centre'], ['r', 'Right'], ['bl', 'Bottom left'], ['b', 'Bottom'], ['br', 'Bottom right']];
+const ALIGNS: [TileAlign, string][] = [['tl', 'Top left'], ['t', 'Top'], ['tr', 'Top right'], ['l', 'Left'], ['ctr', 'Center'], ['r', 'Right'], ['bl', 'Bottom left'], ['b', 'Bottom'], ['br', 'Bottom right']];
 const MIRRORS: [TileMirror, string][] = [['none', 'None'], ['x', 'Side to side'], ['y', 'Top to bottom'], ['xy', 'Both']];
 const SHAPES: [Gradient['shape'], string][] = [['linear', 'Linear'], ['radial', 'Radial'], ['rect', 'Rectangular']];
 
@@ -64,6 +65,7 @@ export function formatBackground(o: BackgroundDialogOptions): Promise<Background
     const note = document.createElement('p');
     note.className = 'muted';
     note.textContent = o.design ? 'The background of the page.' : o.count > 1 ? `For the ${o.count} slides picked in the slide list, or every slide with Apply to All.` : 'For this slide, or every slide with Apply to All.';
+    foldIntoInfo(note, h);
     const preview = document.createElement('canvas');
     preview.className = 'bg-preview';
     const PW = 280, PH = Math.round(PW / Math.max(0.2, o.aspect));
@@ -157,7 +159,7 @@ export function formatBackground(o: BackgroundDialogOptions): Promise<Background
 
     // ------------------------------------------------ solid colour
     const solidBox = section();
-    row(solidBox, 'Colour', color(solid.color, (v) => { solid = { ...solid, color: v }; draw(); }));
+    row(solidBox, 'Color', color(solid.color, (v) => { solid = { ...solid, color: v }; draw(); }));
     row(solidBox, 'Transparency', clear(solid.transparency, (v) => { solid = { ...solid, transparency: v || undefined }; draw(); }));
 
     // ------------------------------------------------ gradient
@@ -195,7 +197,7 @@ export function formatBackground(o: BackgroundDialogOptions): Promise<Background
       }
       const head = document.createElement('div');
       head.className = 'bg-stops-head muted';
-      head.textContent = 'Colour stops: colour, how far along the gradient, and transparency';
+      head.textContent = 'Color stops: color, how far along the gradient, and transparency';
       gradControls.append(head);
       gradient.stops.forEach((s, k) => {
         const put = (v: Partial<GradientStop>) => { gradient = { ...gradient, stops: gradient.stops.map((x, j) => (j === k ? { ...x, ...v } : x)) }; draw(); };
@@ -213,7 +215,7 @@ export function formatBackground(o: BackgroundDialogOptions): Promise<Background
       const add = document.createElement('button');
       add.type = 'button';
       add.textContent = 'Add stop';
-      add.title = 'A new colour stop between the two farthest apart';
+      add.title = 'A new color stop between the two farthest apart';
       add.addEventListener('click', () => {
         const st = sortedStops(gradient.stops);
         let best = 0;

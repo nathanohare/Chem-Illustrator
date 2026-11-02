@@ -111,7 +111,7 @@ export const CYCLE_PRESETS: CyclePreset[] = [
     },
   },
   {
-    id: 'wacker', name: 'Wacker oxidation (Pd and Cu)', group: 'two', blurb: 'Palladium oxidises ethylene; copper(II) reoxidises Pd(0), and O₂ reoxidises copper.',
+    id: 'wacker', name: 'Wacker oxidation (Pd and Cu)', group: 'two', blurb: 'Palladium oxidizes ethylene; copper(II) reoxidises Pd(0), and O₂ reoxidises copper.',
     spec: {
       loops: [
         {

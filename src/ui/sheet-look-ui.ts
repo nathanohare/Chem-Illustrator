@@ -3,6 +3,7 @@
 // Headings, Total, Input, Output, the Accent styles and the number styles) and the workbook's
 // theme (its colours and fonts, Excel's Themes, Colours and Fonts menus).
 
+import { textAnglePic } from './select-gallery';
 import { popupMenu } from './sheet-view';
 import type { SheetView } from './sheet-view';
 import { ask } from './ask';
@@ -54,7 +55,7 @@ const heading = (text: string) => {
 /** The theme's colours (ten columns with their shades) for the top of a colour menu. */
 export function themeColourGrid(theme: WorkbookTheme, pick: (c: string) => void): HTMLElement {
   const box = document.createElement('div');
-  box.append(heading('Theme Colours'));
+  box.append(heading('Theme Colors'));
   const grid = document.createElement('div');
   grid.className = 'colour-grid theme-grid';
   const cols = themePalette(theme);
@@ -72,7 +73,7 @@ export function themeColourGrid(theme: WorkbookTheme, pick: (c: string) => void)
       grid.append(b);
     }
   }
-  box.append(grid, heading('Standard Colours'));
+  box.append(grid, heading('Standard Colors'));
   return box;
 }
 
@@ -115,12 +116,13 @@ export class SheetLook {
 
   orientationMenu(x: number, y: number): void {
     const cur = this.view.sheet?.styleAt(this.view.sel.active.r, this.view.sel.active.c)?.rotate;
-    const it = (label: string, deg: number | undefined): [string, () => void] => [`${cur === deg ? '✓ ' : ''}${label}`, () => this.style('Orientation', { rotate: deg })];
+    const it = (label: string, deg: number | undefined): [string, () => void, boolean, string] =>
+      [`${cur === deg ? '✓ ' : ''}${label}`, () => this.style('Orientation', { rotate: deg }), true, deg === 255 ? textAnglePic(0, true) : textAnglePic(deg ?? 0)];
     popupMenu(x, y, [
       it('Horizontal', undefined),
       it('Angle Counterclockwise', 45),
       it('Angle Clockwise', -45),
-      it('Vertical Text (stacked letters)', 255),
+      it('Vertical Text', 255),
       it('Rotate Text Up', 90),
       it('Rotate Text Down', -90),
       null,
@@ -209,7 +211,7 @@ export class SheetLook {
   }
 
   coloursMenu(x: number, y: number): void {
-    this.themeGallery(x, y, 'Colours', (t) => mixTheme(this.theme, t, null), (t) => this.setTheme(mixTheme(this.theme, t, null), `Theme colours: ${t.name}`));
+    this.themeGallery(x, y, 'Colors', (t) => mixTheme(this.theme, t, null), (t) => this.setTheme(mixTheme(this.theme, t, null), `Theme colors: ${t.name}`));
   }
 
   fontsMenu(x: number, y: number): void {

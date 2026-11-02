@@ -6,6 +6,7 @@
 
 import { Molecule, ConformerGenerator, ForceFieldMMFF94 } from 'openchemlib';
 import { choosePose, type DepthCues, type PoseProblem, type V3 } from './perspective';
+import { absoluteMolfile } from './model3d-build';
 
 export interface Pose {
   /** Every atom (the molfile's first, in its order, then added hydrogens), Å, the 3-D window's frame: x right, y up, z towards the reader. */
@@ -21,7 +22,7 @@ export type PoseResult = { pose: Pose } | { problem: PoseProblem | 'build'; mess
 
 const PROBLEM: Record<PoseProblem | 'build', string> = {
   build: 'No 3-D shape could be built for this structure.',
-  stereo: 'No 3-D shape keeps the stereocentres as they are drawn.',
+  stereo: 'No 3-D shape keeps the stereocenters as they are drawn.',
   hints: 'The wedges and bold bonds don\'t say which 3-D shape is meant (or no shape of this structure looks like that).',
 };
 
@@ -35,7 +36,7 @@ const viewOf = (m: Molecule): V3[] => {
 /** The drawing's shape in 3-D: up to `count` conformers are tried. */
 export function buildPose(molblock: string, cues: DepthCues, L: number, count = 8, seed = 1): PoseResult {
   const fail = (p: PoseProblem | 'build'): PoseResult => ({ problem: p, message: PROBLEM[p] });
-  const mol = Molecule.fromMolfile(molblock);
+  const mol = Molecule.fromMolfile(absoluteMolfile(molblock));
   if (!mol.getAllAtoms()) return fail('build');
   const gen = new ConformerGenerator(seed);
   if (!gen.initializeConformers(mol)) return fail('build');

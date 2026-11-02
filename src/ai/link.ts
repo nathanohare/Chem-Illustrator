@@ -20,14 +20,23 @@ export interface AiPrefs {
   model: string;
   /** For an OpenAI-compatible service: its address, such as http://localhost:11434/v1. */
   base: string;
+  /** Local only: nothing is sent to any address but this computer's own (a model in Ollama or LM Studio). */
+  localOnly: boolean;
+  /** The Assistant is switched on (it is off until the person turns it on). */
+  assistant: boolean;
+  /** How the Assistant shows: a prompt bar (the usual), a pane down the right, or a floating window. */
+  assistantLook?: AssistantLook;
 }
 
-export const DEFAULT_AI: AiPrefs = { provider: 'none', model: '', base: '' };
+export type AssistantLook = 'bar' | 'pane' | 'window';
+
+export const DEFAULT_AI: AiPrefs = { provider: 'none', model: '', base: '', localOnly: false, assistant: false };
 
 export function parseAiPrefs(v: unknown): AiPrefs {
   const r = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
   const provider = (['none', 'anthropic', 'openai', 'gemini', 'compatible'] as const).find((p) => p === r.provider) ?? 'none';
-  return { provider, model: typeof r.model === 'string' ? r.model.trim() : '', base: typeof r.base === 'string' ? r.base.trim() : '' };
+  return { provider, model: typeof r.model === 'string' ? r.model.trim() : '', base: typeof r.base === 'string' ? r.base.trim() : '', localOnly: r.localOnly === true, assistant: r.assistant === true,
+    ...(r.assistantLook === 'pane' || r.assistantLook === 'window' ? { assistantLook: r.assistantLook } : {}) };
 }
 
 interface ProviderInfo {
@@ -83,6 +92,24 @@ export function aiName(p: AiPrefs): string {
   if (p.provider === 'none') return 'No AI model';
   const name = p.provider === 'compatible' ? (safeHost(p.base) || 'Other') : PROVIDERS[p.provider].name;
   return `${name}, ${aiModel(p)}`;
+}
+
+/** Whether an address is this computer's own (localhost, 127.x.x.x or ::1), so a request to it never leaves the machine. */
+export function isLocalAddress(url: string): boolean {
+  try {
+    const h = new URL(url).hostname.toLowerCase().replace(/^\[|\]$/g, '');
+    return h === 'localhost' || h === '::1' || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(h);
+  } catch {
+    return false;
+  }
+}
+
+/** Why a request may not go, under Local only (null when it may). */
+export function localOnlyBlock(p: AiPrefs): string | null {
+  if (!p.localOnly || p.provider === 'none') return null;
+  const base = aiBase(p);
+  return isLocalAddress(base) ? null
+    : `Local only is on, so nothing is sent to ${safeHost(base) || 'that service'}. Link a model on this computer (Ollama or LM Studio, under Other) in Edit > Settings > AI Model, or turn Local only off there.`;
 }
 
 function safeHost(url: string): string {
@@ -240,11 +267,13 @@ const ANSWER_MS = 180_000;
 async function send(p: AiPrefs, req: AiRequest): Promise<unknown> {
   const base = aiBase(p);
   if (!base) throw new Error('Link an AI model first (Edit > Settings > AI Model).');
+  const blocked = localOnlyBlock(p);
+  if (blocked) throw new Error(blocked);
   let status = 0;
   let text: string;
   if (isTauri()) {
     const r = await invoke<{ status: number; body: string }>('ai_request', {
-      provider: p.provider, base, method: req.method, path: req.path, body: req.body === undefined ? null : JSON.stringify(req.body),
+      provider: p.provider, base, method: req.method, path: req.path, body: req.body === undefined ? null : JSON.stringify(req.body), localOnly: p.localOnly,
     });
     status = r.status; text = r.body;
   } else {

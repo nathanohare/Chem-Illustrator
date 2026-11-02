@@ -17,7 +17,7 @@ import { paraAt, paraRange } from './text/paragraphs';
 // ------------------------------------------------------------------ text
 
 /** What of a run is its look (not its words, figures, links, comments or tracked changes). */
-export const RUN_LOOK_KEYS = ['bold', 'italic', 'underline', 'sub', 'sup', 'formula', 'size', 'font', 'color', 'highlight', 'strike', 'spacing', 'smallCaps', 'allCaps', 'cstyle'] as const;
+export const RUN_LOOK_KEYS = ['bold', 'italic', 'underline', 'sub', 'sup', 'formula', 'size', 'font', 'color', 'highlight', 'strike', 'spacing', 'smallCaps', 'allCaps', 'cstyle', 'noKern', 'noFill', 'transparency', 'outline', 'outlineW', 'shadow'] as const;
 /** What of a paragraph is its look (not its breaks, section or bookmarks). */
 export const PARA_LOOK_KEYS = ['list', 'level', 'align', 'spaceBefore', 'spaceAfter', 'indent', 'style', 'firstLine', 'line', 'keepNext', 'indentRight', 'linePt', 'lineRule', 'tabs', 'scheme', 'bullet', 'border', 'shade'] as const;
 
@@ -90,7 +90,7 @@ const PICTURE_KEYS = ['look'] as const;
 
 /** Shapes whose outline and fill are their look (not tables, charts, equations, videos, or the invisible frames of diagrams). */
 const LOOK_KINDS = new Set<Shape['kind']>(['rect', 'oval', 'geo', 'ring', 'line', 'bracket', 'symbol']);
-const paintableShape = (s: Shape) => LOOK_KINDS.has(s.kind) && !s.energy && !s.diagram;
+const paintableShape = (s: Shape) => LOOK_KINDS.has(s.kind) && !s.energy && !s.diagram && !s.plate;
 const plainPicture = (s: Shape) => s.kind === 'picture' && !s.chart && !s.math && !s.video && !s.zoom;
 
 /** The look taken from things on a drawing: one of each kind, so a mixed selection paints each kind from its own. */

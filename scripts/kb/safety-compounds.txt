@@ -1,0 +1,272 @@
+# Compounds in the Knowledge Base's Reagent Safety and Physical Constants tables.
+# One per line: the name shown | the name (or CID:n) PubChem is asked for, when different | the
+# CAS number, when PubChem's record has none.
+# Kept to reagents, solvents and gases a synthetic lab actually uses.
+
+# Solvents
+Acetone
+Acetonitrile
+Benzene
+1-Butanol
+tert-Butyl methyl ether | methyl tert-butyl ether
+Carbon disulfide
+Carbon tetrachloride
+Chlorobenzene
+Chloroform
+Cyclohexane
+1,2-Dichloroethane
+Dichloromethane
+Diethyl ether
+Diisopropyl ether
+1,2-Dimethoxyethane
+N,N-Dimethylacetamide
+N,N-Dimethylformamide
+Dimethyl sulfoxide
+1,4-Dioxane
+Ethanol
+Ethyl acetate
+Ethylene glycol
+Formamide
+Heptane | n-heptane
+Hexane | n-hexane
+Hexamethylphosphoramide
+Isopropanol | 2-propanol
+Methanol
+2-Methyltetrahydrofuran
+N-Methyl-2-pyrrolidone
+Nitromethane
+Pentane | n-pentane
+Petroleum ether | CID:21889599
+Pyridine
+Tetrahydrofuran
+Toluene
+Triethylamine
+Water
+o-Xylene
+Acetic acid
+Trifluoroacetic acid
+1,1,1,3,3,3-Hexafluoro-2-propanol
+2,2,2-Trifluoroethanol
+Sulfolane
+Propylene carbonate
+
+# Acids, bases and salts
+Hydrochloric acid | hydrogen chloride
+Hydrobromic acid | hydrogen bromide
+Hydrofluoric acid | hydrogen fluoride
+Hydrogen fluoride pyridine | CID:2724467 | 62778-11-4
+Triethylamine trihydrofluoride
+Sulfuric acid
+Nitric acid
+Phosphoric acid
+Perchloric acid
+Methanesulfonic acid
+p-Toluenesulfonic acid
+Trifluoromethanesulfonic acid
+Fluorosulfonic acid | fluorosulfuric acid
+Chlorosulfonic acid
+Sodium hydroxide
+Potassium hydroxide
+Lithium hydroxide
+Ammonia
+Sodium bicarbonate
+Sodium carbonate
+Potassium carbonate
+Cesium carbonate
+Sodium chloride
+Ammonium chloride
+Sodium sulfate
+Magnesium sulfate
+Calcium chloride
+Potassium tert-butoxide
+Sodium methoxide
+Sodium ethoxide
+Sodium hydride
+Potassium hydride
+Calcium hydride
+1,8-Diazabicyclo[5.4.0]undec-7-ene | DBU
+N,N-Diisopropylethylamine
+4-Dimethylaminopyridine
+2,6-Lutidine
+Imidazole
+Piperidine
+Morpholine
+Diisopropylamine
+Hexamethyldisilazane
+Lithium diisopropylamide
+Lithium bis(trimethylsilyl)amide
+Sodium bis(trimethylsilyl)amide
+Potassium bis(trimethylsilyl)amide
+Tetrabutylammonium fluoride
+Cesium fluoride
+Potassium fluoride
+
+# Organometallics and hydrides
+n-Butyllithium | butyllithium
+sec-Butyllithium
+tert-Butyllithium
+Methyllithium
+Phenyllithium
+Methylmagnesium bromide
+Ethylmagnesium bromide
+Isopropylmagnesium chloride
+Diethylzinc
+Dimethylzinc
+Trimethylaluminum
+Triethylaluminum
+Diisobutylaluminum hydride
+Lithium aluminum hydride | lithium aluminium hydride
+Sodium borohydride
+Sodium cyanoborohydride
+Sodium triacetoxyborohydride
+Lithium borohydride
+Borane tetrahydrofuran complex | CID:6365270
+Borane dimethyl sulfide complex | borane dimethyl sulfide
+9-Borabicyclo[3.3.1]nonane | 9-BBN
+Lithium triethylborohydride
+Triethylsilane
+Tributyltin hydride
+Lithium | lithium metal
+Sodium | sodium metal
+Potassium | potassium metal
+Magnesium
+Zinc
+Raney nickel | CID:62619
+Palladium on carbon | palladium
+Platinum(IV) oxide | platinum dioxide
+Hydrogen
+Trimethylsilyl chloride | chlorotrimethylsilane
+
+# Oxidants
+Osmium tetroxide
+Potassium osmate | potassium osmate(VI) dihydrate
+Ruthenium tetroxide | ruthenium(VIII) oxide
+Potassium permanganate
+Chromium trioxide | chromium(VI) oxide
+Pyridinium chlorochromate | CID:46846327
+Pyridinium dichromate
+Potassium dichromate
+Sodium periodate
+Periodic acid
+Dess-Martin periodinane
+2-Iodoxybenzoic acid
+meta-Chloroperoxybenzoic acid | 3-chloroperbenzoic acid
+Hydrogen peroxide
+Urea hydrogen peroxide | CID:31296
+tert-Butyl hydroperoxide
+Oxone | potassium peroxymonosulfate
+Sodium hypochlorite
+Sodium chlorite
+Ozone
+Selenium dioxide
+Manganese dioxide | manganese(IV) oxide
+Lead tetraacetate | lead(IV) acetate
+Ceric ammonium nitrate | ceric ammonium nitrate
+2,3-Dichloro-5,6-dicyano-1,4-benzoquinone | DDQ
+TEMPO | 2,2,6,6-tetramethylpiperidine 1-oxyl
+N-Methylmorpholine N-oxide
+Benzoyl peroxide
+Silver nitrate
+Oxygen
+
+# Halogenating, alkylating and acylating agents
+Bromine
+Chlorine
+Iodine
+N-Bromosuccinimide
+N-Chlorosuccinimide
+N-Iodosuccinimide
+Iodomethane | methyl iodide
+Bromomethane | methyl bromide
+Dimethyl sulfate
+Diethyl sulfate
+Methyl triflate | methyl trifluoromethanesulfonate
+Trimethyloxonium tetrafluoroborate
+Benzyl bromide
+Benzyl chloride
+Allyl bromide
+Chloromethyl methyl ether
+Bis(chloromethyl) ether
+Ethylene oxide
+Propylene oxide
+Diazomethane
+Trimethylsilyldiazomethane | (trimethylsilyl)diazomethane
+Ethyl diazoacetate
+Thionyl chloride
+Oxalyl chloride
+Phosphorus oxychloride | phosphoryl chloride
+Phosphorus pentachloride
+Phosphorus tribromide
+Phosphorus pentoxide | phosphorus pentoxide
+Acetyl chloride
+Acetic anhydride
+Trifluoroacetic anhydride
+Triflic anhydride | trifluoromethanesulfonic anhydride
+Methanesulfonyl chloride
+p-Toluenesulfonyl chloride
+Benzoyl chloride
+Phosgene
+Triphosgene
+Diphosgene | trichloromethyl chloroformate
+Ethyl chloroformate
+Di-tert-butyl dicarbonate
+Carbonyldiimidazole | 1,1'-carbonyldiimidazole
+Dicyclohexylcarbodiimide | N,N'-dicyclohexylcarbodiimide
+1-Ethyl-3-(3-dimethylaminopropyl)carbodiimide
+Diethylaminosulfur trifluoride
+Boron tribromide
+Boron trifluoride diethyl etherate | boron trifluoride etherate
+Aluminum chloride | aluminium chloride
+Titanium tetrachloride | titanium tetrachloride
+Tin(IV) chloride | stannic chloride
+Trimethylsilyl trifluoromethanesulfonate
+tert-Butyldimethylsilyl chloride
+Hydrazine
+Hydroxylamine
+Hydrogen sulfide
+Carbon monoxide
+Nitrogen dioxide
+Sulfur dioxide
+Acrolein
+Formaldehyde
+Acrylonitrile
+Allyl alcohol
+Ethylene glycol dimethyl ether | CID:8071
+Methyl isocyanate
+Phenyl isocyanate
+
+# Cyanides, azides and other special hazards
+Sodium cyanide
+Potassium cyanide
+Hydrogen cyanide
+Trimethylsilyl cyanide
+Acetone cyanohydrin
+Copper(I) cyanide
+Sodium azide
+Diphenylphosphoryl azide
+Trimethylsilyl azide
+Phenol
+Mercury
+Mercury(II) chloride
+Dimethylmercury
+Thallium(I) acetate | thallium acetate
+Sodium nitrite
+Picric acid
+Ammonium nitrate
+Nickel(II) chloride | nickel chloride
+Cobalt(II) chloride | cobalt(II) chloride
+Tetrakis(triphenylphosphine)palladium(0)
+Palladium(II) acetate
+Triphenylphosphine
+Tributylphosphine
+Trimethylphosphine
+Tri-tert-butylphosphine
+Carbon tetrabromide
+Benzene-1,4-diol | hydroquinone
+Aniline
+Nitrobenzene
+Thiophenol | benzenethiol
+Ethanethiol
+Silica gel | silicon dioxide
+Sucrose
+Glucose

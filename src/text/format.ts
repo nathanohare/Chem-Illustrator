@@ -6,6 +6,7 @@ import type { Justify } from '../model';
 import type * as rt from '../richtext';
 import { TextEditing, type RichText } from './editing';
 import type { Measure } from './layout';
+import { stereoItalics } from './chemtext';
 
 export type TextFormat =
   | { kind: 'toggle'; key: rt.Toggle }
@@ -15,8 +16,14 @@ export type TextFormat =
   | { kind: 'list'; list: 'bullet' | 'number' }
   | { kind: 'indent'; by: 1 | -1 }
   | { kind: 'line'; v: number }
+  /** Space before or after the paragraphs, in points. */
+  | { kind: 'para'; patch: { spaceBefore?: number; spaceAfter?: number } }
+  /** The width the lines wrap to (none: they break only at Enter). */
+  | { kind: 'wrap'; w: number | undefined }
   | { kind: 'case'; mode: rt.CaseMode }
-  | { kind: 'clear' };
+  | { kind: 'clear' }
+  /** Stereodescriptors and prefixes such as (2R,3S)-, (E)-, cis-, tert-, n- in italics (or back, if they all are). */
+  | { kind: 'stereo' };
 
 /** PowerPoint's steps for Increase and Decrease Font Size. */
 export const FONT_STEPS = [8, 9, 10, 10.5, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 44, 48, 54, 60, 66, 72, 80, 88, 96];
@@ -38,8 +45,17 @@ export function applyFormat(ed: TextEditing, f: TextFormat): void {
     case 'list': ed.list(f.list); break;
     case 'indent': ed.indent(f.by); break;
     case 'line': ed.lineSpacing(f.v); break;
+    case 'para': ed.paraSpacing(f.patch); break;
+    case 'wrap': ed.setWrap(f.w); break;
     case 'case': ed.changeCase(f.mode); break;
     case 'clear': ed.clearFormatting(); break;
+    case 'stereo': {
+      // the selection, or the whole text when nothing is selected
+      const a = Math.min(ed.anchor, ed.focus), b = Math.max(ed.anchor, ed.focus);
+      const looks = ed.looks();
+      ed.fix(stereoItalics(ed.text, (i) => !!looks[i]?.italic, a === b ? 0 : a, a === b ? ed.text.length : b));
+      break;
+    }
   }
 }
 

@@ -3,6 +3,7 @@
 // Clicking or dragging over cells fills the last range box that had the focus (Excel's RefEdit),
 // with absolute references ($A$1:$B$9), and the sheet's name when the cells are on another sheet.
 
+import { addInfo } from './info-tip';
 import type { Range } from '../sheet/refs';
 import { colName, quoteSheet } from '../sheet/refs';
 
@@ -66,6 +67,11 @@ export class ToolWindow {
   /** The open window, if any (cell picks go to it). */
   static get open(): ToolWindow | null {
     return current && current.d.open ? current : null;
+  }
+
+  /** Help for the window, in an "i" beside its title. */
+  info(text: string): void {
+    addInfo(this.form.querySelector('h2'), text);
   }
 
   /** A line of text. */

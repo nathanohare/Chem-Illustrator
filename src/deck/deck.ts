@@ -8,6 +8,7 @@
 // on a slide is undone on that slide (the deck goes back to it), and adding, deleting or
 // moving slides, or changing the master, are undone too.
 
+import type { KeptParts } from '../io/kept-parts';
 import type { SlideView } from './guides';
 import type { HandoutSetup, NotesPageSetup } from './notes-pages';
 import { copyPinned, type PinnedComment } from '../document/comments';
@@ -21,7 +22,7 @@ import type { Transition, Anim } from './animation';
 import { clampZoom, copyCanvas, keyRect, newCanvas, syncCamera, type CanvasData, type Keyframe } from './canvas';
 import { backgroundColour, copyBackground, isPlain, sameBackground, solid, type Background } from './background';
 import type { ShowSetup, CustomShow } from './show-setup';
-import { fitEntries, lineGap, mergeReferences, refArea, slideRefBlock, type DeckRefs, type LaidLine, type Measure, type RefBlock, type RefListSpec, type RefLook } from './slide-refs';
+import { fitEntries, lineGap, mergeReferences, refArea, slideRefBlock, type DeckRefs, type LaidLine, type Measure, type RefBlock, type RefListSpec, type RefLook, type SlideRefs, type SlideZotero } from './slide-refs';
 import type { Reference } from '../document/references';
 
 /**
@@ -171,7 +172,7 @@ export const DECORS: { id: Decor; name: string }[] = [
   { id: 'title-rule', name: 'Rule under the title' },
   { id: 'corner', name: 'Triangles in the corner' },
   { id: 'footer-band', name: 'Band along the bottom' },
-  { id: 'frame', name: 'Frame round the slide' },
+  { id: 'frame', name: 'Frame around the slide' },
 ];
 
 /** The colours a slide with this layout uses: title slides can have their own. */
@@ -555,6 +556,8 @@ export interface Slide {
   refLook?: Partial<RefLook>;
   /** It is a References slide: it lists the deck's references and keeps the list up to date. */
   refList?: RefListSpec;
+  /** What Zotero last set on its references (citing with Zotero). */
+  zotero?: SlideZotero;
 }
 
 /**
@@ -571,7 +574,7 @@ export interface SectionCount { name: string; count: number }
 export type SizeFit = 'centre' | 'fit' | 'max';
 
 /** A slide's transition, animations, comments, own background and whether it is hidden, copied (for duplicates and the undo history). */
-export interface Motion { transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec }
+export interface Motion { transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec; zotero?: SlideZotero }
 const copyMotion = (m: Motion): Motion => ({
   ...(m.transition ? { transition: { ...m.transition } } : {}),
   ...(m.anims?.length ? { anims: m.anims.map((a) => ({ ...a, target: { ...a.target }, ...(a.trigger ? { trigger: { ...a.trigger } } : {}) })) } : {}),
@@ -583,7 +586,8 @@ const copyMotion = (m: Motion): Motion => ({
   ...(m.canvas?.keys.length ? { canvas: copyCanvas(m.canvas) } : {}),
   ...(m.refs?.length ? { refs: [...m.refs] } : {}),
   ...(m.refLook && Object.keys(m.refLook).length ? { refLook: { ...m.refLook } } : {}),
-  ...(m.refList ? { refList: { ...m.refList } } : {}),
+  ...(m.refList ? { refList: structuredClone(m.refList) } : {}),
+  ...(m.zotero ? { zotero: structuredClone(m.zotero) } : {}),
 });
 
 /** A slide copied out of a deck (Copy, or Reuse Slides): its layout, drawing, notes and the rest. */
@@ -649,6 +653,8 @@ export class Deck {
   folded = new Set<number>();
   /** Set Up Show, custom shows and the rest of the deck's own settings. */
   settings: DeckSettings = {};
+  /** Other programs' data in the file read (custom XML, custom properties, add-ins' settings), saved back with it. */
+  kept: KeptParts | undefined = undefined;
   /** The slide being edited; its drawing is in `host`. */
   index = -1;
   /** Called whenever the deck changes in a way the slide list or title bar should show. */
@@ -1823,6 +1829,41 @@ export class Deck {
     this.onSwitch();
     return s;
   }
+
+  /**
+   * References changed together, as citing with Zotero changes them: the deck's references and
+   * what slides (by id) say of them. With `join`, the change is part of the step before (one
+   * Zotero command is one step to undo).
+   */
+  setRefState(refs: DeckRefs | undefined, slides: Map<number, SlideRefs>, label = 'Zotero', join = false): void {
+    const keys = ['refs', 'refLook', 'refList', 'zotero'] as const;
+    const snap = (): { refs?: DeckRefs; slides: Map<number, SlideRefs> } => ({
+      ...(this.settings.refs ? { refs: structuredClone(this.settings.refs) } : {}),
+      slides: new Map(this.slides.map((s) => [s.id, structuredClone(Object.fromEntries(keys.filter((k) => s[k] !== undefined).map((k) => [k, s[k]]))) as SlideRefs])),
+    });
+    const put = (v: { refs?: DeckRefs; slides: Map<number, SlideRefs> }) => {
+      if (v.refs) this.settings.refs = structuredClone(v.refs); else delete this.settings.refs;
+      for (const s of this.slides) {
+        const got = v.slides.get(s.id);
+        if (!got) continue;
+        for (const k of keys) { if (got[k] !== undefined && !(k === 'refs' && !got.refs?.length)) (s as unknown as Record<string, unknown>)[k] = structuredClone(got[k]); else delete s[k]; }
+      }
+      this.looks++;
+      this.onSwitch();
+    };
+    const last = this.undoList[this.undoList.length - 1];
+    const joining = join && this.refJoin && last === this.refJoin.entry;
+    const before = joining ? this.refJoin!.before : snap();
+    if (joining) this.undoList.pop();
+    const after = snap();
+    if (refs) after.refs = structuredClone(refs); else delete after.refs;
+    for (const [id, v] of slides) after.slides.set(id, structuredClone(v));
+    put(after);
+    this.record(label, () => put(before), () => put(after));
+    this.refJoin = { entry: this.undoList[this.undoList.length - 1], before };
+  }
+  /** The last step setRefState made, and how things were before it (for the next change to join it). */
+  private refJoin: { entry: unknown; before: { refs?: DeckRefs; slides: Map<number, SlideRefs> } } | null = null;
 
   /** Change what a References slide lists. One undo step. */
   setRefList(spec: RefListSpec | undefined, i = this.index): void {

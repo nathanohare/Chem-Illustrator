@@ -195,7 +195,7 @@ describe('the Analysis panel\'s PubChem section', async () => {
 
   it('makes the captions', () => {
     expect(pubchemRuns('pcname', aspirin)).toEqual([{ text: 'Aspirin' }]);
-    expect(pubchemRuns('pccas', aspirin)).toEqual([{ text: 'CAS 50-78-2' }]);
+    expect(pubchemRuns('pccas', aspirin)).toEqual([{ text: 'CAS RN 50-78-2' }]);
     const h = pubchemRuns('pchaz', aspirin)!;
     expect(h[0]).toEqual({ text: 'Danger', bold: true });
     expect(h[1].text).toBe('\nH300+H310 Fatal if swallowed or in contact with skin\nH302 Harmful if swallowed\nH315 Causes skin irritation\nH318 Causes serious eye damage');

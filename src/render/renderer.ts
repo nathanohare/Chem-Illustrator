@@ -9,10 +9,11 @@ import { Doc, Atom, Bond, Arrow, PARTIAL, Caption, Shape, PICTURE_SHADOWS, pictu
 import { centredSpots, fullStyle, highlightPieces, highlightSizes, movePieces, tracePieces, type Piece } from './highlight';
 import { highlightFx, layerPaints, needsFx, patternMarks, regionOf, rgba, unionOf, type FxLayer, type FxPaint, type FxStep, type HighlightFx, type Region, shapeShadow } from './highlight-fx';
 import { ellipseArc, isCircleRing, ringCircle, ringsThroughBond, type RingCircle } from '../chem/aromatic';
+import { chainArc, piLooksOf } from '../chem/hapto';
 import { crossingGapsCached } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
-import { bondEndPrefs, doubleBondGap, wedgeWidth } from '../style';
+import { bondEndPrefs, doubleBondGap, mapLookPrefs, wedgeWidth } from '../style';
 import { depthFractions, depthShadePrefs, shadeLook, shadeStep } from './depth-shade';
 import { joinWideEnds, lineMitres, endTip, LINE_MITRE_LIMIT, type WideEnd, type EndJoin, type LineEnd } from './bond-joins';
 import { chargeInk, labelBonds, labelSpec, layoutLabel, LabelLayout, labelLook } from '../chem/labels';
@@ -21,7 +22,8 @@ import { isGenericLabel } from '../chem/labels';
 import { bracketPath, shaftOffset, shapeOrder, elbowRoute, boxOf, shapeBox, shapeMid, shapeTurn, bezPoints, bezHeadBack, bezPathAt, bezSlice, type PathStep } from '../objects';
 import { atomStereoText, bondStereoText, shownDescriptor, axialStyle, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
-import { attachDiamondSize, hasAttachDiamond } from './atom-marks';
+import { attachDiamondSize, attachStarSize, hasAttachDiamond, isMapNumber, mapBox } from './atom-marks';
+import { paintMapBox } from './map-box';
 import { layoutText, FONT_STACK, withStack, type TextLayout } from '../text/layout';
 import { drawLayout } from '../text/draw';
 import { geoDef, moveSteps, textArea, traceSteps, type GeoStep } from '../design/geo';
@@ -31,7 +33,7 @@ import { imageFor } from './images';
 import { hasShapeFx, shapeFx, type ShapeFxPaints } from './shape-fx';
 import { fxCanvas, fxSrc, shapeDef, traceShape } from './picture-fx';
 import { layoutTable, drawTable, type TableLayout, type TablePart } from '../table';
-import type { TableData } from '../model';
+import type { TableData, TextRun } from '../model';
 import { repeatLabelPlace } from '../chem/polymer';
 import { paintChartBox } from './chart-box-paint';
 import { paintShapeMath } from '../deck/equation';
@@ -49,6 +51,8 @@ export interface PageDecor {
 
 /** Words shown in an empty placeholder on screen. */
 const PROMPTS = { title: 'Click to add title', subtitle: 'Click to add subtitle', body: 'Click to add text' };
+/** What a Smart Scheme's dashed species box says on screen. */
+const HOLDER_HINT: { runs: TextRun[] } = { runs: [{ text: 'Draw the structure here, or select the box and paste', color: '#8a909b' }] };
 
 /** Something that can record a picture instead of drawing it (the vector recorder). */
 interface PictureSink { picture(s: Shape, radius?: number): void }
@@ -83,6 +87,11 @@ interface BondCache {
   trim2: number;
   /** An aromatic bond drawn with a circle: the circles of the rings it is in. */
   circles?: RingCircle[];
+  /**
+   * A bond of a π-system bonded to a metal as one (η³ and up), drawn delocalized: one line, and
+   * its stretch of the ring's circle or the allyl's arc.
+   */
+  pi?: { circle?: RingCircle; arc?: { from: Vec; ctrl: Vec; to: Vec } }[];
 }
 
 let mctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
@@ -147,6 +156,8 @@ export class Renderer {
   width = 0;
   height = 0;
   showWarnings = true;
+  /** How a warning is marked on the drawing (Settings ▸ Preferences). */
+  warnLook: WarnLook = 'disc';
   /** The drawing's chemistry warnings, drawn as red boxes when `showWarnings` is on. */
   checks: StructureChecks | null = null;
   /**
@@ -160,6 +171,8 @@ export class Renderer {
   lastSceneMs = 0;
   /** Drawing on screen for editing: empty placeholders show their prompts. */
   screen = false;
+  /** The drawing window: a Smart Scheme's dashed species boxes say how to fill them (never in pictures or print). */
+  holderHints = false;
   /** Drawn under everything (a slide and its master). */
   page: PageDecor | null = null;
   /** Placeholder text formatting of the document being drawn. */
@@ -275,6 +288,8 @@ export class Renderer {
       for (let d = 0; d < 4 && frontier.length; d++) {
         const next: number[] = [];
         for (const id of frontier) {
+          // a multicentre point changed (bonded to a metal, or switched to Kekulé form): its ring's bonds are drawn again
+          for (const m of doc.atoms.get(id)?.multi ?? []) if (!seen.has(m)) { seen.add(m); next.push(m); }
           for (const bid of doc.adj.get(id) ?? []) {
             this.bondCache.delete(bid);
             const b = doc.bonds.get(bid);
@@ -323,6 +338,11 @@ export class Renderer {
       const m = doc.style.marginWidth * k;
       for (const b of layout.boxes) boxes.push({ x1: a.x + b.x1 - m, y1: a.y + b.y1 - m, x2: a.x + b.x2 + m, y2: a.y + b.y2 + m });
     }
+    // a star point of attachment: the bond stops short of its asterisk, as at a label
+    if (a.attach === 'Star') {
+      const h = attachStarSize(size) + doc.style.marginWidth * k;
+      boxes.push({ x1: a.x - h, y1: a.y - h, x2: a.x + h, y2: a.y + h });
+    }
     c = { layout, boxes };
     if (layout?.charge !== undefined) {
       // a bond is cut short at the charge only where it would touch the sign itself
@@ -336,10 +356,32 @@ export class Renderer {
     return c;
   }
 
+  /** Which side a double bond's second line is drawn on: +1 to the right of a1→a2 on screen, −1 the left, 0 centred. */
+  doubleSide(doc: Doc, b: Bond): number {
+    return this.bondInfo(doc, b).side;
+  }
+
   private bondInfo(doc: Doc, b: Bond): BondCache {
     let c = this.bondCache.get(b.id);
     if (c) return c;
     c = { side: 0, trim1: 0, trim2: 0 };
+    // a ring or allyl bonded to a metal as one, drawn delocalized (the bonds stay as they are)
+    if ((b.order === 1 || b.order === 2 || (b.order === 1.5 && !b.circle)) && (b.display ?? 'solid') === 'solid') {
+      const looks = piLooksOf(doc, b);
+      if (looks.length) {
+        const gap = doubleBondGap(doc.style) * (b.s ?? 1);
+        c.pi = looks.flatMap((lk) => {
+          if (lk.kind === 'ring') return [{ circle: ringCircle(doc, lk.ring) }];
+          const pieces = chainArc(lk.chain.map((id) => doc.atoms.get(id)!), gap);
+          if (!pieces) return [{}];
+          // this bond's stretch of the curve
+          const k = lk.chain.findIndex((id, i) => i + 1 < lk.chain.length && ((id === b.a1 && lk.chain[i + 1] === b.a2) || (id === b.a2 && lk.chain[i + 1] === b.a1)));
+          return k < 0 ? [{}] : pieces[k].map((arc) => ({ arc }));
+        });
+        this.bondCache.set(b.id, c);
+        return c;
+      }
+    }
     if (b.order === 1.5 && b.circle) {
       c.circles = ringsThroughBond(doc, b.id).filter((r) => isCircleRing(doc, r)).map((r) => ringCircle(doc, r));
     } else if (b.order === 2 || b.order === 1.5) {
@@ -454,7 +496,7 @@ export class Renderer {
       if (!o) continue;
       const k = b.s ?? 1, ds = doc.style;
       let h = (ds.lineWidth * k) / 2;
-      if (b.order === 1 || b.order === PARTIAL || b.display === 'dative') {
+      if (b.order === 1 || b.order === PARTIAL || b.display === 'dative' || this.bondInfo(doc, b).pi) {
         if (b.display === 'dative' || b.display === 'dash' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy') continue;
         if (b.display === 'bold') h = (ds.boldWidth * k) / 2;
         else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: ds.boldWidth * k }) / 2;
@@ -710,11 +752,36 @@ export class Renderer {
   /** The atom number shown with the ' key, on the open side of the atom or its label. */
   private drawAtomNumber(ctx: CanvasRenderingContext2D, doc: Doc, a: Atom, curFont: string): string {
     const p = this.stereoPlacer(doc).number(a);
-    const f = `${p.size}px ${FONT_STACK}`;
+    let f = `${p.size}px ${FONT_STACK}`;
+    let ink = a.color ?? '#000';
+    if (isMapNumber(a)) {
+      // an atom-map number: in a small box (Chemistry ▸ Map Atoms), in the chosen look
+      const look = paintMapBox(ctx, mapBox(p, measureText(a.atomNumber!, p.size)), a.mapNo!, doc.style.lineWidth, mapLookPrefs.look, mapLookPrefs.custom);
+      ink = look.ink;
+      if (look.bold) f = `bold ${f}`;
+    }
     if (f !== curFont) { ctx.font = f; curFont = f; }
-    ctx.fillStyle = a.color ?? '#000';
+    ctx.fillStyle = ink;
     ctx.fillText(a.atomNumber!, p.x, p.y);
     return curFont;
+  }
+
+  /** A star point of attachment: an asterisk of three lines crossing where the bond ends. */
+  private drawAttachStar(ctx: CanvasRenderingContext2D, doc: Doc, a: Atom): void {
+    const k = a.s ?? 1;
+    const r = attachStarSize(doc.style.labelSize * k);
+    ctx.save();
+    ctx.strokeStyle = a.color ?? '#000';
+    ctx.lineWidth = doc.style.lineWidth * k;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const t = (90 + 60 * i) * DEG, dx = Math.cos(t) * r, dy = Math.sin(t) * r;
+      ctx.moveTo(a.x - dx, a.y - dy);
+      ctx.lineTo(a.x + dx, a.y + dy);
+    }
+    ctx.stroke();
+    ctx.restore();
   }
 
   /** A numbered point of attachment: a black diamond with the number in white. */
@@ -850,7 +917,7 @@ export class Renderer {
         const ab = a.color ? undefined : back?.get(a.id);
         ctx.fillStyle = a.color ?? (ab !== undefined ? shadeLook(shadeStep(ab)).color : '#000');
         for (const r of info.layout.runs) {
-          const f = `${r.size}px ${this.labelStack}`;
+          const f = `${r.italic ? 'italic ' : ''}${r.size}px ${this.labelStack}`;
           if (f !== curFont) { ctx.font = f; curFont = f; }
           ctx.fillText(r.text, a.x + r.dx, a.y + r.dy);
         }
@@ -859,6 +926,7 @@ export class Renderer {
       }
       if (a.showNumber && a.atomNumber) curFont = this.drawAtomNumber(ctx, doc, a, curFont);
       if (hasAttachDiamond(a)) curFont = this.drawAttachDiamond(ctx, doc, a, curFont);
+      if (a.attach === 'Star') this.drawAttachStar(ctx, doc, a);
       if (checks?.forAtom(a)) warns.push(this.warningBox(doc, a, info));
     }
     curFont = this.drawStereoLabels(ctx, doc, atoms, bondSet, curFont);
@@ -882,11 +950,60 @@ export class Renderer {
       else if (mark) this.drawChemMark(ctx, r);
     }
 
-    if (warns.length) {
-      ctx.strokeStyle = WARN_COLOR;
+    if (warns.length) this.drawWarnMarks(ctx, warns);
+  }
+
+  /**
+   * Mark what has a warning, in the look chosen in Settings ▸ Preferences: a soft red disc (the
+   * default), the thin red box, a circle, a dashed circle or corner marks. Round looks go round an
+   * atom and make a rounded band along a bond or text.
+   */
+  private drawWarnMarks(ctx: CanvasRenderingContext2D, warns: Rect[]): void {
+    const look = this.warnLook;
+    ctx.save();
+    ctx.strokeStyle = ctx.fillStyle = WARN_COLOR;
+    if (look === 'box') {
       ctx.lineWidth = 0.5;
       for (const w of warns) ctx.strokeRect(w.x1, w.y1, w.x2 - w.x1, w.y2 - w.y1);
+      ctx.restore();
+      return;
     }
+    if (look === 'corners') {
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      for (const w of warns) {
+        const p = 1, x1 = w.x1 - p, y1 = w.y1 - p, x2 = w.x2 + p, y2 = w.y2 + p;
+        const k = Math.min(x2 - x1, y2 - y1) * 0.35;
+        ctx.moveTo(x1, y1 + k); ctx.lineTo(x1, y1); ctx.lineTo(x1 + k, y1);
+        ctx.moveTo(x2 - k, y1); ctx.lineTo(x2, y1); ctx.lineTo(x2, y1 + k);
+        ctx.moveTo(x2, y2 - k); ctx.lineTo(x2, y2); ctx.lineTo(x2 - k, y2);
+        ctx.moveTo(x1 + k, y2); ctx.lineTo(x1, y2); ctx.lineTo(x1, y2 - k);
+      }
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    // round: a circle round a square (an atom), a band with round ends round anything longer
+    const round = (w: Rect, pad: number) => {
+      const x1 = w.x1 - pad, y1 = w.y1 - pad, x2 = w.x2 + pad, y2 = w.y2 + pad;
+      const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, ww = x2 - x1, hh = y2 - y1;
+      if (Math.abs(ww - hh) < Math.min(ww, hh) * 0.3) { ctx.moveTo(cx + Math.max(ww, hh) * 0.62, cy); ctx.arc(cx, cy, Math.max(ww, hh) * 0.62, 0, Math.PI * 2); return; }
+      const r = Math.min(ww, hh) / 2;
+      ctx.moveTo(x1 + r, y1);
+      ctx.arcTo(x2, y1, x2, y2, r); ctx.arcTo(x2, y2, x1, y2, r); ctx.arcTo(x1, y2, x1, y1, r); ctx.arcTo(x1, y1, x2, y1, r);
+      ctx.closePath();
+    };
+    ctx.beginPath();
+    for (const w of warns) round(w, look === 'disc' ? 1.2 : 0.8);
+    if (look === 'disc') {
+      ctx.globalAlpha = 0.22;
+      ctx.fill();
+    } else {
+      ctx.lineWidth = 0.75;
+      if (look === 'dashed') ctx.setLineDash([2, 1.6]);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /** The red box around an atom with a warning: around its whole label, or a small square on a bare carbon. */
@@ -1107,6 +1224,32 @@ export class Renderer {
     if (p.attach === 'Wavy') attachWave(thin, p, nrm, st.bondLength);
     if (q.attach === 'Wavy') attachWave(thin, q, nrm, st.bondLength);
 
+    // a ring or allyl bonded to a metal as one: a plain line, and its stretch of the circle or arc
+    const pi = this.bondInfo(doc, b).pi;
+    if (pi) {
+      line(thin, s, e);
+      for (const x of pi) {
+        if (x.arc) {
+          thin.moveTo(x.arc.from.x, x.arc.from.y);
+          thin.quadraticCurveTo(x.arc.ctrl.x, x.arc.ctrl.y, x.arc.to.x, x.arc.to.y);
+          continue;
+        }
+        if (!x.circle) continue;
+        const { center, radius, ellipse } = x.circle;
+        if (ellipse) {
+          ellipseArc(center, ellipse, p, q).forEach((pt, k) => (k ? thin.lineTo(pt.x, pt.y) : thin.moveTo(pt.x, pt.y)));
+          continue;
+        }
+        const a1 = angleOf(sub(p, center)), a2 = angleOf(sub(q, center));
+        let da = a2 - a1;
+        while (da > Math.PI) da -= 2 * Math.PI;
+        while (da < -Math.PI) da += 2 * Math.PI;
+        thin.moveTo(center.x + Math.cos(a1) * radius, center.y + Math.sin(a1) * radius);
+        thin.arc(center.x, center.y, radius, a1, a1 + da, da < 0);
+      }
+      return;
+    }
+
     // an aromatic ring drawn with a circle: a plain line, and the stretch of each ring's circle
     // that faces this bond
     if (b.order === 1.5 && b.circle) {
@@ -1250,7 +1393,7 @@ export class Renderer {
 
   private drawShape(ctx: CanvasRenderingContext2D, s: Shape, lw: number, labelSize = 10): void {
     const rot = shapeTurn(s);
-    if (!rot) { this.drawFlatShape(ctx, s, lw, labelSize); return; }
+    if (!rot) { this.drawFlatShape(ctx, s, lw, labelSize); if (s.dotted) ctx.lineCap = 'butt'; return; }
     // a turned shape (Slides and Design): drawn level, turned about its middle
     ctx.save();
     turnAt(ctx, shapeMid(s), rot);
@@ -1264,7 +1407,8 @@ export class Renderer {
     ctx.lineWidth = s.bold ? lw * 2.5 : lw;
     ctx.strokeStyle = s.color ?? '#000';
     ctx.fillStyle = s.color ?? '#000';
-    ctx.setLineDash(s.dashed ? [lw * 3, lw * 3] : []);
+    ctx.setLineDash(s.dotted ? [0.01, lw * 2.6] : s.dashed ? [lw * 3, lw * 3] : []);
+    if (s.dotted) ctx.lineCap = 'round';
     ctx.beginPath();
     switch (s.kind) {
       case 'picture': this.drawPicture(ctx, s, x, y, w, h); break;
@@ -2215,6 +2359,12 @@ export class Renderer {
     if (s.text && this.geoEdit !== s.id) {
       const g = this.geoText(s);
       if (g) drawLayout(ctx, g.lay, g.x, g.y);
+    } else if (s.holder && (this.screen || this.holderHints)) {
+      // a Smart Scheme species waiting for its structure says how, on screen only, small
+      const x1 = Math.min(s.x1, s.x2), x2 = Math.max(s.x1, s.x2), y1 = Math.min(s.y1, s.y2), y2 = Math.max(s.y1, s.y2);
+      const lay = layoutText({ runs: HOLDER_HINT.runs, justify: 'center', wrap: Math.max(4, x2 - x1 - 4) }, 0.62 * this.captionSize, (t, sz, family, style) => measureText(t, sz, family, style));
+      const th = lay.box.y2 - lay.box.y1;
+      if (th < y2 - y1) drawLayout(ctx, lay, x1 + 2, (y1 + y2) / 2 - th / 2 - lay.box.y1);
     }
   }
 
@@ -2470,6 +2620,10 @@ export function attachWave(path: Path2D, at: Vec, across: Vec, bondLength: numbe
 }
 
 const WARN_COLOR = '#e0141e';
+
+/** The looks a warning's mark can take (Settings ▸ Preferences). */
+export const WARN_LOOKS = ['disc', 'box', 'circle', 'dashed', 'corners'] as const;
+export type WarnLook = (typeof WARN_LOOKS)[number];
 const CHEM_MARK_COLOR = '#1f8a7a';
 
 /**

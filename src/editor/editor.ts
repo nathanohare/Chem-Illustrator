@@ -2,19 +2,25 @@
 // pan. The editor changes the document and asks for a repaint; hover and drawing previews
 // only repaint the overlay layer.
 
+import { guideAt, guideLines, movedGuide, snapToGuides, ticksBetween, type GuideLine as CanvasGuideLine } from './guides';
+import { DEFAULT_CURSOR_AIDS, drawCursorAids, hintLines, modifierHints, readoutText, type CursorAidPrefs, type HintState, type Mods } from './cursor-aids';
 import { Sketcher } from './sketch';
 import { installPenAndTouch } from './touch';
 import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAtom, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
 import { CaptionEditor } from '../ui/caption-editor';
 import { followLink, linkTip } from '../ui/links-ui';
 import { stopAtEdge } from '../ui/scrollbars';
+
+/** Screen pixels of grey left showing past a fixed page edge when panned as far as it goes. */
+export const WALL_BAND = 14;
 import { linkAtPoint } from '../links';
 import { typingPrefs } from '../text/typing';
 import { geoDef, geoShapeStyle, moveSteps, traceSteps } from '../design/geo';
+import { distinctChoices } from '../chem/template-choices';
 import { TEMPLATES, Template, Placement, templateById, templatePoints, placePoint, fusePlacements, atomPlacements, freePlacement, crowdingOf, placeTemplate, snap15 } from '../chem/templates';
 import { fusions3d } from '../chem/fuse3d';
-import { bondHapto, centreEnd, haptoTarget, haptoText, splitHapto } from '../chem/hapto';
-import { expandLigand, expandWithMolblock, labelSmiles, ligandTemplateFor } from '../chem/expand';
+import { bondHapto, centreEnd, haptoLook, haptoTarget, haptoText, splitHapto } from '../chem/hapto';
+import { expandInPlace, expandLigand, expandWithMolblock, freeLigandFor, inPlaceSmiles, labelSmiles, ligandTemplateFor } from '../chem/expand';
 import { styleFromFace, plainText } from '../richtext';
 import * as rt from '../richtext';
 import { applyFormat, formatWhole, type TextFormat } from '../text/format';
@@ -43,26 +49,35 @@ import { extractDrawing, insertDrawing } from '../io/clipboard';
 import { isReactionArrow, itemFinder, rolesOf, ROLES, schemeItems, type Item, type Role } from '../chem/reaction';
 import { applySchemePlan, planCleanUp } from '../chem/scheme-layout';
 import { adoptSideCaption, arrowTexts, helperBox, setSideText, sideSlot, takesHelpers, textJustify, textSize, type ArrowSide } from '../chem/arrow-text';
-import { schemePrefs } from '../chem/scheme-layout';
+import { prefsOf, schemePrefs, spacing } from '../chem/scheme-layout';
+import { arrowEnd, boxOf, productDrawing, pushArrowsOf, pushedAtoms, readPushes, type PushIssue, type PushReading } from '../chem/push-electrons';
+import { freeSpace } from './free-space';
 import { fillRings, refitRingFills, ringFillsOn } from '../chem/ring-fill';
 import { setMethylStyle, toggleChainEndLabels, toggleExplicitHydrogens, type MethylStyle } from '../chem/hydrogens';
 import { selectedGroup } from '../chem/group-smiles';
 import { groupMembers, groupSelection, selectedGroups, ungroupSelection, withGroups } from './groups';
 import { circleRing, circleRings, kekulize } from '../chem/aromatic';
-import { bondLayer, crossingBonds } from '../chem/crossing';
+import { bondLayer, crossingBonds, layerByDepth } from '../chem/crossing';
+import { RING_VIEW_NAMES, stepRing, viewNow, viewRingOf, type RingStep } from '../chem/ring-views';
 import { nextNumber as nextCompound, planNumbers, type NumberOptions } from '../chem/compound-numbers';
 import { arrowClash, bendSide, cleanUpArrow, endCentre, endPointToward, headEnd, isAtomSymbol, pushArrow, pushEndAt, pushPins, sameEnd, symbolAt, symbolPin, symbolSpot, tailEnd, SMALL_HEAD, type PushArrow, type PushEnd } from '../chem/mechanism';
 import { followPins, hasPins, makePin, mirrorBend } from '../chem/pins';
 import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '../chem/scheme-arrange';
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
+import { rebuildSmartCycle, smartCycleStart, type SmartCycleStart } from '../chem/smart-cycle';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
+import { arrangeSmart, formatSmart, stepToHolder, stepHolderToText, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
+import type { SmartFormat } from '../chem/smart-format';
+import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
+import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
+import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
-import { Align, Measure, POINTS, Snapshot, type TurnText, units, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
+import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
-import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, CAP, SUB_SCALE } from '../chem/labels';
+import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
 import {
   Handle, type HandleId, arrowHit, shapeHit, arrowHandles, shapeHandles, dragArrowHandle, dragShapeHandle, dragCropHandle, shapeBox, shapeMid, shapeTurn,
   arrowPoints, bracketHalves, type BracketForm, bracketLip, unionRect,
@@ -72,9 +87,10 @@ import { bezFrom, fitPath, dragCurveAt, throughPoints, dragPathPoint, firstBend,
 import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
 import { imageFor } from '../render/images';
+import { gridOffsets, inferGrid, sharedAnchors, usualGap, withLabels, type GridHow } from './grid-arrange';
 import { BEND, BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
 import { flatten, prepareTurn, stillMeans, structuresOf, type PerspectiveHost, type Prepared } from './perspective';
-import { anglesTurn, dragTurn, type M3 } from '../chem/perspective';
+import { anglesTurn, dragTurn, IDENT as IDENT_TURN, type M3 } from '../chem/perspective';
 import type { TextEditing } from '../text/editing';
 
 export type Tool =
@@ -100,7 +116,9 @@ export type Tool =
   /** Freehand with the pen: lines become bonds, loops rings, letters labels, a scribble erases (sketch.ts). */
   | { kind: 'sketch' }
   /** Drag a structure to turn it in perspective: as a flat sheet, or (`real`) its true 3-D shape (perspective.ts). */
-  | { kind: 'perspective'; real: boolean };
+  | { kind: 'perspective'; real: boolean }
+  /** Click a single bond for its Newman projection: the end clicked nearer is in front (newman.ts). */
+  | { kind: 'newman' };
 
 /** Marks put on atoms for mechanisms: a lone pair, a radical's dot, a circled charge, or δ+ / δ−. */
 export type SymbolKind = 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus' | 'DeltaPlus' | 'DeltaMinus';
@@ -115,6 +133,9 @@ export type ArrowStyle = Partial<Pick<Arrow, 'headStyle' | 'tailStyle' | 'headTy
   connector?: boolean;
 };
 
+/** New arrows' line width and head length and width, in points (null: from the drawing style). */
+export interface ArrowLook { width: number | null; headLength: number | null; headWidth: number | null }
+
 /** How a new shape looks. */
 export type ShapeStyle = Partial<Omit<Shape, 'id' | 'kind' | 'x1' | 'y1' | 'x2' | 'y2'>> & { kind: 'line' | 'rect' | 'oval' | 'geo' };
 
@@ -127,6 +148,7 @@ export const TOOLS: Record<string, Tool> = {
   sketch: { kind: 'sketch' },
   perspective: { kind: 'perspective', real: false },
   'perspective-3d': { kind: 'perspective', real: true },
+  newman: { kind: 'newman' },
   'bond-single': { kind: 'bond', order: 1, display: 'solid' },
   'bond-double': { kind: 'bond', order: 2, display: 'solid' },
   'bond-triple': { kind: 'bond', order: 3, display: 'solid' },
@@ -230,7 +252,7 @@ interface Drag {
   shift: boolean;
   alt: boolean;
   ctrl: boolean;
-  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'reshape' | 'turn3d';
+  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'reshape' | 'turn3d' | 'guide';
   last: Vec;
   panOrigin?: { ox: number; oy: number };
   /** The arrow or shape handle being dragged. */
@@ -261,6 +283,10 @@ interface Drag {
   joinTo?: number;
   /** Turning structures in perspective (the Perspective tools). */
   persp?: PerspDrag;
+  /** A guide being dragged: which, and by its middle or one of its lines. */
+  guideGrab?: { index: number; part: 'middle' | 'x' | 'y' };
+  /** Moving with guides: the grabbed atom's (or bond end's) place where the move began. */
+  grabbed?: Vec;
 }
 
 /** A drag with a Perspective tool: the structures, once ready (a 3-D shape may be building), and the drag so far in screen pixels. */
@@ -293,18 +319,39 @@ interface TemplateChoice {
   note?: string;
 }
 
-const HILITE = 'rgba(40, 120, 255, 0.28)';
-const PREVIEW = '#2f6fdf';
+let PREVIEW = '#2f6fdf';
 
 /**
- * Colours of the marks drawn over the page. With View > Dark Page on, the marks go through the
+ * Colours of the marks drawn over the page. With View > Reading Mode on, the marks go through the
  * page's colour filter too (so text being typed shows in the ink colour), which turns lightness
  * round: these are picked to come out bright and clear on the dark page.
  */
-const MARKS = {
-  light: { selFill: 'rgba(40, 120, 255, 0.18)', selLine: 'rgba(40, 120, 255, 0.35)', hot: HILITE, box: 'rgba(47, 111, 223, 0.55)', hover: 'rgba(40,120,255,0.7)', marquee: '#333', next: '#19a34a' },
-  dark: { selFill: 'rgba(0, 70, 190, 0.34)', selLine: 'rgba(0, 70, 190, 0.6)', hot: 'rgba(0, 70, 190, 0.5)', box: 'rgba(0, 60, 158, 0.9)', hover: 'rgba(0, 60, 158, 0.95)', marquee: '#000', next: '#0b6b2f' },
+const marksIn = (light: [number, number, number], dark: [number, number, number]) => {
+  const a = (c: [number, number, number], o: number) => `rgba(${c.join(', ')}, ${o})`;
+  return {
+    light: { selFill: a(light, 0.18), selLine: a(light, 0.35), hot: a(light, 0.28), box: a(light, 0.55), hover: a(light, 0.7), marquee: '#333', next: '#19a34a' },
+    dark: { selFill: a(dark, 0.34), selLine: a(dark, 0.6), hot: a(dark, 0.5), box: a(dark, 0.9), hover: a(dark, 0.95), marquee: '#000', next: '#0b6b2f' },
+  };
 };
+const BLUE_MARKS = marksIn([40, 120, 255], [0, 70, 190]);
+let MARKS = BLUE_MARKS;
+
+/**
+ * Draw the selection, hover and drawing previews in `hex` (Canvas mode's teal, so the marks
+ * match the mode's accent), or in the usual blue (null).
+ */
+export function setMarkTint(hex: string | null): void {
+  if (!hex || !/^#[0-9a-f]{6}$/i.test(hex)) {
+    MARKS = BLUE_MARKS;
+    PREVIEW = '#2f6fdf';
+    return;
+  }
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) as [number, number, number];
+  // the Reading Mode page turns lightness round, so its marks are a darker shade that comes out bright
+  const dark = c.map((v) => Math.round(v * 0.55)) as [number, number, number];
+  MARKS = marksIn(c, dark);
+  PREVIEW = hex;
+}
 
 /** A highlight setting the Chemistry menu and Highlight toolbox turn on and off. */
 export type HighlightToggle = 'smooth' | 'centre' | 'soft' | 'shadow' | 'glow' | 'outline';
@@ -339,6 +386,12 @@ export class Editor {
   /** Preferences from the settings file. */
   /** With one reaction arrow selected, outline what its starting materials, products and conditions are. */
   showRoles = true;
+  /**
+   * Enter finishes typing and Alt+Enter starts a new line (Settings ▸ Preferences; main.ts knows
+   * the mode): for text from the Text tool ('text'), or text in a shape, a table cell or a
+   * slide's title and text placeholders ('other').
+   */
+  enterFinishesText: (what: 'text' | 'other') => boolean = () => false;
 
   options = {
     /** The pen sketches whatever tool is picked (View > Window and Colours > Touch Mode > Pen Always Sketches). */
@@ -363,9 +416,28 @@ export class Editor {
     groupOutline: true,
     /** Mechanism arrows left running into something by a change find their own way round (Edit > Settings). */
     rerouteArrows: true,
+    /** Draw Next Intermediate and Check Arrows are offered (Edit > Settings ▸ Drawing). */
+    arrowProducts: true,
   };
+  /**
+   * New arrows' line width and head size, in points, apart from the bonds' line width (the
+   * drawing style's, Drawing Style ▸ Reaction arrows); null for the usual: the style's line
+   * width, and a head ten line widths long and 2.5 wide.
+   */
+  get arrowLook(): ArrowLook {
+    const s = this.doc.style;
+    return { width: s.arrowWidth ?? null, headLength: s.arrowHeadLength ?? null, headWidth: s.arrowHeadWidth ?? null };
+  }
+  /** The line width new arrows get. */
+  arrowWidth(): number { return this.arrowLook.width ?? this.doc.style.lineWidth; }
   /** Tell the person something in the status bar. */
   say: (msg: string) => void = () => {};
+  /** The angle and length beside the pointer while drawing, and the modifier keys' hints (Settings ▸ Drawing). */
+  aids: CursorAidPrefs = { ...DEFAULT_CURSOR_AIDS };
+  /** The units lengths beside the pointer are written in (the rulers'). */
+  lengthUnits: () => 'in' | 'cm' = () => this.aids.units;
+  /** The modifier keys held now (for the hints beside the pointer). */
+  private mods: Mods = { shift: false, alt: false, ctrl: false };
   /** Run a menu command by name; false when it doesn't apply, so the key does nothing. */
   runCommand: (name: string) => boolean = () => false;
   /** The Choose Nickname list, for =. */
@@ -374,6 +446,8 @@ export class Editor {
   onProperties: () => void = () => {};
   /** A double-click on an energy diagram: open its numbers (the frame's id). */
   onEnergy: (id: number) => void = () => {};
+  /** A double-click on a TLC plate or gel: open its lanes (the frame's id). */
+  onPlate: (id: number) => void = () => {};
   /** A double-click on a diagram away from its words: open its text and look (the frame's id). */
   onDiagram: (id: number) => void = () => {};
   /** A chart (on a slide or drawing) was double-clicked: open its data and settings. */
@@ -385,6 +459,8 @@ export class Editor {
   private drag: Drag | null = null;
   /** Something is being dragged (moved, rotated or resized) right now. */
   get dragging(): boolean { return !!this.drag?.moved; }
+  /** Text is being typed into a caption or label. */
+  captionOpen(): boolean { return !!this.captionEd?.isOpen; }
   private needScene = true;
   private needOverlay = true;
   private frameQueued = false;
@@ -413,6 +489,14 @@ export class Editor {
   perspectiveHost: PerspectiveHost | null = null;
   /** The fragmentation tool drew a line from p to q across these bonds (the app works out the masses). */
   onFragment: (p: Vec, q: Vec, bonds: number[]) => void = () => {};
+  /** The Newman tool clicked a bond (`front`: the end clicked nearer). */
+  onNewman: (bond: number, front: number) => void = () => {};
+  /** A Newman projection double-clicked (its frame), to open its window again. */
+  onNewmanEdit: (frame: number) => void = () => {};
+  /** A torsional energy chart double-clicked (its frame): change its look. */
+  onTorsionEdit: (frame: number) => void = () => {};
+  /** Linked Newman projections whose structure just changed (their frames), to be worked out again. */
+  onNewmanStale: (frames: number[]) => void = () => {};
   /** The atom most recently drawn or changed (its structure is analysed when nothing is selected). */
   lastEdited: number | null = null;
   /** The last label typed in an atom's label box (with its raised and lowered marks), for Repeat Label. */
@@ -494,15 +578,29 @@ export class Editor {
       if (this.drag?.button === 2) this.pendingContext = e;
       else if (!this.rightDragged) this.onContextMenu(e);
     });
-    window.addEventListener('keydown', (e) => this.onKey(e));
+    window.addEventListener('keydown', (e) => { if (!this.freeAngleKey(e)) this.onKey(e); });
+    window.addEventListener('keyup', (e) => this.freeAngleKey(e));
+    window.addEventListener('blur', () => { this.spaceHeld = false; });
     // holding Ctrl over the selection shows that a drag will copy it
     const ctrlKey = (e: KeyboardEvent) => { if (e.key === 'Control' || e.key === 'Meta') this.showPointer(e.type === 'keydown'); };
     window.addEventListener('keydown', ctrlKey);
     window.addEventListener('keyup', ctrlKey);
+    // the hints beside the pointer follow Shift, Alt and Ctrl as they go down and up
+    const modKeys = (e: KeyboardEvent) => {
+      if (!/^(Shift|Alt|Control|Meta)$/.test(e.key)) return;
+      this.setMods(e);
+    };
+    window.addEventListener('keydown', modKeys);
+    window.addEventListener('keyup', modKeys);
+    window.addEventListener('blur', () => this.setMods({ shiftKey: false, altKey: false, ctrlKey: false, metaKey: false }));
     // frames that follow what they surround are refitted as each change finishes
     doc.beforeCommit = (before) => {
-      let frames = false, rings = false, tied = false, energy = false, tables = false, diagrams = false;
-      for (const s of this.doc.shapes.values()) { if (s.frame?.fit) frames = true; if (s.kind === 'ring') rings = true; if (s.energy) energy = true; if (s.kind === 'table') tables = true; if (s.diagram) diagrams = true; }
+      let frames = false, rings = false, tied = false, energy = false, tables = false, diagrams = false, plates = false, smart = false, newman = false, torsion = false;
+      for (const s of this.doc.shapes.values()) { if (s.frame?.fit) frames = true; if (s.kind === 'ring') rings = true; if (s.energy) energy = true; if (s.plate) plates = true; if (s.kind === 'table') tables = true; if (s.diagram) diagrams = true; if (s.smart) smart = true; if (s.newman?.link) newman = true; if (s.torsion) torsion = true; }
+      // a linked Newman projection's viewing mark follows its bond; a changed structure is worked out again after
+      if (newman) { const stale = refitNewman(this.doc, before); if (stale.length) queueMicrotask(() => this.onNewmanStale(stale)); }
+      // a torsion chart's barrier arrow or number dragged to the side: the pair moves together
+      if (torsion) refitTorsion(this.doc, this.fullMeasure(), before);
       for (const c of this.doc.captions.values()) if (c.attach) { tied = true; break; }
       // ring fills first, then labels beside their structures: a frame round a structure takes in both
       if (rings) refitRingFills(this.doc, before);
@@ -511,10 +609,13 @@ export class Editor {
       if (tied) refitAttached(this.doc, before, this.measure());
       // an energy diagram resized by hand is drawn again to fill its frame, before frames refit
       if (energy) refitEnergy(this.doc, before, this.measure());
+      if (plates) refitPlates(this.doc, before, this.measure());
       // a diagram resized by hand is drawn again in its new box; words typed into its shapes go into its text
       if (diagrams) refitDiagrams(this.doc, before, this.measure());
       // structures in a diagram's items: room kept for them (the diagram growing to fit), and centred there
       if (diagrams) refitDiagramFigures(this.doc, before, this.measure());
+      // a Smart Scheme's species moved by hand: its arrows and their conditions follow
+      if (smart) { fillHoldersDrawn(this.doc, before, this.measure()); refitSmart(this.doc, before, this.measure()); }
       if (frames) refitFrames(this.doc, before, this.measure());
       // mechanism arrows the change left running into something find their own way round again
       if (this.options.rerouteArrows) this.rerouteArrows(before);
@@ -549,6 +650,7 @@ export class Editor {
     this.frameQueued = false;
     const t0 = performance.now(), dragging = !!this.drag;
     if (this.needScene) {
+      this.keepByWalls();
       this.r.renderScene(this.doc, full ? Infinity : 10);
       this.needScene = this.r.incomplete;
     }
@@ -842,6 +944,14 @@ export class Editor {
 
   private onDown(e: PointerEvent): void {
     this.commitLabel();
+    // Alt+click on a locked structure (Slides) edits it this once: the lock lifts for this press
+    // and comes back when the button is let go
+    if (this.structuresLocked && e.altKey && e.button === 0) {
+      this.structuresLocked = false;
+      const h = this.hitTestNow(this.docPoint(e));
+      if (h?.kind === 'atom' || h?.kind === 'bond') this.relockAfter = true;
+      else this.structuresLocked = true;
+    }
     // a press on the text being typed (or its width handle) goes to the text
     const cap = this.captionEd;
     if (cap && e.button === 2 && cap.hit(this.docPoint(e)) === 'text') {
@@ -869,6 +979,11 @@ export class Editor {
         void followLink(link);
         return;
       }
+    }
+    // a click on a selected Smart Scheme's + adds a species there
+    if (e.button === 0 && !e.shiftKey && !e.altKey) {
+      const add = this.smartAddAt(this.docPoint(e));
+      if (add) { e.preventDefault(); this.closeCaption(); this.smartInsert(add.frame, add.after); return; }
     }
     // a click on a "+" box above or below a reaction arrow starts the text there
     // (Alt+click goes to what is under the box instead)
@@ -914,6 +1029,9 @@ export class Editor {
       ...(e.pointerType === 'pen' ? { pen: true } : {}),
     };
     if (handle) this.drag.handle = handle;
+    // the selection tool on a guide (where nothing else is): the guide is dragged
+    const gh = e.button === 0 && !handle && !rotating && !painting && !hit && this.tool.kind === 'select' ? this.guideUnder(p) : null;
+    if (gh) { this.drag.mode = 'guide'; this.drag.guideGrab = gh; }
     // a curved arrow tool on a selected S-shaped (or longer) arrow's line: dragging there reshapes it
     if (e.button === 0 && !handle && !rotating && !painting && !e.shiftKey && hit?.kind === 'arrow' && this.curvedTool() && this.isSelected(hit)) {
       const r = this.pathArrow(hit.id);
@@ -947,6 +1065,7 @@ export class Editor {
   private onMove(e: PointerEvent): void {
     const p = this.wallPoint(this.docPoint(e));
     this.pointer = p;
+    this.setMods(e, false);
     this.lastClient = { x: e.clientX, y: e.clientY };
     // (a card or menu closing over the drawing leaves the mouse on it without a pointerenter)
     this.pointerInside = true;
@@ -983,6 +1102,8 @@ export class Editor {
       const slot = near && (!h || h.kind === 'arrow' && h.id === near.id) ? near : null;
       if (slot?.id !== this.helperHover?.id || slot?.side !== this.helperHover?.side) this.helperHover = slot;
       this.showPointer(e.ctrlKey || e.metaKey);
+      const gh = !h && !handle && !onRotate && !slot && this.tool.kind === 'select' ? this.guideUnder(p) : null;
+      if (gh) this.r.overlay.style.cursor = gh.part === 'middle' ? 'move' : gh.part === 'x' ? 'col-resize' : 'row-resize';
       if (slot) this.r.overlay.style.cursor = 'pointer';
       this.requestOverlay(e.timeStamp);
       return;
@@ -1031,6 +1152,21 @@ export class Editor {
       if (d.mode === 'pan') this.r.overlay.style.cursor = 'grabbing';
     }
     if (!d.moved) return;
+    if (d.mode === 'guide') {
+      const g = this.doc.guides, gg = d.guideGrab!;
+      const x = g?.list[gg.index];
+      if (g && x) {
+        // a guide snaps to the drawing's major ticks (from its top left) unless Alt is held
+        const at = e.altKey || g.snapOff ? p : { x: Math.round(p.x / g.minor) * g.minor, y: Math.round(p.y / g.minor) * g.minor };
+        const list = g.list.slice();
+        list[gg.index] = movedGuide(x, gg.part, at);
+        this.doc.guides = { ...g, list };
+        this.onGuides();
+      }
+      d.last = p;
+      this.requestOverlay(e.timeStamp);
+      return;
+    }
     if (d.mode === 'pan') {
       this.r.view.ox = d.panOrigin!.ox + (sp.x - d.startScreen.x);
       this.r.view.oy = d.panOrigin!.oy + (sp.y - d.startScreen.y);
@@ -1057,6 +1193,18 @@ export class Editor {
           to = { x: upDown ? 0 : g.offset.x, y: across ? 0 : g.offset.y };
           // (a straight move keeps only the guides along its way)
           this.guideLines = g.lines.filter((l) => !(across && l.y1 === l.y2 && l.x1 !== l.x2) && !(upDown && l.x1 === l.x2 && l.y1 !== l.y2));
+        }
+      }
+      // the drawing's guides: the atom or bond end grabbed goes onto a guide and its ticks (Alt: off)
+      this.guideSnapped = [];
+      if (this.guidesSnap() && !e.altKey) {
+        if (!d.grabbed) { const g0 = this.grabbedPoint(d); if (g0) d.grabbed = sub(g0, done); }
+        if (d.grabbed) {
+          const target = add(d.grabbed, to);
+          const sn = snapToGuides(target, this.doc.guides!, guideLines(this.doc.guides!, this.viewArea()), this.tol(6));
+          const across = want.y === 0 && e.shiftKey, upDown = want.x === 0 && e.shiftKey;
+          to = { x: upDown ? to.x : to.x + sn.at.x - target.x, y: across ? to.y : to.y + sn.at.y - target.y };
+          this.guideSnapped = sn.on;
         }
       }
       // the grid and drawing guides (Slides; Alt: off)
@@ -1158,7 +1306,9 @@ export class Editor {
       this.requestScene(e.timeStamp);
       return;
     }
-    if (d.mode === 'draw' && this.tool.kind === 'symbol') { d.alt = e.altKey; d.shift = e.shiftKey; }
+    // Alt (any angle) and Shift (a square or circle) count while held, not only when pressed first
+    if (d.mode === 'draw' && this.liveMods()) { d.alt = e.altKey; d.shift = e.shiftKey; }
+    if (this.freeAngleTool(d)) d.alt = e.altKey || this.spaceHeld;
     d.last = p;
     d.path?.push(p);
     this.hover = this.hitTest(p);
@@ -1192,6 +1342,7 @@ export class Editor {
       case 'fragment':
         return 'draw';
       case 'sketch':
+      case 'newman':
         return 'none';
       case 'perspective':
         return 'marquee';
@@ -1218,7 +1369,11 @@ export class Editor {
     this.requestScene();
   }
 
+  /** The structures were unlocked for one Alt+click: lock them again when it ends. */
+  private relockAfter = false;
+
   private onUp(e: PointerEvent): void {
+    if (this.relockAfter) queueMicrotask(() => { this.relockAfter = false; this.structuresLocked = true; this.lastHit = null; });
     const d = this.drag;
     this.drag = null;
     if (!d) return;
@@ -1245,6 +1400,15 @@ export class Editor {
       if (ctx && !d.moved) this.onContextMenu(ctx);
     }
     if (d.mode === 'pan') { this.requestScene(e.timeStamp); return; }
+    if (d.mode === 'guide') {
+      // a guide dropped outside the drawing area goes, as in PowerPoint
+      const rect = this.r.overlay.getBoundingClientRect();
+      const out = e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom;
+      const g = this.doc.guides;
+      if (out && g) { this.doc.guides = { ...g, list: g.list.filter((_, i) => i !== d.guideGrab!.index) }; this.onGuides(); }
+      this.requestOverlay(e.timeStamp);
+      return;
+    }
     if (d.mode === 'route') {
       // a point dragged out: the arrow runs through it the way it was dragged
       if (d.moved) this.routePoint(d.start, sub(d.last, d.start));
@@ -1288,7 +1452,8 @@ export class Editor {
     }
     if (!d.moved) this.click(d, p);
     else if (d.mode === 'draw') {
-      if (this.tool.kind === 'symbol') { d.alt = e.altKey; d.shift = e.shiftKey; }
+      if (this.liveMods()) { d.alt = e.altKey; d.shift = e.shiftKey; }
+      if (this.freeAngleTool(d)) d.alt = e.altKey || this.spaceHeld;
       this.finishDraw(d, p);
     }
     this.hover = this.hitTest(p);
@@ -1340,6 +1505,12 @@ export class Editor {
     // any part of an energy diagram (but a structure put on it) opens its numbers
     const diagram = h && h.kind !== 'atom' && h.kind !== 'bond' && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? energyFrameOf(this.doc, h.kind, h.id) : null;
     if (diagram !== null) { this.selectOnly({ kind: 'shape', id: diagram }); this.onEnergy(diagram); return; }
+    const newman = h && h.kind !== 'atom' && h.kind !== 'bond' && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? newmanFrameOf(this.doc, h.kind, h.id) : null;
+    if (newman !== null) { this.selectOnly({ kind: 'shape', id: newman }); this.onNewmanEdit(newman); return; }
+    const chart = h && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? torsionFrameOf(this.doc, h.kind, h.id) : null;
+    if (chart !== null) { this.selectOnly({ kind: 'shape', id: chart }); this.onTorsionEdit(chart); return; }
+    const plate = h && h.kind !== 'atom' && h.kind !== 'bond' && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? plateFrameOf(this.doc, h.kind, h.id) : null;
+    if (plate !== null) { this.selectOnly({ kind: 'shape', id: plate }); this.onPlate(plate); return; }
     // a SmartArt-style diagram: its words are typed into in place, as in PowerPoint; anywhere else opens its text and look
     const smart = h && (h.kind === 'arrow' || h.kind === 'shape') ? diagramFrameOf(this.doc, h.kind, h.id) : null;
     if (smart !== null) {
@@ -1410,6 +1581,24 @@ export class Editor {
 
   /** What the wheel scrolls over: it stops at this (with half a screen of room) as the scroll bars do. */
   scrollArea: (() => { x1: number; y1: number; x2: number; y2: number } | null) | null = null;
+  /**
+   * Panning and zooming stop with a thin band of grey past a fixed page edge (`WALL_BAND` screen
+   * pixels), rather than half a window of it. Where the pages are narrower or shorter than the
+   * window, they keep to the left and top fixed edges and the spare room opens to the right and down.
+   */
+  private keepByWalls(): void {
+    const w = this.walls?.();
+    if (!w) return;
+    const v = this.r.view, s = v.scale, band = WALL_BAND;
+    const keep = (o: number, lo1: number, hi2: number, size: number) => {
+      const hi = isFinite(lo1) ? band - lo1 * s : Infinity;
+      const lo = isFinite(hi2) ? size - band - hi2 * s : -Infinity;
+      return lo > hi ? hi : Math.min(Math.max(o, lo), hi);
+    };
+    v.ox = keep(v.ox, w.x1, w.x2, this.r.width);
+    v.oy = keep(v.oy, w.y1, w.y2, this.r.height);
+  }
+
   /** The fixed edges of the drawing's page grid (page-grid.ts): nothing is put or moved past them. Null: none. */
   walls: (() => Rect | null) | null = null;
 
@@ -1544,6 +1733,14 @@ export class Editor {
         // a click on a structure picked it (startTurn); on empty space it lets go of everything
         if (!h) { this.sel = emptySel(); this.onChange(); }
         else if (h.kind !== 'atom' && h.kind !== 'bond') { this.selectOnly(h); this.onChange(); }
+        return;
+      }
+      case 'newman': {
+        // a bond's projection, looking from the end clicked nearer
+        if (h?.kind !== 'bond') { this.onNotice('Click a single bond: its Newman projection is drawn looking from the end you click nearer.'); return; }
+        const b = doc.bonds.get(h.id)!, a1 = doc.atoms.get(b.a1)!, a2 = doc.atoms.get(b.a2)!;
+        const near1 = Math.hypot(d.start.x - a1.x, d.start.y - a1.y) <= Math.hypot(d.start.x - a2.x, d.start.y - a2.y);
+        this.onNewman(h.id, near1 ? b.a1 : b.a2);
         return;
       }
       case 'fragment': {
@@ -1737,8 +1934,8 @@ export class Editor {
         const c = placePoint(pl, 0, 0);
         return Math.sign(dot(sub(c, mid), n)) === Math.sign(dot(sub(start, mid), n)) ? 0 : 0.01;
       };
-      return rank(fusePlacements(t, p, q), new Set([p.id, q.id]), side).map((pl) => (
-        { pl, existing: new Map([[t.fuse![0], nearest(pl, t.fuse![0], [p.id, q.id])], [t.fuse![1], nearest(pl, t.fuse![1], [p.id, q.id])]]), scale: b.s }));
+      return distinctChoices(doc, t, rank(fusePlacements(t, p, q), new Set([p.id, q.id]), side).map((pl) => (
+        { pl, existing: new Map([[t.fuse![0], nearest(pl, t.fuse![0], [p.id, q.id])], [t.fuse![1], nearest(pl, t.fuse![1], [p.id, q.id])]]), scale: b.s })), true);
     }
     if (h && h.kind === 'atom') {
       const a = doc.atoms.get(h.id)!;
@@ -1748,15 +1945,15 @@ export class Editor {
       if (t.onMetal) byBond = false;
       else if (!byBond && doc.degree(a.id) >= 3) byBond = true;
       const dir = cursor && dist(cursor, a) > L * 0.3 ? norm(fromAngle(snapAngle(angleOf(sub(cursor, a))))) : byBond ? sproutDir(doc, a.id) : ringDir(doc, a.id);
-      return rank(atomPlacements(t, a, dir, L, byBond), new Set([a.id])).map((pl) => (
-        byBond ? { pl, existing: new Map(), bondFrom: a.id, scale: a.s } : { pl, existing: new Map([[t.attach, a.id]]), scale: a.s }));
+      return distinctChoices(doc, t, rank(atomPlacements(t, a, dir, L, byBond), new Set([a.id])).map((pl): TemplateChoice => (
+        byBond ? { pl, existing: new Map(), bondFrom: a.id, scale: a.s } : { pl, existing: new Map([[t.attach, a.id]]), scale: a.s })), true);
     }
     const L = doc.style.bondLength;
     let angle = 0;
     if (cursor && dist(cursor, start) > L * 0.3) angle = alt ? angleOf(sub(cursor, start)) : snap15(angleOf(sub(cursor, start)));
     // as drawn, mirrored top to bottom, mirrored left to right, and turned round
-    return [[false, 0], [true, 0], [true, Math.PI], [false, Math.PI]].map(([mirror, turn]) => (
-      { pl: { ...freePlacement(start, L, angle + (turn as number)), mirror: mirror as boolean }, existing: new Map() }));
+    return distinctChoices(doc, t, [[false, 0], [true, 0], [true, Math.PI], [false, Math.PI]].map(([mirror, turn]): TemplateChoice => (
+      { pl: { ...freePlacement(start, L, angle + (turn as number)), mirror: mirror as boolean }, existing: new Map() })), false);
   }
 
   /**
@@ -1865,7 +2062,7 @@ export class Editor {
     const rest = sel.filter((a) => !isMetalAtom(a));
     if (metals.length !== 1 || rest.length < 2) return 'Select one metal and the atoms of the ring or π-bond it is bonded to (two or more).';
     const m = metals[0];
-    doc.edit('Bond Metal to Ring', () => {
+    doc.edit('Add Hapto Bond', () => {
       for (const a of rest) { const b = doc.bondBetween(m.id, a.id); if (b) doc.removeBond(b.id); }
       bondHapto(doc, m.id, rest.map((a) => a.id));
     });
@@ -1905,6 +2102,83 @@ export class Editor {
     return `Split into ${n} bonds.`;
   }
 
+  /**
+   * The multicentre points (η³ and up) of what is picked: hapto bonds, metals with them, and
+   * atoms of a bonded ring or allyl (or the right-clicked bond).
+   */
+  haptoCentresPicked(contextBond: number | null = null): number[] {
+    const doc = this.doc;
+    const out = new Set<number>();
+    const big = (c: Atom | undefined | null) => !!c?.multi && c.multi.length >= 3;
+    const fromBond = (bid: number) => { const b = doc.bonds.get(bid); const c = b && centreEnd(doc, b); if (big(c)) out.add(c!.id); };
+    for (const bid of this.sel.bonds) {
+      fromBond(bid);
+      const b = doc.bonds.get(bid);
+      if (b) for (const cid of doc.centresOf.get(b.a1) ?? []) if (doc.atoms.get(cid)?.multi?.includes(b.a2) && big(doc.atoms.get(cid))) out.add(cid);
+    }
+    for (const aid of this.sel.atoms) {
+      for (const bid of doc.adj.get(aid) ?? []) fromBond(bid);
+      for (const cid of doc.centresOf.get(aid) ?? []) if (big(doc.atoms.get(cid)) && doc.adj.get(cid)?.length) out.add(cid);
+    }
+    if (contextBond !== null) fromBond(contextBond);
+    return [...out];
+  }
+
+  /** Chemistry > Structure > Kekulé Form for η Ligand: the picked η³–η⁸ ligands drawn with their double bonds, or delocalized again. */
+  toggleHaptoKekule(contextBond: number | null = null): string {
+    const ids = this.haptoCentresPicked(contextBond);
+    if (!ids.length) return 'Select an η ligand\'s ring or allyl, its hapto bond, or the metal.';
+    const doc = this.doc;
+    const kekule = !ids.every((id) => doc.atoms.get(id)?.kekule);
+    doc.edit(kekule ? 'Kekulé Form' : 'Delocalized Form', () => { for (const id of ids) doc.updateAtom(id, { kekule: kekule || undefined }); });
+    this.changed();
+    return kekule ? 'Drawn with its double bonds (Kekulé form).' : (haptoLook.delocalized ? 'Drawn delocalized again.' : 'Drawn delocalized when that is on in Settings ▸ Drawing.');
+  }
+
+  /**
+   * Redraw the selected six-membered ring flat, as a chair, the other chair or a boat, or walk
+   * it round one place: the molecule and its stereochemistry stay the same (ring-views.ts).
+   * Returns what to say.
+   */
+  ringStep(step: RingStep): string {
+    const doc = this.doc;
+    const got = viewRingOf(doc, this.sel.atoms.size ? this.sel.atoms : this.hover?.kind === 'atom' ? [this.hover.id] : []);
+    if (!('ring' in got)) return got.why;
+    const vr = got.ring;
+    const walking = step === 'cw' || step === 'ccw';
+    let view = viewNow(doc, vr).view;
+    doc.edit(walking ? 'Walk Ring' : step === 'flip' ? 'Ring Flip' : 'Ring Shape', () => {
+      view = stepRing(doc, vr, step);
+      layerByDepth(doc, [...vr.ring, ...vr.subs.map((x) => x.first)]);
+    });
+    this.changed();
+    const subs = vr.subs.length > 0;
+    if (walking) return `Walked one place ${step === 'cw' ? 'clockwise' : 'counterclockwise'}. Tab goes on, [ goes back, Shift+Tab flips the chair.`;
+    if (view === 'flat') return 'Drawn flat. Tab: chair.';
+    const name = RING_VIEW_NAMES[view];
+    return view === 'boat'
+      ? `${name}. ${subs ? 'Tab walks it round; ' : 'Tab: flat; '}Shift+Tab: chair.`
+      : `${name}. ${subs ? 'Tab walks the ring round, [ goes back, ' : 'Tab: the next shape, '}Shift+Tab flips it.`;
+  }
+
+  /** What Tab, Shift+Tab, [ and ] do to the selected ring now, or null when they don't act on a ring. */
+  private ringKey(chord: string): RingStep | null {
+    if (!['Tab', 'Shift+Tab', '[', ']'].includes(chord) || !this.sel.atoms.size) return null;
+    // a structure picked with Tab: Tab goes on to the next structure
+    if (this.tabPicked !== null && this.tabPicked === [...this.sel.atoms].sort((a, b) => a - b).join(',')) return null;
+    const got = viewRingOf(this.doc, this.sel.atoms);
+    if (!('ring' in got)) return null;
+    const view = viewNow(this.doc, got.ring).view;
+    const shaped = view !== 'flat';
+    const walks = shaped && got.ring.subs.length > 0;
+    if (chord === '[') return walks ? 'ccw' : null;
+    if (chord === ']') return walks ? 'cw' : null;
+    if (chord === 'Shift+Tab') return view === 'chair' || view === 'chair-flip' ? 'flip' : 'chair';
+    return walks ? 'cw' : 'next';
+  }
+  /** The structure Tab last picked (its atoms, sorted), so Tab again goes on to the next. */
+  private tabPicked: string | null = null;
+
   /** The selected labels Expand Label can draw out: ligands on a metal (by template) and other labels (by SMILES). */
   expandableLabels(): { id: number; template: boolean; smiles: string | null }[] {
     const doc = this.doc;
@@ -1913,8 +2187,9 @@ export class Editor {
       const a = doc.atoms.get(id);
       if (!a?.label) continue;
       const deg = doc.degree(id);
-      if (ligandTemplateFor(doc, a)) out.push({ id, template: true, smiles: null });
+      if (ligandTemplateFor(doc, a) || (!deg && freeLigandFor(a.label))) out.push({ id, template: true, smiles: null });
       else if (deg <= 1) out.push({ id, template: false, smiles: labelSmiles(a, deg) });
+      else { const smiles = inPlaceSmiles(doc, a); if (smiles) out.push({ id, template: false, smiles }); }
     }
     return out;
   }
@@ -1923,14 +2198,17 @@ export class Editor {
    * Chemistry > Expand Label: draw out labels as their atoms, given the molfiles the chemistry
    * engine laid out for those without a template (by atom id). Returns how many were expanded.
    */
-  expandLabels(list: { id: number; template: boolean }[], molblocks: Map<number, string>): number {
+  expandLabels(list: { id: number; template: boolean }[], molblocks: Map<number, string>, join = false, full = false): number {
     const doc = this.doc;
     const added: number[] = [];
     let n = 0;
-    doc.edit('Expand Label', () => {
+    // (full: ligands drawn in full; join: a further round of Expand Label Fully, taken back by the same undo)
+    const step = (fn: () => void) => (join ? doc.amend('Expand Label', fn) : doc.edit('Expand Label', fn));
+    step(() => {
       for (const { id, template } of list) {
         if (!doc.atoms.has(id)) continue;
-        const ids = template ? expandLigand(doc, id) : molblocks.has(id) ? expandWithMolblock(doc, id, molblocks.get(id)!) : null;
+        const mb = molblocks.get(id);
+        const ids = template ? expandLigand(doc, id, full) : mb ? (doc.degree(id) >= 2 ? expandInPlace(doc, id, mb) : expandWithMolblock(doc, id, mb)) : null;
         if (ids) { added.push(...ids); n++; }
       }
     });
@@ -2225,7 +2503,7 @@ export class Editor {
 
   /** Add an electron-pushing arrow as pushArrow worked it out, in the tool's style, its ends pinned to what they are on. */
   private addPushArrow(push: PushArrow, style: ArrowStyle): Arrow {
-    const lw = this.doc.style.lineWidth;
+    const lw = this.arrowWidth();
     const { s: _, ...rest } = style;
     const look: ArrowStyle = push.bez
       ? { ...rest, sweep: 0, bez: push.bez }
@@ -2696,6 +2974,128 @@ export class Editor {
     return bonds.length;
   }
 
+  /**
+   * The electron-pushing arrows a mechanism command works on: all those of the step (the arrows
+   * drawn on structures that arrows join) with a picked arrow or structure in it, else all of
+   * them when there is only one step. 'many' when nothing is picked and there are several.
+   */
+  private mechanismArrows(): Arrow[] | 'many' {
+    const doc = this.doc;
+    const m = this.measure();
+    const all = pushArrowsOf(doc, doc.arrows.keys());
+    const on = (r: Arrow) => [arrowEnd(doc, m, r, 'tail'), arrowEnd(doc, m, r, 'head')].flatMap((e) => e.kind === 'atom' ? [e.id] : e.kind === 'gap' ? [e.a1, e.a2] : e.kind === 'bond' ? [doc.bonds.get(e.id)!.a1] : []);
+    // the steps: arrows, with the structures they are on, joined where they share one
+    const steps: { atoms: Set<number>; arrows: Arrow[] }[] = [];
+    for (const r of all) {
+      const atoms = new Set<number>();
+      for (const id of on(r)) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
+      const hit = atoms.size ? steps.filter((g) => [...atoms].some((id) => g.atoms.has(id))) : [];
+      const merged = { atoms: new Set<number>([...atoms, ...hit.flatMap((g) => [...g.atoms])]), arrows: [r, ...hit.flatMap((g) => g.arrows)] };
+      for (const g of hit) steps.splice(steps.indexOf(g), 1);
+      steps.push(merged);
+    }
+    const pickedAtoms = [...this.sel.atoms, ...[...this.sel.bonds].map((id) => doc.bonds.get(id)?.a1).filter((x): x is number => x !== undefined)];
+    if (this.sel.arrows.size || pickedAtoms.length) {
+      const chosen = steps.filter((g) => g.arrows.some((r) => this.sel.arrows.has(r.id)) || pickedAtoms.some((id) => g.atoms.has(id)));
+      return chosen.flatMap((g) => g.arrows).sort((a, b) => a.id - b.id);
+    }
+    return steps.length > 1 ? 'many' : all;
+  }
+
+  /**
+   * Check Arrows: read the mechanism arrows as electrons moving and say what doesn't make sense
+   * (an arrow from an atom with no lone pair, a five-bond carbon, a bond left with one electron).
+   * 'many' and 'none' when there is nothing to check.
+   */
+  checkArrows(): PushIssue[] | 'many' | 'none' {
+    const arrows = this.mechanismArrows();
+    if (arrows === 'many') return 'many';
+    if (!arrows.length) return 'none';
+    return this.readArrows(arrows).issues;
+  }
+
+  /** The arrows read and checked, with the checks the drawn product adds (labels with too many bonds). */
+  private readArrows(arrows: Arrow[]): PushReading {
+    const m = this.measure();
+    const reading = readPushes(this.doc, m, arrows);
+    productDrawing(this.doc, m, reading);
+    return reading;
+  }
+
+  /** Select what these problems are about, and bring the first into view. */
+  pickIssues(issues: PushIssue[]): void {
+    if (!issues.length) return;
+    const first = issues[0].atoms[0];
+    if (first !== undefined) this.reveal('atom', first);
+    this.sel = emptySel();
+    for (const i of issues) {
+      for (const id of i.arrows) this.sel.arrows.add(id);
+      for (const id of i.atoms) this.sel.atoms.add(id);
+      for (const id of i.bonds) this.sel.bonds.add(id);
+    }
+    this.requestOverlay();
+    this.onChange();
+  }
+
+  /**
+   * Draw Next Intermediate: what the mechanism arrows make, drawn after the structures they are
+   * on with a reaction arrow between, as one undo step (and selected). Nothing is drawn while
+   * the arrows don't make sense: the problems are given back and selected instead.
+   */
+  drawFromArrows(): { drawn: boolean; issues: PushIssue[] } | 'many' | 'none' {
+    const doc = this.doc;
+    const m = this.measure();
+    const arrows = this.mechanismArrows();
+    if (arrows === 'many') return 'many';
+    if (!arrows.length) return 'none';
+    const reading = readPushes(doc, m, arrows);
+    const out = productDrawing(doc, m, reading);
+    const errors = reading.issues.filter((i) => i.level === 'error');
+    if (!reading.steps.length && !errors.length) return 'none';
+    if (errors.length || !out) { this.pickIssues(errors); return { drawn: false, issues: reading.issues }; }
+    // after what the arrows are drawn on (and the arrows), with the reaction centre (the changed
+    // atoms of the main structure) on the same level in both, and the reaction arrow there too
+    const L = doc.style.bondLength;
+    const sp = spacing(L, prefsOf(doc));
+    const changed = pushedAtoms(reading);
+    const atoms = new Set<number>();
+    for (const id of changed) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
+    const from = boxOf(doc, atoms, arrows.map((r) => r.id))!;
+    const main = out.fragments().filter((f) => [...f].some((id) => changed.has(id))).sort((p, q) => q.size - p.size)[0] ?? new Set<number>();
+    // (the changed atoms that stayed where they were drawn: a structure brought alongside doesn't count)
+    const inMain = [...changed].filter((id) => main.has(id));
+    const stayed = inMain.filter((id) => dist(out.atoms.get(id)!, doc.atoms.get(id)!) < 1e-6);
+    const centre = stayed.length ? stayed : inMain;
+    const meanY = (d: Doc) => centre.reduce((t, id) => t + d.atoms.get(id)!.y, 0) / Math.max(1, centre.length);
+    const level = centre.length ? meanY(doc) : (from.y1 + from.y2) / 2;
+    const pb = out.bounds() ?? { x1: 0, y1: 0, x2: 0, y2: 0 };
+    const dy0 = level - (centre.length ? meanY(out) : (pb.y1 + pb.y2) / 2);
+    const len = sp.minArrow;
+    // the block (arrow and product) goes there if the space is free, else as near as it can
+    // (the block starts where the arrow does, a gap after what it follows)
+    const w = len + sp.gap + (pb.x2 - pb.x1);
+    const top = Math.min(pb.y1 + dy0, level - L / 2), bottom = Math.max(pb.y2 + dy0, level + L / 2);
+    const want = { x: from.x2 + sp.gap + w / 2, y: (top + bottom) / 2 };
+    const c = freeSpace(doc, w, bottom - top, want, 0.5 * L);
+    // (the free-space grid is coarse: a spot that is free, or free just along the line, stays exactly on the line)
+    const snap = (d: number) => (Math.abs(d) < 0.6 * L ? 0 : d);
+    const shift = { x: snap(c.x - want.x), y: snap(c.y - want.y) };
+    const tail = { x: from.x2 + sp.gap + shift.x, y: level + shift.y }, head = { x: tail.x + len, y: tail.y };
+    // the product drawn to the right of the arrow
+    const dx = head.x + sp.gap - pb.x1, dy = dy0 + shift.y;
+    out.bulk(() => {
+      for (const a of [...out.atoms.values()]) out.updateAtom(a.id, { x: a.x + dx, y: a.y + dy });
+      for (const s of [...out.shapes.values()]) out.updateShape(s.id, { x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy });
+      const lw = doc.style.lineWidth;
+      out.addArrow({ tail, head, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: lw * 10, headWidth: lw * 2.5 });
+    });
+    const b = out.bounds()!;
+    const sel = insertDrawing(doc, out, { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 }, 'Draw next intermediate');
+    this.selectThese({ ...sel, arrows: new Set() });
+    this.changed();
+    return { drawn: true, issues: reading.issues };
+  }
+
   /** The box, circle or line a shape tool draws for a drag from a to b (Shift: square or circle). */
   private shapeGeometry(t: Extract<Tool, { kind: 'shape' }>, a: Vec, b: Vec, shift: boolean, alt: boolean): Pick<Shape, 'x1' | 'y1' | 'x2' | 'y2'> | null {
     if (t.shape.kind === 'line') {
@@ -2860,7 +3260,7 @@ export class Editor {
    */
   private groupFirst(h: NonNullable<Hit>): NonNullable<Hit> {
     if (h.kind !== 'atom' && h.kind !== 'bond' && h.kind !== 'caption' && h.kind !== 'arrow' && h.kind !== 'shape') return h;
-    const g = energyFrameOf(this.doc, h.kind, h.id) ?? (h.kind === 'shape' || h.kind === 'arrow' ? diagramFrameOf(this.doc, h.kind, h.id) : null);
+    const g = energyFrameOf(this.doc, h.kind, h.id) ?? plateFrameOf(this.doc, h.kind, h.id) ?? newmanFrameOf(this.doc, h.kind, h.id) ?? torsionFrameOf(this.doc, h.kind, h.id) ?? (h.kind === 'shape' || h.kind === 'arrow' ? diagramFrameOf(this.doc, h.kind, h.id) : null) ?? smartFrameOf(this.doc, h.kind, h.id);
     return g !== null && g !== (h.kind === 'shape' ? h.id : null) && !this.sel.shapes.has(g) ? { kind: 'shape', id: g } : h;
   }
 
@@ -2871,6 +3271,382 @@ export class Editor {
       for (const id of set) { const g = energyFrameOf(this.doc, k, id); if (g !== null) return g; }
     }
     return null;
+  }
+
+  /** The Newman projection the selection is in (its frame), if any. */
+  selectedNewman(): number | null {
+    for (const id of this.sel.shapes) if (this.doc.shapes.get(id)?.newman) return id;
+    for (const [k, set] of [['caption', this.sel.captions], ['arrow', this.sel.arrows], ['shape', this.sel.shapes]] as const) {
+      for (const id of set) { const g = newmanFrameOf(this.doc, k, id); if (g !== null) return g; }
+    }
+    return null;
+  }
+
+  /** A Newman projection drawn on a page of its own, in this drawing's style (the Newman window's preview). */
+  newmanPreview(d: NewmanData): { doc: Doc; box: Rect } {
+    const tmp = new Doc();
+    tmp.style = { ...this.doc.style };
+    tmp.textStyles = this.doc.textStyles;
+    let id = 0;
+    tmp.edit('Preview', () => { id = putNewman(tmp, this.fullMeasure(), { ...d, link: undefined, mark: undefined }, { x: 0, y: 0 }); });
+    return { doc: tmp, box: shapeBox(tmp.shapes.get(id)!) };
+  }
+
+  /**
+   * Draw a Newman projection beside its structure (or draw projection `id` again where it is),
+   * with its viewing mark when `mark` gives a colour (null: none; left out: as it was), and
+   * select it. `linked: false` lets go of the structure. `amend`
+   * joins the last undo step (a linked projection worked out again after its structure changed).
+   */
+  putNewmanProjection(d: NewmanData, opts: { id?: number; mark?: string | null; linked?: boolean; amend?: boolean; page?: { w: number; h: number } } = {}): number | null {
+    const doc = this.doc, m = this.fullMeasure(), L = doc.style.bondLength;
+    const old = opts.id !== undefined ? doc.shapes.get(opts.id) : undefined;
+    let frame: number | null = null;
+    const run = () => {
+      let c = old ? newmanCentre(doc, old) : null;
+      if (!c) {
+        // to the right of its structure, level with the bond
+        const atoms = d.link ? doc.fragmentOf(d.link.front) : new Set<number>();
+        const box = atoms.size ? atomsBox(doc, atoms, m) : null;
+        const f = d.link ? doc.atoms.get(d.link.front) : undefined;
+        c = box ? { x: box.x2 + 2.6 * L, y: f ? f.y : (box.y1 + box.y2) / 2 } : { x: 0, y: 0 };
+      }
+      let data: NewmanData = { ...d, mark: old?.newman?.mark ?? d.mark };
+      if (opts.mark !== undefined) {
+        if (opts.mark && d.link) data.mark = putMark(doc, data, opts.mark);
+        else if (data.mark) { for (const x of data.mark.arrows) doc.removeArrow(x); for (const x of data.mark.shapes) doc.removeShape(x); data = { ...data, mark: undefined }; }
+      }
+      // not linked: it keeps no tie to the structure, and its mark is ordinary lines
+      if (opts.linked === false) data = { ...data, link: undefined, mark: undefined };
+      frame = putNewman(doc, m, data, c, old?.id);
+      if (!old) { this.sel = emptySel(); this.sel.shapes.add(frame); this.moveClear(opts.page); }
+    };
+    const label = old ? 'Edit Newman Projection' : 'Newman Projection';
+    if (opts.amend) doc.amend(label, run); else doc.edit(label, run);
+    if (frame !== null && !opts.amend) this.selectOnly({ kind: 'shape', id: frame });
+    this.changed();
+    return frame;
+  }
+
+  /** The torsional energy chart the selection is in (its frame), if any. */
+  selectedTorsion(): number | null {
+    for (const id of this.sel.shapes) if (this.doc.shapes.get(id)?.torsion) return id;
+    for (const [k, set] of [['caption', this.sel.captions], ['arrow', this.sel.arrows], ['shape', this.sel.shapes]] as const) {
+      for (const id of set) { const g = torsionFrameOf(this.doc, k, id); if (g !== null) return g; }
+    }
+    return null;
+  }
+
+  /** A torsional energy chart drawn on a page of its own, in this drawing's style (the Energy Chart tab's preview). */
+  torsionPreview(d: TorsionData): { doc: Doc; box: Rect } {
+    const tmp = new Doc();
+    tmp.style = { ...this.doc.style };
+    tmp.textStyles = this.doc.textStyles;
+    let id = 0;
+    tmp.edit('Preview', () => { id = putTorsion(tmp, this.fullMeasure(), d, { x: 0, y: 0 }); });
+    return { doc: tmp, box: shapeBox(tmp.shapes.get(id)!) };
+  }
+
+  /**
+   * Draw a torsional energy chart below its structure (or chart `id` again where it is), and
+   * select it.
+   */
+  putTorsionChart(d: TorsionData, opts: { id?: number; near?: number; page?: { w: number; h: number } } = {}): number | null {
+    const doc = this.doc, m = this.fullMeasure(), L = doc.style.bondLength;
+    const old = opts.id !== undefined ? doc.shapes.get(opts.id) : undefined;
+    let frame: number | null = null;
+    doc.edit(old ? 'Edit Torsional Energy Chart' : 'Torsional Energy Chart', () => {
+      let at: Vec;
+      if (old?.frame && old.torsion) {
+        // where its plot was: the frame keeps the plot's corner a fixed way from its own
+        const was = shapeBox(old);
+        const tmp = this.torsionPreview(old.torsion).box;
+        at = { x: was.x1 - tmp.x1, y: was.y1 - tmp.y1 };
+      } else {
+        // below its structure, the plot's left edge under the structure's
+        const atoms = opts.near !== undefined && doc.atoms.has(opts.near) ? doc.fragmentOf(opts.near) : new Set<number>();
+        const box = atoms.size ? atomsBox(doc, atoms, m) : null;
+        const prev = this.torsionPreview(d).box;
+        at = box ? { x: box.x1 - prev.x1, y: box.y2 + 1.5 * L - prev.y1 } : { x: 0, y: 0 };
+      }
+      frame = putTorsion(doc, m, d, at, old?.id);
+      if (!old) { this.sel = emptySel(); this.sel.shapes.add(frame); this.moveClear(opts.page); }
+    });
+    if (frame !== null) this.selectOnly({ kind: 'shape', id: frame });
+    this.changed();
+    return frame;
+  }
+
+  /** Every Newman projection in the drawing drawn again in `look` (Settings ▸ Newman Projections). */
+  restyleNewman(look: NewmanData['look']): void {
+    const doc = this.doc, m = this.fullMeasure();
+    const ids = [...doc.shapes.values()].filter((s) => s.newman).map((s) => s.id);
+    if (!ids.length) return;
+    doc.edit('Newman Projection Look', () => {
+      for (const id of ids) {
+        const s = doc.shapes.get(id)!;
+        const c = newmanCentre(doc, s);
+        if (c) putNewman(doc, m, { ...s.newman!, look: structuredClone(look) }, c, id);
+      }
+    });
+    this.changed();
+  }
+
+  /** Unlink: the projection stays as drawn and no longer follows its structure (its mark stays as ordinary lines). */
+  unlinkNewman(id: number): void {
+    const d = this.doc.shapes.get(id)?.newman;
+    if (!d?.link) return;
+    this.doc.edit('Unlink Newman Projection', () => this.doc.updateShape(id, { newman: { ...d, link: undefined, mark: undefined } }));
+    this.changed();
+  }
+
+  /** The Smart Scheme the selection is in (its frame), if any. */
+  selectedSmart(): number | null {
+    for (const id of this.sel.shapes) if (this.doc.shapes.get(id)?.smart) return id;
+    for (const [k, set] of [['caption', this.sel.captions], ['arrow', this.sel.arrows], ['shape', this.sel.shapes], ['atom', this.sel.atoms]] as const) {
+      for (const id of set) { const g = smartFrameOf(this.doc, k, id); if (g !== null) return g; }
+    }
+    return null;
+  }
+
+  /** Called each time the overlay is drawn (the Smart Scheme pane keeps beside its scheme). */
+  onOverlay: () => void = () => {};
+
+  private smartMarksCache: { key: string; marks: ReturnType<typeof smartMarks> } | null = null;
+  private smartMarksOf(id: number): ReturnType<typeof smartMarks> {
+    const key = `${id} ${this.doc.version}`;
+    if (this.smartMarksCache?.key !== key) this.smartMarksCache = { key, marks: smartMarks(this.doc, this.measure(), id) };
+    return this.smartMarksCache.marks;
+  }
+
+  private drawSmartMarks(ctx: CanvasRenderingContext2D, id: number, px: number): void {
+    const marks = this.smartMarksOf(id);
+    if (!marks) return;
+    const blue = this.dark ? '#6aa8ee' : '#2b7bd6';
+    ctx.save();
+    ctx.strokeStyle = blue;
+    ctx.lineWidth = px;
+    ctx.setLineDash([4 * px, 3 * px]);
+    marks.boxes.forEach((b) => ctx.strokeRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1));
+    ctx.setLineDash([]);
+    ctx.font = `600 ${9 * px}px Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    marks.boxes.forEach((b, i) => {
+      const w = 13 * px, h = 11 * px;
+      ctx.fillStyle = blue;
+      ctx.fillRect(b.x1, b.y1 - h, w, h);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(String(i + 1), b.x1 + w / 2, b.y1 - h / 2 + 0.5 * px);
+    });
+    for (const a of marks.adds) {
+      const r = 7 * px;
+      ctx.fillStyle = this.dark ? '#23262e' : '#ffffff';
+      ctx.beginPath(); ctx.arc(a.at.x, a.at.y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(a.at.x - 3.5 * px, a.at.y); ctx.lineTo(a.at.x + 3.5 * px, a.at.y);
+      ctx.moveTo(a.at.x, a.at.y - 3.5 * px); ctx.lineTo(a.at.x, a.at.y + 3.5 * px);
+      ctx.lineWidth = 1.5 * px;
+      ctx.stroke();
+      ctx.lineWidth = px;
+    }
+    ctx.restore();
+  }
+
+  /** A selected Smart Scheme's + button under a point, if any. */
+  private smartAddAt(p: Vec): { frame: number; after: number } | null {
+    const id = this.selectedSmart();
+    if (id === null) return null;
+    const marks = this.smartMarksOf(id);
+    const r = 8 / this.r.view.scale;
+    const hit = marks?.adds.find((a) => dist(a.at, p) <= r);
+    return hit ? { frame: id, after: hit.after } : null;
+  }
+
+  /** Run a change to a Smart Scheme as one undoable step, keeping the scheme selected. */
+  private smartEdit(id: number, label: string, f: (m: Measure) => unknown): boolean {
+    if (!this.doc.shapes.get(id)?.smart) return false;
+    let ok = false;
+    this.doc.edit(label, () => { ok = !!f(this.fullMeasure()); });
+    if (this.doc.shapes.has(id)) this.selectOnly({ kind: 'shape', id });
+    this.changed();
+    return ok;
+  }
+
+  /** Add a species after slot `after` of Smart Scheme `id` (−1: before the first), and start typing it. */
+  smartInsert(id: number, after: number): boolean {
+    let cap: number | null = null;
+    const ok = this.smartEdit(id, 'Add Species', (m) => (cap = insertSlot(this.doc, m, id, after)) !== null);
+    if (ok && cap !== null) this.onSmartAdded(id, cap);
+    return ok;
+  }
+
+  /** After a species is added: the pane puts the caret in its row. */
+  onSmartAdded: (frame: number, caption: number) => void = () => {};
+
+  smartRemove(id: number, k: number): boolean { return this.smartEdit(id, 'Remove Species', (m) => removeSlot(this.doc, m, id, k)); }
+  smartMove(id: number, from: number, to: number): boolean { return this.smartEdit(id, 'Move Species', (m) => moveSlot(this.doc, m, id, from, to)); }
+  smartSlotText(id: number, k: number, text: string): boolean { return this.smartEdit(id, 'Type Species', (m) => setSlotText(this.doc, m, id, k, text)); }
+  smartStepText(id: number, k: number, part: StepPart, text: string): boolean { return this.smartEdit(id, 'Type Conditions', (m) => setStepText(this.doc, m, id, k, part, text)); }
+  /** Make species k of Smart Scheme `id` a dashed box to draw or paste its structure in (selected, ready for Ctrl+V). */
+  smartToHolder(id: number, k: number): boolean {
+    let box: number | null = null;
+    const ok = this.smartEdit(id, 'Make Species a Structure', (m) => (box = slotToHolder(this.doc, m, id, k)) !== null);
+    if (box !== null) { this.selectOnly({ kind: 'shape', id: box }); this.changed(); }
+    return ok;
+  }
+  /** Select one shape on its own (a Smart Scheme's dashed species box, from the species list). */
+  selectShape(id: number): void { if (this.doc.shapes.has(id)) { this.selectOnly({ kind: 'shape', id }); this.changed(); } }
+  /** Make what joins or leaves at step k (above or below its arrow) a dashed box to draw or paste a structure in; the box is selected. */
+  smartStepToHolder(id: number, k: number, part: 'above' | 'below'): boolean {
+    let box: number | null = null;
+    const ok = this.smartEdit(id, 'Make Reagent a Structure', (m) => (box = stepToHolder(this.doc, m, id, k, part)) !== null);
+    if (box !== null) { this.selectOnly({ kind: 'shape', id: box }); this.changed(); }
+    return ok;
+  }
+  /** Make a step's dashed reagent box text again. */
+  smartStepToText(id: number, k: number, part: 'above' | 'below'): boolean { return this.smartEdit(id, 'Make Reagent Text', (m) => stepHolderToText(this.doc, m, id, k, part)); }
+  /** Make species k's dashed box a text label again. */
+  smartToText(id: number, k: number): boolean { return this.smartEdit(id, 'Make Species Text', (m) => holderToSlotText(this.doc, m, id, k) !== null); }
+  /** The dashed species box selected on its own (a paste goes into it), or null. */
+  selectedHolder(): number | null {
+    const s = this.sel;
+    if (s.shapes.size !== 1 || s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size) return null;
+    const id = [...s.shapes][0];
+    return holderFrameOf(this.doc, id) !== null ? id : null;
+  }
+  /** Put a drawing in place of a dashed species box: it goes in the middle of the box and becomes that species. */
+  fillSpeciesBox(holder: number, drawing: Doc): boolean {
+    const sh = this.doc.shapes.get(holder);
+    const frame = holderFrameOf(this.doc, holder);
+    if (!sh || frame === null) return false;
+    let ok = false;
+    this.doc.edit('Paste into Species', () => {
+      const sel = insertDrawing(this.doc, drawing, { x: (sh.x1 + sh.x2) / 2, y: (sh.y1 + sh.y2) / 2 });
+      ok = fillHolder(this.doc, this.fullMeasure(), holder, [...sel.atoms], [...sel.captions]);
+    });
+    if (this.doc.shapes.has(frame)) this.selectOnly({ kind: 'shape', id: frame });
+    this.changed();
+    return ok;
+  }
+  smartSlotRuns(id: number, k: number, parts: TextPart[]): boolean { return this.smartEdit(id, 'Type Species', (m) => setSlotRuns(this.doc, m, id, k, parts)); }
+  smartStepRuns(id: number, k: number, part: StepPart, parts: TextPart[]): boolean { return this.smartEdit(id, 'Type Conditions', (m) => setStepRuns(this.doc, m, id, k, part, parts)); }
+  /** Lay a Smart Scheme out again, with a new layout or other settings. */
+  /** A Smart Scheme's single loop as the Catalytic Cycle window's table, to add a second loop to (null for other schemes). */
+  smartCycleStart(id: number): SmartCycleStart | null { return smartCycleStart(this.doc, this.fullMeasure(), id); }
+  /**
+   * Draw Smart Scheme `id`'s cycle again with the loops from the Catalytic Cycle window (`rows`:
+   * the species each row of loop 1 keeps). It is a Smart Scheme again afterwards, selected.
+   */
+  smartRebuildCycle(id: number, spec: CycleSpec, look: CycleLook, rows: (number | null)[]): boolean {
+    let smart: number | null = null;
+    this.doc.edit('Add a Second Loop', () => {
+      const m = this.fullMeasure();
+      const made = rebuildSmartCycle(this.doc, m, id, spec, look, rows);
+      if (made) smart = this.cycleSmart(made, made.atoms, look, made.kept, made.shapes);
+    });
+    if (smart !== null) this.selectOnly({ kind: 'shape', id: smart });
+    this.changed();
+    return smart !== null;
+  }
+  smartFormat(id: number, fmt: SmartFormat | undefined): boolean { return this.smartEdit(id, 'Format Smart Scheme', (m) => formatSmart(this.doc, m, id, fmt)); }
+  smartArrange(id: number, patch?: Partial<SmartData>): boolean { return this.smartEdit(id, 'Arrange Smart Scheme', (m) => arrangeSmart(this.doc, m, id, patch)); }
+
+  /** Chemistry ▸ Scheme ▸ Convert to Smart Scheme: the selected scheme becomes one object. */
+  convertToSmart(): boolean {
+    if (this.selectedSmart() !== null) return false;
+    const sel = withFrameContents(this.doc, this.sel);
+    let id: number | null = null;
+    this.doc.edit('Convert to Smart Scheme', () => { id = makeSmart(this.doc, this.fullMeasure(), sel); });
+    if (id === null) return false;
+    this.selectOnly({ kind: 'shape', id });
+    this.changed();
+    return true;
+  }
+
+  /**
+   * Insert ▸ Smart Scheme: the selected structures joined by arrows in reading order, or (with
+   * none selected) three species to type over, as a Smart Scheme in a line. It is selected.
+   */
+  insertSmartScheme(at: Vec, page?: { w: number; h: number }): boolean {
+    const doc = this.doc, m = this.fullMeasure();
+    const picked = this.selectedStructures();
+    let id: number | null = null;
+    doc.edit('Smart Scheme', () => {
+      let sel = withFrameContents(doc, this.sel);
+      if (picked.length < 2) {
+        const L = doc.style.bondLength, lw = doc.style.lineWidth;
+        const names = ['Starting material', 'Intermediate', 'Product'];
+        const caps = names.map((t, i) => doc.addCaption({ x: at.x + (i - 1) * 9 * L, y: at.y, runs: [{ text: t }], justify: 'center' }));
+        sel = emptySel();
+        for (const c of caps) sel.captions.add(c.id);
+        for (let i = 0; i + 1 < caps.length; i++) {
+          const r = doc.addArrow({
+            headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: lw * 10, headWidth: lw * 2.5,
+            tail: { x: at.x + (i - 1) * 9 * L + 3.5 * L, y: at.y - 0.3 * L }, head: { x: at.x + (i - 1) * 9 * L + 5.5 * L, y: at.y - 0.3 * L },
+            step: { reactants: ['c' + caps[i].id], products: ['c' + caps[i + 1].id], above: [], below: [], manual: true },
+          });
+          sel.arrows.add(r.id);
+        }
+      }
+      id = makeSmart(doc, m, sel, { layout: 'line' });
+      if (id !== null) arrangeSmart(doc, m, id, { layout: 'line' });
+      if (id !== null && picked.length < 2) { this.sel = emptySel(); this.sel.shapes.add(id); this.moveClear(page); }
+    });
+    if (id === null) return false;
+    this.selectOnly({ kind: 'shape', id });
+    this.changed();
+    return true;
+  }
+
+  /** Ungroup a Smart Scheme: back to ordinary structures, text and arrows (selected). */
+  ungroupSmart(frame?: number): boolean {
+    const id = frame ?? this.selectedSmart();
+    if (id === null) return false;
+    let members: Selection | null = null;
+    this.doc.edit('Ungroup Smart Scheme', () => { members = ungroupSmart(this.doc, id); });
+    if (!members) return false;
+    this.sel = members;
+    this.changed();
+    return true;
+  }
+
+  /** The TLC plate or gel the selection is in (its frame), if any. */
+  selectedPlate(): number | null {
+    for (const id of this.sel.shapes) if (this.doc.shapes.get(id)?.plate) return id;
+    for (const [k, set] of [['caption', this.sel.captions], ['arrow', this.sel.arrows], ['shape', this.sel.shapes], ['atom', this.sel.atoms]] as const) {
+      for (const id of set) { const g = plateFrameOf(this.doc, k, id); if (g !== null) return g; }
+    }
+    return null;
+  }
+
+  /** A TLC plate or gel drawn on a page of its own, in this drawing's style (the window's preview). */
+  platePreview(d: PlateData): { doc: Doc; box: Rect } {
+    const tmp = new Doc();
+    tmp.style = { ...this.doc.style };
+    tmp.textStyles = this.doc.textStyles;
+    let id = 0;
+    tmp.edit('Preview', () => { id = putPlate(tmp, this.fullMeasure(), d, { x: 0, y: 0 }); });
+    return { doc: tmp, box: shapeBox(tmp.shapes.get(id)!) };
+  }
+
+  /** Insert ▸ TLC Plate or Gel: draw one with its middle at `at` (or draw plate `id` again), and select it. */
+  putPlateAt(d: PlateData, at: Vec, id?: number, page?: { w: number; h: number }): void {
+    const m = this.fullMeasure();
+    let frame = id;
+    const what = d.kind === 'tlc' ? 'TLC Plate' : d.kind === 'gel' ? 'Gel' : d.kind === 'crystal' ? 'Crystal Structure' : 'MO Diagram';
+    this.doc.edit(id === undefined ? what : `Edit ${what}`, () => {
+      const s = id !== undefined ? this.doc.shapes.get(id) : undefined;
+      const corner = s?.plate ? plateFromBox(shapeBox(s), s.plate, this.doc.style.bondLength).at : { x: at.x - d.w / 2, y: at.y - d.h / 2 };
+      frame = putPlate(this.doc, m, d, corner, id);
+      if (id === undefined) {
+        this.sel = emptySel();
+        this.sel.shapes.add(frame);
+        this.moveClear(page);
+      }
+    });
+    if (frame !== undefined) this.selectOnly({ kind: 'shape', id: frame });
+    this.changed();
   }
 
   /** The SmartArt-style diagram the selection is in (its frame), if any. */
@@ -2995,12 +3771,14 @@ export class Editor {
 
   /** Add an arrow from tail to head in the given style; `side` −1 bends a curved arrow the other way. */
   private addArrow(tail: Vec, head: Vec, style: ArrowStyle = {}, side = 1): Arrow {
-    const lw = this.doc.style.lineWidth;
+    const lw = this.arrowWidth();
     const { retro, connector: _, s: sShape, ...rest } = style;
-    // ChemDraw's defaults: heads ten line widths long and 2.5 wide
+    // ChemDraw's defaults: heads ten line widths long and 2.5 wide (unless the drawing style gives sizes)
+    const own = this.arrowLook;
     const a: Omit<Arrow, 'id'> = {
       tail, head, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false,
-      equilibrium: false, sweep: 0, headLength: lw * 10, headWidth: lw * 2.5, ...rest,
+      equilibrium: false, sweep: 0, headLength: own.headLength ?? lw * 10, headWidth: own.headWidth ?? lw * 2.5,
+      ...(own.width !== null ? { lineWidth: own.width } : {}), ...rest,
     };
     // an S drawn freely: its first bend to the side the pointer swung out to
     if (sShape && !a.bez) { a.bez = [{ x: 0.25, y: -0.8 * side }, { x: 0.75, y: 0.8 * side }]; a.sweep = 0; }
@@ -3134,11 +3912,11 @@ export class Editor {
       if (!t.told) { t.told = true; this.onHint('Building the 3-D shape…'); this.onNotice('Building the 3-D shape… (only the first time for a structure)'); }
       return;
     }
-    if (!t.begun) { this.doc.begin(t.real ? 'Turn in 3-D' : 'Turn in Perspective'); t.begun = true; }
+    if (!t.begun) { this.doc.begin(t.real ? '3-D Rotation' : 'Rotate in Perspective'); t.begun = true; }
     const R = dragTurn(t.dx, t.dy, t.shift);
     t.unshown = t.ready.turn.apply(this.doc, R);
     if (!t.unshown) t.ready.turn.lastGood = R;
-    this.onHint(t.unshown ? 'From this angle a stereocentre can\'t be drawn so it reads right: let go and it goes back to the last angle that worked.' : t.shift ? 'Turning in 15° steps' : 'Shift: turn in 15° steps, one way at a time');
+    this.onHint(t.unshown ? 'From this angle a stereocenter can\'t be drawn so it reads right: let go and it goes back to the last angle that worked.' : t.shift ? 'Turning in 15° steps' : 'Shift: turn in 15° steps, one way at a time');
     if (hasPins(this.doc)) followPins(this.doc);
     this.requestScene();
   }
@@ -3154,7 +3932,7 @@ export class Editor {
     this.doc.commit();
     this.changed();
     this.onHint('');
-    if (t.unshown) this.onNotice('From that angle a stereocentre can\'t be drawn so it reads right, so the structure went back to the last angle where it could.', 6000);
+    if (t.unshown) this.onNotice('From that angle a stereocenter can\'t be drawn so it reads right, so the structure went back to the last angle where it could.', 6000);
     this.checkTurn(turn, left);
   }
 
@@ -3168,7 +3946,7 @@ export class Editor {
       if (this.doc !== doc || doc.version !== version) return;
       doc.undo();
       this.afterUndo();
-      this.onNotice('From that angle a stereocentre can\'t be drawn so it reads right, so the turn was taken back. Turn it a little less (or more).', 7000);
+      this.onNotice('From that angle a stereocenter can\'t be drawn so it reads right, so the turn was taken back. Turn it a little less (or more).', 7000);
     });
   }
 
@@ -3186,7 +3964,7 @@ export class Editor {
     if (prep.notes.length) this.onNotice(`${prep.notes[0]} Turning it flat instead.`, 7000);
     const R: M3 = anglesTurn(x, y, z);
     let left = 0;
-    doc.edit(real ? 'Turn in 3-D' : 'Turn in Perspective', () => {
+    doc.edit(real ? '3-D Rotation' : 'Rotate in Perspective', () => {
       left = prep.turn.apply(doc, R, true);
       prep.turn.remember(doc);
     });
@@ -3194,6 +3972,24 @@ export class Editor {
     this.changed();
     this.checkTurn(prep.turn, left);
     return true;
+  }
+
+  /**
+   * Give a structure its real 3-D shape where it lies (as 3-D Perspective does at its first
+   * move), so it can turn as the molecule does (Turn in 3-D). `doc` defaults to the drawing; a
+   * copy can be given to try it first. Returns why not when it can't.
+   */
+  async realShape(atom: number, doc: Doc = this.doc): Promise<string | null> {
+    const structures = structuresOf(doc, [atom]);
+    if (!structures.length) return 'There is no structure there.';
+    const prep = await prepareTurn(doc, structures, true, this.perspectiveHost);
+    if (prep.notes.length) return prep.notes[0];
+    doc.edit('Real 3-D shape', () => {
+      prep.turn.apply(doc, IDENT_TURN, true);
+      prep.turn.remember(doc);
+    });
+    if (doc === this.doc) this.changed();
+    return null;
   }
 
   /** Flatten: the selected structures become ordinary flat drawings, looking as they do now. False when nothing is selected. */
@@ -3340,7 +4136,7 @@ export class Editor {
     const doc = this.doc, s = this.sel;
     if (!this.hasSelection()) return false;
     const black = colour?.toLowerCase() === '#000000' ? undefined : colour;
-    doc.edit(what === 'highlight' ? 'Highlight' : what === 'fill' ? 'Fill colour' : 'Colour', () => {
+    doc.edit(what === 'highlight' ? 'Highlight' : what === 'fill' ? 'Fill color' : 'Color', () => {
       if (what === 'highlight') {
         for (const id of s.atoms) doc.updateAtom(id, { highlight: colour });
         for (const id of s.bonds) doc.updateBond(id, { highlight: colour });
@@ -3403,7 +4199,7 @@ export class Editor {
     const on = ![...atoms, ...bonds].every((x) => has(x.hl));
     const patch: HighlightStyle = key === 'outline' ? (on ? { fill: 'none', line: 'solid' } : { fill: 'solid', line: 'none' }) : { [key]: on };
     const labels: Record<HighlightToggle, [string, string]> = {
-      smooth: ['Smooth highlight', 'Highlight with discs'], centre: ['Centre highlight on double bonds', 'Highlight on the bonds'],
+      smooth: ['Smooth highlight', 'Highlight with discs'], centre: ['Center highlight on double bonds', 'Highlight on the bonds'],
       soft: ['Soft highlight', 'Sharp highlight'], shadow: ['Highlight shadow', 'No highlight shadow'], glow: ['Highlight glow', 'No highlight glow'],
       outline: ['Outline-only highlight', 'Filled highlight'],
     };
@@ -3513,7 +4309,7 @@ export class Editor {
   measure(): Measure {
     this.r.invalidate(this.doc);
     if (this.sel.atoms.size > 5000) return { ...POINTS, captionBox: (c) => this.r.captionBox(c) };
-    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c) };
+    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c), bondSide: (b) => this.r.doubleSide(this.doc, b) };
   }
 
   private selBoxCache: { key: string; box: Rect | null } = { key: '', box: null };
@@ -3550,9 +4346,25 @@ export class Editor {
     return { deg, which: (c) => turns && !c.attach, shapes: this.textFirst };
   }
 
-    private rotateHandle(): Vec | null {
+  /**
+   * Whether the selection's dashed box would only clutter the blue highlight: one bond, or atoms
+   * and bonds lying in a thin strip (a chain drawn straight across or down).
+   */
+  private boxInsideHighlight(b: Rect): boolean {
+    const s = this.sel;
+    if (s.captions.size || s.arrows.size || s.shapes.size || !s.bonds.size) return false;
+    // one bond (with its atoms): the highlight shows it well enough at any angle
+    const one = s.bonds.size === 1 ? this.doc.bonds.get([...s.bonds][0]) : undefined;
+    if (one && [...s.atoms].every((id) => id === one.a1 || id === one.a2)) return true;
+    return Math.min(b.x2 - b.x1, b.y2 - b.y1) < this.doc.style.bondLength * 0.3;
+  }
+
+  /** The handle above the selection that turns it (none when turning would do nothing). */
+  rotateHandle(): Vec | null {
     const s = this.sel;
     if (this.tool.kind !== 'select' || (!s.atoms.size && !s.arrows.size && !s.shapes.size && !s.captions.size)) return null;
+    // one atom on its own turns round itself, which does nothing (its label stays level): no handle
+    if (s.atoms.size === 1 && !s.arrows.size && !s.shapes.size && !s.captions.size) return null;
     const b = this.selBox();
     return b ? { x: (b.x1 + b.x2) / 2, y: b.y1 - this.tol(24) } : null;
   }
@@ -3573,6 +4385,73 @@ export class Editor {
     if (us.length < 3) return false;
     const off = distributeOffsets(us, axis);
     this.doc.edit('Distribute', () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
+    this.changed();
+    return true;
+  }
+
+  /**
+   * The things to set out in a row, column or grid: the selected ones (everything, with nothing
+   * selected), each structure with its compound number even when the number isn't selected.
+   */
+  private gridUnits(): ReturnType<typeof units> {
+    const doc = this.doc, m = this.measure();
+    const none = !this.hasSelection();
+    const sel = none
+      ? { atoms: new Set(doc.atoms.keys()), bonds: new Set(doc.bonds.keys()), captions: new Set(doc.captions.keys()), arrows: new Set(doc.arrows.keys()), shapes: new Set(doc.shapes.keys()) }
+      : this.sel;
+    const chosen = units(doc, sel, m);
+    // numbers under the chosen structures come along, picked or not
+    const others = none ? [] : units(doc, { atoms: new Set(), bonds: new Set(), captions: new Set([...doc.captions.keys()].filter((id) => !sel.captions.has(id))), arrows: new Set(), shapes: new Set() }, m);
+    const folded = withLabels(doc, [...chosen, ...others], doc.style.bondLength);
+    const loose = new Set(others.flatMap((u) => u.captions));
+    return folded.filter((u) => u.atoms.length || !u.captions.every((id) => loose.has(id)) || u.arrows.length || u.shapes.length);
+  }
+
+  /** How many things Arrange in a Grid would set out. */
+  gridCount(): number {
+    return this.gridUnits().length;
+  }
+
+  /** Format ▸ Align ▸ Arrange in a Row, Column or Grid. False with fewer than two things, or nothing to move. */
+  arrangeGrid(how: GridHow): boolean {
+    const us = this.gridUnits();
+    if (us.length < 2) return false;
+    return this.applyGrid(us, how, how.kind === 'row' ? 'Arrange in a Row' : how.kind === 'column' ? 'Arrange in a Column' : 'Arrange in a Grid');
+  }
+
+  /**
+   * Clean Up's own arranging: when the picked structures (or, with nothing picked, a drawing of
+   * nothing but structures and their numbers) clearly sit in rows, a column or a grid, even them
+   * out, keeping the spacing they mostly have. False when it isn't clear or they are already even.
+   */
+  autoArrange(): boolean {
+    // (quick look first: three or more structures)
+    const frags = this.sel.atoms.size ? this.doc.fragments().filter((f) => [...f].some((id) => this.sel.atoms.has(id))) : this.doc.fragments();
+    if (frags.length < 3) return false;
+    const us = this.gridUnits();
+    // three or more structures and nothing else (a scheme is Clean Up Reaction's to tidy)
+    if (us.length < 3 || us.some((u) => !u.atoms.length || u.arrows.length || u.shapes.length)) return false;
+    const boxes = us.map((u) => u.box);
+    const shape = inferGrid(boxes);
+    if (!shape) return false;
+    return this.applyGrid(us, { kind: shape.kind, cols: shape.cols, gap: usualGap(boxes, this.doc.style.bondLength) }, 'Clean Up: Arrange');
+  }
+
+  /** Where Arrange in a Grid would move things, without moving them (for its preview). */
+  gridPlan(how: GridHow): { units: ReturnType<typeof units>; offsets: Vec[] } {
+    const us = this.gridUnits();
+    return { units: us, offsets: this.gridMoves(us, how) };
+  }
+
+  private gridMoves(us: ReturnType<typeof units>, how: GridHow): Vec[] {
+    // structures that share a ring line up on it
+    return gridOffsets(us.map((u) => u.box), { anchors: sharedAnchors(this.doc, us), ...how });
+  }
+
+  private applyGrid(us: ReturnType<typeof units>, how: GridHow, label: string): boolean {
+    const off = this.gridMoves(us, how);
+    if (off.every((d) => Math.hypot(d.x, d.y) < 0.05)) return false;
+    this.doc.edit(label, () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
     this.changed();
     return true;
   }
@@ -3661,7 +4540,13 @@ export class Editor {
     if (!options.length) return false;
     const cycle = { version: -1, key, options, k: 0 };
     this.cleanCycle = cycle;
-    if (!this.applyCleanUp(options.map((o) => o[0]))) {
+    // the structures, then what they sit in: their scheme, or rows and grids (one undo)
+    let did = false;
+    doc.edit('Clean Up Structure', () => {
+      did = this.applyCleanUp(options.map((o) => o[0]));
+      did = this.tidyLayout() || did;
+    });
+    if (!did) {
       // already tidy: show the next way instead, so the button always does something
       cycle.version = doc.version;
       return picked ? this.nextCleanUp(cycle) : false;
@@ -3678,6 +4563,26 @@ export class Editor {
     this.applyCleanUp(pick);
     c.version = this.doc.version;
     return { k: c.k, of, label: pick[0].label };
+  }
+
+  /**
+   * Clean Up's tidying round the structures: the reaction scheme they are in (as Clean Up
+   * Reaction), or, with no scheme, rows, a column or a grid they clearly sit in, evened out.
+   */
+  private tidyLayout(): boolean {
+    const picked = this.hasSelection();
+    if (!this.doc.arrows.size) return this.autoArrange();
+    const steps = picked ? this.selectedSteps() : undefined;
+    const anySteps = [...this.doc.arrows.values()].some((r) => { const q = !r.sweep && this.reactionRoles(r.id); return !!q && (q.reactants.length > 0 || q.products.length > 0); });
+    if (picked ? steps?.length : anySteps) {
+      const m = this.fullMeasure();
+      const plan = planCleanUp(this.doc, m, steps);
+      if (!plan) return false;
+      applySchemePlan(this.doc, m, plan, 'Clean Up Structure');
+      this.changed();
+      return true;
+    }
+    return this.autoArrange();
   }
 
   /** The ways Clean Up can lay out the target structures (for the Clean Up Options window). */
@@ -3744,9 +4649,9 @@ export class Editor {
   }
 
   /** Label and caption sizes for every atom (schemes need whole structures, however big the selection). */
-  private fullMeasure(): Measure {
+  fullMeasure(): Measure {
     this.r.invalidate(this.doc);
-    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c) };
+    return { atomBoxes: (a) => this.r.atomInfo(this.doc, a).boxes, captionBox: (c) => this.r.captionBox(c), bondSide: (b) => this.r.doubleSide(this.doc, b) };
   }
 
   /** An arrow's reaction roles: kept with it, or worked out from where things sit. */
@@ -3778,14 +4683,28 @@ export class Editor {
    * Clean Up Reaction: space the selected steps (or every step) evenly, add missing + signs,
    * centre the conditions and fit the arrows to them. False when there is no step to tidy.
    */
-  cleanUpReaction(): boolean {
+  cleanUpReaction(): false | 'matched' | 'fitted' {
     const m = this.fullMeasure();
-    const plan = planCleanUp(this.doc, m, this.selectedSteps());
+    const steps = this.selectedSteps();
+    const key = steps ? [...steps].sort((a, b) => a - b).join(',') : 'all';
+    // pressed again on the same steps: each arrow shrinks to fit its own text (the structures
+    // move up to keep the spacing even); again, and they match once more
+    const c = this.reactionCycle;
+    const again = !!c && c.version === this.doc.version && c.key === key;
+    const fitted = again ? !c!.fitted : false;
+    const same = prefsOf(this.doc).sameLength;
+    const plan = planCleanUp(this.doc, m, steps, fitted ? { sameLength: !same, fit: true } : undefined);
+    if (plan) {
+      applySchemePlan(this.doc, m, plan);
+      this.changed();
+    }
+    this.reactionCycle = { version: this.doc.version, key, fitted };
     if (!plan) return false;
-    applySchemePlan(this.doc, m, plan);
-    this.changed();
-    return true;
+    return fitted === same ? 'fitted' : 'matched';
   }
+
+  /** The last Clean Up Reaction: which steps, and whether it fitted each arrow to its own text. */
+  private reactionCycle: { version: number; key: string; fitted: boolean } | null = null;
 
   /**
    * Arrange the selected scheme (or the whole drawing) in one go: in a line, in rows, as a
@@ -3815,17 +4734,31 @@ export class Editor {
    */
   insertCycle(spec: CycleSpec, look: CycleLook, at: Vec, page?: { w: number; h: number }): void {
     const stations = this.selectedStructures();
+    let smart: number | null = null;
     this.doc.edit('Catalytic Cycle', () => {
       const made = buildCycle(this.doc, this.fullMeasure(), spec, look, at, stations);
-      this.sel = emptySel();
-      for (const st of stations) for (const a of st.atoms) this.sel.atoms.add(a);
-      for (const a of this.sel.atoms) for (const b of this.doc.adj.get(a) ?? []) this.sel.bonds.add(b);
-      for (const id of made.captions) this.sel.captions.add(id);
-      for (const id of made.arrows) this.sel.arrows.add(id);
       // drawn round selected structures it stays put; otherwise it goes beside what is there
-      if (!stations.length) this.moveClear(page);
+      smart = this.cycleSmart(made, stations.flatMap((st) => st.atoms), look, [], [], stations.length ? undefined : () => this.moveClear(page));
     });
+    if (smart !== null) this.selectOnly({ kind: 'shape', id: smart });
     this.changed();
+  }
+
+  /**
+   * A cycle just drawn (with these structures as species, and extra text or pictures that go
+   * with it) made a Smart Scheme: one object, laid out round a loop. `place` moves it first,
+   * selected. Call inside an edit.
+   */
+  private cycleSmart(made: { captions: number[]; arrows: number[] }, atoms: number[], look: CycleLook, captions: number[], shapes: number[], place?: () => void): number | null {
+    this.sel = emptySel();
+    for (const a of atoms) this.sel.atoms.add(a);
+    for (const a of this.sel.atoms) for (const b of this.doc.adj.get(a) ?? []) this.sel.bonds.add(b);
+    for (const id of [...made.captions, ...captions]) this.sel.captions.add(id);
+    for (const id of made.arrows) this.sel.arrows.add(id);
+    for (const id of shapes) this.sel.shapes.add(id);
+    place?.();
+    for (const r of this.doc.arrows.values()) if (r.reagentFor !== undefined && this.sel.arrows.has(r.reagentFor)) this.sel.arrows.add(r.id);
+    return makeSmart(this.doc, this.fullMeasure(), this.sel, { layout: 'cycle', ...(look.anticlockwise ? { anticlockwise: true } : {}), ...(look.reagentArrows ? { reagentArrows: true } : {}) });
   }
 
   /** Where the mouse is on the drawing, or null when it is somewhere else (a menu, a panel). */
@@ -3940,7 +4873,7 @@ export class Editor {
     if (!label) return 'Type a name for the label.';
     // a built-in nickname is fine when the selection is that group (Ph, TBS, Boc), not otherwise
     const same = builtIn.includes(label);
-    if (isBuiltInNickname(label) && !same) return `“${label}” is already a nickname for a different group${builtIn.length ? ` (this one is ${builtIn.slice(0, 3).join(', ')})` : ''}. Choose another name.`;
+    if (isBuiltInNickname(label) && !same) return `“${label}” is already an abbreviation for a different group${builtIn.length ? ` (this one is ${builtIn.slice(0, 3).join(', ')})` : ''}. Choose another name.`;
     if (!same) addNicknames({ [label]: g.smiles });
     const ids = [...this.sel.atoms].filter((id) => id !== g.start && doc.atoms.has(id));
     doc.edit('Contract Label', () => {
@@ -4002,18 +4935,37 @@ export class Editor {
 
   /**
    * Where crossing bonds are drawn bring the selected bonds in front of (or behind) the bonds they
-   * cross: the bond behind gets a gap. False when no bond is selected.
+   * cross, or one step either way: the bond behind gets a gap. False when no bond is selected,
+   * 'none' when none of the selected bonds crosses another bond.
    */
-  setBondLayer(front: boolean): boolean {
+  setBondLayer(how: 'front' | 'back' | 'forward' | 'backward'): boolean | 'none' {
     const doc = this.doc;
-    const ids = [...this.sel.bonds];
+    const ids = [...this.sel.bonds].filter((id) => doc.bonds.has(id));
     if (!ids.length) return false;
+    const picked = new Set(ids);
+    const crossing = new Map(ids.map((id) => [id, crossingBonds(doc, doc.bonds.get(id)!).filter((o) => !picked.has(o.id))]));
+    if (![...crossing.values()].some((c) => c.length)) return 'none';
     let hi = -Infinity, lo = Infinity;
     for (const b of doc.bonds.values()) { const l = bondLayer(b); hi = Math.max(hi, l); lo = Math.min(lo, l); }
-    doc.edit(front ? 'Bring to Front' : 'Send to Back', () => {
-      ids.forEach((id, i) => doc.updateBond(id, { z: front ? hi + 1 + i : lo - ids.length + i }));
+    // the selected bonds keep their order among themselves
+    const order = ids.sort((a, b) => bondLayer(doc.bonds.get(a)!) - bondLayer(doc.bonds.get(b)!) || a - b);
+    const label = { front: 'Bring to Front', back: 'Send to Back', forward: 'Bring Forward', backward: 'Send Backward' }[how];
+    doc.edit(label, () => {
+      if (how === 'front' || how === 'back') {
+        order.forEach((id, i) => doc.updateBond(id, { z: how === 'front' ? hi + 1 + i : lo - order.length + i }));
+      } else {
+        // one step: just past the nearest bond it crosses in that direction (between it and the next)
+        const up = how === 'forward';
+        for (const id of up ? [...order].reverse() : order) {
+          const me = bondLayer(doc.bonds.get(id)!);
+          const ls = crossing.get(id)!.map(bondLayer).filter((l) => (up ? l > me : l < me)).sort((a, b) => (up ? a - b : b - a));
+          if (!ls.length) continue;
+          const past = ls.find((l) => l !== ls[0]);
+          doc.updateBond(id, { z: past === undefined ? ls[0] + (up ? 1 : -1) : (ls[0] + past) / 2 });
+        }
+      }
       // the bonds crossing them are redrawn too (their gaps change)
-      for (const id of ids) for (const o of crossingBonds(doc, doc.bonds.get(id)!)) doc.updateBond(o.id, {});
+      for (const c of crossing.values()) for (const o of c) doc.updateBond(o.id, {});
     });
     this.changed();
     return true;
@@ -4123,6 +5075,36 @@ export class Editor {
   }
 
   /**
+   * Right-click > Attachment Point: make an atom a point of attachment of this kind (a wavy bond,
+   * a star or a numbered diamond), or a plain carbon again (null). An atom at the end of a single
+   * bond becomes the point itself; an atom with more bonds (a ring carbon) gets a new bond out to
+   * one, so the point sits right on it. False when nothing changed.
+   */
+  setAttachPoint(id: number, kind: 'Wavy' | 'Star' | 'Numbered' | null): boolean {
+    const doc = this.doc, a = doc.atoms.get(id);
+    if (!a || a.multi) return false;
+    if (kind === null && !a.attach) return false;
+    const look = (at: number, num?: number): Partial<Atom> => kind === 'Numbered'
+      ? { attach: 'Unspecified', attachNum: num ?? nextNumber(doc, at, (x) => (x.attach ? x.attachNum : undefined)) }
+      : { attach: kind!, attachNum: undefined };
+    const plain: Partial<Atom> = { z: 0, label: null, charge: 0, fileLabel: false, isotope: 0 };
+    let at = id;
+    doc.edit(kind ? 'Attachment Point' : 'Remove Attachment Point', () => {
+      if (kind === null) doc.updateAtom(id, { attach: undefined, attachNum: undefined, z: 6 });
+      else if (a.attach) doc.updateAtom(id, look(id, a.attach === 'Unspecified' || a.attach === 'Diamond' ? a.attachNum : undefined));
+      else if (doc.degree(id) <= 1 && !doc.neighbors(id).some((n) => n.attach)) doc.updateAtom(id, { ...plain, ...look(id) });
+      else {
+        const t = sprout(doc, id, 1, 'solid', 0);
+        at = t.id;
+        doc.updateAtom(t.id, { ...plain, ...look(t.id) });
+      }
+    });
+    this.selectOnly({ kind: 'atom', id: at });
+    this.changed();
+    return true;
+  }
+
+  /**
    * Make the selection bigger or smaller about its middle: positions, bond lengths, labels and
    * line widths together (captions keep their font size). False with nothing selected.
    */
@@ -4203,6 +5185,7 @@ export class Editor {
     const cur = frags.findIndex((f) => [...this.sel.atoms].some((id) => f.has(id)));
     const i = cur < 0 ? (step > 0 ? 0 : frags.length - 1) : (cur + step + frags.length) % frags.length;
     this.selectFragment(frags[i].values().next().value!, false);
+    this.tabPicked = [...this.sel.atoms].sort((a, b) => a - b).join(',');
     return true;
   }
 
@@ -4234,6 +5217,39 @@ export class Editor {
 
   // ------------------------------------------------------------------ keyboard
 
+  /** Space is down: while drawing a bond or an arrow, it frees the angle as Alt does (for where the system takes Alt + drag, as many Linux desktops do). */
+  private spaceHeld = false;
+
+  /** A bond or arrow being drawn, whose angle Alt (or Space) frees from the 15° steps however late it is pressed. */
+  private freeAngleTool(d: Drag): boolean {
+    return d.mode === 'draw' && d.button === 0 && (this.tool.kind === 'bond' || this.tool.kind === 'arrow');
+  }
+
+  /**
+   * Alt or Space pressed or let go while drawing a bond or an arrow: the angle is freed (or snaps
+   * again) at once, without waiting for the pointer to move. Returns whether the key was used.
+   * The Alt key's default is stopped, so Windows doesn't take it for the window menu, and letting
+   * it go doesn't send the keys to the menu bar.
+   */
+  private freeAngleKey(e: KeyboardEvent): boolean {
+    if (this.paused) return false;
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return false;
+    const space = e.code === 'Space';
+    if (space) this.spaceHeld = e.type === 'keydown';
+    if (e.key !== 'Alt' && !space) return false;
+    const d = this.drag;
+    if (!d || !this.freeAngleTool(d)) return false;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    d.alt = e.altKey || (e.key === 'Alt' && e.type === 'keydown') || this.spaceHeld;
+    if (e.key === 'Alt' && e.type === 'keyup') d.alt = this.spaceHeld;
+    // the key stops here, so the hints beside the pointer learn of it here too
+    this.setMods(e, false);
+    this.requestOverlay(e.timeStamp);
+    return true;
+  }
+
   private onKey(e: KeyboardEvent): void {
     if (this.paused) return;
     const target = e.target as HTMLElement;
@@ -4250,6 +5266,10 @@ export class Editor {
     if (/^(Shift\+)?Tab$/.test(chord) && !this.pointerInside && target !== this.r.overlay) return;
     // drawing a curved arrow through points: Enter ends it, Backspace takes back a point, Esc stops
     if (this.routeKey(chord)) { e.preventDefault(); return; }
+    // a selected cyclohexane: Tab through its shapes (flat, chair, flipped chair, boat); on a chair
+    // with substituents Tab and ] walk it round, [ walks it back, and Shift+Tab flips it
+    const ringStep = this.pointerInside || target === this.r.overlay ? this.ringKey(chord) : null;
+    if (ringStep) { e.preventDefault(); this.say(this.ringStep(ringStep)); return; }
     // on a focused button or menu, Enter, Space and Tab do their usual jobs (unless the mouse
     // is over the drawing: then they are drawing keys, as in ChemDraw)
     if (!this.pointerInside && target && target !== document.body && target !== this.r.overlay && /^(Shift\+)?(Enter|Space|Tab)$/.test(chord)) return;
@@ -4706,6 +5726,7 @@ export class Editor {
         const span = document.createElement('span');
         span.textContent = p.text.replace(/−/g, '-');
         if (p.sub || p.sup) { span.className = p.sub ? 'sub' : 'sup'; span.style.fontSize = `${SUB_SCALE * 100}%`; }
+        if (p.italic) span.style.fontStyle = 'italic';
         box.appendChild(span);
       }
       // what the label shows can differ from what was typed (a minus for a hyphen): keep the typed text
@@ -4757,10 +5778,13 @@ export class Editor {
       if (ok && doc.atoms.has(id) && (text !== was || marks !== wasMarks)) {
         const lead = text.length - text.trimStart().length;
         const kept = marks.slice(lead, lead + text.trim().length);
+        // tBu, iPr… in the alkyl look chosen in Settings ▸ Preferences (t-Bu, an italic t)
+        const styled = styleLabel(text.trim(), kept);
         doc.edit('Label', () => {
-          this.applyLabel(id, text);
+          this.applyLabel(id, styled.label);
           const now = doc.atoms.get(id)!;
-          const m = now.label !== null && /[\^_=]/.test(kept) ? kept : undefined;
+          const sm = styled.marks ?? '';
+          const m = now.label !== null && /[\^_=/]/.test(sm) ? sm : undefined;
           if (now.labelMarks !== m) doc.updateAtom(id, { labelMarks: m });
         });
         // remembered for Repeat Label on the right-click menu (clearing a label is not a label)
@@ -4861,11 +5885,11 @@ export class Editor {
         const t = { runs: applyBase(c.runs, base), paras: c.paras, justify: c.justify, wrap: c.wrap, width: c.width, lineHeight: c.lineHeight, lineSpacing: c.lineSpacing };
         const res = formatWhole(t, f, defaults, base?.size ?? st.captionSize, (x, sz, family, style) => measureText(x, sz, family, style));
         doc.dirtyRects.push(this.r.captionBox(c));
-        doc.updateCaption(c.id, { runs: stripBase(res.runs, base), paras: res.paras, justify: res.justify, lineHeight: res.lineHeight, lineSpacing: res.lineSpacing });
+        doc.updateCaption(c.id, { runs: stripBase(res.runs, base), paras: res.paras, justify: res.justify, lineHeight: res.lineHeight, lineSpacing: res.lineSpacing, ...(f.kind === 'wrap' ? { wrap: res.wrap } : {}) });
       }
       for (const sh of shapes) {
-        // a shape's text: its look and lining up (line spacing and lists don't apply to it)
-        if (!sh.text?.runs.length || f.kind === 'line') continue;
+        // a shape's text: its look and lining up (line spacing, lists and a wrap width don't apply to it)
+        if (!sh.text?.runs.length || f.kind === 'line' || f.kind === 'wrap') continue;
         const res = formatWhole({ runs: sh.text.runs, paras: sh.text.paras, justify: sh.textAlign ?? 'center' }, f, {}, this.r.geoTextSize());
         const text = { runs: res.runs, ...(res.paras?.length ? { paras: res.paras } : {}) };
         doc.dirtyRects.push(shapeBox(sh));
@@ -4928,19 +5952,19 @@ export class Editor {
   }
 
   /** How the text the ribbon's Font and Paragraph buttons would change looks now (for showing which are on). */
-  textLook(): { style: rt.RunStyle; align: Justify; list?: 'bullet' | 'number'; line: number; defaultSize: number; defaultFont?: string } | null {
+  textLook(): { style: rt.RunStyle; align: Justify; list?: 'bullet' | 'number'; line: number; before?: number; after?: number; wrap?: number; link?: boolean; defaultSize: number; defaultFont?: string } | null {
     const st = this.doc.style;
     const ed = this.captionEd?.ed;
     if (ed) {
       const p = ed.currentPara();
-      return { style: ed.currentStyle(), align: ed.currentAlign(), list: p.list, line: ed.t.lineSpacing ?? 1, defaultSize: ed.defaultSize, defaultFont: ed.defaults.font ?? st.captionFont };
+      return { style: ed.currentStyle(), align: ed.currentAlign(), list: p.list, line: ed.t.lineSpacing ?? 1, before: p.spaceBefore, after: p.spaceAfter, wrap: ed.t.wrap, link: !!ed.linkHere(), defaultSize: ed.defaultSize, defaultFont: ed.defaults.font ?? st.captionFont };
     }
     const c = [...this.sel.captions].map((id) => this.doc.captions.get(id)).find((x): x is Caption => !!x);
     if (c) {
       const base = c.ph ? this.doc.textStyles?.[c.ph] : undefined;
       const runs = applyBase(c.runs, base);
       const len = plainText(runs).length;
-      return { style: len ? rt.commonStyle(runs, 0, len) : { ...(base ?? {}) }, align: c.justify ?? 'left', list: c.paras?.[0]?.list, line: c.lineSpacing ?? 1, defaultSize: base?.size ?? st.captionSize, defaultFont: base?.font ?? st.captionFont };
+      return { style: len ? rt.commonStyle(runs, 0, len) : { ...(base ?? {}) }, align: c.justify ?? 'left', list: c.paras?.[0]?.list, line: c.lineSpacing ?? 1, before: c.paras?.[0]?.spaceBefore, after: c.paras?.[0]?.spaceAfter, wrap: c.wrap, defaultSize: base?.size ?? st.captionSize, defaultFont: base?.font ?? st.captionFont };
     }
     const sh = [...this.sel.shapes].map((id) => this.doc.shapes.get(id)).find((x): x is Shape => !!x && x.kind === 'geo' && !!x.text?.runs.length);
     if (sh?.text) {
@@ -5045,8 +6069,9 @@ export class Editor {
     const at = add(slot.mid, mul(slot.out, slot.gap + size * (side === 'above' ? 0.25 : 0.8)));
     this.sel = emptySel();
     this.openCaption(null, at, undefined, undefined, {
-      justify: textJustify(),
+      justify: textJustify(this.doc),
       size,
+      font: this.doc.style.arrowTextFont,
       // once typed: counted as the arrow's conditions, the arrow fitted to it and the text lined up
       done: (cid) => {
         const a = this.doc.arrows.get(id);
@@ -5088,7 +6113,12 @@ export class Editor {
     }
     if (!best) return false;
     const id = best.id;
-    doc.edit('Text to Atom', () => { doc.removeCaption(caption); this.applyLabel(id, text); });
+    const styled = styleLabel(text.trim());
+    doc.edit('Text to Atom', () => {
+      doc.removeCaption(caption);
+      this.applyLabel(id, styled.label);
+      if (styled.marks && doc.atoms.get(id)?.label) doc.updateAtom(id, { labelMarks: styled.marks });
+    });
     this.lastEdited = id;
     this.say(`${text} is now an atom on the bond. Undo (Ctrl+Z) to keep it as text, or turn this off in Edit > Settings.`);
     return true;
@@ -5126,14 +6156,14 @@ export class Editor {
    * one, with the caret at `click`. New text takes the document's caption style; everything
    * can be restyled in the bar above the text.
    */
-  private openCaption(c: Caption | null, at: Vec, click?: Vec, wrap?: number, opts?: { justify?: Justify; size?: number; done?: (id: number) => void }): void {
+  private openCaption(c: Caption | null, at: Vec, click?: Vec, wrap?: number, opts?: { justify?: Justify; size?: number; font?: string; done?: (id: number) => void }): void {
     this.closeCaption();
     this.commitLabel();
     const doc = this.doc;
     const st = doc.style;
     // a slide's title and text placeholders take the slide master's formatting
     const base = c?.ph ? doc.textStyles?.[c.ph] : captionBase(st);
-    const defaults = c?.ph && base ? { ...base } : { ...styleFromFace(st.captionFace), size: opts?.size ?? st.captionSize, ...base };
+    const defaults = c?.ph && base ? { ...base } : { ...styleFromFace(st.captionFace), size: opts?.size ?? st.captionSize, ...(opts?.font && opts.font !== st.captionFont ? { font: opts.font } : {}), ...base };
     const hide = (id: number | null) => {
       const shown = this.r.hiddenCaption !== null ? doc.captions.get(this.r.hiddenCaption) : null;
       if (shown) doc.dirtyRects.push(this.r.captionBox(shown));
@@ -5151,6 +6181,7 @@ export class Editor {
       defaultSize: base?.size ?? st.captionSize,
       defaultFont: base?.font ?? st.captionFont,
       redraw: () => this.requestOverlay(),
+      enterFinishes: () => this.enterFinishesText(c?.ph ? 'other' : 'text'),
     };
     const initial = c
       ? { runs: applyBase(c.runs, base), paras: c.paras, justify: c.justify, wrap: c.wrap, width: c.width, lineHeight: c.lineHeight, lineSpacing: c.lineSpacing, cols: c.cols, colGap: c.colGap, boxH: c.boxH, fit: c.fit }
@@ -5232,11 +6263,88 @@ export class Editor {
 
   /** Smart guides: things moved snap into line with other structures, text, shapes and the page (View > Alignment Guides; Alt turns them off while dragging). */
   smartGuides = false;
+  /** The drawing's guides changed (added, moved, taken away): the file has changed, and the Guides toolbox shows it. */
+  onGuides: () => void = () => {};
+  /** The guide lines the grabbed atom snapped onto in the move going on (shown brighter). */
+  private guideSnapped: CanvasGuideLine[] = [];
+
+  /** Moves snap to the drawing's guides. */
+  private guidesSnap(): boolean {
+    const g = this.doc.guides;
+    return !!g && g.shown && !g.snapOff && (g.list.length > 0 || g.grid);
+  }
+
+  /** The guide under a point (the Select tool drags it). */
+  private guideUnder(p: Vec): { index: number; part: 'middle' | 'x' | 'y' } | null {
+    const g = this.doc.guides;
+    return g ? guideAt(p, g, this.tol(4)) : null;
+  }
+
+  /** What part of the drawing the window shows, in points. */
+  viewArea(): { x1: number; y1: number; x2: number; y2: number } {
+    const a = this.r.toDoc(0, 0), b = this.r.toDoc(this.r.overlay.clientWidth, this.r.overlay.clientHeight);
+    return { x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y), x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y) };
+  }
+
+  /** The point a move snaps to guides by: the atom grabbed, the end of the bond grabbed nearer the press, or a caption's corner. */
+  private grabbedPoint(d: Drag): Vec | null {
+    const h = d.hit;
+    if (!h) return null;
+    if (h.kind === 'atom') { const a = this.doc.atoms.get(h.id); return a ? { x: a.x, y: a.y } : null; }
+    if (h.kind === 'bond') {
+      const b = this.doc.bonds.get(h.id);
+      const p = b && this.doc.atoms.get(b.a1), q = b && this.doc.atoms.get(b.a2);
+      if (!p || !q) return null;
+      return dist(p, d.start) <= dist(q, d.start) ? { x: p.x, y: p.y } : { x: q.x, y: q.y };
+    }
+    if (h.kind === 'caption') { const c = this.doc.captions.get(h.id); return c ? { x: c.x, y: c.y } : null; }
+    return null;
+  }
+
+  /** Draw the guides: their lines across the window, ruler ticks along them, and a crosshair's middle. */
+  private drawGuides(ctx: CanvasRenderingContext2D, px: number): void {
+    const g = this.doc.guides;
+    if (!g?.shown || (!g.list.length && !g.grid)) return;
+    const area = this.viewArea();
+    const colour = g.color ?? (this.dark ? '#4fc3f7' : '#1b8fd0');
+    // (Guides toolbox > Look: how see-through, on top of the grid's own lightness)
+    const solid = 1 - (g.clear ?? 0);
+    const lines = guideLines(g, area);
+    const minGap = 5 * px;
+    ctx.save();
+    ctx.strokeStyle = colour;
+    for (const l of lines) {
+      const snapped = this.drag?.mode === 'move' && this.guideSnapped.some((s) => s.axis === l.axis && s.at === l.at);
+      ctx.globalAlpha = (l.guide === null ? 0.35 : snapped ? 1 : 0.8) * (snapped ? 1 : solid);
+      ctx.lineWidth = (snapped ? 2 : 1) * px;
+      ctx.beginPath();
+      if (l.axis === 'x') { ctx.moveTo(l.at, area.y1); ctx.lineTo(l.at, area.y2); } else { ctx.moveTo(area.x1, l.at); ctx.lineTo(area.x2, l.at); }
+      // the ticks, as on a ruler (the grid's own lines carry only their minor ticks where they cross nothing)
+      const [a, b] = l.axis === 'x' ? [area.y1, area.y2] : [area.x1, area.x2];
+      for (const t of ticksBetween(a, b, l.origin, g, minGap)) {
+        const half = (t.major ? 6 : 3) * px;
+        if (l.axis === 'x') { ctx.moveTo(l.at - half, t.at); ctx.lineTo(l.at + half, t.at); } else { ctx.moveTo(t.at, l.at - half); ctx.lineTo(t.at, l.at + half); }
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = Math.max(0.3, solid);
+    ctx.lineWidth = 1.5 * px;
+    ctx.fillStyle = this.dark ? '#10161f' : '#ffffff';
+    for (const x of g.list) {
+      if (x.kind !== 'cross') continue;
+      ctx.beginPath();
+      ctx.arc(x.x, x.y, 4 * px, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   /** Where a moved selection (its box at the start, dragged `raw`) lands on the grid and drawing guides, when there are any (Slides). */
   moveSnap: ((box: Rect, raw: Vec, tol: number) => Vec) | null = null;
   /** Text boxes take a click as typing (Slides and Design), with an I-beam over them. */
   textFirst = false;
-  /** View > Dark Page is on: marks drawn over the page are made to show up on it. */
+  /** View > Reading Mode is on: marks drawn over the page are made to show up on it. */
   dark = false;
 
   /** What the pointer was last over (to change the pointer when Ctrl is pressed or let go). */
@@ -5360,6 +6468,7 @@ export class Editor {
       defaultSize: size,
       defaultFont: this.doc.style.captionFont,
       redraw: () => this.requestOverlay(),
+      enterFinishes: () => this.enterFinishesText('other'),
       hint: 'Enter: new line · Esc: done',
       around: () => shapeBox(doc.shapes.get(id) ?? s),
     };
@@ -5459,6 +6568,7 @@ export class Editor {
       defaultSize: size,
       defaultFont: this.doc.style.captionFont,
       redraw: () => this.requestOverlay(),
+      enterFinishes: () => this.enterFinishesText('other'),
       hint: typeof part === 'string' ? 'Enter: new paragraph · Esc: done' : 'Tab: next cell · Shift+Tab: back · Enter: new line · Esc: done',
       around: () => { const cur = doc.shapes.get(id); return cur ? this.r.tableBox(cur) : this.r.tableBox(s); },
       typed: (rich: { runs: Caption['runs']; paras?: Caption['paras'] }) => {
@@ -5524,6 +6634,98 @@ export class Editor {
 
   // ------------------------------------------------------------------ overlay
 
+  /** Tools whose drag reads Alt and Shift as they are held now (the others read them at the press). */
+  private liveMods(): boolean {
+    const k = this.tool.kind;
+    return k === 'symbol' || k === 'bond' || k === 'shape' || (k === 'arrow' && !this.drag?.shift);
+  }
+
+  /** Note the modifier keys held (from a key or pointer event); the hints beside the pointer redraw when they change. */
+  private setMods(e: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean }, redraw = true): void {
+    const m = { shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey };
+    if (m.shift === this.mods.shift && m.alt === this.mods.alt && m.ctrl === this.mods.ctrl) return;
+    this.mods = m;
+    if (redraw && this.aids.hints && this.pointerInside) this.requestOverlay();
+  }
+
+  /** The line being drawn or dragged now (a bond, an arrow, a line, or an arrow's or line's end), for the angle beside the pointer. */
+  private drawnSegment(): { a: Vec; b: Vec } | null {
+    const d = this.drag;
+    if (!d?.moved) return null;
+    const doc = this.doc;
+    const t = this.tool;
+    if (d.mode === 'draw') {
+      if (t.kind === 'bond' && !t.hapto) {
+        const startAtom = d.hit?.kind === 'atom' ? doc.atoms.get(d.hit.id) ?? null : null;
+        const start: Vec = startAtom ?? d.start;
+        const L = startAtom ? bondLength(doc, startAtom) : doc.style.bondLength;
+        return { a: start, b: this.snapEnd(start, d.last, L, startAtom?.id, d.alt, t.order).pt };
+      }
+      if (t.kind === 'arrow') {
+        if (this.freehand(d) || this.pushFor(d, d.last)) return null;
+        const c = this.connectorEnds(t.style, d.start, d.last);
+        if (c) return { a: c.tail, b: c.head };
+        const start = this.branchStart(d);
+        return { a: start, b: this.arrowEnd(start, d.last, d.alt) };
+      }
+      if (t.kind === 'shape' && t.shape.kind === 'line') {
+        const g = this.shapeGeometry(t, d.start, d.last, d.shift, d.alt);
+        return g ? { a: { x: g.x1, y: g.y1 }, b: { x: g.x2, y: g.y2 } } : null;
+      }
+      return null;
+    }
+    if (d.mode === 'handle' && d.handle) {
+      const h = d.handle;
+      if (h.kind === 'arrow' && (h.which === 'tail' || h.which === 'head')) {
+        const r = doc.arrows.get(h.id);
+        if (r && !isCurved(r)) return h.which === 'head' ? { a: r.tail, b: r.head } : { a: r.head, b: r.tail };
+      }
+      if (h.kind === 'shape' && (h.which === 'p1' || h.which === 'p2')) {
+        const s = doc.shapes.get(h.id);
+        if (s?.kind === 'line') return h.which === 'p2' ? { a: { x: s.x1, y: s.y1 }, b: { x: s.x2, y: s.y2 } } : { a: { x: s.x2, y: s.y2 }, b: { x: s.x1, y: s.y1 } };
+      }
+    }
+    return null;
+  }
+
+  /** What the modifier keys care about right now (see modifierHints). */
+  private hintState(): HintState {
+    const d = this.drag;
+    const t = this.tool;
+    const drag: HintState['drag'] = !d || d.button !== 0 ? 'none'
+      : d.mode === 'draw' || (d.mode === 'none' && !d.moved) ? 'draw'
+      : d.mode === 'move' || d.mode === 'rotate' || d.mode === 'handle' || d.mode === 'marquee' ? d.mode : 'other';
+    const over = (d ? d.hit : this.hover)?.kind;
+    const h = d?.mode === 'handle' ? d.handle : undefined;
+    return {
+      tool: t.kind,
+      shape: t.kind === 'shape' ? t.shape.kind : undefined,
+      curved: t.kind === 'arrow' && this.curvedTool(),
+      aromatic: t.kind === 'ring' && t.aromatic,
+      drag: d && !d.moved && drag !== 'draw' ? 'none' : drag,
+      over: over === 'atom' || over === 'bond' || over === 'arrow' || over === 'shape' || over === 'caption' ? over : null,
+      handle: h && (h.kind === 'arrow' || h.kind === 'shape') ? { kind: h.kind, which: h.which, line: h.kind === 'shape' && this.doc.shapes.get(h.id)?.kind === 'line' } : undefined,
+      fixedAngles: this.options.fixedAngles,
+      fixedLength: this.options.fixedLength,
+      snapping: this.smartGuides || !!this.moveSnap || this.guidesSnap(),
+      asksChain: !!this.askChainLength,
+    };
+  }
+
+  /** The angle (and length) of what is being drawn, and the modifier keys' hints, beside the pointer. */
+  private drawAids(ctx: CanvasRenderingContext2D, px: number): void {
+    const a = this.aids;
+    if ((!a.angle && !a.length && !a.hints) || !this.pointerInside || this.captionEd || this.paused) return;
+    const seg = a.angle || a.length ? this.drawnSegment() : null;
+    const readout = seg ? readoutText(seg.a, seg.b, { ...a, units: this.lengthUnits() }) : '';
+    const d = this.drag;
+    // while the button is up the hints show only as a key is held, saying what it will do
+    const held = this.mods.shift || this.mods.alt || this.mods.ctrl;
+    let hints = a.hints && (d?.moved || held) ? modifierHints(this.hintState(), this.mods) : [];
+    if (!d?.moved && held) hints = hints.filter((x) => x.on);
+    drawCursorAids(ctx, this.pointer, px, readout, hintLines(hints), { dark: this.dark, look: a.look });
+  }
+
   private drawOverlay(): void {
     this.captionEd?.place();
     const ctx = this.r.clearOverlay();
@@ -5579,6 +6781,10 @@ export class Editor {
       }
     }
     if (this.showRoles && s.arrows.size === 1 && !this.drag) this.drawRoles(ctx, [...s.arrows][0], px);
+    // a selected Smart Scheme: a dashed box round each species, numbered, and + buttons to add one
+    const smartId = this.drag?.moved ? null : this.selectedSmart();
+    if (smartId !== null) this.drawSmartMarks(ctx, smartId, px);
+    this.onOverlay();
     // hotspot
     const join = this.drag?.joinTo;
     const h: Hit = join !== undefined ? { kind: 'atom', id: join } : this.drag?.mode === 'move' || this.drag?.mode === 'rotate' ? null : this.hotspot();
@@ -5750,9 +6956,12 @@ export class Editor {
       const b = this.selBox()!;
       ctx.lineWidth = px;
       ctx.strokeStyle = mk.box;
-      ctx.setLineDash([3 * px, 3 * px]);
-      ctx.strokeRect(b.x1 - 2 * px, b.y1 - 2 * px, b.x2 - b.x1 + 4 * px, b.y2 - b.y1 + 4 * px);
-      ctx.setLineDash([]);
+      // no box round a bond or a straight run of bonds: it would sit inside their blue highlight
+      if (!this.boxInsideHighlight(b)) {
+        ctx.setLineDash([3 * px, 3 * px]);
+        ctx.strokeRect(b.x1 - 2 * px, b.y1 - 2 * px, b.x2 - b.x1 + 4 * px, b.y2 - b.y1 + 4 * px);
+        ctx.setLineDash([]);
+      }
       ctx.beginPath();
       ctx.moveTo(rh.x, b.y1 - 2 * px);
       ctx.lineTo(rh.x, rh.y + 4.5 * px);
@@ -5781,6 +6990,7 @@ export class Editor {
       }
     }
     this.drawPorts(ctx, px);
+    this.drawGuides(ctx, px);
     if (this.guideLines.length && this.drag?.mode === 'move') {
       ctx.save();
       ctx.strokeStyle = '#e8336d';
@@ -5817,6 +7027,7 @@ export class Editor {
     this.drawInk(ctx, px);
     this.drawArrowHelpers(ctx, px, mk.box);
     this.captionEd?.draw(ctx);
+    this.drawAids(ctx, px);
   }
 
   /** The pen's ink: the stroke being drawn, and letters waiting to be read. */
@@ -6263,7 +7474,7 @@ export function insideLoop(loop: readonly Vec[], x: number, y: number): boolean 
 
 /** What Fill Rings says when it has filled n rings: it sends you to the Style panel. */
 export function ringsFilledMessage(n: number): string {
-  return `${n} ring${n > 1 ? 's' : ''} filled: choose the colour, gradient or pattern in the Style panel.`;
+  return `${n} ring${n > 1 ? 's' : ''} filled: choose the color, gradient or pattern in the Style panel.`;
 }
 
 /** Fill Rings' message says rings were filled (not that there was nothing to fill), so the Style panel should show. */

@@ -157,7 +157,7 @@ export class DocFile {
     ed.layoutWith = (frame) => {
       const lay = this.layout();
       const at = lay.notes.get(id);
-      const nl = this.layouter.noteText(this.t, frame.runs, frame.paras, lay.fields.get(id) ?? '', at?.w ?? lay.textW);
+      const nl = this.layouter.noteText(this.t, frame.runs, frame.paras, lay.fields.get(id) ?? '', at?.w ?? lay.textW, lay.fields);
       return at ? movedLayout(nl, at.x, at.y - nl.box.y1) : nl;
     };
     // tracked like the document's own text, and protected with it

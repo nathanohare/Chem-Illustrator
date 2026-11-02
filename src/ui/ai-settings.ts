@@ -2,13 +2,13 @@
 
 import { isTauri } from '@tauri-apps/api/core';
 import { ask } from './ask';
-import { PROVIDERS, aiKeyRemembered, aiModel, aiModels, aiAsk, aiName, hasAiKey, rememberAiKey, setAiKey, type AiPrefs, type AiProvider } from '../ai/link';
+import { PROVIDERS, localOnlyBlock, aiKeyRemembered, aiModel, aiModels, aiAsk, aiName, hasAiKey, rememberAiKey, setAiKey, type AiPrefs, type AiProvider } from '../ai/link';
 
-const NOTE = 'Optional. Link an AI model with your own API key to use it where the app offers "Use AI model", such as reading hand-drawn structures. '
+const NOTE = 'Optional. Link an AI model with your own API key to use it where the app offers "Use AI model", such as reading hand-drawn structures, and for the Assistant. '
   + 'Nothing is sent anywhere until you link one; after that, only what you choose to send (such as the picture being read) goes to that service, '
   + 'and it is billed to your account there. The key is never in exported settings. '
   + (isTauri() ? 'It is kept on this computer only.'
-    : 'In a browser it is forgotten when this tab closes unless you tick "Remember". Other sites at the same github.io address can read what a browser remembers, so a separate key with a spending limit is safest here.');
+    : 'In a browser it is forgotten when this tab closes unless you check "Remember". Other sites at the same github.io address can read what a browser remembers, so a separate key with a spending limit is safest here.');
 
 /** Show the settings; `save` keeps the new choice. */
 export async function aiSettingsDialog(now: AiPrefs, save: (p: AiPrefs) => void): Promise<void> {
@@ -28,11 +28,19 @@ export async function aiSettingsDialog(now: AiPrefs, save: (p: AiPrefs) => void)
       { name: 'base', label: 'Address (Other only)', value: cur.base, placeholder: 'http://localhost:11434/v1',
         help: 'For Other: the service\'s OpenAI-style address, such as https://openrouter.ai/api/v1 or Ollama\'s http://localhost:11434/v1.' },
       ...(isTauri() ? [] : [{ name: 'remember', label: 'Remember the key in this browser', type: 'checkbox' as const, value: String(aiKeyRemembered(cur)) }]),
+      { name: 'localOnly', label: 'Local only: never send anything off this computer', type: 'checkbox', value: String(cur.localOnly),
+        help: 'Only a model on this computer (Ollama or LM Studio, under Other, at a localhost address) is asked; requests to any other address are blocked. For unpublished structures.' },
+      { name: 'look', label: 'Assistant shows as', value: cur.assistantLook ?? 'bar', options: [
+        { value: 'bar', label: 'A prompt bar at the bottom of the page' },
+        { value: 'pane', label: 'A pane down the right' },
+        { value: 'window', label: 'A floating window' },
+      ], help: 'Edit > Assistant (Ctrl+/), there once a model is linked. It can be changed from the Assistant too.' },
       { name: 'forget', label: 'Forget the saved key for this service', type: 'checkbox', value: 'false' },
     ], { ok: 'Save and Test', note: NOTE });
     if (!r) return;
     const provider = (r.provider as AiProvider) || 'none';
-    const next: AiPrefs = { provider, model: r.model.trim(), base: r.base.trim() };
+    const next: AiPrefs = { provider, model: r.model.trim(), base: r.base.trim(), localOnly: r.localOnly === 'true', assistant: cur.assistant,
+      ...(r.look === 'pane' || r.look === 'window' ? { assistantLook: r.look } : {}) };
     if (provider === 'compatible' && !/^https?:\/\//i.test(next.base)) {
       await ask('AI Model', [], { noCancel: true, note: 'For Other, type the service\'s address, starting with http:// or https://.' });
       cur = next;
@@ -48,6 +56,13 @@ export async function aiSettingsDialog(now: AiPrefs, save: (p: AiPrefs) => void)
     }
     save(next);
     if (provider === 'none') return;
+    const blocked = localOnlyBlock(next);
+    if (blocked) {
+      const again = await ask('AI Model', [], { ok: 'Change', note: blocked });
+      if (!again) return;
+      cur = next;
+      continue;
+    }
     const problem = await test(next);
     if (!problem) {
       await ask('AI Model', [], { noCancel: true, note: `Linked: ${aiName(next)}. The key works.` });

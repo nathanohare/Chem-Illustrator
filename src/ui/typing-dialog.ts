@@ -35,12 +35,10 @@ export class TypingDialog {
       <label class="hk-opt"><input type="checkbox" data-opt="links" /><span>Make web addresses, doi:10.… and e-mail addresses into links as I type them (when a space or a new line ends them). <kbd>Ctrl+Z</kbd> straight after keeps one as plain text.</span></label>
       <label class="hk-opt"><input type="checkbox" data-opt="ctrl" /><span>Use <kbd>Ctrl+click</kbd> to follow a link, as Word does. Off: a plain click follows links in canvases, presentations and spreadsheets (in text being typed, and in documents, it is still <kbd>Ctrl+click</kbd>, so a click can place the caret).</span></label>
       <label class="hk-opt"><input type="checkbox" data-opt="spell" /><span>Check spelling, with chemistry words (red underlines), and chemistry formatting (blue underlines) in text being typed. Right-click an underlined word for suggestions.</span></label>
-      <h3>Replacements as you type</h3>
-      <p class="muted small">When you finish a word with a space or punctuation, text on the left becomes text on the right. A replacement that starts with a letter only applies as a whole word (65 oC, not ZnoC).</p>
+      <h3 data-info="When you finish a word with a space or punctuation, text on the left becomes text on the right. A replacement that starts with a letter only applies as a whole word (65 oC, not ZnoC).">Replacements as you type</h3>
       <div class="ty-table-wrap"><table class="ty-table"><thead><tr><th>Type</th><th>Becomes</th><th></th></tr></thead><tbody></tbody></table></div>
       <div class="ty-row-buttons"><button type="button" data-act="add">Add a replacement</button><button type="button" data-act="reset">Use the standard list</button></div>
-      <h3>My dictionary</h3>
-      <p class="muted small">Words the spelling check accepts, one per line (Add to Dictionary on an underlined word adds it here).</p>
+      <h3 data-info="Words the spelling check accepts, one per line (Add to Dictionary on an underlined word adds it here).">My dictionary</h3>
       <textarea class="ty-words" rows="6" spellcheck="false" aria-label="My dictionary, one word per line"></textarea>
       <div class="hk-foot">
         <span class="muted small">Saved in <code class="ty-where"></code></span>

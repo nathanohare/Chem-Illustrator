@@ -31,7 +31,7 @@ import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed'
 import { fromDataUrl } from '../render/images';
 import { embeddedPart } from './ole-object';
 import { BULLETS, fitParas, listInfo, paraCount, schemeOf, splitParagraphs } from '../text/paragraphs';
-import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FLOAT_GAP, FOOT_FORMAT, columnsOf, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
+import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FLOAT_GAP, FOOT_FORMAT, columnsOf, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
 import { ACS_LINE, GRID_LINE, bibHang, docCellAlign, shownSize } from '../document/doc-layout';
 import { sectionsOf, type Section } from '../document/sections';
 import { bibliography, piecesText, type Reference } from '../document/references';
@@ -47,20 +47,23 @@ import { toOmml } from '../document/math';
 import { documentMeasure } from '../text/font-measure';
 import { arialWidth } from '../text-metrics';
 import { PAD_X, PAD_Y, cellAlign, coveringCell, isCovered, rowSpanOf, spanOf } from '../table';
-import { connectorSpPr, geoSpPr, xfrm } from './pptx-write';
+import { connectorSpPr, geoGeomXml, geoSpPr, xfrm } from './pptx-write';
 import { geoDef } from '../design/geo';
 import { shapeOrder } from '../objects';
 import { addChart, C_NS } from './office-chart';
 import { CX_NS, CX1_NS } from './xlsx-chart';
 import { isChartEx } from '../sheet/chart';
 import type { ChartBox } from '../sheet/chart-box';
+import { writeKeptParts, type ContentControl } from './kept-parts';
+import { cmlGuid, contentsSig, writeCml } from './cml';
 import {
-  BIB_MARK, CHART_NAME, CITE_FIELD, CUSTOM_PROPS_FMTID, DOCX_CT, W14_NS, W15_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_NAME, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
+  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_NAME, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
 } from './docx-base';
 
 export interface DocxDeps {
   /** A drawing's picture for Word: PNG bytes, an SVG Word shows instead when it can, and its own size in points. */
-  picture(contents: Contents, style: DocStyle): Promise<{ png: Uint8Array; svg?: string; w: number; h: number; x?: number; y?: number } | null>;
+  /** A drawing's picture: just round what is drawn, or a figure's whole area (`frame`, never cut short of what is drawn). */
+  picture(contents: Contents, style: DocStyle, frame?: FigureFrame): Promise<{ png: Uint8Array; svg?: string; w: number; h: number; x?: number; y?: number } | null>;
   /** A PNG of an SVG picture, for Word versions that can't show SVG (w × h pixels). */
   svgToPng?(svg: string, w: number, h: number): Promise<Uint8Array>;
   /**
@@ -226,7 +229,7 @@ class DocxWriter {
     pkg.relate(main, DOCX_REL.settings, 'settings.xml');
     const settings = (embed: boolean) => `${HEAD}<w:settings xmlns:w="${W_NS}"><w:zoom w:percent="100"/>${this.t.pageColor ? '<w:displayBackgroundShape/>' : ''}${embed ? '<w:embedTrueTypeFonts/><w:saveSubsetFonts/>' : ''}${this.t.track ? '<w:trackRevisions/>' : ''}${protectionXml(this.t.protect)}<w:defaultTabStop w:val="720"/>${hyphenXml(this.t.hyphen)}${allHf(this.t).some((h) => h.oddEven) ? '<w:evenAndOddHeaders/>' : ''}` +
       `<w:characterSpacingControl w:val="doNotCompress"/>${notes}` +
-      `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>`;
+      `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>${this.t.kept?.vars ?? ''}</w:settings>`;
     pkg.add('word/settings.xml', settings(false), DOCX_CT.settings);
     // our own part: each structure's drawing, and each table as made here
     pkg.relate(main, DOCX_REL.customXml, '../customXml/item1.xml');
@@ -245,13 +248,13 @@ class DocxWriter {
       `${tag('dc:title', name)}${tag('dc:subject', pr.subject)}${tag('dc:creator', pr.author)}${tag('cp:keywords', pr.keywords)}${pr.author ? `<cp:lastModifiedBy>${xml(pr.author)}</cp:lastModifiedBy>` : ''}` +
       `<dcterms:created xsi:type="dcterms:W3CDTF">${xml(pr.created ?? now)}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`, DOCX_CT.core);
     pkg.add('docProps/app.xml', `${HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Chem Illustrator</Application>${tag('Company', pr.company)}</Properties>`, DOCX_CT.app);
-    // Zotero's document preferences (its style and settings), as custom document properties
-    if (this.t.citeManager === 'zotero') {
-      const prefs = splitPrefs(this.t.zoteroPrefs ?? newZoteroPrefs(this.t.citeStyle ?? preferredStyle().style));
-      pkg.relate('', REL.customProps, 'docProps/custom.xml');
-      pkg.add('docProps/custom.xml', `${HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">` +
-        prefs.map((v, i) => `<property fmtid="${CUSTOM_PROPS_FMTID}" pid="${i + 2}" name="ZOTERO_PREF_${i + 1}"><vt:lpwstr>${xml(v)}</vt:lpwstr></property>`).join('') + '</Properties>', DOCX_CT.custom);
-    }
+    // Zotero's document preferences (its style and settings) as custom document properties, with
+    // other programs' data kept from the file read: custom XML (Chem4Word's structures written
+    // afresh where they were changed here), custom properties and add-ins' settings
+    const ownProps: [string, string][] = this.t.citeManager === 'zotero'
+      ? splitPrefs(this.t.zoteroPrefs ?? newZoteroPrefs(this.t.citeStyle ?? preferredStyle().style)).map((v, i) => [`ZOTERO_PREF_${i + 1}`, v])
+      : [];
+    writeKeptParts(pkg, this.t.kept, { main, firstItem: 2, ownProps, replaceXml: changedCml(this.t) });
     // the free fonts the document uses go inside it, so it looks the same where they aren't installed
     const embed = await facesToEmbed(pkg.xmlTexts(), this.deps.fonts);
     if (embed.length) {
@@ -296,9 +299,19 @@ class DocxWriter {
     const secs = sectionsOf({ ...t, paras });
     const endsSection = new Map<number, Section>();
     for (const s of secs.slice(0, -1)) endsSection.set(s.end - 1, s);
+    // other programs' content controls round whole paragraphs (kept from the file read), opened and closed as they change
+    let block: string | undefined;
+    const blockTo = (cc: string | undefined) => {
+      const want = cc && t.controls?.[cc] ? cc : undefined;
+      if (want === block) return;
+      if (block !== undefined) out.push(`</w:sdtContent></w:sdt>`);
+      block = want;
+      if (want !== undefined) out.push(this.sdtStart(t.controls![want]));
+    };
     for (let p = 0; p < n; p++) {
       const runs = runsOf[p] ?? [];
       const ps = paras[p];
+      blockTo(ps.cc);
       const ending = endsSection.get(p);
       const sectXml = ending ? await this.section(main, ending) : '';
       // a section ending with a table, contents or bibliography: an empty paragraph after it holds the section's properties
@@ -343,6 +356,7 @@ class DocxWriter {
       } else out.push(await this.paragraph(main, ps, runs, listNum, p, sectXml));
       lastWasTable = false;
     }
+    blockTo(undefined);
     // comments still open (on a table, say) close in a paragraph of their own
     const left = [...this.cmtOpen].map((id) => this.cmtEnd(id)).join('');
     if (left) { out.push(`<w:p>${left}</w:p>`); lastWasTable = false; }
@@ -504,7 +518,18 @@ class DocxWriter {
     // an equation on its own in its paragraph is a display equation (Word's equation paragraph)
     const shownRuns = runs.filter((r) => r.obj !== undefined || r.text.trim());
     const display = shownRuns.length === 1 && shownRuns[0].obj !== undefined && this.t.objects[shownRuns[0].obj]?.kind === 'math';
+    // other programs' content controls round runs (Chem4Word's structures, a form's fields): links go inside them
+    let control: string | undefined;
+    const controlTo = (cc: string | undefined) => {
+      const want = cc && this.t.controls?.[cc] && cc !== ps.cc ? cc : undefined;
+      if (want === control) return;
+      linkTo(undefined);
+      if (control !== undefined) out.push(`</w:sdtContent></w:sdt>`);
+      control = want;
+      if (want !== undefined) out.push(this.sdtStart(this.t.controls![want]));
+    };
     for (const r of runs) {
+      controlTo(r.cc);
       linkTo(r.link);
       out.push(this.cmtBefore(r));
       if (r.obj === undefined) { out.push(this.tracked(r.rev, this.textRuns(r, st)), this.cmtAfter(r)); continue; }
@@ -521,9 +546,15 @@ class DocxWriter {
       if (open && r.obj === open.seq) { out.push(`<w:bookmarkEnd w:id="${open.id}"/>`); open = null; }
       out.push(this.cmtAfter(r));
     }
+    controlTo(undefined);
     linkTo(undefined);
     for (const m of marks) out.push(`<w:bookmarkEnd w:id="${m.id}"/>`);
     return `<w:p>${pPr.length ? `<w:pPr>${pPr.join('')}</w:pPr>` : ''}${colBreak}${out.join('')}</w:p>`;
+  }
+
+  /** The start of a content control kept from the file read: its properties as they were, with a fresh id. */
+  private sdtStart(c: ContentControl): string {
+    return `<w:sdt><w:sdtPr>${c.head}<w:id w:val="${this.sdtId++}"/>${c.rest}</w:sdtPr>${c.end ? `<w:sdtEndPr>${c.end}</w:sdtEndPr>` : ''}<w:sdtContent>`;
   }
 
   /** The start of a Word link: to a bookmark here (w:anchor), or through a relationship of the part it is in. */
@@ -568,7 +599,8 @@ class DocxWriter {
     const app = t.citeManager;
     if (app && app !== 'mendeley-cite') {
       // a reference manager's bibliography field round the entries (worked out again here when opened)
-      paras[0] = fieldStart('', bibInstr(app).instr) + paras[0];
+      const o = t.objects[id];
+      paras[0] = fieldStart('', bibInstr(app, o?.kind === 'bib' ? o.live : undefined).instr) + paras[0];
       paras[paras.length - 1] += '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
     } else if (!app) {
       paras[0] = `<w:bookmarkStart w:id="${mark}" w:name="${name}"/>${paras[0]}`;
@@ -695,7 +727,12 @@ class DocxWriter {
           const align = p.align ?? 'left';
           if (align !== st.align) pPr.push(`<w:jc w:val="${JC[align]}"/>`);
           const mark = i === 0 ? `<w:r><w:rPr><w:rStyle w:val="${ref}"/></w:rPr><w:${tag}Ref/></w:r><w:r><w:t xml:space="preserve"> </w:t></w:r>` : '';
-          const body = this.linkedRuns(`word/${tag}s.xml`, (runsOf[i] ?? []).filter((r) => r.obj === undefined), (r) => this.tracked(r.rev, this.textRuns(r, st)));
+          // its text, and its citations (note styles put them in footnotes)
+          const cite = (r: TextRun) => { const c = r.obj !== undefined ? t.objects[r.obj] : undefined; return c?.kind === 'cite' ? c : null; };
+          const body = this.linkedRuns(`word/${tag}s.xml`, (runsOf[i] ?? []).filter((r) => r.obj === undefined || cite(r)), (r) => {
+            const c = cite(r);
+            return c ? this.citeXml(c, runProps(r, st, { cs: this.charStyleOf(r) }), this.shown.get(r.obj!) ?? '') : this.tracked(r.rev, this.textRuns(r, st));
+          });
           return `<w:p><w:pPr>${pPr.join('')}</w:pPr>${mark}${body}</w:p>`;
         });
         out.push(`<w:${tag} w:id="${n}">${ps.join('')}</w:${tag}>`);
@@ -731,6 +768,19 @@ class DocxWriter {
     return r.cstyle ? this.charStyles[r.cstyle] : undefined;
   }
 
+  /** A citation: its numbers, which Word shows as they are (an ADDIN field is never worked out again by Word). */
+  private citeXml(o: Extract<DocObject, { kind: 'cite' }>, rPr: string, shown: string): string {
+    // for Zotero, Mendeley or EndNote: in their own form, so they go on managing it
+    const refs = o.refs.map((r) => this.t.references?.find((x) => x.id === r)).filter((r): r is Reference => !!r);
+    const app = this.t.citeManager;
+    if (app && refs.length) {
+      const out = writeCite(app, refs, o.live, shown);
+      if (out.tag) return `<w:sdt><w:sdtPr><w:tag w:val="${xml(out.tag)}"/><w:id w:val="${this.sdtId++}"/></w:sdtPr><w:sdtContent>${run(rPr, shown)}</w:sdtContent></w:sdt>`;
+      return field(rPr, xml(out.instr), shown, out.data);
+    }
+    return field(rPr, ` ${CITE_FIELD} ${o.refs.map(xml).join(' ')} `, shown);
+  }
+
   private async objectRun(main: string, r: TextRun, st: NamedStyle): Promise<string> {
     const id = r.obj!;
     const o = this.t.objects[id];
@@ -746,18 +796,7 @@ class DocxWriter {
       const bm = this.bookmarks.get(o.target);
       return bm ? field(rPr, ` REF ${bm} \\h \\* CHARFORMAT `, shown) : run(rPr, shown);
     }
-    // a citation: its numbers, which Word shows as they are (an ADDIN field is never worked out again by Word)
-    if (o.kind === 'cite') {
-      // for Zotero, Mendeley or EndNote: in their own form, so they go on managing it
-      const refs = o.refs.map((r) => this.t.references?.find((x) => x.id === r)).filter((r): r is Reference => !!r);
-      const app = this.t.citeManager;
-      if (app && refs.length) {
-        const out = writeCite(app, refs, o.live, shown);
-        if (out.tag) return `<w:sdt><w:sdtPr><w:tag w:val="${xml(out.tag)}"/><w:id w:val="${this.sdtId++}"/></w:sdtPr><w:sdtContent>${run(rPr, shown)}</w:sdtContent></w:sdt>`;
-        return field(rPr, xml(out.instr), shown, out.data);
-      }
-      return field(rPr, ` ${CITE_FIELD} ${o.refs.map(xml).join(' ')} `, shown);
-    }
+    if (o.kind === 'cite') return this.citeXml(o, rPr, shown);
     // a footnote's or endnote's number: Word's own reference to it (Word numbers it)
     if (o.kind === 'note') {
       const n = this.noteIds.get(id);
@@ -806,7 +845,8 @@ class DocxWriter {
     for (let p = 0; p < n; p++) ps.push(await this.paragraph(main, paras[p], runsOf[p] ?? [], 0));
     const N = styleOf(this.t, {});
     const lines = o.runs.reduce((a, r) => a + (r.text.match(/\n/g)?.length ?? 0), 1);
-    const h = Math.max(o.h ?? 0, lines * N.size * 1.25 + 2 * BOX_PAD.y);
+    // a shape keeps its own height (its text in the middle); a text box grows to fit its text
+    const h = o.geo && o.h ? o.h : Math.max(o.h ?? 0, lines * N.size * 1.25 + 2 * BOX_PAD.y);
     const cx = emu(o.w), cy = emu(h);
     const k = this.docPr++;
     const look = lookOf(o);
@@ -814,11 +854,14 @@ class DocxWriter {
     // the look's own white fill (under a shadow) gives way to the box's fill
     const lookRest = lookXml(look).replace(/^<a:solidFill>.*?<\/a:solidFill>/, '');
     const line = look?.frame ? '' : '<a:ln><a:noFill/></a:ln>';
-    const shape = `<wp:docPr id="${k}" name="Text Box ${id}"/><wp:cNvGraphicFramePr/>` +
-      `<a:graphic><a:graphicData uri="${WPS_NS}"><wps:wsp><wps:cNvSpPr txBox="1"/>` +
-      `<wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${fill}${line}${lookRest}</wps:spPr>` +
+    // a shape (Insert > Shapes): Word's shape with its outline (and which of ours it is, for the ones Word has no preset for)
+    const geom = o.geo ? geoGeomXml(o.geo, o.w, h) : '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
+    if (o.geo) (this.model.geos ??= {})[id] = o.geo;
+    const shape = `<wp:docPr id="${k}" name="${o.geo ? 'Shape' : 'Text Box'} ${id}"/><wp:cNvGraphicFramePr/>` +
+      `<a:graphic><a:graphicData uri="${WPS_NS}"><wps:wsp><wps:cNvSpPr${o.geo ? '' : ' txBox="1"'}/>` +
+      `<wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm>${geom}${fill}${line}${lookRest}</wps:spPr>` +
       `<wps:txbx><w:txbxContent>${ps.join('') || '<w:p/>'}</w:txbxContent></wps:txbx>` +
-      `<wps:bodyPr rot="0" vert="horz" wrap="square" lIns="${emu(BOX_PAD.x)}" tIns="${emu(BOX_PAD.y)}" rIns="${emu(BOX_PAD.x)}" bIns="${emu(BOX_PAD.y)}" anchor="t" anchorCtr="0"><a:spAutoFit/></wps:bodyPr></wps:wsp></a:graphicData></a:graphic>`;
+      `<wps:bodyPr rot="0" vert="horz" wrap="square" lIns="${emu(BOX_PAD.x)}" tIns="${emu(BOX_PAD.y)}" rIns="${emu(BOX_PAD.x)}" bIns="${emu(BOX_PAD.y)}" anchor="${o.geo ? 'ctr' : 't'}" anchorCtr="0">${o.geo ? '<a:noAutofit/>' : '<a:spAutoFit/>'}</wps:bodyPr></wps:wsp></a:graphicData></a:graphic>`;
     return `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ''}<mc:AlternateContent><mc:Choice Requires="wps"><w:drawing>${this.placed(o, cx, cy, shape)}</w:drawing></mc:Choice><mc:Fallback/></mc:AlternateContent></w:r>`;
   }
 
@@ -912,7 +955,7 @@ class DocxWriter {
     // a diagram in the document's own text: Word gets its shapes as a group (the picture for older Words)
     let group: ((docPr: string) => string) | null = null;
     if (o.kind === 'drawing') {
-      const pic = await this.deps.picture(o.contents, t.drawingStyle);
+      const pic = await this.deps.picture(o.contents, t.drawingStyle, o.frame);
       if (!pic) return '';
       if (main === 'word/document.xml' && pic.x !== undefined && pic.y !== undefined) {
         const kids = diagramShapesXml(o.contents, t.drawingStyle);
@@ -921,7 +964,7 @@ class DocxWriter {
           `<wpg:grpSpPr><a:xfrm${turnAttrs(o)}><a:off x="0" y="0"/><a:ext cx="${emu(size.w)}" cy="${emu(size.h)}"/><a:chOff x="${emu(at.x)}" y="${emu(at.y)}"/><a:chExt cx="${emu(at.w)}" cy="${emu(at.h)}"/></a:xfrm></wpg:grpSpPr>` +
           `${kids}</wpg:wgp></a:graphicData></a:graphic>`;
       }
-      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png) };
+      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), ...(o.frame ? { frame: o.frame } : {}) };
       blip = this.media(main, pic.png, 'png');
       if (pic.svg) svgId = this.media(main, new TextEncoder().encode(pic.svg), 'svg');
       size = shownSize({ w: pic.w, h: pic.h }, o.scale ?? 1, this.textW);
@@ -1400,6 +1443,9 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   if (!!r.strike !== !!cs?.strike) out.push(r.strike ? '<w:strike/>' : '<w:strike w:val="0"/>');
   const color = r.color ?? st.color;
   if ((color ?? '') !== (st.color ?? '')) out.push(`<w:color w:val="${color ? hex6(color) : 'auto'}"/>`);
+  // character spacing (twentieths of a point) and kerning taken off
+  if (r.spacing) out.push(`<w:spacing w:val="${Math.round(r.spacing * 20)}"/>`);
+  if (r.noKern) out.push('<w:kern w:val="0"/>');
   const size = r.size ?? st.size;
   if (size !== st.size) out.push(`<w:sz w:val="${half(size)}"/><w:szCs w:val="${half(size)}"/>`);
   const hl = r.highlight ? highlightName(r.highlight) : null;
@@ -1409,6 +1455,23 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   if (r.highlight && !hl) out.push(`<w:shd w:val="clear" w:color="auto" w:fill="${hex6(r.highlight)}"/>`);
   const pos = x.pos ?? (r.sub ? 'sub' : r.sup ? 'sup' : 'base');
   if (pos !== 'base') out.push(`<w:vertAlign w:val="${pos === 'sub' ? 'subscript' : 'superscript'}"/>`);
+  out.push(textEffects(r, color));
+  return out.join('');
+}
+
+/**
+ * The Font box's text effects as Word 2010's own (w14, last in a run's properties, in Word's
+ * order): a shadow, an outline round the letters, and the letters' fill (none, or see-through).
+ */
+function textEffects(r: TextRun, color: string | undefined): string {
+  if (!r.shadow && !r.outline && !r.noFill && !r.transparency) return '';
+  const ns = ` xmlns:w14="${W14_NS}"`;
+  const out: string[] = [];
+  if (r.shadow) out.push(`<w14:shadow${ns} w14:blurRad="38100" w14:dist="38100" w14:dir="2700000" w14:sx="100000" w14:sy="100000" w14:kx="0" w14:ky="0" w14:algn="tl"><w14:srgbClr w14:val="000000"><w14:alpha w14:val="60000"/></w14:srgbClr></w14:shadow>`);
+  if (r.outline) out.push(`<w14:textOutline${ns} w14:w="${Math.round((r.outlineW ?? 0.75) * 12700)}" w14:cap="flat" w14:cmpd="sng" w14:algn="ctr"><w14:solidFill><w14:srgbClr w14:val="${hex6(r.outline)}"/></w14:solidFill><w14:prstDash w14:val="solid"/><w14:round/></w14:textOutline>`);
+  // (w14's alpha is how see-through, not how solid)
+  if (r.noFill) out.push(`<w14:textFill${ns}><w14:noFill/></w14:textFill>`);
+  else if (r.transparency) out.push(`<w14:textFill${ns}><w14:solidFill><w14:srgbClr w14:val="${hex6(color ?? '#000000')}"><w14:alpha w14:val="${Math.round(r.transparency * 100000)}"/></w14:srgbClr></w14:solidFill></w14:textFill>`);
   return out.join('');
 }
 
@@ -1654,5 +1717,25 @@ export function hyphenXml(h: DocText['hyphen']): string {
   if (h.limit) out += `<w:consecutiveHyphenLimit w:val="${Math.round(h.limit)}"/>`;
   if (h.zone !== undefined) out += `<w:hyphenationZone w:val="${twips(h.zone)}"/>`;
   if (h.caps === false) out += '<w:doNotHyphenateCaps/>';
+  return out;
+}
+
+/**
+ * Chem4Word's CML parts to write afresh, by their place among the kept custom XML parts: those
+ * whose structure was changed here (its drawing no longer matches the fingerprint taken when the
+ * file was read). Unchanged structures keep their CML exactly as Chem4Word wrote it.
+ */
+function changedCml(t: DocText): Map<number, string> {
+  const out = new Map<number, string>();
+  const parts = t.kept?.xml ?? [];
+  if (!parts.length) return out;
+  const index = new Map<string, number>();
+  parts.forEach((x, i) => { const g = cmlGuid(x.xml); if (g) index.set(g, i); });
+  for (const o of Object.values(t.objects)) {
+    if (o?.kind !== 'drawing' || !o.c4w) continue;
+    const i = index.get(o.c4w.guid);
+    if (i === undefined || out.has(i) || contentsSig(o.contents) === o.c4w.sig) continue;
+    out.set(i, writeCml(o.contents, o.c4w.guid));
+  }
   return out;
 }

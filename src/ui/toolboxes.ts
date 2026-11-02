@@ -1,5 +1,5 @@
 // Toolboxes (View > Toolboxes): the drawing tools down the left, and others to show as wanted:
-// structure commands, arranging, templates, colours, and one of your own that mixes any tools
+// structure commands, arranging, templates, colours, text formatting, guides, and one of your own that mixes any tools
 // and commands. Unlocked, a toolbox is dragged by its title to float anywhere, or to an edge of
 // the drawing to dock there. Where each one is, and what is in your own, is kept with the settings.
 
@@ -49,9 +49,21 @@ export interface ToolboxState {
   flyGrids?: Record<string, Grid>;
   /** What a toolbox does when the window is too short for it: scroll, or wrap into more columns. Unset: see `overflowOf`. */
   overflow?: Record<string, Overflow>;
+  /** The side panel's height, in pixels, docked along the top or bottom (a strip across the window; its edge drags). */
+  stripHeight?: number;
 }
 
 export type Overflow = 'scroll' | 'wrap';
+
+/** The side panel docked along the top or bottom: a strip this tall to start with, and no shorter or (as a share of the window) taller. */
+export const STRIP_HEIGHT = 190;
+export const STRIP_MIN = 72;
+export const STRIP_MAX_SHARE = 0.6;
+/** The strip's height, kept within reach of the drawing in a window this tall. */
+export function stripHeight(st: Pick<ToolboxState, 'stripHeight'>, windowHeight: number): number {
+  const max = Math.max(STRIP_MIN, Math.round(windowHeight * STRIP_MAX_SHARE));
+  return Math.min(max, Math.max(STRIP_MIN, Math.round(st.stripHeight ?? STRIP_HEIGHT)));
+}
 
 /** A toolbox of your own. */
 export interface OwnBox { id: string; title: string }
@@ -112,15 +124,22 @@ export function withSideFolded(st: ToolboxState, mode: string, folded: boolean):
 /**
  * The toolboxes and where they start: the drawing tools on the left, the rest hidden until wanted.
  * "details" is the side panel taken out of its place at the right, to float or dock elsewhere.
+ * Smart Schemes, Diagrams, Tables and Charts, Biopolymers and Perspective and 3-D are context
+ * toolboxes: hidden until opened, and brought out while their kind of object is selected.
  */
-export const TOOLBOX_IDS = ['main', 'structure', 'arrange', 'templates', 'colours', 'highlight', 'custom', 'details'] as const;
+export const TOOLBOX_IDS = ['main', 'structure', 'arrange', 'templates', 'colours', 'highlight', 'text', 'guides', 'custom', 'smart', 'schemes', 'diagrams', 'tables', 'biopolymers', 'perspective', 'details'] as const;
 export type ToolboxId = (typeof TOOLBOX_IDS)[number];
+/** The context toolboxes (see TOOLBOX_IDS). */
+export const CONTEXT_BOXES = ['schemes', 'diagrams', 'tables', 'biopolymers', 'perspective'] as const;
+export type ContextBox = (typeof CONTEXT_BOXES)[number];
 
 export function defaultToolboxes(): ToolboxState {
   const places: Record<string, BoxPlace> = {};
   TOOLBOX_IDS.forEach((id, i) => { places[id] = { shown: id === 'main', dock: id === 'main' ? 'left' : 'float', x: 110 + i * 24, y: 90 + i * 64 }; });
   // the side panel (Style, Warnings, Analysis) is always shown, docked at the right to start with
   places.details = { shown: true, dock: 'right', x: 900, y: 90 };
+  // the Smart Scheme species list floats beside its scheme until docked (then it is a toolbox, at the right to start with)
+  places.smart = { shown: false, dock: 'right', x: 900, y: 140 };
   return { locked: true, places, custom: ['cmd:clean-up', 'cmd:add-frame', 'cmd:fill-rings', 'cmd:highlight', 'cmd:chain-ends'], sideCollapsed: false };
 }
 
@@ -206,6 +225,7 @@ export function parseToolboxes(raw: unknown): ToolboxState {
     if (Object.keys(by).length) s.flyouts = by;
   }
   if (r.jiggle === false) s.jiggle = false;
+  if (typeof r.stripHeight === 'number' && isFinite(r.stripHeight)) s.stripHeight = Math.min(4000, Math.max(STRIP_MIN, Math.round(r.stripHeight)));
   const grids = (v: unknown, valid: (k: string) => boolean, ok: (id: string) => boolean): Record<string, Grid> | undefined => {
     if (!v || typeof v !== 'object') return undefined;
     const by: Record<string, Grid> = {};
@@ -387,6 +407,8 @@ export interface ToolboxDef {
   /** One of TOOLBOX_IDS, or a toolbox of your own ("own-…"). */
   id: string;
   title: string;
+  /** How to use it, shown on an "i" beside the title (instead of a line of help in the box). */
+  info?: string;
   /** Fill the toolbox's body; `vertical` when it is docked at the left or right. */
   build(body: HTMLElement, vertical: boolean): void;
 }
@@ -468,6 +490,7 @@ export class Toolboxes {
       const lock = f.querySelector<HTMLElement>('.tb-lock');
       if (lock) { lock.innerHTML = lockIcon(locked, 14); lock.title = locked ? `Lock this toolbox's place (locked). Click to unlock it, then drag it by its title. The drawing itself is never locked.` : `Lock this toolbox's place (unlocked: drag it by its title). Click to lock it where it is.`; lock.setAttribute('aria-pressed', String(locked)); }
       f.dataset.dock = place.dock;
+      if (def.id === 'details') f.style.setProperty('--strip-h', `${stripHeight(st, innerHeight)}px`);
       const body = f.querySelector<HTMLElement>('.tb-body')!;
       body.replaceChildren();
       def.build(body, vertical || place.dock === 'float' && def.id === 'main');
@@ -541,6 +564,11 @@ export class Toolboxes {
     this.change(withSideFolded(this.hooks.get(), mode, collapsed));
   }
 
+  /** Show a toolbox at a place (a dock, or floating at x, y). */
+  put(id: string, p: Partial<BoxPlace>): void {
+    this.place(id, { ...p, shown: true });
+  }
+
   private place(id: string, p: Partial<BoxPlace>): void {
     const st = this.hooks.get();
     this.change({ ...st, places: { ...st.places, [id]: { ...st.places[id], ...p } } });
@@ -581,7 +609,9 @@ export class Toolboxes {
     lock.type = 'button';
     lock.className = 'tb-lock';
     lock.addEventListener('click', () => this.setBoxLocked(def.id, !boxLocked(this.hooks.get(), def.id)));
-    head.append(grip, name, lock, fold, close);
+    head.append(grip, name);
+    if (def.info) head.append(infoIcon(def.info, 'tb-info'));
+    head.append(lock, fold, close);
     // a locked docked box hides its title bar, so this slim arrow folds it instead (folded, the title shows again to open it)
     const tab = document.createElement('button');
     tab.type = 'button';
@@ -591,6 +621,7 @@ export class Toolboxes {
     const body = document.createElement('div');
     body.className = 'tb-body';
     f.append(head, tab, body);
+    if (def.id === 'details') this.stripEdge(f, body);
     head.addEventListener('pointerdown', (e) => { if (e.button === 0 && !(e.target as Element).closest('button')) this.drag(def.id, f, e); });
     // right-click the title, or the box round its buttons (a locked docked box has no title showing)
     f.addEventListener('contextmenu', (e) => {
@@ -601,6 +632,59 @@ export class Toolboxes {
     return f;
   }
 
+  /**
+   * Docked along the top or bottom, the side panel is a strip across the window (its sections side by side,
+   * scrolling sideways): its inner edge drags it taller or shorter, kept with the settings. The wheel scrolls it
+   * sideways there too, where there is nothing to scroll up and down.
+   */
+  private stripEdge(f: HTMLElement, body: HTMLElement): void {
+    const edge = document.createElement('div');
+    edge.className = 'tb-strip-edge';
+    edge.setAttribute('role', 'separator');
+    edge.setAttribute('aria-orientation', 'horizontal');
+    edge.title = 'Drag to make the side panel taller or shorter (double-click: back to its first height)';
+    f.append(edge);
+    const docked = () => f.dataset.dock === 'top' || f.dataset.dock === 'bottom';
+    const keep = (h: number) => {
+      const st = this.hooks.get();
+      this.hooks.set({ ...st, stripHeight: Math.round(h) });
+      f.style.setProperty('--strip-h', `${stripHeight(this.hooks.get(), innerHeight)}px`);
+    };
+    edge.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 || !docked()) return;
+      e.preventDefault();
+      const from = e.clientY;
+      const start = body.getBoundingClientRect().height;
+      const sign = f.dataset.dock === 'top' ? 1 : -1;
+      const height = (y: number) => stripHeight({ stripHeight: start + sign * (y - from) }, innerHeight);
+      edge.setPointerCapture(e.pointerId);
+      edge.classList.add('dragging');
+      const move = (ev: PointerEvent) => f.style.setProperty('--strip-h', `${height(ev.clientY)}px`);
+      const up = (ev: PointerEvent) => {
+        edge.removeEventListener('pointermove', move);
+        edge.removeEventListener('pointerup', up);
+        edge.removeEventListener('pointercancel', up);
+        edge.classList.remove('dragging');
+        keep(height(ev.clientY));
+        window.dispatchEvent(new Event('resize'));
+      };
+      edge.addEventListener('pointermove', move);
+      edge.addEventListener('pointerup', up);
+      edge.addEventListener('pointercancel', up);
+    });
+    edge.addEventListener('dblclick', () => { if (docked()) { keep(STRIP_HEIGHT); window.dispatchEvent(new Event('resize')); } });
+    body.addEventListener('wheel', (e) => {
+      if (!docked() || e.shiftKey || e.ctrlKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      // a list or box inside that scrolls up and down keeps the wheel
+      for (let el = e.target as HTMLElement | null; el && el !== body; el = el.parentElement) {
+        if (el.scrollHeight > el.clientHeight + 1 && /auto|scroll/.test(getComputedStyle(el).overflowY)) return;
+      }
+      if (body.scrollWidth <= body.clientWidth) return;
+      e.preventDefault();
+      body.scrollLeft += e.deltaY;
+    }, { passive: false });
+  }
+
   /** The toolbox's own menu: dock it, float it, lock it or all of them, hide it. */
   private menu(def: ToolboxDef, x: number, y: number): void {
     const st = this.hooks.get();
@@ -608,7 +692,7 @@ export class Toolboxes {
       ...DOCKS.map((d) => ({ cmd: `tbx:${d}`, label: DOCK_LABEL[d] })), null,
       { cmd: 'tbx:lock', label: boxLocked(st, def.id) ? `Unlock ${def.title}` : `Lock ${def.title}` },
       { cmd: 'tbx:lock-all', label: st.locked ? 'Unlock All Toolboxes' : 'Lock All Toolboxes' },
-      { cmd: 'tbx:fold', label: (this.hooks.folded?.(def.id) ?? st.places[def.id]?.collapsed) ? 'Open Out' : 'Fold Up' },
+      { cmd: 'tbx:fold', label: (this.hooks.folded?.(def.id) ?? st.places[def.id]?.collapsed) ? 'Expand' : 'Collapse' },
       { cmd: 'tbx:customize', label: isEditable(def.id) ? 'Customize This Toolbox…' : 'Customize Toolboxes…' },
       ...(def.id === 'details' ? [] : [{ cmd: 'tbx:hide', label: `Hide ${def.title}` }]),
     ];
@@ -795,3 +879,6 @@ export function overflowOf(st: ToolboxState, id: string): Overflow {
 export function withOverflow(st: ToolboxState, id: string, o: Overflow): ToolboxState {
   return { ...st, overflow: { ...st.overflow, [id]: o } };
 }
+
+import { infoIcon } from './info-tip';
+export { infoIcon };

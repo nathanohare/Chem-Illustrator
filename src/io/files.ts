@@ -51,6 +51,13 @@ export const EPS: FileType = { description: 'EPS picture', extension: 'eps', mim
 /** Picture files that can go on a slide. */
 export const PICTURE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'emf', 'bmp', 'webp'];
 export const MOL: FileType = { description: 'MDL molfile', extension: 'mol', mime: 'chemical/x-mdl-molfile' };
+export const RXN: FileType = { description: 'MDL reaction file', extension: 'rxn', mime: 'chemical/x-mdl-rxnfile' };
+export const MRV: FileType = { description: 'Marvin document', extension: 'mrv', mime: 'chemical/x-mrv' };
+export const KET: FileType = { description: 'Ketcher drawing', extension: 'ket', mime: 'application/json' };
+export const CML: FileType = { description: 'Chemical Markup Language', extension: 'cml', mime: 'chemical/x-cml' };
+export const CDJSON: FileType = { description: 'ChemDoodle JSON', extension: 'json', mime: 'application/json' };
+/** Other programs' chemistry files a drawing can be saved as: structures, arrows and text only. */
+export const CHEM_EXCHANGE: FileType[] = [MOL, SDF, RXN, MRV, KET, CML, CDJSON];
 export const KEYMAP_FILE: FileType = { description: 'Chem Illustrator hotkeys', extension: 'json', mime: 'application/json' };
 export const SETTINGS_FILE: FileType = { description: 'Chem Illustrator settings', extension: 'json', mime: 'application/json' };
 
@@ -61,6 +68,7 @@ export interface FileHandle {
   createWritable(): Promise<{ write(data: string | Uint8Array): Promise<void>; close(): Promise<void> }>;
 }
 interface PickerOptions {
+  multiple?: boolean;
   types?: { description: string; accept: Record<string, string[]> }[];
   suggestedName?: string;
   excludeAcceptAllOption?: boolean;
@@ -178,6 +186,43 @@ export async function openBytesDialog(label: string, types: FileType[], extra: s
   }
   const file = await uploadBox(exts.map((e) => ({ description: e, extension: e, mime: '' })));
   return file ? { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), ref: { kind: 'none' } } : null;
+}
+
+/**
+ * Ask for several files of these extensions and read their bytes (File > Export > Batch Convert).
+ * Empty when the user cancels.
+ */
+/** Several files the user picks; on the desktop each also says where it is (`path`). */
+export async function openManyBytesDialog(label: string, exts: string[]): Promise<{ name: string; bytes: Uint8Array; path?: string }[]> {
+  if (desktop) {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const got = await open({ multiple: true, directory: false, filters: [{ name: label, extensions: exts }] });
+    const paths = Array.isArray(got) ? got : typeof got === 'string' ? [got] : [];
+    const out: { name: string; bytes: Uint8Array; path?: string }[] = [];
+    for (const path of paths) out.push({ name: baseName(path), path, bytes: new Uint8Array(await invoke<ArrayBuffer>('read_binary_file', { path })) });
+    return out;
+  }
+  let files: File[];
+  if (pw.showOpenFilePicker) {
+    try {
+      const handles = await pw.showOpenFilePicker({ multiple: true, types: [{ description: label, accept: { 'application/octet-stream': exts.map((e) => '.' + e) } }] });
+      files = await Promise.all(handles.map((h) => h.getFile()));
+    } catch (e) {
+      if (isAbort(e)) return [];
+      throw e;
+    }
+  } else {
+    files = await new Promise<File[]>((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.multiple = true;
+      input.accept = exts.map((e) => '.' + e).join(',');
+      input.addEventListener('change', () => resolve([...(input.files ?? [])]));
+      input.addEventListener('cancel', () => resolve([]));
+      input.click();
+    });
+  }
+  return Promise.all(files.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
 }
 
 function uploadBox(types: FileType[]): Promise<File | null> {

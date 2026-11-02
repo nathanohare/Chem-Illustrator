@@ -56,7 +56,7 @@ export const STYLE_SETS: StyleSet[] = [
     styles: { Normal: { align: 'left', spaceAfter: 10, line: 1.08 }, Title: { size: 22, bold: false, align: 'left' }, [H(1)]: { size: 16, bold: false, spaceBefore: 20 }, [H(2)]: { size: 13, bold: false }, [H(3)]: { size: 12, bold: false, italic: false } },
   },
   {
-    name: 'Centered', description: 'The title and main headings centred',
+    name: 'Centered', description: 'The title and main headings centered',
     styles: { Title: { size: 20, align: 'center' }, [H(1)]: { size: 14, align: 'center', spaceBefore: 24 }, [H(2)]: { align: 'center' } },
   },
   {

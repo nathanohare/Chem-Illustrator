@@ -5,6 +5,7 @@
 mod ai;
 mod clipboard;
 mod file_types;
+mod folders;
 mod keep;
 mod ole;
 mod open_dialog;
@@ -12,6 +13,8 @@ mod portable;
 mod print;
 mod recognise;
 mod web;
+mod xtb;
+mod zotero;
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -510,6 +513,8 @@ pub fn run() {
             clipboard::clipboard_read,
             clipboard::clipboard_formats,
             open_dialog::open_shared_dialog,
+            folders::list_folder,
+            folders::make_folder,
             file_types::launch_files,
             file_types::file_types_get,
             file_types::file_types_set,
@@ -521,6 +526,8 @@ pub fn run() {
             ole::ole_register,
             ole::ole_object_folder,
             web::web_get,
+            zotero::zotero_post,
+            zotero::zotero_activate,
             ai::ai_key_set,
             ai::ai_key_has,
             ai::ai_request,
@@ -529,7 +536,9 @@ pub fn run() {
             recognise::pack_cancel,
             recognise::pack_read,
             print::printers,
-            print::print_page
+            print::print_page,
+            xtb::xtb_version,
+            xtb::xtb_run
         ])
         .build(tauri::generate_context!())
         .expect("error while running Chem Illustrator")

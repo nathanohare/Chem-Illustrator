@@ -8,13 +8,13 @@ This page covers the problems people meet most often: the program won't install 
 
 **Nothing happens when the app starts (Windows).** The app needs Microsoft's WebView2 Runtime. Windows 10 and 11 normally have it, but some managed computers remove it. Install the "Evergreen Standalone Installer" from Microsoft's WebView2 page, then start the app again.
 
-**The window is bigger than the screen, or the status bar is cut off.** Maximise the window (double-click the menu bar), or make the whole interface smaller with **View ▸ Window and Colours ▸ Interface Size**.
+**The window is bigger than the screen, or the status bar is cut off.** Maximize the window (double-click the menu bar), or make the whole interface smaller with **View ▸ Window and Colors ▸ Interface Size**.
 
-**The menus or the window are the wrong colours.** **View ▸ Window and Colours ▸ Theme** chooses light, dark, or as the computer is set. The drawing's page has its own dark look: **View ▸ Dark Page** (or the eye button).
+**The menus or the window are the wrong colors.** **View ▸ Window and Colors ▸ Theme** chooses light, dark, or as the computer is set. The drawing's page has its own dark look: **View ▸ Reading Mode** (or the eye button).
 
 ## Settings
 
-Settings (hotkeys, your nicknames and templates, styles, palettes and every preference) are kept in one file, `settings.json`:
+Settings (hotkeys, your abbreviations and templates, styles, palettes and every preference) are kept in one file, `settings.json`:
 
 - **Windows:** `%APPDATA%\io.github.nathanohare.chemillustrator`
 - **macOS:** `~/Library/Application Support/io.github.nathanohare.chemillustrator`

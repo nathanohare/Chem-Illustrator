@@ -381,10 +381,17 @@ export function parseReferenceText(text: string): Reference[] {
 
 // ---------------------------------------------------------------- citations
 
+/**
+ * What a reference manager last put in a field, citing live through it (Zotero): a citation's
+ * text, or a bibliography's entries, kept while the field cites what it did then (`for`: the
+ * citation's reference ids, or the bibliography's, in order, joined by spaces).
+ */
+export interface ShownByManager { text?: string; for?: string; entries?: { label: string; pieces: Piece[] }[] }
+
 /** What the text has that counts for citations: its runs, its fields and its references. */
 export interface Citing {
   runs: TextRun[];
-  objects: Record<number, { kind: string; refs?: string[] }>;
+  objects: Record<number, { kind: string; refs?: string[]; live?: ShownByManager }>;
   references?: Reference[];
   citeStyle?: CiteStyle;
   /** The style's details changed for this document. */
@@ -395,15 +402,17 @@ export interface Citing {
 export const formatOf = (t: Pick<Citing, 'citeStyle' | 'citeOptions'>): CiteFormat => citeFormat(t.citeStyle, t.citeOptions);
 const asFormat = (style: CiteStyle | CiteFormat | undefined): CiteFormat => (typeof style === 'object' ? style : citeFormat(style ?? DEFAULT_STYLE));
 
-/** The ids of the fields in the text, in order, with those in a table's cells after the table. */
-function fieldOrder(t: Pick<Citing, 'runs' | 'objects'>): number[] {
+/** The ids of the fields in the text, in order, with those in a table's cells after the table and those in a footnote after its number. */
+export function fieldOrder(t: Pick<Citing, 'runs' | 'objects'>): number[] {
   const out: number[] = [];
   const walk = (runs: TextRun[]): void => {
     for (const r of runs) {
       if (r.obj === undefined) continue;
       for (let i = 0; i < r.text.length; i++) out.push(r.obj);
-      const o = t.objects[r.obj] as { kind: string; table?: { rows: { runs: TextRun[] }[][] } } | undefined;
+      const o = t.objects[r.obj] as { kind: string; table?: { rows: { runs: TextRun[] }[][] }; runs?: TextRun[] } | undefined;
       if (o?.kind === 'table' && o.table) for (const row of o.table.rows) for (const c of row) walk(c.runs);
+      // a footnote's citations (note styles) where its number is
+      if (o?.kind === 'note' && o.runs) walk(o.runs);
     }
   };
   walk(t.runs);
@@ -467,6 +476,9 @@ export function citeText(nums: number[], style?: CiteStyle | CiteFormat): string
 /** Whether a style's citations are superscript. */
 export const citeSuper = (f: CiteFormat): boolean => f.cite === 'super' || f.cite === 'super-square';
 
+/** A citation Zotero is putting in (its text set, no references yet). */
+const managerPlaceholder = (o: { refs?: string[]; live?: ShownByManager }): boolean => !o.refs?.length && o.live?.text !== undefined && o.live.for === '';
+
 /** What every citation in the text shows, by its field's id. */
 export function citationTexts(t: Citing): Map<number, string> {
   const numbers = citationNumbers(t);
@@ -474,7 +486,10 @@ export function citationTexts(t: Citing): Map<number, string> {
   const out = new Map<number, string>();
   for (const [k, o] of Object.entries(t.objects)) {
     if (o.kind !== 'cite') continue;
-    const nums = (o.refs ?? []).map((r) => numbers.get(r)).filter((n): n is number => n !== undefined);
+    const refs = o.refs ?? [];
+    // what Zotero showed, while the citation cites what it did then
+    if (o.live?.text !== undefined && o.live.for === refs.join(' ')) { out.set(Number(k), o.live.text); continue; }
+    const nums = refs.map((r) => numbers.get(r)).filter((n): n is number => n !== undefined);
     out.set(Number(k), citeText(nums, f));
   }
   return out;
@@ -485,7 +500,7 @@ export function brokenCitations(t: Citing): number[] {
   const known = new Set((t.references ?? []).map((r) => r.id));
   const used = new Set(fieldOrder(t));
   return Object.entries(t.objects)
-    .filter(([k, o]) => o.kind === 'cite' && used.has(Number(k)) && (!o.refs?.length || o.refs.some((r) => !known.has(r))))
+    .filter(([k, o]) => o.kind === 'cite' && used.has(Number(k)) && !managerPlaceholder(o) && (!o.refs?.length || o.refs.some((r) => !known.has(r))))
     .map(([k]) => Number(k));
 }
 
@@ -518,11 +533,17 @@ export function bibLabel(n: number, style?: CiteStyle | CiteFormat): string {
   return l === '(n)' ? `(${n})` : l === '[n]' ? `[${n}]` : l === 'n.' ? `${n}.` : String(n);
 }
 
-/** The references cited, in citation order, each as the style prints it. */
+/**
+ * The references cited, in citation order, each as the style prints it; or, while Zotero's
+ * bibliography is up to date (the same references cited, in the same order), Zotero's entries.
+ */
 export function bibliography(t: Citing): BibEntry[] {
   const style = formatOf(t);
   const numbers = citationNumbers(t);
   const byId = new Map((t.references ?? []).map((r) => [r.id, r]));
+  const cited = [...numbers.keys()];
+  const zotero = Object.values(t.objects).find((o) => o.kind === 'bib' && o.live?.entries && o.live.for === cited.join(' '))?.live?.entries;
+  if (zotero) return zotero.map((e, i) => ({ n: i + 1, ref: byId.get(cited[i]) ?? byId.get(cited[0]) ?? blankRef(), label: e.label, pieces: e.pieces, typed: false }));
   return [...numbers.entries()].sort((a, b) => a[1] - b[1]).map(([id, n]) => {
     const ref = byId.get(id)!;
     const typed = ref.typed !== undefined;

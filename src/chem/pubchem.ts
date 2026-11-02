@@ -10,6 +10,8 @@ const VIEW = 'https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound';
 export const PUBCHEM_HOST = 'pubchem.ncbi.nlm.nih.gov';
 
 import type { CompoundCard } from '../sheet/compound';
+import { casOf, safetyRecordFrom, type ViewRecord } from '../kb/pubchem-safety';
+import type { SafetyRecord } from '../kb/safety';
 
 export type Fetch = typeof fetch;
 
@@ -252,4 +254,57 @@ export async function pubchemCard(q: { name: string } | { smiles: string } | { c
   }
   put('PubChem page', compoundPage(cid));
   return { cid, name: title, fields, looked: new Date().toISOString() };
+}
+
+/** PubChem's compound number for a CAS Registry Number, or null when it has none. */
+export async function pubchemCidForCas(cas: string, fetchFn: Fetch = fetch): Promise<number | null> {
+  const data = (await get(`${PUG}/compound/xref/RN/${encodeURIComponent(cas.trim())}/cids/JSON`, fetchFn)) as { IdentifierList?: { CID?: number[] } } | null;
+  const cid = data?.IdentifierList?.CID?.[0];
+  return cid && cid > 0 ? cid : null;
+}
+
+/** A compound's hazard record, read live from PubChem with the same rules as the bundled tables
+ * (only the open sources: HSDB, NIOSH, CAMEO, OSHA, DOE PAC, EU Annex VI). Null when PubChem has no
+ * such compound. */
+export async function pubchemSafetyRecord(q: { cas: string } | { name: string } | { smiles: string } | { cid: number }, fetchFn: Fetch = fetch): Promise<SafetyRecord | null> {
+  const cid = 'cid' in q ? q.cid : 'cas' in q ? await pubchemCidForCas(q.cas, fetchFn) : 'smiles' in q ? await pubchemCid(q.smiles, fetchFn) : (await pubchemName(q.name, fetchFn))?.cid ?? null;
+  if (!cid) return null;
+  const props = (await get(`${PUG}/compound/cid/${cid}/property/Title,MolecularFormula,MolecularWeight,SMILES,XLogP/JSON`, fetchFn)) as { PropertyTable?: { Properties?: Record<string, unknown>[] } } | null;
+  const p = props?.PropertyTable?.Properties?.[0] ?? {};
+  const view = (await get(`${VIEW}/${cid}/JSON`, fetchFn, undefined, 30000)) as { Record?: ViewRecord } | null;
+  if (!view?.Record) return null;
+  return safetyRecordFrom({
+    name: typeof p.Title === 'string' ? p.Title : `CID ${cid}`, cid, cas: casOf(view.Record),
+    formula: typeof p.MolecularFormula === 'string' ? p.MolecularFormula : null, mw: p.MolecularWeight as string | number | null ?? null,
+    smiles: smilesOf(p), xlogp: typeof p.XLogP === 'number' ? p.XLogP : null, view: view.Record,
+  });
+}
+
+/**
+ * A CAS RN's structure on PubChem: the compound filed under that number (the first, when PubChem
+ * files several under it: `count` says how many), or null when PubChem doesn't list it.
+ */
+export async function pubchemByCas(cas: string, fetchFn: Fetch = fetch): Promise<{ cid: number; smiles: string; title: string; count: number } | null> {
+  const ids = (await get(`${PUG}/compound/name/${encodeURIComponent(cas)}/cids/JSON`, fetchFn)) as { IdentifierList?: { CID?: number[] } } | null;
+  const cids = (ids?.IdentifierList?.CID ?? []).filter((c) => c > 0);
+  if (!cids.length) return null;
+  const data = (await get(`${PUG}/compound/cid/${cids[0]}/property/IsomericSMILES,Title/JSON`, fetchFn)) as
+    { PropertyTable?: { Properties?: Record<string, unknown>[] } } | null;
+  const p = data?.PropertyTable?.Properties?.[0];
+  const smiles = p && smilesOf(p);
+  if (!p || !smiles) return null;
+  return { cid: cids[0], smiles, title: typeof p.Title === 'string' ? p.Title : '', count: cids.length };
+}
+
+/**
+ * A drawn structure's CAS RNs on PubChem (main one first), with its PubChem name and number;
+ * null when PubChem has no record of the structure. Two requests.
+ */
+export async function pubchemCasOf(smiles: string, fetchFn: Fetch = fetch): Promise<{ cid: number; title: string; cas: string[] } | null> {
+  const cid = await pubchemCid(smiles, fetchFn);
+  if (!cid) return null;
+  const syn = (await get(`${PUG}/compound/cid/${cid}/synonyms/JSON`, fetchFn)) as { InformationList?: { Information?: { Synonym?: string[] }[] } } | null;
+  const names = syn?.InformationList?.Information?.[0]?.Synonym ?? [];
+  // the first synonym is PubChem's title for it
+  return { cid, title: names[0] ?? '', cas: casNumbers(names) };
 }

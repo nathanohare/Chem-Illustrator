@@ -22,6 +22,7 @@ export interface MediaTiming { spid: number; media: Media }
 import type { Selection } from '../editor/editor';
 import { splitSlide } from './split-slide';
 import { plainText } from '../richtext';
+import { SAME_VIEW, viewBetween } from './turn3d';
 
 // ---------------------------------------------------------------- transitions
 
@@ -74,7 +75,7 @@ export const DEFAULT_TRANSITION_DUR = 0.7;
 /** `camera`: on a canvas slide, the show moves on to a keyframe (see canvas.ts); it moves no object. */
 export type Effect = 'appear' | 'fade' | 'wipe' | 'fly' | Emphasis | 'path' | 'camera';
 /** Effects that change something already showing (PowerPoint's Emphasis effects). */
-export type Emphasis = 'pulse' | 'grow' | 'spin' | 'transparency' | 'colour';
+export type Emphasis = 'pulse' | 'grow' | 'spin' | 'transparency' | 'colour' | 'turn3d';
 export type Side = 'left' | 'right' | 'top' | 'bottom';
 
 export const EFFECTS: { id: Effect; name: string; sides: boolean; emph?: boolean }[] = [
@@ -86,7 +87,8 @@ export const EFFECTS: { id: Effect; name: string; sides: boolean; emph?: boolean
   { id: 'grow', name: 'Grow/Shrink', sides: false, emph: true },
   { id: 'spin', name: 'Spin', sides: false, emph: true },
   { id: 'transparency', name: 'Transparency', sides: false, emph: true },
-  { id: 'colour', name: 'Colour Change', sides: false, emph: true },
+  { id: 'colour', name: 'Color Change', sides: false, emph: true },
+  { id: 'turn3d', name: '3-D Rotation', sides: false, emph: true },
 ];
 
 /** The keyframe moves, as the ribbon offers them. */
@@ -97,7 +99,7 @@ export const MOVES: { id: CameraMove; name: string; tip: string }[] = [
   { id: 'cut', name: 'Cut', tip: 'straight to the next keyframe' },
 ];
 
-export const isEmphasis = (e: Effect): e is Emphasis => e === 'pulse' || e === 'grow' || e === 'spin' || e === 'transparency' || e === 'colour';
+export const isEmphasis = (e: Effect): e is Emphasis => e === 'pulse' || e === 'grow' || e === 'spin' || e === 'transparency' || e === 'colour' || e === 'turn3d';
 /** Effects that act on something already showing and leave it showing: emphasis and motion paths. */
 export const keepsShowing = (e: Effect): boolean => isEmphasis(e) || e === 'path';
 
@@ -147,6 +149,11 @@ export interface Anim {
   opacity?: number;
   /** Colour Change: the colour it ends (a shape's fill, text's colour, a structure's lines and labels). */
   color?: string;
+  /**
+   * Turn in 3-D: the key view a structure turns to, as a turn of the structure as drawn on the
+   * slide (3 × 3, row by row; see turn3d.ts). It turns from the view the one before left it in.
+   */
+  view?: number[];
   /**
    * A motion path: where it goes, as PowerPoint writes paths (M, L and C, then E), in fractions of
    * the slide's width and height from where it is; and which of the ready-made paths it is.
@@ -198,14 +205,14 @@ export type PathKind = 'down' | 'up' | 'left' | 'right' | 'arc' | 'turn' | 'circ
 
 /** The ready-made motion paths, as PowerPoint's gallery has them (Lines, Arcs, Turns, Shapes, Loops). */
 export const PATHS: { id: PathKind; name: string; tip: string }[] = [
-  { id: 'down', name: 'Line Down', tip: 'straight down' },
-  { id: 'up', name: 'Line Up', tip: 'straight up' },
-  { id: 'left', name: 'Line Left', tip: 'straight to the left' },
-  { id: 'right', name: 'Line Right', tip: 'straight to the right' },
+  { id: 'down', name: 'Lines: Down', tip: 'straight down' },
+  { id: 'up', name: 'Lines: Up', tip: 'straight up' },
+  { id: 'left', name: 'Lines: Left', tip: 'straight to the left' },
+  { id: 'right', name: 'Lines: Right', tip: 'straight to the right' },
   { id: 'arc', name: 'Arc', tip: 'in an arc, down and back up to the right' },
-  { id: 'turn', name: 'Turn', tip: 'to the right, then round a corner and down' },
-  { id: 'circle', name: 'Circle', tip: 'round in a circle, back to where it started' },
-  { id: 'square', name: 'Square', tip: 'round a square, back to where it started' },
+  { id: 'turn', name: 'Turn', tip: 'to the right, then around a corner and down' },
+  { id: 'circle', name: 'Circle', tip: 'around in a circle, back to where it started' },
+  { id: 'square', name: 'Square', tip: 'around a square, back to where it started' },
   { id: 'loop', name: 'Loop', tip: 'to the right with a loop in the middle' },
   { id: 'wave', name: 'Wave', tip: 'to the right in a wave' },
   { id: 'custom', name: 'Custom Path', tip: 'along a path you click out on the slide (double-click to finish)' },
@@ -543,7 +550,7 @@ export interface PartState { visible: boolean; running?: { anim: Anim; p: number
  * how solid it is (0 to 1), and a colour it is changing to (`mix` of the way; `was` the colour it
  * had changed to before, if any).
  */
-export interface Emph { scale: number; rot: number; alpha: number; color?: string; mix: number; was?: string; dx?: number; dy?: number }
+export interface Emph { scale: number; rot: number; alpha: number; color?: string; mix: number; was?: string; dx?: number; dy?: number; view?: number[] }
 
 export const NO_EMPH: Emph = { scale: 1, rot: 0, alpha: 1, mix: 0 };
 
@@ -560,6 +567,11 @@ export function emphAt(held: Emph, a: Anim, p: number, size: { w: number; h: num
     case 'pulse': return { ...held, scale: held.scale * (1 + 0.1 * Math.sin(Math.PI * p)) };
     case 'grow': return { ...held, scale: held.scale * (1 + ((a.scale ?? EMPH_DEFAULTS.scale) - 1) * p) };
     case 'spin': return { ...held, rot: held.rot + (a.turn ?? EMPH_DEFAULTS.turn) * p };
+    case 'turn3d': {
+      // eased in and out, the shortest way round from the view it was left in
+      const e = p <= 0 ? 0 : p >= 1 ? 1 : p * p * (3 - 2 * p);
+      return { ...held, view: viewBetween(held.view ?? SAME_VIEW, a.view ?? SAME_VIEW, e) };
+    }
     case 'transparency': return { ...held, alpha: held.alpha + (1 - (a.opacity ?? EMPH_DEFAULTS.opacity) - held.alpha) * p };
     case 'colour': {
       const was = held.mix >= 1 ? held.color : held.was;
@@ -675,7 +687,8 @@ export function readTransition(sld: Element, warn: (s: string) => void): Transit
 
 // ---------------------------------------------------------------- PowerPoint: animations
 
-const PRESET: Record<Effect, number> = { appear: 1, fly: 2, fade: 10, wipe: 22, pulse: 26, grow: 6, spin: 8, transparency: 9, colour: 1, path: 0, camera: 0 };
+// (Turn in 3-D goes to PowerPoint as a Spin of next to nothing, which keeps its place in the order; the view rides in a tag)
+const PRESET: Record<Effect, number> = { appear: 1, fly: 2, fade: 10, wipe: 22, pulse: 26, grow: 6, spin: 8, transparency: 9, colour: 1, path: 0, camera: 0, turn3d: 8 };
 /** Colour Change on text is PowerPoint's Font Color (on anything else, its Fill Color). */
 const PRESET_FONT_COLOR = 3;
 const SUBTYPE: Record<Side, number> = { top: 1, right: 2, bottom: 4, left: 8 };
@@ -715,6 +728,7 @@ export function timingXml(anims: Anim[], spidsOf: (a: Anim) => number[], media: 
         return `<p:animScale>${bhvr(spid, d)}<p:by x="${k}" y="${k}"/></p:animScale>`;
       }
       case 'spin': return `<p:animRot by="${Math.round((a.turn ?? EMPH_DEFAULTS.turn) * 60000)}">${bhvr(spid, d, 'r')}</p:animRot>`;
+      case 'turn3d': return `<p:animRot by="1">${bhvr(spid, d, 'r')}</p:animRot>`;
       case 'transparency': {
         const v = +(1 - (a.opacity ?? EMPH_DEFAULTS.opacity)).toFixed(3);
         return `<p:set>${bhvr(spid, d, 'style.opacity')}<p:to><p:strVal val="${v}"/></p:to></p:set>` +
@@ -940,7 +954,7 @@ function readEmphasis(tn: Element, preset: number, warn: (s: string) => void): P
     const k = Number.isFinite(x) && x ? (Number.isFinite(y) && y ? (x + y) / 2 : x) : NaN;
     return { effect: 'grow', scale: Number.isFinite(k) ? +(k / 100000).toFixed(3) : EMPH_DEFAULTS.scale };
   }
-  if (preset !== 26) warn('Emphasis effects other than Pulse, Grow/Shrink, Spin, Transparency and colour changes came in as Pulse.');
+  if (preset !== 26) warn('Emphasis effects other than Pulse, Grow/Shrink, Spin, Transparency and color changes came in as Pulse.');
   return { effect: 'pulse' };
 }
 

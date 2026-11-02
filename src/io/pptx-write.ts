@@ -30,6 +30,7 @@ import { extractDrawing } from './clipboard';
 import { contentsAlt, titleOverlaps, roughCaptionBox } from '../accessibility';
 import type { Selection } from '../editor/editor';
 import { Package, NS, REL, emu, xml, xmlAttr, hex6, MediaFiles, structureAltText } from './ooxml';
+import { writeKeptParts, type KeptParts } from './kept-parts';
 import { facesToEmbed, toEot, type FontSource } from './font-embed';
 import { dataUrl, fromDataUrl } from '../render/images';
 import { patternClear, patternInk, shadowLook } from '../render/fills';
@@ -43,7 +44,7 @@ import { showPrXml, custShowsXml } from '../deck/show-setup';
 import {
   Master, SlideSize, LayoutId, layoutFrames, deckLayouts, layoutDef, titleLook, isBuiltinLayout, type LayoutDef, type SectionCount, decorFrames, showsNumber, showsFooter, showsDate, dateText, type SlideHF, type DeckSettings, textStyles, isEmptyText, slideColours, slideBackground, decorShapes, type DecorShape, placeRefs, type PlacedRefs,
 } from '../deck/deck';
-import { lineGap, slideRefBlock, slideRefsTag, type RefListSpec, type RefLook } from '../deck/slide-refs';
+import { lineGap, slideRefBlock, slideRefsTag, type RefListSpec, type RefLook, type SlideZotero } from '../deck/slide-refs';
 import { sameBackground, type Background } from '../deck/background';
 import { bgXml, type BlipIds } from './pptx-background';
 import { addChart, C_NS } from './office-chart';
@@ -95,6 +96,8 @@ export const TAG = {
   math: 'CHEMILLUSTRATOR_MATH',
   /** A canvas slide's keyframes (its drawing is saved at its own places, the first keyframe's over the slide). */
   canvas: 'CHEMILLUSTRATOR_CANVAS',
+  /** Turn in 3-D: each one's key view, in the order of the slide's animations (PowerPoint is given a Spin of next to nothing in its place). */
+  turn3d: 'CHEMILLUSTRATOR_TURN3D',
   /**
    * A slide made from a canvas slide's keyframe: which canvas, which of its slides, and a print of
    * what it held (to tell whether PowerPoint changed it). The first also has canvasKeep, the canvas itself.
@@ -145,13 +148,15 @@ export interface DeckData {
   size: SlideSize;
   master: Master;
   /** `id` is the slide's id in the deck, for links to it (#slide=id). */
-  slides: { id?: number; layout: LayoutId; doc: Doc; notes: string; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; part?: CanvasPart; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec }[];
+  slides: { id?: number; layout: LayoutId; doc: Doc; notes: string; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; part?: CanvasPart; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec; zotero?: SlideZotero }[];
   /** A design (Design mode): marked so it opens in Design mode again. */
   design?: boolean;
   /** The deck's sections, in order (none when left out). */
   sections?: SectionCount[];
   /** Set Up Show and custom shows. */
   settings?: DeckSettings;
+  /** Other programs' data kept from the file read (custom XML, custom properties, add-ins' settings). */
+  kept?: KeptParts;
 }
 
 /**
@@ -239,13 +244,18 @@ function runXml(r: TextRun, explicit: { size: number; font: string } | null, hli
     if (r.underline) attrs.push('u="sng"');
     if (r.strike) attrs.push('strike="sngStrike"');
     if (r.spacing) attrs.push(`spc="${Math.round(r.spacing * 100)}"`);
+    if (r.noKern) attrs.push('kern="0"');
     if (p.pos === 'sub') attrs.push('baseline="-25000"');
     else if (p.pos === 'sup') attrs.push('baseline="30000"');
     attrs.push('dirty="0"');
-    const color = r.color ?? (explicit ? '#000000' : undefined);
-    const fill = color ? `<a:solidFill><a:srgbClr val="${hex6(color)}"/></a:solidFill>` : '';
+    const color = r.color ?? (explicit || r.transparency ? '#000000' : undefined);
+    const alpha = r.transparency ? `<a:alpha val="${Math.round((1 - r.transparency) * 100000)}"/>` : '';
+    const fill = r.noFill ? '<a:noFill/>' : color ? `<a:solidFill><a:srgbClr val="${hex6(color)}"${alpha ? `>${alpha}</a:srgbClr>` : '/>'}</a:solidFill>` : '';
+    // the Font box's text effects: an outline round the letters (a:ln comes first) and a shadow
+    const ln = r.outline ? `<a:ln w="${Math.round((r.outlineW ?? 0.75) * 12700)}"><a:solidFill><a:srgbClr val="${hex6(r.outline)}"/></a:solidFill></a:ln>` : '';
+    const shadow = r.shadow ? '<a:effectLst><a:outerShdw blurRad="38100" dist="38100" dir="2700000" algn="tl" rotWithShape="0"><a:prstClr val="black"><a:alpha val="40000"/></a:prstClr></a:outerShdw></a:effectLst>' : '';
     const latin = font ? `<a:latin typeface="${xml(font)}"/><a:cs typeface="${xml(font)}"/>` : '';
-    return `<a:r><a:rPr ${attrs.join(' ')}>${fill}${latin}${ownColour(click, color)}</a:rPr><a:t>${xml(p.text)}</a:t></a:r>`;
+    return `<a:r><a:rPr ${attrs.join(' ')}>${ln}${fill}${shadow}${latin}${ownColour(click, color)}</a:rPr><a:t>${xml(p.text)}</a:t></a:r>`;
   }).join('');
 }
 
@@ -556,6 +566,7 @@ class Writer {
       // (the guides, also where PowerPoint 2013 and later look for them)
       sectionsXml(deck.sections, n, slideGuidesExt(deck.settings?.view)) +
       `</p:presentation>`, CT.presentation);
+    writeKeptParts(pkg, deck.kept, { main: P, firstItem: 1 });
     return pkg.build();
   }
 
@@ -788,7 +799,7 @@ class Writer {
       part = { [TAG.canvasPart]: JSON.stringify({ ...where, print: slidePrintXml(`<p:spTree ${XMLNS}>${GROUP}${out.join('')}</p:spTree>`) }), ...(keep ? { [TAG.canvasKeep]: JSON.stringify(keep) } : {}) };
     }
     const refTag = slideRefsTag(s);
-    const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(refTag ? { [TAG.slideRefs]: refTag } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}), ...part });
+    const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(refTag ? { [TAG.slideRefs]: refTag } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}), ...turnTag(s.anims), ...part });
     const bg = s.background ? await this.background(path, s.background) : '';
     return `${HEAD}<p:sld ${XMLNS}${s.hideGraphics ? ' showMasterSp="0"' : ''}${s.hidden ? ' show="0"' : ''}><p:cSld>${bg}<p:spTree>${GROUP}${out.join('')}</p:spTree><p:custDataLst><p:tags r:id="${tags}"/></p:custDataLst></p:cSld>` +
       `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(s.transition)}${timingXml(expandParas(s.anims ?? [], (cid) => { const c = doc.captions.get(cid); return c ? plainText(c.runs).split('\n') : null; }), (a) => spids.get(targetKey(a.target)) ?? [], videos, (t) => spids.get(targetKey(t))?.[0])}` +
@@ -1356,23 +1367,25 @@ export function connectorSpPr(r: Arrow, lw: number): { frame: string; geom: stri
   return { frame, geom, ln, curved: curved || !!r.elbow };
 }
 
+/** A library shape's outline `w` × `h` points big: PowerPoint's preset when it has one, else a custom shape with these outlines (as PowerPoint and Word both write them). */
+export function geoGeomXml(geo: string | undefined, w: number, h: number): string {
+  const def = geoDef(geo);
+  if (def.prst) return `<a:prstGeom prst="${def.prst}"><a:avLst/></a:prstGeom>`;
+  const o = def.draw(w, h);
+  const ta = textArea(def, 0, 0, w, h);
+  // the text's box through guides (LibreOffice ignores a text box given as plain numbers)
+  const f = (v: number, of: number) => Math.round((of > 0 ? v / of : 0) * 100000);
+  return `<a:custGeom><a:avLst/><a:gdLst><a:gd name="txL" fmla="*/ w ${f(ta.x1, w)} 100000"/><a:gd name="txT" fmla="*/ h ${f(ta.y1, h)} 100000"/><a:gd name="txR" fmla="*/ w ${f(ta.x2, w)} 100000"/><a:gd name="txB" fmla="*/ h ${f(ta.y2, h)} 100000"/></a:gdLst><a:ahLst/><a:cxnLst/>` +
+    '<a:rect l="txL" t="txT" r="txR" b="txB"/>' +
+    `<a:pathLst>${geoPath(o.body, w, h, '')}${o.lines?.length ? geoPath(o.lines, w, h, ' fill="none"') : ''}</a:pathLst></a:custGeom>`;
+}
+
 /** A design shape's place, outline, fill, line and effects (shadow, glow, reflection, soft edges, bevel), as PowerPoint and Word (in groups) both write them. */
 export function geoSpPr(s: Shape, lw: number): { box: Rect; geom: string; fill: string; ln: string; shadow: string } {
-  const def = geoDef(s.geo);
   const box = { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
   const w = box.x2 - box.x1, h = box.y2 - box.y1;
   const width = s.lineWidth ?? (s.bold ? lw * 2.5 : lw);
-  let geom: string;
-  if (def.prst) geom = `<a:prstGeom prst="${def.prst}"><a:avLst/></a:prstGeom>`;
-  else {
-    const o = def.draw(w, h);
-    const ta = textArea(def, 0, 0, w, h);
-    // the text's box through guides (LibreOffice ignores a text box given as plain numbers)
-    const f = (v: number, of: number) => Math.round((of > 0 ? v / of : 0) * 100000);
-    geom = `<a:custGeom><a:avLst/><a:gdLst><a:gd name="txL" fmla="*/ w ${f(ta.x1, w)} 100000"/><a:gd name="txT" fmla="*/ h ${f(ta.y1, h)} 100000"/><a:gd name="txR" fmla="*/ w ${f(ta.x2, w)} 100000"/><a:gd name="txB" fmla="*/ h ${f(ta.y2, h)} 100000"/></a:gdLst><a:ahLst/><a:cxnLst/>` +
-      '<a:rect l="txL" t="txT" r="txR" b="txB"/>' +
-      `<a:pathLst>${geoPath(o.body, w, h, '')}${o.lines?.length ? geoPath(o.lines, w, h, ' fill="none"') : ''}</a:pathLst></a:custGeom>`;
-  }
+  const geom = geoGeomXml(s.geo, w, h);
   const fc = hex6(s.fillColor ?? s.color ?? '#000000');
   const clear = Math.max(0, Math.min(1, s.transparency ?? 0));
   const alpha = clear ? `<a:alpha val="${Math.round((1 - clear) * 100000)}"/>` : '';
@@ -1492,7 +1505,7 @@ function patternOrGradient(s: Shape, fc: string, alpha: string): string | null {
 function shapeXml(s: Shape, id: number, lw: number): string {
   const width = (s.bold ? lw * 2.5 : lw);
   const color = hex6(s.color ?? '#000000');
-  const dash = s.dashed ? '<a:prstDash val="dash"/>' : '';
+  const dash = s.dotted ? '<a:prstDash val="sysDot"/>' : s.dashed ? '<a:prstDash val="dash"/>' : '';
   if (s.kind === 'line') {
     const flips = `${s.x2 < s.x1 ? ' flipH="1"' : ''}${s.y2 < s.y1 ? ' flipV="1"' : ''}`;
     const box = { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
@@ -1653,4 +1666,10 @@ function withCanvasesSplit(deck: DeckData): DeckData {
     return { ...sec, count };
   });
   return { ...deck, slides: split.flat(), ...(sections ? { sections } : {}) };
+}
+
+/** The slide's Turn in 3-D views, for a tag (see TAG.turn3d). */
+function turnTag(anims: Anim[] | undefined): Record<string, string> {
+  const turns = (anims ?? []).filter((a) => a.effect === 'turn3d');
+  return turns.length ? { [TAG.turn3d]: JSON.stringify(turns.map((a) => a.view ?? null)) } : {};
 }

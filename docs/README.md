@@ -21,6 +21,7 @@ Structures stay editable in every kind of file: double-click one on a slide, in 
 
 ## Everything else
 
+- **[Your libraries and Find Structure in Files](guide/libraries.md)**: the reference library (collections, tags, PDFs, PubMed, Zotero sync) and the compound library shared by every file, kept on this computer or in a shared folder, and searching a folder of files for a structure.
 - **[Files and sharing](guide/files-and-sharing.md)**: every file type it opens and saves, copying to and from ChemDraw, Word and PowerPoint, Split View, workspaces, AutoSave, recovery after a crash, Version History, shared folders, printing and fonts.
 - **[Troubleshooting](guide/troubleshooting.md)**: the program won't install or start, a damaged settings file, work that seems lost, where settings and recovery copies are kept.
 - **[Feedback, problems and ideas](guide/feedback.md)**: how to send a feature request or report a problem from inside the program (**Help ▸ Send Feedback…**).

@@ -2,12 +2,14 @@
 // molfiles back (for pasted SMILES). Abbreviation labels are expanded into real atoms so
 // formula, mass and stereo come out right; "R"-type labels become dummy atoms.
 
+import { attachCode } from './attach-codes';
 import { Doc, Atom, isMetalAtom, outsideValence, radicalElectrons } from '../model';
 import { metalCarbonyl } from './hapto';
 import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, valenceOfBonds } from './elements';
 import { CARBONYL_LIGAND, isCarbonylLabel, kekulize, labelDonates, labelGraph, MiniGraph } from './labels';
 import { stereoAnchor, stereoSense } from './stereo';
 import { kekuleDoubles } from './aromatic';
+import { flatStandIn } from './ring-views';
 
 export interface MolExport {
   molblock: string;
@@ -37,13 +39,54 @@ export interface MolfileOptions {
    * placed round its point, as separate molecules (map −1).
    */
   species?: { graph: MiniGraph; x: number; y: number }[];
+  /** Write atom-atom map numbers (Atom.mapNo) in the mmm column, for mapped reaction SMILES and RXN files. */
+  maps?: boolean;
+  /** Write a V3000 molfile (otherwise V2000). */
+  v3000?: boolean;
+  /** Write each attachment point's kind as its "*" atom's isotope (src/chem/attach-codes.ts), for Hammett's reference position. */
+  attachKinds?: boolean;
 }
 
 /** Stands in for R groups when working out R/S: oganesson, heavier than any atom in a real drawing. */
 const GENERIC_STAND_IN = 'Og';
 
-interface MAtom { sym: string; x: number; y: number; charge: number; iso: number; rad?: number }
-interface MBond { a: number; b: number; order: number; stereo: number }
+/** A molfile atom: an element symbol (or R#, *, or a label kept as an alias), position in bond lengths. */
+export interface MAtom { sym: string; x: number; y: number; charge: number; iso: number; rad?: number; map?: number; alias?: string }
+/** A molfile bond between atoms counted from 0, with V2000's bond type and stereo numbers (1 up, 6 down, 4 either, 3 cis or trans). */
+export interface MBond { a: number; b: number; order: number; stereo: number }
+
+/**
+ * The connection table of a V3000 molfile ("M  V30 BEGIN CTAB" … "M  V30 END CTAB"), from BIOVIA's
+ * CTfile Formats: atoms with CHG=, MASS=, RAD= and their map number; bonds with CFG= (1 up, 2 either,
+ * 3 down); a label kept as an alias is the atom's type, quoted when it has spaces. Lines longer than
+ * 80 characters go on to the next with "-".
+ */
+export function v3000Ctab(atoms: MAtom[], bonds: MBond[]): string[] {
+  const n = (v: number) => (Math.abs(v) < 5e-5 ? 0 : v).toFixed(4);
+  const type = (a: MAtom) => { const t = a.alias ?? a.sym; return /[\s"]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const out = ['BEGIN CTAB', `COUNTS ${atoms.length} ${bonds.length} 0 0 0`, 'BEGIN ATOM'];
+  atoms.forEach((a, i) => out.push([i + 1, type(a), n(a.x), n(a.y), n(0), a.map ?? 0,
+    ...(a.charge ? [`CHG=${a.charge}`] : []), ...(a.rad ? [`RAD=${a.rad}`] : []), ...(a.iso ? [`MASS=${a.iso}`] : [])].join(' ')));
+  out.push('END ATOM');
+  if (bonds.length) {
+    out.push('BEGIN BOND');
+    bonds.forEach((b, i) => out.push([i + 1, b.order, b.a + 1, b.b + 1, ...(b.stereo === 1 ? ['CFG=1'] : b.stereo === 6 ? ['CFG=3'] : b.stereo === 4 || b.stereo === 3 ? ['CFG=2'] : [])].join(' ')));
+    out.push('END BOND');
+  }
+  out.push('END CTAB');
+  return out.flatMap((t) => {
+    const parts: string[] = [];
+    let rest = t;
+    while (rest.length > 72) { parts.push(`M  V30 ${rest.slice(0, 72)}-`); rest = rest.slice(72); }
+    parts.push(`M  V30 ${rest}`);
+    return parts;
+  });
+}
+
+/** A whole V3000 molfile: three header lines, the counts line, the connection table and M  END. */
+export function v3000Molfile(head: string[], atoms: MAtom[], bonds: MBond[]): string {
+  return [...head, '  0  0  0     0  0            999 V3000', ...v3000Ctab(atoms, bonds), 'M  END', ''].join('\n');
+}
 
 const f = (v: number, w: number, d = 4) => v.toFixed(d).padStart(w);
 const i3 = (v: number) => String(v).padStart(3);
@@ -55,6 +98,8 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
   // a ring's middle, where a metal is bonded (η⁵), is not an atom: it and its bonds are left out
   const ids = [...atomIds].filter((id) => doc.atoms.has(id) && !doc.atoms.get(id)!.multi);
   const inSet = new Set(ids);
+  // rings drawn as chairs or boats show their stereo by their shape: the engine is shown them flat, with wedges
+  const stand = flatStandIn(doc, inSet);
   const L = doc.style.bondLength || 14.4;
   const atoms: MAtom[] = [];
   const bonds: MBond[] = [];
@@ -190,7 +235,8 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
   }
   for (const id of ids) {
     const a = doc.atoms.get(id)!;
-    const x = (a.x - first.x) / L, y = -(a.y - first.y) / L;
+    const at = stand?.moves.get(id) ?? a;
+    const x = (at.x - first.x) / L, y = -(at.y - first.y) / L;
     let g: MiniGraph | null = null;
     if (a.label) {
       const own = valenceOfBonds((doc.adj.get(id) ?? []).map((bid) => doc.bonds.get(bid)!).filter((b) => !outsideValence(b) && !dative.has(b.id)).map((b) => b.order));
@@ -202,7 +248,8 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
       const rad = a.radical === 'singlet' || carbene.has(id) ? 1 : a.radical === 'doublet' ? 2 : a.radical === 'triplet' ? 3 : 0;
       const sym = a.label && !g ? generic : SYMBOLS[a.z] || generic;
       if (sym === generic) genericAt.push([atoms.length, a.label ?? '']);
-      atoms.push({ sym, x, y, charge: a.charge + (charged.get(id) ?? 0), iso: a.isotope, rad });
+      const iso = opts.attachKinds && a.attach ? attachCode(a.attach, a.attachNum) : a.isotope;
+      atoms.push({ sym, x, y, charge: a.charge + (charged.get(id) ?? 0), iso, rad, ...(opts.maps && a.mapNo ? { map: a.mapNo } : {}) });
       map.push(id);
       continue;
     }
@@ -214,7 +261,7 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
       const r = k === 0 ? 0 : 0.35 + 0.05 * k;
       const sym = ga.dummy ? generic : SYMBOLS[ga.z] || generic;
       if (sym === generic) genericAt.push([atoms.length, `${a.label}/${k}`]);
-      atoms.push({ sym, x: x + r * Math.cos(ang), y: y + r * Math.sin(ang), charge: ga.charge + (k === 0 ? a.charge + (charged.get(id) ?? 0) : 0), iso: ga.iso ?? 0 });
+      atoms.push({ sym, x: x + r * Math.cos(ang), y: y + r * Math.sin(ang), charge: ga.charge + (k === 0 ? a.charge + (charged.get(id) ?? 0) : 0), iso: ga.iso ?? 0, ...(k === 0 && opts.maps && a.mapNo ? { map: a.mapNo } : {}) });
       map.push(k === 0 ? id : -1);
       if (g!.atoms.length > 1) inLabel.push(base + k);
     });
@@ -255,18 +302,25 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
       }
       const order = kekule.get(b.id) ?? (b.order === 1.5 ? 4 : b.order === 2 ? 2 : b.order === 3 ? 3 : 1);
       // a stereo bond is written from the atom it describes
-      const sense = stereoSense(b);
-      const from = sense ? stereoAnchor(doc, b)! : b.a1;
+      const flat = stand?.bonds.get(b.id);
+      const sb = flat ? { ...b, ...flat } : b;
+      const sense = stereoSense(sb);
+      const from = sense ? stereoAnchor(doc, sb)! : sb.a1;
       const stereo = sense === 'up' ? 1 : sense === 'down' ? 6 : sense === 'either' ? 4 : 0;
-      const to = from === b.a1 ? b.a2 : b.a1;
+      const to = from === sb.a1 ? sb.a2 : sb.a1;
       bonds.push({ a: attach.get(from)!, b: attach.get(to)!, order, stereo });
     }
   }
 
-  const lines: string[] = [name.slice(0, 80), '  ChemIllus         2D', ''];
+  const head = [name.slice(0, 80), '  ChemIllus         2D', ''];
+  if (opts.v3000) {
+    return { molblock: v3000Molfile(head, atoms, bonds), map, unknownLabels: unknown, inLabel, generic: genericAt };
+  }
+  const lines: string[] = [...head];
   lines.push(`${i3(atoms.length)}${i3(bonds.length)}  0  0  0  0  0  0  0  0999 V2000`);
   for (const a of atoms) {
-    lines.push(`${f(a.x, 10)}${f(a.y, 10)}${f(0, 10)} ${a.sym.padEnd(3)} 0  0  0  0  0  0  0  0  0  0  0  0`);
+    // (the ninth number after the charge is the atom-atom map number)
+    lines.push(`${f(a.x, 10)}${f(a.y, 10)}${f(0, 10)} ${a.sym.padEnd(3)} 0  0  0  0  0  0  0  0  0${i3(a.map ?? 0)}  0  0`);
   }
   for (const b of bonds) lines.push(`${i3(b.a + 1)}${i3(b.b + 1)}${i3(b.order)}${i3(b.stereo)}`);
   const chg = atoms.map((a, i) => [i, a.charge] as const).filter(([, c]) => c !== 0);
@@ -294,10 +348,11 @@ export function addMolfile(doc: Doc, molblock: string, cx: number, cy: number): 
   const counts = lines[3] ?? '';
   const na = parseInt(counts.slice(0, 3), 10), nb = parseInt(counts.slice(3, 6), 10);
   if (!Number.isFinite(na) || counts.includes('V3000')) throw new Error('Only V2000 molfiles are supported so far.');
-  const raw: { x: number; y: number; sym: string; chg: number; iso: number; rad: number }[] = [];
+  const raw: { x: number; y: number; sym: string; chg: number; iso: number; rad: number; map: number }[] = [];
   for (let i = 0; i < na; i++) {
     const l = lines[4 + i];
-    raw.push({ x: parseFloat(l.slice(0, 10)), y: parseFloat(l.slice(10, 20)), sym: l.slice(31, 34).trim(), chg: 0, iso: 0, rad: 0 });
+    // (RDKit writes nan for a lone atom it has no layout for, such as [H+])
+    raw.push({ x: parseFloat(l.slice(0, 10)) || 0, y: parseFloat(l.slice(10, 20)) || 0, sym: l.slice(31, 34).trim(), chg: 0, iso: 0, rad: 0, map: parseInt(l.slice(60, 63), 10) || 0 });
   }
   // average bond length, to scale to the document's bond length
   let sum = 0;
@@ -332,6 +387,8 @@ export function addMolfile(doc: Doc, molblock: string, cx: number, cy: number): 
     const radical = r.rad === 1 ? 'singlet' : r.rad === 2 ? 'doublet' : r.rad === 3 ? 'triplet' : undefined;
     const a = doc.addAtom(cx + (r.x - mx) * k, cy - (r.y - my) * k, z ?? 6, {
       charge: r.chg, label: z === undefined ? r.sym : null, ...(r.iso ? { isotope: r.iso } : {}), ...(radical ? { radical } : {}),
+      // a mapped reaction's atom-atom numbers are shown beside the atoms
+      ...(r.map > 0 ? { mapNo: r.map, atomNumber: String(r.map), showNumber: true } : {}),
     });
     ids.push(a.id);
     atoms.push(a);
