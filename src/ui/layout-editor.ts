@@ -5,6 +5,7 @@
 // here, and put a built-in layout back as it came. Slides with a changed layout follow it when
 // the window is closed with Apply; Undo puts everything back.
 
+import { foldIntoInfo } from './info-tip';
 import { Doc, type Placeholder } from '../model';
 import {
   type Master, type SlideSize, type LayoutDef, type LayoutId, type PlaceholderBox,
@@ -45,6 +46,7 @@ export function editLayouts(input: LayoutEditorInput): Promise<LayoutDef[] | nul
     const note = document.createElement('p');
     note.className = 'muted';
     note.textContent = 'Drag a placeholder to move it and its corner to size it. Slides with a layout follow it when you apply; text already typed is kept.';
+    foldIntoInfo(note, h);
     form.append(h, note);
 
     const body = document.createElement('div');
@@ -108,8 +110,8 @@ export function editLayouts(input: LayoutEditorInput): Promise<LayoutDef[] | nul
     lookLabel.className = 'le-check';
     const look = document.createElement('input');
     look.type = 'checkbox';
-    lookLabel.append(look, ' Title slide colours and background');
-    lookLabel.title = 'Slides with this layout use the title slide\'s own colours (Slide Master > Title slides), and leave the slide number off unless title slides show it';
+    lookLabel.append(look, ' Title slide colors and background');
+    lookLabel.title = 'Slides with this layout use the title slide\'s own colors (Slide Master > Title slides), and leave the slide number off unless title slides show it';
     top.append(nameLabel, lookLabel);
     name.addEventListener('input', () => { layouts[sel].name = name.value; paintList(); });
     look.addEventListener('change', () => { layouts[sel].titleLook = look.checked; paintStage(); paintList(); });
@@ -129,7 +131,7 @@ export function editLayouts(input: LayoutEditorInput): Promise<LayoutDef[] | nul
     const delPh = btn('Delete Placeholder', 'Take the placeholder picked off this layout (Delete)', () => removeBox());
     const align = document.createElement('select');
     align.title = 'How the placeholder\'s text lines up';
-    for (const [v, l] of [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']]) align.add(new Option(l, v));
+    for (const [v, l] of [['left', 'Left'], ['center', 'Center'], ['right', 'Right']]) align.add(new Option(l, v));
     align.addEventListener('change', () => {
       const b = layouts[sel].boxes[box];
       if (b) { b.justify = align.value as PlaceholderBox['justify']; paintStage(); }

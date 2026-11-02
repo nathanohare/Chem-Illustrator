@@ -153,8 +153,8 @@ function thermoHtml(jb: JobackResult, vp: number | null, henry: number | null, t
     <tr><th title="Ideal gas at 298 K">C<sub>p</sub> (gas)</th><td>${v(jb.cp, 1, 'J/(mol·K)')}</td></tr>
     <tr><th title="At the boiling point">ΔH<sub>vap</sub></th><td>${v(jb.hvap, 1, 'kJ/mol')}</td></tr>
     <tr><th>ΔH<sub>fus</sub></th><td>${v(jb.hfus, 1, 'kJ/mol')}</td></tr>
-    <tr><th title="${esc(vpTip)}">Vapour pressure</th><td>${vp === null ? '—' : vp >= 0.1 ? v(vp >= 1000 ? vp / 1000 : vp, vp >= 1000 ? 1 : 2, vp >= 1000 ? 'kPa' : 'Pa') : `${sci(vp)} Pa`}</td></tr>
-    <tr><th title="${esc('Estimated vapour pressure over estimated solubility (ESOL), 25 °C. Rough: often within a factor of 10.')}">Henry's law constant</th><td>${henry === null ? '—' : `${sci(henry)} Pa·m³/mol`}</td></tr>
+    <tr><th title="${esc(vpTip)}">Vapor pressure</th><td>${vp === null ? '—' : vp >= 0.1 ? v(vp >= 1000 ? vp / 1000 : vp, vp >= 1000 ? 1 : 2, vp >= 1000 ? 'kPa' : 'Pa') : `${sci(vp)} Pa`}</td></tr>
+    <tr><th title="${esc('Estimated vapor pressure over estimated solubility (ESOL), 25 °C. Rough: often within a factor of 10.')}">Henry's law constant</th><td>${henry === null ? '—' : `${sci(henry)} Pa·m³/mol`}</td></tr>
     </table></details>`;
 }
 
@@ -176,7 +176,7 @@ export function nameHtml(state: NameState, i: number): string {
     <button type="button" data-insert="name:${i}" title="Put the name under the structure; it follows the structure and can be edited like any text">Name caption</button></div>`;
 }
 
-export function analysisHtml(r: FragmentResult, i: number, adductText: string, extras: { stereo?: string; unknown?: string[]; pubchem?: string; electrons?: string; rGroups?: string[]; name?: string }): string {
+export function analysisHtml(r: FragmentResult, i: number, adductText: string, extras: { stereo?: string; unknown?: string[]; pubchem?: string; electrons?: string; rGroups?: string[]; name?: string; cas?: { row: string; button: string } }): string {
   if (r.error) return `<div class="frag"><p class="warn">${esc(r.error)}</p></div>`;
   // with R groups only the core is known: no ion or elemental analysis for a compound not drawn
   const core = !!extras.rGroups?.length;
@@ -190,6 +190,7 @@ export function analysisHtml(r: FragmentResult, i: number, adductText: string, e
   if (ion) rows.push(`<tr><th>m/z ${adductHtml(ion.adduct.label)}</th><td>${ion.mz.toFixed(4)}</td></tr>`);
   if (ea) rows.push(`<tr><th>Elemental</th><td>${reported(ea).map((x) => `${x.el}, ${x.pct.toFixed(2)}`).join('; ')}</td></tr>`);
   if (extras.stereo) rows.push(`<tr><th>Stereo</th><td>${esc(extras.stereo)}</td></tr>`);
+  if (extras.cas && !core) rows.push(extras.cas.row);
   let iso = '';
   if (ion?.pattern && ion.pattern.length) {
     // the peaks of 0.5 % or more (with any between), so a Br6 or Cl4 cluster shows its tallest peaks
@@ -225,6 +226,8 @@ export function analysisHtml(r: FragmentResult, i: number, adductText: string, e
       ${core ? '' : `<button type="button" data-insert="formula:${i}" title="Attach the formula and masses under the structure: they follow it and update when it changes (choose what is shown in the Style panel)">Attach descriptors</button>`}
       ${ion ? `<button type="button" data-insert="hrms:${i}" title="Put an HRMS line under the structure (ACS style); type the found value into it">HRMS text</button>` : ''}
       ${ea ? `<button type="button" data-insert="ea:${i}" title="Put an elemental analysis line under the structure (ACS style)">Anal. text</button>` : ''}
+      ${core ? '' : `<button type="button" data-calc="${i}" title="Mass, mmol and volume of this compound (neat or as a solution), the mass for a solution, and dilutions, with its molecular weight filled in">Calculator</button>`}
+      ${core ? '' : extras.cas?.button ?? ''}
     </div>`;
   return `<div class="frag">
     <div class="formula">${formulaHtml(r.formula)}${core ? `·${extras.rGroups!.map(esc).join('·')} <span class="muted">(core only)</span>` : ''}</div>

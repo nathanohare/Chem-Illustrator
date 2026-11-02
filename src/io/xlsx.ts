@@ -16,6 +16,7 @@
 
 import { MAX_CELL_TEXT } from './sheet-sniff';
 import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr, ZipTooBigError } from './ooxml';
+import { readKeptParts, writeKeptParts } from './kept-parts';
 import { officeTarget, linkFromTarget } from '../links';
 import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side, makeStructure } from '../sheet/workbook';
 import { keyOf, rowOf, colOf, colName, cellName, parseRange, quoteSheet, Range, MAX_COLS, rangesOverlap, rangeName, inRange, MAX_ROWS, sheetNameProblem, fixSheetName } from '../sheet/refs';
@@ -149,7 +150,7 @@ export const BUILTIN_FORMATS: Record<number, string> = {
 };
 
 // FIELDVALUE too: Excel has it, but for its own data types, and would find no compound here
-const CHEM_FUNCTION = new RegExp(`\\b(${[...Object.keys(PROPERTIES), ...Object.keys(ISOTOPE_FUNCTIONS), 'FIELDVALUE'].join('|')})\\s*\\(`, 'i');
+const CHEM_FUNCTION = new RegExp(`\\b(${[...Object.keys(PROPERTIES), ...Object.keys(ISOTOPE_FUNCTIONS), 'HAMMETT', 'FIELDVALUE'].join('|')})\\s*\\(`, 'i');
 // Functions newer than Excel 2007 are written in the file with a prefix (_xlfn.), which Excel
 // needs to know them; reading a file takes the prefix off, so saving puts it back.
 const XLFN = new Set(['AGGREGATE', 'BETA.DIST', 'BETA.INV', 'BINOM.DIST', 'BINOM.INV', 'CEILING.MATH', 'CHISQ.DIST', 'CHISQ.DIST.RT',
@@ -826,6 +827,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   pkg.add('customXml/item1.xml', `${HEAD}<chemIllustrator xmlns="${MODEL_NS}" version="1">${xml(JSON.stringify(model))}</chemIllustrator>`);
   pkg.relate('customXml/item1.xml', RELS.customXmlProps, 'itemProps1.xml');
   pkg.add('customXml/itemProps1.xml', `${HEAD}<ds:datastoreItem ds:itemID="{6D1F3A52-6C1B-4D5E-9A57-3C0B1E0C1A01}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"><ds:schemaRefs><ds:schemaRef ds:uri="${MODEL_NS}"/></ds:schemaRefs></ds:datastoreItem>`, CT.itemProps);
+  // other programs' data kept from the file read: custom XML, custom properties, add-ins' settings
+  writeKeptParts(pkg, book.kept, { main: 'xl/workbook.xml', firstItem: 2 });
 
   if (anyDynamic) {
     pkg.relate('xl/workbook.xml', RELS.metadata, 'metadata.xml');
@@ -1098,6 +1101,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const nameCase = new Map(definedNames.map((d) => [(d.getAttribute('name') ?? '').toUpperCase(), d.getAttribute('name') ?? '']));
 
   if (model?.drawingStyle) book.drawingStyle = { ...book.drawingStyle, ...model.drawingStyle };
+  // other programs' data (custom XML, custom properties, add-ins' settings), to save back
+  book.kept = readKeptParts(pkg, { main: wbPath, ours: (r) => r.namespaceURI === MODEL_NS });
   // another program's text is shown as it wrote it (Q1 stays Q1); ours as it was made here
   book.autoChem = !!model && model.autoChem !== false;
 

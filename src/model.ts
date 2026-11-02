@@ -8,7 +8,11 @@ import { DocStyle, ACS_1996 } from './style';
 import { arrowPoints, gluePoint } from './objects';
 import { followPins } from './chem/pins';
 import type { EnergyData } from './design/energy';
+import type { NewmanData } from './design/newman';
+import type { TorsionData } from './design/torsion';
+import type { PlateData } from './design/plates';
 import type { DiagramData } from './design/diagrams';
+import type { SmartData } from './chem/smart-scheme';
 import type { ChartBox } from './sheet/chart-box';
 import { isMetal, isMetalLabel, lowestValence } from './chem/elements';
 import { NICKNAMES } from './chem/labels';
@@ -29,6 +33,8 @@ export function outsideValence(b: Pick<Bond, 'display' | 'order'>): boolean {
 export type DoublePos = 'auto' | 'left' | 'right' | 'center';
 
 export interface Atom {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -97,6 +103,12 @@ export interface Atom {
   /** Where the shown number sits, relative to the atom, when the file says or it was moved. */
   numberLabel?: { dx: number; dy: number; size: number };
   /**
+   * The atom-atom map number across a reaction (Chemistry ▸ Reactions and Schemes ▸ Map Atoms, or a
+   * mapped reaction SMILES or RXN file): an atom in a product has the number of the starting-material
+   * atom it came from. Written to molfiles (V2000 mmm) and reaction SMILES ([CH3:4]) when asked.
+   */
+  mapNo?: number;
+  /**
    * Enhanced stereo (ChemDraw's EnhancedStereoType): this stereocentre's configuration is known
    * as drawn ('abs'), or belongs to a group whose centres are a mixture of both forms ('and',
    * labelled &1) or are one form that isn't known ('or', labelled or1).
@@ -109,6 +121,12 @@ export interface Atom {
    * sits at their centre, follows them when they move, and goes when fewer than two are left.
    */
   multi?: number[];
+  /**
+   * On a multicentre point: its π-system drawn with its double bonds (Kekulé form) rather than
+   * delocalized (a circle in an η⁵/η⁶ ring, an arc over an η³-allyl), which is how it is drawn
+   * when bonded to a metal. Only the look: the bonds are the same either way.
+   */
+  kekule?: boolean;
 }
 
 /** A metal atom: a metal element, or a label written for one (Pd, PdCl2, LnPd, [M]). */
@@ -239,7 +257,24 @@ export interface TextRun {
   allCaps?: boolean;
   /** Documents: the character style the text is in (Emphasis, Strong…), by id; its look is in the run itself. */
   cstyle?: string;
+  /** Documents: the content control (another program's, such as Chem4Word's) this text sits in, by id (see DocText.controls). */
+  cc?: string;
+  /** Text effects (the Font box): no kerning between letter pairs (they are kerned unless this is set). */
+  noKern?: boolean;
+  /** Text effects: no fill inside the letters (outline-only text, with `outline`). */
+  noFill?: boolean;
+  /** Text effects: how much shows through the letters' fill, 0 (solid) to 1. */
+  transparency?: number;
+  /** Text effects: a line round each letter, in this colour, `outlineW` points wide (0.75 unless set). */
+  outline?: string;
+  outlineW?: number;
+  /** Text effects: a soft drop shadow, down and to the right. */
+  shadow?: boolean;
 }
+
+/** The text effects a run can have (the Font box), copied together onto every piece of it that is drawn. */
+export type TextFx = Pick<TextRun, 'noKern' | 'noFill' | 'transparency' | 'outline' | 'outlineW' | 'shadow'>;
+
 
 /**
  * Formatting a text takes where its runs don't set their own: the placeholders on slides take
@@ -350,6 +385,8 @@ export interface ParaStyle {
   xe?: IndexMark[];
   /** Documents: citations marked here for a table of authorities (References > Mark Citation; Word's TA fields). */
   ta?: AuthorityMark[];
+  /** Documents: the content control round whole paragraphs that this one is in, by id (see DocText.controls). */
+  cc?: string;
 }
 
 /**
@@ -387,6 +424,8 @@ export interface TabStop {
 }
 
 export interface Caption {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -546,6 +585,8 @@ export interface Attachment {
 export type ArrowHead = 'none' | 'full' | 'halfLeft' | 'halfRight';
 
 export interface Arrow {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -652,6 +693,8 @@ export interface StepRoles {
 export type Pattern = 'hatch' | 'backhatch' | 'crosshatch' | 'horizontal' | 'vertical' | 'grid' | 'dots' | 'dense-dots';
 
 export interface Shape {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -687,6 +730,8 @@ export interface Shape {
    */
   rot?: number;
   dashed?: boolean;
+  /** A line drawn as a row of round dots (with `dashed` too, for programs that only know dashes). */
+  dotted?: boolean;
   filled?: boolean;
   /**
    * How a filled shape is filled: evenly (absent), a light tint, shaded light to dark, or a
@@ -812,8 +857,21 @@ export interface Shape {
   frame?: Frame;
   /** An energy diagram's numbers and look, kept on the invisible frame round its drawing (design/energy.ts). */
   energy?: EnergyData;
+  /** A Newman or sawhorse projection's groups, look and the bond it shows, kept on the invisible frame round it (design/newman.ts). */
+  newman?: NewmanData;
+  /** A torsional energy diagram's curve, look and the bond it shows, kept on the invisible frame round it (design/torsion.ts). */
+  torsion?: TorsionData;
+  /** A TLC plate's or gel's lanes and look, kept on the invisible frame round its drawing (design/plates.ts). */
+  plate?: PlateData;
   /** A SmartArt-style diagram's text and look, kept on the invisible frame round its shapes (design/diagrams.ts). */
   diagram?: DiagramData;
+  /** A Smart Scheme's layout, kept on the invisible frame round the scheme (chem/smart-scheme.ts). */
+  smart?: SmartData;
+  /**
+   * A Smart Scheme species waiting for its structure: a dashed box to draw in, or to select and
+   * paste into. `runs` is the text label it had, so it can go back to that.
+   */
+  holder?: { runs?: TextRun[] };
 }
 
 /** Can this shape be turned to any angle (Slides and Design), keeping its box and turning it as a whole? */
@@ -948,7 +1006,7 @@ export const PICTURE_SHADOWS: Record<'soft' | 'hard', { off: number; blur: numbe
 export const PICTURE_STYLES: { id: string; name: string; look: PictureLook | undefined }[] = [
   { id: 'none', name: 'No frame', look: undefined },
   { id: 'thin', name: 'Thin line', look: { line: 1, lineColor: '#000000' } },
-  { id: 'grey', name: 'Grey line', look: { line: 1.5, lineColor: '#7f7f7f' } },
+  { id: 'grey', name: 'Gray line', look: { line: 1.5, lineColor: '#7f7f7f' } },
   { id: 'thick', name: 'Thick line', look: { line: 4, lineColor: '#000000' } },
   { id: 'white', name: 'White frame', look: { line: 10, lineColor: '#ffffff', shadow: 'soft' } },
   { id: 'black', name: 'Black frame', look: { line: 10, lineColor: '#000000' } },
@@ -1173,6 +1231,8 @@ export class Doc {
   background = '#ffffff';
   /** The page the drawing is on (File > Page Setup): its size in points, and whether it grows to hold the drawing. Null: no page shown. */
   page: PageSetup | null = null;
+  /** Guides drawn over the drawing to line things up by (View > Toolboxes > Guides). Saved with the file, never exported or printed. */
+  guides: import('./editor/guides').CanvasGuides | null = null;
   /**
    * Draw only the highlights (a highlight animated on its own in a slide show, or saved to
    * PowerPoint as its own picture behind its structure). Not saved.
@@ -1518,6 +1578,8 @@ export class Doc {
         }
       }
       if (was?.multi) this.unlinkCentre(was);
+      // (a multicentre point's atoms are drawn by how it is: a ring bonded to a metal is drawn delocalized)
+      for (const m of [...(was?.multi ?? []), ...((e as Atom | null)?.multi ?? [])]) this.dirtyAtoms.add(m);
       if (e) {
         this.atoms.set(id, e as Atom);
         if (!this.adj.has(id)) this.adj.set(id, []);

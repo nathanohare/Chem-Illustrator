@@ -4,6 +4,7 @@
 // their size and colour. Apply keeps the look for the slides picked; Apply to All uses it on every
 // slide. The lines are written, placed and formatted by the app, like the slide number and footer.
 
+import { withInfo } from './info-tip';
 import type { CiteFormat } from '../document/cite-styles';
 import { shortLabel, type Piece, type Reference } from '../document/references';
 import { REF_FORMS, REF_NUMBERINGS, REF_PLACES, slideRefPieces, type RefForm, type RefLook, type RefNumbering, type RefPlace } from '../deck/slide-refs';
@@ -92,7 +93,7 @@ export function editSlideRefs(input: SlideRefsInput): Promise<SlideRefsResult | 
     };
     const colourBox = el('span', 'slide-refs-colour');
     const colourLabel = el('label');
-    colourLabel.append(ownColour, ' Own colour ');
+    colourLabel.append(ownColour, ' Own color ');
     colourBox.append(colourLabel, colour);
 
     const look = (): RefLook => ({
@@ -114,7 +115,7 @@ export function editSlideRefs(input: SlideRefsInput): Promise<SlideRefsResult | 
         if (labels[k]) p.prepend(`${labels[k]} `);
         return p;
       });
-      preview.replaceChildren(...(lines.length ? lines : [el('p', 'muted', 'Tick references to show them at the foot of the slide.')]));
+      preview.replaceChildren(...(lines.length ? lines : [el('p', 'muted', 'Check references to show them at the foot of the slide.')]));
       preview.style.color = l.color ?? input.footerColor;
       preview.style.textAlign = l.place === 'bottom-centre' ? 'center' : l.place.endsWith('right') ? 'right' : 'left';
     };
@@ -153,7 +154,7 @@ export function editSlideRefs(input: SlideRefsInput): Promise<SlideRefsResult | 
     form.addEventListener('input', showPreview);
     form.addEventListener('change', showPreview);
 
-    const note = el('p', 'muted small', `Ticks are for the ${input.picked > 1 ? `${input.picked} slides picked` : 'slide being edited'}. Apply gives ${input.picked > 1 ? 'them' : 'it'} this look of its own; Apply to All uses the look on every slide. The References slide (Insert > Presentation > References Slide) lists them all.`);
+    const note = el('p', 'muted small', `Check marks are for the ${input.picked > 1 ? `${input.picked} slides picked` : 'slide being edited'}. Apply gives ${input.picked > 1 ? 'them' : 'it'} this look of its own; Apply to All uses the look on every slide. The References slide (Insert > Presentation > References Slide) lists them all.`);
     const buttons = el('p', 'ask-buttons');
     const cancel = el('button', '', 'Cancel');
     cancel.type = 'button';
@@ -162,18 +163,18 @@ export function editSlideRefs(input: SlideRefsInput): Promise<SlideRefsResult | 
     apply.title = input.picked > 1 ? `The look for the ${input.picked} slides picked only` : 'The look for this slide only';
     const all = el('button', 'primary', 'Apply to All');
     all.type = 'submit';
-    all.title = 'The look for every slide (the ticks are for the slides picked)';
+    all.title = 'The look for every slide (the check marks are for the slides picked)';
     const spacer = el('span', 'spacer');
     buttons.append(manage, spacer, cancel, apply, all);
     form.append(
-      el('h2', '', 'References on Slide'),
+      withInfo(el('h2', '', 'References on Slide'), note.textContent ?? ''),
       list,
       row('Write each as', formSel),
       row('Numbers', numSel),
       row('Place', placeSel),
       row('Size (pt)', size, colourBox),
       el('h3', 'slide-refs-sub', 'On the slide'),
-      preview, note, buttons,
+      preview, buttons,
     );
     fillList();
 

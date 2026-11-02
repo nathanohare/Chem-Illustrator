@@ -10,7 +10,7 @@ Open **Help ▸ Send Feedback…** (or **Help ▸ Report a Problem…** if somet
 
 1. Pick what it is: **Feature request**, **Problem (bug)** or **Comment or question**.
 2. Give it a short title, and say what you'd like or what went wrong. For a problem, the steps that make it happen help most: what you opened, what you clicked, and what you saw.
-3. Leave **Include the program's version and computer** ticked, unless you'd rather not share them. It adds the version number, the kind of computer (Windows, macOS or Linux) and which mode you were in. Nothing else about you or your files is included.
+3. Leave **Include the program's version and computer** checked, unless you'd rather not share them. It adds the version number, the kind of computer (Windows, macOS or Linux) and which mode you were in. Nothing else about you or your files is included.
 4. Then choose how to send it:
    - **Open on GitHub** opens a new issue on the project's GitHub page in your web browser, already filled in. Check it, add a screenshot if it helps (drag the picture into the text box), and click **Create** or **Submit new issue**. You need a free GitHub account for this.
    - **Copy Text** copies the same text so you can paste it into an email or a message, for example to whoever looks after Chem Illustrator in your lab.
@@ -19,7 +19,7 @@ Nothing is sent by the program itself: you always see the text first, in your br
 
 ## When something goes wrong
 
-If the program hits an error it didn't expect, a notice at the bottom of the window says so, with a **Report It…** button. That opens **Report a Problem**, already filled in with the error and the few things the program noted just before it. Under **Include the error details the program wrote down**, click **Show them** to read exactly what would be sent, or untick the box to leave them out. Add what you were doing, then send it as above.
+If the program hits an error it didn't expect, a notice at the bottom of the window says so, with a **Report It…** button. That opens **Report a Problem**, already filled in with the error and the few things the program noted just before it. Under **Include the error details the program wrote down**, click **Show them** to read exactly what would be sent, or clear the box to leave them out. Add what you were doing, then send it as above.
 
 If the desktop app closed unexpectedly last time (it crashed, or Windows ended it), the next start says so in a notice at the bottom left, with the same **Report It…** button. The notice stays until you click **Report It…** or **Dismiss**.
 

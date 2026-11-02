@@ -2,6 +2,7 @@
 // it as a new issue on GitHub (in the computer's browser, to check and submit there) or copy it to
 // send another way. Nothing is sent from the program itself.
 
+import { foldIntoInfo } from './info-tip';
 import { feedbackIssue, feedbackText, issueUrl, KIND_NAMES, REPO_URL, type Feedback, type FeedbackKind } from '../feedback';
 
 export interface FeedbackHost {
@@ -130,6 +131,7 @@ export class FeedbackDialog {
     send.title = `Open a new issue on ${REPO_URL.replace('https://', '')}, filled in, in your browser`;
     buttons.append(cancel, copy, send);
 
+    foldIntoInfo(note, h);
     form.append(h, note, kinds, titleRow, detailsRow, stepsRow, extraWrap, aboutLab, status, buttons);
     d.append(form);
 

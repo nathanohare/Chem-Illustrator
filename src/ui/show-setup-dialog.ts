@@ -84,7 +84,7 @@ export function setUpShow(setup: ShowSetup | undefined, shows: CustomShow[], sli
     const timed = radio('ss-adv', 'Using timings, if present', !s.manual, 'Each slide goes on by itself after its time (Rehearse Timings, or Transitions > After)');
     adv.append(manual.l, timed.l);
     grid.append(type, opt, which, adv);
-    const kioskNote = el('p', 'muted small', 'At a kiosk the show goes round by itself, by the slides\' times; clicks only follow links and action buttons, and Esc ends it.');
+    const kioskNote = el('p', 'muted small', 'At a kiosk the show goes around by itself, by the slides\' times; clicks only follow links and action buttons, and Esc ends it.');
     const sync = () => {
       const kiosk = types.get('kiosk')!.checked;
       loop.i.disabled = kiosk;

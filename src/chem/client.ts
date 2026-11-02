@@ -6,6 +6,7 @@ import type { StereoTags } from './stereo';
 import type { MolProps } from '../sheet/properties';
 import type { MassFragment } from './props';
 import type { NamerGraph } from './namer-graph';
+import type { HammettResult } from './hammett-match';
 
 export class ChemClient {
   ready = false;
@@ -102,6 +103,12 @@ export class ChemClient {
   async substructure(query: string, mols: string[]): Promise<{ results: (boolean | null)[]; error?: string }> {
     const r = await this.request<Extract<ChemResponse, { type: 'substructure' }>>((id) => ({ type: 'substructure', id, query, mols }));
     return { results: r.results, error: r.error };
+  }
+
+  /** The Hammett groups at a core's marked positions in each molecule (SMILES or molfiles). */
+  async hammett(core: string, mols: string[]): Promise<HammettResult[]> {
+    const r = await this.request<Extract<ChemResponse, { type: 'hammett' }>>((id) => ({ type: 'hammett', id, core, mols }));
+    return r.results;
   }
 
   /** For each molfile, the atoms it shares with `ref` (largest common substructure) as [ref atom, its atom] pairs, or null. */

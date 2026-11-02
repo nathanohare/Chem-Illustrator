@@ -2,6 +2,7 @@
 // (shapes and icons, searchable, in groups, each drawn as a small picture). Clicking a shape picks it as the
 // tool (click or drag on the page to place it); a shape can also be dragged straight onto the page.
 
+import { infoIcon } from './info-tip';
 import { DESIGN_SIZES, SlideSize } from '../deck/deck';
 import { GEOS, GEO_GROUPS, GeoDef, traceSteps } from '../design/geo';
 import { ICON_CREDIT, findIcons, iconGroups, iconSvg, iconsLoaded, loadIcons, whenIconsLoaded } from '../design/icons';
@@ -54,7 +55,7 @@ export function pickDesignSize(title: string, current?: SlideSize): Promise<Slid
       list.append(choice(s.id, s.name, sizeLabel(s.size)));
     }
     const g = document.createElement('h3');
-    g.textContent = 'Your own';
+    g.textContent = 'Custom';
     list.append(g, choice('custom', 'Custom size', ''));
 
     const custom = document.createElement('div');
@@ -157,8 +158,8 @@ export function pickDesignSize(title: string, current?: SlideSize): Promise<Slid
   });
 }
 
-/** Draws a shape's picture for the library. */
-export function drawGeoIcon(c: HTMLCanvasElement, def: GeoDef, px: number, colour: string): void {
+/** Draws a shape's picture for the library: lines in `colour` (bold ones for the Shapes menu) with a light wash of `tint` inside. */
+export function drawGeoIcon(c: HTMLCanvasElement, def: GeoDef, px: number, colour: string, tint = colour, bold = false): void {
   const dpr = window.devicePixelRatio || 1;
   c.width = Math.round(px * dpr);
   c.height = Math.round(px * dpr);
@@ -166,20 +167,25 @@ export function drawGeoIcon(c: HTMLCanvasElement, def: GeoDef, px: number, colou
   const g = c.getContext('2d');
   if (!g) return;
   g.scale(dpr, dpr);
-  const pad = 3, room = px - 2 * pad;
+  const pad = bold ? 2.5 : 3, room = px - 2 * pad;
   const [sw, sh] = def.size;
   const k = room / Math.max(sw, sh);
   const w = sw * k, h = sh * k;
   g.translate(pad + (room - w) / 2, pad + (room - h) / 2);
   const o = def.draw(w, h);
-  g.lineWidth = 1.2;
+  g.lineWidth = bold ? Math.max(1.8, px / 14) : 1.2;
   g.lineJoin = 'round';
+  g.lineCap = 'round';
   g.strokeStyle = colour;
+  g.fillStyle = colour;
   g.beginPath();
   traceSteps(g, o.body);
   if (!def.outline) {
-    g.fillStyle = 'rgba(123, 63, 191, 0.14)';
+    g.save();
+    g.globalAlpha = 0.14;
+    g.fillStyle = tint;
     g.fill();
+    g.restore();
   }
   g.stroke();
   if (o.lines?.length) {
@@ -187,6 +193,16 @@ export function drawGeoIcon(c: HTMLCanvasElement, def: GeoDef, px: number, colou
     traceSteps(g, o.lines);
     g.stroke();
   }
+}
+
+/**
+ * The colour of the Shapes menu's pictures (View > Window and Colours > Icon Colours): neutral
+ * (the text colour: black on light, white on dark) or the mode's own colour.
+ */
+let shapeInk: 'neutral' | 'accent' = 'neutral';
+export function setShapeInk(ink: 'neutral' | 'accent'): void {
+  shapeInk = ink;
+  dispatchEvent(new CustomEvent('shape-ink-changed'));
 }
 
 /** The size of the enlarged picture shown while the mouse rests on a shape or icon. */
@@ -279,14 +295,16 @@ export class DesignLibrary {
       this.iconCount = ICON_PAGE;
       this.build();
     });
-    const tip = document.createElement('p');
-    tip.className = 'muted small';
-    tip.textContent = 'Click a shape, then click or drag on the page. Or drag it onto the page.';
-    head.append(bar, this.search, this.groupPick, tip);
+    bar.append(infoIcon('Click a shape, then click or drag on the page. Or drag it onto the page.', 'dl-info'));
+    head.append(bar, this.search, this.groupPick);
     this.body = document.createElement('div');
     this.body.className = 'dl-body';
     el.replaceChildren(head, this.body);
     whenIconsLoaded(() => { this.fillGroups(); this.build(); });
+    // the shapes' pictures follow the setting, the theme and the mode's colour
+    const redraw = () => { if (this.tab === 'shapes' && this.el.isConnected) this.build(); };
+    addEventListener('shape-ink-changed', redraw);
+    addEventListener('surround-changed', redraw);
     this.showTab('shapes');
   }
 
@@ -364,7 +382,10 @@ export class DesignLibrary {
       const text = `${g.name} ${g.group} ${g.keywords ?? ''} ${g.id}`.toLowerCase();
       return words.every((w) => text.includes(w));
     });
-    const colour = getComputedStyle(this.el).getPropertyValue('--tile-ink').trim() || '#222';
+    const css = getComputedStyle(this.el);
+    // the lines black (white in the dark theme) or the mode's colour, as set; the wash always the mode's colour
+    const tint = css.getPropertyValue('--accent').trim() || '#7b3fbf';
+    const colour = shapeInk === 'accent' ? tint : css.getPropertyValue('--text').trim() || '#1d2330';
     const parts: HTMLElement[] = [];
     for (const group of GEO_GROUPS) {
       const inGroup = found.filter((g) => g.group === group);
@@ -375,10 +396,10 @@ export class DesignLibrary {
       grid.className = 'dl-grid';
       for (const def of inGroup) {
         const c = document.createElement('canvas');
-        drawGeoIcon(c, def, 26, colour);
+        drawGeoIcon(c, def, 26, colour, tint, true);
         grid.append(this.tile(def.id, def.name, c, () => {
           const large = document.createElement('canvas');
-          drawGeoIcon(large, def, PREVIEW_PX, colour);
+          drawGeoIcon(large, def, PREVIEW_PX, colour, tint, true);
           return large;
         }));
       }

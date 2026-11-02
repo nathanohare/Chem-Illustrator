@@ -48,6 +48,42 @@
       },
       {
         "ext": [
+          "rxn"
+        ],
+        "name": "MDL reaction file",
+        "mimeType": "chemical/x-mdl-rxnfile",
+        "role": "Editor",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "mrv"
+        ],
+        "name": "Marvin document",
+        "mimeType": "chemical/x-mrv",
+        "role": "Editor",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "ket"
+        ],
+        "name": "Ketcher drawing",
+        "mimeType": "application/json",
+        "role": "Editor",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
+          "cml"
+        ],
+        "name": "Chemical Markup Language file",
+        "mimeType": "chemical/x-cml",
+        "role": "Editor",
+        "rank": "Alternate"
+      },
+      {
+        "ext": [
           "docx"
         ],
         "name": "Word document",

@@ -314,10 +314,10 @@ export class Keeper {
     const keepMine = () => { t.stamp = disk; this.paused.delete(t.id); this.told.delete(t.id); };
     notice(`disk-${t.id}`, `${t.name} changed on disk`,
       `It was changed ${when(disk.modified)} outside Chem Illustrator: by another program, someone else in a shared folder, or OneDrive bringing in changes.` +
-      (t.dirty ? ' You have unsaved changes here too: Reload throws them away, Keep Mine saves over theirs next time, and Open Theirs shows their version in a new tab to compare.' : ' Reload shows their version; Keep Mine leaves the tab as it is.'), [
-        { label: t.dirty ? 'Reload (Lose Mine)' : 'Reload', run: () => void this.reload(t), main: !t.dirty },
-        { label: 'Keep Mine', run: keepMine, main: t.dirty },
-        { label: 'Open Theirs', run: () => { keepMine(); void this.openDiskCopy(t); } },
+      (t.dirty ? ' You have unsaved changes here too: Reload throws them away, Keep My Version saves over theirs next time, and Open Their Version shows their version in a new tab to compare.' : ' Reload shows their version; Keep My Version leaves the tab as it is.'), [
+        { label: t.dirty ? 'Reload and Discard Mine' : 'Reload', run: () => void this.reload(t), main: !t.dirty },
+        { label: 'Keep My Version', run: keepMine, main: t.dirty },
+        { label: 'Open Their Version', run: () => { keepMine(); void this.openDiskCopy(t); } },
       ]);
   }
 

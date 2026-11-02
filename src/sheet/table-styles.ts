@@ -28,12 +28,12 @@ export interface TableDef {
 
 /** The Office colours a style family is made in: none (black and greys), then accents 1 to 6. */
 const SHADES = ['000000', '4472C4', 'ED7D31', 'A5A5A5', 'FFC000', '5B9BD5', '70AD47'];
-const SHADE_NAMES = ['Black', 'Blue', 'Orange', 'Grey', 'Gold', 'Light blue', 'Green'];
+const SHADE_NAMES = ['Black', 'Blue', 'Orange', 'Gray', 'Gold', 'Light blue', 'Green'];
 
 type Family = 'light' | 'lightHeader' | 'lightGrid' | 'medium' | 'mediumBands' | 'mediumGrid' | 'mediumPlain' | 'dark';
 const FAMILIES: { family: Family; prefix: 'Light' | 'Medium' | 'Dark'; first: number; label: string }[] = [
   { family: 'light', prefix: 'Light', first: 1, label: 'Light' },
-  { family: 'lightHeader', prefix: 'Light', first: 8, label: 'Light, coloured header' },
+  { family: 'lightHeader', prefix: 'Light', first: 8, label: 'Light, colored header' },
   { family: 'lightGrid', prefix: 'Light', first: 15, label: 'Light, lines' },
   { family: 'medium', prefix: 'Medium', first: 1, label: 'Medium' },
   { family: 'mediumBands', prefix: 'Medium', first: 8, label: 'Medium, strong bands' },

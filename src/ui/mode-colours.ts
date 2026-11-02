@@ -92,16 +92,29 @@ export interface Palette {
   /** The menu bar in "Whole window", with white text on it. */
   bar: string;
   barDark: string;
+  /** Words on the accent colour (a Done button), each theme: white, or a near-black ink where white would not read (WCAG AA, 4.5:1). */
+  onAccent: string;
+  onAccentDark: string;
+}
+
+/** The ink for words on a coloured button when white would not read on it. */
+const INK = '#14171c';
+
+/** White on `bg` if it reads (4.5:1), else whichever of white and the dark ink reads better. */
+function inkOn(bg: string): string {
+  if (contrast('#ffffff', bg) >= 4.5) return '#ffffff';
+  return contrast(INK, bg) > contrast('#ffffff', bg) ? INK : '#ffffff';
 }
 
 /** Everything the window needs from one chosen colour, in both themes, keeping text readable. */
 export function modePalette(colour: string): Palette {
   const c = rgb(HEX.test(colour) ? colour : DEFAULT_MODE_COLOURS.drawing);
   const accent = until(c, BLACK, WHITE, 4.5);
-  const [h, s, l] = toHsl(c);
-  // the dark theme's accent: the same hue, lighter and stronger (blue #2f6fdf gives #7babff)
-  const lighter = fromHsl(h, Math.min(1, s + 0.27), l + (1 - l) * 0.45);
-  const accentDark = until(lighter, WHITE, DARK_PANEL, 4.5);
+  const [h, s] = toHsl(c);
+  // the dark theme's accent: the same hue, muted (saturation at most 0.45, so it does not glow against
+  // the dark grays) and lightened until it reads at 5.2:1 on the panels (Canvas teal #0e7c93 gives #4ea9bc)
+  let accentDark = fromHsl(h, Math.min(s, 0.45), 0.5);
+  for (let L = 0.5; contrast(hex(accentDark), hex(DARK_PANEL)) < 5.2 && L < 1; L += 0.01) accentDark = fromHsl(h, Math.min(s, 0.45), L);
   return {
     accent: hex(accent),
     soft: hex(mix(WHITE, c, 0.14)),
@@ -109,6 +122,8 @@ export function modePalette(colour: string): Palette {
     softDark: hex(mix(DARK_PANEL, c, 0.28)),
     bar: hex(until(c, BLACK, WHITE, 4.5)),
     barDark: hex(until(mix(DARK_BG, c, 0.55), BLACK, WHITE, 4.5)),
+    onAccent: inkOn(hex(accent)),
+    onAccentDark: inkOn(hex(accentDark)),
   };
 }
 
@@ -122,7 +137,7 @@ export function applyModeColours(mode: ColourMode, c: ModeColours, root: HTMLEle
   const p = modePalette(modeColour(mode, c));
   const vars: Record<string, string> = {
     '--mode-accent': p.accent, '--mode-soft': p.soft, '--mode-accent-dark': p.accentDark, '--mode-soft-dark': p.softDark,
-    '--mode-bar': p.bar, '--mode-bar-dark': p.barDark, '--mode-drawing': c.drawing, '--mode-slides': c.style === 'off' ? c.drawing : c.slides,
+    '--mode-bar': p.bar, '--mode-bar-dark': p.barDark, '--mode-on-accent': p.onAccent, '--mode-on-accent-dark': p.onAccentDark, '--mode-drawing': c.drawing, '--mode-slides': c.style === 'off' ? c.drawing : c.slides,
     '--mode-sheet': c.style === 'off' ? c.drawing : c.sheet, '--mode-document': c.style === 'off' ? c.drawing : c.document, '--mode-design': c.style === 'off' ? c.drawing : c.design,
   };
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);
@@ -145,19 +160,18 @@ export class ModeColoursDialog {
   constructor(private opts: ModeColoursDialogOptions) {
     const d = (this.d = document.createElement('dialog'));
     d.className = 'mode-dialog';
-    d.setAttribute('aria-label', 'Mode colours');
+    d.setAttribute('aria-label', 'Mode colors');
     d.innerHTML = `
-      <h2>Mode colours</h2>
-      <p class="muted">Each kind of file has its own colour, so you can see at a glance whether you are working on a canvas, a presentation, a spreadsheet, a document or a design.</p>
+      <h2 data-info="Each kind of file has its own color, so you can see at a glance whether you are working on a canvas, a presentation, a spreadsheet, a document or a design.">Mode colors</h2>
       <fieldset class="mc-styles">
-        <legend>Use the colour for</legend>
+        <legend>Use the color for</legend>
         <label class="hk-opt"><input type="radio" name="mc-style" value="accent" /><span>Buttons, highlights and tab icons (the window keeps its usual look)</span></label>
         <label class="hk-opt"><input type="radio" name="mc-style" value="window" /><span>The whole window: the menu bar and tab strip too</span></label>
-        <label class="hk-opt"><input type="radio" name="mc-style" value="off" /><span>Nothing: every mode uses the drawing colour</span></label>
+        <label class="hk-opt"><input type="radio" name="mc-style" value="off" /><span>Nothing: every mode uses the drawing color</span></label>
       </fieldset>
       <div class="mc-colours"></div>
       <div class="hk-foot">
-        <button type="button" data-act="reset">Use the standard colours</button>
+        <button type="button" data-act="reset">Use the standard colors</button>
         <span class="hk-buttons"><button type="button" data-act="close" class="primary">Close</button></span>
       </div>`;
     const box = d.querySelector('.mc-colours')!;
@@ -171,7 +185,7 @@ export class ModeColoursDialog {
       const input = document.createElement('input');
       input.type = 'color';
       input.dataset.mode = mode;
-      input.setAttribute('aria-label', `${NAMES[mode]} colour`);
+      input.setAttribute('aria-label', `${NAMES[mode]} color`);
       input.addEventListener('input', () => this.change({ [mode]: input.value.toLowerCase() }));
       const reset = document.createElement('button');
       reset.type = 'button';

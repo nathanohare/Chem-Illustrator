@@ -10,8 +10,8 @@ import type { LaidLine } from '../text/layout';
 import type { DocFile } from '../document/doc-file';
 import { figures } from '../document/doc-file';
 import { turnOf } from '../document/arrange';
-import { drawChangeBars, turnAbout, drawDocTable, drawHeaderFooter, drawHfBodies, drawLineNumbers, drawNoteRules, drawPageLook } from '../document/doc-paint';
-import { BOX_PAD, SHADOWS, lookOf, type DocText } from '../document/document';
+import { boxTextTop, drawChangeBars, turnAbout, drawDocTable, drawHeaderFooter, drawHfBodies, drawLineNumbers, drawNoteRules, drawPageLook, traceGeo } from '../document/doc-paint';
+import { BOX_PAD, SHADOWS, emptyContents, lookOf, type DocText } from '../document/document';
 import { BREAK_NAMES } from '../document/sections';
 import { drawLayout } from '../text/draw';
 import { drawMath } from '../document/math';
@@ -30,6 +30,8 @@ let surround = getComputedStyle(document.documentElement).getPropertyValue('--su
 addEventListener('surround-changed', (e) => { surround = (e as CustomEvent<string | null>).detail ?? SURROUND; });
 const SELECTION = 'rgba(40, 120, 255, 0.25)';
 const OBJECT_FRAME = '#2f6fdf';
+/** A figure's area under the pointer: light grey, so its edges show. */
+const FIGURE_HOVER = 'rgba(60, 64, 72, 0.08)';
 /** 100%: a point of the page is a point on the screen (96 pixels to the inch). */
 export const ACTUAL = 96 / 72;
 
@@ -73,6 +75,25 @@ export class DocView {
   onResize: () => void = () => {};
   /** Pages in rows of this many (View > Multiple Pages), or 1. */
   perRow = 1;
+  /** A figure's area being drawn (Insert > Figure), in the document's points. */
+  sketch: Rect | null = null;
+  /** Figures proposed for a document's structures (Make Figures' preview): their areas, labelled; those left out greyed. */
+  proposals: { rect: Rect; on: boolean; label: string }[] | null = null;
+  /** Where each proposal's label was drawn (the document's points), to click. */
+  private labels: Rect[] = [];
+
+  /** Where a proposed figure's label is (the document's points), as last drawn. */
+  proposalLabel(i: number): Rect | null {
+    return this.labels[i] ?? null;
+  }
+  /** The figure the pointer is over: its area is shaded light grey, to show its edges (on screen only). */
+  hover: number | null = null;
+  /**
+   * A structure being drawn in place on its page: `paint` draws it as it is being drawn (in the
+   * page's points, `o` its place) instead of as the document has it, over the rest of the
+   * page, which is faded when `fade` (it can't be changed until the drawing is done).
+   */
+  live: { id: number; fade: boolean; paint(ctx: CanvasRenderingContext2D, o: PlacedObject): void } | null = null;
   /** Table > View Gridlines: faint lines on every table edge with no border (else only in tables with none). */
   gridlines = false;
   /** Pages side by side in one row, scrolled across (View > Side to Side, and Read Mode). */
@@ -478,6 +499,13 @@ export class DocView {
       }
       for (const o of lay.objects) if (o.page === p.index && o.wrap !== 'behind' && t.objects[o.id]?.kind !== 'table') this.object(ctx, t, o, lay);
       const px = 1 / k;
+      // a structure drawn in place: over the page (faded, as it can't be changed meanwhile)
+      const live = this.live;
+      if (live) {
+        if (live.fade && !endless) { ctx.fillStyle = 'rgba(255, 255, 255, 0.5)'; ctx.fillRect(p.x, p.top, p.w, p.h); }
+        const lo = lay.objects.find((o) => o.id === live.id);
+        if (lo && lo.page === p.index) live.paint(ctx, lo);
+      }
       for (const s of ov.squiggles) {
         if (!inPage(s.start, s.end)) continue;
         ctx.strokeStyle = s.color;
@@ -492,19 +520,64 @@ export class DocView {
     }
     const onPageOf = (o: PlacedObject) => at(lay.pages[o.page] ?? lay.pages[0]);
     // the picked figure's frame and handle
-    if (ov.picked !== null) {
+    if (ov.picked !== null && ov.picked !== this.live?.id) {
       const o = lay.objects.find((x) => x.id === ov.picked);
       if (o) {
         onPageOf(o);
         const px = 1 / k;
         ctx.strokeStyle = OBJECT_FRAME;
         ctx.lineWidth = 1.2 * px;
-        ctx.strokeRect(o.x, o.y, o.w, o.h);
+        // a structure picked shows only its handles (no box round it); other things their frame too
+        const obj = t.objects[o.id];
+        const structure = obj?.kind === 'drawing' && !obj.frame;
+        if (obj?.kind !== 'drawing') ctx.strokeRect(o.x, o.y, o.w, o.h);
         ctx.fillStyle = '#fff';
         const hs = 7 * px;
-        ctx.fillRect(o.x + o.w - hs / 2, o.y + o.h - hs / 2, hs, hs);
-        ctx.strokeRect(o.x + o.w - hs / 2, o.y + o.h - hs / 2, hs, hs);
+        const corners = structure ? [[o.x, o.y], [o.x + o.w, o.y], [o.x, o.y + o.h], [o.x + o.w, o.y + o.h]] : [[o.x + o.w, o.y + o.h]];
+        for (const [x, y] of corners) { ctx.fillRect(x - hs / 2, y - hs / 2, hs, hs); ctx.strokeRect(x - hs / 2, y - hs / 2, hs, hs); }
       }
+    }
+    if (this.sketch) {
+      const r = this.sketch;
+      at(this.pageAt(lay, r.y1));
+      ctx.strokeStyle = OBJECT_FRAME;
+      ctx.lineWidth = 1.2 / k;
+      ctx.setLineDash([5 / k, 4 / k]);
+      ctx.strokeRect(r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1);
+      ctx.setLineDash([]);
+    }
+    this.labels = [];
+    if (this.proposals) {
+      ctx.save();
+      ctx.font = `600 ${11 / k}px system-ui, sans-serif`;
+      this.proposals.forEach((pr, i) => {
+        const r = pr.rect;
+        at(this.pageAt(lay, r.y1));
+        const colour = pr.on ? OBJECT_FRAME : '#9aa0aa';
+        if (pr.on) { ctx.fillStyle = 'rgba(47, 111, 223, 0.06)'; ctx.fillRect(r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1); }
+        ctx.strokeStyle = colour;
+        ctx.lineWidth = 1.4 / k;
+        ctx.setLineDash(pr.on ? [6 / k, 4 / k] : [2 / k, 3 / k]);
+        ctx.strokeRect(r.x1, r.y1, r.x2 - r.x1, r.y2 - r.y1);
+        ctx.setLineDash([]);
+        // its corner handles (its edges drag too)
+        if (pr.on) {
+          const hs = 6 / k;
+          ctx.fillStyle = '#fff';
+          for (const [x, y] of [[r.x1, r.y1], [r.x2, r.y1], [r.x1, r.y2], [r.x2, r.y2]]) { ctx.fillRect(x - hs / 2, y - hs / 2, hs, hs); ctx.strokeRect(x - hs / 2, y - hs / 2, hs, hs); }
+        }
+        // the label above it: click it to leave the figure out (or put it back)
+        const text = pr.on ? pr.label : `${pr.label} (left out)`;
+        const w = ctx.measureText(text).width + 12 / k, h = 17 / k;
+        const lb = { x1: r.x1, y1: r.y1 - h - 3 / k, x2: r.x1 + w, y2: r.y1 - 3 / k };
+        ctx.fillStyle = colour;
+        ctx.fillRect(lb.x1, lb.y1, w, h);
+        ctx.fillStyle = '#fff';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, lb.x1 + 6 / k, lb.y1 + h / 2);
+        this.labels[i] = lb;
+      });
+      ctx.restore();
     }
     if (ov.framed !== null) {
       ctx.strokeStyle = OBJECT_FRAME;
@@ -648,6 +721,8 @@ export class DocView {
   }
 
   private object(ctx: CanvasRenderingContext2D, t: DocText, o: PlacedObject, lay: DocLayout): void {
+    // the structure being drawn in place is painted over the page as it is drawn
+    if (this.live?.id === o.id) return;
     // a picture turned or flipped (Arrange > Rotate) is drawn so about its middle
     const turn = turnOf(t.objects[o.id]);
     if (!turn) { this.objectBody(ctx, t, o, lay); return; }
@@ -683,7 +758,7 @@ export class DocView {
     if (obj.kind === 'textbox') {
       if (obj.fill) {
         ctx.fillStyle = obj.fill;
-        ctx.fillRect(o.x, o.y, o.w, o.h);
+        if (obj.geo) { ctx.beginPath(); traceGeo(ctx, obj.geo, o); ctx.fill(); } else ctx.fillRect(o.x, o.y, o.w, o.h);
       }
       const bl = lay.boxes.get(o.id);
       if (bl) {
@@ -691,7 +766,7 @@ export class DocView {
         ctx.beginPath();
         ctx.rect(o.x, o.y, o.w, o.h);
         ctx.clip();
-        drawLayout(ctx, bl, o.x + BOX_PAD.x, o.y + BOX_PAD.y - bl.box.y1);
+        drawLayout(ctx, bl, o.x + BOX_PAD.x, boxTextTop(obj, o, bl));
         ctx.restore();
       }
     } else if (obj.kind === 'math') {
@@ -702,7 +777,8 @@ export class DocView {
       ctx.strokeStyle = look.frameColor ?? '#000';
       ctx.lineWidth = look.frame;
       ctx.beginPath();
-      if (!(obj.kind === 'picture' && obj.fx?.shape && traceShape(ctx, obj.fx.shape, o.x, o.y, o.w, o.h))) ctx.rect(o.x, o.y, o.w, o.h);
+      if (obj.kind === 'textbox' && obj.geo) traceGeo(ctx, obj.geo, o, true);
+      else if (!(obj.kind === 'picture' && obj.fx?.shape && traceShape(ctx, obj.fx.shape, o.x, o.y, o.w, o.h))) ctx.rect(o.x, o.y, o.w, o.h);
       ctx.stroke();
     }
   }
@@ -710,7 +786,26 @@ export class DocView {
   private figure(ctx: CanvasRenderingContext2D, t: DocText, o: PlacedObject): void {
     const obj = t.objects[o.id];
     if (!obj) return;
-    if (obj.kind === 'drawing') {
+    if (obj.kind === 'drawing' && obj.frame) {
+      // a figure: its area shaded when the pointer is over it, and an empty one outlined faintly (neither is printed)
+      const fr = obj.frame, k = o.w / Math.max(1e-6, fr.w), px = 1 / this.zoom;
+      if (this.hover === o.id) { ctx.fillStyle = FIGURE_HOVER; ctx.fillRect(o.x, o.y, o.w, o.h); }
+      if (emptyContents(obj.contents)) {
+        ctx.save();
+        ctx.strokeStyle = '#b4b9c2';
+        ctx.lineWidth = px;
+        ctx.setLineDash([4 * px, 3 * px]);
+        ctx.strokeRect(o.x, o.y, o.w, o.h);
+        ctx.restore();
+        return;
+      }
+      const pic = figures.record(obj.contents, t.drawingStyle).pic;
+      const bmp = pic && figures.bitmap(obj.contents, t.drawingStyle, k * this.zoom * this.dpr, true);
+      if (pic && bmp) {
+        const b = pic.box;
+        ctx.drawImage(bmp, o.x + (b.x1 - fr.x) * k, o.y + (b.y1 - fr.y) * k, (b.x2 - b.x1) * k, (b.y2 - b.y1) * k);
+      }
+    } else if (obj.kind === 'drawing') {
       const bmp = figures.bitmap(obj.contents, t.drawingStyle, (o.w / Math.max(1, figures.size(obj.contents, t.drawingStyle).w)) * this.zoom * this.dpr, true);
       if (bmp) ctx.drawImage(bmp, o.x, o.y, o.w, o.h);
     } else if (obj.kind === 'picture' && obj.chart) {

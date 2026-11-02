@@ -1,3 +1,4 @@
+import { foldIntoInfo } from './info-tip';
 // The Name to Structure window: type a name, press Insert. If the name can't be read the window
 // stays open with a short message, the part that couldn't be read underlined, and the name
 // reader's own words under Details, so the name can be corrected.
@@ -19,14 +20,14 @@ export class NameDialog {
     h.textContent = 'Name to Structure';
     const note = document.createElement('p');
     note.className = 'muted';
-    note.textContent = 'Type a SMILES string, or a systematic (IUPAC) or common name, such as (2S)-2-aminopropanoic acid, ethyl acetate or caffeine. Names are read on this computer; others, such as trade names and abbreviations (DMAP, DIPEA), are looked up on PubChem (Edit > Settings turns that off).';
+    note.textContent = 'Type a name, SMILES or CAS RN, such as (2S)-2-aminopropanoic acid, caffeine or 50-78-2. Names are read on this computer; CAS RNs, trade names and abbreviations (DMAP, DIPEA) are looked up on PubChem (Edit > Settings turns that off).';
     const input = document.createElement('input');
     input.type = 'text';
     input.className = 'name-input';
     input.spellcheck = false;
     input.autocomplete = 'off';
     input.setAttribute('autocapitalize', 'off');
-    input.setAttribute('aria-label', 'Chemical name or SMILES');
+    input.setAttribute('aria-label', 'Chemical name, SMILES or CAS RN');
     input.value = initial ?? this.last;
     const status = document.createElement('p');
     status.className = 'name-status';
@@ -41,6 +42,8 @@ export class NameDialog {
     ok.className = 'primary';
     ok.textContent = 'Insert';
     buttons.append(cancel, ok);
+    foldIntoInfo(note, h);
+    if (!input.placeholder) input.placeholder = 'Name, SMILES or CAS RN';
     form.append(h, note, input, status, buttons);
     d.append(form);
 
@@ -50,7 +53,7 @@ export class NameDialog {
       e.preventDefault();
       if (busy) return;
       const name = input.value.trim();
-      if (!name) { status.textContent = 'Type a chemical name or SMILES.'; status.classList.add('error'); return; }
+      if (!name) { status.textContent = 'Type a chemical name, SMILES or CAS RN.'; status.classList.add('error'); return; }
       busy = true;
       ok.disabled = true;
       status.classList.remove('error');

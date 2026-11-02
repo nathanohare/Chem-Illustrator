@@ -4,6 +4,7 @@
 // spelling check knows chemistry words. The panel on the right shows the paragraph's formatting,
 // its style, the page and the figure picked, every value of which can be typed in.
 
+import { applyFormat } from '../text/format';
 import { placeTextMenu } from './text-menu';
 import { Doc, type Contents, type ParaStyle, type Shape, type TabStop, type TextRun } from '../model';
 
@@ -19,6 +20,7 @@ import type { Move, TextEditing } from '../text/editing';
 import type { TextLook } from '../format-painter';
 import { BRUSH } from '../editor/cursors';
 import { offsetAt, caretPos, selectionRects } from '../text/layout';
+import type { Rect } from '../geom';
 import { htmlToRich, richToHtml, richToPlain } from '../text/html';
 import { pastedTable, tableHtml, tableTsv } from '../io/table-clip';
 import { afterTyping, typingPrefs, setTypingPrefs } from '../text/typing';
@@ -31,6 +33,7 @@ import {
   type DocViewKind, type OutlineOp, type OutlineState, type ScreenView,
 } from '../document/doc-views';
 import { DocPanel, parseLength, showLength, type DocBoxKey } from './doc-panel';
+import { FontBox } from './font-box';
 import { WORD_HIGHLIGHTS } from '../io/docx-base';
 import { DocFind } from './doc-find';
 import { askLink, followLink, linkTip } from './links-ui';
@@ -47,6 +50,8 @@ import { askReviewName } from './review-name';
 import { askEquation } from './equation-dialog';
 import { chooseReferences } from './references-dialog';
 import { citeSuper, formatOf, type Reference } from '../document/references';
+import { replaceInCells, runZotero, type ZoteroCommand, type ZoteroHost, type ZoteroPost } from '../document/zotero-live';
+import { choose } from './keep-ui';
 import { dataUrl, fromDataUrl, imageSize } from '../render/images';
 import { shownSize } from '../document/doc-layout';
 import { editChart, chartPoints } from './chart-editor';
@@ -55,7 +60,7 @@ import { chemdrawCdx, embedFile, fileInside, isChemDraw, objectKind, withFile } 
 import { showsContents, type ObjectPicture } from '../render/object-picture';
 import { newChartBox, sizedBox } from '../sheet/chart-box';
 import { chartBoxPng } from '../render/chart-box-paint';
-import type { DocFile } from '../document/doc-file';
+import { figures, type DocFile } from '../document/doc-file';
 import type { TableData } from '../model';
 import {
   canMerge, coveringCell, deleteColumn, deleteRow, emptyTable, insertColumn, tableFromCells, insertRow, isCovered, mergeDown, mergeRight, nextCell, rowSpanOf, setColumnAlign, setColumnWidth, setPart, splitCell, spanOf,
@@ -69,7 +74,9 @@ import { DocParagraphUI } from './doc-paragraph-ui';
 import { DocArrangeUI } from './doc-arrange-ui';
 import type { DocDesign } from '../document/document';
 import { setParaSpacing, setStyleSet, setTheme, setThemeColors, setThemeFonts, PARA_SPACINGS, STYLE_SETS, THEMES, THEME_COLORS, THEME_FONTS } from '../document/themes';
-import { groupOf, withFloats } from '../document/arrange';
+import { groupOf, turnOf, withFloats } from '../document/arrange';
+import { PLACE_MARGIN, type InPlace } from './in-place';
+import { FigureOffer } from './doc-figure-offer';
 import { DocProofingUI } from './doc-proofing-ui';
 import { DEFAULT_ZONE } from '../text/hyphenate';
 import { bodyFromZones, insertInZone, numbersFor, zonesFor } from '../document/hf-bodies';
@@ -83,10 +90,10 @@ import type { BorderLine, BorderSide, TableLook } from '../model';
 import { BREAK_NAMES, changeSection, newBreak, pageNumText, sectionAt, sectionsOf, type Section, type SectionPatch } from '../document/sections';
 import {
   type HfKey, A4, COMPOUND, INCH, LETTER, OBJECT_CHAR, CAPTION_NAMES, END_FORMAT, FOOT_FORMAT, captionRuns, noteLabel, noteStyle, nextObjectId, objectRun, objectsInText, runStyleOf, setParaStyle, styleOf, fieldTexts, objectOffsets, inlineMove,
-  floatOf, lookExtent, lookOf, cellHolding, innerObjects,
+  floatOf, lookExtent, lookOf, cellHolding, innerObjects, emptyContents,
   WATERMARKS, applyCharStyle, charStylesOf, clearCharStyle, clearFormatting, defaultPageBorder, defaultWatermark, deleteStyle, modifyCharStyle, newCharStyle, newParaStyle, withStyle,
   type CharStyle, type PageBorder, type Watermark,
-  type BreakKind, type DocObject, type DocText, type Embedded, type FigureLook, type Float, type LineNumbers, type NoteFormat, type NumberPlace, type PageNumFormat, type PageSetup, type WrapKind,
+  type BreakKind, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type Float, type LineNumbers, type NoteFormat, type NumberPlace, type PageNumFormat, type PageSetup, type WrapKind,
 } from '../document/document';
 
 export interface DocModeHost {
@@ -99,6 +106,8 @@ export interface DocModeHost {
   changed(): void;
   /** Open the drawing tools on a drawing (null to draw a new one); `done` gets it, or null when cancelled. */
   editDrawing(contents: Contents | null, title: string, done: (c: Contents | null) => void): void;
+  /** Draw a structure in place on its page (the pages follow the drawing tools' zoom and scrolling); `done` as for editDrawing. */
+  editInPlace?(contents: Contents, place: InPlace, done: (c: Contents | null) => void): void;
   /** The diagram window (Insert > Diagram) on a figure's diagram, or for a new one (null); resolves to the drawing, or null when cancelled. */
   editDiagram?(contents: Contents | null): Promise<Contents | null>;
   /** Put a drawing on the clipboard, for ChemDraw and Word. */
@@ -132,6 +141,10 @@ export interface DocModeHost {
   pickReferenceFile(): Promise<{ name: string; text: string } | null>;
   /** The References window (every open file's references), on this document's group. */
   openReferences(): Promise<void>;
+  /** Zotero's citing endpoints on this computer (the desktop app; a browser can't reach Zotero). */
+  zoteroPost?: ZoteroPost;
+  /** Bring the app's window to the front (Zotero asks when its citation window closes). */
+  activateWindow?(): void;
   /** The person chose a reference style for new documents (save settings). */
   preferredChanged?(): void;
   /** The name put on tracked changes was changed (save settings). */
@@ -159,14 +172,18 @@ export interface DocPaste {
 
 /** Two clicks this close together are a double-click (Windows' own setting is 500 ms out of the box). */
 const DOUBLE_CLICK_MS = 500;
+/** The rectangle two corners make. */
+const rectOf = (a: { x: number; y: number }, b: { x: number; y: number }): Rect => ({ x1: Math.min(a.x, b.x), y1: Math.min(a.y, b.y), x2: Math.max(a.x, b.x), y2: Math.max(a.y, b.y) });
 const SELECTION_SQUIGGLE = '#e0302f';
 const FORMATTING = '#2f6fdf';
+/** A figure's edges while its structures are drawn in place. */
+const FIGURE_EDGE = '#7f8fae';
 /** Words ignored with "Ignore" while the program is open (lower case). */
 const ignored = new Set<string>();
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 /** Commands that, in a text box, work on its text (others leave the box first). */
-const BOX_COMMANDS = /^(format-painter$|(insert|remove|open)-link$|insert-symbol$|doc-(align-|justify|bold|italic|underline|sub|sup|formula|highlight|bullets|numbering|indent|outdent)|line-|font-|select-all$|undo$|redo$|zoom-|copy$|cut$|paste$|box-|find$|replace$|wrap-)/;
+const BOX_COMMANDS = /^(format-painter$|(insert|remove|open)-link$|insert-symbol$|doc-(align-|justify|bold|italic|underline|sub|sup|formula|stereo-italic|highlight|bullets|numbering|indent|outdent)|line-|font-|select-all$|undo$|redo$|zoom-|copy$|cut$|paste$|box-|find$|replace$|wrap-)/;
 
 /** Commands that, in a table cell, work there too (others leave the cell first). */
 const CELL_COMMANDS = /^(table-|tbl-|insert-table$|insert-structure$|structure-from-name-doc$|name-to-structure$|insert-picture$|insert-object$|paste-object$|edit-figure$|compound-number$|cross-reference$|insert-citation$)/;
@@ -216,6 +233,10 @@ export class DocumentMode {
   private views: DocView[] = [];
   /** View > Document > Split Window: the second pane, under the first, and the bar between them. */
   private split: { view: DocView; host: HTMLDivElement; bar: HTMLDivElement } | null = null;
+  /** A Zotero command is under way (one at a time). */
+  private zoteroRunning = false;
+  /** Each open document's id for Zotero. */
+  private zoteroIds = new WeakMap<object, string>();
   /** Where the caret was last in Outline view (to step over folded text in the direction it went). */
   private lastFocus = 0;
   /** How many paragraphs the text had (Outline's folded headings move with the text). */
@@ -230,6 +251,8 @@ export class DocumentMode {
   tab: Tab | null = null;
   private ta: HTMLTextAreaElement;
   private panel: DocPanel;
+  /** The Font group's corner box (made the first time it opens). */
+  private fontBox: FontBox | null = null;
   private ribbon: HTMLElement;
   private caretOn = true;
   private blink: ReturnType<typeof setInterval> | null = null;
@@ -237,11 +260,19 @@ export class DocumentMode {
   private dragging:
     | { kind: 'text' }
     | { kind: 'box' }
-    | { kind: 'resize'; id: number; w0: number; scale0: number; x0: number }
+    | { kind: 'resize'; id: number; w0: number; h0?: number; scale0: number; x0: number; left?: boolean; top?: boolean; float?: Float }
     | { kind: 'move'; id: number; from: { x: number; y: number }; float: Float; moved: boolean; others: [number, Float][] }
     | { kind: 'inline'; id: number; from: { x: number; y: number }; to: number | null }
     | { kind: 'paint'; done: Set<string> }
+    | { kind: 'figure'; geo?: string; from: { x: number; y: number }; to: { x: number; y: number } }
+    | { kind: 'shape'; id: number; w0: number; h0: number; from: { x: number; y: number } }
+    | { kind: 'offer' }
+    | { kind: 'frame'; id: number; frame: FigureFrame; k: number; min: { w: number; h: number }; from: { x: number; y: number } }
     | null = null;
+  /** Making a document's structures figures: the offer when it opens, and the preview of the figures. */
+  private readonly figureOffer: FigureOffer;
+  /** Insert > Figure or Shapes: the next drag on the page draws a figure's area, or the shape (a click: one of its own size). */
+  private placeNext: { geo?: string } | null = null;
   private plainPaste = false;
   /** Cells chosen together by dragging across them (Table commands work on all of them). */
   private cellRange: ({ id: number } & CellBlock) | null = null;
@@ -314,6 +345,12 @@ export class DocumentMode {
       setFill: (id, c) => this.setFill(id, c),
       setLook: (id, patch) => this.setLook(id, patch),
       lookOf: (id) => this.lookOf(id),
+    });
+    this.figureOffer = new FigureOffer($('#doc-pane'), {
+      view: () => this.view,
+      apply: (t, kind) => { this.file?.ed.update(t, kind); this.focus(); },
+      redraw: () => this.redraw(),
+      flash: (msg) => this.host.flash(msg),
     });
     this.comments = new DocComments(docHost, this.view, {
       file: () => this.file,
@@ -447,10 +484,42 @@ export class DocumentMode {
     return this.file && !this.reading ? this.ed.pickLook() : null;
   }
 
+  /** Format Favorites: give the selection (or the word at the caret) a text look kept. False when there was nothing to give it to. */
+  paintLook(look: TextLook): boolean {
+    return this.file && !this.reading ? this.ed.paintLook(look) : false;
+  }
+
   /** Insert > Symbol: type a character where the caret is. False when the text can't be typed in (Read Mode). */
   insertText(text: string): boolean {
     if (!this.file || this.reading) return false;
     this.ed.type(text);
+    return true;
+  }
+
+  /** The Assistant: the selected text where typing goes ('' when nothing is selected). */
+  selectedText(): string {
+    if (!this.file) return '';
+    const ed = this.ed;
+    return ed.text.slice(ed.start, ed.end);
+  }
+
+  /** The Assistant: the document's body text, cut at `max` characters. */
+  documentText(max = 20000): string {
+    return this.file ? this.file.ed.text.slice(0, max) : '';
+  }
+
+  /**
+   * The Assistant: write text in place of the selection, or after it (on a paragraph of its
+   * own), as one step of Undo. False when the text can't be typed in (Read Mode).
+   */
+  writeText(text: string, replace: boolean): boolean {
+    if (!this.file || this.reading) return false;
+    const ed = this.ed;
+    if (!replace) {
+      ed.setCaret(ed.end);
+      if (ed.text.length && ed.text[ed.end - 1] !== '\n') text = '\n' + text;
+    }
+    ed.pastePlain(text);
     return true;
   }
 
@@ -895,6 +964,12 @@ export class DocumentMode {
   }
 
   /** Stop typing into the text box (`pick`: and pick the box, as Escape does in Word). */
+  /** What a box opened from a ribbon list sits under: the list's gallery button (the list itself is hidden). */
+  private ribbonAnchor(sel: string): HTMLElement | null {
+    const el = this.ribbon.querySelector<HTMLElement>(sel);
+    return el?.closest<HTMLElement>('.rb-fly')?.querySelector<HTMLElement>(':scope > .rb-fly-btn') ?? el;
+  }
+
   private stopBox(pick = false): void {
     const f = this.file;
     this.cellRange = null;
@@ -918,7 +993,7 @@ export class DocumentMode {
 
   /** A document tab came to the front (or null: another kind of tab). */
   show(tab: Tab | null): void {
-    if (this.tab && this.tab !== tab) this.leave();
+    if (this.tab && this.tab !== tab) { this.leave(); this.figureOffer.leave(); }
     this.tab?.document?.endBox();
     this.tab = tab;
     const f = tab?.document ?? null;
@@ -926,6 +1001,7 @@ export class DocumentMode {
     if (!f) {
       if (this.blink) { clearInterval(this.blink); this.blink = null; }
       this.panel.closeBoxes();
+      this.fontBox?.close();
       this.stylesPane.close();
       this.ruler.shown = false;
       this.comments.update();
@@ -960,6 +1036,8 @@ export class DocumentMode {
     this.paraCountWas = paraCount(f.ed.text);
     this.showViewKind();
     if (f.view.kind === 'read') this.startReading();
+    // a document opened with structures that aren't figures: offer to make them figures (once)
+    if (!st) this.figureOffer.opened(f);
     this.blink ??= setInterval(() => {
       // no caret to blink (Read Mode, text selected, typing elsewhere): no need to paint the pages
       // again, after one last time to take a caret that showed off
@@ -995,7 +1073,8 @@ export class DocumentMode {
   }
 
   focus(): void {
-    if (this.file) this.ta.focus({ preventScroll: true });
+    // (not while a structure is drawn in place: the keys are the drawing tools')
+    if (this.file && !this.inPlace) this.ta.focus({ preventScroll: true });
   }
 
   /** Fonts finished loading: measure again. */
@@ -1148,7 +1227,7 @@ export class DocumentMode {
     if (!ranges.length) { this.host.flash('There is no text here to match.'); return; }
     ed.select(ranges[0][0], ranges[0][1]);
     this.similar = { t: f.t, ranges, at: [ed.start, ed.end] };
-    this.host.flash(`${ranges.length} place${ranges.length === 1 ? '' : 's'} with this formatting selected: bold, italic, the font, size, colour, highlight or a style now changes them all.`, 6000);
+    this.host.flash(`${ranges.length} place${ranges.length === 1 ? '' : 's'} with this formatting selected: bold, italic, the font, size, color, highlight or a style now changes them all.`, 6000);
     this.redraw();
   }
 
@@ -1251,7 +1330,7 @@ export class DocumentMode {
       [tick(!hidden.length, 'All Reviewers'), () => set({ hidden: hidden.length ? [] : people })],
       ...people.map((p): [string, () => void] => [tick(!hidden.includes(p), p || 'Unknown'), () => set({ hidden: hidden.includes(p) ? hidden.filter((h) => h !== p) : [...hidden, p] })]),
       null,
-      [tick(trackingFormatting(), 'Track Formatting Changes'), () => { setTrackFormatting(!trackingFormatting()); this.host.flash(trackingFormatting() ? 'Formatting changes will be tracked (bold, fonts, sizes, colours).' : 'Formatting changes won\'t be tracked; only text typed and deleted.'); }],
+      [tick(trackingFormatting(), 'Track Formatting Changes'), () => { setTrackFormatting(!trackingFormatting()); this.host.flash(trackingFormatting() ? 'Formatting changes will be tracked (bold, fonts, sizes, colors).' : 'Formatting changes won\'t be tracked; only text typed and deleted.'); }],
     ]);
   }
 
@@ -1439,7 +1518,14 @@ export class DocumentMode {
     menu.appendChild(document.createElement('hr'));
     const picked = this.pickedObject();
     if (picked !== null) {
-      if (this.file?.t.objects[picked]?.kind === 'drawing') cmd('Edit Drawing', 'edit-figure');
+      const pd = this.file?.t.objects[picked];
+      if (pd?.kind === 'drawing') {
+        cmd('Edit Drawing', 'edit-figure');
+        if (pd.frame) cmd('Fit Figure to Structure', 'figure-fit', 'Its area just around what is drawn in it (the text around it moves to fit)');
+        else cmd('Make Figure', 'make-figure', 'Give the structure an area of its own on the page: drawing in it never moves the text around it, and text wraps around the area, even an empty one');
+        if (pd.frame) cmd('Remove Figure', 'remove-figure', 'Back to a plain structure, sized by what is drawn');
+        cmd('Make All Structures Figures…', 'make-figures', 'Every structure in the document a figure: see how they would be grouped and change their areas first');
+      }
       const po = this.file?.t.objects[picked];
       if (po?.kind === 'picture' && po.chart) cmd('Edit Chart…', 'edit-chart');
       if (po?.kind === 'picture' && po.embed) {
@@ -1447,11 +1533,11 @@ export class DocumentMode {
         else cmd('Open Object', 'open-object', `Open the ${objectKind(po.embed)} in its own program; save it there to change it here`);
         item(po.embed.icon ? 'Show Contents' : 'Display as Icon', () => void this.embeddedIcon(picked, !po.embed?.icon), po.embed.icon ? 'Show what the object holds instead of its icon' : 'Show an icon with the file\'s name instead of what it holds');
       }
-      if (po?.kind === 'picture' && !po.chart && !po.embed) cmd('Picture Format…', 'picture-format', 'Brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions');
+      if (po?.kind === 'picture' && !po.chart && !po.embed) cmd('Picture Format…', 'picture-format', 'Brightness, contrast, sharpen, recolor, transparency, Remove Background, crop to a shape or proportions');
       if (po?.kind === 'drawing' || po?.kind === 'picture') cmd('Alt Text…', 'alt-text', 'What it shows, for people who can\'t see it (screen readers); kept as its alt text in Word');
       cmd('Insert Caption…', 'insert-caption');
       const look = this.lookOf(picked);
-      item(look?.frame ? 'Remove Frame' : 'Add Frame', () => this.setLook(picked, { frame: look?.frame ? undefined : 0.75, frameColor: undefined }), 'A thin black line round it (Format in the panel sets its width and colour)');
+      item(look?.frame ? 'Remove Frame' : 'Add Frame', () => this.setLook(picked, { frame: look?.frame ? undefined : 0.75, frameColor: undefined }), 'A thin black line around it (Format in the panel sets its width and color)');
       item(look?.shadow ? 'Remove Shadow' : 'Add Shadow', () => this.setLook(picked, { shadow: look?.shadow ? undefined : 'soft' }), 'A soft shadow down and to the right');
       menu.appendChild(document.createElement('hr'));
       const nested = this.file ? cellHolding(this.file.t, picked) !== null : false;
@@ -1546,14 +1632,14 @@ export class DocumentMode {
     row.className = 'hl-row';
     const none = document.createElement('button');
     none.type = 'button';
-    none.textContent = 'No Colour';
+    none.textContent = 'No Color';
     none.title = 'Take the highlight off the selected text';
     none.addEventListener('mousedown', (e) => e.preventDefault());
     none.addEventListener('click', () => use(undefined));
     const other = document.createElement('input');
     other.type = 'color';
     other.value = this.highlighter;
-    other.title = 'Any other colour (saved to Word as shading, which it shows the same way)';
+    other.title = 'Any other color (saved to Word as shading, which it shows the same way)';
     other.addEventListener('change', () => use(other.value));
     row.append(none, other);
     menu.append(grid, row);
@@ -1611,6 +1697,8 @@ export class DocumentMode {
     if (e.isComposing || e.keyCode === 229) return;
     if (this.menu && e.key === 'Escape') { e.preventDefault(); this.closeMenu(); return; }
     this.closeMenu();
+    if (e.key === 'Escape' && this.figureOffer.previewing) { e.preventDefault(); this.figureOffer.leave(); return; }
+    if (e.key === 'Escape' && this.placeNext) { e.preventDefault(); this.placeNext = null; this.view.scroller.style.cursor = ''; return; }
     if (e.key === 'Escape' && this.tables.painting) { e.preventDefault(); this.tables.setPainting(false); return; }
     if (e.key === 'Escape' && this.cellRange) { e.preventDefault(); this.cellRange = null; this.redraw(); return; }
     if (this.cellRange && !['Shift', 'Control', 'Alt', 'Meta'].includes(e.key) && !(e.ctrlKey || e.metaKey)) { this.cellRange = null; this.redraw(); }
@@ -1683,7 +1771,13 @@ export class DocumentMode {
     const ed = this.ed;
     if (t === 'insertCompositionText') return;
     e.preventDefault();
-    if (t === 'insertText' || t === 'insertReplacementText') { if (e.data) ed.type(e.data); }
+    if (t === 'insertText' || t === 'insertReplacementText') {
+      // a shape picked: what is typed goes into it (as in PowerPoint), not in place of it
+      const picked = this.file.box ? null : this.pickedObject();
+      const po = picked !== null ? this.file.t.objects[picked] : undefined;
+      if (po?.kind === 'textbox' && po.geo && e.data && this.startBox(picked!)) { this.ed.type(e.data); return; }
+      if (e.data) ed.type(e.data);
+    }
     else if (t === 'insertLineBreak' || t === 'insertParagraph') this.enter(t === 'insertLineBreak');
     else if (t === 'deleteContentBackward') ed.backspace();
     else if (t === 'deleteContentForward') ed.deleteForward();
@@ -1894,6 +1988,8 @@ export class DocumentMode {
       if (o.kind === 'ref' && ids.has(o.target)) objects[id] = { ...o, target: ids.get(o.target)! };
       // the structures in a pasted table's cells are its own copies
       if (o.kind === 'table') objects[id] = { ...o, table: { ...o.table, rows: o.table.rows.map((row) => row.map((cell) => ({ ...cell, runs: remap(cell.runs) }))) } };
+      // and the citations in a pasted footnote
+      if (o.kind === 'note') objects[id] = { ...o, runs: remap(o.runs) };
     }
     const b = f.box?.cell ? f.box : null;
     // into a table cell: no text boxes, bibliographies or notes inside it (a table goes in as a table in the cell)
@@ -1917,6 +2013,7 @@ export class DocumentMode {
   private setupView(v: DocView): void {
     v.overlay = () => this.overlay(v);
     v.onMove = () => {
+      if (v === this.inPlace?.v) this.inPlace.place.moved();
       if (v === this.view) this.placeInput();
       this.showZoom();
       if (v === this.views[0]) { this.comments?.place(); this.ruler?.update(); }
@@ -2408,6 +2505,8 @@ export class DocumentMode {
       this.dragging = null;
       try { s.releasePointerCapture(e.pointerId); } catch { /* not captured */ }
       if (d?.kind === 'move' && d.moved) this.reanchor(d.id);
+      if (d?.kind === 'offer') this.figureOffer.up();
+      if (d?.kind === 'figure') { this.view.sketch = null; if (d.geo) this.placeShape(d.geo, rectOf(d.from, d.to)); else this.insertFigure(rectOf(d.from, d.to)); }
       if (d?.kind === 'inline') this.dropInline(d.id, d.to);
       if ((d?.kind === 'text' || d?.kind === 'box') && this.painter && this.file && !this.reading) this.painter(this.ed);
     });
@@ -2493,6 +2592,18 @@ export class DocumentMode {
     return null;
   }
 
+  /** Which of a picked structure's corner handles is under a point (only structures have all four). */
+  private cornerAt(id: number, o: { x: number; y: number; w: number; h: number }, p: { x: number; y: number }): { left: boolean; top: boolean } | null {
+    const obj = this.file?.t.objects[id];
+    // (a figure's corner handle sizes its area: it has the one)
+    if (obj?.kind !== 'drawing' || obj.frame) return null;
+    const hs = 8 / this.view.zoom;
+    for (const left of [true, false]) for (const top of [true, false]) {
+      if (Math.abs(p.x - (left ? o.x : o.x + o.w)) <= hs && Math.abs(p.y - (top ? o.y : o.y + o.h)) <= hs) return { left, top };
+    }
+    return null;
+  }
+
   /** Near the edge of a placed object (where a text box is picked or moved rather than typed into). */
   private nearEdge(id: number, p: { x: number; y: number }): boolean {
     const o = this.file?.layout().objects.find((x) => x.id === id);
@@ -2551,13 +2662,53 @@ export class DocumentMode {
         return;
       }
     }
+    // Make Figures' preview: only its figures' edges and labels take clicks
+    if (this.figureOffer.previewing) {
+      this.figureOffer.down(p);
+      this.dragging = { kind: 'offer' };
+      s.setPointerCapture(e.pointerId);
+      return;
+    }
+    // Insert > Figure: a drag draws its area
+    if (this.placeNext) {
+      const geo = this.placeNext.geo;
+      this.placeNext = null;
+      this.dragging = { kind: 'figure', ...(geo ? { geo } : {}), from: p, to: p };
+      s.setPointerCapture(e.pointerId);
+      return;
+    }
     // the picked figure's corner handle resizes it (one in a table cell too)
     const picked = this.pickedObject();
     if (picked !== null) {
       const o = f.layout().objects.find((x) => x.id === picked);
       const hs = 8 / this.view.zoom;
+      // a structure's other corners resize it too, from the corner across from them
+      const other = o ? this.cornerAt(picked, o, p) : null;
+      if (o && other && (other.left || other.top)) {
+        const obj = f.t.objects[picked];
+        if (obj.kind === 'drawing') {
+          this.dragging = { kind: 'resize', id: picked, w0: o.w, h0: o.h, scale0: obj.scale ?? 1, x0: o.x + o.w, ...other, ...(obj.float ? { float: obj.float } : {}) };
+          s.setPointerCapture(e.pointerId);
+          return;
+        }
+      }
       if (o && Math.abs(p.x - (o.x + o.w)) <= hs && Math.abs(p.y - (o.y + o.h)) <= hs) {
         const obj = f.t.objects[picked];
+        // a shape: wider or narrower, taller or shorter
+        if (obj.kind === 'textbox' && obj.geo) {
+          this.dragging = { kind: 'shape', id: picked, w0: obj.w, h0: obj.h ?? o.h, from: p };
+          s.setPointerCapture(e.pointerId);
+          return;
+        }
+        // a figure's area grows or shrinks (down to what is drawn in it); its structures stay as they are
+        if (obj.kind === 'drawing' && obj.frame) {
+          const fr = obj.frame, k = o.w / Math.max(1e-6, fr.w);
+          const b = emptyContents(obj.contents) ? null : figures.record(obj.contents, f.t.drawingStyle).pic?.box;
+          const min = { w: Math.max(18 / k, b ? b.x2 - fr.x : 0), h: Math.max(18 / k, b ? b.y2 - fr.y : 0) };
+          this.dragging = { kind: 'frame', id: picked, frame: fr, k, min, from: p };
+          s.setPointerCapture(e.pointerId);
+          return;
+        }
         const scale0 = obj.kind === 'drawing' || obj.kind === 'picture' ? obj.scale ?? 1 : obj.kind === 'textbox' ? obj.w : 1;
         this.dragging = { kind: 'resize', id: picked, w0: o.w, scale0, x0: o.x };
         s.setPointerCapture(e.pointerId);
@@ -2610,7 +2761,7 @@ export class DocumentMode {
     if (id !== null && !e.shiftKey) {
       const obj = f.t.objects[id];
       // a click inside a text box types into it; its edge picks it, to move it or change its look
-      if ((obj?.kind === 'textbox' || obj?.kind === 'note') && !this.nearEdge(id, p)) { this.startBox(id, p); this.dragging = { kind: 'box' }; s.setPointerCapture(e.pointerId); return; }
+      if (((obj?.kind === 'textbox' && !obj.geo) || obj?.kind === 'note') && !this.nearEdge(id, p)) { this.startBox(id, p); this.dragging = { kind: 'box' }; s.setPointerCapture(e.pointerId); return; }
       const at = objectOffsets(f.t.runs).get(id);
       if (at !== undefined) {
         ed.select(at, at + 1);
@@ -2644,11 +2795,17 @@ export class DocumentMode {
       const id = this.objectAt(e.clientX, e.clientY);
       const p = this.view.toDoc(e.clientX, e.clientY);
       const o = id !== null ? f.t.objects[id] : undefined;
+      if (this.figureOffer.previewing) { this.view.scroller.style.cursor = this.figureOffer.hover(p); return; }
+      // a figure under the pointer shows its area in light grey
+      const hover = o?.kind === 'drawing' && o.frame ? id : null;
+      if (this.view.hover !== hover) { this.view.hover = hover; this.view.redraw(); }
+      if (this.placeNext) { this.view.scroller.style.cursor = 'crosshair'; return; }
       // the picked figure's corner handle resizes it
       const picked = this.pickedObject();
       const box = picked !== null ? f.layout().objects.find((x) => x.id === picked) : undefined;
       const hs = 8 / this.view.zoom;
       const corner = !!box && Math.abs(p.x - (box.x + box.w)) <= hs && Math.abs(p.y - (box.y + box.h)) <= hs;
+      const across = box && picked !== null ? this.cornerAt(picked, box, p) : null;
       // a structure: a hand, since a double-click opens it for drawing (and a click picks it)
       const link = id === null || o?.kind === 'table' || o?.kind === 'textbox' ? this.linkAtPoint(p) : null;
       const tip = link ? linkTip(link, !this.reading) : '';
@@ -2656,15 +2813,43 @@ export class DocumentMode {
       if (link && (this.reading || (isMac ? e.metaKey : e.ctrlKey))) { this.view.scroller.style.cursor = 'pointer'; return; }
       if (this.tables.painting && this.cellAt(p)) { this.view.scroller.style.cursor = 'crosshair'; return; }
       if (this.painter && !this.reading) { this.view.scroller.style.cursor = BRUSH; return; }
-      this.view.scroller.style.cursor = corner ? 'nwse-resize' : id === null || o?.kind === 'table' ? 'text'
-        : o?.kind === 'textbox' ? (this.nearEdge(id, p) ? 'move' : 'text') : o?.kind === 'note' ? 'text'
+      this.view.scroller.style.cursor = across && across.left !== across.top ? 'nesw-resize' : corner || across ? 'nwse-resize' : id === null || o?.kind === 'table' ? 'text'
+        : o?.kind === 'textbox' ? (o.geo || this.nearEdge(id, p) ? 'move' : 'text') : o?.kind === 'note' ? 'text'
         : floatOf(o) ? 'move' : o?.kind === 'drawing' ? 'pointer' : 'default';
       return;
     }
     const p = this.view.toDoc(e.clientX, e.clientY);
+    if (d.kind === 'offer') { this.figureOffer.move(p); return; }
+    if (d.kind === 'figure') { d.to = p; this.view.sketch = rectOf(d.from, d.to); this.view.redraw(); return; }
+    if (d.kind === 'shape') {
+      const cur = f.t.objects[d.id];
+      if (cur?.kind !== 'textbox') return;
+      const r = (x: number) => Math.round(x * 100) / 100;
+      const w = r(Math.max(6, d.w0 + p.x - d.from.x)), h = r(Math.max(6, d.h0 + p.y - d.from.y));
+      const first = cur.w === d.w0 && (cur.h ?? 0) === d.h0;
+      f.ed.update({ ...f.t, objects: { ...f.t.objects, [d.id]: { ...cur, w, h } } } as DocText, first ? 'Resize shape' : null);
+      return;
+    }
+    if (d.kind === 'frame') {
+      const w = Math.max(d.min.w, d.frame.w + (p.x - d.from.x) / d.k), h = Math.max(d.min.h, d.frame.h + (p.y - d.from.y) / d.k);
+      const cur = f.t.objects[d.id];
+      if (cur?.kind !== 'drawing') return;
+      const r = (x: number) => Math.round(x * 100) / 100;
+      const moved = cur.frame!.w !== d.frame.w || cur.frame!.h !== d.frame.h;
+      f.ed.update({ ...f.t, objects: { ...f.t.objects, [d.id]: { ...cur, frame: { ...d.frame, w: r(w), h: r(h) } } } } as DocText, moved ? null : 'Resize figure');
+      return;
+    }
     if (d.kind === 'resize') {
-      const w = Math.max(12, p.x - d.x0);
+      const w = Math.max(12, d.left ? d.x0 - p.x : p.x - d.x0);
       const o = f.t.objects[d.id];
+      // from a left or top corner: the corner across from it stays put (a floating one moves)
+      if ((d.left || d.top) && o?.kind === 'drawing') {
+        const k = w / d.w0;
+        const next: DocObject = { ...o, scale: Math.abs(d.scale0 * k - 1) < 1e-6 ? undefined : Math.max(0.05, d.scale0 * k) };
+        if (d.float) next.float = { ...d.float, x: d.float.x + (d.left ? d.w0 - w : 0), y: d.float.y + (d.top ? (d.h0 ?? 0) * (1 - k) : 0) };
+        f.ed.update({ ...f.t, objects: { ...f.t.objects, [d.id]: next } } as DocText, null);
+        return;
+      }
       if (o?.kind === 'textbox') this.setBoxWidth(d.id, Math.max(18, d.scale0 + (w - d.w0)), false);
       else this.setScale(d.id, Math.max(0.05, d.scale0 * (w / d.w0)), false);
       return;
@@ -2836,15 +3021,133 @@ export class DocumentMode {
       return;
     }
     const spot = this.cellSpot();
-    this.host.editDrawing(o.contents, 'Figure', (c) => {
+    let grown: FigureFrame | null = null;
+    const done = (c: Contents | null) => {
+      this.inPlace = null;
       if (this.file === f) this.backToCell(spot);
       if (!c || this.file !== f) { this.focus(); return; }
       const cur = f.t.objects[id];
       if (cur?.kind !== 'drawing') return;
       if (f.box?.cell) f.box.recorded = false;
-      f.ed.update({ ...f.t, objects: { ...f.t.objects, [id]: { ...cur, contents: c } } } as DocText, 'Edit figure');
+      const next: DocObject = { ...cur, contents: c };
+      // a figure grown to hold its structures: it grows round them, so on the page they stay where they were drawn
+      if (grown && cur.frame) {
+        const at = f.layout().objects.find((x) => x.id === id);
+        const k = at ? at.w / Math.max(1e-6, cur.frame.w) : cur.scale ?? 1;
+        next.frame = grown;
+        if (cur.float) next.float = { ...cur.float, x: cur.float.x - (cur.frame.x - grown.x) * k, y: cur.float.y - (cur.frame.y - grown.y) * k };
+      }
+      f.ed.update({ ...f.t, objects: { ...f.t.objects, [id]: next } } as DocText, grown ? 'Edit figure (grown to fit)' : 'Edit figure');
       this.focus();
-    });
+    };
+    const place = this.placeFor(id, (box) => { grown = box; });
+    if (place && this.host.editInPlace) { this.host.editInPlace(o.contents, place, done); return; }
+    this.host.editDrawing(o.contents, 'Figure', done);
+  }
+
+  /** A structure being drawn in place on its page, and the pane it is in. */
+  private inPlace: { v: DocView; place: InPlace } | null = null;
+
+  /**
+   * Drawing a figure's structures in place on its page: how the drawing tools line up with it
+   * (null when they can't: turned, in a header or footer, or a view without pages). `grow`
+   * gets the figure's new area when its structures outgrew it and Grow Figure was chosen.
+   */
+  private placeFor(id: number, grow: (frame: FigureFrame) => void, fresh = false): InPlace | null {
+    const f = this.file;
+    const o = f?.t.objects[id];
+    if (!f || o?.kind !== 'drawing' || !this.host.editInPlace || this.reading || turnOf(o)) return null;
+    const v = this.view;
+    if (v.kind !== 'print' && v.kind !== 'web') return null;
+    const find = () => f.layout().objects.find((x) => x.id === id) ?? null;
+    const at0 = find();
+    if (!at0 || at0.w <= 0) return null;
+    // (a new structure's room is only room to draw in: not a figure, with no edges or Grow Figure)
+    const room = fresh ? o.frame : undefined;
+    const fr = fresh ? undefined : o.frame;
+    const style = f.t.drawingStyle;
+    const edge = fr ?? room;
+    const box = edge ? { x1: edge.x, y1: edge.y, x2: edge.x + edge.w, y2: edge.y + edge.h } : figures.record(o.contents, style).pic?.box;
+    if (!box) return null;
+    // drawing points to the page's
+    const s = at0.w / Math.max(1e-6, box.x2 - box.x1);
+    const place: InPlace = {
+      title: fr ? 'Figure' : fresh ? 'New Structure' : 'Structure',
+      rect: () => {
+        const el = v.scroller;
+        if (!el.isConnected) return null;
+        const r = el.getBoundingClientRect();
+        return { left: r.left + el.clientLeft, top: r.top + el.clientTop, width: el.clientWidth, height: el.clientHeight };
+      },
+      view: () => {
+        const at = find();
+        if (!at) return null;
+        const p = v.toScreen(at.x, at.y);
+        const k = s * v.zoom;
+        return { scale: k, ox: p.x - box.x1 * k, oy: p.y - box.y1 * k };
+      },
+      follow: (want) => {
+        const z = want.scale / s;
+        if (Math.abs(z - v.zoom) > 1e-6 * z) v.setZoom(z);
+        const now = place.view();
+        if (!now) return;
+        v.scroller.scrollLeft += now.ox - want.ox;
+        v.scroller.scrollTop += now.oy - want.oy;
+      },
+      moved: () => {},
+      show: (paint) => {
+        v.live = paint ? {
+          id,
+          fade: true,
+          paint: (ctx, at) => {
+            ctx.save();
+            ctx.translate(at.x - box.x1 * s, at.y - box.y1 * s);
+            ctx.scale(s, s);
+            // a figure's edges, while its structures are drawn (they may reach past them: nothing is cut off)
+            // (and a new structure's room, to show where it goes)
+            if (edge) {
+              const px = 1 / (s * v.zoom);
+              ctx.strokeStyle = FIGURE_EDGE;
+              ctx.lineWidth = px;
+              ctx.setLineDash([5 * px, 4 * px]);
+              ctx.strokeRect(edge.x, edge.y, edge.w, edge.h);
+              ctx.setLineDash([]);
+            }
+            paint(ctx);
+            ctx.restore();
+          },
+        } : null;
+        v.redraw();
+      },
+      area: (drawn) => {
+        if (fr) return { x1: fr.x - 12, y1: fr.y - 12, x2: fr.x + fr.w + 12, y2: fr.y + fr.h + 12 };
+        const m = PLACE_MARGIN;
+        const r = drawn ? { x1: Math.min(box.x1, drawn.x1), y1: Math.min(box.y1, drawn.y1), x2: Math.max(box.x2, drawn.x2), y2: Math.max(box.y2, drawn.y2) } : box;
+        return { x1: r.x1 - m, y1: r.y1 - m, x2: r.x2 + m, y2: r.y2 + m };
+      },
+      beforeDone: fr ? async (c) => {
+        // structures reaching past the figure: grow it round them, or go back and draw on
+        // (what is drawn, without the picture's margin round it: a structure drawn up to the edges still fits)
+        const rec = figures.record(c, style);
+        const b = rec.doc.bounds();
+        if (!b || !rec.pic || emptyContents(c)) return true;
+        const need = { x1: Math.min(fr.x, b.x1), y1: Math.min(fr.y, b.y1), x2: Math.max(fr.x + fr.w, b.x2), y2: Math.max(fr.y + fr.h, b.y2) };
+        if (need.x1 >= fr.x - 0.5 && need.y1 >= fr.y - 0.5 && need.x2 <= fr.x + fr.w + 0.5 && need.y2 <= fr.y + fr.h + 0.5) return true;
+        const ok = await ask('Grow the Figure?', [], {
+          ok: 'Grow Figure',
+          note: 'The structure reaches past the edges of its figure. Grow the figure to fit it (the text around it moves to make room), or Cancel to go back to the drawing. Nothing is cut off.',
+        });
+        if (!ok) return false;
+        // grown round the picture of it (with its margin)
+        const pb = rec.pic.box;
+        const all = { x1: Math.min(fr.x, pb.x1), y1: Math.min(fr.y, pb.y1), x2: Math.max(fr.x + fr.w, pb.x2), y2: Math.max(fr.y + fr.h, pb.y2) };
+        const r = (x: number) => Math.round(x * 100) / 100;
+        grow({ x: r(all.x1), y: r(all.y1), w: r(all.x2 - all.x1), h: r(all.y2 - all.y1) });
+        return true;
+      } : undefined,
+    };
+    this.inPlace = { v, place };
+    return place;
   }
 
   /** Insert > Chart: a chart with its own data, at the caret. */
@@ -3027,12 +3330,52 @@ export class DocumentMode {
 
   /** Insert > Shapes: a shape from the library, as a drawing in the text at the caret (double-click to change it). */
   insertShape(geo: string): void {
+    if (!this.file || !geoShapeStyle(geo)) return;
+    // icons stay pictures of themselves (drawings); other shapes are drawn on the page, as in PowerPoint
+    if (geoDef(geo).icon) {
+      const look = geoShapeStyle(geo)!;
+      const d = new Doc();
+      const [w, h] = geoDef(geo).size;
+      d.edit('Shape', () => d.addShape({ ...look, x1: 0, y1: 0, x2: w, y2: h } as Omit<Shape, 'id'>));
+      this.insertObject({ kind: 'drawing', contents: d.contents() }, 'Insert shape');
+      this.focus();
+      return;
+    }
+    this.placeNext = { geo };
+    this.view.scroller.style.cursor = 'crosshair';
+    this.host.flash(`Drag on the page to draw the ${geoDef(geo).name.toLowerCase()}, or click for one of its usual size (Esc to stop).`, 5000);
+    this.focus();
+  }
+
+  /**
+   * A shape drawn on the page (Insert > Shapes): floating, with the text wrapping round it, in
+   * the library's colours. A click and type, or a double-click, writes in it.
+   */
+  private placeShape(geo: string, r: Rect): void {
+    const f = this.file;
     const look = geoShapeStyle(geo);
-    if (!this.file || !look) return;
-    const d = new Doc();
-    const [w, h] = geoDef(geo).size;
-    d.edit('Shape', () => d.addShape({ ...look, x1: 0, y1: 0, x2: w, y2: h } as Omit<Shape, 'id'>));
-    this.insertObject({ kind: 'drawing', contents: d.contents() }, 'Insert shape');
+    if (!f || !look) return;
+    this.stopBox();
+    const def = geoDef(geo);
+    const drawn = r.x2 - r.x1 >= 6 && r.y2 - r.y1 >= 6;
+    const w = drawn ? r.x2 - r.x1 : def.size[0], h = drawn ? r.y2 - r.y1 : def.size[1];
+    const lay = f.layout();
+    const ed = f.ed;
+    const para = paraAt(ed.text, offsetAt(lay.text, r.x1, r.y1));
+    const start = paraRange(ed.text, para).start;
+    const top = lay.paraTops[para];
+    const rd = (x: number) => Math.round(x * 100) / 100;
+    const id = nextObjectId(f.t);
+    const N = styleOf(f.t, {});
+    const shape: DocObject = {
+      kind: 'textbox', geo, runs: [{ ...runStyleOf(N), text: '' }], paras: [{ align: 'center' }], w: rd(w), h: rd(h),
+      ...(look.filled ? { fill: look.fillColor ?? look.color ?? '#000000' } : {}),
+      ...(look.lineWidth ? { look: { frame: look.lineWidth, frameColor: look.color ?? '#000000' } } : {}),
+      float: { wrap: 'square', x: rd(r.x1 - f.t.page.left), y: rd(top ? r.y1 - top.y : 0) },
+    };
+    ed.update({ ...f.t, objects: { ...f.t.objects, [id]: shape } } as DocText, 'Insert shape');
+    ed.replace(start, start, [objectRun(id, ed.typingStyle())], undefined, null);
+    ed.select(start, start + 1);
     this.focus();
   }
 
@@ -3063,6 +3406,64 @@ export class DocumentMode {
     ed.update({ ...f.t, objects: { ...f.t.objects, [id]: box } } as DocText, 'Insert text box');
     ed.replace(start, start, [objectRun(id, ed.typingStyle())], undefined, null);
     this.startBox(id);
+  }
+
+  /**
+   * Insert > Figure: an empty figure where its area was drawn on the page (a click gives one
+   * 3 × 2 in), with text wrapping round it; drawing starts in it at once.
+   */
+  private insertFigure(r: Rect): void {
+    const f = this.file;
+    if (!f) return;
+    this.stopBox();
+    const w = r.x2 - r.x1 >= 18 && r.y2 - r.y1 >= 18 ? r.x2 - r.x1 : 3 * INCH, h = r.x2 - r.x1 >= 18 && r.y2 - r.y1 >= 18 ? r.y2 - r.y1 : 2 * INCH;
+    const lay = f.layout();
+    const ed = f.ed;
+    // in the paragraph beside where it was drawn
+    const para = paraAt(ed.text, offsetAt(lay.text, r.x1, r.y1));
+    const start = paraRange(ed.text, para).start;
+    const id = nextObjectId(f.t);
+    const rd = (x: number) => Math.round(x * 100) / 100;
+    const top = lay.paraTops[para];
+    const fig: DocObject = {
+      kind: 'drawing', contents: { atoms: [], bonds: [], captions: [], arrows: [], shapes: [] },
+      frame: { x: 0, y: 0, w: rd(w), h: rd(h) },
+      float: { wrap: 'square', x: rd(r.x1 - f.t.page.left), y: rd(top ? r.y1 - top.y : 0) },
+    };
+    ed.update({ ...f.t, objects: { ...f.t.objects, [id]: fig } } as DocText, 'Insert figure');
+    ed.replace(start, start, [objectRun(id, ed.typingStyle())], undefined, null);
+    ed.select(start, start + 1);
+    this.redraw();
+    this.editFigure(id);
+  }
+
+  /** Make Figure: the structure gets an area of its own, just round it (resize it with its corner handle). */
+  private makeFigure(id: number): void {
+    const f = this.file!;
+    const o = f.t.objects[id];
+    if (o?.kind !== 'drawing' || o.frame) return;
+    const b = figures.record(o.contents, f.t.drawingStyle).pic?.box;
+    if (!b) return;
+    const r = (x: number) => Math.round(x * 100) / 100;
+    f.ed.update({ ...f.t, objects: { ...f.t.objects, [id]: { ...o, frame: { x: r(b.x1), y: r(b.y1), w: r(b.x2 - b.x1), h: r(b.y2 - b.y1) } } } } as DocText, 'Make figure');
+    this.host.flash('It is a figure now: drag its corner handle to give it room, and drawing in it won\'t move the text around it.', 6000);
+  }
+
+  /** Fit Figure to Structure (its area just round what is drawn), or Remove Figure (a plain structure again). */
+  private fitFigure(id: number, remove: boolean): void {
+    const f = this.file!;
+    const o = f.t.objects[id];
+    if (o?.kind !== 'drawing' || !o.frame) return;
+    const b = emptyContents(o.contents) ? null : figures.record(o.contents, f.t.drawingStyle).pic?.box;
+    if (!b) { this.host.flash('The figure is empty: double-click it to draw in it, or press Delete to take it out.'); return; }
+    const { frame: fr, ...rest } = o;
+    const r = (x: number) => Math.round(x * 100) / 100;
+    const next: DocObject = remove ? rest : { ...o, frame: { x: r(b.x1), y: r(b.y1), w: r(b.x2 - b.x1), h: r(b.y2 - b.y1) } };
+    // a floating one keeps its structures where they are on the page
+    const at = f.layout().objects.find((x) => x.id === id);
+    const k = at ? at.w / Math.max(1e-6, fr.w) : 1;
+    if (o.float && next.kind === 'drawing') next.float = { ...o.float, x: o.float.x + (b.x1 - fr.x) * k, y: o.float.y + (b.y1 - fr.y) * k };
+    f.ed.update({ ...f.t, objects: { ...f.t.objects, [id]: next } } as DocText, remove ? 'Remove figure' : 'Fit figure');
   }
 
   // ---------------------------------------------------------------- commands
@@ -3146,6 +3547,7 @@ export class DocumentMode {
       case 'doc-sub': ed.toggle('sub'); break;
       case 'doc-sup': ed.toggle('sup'); break;
       case 'doc-formula': ed.toggle('formula'); break;
+      case 'doc-stereo-italic': applyFormat(ed, { kind: 'stereo' }); break;
       case 'doc-highlight': {
         const on = ed.currentStyle().highlight;
         ed.setStyle({ highlight: on && on === this.highlighter ? undefined : this.highlighter });
@@ -3162,6 +3564,11 @@ export class DocumentMode {
       case 'undo': this.undo(false); break;
       case 'redo': this.undo(true); break;
       case 'insert-structure': this.drawNew(); break;
+      case 'insert-figure': this.placeNext = {}; this.view.scroller.style.cursor = 'crosshair'; this.host.flash('Drag on the page to draw the figure\'s area (Esc to stop). Text wraps around it; double-click it to draw in it.', 6000); break;
+      case 'make-figures': this.figureOffer.start(f); break;
+      case 'make-figure': { const id = this.pickedObject(); if (id !== null) this.makeFigure(id); break; }
+      case 'figure-fit': { const id = this.pickedObject(); if (id !== null) this.fitFigure(id, false); break; }
+      case 'remove-figure': { const id = this.pickedObject(); if (id !== null) this.fitFigure(id, true); break; }
       case 'structure-from-name-doc': case 'name-to-structure': void this.fromName(); break;
       case 'insert-picture': void this.insertPicture(); break;
       case 'insert-object': void this.insertEmbedded(); break;
@@ -3170,7 +3577,7 @@ export class DocumentMode {
       case 'insert-text-box': this.insertTextBox(); break;
       case 'wrap-inline': case 'wrap-square': case 'wrap-topBottom': case 'wrap-behind': case 'wrap-front': {
         const id = this.pickedObject() ?? f.box?.id ?? null;
-        if (id === null) { this.host.flash('Click a structure, picture or text box first, then choose how text wraps round it.'); break; }
+        if (id === null) { this.host.flash('Click a structure, picture or text box first, then choose how text wraps around it.'); break; }
         this.setWrap(id, cmd.slice(5) as WrapKind | 'inline');
         break;
       }
@@ -3183,6 +3590,11 @@ export class DocumentMode {
       case 'cross-reference': void this.crossReference(); break;
       case 'compound-number': void this.compoundNumber(); break;
       case 'insert-citation': void this.insertCitation(); break;
+      case 'zotero-cite': void this.zotero('addEditCitation'); break;
+      case 'zotero-bib': void this.zotero('addEditBibliography'); break;
+      case 'zotero-refresh': void this.zotero('refresh'); break;
+      case 'zotero-prefs': void this.zotero('setDocPrefs'); break;
+      case 'zotero-unlink': void this.zotero('removeCodes'); break;
       case 'insert-bibliography': this.insertBibliography(); break;
       case 'insert-toc': void this.insertToc(); break;
       case 'insert-tof': void this.insertTof(); break;
@@ -3254,11 +3666,21 @@ export class DocumentMode {
       case 'find': case 'replace': this.find(cmd === 'replace'); return true;
       case 'paste': void this.paste(null); break;
       case 'copy': case 'cut': this.focus(); document.execCommand(cmd); break;
+      case 'font-box': {
+        this.fontBox ??= new FontBox({
+          look: () => (this.file ? this.ed.currentStyle() : null),
+          apply: (patch) => { if (this.file) this.setTextStyle(patch); },
+          changeCase: (mode) => { if (this.file) this.ed.changeCase(mode); },
+          allCaps: () => { if (this.file) this.ed.toggle('allCaps'); },
+        });
+        this.fontBox.toggle(this.ribbon.querySelector<HTMLElement>('[data-doc="font-box"]'));
+        return true;
+      }
       case 'box-para': case 'box-style': case 'box-page': case 'box-hf':
         this.panel.open(cmd.slice(4) as DocBoxKey);
         return true;
       case 'margins-custom': case 'paper-custom':
-        this.panel.open('page', this.ribbon.querySelector<HTMLElement>(cmd === 'paper-custom' ? '#doc-paper' : '#doc-margins'), cmd === 'paper-custom' ? 'pg-w' : 'pg-top');
+        this.panel.open('page', this.ribbonAnchor(cmd === 'paper-custom' ? '#doc-paper' : '#doc-margins'), cmd === 'paper-custom' ? 'pg-w' : 'pg-top');
         this.updateRibbon();
         return true;
       case 'header-edit': this.panel.open('hf', null, 'hf-header0'); return true;
@@ -3334,7 +3756,7 @@ export class DocumentMode {
     } else if (what === 'orient') {
       if ((v === 'landscape') !== land) page({ w: pg.h, h: pg.w });
     } else if (what === 'columns') {
-      if (v === 'more') { this.panel.open('page', this.ribbon.querySelector<HTMLElement>('#doc-columns'), 'pg-cols'); return true; }
+      if (v === 'more') { this.panel.open('page', this.ribbonAnchor('#doc-columns'), 'pg-cols'); return true; }
       const n = Number(v);
       if (!(n >= 1 && n <= 4)) return false;
       page({ cols: n > 1 ? n : undefined });
@@ -3383,7 +3805,7 @@ export class DocumentMode {
     const got = await ask('Picture in Header or Footer', [
       { name: 'where', label: 'Put it in the', value: 'header', options: [{ value: 'header', label: 'Header' }, { value: 'footer', label: 'Footer' }] },
       { name: 'which', label: 'On', value: '', options: [{ value: '', label: hf.oddEven ? 'Odd pages' : 'Every page' }, ...(hf.firstPage ? [{ value: 'first', label: 'The first page' }] : []), ...(hf.oddEven ? [{ value: 'even', label: 'Even pages' }] : [])] },
-      { name: 'zone', label: 'At the', value: '0', options: [{ value: '0', label: 'Left' }, { value: '1', label: 'Centre' }, { value: '2', label: 'Right' }] },
+      { name: 'zone', label: 'At the', value: '0', options: [{ value: '0', label: 'Left' }, { value: '1', label: 'Center' }, { value: '2', label: 'Right' }] },
       { name: 'height', label: 'Height', value: '0.5', unit: 'in' },
     ], { ok: 'Choose Picture…', note: 'For this section. Saved as a picture in Word\'s header or footer. Plain Text (in the Header and Footer settings) takes it out again.' });
     this.focus();
@@ -3508,6 +3930,7 @@ export class DocumentMode {
 
   private drawNew(): void {
     const f = this.file!;
+    if (this.drawNewInPlace()) return;
     const spot = this.cellSpot();
     this.host.editDrawing(null, 'New structure', (c) => {
       if (this.file === f) this.backToCell(spot);
@@ -3517,11 +3940,46 @@ export class DocumentMode {
     });
   }
 
+  /**
+   * Insert > Structure, drawn in place on the page: room for it at the caret (2 × 1.25 in), the drawing
+   * tools over it, and on Done a plain structure sized to what was drawn. Cancel, or Done with nothing
+   * drawn, leaves the document as if nothing had been inserted (no Undo step). False when it can't be
+   * drawn in place here (a table cell, reading view, no pages): the pop-out editor draws it instead.
+   */
+  private drawNewInPlace(): boolean {
+    const f = this.file!;
+    if (!this.host.editInPlace || f.box || this.reading || (this.view.kind !== 'print' && this.view.kind !== 'web')) return false;
+    const ed = f.ed;
+    const empty: Contents = { atoms: [], bonds: [], captions: [], arrows: [], shapes: [] };
+    const id = this.insertObject({ kind: 'drawing', contents: empty, frame: { x: 0, y: 0, w: 2 * INCH, h: 1.25 * INCH } }, 'Insert structure');
+    const step = ed.lastStep as { t: DocText; anchor: number; focus: number } | undefined;
+    this.redraw();
+    const forget = () => {
+      // the room for it taken out again, as if it had never been put in
+      if (!step || ed.lastStep !== step) return;
+      ed.update(step.t, null, step.anchor, step.focus);
+      ed.dropStep(step, () => true);
+    };
+    const place = this.placeFor(id, () => {}, true);
+    if (!place) { forget(); return false; }
+    this.host.editInPlace(empty, place, (c) => {
+      this.inPlace = null;
+      if (this.file !== f) return;
+      const cur = f.t.objects[id];
+      if (!c || emptyContents(c) || cur?.kind !== 'drawing') { forget(); this.redraw(); this.focus(); return; }
+      const { frame: _room, ...plain } = cur;
+      // part of the insert's Undo step, so one Undo takes the structure out
+      ed.update({ ...f.t, objects: { ...f.t.objects, [id]: { ...plain, contents: c } } } as DocText, ed.lastStep === step ? null : 'Insert structure');
+      this.focus();
+    });
+    return true;
+  }
+
   private async fromName(): Promise<void> {
     const f = this.file!;
     const spot = this.cellSpot();
-    const got = await ask('Structure from Name or SMILES', [{ name: 'text', label: 'Name or SMILES', value: '' }], {
-      ok: 'Insert', note: 'A systematic or common name (ethyl acetate, 4-bromoanisole) or a SMILES string. The structure goes in the text at the caret.',
+    const got = await ask('Structure from Name or SMILES', [{ name: 'text', label: 'Name, SMILES or CAS RN', value: '' }], {
+      ok: 'Insert', note: 'A systematic or common name (ethyl acetate, 4-bromoanisole), a SMILES string or a CAS RN (50-78-2). The structure goes in the text at the caret.',
     });
     this.focus();
     if (!got?.text.trim() || this.file !== f) return;
@@ -3878,6 +4336,70 @@ export class DocumentMode {
     this.insertObject({ kind: 'cite', refs }, 'Insert citation', { sup: citeSuper(formatOf(f.t)) || undefined, sub: undefined });
     // what is typed next looks as it did before the citation
     ed.setStyle({ sup: before.sup });
+  }
+
+  /**
+   * References > Zotero: one of Zotero's commands (Add/Edit Citation, Add/Edit Bibliography,
+   * Refresh, Document Preferences, Unlink Citations), run by the Zotero app on this computer as
+   * its Word plugin's are (zotero-live.ts). All it changes is one step to undo.
+   */
+  private async zotero(command: ZoteroCommand): Promise<void> {
+    const f = this.file;
+    if (!f) return;
+    const post = this.host.zoteroPost;
+    if (!post) {
+      this.host.flash('Citing with Zotero works in the desktop app (a browser can\'t reach Zotero on this computer). Here, use Insert Citation, or add references from Zotero in the Reference Manager.', 8000);
+      return;
+    }
+    if (this.zoteroRunning) { this.host.flash('Zotero is still working on this document (finish in Zotero\'s window first).'); return; }
+    this.zoteroRunning = true;
+    let first = true;
+    const kind = (): string | null => { const k = first ? 'Zotero' : null; first = false; return k; };
+    const at = (id: number): number | undefined => objectOffsets(f.ed.t.runs).get(id);
+    let docId = this.zoteroIds.get(f);
+    if (!docId) { docId = `chem-illustrator-${Math.random().toString(36).slice(2, 12)}`; this.zoteroIds.set(f, docId); }
+    const host: ZoteroHost = {
+      docId,
+      text: () => f.t,
+      change: (t) => f.ed.update(t, kind()),
+      replaceObject: (id, runs) => {
+        const i = at(id);
+        if (i === undefined) { const t = replaceInCells(f.t, id, runs); if (t) f.ed.update(t, kind()); return; }
+        const { anchor, focus } = f.ed;
+        const shift = (x: number) => (x > i ? Math.max(i, x + rt.plainText(runs).length - 1) : x);
+        f.ed.replace(i, i + 1, runs, undefined, kind());
+        f.ed.select(shift(anchor), shift(focus));
+      },
+      picked: () => (this.file === f ? this.pickedField('cite')?.id ?? this.pickedField('bib')?.id ?? null : null),
+      canInsert: () => this.file === f && !(f.box && !f.box.cell),
+      insert: (o, sup) => {
+        const before = f.ed.typingStyle();
+        const id = this.insertObject(o, kind() ?? 'Zotero', { sup: (sup ?? citeSuper(formatOf(f.t))) || undefined, sub: undefined });
+        f.ed.setStyle({ sup: before.sup });
+        return id;
+      },
+      ownParagraph: (id) => {
+        const i = at(id);
+        if (i === undefined) return;
+        const text = f.ed.text;
+        const look = { ...f.ed.t.runs.find((r) => r.obj === id), obj: undefined, sup: undefined, text: '\n' };
+        if (i + 1 < text.length && text[i + 1] !== '\n') f.ed.replace(i + 1, i + 1, [look], undefined, kind());
+        if (i > 0 && text[i - 1] !== '\n') f.ed.replace(i, i, [look], undefined, kind());
+      },
+      select: (id) => { const i = at(id); if (i !== undefined && this.file === f) f.ed.select(i, i + 1); },
+      choose: (text, labels) => choose('Zotero', text, labels, 0),
+      activate: () => this.host.activateWindow?.(),
+    };
+    try {
+      const got = await runZotero(command, host, post);
+      if (got === 'offline') this.host.flash('Zotero isn\'t running. Start the Zotero app (version 7 or later) on this computer, then try again.', 7000);
+      else if (got === 'busy') this.host.flash('Zotero is busy with a citation in another document. Finish there, then try again.', 6000);
+    } catch (e) {
+      this.host.flash(`Zotero: ${e instanceof Error ? e.message : String(e)}`, 8000);
+    } finally {
+      this.zoteroRunning = false;
+      this.redraw();
+    }
   }
 
   /**
@@ -4298,7 +4820,7 @@ export class DocumentMode {
   /** Design > Set as Default: new documents start with this one's theme, style set and spacing. */
   private async designDefault(): Promise<void> {
     const d = this.file?.t.design;
-    const what = d ? [d.theme && `the ${d.theme} theme`, !d.theme && d.fonts && `${d.fonts} fonts`, !d.theme && d.colors && `${d.colors} colours`, d.styleSet && `the ${d.styleSet} style set`, d.spacing && `${d.spacing} spacing`].filter(Boolean).join(', ') : '';
+    const what = d ? [d.theme && `the ${d.theme} theme`, !d.theme && d.fonts && `${d.fonts} fonts`, !d.theme && d.colors && `${d.colors} colors`, d.styleSet && `the ${d.styleSet} style set`, d.spacing && `${d.spacing} spacing`].filter(Boolean).join(', ') : '';
     const got = await ask('Set as Default', [], { ok: what ? 'Set as Default' : 'Use the Standard Look', note: what ? `New documents will start with ${what}. (Documents already made keep their own look.)` : 'This document uses the standard look, so new documents will too.' });
     if (!got) return;
     this.host.setNewDesign?.(d && Object.keys(d).length ? d : null);
@@ -4321,7 +4843,7 @@ export class DocumentMode {
     const got = await ask('Watermark', [
       { name: 'text', label: 'Text', value: w.text, suggestions: WATERMARKS },
       { name: 'font', label: 'Font', value: w.font, suggestions: ['Calibri', 'Arial', 'Times New Roman', 'Inter', 'IBM Plex Sans'] },
-      { name: 'color', label: 'Colour', value: w.color, type: 'color' },
+      { name: 'color', label: 'Color', value: w.color, type: 'color' },
       { name: 'layout', label: 'Layout', value: w.layout, options: [{ value: 'diagonal', label: 'Diagonal' }, { value: 'horizontal', label: 'Horizontal' }] },
       { name: 'faded', label: 'Semitransparent', value: String(w.faded), type: 'checkbox' },
     ], { ok: 'Apply', note: 'Words across every page, behind the text. Saved in Word files as Word’s own watermark, so Word shows and edits it too.' });
@@ -4336,10 +4858,10 @@ export class DocumentMode {
     const f = this.file!;
     const b: PageBorder = f.t.pageBorder ?? defaultPageBorder();
     const got = await ask('Page Borders', [
-      { name: 'on', label: 'A border round every page', value: String(!!f.t.pageBorder), type: 'checkbox' },
+      { name: 'on', label: 'A border around every page', value: String(!!f.t.pageBorder), type: 'checkbox' },
       { name: 'style', label: 'Style', value: b.style, options: [{ value: 'single', label: 'Single line' }, { value: 'double', label: 'Double line' }, { value: 'thick', label: 'Thick and thin' }, { value: 'dotted', label: 'Dotted' }, { value: 'dashed', label: 'Dashed' }] },
       { name: 'width', label: 'Width', value: String(b.width), unit: 'pt', options: ['0.25', '0.5', '0.75', '1', '1.5', '2.25', '3', '4.5', '6'].map((x) => ({ value: x, label: `${x} pt` })) },
-      { name: 'color', label: 'Colour', value: b.color, type: 'color' },
+      { name: 'color', label: 'Color', value: b.color, type: 'color' },
       { name: 'from', label: 'Measure from', value: b.from, options: [{ value: 'page', label: 'Edge of page' }, { value: 'text', label: 'Text' }] },
       { name: 'space', label: 'Distance', value: String(b.space), unit: 'pt', type: 'number' },
     ], { ok: 'OK', note: 'Saved in Word files as Word’s own page border. From the edge of the page, Word allows up to 31 pt; from the text, up to 31 pt outside the margins.' });
@@ -4360,7 +4882,7 @@ export class DocumentMode {
     const shown = cur.map((t) => `${showLength(t.pos, 'in')} in ${t.kind === 'center' ? 'centre' : t.kind}${t.leader ? ` ${t.leader === 'underscore' ? 'line' : t.leader}` : ''}`).join('\n');
     const got = await ask('Tabs', [
       { name: 'tabs', label: 'Tab stops, one per line', value: shown, type: 'textarea', placeholder: '1 in left\n3.25 in decimal\n6.5 in right dot' },
-    ], { ok: 'OK', note: 'Each line: where (from the left margin, in inches unless you give cm, mm or pt), then left, centre, right or decimal, then dot, hyphen or line for a leader. Past the last one, tabs stop every half inch. The ruler (View > Ruler) sets them by clicking too.' });
+    ], { ok: 'OK', note: 'Each line: where (from the left margin, in inches unless you give cm, mm or pt), then left, center, right or decimal, then dot, hyphen or line for a leader. Past the last one, tabs stop every half inch. The ruler (View > Ruler) sets them by clicking too.' });
     this.focus();
     if (!got || this.file !== f) return;
     const tabs: TabStop[] = [];
@@ -4433,7 +4955,7 @@ export class DocumentMode {
     const got = await ask('New Style', [
       { name: 'name', label: 'Name', value: '' , placeholder: 'Experimental heading' },
       { name: 'kind', label: 'Style type', value: ed.collapsed ? 'para' : 'char', options: [{ value: 'para', label: 'Paragraph (the whole paragraph’s look and spacing)' }, { value: 'char', label: 'Character (the look of the words picked)' }] },
-    ], { ok: 'Make Style', note: 'The new style takes the look of the text the caret is in, and is given to it. Change it later with Modify; every paragraph or word in it follows.' });
+    ], { ok: 'Create Style', note: 'The new style takes the look of the text the caret is in, and is given to it. Change it later with Modify; every paragraph or word in it follows.' });
     this.focus();
     if (!got || this.file !== f || !got.name.trim()) return;
     const look = ed.currentStyle();
@@ -4469,8 +4991,8 @@ export class DocumentMode {
       { name: 'italic', label: 'Italic', value: yesNo(s.italic), options: tri },
       { name: 'underline', label: 'Underline', value: String(!!s.underline), type: 'checkbox' },
       { name: 'smallCaps', label: 'Small caps', value: String(!!s.smallCaps), type: 'checkbox' },
-      { name: 'colorOn', label: 'Own colour', value: String(!!s.color), type: 'checkbox' },
-      { name: 'color', label: 'Colour', value: s.color ?? '#000000', type: 'color' },
+      { name: 'colorOn', label: 'Own color', value: String(!!s.color), type: 'checkbox' },
+      { name: 'color', label: 'Color', value: s.color ?? '#000000', type: 'color' },
     ], { ok: 'OK', note: 'Every word in this style changes with it (except what was formatted by hand).' });
     this.focus();
     if (!got || this.file !== f) return;
@@ -4647,6 +5169,7 @@ export class DocumentMode {
     if (!f) return;
     const ed = f.textEd;
     const s = ed.currentStyle();
+    if (this.fontBox?.open) this.fontBox.refresh();
     const para = ed.currentPara();
     const st = f.box ? styleOf(f.t, {}) : styleOf(f.t, para);
     const press = (cmd: string, on: boolean) => {

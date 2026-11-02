@@ -17,7 +17,7 @@ import { withStack, layoutText, type Glyphs, type InlineBox, type LaidLine, type
 import { fitParas, listMarkers, paraCount, splitParagraphs } from '../text/paragraphs';
 import { isCovered, rowSpanOf, spanOf } from '../table';
 import * as rt from '../richtext';
-import { nestedTables, BOX_PAD, FLOAT_GAP, LINE_NUMBER_GAP, OBJECT_CHAR, columnsOf, fieldTexts, floatOf, lookExtent, lookOf, noteStyle, objectsInText, styleOf, FORM_SHADE, type DocObject, type DocText, type HeaderFooter, type NamedStyle, type PageSetup, type WrapKind } from './document';
+import { drawingOwnSize, nestedTables, BOX_PAD, FLOAT_GAP, LINE_NUMBER_GAP, OBJECT_CHAR, columnsOf, fieldTexts, floatOf, lookExtent, lookOf, noteStyle, objectsInText, styleOf, FORM_SHADE, type DocObject, type DocText, type HeaderFooter, type NamedStyle, type PageSetup, type WrapKind } from './document';
 import { pageNumText, samePaper, sectionOfParas, sectionsOf } from './sections';
 import { bibliography, type BibEntry } from './references';
 import { emptyTof, tocEntries, tocLines, tofEntries, type TocEntry } from './toc';
@@ -388,7 +388,7 @@ export class DocLayouter {
     const inline = (id: number): InlineBox | null => {
       const o = t.objects[id];
       const k = o && (o.kind === 'drawing' || o.kind === 'picture') ? o.scale ?? 1 : 1;
-      const own = o?.kind === 'drawing' ? this.deps.drawingSize(o.contents, t.drawingStyle) : o?.kind === 'picture' ? { w: o.w, h: o.h } : null;
+      const own = o?.kind === 'drawing' ? drawingOwnSize(o, () => this.deps.drawingSize(o.contents, t.drawingStyle)) : o?.kind === 'picture' ? { w: o.w, h: o.h } : null;
       if (own) {
         const [l, tp, r, b] = lookExtent(lookOf(o));
         return { w: own.w * k + l + r, ascent: own.h * k + tp, descent: b };
@@ -479,7 +479,7 @@ export class DocLayouter {
     const sizes = new Map<number, { w: number; h: number }>();
     for (const [k, o] of Object.entries(t.objects)) {
       const room = objWidth.get(Number(k)) ?? textW;
-      if (o.kind === 'drawing') sizes.set(Number(k), shownSize(this.deps.drawingSize(o.contents, t.drawingStyle), o.scale ?? 1, room));
+      if (o.kind === 'drawing') sizes.set(Number(k), shownSize(drawingOwnSize(o, () => this.deps.drawingSize(o.contents, t.drawingStyle)), o.scale ?? 1, room));
       else if (o.kind === 'picture') sizes.set(Number(k), shownSize({ w: o.w, h: o.h }, o.scale ?? 1, room));
     }
     // equations: laid out in the font and size of the text round them
@@ -520,7 +520,7 @@ export class DocLayouter {
         const room = Math.max(6, xs[c + spanOf(tb, r, c)] - xs[c] - m.left - m.right);
         for (const x of cell.runs) {
           const n = x.obj !== undefined ? t.objects[x.obj] : undefined;
-          if (n?.kind === 'drawing') sizes.set(x.obj!, shownSize(this.deps.drawingSize(n.contents, t.drawingStyle), n.scale ?? 1, room));
+          if (n?.kind === 'drawing') sizes.set(x.obj!, shownSize(drawingOwnSize(n, () => this.deps.drawingSize(n.contents, t.drawingStyle)), n.scale ?? 1, room));
           else if (n?.kind === 'picture') sizes.set(x.obj!, shownSize({ w: n.w, h: n.h }, n.scale ?? 1, room));
         }
       }));
@@ -689,7 +689,7 @@ export class DocLayouter {
     const sep = 1.2 * nst.size;
     const noteLay = (id: number, w: number): TextLayout | null => {
       const o = t.objects[id];
-      return o?.kind === 'note' ? this.noteText(t, o.runs, o.paras, fields.get(id) ?? '', w) : null;
+      return o?.kind === 'note' ? this.noteText(t, o.runs, o.paras, fields.get(id) ?? '', w, fields) : null;
     };
     const noteH = (id: number) => { const l = noteLay(id, fullW); return l ? l.box.y2 - l.box.y1 : 0; };
     let feet: { id: number; line: number }[] = [];
@@ -1201,7 +1201,7 @@ export class DocLayouter {
    * A footnote's or endnote's text laid out `w` wide, in the notes' style: its number (`label`)
    * in superscript before the first line, which starts after it (the number is shown, not typed).
    */
-  noteText(t: DocText, runs: TextRun[], paras: ParaStyle[] | undefined, label: string, w: number): TextLayout {
+  noteText(t: DocText, runs: TextRun[], paras: ParaStyle[] | undefined, label: string, w: number, fields?: Map<number, string>): TextLayout {
     const st = noteStyle(t);
     if (hasChanges(runs)) runs = showChanges(runs, this.review);
     const resolved = runs.map((r) => (r.font && r.size ? r : { ...r, font: r.font ?? st.font, size: r.size ?? st.size }));
@@ -1210,10 +1210,13 @@ export class DocLayouter {
     const small = 0.75 * st.size;
     const lw = this.deps.measure(label, small, family, '') + 0.3 * st.size;
     const first = ps.map((p, i) => (i === 0 ? { ...p, firstLine: (p.firstLine ?? 0) + lw } : p));
-    const key = `note|${JSON.stringify([resolved, first, w, label])}`;
+    // fields in the note (a citation, as note styles put them) show their text
+    const shownIn = resolved.filter((r) => r.obj !== undefined).map((r) => fields?.get(r.obj!) ?? null);
+    const key = `note|${JSON.stringify([resolved, first, w, label, shownIn])}`;
     let lay = this.cache.get(key);
     if (!lay) {
-      lay = layoutText({ runs: resolved, paras: first, justify: 'left', wrap: Math.max(6, w), boxes: true, markers: listMarkers(first) }, st.size, this.deps.measure);
+      const inline = (x: number) => { const f = fields?.get(x); return f !== undefined ? { text: f } : null; };
+      lay = layoutText({ runs: resolved, paras: first, justify: 'left', wrap: Math.max(6, w), boxes: true, markers: listMarkers(first), inline }, st.size, this.deps.measure);
       const l0 = lay.lines[0];
       if (l0) {
         const mark: Glyphs = { text: label, start: 0, x: l0.x - lw, w: lw - 0.3 * st.size, dy: -0.42 * st.size, size: small, family, style: '', decor: true };

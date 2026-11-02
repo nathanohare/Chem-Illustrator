@@ -94,6 +94,9 @@ export class Toolbar {
   private titleTool(b: HTMLButtonElement, t: ToolDef, extra = ''): void {
     b.title = t.title + this.keys(t.name) + extra;
     b.setAttribute('aria-label', t.title);
+    // (for the tooltip card: which tool, and how its palette opens)
+    b.dataset.tipTool = t.name;
+    if (extra) b.dataset.tipMore = extra.replace(/^\.\s*/, ''); else delete b.dataset.tipMore;
   }
 
   /** Show the current hotkeys in the tool tips. */

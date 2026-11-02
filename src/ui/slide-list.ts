@@ -174,7 +174,7 @@ export class SlideList {
     fold.type = 'button';
     fold.className = 'sl-sec-fold';
     fold.textContent = folded ? '▸' : '▾';
-    fold.title = folded ? 'Show this section\'s slides' : 'Fold this section';
+    fold.title = folded ? 'Show this section\'s slides' : 'Collapse Section';
     fold.setAttribute('aria-expanded', String(!folded));
     fold.addEventListener('click', (e) => { e.stopPropagation(); this.deck?.fold(id, !folded); });
     const label = document.createElement('span');

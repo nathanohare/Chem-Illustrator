@@ -12,6 +12,7 @@
 // page's clipboard gets a PNG (and the drawing in a web format where the browser takes one),
 // and the drawing itself is kept in memory: pasting that same picture back here gives the drawing.
 
+import { remapFrames, remapStep, type IdMaps } from './remap-refs';
 import { freshGroups } from '../editor/groups';
 import { pastedTable, tableHtml, tableTsv, type PastedRows } from './table-clip';
 import { invoke, isTauri } from '@tauri-apps/api/core';
@@ -28,6 +29,7 @@ import { emfToSvg } from '../render/emf-read';
 import type { Item } from '../render/vector';
 import { itemsToEmf, withDrawing, drawingInEmf, type EmfBox } from '../render/emf';
 import { imageSize } from '../render/images';
+import { isReactionSmiles } from '../chem/reaction-io';
 
 /** Our own clipboard format: the drawing as CDXML text. */
 export const OWN_FORMAT = 'Chem Illustrator CDXML';
@@ -194,6 +196,7 @@ export function insertDrawing(doc: Doc, src: Doc, center: Vec, label = 'Paste'):
   if (!b) return sel;
   const dx = center.x - (b.x1 + b.x2) / 2, dy = center.y - (b.y1 + b.y2) / 2;
   const ids = new Map<number, number>();
+  const maps: IdMaps = { atoms: ids, captions: new Map(), shapes: new Map(), arrows: new Map() };
   doc.edit(label, () => {
     // (multicentre points after the atoms they stand for, so they can point at the new ones)
     const atoms = [...src.atoms.values()];
@@ -214,16 +217,34 @@ export function insertDrawing(doc: Doc, src: Doc, center: Vec, label = 'Paste'):
       sel.bonds.add(doc.addBond(a1, a2, bd.order, bd.display, { ...rest, a1, a2 }).id);
     }
     for (const c of src.captions.values()) {
-      const { id: _id, ...rest } = structuredClone(c);
+      const { id: cid, ...rest } = structuredClone(c);
       // a tied caption follows the copy of its structure, not the original
       if (rest.attach) {
         const atoms = rest.attach.atoms.map((x) => ids.get(x)).filter((x): x is number => x !== undefined);
         if (atoms.length) rest.attach.atoms = atoms; else rest.attach = undefined;
       }
-      sel.captions.add(doc.addCaption({ ...rest, x: c.x + dx, y: c.y + dy }).id);
+      const nc = doc.addCaption({ ...rest, x: c.x + dx, y: c.y + dy });
+      maps.captions.set(cid, nc.id);
+      sel.captions.add(nc.id);
+    }
+    for (const s of src.shapes.values()) {
+      const { id: sid, ...rest } = structuredClone(s);
+      // a ring fill sits on the new copies of its ring's atoms
+      const ring = rest.ring?.map((a) => ids.get(a));
+      if (rest.ring) rest.ring = ring!.every((a) => a !== undefined) ? (ring as number[]) : undefined;
+      if (rest.pin) {
+        const ref = rest.pin.ref.map((x) => ids.get(x));
+        rest.pin = ref.every((x) => x !== undefined) ? { ...rest.pin, ref: ref as number[] } : undefined;
+      }
+      if (rest.poly) rest.poly = rest.poly.map((p) => ({ x: p.x + dx, y: p.y + dy }));
+      const ns = doc.addShape({ ...rest, x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy });
+      maps.shapes.set(sid, ns.id);
+      sel.shapes.add(ns.id);
     }
     for (const r of src.arrows.values()) {
-      const { id: _id, ...rest } = structuredClone(r);
+      const { id: rid, ...rest } = structuredClone(r);
+      // chosen roles (reaction steps, a Smart Scheme's order) name the copies
+      if (rest.step) rest.step = remapStep(rest.step, maps);
       // pins and animation pairs point at the copies of the atoms, or are let go
       if (rest.pin) {
         for (const end of ['tail', 'head'] as const) {
@@ -237,20 +258,11 @@ export function insertDrawing(doc: Doc, src: Doc, center: Vec, label = 'Paste'):
         const pairs = rest.morph.pairs?.map(([a, b]) => [ids.get(a), ids.get(b)]).filter(([a, b]) => a !== undefined && b !== undefined) as [number, number][] | undefined;
         rest.morph = pairs?.length ? { pairs, exact: rest.morph.exact } : undefined;
       }
-      sel.arrows.add(doc.addArrow({ ...rest, tail: { x: r.tail.x + dx, y: r.tail.y + dy }, head: { x: r.head.x + dx, y: r.head.y + dy } }).id);
+      const na = doc.addArrow({ ...rest, tail: { x: r.tail.x + dx, y: r.tail.y + dy }, head: { x: r.head.x + dx, y: r.head.y + dy } });
+      maps.arrows.set(rid, na.id);
+      sel.arrows.add(na.id);
     }
-    for (const s of src.shapes.values()) {
-      const { id: _id, ...rest } = structuredClone(s);
-      // a ring fill sits on the new copies of its ring's atoms
-      const ring = rest.ring?.map((a) => ids.get(a));
-      if (rest.ring) rest.ring = ring!.every((a) => a !== undefined) ? (ring as number[]) : undefined;
-      if (rest.pin) {
-        const ref = rest.pin.ref.map((x) => ids.get(x));
-        rest.pin = ref.every((x) => x !== undefined) ? { ...rest.pin, ref: ref as number[] } : undefined;
-      }
-      if (rest.poly) rest.poly = rest.poly.map((p) => ({ x: p.x + dx, y: p.y + dy }));
-      sel.shapes.add(doc.addShape({ ...rest, x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy }).id);
-    }
+    remapFrames(doc, maps);
     // a pasted group is a new group, not part of the one it was copied from
     freshGroups(doc, sel);
   });
@@ -503,7 +515,7 @@ export type Pasted =
 /** Text that could be a structure (a molfile, or one word that could be SMILES). */
 export function looksLikeChemistry(text: string): boolean {
   const t = text.trim();
-  return t.includes('M  END') || (!!t && !/\s/.test(t) && /^[A-Za-z0-9@+\-[\]()=#$%/\\.:*~]+$/.test(t));
+  return t.includes('M  END') || isReactionSmiles(t) || (!!t && !/\s/.test(t) && /^[A-Za-z0-9@+\-[\]()=#$%/\\.:*~]+$/.test(t));
 }
 
 /** A Windows bitmap from the clipboard (no file header) as a .bmp file a web page can show. */

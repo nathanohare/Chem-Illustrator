@@ -21,7 +21,8 @@ import * as rt from '../richtext';
 import { cleanPara, fitParas, paraCount, paraRange } from '../text/paragraphs';
 import { citationTexts, type CiteStyle, type Reference } from './references';
 import type { CiteFormat } from './cite-styles';
-import type { CiteLive, CiteManager } from './live-cites';
+import type { BibLive, CiteLive, CiteManager } from './live-cites';
+import type { ContentControl, KeptParts } from '../io/kept-parts';
 import type { ChartBox } from '../sheet/chart-box';
 import type { DocHyphenation } from '../text/hyphenate';
 import { allHf, hfObjectIds } from './hf-bodies';
@@ -293,6 +294,22 @@ export const FLOAT_GAP = 9;
 /** A text box's inner margins, in points (Word's: 0.1 in at the sides, 0.05 in above and below). */
 export const BOX_PAD = { x: 7.2, y: 3.6 };
 
+/** Nothing drawn (a figure waiting for its structures). */
+export function emptyContents(c: Contents): boolean {
+  return !c.atoms.length && !c.bonds.length && !c.arrows.length && !c.shapes.length && !c.captions.length;
+}
+
+/** A figure's area in its drawing's own points (x, y its top left). */
+export interface FigureFrame { x: number; y: number; w: number; h: number }
+
+/**
+ * A drawing's own size in points: its figure's area when it has one, else what its structures
+ * take up (`natural`, worked out only when needed).
+ */
+export function drawingOwnSize(o: { frame?: FigureFrame }, natural: () => { w: number; h: number }): { w: number; h: number } {
+  return o.frame ? { w: o.frame.w, h: o.frame.h } : natural();
+}
+
 /** A figure's, picture's or text box's frame and shadow (none for other objects). */
 export function lookOf(o: DocObject | undefined): FigureLook | undefined {
   return o && (o.kind === 'drawing' || o.kind === 'picture' || o.kind === 'textbox') ? o.look : undefined;
@@ -325,7 +342,7 @@ export interface Embedded {
 
 export type DocObject =
   /** A structure, scheme or table: a drawing, edited with the drawing tools. `scale` 1 is the drawing's own size. */
-  | { kind: 'drawing'; contents: Contents; scale?: number; look?: FigureLook; float?: Float; alt?: string; /** Turned and flipped, as a picture (Arrange > Rotate). */ rot?: number; flipH?: boolean; flipV?: boolean }
+  | { kind: 'drawing'; contents: Contents; scale?: number; look?: FigureLook; float?: Float; alt?: string; /** A figure: a set area of the page (in the drawing's points) its structures are drawn in, sized by it rather than by them, so drawing inside it never moves the text round it. Never drawn when printed. */ frame?: FigureFrame; /** Turned and flipped, as a picture (Arrange > Rotate). */ rot?: number; flipH?: boolean; flipV?: boolean; /** A Chem4Word structure: its id in the file's CML part, and a fingerprint of the drawing as read (changed = the CML is written afresh). */ c4w?: { guid: string; sig: string } }
   /**
    * A picture: its own size is w × h points (`px` its pixels); `scale` 1 is that size. A chart
    * (Insert > Chart) is a picture with its chart and data: drawn from them, saved as Word's chart.
@@ -339,7 +356,7 @@ export type DocObject =
    * A text box: text of its own (typed into in place), `w` wide; it grows to fit its text, and is
    * at least `h` tall when that is set. Always placed on the page. `fill` is its background.
    */
-  | { kind: 'textbox'; runs: TextRun[]; paras?: ParaStyle[]; w: number; h?: number; fill?: string; look?: FigureLook; float: Float }
+  | { kind: 'textbox'; runs: TextRun[]; paras?: ParaStyle[]; w: number; h?: number; fill?: string; look?: FigureLook; float: Float; /** A shape (Insert > Shapes): the library's outline (design/geo.ts) instead of a plain box, `w` × `h` (it doesn't grow down), its text in the middle; a click picks it and drags it, typing or a double-click goes into its text, as in PowerPoint. */ geo?: string }
   /**
    * A table in the text, typed into in place as in Word: its own paragraph, cells of text that
    * can hold structures and pictures (objects of the document, like those in the text), and
@@ -353,7 +370,7 @@ export type DocObject =
   /** A citation of references in the document's list (by their ids): numbers in order of first citation. */
   | { kind: 'cite'; refs: string[]; live?: CiteLive }
   /** The bibliography: the references cited, in citation order, in the citation style (a block of its own). */
-  | { kind: 'bib' }
+  | { kind: 'bib'; /** Kept by Zotero, citing live through it: its field's code and entries. */ live?: BibLive }
   /** A table of contents: the headings down to `levels` (1 to 3) deep with their page numbers (a block of its own). */
   | { kind: 'toc'; levels: number }
   /**
@@ -439,6 +456,13 @@ export interface DocText extends RichText {
   protect?: Protection;
   /** Design > Document Formatting: the theme, style set and paragraph spacing chosen (by name; see themes.ts). */
   design?: DocDesign;
+  /**
+   * Other programs' content controls (Chem4Word's structures, a template's fields), by id: the
+   * runs and paragraphs inside carry the id (`cc`), and the control goes back round them on saving.
+   */
+  controls?: Record<string, ContentControl>;
+  /** Other programs' data in the file that nothing here uses (custom XML, custom properties, add-in settings), saved back as it was. */
+  kept?: KeptParts;
 }
 
 /** What Design has set: names of the choices made (kept with the document, so the galleries show them). */
@@ -838,9 +862,10 @@ export function objectRun(id: number, style: rt.RunStyle): TextRun {
   return { ...style, obj: id, text: OBJECT_CHAR };
 }
 
-/** The objects inside an object (structures in a table's cells), in order. */
+/** The objects inside an object (structures in a table's cells, citations in a footnote), in order. */
 export function innerObjects(o: DocObject | undefined): number[] {
   if (o?.kind === 'table') return o.table.rows.flatMap((row) => row.flatMap((c) => objectsInText(c.runs)));
+  if (o?.kind === 'note') return objectsInText(o.runs);
   return [];
 }
 
@@ -909,6 +934,8 @@ export function usedObjects(t: Pick<DocText, 'runs' | 'objects'> & Partial<Pick<
   const used = new Set(objectsInText(flatRuns(t)));
   // with those in the headers and footers
   if (t.hf) for (const id of hfObjectIds(allHf({ hf: t.hf, paras: t.paras }), t.objects)) used.add(id);
+  // and those inside them (citations in footnotes)
+  for (const id of [...used]) for (const x of innerObjects(t.objects[id])) used.add(x);
   return used;
 }
 
@@ -984,7 +1011,8 @@ export function fieldTexts(t: Pick<DocText, 'runs' | 'objects'> & Partial<Pick<D
       shown.set(id, labelText(text, target, (i) => objectAtChar(t.runs, i), shown).trim());
     }
   }
-  if (order.some((id) => t.objects[id]?.kind === 'cite')) for (const [id, s] of citationTexts(t)) shown.set(id, s);
+  // (citations in footnotes too, as note styles put them)
+  if (Object.values(t.objects).some((o) => o.kind === 'cite')) for (const [id, s] of citationTexts(t)) shown.set(id, s);
   if (order.some((id) => t.objects[id]?.kind === 'field')) {
     const at = objectParas({ runs: top, objects: t.objects });
     const doc = { runs: top, paras: t.paras ?? [], props: t.props };

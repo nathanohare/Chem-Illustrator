@@ -9,6 +9,7 @@
 // lines, arrows and tables. What has no place here yet (charts, rotated things) is noted in
 // warnings, never refused.
 
+import { remapFrames, remapStep } from './remap-refs';
 import { fromDataUrl } from '../render/images';
 import type { PinnedComment } from '../document/comments';
 import { COMMENT_REL, readCommentAuthors, readLegacyComments, readModernComments } from './pptx-comments';
@@ -19,6 +20,7 @@ import { linesFromBorders, type Borders } from './cdxml-table';
 import { turnAbout, normDegrees, DEG, type Vec, type Rect } from '../geom';
 import { POINTS, rotation, snapshot, transform } from '../editor/arrange';
 import { PackageReader, NS, REL, kids, kid, rAttr, fromEmu } from './ooxml';
+import { readKeptParts, type KeptParts } from './kept-parts';
 import { linkFromTarget, officeTarget, slideOfLink } from '../links';
 import { readCdxml } from './cdxml';
 import { drawingInEmf } from '../render/emf';
@@ -78,6 +80,8 @@ export interface PptxRead {
   settings?: DeckSettings;
   /** Canvas slides whose keyframes' slides were changed outside (in PowerPoint) since they were saved here. */
   canvasEdited?: number;
+  /** Other programs' data in the file (custom XML, custom properties, add-ins' settings), to save back. */
+  kept?: KeptParts;
 }
 
 /** A plain box or oval that needs a design shape to keep its look: a picture or gradient fill, or effects past a shadow. */
@@ -367,10 +371,12 @@ class Reader {
     // PowerPoint 2013 and later keep the guides in presentation.xml (moved there, they are only there)
     const guides = readSlideGuides(root);
     if (guides) view = { ...(view ?? { showGuides: false, snapToGrid: true, grid: 7.2 }), guides };
+    const kept = readKeptParts(this.r, { main });
     const settings: DeckSettings = { ...(show ? { show } : {}), ...(customShows.length ? { customShows } : {}), ...(view ? { view } : {}), ...(this.refs?.list.length ? { refs: this.refs } : {}) };
     return {
       size: this.size, master: this.masterOut, slides, warnings: [...this.warnings], design: this.design, ...(sections ? { sections } : {}), ...(Object.keys(settings).length ? { settings } : {}),
       ...(joined.edited ? { canvasEdited: joined.edited } : {}),
+      ...(kept ? { kept } : {}),
     };
   }
 
@@ -578,6 +584,8 @@ class Reader {
     const canvas = readCanvasTag(tags[TAG.canvas]);
     // its keyframe moves (which PowerPoint can't hold) back among its animations
     if (canvas) anims = withCameraMoves(anims, tags[TAG.canvas]);
+    // Turn in 3-D (written for PowerPoint as a Spin of next to nothing): its views back
+    if (tags[TAG.turn3d]) anims = withTurns(anims, tags[TAG.turn3d]);
     // the references its lines show (the lines themselves are made again from them)
     let refs: SlideRefs = {};
     if (tags[TAG.slideRefs]) {
@@ -976,7 +984,7 @@ class Reader {
   private pictureFx(from: string, pic: Element, img: { src: string; px: { w: number; h: number }; mime: string }, tag: string | undefined, origTag?: string): PictureFx | undefined {
     const blip = kid(pic, 'blipFill', 'blip');
     const got = readPictureFx(blip, kid(pic, 'spPr'));
-    if (got.dropped) this.warnings.add('Some picture effects (artistic effects, saturation, colour temperature) were left off.');
+    if (got.dropped) this.warnings.add('Some picture effects (artistic effects, saturation, color temperature) were left off.');
     // ours: the original kept beside the picture, named by the tag with what was worked in
     let t: { tol?: unknown; orig?: unknown; fx?: { bg?: unknown; sharpen?: unknown } } = {};
     try { if (tag) t = JSON.parse(tag) ?? {}; } catch { /* not ours */ }
@@ -1461,7 +1469,7 @@ class Reader {
     const def = kids(this.r.xml(this.r.relOfType(this.r.relOfType('', REL.officeDocument) ?? '', REL.tableStyles) ?? '')?.documentElement ?? null, 'tblStyle')
       .find((e) => e.getAttribute('styleId') === id);
     if (!def) {
-      this.warnings.add('A table\'s PowerPoint style wasn\'t in the file, so its colours were left out (pick a style in the Style panel).');
+      this.warnings.add('A table\'s PowerPoint style wasn\'t in the file, so its colors were left out (pick a style in the Style panel).');
       return { table: t };
     }
     const n = t.rows.length, m = t.cols.length;
@@ -1743,7 +1751,7 @@ class Reader {
   }
 
   /** How a shape is filled and outlined (its own settings, else its theme style). */
-  private look(sp: Element, spPr: Element | null): { fill: string | null; line: string | null; width: number; dashed: boolean; shaded: boolean } {
+  private look(sp: Element, spPr: Element | null): { fill: string | null; line: string | null; width: number; dashed: boolean; dotted?: boolean; shaded: boolean } {
     const style = kid(sp, 'style');
     let fill: string | null = null;
     let shaded = false;
@@ -1755,7 +1763,7 @@ class Reader {
       shaded = true;
     } else if (kid(spPr, 'pattFill')) {
       fill = this.color(kid(spPr, 'pattFill', 'fgClr'));
-      this.warnings.add('Patterned fills came in as plain colours.');
+      this.warnings.add('Patterned fills came in as plain colors.');
     } else if (!kid(spPr, 'noFill') && !kid(spPr, 'blipFill')) {
       const ref = kid(style, 'fillRef');
       if (ref && ref.getAttribute('idx') !== '0') fill = this.color(ref);
@@ -1769,7 +1777,7 @@ class Reader {
     }
     const w = ln?.getAttribute('w');
     const dash = kid(ln, 'prstDash')?.getAttribute('val');
-    return { fill, line, width: w ? fromEmu(w) : 0.75, dashed: !!dash && dash !== 'solid', shaded };
+    return { fill, line, width: w ? fromEmu(w) : 0.75, dashed: !!dash && dash !== 'solid', dotted: dash === 'sysDot' || dash === 'dot', shaded };
   }
 
   /** A line or connector: an arrow when it has a head, else a line. */
@@ -1812,6 +1820,7 @@ class Reader {
     const sh: Omit<Shape, 'id'> = { kind: 'line', x1: a.x, y1: a.y, x2: b.x, y2: b.y };
     if (look.line.toLowerCase() !== '#000000') sh.color = look.line;
     if (look.dashed) sh.dashed = true;
+    if (look.dotted) sh.dotted = true;
     if (look.width > 1.75 * doc.style.lineWidth) sh.bold = true;
     doc.addShape(sh);
   }
@@ -1907,11 +1916,26 @@ class Reader {
         if (strike && strike !== 'noStrike') r.strike = true;
         const spc = Number(get('spc') ?? 0);
         if (spc) r.spacing = spc / 100;
+        if (get('kern') === '0') r.noKern = true;
         const bl = Number(get('baseline') ?? 0);
         if (bl < 0) r.sub = true;
         else if (bl > 0) r.sup = true;
         const fillEl = inheritEl(rPr, chain, lvl, ['solidFill'], true);
         r.color = this.color(fillEl) ?? '#000000';
+        // the Font box's text effects: no fill, a see-through fill, an outline, a shadow
+        if (rPr) {
+          if (kid(rPr, 'noFill')) r.noFill = true;
+          const a = kid(rPr, 'solidFill')?.querySelector('alpha')?.getAttribute('val');
+          if (a && Number(a) < 100000) r.transparency = Math.round((1 - Number(a) / 100000) * 100) / 100;
+          const ln = kid(rPr, 'ln');
+          const lnCol = ln && !kid(ln, 'noFill') ? this.color(kid(ln, 'solidFill')) : undefined;
+          if (lnCol) {
+            r.outline = lnCol;
+            const w = Number(ln!.getAttribute('w') ?? 0);
+            if (w && Math.abs(w / 12700 - 0.75) > 0.01) r.outlineW = Math.round((w / 12700) * 100) / 100;
+          }
+          if (kid(rPr, 'effectLst')?.querySelector('outerShdw')) r.shadow = true;
+        }
         r.font = this.font(inheritEl(rPr, chain, lvl, ['latin'], true)?.getAttribute('typeface') ?? null, title);
         const link = this.hlinkOf(kid(rPr, 'hlinkClick'));
         if (link) {
@@ -2043,20 +2067,24 @@ export function mergeDrawing(doc: Doc, src: Doc, map: (p: Vec) => Vec): void {
     const { id: _id, ...rest } = structuredClone(b);
     doc.addBond(a1, a2, b.order, b.display, { ...rest, a1, a2 });
   }
+  const caps = new Map<number, number>(), shapes = new Map<number, number>(), arrows = new Map<number, number>();
+  const maps = { atoms: ids, captions: caps, shapes, arrows };
   for (const c of src.captions.values()) {
-    const { id: _id, ...rest } = structuredClone(c);
+    const { id, ...rest } = structuredClone(c);
     const p = map(c);
-    doc.addCaption({ ...rest, x: p.x, y: p.y });
-  }
-  for (const r of src.arrows.values()) {
-    const { id: _id, ...rest } = structuredClone(r);
-    doc.addArrow({ ...rest, tail: map(r.tail), head: map(r.head) });
+    caps.set(id, doc.addCaption({ ...rest, x: p.x, y: p.y }).id);
   }
   for (const s of src.shapes.values()) {
-    const { id: _id, ...rest } = structuredClone(s);
+    const { id, ...rest } = structuredClone(s);
     const a = map({ x: s.x1, y: s.y1 }), b = map({ x: s.x2, y: s.y2 });
-    doc.addShape({ ...rest, x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+    shapes.set(id, doc.addShape({ ...rest, x1: a.x, y1: a.y, x2: b.x, y2: b.y }).id);
   }
+  for (const r of src.arrows.values()) {
+    const { id, ...rest } = structuredClone(r);
+    if (rest.step) rest.step = remapStep(rest.step, maps);
+    arrows.set(id, doc.addArrow({ ...rest, tail: map(r.tail), head: map(r.head) }).id);
+  }
+  remapFrames(doc, maps);
 }
 
 /** Read a PowerPoint file. Throws only when the file is not a PowerPoint file at all. */
@@ -2181,4 +2209,18 @@ function readSections(root: Element, sldIds: string[]): SectionCount[] | undefin
     out.push({ name: sec.getAttribute('name') ?? 'Untitled Section', count: ids.length });
   }
   return out.length ? out : undefined;
+}
+
+/** Turn in 3-D animations back from the Spins of next to nothing PowerPoint was given, with their views from the tag. */
+export function withTurns(anims: Anim[], tag: string): Anim[] {
+  let views: unknown;
+  try { views = JSON.parse(tag); } catch { return anims; }
+  if (!Array.isArray(views)) return anims;
+  let k = 0;
+  return anims.map((a) => {
+    if (a.effect !== 'spin' || a.turn !== 0 || k >= views.length) return a;
+    const v = views[k++];
+    const { turn: _, ...rest } = a;
+    return { ...rest, effect: 'turn3d', ...(Array.isArray(v) && v.length === 9 && v.every((x) => typeof x === 'number') ? { view: v as number[] } : {}) };
+  });
 }

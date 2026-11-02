@@ -1,4 +1,4 @@
-// Dark page: the page shown dark on screen only (View > Dark Page, or the eye button). Files,
+// Reading Mode (once Dark Page): the page shown dark on screen only (View > Reading Mode, or the eye button). Files,
 // printing, copying and exports are not touched: the page canvases are drawn as always and a
 // colour filter is laid over them. White paper shows as the palette's paper colour, black ink as
 // its ink colour, and colours keep their hue with their lightness turned round, so a pale ring

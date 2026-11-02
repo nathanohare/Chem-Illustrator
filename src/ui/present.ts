@@ -3,6 +3,9 @@
 // Enter, Page Down or N. Back: ←, ↑, Backspace, Page Up or P.
 // Home and End go to the first and last slide; a number then Enter goes to that slide.
 // B (or .) makes the screen black and W (or ,) white until a key is pressed. Esc ends the show.
+// On a canvas slide, drag to look round the canvas and scroll (or + and −) to zoom; Esc, a click or
+// Next glides back to where the show was. G shows every slide to pick from, M the canvas's map;
+// the controls in the top right corner do the same.
 // The laser pointer, pen and highlighter are on the bar at the bottom left (show-ink.ts); links,
 // action buttons, zooms, videos and sounds take clicks on them (show-actions.ts).
 //
@@ -22,6 +25,7 @@ import { ShowInk, type Stroke } from './show-ink';
 import { ask } from './ask';
 import { clockText } from '../deck/show-link';
 import { Recorder } from '../deck/narration';
+import { paintSlide } from '../deck/slide-view';
 
 const NOTES_KEY = 'chem-illustrator.rehearse-notes';
 
@@ -77,6 +81,13 @@ export class Presenter {
 
   private actions: ShowActions | null = null;
   private ink: ShowInk | null = null;
+  /** The controls in the bottom right corner (zoom, back, map, slides), and the grid of slides. */
+  private corner: { el: HTMLDivElement; zoom: HTMLElement[]; back: HTMLButtonElement; map: HTMLButtonElement } | null = null;
+  private grid: HTMLDivElement | null = null;
+  /** A drag looking round a canvas slide: where the pointer was, and whether it has moved yet. */
+  private drag: { x: number; y: number; moved: boolean } | null = null;
+  /** The click that ends a drag is not a click on the slide. */
+  private dragged = false;
 
   /** Called when the show ends (with the slide it ended on, to edit next). */
   onEnd: (index: number) => void = () => {};
@@ -133,19 +144,55 @@ export class Presenter {
     this.player = player;
     const actions = (this.actions = new ShowActions(deck, player, canvas, {
       go: (i) => this.go(i, false), next: () => this.next(), prev: () => this.prev(), end: () => this.stop(), open: (link) => void followLink(link),
+      grid: () => this.openGrid(), look: () => this.updateCorner(),
     }));
     const ink = (this.ink = new ShowInk(root, canvas, { slide: () => player.i, place: () => player.slidePlace }));
-    player.onChange = () => { actions.noteSlide(player.i); ink.paint(); this.slideShown(player.i); this.updateBar(); };
+    player.onChange = () => { actions.noteSlide(player.i); ink.paint(); this.slideShown(player.i); this.updateBar(); this.updateCorner(); };
     // a click on a link, action button, zoom, video or sound acts on it, as in PowerPoint's slide show; anywhere else goes on (not at a kiosk)
     root.addEventListener('click', (e) => {
-      if ((e.target as HTMLElement).closest('.show-bar, .rehearse-bar, .rehearse-notes')) return;
+      if ((e.target as HTMLElement).closest('.show-bar, .rehearse-bar, .rehearse-notes, .show-corner, .show-grid')) return;
+      if (this.dragged) { this.dragged = false; return; }
       if (!this.clickThing(e) && !opts.kiosk) this.next();
     });
+    // on a canvas slide, a drag looks round the canvas
+    root.addEventListener('pointerdown', (e) => {
+      this.dragged = false;
+      if (opts.kiosk || e.button !== 0 || !this.player?.canLookRound || this.grid) return;
+      if ((e.target as HTMLElement).closest('.show-bar, .rehearse-bar, .rehearse-notes, .show-corner, .show-tools')) return;
+      if (this.ink && this.ink.tool !== 'arrow' && this.ink.tool !== 'laser') return;
+      this.drag = { x: e.clientX, y: e.clientY, moved: false };
+    });
+    root.addEventListener('pointermove', (e) => {
+      const d = this.drag;
+      if (!d || !(e.buttons & 1)) return;
+      const dx = e.clientX - d.x, dy = e.clientY - d.y;
+      if (!d.moved && Math.hypot(dx, dy) < 5) return;
+      if (!d.moved) { d.moved = true; root.classList.add('panning'); }
+      d.x = e.clientX;
+      d.y = e.clientY;
+      this.player?.panBy(dx, dy);
+    });
+    const endDrag = () => { if (this.drag?.moved) this.dragged = true; this.drag = null; root.classList.remove('panning'); };
+    root.addEventListener('pointerup', endDrag);
+    root.addEventListener('pointercancel', endDrag);
     root.addEventListener('pointermove', (e) => { if (this.canvas) this.canvas.style.cursor = this.thingUnder(e) ? 'pointer' : ''; });
-    root.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!opts.kiosk) this.prev(); });
-    root.addEventListener('wheel', (e) => { if (opts.kiosk) return; if (e.deltaY > 0) this.next(); else if (e.deltaY < 0) this.prev(); }, { passive: true });
+    // a right-click opens the show's menu (as in PowerPoint): look round freely, every slide, the map…
+    root.addEventListener('contextmenu', (e) => { e.preventDefault(); if (!opts.kiosk) this.showMenu(e.clientX, e.clientY); });
+    root.addEventListener('wheel', (e) => {
+      if (opts.kiosk || this.grid) return;
+      // a canvas slide zooms where the pointer is; any other slide goes on or back
+      if (this.player?.canLookRound) {
+        e.preventDefault();
+        const p = this.point(e);
+        const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+        this.player.zoomAt(Math.exp(-dy * 0.0015), p.x, p.y);
+        return;
+      }
+      if (e.deltaY > 0) this.next(); else if (e.deltaY < 0) this.prev();
+    }, { passive: false });
     root.addEventListener('pointermove', () => this.showCursor());
     if (opts.windowed) this.addShowBar(root);
+    if (!opts.kiosk) this.addCorner(root);
     if (opts.rehearse) await this.startRehearsal(root, !!opts.record);
     if (this.root !== root) return;
     window.addEventListener('keydown', this.keyHandler, true);
@@ -225,7 +272,7 @@ export class Presenter {
     const next = b('Next ▶', 'Go on to the next animation or slide (→ or a click)', () => this.next());
     const pause = b('❚❚ Pause', 'Stop the clock (and the recording) for now', () => this.pauseRehearsal());
     const repeat = b('↺ Repeat', 'Start this slide\'s time again (and its recording)', () => this.repeatSlide());
-    const notesBtn = b('Notes', 'Show your speaker notes for each slide under it while you practise or record (only you see them here)', () => this.toggleNotes());
+    const notesBtn = b('Notes', 'Show your speaker notes for each slide under it while you practice or record (only you see them here)', () => this.toggleNotes());
     bar.append(label, next, pause, slide, repeat, total, notesBtn);
     const notes = document.createElement('div');
     notes.className = 'rehearse-notes';
@@ -373,7 +420,7 @@ export class Presenter {
     const lines = rehearsalLines(r.times, r.recordings, this.deck?.slides.length ?? 0);
     const recorded = r.recordings.size > 0;
     const got = await ask(r.rec ? 'Keep Recording?' : 'Keep Timings?', recorded ? [
-      { name: 'narration', label: 'Keep the narration too', type: 'checkbox', value: 'true', help: 'Untick to keep only the times (the slides keep any narration they had)' },
+      { name: 'narration', label: 'Keep the narration too', type: 'checkbox', value: 'true', help: 'Clear to keep only the times (the slides keep any narration they had)' },
     ] : [], {
       ok: 'Keep',
       note: `This run took ${clockText(r.before)}. Keep each slide's time${recorded ? ' and its narration' : ''}, so the show goes on by itself when it is played? Slides not shown keep what they had. (${recorded ? 'Narration goes on each slide as a sound that plays as it comes in. ' : ''}Set Up Show can turn timings off.)`,
@@ -383,10 +430,14 @@ export class Presenter {
   }
 
   stop(): void {
+    this.closeMenu();
     if (!this.root) return;
     const rehearsing = !!this.rehearse;
     if (rehearsing) this.closeSlide();
     this.bar = null;
+    this.corner = null;
+    this.grid = null;
+    this.drag = null;
     const ink = this.ink?.any ? this.ink.all() : null;
     this.ink?.remove();
     this.ink = null;
@@ -474,12 +525,14 @@ export class Presenter {
     // every key belongs to the show while it runs
     e.preventDefault();
     e.stopPropagation();
+    if (this.grid) { this.gridKey(e); return; }
+    if (this.menu) { this.menuKey(e); return; }
     if (this.ink?.key(e)) return;
     const k = e.key;
     if (/^[0-9]$/.test(k)) { this.typed += k; return; }
     if (k === 'Enter' && this.typed) { this.go(Number(this.typed) - 1); this.typed = ''; return; }
     this.typed = '';
-    if (k === 'Escape') this.stop();
+    if (k === 'Escape') { if (!this.player?.lookBack()) this.stop(); }
     // at a kiosk only Esc (and clicks on links and buttons) do anything
     else if (this.opts.kiosk) return;
     else if (['ArrowRight', 'ArrowDown', ' ', 'Enter', 'PageDown', 'n', 'N'].includes(k)) this.next();
@@ -488,6 +541,207 @@ export class Presenter {
     else if (k === 'End') this.go(this.player!.last);
     else if (k === 'b' || k === 'B' || k === '.') { this.blank = this.blank === 'black' ? null : 'black'; this.paint(); }
     else if (k === 'w' || k === 'W' || k === ',') { this.blank = this.blank === 'white' ? null : 'white'; this.paint(); }
+    else if (k === 'g' || k === 'G') this.openGrid();
+    else if (k === 'm' || k === 'M') this.toggleMap();
+    else if (k === 'l' || k === 'L') this.lookRound();
+    else if (k === '+' || k === '=') this.player?.zoomAt(1.25);
+    else if (k === '-' || k === '_') this.player?.zoomAt(0.8);
+  }
+
+  // ---------------------------------------------------------------- looking round, and every slide
+
+  /** Zoom, back to the show, the canvas's map and every slide, in the top right corner (they fade when the mouse is still). */
+  private addCorner(root: HTMLDivElement): void {
+    const el = document.createElement('div');
+    el.className = 'show-corner';
+    el.setAttribute('role', 'toolbar');
+    el.setAttribute('aria-label', 'Show navigation');
+    const btn = (label: string, title: string, f: () => void) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = label;
+      b.title = title;
+      b.setAttribute('aria-label', title);
+      b.addEventListener('click', (e) => { e.stopPropagation(); f(); root.focus(); });
+      el.append(b);
+      return b;
+    };
+    const out = btn('−', 'Zoom out (−)', () => this.player?.zoomAt(0.8));
+    const into = btn('+', 'Zoom in (+, or scroll)', () => this.player?.zoomAt(1.25));
+    const back = btn('⤺', 'Back to where the show was (Esc)', () => this.player?.lookBack());
+    const map = btn('Map', 'The canvas\'s map in the corner (M)', () => this.toggleMap());
+    btn('▦', 'Every slide, to pick one (G)', () => this.openGrid());
+    root.append(el);
+    this.corner = { el, zoom: [out, into, map], back, map };
+    this.updateCorner();
+  }
+
+  private updateCorner(): void {
+    const c = this.corner, p = this.player;
+    if (!c || !p) return;
+    const canvas = p.canLookRound;
+    for (const b of c.zoom) b.hidden = !canvas;
+    c.back.hidden = !p.lookingRound;
+    c.map.setAttribute('aria-pressed', String(p.mapOn));
+  }
+
+  private toggleMap(): void {
+    const p = this.player;
+    if (!p) return;
+    p.mapOn = !p.mapOn;
+    p.paint();
+    this.updateCorner();
+  }
+
+  /** Every slide in the show as a picture to pick, over the show (G); Esc or G again goes back. */
+  private openGrid(): void {
+    const root = this.root, d = this.deck, p = this.player;
+    if (!root || !d || !p || this.grid) return;
+    const grid = document.createElement('div');
+    grid.className = 'show-grid';
+    grid.setAttribute('role', 'dialog');
+    grid.setAttribute('aria-label', 'Slides');
+    grid.addEventListener('click', (e) => { e.stopPropagation(); if (e.target === grid) this.closeGrid(); });
+    const order = p.order ?? d.slides.map((_, i) => i).filter((i) => !d.slides[i].hidden);
+    const W = 220, H = Math.round((W * d.size.h) / d.size.w);
+    const todo: [HTMLCanvasElement, number][] = [];
+    for (const [n, i] of order.entries()) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'show-grid-slide';
+      if (i === p.i) b.classList.add('now');
+      b.setAttribute('aria-label', `Slide ${n + 1}`);
+      const c = document.createElement('canvas');
+      c.style.width = `${W}px`;
+      c.style.height = `${H}px`;
+      const num = document.createElement('span');
+      num.textContent = String(n + 1);
+      b.append(c, num);
+      // a Canvas slide picked opens to look round it freely (Esc goes back to where its show starts)
+      b.addEventListener('click', (e) => { e.stopPropagation(); this.closeGrid(); this.go(i); this.lookRound(true); });
+      grid.append(b);
+      todo.push([c, i]);
+    }
+    root.append(grid);
+    this.grid = grid;
+    grid.querySelector<HTMLButtonElement>('.now')?.focus();
+    grid.querySelector('.now')?.scrollIntoView?.({ block: 'center' });
+    // the pictures a few at a time, so the grid comes up at once
+    const paintSome = () => {
+      if (this.grid !== grid) return;
+      const t0 = performance.now();
+      while (todo.length && performance.now() - t0 < 30) {
+        const [c, i] = todo.shift()!;
+        try { paintSlide(c, W, H, window.devicePixelRatio || 1, d.page(i), d.docOf(i), '#fff'); } catch { /* left blank */ }
+      }
+      if (todo.length) setTimeout(paintSome, 0);
+    };
+    paintSome();
+  }
+
+  /** Look round the Canvas slide showing freely (L, the show's menu, an action button). */
+  private lookRound(quiet = false): void {
+    if (this.player?.startLookRound()) this.updateCorner();
+    else if (!quiet) this.flashNote('Looking around works on Canvas slides.');
+  }
+
+  /** A short note over the show, fading after a moment. */
+  private flashNote(text: string): void {
+    const root = this.root;
+    if (!root) return;
+    root.querySelector('.show-note')?.remove();
+    const n = document.createElement('div');
+    n.className = 'show-note';
+    n.textContent = text;
+    root.append(n);
+    setTimeout(() => n.remove(), 2200);
+  }
+
+  private menu: HTMLDivElement | null = null;
+
+  /** The show's right-click menu. */
+  private showMenu(x: number, y: number): void {
+    const root = this.root, p = this.player;
+    if (!root || !p) return;
+    this.closeMenu();
+    const m = document.createElement('div');
+    m.className = 'show-menu';
+    m.setAttribute('role', 'menu');
+    const item = (label: string, key: string, run: () => void, disabled = false) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.setAttribute('role', 'menuitem');
+      b.disabled = disabled;
+      b.innerHTML = `<span></span><kbd></kbd>`;
+      b.firstElementChild!.textContent = label;
+      b.lastElementChild!.textContent = key;
+      b.addEventListener('click', (e) => { e.stopPropagation(); this.closeMenu(); run(); root.focus(); });
+      m.append(b);
+    };
+    const line = () => m.append(Object.assign(document.createElement('hr'), { role: 'separator' }));
+    item('Next', 'N', () => this.next());
+    item('Previous', 'P', () => this.prev());
+    item('All Slides…', 'G', () => this.openGrid());
+    line();
+    if (p.lookingRound) item('Back to the Show', 'Esc', () => { p.lookBack(); });
+    else item('Look Around Freely', 'L', () => this.lookRound(), !p.canLookRound);
+    item(p.mapOn ? 'Hide the Map' : 'Show the Map', 'M', () => this.toggleMap(), !p.canLookRound);
+    line();
+    item(this.blank === 'black' ? 'Back from Black' : 'Black Screen', 'B', () => { this.blank = this.blank === 'black' ? null : 'black'; this.paint(); });
+    item('End Show', 'Esc', () => this.stop());
+    m.addEventListener('click', (e) => e.stopPropagation());
+    m.addEventListener('pointerdown', (e) => e.stopPropagation());
+    root.append(m);
+    const r = root.getBoundingClientRect();
+    m.style.left = `${Math.max(4, Math.min(x - r.left, r.width - m.offsetWidth - 4))}px`;
+    m.style.top = `${Math.max(4, Math.min(y - r.top, r.height - m.offsetHeight - 4))}px`;
+    this.menu = m;
+    m.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+    const away = (e: Event) => { if (!m.contains(e.target as Node)) { e.stopPropagation(); this.closeMenu(); this.dragged = true; } };
+    setTimeout(() => { if (this.menu === m) { root.addEventListener('pointerdown', away, true); this.menuAway = () => root.removeEventListener('pointerdown', away, true); } });
+  }
+
+  private menuAway: (() => void) | null = null;
+
+  private closeMenu(): void {
+    this.menu?.remove();
+    this.menu = null;
+    this.menuAway?.();
+    this.menuAway = null;
+  }
+
+  private menuKey(e: KeyboardEvent): void {
+    const m = this.menu!;
+    const items = [...m.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')];
+    const i = items.indexOf(document.activeElement as HTMLButtonElement);
+    if (e.key === 'Escape') { this.closeMenu(); this.root?.focus(); }
+    else if (e.key === 'ArrowDown') items[(i + 1) % items.length]?.focus();
+    else if (e.key === 'ArrowUp') items[(i - 1 + items.length) % items.length]?.focus();
+    else if (e.key === 'Enter' || e.key === ' ') items[i]?.click();
+  }
+
+  private closeGrid(): void {
+    this.grid?.remove();
+    this.grid = null;
+    this.root?.focus();
+  }
+
+  /** Keys while the grid of slides is up: arrows move between slides, Enter picks, Esc or G goes back. */
+  private gridKey(e: KeyboardEvent): void {
+    const grid = this.grid!;
+    const items = [...grid.querySelectorAll<HTMLButtonElement>('.show-grid-slide')];
+    const at = Math.max(0, items.indexOf(document.activeElement as HTMLButtonElement));
+    const cols = Math.max(1, items.filter((b) => b.offsetTop === items[0].offsetTop).length);
+    const k = e.key;
+    const to = (i: number) => items[Math.max(0, Math.min(items.length - 1, i))]?.focus();
+    if (k === 'Escape' || k === 'g' || k === 'G') this.closeGrid();
+    else if (k === 'Enter' || k === ' ') items[at]?.click();
+    else if (k === 'ArrowRight') to(at + 1);
+    else if (k === 'ArrowLeft') to(at - 1);
+    else if (k === 'ArrowDown') to(at + cols);
+    else if (k === 'ArrowUp') to(at - cols);
+    else if (k === 'Home') to(0);
+    else if (k === 'End') to(items.length - 1);
   }
 
   private size(): void {
@@ -520,6 +774,6 @@ export class Presenter {
 
 /** At the end of a show with ink: keep it on the slides, or throw it away (as PowerPoint asks). */
 export async function askKeepInk(): Promise<boolean> {
-  const got = await ask('Keep Ink?', [], { ok: 'Keep', note: 'Do you want to keep your ink annotations? Kept, they go on the slides as shapes you can move, recolour or delete (and they go to PowerPoint). Cancel discards them.' });
+  const got = await ask('Keep Ink?', [], { ok: 'Keep', note: 'Do you want to keep your ink annotations? Kept, they go on the slides as shapes you can move, recolor or delete (and they go to PowerPoint). Cancel discards them.' });
   return !!got;
 }

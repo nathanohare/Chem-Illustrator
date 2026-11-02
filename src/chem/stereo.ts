@@ -11,7 +11,7 @@ import { axialTags } from './axial';
 import { Vec, Rect, norm, sub, len, lerp, distToSegment } from '../geom';
 import { labelBonds, labelSpec, layoutLabel, labelLook } from './labels';
 import { doubleBondGap, wedgeWidth } from '../style';
-import { NumberPlace, numberSlots, numberBox, numberSize } from '../render/atom-marks';
+import { NumberPlace, numberSlots, numberBox, numberSize, isMapNumber, mapBox, mapPad } from '../render/atom-marks';
 
 export type StereoSense = 'up' | 'down' | 'either';
 
@@ -452,8 +452,13 @@ export class StereoPlacer {
     const obs = this.obstacles([a.id], { kind: 2, id: a.id, preview: false }, others, true);
     const rings = this.ringsAt(a);
     let best: { p: NumberPlace; score: number } | null = null, fallback: { p: NumberPlace; room: number } | null = null;
-    for (const slot of numberSlots(a, L, w, own)) {
-      const box = numberBox(slot.p, w);
+    // a map number's box: the slots are worked out for the box, moved out by its padding
+    const boxed = isMapNumber(a), pad = boxed ? mapPad(numberSize(L)) : 0;
+    const slots = numberSlots(a, L, w + 2 * pad, own).map((s) => boxed
+      ? { dir: s.dir, p: { ...s.p, x: s.p.x + pad + 0.5 * pad * Math.cos((s.dir * Math.PI) / 180), y: s.p.y - 0.5 * pad * Math.sin((s.dir * Math.PI) / 180) } }
+      : s);
+    for (const slot of slots) {
+      const box = boxed ? mapBox(slot.p, w) : numberBox(slot.p, w);
       const room = this.room(box, obs);
       if (!fallback || room > fallback.room + 1e-9) fallback = { p: slot.p, room };
       if (room < -1e-6) continue;
@@ -656,7 +661,7 @@ export class StereoPlacer {
     if (!a.numberLabel && !auto) return null;
     if (!a.numberLabel && this.firstNumber.has(a.id)) return this.firstNumber.get(a.id)!;
     const p = a.numberLabel || this.depth < MAX_DEPTH ? this.nested(() => this.number(a)) : this.spotNumber(a, false);
-    const box = numberBox(p, this.measure(a.atomNumber, p.size));
+    const box = (isMapNumber(a) ? mapBox : numberBox)(p, this.measure(a.atomNumber, p.size));
     if (!a.numberLabel) this.firstNumber.set(a.id, box);
     return box;
   }

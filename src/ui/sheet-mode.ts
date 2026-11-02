@@ -22,9 +22,11 @@ import { parseDelimited, toDelimited } from '../sheet/csv';
 import { SheetChem } from '../sheet/sheet-chem';
 import { isBlankDrawing } from '../sheet/structure-doc';
 import { StructurePictures } from './structure-pictures';
-import { askProperties, PropertyChoice } from './property-dialog';
+import { askProperties, PropertyChoice, type HammettChoice, type HammettColumn, type HammettSetup, type PropertyAnswer } from './property-dialog';
+import { attachRefs, refAtoms, refLabel, refMarks } from '../sheet/hammett-refs';
 import { ask } from './ask';
 import { SheetFormatting } from './sheet-format-ui';
+import { ChartGallery } from './chart-gallery';
 import { SheetCharts } from './sheet-chart-ui';
 import { DASH_CHART_KINDS } from './dashboard-ui';
 import { SheetNotes } from './sheet-notes-ui';
@@ -52,13 +54,20 @@ import type { TableDef } from '../sheet/table-styles';
 import type { Contents } from '../model';
 import type { DocStyle } from '../style';
 import type { Tab } from '../workspace';
-import { paintCells } from '../format-painter';
+import { paintCells, type ObjectLook, type RunLook } from '../format-painter';
+import { cellFavoriteLook, favoriteCellLook } from '../favorites';
+import { objectLook, type SheetObject } from '../sheet/sheet-objects';
 import { SheetLook, themeColourGrid } from './sheet-look-ui';
 import { SheetOutline } from './sheet-outline-ui';
 import { SheetSparklines } from './sheet-sparkline-ui';
 import { SheetViews, formulaBarPrefs } from './sheet-views-ui';
 import type { SparkKind } from '../sheet/sparklines';
 import { themeOf } from '../sheet/themes';
+import { SHEET_PAPERS, type PaperName } from '../sheet/page-setup';
+import { defaultPaper } from '../print-layout';
+
+/** The header of each Hammett column (σm and σp show their m and p as italic subscripts). */
+const HAMMETT_HEADS: Record<HammettColumn, string> = { group: 'Group', sigma: 'σ', F: 'F', R: 'R', sm: 'σm', sp: 'σp' };
 
 /** What a paste found on the clipboard, as far as a sheet cares. */
 export interface ClipboardCells {
@@ -120,6 +129,8 @@ export class SheetMode {
   readonly formatting: SheetFormatting;
   /** Charts on the sheets. */
   readonly charts: SheetCharts;
+  /** Insert > All Charts: every kind drawn from the selection. */
+  private chartGallery: ChartGallery;
   /** Dashboard sheets: adding tiles, their menus and settings. */
   readonly dashUi: DashboardUi;
   /** Notes and comments on cells. */
@@ -214,6 +225,7 @@ export class SheetMode {
       edit: (label, fn) => this.edit(label, fn),
       flash: (m, ms) => this.host.flash(m, ms),
     });
+    this.chartGallery = new ChartGallery(() => this.view, (k) => this.run(`chart-${k}`));
     this.notes = new SheetNotes({
       view: this.view,
       edit: (label, fn) => this.edit(label, fn),
@@ -524,7 +536,7 @@ export class SheetMode {
       rb.querySelector<HTMLInputElement>(id)!.addEventListener('change', (e) => {
         const t = table();
         if (!t) return;
-        this.formatting.setTable(t, { custom: { ...t.custom, [key]: (e.target as HTMLInputElement).value } }, 'Table colours');
+        this.formatting.setTable(t, { custom: { ...t.custom, [key]: (e.target as HTMLInputElement).value } }, 'Table colors');
       });
     }
   }
@@ -609,6 +621,9 @@ export class SheetMode {
     const v = this.view;
     if (!this.book || !v.sheet) return false;
     const a = v.sheet.styleAt(v.sel.active.r, v.sel.active.c) ?? {};
+    // File > Print > Paper Size
+    const paper = name.startsWith('sheet-paper-') ? name.slice('sheet-paper-'.length) : '';
+    if (paper && paper in SHEET_PAPERS) { this.page.set('Paper size', { paper: paper as PaperName }); return true; }
     switch (name) {
       case 'cell-bold': this.style('Bold', { bold: !a.bold || undefined }); break;
       case 'cell-italic': this.style('Italic', { italic: !a.italic || undefined }); break;
@@ -677,7 +692,7 @@ export class SheetMode {
       case 'new-rule': void this.formatting.ruleDialog(null); break;
       case 'insert-table': if (v.sheet.dashboard) void this.dashUi.addTile('table'); else void this.formatting.formatAsTable(this.tableHere()?.style ?? 'TableStyleMedium2'); break;
       case 'table-convert': { const t = this.tableHere(); if (t) this.formatting.convertToRange(t); break; }
-      case 'table-colours-reset': { const t = this.tableHere(); if (t) this.formatting.setTable(t, { custom: undefined }, 'Table colours'); break; }
+      case 'table-colours-reset': { const t = this.tableHere(); if (t) this.formatting.setTable(t, { custom: undefined }, 'Table colors'); break; }
       case 'chart-scatter': case 'chart-line': case 'chart-column': case 'chart-bar': case 'chart-area': case 'chart-pie':
       case 'chart-combo': case 'chart-histogram': case 'chart-box': case 'chart-bubble': case 'chart-radar': case 'chart-sankey':
       case 'chart-treemap': case 'chart-decomp':
@@ -686,6 +701,7 @@ export class SheetMode {
           else this.host.flash('Dashboard tiles take scatter, line, column, bar, area, pie, Sankey, treemap and decomposition tree charts: make this one on a sheet.', 5000);
         } else this.charts.insert(name.slice(6) as ChartKind);
         break;
+      case 'chart-gallery': this.chartGallery.toggle(this.ribbon.querySelector<HTMLElement>('[data-sh="chart-gallery"]')); break;
       case 'dash-add-chart': void this.dashUi.addTile('chart'); break;
       case 'dash-add-kpi': void this.dashUi.addTile('kpi'); break;
       case 'dash-add-table': void this.dashUi.addTile('table'); break;
@@ -737,9 +753,27 @@ export class SheetMode {
       case 'page-scale': void this.page.scaleWindow(); break;
       case 'print-gridlines': this.page.toggle('gridlines'); break;
       case 'print-headings': this.page.toggle('headings'); break;
-      case 'show-page-breaks': v.showPageBreaks = !v.showPageBreaks; v.refresh(); this.showRibbonState(); break;
+      case 'show-page-breaks': {
+        v.showPageBreaks = !v.showPageBreaks;
+        v.refresh();
+        this.showRibbonState();
+        // an empty sheet has no pages, so no breaks to show yet
+        if (v.showPageBreaks && !v.sheet.usedRange() && !v.sheet.pageSetup?.printArea?.length) this.host.flash('Page breaks show as dashed lines once the sheet has something to print.', 4000);
+        break;
+      }
       case 'insert-page-break': this.page.insertBreak(); break;
       case 'set-print-area': this.page.setPrintArea(false); break;
+      case 'add-print-area': this.page.setPrintArea(true); break;
+      case 'remove-page-break': this.page.removeBreak(); break;
+      case 'reset-page-breaks': this.page.set('Reset page breaks', { rowBreaks: undefined, colBreaks: undefined }); break;
+      case 'sheet-margins-normal': case 'sheet-margins-wide': case 'sheet-margins-narrow': this.page.margins(name.slice('sheet-margins-'.length) as 'normal' | 'wide' | 'narrow'); break;
+      case 'sheet-margins-custom': void this.page.pageSetupWindow('margins'); break;
+      case 'sheet-portrait': this.page.set('Orientation', { orientation: undefined }); break;
+      case 'sheet-landscape': this.page.set('Orientation', { orientation: 'landscape' }); break;
+      case 'sheet-no-scaling': this.page.scaling('none'); break;
+      case 'sheet-fit-page': this.page.scaling('page'); break;
+      case 'sheet-fit-columns': this.page.scaling('columns'); break;
+      case 'sheet-fit-rows': this.page.scaling('rows'); break;
       case 'clear-print-area': this.page.set('Clear print area', { printArea: undefined }); break;
       case 'print-preview': this.printPreview(); break;
       case 'data-analysis': this.analysis.dataAnalysis(); break;
@@ -949,6 +983,61 @@ export class SheetMode {
     this.view.select(target, { r: target.r1, c: target.c1 });
   }
 
+  /** Format Favorites: the look of the selected shape or text box, else of the active cell. */
+  favoriteLook(): ObjectLook | null {
+    const s = this.view.sheet;
+    if (!s) return null;
+    this.view.commitEdit();
+    const o = this.view.selectedObject;
+    if (o) {
+      if (o.kind === 'picture') return null;
+      const k = objectLook(o);
+      const run: RunLook = { ...(o.bold ? { bold: true } : {}), ...(o.italic ? { italic: true } : {}), ...(o.font ? { font: o.font } : {}), ...(o.size ? { size: o.size } : {}), color: k.color };
+      return {
+        shape: { filled: k.fill !== 'none', ...(k.fill !== 'none' ? { fillColor: k.fill } : {}), lineWidth: k.line === 'none' ? 0 : k.lineW, ...(k.line !== 'none' ? { color: k.line } : {}) },
+        text: { run, ...(o.align ? { justify: o.align } : {}) },
+        colour: { color: k.color },
+      };
+    }
+    return cellFavoriteLook(s.styleAt(this.view.sel.active.r, this.view.sel.active.c) ?? {});
+  }
+
+  /** Format Favorites: give the selected shape or text box, or the selected cells, a favorite's look (one undo step). */
+  paintFavorite(look: ObjectLook, name: string): boolean {
+    const s = this.view.sheet;
+    if (!s) return false;
+    this.view.commitEdit();
+    const o = this.view.selectedObject;
+    if (o) {
+      if (o.kind === 'picture') return false;
+      const next: SheetObject = { ...o };
+      const sh = look.shape, run = look.text?.run;
+      if (sh?.filled !== undefined) next.fill = sh.filled && sh.fillColor ? sh.fillColor : 'none';
+      if (sh?.lineWidth !== undefined) { if (sh.lineWidth <= 0) next.line = 'none'; else { next.lineW = sh.lineWidth; if (sh.color) next.line = sh.color; } }
+      else if (sh?.color) next.line = sh.color;
+      const color = run?.color ?? look.colour?.color;
+      if (color) next.color = color;
+      if (run?.bold !== undefined) next.bold = run.bold || undefined;
+      if (run?.italic !== undefined) next.italic = run.italic || undefined;
+      if (run?.font) next.font = run.font;
+      if (run?.size) next.size = run.size;
+      const j = look.text?.justify;
+      if (j === 'left' || j === 'center' || j === 'right') next.align = j;
+      this.view.replaceObject(next, `Format Favorite “${name}”`);
+      return true;
+    }
+    const got = favoriteCellLook(look);
+    if (!got) return false;
+    this.edit(`Format Favorite “${name}”`, (sh) => {
+      for (const a of this.view.areas()) {
+        const R = growToMerges(sh, a);
+        sh.patchStyle(R, got.patch);
+        if (got.borders) sh.patchStyle(R, { borders: got.borders });
+      }
+    });
+    return true;
+  }
+
   private decimals(delta: 1 | -1): void {
     const v = this.view;
     const s = v.sheet!;
@@ -970,7 +1059,7 @@ export class SheetMode {
     if (R.r2 - R.r1 > 5000 || R.c2 - R.c1 > 500) { this.host.flash('That is too large a block to merge.'); return; }
     const filled = s.keysIn(R).filter((k) => s.cells.get(k)?.input || s.cells.get(k)?.structure);
     if (filled.length > 1) this.host.flash('Merging keeps only the top-left value, as in Excel (Undo brings the others back).', 6000);
-    this.edit('Merge and centre', (sh) => {
+    this.edit('Merge and center', (sh) => {
       for (const k of filled) if (k !== keyOf(R.r1, R.c1)) sh.setCell(rowOf(k), colOf(k), { style: sh.cell(rowOf(k), colOf(k))?.style });
       sh.merge(R);
       sh.patchStyle({ r1: R.r1, c1: R.c1, r2: R.r1, c2: R.c1 }, { align: 'center' });
@@ -986,7 +1075,7 @@ export class SheetMode {
     grid.className = 'colour-grid';
     const pick = (c: string | undefined) => {
       m.remove();
-      this.style(which === 'fill' ? 'Fill colour' : 'Text colour', which === 'fill' ? { fill: c } : { color: c });
+      this.style(which === 'fill' ? 'Fill color' : 'Text color', which === 'fill' ? { fill: c } : { color: c });
       this.view.focus();
     };
     for (const c of COLOURS) {
@@ -1009,7 +1098,7 @@ export class SheetMode {
     input.type = 'color';
     input.dataset.systemPicker = '';
     input.addEventListener('change', () => pick(input.value));
-    more.append('More colours ', input);
+    more.append('More colors ', input);
     m.append(themeColourGrid(this.look.theme, pick), grid, paletteRows(undefined, pick, () => m.remove()), none, more);
     document.body.append(m);
     m.style.left = `${Math.min(x, innerWidth - m.offsetWidth - 4)}px`;
@@ -1490,8 +1579,8 @@ export class SheetMode {
       return;
     }
     const { r, c } = v.sel.active;
-    const ans = await ask('Structure from name or SMILES', [{ name: 'text', label: 'Name or SMILES', value: '' }], {
-      ok: 'Draw', note: `Draws the structure in ${cellName(r, c)}. Names are read on this computer (OPSIN): systematic names and many common ones such as caffeine.`,
+    const ans = await ask('Structure from name or SMILES', [{ name: 'text', label: 'Name, SMILES or CAS RN', value: '' }], {
+      ok: 'Draw', note: `Draws the structure in ${cellName(r, c)}. Names are read on this computer (OPSIN): systematic names and many common ones such as caffeine. CAS RNs (50-78-2) are looked up on PubChem.`,
     });
     const text = ans?.text.trim();
     if (!text) return;
@@ -1537,6 +1626,29 @@ export class SheetMode {
   }
 
   /** The structure in the active cell, if it holds one. */
+  /**
+   * The Assistant: the selected cells as tab-separated text (structures as SMILES, as a copy
+   * gives Excel), with the address of the first cell; null for a single empty cell. At most
+   * 2000 cells.
+   */
+  selectedCellsText(): { at: string; text: string } | null {
+    const v = this.view;
+    const s = v.sheet;
+    if (!s) return null;
+    const sel = growToMerges(s, v.sel.range);
+    const R = s.clip(sel) ?? { r1: sel.r1, c1: sel.c1, r2: sel.r1, c2: sel.c1 };
+    const rows: string[][] = [];
+    let n = 0;
+    for (let r = R.r1; r <= R.r2 && n < 2000; r++) {
+      if (s.hiddenRows.has(r)) continue;
+      const line: string[] = [];
+      for (let c = R.c1; c <= R.c2 && n < 2000; c++, n++) line.push(this.cellText(s, r, c));
+      rows.push(line);
+    }
+    const text = toDelimited(rows, '\t').trim();
+    return text ? { at: `${cellName(R.r1, R.c1)}${R.r1 === R.r2 && R.c1 === R.c2 ? '' : ':' + cellName(R.r2, R.c2)}`, text } : null;
+  }
+
   activeStructure(): Contents | null {
     const s = this.view.sheet;
     if (!s) return null;
@@ -1640,7 +1752,7 @@ export class SheetMode {
   }
 
   /** Chemistry > Insert Property Column…: pick properties to work out from a column of structures. */
-  private async propertyColumns(choice?: { col: number; props: PropertyChoice[] }): Promise<void> {
+  private async propertyColumns(choice?: PropertyAnswer): Promise<void> {
     const v = this.view;
     const s = v.sheet!;
     const { r, c } = v.sel.active;
@@ -1651,14 +1763,61 @@ export class SheetMode {
         this.host.flash('Click in a table with a column of structures (or SMILES) first. To start one, draw a structure in a cell (Chemistry > Structure).', 8000);
         return;
       }
-      const got = await askProperties({ columns: cols, col: cols.some((x) => x.col === c) ? c : cols[0].col });
+      const got = await askProperties({ columns: cols, col: cols.some((x) => x.col === c) ? c : cols[0].col, hammett: this.hammettSetup(s, region) });
       if (!got) return;
       choice = got;
     }
-    this.insertPropertyColumns(s, choice.col, choice.props, region);
+    this.insertPropertyColumns(s, choice.col, choice.props, region, choice.hammett);
   }
 
-  private insertPropertyColumns(s: Sheet, col: number, props: PropertyChoice[], region: Range): void {
+  /** The Hammett section of Insert Property Columns: the reference positions a column's structures offer, and a picture of one marked up. */
+  private hammettSetup(s: Sheet, region: Range): HammettSetup {
+    const structures = (col: number): Structure[] => {
+      const out: Structure[] = [];
+      for (let r = region.r1; r <= Math.min(region.r2, region.r1 + 500); r++) { const st = s.cell(r, col)?.structure; if (st) out.push(st); }
+      return out;
+    };
+    const ORDER = ['wavy', 'star', 'numbered'];
+    const rank = (ref: string) => (ORDER.includes(ref) ? ORDER.indexOf(ref) : 2 + Number(ref) / 100);
+    return {
+      refs: (col) => {
+        const used = new Map<string, number>();
+        for (const st of structures(col)) for (const ref of attachRefs(this.pictures.doc(st)).keys()) used.set(ref, (used.get(ref) ?? 0) + 1);
+        return [...used].sort((a, b) => b[1] - a[1] || rank(a[0]) - rank(b[0])).map(([value]) => ({ value, label: refLabel(value) }));
+      },
+      look: (col, ref, w, h) => {
+        const sts = structures(col);
+        const SAYS = 'Every group on the ring it sits on is placed o, m or p from it; two or more add up (Σσ).';
+        if (!sts.length) return { picture: null, note: `SMILES are read as the values are worked out: write the reference position as * on a ring carbon, e.g. *c1ccc(OC)cc1. ${SAYS}` };
+        let once = 0, several = 0;
+        let onRing = null as Structure | null;
+        for (const st of sts) {
+          const d = this.pictures.doc(st), n = refAtoms(d, ref).length;
+          if (n === 1) once++;
+          if (n > 1) several++;
+          if (!onRing && n && refMarks(d, ref)) onRing = st;
+        }
+        const n = sts.length, none = n - once - several, name = refLabel(ref).replace(/^\S+ /, '').toLowerCase();
+        let note = once === n ? (n === 1 ? 'Found in the structure.' : `Found once in each of the ${n} structures.`)
+          : once || several ? `Found once in ${once} of the ${n} structures${none ? `; ${none} ${none === 1 ? 'has' : 'have'} none and will show #N/A` : ''}${several ? `; ${several} ${several === 1 ? 'has' : 'have'} more than one and will show #N/A` : ''}.`
+          : `None of the structures has a ${name} attachment point yet: right-click a ring carbon and pick Attachment Point.`;
+        if (once + several && !onRing) note += ' It must sit on a benzene ring carbon, with nothing between it and the ring.';
+        else if (once + several) note += ` ${SAYS}`;
+        const fit = onRing && this.pictures.fitted(onRing, w, h);
+        const m = fit && refMarks(fit.doc, ref);
+        if (!fit || !m) return { picture: null, note };
+        const c = fit.at(m.centre);
+        // (inside the ring, clear of the groups on it)
+        const marks = m.places.map(({ atom, place }) => {
+          const p = fit.at(atom);
+          return { x: c.x + (p.x - c.x) * 0.5, y: c.y + (p.y - c.y) * 0.5, text: place };
+        });
+        return { picture: { canvas: fit.canvas, w: fit.w, h: fit.h, ref: fit.at(m.ref), marks }, note };
+      },
+    };
+  }
+
+  private insertPropertyColumns(s: Sheet, col: number, props: PropertyChoice[], region: Range, hammett?: HammettChoice): void {
     // the first row of data: the first structure (or SMILES) in the column; the row above it is the header
     let first = -1;
     for (let r = region.r1; r <= region.r2; r++) {
@@ -1671,8 +1830,9 @@ export class SheetMode {
     const at = region.c2 + 1;
     const ref = cellName(first, col);
     const headStyle = header >= 0 ? s.styleAt(header, col) : undefined;
-    this.edit(props.length > 1 ? 'Insert property columns' : 'Insert property column', (sh) => {
-      sh.insertCols(at, props.length);
+    const hm = hammett?.columns ?? [];
+    this.edit(props.length + hm.length > 1 ? 'Insert property columns' : 'Insert property column', (sh) => {
+      sh.insertCols(at, props.length + hm.length);
       props.forEach((p, i) => {
         const def = PROPERTIES[p.name];
         const target = at + i;
@@ -1688,8 +1848,21 @@ export class SheetMode {
         }
         sh.setColWidth(target, p.name === 'SMILES' ? 220 : p.name === 'INCHIKEY' ? 200 : p.name === 'FORMULA' || p.name === 'DUPLICATE' ? 96 : 80);
       });
+      // Hammett constants, counted from the reference position picked
+      hm.forEach((what, i) => {
+        const target = at + props.length + i;
+        const extra = hammett!.orthoSp && what !== 'group' ? ',"ortho=sp"' : '';
+        sh.setColDef(target, { formula: `=HAMMETT(${ref},"${what}","${hammett!.ref}"${extra})`, firstRow: first, style: what === 'group' ? { chem: true } : { numFmt: '0.00' } });
+        if (header >= 0 && !sh.cell(header, target)?.input) {
+          sh.setInput(header, target, HAMMETT_HEADS[what]);
+          const italic = what === 'F' || what === 'R' ? true : headStyle?.italic;
+          if (headStyle || italic) sh.patchStyle({ r1: header, c1: target, r2: header, c2: target }, { bold: headStyle?.bold, fill: headStyle?.fill, align: headStyle?.align, borders: headStyle?.borders, italic });
+        }
+        sh.setColWidth(target, what === 'group' ? 96 : 64);
+      });
     });
-    this.host.flash(`Added ${props.map((p) => PROPERTIES[p.name].label).join(', ')}. Type over any value to replace it; Reset to Calculated puts it back.`, 6000);
+    const names = [...props.map((p) => PROPERTIES[p.name].label), ...hm.map((w) => HAMMETT_HEADS[w])];
+    this.host.flash(`Added ${names.join(', ')}. Type over any value to replace it; Reset to Calculated puts it back.`, 6000);
   }
 
   /**
@@ -2109,7 +2282,7 @@ export class SheetMode {
       ['Isotope pattern…', () => void this.isotopePattern()],
       ['Formula Style ▸', () => popupMenu(x, y, [
         [this.chemShown() ? 'Turn Off for These Cells' : 'Turn On for These Cells', () => this.run('format-chem')],
-        [`${s.wb.autoChem ? '✓ ' : ''}Spot Formulas in Typed Text (CH2Cl2 → CH₂Cl₂)`, () => s.wb.edit('Spot formulas in typed text', () => s.wb.setAutoChem(!s.wb.autoChem))],
+        [`${s.wb.autoChem ? '✓ ' : ''}AutoFormat Chemical Formulas (CH2Cl2 → CH₂Cl₂)`, () => s.wb.edit('AutoFormat chemical formulas', () => s.wb.setAutoChem(!s.wb.autoChem))],
       ])],
       ['Reset to calculated', () => this.resetCalculated(), overrides],
       null,
@@ -2191,6 +2364,7 @@ export class SheetMode {
       this.panelQueued = false;
       this.renderPanel();
       this.showRibbonState();
+      this.chartGallery.refresh(true);
     });
   }
 
@@ -2289,6 +2463,17 @@ export class SheetMode {
     for (const m of document.querySelectorAll('[role="menuitemcheckbox"][data-cmd="show-all-notes"]')) m.setAttribute('aria-checked', String(this.notes.showAll));
     for (const m of document.querySelectorAll('[role="menuitemcheckbox"][data-cmd="circle-invalid"]')) m.setAttribute('aria-checked', String(this.view.circleInvalid));
     for (const m of document.querySelectorAll('[role="menuitemcheckbox"][data-cmd="show-page-breaks"]')) m.setAttribute('aria-checked', String(this.view.showPageBreaks));
+    // File > Print: ticks by the page setup in use
+    const ps = s.pageSetup;
+    const margins = this.page.marginPreset(), scaling = this.page.scalingNow(), paper = ps?.paper ?? defaultPaper(navigator.language);
+    const ticks: Record<string, boolean> = {
+      'print-gridlines': !!ps?.gridlines, 'print-headings': !!ps?.headings,
+      'sheet-portrait': ps?.orientation !== 'landscape', 'sheet-landscape': ps?.orientation === 'landscape',
+      'sheet-margins-normal': margins === 'normal', 'sheet-margins-wide': margins === 'wide', 'sheet-margins-narrow': margins === 'narrow',
+      'sheet-no-scaling': scaling === 'none', 'sheet-fit-page': scaling === 'page', 'sheet-fit-columns': scaling === 'columns', 'sheet-fit-rows': scaling === 'rows',
+    };
+    for (const k of Object.keys(SHEET_PAPERS)) ticks[`sheet-paper-${k}`] = k === paper;
+    for (const [cmd, on] of Object.entries(ticks)) for (const m of document.querySelectorAll(`[data-cmd="${cmd}"][role^="menuitem"]`)) m.setAttribute('aria-checked', String(on));
     const fmt = this.ribbon.querySelector<HTMLSelectElement>('#sh-numfmt')!;
     const code = st.numFmt ?? 'General';
     let opt = [...fmt.options].find((o) => o.value === code);

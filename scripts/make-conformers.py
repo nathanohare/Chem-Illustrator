@@ -1,5 +1,5 @@
 """Make src/chem/conformers.json: the 3-D templates (conformers, fused and bridged rings,
-projections, stereocentres, large rings, aromatics and rings seen in perspective).
+projections, stereocenters, large rings, aromatics and rings seen in perspective).
 
 Every 3-D shape is worked out here from real geometry, not traced from any picture:
 
@@ -722,7 +722,7 @@ def add(group, tid, name, smiles, atoms, bonds, view, *, flat=False, stereo3d=Fa
         i, j, order = b[0], b[1], b[2]
         disp = b[3] if len(b) > 3 else None
         if wedges and disp is None and order == 1:
-            # bonds from a stereocentre: towards the viewer wedged, away hashed (narrow end at the centre)
+            # bonds from a stereocenter: towards the viewer wedged, away hashed (narrow end at the centre)
             dz = P[j, 2] - P[i, 2]
             if abs(dz) > 0.25:
                 disp = 'wedge' if dz > 0 else 'hashWedge'
@@ -1367,7 +1367,7 @@ def projections():
                 atoms.append(['C', np.array([sx * 1.0, -k * 1.0, 0.0]), 0])
                 bonds.append([k, len(atoms) - 1, 1])
         smi = Chem.MolToSmiles(mol_from(atoms, bonds))
-        add(G, f'fischer-{n}', f'Fischer projection, {n} stereocentre' + ('s' if n > 1 else ''), smi, atoms, bonds, xyz_of(atoms), flat=True, attach=0)
+        add(G, f'fischer-{n}', f'Fischer projection, {n} stereocenter' + ('s' if n > 1 else ''), smi, atoms, bonds, xyz_of(atoms), flat=True, attach=0)
 
 
 def mol_from(atoms, bonds):
@@ -1383,8 +1383,8 @@ def mol_from(atoms, bonds):
     return m
 
 
-def stereocentres():
-    """Wedge-and-hash pictures of stereocentres, drawn as the IUPAC recommendations for
+def stereocenters():
+    """Wedge-and-hash pictures of stereocenters, drawn as the IUPAC recommendations for
     graphical representations of stereochemistry (Pure Appl. Chem. 2006, 78, 1897) prefer: the
     wedged and hashed bonds next to each other, the plain bonds opposite."""
     G = 'stereo'
@@ -1398,15 +1398,15 @@ def stereocentres():
             bonds.append([0, len(atoms) - 1, 1] + ([disp] if disp else []))
         labels = {0: label} if label else None
         add(G, tid, name, smi, atoms, bonds, xyz_of(atoms), flat=True, labels=labels, attach=1, check=smi is not None)
-    centre('stereo-4a', 'Stereocentre: two plain bonds, a wedge and a hash', [(150, None), (30, None), (-60, 'wedge'), (-120, 'hashWedge')], smi='CC(C)(C)C')
-    centre('stereo-4b', 'Stereocentre (mirror image)', [(150, None), (30, None), (-60, 'hashWedge'), (-120, 'wedge')], smi='CC(C)(C)C')
-    centre('stereo-4c', 'Stereocentre: three plain bonds and a wedge', [(90, None), (210, None), (330, None), (270 + 25, 'wedge')], smi='CC(C)(C)C')
-    centre('stereo-4d', 'Stereocentre: three plain bonds and a hash', [(90, None), (210, None), (330, None), (270 + 25, 'hashWedge')], smi='CC(C)(C)C')
+    centre('stereo-4a', 'Stereocenter: two plain bonds, a wedge and a hash', [(150, None), (30, None), (-60, 'wedge'), (-120, 'hashWedge')], smi='CC(C)(C)C')
+    centre('stereo-4b', 'Stereocenter (mirror image)', [(150, None), (30, None), (-60, 'hashWedge'), (-120, 'wedge')], smi='CC(C)(C)C')
+    centre('stereo-4c', 'Stereocenter: three plain bonds and a wedge', [(90, None), (210, None), (330, None), (270 + 25, 'wedge')], smi='CC(C)(C)C')
+    centre('stereo-4d', 'Stereocenter: three plain bonds and a hash', [(90, None), (210, None), (330, None), (270 + 25, 'hashWedge')], smi='CC(C)(C)C')
     centre('stereo-tbp', 'Trigonal bipyramid', [(90, None), (270, None), (180, None), (-20, 'wedge'), (20, 'hashWedge')], label='M')
     centre('stereo-oct', 'Octahedron', [(90, None), (270, None), (195, 'wedge'), (-15, 'hashWedge'), (165, 'hashWedge'), (15, 'wedge')], label='M')
     centre('stereo-sqpy', 'Square pyramid', [(90, None), (195, 'wedge'), (-15, 'hashWedge'), (165, 'hashWedge'), (15, 'wedge')], label='M')
     centre('stereo-sqpl', 'Square planar, in perspective', [(195, 'wedge'), (-15, 'hashWedge'), (165, 'hashWedge'), (15, 'wedge')], label='M')
-    # chains with stereocentres: zig-zag with wedges (syn) and wedge + hash (anti)
+    # chains with stereocenters: zig-zag with wedges (syn) and wedge + hash (anti)
     def chain(tid, name, marks):
         atoms, bonds = [], []
         n = len(marks) + 2
@@ -1421,9 +1421,9 @@ def stereocentres():
         add(G, tid, name, Chem.MolToSmiles(mol_from(atoms, [b[:3] for b in bonds])), atoms, bonds, xyz_of(atoms), flat=True, attach=0)
     chain('stereo-chain-1w', 'Chain with a wedged bond', ['wedge'])
     chain('stereo-chain-1h', 'Chain with a hashed bond', ['hashWedge'])
-    chain('stereo-chain-syn', 'Two stereocentres, syn', ['wedge', 'hashWedge'])
-    chain('stereo-chain-anti', 'Two stereocentres, anti', ['wedge', 'wedge'])
-    chain('stereo-chain-3', 'Three stereocentres', ['wedge', 'hashWedge', 'wedge'])
+    chain('stereo-chain-syn', 'Two stereocenters, syn', ['wedge', 'hashWedge'])
+    chain('stereo-chain-anti', 'Two stereocenters, anti', ['wedge', 'wedge'])
+    chain('stereo-chain-3', 'Three stereocenters', ['wedge', 'hashWedge', 'wedge'])
 
 
 def cycloalkanes():
@@ -1612,7 +1612,7 @@ def main():
         draw_all(Path(sys.argv[sys.argv.index('--png') + 1]))
 
 
-FAMILIES = [cyclohexanes, small_rings, medium_rings, fused, cages, bicyclics, projections, stereocentres, cycloalkanes, aromatics, perspective, sugar_chairs]
+FAMILIES = [cyclohexanes, small_rings, medium_rings, fused, cages, bicyclics, projections, stereocenters, cycloalkanes, aromatics, perspective, sugar_chairs]
 
 
 def draw_all(folder):

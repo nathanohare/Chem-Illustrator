@@ -2,8 +2,9 @@
 // as your own, make it the style new tabs of this kind start with, and say what happens to the
 // structures already drawn (redrawn in the new style, or left as they look now).
 
-import { showDialog } from './dialog-host';
-import type { DocStyle } from '../style';
+import { previewSlot, showDialog } from './dialog-host';
+import type { DocStyle, StyleScheme } from '../style';
+import { schemePrefs, spacing } from '../chem/scheme-layout';
 import { FONT_GROUPS } from '../fonts';
 import { STYLE_PRESETS, presetNamed, sameLook, scaleStyle, type RestyleHow } from '../drawing-styles';
 
@@ -27,6 +28,8 @@ export interface StyleDialogOptions {
   isDefault: boolean;
   /** There are structures already, so ask what happens to them. */
   hasStructures: boolean;
+  /** A sample drawing in the style shown, beside the settings (drawn again as they change). */
+  preview?: (st: DocStyle) => Node;
 }
 
 
@@ -56,7 +59,6 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     d.append(form);
     form.append(
       el('h2', { textContent: 'Drawing style' }),
-      el('p', { className: 'muted', textContent: `How structures are drawn in ${o.where}: bond length, line widths and label fonts. Pick a journal's style or your own, and change any number.` }),
     );
 
     const grid = el('div', { className: 'md-grid' });
@@ -69,10 +71,8 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
 
     // which style
     const pick = el('select');
-    const source = el('p', { className: 'muted style-source' });
     grid.append(el('h3', { textContent: 'Style' }));
     row('Start from', pick);
-    grid.append(source);
 
     // its numbers
     grid.append(el('h3', { textContent: 'Structures' }));
@@ -97,11 +97,58 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     row('Captions', captionFont, captionSize, el('span', { className: 'muted', textContent: 'pt' }));
     inputs.set('labelSize', labelSize);
     inputs.set('captionSize', captionSize);
+    // reagents and conditions over and under reaction arrows: often a point smaller than captions
+    const arrowFont = fontSelect(), arrowSize = el('input', { type: 'number', className: 'md-num', step: 'any', min: '0' });
+    arrowFont.prepend(new Option('Same as captions', ''));
+    arrowSize.title = 'Leave blank for the captions\' size';
+    const smaller = el('button', { type: 'button', textContent: '1 pt smaller', title: 'One point smaller than the captions' });
+    smaller.addEventListener('click', () => { const c = parseFloat(captionSize.value); if (c > 1) { arrowSize.value = String(+(c - 1).toFixed(3)); arrowSize.dispatchEvent(new Event('input', { bubbles: true })); } });
+    grid.append(el('h3', { textContent: 'Reaction arrows' }));
+    row('Text above and below arrows', arrowFont, arrowSize, el('span', { className: 'muted', textContent: 'pt' }), smaller);
+    const showArrowSize = () => { arrowSize.placeholder = captionSize.value; };
+    captionSize.addEventListener('input', showArrowSize);
+    // reaction arrows: their own line width and head, apart from the bonds' (blank: the usual)
+    const arrowNum = (title: string) => { const i = el('input', { type: 'number', className: 'md-num', step: 'any', min: '0' }); i.title = title; return i; };
+    const arrowWidth = arrowNum('Leave blank for the bonds\' line width');
+    const headLength = arrowNum('Leave blank for ten line widths');
+    const headWidth = arrowNum('Leave blank for 2.5 line widths each side');
+    row('Line width', arrowWidth, el('span', { className: 'muted', textContent: 'pt' }));
+    row('Arrowhead length, width', headLength, headWidth, el('span', { className: 'muted', textContent: 'pt' }));
+    // how arrows sit in a scheme: as Clean Up Reaction and typing text by an arrow lay them out
+    const align = el('select');
+    for (const [v, t] of [['center', 'Centered'], ['left', 'Left'], ['right', 'Right']]) align.append(new Option(t, v));
+    row('Lines of text line up', align);
+    const textGap = arrowNum('Leave blank to scale with the bond length');
+    row('Gap between arrow and text', textGap, el('span', { className: 'muted', textContent: 'pt' }));
+    const fit = el('input', { type: 'checkbox' });
+    row('', fit, el('span', { className: 'muted', textContent: 'Fit the arrow to its text (moves the products)' }));
+    const lead = arrowNum('Leave blank to scale with the bond length'), headGap = arrowNum('Leave blank to scale with the bond length');
+    const beyond = row('Arrow before and after the text', lead, headGap, el('span', { className: 'muted', textContent: 'pt' }));
+    const structGap = arrowNum('Leave blank to scale with the bond length'), plusGap = arrowNum('Leave blank to scale with the bond length');
+    row('Gap to the structures', structGap, el('span', { className: 'muted', textContent: 'pt' }));
+    row('Space either side of +', plusGap, el('span', { className: 'muted', textContent: 'pt' }));
+    const showScheme = () => {
+      // blank: the app's scheme settings, most of them growing with the bond length
+      const sp = spacing(parseFloat(inputs.get('bondLength')!.value) || shown.bondLength);
+      const auto = (v: number) => String(Math.round(v * 10) / 10);
+      textGap.placeholder = auto(sp.conditions); lead.placeholder = auto(sp.lead); headGap.placeholder = auto(sp.headGap);
+      structGap.placeholder = auto(sp.gap); plusGap.placeholder = auto(sp.plus);
+      beyond.style.opacity = fit.checked ? '' : '0.5';
+    };
+    fit.addEventListener('change', showScheme);
+    inputs.get('bondLength')!.addEventListener('input', showScheme);
+    const showArrowLook = () => {
+      const lw = parseFloat(arrowWidth.value) > 0 ? parseFloat(arrowWidth.value) : parseFloat(inputs.get('lineWidth')!.value);
+      arrowWidth.placeholder = inputs.get('lineWidth')!.value;
+      headLength.placeholder = lw > 0 ? String(+(lw * 10).toFixed(2)) : '';
+      headWidth.placeholder = lw > 0 ? String(+(lw * 2.5).toFixed(2)) : '';
+    };
+    for (const i of [arrowWidth, inputs.get('lineWidth')!]) i.addEventListener('input', showArrowLook);
 
     // your own
     grid.append(el('h3', { textContent: 'Your own styles' }));
     const name = el('input', { type: 'text', placeholder: 'e.g. My group meeting style' });
-    const save = el('button', { type: 'button', textContent: 'Save as My Style', title: 'Keep these settings under this name, in every mode' });
+    const save = el('button', { type: 'button', textContent: 'Save', title: 'Save as My Style: keep these settings under this name, in every mode' });
     const del = el('button', { type: 'button', textContent: 'Delete', title: 'Remove this one of your own styles' });
     row('Name', name, save, del);
     const said = el('p', { className: 'muted', textContent: '' });
@@ -132,6 +179,20 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       for (const [k, i] of inputs) i.value = String(+st[k].toFixed(3));
       pickFont(labelFont, st.labelFont);
       pickFont(captionFont, st.captionFont);
+      if (st.arrowTextFont) pickFont(arrowFont, st.arrowTextFont); else arrowFont.value = '';
+      arrowSize.value = st.arrowTextSize !== undefined ? String(+st.arrowTextSize.toFixed(3)) : '';
+      showArrowSize();
+      const pt = (v: number | undefined) => (v !== undefined ? String(+v.toFixed(3)) : '');
+      arrowWidth.value = pt(st.arrowWidth);
+      headLength.value = pt(st.arrowHeadLength);
+      headWidth.value = pt(st.arrowHeadWidth);
+      showArrowLook();
+      const sc = st.scheme ?? {};
+      align.value = sc.textAlign ?? schemePrefs.textAlign;
+      textGap.value = pt(sc.textGap); lead.value = pt(sc.lead); headGap.value = pt(sc.headGap);
+      structGap.value = pt(sc.structGap); plusGap.value = pt(sc.plusGap);
+      fit.checked = sc.fit ?? schemePrefs.fit;
+      showScheme();
       name.value = st.name;
       showCm();
     };
@@ -150,6 +211,19 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       }
       st.labelFont = labelFont.value.trim() || shown.labelFont;
       st.captionFont = captionFont.value.trim() || shown.captionFont;
+      const af = arrowFont.value.trim(), as = parseFloat(arrowSize.value);
+      if (af && af !== st.captionFont) st.arrowTextFont = af; else delete st.arrowTextFont;
+      if (Number.isFinite(as) && as > 0 && Math.abs(as - st.captionSize) > 1e-6) st.arrowTextSize = as; else delete st.arrowTextSize;
+      const own = (i: HTMLInputElement, k: 'arrowWidth' | 'arrowHeadLength' | 'arrowHeadWidth') => { const v = parseFloat(i.value); if (Number.isFinite(v) && v >= 0.05) st[k] = Math.min(30, v); else delete st[k]; };
+      own(arrowWidth, 'arrowWidth');
+      own(headLength, 'arrowHeadLength');
+      own(headWidth, 'arrowHeadWidth');
+      const sc: StyleScheme = {};
+      const dist = (i: HTMLInputElement) => { const v = parseFloat(i.value); return Number.isFinite(v) && v >= 0 ? Math.min(500, v) : undefined; };
+      for (const [k, i] of [['textGap', textGap], ['lead', lead], ['headGap', headGap], ['structGap', structGap], ['plusGap', plusGap]] as const) { const v = dist(i); if (v !== undefined) sc[k] = v; }
+      if (align.value !== schemePrefs.textAlign && (align.value === 'left' || align.value === 'center' || align.value === 'right')) sc.textAlign = align.value;
+      if (fit.checked !== schemePrefs.fit) sc.fit = fit.checked;
+      if (Object.keys(sc).length) st.scheme = sc; else delete st.scheme;
       return st;
     };
 
@@ -177,7 +251,8 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     const describe = () => {
       const v = pick.value;
       const p = v.startsWith('preset:') ? presetNamed(v.slice(7)) : undefined;
-      source.textContent = p ? `From: ${p.source}.${p.note ? ' ' + p.note : ''}` : v.startsWith('own:') ? 'One of your own styles.' : 'The style this file was saved with.';
+      // where a journal's numbers come from shows on the list's tip, not as a line of its own
+      pick.title = p ? `From: ${p.source}.${p.note ? ' ' + p.note : ''}` : v.startsWith('own:') ? 'One of your own styles.' : 'The style this file was saved with.';
       del.disabled = !v.startsWith('own:');
     };
 
@@ -243,6 +318,18 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     d.addEventListener('close', () => done(null));
     document.body.append(d);
     showDialog(d);
+    if (o.preview) {
+      // in the Settings window's pane on the right, or at the top of the window
+      let slot = previewSlot('Preview', true);
+      if (!slot) { slot = el('div', { className: 'ask-preview' }); form.insertBefore(slot, grid); }
+      const box = slot;
+      let queued = 0;
+      const redraw = () => { cancelAnimationFrame(queued); queued = requestAnimationFrame(() => box.replaceChildren(o.preview!(read()))); };
+      box.replaceChildren(o.preview(read()));
+      form.addEventListener('input', redraw);
+      form.addEventListener('change', redraw);
+      pick.addEventListener('change', redraw);
+    }
     pick.focus();
   });
 }

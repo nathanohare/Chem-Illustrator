@@ -14,9 +14,9 @@ export class NicknameChooser {
   constructor() {
     this.d = document.createElement('dialog');
     this.d.className = 'nicknames';
-    this.d.innerHTML = `<h2>Choose a nickname</h2>
-      <input type="search" placeholder="Type to narrow the list (Boc, TBS, OTf…)" aria-label="Find a nickname" />
-      <div class="nick-list" role="listbox" aria-label="Nicknames"></div>
+    this.d.innerHTML = `<h2>Choose an abbreviation</h2>
+      <input type="search" placeholder="Type to narrow the list (Boc, TBS, OTf…)" aria-label="Find an abbreviation" />
+      <div class="nick-list" role="listbox" aria-label="Abbreviations"></div>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button></p>`;
     this.filter = this.d.querySelector('input')!;
     this.list = this.d.querySelector('.nick-list')!;
@@ -72,7 +72,7 @@ export class NicknameChooser {
     if (!this.shown.length) {
       const p = document.createElement('p');
       p.className = 'muted';
-      p.textContent = 'No nickname matches. Press Enter on an atom to type any label.';
+      p.textContent = 'No abbreviation matches. Press Enter on an atom to type any label.';
       this.list.append(p);
     }
   }

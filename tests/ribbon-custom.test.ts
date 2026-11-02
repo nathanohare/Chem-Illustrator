@@ -53,4 +53,13 @@ describe('customizing the ribbon', () => {
     });
     expect(parseRibbons(null)).toEqual({});
   });
+
+  it('reads single buttons taken off and commands added, keeping only what makes sense', () => {
+    const p = parseRibbons({ slides: {
+      hiddenItems: ['g:font cmd:bold', 'g:font', 'cmd:bold', 'g:font cmd:<x>', 5],
+      extra: { 'g:font': ['cmd:subscript', 'nope', 'sh:sort'], bad: ['cmd:bold'], 'g:empty': [] },
+    } }).slides!;
+    expect(p.hiddenItems).toEqual(['g:font cmd:bold']);
+    expect(p.extra).toEqual({ 'g:font': ['cmd:subscript', 'sh:sort'] });
+  });
 });

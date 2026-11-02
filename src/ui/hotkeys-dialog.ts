@@ -3,6 +3,7 @@
 // that another action had is allowed (the window says what changed), never blocked.
 
 import { showDialog } from './dialog-host';
+import { keyBoard } from './key-board';
 import { keymap, CONTEXTS, KeyContext, DEFAULT_KEYS, actionsFor, actionName, displayChord, chordOf, parseAction } from '../editor/keymap';
 
 export interface HotkeysOptions {
@@ -34,12 +35,16 @@ export class HotkeysDialog {
   constructor(private opts: HotkeysOptions) {
     const d = (this.d = document.createElement('dialog'));
     d.className = 'hotkeys';
-    d.setAttribute('aria-label', 'Hotkeys');
+    d.setAttribute('aria-label', 'Keyboard Shortcuts');
     d.innerHTML = `
       <div class="hk-head">
         <h2>Hotkeys</h2>
+        <span class="hk-views" role="group" aria-label="Show the keys as">
+          <button type="button" data-view="board" aria-pressed="true">Keyboard</button><button type="button" data-view="list" aria-pressed="false">List</button>
+        </span>
         <input type="search" placeholder="Find an action or a key" aria-label="Find an action or a key" />
       </div>
+      <div class="hk-board"></div>
       <p class="muted">Click <b>+</b> next to an action and press the key you want for it. Click <b>×</b> on a key to take it away. Keys are case-sensitive: <kbd>f</kbd> and <kbd>Shift+F</kbd> are different keys.</p>
       <label class="hk-opt small"><input type="checkbox" data-opt="keep" /><span>After <kbd>1</kbd> or <kbd>0</kbd> on the atom under the mouse, keep the highlight there, as ChemDraw does (pressing 1 three times adds three bonds). Off: the highlight moves to the new atom, so 1 1 1 draws a chain.</span></label>
       <label class="hk-opt small"><input type="checkbox" data-opt="sticky" /><span>Keep the highlight a key sets in place while the mouse moves off into empty space, as ChemDraw does (it gives way when the mouse rests on another atom or bond). Off: the highlight follows the mouse as soon as it moves.</span></label>
@@ -69,9 +74,26 @@ export class HotkeysDialog {
     d.querySelector('[data-act=import]')!.addEventListener('click', () => opts.importKeys());
     this.resetAllBtn.addEventListener('click', () => this.resetAll());
     this.body.addEventListener('click', (e) => this.onClick(e));
+    // the keyboard, or the list of actions
+    const boardBox = d.querySelector<HTMLElement>('.hk-board')!;
+    boardBox.append(keyBoard({
+      mac: opts.mac,
+      bind: (ctx, chord, action) => {
+        if (action) this.say(this.assign(ctx, action, chord));
+        else { const was = keymap.lookup(ctx, chord); keymap.bind(ctx, chord, null); this.say(was ? `${displayChord(chord, opts.mac)} no longer does “${actionName(was)}”.` : ''); }
+      },
+    }));
+    const show = (view: 'board' | 'list') => {
+      d.dataset.view = view;
+      for (const b of d.querySelectorAll<HTMLButtonElement>('[data-view]')) b.setAttribute('aria-pressed', String(b.dataset.view === view));
+    };
+    for (const b of d.querySelectorAll<HTMLButtonElement>('[data-view]')) b.addEventListener('click', () => show(b.dataset.view as 'board' | 'list'));
+    // typing in the search box goes to the list
+    this.search.addEventListener('input', () => { if (this.search.value) show('list'); });
+    show('board');
     // while waiting for a key, every key press is the new key (Esc cancels)
     d.addEventListener('keydown', (e) => this.onRecordKey(e), true);
-    d.addEventListener('cancel', (e) => { if (this.recording) { e.preventDefault(); this.stopRecording('Cancelled: no key changed.'); } });
+    d.addEventListener('cancel', (e) => { if (this.recording) { e.preventDefault(); this.stopRecording('Canceled: no key changed.'); } });
     d.addEventListener('close', () => this.stopRecording(''));
     keymap.onChange(() => { if (d.open) this.render(); });
     document.body.append(d);
@@ -238,7 +260,7 @@ export class HotkeysDialog {
     const action = btn.closest<HTMLTableRowElement>('tr')?.dataset.action;
     if (!action) return;
     if (btn.classList.contains('hk-add')) {
-      if (this.recording?.button === btn) this.stopRecording('Cancelled: no key changed.');
+      if (this.recording?.button === btn) this.stopRecording('Canceled: no key changed.');
       else this.startRecording(ctx, action, btn);
     } else if (btn.classList.contains('hk-remove')) {
       const chord = btn.dataset.chord!;
@@ -275,7 +297,7 @@ export class HotkeysDialog {
     e.preventDefault();
     e.stopPropagation();
     if (!chord) return; // a modifier on its own: wait for the rest
-    if (chord === 'Escape') { this.stopRecording('Cancelled: no key changed.'); return; }
+    if (chord === 'Escape') { this.stopRecording('Canceled: no key changed.'); return; }
     const { ctx, action } = this.recording;
     this.stopRecording('');
     this.say(this.assign(ctx, action, chord));

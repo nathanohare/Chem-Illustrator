@@ -3,6 +3,7 @@
 // keeps that choice for the person: no app can make itself the default). On macOS and Linux the
 // installer lists the types, and the page says where to choose the default.
 
+import { addInfo, foldIntoInfo } from './info-tip';
 import { showDialog } from './dialog-host';
 
 export const FILE_TYPES: { ext: string; label: string; chemistry: boolean }[] = [
@@ -11,6 +12,10 @@ export const FILE_TYPES: { ext: string; label: string; chemistry: boolean }[] = 
   { ext: 'cds', label: 'ChemDraw style sheets (.cds)', chemistry: true },
   { ext: 'mol', label: 'Molfiles (.mol)', chemistry: true },
   { ext: 'sdf', label: 'Structure-data files (.sdf)', chemistry: true },
+  { ext: 'rxn', label: 'Reaction files (.rxn)', chemistry: true },
+  { ext: 'mrv', label: 'Marvin documents (.mrv)', chemistry: true },
+  { ext: 'ket', label: 'Ketcher drawings (.ket)', chemistry: true },
+  { ext: 'cml', label: 'Chemical Markup Language (.cml)', chemistry: true },
   { ext: 'docx', label: 'Word documents (.docx)', chemistry: false },
   { ext: 'pptx', label: 'PowerPoint presentations (.pptx)', chemistry: false },
   { ext: 'xlsx', label: 'Excel workbooks (.xlsx)', chemistry: false },
@@ -49,8 +54,8 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     note(host.platform === 'web'
       ? 'The web version opens files from File ▸ Open, or dropped on the window. The desktop app can be opened from your files directly.'
       : host.platform === 'mac'
-        ? 'Chem Illustrator is offered for .cdxml, .cdx, .cds, .mol, .sdf, .docx, .pptx and .xlsx files: right-click a file in Finder and choose Open With. To always open a kind of file here, choose File ▸ Get Info in Finder, pick Chem Illustrator under Open with, and click Change All.'
-        : 'Chem Illustrator is offered for .cdxml, .cdx, .cds, .mol, .sdf, .docx, .pptx and .xlsx files in your file manager\'s Open With menu. Your desktop\'s settings (Default Applications) choose which program opens each kind of file.');
+        ? 'Chem Illustrator is offered for .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket, .cml, .docx, .pptx and .xlsx files: right-click a file in Finder and choose Open With. To always open a kind of file here, choose File ▸ Get Info in Finder, pick Chem Illustrator under Open with, and click Change All.'
+        : 'Chem Illustrator is offered for .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket, .cml, .docx, .pptx and .xlsx files in your file manager\'s Open With menu. Your desktop\'s settings (Default Applications) choose which program opens each kind of file.');
     const ok = document.createElement('button');
     ok.type = 'submit';
     ok.className = 'primary';
@@ -59,7 +64,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     form.append(buttons);
     form.addEventListener('submit', (e) => { e.preventDefault(); done(); });
   } else {
-    note('Ticked kinds of file show Chem Illustrator under "Open with" when you right-click them in Explorer. This never changes the program that opens them now: ChemDraw, Word, PowerPoint and Excel stay the default unless you change it.');
+    addInfo(h, 'Checked kinds of file show Chem Illustrator under "Open with" when you right-click them in Explorer. This never changes the program that opens them now: ChemDraw, Word, PowerPoint and Excel stay the default unless you change it.');
     const now = new Set(await host.get().catch(() => [] as string[]));
     const boxes = new Map<string, HTMLInputElement>();
     for (const t of FILE_TYPES) {
@@ -81,6 +86,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     open.type = 'button';
     open.textContent = 'Choose Defaults in Windows Settings…';
     open.addEventListener('click', () => void host.openDefaults().catch((e) => host.flash(String(e))));
+    foldIntoInfo(defaults, open);
     form.append(defaults, open);
     const objRow = document.createElement('label');
     objRow.className = 'ask-row ask-check';
@@ -94,6 +100,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     const objHelp = document.createElement('p');
     objHelp.className = 'ask-help muted';
     objHelp.textContent = 'Copied drawings paste as Chem Illustrator objects: double-click one in Word to edit it here, and Save puts it back. Without this they paste as pictures (they still hold the drawing, so copying one back here keeps it editable). Also in Word under Insert ▸ Document ▸ Object.';
+    foldIntoInfo(objHelp, objName);
     form.append(objRow, objHelp);
     const cancel = document.createElement('button');
     cancel.type = 'button';

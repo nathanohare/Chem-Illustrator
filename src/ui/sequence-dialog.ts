@@ -2,6 +2,7 @@
 // pick its ends, and press Insert for the whole structure. What the sequence was read as shows
 // under it while typing (H-Ala-Gly-…-OH), and anything that can't be read says why.
 
+import { addInfo } from './info-tip';
 import { C_TERMINI, N_TERMINI, parsePeptide, peptideName, peptideTemplate, type CTerminus, type NTerminus } from '../chem/biopolymer';
 import type { Template } from '../chem/templates';
 
@@ -23,9 +24,7 @@ export class SequenceDialog {
     const form = document.createElement('form');
     const h = document.createElement('h2');
     h.textContent = 'Structure from Sequence';
-    const note = document.createElement('p');
-    note.className = 'muted';
-    note.textContent = 'Type a peptide in one-letter codes (GLYPHS) or three-letter codes (Boc-Ala-D-Phe-OMe). Spaces, numbers and a FASTA header line are skipped. It is drawn N-terminus on the left, side chains in turn up and down.';
+    addInfo(h, 'Type a peptide in one-letter codes (GLYPHS) or three-letter codes (Boc-Ala-D-Phe-OMe). Spaces, numbers and a FASTA header line are skipped. It is drawn N-terminus on the left, side chains in turn up and down.');
     const input = document.createElement('textarea');
     input.className = 'name-input sequence-input';
     input.rows = 3;
@@ -76,7 +75,7 @@ export class SequenceDialog {
     ok.className = 'primary';
     ok.textContent = 'Insert';
     buttons.append(cancel, ok);
-    form.append(h, note, input, ends, opts, status, buttons);
+    form.append(h, input, ends, opts, status, buttons);
     d.append(form);
 
     /** The sequence read now, with the ends it was given (written in it, or picked). */
