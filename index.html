@@ -2217,7 +2217,7 @@
       </div>
       <div class="rb-group" data-sl-text>
         <div class="rb-row">
-          <div class="rb-col">
+          <div class="rb-col rb-fontcol">
             <div class="rb-pair">
               <input data-tx="font" class="rb-text rb-font" list="ci-fonts" spellcheck="false" aria-label="Font" title="Font of the selected text, or of the whole of each picked text box (type any installed font)" />
               <input data-tx="size" class="rb-text rb-num" list="sl-size-list" spellcheck="false" aria-label="Font size" title="Font size in points" />
@@ -2225,6 +2225,7 @@
               <button class="rb-sq" data-sl-fmt="grow" title="Increase font size">A<sup>+</sup></button>
               <button class="rb-sq" data-sl-fmt="shrink" title="Decrease font size">A<sup>−</sup></button>
               <button class="rb-sq" data-sl-fmt="clear" title="Clear All Formatting: back to plain text in the box's own font and size">A<sub>⌫</sub></button>
+              <label class="rb-sq rb-colour" title="Text color"><span>A</span><input data-tx="colour" type="color" aria-label="Text color" /></label>
             </div>
             <div class="rb-pair">
               <button class="rb-sq" data-sl-fmt="bold" aria-pressed="false" title="Bold (Ctrl+B)"><b>B</b></button>
@@ -2237,7 +2238,6 @@
               <select data-tx="spacing" title="Character spacing" aria-label="Character spacing">
                 <option value="-3">Very Tight</option><option value="-1.5">Tight</option><option value="0">Normal</option><option value="3">Loose</option><option value="6">Very Loose</option><option value="more">More Spacing…</option><option value="" hidden>Other</option>
               </select>
-              <label class="rb-sq rb-colour" title="Text color"><span>A</span><input data-tx="colour" type="color" aria-label="Text color" /></label>
             </div>
           </div>
         </div>

@@ -3437,3 +3437,12 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 /* the Style panel: "Style – Box" in its title, and a small label over a shape's border rows */
 #style-section > h2 .style-of { color: var(--text); }
 #style-body .style-sub { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin: 8px 0 2px; padding-top: 6px; border-top: 1px solid var(--line); }
+
+/* Presentation and Design's Font group: two rows the same width, no gaps at their ends. The
+   longer row sets the width; the font box, then the buttons, stretch to fill the other */
+.rb-fontcol { align-items: stretch; }
+.rb-fontcol > .rb-pair { width: 100%; }
+.ribbon .rb-fontcol input.rb-font { flex: 1 1 84px; width: 84px; min-width: 0; }
+.ribbon .rb-fontcol input.rb-num { flex: 0 0 auto; width: 36px; }
+.ribbon .rb-fontcol .rb-sq { flex: 1 1 auto; min-width: 22px; padding: 2px 3px; }
+.ribbon .rb-fontcol select[data-tx='spacing'] { flex: 0 0 auto; width: 74px; }
