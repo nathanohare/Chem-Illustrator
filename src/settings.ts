@@ -106,16 +106,20 @@ export interface Settings {
   welcomed: boolean;
   /** Where the text formatting bar goes while typing text (View > Window and Colours > Text Formatting Bar). */
   textBar: 'docked' | 'floating' | 'hidden';
-  /** The window's own colours: as the computer is set (light or dark), or always light or dark (View > Window and Colours > Theme). The page has its own Dark Page. */
+  /** The window's own colours: as the computer is set (light or dark), or always light or dark (View > Window and Colours > Theme). The page has its own Reading Mode. */
   appTheme: 'system' | 'light' | 'dark';
   /** Toolboxes docked at a side show in one column in Slides, Sheet, Document and Design tabs (View > Toolboxes). */
   oneColumnTools: boolean;
+  /** Settings ▸ Toolboxes: each toolbox button in a cell of its own, ruled off by lines, raised, or both. */
+  toolCells: 'off' | 'grid' | 'raised' | 'both';
   /** The start view (new tabs, recent files) on the empty drawing the program opens with. */
   startView: boolean;
   /** Settings ▸ Preferences: Enter finishes text typed with the Text tool (in every mode) and Alt+Enter (Option+Enter on a Mac) starts a new line. Off: Enter starts a new line and Esc finishes (ChemDraw). */
   enterFinishesText: boolean;
   /** Resting the mouse on an abbreviation shows the group written out (View > Group Tooltips). */
   groupTips: boolean;
+  /** Tooltips that show what a tool does and its keys (off: the plain one-line tip). */
+  toolTips: boolean;
   /** View > Window and Colours > Touch Mode: bigger buttons, the atom keypad and long-press menus. Automatic turns it on once a pen or finger is used. */
   touchMode: 'auto' | 'on' | 'off';
   /** The pen always sketches (whatever tool is picked): strokes become bonds and rings, letters atom labels, a scribble erases. */
@@ -177,15 +181,15 @@ export interface Settings {
   myStyles: DocStyle[];
   /** The style each kind of new tab starts with, by name (File > Drawing Style > Use for new…). */
   modeStyles: Partial<Record<StyleMode, string>>;
-  /** Show the page dark on screen (View > Dark Page, or the eye button). */
+  /** Show the page dark on screen (View > Reading Mode, or the eye button). */
   darkPage: boolean;
   /** Which dark palette, by name. */
   darkPalette: string;
-  /** Your own dark palettes (View > Window and Colours > Dark Page Colours). */
+  /** Your own dark palettes (View > Window and Colours > Reading Mode Colours). */
   darkPalettes: DarkPalette[];
   /** Alignment guides on or off in each kind of tab (View > Alignment Guides). */
   guides: { drawing: boolean; slides: boolean; design: boolean };
-  /** Finding your way round drawings: navigator, edge arrows, dot grid, outside tint, Fit and Go to Selection buttons (Settings ▸ Navigation). */
+  /** Finding your way around drawings: the Document Map, edge arrows, dot grid, outside tint, Fit and Go to Selection buttons (Settings ▸ Navigation). */
   orient: OrientPrefs;
   /** How the drawing's page grid looks, and what a paste past a fixed edge does (Settings ▸ Page Grid). */
   pageLook: PageLook;
@@ -216,8 +220,6 @@ export interface Settings {
   cursorAids: CursorAidPrefs;
   /** η³ and larger ligands on a metal drawn delocalized (a circle in the ring, an arc over an allyl). */
   haptoDelocalized: boolean;
-  /** How a tool's demo shows when the pointer rests on its button (Settings ▸ General). */
-  toolDemos: DemoLook;
   /** The Windows app has offered to open the chemistry file types (once, at its first start). */
   fileTypesOffered: boolean;
   /** The Windows app has registered its drawings as objects Word can send back to edit (once, at its first start). */
@@ -256,7 +258,7 @@ export const SLIDE_PANE_MIN = 120, SLIDE_PANE_MAX = 480, NOTES_MIN = 36, NOTES_M
 export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, stickyHotspot: false, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
-  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', oneColumnTools: false, startView: true, enterFinishesText: false, groupTips: true, touchMode: 'auto', penSketch: false,
+  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', oneColumnTools: false, toolCells: 'off', startView: true, enterFinishesText: false, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
   citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowProducts: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'peach', depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
@@ -277,22 +279,7 @@ export const DEFAULT_SETTINGS: Settings = {
   straightenLinear: true,
   cursorAids: { ...DEFAULT_CURSOR_AIDS },
   haptoDelocalized: true,
-  toolDemos: 'off',
 };
-
-/**
- * How demos show: B, a card with the clip, its steps and Replay (the default); A, a small clip in a
- * tip; C, still frames only; or not at all. With the system's reduced motion on, A and B show the
- * still frames instead.
- */
-export type DemoLook = 'card' | 'tip' | 'frames' | 'off';
-export const DEMO_LOOKS: { value: DemoLook; label: string }[] = [
-  { value: 'card', label: 'A card with the clip and its steps' },
-  { value: 'tip', label: 'A small clip in the tool tip' },
-  { value: 'frames', label: 'Still pictures of each step' },
-  { value: 'off', label: 'Don\'t show demos' },
-];
-export const parseDemoLook = (v: unknown): DemoLook => (DEMO_LOOKS.some((l) => l.value === v) ? (v as DemoLook) : 'off');
 
 const STORAGE_KEY = 'chem-illustrator.settings';
 
@@ -305,7 +292,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (!raw || typeof raw !== 'object') return s;
   const r = raw as Record<string, unknown>;
   if (r.hotkeys && typeof r.hotkeys === 'object' && !Array.isArray(r.hotkeys)) s.hotkeys = r.hotkeys as KeyOverrides;
-  for (const k of ['keepHotspotOnBond', 'stickyHotspot', 'fixedLength', 'fixedAngles', 'devTools', 'showRoles', 'chemTyping', 'stereoItalic', 'boldNumbers', 'autoLinks', 'linkCtrlClick', 'spellCheck', 'scrollBars', 'ribbonCollapsed', 'ribbonAutoFold', 'tabsInMenu', 'welcomed', 'groupTips', 'penSketch', 'askWholeDrawing', 'darkPage', 'circledCharges', 'textToAtom', 'ionCharges', 'saltGroups', 'groupOutline', 'rerouteArrows', 'arrowProducts', 'superscriptR', 'updateCheck', 'pubchemNames', 'convertChemDraw', 'matchStructure', 'fileTypesOffered', 'wordObjectsOffered'] as const) if (typeof r[k] === 'boolean') s[k] = r[k] as boolean;
+  for (const k of ['keepHotspotOnBond', 'stickyHotspot', 'fixedLength', 'fixedAngles', 'devTools', 'showRoles', 'chemTyping', 'stereoItalic', 'boldNumbers', 'autoLinks', 'linkCtrlClick', 'spellCheck', 'scrollBars', 'ribbonCollapsed', 'ribbonAutoFold', 'tabsInMenu', 'welcomed', 'groupTips', 'toolTips', 'penSketch', 'askWholeDrawing', 'darkPage', 'circledCharges', 'textToAtom', 'ionCharges', 'saltGroups', 'groupOutline', 'rerouteArrows', 'arrowProducts', 'superscriptR', 'updateCheck', 'pubchemNames', 'convertChemDraw', 'matchStructure', 'fileTypesOffered', 'wordObjectsOffered'] as const) if (typeof r[k] === 'boolean') s[k] = r[k] as boolean;
   for (const k of ['arrowStartGap', 'arrowEndGap'] as const) if (typeof r[k] === 'number' && isFinite(r[k] as number) && (r[k] as number) >= 0) s[k] = Math.min(50, r[k] as number);
   if (typeof r.bondEnds === 'number' && isFinite(r.bondEnds)) s.bondEnds = Math.max(0, Math.min(1, r.bondEnds));
   if (MAP_LOOKS.some((l) => l.value === r.mapLook)) s.mapLook = r.mapLook as MapLook;
@@ -327,6 +314,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.uiScale === 'number') s.uiScale = clampUiScale(r.uiScale);
   if (r.updateChannel === 'stable' || r.updateChannel === 'latest') s.updateChannel = r.updateChannel;
   if (typeof r.textBar === 'string' && ['docked', 'floating', 'hidden'].includes(r.textBar)) s.textBar = r.textBar as Settings['textBar'];
+  if (typeof r.toolCells === 'string' && ['off', 'grid', 'raised', 'both'].includes(r.toolCells)) s.toolCells = r.toolCells as Settings['toolCells'];
   if (r.appTheme === 'system' || r.appTheme === 'light' || r.appTheme === 'dark') s.appTheme = r.appTheme;
   if (typeof r.oneColumnTools === 'boolean') s.oneColumnTools = r.oneColumnTools;
   if (typeof r.startView === 'boolean') s.startView = r.startView;
@@ -388,7 +376,6 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.straightenLinear === 'boolean') s.straightenLinear = r.straightenLinear;
   if (r.cursorAids) s.cursorAids = parseCursorAids(r.cursorAids);
   if (typeof r.haptoDelocalized === 'boolean') s.haptoDelocalized = r.haptoDelocalized;
-  if (r.toolDemos !== undefined) s.toolDemos = parseDemoLook(r.toolDemos);
   return s;
 }
 

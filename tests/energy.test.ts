@@ -115,6 +115,73 @@ describe('energy diagrams', () => {
     expect(energyFrameOf(doc, 'shape', frame)).toBe(frame);
   });
 
+  // a structure drawn for a species in the Energy Diagram window
+  const ethanol = () => {
+    const t = new Doc();
+    t.edit('d', () => {
+      const a = t.addAtom(0, 0), b = t.addAtom(26, -15), o = t.addAtom(52, 0, 8, { label: 'OH' });
+      t.addBond(a.id, b.id, 1); t.addBond(b.id, o.id, 1);
+    });
+    return t.contents();
+  };
+  const withDrawn = (k: number, more: Partial<EnergyData> = {}) => {
+    const d = data('one-step', more);
+    return { ...d, paths: [{ ...d.paths[0], points: d.paths[0].points.map((q, i) => (i === k ? { ...q, drawn: ethanol() } : q)) }] };
+  };
+  const level = (doc: Doc, x: number) => [...doc.shapes.values()].filter((s) => s.kind === 'line' && s.bold).sort((a, b) => Math.abs((a.x1 + a.x2) / 2 - x) - Math.abs((b.x1 + b.x2) / 2 - x))[0];
+
+  it('a drawn structure sits above its level, inside the frame', () => {
+    const doc = new Doc();
+    const m = plainMeasure(doc);
+    const frame = doc.edit('e', () => putEnergy(doc, m, withDrawn(1), { x: 100, y: 100 }));
+    expect(doc.atoms.size).toBe(3);
+    expect(doc.bonds.size).toBe(2);
+    const xs = [...doc.atoms.values()].map((a) => a.x), ys = [...doc.atoms.values()].map((a) => a.y);
+    const ts = level(doc, (Math.min(...xs) + Math.max(...xs)) / 2);
+    expect(Math.max(...ys)).toBeLessThan(ts.y1);
+    expect(energyFrameOf(doc, 'atom', [...doc.atoms.keys()][0])).toBe(frame);
+  });
+
+  it('below each level puts it under the line', () => {
+    const doc = new Doc();
+    const m = plainMeasure(doc);
+    doc.edit('e', () => putEnergy(doc, m, withDrawn(1, { place: 'below' }), { x: 100, y: 100 }));
+    const xs = [...doc.atoms.values()].map((a) => a.x), ys = [...doc.atoms.values()].map((a) => a.y);
+    const ts = level(doc, (Math.min(...xs) + Math.max(...xs)) / 2);
+    expect(Math.min(...ys)).toBeGreaterThan(ts.y1);
+  });
+
+  it('drawing again puts the drawn structure in once, and keeps structures put on by hand', () => {
+    const doc = new Doc();
+    const m = plainMeasure(doc);
+    const frame = doc.edit('e', () => putEnergy(doc, m, withDrawn(1), { x: 100, y: 100 }));
+    const hand = doc.edit('a', () => doc.addAtom(150, 150, 7).id);
+    doc.edit('in', () => {
+      const f = doc.shapes.get(frame)!.frame!;
+      doc.updateShape(frame, { frame: { ...f, atoms: [...f.atoms, hand] } });
+    });
+    for (let i = 0; i < 2; i++) doc.edit('re', () => putEnergy(doc, m, doc.shapes.get(frame)!.energy!, { x: 100, y: 100 }, frame));
+    expect(doc.atoms.size).toBe(4);
+    expect(doc.atoms.has(hand)).toBe(true);
+    // taking the structure out of the table takes it off the diagram
+    const d = doc.shapes.get(frame)!.energy!;
+    doc.edit('off', () => putEnergy(doc, m, { ...d, paths: [{ ...d.paths[0], points: d.paths[0].points.map(({ drawn: _d, ...q }) => q) }] }, { x: 100, y: 100 }, frame));
+    expect(doc.atoms.size).toBe(1);
+  });
+
+  it('keeps a drawn structure when saved to CDXML', () => {
+    const doc = new Doc();
+    const m = plainMeasure(doc);
+    doc.edit('e', () => putEnergy(doc, m, withDrawn(1), { x: 100, y: 100 }));
+    const back = readCdxml(writeCdxml(doc)).doc;
+    const s = [...back.shapes.values()].find((x) => x.energy)!;
+    expect(s.energy!.paths[0].points[1].drawn?.atoms.length).toBe(3);
+    expect(back.atoms.size).toBe(3);
+    // and drawing it again after opening the file does not leave a second copy
+    back.edit('re', () => putEnergy(back, plainMeasure(back), s.energy!, { x: 100, y: 100 }, s.id));
+    expect(back.atoms.size).toBe(3);
+  });
+
   it('keeps its numbers when saved to CDXML, and its parts are in its frame again', () => {
     const { doc, frame } = put('catalysed', { style: 'curve' });
     const back = readCdxml(writeCdxml(doc)).doc;

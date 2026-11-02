@@ -25,6 +25,7 @@ import { Editor, TOOLS, ringsWereFilled, type HighlightToggle, type Selection } 
 import { BUILT_IN_LOOKS, type HighlightLookPreset } from './ui/highlight-looks';
 import { selectionBox, atomsBox, POINTS, type Align, units, moveUnit } from './editor/arrange';
 import { defaultColumns } from './editor/grid-arrange';
+import { askGridLayout, type GridPick } from './ui/grid-picker';
 import { groupSelection, selectedGroups } from './editor/groups';
 import { readCdxml, ReadStats } from './io/cdxml';
 import { readCml } from './io/cml';
@@ -96,10 +97,9 @@ import { recordingToWav, NARRATION_NAME } from './deck/narration';
 import { clockText } from './deck/show-link';
 import type { PresenterView } from './ui/presenter-view';
 import { editDrawingStyle } from './ui/style-dialog';
-import { ribbonStyles, showStylePresets, styleNumbers } from './ui/style-cards';
 import { usedObjects, type DocText } from './document/document';
 import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from './dark-page';
-import { STYLE_PRESETS, applyStyle, presetNamed, restyleContents, sameLook, styleNamed, type RestyleHow, type StyleMode } from './drawing-styles';
+import { STYLE_PRESETS, applyStyle, presetNamed, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
 import { askCleanUpOption } from './ui/cleanup-picker';
 import { looksTangled, turnOption } from './chem/cleanup';
 import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
@@ -148,7 +148,6 @@ import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templ
 import { freeLigandFor, loadFullLigands, placeFreeLigand } from './chem/expand';
 import { centreEnd, haptoLook } from './chem/hapto';
 import { viewNow, viewRingOf, type RingView } from './chem/ring-views';
-import { watchToolHover } from './ui/tool-demos';
 import { countElectrons } from './chem/electrons';
 import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, alkylPrefs, ALKYL_LOOKS, type AlkylLook, tokenize as tokenizeLabel } from './chem/labels';
 import { restyleAlkyl } from './text/alkyl-restyle';
@@ -174,7 +173,7 @@ import { htmlToRich } from './text/html';
 import { LiveStereo } from './chem/live-stereo';
 import { setStereoShown, shownDescriptor, axialStyle } from './chem/stereo';
 import { keymap, COMMAND_NAMES, registerToolNames, displayChord, actionName, chordOf, parseAction, KeyContext, KeyOverrides } from './editor/keymap';
-import { loadSettings, saveSettings, settingsLocation, exportText, importSettings, Settings, DEMO_LOOKS, parseDemoLook, type DemoLook, SLIDE_PANE_MIN, SLIDE_PANE_MAX, NOTES_MIN, NOTES_MAX } from './settings';
+import { loadSettings, saveSettings, settingsLocation, exportText, importSettings, Settings, SLIDE_PANE_MIN, SLIDE_PANE_MAX, NOTES_MIN, NOTES_MAX } from './settings';
 import { arrowGaps } from './chem/mechanism';
 import { showDialog } from './ui/dialog-host';
 import { HotkeysDialog } from './ui/hotkeys-dialog';
@@ -239,6 +238,8 @@ import { SheetChem } from './sheet/sheet-chem';
 import { structureDoc, structureMolfile } from './sheet/structure-doc';
 import { StructurePictures } from './ui/structure-pictures';
 import { LabelTooltip } from './ui/label-tooltip';
+import { ToolTip } from './ui/tool-tip';
+import { toolHelp, arrowHandleHelp, shapeHandleHelp, splitTitle, withoutKeys } from './ui/tool-help';
 import { starAtoms } from './chem/label-tip';
 import { structurePlace } from './sheet/layout';
 // sheet and document files' readers and writers load the first time one is opened or saved
@@ -304,6 +305,7 @@ const pickSlideSize = later(() => import('./ui/slide-size-dialog'), 'pickSlideSi
 const pickTemplate = later(() => import('./ui/template-gallery'), 'pickTemplate');
 const askCycle = later(() => import('./ui/cycle-dialog'), 'askCycle');
 const askEnergy = later(() => import('./ui/energy-dialog'), 'askEnergy');
+import type { EnergyStructureHooks } from './ui/energy-dialog';
 const askNewman = later(() => import('./ui/newman-dialog'), 'askNewman');
 const newmanSettings = later(() => import('./ui/newman-settings'), 'newmanSettings');
 const askPlate = later(() => import('./ui/plate-dialog'), 'askPlate');
@@ -370,7 +372,7 @@ let modeStyles: Partial<Record<StyleMode, string>> = {};
 /** The style each mode's new tabs take when you haven't chosen one: slides are seen from the back of a room, so their structures are twice ACS size. */
 const MODE_STYLE_DEFAULTS: Partial<Record<StyleMode, string>> = { slides: 'Slides (ACS 1996 × 2)' };
 const modeStyleFor = (mode: StyleMode): string | undefined => modeStyles[mode] ?? MODE_STYLE_DEFAULTS[mode];
-/** View > Dark Page: on or off, which palette, and your own palettes. */
+/** View > Reading Mode: on or off, which palette, and your own palettes. */
 const dark = { on: false, palette: 'Graphite', own: [] as DarkPalette[] };
 /** Finding your way round drawings (Settings ▸ Navigation): navigator, edge arrows, dot grid, outside tint, Fit and Go to Selection buttons. */
 let orientPrefs: OrientPrefs = { ...DEFAULT_ORIENT };
@@ -423,7 +425,7 @@ const ARROWS: PaletteDef = {
 
 const SHAPES: PaletteDef = {
   palette: 'shapes',
-  title: 'Shapes',
+  title: 'Frames',
   items: [
     { name: 'shape-rect', title: 'Box' },
     { name: 'shape-rect-rounded', title: 'Box with round corners' },
@@ -512,8 +514,8 @@ const SELECT_TOOLS: PaletteDef = {
   palette: 'select',
   title: 'Select',
   items: [
-    { name: 'select', title: 'Select and move: drag a box round what to select' },
-    { name: 'lasso', title: 'Lasso select: drag a loop round what to select, to pick pieces out of a crowded scheme' },
+    { name: 'select', title: 'Select and move: drag a box around what to select' },
+    { name: 'lasso', title: 'Lasso select: drag a loop around what to select, to pick pieces out of a crowded scheme' },
   ],
   columns: 2,
 };
@@ -593,9 +595,11 @@ function keysOf(ctx: KeyContext, action: string): string[] {
 
 // Tool names for the Hotkeys window: the tool tip up to its first full stop or colon.
 const toolNames: Record<string, string> = {};
+/** Each tool's whole tooltip, as its button has it. */
+const toolTitles: Record<string, string> = {};
 for (const group of [...TOOL_GROUPS, OFF_BAR]) {
   for (const item of group) {
-    for (const t of 'palette' in item ? item.items : [item]) toolNames[t.name] = t.title.replace(/\s*\(.*?\)/g, '').split(/[.:] /)[0];
+    for (const t of 'palette' in item ? item.items : [item]) { toolTitles[t.name] = t.title; toolNames[t.name] = t.title.replace(/\s*\(.*?\)/g, '').split(/[.:] /)[0]; }
   }
 }
 registerToolNames(toolNames);
@@ -620,27 +624,6 @@ const toolbar = new Toolbar($<HTMLDivElement>('#tools'), TOOL_GROUPS, (name) => 
   const keys = keysOf('space', `tool ${name}`);
   return keys.length ? ` (${keys.join(', ')})` : '';
 }, (name, size) => TOOL_PALETTE.get(name)?.icon?.(name, size));
-
-const HINTS: Record<string, string> = {
-  sketch: 'Draw freehand: a line is a bond, a zig-zag a chain, over a bond doubles it; a loop with corners is a ring, a circle benzene; write C, N, O, Cl, Br, + or − on an atom; scribble to erase.',
-  connector: 'Drag from one shape\'s blue dot to another\'s: the connector sticks to both and follows them when they move.',
-  'connector-elbow': 'Drag from one shape\'s blue dot to another\'s: the connector bends square and follows the shapes when they move.',
-  select: 'Click to select (Shift or Ctrl+click adds), drag to box-select or move. Ctrl+drag copies; Shift keeps a drag straight. Double-click selects a whole structure. Delete removes.',
-  eraser: 'Click an atom, bond, caption, arrow or shape to remove it.',
-  chain: 'Drag from empty space or an atom; the number shows how many bonds. Click to type how many atoms; Alt+click repeats the last number.',
-  text: 'Click an atom to type a label (OMe, CO2Et, NHBoc…), or click empty space for a caption.',
-  element: 'Click atoms to make them the element picked in the periodic table, or empty space to add one.',
-  'bond-hapto': 'Drag from a metal into a ring (η⁵, η⁶) or onto a bond (η²), or the other way. Click inside a ring or on a bond for a new metal M there; select an allyl or diene, then click the metal. Click a hapto bond to draw it to each atom.',
-  fragment: 'Drag a line across the bonds to break (or click one bond). Each piece gets a caption with its formula and exact mass, which you can edit.',
-  newman: 'Click a single bond to draw its Newman projection: the end you click nearer is in front. The window shows its most stable conformers (Tab steps through them).',
-};
-const ARROW_HINT = 'Drag to draw an arrow (hold Alt or Space: any angle); click for a standard one. Drag the ends to move them, the middle to bend it.';
-const CURVE_HINT = 'Drag from where the electrons start to where they go. They start at a lone pair, bond, radical or charge and go to an atom, a bond, or the gap where a new bond forms; swing out to one side to bend that way. Or click where it starts, click points it goes through, and click where it ends. Ctrl+drag (or the pen) draws it freehand. The arrow sticks to the structure. Drag the middle dot (an S: its diamonds, or its line) to change the curve.';
-const SHAPE_HINT = 'Drag to draw. Drag the corner squares to resize; the Style panel changes dashes, fill, corners and shadow.';
-const BRACKET_HINT = 'Drag a box to put brackets round it, or click a structure to bracket it.';
-const BOND_HINT = 'Click empty space or an atom to draw; drag to aim (hold Alt or Space: any angle). Point at an atom or bond and press a hotkey (Edit > Hotkeys lists them).';
-const RING_HINT = 'Click empty space, an atom (spiro; Alt+click to attach by a bond) or a bond (fused). Drag to orient.';
-const TEMPLATE_HINT = 'Click empty space to place it (drag to turn it), a bond to fuse it on, or an atom to join it there (Alt: the other way: by a new bond, or sharing the atom).';
 
 // Design mode's shape library (made further down, once the page is ready)
 let designLib: DesignLibrary | null = null;
@@ -673,21 +656,71 @@ function showGuides(): void {
   $('[data-cmd="alignment-guides"]')?.setAttribute('aria-checked', String(editor.smartGuides));
   if (m === 'design') $<HTMLInputElement>('#dz-guides').checked = guidesOn.design;
 }
-const GEO_HINT = 'Click on the page to put the shape down, or drag to draw it at any size (Shift keeps its shape). Double-click a shape to type in it.';
 
 editor.onToolChange = (name) => {
   toolbar.setActive(name);
   markSketch(name === 'sketch');
   for (const b of document.querySelectorAll<HTMLElement>('.tb-tool')) b.classList.toggle('active', b.dataset.tool === name);
   designLib?.setActive(name);
-  if (name.startsWith('geo:')) { setHint(GEO_HINT); return; }
-  const t = TOOLS[name];
-  setHint(HINTS[name] ?? (t.kind === 'ring' ? RING_HINT : t.kind === 'arrow' ? (t.style.sweep ? CURVE_HINT : ARROW_HINT)
-    : t.kind === 'shape' ? SHAPE_HINT : t.kind === 'bracket' ? BRACKET_HINT : t.kind === 'template' ? TEMPLATE_HINT : BOND_HINT));
+  toolStep = 0;
+  showToolStatus();
 };
+let statusReady = false;
+/** Which step of the tool in use the status bar marks (0: the first; 1 once the mouse is pressed). */
+let toolStep = 0;
+/** The tool's name as its button says it ("Wedge", "Curved arrow (electron pair)"). */
+function toolLabel(name: string): string {
+  const title = toolTitles[name];
+  return title ? splitTitle(title, false).name : name.startsWith('geo:') ? 'Shape' : TOOLS[name]?.kind === 'template' ? 'Template' : name;
+}
+/**
+ * The status bar for the tool in use, step by step, with the keys that change it; with one arrow
+ * or shape selected (by the Select tool, or an arrow tool on an arrow), what each of its handles does.
+ */
+function showToolStatus(): void {
+  // (the first tool is picked before the tabs exist: its hint comes once they do)
+  if (!statusReady) { queueMicrotask(() => { statusReady = true; showToolStatus(); }); return; }
+  if (stepHintOn || (ws.active.mode === 'sheet' || ws.active.mode === 'document') && !splitDrawing) return;
+  const name = editor.toolName, t = TOOLS[name];
+  const sel = editor.sel;
+  const one = sel.atoms.size + sel.bonds.size + sel.captions.size === 0 && sel.arrows.size + sel.shapes.size === 1;
+  if (one && toolStep === 0 && (t?.kind === 'select' || t?.kind === 'arrow' && sel.arrows.size)) {
+    const r = sel.arrows.size ? editor.doc.arrows.get([...sel.arrows][0]) : undefined;
+    const sh = sel.shapes.size ? editor.doc.shapes.get([...sel.shapes][0]) : undefined;
+    const g = r ? arrowHandleHelp(r) : sh && (sh.kind === 'rect' || sh.kind === 'oval' || sh.kind === 'line') ? shapeHandleHelp(sh.kind === 'line') : null;
+    if (g) { setStatus({ name: g.name, steps: g.handles, numbered: false, at: -1, keys: g.keys, full: `${g.name}. ${g.handles.join('. ')}.` }); return; }
+  }
+  const h = toolHelp(name, t);
+  setStatus({ name: toolLabel(name), steps: h.steps, numbered: h.steps.length > 1, at: Math.min(toolStep, h.steps.length - 1), keys: h.keys, full: h.what });
+}
+/** The status bar's step-by-step hint: the tool, its steps (the one in hand marked), then its keys. */
+function setStatus(s: { name: string; steps: string[]; numbered: boolean; at: number; keys: [string, string][]; full: string }): void {
+  const el = $('#hint');
+  const esc = (x: string) => x.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
+  const kbd = (k: string) => `<kbd>${esc(isMac ? k.replace(/^Ctrl\b/, '⌘').replace(/^Alt\b/, '⌥') : k)}</kbd>`;
+  const steps = s.steps.map((x, i) => `<span class="st-step${s.numbered && i < s.at ? ' done' : ''}${s.numbered && i === s.at ? ' now' : ''}">${s.numbered ? `<i>${i + 1}</i>` : ''}${esc(x)}</span>`);
+  el.innerHTML = `<b class="st-tool">${esc(s.name)}</b>${steps.join(s.numbered ? '<span class="st-sep">›</span>' : '<span class="st-sep">·</span>')}`
+    + s.keys.map(([k, what]) => `<span class="st-key">${kbd(k)} ${esc(what)}</span>`).join('');
+  el.classList.add('steps');
+  el.title = s.full;
+}
+// resting the mouse on a tool: what it does and the keys that change it
+const toolTip = new ToolTip((b) => {
+  const name = b.dataset.tipTool!, t = TOOLS[name];
+  const title = b.getAttribute('aria-label') ?? toolTitles[name] ?? name;
+  const known = !!t || name.startsWith('geo:');
+  const h = known ? toolHelp(name, t) : null;
+  const { name: label, rest } = splitTitle(title, !!h?.keys.length);
+  return { name: label, hotkey: keysOf('space', `tool ${name}`)[0] ?? '', body: rest || (h ? withoutKeys(h.what) : ''), keys: h?.keys ?? [], more: b.dataset.tipMore };
+}, isMac);
+// the step in hand: pressing on the drawing starts the second step, letting go goes back to the first
+host.addEventListener('pointerdown', (e) => { if (e.button === 0 && toolStep === 0) { toolStep = 1; showToolStatus(); } });
+window.addEventListener('pointerup', () => { if (toolStep) { toolStep = 0; showToolStatus(); } });
+
 /** The status bar's hint: its first sentence, short enough to read at a glance; the whole of it when you point at it. */
 function setHint(text: string): void {
   const el = $('#hint');
+  el.classList.remove('steps');
   const dot = text.search(/\.(\s|$)/);
   let short = dot > 0 ? text.slice(0, dot + 1) : text;
   const semi = short.indexOf('; ');
@@ -696,7 +729,9 @@ function setHint(text: string): void {
   el.title = short === text ? '' : text;
 }
 // a hint for the step in hand (drawing an arrow through points), and back to the tool's own after
-editor.onHint = (text) => { if (text) setHint(text); else editor.onToolChange(editor.toolName); };
+/** A hint for the step in hand is showing (it stays until the editor takes it back). */
+let stepHintOn = false;
+editor.onHint = (text) => { stepHintOn = !!text; if (text) setHint(text); else editor.onToolChange(editor.toolName); };
 editor.onNotice = (text, ms) => flash(text, ms);
 editor.setTool('bond-single');
 
@@ -826,6 +861,9 @@ async function pasteFrom(read: () => Pasted | Promise<Pasted>): Promise<void> {
     flash('Could not paste: ' + String(err));
     return;
   }
+  // a Smart Scheme's dashed species box selected: what is pasted becomes that species
+  const holder = editor.selectedHolder();
+  if (holder !== null) { await pasteIntoSpeciesBox(holder, got); return; }
   if (got.kind === 'drawing') {
     if (isEmpty(got.doc)) { flash('There is nothing to paste.'); return; }
     // on slides, structures can take the slide master's bond length; elsewhere they keep their size
@@ -847,6 +885,19 @@ async function pasteFrom(read: () => Pasted | Promise<Pasted>): Promise<void> {
   else if (got.kind === 'picture') placePicture(got.bytes, got.mime, null);
   else if (got.kind === 'table') pasteTable(got.rows);
   else flash('There is nothing to paste.');
+}
+
+/** A structure pasted into a Smart Scheme's dashed species box: a drawing, a SMILES string or a molfile. */
+async function pasteIntoSpeciesBox(holder: number, got: Pasted): Promise<void> {
+  let drawing: Doc | null = null;
+  if (got.kind === 'drawing' && !isEmpty(got.doc) && got.doc.atoms.size) { fitPasted(got.doc, doc.style); drawing = got.doc; }
+  else if (got.kind === 'text') {
+    const mb = chem.ready ? await molfileOrSmiles(got.text.trim(), (t) => chem.smilesToMol(t)) : null;
+    const c = mb ? molContents(mb) : null;
+    if (c) drawing = structureDoc(c, doc.style);
+  }
+  if (!drawing) { flash('There is no structure on the clipboard to put in this species: copy a structure, a SMILES string or a molfile.', 6000); return; }
+  editor.fillSpeciesBox(holder, drawing);
 }
 
 /** Cells from Excel, Word or a sheet become a table in the ACS style, with the first row as headings. */
@@ -1006,9 +1057,57 @@ async function energyDiagram(id: number | null): Promise<void> {
   finishTyping();
   const L = doc.style.bondLength;
   const now = id !== null ? doc.shapes.get(id)?.energy ?? null : null;
-  const got = await askEnergy(now, { w: Math.round(18 * L), h: Math.round(12 * L) }, paintEnergyPreview, async (mb) => (await chem.layouts(mb))[0] ?? null);
+  const got = await askEnergy(now, { w: Math.round(18 * L), h: Math.round(12 * L) }, paintEnergyPreview, async (mb) => (await chem.layouts(mb))[0] ?? null, energyStructureHooks);
   if (got) editor.putEnergyDiagram(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);
 }
+
+/** A molfile drawn on its own, in this drawing's style, as contents (null when it can't be read). */
+function molContents(mb: string, attach: number[] = []): Contents | null {
+  const tmp = new Doc();
+  tmp.style = { ...doc.style };
+  try { tmp.bulk(() => { addNamed({ mb, attach }, 0, 0, tmp); }); } catch { return null; }
+  return tmp.atoms.size ? tmp.contents() : null;
+}
+
+/** The Energy Diagram window's Structure column: drawn in the drawing area, pasted, or from a name. */
+const energyStructureHooks: EnergyStructureHooks = {
+  edit: (contents, title) => new Promise((resolve) => editCellStructure(contents, title, (c) => resolve(c), doc.style)),
+  async paste() {
+    let p: Pasted;
+    try { p = nativeClipboard ? await readNativeClipboard() : await readWebClipboard(); } catch (e) { return { error: 'Could not read the clipboard: ' + String(e) }; }
+    if (p.kind === 'drawing' && !isEmpty(p.doc)) { fitPasted(p.doc, doc.style); return p.doc.contents(); }
+    if (p.kind === 'text') {
+      const mb = await molfileOrSmiles(p.text, (s) => chem.smilesToMol(s));
+      const c = mb ? molContents(mb) : null;
+      if (c) return c;
+    }
+    return { error: 'There is no structure on the clipboard: copy one (or a SMILES or molfile) first.' };
+  },
+  async fromText(text) {
+    if (!/\s/.test(text.trim()) && /[=#()\[\]@]|^[BCNOPSFIclbrcnops0-9]+$/.test(text.trim())) {
+      const mb = await chem.smilesToMol(text.trim()).catch(() => null);
+      const c = mb ? molContents(mb) : null;
+      if (c) return c;
+    }
+    const got = await nameToMolfile(text);
+    if ('error' in got) return { error: got.error };
+    return molContents(got.mb, got.attach) ?? { error: 'The structure could not be drawn.' };
+  },
+  thumb(contents, canvas) {
+    const tmp = structureDoc(contents, doc.style);
+    const b = tmp.bounds();
+    const ctx = canvas.getContext('2d');
+    if (!b || !ctx) return;
+    const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth || canvas.width, h = canvas.clientHeight || canvas.height;
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const k = Math.min(1, (w - 6) / Math.max(1, b.x2 - b.x1), (h - 6) / Math.max(1, b.y2 - b.y1));
+    ctx.setTransform(k * dpr, 0, 0, k * dpr, (w / 2 - ((b.x1 + b.x2) / 2) * k) * dpr, (h / 2 - ((b.y1 + b.y2) / 2) * k) * dpr);
+    drawDrawing(ctx, tmp);
+  },
+};
 editor.onEnergy = (id) => void energyDiagram(id);
 
 /** The TLC Plate and Gel windows' preview: the plate as it will be drawn, fitted to the canvas. */
@@ -2508,22 +2607,28 @@ async function structureKeys(): Promise<Map<number, string>> {
 
 /** Space left between things set out in a row, column or grid: as last chosen, or one and a half bonds. */
 let lastGridGap: number | null = null;
+let lastGridGaps: { rowGap: number; colGap: number } | null = null;
 const gridGap = () => lastGridGap ?? 1.5 * doc.style.bondLength;
 
-/** Format ▸ Align ▸ Arrange in a Grid…: how many across, and the space between. */
+/** Format ▸ Align ▸ Arrange in a Grid…: rows × columns and the spacing, with a live preview. */
 async function arrangeInGrid(): Promise<void> {
   finishTyping();
   const n = editor.gridCount();
   if (n < 2) { flash('Select two or more structures or objects to put in a grid.'); return; }
-  const got = await ask('Arrange in a Grid', [
-    { name: 'cols', label: 'Columns (across)', value: String(defaultColumns(n)), type: 'number' },
-    { name: 'gap', label: 'Space between', value: String(Math.round(gridGap() * 10) / 10), type: 'number', unit: 'pt' },
-  ], { ok: 'Arrange', note: `${n} things, set out in reading order (left to right, then down). Compound numbers move with their structures.` });
+  const start = { cols: defaultColumns(n), rowGap: lastGridGaps?.rowGap ?? gridGap(), colGap: lastGridGaps?.colGap ?? gridGap() };
+  const preview = (p: GridPick) => {
+    const { units: us, offsets } = editor.gridPlan({ kind: 'grid', cols: p.cols, gap: p.colGap, rowGap: p.rowGap, colGap: p.colGap });
+    const sel: Selection = { atoms: new Set(us.flatMap((u) => u.atoms)), bonds: new Set(), captions: new Set(us.flatMap((u) => u.captions)), arrows: new Set(us.flatMap((u) => u.arrows)), shapes: new Set(us.flatMap((u) => u.shapes)) };
+    sel.bonds = new Set([...doc.bonds.values()].filter((b) => sel.atoms.has(b.a1) && sel.atoms.has(b.a2)).map((b) => b.id));
+    const d = extractDrawing(doc, sel);
+    d.bulk(() => us.forEach((u, i) => moveUnit(d, u, offsets[i])));
+    const pic = recordPicture(d, 6);
+    return pic ? pictureSvg(pic).replace(/^<\?xml[^>]*>\s*/, '') : '';
+  };
+  const got = await askGridLayout(n, start, preview);
   if (!got) return;
-  const cols = Math.max(1, Math.min(n, Math.round(Number(got.cols)) || defaultColumns(n)));
-  const gap = Number(got.gap);
-  if (isFinite(gap) && gap >= 0) lastGridGap = Math.min(500, gap);
-  if (!editor.arrangeGrid({ kind: 'grid', cols, gap: gridGap() })) flash('They are already in that grid.');
+  lastGridGaps = { rowGap: got.rowGap, colGap: got.colGap };
+  if (!editor.arrangeGrid({ kind: 'grid', cols: got.cols, gap: got.colGap, rowGap: got.rowGap, colGap: got.colGap })) flash('They are already in that grid.');
 }
 
 // ---------------------------------------------------------------- Clean Up Structure
@@ -2733,6 +2838,7 @@ function chemMark(c: Caption): 'chem' | 'warn' | null {
   return !c.ignoreWarnings && captionChemWarning(doc, c, editor.measure()) ? 'warn' : 'chem';
 }
 renderer.chemMarks = chemMark;
+renderer.holderHints = true;
 
 /** Repaint when which text boxes read as chemistry changes for some other reason than their own text (an arrow moved). */
 function refreshChemMarks(): void {
@@ -5937,68 +6043,20 @@ const STYLE_KINDS: Record<StyleMode, { plural: string; where: string }> = {
   sheet: { plural: 'spreadsheets', where: 'this spreadsheet\'s structure cells' },
 };
 
-/** The style structures are drawn in in the tab showing, and whether it has any yet. */
-function drawingStyleNow(): { tab: Tab; mode: StyleMode; current: DocStyle; hasStructures: boolean } {
+/** Pick or change how structures are drawn in the tab showing (a journal's style, or your own). */
+async function drawingStyleDialog(): Promise<void> {
   const tab = ws.active, mode = tab.mode as StyleMode;
+  finishTyping();
   const deck = tab.deck, book = tab.book, file = tab.document;
   const current = deck ? deck.master.drawing : book ? book.drawingStyle : file ? file.t.drawingStyle : doc.style;
   const hasStructures = deck ? deck.slides.some((_, i) => deck.docOf(i).atoms.size > 0)
     : file ? Object.values(file.t.objects).some((o) => o.kind === 'drawing' && o.contents.atoms.length > 0)
     : book ? book.sheets.some((s) => [...s.cells.values()].some((c) => !!c.structure)) : doc.atoms.size > 0 || doc.captions.size > 0;
-  return { tab, mode, current, hasStructures };
-}
-
-/** Draw the tab's structures in `next` (every slide, every figure of a document…), as one step to undo. */
-function applyDrawingStyle(tab: Tab, next: DocStyle, how: RestyleHow): void {
-  previewDrawingStyle(null);
-  const deck = tab.deck, book = tab.book, file = tab.document;
-  if (deck) deck.setDrawingStyle(next, how);
-  else if (book) {
-    book.setDrawingStyle(next, (c, old) => restyleContents(c, old, next, how));
-    sheetMode?.styleChanged();
-  } else if (file) {
-    const t = file.t, old = t.drawingStyle;
-    const objects = { ...t.objects };
-    for (const [k, o] of Object.entries(objects)) if (o.kind === 'drawing') objects[Number(k)] = { ...o, contents: restyleContents(o.contents, old, next, how) };
-    const changed: DocText = { ...t, objects, drawingStyle: { ...next } };
-    file.ed.update(changed, 'Drawing style');
-    docMode?.fontsChanged();
-  } else {
-    doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, next, how));
-    editor.changed();
-  }
-}
-
-/** A style being tried on the drawing showing (pointing at a Drawing Styles card): taken back with null. */
-let stylePreviewDoc: Doc | null = null;
-function previewDrawingStyle(st: DocStyle | null): void {
-  if (stylePreviewDoc) {
-    stylePreviewDoc.abandon();
-    stylePreviewDoc = null;
-    editor.requestScene();
-  }
-  if (!st) return;
-  // only where the drawing on screen is the editor's (a canvas, a design, the slide showing)
-  const mode = ws.active.mode;
-  if (mode !== 'drawing' && mode !== 'design' && mode !== 'slides') return;
-  const d = editor.doc;
-  if (d.editing || (!d.atoms.size && !d.captions.size) || (st.name === d.style.name && sameLook(st, d.style))) return;
-  d.begin('Drawing style preview');
-  applyStyle(d, st, 'restyle');
-  stylePreviewDoc = d;
-  editor.requestScene();
-}
-
-/** Pick or change how structures are drawn in the tab showing (a journal's style, or your own). */
-async function drawingStyleDialog(): Promise<void> {
-  finishTyping();
-  const { tab, mode, current, hasStructures } = drawingStyleNow();
   const got = await editDrawingStyle({
     current, own: ownStyles, kindPlural: STYLE_KINDS[mode].plural, where: STYLE_KINDS[mode].where,
     isDefault: modeStyleFor(mode) === current.name, hasStructures,
-    preview: (st) => stylePreview(st), livePreview: previewDrawingStyle,
+    preview: (st) => stylePreview(st),
   });
-  previewDrawingStyle(null);
   if (!got || ws.active !== tab) return;
   ownStyles = got.own;
   // Set as Default: new files start in it too
@@ -6014,59 +6072,23 @@ async function drawingStyleDialog(): Promise<void> {
     ownStyles = [...ownStyles, { ...got.style }];
   }
   storeSettings();
-  applyDrawingStyle(tab, got.style, got.how);
-  for (const r of ribbonStyleStrips) r.refresh();
-  flash(`Structures are now drawn in ${got.style.name}${got.forNew ? `, and new ${STYLE_KINDS[mode].plural} will start in it` : ''}.`, 4000);
-}
-
-/** Drawing Styles ▾ on the ribbon: the style cards; pointing at one shows the drawing in it, clicking applies it. */
-function drawingStylesGallery(at?: { left: number; bottom: number }): void {
-  finishTyping();
-  const { tab, current } = drawingStyleNow();
-  showStylePresets(at ?? dropAnchor('drawing-styles'), {
-    own: ownStyles, current,
-    preview: previewDrawingStyle,
-    pick: (st) => {
-      if (ws.active !== tab) return;
-      applyDrawingStyle(tab, st, 'restyle');
-      for (const r of ribbonStyleStrips) r.refresh();
-      flash(`Structures are now drawn in ${st.name}. Undo takes it back.`, 3000);
-    },
-    save: () => void saveCurrentStyle(),
-    more: () => void drawingStyleDialog(),
-  });
-}
-
-/** The Drawing Styles strips on the Presentation and Design ribbons (made once the app is up). */
-let ribbonStyleStrips: { refresh(): void }[] = [];
-setTimeout(() => {
-  ribbonStyleStrips = [...document.querySelectorAll<HTMLElement>('[data-style-gallery]')].map((host) => ribbonStyles(host, {
-    own: () => ownStyles,
-    current: () => drawingStyleNow().current,
-    preview: previewDrawingStyle,
-    pick: (st) => {
-      finishTyping();
-      applyDrawingStyle(ws.active, st, 'restyle');
-      flash(`Structures are now drawn in ${st.name}. Undo takes it back.`, 3000);
-    },
-    more: (b) => drawingStylesGallery(b.getBoundingClientRect()),
-  }));
-}, 400);
-
-/** Keep the style in use as one of your own (the gallery's "+ Save current"). */
-async function saveCurrentStyle(): Promise<void> {
-  const { current } = drawingStyleNow();
-  const got = await ask('Save as My Style', [{ name: 'name', label: 'Name', value: current.name.startsWith('My ') ? current.name : `My ${current.name}` }], {
-    ok: 'Save', note: `Keeps ${styleNumbers(current)} under this name, in the Drawing Styles gallery of every mode.`,
-  });
-  const name = got?.name.trim();
-  if (!name) return;
-  const st: DocStyle = { ...current, name };
-  const had = ownStyles.findIndex((s) => s.name === name);
-  ownStyles = had >= 0 ? ownStyles.map((s, i) => (i === had ? st : s)) : [...ownStyles, st];
-  storeSettings();
-  for (const r of ribbonStyleStrips) r.refresh();
-  flash(`${name} is now one of your drawing styles.`, 3000);
+  const next = got.style;
+  if (deck) deck.setDrawingStyle(next, got.how);
+  else if (book) {
+    book.setDrawingStyle(next, (c, old) => restyleContents(c, old, next, got.how));
+    sheetMode?.styleChanged();
+  } else if (file) {
+    const t = file.t, old = t.drawingStyle;
+    const objects = { ...t.objects };
+    for (const [k, o] of Object.entries(objects)) if (o.kind === 'drawing') objects[Number(k)] = { ...o, contents: restyleContents(o.contents, old, next, got.how) };
+    const changed: DocText = { ...t, objects, drawingStyle: { ...next } };
+    file.ed.update(changed, 'Drawing style');
+    docMode?.fontsChanged();
+  } else {
+    doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, next, got.how));
+    editor.changed();
+  }
+  flash(`Structures are now drawn in ${next.name}${got.forNew ? `, and new ${STYLE_KINDS[mode].plural} will start in it` : ''}.`, 4000);
 }
 
 /**
@@ -7425,7 +7447,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'toolbox-guides', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -7935,7 +7957,6 @@ const COMMANDS: Record<string, () => unknown> = {
   'delete-all-comments': () => { if (ws.active.mode !== 'slides') return false; slideCmts?.removeAll(); return undefined; },
   'show-comments': () => { if (ws.active.mode !== 'slides' || !slideCmts) return false; slideCmts.show(!slideCmts.shown); return undefined; },
   'drawing-style': () => settingsWindow.open('style'),
-  'drawing-styles': () => drawingStylesGallery(),
   present: () => present(false),
   'present-current': () => present(true),
   'presenter-view': () => present(false, true),
@@ -8073,6 +8094,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'text-bar-floating': () => { placeTextBar('floating'); storeSettings(); },
   'text-bar-hidden': () => { placeTextBar('hidden'); storeSettings(); },
   'group-tips': () => { showGroupTips(!labelTips.enabled); storeSettings(); },
+  'tool-tips': () => { showToolTips(!toolTip.enabled); storeSettings(); },
   'touch-mode-auto': () => { setTouchMode('auto'); storeSettings(); },
   'touch-mode-on': () => { setTouchMode('on'); storeSettings(); },
   'touch-mode-off': () => { setTouchMode('off'); storeSettings(); },
@@ -8244,7 +8266,11 @@ const COMMANDS: Record<string, () => unknown> = {
     await orientLikeFirst(true);
     if (!editor.cleanUpReaction()) flash('No reaction to tidy: draw starting materials, an arrow and products (the arrow pointing from one to the other), or the scheme is already tidy.', 6000);
   },
-  'clean-up-reaction': () => editor.cleanUpReaction() || flash('No reaction to tidy: draw starting materials, an arrow and products (the arrow pointing from one to the other), or the scheme is already tidy.', 6000),
+  'clean-up-reaction': () => {
+    const r = editor.cleanUpReaction();
+    if (!r) flash('No reaction to tidy: draw starting materials, an arrow and products (the arrow pointing from one to the other), or the scheme is already tidy. Press it again to fit each arrow to its own text.', 6000);
+    else if (r === 'fitted') flash('Each arrow fitted to its own text. Clean Up Reaction again to make them all the same length.', 4000);
+  },
   'arrange-scheme': () => arrangeDialog.open(),
   'stoichiometry-table': () => void stoichiometryTable(),
   'check-balance': () => void checkStepBalance(),
@@ -9084,10 +9110,6 @@ function chooseMethylStyle(style: MethylStyle): void {
 
 /** Ask before a command with nothing selected changes every structure on the page (Edit > Settings). */
 let askWholeDrawing = true;
-/** How a tool's demo shows on a long hover over its button (Settings ▸ General). */
-// (off until it's settled which tools should have one)
-let toolDemos: DemoLook = 'off';
-watchToolHover(document, () => toolDemos);
 /** Where linked text goes (Edit > Settings). */
 let linkSide: Settings['linkSide'] = 'keep';
 
@@ -9484,8 +9506,6 @@ async function generalPreferences(): Promise<void> {
       help: 'Off: they keep the look they had in Word and become drawings when you edit one. On: each is redrawn here in the document\'s drawing style.' },
     { name: 'reviewer', label: 'Your name on tracked changes in documents', value: reviewAuthor() },
     { name: 'startView', label: 'Show the start view (new tabs, recent files) when the program opens', type: 'checkbox', value: String(startView) },
-    { name: 'toolDemos', label: 'Resting the pointer on a tool such as the curved arrow shows', value: toolDemos, options: DEMO_LOOKS,
-      help: 'A short demo of the tool, drawn as you watch. With animation turned off in your system\'s settings, it shows a still picture of each step.' },
   ], { ok: 'Save' });
   if (!r) return;
   editor.options.groupClick = r.groupClick === 'item' ? 'item' : 'group';
@@ -9497,7 +9517,28 @@ async function generalPreferences(): Promise<void> {
   straightenLinear.on = r.straightenLinear === 'true';
   setReviewAuthor(r.reviewer ?? '');
   startView = r.startView === 'true';
-  toolDemos = parseDemoLook(r.toolDemos);
+  storeSettings();
+}
+
+/** Settings ▸ Toolboxes: each button in a cell of its own (lines, raised, or both). */
+let toolCells: Settings['toolCells'] = 'off';
+function setToolCells(v: Settings['toolCells']): void {
+  toolCells = v;
+  document.body.classList.toggle('cells-grid', v === 'grid' || v === 'both');
+  document.body.classList.toggle('cells-raised', v === 'raised' || v === 'both');
+  window.dispatchEvent(new Event('resize'));
+}
+
+/** Settings ▸ Toolboxes: how the toolboxes' buttons look and what their tips say. */
+async function toolboxPreferences(): Promise<void> {
+  const r = await ask('Toolboxes', [
+    { name: 'cells', label: 'Button cells', value: toolCells, options: [{ value: 'off', label: 'None' }, { value: 'grid', label: 'Grid lines' }, { value: 'raised', label: 'Raised buttons' }, { value: 'both', label: 'Grid lines and raised buttons' }],
+      help: 'Gives each toolbox button a cell of its own, so the buttons are easier to tell apart and to hit.' },
+    { name: 'tips', label: 'Detailed tooltips: hold the mouse on a tool to see what it does and what Alt, Shift and Ctrl change', type: 'checkbox', value: String(toolTip.enabled) },
+  ], { ok: 'Save' });
+  if (!r) return;
+  setToolCells((['grid', 'raised', 'both'].includes(r.cells) ? r.cells : 'off') as Settings['toolCells']);
+  showToolTips(r.tips === 'true');
   storeSettings();
 }
 
@@ -9599,11 +9640,13 @@ function currentSettings(): Settings {
     textBar: CaptionEditor.barPlace,
     appTheme,
     oneColumnTools,
+    toolCells,
     startView,
     enterFinishesText,
     page: defaultPage,
     welcomed,
     groupTips: labelTips.enabled,
+    toolTips: toolTip.enabled,
     touchMode: touchMode(),
     penSketch: editor.options.penSketch,
     chemTyping: typingPrefs.chemistry,
@@ -9637,7 +9680,6 @@ function currentSettings(): Settings {
     arrowEndGap: arrowGaps.end,
     cursorAids: { ...editor.aids },
     haptoDelocalized: haptoLook.delocalized,
-    toolDemos,
     superscriptR: labelPrefs.superscriptR,
     alkylLook: alkylPrefs.look,
     bondEnds: bondEndPrefs.round,
@@ -9844,9 +9886,11 @@ function applySettings(s: Settings): void {
   placeTextBar(s.textBar);
   setAppTheme(s.appTheme);
   setOneColumnTools(s.oneColumnTools);
+  setToolCells(s.toolCells);
   startView = s.startView;
   enterFinishesText = s.enterFinishesText;
   showGroupTips(s.groupTips);
+  showToolTips(s.toolTips);
   setTouchMode(s.touchMode);
   editor.options.penSketch = s.penSketch;
   $('[data-cmd="pen-sketch"]')?.setAttribute('aria-checked', String(s.penSketch));
@@ -9879,7 +9923,6 @@ function applySettings(s: Settings): void {
   arrowGaps.end = s.arrowEndGap;
   editor.aids = { ...s.cursorAids };
   haptoLook.delocalized = s.haptoDelocalized;
-  toolDemos = s.toolDemos;
   labelPrefs.superscriptR = s.superscriptR;
   alkylPrefs.look = s.alkylLook;
   bondEndPrefs.round = s.bondEnds;
@@ -11042,7 +11085,7 @@ function drawingMenu(): MenuItem[] {
   const texts = selectedSpecies().length > 0;
   const shapes = [...s.shapes].map((id) => doc.shapes.get(id)).filter((x): x is Shape => !!x);
   const design = ws.active.mode === 'design';
-  const view: MenuItem = { label: 'View', items: [{ cmd: 'zoom-in' }, { cmd: 'zoom-out' }, { cmd: 'zoom-fit' }, { cmd: 'zoom-selection' }, { cmd: 'zoom-actual' }, null, { cmd: 'show-stereo' }, { cmd: 'group-tips' }, { cmd: 'scroll-bars' }, { cmd: 'alignment-guides' }, null, { cmd: 'dark-page' }, { cmd: 'dark-colours' }] };
+  const view: MenuItem = { label: 'View', items: [{ cmd: 'zoom-in' }, { cmd: 'zoom-out' }, { cmd: 'zoom-fit' }, { cmd: 'zoom-selection' }, { cmd: 'zoom-actual' }, null, { cmd: 'show-stereo' }, { cmd: 'group-tips' }, { cmd: 'tool-tips' }, { cmd: 'scroll-bars' }, { cmd: 'alignment-guides' }, null, { cmd: 'dark-page' }, { cmd: 'dark-colours' }] };
   if (!any) {
     return [
       { cmd: 'paste' }, { cmd: 'paste-smiles' }, { cmd: 'select-all' }, null,
@@ -11212,11 +11255,11 @@ function showDark(on: boolean): void {
   quickBar?.refresh();
 }
 
-/** View > Window and Colours > Dark Page Colours…: pick a palette, change its paper and ink, or keep your own. */
+/** View > Window and Colours > Reading Mode Colours…: pick a palette, change its paper and ink, or keep your own. */
 async function darkColours(): Promise<void> {
   const all = (): DarkPalette[] => [...DARK_PALETTES, ...dark.own];
   const cur = darkPaletteNamed(dark.palette, dark.own);
-  const got = await ask('Dark page colours', [
+  const got = await ask('Reading Mode colours', [
     { name: 'palette', label: 'Palette', value: cur.name, options: [...all().map((p) => ({ value: p.name, label: dark.own.includes(p) ? `${p.name} (yours)` : p.name }))] },
     { name: 'paper', label: 'Paper shows as', value: cur.paper, type: 'color' },
     { name: 'ink', label: 'Black ink shows as', value: cur.ink, type: 'color' },
@@ -11241,6 +11284,10 @@ async function darkColours(): Promise<void> {
   storeSettings();
 }
 
+function showToolTips(on: boolean): void {
+  toolTip.enabled = on;
+  $('[data-cmd="tool-tips"]')?.setAttribute('aria-checked', String(on));
+}
 function showGroupTips(on: boolean): void {
   labelTips.enabled = on;
   if (!on) labelTips.hide();
@@ -11369,7 +11416,7 @@ function favoritesChanged(): void {
 
 /** The look of what is selected, wherever it is: a document's text, a caption being typed in, or things on a drawing. */
 function selectionLook(): ObjectLook | null {
-  if (sheetActive()) return null;
+  if (sheetActive()) return sheetMode.favoriteLook();
   if (docActive()) { const t = docMode.pickLook(); return t ? { text: t, colour: { color: t.run.color } } : null; }
   const cap = editor.typingCaption;
   if (cap) { const t = cap.ed.pickLook(); return { text: t, colour: { color: t.run.color } }; }
@@ -11380,13 +11427,13 @@ function selectionLook(): ObjectLook | null {
 async function saveFavorite(replacing?: FormatFavorite): Promise<void> {
   const look = selectionLook();
   if (!look) {
-    flash(sheetActive() ? 'Format Favorites keep the looks of shapes, structures, arrows, pictures and text; in a sheet, use cell styles.' : 'Select something with the look you want to keep (a shape, arrow, structure, picture or text) first.');
+    flash(sheetActive() ? 'Select the cells or the shape with the look you want to keep first.' : 'Select something with the look you want to keep (a shape, arrow, structure, picture or text) first.');
     return;
   }
   let name = replacing?.name;
   if (!name) {
     const got = await ask('Save Format as Favorite', [{ name: 'name', label: 'Name', value: freshFavoriteName(favorites), placeholder: 'for example Key intermediate box' }], {
-      ok: 'Save', note: `Keeps ${favoriteSummary(look) || 'the look'} of what is selected. Click it under Format Favorites on the Home tab (or Edit ▸ Format Favorites…) to give that look to the selection, in any drawing, slide, design or document.`,
+      ok: 'Save', note: `Keeps ${favoriteSummary(look) || 'the look'} of what is selected. Click it under Format Favorites on the Home tab (or Edit ▸ Format Favorites…) to give that look to the selection, in any drawing, slide, design, document or sheet.`,
     });
     name = got?.name.trim();
     if (!name) return;
@@ -11399,7 +11446,7 @@ async function saveFavorite(replacing?: FormatFavorite): Promise<void> {
 /** Give the selection a favorite's look (one undo step). */
 function applyFavorite(f: FormatFavorite): void {
   const look = f.look;
-  if (sheetActive()) { flash('Format Favorites are for drawings, slides, designs and documents.'); return; }
+  if (sheetActive()) { if (!sheetMode.paintFavorite(look, f.name)) flash(`“${f.name}” has no look cells or this object can take.`); return; }
   if (docActive()) {
     if (!look.text) { flash(`“${f.name}” has no text look to give to text.`); return; }
     if (!docMode.paintLook(look.text)) flash('Put the caret in a word, or select some text, first.');
@@ -11853,6 +11900,9 @@ function layCells(cells: HTMLElement, fit?: number): void {
     el.style.gridColumn = el.classList.contains('tb-wide') ? `${p.c + 1} / span ${Math.max(1, room)}` : String(p.c + 1);
     el.classList.toggle('tb-after-line', lineRows.has(o.r));
     el.classList.toggle('tb-after-vline', lineCols.has(o.c));
+    // (with grid lines on, the cell before a division carries it as a bold edge)
+    el.classList.toggle('tb-before-line', lineRows.has(o.r + 1));
+    el.classList.toggle('tb-before-vline', lineCols.has(o.c + 1));
     el.classList.toggle('tb-block', p.start);
   }
   // the lines themselves, across each block of the grid (or down it, turned on its side)
@@ -12228,7 +12278,7 @@ const guide = {
 };
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 const SETTINGS_PAGES: SettingsPage[] = [
-  { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files demo clips hover tool tips animation', open: generalPreferences },
+  { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files', open: generalPreferences },
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
@@ -12236,10 +12286,11 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'typing', title: 'Text and Spelling', words: 'typing spelling dictionary autocorrect replacements chemistry formulas subscripts', open: () => typingDialog.open() },
   { id: 'palettes', title: 'Colour Palettes', words: 'colours colors palette rows', open: () => editPalettes() },
   { id: 'mode-colours', title: 'Mode Colours', words: 'tab colours accent window drawing slides sheet document design appearance', open: () => modeDialog.open() },
-  { id: 'navigation', title: 'Navigation', words: 'navigator minimap map overview edge arrows off screen lost find dot grid dots tint outside fit go to selection orientation zoom', open: navigationSettings },
+  { id: 'navigation', title: 'Navigation', words: 'document map navigator minimap map overview edge arrows off screen lost find dot grid dots tint outside fit go to selection orientation zoom', open: navigationSettings },
   { id: 'page-grid', title: 'Page Grid', words: 'pages page grid boundaries dashed dotted lines paper fixed edges hatched wall empty grey print chemdraw paste wrap', open: pageGridSettings },
-  { id: 'dark', title: 'Dark Page', words: 'dark mode night paper ink graphite slate appearance colours', open: darkColours },
-  { id: 'newman', title: 'Newman Projections', words: 'newman sawhorse projection conformation torsion dihedral gauche anti eclipsed colour largest middle smallest group strain a-value energy chart rotation barrier kcal kj', open: () => newmanSettingsPage() },
+  { id: 'toolboxes', title: 'Toolboxes', words: 'toolbox buttons cells grid lines raised bevel borders tool tips tooltips hints keys modifiers shortcuts', open: toolboxPreferences },
+  { id: 'dark', title: 'Reading Mode', words: 'reading mode dark page dark mode night paper ink graphite slate appearance colours', open: darkColours },
+    { id: 'newman', title: 'Newman Projections', words: 'newman sawhorse projection conformation torsion dihedral gauche anti eclipsed colour largest middle smallest group strain a-value energy chart rotation barrier kcal kj', open: () => newmanSettingsPage() },
   { id: 'schemes', title: 'Schemes', words: 'scheme arrow gap plus text reagents conditions boxes', open: schemeSettings },
   { id: 'autosave', title: 'AutoSave and Recovery', words: 'autosave recovery versions backup copies shared folders onedrive', open: () => keeper.optionsCommand() },
   { id: 'ai', title: 'AI Model', words: 'ai artificial intelligence claude anthropic chatgpt gpt openai gemini google ollama openrouter api key llm model link connect', open: () => aiSettings() },
@@ -12522,10 +12573,10 @@ async function navigationSettings(): Promise<void> {
   const o = orientPrefs;
   const strength = [{ value: 'faint', label: 'Faint' }, { value: 'light', label: 'Light' }, { value: 'strong', label: 'Stronger' }];
   const r = await ask('Navigation', [
-    { name: 'navigator', label: 'Navigator: a small map of the whole drawing in a corner (click or drag in it to move there; double-click to fit)', type: 'checkbox', value: String(o.navigator) },
-    { name: 'navCorner', label: 'Navigator corner', value: o.navCorner, options: [{ value: 'br', label: 'Bottom right' }, { value: 'bl', label: 'Bottom left' }, { value: 'tr', label: 'Top right' }, { value: 'tl', label: 'Top left' }] },
-    { name: 'navSize', label: 'Navigator size', value: o.navSize, options: [{ value: 'small', label: 'Small' }, { value: 'medium', label: 'Medium' }, { value: 'large', label: 'Large' }] },
-    { name: 'navHideAll', label: 'Hide the navigator while the whole drawing is on screen', type: 'checkbox', value: String(o.navHideAll) },
+    { name: 'navigator', label: 'Document Map: a small map of the whole drawing in a corner (click or drag in it to move there; double-click to fit)', type: 'checkbox', value: String(o.navigator) },
+    { name: 'navCorner', label: 'Document Map corner', value: o.navCorner, options: [{ value: 'br', label: 'Bottom right' }, { value: 'bl', label: 'Bottom left' }, { value: 'tr', label: 'Top right' }, { value: 'tl', label: 'Top left' }] },
+    { name: 'navSize', label: 'Document Map size', value: o.navSize, options: [{ value: 'small', label: 'Small' }, { value: 'medium', label: 'Medium' }, { value: 'large', label: 'Large' }] },
+    { name: 'navHideAll', label: 'Hide the Document Map while the whole drawing is on screen', type: 'checkbox', value: String(o.navHideAll) },
     { name: 'edgeArrows', label: 'Edge arrows: point to things scrolled out of sight (click one to go there)', type: 'checkbox', value: String(o.edgeArrows) },
     { name: 'arrowsTo', label: 'Edge arrows point to', value: o.arrowsTo, options: [{ value: 'structures', label: 'Structures' }, { value: 'everything', label: 'Structures, text, arrows and shapes' }] },
     { name: 'dotGrid', label: 'Dot grid behind the drawing', type: 'checkbox', value: String(o.dotGrid),
@@ -12810,8 +12861,11 @@ const smartPane = new SmartPane({
     return { x1: a.x + o.left, y1: a.y + o.top, x2: b.x + o.left, y2: b.y + o.top };
   },
   area: () => { const o = host.getBoundingClientRect(); return { x1: o.left, y1: o.top, x2: o.right, y2: o.bottom }; },
-  slotText: (id, k, t) => editor.smartSlotText(id, k, t),
-  stepText: (id, k, part, t) => editor.smartStepText(id, k, part, t),
+  slotRuns: (id, k, parts) => editor.smartSlotRuns(id, k, parts),
+  stepRuns: (id, k, part, parts) => editor.smartStepRuns(id, k, part, parts),
+  toStructure: (id, k) => editor.smartToHolder(id, k),
+  toText: (id, k) => editor.smartToText(id, k),
+  selectHolder: (shape) => editor.selectShape(shape),
   add: (id, after) => editor.smartInsert(id, after),
   remove: (id, k) => editor.smartRemove(id, k),
   move: (id, from, to) => editor.smartMove(id, from, to),
@@ -12843,7 +12897,7 @@ const buildHint = new BuildHint({
 });
 editor.onOverlay = () => { smartPane.place(); buildHint.place(); };
 editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
-editor.onChange = () => { welcomeWatch?.(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides') slideText.refresh(); textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); showToolStatus(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides') slideText.refresh(); textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();

@@ -89,7 +89,7 @@ Along the top are the menus: **File**, **Edit**, **View**, **Insert**, **Format*
 
 **Help** has this **User Guide** built in (it works without an internet connection), the hotkeys, and short notes on each part of the program. **F1** opens the guide at the part about the tool or kind of tab in use: with the ring tool, for example, it opens at Rings.
 
-To the right of the menus is the **quick bar** (like Office's Quick Access Toolbar), with buttons for **Save**, **Undo**, **Redo**, **Fit** (fit the whole drawing in the window), the **padlock** (locks or unlocks all the toolboxes at once so they can be moved; see [Canvas](drawing.md#toolboxes)) and the **eye** (the dark page). Undo and Redo are greyed out when there is nothing to take back, and resting the mouse on one names the step it would undo (**Undo Add Ring**). To choose its buttons:
+To the right of the menus is the **quick bar** (like Office's Quick Access Toolbar), with buttons for **Save**, **Undo**, **Redo**, **Fit** (fit the whole drawing in the window), the **padlock** (locks or unlocks all the toolboxes at once so they can be moved; see [Canvas](drawing.md#toolboxes)) and the **eye** (Reading Mode). Undo and Redo are greyed out when there is nothing to take back, and resting the mouse on one names the step it would undo (**Undo Add Ring**). To choose its buttons:
 
 - click the **▾** at its end and tick the ones you want (Print, Copy, Paste, Focus View and more);
 - right-click any menu command, or a ribbon button that runs one, and pick **Add to Quick Access Toolbar**; right-click a quick button to take it off;
@@ -118,8 +118,6 @@ The same commands are in the **File** menu (**New Canvas**, and **Presentation**
 ### The toolbox on the left
 
 In a canvas, the drawing tools run down the left side: select, eraser, bonds, then text, arrows, mechanism symbols, brackets, shapes and mass fragmentation, then rings and templates. A button with a small arrow in its corner holds a set of related tools: click the corner, click the button a second time, or right-click it to see them all. Rest the mouse on any button to see its name and hotkey. [Canvas](drawing.md) explains each tool.
-
-Some tools take more than a click: the curved and half-headed mechanism arrows, the hapto (η) bond, the chain, the cyclohexane (and its chair shapes), the lone pair and mass fragmentation. These can show a short demo, which is off at first: turn it on in **Edit ▸ Settings ▸ General**. Then keep the mouse on one of these tools for a second and the demo plays beside it, drawn by the app as you watch, with its steps numbered beside it and a **Replay** button. Move away, click the tool or press Esc and it goes. The same setting picks how it shows: the card, a small clip in the tool tip, still pictures of each step, or no demos. If animation is turned off in your system's settings, you get the still pictures.
 
 ### The side panel on the right
 
@@ -179,7 +177,7 @@ A **Format Favorite** is a complete look kept under a name: fill (colour, gradie
 - **Use one:** select what should take the look and click the favorite's card in the gallery, or right-click ▸ **Format Favorites** ▸ its name, or **Edit ▸ Format Favorites…**. It is one step to undo.
 - **Change one:** right-click its card for **Update to Match Selection**, **Rename…**, **Move Earlier** and **Delete**.
 
-Favorites are kept with your settings, not in a file, so the same ones are there in every canvas, presentation, design and document (in a document, a favorite gives its text look). The things you paint keep their look when saved, in every format.
+Favorites are kept with your settings, not in a file, so the same ones are there in every canvas, presentation, design, document and spreadsheet (in a document, a favorite gives its text look). In a spreadsheet the gallery is on the **Home** tab beside **Styles**: a favorite gives the selected cells its fill, font, colour, alignment and, when its outline has a colour, thin borders of that colour, or gives a selected shape or text box its fill, outline and font; **+** there saves the look of the selected cells or shape. The things you paint keep their look when saved, in every format.
 
 ### Insert ▸ Symbol (every mode)
 
@@ -224,16 +222,16 @@ Presentations, spreadsheets, documents and designs save in their own formats; se
 
 ## Edit ▸ Settings
 
-**Edit ▸ Settings…** (Ctrl+,) holds every setting in one window, with a list of pages on the left and a **Find a setting** box at the top. The menu items for a single page (**Hotkeys…**, **Typing and Spelling…**, **Colour Palettes…**, **Mode Colours…**, **Dark Page Colours…**, **Drawing Style…**, **Scheme Settings…**, **AutoSave and Recovery Options…**) open the Settings window at that page. Each page has its own **Save** (or **Apply**) and **Cancel**; a line of help sits under each setting that needs one.
+**Edit ▸ Settings…** (Ctrl+,) holds every setting in one window, with a list of pages on the left and a **Find a setting** box at the top. The menu items for a single page (**Hotkeys…**, **Typing and Spelling…**, **Colour Palettes…**, **Mode Colours…**, **Reading Mode Colours…**, **Drawing Style…**, **Scheme Settings…**, **AutoSave and Recovery Options…**) open the Settings window at that page. Each page has its own **Save** (or **Apply**) and **Cancel**; a line of help sits under each setting that needs one.
 
 | Page | What it holds |
 |---|---|
-| **General** | The start view, the tool demos on a long hover, what a click on a grouped thing selects, outlining the rest of a group, where linked text goes, asking before a command changes every structure on the page, and your name on tracked changes in documents. |
+| **General** | The start view, what a click on a grouped thing selects, outlining the rest of a group, where linked text goes, asking before a command changes every structure on the page, and your name on tracked changes in documents. |
 | **Drawing** | Terminal methyls as Me or CH3; axial chirality as Ra / Sa or P / M (Ra is the same as M, and Sa as P); charges from the + and − keys plain (N+) or circled (⊕, ⊖); text typed beside a bond end becoming an atom; raised R-group numbers; mechanism arrows finding their own way round. |
 | **Drawing Style** | Bond length, line widths, fonts and journal styles (see [Canvas](drawing.md#drawing-styles)). |
 | **Hotkeys** | Every key, to change, import or export (see [Keyboard and mouse](keyboard-and-mouse.md)). |
 | **Text and Spelling** | Chemistry typing (subscripts in formulas), spelling, your dictionary and replacements. |
-| **Colour Palettes**, **Mode Colours**, **Dark Page** | Your rows of colours, the colour of each kind of tab, and the dark page's colours. |
+| **Colour Palettes**, **Mode Colours**, **Reading Mode** | Your rows of colours, the colour of each kind of tab, and Reading Mode's colours. |
 | **Schemes** | Gaps round arrows and + signs, text size above and below arrows, and the + boxes on new arrows. |
 | **AutoSave and Recovery** | AutoSave, how often unsaved work is copied for recovery, and how many versions are kept. |
 | **File Types** | Which kinds of file Chem Illustrator is offered for under **Open with** in Explorer, and a button to Windows' Default apps page (see [Files and sharing](files-and-sharing.md#opening-files-from-explorer-or-finder-desktop-app)). |

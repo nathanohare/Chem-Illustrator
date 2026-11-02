@@ -94,6 +94,9 @@ export class Toolbar {
   private titleTool(b: HTMLButtonElement, t: ToolDef, extra = ''): void {
     b.title = t.title + this.keys(t.name) + extra;
     b.setAttribute('aria-label', t.title);
+    // (for the tooltip card: which tool, and how its palette opens)
+    b.dataset.tipTool = t.name;
+    if (extra) b.dataset.tipMore = extra.replace(/^\.\s*/, ''); else delete b.dataset.tipMore;
   }
 
   /** Show the current hotkeys in the tool tips. */
@@ -189,7 +192,6 @@ export class Toolbar {
       if (at != null) { b.style.gridRow = String(Math.floor(at / cols) + 1); b.style.gridColumn = String((at % cols) + 1); }
       b.className = 'tool' + (pal.def.large ? ' large' : '') + (t.name === this.current.get(pal.def.palette) ? ' active' : '');
       b.setAttribute('role', 'menuitem');
-      b.dataset.tool = t.name;
       this.titleTool(b, t);
       const px = pal.def.large ? pal.def.iconSize ?? 46 : 28;
       if (pal.def.large && pal.def.iconSize) b.style.width = b.style.height = `${px + 6}px`;
