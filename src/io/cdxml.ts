@@ -1004,7 +1004,8 @@ function readSteps(all: Element[], refs: () => Map<Element, string>, doc: Doc): 
   if (!all.some((el) => el.nodeName === 'step')) return;
   const refOf = refs();
   const byId = new Map<string, Element>();
-  for (const el of all) { const id = el.getAttribute('id'); if (id && !byId.has(id)) byId.set(id, el); }
+  // (fonts are numbered on their own: a font's id can be the same as a drawn object's)
+  for (const el of all) { const id = el.getAttribute('id'); if (id && el.nodeName !== 'font' && !byId.has(id)) byId.set(id, el); }
   const refsOf = (el: Element | undefined, out: string[]) => {
     if (!el) return;
     const own = refOf.get(el);

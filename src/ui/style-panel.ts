@@ -190,10 +190,14 @@ export class StylePanel {
     if (several) this.structureControls(selAtoms, selBonds);
     if (arrows.length) this.arrowControls(arrows);
     // an energy diagram is a frame drawn from its numbers: its own section, not a rectangle's
-    const diagram = all.length === 1 && (all[0].energy || all[0].diagram || all[0].plate) ? all[0] : undefined;
+    const diagram = all.length === 1 && (all[0].energy || all[0].diagram || all[0].plate || all[0].smart) ? all[0] : undefined;
     if (diagram?.energy) this.energyControls(diagram);
     else if (diagram?.plate) this.plateControls(diagram);
     else if (diagram?.diagram) this.diagramControls(diagram);
+    else if (diagram?.smart) {
+      this.heading('Smart Scheme');
+      this.note('Switch its layout and type its species and conditions in the list beside it. Drag a species on the page and its arrows follow; the + buttons add a species there.');
+    }
     else if (shapes.length) this.shapeControls(shapes);
     if (rings.length) this.shapeControls(rings, rings.length > 1 ? `${rings.length} ring fills` : 'Ring fill');
     if (pictures.length) this.pictureControls(pictures);
