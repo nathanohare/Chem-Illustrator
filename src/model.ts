@@ -10,6 +10,7 @@ import { followPins } from './chem/pins';
 import type { EnergyData } from './design/energy';
 import type { PlateData } from './design/plates';
 import type { DiagramData } from './design/diagrams';
+import type { SmartData } from './chem/smart-scheme';
 import type { ChartBox } from './sheet/chart-box';
 import { isMetal, isMetalLabel, lowestValence } from './chem/elements';
 import { NICKNAMES } from './chem/labels';
@@ -30,6 +31,8 @@ export function outsideValence(b: Pick<Bond, 'display' | 'order'>): boolean {
 export type DoublePos = 'auto' | 'left' | 'right' | 'center';
 
 export interface Atom {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -398,6 +401,8 @@ export interface TabStop {
 }
 
 export interface Caption {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -557,6 +562,8 @@ export interface Attachment {
 export type ArrowHead = 'none' | 'full' | 'halfLeft' | 'halfRight';
 
 export interface Arrow {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -663,6 +670,8 @@ export interface StepRoles {
 export type Pattern = 'hatch' | 'backhatch' | 'crosshatch' | 'horizontal' | 'vertical' | 'grid' | 'dots' | 'dense-dots';
 
 export interface Shape {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -827,6 +836,8 @@ export interface Shape {
   plate?: PlateData;
   /** A SmartArt-style diagram's text and look, kept on the invisible frame round its shapes (design/diagrams.ts). */
   diagram?: DiagramData;
+  /** A Smart Scheme's layout, kept on the invisible frame round the scheme (chem/smart-scheme.ts). */
+  smart?: SmartData;
 }
 
 /** Can this shape be turned to any angle (Slides and Design), keeping its box and turning it as a whole? */

@@ -216,9 +216,11 @@ In the desktop app, the **Zotero** group on the **References** tab works with th
 - **Document Preferences** chooses the citation style (any style in Zotero, not only the ones above) and its language.
 - **Unlink Citations** turns the citations and the bibliography into plain text. You can undo this here, but once the text is plain, Zotero can't update it.
 
+**Note styles.** With a note style (Chicago notes, for example), **Add/Edit Citation** puts each citation in a new footnote at the caret, or an endnote if you pick endnotes in **Document Preferences**. Switching between a note style and an in-text style moves the citations into footnotes or back into the text, and switching between footnotes and endnotes moves them too. A footnote you typed words in keeps them when its citation moves out.
+
 The first time you use Zotero in a document, Zotero asks for the citation style. Each command undoes in one step. If you change a citation here (with **Insert Citation** or **Manage References…**), it is numbered in the document's own style until the next **Refresh**.
 
-Saving as a Word file writes the citations and the bibliography as Zotero's Word fields, with its preferences. So you can carry on with Zotero's Word plugin in Word, and a Word file with Zotero citations carries on here.
+Saving as a Word file writes the citations (in the text or in footnotes) and the bibliography as Zotero's Word fields, with its preferences. So you can carry on with Zotero's Word plugin in Word, and a Word file with Zotero citations carries on here.
 
 The browser version can't reach the Zotero app, so these buttons work only in the desktop app. If Zotero isn't running, or is busy with a citation in another document, a message says so.
 
@@ -301,7 +303,7 @@ For legal writing (cases, statutes, rules and other authorities), as Word does i
 - Click a note to change it; double-click a number in the text to go to its note. Delete a note by deleting its number.
 - **Note Options…** chooses how footnotes and endnotes are numbered (1, 2, 3; i, ii, iii; a, b, c; *, †, ‡) and turns all footnotes into endnotes or back. Right-click a number to convert just that one.
 - A line and its footnote stay on the same page. In Draft, Web Layout and Outline the footnotes show after the text.
-- Word files keep them as Word's own footnotes and endnotes, both ways.
+- Word files keep them as Word's own footnotes and endnotes, both ways, with any citations in them (as Zotero, Mendeley and EndNote put citations in footnotes).
 
 ## Links and bookmarks
 

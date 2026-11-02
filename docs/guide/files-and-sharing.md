@@ -8,7 +8,7 @@ Each kind of tab saves to its own file type. **Save** (Ctrl+S) uses the first ty
 
 | Tab | Opens | Saves | Also exports |
 |---|---|---|---|
-| Canvas | .cdxml, .cdx, .cds | .cdxml (the default), .cdx | Molfile (.mol), PDF, PNG, TIFF, SVG, EMF, EPS |
+| Canvas | .cdxml, .cdx, .cds, .mol, .rxn, .mrv, .ket, .cml, ChemDoodle .json | .cdxml (the default), .cdx, .mol, .sdf, .rxn, .mrv, .ket, .cml, ChemDoodle .json | Molfile (.mol), PDF, PNG, TIFF, SVG, EMF, EPS |
 | Presentation | .pptx | .pptx | PDF (one page per slide), PNG, TIFF, SVG, EMF or EPS of the current slide |
 | Design | .pptx | .pptx (one slide) | PDF, PNG, TIFF, SVG, EMF, EPS |
 | Document | .docx, .doc, .rtf, .odt | .docx (the default), .rtf, .odt | PDF |
@@ -21,6 +21,7 @@ Open files with **File ▸ Open…** (Ctrl+O), or drop them onto the window. Pic
 
 - **.cdxml** is the default for canvases. When you save a ChemDraw file you opened, only what you changed is rewritten, so the rest stays exactly as ChemDraw wrote it.
 - **.cdx** is ChemDraw's binary format. It opens and saves, and it is what ChemDraw reads from the clipboard.
+- **Other programs' chemistry files** open as canvases in your drawing style, at your bond length: molfiles (.mol, V2000 and V3000), reaction files (.rxn, V2000 and V3000), Marvin documents (.mrv), Ketcher drawings (.ket), Chemical Markup Language (.cml) and ChemDoodle JSON (.json). Abbreviations the file marks (OMe, Boc) come back as labels, and a reaction keeps its starting materials, reagents and products. **Save As** writes them too, and .sdf (one record per structure). These formats hold less than .cdxml: molfiles and SD files keep the structures only, RXN the first reaction step, ChemDoodle JSON the structures and arrows, and Marvin, Ketcher and CML the structures, straight arrows, + signs and text. The save message says what was left out, and AutoSave leaves these files alone. ACD/ChemSketch's .sk2 has no published description, so it can't be read: save from ChemSketch as .mol instead.
 - **.cds** is a ChemDraw style sheet. It opens like a drawing, and the app offers to keep its settings (bond length, line widths, label font) as one of your own drawing styles, so you can pick it in **Drawing Style** in any mode or start new drawings in it. Style sheets open but are never written back to: Save asks for a .cdxml or .cdx file.
 
 ### Structures in Office files
@@ -62,7 +63,7 @@ A figure wider than the column is shrunk by the journal, which makes its text an
 - **Molfile:** **File ▸ Export ▸ Export Molfile…** saves the selected structures (or all of them) as a .mol file; **Edit ▸ Copy As ▸ Copy as Molfile Text** copies them as text. A molfile pasted with Ctrl+V is drawn.
 - **CDXML text:** **Edit ▸ Copy As ▸ Copy as CDXML Text** copies the drawing as ChemDraw XML.
 - **Reactions:** **Edit ▸ Copy As ▸ Copy Reaction as SMILES** copies the selected reaction step (or the only one) as reaction SMILES (starting materials>reagents>products), and **Copy Reaction as RXN** as an MDL RXN file, for electronic notebooks and reaction databases. Paste either with Ctrl+V and the reaction is drawn: starting materials with + between them, the arrow with the reagents over it, and the products.
-- **Many files at once:** **File ▸ Export ▸ Batch Convert…** turns a set of CDXML, CDX, molfile, SD and SMILES files into CDXML, CDX, molfiles, SVG or PNG pictures, or one SMILES list. Each record of an SD file and each line of a SMILES file becomes a file of its own, named after its title. The desktop app saves them in a folder you pick or in one zip; the web version saves a zip.
+- **Many files at once:** **File ▸ Export ▸ Batch Convert…** turns a set of CDXML, CDX, molfile, SD, SMILES, RXN, Marvin, Ketcher, CML and ChemDoodle files into CDXML, CDX, molfiles, SVG or PNG pictures, or one SMILES list. Each record of an SD file and each line of a SMILES file becomes a file of its own, named after its title. The desktop app saves them in a folder you pick or in one zip; the web version saves a zip.
 - **SD files (.sdf):** open in a spreadsheet with one row per structure and its data fields as columns.
 - **PDF:** **File ▸ Export ▸ Export PDF…** for canvases, presentations, designs and documents. Structures and text stay sharp at any zoom. The fonts go inside the file, so it looks the same everywhere and passes journals' "all fonts embedded" checks. Arial, Helvetica and similar fonts are drawn with Arimo, Times with Tinos and Courier with Cousine: free fonts with exactly the same letter widths. A character none of those has (an arrow such as →) uses the reader's Symbol font.
 - **Pictures:** **File ▸ Export ▸ Export Picture…** for a canvas, the current slide or a design page. Pick a white or page-coloured background or a see-through one.
@@ -73,7 +74,7 @@ A figure wider than the column is shrunk by the journal, which makes its text an
 
 Double-click a file, or right-click it and choose **Open with ▸ Chem Illustrator**, and it opens in a new tab. A file opened while the program is already running goes to the open window rather than starting a second copy.
 
-- **Windows**: the first time it starts, Chem Illustrator adds itself to the **Open with** list of .cdxml, .cdx, .cds, .mol and .sdf files, for you only. **Edit ▸ Settings ▸ File Types** chooses which kinds of file it is offered for, including .docx, .pptx and .xlsx. It never makes itself the program that opens a file on a double-click: Windows keeps that choice for you. **Choose Defaults in Windows Settings…** on that page opens Windows' Default apps page, where you can pick Chem Illustrator for each kind of file. A portable copy leaves the computer's file types alone until you tick them yourself. Uninstalling takes it off the lists again.
+- **Windows**: the first time it starts, Chem Illustrator adds itself to the **Open with** list of .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket and .cml files, for you only. **Edit ▸ Settings ▸ File Types** chooses which kinds of file it is offered for, including .docx, .pptx and .xlsx. It never makes itself the program that opens a file on a double-click: Windows keeps that choice for you. **Choose Defaults in Windows Settings…** on that page opens Windows' Default apps page, where you can pick Chem Illustrator for each kind of file. A portable copy leaves the computer's file types alone until you tick them yourself. Uninstalling takes it off the lists again.
 - **macOS**: right-click a file and choose **Open With ▸ Chem Illustrator**. To open a kind of file here every time, select one in Finder, choose **File ▸ Get Info**, pick Chem Illustrator under **Open with** and click **Change All**.
 - **Linux**: Chem Illustrator is in your file manager's **Open With** list for these files; your desktop's Default Applications settings choose the default.
 

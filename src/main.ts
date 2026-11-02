@@ -32,6 +32,8 @@ import { ChemClient } from './chem/client';
 import type { FragmentResult } from './worker/chem-worker';
 import { COMMON_ADDUCTS } from './chem/hrms';
 import { pubchemName, pubchemCid, pubchemCompound, compoundPage, pubchemCidForCas, pubchemSafetyRecord, isCas as isCasNumber } from './chem/pubchem';
+import { CasMemory, readCas, casTypoMessage, structureForCas, casForStructure, type CasDeps, type CasFound } from './chem/cas';
+import { casHtml, casRuns, type CasState } from './ui/cas-panel';
 import { pubchemHtml, pubchemRuns, type PubChemState } from './ui/pubchem-panel';
 import { paragraphPages } from './document/doc-file';
 import { reviewAuthor, setReviewAuthor } from './document/revisions';
@@ -54,6 +56,7 @@ import { cdxToCdxml } from './io/cdx';
 import { writeCdxml } from './io/cdxml-write';
 import { WORKSPACE, folderOf } from './io/workspace-file';
 import { askLink, followLink, setLinkHost, type LinkPlace } from './ui/links-ui';
+import { LigandLibraryWindow } from './ui/ligand-library';
 import { SHOW_JUMPS, cellOfLink, linkSpans, normalizeLink, removeLink, setLink, slideOfLink } from './links';
 import { openFileDialog, openManyBytesDialog, openBytesDialog, CSV, openAnyBytesDialog, stampOf, readRef, saveFileDialog, writeFile, showError, baseName, readPath, withExtension, setEmbeddedWriter, KEYMAP_FILE, SETTINGS_FILE, MOL, PDF, SDF, PICTURE, SVG, TIFF, EMF, EPS, PPTX, DOCX, PICTURE_EXTENSIONS, type FileType } from './io/files';
 import { writeTiff } from './render/tiff';
@@ -108,6 +111,7 @@ import { EFFECTS, animName, newAnim, highlightParts } from './deck/animation';
 import { SLIDE_TEMPLATES, applyTemplate, type SlideTemplate } from './deck/templates';
 import { showContextMenu, topMenuEntry, type MenuItem } from './ui/context-menu';
 import { QuickBar } from './ui/quick-bar';
+import { SmartPane } from './ui/smart-pane';
 import { commandDef } from './commands/registry';
 import { defaultHandout, handoutLayout, handoutPageSvg, notesPageSize, notesPageSvg, type HandoutSetup } from './deck/notes-pages';
 import { OutlineView } from './ui/outline-view';
@@ -170,12 +174,14 @@ import { ModeColoursDialog, ModeColours, DEFAULT_MODE_COLOURS, applyModeColours 
 import { typingPrefs, setTypingPrefs, onTypingPrefs } from './text/typing';
 import { NicknameChooser } from './ui/nickname-chooser';
 import { ask } from './ui/ask';
+import { bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
+import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepPieces, type AutoStepsOptions } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
 import { canUpdate, appVersion, portableInfo, STAGE, STAGE_NOTE, UPDATE_CHANNELS, type UpdateChannel } from './updates';
 import { computerName } from './feedback';
 import { guideSpot } from './ui/guide-spot';
 import type { GuideWindow, GuideHeading } from './ui/guide-window';
-import { SettingsWindow, type SettingsPage } from './ui/settings-window';
+import { SettingsWindow, changedKeys, type SettingsHost, type SettingsPage } from './ui/settings-window';
 import { fileTypesPage, FILE_TYPES } from './ui/file-types-page';
 import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed } from './ui/ribbon-fit';
 import { placeTitleBar, titleBarPlace } from './ui/title-bar';
@@ -189,7 +195,9 @@ import { NameReader, captionName, attachmentAtoms, cxNotes } from './chem/names'
 import { Model3dBuilder } from './chem/model3d';
 import { StructureNamer, confirmedName, nameRuns, type NameTools } from './chem/namer';
 import { placeView } from './chem/place3d';
-import type { Viewer3d } from './ui/viewer3d';
+import type { ConformerTools, Viewer3d } from './ui/viewer3d';
+import { DEFAULT_XTB, type XtbOptions } from './chem/xtb';
+import type { QmOptions } from './chem/qm-input';
 import { NameDialog } from './ui/name-dialog';
 import { SequenceDialog } from './ui/sequence-dialog';
 import { ArrangeDialog } from './ui/arrange-dialog';
@@ -229,7 +237,9 @@ import { SlideComparePane } from './ui/slide-compare';
 import { pickFileTemplate } from './ui/file-templates';
 import type { PastedRows } from './io/table-clip';
 import { Keeper } from './keep/keeper';
-import { notice } from './ui/keep-ui';
+import { choose as chooseButtons, notice } from './ui/keep-ui';
+import { runZoteroOn, type ZoteroCommand } from './document/zotero-live';
+import { DeckStore, type DeckZoteroHost } from './deck/zotero-deck';
 import { DEFAULT_KEEP, type KeepPrefs } from './keep/prefs';
 import { Brush, paintObjects, pickObjectLook, type ObjectLook, type TextLook } from './format-painter';
 import { SymbolWindow } from './ui/symbol-window';
@@ -296,6 +306,7 @@ const scene = $<HTMLCanvasElement>('#scene');
 const overlay = $<HTMLCanvasElement>('#overlay');
 const renderer = new Renderer(scene, overlay);
 const editor = new Editor(doc, renderer, host);
+editor.lengthUnits = () => rulerPrefs.units;
 const chem = new ChemClient(document.baseURI);
 const checks = new StructureChecks(doc);
 renderer.checks = checks;
@@ -377,8 +388,8 @@ const ARROWS: PaletteDef = {
     { name: 'arrow-equilibrium', title: 'Equilibrium arrows' },
     { name: 'arrow-retro', title: 'Retrosynthetic arrow' },
     { name: 'arrow-nogo', title: 'Crossed-out arrow (reaction does not go)' },
-    { name: 'arrow-curved', title: 'Curved arrow (electron pair). Drag from an atom or bond to an atom or bond and it snaps like a mechanism arrow; hold Alt to draw freely' },
-    { name: 'arrow-fishhook', title: 'Curved half-headed arrow (one electron). Snaps between atoms and bonds like the curved arrow; hold Alt to draw freely' },
+    { name: 'arrow-curved', title: 'Curved arrow (electron pair). Drag from an atom or bond to an atom or bond and it snaps like a mechanism arrow; hold Alt or Space to draw freely' },
+    { name: 'arrow-fishhook', title: 'Curved half-headed arrow (one electron). Snaps between atoms and bonds like the curved arrow; hold Alt or Space to draw freely' },
     { name: 'arrow-s', title: 'S-shaped curved arrow (two bends), for electrons that have to go round something. Snaps like the curved arrow; hold Alt to draw freely' },
     { name: 'arrow-s-fishhook', title: 'S-shaped half-headed arrow (one electron, two bends). Snaps like the curved arrow; hold Alt to draw freely' },
   ],
@@ -447,15 +458,17 @@ const OFF_PALETTE = new Set([
   'cyclobutane', 'cyclobutane-ae', 'cyclopropane-ae', 'c7-twist-chair', 'c8-boat-chair', 'c8-crown', 'cot-tub',
   'cis-bicyclooctane', 'perhydroazulene', 'twistane',
 ]);
-const templatePalette = (group: Template['group'] | Template['group'][], palette: string, title: string, columns: number, iconSize?: number): PaletteDef => ({
+const templatePalette = (group: Template['group'] | Template['group'][], palette: string, title: string, columns: number, iconSize?: number, first: { name: string; title: string }[] = []): PaletteDef => ({
   palette,
   title,
-  items: TEMPLATES.filter((t) => (Array.isArray(group) ? group.includes(t.group) : t.group === group) && !OFF_PALETTE.has(t.id)).map((t) => ({ name: `tpl-${t.id}`, title: t.name })),
+  items: [...first, ...TEMPLATES.filter((t) => (Array.isArray(group) ? group.includes(t.group) : t.group === group) && !OFF_PALETTE.has(t.id)).map((t) => ({ name: `tpl-${t.id}`, title: t.name }))],
   columns,
   large: true,
   iconSize,
-  icon: (name, size) => templateIcon(templateById(name.slice(4))!, size),
+  icon: (name, size) => { const t = templateById(name.slice(4)); return t ? templateIcon(t, size) : ICONS[name] ?? name; },
 });
+/** The Ligands palette's first button: the Ligand Library window. */
+const LIGAND_LIBRARY_OPEN = 'ligand-library-open';
 
 /** Turning structures in perspective: as a flat sheet (as ChemDraw does), or in their real 3-D shape. */
 const PERSPECTIVE_TOOLS: PaletteDef = {
@@ -533,7 +546,7 @@ const TOOL_GROUPS: ToolbarItem[][] = [
     templatePalette('perspective', 'tpl-perspective', 'Rings in perspective', 6, 56),
     templatePalette(['geometries', 'organometallic'], 'tpl-metal', 'Metal complexes', 6, 64),
     templatePalette('metallocenes', 'tpl-metallocenes', 'Metallocenes and half-sandwich complexes', 6, 64),
-    templatePalette('ligands', 'tpl-ligands', 'Ligands', 6, 64),
+    templatePalette('ligands', 'tpl-ligands', 'Ligands', 6, 64, [{ name: LIGAND_LIBRARY_OPEN, title: 'Ligand Library: several hundred ligands by family, to find and use (Chemistry > Metals > Ligand Library)' }]),
     OWN_PALETTE,
   ],
 ];
@@ -574,6 +587,7 @@ const MAIN_ITEMS: string[] = TOOL_GROUPS.flatMap((g, i) => [...(i ? ['sep'] : []
 const periodicTable = new PeriodicTable((z) => editor.pickElement(z), () => editor.element);
 const toolbar = new Toolbar($<HTMLDivElement>('#tools'), TOOL_GROUPS, (name) => {
   if (name === OWN_ADD) { void saveTemplate(); return; }
+  if (name === LIGAND_LIBRARY_OPEN) { openLigandLibrary(); return; }
   pickTool(name);
 }, (name) => {
   const keys = keysOf('space', `tool ${name}`);
@@ -592,11 +606,11 @@ const HINTS: Record<string, string> = {
   'bond-hapto': 'Drag from a metal into a ring (η⁵, η⁶) or onto a bond (η²), or the other way. Click inside a ring or on a bond for a new metal M there; select an allyl or diene, then click the metal. Click a hapto bond to draw it to each atom.',
   fragment: 'Drag a line across the bonds to break (or click one bond). Each piece gets a caption with its formula and exact mass, which you can edit.',
 };
-const ARROW_HINT = 'Drag to draw an arrow (Alt: any angle); click for a standard one. Drag the ends to move them, the middle to bend it.';
+const ARROW_HINT = 'Drag to draw an arrow (hold Alt or Space: any angle); click for a standard one. Drag the ends to move them, the middle to bend it.';
 const CURVE_HINT = 'Drag from where the electrons start to where they go. They start at a lone pair, bond, radical or charge and go to an atom, a bond, or the gap where a new bond forms; swing out to one side to bend that way. Or click where it starts, click points it goes through, and click where it ends. Ctrl+drag (or the pen) draws it freehand. The arrow sticks to the structure. Drag the middle dot (an S: its diamonds, or its line) to change the curve.';
 const SHAPE_HINT = 'Drag to draw. Drag the corner squares to resize; the Style panel changes dashes, fill, corners and shadow.';
 const BRACKET_HINT = 'Drag a box to put brackets round it, or click a structure to bracket it.';
-const BOND_HINT = 'Click empty space or an atom to draw; drag to aim. Point at an atom or bond and press a hotkey (Edit > Hotkeys lists them).';
+const BOND_HINT = 'Click empty space or an atom to draw; drag to aim (hold Alt or Space: any angle). Point at an atom or bond and press a hotkey (Edit > Hotkeys lists them).';
 const RING_HINT = 'Click empty space, an atom (spiro; Alt+click to attach by a bond) or a bond (fused). Drag to orient.';
 const TEMPLATE_HINT = 'Click empty space to place it (drag to turn it), a bond to fuse it on, or an atom to join it there (Alt: the other way: by a new bond, or sharing the atom).';
 
@@ -714,7 +728,7 @@ async function dropFiles(files: File[], at: { x: number; y: number }): Promise<v
     const bytes = new Uint8Array(await f.arrayBuffer());
     // a crystal structure: into the crystal structure window, to turn and place
     if (/\.cif$/i.test(f.name) && !sheetActive() && !docActive()) { await plateFigure('crystal', null, { name: f.name, text: new TextDecoder().decode(bytes) }); continue; }
-    const mime = /\.(cdxml|cdx|cds|pptx|xlsx|xlsm|xls|ods|docx|csv|tsv|txt|sdf?)$/i.test(f.name) ? null : pictureMime(f.name, bytes);
+    const mime = /\.(cdxml|cdx|cds|mol|mdl|rxn|mrv|ket|cml|json|pptx|xlsx|xlsm|xls|ods|docx|csv|tsv|txt|sdf?)$/i.test(f.name) ? null : pictureMime(f.name, bytes);
     if (mime && sheetActive()) flash('Pictures can\'t go in a cell yet. Drop sheet files (.xlsx, .csv, .sdf) to open them.');
     else if (mime && docActive()) docMode.dropPicture(bytes, mime);
     else if (mime) placePicture(bytes, mime, inside ? renderer.toDoc(at.x - r.left, at.y - r.top) : null);
@@ -1356,7 +1370,7 @@ setLinkHost({
   },
   async openHere(path) {
     // drawings, documents, slides, sheets and workspaces open in a tab here
-    if (!/\.(cdxml|cdx|cds|docx|pptx|xlsx|xlsm|xls|ods|csv|tsv|sdf|sd)$/i.test(path) && !path.toLowerCase().endsWith(`.${WORKSPACE.extension}`)) return false;
+    if (!/\.(cdxml|cdx|cds|mol|rxn|mrv|ket|cml|docx|pptx|xlsx|xlsm|xls|ods|csv|tsv|sdf|sd)$/i.test(path) && !path.toLowerCase().endsWith(`.${WORKSPACE.extension}`)) return false;
     if (!isTauri()) return false;
     await openRecent(path);
     return true;
@@ -1480,6 +1494,47 @@ function depthShadingChanged(): void {
   viewer3d?.redraw();
 }
 
+/** The 3-D Model window's settings for xTB and Gaussian/ORCA input, kept in this browser or app between sessions. */
+const conformerPrefs = (() => {
+  const KEY = 'ci.conformerTools';
+  let saved: { xtb?: Partial<XtbOptions>; qm?: Partial<QmOptions> } = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') ?? {}; } catch { saved = {}; }
+  const prefs = {
+    xtb: { ...DEFAULT_XTB, ...(saved.xtb ?? {}) } as XtbOptions,
+    qm: { ...(saved.qm ?? {}) } as Partial<QmOptions>,
+    save() { try { localStorage.setItem(KEY, JSON.stringify({ xtb: prefs.xtb, qm: prefs.qm })); } catch { /* not kept */ } },
+  };
+  return prefs;
+})();
+
+/** The conformer tiers of the 3-D Model window, for the structure `molblock`. */
+function conformerTools(molblock: string): ConformerTools {
+  return {
+    search: (opts, progress) => model3d.search(molblock, opts, progress),
+    stop: () => model3d.stop(),
+    ...(isTauri() ? {
+      xtb: (job) => invoke<{ xyz: string; energy: number }>('xtb_run', { job }),
+      xtbVersion: (exe: string) => invoke<string>('xtb_version', { exe }),
+    } : {}),
+    prefs: conformerPrefs,
+    async saveFiles(files, ext) {
+      const what = ext === 'gjf' ? 'Gaussian input' : 'ORCA input';
+      const one: FileType = { description: what, extension: ext, mime: 'text/plain' };
+      const zip: FileType = { description: `${what} files (zip)`, extension: 'zip', mime: 'application/zip' };
+      const single = files.length === 1;
+      const target = await saveFileDialog(single ? files[0].name : files[0].name.replace(/_conf\d+\.\w+$/, '') + `_${ext}.zip`, single ? one : zip).catch(async (e) => { await showError(String(e)); return null; });
+      if (!target) return;
+      try {
+        if (single) await writeFile(target.ref, target.name, files[0].text, one);
+        else await writeFile(target.ref, target.name, zipSync(Object.fromEntries(files.map((f) => [f.name, new TextEncoder().encode(f.text)]))), zip);
+        flash(`Saved ${target.name}.`);
+      } catch (e) {
+        await showError(`Could not save ${target.name}: ${String(e)}`);
+      }
+    },
+  };
+}
+
 async function show3dModel(): Promise<void> {
   const root = editor.sel.atoms.size ? [...editor.sel.atoms][0] : editor.lastEdited;
   if (root === null || !doc.atoms.has(root)) { flash('Select a structure to see in 3-D.'); return; }
@@ -1489,6 +1544,7 @@ async function show3dModel(): Promise<void> {
   if (!viewer3d) viewer3d = new (await import('./ui/viewer3d')).Viewer3d((m) => flash(m));
   viewer3d.showBusy('3-D Model');
   try {
+    viewer3d.tools = conformerTools(ex.molblock);
     const m = await model3d.build(ex.molblock, 12, 1);
     const before = await chem.molToSmiles(ex.molblock);
     viewer3d.show(m, '3-D Model', async (v) => {
@@ -1617,6 +1673,9 @@ function unreadableName(name: string, parser: string): NameError {
  * that is turned off in Edit > Settings.
  */
 async function nameToMolfile(name: string): Promise<{ mb: string; attach: number[]; warnings: string[] } | NameError> {
+  // a CAS RN is looked up (it can't be read like a name)
+  const cas = readCas(name);
+  if (cas) return casToMolfile(cas.kind === 'typo' ? { error: casTypoMessage(cas) } : await structureForCas(cas.cas, casDeps()));
   const r = await names.read(name);
   namesReady = true;
   if (!chem.ready) return { error: 'The chemistry engine is still loading; try again in a moment.' };
@@ -1639,6 +1698,28 @@ async function nameToMolfile(name: string): Promise<{ mb: string; attach: number
   const mb = await chem.smilesToMol(r.smiles).catch(() => null);
   if (!mb) return { error: 'The name was read, but the structure could not be drawn (' + r.smiles + ').' };
   return { mb, attach: attachmentAtoms(r.smiles), warnings: [...r.warnings, ...cxNotes(r.smiles)] };
+}
+
+/** CAS RNs found before, kept on this computer (src/chem/cas.ts). */
+const casMemory = new CasMemory();
+
+/** What a CAS RN lookup needs: your Compound Library, the answers kept, and whether looking up online is allowed. */
+function casDeps(): CasDeps {
+  return {
+    library: async () => (await useLibrary()).now.compounds,
+    memory: casMemory,
+    online: pubchemNames,
+    canonical: async (smiles) => { const mb = await chem.smilesToMol(smiles); return mb ? chem.molToSmiles(mb) : null; },
+  };
+}
+
+/** A CAS RN's structure as a laid-out molfile, or why not. */
+async function casToMolfile(got: { smiles: string; note: string } | { error: string }): Promise<{ mb: string; attach: number[]; warnings: string[] } | NameError> {
+  if ('error' in got) return { error: got.error };
+  if (!chem.ready) return { error: 'The chemistry engine is still loading; try again in a moment.' };
+  const mb = await chem.smilesToMol(got.smiles).catch(() => null);
+  if (!mb) return { error: `The CAS RN was found, but its structure could not be drawn (${got.smiles}).` };
+  return { mb, attach: [], warnings: [got.note] };
 }
 
 /** Adds a named structure centred at (x, y), its attachment points drawn as wavy lines. Use inside doc.edit (or `to`'s bulk). */
@@ -2641,7 +2722,7 @@ function reactionStep(dir: 'right' | 'left' | 'down' | 'up'): void {
 
 const OPTION_TEXT = {
   fixedLength: ['Fixed bond lengths on: new bonds are the standard length (hold Alt to drag any length).', 'Fixed bond lengths off: new bonds are as long as you drag them.'],
-  fixedAngles: ['Fixed angles on: new bonds point in 15° steps (hold Alt for any angle).', 'Fixed angles off: new bonds point wherever you drag.'],
+  fixedAngles: ['Fixed angles on: new bonds point in 15° steps (hold Alt or Space for any angle).', 'Fixed angles off: new bonds point wherever you drag.'],
 };
 function toggleOption(key: 'fixedLength' | 'fixedAngles'): void {
   editor.options[key] = !editor.options[key];
@@ -4635,7 +4716,9 @@ const compoundWindow = new CompoundLibraryWindow(library, {
     const d = structureDoc(r.contents, ACS_1996);
     const [s] = await structuresFor(d, [{ atoms: [...d.atoms.keys()] }]);
     if (!s) return { error: 'The structure couldn\'t be read.' };
-    // a name typed is kept as its name; SMILES isn't one
+    // a name typed is kept as its name, a CAS RN as its CAS RN; SMILES isn't either
+    const cas = readCas(text);
+    if (cas?.kind === 'cas') return { ...s, cas: cas.cas, name: casMemory.byCas(cas.cas)?.name ?? '' };
     const smiles = chem.ready ? await molfileOrSmiles(text.trim(), (x) => chem.smilesToMol(x)).catch(() => null) : null;
     return smiles ? s : { ...s, name: text.trim() };
   },
@@ -4739,6 +4822,20 @@ const knowledgeBase = new KnowledgeBaseWindow({
 function openKnowledgeBase(): void {
   finishTyping();
   void knowledgeBase.open();
+}
+
+// ---------------------------------------------------------------- Chemistry > Metals > Ligand Library
+
+const ligandLibrary = new LigandLibraryWindow({
+  useTemplate: (id) => pickTool(`tpl-${id}`),
+  openUrl: (url) => openWebPage(url),
+  copyText: (text, done) => void copyText(text, done),
+});
+
+/** Chemistry > Metals > Ligand Library, and the first button on the Ligands palette. */
+function openLigandLibrary(): void {
+  finishTyping();
+  ligandLibrary.open();
 }
 
 // ---------------------------------------------------------------- File > Find Structure in Files (desktop app)
@@ -4860,6 +4957,56 @@ async function slideReferences(): Promise<void> {
     if (!got.look.color && deckLook.color) Object.assign(own, { color: undefined });
     d.setSlideRefs(ix, got.ids, Object.keys(own).length ? own : null);
   }
+}
+
+/** Each open presentation's id for Zotero. */
+const zoteroDeckIds = new WeakMap<Deck, string>();
+let zoteroDeckBusy = false;
+
+/**
+ * Insert > Zotero (presentations): Zotero's commands on the presentation (zotero-deck.ts). Add/Edit
+ * Citation picks the references the slide shows in Zotero's window; Add/Edit Bibliography makes
+ * (or edits) the References slide in Zotero's style. Desktop app only: Zotero turns away web pages.
+ */
+async function zoteroSlides(command: ZoteroCommand): Promise<void> {
+  const d = deckNow();
+  if (!d || ws.active.mode !== 'slides') return;
+  finishTyping();
+  if (!isTauri() || iPadApp) { flash('Citing with Zotero works in the desktop app with Zotero running on the same computer (a browser can\'t reach it). Here, use References on Slide.', 8000); return; }
+  if (zoteroDeckBusy) { flash('Zotero is still working on this presentation (finish in Zotero\'s window first).'); return; }
+  zoteroDeckBusy = true;
+  let docId = zoteroDeckIds.get(d);
+  if (!docId) { docId = `chem-illustrator-${Math.random().toString(36).slice(2, 12)}`; zoteroDeckIds.set(d, docId); }
+  let join = false;
+  const host: DeckZoteroHost = {
+    docId,
+    state: () => ({ refs: d.settings.refs, slides: d.slides.map((s) => ({ id: s.id, hidden: s.hidden, refs: s.refs, refLook: s.refLook, refList: s.refList, zotero: s.zotero })), current: d.index }),
+    change: (refs, slides) => { d.setRefState(refs, slides, 'Zotero', join); join = true; },
+    addRefsSlide: () => { const s = d.insertRefsSlide(d.slides.length, { which: 'shown' }); join = false; return s.id; },
+    removeSlide: (id) => { const i = d.slides.findIndex((s) => s.id === id); if (i >= 0) d.remove([i]); join = false; },
+    goTo: (id) => { const i = d.slides.findIndex((s) => s.id === id); if (i >= 0 && deckNow() === d) d.go(i); },
+    choose: (text, labels) => chooseButtons('Zotero', text, labels, 0),
+    activate: () => { void invoke('zotero_activate').catch(() => {}); },
+  };
+  try {
+    const got = await runZoteroOn(command, new DeckStore(host, command), async (endpoint, body) => {
+      const r = await invoke<{ status: number; body: string }>('zotero_post', { endpoint, body });
+      return { status: r.status, text: r.body };
+    });
+    if (got === 'offline') flash('Zotero isn\'t running. Start the Zotero app (version 7 or later) on this computer, then try again.', 7000);
+    else if (got === 'busy') flash('Zotero is busy with a citation in another file. Finish there, then try again.', 6000);
+  } catch (e) {
+    flash(`Zotero: ${e instanceof Error ? e.message : String(e)}`, 8000);
+  } finally {
+    zoteroDeckBusy = false;
+  }
+}
+
+/** Insert > Zotero ▾ on a presentation: Zotero's commands in a menu under the button. */
+function zoteroSlidesMenu(): void {
+  const b = document.querySelector<HTMLElement>('[data-cmd="zotero-menu"]');
+  const r = b?.getBoundingClientRect();
+  showContextMenu(r ? r.left : 200, r ? r.bottom : 120, [{ cmd: 'zotero-cite' }, { cmd: 'zotero-bib' }, { cmd: 'zotero-refresh' }, null, { cmd: 'zotero-prefs' }, { cmd: 'zotero-unlink' }], { run: (cmd) => void command(cmd), key: commandKey });
 }
 
 /** Insert > Presentation > References Slide: a slide after the last one listing the references the slides show (or all of them), kept up to date. */
@@ -5205,9 +5352,12 @@ async function drawingStyleDialog(): Promise<void> {
   const got = await editDrawingStyle({
     current, own: ownStyles, kindPlural: STYLE_KINDS[mode].plural, where: STYLE_KINDS[mode].where,
     isDefault: modeStyleFor(mode) === current.name, hasStructures,
+    preview: (st) => stylePreview(st, editor.arrowLook),
   });
   if (!got || ws.active !== tab) return;
   ownStyles = got.own;
+  // Set as Default: new files start in it too
+  if (settingsWindow.mode === 'default') got.forNew = true;
   if (got.forNew) modeStyles[mode] = got.style.name;
   else if (modeStyleFor(mode) === current.name || modeStyleFor(mode) === got.style.name) {
     // no longer the default for new tabs: back to the standard one (or, where that is this style, plain ACS)
@@ -5362,6 +5512,42 @@ async function customSlideSize(): Promise<void> {
   finishTyping();
   const got = await pickSlideSize(d.size);
   if (got && deckNow() === d) setSlideSize(got.size, got.fit);
+}
+
+/** How Auto-Animate Steps was last set (the next starts the same way). */
+let autoSteps: AutoStepsOptions = { ...AUTO_STEPS_DEFAULTS };
+
+/** Animations ▸ Auto-Animate Steps…: the selected scheme (every scheme on the slide when nothing is selected) built a step at a time. */
+async function autoAnimateSteps(): Promise<void> {
+  const d = deckNow();
+  if (!d) { flash('Auto-Animate Steps builds a scheme up on a slide: use it in a presentation.'); return; }
+  finishTyping();
+  const i = d.index, slide = d.slides[i], sdoc = d.docOf(i);
+  const m = editor.fullMeasure();
+  const smart = editor.selectedSmart();
+  const f = smart !== null ? sdoc.shapes.get(smart)?.frame : undefined;
+  const s = editor.sel;
+  const scope = f
+    ? { atoms: new Set(f.atoms), captions: new Set(f.captions), arrows: new Set(f.arrows), shapes: new Set(f.shapes) }
+    : { atoms: new Set(s.atoms), captions: new Set(s.captions), arrows: new Set(s.arrows), shapes: new Set(s.shapes) };
+  const pieces = stepPieces(sdoc, m, scope);
+  if (!pieces) { flash('Select a scheme with reaction arrows first (or nothing, to build every scheme on the slide).'); return; }
+  const steps = Math.max(...pieces.map((p) => p.step));
+  const canvas = !!slide.canvas;
+  const got = await ask('Auto-Animate Steps', [
+    { name: 'effect', label: 'Effect', value: autoSteps.effect, options: [{ value: 'wipe', label: 'Wipe, along each arrow' }, { value: 'fade', label: 'Fade' }, { value: 'appear', label: 'Appear' }] },
+    { name: 'product', label: 'Each product', value: autoSteps.product, options: [{ value: 'after', label: 'Right after its arrow' }, { value: 'with', label: 'With its arrow' }, { value: 'click', label: 'On a click of its own' }] },
+    { name: 'first', label: 'The first species comes in on the first click too', value: String(autoSteps.first), type: 'checkbox' },
+    ...(canvas ? [{ name: 'camera', label: 'Camera Follow: a keyframe for each step, the view moving along the route (replaces this canvas slide\'s keyframes)', value: String(autoSteps.camera), type: 'checkbox' as const }] : []),
+  ], { ok: 'Animate', note: `${steps} step${steps > 1 ? 's' : ''} found. Each click brings the next arrow with its conditions, then what it makes. The animations are ordinary ones: change them in the Animation Pane.` });
+  if (!got || deckNow() !== d || d.index !== i) return;
+  autoSteps = { effect: got.effect as AutoStepsOptions['effect'], product: got.product as AutoStepsOptions['product'], first: got.first === 'true', camera: got.camera === 'true' };
+  sdoc.edit('Auto-Animate Steps', () => markPieces(sdoc, pieces));
+  const out = stepAnims(sdoc, pieces, autoSteps, slide.anims ?? [], canvas && autoSteps.camera ? { data: slide.canvas!, size: d.size } : undefined);
+  if (out.canvas) d.setCanvas(out.canvas, 'Auto-Animate Steps', i);
+  d.setAnims(out.anims, 'Auto-Animate Steps', i);
+  if (animUi && !animUi.paneShown) animUi.showPane(true);
+  flash(`Animated ${steps} step${steps > 1 ? 's' : ''}${out.canvas ? `, with ${out.canvas.keys.length} keyframes` : ''}. Preview plays them.`);
 }
 
 function present(fromHere: boolean, notes = false, how: { custom?: number; windowed?: boolean; rehearse?: boolean; record?: boolean } = {}): void {
@@ -5698,7 +5884,7 @@ async function printNow(): Promise<void> {
         ...(area ? [{ value: 'used', label: 'The whole sheet (ignore the print area)' }] : []),
         { value: 'sel', label: 'The selected cells' },
       ] },
-    ], { ok: 'Print…', note: 'Paper, orientation, margins, scaling, titles, headers and footers come from the Page Layout tab (Page Setup…). Copies and the printer are chosen in the next window: set its paper to match.' });
+    ], { ok: 'Print…', note: 'Paper, orientation, margins, scaling, titles, headers and footers are in File > Print (Page Setup… has them all). Copies and the printer are chosen in the next window: set its paper to match.' });
     if (!v) return;
     Object.assign(printChoices, v);
     const got = sheetMode.printedSheet({ selection: v.sheet === 'sel', ignoreArea: v.sheet === 'used', file: tab.name });
@@ -6462,7 +6648,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 /** Menu commands that work the same whatever shows. */
-const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
+const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
   'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
@@ -6790,9 +6976,9 @@ function setPictureStyle(look: PictureLook | undefined): boolean {
 }
 
 /** Slide commands that don't apply to a design's single page. */
-const SLIDE_ONLY = new Set(['references-slide', 'compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
+const SLIDE_ONLY = new Set(['references-slide', 'zotero-menu', 'zotero-cite', 'zotero-bib', 'zotero-refresh', 'zotero-prefs', 'zotero-unlink', 'compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
   'edit-layouts', 'view-sorter', 'add-section', 'rename-section', 'remove-section', 'remove-section-slides', 'remove-all-sections', 'section-up', 'section-down', 'collapse-sections', 'expand-sections',
-  'slide-transitions', 'slide-animations', 'animation-pane', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-video', 'insert-audio',
+  'slide-transitions', 'slide-animations', 'animation-pane', 'auto-animate-steps', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-video', 'insert-audio',
   'reading-view', 'rehearse-timings', 'record-show', 'rehearse-here', 'record-show-here', 'clear-timings-slide', 'clear-timings-all', 'clear-narration-slide', 'clear-narration-all', 'clear-show-menu', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
 
 /** The animation commands: an effect for the selected objects (the right-click menu's Animation). */
@@ -6945,6 +7131,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'slide-transitions': () => animUi?.showTab('transitions'),
   'slide-animations': () => animUi?.showTab('animations'),
   'animation-pane': () => animUi?.showPane(!animUi.paneShown),
+  'auto-animate-steps': () => void autoAnimateSteps(),
   'preview-slide': () => animUi?.preview(),
   'remove-animation': () => animUi?.removePicked(),
   // comments on slides (in documents, the document's own commands run first)
@@ -7001,10 +7188,17 @@ const COMMANDS: Record<string, () => unknown> = {
   references: () => void openReferences(),
   'manage-references': () => void openReferences(),
   'slide-references': () => void slideReferences(),
+  'zotero-menu': () => zoteroSlidesMenu(),
+  'zotero-cite': () => void zoteroSlides('addEditCitation'),
+  'zotero-bib': () => void zoteroSlides('addEditBibliography'),
+  'zotero-refresh': () => void zoteroSlides('refresh'),
+  'zotero-prefs': () => void zoteroSlides('setDocPrefs'),
+  'zotero-unlink': () => void zoteroSlides('removeCodes'),
   'references-slide': () => void referencesSlide(),
   'insert-reference': () => void insertReference(),
   'compound-library': () => void openCompoundLibrary(),
   'knowledge-base': () => openKnowledgeBase(),
+  'ligand-library': () => openLigandLibrary(),
   'insert-compound': () => void openCompoundLibrary(),
   'add-to-compound-library': () => void addToCompoundLibrary(),
   'library-location': () => void libraryLocation(),
@@ -7285,6 +7479,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'scheme-settings': () => settingsWindow.open('schemes'),
   'attach-descriptors': () => void attachDescriptors(),
   'pubchem-lookup': () => void lookUpChosen(),
+  'find-cas': () => void findCasChosen(),
   'model-3d': () => void show3dModel(),
   'turn-3d': () => void turn3dDialog(),
   'flatten-3d': () => editor.flattenSelection() || flash('Select a structure to flatten.'),
@@ -7297,7 +7492,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'link-text': () => linkText() || flash('Select the text to link (and the structure to link it to; else it goes to the nearest).'),
   'unlink-text': () => unlinkText() || flash('Select linked text, or a structure with text linked to it.'),
   group: () => editor.group() || flash('Select two or more things to group: structures, text, arrows or shapes.'),
-  ungroup: () => editor.ungroup() || flash('Select a group to take apart.'),
+  ungroup: () => editor.ungroupSmart() || editor.ungroup() || flash('Select a group to take apart.'),
+  'smart-scheme': () => { finishTyping(); editor.insertSmartScheme(pasteCentre(), deckNow()?.size); },
+  'convert-smart-scheme': () => editor.convertToSmart() || flash(editor.selectedSmart() !== null ? 'That is a Smart Scheme already.' : 'Select a reaction scheme (structures and the arrows between them) to make into a Smart Scheme.'),
+  'ungroup-smart-scheme': () => editor.ungroupSmart() || flash('Select a Smart Scheme first.'),
   'bring-front': () => editor.setBondLayer(true) || flash('Select the bond to bring to the front (where bonds cross, the one behind has a gap).'),
   'send-back': () => editor.setBondLayer(false) || flash('Select the bond to send to the back (where bonds cross, the one behind has a gap).'),
   'save-template': () => void saveTemplate(),
@@ -7520,8 +7718,10 @@ function cycleRegion(step: 1 | -1): void {
 }
 
 let altAlone = false;
+/** A mouse button or pen is down: Alt then frees a bond's or an arrow's angle, so letting it go doesn't open the menus. */
+let pointerHeld = false;
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Alt') { altAlone = !e.repeat && !e.ctrlKey && !e.metaKey && !e.shiftKey; if (altAlone) document.body.classList.add('show-mnemonics'); return; }
+  if (e.key === 'Alt') { altAlone = !e.repeat && !e.ctrlKey && !e.metaKey && !e.shiftKey && !pointerHeld; if (altAlone) document.body.classList.add('show-mnemonics'); return; }
   altAlone = false;
   // Ctrl+F6 works from anywhere, a text box too
   const chord = chordOf(e);
@@ -7551,14 +7751,15 @@ window.addEventListener('keyup', (e) => {
   if (e.key !== 'Alt') return;
   const alone = altAlone;
   altAlone = false;
-  if (!alone) { if (!inMenuBar()) document.body.classList.remove('show-mnemonics'); return; }
+  if (!alone || pointerHeld) { if (!inMenuBar()) document.body.classList.remove('show-mnemonics'); return; }
   if (isTyping(e.target) || (e.target as HTMLElement | null)?.closest?.('dialog')) { document.body.classList.remove('show-mnemonics'); return; }
   e.preventDefault();
   if (inMenuBar() || openMenu) leaveMenuBar();
   else enterMenuBar();
 });
-window.addEventListener('pointerdown', () => { altAlone = false; }, true);
-window.addEventListener('blur', () => { altAlone = false; document.body.classList.remove('show-mnemonics'); });
+window.addEventListener('pointerdown', () => { altAlone = false; pointerHeld = true; }, true);
+for (const type of ['pointerup', 'pointercancel'] as const) window.addEventListener(type, () => { pointerHeld = false; }, true);
+window.addEventListener('blur', () => { altAlone = false; pointerHeld = false; document.body.classList.remove('show-mnemonics'); });
 document.addEventListener('focusin', () => { if (!inMenuBar() && !openMenu) document.body.classList.remove('show-mnemonics'); });
 
 /** The mode the menus serve: drawing a structure for a cell or a document counts as Drawing. */
@@ -8389,14 +8590,14 @@ async function drawingPreferences(): Promise<void> {
       help: 'Show Terminal Methyls writes them this way; methyls already written out in the selection (or the whole drawing, with nothing selected) change too.' },
     { name: 'axial', label: 'Axial chirality written as', value: axialStyle.helicity ? 'PM' : 'RaSa', options: [{ value: 'RaSa', label: 'Ra / Sa' }, { value: 'PM', label: 'P / M (helicity)' }],
       help: 'Labels on biaryls and allenes follow the choice at once. Ra is the same as M, and Sa as P.' },
-    { name: 'charges', label: 'Charges from the + and − keys', value: editor.options.circledCharges ? 'circled' : 'plain', options: [{ value: 'plain', label: 'Plain sign (N+)' }, { value: 'circled', label: 'In a circle (⊕, ⊖)' }],
+    { name: 'charges', label: 'Charges from the + and − keys', value: editor.options.circledCharges ? 'circled' : 'plain', options: [{ value: 'plain', label: 'Plain sign (N+)' }, { value: 'circled', label: 'In a circle (⊕, ⊖)' }], inline: (v) => chargeSwatch(v === 'circled'),
       help: 'Charges already drawn keep their look; the circle tools on the Object toolbox always draw a circled charge.' },
     { name: 'textAtom', label: 'An atom or group typed with the Text tool beside a bond end (Br, OMe) becomes that atom', type: 'checkbox', value: String(editor.options.textToAtom) },
     { name: 'ionCharges', label: 'Add charges to common counterions typed as text (BF4 becomes BF4⁻, NBu4 becomes NBu4⁺)', type: 'checkbox', value: String(chemText.ionCharges),
       help: 'Off, a counterion typed without its charge is still read as that ion, and flagged until the charge is added.' },
     { name: 'saltGroups', label: 'Group a counterion typed as text with the structure or ion of opposite charge next to it, as one salt', type: 'checkbox', value: String(chemText.saltGroups),
       help: 'Grouped, the two count as one salt: one formula and mass, and a SMILES with both parts.' },
-    { name: 'bondEnds', label: 'Ends of bond lines', value: String(bondEndPrefs.round), options: BOND_END_CHOICES.map((c) => ({ value: String(c.value), label: c.label })),
+    { name: 'bondEnds', label: 'Ends of bond lines', value: String(bondEndPrefs.round), options: BOND_END_CHOICES.map((c) => ({ value: String(c.value), label: c.label })), inline: (v) => bondEndSwatch(Number(v)),
       help: 'How round the free ends of bonds are, on screen and in pictures and prints. Anything but Round also gives ring corners and chain bends a sharp, mitred point.' },
     { name: 'supR', label: 'R groups numbered R1, R12… show the number raised (R¹, R¹²)', type: 'checkbox', value: String(labelPrefs.superscriptR),
       help: 'Longer labels (OR1, CO2R1) and labels from files are left as they are.' },
@@ -8405,7 +8606,19 @@ async function drawingPreferences(): Promise<void> {
     { name: 'startGap', label: 'Gap between a mechanism arrow\'s start and its atom or lone pair', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic' },
     { name: 'endGap', label: 'Gap between a mechanism arrow\'s head and its atom', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic',
       help: 'Measured from the atom\'s label (or a bare carbon\'s corner) or the lone pair\'s dots. Leave blank for the usual gap, which grows with the bond length. New arrows, and arrows stuck to a structure, use it when they are next drawn; Clean Up Arrow redraws the selected ones now.' },
-  ], { ok: 'Save' });
+    { name: 'arrowWidth', label: 'Arrow line width', value: editor.arrowLook.width === null ? '' : String(editor.arrowLook.width), type: 'number', unit: 'pt', placeholder: `Same as bonds (${doc.style.lineWidth} pt)` },
+    { name: 'headLength', label: 'Arrowhead length', value: editor.arrowLook.headLength === null ? '' : String(editor.arrowLook.headLength), type: 'number', unit: 'pt', placeholder: 'Automatic' },
+    { name: 'headWidth', label: 'Arrowhead width (each side of the line)', value: editor.arrowLook.headWidth === null ? '' : String(editor.arrowLook.headWidth), type: 'number', unit: 'pt', placeholder: 'Automatic',
+      help: 'For new arrows, whatever the bonds\' line width. Leave blank for the usual: the drawing style\'s line width, and a head ten line widths long and 2.5 wide. Arrows already drawn keep their size (change them in the Style panel).' },
+    { name: 'aidAngle', label: 'Show the angle beside the pointer while drawing bonds, arrows and lines', type: 'checkbox', value: String(editor.aids.angle) },
+    { name: 'aidLength', label: 'Show the length there too', type: 'checkbox', value: String(editor.aids.length),
+      help: 'In the rulers\' units (inches or centimetres).' },
+    { name: 'aidHints', label: 'Show what Shift, Alt and Ctrl do beside the pointer', type: 'checkbox', value: String(editor.aids.hints),
+      help: 'While dragging, the keys that change what the tool does are listed in blue (the one held in bold). With the button up they show as a key is held.' },
+  ], { ok: 'Save', preview: { title: 'Arrows and bonds', draw: (v) => {
+    const size = (x: string) => { const n = Number(x); return x.trim() === '' || !isFinite(n) || n < 0.05 ? null : Math.min(30, n); };
+    return stylePreview(doc.style, { width: size(v.arrowWidth), headLength: size(v.headLength), headWidth: size(v.headWidth) });
+  } } });
   if (!r) return;
   editor.options.circledCharges = r.charges === 'circled';
   editor.options.textToAtom = r.textAtom === 'true';
@@ -8415,6 +8628,9 @@ async function drawingPreferences(): Promise<void> {
   const gap = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
   arrowGaps.start = gap(r.startGap);
   arrowGaps.end = gap(r.endGap);
+  const size = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0.05 ? null : Math.min(30, n); };
+  editor.arrowLook = { width: size(r.arrowWidth), headLength: size(r.headLength), headWidth: size(r.headWidth) };
+  editor.aids = { ...editor.aids, angle: r.aidAngle === 'true', length: r.aidLength === 'true', hints: r.aidHints === 'true' };
   const ends = Number(r.bondEnds);
   if (isFinite(ends) && ends !== bondEndPrefs.round) {
     bondEndPrefs.round = ends;
@@ -8468,8 +8684,8 @@ async function aiSettings(): Promise<void> {
 
 async function onlinePreferences(): Promise<void> {
   const r = await ask('Online', [
-    { name: 'pubchem', label: 'Look up names the name reader can\'t read on PubChem', type: 'checkbox', value: String(pubchemNames),
-      help: 'Sends the name typed to PubChem, a free NIH database. Names the program can read itself never leave this computer.' },
+    { name: 'pubchem', label: 'Look up CAS RNs, and names the name reader can\'t read, on PubChem', type: 'checkbox', value: String(pubchemNames),
+      help: 'Sends the name or CAS RN typed to PubChem, a free NIH database (and a CAS RN PubChem doesn\'t know to NCI CACTUS); Find CAS RN sends the structure as SMILES. Names the program can read itself never leave this computer.' },
     ...(canUpdate ? [{ name: 'updates', label: 'Check for a newer version when the app starts', type: 'checkbox' as const, value: String(updateCheck),
       help: 'Asks GitHub for the latest release number; nothing about you or your files is sent.' },
     { name: 'channel', label: 'Updates', options: UPDATE_CHANNELS, value: updateChannel,
@@ -8495,7 +8711,8 @@ onPalettes(() => storeSettings());
 /** Save the key map and preferences (after the saved ones have been read, so they aren't lost). */
 function storeSettings(): void {
   if (!settingsLoaded) return;
-  saveSettings(currentSettings(), (msg) => flash(msg, 10000));
+  // (settings only applied for now are kept in the file as they were)
+  saveSettings({ ...currentSettings(), ...heldSettings } as Settings, (msg) => flash(msg, 10000));
 }
 
 /** Every setting as it is now. */
@@ -8551,6 +8768,8 @@ function currentSettings(): Settings {
     rerouteArrows: editor.options.rerouteArrows,
     arrowStartGap: arrowGaps.start,
     arrowEndGap: arrowGaps.end,
+    cursorAids: { ...editor.aids },
+    arrowLook: { ...editor.arrowLook },
     superscriptR: labelPrefs.superscriptR,
     bondEnds: bondEndPrefs.round,
     depthShade: { ...depthShadePrefs },
@@ -8782,6 +9001,8 @@ function applySettings(s: Settings): void {
   editor.options.rerouteArrows = s.rerouteArrows;
   arrowGaps.start = s.arrowStartGap;
   arrowGaps.end = s.arrowEndGap;
+  editor.aids = { ...s.cursorAids };
+  editor.arrowLook = { ...s.arrowLook };
   labelPrefs.superscriptR = s.superscriptR;
   bondEndPrefs.round = s.bondEnds;
   Object.assign(depthShadePrefs, s.depthShade);
@@ -9052,13 +9273,65 @@ adductSel.addEventListener('change', () => scheduleAnalysis(true));
 /** What PubChem had on each structure looked up this session, by SMILES. */
 const pubchemStates = new Map<string, PubChemState>();
 
+/** Each structure's CAS RN as looked up this session, by SMILES. */
+const casStates = new Map<string, CasState>();
+
+/**
+ * A structure's CAS RN line: as looked up this session, else straight from your Compound
+ * Library (once it has been read) or the answers kept on this computer, without going online.
+ */
+function casStateOf(smiles: string): CasState {
+  const st = casStates.get(smiles);
+  if (st) return st;
+  const mine = library.loaded ? library.now.compounds.find((c) => c.smiles === smiles && readCas(c.cas)?.kind === 'cas') : undefined;
+  if (mine) return { kind: 'found', cas: [readCas(mine.cas)!.cas], name: mine.name || undefined, from: 'your Compound Library' };
+  const kept = casMemory.byKey(smiles);
+  if (kept?.cas.length) return { kind: 'found', cas: kept.cas, name: kept.name, cid: kept.cid, from: kept.source };
+  return { kind: 'idle' };
+}
+
+/** The Analysis panel's Find button (and Find CAS RN): the structure's CAS RN, shown in its line. */
+async function findCas(smiles: string, fresh = false): Promise<CasFound | null> {
+  if (casStates.get(smiles)?.kind === 'busy') return null;
+  casStates.set(smiles, { kind: 'busy' });
+  scheduleAnalysis(true);
+  let got: CasFound;
+  try {
+    got = await casForStructure(smiles, casDeps(), fresh);
+  } catch (e) {
+    got = { kind: 'error', message: (e as Error).message };
+  }
+  casStates.set(smiles, got);
+  scheduleAnalysis(true);
+  return got;
+}
+
+/** Chemistry > Look Up > Find CAS RN (and the right-click menu): the structure picked, its CAS RN shown in the Analysis panel. */
+async function findCasChosen(): Promise<void> {
+  const f = chosenStructures()[0];
+  if (!f) { flash('Select a structure first.'); return; }
+  const r = await weigh(f);
+  if (!r?.smiles) { flash('Couldn\'t read that structure to look it up.'); return; }
+  if (sideIsFolded()) command('fold-side');
+  const got = await findCas(r.smiles, casStates.get(r.smiles)?.kind === 'none' || casStates.get(r.smiles)?.kind === 'error');
+  $('#analysis-body .an-cas')?.scrollIntoView({ block: 'nearest' });
+  if (got?.kind === 'found') flash(`CAS RN ${got.cas[0]}${got.name ? ` (${got.name})` : ''}, from ${got.from}. It is in the Analysis panel.`);
+  else if (got) flash(got.message, 7000);
+}
+
 /** The Analysis panel's PubChem button: find the structure's compound number, then its record. */
 async function lookUpOnPubChem(smiles: string): Promise<void> {
   pubchemStates.set(smiles, { kind: 'busy' });
   scheduleAnalysis(true);
   try {
     const cid = await pubchemCid(smiles);
-    pubchemStates.set(smiles, cid ? { kind: 'found', c: await pubchemCompound(cid) } : { kind: 'none' });
+    const c = cid ? await pubchemCompound(cid) : null;
+    pubchemStates.set(smiles, c ? { kind: 'found', c } : { kind: 'none' });
+    // its CAS RNs fill in the CAS RN line too
+    if (c?.cas.length && casStateOf(smiles).kind !== 'found') {
+      casStates.set(smiles, { kind: 'found', cas: c.cas, name: c.title || undefined, cid: c.cid, from: 'PubChem' });
+      casMemory.remember(c.cas.map((cas) => ({ cas, smiles, key: smiles, whole: true, name: c.title || undefined, cid: c.cid, source: 'PubChem' as const, found: new Date().toISOString() })));
+    }
   } catch (e) {
     pubchemStates.set(smiles, { kind: 'error', message: (e as Error).message });
   }
@@ -9091,6 +9364,8 @@ $('#analysis-body').addEventListener('click', (e) => {
   if (nm && lastAnalysis) { const k = Number(nm.dataset.name); const r = lastAnalysis.results[k]; if (r?.smiles && lastAnalysis.molblocks[k]) void nameForPanel(r.smiles, lastAnalysis.molblocks[k]); return; }
   const calc = t.closest<HTMLButtonElement>('button[data-calc]');
   if (calc && lastAnalysis) { const r = lastAnalysis.results[Number(calc.dataset.calc)]; if (r && !r.error) void showLabCalculator({ mw: r.mw, label: r.formula }); return; }
+  const findBtn = t.closest<HTMLButtonElement>('button[data-cas]');
+  if (findBtn && lastAnalysis) { const r = lastAnalysis.results[Number(findBtn.dataset.cas)]; if (r?.smiles) void findCas(r.smiles, casStates.has(r.smiles)); return; }
   const look = t.closest<HTMLButtonElement>('button[data-pubchem]');
   if (look && lastAnalysis) { const r = lastAnalysis.results[Number(look.dataset.pubchem)]; if (r?.smiles) void lookUpOnPubChem(r.smiles); return; }
   const b = t.closest<HTMLButtonElement>('button[data-insert]');
@@ -9098,6 +9373,18 @@ $('#analysis-body').addEventListener('click', (e) => {
   const [kind, n] = b.dataset.insert!.split(':');
   const r = lastAnalysis.results[Number(n)], frag = lastAnalysis.frags[Number(n)];
   if (kind === 'formula') { if (frag) void attachDescriptors([frag]); return; }
+  if (kind === 'cas') {
+    const st = r?.smiles ? casStateOf(r.smiles) : null;
+    if (st?.kind !== 'found' || !frag) return;
+    const m = editor.measure();
+    doc.edit('CAS caption', () => {
+      const c = doc.addCaption({ x: 0, y: 0, runs: casRuns(st.cas[0]), justify: 'center', attach: { atoms: [...frag], side: 'below', gap: defaultGap(doc), shift: 0, role: 'caption' } });
+      placeAttached(doc, c, m);
+    });
+    editor.changed();
+    flash('Added the CAS RN under the structure; it follows it. Double-click to edit.');
+    return;
+  }
   if (kind === 'pcname' || kind === 'pccas' || kind === 'pchaz' || kind === 'name') {
     const st = r && pubchemStates.get(r.smiles);
     const named = kind === 'name' && r ? nameStates.get(r.smiles) : undefined;
@@ -9321,7 +9608,7 @@ async function runAnalysis(force: boolean): Promise<void> {
   // once the namer is running, every structure analysed gets its name without asking
   if (namer.ready) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !nameStates.has(r.smiles)) void nameForPanel(r.smiles, exports[i].molblock); });
   saySelection(results);
-  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i) })).join('');
+  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
   updatePanels();
 }
 
@@ -9821,7 +10108,7 @@ const MENU_LIGANDS = ['pph3', 'pcy3', 'co', 'mecn', 'py', 'cp', 'cpstar', 'benze
 function metalMenu(): MenuItem[] {
   const out: MenuItem[] = [];
   const metal = editor.selectedMetal();
-  if (metal !== null) out.push({ label: 'Add Ligand', items: MENU_LIGANDS.map((id) => ({ cmd: `add-ligand:${id}`, label: templateById(id)?.name ?? id })) });
+  if (metal !== null) out.push({ label: 'Add Ligand', items: [...MENU_LIGANDS.map((id) => ({ cmd: `add-ligand:${id}`, label: templateById(id)?.name ?? id })), null, { cmd: 'ligand-library', label: 'More in the Ligand Library…' }] });
   const sel = [...editor.sel.atoms].map((id) => doc.atoms.get(id)).filter((a): a is Atom => !!a && !a.multi);
   if (metal !== null && sel.length >= 3) out.push({ cmd: 'hapto-bond' });
   const hapto = (bid: number) => { const b = doc.bonds.get(bid); return !!b && !!centreEnd(doc, b); };
@@ -9917,6 +10204,7 @@ function drawingMenu(): MenuItem[] {
         { cmd: 'pubchem-lookup' },
       ] },
       { cmd: 'structure-to-name' },
+      { cmd: 'find-cas' },
       { cmd: 'model-3d' },
       { label: 'Perspective', items: [{ cmd: 'turn-3d' }, { cmd: 'flatten-3d' }, null, { cmd: 'depth-shading', checked: depthShadePrefs.on }, { cmd: 'depth-shading-settings' }] },
     ] : []),
@@ -9927,7 +10215,7 @@ function drawingMenu(): MenuItem[] {
     ] }, { cmd: 'draw-from-arrows' }, { cmd: 'check-arrows' }] : []),
     ...(s.bonds.size && s.bonds.size <= 2 && !s.arrows.size ? [{ cmd: 'homolysis-arrows' }] : []),
     ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : []),
-    ...(s.arrows.size || atoms ? [{ label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'map-atoms' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
+    ...(s.arrows.size || atoms ? [...(editor.selectedSmart() !== null ? [{ cmd: 'ungroup-smart-scheme' }, null] : []), { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, ...(editor.selectedSmart() === null ? [{ cmd: 'convert-smart-scheme' }] : []), { cmd: 'smart-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'map-atoms' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
     null,
     ...(atoms ? [{ label: 'Label the Structure', items: [{ cmd: 'add-id-label' }, { cmd: 'add-caption' }, { cmd: 'attach-descriptors' }, null, { cmd: 'number-compounds' }] }] : []),
     ...(atoms ? [{ cmd: 'add-to-compound-library', label: 'Add to Compound Library' }] : []),
@@ -9958,7 +10246,7 @@ function drawingMenu(): MenuItem[] {
     ...(shapes.some((x) => x.kind === 'picture') ? [{ cmd: 'import-picture', label: 'Read Structure from Picture…' }, { cmd: 'crop' }, { cmd: 'picture-format' }, { label: 'Picture Style', items: PICTURE_STYLES.map((p) => ({ cmd: `picture-style-${p.id}`, label: p.name })) }] : []),
     ...(ws.active.mode === 'slides' ? [{ label: 'Animation', items: [
       ...ANIM_COMMANDS.slice(0, EFFECTS.length), null, ...ANIM_COMMANDS.slice(EFFECTS.length), null,
-      { cmd: 'remove-animation', label: 'Remove Animation' }, { cmd: 'animation-pane', label: 'Animation Pane' }, { cmd: 'preview-slide', label: 'Preview Slide' },
+      { cmd: 'remove-animation', label: 'Remove Animation' }, ...(s.arrows.size ? [{ cmd: 'auto-animate-steps' }] : []), { cmd: 'animation-pane', label: 'Animation Pane' }, { cmd: 'preview-slide', label: 'Preview Slide' },
     ] }, { cmd: 'new-comment', label: 'New Comment' }] : []),
     null,
     { cmd: 'show-style' },
@@ -9971,6 +10259,15 @@ function drawingMenu(): MenuItem[] {
 
 /** Resting the mouse on OTBS, Boc, CO2Me… shows the group written out. */
 const labelTips = new LabelTooltip(async (tip) => {
+  // a ligand from the Ligand Library: its drawing on a metal, PPh2-style labels kept
+  const lig = tip.ligand ? templateById(tip.ligand) : undefined;
+  if (lig) {
+    const d = new Doc();
+    d.style = { ...editor.doc.style };
+    d.bulk(() => placeTemplate(d, lig, freePlacement({ x: 0, y: 0 }, d.style.bondLength), { noMerge: true }));
+    const pic = recordPicture(d, 3);
+    if (pic) return pictureCanvas(d, pic, 72 * 1.8 * (window.devicePixelRatio || 1)).canvas;
+  }
   if (!chem.ready) return null;
   const mb = await chem.smilesToMol(tip.smiles).catch(() => null);
   if (!mb) return null;
@@ -10031,7 +10328,11 @@ async function darkColours(): Promise<void> {
     { name: 'paper', label: 'Paper shows as', value: cur.paper, type: 'color' },
     { name: 'ink', label: 'Black ink shows as', value: cur.ink, type: 'color' },
     { name: 'name', label: 'Save as your own, named', value: '', placeholder: 'leave empty to use the palette as it is' },
-  ], { ok: 'Use', note: 'Only the screen changes: files, printing, copying and exports keep their white paper and black ink. The colours shown are the palette in use now: pick another palette and leave them alone to use it as it is, or change them (and give a name) to keep your own.' });
+  ], { ok: 'Use', preview: { title: 'On screen', draw: (v) => {
+    const base = darkPaletteNamed(v.palette, dark.own);
+    const untouched = v.paper === cur.paper && v.ink === cur.ink;
+    return readingPreview(untouched ? base : { name: '', paper: v.paper || base.paper, ink: v.ink || base.ink }, doc.style);
+  } }, note: 'Only the screen changes: files, printing, copying and exports keep their white paper and black ink. The colours shown are the palette in use now: pick another palette and leave them alone to use it as it is, or change them (and give a name) to keep your own.' });
   if (!got) return;
   const base = darkPaletteNamed(got.palette, dark.own);
   // colours left as they were mean "this palette as it is"
@@ -10192,11 +10493,35 @@ for (const group of [...TOOL_GROUPS, OFF_BAR]) {
   for (const item of group) {
     const pal = 'palette' in item ? item : null;
     for (const t of pal ? pal.items : [item as { name: string; title: string }]) {
-      if (t.name === OWN_ADD) continue;
+      if (t.name === OWN_ADD || t.name === LIGAND_LIBRARY_OPEN) continue;
       ALL_TOOLS.set(t.name, { title: t.title, icon: ICONS[t.name] ?? pal?.icon?.(t.name, 28) ?? t.name });
     }
   }
 }
+
+/**
+ * Document and Spreadsheet, with no structure being drawn: one Insert Structure button in place of
+ * the drawing tools (they do nothing until a structure is open). In a sheet the structure goes in
+ * the active cell; in a document, at the caret (or the picked drawing opens). While a structure is
+ * drawn, and in split view, the whole toolbox is back.
+ */
+const structureStart = document.createElement('button');
+structureStart.type = 'button';
+structureStart.id = 'structure-start';
+structureStart.innerHTML = `${ICONS['insert-structure']}<span>Insert<br>Structure</span>`;
+structureStart.addEventListener('click', () => {
+  const mode = ws.active.mode;
+  if (mode === 'sheet') command('draw-structure');
+  else if (mode === 'document') docMode?.drawWithTool();
+});
+structureStart.addEventListener('pointerenter', () => {
+  const sheet = ws.active.mode === 'sheet';
+  const cell = sheet ? $<HTMLInputElement>('#sh-name').value : '';
+  structureStart.title = sheet ? `Insert Structure: draw a structure in the active cell${cell ? ` (${cell})` : ''}. Double-click a structure to change it` : 'Insert Structure: draw a structure or scheme to put in the text at the caret (or change the picked drawing)';
+});
+structureStart.title = 'Insert Structure';
+structureStart.setAttribute('aria-label', 'Insert Structure');
+$('#dock-left').prepend(structureStart);
 
 /**
  * A tool picked from a toolbox. In Document and Sheet modes, with no drawing open, a drawing
@@ -10855,7 +11180,7 @@ const guide = {
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files', open: generalPreferences },
-  { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute', open: drawingPreferences },
+  { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
   { id: 'typing', title: 'Text and Spelling', words: 'typing spelling dictionary autocorrect replacements chemistry formulas subscripts', open: () => typingDialog.open() },
@@ -10868,10 +11193,42 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'autosave', title: 'AutoSave and Recovery', words: 'autosave recovery versions backup copies shared folders onedrive', open: () => keeper.optionsCommand() },
   { id: 'ai', title: 'AI Model', words: 'ai artificial intelligence claude anthropic chatgpt gpt openai gemini google ollama openrouter api key llm model link connect', open: () => aiSettings() },
   { id: 'online', title: 'Online', words: 'pubchem internet names lookup updates check version privacy stable latest channel beta', open: onlinePreferences },
-  { id: 'transfer', title: 'Import and Export', words: 'backup back up copy move settings file new computer install reinstall export import toolboxes hotkeys', open: settingsTransfer },
-  { id: 'files', title: 'File Types', words: 'open with default app explorer finder associations cdxml cdx mol sdf docx pptx xlsx double-click', open: () => fileTypesPage(fileTypesHost) },
+  { id: 'transfer', actions: true, title: 'Import and Export', words: 'backup back up copy move settings file new computer install reinstall export import toolboxes hotkeys', open: settingsTransfer },
+  { id: 'files', actions: true, title: 'File Types', words: 'open with default app explorer finder associations cdxml cdx mol sdf docx pptx xlsx double-click', open: () => fileTypesPage(fileTypesHost) },
 ];
-const settingsWindow = new SettingsWindow(SETTINGS_PAGES);
+// Apply on a Settings page uses its settings until the program closes: meanwhile the settings
+// file keeps what they were (held here), until Set as Default keeps them for good. Pages about
+// the open file (Drawing Style) apply to that file, and what they change in settings is kept.
+const heldSettings: Record<string, unknown> = {};
+const heldBy = new Map<string, Set<string>>();
+/** Settings that change by themselves (recent files, pane sizes): never part of a page's changes. */
+const RUNNING_SETTINGS = ['recentFiles', 'recentSymbols', 'lastVersion', 'welcomed', 'skipVersion', 'splitWidth', 'slidePaneWidth', 'notesHeight', 'fileTypesOffered', 'wordObjectsOffered'];
+const PER_FILE_PAGES = new Set(['style']);
+const settingsHost: SettingsHost = {
+  snapshot: () => {
+    const s = JSON.parse(JSON.stringify(currentSettings())) as Record<string, unknown>;
+    for (const k of RUNNING_SETTINGS) delete s[k];
+    return s;
+  },
+  restore: (s) => {
+    applySettings({ ...currentSettings(), ...s } as Settings);
+    storeSettings();
+  },
+  applied: (page, mode, before) => {
+    const keys = PER_FILE_PAGES.has(page) ? [] : changedKeys(before, settingsHost.snapshot());
+    const mine = heldBy.get(page) ?? new Set<string>();
+    if (mode === 'default') {
+      for (const k of [...mine, ...keys]) delete heldSettings[k];
+      heldBy.delete(page);
+    } else {
+      for (const k of keys) { if (!(k in heldSettings)) heldSettings[k] = before[k]; mine.add(k); }
+      if (mine.size) heldBy.set(page, mine);
+    }
+    storeSettings();
+    if (mode === 'default' && !PER_FILE_PAGES.has(page)) flash('Kept as your default.', 2500);
+  },
+};
+const settingsWindow = new SettingsWindow(SETTINGS_PAGES, settingsHost);
 $('#btn-search').addEventListener('click', () => commandSearch.open());
 placeSidePanel();
 // your palettes show in the Colours toolbox as soon as they change
@@ -11110,16 +11467,19 @@ async function pageGridSettings(): Promise<void> {
     { name: 'hatchAngle', label: 'Hatching: slant', value: String(o.hatchAngle), options: [{ value: '45', label: '45° (/)' }, { value: '135', label: '45° (\\)' }, { value: '60', label: '60° (steep /)' }, { value: '120', label: '60° (steep \\)' }, { value: '30', label: '30° (shallow /)' }, { value: '150', label: '30° (shallow \\)' }] },
     { name: 'hatchCorner', label: 'Hatching where two fixed edges meet', value: o.hatchCorner, options: [{ value: 'wrap', label: 'Carry on round the corner' }, { value: 'mirror', label: 'Lean the other way on the sides (a chevron at the corner)' }] },
     { name: 'pasteAtWall', label: 'A paste that goes past a fixed edge', value: o.pasteAtWall, options: [{ value: 'ask', label: 'Ask each time' }, { value: 'pages', label: 'Move it inside, adding pages' }, { value: 'wrap', label: 'Wrap its structures at the page\'s edge' }] },
-  ], { ok: 'Save' });
+  ], { ok: 'Save', preview: { title: 'Pages', draw: (v) => pageGridPreview(readLook(v)) } });
   if (!r) return;
-  setPageLook({
+  setPageLook(readLook(r));
+  function readLook(r: Record<string, string>): PageLook {
+    return {
     grid: r.grid === 'true', lineStyle: r.lineStyle as PageLook['lineStyle'], lineWidth: Number(r.lineWidth) || 1,
     lineColour: /^#[0-9a-f]{6}$/i.test(r.lineColour) ? r.lineColour : o.lineColour, lineOpacity: Number(r.lineOpacity) || o.lineOpacity,
     emptyShade: r.emptyShade as PageLook['emptyShade'], outsideShade: r.outsideShade as PageLook['outsideShade'], ghost: r.ghost === 'true',
     wallStyle: r.wallStyle === 'line' ? 'line' : 'hatch', pasteAtWall: r.pasteAtWall as PageLook['pasteAtWall'],
     wallWidth: Number(r.wallWidth) || o.wallWidth, hatchSpacing: Number(r.hatchSpacing) || o.hatchSpacing, hatchLength: Number(r.hatchLength) || o.hatchLength,
     hatchWidth: Number(r.hatchWidth) || o.hatchWidth, hatchAngle: Number(r.hatchAngle) || o.hatchAngle, hatchCorner: r.hatchCorner === 'mirror' ? 'mirror' : 'wrap',
-  });
+    };
+  }
 }
 
 /** Settings ▸ Navigation. */
@@ -11142,7 +11502,9 @@ async function navigationSettings(): Promise<void> {
     { name: 'tintStrength', label: 'Tint', value: o.tintStrength, options: strength },
     { name: 'goButtons', label: 'Fit and Go to Selection buttons in the status bar', type: 'checkbox', value: String(o.goButtons),
       help: 'F6 fits the drawing and Shift+F6 goes to the selection, with or without the buttons (Edit ▸ Hotkeys changes the keys).' },
-  ], { ok: 'Save' });
+  ], { ok: 'Save', preview: { title: 'Dots and tint', draw: (v) => navigationPreview({
+    dotGrid: v.dotGrid === 'true', gridSpacing: v.gridSpacing as OrientPrefs['gridSpacing'], gridStrength: v.gridStrength as OrientPrefs['gridStrength'],
+    tint: v.tint === 'true', tintStrength: v.tintStrength as OrientPrefs['tintStrength'] }, editor.dark) } });
   if (!r) return;
   setOrient({
     navigator: r.navigator === 'true', navCorner: r.navCorner as OrientPrefs['navCorner'], navSize: r.navSize as OrientPrefs['navSize'], navHideAll: r.navHideAll === 'true',
@@ -11396,7 +11758,28 @@ const slideText = new SlideTextRibbon($('#ribbon'), {
   boxLook: () => editor.textBoxLook(),
 });
 CaptionEditor.onState = () => { if (ws.active.mode === 'slides') slideText.refresh(); };
-editor.onChange = () => { welcomeWatch?.(); if (ws.active.mode === 'slides') slideText.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+// the Smart Scheme pane: the selected scheme's species, beside it
+const smartPane = new SmartPane({
+  doc: () => editor.doc,
+  measure: () => editor.fullMeasure(),
+  selected: () => (editor.sel.shapes.size + editor.sel.captions.size + editor.sel.arrows.size + editor.sel.atoms.size ? editor.selectedSmart() : null),
+  screenRect: (r) => {
+    const o = overlay.getBoundingClientRect();
+    const a = renderer.toScreen({ x: r.x1, y: r.y1 }), b = renderer.toScreen({ x: r.x2, y: r.y2 });
+    return { x1: a.x + o.left, y1: a.y + o.top, x2: b.x + o.left, y2: b.y + o.top };
+  },
+  area: () => { const o = host.getBoundingClientRect(); return { x1: o.left, y1: o.top, x2: o.right, y2: o.bottom }; },
+  slotText: (id, k, t) => editor.smartSlotText(id, k, t),
+  stepText: (id, k, part, t) => editor.smartStepText(id, k, part, t),
+  add: (id, after) => editor.smartInsert(id, after),
+  remove: (id, k) => editor.smartRemove(id, k),
+  move: (id, from, to) => editor.smartMove(id, from, to),
+  arrange: (id, patch) => editor.smartArrange(id, patch),
+  ungroup: (id) => editor.ungroupSmart(id),
+});
+editor.onOverlay = () => smartPane.place();
+editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
+editor.onChange = () => { welcomeWatch?.(); smartPane.refresh(); if (ws.active.mode === 'slides') slideText.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();
@@ -11464,7 +11847,7 @@ requestAnimationFrame(() => {
 });
 
 // Hooks for the automated speed tests.
-(window as any).__app = { doc, editor, renderer, chem, live, command, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
+(window as any).__app = { doc, editor, renderer, settingsWindow, chem, live, command, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
   pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, canvas: s.canvas })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test

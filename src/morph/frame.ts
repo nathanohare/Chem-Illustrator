@@ -44,6 +44,12 @@ export interface Stroke {
   base?: [Vec, Vec];
   inner?: Inner;
   dashed?: boolean;
+  /**
+   * A bond appearing or going (in only one of the two drawings): it fades in or out at its own
+   * final shape, stopping at its atoms' labels as they will be (or were), rather than reaching
+   * into a label that is still faint.
+   */
+  whole?: boolean;
 }
 
 export interface TextPiece { text: string; x: number; y: number; size: number; color: RGB; alpha: number }
@@ -193,11 +199,17 @@ function orderTracks(oa: number, ob: number, t: number, sideA: number, sideB: nu
 interface EmitArgs {
   p0: Vec; p1: Vec; side: number; color: RGB; z: number; alpha: number; w: number; ends: string[]; grp: string;
   second: number; nbrs: [Vec[], Vec[]] | null; stereo: Stereo | null; triple: boolean;
-  flanks: [number, number, Inner | null][] | null; aromatic: boolean;
+  flanks: [number, number, Inner | null][] | null; aromatic: boolean; whole?: boolean;
 }
 
 /** The strokes of one bond: one line, a double's two, or a triple's three. */
 function emit(lines: Stroke[], gap: number, a: EmitArgs): void {
+  const from = lines.length;
+  emitLines(lines, gap, a);
+  if (a.whole) for (let i = from; i < lines.length; i++) lines[i].whole = true;
+}
+
+function emitLines(lines: Stroke[], gap: number, a: EmitArgs): void {
   const { p0, p1, side, color, z, alpha, w, ends, grp, second, nbrs, stereo } = a;
   const d = { x: p1.x - p0.x, y: p1.y - p0.y };
   const L = Math.hypot(d.x, d.y) || 1;
@@ -385,6 +397,7 @@ export function frame(A: MScene, B: MScene, M: Mapping, t: number, opt: FrameOpt
       alpha = fadeOut;
       if (depth) z = zTurnA(aid);
     }
+    const going = !bmap.has(aid) && !shifts.has(aid);
     if (alpha <= 0.01) continue;
     const stA = stereoOf(A, aid, PA);
     const tgtB = bmap.get(aid) ?? shifts.get(aid)?.tgt;
@@ -416,7 +429,7 @@ export function frame(A: MScene, B: MScene, M: Mapping, t: number, opt: FrameOpt
     }
     emit(lines, gap, {
       p0, p1, side, color: col, z, alpha, w: wid, ends, grp: 'A' + aid, second: second * alpha,
-      nbrs: neighbours(A, aid, PA), stereo, triple, flanks: flanks ? flanks.map(([m, al, inn]) => [m, al * alpha, inn]) : null, aromatic,
+      nbrs: neighbours(A, aid, PA), stereo, triple, flanks: flanks ? flanks.map(([m, al, inn]) => [m, al * alpha, inn]) : null, aromatic, whole: going,
     });
   }
 
@@ -426,7 +439,7 @@ export function frame(A: MScene, B: MScene, M: Mapping, t: number, opt: FrameOpt
     emit(lines, gap, {
       p0: PB.get(b.b)!, p1: PB.get(b.e)!, side: b.order === 2 ? doubleSide(B, bid, PB) : 0, color: b.color, z: zb,
       alpha: fadeIn, w: b.w, ends: [kb(b.b), kb(b.e)], grp: 'B' + bid, second: b.order >= 2 ? fadeIn : 0,
-      nbrs: neighbours(B, bid, PB), stereo: stereoOf(B, bid, PB), triple: b.order >= 3, flanks: null, aromatic: b.aromatic,
+      nbrs: neighbours(B, bid, PB), stereo: stereoOf(B, bid, PB), triple: b.order >= 3, flanks: null, aromatic: b.aromatic, whole: true,
     });
   }
 

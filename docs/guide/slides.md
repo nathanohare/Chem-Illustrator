@@ -258,6 +258,18 @@ In PowerPoint the lines and the References slide's list are ordinary text boxes,
 
 To put a reference anywhere on a slide as text you can edit, use **Insert ▸ Formatted Reference…**.
 
+### Citing with Zotero
+
+In the desktop app, **Insert ▸ Zotero ▾** works with the Zotero app on your computer (Zotero 7 or later, running), as it does in documents.
+
+- **Add/Edit Citation** opens Zotero's citation window for the slide showing. The items you pick become the references that slide shows, linked to your Zotero library, and its lines are written as **References on Slide** sets them. Run it again on the same slide to change them.
+- **Add/Edit Bibliography** adds a References slide at the end (or edits the one there), with Zotero writing the list in its citation style.
+- **Refresh** brings the references and the References slide up to date from your library.
+- **Document Preferences** chooses Zotero's citation style for the presentation.
+- **Unlink Citations** keeps the lines and the list as they are, without the link to Zotero.
+
+Zotero's preferences are saved in the PowerPoint file with the presentation's references, so Zotero carries on when the file is opened here again.
+
 ## Transitions
 
 Open the **Design & Transitions** tab.
@@ -288,6 +300,8 @@ The same effects are on the right-click menu under **Animation**. Each animation
 | **Remove** | Take it off |
 
 A reagent written over an arrow animates with its whole scheme, because the scheme is a single picture in PowerPoint.
+
+**Auto-Animate Steps…** (Animations tab, or right-click ▸ **Animation**) builds a scheme up a step at a time: select the scheme (or a Smart Scheme, or nothing for every scheme on the slide) and choose the effect (Wipe runs along each arrow), when each product comes (right after its arrow, with it, or on a click of its own) and whether the first species comes in on a click too. Each click then brings the next arrow with its conditions, and what it makes. The scheme's pieces are kept apart for this, in the show and as separate pictures in PowerPoint. On a canvas slide, **Camera Follow** replaces the keyframes with one for each step, so the view travels along the route as it is built. The animations are ordinary ones: change or remove them in the Animation pane, and run Auto-Animate Steps again to start over.
 
 A highlight can animate on its own, like a shape in PowerPoint, so it can fade in over a structure that is already there. Click a highlighted atom or bond (or choose **Select Highlight** on the right-click menu or **Chemistry ▸ Highlight and Fill**), or pick the highlight under **Highlights** in the Animation pane, then pick an effect. Each run of highlight of one colour and look is one object. In PowerPoint the highlight is a picture of its own under its structure, and the animation stays on the highlight when the file comes back.
 
@@ -322,9 +336,15 @@ Undo works for every change. Comments are saved in the .pptx as PowerPoint comme
 | Back one click | ← or Backspace |
 | Jump to a slide | Type its number, then Enter |
 | Black or white screen | B or W (B or W again, or the next or back key, brings the slide back) |
+| Every slide, to pick one | G (arrow keys and Enter, or a click; Esc or G goes back) |
+| Look round a canvas slide | Drag, and scroll (or + and −) to zoom |
+| Back to where the show was | Esc, a click or the next key |
+| The canvas's map | M |
 | End the show | Esc |
 
 Each click plays the next animation, then moves on to the next slide with its transition. A click while something is moving finishes it at once.
+
+On a canvas slide you can leave the route to look round: drag to pan and scroll to zoom anywhere on the canvas (up to twelve times closer, or out to the whole canvas). While you look round, the map of the whole canvas shows in the corner with where you are. Esc, a click or the next key glides back to where the show was, and the show goes on from there. The controls in the top right corner (they fade until you move the mouse) zoom, take you back, show the map and show every slide.
 
 ### Presenter View
 

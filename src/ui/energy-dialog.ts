@@ -3,9 +3,13 @@
 // the diagram looks. Names take _ and ^ for sub- and superscripts (TS1^‡ or just TS1‡).
 
 import { ENERGY_DEFAULTS, ENERGY_PRESETS, PATH_COLOURS, type EnergyData, type EnergyPath } from '../design/energy';
+import { HARTREE, pickEnergy, readQmOutput, speciesName, type QmAtom, type QmResult } from '../chem/qm-output';
 
 /** How the last diagram looked, so a new one starts the same way. */
-let lastLook: Pick<EnergyData, 'style' | 'values' | 'digits' | 'axis' | 'barrier' | 'quantity' | 'unit'> = { ...ENERGY_DEFAULTS, quantity: 'ΔG', unit: 'kcal/mol' };
+let lastLook: Pick<EnergyData, 'style' | 'values' | 'digits' | 'axis' | 'barrier' | 'overall' | 'quantity' | 'unit'> = { ...ENERGY_DEFAULTS, quantity: 'ΔG', unit: 'kcal/mol' };
+
+/** A cell of the table: what is typed, and what came from a Gaussian or ORCA file. */
+interface Cell { label: string; g: string; eh?: number; geom?: QmAtom[] }
 
 /** Ask for a diagram: a new one (from a preset), or `editing` with its numbers to change. */
 export function askEnergy(editing: EnergyData | null, size: { w: number; h: number }, preview?: (d: EnergyData, canvas: HTMLCanvasElement) => void): Promise<EnergyData | null> {
@@ -22,7 +26,10 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       <div class="energy-table-wrap"><table class="energy-table"><thead></thead><tbody></tbody></table></div>
       <p class="energy-rows"><button type="button" data-act="row" title="Another species along the reaction coordinate">+ Species</button>
         <button type="button" data-act="path" title="Another pathway drawn on the same diagram, in its own colour">+ Pathway</button>
-        <button type="button" data-act="ddagger" title="Put a double dagger (‡) at the end of the species name you were last in, for a transition state">‡</button></p>
+        <button type="button" data-act="ddagger" title="Put a double dagger (‡) at the end of the species name you were last in, for a transition state">‡</button>
+        <button type="button" data-act="import" title="Read energies, transition states, the level of theory and geometries from Gaussian or ORCA output files, into the pathway you were last in">Import Gaussian/ORCA…</button>
+        <input type="file" name="qm" multiple accept=".log,.out,.txt" hidden /></p>
+      <p class="muted small energy-import-note" hidden></p>
       <p class="muted small">Leave an energy empty where a pathway has nothing (so a one-step route can sit beside a two-step one). Name transition states with ‡ (TS1‡): the ‡ button adds one to the name box you were last in.</p>
       <label class="ask-row"><span>Axis</span><span class="energy-pair"><select name="quantity"><option>ΔG</option><option>ΔG°</option><option>ΔH</option><option>E</option><option>ΔE</option></select>
         <select name="unit"><option>kcal/mol</option><option>kJ/mol</option><option>eV</option></select></span></label>
@@ -32,11 +39,14 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       <label class="ask-row ask-check"><input name="values" type="checkbox" /><span>Show the energies</span></label>
       <label class="ask-row ask-check"><input name="axis" type="checkbox" /><span>Axis with its title, and "Reaction coordinate" along the bottom</span></label>
       <label class="ask-row ask-check"><input name="barrier" type="checkbox" /><span>Mark the largest barrier on each pathway (ΔG‡)</span></label>
+      <label class="ask-row ask-check"><input name="overall" type="checkbox" /><span>Mark the overall change on each pathway (ΔG), first species to last</span></label>
+      <label class="ask-row ask-check"><input name="structures" type="checkbox" /><span>Show the structures read from files, as balls and sticks</span></label>
+      <label class="ask-row"><span>Level of theory</span><input name="theory" placeholder="e.g. B3LYP-D3(BJ)/def2-TZVP, SMD(THF)" /></label>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">${editing ? 'Redraw' : 'Insert'}</button></p>`;
     const $ = <T extends Element>(q: string) => form.querySelector<T>(q)!;
     const table = $<HTMLTableElement>('.energy-table');
     let paths: { name: string; color: string }[] = [];
-    let rows: { label: string; g: string }[][] = [];
+    let rows: Cell[][] = [];
 
     /** Read what is typed back into paths and rows (before the table is redrawn). */
     const read = () => {
@@ -44,15 +54,22 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         name: table.querySelector<HTMLInputElement>(`thead input[data-p="${j}"]`)?.value ?? p.name,
         color: table.querySelector<HTMLInputElement>(`thead input[data-c="${j}"]`)?.value ?? p.color,
       }));
-      rows = [...table.tBodies[0].rows].map((tr) => paths.map((_, j) => ({
-        label: tr.querySelector<HTMLInputElement>(`input[data-l="${j}"]`)?.value ?? '',
-        g: tr.querySelector<HTMLInputElement>(`input[data-g="${j}"]`)?.value ?? '',
-      })));
+      rows = [...table.tBodies[0].rows].map((tr, i) => paths.map((_, j) => {
+        const gi = tr.querySelector<HTMLInputElement>(`input[data-g="${j}"]`);
+        const was = rows[i]?.[j];
+        const cell: Cell = { label: tr.querySelector<HTMLInputElement>(`input[data-l="${j}"]`)?.value ?? '', g: gi?.value ?? '' };
+        if (was?.geom) cell.geom = was.geom;
+        // an energy typed over is the one wanted, not the file's
+        if (was?.eh !== undefined && gi && gi.value === gi.dataset.v) cell.eh = was.eh;
+        return cell;
+      }));
     };
     const draw = () => {
       const head = table.tHead!;
       head.innerHTML = '';
       const tr1 = head.insertRow(), tr2 = head.insertRow();
+      tr1.append(document.createElement('th'));
+      tr2.append(document.createElement('th'));
       paths.forEach((p, j) => {
         const th = document.createElement('th');
         th.colSpan = 2;
@@ -75,13 +92,31 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       body.innerHTML = '';
       rows.forEach((r, i) => {
         const tr = body.insertRow();
+        // dragged by its handle to another place along the reaction coordinate
+        const grip = Object.assign(document.createElement('span'), { textContent: '⋮⋮', title: 'Drag to move this species along the reaction coordinate', className: 'energy-grip' });
+        tr.insertCell().append(grip);
+        grip.draggable = true;
+        grip.addEventListener('dragstart', (e) => { dragFrom = i; e.dataTransfer?.setData('text/plain', String(i)); });
+        tr.addEventListener('dragover', (e) => { if (dragFrom !== null) e.preventDefault(); });
+        tr.addEventListener('drop', (e) => {
+          e.preventDefault();
+          if (dragFrom === null || dragFrom === i) return;
+          read();
+          const [moved] = rows.splice(dragFrom, 1);
+          rows.splice(i, 0, moved);
+          dragFrom = null;
+          draw();
+          redraw();
+        });
         paths.forEach((_, j) => {
           const l = Object.assign(document.createElement('input'), { value: r[j]?.label ?? '' });
           l.dataset.l = String(j);
           l.setAttribute('aria-label', `Species ${i + 1}, pathway ${j + 1}`);
           const g = Object.assign(document.createElement('input'), { value: r[j]?.g ?? '', inputMode: 'decimal' });
           g.dataset.g = String(j);
+          g.dataset.v = g.value;
           g.className = 'energy-num';
+          if (r[j]?.eh !== undefined) g.title = `${r[j].eh!.toFixed(6)} hartree, from the file`;
           g.setAttribute('aria-label', `Energy ${i + 1}, pathway ${j + 1}`);
           tr.insertCell().append(l);
           tr.insertCell().append(g);
@@ -91,10 +126,14 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         tr.insertCell().append(del);
       });
     };
+    let dragFrom: number | null = null;
     const load = (ps: EnergyPath[]) => {
       paths = ps.map((p) => ({ name: p.name, color: p.color }));
       const n = Math.max(...ps.map((p) => p.points.length));
-      rows = Array.from({ length: n }, (_, i) => ps.map((p) => ({ label: p.points[i]?.label ?? '', g: p.points[i]?.g === null || p.points[i] === undefined ? '' : String(p.points[i].g) })));
+      rows = Array.from({ length: n }, (_, i) => ps.map((p): Cell => {
+        const q = p.points[i];
+        return { label: q?.label ?? '', g: q?.g === null || q === undefined ? '' : String(q.g), ...(q?.eh !== undefined ? { eh: q.eh } : {}), ...(q?.geom ? { geom: q.geom } : {}) };
+      }));
       draw();
     };
 
@@ -117,6 +156,9 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
     $<HTMLInputElement>('input[name=values]').checked = look.values;
     $<HTMLInputElement>('input[name=axis]').checked = look.axis;
     $<HTMLInputElement>('input[name=barrier]').checked = look.barrier;
+    $<HTMLInputElement>('input[name=overall]').checked = !!look.overall;
+    $<HTMLInputElement>('input[name=structures]').checked = !!editing?.structures;
+    $<HTMLInputElement>('input[name=theory]').value = editing?.theory ?? '';
     form.querySelector('[data-act=row]')!.addEventListener('click', () => { read(); rows.push(paths.map(() => ({ label: '', g: '' }))); draw(); });
     form.querySelector('[data-act=path]')!.addEventListener('click', () => {
       read();
@@ -138,7 +180,10 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
     const gather = (): EnergyData => {
       read();
       return {
-        paths: paths.map((p, j) => ({ name: p.name.trim(), color: p.color, points: rows.map((r) => ({ label: r[j].label.trim(), g: num(r[j].g) })) })),
+        paths: paths.map((p, j) => ({
+          name: p.name.trim(), color: p.color,
+          points: rows.map((r) => ({ label: r[j].label.trim(), g: num(r[j].g), ...(r[j].eh !== undefined ? { eh: r[j].eh } : {}), ...(r[j].geom ? { geom: r[j].geom } : {}) })),
+        })),
         quantity: $<HTMLSelectElement>('select[name=quantity]').value,
         unit: $<HTMLSelectElement>('select[name=unit]').value,
         style: $<HTMLSelectElement>('select[name=style]').value as EnergyData['style'],
@@ -146,6 +191,9 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         digits: Math.max(0, Math.min(3, Number($<HTMLInputElement>('input[name=digits]').value) || 0)),
         axis: $<HTMLInputElement>('input[name=axis]').checked,
         barrier: $<HTMLInputElement>('input[name=barrier]').checked,
+        overall: $<HTMLInputElement>('input[name=overall]').checked,
+        structures: $<HTMLInputElement>('input[name=structures]').checked,
+        theory: $<HTMLInputElement>('input[name=theory]').value.trim(),
         w: Math.max(60, Number($<HTMLInputElement>('input[name=w]').value) || size.w),
         h: Math.max(40, Number($<HTMLInputElement>('input[name=h]').value) || size.h),
         ...(editing?.margins ? { margins: editing.margins } : {}),
@@ -177,12 +225,73 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       t.focus();
       redraw();
     });
+    // energies from files: relative to the pathway's first file, in the unit chosen
+    const lastPath = () => Number(lastName?.isConnected ? lastName.dataset.l : 0) || 0;
+    const relative = () => {
+      const unit = $<HTMLSelectElement>('select[name=unit]').value;
+      const k = HARTREE[unit] ?? HARTREE['kcal/mol'];
+      paths.forEach((_, j) => {
+        const ref = rows.find((r) => r[j]?.eh !== undefined)?.[j].eh;
+        if (ref === undefined) return;
+        for (const r of rows) if (r[j]?.eh !== undefined) r[j].g = String(Math.round((r[j].eh! - ref) * k * 100) / 100);
+      });
+    };
+    $<HTMLSelectElement>('select[name=unit]').addEventListener('change', () => { read(); relative(); draw(); });
+    const files = $<HTMLInputElement>('input[name=qm]');
+    form.querySelector('[data-act=import]')!.addEventListener('click', () => files.click());
+    files.addEventListener('change', async () => {
+      const list = [...(files.files ?? [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      files.value = '';
+      if (!list.length) return;
+      const got: QmResult[] = [], skipped: string[] = [];
+      for (const f of list) {
+        const r = readQmOutput(await f.text(), f.name);
+        const e = r && (r.free ?? r.scf);
+        if (r && e !== null) got.push(r); else skipped.push(f.name);
+      }
+      const note = $<HTMLParagraphElement>('.energy-import-note');
+      note.hidden = false;
+      if (!got.length) { note.textContent = `Nothing read: ${skipped.join(', ')} ${skipped.length > 1 ? 'are not' : 'is not'} Gaussian or ORCA output with an energy.`; return; }
+      read();
+      const pick = pickEnergy(got);
+      const j = Math.min(lastPath(), paths.length - 1);
+      const cells = got.map((r): Cell => ({
+        label: speciesName(r), g: '', eh: pick.kind === 'free' ? r.free! : r.scf!,
+        ...(r.atoms.length ? { geom: r.atoms.map((a) => ({ el: a.el, x: +a.x.toFixed(3), y: +a.y.toFixed(3), z: +a.z.toFixed(3) })) } : {}),
+      }));
+      // a preset's made-up numbers go; a table being worked on keeps its other pathways
+      const fresh = !editing && paths.length === 1;
+      if (fresh) rows = cells.map((c) => [c]);
+      else {
+        while (rows.length < cells.length) rows.push(paths.map(() => ({ label: '', g: '' })));
+        rows.forEach((r, i) => { r[j] = cells[i] ?? { label: '', g: '' }; });
+      }
+      relative();
+      draw();
+      $<HTMLSelectElement>('select[name=quantity]').value = pick.quantity;
+      const theory = got.find((r) => r.theory)?.theory ?? '';
+      const t = $<HTMLInputElement>('input[name=theory]');
+      if (!t.value.trim() && theory) t.value = theory + (pick.kind === 'free' ? '' : ' (electronic energies)');
+      if (got.some((r) => r.atoms.length)) $<HTMLInputElement>('input[name=structures]').checked = true;
+      const ts = got.filter((r) => r.imaginary === 1).length;
+      const odd = got.filter((r) => (r.imaginary ?? 0) > 1).map((r) => r.name);
+      const theories = new Set(got.map((r) => r.theory).filter(Boolean));
+      note.textContent = [
+        `Read ${got.length} file${got.length > 1 ? 's' : ''} (${[...new Set(got.map((r) => r.program))].join(', ')}): ${pick.kind === 'free' ? 'free energies' : 'electronic energies (no frequency job in every file)'}, relative to ${got[0].name}.`,
+        ts ? `${ts} transition state${ts > 1 ? 's' : ''} (one imaginary frequency) marked ‡.` : '',
+        odd.length ? `More than one imaginary frequency: ${odd.join(', ')}.` : '',
+        theories.size > 1 ? `The files use different levels of theory (${[...theories].join('; ')}).` : '',
+        got.some((r) => r.unfinished) ? `Did not finish normally: ${got.filter((r) => r.unfinished).map((r) => r.name).join(', ')}.` : '',
+        skipped.length ? `Not read: ${skipped.join(', ')}.` : '',
+      ].filter(Boolean).join(' ');
+      redraw();
+    });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const out = gather();
       if (!out.paths.some((p) => p.points.some((q) => q.g !== null))) return;
-      const { style, values, digits, axis, barrier, quantity, unit } = out;
-      lastLook = { style, values, digits, axis, barrier, quantity, unit };
+      const { style, values, digits, axis, barrier, overall, quantity, unit } = out;
+      lastLook = { style, values, digits, axis, barrier, overall, quantity, unit };
       d.close();
       finish(out);
     });

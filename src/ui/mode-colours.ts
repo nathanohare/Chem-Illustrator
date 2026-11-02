@@ -92,6 +92,18 @@ export interface Palette {
   /** The menu bar in "Whole window", with white text on it. */
   bar: string;
   barDark: string;
+  /** Words on the accent colour (a Done button), each theme: white, or a near-black ink where white would not read (WCAG AA, 4.5:1). */
+  onAccent: string;
+  onAccentDark: string;
+}
+
+/** The ink for words on a coloured button when white would not read on it. */
+const INK = '#14171c';
+
+/** White on `bg` if it reads (4.5:1), else whichever of white and the dark ink reads better. */
+function inkOn(bg: string): string {
+  if (contrast('#ffffff', bg) >= 4.5) return '#ffffff';
+  return contrast(INK, bg) > contrast('#ffffff', bg) ? INK : '#ffffff';
 }
 
 /** Everything the window needs from one chosen colour, in both themes, keeping text readable. */
@@ -109,6 +121,8 @@ export function modePalette(colour: string): Palette {
     softDark: hex(mix(DARK_PANEL, c, 0.28)),
     bar: hex(until(c, BLACK, WHITE, 4.5)),
     barDark: hex(until(mix(DARK_BG, c, 0.55), BLACK, WHITE, 4.5)),
+    onAccent: inkOn(hex(accent)),
+    onAccentDark: inkOn(hex(accentDark)),
   };
 }
 
@@ -122,7 +136,7 @@ export function applyModeColours(mode: ColourMode, c: ModeColours, root: HTMLEle
   const p = modePalette(modeColour(mode, c));
   const vars: Record<string, string> = {
     '--mode-accent': p.accent, '--mode-soft': p.soft, '--mode-accent-dark': p.accentDark, '--mode-soft-dark': p.softDark,
-    '--mode-bar': p.bar, '--mode-bar-dark': p.barDark, '--mode-drawing': c.drawing, '--mode-slides': c.style === 'off' ? c.drawing : c.slides,
+    '--mode-bar': p.bar, '--mode-bar-dark': p.barDark, '--mode-on-accent': p.onAccent, '--mode-on-accent-dark': p.onAccentDark, '--mode-drawing': c.drawing, '--mode-slides': c.style === 'off' ? c.drawing : c.slides,
     '--mode-sheet': c.style === 'off' ? c.drawing : c.sheet, '--mode-document': c.style === 'off' ? c.drawing : c.document, '--mode-design': c.style === 'off' ? c.drawing : c.design,
   };
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v);

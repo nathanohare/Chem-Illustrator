@@ -16,6 +16,7 @@ import type { View } from './render/renderer';
 import { readCdxml } from './io/cdxml';
 import { writeCdxml, WriteOptions } from './io/cdxml-write';
 import { cdxToCdxml, cdxmlToCdx, isCdx } from './io/cdx';
+import { chemFormatOf, FOREIGN_EXTENSIONS, readScene, sceneToDoc, writeChemDoodleJson, writeCmlFile, writeKetFile, writeMolFile, writeMrvFile, writeRxnFile, writeSdfFile, type ChemFormat } from './io/chem-formats';
 // the PowerPoint writer loads the first time slides are saved
 import type { PptxOptions } from './io/pptx-write';
 import { zipHas } from './io/ooxml';
@@ -23,7 +24,7 @@ import { isXls, isOds, excelLimitNote } from './io/sheet-sniff';
 import { DOC_OPEN_ONLY, documentSaveNote, isOtherDocument } from './io/doc-sniff';
 import { adoptSaved } from './io/document-file';
 import {
-  FileRef, FileHandle, FileType, CDXML, CDX, CDS, PPTX, XLSX, XLSM, SHEET_OPEN_ONLY, CSV, SDF, DOCX, RTF, ODT, TABLE_TEXT_EXTENSIONS, openBytesDialog, saveFileDialog, writeFile, canSaveInPlace, askSaveChanges,
+  FileRef, FileHandle, FileType, CDXML, CDX, CDS, MOL, RXN, MRV, KET, CML, CDJSON, CHEM_EXCHANGE, PPTX, XLSX, XLSM, SHEET_OPEN_ONLY, CSV, SDF, DOCX, RTF, ODT, TABLE_TEXT_EXTENSIONS, openBytesDialog, saveFileDialog, writeFile, canSaveInPlace, askSaveChanges,
   showError, withExtension, extensionOf, baseName, readPath, pathExists, stampOf,
 } from './io/files';
 import type { FileStamp } from './keep/recovery';
@@ -130,10 +131,26 @@ export interface WorkspaceHooks {
 }
 
 /** File types AutoSave leaves alone: they keep only the values of one sheet, so saving loses the rest. */
-const NO_AUTOSAVE = new Set(['csv', 'tsv', 'txt', 'sdf', 'sd']);
+const NO_AUTOSAVE = new Set(['csv', 'tsv', 'txt', 'sdf', 'sd', 'mol', 'rxn', 'mrv', 'ket', 'cml', 'json']);
 
 /** What each kind of tab saves as (the first is the default). */
-const SAVE_TYPES: Record<Mode, FileType[]> = { drawing: [CDXML, CDX], slides: [PPTX], design: [PPTX], sheet: [XLSX, XLSM, CSV, SDF], document: [DOCX, RTF, ODT] };
+const SAVE_TYPES: Record<Mode, FileType[]> = { drawing: [CDXML, CDX, ...CHEM_EXCHANGE], slides: [PPTX], design: [PPTX], sheet: [XLSX, XLSM, CSV, SDF], document: [DOCX, RTF, ODT] };
+
+/** What each chemistry format is called in messages. */
+const FORMAT_NAMES: Record<ChemFormat, string> = { mol: 'molfile', sdf: 'SD file', rxn: 'RXN file', mrv: 'Marvin document', ket: 'Ketcher file', cml: 'CML file', cdjson: 'ChemDoodle JSON file' };
+
+/**
+ * A drawing in another program's chemistry format. These keep structures (and, except molfiles
+ * and SD files, straight arrows, + signs and text): what they can't hold is said, not stopped.
+ */
+function exchangeFile(doc: Doc, type: FileType, name: string): { data: string; type: FileType; note: string } {
+  const stem = name.replace(/\.[^.]+$/, '');
+  const got = type === MOL ? writeMolFile(doc, stem) : type === SDF ? writeSdfFile(doc) : type === RXN ? writeRxnFile(doc, stem)
+    : type === MRV ? writeMrvFile(doc) : type === KET ? writeKetFile(doc) : type === CML ? writeCmlFile(doc) : writeChemDoodleJson(doc);
+  const kept = type === MOL || type === SDF ? 'structures only' : type === RXN ? 'the first reaction step only' : type === CDJSON ? 'structures and arrows only' : 'structures, straight arrows and text only';
+  const unknown = got.unknown.length ? `; not understood, so written as R groups: ${got.unknown.join(', ')}` : '';
+  return { data: got.text, type, note: ` (${kept}: save as .cdxml to keep everything${unknown})` };
+}
 
 /** Tabs already told, this session, how their structures look in Office (said once, not on every save). */
 const officeNoted = new WeakSet<Tab>();
@@ -470,7 +487,7 @@ export class Workspace {
   async open(): Promise<void> {
     let f;
     try {
-      f = await openBytesDialog('Canvases, presentations, spreadsheets and documents', [CDXML, CDX, CDS, PPTX, XLSX, XLSM, DOCX, RTF, ODT, CSV, SDF], ['sd', ...SHEET_OPEN_ONLY, ...DOC_OPEN_ONLY, ...TABLE_TEXT_EXTENSIONS]);
+      f = await openBytesDialog('Canvases, presentations, spreadsheets and documents', [CDXML, CDX, CDS, PPTX, XLSX, XLSM, DOCX, RTF, ODT, CSV, SDF, MOL, RXN, MRV, KET, CML, CDJSON], ['sd', 'mdl', ...SHEET_OPEN_ONLY, ...DOC_OPEN_ONLY, ...TABLE_TEXT_EXTENSIONS]);
     } catch (e) {
       await showError('Could not open the file: ' + String(e));
       return;
@@ -501,7 +518,12 @@ export class Workspace {
       else if (ext === 'xlsx' || ext === 'xlsm' || SHEET_OPEN_ONLY.includes(ext) || (zip && (zipHas(bytes, 'xl/workbook.xml') || isOds(bytes))) || isXls(bytes) || ext === 'sdf' || ext === 'sd' || TABLE_TEXT_EXTENSIONS.includes(ext)) ok = await this.openSheet(bytes, name, ref, file);
       else if (ext === 'docx' || (zip && zipHas(bytes, 'word/document.xml'))) ok = await this.openDocument(bytes, name, ref, file);
       else if (ext === 'pptx' || zip) ok = await this.openSlides(bytes, name, ref);
-      else ok = this.openDrawing(isCdx(bytes) ? cdxToCdxml(bytes) : new TextDecoder().decode(bytes), name, ref);
+      else if (isCdx(bytes)) ok = this.openDrawing(cdxToCdxml(bytes), name, ref);
+      else {
+        const text = new TextDecoder().decode(bytes);
+        const fmt = FOREIGN_EXTENSIONS.includes(ext) || !/^\s*(<\?xml[^>]*>\s*)?(<!DOCTYPE[^>]*>\s*)?<CDXML/i.test(text) ? chemFormatOf(file, text) : null;
+        ok = fmt ? this.openForeign(fmt, text, name, ref) : this.openDrawing(text, name, ref);
+      }
       if (ok && ref.kind === 'path' && !this.quiet) this.hooks.remember?.(ref.path);
       else if (ok && ref.kind === 'handle' && !this.quiet) this.hooks.rememberHandle?.(ref.handle);
       if (ok && ext === CDS.extension && this.active.mode === 'drawing' && !this.quiet) this.hooks.styleSheet?.(this.active, { ...this.docOf(this.active).style });
@@ -531,6 +553,24 @@ export class Workspace {
     if (t.mode === 'sheet') return t.book!.edits === 0 ? t : null;
     if (t.mode === 'document') return t.document!.edits === 0 ? t : null;
     return t.deck!.edits === 0 ? t : null;
+  }
+
+  /** Another program's chemistry file (molfile, RXN, MRV, KET, CML, ChemDoodle JSON) as a drawing in the style new drawings start with. */
+  private openForeign(fmt: ChemFormat, text: string, name: string, ref: FileRef): boolean {
+    const scene = readScene(fmt, text);
+    if (!scene) throw new Error(`it isn't a ${FORMAT_NAMES[fmt]} this program can read`);
+    const style = this.hooks.newStyle?.('drawing') ?? new Doc().style;
+    const { doc, stats } = sceneToDoc(scene, style, this.hooks.newPage?.() ?? null);
+    const spare = this.spare();
+    const t = this.makeTab('drawing', name, ref);
+    t.stash = doc;
+    this.tabs.splice(this.tabs.indexOf(this.active) + 1, 0, t);
+    this.activate(t, true);
+    t.seen = this.host.version;
+    if (spare) this.drop(spare);
+    const parts = [`${stats.atoms} atoms`, `${stats.bonds} bonds`, ...(stats.arrows ? [`${stats.arrows} arrow${stats.arrows === 1 ? '' : 's'}`] : []), ...(stats.texts ? [`${stats.texts} text${stats.texts === 1 ? '' : 's'}`] : [])];
+    this.hooks.flash(`Opened ${name} (${FORMAT_NAMES[fmt]}): ${parts.join(', ')}. Save writes it back as a ${FORMAT_NAMES[fmt]}; Save As .cdxml keeps styles, shapes and everything else.`);
+    return true;
   }
 
   private openDrawing(text: string, name: string, ref: FileRef): boolean {
@@ -742,7 +782,7 @@ export class Workspace {
       const { writePptx } = await import('./io/pptx-write');
       const bytes = await writePptx({
         size: deck.size, master: deck.master, design: tab.mode === 'design', sections: deck.sectionCounts(), settings: deck.settings, kept: deck.kept,
-        slides: deck.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: deck.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf, canvas: s.canvas, refs: s.refs, refLook: s.refLook, refList: s.refList })),
+        slides: deck.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: deck.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf, canvas: s.canvas, refs: s.refs, refLook: s.refLook, refList: s.refList, zotero: s.zotero })),
       }, { ...this.hooks.pptx, title: name.replace(/\.[^.]+$/, '') });
       return { data: bytes, type: PPTX, note: '' };
     }
@@ -760,6 +800,8 @@ export class Workspace {
       return { data: await this.hooks.documents.write(tab.document!.t, name), type: ext === 'rtf' ? RTF : ext === 'odt' ? ODT : DOCX, note: documentSaveNote(name) };
     }
     keepOnPage(this.docOf(tab));
+    const exchange = CHEM_EXCHANGE.find((t) => t.extension === ext);
+    if (exchange) return exchangeFile(this.docOf(tab), exchange, name);
     const text = atFirstPage(this.docOf(tab), () => writeCdxml(this.docOf(tab), { name, textMeasure: this.hooks.measure }));
     return ext === 'cdx' ? { data: cdxmlToCdx(text), type: CDX, note: '' } : { data: text, type: CDXML, note: '' };
   }

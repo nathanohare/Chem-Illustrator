@@ -279,3 +279,32 @@ export async function pubchemSafetyRecord(q: { cas: string } | { name: string } 
     smiles: smilesOf(p), xlogp: typeof p.XLogP === 'number' ? p.XLogP : null, view: view.Record,
   });
 }
+
+/**
+ * A CAS RN's structure on PubChem: the compound filed under that number (the first, when PubChem
+ * files several under it: `count` says how many), or null when PubChem doesn't list it.
+ */
+export async function pubchemByCas(cas: string, fetchFn: Fetch = fetch): Promise<{ cid: number; smiles: string; title: string; count: number } | null> {
+  const ids = (await get(`${PUG}/compound/name/${encodeURIComponent(cas)}/cids/JSON`, fetchFn)) as { IdentifierList?: { CID?: number[] } } | null;
+  const cids = (ids?.IdentifierList?.CID ?? []).filter((c) => c > 0);
+  if (!cids.length) return null;
+  const data = (await get(`${PUG}/compound/cid/${cids[0]}/property/IsomericSMILES,Title/JSON`, fetchFn)) as
+    { PropertyTable?: { Properties?: Record<string, unknown>[] } } | null;
+  const p = data?.PropertyTable?.Properties?.[0];
+  const smiles = p && smilesOf(p);
+  if (!p || !smiles) return null;
+  return { cid: cids[0], smiles, title: typeof p.Title === 'string' ? p.Title : '', count: cids.length };
+}
+
+/**
+ * A drawn structure's CAS RNs on PubChem (main one first), with its PubChem name and number;
+ * null when PubChem has no record of the structure. Two requests.
+ */
+export async function pubchemCasOf(smiles: string, fetchFn: Fetch = fetch): Promise<{ cid: number; title: string; cas: string[] } | null> {
+  const cid = await pubchemCid(smiles, fetchFn);
+  if (!cid) return null;
+  const syn = (await get(`${PUG}/compound/cid/${cid}/synonyms/JSON`, fetchFn)) as { InformationList?: { Information?: { Synonym?: string[] }[] } } | null;
+  const names = syn?.InformationList?.Information?.[0]?.Synonym ?? [];
+  // the first synonym is PubChem's title for it
+  return { cid, title: names[0] ?? '', cas: casNumbers(names) };
+}

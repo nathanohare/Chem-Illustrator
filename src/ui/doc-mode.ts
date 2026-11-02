@@ -1904,6 +1904,8 @@ export class DocumentMode {
       if (o.kind === 'ref' && ids.has(o.target)) objects[id] = { ...o, target: ids.get(o.target)! };
       // the structures in a pasted table's cells are its own copies
       if (o.kind === 'table') objects[id] = { ...o, table: { ...o.table, rows: o.table.rows.map((row) => row.map((cell) => ({ ...cell, runs: remap(cell.runs) }))) } };
+      // and the citations in a pasted footnote
+      if (o.kind === 'note') objects[id] = { ...o, runs: remap(o.runs) };
     }
     const b = f.box?.cell ? f.box : null;
     // into a table cell: no text boxes, bibliographies or notes inside it (a table goes in as a table in the cell)
@@ -3535,8 +3537,8 @@ export class DocumentMode {
   private async fromName(): Promise<void> {
     const f = this.file!;
     const spot = this.cellSpot();
-    const got = await ask('Structure from Name or SMILES', [{ name: 'text', label: 'Name or SMILES', value: '' }], {
-      ok: 'Insert', note: 'A systematic or common name (ethyl acetate, 4-bromoanisole) or a SMILES string. The structure goes in the text at the caret.',
+    const got = await ask('Structure from Name or SMILES', [{ name: 'text', label: 'Name, SMILES or CAS RN', value: '' }], {
+      ok: 'Insert', note: 'A systematic or common name (ethyl acetate, 4-bromoanisole), a SMILES string or a CAS RN (50-78-2). The structure goes in the text at the caret.',
     });
     this.focus();
     if (!got?.text.trim() || this.file !== f) return;
@@ -3929,9 +3931,9 @@ export class DocumentMode {
       },
       picked: () => (this.file === f ? this.pickedField('cite')?.id ?? this.pickedField('bib')?.id ?? null : null),
       canInsert: () => this.file === f && !(f.box && !f.box.cell),
-      insert: (o) => {
+      insert: (o, sup) => {
         const before = f.ed.typingStyle();
-        const id = this.insertObject(o, kind() ?? 'Zotero', { sup: citeSuper(formatOf(f.t)) || undefined, sub: undefined });
+        const id = this.insertObject(o, kind() ?? 'Zotero', { sup: (sup ?? citeSuper(formatOf(f.t))) || undefined, sub: undefined });
         f.ed.setStyle({ sup: before.sup });
         return id;
       },
