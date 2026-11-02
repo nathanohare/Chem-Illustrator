@@ -6958,6 +6958,8 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
   const k = b ? Math.min(2.5, 0.8 * Math.min(w / Math.max(20, b.x2 - b.x1), h / Math.max(20, b.y2 - b.y1))) : 2;
   renderer.view = { ...renderer.view, scale: k, ox: w / 2 - (b ? (b.x1 + b.x2) / 2 : 0) * k, oy: h / 2 - (b ? (b.y1 + b.y2) / 2 : 0) * k };
   renderer.repaintAll();
+  // paint the structure now: the drawing area still shows the last one edited until the scene is asked for
+  editor.requestScene();
   editor.frame(true);
   refreshKeys();
   analysisKey = '';
