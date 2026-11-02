@@ -50,6 +50,21 @@ export interface CiteLive {
   id?: string;
   /** Per reference id: what the citation said of that item besides the item (locator, label, prefix, suffix…). */
   items?: Record<string, Json>;
+  /**
+   * Citing live through Zotero (zotero-live.ts): the field's code and text as Zotero last set
+   * them, kept while the citation cites what it did then (`for`, its reference ids joined by
+   * spaces). Changed here, the citation is worked out here again until Zotero refreshes it.
+   */
+  code?: string;
+  text?: string;
+  for?: string;
+}
+
+/** A bibliography Zotero keeps (citing live through it): its field's code, and its entries while they are up to date (`for`: the references cited, in order). */
+export interface BibLive {
+  code: string;
+  entries?: { label: string; pieces: { text: string; italic?: boolean; bold?: boolean }[] }[];
+  for?: string;
 }
 
 /** A citation read from a field: the references it cites (each with its link) and those details. */
@@ -330,6 +345,8 @@ export function writeCite(app: CiteManager, refs: Reference[], live: CiteLive | 
     return { ...extra(r), id: l?.id ?? r.id, ...(l?.uris?.length ? { uris: l.uris } : {}), itemData: { ...cslFromRef(r), id: l?.id ?? r.id } };
   });
   if (app === 'zotero') {
+    // Zotero's own code, while the citation cites what it did when Zotero set it
+    if (live?.app === 'zotero' && live.code && /^ITEM\b/.test(live.code) && live.for === refs.map((r) => r.id).join(' ')) return { instr: ` ADDIN ZOTERO_${live.code} ` };
     const json = { citationID, properties: { formattedCitation: shown, plainCitation: shown, noteIndex: 0 }, citationItems, schema: SCHEMA };
     return { instr: ` ADDIN ZOTERO_ITEM CSL_CITATION ${JSON.stringify(json)} ` };
   }
@@ -343,7 +360,8 @@ export function writeCite(app: CiteManager, refs: Reference[], live: CiteLive | 
 }
 
 /** A bibliography's field instruction for `app` (for Mendeley Cite, the tag of its content control). */
-export function bibInstr(app: CiteManager): { instr: string; tag?: string } {
+export function bibInstr(app: CiteManager, live?: BibLive): { instr: string; tag?: string } {
+  if (app === 'zotero' && live?.code && /^BIBL\b/.test(live.code)) return { instr: ` ADDIN ZOTERO_${live.code} ` };
   switch (app) {
     case 'zotero': return { instr: ' ADDIN ZOTERO_BIBL {"uncited":[],"omitted":[],"custom":[]} CSL_BIBLIOGRAPHY ' };
     case 'mendeley': return { instr: ' ADDIN Mendeley Bibliography CSL_BIBLIOGRAPHY ' };

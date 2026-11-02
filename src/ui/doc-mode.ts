@@ -47,6 +47,8 @@ import { askReviewName } from './review-name';
 import { askEquation } from './equation-dialog';
 import { chooseReferences } from './references-dialog';
 import { citeSuper, formatOf, type Reference } from '../document/references';
+import { replaceInCells, runZotero, type ZoteroCommand, type ZoteroHost, type ZoteroPost } from '../document/zotero-live';
+import { choose } from './keep-ui';
 import { dataUrl, fromDataUrl, imageSize } from '../render/images';
 import { shownSize } from '../document/doc-layout';
 import { editChart, chartPoints } from './chart-editor';
@@ -132,6 +134,10 @@ export interface DocModeHost {
   pickReferenceFile(): Promise<{ name: string; text: string } | null>;
   /** The References window (every open file's references), on this document's group. */
   openReferences(): Promise<void>;
+  /** Zotero's citing endpoints on this computer (the desktop app; a browser can't reach Zotero). */
+  zoteroPost?: ZoteroPost;
+  /** Bring the app's window to the front (Zotero asks when its citation window closes). */
+  activateWindow?(): void;
   /** The person chose a reference style for new documents (save settings). */
   preferredChanged?(): void;
   /** The name put on tracked changes was changed (save settings). */
@@ -216,6 +222,10 @@ export class DocumentMode {
   private views: DocView[] = [];
   /** View > Document > Split Window: the second pane, under the first, and the bar between them. */
   private split: { view: DocView; host: HTMLDivElement; bar: HTMLDivElement } | null = null;
+  /** A Zotero command is under way (one at a time). */
+  private zoteroRunning = false;
+  /** Each open document's id for Zotero. */
+  private zoteroIds = new WeakMap<object, string>();
   /** Where the caret was last in Outline view (to step over folded text in the direction it went). */
   private lastFocus = 0;
   /** How many paragraphs the text had (Outline's folded headings move with the text). */
@@ -3183,6 +3193,11 @@ export class DocumentMode {
       case 'cross-reference': void this.crossReference(); break;
       case 'compound-number': void this.compoundNumber(); break;
       case 'insert-citation': void this.insertCitation(); break;
+      case 'zotero-cite': void this.zotero('addEditCitation'); break;
+      case 'zotero-bib': void this.zotero('addEditBibliography'); break;
+      case 'zotero-refresh': void this.zotero('refresh'); break;
+      case 'zotero-prefs': void this.zotero('setDocPrefs'); break;
+      case 'zotero-unlink': void this.zotero('removeCodes'); break;
       case 'insert-bibliography': this.insertBibliography(); break;
       case 'insert-toc': void this.insertToc(); break;
       case 'insert-tof': void this.insertTof(); break;
@@ -3878,6 +3893,70 @@ export class DocumentMode {
     this.insertObject({ kind: 'cite', refs }, 'Insert citation', { sup: citeSuper(formatOf(f.t)) || undefined, sub: undefined });
     // what is typed next looks as it did before the citation
     ed.setStyle({ sup: before.sup });
+  }
+
+  /**
+   * References > Zotero: one of Zotero's commands (Add/Edit Citation, Add/Edit Bibliography,
+   * Refresh, Document Preferences, Unlink Citations), run by the Zotero app on this computer as
+   * its Word plugin's are (zotero-live.ts). All it changes is one step to undo.
+   */
+  private async zotero(command: ZoteroCommand): Promise<void> {
+    const f = this.file;
+    if (!f) return;
+    const post = this.host.zoteroPost;
+    if (!post) {
+      this.host.flash('Citing with Zotero works in the desktop app (a browser can\'t reach Zotero on this computer). Here, use Insert Citation, or add references from Zotero in the Reference Manager.', 8000);
+      return;
+    }
+    if (this.zoteroRunning) { this.host.flash('Zotero is still working on this document (finish in Zotero\'s window first).'); return; }
+    this.zoteroRunning = true;
+    let first = true;
+    const kind = (): string | null => { const k = first ? 'Zotero' : null; first = false; return k; };
+    const at = (id: number): number | undefined => objectOffsets(f.ed.t.runs).get(id);
+    let docId = this.zoteroIds.get(f);
+    if (!docId) { docId = `chem-illustrator-${Math.random().toString(36).slice(2, 12)}`; this.zoteroIds.set(f, docId); }
+    const host: ZoteroHost = {
+      docId,
+      text: () => f.t,
+      change: (t) => f.ed.update(t, kind()),
+      replaceObject: (id, runs) => {
+        const i = at(id);
+        if (i === undefined) { const t = replaceInCells(f.t, id, runs); if (t) f.ed.update(t, kind()); return; }
+        const { anchor, focus } = f.ed;
+        const shift = (x: number) => (x > i ? Math.max(i, x + rt.plainText(runs).length - 1) : x);
+        f.ed.replace(i, i + 1, runs, undefined, kind());
+        f.ed.select(shift(anchor), shift(focus));
+      },
+      picked: () => (this.file === f ? this.pickedField('cite')?.id ?? this.pickedField('bib')?.id ?? null : null),
+      canInsert: () => this.file === f && !(f.box && !f.box.cell),
+      insert: (o) => {
+        const before = f.ed.typingStyle();
+        const id = this.insertObject(o, kind() ?? 'Zotero', { sup: citeSuper(formatOf(f.t)) || undefined, sub: undefined });
+        f.ed.setStyle({ sup: before.sup });
+        return id;
+      },
+      ownParagraph: (id) => {
+        const i = at(id);
+        if (i === undefined) return;
+        const text = f.ed.text;
+        const look = { ...f.ed.t.runs.find((r) => r.obj === id), obj: undefined, sup: undefined, text: '\n' };
+        if (i + 1 < text.length && text[i + 1] !== '\n') f.ed.replace(i + 1, i + 1, [look], undefined, kind());
+        if (i > 0 && text[i - 1] !== '\n') f.ed.replace(i, i, [look], undefined, kind());
+      },
+      select: (id) => { const i = at(id); if (i !== undefined && this.file === f) f.ed.select(i, i + 1); },
+      choose: (text, labels) => choose('Zotero', text, labels, 0),
+      activate: () => this.host.activateWindow?.(),
+    };
+    try {
+      const got = await runZotero(command, host, post);
+      if (got === 'offline') this.host.flash('Zotero isn\'t running. Start the Zotero app (version 7 or later) on this computer, then try again.', 7000);
+      else if (got === 'busy') this.host.flash('Zotero is busy with a citation in another document. Finish there, then try again.', 6000);
+    } catch (e) {
+      this.host.flash(`Zotero: ${e instanceof Error ? e.message : String(e)}`, 8000);
+    } finally {
+      this.zoteroRunning = false;
+      this.redraw();
+    }
   }
 
   /**

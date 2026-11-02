@@ -6072,6 +6072,12 @@ function loadDocMode(): Promise<DocumentMode> {
       clipboardObject: nativeClipboard ? () => clipboardObject() : undefined,
       pickReferenceFile: () => pickReferenceFile(),
       openReferences: () => referencesWindow.open(),
+      // Zotero on this computer (the desktop app: Zotero turns away requests from a web page)
+      zoteroPost: isTauri() && !iPadApp ? async (endpoint, body) => {
+        const got = await invoke<{ status: number; body: string }>('zotero_post', { endpoint, body });
+        return { status: got.status, text: got.body };
+      } : undefined,
+      activateWindow: isTauri() ? () => { void invoke('zotero_activate').catch(() => {}); } : undefined,
       preferredChanged: () => storeSettings(),
       reviewNameChanged: () => storeSettings(),
       quickParts: () => docQuickParts,

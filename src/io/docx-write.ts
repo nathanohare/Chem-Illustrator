@@ -598,7 +598,8 @@ class DocxWriter {
     const app = t.citeManager;
     if (app && app !== 'mendeley-cite') {
       // a reference manager's bibliography field round the entries (worked out again here when opened)
-      paras[0] = fieldStart('', bibInstr(app).instr) + paras[0];
+      const o = t.objects[id];
+      paras[0] = fieldStart('', bibInstr(app, o?.kind === 'bib' ? o.live : undefined).instr) + paras[0];
       paras[paras.length - 1] += '<w:r><w:fldChar w:fldCharType="end"/></w:r>';
     } else if (!app) {
       paras[0] = `<w:bookmarkStart w:id="${mark}" w:name="${name}"/>${paras[0]}`;
