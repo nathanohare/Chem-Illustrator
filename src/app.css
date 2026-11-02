@@ -3132,6 +3132,9 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 /* small pictures of a choice, beside its box; and a page's bigger preview when it isn't in the Settings window */
 .ask-inline { display: inline-flex; align-items: center; margin-left: 8px; min-width: 54px; }
 .ask-swatch { font: 600 15px Arial, sans-serif; padding: 0 6px; border: 1px solid var(--line); border-radius: var(--r-control); background: #fff; color: #111; line-height: 20px; }
+.alkyl-preview { display: flex; flex-wrap: wrap; gap: 6px; }
+.alkyl-preview .ask-swatch { font-weight: 400; white-space: nowrap; }
+.alkyl-preview sub { font-size: 75%; line-height: 0; }
 .ask-preview { margin: 6px 0 10px; }
 .ask-preview canvas { border: 1px solid var(--line); border-radius: var(--r-control); }
 .sw-cap { margin: 6px 0 0; font-size: var(--fs-sm, 0.85em); }

@@ -4,6 +4,7 @@
 // single choice (bond ends, charges). Each is drawn again as the settings change.
 
 import { newTextLook } from '../chem/arrow-text';
+import { alkylPrefs, alkylShown } from '../chem/labels';
 import { Doc } from '../model';
 import type { DocStyle } from '../style';
 import { freeRing, placeRing, sprout } from '../chem/chemgeom';
@@ -240,6 +241,35 @@ export function bondEndSwatch(round: number): HTMLElement {
 }
 
 /** "N⁺" or "N⊕", as the + key will put a charge. */
+/**
+ * Sample labels with the alkyl prefix style (italic t, a dash or none), as atom labels show them:
+ * counts lowered. `dash` null leaves each sample as it was typed.
+ */
+export function alkylPreview(italic: boolean, dash: boolean | null): HTMLElement {
+  const box = document.createElement('div');
+  box.className = 'alkyl-preview';
+  const was = { ...alkylPrefs };
+  Object.assign(alkylPrefs, { italic, dash });
+  try {
+    for (const label of ['OtBu', 'N(iPr)2', 'Si(iPr)3', 'nBu', 'sBu', 'P(t-Bu)2']) {
+      const s = document.createElement('span');
+      s.className = 'ask-swatch';
+      const shown = alkylShown(label);
+      const chars = shown ? [...shown.text].map((ch, k) => ({ ch, it: shown.italic[k] })) : [...label].map((ch) => ({ ch, it: false }));
+      chars.forEach(({ ch, it }, k) => {
+        const lowered = /\d/.test(ch) && k > 0 && /[A-Za-z)\d]/.test(chars[k - 1].ch);
+        const el = document.createElement(it ? 'i' : lowered ? 'sub' : 'span');
+        el.textContent = ch;
+        s.append(el);
+      });
+      box.append(s);
+    }
+  } finally {
+    Object.assign(alkylPrefs, was);
+  }
+  return box;
+}
+
 export function chargeSwatch(circled: boolean): HTMLElement {
   const s = document.createElement('span');
   s.className = 'ask-swatch';

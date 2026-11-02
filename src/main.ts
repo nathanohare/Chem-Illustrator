@@ -149,7 +149,7 @@ import { centreEnd, haptoLook } from './chem/hapto';
 import { viewNow, viewRingOf, type RingView } from './chem/ring-views';
 import { watchToolHover } from './ui/tool-demos';
 import { countElectrons } from './chem/electrons';
-import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, tokenize as tokenizeLabel } from './chem/labels';
+import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, alkylPrefs, tokenize as tokenizeLabel } from './chem/labels';
 import { selectedGroup } from './chem/group-smiles';
 import { templateIcon } from './ui/template-icons';
 import { StructureChecks } from './chem/warnings';
@@ -184,7 +184,7 @@ import { ask } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
 import { actionSet, askActionButton } from './ui/action-button-dialog';
-import { bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
+import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepPieces, type AutoStepsOptions } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
 import { canUpdate, appVersion, portableInfo, STAGE, STAGE_NOTE, UPDATE_CHANNELS, type UpdateChannel } from './updates';
@@ -9384,6 +9384,31 @@ async function generalPreferences(): Promise<void> {
   storeSettings();
 }
 
+/** Settings ▸ Preferences: matters of taste, such as how alkyl groups are written. */
+async function personalPreferences(): Promise<void> {
+  const r = await ask('Preferences', [
+    { name: 'alkylItalic', label: 'Alkyl prefixes in italics (the t of tBu, the i of iPr)', type: 'checkbox', value: String(alkylPrefs.italic) },
+    { name: 'alkylDash', label: 'A dash after alkyl prefixes (tBu shows as t-Bu, iPr as i-Pr)', type: 'checkbox', value: String(alkylPrefs.dash === true),
+      help: 'For the n-, i-, s- and t- of Pr and Bu, in atom labels (redrawn at once), in text boxes as you type, and in everything saved or exported. Only the look changes: a label still means the same group. Turned off, the dash comes out again (t-Bu shows as tBu), except where the letters would read as an element (PtBu3 stays as it is).' },
+  ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(v.alkylItalic === 'true', alkylDashChoice(v.alkylDash)) } });
+  if (!r) return;
+  const italic = r.alkylItalic === 'true', dash = alkylDashChoice(r.alkylDash);
+  if (italic !== alkylPrefs.italic || dash !== alkylPrefs.dash) {
+    alkylPrefs.italic = italic;
+    alkylPrefs.dash = dash;
+    renderer.invalidate(doc);
+    doc.allDirty = true;
+    editor.requestScene();
+  }
+  storeSettings();
+}
+
+/** The dash setting from its box: on adds dashes; off takes them out, once it has been on (until then labels stay as typed). */
+function alkylDashChoice(box: string | undefined): boolean | null {
+  if (box === 'true') return true;
+  return alkylPrefs.dash === null ? null : false;
+}
+
 /** Settings ▸ Online: what the program asks the internet for. */
 /** Edit > Settings > AI Model. */
 async function aiSettings(): Promise<void> {
@@ -9480,6 +9505,8 @@ function currentSettings(): Settings {
     haptoDelocalized: haptoLook.delocalized,
     toolDemos,
     superscriptR: labelPrefs.superscriptR,
+    alkylItalic: alkylPrefs.italic,
+    alkylDash: alkylPrefs.dash,
     bondEnds: bondEndPrefs.round,
     depthShade: { ...depthShadePrefs },
     linkSide,
@@ -9717,6 +9744,8 @@ function applySettings(s: Settings): void {
   haptoLook.delocalized = s.haptoDelocalized;
   toolDemos = s.toolDemos;
   labelPrefs.superscriptR = s.superscriptR;
+  alkylPrefs.italic = s.alkylItalic;
+  alkylPrefs.dash = s.alkylDash;
   bondEndPrefs.round = s.bondEnds;
   Object.assign(depthShadePrefs, s.depthShade);
   for (const el of document.querySelectorAll('[data-cmd="depth-shading"][role="menuitemcheckbox"]')) el.setAttribute('aria-checked', String(depthShadePrefs.on));
@@ -12057,6 +12086,7 @@ const guide = {
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files demo clips hover tool tips animation', open: generalPreferences },
+  { id: 'preferences', title: 'Preferences', words: 'preferences personal taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },

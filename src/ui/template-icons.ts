@@ -172,7 +172,7 @@ export function templateIcon(t: Template, size = 44): string {
     if (!lay) return;
     const p = P(i);
     for (const r of lay.runs) {
-      parts.push(`<text x="${f(p.x + r.dx * k)}" y="${f(p.y + r.dy * k)}" font-size="${f(r.size * k)}" fill="currentColor" stroke="none">${esc(r.text)}</text>`);
+      parts.push(`<text x="${f(p.x + r.dx * k)}" y="${f(p.y + r.dy * k)}" font-size="${f(r.size * k)}"${r.italic ? ' font-style="italic"' : ''} fill="currentColor" stroke="none">${esc(r.text)}</text>`);
     }
   });
   if (showCode) parts.push(`<text x="${size / 2}" y="${size - 2}" font-size="10" text-anchor="middle" fill="currentColor" stroke="none" font-weight="700">${codeOf(t)}</text>`);
