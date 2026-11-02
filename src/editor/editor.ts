@@ -64,6 +64,7 @@ import { arrowClash, bendSide, cleanUpArrow, endCentre, endPointToward, headEnd,
 import { followPins, hasPins, makePin, mirrorBend } from '../chem/pins';
 import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '../chem/scheme-arrange';
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
+import { rebuildSmartCycle, smartCycleStart, type SmartCycleStart } from '../chem/smart-cycle';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
 import { arrangeSmart, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
@@ -3494,6 +3495,23 @@ export class Editor {
   smartSlotRuns(id: number, k: number, parts: TextPart[]): boolean { return this.smartEdit(id, 'Type Species', (m) => setSlotRuns(this.doc, m, id, k, parts)); }
   smartStepRuns(id: number, k: number, part: StepPart, parts: TextPart[]): boolean { return this.smartEdit(id, 'Type Conditions', (m) => setStepRuns(this.doc, m, id, k, part, parts)); }
   /** Lay a Smart Scheme out again, with a new layout or other settings. */
+  /** A Smart Scheme's single loop as the Catalytic Cycle window's table, to add a second loop to (null for other schemes). */
+  smartCycleStart(id: number): SmartCycleStart | null { return smartCycleStart(this.doc, this.fullMeasure(), id); }
+  /**
+   * Draw Smart Scheme `id`'s cycle again with the loops from the Catalytic Cycle window (`rows`:
+   * the species each row of loop 1 keeps). It is a Smart Scheme again afterwards, selected.
+   */
+  smartRebuildCycle(id: number, spec: CycleSpec, look: CycleLook, rows: (number | null)[]): boolean {
+    let smart: number | null = null;
+    this.doc.edit('Add a Second Loop', () => {
+      const m = this.fullMeasure();
+      const made = rebuildSmartCycle(this.doc, m, id, spec, look, rows);
+      if (made) smart = this.cycleSmart(made, made.atoms, look, made.kept, made.shapes);
+    });
+    if (smart !== null) this.selectOnly({ kind: 'shape', id: smart });
+    this.changed();
+    return smart !== null;
+  }
   smartArrange(id: number, patch?: Partial<SmartData>): boolean { return this.smartEdit(id, 'Arrange Smart Scheme', (m) => arrangeSmart(this.doc, m, id, patch)); }
 
   /** Chemistry ▸ Scheme ▸ Convert to Smart Scheme: the selected scheme becomes one object. */
@@ -4681,19 +4699,28 @@ export class Editor {
     let smart: number | null = null;
     this.doc.edit('Catalytic Cycle', () => {
       const made = buildCycle(this.doc, this.fullMeasure(), spec, look, at, stations);
-      this.sel = emptySel();
-      for (const st of stations) for (const a of st.atoms) this.sel.atoms.add(a);
-      for (const a of this.sel.atoms) for (const b of this.doc.adj.get(a) ?? []) this.sel.bonds.add(b);
-      for (const id of made.captions) this.sel.captions.add(id);
-      for (const id of made.arrows) this.sel.arrows.add(id);
       // drawn round selected structures it stays put; otherwise it goes beside what is there
-      if (!stations.length) this.moveClear(page);
-      // the cycle is a Smart Scheme: one object, laid out round a loop
-      for (const r of this.doc.arrows.values()) if (r.reagentFor !== undefined && this.sel.arrows.has(r.reagentFor)) this.sel.arrows.add(r.id);
-      smart = makeSmart(this.doc, this.fullMeasure(), this.sel, { layout: 'cycle', ...(look.anticlockwise ? { anticlockwise: true } : {}), ...(look.reagentArrows ? { reagentArrows: true } : {}) });
+      smart = this.cycleSmart(made, stations.flatMap((st) => st.atoms), look, [], [], stations.length ? undefined : () => this.moveClear(page));
     });
     if (smart !== null) this.selectOnly({ kind: 'shape', id: smart });
     this.changed();
+  }
+
+  /**
+   * A cycle just drawn (with these structures as species, and extra text or pictures that go
+   * with it) made a Smart Scheme: one object, laid out round a loop. `place` moves it first,
+   * selected. Call inside an edit.
+   */
+  private cycleSmart(made: { captions: number[]; arrows: number[] }, atoms: number[], look: CycleLook, captions: number[], shapes: number[], place?: () => void): number | null {
+    this.sel = emptySel();
+    for (const a of atoms) this.sel.atoms.add(a);
+    for (const a of this.sel.atoms) for (const b of this.doc.adj.get(a) ?? []) this.sel.bonds.add(b);
+    for (const id of [...made.captions, ...captions]) this.sel.captions.add(id);
+    for (const id of made.arrows) this.sel.arrows.add(id);
+    for (const id of shapes) this.sel.shapes.add(id);
+    place?.();
+    for (const r of this.doc.arrows.values()) if (r.reagentFor !== undefined && this.sel.arrows.has(r.reagentFor)) this.sel.arrows.add(r.id);
+    return makeSmart(this.doc, this.fullMeasure(), this.sel, { layout: 'cycle', ...(look.anticlockwise ? { anticlockwise: true } : {}), ...(look.reagentArrows ? { reagentArrows: true } : {}) });
   }
 
   /** Where the mouse is on the drawing, or null when it is somewhere else (a menu, a panel). */
