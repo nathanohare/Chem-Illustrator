@@ -3902,9 +3902,12 @@ export class Editor {
     return { deg, which: (c) => turns && !c.attach, shapes: this.textFirst };
   }
 
-    private rotateHandle(): Vec | null {
+  /** The handle above the selection that turns it (none when turning would do nothing). */
+  rotateHandle(): Vec | null {
     const s = this.sel;
     if (this.tool.kind !== 'select' || (!s.atoms.size && !s.arrows.size && !s.shapes.size && !s.captions.size)) return null;
+    // one atom on its own turns round itself, which does nothing (its label stays level): no handle
+    if (s.atoms.size === 1 && !s.arrows.size && !s.shapes.size && !s.captions.size) return null;
     const b = this.selBox();
     return b ? { x: (b.x1 + b.x2) / 2, y: b.y1 - this.tol(24) } : null;
   }
