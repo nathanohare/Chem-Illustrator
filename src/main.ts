@@ -172,7 +172,7 @@ import { zipSync } from 'fflate';
 import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
 import { plainText, savableChar } from './richtext';
 import { buildTextToolbox, type TextToolboxHooks } from './ui/text-toolbox';
-import { buildGuidesToolbox, type GuidesToolboxHooks } from './ui/guides-toolbox';
+import { buildGuidesToolbox, GUIDES_INFO, type GuidesToolboxHooks } from './ui/guides-toolbox';
 import { htmlToRich } from './text/html';
 import { LiveStereo } from './chem/live-stereo';
 import { setStereoShown, shownDescriptor, axialStyle } from './chem/stereo';
@@ -7681,7 +7681,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'toolbox-guides', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'toolbox-schemes', 'toolbox-diagrams', 'toolbox-tables', 'toolbox-biopolymers', 'toolbox-perspective', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'theme-darkgray', 'density-compact', 'density-standard', 'density-large', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'theme-darkgray', 'density-compact', 'density-standard', 'density-large', 'shadows-light', 'shadows-strong', 'shadows-off', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -8349,6 +8349,9 @@ const COMMANDS: Record<string, () => unknown> = {
   'density-compact': () => { setDensity('compact'); storeSettings(); },
   'density-standard': () => { setDensity('standard'); storeSettings(); },
   'density-large': () => { setDensity('large'); storeSettings(); },
+  'shadows-light': () => { setShadows('light'); storeSettings(); },
+  'shadows-strong': () => { setShadows('strong'); storeSettings(); },
+  'shadows-off': () => { setShadows('off'); storeSettings(); },
   'icons-mode': () => { setIconLook('mode'); storeSettings(); },
   'icons-kind': () => { setIconLook('kind'); storeSettings(); },
   'shape-ink-accent': () => { setShapesInk(shapeInkNow === 'accent' ? 'neutral' : 'accent'); storeSettings(); },
@@ -9942,6 +9945,7 @@ function currentSettings(): Settings {
     textBar: CaptionEditor.barPlace,
     appTheme,
     density,
+    shadows,
     iconLook,
     shapeInk: shapeInkNow,
     oneColumnTools,
@@ -10195,6 +10199,7 @@ function applySettings(s: Settings): void {
   placeTextBar(s.textBar);
   setAppTheme(s.appTheme);
   setDensity(s.density);
+  setShadows(s.shadows);
   setIconLook(s.iconLook);
   setShapesInk(s.shapeInk);
   setOneColumnTools(s.oneColumnTools);
@@ -12237,6 +12242,7 @@ function toolboxDefs(): ToolboxDef[] {
   return ['main', ...ids.filter((id) => id !== 'main')].map((id) => ({
     id,
     title: boxTitle(toolboxState, id, BOX_TITLES[id]),
+    info: id === 'guides' ? GUIDES_INFO : undefined,
     build: (body: HTMLElement, vertical: boolean) => (SPECIAL_BOXES[id] && !isEditable(id) ? SPECIAL_BOXES[id](body, vertical) : buildBox(body, id, vertical)),
   }));
 }
@@ -13168,6 +13174,14 @@ function setAppTheme(t: Settings['appTheme']): void {
 
 /** View > Window and Colours > Density: bigger icons and more room between the toolboxes' and ribbons' buttons. */
 let density: Settings['density'] = 'compact';
+/** Shadows under the menus and on the toolboxes: light as the app comes, strong, or off. */
+let shadows: Settings['shadows'] = 'light';
+function setShadows(v: Settings['shadows']): void {
+  shadows = v;
+  if (v === 'light') delete document.documentElement.dataset.shadows;
+  else document.documentElement.dataset.shadows = v;
+  for (const w of ['light', 'strong', 'off']) $(`[data-cmd="shadows-${w}"]`)?.setAttribute('aria-checked', String(w === v));
+}
 function setDensity(d: Settings['density']): void {
   density = d;
   if (d === 'compact') delete document.documentElement.dataset.density;
@@ -13291,6 +13305,8 @@ const designText = new SlideTextRibbon($('#design-ribbon'), {
 });
 /** The text groups of the ribbon showing (Presentation or Design) follow the text being edited. */
 const textRibbonNow = () => (ws.active.mode === 'slides' ? slideText : ws.active.mode === 'design' ? designText : null);
+// the Text Formatting toolbox is the typing bar, so with it showing the bar above the text hides
+CaptionEditor.barElsewhere = () => toolboxes.isShown('text');
 CaptionEditor.onState = () => { textRibbonNow()?.refresh(); textToolbox?.refresh(); };
 // the Smart Scheme pane: the selected scheme's species, beside it
 const smartPane = new SmartPane({

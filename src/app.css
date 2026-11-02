@@ -352,7 +352,13 @@ body.cells-raised .tb-cells .tool.active { background: var(--accent-soft); borde
 .gt-seg:last-child { border-radius: 0 var(--r-control) var(--r-control) 0; }
 .gt-seg.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); position: relative; }
 .gt-check { gap: 6px; cursor: pointer; }
-.gt-tip { color: var(--muted); font-size: var(--fs-xs); }
+.info-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 14px; height: 14px; border: 1px solid currentColor; border-radius: 50%; color: var(--muted); font: italic 600 10px/1 Georgia, 'Times New Roman', serif; cursor: help; user-select: none; }
+.info-icon:hover, .info-icon:focus-visible { color: var(--accent); outline: none; }
+.tb-head > .tb-title { flex: 0 1 auto; }
+.tb-head > .tb-lock { margin-left: auto; }
+.gt-info { display: none; margin-left: 4px; }
+.toolbox[data-id='guides']:not(.floating) { position: relative; }
+.toolbox.locked:not(.floating):not(.collapsed) .gt-info { display: inline-flex; position: absolute; top: 0; right: 2px; margin: 0; }
 .tb-modes button { padding: 2px 6px; font-size: var(--fs-xs); }
 .tb-modes button[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
 
@@ -2595,6 +2601,7 @@ dialog.settings-window { max-width: none; }
 /* a page's preview, beside its settings */
 .sw-aside { flex: 0 0 260px; overflow: auto; padding: 12px 14px; border-left: 1px solid var(--line); background: var(--panel, var(--bg)); }
 .sw-aside[hidden] { display: none; }
+.sw-aside.wide { flex-basis: 380px; }
 .sw-aside h3 { margin: 0 0 8px; font-size: var(--fs-sm, 0.85em); font-weight: 600; color: var(--muted, inherit); text-transform: uppercase; letter-spacing: 0.04em; }
 .sw-aside canvas, .sw-aside svg { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: var(--r-control); background: #fff; }
 /* Apply and Set as Default, the same on every page */
@@ -3917,3 +3924,20 @@ dialog.geom-view-dialog { width: min(96vw, 640px); }
 /* checkboxes and radio buttons in these windows and panes take the mode's accent (teal in Canvas) */
 .smart-pane, .smart-format-pop, .energy-dialog, .geom-view-dialog { accent-color: var(--accent); }
 .smart-pane .sp-info.marked { color: var(--accent); }
+
+/* Shadows (View > Window and Colors > Shadows): light as the app comes, strong, or off. Light gives
+   a slight shadow under the menus, docked toolboxes on raised cards like the ribbon panel, and a soft
+   shadow under floating ones. The ribbon keeps its own (--rb-shadow). */
+:root { --sh-top: 0 1px 3px rgb(0 0 0 / 0.12), 0 1px 1px rgb(0 0 0 / 0.05); --sh-dock: 0 1px 3px rgb(0 0 0 / 0.1), 0 1px 1px rgb(0 0 0 / 0.04); --sh-float: 0 2px 8px rgb(0 0 0 / 0.14), 0 1px 2px rgb(0 0 0 / 0.06); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --sh-top: 0 1px 4px rgb(0 0 0 / 0.45); --sh-dock: 0 1px 4px rgb(0 0 0 / 0.5); --sh-float: 0 4px 14px rgb(0 0 0 / 0.5); } }
+:root[data-theme='dark'] { --sh-top: 0 1px 4px rgb(0 0 0 / 0.45); --sh-dock: 0 1px 4px rgb(0 0 0 / 0.5); --sh-float: 0 4px 14px rgb(0 0 0 / 0.5); }
+:root[data-shadows='strong'] { --sh-top: 0 2px 6px rgb(0 0 0 / 0.18); --sh-dock: 0 2px 6px rgb(0 0 0 / 0.16), 0 1px 2px rgb(0 0 0 / 0.08); --sh-float: 0 10px 28px rgb(0 0 0 / 0.26), 0 2px 6px rgb(0 0 0 / 0.1); }
+:root[data-shadows='strong'][data-theme='dark'] { --sh-top: 0 2px 8px rgb(0 0 0 / 0.6); --sh-dock: 0 2px 8px rgb(0 0 0 / 0.6); --sh-float: 0 10px 30px rgb(0 0 0 / 0.65); }
+/* relative without a z-index: the shadow paints over what is below, and the menus keep their own layering */
+:root:not([data-shadows='off']) header { position: relative; box-shadow: var(--sh-top); }
+.toolbox.floating { box-shadow: var(--sh-float); }
+:root[data-shadows='off'] .toolbox.floating { box-shadow: none; }
+:root:not([data-shadows='off']) .dock { background: var(--chrome); }
+:root:not([data-shadows='off']) :is(#dock-left, #dock-right, #dock-top, #dock-bottom) { border: 0; }
+:root:not([data-shadows='off']) .dock > .toolbox:not(.floating) { background: var(--rb-surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--sh-dock); padding: 4px; }
+:root:not([data-shadows='off']) .dock > .toolbox:not(.floating) + .toolbox:not(.floating) { border: 1px solid var(--line); padding: 4px; }

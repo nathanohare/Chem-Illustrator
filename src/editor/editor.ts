@@ -1136,7 +1136,7 @@ export class Editor {
       const x = g?.list[gg.index];
       if (g && x) {
         // a guide snaps to the drawing's major ticks (from its top left) unless Alt is held
-        const at = e.altKey || g.snap === 'none' ? p : { x: Math.round(p.x / g.minor) * g.minor, y: Math.round(p.y / g.minor) * g.minor };
+        const at = e.altKey || g.snapOff ? p : { x: Math.round(p.x / g.minor) * g.minor, y: Math.round(p.y / g.minor) * g.minor };
         const list = g.list.slice();
         list[gg.index] = movedGuide(x, gg.part, at);
         this.doc.guides = { ...g, list };
@@ -6256,7 +6256,7 @@ export class Editor {
   /** Moves snap to the drawing's guides. */
   private guidesSnap(): boolean {
     const g = this.doc.guides;
-    return !!g && g.shown && g.snap !== 'none' && (g.list.length > 0 || g.grid);
+    return !!g && g.shown && !g.snapOff && (g.list.length > 0 || g.grid);
   }
 
   /** The guide under a point (the Select tool drags it). */
