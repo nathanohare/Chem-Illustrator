@@ -43,7 +43,9 @@ import { extractDrawing, insertDrawing } from '../io/clipboard';
 import { isReactionArrow, itemFinder, rolesOf, ROLES, schemeItems, type Item, type Role } from '../chem/reaction';
 import { applySchemePlan, planCleanUp } from '../chem/scheme-layout';
 import { adoptSideCaption, arrowTexts, helperBox, setSideText, sideSlot, takesHelpers, textJustify, textSize, type ArrowSide } from '../chem/arrow-text';
-import { schemePrefs } from '../chem/scheme-layout';
+import { schemePrefs, spacing } from '../chem/scheme-layout';
+import { arrowEnd, boxOf, productDrawing, pushArrowsOf, pushedAtoms, readPushes, type PushIssue, type PushReading } from '../chem/push-electrons';
+import { freeSpace } from './free-space';
 import { fillRings, refitRingFills, ringFillsOn } from '../chem/ring-fill';
 import { setMethylStyle, toggleChainEndLabels, toggleExplicitHydrogens, type MethylStyle } from '../chem/hydrogens';
 import { selectedGroup } from '../chem/group-smiles';
@@ -2652,6 +2654,112 @@ export class Editor {
     if (made.length) { this.sel = emptySel(); for (const id of made) this.sel.arrows.add(id); }
     this.changed();
     return bonds.length;
+  }
+
+  /**
+   * The electron-pushing arrows a mechanism command works on: all those of the step (the arrows
+   * drawn on structures that arrows join) with a picked arrow or structure in it, else all of
+   * them when there is only one step. 'many' when nothing is picked and there are several.
+   */
+  private mechanismArrows(): Arrow[] | 'many' {
+    const doc = this.doc;
+    const m = this.measure();
+    const all = pushArrowsOf(doc, doc.arrows.keys());
+    const on = (r: Arrow) => [arrowEnd(doc, m, r, 'tail'), arrowEnd(doc, m, r, 'head')].flatMap((e) => e.kind === 'atom' ? [e.id] : e.kind === 'gap' ? [e.a1, e.a2] : e.kind === 'bond' ? [doc.bonds.get(e.id)!.a1] : []);
+    // the steps: arrows, with the structures they are on, joined where they share one
+    const steps: { atoms: Set<number>; arrows: Arrow[] }[] = [];
+    for (const r of all) {
+      const atoms = new Set<number>();
+      for (const id of on(r)) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
+      const hit = atoms.size ? steps.filter((g) => [...atoms].some((id) => g.atoms.has(id))) : [];
+      const merged = { atoms: new Set<number>([...atoms, ...hit.flatMap((g) => [...g.atoms])]), arrows: [r, ...hit.flatMap((g) => g.arrows)] };
+      for (const g of hit) steps.splice(steps.indexOf(g), 1);
+      steps.push(merged);
+    }
+    const pickedAtoms = [...this.sel.atoms, ...[...this.sel.bonds].map((id) => doc.bonds.get(id)?.a1).filter((x): x is number => x !== undefined)];
+    if (this.sel.arrows.size || pickedAtoms.length) {
+      const chosen = steps.filter((g) => g.arrows.some((r) => this.sel.arrows.has(r.id)) || pickedAtoms.some((id) => g.atoms.has(id)));
+      return chosen.flatMap((g) => g.arrows).sort((a, b) => a.id - b.id);
+    }
+    return steps.length > 1 ? 'many' : all;
+  }
+
+  /**
+   * Check Arrows: read the mechanism arrows as electrons moving and say what doesn't make sense
+   * (an arrow from an atom with no lone pair, a five-bond carbon, a bond left with one electron).
+   * 'many' and 'none' when there is nothing to check.
+   */
+  checkArrows(): PushIssue[] | 'many' | 'none' {
+    const arrows = this.mechanismArrows();
+    if (arrows === 'many') return 'many';
+    if (!arrows.length) return 'none';
+    return this.readArrows(arrows).issues;
+  }
+
+  /** The arrows read and checked, with the checks the drawn product adds (labels with too many bonds). */
+  private readArrows(arrows: Arrow[]): PushReading {
+    const m = this.measure();
+    const reading = readPushes(this.doc, m, arrows);
+    productDrawing(this.doc, m, reading);
+    return reading;
+  }
+
+  /** Select what these problems are about, and bring the first into view. */
+  pickIssues(issues: PushIssue[]): void {
+    if (!issues.length) return;
+    const first = issues[0].atoms[0];
+    if (first !== undefined) this.reveal('atom', first);
+    this.sel = emptySel();
+    for (const i of issues) {
+      for (const id of i.arrows) this.sel.arrows.add(id);
+      for (const id of i.atoms) this.sel.atoms.add(id);
+      for (const id of i.bonds) this.sel.bonds.add(id);
+    }
+    this.requestOverlay();
+    this.onChange();
+  }
+
+  /**
+   * Draw Next Intermediate: what the mechanism arrows make, drawn after the structures they are
+   * on with a reaction arrow between, as one undo step (and selected). Nothing is drawn while
+   * the arrows don't make sense: the problems are given back and selected instead.
+   */
+  drawFromArrows(): { drawn: boolean; issues: PushIssue[] } | 'many' | 'none' {
+    const doc = this.doc;
+    const m = this.measure();
+    const arrows = this.mechanismArrows();
+    if (arrows === 'many') return 'many';
+    if (!arrows.length) return 'none';
+    const reading = readPushes(doc, m, arrows);
+    const out = productDrawing(doc, m, reading);
+    const errors = reading.issues.filter((i) => i.level === 'error');
+    if (!reading.steps.length && !errors.length) return 'none';
+    if (errors.length || !out) { this.pickIssues(errors); return { drawn: false, issues: reading.issues }; }
+    // after what the arrows are drawn on (and the arrows), on the level of its middle
+    const L = doc.style.bondLength;
+    const sp = spacing(L);
+    const atoms = new Set<number>();
+    for (const id of pushedAtoms(reading)) if (!atoms.has(id)) for (const x of doc.fragmentOf(id)) atoms.add(x);
+    const from = boxOf(doc, atoms, arrows.map((r) => r.id))!;
+    const pb = out.bounds() ?? { x1: 0, y1: 0, x2: 0, y2: 0 };
+    const len = sp.minArrow;
+    const w = sp.gap + len + sp.gap + (pb.x2 - pb.x1), h = Math.max(pb.y2 - pb.y1, L);
+    const want = { x: from.x2 + w / 2, y: (from.y1 + from.y2) / 2 };
+    const c = freeSpace(doc, w, h, want, 0.5 * L);
+    const tail = { x: c.x - w / 2 + sp.gap, y: c.y }, head = { x: tail.x + len, y: c.y };
+    // the product drawn to the right of the arrow, centred on it
+    const dx = head.x + sp.gap - pb.x1, dy = c.y - (pb.y1 + pb.y2) / 2;
+    out.bulk(() => {
+      for (const a of [...out.atoms.values()]) out.updateAtom(a.id, { x: a.x + dx, y: a.y + dy });
+      for (const s of [...out.shapes.values()]) out.updateShape(s.id, { x1: s.x1 + dx, y1: s.y1 + dy, x2: s.x2 + dx, y2: s.y2 + dy });
+      const lw = doc.style.lineWidth;
+      out.addArrow({ tail, head, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: lw * 10, headWidth: lw * 2.5 });
+    });
+    const b = out.bounds()!;
+    const sel = insertDrawing(doc, out, { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 }, 'Draw next intermediate');
+    this.selectThese({ ...sel, arrows: new Set() });
+    this.changed();
+    return { drawn: true, issues: reading.issues };
   }
 
   /** The box, circle or line a shape tool draws for a drag from a to b (Shift: square or circle). */
