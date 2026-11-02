@@ -10778,11 +10778,13 @@ function applyRibbons(): void {
   fitRibbons();
 }
 
+/** The top menus' commands, in groups, for adding to the ribbons. */
+const ribbonMenus = () => menuCommands().filter((g) => g.items.length).map((g) => ({ name: `${g.menu} menu`, items: g.items.filter((c) => !c.cmd.startsWith('toolbox-')).map((c) => ({ key: `cmd:${c.cmd}`, label: c.label, icon: commandIcon(c.cmd) })) }));
 const ribbonEditor = new RibbonEditor({
   ribbons: ribbonsNow,
   get: () => ribbonPrefs,
   set: (p) => { ribbonPrefs = p; applyRibbons(); storeSettings(); },
-  menus: () => menuCommands().filter((g) => g.items.length).map((g) => ({ name: `${g.menu} menu`, items: g.items.filter((c) => !c.cmd.startsWith('toolbox-')).map((c) => ({ key: `cmd:${c.cmd}`, label: c.label, icon: commandIcon(c.cmd) })) })),
+  menus: ribbonMenus,
   jiggle: () => toolboxState.jiggle !== false,
 });
 // the gear at the right of each ribbon's tabs: edit the ribbon where it is
@@ -10797,6 +10799,7 @@ const ribbonLive = new RibbonLive({
   },
   openText: async () => (await openFileDialog([SETTINGS_FILE]).catch((e) => { flash(String(e)); return null; }))?.text ?? null,
   flash: (m) => flash(m, 6000),
+  menus: ribbonMenus,
 });
 ribbonLive.install();
 // right-click a ribbon's tabs (or a group's name) to customize it

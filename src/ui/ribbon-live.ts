@@ -1,10 +1,13 @@
-// Editing a ribbon where it is (the gear at the right of its tabs): its groups get a grip to drag
-// them along the tab, or onto another tab's name to move them there, and a × to hide them (a
-// hidden group shows faintly while editing, with a + to bring it back). A bar under the tabs
-// offers Reset to Default, Export and Import of the layout, the full Customize window, and Done.
-// The changes are the same RibbonPrefs the Customize window makes, kept with the settings.
+// Editing a ribbon where it is (the gear at the right of its tabs), like building a toolbox:
+// drag a group along the tab, or onto another tab's name to move it there, and × hides it (a
+// hidden group shows faintly while editing, with a + to bring it back). Single buttons drag too:
+// into another group, or off the ribbon to take them away (they show faintly while editing; a
+// click brings one back), and Commands lists every command to drag into a group. A bar under the
+// tabs offers Reset to Default, Export and Import of the layout, the full Customize window, and
+// Done. The changes are the same RibbonPrefs the Customize window makes, kept with the settings.
 
-import { parseRibbons, type RibbonInfo, type RibbonPrefs, type RibbonsPrefs } from './ribbon-custom';
+import { itemKey, parseRibbons, type RibbonInfo, type RibbonPrefs, type RibbonsPrefs } from './ribbon-custom';
+import type { Pickable } from './toolboxes';
 
 export interface RibbonLiveHooks {
   ribbons(): RibbonInfo[];
@@ -16,7 +19,14 @@ export interface RibbonLiveHooks {
   saveText(name: string, text: string): Promise<void>;
   openText(): Promise<string | null>;
   flash(msg: string): void;
+  /** The menus' commands, in groups, to drag onto the ribbon. */
+  menus(): { name: string; items: Pickable[] }[];
 }
+
+/** A single button being dragged: its command, and the group it comes from (null: from the Commands list). */
+interface ItemDrag { key: string; from: string | null }
+
+const ITEM_TYPE = 'application/x-ribbon-item';
 
 const GEAR = '<svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor"><circle cx="8" cy="8" r="5.4" stroke-width="2.6" stroke-dasharray="2.1 2.14"/><circle cx="8" cy="8" r="4" stroke-width="1.3"/><circle cx="8" cy="8" r="1.5" stroke-width="1.3"/></svg>';
 
@@ -24,6 +34,9 @@ export class RibbonLive {
   private editing: RibbonInfo | null = null;
   private bar: HTMLElement | null = null;
   private dragKey: string | null = null;
+  private dragItem: ItemDrag | null = null;
+  private dropped = false;
+  private palette: HTMLElement | null = null;
 
   constructor(private hooks: RibbonLiveHooks) {}
 
@@ -72,7 +85,7 @@ export class RibbonLive {
     bar.setAttribute('aria-label', 'Editing the ribbon');
     const say = document.createElement('span');
     say.className = 'rb-live-say';
-    say.textContent = 'Editing the ribbon: drag a group by its name to move it (onto a tab to move it there); × hides it.';
+    say.textContent = 'Editing the ribbon: drag a group by its name, or a single button, to move it (onto a tab to move it to that tab); drag a button off the ribbon or click × to take it away.';
     const btn = (label: string, title: string, f: () => void, primary = false) => {
       const b = document.createElement('button');
       b.type = 'button';
@@ -83,6 +96,7 @@ export class RibbonLive {
       return b;
     };
     bar.append(say,
+      btn('Commands ▾', 'Every command, to drag into a group on the ribbon', () => this.togglePalette()),
       btn('Customize…', 'Every setting: rename tabs and groups, make groups of your own with any command', () => { const i = this.editing!.id; this.stop(); this.hooks.customize(i); }),
       btn('Export…', 'Save this ribbon\'s layout to a file, to load on another computer or share with the group', () => void this.exportLayout()),
       btn('Import…', 'Load a layout saved with Export', () => void this.importLayout()),
@@ -95,6 +109,7 @@ export class RibbonLive {
     info.el.addEventListener('dragover', this.onDragOver);
     info.el.addEventListener('drop', this.onDrop);
     info.el.addEventListener('dragend', this.onDragEnd);
+    info.el.addEventListener('click', this.onClick, true);
     addEventListener('keydown', this.onKey, true);
   }
 
@@ -108,6 +123,10 @@ export class RibbonLive {
       g.classList.remove('rb-live-hidden');
       g.querySelector(':scope > .rb-live-x')?.remove();
     }
+    for (const b of info.el.querySelectorAll<HTMLElement>('.rb-live-item')) { b.draggable = false; b.classList.remove('rb-live-item'); }
+    info.el.removeEventListener('click', this.onClick, true);
+    this.palette?.remove();
+    this.palette = null;
     info.el.removeEventListener('dragstart', this.onDragStart);
     info.el.removeEventListener('dragover', this.onDragOver);
     info.el.removeEventListener('drop', this.onDrop);
@@ -139,7 +158,151 @@ export class RibbonLive {
       }
       x.textContent = off ? '+' : '×';
       x.title = off ? 'Show this group again' : 'Hide this group';
+      for (const b of g.querySelectorAll<HTMLElement>('button[data-cmd], button[data-sh], button[data-doc], button[data-own-cmd]')) {
+        if (b.closest('.rb-fly-menu, .rb-fold-btn') || !itemKey(b)) continue;
+        b.draggable = true;
+        b.classList.add('rb-live-item');
+      }
     }
+  }
+
+  /** The group a button sits in, by key ('' for none). */
+  private groupOf(el: Element): string {
+    return el.closest<HTMLElement>('.rb-group[data-group-key]')?.dataset.groupKey ?? '';
+  }
+
+  /** Prefs with a command taken out of a group (hidden, if it is one of the group's own buttons). */
+  private without(p: RibbonPrefs, group: string, key: string): RibbonPrefs {
+    const q: RibbonPrefs = { ...p };
+    if (group.startsWith('own:')) {
+      const id = group.slice(4);
+      const own = q.own?.[id];
+      if (own) q.own = { ...q.own, [id]: { ...own, items: own.items.filter((k) => k !== key) } };
+      return q;
+    }
+    const extra = q.extra?.[group];
+    if (extra?.includes(key)) {
+      const e = { ...q.extra, [group]: extra.filter((k) => k !== key) };
+      if (!e[group].length) delete e[group];
+      if (Object.keys(e).length) q.extra = e; else delete q.extra;
+      return q;
+    }
+    q.hiddenItems = [...new Set([...(q.hiddenItems ?? []), `${group} ${key}`])];
+    return q;
+  }
+
+  /** Prefs with a command put into a group (shown again, if it is one of the group's own buttons taken off before). */
+  private withItem(p: RibbonPrefs, group: string, key: string): RibbonPrefs {
+    const q: RibbonPrefs = { ...p };
+    if (group.startsWith('own:')) {
+      const id = group.slice(4);
+      const own = q.own?.[id];
+      if (own && !own.items.includes(key)) q.own = { ...q.own, [id]: { ...own, items: [...own.items, key] } };
+      return q;
+    }
+    const tag = `${group} ${key}`;
+    if (q.hiddenItems?.includes(tag)) {
+      const h = q.hiddenItems.filter((x) => x !== tag);
+      if (h.length) q.hiddenItems = h; else delete q.hiddenItems;
+      return q;
+    }
+    const g = this.editing!.groups.get(group)?.el;
+    const there = g && [...g.querySelectorAll<HTMLElement>('button')].some((b) => itemKey(b) === key && !b.classList.contains('rb-user-hidden'));
+    if (there) return q;
+    q.extra = { ...q.extra, [group]: [...(q.extra?.[group] ?? []), key] };
+    return q;
+  }
+
+  private moveItem(item: ItemDrag, to: string | null): void {
+    let p = this.prefs();
+    if (to && to === item.from) return;
+    if (item.from) p = this.without(p, item.from, item.key);
+    if (to) p = this.withItem(p, to, item.key);
+    this.save(p);
+  }
+
+  /** While editing, a click on a button that was taken off brings it back; other clicks on the groups' buttons do nothing. */
+  private onClick = (e: MouseEvent): void => {
+    const b = (e.target as HTMLElement).closest<HTMLElement>('.rb-live-item');
+    if (!b) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (b.classList.contains('rb-user-hidden')) {
+      const g = this.groupOf(b);
+      if (g) this.save(this.withItem(this.prefs(), g, itemKey(b)));
+    }
+  };
+
+  /** The Commands list: this ribbon's commands by group, and the menus', to drag onto a group. */
+  private togglePalette(): void {
+    if (this.palette) { this.palette.remove(); this.palette = null; return; }
+    const info = this.editing!;
+    const pal = document.createElement('div');
+    pal.className = 'rb-live-palette';
+    const find = document.createElement('input');
+    find.type = 'search';
+    find.placeholder = 'Find a command';
+    find.setAttribute('aria-label', 'Find a command');
+    const list = document.createElement('div');
+    list.className = 'rb-live-list';
+    const groups: { name: string; items: Pickable[] }[] = [];
+    for (const [key, g] of info.groups) {
+      const seen = new Set<string>();
+      const items: Pickable[] = [];
+      for (const b of g.el.querySelectorAll<HTMLElement>('button[data-cmd], button[data-sh], button[data-doc]')) {
+        const k = itemKey(b);
+        if (!k || seen.has(k) || b.closest('.rb-extra')) continue;
+        seen.add(k);
+        const t = b.cloneNode(true) as HTMLElement;
+        t.querySelectorAll('.rb-icon, .rb-lead, svg, kbd').forEach((x) => x.remove());
+        const words = t.textContent!.replace(/[▾…]/g, '').replace(/\s+/g, ' ').trim();
+        items.push({ key: k, label: words.length > 2 ? words : (b.title.split(/[.:;] /)[0] || words) });
+      }
+      if (items.length) groups.push({ name: `${info.tabs.get(g.tab)?.name ?? ''} › ${g.name}`, items });
+      void key;
+    }
+    groups.push(...this.hooks.menus());
+    const draw = () => {
+      const q = find.value.trim().toLowerCase();
+      list.replaceChildren();
+      for (const g of groups) {
+        const items = g.items.filter((it) => !q || it.label.toLowerCase().includes(q));
+        if (!items.length) continue;
+        const h = document.createElement('div');
+        h.className = 'rb-live-list-head';
+        h.textContent = g.name;
+        list.append(h);
+        for (const it of items) {
+          const r = document.createElement('div');
+          r.className = 'rb-live-cmd';
+          r.draggable = true;
+          r.textContent = it.label;
+          r.title = `Drag ${it.label} into a group on the ribbon`;
+          r.addEventListener('dragstart', (e) => {
+            this.dragItem = { key: it.key, from: null };
+            this.dropped = false;
+            e.dataTransfer?.setData(ITEM_TYPE, it.key);
+            e.dataTransfer?.setData('text/plain', it.label);
+            if (e.dataTransfer) e.dataTransfer.effectAllowed = 'copy';
+          });
+          r.addEventListener('dragend', () => { this.dragItem = null; this.clearMarks(); });
+          list.append(r);
+        }
+      }
+    };
+    find.addEventListener('input', draw);
+    draw();
+    pal.append(find, list);
+    // (fixed, so the ribbon's own scrolling doesn't clip it)
+    const r = this.bar!.getBoundingClientRect();
+    pal.style.top = `${r.bottom + 2}px`;
+    document.body.append(pal);
+    this.palette = pal;
+    find.focus();
+  }
+
+  private clearMarks(): void {
+    for (const x of this.editing?.el.querySelectorAll('.rb-live-dragging, .rb-live-before, .rb-live-after, .rb-live-tab, .rb-live-into') ?? []) x.classList.remove('rb-live-dragging', 'rb-live-before', 'rb-live-after', 'rb-live-tab', 'rb-live-into');
   }
 
   private toggleHidden(key: string): void {
@@ -162,7 +325,18 @@ export class RibbonLive {
   }
 
   private onDragStart = (e: DragEvent): void => {
-    const g = (e.target as HTMLElement).closest<HTMLElement>('.rb-group');
+    const t = e.target as HTMLElement;
+    const item = t.closest<HTMLElement>('.rb-live-item');
+    if (item) {
+      const from = this.groupOf(item);
+      this.dragItem = { key: itemKey(item), from: from || null };
+      this.dropped = false;
+      item.classList.add('rb-live-dragging');
+      e.dataTransfer?.setData(ITEM_TYPE, this.dragItem.key);
+      if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move';
+      return;
+    }
+    const g = t.closest<HTMLElement>('.rb-group');
     if (!g) return;
     this.dragKey = g.dataset.groupKey ?? null;
     g.classList.add('rb-live-dragging');
@@ -171,10 +345,17 @@ export class RibbonLive {
   };
 
   private onDragOver = (e: DragEvent): void => {
-    if (!this.dragKey) return;
+    if (!this.dragKey && !this.dragItem) return;
     const t = e.target as HTMLElement;
     const tab = t.closest<HTMLElement>('.rb-tabs [role=tab]');
     const g = t.closest<HTMLElement>('.rb-group');
+    if (this.dragItem) {
+      if (!g) return;
+      e.preventDefault();
+      this.clearMarks();
+      g.classList.add('rb-live-into');
+      return;
+    }
     if (!tab && !g) return;
     e.preventDefault();
     for (const x of this.editing!.el.querySelectorAll('.rb-live-before, .rb-live-after, .rb-live-tab')) x.classList.remove('rb-live-before', 'rb-live-after', 'rb-live-tab');
@@ -185,10 +366,21 @@ export class RibbonLive {
 
   private onDrop = (e: DragEvent): void => {
     const info = this.editing;
+    if (!info) return;
+    if (this.dragItem) {
+      e.preventDefault();
+      this.dropped = true;
+      const g = (e.target as HTMLElement).closest<HTMLElement>('.rb-group[data-group-key]');
+      const item = this.dragItem;
+      this.dragItem = null;
+      this.clearMarks();
+      if (g) this.moveItem(item, g.dataset.groupKey!);
+      return;
+    }
     const key = this.dragKey;
-    if (!info || !key) return;
+    if (!key) return;
     e.preventDefault();
-    const moving = info.el.querySelector<HTMLElement>('.rb-live-dragging');
+    const moving = info.el.querySelector<HTMLElement>('.rb-group.rb-live-dragging');
     const t = e.target as HTMLElement;
     const tabBtn = t.closest<HTMLElement>('.rb-tabs [role=tab]');
     if (moving && tabBtn) {
@@ -204,9 +396,17 @@ export class RibbonLive {
     this.save({ ...this.prefs(), groups: this.layoutNow() });
   };
 
-  private onDragEnd = (): void => {
+  private onDragEnd = (e: DragEvent): void => {
+    // a button dropped off the ribbon is taken away
+    const item = this.dragItem;
+    if (item && !this.dropped && item.from && this.editing) {
+      const r = this.editing.el.getBoundingClientRect();
+      const out = e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom;
+      if (out) this.moveItem(item, null);
+    }
+    this.dragItem = null;
     this.dragKey = null;
-    for (const x of this.editing?.el.querySelectorAll('.rb-live-dragging, .rb-live-before, .rb-live-after, .rb-live-tab') ?? []) x.classList.remove('rb-live-dragging', 'rb-live-before', 'rb-live-after', 'rb-live-tab');
+    this.clearMarks();
   };
 
   private onKey = (e: KeyboardEvent): void => {

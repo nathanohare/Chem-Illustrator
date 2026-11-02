@@ -3155,3 +3155,29 @@ body:is(.slides-mode, .design-mode):not(.show-analysis-pane) #analysis-section {
 .rb-live-x { position: absolute; top: 2px; right: 2px; z-index: 3; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 50%; background: var(--panel); color: var(--muted); font-size: 12px; line-height: 16px; box-shadow: 0 0 0 1px var(--line); }
 .rb-live-x:hover { color: var(--text); background: var(--accent-soft); }
 .ribbon.rb-live .rb-group.rb-user-hidden .rb-live-x { opacity: 1; }
+
+/* Spreadsheet > Insert > Charts: a gallery of the common charts, like the Styles gallery, with All Charts for the rest (item 57) */
+.ribbon button.rb-style.rb-chart-tile { width: 66px; align-items: center; gap: 1px; color: var(--muted); }
+.rb-chart-tile svg { display: block; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.rb-chart-tile .cx { stroke: var(--ic-ink); stroke-width: 1.2; stroke-opacity: 0.55; }
+.rb-chart-tile .c1 { fill: var(--accent); }
+.rb-chart-tile .c2 { fill: color-mix(in srgb, var(--accent) 45%, var(--panel)); }
+.rb-chart-tile .c3 { fill: color-mix(in srgb, var(--ic-ink) 35%, var(--panel)); }
+.rb-chart-tile .l1 { stroke: var(--accent); stroke-width: 2; }
+.rb-chart-tile .l2 { stroke: color-mix(in srgb, var(--accent) 45%, var(--panel)); stroke-width: 2; }
+.rb-chart-tile .lt { stroke: var(--ic-ink); stroke-width: 1; stroke-dasharray: 3 2; stroke-opacity: 0.6; }
+.rb-chart-tile .d1 { fill: var(--accent); }
+.rb-group.rb-compact .rb-chart-tile { font-size: 0; }
+
+/* editing the ribbon in place: single buttons drag too; ones taken off show faintly (a click brings one back) */
+.ribbon.rb-live .rb-live-item { cursor: grab; }
+.ribbon.rb-live button.rb-user-hidden.rb-live-item { display: inline-flex !important; opacity: 0.35; outline: 1px dashed var(--muted); outline-offset: -2px; }
+.ribbon.rb-live .rb-live-item.rb-live-dragging { opacity: 0.4; }
+.ribbon.rb-live .rb-group.rb-live-into { background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.rb-extra { display: flex; gap: 2px; }
+.rb-live-palette { display: flex; flex-direction: column; gap: 4px; position: fixed; right: 8px; z-index: 60; width: 260px; max-height: 360px; padding: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: 0 6px 18px rgb(0 0 0 / 0.18); }
+.rb-live-palette input { width: 100%; box-sizing: border-box; font: inherit; font-size: var(--fs-sm); padding: 3px 6px; }
+.rb-live-list { overflow-y: auto; min-height: 0; flex: 1 1 auto; }
+.rb-live-list-head { margin: 6px 0 2px; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.rb-live-cmd { padding: 3px 6px; font-size: var(--fs-sm); border-radius: var(--r-control); cursor: grab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rb-live-cmd:hover { background: var(--accent-soft); }
