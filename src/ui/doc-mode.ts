@@ -3535,8 +3535,8 @@ export class DocumentMode {
   private async fromName(): Promise<void> {
     const f = this.file!;
     const spot = this.cellSpot();
-    const got = await ask('Structure from Name or SMILES', [{ name: 'text', label: 'Name or SMILES', value: '' }], {
-      ok: 'Insert', note: 'A systematic or common name (ethyl acetate, 4-bromoanisole) or a SMILES string. The structure goes in the text at the caret.',
+    const got = await ask('Structure from Name or SMILES', [{ name: 'text', label: 'Name, SMILES or CAS RN', value: '' }], {
+      ok: 'Insert', note: 'A systematic or common name (ethyl acetate, 4-bromoanisole), a SMILES string or a CAS RN (50-78-2). The structure goes in the text at the caret.',
     });
     this.focus();
     if (!got?.text.trim() || this.file !== f) return;
