@@ -8856,7 +8856,8 @@ function chooseMethylStyle(style: MethylStyle): void {
 /** Ask before a command with nothing selected changes every structure on the page (Edit > Settings). */
 let askWholeDrawing = true;
 /** How a tool's demo shows on a long hover over its button (Settings ▸ General). */
-let toolDemos: DemoLook = 'card';
+// (off until it's settled which tools should have one)
+let toolDemos: DemoLook = 'off';
 watchToolHover(document, () => toolDemos);
 /** Where linked text goes (Edit > Settings). */
 let linkSide: Settings['linkSide'] = 'keep';
