@@ -89,7 +89,7 @@ Along the top are the menus: **File**, **Edit**, **View**, **Insert**, **Format*
 
 **Help** has this **User Guide** built in (it works without an internet connection), the hotkeys, and short notes on each part of the program. **F1** opens the guide at the part about the tool or kind of tab in use: with the ring tool, for example, it opens at Rings.
 
-To the right of the menus is the **quick bar** (like Office's Quick Access Toolbar), with buttons for **Save**, **Undo**, **Redo**, **Fit** (fit the whole drawing in the window), the **padlock** (locks or unlocks all the toolboxes at once so they can be moved; see [Canvas](drawing.md#toolboxes)) and the **eye** (the dark page). Undo and Redo are greyed out when there is nothing to take back, and resting the mouse on one names the step it would undo (**Undo Add Ring**). To choose its buttons:
+To the right of the menus is the **quick bar** (like Office's Quick Access Toolbar), with buttons for **Save**, **Undo**, **Redo**, **Fit** (fit the whole drawing in the window), the **padlock** (locks or unlocks all the toolboxes at once so they can be moved; see [Canvas](drawing.md#toolboxes)) and the **eye** (Reading Mode). Undo and Redo are greyed out when there is nothing to take back, and resting the mouse on one names the step it would undo (**Undo Add Ring**). To choose its buttons:
 
 - click the **▾** at its end and tick the ones you want (Print, Copy, Paste, Focus View and more);
 - right-click any menu command, or a ribbon button that runs one, and pick **Add to Quick Access Toolbar**; right-click a quick button to take it off;
@@ -224,7 +224,7 @@ Presentations, spreadsheets, documents and designs save in their own formats; se
 
 ## Edit ▸ Settings
 
-**Edit ▸ Settings…** (Ctrl+,) holds every setting in one window, with a list of pages on the left and a **Find a setting** box at the top. The menu items for a single page (**Hotkeys…**, **Typing and Spelling…**, **Colour Palettes…**, **Mode Colours…**, **Dark Page Colours…**, **Drawing Style…**, **Scheme Settings…**, **AutoSave and Recovery Options…**) open the Settings window at that page. Each page has its own **Save** (or **Apply**) and **Cancel**; a line of help sits under each setting that needs one.
+**Edit ▸ Settings…** (Ctrl+,) holds every setting in one window, with a list of pages on the left and a **Find a setting** box at the top. The menu items for a single page (**Hotkeys…**, **Typing and Spelling…**, **Colour Palettes…**, **Mode Colours…**, **Reading Mode Colours…**, **Drawing Style…**, **Scheme Settings…**, **AutoSave and Recovery Options…**) open the Settings window at that page. Each page has its own **Save** (or **Apply**) and **Cancel**; a line of help sits under each setting that needs one.
 
 | Page | What it holds |
 |---|---|
@@ -233,7 +233,7 @@ Presentations, spreadsheets, documents and designs save in their own formats; se
 | **Drawing Style** | Bond length, line widths, fonts and journal styles (see [Canvas](drawing.md#drawing-styles)). |
 | **Hotkeys** | Every key, to change, import or export (see [Keyboard and mouse](keyboard-and-mouse.md)). |
 | **Text and Spelling** | Chemistry typing (subscripts in formulas), spelling, your dictionary and replacements. |
-| **Colour Palettes**, **Mode Colours**, **Dark Page** | Your rows of colours, the colour of each kind of tab, and the dark page's colours. |
+| **Colour Palettes**, **Mode Colours**, **Reading Mode** | Your rows of colours, the colour of each kind of tab, and Reading Mode's colours. |
 | **Schemes** | Gaps round arrows and + signs, text size above and below arrows, and the + boxes on new arrows. |
 | **AutoSave and Recovery** | AutoSave, how often unsaved work is copied for recovery, and how many versions are kept. |
 | **File Types** | Which kinds of file Chem Illustrator is offered for under **Open with** in Explorer, and a button to Windows' Default apps page (see [Files and sharing](files-and-sharing.md#opening-files-from-explorer-or-finder-desktop-app)). |
