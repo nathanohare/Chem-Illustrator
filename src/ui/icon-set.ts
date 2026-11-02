@@ -225,6 +225,10 @@ export const ICON_SET: Record<string, IconDef> = {
   // ---------------------------------------------------------------- design
   'connector-tool': { hue: 'purple', d: '<circle class="s" cx="5" cy="19" r="2"/><circle class="p" cx="19" cy="5" r="2"/><path class="a" d="M6.5 17.5l9.5-9.5M11.25 8h4.75v4.75"/>' },
   'connector-elbow-tool': { hue: 'purple', d: '<circle class="s" cx="4.5" cy="19.5" r="2"/><circle class="p" cx="19.5" cy="4.5" r="2"/><path class="a" d="M6.5 19.5h5.5V4.5h5M14.75 2.25l2.25 2.25-2.25 2.25"/>' },
+  // two rings joined by an arrow: a scheme kept as one object
+  'smart-scheme': { hue: 'purple', d: hex(5.75, 12, 3.75, 'p') + '<path class="a" d="M10.75 12h3.5M12.75 10l2 2-2 2"/>' + hex(18.25, 12, 3.75, 'p') },
+  // one arrow shown, the next still faint, with a play badge: a scheme built step by step
+  'auto-animate-steps': { hue: 'amber', d: '<path class="a" d="M2.75 8h6.5M7.25 6l2 2-2 2"/><path d="M11.75 8h6.5M16.25 6l2 2-2 2" stroke-opacity=".4"/><circle class="s" cx="17" cy="17" r="4.75"/><path class="k" d="M15.75 14.75v4.5l3.5-2.25z"/>' },
   'catalytic-cycle': { hue: 'purple', d: '<path d="M12 3.75a8.25 8.25 0 0 1 8.25 8.25M20.25 12A8.25 8.25 0 0 1 12 20.25M12 20.25A8.25 8.25 0 0 1 3.75 12M3.75 12A8.25 8.25 0 0 1 12 3.75"/><path class="a" d="M18.25 9.75l2 2.25 2-2.25M14.25 18.25l-2.25 2 2.25 2M5.75 14.25l-2-2.25-2 2.25M9.75 5.75L12 3.75 9.75 1.75"/>' },
   'energy-diagram': { hue: 'purple', d: '<path d="M3.25 3.25v17.5h17.5" stroke-width="1.25"/><path class="a" d="M5.5 16.5h3M10.5 6.5h3M15.5 12.5h3" stroke-width="2.25"/><path d="M8.5 16.5l2-10M13.5 6.5l2 6" stroke-dasharray="1.5 1.5" stroke-width="1.1"/>' },
   'export-pdf': { hue: 'red', d: page(3.75, 2.75, 13.5, 18.5, 4) + '<path d="M6.75 11.5h5M6.75 14.5h3.5" stroke-opacity=".5"/><circle class="s" cx="17" cy="17" r="4.75"/><path class="k" d="M17 14.5v4.5M15 17.25l2 2 2-2"/>' },
