@@ -1904,6 +1904,8 @@ export class DocumentMode {
       if (o.kind === 'ref' && ids.has(o.target)) objects[id] = { ...o, target: ids.get(o.target)! };
       // the structures in a pasted table's cells are its own copies
       if (o.kind === 'table') objects[id] = { ...o, table: { ...o.table, rows: o.table.rows.map((row) => row.map((cell) => ({ ...cell, runs: remap(cell.runs) }))) } };
+      // and the citations in a pasted footnote
+      if (o.kind === 'note') objects[id] = { ...o, runs: remap(o.runs) };
     }
     const b = f.box?.cell ? f.box : null;
     // into a table cell: no text boxes, bibliographies or notes inside it (a table goes in as a table in the cell)
@@ -3929,9 +3931,9 @@ export class DocumentMode {
       },
       picked: () => (this.file === f ? this.pickedField('cite')?.id ?? this.pickedField('bib')?.id ?? null : null),
       canInsert: () => this.file === f && !(f.box && !f.box.cell),
-      insert: (o) => {
+      insert: (o, sup) => {
         const before = f.ed.typingStyle();
-        const id = this.insertObject(o, kind() ?? 'Zotero', { sup: citeSuper(formatOf(f.t)) || undefined, sub: undefined });
+        const id = this.insertObject(o, kind() ?? 'Zotero', { sup: (sup ?? citeSuper(formatOf(f.t))) || undefined, sub: undefined });
         f.ed.setStyle({ sup: before.sup });
         return id;
       },

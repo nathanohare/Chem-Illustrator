@@ -11,6 +11,7 @@ import { newDocument, objectOffsets, objectRun, nextObjectId, type DocObject, ty
 import { bibliography, citationTexts } from '../src/document/references';
 import { bibFromHtml, htmlSuper, htmlText, runZotero, withFieldType, zoteroFields, type ZoteroHost, type ZoteroPost } from '../src/document/zotero-live';
 import { writeDocx, readDocx, type DocxDeps } from '../src/io/docx';
+import { DocLayouter } from '../src/document/doc-layout';
 import type { TextRun } from '../src/model';
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
@@ -121,7 +122,7 @@ describe('Zotero HTTP citing', () => {
     expect(z.posts.at(-1)!.endpoint).toBe('respond');
     expect(z.posts.filter((p) => p.endpoint === 'respond')).toHaveLength(11);
     const [doc, data, , canInsert, inField, inserted, , fields] = z.answers;
-    expect(doc).toMatchObject({ documentID: 'test-doc', outputFormat: 'html', supportedNotes: [], supportsImportExport: false, processorName: 'Chem Illustrator' });
+    expect(doc).toMatchObject({ documentID: 'test-doc', outputFormat: 'html', supportedNotes: ['footnotes', 'endnotes'], supportsImportExport: false, processorName: 'Chem Illustrator' });
     // a new document has no Zotero preferences yet (Zotero asks for a style)
     expect(data).toBe('');
     expect(canInsert).toBe(true);
@@ -331,6 +332,159 @@ describe('Zotero HTTP citing', () => {
     expect(again.citeManager).toBe('zotero');
     expect(Object.values(again.objects).find((o) => o.kind === 'bib')).toMatchObject({ live: { code: bibl } });
     expect(again.references![0].live).toMatchObject({ app: 'zotero', uris: [URI('ABCD1234')] });
+  });
+});
+
+describe('Zotero note styles (citations in footnotes)', () => {
+  const NOTE_PREFS = PREFS_HTTP.replace('american-chemical-society', 'chicago-note-bibliography');
+  const noteText = 'Gregory R. Fulmer, “NMR Chemical Shifts of Trace Impurities,” <i>Organometallics</i> 29 (2010): 2176–79.';
+  const noteCode = itemCode('cit9', [{ id: 1234, uris: [URI('ABCD1234')], itemData: FULMER }], 'Gregory R. Fulmer, “NMR Chemical Shifts of Trace Impurities,” Organometallics 29 (2010): 2176–79.');
+  const notes = (t: DocText) => Object.entries(t.objects).filter(([, o]) => o.kind === 'note') as [string, Extract<DocObject, { kind: 'note' }>][];
+
+  async function footnoted(): Promise<{ host: TestHost; field: string; fieldsSeen: unknown }> {
+    const host = new TestHost();
+    let field = '';
+    const z = fakeZotero([
+      () => ['Application.getActiveDocument', []],
+      () => ['Document.getDocumentData', [D]],
+      () => ['Document.setDocumentData', [D, NOTE_PREFS]],
+      () => ['Document.canInsertField', [D, 'Http']],
+      () => ['Document.cursorInField', [D, 'Http']],
+      () => ['Document.insertField', [D, 'Http', 1]],
+      (last) => { field = (last as { id: string }).id; return ['Field.setCode', [D, field, 'TEMP']]; },
+      () => ['Field.setCode', [D, field, noteCode]],
+      () => ['Field.setText', [D, field, noteText, false]],
+      () => ['Document.getFields', [D, 'Http']],
+      () => ['Document.complete', [D]],
+    ]);
+    expect(await runZotero('addEditCitation', host, z.post)).toBe('done');
+    return { host, field, fieldsSeen: z.answers[z.answers.length - 1] };
+  }
+
+  it('tells Zotero it has footnotes and endnotes, and puts a note style\'s citation in a new footnote', async () => {
+    const { host, field, fieldsSeen } = await footnoted();
+    const ns = notes(host.t);
+    expect(ns).toHaveLength(1);
+    const [noteId, note] = ns[0];
+    expect(note.end).toBeUndefined();
+    // the footnote's mark is at the caret, raised; the citation is in the footnote, not raised
+    expect(host.t.runs.find((r) => r.obj === Number(noteId))).toMatchObject({ sup: true });
+    const citeRun = note.runs.find((r) => r.obj === Number(field))!;
+    expect(citeRun.sup).toBeFalsy();
+    expect(host.t.objects[Number(field)]).toMatchObject({ kind: 'cite', refs: [host.t.references![0].id] });
+    // Zotero is told which note it is in
+    expect(fieldsSeen).toEqual([expect.objectContaining({ id: field, noteIndex: 1 })]);
+    expect(citationTexts(host.t).get(Number(field))).toBe(htmlText(noteText));
+  });
+
+  it('puts a citation in an endnote when Zotero asks for one', async () => {
+    const host = new TestHost();
+    let id = '';
+    const z = fakeZotero([
+      () => ['Document.insertField', [D, 'Http', 2]],
+      (last) => { id = (last as { id: string }).id; return ['Document.getFields', [D, 'Http']]; },
+      () => ['Document.complete', [D]],
+    ]);
+    await runZotero('addEditCitation', host, z.post);
+    expect(notes(host.t)[0][1].end).toBe(true);
+    expect(z.answers[1]).toEqual([expect.objectContaining({ id, noteIndex: 1 })]);
+  });
+
+  it('counts footnotes and endnotes each on their own, in the order they come', () => {
+    const t = { ...newDocument(), runs: [{ text: 'a' }, objectRun(2, { sup: true }), { text: 'b' }, objectRun(4, { sup: true }), { text: 'c' }, objectRun(6, { sup: true })] } as DocText;
+    t.objects = {
+      1: { kind: 'cite', refs: [] }, 2: { kind: 'note', runs: [objectRun(1)] },
+      3: { kind: 'cite', refs: [] }, 4: { kind: 'note', end: true, runs: [objectRun(3)] },
+      5: { kind: 'cite', refs: [] }, 6: { kind: 'note', runs: [{ text: 'See ' }, objectRun(5)] },
+    };
+    expect(zoteroFields(t).map((f) => [f.id, f.noteIndex])).toEqual([['1', 1], ['3', 1], ['5', 2]]);
+  });
+
+  it('moves citations into footnotes and back out as the style changes', async () => {
+    const host = await citedDocument();
+    const id = Object.entries(host.t.objects).find(([, o]) => o.kind === 'cite')![0];
+    const before = rt.plainText(host.t.runs);
+    await runZotero('setDocPrefs', host, fakeZotero([
+      () => ['Document.convert', [D, [id], 'Http', [1]]],
+      () => ['Document.complete', [D]],
+    ]).post);
+    const [noteId, note] = notes(host.t)[0];
+    expect(note.runs.some((r) => r.obj === Number(id))).toBe(true);
+    expect(host.t.runs.some((r) => r.obj === Number(id))).toBe(false);
+    expect(host.t.runs.find((r) => r.obj === Number(noteId))).toMatchObject({ sup: true });
+    // a footnote to an endnote
+    await runZotero('setDocPrefs', host, fakeZotero([
+      () => ['Document.convert', [D, [id], 'Http', [2]]],
+      () => ['Document.complete', [D]],
+    ]).post);
+    expect(notes(host.t)[0][1].end).toBe(true);
+    // and back into the text: the note goes, the citation is where its mark was
+    await runZotero('setDocPrefs', host, fakeZotero([
+      () => ['Document.convert', [D, [id], 'Http', [0]]],
+      () => ['Document.complete', [D]],
+    ]).post);
+    expect(notes(host.t)).toHaveLength(0);
+    expect(host.t.runs.some((r) => r.obj === Number(id))).toBe(true);
+    expect(rt.plainText(host.t.runs)).toBe(before);
+  });
+
+  it('keeps a footnote\'s own words when its citation moves out of it', async () => {
+    const host = new TestHost('Text.', 5);
+    host.t = { ...host.t, runs: [{ text: 'Text.' }, objectRun(2, { sup: true })], objects: { 1: { kind: 'cite', refs: [] }, 2: { kind: 'note', runs: [{ text: 'As shown in ' }, objectRun(1)] } } };
+    await runZotero('setDocPrefs', host, fakeZotero([
+      () => ['Document.convert', [D, ['1'], 'Http', [0]]],
+      () => ['Document.complete', [D]],
+    ]).post);
+    expect(host.t.objects[2]).toMatchObject({ kind: 'note', runs: [{ text: 'As shown in ' }] });
+    expect(host.t.runs.map((r) => r.obj).filter((x) => x !== undefined)).toEqual([2, 1]);
+  });
+
+  it('shows the citation\'s text in the footnote', async () => {
+    const { host } = await footnoted();
+    const lay = new DocLayouter({ measure: (s: string, z: number) => s.length * z * 0.5, drawingSize: () => ({ w: 10, h: 10 }) });
+    const doc = lay.layout(host.t);
+    const [noteId, note] = notes(host.t)[0];
+    const nl = lay.noteText(host.t, note.runs, note.paras, doc.fields.get(Number(noteId)) ?? '', 400, doc.fields);
+    const shown = nl.lines.flatMap((l) => l.pieces.map((p) => p.shown ?? p.text)).join('');
+    expect(doc.fields.get(Number(noteId))).toBe('1');
+    expect(shown).toContain('Fulmer');
+    expect(shown).toContain('Organometallics');
+  });
+
+  it('saves citations in footnotes as Zotero\'s Word fields, and reads them back live', async () => {
+    const { host, field } = await footnoted();
+    const files = unzipSync(await writeDocx(host.t, deps));
+    const foot = strFromU8(files['word/footnotes.xml']);
+    const instr = [...foot.matchAll(/<w:instrText[^>]*>([^<]*)<\/w:instrText>/g)].map((m) => m[1]).join('').replace(/&quot;/g, '"');
+    expect(instr).toContain(`ADDIN ZOTERO_${noteCode}`);
+    expect(foot).toContain('Fulmer');
+    const again = (await readDocx(await writeDocx(host.t, deps))).doc;
+    const n = Object.values(again.objects).find((o) => o.kind === 'note') as Extract<DocObject, { kind: 'note' }>;
+    const cid = n.runs.find((r) => r.obj !== undefined)!.obj!;
+    expect(again.objects[cid]).toMatchObject({ kind: 'cite', live: { code: noteCode } });
+    // the footnote shows what Zotero wrote in it, before any Refresh
+    expect(citationTexts(again).get(cid)).toBe(htmlText(noteText));
+    expect(zoteroFields(again)).toEqual([expect.objectContaining({ code: noteCode, noteIndex: 1 })]);
+    expect(field).toBeTruthy();
+  });
+
+  it('works numbers out here again after reading a Word file, and then writes a code that says so', async () => {
+    const host = await citedDocument();
+    const again = (await readDocx(await writeDocx(host.t, deps))).doc;
+    const [cid, cite] = Object.entries(again.objects).find(([, o]) => o.kind === 'cite')!;
+    // Zotero's code is kept as it was; a number is not kept as text (it follows edits here)
+    expect(cite).toMatchObject({ live: { code: fulmerCode } });
+    expect((cite as Extract<DocObject, { kind: 'cite' }>).live!.text).toBeUndefined();
+    expect(zoteroFields(again)[0].code).toBe(fulmerCode);
+    // a citation before it: this one is 2 now, so its code is written again with what it shows
+    const t2 = { ...again, runs: [objectRun(99, { sup: true }), ...again.runs], objects: { ...again.objects, 99: { kind: 'cite', refs: [again.references![0].id] } } } as DocText;
+    const other = { ...t2, references: [...t2.references!, { ...t2.references![0], id: 'r-smith', title: 'Another', live: undefined }] };
+    other.objects = { ...other.objects, 99: { kind: 'cite', refs: ['r-smith'] } };
+    const f = zoteroFields(other).find((x) => x.id === cid)!;
+    expect(f.text).toBe('2');
+    expect(f.code).not.toBe(fulmerCode);
+    expect(f.code).toContain('"plainCitation":"2"');
+    expect(f.code).toContain('"citationID":"cit1"');
   });
 });
 

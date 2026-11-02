@@ -258,6 +258,18 @@ In PowerPoint the lines and the References slide's list are ordinary text boxes,
 
 To put a reference anywhere on a slide as text you can edit, use **Insert ▸ Formatted Reference…**.
 
+### Citing with Zotero
+
+In the desktop app, **Insert ▸ Zotero ▾** works with the Zotero app on your computer (Zotero 7 or later, running), as it does in documents.
+
+- **Add/Edit Citation** opens Zotero's citation window for the slide showing. The items you pick become the references that slide shows, linked to your Zotero library, and its lines are written as **References on Slide** sets them. Run it again on the same slide to change them.
+- **Add/Edit Bibliography** adds a References slide at the end (or edits the one there), with Zotero writing the list in its citation style.
+- **Refresh** brings the references and the References slide up to date from your library.
+- **Document Preferences** chooses Zotero's citation style for the presentation.
+- **Unlink Citations** keeps the lines and the list as they are, without the link to Zotero.
+
+Zotero's preferences are saved in the PowerPoint file with the presentation's references, so Zotero carries on when the file is opened here again.
+
 ## Transitions
 
 Open the **Design & Transitions** tab.
