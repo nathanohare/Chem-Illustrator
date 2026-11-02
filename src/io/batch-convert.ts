@@ -7,15 +7,16 @@ import type { DocStyle } from '../style';
 import { readCdxml } from './cdxml';
 import { writeCdxml } from './cdxml-write';
 import { cdxToCdxml, cdxmlToCdx } from './cdx';
-import { addMolfile, toMolfile } from '../chem/molfile';
+import { toMolfile } from '../chem/molfile';
+import { chemFormatOf, readScene, sceneToDoc } from './chem-formats';
 import { allSpecies } from '../chem/species';
 import { recordPicture, pictureCanvas, canvasPng, pictureSvg } from '../render/picture';
 import { pngWithDpi } from '../render/emf-read';
 
 export type BatchFormat = 'cdxml' | 'cdx' | 'mol' | 'svg' | 'png' | 'smi';
 
-/** What can be read: ChemDraw drawings, molfiles, SD files and SMILES lists. */
-export const BATCH_INPUTS = ['cdxml', 'cdx', 'mol', 'sdf', 'sd', 'smi', 'smiles'];
+/** What can be read: ChemDraw drawings, molfiles, SD files, SMILES lists, and RXN, Marvin, Ketcher, CML and ChemDoodle files. */
+export const BATCH_INPUTS = ['cdxml', 'cdx', 'mol', 'sdf', 'sd', 'smi', 'smiles', 'rxn', 'mrv', 'ket', 'cml', 'json'];
 
 export const BATCH_FORMATS: { value: BatchFormat; label: string }[] = [
   { value: 'cdxml', label: 'CDXML (ChemDraw XML, opens here and in ChemDraw)' },
@@ -68,14 +69,20 @@ const stemOf = (file: string) => file.replace(/\.[^.\\/]+$/, '');
 const extensionOf = (file: string) => /\.([^.\\/]+)$/.exec(file)?.[1].toLowerCase() ?? '';
 
 function molDoc(molblock: string, style: DocStyle): Doc | null {
-  const d = new Doc();
-  d.style = { ...style };
+  return sceneDoc('x.mol', molblock, style);
+}
+
+/** A molfile (V2000 or V3000), RXN, Marvin, Ketcher, CML or ChemDoodle file as a drawing, or null. */
+function sceneDoc(file: string, text: string, style: DocStyle): Doc | null {
+  const fmt = chemFormatOf(file, text);
+  const scene = fmt ? readScene(fmt, text) : null;
+  if (!scene) return null;
   try {
-    d.bulk(() => { addMolfile(d, molblock, 0, 0); });
+    const d = sceneToDoc(scene, style).doc;
+    return d.atoms.size ? d : null;
   } catch {
     return null;
   }
-  return d.atoms.size ? d : null;
 }
 
 /**
@@ -89,7 +96,7 @@ export async function readBatchFile(file: string, bytes: Uint8Array, deps: Batch
   let failed = 0;
   if (ext === 'cdx') items.push({ name: stem, doc: readCdxml(cdxToCdxml(bytes)).doc });
   else if (ext === 'cdxml') items.push({ name: stem, doc: readCdxml(text()).doc });
-  else if (ext === 'mol') { const d = molDoc(text(), deps.style); if (d) items.push({ name: stem, doc: d }); else failed++; }
+  else if (['mol', 'rxn', 'mrv', 'ket', 'cml', 'json'].includes(ext)) { const d = sceneDoc(file, text(), deps.style); if (d) items.push({ name: stem, doc: d }); else failed++; }
   else if (ext === 'sdf' || ext === 'sd') {
     splitSdf(text()).forEach((r, i) => {
       const d = molDoc(r.molblock, deps.style);
