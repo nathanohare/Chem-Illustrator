@@ -4,7 +4,7 @@
 // two routes can be drawn on one diagram. Everything is drawn as ordinary lines, curves and
 // text inside an invisible frame that keeps the numbers; editing the numbers draws it again.
 
-import type { Arrow, Caption, Doc, Entity, Frame, Shape } from '../model';
+import type { Arrow, Caption, Contents, Doc, Entity, Frame, Shape } from '../model';
 import type { Rect, Vec } from '../geom';
 import { sweepThrough } from '../objects';
 import { chemRuns } from '../text/chemtext';
@@ -28,6 +28,8 @@ export interface EnergyPoint {
   ehs?: { G?: number; H?: number; E?: number };
   /** The 2-D layout of the geometry's drawn atoms (null: a hydrogen left out), y down, any scale. */
   flat?: ([number, number] | null)[];
+  /** A structure drawn for this species (in the Energy Diagram window), shown beside its level in place of the file's geometry. */
+  drawn?: Contents;
 }
 
 /** A bracket between two species on one pathway, marking the change from one to the other (ΔG‡ when it climbs to a transition state). */
@@ -67,6 +69,8 @@ export interface EnergyData {
   structures?: boolean | '2d' | '3d';
   /** On transition states' structures, the length (Å) of each bond being made or broken. */
   distances?: boolean;
+  /** Where structures go: above each level (the default), above peaks and below valleys, or below each level. */
+  place?: 'above' | 'auto' | 'below';
   /** Brackets between any two species, chosen by hand. */
   brackets?: EnergyBracket[];
   /** The plot's size in points. */
@@ -115,7 +119,7 @@ export const ENERGY_PRESETS: EnergyPreset[] = [
 export const ENERGY_DEFAULTS = { style: 'levels' as const, values: true, digits: 1, axis: true, barrier: false };
 
 /** The members of a drawn diagram (to put in its frame). */
-export interface EnergyParts { captions: number[]; arrows: number[]; shapes: number[] }
+export interface EnergyParts { captions: number[]; arrows: number[]; shapes: number[]; atoms?: number[] }
 
 /**
  * Draw the diagram with its plot's top left corner at `at`. Returns what was made (the caller
@@ -309,10 +313,12 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
       ky += Math.max(b.y2 - b.y1, 0.8 * L);
     }
   }
-  if (d.structures) {
-    // each species' geometry over its level when it is a peak, under it otherwise, moved on
-    // until it is clear of the text, lines and other structures
+  const drawnAny = d.paths.some((p) => p.points.some((q) => q.drawn?.atoms.length));
+  if (d.structures || drawnAny) {
+    // each species' structure (drawn here, else its file's geometry) above its level (or as
+    // `place` says), moved on until it is clear of the text, lines and other structures
     const box = Math.min(colW * 0.92, 5 * L), h = box * 0.8;
+    const place = d.place ?? 'above';
     const taken: Rect[] = out.captions.map((id) => m.captionBox(doc.captions.get(id)!));
     const clear = (r: Rect) => !taken.some((o) => o.x1 < r.x2 && r.x1 < o.x2 && o.y1 < r.y2 && r.y1 < o.y2)
       && !ink.some((q) => q.x > r.x1 && q.x < r.x2 && q.y > r.y1 && q.y < r.y2);
@@ -320,19 +326,34 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
     d.paths.forEach((p) => {
       const shown = p.points.map((q, k) => ({ q, k })).filter(({ q }) => q.g !== null && isFinite(q.g));
       shown.forEach(({ q, k }, i) => {
-        if (!q.geom?.length || done.has(k)) return;
+        const drawn = q.drawn?.atoms.length ? q.drawn : null;
+        if ((!drawn && (!d.structures || !q.geom?.length)) || done.has(k)) return;
         done.add(k);
         const prev = shown[i - 1]?.q.g ?? -Infinity, next = shown[i + 1]?.q.g ?? -Infinity;
-        const up = q.g! > prev && q.g! > next ? -1 : 1;
+        const up = place === 'above' ? -1 : place === 'below' ? 1 : q.g! > prev && q.g! > next ? -1 : 1;
         const yy = y(q.g!);
+        if (drawn) {
+          // the structure as drawn, at the drawing's own size, its middle over the level's
+          const b = contentsBox(drawn, L);
+          const bw = b.x2 - b.x1, bh = b.y2 - b.y1;
+          let top2 = up < 0 ? yy - gap - bh : yy + gap;
+          const at3 = (t2: number): Rect => ({ x1: x(k) - bw / 2, y1: t2, x2: x(k) + bw / 2, y2: t2 + bh });
+          for (let n = 0; n < 40 && !clear(at3(top2)); n++) top2 += up * 0.25 * L;
+          const r = at3(top2);
+          const made = placeContents(doc, drawn, r.x1 - b.x1, r.y1 - b.y1);
+          taken.push(r);
+          out.captions.push(...made.captions);
+          (out.atoms ??= []).push(...made.atoms);
+          return;
+        }
         let top = up < 0 ? yy - gap - h : yy + gap;
         const at2 = (t: number): Rect => ({ x1: x(k) - box / 2, y1: t, x2: x(k) + box / 2, y2: t + h });
         for (let n = 0; n < 40 && !clear(at2(top)); n++) top += up * 0.25 * L;
         const ts = /‡/.test(q.label);
-        const bonds = qmBonds(q.geom, ts);
+        const bonds = qmBonds(q.geom!, ts);
         const parts = d.structures === '2d'
-          ? drawSkeleton(doc, m, q.geom, bonds, q.flat, at2(top), L, ts && !!d.distances)
-          : drawBalls(doc, m, q.geom, bonds, at2(top), ts && !!d.distances);
+          ? drawSkeleton(doc, m, q.geom!, bonds, q.flat, at2(top), L, ts && !!d.distances)
+          : drawBalls(doc, m, q.geom!, bonds, at2(top), ts && !!d.distances);
         taken.push(at2(top));
         out.captions.push(...parts.captions);
         out.shapes.push(...parts.shapes);
@@ -438,11 +459,20 @@ export function putEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec, id?: num
       // lines, and the balls and sticks of structures read from files, are drawn again
       if (sh && (sh.kind === 'line' || (sh.kind === 'oval' && sh.fill === 'shaded') || (sh.kind === 'geo' && isInkId(sh.geo)))) doc.removeShape(s); else if (sh) kept.shapes.push(s);
     }
-    kept.atoms = f.atoms.filter((a) => doc.atoms.has(a));
+    // structures drawn for species are drawn again; ones put on the diagram by hand stay
+    const sigs = new Set([...(old.energy?.paths ?? []), ...d.paths].flatMap((p) => p.points.map((q) => (q.drawn ? drawnSig(q.drawn.atoms) : ''))).filter(Boolean));
+    const seen = new Set<number>();
+    for (const a of f.atoms) {
+      if (!doc.atoms.has(a) || seen.has(a)) continue;
+      const frag = [...doc.fragmentOf(a)];
+      for (const x of frag) seen.add(x);
+      if (sigs.has(drawnSig(frag.map((x) => doc.atoms.get(x)!)))) for (const x of frag) doc.removeAtom(x);
+      else kept.atoms.push(a);
+    }
   }
   const parts = drawEnergy(doc, m, d, at);
   const pad = 0.3 * doc.style.bondLength;
-  const frame: Frame = { atoms: kept.atoms, captions: parts.captions, arrows: parts.arrows, shapes: [...parts.shapes, ...kept.shapes], padX: pad, padY: pad, fit: true };
+  const frame: Frame = { atoms: [...kept.atoms, ...(parts.atoms ?? [])], captions: parts.captions, arrows: parts.arrows, shapes: [...parts.shapes, ...kept.shapes], padX: pad, padY: pad, fit: true };
   const b = frameBox(doc, frame, m) ?? { x1: at.x, y1: at.y, x2: at.x + d.w, y2: at.y + d.h };
   const r = (v: number) => Math.round(v * 100) / 100;
   const energy: EnergyData = { ...d, margins: { l: r(at.x - b.x1), t: r(at.y - b.y1), r: r(b.x2 - at.x - d.w), b: r(b.y2 - at.y - d.h) } };
@@ -635,4 +665,51 @@ export function drawSkeleton(doc: Doc, m: Measure, atoms: QmAtom[], bonds: QmBon
       { x: q.x + n.x * off * s - u.x * (labelled.has(b.j) ? 0 : cut), y: q.y + n.y * off * s - u.y * (labelled.has(b.j) ? 0 : cut) });
   }
   return out;
+}
+
+/** The box a drawn structure takes (its atoms, with room for their labels, and any text with it). */
+export function contentsBox(c: Contents, L: number): Rect {
+  const pts = [...c.atoms.map((a) => ({ x: a.x, y: a.y })), ...c.captions.map((t) => ({ x: t.x, y: t.y }))];
+  if (!pts.length) return { x1: 0, y1: 0, x2: 0, y2: 0 };
+  const pad = 0.45 * L;
+  return {
+    x1: Math.min(...pts.map((p) => p.x)) - pad, y1: Math.min(...pts.map((p) => p.y)) - pad,
+    x2: Math.max(...pts.map((p) => p.x)) + pad, y2: Math.max(...pts.map((p) => p.y)) + pad,
+  };
+}
+
+/** Put a copy of a drawn structure (its atoms, bonds and text) in the drawing, moved by (dx, dy). Call inside an edit. */
+export function placeContents(doc: Doc, c: Contents, dx: number, dy: number): { atoms: number[]; captions: number[] } {
+  const ids = new Map<number, number>();
+  const out = { atoms: [] as number[], captions: [] as number[] };
+  // multicentre points after the atoms they stand for
+  for (const a of [...c.atoms.filter((x) => !x.multi), ...c.atoms.filter((x) => x.multi)]) {
+    const { id, ...rest } = structuredClone(a);
+    if (rest.multi) {
+      rest.multi = rest.multi.map((k) => ids.get(k)).filter((k): k is number => k !== undefined);
+      if (rest.multi.length < 2) continue;
+    }
+    const n = doc.addAtom(a.x + dx, a.y + dy, a.z, { ...rest, x: a.x + dx, y: a.y + dy });
+    ids.set(id, n.id);
+    out.atoms.push(n.id);
+  }
+  for (const bd of c.bonds) {
+    const a1 = ids.get(bd.a1), a2 = ids.get(bd.a2);
+    if (a1 === undefined || a2 === undefined) continue;
+    const { id: _id, ...rest } = structuredClone(bd);
+    doc.addBond(a1, a2, bd.order, bd.display, { ...rest, a1, a2 });
+  }
+  for (const t of c.captions) {
+    const { id: _id, attach: _at, ...rest } = structuredClone(t);
+    out.captions.push(doc.addCaption({ ...rest, x: t.x + dx, y: t.y + dy }).id);
+  }
+  return out;
+}
+
+/** A drawn structure's fingerprint wherever it is put: its atoms and where they sit from its corner (so it is found again to be drawn anew). */
+export function drawnSig(atoms: { x: number; y: number; z: number; charge?: number }[]): string {
+  if (!atoms.length) return '';
+  const x0 = Math.min(...atoms.map((a) => a.x)), y0 = Math.min(...atoms.map((a) => a.y));
+  // (not labels: a file may write OH for an oxygen we leave unlabelled)
+  return atoms.map((a) => `${a.z}:${a.charge ?? 0}:${Math.round((a.x - x0) * 10)}:${Math.round((a.y - y0) * 10)}`).sort().join(',');
 }

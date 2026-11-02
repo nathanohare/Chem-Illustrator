@@ -306,6 +306,7 @@ const pickSlideSize = later(() => import('./ui/slide-size-dialog'), 'pickSlideSi
 const pickTemplate = later(() => import('./ui/template-gallery'), 'pickTemplate');
 const askCycle = later(() => import('./ui/cycle-dialog'), 'askCycle');
 const askEnergy = later(() => import('./ui/energy-dialog'), 'askEnergy');
+import type { EnergyStructureHooks } from './ui/energy-dialog';
 const askNewman = later(() => import('./ui/newman-dialog'), 'askNewman');
 const newmanSettings = later(() => import('./ui/newman-settings'), 'newmanSettings');
 const askPlate = later(() => import('./ui/plate-dialog'), 'askPlate');
@@ -861,6 +862,9 @@ async function pasteFrom(read: () => Pasted | Promise<Pasted>): Promise<void> {
     flash('Could not paste: ' + String(err));
     return;
   }
+  // a Smart Scheme's dashed species box selected: what is pasted becomes that species
+  const holder = editor.selectedHolder();
+  if (holder !== null) { await pasteIntoSpeciesBox(holder, got); return; }
   if (got.kind === 'drawing') {
     if (isEmpty(got.doc)) { flash('There is nothing to paste.'); return; }
     // on slides, structures can take the slide master's bond length; elsewhere they keep their size
@@ -882,6 +886,19 @@ async function pasteFrom(read: () => Pasted | Promise<Pasted>): Promise<void> {
   else if (got.kind === 'picture') placePicture(got.bytes, got.mime, null);
   else if (got.kind === 'table') pasteTable(got.rows);
   else flash('There is nothing to paste.');
+}
+
+/** A structure pasted into a Smart Scheme's dashed species box: a drawing, a SMILES string or a molfile. */
+async function pasteIntoSpeciesBox(holder: number, got: Pasted): Promise<void> {
+  let drawing: Doc | null = null;
+  if (got.kind === 'drawing' && !isEmpty(got.doc) && got.doc.atoms.size) { fitPasted(got.doc, doc.style); drawing = got.doc; }
+  else if (got.kind === 'text') {
+    const mb = chem.ready ? await molfileOrSmiles(got.text.trim(), (t) => chem.smilesToMol(t)) : null;
+    const c = mb ? molContents(mb) : null;
+    if (c) drawing = structureDoc(c, doc.style);
+  }
+  if (!drawing) { flash('There is no structure on the clipboard to put in this species: copy a structure, a SMILES string or a molfile.', 6000); return; }
+  editor.fillSpeciesBox(holder, drawing);
 }
 
 /** Cells from Excel, Word or a sheet become a table in the ACS style, with the first row as headings. */
@@ -1041,9 +1058,57 @@ async function energyDiagram(id: number | null): Promise<void> {
   finishTyping();
   const L = doc.style.bondLength;
   const now = id !== null ? doc.shapes.get(id)?.energy ?? null : null;
-  const got = await askEnergy(now, { w: Math.round(18 * L), h: Math.round(12 * L) }, paintEnergyPreview, async (mb) => (await chem.layouts(mb))[0] ?? null);
+  const got = await askEnergy(now, { w: Math.round(18 * L), h: Math.round(12 * L) }, paintEnergyPreview, async (mb) => (await chem.layouts(mb))[0] ?? null, energyStructureHooks);
   if (got) editor.putEnergyDiagram(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);
 }
+
+/** A molfile drawn on its own, in this drawing's style, as contents (null when it can't be read). */
+function molContents(mb: string, attach: number[] = []): Contents | null {
+  const tmp = new Doc();
+  tmp.style = { ...doc.style };
+  try { tmp.bulk(() => { addNamed({ mb, attach }, 0, 0, tmp); }); } catch { return null; }
+  return tmp.atoms.size ? tmp.contents() : null;
+}
+
+/** The Energy Diagram window's Structure column: drawn in the drawing area, pasted, or from a name. */
+const energyStructureHooks: EnergyStructureHooks = {
+  edit: (contents, title) => new Promise((resolve) => editCellStructure(contents, title, (c) => resolve(c), doc.style)),
+  async paste() {
+    let p: Pasted;
+    try { p = nativeClipboard ? await readNativeClipboard() : await readWebClipboard(); } catch (e) { return { error: 'Could not read the clipboard: ' + String(e) }; }
+    if (p.kind === 'drawing' && !isEmpty(p.doc)) { fitPasted(p.doc, doc.style); return p.doc.contents(); }
+    if (p.kind === 'text') {
+      const mb = await molfileOrSmiles(p.text, (s) => chem.smilesToMol(s));
+      const c = mb ? molContents(mb) : null;
+      if (c) return c;
+    }
+    return { error: 'There is no structure on the clipboard: copy one (or a SMILES or molfile) first.' };
+  },
+  async fromText(text) {
+    if (!/\s/.test(text.trim()) && /[=#()\[\]@]|^[BCNOPSFIclbrcnops0-9]+$/.test(text.trim())) {
+      const mb = await chem.smilesToMol(text.trim()).catch(() => null);
+      const c = mb ? molContents(mb) : null;
+      if (c) return c;
+    }
+    const got = await nameToMolfile(text);
+    if ('error' in got) return { error: got.error };
+    return molContents(got.mb, got.attach) ?? { error: 'The structure could not be drawn.' };
+  },
+  thumb(contents, canvas) {
+    const tmp = structureDoc(contents, doc.style);
+    const b = tmp.bounds();
+    const ctx = canvas.getContext('2d');
+    if (!b || !ctx) return;
+    const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth || canvas.width, h = canvas.clientHeight || canvas.height;
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const k = Math.min(1, (w - 6) / Math.max(1, b.x2 - b.x1), (h - 6) / Math.max(1, b.y2 - b.y1));
+    ctx.setTransform(k * dpr, 0, 0, k * dpr, (w / 2 - ((b.x1 + b.x2) / 2) * k) * dpr, (h / 2 - ((b.y1 + b.y2) / 2) * k) * dpr);
+    drawDrawing(ctx, tmp);
+  },
+};
 editor.onEnergy = (id) => void energyDiagram(id);
 
 /** The TLC Plate and Gel windows' preview: the plate as it will be drawn, fitted to the canvas. */
@@ -2768,6 +2833,7 @@ function chemMark(c: Caption): 'chem' | 'warn' | null {
   return !c.ignoreWarnings && captionChemWarning(doc, c, editor.measure()) ? 'warn' : 'chem';
 }
 renderer.chemMarks = chemMark;
+renderer.holderHints = true;
 
 /** Repaint when which text boxes read as chemistry changes for some other reason than their own text (an arrow moved). */
 function refreshChemMarks(): void {
@@ -12866,8 +12932,11 @@ const smartPane = new SmartPane({
     return { x1: a.x + o.left, y1: a.y + o.top, x2: b.x + o.left, y2: b.y + o.top };
   },
   area: () => { const o = host.getBoundingClientRect(); return { x1: o.left, y1: o.top, x2: o.right, y2: o.bottom }; },
-  slotText: (id, k, t) => editor.smartSlotText(id, k, t),
-  stepText: (id, k, part, t) => editor.smartStepText(id, k, part, t),
+  slotRuns: (id, k, parts) => editor.smartSlotRuns(id, k, parts),
+  stepRuns: (id, k, part, parts) => editor.smartStepRuns(id, k, part, parts),
+  toStructure: (id, k) => editor.smartToHolder(id, k),
+  toText: (id, k) => editor.smartToText(id, k),
+  selectHolder: (shape) => editor.selectShape(shape),
   add: (id, after) => editor.smartInsert(id, after),
   remove: (id, k) => editor.smartRemove(id, k),
   move: (id, from, to) => editor.smartMove(id, from, to),
