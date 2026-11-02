@@ -431,7 +431,7 @@ export class SheetCharts {
     out.push(row('Font size', numberBox(c.fontSize, (v) => this.patch((x) => clean({ ...x, fontSize: v }), 'Chart font size'), '12', 'px')));
     if (!this.ownData) out.push(row('Size', numberBox(c.w, (v) => v && this.patch((x) => ({ ...x, w: Math.max(80, v) }), 'Resize chart'), '', '×'), numberBox(c.h, (v) => v && this.patch((x) => ({ ...x, h: Math.max(80, v) }), 'Resize chart'), '', 'px')));
     out.push(row('Background', colour(c.background && c.background !== 'none' ? c.background : '#ffffff', (v) => this.patch((x) => ({ ...x, background: v === '#ffffff' ? undefined : v }), 'Chart background')),
-      check(c.background === 'none', (v) => this.patch((x) => clean({ ...x, background: v ? 'none' : undefined }), 'Chart background'), 'See-through')));
+      check(c.background === 'none', (v) => this.patch((x) => clean({ ...x, background: v ? 'none' : undefined }), 'Chart background'), 'No Fill (transparent)')));
     out.push(row('Border', check(c.border !== false, (v) => this.patch((x) => clean({ ...x, border: v ? undefined : false }), 'Chart border'))));
     if (!this.ownData) out.push(row('Hidden rows', check(!!c.showHidden, (v) => this.patch((x) => clean({ ...x, showHidden: v || undefined }), 'Chart hidden rows'), 'Chart them too (off: a filtered table charts what shows)')));
 

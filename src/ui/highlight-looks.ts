@@ -26,7 +26,7 @@ export const BUILT_IN_LOOKS: HighlightLookPreset[] = [
   { name: 'Lifted (soft shadow)', style: { smooth: true, shadow: true, shadowBlur: 0.15, shadowDistance: 0.08 } },
   { name: 'Gradient across', style: { smooth: true, fill: 'linear' } },
   { name: 'Bright middle (gradient to the edge)', style: { smooth: true, fill: 'edge' } },
-  { name: 'See-through', style: { smooth: true, transparency: 0.5 } },
+  { name: 'Transparent', style: { smooth: true, transparency: 0.5 } },
 ];
 
 /** Your own looks as read from the settings file, keeping only what makes sense. */

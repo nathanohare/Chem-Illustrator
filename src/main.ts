@@ -5849,7 +5849,7 @@ async function exportPicture(preset: { format?: string; dpi?: number; note?: str
     { name: 'dpi', label: 'Resolution (PNG, TIFF)', value: String(dpiNow), type: 'number', unit: 'dpi' },
     { name: 'bg', label: 'Background', value: deck ? 'page' : 'clear', options: [
       { value: deck ? 'page' : 'white', label: deck ? 'The page colour' : 'White' },
-      { value: 'clear', label: 'See-through' },
+      { value: 'clear', label: 'Transparent' },
     ] },
   ], { ok: 'Export…', note: preset.note ?? (checked ? `Saves ${what}. The ${checked.journal.name.replace(/ \(.*/, '')} guidelines ask for ${checked.dpi} dpi for this figure (File > Check Figure for Journal).` : `Saves ${what}. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line drawings.`) });
   if (!v) return;

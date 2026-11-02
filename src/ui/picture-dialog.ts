@@ -176,10 +176,10 @@ export function pictureFormat(o: PictureFormatOptions): Promise<PictureFormatRes
     });
     const swatch = document.createElement('span');
     swatch.className = 'pic-swatch';
-    const pickClear = button('Pick in the picture', 'Click the colour in the preview that should be see-through (a white or coloured background)', () => { clickDoes = clickDoes === 'clear' ? 'none' : 'clear'; show(); });
-    const noClear = button('None', 'No colour see-through', () => { fx.clear = undefined; clickDoes = clickDoes === 'clear' ? 'none' : clickDoes; show(); draw(); });
-    row(grid, 'See-through colour', swatch, pickClear, noClear);
-    const alpha = slider((fx.alpha ?? 0) * 100, 0, 100, (v) => { fx.alpha = v / 100; draw(); }, 'How see-through the whole picture is');
+    const pickClear = button('Pick in the picture', 'Click the colour in the preview to make transparent (a white or coloured background)', () => { clickDoes = clickDoes === 'clear' ? 'none' : 'clear'; show(); });
+    const noClear = button('None', 'No transparent colour', () => { fx.clear = undefined; clickDoes = clickDoes === 'clear' ? 'none' : clickDoes; show(); draw(); });
+    row(grid, 'Transparent Colour', swatch, pickClear, noClear);
+    const alpha = slider((fx.alpha ?? 0) * 100, 0, 100, (v) => { fx.alpha = v / 100; draw(); }, 'Transparency: how much the whole picture lets show through');
     row(grid, 'Transparency', alpha);
 
     // ------------------------------------------------ remove background
@@ -250,13 +250,13 @@ export function pictureFormat(o: PictureFormatOptions): Promise<PictureFormatRes
       tintRow.hidden = fx.recolor?.kind !== 'tint';
       tolRow.hidden = marksRow.hidden = !fx.bg;
       swatch.style.background = fx.clear ?? 'transparent';
-      swatch.title = fx.clear ? `${fx.clear} is see-through` : 'None';
+      swatch.title = fx.clear ? `${fx.clear} is transparent` : 'None';
       swatch.classList.toggle('pic-none', !fx.clear);
       pickClear.setAttribute('aria-pressed', String(clickDoes === 'clear'));
       keepBtn.setAttribute('aria-pressed', String(clickDoes === 'keep'));
       dropBtn.setAttribute('aria-pressed', String(clickDoes === 'drop'));
       preview.style.cursor = clickDoes === 'none' ? '' : 'crosshair';
-      hint.textContent = clickDoes === 'clear' ? 'Click the colour in the picture to make see-through.'
+      hint.textContent = clickDoes === 'clear' ? 'Click the colour in the picture to make transparent.'
         : clickDoes === 'keep' ? 'Click parts of the picture to keep (green dots). Click Mark to keep again to stop.'
           : clickDoes === 'drop' ? 'Click parts of the picture to remove (red dots). Click Mark to remove again to stop.'
             : '';

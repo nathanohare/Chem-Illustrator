@@ -335,7 +335,7 @@ export class StylePanel {
     this.note(r.step?.manual ? 'Chosen by hand.' : r.step ? 'Kept with the arrow (from the file, or when it was last tidied).' : 'Worked out from where things sit.');
     if (hooks.others()) {
       const opts: Opt<string>[] = [['', 'Choose…'], ['reactants', 'Starting materials'], ['products', 'Products'], ['above', 'Above the arrow'], ['below', 'Below the arrow'], ['none', 'Not part of this step']];
-      this.select('Selected things are', opts, '', (v) => { if (v) hooks.setRole(r.id, v as Role | 'none'); },);
+      this.select('Set Selection As', opts, '', (v) => { if (v) hooks.setRole(r.id, v as Role | 'none'); },);
     } else this.note('To change a role by hand, select the arrow and the things with Shift, then choose what they are here.');
     const buttons = document.createElement('div');
     buttons.className = 'style-buttons';
@@ -400,7 +400,7 @@ export class StylePanel {
       const see = any((x) => x.kind === 'geo' || x.kind === 'ring');
       if (f.filled && see) {
         const seeable = (x: Shape) => x.kind === 'geo' || x.kind === 'ring';
-        this.number('See-through (%)', Math.round((see.transparency ?? 0) * 100), 5, 0, 100, (v) => set('Transparency', seeable, () => ({ transparency: v ? v / 100 : undefined })), 'How much shows through the fill: 0 is solid');
+        this.number('Transparency (%)', Math.round((see.transparency ?? 0) * 100), 5, 0, 100, (v) => set('Transparency', seeable, () => ({ transparency: v ? v / 100 : undefined })), 'How much shows through the fill: 0 is solid');
       }
       // hatching and stippling, over the fill or on their own
       this.patternPicker('Pattern', f.pattern ?? 'none', (v) => set('Pattern', fillable, () => ({ pattern: v === 'none' ? undefined : (v as Pattern) })));
@@ -411,7 +411,7 @@ export class StylePanel {
       if (f.pattern) {
         this.color('Pattern colour', f.patternColor, (v) => set('Pattern colour', fillable, () => ({ patternColor: v })),
           f.kind === 'ring' ? 'Light grey' : 'Same as the line', f.kind === 'ring' ? RING_PATTERN_COLOUR : f.color ?? '#000000');
-        this.number('Pattern see-through (%)', Math.round((f.patternTransparency ?? 0) * 100), 5, 0, 100, (v) => set('Pattern transparency', fillable, () => ({ patternTransparency: v ? v / 100 : undefined })),
+        this.number('Pattern Transparency (%)', Math.round((f.patternTransparency ?? 0) * 100), 5, 0, 100, (v) => set('Pattern transparency', fillable, () => ({ patternTransparency: v ? v / 100 : undefined })),
           'How much shows through the lines or dots: 0 is solid');
         this.number('Pattern spacing (pt)', round(patternSpacing(f)), 0.25, 0.5, 40, (v) => set('Pattern spacing', fillable, () => ({ patternSize: v })), 'How far apart the lines or dots are');
         const ring = any((x) => x.kind === 'ring' && !!x.pattern);
@@ -439,8 +439,8 @@ export class StylePanel {
     }
     if (geo) {
       this.number('Outline (pt)', round(geo.lineWidth ?? (geo.bold ? lw * 2.5 : lw)), 0.25, 0, 50, (v) => set('Outline width', isGeo, () => ({ lineWidth: v, bold: undefined })), '0 for no outline');
-      this.select('Text across', JUSTIFY, geo.textAlign ?? 'center', (v) => set('Text alignment', isGeo, () => ({ textAlign: v === 'center' ? undefined : v })));
-      this.select('Text up and down', VALIGN, geo.textValign ?? 'middle', (v) => set('Text alignment', isGeo, () => ({ textValign: v === 'middle' ? undefined : v })));
+      this.select('Horizontal Alignment', JUSTIFY, geo.textAlign ?? 'center', (v) => set('Text alignment', isGeo, () => ({ textAlign: v === 'center' ? undefined : v })));
+      this.select('Vertical Alignment', VALIGN, geo.textValign ?? 'middle', (v) => set('Text alignment', isGeo, () => ({ textValign: v === 'middle' ? undefined : v })));
       this.note('Double-click the shape to type in it.');
     }
     const box = any((x) => x.kind === 'rect');
@@ -555,7 +555,7 @@ export class StylePanel {
     if (d.colours !== 'colourful' && d.colours !== 'mono' && d.colours !== 'grey') this.color('Accent colour', d.accent, (v) => set({ accent: v ?? '#4472c4' }), 'Blue', '#4472c4');
     this.check('Rounded corners', d.rounded, (v) => set({ rounded: v }));
     this.check('Shadow', d.shadow, (v) => set({ shadow: v }));
-    this.check('Fit the text', d.size === undefined, (v) => set({ size: v ? undefined : 14 }), 'The text as big as fits, the same size in every shape; off, a size of your own');
+    this.check('AutoFit Text', d.size === undefined, (v) => set({ size: v ? undefined : 14 }), 'The text as big as fits, the same size in every shape; off, a size of your own');
     if (d.size !== undefined) this.number('Text size', d.size, 1, 4, 96, (v) => set({ size: v }));
     this.note('Double-click a shape to type in it, or change all the text in the window. Drag a corner to resize it: it is drawn again to fill the box.');
     const row = document.createElement('div');
@@ -594,9 +594,9 @@ export class StylePanel {
       for (const id of f.atoms) if (this.doc.atoms.has(id) && !seen.has(id)) { n++; for (const a of this.doc.fragmentOf(id)) seen.add(a); }
       this.check('Fit to Contents', f.fit, (v) => (v ? this.frames?.fit(sh.id) : set('Stop fitting frame', { fit: false })),
         `${f.fit ? 'Follows' : 'Surrounds'} ${n} ${n === 1 ? 'thing' : 'things'} (structures, text, arrows, shapes). ${about}`);
-      this.number('Gap across (pt)', round(f.padX, 10), 0.5, 0, 500, (v) => set('Frame gap', { padX: v }),
+      this.number('Horizontal Padding (pt)', round(f.padX, 10), 0.5, 0, 500, (v) => set('Frame gap', { padX: v }),
         'Space between the frame and what it surrounds, left and right.');
-      this.number('Gap up and down (pt)', round(f.padY, 10), 0.5, 0, 500, (v) => set('Frame gap', { padY: v }),
+      this.number('Vertical Padding (pt)', round(f.padY, 10), 0.5, 0, 500, (v) => set('Frame gap', { padY: v }),
         'Space between the frame and what it surrounds, above and below.');
     }
     if (!f || !f.fit) {
@@ -813,7 +813,7 @@ export class StylePanel {
     }
     if (cell) {
       const colAlign = t.align?.[cell.c] ?? (cell.c === 0 ? 'left' : 'center');
-      this.select('Column lines up', JUSTIFY, colAlign === 'justify' ? 'left' : colAlign, (v) => set('Column alignment', setColumnAlign(t, cell.c, v)));
+      this.select('Column Alignment', JUSTIFY, colAlign === 'justify' ? 'left' : colAlign, (v) => set('Column alignment', setColumnAlign(t, cell.c, v)));
       this.number('Column width (pt)', round(t.cols[cell.c], 10), 1, 4, 2000, (v) => set('Column width', setColumnWidth(t, cell.c, v)),
         'You can also drag the handle at the right of the text box while typing in a cell.');
       this.number('Cell spans (columns)', spanOf(t, cell.r, cell.c), 1, 1, t.cols.length - cell.c, (v) => set('Join table cells', setSpan(t, cell.r, cell.c, v)),
@@ -858,7 +858,7 @@ export class StylePanel {
     whole('Bold', 'bold');
     whole('Italic', 'italic');
     whole('Formula style (CH₃, NH₄⁺)', 'formula');
-    this.select('Line up', JUSTIFY, c.justify, (v) => set('Justification', () => ({ justify: v })));
+    this.select('Alignment', JUSTIFY, c.justify, (v) => set('Justification', () => ({ justify: v })));
     this.color('Colour', c.runs[0]?.color, (v) => set('Text colour', (x) => ({ runs: x.runs.map((r) => ({ ...r, color: v })) })));
     this.chemControls(caps);
     this.attachControls(caps);
@@ -1047,7 +1047,7 @@ export class StylePanel {
     });
 
     const fillName = HL_FILLS.find(([v]) => v === st.fill)![1].split(' (')[0];
-    this.group('Fill and texture', [fillName, st.transparency > 0 && `${pct(st.transparency)}% see-through`, st.pattern !== 'none' && PATTERN_OPTS.find(([v]) => v === st.pattern)?.[1].split(' (')[0].toLowerCase()].filter(Boolean).join(', '), () => {
+    this.group('Fill and texture', [fillName, st.transparency > 0 && `${pct(st.transparency)}% transparent`, st.pattern !== 'none' && PATTERN_OPTS.find(([v]) => v === st.pattern)?.[1].split(' (')[0].toLowerCase()].filter(Boolean).join(', '), () => {
       this.select<HighlightFill>('Fill', HL_FILLS, st.fill, (v) => set('Highlight fill', { fill: v }));
       if (st.fill === 'linear' || st.fill === 'edge') {
         this.color(st.fill === 'edge' ? 'Colour at the edge' : 'Second colour', st.colour2 || undefined, (v) => set('Highlight gradient colour', { colour2: v ?? '' }), 'White', '#ffffff');
@@ -1056,7 +1056,7 @@ export class StylePanel {
           this.select<string>('Direction', dirs.some(([v]) => v === String(st.gradAngle)) ? dirs : [...dirs, [String(st.gradAngle), `${st.gradAngle}°`]], String(st.gradAngle), (v) => set('Highlight gradient direction', { gradAngle: Number(v) }));
         }
       }
-      this.number('See-through (%)', pct(st.transparency), 5, 0, 100, (v) => set('Highlight transparency', { transparency: v / 100 }), 'How much shows through the fill and texture: 0 is solid');
+      this.number('Transparency (%)', pct(st.transparency), 5, 0, 100, (v) => set('Highlight transparency', { transparency: v / 100 }), 'How much shows through the fill and texture: 0 is solid');
       this.patternPicker('Texture', st.pattern, (v) => set('Highlight texture', { pattern: v as HighlightStyle['pattern'] }));
       if (st.pattern === 'dots' || st.pattern === 'dense-dots') {
         this.densityPicker(st.patternSize || (st.pattern === 'dense-dots' ? DOT_DENSITY[2].gap : DOT_DENSITY[1].gap), false, (gap) => set('Highlight dot density', { pattern: 'dots', patternSize: gap }));
@@ -1079,7 +1079,7 @@ export class StylePanel {
     this.group('Soft edges', st.soft ? `${pct(st.softAmount)}%, ${HL_SOFT_SIDES.find(([v]) => v === st.softSide)![1].split(' (')[0].toLowerCase()}` : 'off', () => {
       this.check('Soft edges', st.soft, (v) => set(v ? 'Soft highlight' : 'Sharp highlight', { soft: v }), 'Fade the highlight out instead of a sharp edge (Chemistry > Highlight and Fill > Soft Highlight Edges).');
       if (st.soft) {
-        this.number('How much fades (%)', pct(st.softAmount), 5, 5, 100, (v) => set('Soft edge amount', { softAmount: v / 100 }),
+        this.number('Soft Edge Amount (%)', pct(st.softAmount), 5, 5, 100, (v) => set('Soft edge amount', { softAmount: v / 100 }),
           'How much of the band fades, measured from its edge in to its middle: 25% fades only the outer quarter');
         this.select<HighlightSoftSide>('Fades', HL_SOFT_SIDES, st.softSide, (v) => set('Soft edge side', { softSide: v }));
       }
@@ -1100,7 +1100,7 @@ export class StylePanel {
       if (st.glow) {
         this.color('Glow colour', st.glowColour || undefined, (v) => set('Glow colour', { glowColour: v ?? '' }), 'The highlight\'s', '#ffe680');
         this.number('Glow size (% of a bond)', pct(st.glowSize), 1, 1, 200, (v) => set('Glow size', { glowSize: v / 100 }));
-        this.number('Glow see-through (%)', pct(st.glowTransparency), 5, 0, 95, (v) => set('Glow transparency', { glowTransparency: v / 100 }));
+        this.number('Glow Transparency (%)', pct(st.glowTransparency), 5, 0, 95, (v) => set('Glow transparency', { glowTransparency: v / 100 }));
       }
     });
 
@@ -1118,7 +1118,7 @@ export class StylePanel {
   /** A drop shadow's colour, darkness, direction, distance and blur (distance and blur in `unit`). */
   private shadowRows(now: { colour: string; opacity: number; angle: number; distance: number; blur: number }, unit: string, on: (patch: Partial<typeof now>) => void): void {
     this.color('Shadow colour', now.colour === '#000000' ? undefined : now.colour, (v) => on({ colour: v ?? '#000000' }), 'Black', '#000000');
-    this.number('Darkness (%)', Math.round(now.opacity * 100), 5, 0, 100, (v) => on({ opacity: v / 100 }));
+    this.number('Shadow Opacity (%)', Math.round(now.opacity * 100), 5, 0, 100, (v) => on({ opacity: v / 100 }));
     const a = Math.round(now.angle);
     this.select<string>('Falls', SHADOW_DIRS.some(([v]) => Number(v) === a) ? SHADOW_DIRS : [...SHADOW_DIRS, [String(a), `${a}°`]], String(a), (v) => on({ angle: Number(v) }));
     this.number(`Distance (${unit})`, round(now.distance), unit === 'pt' ? 0.25 : 1, 0, unit === 'pt' ? 50 : 200, (v) => on({ distance: v }));

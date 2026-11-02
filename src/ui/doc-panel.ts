@@ -263,7 +263,7 @@ export class DocPanel {
     fill.addEventListener('change', () => { const id = this.host.picked(); if (id !== null) this.host.setFill(id, fill.value); this.host.focus(); });
     this.fields.set('fig-fill', fill);
     this.row(s, 'Fill', fill, 'The text box\'s background');
-    this.buttons(s, [['No Fill', 'A see-through text box', () => { const id = this.host.picked(); if (id !== null) this.host.setFill(id, undefined); }]]).dataset.key = 'fig-nofill';
+    this.buttons(s, [['No Fill', 'No fill: a transparent text box', () => { const id = this.host.picked(); if (id !== null) this.host.setFill(id, undefined); }]]).dataset.key = 'fig-nofill';
     // where it sits: in the line, or on the page with the text wrapping round it
     this.row(s, 'Wrap text', this.select('fig-wrap', [['inline', 'In Line with Text'], ['square', 'Square'], ['topBottom', 'Top and Bottom'], ['behind', 'Behind Text'], ['front', 'In Front of Text']], (v) => {
       const id = this.host.picked();
