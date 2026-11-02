@@ -9,7 +9,7 @@ const FONT = 'Arial, Helvetica, sans-serif';
 
 /** A row of sample boxes drawn in the format the window shows. */
 function preview(s: MapBoxStyle): HTMLCanvasElement {
-  const scale = window.devicePixelRatio || 1, W = 220, H = 70;
+  const scale = window.devicePixelRatio || 1, W = 220, H = 40;
   const c = document.createElement('canvas');
   c.width = W * scale; c.height = H * scale;
   c.style.width = `${W}px`; c.style.height = `${H}px`;
@@ -21,7 +21,7 @@ function preview(s: MapBoxStyle): HTMLCanvasElement {
   const size = 18;
   ctx.font = `${s.bold ? 'bold ' : ''}${size}px ${FONT}`;
   ['1', '2', '12'].forEach((t, k) => {
-    const w = ctx.measureText(t).width, pad = 0.3 * size, x = 24 + k * 64, y = 44;
+    const w = ctx.measureText(t).width, pad = 0.3 * size, x = 24 + k * 64, y = 27;
     const look = paintMapBox(ctx, { x1: x - pad, y1: y - 0.716 * size - pad, x2: x + w + pad, y2: y + pad }, Number(t), 1, 'custom', s);
     ctx.font = `${look.bold ? 'bold ' : ''}${size}px ${FONT}`;
     ctx.fillStyle = look.ink;
@@ -43,7 +43,7 @@ export async function askMapFormat(now: MapBoxStyle): Promise<MapBoxStyle | null
   const got = await ask('Map Number Format', [
     { name: 'fillOn', label: 'Fill', type: 'checkbox', value: String(!!now.fill) },
     { name: 'fill', label: 'Fill color', type: 'color', value: now.fill || '#fbdcc2' },
-    { name: 'pattern', label: 'Pattern over the fill', value: now.pattern, options: MAP_PATTERNS.map((p) => ({ value: p.value, label: p.label })) },
+    { name: 'pattern', label: 'Pattern', value: now.pattern, options: MAP_PATTERNS.map((p) => ({ value: p.value, label: p.label })) },
     { name: 'patternColor', label: 'Pattern color', type: 'color', value: now.patternColor },
     { name: 'border', label: 'Outline color', type: 'color', value: now.border || '#000000' },
     { name: 'borderWidth', label: 'Outline width', type: 'number', unit: 'pt', value: String(now.border ? now.borderWidth : 0), help: '0 for no outline.' },
@@ -51,6 +51,6 @@ export async function askMapFormat(now: MapBoxStyle): Promise<MapBoxStyle | null
     { name: 'bold', label: 'Bold numbers', type: 'checkbox', value: String(now.bold) },
     { name: 'rounded', label: 'Rounded corners', type: 'checkbox', value: String(now.rounded) },
     { name: 'shadow', label: 'Shadow', type: 'checkbox', value: String(now.shadow) },
-  ], { ok: 'Use for All Map Numbers', note: 'Every atom-map number box takes this format.', preview: { title: 'Preview', draw: (v) => preview(read(v)) } });
+  ], { ok: 'Use for All Map Numbers', preview: { title: 'Preview', draw: (v) => preview(read(v)) } });
   return got ? read(got) : null;
 }
