@@ -713,6 +713,8 @@ export interface Shape {
    */
   rot?: number;
   dashed?: boolean;
+  /** A line drawn as a row of round dots (with `dashed` too, for programs that only know dashes). */
+  dotted?: boolean;
   filled?: boolean;
   /**
    * How a filled shape is filled: evenly (absent), a light tint, shaded light to dark, or a

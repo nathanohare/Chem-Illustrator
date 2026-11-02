@@ -1305,7 +1305,7 @@ export class Renderer {
 
   private drawShape(ctx: CanvasRenderingContext2D, s: Shape, lw: number, labelSize = 10): void {
     const rot = shapeTurn(s);
-    if (!rot) { this.drawFlatShape(ctx, s, lw, labelSize); return; }
+    if (!rot) { this.drawFlatShape(ctx, s, lw, labelSize); if (s.dotted) ctx.lineCap = 'butt'; return; }
     // a turned shape (Slides and Design): drawn level, turned about its middle
     ctx.save();
     turnAt(ctx, shapeMid(s), rot);
@@ -1319,7 +1319,8 @@ export class Renderer {
     ctx.lineWidth = s.bold ? lw * 2.5 : lw;
     ctx.strokeStyle = s.color ?? '#000';
     ctx.fillStyle = s.color ?? '#000';
-    ctx.setLineDash(s.dashed ? [lw * 3, lw * 3] : []);
+    ctx.setLineDash(s.dotted ? [0.01, lw * 2.6] : s.dashed ? [lw * 3, lw * 3] : []);
+    if (s.dotted) ctx.lineCap = 'round';
     ctx.beginPath();
     switch (s.kind) {
       case 'picture': this.drawPicture(ctx, s, x, y, w, h); break;

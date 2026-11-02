@@ -985,7 +985,7 @@ async function energyDiagram(id: number | null): Promise<void> {
   finishTyping();
   const L = doc.style.bondLength;
   const now = id !== null ? doc.shapes.get(id)?.energy ?? null : null;
-  const got = await askEnergy(now, { w: Math.round(18 * L), h: Math.round(12 * L) }, paintEnergyPreview);
+  const got = await askEnergy(now, { w: Math.round(18 * L), h: Math.round(12 * L) }, paintEnergyPreview, async (mb) => (await chem.layouts(mb))[0] ?? null);
   if (got) editor.putEnergyDiagram(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);
 }
 editor.onEnergy = (id) => void energyDiagram(id);
