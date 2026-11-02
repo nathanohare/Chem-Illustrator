@@ -2,7 +2,7 @@
 // as your own, make it the style new tabs of this kind start with, and say what happens to the
 // structures already drawn (redrawn in the new style, or left as they look now).
 
-import { showDialog } from './dialog-host';
+import { previewSlot, showDialog } from './dialog-host';
 import type { DocStyle } from '../style';
 import { FONT_GROUPS } from '../fonts';
 import { STYLE_PRESETS, presetNamed, sameLook, scaleStyle, type RestyleHow } from '../drawing-styles';
@@ -27,6 +27,8 @@ export interface StyleDialogOptions {
   isDefault: boolean;
   /** There are structures already, so ask what happens to them. */
   hasStructures: boolean;
+  /** A sample drawing in the style shown, beside the settings (drawn again as they change). */
+  preview?: (st: DocStyle) => Node;
 }
 
 
@@ -243,6 +245,18 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     d.addEventListener('close', () => done(null));
     document.body.append(d);
     showDialog(d);
+    if (o.preview) {
+      // in the Settings window's pane on the right, or at the top of the window
+      let slot = previewSlot('Preview');
+      if (!slot) { slot = el('div', { className: 'ask-preview' }); form.insertBefore(slot, grid); }
+      const box = slot;
+      let queued = 0;
+      const redraw = () => { cancelAnimationFrame(queued); queued = requestAnimationFrame(() => box.replaceChildren(o.preview!(read()))); };
+      box.replaceChildren(o.preview(read()));
+      form.addEventListener('input', redraw);
+      form.addEventListener('change', redraw);
+      pick.addEventListener('change', redraw);
+    }
     pick.focus();
   });
 }

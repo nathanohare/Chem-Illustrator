@@ -1,7 +1,7 @@
 // Small windows that ask for a value or two (Rotate…, Scale…). The desktop app can't rely on
 // the browser's own prompt boxes, so these are drawn by the page.
 
-import { showDialog } from './dialog-host';
+import { previewSlot, showDialog } from './dialog-host';
 export interface Field {
   name: string;
   label: string;
@@ -18,10 +18,18 @@ export interface Field {
   suggestions?: string[];
   /** A line of help shown under the box. */
   help?: string;
+  /** A small picture of the choice beside the box, drawn again as it changes. */
+  inline?: (value: string) => Node;
+}
+
+/** A bigger picture of what the settings will look like, beside them (the Settings window's right-hand pane), drawn again as anything changes. */
+export interface AskPreview {
+  title: string;
+  draw: (values: Record<string, string>) => Node;
 }
 
 /** Show the fields; resolves with what was entered, or null if the window was cancelled. */
-export function ask(title: string, fields: Field[], opts: { ok?: string; note?: string; /** Only an OK button, for a message. */ noCancel?: boolean; /** A short list under the note (two columns: what, and its value). */ lines?: [string, string][] } = {}): Promise<Record<string, string> | null> {
+export function ask(title: string, fields: Field[], opts: { ok?: string; note?: string; /** Only an OK button, for a message. */ noCancel?: boolean; /** A short list under the note (two columns: what, and its value). */ lines?: [string, string][]; preview?: AskPreview } = {}): Promise<Record<string, string> | null> {
   return new Promise((resolve) => {
     const d = document.createElement('dialog');
     d.className = 'ask';
@@ -46,6 +54,7 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
       form.append(t);
     }
     const inputs = new Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
+    const inlines: (() => void)[] = [];
     for (const f of fields) {
       const row = document.createElement('label');
       row.className = 'ask-row';
@@ -93,6 +102,14 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
         u.textContent = f.unit;
         row.append(u);
       }
+      if (f.inline) {
+        const slot = document.createElement('span');
+        slot.className = 'ask-inline';
+        slot.setAttribute('aria-hidden', 'true');
+        row.append(slot);
+        const el = input;
+        inlines.push(() => slot.replaceChildren(f.inline!(el instanceof HTMLInputElement && el.type === 'checkbox' ? String(el.checked) : el.value)));
+      }
       form.append(row);
       if (f.help) {
         const help = document.createElement('p');
@@ -123,15 +140,37 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
       d.remove();
       resolve(v);
     };
-    form.addEventListener('submit', (e) => {
-      e.preventDefault();
+    const values = () => {
       const out: Record<string, string> = {};
       for (const [k, el] of inputs) out[k] = el instanceof HTMLInputElement && el.type === 'checkbox' ? String(el.checked) : el.value;
-      done(out);
+      return out;
+    };
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      done(values());
     });
     cancel.addEventListener('click', () => done(null));
     d.addEventListener('close', () => done(null));
     showDialog(d);
+    // the pictures of the choices, drawn now and again as anything changes
+    let big: HTMLElement | null = null;
+    if (opts.preview) {
+      big = previewSlot(opts.preview.title);
+      if (!big) {
+        big = document.createElement('div');
+        big.className = 'ask-preview';
+        form.insertBefore(big, form.querySelector('.ask-row'));
+      }
+    }
+    const redraw = () => {
+      for (const f of inlines) f();
+      if (big && opts.preview) big.replaceChildren(opts.preview.draw(values()));
+    };
+    if (inlines.length || big) {
+      redraw();
+      form.addEventListener('input', redraw);
+      form.addEventListener('change', redraw);
+    }
     const first = form.querySelector<HTMLInputElement | HTMLTextAreaElement>('input:not([type=checkbox]), textarea');
     first?.focus();
     first?.select();
