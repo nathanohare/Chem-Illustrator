@@ -75,7 +75,7 @@ import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../d
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
-import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
+import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, joinGroups, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
 import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
 import {
@@ -4371,7 +4371,7 @@ export class Editor {
 
   /** Line up the selected objects. Returns false when fewer than two are selected. */
   align(how: Align): boolean {
-    const us = units(this.doc, this.sel, this.measure());
+    const us = joinGroups(this.doc, units(this.doc, this.sel, this.measure()));
     if (us.length < 2) return false;
     const off = alignOffsets(us, how);
     this.doc.edit('Align', () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
@@ -4381,7 +4381,7 @@ export class Editor {
 
   /** Space the selected objects evenly. Returns false when fewer than three are selected. */
   distribute(axis: 'h' | 'v'): boolean {
-    const us = units(this.doc, this.sel, this.measure());
+    const us = joinGroups(this.doc, units(this.doc, this.sel, this.measure()));
     if (us.length < 3) return false;
     const off = distributeOffsets(us, axis);
     this.doc.edit('Distribute', () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
@@ -4399,7 +4399,7 @@ export class Editor {
     const sel = none
       ? { atoms: new Set(doc.atoms.keys()), bonds: new Set(doc.bonds.keys()), captions: new Set(doc.captions.keys()), arrows: new Set(doc.arrows.keys()), shapes: new Set(doc.shapes.keys()) }
       : this.sel;
-    const chosen = units(doc, sel, m);
+    const chosen = joinGroups(doc, units(doc, sel, m));
     // numbers under the chosen structures come along, picked or not
     const others = none ? [] : units(doc, { atoms: new Set(), bonds: new Set(), captions: new Set([...doc.captions.keys()].filter((id) => !sel.captions.has(id))), arrows: new Set(), shapes: new Set() }, m);
     const folded = withLabels(doc, [...chosen, ...others], doc.style.bondLength);
