@@ -90,7 +90,7 @@ const PICTURE_KEYS = ['look'] as const;
 
 /** Shapes whose outline and fill are their look (not tables, charts, equations, videos, or the invisible frames of diagrams). */
 const LOOK_KINDS = new Set<Shape['kind']>(['rect', 'oval', 'geo', 'ring', 'line', 'bracket', 'symbol']);
-const paintableShape = (s: Shape) => LOOK_KINDS.has(s.kind) && !s.energy && !s.diagram;
+const paintableShape = (s: Shape) => LOOK_KINDS.has(s.kind) && !s.energy && !s.diagram && !s.plate;
 const plainPicture = (s: Shape) => s.kind === 'picture' && !s.chart && !s.math && !s.video && !s.zoom;
 
 /** The look taken from things on a drawing: one of each kind, so a mixed selection paints each kind from its own. */

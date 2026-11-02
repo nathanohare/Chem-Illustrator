@@ -118,6 +118,7 @@ import { CommandSearch, uniqueCommands, type CommandItem } from './ui/command-se
 import { fillTemplate, templateSize } from './design/templates';
 import { putDiagram, type DiagramData } from './design/diagrams';
 import type { EnergyData } from './design/energy';
+import type { PlateData, PlateKind } from './design/plates';
 import { refreshZooms, summaryParts, zoomGrid, zoomShape } from './deck/zoom';
 import { AUDIO_TYPES, VIDEO_TYPES, mediaMime, probeAudio, probeVideo, speakerPng, filmPng } from './deck/media';
 import { newChartBox, sizedBox } from './sheet/chart-box';
@@ -264,6 +265,7 @@ const pickSlideSize = later(() => import('./ui/slide-size-dialog'), 'pickSlideSi
 const pickTemplate = later(() => import('./ui/template-gallery'), 'pickTemplate');
 const askCycle = later(() => import('./ui/cycle-dialog'), 'askCycle');
 const askEnergy = later(() => import('./ui/energy-dialog'), 'askEnergy');
+const askPlate = later(() => import('./ui/plate-dialog'), 'askPlate');
 const askDiagram = later(() => import('./ui/diagram-dialog'), 'askDiagram');
 const editChart = later(() => import('./ui/chart-editor'), 'editChart');
 const editMedia = later(() => import('./ui/media-dialog'), 'editMedia');
@@ -951,6 +953,32 @@ async function energyDiagram(id: number | null): Promise<void> {
   if (got) editor.putEnergyDiagram(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);
 }
 editor.onEnergy = (id) => void energyDiagram(id);
+
+/** The TLC Plate and Gel windows' preview: the plate as it will be drawn, fitted to the canvas. */
+function paintPlatePreview(d: PlateData, canvas: HTMLCanvasElement): void {
+  const { doc: tmp, box } = editor.platePreview(d);
+  const w = canvas.clientWidth || 360, h = canvas.clientHeight || 200, dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const bw = box.x2 - box.x1, bh = box.y2 - box.y1, pad = 8;
+  const k = Math.min((w - 2 * pad) / bw, (h - 2 * pad) / bh);
+  ctx.setTransform(k * dpr, 0, 0, k * dpr, (w / 2 - (box.x1 + bw / 2) * k) * dpr, (h / 2 - (box.y1 + bh / 2) * k) * dpr);
+  drawDrawing(ctx, tmp);
+}
+
+/** Insert ▸ Lab Figures ▸ TLC Plate… or Gel…, or the selected plate's lanes to change (`id`, its frame). */
+async function plateFigure(kind: PlateKind | null, id: number | null): Promise<void> {
+  finishTyping();
+  const now = id !== null ? doc.shapes.get(id)?.plate ?? null : null;
+  const got = await askPlate(now?.kind ?? kind ?? 'tlc', now, doc.style.bondLength, paintPlatePreview);
+  if (got) editor.putPlateAt(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);
+}
+editor.onPlate = (id) => void plateFigure(null, id);
 
 /** A diagram drawn as an SVG picture, for the diagram window's preview and its layout buttons. */
 function diagramSvg(d: DiagramData): string {
@@ -7051,6 +7079,9 @@ const COMMANDS: Record<string, () => unknown> = {
   'catalytic-cycle': () => void insertCycle(),
   'ts-brackets': () => { if (!editor.tsBrackets()) flash('Select the transition state first (draw it with partial bonds: P over a bond).'); },
   'energy-diagram': () => void energyDiagram(null),
+  'tlc-plate': () => void plateFigure('tlc', null),
+  gel: () => void plateFigure('gel', null),
+  'edit-plate': () => { const id = editor.selectedPlate(); if (id === null) flash('Select a TLC plate or gel first.'); else void plateFigure(null, id); },
   'insert-diagram': () => void smartDiagram(null),
   'edit-diagram': () => { const id = editor.selectedDiagram(); if (id === null) flash('Select a diagram first.'); else void smartDiagram(id); },
   'diagram-to-shapes': () => editor.ungroupSelectedDiagram() || flash('Select a diagram first.'),
@@ -9679,6 +9710,7 @@ function drawingMenu(): MenuItem[] {
     { cmd: 'cut' }, { cmd: 'copy' }, { cmd: 'paste' }, { cmd: 'delete', label: 'Delete' }, { cmd: 'format-painter' }, null,
     ...repeatLabelMenu(),
     ...(editor.selectedEnergy() !== null ? [{ cmd: 'edit-energy' }, null] : []),
+    ...(editor.selectedPlate() !== null ? [{ cmd: 'edit-plate' }, null] : []),
     ...(editor.selectedDiagram() !== null ? [{ cmd: 'edit-diagram' }, { cmd: 'diagram-to-shapes' }, null] : []),
     ...(atoms || texts ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }, null] : []),
     ...(s.captions.size ? [readAsMenu(), ...(texts && !atoms ? [{ cmd: 'expand-label', label: 'Expand to Structure' }] : []), null] : []),
@@ -9854,6 +9886,10 @@ stylePanel.diagram = {
   edit: (id) => void smartDiagram(id),
   restyle: (id, patch) => { const d = doc.shapes.get(id)?.diagram; if (d) editor.putDiagramAt({ ...d, ...patch }, pasteCentre(), id); },
   ungroup: (id) => editor.ungroupSelectedDiagram(id),
+};
+stylePanel.plate = {
+  edit: (id) => void plateFigure(null, id),
+  restyle: (id, patch) => { const d = doc.shapes.get(id)?.plate; if (d) editor.putPlateAt({ ...d, ...patch }, pasteCentre(), id); },
 };
 stylePanel.energy = {
   edit: (id) => void energyDiagram(id),

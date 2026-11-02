@@ -59,6 +59,7 @@ import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '..
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
+import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
@@ -377,6 +378,8 @@ export class Editor {
   onProperties: () => void = () => {};
   /** A double-click on an energy diagram: open its numbers (the frame's id). */
   onEnergy: (id: number) => void = () => {};
+  /** A double-click on a TLC plate or gel: open its lanes (the frame's id). */
+  onPlate: (id: number) => void = () => {};
   /** A double-click on a diagram away from its words: open its text and look (the frame's id). */
   onDiagram: (id: number) => void = () => {};
   /** A chart (on a slide or drawing) was double-clicked: open its data and settings. */
@@ -504,8 +507,8 @@ export class Editor {
     window.addEventListener('keyup', ctrlKey);
     // frames that follow what they surround are refitted as each change finishes
     doc.beforeCommit = (before) => {
-      let frames = false, rings = false, tied = false, energy = false, tables = false, diagrams = false;
-      for (const s of this.doc.shapes.values()) { if (s.frame?.fit) frames = true; if (s.kind === 'ring') rings = true; if (s.energy) energy = true; if (s.kind === 'table') tables = true; if (s.diagram) diagrams = true; }
+      let frames = false, rings = false, tied = false, energy = false, tables = false, diagrams = false, plates = false;
+      for (const s of this.doc.shapes.values()) { if (s.frame?.fit) frames = true; if (s.kind === 'ring') rings = true; if (s.energy) energy = true; if (s.plate) plates = true; if (s.kind === 'table') tables = true; if (s.diagram) diagrams = true; }
       for (const c of this.doc.captions.values()) if (c.attach) { tied = true; break; }
       // ring fills first, then labels beside their structures: a frame round a structure takes in both
       if (rings) refitRingFills(this.doc, before);
@@ -514,6 +517,7 @@ export class Editor {
       if (tied) refitAttached(this.doc, before, this.measure());
       // an energy diagram resized by hand is drawn again to fill its frame, before frames refit
       if (energy) refitEnergy(this.doc, before, this.measure());
+      if (plates) refitPlates(this.doc, before, this.measure());
       // a diagram resized by hand is drawn again in its new box; words typed into its shapes go into its text
       if (diagrams) refitDiagrams(this.doc, before, this.measure());
       // structures in a diagram's items: room kept for them (the diagram growing to fit), and centred there
@@ -1349,6 +1353,8 @@ export class Editor {
     // any part of an energy diagram (but a structure put on it) opens its numbers
     const diagram = h && h.kind !== 'atom' && h.kind !== 'bond' && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? energyFrameOf(this.doc, h.kind, h.id) : null;
     if (diagram !== null) { this.selectOnly({ kind: 'shape', id: diagram }); this.onEnergy(diagram); return; }
+    const plate = h && h.kind !== 'atom' && h.kind !== 'bond' && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? plateFrameOf(this.doc, h.kind, h.id) : null;
+    if (plate !== null) { this.selectOnly({ kind: 'shape', id: plate }); this.onPlate(plate); return; }
     // a SmartArt-style diagram: its words are typed into in place, as in PowerPoint; anywhere else opens its text and look
     const smart = h && (h.kind === 'arrow' || h.kind === 'shape') ? diagramFrameOf(this.doc, h.kind, h.id) : null;
     if (smart !== null) {
@@ -2975,7 +2981,7 @@ export class Editor {
    */
   private groupFirst(h: NonNullable<Hit>): NonNullable<Hit> {
     if (h.kind !== 'atom' && h.kind !== 'bond' && h.kind !== 'caption' && h.kind !== 'arrow' && h.kind !== 'shape') return h;
-    const g = energyFrameOf(this.doc, h.kind, h.id) ?? (h.kind === 'shape' || h.kind === 'arrow' ? diagramFrameOf(this.doc, h.kind, h.id) : null);
+    const g = energyFrameOf(this.doc, h.kind, h.id) ?? plateFrameOf(this.doc, h.kind, h.id) ?? (h.kind === 'shape' || h.kind === 'arrow' ? diagramFrameOf(this.doc, h.kind, h.id) : null);
     return g !== null && g !== (h.kind === 'shape' ? h.id : null) && !this.sel.shapes.has(g) ? { kind: 'shape', id: g } : h;
   }
 
@@ -2986,6 +2992,44 @@ export class Editor {
       for (const id of set) { const g = energyFrameOf(this.doc, k, id); if (g !== null) return g; }
     }
     return null;
+  }
+
+  /** The TLC plate or gel the selection is in (its frame), if any. */
+  selectedPlate(): number | null {
+    for (const id of this.sel.shapes) if (this.doc.shapes.get(id)?.plate) return id;
+    for (const [k, set] of [['caption', this.sel.captions], ['arrow', this.sel.arrows], ['shape', this.sel.shapes], ['atom', this.sel.atoms]] as const) {
+      for (const id of set) { const g = plateFrameOf(this.doc, k, id); if (g !== null) return g; }
+    }
+    return null;
+  }
+
+  /** A TLC plate or gel drawn on a page of its own, in this drawing's style (the window's preview). */
+  platePreview(d: PlateData): { doc: Doc; box: Rect } {
+    const tmp = new Doc();
+    tmp.style = { ...this.doc.style };
+    tmp.textStyles = this.doc.textStyles;
+    let id = 0;
+    tmp.edit('Preview', () => { id = putPlate(tmp, this.fullMeasure(), d, { x: 0, y: 0 }); });
+    return { doc: tmp, box: shapeBox(tmp.shapes.get(id)!) };
+  }
+
+  /** Insert ▸ TLC Plate or Gel: draw one with its middle at `at` (or draw plate `id` again), and select it. */
+  putPlateAt(d: PlateData, at: Vec, id?: number, page?: { w: number; h: number }): void {
+    const m = this.fullMeasure();
+    let frame = id;
+    const what = d.kind === 'tlc' ? 'TLC Plate' : 'Gel';
+    this.doc.edit(id === undefined ? what : `Edit ${what}`, () => {
+      const s = id !== undefined ? this.doc.shapes.get(id) : undefined;
+      const corner = s?.plate ? plateFromBox(shapeBox(s), s.plate, this.doc.style.bondLength).at : { x: at.x - d.w / 2, y: at.y - d.h / 2 };
+      frame = putPlate(this.doc, m, d, corner, id);
+      if (id === undefined) {
+        this.sel = emptySel();
+        this.sel.shapes.add(frame);
+        this.moveClear(page);
+      }
+    });
+    if (frame !== undefined) this.selectOnly({ kind: 'shape', id: frame });
+    this.changed();
   }
 
   /** The SmartArt-style diagram the selection is in (its frame), if any. */
