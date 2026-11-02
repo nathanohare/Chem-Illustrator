@@ -15,6 +15,7 @@ export type ChemRequest =
   | { type: 'analyze'; id: number; mols: { molblock: string; map: number[] }[] }
   | { type: 'stereo'; id: number; mols: { molblock: string; skip: number[]; generic: [number, string][] }[] }
   | { type: 'smilesToMol'; id: number; smiles: string }
+  | { type: 'layouts'; id: number; molblock: string }
   | { type: 'molToSmiles'; id: number; molblock: string; loose?: boolean }
   /** Sheet properties of molecules, each given as a molfile or a SMILES string. */
   | { type: 'props'; id: number; mols: string[] }
@@ -46,6 +47,7 @@ export type ChemResponse =
   | { type: 'analyze'; id: number; results: FragmentResult[]; ms: number }
   | { type: 'stereo'; id: number; results: StereoTags[]; ms: number }
   | { type: 'smilesToMol'; id: number; molblock: string | null }
+  | { type: 'layouts'; id: number; coords: [number, number][][] }
   | { type: 'molToSmiles'; id: number; smiles: string | null }
   | { type: 'props'; id: number; results: (MolProps | { error: string })[] }
   | { type: 'substructure'; id: number; results: (boolean | null)[]; error?: string }
@@ -154,6 +156,22 @@ self.onmessage = async (e: MessageEvent<ChemRequest>) => {
       const mb = mol.get_molblock();
       mol.delete();
       post({ type: 'smilesToMol', id: m.id, molblock: mb });
+    } else if (m.type === 'layouts') {
+      // the engine's own 2-D layouts (its classic one and CoordGen's), for Clean Up to start from
+      const coords: [number, number][][] = [];
+      const mol = RDKit.get_mol(m.molblock, JSON.stringify({ sanitize: false, removeHs: false }));
+      if (mol && mol.is_valid()) {
+        for (const coordGen of [false, true]) {
+          try {
+            mol.set_new_coords(coordGen);
+            const lines = mol.get_molblock().split(/\r?\n/);
+            const n = parseInt(lines[3].slice(0, 3), 10);
+            coords.push(Array.from({ length: n }, (_, i) => [parseFloat(lines[4 + i].slice(0, 10)), -parseFloat(lines[4 + i].slice(10, 20))] as [number, number]));
+          } catch { /* that layout failed: use the other */ }
+        }
+      }
+      mol?.delete();
+      post({ type: 'layouts', id: m.id, coords });
     } else if (m.type === 'molToSmiles') {
       const mol = m.loose ? RDKit.get_mol(m.molblock, JSON.stringify({ sanitize: false })) : RDKit.get_mol(m.molblock);
       const smiles = mol && mol.is_valid() ? mol.get_smiles() : null;

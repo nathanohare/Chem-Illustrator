@@ -18,7 +18,7 @@ import { expandLigand, expandWithMolblock, labelSmiles, ligandTemplateFor } from
 import { styleFromFace, plainText } from '../richtext';
 import * as rt from '../richtext';
 import { applyFormat, formatWhole, type TextFormat } from '../text/format';
-import { cleanUpMoves } from '../chem/cleanup';
+import { cleanUpOptions, type CleanUpOption } from '../chem/cleanup';
 import { Renderer, measureText } from '../render/renderer';
 import { tidyStyle } from '../render/highlight';
 import { ASCENT, blankRoomAt } from '../text/layout';
@@ -74,7 +74,10 @@ import { bezFrom, fitPath, dragCurveAt, throughPoints, dragPathPoint, firstBend,
 import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
 import { imageFor } from '../render/images';
+import { gridOffsets, inferGrid, usualGap, withLabels, type GridHow } from './grid-arrange';
 import { BEND, BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
+import { flatten, prepareTurn, stillMeans, structuresOf, type PerspectiveHost, type Prepared } from './perspective';
+import { anglesTurn, dragTurn, type M3 } from '../chem/perspective';
 import type { TextEditing } from '../text/editing';
 
 export type Tool =
@@ -98,7 +101,9 @@ export type Tool =
   /** Mass fragmentation: a line dragged across bonds (or a click on one) breaks them, and each piece gets its formula and mass. */
   | { kind: 'fragment' }
   /** Freehand with the pen: lines become bonds, loops rings, letters labels, a scribble erases (sketch.ts). */
-  | { kind: 'sketch' };
+  | { kind: 'sketch' }
+  /** Drag a structure to turn it in perspective: as a flat sheet, or (`real`) its true 3-D shape (perspective.ts). */
+  | { kind: 'perspective'; real: boolean };
 
 /** Marks put on atoms for mechanisms: a lone pair, a radical's dot, a circled charge, or δ+ / δ−. */
 export type SymbolKind = 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus' | 'DeltaPlus' | 'DeltaMinus';
@@ -123,6 +128,8 @@ export const TOOLS: Record<string, Tool> = {
   element: { kind: 'element' },
   fragment: { kind: 'fragment' },
   sketch: { kind: 'sketch' },
+  perspective: { kind: 'perspective', real: false },
+  'perspective-3d': { kind: 'perspective', real: true },
   'bond-single': { kind: 'bond', order: 1, display: 'solid' },
   'bond-double': { kind: 'bond', order: 2, display: 'solid' },
   'bond-triple': { kind: 'bond', order: 3, display: 'solid' },
@@ -226,7 +233,7 @@ interface Drag {
   shift: boolean;
   alt: boolean;
   ctrl: boolean;
-  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'reshape';
+  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'reshape' | 'turn3d';
   last: Vec;
   panOrigin?: { ox: number; oy: number };
   /** The arrow or shape handle being dragged. */
@@ -255,6 +262,22 @@ interface Drag {
   charge?: number;
   /** Moving an atom: the atom it has been dropped on, which it becomes one with at the lift (closing a ring). */
   joinTo?: number;
+  /** Turning structures in perspective (the Perspective tools). */
+  persp?: PerspDrag;
+}
+
+/** A drag with a Perspective tool: the structures, once ready (a 3-D shape may be building), and the drag so far in screen pixels. */
+interface PerspDrag {
+  real: boolean;
+  ready: Prepared | null;
+  begun: boolean;
+  dx: number;
+  dy: number;
+  shift: boolean;
+  /** Stereocentres that can't be drawn so they read right at the angle reached. */
+  unshown: number;
+  /** "Building…" has been said. */
+  told: boolean;
 }
 
 /** One way a template can go: where its atoms land, and which are shared with the drawing. */
@@ -387,6 +410,10 @@ export class Editor {
   onToolChange: (name: string) => void = () => {};
   /** Show a hint for the step in hand in the status bar (empty: the tool's own hint again). */
   onHint: (text: string) => void = () => {};
+  /** A message for the person, shown for a few seconds (ms). */
+  onNotice: (text: string, ms?: number) => void = () => {};
+  /** The 3-D builder and compound check behind the 3-D Perspective tool (none: it turns structures flat). */
+  perspectiveHost: PerspectiveHost | null = null;
   /** The fragmentation tool drew a line from p to q across these bonds (the app works out the masses). */
   onFragment: (p: Vec, q: Vec, bonds: number[]) => void = () => {};
   /** The atom most recently drawn or changed (its structure is analysed when nothing is selected). */
@@ -904,6 +931,8 @@ export class Editor {
       const c = this.chargeSignAt(p);
       if (c !== null) this.drag.charge = c;
     }
+    // a Perspective tool on a structure: a drag turns it (and everything selected with it)
+    if (e.button === 0 && !handle && !rotating && !painting && this.tool.kind === 'perspective' && (hit?.kind === 'atom' || hit?.kind === 'bond')) this.startTurn(this.drag, hit, this.tool.real);
     if (rotating) {
       const b = this.selBox()!;
       const center = { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 };
@@ -1074,6 +1103,15 @@ export class Editor {
       this.requestScene(e.timeStamp);
       return;
     }
+    if (d.mode === 'turn3d') {
+      const t = d.persp!;
+      t.dx = sp.x - d.startScreen.x;
+      t.dy = sp.y - d.startScreen.y;
+      t.shift = e.shiftKey;
+      d.last = p;
+      this.turnTo(d);
+      return;
+    }
     if (d.mode === 'route') {
       d.last = p;
       this.requestOverlay(e.timeStamp);
@@ -1133,6 +1171,8 @@ export class Editor {
   private dragModeFor(d: Drag): Drag['mode'] {
     if (d.paint) return 'marquee';
     if (d.charge !== undefined) return 'move';
+    // a Perspective tool turns a structure, selected or not
+    if (d.persp) return 'turn3d';
     // with any drawing tool, dragging what is already selected moves it (as in ChemDraw)
     if (d.hit && this.tool.kind !== 'eraser' && this.isSelected(d.hit)) return 'move';
     switch (this.tool.kind) {
@@ -1156,6 +1196,8 @@ export class Editor {
         return 'draw';
       case 'sketch':
         return 'none';
+      case 'perspective':
+        return 'marquee';
       case 'text':
         // dragging across empty space makes a text box that wide
         return d.hit && d.hit.kind === 'caption' ? 'move' : d.hit ? 'none' : 'draw';
@@ -1172,7 +1214,7 @@ export class Editor {
     if (!d) return;
     this.drag = null;
     this.guideLines = [];
-    if (d.moved && (d.mode === 'move' || d.mode === 'rotate' || d.mode === 'handle')) {
+    if (d.moved && (d.mode === 'move' || d.mode === 'rotate' || d.mode === 'handle' || (d.mode === 'turn3d' && d.persp?.begun))) {
       this.doc.abandon();
       this.afterUndo();
     }
@@ -1214,6 +1256,7 @@ export class Editor {
       return;
     }
     if (d.mode === 'reshape' && d.moved) { this.doc.commit(); this.changed(); return; }
+    if (d.mode === 'turn3d') { this.finishTurn(d); return; }
     if (d.mode === 'handle' || d.mode === 'rotate') {
       if (d.moved) { this.doc.commit(); this.changed(); }
       return;
@@ -1504,6 +1547,12 @@ export class Editor {
       case 'template': {
         doc.edit('Template', () => this.placeTemplateAt(t.id, h, d.start, null, d.alt, d));
         this.changed();
+        return;
+      }
+      case 'perspective': {
+        // a click on a structure picked it (startTurn); on empty space it lets go of everything
+        if (!h) { this.sel = emptySel(); this.onChange(); }
+        else if (h.kind !== 'atom' && h.kind !== 'bond') { this.selectOnly(h); this.onChange(); }
         return;
       }
       case 'fragment': {
@@ -3163,6 +3212,116 @@ export class Editor {
     return s.atoms.size + s.bonds.size + s.captions.size + s.arrows.size + s.shapes.size > 0;
   }
 
+  // ------------------------------------------------------------------ perspective
+
+  /**
+   * A Perspective tool pressed on a structure: it is picked (with the rest of the selection when
+   * it is part of it) and got ready to turn. A 3-D shape that has to be built starts building
+   * now, while the pointer is still down.
+   */
+  private startTurn(d: Drag, hit: Hit, real: boolean): void {
+    if (!hit || (hit.kind !== 'atom' && hit.kind !== 'bond')) return;
+    const atom = hit.kind === 'atom' ? hit.id : this.doc.bonds.get(hit.id)!.a1;
+    if (!this.isSelected(hit)) this.selectFragment(atom, d.shift);
+    const structures = structuresOf(this.doc, this.sel.atoms.size ? this.sel.atoms : [atom]);
+    if (!structures.length) return;
+    const t: PerspDrag = { real, ready: null, begun: false, dx: 0, dy: 0, shift: false, unshown: 0, told: false };
+    d.persp = t;
+    const doc = this.doc;
+    const host = real ? this.perspectiveHost : null;
+    if (real && !host) this.onNotice('3-D shapes can\'t be built here; turning the structure flat instead.');
+    void prepareTurn(doc, structures, real, host ?? (real ? null : this.perspectiveHost)).then((prep) => {
+      if (this.drag !== d || this.doc !== doc) {
+        // let go before the shape was ready: it is kept, so the next drag turns it at once
+        if (real && !prep.notes.length && t.told) this.onNotice('The 3-D shape is ready: drag the structure to turn it.');
+        return;
+      }
+      t.ready = prep;
+      if (prep.notes.length) this.onNotice(`${prep.notes[0]} Turning it flat instead.`, 7000);
+      if (d.moved) this.turnTo(d);
+    });
+  }
+
+  /** Turn the structures for the drag so far (nothing yet while a 3-D shape is building). */
+  private turnTo(d: Drag): void {
+    const t = d.persp!;
+    if (!t.ready) {
+      if (!t.told) { t.told = true; this.onHint('Building the 3-D shape…'); this.onNotice('Building the 3-D shape… (only the first time for a structure)'); }
+      return;
+    }
+    if (!t.begun) { this.doc.begin(t.real ? 'Turn in 3-D' : 'Turn in Perspective'); t.begun = true; }
+    const R = dragTurn(t.dx, t.dy, t.shift);
+    t.unshown = t.ready.turn.apply(this.doc, R);
+    if (!t.unshown) t.ready.turn.lastGood = R;
+    this.onHint(t.unshown ? 'From this angle a stereocentre can\'t be drawn so it reads right: let go and it goes back to the last angle that worked.' : t.shift ? 'Turning in 15° steps' : 'Shift: turn in 15° steps, one way at a time');
+    if (hasPins(this.doc)) followPins(this.doc);
+    this.requestScene();
+  }
+
+  /** The drag ends: wedges and crossings are settled, and the drawing must still mean the same compound. */
+  private finishTurn(d: Drag): void {
+    const t = d.persp;
+    if (!t?.begun || !t.ready) { this.requestScene(); return; }
+    const turn = t.ready.turn;
+    const R = t.unshown ? turn.lastGood : dragTurn(t.dx, t.dy, t.shift);
+    const left = turn.apply(this.doc, R, true);
+    turn.remember(this.doc);
+    this.doc.commit();
+    this.changed();
+    this.onHint('');
+    if (t.unshown) this.onNotice('From that angle a stereocentre can\'t be drawn so it reads right, so the structure went back to the last angle where it could.', 6000);
+    this.checkTurn(turn, left);
+  }
+
+  /** Take back a turn after which the drawing means another compound (a stereocentre that can't be shown from this side). */
+  private checkTurn(turn: Prepared['turn'], unshown: number): void {
+    const host = this.perspectiveHost;
+    const doc = this.doc, version = doc.version;
+    if (!host) return;
+    void stillMeans(doc, turn, host).then((same) => {
+      if (same !== false && !unshown) return;
+      if (this.doc !== doc || doc.version !== version) return;
+      doc.undo();
+      this.afterUndo();
+      this.onNotice('From that angle a stereocentre can\'t be drawn so it reads right, so the turn was taken back. Turn it a little less (or more).', 7000);
+    });
+  }
+
+  /**
+   * Turn the selected structures by angles (degrees): about x (left–right), then y (up–down),
+   * then z (in the page), as a flat sheet or (`real`) in their true 3-D shape. False when
+   * nothing is selected.
+   */
+  async turnSelectionBy(x: number, y: number, z: number, real: boolean): Promise<boolean> {
+    const structures = structuresOf(this.doc, this.sel.atoms);
+    if (!structures.length) return false;
+    const doc = this.doc;
+    const prep = await prepareTurn(doc, structures, real, this.perspectiveHost);
+    if (this.doc !== doc) return true;
+    if (prep.notes.length) this.onNotice(`${prep.notes[0]} Turning it flat instead.`, 7000);
+    const R: M3 = anglesTurn(x, y, z);
+    let left = 0;
+    doc.edit(real ? 'Turn in 3-D' : 'Turn in Perspective', () => {
+      left = prep.turn.apply(doc, R, true);
+      prep.turn.remember(doc);
+    });
+    if (hasPins(doc)) followPins(doc);
+    this.changed();
+    this.checkTurn(prep.turn, left);
+    return true;
+  }
+
+  /** Flatten: the selected structures become ordinary flat drawings, looking as they do now. False when nothing is selected. */
+  flattenSelection(): boolean {
+    const structures = structuresOf(this.doc, this.sel.atoms);
+    if (!structures.length) return false;
+    let n = 0;
+    this.doc.edit('Flatten', () => { n = flatten(this.doc, structures.flat()); });
+    if (!n) this.onNotice('The selected structures are already flat drawings.');
+    this.changed();
+    return true;
+  }
+
   private selectFragment(atomId: number, add: boolean): void {
     if (!add) this.sel = emptySel();
     for (const id of this.doc.fragmentOf(atomId)) {
@@ -3205,6 +3364,36 @@ export class Editor {
     for (const c of doc.captions.values()) { if (c.hidden) continue; if (within(this.r.captionBox(c))) this.sel.captions.add(c.id); }
     for (const ar of doc.arrows.values()) if (arrowPoints(ar).every((q) => inside(q.x, q.y))) this.sel.arrows.add(ar.id);
     for (const s of doc.shapes.values()) if (!s.hidden && !s.locked && within(s.kind === 'bracket' ? { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) } : shapeBox(s))) this.sel.shapes.add(s.id);
+  }
+
+  /**
+   * The atoms, text, arrows and shapes that overlap any of these areas (from the figure preflight,
+   * whose findings are places on the drawing). Bonds come with both their atoms.
+   */
+  touching(rects: readonly Rect[]): Selection {
+    const sel = emptySel();
+    if (!rects.length) return sel;
+    const doc = this.doc;
+    const overlaps = (b: Rect) => rects.some((r) => b.x1 <= r.x2 && b.x2 >= r.x1 && b.y1 <= r.y2 && b.y2 >= r.y1);
+    const near = (x: number, y: number) => rects.some((r) => x >= r.x1 - 1 && x <= r.x2 + 1 && y >= r.y1 - 1 && y <= r.y2 + 1);
+    for (const r of rects) for (const at of doc.atomsIn({ x1: r.x1 - 1, y1: r.y1 - 1, x2: r.x2 + 1, y2: r.y2 + 1 })) sel.atoms.add(at.id);
+    // a bond whose middle is in a place takes both its atoms
+    for (const b of doc.bonds.values()) {
+      const p = doc.atoms.get(b.a1), q = doc.atoms.get(b.a2);
+      if (p && q && near((p.x + q.x) / 2, (p.y + q.y) / 2)) { sel.atoms.add(b.a1); sel.atoms.add(b.a2); }
+    }
+    for (const c of doc.captions.values()) if (!c.hidden && overlaps(this.r.captionBox(c))) sel.captions.add(c.id);
+    for (const ar of doc.arrows.values()) {
+      const pts = arrowPoints(ar);
+      const b = { x1: Math.min(...pts.map((q) => q.x)), y1: Math.min(...pts.map((q) => q.y)), x2: Math.max(...pts.map((q) => q.x)), y2: Math.max(...pts.map((q) => q.y)) };
+      if (overlaps({ x1: b.x1 - 2, y1: b.y1 - 2, x2: b.x2 + 2, y2: b.y2 + 2 })) sel.arrows.add(ar.id);
+    }
+    for (const s of doc.shapes.values()) {
+      if (s.hidden || s.locked) continue;
+      const b = s.kind === 'bracket' ? { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) } : shapeBox(s);
+      if (overlaps(b)) sel.shapes.add(s.id);
+    }
+    return sel;
   }
 
   /**
@@ -3504,6 +3693,62 @@ export class Editor {
   }
 
   /**
+   * The things to set out in a row, column or grid: the selected ones (everything, with nothing
+   * selected), each structure with its compound number even when the number isn't selected.
+   */
+  private gridUnits(): ReturnType<typeof units> {
+    const doc = this.doc, m = this.measure();
+    const none = !this.hasSelection();
+    const sel = none
+      ? { atoms: new Set(doc.atoms.keys()), bonds: new Set(doc.bonds.keys()), captions: new Set(doc.captions.keys()), arrows: new Set(doc.arrows.keys()), shapes: new Set(doc.shapes.keys()) }
+      : this.sel;
+    const chosen = units(doc, sel, m);
+    // numbers under the chosen structures come along, picked or not
+    const others = none ? [] : units(doc, { atoms: new Set(), bonds: new Set(), captions: new Set([...doc.captions.keys()].filter((id) => !sel.captions.has(id))), arrows: new Set(), shapes: new Set() }, m);
+    const folded = withLabels(doc, [...chosen, ...others], doc.style.bondLength);
+    const loose = new Set(others.flatMap((u) => u.captions));
+    return folded.filter((u) => u.atoms.length || !u.captions.every((id) => loose.has(id)) || u.arrows.length || u.shapes.length);
+  }
+
+  /** How many things Arrange in a Grid would set out. */
+  gridCount(): number {
+    return this.gridUnits().length;
+  }
+
+  /** Format ▸ Align ▸ Arrange in a Row, Column or Grid. False with fewer than two things, or nothing to move. */
+  arrangeGrid(how: GridHow): boolean {
+    const us = this.gridUnits();
+    if (us.length < 2) return false;
+    return this.applyGrid(us, how, how.kind === 'row' ? 'Arrange in a Row' : how.kind === 'column' ? 'Arrange in a Column' : 'Arrange in a Grid');
+  }
+
+  /**
+   * Clean Up's own arranging: when the picked structures (or, with nothing picked, a drawing of
+   * nothing but structures and their numbers) clearly sit in rows, a column or a grid, even them
+   * out, keeping the spacing they mostly have. False when it isn't clear or they are already even.
+   */
+  autoArrange(): boolean {
+    // (quick look first: three or more structures)
+    const frags = this.sel.atoms.size ? this.doc.fragments().filter((f) => [...f].some((id) => this.sel.atoms.has(id))) : this.doc.fragments();
+    if (frags.length < 3) return false;
+    const us = this.gridUnits();
+    // three or more structures and nothing else (a scheme is Clean Up Reaction's to tidy)
+    if (us.length < 3 || us.some((u) => !u.atoms.length || u.arrows.length || u.shapes.length)) return false;
+    const boxes = us.map((u) => u.box);
+    const shape = inferGrid(boxes);
+    if (!shape) return false;
+    return this.applyGrid(us, { kind: shape.kind, cols: shape.cols, gap: usualGap(boxes, this.doc.style.bondLength) }, 'Clean Up: Arrange');
+  }
+
+  private applyGrid(us: ReturnType<typeof units>, how: GridHow, label: string): boolean {
+    const off = gridOffsets(us.map((u) => u.box), how);
+    if (off.every((d) => Math.hypot(d.x, d.y) < 0.05)) return false;
+    this.doc.edit(label, () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
+    this.changed();
+    return true;
+  }
+
+  /**
    * Mirror the selection left-to-right ('h') or top-to-bottom ('v'). A plain flip turns
    * stereocentres over (the mirror image, as in ChemDraw); with `keep`, wedges and hashes swap
    * too, so each centre keeps its configuration (the same molecule, turned over).
@@ -3557,18 +3802,105 @@ export class Editor {
     return true;
   }
 
+  /** What the last Clean Up did, so pressing it again on the same structures steps through the other ways. */
+  private cleanCycle: { version: number; key: string; options: CleanUpOption[][]; k: number } | null = null;
+
+  /** The structures Clean Up works on: the selected ones, or all of them when no atom is selected. */
+  cleanUpTargets(): Set<number>[] {
+    const doc = this.doc;
+    const frags = this.sel.atoms.size ? doc.fragments().filter((f) => [...f].some((id) => this.sel.atoms.has(id))) : doc.fragments();
+    return frags.filter((f) => f.size > 1);
+  }
+
   /**
    * Redraw structures with even bonds and angles: the selected ones, or all of them when no atom
-   * is selected. Returns false when there was nothing to change.
+   * is selected. The first time keeps each structure where it was and turned the way it was
+   * drawn; pressing it again straight away steps through other layouts and turns of the same
+   * structures. `seeds` are other starting places for atoms (the chemistry engine's layouts),
+   * tried for ring systems that need untangling. Returns which way was used (and how many there
+   * are), or false when there was nothing to change.
    */
-  cleanUp(): boolean {
+  cleanUp(seeds: Map<number, Vec>[] = []): false | { k: number; of: number; label: string } {
     const doc = this.doc;
-    const frags = this.sel.atoms.size
-      ? doc.fragments().filter((f) => [...f].some((id) => this.sel.atoms.has(id)))
-      : doc.fragments();
-    const moves = cleanUpMoves(doc, frags);
-    if (!moves.length) return false;
-    doc.edit('Clean Up Structure', () => { for (const [id, p] of moves) doc.updateAtom(id, { x: p.x, y: p.y }); });
+    const frags = this.cleanUpTargets();
+    const key = frags.map((f) => Math.min(...f)).sort((a, b) => a - b).join(',');
+    // stepping through other ways is for picked structures, not a whole drawing's worth
+    const picked = this.sel.atoms.size > 0;
+    const c = this.cleanCycle;
+    if (picked && c && c.version === doc.version && c.key === key) return this.nextCleanUp(c);
+    const options = frags.map((f) => cleanUpOptions(doc, f, seeds)).filter((o) => o.length);
+    if (!options.length) return false;
+    const cycle = { version: -1, key, options, k: 0 };
+    this.cleanCycle = cycle;
+    // the structures, then what they sit in: their scheme, or rows and grids (one undo)
+    let did = false;
+    doc.edit('Clean Up Structure', () => {
+      did = this.applyCleanUp(options.map((o) => o[0]));
+      did = this.tidyLayout() || did;
+    });
+    if (!did) {
+      // already tidy: show the next way instead, so the button always does something
+      cycle.version = doc.version;
+      return picked ? this.nextCleanUp(cycle) : false;
+    }
+    cycle.version = doc.version;
+    return { k: 0, of: Math.max(...options.map((o) => o.length)), label: options[0][0].label };
+  }
+
+  private nextCleanUp(c: { version: number; options: CleanUpOption[][]; k: number }): false | { k: number; of: number; label: string } {
+    const of = Math.max(...c.options.map((o) => o.length));
+    if (of < 2) return false;
+    c.k = (c.k + 1) % of;
+    const pick = c.options.map((o) => o[Math.min(c.k, o.length - 1)]);
+    this.applyCleanUp(pick);
+    c.version = this.doc.version;
+    return { k: c.k, of, label: pick[0].label };
+  }
+
+  /**
+   * Clean Up's tidying round the structures: the reaction scheme they are in (as Clean Up
+   * Reaction), or, with no scheme, rows, a column or a grid they clearly sit in, evened out.
+   */
+  private tidyLayout(): boolean {
+    const picked = this.hasSelection();
+    if (!this.doc.arrows.size) return this.autoArrange();
+    const steps = picked ? this.selectedSteps() : undefined;
+    const anySteps = [...this.doc.arrows.values()].some((r) => { const q = !r.sweep && this.reactionRoles(r.id); return !!q && (q.reactants.length > 0 || q.products.length > 0); });
+    if (picked ? steps?.length : anySteps) {
+      const m = this.fullMeasure();
+      const plan = planCleanUp(this.doc, m, steps);
+      if (!plan) return false;
+      applySchemePlan(this.doc, m, plan, 'Clean Up Structure');
+      this.changed();
+      return true;
+    }
+    return this.autoArrange();
+  }
+
+  /** The ways Clean Up can lay out the target structures (for the Clean Up Options window). */
+  cleanUpChoices(seeds: Map<number, Vec>[] = []): { frags: Set<number>[]; options: CleanUpOption[][] } {
+    const c = this.cleanCycle;
+    const frags = this.cleanUpTargets();
+    const key = frags.map((f) => Math.min(...f)).sort((a, b) => a - b).join(',');
+    // straight after a Clean Up, offer the ways worked out from the drawing as it was before it
+    if (c && c.version === this.doc.version && c.key === key) return { frags, options: c.options };
+    return { frags, options: frags.map((f) => cleanUpOptions(this.doc, f, seeds)).filter((o) => o.length) };
+  }
+
+  /** Put structures as the options say, as one undoable step. False when nothing changes. */
+  applyCleanUp(options: CleanUpOption[]): boolean {
+    const doc = this.doc;
+    const moves: [number, Vec][] = [];
+    const looks: [number, BondDisplay][] = [];
+    for (const o of options) {
+      for (const [id, p] of o.pos) { const a = doc.atoms.get(id); if (a && Math.hypot(a.x - p.x, a.y - p.y) > 1e-3) moves.push([id, p]); }
+      for (const [id, d] of o.displays) { const b = doc.bonds.get(id); if (b && b.display !== d) looks.push([id, d]); }
+    }
+    if (!moves.length && !looks.length) return false;
+    doc.edit('Clean Up Structure', () => {
+      for (const [id, p] of moves) doc.updateAtom(id, { x: p.x, y: p.y });
+      for (const [id, d] of looks) doc.updateBond(id, { display: d });
+    });
     this.changed();
     return true;
   }

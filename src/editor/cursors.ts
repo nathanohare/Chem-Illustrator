@@ -85,6 +85,8 @@ export function pointerFor(s: PointerState): string {
       return s.slides ? '' : MARQUEE;
     case 'eraser': return ERASER;
     case 'text': return 'text';
+    // the Perspective tools: a structure takes a drag (to turn it); empty space a selection box
+    case 'perspective': return s.over === 'chem' ? 'grab' : s.over ? 'default' : MARQUEE;
     default: return 'crosshair';
   }
 }

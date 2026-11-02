@@ -31,6 +31,9 @@ export const COMMAND_ICONS: Record<string, string> = {
   'align-bottom': svg('<line x1="3" y1="20" x2="21" y2="20"/><rect x="6" y="5" width="4" height="13"/><rect x="14" y="10" width="4" height="8"/>'),
   // ---- object: spread out evenly
   'distribute-h': svg('<line x1="3" y1="4" x2="3" y2="20"/><line x1="21" y1="4" x2="21" y2="20"/><rect x="6" y="8" width="3" height="8"/><rect x="10.5" y="8" width="3" height="8"/><rect x="15" y="8" width="3" height="8"/>'),
+  'arrange-row': svg('<rect x="2" y="9" width="5" height="6"/><rect x="9.5" y="9" width="5" height="6"/><rect x="17" y="9" width="5" height="6"/>'),
+  'arrange-column': svg('<rect x="9" y="2" width="6" height="5"/><rect x="9" y="9.5" width="6" height="5"/><rect x="9" y="17" width="6" height="5"/>'),
+  'arrange-grid': svg('<rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>'),
   'distribute-v': svg('<line x1="4" y1="3" x2="20" y2="3"/><line x1="4" y1="21" x2="20" y2="21"/><rect x="8" y="6" width="8" height="3"/><rect x="8" y="10.5" width="8" height="3"/><rect x="8" y="15" width="8" height="3"/>'),
   // ---- object: flip and turn
   'flip-h': svg('<line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="2 2"/><path d="M10 6v12L4 18z"' + filled() + '/><path d="M14 6v12l6 0z"/>'),
@@ -49,6 +52,8 @@ export const COMMAND_ICONS: Record<string, string> = {
   'rotate-dialog': svg('<path d="M18.5 12.5a6.5 6.5 0 1 1-2.2-5"/><path d="M17 3.5v4h-4"/>' + txt(11.5, 15.5, '°', 9)),
   // ---- structure
   'clean-up': svg(hex(10.5, 13, 7) + '<path d="M19 2.5l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1-2.1-.9 2.1-.9z" fill="currentColor" stroke="none"/>'),
+  // three small layouts to pick from
+  'clean-up-options': svg(hex(6.5, 7.5, 4) + hex(17.5, 7.5, 4) + hex(12, 17, 4)),
   // ---- scheme: a cycle of four species with arrows round it; levels over a reaction coordinate
   'catalytic-cycle': svg('<path d="M12 4.5a7.5 7.5 0 0 1 7.5 7.5"/><path d="M19.5 12a7.5 7.5 0 0 1-7.5 7.5"/><path d="M12 19.5a7.5 7.5 0 0 1-7.5-7.5"/><path d="M4.5 12a7.5 7.5 0 0 1 7.5-7.5"/><path d="M17.6 9.6l1.9 2.4 1.9-2.4M14.4 17.6l-2.4 1.9 2.4 1.9M6.4 14.4l-1.9-2.4-1.9 2.4M9.6 6.4l2.4-1.9-2.4-1.9"/>'),
   'energy-diagram': svg('<path d="M3 3v18h18" stroke-width="1.2"/><path d="M5 17h3M10 8h3M15 13h3M20 18.5h1.5" stroke-width="2.2"/><path d="M8 17l2-9M13 8l2 5M18 13l2 5.5" stroke-dasharray="1.5 1.5" stroke-width="1"/>'),

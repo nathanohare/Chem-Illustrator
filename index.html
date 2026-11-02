@@ -72,6 +72,7 @@
     </div>
     </div>
         <button role="menuitem" data-cmd="check-accessibility" title="Look for what makes this file hard to use with a screen reader or to read: missing alt text, low-contrast text, slides without titles, headings that skip a level, things read out of order">Check Accessibility</button>
+        <button role="menuitem" data-modes="drawing slides design" data-cmd="preflight" title="Check the figure against a journal's author guidelines (ACS, RSC, Elsevier, Nature, Wiley) before export: width for one or two columns, height, smallest text and thinnest line once printed, fonts, picture resolution">Check Figure for Journal…</button>
     <hr />
         <button role="menuitem" data-cmd="print" title="Print the canvas, presentation (or handouts), document or spreadsheet">Print…</button>
         <button data-modes="sheet" role="menuitem" data-cmd="print-preview" title="Every page of the spreadsheet as it will print">Print Preview</button>
@@ -309,6 +310,18 @@
     <button role="menuitem" data-cmd="set-up-show" title="How the show runs, which slides it plays, looping, narration, animations and timings">Set Up Show…</button>
     <button role="menuitem" data-cmd="rehearse-timings" title="Play the show timing each slide, and keep the times">Rehearse Timings</button>
     <button role="menuitem" data-cmd="record-show" title="Play the show recording narration and timing each slide">Record…</button>
+    <button role="menuitem" data-cmd="rehearse-here" title="Rehearse from the slide showing to the end; the slides before it keep their times">Rehearse from This Slide</button>
+    <button role="menuitem" data-cmd="record-show-here" title="Record from the slide showing to the end; the slides before it keep their times and narration">Record from This Slide…</button>
+    <div class="submenu">
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Clear</button>
+    <div class="menu sub" role="menu" hidden>
+    <button role="menuitem" data-cmd="clear-timings-slide" title="Take the rehearsed time off the slides picked: they go on with a click">Clear Timing on This Slide</button>
+    <button role="menuitem" data-cmd="clear-timings-all" title="Take the rehearsed times off every slide">Clear Timings on All Slides</button>
+    <hr />
+    <button role="menuitem" data-cmd="clear-narration-slide" title="Take the recorded narration off the slides picked (their times stay)">Clear Narration on This Slide</button>
+    <button role="menuitem" data-cmd="clear-narration-all" title="Take the recorded narration off every slide (their times stay)">Clear Narration on All Slides</button>
+    </div>
+    </div>
     </div>
     </div>
     </div>
@@ -419,6 +432,10 @@
     <hr />
     <button role="menuitem" data-cmd="distribute-h">Space Evenly Across</button>
     <button role="menuitem" data-cmd="distribute-v">Space Evenly Down</button>
+    <hr />
+    <button role="menuitem" data-cmd="arrange-row">Arrange in a Row</button>
+    <button role="menuitem" data-cmd="arrange-column">Arrange in a Column</button>
+    <button role="menuitem" data-cmd="arrange-grid">Arrange in a Grid…</button>
     </div>
     </div>
     <div class="submenu" data-modes="drawing slides design">
@@ -432,6 +449,10 @@
     <button role="menuitem" data-cmd="rotate-ccw">Rotate 90° Anticlockwise</button>
     <button role="menuitem" data-cmd="rotate-180">Rotate 180°</button>
     <button role="menuitem" data-cmd="rotate-dialog">Rotate…</button>
+    <button role="menuitem" data-cmd="turn-3d" title="Turn the selected structures in 3-D by angles you type (about X, Y and Z): their real 3-D shape, or the drawing as a flat sheet. The Perspective tools do it by dragging">Turn in 3-D…</button>
+    <button role="menuitem" data-cmd="flatten-3d" title="Make structures turned in 3-D ordinary flat drawings again: they keep how they look, and the next 3-D turn builds their shape afresh">Flatten</button>
+    <button role="menuitemcheckbox" data-cmd="depth-shading" aria-checked="false" title="Shade structures drawn in 3-D by depth: black in front, fading to grey behind (on or off)"><span>Depth Shading</span></button>
+    <button role="menuitem" data-cmd="depth-shading-settings" title="Choose the colours in front and behind, how the fade goes, and whether lines thin with depth">Depth Shading Settings…</button>
     </div>
     </div>
     <div class="submenu" data-modes="drawing slides design">
@@ -2295,6 +2316,7 @@
           <button class="rb-big" data-cmd="hide-slide" aria-pressed="false" title="The slide show skips the slides picked; they stay in the deck and in the PowerPoint file. Again to show them"><span class="rb-icon">⊘</span>Hide Slide</button>
           <button class="rb-big" data-cmd="rehearse-timings" title="Rehearse Timings: play the show with a clock for each slide and the whole talk; at the end keep the times, so the show can go on by itself"><span class="rb-icon">⏱</span>Rehearse Timings</button>
           <button class="rb-big" data-cmd="record-show" title="Record: play the show recording your narration from the microphone, slide by slide, and timing each slide; at the end keep them (narration goes on each slide as a sound that plays as it comes in, PowerPoint too)"><span class="rb-icon">●</span>Record</button>
+          <button class="rb-big" data-cmd="clear-show-menu" aria-haspopup="true" title="Clear: take the rehearsed times or the recorded narration off this slide or every slide; or rehearse or record again from this slide"><span class="rb-icon">⌫</span>Clear ▾</button>
           <div class="rb-col">
             <label class="rb-field check" title="Play the narration recorded with Record (off: Show without narration)"><input type="checkbox" data-cmd="play-narrations" checked /> Play Narrations</label>
             <label class="rb-field check" title="Each slide goes on by itself after its time (off: only clicks go on)"><input type="checkbox" data-cmd="use-timings" checked /> Use Timings</label>
@@ -2635,6 +2657,7 @@
         <div class="rb-row">
           <button class="rb-big" data-cmd="export-pdf" title="Save the design as a PDF at its page size"><span class="rb-icon">⎙</span>Export PDF</button>
             <button class="rb-big" data-cmd="export-picture" title="Save the design as a PNG (choose the dpi) or an SVG"><span class="rb-icon">▣</span>Export Picture</button>
+            <button class="rb-big" data-cmd="preflight" title="Check Figure for Journal: is the page the width the journal prints at, is its text big enough and its lines thick enough once printed, are its fonts and pictures what the journal asks for"><span class="rb-icon">✓</span>Check for Journal</button>
         </div>
         <div class="rb-label">Share</div>
       </div>

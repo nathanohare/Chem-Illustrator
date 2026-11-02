@@ -41,6 +41,21 @@ Open files with **File ▸ Open…** (Ctrl+O), or drop them onto the window. Pic
 
 **File ▸ Check Accessibility** (or **Review** ▸ **Check Accessibility**) lists what makes the file harder to read: pictures, charts and structures with no alt text, text with too little contrast against its background (WCAG 2.2: 4.5:1, or 3:1 for large text), slides with no title or the same title as another, slide titles that a screen reader would not reach first, skipped heading levels, tables with no heading row, floating pictures, merged cells and unnamed sheets. Click an item to go to it; **Add Alt Text…** fixes a missing description there and then. **Check Again** looks again after changes.
 
+### Checking a figure for a journal
+
+**File ▸ Check Figure for Journal…** (or **Check for Journal** on the Design tab) checks the drawing, design page or slide against a journal's published author guidelines before you export it. Pick the journal (ACS, RSC, Elsevier, Nature or Wiley journals), the width it will print at (one column, two columns, or a table of contents graphic), and whether it prints as drawn or is made to fill that width.
+
+A figure wider than the column is shrunk by the journal, which makes its text and lines smaller too, so the check measures every piece of text and every line at the size it will be printed. It lists, errors first:
+
+- the figure's width and height against the journal's sizes;
+- text smaller than the journal allows (ACS 4.5 pt, Elsevier 6 pt, Nature 5 pt) or than it asks for (RSC, Elsevier and Wiley 7 pt), and text over Nature's 7 pt;
+- fonts other than the ones the journal asks for;
+- lines thinner than the journal allows (ACS 0.5 pt, Wiley 0.2 pt, Elsevier 0.1 pt);
+- pictures in the figure with too few dots at the printed size;
+- the resolution and file format to export at (for example ACS: 1200 dpi for black and white line art; RSC: TIFF at 600 dpi; Nature: PDF or EPS, not TIFF or PNG).
+
+**Select** picks out what a finding is about. **Make It Fit** scales the drawing to the width, **Enlarge Text** and **Thicken Lines** make just what is too small big enough, **Use Arial** changes other fonts, and **Use Journal Drawing Style** redraws the structures in the journal's own style. Each is one undo. **Export for Journal…** opens Export Picture at the resolution the journal asks for (or Export PDF for Nature). The numbers come from each publisher's author guidelines, linked at the foot of the box; journals change them, so check the journal's own page before sending.
+
 ### Other formats
 
 - **SMILES:** **Edit ▸ Copy As ▸ Copy as SMILES** (Ctrl+Alt+C) copies the selected structures as SMILES; **Edit ▸ Paste Special ▸ Paste SMILES** (Ctrl+Alt+P) draws them. A SMILES string pasted with Ctrl+V is drawn too.

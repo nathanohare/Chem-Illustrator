@@ -24,6 +24,7 @@ import { Renderer, measureText, forgetTextWidths } from './render/renderer';
 import { Editor, TOOLS, ringsWereFilled, type HighlightToggle, type Selection } from './editor/editor';
 import { BUILT_IN_LOOKS, type HighlightLookPreset } from './ui/highlight-looks';
 import { selectionBox, POINTS, type Align, units, moveUnit } from './editor/arrange';
+import { defaultColumns } from './editor/grid-arrange';
 import { groupSelection, selectedGroups } from './editor/groups';
 import { readCdxml, ReadStats } from './io/cdxml';
 import { ChemClient } from './chem/client';
@@ -92,7 +93,9 @@ import type { PresenterView } from './ui/presenter-view';
 import { editDrawingStyle } from './ui/style-dialog';
 import { usedObjects, type DocText } from './document/document';
 import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from './dark-page';
-import { STYLE_PRESETS, applyStyle, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
+import { STYLE_PRESETS, applyStyle, presetNamed, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
+import { askCleanUpOption } from './ui/cleanup-picker';
+import { looksTangled, turnOption } from './chem/cleanup';
 import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
 import { pngWithDpi } from './render/emf-read';
 import { whiteToClear } from './render/background';
@@ -210,10 +213,14 @@ import type { SheetFileDeps } from './io/sheet-files';
 import { fromEmbedSource, type Embedded } from './io/ole-object';
 import { objectPicture, type ObjectPicture } from './render/object-picture';
 import { ACS_1996, BOND_END_CHOICES, bondEndPrefs, DocStyle } from './style';
+import { DEFAULT_DEPTH_SHADE, depthShadePrefs } from './render/depth-shade';
 import { emptyTable, tableFromCells } from './table';
 import type { TableData } from './model';
 import { checkDrawing, checkDocument, checkWorkbook, repeatedTitles, structureAlt, setStructureAlt, type Issue, type IssuePlace } from './accessibility';
 import { AccessibilityPane, askAltText } from './ui/accessibility-pane';
+import { PreflightPane } from './ui/preflight-pane';
+import { enlargeText, thickenLines, useArial } from './preflight-fix';
+import { shapeBox } from './objects';
 import { SlideComparePane } from './ui/slide-compare';
 import { pickFileTemplate } from './ui/file-templates';
 import type { PastedRows } from './io/table-clip';
@@ -441,6 +448,17 @@ const templatePalette = (group: Template['group'] | Template['group'][], palette
   icon: (name, size) => templateIcon(templateById(name.slice(4))!, size),
 });
 
+/** Turning structures in perspective: as a flat sheet (as ChemDraw does), or in their real 3-D shape. */
+const PERSPECTIVE_TOOLS: PaletteDef = {
+  palette: 'perspective',
+  title: 'Perspective',
+  items: [
+    { name: 'perspective', title: 'Perspective: drag a structure to turn it in 3-D as a flat sheet, the way it is drawn (Shift: 15° steps)' },
+    { name: 'perspective-3d', title: '3-D Perspective: drag a structure to turn its real 3-D shape, built from the drawing; wedges and bold bonds say which shape is meant (Shift: 15° steps)' },
+  ],
+  columns: 2,
+};
+
 /** Box select, with the lasso (freehand) on the same button. */
 const SELECT_TOOLS: PaletteDef = {
   palette: 'select',
@@ -480,6 +498,7 @@ const TOOL_GROUPS: ToolbarItem[][] = [
     BRACKETS,
     SHAPES,
     { name: 'fragment', title: 'Mass fragmentation: drag a line across bonds (or click a bond) to break them and label each piece with its formula and mass' },
+    PERSPECTIVE_TOOLS,
     { name: 'sketch', title: 'Sketch (for a pen): draw freehand. Lines become bonds, a loop with corners a ring, a circle benzene (inside a ring: aromatic), letters label atoms (C N O S P F Cl Br I H, + −), a scribble erases' },
   ],
   [
@@ -621,6 +640,7 @@ function setHint(text: string): void {
 }
 // a hint for the step in hand (drawing an arrow through points), and back to the tool's own after
 editor.onHint = (text) => { if (text) setHint(text); else editor.onToolChange(editor.toolName); };
+editor.onNotice = (text, ms) => flash(text, ms);
 editor.setTool('bond-single');
 
 // tablets: bigger buttons, long-press menus, double taps and the atom keypad (View > Window and Colours > Touch Mode)
@@ -1286,6 +1306,69 @@ let viewer3d: Viewer3d | null = null;
  * Chemistry > 3-D Model: the selected structure (or the one last drawn) built in 3-D in a window
  * of its own, to turn and look at, and to turn the drawing to match (Place on Page).
  */
+// the 3-D Perspective tool builds a structure's shape in the same worker, and checks a turn kept its meaning
+editor.perspectiveHost = {
+  pose: (molblock, cues, L) => model3d.pose(molblock, cues, L),
+  smiles: (molblock) => chem.molToSmiles(molblock),
+};
+
+let lastTurn3d = { x: '0', y: '30', z: '0', shape: 'real' };
+/** Turn in 3-D…: the selected structures turned by angles typed in, in their real shape or as a flat sheet. */
+async function turn3dDialog(): Promise<void> {
+  if (!editor.sel.atoms.size) { flash('Select a structure to turn in 3-D.'); return; }
+  const r = await ask('Turn in 3-D', [
+    { name: 'x', label: 'About X (left–right)', value: lastTurn3d.x, unit: 'degrees', type: 'number', help: 'Positive tips the top towards you.' },
+    { name: 'y', label: 'About Y (up–down)', value: lastTurn3d.y, unit: 'degrees', type: 'number', help: 'Positive brings the left side towards you.' },
+    { name: 'z', label: 'About Z (in the page)', value: lastTurn3d.z, unit: 'degrees', type: 'number', help: 'Positive turns it clockwise.' },
+    { name: 'shape', label: 'Turn', value: lastTurn3d.shape, options: [{ value: 'real', label: 'The real 3-D shape' }, { value: 'flat', label: 'The drawing as a flat sheet' }] },
+  ], { ok: 'Turn', note: 'Drag with the Perspective tools to turn by eye.' });
+  if (!r) return;
+  const [x, y, z] = [r.x, r.y, r.z].map((v) => parseFloat(v || '0'));
+  if (![x, y, z].every(Number.isFinite)) { flash('Type each angle in degrees.'); return; }
+  lastTurn3d = { x: r.x, y: r.y, z: r.z, shape: r.shape };
+  if (r.shape === 'real') flash('Building the 3-D shape…');
+  await editor.turnSelectionBy(x, y, z, r.shape === 'real');
+}
+
+/** Depth shading on or off (Format ▸ Depth Shading): structures in 3-D fade from black in front to grey behind. */
+function toggleDepthShading(): void {
+  depthShadePrefs.on = !depthShadePrefs.on;
+  depthShadingChanged();
+  storeSettings();
+  flash(depthShadePrefs.on ? 'Depth shading on: structures turned in 3-D fade from front to back.' : 'Depth shading off.');
+}
+
+/** Depth Shading Settings…: the colours in front and behind, how the fade goes, and whether lines thin with depth. */
+async function depthShadingDialog(): Promise<void> {
+  const s = depthShadePrefs;
+  const r = await ask('Depth Shading', [
+    { name: 'on', label: 'Shade structures drawn in 3-D by depth', type: 'checkbox', value: String(s.on),
+      help: 'Structures turned with the Perspective tools, placed from the 3-D Model window, or drawn from conformer templates. Each is shaded over its own depth.' },
+    { name: 'near', label: 'Nearest colour', type: 'color', value: s.near },
+    { name: 'far', label: 'Furthest colour', type: 'color', value: s.far },
+    { name: 'curve', label: 'Fade', value: s.curve, options: [{ value: 'linear', label: 'Even (linear)' }, { value: 'eased', label: 'Eased (slow at front and back)' }] },
+    { name: 'thin', label: 'Thin the lines with depth too', type: 'checkbox', value: String(s.thin) },
+    { name: 'thinTo', label: 'Line width at the back', type: 'number', unit: '% of the usual', value: String(Math.round(s.thinTo * 100)) },
+  ], { ok: 'Apply', note: `The usual look is black in front to ${DEFAULT_DEPTH_SHADE.far} grey behind, evenly, lines kept their width. Pictures you copy or export keep the shading.` });
+  if (!r) return;
+  const pct = Number(r.thinTo);
+  Object.assign(depthShadePrefs, {
+    on: r.on === 'true', near: r.near || s.near, far: r.far || s.far, curve: r.curve === 'eased' ? 'eased' : 'linear',
+    thin: r.thin === 'true', thinTo: isFinite(pct) ? Math.max(10, Math.min(100, pct)) / 100 : s.thinTo,
+  });
+  depthShadingChanged();
+  storeSettings();
+}
+
+/** Repaint with the depth shading as it now is, and tick the menu. */
+function depthShadingChanged(): void {
+  for (const el of document.querySelectorAll('[data-cmd="depth-shading"][role="menuitemcheckbox"]')) el.setAttribute('aria-checked', String(depthShadePrefs.on));
+  doc.allDirty = true;
+  renderer.repaintAll();
+  editor.requestScene();
+  viewer3d?.redraw();
+}
+
 async function show3dModel(): Promise<void> {
   const root = editor.sel.atoms.size ? [...editor.sel.atoms][0] : editor.lastEdited;
   if (root === null || !doc.atoms.has(root)) { flash('Select a structure to see in 3-D.'); return; }
@@ -1702,6 +1785,86 @@ async function structureKeys(): Promise<Map<number, string>> {
     if (r && !r.error && r.smiles) for (const a of f) out.set(a, r.smiles);
   });
   return out;
+}
+
+/** Space left between things set out in a row, column or grid: as last chosen, or one and a half bonds. */
+let lastGridGap: number | null = null;
+const gridGap = () => lastGridGap ?? 1.5 * doc.style.bondLength;
+
+/** Format ▸ Align ▸ Arrange in a Grid…: how many across, and the space between. */
+async function arrangeInGrid(): Promise<void> {
+  finishTyping();
+  const n = editor.gridCount();
+  if (n < 2) { flash('Select two or more structures or objects to put in a grid.'); return; }
+  const got = await ask('Arrange in a Grid', [
+    { name: 'cols', label: 'Columns (across)', value: String(defaultColumns(n)), type: 'number' },
+    { name: 'gap', label: 'Space between', value: String(Math.round(gridGap() * 10) / 10), type: 'number', unit: 'pt' },
+  ], { ok: 'Arrange', note: `${n} things, set out in reading order (left to right, then down). Compound numbers move with their structures.` });
+  if (!got) return;
+  const cols = Math.max(1, Math.min(n, Math.round(Number(got.cols)) || defaultColumns(n)));
+  const gap = Number(got.gap);
+  if (isFinite(gap) && gap >= 0) lastGridGap = Math.min(500, gap);
+  if (!editor.arrangeGrid({ kind: 'grid', cols, gap: gridGap() })) flash('They are already in that grid.');
+}
+
+// ---------------------------------------------------------------- Clean Up Structure
+
+/**
+ * The chemistry engine's own layouts of the target structures that look tangled (bonds crossing,
+ * atoms on top of one another), for Clean Up to try alongside its own. Empty when the engine
+ * isn't ready or nothing is tangled.
+ */
+async function engineLayouts(): Promise<Map<number, Vec>[]> {
+  if (!chem.ready) return [];
+  const out: Map<number, Vec>[] = [];
+  for (const f of editor.cleanUpTargets()) {
+    if (!looksTangled(doc, f)) continue;
+    try {
+      const mf = toMolfile(doc, f);
+      const layouts = await chem.layouts(mf.molblock);
+      for (const coords of layouts) {
+        const m = new Map<number, Vec>();
+        mf.map.forEach((id, i) => { if (id >= 0 && coords[i]) m.set(id, { x: coords[i][0], y: coords[i][1] }); });
+        out.push(m);
+      }
+    } catch { /* the engine can't read it: Clean Up manages on its own */ }
+  }
+  return out;
+}
+
+/** Structure > Clean Up Structure. Pressed again on the same structures, it steps through other ways of laying them out. */
+async function cleanUpStructures(): Promise<void> {
+  const seeds = await engineLayouts();
+  const r = editor.cleanUp(seeds);
+  if (!r) flash('Nothing to clean up: the structures are already tidy.');
+  else if (r.k > 0) flash(`${r.label} (${r.k + 1} of ${r.of}). Clean Up again for the next, or Clean Up Options… to see them all.`, 4000);
+}
+
+/** Structure > Clean Up Options…: every way Clean Up can lay out the picked structures, to choose from. */
+async function cleanUpChoices(): Promise<void> {
+  finishTyping();
+  const seeds = await engineLayouts();
+  const { frags, options } = editor.cleanUpChoices(seeds);
+  if (!options.length) { flash('Draw or select a structure first.'); return; }
+  const count = Math.max(...options.map((o) => o.length));
+  const labels = Array.from({ length: count }, (_, k) => options[0][Math.min(k, options[0].length - 1)].label);
+  const atoms = new Set(frags.flatMap((f) => [...f]));
+  const sel: Selection = { atoms, bonds: new Set([...doc.bonds.values()].filter((b) => atoms.has(b.a1)).map((b) => b.id)), captions: new Set(), arrows: new Set(), shapes: new Set() };
+  const pickOf = (k: number, turn: number, mirror: boolean) => options.map((o) => turnOption(o[Math.min(k, o.length - 1)], turn, mirror));
+  const preview = (k: number, turn: number, mirror: boolean) => {
+    const d = extractDrawing(doc, sel);
+    d.bulk(() => {
+      for (const o of pickOf(k, turn, mirror)) {
+        for (const [id, p] of o.pos) if (d.atoms.has(id)) d.updateAtom(id, { x: p.x, y: p.y });
+        for (const [id, look] of o.displays) if (d.bonds.has(id)) d.updateBond(id, { display: look });
+      }
+    });
+    const pic = recordPicture(d, 6);
+    return pic ? pictureSvg(pic).replace(/^<\?xml[^>]*>\s*/, '') : '';
+  };
+  const got = await askCleanUpOption(labels, preview);
+  if (!got) return;
+  editor.applyCleanUp(pickOf(got.option, got.turn, got.mirror));
 }
 
 /**
@@ -2897,7 +3060,7 @@ function showCanvasState(): void {
 let listKey = '';
 let masterSeen: unknown = null;
 let indexSeen = -1;
-const slideListKey = (d: Deck) => `${d.slides.map((s) => s.id + (s.notes.trim() ? 'n' : '') + (s.hidden ? 'h' : '') + (s.section !== undefined ? `s${s.section}` : '') + (s.canvas ? `k${s.canvas.keys.map((k) => k.id).join('.')}` : '')).join(',')}|${d.sections.map((x) => `${x.id}:${x.name}`).join('/')}|${d.size.w}x${d.size.h}|${d.looks}`;
+const slideListKey = (d: Deck) => `${d.slides.map((s, i) => s.id + (s.notes.trim() ? 'n' : '') + (s.hidden ? 'h' : '') + (s.section !== undefined ? `s${s.section}` : '') + (s.canvas ? `k${s.canvas.keys.map((k) => k.id).join('.')}` : '') + (s.transition?.advanceAfter !== undefined ? `t${s.transition.advanceAfter}` : '') + (d.narrated(i) ? 'v' : '')).join(',')}|${d.sections.map((x) => `${x.id}:${x.name}`).join('/')}|${d.size.w}x${d.size.h}|${d.looks}`;
 
 /** Told of every change to a deck (the Compare pane, which follows Undo). */
 const deckWatchers: ((deck: Deck) => void)[] = [];
@@ -5022,6 +5185,34 @@ function present(fromHere: boolean, notes = false, how: { custom?: number; windo
   });
 }
 
+/** The slides Clear works on: the ones picked in the slide list (the one showing), or all. */
+function clearTargets(d: Deck, which: 'slide' | 'all'): number[] {
+  if (which === 'all') return d.slides.map((_s, i) => i);
+  const picked = [...slideList.picked].filter((i) => i >= 0 && i < d.slides.length).sort((a, b) => a - b);
+  return picked.length ? picked : [d.index];
+}
+
+/** Slide Show > Clear > Timings: the slides go on with a click again, as before Rehearse Timings. */
+function clearShowTimings(which: 'slide' | 'all'): void {
+  const d = deckNow();
+  if (!d) return;
+  const ix = clearTargets(d, which);
+  if (!d.clearTimings(ix, which === 'all' ? 'Clear timings on all slides' : 'Clear timings')) { flash(which === 'all' ? 'No slide has a time to clear.' : 'This slide has no time to clear.'); return; }
+  flash(which === 'all' ? 'Timings cleared: every slide goes on with a click.' : 'Timing cleared: the slide goes on with a click.');
+}
+
+/** Slide Show > Clear > Narration: the recorded sounds come off the slides (their times stay). */
+function clearNarration(which: 'slide' | 'all'): void {
+  const d = deckNow();
+  if (!d) return;
+  const ix = clearTargets(d, which).filter((i) => d.narrated(i));
+  if (!ix.length) { flash(which === 'all' ? 'No slide has narration to clear.' : 'This slide has no narration to clear.'); return; }
+  d.editSlides(which === 'all' ? 'Clear narration on all slides' : 'Clear narration', ix, (sd) => {
+    for (const sh of [...sd.shapes.values()]) if (sh.video?.narration) sd.removeShape(sh.id);
+  });
+  flash(`Narration cleared from ${ix.length} slide${ix.length > 1 ? 's' : ''}. Their times stay (Clear > Timings takes those off).`);
+}
+
 /** The slide show and Presenter View: their code loads the first time a show starts. */
 let shows: { presenter: Presenter; presenterView: PresenterView } | null = null;
 let showsLoading: Promise<{ presenter: Presenter; presenterView: PresenterView }> | null = null;
@@ -5070,7 +5261,9 @@ function wireShows(presenter: Presenter, presenterView: PresenterView, inkShape:
         } else flash('Nothing was recorded (the microphone gave no sound).');
       }
       d.setTimings(r.times, r.recordings.size ? 'Record slide show timings' : 'Rehearse timings');
-      flash(`Kept: the show takes ${clockText(r.total)}${r.recordings.size ? ', with narration on the slides' : ''}. Set Up Show > Advance slides can turn the times off.`, 8000);
+      // the whole show, with the times of slides not played this time (rehearsing from one slide)
+      const whole = d.slides.reduce((n, s) => n + (s.hidden ? 0 : s.transition?.advanceAfter ?? 0), 0);
+      flash(`Kept: the show takes ${clockText(Math.max(whole, r.total))}${r.recordings.size ? ', with narration on the slides' : ''}. Set Up Show > Advance slides can turn the times off.`, 8000);
     })();
   };
 
@@ -5394,23 +5587,26 @@ async function printNow(): Promise<void> {
  * File > Export > Export Picture: the page (a design or the current slide) or the drawing as a PNG or
  * TIFF at the resolution picked, or as an SVG, EMF or EPS, on its background colour or see-through.
  */
-async function exportPicture(): Promise<void> {
+async function exportPicture(preset: { format?: string; dpi?: number; note?: string } = {}): Promise<void> {
   const tab = ws.active, deck = tab.deck;
   const what = deck ? (tab.mode === 'design' ? 'the page' : 'this slide') : 'the drawing';
+  // the figure check's journal sets the resolution it asks for
+  const checked = preflightPane.open ? preflightPane.last : null;
+  const dpiNow = preset.dpi ?? checked?.dpi ?? 300;
   const v = await ask('Export Picture', [
-    { name: 'format', label: 'Format', value: 'png', options: [
+    { name: 'format', label: 'Format', value: preset.format ?? 'png', options: [
       { value: 'png', label: 'PNG (a picture of dots: journals, Word, web)' },
       { value: 'tiff', label: 'TIFF (a picture of dots, LZW-compressed: what many journals ask for)' },
       { value: 'svg', label: 'SVG (shapes that stay sharp: Illustrator, Inkscape, web)' },
       { value: 'emf', label: 'EMF (shapes that stay sharp: Word, PowerPoint on Windows)' },
       { value: 'eps', label: 'EPS (shapes that stay sharp: older journal systems, Illustrator)' },
     ] },
-    { name: 'dpi', label: 'Resolution (PNG, TIFF)', value: '300', type: 'number', unit: 'dpi' },
+    { name: 'dpi', label: 'Resolution (PNG, TIFF)', value: String(dpiNow), type: 'number', unit: 'dpi' },
     { name: 'bg', label: 'Background', value: deck ? 'page' : 'clear', options: [
       { value: deck ? 'page' : 'white', label: deck ? 'The page colour' : 'White' },
       { value: 'clear', label: 'See-through' },
     ] },
-  ], { ok: 'Export…', note: `Saves ${what}. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line drawings.` });
+  ], { ok: 'Export…', note: preset.note ?? (checked ? `Saves ${what}. The ${checked.journal.name.replace(/ \(.*/, '')} guidelines ask for ${checked.dpi} dpi for this figure (File > Check Figure for Journal).` : `Saves ${what}. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line drawings.`) });
   if (!v) return;
   const dpi = Math.max(30, Math.min(2400, Number(v.dpi) || 300));
   const clear = v.bg === 'clear';
@@ -6130,6 +6326,69 @@ const accessibility = new AccessibilityPane({
   },
 });
 
+/** The journal drawing style for each journal the figure check knows (drawing-styles.ts). */
+const JOURNAL_STYLES: Record<string, string> = {
+  acs: 'ACS Document 1996', rsc: 'RSC', nature: 'Nature journals', wiley: 'Wiley (Angewandte, Chemistry Europe)', elsevier: 'Elsevier (Tetrahedron and others)',
+};
+
+/** File > Check Figure for Journal: the figure showing, as it draws (a drawing, a design page or a slide). */
+const preflightPane = new PreflightPane({
+  figure: () => {
+    if (sheetActive() || docActive()) return null;
+    const deck = deckNow();
+    if (deck) {
+      const i = deck.index;
+      const at = slidePages(deck, i)[deck.current?.canvas ? canvasKeys.picked(deck) : 0];
+      if (!at) return null;
+      return { items: recordSlide(at.page, at.doc), box: { x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h }, page: true };
+    }
+    const pic = recordPicture(doc, 0);
+    return pic ? { items: pic.items, box: pic.box } : null;
+  },
+  select: (where) => {
+    const sel = editor.touching(where);
+    editor.selectThese(sel);
+    const first = [...sel.atoms][0];
+    if (first !== undefined) editor.reveal('atom', first);
+    else if (sel.captions.size) editor.reveal('caption', [...sel.captions][0]);
+    else if (!sel.shapes.size && !sel.arrows.size) flash('That is part of a picture, chart or table: change it there.');
+  },
+  fix: (issue, r) => {
+    finishTyping();
+    const m = editor.measure();
+    const ctx = { captionBox: (id: number) => m.captionBox(doc.captions.get(id)!), shapeBox: (id: number) => shapeBox(doc.shapes.get(id)!) };
+    let done = false;
+    if (issue.fix === 'fit' && issue.want) {
+      editor.selectAll();
+      done = editor.scaleSelection(issue.want);
+      if (done) flash(`Scaled to ${Math.round(issue.want * 100)} % to fit ${r.size.name.replace(/ \(.*/, '').toLowerCase()}. Text in captions keeps its size; check it again.`, 6000);
+    } else if (issue.fix === 'text') done = enlargeText(doc, issue, ctx);
+    else if (issue.fix === 'lines') done = thickenLines(doc, issue, ctx);
+    else if (issue.fix === 'fonts') done = useArial(doc, issue.fonts ?? []);
+    if (done) editor.changed();
+    else if (issue.fix !== 'fit') flash('This is in a picture, chart or table: change it there.');
+    return done;
+  },
+  styleFor: (id) => (JOURNAL_STYLES[id] && presetNamed(JOURNAL_STYLES[id]) ? JOURNAL_STYLES[id] : undefined),
+  useStyle: (name) => {
+    const next = presetNamed(name)?.style;
+    if (!next) return;
+    finishTyping();
+    const deck = deckNow();
+    if (deck) deck.setDrawingStyle({ ...next }, 'restyle');
+    else { doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, { ...next }, 'restyle')); editor.changed(); }
+    flash(`Structures are now drawn in ${next.name}.`, 4000);
+  },
+  exportFor: (r) => {
+    finishTab();
+    const name = r.journal.name.replace(/ \(.*/, '');
+    if (r.journal.vectorPreferred) { void exportPdf(); return; }
+    const raster = r.journal.formats?.find((f) => f === 'tiff' || f === 'png') ?? 'tiff';
+    void exportPicture({ format: raster, dpi: r.dpi, note: `The ${name} guidelines ask for ${r.dpi} dpi for this figure${r.journal.formats ? `, as ${r.journal.formats.map((f) => f.toUpperCase()).join(', ')}` : ''}.` });
+  },
+  open: (url) => openWebPage(url),
+});
+
 const slideCompare = new SlideComparePane({
   deck: () => (ws.active.mode === 'slides' ? deckNow() : null),
   flash: (m, ms) => flash(m, ms),
@@ -6324,7 +6583,7 @@ function setPictureStyle(look: PictureLook | undefined): boolean {
 const SLIDE_ONLY = new Set(['references-slide', 'compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
   'edit-layouts', 'view-sorter', 'add-section', 'rename-section', 'remove-section', 'remove-section-slides', 'remove-all-sections', 'section-up', 'section-down', 'collapse-sections', 'expand-sections',
   'slide-transitions', 'slide-animations', 'animation-pane', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-video', 'insert-audio',
-  'reading-view', 'rehearse-timings', 'record-show', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
+  'reading-view', 'rehearse-timings', 'record-show', 'rehearse-here', 'record-show-here', 'clear-timings-slide', 'clear-timings-all', 'clear-narration-slide', 'clear-narration-all', 'clear-show-menu', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
 
 /** The animation commands: an effect for the selected objects (the right-click menu's Animation). */
 const ANIM_COMMANDS: { cmd: string; label: string }[] = [false, true].flatMap((exit) => EFFECTS.filter((e) => !(exit && e.emph)).map((e) => ({
@@ -6333,6 +6592,7 @@ const ANIM_COMMANDS: { cmd: string; label: string }[] = [false, true].flatMap((e
 
 const COMMANDS: Record<string, () => unknown> = {
   new: () => { finishTab(); ws.newDrawing(); },
+  'preflight': () => { finishTyping(); if (preflightPane.open) preflightPane.refresh(); else preflightPane.show(document.querySelector<HTMLElement>('[data-cmd="preflight"]:not([hidden])')); },
   'check-accessibility': () => { finishTyping(); if (accessibility.open) accessibility.refresh(); else accessibility.show(document.querySelector<HTMLElement>('[data-cmd="check-accessibility"]:not([hidden])')); },
   'alt-text': () => { finishTyping(); void drawingAltText(); },
   'new-slides': () => { finishTab(); ws.newSlides(); },
@@ -6492,8 +6752,23 @@ const COMMANDS: Record<string, () => unknown> = {
   'reading-view': () => present(true, false, { windowed: true }),
   'rehearse-timings': () => present(false, false, { rehearse: true }),
   'record-show': () => present(false, false, { rehearse: true, record: true }),
+  'rehearse-here': () => present(true, false, { rehearse: true }),
+  'record-show-here': () => present(true, false, { rehearse: true, record: true }),
+  'clear-timings-slide': () => clearShowTimings('slide'),
+  'clear-timings-all': () => clearShowTimings('all'),
+  'clear-narration-slide': () => clearNarration('slide'),
+  'clear-narration-all': () => clearNarration('all'),
   'set-up-show': () => void setUpShowCmd(),
   'custom-shows': () => void customShowsCmd(),
+  'clear-show-menu': () => {
+    const b = document.querySelector<HTMLElement>('#ribbon [data-cmd="clear-show-menu"]');
+    const at = (b && b.offsetParent ? b : document.querySelector<HTMLElement>('#ribbon .rb-tabs')!).getBoundingClientRect();
+    showContextMenu(at.left, at.bottom, [
+      { cmd: 'rehearse-here', label: 'Rehearse from This Slide' }, { cmd: 'record-show-here', label: 'Record from This Slide…' }, null,
+      { cmd: 'clear-timings-slide', label: 'Clear Timing on This Slide' }, { cmd: 'clear-timings-all', label: 'Clear Timings on All Slides' }, null,
+      { cmd: 'clear-narration-slide', label: 'Clear Narration on This Slide' }, { cmd: 'clear-narration-all', label: 'Clear Narration on All Slides' },
+    ], { run: (cmd) => void command(cmd), key: commandKey });
+  },
   'custom-show-menu': () => {
     const b = document.querySelector<HTMLElement>('#ribbon [data-cmd="custom-show-menu"]');
     customShowMenu(b && b.offsetParent ? b : document.querySelector<HTMLElement>('#ribbon .rb-tabs')!);
@@ -6555,6 +6830,9 @@ const COMMANDS: Record<string, () => unknown> = {
   'align-bottom': () => align('bottom'),
   'distribute-h': () => editor.distribute('h') || flash('Select three or more structures, captions, arrows or shapes to space them evenly.'),
   'distribute-v': () => editor.distribute('v') || flash('Select three or more structures, captions, arrows or shapes to space them evenly.'),
+  'arrange-row': () => editor.arrangeGrid({ kind: 'row', gap: gridGap() }) || flash('Select two or more structures or objects to put in a row (or they already are, evenly spaced).'),
+  'arrange-column': () => editor.arrangeGrid({ kind: 'column', gap: gridGap() }) || flash('Select two or more structures or objects to put in a column (or they already are, evenly spaced).'),
+  'arrange-grid': () => void arrangeInGrid(),
   'flip-h': () => flipped(editor.flip('h')),
   'flip-v': () => flipped(editor.flip('v')),
   'flip-h-keep': () => flipped(editor.flip('h', true)),
@@ -6702,7 +6980,8 @@ const COMMANDS: Record<string, () => unknown> = {
   },
   'save-highlight-look': () => void saveHighlightLook(),
   'delete-highlight-look': () => void deleteHighlightLook(),
-  'clean-up': () => editor.cleanUp() || flash('Nothing to clean up: the structures are already tidy.'),
+  'clean-up': () => void cleanUpStructures(),
+  'clean-up-options': () => void cleanUpChoices(),
   'clean-up-arrow': () => {
     if (!pickedCurved()) { flash('Select one or more curved (mechanism) arrows first.'); return; }
     const n = editor.cleanUpArrows();
@@ -6787,6 +7066,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'attach-descriptors': () => void attachDescriptors(),
   'pubchem-lookup': () => void lookUpChosen(),
   'model-3d': () => void show3dModel(),
+  'turn-3d': () => void turn3dDialog(),
+  'flatten-3d': () => editor.flattenSelection() || flash('Select a structure to flatten.'),
+  'depth-shading': () => toggleDepthShading(),
+  'depth-shading-settings': () => void depthShadingDialog(),
   'structure-to-name': () => void structureToName(),
   'add-id-label': () => void addTiedText('label'),
   'lock-structures': () => toggleStructureLock(),
@@ -8050,6 +8333,7 @@ function currentSettings(): Settings {
     arrowEndGap: arrowGaps.end,
     superscriptR: labelPrefs.superscriptR,
     bondEnds: bondEndPrefs.round,
+    depthShade: { ...depthShadePrefs },
     linkSide,
     slideTemplate,
     slideThemes,
@@ -8280,6 +8564,8 @@ function applySettings(s: Settings): void {
   arrowGaps.end = s.arrowEndGap;
   labelPrefs.superscriptR = s.superscriptR;
   bondEndPrefs.round = s.bondEnds;
+  Object.assign(depthShadePrefs, s.depthShade);
+  for (const el of document.querySelectorAll('[data-cmd="depth-shading"][role="menuitemcheckbox"]')) el.setAttribute('aria-checked', String(depthShadePrefs.on));
   linkSide = s.linkSide;
   slideTemplate = s.slideTemplate;
   slideThemes = s.slideThemes;
@@ -9379,7 +9665,8 @@ function drawingMenu(): MenuItem[] {
   const arrange: MenuItem[] = [
     { cmd: 'align-left' }, { cmd: 'align-hcenter' }, { cmd: 'align-right' }, null,
     { cmd: 'align-top' }, { cmd: 'align-vcenter' }, { cmd: 'align-bottom' }, null,
-    { cmd: 'distribute-h' }, { cmd: 'distribute-v' },
+    { cmd: 'distribute-h' }, { cmd: 'distribute-v' }, null,
+    { cmd: 'arrange-row' }, { cmd: 'arrange-column' }, { cmd: 'arrange-grid' },
   ];
   const turn: MenuItem[] = [
     { cmd: 'flip-h' }, { cmd: 'flip-v' }, { cmd: 'flip-h-keep' }, { cmd: 'flip-v-keep' }, null,
@@ -9397,6 +9684,7 @@ function drawingMenu(): MenuItem[] {
     ...(s.captions.size ? [readAsMenu(), ...(texts && !atoms ? [{ cmd: 'expand-label', label: 'Expand to Structure' }] : []), null] : []),
     ...(atoms ? [
       { cmd: 'clean-up' },
+      { cmd: 'clean-up-options' },
       ...fuseRingMenu(),
       ...metalMenu(),
       { label: 'Structure', items: [
@@ -9409,6 +9697,7 @@ function drawingMenu(): MenuItem[] {
       ] },
       { cmd: 'structure-to-name' },
       { cmd: 'model-3d' },
+      { label: 'Perspective', items: [{ cmd: 'turn-3d' }, { cmd: 'flatten-3d' }, null, { cmd: 'depth-shading', checked: depthShadePrefs.on }, { cmd: 'depth-shading-settings' }] },
     ] : []),
     ...(pickedCurved() ? [{ cmd: 'clean-up-arrow' }, { label: 'Mechanism Arrow', items: [
       { cmd: 'arrow-add-bend', ...(editor.contextSpot?.t !== undefined ? { label: 'Add Bend Here' } : {}) }, ...(editor.pickedJoin() ? [{ cmd: 'arrow-remove-bend' }, { cmd: 'arrow-smooth-join' }, { cmd: 'arrow-symmetric-join' }] : []), null,
@@ -9772,8 +10061,8 @@ const BOX_TITLES: Record<string, string> = {
 const cmds = (list: (string | null)[]) => list.map((c) => (c ? `cmd:${c}` : 'sep'));
 const BOX_ITEMS: Record<string, readonly string[]> = {
   main: MAIN_ITEMS,
-  structure: cmds(['clean-up', 'add-frame', 'fill-rings', 'highlight', 'remove-highlight', null, 'chain-ends', 'explicit-h', 'aromatic-circles', 'stereo-labels', null, 'add-id-label', 'add-caption', 'attach-descriptors', 'number-compounds', null, 'contract-label', 'expand-label', 'hapto-bond', 'name-to-structure']),
-  arrange: cmds(['align-left', 'align-hcenter', 'align-right', 'align-top', 'align-vcenter', 'align-bottom', null, 'distribute-h', 'distribute-v', null, 'flip-h', 'flip-v', 'rotate-cw', 'rotate-ccw', null, 'shape-front', 'shape-back']),
+  structure: cmds(['clean-up', 'clean-up-options', 'add-frame', 'fill-rings', 'highlight', 'remove-highlight', null, 'chain-ends', 'explicit-h', 'aromatic-circles', 'stereo-labels', null, 'add-id-label', 'add-caption', 'attach-descriptors', 'number-compounds', null, 'contract-label', 'expand-label', 'hapto-bond', 'name-to-structure']),
+  arrange: cmds(['align-left', 'align-hcenter', 'align-right', 'align-top', 'align-vcenter', 'align-bottom', null, 'distribute-h', 'distribute-v', 'arrange-row', 'arrange-column', 'arrange-grid', null, 'flip-h', 'flip-v', 'rotate-cw', 'rotate-ccw', null, 'shape-front', 'shape-back']),
   highlight: [...cmds(['highlight', 'remove-highlight', null, 'smooth-highlight', 'centre-highlight', 'soft-highlight', 'outline-highlight', 'shadow-highlight', 'glow-highlight', null, 'save-highlight-look']), 'w:looks'],
   custom: defaultToolboxes().custom,
 };

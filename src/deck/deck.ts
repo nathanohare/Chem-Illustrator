@@ -1703,6 +1703,29 @@ export class Deck {
     this.record(label, () => put(before), () => put(after), slides.length === 1 ? slides[0] : undefined);
   }
 
+  /** Take the rehearsed times off these slides (Slide Show > Clear > Timings): they go on with a click again. One undo step. */
+  clearTimings(indices: number[], label = 'Clear timings'): boolean {
+    const slides = [...new Set(indices)].map((i) => this.slides[i]).filter((s) => s?.transition?.advanceAfter !== undefined);
+    if (!slides.length) return false;
+    const before = slides.map((s) => ({ ...s.transition! }));
+    const after = before.map((t) => { const n = { ...t }; delete n.advanceAfter; return n; });
+    const put = (vals: Transition[]) => {
+      slides.forEach((s, k) => { const v = vals[k]; if (v.kind === 'none' && Object.keys(v).every((key) => key === 'kind' || key === 'dur')) delete s.transition; else s.transition = { ...v }; });
+      this.onMotion();
+    };
+    put(after);
+    this.record(label, () => put(before), () => put(after), slides.length === 1 ? slides[0] : undefined);
+    return true;
+  }
+
+  /** Does this slide have recorded narration on it (Slide Show > Record)? */
+  narrated(i: number): boolean {
+    const d = this.slides[i] ? this.docOf(i) : null;
+    if (!d) return false;
+    for (const sh of d.shapes.values()) if (sh.video?.narration) return true;
+    return false;
+  }
+
   /** Change a slide's comments (the current slide by default). One undo step. */
   setComments(list: PinnedComment[], label = 'Comment', i = this.index): void {
     const s = this.slides[i];
