@@ -296,6 +296,7 @@ const scene = $<HTMLCanvasElement>('#scene');
 const overlay = $<HTMLCanvasElement>('#overlay');
 const renderer = new Renderer(scene, overlay);
 const editor = new Editor(doc, renderer, host);
+editor.lengthUnits = () => rulerPrefs.units;
 const chem = new ChemClient(document.baseURI);
 const checks = new StructureChecks(doc);
 renderer.checks = checks;
@@ -8400,6 +8401,15 @@ async function drawingPreferences(): Promise<void> {
     { name: 'startGap', label: 'Gap between a mechanism arrow\'s start and its atom or lone pair', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic' },
     { name: 'endGap', label: 'Gap between a mechanism arrow\'s head and its atom', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic',
       help: 'Measured from the atom\'s label (or a bare carbon\'s corner) or the lone pair\'s dots. Leave blank for the usual gap, which grows with the bond length. New arrows, and arrows stuck to a structure, use it when they are next drawn; Clean Up Arrow redraws the selected ones now.' },
+    { name: 'arrowWidth', label: 'Arrow line width', value: editor.arrowLook.width === null ? '' : String(editor.arrowLook.width), type: 'number', unit: 'pt', placeholder: `Same as bonds (${doc.style.lineWidth} pt)` },
+    { name: 'headLength', label: 'Arrowhead length', value: editor.arrowLook.headLength === null ? '' : String(editor.arrowLook.headLength), type: 'number', unit: 'pt', placeholder: 'Automatic' },
+    { name: 'headWidth', label: 'Arrowhead width (each side of the line)', value: editor.arrowLook.headWidth === null ? '' : String(editor.arrowLook.headWidth), type: 'number', unit: 'pt', placeholder: 'Automatic',
+      help: 'For new arrows, whatever the bonds\' line width. Leave blank for the usual: the drawing style\'s line width, and a head ten line widths long and 2.5 wide. Arrows already drawn keep their size (change them in the Style panel).' },
+    { name: 'aidAngle', label: 'Show the angle beside the pointer while drawing bonds, arrows and lines', type: 'checkbox', value: String(editor.aids.angle) },
+    { name: 'aidLength', label: 'Show the length there too', type: 'checkbox', value: String(editor.aids.length),
+      help: 'In the rulers\' units (inches or centimetres).' },
+    { name: 'aidHints', label: 'Show what Shift, Alt and Ctrl do beside the pointer', type: 'checkbox', value: String(editor.aids.hints),
+      help: 'While dragging, the keys that change what the tool does are listed in blue (the one held in bold). With the button up they show as a key is held.' },
   ], { ok: 'Save' });
   if (!r) return;
   editor.options.circledCharges = r.charges === 'circled';
@@ -8410,6 +8420,9 @@ async function drawingPreferences(): Promise<void> {
   const gap = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
   arrowGaps.start = gap(r.startGap);
   arrowGaps.end = gap(r.endGap);
+  const size = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0.05 ? null : Math.min(30, n); };
+  editor.arrowLook = { width: size(r.arrowWidth), headLength: size(r.headLength), headWidth: size(r.headWidth) };
+  editor.aids = { ...editor.aids, angle: r.aidAngle === 'true', length: r.aidLength === 'true', hints: r.aidHints === 'true' };
   const ends = Number(r.bondEnds);
   if (isFinite(ends) && ends !== bondEndPrefs.round) {
     bondEndPrefs.round = ends;
@@ -8546,6 +8559,8 @@ function currentSettings(): Settings {
     rerouteArrows: editor.options.rerouteArrows,
     arrowStartGap: arrowGaps.start,
     arrowEndGap: arrowGaps.end,
+    cursorAids: { ...editor.aids },
+    arrowLook: { ...editor.arrowLook },
     superscriptR: labelPrefs.superscriptR,
     bondEnds: bondEndPrefs.round,
     depthShade: { ...depthShadePrefs },
@@ -8777,6 +8792,8 @@ function applySettings(s: Settings): void {
   editor.options.rerouteArrows = s.rerouteArrows;
   arrowGaps.start = s.arrowStartGap;
   arrowGaps.end = s.arrowEndGap;
+  editor.aids = { ...s.cursorAids };
+  editor.arrowLook = { ...s.arrowLook };
   labelPrefs.superscriptR = s.superscriptR;
   bondEndPrefs.round = s.bondEnds;
   Object.assign(depthShadePrefs, s.depthShade);
@@ -10850,7 +10867,7 @@ const guide = {
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files', open: generalPreferences },
-  { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute', open: drawingPreferences },
+  { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
   { id: 'typing', title: 'Text and Spelling', words: 'typing spelling dictionary autocorrect replacements chemistry formulas subscripts', open: () => typingDialog.open() },

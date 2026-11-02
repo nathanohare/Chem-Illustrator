@@ -2,6 +2,7 @@
 // pan. The editor changes the document and asks for a repaint; hover and drawing previews
 // only repaint the overlay layer.
 
+import { DEFAULT_CURSOR_AIDS, drawCursorAids, hintLines, modifierHints, readoutText, type CursorAidPrefs, type HintState, type Mods } from './cursor-aids';
 import { Sketcher } from './sketch';
 import { installPenAndTouch } from './touch';
 import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAtom, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
@@ -118,6 +119,9 @@ export type ArrowStyle = Partial<Pick<Arrow, 'headStyle' | 'tailStyle' | 'headTy
   /** A connector: its ends stick to shapes' connection points, and it isn't snapped to 15° steps. */
   connector?: boolean;
 };
+
+/** New arrows' line width and head length and width, in points (null: from the drawing style). */
+export interface ArrowLook { width: number | null; headLength: number | null; headWidth: number | null }
 
 /** How a new shape looks. */
 export type ShapeStyle = Partial<Omit<Shape, 'id' | 'kind' | 'x1' | 'y1' | 'x2' | 'y2'>> & { kind: 'line' | 'rect' | 'oval' | 'geo' };
@@ -368,8 +372,22 @@ export class Editor {
     /** Mechanism arrows left running into something by a change find their own way round (Edit > Settings). */
     rerouteArrows: true,
   };
+  /**
+   * New arrows' line width and head size, in points, apart from the bonds' line width
+   * (Settings ▸ Drawing); null for the usual: the drawing style's line width, and a head ten
+   * line widths long and 2.5 wide.
+   */
+  arrowLook: ArrowLook = { width: null, headLength: null, headWidth: null };
+  /** The line width new arrows get. */
+  arrowWidth(): number { return this.arrowLook.width ?? this.doc.style.lineWidth; }
   /** Tell the person something in the status bar. */
   say: (msg: string) => void = () => {};
+  /** The angle and length beside the pointer while drawing, and the modifier keys' hints (Settings ▸ Drawing). */
+  aids: CursorAidPrefs = { ...DEFAULT_CURSOR_AIDS };
+  /** The units lengths beside the pointer are written in (the rulers'). */
+  lengthUnits: () => 'in' | 'cm' = () => this.aids.units;
+  /** The modifier keys held now (for the hints beside the pointer). */
+  private mods: Mods = { shift: false, alt: false, ctrl: false };
   /** Run a menu command by name; false when it doesn't apply, so the key does nothing. */
   runCommand: (name: string) => boolean = () => false;
   /** The Choose Nickname list, for =. */
@@ -505,6 +523,14 @@ export class Editor {
     const ctrlKey = (e: KeyboardEvent) => { if (e.key === 'Control' || e.key === 'Meta') this.showPointer(e.type === 'keydown'); };
     window.addEventListener('keydown', ctrlKey);
     window.addEventListener('keyup', ctrlKey);
+    // the hints beside the pointer follow Shift, Alt and Ctrl as they go down and up
+    const modKeys = (e: KeyboardEvent) => {
+      if (!/^(Shift|Alt|Control|Meta)$/.test(e.key)) return;
+      this.setMods(e);
+    };
+    window.addEventListener('keydown', modKeys);
+    window.addEventListener('keyup', modKeys);
+    window.addEventListener('blur', () => this.setMods({ shiftKey: false, altKey: false, ctrlKey: false, metaKey: false }));
     // frames that follow what they surround are refitted as each change finishes
     doc.beforeCommit = (before) => {
       let frames = false, rings = false, tied = false, energy = false, tables = false, diagrams = false, plates = false;
@@ -954,6 +980,7 @@ export class Editor {
   private onMove(e: PointerEvent): void {
     const p = this.wallPoint(this.docPoint(e));
     this.pointer = p;
+    this.setMods(e, false);
     this.lastClient = { x: e.clientX, y: e.clientY };
     // (a card or menu closing over the drawing leaves the mouse on it without a pointerenter)
     this.pointerInside = true;
@@ -1165,7 +1192,8 @@ export class Editor {
       this.requestScene(e.timeStamp);
       return;
     }
-    if (d.mode === 'draw' && this.tool.kind === 'symbol') { d.alt = e.altKey; d.shift = e.shiftKey; }
+    // Alt (any angle) and Shift (a square or circle) count while held, not only when pressed first
+    if (d.mode === 'draw' && this.liveMods()) { d.alt = e.altKey; d.shift = e.shiftKey; }
     d.last = p;
     d.path?.push(p);
     this.hover = this.hitTest(p);
@@ -1295,7 +1323,7 @@ export class Editor {
     }
     if (!d.moved) this.click(d, p);
     else if (d.mode === 'draw') {
-      if (this.tool.kind === 'symbol') { d.alt = e.altKey; d.shift = e.shiftKey; }
+      if (this.liveMods()) { d.alt = e.altKey; d.shift = e.shiftKey; }
       this.finishDraw(d, p);
     }
     this.hover = this.hitTest(p);
@@ -2240,7 +2268,7 @@ export class Editor {
 
   /** Add an electron-pushing arrow as pushArrow worked it out, in the tool's style, its ends pinned to what they are on. */
   private addPushArrow(push: PushArrow, style: ArrowStyle): Arrow {
-    const lw = this.doc.style.lineWidth;
+    const lw = this.arrowWidth();
     const { s: _, ...rest } = style;
     const look: ArrowStyle = push.bez
       ? { ...rest, sweep: 0, bez: push.bez }
@@ -3154,12 +3182,14 @@ export class Editor {
 
   /** Add an arrow from tail to head in the given style; `side` −1 bends a curved arrow the other way. */
   private addArrow(tail: Vec, head: Vec, style: ArrowStyle = {}, side = 1): Arrow {
-    const lw = this.doc.style.lineWidth;
+    const lw = this.arrowWidth();
     const { retro, connector: _, s: sShape, ...rest } = style;
-    // ChemDraw's defaults: heads ten line widths long and 2.5 wide
+    // ChemDraw's defaults: heads ten line widths long and 2.5 wide (unless Settings ▸ Drawing gives sizes)
+    const own = this.arrowLook;
     const a: Omit<Arrow, 'id'> = {
       tail, head, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false,
-      equilibrium: false, sweep: 0, headLength: lw * 10, headWidth: lw * 2.5, ...rest,
+      equilibrium: false, sweep: 0, headLength: own.headLength ?? lw * 10, headWidth: own.headWidth ?? lw * 2.5,
+      ...(own.width !== null ? { lineWidth: own.width } : {}), ...rest,
     };
     // an S drawn freely: its first bend to the side the pointer swung out to
     if (sShape && !a.bez) { a.bez = [{ x: 0.25, y: -0.8 * side }, { x: 0.75, y: 0.8 * side }]; a.sweep = 0; }
@@ -5765,6 +5795,98 @@ export class Editor {
 
   // ------------------------------------------------------------------ overlay
 
+  /** Tools whose drag reads Alt and Shift as they are held now (the others read them at the press). */
+  private liveMods(): boolean {
+    const k = this.tool.kind;
+    return k === 'symbol' || k === 'bond' || k === 'shape' || (k === 'arrow' && !this.drag?.shift);
+  }
+
+  /** Note the modifier keys held (from a key or pointer event); the hints beside the pointer redraw when they change. */
+  private setMods(e: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean }, redraw = true): void {
+    const m = { shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey };
+    if (m.shift === this.mods.shift && m.alt === this.mods.alt && m.ctrl === this.mods.ctrl) return;
+    this.mods = m;
+    if (redraw && this.aids.hints && this.pointerInside) this.requestOverlay();
+  }
+
+  /** The line being drawn or dragged now (a bond, an arrow, a line, or an arrow's or line's end), for the angle beside the pointer. */
+  private drawnSegment(): { a: Vec; b: Vec } | null {
+    const d = this.drag;
+    if (!d?.moved) return null;
+    const doc = this.doc;
+    const t = this.tool;
+    if (d.mode === 'draw') {
+      if (t.kind === 'bond' && !t.hapto) {
+        const startAtom = d.hit?.kind === 'atom' ? doc.atoms.get(d.hit.id) ?? null : null;
+        const start: Vec = startAtom ?? d.start;
+        const L = startAtom ? bondLength(doc, startAtom) : doc.style.bondLength;
+        return { a: start, b: this.snapEnd(start, d.last, L, startAtom?.id, d.alt, t.order).pt };
+      }
+      if (t.kind === 'arrow') {
+        if (this.freehand(d) || this.pushFor(d, d.last)) return null;
+        const c = this.connectorEnds(t.style, d.start, d.last);
+        if (c) return { a: c.tail, b: c.head };
+        const start = this.branchStart(d);
+        return { a: start, b: this.arrowEnd(start, d.last, d.alt) };
+      }
+      if (t.kind === 'shape' && t.shape.kind === 'line') {
+        const g = this.shapeGeometry(t, d.start, d.last, d.shift, d.alt);
+        return g ? { a: { x: g.x1, y: g.y1 }, b: { x: g.x2, y: g.y2 } } : null;
+      }
+      return null;
+    }
+    if (d.mode === 'handle' && d.handle) {
+      const h = d.handle;
+      if (h.kind === 'arrow' && (h.which === 'tail' || h.which === 'head')) {
+        const r = doc.arrows.get(h.id);
+        if (r && !isCurved(r)) return h.which === 'head' ? { a: r.tail, b: r.head } : { a: r.head, b: r.tail };
+      }
+      if (h.kind === 'shape' && (h.which === 'p1' || h.which === 'p2')) {
+        const s = doc.shapes.get(h.id);
+        if (s?.kind === 'line') return h.which === 'p2' ? { a: { x: s.x1, y: s.y1 }, b: { x: s.x2, y: s.y2 } } : { a: { x: s.x2, y: s.y2 }, b: { x: s.x1, y: s.y1 } };
+      }
+    }
+    return null;
+  }
+
+  /** What the modifier keys care about right now (see modifierHints). */
+  private hintState(): HintState {
+    const d = this.drag;
+    const t = this.tool;
+    const drag: HintState['drag'] = !d || d.button !== 0 ? 'none'
+      : d.mode === 'draw' || (d.mode === 'none' && !d.moved) ? 'draw'
+      : d.mode === 'move' || d.mode === 'rotate' || d.mode === 'handle' || d.mode === 'marquee' ? d.mode : 'other';
+    const over = (d ? d.hit : this.hover)?.kind;
+    const h = d?.mode === 'handle' ? d.handle : undefined;
+    return {
+      tool: t.kind,
+      shape: t.kind === 'shape' ? t.shape.kind : undefined,
+      curved: t.kind === 'arrow' && this.curvedTool(),
+      aromatic: t.kind === 'ring' && t.aromatic,
+      drag: d && !d.moved && drag !== 'draw' ? 'none' : drag,
+      over: over === 'atom' || over === 'bond' || over === 'arrow' || over === 'shape' || over === 'caption' ? over : null,
+      handle: h && (h.kind === 'arrow' || h.kind === 'shape') ? { kind: h.kind, which: h.which, line: h.kind === 'shape' && this.doc.shapes.get(h.id)?.kind === 'line' } : undefined,
+      fixedAngles: this.options.fixedAngles,
+      fixedLength: this.options.fixedLength,
+      snapping: this.smartGuides || !!this.moveSnap,
+      asksChain: !!this.askChainLength,
+    };
+  }
+
+  /** The angle (and length) of what is being drawn, and the modifier keys' hints, beside the pointer. */
+  private drawAids(ctx: CanvasRenderingContext2D, px: number): void {
+    const a = this.aids;
+    if ((!a.angle && !a.length && !a.hints) || !this.pointerInside || this.captionEd || this.paused) return;
+    const seg = a.angle || a.length ? this.drawnSegment() : null;
+    const readout = seg ? readoutText(seg.a, seg.b, { ...a, units: this.lengthUnits() }) : '';
+    const d = this.drag;
+    // while the button is up the hints show only as a key is held, saying what it will do
+    const held = this.mods.shift || this.mods.alt || this.mods.ctrl;
+    let hints = a.hints && (d?.moved || held) ? modifierHints(this.hintState(), this.mods) : [];
+    if (!d?.moved && held) hints = hints.filter((x) => x.on);
+    drawCursorAids(ctx, this.pointer, px, readout, hintLines(hints), { dark: this.dark, look: a.look });
+  }
+
   private drawOverlay(): void {
     this.captionEd?.place();
     const ctx = this.r.clearOverlay();
@@ -6058,6 +6180,7 @@ export class Editor {
     this.drawInk(ctx, px);
     this.drawArrowHelpers(ctx, px, mk.box);
     this.captionEd?.draw(ctx);
+    this.drawAids(ctx, px);
   }
 
   /** The pen's ink: the stroke being drawn, and letters waiting to be read. */
