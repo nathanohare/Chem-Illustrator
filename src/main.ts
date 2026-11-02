@@ -2607,7 +2607,7 @@ async function schemeSettings(): Promise<void> {
     { name: 'sameLength', label: 'Clean Up Reaction makes arrows the same length', value: String(p.sameLength), type: 'checkbox' },
     { name: 'lead', label: 'Arrow before the text starts', value: pt(p.lead), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
     { name: 'headGap', label: 'Space between text and arrowhead', value: pt(p.headGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
-  ], { ok: 'Save', note: 'Used when you type text beside an arrow, and by Clean Up Reaction and Arrange Scheme. The text\'s size and font are in Drawing Style. Leave a distance blank to scale it with the bond length. Existing schemes change when you next clean them up.' });
+  ], { ok: 'Save', note: 'Used when you type text beside an arrow, and by Clean Up Reaction and Arrange Scheme. These are the usual values for every file; a drawing style can have its own (Drawing Style ▸ Reaction arrows, with a preview), and those win. The text\'s size and font are in Drawing Style too. Leave a distance blank to scale it with the bond length. Existing schemes change when you next clean them up.' });
   if (!got) return;
   const len = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(500, n); };
   const next: Partial<SchemePrefs> = {
@@ -12209,7 +12209,7 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files demo clips hover tool tips animation', open: generalPreferences },
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
-  { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller', open: drawingStyleDialog },
+  { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
   { id: 'typing', title: 'Text and Spelling', words: 'typing spelling dictionary autocorrect replacements chemistry formulas subscripts', open: () => typingDialog.open() },
   { id: 'palettes', title: 'Colour Palettes', words: 'colours colors palette rows', open: () => editPalettes() },

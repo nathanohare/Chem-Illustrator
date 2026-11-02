@@ -25,6 +25,23 @@ export interface DocStyle {
   arrowWidth?: number;
   arrowHeadLength?: number;
   arrowHeadWidth?: number;
+  /**
+   * How reaction arrows sit in a scheme, where not the usual (each distance in points; absent:
+   * it scales with the bond length): the gap to the structures, either side of a +, between the
+   * arrow and its text, how the lines of text line up, whether the arrow fits its text, and the
+   * arrow beyond the text before it starts and before the head.
+   */
+  scheme?: StyleScheme;
+}
+
+export interface StyleScheme {
+  structGap?: number;
+  plusGap?: number;
+  textGap?: number;
+  textAlign?: 'left' | 'center' | 'right';
+  fit?: boolean;
+  lead?: number;
+  headGap?: number;
 }
 
 export const ACS_1996: DocStyle = {

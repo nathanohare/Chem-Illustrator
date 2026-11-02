@@ -9,6 +9,11 @@ import { Doc } from '../model';
 import type { DocStyle } from '../style';
 import { freeRing, placeRing, sprout } from '../chem/chemgeom';
 import { recordPicture, pictureCanvas } from '../render/picture';
+import { Renderer } from '../render/renderer';
+import { applySchemePlan, planCleanUp, withSchemePrefs, type SchemePrefs } from '../chem/scheme-layout';
+import type { Measure } from '../editor/arrange';
+
+const noCanvas = { getContext: () => null } as unknown as HTMLCanvasElement;
 import { darkMatrix, type DarkPalette } from '../dark-page';
 import type { PageLook } from '../page-grid';
 import { SHADE_ALPHA } from '../page-grid';
@@ -30,49 +35,68 @@ function sized(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasRe
 }
 
 /**
- * The sample drawing: a Boc-protected amino ester on a benzene ring (a wedge, a hashed bond,
- * double bonds and labels), its compound number, a reaction arrow with conditions, and a
- * second molecule after it (a ketone and an ammonium ion, with a bold bond).
+ * The sample drawing: a Boc-protected amine on a benzene ring (a wedge, a hashed bond, double
+ * bonds and labels) taken off with TFA, to the ammonium ion. The two compound numbers, and a
+ * reaction arrow with text above and below it, laid out by Clean Up Reaction in the scheme
+ * settings `scheme` (the arrow fitted to its text, the gaps, how the lines of text line up).
  */
-export function sampleDrawing(style: DocStyle): Doc {
+export function sampleDrawing(style: DocStyle, scheme: Partial<SchemePrefs> = {}): Doc {
   const doc = new Doc();
   doc.style = { ...style };
   const L = style.bondLength;
-  doc.bulk(() => {
-    const ring = placeRing(doc, freeRing({ x: 0, y: 0 }, 6, L), { aromatic: true });
-    const a = doc.atoms.get(ring[1])!;
-    const c = sprout(doc, a.id);
-    const me = sprout(doc, c.id, 1, 'hashWedge');
-    doc.updateAtom(me.id, { label: null });
+  /** The 1-phenylethylamine part both share: ring, then C with a hashed methyl and a wedged N. */
+  const amine = (x: number): number => {
+    const ring = placeRing(doc, freeRing({ x, y: 0 }, 6, L), { aromatic: true });
+    const c = sprout(doc, doc.atoms.get(ring[1])!.id);
+    doc.updateAtom(sprout(doc, c.id, 1, 'hashWedge').id, { label: null });
     const n = sprout(doc, c.id, 1, 'wedge');
     doc.updateAtom(n.id, { z: 7 });
-    const co = sprout(doc, n.id);
+    return n.id;
+  };
+  const box = (from: number) => {
+    let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+    for (const a of doc.atoms.values()) if (a.id >= from) { x1 = Math.min(x1, a.x); x2 = Math.max(x2, a.x); y1 = Math.min(y1, a.y); y2 = Math.max(y2, a.y); }
+    return { x1, y1, x2, y2 };
+  };
+  const number = (b: { x1: number; x2: number; y2: number }, text: string) =>
+    doc.addCaption({ x: (b.x1 + b.x2) / 2 - style.captionSize * 0.3, y: b.y2 + L * 1.1, runs: [{ text, bold: true }], justify: 'left' });
+  doc.bulk(() => {
+    // the carbamate
+    const n = amine(0);
+    const co = sprout(doc, n);
     sprout(doc, co.id, 2, 'solid', 8);
     const o = sprout(doc, co.id, 1, 'solid', 8);
     doc.updateAtom(o.id, { label: null });
-    const tb = sprout(doc, o.id);
-    doc.updateAtom(tb.id, { label: 'tBu' });
-    let minY = Infinity, maxY = -Infinity, minX = Infinity, maxX = -Infinity;
-    for (const at of doc.atoms.values()) { minX = Math.min(minX, at.x); maxX = Math.max(maxX, at.x); minY = Math.min(minY, at.y); maxY = Math.max(maxY, at.y); }
-    doc.addCaption({ x: (minX + maxX) / 2 - style.captionSize * 0.3, y: maxY + L * 1.1, runs: [{ text: '1', bold: true }], justify: 'left' });
-    // a reaction arrow under it, in the style's arrow sizes
+    doc.updateAtom(sprout(doc, o.id).id, { label: 'tBu' });
+    const one = box(0);
+    number(one, '1');
+    // the arrow, roughly placed (Clean Up puts it right), with its text
+    const y = (one.y1 + one.y2) / 2;
     const lw = style.arrowWidth ?? style.lineWidth;
-    const y = maxY + L * 2.2;
+    const x0 = one.x2 + L;
     doc.addArrow({
-      tail: { x: minX, y }, head: { x: minX + L * 3.4, y }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0,
+      tail: { x: x0, y }, head: { x: x0 + L * 4.6, y }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0,
       headLength: style.arrowHeadLength ?? lw * 10, headWidth: style.arrowHeadWidth ?? lw * 2.5, ...(style.arrowWidth !== undefined ? { lineWidth: style.arrowWidth } : {}),
     });
-    doc.addCaption({ x: minX + L * 0.6, y: y - L * 0.35, runs: [{ text: 'TFA, CH' }, { text: '2', sub: true }, { text: 'Cl' }, { text: '2', sub: true }].map((r) => ({ ...r, ...newTextLook(doc) })), justify: 'left' });
-    // and its product beyond the arrow: a second molecule, with a charge and a bold bond
-    const px = minX + L * 6;
-    const ring2 = placeRing(doc, freeRing({ x: px, y }, 6, L), { aromatic: false });
-    // the ketone on the ring atom furthest up, the ammonium on the one furthest down
-    const far = (f: (p: { x: number; y: number }) => number) => ring2.reduce((b, id) => (f(doc.atoms.get(id)!) > f(doc.atoms.get(b)!) ? id : b));
-    sprout(doc, far((p) => -p.y), 2, 'solid', 8);
-    const nh = sprout(doc, far((p) => p.y), 1, 'bold', 7);
-    doc.updateAtom(nh.id, { charge: 1 });
-    doc.addCaption({ x: px - style.captionSize * 0.3, y: nh.y + L * 1.1, runs: [{ text: '2', bold: true }], justify: 'left' });
+    const look = newTextLook(doc);
+    doc.addCaption({ x: x0 + L * 0.3, y: y - L * 0.3, runs: [{ text: 'TFA', ...look }], justify: 'left' });
+    doc.addCaption({ x: x0 + L * 0.3, y: y + L * 0.75, runs: [{ text: 'CH' }, { text: '2', sub: true }, { text: 'Cl' }, { text: '2', sub: true }, { text: ', 23 °C, 1 h' }].map((r) => ({ ...r, ...look })), justify: 'left' });
+    // the ammonium ion after it
+    const first = Math.max(...doc.atoms.keys()) + 1;
+    const nh = amine(x0 + L * 6.6);
+    doc.updateAtom(nh, { charge: 1 });
+    number(box(first), '2');
   });
+  // laid out as the scheme settings say, by the same Clean Up Reaction the canvas uses
+  try {
+    const r = new Renderer(noCanvas, noCanvas);
+    r.showWarnings = false;
+    const m: Measure = { atomBoxes: (a) => r.atomInfo(doc, a).boxes, captionBox: (c) => r.captionBox(c) };
+    withSchemePrefs(scheme, () => {
+      const plan = planCleanUp(doc, m);
+      if (plan) applySchemePlan(doc, m, plan);
+    });
+  } catch { /* (no text measuring here: left roughly placed) */ }
   return doc;
 }
 
@@ -92,10 +116,37 @@ export function drawingCanvas(doc: Doc, w: number, h: number, pad = 10): HTMLCan
   return out.canvas;
 }
 
+/** Part of a drawing (`view`, in its points) on a canvas `w` × `h` CSS pixels, on white. */
+export function drawingCrop(doc: Doc, view: { x1: number; y1: number; x2: number; y2: number }, w: number, h: number): HTMLCanvasElement {
+  const pic = recordPicture(doc, 2);
+  const out = sized(w, h);
+  if (!pic || !out.ctx) return out.canvas;
+  const vw = view.x2 - view.x1, vh = view.y2 - view.y1;
+  const fit = Math.min(w / vw, h / vh, 4);
+  const { canvas: src, dpi } = pictureCanvas(doc, pic, fit * dpr() * 72);
+  const k = dpi / 72;
+  const ctx = out.ctx;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, w, h);
+  const dw = vw * fit, dh = vh * fit;
+  ctx.drawImage(src, (view.x1 - pic.box.x1) * k, (view.y1 - pic.box.y1) * k, vw * k, vh * k, (w - dw) / 2, (h - dh) / 2, dw, dh);
+  return out.canvas;
+}
+
 /** Drawing Style: a sample drawn in it. */
-export function stylePreview(style: DocStyle): HTMLElement {
+export function stylePreview(style: DocStyle, scheme: Partial<SchemePrefs> = {}): HTMLElement {
   const box = document.createElement('div');
-  box.append(drawingCanvas(sampleDrawing(style), 260, 240));
+  const doc = sampleDrawing(style, { ...style.scheme, ...scheme });
+  box.append(drawingCanvas(doc, 236, 110, 6));
+  // the arrow close up, where its gaps and the text's place show
+  const r = [...doc.arrows.values()][0];
+  if (r) {
+    const L = style.bondLength;
+    const x1 = Math.min(r.tail.x, r.head.x), x2 = Math.max(r.tail.x, r.head.x);
+    const crop = drawingCrop(doc, { x1: x1 - 1.6 * L, y1: r.tail.y - 1.3 * L, x2: x2 + 1.6 * L, y2: r.tail.y + 1.3 * L }, 236, 96);
+    crop.classList.add('sw-zoom');
+    box.append(crop);
+  }
   const p = document.createElement('p');
   p.className = 'muted sw-cap';
   p.textContent = `Bond ${+style.bondLength.toFixed(2)} pt · line ${+style.lineWidth.toFixed(2)} pt · ${style.labelFont} ${style.labelSize} pt`;

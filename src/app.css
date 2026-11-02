@@ -3191,6 +3191,7 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 .ask-preview { margin: 6px 0 10px; }
 .ask-preview canvas { border: 1px solid var(--line); border-radius: var(--r-control); }
 .sw-cap { margin: 6px 0 0; font-size: var(--fs-sm, 0.85em); }
+.sw-zoom { display: block; margin-top: 6px; }
 /* the Hotkeys page's keyboard */
 .hk-views { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-control); overflow: hidden; }
 .hk-views button { border: 0; border-radius: 0; background: none; padding: 3px 10px; color: var(--text); cursor: pointer; }
