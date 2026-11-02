@@ -144,6 +144,7 @@ import { installFontList, registerBundledFonts, bundledFaces, pdfFonts } from '.
 import { applyRibbonIcons } from './ui/ribbon-icons';
 import { TEMPLATES, Template, templateById, ownTemplates, setOwnTemplates, templateFromAtoms, placeTemplate, freePlacement } from './chem/templates';
 import { centreEnd, haptoLook } from './chem/hapto';
+import { viewNow, viewRingOf, type RingView } from './chem/ring-views';
 import { countElectrons } from './chem/electrons';
 import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, tokenize as tokenizeLabel } from './chem/labels';
 import { selectedGroup } from './chem/group-smiles';
@@ -7634,6 +7635,13 @@ const COMMANDS: Record<string, () => unknown> = {
   'hapto-bond': () => flash(editor.bondMetalToRing(), 5000),
   'split-hapto': () => flash(editor.splitHaptoBonds()),
   'hapto-kekule': () => flash(editor.toggleHaptoKekule(contextBond)),
+  'ring-flat': () => flash(editor.ringStep('flat')),
+  'ring-chair': () => flash(editor.ringStep('chair')),
+  'ring-chair-flip': () => flash(editor.ringStep('chair-flip')),
+  'ring-boat': () => flash(editor.ringStep('boat')),
+  'ring-flip': () => flash(editor.ringStep('flip')),
+  'ring-walk-cw': () => flash(editor.ringStep('cw')),
+  'ring-walk-ccw': () => flash(editor.ringStep('ccw')),
   'chain-ends': () => void toggleTerminalMethyls(),
   'methyls-ch3': () => chooseMethylStyle('CH3'),
   'methyls-me': () => chooseMethylStyle('Me'),
@@ -10317,6 +10325,7 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'clean-up' },
       { cmd: 'clean-up-options' },
       ...fuseRingMenu(),
+      ...ringShapeMenu(),
       ...metalMenu(),
       { label: 'Structure', items: [
         { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'chain-ends' }, { cmd: 'explicit-h' }, null,
@@ -10917,6 +10926,19 @@ const textToolboxHooks: TextToolboxHooks = {
   moreSymbols: () => symbolWindow.open(),
   say: (t) => flash(t),
 };
+
+/** Ring Shape on the right-click menu, when the selection is one cyclohexane that can be redrawn. */
+function ringShapeMenu(): MenuItem[] {
+  const got = viewRingOf(doc, editor.sel.atoms);
+  if (!('ring' in got)) return [];
+  const now = viewNow(doc, got.ring).view;
+  const shape = (cmd: string, v: RingView): MenuItem => ({ cmd, checked: now === v });
+  const walks = got.ring.subs.length > 0;
+  return [{ label: 'Ring Shape', items: [
+    shape('ring-flat', 'flat'), shape('ring-chair', 'chair'), shape('ring-chair-flip', 'chair-flip'), shape('ring-boat', 'boat'), null,
+    { cmd: 'ring-flip' }, ...(walks ? [{ cmd: 'ring-walk-cw' }, { cmd: 'ring-walk-ccw' }] : []),
+  ] }];
+}
 
 /** The toolboxes there are now (the drawing tools first, as the others' buttons may come from its bar). */
 function toolboxDefs(): ToolboxDef[] {

@@ -36,6 +36,19 @@ Cyclopropane to cyclooctane, benzene and cyclopentadiene.
 - Click empty space to place a ring, a bond to fuse it on, or an atom to make a spiro ring. Alt+click an atom to attach the ring by a new bond instead. Drag to turn it.
 - With benzene, Shift+click swaps the double bonds round; Ctrl+click draws it with a circle inside. Ctrl+click with cyclopentadiene also draws a circle.
 
+#### Flat, chair, flipped chair and boat
+
+A cyclohexane (or any six-membered ring of single bonds, such as a tetrahydropyran) can be drawn four ways, and it stays the same molecule in each: every group keeps its face of the ring, so its stereochemistry never changes, and the SMILES, the formula and the R/S labels stay the same.
+
+- Select the ring (or its whole structure) with the pointer over the drawing and press **Tab**: flat, then chair, then the flipped chair, then boat, then flat again. A wedge on the flat ring becomes an axial or equatorial bond on the same face of the chair.
+- On a chair with groups on it, **Tab** (or **]**) walks the ring round one place clockwise and **[** walks it back. The picture turns; the conformer doesn't, so axial groups stay axial.
+- **Shift+Tab** flips the chair: axial and equatorial swap.
+- The same commands are on the right-click menu under **Ring Shape**.
+- A structure picked with Tab (Edit ▸ Select Next Structure) isn't changed: Tab goes on to the next one.
+- A ring fused or bridged to another keeps its shape.
+
+A chair or boat drawn without wedges still has its stereochemistry read from its shape, so it keeps it when saved and opened again.
+
 ### Templates
 
 Ready-made structures in palettes on the tool bar, plus **My templates**:

@@ -54,7 +54,8 @@ import { setMethylStyle, toggleChainEndLabels, toggleExplicitHydrogens, type Met
 import { selectedGroup } from '../chem/group-smiles';
 import { groupMembers, groupSelection, selectedGroups, ungroupSelection, withGroups } from './groups';
 import { circleRing, circleRings, kekulize } from '../chem/aromatic';
-import { bondLayer, crossingBonds } from '../chem/crossing';
+import { bondLayer, crossingBonds, layerByDepth } from '../chem/crossing';
+import { RING_VIEW_NAMES, stepRing, viewNow, viewRingOf, type RingStep } from '../chem/ring-views';
 import { nextNumber as nextCompound, planNumbers, type NumberOptions } from '../chem/compound-numbers';
 import { arrowClash, bendSide, cleanUpArrow, endCentre, endPointToward, headEnd, isAtomSymbol, pushArrow, pushEndAt, pushPins, sameEnd, symbolAt, symbolPin, symbolSpot, tailEnd, SMALL_HEAD, type PushArrow, type PushEnd } from '../chem/mechanism';
 import { followPins, hasPins, makePin, mirrorBend } from '../chem/pins';
@@ -2042,6 +2043,50 @@ export class Editor {
     this.changed();
     return kekule ? 'Drawn with its double bonds (Kekulé form).' : (haptoLook.delocalized ? 'Drawn delocalized again.' : 'Drawn delocalized when that is on in Settings ▸ Drawing.');
   }
+
+  /**
+   * Redraw the selected six-membered ring flat, as a chair, the other chair or a boat, or walk
+   * it round one place: the molecule and its stereochemistry stay the same (ring-views.ts).
+   * Returns what to say.
+   */
+  ringStep(step: RingStep): string {
+    const doc = this.doc;
+    const got = viewRingOf(doc, this.sel.atoms.size ? this.sel.atoms : this.hover?.kind === 'atom' ? [this.hover.id] : []);
+    if (!('ring' in got)) return got.why;
+    const vr = got.ring;
+    const walking = step === 'cw' || step === 'ccw';
+    let view = viewNow(doc, vr).view;
+    doc.edit(walking ? 'Walk Ring' : step === 'flip' ? 'Ring Flip' : 'Ring Shape', () => {
+      view = stepRing(doc, vr, step);
+      layerByDepth(doc, [...vr.ring, ...vr.subs.map((x) => x.first)]);
+    });
+    this.changed();
+    const subs = vr.subs.length > 0;
+    if (walking) return `Walked one place ${step === 'cw' ? 'clockwise' : 'counterclockwise'}. Tab goes on, [ goes back, Shift+Tab flips the chair.`;
+    if (view === 'flat') return 'Drawn flat. Tab: chair.';
+    const name = RING_VIEW_NAMES[view];
+    return view === 'boat'
+      ? `${name}. ${subs ? 'Tab walks it round; ' : 'Tab: flat; '}Shift+Tab: chair.`
+      : `${name}. ${subs ? 'Tab walks the ring round, [ goes back, ' : 'Tab: the next shape, '}Shift+Tab flips it.`;
+  }
+
+  /** What Tab, Shift+Tab, [ and ] do to the selected ring now, or null when they don't act on a ring. */
+  private ringKey(chord: string): RingStep | null {
+    if (!['Tab', 'Shift+Tab', '[', ']'].includes(chord) || !this.sel.atoms.size) return null;
+    // a structure picked with Tab: Tab goes on to the next structure
+    if (this.tabPicked !== null && this.tabPicked === [...this.sel.atoms].sort((a, b) => a - b).join(',')) return null;
+    const got = viewRingOf(this.doc, this.sel.atoms);
+    if (!('ring' in got)) return null;
+    const view = viewNow(this.doc, got.ring).view;
+    const shaped = view !== 'flat';
+    const walks = shaped && got.ring.subs.length > 0;
+    if (chord === '[') return walks ? 'ccw' : null;
+    if (chord === ']') return walks ? 'cw' : null;
+    if (chord === 'Shift+Tab') return view === 'chair' || view === 'chair-flip' ? 'flip' : 'chair';
+    return walks ? 'cw' : 'next';
+  }
+  /** The structure Tab last picked (its atoms, sorted), so Tab again goes on to the next. */
+  private tabPicked: string | null = null;
 
   /** The selected labels Expand Label can draw out: ligands on a metal (by template) and other labels (by SMILES). */
   expandableLabels(): { id: number; template: boolean; smiles: string | null }[] {
@@ -4727,6 +4772,7 @@ export class Editor {
     const cur = frags.findIndex((f) => [...this.sel.atoms].some((id) => f.has(id)));
     const i = cur < 0 ? (step > 0 ? 0 : frags.length - 1) : (cur + step + frags.length) % frags.length;
     this.selectFragment(frags[i].values().next().value!, false);
+    this.tabPicked = [...this.sel.atoms].sort((a, b) => a - b).join(',');
     return true;
   }
 
@@ -4807,6 +4853,10 @@ export class Editor {
     if (/^(Shift\+)?Tab$/.test(chord) && !this.pointerInside && target !== this.r.overlay) return;
     // drawing a curved arrow through points: Enter ends it, Backspace takes back a point, Esc stops
     if (this.routeKey(chord)) { e.preventDefault(); return; }
+    // a selected cyclohexane: Tab through its shapes (flat, chair, flipped chair, boat); on a chair
+    // with substituents Tab and ] walk it round, [ walks it back, and Shift+Tab flips it
+    const ringStep = this.pointerInside || target === this.r.overlay ? this.ringKey(chord) : null;
+    if (ringStep) { e.preventDefault(); this.say(this.ringStep(ringStep)); return; }
     // on a focused button or menu, Enter, Space and Tab do their usual jobs (unless the mouse
     // is over the drawing: then they are drawing keys, as in ChemDraw)
     if (!this.pointerInside && target && target !== document.body && target !== this.r.overlay && /^(Shift\+)?(Enter|Space|Tab)$/.test(chord)) return;
