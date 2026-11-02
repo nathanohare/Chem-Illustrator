@@ -38,6 +38,11 @@ describe('the icon set', () => {
     document.body.innerHTML = html.slice(html.indexOf('<body'), html.lastIndexOf('</body>')).replace(/^<body[^>]*>/, '');
   });
 
+  it('keeps every ribbon panel inside its ribbon, and the page outside them', () => {
+    for (const p of document.querySelectorAll<HTMLElement>('.rb-panel')) expect(p.parentElement!.matches('.ribbon, .doc-ribbon'), p.outerHTML.slice(0, 80)).toBe(true);
+    expect(document.querySelector('.ribbon #work, .ribbon footer, .ribbon aside')).toBeNull();
+  });
+
   it('draws every icon differently', () => {
     const seen = new Map<string, string>();
     for (const [name, def] of Object.entries(ICON_SET)) {

@@ -229,6 +229,12 @@ export const ICON_SET: Record<string, IconDef> = {
   'energy-diagram': { hue: 'purple', d: '<path d="M3.25 3.25v17.5h17.5" stroke-width="1.25"/><path class="a" d="M5.5 16.5h3M10.5 6.5h3M15.5 12.5h3" stroke-width="2.25"/><path d="M8.5 16.5l2-10M13.5 6.5l2 6" stroke-dasharray="1.5 1.5" stroke-width="1.1"/>' },
   'export-pdf': { hue: 'red', d: page(3.75, 2.75, 13.5, 18.5, 4) + '<path d="M6.75 11.5h5M6.75 14.5h3.5" stroke-opacity=".5"/><circle class="s" cx="17" cy="17" r="4.75"/><path class="k" d="M17 14.5v4.5M15 17.25l2 2 2-2"/>' },
   'export-picture': { hue: 'teal', d: '<rect class="p" x="2.75" y="3.75" width="15.5" height="13.5" rx="2"/><path d="M2.75 14l4.5-4.5 3.5 3.5 2-2 5.5 5.5"/><circle class="s" cx="17" cy="17" r="4.75"/><path class="k" d="M17 14.5v4.5M15 17.25l2 2 2-2"/>' },
+  // a hexagon with a tick: the structures checked
+  'check-structure': { hue: 'green', d: '<path class="p" d="M10 3.25l5.85 3.38v6.75L10 16.75l-5.85-3.37V6.63z"/><path class="a" d="M13.5 18.5l2.5 2.5 5-5.5"/>' },
+  // a curved arrow with a tick
+  'check-arrows': { hue: 'red', d: '<path class="a" d="M4 15.5C4 8.5 9 4.5 15.5 5.25"/><path class="a" d="M12.75 2.75l3 2.6-2.9 2.7"/><path d="M13.5 18.5l2.5 2.5 5-5.5"/>' },
+  // a balance: two pans on a beam
+  'check-balance': { hue: 'blue', d: '<path d="M12 3.75v16.5M7.5 20.25h9M4.75 6.75h14.5"/><path class="f a" d="M2.75 13.25l2-6.5 2 6.5a2 2 0 0 1-4 0zM17.25 13.25l2-6.5 2 6.5a2 2 0 0 1-4 0z"/>' },
   preflight: { hue: 'green', d: page(3.75, 2.75, 13.5, 18.5, 4) + '<path d="M6.75 11h7.5M6.75 14h4.5" stroke-opacity=".5"/><circle class="s" cx="17" cy="17" r="4.75"/><path class="k" d="M14.75 17l1.5 1.5 3-3"/>' },
   // ---------------------------------------------------------------- arrange (small buttons)
   'shape-forward': { hue: 'gray', d: '<rect x="2.75" y="6.75" width="11" height="11" rx="1.5"/><rect class="f a" x="8.75" y="11.25" width="11" height="10" rx="1.5"/><path class="a" d="M18.5 2.75v5M16.25 5l2.25-2.25L20.75 5"/>' },

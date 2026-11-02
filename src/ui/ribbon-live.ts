@@ -85,7 +85,7 @@ export class RibbonLive {
     bar.setAttribute('aria-label', 'Editing the ribbon');
     const say = document.createElement('span');
     say.className = 'rb-live-say';
-    say.textContent = 'Editing the ribbon: drag a group by its name, or a single button, to move it (onto a tab to move it to that tab); drag a button off the ribbon or click × to take it away.';
+    say.textContent = 'Editing the ribbon: drag groups or single buttons to move them (onto a tab name for another tab); drag a button off the ribbon, or click a group\'s ×, to take it away.';
     const btn = (label: string, title: string, f: () => void, primary = false) => {
       const b = document.createElement('button');
       b.type = 'button';

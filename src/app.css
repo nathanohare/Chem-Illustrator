@@ -3181,3 +3181,58 @@ body:is(.slides-mode, .design-mode):not(.show-analysis-pane) #analysis-section {
 .rb-live-list-head { margin: 6px 0 2px; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
 .rb-live-cmd { padding: 3px 6px; font-size: var(--fs-sm); border-radius: var(--r-control); cursor: grab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rb-live-cmd:hover { background: var(--accent-soft); }
+
+/* a narrow window's second step (src/ui/ribbon-fit.ts): a group of large buttons becomes small buttons with their words, three to a column */
+.rb-group.rb-small > .rb-row { display: grid; grid-auto-flow: column; grid-template-rows: repeat(3, auto); align-content: center; column-gap: 2px; row-gap: 1px; }
+.rb-group.rb-small > .rb-row > .rb-fly { display: flex; }
+.ribbon .rb-group.rb-small button.rb-big { flex-direction: row; align-items: center; justify-content: flex-start; gap: 4px; min-width: 0; padding: 1px 5px; line-height: 17px; }
+.ribbon .rb-group.rb-small button.rb-big br { display: none; }
+.rb-group.rb-small button.rb-big .rb-icon { font-size: 14px; line-height: 1; width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+.rb-group.rb-small button.rb-big .rb-icon svg { width: 16px; height: 16px; }
+.rb-group.rb-small.rb-compact button.rb-big { font-size: 0; gap: 0; }
+
+/* ---- item 68: each region on its own surface. The title bar, the ribbon's tabs and the status bar
+   share one chrome tone; the ribbon's buttons sit on a rounded, slightly tinted panel with a soft
+   shadow; the formula bar, docks and side panel have their own pane tone; the page or grid stays white. */
+:root { --chrome: #e9ebef; --rb-surface: #fbfbfc; --pane: #f4f5f7; --rb-shadow: 0 1px 3px rgb(0 0 0 / 0.1), 0 1px 1px rgb(0 0 0 / 0.04); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) { --chrome: #14171b; --rb-surface: #262b33; --pane: #20242b; --rb-shadow: 0 1px 4px rgb(0 0 0 / 0.5); } }
+:root[data-theme='dark'] { --chrome: #14171b; --rb-surface: #262b33; --pane: #20242b; --rb-shadow: 0 1px 4px rgb(0 0 0 / 0.5); }
+header, footer { background: var(--chrome); }
+.ribbon.tabbed, .doc-ribbon { background: var(--chrome); border-bottom: 0; }
+body:not(.mode-window) .rb-tabs { background: var(--chrome); border-bottom: 0; }
+.ribbon.tabbed > .rb-panel:not([hidden]), .doc-ribbon > .rb-panel:not([hidden]) { margin: 0 6px 5px; background: var(--rb-surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--rb-shadow); }
+.ribbon.tabbed > .rb-panel .rb-group, .doc-ribbon > .rb-panel .rb-group { background: transparent; }
+#formula-bar { background: var(--pane); }
+.dock, aside { background: var(--pane); }
+
+/* ---- item 38: Dark Gray (View > Window and Colours > Theme), like Office's: a dark title bar and
+   tab band, the ribbon and the panels a lighter gray so the icons read easily; the page stays white.
+   It is the light theme underneath (data-theme="light"), with these colours over it. */
+:root[data-gray] { --chrome: #2e3137; --rb-surface: #d3d6db; --pane: #dfe1e5; --bg: #b4b8bf; --surround: #9fa4ad; --line: #bfc3ca; --rb-shadow: 0 1px 3px rgb(0 0 0 / 0.25); }
+:root[data-gray] header, :root[data-gray] footer, :root[data-gray] .rb-tabs { --bg: #23262b; --text: #eceef2; --muted: #b9bec8; --line: #474b53; --accent-soft: #41464f; --panel: #3a3e45; color: var(--text); }
+:root[data-gray] .ribbon > .rb-panel, :root[data-gray] .doc-ribbon > .rb-panel { --panel: #d3d6db; --accent-soft: #c1c7d1; --line: #b3b8c0; }
+:root[data-gray] .dock, :root[data-gray] aside { --panel: #dfe1e5; --line: #c4c8cf; }
+
+/* ---- item 37: interface density (View > Window and Colours > Density). Compact is as the app comes;
+   Standard and Large make the icons bigger and give the toolbox and ribbon buttons more room, rather
+   than zooming everything (Interface Size does that). */
+html[data-density='standard'] .tool { width: 40px; height: 38px; }
+html[data-density='standard'] .tool > :is(svg, img) { width: 24px; height: 24px; }
+html[data-density='standard'] .tb-cells { gap: 5px; }
+html[data-density='standard'] .tb-cells > .tb-gap { width: 40px; height: 38px; }
+html[data-density='standard'] .ribbon button { padding: 3px 7px; line-height: 19px; }
+html[data-density='standard'] .ribbon .rb-group:not(.rb-small) button.rb-big { padding: 4px 7px; min-width: 52px; gap: 3px; }
+html[data-density='standard'] .ribbon .rb-group:not(.rb-small) .rb-icon { height: 30px; line-height: 30px; font-size: 24px; }
+html[data-density='standard'] .ribbon .rb-group:not(.rb-small) .rb-icon .ci-ic { width: 28px; height: 28px; }
+html[data-density='standard'] .ribbon :is(.rb-lead, .rb-iconbtn) .ci-ic { width: 18px; height: 18px; }
+html[data-density='standard'] .rb-group { padding: 0 9px; }
+html[data-density='large'] .tool { width: 46px; height: 44px; }
+html[data-density='large'] .tool > :is(svg, img) { width: 28px; height: 28px; }
+html[data-density='large'] .tb-cells { gap: 7px; }
+html[data-density='large'] .tb-cells > .tb-gap { width: 46px; height: 44px; }
+html[data-density='large'] .ribbon button { padding: 5px 9px; line-height: 21px; }
+html[data-density='large'] .ribbon .rb-group:not(.rb-small) button.rb-big { padding: 5px 9px; min-width: 62px; gap: 4px; }
+html[data-density='large'] .ribbon .rb-group:not(.rb-small) .rb-icon { height: 36px; line-height: 36px; font-size: 29px; }
+html[data-density='large'] .ribbon .rb-group:not(.rb-small) .rb-icon .ci-ic { width: 34px; height: 34px; }
+html[data-density='large'] .ribbon :is(.rb-lead, .rb-iconbtn) .ci-ic { width: 20px; height: 20px; }
+html[data-density='large'] .rb-group { padding: 0 12px; }

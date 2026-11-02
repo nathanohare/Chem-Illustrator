@@ -6515,7 +6515,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['view-warnings-pane', 'view-analysis-pane', 'references', 'compound-library', 'knowledge-base', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'theme-darkgray', 'density-compact', 'density-standard', 'density-large', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -7141,6 +7141,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'theme-system': () => { setAppTheme('system'); storeSettings(); },
   'theme-light': () => { setAppTheme('light'); storeSettings(); },
   'theme-dark': () => { setAppTheme('dark'); storeSettings(); },
+  'theme-darkgray': () => { setAppTheme('darkgray'); storeSettings(); },
+  'density-compact': () => { setDensity('compact'); storeSettings(); },
+  'density-standard': () => { setDensity('standard'); storeSettings(); },
+  'density-large': () => { setDensity('large'); storeSettings(); },
   'icons-mode': () => { setIconLook('mode'); storeSettings(); },
   'icons-kind': () => { setIconLook('kind'); storeSettings(); },
   'shape-ink-accent': () => { setShapesInk(shapeInkNow === 'accent' ? 'neutral' : 'accent'); storeSettings(); },
@@ -8579,6 +8583,7 @@ function currentSettings(): Settings {
     uiScale: uiScale(),
     textBar: CaptionEditor.barPlace,
     appTheme,
+    density,
     iconLook,
     shapeInk: shapeInkNow,
     oneColumnTools,
@@ -8817,6 +8822,7 @@ function applySettings(s: Settings): void {
   if (!doc.page && !doc.source && !doc.atoms.size && !deckNow()) doc.page = defaultPage && { ...defaultPage };
   placeTextBar(s.textBar);
   setAppTheme(s.appTheme);
+  setDensity(s.density);
   setIconLook(s.iconLook);
   setShapesInk(s.shapeInk);
   setOneColumnTools(s.oneColumnTools);
@@ -11415,10 +11421,23 @@ function placeTextBar(where: Settings['textBar']): void {
 let appTheme: Settings['appTheme'] = 'system';
 function setAppTheme(t: Settings['appTheme']): void {
   appTheme = t;
-  if (t === 'system') delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = t;
+  const root = document.documentElement;
+  // Dark Gray is the light theme with its own colours over it
+  if (t === 'system') delete root.dataset.theme;
+  else root.dataset.theme = t === 'darkgray' ? 'light' : t;
+  if (t === 'darkgray') root.dataset.gray = ''; else delete root.dataset.gray;
   themeChanged();
-  for (const w of ['system', 'light', 'dark']) $(`[data-cmd="theme-${w}"]`)?.setAttribute('aria-checked', String(w === t));
+  for (const w of ['system', 'light', 'dark', 'darkgray']) $(`[data-cmd="theme-${w}"]`)?.setAttribute('aria-checked', String(w === t));
+}
+
+/** View > Window and Colours > Density: bigger icons and more room between the toolboxes' and ribbons' buttons. */
+let density: Settings['density'] = 'compact';
+function setDensity(d: Settings['density']): void {
+  density = d;
+  if (d === 'compact') delete document.documentElement.dataset.density;
+  else document.documentElement.dataset.density = d;
+  for (const w of ['compact', 'standard', 'large']) $(`[data-cmd="density-${w}"]`)?.setAttribute('aria-checked', String(w === d));
+  fitRibbons();
 }
 
 /** View > Window and Colours > Icon Colours: the mode's colour on one part of each icon (the default), or a colour for each kind of command. */

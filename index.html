@@ -364,6 +364,15 @@
     <button role="menuitemradio" aria-checked="true" data-cmd="theme-system" title="Light or dark as the computer is set"><span>As the Computer Is Set</span></button>
     <button role="menuitemradio" aria-checked="false" data-cmd="theme-light"><span>Light</span></button>
     <button role="menuitemradio" aria-checked="false" data-cmd="theme-dark"><span>Dark</span></button>
+    <button role="menuitemradio" aria-checked="false" data-cmd="theme-darkgray" title="A dark title bar with the ribbon and panels in a lighter gray, so the icons read easily (Office's Dark Gray)"><span>Dark Gray</span></button>
+    </div>
+    </div>
+    <div class="submenu">
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false" title="How roomy the toolboxes and ribbons are: bigger icons and more space between buttons. Interface Size zooms everything instead">Density</button>
+    <div class="menu sub" role="menu" hidden>
+    <button role="menuitemradio" aria-checked="true" data-cmd="density-compact" title="As the app comes: small icons, buttons close together"><span>Compact</span></button>
+    <button role="menuitemradio" aria-checked="false" data-cmd="density-standard" title="Bigger icons and a little more room between buttons"><span>Standard</span></button>
+    <button role="menuitemradio" aria-checked="false" data-cmd="density-large" title="The biggest icons and the most room between buttons (a touch screen or a projector)"><span>Large</span></button>
     </div>
     </div>
     <div class="submenu">
@@ -2420,13 +2429,16 @@
         </div>
         <div class="rb-label">Arrange</div>
       </div>
+    </div>
     <div class="rb-panel" data-sl-panel="show" hidden>
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="present" title="Show the slides full screen from the first"><span class="rb-icon">▶</span>From Beginning</button>
           <button class="rb-big" data-cmd="present-current" title="Show the slides full screen from this one"><span class="rb-icon">▷</span>From This Slide</button>
-          <button class="rb-big" data-cmd="presenter-view" title="Slides full screen on the projector; your notes, the next slide and a timer on your own screen"><span class="rb-icon">▣</span>Presenter View</button>
-          <button class="rb-big" data-cmd="custom-show-menu" aria-haspopup="true" title="Custom Slide Show: play one of the deck's custom shows (named lists of its slides, in any order), or make and change them"><span class="rb-icon">☷</span>Custom Slide Show ▾</button>
+          <div class="rb-col">
+            <button class="rb-labelled" data-cmd="presenter-view" title="Slides full screen on the projector; your notes, the next slide and a timer on your own screen"><span class="rb-lead">▣</span>Presenter View</button>
+            <button class="rb-labelled" data-cmd="custom-show-menu" aria-haspopup="true" title="Custom Slide Show: play one of the deck's custom shows (named lists of its slides, in any order), or make and change them"><span class="rb-lead">☷</span>Custom Slide Show ▾</button>
+          </div>
         </div>
         <div class="rb-label">Start Slide Show</div>
       </div>
@@ -2434,11 +2446,13 @@
         <div class="rb-row">
           <button class="rb-big" data-cmd="set-up-show" title="Set Up Show: full screen with a speaker, in a window for one person, or at a kiosk going round by itself; which slides; loop; narration, animations and timings. Saved with the PowerPoint file"><span class="rb-icon">⚙</span>Set Up Slide Show</button>
           <button class="rb-big keyframes-only" hidden data-cmd="canvas-show-options" title="Canvas Show Options: dim what is outside the keyframe, a mini-map of the whole canvas, compound numbers that fly back to where the compound was made"><span class="rb-icon">◰</span>Canvas Show</button>
-          <button class="rb-big" data-cmd="hide-slide" aria-pressed="false" title="The slide show skips the slides picked; they stay in the deck and in the PowerPoint file. Again to show them"><span class="rb-icon">⊘</span>Hide Slide</button>
-          <button class="rb-big" data-cmd="rehearse-timings" title="Rehearse Timings: play the show with a clock for each slide and the whole talk; at the end keep the times, so the show can go on by itself"><span class="rb-icon">⏱</span>Rehearse Timings</button>
-          <button class="rb-big" data-cmd="record-show" title="Record: play the show recording your narration from the microphone, slide by slide, and timing each slide; at the end keep them (narration goes on each slide as a sound that plays as it comes in, PowerPoint too)"><span class="rb-icon">●</span>Record</button>
-          <button class="rb-big" data-cmd="clear-show-menu" aria-haspopup="true" title="Clear: take the rehearsed times or the recorded narration off this slide or every slide; or rehearse or record again from this slide"><span class="rb-icon">⌫</span>Clear ▾</button>
           <div class="rb-col">
+            <button class="rb-labelled" data-cmd="hide-slide" aria-pressed="false" title="The slide show skips the slides picked; they stay in the deck and in the PowerPoint file. Again to show them"><span class="rb-lead">⊘</span>Hide Slide</button>
+            <button class="rb-labelled" data-cmd="rehearse-timings" title="Rehearse Timings: play the show with a clock for each slide and the whole talk; at the end keep the times, so the show can go on by itself"><span class="rb-lead">⏱</span>Rehearse Timings</button>
+            <button class="rb-labelled" data-cmd="record-show" title="Record: play the show recording your narration from the microphone, slide by slide, and timing each slide; at the end keep them (narration goes on each slide as a sound that plays as it comes in, PowerPoint too)"><span class="rb-lead">●</span>Record</button>
+          </div>
+          <div class="rb-col">
+            <button class="rb-labelled" data-cmd="clear-show-menu" aria-haspopup="true" title="Clear: take the rehearsed times or the recorded narration off this slide or every slide; or rehearse or record again from this slide"><span class="rb-lead">⌫</span>Clear ▾</button>
             <label class="rb-field check" title="Play the narration recorded with Record (off: Show without narration)"><input type="checkbox" data-cmd="play-narrations" checked /> Play Narrations</label>
             <label class="rb-field check" title="Each slide goes on by itself after its time (off: only clicks go on)"><input type="checkbox" data-cmd="use-timings" checked /> Use Timings</label>
           </div>
@@ -2500,6 +2514,17 @@
       </div>
     </div>
     <div class="rb-panel" data-sl-panel="review" hidden>
+      <div class="rb-group">
+        <div class="rb-row">
+          <button class="rb-big" data-cmd="preflight" title="Check Figure for Journal: is the slide's figure the width the journal prints at, is its text big enough and its lines thick enough once printed, are its fonts and pictures what the journal asks for"><span class="rb-icon">✓</span>Check for Journal</button>
+          <div class="rb-col">
+            <button class="rb-labelled" data-cmd="check-structure" title="Check Structure: go to the next structure warning (valence, charge, stereo) on the slide"><span class="rb-lead"></span>Check Structures</button>
+            <button class="rb-labelled" data-cmd="check-arrows" title="Check that the curved arrows make sense: each starts at a lone pair, negative charge, radical or bond, ends where electrons can go, and leaves no five-bond carbon or one-electron bond. Again for the next problem"><span class="rb-lead"></span>Check Arrows</button>
+            <button class="rb-labelled" data-cmd="check-balance" title="Check Balance: count every element and the charge on each side of the selected reaction step and say what is missing, such as water or HCl"><span class="rb-lead"></span>Check Balance…</button>
+          </div>
+        </div>
+        <div class="rb-label">Chemistry</div>
+      </div>
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="check-accessibility" title="Check Accessibility: missing alt text, low-contrast text, slides without titles, reading order. Click an item to go to it"><span class="rb-icon">♿</span>Check Accessibility</button>
