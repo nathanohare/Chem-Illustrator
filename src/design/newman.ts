@@ -289,10 +289,11 @@ export function drawEyeMark(doc: Doc, front: Vec, back: Vec, color = '#1a56db'):
   const tail = { x: front.x + u.x * 1.9 * L, y: front.y + u.y * 1.9 * L };
   const arrows: number[] = [], shapes: number[] = [];
   arrows.push(doc.addArrow({ tail, head: tip, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'dashed', noGo: false, equilibrium: false, sweep: 0, headLength: lw * 7, headWidth: lw * 2.6, color } as Omit<Arrow, 'id'>).id);
-  // the eye, side on: two lids meeting at the corner nearest the arrow, closed by the eyeball's curve
+  // the eye, side on: two lids meeting at the corner farthest from the bond and opening toward it,
+  // the eyeball's curve across the open end looking down the arrow
   const s = 0.6 * L;
-  const corner = { x: tail.x + u.x * 0.15 * L, y: tail.y + u.y * 0.15 * L };
-  const lidEnd = (k: number) => ({ x: corner.x + u.x * s + n.x * k * s * 0.62, y: corner.y + u.y * s + n.y * k * s * 0.62 });
+  const corner = { x: tail.x + u.x * (0.33 * L + s), y: tail.y + u.y * (0.33 * L + s) };
+  const lidEnd = (k: number) => ({ x: corner.x - u.x * s + n.x * k * s * 0.62, y: corner.y - u.y * s + n.y * k * s * 0.62 });
   for (const k of [1, -1]) { const e = lidEnd(k); shapes.push(doc.addShape({ kind: 'line', x1: corner.x, y1: corner.y, x2: e.x, y2: e.y, color }).id); }
   arrows.push(doc.addArrow({ tail: lidEnd(1), head: lidEnd(-1), headStyle: 'none', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 110 * RAD, headLength: 0, headWidth: 0, color } as Omit<Arrow, 'id'>).id);
   return { arrows, shapes };
