@@ -67,7 +67,8 @@ import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
 import { rebuildSmartCycle, smartCycleStart, type SmartCycleStart } from '../chem/smart-cycle';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
-import { arrangeSmart, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
+import { arrangeSmart, formatSmart, stepToHolder, stepHolderToText, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
+import type { SmartFormat } from '../chem/smart-format';
 import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
 import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
 import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
@@ -1135,7 +1136,7 @@ export class Editor {
       const x = g?.list[gg.index];
       if (g && x) {
         // a guide snaps to the drawing's major ticks (from its top left) unless Alt is held
-        const at = e.altKey || g.snap === 'none' ? p : { x: Math.round(p.x / g.minor) * g.minor, y: Math.round(p.y / g.minor) * g.minor };
+        const at = e.altKey || g.snapOff ? p : { x: Math.round(p.x / g.minor) * g.minor, y: Math.round(p.y / g.minor) * g.minor };
         const list = g.list.slice();
         list[gg.index] = movedGuide(x, gg.part, at);
         this.doc.guides = { ...g, list };
@@ -3481,6 +3482,15 @@ export class Editor {
   }
   /** Select one shape on its own (a Smart Scheme's dashed species box, from the species list). */
   selectShape(id: number): void { if (this.doc.shapes.has(id)) { this.selectOnly({ kind: 'shape', id }); this.changed(); } }
+  /** Make what joins or leaves at step k (above or below its arrow) a dashed box to draw or paste a structure in; the box is selected. */
+  smartStepToHolder(id: number, k: number, part: 'above' | 'below'): boolean {
+    let box: number | null = null;
+    const ok = this.smartEdit(id, 'Make Reagent a Structure', (m) => (box = stepToHolder(this.doc, m, id, k, part)) !== null);
+    if (box !== null) { this.selectOnly({ kind: 'shape', id: box }); this.changed(); }
+    return ok;
+  }
+  /** Make a step's dashed reagent box text again. */
+  smartStepToText(id: number, k: number, part: 'above' | 'below'): boolean { return this.smartEdit(id, 'Make Reagent Text', (m) => stepHolderToText(this.doc, m, id, k, part)); }
   /** Make species k's dashed box a text label again. */
   smartToText(id: number, k: number): boolean { return this.smartEdit(id, 'Make Species Text', (m) => holderToSlotText(this.doc, m, id, k) !== null); }
   /** The dashed species box selected on its own (a paste goes into it), or null. */
@@ -3524,6 +3534,7 @@ export class Editor {
     this.changed();
     return smart !== null;
   }
+  smartFormat(id: number, fmt: SmartFormat | undefined): boolean { return this.smartEdit(id, 'Format Smart Scheme', (m) => formatSmart(this.doc, m, id, fmt)); }
   smartArrange(id: number, patch?: Partial<SmartData>): boolean { return this.smartEdit(id, 'Arrange Smart Scheme', (m) => arrangeSmart(this.doc, m, id, patch)); }
 
   /** Chemistry ▸ Scheme ▸ Convert to Smart Scheme: the selected scheme becomes one object. */
@@ -6245,7 +6256,7 @@ export class Editor {
   /** Moves snap to the drawing's guides. */
   private guidesSnap(): boolean {
     const g = this.doc.guides;
-    return !!g && g.shown && g.snap !== 'none' && (g.list.length > 0 || g.grid);
+    return !!g && g.shown && !g.snapOff && (g.list.length > 0 || g.grid);
   }
 
   /** The guide under a point (the Select tool drags it). */

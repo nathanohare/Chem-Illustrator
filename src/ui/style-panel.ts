@@ -203,8 +203,8 @@ export class StylePanel {
     else if (diagram?.plate) this.plateControls(diagram);
     else if (diagram?.diagram) this.diagramControls(diagram);
     else if (diagram?.smart) {
+      // how its list works is behind the "i" by the list's title
       this.heading('Smart Scheme');
-      this.note('Switch its layout and type its species and conditions in the list beside it. Drag a species on the page and its arrows follow; the + buttons add a species there.');
     }
     else if (shapes.length) this.shapeControls(shapes);
     if (rings.length) this.shapeControls(rings, rings.length > 1 ? `${rings.length} ring fills` : 'Ring fill');

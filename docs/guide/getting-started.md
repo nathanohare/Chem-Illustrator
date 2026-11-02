@@ -190,6 +190,17 @@ Favorites are kept with your settings, not in a file, so the same ones are there
 
 It types into the text you are editing: a document, a caption or text box, a slide's text, or a cell (it starts typing in the active cell if you weren't already). On a canvas, slide or design with nothing being typed, it starts a new text in the middle of the view. On a canvas, the window warns about the few characters a ChemDraw file may not show.
 
+### The Assistant (every mode, Ctrl+/)
+
+**Edit ▸ Assistant…** (Ctrl+/) opens a slim bar at the bottom of the page for asking an AI model of your own about what you are working on. It is there only once a model is linked in **Edit ▸ Settings ▸ AI Model** (Claude, ChatGPT or Gemini with your own API key, or a model on this computer, in Ollama or LM Studio, so that nothing leaves it), and it sends nothing until you turn it on.
+
+- **What it can do.** On a canvas, slide or design page: draw a structure you describe, change the selected one ("make this the methyl ester"), or check a scheme (balance, stereochemistry, missing reagents); a finding about a step has **Show step** to select its arrow. In a Document: write or rewrite text ("write the experimental for step 2"). In a Spreadsheet: answer questions about the selected cells.
+- **It only proposes.** Each change comes as a card with **Accept** and **Reject**. Nothing on the page changes until you accept, an accepted change is one step of Undo (the card has its own **Undo** too), and a proposed structure is read by RDKit before it is drawn. A structure proposed in a Document or a Spreadsheet is copied as SMILES for you to paste.
+- **What is sent.** Under the box, **Will send** lists everything the question would carry: the selected structures as SMILES, the scheme's steps as reaction SMILES with their conditions, the selected text or the document's text, the selected cells. Click any of them to leave it out. Nothing else is sent: not your other files or tabs, not file names, not your key. The line under it says which service it goes to, and "(this computer)" when it stays here.
+- **Local only.** Tick it in the bar (or in the AI Model settings) to make sure nothing leaves the computer: only a model at a localhost address is asked, and anything else is blocked before it is sent. Use it for unpublished structures.
+- **Request Log.** Every question sent, with everything sent with it, is kept on this computer (the last 200). **Request Log** in the bar shows them, and **Clear Log** forgets them.
+- **Open as Pane** makes the bar a taller pane down the right for a longer conversation, and **Float as Window** a window of its own that you move by its title and size from its corner; **Make Bar** puts it back. The look you choose is kept (also in **Settings ▸ AI Model ▸ Assistant shows as**). Esc closes it. A conversation belongs to the tab it started in: switching tabs starts a new one.
+
 ## Opening your first ChemDraw file
 
 1. Choose **File ▸ Open…** (Ctrl+O).

@@ -130,7 +130,8 @@ export class CaptionEditor {
     // View > Window and Colours > Text Formatting Bar: along the top of the drawing (so it never covers what is
     // drawn), floating by the text, or hidden (the keys still work)
     this.bar.classList.toggle('docked', CaptionEditor.barPlace === 'docked');
-    this.bar.hidden = CaptionEditor.barPlace === 'hidden';
+    // (and with the Text Formatting toolbox showing, that is the bar: the same one isn't shown twice)
+    this.bar.hidden = CaptionEditor.barPlace === 'hidden' || !!CaptionEditor.barElsewhere?.();
     h.host.append(this.ta, this.bar);
 
     const ta = this.ta;
@@ -495,6 +496,9 @@ export class CaptionEditor {
     this.bar.style.left = `${left}px`;
     this.bar.style.top = `${below ? br.y + 8 : tl.y - hb - 8}px`;
   }
+
+  /** True when the same bar shows elsewhere (the Text Formatting toolbox), so this one stays hidden. */
+  static barElsewhere: (() => boolean) | null = null;
 
   /** Where the bar goes (View > Window and Colours > Text Formatting Bar). */
   static barPlace: 'docked' | 'floating' | 'hidden' = 'docked';

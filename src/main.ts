@@ -172,7 +172,7 @@ import { zipSync } from 'fflate';
 import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
 import { plainText, savableChar } from './richtext';
 import { buildTextToolbox, type TextToolboxHooks } from './ui/text-toolbox';
-import { buildGuidesToolbox, type GuidesToolboxHooks } from './ui/guides-toolbox';
+import { buildGuidesToolbox, GUIDES_INFO, type GuidesToolboxHooks } from './ui/guides-toolbox';
 import { htmlToRich } from './text/html';
 import { LiveStereo } from './chem/live-stereo';
 import { setStereoShown, shownDescriptor, axialStyle } from './chem/stereo';
@@ -281,7 +281,8 @@ import { paintPages } from './ui/page-grid-view';
 import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
-import type { AssistantAction, SendItem } from './ai/assistant';
+import type { AssistantAction, AssistantMode, SendItem } from './ai/assistant';
+import { AssistantBar } from './ui/assistant-bar';
 import { aiSettingsDialog } from './ui/ai-settings';
 import { freeSpace } from './editor/free-space';
 import { canReadStructures, importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
@@ -2555,6 +2556,31 @@ async function applyAssistantAction(a: AssistantAction): Promise<string> {
   selectNewAtoms(ids);
   await keepPasteInside();
   return old.length ? 'Replaced the selected structure.' : 'Drew the structure.';
+}
+
+let assistantBarEl: AssistantBar | null = null;
+
+/** Edit > Assistant is only there once an AI model is linked. */
+function showAssistantMenu(): void {
+  for (const b of document.querySelectorAll<HTMLElement>('[data-cmd="assistant"]')) b.hidden = aiPrefs.provider === 'none';
+  if (aiPrefs.provider === 'none') assistantBarEl?.close();
+}
+
+/** Edit > Assistant (Ctrl+/): the prompt bar, made the first time. */
+function assistantBar(): AssistantBar {
+  assistantBarEl ??= new AssistantBar({
+    prefs: () => aiPrefs,
+    savePrefs: (p) => { aiPrefs = p; storeSettings(); },
+    mode: () => ws.active.mode as AssistantMode,
+    items: assistantItems,
+    apply: applyAssistantAction,
+    markStep: markAssistantStep,
+    undo: () => { command('undo'); },
+    openSettings: aiSettings,
+    area: () => document.getElementById('work')?.getBoundingClientRect() ?? null,
+    tab: () => ws.active,
+  });
+  return assistantBarEl;
 }
 
 /** "Mark on drawing" for a finding about a step: select that step's arrow. False when there is no such step. */
@@ -7233,6 +7259,16 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
   finishCellStructure(true);
   const blank: Contents = { atoms: [], bonds: [], captions: [], arrows: [], shapes: [] };
   const drawing = structureDoc(contents ?? blank, style);
+  // in a mode whose page is the drawing area itself (Canvas, Presentation, Design), the structure
+  // is drawn in a box over a faded picture of the page, as a spreadsheet cell's is
+  const boxed = !inPlace && ws.active.mode !== 'sheet' && ws.active.mode !== 'document';
+  if (boxed) {
+    const back = $<HTMLDivElement>('#drawing-backdrop');
+    const scene = host.querySelector<HTMLCanvasElement>('#scene');
+    try { back.style.backgroundImage = scene ? `url(${scene.toDataURL('image/png')})` : ''; } catch { back.style.backgroundImage = ''; }
+    back.hidden = false;
+    document.body.classList.add('boxed-drawing');
+  }
   editor.clearSelection();
   doc.swap(drawing);
   // the drawing beside (split view) waits in `drawing`, its zoom kept for after
@@ -7242,7 +7278,7 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
   layoutSplit();
   $('#structure-title').textContent = title;
   $('#structure-bar').hidden = false;
-  if (ws.active.mode === 'sheet') setStructureSize(0);
+  if (ws.active.mode === 'sheet' || boxed) setStructureSize(0);
   showSheetParts();
   editor.paused = false;
   editor.lastEdited = null;
@@ -7303,7 +7339,9 @@ function finishCellStructure(keep: boolean): void {
   // the drawing beside is back as it was: not changed, at its own zoom
   if (ws.pane) ws.pane.seen = doc.version;
   renderer.view = e.view;
-  document.body.classList.remove('floating-drawing');
+  document.body.classList.remove('floating-drawing', 'boxed-drawing');
+  $('#drawing-backdrop').hidden = true;
+  $<HTMLDivElement>('#drawing-backdrop').style.backgroundImage = '';
   $('#structure-bar').hidden = true;
   const sheet = ws.active.mode === 'sheet';
   const words = ws.active.mode === 'document';
@@ -7670,7 +7708,7 @@ window.addEventListener('keydown', (e) => {
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'toolbox-guides', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'toolbox-schemes', 'toolbox-diagrams', 'toolbox-tables', 'toolbox-biopolymers', 'toolbox-perspective', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
   'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'theme-darkgray', 'density-snug', 'density-cozy', 'density-normal', 'density-standard', 'density-large', 'shadows-light', 'shadows-strong', 'shadows-off', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
-  'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
+  'assistant', 'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
 
@@ -8405,6 +8443,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'open-log-folder': () => openLogFolder(),
   'open-inspector': () => { invoke('open_inspector').catch((e) => flash(String(e))); },
   'command-search': () => commandSearch.open(),
+  assistant: () => {
+    if (aiPrefs.provider === 'none') { flash('Link an AI model in Edit > Settings > AI Model to use the Assistant.', 6000, { label: 'AI Model…', run: () => void aiSettings() }); return; }
+    assistantBar().toggle();
+  },
   'next-region': () => cycleRegion(1),
   'prev-region': () => cycleRegion(-1),
   'toolbox-main': () => toolboxes.toggle('main'),
@@ -9880,7 +9922,7 @@ async function offerAlkylRestyle(look: AlkylLook): Promise<void> {
 /** Settings ▸ Online: what the program asks the internet for. */
 /** Edit > Settings > AI Model. */
 async function aiSettings(): Promise<void> {
-  await aiSettingsDialog(aiPrefs, (p) => { aiPrefs = p; storeSettings(); });
+  await aiSettingsDialog(aiPrefs, (p) => { aiPrefs = p; storeSettings(); showAssistantMenu(); });
 }
 
 async function onlinePreferences(): Promise<void> {
@@ -10246,6 +10288,7 @@ function applySettings(s: Settings): void {
   updateChannel = s.updateChannel;
   pubchemNames = s.pubchemNames;
   aiPrefs = s.ai;
+  showAssistantMenu();
   docRead.convertChemDraw = s.convertChemDraw;
   matchStructure.on = s.matchStructure;
   straightenLinear.on = s.straightenLinear;
@@ -12232,6 +12275,7 @@ function toolboxDefs(): ToolboxDef[] {
   return ['main', ...ids.filter((id) => id !== 'main')].map((id) => ({
     id,
     title: boxTitle(toolboxState, id, BOX_TITLES[id]),
+    info: id === 'guides' ? GUIDES_INFO : undefined,
     build: (body: HTMLElement, vertical: boolean) => (SPECIAL_BOXES[id] && !isEditable(id) ? SPECIAL_BOXES[id](body, vertical) : buildBox(body, id, vertical)),
   }));
 }
@@ -13294,6 +13338,8 @@ const designText = new SlideTextRibbon($('#design-ribbon'), {
 });
 /** The text groups of the ribbon showing (Presentation or Design) follow the text being edited. */
 const textRibbonNow = () => (ws.active.mode === 'slides' ? slideText : ws.active.mode === 'design' ? designText : null);
+// the Text Formatting toolbox is the typing bar, so with it showing the bar above the text hides
+CaptionEditor.barElsewhere = () => toolboxes.isShown('text');
 CaptionEditor.onState = () => { textRibbonNow()?.refresh(); textToolbox?.refresh(); };
 // the Smart Scheme pane: the selected scheme's species, beside it
 const smartPane = new SmartPane({
@@ -13310,11 +13356,14 @@ const smartPane = new SmartPane({
   stepRuns: (id, k, part, parts) => editor.smartStepRuns(id, k, part, parts),
   toStructure: (id, k) => editor.smartToHolder(id, k),
   toText: (id, k) => editor.smartToText(id, k),
+  stepToStructure: (id, k, part) => editor.smartStepToHolder(id, k, part),
+  stepToText: (id, k, part) => editor.smartStepToText(id, k, part),
   selectHolder: (shape) => editor.selectShape(shape),
   add: (id, after) => editor.smartInsert(id, after),
   remove: (id, k) => editor.smartRemove(id, k),
   move: (id, from, to) => editor.smartMove(id, from, to),
   arrange: (id, patch) => editor.smartArrange(id, patch),
+  format: (id, fmt) => editor.smartFormat(id, fmt),
   async secondLoop(id) {
     const st = editor.smartCycleStart(id);
     if (!st) return;
