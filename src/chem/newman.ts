@@ -168,11 +168,12 @@ export function conformationName(phi: number): string {
 
 /** The everyday name: eclipsed, gauche or anti (staggered and eclipsed told apart by the angle). */
 export function commonName(phi: number): string {
+  // relaxed conformers sit well off the ideal 60° steps, so each name covers a band round its angle
   const a = Math.abs(norm180(phi));
-  if (a < 15) return 'eclipsed';
-  if (Math.abs(a - 60) < 15) return 'gauche';
-  if (Math.abs(a - 120) < 15) return 'eclipsed';
-  if (a > 165) return 'anti';
+  if (a < 20) return 'eclipsed';
+  if (a >= 30 && a <= 90) return 'gauche';
+  if (Math.abs(a - 120) < 20) return 'eclipsed';
+  if (a >= 150) return 'anti';
   return '';
 }
 
@@ -265,4 +266,39 @@ export function groupSize(mol: NewmanMol, a: number, from: number, nb = neighbou
   if (z === 16) return 1.0 + 0.1 * branches;
   if (z === 14) return 2.5;
   return 0.5 + 0.2 * branches;
+}
+
+// ------------------------------------------------------------------ conformers seen down the bond
+
+/** One picture down the bond: the lowest conformer that gives it, and the share of every conformer that does. */
+export interface NewmanConformer {
+  view: NewmanView;
+  /** kcal/mol above the lowest picture (null when the force field had no energies). */
+  energy: number | null;
+  /** Share at 25 °C of all the conformers that look like this down the bond (0 to 1). */
+  population?: number;
+  /** Which of the model's conformers it is. */
+  index: number;
+}
+
+/**
+ * The model's conformers as they look down the bond `front`→`back`: conformers that differ only
+ * away from the bond (a far-off rotamer) give the same picture and are kept once, lowest energy
+ * first, their populations added. A picture is the same when every front–back pair of groups
+ * (by label) sits at the same angle, to 30°, so a methyl turned by 120° is no new picture.
+ */
+export function newmanConformers(mol: NewmanMol, conformers: { xyz: number[]; energy: number | null; population?: number }[], front: number, back: number, opts: { drawn?: (atom: number) => string | null } = {}): NewmanConformer[] {
+  const seen = new Map<string, NewmanConformer>();
+  const order = conformers.map((c, i) => ({ c, i })).sort((p, q) => (p.c.energy ?? 0) - (q.c.energy ?? 0));
+  for (const { c, i } of order) {
+    const view = newmanView(mol, c.xyz, front, back, opts);
+    const key = view.front.flatMap((f) => view.back.map((b) => `${f.label}|${b.label}|${Math.round(norm360(b.angle - f.angle) / 30) % 12}`)).sort().join(';');
+    const had = seen.get(key);
+    if (had) { if (had.population !== undefined && c.population !== undefined) had.population += c.population; continue; }
+    seen.set(key, { view, energy: c.energy, ...(c.population !== undefined ? { population: c.population } : {}), index: i });
+  }
+  const out = [...seen.values()];
+  const e0 = out.find((x) => x.energy !== null)?.energy ?? null;
+  for (const x of out) x.energy = x.energy !== null && e0 !== null ? x.energy - e0 : null;
+  return out;
 }

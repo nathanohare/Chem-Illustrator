@@ -64,6 +64,8 @@ export const ICONS: Record<string, string> = {
   fragment: svg('<polyline points="2.5,17 6,13 9.5,17"/><polyline points="14.5,12 18,8 21.5,12"/><line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="2 2"/><path d="M9 7.5l-2.5 2M15 16.5l2.5-2" stroke-width="1.3"/>'),
   // a ring tipped back into the page, and the way it turns
   perspective: svg('<polygon points="3.5,15 8,11.5 16,11.5 20.5,15 16,18.5 8,18.5"/><path d="M5 8.5C8 4.5 16 4.5 19 8.5"/><path d="M19.4 4.6l-.4 3.9-3.8-.7" stroke-width="1.4"/>'),
+  // an eye, side on, looking along a dotted arrow (the viewing mark of a Newman projection)
+  newman: svg('<path d="M3 12h9.5" stroke-dasharray="2.1 1.7"/><path d="M6.2 8.8L3 12l3.2 3.2"/><path d="M14.5 12l6.5-4.6M14.5 12l6.5 4.6"/><path d="M21 7.4c1.9 2.8 1.9 6.4 0 9.2"/><path d="M17.2 10.4c.7.9.7 2.3 0 3.2"/>'),
   // two rings at right angles (a biaryl seen in 3-D), and the way they turn
   'perspective-3d': svg('<polygon points="7,10.5 10.5,12.5 10.5,16.5 7,18.5 3.5,16.5 3.5,12.5"/><line x1="10.5" y1="14.5" x2="14" y2="14.5"/><polygon points="14,14.5 16,10.5 19.5,11.5 21,15.5 19,19.5 15.5,18.5"/><path d="M5 7C8 3 16 3 19 7"/><path d="M19.4 3.1l-.4 3.9-3.8-.7" stroke-width="1.4"/>'),
   element: svg('<rect x="3" y="4" width="5" height="5"/><rect x="3" y="9" width="5" height="5"/><rect x="8" y="9" width="5" height="5"/><rect x="16" y="4" width="5" height="5"/><rect x="16" y="9" width="5" height="5"/><rect x="8" y="16" width="8" height="4"/>'),

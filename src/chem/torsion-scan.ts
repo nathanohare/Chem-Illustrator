@@ -9,6 +9,7 @@
 
 import { Molecule, ConformerGenerator, ForceFieldMMFF94 } from 'openchemlib';
 import { sideOf, torsion, type NewmanMol } from './newman';
+import { absoluteMolfile } from './model3d-build';
 
 export interface ScanPoint {
   /** The torsion a–b–c–d, degrees (0 to 360). */
@@ -55,7 +56,7 @@ function positionsKey(ff: ForceFieldMMFF94, m: Molecule): string | null {
 
 /** The molecule the conformer generator makes (with its hydrogens), at positions `xyz`. */
 export function moleculeAt(molblock: string, xyz: number[]): Molecule | null {
-  const mol = Molecule.fromMolfile(molblock);
+  const mol = Molecule.fromMolfile(absoluteMolfile(molblock));
   if (!mol.getAllAtoms()) return null;
   const gen = new ConformerGenerator(1);
   if (!gen.initializeConformers(mol)) return null;
@@ -153,4 +154,36 @@ export function scanTorsion(molblock: string, xyz: number[], t: [number, number,
   }
   const e0 = Math.min(...best.map((p) => p.raw));
   return { points: best.map((p) => ({ phi: p.phi, energy: p.raw - e0, xyz: p.xyz })), relaxed, method: 'MMFF94s+' };
+}
+
+/**
+ * The bond's other staggered rotamers, for a conformer search that may have missed some: each
+ * starting conformer turned about b→c by 120° and 240° and relaxed freely (MMFF94s+). Returns
+ * each new shape with its energy (kcal/mol); none for a bond in a ring.
+ */
+export function bondRotamers(molblock: string, starts: number[][], t: [number, number, number, number]): { xyz: number[]; energy: number }[] {
+  const out: { xyz: number[]; energy: number }[] = [];
+  for (const xyz of starts) {
+    for (const turn of [120, 240]) {
+      const m = moleculeAt(molblock, xyz);
+      if (!m) return out;
+      const moving = sideOf(describe(m), t[2], t[1]);
+      if (!moving) return out;
+      setTorsion(m, t, moving, torsion(xyz, ...t) + turn);
+      try {
+        const ff = new ForceFieldMMFF94(m, ForceFieldMMFF94.MMFF94SPLUS);
+        const key = positionsKey(ff, m);
+        const done = ff.minimise({ maxIts: 6000 });
+        const energy = ff.getTotalEnergy();
+        if (done !== 0) {
+          const pos = key ? (ff as unknown as { a: Record<string, number[]> }).a[key] : null;
+          if (pos) for (let i = 0; i < m.getAllAtoms(); i++) { m.setAtomX(i, pos[3 * i]); m.setAtomY(i, pos[3 * i + 1]); m.setAtomZ(i, pos[3 * i + 2]); }
+        }
+        out.push({ xyz: coords(m), energy });
+      } catch {
+        return out;
+      }
+    }
+  }
+  return out;
 }

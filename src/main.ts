@@ -193,7 +193,13 @@ import { Model3dBuilder } from './chem/model3d';
 import { StructureNamer, confirmedName, nameRuns, type NameTools } from './chem/namer';
 import { placeView } from './chem/place3d';
 import type { ConformerTools, Viewer3d } from './ui/viewer3d';
-import { DEFAULT_XTB, type XtbOptions } from './chem/xtb';
+import { DEFAULT_XTB, refineWithXtb, type XtbOptions } from './chem/xtb';
+import type { Model3d } from './chem/model3d-build';
+import { fittedRmsd, withPopulations } from './chem/conformer-rank';
+import { groupLabel, neighbours, newmanConformers, newmanView, type NewmanConformer } from './chem/newman';
+import { parseNewmanPrefs, structureKey, type NewmanData, type NewmanLook, type NewmanPrefs } from './design/newman';
+import { depthCues } from './editor/perspective';
+import type { NewmanChoice } from './ui/newman-dialog';
 import type { QmOptions } from './chem/qm-input';
 import { NameDialog } from './ui/name-dialog';
 import { SequenceDialog } from './ui/sequence-dialog';
@@ -277,6 +283,8 @@ const pickSlideSize = later(() => import('./ui/slide-size-dialog'), 'pickSlideSi
 const pickTemplate = later(() => import('./ui/template-gallery'), 'pickTemplate');
 const askCycle = later(() => import('./ui/cycle-dialog'), 'askCycle');
 const askEnergy = later(() => import('./ui/energy-dialog'), 'askEnergy');
+const askNewman = later(() => import('./ui/newman-dialog'), 'askNewman');
+const newmanSettings = later(() => import('./ui/newman-settings'), 'newmanSettings');
 const askPlate = later(() => import('./ui/plate-dialog'), 'askPlate');
 const askMo = later(() => import('./ui/mo-dialog'), 'askMo');
 const askCrystal = later(() => import('./ui/crystal-dialog'), 'askCrystal');
@@ -515,6 +523,7 @@ const TOOL_GROUPS: ToolbarItem[][] = [
     SHAPES,
     { name: 'fragment', title: 'Mass fragmentation: drag a line across bonds (or click a bond) to break them and label each piece with its formula and mass' },
     PERSPECTIVE_TOOLS,
+    { name: 'newman', title: 'Newman Projection: click a single bond to see it end on. The end you click nearer is in front' },
     { name: 'sketch', title: 'Sketch (for a pen): draw freehand. Lines become bonds, a loop with corners a ring, a circle benzene (inside a ring: aromatic), letters label atoms (C N O S P F Cl Br I H, + −), a scribble erases' },
   ],
   [
@@ -598,6 +607,7 @@ const HINTS: Record<string, string> = {
   element: 'Click atoms to make them the element picked in the periodic table, or empty space to add one.',
   'bond-hapto': 'Drag from a metal into a ring (η⁵, η⁶) or onto a bond (η²), or the other way. Click inside a ring or on a bond for a new metal M there; select an allyl or diene, then click the metal. Click a hapto bond to draw it to each atom.',
   fragment: 'Drag a line across the bonds to break (or click one bond). Each piece gets a caption with its formula and exact mass, which you can edit.',
+  newman: 'Click a single bond to draw its Newman projection: the end you click nearer is in front. The window shows its most stable conformers (Tab steps through them).',
 };
 const ARROW_HINT = 'Drag to draw an arrow (hold Alt or Space: any angle); click for a standard one. Drag the ends to move them, the middle to bend it.';
 const CURVE_HINT = 'Drag from where the electrons start to where they go. They start at a lone pair, bond, radical or charge and go to an atom, a bond, or the gap where a new bond forms; swing out to one side to bend that way. Or click where it starts, click points it goes through, and click where it ends. Ctrl+drag (or the pen) draws it freehand. The arrow sticks to the structure. Drag the middle dot (an S: its diamonds, or its line) to change the curve.';
@@ -1557,6 +1567,233 @@ async function show3dModel(): Promise<void> {
     flash((e as Error).message || 'Could not build a 3-D model of this structure.');
   }
 }
+
+// ------------------------------------------------------------------ Newman projections
+
+/** Settings ▸ Newman Projections: how projections and torsion charts look. */
+let newmanPrefs: NewmanPrefs = parseNewmanPrefs(null);
+
+/** What the Newman window last used, so the next one starts the same way. */
+let lastNewman = { kind: null as NewmanChoice['kind'] | null, source: 'stable' as NewmanChoice['source'], linked: true };
+
+/** Work on one structure for its Newman projections: its molfile, and the conformers (searched once per method). */
+function newmanWork(frontId: number, backId: number) {
+  const ids = [...doc.fragmentOf(frontId)];
+  const ex = toMolfile(doc, ids, '');
+  if (ex.generic.length) throw new Error('A structure with R groups or labels that can\'t be read has no 3-D shape. Replace them with atoms first.');
+  const fi = ex.map.indexOf(frontId), bi = ex.map.indexOf(backId);
+  if (fi < 0 || bi < 0) throw new Error('Pick a bond between two atoms drawn as atoms, not inside a label.');
+  // a group drawn as a label (OTBS, CO2Et) keeps its label in the projection
+  const drawn = (i: number): string | null => {
+    const id = ex.map[i];
+    const a = id !== undefined && id >= 0 ? doc.atoms.get(id) : undefined;
+    return a?.label && (doc.adj.get(a.id) ?? []).length === 1 ? a.label : null;
+  };
+  const models = new Map<string, Promise<Model3d>>();
+  const modelFor = (method: 'mmff' | 'xtb', progress: (t: string) => void): Promise<Model3d> => {
+    let p = models.get(method);
+    if (!p) {
+      const opts = { starts: 120, window: 6, rmsd: 0.3 };
+      p = method === 'mmff'
+        ? model3d.search(ex.molblock, opts, (done, total) => progress(`Searching conformers… ${done} of ${total}`)).then((m) => withBondRotamers(m, ex.molblock, fi, bi, progress))
+        : modelFor('mmff', progress).then((m) => {
+          const t = conformerTools(ex.molblock);
+          if (!t.xtb) throw new Error('xTB runs in the desktop app, with the xtb program installed.');
+          return refineWithXtb(m, { ...conformerPrefs.xtb, count: Math.min(m.conformers.length, Math.max(conformerPrefs.xtb.count, 8)) }, t.xtb, (done, total) => progress(`xTB: ${done} of ${total} conformers done…`));
+        });
+      models.set(method, p);
+      p.catch(() => models.delete(method));
+    }
+    return p;
+  };
+  const ends = (rev: boolean) => (rev ? [bi, fi] : [fi, bi]);
+  return {
+    ids, ex, fi, bi,
+    /** Each end named by its group as written from the other end (CH(OH)CH3), once the conformers are in. */
+    async names(): Promise<[string, string]> {
+      const m = await modelFor('mmff', () => {});
+      const nb = neighbours(m);
+      // an end named by what is on it (its groups other than H): the OH, CH3 end
+      const end = (a: number, other: number) => {
+        const gs = nb[a].filter((n) => n.atom !== other && m.atoms[n.atom].z !== 1).map((n) => drawn(n.atom) ?? groupLabel(m, n.atom, a, nb));
+        return gs.length ? `the ${gs.join(', ')} end` : `the ${groupLabel(m, a, other, nb)} end`;
+      };
+      const cap = (t: string) => t[0].toUpperCase() + t.slice(1);
+      return [`${cap(end(fi, bi))} in front`, `${cap(end(bi, fi))} in front`];
+    },
+    async list(rev: boolean, method: 'mmff' | 'xtb', progress: (t: string) => void): Promise<NewmanConformer[]> {
+      const m = await modelFor(method, progress);
+      const [f, b] = ends(rev);
+      return newmanConformers(m, m.conformers, f, b, { drawn });
+    },
+    async drawn(rev: boolean): Promise<NewmanConformer | string> {
+      const r = await model3d.pose(ex.molblock, depthCues(doc, ex), doc.style.bondLength || 14.4);
+      if ('problem' in r) return r.message;
+      const p = r.pose;
+      const mol = { atoms: p.z.map((z) => ({ z, charge: 0 })), bonds: p.bonds.map(([a, b]) => ({ a, b, order: 1 })) };
+      // bond orders from the molfile (the pose keeps the molfile's atoms first, in order)
+      const m = await modelFor('mmff', () => {}).catch(() => null);
+      const withOrders = m && m.atoms.length === p.z.length ? m : mol;
+      const [f, b] = ends(rev);
+      const view = newmanView(withOrders, p.pts.flat(), f, b, { drawn });
+      return { view, energy: null, index: 0 };
+    },
+  };
+}
+
+/**
+ * A conformer search can miss some rotamers about one bond: the lowest conformers are also turned
+ * 120° and 240° about it and relaxed, and those not already found are added (populations again).
+ */
+async function withBondRotamers(m: Model3d, molblock: string, fi: number, bi: number, progress: (t: string) => void): Promise<Model3d> {
+  const nb = neighbours(m);
+  const a = nb[fi].find((n) => n.atom !== bi)?.atom, d = nb[bi].find((n) => n.atom !== fi)?.atom;
+  if (a === undefined || d === undefined || m.conformers.some((c) => c.energy === null)) return m;
+  progress('Turning the bond to its other rotamers…');
+  const extra = await model3d.rotamers(molblock, m.conformers.slice(0, 3).map((c) => c.xyz), [a, fi, bi, d]).catch(() => []);
+  const heavy = m.atoms.map((x, i) => (x.z === 1 ? -1 : i)).filter((i) => i >= 0);
+  const all = m.conformers.map((c) => ({ xyz: c.xyz, energy: c.energy }));
+  for (const r of extra) {
+    if (all.some((k) => Math.abs(k.energy! - r.energy) < 0.1 && fittedRmsd(k.xyz, r.xyz, heavy) < 0.3)) continue;
+    all.push(r);
+  }
+  all.sort((p, q) => p.energy! - q.energy!);
+  const e0 = all[0].energy!;
+  return { ...m, conformers: withPopulations(all.filter((c) => c.energy! - e0 <= 8)) };
+}
+
+/** The projection a choice in the Newman window makes. */
+function newmanData(w: ReturnType<typeof newmanWork>, choice: NewmanChoice, conf: NewmanConformer, frontId: number, backId: number, look = newmanPrefs.look): NewmanData {
+  const [f, b] = choice.reversed ? [backId, frontId] : [frontId, backId];
+  return {
+    kind: choice.kind, front: conf.view.front, back: conf.view.back, turn: choice.turn,
+    conformer: choice.source === 'drawn' ? 0 : choice.index,
+    ...(conf.energy !== null ? { energy: conf.energy } : {}),
+    method: choice.source === 'drawn' ? 'as drawn' : choice.method === 'xtb' ? 'GFN2-xTB' : 'MMFF94s+',
+    source: choice.source,
+    look: structuredClone(look),
+    link: { atoms: w.ids, front: f, back: b, key: structureKey(doc, w.ids) },
+  };
+}
+
+/** The Newman window's preview: the projection fitted to the canvas. */
+function paintNewmanPreview(d: NewmanData, canvas: HTMLCanvasElement): void {
+  const { doc: tmp, box } = editor.newmanPreview(d);
+  const w = canvas.clientWidth || 230, h = canvas.clientHeight || 200, dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const bw = box.x2 - box.x1, bh = box.y2 - box.y1, pad = 10;
+  const k = Math.min((w - 2 * pad) / bw, (h - 2 * pad) / bh, 3);
+  ctx.setTransform(k * dpr, 0, 0, k * dpr, (w / 2 - (box.x1 + bw / 2) * k) * dpr, (h / 2 - (box.y1 + bh / 2) * k) * dpr);
+  drawDrawing(ctx, tmp);
+}
+
+/**
+ * Chemistry ▸ Newman Projection… (right-click a single bond, or the Newman tool): the bond seen
+ * end on, from `frontId`'s end; or projection `editId` (its frame) to change.
+ */
+async function newmanProjection(bondId: number | null, frontId: number | null, editId?: number): Promise<void> {
+  finishTyping();
+  const old = editId !== undefined ? doc.shapes.get(editId)?.newman : undefined;
+  let front: number, back: number;
+  if (old) {
+    if (!old.link || !doc.atoms.has(old.link.front) || !doc.atoms.has(old.link.back)) { await newmanLookOnly(editId!, old); return; }
+    front = old.link.front; back = old.link.back;
+  } else {
+    const b = bondId !== null ? doc.bonds.get(bondId) : undefined;
+    if (!b) { flash('Right-click a single bond (or click one with the Newman tool) to see its Newman projection.'); return; }
+    if (b.order !== 1) { flash('A Newman projection looks down a single bond: pick one that can turn.'); return; }
+    front = frontId === b.a2 ? b.a2 : b.a1;
+    back = front === b.a1 ? b.a2 : b.a1;
+  }
+  let w: ReturnType<typeof newmanWork>;
+  try { w = newmanWork(front, back); } catch (e) { flash((e as Error).message); return; }
+  const start: NewmanChoice = {
+    reversed: false,
+    kind: old?.kind ?? lastNewman.kind ?? newmanPrefs.kind,
+    source: old ? (old.source === 'drawn' ? 'drawn' : 'stable') : lastNewman.source,
+    index: old?.conformer ?? 0,
+    turn: old?.turn ?? 0,
+    method: newmanPrefs.method,
+    mark: old ? !!old.mark : newmanPrefs.mark,
+    linked: old ? true : lastNewman.linked,
+  };
+  const got = await askNewman(start, {
+    ends: ['The end you picked', 'The other end'],
+    names: w.names(),
+    xtb: !!conformerTools(w.ex.molblock).xtb,
+    list: (rev, method, progress) => w.list(rev, method, progress),
+    drawn: (rev) => w.drawn(rev),
+    paint: (choice, conf, canvas) => paintNewmanPreview(newmanData(w, choice, conf, front, back, old?.look), canvas),
+    stop: () => model3d.stop(),
+  }, !!old);
+  if (!got) return;
+  lastNewman = { kind: got.choice.kind, source: got.choice.source, linked: got.choice.linked };
+  if (!doc.atoms.has(front) || !doc.atoms.has(back)) { flash('The structure was changed while the window was open. Open Newman Projection again.'); return; }
+  const data = newmanData(w, got.choice, got.conf, front, back, old?.look);
+  editor.putNewmanProjection(data, { id: editId, mark: got.choice.mark ? (old?.mark?.color ?? newmanPrefs.markColor) : null, linked: got.choice.linked, page: deckNow()?.size });
+}
+
+/** A projection no longer linked to a structure: only its look and the Turn dial can change. */
+async function newmanLookOnly(id: number, d: NewmanData): Promise<void> {
+  const r = await ask('Edit Newman Projection', [
+    { name: 'kind', label: 'Draw as', value: d.kind, options: [{ value: 'newman', label: 'Newman' }, { value: 'sawhorse', label: 'Sawhorse' }] },
+    { name: 'turn', label: 'Turn the back atom', value: String(d.turn), unit: 'degrees', type: 'number' },
+    { name: 'look', label: 'Look', value: 'keep', options: [{ value: 'keep', label: 'Keep its own look' }, { value: 'settings', label: 'Use Settings ▸ Newman Projections' }] },
+  ], { ok: 'Redraw', note: 'This projection is not linked to a structure, so its conformation stays as it is. To work out another, right-click a bond of the structure ▸ Newman Projection….' });
+  if (!r) return;
+  const turn = parseFloat(r.turn);
+  editor.putNewmanProjection({ ...d, kind: r.kind === 'sawhorse' ? 'sawhorse' : 'newman', turn: isFinite(turn) ? turn : d.turn, look: r.look === 'settings' ? structuredClone(newmanPrefs.look) : d.look }, { id });
+}
+
+/** Linked projections whose structure changed are worked out again, as the most stable conformer of the new structure (or as drawn). */
+const newmanRedo = new Map<number, ReturnType<typeof setTimeout>>();
+editor.onNewmanStale = (frames) => {
+  for (const id of frames) {
+    clearTimeout(newmanRedo.get(id));
+    newmanRedo.set(id, setTimeout(() => { newmanRedo.delete(id); void redoNewman(id); }, 500));
+  }
+};
+async function redoNewman(id: number): Promise<void> {
+  const d = doc.shapes.get(id)?.newman;
+  if (!d?.link || structureKey(doc, doc.fragmentOf(d.link.front)) === d.link.key) return;
+  const { front, back } = d.link;
+  try {
+    const w = newmanWork(front, back);
+    const method = d.method === 'GFN2-xTB' && conformerTools(w.ex.molblock).xtb ? 'xtb' : 'mmff';
+    const conf = d.source === 'drawn' ? await w.drawn(false) : (await w.list(false, method, () => {}))[0];
+    if (!conf || typeof conf === 'string') throw new Error(typeof conf === 'string' ? conf : 'No conformer was found.');
+    const shape = doc.shapes.get(id);
+    if (!shape?.newman?.link || !doc.atoms.has(front) || !doc.atoms.has(back)) return;
+    const choice: NewmanChoice = { reversed: false, kind: d.kind, source: d.source === 'drawn' ? 'drawn' : 'stable', index: 0, turn: d.turn, method, mark: !!d.mark, linked: true };
+    editor.putNewmanProjection(newmanData(w, choice, conf, front, back, d.look), { id, mark: d.mark ? d.mark.color : null, amend: true });
+  } catch (e) {
+    flash(`The Newman projection could not be worked out again: ${(e as Error).message}`);
+  }
+}
+/** Settings ▸ Newman Projections. */
+async function newmanSettingsPage(): Promise<void> {
+  finishTyping();
+  const sample = (look: NewmanLook, kind: NewmanPrefs['kind']): NewmanData => ({
+    kind, turn: 0, conformer: 0, source: 'stable', look,
+    front: [{ atom: 1, angle: 0, label: 'Ph', size: 2.8 }, { atom: 2, angle: 120, label: 'CH3', size: 1.74 }, { atom: 3, angle: 240, label: 'H', size: 0 }],
+    back: [{ atom: 4, angle: 60, label: 'OH', size: 0.87 }, { atom: 5, angle: 180, label: 'CH3', size: 1.74 }, { atom: 6, angle: 300, label: 'H', size: 0 }],
+  });
+  const count = [...doc.shapes.values()].filter((x) => x.newman).length;
+  await newmanSettings(newmanPrefs, (look, kind, canvas) => paintNewmanPreview(sample(look, kind), canvas), (p, restyle) => {
+    newmanPrefs = structuredClone(p);
+    storeSettings();
+    if (restyle) editor.restyleNewman(newmanPrefs.look);
+  }, count);
+}
+
+editor.onNewman = (bond, front) => void newmanProjection(bond, front);
+editor.onNewmanEdit = (frame) => void newmanProjection(null, null, frame);
 
 // ------------------------------------------------------------------ name to structure
 
@@ -7414,6 +7651,12 @@ const COMMANDS: Record<string, () => unknown> = {
   'pubchem-lookup': () => void lookUpChosen(),
   'find-cas': () => void findCasChosen(),
   'model-3d': () => void show3dModel(),
+  'newman-projection': () => {
+    const b = contextBond ?? (editor.sel.bonds.size === 1 ? [...editor.sel.bonds][0] : null);
+    void newmanProjection(b, null);
+  },
+  'edit-newman': () => { const id = editor.selectedNewman(); if (id === null) flash('Select a Newman projection first.'); else void newmanProjection(null, null, id); },
+  'unlink-newman': () => { const id = editor.selectedNewman(); if (id !== null) { editor.unlinkNewman(id); flash('Unlinked: the projection stays as it is when the structure changes.'); } },
   'turn-3d': () => void turn3dDialog(),
   'flatten-3d': () => editor.flattenSelection() || flash('Select a structure to flatten.'),
   'depth-shading': () => toggleDepthShading(),
@@ -8726,6 +8969,7 @@ function currentSettings(): Settings {
     recentFiles,
     recentSymbols,
     scheme: { ...schemePrefs },
+    newman: structuredClone(newmanPrefs),
     keep: keepPrefs,
     highlightLooks: ownLooks,
     quickParts: docQuickParts,
@@ -8867,6 +9111,7 @@ function applySettings(s: Settings): void {
   editor.options.fixedAngles = s.fixedAngles;
   editor.showRoles = s.showRoles;
   setSchemePrefs(s.scheme);
+  newmanPrefs = structuredClone(s.newman);
   $('[data-cmd="show-roles"]')?.setAttribute('aria-checked', String(s.showRoles));
   showDevTools(s.devTools);
   showScrollBars(s.scrollBars);
@@ -10099,6 +10344,7 @@ function drawingMenu(): MenuItem[] {
     { cmd: 'cut' }, { cmd: 'copy' }, { cmd: 'paste' }, { cmd: 'delete', label: 'Delete' }, { cmd: 'format-painter' }, null,
     ...repeatLabelMenu(),
     ...(editor.selectedEnergy() !== null ? [{ cmd: 'edit-energy' }, null] : []),
+    ...(editor.selectedNewman() !== null ? [{ cmd: 'edit-newman' }, ...(doc.shapes.get(editor.selectedNewman()!)?.newman?.link ? [{ cmd: 'unlink-newman' }] : []), null] : []),
     ...(editor.selectedPlate() !== null ? [{ cmd: 'edit-plate' }, null] : []),
     ...(editor.selectedDiagram() !== null ? [{ cmd: 'edit-diagram' }, { cmd: 'diagram-to-shapes' }, null] : []),
     ...(atoms || texts ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }, null] : []),
@@ -10119,6 +10365,7 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'structure-to-name' },
       { cmd: 'find-cas' },
       { cmd: 'model-3d' },
+      ...(contextBond !== null && doc.bonds.get(contextBond)?.order === 1 ? [{ cmd: 'newman-projection' }] : []),
       { label: 'Perspective', items: [{ cmd: 'turn-3d' }, { cmd: 'flatten-3d' }, null, { cmd: 'depth-shading', checked: depthShadePrefs.on }, { cmd: 'depth-shading-settings' }] },
     ] : []),
     ...(pickedCurved() ? [{ cmd: 'clean-up-arrow' }, { label: 'Mechanism Arrow', items: [
@@ -11089,6 +11336,7 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'navigation', title: 'Navigation', words: 'navigator minimap map overview edge arrows off screen lost find dot grid dots tint outside fit go to selection orientation zoom', open: navigationSettings },
   { id: 'page-grid', title: 'Page Grid', words: 'pages page grid boundaries dashed dotted lines paper fixed edges hatched wall empty grey print chemdraw paste wrap', open: pageGridSettings },
   { id: 'dark', title: 'Dark Page', words: 'dark mode night paper ink graphite slate appearance colours', open: darkColours },
+  { id: 'newman', title: 'Newman Projections', words: 'newman sawhorse projection conformation torsion dihedral gauche anti eclipsed colour largest middle smallest group strain a-value energy chart rotation barrier kcal kj', open: () => void newmanSettingsPage() },
   { id: 'schemes', title: 'Schemes', words: 'scheme arrow gap plus text size reagents conditions boxes', open: schemeSettings },
   { id: 'autosave', title: 'AutoSave and Recovery', words: 'autosave recovery versions backup copies shared folders onedrive', open: () => keeper.optionsCommand() },
   { id: 'ai', title: 'AI Model', words: 'ai artificial intelligence claude anthropic chatgpt gpt openai gemini google ollama openrouter api key llm model link connect', open: () => aiSettings() },

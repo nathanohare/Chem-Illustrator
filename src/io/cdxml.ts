@@ -28,6 +28,7 @@ import { TABLE_TAG, TABLE_PART_TAG, applyTableTag, gridOf, linesFromBorders, par
 import { layoutTable, NOTE_SCALE } from '../table';
 import { arialWidth } from '../text-metrics';
 import { freshBox, type ChartBox } from '../sheet/chart-box';
+import { relinkNewman } from '../design/newman';
 
 export interface ReadStats {
   atoms: number;
@@ -907,6 +908,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     // lone pairs, radical dots and circled charges go with their atoms
     pinSymbols(doc);
     fillFrameMembers(doc);
+    // Newman projections find their bonds and viewing marks again by where they are drawn
+    relinkNewman(doc);
     fillAttachments(doc);
     readGroups();
   });
