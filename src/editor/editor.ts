@@ -501,7 +501,9 @@ export class Editor {
       if (this.drag?.button === 2) this.pendingContext = e;
       else if (!this.rightDragged) this.onContextMenu(e);
     });
-    window.addEventListener('keydown', (e) => this.onKey(e));
+    window.addEventListener('keydown', (e) => { if (!this.freeAngleKey(e)) this.onKey(e); });
+    window.addEventListener('keyup', (e) => this.freeAngleKey(e));
+    window.addEventListener('blur', () => { this.spaceHeld = false; });
     // holding Ctrl over the selection shows that a drag will copy it
     const ctrlKey = (e: KeyboardEvent) => { if (e.key === 'Control' || e.key === 'Meta') this.showPointer(e.type === 'keydown'); };
     window.addEventListener('keydown', ctrlKey);
@@ -1167,6 +1169,7 @@ export class Editor {
       return;
     }
     if (d.mode === 'draw' && this.tool.kind === 'symbol') { d.alt = e.altKey; d.shift = e.shiftKey; }
+    if (this.freeAngleTool(d)) d.alt = e.altKey || this.spaceHeld;
     d.last = p;
     d.path?.push(p);
     this.hover = this.hitTest(p);
@@ -1297,6 +1300,7 @@ export class Editor {
     if (!d.moved) this.click(d, p);
     else if (d.mode === 'draw') {
       if (this.tool.kind === 'symbol') { d.alt = e.altKey; d.shift = e.shiftKey; }
+      if (this.freeAngleTool(d)) d.alt = e.altKey || this.spaceHeld;
       this.finishDraw(d, p);
     }
     this.hover = this.hitTest(p);
@@ -4475,6 +4479,37 @@ export class Editor {
   }
 
   // ------------------------------------------------------------------ keyboard
+
+  /** Space is down: while drawing a bond or an arrow, it frees the angle as Alt does (for where the system takes Alt + drag, as many Linux desktops do). */
+  private spaceHeld = false;
+
+  /** A bond or arrow being drawn, whose angle Alt (or Space) frees from the 15° steps however late it is pressed. */
+  private freeAngleTool(d: Drag): boolean {
+    return d.mode === 'draw' && d.button === 0 && (this.tool.kind === 'bond' || this.tool.kind === 'arrow');
+  }
+
+  /**
+   * Alt or Space pressed or let go while drawing a bond or an arrow: the angle is freed (or snaps
+   * again) at once, without waiting for the pointer to move. Returns whether the key was used.
+   * The Alt key's default is stopped, so Windows doesn't take it for the window menu, and letting
+   * it go doesn't send the keys to the menu bar.
+   */
+  private freeAngleKey(e: KeyboardEvent): boolean {
+    if (this.paused) return false;
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return false;
+    const space = e.code === 'Space';
+    if (space) this.spaceHeld = e.type === 'keydown';
+    if (e.key !== 'Alt' && !space) return false;
+    const d = this.drag;
+    if (!d || !this.freeAngleTool(d)) return false;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    d.alt = e.altKey || (e.key === 'Alt' && e.type === 'keydown') || this.spaceHeld;
+    if (e.key === 'Alt' && e.type === 'keyup') d.alt = this.spaceHeld;
+    this.requestOverlay(e.timeStamp);
+    return true;
+  }
 
   private onKey(e: KeyboardEvent): void {
     if (this.paused) return;
