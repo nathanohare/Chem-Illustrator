@@ -88,10 +88,17 @@ function strRef(f: string, values: string[]): string {
   return `<c:strRef><c:f>${xml(ref(f))}</c:f><c:strCache><c:ptCount val="${values.length}"/>${pts}</c:strCache></c:strRef>`;
 }
 
-const FIT_TYPE: Record<FitKind, [string, number?]> = { linear: ['linear'], poly2: ['poly', 2], poly3: ['poly', 3], exp: ['exp'], log: ['log'], power: ['power'] };
+// Excel's trendline for each fit: a first-order decay is its exponential and a Hammett line its
+// straight line; the other chemistry fits have none (our own copy of the chart keeps them).
+const FIT_TYPE: Record<FitKind, [string, number?] | null> = {
+  linear: ['linear'], poly2: ['poly', 2], poly3: ['poly', 3], exp: ['exp'], log: ['log'], power: ['power'],
+  order1: ['exp'], hammett: ['linear'], order2: null, arrhenius: null, eyring: null,
+};
 
 function trendlineXml(f: SeriesFit, color: string): string {
-  const [type, order] = FIT_TYPE[f.kind];
+  const t = FIT_TYPE[f.kind];
+  if (!t) return '';
+  const [type, order] = t;
   return `<c:trendline><c:spPr><a:ln w="19050" cap="rnd">${fill(f.color ?? color)}<a:prstDash val="sysDash"/></a:ln></c:spPr>` +
     `${v('trendlineType', type)}${order ? v('order', order) : ''}` +
     `${f.forward ? v('forward', f.forward) : ''}${f.backward ? v('backward', f.backward) : ''}${f.intercept !== undefined ? v('intercept', f.intercept) : ''}` +

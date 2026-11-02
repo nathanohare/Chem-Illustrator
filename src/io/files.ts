@@ -61,6 +61,7 @@ export interface FileHandle {
   createWritable(): Promise<{ write(data: string | Uint8Array): Promise<void>; close(): Promise<void> }>;
 }
 interface PickerOptions {
+  multiple?: boolean;
   types?: { description: string; accept: Record<string, string[]> }[];
   suggestedName?: string;
   excludeAcceptAllOption?: boolean;
@@ -178,6 +179,42 @@ export async function openBytesDialog(label: string, types: FileType[], extra: s
   }
   const file = await uploadBox(exts.map((e) => ({ description: e, extension: e, mime: '' })));
   return file ? { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()), ref: { kind: 'none' } } : null;
+}
+
+/**
+ * Ask for several files of these extensions and read their bytes (File > Export > Batch Convert).
+ * Empty when the user cancels.
+ */
+export async function openManyBytesDialog(label: string, exts: string[]): Promise<{ name: string; bytes: Uint8Array }[]> {
+  if (desktop) {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const got = await open({ multiple: true, directory: false, filters: [{ name: label, extensions: exts }] });
+    const paths = Array.isArray(got) ? got : typeof got === 'string' ? [got] : [];
+    const out: { name: string; bytes: Uint8Array }[] = [];
+    for (const path of paths) out.push({ name: baseName(path), bytes: new Uint8Array(await invoke<ArrayBuffer>('read_binary_file', { path })) });
+    return out;
+  }
+  let files: File[];
+  if (pw.showOpenFilePicker) {
+    try {
+      const handles = await pw.showOpenFilePicker({ multiple: true, types: [{ description: label, accept: { 'application/octet-stream': exts.map((e) => '.' + e) } }] });
+      files = await Promise.all(handles.map((h) => h.getFile()));
+    } catch (e) {
+      if (isAbort(e)) return [];
+      throw e;
+    }
+  } else {
+    files = await new Promise<File[]>((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.multiple = true;
+      input.accept = exts.map((e) => '.' + e).join(',');
+      input.addEventListener('change', () => resolve([...(input.files ?? [])]));
+      input.addEventListener('cancel', () => resolve([]));
+      input.click();
+    });
+  }
+  return Promise.all(files.map(async (f) => ({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) })));
 }
 
 function uploadBox(types: FileType[]): Promise<File | null> {

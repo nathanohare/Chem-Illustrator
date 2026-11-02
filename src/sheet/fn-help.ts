@@ -42,6 +42,8 @@ const KNOWN_X = "known_x's: the x values, as many as the y values";
 const LAMBDA_ARG = 'lambda: a LAMBDA giving the answer for each value, such as LAMBDA(x, x*2)';
 
 const HELP: Record<string, Entry> = {
+  // ---------------------------------------------------------------- chemistry (no structure needed)
+  SIGMA: ['Chemistry', 'The Hammett substituent constant σ of a group, for Hammett plots: SIGMA("NO2") is 0.78.', 'group: the substituent, such as "NO2", "Cl", "OMe", "NMe2" or "CO2Me"', '[position]: "para" (left out), "meta", or "para-" for σp⁻'],
   // ---------------------------------------------------------------- maths
   SUM: [M, 'Adds up numbers.', NUMS],
   PRODUCT: [M, 'Multiplies numbers together.', NUMS],

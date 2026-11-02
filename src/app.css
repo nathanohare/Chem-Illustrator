@@ -2896,3 +2896,24 @@ body.mode-window header .tab-close, body.mode-window header .tab-ctl { color: rg
 .v3d-bar label { display: inline-flex; align-items: center; gap: 3px; }
 .v3d-bar button[aria-pressed='true'] { background: var(--accent-soft); }
 .v3d-info { flex: 1; text-align: center; color: var(--muted); font-size: 0.92em; }
+
+/* Check Balance */
+dialog.balance-dialog { width: min(92vw, 420px); }
+.balance-table { border-collapse: collapse; width: 100%; margin: 6px 0 10px; font-variant-numeric: tabular-nums; }
+.balance-table th, .balance-table td { text-align: right; padding: 2px 8px; border-bottom: 1px solid var(--line); }
+.balance-table th:first-child, .balance-table td:first-child { text-align: left; }
+.balance-table tr.off td { color: var(--danger); font-weight: 600; }
+.balance-verdict { margin: 4px 0; }
+.balance-verdict.ok { color: var(--text); font-weight: 600; }
+/* Chemistry > Reactions and Schemes > Lab Calculator */
+dialog.calc-dialog { width: min(92vw, 400px); }
+.calc-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 4px 0 6px; }
+.calc-tabs button { border: 0; border-bottom: 2px solid transparent; background: none; padding: 4px 8px; color: var(--muted); font: inherit; }
+.calc-tabs button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.calc-page .ask-row { grid-template-columns: 10.5em 1fr 5.5em; margin: 4px 0; }
+.calc-page .ask-row input { font-variant-numeric: tabular-nums; }
+.calc-group { padding: 2px 0 4px; }
+.calc-group + .calc-group { border-top: 1px solid var(--line); padding-top: 4px; }
+.calc-compound { margin: 2px 0; font-weight: 600; }
+.calc-row.calc-given span:first-child, .calc-row.calc-answer span:first-child { font-weight: 600; }
+.calc-row.calc-answer input { background: var(--accent-soft, transparent); }

@@ -12,7 +12,7 @@ import {
   Chart, ChartKind, ChartAxis, Series, SeriesFit, ErrorBars, MarkerShape, CHART_NAMES, CHART_PALETTES, MARKERS,
   chartFromRange, chartData, readRef, refText, isXY, isLevelled, comboAs, onSecondAxis, Bins, BoxOptions,
 } from '../sheet/chart';
-import { FIT_NAMES, FitKind, fitEquation, r2Text, fitNumber } from '../sheet/fit';
+import { CHEM_FITS, FIT_NAMES, FitKind, fitEquation, fitResults, isChemFit, isTemperatureFit, r2Text, fitNumber } from '../sheet/fit';
 import { histogram } from '../sheet/chart-stats';
 import { chartCanvas, chartItems, chartFits } from '../render/chart-draw';
 import { itemsToSvg } from '../render/svg';
@@ -32,7 +32,7 @@ type MenuItem = [string, () => void, boolean?] | null;
 const KINDS = Object.keys(CHART_NAMES) as ChartKind[];
 /** Charts that take fitted lines and error bars. */
 const FITTED = new Set<ChartKind>(['scatter', 'line', 'column', 'bar', 'area', 'bubble']);
-const FITS = Object.keys(FIT_NAMES) as FitKind[];
+const FITS = (Object.keys(FIT_NAMES) as FitKind[]).filter((k) => !isChemFit(k));
 
 /** The block of filled cells around a cell (Excel's current region), for charting one cell's table. */
 export function currentRegion(s: Sheet, r: number, c: number): Range {
@@ -138,9 +138,12 @@ export class SheetCharts {
       [`${!c.series.some((s) => s.fit) ? '✓ ' : ''}None`, () => all((s) => ({ ...s, fit: undefined }))],
       ...FITS.map((k) => [`${first?.kind === k ? '✓ ' : ''}${FIT_NAMES[k]}`, () => all((s) => ({ ...s, fit: { showEq: true, showR2: true, ...s.fit, kind: k } }))] as MenuItem),
       null,
+      // the chemistry fits: rate laws, Arrhenius, Eyring and Hammett plots
+      ...CHEM_FITS.map((k) => [`${first?.kind === k ? '✓ ' : ''}${FIT_NAMES[k]}`, () => all((s) => ({ ...s, fit: { showEq: true, showR2: true, ...s.fit, kind: k } }))] as MenuItem),
+      null,
       [`${first?.showEq ? '✓ ' : ''}Show Equation`, () => all((s) => (s.fit ? { ...s, fit: { ...s.fit, showEq: !s.fit.showEq } } : s)), !!first],
       [`${first?.showR2 ? '✓ ' : ''}Show R²`, () => all((s) => (s.fit ? { ...s, fit: { ...s.fit, showR2: !s.fit.showR2 } } : s)), !!first],
-      ['Through the Origin', () => all((s) => (s.fit ? { ...s, fit: { ...s.fit, intercept: s.fit.intercept === 0 ? undefined : 0 } } : s)), !!first && (first.kind === 'linear' || first.kind.startsWith('poly'))],
+      ['Through the Origin', () => all((s) => (s.fit ? { ...s, fit: { ...s.fit, intercept: s.fit.intercept === 0 ? undefined : 0 } } : s)), !!first && (first.kind === 'linear' || first.kind.startsWith('poly') || first.kind === 'hammett')],
       null,
       ['More Options (each series)…', () => this.focusPanel()],
     ]);
@@ -506,10 +509,11 @@ export class SheetCharts {
       // fitted line
       const f = s.fit;
       const setFit = (q: Partial<SeriesFit> | null) => this.patchSeries(i, { fit: q === null ? undefined : clean({ kind: 'linear', showEq: true, showR2: true, ...f, ...q } as SeriesFit) }, 'Fitted line');
-      out.push(row('Fitted line', select([['', 'None'], ...FITS.map((k) => [k, FIT_NAMES[k]] as [string, string])], f?.kind ?? '', (v) => setFit(v ? { kind: v as FitKind } : null))));
+      out.push(row('Fitted line', select([['', 'None'], ...[...FITS, ...CHEM_FITS].map((k) => [k, FIT_NAMES[k]] as [string, string])], f?.kind ?? '', (v) => setFit(v ? { kind: v as FitKind } : null))));
       if (f) {
         out.push(row('Show', check(!!f.showEq, (v) => setFit({ showEq: v }), 'Equation'), check(!!f.showR2, (v) => setFit({ showR2: v }), 'R²')));
-        if (f.kind === 'linear' || f.kind.startsWith('poly') || f.kind === 'exp') out.push(row(f.kind === 'exp' ? 'Value at x = 0' : 'Crosses y at', numberBox(f.intercept, (v) => setFit({ intercept: v }), 'fitted')));
+        if (f.kind === 'linear' || f.kind.startsWith('poly') || f.kind === 'exp' || f.kind === 'order1' || f.kind === 'hammett') out.push(row(f.kind === 'exp' || f.kind === 'order1' ? 'Value at x = 0' : 'Crosses y at', numberBox(f.intercept, (v) => setFit({ intercept: v }), 'fitted')));
+        if (isTemperatureFit(f.kind)) out.push(row('x is in', select([['K', 'kelvin (K)'], ['C', 'degrees Celsius (°C)']], f.celsius ? 'C' : 'K', (v) => setFit({ celsius: v === 'C' || undefined }))));
         out.push(row('Extend', numberBox(f.backward, (v) => setFit({ backward: v }), '0', 'back'), numberBox(f.forward, (v) => setFit({ forward: v }), '0', 'forward')));
         out.push(row('Colour', colour(f.color ?? data[i]?.color ?? '#4472c4', (v) => setFit({ color: v })), f.color ? button('Auto', () => setFit({ color: undefined })) : null));
         out.push(row('Legend', check(f.legend !== false, (v) => setFit({ legend: v ? undefined : false }), 'List it')));
@@ -518,15 +522,25 @@ export class SheetCharts {
         if (fit) {
           const box = document.createElement('div');
           box.className = 'cp-fit';
-          box.append(note(`${fitEquation(fit, 6)}`, 'cp-value'), note(`${r2Text(fit, 5)}   (n = ${fit.n})`, 'cp-value'));
+          box.append(note(`${fitEquation(fit, 6)}`, 'cp-value'), ...fitResults(fit, 5).map((l) => note(l, 'cp-value')), note(`${r2Text(fit, 5)}   (n = ${fit.n})`, 'cp-value'));
           if (fit.kind === 'linear') box.append(note(`Slope ${fitNumber(fit.coef[1], 6)}, intercept ${fitNumber(fit.coef[0], 6)}`, 'muted small'));
+          const how: Partial<Record<FitKind, string>> = {
+            order1: 'Fitted as ln y against x. k is in the reciprocal of the x units (s⁻¹ for seconds).',
+            order2: 'Fitted as 1/y against x. k is in 1/(concentration × time) of your units.',
+            arrhenius: 'Fitted as ln k against 1/T. A has the units of k.',
+            eyring: 'Fitted as ln(k/T) against 1/T. For ΔS‡ to be right, k must be in s⁻¹ (first order) or M⁻¹ s⁻¹.',
+            hammett: 'Plot log(kX/kH), or log(KX/KH), against σ; the slope is ρ. =SIGMA("NO2", "para") gives σ values.',
+          };
+          if (how[fit.kind]) box.append(note(how[fit.kind]!, 'muted small'));
           const btns = document.createElement('div');
           btns.className = 'cp-buttons';
-          btns.append(button('Copy equation', () => void navigator.clipboard?.writeText(`${fitEquation(fit, 6)}\n${r2Text(fit, 5)}`).then(() => this.host.flash('Copied the equation.'), () => this.host.flash('This browser would not copy.'))));
+          btns.append(button('Copy equation', () => void navigator.clipboard?.writeText([fitEquation(fit, 6), ...fitResults(fit, 6), r2Text(fit, 5)].join('\n')).then(() => this.host.flash('Copied the equation.'), () => this.host.flash('This browser would not copy.'))));
           if (fit.kind === 'linear' && f.intercept === undefined && s.x && c.kind === 'scatter' && !this.target) btns.append(button('Put in cells…', () => void this.fitToCells(i)));
           box.append(btns);
           out.push(box);
-        } else out.push(note('Too few usable points to fit (log and power fits need x > 0; exponential and power fits need y > 0).', 'cp-error'));
+        } else out.push(note(isChemFit(f.kind)
+          ? 'Too few usable points to fit (rate fits need y > 0; Arrhenius and Eyring need k > 0 and temperatures above absolute zero).'
+          : 'Too few usable points to fit (log and power fits need x > 0; exponential and power fits need y > 0).', 'cp-error'));
       }
       if (c.series.length > 1) out.push(remove());
     });

@@ -7,7 +7,7 @@ import { niceTicks, logTicks, CHART_PALETTES, isXY, isLevelled, comboAs, onSecon
 import { histogram, boxGroups } from '../sheet/chart-stats';
 import { sankeyFlows } from '../sheet/sankey';
 import { hierarchy, nodeAt, validPath, squarify, type HierNode } from '../sheet/hierarchy';
-import { fitPoints, fitAt, fitEquation, r2Text, Fit, FitKind } from '../sheet/fit';
+import { fitPoints, fitAt, fitEquation, fitResults, r2Text, Fit, FitKind } from '../sheet/fit';
 import { cssFamily } from '../text/layout';
 import { formatValue, generalNumber } from '../sheet/numfmt';
 import { VectorContext, Item, Seg } from './vector';
@@ -282,7 +282,10 @@ const dashOf = (d: string | undefined): number[] => (d === 'dash' ? [6, 4] : d =
 
 // ---------------------------------------------------------------- the chart
 
-const SHORT_FIT: Record<FitKind, string> = { linear: 'Linear', poly2: 'Poly.', poly3: 'Poly.', exp: 'Expon.', log: 'Log.', power: 'Power' };
+const SHORT_FIT: Record<FitKind, string> = {
+  linear: 'Linear', poly2: 'Poly.', poly3: 'Poly.', exp: 'Expon.', log: 'Log.', power: 'Power',
+  order1: '1st order', order2: '2nd order', arrhenius: 'Arrhenius', eyring: 'Eyring', hammett: 'Hammett',
+};
 
 /** Charts that take fitted lines (as Excel gives trendlines to). */
 const FITTED = new Set<Chart['kind']>(['scatter', 'line', 'column', 'bar', 'area', 'bubble']);
@@ -301,7 +304,7 @@ export function chartFits(chart: Chart, data: SeriesData[]): (Fit | null)[] {
     const d = data[i];
     if (!s.fit || !d || !FITTED.has(chart.kind)) return null;
     const xs = isXY(chart.kind) ? d.xs : d.ys.map((_, j) => j + 1);
-    return fitPoints(s.fit.kind, xs, d.ys, s.fit.intercept);
+    return fitPoints(s.fit.kind, xs, d.ys, s.fit.intercept, !!s.fit.celsius);
   });
 }
 
@@ -741,7 +744,8 @@ export function drawChart(ctx: Ctx, chart: Chart, data0: SeriesData[], w: number
     ctx.setLineDash([5, 3]);
     polyline(ctx, pts, plot);
     ctx.setLineDash([]);
-    const lines = [s.fit.showEq ? fitEquation(f) : '', s.fit.showR2 ? r2Text(f) : ''].filter(Boolean);
+    // a chemistry fit's equation comes with what it works out (k, Ea, ΔH‡…)
+    const lines = [...(s.fit.showEq ? [fitEquation(f), ...fitResults(f)] : []), s.fit.showR2 ? r2Text(f) : ''].filter(Boolean);
     if (!lines.length) return;
     const lfs = fs * 0.95;
     const bw = Math.max(...lines.map((l) => measure(ctx, l, opt(lfs)))), bh = lines.length * lfs * 1.3;
