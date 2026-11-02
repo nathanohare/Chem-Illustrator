@@ -233,6 +233,10 @@ class Builder {
       for (const inner of innerObjects(o)) this.copy(inner);
       c = { ...c, table: { ...c.table, rows: c.table.rows.map((row) => row.map((cell) => ({ ...cell, runs: cell.runs.map((r) => (r.obj !== undefined ? { ...r, obj: this.copied.get(r.obj) ?? r.obj } : r)) }))) } };
     }
+    if (c.kind === 'note') {
+      for (const inner of innerObjects(o)) this.copy(inner);
+      c = { ...c, runs: c.runs.map((r) => (r.obj !== undefined ? { ...r, obj: this.copied.get(r.obj) ?? r.obj } : r)) };
+    }
     this.objects[nid] = c;
     return nid;
   }

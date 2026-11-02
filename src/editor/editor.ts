@@ -12,6 +12,7 @@ import { stopAtEdge } from '../ui/scrollbars';
 import { linkAtPoint } from '../links';
 import { typingPrefs } from '../text/typing';
 import { geoDef, geoShapeStyle, moveSteps, traceSteps } from '../design/geo';
+import { distinctChoices } from '../chem/template-choices';
 import { TEMPLATES, Template, Placement, templateById, templatePoints, placePoint, fusePlacements, atomPlacements, freePlacement, crowdingOf, placeTemplate, snap15 } from '../chem/templates';
 import { fusions3d } from '../chem/fuse3d';
 import { bondHapto, centreEnd, haptoTarget, haptoText, splitHapto } from '../chem/hapto';
@@ -518,7 +519,9 @@ export class Editor {
       if (this.drag?.button === 2) this.pendingContext = e;
       else if (!this.rightDragged) this.onContextMenu(e);
     });
-    window.addEventListener('keydown', (e) => this.onKey(e));
+    window.addEventListener('keydown', (e) => { if (!this.freeAngleKey(e)) this.onKey(e); });
+    window.addEventListener('keyup', (e) => this.freeAngleKey(e));
+    window.addEventListener('blur', () => { this.spaceHeld = false; });
     // holding Ctrl over the selection shows that a drag will copy it
     const ctrlKey = (e: KeyboardEvent) => { if (e.key === 'Control' || e.key === 'Meta') this.showPointer(e.type === 'keydown'); };
     window.addEventListener('keydown', ctrlKey);
@@ -1194,6 +1197,7 @@ export class Editor {
     }
     // Alt (any angle) and Shift (a square or circle) count while held, not only when pressed first
     if (d.mode === 'draw' && this.liveMods()) { d.alt = e.altKey; d.shift = e.shiftKey; }
+    if (this.freeAngleTool(d)) d.alt = e.altKey || this.spaceHeld;
     d.last = p;
     d.path?.push(p);
     this.hover = this.hitTest(p);
@@ -1324,6 +1328,7 @@ export class Editor {
     if (!d.moved) this.click(d, p);
     else if (d.mode === 'draw') {
       if (this.liveMods()) { d.alt = e.altKey; d.shift = e.shiftKey; }
+      if (this.freeAngleTool(d)) d.alt = e.altKey || this.spaceHeld;
       this.finishDraw(d, p);
     }
     this.hover = this.hitTest(p);
@@ -1780,8 +1785,8 @@ export class Editor {
         const c = placePoint(pl, 0, 0);
         return Math.sign(dot(sub(c, mid), n)) === Math.sign(dot(sub(start, mid), n)) ? 0 : 0.01;
       };
-      return rank(fusePlacements(t, p, q), new Set([p.id, q.id]), side).map((pl) => (
-        { pl, existing: new Map([[t.fuse![0], nearest(pl, t.fuse![0], [p.id, q.id])], [t.fuse![1], nearest(pl, t.fuse![1], [p.id, q.id])]]), scale: b.s }));
+      return distinctChoices(doc, t, rank(fusePlacements(t, p, q), new Set([p.id, q.id]), side).map((pl) => (
+        { pl, existing: new Map([[t.fuse![0], nearest(pl, t.fuse![0], [p.id, q.id])], [t.fuse![1], nearest(pl, t.fuse![1], [p.id, q.id])]]), scale: b.s })), true);
     }
     if (h && h.kind === 'atom') {
       const a = doc.atoms.get(h.id)!;
@@ -1791,15 +1796,15 @@ export class Editor {
       if (t.onMetal) byBond = false;
       else if (!byBond && doc.degree(a.id) >= 3) byBond = true;
       const dir = cursor && dist(cursor, a) > L * 0.3 ? norm(fromAngle(snapAngle(angleOf(sub(cursor, a))))) : byBond ? sproutDir(doc, a.id) : ringDir(doc, a.id);
-      return rank(atomPlacements(t, a, dir, L, byBond), new Set([a.id])).map((pl) => (
-        byBond ? { pl, existing: new Map(), bondFrom: a.id, scale: a.s } : { pl, existing: new Map([[t.attach, a.id]]), scale: a.s }));
+      return distinctChoices(doc, t, rank(atomPlacements(t, a, dir, L, byBond), new Set([a.id])).map((pl): TemplateChoice => (
+        byBond ? { pl, existing: new Map(), bondFrom: a.id, scale: a.s } : { pl, existing: new Map([[t.attach, a.id]]), scale: a.s })), true);
     }
     const L = doc.style.bondLength;
     let angle = 0;
     if (cursor && dist(cursor, start) > L * 0.3) angle = alt ? angleOf(sub(cursor, start)) : snap15(angleOf(sub(cursor, start)));
     // as drawn, mirrored top to bottom, mirrored left to right, and turned round
-    return [[false, 0], [true, 0], [true, Math.PI], [false, Math.PI]].map(([mirror, turn]) => (
-      { pl: { ...freePlacement(start, L, angle + (turn as number)), mirror: mirror as boolean }, existing: new Map() }));
+    return distinctChoices(doc, t, [[false, 0], [true, 0], [true, Math.PI], [false, Math.PI]].map(([mirror, turn]): TemplateChoice => (
+      { pl: { ...freePlacement(start, L, angle + (turn as number)), mirror: mirror as boolean }, existing: new Map() })), false);
   }
 
   /**
@@ -4504,6 +4509,39 @@ export class Editor {
   }
 
   // ------------------------------------------------------------------ keyboard
+
+  /** Space is down: while drawing a bond or an arrow, it frees the angle as Alt does (for where the system takes Alt + drag, as many Linux desktops do). */
+  private spaceHeld = false;
+
+  /** A bond or arrow being drawn, whose angle Alt (or Space) frees from the 15° steps however late it is pressed. */
+  private freeAngleTool(d: Drag): boolean {
+    return d.mode === 'draw' && d.button === 0 && (this.tool.kind === 'bond' || this.tool.kind === 'arrow');
+  }
+
+  /**
+   * Alt or Space pressed or let go while drawing a bond or an arrow: the angle is freed (or snaps
+   * again) at once, without waiting for the pointer to move. Returns whether the key was used.
+   * The Alt key's default is stopped, so Windows doesn't take it for the window menu, and letting
+   * it go doesn't send the keys to the menu bar.
+   */
+  private freeAngleKey(e: KeyboardEvent): boolean {
+    if (this.paused) return false;
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return false;
+    const space = e.code === 'Space';
+    if (space) this.spaceHeld = e.type === 'keydown';
+    if (e.key !== 'Alt' && !space) return false;
+    const d = this.drag;
+    if (!d || !this.freeAngleTool(d)) return false;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    d.alt = e.altKey || (e.key === 'Alt' && e.type === 'keydown') || this.spaceHeld;
+    if (e.key === 'Alt' && e.type === 'keyup') d.alt = this.spaceHeld;
+    // the key stops here, so the hints beside the pointer learn of it here too
+    this.setMods(e, false);
+    this.requestOverlay(e.timeStamp);
+    return true;
+  }
 
   private onKey(e: KeyboardEvent): void {
     if (this.paused) return;

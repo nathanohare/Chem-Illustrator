@@ -32,6 +32,8 @@ import { ChemClient } from './chem/client';
 import type { FragmentResult } from './worker/chem-worker';
 import { COMMON_ADDUCTS } from './chem/hrms';
 import { pubchemName, pubchemCid, pubchemCompound, compoundPage } from './chem/pubchem';
+import { CasMemory, readCas, casTypoMessage, structureForCas, casForStructure, type CasDeps, type CasFound } from './chem/cas';
+import { casHtml, casRuns, type CasState } from './ui/cas-panel';
 import { pubchemHtml, pubchemRuns, type PubChemState } from './ui/pubchem-panel';
 import { paragraphPages } from './document/doc-file';
 import { reviewAuthor, setReviewAuthor } from './document/revisions';
@@ -230,7 +232,9 @@ import { SlideComparePane } from './ui/slide-compare';
 import { pickFileTemplate } from './ui/file-templates';
 import type { PastedRows } from './io/table-clip';
 import { Keeper } from './keep/keeper';
-import { notice } from './ui/keep-ui';
+import { choose as chooseButtons, notice } from './ui/keep-ui';
+import { runZoteroOn, type ZoteroCommand } from './document/zotero-live';
+import { DeckStore, type DeckZoteroHost } from './deck/zotero-deck';
 import { DEFAULT_KEEP, type KeepPrefs } from './keep/prefs';
 import { Brush, paintObjects, pickObjectLook, type ObjectLook, type TextLook } from './format-painter';
 import { SymbolWindow } from './ui/symbol-window';
@@ -379,8 +383,8 @@ const ARROWS: PaletteDef = {
     { name: 'arrow-equilibrium', title: 'Equilibrium arrows' },
     { name: 'arrow-retro', title: 'Retrosynthetic arrow' },
     { name: 'arrow-nogo', title: 'Crossed-out arrow (reaction does not go)' },
-    { name: 'arrow-curved', title: 'Curved arrow (electron pair). Drag from an atom or bond to an atom or bond and it snaps like a mechanism arrow; hold Alt to draw freely' },
-    { name: 'arrow-fishhook', title: 'Curved half-headed arrow (one electron). Snaps between atoms and bonds like the curved arrow; hold Alt to draw freely' },
+    { name: 'arrow-curved', title: 'Curved arrow (electron pair). Drag from an atom or bond to an atom or bond and it snaps like a mechanism arrow; hold Alt or Space to draw freely' },
+    { name: 'arrow-fishhook', title: 'Curved half-headed arrow (one electron). Snaps between atoms and bonds like the curved arrow; hold Alt or Space to draw freely' },
     { name: 'arrow-s', title: 'S-shaped curved arrow (two bends), for electrons that have to go round something. Snaps like the curved arrow; hold Alt to draw freely' },
     { name: 'arrow-s-fishhook', title: 'S-shaped half-headed arrow (one electron, two bends). Snaps like the curved arrow; hold Alt to draw freely' },
   ],
@@ -594,11 +598,11 @@ const HINTS: Record<string, string> = {
   'bond-hapto': 'Drag from a metal into a ring (η⁵, η⁶) or onto a bond (η²), or the other way. Click inside a ring or on a bond for a new metal M there; select an allyl or diene, then click the metal. Click a hapto bond to draw it to each atom.',
   fragment: 'Drag a line across the bonds to break (or click one bond). Each piece gets a caption with its formula and exact mass, which you can edit.',
 };
-const ARROW_HINT = 'Drag to draw an arrow (Alt: any angle); click for a standard one. Drag the ends to move them, the middle to bend it.';
+const ARROW_HINT = 'Drag to draw an arrow (hold Alt or Space: any angle); click for a standard one. Drag the ends to move them, the middle to bend it.';
 const CURVE_HINT = 'Drag from where the electrons start to where they go. They start at a lone pair, bond, radical or charge and go to an atom, a bond, or the gap where a new bond forms; swing out to one side to bend that way. Or click where it starts, click points it goes through, and click where it ends. Ctrl+drag (or the pen) draws it freehand. The arrow sticks to the structure. Drag the middle dot (an S: its diamonds, or its line) to change the curve.';
 const SHAPE_HINT = 'Drag to draw. Drag the corner squares to resize; the Style panel changes dashes, fill, corners and shadow.';
 const BRACKET_HINT = 'Drag a box to put brackets round it, or click a structure to bracket it.';
-const BOND_HINT = 'Click empty space or an atom to draw; drag to aim. Point at an atom or bond and press a hotkey (Edit > Hotkeys lists them).';
+const BOND_HINT = 'Click empty space or an atom to draw; drag to aim (hold Alt or Space: any angle). Point at an atom or bond and press a hotkey (Edit > Hotkeys lists them).';
 const RING_HINT = 'Click empty space, an atom (spiro; Alt+click to attach by a bond) or a bond (fused). Drag to orient.';
 const TEMPLATE_HINT = 'Click empty space to place it (drag to turn it), a bond to fuse it on, or an atom to join it there (Alt: the other way: by a new bond, or sharing the atom).';
 
@@ -716,7 +720,7 @@ async function dropFiles(files: File[], at: { x: number; y: number }): Promise<v
     const bytes = new Uint8Array(await f.arrayBuffer());
     // a crystal structure: into the crystal structure window, to turn and place
     if (/\.cif$/i.test(f.name) && !sheetActive() && !docActive()) { await plateFigure('crystal', null, { name: f.name, text: new TextDecoder().decode(bytes) }); continue; }
-    const mime = /\.(cdxml|cdx|cds|pptx|xlsx|xlsm|xls|ods|docx|csv|tsv|txt|sdf?)$/i.test(f.name) ? null : pictureMime(f.name, bytes);
+    const mime = /\.(cdxml|cdx|cds|mol|mdl|rxn|mrv|ket|cml|json|pptx|xlsx|xlsm|xls|ods|docx|csv|tsv|txt|sdf?)$/i.test(f.name) ? null : pictureMime(f.name, bytes);
     if (mime && sheetActive()) flash('Pictures can\'t go in a cell yet. Drop sheet files (.xlsx, .csv, .sdf) to open them.');
     else if (mime && docActive()) docMode.dropPicture(bytes, mime);
     else if (mime) placePicture(bytes, mime, inside ? renderer.toDoc(at.x - r.left, at.y - r.top) : null);
@@ -1358,7 +1362,7 @@ setLinkHost({
   },
   async openHere(path) {
     // drawings, documents, slides, sheets and workspaces open in a tab here
-    if (!/\.(cdxml|cdx|cds|docx|pptx|xlsx|xlsm|xls|ods|csv|tsv|sdf|sd)$/i.test(path) && !path.toLowerCase().endsWith(`.${WORKSPACE.extension}`)) return false;
+    if (!/\.(cdxml|cdx|cds|mol|rxn|mrv|ket|cml|docx|pptx|xlsx|xlsm|xls|ods|csv|tsv|sdf|sd)$/i.test(path) && !path.toLowerCase().endsWith(`.${WORKSPACE.extension}`)) return false;
     if (!isTauri()) return false;
     await openRecent(path);
     return true;
@@ -1619,6 +1623,9 @@ function unreadableName(name: string, parser: string): NameError {
  * that is turned off in Edit > Settings.
  */
 async function nameToMolfile(name: string): Promise<{ mb: string; attach: number[]; warnings: string[] } | NameError> {
+  // a CAS RN is looked up (it can't be read like a name)
+  const cas = readCas(name);
+  if (cas) return casToMolfile(cas.kind === 'typo' ? { error: casTypoMessage(cas) } : await structureForCas(cas.cas, casDeps()));
   const r = await names.read(name);
   namesReady = true;
   if (!chem.ready) return { error: 'The chemistry engine is still loading; try again in a moment.' };
@@ -1641,6 +1648,28 @@ async function nameToMolfile(name: string): Promise<{ mb: string; attach: number
   const mb = await chem.smilesToMol(r.smiles).catch(() => null);
   if (!mb) return { error: 'The name was read, but the structure could not be drawn (' + r.smiles + ').' };
   return { mb, attach: attachmentAtoms(r.smiles), warnings: [...r.warnings, ...cxNotes(r.smiles)] };
+}
+
+/** CAS RNs found before, kept on this computer (src/chem/cas.ts). */
+const casMemory = new CasMemory();
+
+/** What a CAS RN lookup needs: your Compound Library, the answers kept, and whether looking up online is allowed. */
+function casDeps(): CasDeps {
+  return {
+    library: async () => (await useLibrary()).now.compounds,
+    memory: casMemory,
+    online: pubchemNames,
+    canonical: async (smiles) => { const mb = await chem.smilesToMol(smiles); return mb ? chem.molToSmiles(mb) : null; },
+  };
+}
+
+/** A CAS RN's structure as a laid-out molfile, or why not. */
+async function casToMolfile(got: { smiles: string; note: string } | { error: string }): Promise<{ mb: string; attach: number[]; warnings: string[] } | NameError> {
+  if ('error' in got) return { error: got.error };
+  if (!chem.ready) return { error: 'The chemistry engine is still loading; try again in a moment.' };
+  const mb = await chem.smilesToMol(got.smiles).catch(() => null);
+  if (!mb) return { error: `The CAS RN was found, but its structure could not be drawn (${got.smiles}).` };
+  return { mb, attach: [], warnings: [got.note] };
 }
 
 /** Adds a named structure centred at (x, y), its attachment points drawn as wavy lines. Use inside doc.edit (or `to`'s bulk). */
@@ -2643,7 +2672,7 @@ function reactionStep(dir: 'right' | 'left' | 'down' | 'up'): void {
 
 const OPTION_TEXT = {
   fixedLength: ['Fixed bond lengths on: new bonds are the standard length (hold Alt to drag any length).', 'Fixed bond lengths off: new bonds are as long as you drag them.'],
-  fixedAngles: ['Fixed angles on: new bonds point in 15° steps (hold Alt for any angle).', 'Fixed angles off: new bonds point wherever you drag.'],
+  fixedAngles: ['Fixed angles on: new bonds point in 15° steps (hold Alt or Space for any angle).', 'Fixed angles off: new bonds point wherever you drag.'],
 };
 function toggleOption(key: 'fixedLength' | 'fixedAngles'): void {
   editor.options[key] = !editor.options[key];
@@ -4637,7 +4666,9 @@ const compoundWindow = new CompoundLibraryWindow(library, {
     const d = structureDoc(r.contents, ACS_1996);
     const [s] = await structuresFor(d, [{ atoms: [...d.atoms.keys()] }]);
     if (!s) return { error: 'The structure couldn\'t be read.' };
-    // a name typed is kept as its name; SMILES isn't one
+    // a name typed is kept as its name, a CAS RN as its CAS RN; SMILES isn't either
+    const cas = readCas(text);
+    if (cas?.kind === 'cas') return { ...s, cas: cas.cas, name: casMemory.byCas(cas.cas)?.name ?? '' };
     const smiles = chem.ready ? await molfileOrSmiles(text.trim(), (x) => chem.smilesToMol(x)).catch(() => null) : null;
     return smiles ? s : { ...s, name: text.trim() };
   },
@@ -4857,6 +4888,56 @@ async function slideReferences(): Promise<void> {
     if (!got.look.color && deckLook.color) Object.assign(own, { color: undefined });
     d.setSlideRefs(ix, got.ids, Object.keys(own).length ? own : null);
   }
+}
+
+/** Each open presentation's id for Zotero. */
+const zoteroDeckIds = new WeakMap<Deck, string>();
+let zoteroDeckBusy = false;
+
+/**
+ * Insert > Zotero (presentations): Zotero's commands on the presentation (zotero-deck.ts). Add/Edit
+ * Citation picks the references the slide shows in Zotero's window; Add/Edit Bibliography makes
+ * (or edits) the References slide in Zotero's style. Desktop app only: Zotero turns away web pages.
+ */
+async function zoteroSlides(command: ZoteroCommand): Promise<void> {
+  const d = deckNow();
+  if (!d || ws.active.mode !== 'slides') return;
+  finishTyping();
+  if (!isTauri() || iPadApp) { flash('Citing with Zotero works in the desktop app with Zotero running on the same computer (a browser can\'t reach it). Here, use References on Slide.', 8000); return; }
+  if (zoteroDeckBusy) { flash('Zotero is still working on this presentation (finish in Zotero\'s window first).'); return; }
+  zoteroDeckBusy = true;
+  let docId = zoteroDeckIds.get(d);
+  if (!docId) { docId = `chem-illustrator-${Math.random().toString(36).slice(2, 12)}`; zoteroDeckIds.set(d, docId); }
+  let join = false;
+  const host: DeckZoteroHost = {
+    docId,
+    state: () => ({ refs: d.settings.refs, slides: d.slides.map((s) => ({ id: s.id, hidden: s.hidden, refs: s.refs, refLook: s.refLook, refList: s.refList, zotero: s.zotero })), current: d.index }),
+    change: (refs, slides) => { d.setRefState(refs, slides, 'Zotero', join); join = true; },
+    addRefsSlide: () => { const s = d.insertRefsSlide(d.slides.length, { which: 'shown' }); join = false; return s.id; },
+    removeSlide: (id) => { const i = d.slides.findIndex((s) => s.id === id); if (i >= 0) d.remove([i]); join = false; },
+    goTo: (id) => { const i = d.slides.findIndex((s) => s.id === id); if (i >= 0 && deckNow() === d) d.go(i); },
+    choose: (text, labels) => chooseButtons('Zotero', text, labels, 0),
+    activate: () => { void invoke('zotero_activate').catch(() => {}); },
+  };
+  try {
+    const got = await runZoteroOn(command, new DeckStore(host, command), async (endpoint, body) => {
+      const r = await invoke<{ status: number; body: string }>('zotero_post', { endpoint, body });
+      return { status: r.status, text: r.body };
+    });
+    if (got === 'offline') flash('Zotero isn\'t running. Start the Zotero app (version 7 or later) on this computer, then try again.', 7000);
+    else if (got === 'busy') flash('Zotero is busy with a citation in another file. Finish there, then try again.', 6000);
+  } catch (e) {
+    flash(`Zotero: ${e instanceof Error ? e.message : String(e)}`, 8000);
+  } finally {
+    zoteroDeckBusy = false;
+  }
+}
+
+/** Insert > Zotero ▾ on a presentation: Zotero's commands in a menu under the button. */
+function zoteroSlidesMenu(): void {
+  const b = document.querySelector<HTMLElement>('[data-cmd="zotero-menu"]');
+  const r = b?.getBoundingClientRect();
+  showContextMenu(r ? r.left : 200, r ? r.bottom : 120, [{ cmd: 'zotero-cite' }, { cmd: 'zotero-bib' }, { cmd: 'zotero-refresh' }, null, { cmd: 'zotero-prefs' }, { cmd: 'zotero-unlink' }], { run: (cmd) => void command(cmd), key: commandKey });
 }
 
 /** Insert > Presentation > References Slide: a slide after the last one listing the references the slides show (or all of them), kept up to date. */
@@ -6790,7 +6871,7 @@ function setPictureStyle(look: PictureLook | undefined): boolean {
 }
 
 /** Slide commands that don't apply to a design's single page. */
-const SLIDE_ONLY = new Set(['references-slide', 'compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
+const SLIDE_ONLY = new Set(['references-slide', 'zotero-menu', 'zotero-cite', 'zotero-bib', 'zotero-refresh', 'zotero-prefs', 'zotero-unlink', 'compare-slides', 'section-menu', 'new-slide', 'new-canvas-slide', 'add-keyframe', 'keyframe-here', 'fit-keyframe', 'delete-keyframe', 'keyframe-title', 'keyframe-zone', 'canvas-background', 'canvas-heading', 'keyframe-spotlight', 'keyframe-unspot', 'keyframe-detour', 'canvas-show-options', 'duplicate-slide', 'delete-slide', 'cut-slides', 'copy-slides', 'paste-slides', 'paste-slides-keep', 'hide-slide', 'reuse-slides', 'size-wide', 'size-standard', 'size-custom', 'slide-master', 'slide-templates',
   'edit-layouts', 'view-sorter', 'add-section', 'rename-section', 'remove-section', 'remove-section-slides', 'remove-all-sections', 'section-up', 'section-down', 'collapse-sections', 'expand-sections',
   'slide-transitions', 'slide-animations', 'animation-pane', 'preview-slide', 'remove-animation', 'insert-slide-zoom', 'insert-summary-zoom', 'action-settings', 'insert-video', 'insert-audio',
   'reading-view', 'rehearse-timings', 'record-show', 'rehearse-here', 'record-show-here', 'clear-timings-slide', 'clear-timings-all', 'clear-narration-slide', 'clear-narration-all', 'clear-show-menu', 'set-up-show', 'custom-shows', 'custom-show-menu', 'use-timings', 'play-narrations', 'header-footer', 'insert-date-time', 'insert-slide-number', 'view-slide-ruler', 'view-gridlines', 'view-guides', 'grid-settings', 'add-vertical-guide', 'add-horizontal-guide', 'view-outline', 'view-notes-page', 'notes-master', 'handout-master']);
@@ -7001,6 +7082,12 @@ const COMMANDS: Record<string, () => unknown> = {
   references: () => void openReferences(),
   'manage-references': () => void openReferences(),
   'slide-references': () => void slideReferences(),
+  'zotero-menu': () => zoteroSlidesMenu(),
+  'zotero-cite': () => void zoteroSlides('addEditCitation'),
+  'zotero-bib': () => void zoteroSlides('addEditBibliography'),
+  'zotero-refresh': () => void zoteroSlides('refresh'),
+  'zotero-prefs': () => void zoteroSlides('setDocPrefs'),
+  'zotero-unlink': () => void zoteroSlides('removeCodes'),
   'references-slide': () => void referencesSlide(),
   'insert-reference': () => void insertReference(),
   'compound-library': () => void openCompoundLibrary(),
@@ -7285,6 +7372,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'scheme-settings': () => settingsWindow.open('schemes'),
   'attach-descriptors': () => void attachDescriptors(),
   'pubchem-lookup': () => void lookUpChosen(),
+  'find-cas': () => void findCasChosen(),
   'model-3d': () => void show3dModel(),
   'turn-3d': () => void turn3dDialog(),
   'flatten-3d': () => editor.flattenSelection() || flash('Select a structure to flatten.'),
@@ -7520,8 +7608,10 @@ function cycleRegion(step: 1 | -1): void {
 }
 
 let altAlone = false;
+/** A mouse button or pen is down: Alt then frees a bond's or an arrow's angle, so letting it go doesn't open the menus. */
+let pointerHeld = false;
 window.addEventListener('keydown', (e) => {
-  if (e.key === 'Alt') { altAlone = !e.repeat && !e.ctrlKey && !e.metaKey && !e.shiftKey; if (altAlone) document.body.classList.add('show-mnemonics'); return; }
+  if (e.key === 'Alt') { altAlone = !e.repeat && !e.ctrlKey && !e.metaKey && !e.shiftKey && !pointerHeld; if (altAlone) document.body.classList.add('show-mnemonics'); return; }
   altAlone = false;
   // Ctrl+F6 works from anywhere, a text box too
   const chord = chordOf(e);
@@ -7551,14 +7641,15 @@ window.addEventListener('keyup', (e) => {
   if (e.key !== 'Alt') return;
   const alone = altAlone;
   altAlone = false;
-  if (!alone) { if (!inMenuBar()) document.body.classList.remove('show-mnemonics'); return; }
+  if (!alone || pointerHeld) { if (!inMenuBar()) document.body.classList.remove('show-mnemonics'); return; }
   if (isTyping(e.target) || (e.target as HTMLElement | null)?.closest?.('dialog')) { document.body.classList.remove('show-mnemonics'); return; }
   e.preventDefault();
   if (inMenuBar() || openMenu) leaveMenuBar();
   else enterMenuBar();
 });
-window.addEventListener('pointerdown', () => { altAlone = false; }, true);
-window.addEventListener('blur', () => { altAlone = false; document.body.classList.remove('show-mnemonics'); });
+window.addEventListener('pointerdown', () => { altAlone = false; pointerHeld = true; }, true);
+for (const type of ['pointerup', 'pointercancel'] as const) window.addEventListener(type, () => { pointerHeld = false; }, true);
+window.addEventListener('blur', () => { altAlone = false; pointerHeld = false; document.body.classList.remove('show-mnemonics'); });
 document.addEventListener('focusin', () => { if (!inMenuBar() && !openMenu) document.body.classList.remove('show-mnemonics'); });
 
 /** The mode the menus serve: drawing a structure for a cell or a document counts as Drawing. */
@@ -8483,8 +8574,8 @@ async function aiSettings(): Promise<void> {
 
 async function onlinePreferences(): Promise<void> {
   const r = await ask('Online', [
-    { name: 'pubchem', label: 'Look up names the name reader can\'t read on PubChem', type: 'checkbox', value: String(pubchemNames),
-      help: 'Sends the name typed to PubChem, a free NIH database. Names the program can read itself never leave this computer.' },
+    { name: 'pubchem', label: 'Look up CAS RNs, and names the name reader can\'t read, on PubChem', type: 'checkbox', value: String(pubchemNames),
+      help: 'Sends the name or CAS RN typed to PubChem, a free NIH database (and a CAS RN PubChem doesn\'t know to NCI CACTUS); Find CAS RN sends the structure as SMILES. Names the program can read itself never leave this computer.' },
     ...(canUpdate ? [{ name: 'updates', label: 'Check for a newer version when the app starts', type: 'checkbox' as const, value: String(updateCheck),
       help: 'Asks GitHub for the latest release number; nothing about you or your files is sent.' },
     { name: 'channel', label: 'Updates', options: UPDATE_CHANNELS, value: updateChannel,
@@ -9072,13 +9163,65 @@ adductSel.addEventListener('change', () => scheduleAnalysis(true));
 /** What PubChem had on each structure looked up this session, by SMILES. */
 const pubchemStates = new Map<string, PubChemState>();
 
+/** Each structure's CAS RN as looked up this session, by SMILES. */
+const casStates = new Map<string, CasState>();
+
+/**
+ * A structure's CAS RN line: as looked up this session, else straight from your Compound
+ * Library (once it has been read) or the answers kept on this computer, without going online.
+ */
+function casStateOf(smiles: string): CasState {
+  const st = casStates.get(smiles);
+  if (st) return st;
+  const mine = library.loaded ? library.now.compounds.find((c) => c.smiles === smiles && readCas(c.cas)?.kind === 'cas') : undefined;
+  if (mine) return { kind: 'found', cas: [readCas(mine.cas)!.cas], name: mine.name || undefined, from: 'your Compound Library' };
+  const kept = casMemory.byKey(smiles);
+  if (kept?.cas.length) return { kind: 'found', cas: kept.cas, name: kept.name, cid: kept.cid, from: kept.source };
+  return { kind: 'idle' };
+}
+
+/** The Analysis panel's Find button (and Find CAS RN): the structure's CAS RN, shown in its line. */
+async function findCas(smiles: string, fresh = false): Promise<CasFound | null> {
+  if (casStates.get(smiles)?.kind === 'busy') return null;
+  casStates.set(smiles, { kind: 'busy' });
+  scheduleAnalysis(true);
+  let got: CasFound;
+  try {
+    got = await casForStructure(smiles, casDeps(), fresh);
+  } catch (e) {
+    got = { kind: 'error', message: (e as Error).message };
+  }
+  casStates.set(smiles, got);
+  scheduleAnalysis(true);
+  return got;
+}
+
+/** Chemistry > Look Up > Find CAS RN (and the right-click menu): the structure picked, its CAS RN shown in the Analysis panel. */
+async function findCasChosen(): Promise<void> {
+  const f = chosenStructures()[0];
+  if (!f) { flash('Select a structure first.'); return; }
+  const r = await weigh(f);
+  if (!r?.smiles) { flash('Couldn\'t read that structure to look it up.'); return; }
+  if (sideIsFolded()) command('fold-side');
+  const got = await findCas(r.smiles, casStates.get(r.smiles)?.kind === 'none' || casStates.get(r.smiles)?.kind === 'error');
+  $('#analysis-body .an-cas')?.scrollIntoView({ block: 'nearest' });
+  if (got?.kind === 'found') flash(`CAS RN ${got.cas[0]}${got.name ? ` (${got.name})` : ''}, from ${got.from}. It is in the Analysis panel.`);
+  else if (got) flash(got.message, 7000);
+}
+
 /** The Analysis panel's PubChem button: find the structure's compound number, then its record. */
 async function lookUpOnPubChem(smiles: string): Promise<void> {
   pubchemStates.set(smiles, { kind: 'busy' });
   scheduleAnalysis(true);
   try {
     const cid = await pubchemCid(smiles);
-    pubchemStates.set(smiles, cid ? { kind: 'found', c: await pubchemCompound(cid) } : { kind: 'none' });
+    const c = cid ? await pubchemCompound(cid) : null;
+    pubchemStates.set(smiles, c ? { kind: 'found', c } : { kind: 'none' });
+    // its CAS RNs fill in the CAS RN line too
+    if (c?.cas.length && casStateOf(smiles).kind !== 'found') {
+      casStates.set(smiles, { kind: 'found', cas: c.cas, name: c.title || undefined, cid: c.cid, from: 'PubChem' });
+      casMemory.remember(c.cas.map((cas) => ({ cas, smiles, key: smiles, whole: true, name: c.title || undefined, cid: c.cid, source: 'PubChem' as const, found: new Date().toISOString() })));
+    }
   } catch (e) {
     pubchemStates.set(smiles, { kind: 'error', message: (e as Error).message });
   }
@@ -9111,6 +9254,8 @@ $('#analysis-body').addEventListener('click', (e) => {
   if (nm && lastAnalysis) { const k = Number(nm.dataset.name); const r = lastAnalysis.results[k]; if (r?.smiles && lastAnalysis.molblocks[k]) void nameForPanel(r.smiles, lastAnalysis.molblocks[k]); return; }
   const calc = t.closest<HTMLButtonElement>('button[data-calc]');
   if (calc && lastAnalysis) { const r = lastAnalysis.results[Number(calc.dataset.calc)]; if (r && !r.error) void showLabCalculator({ mw: r.mw, label: r.formula }); return; }
+  const findBtn = t.closest<HTMLButtonElement>('button[data-cas]');
+  if (findBtn && lastAnalysis) { const r = lastAnalysis.results[Number(findBtn.dataset.cas)]; if (r?.smiles) void findCas(r.smiles, casStates.has(r.smiles)); return; }
   const look = t.closest<HTMLButtonElement>('button[data-pubchem]');
   if (look && lastAnalysis) { const r = lastAnalysis.results[Number(look.dataset.pubchem)]; if (r?.smiles) void lookUpOnPubChem(r.smiles); return; }
   const b = t.closest<HTMLButtonElement>('button[data-insert]');
@@ -9118,6 +9263,18 @@ $('#analysis-body').addEventListener('click', (e) => {
   const [kind, n] = b.dataset.insert!.split(':');
   const r = lastAnalysis.results[Number(n)], frag = lastAnalysis.frags[Number(n)];
   if (kind === 'formula') { if (frag) void attachDescriptors([frag]); return; }
+  if (kind === 'cas') {
+    const st = r?.smiles ? casStateOf(r.smiles) : null;
+    if (st?.kind !== 'found' || !frag) return;
+    const m = editor.measure();
+    doc.edit('CAS caption', () => {
+      const c = doc.addCaption({ x: 0, y: 0, runs: casRuns(st.cas[0]), justify: 'center', attach: { atoms: [...frag], side: 'below', gap: defaultGap(doc), shift: 0, role: 'caption' } });
+      placeAttached(doc, c, m);
+    });
+    editor.changed();
+    flash('Added the CAS RN under the structure; it follows it. Double-click to edit.');
+    return;
+  }
   if (kind === 'pcname' || kind === 'pccas' || kind === 'pchaz' || kind === 'name') {
     const st = r && pubchemStates.get(r.smiles);
     const named = kind === 'name' && r ? nameStates.get(r.smiles) : undefined;
@@ -9341,7 +9498,7 @@ async function runAnalysis(force: boolean): Promise<void> {
   // once the namer is running, every structure analysed gets its name without asking
   if (namer.ready) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !nameStates.has(r.smiles)) void nameForPanel(r.smiles, exports[i].molblock); });
   saySelection(results);
-  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i) })).join('');
+  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
   updatePanels();
 }
 
@@ -9937,6 +10094,7 @@ function drawingMenu(): MenuItem[] {
         { cmd: 'pubchem-lookup' },
       ] },
       { cmd: 'structure-to-name' },
+      { cmd: 'find-cas' },
       { cmd: 'model-3d' },
       { label: 'Perspective', items: [{ cmd: 'turn-3d' }, { cmd: 'flatten-3d' }, null, { cmd: 'depth-shading', checked: depthShadePrefs.on }, { cmd: 'depth-shading-settings' }] },
     ] : []),
@@ -10221,6 +10379,30 @@ for (const group of [...TOOL_GROUPS, OFF_BAR]) {
     }
   }
 }
+
+/**
+ * Document and Spreadsheet, with no structure being drawn: one Insert Structure button in place of
+ * the drawing tools (they do nothing until a structure is open). In a sheet the structure goes in
+ * the active cell; in a document, at the caret (or the picked drawing opens). While a structure is
+ * drawn, and in split view, the whole toolbox is back.
+ */
+const structureStart = document.createElement('button');
+structureStart.type = 'button';
+structureStart.id = 'structure-start';
+structureStart.innerHTML = `${ICONS['ring-benzene'] ?? '⬡'}<span>Insert<br>Structure</span>`;
+structureStart.addEventListener('click', () => {
+  const mode = ws.active.mode;
+  if (mode === 'sheet') command('draw-structure');
+  else if (mode === 'document') docMode?.drawWithTool();
+});
+structureStart.addEventListener('pointerenter', () => {
+  const sheet = ws.active.mode === 'sheet';
+  const cell = sheet ? $<HTMLInputElement>('#sh-name').value : '';
+  structureStart.title = sheet ? `Insert Structure: draw a structure in the active cell${cell ? ` (${cell})` : ''}. Double-click a structure to change it` : 'Insert Structure: draw a structure or scheme to put in the text at the caret (or change the picked drawing)';
+});
+structureStart.title = 'Insert Structure';
+structureStart.setAttribute('aria-label', 'Insert Structure');
+$('#dock-left').prepend(structureStart);
 
 /**
  * A tool picked from a toolbox. In Document and Sheet modes, with no drawing open, a drawing

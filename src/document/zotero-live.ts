@@ -24,7 +24,7 @@
 // define the commands, their arguments and the answers they expect.
 
 import type { TextRun } from '../model';
-import type { DocObject, DocText } from './document';
+import { nextObjectId, OBJECT_CHAR, type DocObject, type DocText } from './document';
 import { bibliography, citationTexts, fieldOrder, piecesText, type Piece, type Reference } from './references';
 import { placeRef, readCiteField, styleFromCsl, writeCite, zoteroStyleOf, type CiteLive } from './live-cites';
 
@@ -51,8 +51,8 @@ export interface ZoteroHost {
   picked(): number | null;
   /** Whether a citation can go where the caret is. */
   canInsert(): boolean;
-  /** Put a new object at the caret, in the citation's look; its id. */
-  insert(o: DocObject): number;
+  /** Put a new object at the caret, in the citation's look (raised when `sup`, as a footnote's number is); its id. */
+  insert(o: DocObject, sup?: boolean): number;
   /** Give a bibliography a paragraph of its own. */
   ownParagraph(id: number): void;
   /** Pick an object (select its character). */
@@ -147,49 +147,66 @@ export function bibFromHtml(html: string): { label: string; pieces: Piece[] }[] 
 
 // ---------------------------------------------------------------- the document's fields
 
-interface FieldJson { id: string; code: string; text: string; noteIndex: number }
+/** A field as Zotero's protocol has it: its id, code, text and the number of the note it is in (0: in the text). */
+export interface FieldJson { id: string; code: string; text: string; noteIndex: number }
 
-/** Runs anywhere in the text (its own and its tables' cells), changed by `f`. */
+/** Each run list objects sit in besides the text's own: tables' cells and footnotes, with how to put a changed list back. */
+function partsOf(t: DocText): { runs: TextRun[]; put: (t: DocText, runs: TextRun[]) => DocText }[] {
+  const out: { runs: TextRun[]; put: (t: DocText, runs: TextRun[]) => DocText }[] = [];
+  for (const [k, o] of Object.entries(t.objects)) {
+    const id = Number(k);
+    if (o.kind === 'note') out.push({ runs: o.runs, put: (x, runs) => { const n = x.objects[id]; return n?.kind === 'note' ? { ...x, objects: { ...x.objects, [id]: { ...n, runs } } } : x; } });
+    if (o.kind !== 'table') continue;
+    o.table.rows.forEach((row, r) => row.forEach((cell, c) => out.push({
+      runs: cell.runs,
+      put: (x, runs) => {
+        const tb = x.objects[id];
+        if (tb?.kind !== 'table') return x;
+        const rows = tb.table.rows.map((rr, ri) => (ri !== r ? rr : rr.map((cc, ci) => (ci !== c ? cc : { ...cc, runs }))));
+        return { ...x, objects: { ...x.objects, [id]: { ...tb, table: { ...tb.table, rows } } } };
+      },
+    })));
+  }
+  return out;
+}
+
+/** Runs anywhere in the text (its own, its tables' cells and its footnotes), changed by `f`. */
 function mapObjectRuns(t: DocText, id: number, f: (r: TextRun) => TextRun): DocText {
-  const map = (runs: TextRun[]): TextRun[] => (runs.some((r) => r.obj === id) ? runs.map((r) => (r.obj === id ? f(r) : r)) : runs);
-  const objects = { ...t.objects };
-  for (const [k, o] of Object.entries(t.objects)) {
-    if (o.kind !== 'table') continue;
-    const rows = o.table.rows.map((row) => row.map((c) => { const runs = map(c.runs); return runs === c.runs ? c : { ...c, runs }; }));
-    if (rows.some((row, r) => row.some((c, i) => c !== o.table.rows[r][i]))) objects[Number(k)] = { ...o, table: { ...o.table, rows } };
-  }
-  return { ...t, runs: map(t.runs), objects };
+  const map = (runs: TextRun[]): TextRun[] => runs.map((r) => (r.obj === id ? f(r) : r));
+  if (t.runs.some((r) => r.obj === id)) return { ...t, runs: map(t.runs) };
+  const part = partsOf(t).find((p) => p.runs.some((r) => r.obj === id));
+  return part ? part.put(t, map(part.runs)) : t;
 }
 
-/** The text with an object's character in a table's cell replaced by runs (none: taken out); null when no cell holds it. */
+/** The text with an object's character in a table's cell or a footnote replaced by runs (none: taken out); null when none holds it. */
 export function replaceInCells(t: DocText, id: number, runs: TextRun[]): DocText | null {
-  for (const [k, o] of Object.entries(t.objects)) {
-    if (o.kind !== 'table') continue;
-    for (let r = 0; r < o.table.rows.length; r++) {
-      for (let c = 0; c < o.table.rows[r].length; c++) {
-        const cell = o.table.rows[r][c];
-        if (!cell.runs.some((x) => x.obj === id)) continue;
-        const rows = o.table.rows.map((row, ri) => (ri !== r ? row : row.map((x, ci) => (ci !== c ? x : { ...x, runs: x.runs.flatMap((y) => (y.obj === id ? runs : [y])) }))));
-        return { ...t, objects: { ...t.objects, [Number(k)]: { ...o, table: { ...o.table, rows } } } };
-      }
-    }
-  }
-  return null;
+  const part = partsOf(t).find((p) => p.runs.some((r) => r.obj === id));
+  return part ? part.put(t, part.runs.flatMap((y) => (y.obj === id ? runs : [y]))) : null;
 }
 
-/** The run that puts an object in the text (in a table's cell too), or undefined. */
+/** The run that puts an object in the text (in a table's cell or a footnote too), or undefined. */
 function objectRunOf(t: DocText, id: number): TextRun | undefined {
-  const inRuns = (runs: TextRun[]) => runs.find((r) => r.obj === id);
-  const top = inRuns(t.runs);
-  if (top) return top;
-  for (const o of Object.values(t.objects)) {
-    if (o.kind !== 'table') continue;
-    for (const row of o.table.rows) for (const c of row) { const r = inRuns(c.runs); if (r) return r; }
-  }
+  return t.runs.find((r) => r.obj === id) ?? partsOf(t).map((p) => p.runs.find((r) => r.obj === id)).find((r) => r);
+}
+
+/** The footnote or endnote a citation is in (its id), or undefined. */
+function noteHolding(t: DocText, id: number): number | undefined {
+  for (const [k, o] of Object.entries(t.objects)) if (o.kind === 'note' && o.runs.some((r) => r.obj === id)) return Number(k);
   return undefined;
 }
 
-const refsKey = (refs: string[]): string => refs.join(' ');
+/** Each footnote's and endnote's number (as Zotero counts notes: each kind on its own, in order). */
+function noteNumbers(t: DocText): Map<number, number> {
+  const out = new Map<number, number>();
+  let foot = 0, end = 0;
+  for (const id of fieldOrder(t)) {
+    const o = t.objects[id];
+    if (o?.kind === 'note' && !out.has(id)) out.set(id, o.end ? ++end : ++foot);
+  }
+  return out;
+}
+
+export const refsKey = (refs: string[]): string => refs.join(' ');
 /** The references cited, in order (what a bibliography's entries are for). */
 const citedKey = (t: DocText): string => {
   const known = new Set((t.references ?? []).map((r) => r.id));
@@ -205,13 +222,14 @@ const citedKey = (t: DocText): string => {
 function citeCode(t: DocText, o: Extract<DocObject, { kind: 'cite' }>, shown: string): string {
   if (!o.refs.length) return o.live?.code ?? 'TEMP';
   const refs = o.refs.map((r) => t.references?.find((x) => x.id === r)).filter((r): r is Reference => !!r);
-  if (!refs.length) return 'TEMP';
-  return writeCite('zotero', refs, o.live, shown).instr.trim().replace(/^ADDIN\s+ZOTERO_/, '');
+  return refs.length ? writtenCode(refs, o.live, shown) : 'TEMP';
 }
 
 /** The document's citations and bibliographies as Zotero's fields, in order. */
 export function zoteroFields(t: DocText): FieldJson[] {
   const shown = citationTexts(t);
+  const notes = Object.values(t.objects).some((o) => o.kind === 'note') ? noteNumbers(t) : null;
+  const noteOf = (id: number): number => { const n = notes ? noteHolding(t, id) : undefined; return n !== undefined ? notes!.get(n) ?? 0 : 0; };
   const out: FieldJson[] = [];
   const seen = new Set<number>();
   let bibText: string | null = null;
@@ -221,7 +239,7 @@ export function zoteroFields(t: DocText): FieldJson[] {
     const o = t.objects[id];
     if (o?.kind === 'cite') {
       const text = shown.get(id) ?? '';
-      out.push({ id: String(id), code: citeCode(t, o, text), text, noteIndex: 0 });
+      out.push({ id: String(id), code: citeCode(t, o, text), text, noteIndex: noteOf(id) });
     } else if (o?.kind === 'bib') {
       bibText ??= bibliography(t).map((e) => (e.label ? `${e.label}\t` : '') + piecesText(e.pieces)).join('\n');
       out.push({ id: String(id), code: o.live?.code ?? BIBL, text: bibText, noteIndex: 0 });
@@ -230,12 +248,75 @@ export function zoteroFields(t: DocText): FieldJson[] {
   return out;
 }
 
-// ---------------------------------------------------------------- a command
+// ---------------------------------------------------------------- what Zotero works on
 
-class Transaction {
+/**
+ * A file Zotero cites in, as Zotero's fields: a document (its citations and bibliographies) or a
+ * presentation (its slides' references and its References slide, zotero-deck.ts). Field ids are
+ * the file's own. Zotero's preferences are kept as its Word plugin keeps them (field type
+ * "Field"), so they go into a Word file as they are.
+ */
+export interface ZoteroStore {
+  readonly docId: string;
+  /** Zotero's preferences as kept in the file ('' when there are none yet). */
+  prefs(): string;
+  setPrefs(prefs: string): void;
+  fields(): FieldJson[];
+  /** The field picked (where a command acts on an existing one), or null. */
+  cursor(): FieldJson | null;
+  canInsert(): boolean;
+  /** A new field where Zotero puts the citation or bibliography (`note`: in a footnote, 1, or an endnote, 2). */
+  insert(note: number): FieldJson;
+  setText(id: string, html: string): void;
+  setCode(id: string, code: string): void;
+  remove(id: string): void;
+  select(id: string): void;
+  unlink(id: string): void;
+  /** Citations moved into or out of notes (a note style chosen, or one no longer). */
+  convert(ids: string[], notes: number[]): void;
+  /** The notes citations can go in. */
+  readonly notes: string[];
+  /** At the end of a command. */
+  finish(): void;
+  choose(text: string, labels: string[]): Promise<number>;
+  activate(): void;
+}
+
+/** Zotero's citation code's items as references: placed in `list` (a copy, changed), linked to Zotero's items; null when the code is not a citation. */
+export function citationFromCode(code: string, list: Reference[]): { list: Reference[]; ids: string[]; items: Record<string, Record<string, unknown>>; id?: string } | null {
+  const got = /^ITEM\b/.test(code) ? readCiteField(`ADDIN ZOTERO_${code}`) : null;
+  if (!got) return null;
+  // (copies: placeRef links the one it finds, and the old ones belong to Undo)
+  const refs = list.map((r) => ({ ...r }));
+  const ids: string[] = [];
+  const items: Record<string, Record<string, unknown>> = {};
+  for (const it of got.items) {
+    const rid = placeRef(refs, it.ref);
+    // what Zotero says of the item now (a title corrected in Zotero shows here)
+    const at = refs.findIndex((r) => r.id === rid);
+    if (at >= 0 && refs[at].live?.app === 'zotero' && it.ref.live?.item) refs[at] = { ...it.ref, id: rid, ...(refs[at].typed !== undefined ? { typed: refs[at].typed } : {}) };
+    if (!ids.includes(rid)) ids.push(rid);
+    if (Object.keys(it.extra).length) items[rid] = it.extra;
+  }
+  return { list: refs, ids, items, ...(got.id ? { id: got.id } : {}) };
+}
+
+/** A citation's code written for Zotero from its references (when Zotero's own is out of date). */
+export function writtenCode(refs: Reference[], live: CiteLive | undefined, shown: string): string {
+  if (!refs.length) return live?.code ?? 'TEMP';
+  return writeCite('zotero', refs, live, shown).instr.trim().replace(/^ADDIN\s+ZOTERO_/, '');
+}
+
+export const ZOTERO_PLACEHOLDER = PLACEHOLDER;
+export const ZOTERO_BIBL = BIBL;
+
+/** A document (doc-mode.ts gives its host) as Zotero's fields: citation and bibliography objects in the text. */
+class DocStore implements ZoteroStore {
   private bibs = new Set<number>();
+  readonly notes: string[] = ['footnotes', 'endnotes'];
   constructor(private host: ZoteroHost) {}
 
+  get docId(): string { return this.host.docId; }
   private get t(): DocText { return this.host.text(); }
 
   private field(fieldId: unknown): { id: number; o: DocObject } {
@@ -254,52 +335,79 @@ class Transaction {
     return zoteroFields(this.t).find((f) => f.id === String(id)) ?? null;
   }
 
-  /** Do what Zotero asked; the answer to send back. */
-  async do(command: string, args: unknown[]): Promise<unknown> {
-    const [, a1, a2, a3] = args;
-    switch (command) {
-      case 'Application.getActiveDocument':
-        return { documentID: this.host.docId, outputFormat: 'html', supportedNotes: [], supportsImportExport: false, supportsTextInsertion: false, supportsCitationMerging: false, processorName: 'Chem Illustrator' };
-      case 'Document.activate': this.host.activate(); return null;
-      case 'Document.canInsertField': return this.host.canInsert();
-      case 'Document.displayAlert': return this.alert(String(a1 ?? ''), Number(a3 ?? 0));
-      case 'Document.getDocumentData': return this.t.zoteroPrefs ? withFieldType(this.t.zoteroPrefs, HTTP_FIELD) : '';
-      case 'Document.setDocumentData': this.setPrefs(String(a1 ?? '')); return null;
-      case 'Document.cursorInField': { const id = this.host.picked(); return id === null ? null : this.fieldJson(id); }
-      case 'Document.insertField': {
-        const id = this.host.insert({ kind: 'cite', refs: [], live: { app: 'zotero', code: 'TEMP', text: PLACEHOLDER, for: '' } });
-        return { id: String(id), code: 'TEMP', text: PLACEHOLDER, noteIndex: 0 };
-      }
-      case 'Document.getFields': return zoteroFields(this.t);
-      case 'Document.convert': case 'Document.setBibliographyStyle': case 'Document.cleanup': return null;
-      case 'Document.complete': return null;
-      case 'Field.setText': this.setText(a1, String(a2 ?? '')); return null;
-      case 'Field.setCode': this.setCode(a1, String(a2 ?? '')); return null;
-      case 'Field.delete': this.host.replaceObject(this.field(a1).id, []); return null;
-      case 'Field.select': this.host.select(this.field(a1).id); return null;
-      case 'Field.removeCode': this.removeCode(a1); return null;
-      case 'Field.getText': return this.fieldJson(this.field(a1).id)?.text ?? '';
-      case 'Field.getCode': return this.fieldJson(this.field(a1).id)?.code ?? '';
-      default: throw new Error(`Chem Illustrator can't do ${command} yet.`);
+  prefs(): string { return this.t.zoteroPrefs ?? ''; }
+  fields(): FieldJson[] { return zoteroFields(this.t); }
+  cursor(): FieldJson | null { const id = this.host.picked(); return id === null ? null : this.fieldJson(id); }
+  canInsert(): boolean { return this.host.canInsert(); }
+  insert(note: number): FieldJson {
+    const cite: DocObject = { kind: 'cite', refs: [], live: { app: 'zotero', code: 'TEMP', text: PLACEHOLDER, for: '' } };
+    if (note > 0) {
+      // a note style: the citation in a new footnote (or endnote) at the caret
+      const t = this.t;
+      const id = nextObjectId(t);
+      this.host.change({ ...t, objects: { ...t.objects, [id]: cite } });
+      this.host.insert({ kind: 'note', ...(note === 2 ? { end: true } : {}), runs: [{ text: OBJECT_CHAR, obj: id }] }, true);
+      const holder = noteHolding(this.t, id);
+      return { id: String(id), code: 'TEMP', text: PLACEHOLDER, noteIndex: holder !== undefined ? noteNumbers(this.t).get(holder) ?? 1 : 1 };
     }
+    const id = this.host.insert(cite);
+    return { id: String(id), code: 'TEMP', text: PLACEHOLDER, noteIndex: 0 };
   }
-
-  /** Zotero's question in a window of ours, answered as its Word plugin answers (OK and Yes count highest). */
-  private async alert(text: string, buttons: number): Promise<number> {
-    const labels = buttons === 1 ? ['OK', 'Cancel'] : buttons === 2 ? ['Yes', 'No'] : buttons === 3 ? ['Yes', 'No', 'Cancel'] : ['OK'];
-    const got = await this.host.choose(text, labels);
-    if (buttons === 0) return 0;
-    if (got < 0) return 0;
-    return labels.length - 1 - got;
+  remove(id: string): void { this.host.replaceObject(this.field(id).id, []); }
+  select(id: string): void { this.host.select(this.field(id).id); }
+  /** Citations into footnotes (or endnotes), or out of them into the text, as Zotero's style now has them. */
+  convert(ids: string[], notes: number[]): void {
+    ids.forEach((fid, i) => {
+      const want = notes[i] ?? notes[0] ?? 0;
+      const id = Number(fid);
+      const t = this.t;
+      if (t.objects[id]?.kind !== 'cite') return;
+      const holder = noteHolding(t, id);
+      if (want > 0 && holder === undefined) {
+        // (citations in the text itself; those in a table's cells stay where they are)
+        const run = t.runs.find((r) => r.obj === id);
+        if (!run) return;
+        const noteId = nextObjectId(t);
+        this.host.change({ ...t, objects: { ...t.objects, [noteId]: { kind: 'note', ...(want === 2 ? { end: true } : {}), runs: [{ ...run, sup: undefined }] } } });
+        this.host.replaceObject(id, [{ ...run, obj: noteId, sup: true }]);
+        return;
+      }
+      if (holder === undefined) return;
+      const n = t.objects[holder];
+      if (n?.kind !== 'note') return;
+      if (want > 0) {
+        // a footnote to an endnote, or back
+        if (!!n.end !== (want === 2)) {
+          const { end: _e, ...rest } = n;
+          this.host.change({ ...t, objects: { ...t.objects, [holder]: want === 2 ? { ...rest, end: true } : rest } });
+        }
+        return;
+      }
+      // out of the note, where its number was (the note goes when nothing else is in it)
+      const mark = t.runs.find((r) => r.obj === holder);
+      if (!mark) return;
+      const citeRun: TextRun = { ...mark, obj: id, sup: undefined };
+      const rest = n.runs.filter((r) => r.obj !== id);
+      if (!rest.some((r) => r.obj !== undefined || r.text.trim())) {
+        this.host.replaceObject(holder, [citeRun]);
+        const { [holder]: _n, ...objects } = this.t.objects;
+        this.host.change({ ...this.t, objects });
+        return;
+      }
+      this.host.change({ ...t, objects: { ...t.objects, [holder]: { ...n, runs: rest } } });
+      this.host.replaceObject(holder, [mark, citeRun]);
+    });
   }
+  choose(text: string, labels: string[]): Promise<number> { return this.host.choose(text, labels); }
+  activate(): void { this.host.activate(); }
 
-  private setPrefs(data: string): void {
+  setPrefs(data: string): void {
     const t = this.t;
     const style = styleFromCsl(zoteroStyleOf(data) ?? '');
-    this.host.change({ ...t, zoteroPrefs: withFieldType(data, WORD_FIELD), citeManager: 'zotero', ...(style ? { citeStyle: style } : {}) });
+    this.host.change({ ...t, zoteroPrefs: data, citeManager: 'zotero', ...(style ? { citeStyle: style } : {}) });
   }
 
-  private setText(fieldId: unknown, html: string): void {
+  setText(fieldId: string, html: string): void {
     const { id, o } = this.field(fieldId);
     if (o.kind === 'bib') {
       this.bibs.add(id);
@@ -314,7 +422,7 @@ class Transaction {
     if (!!objectRunOf(this.t, id)?.sup !== !!sup) this.host.change(mapObjectRuns(this.t, id, (r) => ({ ...r, sup })));
   }
 
-  private setCode(fieldId: unknown, code: string): void {
+  setCode(fieldId: string, code: string): void {
     const { id, o } = this.field(fieldId);
     code = code.trim();
     if (/^BIBL\b/.test(code)) {
@@ -327,30 +435,17 @@ class Transaction {
       return;
     }
     if (o.kind !== 'cite') return;
-    const got = /^ITEM\b/.test(code) ? readCiteField(`ADDIN ZOTERO_${code}`) : null;
-    if (!got) { this.setObject(id, { ...o, live: { ...(o.live ?? {}), app: 'zotero', code } }); return; }
-    // Zotero's items as the document's references, linked to Zotero's items
     const t = this.t;
-    // (copies: placeRef links the one it finds, and the old ones belong to Undo)
-    const refs = (t.references ?? []).map((r) => ({ ...r }));
-    const ids: string[] = [];
-    const items: Record<string, Record<string, unknown>> = {};
-    for (const it of got.items) {
-      const rid = placeRef(refs, it.ref);
-      // what Zotero says of the item now (a title corrected in Zotero shows here)
-      const at = refs.findIndex((r) => r.id === rid);
-      if (at >= 0 && refs[at].live?.app === 'zotero' && it.ref.live?.item) refs[at] = { ...it.ref, id: rid, ...(refs[at].typed !== undefined ? { typed: refs[at].typed } : {}) };
-      if (!ids.includes(rid)) ids.push(rid);
-      if (Object.keys(it.extra).length) items[rid] = it.extra;
-    }
+    const got = citationFromCode(code, t.references ?? []);
+    if (!got) { this.setObject(id, { ...o, live: { ...(o.live ?? {}), app: 'zotero', code } }); return; }
     const live: CiteLive = {
-      ...(o.live ?? {}), app: 'zotero', ...(got.id ? { id: got.id } : {}), code, for: refsKey(ids),
-      ...(Object.keys(items).length ? { items } : { items: undefined }),
+      ...(o.live ?? {}), app: 'zotero', ...(got.id ? { id: got.id } : {}), code, for: refsKey(got.ids),
+      ...(Object.keys(got.items).length ? { items: got.items } : { items: undefined }),
     };
-    this.host.change({ ...t, references: refs, objects: { ...t.objects, [id]: { kind: 'cite', refs: ids, live } } });
+    this.host.change({ ...t, references: got.list, objects: { ...t.objects, [id]: { kind: 'cite', refs: got.ids, live } } });
   }
 
-  private removeCode(fieldId: unknown): void {
+  unlink(fieldId: string): void {
     const { id, o } = this.field(fieldId);
     const run = objectRunOf(this.t, id)!;
     const look = { ...run, obj: undefined };
@@ -383,22 +478,70 @@ class Transaction {
   }
 }
 
+// ---------------------------------------------------------------- a command
+
+/** Zotero's requests, done on a store. */
+class Transaction {
+  constructor(private store: ZoteroStore) {}
+
+  /** Do what Zotero asked; the answer to send back. */
+  async do(command: string, args: unknown[]): Promise<unknown> {
+    const s = this.store;
+    const [, a1, a2, a3] = args;
+    const id = () => String(a1 ?? '');
+    switch (command) {
+      case 'Application.getActiveDocument':
+        return { documentID: s.docId, outputFormat: 'html', supportedNotes: s.notes, supportsImportExport: false, supportsTextInsertion: false, supportsCitationMerging: false, processorName: 'Chem Illustrator' };
+      case 'Document.activate': s.activate(); return null;
+      case 'Document.canInsertField': return s.canInsert();
+      case 'Document.displayAlert': return this.alert(String(a1 ?? ''), Number(a3 ?? 0));
+      case 'Document.getDocumentData': { const p = s.prefs(); return p ? withFieldType(p, HTTP_FIELD) : ''; }
+      case 'Document.setDocumentData': s.setPrefs(withFieldType(String(a1 ?? ''), WORD_FIELD)); return null;
+      case 'Document.cursorInField': return s.cursor();
+      case 'Document.insertField': return s.insert(Number(a2) || 0);
+      case 'Document.getFields': return s.fields();
+      case 'Document.convert': s.convert(Array.isArray(a1) ? a1.map(String) : [], Array.isArray(a3) ? a3.map(Number) : []); return null;
+      case 'Document.setBibliographyStyle': case 'Document.cleanup': case 'Document.complete': return null;
+      case 'Field.setText': s.setText(id(), String(a2 ?? '')); return null;
+      case 'Field.setCode': s.setCode(id(), String(a2 ?? '')); return null;
+      case 'Field.delete': s.remove(id()); return null;
+      case 'Field.select': s.select(id()); return null;
+      case 'Field.removeCode': s.unlink(id()); return null;
+      case 'Field.getText': case 'Field.getCode': {
+        const f = s.fields().find((x) => x.id === id());
+        if (!f) throw new Error(`The citation or bibliography ${id()} is no longer there.`);
+        return command === 'Field.getText' ? f.text : f.code;
+      }
+      default: throw new Error(`Chem Illustrator can't do ${command} yet.`);
+    }
+  }
+
+  /** Zotero's question in a window of ours, answered as its Word plugin answers (OK and Yes count highest). */
+  private async alert(text: string, buttons: number): Promise<number> {
+    const labels = buttons === 1 ? ['OK', 'Cancel'] : buttons === 2 ? ['Yes', 'No'] : buttons === 3 ? ['Yes', 'No', 'Cancel'] : ['OK'];
+    const got = await this.store.choose(text, labels);
+    if (buttons === 0) return 0;
+    if (got < 0) return 0;
+    return labels.length - 1 - got;
+  }
+}
+
 interface ZoteroRequest { command: string; arguments?: unknown[] }
 
 /**
- * Run one of Zotero's commands on the document: ask Zotero to start it, then do what it asks
- * until it is complete. Errors here go back to Zotero, which shows them and ends the command.
+ * Run one of Zotero's commands on a file: ask Zotero to start it, then do what it asks until it
+ * is complete. Errors here go back to Zotero, which shows them and ends the command.
  */
-export async function runZotero(command: ZoteroCommand, host: ZoteroHost, post: ZoteroPost): Promise<ZoteroOutcome> {
+export async function runZoteroOn(command: ZoteroCommand, store: ZoteroStore, post: ZoteroPost): Promise<ZoteroOutcome> {
   let res: { status: number; text: string };
   try {
-    res = await post('execCommand', JSON.stringify({ command, docId: host.docId }));
+    res = await post('execCommand', JSON.stringify({ command, docId: store.docId }));
   } catch {
     return 'offline';
   }
   if (res.status === 503) return 'busy';
   if (res.status !== 200) throw new Error(`Zotero answered with an error (${res.status}): ${res.text.slice(0, 200)}`);
-  const tx = new Transaction(host);
+  const tx = new Transaction(store);
   for (;;) {
     let req: ZoteroRequest;
     try { req = JSON.parse(res.text) as ZoteroRequest; } catch { throw new Error('Zotero sent something that could not be read.'); }
@@ -410,8 +553,13 @@ export async function runZotero(command: ZoteroCommand, host: ZoteroHost, post: 
       const err = e instanceof Error ? e : new Error(String(e));
       answer = { error: 'Chem Illustrator Error', message: err.message, stack: err.stack ?? '' };
     }
-    if (req.command === 'Document.complete') { tx.finish(); return 'done'; }
+    if (req.command === 'Document.complete') { store.finish(); return 'done'; }
     res = await post('respond', answer === undefined ? 'null' : JSON.stringify(answer));
     if (res.status !== 200) throw new Error(`Zotero answered with an error (${res.status}): ${res.text.slice(0, 200)}`);
   }
+}
+
+/** Run one of Zotero's commands on a document (doc-mode.ts gives the host). */
+export function runZotero(command: ZoteroCommand, host: ZoteroHost, post: ZoteroPost): Promise<ZoteroOutcome> {
+  return runZoteroOn(command, new DocStore(host), post);
 }

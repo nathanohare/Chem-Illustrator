@@ -13,6 +13,8 @@ import type { OrientView } from './orientation';
 /** The colour of the shading (over the page colour) and of the lines when left at their default, on light and dark pages. */
 const SHADE = { light: '45, 58, 82', dark: '225, 232, 245' };
 const DARK_LINE = '#a9b6cc';
+/** How much greyer the room to add pages is in the dark theme, so it reads as light grey paper against the dark surround. */
+const DARK_ROOM_EXTRA = 0.06;
 
 function rgba(hex: string, a: number): string {
   const n = parseInt(hex.slice(1), 16);
@@ -60,14 +62,24 @@ export function paintPages(ctx: CanvasRenderingContext2D, look: PageLook, r: Ori
   const tiny = Math.min(p.w, p.h) * s < 8;
   ctx.save();
 
-  // the space round the pages, where drawing adds pages, a light grey (the theme's colour in the dark theme); beyond a fixed edge darker
+  // the space round the pages, where drawing adds pages, a light grey; beyond a fixed edge darker
+  // (in the dark theme the theme's own colour, so a white page does not sit in a glare of light grey,
+  // with the room to add pages still a light grey: it is more paper, so never darker than the surround)
   const out = SHADE_ALPHA[look.outsideShade];
   if (surround) {
     ctx.fillStyle = surround;
     ctx.beginPath();
     ctx.rect(view.x1, view.y1, view.x2 - view.x1, view.y2 - view.y1);
-    ctx.rect(grid.x1, grid.y1, grid.x2 - grid.x1, grid.y2 - grid.y1);
+    const keep = room ?? grid;
+    ctx.rect(keep.x1, keep.y1, keep.x2 - keep.x1, keep.y2 - keep.y1);
     ctx.fill('evenodd');
+    if (room && out > 0) {
+      ctx.fillStyle = `rgba(${shade}, ${out + DARK_ROOM_EXTRA})`;
+      ctx.beginPath();
+      ctx.rect(room.x1, room.y1, room.x2 - room.x1, room.y2 - room.y1);
+      ctx.rect(grid.x1, grid.y1, grid.x2 - grid.x1, grid.y2 - grid.y1);
+      ctx.fill('evenodd');
+    }
   } else if (out > 0) {
     ctx.fillStyle = `rgba(${shade}, ${out})`;
     ctx.beginPath();
@@ -75,7 +87,7 @@ export function paintPages(ctx: CanvasRenderingContext2D, look: PageLook, r: Ori
     ctx.rect(grid.x1, grid.y1, grid.x2 - grid.x1, grid.y2 - grid.y1);
     ctx.fill('evenodd');
   }
-  if (!room || room.x1 > view.x1 || room.y1 > view.y1 || room.x2 < view.x2 || room.y2 < view.y2) {
+  if (!surround && (!room || room.x1 > view.x1 || room.y1 > view.y1 || room.x2 < view.x2 || room.y2 < view.y2)) {
     ctx.fillStyle = `rgba(${shade}, ${Math.max(0.07, out + 0.05)})`;
     ctx.beginPath();
     ctx.rect(view.x1, view.y1, view.x2 - view.x1, view.y2 - view.y1);

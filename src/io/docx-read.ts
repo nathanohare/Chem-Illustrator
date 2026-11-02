@@ -828,8 +828,8 @@ class DocxReader {
     this.displayMath = math;
     this.part = part;
     this.link = link;
-    // text only (citations, captions and pictures in notes keep no place here)
-    const runs = got.runs.filter((x) => x.obj === undefined).map(({ cmt: _c, ...x }) => x);
+    // text and citations (note styles put them in footnotes); captions and pictures in notes keep no place here
+    const runs = got.runs.filter((x) => x.obj === undefined || this.objects[x.obj]?.kind === 'cite').map(({ cmt: _c, ...x }) => x);
     while (runs.length && /^[ \t]/.test(runs[0].text)) {
       const text = runs[0].text.replace(/^[ \t]+/, '');
       if (text) { runs[0] = { ...runs[0], text }; break; }
@@ -1541,6 +1541,13 @@ class DocxReader {
       if (Object.keys(it.extra).length) items[id] = it.extra;
     }
     const live: CiteLive = { app: c.app, ...(c.id ? { id: c.id } : {}), ...(Object.keys(items).length ? { items } : {}) };
+    // Zotero's code as it was, and what it showed when that is more than numbers (a note style's
+    // or an author-date style's text; numbers are worked out here, so they follow edits)
+    if (c.code) {
+      live.code = c.code;
+      live.for = refs.join(' ');
+      if (c.shown !== undefined && /[^\d\s,;.\u2013\-[\]()]/.test(c.shown)) live.text = c.shown;
+    }
     return this.emitObject(ctx, { kind: 'cite', refs, live }, props, true) !== null;
   }
 

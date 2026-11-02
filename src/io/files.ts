@@ -51,6 +51,13 @@ export const EPS: FileType = { description: 'EPS picture', extension: 'eps', mim
 /** Picture files that can go on a slide. */
 export const PICTURE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'emf', 'bmp', 'webp'];
 export const MOL: FileType = { description: 'MDL molfile', extension: 'mol', mime: 'chemical/x-mdl-molfile' };
+export const RXN: FileType = { description: 'MDL reaction file', extension: 'rxn', mime: 'chemical/x-mdl-rxnfile' };
+export const MRV: FileType = { description: 'Marvin document', extension: 'mrv', mime: 'chemical/x-mrv' };
+export const KET: FileType = { description: 'Ketcher drawing', extension: 'ket', mime: 'application/json' };
+export const CML: FileType = { description: 'Chemical Markup Language', extension: 'cml', mime: 'chemical/x-cml' };
+export const CDJSON: FileType = { description: 'ChemDoodle JSON', extension: 'json', mime: 'application/json' };
+/** Other programs' chemistry files a drawing can be saved as: structures, arrows and text only. */
+export const CHEM_EXCHANGE: FileType[] = [MOL, SDF, RXN, MRV, KET, CML, CDJSON];
 export const KEYMAP_FILE: FileType = { description: 'Chem Illustrator hotkeys', extension: 'json', mime: 'application/json' };
 export const SETTINGS_FILE: FileType = { description: 'Chem Illustrator settings', extension: 'json', mime: 'application/json' };
 

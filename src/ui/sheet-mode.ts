@@ -737,7 +737,14 @@ export class SheetMode {
       case 'page-scale': void this.page.scaleWindow(); break;
       case 'print-gridlines': this.page.toggle('gridlines'); break;
       case 'print-headings': this.page.toggle('headings'); break;
-      case 'show-page-breaks': v.showPageBreaks = !v.showPageBreaks; v.refresh(); this.showRibbonState(); break;
+      case 'show-page-breaks': {
+        v.showPageBreaks = !v.showPageBreaks;
+        v.refresh();
+        this.showRibbonState();
+        // an empty sheet has no pages, so no breaks to show yet
+        if (v.showPageBreaks && !v.sheet.usedRange() && !v.sheet.pageSetup?.printArea?.length) this.host.flash('Page breaks show as dashed lines once the sheet has something to print.', 4000);
+        break;
+      }
       case 'insert-page-break': this.page.insertBreak(); break;
       case 'set-print-area': this.page.setPrintArea(false); break;
       case 'clear-print-area': this.page.set('Clear print area', { printArea: undefined }); break;
@@ -1490,8 +1497,8 @@ export class SheetMode {
       return;
     }
     const { r, c } = v.sel.active;
-    const ans = await ask('Structure from name or SMILES', [{ name: 'text', label: 'Name or SMILES', value: '' }], {
-      ok: 'Draw', note: `Draws the structure in ${cellName(r, c)}. Names are read on this computer (OPSIN): systematic names and many common ones such as caffeine.`,
+    const ans = await ask('Structure from name or SMILES', [{ name: 'text', label: 'Name, SMILES or CAS RN', value: '' }], {
+      ok: 'Draw', note: `Draws the structure in ${cellName(r, c)}. Names are read on this computer (OPSIN): systematic names and many common ones such as caffeine. CAS RNs (50-78-2) are looked up on PubChem.`,
     });
     const text = ans?.text.trim();
     if (!text) return;

@@ -726,7 +726,12 @@ class DocxWriter {
           const align = p.align ?? 'left';
           if (align !== st.align) pPr.push(`<w:jc w:val="${JC[align]}"/>`);
           const mark = i === 0 ? `<w:r><w:rPr><w:rStyle w:val="${ref}"/></w:rPr><w:${tag}Ref/></w:r><w:r><w:t xml:space="preserve"> </w:t></w:r>` : '';
-          const body = this.linkedRuns(`word/${tag}s.xml`, (runsOf[i] ?? []).filter((r) => r.obj === undefined), (r) => this.tracked(r.rev, this.textRuns(r, st)));
+          // its text, and its citations (note styles put them in footnotes)
+          const cite = (r: TextRun) => { const c = r.obj !== undefined ? t.objects[r.obj] : undefined; return c?.kind === 'cite' ? c : null; };
+          const body = this.linkedRuns(`word/${tag}s.xml`, (runsOf[i] ?? []).filter((r) => r.obj === undefined || cite(r)), (r) => {
+            const c = cite(r);
+            return c ? this.citeXml(c, runProps(r, st, { cs: this.charStyleOf(r) }), this.shown.get(r.obj!) ?? '') : this.tracked(r.rev, this.textRuns(r, st));
+          });
           return `<w:p><w:pPr>${pPr.join('')}</w:pPr>${mark}${body}</w:p>`;
         });
         out.push(`<w:${tag} w:id="${n}">${ps.join('')}</w:${tag}>`);
@@ -762,6 +767,19 @@ class DocxWriter {
     return r.cstyle ? this.charStyles[r.cstyle] : undefined;
   }
 
+  /** A citation: its numbers, which Word shows as they are (an ADDIN field is never worked out again by Word). */
+  private citeXml(o: Extract<DocObject, { kind: 'cite' }>, rPr: string, shown: string): string {
+    // for Zotero, Mendeley or EndNote: in their own form, so they go on managing it
+    const refs = o.refs.map((r) => this.t.references?.find((x) => x.id === r)).filter((r): r is Reference => !!r);
+    const app = this.t.citeManager;
+    if (app && refs.length) {
+      const out = writeCite(app, refs, o.live, shown);
+      if (out.tag) return `<w:sdt><w:sdtPr><w:tag w:val="${xml(out.tag)}"/><w:id w:val="${this.sdtId++}"/></w:sdtPr><w:sdtContent>${run(rPr, shown)}</w:sdtContent></w:sdt>`;
+      return field(rPr, xml(out.instr), shown, out.data);
+    }
+    return field(rPr, ` ${CITE_FIELD} ${o.refs.map(xml).join(' ')} `, shown);
+  }
+
   private async objectRun(main: string, r: TextRun, st: NamedStyle): Promise<string> {
     const id = r.obj!;
     const o = this.t.objects[id];
@@ -777,18 +795,7 @@ class DocxWriter {
       const bm = this.bookmarks.get(o.target);
       return bm ? field(rPr, ` REF ${bm} \\h \\* CHARFORMAT `, shown) : run(rPr, shown);
     }
-    // a citation: its numbers, which Word shows as they are (an ADDIN field is never worked out again by Word)
-    if (o.kind === 'cite') {
-      // for Zotero, Mendeley or EndNote: in their own form, so they go on managing it
-      const refs = o.refs.map((r) => this.t.references?.find((x) => x.id === r)).filter((r): r is Reference => !!r);
-      const app = this.t.citeManager;
-      if (app && refs.length) {
-        const out = writeCite(app, refs, o.live, shown);
-        if (out.tag) return `<w:sdt><w:sdtPr><w:tag w:val="${xml(out.tag)}"/><w:id w:val="${this.sdtId++}"/></w:sdtPr><w:sdtContent>${run(rPr, shown)}</w:sdtContent></w:sdt>`;
-        return field(rPr, xml(out.instr), shown, out.data);
-      }
-      return field(rPr, ` ${CITE_FIELD} ${o.refs.map(xml).join(' ')} `, shown);
-    }
+    if (o.kind === 'cite') return this.citeXml(o, rPr, shown);
     // a footnote's or endnote's number: Word's own reference to it (Word numbers it)
     if (o.kind === 'note') {
       const n = this.noteIds.get(id);
