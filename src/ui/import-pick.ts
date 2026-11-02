@@ -45,8 +45,8 @@ export function pickDrawings(o: PickOptions): Promise<Picked | null> {
     const list = el('div', { className: 'import-pages' });
     const go = el('button', { type: 'button', className: 'primary' });
     const cancel = el('button', { type: 'button', textContent: 'Cancel' });
-    const all = el('button', { type: 'button', textContent: 'Tick All' });
-    const none = el('button', { type: 'button', textContent: 'Tick None' });
+    const all = el('button', { type: 'button', textContent: 'Select All' });
+    const none = el('button', { type: 'button', textContent: 'Deselect All' });
     const reader = el('select', { className: 'import-reader' });
     for (const r of o.readers) reader.append(el('option', { value: r.value, textContent: r.label }));
     const readWith = el('label', { className: 'import-read-with', hidden: o.readers.length < 2 }, 'Read with ', reader);
@@ -79,11 +79,11 @@ export function pickDrawings(o: PickOptions): Promise<Picked | null> {
         m.setAttribute('aria-pressed', String(ticked.has(f)));
       }
       const n = ticked.size;
-      go.textContent = n === 1 ? 'Read 1 Structure' : `Read ${n} Structures`;
+      go.textContent = n === 1 ? 'Import 1 Structure' : `Import ${n} Structures`;
       go.disabled = n === 0;
       const pages = new Set(o.found.map((f) => f.page)).size;
-      status.textContent = `Found ${o.found.length} ${o.found.length === 1 ? 'drawing' : 'drawings'} on ${pages} ${pages === 1 ? 'page' : 'pages'}; ${n} ticked.`
-        + (o.readers.length && reader.value === 'ai' ? ' Only the ticked ones are sent to the AI model.' : '');
+      status.textContent = `Found ${o.found.length} ${o.found.length === 1 ? 'drawing' : 'drawings'} on ${pages} ${pages === 1 ? 'page' : 'pages'}; ${n} checked.`
+        + (o.readers.length && reader.value === 'ai' ? ' Only the checked ones are sent to the AI model.' : '');
     }
 
     let done = false;

@@ -295,7 +295,7 @@ export class ToolboxEditor {
 
   /** A note for the status line when the toolbox being changed is hidden. */
   private hiddenNote(): string {
-    return this.folder || this.box === 'details' || this.hooks.get().places[this.box]?.shown ? '' : ' (It is hidden: tick Shown to see it.)';
+    return this.folder || this.box === 'details' || this.hooks.get().places[this.box]?.shown ? '' : ' (It is hidden: check Shown to see it.)';
   }
 
   private draw(): void {
@@ -314,7 +314,7 @@ export class ToolboxEditor {
     // the side panel always shows
     shown.disabled = this.box === 'details';
     del.disabled = KEEP.includes(this.box);
-    del.title = del.disabled ? 'This toolbox can’t be deleted (it can be hidden: untick Shown)' : 'Delete this toolbox (Undo brings it back)';
+    del.title = del.disabled ? 'This toolbox can’t be deleted (it can be hidden: clear Shown)' : 'Delete this toolbox (Undo brings it back)';
     up.disabled = ids[0] === this.box;
     down.disabled = ids[ids.length - 1] === this.box;
     undo.disabled = !this.undo.length;
@@ -478,7 +478,7 @@ export class ToolboxEditor {
 
   private openFolder(palette: string): void {
     if (this.folder) return;
-    if (!this.hooks.palette(palette)) { this.say('This fly-out’s tools come from your own templates (save one with Chemistry > Nicknames and Templates > Save as Template).'); return; }
+    if (!this.hooks.palette(palette)) { this.say('This fly-out’s tools come from your own templates (save one with Chemistry > Abbreviations and Templates > Save as Template).'); return; }
     this.folder = palette;
     this.draw();
     this.focusCell(0);

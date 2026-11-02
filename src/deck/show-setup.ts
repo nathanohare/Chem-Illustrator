@@ -33,7 +33,7 @@ export const defaultShow = (): ShowSetup => ({ type: 'speaker' });
 export const SHOW_TYPES: { id: ShowType; name: string; tip: string }[] = [
   { id: 'speaker', name: 'Presented by a speaker (full screen)', tip: 'The usual slide show: full screen, a click or key goes on' },
   { id: 'window', name: 'Browsed by an individual (window)', tip: 'In a window with Back and Next buttons, for someone reading the slides by themselves' },
-  { id: 'kiosk', name: 'Browsed at a kiosk (full screen)', tip: 'Full screen, going on by itself after each slide\'s time and round again, until Esc. Clicks only follow links and action buttons' },
+  { id: 'kiosk', name: 'Browsed at a kiosk (full screen)', tip: 'Full screen, going on by itself after each slide\'s time and around again, until Esc. Clicks only follow links and action buttons' },
 ];
 
 /** The slides a show plays, in order (by their place in the deck), leaving out hidden ones; null: every slide not hidden. */

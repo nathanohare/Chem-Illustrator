@@ -86,7 +86,7 @@
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Margins</button>
     <div class="menu sub" role="menu" hidden>
         <button role="menuitemradio" aria-checked="false" data-cmd="sheet-margins-normal" title="0.7 in at the sides, 0.75 in top and bottom"><span>Normal</span></button>
-        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-margins-wide" title="1 in all round"><span>Wide</span></button>
+        <button role="menuitemradio" aria-checked="false" data-cmd="sheet-margins-wide" title="1 in all around"><span>Wide</span></button>
         <button role="menuitemradio" aria-checked="false" data-cmd="sheet-margins-narrow" title="0.25 in at the sides, 0.75 in top and bottom"><span>Narrow</span></button>
     <hr />
         <button role="menuitem" data-cmd="sheet-margins-custom">Custom Margins…</button>
@@ -261,7 +261,7 @@
     </div>
     <hr />
     <button role="menuitem" data-cmd="command-search" title="Find any command by typing part of its name">Search Commands…</button>
-    <button role="menuitem" data-cmd="hotkeys">Hotkeys…</button>
+    <button role="menuitem" data-cmd="hotkeys">Keyboard Shortcuts…</button>
     <button role="menuitem" data-cmd="typing-spelling" title="Chemistry formatting as you type, replacements, spelling check and your dictionary">Typing and Spelling…</button>
     <button role="menuitem" data-cmd="edit-palettes" title="Your own rows of colors, in every color menu and every mode">Color Palettes…</button>
     <button role="menuitem" data-cmd="preferences" title="Every setting in one window: drawing, drawing style, hotkeys, text and spelling, colors, schemes, AutoSave, online lookups">Settings…</button>
@@ -303,7 +303,7 @@
     <hr />
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="show-stereo" title="Preview every R/S and E/Z label in red (on screen only; use Chemistry &gt; Show Stereo Labels to add them to the drawing)"><span>Show R/S Preview</span></button>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="alignment-guides" title="While moving, edges and middles snap into line with other structures, text, shapes and the page (pink lines; hold Alt to move freely). Set separately for canvases, presentations and designs"><span>Alignment Guides</span></button>
-    <button role="menuitemcheckbox" aria-checked="true" data-cmd="group-tips" title="Rest the mouse on an abbreviation such as OTBS, Boc or CO2Me to see the group written out, with its name and formula"><span>Group Tooltips</span></button>
+    <button role="menuitemcheckbox" aria-checked="true" data-cmd="group-tips" title="Rest the mouse on an abbreviation such as OTBS, Boc or CO2Me to see the group written out, with its name and formula"><span>Chemical Abbreviation Tooltips</span></button>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="tool-tips" title="Hold the mouse on a tool for a moment to see what it does and what Alt, Shift and Ctrl change. Off: a one-line tip"><span>Detailed Tooltips</span></button>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="scroll-bars" title="Scroll bars along the bottom and right of the drawing, showing where you are"><span>Scroll Bars</span></button>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="dark-page" title="Reading Mode: the page dark on screen only; files, printing, copying and exports are not changed"><span>Reading Mode</span></button>
@@ -430,7 +430,7 @@
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Ribbon</button>
     <div class="menu sub" role="menu" hidden>
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="collapse-ribbon" title="Show the ribbon's tabs only, for more room; click a tab to use its buttons (Ctrl+F1, or double-click a tab)"><span>Collapse the Ribbon</span><kbd>Ctrl+F1</kbd></button>
-    <button role="menuitemcheckbox" aria-checked="false" data-cmd="ribbon-auto-fold" title="Fold the ribbon to its tabs while the window is short (under 760 pixels tall), so the page keeps its room on a laptop; click a tab to use its buttons. It opens again when the window is taller"><span>Fold on Short Windows</span></button>
+    <button role="menuitemcheckbox" aria-checked="false" data-cmd="ribbon-auto-fold" title="Collapse the ribbon to its tabs while the window is short (under 760 pixels tall), so the page keeps its room on a laptop; click a tab to use its buttons. It opens again when the window is taller"><span>Auto-Collapse on Short Windows</span></button>
     <button role="menuitem" data-cmd="customize-ribbon" title="Put the ribbon's tabs and groups in your order, rename or hide them, and make groups of your own commands (Presentations, Documents, Spreadsheets and Designs)">Customize the Ribbon…</button>
     </div>
     </div>
@@ -519,16 +519,16 @@
     <div class="submenu" data-modes="drawing slides design">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Align</button>
     <div class="menu sub" role="menu" hidden>
-    <button role="menuitem" data-cmd="align-left">Align Left Edges</button>
-    <button role="menuitem" data-cmd="align-hcenter">Align Centers Across</button>
-    <button role="menuitem" data-cmd="align-right">Align Right Edges</button>
+    <button role="menuitem" data-cmd="align-left">Align Left</button>
+    <button role="menuitem" data-cmd="align-hcenter">Align Center</button>
+    <button role="menuitem" data-cmd="align-right">Align Right</button>
     <hr />
-    <button role="menuitem" data-cmd="align-top">Align Top Edges</button>
-    <button role="menuitem" data-cmd="align-vcenter">Align Middles Down</button>
-    <button role="menuitem" data-cmd="align-bottom">Align Bottom Edges</button>
+    <button role="menuitem" data-cmd="align-top">Align Top</button>
+    <button role="menuitem" data-cmd="align-vcenter">Align Middle</button>
+    <button role="menuitem" data-cmd="align-bottom">Align Bottom</button>
     <hr />
-    <button role="menuitem" data-cmd="distribute-h">Space Evenly Across</button>
-    <button role="menuitem" data-cmd="distribute-v">Space Evenly Down</button>
+    <button role="menuitem" data-cmd="distribute-h">Distribute Horizontally</button>
+    <button role="menuitem" data-cmd="distribute-v">Distribute Vertically</button>
     <hr />
     <button role="menuitem" data-cmd="arrange-row">Arrange in a Row</button>
     <button role="menuitem" data-cmd="arrange-column">Arrange in a Column</button>
@@ -538,15 +538,15 @@
     <div class="submenu" data-modes="drawing slides design">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Rotate and Flip</button>
     <div class="menu sub" role="menu" hidden>
-    <button role="menuitem" data-cmd="flip-h">Flip Left to Right</button>
-    <button role="menuitem" data-cmd="flip-v">Flip Top to Bottom</button>
-    <button role="menuitem" data-cmd="flip-h-keep" title="Turn the structure over left to right: wedges and hashes swap, so every stereocenter keeps its R or S">Flip Left to Right, Keeping Configuration</button>
-    <button role="menuitem" data-cmd="flip-v-keep" title="Turn the structure over top to bottom: wedges and hashes swap, so every stereocenter keeps its R or S">Flip Top to Bottom, Keeping Configuration</button>
+    <button role="menuitem" data-cmd="flip-h">Flip Horizontal (Left-Right)</button>
+    <button role="menuitem" data-cmd="flip-v">Flip Vertical (Top-Bottom)</button>
+    <button role="menuitem" data-cmd="flip-h-keep" title="Turn the structure over left to right: wedges and hashes swap, so every stereocenter keeps its R or S">Flip Horizontal, Preserve Stereochemistry</button>
+    <button role="menuitem" data-cmd="flip-v-keep" title="Turn the structure over top to bottom: wedges and hashes swap, so every stereocenter keeps its R or S">Flip Vertical, Preserve Stereochemistry</button>
     <button role="menuitem" data-cmd="rotate-cw">Rotate 90° Clockwise</button>
     <button role="menuitem" data-cmd="rotate-ccw">Rotate 90° Counterclockwise</button>
     <button role="menuitem" data-cmd="rotate-180">Rotate 180°</button>
     <button role="menuitem" data-cmd="rotate-dialog">Rotate…</button>
-    <button role="menuitem" data-cmd="turn-3d" title="Turn the selected structures in 3-D by angles you type (about X, Y and Z): their real 3-D shape, or the drawing as a flat sheet. The Perspective tools do it by dragging">Turn in 3-D…</button>
+    <button role="menuitem" data-cmd="turn-3d" title="Turn the selected structures in 3-D by angles you type (about X, Y and Z): their real 3-D shape, or the drawing as a flat sheet. The Perspective tools do it by dragging">3-D Rotation…</button>
     <button role="menuitem" data-cmd="flatten-3d" title="Make structures turned in 3-D ordinary flat drawings again: they keep how they look, and the next 3-D turn builds their shape afresh">Flatten</button>
     <button role="menuitemcheckbox" data-cmd="depth-shading" aria-checked="false" title="Shade structures drawn in 3-D by depth: black in front, fading to gray behind (on or off)"><span>Depth Shading</span></button>
     <button role="menuitem" data-cmd="depth-shading-settings" title="Choose the colors in front and behind, how the fade goes, and whether lines thin with depth">Depth Shading Settings…</button>
@@ -636,8 +636,8 @@
     <div id="chemistry-menu" class="menu" role="menu" data-item-modes="drawing slides design" hidden>
     <button role="menuitem" data-cmd="clean-up">Clean Up Structure</button>
     <button role="menuitem" data-cmd="clean-up-reaction">Clean Up Reaction</button>
-    <button role="menuitem" data-cmd="clean-up-reaction-orient" title="Turn every structure so the part it shares with the starting material lies the same way round (configuration kept), then tidy the scheme">Clean Up Reaction, Orienting Like the Start</button>
-    <button role="menuitem" data-cmd="orient-like" title="Turn each selected structure so the part it shares with the first one (top left) lies the same way round; structures turned over have their wedges swapped, so configuration is kept">Orient Like First</button>
+    <button role="menuitem" data-cmd="clean-up-reaction-orient" title="Turn every structure so the part it shares with the starting material lies the same way around (configuration kept), then tidy the scheme">Clean Up Reaction, Orienting Like the Start</button>
+    <button role="menuitem" data-cmd="orient-like" title="Turn each selected structure so the part it shares with the first one (top left) lies the same way around; structures turned over have their wedges swapped, so configuration is kept">Orient Like First</button>
     <button role="menuitem" data-cmd="check-structure">Check Structure (next warning)</button>
     <button role="menuitem" data-cmd="join">Join</button>
     <button role="menuitem" data-cmd="expand-label" title="Draw the selected labels out as atoms and bonds: abbreviations (OMe, Boc, CO2Et), ligands drawn the usual way (BINAP keeps its PPh2 groups) and ligands on a metal (PPh3, dppe, Cp*, COD)">Expand Label</button>
@@ -650,18 +650,18 @@
     <button role="menuitem" data-cmd="highlight" title="A soft band of color behind the selected atoms and bonds (change the color in the Style panel)">Highlight</button>
     <button role="menuitem" data-cmd="remove-highlight">Remove Highlight</button>
     <button role="menuitem" data-cmd="select-highlight" title="Select the whole highlight the selection is part of (in Slides, to animate the highlight on its own, as a shape)">Select Highlight</button>
-    <button role="menuitem" data-cmd="highlight-look" title="Give the selection a ready-made or saved highlight look">Highlight Look…</button>
+    <button role="menuitem" data-cmd="highlight-look" title="Give the selection a ready-made or saved highlight style">Highlight Style…</button>
     <button role="menuitem" data-cmd="smooth-highlight" title="Round highlights: one even band along the bonds, with no disc bulging out at each atom (or put the discs back). Straight highlights are always one band.">Smooth Highlight</button>
-    <button role="menuitem" data-cmd="centre-highlight" title="Run the highlight midway between the lines of double bonds, and round a ring midway between the ring and its inner double-bond lines (or back on the bonds)">Center Highlight on Double Bonds</button>
+    <button role="menuitem" data-cmd="centre-highlight" title="Run the highlight midway between the lines of double bonds, and around a ring midway between the ring and its inner double-bond lines (or back on the bonds)">Center Highlight on Double Bonds</button>
     <button role="menuitem" data-cmd="soft-highlight" title="Fade the selected highlights at their edges, or along their middles (choose how much, and which way, under Soft edges in the Style panel)">Soft Highlight Edges</button>
-    <button role="menuitem" data-cmd="outline-highlight" title="No fill, only a line round the selected highlights (or filled again)">Outline-Only Highlight</button>
+    <button role="menuitem" data-cmd="outline-highlight" title="No fill, only a line around the selected highlights (or filled again)">Outline-Only Highlight</button>
     <button role="menuitem" data-cmd="shadow-highlight" title="A drop shadow under the selected highlights (color, direction, distance and blur under Shadow in the Style panel)">Highlight Shadow</button>
-    <button role="menuitem" data-cmd="glow-highlight" title="A soft halo of color round the selected highlights">Highlight Glow</button>
-    <button role="menuitem" data-cmd="save-highlight-look" title="Keep the selected highlight's look (and color) under a name, to use again in any drawing">Save Highlight Look…</button>
-    <button role="menuitem" data-cmd="delete-highlight-look">Delete Highlight Look…</button>
+    <button role="menuitem" data-cmd="glow-highlight" title="A soft halo of color around the selected highlights">Highlight Glow</button>
+    <button role="menuitem" data-cmd="save-highlight-look" title="Keep the selected highlight's style (and color) under a name, to use again in any drawing">Save Highlight Style…</button>
+    <button role="menuitem" data-cmd="delete-highlight-look">Delete Highlight Style…</button>
     <hr />
     <button role="menuitem" data-cmd="fill-rings" title="Color in, shade, hatch or stipple the rings in the selection">Fill Rings</button>
-    <button role="menuitem" data-cmd="aromatic-circles">Aromatic Rings: Circle or Double Bonds</button>
+    <button role="menuitem" data-cmd="aromatic-circles">Aromatic Rings: Circle or Kekulé</button>
     </div>
     </div>
     <div class="submenu">
@@ -672,8 +672,8 @@
     <button role="menuitem" data-cmd="attach-descriptors" title="The formula, exact mass and molecular weight under the structure, tied to it: they follow it and update when it changes (choose what is shown in the Style panel)">Attach Descriptors (Formula, Mass)</button>
     <button role="menuitem" data-cmd="add-frame">Add Frame</button>
     <button role="menuitem" data-cmd="number-compounds" title="ID labels under every selected structure (or all of them) in scheme order: choose how they count and where they start; the same structure gets the same ID">Number Compounds…</button>
-    <button role="menuitem" data-cmd="chain-ends">Show Terminal Methyls (or Hide)</button>
-    <button role="menuitem" data-cmd="explicit-h">H Atoms: Hide or Draw</button>
+    <button role="menuitem" data-cmd="chain-ends">Show/Hide Terminal Methyls</button>
+    <button role="menuitem" data-cmd="explicit-h">Show/Hide Explicit Hydrogens</button>
     </div>
     </div>
     <div class="submenu">
@@ -694,16 +694,16 @@
     <div class="submenu">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Metals</button>
     <div class="menu sub" role="menu" hidden>
-    <button role="menuitem" data-cmd="hapto-bond" title="Bond the selected metal to the middle of the other selected atoms (a Cp ring, an arene, an allyl, a C=C) with one hapto bond">Bond Metal to Ring (η)</button>
+    <button role="menuitem" data-cmd="hapto-bond" title="Bond the selected metal to the middle of the other selected atoms (a Cp ring, an arene, an allyl, a C=C) with one hapto bond">Add Hapto Bond (η)</button>
     <button role="menuitem" data-cmd="split-hapto" title="Draw the selected hapto bonds as a bond to each atom of the ring">Split Hapto Bond</button>
-    <button role="menuitem" data-cmd="ligand-library" title="Several hundred ligands by family (phosphines, NHCs, bipyridines, salens, pincers, π-ligands), each drawn on a metal the usual way round: find one by abbreviation, name, PubChem number or bonding type, and use its drawing as a template. Every abbreviation also works typed as a label">Ligand Library…</button>
+    <button role="menuitem" data-cmd="ligand-library" title="Several hundred ligands by family (phosphines, NHCs, bipyridines, salens, pincers, π-ligands), each drawn on a metal the usual way around: find one by abbreviation, name, PubChem number or bonding type, and use its drawing as a template. Every abbreviation also works typed as a label">Ligand Library…</button>
     </div>
     </div>
     <div class="submenu">
-    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Nicknames and Templates</button>
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Abbreviations and Templates</button>
     <div class="menu sub" role="menu" hidden>
-    <button role="menuitem" data-cmd="define-nickname">Define Nickname…</button>
-    <button role="menuitem" data-cmd="delete-nickname">Delete Nickname…</button>
+    <button role="menuitem" data-cmd="define-nickname">Define Abbreviation…</button>
+    <button role="menuitem" data-cmd="delete-nickname">Delete Abbreviation…</button>
     <button role="menuitem" data-cmd="save-template">Save as Template…</button>
     <button role="menuitem" data-cmd="delete-template">Delete Template…</button>
     </div>
@@ -743,9 +743,9 @@
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="show-roles"><span>Show Reaction Roles</span></button>
     <button role="menuitem" data-cmd="smart-scheme" title="A Smart Scheme: the selected structures joined by arrows (or three species to type over), kept as one object you can lay out as a line, rows, a snake, down the page or a cycle, with a species list beside it">Smart Scheme</button>
     <button role="menuitem" data-cmd="convert-smart-scheme" title="Make the selected scheme a Smart Scheme: one object with a species list, whose layout you can switch and whose species you can add, remove and reorder">Convert to Smart Scheme</button>
-    <button role="menuitem" data-cmd="catalytic-cycle" title="Draw a catalytic cycle: a ready-made one from the list (Suzuki, Heck, Sonogashira's two loops…) or a blank one, or the selected structures put round a loop, with step names and what comes in and goes out">Catalytic Cycle…</button>
+    <button role="menuitem" data-cmd="catalytic-cycle" title="Draw a catalytic cycle: a ready-made one from the list (Suzuki, Heck, Sonogashira's two loops…) or a blank one, or the selected structures put around a loop, with step names and what comes in and goes out">Catalytic Cycle…</button>
     <button role="menuitem" data-cmd="energy-diagram" title="Draw a reaction energy diagram from a table of energies: levels joined by dashed lines or a smooth curve, one or more pathways, the largest barrier marked. Double-click it to change the numbers">Energy Diagram…</button>
-    <button role="menuitem" data-cmd="ts-brackets" title="Put square brackets round the selected transition state with ‡ at the upper right. Draw its forming and breaking bonds as partial bonds (P over a bond)">Transition State Brackets ‡</button>
+    <button role="menuitem" data-cmd="ts-brackets" title="Put square brackets around the selected transition state with ‡ at the upper right. Draw its forming and breaking bonds as partial bonds (P over a bond)">Transition State Brackets ‡</button>
     </div>
     </div>
     <div class="submenu">
@@ -763,13 +763,13 @@
     <button role="menuitem" data-cmd="draw-from-arrows" title="Draw the structure the curved arrows make, after an arrow: bonds made and broken, charges, radicals and lone pairs moved. The arrows are checked first (each must start at electrons that are there, and nothing may end up past an octet); nothing is drawn while they don't make sense">Draw Next Intermediate</button>
     <button role="menuitem" data-cmd="check-arrows" title="Check that the curved arrows make sense: each starts at a lone pair, negative charge, radical or bond, ends where electrons can go, and leaves no five-bond carbon or one-electron bond. Again for the next problem">Check Arrows</button>
     <hr id="arrow-products-rule" />
-    <button role="menuitem" data-cmd="clean-up-arrow" title="Redraw the selected curved arrows from their lone pair, bond or atom to what they point at, clear of the structure (as an S where one curve can't get round it)">Clean Up Arrow</button>
+    <button role="menuitem" data-cmd="clean-up-arrow" title="Redraw the selected curved arrows from their lone pair, bond or atom to what they point at, clear of the structure (as an S where one curve can't get around it)">Clean Up Arrow</button>
     <button role="menuitem" data-cmd="arrow-s-shape" title="Redraw the selected curved arrows as S shapes (two bends), from and to the same places">Make S-Shaped Arrow</button>
     <button role="menuitem" data-cmd="arrow-single-curve" title="Redraw the selected S-shaped arrows as a single curve">Make Single-Curve Arrow</button>
     <button role="menuitem" data-cmd="arrow-shape-u" title="Redraw the selected curved arrows as a U-turn: out to one side and back in, from and to the same places">Make U-Turn Arrow</button>
     <button role="menuitem" data-cmd="arrow-shape-loop" title="Redraw the selected curved arrows with a loop in them, from and to the same places">Make Loop Arrow</button>
-    <button role="menuitem" data-cmd="flip-arrow-bend" title="Bend the selected curved arrows the other way round">Flip Arrow Bend</button>
-    <button role="menuitem" data-cmd="arrow-reverse" title="Turn the selected curved arrows round, keeping their line: the head goes where the tail was">Reverse Direction</button>
+    <button role="menuitem" data-cmd="flip-arrow-bend" title="Bend the selected curved arrows the other way around">Flip Arrow Bend</button>
+    <button role="menuitem" data-cmd="arrow-reverse" title="Turn the selected curved arrows around, keeping their line: the head goes where the tail was">Reverse Direction</button>
     <button role="menuitem" data-cmd="arrow-smooth-path" title="Turn every sharp corner on the selected curved arrows into a smooth bend">Smooth Path</button>
     <button role="menuitem" data-cmd="arrow-simplify-path" title="Redraw the selected curved arrows with as few bends as keep their shape">Simplify Path</button>
     <button role="menuitem" data-cmd="arrow-add-bend" title="Add a join to the selected curved arrow (half way along its longest curve) that you can drag to reshape it. Or double-click the arrow's line where the bend should go.">Add Bend</button>
@@ -894,7 +894,7 @@
               <button data-sh="align-center" aria-pressed="false" title="Center">Center</button>
               <button data-sh="align-right" aria-pressed="false" title="Align right">Right</button>
               <button data-sh="merge-cells" aria-pressed="false" title="Merge the selected cells into one and center (again to split them)">Merge</button>
-              <button class="rb-sq" data-sh="indent-less" title="Decrease Indent: move the text back towards the cell's edge">⇤</button>
+              <button class="rb-sq" data-sh="indent-less" title="Decrease Indent: move the text back toward the cell's edge">⇤</button>
               <button class="rb-sq" data-sh="indent-more" title="Increase Indent: move the text in from the cell's edge">⇥</button>
             </div>
           </div>
@@ -975,7 +975,7 @@
           </div>
           <div class="rb-col">
             <button data-sh="data-validation" title="Data Validation: what may be typed in the selected cells (numbers within limits, dates, a drop-down list), a message shown when one is selected, and the alert for anything else">Validation…</button>
-            <button data-sh="circle-invalid" aria-pressed="false" title="Circle Invalid Data: red rings round the cells that break their rules (again to clear them)">Circle Invalid</button>
+            <button data-sh="circle-invalid" aria-pressed="false" title="Circle Invalid Data: red rings around the cells that break their rules (again to clear them)">Circle Invalid</button>
           </div>
         </div>
         <div class="rb-label">Data</div>
@@ -1034,11 +1034,11 @@
           <button class="rb-big" data-sh="text-to-columns" title="Text to Columns: split one column of text into several, at commas, tabs, spaces or other characters, or at fixed widths"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="2.5" y="4" width="5" height="12" rx="1"/><path d="M9.5 10h2.5M10.8 8.6L12.2 10l-1.4 1.4" stroke-linecap="round"/><rect x="13.5" y="4" width="2" height="12"/><rect x="16" y="4" width="2" height="12"/></svg></span>Text to Columns</button>
           <div class="rb-col">
             <button data-sh="flash-fill" title="Flash Fill (Ctrl+E): type an example or two beside the data, and the rest of the column is filled the same way">Flash Fill</button>
-            <button data-sh="remove-duplicates" title="Remove Duplicates: rows that repeat an earlier row in the columns you tick are removed">Remove Duplicates</button>
+            <button data-sh="remove-duplicates" title="Remove Duplicates: rows that repeat an earlier row in the columns you check are removed">Remove Duplicates</button>
           </div>
           <div class="rb-col">
             <button data-sh="data-validation" title="Data Validation: what may be typed in the selected cells, a message shown when one is selected, and the alert for anything else">Validation…</button>
-            <button data-sh="circle-invalid" aria-pressed="false" title="Circle Invalid Data: red rings round the cells that break their rules (again to clear them)">Circle Invalid</button>
+            <button data-sh="circle-invalid" aria-pressed="false" title="Circle Invalid Data: red rings around the cells that break their rules (again to clear them)">Circle Invalid</button>
           </div>
         </div>
         <div class="rb-label">Data Tools</div>
@@ -1322,7 +1322,7 @@
     <div class="rb-panel" data-sh-panel="pivot" hidden>
       <div class="rb-group">
         <div class="rb-row">
-          <button class="rb-big" data-sh="pivot-fields" title="Field List: tick fields, or drag them to Filters, Columns, Rows and Values"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="6" height="14" rx="1"/><rect x="11" y="3" width="6.5" height="6" rx="1"/><rect x="11" y="11" width="6.5" height="6" rx="1"/><path d="M4.5 6.5h2M4.5 10h2M4.5 13.5h2"/></svg></span>Field List</button>
+          <button class="rb-big" data-sh="pivot-fields" title="Field List: check fields, or drag them to Filters, Columns, Rows and Values"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="6" height="14" rx="1"/><rect x="11" y="3" width="6.5" height="6" rx="1"/><rect x="11" y="11" width="6.5" height="6" rx="1"/><path d="M4.5 6.5h2M4.5 10h2M4.5 13.5h2"/></svg></span>Field List</button>
         </div>
         <div class="rb-label">Show</div>
       </div>
@@ -1514,7 +1514,7 @@
               <span class="rb-split">
                 <button class="rb-sq" data-doc="doc-bullets" aria-pressed="false" title="Bullets">• ≡</button>
                 <select class="rb-mini rb-drop" id="doc-bulletlib" data-doc-prefix="bulletlib" title="Bullet Library: the bullet for the selected list items" aria-label="Bullet Library">
-                  <option value="" hidden>▾</option><option value="default">Default (• – • –)</option><option value="0">•  Round</option><option value="1">○  Hollow</option><option value="2">■  Square</option><option value="3">◆  Diamond</option><option value="4">➢  Arrow</option><option value="5">✓  Tick</option><option value="6">–  Dash</option><option value="7">★  Star</option>
+                  <option value="" hidden>▾</option><option value="default">Default (• – • –)</option><option value="0">•  Round</option><option value="1">○  Hollow</option><option value="2">■  Square</option><option value="3">◆  Diamond</option><option value="4">➢  Arrow</option><option value="5">✓  Check Mark</option><option value="6">–  Dash</option><option value="7">★  Star</option>
                 </select>
               </span>
               <span class="rb-split">
@@ -1537,7 +1537,7 @@
               <button class="rb-sq" data-doc="para-tabs" title="Tabs: the tab stops of the paragraphs picked (left, center, right or decimal, with dot leaders), typed in; or click the ruler (View > Ruler)">Tabs…</button>
               <button class="rb-sq" data-doc="para-sort" title="Sort: put the selected paragraphs (or the rows of the table the caret is in) in order, by text, number or date">A↓Z</button>
               <label class="rb-sq rb-colour" title="Shading: a background color behind the selected paragraphs (Borders and Shading takes it off)"><span>▧</span><input id="doc-shading" type="color" value="#d9e2f3" aria-label="Paragraph shading" /></label>
-              <button class="rb-sq rb-drop" data-doc="para-borders" aria-haspopup="true" title="Borders: lines above, below or round the selected paragraphs; Borders and Shading for the line and the shading">▦ ▾</button>
+              <button class="rb-sq rb-drop" data-doc="para-borders" aria-haspopup="true" title="Borders: lines above, below or around the selected paragraphs; Borders and Shading for the line and the shading">▦ ▾</button>
             </div>
           </div>
         </div>
@@ -1583,7 +1583,7 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-doc="insert-structure" title="Draw a structure or scheme with the drawing tools; it goes in the text at the caret"><span class="rb-icon">⬡</span>Structure</button>
-          <button class="rb-big" data-doc="insert-figure" title="Figure: drag on the page to mark out an area for structures, with the text wrapping round it (even while it is empty). Drawing in it never moves the text round it; it is not printed, and shows light gray when the pointer is over it. Right-click a structure for Make Figure"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" stroke-dasharray="2.6 2"/><path d="M7.5 8.2l2.5-1.4 2.5 1.4v2.8l-2.5 1.4-2.5-1.4z"/></svg></span>Figure</button>
+          <button class="rb-big" data-doc="insert-figure" title="Figure: drag on the page to mark out an area for structures, with the text wrapping around it (even while it is empty). Drawing in it never moves the text around it; it is not printed, and shows light gray when the pointer is over it. Right-click a structure for Make Figure"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="2.5" y="3.5" width="15" height="13" stroke-dasharray="2.6 2"/><path d="M7.5 8.2l2.5-1.4 2.5 1.4v2.8l-2.5 1.4-2.5-1.4z"/></svg></span>Figure</button>
           <button class="rb-big" data-doc="structure-from-name-doc" title="A structure from its name or SMILES"><span class="rb-icon">Aa</span>From Name</button>
           <button class="rb-big" data-doc="edit-figure" title="Change the picked structure or scheme with the drawing tools (or double-click it)"><span class="rb-icon">✎</span>Edit Drawing</button>
         </div>
@@ -1597,7 +1597,7 @@
           <button class="rb-big" data-doc="picture-format" title="Picture Format for the picture picked: brightness, contrast, sharpen, recolor, transparency, Remove Background, crop to a shape or proportions. Saved as Word's own picture settings"><span class="rb-icon">◐</span>Picture Format</button>
           <button class="rb-big" data-doc="insert-chart" title="A chart with its own data, as in Word: type or paste the numbers, pick the kind of chart. Double-click it to change it"><span class="rb-icon">▥</span>Chart</button>
           <button class="rb-big" data-doc="insert-object" title="Object: another program's file kept whole in the document, as in Word (an Excel workbook, a PDF, anything). It shows its cells, first page or an icon; double-click it to open it in its program, and what you save there comes back here. Paste as Object (Edit menu) does the same with cells copied in Excel"><span class="rb-icon">⧈</span>Object</button>
-          <button class="rb-big" data-doc="insert-text-box" title="A box of text on the page, with the page's text wrapping round it. Drag its edge to move it"><span class="rb-icon">▭</span>Text Box</button>
+          <button class="rb-big" data-doc="insert-text-box" title="A box of text on the page, with the page's text wrapping around it. Drag its edge to move it"><span class="rb-icon">▭</span>Text Box</button>
           <button class="rb-big" data-doc="insert-shapes" aria-haspopup="true" title="Basic shapes, block arrows, flowchart shapes, callouts and lab glassware: the one you pick goes in the text at the caret. Double-click it to change it with the drawing tools"><span class="rb-icon">◇</span>Shapes ▾</button>
           <button class="rb-big" data-doc="insert-icons" aria-haspopup="true" title="About 7,000 icons, lab and science ones first (glassware, molecules, hazard signs): the one you pick goes in the text at the caret. Find one by name"><span class="rb-icon">⚗</span>Icons ▾</button>
           <button class="rb-big" data-doc="insert-diagram" title="Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint's SmartArt: it goes in the text at the caret. Double-click it to change its text or look"><span class="rb-icon">⧉</span>Diagram</button>
@@ -1651,7 +1651,7 @@
           <div class="rb-fly rb-selgal" data-name="Watermark" data-ic="watermark" data-pic="watermark" data-gal="grid" title="Words across every page behind the text (saved as Word's watermark)"><select id="doc-watermark" data-doc-prefix="watermark">
               <option value="" hidden>None</option>
               <option value="0">CONFIDENTIAL</option><option value="1">DRAFT</option><option value="2">DO NOT COPY</option><option value="3">SAMPLE</option><option value="4">PRELIMINARY</option><option value="5">NOT FOR DISTRIBUTION</option><option value="6">ASAP</option><option value="7">URGENT</option>
-              <option value="other" hidden>Your own</option>
+              <option value="other" hidden>Custom</option>
               <option value="custom">Custom Watermark…</option>
               <option value="remove">Remove Watermark</option>
             </select></div>
@@ -1666,7 +1666,7 @@
               <input id="doc-page-colour" class="gal-colour-input" type="color" aria-label="Page color" tabindex="-1" />
             </div>
           </div>
-          <button class="rb-big" data-doc="page-borders" data-ic="page-borders" title="Page Borders: a line round every page, from the edge of the paper or round the text"><span class="rb-icon"></span>Page Borders</button>
+          <button class="rb-big" data-doc="page-borders" data-ic="page-borders" title="Page Borders: a line around every page, from the edge of the paper or around the text"><span class="rb-icon"></span>Page Borders</button>
         </div>
         <div class="rb-label">Page Background</div>
       </div>
@@ -1674,7 +1674,7 @@
     <div class="rb-panel" data-doc-panel="layout" hidden>
       <div class="rb-group">
         <div class="rb-row">
-          <div class="rb-fly rb-selgal" data-name="Margins" data-ic="page-margins" data-pic="margins" title="Margins: the room round the text on every page of this section"><select id="doc-margins" data-doc-prefix="margins">
+          <div class="rb-fly rb-selgal" data-name="Margins" data-ic="page-margins" data-pic="margins" title="Margins: the room around the text on every page of this section"><select id="doc-margins" data-doc-prefix="margins">
               <option value="normal">Normal (1 in)</option>
               <option value="narrow">Narrow (0.5 in)</option>
               <option value="moderate">Moderate (1 in, 0.75 in sides)</option>
@@ -1769,8 +1769,8 @@
       </div>
       <div class="rb-group">
         <div class="rb-row">
-          <button class="rb-big" data-doc="arrange-position" data-ic="position" aria-haspopup="true" title="Position: put the structure, picture or text box picked at the top, middle or bottom of the page, left, center or right, with the text wrapping round it"><span class="rb-icon"></span>Position ▾</button>
-          <div class="rb-fly rb-selgal" data-name="Wrap Text" data-ic="wrap-text" data-pic="wrap" title="How the text goes round the structure, picture or text box picked"><select id="doc-wrap" data-doc-prefix="wrap">
+          <button class="rb-big" data-doc="arrange-position" data-ic="position" aria-haspopup="true" title="Position: put the structure, picture or text box picked at the top, middle or bottom of the page, left, center or right, with the text wrapping around it"><span class="rb-icon"></span>Position ▾</button>
+          <div class="rb-fly rb-selgal" data-name="Wrap Text" data-ic="wrap-text" data-pic="wrap" title="How the text goes around the structure, picture or text box picked"><select id="doc-wrap" data-doc-prefix="wrap">
               <option value="inline">In Line with Text</option>
               <option value="square">Square</option>
               <option value="topBottom">Top and Bottom</option>
@@ -1941,7 +1941,7 @@
           <button class="rb-big" data-doc="restrict-editing" aria-pressed="false" title="Restrict Editing: let the document be read but changed only by adding comments, only with changes tracked, only by filling in its form fields, or not at all, with a password if wanted (kept as Word keeps it). Click again to stop the protection"><span class="rb-icon">🔒</span>Restrict Editing</button>
           <div class="rb-col">
             <button data-doc="insert-form-text" title="A text form field: a shaded box to type an entry into, also when the document is protected for filling in forms (Word's legacy form field)">▭ Text Field</button>
-            <button data-doc="insert-form-check" title="A check box form field, ticked or not with a click">☐ Check Box</button>
+            <button data-doc="insert-form-check" title="A check box form field, checked or not with a click">☐ Check Box</button>
             <button data-doc="insert-form-drop" title="A drop-down form field: one of a list of items">▾ Drop-Down</button>
           </div>
         </div>
@@ -2116,7 +2116,7 @@
       <div class="rb-group">
         <div class="rb-row">
           <div class="rb-col">
-            <label class="rb-field" title="Lines round the cells (Word's grid), the ACS rules (above, under the headings, at the bottom), or none">Lines <select id="doc-tbl-lines" data-doc-prefix="table-lines">
+            <label class="rb-field" title="Lines around the cells (Word's grid), the ACS rules (above, under the headings, at the bottom), or none">Lines <select id="doc-tbl-lines" data-doc-prefix="table-lines">
               <option value="grid">Grid</option>
               <option value="acs">ACS rules</option>
               <option value="none">None</option>
@@ -2217,7 +2217,7 @@
           </div>
           <div class="rb-col">
             <button data-cmd="keyframe-title" title="The title shown fixed to the screen while the show is at the keyframe picked">Title…</button>
-            <button data-cmd="keyframe-zone" title="A soft tint in the background round the keyframe picked: give a part of the route its own color">Zone…</button>
+            <button data-cmd="keyframe-zone" title="A soft tint in the background around the keyframe picked: give a part of the route its own color">Zone…</button>
             <button data-cmd="canvas-heading" title="A large, faint label marking a part of the route, such as Fragment A or Endgame">Heading</button>
           </div>
           <div class="rb-col">
@@ -2311,9 +2311,9 @@
             <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: the selected pictures and shapes in front of all the others, and the selected bonds in front of the bonds they cross" aria-label="Bring to Front">⧉</button>
             <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: the selected pictures and shapes behind all the others, and the selected bonds behind the bonds they cross" aria-label="Send to Back">⧉</button>
             <button class="rb-iconbtn" data-cmd="ungroup" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup">▢</button>
-            <button class="rb-iconbtn" data-cmd="align-left" title="Align left edges (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
+            <button class="rb-iconbtn" data-cmd="align-left" title="Align left (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
             <button class="rb-iconbtn" data-cmd="align-hcenter" title="Align centers, across" aria-label="Align Center">↔</button>
-            <button class="rb-iconbtn" data-cmd="align-right" title="Align right edges" aria-label="Align Right">⇥</button>
+            <button class="rb-iconbtn" data-cmd="align-right" title="Align right" aria-label="Align Right">⇥</button>
             <button class="rb-iconbtn" data-cmd="align-top" title="Align tops" aria-label="Align Top">⤒</button>
             <button class="rb-iconbtn" data-cmd="align-vcenter" title="Align middles, up and down" aria-label="Align Middle">↕</button>
             <button class="rb-iconbtn" data-cmd="align-bottom" title="Align bottoms" aria-label="Align Bottom">⤓</button>
@@ -2383,7 +2383,7 @@
           <div class="rb-fly">
             <button class="rb-big rb-fly-btn" data-ic="references-menu" title="References on the slides picked, a slide listing them, and the Reference Manager"><span class="rb-icon"></span>References ▾</button>
             <div class="rb-fly-menu" role="menu" hidden>
-              <button data-cmd="slide-references" title="References on Slide: tick which of the presentation's references the slides picked show at their foot. The lines are written, placed and formatted for you (short form, numbered or not), like the slide number and footer"><span class="rb-icon">¹⁾</span>References on Slide</button><button data-cmd="references-slide" title="References Slide: a slide at the end listing the references shown on the slides, in full, kept up to date"><span class="rb-icon"></span>References Slide</button><button data-cmd="references" title="Reference Manager: the references of every open file, grouped by file. Add by DOI, by hand or from BibTeX or RIS, and copy references between files"><span class="rb-icon"></span>Reference Manager</button>
+              <button data-cmd="slide-references" title="References on Slide: select which of the presentation's references the slides picked show at their foot. The lines are written, placed and formatted for you (short form, numbered or not), like the slide number and footer"><span class="rb-icon">¹⁾</span>References on Slide</button><button data-cmd="references-slide" title="References Slide: a slide at the end listing the references shown on the slides, in full, kept up to date"><span class="rb-icon"></span>References Slide</button><button data-cmd="references" title="Reference Manager: the references of every open file, grouped by file. Add by DOI, by hand or from BibTeX or RIS, and copy references between files"><span class="rb-icon"></span>Reference Manager</button>
             </div>
           </div>
           <button class="rb-big" data-cmd="zotero-menu" aria-haspopup="true" title="Zotero (desktop app, with Zotero running): Add/Edit Citation picks the references this slide shows in Zotero's own window; Add/Edit Bibliography makes the References slide in Zotero's style; Refresh brings them up to date from your library"><span class="rb-icon">Z</span>Zotero ▾</button>
@@ -2428,9 +2428,9 @@
             <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: the selected pictures and shapes in front of all the others, and the selected bonds in front of the bonds they cross" aria-label="Bring to Front">⧉</button>
             <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: the selected pictures and shapes behind all the others, and the selected bonds behind the bonds they cross" aria-label="Send to Back">⧉</button>
             <button class="rb-iconbtn" data-cmd="ungroup" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup">▢</button>
-            <button class="rb-iconbtn" data-cmd="align-left" title="Align left edges (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
+            <button class="rb-iconbtn" data-cmd="align-left" title="Align left (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
             <button class="rb-iconbtn" data-cmd="align-hcenter" title="Align centers, across" aria-label="Align Center">↔</button>
-            <button class="rb-iconbtn" data-cmd="align-right" title="Align right edges" aria-label="Align Right">⇥</button>
+            <button class="rb-iconbtn" data-cmd="align-right" title="Align right" aria-label="Align Right">⇥</button>
             <button class="rb-iconbtn" data-cmd="align-top" title="Align tops" aria-label="Align Top">⤒</button>
             <button class="rb-iconbtn" data-cmd="align-vcenter" title="Align middles, up and down" aria-label="Align Middle">↕</button>
             <button class="rb-iconbtn" data-cmd="align-bottom" title="Align bottoms" aria-label="Align Bottom">⤓</button>
@@ -2463,9 +2463,9 @@
             <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: the selected pictures and shapes in front of all the others, and the selected bonds in front of the bonds they cross" aria-label="Bring to Front">⧉</button>
             <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: the selected pictures and shapes behind all the others, and the selected bonds behind the bonds they cross" aria-label="Send to Back">⧉</button>
             <button class="rb-iconbtn" data-cmd="ungroup" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup">▢</button>
-            <button class="rb-iconbtn" data-cmd="align-left" title="Align left edges (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
+            <button class="rb-iconbtn" data-cmd="align-left" title="Align left (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
             <button class="rb-iconbtn" data-cmd="align-hcenter" title="Align centers, across" aria-label="Align Center">↔</button>
-            <button class="rb-iconbtn" data-cmd="align-right" title="Align right edges" aria-label="Align Right">⇥</button>
+            <button class="rb-iconbtn" data-cmd="align-right" title="Align right" aria-label="Align Right">⇥</button>
             <button class="rb-iconbtn" data-cmd="align-top" title="Align tops" aria-label="Align Top">⤒</button>
             <button class="rb-iconbtn" data-cmd="align-vcenter" title="Align middles, up and down" aria-label="Align Middle">↕</button>
             <button class="rb-iconbtn" data-cmd="align-bottom" title="Align bottoms" aria-label="Align Bottom">⤓</button>
@@ -2491,7 +2491,7 @@
       </div>
       <div class="rb-group">
         <div class="rb-row">
-          <button class="rb-big" data-cmd="set-up-show" title="Set Up Show: full screen with a speaker, in a window for one person, or at a kiosk going round by itself; which slides; loop; narration, animations and timings. Saved with the PowerPoint file"><span class="rb-icon">⚙</span>Set Up Slide Show</button>
+          <button class="rb-big" data-cmd="set-up-show" title="Set Up Show: full screen with a speaker, in a window for one person, or at a kiosk going around by itself; which slides; loop; narration, animations and timings. Saved with the PowerPoint file"><span class="rb-icon">⚙</span>Set Up Slide Show</button>
           <button class="rb-big keyframes-only" hidden data-cmd="canvas-show-options" title="Canvas Show Options: dim what is outside the keyframe, a mini-map of the whole canvas, compound numbers that fly back to where the compound was made"><span class="rb-icon">◰</span>Canvas Show</button>
           <div class="rb-col">
             <button class="rb-labelled" data-cmd="hide-slide" aria-pressed="false" title="The slide show skips the slides picked; they stay in the deck and in the PowerPoint file. Again to show them"><span class="rb-lead">⊘</span>Hide Slide</button>
@@ -2545,7 +2545,7 @@
           <button class="rb-big" data-cmd="slide-templates" title="Ready-made looks and your own themes: make, change or delete themes"><span class="rb-icon">◧</span>Themes</button>
           <div class="rb-col">
             <button data-cmd="notes-master" title="Notes Master: how notes pages look and print: the page's way up, the slide picture's size, the notes' font and size, the header, footer, date and page number">Notes Master…</button>
-            <button data-cmd="handout-master" title="Handout Master: how handouts print: slides to a page, the page's way up, frames round the slides, the header, footer, date and page number">Handout Master…</button>
+            <button data-cmd="handout-master" title="Handout Master: how handouts print: slides to a page, the page's way up, frames around the slides, the header, footer, date and page number">Handout Master…</button>
           </div>
         </div>
         <div class="rb-label">Master Views</div>
@@ -2698,7 +2698,7 @@
             <label class="rb-field" title="Wipe and Fly: the side it comes in from (or goes out to)">Effect <select id="an-from"></select></label>
             <label class="rb-field" id="an-amount-box" style="display: none">Amount <input id="an-amount" type="number" step="5" style="width: 60px" /> <span id="an-amount-unit"></span></label>
             <label class="rb-field" id="an-colour-box" style="display: none" title="Color Change: the color it changes to">Color <input id="an-colour" type="color" /></label>
-            <button id="an-views" style="display: none" title="Turn in 3-D: set the views the structure turns to, one per click, and watch them play">Key Views…</button>
+            <button id="an-views" style="display: none" title="3-D Rotation: set the views the structure turns to, one per click, and watch them play">Key Views…</button>
             <label class="rb-field" id="an-move-box" style="display: none" title="Keyframe move: how the view gets to this keyframe on a canvas slide">Move <select id="an-move"></select></label>
             <label class="rb-field" id="an-bydist-box" style="display: none" title="By distance: the move takes longer the further it goes (0.6 s for a short step, up to 1.5 s for a long jump). Typing a duration turns this off"><input id="an-bydist" type="checkbox" /> By distance</label>
             <label class="rb-field" title="Text: comes in (or goes, or is emphasized) as one object, or one paragraph at a time (each starting as the first does: on its own click, with or after the one before)">Sequence <select id="an-seq">
@@ -2795,9 +2795,9 @@
             <button class="rb-iconbtn" data-cmd="shape-front" title="Bring to Front: the selected pictures and shapes in front of all the others, and the selected bonds in front of the bonds they cross" aria-label="Bring to Front">⧉</button>
             <button class="rb-iconbtn" data-cmd="shape-back" title="Send to Back: the selected pictures and shapes behind all the others, and the selected bonds behind the bonds they cross" aria-label="Send to Back">⧉</button>
             <button class="rb-iconbtn" data-cmd="ungroup" title="Ungroup (Ctrl+Shift+G)" aria-label="Ungroup">▢</button>
-            <button class="rb-iconbtn" data-cmd="align-left" title="Align left edges (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
+            <button class="rb-iconbtn" data-cmd="align-left" title="Align left (with one thing selected, to the slide)" aria-label="Align Left">⇤</button>
             <button class="rb-iconbtn" data-cmd="align-hcenter" title="Align centers, across" aria-label="Align Center">↔</button>
-            <button class="rb-iconbtn" data-cmd="align-right" title="Align right edges" aria-label="Align Right">⇥</button>
+            <button class="rb-iconbtn" data-cmd="align-right" title="Align right" aria-label="Align Right">⇥</button>
             <button class="rb-iconbtn" data-cmd="align-top" title="Align tops" aria-label="Align Top">⤒</button>
             <button class="rb-iconbtn" data-cmd="align-vcenter" title="Align middles, up and down" aria-label="Align Middle">↕</button>
             <button class="rb-iconbtn" data-cmd="align-bottom" title="Align bottoms" aria-label="Align Bottom">⤓</button>
@@ -2818,7 +2818,7 @@
           <button class="rb-big" data-cmd="insert-chart" title="A chart with its own data: type or paste the numbers, pick the kind of chart. Double-click it to change it"><span class="rb-icon">▥</span>Chart</button>
           <button class="rb-big" data-cmd="insert-diagram" title="Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint's SmartArt"><span class="rb-icon">⧉</span>Diagram</button>
           <button class="rb-big" data-cmd="insert-symbol" title="Symbol: Greek letters, arrows, math and chemistry signs, accented letters, typed into the text being edited (or a new text box). Find one by name or code"><span class="rb-icon">Ω</span>Symbol</button>
-          <button class="rb-big" data-cmd="slide-references" title="References on Page: tick which of the design's references the page shows at its foot, written and formatted for you (short form by default). Reference Manager to add them or copy them from another file"><span class="rb-icon">¹⁾</span>References</button>
+          <button class="rb-big" data-cmd="slide-references" title="References on Page: select which of the design's references the page shows at its foot, written and formatted for you (short form by default). Reference Manager to add them or copy them from another file"><span class="rb-icon">¹⁾</span>References</button>
         </div>
         <div class="rb-label">Insert</div>
       </div>
@@ -2832,7 +2832,7 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="smart-scheme" title="A Smart Scheme: the selected structures joined by arrows (or three species to type over), kept as one object whose layout you can switch"><span class="rb-icon">⇢</span>Smart Scheme</button>
-          <button class="rb-big" data-cmd="catalytic-cycle" title="Draw a catalytic cycle: a ready-made one (Suzuki, Heck, Sonogashira's two loops…) or a blank one, or the selected structures put round a loop"><span class="rb-icon">⟳</span>Catalytic Cycle</button>
+          <button class="rb-big" data-cmd="catalytic-cycle" title="Draw a catalytic cycle: a ready-made one (Suzuki, Heck, Sonogashira's two loops…) or a blank one, or the selected structures put around a loop"><span class="rb-icon">⟳</span>Catalytic Cycle</button>
           <button class="rb-big" data-cmd="energy-diagram" title="Draw a reaction energy diagram from a table of energies (double-click one to change its numbers)"><span class="rb-icon">⩘</span>Energy Diagram</button>
         </div>
         <div class="rb-label">Chemistry</div>
@@ -2951,7 +2951,7 @@
         <h2 id="welcome-title">Welcome to Chem Illustrator</h2>
         <ul>
           <li><b>Draw</b>: pick a bond or ring on the left and click the page; drag to aim. Click an atom to grow from it.</li>
-          <li><b>Type atoms</b>: point at an atom and press a key (O, N, Cl as <kbd>l</kbd>…). <b>Edit ▸ Hotkeys</b> lists them all.</li>
+          <li><b>Type atoms</b>: point at an atom and press a key (O, N, Cl as <kbd>l</kbd>…). <b>Edit ▸ Keyboard Shortcuts</b> lists them all.</li>
           <li><b>Paste</b> a SMILES or a molfile to get the structure, or type a name in <b>Insert ▸ Structure from Name or SMILES</b>.</li>
           <li><b>Find any command</b> with the search box at the top (<kbd>Alt</kbd>+<kbd>Q</kbd>).</li>
           <li><b>Right-click</b> anything for what you can do with it; the panel on the right shows its style and analysis.</li>
@@ -3047,8 +3047,8 @@
   <dialog id="help">
     <h2>Hotkeys and Tips</h2>
     <p class="muted"><span id="app-version"></span>. Free software under the GNU General Public License, version 3 or later.</p>
-    <p class="muted">Hotkeys work like ChemDraw: point at an atom or bond (it highlights blue) and press a key. A key that grows something moves the highlight to the new atom, so you can carry on typing (<kbd>8</kbd> then <kbd>1</kbd> makes an E double bond). <kbd>1</kbd> and <kbd>0</kbd> keep the highlight under the mouse, so pressing 1 three times adds three bonds; after a click or another key they move it, so 1 1 1 draws a chain. Every key can be changed.</p>
-    <p><button id="help-hotkeys" type="button">Show and change all hotkeys…</button></p>
+    <p class="muted">Hotkeys work like ChemDraw: point at an atom or bond (it highlights blue) and press a key. A key that grows something moves the highlight to the new atom, so you can keep typing (<kbd>8</kbd> then <kbd>1</kbd> makes an E double bond). <kbd>1</kbd> and <kbd>0</kbd> keep the highlight under the mouse, so pressing 1 three times adds three bonds; after a click or another key they move it, so 1 1 1 draws a chain. Every key can be changed.</p>
+    <p><button id="help-hotkeys" type="button">Show and change all keyboard shortcuts…</button></p>
     <div class="cols">
       <div>
         <h3>Pointing at an atom</h3>
@@ -3064,7 +3064,7 @@
           <li>Text tool: click to type a caption; the bar above the text has bold, subscript, formula style, Greek letters and symbols. <kbd>Esc</kbd> finishes</li>
           <li>Arrows, shapes and brackets are in the tool bar; drag their handles to change them, and use the Style panel for line width and color</li>
           <li>Templates (rings, heterocycles, amino acids, sugars): click empty space to place one, a bond to fuse it on, an atom to join it there</li>
-          <li>Format menu: align, space evenly, flip, rotate, scale and join; or drag the round handle above a selection to turn it. Arrow keys nudge the selection; <kbd data-cmd-key="reaction-right"></kbd> adds a reaction arrow and a copy of the selection to turn into the product</li>
+          <li>Format menu: align, distribute, flip, rotate, scale and join; or drag the round handle above a selection to turn it. Arrow keys nudge the selection; <kbd data-cmd-key="reaction-right"></kbd> adds a reaction arrow and a copy of the selection to turn into the product</li>
           <li>Chemistry menu: Clean Up Structure evens out bonds and angles while keeping stereochemistry; Fixed Bond Lengths and Fixed Angles can be turned off (or hold <kbd>Alt</kbd> while drawing)</li>
           <li>Insert &gt; Structure from Name or SMILES (<kbd data-cmd-key="name-to-structure"></kbd>) draws a structure from its name: systematic (IUPAC) names, CAS-style names and many common names such as caffeine or ethyl acetate. A CAS RN (50-78-2) works too: its check digit is checked, then it is looked up in your Compound Library, numbers found before, and PubChem (NCI CACTUS when PubChem doesn't know it). Other names it can't read, such as trade names, are looked up on PubChem. Select a caption holding a name first to replace the caption with the structure. Names are read on this computer by OPSIN, so it works offline. Substituent names such as 4-methoxyphenyl get a wavy-line point of attachment</li>
           <li>Insert &gt; Structure from Sequence draws a peptide from its one-letter (GLYPHS, small letters for D) or three-letter sequence (Boc-Ala-D-Phe-OMe), with the N- and C-terminal groups you pick. The Sugars and Nucleic acids palettes hold Haworth sugars, bases, nucleosides and nucleotides</li>
@@ -3072,7 +3072,7 @@
         <h3>Drawing styles</h3>
         <ul>
           <li>File &gt; Drawing Style… sets how structures are drawn in the tab showing: bond length, line widths, double-bond spacing and label fonts. Built in are ACS 1996 (every ACS journal), RSC, Nature journals and a larger Slides style, with the source of each set of numbers shown. Every number can be changed</li>
-          <li>Save as My Style keeps your changes under a name, in every mode. Tick Use this style for new … to make new canvases, presentations, designs, documents or spreadsheets start in it</li>
+          <li>Save as My Style keeps your changes under a name, in every mode. Check Use this style for new … to make new canvases, presentations, designs, documents or spreadsheets start in it</li>
           <li>View &gt; Alignment Guides: while you move something, its edges and middle snap into line with other structures, text, arrows, shapes and the page, shown by pink lines. Hold <kbd>Alt</kbd> to move freely. It is on for presentations and designs and off for canvases to start with; each remembers its own setting</li>
           <li>View &gt; Reading Mode (or the eye button at the top) shows the page dark: black ink as light grey, white paper as dark grey, colours dimmed. It changes the screen only; files, printing, copies and exports stay as they are. View &gt; Window and Colours &gt; Reading Mode Colours… picks Graphite, Slate or Warm dark, or your own paper and ink colours</li>
           <li>When there are structures already, choose Redraw (they take the new bond length and widths) or Keep their look (only new structures use the new style). One Undo puts it all back</li>
@@ -3080,8 +3080,8 @@
         <h3>Chemistry checks</h3>
         <ul>
           <li>Red boxes mark atoms with too many or too few bonds, labels that can't be read, and atoms sitting on top of others. Point at one to see why; the Warnings panel lists them all, with Ignore. Chemistry &gt; Check Structure goes to the next one. They are never printed, saved or copied</li>
-          <li>Rest the mouse on an abbreviation or condensed label (OTBS, NHBoc, CO2Me) to see the group written out, with its name and formula. View &gt; Group Tooltips turns this off.</li>
-          <li>Axial chirality (biaryls, allenes, alkylidenecycloalkanes) gets Ra or Sa by IUPAC P-93.5.1: draw the groups on one end of the axis with a wedge and a hash (or one wedge) to show which way round it is. Edit &gt; Settings writes them as P/M instead.</li>
+          <li>Rest the mouse on an abbreviation or condensed label (OTBS, NHBoc, CO2Me) to see the group written out, with its name and formula. View &gt; Chemical Abbreviation Tooltips turns this off.</li>
+          <li>Axial chirality (biaryls, allenes, alkylidenecycloalkanes) gets Ra or Sa by IUPAC P-93.5.1: draw the groups on one end of the axis with a wedge and a hash (or one wedge) to show which way around it is. Edit &gt; Settings writes them as P/M instead.</li>
           <li>R/S and E/Z are worked out for every structure as you draw. Chemistry &gt; Show Stereo Labels adds them to the selected structures (or all) as part of the drawing; they update by themselves after edits. Select a stereocenter to hide its label or type your own (for example (R*)). View &gt; Show R/S Preview shows every label in red on screen</li>
           <li>As in ChemDraw, plain bold bonds count as wedges and plain hashed or dashed bonds as hashed wedges. Where R or S would depend on what an R or Ar group is, no label is given</li>
         </ul>

@@ -141,7 +141,7 @@ export function modifierHints(s: HintState, m: Mods): ModHint[] {
           break;
         case 'ring':
           if (s.over === 'atom') add('Alt', 'on a new bond');
-          add('Shift', 'move the double bonds round');
+          add('Shift', 'move the double bonds around');
           if (s.aromatic) add('Ctrl', 'with a circle');
           break;
         case 'chain':

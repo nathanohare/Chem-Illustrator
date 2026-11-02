@@ -62,7 +62,7 @@ export function askActionButton(slides: SlideChoice[], regions: SlideChoice[] = 
       <label class="ask-row" data-for="slide" hidden><span>Slide</span><select name="slide"></select></label>
       <label class="ask-row" data-for="key" hidden><span>Region</span><select name="key"></select></label>
       <label class="ask-row" data-for="url" hidden><span>Web page or file</span><input name="url" placeholder="https://… or a file path" /></label>
-      <p class="muted small">The button goes in the slide's bottom right corner; move or resize it as any shape. Right-click ▸ Action… changes what it does later. Saved as PowerPoint's own action button; the slide picker, looking round and regions work in this app's slide show.</p>
+      <p class="muted small">The button goes in the slide's bottom right corner; move or resize it as any shape. Right-click ▸ Action… changes what it does later. Saved as PowerPoint's own action button; the slide picker, looking around and regions work in this app's slide show.</p>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">Insert</button></p>`;
     const $ = <T extends Element>(q: string) => form.querySelector<T>(q)!;
     const gallery = $<HTMLDivElement>('.ab-gallery');

@@ -8,7 +8,7 @@ const NOTE = 'Optional. Link an AI model with your own API key to use it where t
   + 'Nothing is sent anywhere until you link one; after that, only what you choose to send (such as the picture being read) goes to that service, '
   + 'and it is billed to your account there. The key is never in exported settings. '
   + (isTauri() ? 'It is kept on this computer only.'
-    : 'In a browser it is forgotten when this tab closes unless you tick "Remember". Other sites at the same github.io address can read what a browser remembers, so a separate key with a spending limit is safest here.');
+    : 'In a browser it is forgotten when this tab closes unless you check "Remember". Other sites at the same github.io address can read what a browser remembers, so a separate key with a spending limit is safest here.');
 
 /** Show the settings; `save` keeps the new choice. */
 export async function aiSettingsDialog(now: AiPrefs, save: (p: AiPrefs) => void): Promise<void> {

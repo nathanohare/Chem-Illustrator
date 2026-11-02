@@ -585,7 +585,7 @@ export class SheetData {
     update();
     w.onOk(() => {
       const o = options();
-      if (o.mode === 'delimited' && !o.delimiters) return 'Tick at least one delimiter.';
+      if (o.mode === 'delimited' && !o.delimiters) return 'Select at least one delimiter.';
       if (o.mode === 'fixed' && !o.breaks!.length) return 'Give where to break each line (characters from the start, such as 10, 18).';
       const at = readCell(dest.value);
       if (!at) return `"${dest.value}" isn't a cell (for example $B$2).`;
@@ -630,10 +630,10 @@ export class SheetData {
     none.addEventListener('click', () => boxes.forEach((b) => { b.checked = false; }));
     const btns = el('div', 'cp-buttons');
     btns.append(selAll, none);
-    w.form.append(el('p', 'muted small', `In ${rangeName(all)}: rows whose ticked columns match an earlier row (ignoring capitals; structures by their SMILES) are removed.`), btns, header.row, list);
+    w.form.append(el('p', 'muted small', `In ${rangeName(all)}: rows whose checked columns match an earlier row (ignoring capitals; structures by their SMILES) are removed.`), btns, header.row, list);
     w.onOk(() => {
       const cols = boxes.filter((b) => b.checked).map((b) => Number(b.value));
-      if (!cols.length) return 'Tick at least one column.';
+      if (!cols.length) return 'Select at least one column.';
       let got = { removed: 0, kept: 0 };
       this.host.edit('Remove Duplicates', (sh) => { got = removeDuplicates(sh, all, cols, header.box.checked); });
       this.host.flash(got.removed ? `${got.removed} duplicate row${got.removed === 1 ? '' : 's'} found and removed; ${got.kept} unique row${got.kept === 1 ? '' : 's'} remain.` : 'No duplicate rows found.', 6000);

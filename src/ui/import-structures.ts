@@ -170,7 +170,7 @@ export async function importPdfDrawings(host: ImportHost, found: FoundPicture[],
   if (!readers.length) { await noReader(); return; }
   const picked = await pickDrawings({
     title: o.title,
-    note: `${o.file}: the drawings found on each page are outlined. Click one to tick it or tick it off; only the ticked ones are read.`,
+    note: `${o.file}: the drawings found on each page are outlined. Click one to check it or clear it; only the checked ones are read.`,
     pages,
     found,
     readers,
@@ -195,7 +195,7 @@ export async function importPictureFiles(host: ImportHost, pics: { name: string;
   if (!found.length) return;
   await importPictures(host, found, {
     title: 'Import Structures from Picture',
-    note: 'Photos and scans of hand drawings work best with dark lines on plain paper, one structure to a picture. Check each structure against its picture before you place it: fix the SMILES, or tick it off.',
+    note: 'Photos and scans of hand drawings work best with dark lines on plain paper, one structure to a picture. Check each structure against its picture before you place it: fix the SMILES, or clear it.',
     tickDoubtful: true,
     photo: true,
   });

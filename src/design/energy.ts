@@ -123,7 +123,7 @@ export const ENERGY_PRESETS: EnergyPreset[] = [
     data: { quantity: 'ΔG', unit: 'kcal/mol', paths: [{ name: '', color: '#000000', points: pts([['SM', 0], ['TS1‡', 24], ['Int', 12], ['TS2‡', 16], ['P', -6]]) }] },
   },
   {
-    id: 'catalysed', name: 'Catalyzed vs uncatalysed', blurb: 'The same overall change by two routes: one high barrier, or two lower ones.',
+    id: 'catalysed', name: 'Catalyzed vs uncatalyzed', blurb: 'The same overall change by two routes: one high barrier, or two lower ones.',
     data: {
       quantity: 'ΔG', unit: 'kcal/mol', paths: [
         { name: 'uncatalysed', color: '#c00000', points: pts([['SM', 0], ['', null], ['TS‡', 32], ['', null], ['P', -10]]) },

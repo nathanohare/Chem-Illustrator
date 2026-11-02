@@ -57,7 +57,7 @@ Pick slides in one deck's list and press Ctrl+C, then click in the list of anoth
 
 ### Reusing slides from another file
 
-**Home** tab ▸ **Reuse…** (or **Insert ▸ Presentation ▸ Reuse Slides…**) opens a PowerPoint file and shows its slides. Click the ones you want (Shift+click picks a run of them), tick **Keep source formatting** if they should keep their own look, and choose **Insert Slide** or **Insert All**. Double-click a slide to put just that one in.
+**Home** tab ▸ **Reuse…** (or **Insert ▸ Presentation ▸ Reuse Slides…**) opens a PowerPoint file and shows its slides. Click the ones you want (Shift+click picks a run of them), check **Keep source formatting** if they should keep their own look, and choose **Insert Slide** or **Insert All**. Double-click a slide to put just that one in.
 
 ### Comparing two versions of a deck
 
@@ -91,7 +91,7 @@ A move comes and goes with its keyframe, so it can't be removed on its own: dele
 
 **Design.** A canvas slide has no edge, so nothing with a hard edge scrolls past in the show:
 
-- **The screen layer.** The template's bars, the logo, slide number and footer stay fixed to the screen, so a canvas slide looks like the slides round it. Give a keyframe a **Title** (Home tab, Keyframes group, or right-click a keyframe) and it shows where a slide's title goes. The next keyframes you add take the same title. When the title changes, the show cross-fades it; when it stays the same, it stays still.
+- **The screen layer.** The template's bars, the logo, slide number and footer stay fixed to the screen, so a canvas slide looks like the slides around it. Give a keyframe a **Title** (Home tab, Keyframes group, or right-click a keyframe) and it shows where a slide's title goes. The next keyframes you add take the same title. When the title changes, the show cross-fades it; when it stays the same, it stays still.
 - **Canvas Background…** (Design & Transitions tab, or right-click a keyframe): a **route gradient**, two or three colors running from the first keyframe to the last, so the color shifts as the talk moves along the route; a faint **pattern** (dots, grid or hexagons) that moves with the canvas; and **parallax**, the background moving slower than the drawing for a sense of depth (50% is half as fast).
 - **Zone…** gives a keyframe a soft tint that fades out over about half a slide. Give the keyframes of one part of the route the same color to make one zone (one per fragment, say).
 - **Heading** puts a large, faint label in the middle of the window, such as "Fragment A" or "Endgame", to mark a part of the route. It is ordinary text.
@@ -127,7 +127,7 @@ Click **Apply to all slides**. Text you formatted by hand keeps its own formatti
 
 - **Move or size a placeholder:** drag it, or drag one of its corners. The arrow keys nudge the one picked (Shift for bigger steps); X, Y, W and H set its place and size in per cent of the slide.
 - **Add a placeholder:** **+ Title**, **+ Text** or **+ Subtitle**. A layout has one title. **Delete Placeholder** (or Delete) takes the one picked off.
-- **Line up the text** in the placeholder picked: Left, Center or Right.
+- **Align the text** in the placeholder picked: Left, Center or Right.
 - **Rename** a layout by typing in **Name**. **Title slide colors and background** gives slides with the layout the title slide's own colors (set in Slide Master).
 - **New Layout** makes a layout with a title and a text box; **Duplicate** copies the one picked, to change. **Delete** removes a layout you made (its slides get Title and Content). The five built-in layouts can be changed and **Reset**, not deleted.
 
@@ -152,7 +152,7 @@ Backgrounds are saved as PowerPoint's own, so PowerPoint (and LibreOffice) shows
 
 **Design & Transitions** tab ▸ **Templates…** (or **Format ▸ Presentation ▸ Slide Templates…**) offers 21 ready-made looks in three groups: **Light**, **Dark title slide** and **Bright**. Picking one changes the fonts, colors, background and the shapes behind every slide. Your text, structures and pictures stay where they are, and Undo puts the old look back.
 
-Tick **Also start new presentations with the template I pick** to make it the starting look for new decks. You can change any part of a template afterwards with **Slide Master…**.
+Check **Also start new presentations with the template I pick** to make it the starting look for new decks. You can change any part of a template afterwards with **Slide Master…**.
 
 ### Themes of your own
 
@@ -197,8 +197,8 @@ The small bar that appears above text while you type has the same buttons, plus 
 
 Every drawing tool in the toolbox works on a slide: draw structures, use the ChemDraw-style hotkeys, add reaction arrows, run Clean Up, and see R/S labels and warnings as you would on a canvas. You can also:
 
-- copy a scheme from a canvas tab (or from ChemDraw, in the Windows app) and paste it onto a slide, or the other way round. It lands in the middle of the space below the title, and a scheme too wide or tall for that space is made smaller to fit;
-- choose how structures look on every slide with **Design & Transitions** tab ▸ **Drawing Style…** (a journal's style, or your own). New decks start in **Slides (ACS 1996 × 2)**, the ACS style at twice the size so structures read from the back of a room. To start new decks in another style, pick it in **Drawing Style…** and tick **Use this style for new slide decks**;
+- copy a scheme from a canvas tab (or from ChemDraw, in the Windows app) and paste it onto a slide, or the other way around. It lands in the middle of the space below the title, and a scheme too wide or tall for that space is made smaller to fit;
+- choose how structures look on every slide with **Design & Transitions** tab ▸ **Drawing Style…** (a journal's style, or your own). New decks start in **Slides (ACS 1996 × 2)**, the ACS style at twice the size so structures read from the back of a room. To start new decks in another style, pick it in **Drawing Style…** and check **Use this style for new slide decks**;
 - click **Home** tab ▸ **Lock Structures** so clicks pass through structures, which makes text and pictures near them easier to pick. Click it again to edit structures.
 
 To put a canvas beside your slides while you work, see Split View in [Files and sharing](files-and-sharing.md).
@@ -248,7 +248,7 @@ Double-click a chart (or right-click ▸ **Edit Chart…**) to change it. Draggi
 A presentation keeps its own reference list, saved inside its PowerPoint file, as a Word document keeps its list.
 
 1. **Insert ▸ Reference Manager…** (or the **Reference Manager** button on the Insert tab) opens the references of every open file, each file in its own group, the one showing first. Add references to the presentation with **Add by DOI…**, **Add by Hand…**, **Import BibTeX / RIS…** or **Paste BibTeX / RIS…**, or copy them from another open file: pick them and choose the presentation in **Copy to…**, drag them onto the presentation's name, or press Ctrl+C and then Ctrl+V on its group. Each file keeps its own copy; a reference a file has already (the same DOI, or the same title and year) isn't added twice.
-2. **Insert ▸ Presentation ▸ References on Slide** ticks which references a slide shows. The app writes the lines at the foot of the slide, above the slide number and footer, and keeps them up to date when a reference is edited, as it does with slide numbers and footers. Pick several slides in the slide list first to tick the same references on all of them. The slide's right-click menu has it too.
+2. **Insert ▸ Presentation ▸ References on Slide** checks which references a slide shows. The app writes the lines at the foot of the slide, above the slide number and footer, and keeps them up to date when a reference is edited, as it does with slide numbers and footers. Pick several slides in the slide list first to tick the same references on all of them. The slide's right-click menu has it too.
 3. In the same window choose how the lines look:
    - **Write each as**: journal, year, volume and first page (*Organometallics* **2010**, *29*, 2176.), the first author in front of that, or the full reference. The italics and bold follow the citation style picked in the Reference Manager (ACS until you pick another).
    - **Numbers**: none, 1, 2, 3 on each slide, or numbered through the presentation so they match the References slide.
@@ -270,7 +270,7 @@ In the desktop app, **Insert ▸ Zotero ▾** works with the Zotero app on your 
 - **Document Preferences** chooses Zotero's citation style for the presentation.
 - **Unlink Citations** keeps the lines and the list as they are, without the link to Zotero.
 
-Zotero's preferences are saved in the PowerPoint file with the presentation's references, so Zotero carries on when the file is opened here again.
+Zotero's preferences are saved in the PowerPoint file with the presentation's references, so Zotero continues when the file is opened here again.
 
 ## Transitions
 
@@ -303,14 +303,14 @@ The same effects are on the right-click menu under **Animation**. Each animation
 
 A reagent written over an arrow animates with its whole scheme, because the scheme is a single picture in PowerPoint.
 
-**Turn in 3-D** (an emphasis effect, for structures) turns a structure smoothly from one view to the next in the slide show, one view per click. Select the structure and pick **Turn in 3-D**, or pick one of its turns in the Animation pane and click **Key Views…**. In the Key Views window:
+**3-D Rotation** (an emphasis effect, for structures) turns a structure smoothly from one view to the next in the slide show, one view per click. Select the structure and pick **3-D Rotation**, or pick one of its turns in the Animation pane and click **Key Views…**. In the Key Views window:
 
 - Drag the structure to turn it. Shift+drag turns it in the page, and the arrow keys turn it by 15°.
 - **+ Add Key View** keeps the view showing. The views line up below in the order they play: click one to go back to it, **Update View** puts the view showing in its place, ◀ plays it earlier and × takes it out.
 - **▶ Play** shows the turns as the show will, from the structure as drawn. **Each turn** sets the seconds.
-- A flat drawing turns as a sheet. Tick **Its real 3-D shape** to build the molecule's shape first (as **3-D Perspective** does): the structure on the slide takes that shape, and then it turns as the molecule does, wedges following. A structure already turned with 3-D Perspective turns in its shape as it is.
+- A flat drawing turns as a sheet. Check **Its real 3-D shape** to build the molecule's shape first (as **3-D Perspective** does): the structure on the slide takes that shape, and then it turns as the molecule does, wedges following. A structure already turned with 3-D Perspective turns in its shape as it is.
 
-Each view is one Turn in 3-D animation in the Animation pane, so it can start on a click, with the one before or after it, like any other. PowerPoint has no 3-D turn, so it is given a Spin of next to nothing in its place and shows the structure still. The views are kept with the file and come back when it is opened here.
+Each view is one 3-D Rotation animation in the Animation pane, so it can start on a click, with the one before or after it, like any other. PowerPoint has no 3-D turn, so it is given a Spin of next to nothing in its place and shows the structure still. The views are kept with the file and come back when it is opened here.
 
 **Auto-Animate Steps…** (Animations tab, or right-click ▸ **Animation**) builds a scheme up a step at a time. It is offered too: select a scheme of two steps or more (or a Smart Scheme) that isn't animated yet, and **▶ Animate n steps, one per click** shows at its top right corner (× hides it for that scheme). To use it, select the scheme (or a Smart Scheme, or nothing for every scheme on the slide) and choose the effect (Wipe runs along each arrow), when each product comes (right after its arrow, with it, or on a click of its own) and whether the first species comes in on a click too. The window plays a preview of the first few clicks over and over as you change these (**▶ Play Again** starts it from the top), so you can see the build before applying it. Each click then brings the next arrow with its conditions, and what it makes. The scheme's pieces are kept apart for this, in the show and as separate pictures in PowerPoint. On a canvas slide, **Camera Follow** replaces the keyframes with one for each step, so the view travels along the route as it is built. The animations are ordinary ones: change or remove them in the Animation pane, and run Auto-Animate Steps again to start over.
 
@@ -348,7 +348,7 @@ Undo works for every change. Comments are saved in the .pptx as PowerPoint comme
 | Jump to a slide | Type its number, then Enter |
 | Black or white screen | B or W (B or W again, or the next or back key, brings the slide back) |
 | Every slide, to pick one | G (arrow keys and Enter, or a click; Esc or G goes back) |
-| Look round a canvas slide | L (or right-click ▸ Look Around Freely), then drag, and scroll (or + and −) to zoom |
+| Look around a canvas slide | L (or right-click ▸ Look Around Freely), then drag, and scroll (or + and −) to zoom |
 | The show's menu | Right-click: next, previous, every slide, look around, the map, black screen, end |
 | Back to where the show was | Esc, a click or the next key |
 | The canvas's map | M |
@@ -356,7 +356,7 @@ Undo works for every change. Comments are saved in the .pptx as PowerPoint comme
 
 Each click plays the next animation, then moves on to the next slide with its transition. A click while something is moving finishes it at once.
 
-On a canvas slide you can leave the route to look round: drag to pan and scroll to zoom anywhere on the canvas (up to twelve times closer, or out to the whole canvas). While you look round, the map of the whole canvas shows in the corner with where you are. Click the map to move the view there. Picking a canvas slide from every slide (G) opens it ready to look round. Esc, a click or the next key glides back to where the show was, and the show goes on from there. The controls in the top right corner (they fade until you move the mouse) zoom, take you back, show the map and show every slide.
+On a canvas slide you can leave the route to look around: drag to pan and scroll to zoom anywhere on the canvas (up to twelve times closer, or out to the whole canvas). While you look around, the map of the whole canvas shows in the corner with where you are. Click the map to move the view there. Picking a canvas slide from every slide (G) opens it ready to look around. Esc, a click or the next key glides back to where the show was, and the show goes on from there. The controls in the top right corner (they fade until you move the mouse) zoom, take you back, show the map and show every slide.
 
 ### Presenter View
 
@@ -377,7 +377,7 @@ With only one screen, the audience's slides open in a window of their own. Drag 
 
 **Slide Show** tab ▸ **Rehearse Timings** plays the show with a bar at the top: the time on this slide, the time for the whole talk, **Pause**, **Repeat** (start this slide's time again) and **Notes**, which shows your speaker notes under the slide while you practice (it remembers whether you want them). **Record** does the same while recording your voice from the microphone, one recording for each slide; it counts 3, 2, 1 on the first slide before the clock and the microphone start (a click or key starts at once).
 
-When the show ends, a window lists each slide's time (🎙 marks the ones with narration) and asks whether to keep them. Kept times make the show go on by itself; kept narration goes on each slide as a sound that plays as the slide comes in, and PowerPoint plays it too. Untick **Keep the narration too** to keep only the times. Each slide's time shows on its picture in the slide list.
+When the show ends, a window lists each slide's time (🎙 marks the ones with narration) and asks whether to keep them. Kept times make the show go on by itself; kept narration goes on each slide as a sound that plays as the slide comes in, and PowerPoint plays it too. Clear **Keep the narration too** to keep only the times. Each slide's time shows on its picture in the slide list.
 
 - **Rehearse from This Slide** and **Record from This Slide…** (**View ▸ Presentation ▸ Slide Show**, or the **Clear** button's menu) start at the slide showing; the slides before it keep what they had.
 - **Clear** takes the timing or the narration off the slides picked, or off every slide. Clearing narration leaves the times.
