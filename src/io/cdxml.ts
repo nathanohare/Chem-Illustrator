@@ -698,11 +698,19 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       case 'Orbital': {
         const cen = pts(g.getAttribute('Center3D')), maj = pts(g.getAttribute('MajorAxisEnd3D')), min = pts(g.getAttribute('MinorAxisEnd3D'));
         if (cen.length < 2 || maj.length < 2) return;
-        const rx = Math.hypot(maj[0] - cen[0], maj[1] - cen[1]);
-        const ry = min.length >= 2 ? Math.hypot(min[0] - cen[0], min[1] - cen[1]) : rx;
+        let rx = Math.hypot(maj[0] - cen[0], maj[1] - cen[1]);
+        let ry = min.length >= 2 ? Math.hypot(min[0] - cen[0], min[1] - cen[1]) : rx;
+        // an oval whose axes are turned: upright when they lie along the page, else turned
+        let rot = 0;
+        if (Math.abs(rx - ry) > 0.01) {
+          let deg = (Math.atan2(maj[1] - cen[1], maj[0] - cen[0]) * 180) / Math.PI;
+          deg = ((deg % 180) + 180) % 180;
+          if (Math.abs(deg - 90) < 0.05) [rx, ry] = [ry, rx];
+          else if (deg > 0.05 && deg < 179.95) rot = +deg.toFixed(3);
+        }
         const ot = g.getAttribute('OvalType') ?? '';
         const filled = ot.includes('Filled') || ot.includes('Shaded');
-        const oval = () => add({ ...base, kind: 'oval', x1: cen[0] - rx, y1: cen[1] - ry, x2: cen[0] + rx, y2: cen[1] + ry, filled, ...(ot.includes('Shaded') ? { fill: 'shaded' as const } : {}), dashed: ot.includes('Dashed'), bold: ot.includes('Bold'), shadow: ot.includes('Shadow') });
+        const oval = () => add({ ...base, kind: 'oval', x1: cen[0] - rx, y1: cen[1] - ry, x2: cen[0] + rx, y2: cen[1] + ry, ...(rot ? { rot } : {}), filled, ...(ot.includes('Shaded') ? { fill: 'shaded' as const } : {}), dashed: ot.includes('Dashed'), bold: ot.includes('Bold'), shadow: ot.includes('Shadow') });
         // a plain circle kept with a structure may be an aromatic ring's circle (checked once the bonds are in)
         if (g.parentElement?.nodeName === 'fragment' && ot.includes('Circle') && !filled) pendingCircles.push({ x: cen[0], y: cen[1], oval });
         else oval();

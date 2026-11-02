@@ -539,7 +539,8 @@ export function inkOutline(pts: Vec[], width: number): GeoStep[] {
     left.push({ x: pts[i].x + nx * r, y: pts[i].y + ny * r });
     right.push({ x: pts[i].x - nx * r, y: pts[i].y - ny * r });
   }
-  const band = poly([...left, ...right.reverse()].map((p) => [p.x, p.y] as [number, number]));
+  // (wound the same way as the discs, so where they overlap stays filled: a canvas fills by winding)
+  const band = poly([...right, ...left.reverse()].map((p) => [p.x, p.y] as [number, number]));
   // round ends (and round over its own turns: a disc at each sharp corner)
   const sharp: GeoStep[] = [];
   for (let i = 1; i < pts.length - 1; i++) {

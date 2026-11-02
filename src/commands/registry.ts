@@ -40,6 +40,7 @@ export const INSERT_MENU: MenuEntry[] = [
   { submenu: 'Lab Figures', modes: 'drawing slides design document', items: [
     { id: 'tlc-plate', label: 'TLC Plate…', modes: 'drawing slides design document', title: 'A TLC plate drawn from each lane\'s Rf values: the stain\'s colours (UV, KMnO₄, anisaldehyde, CAM…) or a notebook sketch, with the Rf values, start and front lines and the eluent. Double-click it to change the spots' },
     { id: 'gel', label: 'Gel…', modes: 'drawing slides design document', title: 'An agarose or SDS-PAGE gel drawn from each lane\'s band sizes, run on a log scale, with a size marker and its sizes. Double-click it to change the bands' },
+    { id: 'crystal-structure', label: 'Crystal Structure (CIF)…', modes: 'drawing slides design document', title: 'An X-ray crystal structure from a CIF file, drawn as thermal ellipsoids (ORTEP) or ball-and-stick: turn it to the view you want, move the labels, and see the crystal data table. Double-click it to change the view' },
   ] },
   { id: 'insert-equation', label: 'Equation…', modes: 'slides design document', title: 'An equation typed as LaTeX (x^2, \\frac{a}{b}, \\alpha), shown as maths; a Word or PowerPoint equation in .docx and .pptx files' },
   { id: 'insert-reference', label: 'Formatted Reference…', modes: 'drawing slides design', title: 'References from any open file (or looked up by DOI) put here as formatted text: full, or short (journal, year, volume, page), in the citation style you pick' },
