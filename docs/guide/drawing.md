@@ -254,7 +254,7 @@ To start a reaction quickly, select a structure and press Ctrl+→ (or Ctrl+←,
 - **Contract Label…**: turns a selected group into one label (such as PMP) that keeps its chemistry. ChemDraw opens it as a contracted label.
 - **Expand Label**: the other way round: the selected labels drawn out as atoms and bonds (ligands on a metal from their templates). See [Metal complexes](#metal-complexes).
 - **Define Nickname…**: select a group that hangs off a structure by one bond and give it a name. Typing that name as a label anywhere then counts as the full group for formula and mass. **Delete Nickname…** removes one.
-- **Insert ▸ Structure from Name or SMILES…** (Ctrl+Shift+N; its window is called Name to Structure): type a systematic, CAS-style or common name and the structure is drawn. Select a caption holding a name first to turn the caption into the structure. Names are read on your computer, so this works offline; names it can't read (DMAP, DIPEA) are looked up on PubChem unless you turn that off in **Settings ▸ Online**. When a name can't be read, the window says so, underlines the part the name reader stopped at, and keeps the reader's own explanation under **Details**.
+- **Insert ▸ Structure from Name or SMILES…** (Ctrl+Shift+N; its window is called Name to Structure): type a systematic, CAS-style or common name and the structure is drawn. Select a caption holding a name first to turn the caption into the structure. Names are read on your computer, so this works offline; names it can't read (DMAP, DIPEA) are looked up on PubChem unless you turn that off in **Settings ▸ Online**. You can type a CAS RN (50-78-2) too; see [CAS RNs](#cas-rns). When a name can't be read, the window says so, underlines the part the name reader stopped at, and keeps the reader's own explanation under **Details**.
 
 ### Frames, highlights and fills
 
@@ -315,6 +315,15 @@ Structures with R groups or labels that can't be read have no 3-D shape. Metals 
 ### PubChem
 
 **Chemistry ▸ Look Up ▸ Look Up on PubChem** (also in the Analysis panel and the right-click menu) sends the selected structure to PubChem and shows its names, CAS number, a link to its PubChem page, GHS hazards, and measured melting point, boiling point and density where known. See [The Analysis panel](#the-analysis-panel).
+
+### CAS RNs
+
+CAS Registry Numbers are arbitrary numbers given out by CAS, so they can't be worked out from a structure; the program looks them up, both ways.
+
+- **CAS RN to structure.** Type or paste a CAS RN wherever a name goes: Insert ▸ Structure from Name or SMILES, a caption turned into a structure, a document, a sheet cell, or Add by Name in the Compound Library (the compound keeps the number). It may be written 50-78-2, CAS 50-78-2, CAS RN: 50-78-2 or [50-78-2]. The last digit is a check digit, so a mistyped number is caught before anything is looked up, and you are told what the check digit should be.
+- **Structure to CAS RN.** Select a structure: the Analysis panel's **CAS RN** line shows its number straight away if it is in your Compound Library or was found before, or a **Find** button. **Chemistry ▸ Look Up ▸ Find CAS RN** (also on the right-click menu) does the same. Hover over the number to see any other CAS RNs PubChem lists for it (old or replaced numbers, mixtures). **CAS caption** puts the number under the structure, tied to it.
+
+Where the numbers come from, in order: your Compound Library, numbers found before (kept on your computer, so they work offline), then PubChem. A CAS RN PubChem doesn't know is tried on NCI CACTUS, the US National Cancer Institute's free resolver, which sometimes leaves out stereochemistry. Only the number typed, or the structure as SMILES, is sent; **Settings ▸ Online** turns these lookups off. No list of CAS RNs comes with the program (CAS asks for a licence to publish them), so a number that isn't in your library needs the internet the first time. Always check that the structure found is the compound you meant: PubChem sometimes files a salt, a mixture or a related compound under the same number, and says so when it does.
 
 ### Knowledge Base
 

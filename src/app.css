@@ -1550,6 +1550,8 @@ dialog.periodic-table { position: fixed; inset: 64px 16px auto auto; max-height:
 .ec-table tr.ec-total td { border-top: 1px solid var(--line); font-weight: 600; }
 .an-buttons { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .an-buttons button { padding: 2px 8px; font-size: var(--fs-sm); }
+.an-cas button { padding: 0 8px; font-size: var(--fs-sm); }
+.an-cas .cas-num { user-select: text; -webkit-user-select: text; }
 #side-content th sup, #side-content th sub { line-height: 0; }
 /* the Analysis panel's PubChem section */
 .pubchem { margin-top: 6px; }

@@ -37,6 +37,8 @@ export interface StructureIn {
   label?: string;
   /** Its name, when it came from one. */
   name?: string;
+  /** Its CAS RN, when it came from one. */
+  cas?: string;
 }
 
 export interface CompoundLibraryHost {
@@ -80,7 +82,7 @@ export function newCompound(s: StructureIn, taken: Iterable<string>, now = Date.
   return {
     id: newId('c', taken), label: s.label ?? '', name: s.name ?? '', synonyms: [], smiles: s.smiles, molfile: s.molfile,
     ...(s.drawing ? { drawing: s.drawing } : {}),
-    formula: s.formula, mw: s.mw, cas: '', notes: '', tags: [], collections: [], files: [], added: now, modified: now,
+    formula: s.formula, mw: s.mw, cas: s.cas ?? '', notes: '', tags: [], collections: [], files: [], added: now, modified: now,
   };
 }
 
@@ -327,9 +329,9 @@ export class CompoundLibraryWindow {
 
   private async addByText(): Promise<void> {
     const got = await ask('Add by Name or SMILES', [
-      { name: 'text', label: 'Name or SMILES', value: '' },
+      { name: 'text', label: 'Name, SMILES or CAS RN', value: '' },
       { name: 'label', label: 'Number', value: '', placeholder: 'its compound number, if it has one' },
-    ], { ok: 'Add', note: 'A systematic or common name (4-bromoanisole, caffeine) or a SMILES string. Names are read on this computer.' });
+    ], { ok: 'Add', note: 'A systematic or common name (4-bromoanisole, caffeine), a SMILES string or a CAS RN (50-78-2). Names are read on this computer; CAS RNs are looked up on PubChem.' });
     if (!got?.text.trim()) return;
     const s = await this.host.fromText(got.text);
     if ('error' in s) { this.host.flash(s.error, 8000); return; }

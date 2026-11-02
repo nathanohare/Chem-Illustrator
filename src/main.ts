@@ -32,6 +32,8 @@ import { ChemClient } from './chem/client';
 import type { FragmentResult } from './worker/chem-worker';
 import { COMMON_ADDUCTS } from './chem/hrms';
 import { pubchemName, pubchemCid, pubchemCompound, compoundPage } from './chem/pubchem';
+import { CasMemory, readCas, casTypoMessage, structureForCas, casForStructure, type CasDeps, type CasFound } from './chem/cas';
+import { casHtml, casRuns, type CasState } from './ui/cas-panel';
 import { pubchemHtml, pubchemRuns, type PubChemState } from './ui/pubchem-panel';
 import { paragraphPages } from './document/doc-file';
 import { reviewAuthor, setReviewAuthor } from './document/revisions';
@@ -1619,6 +1621,9 @@ function unreadableName(name: string, parser: string): NameError {
  * that is turned off in Edit > Settings.
  */
 async function nameToMolfile(name: string): Promise<{ mb: string; attach: number[]; warnings: string[] } | NameError> {
+  // a CAS RN is looked up (it can't be read like a name)
+  const cas = readCas(name);
+  if (cas) return casToMolfile(cas.kind === 'typo' ? { error: casTypoMessage(cas) } : await structureForCas(cas.cas, casDeps()));
   const r = await names.read(name);
   namesReady = true;
   if (!chem.ready) return { error: 'The chemistry engine is still loading; try again in a moment.' };
@@ -1641,6 +1646,28 @@ async function nameToMolfile(name: string): Promise<{ mb: string; attach: number
   const mb = await chem.smilesToMol(r.smiles).catch(() => null);
   if (!mb) return { error: 'The name was read, but the structure could not be drawn (' + r.smiles + ').' };
   return { mb, attach: attachmentAtoms(r.smiles), warnings: [...r.warnings, ...cxNotes(r.smiles)] };
+}
+
+/** CAS RNs found before, kept on this computer (src/chem/cas.ts). */
+const casMemory = new CasMemory();
+
+/** What a CAS RN lookup needs: your Compound Library, the answers kept, and whether looking up online is allowed. */
+function casDeps(): CasDeps {
+  return {
+    library: async () => (await useLibrary()).now.compounds,
+    memory: casMemory,
+    online: pubchemNames,
+    canonical: async (smiles) => { const mb = await chem.smilesToMol(smiles); return mb ? chem.molToSmiles(mb) : null; },
+  };
+}
+
+/** A CAS RN's structure as a laid-out molfile, or why not. */
+async function casToMolfile(got: { smiles: string; note: string } | { error: string }): Promise<{ mb: string; attach: number[]; warnings: string[] } | NameError> {
+  if ('error' in got) return { error: got.error };
+  if (!chem.ready) return { error: 'The chemistry engine is still loading; try again in a moment.' };
+  const mb = await chem.smilesToMol(got.smiles).catch(() => null);
+  if (!mb) return { error: `The CAS RN was found, but its structure could not be drawn (${got.smiles}).` };
+  return { mb, attach: [], warnings: [got.note] };
 }
 
 /** Adds a named structure centred at (x, y), its attachment points drawn as wavy lines. Use inside doc.edit (or `to`'s bulk). */
@@ -4637,7 +4664,9 @@ const compoundWindow = new CompoundLibraryWindow(library, {
     const d = structureDoc(r.contents, ACS_1996);
     const [s] = await structuresFor(d, [{ atoms: [...d.atoms.keys()] }]);
     if (!s) return { error: 'The structure couldn\'t be read.' };
-    // a name typed is kept as its name; SMILES isn't one
+    // a name typed is kept as its name, a CAS RN as its CAS RN; SMILES isn't either
+    const cas = readCas(text);
+    if (cas?.kind === 'cas') return { ...s, cas: cas.cas, name: casMemory.byCas(cas.cas)?.name ?? '' };
     const smiles = chem.ready ? await molfileOrSmiles(text.trim(), (x) => chem.smilesToMol(x)).catch(() => null) : null;
     return smiles ? s : { ...s, name: text.trim() };
   },
@@ -7338,6 +7367,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'scheme-settings': () => settingsWindow.open('schemes'),
   'attach-descriptors': () => void attachDescriptors(),
   'pubchem-lookup': () => void lookUpChosen(),
+  'find-cas': () => void findCasChosen(),
   'model-3d': () => void show3dModel(),
   'turn-3d': () => void turn3dDialog(),
   'flatten-3d': () => editor.flattenSelection() || flash('Select a structure to flatten.'),
@@ -8524,8 +8554,8 @@ async function aiSettings(): Promise<void> {
 
 async function onlinePreferences(): Promise<void> {
   const r = await ask('Online', [
-    { name: 'pubchem', label: 'Look up names the name reader can\'t read on PubChem', type: 'checkbox', value: String(pubchemNames),
-      help: 'Sends the name typed to PubChem, a free NIH database. Names the program can read itself never leave this computer.' },
+    { name: 'pubchem', label: 'Look up CAS RNs, and names the name reader can\'t read, on PubChem', type: 'checkbox', value: String(pubchemNames),
+      help: 'Sends the name or CAS RN typed to PubChem, a free NIH database (and a CAS RN PubChem doesn\'t know to NCI CACTUS); Find CAS RN sends the structure as SMILES. Names the program can read itself never leave this computer.' },
     ...(canUpdate ? [{ name: 'updates', label: 'Check for a newer version when the app starts', type: 'checkbox' as const, value: String(updateCheck),
       help: 'Asks GitHub for the latest release number; nothing about you or your files is sent.' },
     { name: 'channel', label: 'Updates', options: UPDATE_CHANNELS, value: updateChannel,
@@ -9108,13 +9138,65 @@ adductSel.addEventListener('change', () => scheduleAnalysis(true));
 /** What PubChem had on each structure looked up this session, by SMILES. */
 const pubchemStates = new Map<string, PubChemState>();
 
+/** Each structure's CAS RN as looked up this session, by SMILES. */
+const casStates = new Map<string, CasState>();
+
+/**
+ * A structure's CAS RN line: as looked up this session, else straight from your Compound
+ * Library (once it has been read) or the answers kept on this computer, without going online.
+ */
+function casStateOf(smiles: string): CasState {
+  const st = casStates.get(smiles);
+  if (st) return st;
+  const mine = library.loaded ? library.now.compounds.find((c) => c.smiles === smiles && readCas(c.cas)?.kind === 'cas') : undefined;
+  if (mine) return { kind: 'found', cas: [readCas(mine.cas)!.cas], name: mine.name || undefined, from: 'your Compound Library' };
+  const kept = casMemory.byKey(smiles);
+  if (kept?.cas.length) return { kind: 'found', cas: kept.cas, name: kept.name, cid: kept.cid, from: kept.source };
+  return { kind: 'idle' };
+}
+
+/** The Analysis panel's Find button (and Find CAS RN): the structure's CAS RN, shown in its line. */
+async function findCas(smiles: string, fresh = false): Promise<CasFound | null> {
+  if (casStates.get(smiles)?.kind === 'busy') return null;
+  casStates.set(smiles, { kind: 'busy' });
+  scheduleAnalysis(true);
+  let got: CasFound;
+  try {
+    got = await casForStructure(smiles, casDeps(), fresh);
+  } catch (e) {
+    got = { kind: 'error', message: (e as Error).message };
+  }
+  casStates.set(smiles, got);
+  scheduleAnalysis(true);
+  return got;
+}
+
+/** Chemistry > Look Up > Find CAS RN (and the right-click menu): the structure picked, its CAS RN shown in the Analysis panel. */
+async function findCasChosen(): Promise<void> {
+  const f = chosenStructures()[0];
+  if (!f) { flash('Select a structure first.'); return; }
+  const r = await weigh(f);
+  if (!r?.smiles) { flash('Couldn\'t read that structure to look it up.'); return; }
+  if (sideIsFolded()) command('fold-side');
+  const got = await findCas(r.smiles, casStates.get(r.smiles)?.kind === 'none' || casStates.get(r.smiles)?.kind === 'error');
+  $('#analysis-body .an-cas')?.scrollIntoView({ block: 'nearest' });
+  if (got?.kind === 'found') flash(`CAS RN ${got.cas[0]}${got.name ? ` (${got.name})` : ''}, from ${got.from}. It is in the Analysis panel.`);
+  else if (got) flash(got.message, 7000);
+}
+
 /** The Analysis panel's PubChem button: find the structure's compound number, then its record. */
 async function lookUpOnPubChem(smiles: string): Promise<void> {
   pubchemStates.set(smiles, { kind: 'busy' });
   scheduleAnalysis(true);
   try {
     const cid = await pubchemCid(smiles);
-    pubchemStates.set(smiles, cid ? { kind: 'found', c: await pubchemCompound(cid) } : { kind: 'none' });
+    const c = cid ? await pubchemCompound(cid) : null;
+    pubchemStates.set(smiles, c ? { kind: 'found', c } : { kind: 'none' });
+    // its CAS RNs fill in the CAS RN line too
+    if (c?.cas.length && casStateOf(smiles).kind !== 'found') {
+      casStates.set(smiles, { kind: 'found', cas: c.cas, name: c.title || undefined, cid: c.cid, from: 'PubChem' });
+      casMemory.remember(c.cas.map((cas) => ({ cas, smiles, key: smiles, whole: true, name: c.title || undefined, cid: c.cid, source: 'PubChem' as const, found: new Date().toISOString() })));
+    }
   } catch (e) {
     pubchemStates.set(smiles, { kind: 'error', message: (e as Error).message });
   }
@@ -9147,6 +9229,8 @@ $('#analysis-body').addEventListener('click', (e) => {
   if (nm && lastAnalysis) { const k = Number(nm.dataset.name); const r = lastAnalysis.results[k]; if (r?.smiles && lastAnalysis.molblocks[k]) void nameForPanel(r.smiles, lastAnalysis.molblocks[k]); return; }
   const calc = t.closest<HTMLButtonElement>('button[data-calc]');
   if (calc && lastAnalysis) { const r = lastAnalysis.results[Number(calc.dataset.calc)]; if (r && !r.error) void showLabCalculator({ mw: r.mw, label: r.formula }); return; }
+  const findBtn = t.closest<HTMLButtonElement>('button[data-cas]');
+  if (findBtn && lastAnalysis) { const r = lastAnalysis.results[Number(findBtn.dataset.cas)]; if (r?.smiles) void findCas(r.smiles, casStates.has(r.smiles)); return; }
   const look = t.closest<HTMLButtonElement>('button[data-pubchem]');
   if (look && lastAnalysis) { const r = lastAnalysis.results[Number(look.dataset.pubchem)]; if (r?.smiles) void lookUpOnPubChem(r.smiles); return; }
   const b = t.closest<HTMLButtonElement>('button[data-insert]');
@@ -9154,6 +9238,18 @@ $('#analysis-body').addEventListener('click', (e) => {
   const [kind, n] = b.dataset.insert!.split(':');
   const r = lastAnalysis.results[Number(n)], frag = lastAnalysis.frags[Number(n)];
   if (kind === 'formula') { if (frag) void attachDescriptors([frag]); return; }
+  if (kind === 'cas') {
+    const st = r?.smiles ? casStateOf(r.smiles) : null;
+    if (st?.kind !== 'found' || !frag) return;
+    const m = editor.measure();
+    doc.edit('CAS caption', () => {
+      const c = doc.addCaption({ x: 0, y: 0, runs: casRuns(st.cas[0]), justify: 'center', attach: { atoms: [...frag], side: 'below', gap: defaultGap(doc), shift: 0, role: 'caption' } });
+      placeAttached(doc, c, m);
+    });
+    editor.changed();
+    flash('Added the CAS RN under the structure; it follows it. Double-click to edit.');
+    return;
+  }
   if (kind === 'pcname' || kind === 'pccas' || kind === 'pchaz' || kind === 'name') {
     const st = r && pubchemStates.get(r.smiles);
     const named = kind === 'name' && r ? nameStates.get(r.smiles) : undefined;
@@ -9377,7 +9473,7 @@ async function runAnalysis(force: boolean): Promise<void> {
   // once the namer is running, every structure analysed gets its name without asking
   if (namer.ready) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !nameStates.has(r.smiles)) void nameForPanel(r.smiles, exports[i].molblock); });
   saySelection(results);
-  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i) })).join('');
+  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
   updatePanels();
 }
 
@@ -9973,6 +10069,7 @@ function drawingMenu(): MenuItem[] {
         { cmd: 'pubchem-lookup' },
       ] },
       { cmd: 'structure-to-name' },
+      { cmd: 'find-cas' },
       { cmd: 'model-3d' },
       { label: 'Perspective', items: [{ cmd: 'turn-3d' }, { cmd: 'flatten-3d' }, null, { cmd: 'depth-shading', checked: depthShadePrefs.on }, { cmd: 'depth-shading-settings' }] },
     ] : []),
