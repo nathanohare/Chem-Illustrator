@@ -94,7 +94,7 @@ export function haptoTarget(doc: Doc, p: Vec, skip?: number): { centre?: Atom; a
 export const haptoLook = { delocalized: true };
 
 /** How a π-system bonded as one is drawn delocalized: a ring (a circle inside it) or an allyl (an arc). */
-export type PiLook = { kind: 'ring'; ring: number[] } | { kind: 'arc'; chain: [number, number, number] };
+export type PiLook = { kind: 'ring'; ring: number[] } | { kind: 'arc'; chain: number[] };
 
 /**
  * The delocalized look of a multicentre point's π-system, when it is drawn that way: bonded to
@@ -103,17 +103,14 @@ export type PiLook = { kind: 'ring'; ring: number[] } | { kind: 'arc'; chain: [n
  */
 export function piLook(doc: Doc, c: Atom): PiLook | null {
   const m = c.multi;
-  if (!haptoLook.delocalized || c.kekule || !m || m.length < 3 || m.length === 4 || !(doc.adj.get(c.id)?.length)) return null;
+  if (!haptoLook.delocalized || c.kekule || !m || m.length < 3 || !(doc.adj.get(c.id)?.length)) return null;
   const set = new Set(m);
   const nbrs = (id: number) => (doc.adj.get(id) ?? []).map((bid) => { const b = doc.bonds.get(bid)!; return b.a1 === id ? b.a2 : b.a1; }).filter((o) => set.has(o));
-  if (m.length === 3) {
-    const mid = m.find((id) => nbrs(id).length === 2);
-    if (mid === undefined) return null;
-    const [a, b] = nbrs(mid);
-    return { kind: 'arc', chain: [a, mid, b] };
-  }
-  // a ring: each atom bonded to two others of it, all in one loop
-  if (!m.every((id) => nbrs(id).length === 2)) return null;
+  // a chain (an allyl, an η⁴-diene, a pentadienyl): an arc along it
+  const chain = chainOrder(m, nbrs);
+  if (chain) return { kind: 'arc', chain };
+  // a ring: each atom bonded to two others of it, all in one loop (not a 4-ring: cyclobutadiene stays Kekulé)
+  if (m.length === 4 || !m.every((id) => nbrs(id).length === 2)) return null;
   const ring = [m[0]];
   let prev = -1, at = m[0];
   for (;;) {
@@ -168,6 +165,60 @@ export function allylArc(a: Vec, b: Vec, c: Vec, gap: number): { from: Vec; ctrl
   const from = { x: a.x - d1.x * l1 * 0.2 + n1.x * gap, y: a.y - d1.y * l1 * 0.2 + n1.y * gap };
   const to = { x: c.x - d2.x * l2 * 0.2 + n2.x * gap, y: c.y - d2.y * l2 * 0.2 + n2.y * gap };
   return { from, ctrl, to };
+}
+
+/** The atoms of `m` in order along an open chain (each bonded to the next), or null if they aren't one. */
+export function chainOrder<T>(m: T[], nbrs: (id: T) => T[]): T[] | null {
+  const ends = m.filter((id) => nbrs(id).length === 1);
+  if (ends.length !== 2 || m.some((id) => nbrs(id).length > 2)) return null;
+  const out = [ends[0]];
+  let prev: T | null = null, at = ends[0];
+  while (out.length < m.length) {
+    const next = nbrs(at).find((o) => o !== prev);
+    if (next === undefined || out.includes(next)) return null;
+    out.push(next);
+    prev = at;
+    at = next;
+  }
+  return out;
+}
+
+type Quad = { from: Vec; ctrl: Vec; to: Vec };
+const half = (q: Quad, first: boolean): Quad => {
+  const mid = { x: (q.from.x + 2 * q.ctrl.x + q.to.x) / 4, y: (q.from.y + 2 * q.ctrl.y + q.to.y) / 4 };
+  return first
+    ? { from: q.from, ctrl: { x: (q.from.x + q.ctrl.x) / 2, y: (q.from.y + q.ctrl.y) / 2 }, to: mid }
+    : { from: mid, ctrl: { x: (q.ctrl.x + q.to.x) / 2, y: (q.ctrl.y + q.to.y) / 2 }, to: q.to };
+};
+
+/**
+ * The arc drawn along a π chain bonded to a metal (an allyl, an η⁴-butadiene), split into the
+ * pieces each bond draws: `pieces[k]` lies along the bond from pts[k] to pts[k + 1]. For three
+ * atoms it is allylArc's curve; for more, one curve through the inner corner of each middle
+ * atom, smooth where they meet. Null when an angle is straight.
+ */
+export function chainArc(pts: Vec[], gap: number): Quad[][] | null {
+  const n = pts.length;
+  if (n < 3) return null;
+  // each middle atom's curve, as allyl's, ending halfway to the next corner
+  const curves: Quad[] = [];
+  for (let i = 1; i < n - 1; i++) {
+    const q = allylArc(pts[i - 1], pts[i], pts[i + 1], gap);
+    if (!q) return null;
+    curves.push(q);
+  }
+  for (let i = 0; i + 1 < curves.length; i++) {
+    const m = { x: (curves[i].ctrl.x + curves[i + 1].ctrl.x) / 2, y: (curves[i].ctrl.y + curves[i + 1].ctrl.y) / 2 };
+    curves[i].to = m;
+    curves[i + 1].from = m;
+  }
+  const pieces: Quad[][] = pts.slice(1).map(() => []);
+  curves.forEach((q, i) => {
+    // curve i turns at atom i + 1: its first half along bond i, its second along bond i + 1
+    pieces[i].push(half(q, true));
+    pieces[i + 1].push(half(q, false));
+  });
+  return pieces;
 }
 
 /** The multicentre point standing for these atoms, made if there isn't one. Call inside an edit. */
