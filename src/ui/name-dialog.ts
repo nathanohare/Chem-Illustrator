@@ -1,3 +1,4 @@
+import { foldIntoInfo } from './info-tip';
 // The Name to Structure window: type a name, press Insert. If the name can't be read the window
 // stays open with a short message, the part that couldn't be read underlined, and the name
 // reader's own words under Details, so the name can be corrected.
@@ -41,6 +42,8 @@ export class NameDialog {
     ok.className = 'primary';
     ok.textContent = 'Insert';
     buttons.append(cancel, ok);
+    foldIntoInfo(note, h);
+    if (!input.placeholder) input.placeholder = 'Name, SMILES or CAS RN';
     form.append(h, note, input, status, buttons);
     d.append(form);
 

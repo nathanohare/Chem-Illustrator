@@ -64,6 +64,7 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
       const row = document.createElement('label');
       row.className = 'ask-row';
       const name = document.createElement('span');
+      name.className = 'ask-name';
       name.textContent = f.label;
       let input: HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
       if (f.type === 'textarea') {

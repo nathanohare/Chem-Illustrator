@@ -44,7 +44,7 @@ const TIER_NAMES: Record<Tier, string> = { quick: 'Quick', search: 'Full Search'
 const TIER_TIPS: Record<Tier, string> = {
   quick: 'About a dozen likely shapes, each relaxed with the MMFF94s+ force field. Takes seconds.',
   search: 'Hundreds of starting shapes, each relaxed with MMFF94s+, duplicates removed. Finds shapes Quick misses; under a minute for most molecules.',
-  xtb: 'The lowest few re-optimised with GFN2-xTB, a fast quantum-chemical method: more trustworthy energies than a force field. Minutes; desktop app, with xtb installed.',
+  xtb: 'The lowest few re-optimized with GFN2-xTB, a fast quantum-chemical method: more trustworthy energies than a force field. Minutes; desktop app, with xtb installed.',
 };
 
 /** The model's background: light grey, so white hydrogens stand out. */
@@ -323,8 +323,8 @@ export class Viewer3d {
     const n = m?.conformers.length ?? 0;
     const text = this.tier === 'quick' ? `Quick: about a dozen likely shapes, each relaxed with the MMFF94s+ force field. Fast, but it can miss shapes: try Full Search.`
       : this.tier === 'search' ? (m ? `Full Search: ${n} distinct conformer${n === 1 ? '' : 's'} from ${m.starts} starting shapes, each relaxed with MMFF94s+, duplicates removed.` : 'Full Search: hundreds of starting shapes, each relaxed with MMFF94s+, duplicates removed.')
-      : m ? `xTB Refine: the lowest ${n} re-optimised with ${m.method}, a fast quantum-chemical method, and ranked again.`
-      : `xTB Refine: re-optimises the lowest few with GFN2-xTB, a fast quantum-chemical method, using the xtb program on this computer.${this.tools?.xtb ? '' : ' Desktop app only.'}`;
+      : m ? `xTB Refine: the lowest ${n} re-optimized with ${m.method}, a fast quantum-chemical method, and ranked again.`
+      : `xTB Refine: re-optimizes the lowest few with GFN2-xTB, a fast quantum-chemical method, using the xtb program on this computer.${this.tools?.xtb ? '' : ' Desktop app only.'}`;
     this.note.textContent = text + ' ';
     if (m && this.tier !== 'quick') this.note.append(this.again);
   }

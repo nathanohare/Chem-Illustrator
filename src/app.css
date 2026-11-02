@@ -762,9 +762,9 @@ dialog.ask { min-width: min(92vw, 340px); }
 .ask-form { display: grid; grid-template-columns: max-content minmax(12em, 1fr) auto auto; align-items: center; gap: 4px 8px; }
 .ask-form > * { grid-column: 1 / -1; }
 .ask-form > .ask-row:not(.ask-check, .ask-wide) { display: contents; }
-.ask-form > .ask-row:not(.ask-check, .ask-wide) > :first-child:not(datalist) { grid-column: 1; max-width: 16em; }
+.ask-form > .ask-row:not(.ask-check, .ask-wide) > .ask-name { grid-column: 1; max-width: 16em; }
 .ask-form > .ask-row:not(.ask-check, .ask-wide) > :is(input, select, textarea) { grid-column: 2; }
-.ask-form > .ask-row.ask-check, .ask-form > .ask-row.ask-wide { margin: 0; }
+.ask-form > .ask-row.ask-check, .ask-form > .ask-row.ask-wide { margin: 0; max-width: none; }
 .ask-form > h2, .ask-form > .ask-buttons { margin-bottom: 2px; }
 .ask-row { display: grid; grid-template-columns: 9em 1fr auto; align-items: center; gap: 4px 6px; margin: 4px 0; }
 .ask-row input, .ask-row select, .ask-row textarea { min-width: 0; font: inherit; padding: 3px 6px; }
@@ -877,7 +877,7 @@ dialog.name-dialog .muted { margin: 4px 0 10px; max-width: 60ch; }
 .sequence-ends { display: flex; gap: 16px; flex-wrap: wrap; margin: 8px 0 4px; }
 .sequence-opts { margin: 4px 0 0; }
 .name-input { width: 100%; box-sizing: border-box; font: inherit; padding: 5px 8px; }
-.name-status { min-height: 1.4em; margin: 8px 0 0; color: var(--muted); overflow-wrap: anywhere; }
+.name-status { min-height: 1.4em; margin: 4px 0 0; color: var(--muted); overflow-wrap: anywhere; }
 .name-status.error { color: var(--slow); }
 .name-status .name-shown { color: var(--text); font-family: var(--mono, monospace); }
 .name-status .name-shown u { text-decoration: underline wavy var(--slow); text-underline-offset: 3px; }
@@ -2600,18 +2600,18 @@ dialog.settings-window { width: min(920px, calc(100vw - 32px)); height: min(680p
 dialog.settings-window[open] { display: flex; }
 dialog.settings-window.with-preview { width: min(1180px, calc(100vw - 32px)); max-width: none; }
 dialog.settings-window { max-width: none; }
-.sw-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 18px; border-bottom: 1px solid var(--line); }
+.sw-head { display: flex; align-items: center; gap: 8px; padding: 6px 10px 6px 14px; border-bottom: 1px solid var(--line); }
 .sw-head h2 { margin: 0 auto 0 0; font-size: 1.15em; }
 .sw-search { width: 220px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--bg); color: var(--text); }
 .sw-close { width: 28px; height: 28px; border: 0; border-radius: var(--r-control); background: none; color: var(--text); font-size: var(--fs-xl); cursor: pointer; }
 .sw-close:hover { background: var(--hover, rgb(0 0 0 / 0.06)); }
 .sw-body { flex: 1; display: flex; min-height: 0; }
-.sw-list { flex: 0 0 190px; overflow: auto; padding: 8px 6px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 1px; }
-.sw-list button { text-align: left; padding: 6px 10px; border: 0; border-radius: var(--r-control); background: none; color: var(--text); cursor: pointer; }
+.sw-list { flex: 0 0 180px; overflow: auto; padding: 4px; border-right: 1px solid var(--line); display: flex; flex-direction: column; gap: 1px; }
+.sw-list button { text-align: left; padding: 3px 8px; border: 0; border-radius: var(--r-control); background: none; color: var(--text); cursor: pointer; }
 .sw-list button:hover { background: var(--hover, rgb(0 0 0 / 0.06)); }
 .sw-list button.on { background: var(--accent-soft); font-weight: 600; }
-.sw-list p { padding: 6px 10px; margin: 0; }
-.sw-pane { flex: 1; overflow: auto; padding: 4px 22px 18px; min-width: 0; }
+.sw-list p { padding: 3px 8px; margin: 0; }
+.sw-pane { flex: 1; overflow: auto; padding: 2px 14px 12px; min-width: 0; }
 /* a page's preview, beside its settings */
 .sw-aside { flex: 0 0 260px; overflow: auto; padding: 12px 14px; border-left: 1px solid var(--line); background: var(--panel, var(--bg)); }
 .sw-aside[hidden] { display: none; }
@@ -2619,13 +2619,13 @@ dialog.settings-window { max-width: none; }
 .sw-aside h3 { margin: 0 0 8px; font-size: var(--fs-sm, 0.85em); font-weight: 600; color: var(--muted, inherit); text-transform: uppercase; letter-spacing: 0.04em; }
 .sw-aside canvas, .sw-aside svg { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: var(--r-control); background: #fff; }
 /* Apply and Set as Default, the same on every page */
-.sw-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); }
+.sw-foot { display: flex; align-items: center; justify-content: flex-end; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--line); }
 .sw-foot .sw-note { margin-right: auto; font-size: var(--fs-sm, 0.85em); }
 .sw-foot.sw-actions .sw-default, .sw-foot.sw-actions .sw-apply { display: none; }
 .sw-pane .sw-hidden { display: none !important; }
 .sw-pane > dialog.embedded { position: static; display: block; inset: auto; margin: 0; padding: 0; border: 0; box-shadow: none; background: none; color: inherit;
   width: auto; height: auto; max-width: none; max-height: none; min-width: 0; overflow: visible; }
-.sw-pane > dialog.embedded > form > h2:first-child, .sw-pane > dialog.embedded > h2:first-child { margin-top: 12px; }
+.sw-pane > dialog.embedded > form > h2:first-child, .sw-pane > dialog.embedded > h2:first-child { margin-top: 8px; }
 @media (max-width: 640px) { .sw-list { flex-basis: 130px; } .sw-aside { display: none; } }
 
 /* Ribbons in a narrow window: groups lose their buttons' words (icons only), then fold into one button that drops them down */

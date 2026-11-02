@@ -3,6 +3,7 @@
 // mode), and the panels on the right.
 
 // the menus made from the command list, before anything looks for their items
+import { infoTipsOnOpen } from './ui/info-tip';
 import './commands/menus';
 import { newDocDesign, setNewDocDesign } from './document/themes';
 import { fieldEnv } from './document/fields';
@@ -314,7 +315,6 @@ const pickTemplate = later(() => import('./ui/template-gallery'), 'pickTemplate'
 const askCycle = later(() => import('./ui/cycle-dialog'), 'askCycle');
 const askEnergy = later(() => import('./ui/energy-dialog'), 'askEnergy');
 import type { EnergyStructureHooks } from './ui/energy-dialog';
-import { infoTipsOnOpen } from './ui/info-tip';
 
 // help text in data-info attributes becomes an "i" beside its header as each window opens
 infoTipsOnOpen();
@@ -10848,7 +10848,7 @@ async function runAnalysis(force: boolean): Promise<void> {
   analysisKey = key;
   const panel = $('#analysis-body');
   if (!frags.length) {
-    panel.innerHTML = '<p class="muted">Select a structure (or text read as chemistry, such as BF4⁻ or DMAP), or draw one, to see its formula and masses.</p>';
+    panel.innerHTML = '<p class="muted" title="Or select text read as chemistry, such as BF4⁻ or DMAP, or draw a structure.">Select a structure to see its formula and masses.</p>';
     analysisBox.set(null, null);
     return;
   }
