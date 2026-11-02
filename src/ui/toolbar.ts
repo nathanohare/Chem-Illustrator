@@ -189,7 +189,6 @@ export class Toolbar {
       if (at != null) { b.style.gridRow = String(Math.floor(at / cols) + 1); b.style.gridColumn = String((at % cols) + 1); }
       b.className = 'tool' + (pal.def.large ? ' large' : '') + (t.name === this.current.get(pal.def.palette) ? ' active' : '');
       b.setAttribute('role', 'menuitem');
-      b.dataset.tool = t.name;
       this.titleTool(b, t);
       const px = pal.def.large ? pal.def.iconSize ?? 46 : 28;
       if (pal.def.large && pal.def.iconSize) b.style.width = b.style.height = `${px + 6}px`;

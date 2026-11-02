@@ -245,7 +245,7 @@ describe('the settings file', () => {
       ai: { provider: 'anthropic' as const, model: 'claude-sonnet-5-5', base: '', localOnly: true, assistant: true },
       straightenLinear: false,
       cursorAids: { angle: false, length: true, hints: false, units: 'cm' as const, look: 'solid' as const },
-      haptoDelocalized: false, toolDemos: 'frames',
+      haptoDelocalized: false,
       appTheme: 'dark' as const, oneColumnTools: true, startView: false, enterFinishesText: true, lastVersion: '0.1.90',
     };
     const text = settingsText(s);
