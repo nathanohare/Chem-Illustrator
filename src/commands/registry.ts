@@ -22,6 +22,7 @@ export type MenuEntry = CommandDef | '-' | { submenu: string; modes?: string; it
 export const INSERT_MENU: MenuEntry[] = [
   { id: 'name-to-structure', label: 'Structure from Name or SMILES…', title: 'A structure from its name or SMILES: in the drawing, in the text at the caret, or in the selected cell' },
   { id: 'sequence-to-structure', label: 'Structure from Sequence…', modes: 'drawing slides design', title: 'A peptide drawn out in full from its sequence: one-letter codes (GLYP, small letters for D) or three-letter codes (Boc-Ala-D-Phe-OMe), with the ends you pick' },
+  { id: 'insert-compound', label: 'Compound from Library…', title: 'A compound from your Compound Library (kept between sessions): in the drawing or slide with its number under it, in the text at the caret, or in the selected cell' },
   { id: 'insert-structure', label: 'Structure', modes: 'document', title: 'Draw a structure or scheme to put in the text at the caret' },
   { id: 'draw-structure', label: 'Structure in Cell', modes: 'sheet' },
   '-',
@@ -38,7 +39,7 @@ export const INSERT_MENU: MenuEntry[] = [
   { id: 'insert-diagram', label: 'Diagram…', modes: 'drawing slides design document', title: 'Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint\'s SmartArt' },
   { id: 'insert-equation', label: 'Equation…', modes: 'slides design document', title: 'An equation typed as LaTeX (x^2, \\frac{a}{b}, \\alpha), shown as maths; a Word or PowerPoint equation in .docx and .pptx files' },
   { id: 'insert-reference', label: 'Formatted Reference…', modes: 'drawing slides design', title: 'References from any open file (or looked up by DOI) put here as formatted text: full, or short (journal, year, volume, page), in the citation style you pick' },
-  { id: 'references', label: 'Reference Manager…', title: 'The references of every open document and presentation, grouped by file: add, edit, and copy them from one file to another' },
+  { id: 'references', label: 'Reference Manager…', title: 'Your reference library (kept between sessions: collections, tags, PDFs, Zotero) and the references of every open document and presentation: add, edit, and copy them between your library and files' },
   '-',
   { id: 'insert-symbol', label: 'Symbol…', title: 'Greek letters, arrows, maths and chemistry signs, accented letters: find one by name (degree, angstrom) or code, with the ones you used lately first' },
   { id: 'insert-link', label: 'Link…', title: 'Link the selected text to a web page, a DOI, a file or a place in this file (Ctrl+K while typing). Ctrl+click a link to follow it' },
