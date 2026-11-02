@@ -369,7 +369,7 @@ export function readOdt(bytes: Uint8Array): { doc: DocText; warnings: string[] }
 
 export interface OdtDeps {
   /** A drawing's picture: PNG bytes and its size in points. */
-  picture?(contents: Contents, style: DocStyle): Promise<{ png: Uint8Array; w: number; h: number } | null>;
+  picture?(contents: Contents, style: DocStyle, frame?: { x: number; y: number; w: number; h: number }): Promise<{ png: Uint8Array; w: number; h: number } | null>;
 }
 
 // (characters XML 1.0 can't hold are dropped, as in the Office files)
@@ -470,7 +470,7 @@ class OdtWriter {
       return this.image(bytes, m[1].toLowerCase().replace('jpeg', 'jpg').replace('svg+xml', 'svg'), o.w * (o.scale ?? 1), o.h * (o.scale ?? 1), o.alt);
     }
     if (o.kind === 'drawing' && this.deps.picture) {
-      const pic = await this.deps.picture(o.contents, this.t.drawingStyle);
+      const pic = await this.deps.picture(o.contents, this.t.drawingStyle, o.frame);
       if (pic) return this.image(pic.png, 'png', pic.w * (o.scale ?? 1), pic.h * (o.scale ?? 1), o.alt);
     }
     if (o.kind === 'math') return this.span({ ...r, obj: undefined, text: o.tex });

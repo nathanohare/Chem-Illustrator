@@ -1252,6 +1252,21 @@ body.sheet-mode.floating-drawing #structure-bigger { display: inline-block; }
 /* the pop-out drawing area has no scroll bars (the wheel and Space+drag move round it) */
 body.floating-drawing #canvas-host .scrollbar { display: none; }
 body.floating-drawing #sheet-ribbon, body.floating-drawing #doc-ribbon { opacity: 0.55; pointer-events: none; }
+/* a document's structure drawn in place: a clear drawing layer exactly over the pages (placed from
+   script), the page under it showing the structure as it is drawn; the bar floats over the page */
+body.doc-mode.drawing-in-place #canvas-host {
+  position: fixed;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+body.drawing-in-place #canvas-host #scene { visibility: hidden; }
+body.drawing-in-place #canvas-host .navigator, body.drawing-in-place #canvas-host .edge-arrows { display: none; }
+body.drawing-in-place #doc-pane { opacity: 1; }
+body.drawing-in-place #structure-bar { position: fixed; margin: 0; transform: translateX(-50%); }
+body.drawing-in-place #structure-bar .muted { display: none; }
 #structure-bar {
   grid-area: host;
   align-self: start;
@@ -1386,6 +1401,29 @@ dialog.prop-dialog { width: min(94vw, 520px); }
 #doc-host { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
 /* View > Navigation Pane: the headings and search results down the left of the pages */
 #doc-pane { position: relative; }
+/* the offer to make a document's structures figures, and its preview's buttons (ui/doc-figure-offer.ts) */
+.figure-offer {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(760px, calc(100% - 32px));
+  padding: 6px 8px 6px 12px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--r-tab);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+  font-size: 12px;
+}
+.figure-offer[hidden] { display: none; }
+.figure-offer span { flex: 1 1 auto; }
+.figure-offer button { flex: none; }
 #doc-pane.nav-open > :not(#doc-nav) { margin-left: 250px; }
 #doc-nav { position: absolute; left: 0; top: 0; bottom: 0; width: 250px; display: flex; flex-direction: column; background: var(--panel); border-right: 1px solid var(--line); color: var(--text); font-size: var(--fs-md); z-index: 3; }
 #doc-nav[hidden] { display: none; }
