@@ -51,6 +51,25 @@ export function numberSlots(a: Atom, labelSize: number, w: number, labelBox?: Re
   ];
 }
 
+/** Atom-map colours (Chemistry ▸ Map Atoms), one for each number in turn. */
+export const MAP_COLOURS = ['#ffd27a', '#9fd3ff', '#b8e6a0', '#f7a8c4', '#c9b6f2', '#ffb48a', '#8fe0d4', '#e6e08a', '#a8b8ff', '#f2b6e6', '#c4e3b0', '#ffc2a8'];
+export const mapColour = (n: number): string => MAP_COLOURS[(n - 1) % MAP_COLOURS.length];
+/** A map number's box: light peach (Nate's picture), or ChemDraw's grey. */
+export const MAP_PEACH = '#fbdcc2';
+export const MAP_GREY = '#808080';
+
+/** Whether an atom's number is its atom-map number (Chemistry ▸ Map Atoms), drawn in a box. */
+export const isMapNumber = (a: Atom): boolean => !!a.mapNo && a.atomNumber === String(a.mapNo);
+
+/** The space between a map number and its box. */
+export const mapPad = (size: number): number => 0.3 * size;
+
+/** The rounded box round a map number whose text starts at `p` and is `w` wide. */
+export function mapBox(p: NumberPlace, w: number): Rect {
+  const b = numberBox(p, w), pad = mapPad(p.size);
+  return { x1: b.x1 - pad, y1: b.y1 - pad, x2: b.x2 + pad, y2: b.y2 + pad };
+}
+
 /** The box a number covers, from where its text starts (digits reach cap height and no lower). */
 export function numberBox(p: NumberPlace, w: number): Rect {
   return { x1: p.x, y1: p.y - CAP * p.size, x2: p.x + w, y2: p.y };
