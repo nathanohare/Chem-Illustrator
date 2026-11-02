@@ -245,7 +245,7 @@ import { freeSpace } from './editor/free-space';
 import { canReadStructures, importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
 import { placeRead } from './recognise/check';
 import { Diagnostics, catchErrors, errorReport, formatEntry, stamp, type LogEntry, type UnexpectedClose } from './diagnostics';
-import { keepStore, getText, putText } from './keep/store';
+import { keepStore, getText, putText, keyPart } from './keep/store';
 import { Library, storePlace, folderPlace, readPlaceChoice, writePlaceChoice, LIBRARY_FILE } from './library/library-store';
 import { noteMentions, type LibCompound } from './library/library';
 import { fetchPubmed, type ZoteroLink } from './library/online';
@@ -254,6 +254,7 @@ import { parseIndex, indexText } from './library/file-index';
 import { libraryHolder } from './ui/library-refs';
 import { CompoundLibraryWindow, addStructures, type StructureIn } from './ui/compound-library';
 import { KnowledgeBaseWindow } from './ui/knowledge-base';
+import { readPdfPages } from './kb/pdf-library';
 import { FindInFilesWindow, type ListedFile } from './ui/find-in-files';
 import { later } from './lazy';
 
@@ -4636,6 +4637,8 @@ async function openCompoundLibrary(select: string[] = []): Promise<void> {
 
 /** Where the tables the user imported (from their own copies of published tables) are kept: this computer only. */
 const KB_IMPORTED_KEY = 'kb/imported-tables.json';
+/** Your PDFs' text, one file each, kept on this computer only. */
+const KB_PDF_FOLDER = 'kb/pdfs';
 
 const knowledgeBase = new KnowledgeBaseWindow({
   flash,
@@ -4648,6 +4651,18 @@ const knowledgeBase = new KnowledgeBaseWindow({
   },
   copyText: (text) => copyText(text, 'Copied the table: paste it into a sheet, a Word table or Excel.'),
   openUrl: (url) => openWebPage(url),
+  pickPdfs: () => openManyBytesDialog('PDF files', ['pdf']).catch(async (e) => { await showError(String(e)); return []; }),
+  readPdfPages,
+  readPdfs: async () => {
+    const store = keepStore();
+    const files = (await store.list(KB_PDF_FOLDER).catch(() => [])).filter((f) => !f.folder && f.name.endsWith('.json'));
+    const out: string[] = [];
+    for (const f of files) { const t = await getText(store, `${KB_PDF_FOLDER}/${f.name}`).catch(() => null); if (t) out.push(t); }
+    return out;
+  },
+  writePdf: (id, json) => putText(keepStore(), `${KB_PDF_FOLDER}/${keyPart(id)}.json`, json),
+  removePdf: (id) => keepStore().remove(`${KB_PDF_FOLDER}/${keyPart(id)}.json`),
+  ...(isTauri() ? { openFile: async (path: string) => { const { openPath } = await import('@tauri-apps/plugin-opener'); await openPath(path); } } : {}),
 });
 
 /** Chemistry > Look Up > Knowledge Base: reference tables searched by name, CAS number, SMILES or a shift. */

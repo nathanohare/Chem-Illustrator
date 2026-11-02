@@ -17,11 +17,18 @@ export interface KbColumn {
   filter?: boolean | 'present';
   /** Narrow column (multiplicity, units). */
   narrow?: boolean;
+  /** Searched but not shown or copied (a PDF page's whole text). */
+  hidden?: boolean;
+  /** Shows a short excerpt of another column around the words searched for. */
+  excerptOf?: string;
 }
 
 export interface KbSource {
   label: string;
   url?: string;
+  /** A file on this computer (one of your PDFs), and the page to open it at. */
+  path?: string;
+  page?: number;
 }
 
 export interface KbTable {
@@ -36,6 +43,8 @@ export interface KbTable {
   personal?: boolean;
   /** Links shown at the end of each row (the compound's PubChem page, its NIOSH entry…). */
   links?: (row: Record<string, Cell>) => KbSource[];
+  /** One of your PDFs, a row a page: where the file is, when known. */
+  pdf?: { path?: string };
 }
 
 /** The filter value meaning "has something in this column". */
@@ -57,9 +66,16 @@ export function cellNumbers(c: Cell): number[] {
   return [...c.matchAll(/-?\d+(?:\.\d+)?/g)].map((m) => Number(m[0]));
 }
 
-/** A row's text for searching: every cell, lower case. */
+const ROW_TEXT = new WeakMap<Record<string, Cell>, string>();
+
+/** A row's text for searching: every cell, lower case (kept, since a PDF's pages are long). */
 export function rowText(row: Record<string, Cell>): string {
-  return Object.values(row).filter((v) => v !== null).join(' • ').toLowerCase();
+  let s = ROW_TEXT.get(row);
+  if (s === undefined) {
+    s = Object.values(row).filter((v) => v !== null).join(' • ').toLowerCase();
+    ROW_TEXT.set(row, s);
+  }
+  return s;
 }
 
 /** Is this a CAS Registry Number with a correct check digit (109-99-9)? */
@@ -110,7 +126,7 @@ export function findRows(t: KbTable, query: string, filters: Record<string, stri
     const hit = rows.filter((r) => typeof r.smiles === 'string' && sameSmiles.has(r.smiles));
     if (hit.length) return hit.map((row) => ({ row }));
   }
-  if (isCas(q)) return rows.filter((r) => r.cas === q).map((row) => ({ row }));
+  if (isCas(q) && t.columns.some((c) => c.key === 'cas')) return rows.filter((r) => r.cas === q).map((row) => ({ row }));
   const words = q.toLowerCase().split(/\s+/);
   return rows.filter((r) => { const s = rowText(r); return words.every((w) => s.includes(w)); }).map((row) => ({ row }));
 }
@@ -143,10 +159,34 @@ export function sortRows(rows: RowMatch[], col: KbColumn, down: boolean): RowMat
 }
 
 /** The rows as tab-separated text with a header line: to paste into a sheet, a Word table or Excel. */
-export function tableTsv(t: KbTable, rows: RowMatch[]): string {
-  const cols = t.columns;
+export function tableTsv(t: KbTable, rows: RowMatch[], query = ''): string {
+  const cols = t.columns.filter((c) => !c.hidden);
   const clean = (v: Cell) => (v === null || v === undefined ? '' : String(v).replace(/[\t\n]+/g, ' '));
-  return [cols.map((c) => c.label).join('\t'), ...rows.map((m) => cols.map((c) => clean(m.row[c.key])).join('\t'))].join('\n');
+  return [cols.map((c) => c.label).join('\t'), ...rows.map((m) => cols.map((c) => clean(cellShown(m.row, c, query))).join('\t'))].join('\n');
+}
+
+/** What a column shows for a row: its value, or an excerpt of another column around the search. */
+export function cellShown(row: Record<string, Cell>, c: KbColumn, query = ''): Cell {
+  if (!c.excerptOf) return row[c.key] ?? null;
+  const v = row[c.excerptOf];
+  return v === null || v === undefined ? null : excerpt(String(v), query);
+}
+
+/** About `size` characters around the first place a word of the search is found. */
+export function excerpt(text: string, query: string, size = 240): string {
+  const low = text.toLowerCase();
+  let at = -1;
+  for (const w of query.toLowerCase().split(/\s+/).filter(Boolean)) {
+    const i = low.indexOf(w);
+    if (i >= 0 && (at < 0 || i < at)) at = i;
+  }
+  if (at < 0) return text.length > size ? text.slice(0, size).trimEnd() + '…' : text;
+  let start = Math.max(0, at - Math.floor(size / 3));
+  // start and end on whole words
+  if (start > 0 && text[start - 1] !== ' ') { const sp = text.indexOf(' ', start); if (sp >= 0 && sp < at) start = sp + 1; }
+  let end = Math.min(text.length, start + size);
+  if (end < text.length) { const sp = text.lastIndexOf(' ', end); if (sp > at) end = sp; }
+  return (start > 0 ? '…' : '') + text.slice(start, end).trim() + (end < text.length ? '…' : '');
 }
 
 /**

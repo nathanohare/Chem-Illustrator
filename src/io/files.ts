@@ -185,13 +185,14 @@ export async function openBytesDialog(label: string, types: FileType[], extra: s
  * Ask for several files of these extensions and read their bytes (File > Export > Batch Convert).
  * Empty when the user cancels.
  */
-export async function openManyBytesDialog(label: string, exts: string[]): Promise<{ name: string; bytes: Uint8Array }[]> {
+/** Several files the user picks; on the desktop each also says where it is (`path`). */
+export async function openManyBytesDialog(label: string, exts: string[]): Promise<{ name: string; bytes: Uint8Array; path?: string }[]> {
   if (desktop) {
     const { open } = await import('@tauri-apps/plugin-dialog');
     const got = await open({ multiple: true, directory: false, filters: [{ name: label, extensions: exts }] });
     const paths = Array.isArray(got) ? got : typeof got === 'string' ? [got] : [];
-    const out: { name: string; bytes: Uint8Array }[] = [];
-    for (const path of paths) out.push({ name: baseName(path), bytes: new Uint8Array(await invoke<ArrayBuffer>('read_binary_file', { path })) });
+    const out: { name: string; bytes: Uint8Array; path?: string }[] = [];
+    for (const path of paths) out.push({ name: baseName(path), path, bytes: new Uint8Array(await invoke<ArrayBuffer>('read_binary_file', { path })) });
     return out;
   }
   let files: File[];

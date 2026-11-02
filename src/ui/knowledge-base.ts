@@ -5,11 +5,14 @@
 // sheet or document. Every abbreviation shows what it means when the mouse rests on it.
 //
 // Tables you import (a CSV or tab-separated file, or text pasted from a spreadsheet) are kept on
-// this computer only, for data you have a copy of but the program can't carry.
+// this computer only, for data you have a copy of but the program can't carry. So are your PDFs
+// (a book, papers, SI files): each one's text is read once and searched as a table of pages, with
+// an excerpt around the words found, and the file opens from its row.
 
 import { BUILT_IN_TABLES } from '../kb/data';
 import { explainPieces, glossaryEntry } from '../kb/glossary';
-import { PRESENT, filterValues, findRows, isCas, parseUserTable, searchedShift, sortRows, tableTsv, type KbColumn, type KbTable, type RowMatch } from '../kb/tables';
+import { PRESENT, cellShown, filterValues, findRows, isCas, parseUserTable, searchedShift, sortRows, tableTsv, type KbColumn, type KbTable, type RowMatch } from '../kb/tables';
+import { pdfTable, type PdfIndex } from '../kb/pdf-library';
 import { ask } from './ask';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] => {
@@ -54,6 +57,26 @@ export interface KnowledgeBaseHost {
   pickTable(): Promise<{ name: string; text: string } | null>;
   copyText(text: string): Promise<void>;
   openUrl(url: string): void;
+  /** PDFs the user picks, with where each is on this computer when the app can tell. */
+  pickPdfs?(): Promise<{ name: string; bytes: Uint8Array; path?: string }[]>;
+  /** The text of each page of a PDF. */
+  readPdfPages?(bytes: Uint8Array, progress: (done: number, of: number) => void): Promise<string[]>;
+  /** The PDFs read before (each a PdfIndex as JSON). */
+  readPdfs?(): Promise<string[]>;
+  writePdf?(id: string, json: string): Promise<void>;
+  removePdf?(id: string): Promise<void>;
+  /** Open a file on this computer in the program that opens it. */
+  openFile?(path: string): Promise<void>;
+}
+
+/** An excerpt with the words searched for marked. */
+export function marked(text: string, query: string): DocumentFragment {
+  const f = document.createDocumentFragment();
+  const words = query.trim().toLowerCase().split(/\s+/).filter((w) => w.length > 1).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  if (!words.length) { f.append(text); return f; }
+  const re = new RegExp(`(${words.join('|')})`, 'gi');
+  text.split(re).forEach((part, i) => f.append(i % 2 ? el('mark', { textContent: part }) : part));
+  return f;
 }
 
 /** Does this look like SMILES rather than a word or number (has ring digits, bonds or brackets)? */
@@ -104,7 +127,7 @@ export class KnowledgeBaseWindow {
     this.wrap = el('div', { className: 'refs-table-wrap kb-table-wrap' });
     this.sources = el('p', { className: 'muted kb-sources' });
     this.count = el('span', { className: 'muted' });
-    this.removeBtn = button('Remove Table…', 'Remove the imported table showing (only from this computer)', () => void this.removeImported());
+    this.removeBtn = button('Remove Table…', 'Remove the imported table or PDF showing (only from this computer; the file is not changed)', () => void this.removeImported());
     d.append(
       el('div', { className: 'refs-head' }, el('h2', { textContent: 'Knowledge Base' }), this.search),
       el('div', { className: 'kb-body' },
@@ -113,6 +136,7 @@ export class KnowledgeBaseWindow {
       el('div', { className: 'refs-buttons' },
         el('span', { className: 'refs-add' },
           button('Import Table…', 'Add a table of your own from a CSV or tab-separated file (or paste one from a spreadsheet). It is kept on this computer only', () => void this.importTable()),
+          ...(this.host.pickPdfs ? [button('Add PDFs…', 'Search your own PDFs (a book, papers, SI files) here too. Their text is read once and kept on this computer only', () => void this.addPdfs())] : []),
           this.removeBtn),
         el('span', { className: 'refs-edit' },
           this.count,
@@ -142,10 +166,55 @@ export class KnowledgeBaseWindow {
       if (!Array.isArray(got)) return;
       for (const t of got) if (t && typeof t.id === 'string' && Array.isArray(t.rows) && Array.isArray(t.columns)) this.tables.push({ ...t, personal: true });
     } catch { /* a damaged file: start without imported tables */ }
+    finally { await this.loadPdfs(); }
+  }
+
+  private async loadPdfs(): Promise<void> {
+    const all = await this.host.readPdfs?.().catch(() => [] as string[]) ?? [];
+    for (const json of all) {
+      try {
+        const p = JSON.parse(json) as PdfIndex;
+        if (p && typeof p.id === 'string' && Array.isArray(p.pages)) this.tables.push(pdfTable(p));
+      } catch { /* a damaged index: leave it out */ }
+    }
   }
 
   private async saveImported(): Promise<void> {
-    await this.host.writeImported(JSON.stringify(this.tables.filter((t) => t.personal), null, 1));
+    await this.host.writeImported(JSON.stringify(this.tables.filter((t) => t.personal && !t.pdf), null, 1));
+  }
+
+  /** Add PDFs: read each one's text, page by page, and keep it on this computer. */
+  private async addPdfs(): Promise<void> {
+    const h = this.host;
+    if (!h.pickPdfs || !h.readPdfPages || !h.writePdf) return;
+    const files = await h.pickPdfs().catch((e) => { h.flash(`Couldn't open the PDFs: ${e}`); return []; });
+    let last: KbTable | null = null, added = 0;
+    for (const f of files) {
+      h.flash(`Reading ${f.name}…`, 60000);
+      let pages: string[];
+      try {
+        pages = await h.readPdfPages(f.bytes, (done, of) => h.flash(`Reading ${f.name}: page ${done} of ${of}…`, 60000));
+      } catch (e) {
+        h.flash(`${f.name} couldn't be read: ${e}`);
+        continue;
+      }
+      if (!pages.some((p) => p)) { h.flash(`${f.name} has no text to search (a scan without OCR?).`, 6000); continue; }
+      const index: PdfIndex = { id: `pdf-${Date.now().toString(36)}${added}`, name: f.name, ...(f.path ? { path: f.path } : {}), added: new Date().toISOString(), pages };
+      await h.writePdf(index.id, JSON.stringify(index));
+      // the same file added again replaces the copy read before
+      const old = this.tables.find((t) => t.pdf && t.title === pdfTable(index).title && t.pdf.path === index.path);
+      if (old) { this.tables = this.tables.filter((t) => t !== old); await h.removePdf?.(old.id); }
+      last = pdfTable(index);
+      this.tables.push(last);
+      added++;
+    }
+    if (!last) return;
+    this.current = last;
+    this.picked = {};
+    this.sort = null;
+    this.showList();
+    this.showTable();
+    h.flash(added === 1 ? `Added ${last.title} (${last.rows.length} pages with text).` : `Added ${added} PDFs.`);
   }
 
   /** The table list on the left, each with how many rows match the search. */
@@ -223,6 +292,7 @@ export class KnowledgeBaseWindow {
     const t = this.current;
     this.about.textContent = t.about;
     this.removeBtn.hidden = !t.personal;
+    this.removeBtn.textContent = t.pdf ? 'Remove PDF…' : 'Remove Table…';
     // filter lists
     this.filters.replaceChildren(...t.columns.filter((c) => c.filter).map((c) => {
       const s = el('select', { title: `Show only one ${c.label.toLowerCase()}` });
@@ -242,12 +312,14 @@ export class KnowledgeBaseWindow {
     for (const m of shown) {
       const tr = el('tr');
       for (const c of t.columns) {
-        const v = m.row[c.key];
+        if (c.hidden) continue;
+        const v = cellShown(m.row, c, this.search.value);
         const td = el('td');
         if (c.numeric || c.shift) td.className = 'num';
         if (c.narrow) td.classList.add('narrow');
         if (c.key === 'cas') td.classList.add('cas');
-        if (v !== null && v !== undefined && v !== '') td.append(typeof v === 'number' ? String(v) : cellExplained(v, !!c.narrow));
+        if (c.excerptOf) { td.classList.add('kb-excerpt'); if (v) td.append(marked(String(v), this.search.value)); }
+        else if (v !== null && v !== undefined && v !== '') td.append(typeof v === 'number' ? String(v) : cellExplained(v, !!c.narrow));
         tr.append(td);
       }
       if (t.links) {
@@ -255,14 +327,15 @@ export class KnowledgeBaseWindow {
         t.links(m.row).forEach((l, i) => {
           if (i) td.append(' · ');
           const a = el('a', { href: l.url ?? '#', textContent: l.label });
-          a.addEventListener('click', (e) => { e.preventDefault(); if (l.url) this.host.openUrl(l.url); });
+          if (l.path) a.title = l.page ? `Open the PDF (this is page ${l.page})` : 'Open the file';
+          a.addEventListener('click', (e) => { e.preventDefault(); void this.follow(l); });
           td.append(a);
         });
         tr.append(td);
       }
       body.append(tr);
     }
-    const table = el('table', { className: 'refs-table kb-table' }, el('thead', {}, el('tr', {}, ...t.columns.map((c) => this.header(c)), ...(t.links ? [el('th', { textContent: 'Look up' })] : []))), body);
+    const table = el('table', { className: 'refs-table kb-table' }, el('thead', {}, el('tr', {}, ...t.columns.filter((c) => !c.hidden).map((c) => this.header(c)), ...(t.links ? [el('th', { textContent: 'Look up' })] : []))), body);
     if (!rows.length) {
       const q = this.search.value.trim();
       this.wrap.replaceChildren(el('p', { className: 'muted kb-empty', textContent: q ? `Nothing in ${t.title} matches “${q}”.` : 'This table is empty.' }));
@@ -280,9 +353,21 @@ export class KnowledgeBaseWindow {
     });
   }
 
+  /** A row's link: a web page, or one of your files (a PDF opens in its own program, at its first page). */
+  private async follow(l: { url?: string; path?: string; page?: number }): Promise<void> {
+    if (l.url) { this.host.openUrl(l.url); return; }
+    if (!l.path || !this.host.openFile) return;
+    try {
+      await this.host.openFile(l.path);
+      if (l.page) this.host.flash(`Opened the PDF: what you searched for is on page ${l.page}.`, 5000);
+    } catch (e) {
+      this.host.flash(`Couldn't open ${l.path}: it may have moved. Add it again to search it from its new place. (${e})`, 7000);
+    }
+  }
+
   private async copy(): Promise<void> {
     const rows = this.matches(this.current);
-    await this.host.copyText(tableTsv(this.current, rows));
+    await this.host.copyText(tableTsv(this.current, rows, this.search.value));
     this.host.flash(`Copied ${rows.length} row${rows.length === 1 ? '' : 's'} of ${this.current.title}: paste into a sheet or a table.`);
   }
 
@@ -315,10 +400,12 @@ export class KnowledgeBaseWindow {
   private async removeImported(): Promise<void> {
     const t = this.current;
     if (!t.personal) return;
-    const ok = await ask('Remove Table', [], { ok: 'Remove', note: `Remove ${t.title} (${t.rows.length} rows) from this computer? The file it came from is not changed.` });
+    const what = t.pdf ? `the searchable text of ${t.title} (${t.rows.length} pages)` : `${t.title} (${t.rows.length} rows)`;
+    const ok = await ask(t.pdf ? 'Remove PDF' : 'Remove Table', [], { ok: 'Remove', note: `Remove ${what} from this computer? The file it came from is not changed.` });
     if (!ok) return;
     this.tables = this.tables.filter((x) => x !== t);
-    await this.saveImported();
+    if (t.pdf) await this.host.removePdf?.(t.id);
+    else await this.saveImported();
     this.current = this.tables[0];
     this.showList();
     this.showTable();
