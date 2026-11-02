@@ -203,6 +203,7 @@ import type { SheetFileDeps } from './io/sheet-files';
 import { fromEmbedSource, type Embedded } from './io/ole-object';
 import { objectPicture, type ObjectPicture } from './render/object-picture';
 import { ACS_1996, BOND_END_CHOICES, bondEndPrefs, DocStyle } from './style';
+import { DEFAULT_DEPTH_SHADE, depthShadePrefs } from './render/depth-shade';
 import { emptyTable, tableFromCells } from './table';
 import type { TableData } from './model';
 import { checkDrawing, checkDocument, checkWorkbook, repeatedTitles, structureAlt, setStructureAlt, type Issue, type IssuePlace } from './accessibility';
@@ -1304,6 +1305,45 @@ async function turn3dDialog(): Promise<void> {
   lastTurn3d = { x: r.x, y: r.y, z: r.z, shape: r.shape };
   if (r.shape === 'real') flash('Building the 3-D shape…');
   await editor.turnSelectionBy(x, y, z, r.shape === 'real');
+}
+
+/** Depth shading on or off (Format ▸ Depth Shading): structures in 3-D fade from black in front to grey behind. */
+function toggleDepthShading(): void {
+  depthShadePrefs.on = !depthShadePrefs.on;
+  depthShadingChanged();
+  storeSettings();
+  flash(depthShadePrefs.on ? 'Depth shading on: structures turned in 3-D fade from front to back.' : 'Depth shading off.');
+}
+
+/** Depth Shading Settings…: the colours in front and behind, how the fade goes, and whether lines thin with depth. */
+async function depthShadingDialog(): Promise<void> {
+  const s = depthShadePrefs;
+  const r = await ask('Depth Shading', [
+    { name: 'on', label: 'Shade structures drawn in 3-D by depth', type: 'checkbox', value: String(s.on),
+      help: 'Structures turned with the Perspective tools, placed from the 3-D Model window, or drawn from conformer templates. Each is shaded over its own depth.' },
+    { name: 'near', label: 'Nearest colour', type: 'color', value: s.near },
+    { name: 'far', label: 'Furthest colour', type: 'color', value: s.far },
+    { name: 'curve', label: 'Fade', value: s.curve, options: [{ value: 'linear', label: 'Even (linear)' }, { value: 'eased', label: 'Eased (slow at front and back)' }] },
+    { name: 'thin', label: 'Thin the lines with depth too', type: 'checkbox', value: String(s.thin) },
+    { name: 'thinTo', label: 'Line width at the back', type: 'number', unit: '% of the usual', value: String(Math.round(s.thinTo * 100)) },
+  ], { ok: 'Apply', note: `The usual look is black in front to ${DEFAULT_DEPTH_SHADE.far} grey behind, evenly, lines kept their width. Pictures you copy or export keep the shading.` });
+  if (!r) return;
+  const pct = Number(r.thinTo);
+  Object.assign(depthShadePrefs, {
+    on: r.on === 'true', near: r.near || s.near, far: r.far || s.far, curve: r.curve === 'eased' ? 'eased' : 'linear',
+    thin: r.thin === 'true', thinTo: isFinite(pct) ? Math.max(10, Math.min(100, pct)) / 100 : s.thinTo,
+  });
+  depthShadingChanged();
+  storeSettings();
+}
+
+/** Repaint with the depth shading as it now is, and tick the menu. */
+function depthShadingChanged(): void {
+  for (const el of document.querySelectorAll('[data-cmd="depth-shading"][role="menuitemcheckbox"]')) el.setAttribute('aria-checked', String(depthShadePrefs.on));
+  doc.allDirty = true;
+  renderer.repaintAll();
+  editor.requestScene();
+  viewer3d?.redraw();
 }
 
 async function show3dModel(): Promise<void> {
@@ -6175,6 +6215,8 @@ const COMMANDS: Record<string, () => unknown> = {
   'model-3d': () => void show3dModel(),
   'turn-3d': () => void turn3dDialog(),
   'flatten-3d': () => editor.flattenSelection() || flash('Select a structure to flatten.'),
+  'depth-shading': () => toggleDepthShading(),
+  'depth-shading-settings': () => void depthShadingDialog(),
   'structure-to-name': () => void structureToName(),
   'add-id-label': () => void addTiedText('label'),
   'lock-structures': () => toggleStructureLock(),
@@ -7436,6 +7478,7 @@ function currentSettings(): Settings {
     arrowEndGap: arrowGaps.end,
     superscriptR: labelPrefs.superscriptR,
     bondEnds: bondEndPrefs.round,
+    depthShade: { ...depthShadePrefs },
     linkSide,
     slideTemplate,
     slideThemes,
@@ -7666,6 +7709,8 @@ function applySettings(s: Settings): void {
   arrowGaps.end = s.arrowEndGap;
   labelPrefs.superscriptR = s.superscriptR;
   bondEndPrefs.round = s.bondEnds;
+  Object.assign(depthShadePrefs, s.depthShade);
+  for (const el of document.querySelectorAll('[data-cmd="depth-shading"][role="menuitemcheckbox"]')) el.setAttribute('aria-checked', String(depthShadePrefs.on));
   linkSide = s.linkSide;
   slideTemplate = s.slideTemplate;
   slideThemes = s.slideThemes;
@@ -8752,7 +8797,7 @@ function drawingMenu(): MenuItem[] {
       ] },
       { cmd: 'structure-to-name' },
       { cmd: 'model-3d' },
-      { label: 'Perspective', items: [{ cmd: 'turn-3d' }, { cmd: 'flatten-3d' }] },
+      { label: 'Perspective', items: [{ cmd: 'turn-3d' }, { cmd: 'flatten-3d' }, null, { cmd: 'depth-shading', checked: depthShadePrefs.on }, { cmd: 'depth-shading-settings' }] },
     ] : []),
     ...(pickedCurved() ? [{ cmd: 'clean-up-arrow' }, { label: 'Mechanism Arrow', items: [
       { cmd: 'arrow-add-bend', ...(editor.contextSpot?.t !== undefined ? { label: 'Add Bend Here' } : {}) }, ...(editor.pickedJoin() ? [{ cmd: 'arrow-remove-bend' }, { cmd: 'arrow-smooth-join' }, { cmd: 'arrow-symmetric-join' }] : []), null,

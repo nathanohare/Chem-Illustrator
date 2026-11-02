@@ -196,6 +196,10 @@ Two tools turn a structure in 3-D as you drag it. Press on a structure (or on th
 
 A turned structure keeps its 3-D positions in the CDXML file (ChemDraw's `xyz`), as **Place on Page** in the [3-D model](#3-d-model) window does.
 
+### Depth shading
+
+**Format ▸ Rotate and Flip ▸ Depth Shading** (also under **Perspective** on a structure's right-click menu) shades every structure drawn in 3-D by depth: the atoms and bonds nearest you are black, fading to grey the further back they lie. That covers structures turned with the Perspective tools, placed from the 3-D Model window, and drawn from the conformer templates. Each structure is shaded over its own depth, front to back; flat drawings are left as they are, and anything you have coloured yourself keeps its colour. **Depth Shading Settings…** sets the nearest and furthest colours (black and 60% grey, #999999, to start with), whether the fade is even or eased (slow at the front and back, quicker in the middle), and whether lines also thin with depth, and to what width at the back. It is a setting of the app, like the ends of bond lines: pictures you copy or export, and prints, keep the shading, but a CDXML file saves the structure's usual colours. The 3-D Model window has a **Depth** box that fades the back of its model in the same way.
+
 ## Moving, turning and the Format menu
 
 Select something and:

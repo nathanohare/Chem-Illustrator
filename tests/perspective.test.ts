@@ -203,3 +203,28 @@ describe('choosing the shape', () => {
     expect('k' in pick && pick.mirror).toBe(true);
   });
 });
+
+describe('depth shading', () => {
+  it('shades each structure over its own depth, nearest 0 to furthest 1; flat ones not at all', async () => {
+    const { depthFractions, shadeLook, shadeStep, readDepthShade, SHADE_STEPS, DEFAULT_DEPTH_SHADE } = await import('../src/render/depth-shade');
+    const doc = draw('CCCCCC');
+    expect(depthFractions(doc).size).toBe(0);
+    const prep = await prepareTurn(doc, structuresOf(doc, doc.atoms.keys()), false, null);
+    doc.bulk(() => prep.turn.apply(doc, dragTurn(80, 0, false), true));
+    const back = depthFractions(doc);
+    expect(back.size).toBe(6);
+    const near = [...doc.atoms.values()].reduce((a, b) => (a.depth! > b.depth! ? a : b));
+    const far = [...doc.atoms.values()].reduce((a, b) => (a.depth! < b.depth! ? a : b));
+    expect(back.get(near.id)).toBe(0);
+    expect(back.get(far.id)).toBe(1);
+    // the look: black in front to 60% grey at the back, evenly, no thinning
+    expect(shadeLook(0, DEFAULT_DEPTH_SHADE)).toEqual({ color: '#000000', width: 1 });
+    expect(shadeLook(SHADE_STEPS - 1, DEFAULT_DEPTH_SHADE)).toEqual({ color: '#999999', width: 1 });
+    const thin = { ...DEFAULT_DEPTH_SHADE, thin: true, thinTo: 0.5, curve: 'eased' as const };
+    expect(shadeLook(SHADE_STEPS - 1, thin).width).toBeCloseTo(0.5, 9);
+    // eased: slower than even near the front
+    expect(parseInt(shadeLook(shadeStep(0.2), thin).color.slice(1, 3), 16)).toBeLessThan(parseInt(shadeLook(shadeStep(0.2), DEFAULT_DEPTH_SHADE).color.slice(1, 3), 16));
+    // settings read back safely
+    expect(readDepthShade({ on: true, near: 'red', far: '#AABBCC', thinTo: 7 })).toEqual({ ...DEFAULT_DEPTH_SHADE, on: true, far: '#aabbcc', thinTo: 1 });
+  });
+});
