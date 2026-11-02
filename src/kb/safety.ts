@@ -313,6 +313,12 @@ export function rate(r: SafetyRecord): Rating {
   if (has(r, 'H224', 'H225')) why3.push('Highly flammable');
   if (has(r, 'H314')) why3.push('Corrosive');
   if ((has(r, 'H260', 'H261') || WATER_REACTIVE.has(cas)) && !NAMED[r.cid]?.water) why3.push('Reacts with water');
+  // what the harmonised classification says beyond the numbers, so a Tier 3 row never reads as harmless
+  if (has(r, 'H340', 'H350')) why3.push('Carcinogen or mutagen 1A/1B (harmonised), not volatile');
+  if (has(r, 'H360')) why3.push('May damage fertility or the unborn child (H360, harmonised)');
+  if (has(r, 'H301', 'H311', 'H331')) why3.push('Toxic (acute category 3, harmonised)');
+  if (has(r, 'H370', 'H372')) why3.push('Damages organs (H370/H372, harmonised)');
+  if (has(r, 'H334')) why3.push('Respiratory sensitiser');
   if (has(r, 'H351')) why3.push('Suspected carcinogen only');
   return { tier: 3, why: why3.length ? why3 : ['Standard handling: hood, gloves, goggles'] };
 }

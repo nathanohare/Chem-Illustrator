@@ -7,7 +7,7 @@
 import type { Deck } from '../deck/deck';
 import type { Player } from '../deck/playback';
 import type { Rect } from '../geom';
-import { slideOfLink, SHOW_JUMPS } from '../links';
+import { keyOfLink, slideOfLink, SHOW_JUMPS } from '../links';
 
 /** A zoom to come back from: the zoom's slide and box, and the last slide before coming back. */
 interface Return { slide: number; rect: Rect; until: number }
@@ -28,6 +28,10 @@ export interface ShowActionHooks {
   flew?(key: number, go: boolean): void;
   /** A video or sound was clicked (presenter view tells the audience's window), as fractions of the canvas. */
   tapped?(fx: number, fy: number): void;
+  /** Every slide as pictures to pick (#grid). */
+  grid?(): void;
+  /** Look round the Canvas slide freely (#look). */
+  look?(): void;
 }
 
 export class ShowActions {
@@ -47,12 +51,14 @@ export class ShowActions {
 
   /** Whether something there takes a click (for the pointer). */
   clickable(px: number, py: number): boolean {
-    return !!this.player.actionAt(px, py) || this.player.minimapKeyAt(px, py) >= 0 || this.player.compoundAt(px, py) >= 0 || this.player.mediaAt(px, py) || this.player.triggerAt(px, py);
+    return !!this.player.actionAt(px, py) || this.player.minimapKeyAt(px, py) >= 0 || (this.player.lookingRound && !!this.player.minimapPointAt(px, py)) || this.player.compoundAt(px, py) >= 0 || this.player.mediaAt(px, py) || this.player.triggerAt(px, py);
   }
 
   /** A click at a point on the canvas (CSS pixels): true when something there took it. */
   click(px: number, py: number): boolean {
-    // a canvas slide's mini-map: the show goes on from the keyframe picked
+    // a canvas slide's mini-map: while looking round, the view moves there; else the show goes on from the keyframe picked
+    const mp = this.player.lookingRound ? this.player.minimapPointAt(px, py) : null;
+    if (mp) { this.player.centreOn(mp); return true; }
     const mk = this.player.minimapKeyAt(px, py);
     if (mk >= 0) { this.fly(mk, true); return true; }
     const a = this.player.actionAt(px, py);
@@ -96,6 +102,15 @@ export class ShowActions {
         this.player.zoom(i, zoom.rect);
         this.hooks.zoomed?.(i, zoom.rect, false);
       } else this.hooks.go(i);
+      return;
+    }
+    if (link === '#grid') { this.hooks.grid?.(); return; }
+    if (link === '#look') { if (this.player.startLookRound()) this.hooks.look?.(); return; }
+    const key = keyOfLink(link);
+    if (key !== null) {
+      // a look at a region of this Canvas slide (a keyframe), the show going on from where it was
+      const k = this.deck.slides[cur]?.canvas?.keys.findIndex((x) => x.id === key) ?? -1;
+      if (k >= 0) this.fly(k, false);
       return;
     }
     if (link in SHOW_JUMPS) {

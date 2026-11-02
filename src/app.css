@@ -3177,7 +3177,6 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .smart-pane .sp-foot { display: flex; justify-content: space-between; gap: 6px; }
 .smart-pane .sp-add { border: none; background: none; color: var(--accent); font-weight: 600; cursor: pointer; padding: 2px 0; }
 .smart-pane .sp-ungroup { padding: 2px 8px; }
-<<<<<<< HEAD
 /* Chemistry > Newman Projection */
 dialog.newman-dialog { width: min(96vw, 600px); max-height: 92vh; }
 .np-grid { display: grid; grid-template-columns: 230px 1fr; gap: 14px; align-items: start; }
@@ -3207,7 +3206,6 @@ dialog.newman-settings { width: min(96vw, 600px); max-height: 92vh; }
 .ns-ranks input[type=color] { width: 34px; height: 22px; padding: 0; }
 .ns-presets { margin: 6px 0; }
 @media (max-width: 560px) { .newman-settings .ns-grid { grid-template-columns: 1fr; } .ns-preview { margin-top: 0; } }
-=======
 
 /* Insert ▸ Action Button… */
 .ab-gallery { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; }
@@ -3241,7 +3239,21 @@ dialog.newman-settings { width: min(96vw, 600px); max-height: 92vh; }
 .rbs-side button { flex: 1; width: 16px; padding: 0; font-size: 8px; line-height: 1; background: none; border: none; color: var(--text); cursor: pointer; }
 .rbs-side button:hover { background: var(--accent-soft); }
 .rbs-side .rbs-all { border-top: 1px solid var(--line); font-size: 10px; }
->>>>>>> origin/staging
 .newman-settings .ns-grid.ns-one { grid-template-columns: 1fr; }
 .sw-preview .ns-preview { margin: 0 auto; width: 100%; height: 230px; }
 .newman-settings .ask-row input[type=number] { width: 6em; justify-self: start; }
+/* the slide show's right-click menu, and short notes over the show */
+.present .show-menu { position: absolute; z-index: 5; min-width: 200px; padding: 3px 0; background: #26282d; color: #eee; border: 1px solid #444; border-radius: 4px; box-shadow: 0 6px 18px rgba(0,0,0,0.4); font: 13px system-ui, sans-serif; }
+.present .show-menu button { display: flex; width: 100%; justify-content: space-between; gap: 18px; padding: 4px 12px; background: none; border: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.present .show-menu button:hover:not(:disabled), .present .show-menu button:focus-visible { background: #3b5f8f; outline: none; }
+.present .show-menu button:disabled { opacity: 0.45; cursor: default; }
+.present .show-menu kbd { font: inherit; opacity: 0.6; }
+.present .show-menu hr { border: none; border-top: 1px solid #444; margin: 3px 0; }
+.present .show-note { position: absolute; left: 50%; bottom: 48px; transform: translateX(-50%); z-index: 5; padding: 6px 12px; background: rgba(20,20,20,0.85); color: #fff; border-radius: 4px; font: 13px system-ui, sans-serif; pointer-events: none; }
+/* Auto-Animate Steps offered at the corner of a selected scheme on a slide */
+.build-hint { position: fixed; z-index: 30; display: flex; align-items: stretch; background: var(--panel); border: 1px solid var(--accent); border-radius: var(--r-control); box-shadow: 0 2px 8px rgba(0,0,0,0.15); font-size: var(--fs-sm); }
+.build-hint[hidden] { display: none; }
+.build-hint button { background: none; border: none; color: var(--accent); cursor: pointer; padding: 3px 8px; font: inherit; }
+.build-hint .bh-go { font-weight: 600; }
+.build-hint .bh-go:hover, .build-hint .bh-x:hover { background: var(--accent-soft); }
+.build-hint .bh-x { border-left: 1px solid var(--line); color: var(--muted); padding: 3px 6px; }

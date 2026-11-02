@@ -5,7 +5,8 @@
 // shows them.
 
 import { describe, it, expect } from 'vitest';
-import { Doc, Caption } from '../src/model';
+import { Doc, Caption, type Shape } from '../src/model';
+import { geoShapeStyle } from '../src/design/geo';
 import { Deck } from '../src/deck/deck';
 import { writePptx, type PptxOptions } from '../src/io/pptx-write';
 import { readPptx, imageSize } from '../src/io/pptx-read';
@@ -275,6 +276,20 @@ describe('links in PowerPoint files', () => {
     deck.load(back.slides.map((s) => deck.makeSlide(s.layout, s.contents, s.notes, s)), back.size, back.master);
     expect(linksOf(deck.docOf(0).contents())).toEqual([['the paper', 'https://doi.org/10.1021/ja00001'], ['slide 3', `#slide=${deck.slides[2].id}`], ['on', '#next']]);
   });
+  it('keeps the show\'s own action buttons (slide picker, look around, a region) through PowerPoint, drawn there as they look', async () => {
+    const host = new Doc();
+    const d = Deck.blank(host);
+    d.attach();
+    const made: [string, string][] = [['actGrid', '#grid'], ['actLook', '#look'], ['actZoom', '#key=3']];
+    host.edit('Buttons', () => made.forEach(([geo, link], i) => host.addShape({ ...(geoShapeStyle(geo) as Shape), x1: 100 + i * 50, y1: 100, x2: 140 + i * 50, y2: 140, link })));
+    const bytes = await writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes })) }, opts);
+    const back = readPptx(bytes);
+    const deck = new Deck(new Doc());
+    deck.load(back.slides.map((s) => deck.makeSlide(s.layout, s.contents, s.notes, s)), back.size, back.master);
+    const shapes = [...deck.docOf(0).shapes.values()].filter((sh) => sh.kind === 'geo');
+    expect(shapes.map((sh) => [sh.kind === 'geo' && sh.geo, sh.link])).toEqual(made);
+  });
+
   /** A deck whose title slide reads "Slide One", then a link PowerPoint puts on the word "Slide". */
   async function titleLinkedInPowerPoint(keepOurs: boolean) {
     const host = new Doc();

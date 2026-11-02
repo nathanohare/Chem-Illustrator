@@ -18,7 +18,7 @@ import { drawVeil } from './canvas-look';
 import { cameraAt, compoundId, distanceDur, isCamera, keyRect, keysBounds, shownRect, slidePlace, slideShaped, timedCamera, unionRect, viewBetween, type CameraAt, type CanvasData, type Keyframe } from './canvas';
 import { selectionBox, POINTS } from '../editor/arrange';
 import { plainMeasure } from '../chem/reaction';
-import type { Rect } from '../geom';
+import type { Rect, Vec } from '../geom';
 import type { Selection } from '../editor/editor';
 import { plainText } from '../richtext';
 import {
@@ -1047,6 +1047,15 @@ export class Player {
     ctx.restore();
   }
 
+  /** The canvas point under a point (CSS pixels) on the mini-map, if it shows: null off it. */
+  minimapPointAt(px: number, py: number): Vec | null {
+    const c = this.deck.slides[this.i]?.canvas;
+    if (!c?.keys.length || !this.minimapShown(c)) return null;
+    const { box, area, k } = this.minimapPlace(c);
+    if (px < box.x1 || px > box.x2 || py < box.y1 || py > box.y2) return null;
+    return { x: area.x1 + (px - box.x1) / k, y: area.y1 + (py - box.y1) / k };
+  }
+
   /** The keyframe under a point (CSS pixels) on the mini-map, if it shows: -1 off it. */
   minimapKeyAt(px: number, py: number): number {
     const c = this.deck.slides[this.i]?.canvas;
@@ -1192,6 +1201,22 @@ export class Player {
     // once it stops moving, the view is painted sharp at the size it is seen
     this.freeTimer = window.setTimeout(() => { if (this.free === fr && !fr.back) { fr.settled = true; this.paint(); } }, 180);
     this.onChange();
+  }
+
+  /** Start looking round by hand from where the show is (a right-click, L, an action button). False: not a canvas slide. */
+  startLookRound(): boolean {
+    if (!this.lookRound()) return false;
+    this.paint();
+    this.onChange();
+    return true;
+  }
+
+  /** While looking round, move the view so canvas point `q` is in the middle (a click on the mini-map). */
+  centreOn(q: Vec): boolean {
+    if (!this.lookingRound) return false;
+    const v = this.free!.view, w = v.x2 - v.x1, h = v.y2 - v.y1;
+    this.setFreeView({ x1: q.x - w / 2, y1: q.y - h / 2, x2: q.x + w / 2, y2: q.y + h / 2 });
+    return true;
   }
 
   /** Drag the canvas by (dx, dy) CSS pixels. */
