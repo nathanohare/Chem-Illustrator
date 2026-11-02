@@ -156,7 +156,11 @@ def c_status(mol, sp, has_f_or_p):
             return 'bad_list', unique
         plain += 1
         weighted += p[3] if len(p) > 3 and isinstance(p[3], (int, float)) and p[3] and p[3] < 10 else 1
-    if unique in (plain, weighted) or weighted == total:
+    flat = Chem.Mol(mol)
+    Chem.RemoveStereochemistry(flat)  # meso compounds: stereo-aware ranks split mirror-image carbons
+    rank2 = list(Chem.CanonicalRankAtoms(flat, breakTies=False))
+    unique2 = len({rank2[a.GetIdx()] for a in flat.GetAtoms() if a.GetAtomicNum() == 6})
+    if {plain, weighted} & {unique, unique2} or weighted == total:
         return 'match', unique
     n = plain
     if abs(n - unique) == 1 and unique >= 6:
@@ -174,7 +178,8 @@ def c_status(mol, sp, has_f_or_p):
     return f'mismatch({n}/{unique})', unique
 
 
-def pick_structure(rd, opsin):
+def candidates(rd, opsin):
+    """Structures to try: OPSIN's reading of the printed name, and the reader's SMILES."""
     cands = []
     if opsin and opsin.get('ok'):
         m = Chem.MolFromSmiles(opsin['smiles'])
@@ -184,17 +189,84 @@ def pick_structure(rd, opsin):
         m = Chem.MolFromSmiles(rd['smiles'])
         if m is not None:
             cands.append(('reader', m))
-    if not cands:
-        return None, None, None
-    scored = [(src, m, formula_status(m, rd)) for src, m in cands]
-    for want in ('match', 'none', 'mismatch'):
-        for src, m, fs in scored:
-            if fs == want:
-                agree = None
-                if len(cands) == 2:
-                    agree = Chem.MolToInchiKey(cands[0][1]) == Chem.MolToInchiKey(cands[1][1])
-                return src, m, (fs, agree)
-    return None, None, None
+    agree = None
+    if len(cands) == 2:
+        agree = Chem.MolToInchiKey(cands[0][1]) == Chem.MolToInchiKey(cands[1][1])
+        if agree:
+            cands = cands[:1]
+    return cands, agree
+
+
+def evaluate(rd, b, src, mol, agree, base):
+    rec = dict(base, structure_source=src, spectra=[])
+    fs = formula_status(mol, rd)
+    rec['smiles'] = Chem.MolToSmiles(mol)
+    rec['inchikey'] = Chem.MolToInchiKey(mol)
+    rec['formula'] = CalcMolFormula(mol)
+    rec['formula_check'] = fs
+    rec['opsin_reader_agree'] = agree
+    rec['classes'] = classes.tags(mol, b.get('query_class'))
+    syms = {a.GetSymbol() for a in mol.GetAtoms()}
+    reasons, silver = [], False
+    if fs == 'mismatch':
+        reasons.append('formula_mismatch')
+    if fs == 'none' and src == 'reader' and agree is not True:
+        reasons.append('structure_unverified')
+    h_mhz = None
+    for sp in rd.get('spectra') or []:
+        nuc = sp.get('nuc')
+        entry = {k: sp.get(k) for k in ('nuc', 'mhz', 'solvent', 'temp_K', 'decoupled', 'signals', 'peaks', 'flags')}
+        if nuc == '1H':
+            st, _ = h_status(mol, sp)
+            entry['check'] = st
+            h_mhz = h_mhz or sp.get('mhz')
+            if st == 'match_minus_exchangeable':
+                silver = True
+            elif st.startswith('mismatch') and fs == 'match' and _ > 0:
+                got = float(st[st.index('(') + 1:st.index('/')])
+                if abs(got - _) <= 1 and _ >= 15:
+                    entry['check'] = 'close'
+                    silver = True
+                else:
+                    reasons.append('1H_mismatch')
+            elif st != 'match' and not st.startswith('mismatch'):
+                reasons.append('1H_' + st.split('(')[0])
+            elif st.startswith('mismatch') and fs != 'match':
+                reasons.append('1H_mismatch')
+        elif nuc == '13C':
+            st, _ = c_status(mol, sp, bool(syms & {'F', 'P'}))
+            entry['check'] = st
+            if st in ('close', 'extra_lines_cf_cp', 'missing_some', 'rotamer_doubling', 'diastereotopic_possible'):
+                silver = True
+            elif st != 'match':
+                reasons.append('13C_' + st.split('(')[0])
+            if sp.get('mhz') and sp['mhz'] > 260:
+                entry.setdefault('flags', [])
+                entry['flags'] = (entry['flags'] or []) + ['field_inconsistent']
+        else:
+            entry['check'] = 'not_checked'
+        lo, hi = {'1H': (-6, 20), '13C': (-15, 250)}.get(nuc, (-1e9, 1e9))
+        vals = [x[0] for x in (sp.get('signals') or sp.get('peaks') or []) if x and isinstance(x[0], (int, float))]
+        if nuc == '1H':
+            for x in sp.get('signals') or []:
+                if x and len(x) > 1 and isinstance(x[1], (int, float)) and isinstance(x[0], (int, float)):
+                    vals.append(x[1])
+                    if abs(x[1] - x[0]) > 1.5:
+                        vals.append(1e9)  # "8.22-820": a range end with a lost decimal point
+        if any(not lo <= v <= hi for v in vals):
+            reasons.append(nuc + '_value_out_of_range')
+        if any(f in (sp.get('flags') or []) for f in ('mixture', 'list_truncated', 'minor_isomer')):
+            reasons.append('list_' + '_'.join(f for f in sp['flags'] if f in ('mixture', 'list_truncated', 'minor_isomer')))
+        rec['spectra'].append(entry)
+    if 'two_compounds' in (rd.get('flags') or []):
+        silver = True
+    if src == 'reader' and set(rd.get('flags') or []) & {'name_unclear', 'structure_from_procedure', 'label_only'}:
+        silver = True  # structure inferred by the reader, so the formula check is less independent
+    if not any(s['nuc'] in ('1H', '13C') for s in rec['spectra']):
+        reasons.append('no_1H_or_13C')
+    rec['tier'] = 'fail' if reasons else ('silver' if silver else 'gold')
+    rec['reasons'] = reasons
+    return rec
 
 
 def main():
@@ -234,87 +306,22 @@ def main():
         if rd.get('skip'):
             stats['skipped'] += 1
             continue
-        src, mol, fsag = pick_structure(rd, op)
-        rec = {'block_id': bid, 'pmcid': b['pmcid'], 'doi': b['doi'], 'license': b['license'], 'label': rd.get('label'),
-               'name': rd.get('name'), 'structure_source': src, 'reading_flags': rd.get('flags') or [], 'spectra': []}
-        if mol is None:
+        base = {'block_id': bid, 'pmcid': b['pmcid'], 'doi': b['doi'], 'license': b['license'], 'label': rd.get('label'),
+                'name': rd.get('name'), 'reading_flags': rd.get('flags') or []}
+        cands, agree = candidates(rd, op)
+        if not cands:
+            rec = dict(base, structure_source=None, spectra=[], tier='fail', reasons=['no_structure'])
             stats['no_structure'] += 1
-            rec['tier'] = 'fail'
-            rec['reasons'] = ['no_structure']
             fails['no_structure'] += 1
             out.append(rec)
             continue
-        fs, agree = fsag
-        rec['smiles'] = Chem.MolToSmiles(mol)
-        rec['inchikey'] = Chem.MolToInchiKey(mol)
-        rec['formula'] = CalcMolFormula(mol)
-        rec['formula_check'] = fs
-        rec['opsin_reader_agree'] = agree
-        rec['classes'] = classes.tags(mol, b.get('query_class'))
-        syms = {a.GetSymbol() for a in mol.GetAtoms()}
-        reasons, silver = [], False
-        if fs == 'mismatch':
-            reasons.append('formula_mismatch')
-        if fs == 'none' and src == 'reader' and agree is not True:
-            reasons.append('structure_unverified')
-        h_mhz = None
-        for sp in rd.get('spectra') or []:
-            nuc = sp.get('nuc')
-            entry = {k: sp.get(k) for k in ('nuc', 'mhz', 'solvent', 'temp_K', 'decoupled', 'signals', 'peaks', 'flags')}
-            if nuc == '1H':
-                st, _ = h_status(mol, sp)
-                entry['check'] = st
-                h_mhz = h_mhz or sp.get('mhz')
-                if st == 'match_minus_exchangeable':
-                    silver = True
-                elif st.startswith('mismatch') and fs == 'match' and _ > 0:
-                    got = float(st[st.index('(') + 1:st.index('/')])
-                    if abs(got - _) <= 1 and _ >= 15:
-                        entry['check'] = 'close'
-                        silver = True
-                    else:
-                        reasons.append('1H_mismatch')
-                elif st != 'match' and not st.startswith('mismatch'):
-                    reasons.append('1H_' + st.split('(')[0])
-                elif st.startswith('mismatch') and fs != 'match':
-                    reasons.append('1H_mismatch')
-            elif nuc == '13C':
-                st, _ = c_status(mol, sp, bool(syms & {'F', 'P'}))
-                entry['check'] = st
-                if st in ('close', 'extra_lines_cf_cp', 'missing_some', 'rotamer_doubling', 'diastereotopic_possible'):
-                    silver = True
-                elif st != 'match':
-                    reasons.append('13C_' + st.split('(')[0])
-                if sp.get('mhz') and sp['mhz'] > 260:
-                    entry.setdefault('flags', [])
-                    entry['flags'] = (entry['flags'] or []) + ['field_inconsistent']
-            else:
-                entry['check'] = 'not_checked'
-            lo, hi = {'1H': (-6, 20), '13C': (-15, 250)}.get(nuc, (-1e9, 1e9))
-            vals = [x[0] for x in (sp.get('signals') or sp.get('peaks') or []) if x and isinstance(x[0], (int, float))]
-            if nuc == '1H':
-                for x in sp.get('signals') or []:
-                    if x and len(x) > 1 and isinstance(x[1], (int, float)) and isinstance(x[0], (int, float)):
-                        vals.append(x[1])
-                        if abs(x[1] - x[0]) > 1.5:
-                            vals.append(1e9)  # "8.22-820": a range end with a lost decimal point
-            if any(not lo <= v <= hi for v in vals):
-                reasons.append(nuc + '_value_out_of_range')
-            if any(f in (sp.get('flags') or []) for f in ('mixture', 'list_truncated', 'minor_isomer')):
-                reasons.append('list_' + '_'.join(f for f in sp['flags'] if f in ('mixture', 'list_truncated', 'minor_isomer')))
-            rec['spectra'].append(entry)
-        if 'two_compounds' in (rd.get('flags') or []):
-            silver = True
-        if src == 'reader' and set(rd.get('flags') or []) & {'name_unclear', 'structure_from_procedure', 'label_only'}:
-            silver = True  # structure inferred by the reader, so the formula check is less independent
-        if not any(s['nuc'] in ('1H', '13C') for s in rec['spectra']):
-            reasons.append('no_1H_or_13C')
-        rec['tier'] = 'fail' if reasons else ('silver' if silver else 'gold')
-        rec['reasons'] = reasons
-        for r_ in reasons:
+        order = {'gold': 0, 'silver': 1, 'fail': 2}
+        recs = [evaluate(rd, b, src, mol, agree, base) for src, mol in cands]
+        rec = min(recs, key=lambda r: (order[r['tier']], len(r['reasons']), r['structure_source'] != 'opsin'))
+        for r_ in rec['reasons']:
             fails[r_] += 1
         stats['tier_' + rec['tier']] += 1
-        stats['structure_' + str(src)] += 1
+        stats['structure_' + str(rec['structure_source'])] += 1
         out.append(rec)
     with open(outp, 'w') as f:
         for r in out:
