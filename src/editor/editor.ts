@@ -10,6 +10,9 @@ import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAt
 import { CaptionEditor } from '../ui/caption-editor';
 import { followLink, linkTip } from '../ui/links-ui';
 import { stopAtEdge } from '../ui/scrollbars';
+
+/** Screen pixels of grey left showing past a fixed page edge when panned as far as it goes. */
+export const WALL_BAND = 14;
 import { linkAtPoint } from '../links';
 import { typingPrefs } from '../text/typing';
 import { geoDef, geoShapeStyle, moveSteps, traceSteps } from '../design/geo';
@@ -318,7 +321,7 @@ const HILITE = 'rgba(40, 120, 255, 0.28)';
 const PREVIEW = '#2f6fdf';
 
 /**
- * Colours of the marks drawn over the page. With View > Dark Page on, the marks go through the
+ * Colours of the marks drawn over the page. With View > Reading Mode on, the marks go through the
  * page's colour filter too (so text being typed shows in the ink colour), which turns lightness
  * round: these are picked to come out bright and clear on the dark page.
  */
@@ -622,6 +625,7 @@ export class Editor {
     this.frameQueued = false;
     const t0 = performance.now(), dragging = !!this.drag;
     if (this.needScene) {
+      this.keepByWalls();
       this.r.renderScene(this.doc, full ? Infinity : 10);
       this.needScene = this.r.incomplete;
     }
@@ -1546,6 +1550,24 @@ export class Editor {
 
   /** What the wheel scrolls over: it stops at this (with half a screen of room) as the scroll bars do. */
   scrollArea: (() => { x1: number; y1: number; x2: number; y2: number } | null) | null = null;
+  /**
+   * Panning and zooming stop with a thin band of grey past a fixed page edge (`WALL_BAND` screen
+   * pixels), rather than half a window of it. Where the pages are narrower or shorter than the
+   * window, they keep to the left and top fixed edges and the spare room opens to the right and down.
+   */
+  private keepByWalls(): void {
+    const w = this.walls?.();
+    if (!w) return;
+    const v = this.r.view, s = v.scale, band = WALL_BAND;
+    const keep = (o: number, lo1: number, hi2: number, size: number) => {
+      const hi = isFinite(lo1) ? band - lo1 * s : Infinity;
+      const lo = isFinite(hi2) ? size - band - hi2 * s : -Infinity;
+      return lo > hi ? hi : Math.min(Math.max(o, lo), hi);
+    };
+    v.ox = keep(v.ox, w.x1, w.x2, this.r.width);
+    v.oy = keep(v.oy, w.y1, w.y2, this.r.height);
+  }
+
   /** The fixed edges of the drawing's page grid (page-grid.ts): nothing is put or moved past them. Null: none. */
   walls: (() => Rect | null) | null = null;
 
@@ -6148,7 +6170,7 @@ export class Editor {
   moveSnap: ((box: Rect, raw: Vec, tol: number) => Vec) | null = null;
   /** Text boxes take a click as typing (Slides and Design), with an I-beam over them. */
   textFirst = false;
-  /** View > Dark Page is on: marks drawn over the page are made to show up on it. */
+  /** View > Reading Mode is on: marks drawn over the page are made to show up on it. */
   dark = false;
 
   /** What the pointer was last over (to change the pointer when Ctrl is pressed or let go). */

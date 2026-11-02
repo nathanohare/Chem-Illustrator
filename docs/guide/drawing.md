@@ -1,6 +1,6 @@
 # Canvas (chemistry)
 
-This page covers Canvas mode in depth: the tools, hotkeys on atoms and bonds, text, arrows and shapes, the Chemistry and Format menus, drawing styles, the dark page, the Analysis panel and the other chemistry tools.
+This page covers Canvas mode in depth: the tools, hotkeys on atoms and bonds, text, arrows and shapes, the Chemistry and Format menus, drawing styles, Reading Mode, the Analysis panel and the other chemistry tools.
 
 If you use ChemDraw, most of this will feel familiar: the hotkeys are ChemDraw's, new canvases use the ACS Document 1996 style, and files are saved as `.cdxml` or `.cdx`. Mac users: read Cmd for Ctrl and Option for Alt.
 
@@ -129,7 +129,7 @@ To make your own template, select a structure and click the first button on the 
 - **Mechanism symbols**: lone pair, radical dot, circled plus and minus, δ+ and δ−, and ‡ (click where it goes). Click an atom and the symbol goes in the most open space round it. To put a lone pair (or radical dot or circled charge) somewhere else, press on the atom and drag: the symbol goes round the atom after the pointer, and lands where you let go. Hold Alt (or Shift) while dragging to turn it in 15° steps, as when turning a structure. A radical dot makes the atom a radical (one H fewer); a circled charge sets the atom's charge.
 - **Moving a charge:** with the selection tool, drag the + or − beside an atom (a carbocation, tropylium's +, or the sign in a label) to wherever you want it. It becomes a sign of its own that stays with its atom, even in the middle of its ring, as ChemDraw's charges do.
 - **Charges by labels** sit raised after the label (N⁺). A bond that runs under the sign stops short of it, as in ChemDraw; if that would leave almost nothing of a short bond, the charge moves to a free spot round the label instead.
-- **Shapes**: boxes (plain, round-cornered, with a shadow, dashed), ovals, circles drawn from the centre, a filled circle, and plain, dashed and bold lines. Drag to draw; Shift while drawing an oval makes a circle. Drag the corner squares to resize.
+- **Frames**: rectangles (plain, rounded, with a shadow, dashed), ovals, circles drawn from the center, a filled circle, and plain, dashed and bold lines. Drag to draw; Shift while drawing an oval makes a circle. Drag the corner squares to resize.
 - **Brackets**: square, round and curly, transition-state brackets (square, with ‡ at the upper right), and a single left or right bracket. Drag a box to put brackets round it, or click a structure to bracket it.
 
 Select any arrow, shape or bracket to change its line width, colour, dashes, fill, corners and shadow in the **Style** panel.
@@ -465,7 +465,7 @@ In Presentation (**Design & Transitions** tab) and Design (**Home** tab) the sam
 
 On a big white drawing it is easy to lose your place, especially zoomed in. These help, and each can be switched off in **Settings ▸ Navigation** (or from **View ▸ Navigation**):
 
-- **Navigator** (on to start with, but out of the way while the whole drawing fits in the window): a small map of the whole drawing in a corner, with a blue box for the part in the window. Click or drag in it to move there; double-click it to fit the whole drawing. Choose its corner and size, and whether it hides while the whole drawing is on screen.
+- **Document Map** (on to start with, but out of the way while the whole drawing fits in the window): a small map of the whole drawing in a corner, with a blue box for the part in the window. Click or drag in it to move there; double-click it to fit the whole drawing. Choose its corner and size, and whether it hides while the whole drawing is on screen.
 - **Edge arrows** (on to start with): arrows at the edge of the window point to structures scrolled out of sight, with a count where several lie the same way. Click one to glide to the nearest. They can point to text, arrows and shapes too.
 - **Dot grid** (off to start with): faint dots behind the drawing, so you can see it move even with nothing in the window. Fine, normal or wide spacing; the dots spread out as you zoom out.
 - **Tint outside the drawing** (off to start with): the empty space beyond everything drawn turns faintly grey, so you can tell at a glance which way the drawing is.
@@ -487,11 +487,11 @@ A drawing is laid out on pages, as in ChemDraw, so you can see how it will print
 
 **Printing** a drawing on pages prints one sheet for each page, at actual size, as ChemDraw does; tick **Leave out pages with nothing on them** to skip empty ones, or choose **The whole drawing on one sheet**.
 
-## Dark page
+## Reading Mode
 
-**View ▸ Dark Page**, or the eye button at the top, shows the page dark: black ink as light grey, white paper as dark grey, and pale fills dimmed. It changes the screen only; saved files, printing, copies and exports stay black on white. **View ▸ Window and Colours ▸ Dark Page Colours…** picks **Graphite**, **Slate** or **Warm dark**, or your own paper and ink colours.
+**View ▸ Reading Mode**, or the eye button at the top, shows the page dark: black ink as light grey, white paper as dark grey, and pale fills dimmed. It changes the screen only; saved files, printing, copies and exports stay black on white. **View ▸ Window and Colours ▸ Dark Page Colours…** picks **Graphite**, **Slate** or **Warm dark**, or your own paper and ink colours.
 
-![The same drawing with the dark page on](../images/dark-page.png)
+![The same drawing with Reading Mode on](../images/dark-page.png)
 
 ## The Analysis panel
 
