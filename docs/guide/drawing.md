@@ -335,6 +335,14 @@ The namer loads the first time you ask (about 14 MB, a few seconds). After that,
 
 Structures with R groups or labels that can't be read have no 3-D shape. Metals mostly have no MMFF parameters, so their models are the generator's geometry, not relaxed.
 
+### Newman and sawhorse projections
+
+Right-click a single bond ▸ **Newman Projection…** (also **Chemistry ▸ Look Up ▸ Newman Projection…**), or pick the **Newman** tool (the eye and dotted arrow, beside the Perspective tools) and click a bond: the end you click nearer is in front. The window searches the structure's conformers (MMFF94s+), turns the bond to its other staggered rotamers too, and lists each picture down the bond, most stable first, with its torsion, energy and share at 25 °C. **Tab** and **Shift+Tab** in the preview step through them; the **Turn** dial turns the back atom (double-click it for 0°); **Looking from** or **⇄** looks from the other end; **Draw as** gives a Newman or a sawhorse projection; **Conformation ▸ As drawn** uses the shape your wedges and bold bonds draw instead. With the xtb program installed, the desktop app can rank the conformers with GFN2-xTB.
+
+The projection goes beside the structure, with a blue eye and dotted arrow on the structure showing which way you are looking (turn this off in the window). It stays linked: change the structure (an atom, a label, a bond or a wedge) and it is worked out again, in the same undo step; move the structure and the eye follows. Right-click the projection ▸ **Unlink from Structure** keeps it as it is; double-click it to open the window again. Projections keep their link through CDXML, Word, PowerPoint and Excel files, and through copy and paste.
+
+The groups on each atom are ranked by size (their A-value, the cyclohexane axial–equatorial free energy difference) as largest, middle and smallest. **Settings ▸ Newman Projections** sets the colour, bold, italic and bond colour of each rank (largest red to start with), the circle's size, how far the bonds reach, how far an eclipsed back group is turned so both show, a dot on the front atom, the eye's colour, and the defaults for torsion energy charts. Ring bonds are joined by an arc rather than ranked.
+
 ### PubChem
 
 **Chemistry ▸ Look Up ▸ Look Up on PubChem** (also in the Analysis panel and the right-click menu) sends the selected structure to PubChem and shows its names, CAS number, a link to its PubChem page, GHS hazards, and measured melting point, boiling point and density where known. See [The Analysis panel](#the-analysis-panel).

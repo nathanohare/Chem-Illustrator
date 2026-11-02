@@ -25,6 +25,23 @@ export interface Conformer {
   degeneracy?: number;
 }
 
+/**
+ * The molfile with its stereocentres read as drawn (the chiral flag set). Without it OpenChemLib
+ * takes them as racemic, and a 3-D model may come out as the mirror image of the drawing. A V3000
+ * file with enhanced stereo groups (AND, OR) is left as it says.
+ */
+export function absoluteMolfile(molblock: string): string {
+  const lines = molblock.split('\n');
+  if (lines.length > 3 && /V2000\s*$/.test(lines[3]) && lines[3].length >= 15) {
+    lines[3] = lines[3].slice(0, 12) + '  1' + lines[3].slice(15);
+    return lines.join('\n');
+  }
+  if (/M {2}V30 COUNTS/.test(molblock) && !/STE(RAC|REL)/.test(molblock)) {
+    return molblock.replace(/^(M {2}V30 COUNTS +\d+ +\d+ +\d+ +\d+) +\d+/m, '$1 1');
+  }
+  return molblock;
+}
+
 /** A molecule's atoms and bonds (the drawn atoms first, in molfile order) and its conformers, lowest energy first. */
 export interface Model3d {
   atoms: { z: number; charge: number }[];
@@ -45,7 +62,7 @@ export interface Model3d {
  * once, lowest energy first, within `opts.window` of the lowest, with their populations.
  */
 export function searchModel(molblock: string, opts: SearchOptions, seed = 1): Model3d | null {
-  const mol = Molecule.fromMolfile(molblock);
+  const mol = Molecule.fromMolfile(absoluteMolfile(molblock));
   if (!mol.getAllAtoms()) return null;
   const gen = new ConformerGenerator(seed);
   if (!gen.initializeConformers(mol, { strategy: ConformerGenerator.STRATEGY_ADAPTIVE_RANDOM, maxTorsionSets: Math.max(1000, opts.starts * 10) })) return null;
@@ -149,7 +166,7 @@ function describe(shape: Molecule): Omit<Model3d, 'conformers'> {
 
 /** Conformers of a molecule, each relaxed with MMFF94s+, duplicates (same shape) dropped. */
 export function buildModel(molblock: string, count: number, seed: number): Model3d | null {
-  const mol = Molecule.fromMolfile(molblock);
+  const mol = Molecule.fromMolfile(absoluteMolfile(molblock));
   if (!mol.getAllAtoms()) return null;
   const gen = new ConformerGenerator(seed);
   if (!gen.initializeConformers(mol)) return null;

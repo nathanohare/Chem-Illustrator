@@ -37,6 +37,7 @@ import { TABLE_TAG, TABLE_PART_TAG, tableBorders, type TableTag } from './cdxml-
 import { bondLayer, crossingBondsCached } from '../chem/crossing';
 import { repeatGroups, repeatCount, repeatLabelPlace } from '../chem/polymer';
 import { ellipseAxes, isCircleRing, ringCircle, ringsThroughBond } from '../chem/aromatic';
+import { newmanForFile } from '../design/newman';
 
 /** Numbers in an attribute such as "12.5 30 0". */
 const pts = (v: string | null): number[] => (v ?? '').trim().split(/\s+/).filter(Boolean).map(Number);
@@ -1463,6 +1464,7 @@ class CdxmlWriter {
     const { id: _, ...look } = s;
     // a frame takes what lies inside it again on opening (ids change between files)
     if (look.frame) look.frame = { ...look.frame, atoms: [], captions: [], arrows: [], shapes: [] };
+    if (look.newman) look.newman = newmanForFile(this.doc, look.newman);
     if (ringPts) look.poly = ringPts.map((p) => ({ x: p.x, y: p.y }));
     g.appendChild(this.el('objecttag', { TagType: 'String', Name: GEO_TAG, Value: JSON.stringify(look), Visible: 'no' }));
     this.set(g, 'BoundingBox', box(b));

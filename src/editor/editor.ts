@@ -65,10 +65,11 @@ import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
 import { arrangeSmart, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotText, setStepText, smartFrameOf, smartMarks, ungroupSmart, type SmartData, type StepPart } from '../chem/smart-scheme';
 import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
+import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
-import { Align, Measure, POINTS, Snapshot, type TurnText, units, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
+import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
 import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, CAP, SUB_SCALE } from '../chem/labels';
 import {
@@ -109,7 +110,9 @@ export type Tool =
   /** Freehand with the pen: lines become bonds, loops rings, letters labels, a scribble erases (sketch.ts). */
   | { kind: 'sketch' }
   /** Drag a structure to turn it in perspective: as a flat sheet, or (`real`) its true 3-D shape (perspective.ts). */
-  | { kind: 'perspective'; real: boolean };
+  | { kind: 'perspective'; real: boolean }
+  /** Click a single bond for its Newman projection: the end clicked nearer is in front (newman.ts). */
+  | { kind: 'newman' };
 
 /** Marks put on atoms for mechanisms: a lone pair, a radical's dot, a circled charge, or δ+ / δ−. */
 export type SymbolKind = 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus' | 'DeltaPlus' | 'DeltaMinus';
@@ -139,6 +142,7 @@ export const TOOLS: Record<string, Tool> = {
   sketch: { kind: 'sketch' },
   perspective: { kind: 'perspective', real: false },
   'perspective-3d': { kind: 'perspective', real: true },
+  newman: { kind: 'newman' },
   'bond-single': { kind: 'bond', order: 1, display: 'solid' },
   'bond-double': { kind: 'bond', order: 2, display: 'solid' },
   'bond-triple': { kind: 'bond', order: 3, display: 'solid' },
@@ -448,6 +452,12 @@ export class Editor {
   perspectiveHost: PerspectiveHost | null = null;
   /** The fragmentation tool drew a line from p to q across these bonds (the app works out the masses). */
   onFragment: (p: Vec, q: Vec, bonds: number[]) => void = () => {};
+  /** The Newman tool clicked a bond (`front`: the end clicked nearer). */
+  onNewman: (bond: number, front: number) => void = () => {};
+  /** A Newman projection double-clicked (its frame), to open its window again. */
+  onNewmanEdit: (frame: number) => void = () => {};
+  /** Linked Newman projections whose structure just changed (their frames), to be worked out again. */
+  onNewmanStale: (frames: number[]) => void = () => {};
   /** The atom most recently drawn or changed (its structure is analysed when nothing is selected). */
   lastEdited: number | null = null;
   /** The last label typed in an atom's label box (with its raised and lowered marks), for Repeat Label. */
@@ -546,8 +556,10 @@ export class Editor {
     window.addEventListener('blur', () => this.setMods({ shiftKey: false, altKey: false, ctrlKey: false, metaKey: false }));
     // frames that follow what they surround are refitted as each change finishes
     doc.beforeCommit = (before) => {
-      let frames = false, rings = false, tied = false, energy = false, tables = false, diagrams = false, plates = false, smart = false;
-      for (const s of this.doc.shapes.values()) { if (s.frame?.fit) frames = true; if (s.kind === 'ring') rings = true; if (s.energy) energy = true; if (s.plate) plates = true; if (s.kind === 'table') tables = true; if (s.diagram) diagrams = true; if (s.smart) smart = true; }
+      let frames = false, rings = false, tied = false, energy = false, tables = false, diagrams = false, plates = false, smart = false, newman = false;
+      for (const s of this.doc.shapes.values()) { if (s.frame?.fit) frames = true; if (s.kind === 'ring') rings = true; if (s.energy) energy = true; if (s.plate) plates = true; if (s.kind === 'table') tables = true; if (s.diagram) diagrams = true; if (s.smart) smart = true; if (s.newman?.link) newman = true; }
+      // a linked Newman projection's viewing mark follows its bond; a changed structure is worked out again after
+      if (newman) { const stale = refitNewman(this.doc, before); if (stale.length) queueMicrotask(() => this.onNewmanStale(stale)); }
       for (const c of this.doc.captions.values()) if (c.attach) { tied = true; break; }
       // ring fills first, then labels beside their structures: a frame round a structure takes in both
       if (rings) refitRingFills(this.doc, before);
@@ -1280,6 +1292,7 @@ export class Editor {
       case 'fragment':
         return 'draw';
       case 'sketch':
+      case 'newman':
         return 'none';
       case 'perspective':
         return 'marquee';
@@ -1444,6 +1457,8 @@ export class Editor {
     // any part of an energy diagram (but a structure put on it) opens its numbers
     const diagram = h && h.kind !== 'atom' && h.kind !== 'bond' && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? energyFrameOf(this.doc, h.kind, h.id) : null;
     if (diagram !== null) { this.selectOnly({ kind: 'shape', id: diagram }); this.onEnergy(diagram); return; }
+    const newman = h && h.kind !== 'atom' && h.kind !== 'bond' && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? newmanFrameOf(this.doc, h.kind, h.id) : null;
+    if (newman !== null) { this.selectOnly({ kind: 'shape', id: newman }); this.onNewmanEdit(newman); return; }
     const plate = h && h.kind !== 'atom' && h.kind !== 'bond' && (h.kind === 'caption' || h.kind === 'arrow' || h.kind === 'shape') ? plateFrameOf(this.doc, h.kind, h.id) : null;
     if (plate !== null) { this.selectOnly({ kind: 'shape', id: plate }); this.onPlate(plate); return; }
     // a SmartArt-style diagram: its words are typed into in place, as in PowerPoint; anywhere else opens its text and look
@@ -1650,6 +1665,14 @@ export class Editor {
         // a click on a structure picked it (startTurn); on empty space it lets go of everything
         if (!h) { this.sel = emptySel(); this.onChange(); }
         else if (h.kind !== 'atom' && h.kind !== 'bond') { this.selectOnly(h); this.onChange(); }
+        return;
+      }
+      case 'newman': {
+        // a bond's projection, looking from the end clicked nearer
+        if (h?.kind !== 'bond') { this.onNotice('Click a single bond: its Newman projection is drawn looking from the end you click nearer.'); return; }
+        const b = doc.bonds.get(h.id)!, a1 = doc.atoms.get(b.a1)!, a2 = doc.atoms.get(b.a2)!;
+        const near1 = Math.hypot(d.start.x - a1.x, d.start.y - a1.y) <= Math.hypot(d.start.x - a2.x, d.start.y - a2.y);
+        this.onNewman(h.id, near1 ? b.a1 : b.a2);
         return;
       }
       case 'fragment': {
@@ -3153,7 +3176,7 @@ export class Editor {
    */
   private groupFirst(h: NonNullable<Hit>): NonNullable<Hit> {
     if (h.kind !== 'atom' && h.kind !== 'bond' && h.kind !== 'caption' && h.kind !== 'arrow' && h.kind !== 'shape') return h;
-    const g = energyFrameOf(this.doc, h.kind, h.id) ?? plateFrameOf(this.doc, h.kind, h.id) ?? (h.kind === 'shape' || h.kind === 'arrow' ? diagramFrameOf(this.doc, h.kind, h.id) : null) ?? smartFrameOf(this.doc, h.kind, h.id);
+    const g = energyFrameOf(this.doc, h.kind, h.id) ?? plateFrameOf(this.doc, h.kind, h.id) ?? newmanFrameOf(this.doc, h.kind, h.id) ?? (h.kind === 'shape' || h.kind === 'arrow' ? diagramFrameOf(this.doc, h.kind, h.id) : null) ?? smartFrameOf(this.doc, h.kind, h.id);
     return g !== null && g !== (h.kind === 'shape' ? h.id : null) && !this.sel.shapes.has(g) ? { kind: 'shape', id: g } : h;
   }
 
@@ -3164,6 +3187,84 @@ export class Editor {
       for (const id of set) { const g = energyFrameOf(this.doc, k, id); if (g !== null) return g; }
     }
     return null;
+  }
+
+  /** The Newman projection the selection is in (its frame), if any. */
+  selectedNewman(): number | null {
+    for (const id of this.sel.shapes) if (this.doc.shapes.get(id)?.newman) return id;
+    for (const [k, set] of [['caption', this.sel.captions], ['arrow', this.sel.arrows], ['shape', this.sel.shapes]] as const) {
+      for (const id of set) { const g = newmanFrameOf(this.doc, k, id); if (g !== null) return g; }
+    }
+    return null;
+  }
+
+  /** A Newman projection drawn on a page of its own, in this drawing's style (the Newman window's preview). */
+  newmanPreview(d: NewmanData): { doc: Doc; box: Rect } {
+    const tmp = new Doc();
+    tmp.style = { ...this.doc.style };
+    tmp.textStyles = this.doc.textStyles;
+    let id = 0;
+    tmp.edit('Preview', () => { id = putNewman(tmp, this.fullMeasure(), { ...d, link: undefined, mark: undefined }, { x: 0, y: 0 }); });
+    return { doc: tmp, box: shapeBox(tmp.shapes.get(id)!) };
+  }
+
+  /**
+   * Draw a Newman projection beside its structure (or draw projection `id` again where it is),
+   * with its viewing mark when `mark` gives a colour (null: none; left out: as it was), and
+   * select it. `linked: false` lets go of the structure. `amend`
+   * joins the last undo step (a linked projection worked out again after its structure changed).
+   */
+  putNewmanProjection(d: NewmanData, opts: { id?: number; mark?: string | null; linked?: boolean; amend?: boolean; page?: { w: number; h: number } } = {}): number | null {
+    const doc = this.doc, m = this.fullMeasure(), L = doc.style.bondLength;
+    const old = opts.id !== undefined ? doc.shapes.get(opts.id) : undefined;
+    let frame: number | null = null;
+    const run = () => {
+      let c = old ? newmanCentre(doc, old) : null;
+      if (!c) {
+        // to the right of its structure, level with the bond
+        const atoms = d.link ? doc.fragmentOf(d.link.front) : new Set<number>();
+        const box = atoms.size ? atomsBox(doc, atoms, m) : null;
+        const f = d.link ? doc.atoms.get(d.link.front) : undefined;
+        c = box ? { x: box.x2 + 2.6 * L, y: f ? f.y : (box.y1 + box.y2) / 2 } : { x: 0, y: 0 };
+      }
+      let data: NewmanData = { ...d, mark: old?.newman?.mark ?? d.mark };
+      if (opts.mark !== undefined) {
+        if (opts.mark && d.link) data.mark = putMark(doc, data, opts.mark);
+        else if (data.mark) { for (const x of data.mark.arrows) doc.removeArrow(x); for (const x of data.mark.shapes) doc.removeShape(x); data = { ...data, mark: undefined }; }
+      }
+      // not linked: it keeps no tie to the structure, and its mark is ordinary lines
+      if (opts.linked === false) data = { ...data, link: undefined, mark: undefined };
+      frame = putNewman(doc, m, data, c, old?.id);
+      if (!old) { this.sel = emptySel(); this.sel.shapes.add(frame); this.moveClear(opts.page); }
+    };
+    const label = old ? 'Edit Newman Projection' : 'Newman Projection';
+    if (opts.amend) doc.amend(label, run); else doc.edit(label, run);
+    if (frame !== null && !opts.amend) this.selectOnly({ kind: 'shape', id: frame });
+    this.changed();
+    return frame;
+  }
+
+  /** Every Newman projection in the drawing drawn again in `look` (Settings ▸ Newman Projections). */
+  restyleNewman(look: NewmanData['look']): void {
+    const doc = this.doc, m = this.fullMeasure();
+    const ids = [...doc.shapes.values()].filter((s) => s.newman).map((s) => s.id);
+    if (!ids.length) return;
+    doc.edit('Newman Projection Look', () => {
+      for (const id of ids) {
+        const s = doc.shapes.get(id)!;
+        const c = newmanCentre(doc, s);
+        if (c) putNewman(doc, m, { ...s.newman!, look: structuredClone(look) }, c, id);
+      }
+    });
+    this.changed();
+  }
+
+  /** Unlink: the projection stays as drawn and no longer follows its structure (its mark stays as ordinary lines). */
+  unlinkNewman(id: number): void {
+    const d = this.doc.shapes.get(id)?.newman;
+    if (!d?.link) return;
+    this.doc.edit('Unlink Newman Projection', () => this.doc.updateShape(id, { newman: { ...d, link: undefined, mark: undefined } }));
+    this.changed();
   }
 
   /** The Smart Scheme the selection is in (its frame), if any. */
