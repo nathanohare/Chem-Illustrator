@@ -341,6 +341,16 @@ Animations play on both screens. B and W blank the audience's screen. Esc or **E
 
 With only one screen, the audience's slides open in a window of their own. Drag it to a projector when one is plugged in, or close it to rehearse; **Audience Window** opens it again. In a web browser, press F in that window to fill the screen.
 
+### Rehearse Timings and Record
+
+**Slide Show** tab ▸ **Rehearse Timings** plays the show with a bar at the top: the time on this slide, the time for the whole talk, **Pause**, **Repeat** (start this slide's time again) and **Notes**, which shows your speaker notes under the slide while you practise (it remembers whether you want them). **Record** does the same while recording your voice from the microphone, one recording for each slide; it counts 3, 2, 1 on the first slide before the clock and the microphone start (a click or key starts at once).
+
+When the show ends, a window lists each slide's time (🎙 marks the ones with narration) and asks whether to keep them. Kept times make the show go on by itself; kept narration goes on each slide as a sound that plays as the slide comes in, and PowerPoint plays it too. Untick **Keep the narration too** to keep only the times. Each slide's time shows on its picture in the slide list.
+
+- **Rehearse from This Slide** and **Record from This Slide…** (**View ▸ Presentation ▸ Slide Show**, or the **Clear** button's menu) start at the slide showing; the slides before it keep what they had.
+- **Clear** takes the timing or the narration off the slides picked, or off every slide. Clearing narration leaves the times.
+- **Set Up Show** can play the show without narration or without timings, without clearing them.
+
 ## Printing handouts
 
 **File ▸ Print…** (Ctrl+P) asks for a layout:

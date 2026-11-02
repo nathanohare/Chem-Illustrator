@@ -255,10 +255,12 @@ export class StructureChecks {
     if (a.multi) { this.atoms.delete(a.id); return; }
     const list = atomWarnings(doc, a);
     const L = doc.style.bondLength * (a.s ?? 1);
+    // in a structure turned in 3-D, atoms that only look close (one well behind the other) are fine
+    const behind = (depth: number | undefined) => a.depth !== undefined && depth !== undefined && Math.abs(a.depth - depth) > 0.5 * L;
     // another atom almost on top of this one
     let onAtom = false;
     for (const o of doc.atomsNear(a, TOO_CLOSE_ATOM * L)) {
-      if (o.id === a.id || o.multi) continue;
+      if (o.id === a.id || o.multi || behind(o.depth)) continue;
       onAtom = true;
       this.link(a.id, o.id);
       found?.(o.id);
@@ -280,6 +282,7 @@ export class StructureChecks {
         if (p.multi || q.multi) continue;
         const { d, t } = segDist(a, p, q);
         if (t <= 0 || t >= 1 || d >= r) continue;
+        if (p.depth !== undefined && q.depth !== undefined && behind(p.depth + (q.depth - p.depth) * t)) continue;
         onBond = true;
         this.link(a.id, p.id);
         this.link(a.id, q.id);

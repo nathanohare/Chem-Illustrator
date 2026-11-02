@@ -13,6 +13,7 @@
 // show plays them: click one to go to it, drag one to play it at another place, Delete or
 // right-click to take it away.
 
+import { clockText } from '../deck/show-link';
 import type { Deck } from '../deck/deck';
 import { paintSlide } from '../deck/slide-view';
 
@@ -244,6 +245,16 @@ export class SlideList {
       n.className = 'sl-has-notes';
       n.title = 'This slide has speaker notes';
       n.textContent = '✎';
+      item.append(n);
+    }
+    // a rehearsed time (and recorded narration), under the number, as PowerPoint's Slide Sorter shows them
+    const t = s.transition?.advanceAfter;
+    const narrated = deck.narrated(i);
+    if (t !== undefined || narrated) {
+      const n = document.createElement('span');
+      n.className = 'sl-time';
+      n.textContent = `${t !== undefined ? clockText(t) : ''}${narrated ? (t !== undefined ? ' 🎙' : '🎙') : ''}`;
+      n.title = [t !== undefined ? `Goes on by itself after ${clockText(t)} (Rehearse Timings, or Transitions > After)` : '', narrated ? 'Has recorded narration (Slide Show > Record)' : ''].filter(Boolean).join('. ');
       item.append(n);
     }
     item.addEventListener('click', (e) => this.onClick(e, i));
