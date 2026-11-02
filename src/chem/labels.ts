@@ -429,6 +429,19 @@ export const SUB_SCALE = 0.75;
 export const CAP = 0.716; // Arial cap height as a fraction of the font size
 
 /**
+ * A label typed as an element and its hydrogens ("NH", "NH2", "OH") laid out as if the H were
+ * automatic, so a typed NH in a ring stacks its H below or above the N, as ChemDraw does, rather
+ * than running across a bond (issue #407). Labels with hand-raised characters are left alone.
+ */
+export function typedH(spec: LabelSpec): LabelSpec {
+  const [el, h] = spec.tokens;
+  if (spec.tokens.length !== 2 || spec.hCount || spec.marks) return spec;
+  if (el.kind !== 'el' || el.text === 'H' || el.count !== 1 || el.charge) return spec;
+  if (h.kind !== 'el' || h.text !== 'H' || h.charge) return spec;
+  return { ...spec, tokens: [el], hCount: h.count };
+}
+
+/**
  * Which way a label runs from its atom: to the right (OH), to the left (HO), or with the
  * H stacked above or below (the NH of a ring).
  *
@@ -442,6 +455,7 @@ export const CAP = 0.716; // Arial cap height as a fraction of the font size
 export function labelDir(spec: LabelSpec, bondDirs: { x: number; y: number }[], just: 'auto' | 'left' | 'right' = 'auto'): 'right' | 'left' | 'up' | 'down' {
   if (just === 'left') return 'left';
   if (just === 'right') return 'right';
+  spec = typedH(spec);
   let sx = 0, sy = 0;
   for (const d of bondDirs) { sx += d.x; sy += d.y; }
   const EPS = 1e-3; // saved coordinates are rounded, so smaller differences mean nothing
@@ -481,6 +495,7 @@ function bracketUnits(tail: Token[]): Token[][] | null {
  * position, and the rest of the label runs away from the bonds (p. 46).
  */
 export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number, measure: Measure, just: 'auto' | 'left' | 'right' = 'auto'): LabelLayout {
+  spec = typedH(spec);
   const head = spec.tokens[0];
   const tail = spec.tokens.slice(1);
   const hTok: Token | null = spec.hCount > 0 ? { kind: 'el', text: 'H', count: spec.hCount, charge: '' } : null;
