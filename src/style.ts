@@ -18,6 +18,30 @@ export interface DocStyle {
   captionSize: number;
   /** How new captions look, as ChemDraw's face bits (1 bold, 2 italic, 4 underline, 96 formula). */
   captionFace: number;
+  /** Text above and below reaction arrows (reagents, conditions): its size and font, where not the captions'. */
+  arrowTextSize?: number;
+  arrowTextFont?: string;
+  /** Reaction arrows' line width and head length and width (each side), in points, where not the usual (the line width; a head 10 and 2.5 line widths). */
+  arrowWidth?: number;
+  arrowHeadLength?: number;
+  arrowHeadWidth?: number;
+  /**
+   * How reaction arrows sit in a scheme, where not the usual (each distance in points; absent:
+   * it scales with the bond length): the gap to the structures, either side of a +, between the
+   * arrow and its text, how the lines of text line up, whether the arrow fits its text, and the
+   * arrow beyond the text before it starts and before the head.
+   */
+  scheme?: StyleScheme;
+}
+
+export interface StyleScheme {
+  structGap?: number;
+  plusGap?: number;
+  textGap?: number;
+  textAlign?: 'left' | 'center' | 'right';
+  fit?: boolean;
+  lead?: number;
+  headGap?: number;
 }
 
 export const ACS_1996: DocStyle = {
@@ -54,6 +78,19 @@ export function wedgeWidth(s: DocStyle): number {
 /** Slightly round: square-cut ends with softened corners (Nate's pick, 2026-10-30). */
 export const DEFAULT_BOND_ENDS = 0.25;
 export const bondEndPrefs: { round: number } = { round: DEFAULT_BOND_ENDS };
+
+/**
+ * How atom-map numbers (Chemistry ▸ Map Atoms) look, an app setting: a small rounded box beside
+ * the atom, filled light peach (Nate's pick), a light tint of the number's own colour (so an atom
+ * and where it goes match at a glance), or ChemDraw's grey outline.
+ */
+export type MapLook = 'peach' | 'tint' | 'grey';
+export const MAP_LOOKS: { value: MapLook; label: string }[] = [
+  { value: 'peach', label: 'Light peach boxes' },
+  { value: 'tint', label: 'Each number in its own light colour' },
+  { value: 'grey', label: 'Grey outlines (as ChemDraw)' },
+];
+export const mapLookPrefs: { look: MapLook } = { look: 'peach' };
 
 /** The choices offered for it (Settings > Drawing), from round to square. */
 export const BOND_END_CHOICES: { value: number; label: string }[] = [

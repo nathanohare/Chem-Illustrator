@@ -8,6 +8,8 @@ import { DocStyle, ACS_1996 } from './style';
 import { arrowPoints, gluePoint } from './objects';
 import { followPins } from './chem/pins';
 import type { EnergyData } from './design/energy';
+import type { NewmanData } from './design/newman';
+import type { TorsionData } from './design/torsion';
 import type { PlateData } from './design/plates';
 import type { DiagramData } from './design/diagrams';
 import type { SmartData } from './chem/smart-scheme';
@@ -31,6 +33,8 @@ export function outsideValence(b: Pick<Bond, 'display' | 'order'>): boolean {
 export type DoublePos = 'auto' | 'left' | 'right' | 'center';
 
 export interface Atom {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -117,6 +121,12 @@ export interface Atom {
    * sits at their centre, follows them when they move, and goes when fewer than two are left.
    */
   multi?: number[];
+  /**
+   * On a multicentre point: its π-system drawn with its double bonds (Kekulé form) rather than
+   * delocalized (a circle in an η⁵/η⁶ ring, an arc over an η³-allyl), which is how it is drawn
+   * when bonded to a metal. Only the look: the bonds are the same either way.
+   */
+  kekule?: boolean;
 }
 
 /** A metal atom: a metal element, or a label written for one (Pd, PdCl2, LnPd, [M]). */
@@ -399,6 +409,8 @@ export interface TabStop {
 }
 
 export interface Caption {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -558,6 +570,8 @@ export interface Attachment {
 export type ArrowHead = 'none' | 'full' | 'halfLeft' | 'halfRight';
 
 export interface Arrow {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -664,6 +678,8 @@ export interface StepRoles {
 export type Pattern = 'hatch' | 'backhatch' | 'crosshatch' | 'horizontal' | 'vertical' | 'grid' | 'dots' | 'dense-dots';
 
 export interface Shape {
+  /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
+  piece?: number;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -699,6 +715,8 @@ export interface Shape {
    */
   rot?: number;
   dashed?: boolean;
+  /** A line drawn as a row of round dots (with `dashed` too, for programs that only know dashes). */
+  dotted?: boolean;
   filled?: boolean;
   /**
    * How a filled shape is filled: evenly (absent), a light tint, shaded light to dark, or a
@@ -824,6 +842,10 @@ export interface Shape {
   frame?: Frame;
   /** An energy diagram's numbers and look, kept on the invisible frame round its drawing (design/energy.ts). */
   energy?: EnergyData;
+  /** A Newman or sawhorse projection's groups, look and the bond it shows, kept on the invisible frame round it (design/newman.ts). */
+  newman?: NewmanData;
+  /** A torsional energy diagram's curve, look and the bond it shows, kept on the invisible frame round it (design/torsion.ts). */
+  torsion?: TorsionData;
   /** A TLC plate's or gel's lanes and look, kept on the invisible frame round its drawing (design/plates.ts). */
   plate?: PlateData;
   /** A SmartArt-style diagram's text and look, kept on the invisible frame round its shapes (design/diagrams.ts). */
@@ -1189,6 +1211,8 @@ export class Doc {
   background = '#ffffff';
   /** The page the drawing is on (File > Page Setup): its size in points, and whether it grows to hold the drawing. Null: no page shown. */
   page: PageSetup | null = null;
+  /** Guides drawn over the drawing to line things up by (View > Toolboxes > Guides). Saved with the file, never exported or printed. */
+  guides: import('./editor/guides').CanvasGuides | null = null;
   /**
    * Draw only the highlights (a highlight animated on its own in a slide show, or saved to
    * PowerPoint as its own picture behind its structure). Not saved.
@@ -1534,6 +1558,8 @@ export class Doc {
         }
       }
       if (was?.multi) this.unlinkCentre(was);
+      // (a multicentre point's atoms are drawn by how it is: a ring bonded to a metal is drawn delocalized)
+      for (const m of [...(was?.multi ?? []), ...((e as Atom | null)?.multi ?? [])]) this.dirtyAtoms.add(m);
       if (e) {
         this.atoms.set(id, e as Atom);
         if (!this.adj.has(id)) this.adj.set(id, []);

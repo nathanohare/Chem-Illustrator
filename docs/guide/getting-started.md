@@ -119,6 +119,8 @@ The same commands are in the **File** menu (**New Canvas**, and **Presentation**
 
 In a canvas, the drawing tools run down the left side: select, eraser, bonds, then text, arrows, mechanism symbols, brackets, shapes and mass fragmentation, then rings and templates. A button with a small arrow in its corner holds a set of related tools: click the corner, click the button a second time, or right-click it to see them all. Rest the mouse on any button to see its name and hotkey. [Canvas](drawing.md) explains each tool.
 
+Some tools take more than a click: the curved and half-headed mechanism arrows, the hapto (η) bond, the chain, the cyclohexane (and its chair shapes), the lone pair and mass fragmentation. These can show a short demo, which is off at first: turn it on in **Edit ▸ Settings ▸ General**. Then keep the mouse on one of these tools for a second and the demo plays beside it, drawn by the app as you watch, with its steps numbered beside it and a **Replay** button. Move away, click the tool or press Esc and it goes. The same setting picks how it shows: the card, a small clip in the tool tip, still pictures of each step, or no demos. If animation is turned off in your system's settings, you get the still pictures.
+
 ### The side panel on the right
 
 The panel on the right changes with what you are doing. In a canvas it has:
@@ -169,6 +171,16 @@ What goes across is only the look, never the content or its meaning:
 - **Canvases, presentations and designs:** a shape's outline, fill, pattern, see-through amount and shadow; an arrow's colour, line and head size; the colour and highlight of atoms and bonds; the text look of a caption or of the text in a shape. A bond's order or wedge, an arrow's kind of head (one or two electrons) and a shape's kind never change. Something of another kind takes just the colour. Click one thing, or drag a box to paint everything in it.
 - **Spreadsheets:** the cells' formats (number format, font, fill, borders, alignment). Click one cell to paint a block the size of the one you picked up, or drag over a range to fill it, the pattern repeated across it.
 
+### Format Favorites (every mode)
+
+A **Format Favorite** is a complete look kept under a name: fill (colour, gradient or picture), pattern, see-through amount, shadow, outline and effects (glow, soft edges, bevel, reflection), with an arrow's line and heads, the colour and highlight of a structure, and the text's font and colour. Give it to anything with one click, like your own colour palettes.
+
+- **Save one:** select something with the look you want, then right-click it ▸ **Save Format as Favorite…** (or **+** in the **Format Favorites** gallery on the **Home** tab, or **Edit ▸ Save Format as Favorite…**) and give it a name.
+- **Use one:** select what should take the look and click the favorite's card in the gallery, or right-click ▸ **Format Favorites** ▸ its name, or **Edit ▸ Format Favorites…**. It is one step to undo.
+- **Change one:** right-click its card for **Update to Match Selection**, **Rename…**, **Move Earlier** and **Delete**.
+
+Favorites are kept with your settings, not in a file, so the same ones are there in every canvas, presentation, design and document (in a document, a favorite gives its text look). The things you paint keep their look when saved, in every format.
+
 ### Insert ▸ Symbol (every mode)
 
 **Insert ▸ Symbol…** (and **Symbol** on the **Insert** tab) opens a small window of characters: Greek letters, arrows, maths, chemistry signs and units (°, ‡, ⦵, Å, ⇌), superscripts and subscripts, fractions, punctuation, accented letters for authors' names, currency, and marks such as ✓.
@@ -216,7 +228,7 @@ Presentations, spreadsheets, documents and designs save in their own formats; se
 
 | Page | What it holds |
 |---|---|
-| **General** | The start view, what a click on a grouped thing selects, outlining the rest of a group, where linked text goes, asking before a command changes every structure on the page, and your name on tracked changes in documents. |
+| **General** | The start view, the tool demos on a long hover, what a click on a grouped thing selects, outlining the rest of a group, where linked text goes, asking before a command changes every structure on the page, and your name on tracked changes in documents. |
 | **Drawing** | Terminal methyls as Me or CH3; axial chirality as Ra / Sa or P / M (Ra is the same as M, and Sa as P); charges from the + and − keys plain (N+) or circled (⊕, ⊖); text typed beside a bond end becoming an atom; raised R-group numbers; mechanism arrows finding their own way round. |
 | **Drawing Style** | Bond length, line widths, fonts and journal styles (see [Canvas](drawing.md#drawing-styles)). |
 | **Hotkeys** | Every key, to change, import or export (see [Keyboard and mouse](keyboard-and-mouse.md)). |

@@ -6,6 +6,7 @@
 // deleted ones are removed and new ones are added. A new drawing is written from scratch in
 // the same form ChemDraw uses, so ChemDraw opens both.
 
+import { guidesText } from '../editor/guides';
 import { Doc, Atom, Bond, Caption, Arrow, Shape, TextRun, Entity, Kind, StepRoles, enhancedText, CHIRAL_FLAGS, flagTextSize, type HighlightStyle } from '../model';
 import { interpretArrow, isReactionArrow, linkRows, isStep, plainMeasure, schemeItems, type Item } from '../chem/reaction';
 import { SYMBOLS } from '../chem/elements';
@@ -21,7 +22,7 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl } from '../render/images';
-import { PAGE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
+import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
 import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
@@ -36,6 +37,7 @@ import { TABLE_TAG, TABLE_PART_TAG, tableBorders, type TableTag } from './cdxml-
 import { bondLayer, crossingBondsCached } from '../chem/crossing';
 import { repeatGroups, repeatCount, repeatLabelPlace } from '../chem/polymer';
 import { ellipseAxes, isCircleRing, ringCircle, ringsThroughBond } from '../chem/aromatic';
+import { newmanForFile } from '../design/newman';
 
 /** Numbers in an attribute such as "12.5 30 0". */
 const pts = (v: string | null): number[] => (v ?? '').trim().split(/\s+/).filter(Boolean).map(Number);
@@ -186,6 +188,8 @@ class CdxmlWriter {
     const b = doc.bounds();
     // a page set here (File > Page Setup), or grown to hold the drawing, is written to the file's page
     if (src && doc.page && this.pageNeeds(b)) this.changed = true;
+    // the guides and the arrow-text style, kept for this program in tags ChemDraw passes over (guides are never drawn, exported or printed)
+    if (this.writeGuides()) this.changed = true;
     if (src && !this.changed) return src.text;
     if (b) this.root.setAttribute('BoundingBox', box(b));
     if (!src || doc.page) this.sizePage(b);
@@ -255,6 +259,26 @@ class CdxmlWriter {
     else { wp = Math.ceil(((b?.x2 ?? 0) + 36) / W); hp = Math.ceil(((b?.y2 ?? 0) + 36) / H); }
     wp = Math.max(1, wp); hp = Math.max(1, hp);
     return { BoundingBox: `0 0 ${f2(W * wp)} ${f2(H * hp)}`, HeaderPosition: '36', FooterPosition: '36', PrintTrimMarks: 'yes', HeightPages: String(hp), WidthPages: String(wp) };
+  }
+
+  /** The guides' tag on the page, matching the drawing's guides; true when it had to change. */
+  private writeGuides(): boolean {
+    const st = this.doc.style;
+    // the drawing style's text over arrows and arrow sizes (ChemDraw's style has no place for them)
+    const own = { size: st.arrowTextSize, font: st.arrowTextFont, width: st.arrowWidth, head: st.arrowHeadLength, headWidth: st.arrowHeadWidth, scheme: st.scheme };
+    const arrow = Object.values(own).some((v) => v !== undefined && v !== '') ? JSON.stringify(own) : null;
+    const a = this.pageTag(GUIDES_TAG, guidesText(this.doc.guides));
+    const b = this.pageTag(ARROW_TEXT_TAG, arrow);
+    return a || b;
+  }
+
+  /** One of this program's tags on the page, set to `want` (or taken away); true when it changed. */
+  private pageTag(name: string, want: string | null): boolean {
+    const old = kids(this.page).find((c) => c.nodeName === 'objecttag' && c.getAttribute('Name') === name) ?? null;
+    if ((old?.getAttribute('Value') ?? null) === want) return false;
+    if (old) this.page.removeChild(old);
+    if (want) this.page.appendChild(this.el('objecttag', { TagType: 'String', Name: name, Value: want, Visible: 'no' }));
+    return true;
   }
 
   /** The page grid's fixed edges and whether it grows, kept for this program (ChemDraw takes no notice). */
@@ -575,7 +599,11 @@ class CdxmlWriter {
   }
 
   private buildNode(a: Atom): Element {
-    if (a.multi) return this.el('n', { id: a.id, p: pt(a), NodeType: 'MultiAttachment', Attachments: this.attachments(a) });
+    if (a.multi) {
+      const n = this.el('n', { id: a.id, p: pt(a), NodeType: 'MultiAttachment', Attachments: this.attachments(a) });
+      this.kekuleTag(n, a);
+      return n;
+    }
     if (a.attach) return this.el('n', { id: a.id, p: pt(a), NodeType: 'ExternalConnectionPoint', ExternalConnectionType: a.attach === 'Unspecified' ? null : a.attach, ExternalConnectionNum: a.attachNum ?? null });
     const n = this.el('n', { id: a.id, p: pt(a) });
     this.nodeCore(n, a);
@@ -628,6 +656,13 @@ class CdxmlWriter {
   }
 
   /** A multicentre point's atoms, as the ids their nodes have in the file. */
+  /** A multicentre point's π-system shown in Kekulé form, kept for this program (ChemDraw draws the bonds as they are anyway). */
+  private kekuleTag(n: Element, a: Atom): void {
+    const old = kids(n).find((c) => c.nodeName === 'objecttag' && c.getAttribute('Name') === KEKULE_TAG);
+    if (old && !a.kekule) n.removeChild(old);
+    if (!old && a.kekule) n.appendChild(this.el('objecttag', { TagType: 'String', Name: KEKULE_TAG, Value: 'yes', Visible: 'no' }));
+  }
+
   private attachments(a: Atom): string {
     return (a.multi ?? []).filter((id) => this.doc.atoms.has(id)).map((id) => this.nodeId(id)).join(' ');
   }
@@ -638,6 +673,7 @@ class CdxmlWriter {
     if (a.multi) {
       this.set(n, 'NodeType', 'MultiAttachment');
       this.set(n, 'Attachments', this.attachments(a));
+      this.kekuleTag(n, a);
       return;
     }
     if (a.attach) {
@@ -775,7 +811,9 @@ class CdxmlWriter {
     // keep the old label's font and bold/italic style
     const oldS = this.child(this.child(n, 't') ?? n, 's');
     const keepFont = oldS?.getAttribute('font') ?? null;
-    const keepBits = Number(oldS?.getAttribute('face') ?? 0) & 7;
+    // (the bits every run had, so an italic alkyl prefix doesn't spread to the whole label)
+    const oldRuns = [...(this.child(n, 't')?.childNodes ?? [])].filter((c): c is Element => c.nodeName === 's');
+    const keepBits = oldRuns.length ? oldRuns.reduce((m, e) => m & Number(e.getAttribute('face') ?? 0), 7) : Number(oldS?.getAttribute('face') ?? 0) & 7;
     for (const c of kids(n)) if (c.nodeName === 't' || (rebuildInner && c.nodeName === 'fragment')) n.removeChild(c);
     if (rebuildInner) for (const k of ['NodeType', 'GenericNickname', 'Warning', 'NumHydrogens', 'NeedsClean']) n.removeAttribute(k);
     if (!labelSpec(a.z, a.label, a.charge, a.isotope, this.doc.valenceSum(a.id), this.doc.degree(a.id), !a.hideCharge, !!a.showCarbon)) return;
@@ -1428,6 +1466,7 @@ class CdxmlWriter {
     const { id: _, ...look } = s;
     // a frame takes what lies inside it again on opening (ids change between files)
     if (look.frame) look.frame = { ...look.frame, atoms: [], captions: [], arrows: [], shapes: [] };
+    if (look.newman) look.newman = newmanForFile(this.doc, look.newman);
     if (ringPts) look.poly = ringPts.map((p) => ({ x: p.x, y: p.y }));
     g.appendChild(this.el('objecttag', { TagType: 'String', Name: GEO_TAG, Value: JSON.stringify(look), Visible: 'no' }));
     this.set(g, 'BoundingBox', box(b));
@@ -1624,7 +1663,9 @@ class CdxmlWriter {
       case 'line':
         set('GraphicType', 'Line');
         set('BoundingBox', box(s));
-        set('LineType', style);
+        // ChemDraw has no dotted line: it shows dashes, and the dots come back on opening here
+        set('LineType', s.dotted ? [s.bold && 'Bold', 'Dashed'].filter(Boolean).join(' ') : style);
+        set(DOTTED_ATTR, s.dotted ? 'yes' : null);
         break;
       case 'rect':
         set('GraphicType', 'Rectangle');
@@ -1980,9 +2021,11 @@ export function labelRuns(text: string, look: { supDigits: boolean; marks?: stri
   const out: TextRun[] = [];
   [...text].forEach((ch, i) => {
     const m = look.marks?.[i];
-    const r: TextRun = m === '^' ? { text: ch, sup: true } : m === '_' ? { text: ch, sub: true } : m === '=' ? { text: ch } : digits && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
+    const base: TextRun = m === '^' ? { text: ch, sup: true } : m === '_' ? { text: ch, sub: true } : m === '=' ? { text: ch } : digits && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
+    // the t of tBu in italics (the alkyl look)
+    const r: TextRun = m === '/' ? { ...base, italic: true } : base;
     const last = out[out.length - 1];
-    if (last && !!last.sup === !!r.sup && !!last.sub === !!r.sub && !!last.formula === !!r.formula) last.text += ch;
+    if (last && !!last.sup === !!r.sup && !!last.sub === !!r.sub && !!last.formula === !!r.formula && !!last.italic === !!r.italic) last.text += ch;
     else out.push(r);
   });
   return out.length ? out : [{ text, formula: true }];

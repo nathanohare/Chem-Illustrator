@@ -96,6 +96,8 @@ export const TAG = {
   math: 'CHEMILLUSTRATOR_MATH',
   /** A canvas slide's keyframes (its drawing is saved at its own places, the first keyframe's over the slide). */
   canvas: 'CHEMILLUSTRATOR_CANVAS',
+  /** Turn in 3-D: each one's key view, in the order of the slide's animations (PowerPoint is given a Spin of next to nothing in its place). */
+  turn3d: 'CHEMILLUSTRATOR_TURN3D',
   /**
    * A slide made from a canvas slide's keyframe: which canvas, which of its slides, and a print of
    * what it held (to tell whether PowerPoint changed it). The first also has canvasKeep, the canvas itself.
@@ -792,7 +794,7 @@ class Writer {
       part = { [TAG.canvasPart]: JSON.stringify({ ...where, print: slidePrintXml(`<p:spTree ${XMLNS}>${GROUP}${out.join('')}</p:spTree>`) }), ...(keep ? { [TAG.canvasKeep]: JSON.stringify(keep) } : {}) };
     }
     const refTag = slideRefsTag(s);
-    const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(refTag ? { [TAG.slideRefs]: refTag } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}), ...part });
+    const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(refTag ? { [TAG.slideRefs]: refTag } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}), ...turnTag(s.anims), ...part });
     const bg = s.background ? await this.background(path, s.background) : '';
     return `${HEAD}<p:sld ${XMLNS}${s.hideGraphics ? ' showMasterSp="0"' : ''}${s.hidden ? ' show="0"' : ''}><p:cSld>${bg}<p:spTree>${GROUP}${out.join('')}</p:spTree><p:custDataLst><p:tags r:id="${tags}"/></p:custDataLst></p:cSld>` +
       `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(s.transition)}${timingXml(expandParas(s.anims ?? [], (cid) => { const c = doc.captions.get(cid); return c ? plainText(c.runs).split('\n') : null; }), (a) => spids.get(targetKey(a.target)) ?? [], videos, (t) => spids.get(targetKey(t))?.[0])}` +
@@ -1360,23 +1362,25 @@ export function connectorSpPr(r: Arrow, lw: number): { frame: string; geom: stri
   return { frame, geom, ln, curved: curved || !!r.elbow };
 }
 
+/** A library shape's outline `w` × `h` points big: PowerPoint's preset when it has one, else a custom shape with these outlines (as PowerPoint and Word both write them). */
+export function geoGeomXml(geo: string | undefined, w: number, h: number): string {
+  const def = geoDef(geo);
+  if (def.prst) return `<a:prstGeom prst="${def.prst}"><a:avLst/></a:prstGeom>`;
+  const o = def.draw(w, h);
+  const ta = textArea(def, 0, 0, w, h);
+  // the text's box through guides (LibreOffice ignores a text box given as plain numbers)
+  const f = (v: number, of: number) => Math.round((of > 0 ? v / of : 0) * 100000);
+  return `<a:custGeom><a:avLst/><a:gdLst><a:gd name="txL" fmla="*/ w ${f(ta.x1, w)} 100000"/><a:gd name="txT" fmla="*/ h ${f(ta.y1, h)} 100000"/><a:gd name="txR" fmla="*/ w ${f(ta.x2, w)} 100000"/><a:gd name="txB" fmla="*/ h ${f(ta.y2, h)} 100000"/></a:gdLst><a:ahLst/><a:cxnLst/>` +
+    '<a:rect l="txL" t="txT" r="txR" b="txB"/>' +
+    `<a:pathLst>${geoPath(o.body, w, h, '')}${o.lines?.length ? geoPath(o.lines, w, h, ' fill="none"') : ''}</a:pathLst></a:custGeom>`;
+}
+
 /** A design shape's place, outline, fill, line and effects (shadow, glow, reflection, soft edges, bevel), as PowerPoint and Word (in groups) both write them. */
 export function geoSpPr(s: Shape, lw: number): { box: Rect; geom: string; fill: string; ln: string; shadow: string } {
-  const def = geoDef(s.geo);
   const box = { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
   const w = box.x2 - box.x1, h = box.y2 - box.y1;
   const width = s.lineWidth ?? (s.bold ? lw * 2.5 : lw);
-  let geom: string;
-  if (def.prst) geom = `<a:prstGeom prst="${def.prst}"><a:avLst/></a:prstGeom>`;
-  else {
-    const o = def.draw(w, h);
-    const ta = textArea(def, 0, 0, w, h);
-    // the text's box through guides (LibreOffice ignores a text box given as plain numbers)
-    const f = (v: number, of: number) => Math.round((of > 0 ? v / of : 0) * 100000);
-    geom = `<a:custGeom><a:avLst/><a:gdLst><a:gd name="txL" fmla="*/ w ${f(ta.x1, w)} 100000"/><a:gd name="txT" fmla="*/ h ${f(ta.y1, h)} 100000"/><a:gd name="txR" fmla="*/ w ${f(ta.x2, w)} 100000"/><a:gd name="txB" fmla="*/ h ${f(ta.y2, h)} 100000"/></a:gdLst><a:ahLst/><a:cxnLst/>` +
-      '<a:rect l="txL" t="txT" r="txR" b="txB"/>' +
-      `<a:pathLst>${geoPath(o.body, w, h, '')}${o.lines?.length ? geoPath(o.lines, w, h, ' fill="none"') : ''}</a:pathLst></a:custGeom>`;
-  }
+  const geom = geoGeomXml(s.geo, w, h);
   const fc = hex6(s.fillColor ?? s.color ?? '#000000');
   const clear = Math.max(0, Math.min(1, s.transparency ?? 0));
   const alpha = clear ? `<a:alpha val="${Math.round((1 - clear) * 100000)}"/>` : '';
@@ -1496,7 +1500,7 @@ function patternOrGradient(s: Shape, fc: string, alpha: string): string | null {
 function shapeXml(s: Shape, id: number, lw: number): string {
   const width = (s.bold ? lw * 2.5 : lw);
   const color = hex6(s.color ?? '#000000');
-  const dash = s.dashed ? '<a:prstDash val="dash"/>' : '';
+  const dash = s.dotted ? '<a:prstDash val="sysDot"/>' : s.dashed ? '<a:prstDash val="dash"/>' : '';
   if (s.kind === 'line') {
     const flips = `${s.x2 < s.x1 ? ' flipH="1"' : ''}${s.y2 < s.y1 ? ' flipV="1"' : ''}`;
     const box = { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
@@ -1657,4 +1661,10 @@ function withCanvasesSplit(deck: DeckData): DeckData {
     return { ...sec, count };
   });
   return { ...deck, slides: split.flat(), ...(sections ? { sections } : {}) };
+}
+
+/** The slide's Turn in 3-D views, for a tag (see TAG.turn3d). */
+function turnTag(anims: Anim[] | undefined): Record<string, string> {
+  const turns = (anims ?? []).filter((a) => a.effect === 'turn3d');
+  return turns.length ? { [TAG.turn3d]: JSON.stringify(turns.map((a) => a.view ?? null)) } : {};
 }

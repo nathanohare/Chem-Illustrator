@@ -6,10 +6,15 @@
 // from ACS 1996 in proportion to the bond length, and the note says so.
 
 import { Doc, type Contents } from './model';
-import { ACS_1996, DocStyle } from './style';
+import { ACS_1996, DocStyle, type StyleScheme } from './style';
+
+/** What a style is for: the groups the Drawing Styles gallery shows ('Yours' is your own). */
+export type StyleUse = 'Journal' | 'Presentation' | 'Poster' | 'Thesis/Print';
+export const STYLE_USES: StyleUse[] = ['Journal', 'Presentation', 'Poster', 'Thesis/Print'];
 
 export interface StylePreset {
   style: DocStyle;
+  use: StyleUse;
   /** Where the numbers come from. */
   source: string;
   /** Anything worked out rather than read from the guideline. */
@@ -29,10 +34,11 @@ const scaled = (k: number) => {
 
 export const STYLE_PRESETS: StylePreset[] = [
   {
-    style: { ...ACS_1996 },
+    style: { ...ACS_1996 }, use: 'Journal',
     source: 'ACS author guidelines, "ACS Stylesheet" (researcher-resources.acs.org); used by every ACS journal',
   },
   {
+    use: 'Journal',
     style: {
       name: 'RSC', bondLength: cm(0.43), lineWidth: cm(0.016), boldWidth: cm(0.056), hashSpacing: cm(0.062),
       marginWidth: 1.36, bondSpacing: 20, chainAngle: 120, labelFont: 'Arial', labelSize: 7, captionFont: 'Arial', captionSize: 7, captionFace: 96,
@@ -41,6 +47,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     note: 'The guideline gives no margin width; 1.36 pt keeps ACS 1996\'s proportion to the bond length.',
   },
   {
+    use: 'Journal',
     style: {
       name: 'Nature journals', bondLength: cm(0.381), lineWidth: cm(0.021), boldWidth: cm(0.055), hashSpacing: cm(0.06),
       marginWidth: cm(0.042), bondSpacing: 18, chainAngle: 120, labelFont: 'Arial', labelSize: 6, captionFont: 'Arial', captionSize: 6.5, captionFace: 96,
@@ -48,6 +55,7 @@ export const STYLE_PRESETS: StylePreset[] = [
     source: 'Nature Portfolio "Style guide for chemical structures" (nature.com); Nature, Nature Chemistry, Nature Communications and the Nature Reviews journals',
   },
   {
+    use: 'Journal',
     style: {
       name: 'Thieme (Synthesis, Synlett)', bondLength: cm(0.357), lineWidth: cm(0.02), boldWidth: cm(0.049), hashSpacing: cm(0.062),
       marginWidth: cm(0.032), bondSpacing: 18, chainAngle: 120, labelFont: 'Arial', labelSize: 6, captionFont: 'Arial', captionSize: 6, captionFace: 96,
@@ -56,23 +64,59 @@ export const STYLE_PRESETS: StylePreset[] = [
     note: 'The instructions show the numbers but name no font; Arial is used, as for the other journals.',
   },
   {
-    style: { ...scaled(7 / 10), name: 'Wiley (Angewandte, Chemistry Europe)' },
+    style: { ...scaled(7 / 10), name: 'Wiley (Angewandte, Chemistry Europe)' }, use: 'Journal',
     source: 'Wiley-VCH checklists for accepted manuscripts (Angewandte family, Chemistry Europe): Arial or Helvetica only, about 1.8 mm final text (7 pt), lines at least 0.2 pt',
     note: 'Wiley publishes its bond settings only inside its ChemDraw template, so bond length and widths are ACS 1996 scaled to the 7 pt text.',
   },
   {
-    style: { ...scaled(7 / 10), name: 'Elsevier (Tetrahedron and others)' },
+    style: { ...scaled(7 / 10), name: 'Elsevier (Tetrahedron and others)' }, use: 'Journal',
     source: 'Elsevier "Artwork and media instructions" (elsevier.com): Arial, Courier, Symbol or Times; lettering 7 pt at final size, no smaller than 6 pt',
     note: 'Elsevier gives no bond settings, so bond length and widths are ACS 1996 scaled to the 7 pt text.',
   },
   {
+    use: 'Presentation',
     style: {
       ...ACS_1996, name: 'Slides (ACS 1996 × 2)', bondLength: 28.8, lineWidth: 1.2, boldWidth: 4, marginWidth: 3.2, hashSpacing: 5,
       labelSize: 20, captionSize: 20,
     },
     source: 'ACS 1996 at twice the size, so structures read well on a projector',
   },
+  {
+    use: 'Presentation',
+    style: { ...scaled(2), name: 'Slides, heavy lines', lineWidth: 1.8, boldWidth: 5.6, hashSpacing: 5.4, marginWidth: 3.6 },
+    source: 'ACS 1996 at twice the size with lines about half as heavy again, for big rooms and dim projectors where thin lines fade',
+    note: 'Not a publisher\'s style: worked out from ACS 1996.',
+  },
+  {
+    use: 'Poster',
+    style: { ...scaled(3), name: 'Poster (ACS 1996 × 3)', lineWidth: 2.4, boldWidth: 7.2, hashSpacing: 8.1, marginWidth: 5.4 },
+    source: 'ACS 1996 at three times the size with lines a third heavier again: 30 pt labels, readable from about 2 m on an A0 or 48 × 36 in poster',
+    note: 'Not a publisher\'s style: worked out from ACS 1996 and the usual advice that poster text be at least 24 pt.',
+  },
+  {
+    use: 'Poster',
+    style: { ...scaled(2.4), name: 'Poster, compact (ACS 1996 × 2.4)', lineWidth: 1.92, boldWidth: 5.76, hashSpacing: 6.48, marginWidth: 4.32 },
+    source: 'ACS 1996 at 2.4 times the size (24 pt labels), for long schemes on a poster panel',
+    note: 'Not a publisher\'s style: worked out from ACS 1996.',
+  },
+  {
+    use: 'Thesis/Print',
+    style: { ...scaled(1.2), name: 'Thesis (ACS 1996 × 1.2)' },
+    source: 'ACS 1996 at 1.2 times the size: 12 pt labels to match 12 pt body text on a full page',
+    note: 'Not a university\'s rule: check your graduate school\'s format guide for any minimum text size.',
+  },
+  {
+    use: 'Thesis/Print',
+    style: { ...scaled(1.2), name: 'Thesis, serif captions', captionFont: 'Times New Roman' },
+    source: 'Thesis (ACS 1996 × 1.2) with captions in Times New Roman, to match a serif thesis text',
+    note: 'Atom labels stay Arial, as journals ask; only captions change font.',
+  },
 ];
+
+/** The use a style is for: a built-in's group, else 'Yours'. */
+export function styleUse(st: DocStyle): StyleUse | 'Yours' {
+  return presetNamed(st.name)?.use ?? 'Yours';
+}
 
 /** A built-in style by name. */
 export function presetNamed(name: string): StylePreset | undefined {
@@ -83,8 +127,32 @@ const NUMBERS = ['bondLength', 'lineWidth', 'boldWidth', 'marginWidth', 'hashSpa
 
 /** Do two styles draw the same? (Names aside.) */
 export function sameLook(a: DocStyle, b: DocStyle): boolean {
-  return NUMBERS.every((k) => Math.abs(a[k] - b[k]) < 1e-6) && a.labelFont === b.labelFont && a.captionFont === b.captionFont;
+  return NUMBERS.every((k) => Math.abs(a[k] - b[k]) < 1e-6) && a.labelFont === b.labelFont && a.captionFont === b.captionFont
+    && Math.abs(arrowTextSizeOf(a) - arrowTextSizeOf(b)) < 1e-6 && arrowTextFontOf(a) === arrowTextFontOf(b)
+    && ARROW_SIZES.every((k) => (a[k] ?? null) === (b[k] ?? null))
+    && JSON.stringify(cleanScheme(a.scheme) ?? null) === JSON.stringify(cleanScheme(b.scheme) ?? null);
 }
+
+const SCHEME_DISTANCES = ['structGap', 'plusGap', 'textGap', 'lead', 'headGap'] as const;
+
+/** A style's own scheme settings, keeping only what makes sense (in a fixed order), or undefined when it has none. */
+export function cleanScheme(raw: unknown): StyleScheme | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: StyleScheme = {};
+  for (const k of SCHEME_DISTANCES) { const v = r[k]; if (typeof v === 'number' && Number.isFinite(v) && v >= 0) out[k] = Math.min(500, v); }
+  if (r.textAlign === 'left' || r.textAlign === 'center' || r.textAlign === 'right') out.textAlign = r.textAlign;
+  if (typeof r.fit === 'boolean') out.fit = r.fit;
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** A style's own arrow sizes (absent: the usual for its line width). */
+export const ARROW_SIZES = ['arrowWidth', 'arrowHeadLength', 'arrowHeadWidth'] as const;
+
+/** The size of text above and below arrows in a style (the captions' unless set). */
+export const arrowTextSizeOf = (s: DocStyle): number => s.arrowTextSize ?? s.captionSize;
+/** Its font (the captions' unless set). */
+export const arrowTextFontOf = (s: DocStyle): string => s.arrowTextFont ?? s.captionFont;
 
 /** A style read back from the settings file: every number present and sensible, else null. */
 export function cleanStyle(raw: unknown): DocStyle | null {
@@ -100,6 +168,11 @@ export function cleanStyle(raw: unknown): DocStyle | null {
   if (typeof r.labelFont === 'string' && r.labelFont.trim()) out.labelFont = r.labelFont.trim();
   if (typeof r.captionFont === 'string' && r.captionFont.trim()) out.captionFont = r.captionFont.trim();
   if (typeof r.captionFace === 'number') out.captionFace = r.captionFace;
+  if (typeof r.arrowTextSize === 'number' && Number.isFinite(r.arrowTextSize) && r.arrowTextSize > 0) out.arrowTextSize = r.arrowTextSize;
+  if (typeof r.arrowTextFont === 'string' && r.arrowTextFont.trim()) out.arrowTextFont = r.arrowTextFont.trim();
+  for (const k of ARROW_SIZES) { const v = r[k]; if (typeof v === 'number' && Number.isFinite(v) && v > 0) out[k] = Math.min(30, v); }
+  const scheme = cleanScheme(r.scheme);
+  if (scheme) out.scheme = scheme;
   return out;
 }
 
@@ -214,5 +287,8 @@ export function scaleStyle(st: DocStyle, k: number): DocStyle {
   return {
     ...st, bondLength: r(st.bondLength), lineWidth: r(st.lineWidth), boldWidth: r(st.boldWidth), marginWidth: r(st.marginWidth),
     hashSpacing: r(st.hashSpacing), labelSize: r(st.labelSize), captionSize: r(st.captionSize),
+    ...(st.arrowTextSize !== undefined ? { arrowTextSize: r(st.arrowTextSize) } : {}),
+    ...Object.fromEntries(ARROW_SIZES.filter((x) => st[x] !== undefined).map((x) => [x, r(st[x]!)])),
+    ...(st.scheme ? { scheme: { ...st.scheme, ...Object.fromEntries(SCHEME_DISTANCES.filter((x) => st.scheme![x] !== undefined).map((x) => [x, r(st.scheme![x]!)])) } } : {}),
   };
 }

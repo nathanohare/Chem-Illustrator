@@ -33,6 +33,10 @@ function links(r: SafetyRecord): KbSource[] {
 }
 
 const byCid = new Map(SAFETY_RECORDS.map((r) => [r.cid, r]));
+/** Records loaded later (the big table) get their row links too. */
+export function registerRecords(records: SafetyRecord[]): void {
+  for (const r of records) if (!byCid.has(r.cid)) byCid.set(r.cid, r);
+}
 const rowLinks = (row: Record<string, Cell>): KbSource[] => {
   const r = byCid.get(Number(row.cid));
   return r ? links(r) : [];
@@ -48,7 +52,7 @@ function kpText(r: SafetyRecord): string | null {
   return `${(k.kp / 10 ** e).toFixed(1)}×10${sup} (${k.band})`;
 }
 
-function safetyRow(r: SafetyRecord): Record<string, Cell> {
+export function safetyRow(r: SafetyRecord): Record<string, Cell> {
   const rating = rate(r);
   const lethal = lethalByRoute(r);
   const other = (['ip', 'iv', 'sc'] as const).filter((k) => lethal[k]).map((k) => `${k}: ${lethal[k]}`).join('; ');
@@ -60,7 +64,7 @@ function safetyRow(r: SafetyRecord): Record<string, Cell> {
   return {
     cid: r.cid,
     name: r.name,
-    tier: rating.tier,
+    tier: rating.tier ?? 'Not rated',
     // the compound's own name is beside it already
     why: rating.why.map((w) => (w.toLowerCase().startsWith(r.name.toLowerCase() + ': ') ? w.slice(r.name.length + 2) : w)).map((w) => w[0].toUpperCase() + w.slice(1)).join('; '),
     idlh: r.idlh ? fmtIdlh(r) + (r.idlh.ca && r.idlh.value !== undefined ? ' (Ca)' : '') : null,
@@ -82,11 +86,17 @@ function safetyRow(r: SafetyRecord): Record<string, Cell> {
   };
 }
 
+/** Tier 1 first, Not rated last, then by name. */
+export function sortSafety(rows: Record<string, Cell>[]): Record<string, Cell>[] {
+  const t = (r: Record<string, Cell>) => (typeof r.tier === 'number' ? r.tier : 5);
+  return rows.sort((a, b) => t(a) - t(b) || String(a.name).localeCompare(String(b.name)));
+}
+
 /** Hazard numbers for common reagents, solvents and gases, rated by tier. */
 export const REAGENT_SAFETY: KbTable = {
   id: 'reagent-safety',
   title: 'Reagent Safety',
-  about: 'Bench hazard tier (1 extraordinary, 2 high, 3 standard, 4 low) from measured numbers and the harmonised EU classification, with the numbers behind it. A guide only: read the SDS and follow your institution\'s rules.',
+  about: 'Bench hazard tier (1 extraordinary, 2 high, 3 standard, 4 low; Not rated when no open source has data) from measured numbers and the harmonised EU classification, with the numbers behind it. Several thousand compounds; one that isn\'t here can be rated live from PubChem. A guide only: read the SDS and follow your institution\'s rules.',
   columns: [
     { key: 'name', label: 'Compound' },
     { key: 'tier', label: 'Tier', filter: true, narrow: true, numeric: true },
@@ -107,7 +117,7 @@ export const REAGENT_SAFETY: KbTable = {
     { key: 'cas', label: 'CAS' },
     { key: 'sources', label: 'Sources' },
   ],
-  rows: SAFETY_RECORDS.map(safetyRow).sort((a, b) => Number(a.tier) - Number(b.tier) || String(a.name).localeCompare(String(b.name))),
+  rows: sortSafety(SAFETY_RECORDS.map(safetyRow)),
   sources: [
     { label: 'NIOSH Pocket Guide (IDLH, incompatibilities)', url: 'https://www.cdc.gov/niosh/npg/' },
     { label: 'Hazardous Substances Data Bank (LD50, LC50, vapour pressure), via PubChem', url: 'https://pubchem.ncbi.nlm.nih.gov/source/hsdb' },
@@ -118,6 +128,17 @@ export const REAGENT_SAFETY: KbTable = {
   ],
   links: rowLinks,
 };
+
+/** A Physical Constants row. */
+export function constantsRow(r: SafetyRecord): Record<string, Cell> {
+  const vp = r.vp ? vpMmHg(r.vp.text) : null;
+  const src = [['mp', r.mp], ['bp', r.bp], ['density', r.density], ['flash point', r.flash], ['VP', r.vp]].filter(([, v]) => v).map(([k, v]) => `${k} ${(v as { source: string }).source}`).join('; ');
+  return {
+    cid: r.cid, name: r.name, formula: r.formula, mw: r.mw === null ? null : Number(r.mw.toFixed(2)),
+    mp: short(r.mp?.text), bp: short(r.bp?.text), density: short(r.density?.text), flash: short(r.flash?.text),
+    vp: vp === null ? null : vp > 760 ? 'gas' : sig(vp), cas: r.cas, smiles: r.smiles, sources: src || null,
+  };
+}
 
 /** Molar mass, melting and boiling points, density, flash point and vapour pressure. */
 export const PHYSICAL_CONSTANTS: KbTable = {
@@ -136,15 +157,7 @@ export const PHYSICAL_CONSTANTS: KbTable = {
     { key: 'cas', label: 'CAS' },
     { key: 'sources', label: 'Sources' },
   ],
-  rows: SAFETY_RECORDS.map((r) => {
-    const vp = r.vp ? vpMmHg(r.vp.text) : null;
-    const src = [['mp', r.mp], ['bp', r.bp], ['density', r.density], ['flash point', r.flash], ['VP', r.vp]].filter(([, v]) => v).map(([k, v]) => `${k} ${(v as { source: string }).source}`).join('; ');
-    return {
-      cid: r.cid, name: r.name, formula: r.formula, mw: r.mw === null ? null : Number(r.mw.toFixed(2)),
-      mp: short(r.mp?.text), bp: short(r.bp?.text), density: short(r.density?.text), flash: short(r.flash?.text),
-      vp: vp === null ? null : vp > 760 ? 'gas' : sig(vp), cas: r.cas, smiles: r.smiles, sources: src || null,
-    };
-  }).sort((a, b) => String(a.name).localeCompare(String(b.name))),
+  rows: SAFETY_RECORDS.map(constantsRow).sort((a, b) => String(a.name).localeCompare(String(b.name))),
   sources: [
     { label: 'Hazardous Substances Data Bank, NIOSH, NOAA CAMEO and OSHA, via PubChem', url: 'https://pubchem.ncbi.nlm.nih.gov/' },
     { label: 'Formula and molar mass computed by PubChem' },

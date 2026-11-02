@@ -13,6 +13,7 @@ import { sceneOf } from './scene';
 import { resolve } from './mapping';
 import { matchBonds, type NodeMap } from './match';
 import type { MScene } from './scene';
+import { mapColour } from '../render/atom-marks';
 
 export interface AtomMap {
   /** The map number of each mapped atom. */
@@ -256,8 +257,7 @@ function readingOrder(doc: Doc, ids: number[]): number[] {
 }
 
 /** Soft colours for mapped atoms, one per map number (repeating after twelve). */
-export const MAP_COLOURS = ['#ffd27a', '#9fd3ff', '#b8e6a0', '#f7a8c4', '#c9b6f2', '#ffb48a', '#8fe0d4', '#e6e08a', '#a8b8ff', '#f2b6e6', '#c4e3b0', '#ffc2a8'];
-export const mapColour = (n: number): string => MAP_COLOURS[(n - 1) % MAP_COLOURS.length];
+export { MAP_COLOURS, mapColour } from '../render/atom-marks';
 /** Bonds made and broken, when marked. */
 export const MADE_COLOUR = '#5cc26b';
 export const BROKEN_COLOUR = '#ff7b7b';

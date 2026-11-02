@@ -3,8 +3,10 @@
 
 import type { Model3dRequest, Model3dResponse } from '../worker/model3d-worker';
 import type { Model3d } from './model3d-build';
+import type { SearchOptions } from './conformer-rank';
 import type { PoseResult } from './pose3d';
 import type { DepthCues } from './perspective';
+import type { ScanResult } from './torsion-scan';
 
 export class Model3dBuilder {
   private worker: Worker | null = null;
@@ -12,6 +14,8 @@ export class Model3dBuilder {
   private nextId = 1;
   private pending = new Map<number, (m: Extract<Model3dResponse, { type: 'build' }>) => void>();
   private poses = new Map<number, (r: PoseResult) => void>();
+  private progress = new Map<number, (done: number, total: number) => void>();
+  private others = new Map<number, (m: Extract<Model3dResponse, { type: 'rotamers' | 'scan' }>) => void>();
   /** How long starting took (download and set-up of the force field tables), once ready. */
   loadMs = 0;
 
@@ -36,9 +40,14 @@ export class Model3dBuilder {
         else if (m.type === 'build') {
           const cb = this.pending.get(m.id);
           if (cb) { this.pending.delete(m.id); cb(m); }
+        } else if (m.type === 'progress') {
+          this.progress.get(m.id)?.(m.done, m.total);
         } else if (m.type === 'pose') {
           const cb = this.poses.get(m.id);
           if (cb) { this.poses.delete(m.id); cb(m.result); }
+        } else if (m.type === 'rotamers' || m.type === 'scan') {
+          const cb = this.others.get(m.id);
+          if (cb) { this.others.delete(m.id); cb(m); }
         }
       };
       this.worker.onerror = (e) => reject(new Error('The 3-D model builder failed: ' + (e.message || 'unknown error')));
@@ -63,6 +72,69 @@ export class Model3dBuilder {
     });
     if (!r.model) throw new Error(r.message ?? 'Could not build a 3-D model of this structure.');
     return r.model;
+  }
+
+  /**
+   * A conformer search (hundreds of starting points relaxed, duplicates dropped, populations),
+   * `progress` told as it goes. Rejects with a readable reason, or 'stopped' after stop().
+   */
+  async search(molblock: string, opts: Omit<SearchOptions, 'progress'>, progress?: (done: number, total: number) => void): Promise<Model3d> {
+    await this.start();
+    const id = this.nextId++;
+    if (progress) this.progress.set(id, progress);
+    try {
+      const r = await new Promise<Extract<Model3dResponse, { type: 'build' }>>((resolve) => {
+        this.pending.set(id, resolve);
+        this.send({ type: 'search', id, molblock, opts, seed: 1 });
+      });
+      if (!r.model) throw new Error(r.message ?? 'Could not search the conformers of this structure.');
+      return r.model;
+    } finally {
+      this.progress.delete(id);
+    }
+  }
+
+  /** Stop whatever the worker is doing (a long search): it is started afresh when next needed, and calls waiting get 'stopped'. */
+  stop(): void {
+    this.worker?.terminate();
+    this.worker = null;
+    this.started = null;
+    for (const [id, cb] of this.pending) cb({ type: 'build', id, model: null, message: 'stopped' });
+    this.pending.clear();
+    for (const [, cb] of this.poses) cb({ problem: 'build', message: 'stopped' });
+    this.poses.clear();
+    for (const [id, cb] of this.others) cb({ type: 'scan', id, result: null, message: 'stopped' });
+    this.others.clear();
+    this.progress.clear();
+  }
+
+  /** The bond t[1]–t[2] turned to its other staggered rotamers from each starting conformer, each relaxed (Newman projections). */
+  async rotamers(molblock: string, starts: number[][], t: [number, number, number, number]): Promise<{ xyz: number[]; energy: number }[]> {
+    await this.start();
+    const id = this.nextId++;
+    const r = await new Promise<Extract<Model3dResponse, { type: 'rotamers' | 'scan' }>>((resolve) => {
+      this.others.set(id, resolve);
+      this.send({ type: 'rotamers', id, molblock, starts, t });
+    });
+    if (r.type !== 'rotamers') throw new Error(r.message ?? 'stopped');
+    return r.conformers;
+  }
+
+  /** A relaxed scan of the torsion t (3-D model atoms) from conformer `xyz`, in `step` degree steps. Rejects with a readable reason, or 'stopped'. */
+  async scan(molblock: string, xyz: number[], t: [number, number, number, number], step: number, progress?: (done: number, total: number) => void): Promise<ScanResult> {
+    await this.start();
+    const id = this.nextId++;
+    if (progress) this.progress.set(id, progress);
+    try {
+      const r = await new Promise<Extract<Model3dResponse, { type: 'rotamers' | 'scan' }>>((resolve) => {
+        this.others.set(id, resolve);
+        this.send({ type: 'scan', id, molblock, xyz, t, step });
+      });
+      if (r.type !== 'scan' || !r.result) throw new Error(r.message ?? 'The scan failed.');
+      return r.result;
+    } finally {
+      this.progress.delete(id);
+    }
   }
 
   /** The drawing's own shape in 3-D (for the 3-D Perspective tool), picked by its wedges and bold bonds. */

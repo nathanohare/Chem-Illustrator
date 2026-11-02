@@ -1,0 +1,2681 @@
+{
+ "pme3": {
+  "q": "Trimethylphosphine",
+  "ours": "YWWDBCBWQNCYNR-UHFFFAOYSA-N",
+  "cid": 68983,
+  "inchikey": "YWWDBCBWQNCYNR-UHFFFAOYSA-N",
+  "title": "Trimethylphosphine",
+  "how": "name",
+  "cite": 68983
+ },
+ "pet3": {
+  "q": "Triethylphosphine",
+  "ours": "RXJKFRMDXUJTEX-UHFFFAOYSA-N",
+  "cid": 27365,
+  "inchikey": "RXJKFRMDXUJTEX-UHFFFAOYSA-N",
+  "title": "Triethylphosphine",
+  "how": "name",
+  "cite": 27365
+ },
+ "pnbu3": {
+  "q": "Tributylphosphine",
+  "ours": "TUQOTMZNTHZOKS-UHFFFAOYSA-N",
+  "cid": 13831,
+  "inchikey": "TUQOTMZNTHZOKS-UHFFFAOYSA-N",
+  "title": "Tributylphosphine",
+  "how": "name",
+  "cite": 13831
+ },
+ "pnoct3": {
+  "q": "Trioctylphosphine",
+  "ours": "RMZAYIKUYWXQPB-UHFFFAOYSA-N",
+  "cid": 20851,
+  "inchikey": "RMZAYIKUYWXQPB-UHFFFAOYSA-N",
+  "title": "Trioctylphosphine",
+  "how": "name",
+  "cite": 20851
+ },
+ "pipr3": {
+  "q": "Triisopropylphosphine",
+  "ours": "IGNTWNVBGLNYDV-UHFFFAOYSA-N",
+  "cid": 80969,
+  "inchikey": "IGNTWNVBGLNYDV-UHFFFAOYSA-N",
+  "title": "Triisopropylphosphine",
+  "how": "name",
+  "cite": 80969
+ },
+ "pcyp3": {
+  "q": "Tricyclopentylphosphine",
+  "ours": "DHWBYAACHDUFAT-UHFFFAOYSA-N",
+  "cid": 4463278,
+  "inchikey": "DHWBYAACHDUFAT-UHFFFAOYSA-N",
+  "title": "Phosphine, tricyclopentyl-",
+  "how": "name",
+  "cite": 4463278
+ },
+ "pcy3": {
+  "q": "Tricyclohexylphosphine",
+  "ours": "WLPUWLXVBWGYMZ-UHFFFAOYSA-N",
+  "cid": 75806,
+  "inchikey": "WLPUWLXVBWGYMZ-UHFFFAOYSA-N",
+  "title": "Tricyclohexylphosphine",
+  "how": "name",
+  "cite": 75806
+ },
+ "ptbu3": {
+  "q": "Tri-tert-butylphosphine",
+  "ours": "BWHDROKFUHTORW-UHFFFAOYSA-N",
+  "cid": 83681,
+  "inchikey": "BWHDROKFUHTORW-UHFFFAOYSA-N",
+  "title": "Tris(1,1-dimethylethyl)phosphine",
+  "how": "name",
+  "cite": 83681
+ },
+ "pad3": {
+  "q": "Tri(1-adamantyl)phosphine",
+  "ours": "BQQJSZUDBXOSAG-UHFFFAOYSA-N",
+  "cid": 67197322,
+  "inchikey": "BQQJSZUDBXOSAG-UHFFFAOYSA-N",
+  "title": "Tris(1-adamantyl)phosphine",
+  "how": "name",
+  "cite": 67197322
+ },
+ "dtbnpp": {
+  "q": "Di-tert-butylneopentylphosphine",
+  "ours": "JBGICSFDKZAWFJ-UHFFFAOYSA-N",
+  "cid": 546251,
+  "inchikey": "JBGICSFDKZAWFJ-UHFFFAOYSA-N",
+  "title": "Di-tert-butylneopentylphosphine",
+  "how": "name",
+  "cite": 546251
+ },
+ "ptbu2me": {
+  "q": "Di-tert-butylmethylphosphine",
+  "ours": "JURBTQKVGNFPRJ-UHFFFAOYSA-N",
+  "cid": 4190634,
+  "inchikey": "JURBTQKVGNFPRJ-UHFFFAOYSA-N",
+  "title": "Di-tert-butylmethylphosphine",
+  "how": "name",
+  "cite": 4190634
+ },
+ "ptbu2ph": {
+  "q": "Di-tert-butylphenylphosphine",
+  "ours": "XOJNEFQLMRCOMS-UHFFFAOYSA-N",
+  "cid": 316378,
+  "inchikey": "XOJNEFQLMRCOMS-UHFFFAOYSA-N",
+  "title": "Di-tert-butylphenylphosphine",
+  "how": "name",
+  "cite": 316378
+ },
+ "amphos": {
+  "q": "4-(Di-tert-butylphosphino)-N,N-dimethylaniline",
+  "ours": "IQTHEAQKKVAXGV-UHFFFAOYSA-N",
+  "cid": 11714598,
+  "inchikey": "IQTHEAQKKVAXGV-UHFFFAOYSA-N",
+  "title": "(4-(N,N-Dimethylamino)phenyl)di-tert-butyl phosphine",
+  "how": "name",
+  "cite": 11714598
+ },
+ "catacxiuma": {
+  "q": "Butyldi-1-adamantylphosphine",
+  "ours": "HTJWUNNIRKDDIV-UHFFFAOYSA-N",
+  "cid": 11371790,
+  "inchikey": "HTJWUNNIRKDDIV-UHFFFAOYSA-N",
+  "title": "Bis(adamantan-1-yl)(butyl)phosphane",
+  "how": "name",
+  "cite": 11371790
+ },
+ "pph3": {
+  "q": "Triphenylphosphine",
+  "ours": "RIOQSEWOXXDEQQ-UHFFFAOYSA-N",
+  "cid": 11776,
+  "inchikey": "RIOQSEWOXXDEQQ-UHFFFAOYSA-N",
+  "title": "Triphenylphosphine",
+  "how": "name",
+  "cite": 11776
+ },
+ "potol3": {
+  "q": "Tri(o-tolyl)phosphine",
+  "ours": "COIOYMYWGDAQPM-UHFFFAOYSA-N",
+  "cid": 80271,
+  "inchikey": "COIOYMYWGDAQPM-UHFFFAOYSA-N",
+  "title": "Tri-o-tolylphosphine",
+  "how": "name",
+  "cite": 80271
+ },
+ "pmtol3": {
+  "q": "Tri-m-tolylphosphine",
+  "ours": "LFNXCUNDYSYVJY-UHFFFAOYSA-N",
+  "cid": 80362,
+  "inchikey": "LFNXCUNDYSYVJY-UHFFFAOYSA-N",
+  "title": "Tri-m-tolylphosphine",
+  "how": "name",
+  "cite": 80362
+ },
+ "pptol3": {
+  "q": "Tri-p-tolylphosphine",
+  "ours": "WXAZIUYTQHYBFW-UHFFFAOYSA-N",
+  "cid": 13956,
+  "inchikey": "WXAZIUYTQHYBFW-UHFFFAOYSA-N",
+  "title": "Phosphine, tris(4-methylphenyl)-",
+  "how": "name",
+  "cite": 13956
+ },
+ "pmes3": {
+  "q": "Trimesitylphosphine",
+  "ours": "IDXDWPWXHTXJMZ-UHFFFAOYSA-N",
+  "cid": 2733417,
+  "inchikey": "IDXDWPWXHTXJMZ-UHFFFAOYSA-N",
+  "title": "Trimesitylphosphine",
+  "how": "name",
+  "cite": 2733417
+ },
+ "ppmp3": {
+  "q": "Tris(4-methoxyphenyl)phosphine",
+  "ours": "UYUUAUOYLFIRJG-UHFFFAOYSA-N",
+  "cid": 70071,
+  "inchikey": "UYUUAUOYLFIRJG-UHFFFAOYSA-N",
+  "title": "Phosphine, tris(4-methoxyphenyl)-",
+  "how": "name",
+  "cite": 70071
+ },
+ "pfph3": {
+  "q": "Tris(4-fluorophenyl)phosphine",
+  "ours": "GEPJPYNDFSOARB-UHFFFAOYSA-N",
+  "cid": 140387,
+  "inchikey": "GEPJPYNDFSOARB-UHFFFAOYSA-N",
+  "title": "Tris(4-fluorophenyl)phosphine",
+  "how": "name",
+  "cite": 140387
+ },
+ "pcf3ph3": {
+  "q": "Tris[4-(trifluoromethyl)phenyl]phosphine",
+  "ours": "PXYCJKZSCDFXLR-UHFFFAOYSA-N",
+  "cid": 139448,
+  "inchikey": "PXYCJKZSCDFXLR-UHFFFAOYSA-N",
+  "title": "Tris(4-trifluoromethylphenyl)phosphine",
+  "how": "name",
+  "cite": 139448
+ },
+ "pc6f53": {
+  "q": "Tris(pentafluorophenyl)phosphine",
+  "ours": "FQLSDFNKTNBQLC-UHFFFAOYSA-N",
+  "cid": 102076,
+  "inchikey": "FQLSDFNKTNBQLC-UHFFFAOYSA-N",
+  "title": "Tris(pentafluorophenyl)phosphine",
+  "how": "name",
+  "cite": 102076
+ },
+ "tfp": {
+  "q": "Tri(2-furyl)phosphine",
+  "ours": "DLQYXUGCCKQSRJ-UHFFFAOYSA-N",
+  "cid": 521585,
+  "inchikey": "DLQYXUGCCKQSRJ-UHFFFAOYSA-N",
+  "title": "Tris(furan-2-yl)phosphane",
+  "how": "name",
+  "cite": 521585
+ },
+ "pme2ph": {
+  "q": "Dimethylphenylphosphine",
+  "ours": "HASCQPSFPAKVEK-UHFFFAOYSA-N",
+  "cid": 69597,
+  "inchikey": "HASCQPSFPAKVEK-UHFFFAOYSA-N",
+  "title": "Dimethylphenylphosphine",
+  "how": "name",
+  "cite": 69597
+ },
+ "pmeph2": {
+  "q": "Methyldiphenylphosphine",
+  "ours": "UJNZOIKQAUQOCN-UHFFFAOYSA-N",
+  "cid": 73879,
+  "inchikey": "UJNZOIKQAUQOCN-UHFFFAOYSA-N",
+  "title": "Methyldiphenylphosphine",
+  "how": "name",
+  "cite": 73879
+ },
+ "pcy2ph": {
+  "q": "Dicyclohexylphenylphosphine",
+  "ours": "VPLLTGLLUHLIHA-UHFFFAOYSA-N",
+  "cid": 80970,
+  "inchikey": "VPLLTGLLUHLIHA-UHFFFAOYSA-N",
+  "title": "Dicyclohexylphenylphosphine",
+  "how": "name",
+  "cite": 80970
+ },
+ "pcyph2": {
+  "q": "Cyclohexyldiphenylphosphine",
+  "ours": "ZXKWUYWWVSKKQZ-UHFFFAOYSA-N",
+  "cid": 80756,
+  "inchikey": "ZXKWUYWWVSKKQZ-UHFFFAOYSA-N",
+  "title": "Phosphine, cyclohexyldiphenyl-",
+  "how": "name",
+  "cite": 80756
+ },
+ "tppts": {
+  "q": "Tris(3-sulfophenyl)phosphine",
+  "ours": "ZBMZOFSLQIPSPW-UHFFFAOYSA-N",
+  "cid": 3675708,
+  "inchikey": "ZBMZOFSLQIPSPW-UHFFFAOYSA-N",
+  "title": "Tris(3-sulfophenyl)phosphine",
+  "how": "name",
+  "cite": 3675708
+ },
+ "asph3": {
+  "q": "Triphenylarsine",
+  "ours": "BPLUKJNHPBNVQL-UHFFFAOYSA-N",
+  "cid": 11773,
+  "inchikey": "BPLUKJNHPBNVQL-UHFFFAOYSA-N",
+  "title": "Triphenylarsine",
+  "how": "name",
+  "cite": 11773
+ },
+ "sbph3": {
+  "q": "Triphenylstibine",
+  "ours": "HVYVMSPIJIWUNA-UHFFFAOYSA-N",
+  "cid": 11777,
+  "inchikey": "HVYVMSPIJIWUNA-UHFFFAOYSA-N",
+  "title": "Triphenylantimony",
+  "how": "name",
+  "cite": 11777
+ },
+ "johnphos": {
+  "q": "JohnPhos",
+  "ours": "CNXMDTWQWLGCPE-UHFFFAOYSA-N",
+  "cid": 2734215,
+  "inchikey": "CNXMDTWQWLGCPE-UHFFFAOYSA-N",
+  "title": "2-(Di-tert-butylphosphino)biphenyl",
+  "how": "name",
+  "cite": 2734215
+ },
+ "cyjohnphos": {
+  "q": "2-(Dicyclohexylphosphino)biphenyl",
+  "ours": "LCSNDSFWVKMJCT-UHFFFAOYSA-N",
+  "cid": 2734216,
+  "inchikey": "LCSNDSFWVKMJCT-UHFFFAOYSA-N",
+  "title": "2-(Dicyclohexylphosphino)biphenyl",
+  "how": "name",
+  "cite": 2734216
+ },
+ "phjohnphos": {
+  "q": "2-(Diphenylphosphino)biphenyl",
+  "ours": "FNCQSSIMHQVKGF-UHFFFAOYSA-N",
+  "cid": 12976978,
+  "inchikey": "FNCQSSIMHQVKGF-UHFFFAOYSA-N",
+  "title": "2-(Diphenylphosphino)biphenyl",
+  "how": "name",
+  "cite": 12976978
+ },
+ "mephos": {
+  "q": "2-Dicyclohexylphosphino-2'-methylbiphenyl",
+  "ours": "GPVWUKXZFDHGMZ-UHFFFAOYSA-N",
+  "cid": 2734938,
+  "inchikey": "GPVWUKXZFDHGMZ-UHFFFAOYSA-N",
+  "title": "2-(Dicyclohexylphosphino)-2'-methylbiphenyl",
+  "how": "name",
+  "cite": 2734938
+ },
+ "tbumephos": {
+  "q": "2-Di-tert-butylphosphino-2'-methylbiphenyl",
+  "ours": "UJONYAVMBYXBJQ-UHFFFAOYSA-N",
+  "cid": 2734937,
+  "inchikey": "UJONYAVMBYXBJQ-UHFFFAOYSA-N",
+  "title": "2-(Di-tert-butylphosphino)-2'-methyl-1,1'-biphenyl",
+  "how": "name",
+  "cite": 2734937
+ },
+ "davephos": {
+  "q": "DavePhos",
+  "ours": "ZEMZPXWZVTUONV-UHFFFAOYSA-N",
+  "cid": 2734217,
+  "inchikey": "ZEMZPXWZVTUONV-UHFFFAOYSA-N",
+  "title": "2-(Dicyclohexylphosphino)-2'-(dimethylamino)biphenyl",
+  "how": "name",
+  "cite": 2734217
+ },
+ "tbudavephos": {
+  "q": "2-Di-tert-butylphosphino-2'-(N,N-dimethylamino)biphenyl",
+  "ours": "PHLPNEHPCYZBNZ-UHFFFAOYSA-N",
+  "cid": 2734936,
+  "inchikey": "PHLPNEHPCYZBNZ-UHFFFAOYSA-N",
+  "title": "2-Di-tert-butylphosphino-2'-(N,N-dimethylamino)biphenyl",
+  "how": "name",
+  "cite": 2734936
+ },
+ "phdavephos": {
+  "q": "2-Diphenylphosphino-2'-(N,N-dimethylamino)biphenyl",
+  "ours": "JGFXUYLYPITYGR-UHFFFAOYSA-N",
+  "cid": 2734939,
+  "inchikey": "JGFXUYLYPITYGR-UHFFFAOYSA-N",
+  "title": "2'-(diphenylphosphanyl)-N,N-dimethyl-[1,1'-biphenyl]-2-amine",
+  "how": "name",
+  "cite": 2734939
+ },
+ "xphos": {
+  "q": "XPhos",
+  "ours": "UGOMMVLRQDMAQQ-UHFFFAOYSA-N",
+  "cid": 11155794,
+  "inchikey": "UGOMMVLRQDMAQQ-UHFFFAOYSA-N",
+  "title": "2-Dicyclohexylphosphino-2',4',6'-triisoprophylbiphenyl",
+  "how": "name",
+  "cite": 11155794
+ },
+ "tbuxphos": {
+  "q": "tBuXPhos",
+  "ours": "SACNIGZYDTUHKB-UHFFFAOYSA-N",
+  "cid": 11618717,
+  "inchikey": "SACNIGZYDTUHKB-UHFFFAOYSA-N",
+  "title": "Di-tert-butyl(2',4',6'-tris(propan-2-yl)-(1,1'-biphenyl)-2-yl)phosphane",
+  "how": "name",
+  "cite": 11618717
+ },
+ "me4tbuxphos": {
+  "q": "Me4tBuXPhos",
+  "ours": "RCRYEYMHBHPZQD-UHFFFAOYSA-N",
+  "cid": 11953610,
+  "inchikey": "RCRYEYMHBHPZQD-UHFFFAOYSA-N",
+  "title": "Di-tert-butyl[3,4,5,6-tetramethyl-2',4',6'-tris(propan-2-yl)-[1,1'-biphenyl]-2-yl]phosphane",
+  "how": "structure",
+  "cite": 11953610
+ },
+ "sphos": {
+  "q": "SPhos",
+  "ours": "VNFWTIYUKDMAOP-UHFFFAOYSA-N",
+  "cid": 11269872,
+  "inchikey": "VNFWTIYUKDMAOP-UHFFFAOYSA-N",
+  "title": "2-Dicyclohexylphosphino-2',6'-dimethoxybiphenyl",
+  "how": "name",
+  "cite": 11269872
+ },
+ "ruphos": {
+  "q": "RuPhos",
+  "ours": "MXFYYFVVIIWKFE-UHFFFAOYSA-N",
+  "cid": 16217985,
+  "inchikey": "MXFYYFVVIIWKFE-UHFFFAOYSA-N",
+  "title": "2-Dicyclohexylphosphino-2',6'-diisopropoxybiphenyl",
+  "how": "structure",
+  "named": {
+   "cid": 6531,
+   "inchikey": "VBKKVDGJXVOLNE-UHFFFAOYSA-N",
+   "title": "Dioxathion"
+  },
+  "cite": 16217985
+ },
+ "cphos": {
+  "q": "CPhos",
+  "ours": "DRNAQRXLOSUHBQ-UHFFFAOYSA-N",
+  "cid": 44156169,
+  "inchikey": "DRNAQRXLOSUHBQ-UHFFFAOYSA-N",
+  "title": "2'-(Dicyclohexylphosphino)-N2,N2,N6,N6-tetramethyl[1,1'-biphenyl]-2,6-diamine",
+  "how": "name",
+  "cite": 44156169
+ },
+ "brettphos": {
+  "q": "BrettPhos",
+  "ours": "WDVGNXKCFBOKDF-UHFFFAOYSA-N",
+  "cid": 25112535,
+  "inchikey": "WDVGNXKCFBOKDF-UHFFFAOYSA-N",
+  "title": "Brettphos",
+  "how": "name",
+  "cite": 25112535
+ },
+ "tbubrettphos": {
+  "q": "tBuBrettPhos",
+  "ours": "REWLCYPYZCHYSS-UHFFFAOYSA-N",
+  "cid": 44233348,
+  "inchikey": "REWLCYPYZCHYSS-UHFFFAOYSA-N",
+  "title": "Di-tert-butyl(2',4',6'-triisopropyl-3,6-dimethoxy-(1,1'-biphenyl)-2-yl)phosphine",
+  "how": "name",
+  "cite": 44233348
+ },
+ "adbrettphos": {
+  "q": "AdBrettPhos",
+  "ours": "NMGHOZQCYNKWBG-UHFFFAOYSA-N",
+  "cid": 60144828,
+  "inchikey": "NMGHOZQCYNKWBG-UHFFFAOYSA-N",
+  "title": "AdBrettPhos",
+  "how": "name",
+  "cite": 60144828
+ },
+ "bippyphos": {
+  "q": "BippyPhos",
+  "ours": "PTXJGGGNGMPMBG-UHFFFAOYSA-N",
+  "cid": 11547931,
+  "inchikey": "PTXJGGGNGMPMBG-UHFFFAOYSA-N",
+  "title": "BippyPhos",
+  "how": "name",
+  "cite": 11547931
+ },
+ "mordalphos": {
+  "q": "Mor-DalPhos",
+  "ours": "CCBRRSUORFMQCZ-UHFFFAOYSA-N",
+  "cid": 46848051,
+  "inchikey": "CCBRRSUORFMQCZ-UHFFFAOYSA-N",
+  "title": "4-(2-(Di(adamantan-1-yl)phosphino)phenyl)morpholine",
+  "how": "name",
+  "cite": 46848051
+ },
+ "qphos": {
+  "q": "Q-Phos",
+  "ours": "BOBUBHOXRCYKLI-UHFFFAOYSA-N",
+  "cid": 71310380,
+  "inchikey": "BOBUBHOXRCYKLI-UHFFFAOYSA-N",
+  "title": "Ferrocene, 1'-[bis(1,1-dimethylethyl)phosphino]-1,2,3,4,5-pentaphenyl-",
+  "how": "structure",
+  "cite": 71310380
+ },
+ "ph2ppy": {
+  "q": "2-(Diphenylphosphino)pyridine",
+  "ours": "SVABQOITNJTVNJ-UHFFFAOYSA-N",
+  "cid": 621893,
+  "inchikey": "SVABQOITNJTVNJ-UHFFFAOYSA-N",
+  "title": "2-Pyridyldiphenylphosphine",
+  "how": "name",
+  "cite": 621893
+ },
+ "pome3": {
+  "q": "Trimethyl phosphite",
+  "ours": "CYTQBVOFDCPGCX-UHFFFAOYSA-N",
+  "cid": 8472,
+  "inchikey": "CYTQBVOFDCPGCX-UHFFFAOYSA-N",
+  "title": "Trimethyl phosphite",
+  "how": "name",
+  "cite": 8472
+ },
+ "poet3": {
+  "q": "Triethyl phosphite",
+  "ours": "BDZBKCUKTQZUTL-UHFFFAOYSA-N",
+  "cid": 31215,
+  "inchikey": "BDZBKCUKTQZUTL-UHFFFAOYSA-N",
+  "title": "Triethyl phosphite",
+  "how": "name",
+  "cite": 31215
+ },
+ "poipr3": {
+  "q": "Triisopropyl phosphite",
+  "ours": "SJHCUXCOGGKFAI-UHFFFAOYSA-N",
+  "cid": 8304,
+  "inchikey": "SJHCUXCOGGKFAI-UHFFFAOYSA-N",
+  "title": "Triisopropyl phosphite",
+  "how": "name",
+  "cite": 8304
+ },
+ "poph3": {
+  "q": "Triphenyl phosphite",
+  "ours": "HVLLSGMXQDNUAL-UHFFFAOYSA-N",
+  "cid": 7540,
+  "inchikey": "HVLLSGMXQDNUAL-UHFFFAOYSA-N",
+  "title": "Triphenyl phosphite",
+  "how": "name",
+  "cite": 7540
+ },
+ "pootol3": {
+  "q": "Tri-o-tolyl phosphite",
+  "ours": "BKHZQJRTFNFCTG-UHFFFAOYSA-N",
+  "cid": 92937,
+  "inchikey": "BKHZQJRTFNFCTG-UHFFFAOYSA-N",
+  "title": "Tri-o-cresyl phosphite",
+  "how": "name",
+  "cite": 92937
+ },
+ "pnme23": {
+  "q": "Tris(dimethylamino)phosphine",
+  "ours": "XVDBWWRIXBMVJV-UHFFFAOYSA-N",
+  "cid": 15355,
+  "inchikey": "XVDBWWRIXBMVJV-UHFFFAOYSA-N",
+  "title": "Hexamethylphosphorous triamide",
+  "how": "name",
+  "cite": 15355
+ },
+ "pf3": {
+  "q": "Phosphorus trifluoride",
+  "ours": "WKFBZNUBXWCCHG-UHFFFAOYSA-N",
+  "cid": 62665,
+  "inchikey": "WKFBZNUBXWCCHG-UHFFFAOYSA-N",
+  "title": "Phosphorus trifluoride",
+  "how": "name",
+  "cite": 62665
+ },
+ "dmpe": {
+  "q": "1,2-Bis(dimethylphosphino)ethane",
+  "ours": "ZKWQSBFSGZJNFP-UHFFFAOYSA-N",
+  "cid": 141059,
+  "inchikey": "ZKWQSBFSGZJNFP-UHFFFAOYSA-N",
+  "title": "1,2-Bis(dimethylphosphino)ethane",
+  "how": "name",
+  "cite": 141059
+ },
+ "depe": {
+  "q": "1,2-Bis(diethylphosphino)ethane",
+  "ours": "MIOCUERTSIJEDP-UHFFFAOYSA-N",
+  "cid": 138745,
+  "inchikey": "MIOCUERTSIJEDP-UHFFFAOYSA-N",
+  "title": "1,2-Bis(diethylphosphino)ethane",
+  "how": "name",
+  "cite": 138745
+ },
+ "dippe": {
+  "q": "1,2-Bis(diisopropylphosphino)ethane",
+  "ours": "RMFRFTSSEHRKKW-UHFFFAOYSA-N",
+  "cid": 533625,
+  "inchikey": "RMFRFTSSEHRKKW-UHFFFAOYSA-N",
+  "title": "1,2-Bis(diisopropylphosphino)ethane",
+  "how": "name",
+  "cite": 533625
+ },
+ "dcpe": {
+  "q": "1,2-Bis(dicyclohexylphosphino)ethane",
+  "ours": "BOUYBUIVMHNXQB-UHFFFAOYSA-N",
+  "cid": 534202,
+  "inchikey": "BOUYBUIVMHNXQB-UHFFFAOYSA-N",
+  "title": "1,2-Bis(dicyclohexylphosphino)ethane",
+  "how": "name",
+  "cite": 534202
+ },
+ "dtbpe": {
+  "q": "1,2-Bis(di-tert-butylphosphino)ethane",
+  "ours": "MWVXFEZPEPOQRE-UHFFFAOYSA-N",
+  "cid": 534762,
+  "inchikey": "MWVXFEZPEPOQRE-UHFFFAOYSA-N",
+  "title": "1,2-Bis(DI-tert-butylphosphino)ethane",
+  "how": "name",
+  "cite": 534762
+ },
+ "dppm": {
+  "q": "Bis(diphenylphosphino)methane",
+  "ours": "XGCDBGRZEKYHNV-UHFFFAOYSA-N",
+  "cid": 74952,
+  "inchikey": "XGCDBGRZEKYHNV-UHFFFAOYSA-N",
+  "title": "Bis(diphenylphosphino)methane",
+  "how": "name",
+  "cite": 74952
+ },
+ "dppe": {
+  "q": "1,2-Bis(diphenylphosphino)ethane",
+  "ours": "QFMZQPDHXULLKC-UHFFFAOYSA-N",
+  "cid": 74267,
+  "inchikey": "QFMZQPDHXULLKC-UHFFFAOYSA-N",
+  "title": "1,2-Bis(diphenylphosphino)ethane",
+  "how": "name",
+  "cite": 74267
+ },
+ "dppp": {
+  "q": "1,3-Bis(diphenylphosphino)propane",
+  "ours": "LVEYOSJUKRVCCF-UHFFFAOYSA-N",
+  "cid": 81219,
+  "inchikey": "LVEYOSJUKRVCCF-UHFFFAOYSA-N",
+  "title": "1,3-Bis(diphenylphosphino)propane",
+  "how": "name",
+  "cite": 81219
+ },
+ "dppb": {
+  "q": "1,4-Bis(diphenylphosphino)butane",
+  "ours": "BCJVBDBJSMFBRW-UHFFFAOYSA-N",
+  "cid": 82124,
+  "inchikey": "BCJVBDBJSMFBRW-UHFFFAOYSA-N",
+  "title": "1,4-Bis(diphenylphosphino)butane",
+  "how": "name",
+  "cite": 82124
+ },
+ "dpppe": {
+  "q": "1,5-Bis(diphenylphosphino)pentane",
+  "ours": "MZFPAWGWFDGCHP-UHFFFAOYSA-N",
+  "cid": 2733414,
+  "inchikey": "MZFPAWGWFDGCHP-UHFFFAOYSA-N",
+  "title": "1,5-Bis(diphenylphosphino)pentane",
+  "how": "name",
+  "cite": 2733414
+ },
+ "dppen": {
+  "q": "cis-1,2-Bis(diphenylphosphino)ethylene",
+  "ours": "NCKJIJSEWKIXAT-DQRAZIAOSA-N",
+  "cid": 2733415,
+  "inchikey": "NCKJIJSEWKIXAT-DQRAZIAOSA-N",
+  "title": "cis-Vinylenebis(diphenylphosphine)",
+  "how": "name",
+  "cite": 2733415
+ },
+ "dppbz": {
+  "q": "1,2-Bis(diphenylphosphino)benzene",
+  "ours": "NFRYVRNCDXULEX-UHFFFAOYSA-N",
+  "cid": 498379,
+  "inchikey": "NFRYVRNCDXULEX-UHFFFAOYSA-N",
+  "title": "1,2-Bis(diphenylphosphino)benzene",
+  "how": "name",
+  "cite": 498379
+ },
+ "dcypbz": {
+  "q": "1,2-Bis(dicyclohexylphosphino)benzene",
+  "ours": "DZNBZPKZOBDXEL-UHFFFAOYSA-N",
+  "cid": 5195181,
+  "inchikey": "DZNBZPKZOBDXEL-UHFFFAOYSA-N",
+  "title": "1,2-Bis(dicyclohexylphosphino)benzene",
+  "how": "name",
+  "cite": 5195181
+ },
+ "dppf": {
+  "q": "1,1′-Bis(diphenylphosphino)ferrocene",
+  "ours": "KZPYGQFFRCFCPP-UHFFFAOYSA-N",
+  "cid": 15182658,
+  "inchikey": "KZPYGQFFRCFCPP-UHFFFAOYSA-N",
+  "title": "1,1-Bis(diphenylphosphino)ferrocene",
+  "how": "name",
+  "cite": 15182658
+ },
+ "dippf": {
+  "q": "1,1′-Bis(diisopropylphosphino)ferrocene",
+  "ours": "IDLVJIDYJDJHOI-UHFFFAOYSA-N",
+  "cid": 71310232,
+  "inchikey": "IDLVJIDYJDJHOI-UHFFFAOYSA-N",
+  "title": "Ferrocene, 1,1'-bis[bis(1-methylethyl)phosphino]-",
+  "how": "structure",
+  "cite": 71310232
+ },
+ "dcypf": {
+  "q": "1,1′-Bis(dicyclohexylphosphino)ferrocene",
+  "ours": "DTQIHJBOJNZKNL-UHFFFAOYSA-N",
+  "cid": 71310732,
+  "inchikey": "DTQIHJBOJNZKNL-UHFFFAOYSA-N",
+  "title": "Ferrocene, 1,1'-bis(dicyclohexylphosphino)-",
+  "how": "structure",
+  "cite": 71310732
+ },
+ "dtbpf": {
+  "q": "1,1′-Bis(di-tert-butylphosphino)ferrocene",
+  "ours": "WDUDHEOUGWAKFD-UHFFFAOYSA-N",
+  "cid": 71310544,
+  "inchikey": "WDUDHEOUGWAKFD-UHFFFAOYSA-N",
+  "title": "1,1'-Bis(di-tert-butylphosphino)ferrocene",
+  "how": "name",
+  "cite": 71310544
+ },
+ "dpephos": {
+  "q": "DPEphos",
+  "ours": "RYXZOQOZERSHHQ-UHFFFAOYSA-N",
+  "cid": 4285986,
+  "inchikey": "RYXZOQOZERSHHQ-UHFFFAOYSA-N",
+  "title": "Bis[2-(diphenylphosphino)phenyl] ether",
+  "how": "name",
+  "cite": 4285986
+ },
+ "xantphos": {
+  "q": "Xantphos",
+  "ours": "CXNIUSPIQKWYAI-UHFFFAOYSA-N",
+  "cid": 636044,
+  "inchikey": "CXNIUSPIQKWYAI-UHFFFAOYSA-N",
+  "title": "1,1'-(9,9-Dimethyl-9H-xanthene-4,5-diyl)bis(1,1-diphenylphosphine)",
+  "how": "name",
+  "cite": 636044
+ },
+ "tbuxantphos": {
+  "q": "4,5-Bis(di-tert-butylphosphino)-9,9-dimethylxanthene",
+  "ours": "ZEIZANJFJXHMNS-UHFFFAOYSA-N",
+  "cid": 16218202,
+  "inchikey": "ZEIZANJFJXHMNS-UHFFFAOYSA-N",
+  "title": "di-tert-butyl[5-(di-tert-butylphosphanyl)-9,9-dimethyl-9H-xanthen-4-yl]phosphane",
+  "how": "structure",
+  "cite": 16218202
+ },
+ "nixantphos": {
+  "q": "NiXantphos",
+  "ours": "HSWZLYXRAOXOLL-UHFFFAOYSA-N",
+  "cid": 3255346,
+  "inchikey": "HSWZLYXRAOXOLL-UHFFFAOYSA-N",
+  "title": "4,6-Bis(diphenylphosphino)-10H-phenoxazine",
+  "how": "name",
+  "cite": 3255346
+ },
+ "biphep": {
+  "q": "2,2′-Bis(diphenylphosphino)-1,1′-biphenyl",
+  "ours": "GRTJBNJOHNTQBO-UHFFFAOYSA-N",
+  "cid": 2734940,
+  "inchikey": "GRTJBNJOHNTQBO-UHFFFAOYSA-N",
+  "title": "2,2'-Bis(diphenylphosphino)-1,1'-biphenyl",
+  "how": "name",
+  "cite": 2734940
+ },
+ "bisbi": {
+  "q": "2,2′-Bis(diphenylphosphinomethyl)-1,1′-biphenyl",
+  "ours": "SZKMTZNASRXXCE-UHFFFAOYSA-N",
+  "cid": 10985391,
+  "inchikey": "SZKMTZNASRXXCE-UHFFFAOYSA-N",
+  "title": "Phosphine, 1,1'-[[1,1'-biphenyl]-2,2'-diylbis(methylene)]bis[1,1-diphenyl-",
+  "how": "name",
+  "cite": 10985391
+ },
+ "dtbpx": {
+  "q": "1,2-Bis(di-tert-butylphosphinomethyl)benzene",
+  "ours": "SFCNPIUDAIFHRD-UHFFFAOYSA-N",
+  "cid": 4683191,
+  "inchikey": "SFCNPIUDAIFHRD-UHFFFAOYSA-N",
+  "title": "1,2-Bis(di-tert-butylphosphinomethyl)benzene",
+  "how": "name",
+  "cite": 4683191
+ },
+ "triphos": {
+  "q": "1,1,1-Tris(diphenylphosphinomethyl)ethane",
+  "ours": "BARUNXKDFNLHEV-UHFFFAOYSA-N",
+  "cid": 423856,
+  "inchikey": "BARUNXKDFNLHEV-UHFFFAOYSA-N",
+  "title": "1,1,1-Tris(diphenylphosphinomethyl)ethane",
+  "how": "name",
+  "cite": 423856
+ },
+ "ltriphos": {
+  "q": "Bis(2-diphenylphosphinoethyl)phenylphosphine",
+  "ours": "AXVOAMVQOCBPQT-UHFFFAOYSA-N",
+  "cid": 90192,
+  "inchikey": "AXVOAMVQOCBPQT-UHFFFAOYSA-N",
+  "title": "Bis(2-(diphenylphosphino)ethyl)phenylphosphine",
+  "how": "name",
+  "cite": 90192
+ },
+ "binap": {
+  "q": "BINAP",
+  "ours": "MUALRAIOVNYAIW-UHFFFAOYSA-N",
+  "cid": 634876,
+  "inchikey": "MUALRAIOVNYAIW-UHFFFAOYSA-N",
+  "title": "Binap, (A+-)-",
+  "how": "name",
+  "cite": 634876
+ },
+ "tolbinap": {
+  "q": "Tol-BINAP",
+  "ours": "IOPQYDKQISFMJI-UHFFFAOYSA-N",
+  "cid": 4189906,
+  "inchikey": "IOPQYDKQISFMJI-UHFFFAOYSA-N",
+  "title": "(S)-(-)-2,2'-Bis(di-p-tolylphosphino)-1, 1'-binaphthyl",
+  "how": "name",
+  "cite": 4189906
+ },
+ "xylbinap": {
+  "q": "2,2'-Bis[di(3,5-xylyl)phosphino]-1,1'-binaphthyl",
+  "ours": "MXGXXBYVDMVJAO-UHFFFAOYSA-N",
+  "cid": 4189905,
+  "inchikey": "MXGXXBYVDMVJAO-UHFFFAOYSA-N",
+  "title": "(R)-(+)-2,2'-Bis(di(3,5-xylyl)phosphino)-1,1'-binaphthyl",
+  "how": "name",
+  "cite": 4189905
+ },
+ "h8binap": {
+  "q": "H8-BINAP",
+  "ours": "ANSOKCGDSQQISA-UHFFFAOYSA-N",
+  "cid": 4366894,
+  "inchikey": "ANSOKCGDSQQISA-UHFFFAOYSA-N",
+  "title": "[1-(2-Diphenylphosphanyl-5,6,7,8-tetrahydronaphthalen-1-yl)-5,6,7,8-tetrahydronaphthalen-2-yl]-diphenylphosphane",
+  "how": "name",
+  "cite": 4366894
+ },
+ "segphos": {
+  "q": "SEGPHOS",
+  "ours": "RZZDRSHFIVOQAF-UHFFFAOYSA-N",
+  "cid": 11017510,
+  "inchikey": "RZZDRSHFIVOQAF-UHFFFAOYSA-N",
+  "title": "4,4'-Bi-1,3-benzodioxole-5,5'-diylbis(diphenylphosphine)",
+  "how": "name",
+  "cite": 11017510
+ },
+ "dmsegphos": {
+  "q": "DM-SEGPHOS",
+  "ours": "XJJVPYMFHXMROQ-UHFFFAOYSA-N",
+  "cid": 11297101,
+  "inchikey": "XJJVPYMFHXMROQ-UHFFFAOYSA-N",
+  "title": "(S)-(-)-5,5'-Bis(di(3,5-xylyl)phosphino)-4,4'-bi-1,3-benzodioxole",
+  "how": "structure",
+  "cite": 11297101
+ },
+ "dtbmsegphos": {
+  "q": "DTBM-SEGPHOS",
+  "ours": "ZNORAFJUESSLTM-UHFFFAOYSA-N",
+  "cid": 11194192,
+  "inchikey": "ZNORAFJUESSLTM-UHFFFAOYSA-N",
+  "title": "4,4'-Bi-1,3-benzodioxole-5,5'-diylbis{bis[4-methoxy-3,5-bis(2-methyl-2-propanyl)phenyl]phosphine}",
+  "how": "name",
+  "cite": 11194192
+ },
+ "meobiphep": {
+  "q": "MeO-BIPHEP",
+  "ours": "KRJVQCZJJSUHHO-UHFFFAOYSA-N",
+  "cid": 4246603,
+  "inchikey": "KRJVQCZJJSUHHO-UHFFFAOYSA-N",
+  "title": "(S)-(-)-2,2'-Bis(diphenylphosphino)-6,6'-dimethoxy-1,1'-biphenyl",
+  "how": "name",
+  "cite": 4246603
+ },
+ "synphos": {
+  "q": "SYNPHOS",
+  "ours": "GDMCOFXEPNHXJT-UHFFFAOYSA-N",
+  "cid": 11193918,
+  "inchikey": "GDMCOFXEPNHXJT-UHFFFAOYSA-N",
+  "title": "Synphos",
+  "how": "name",
+  "cite": 11193918
+ },
+ "difluorphos": {
+  "q": "DIFLUORPHOS",
+  "ours": "HGMLTMOEYCQDDR-UHFFFAOYSA-N",
+  "cid": 11332069,
+  "inchikey": "HGMLTMOEYCQDDR-UHFFFAOYSA-N",
+  "title": "1,1'-[(4S)-2,2,2',2'-Tetrafluoro[4,4'-bi-1,3-benzodioxole]-5,5'-diyl]bis[1,1-diphenylphosphine]",
+  "how": "name",
+  "cite": 11332069
+ },
+ "pphos": {
+  "q": "P-Phos",
+  "ours": "JZOSBBLJKXSBBN-UHFFFAOYSA-N",
+  "cid": 11158950,
+  "inchikey": "JZOSBBLJKXSBBN-UHFFFAOYSA-N",
+  "title": "p-Phos, (S)-",
+  "how": "name",
+  "cite": 11158950
+ },
+ "sdp": {
+  "q": "7,7'-Bis(diphenylphosphino)-1,1'-spirobiindane",
+  "ours": "DKZNVWNOOLQCMJ-UHFFFAOYSA-N",
+  "cid": 12086160,
+  "inchikey": "DKZNVWNOOLQCMJ-UHFFFAOYSA-N",
+  "title": "(S)-7,7'-bis(diphenylphosphino)-1,1'-spirobiindane((S)-SDP)",
+  "how": "structure",
+  "cite": 12086160
+ },
+ "diop": {
+  "q": 3084647,
+  "ours": "VCHDBLPQYJAQSQ-LOYHVIPDSA-N",
+  "cid": 3084647,
+  "inchikey": "VCHDBLPQYJAQSQ-LOYHVIPDSA-N",
+  "title": "(+)-2,2-Dimethyl-4,5-((diphenylphosphino)dimethyl)dioxolane",
+  "how": "name",
+  "cite": 3084647
+ },
+ "chiraphos": {
+  "q": 2724948,
+  "ours": "FWXAUDSWDBGCMN-DNQXCXABSA-N",
+  "cid": 2724948,
+  "inchikey": "FWXAUDSWDBGCMN-DNQXCXABSA-N",
+  "title": "Chiraphos, (R,R)-",
+  "how": "name",
+  "cite": 2724948
+ },
+ "prophos": {
+  "q": 2724539,
+  "ours": "WGOBPPNNYVSJTE-HSZRJFAPSA-N",
+  "cid": 2724539,
+  "inchikey": "WGOBPPNNYVSJTE-HSZRJFAPSA-N",
+  "title": "1,1'-((1R)-1-Methyl-1,2-ethanediyl)bis(diphenylphosphine)",
+  "how": "name",
+  "cite": 2724539
+ },
+ "skewphos": {
+  "q": 2734567,
+  "ours": "CTYPJIUQROQJBG-DQEYMECFSA-N",
+  "cid": 2734567,
+  "inchikey": "CTYPJIUQROQJBG-DQEYMECFSA-N",
+  "title": "(2S,4S)-2,4-Bis(diphenylphosphino)pentane",
+  "how": "name",
+  "cite": 2734567
+ },
+ "norphos": {
+  "q": 10139589,
+  "ours": "CDJHPMXMJUCLPA-RMDVPPNSSA-N",
+  "cid": 10139589,
+  "inchikey": "CDJHPMXMJUCLPA-RMDVPPNSSA-N",
+  "title": "1,1'-[(1R,2R,3R,4S)-Bicyclo[2.2.1]hept-5-ene-2,3-diyl]bis[1,1-diphenylphosphine]",
+  "how": "name",
+  "cite": 10139589
+ },
+ "dipamp": {
+  "q": 10884975,
+  "ours": "QKZWXPLBVCKXNQ-ROJLCIKYSA-N",
+  "cid": 10884975,
+  "inchikey": "QKZWXPLBVCKXNQ-ROJLCIKYSA-N",
+  "title": "Dipamp, (R,R)-",
+  "how": "name",
+  "cite": 10884975
+ },
+ "meduphos": {
+  "q": 2734551,
+  "ours": "AJNZWRKTWQLAJK-KLHDSHLOSA-N",
+  "cid": 2734551,
+  "inchikey": "AJNZWRKTWQLAJK-KLHDSHLOSA-N",
+  "title": "Methyl-duphos, (R,R)-",
+  "how": "name",
+  "cite": 2734551
+ },
+ "etduphos": {
+  "q": "Et-DuPhos",
+  "ours": "GVVCHDNSTMEUCS-UAFMIMERSA-N",
+  "cid": 2734549,
+  "inchikey": "GVVCHDNSTMEUCS-UAFMIMERSA-N",
+  "title": "Ethyl-duphos, (R,R)-",
+  "how": "structure",
+  "cite": 2734549
+ },
+ "iprduphos": {
+  "q": "iPr-DuPhos",
+  "ours": "RBVGOQHQBUPSGX-MOUTVQLLSA-N",
+  "cid": 11327562,
+  "inchikey": "RBVGOQHQBUPSGX-MOUTVQLLSA-N",
+  "title": "1,2-Bis[(2R,5R)-2,5-diisopropylphospholan-1-yl]benzene",
+  "how": "structure",
+  "cite": 11327562
+ },
+ "mebpe": {
+  "q": "Me-BPE",
+  "ours": "IRCDUOCGSIGEAI-AAVRWANBSA-N",
+  "cid": 2734555,
+  "inchikey": "IRCDUOCGSIGEAI-AAVRWANBSA-N",
+  "title": "Me-bpe, (R,R)-",
+  "how": "structure",
+  "cite": 2734555
+ },
+ "phbpe": {
+  "q": "Ph-BPE",
+  "ours": "VHHAZLMVLLIMHT-YFRBGRBWSA-N",
+  "cid": 11420783,
+  "inchikey": "VHHAZLMVLLIMHT-YFRBGRBWSA-N",
+  "title": "(2R,5R)-1-(2-((2R,5R)-2,5-diphenylphospholan-1-yl)ethyl)-2,5-diphenylphospholane",
+  "how": "structure",
+  "cite": 11420783
+ },
+ "tangphos": {
+  "q": 10149434,
+  "ours": "SJNUZTRUIDRSJK-KNCCTNLNSA-N",
+  "cid": 10149434,
+  "inchikey": "SJNUZTRUIDRSJK-KNCCTNLNSA-N",
+  "title": "(S,S',R,R')-TangPhos",
+  "how": "name",
+  "cite": 10149434
+ },
+ "duanphos": {
+  "q": 10309415,
+  "ours": "HCBRTCFUVLYSKU-PWGHIRGTSA-N",
+  "cid": 10309415,
+  "inchikey": "HCBRTCFUVLYSKU-PWGHIRGTSA-N",
+  "title": "(1R,1'R,2S,2'S)-DuanPhos",
+  "how": "name",
+  "cite": 10309415
+ },
+ "quinoxp": {
+  "q": 11695692,
+  "ours": "DRZBLHZZDMCPGX-VXKWHMMOSA-N",
+  "cid": 11695692,
+  "inchikey": "DRZBLHZZDMCPGX-VXKWHMMOSA-N",
+  "title": "2,3-Bis((R)-tert-butyl(methyl)phosphino)quinoxaline",
+  "how": "name",
+  "cite": 11695692
+ },
+ "benzp": {
+  "q": 15953600,
+  "ours": "JFUWTGUCFKJVST-ROUUACIJSA-N",
+  "cid": 15953600,
+  "inchikey": "JFUWTGUCFKJVST-ROUUACIJSA-N",
+  "title": "1,2-Bis((R)-tert-butyl(methyl)phosphino)benzene",
+  "how": "name",
+  "cite": 15953600
+ },
+ "trostph": {
+  "q": "(R,R)-DACH-phenyl Trost ligand",
+  "ours": "AXMSEDAJMGFTLR-XRSDMRJBSA-N",
+  "cid": 2734568,
+  "inchikey": "AXMSEDAJMGFTLR-XRSDMRJBSA-N",
+  "title": "Trost Ligand",
+  "how": "name",
+  "cite": 2734568
+ },
+ "trostnaph": {
+  "q": "(R,R)-DACH-naphthyl Trost ligand",
+  "ours": "VXFKMKXTPXVEMU-AWSIMMLFSA-N",
+  "cid": 2734210,
+  "inchikey": "VXFKMKXTPXVEMU-AWSIMMLFSA-N",
+  "title": "(R,R)-DACH-naphthyl Trost ligand",
+  "how": "name",
+  "cite": 2734210
+ },
+ "josiphos": {
+  "q": "Josiphos SL-J001-1",
+  "ours": "REDWELITTWIEQG-KHZPMNTOSA-N",
+  "named": {
+   "cid": 91998106,
+   "inchikey": "ULNUEACLWYUUMO-UHFFFAOYSA-N",
+   "title": "Josiphos SL-J001-1"
+  },
+  "cite": 91998106
+ },
+ "josiphos-tbu": {
+  "q": "Josiphos SL-J002-1",
+  "ours": "OHWWNYSXSGMTSB-GHVWMZMZSA-N"
+ },
+ "josiphos-cy": {
+  "q": "Josiphos SL-J009-1",
+  "ours": "XUGHPTFNSLEKBM-GHVWMZMZSA-N",
+  "cid": 71310499,
+  "inchikey": "XUGHPTFNSLEKBM-GHVWMZMZSA-N",
+  "title": "(Dicyclohexylphosphino)ferrocenyl]ethyldi-t-butylphosphine",
+  "how": "structure",
+  "cite": 71310499
+ },
+ "iprphox": {
+  "q": "(S)-4-Isopropyl-2-[2-(diphenylphosphino)phenyl]-2-oxazoline",
+  "ours": "OUQSAXROROGQEE-JOCHJYFZSA-N",
+  "cid": 9807779,
+  "inchikey": "OUQSAXROROGQEE-JOCHJYFZSA-N",
+  "title": "(4S)-2-(2-(Diphenylphosphino)phenyl)-4-isopropyl-1,3-oxazoline",
+  "how": "structure",
+  "cite": 9807779
+ },
+ "tbuphox": {
+  "q": "(S)-4-tert-Butyl-2-[2-(diphenylphosphino)phenyl]-2-oxazoline",
+  "ours": "DMOLTNKQLUAXPI-HSZRJFAPSA-N",
+  "cid": 9937955,
+  "inchikey": "DMOLTNKQLUAXPI-HSZRJFAPSA-N",
+  "title": "(S)-t-BuPHOX",
+  "how": "name",
+  "cite": 9937955
+ },
+ "phphox": {
+  "q": "(S)-4-Phenyl-2-[2-(diphenylphosphino)phenyl]-2-oxazoline",
+  "ours": "OKUTYUNUKKPYJS-RUZDIDTESA-N",
+  "cid": 11058621,
+  "inchikey": "OKUTYUNUKKPYJS-RUZDIDTESA-N",
+  "title": "(S)-(+)-2-[2-(Diphenylphosphino)phenyl]-4-phenyl-2-oxazoline",
+  "how": "structure",
+  "cite": 11058621
+ },
+ "quinap": {
+  "q": "QUINAP",
+  "ours": "YMJAIEYASUCCMJ-UHFFFAOYSA-N",
+  "cid": 4379935,
+  "inchikey": "YMJAIEYASUCCMJ-UHFFFAOYSA-N",
+  "title": "(R)-Quinap",
+  "how": "name",
+  "cite": 4379935
+ },
+ "monophos": {
+  "q": "MonoPhos",
+  "ours": "QCHAVHXSBZARBO-UHFFFAOYSA-N",
+  "cid": 10893715,
+  "inchikey": "QCHAVHXSBZARBO-UHFFFAOYSA-N",
+  "title": "(S)-(+)-(3,5-Dioxa-4-phospha-cyclohepta[2,1-a;3,4-a']dinaphthalen-4-yl)dimethylamine",
+  "how": "structure",
+  "named": {
+   "cid": 56842433,
+   "inchikey": "QTHFMHZSOCXCQI-IPZCTEOASA-N",
+   "title": "Monocrotophos mixture with trichlorfon"
+  },
+  "cite": 10893715
+ },
+ "pipphos": {
+  "q": "PipPhos",
+  "ours": "ZYDGLCZCEANEHK-UHFFFAOYSA-N",
+  "cid": 11429465,
+  "inchikey": "ZYDGLCZCEANEHK-UHFFFAOYSA-N",
+  "title": "1-(Dinaphtho[2,1-d:1',2'-f][1,3,2]dioxaphosphepin-4-yl)piperidine",
+  "how": "structure",
+  "cite": 11429465
+ },
+ "feringa": {
+  "q": "(S,R,R)-(+)-(3,5-Dioxa-4-phosphacyclohepta[2,1-a:3,4-a']dinaphthalen-4-yl)bis(1-phenylethyl)amine",
+  "ours": "LKZPDRCMCSBQFN-CLJLJLNGSA-N",
+  "cid": 10886035,
+  "inchikey": "LKZPDRCMCSBQFN-CLJLJLNGSA-N",
+  "title": "N,N-Bis((R)-1-phenylethyl)dinaphtho(2,1-d:1',2'-f)(1,3,2)dioxaphosphepin-4-amine",
+  "how": "name",
+  "cite": 10886035
+ },
+ "siphos": {
+  "q": "SIPHOS",
+  "ours": "RIDZEECIONITMW-UHFFFAOYSA-N",
+  "cid": 11438749,
+  "inchikey": "RIDZEECIONITMW-UHFFFAOYSA-N",
+  "title": "N,N-Dimethyl-10,11,12,13-tetrahydrodiindeno(7,1-de:1',7'-fg)(1,3,2)dioxaphosphocin-5-amine",
+  "how": "structure",
+  "cite": 11438749
+ },
+ "ime": {
+  "q": "1,3-Dimethylimidazol-2-ylidene",
+  "ours": "SWWCIHVYFYTXDK-UHFFFAOYSA-N",
+  "cid": 5242259,
+  "inchikey": "SWWCIHVYFYTXDK-UHFFFAOYSA-N",
+  "title": "1H-Imidazole, 2,3-dihydro-1,3-dimethyl-",
+  "how": "structure",
+  "named": {
+   "cid": 10909490,
+   "inchikey": "PQVRXLRYFUEHNQ-UHFFFAOYSA-N",
+   "title": "1,3-Dihydro-1,3-dimethyl-2H-imidazol-2-ylidene"
+  },
+  "cite": 10909490
+ },
+ "iipr": {
+  "q": "1,3-Diisopropylimidazol-2-ylidene",
+  "ours": "HHSNIRLXHJNXAK-UHFFFAOYSA-N",
+  "cid": 4961718,
+  "inchikey": "HHSNIRLXHJNXAK-UHFFFAOYSA-N",
+  "title": "1,3-Diisopropyl-2,3-dihydro-1H-imidazole",
+  "how": "structure"
+ },
+ "itbu": {
+  "q": "1,3-Di-tert-butylimidazol-2-ylidene",
+  "ours": "WLZCDCXFXATHNC-UHFFFAOYSA-N",
+  "cid": 10110535,
+  "inchikey": "WLZCDCXFXATHNC-UHFFFAOYSA-N",
+  "title": "1,3-Di-tert-butyl-2,3-dihydro-1H-imidazole",
+  "how": "structure",
+  "named": {
+   "cid": 10961644,
+   "inchikey": "FENRCIKTFREPGS-UHFFFAOYSA-N",
+   "title": "1,3-Di-tert-butylimidazol-2-ylidene"
+  },
+  "cite": 10961644
+ },
+ "iad": {
+  "q": "1,3-Bis(1-adamantyl)imidazol-2-ylidene",
+  "ours": "PLONOWACPBEYFD-UHFFFAOYSA-N",
+  "cid": 10168157,
+  "inchikey": "PLONOWACPBEYFD-UHFFFAOYSA-N",
+  "title": "1,3-Bis(1-adamantyl)imidazol-2-ylidene",
+  "how": "name",
+  "cite": 10168157
+ },
+ "icy": {
+  "q": "1,3-Dicyclohexylimidazol-2-ylidene",
+  "ours": "YQZCSEVPKQVTQP-UHFFFAOYSA-N",
+  "cid": 10229983,
+  "inchikey": "YQZCSEVPKQVTQP-UHFFFAOYSA-N",
+  "title": "1,3-dicyclohexyl-2H-imidazole",
+  "how": "structure"
+ },
+ "ixy": {
+  "q": "1,3-Bis(2,6-dimethylphenyl)imidazol-2-ylidene",
+  "ours": "YCFFJTFZRZQCTE-UHFFFAOYSA-N",
+  "cid": 21981941,
+  "inchikey": "YCFFJTFZRZQCTE-UHFFFAOYSA-N",
+  "title": "1,3-bis(2,6-dimethylphenyl)-2H-imidazole",
+  "how": "structure"
+ },
+ "imes": {
+  "q": "1,3-Bis(2,4,6-trimethylphenyl)imidazol-2-ylidene",
+  "ours": "RSTLYZXJMXWXEI-UHFFFAOYSA-N",
+  "cid": 5247402,
+  "inchikey": "RSTLYZXJMXWXEI-UHFFFAOYSA-N",
+  "title": "1,3-dimesityl-1H-imidazol-3-ium",
+  "how": "structure",
+  "named": {
+   "cid": 11123757,
+   "inchikey": "JCYWCSGERIELPG-UHFFFAOYSA-N",
+   "title": "1,3-Dimesitylimidazol-2-ylidene"
+  },
+  "cite": 11123757
+ },
+ "simes": {
+  "q": "1,3-Bis(2,4,6-trimethylphenyl)imidazolidin-2-ylidene",
+  "ours": "RUKVGXGTVPPWDD-UHFFFAOYSA-N",
+  "cid": 2060893,
+  "inchikey": "RUKVGXGTVPPWDD-UHFFFAOYSA-N",
+  "title": "1,3-Dimesitylimidazolidine",
+  "how": "structure",
+  "named": {
+   "cid": 11228257,
+   "inchikey": "LSMWOQFDLBIYPM-UHFFFAOYSA-N",
+   "title": "1,3-Bis(2,4,6-trimethylphenyl)-2-imidazolidinylidene"
+  },
+  "cite": 11228257
+ },
+ "ipr": {
+  "q": "1,3-Bis(2,6-diisopropylphenyl)imidazol-2-ylidene",
+  "ours": "NJLYZISHBSABMZ-UHFFFAOYSA-N",
+  "cid": 12058007,
+  "inchikey": "NJLYZISHBSABMZ-UHFFFAOYSA-N",
+  "title": "1,3-bis(2,6-diisopropylphenyl)-2,3-dihydro-1H-imidazole",
+  "how": "structure",
+  "named": {
+   "cid": 11271730,
+   "inchikey": "VYCIHDBIKGRENI-UHFFFAOYSA-N",
+   "title": "1,3-Bis(2,6-di(propan-2-yl)phenyl)-1H-imidazol-3-ium-2-ide"
+  },
+  "cite": 11271730
+ },
+ "sipr": {
+  "q": "1,3-Bis(2,6-diisopropylphenyl)imidazolidin-2-ylidene",
+  "ours": "UWINQFQLMRKGBB-UHFFFAOYSA-N",
+  "cid": 5252324,
+  "inchikey": "UWINQFQLMRKGBB-UHFFFAOYSA-N",
+  "title": "1,3-Bis(2,6-diisopropylphenyl)-4,5-dihydroimidazole",
+  "how": "structure",
+  "named": {
+   "cid": 10883669,
+   "inchikey": "XZDYFCGKKKSOEY-UHFFFAOYSA-N",
+   "title": "1,3-Bis(2,6-diisopropylphenyl)imidazolidin-2-ylidene"
+  },
+  "cite": 10883669
+ },
+ "iprcl": {
+  "q": "4,5-Dichloro-1,3-bis(2,6-diisopropylphenyl)imidazol-2-ylidene",
+  "ours": "FMPGDLKIJDLIKI-UHFFFAOYSA-N",
+  "cid": 15971267,
+  "inchikey": "FMPGDLKIJDLIKI-UHFFFAOYSA-N",
+  "title": "4,5-dichloro-1,3-bis[2,6-di(propan-2-yl)phenyl]-2H-imidazole",
+  "how": "structure"
+ },
+ "ipent": {
+  "q": "1,3-Bis[2,6-di(3-pentyl)phenyl]imidazol-2-ylidene",
+  "ours": "QOUWPPYOESXJJG-UHFFFAOYSA-N",
+  "cid": 18354174,
+  "inchikey": "QOUWPPYOESXJJG-UHFFFAOYSA-N",
+  "title": "1,3-Bis[2,6-bis(1-ethylpropyl)phenyl]-1,3-dihydro-2H-imidazol-2-ylidene",
+  "how": "structure",
+  "cite": 18354174
+ },
+ "iprstar": {
+  "q": "1,3-Bis[2,6-bis(diphenylmethyl)-4-methylphenyl]imidazol-2-ylidene",
+  "ours": "CEFBSXFEVWLQMB-UHFFFAOYSA-N",
+  "cid": 101582059,
+  "inchikey": "CEFBSXFEVWLQMB-UHFFFAOYSA-N",
+  "title": "1,3-Bis[2,6-bis(diphenylmethyl)-4-methylphenyl]-1,3-dihydro-2H-imidazol-2-ylidene",
+  "how": "structure",
+  "cite": 101582059
+ },
+ "caac": {
+  "q": "none",
+  "ours": "KNHKJYMWDLAFAX-UHFFFAOYSA-N",
+  "cid": 57912528,
+  "inchikey": "KNHKJYMWDLAFAX-UHFFFAOYSA-N",
+  "title": "1-[2,6-Bis(1-Methylethyl)phenyl]-3,3,5,5-tetramethyl-2-pyrrolidinylidene-",
+  "how": "structure",
+  "cite": 57912528
+ },
+ "tpt": {
+  "q": "1,3,4-Triphenyl-4,5-dihydro-1H-1,2,4-triazol-5-ylidene",
+  "ours": "NNVGTIRYCCWRSL-UHFFFAOYSA-N",
+  "cid": 6097222,
+  "inchikey": "NNVGTIRYCCWRSL-UHFFFAOYSA-N",
+  "title": "2,4,5-triphenyl-3H-1,2,4-triazole",
+  "how": "structure",
+  "named": {
+   "cid": 2733186,
+   "inchikey": "QZHWOLKBXYORRO-UHFFFAOYSA-N",
+   "title": "2,4,5-Triphenyl-4H-1,2,4-triazol-2-ium-3-ide"
+  },
+  "cite": 2733186
+ },
+ "py": {
+  "q": "Pyridine",
+  "ours": "JUJWROOIHBZHMG-UHFFFAOYSA-N",
+  "cid": 1049,
+  "inchikey": "JUJWROOIHBZHMG-UHFFFAOYSA-N",
+  "title": "Pyridine",
+  "how": "name",
+  "cite": 1049
+ },
+ "dmap": {
+  "q": "4-(Dimethylamino)pyridine",
+  "ours": "VHYFNPMBLIVWCW-UHFFFAOYSA-N",
+  "cid": 14284,
+  "inchikey": "VHYFNPMBLIVWCW-UHFFFAOYSA-N",
+  "title": "4-(Dimethylamino)pyridine",
+  "how": "name",
+  "cite": 14284
+ },
+ "picoline": {
+  "q": "2-Picoline",
+  "ours": "BSKHPKMHTQYZBB-UHFFFAOYSA-N",
+  "cid": 7975,
+  "inchikey": "BSKHPKMHTQYZBB-UHFFFAOYSA-N",
+  "title": "2-Methylpyridine",
+  "how": "name",
+  "cite": 7975
+ },
+ "lutidine": {
+  "q": "2,6-Lutidine",
+  "ours": "OISVCGZHLKNMSJ-UHFFFAOYSA-N",
+  "cid": 7937,
+  "inchikey": "OISVCGZHLKNMSJ-UHFFFAOYSA-N",
+  "title": "2,6-Lutidine",
+  "how": "name",
+  "cite": 7937
+ },
+ "tbupy": {
+  "q": "4-tert-Butylpyridine",
+  "ours": "YSHMQTRICHYLGF-UHFFFAOYSA-N",
+  "cid": 19878,
+  "inchikey": "YSHMQTRICHYLGF-UHFFFAOYSA-N",
+  "title": "4-tert-Butylpyridine",
+  "how": "name",
+  "cite": 19878
+ },
+ "quinoline": {
+  "q": "Quinoline",
+  "ours": "SMWDFEZZVXVKRB-UHFFFAOYSA-N",
+  "cid": 7047,
+  "inchikey": "SMWDFEZZVXVKRB-UHFFFAOYSA-N",
+  "title": "Quinoline",
+  "how": "name",
+  "cite": 7047
+ },
+ "pyrazine": {
+  "q": "Pyrazine",
+  "ours": "KYQCOXFCLRTKLS-UHFFFAOYSA-N",
+  "cid": 9261,
+  "inchikey": "KYQCOXFCLRTKLS-UHFFFAOYSA-N",
+  "title": "Pyrazine",
+  "how": "name",
+  "cite": 9261
+ },
+ "imidazole": {
+  "q": "Imidazole",
+  "ours": "RAXXELZNTBOGNW-UHFFFAOYSA-N",
+  "cid": 795,
+  "inchikey": "RAXXELZNTBOGNW-UHFFFAOYSA-N",
+  "title": "Imidazole",
+  "how": "name",
+  "cite": 795
+ },
+ "nmi": {
+  "q": "1-Methylimidazole",
+  "ours": "MCTWTZJPVLRJOU-UHFFFAOYSA-N",
+  "cid": 1390,
+  "inchikey": "MCTWTZJPVLRJOU-UHFFFAOYSA-N",
+  "title": "1-Methylimidazole",
+  "how": "name",
+  "cite": 1390
+ },
+ "pyrazole": {
+  "q": "Pyrazole",
+  "ours": "WTKZEGDFNFYCGP-UHFFFAOYSA-N",
+  "cid": 1048,
+  "inchikey": "WTKZEGDFNFYCGP-UHFFFAOYSA-N",
+  "title": "Pyrazole",
+  "how": "name",
+  "cite": 1048
+ },
+ "net3": {
+  "q": "Triethylamine",
+  "ours": "ZMANZCXQSJIPKH-UHFFFAOYSA-N",
+  "cid": 8471,
+  "inchikey": "ZMANZCXQSJIPKH-UHFFFAOYSA-N",
+  "title": "Triethylamine",
+  "how": "name",
+  "cite": 8471
+ },
+ "quinuclidine": {
+  "q": "Quinuclidine",
+  "ours": "SBYHFKPVCBCYGV-UHFFFAOYSA-N",
+  "cid": 7527,
+  "inchikey": "SBYHFKPVCBCYGV-UHFFFAOYSA-N",
+  "title": "Quinuclidine",
+  "how": "name",
+  "cite": 7527
+ },
+ "dabco": {
+  "q": "1,4-Diazabicyclo[2.2.2]octane",
+  "ours": "IMNIMPAHZVJRPE-UHFFFAOYSA-N",
+  "cid": 9237,
+  "inchikey": "IMNIMPAHZVJRPE-UHFFFAOYSA-N",
+  "title": "Dabco",
+  "how": "name",
+  "cite": 9237
+ },
+ "mecn": {
+  "q": "Acetonitrile",
+  "ours": "WEVYAHXRMPXWCK-UHFFFAOYSA-N",
+  "cid": 6342,
+  "inchikey": "WEVYAHXRMPXWCK-UHFFFAOYSA-N",
+  "title": "Acetonitrile",
+  "how": "name",
+  "cite": 6342
+ },
+ "phcn": {
+  "q": "Benzonitrile",
+  "ours": "JFDZBHWFFUWGJE-UHFFFAOYSA-N",
+  "cid": 7505,
+  "inchikey": "JFDZBHWFFUWGJE-UHFFFAOYSA-N",
+  "title": "Benzonitrile",
+  "how": "name",
+  "cite": 7505
+ },
+ "tbunc": {
+  "q": "tert-Butyl isocyanide",
+  "ours": "FAGLEPBREOXSAC-UHFFFAOYSA-N",
+  "cid": 23577,
+  "inchikey": "FAGLEPBREOXSAC-UHFFFAOYSA-N",
+  "title": "Tert-Butyl isocyanide",
+  "how": "name",
+  "cite": 23577
+ },
+ "cync": {
+  "q": "Cyclohexyl isocyanide",
+  "ours": "XYZMOVWWVXBHDP-UHFFFAOYSA-N",
+  "cid": 79129,
+  "inchikey": "XYZMOVWWVXBHDP-UHFFFAOYSA-N",
+  "title": "Cyclohexyl isocyanide",
+  "how": "name",
+  "cite": 79129
+ },
+ "xylnc": {
+  "q": "2,6-Dimethylphenyl isocyanide",
+  "ours": "DNJLFZHMJDSJFN-UHFFFAOYSA-N",
+  "cid": 76009,
+  "inchikey": "DNJLFZHMJDSJFN-UHFFFAOYSA-N",
+  "title": "2,6-Dimethylphenyl isocyanide",
+  "how": "name",
+  "cite": 76009
+ },
+ "bpy": {
+  "q": "2,2′-Bipyridine",
+  "ours": "ROFVEXUMMXZLPA-UHFFFAOYSA-N",
+  "cid": 1474,
+  "inchikey": "ROFVEXUMMXZLPA-UHFFFAOYSA-N",
+  "title": "2,2'-Bipyridine",
+  "how": "name",
+  "cite": 1474
+ },
+ "dtbbpy": {
+  "q": "4,4′-Di-tert-butyl-2,2′-bipyridine",
+  "ours": "TXNLQUKVUJITMX-UHFFFAOYSA-N",
+  "cid": 4249187,
+  "inchikey": "TXNLQUKVUJITMX-UHFFFAOYSA-N",
+  "title": "4,4'-Di-tert-butyl-2,2'-bipyridyl",
+  "how": "name",
+  "cite": 4249187
+ },
+ "dmbpy44": {
+  "q": "4,4′-Dimethyl-2,2′-bipyridine",
+  "ours": "NBPGPQJFYXNFKN-UHFFFAOYSA-N",
+  "cid": 14338,
+  "inchikey": "NBPGPQJFYXNFKN-UHFFFAOYSA-N",
+  "title": "4,4'-Dimethyl-2,2'-bipyridine",
+  "how": "name",
+  "cite": 14338
+ },
+ "dmbpy55": {
+  "q": "5,5′-Dimethyl-2,2′-bipyridine",
+  "ours": "PTRATZCAGVBFIQ-UHFFFAOYSA-N",
+  "cid": 15664,
+  "inchikey": "PTRATZCAGVBFIQ-UHFFFAOYSA-N",
+  "title": "5,5'-Dimethyl-2,2'-bipyridyl",
+  "how": "name",
+  "cite": 15664
+ },
+ "dmbpy66": {
+  "q": "6,6′-Dimethyl-2,2′-bipyridine",
+  "ours": "OHJPGUSXUGHOGE-UHFFFAOYSA-N",
+  "cid": 20445,
+  "inchikey": "OHJPGUSXUGHOGE-UHFFFAOYSA-N",
+  "title": "6,6'-Bi-2-picoline",
+  "how": "name",
+  "cite": 20445
+ },
+ "dmeobpy": {
+  "q": "4,4′-Dimethoxy-2,2′-bipyridine",
+  "ours": "IMEVSAIFJKKDAP-UHFFFAOYSA-N",
+  "cid": 2733927,
+  "inchikey": "IMEVSAIFJKKDAP-UHFFFAOYSA-N",
+  "title": "4,4'-Dimethoxy-2,2'-bipyridyl",
+  "how": "name",
+  "cite": 2733927
+ },
+ "dcf3bpy": {
+  "q": "4,4′-Bis(trifluoromethyl)-2,2′-bipyridine",
+  "ours": "FFOMEQIMPYKURW-UHFFFAOYSA-N",
+  "cid": 12058766,
+  "inchikey": "FFOMEQIMPYKURW-UHFFFAOYSA-N",
+  "title": "2,2'-Bipyridine, 4,4'-bis(trifluoromethyl)-",
+  "how": "name",
+  "cite": 12058766
+ },
+ "dcbpy": {
+  "q": "2,2′-Bipyridine-4,4′-dicarboxylic acid",
+  "ours": "FXPLCAKVOYHAJA-UHFFFAOYSA-N",
+  "cid": 688094,
+  "inchikey": "FXPLCAKVOYHAJA-UHFFFAOYSA-N",
+  "title": "2,2'-Bipyridine-4,4'-dicarboxylic acid",
+  "how": "name",
+  "cite": 688094
+ },
+ "biq": {
+  "q": "2,2′-Biquinoline",
+  "ours": "WPTCSQBWLUUYDV-UHFFFAOYSA-N",
+  "cid": 8412,
+  "inchikey": "WPTCSQBWLUUYDV-UHFFFAOYSA-N",
+  "title": "2,2'-Biquinoline",
+  "how": "name",
+  "cite": 8412
+ },
+ "bpm": {
+  "q": "2,2′-Bipyrimidine",
+  "ours": "HKOAFLAGUQUJQG-UHFFFAOYSA-N",
+  "cid": 123444,
+  "inchikey": "HKOAFLAGUQUJQG-UHFFFAOYSA-N",
+  "title": "2,2'-Bipyrimidine",
+  "how": "name",
+  "cite": 123444
+ },
+ "phen": {
+  "q": "1,10-Phenanthroline",
+  "ours": "DGEZNRSVGBDHLK-UHFFFAOYSA-N",
+  "cid": 1318,
+  "inchikey": "DGEZNRSVGBDHLK-UHFFFAOYSA-N",
+  "title": "1,10-Phenanthroline",
+  "how": "name",
+  "cite": 1318
+ },
+ "neocuproine": {
+  "q": "Neocuproine",
+  "ours": "IYRGXJIJGHOCFS-UHFFFAOYSA-N",
+  "cid": 65237,
+  "inchikey": "IYRGXJIJGHOCFS-UHFFFAOYSA-N",
+  "title": "2,9-Dimethyl-1,10-phenanthroline",
+  "how": "name",
+  "cite": 65237
+ },
+ "bphen": {
+  "q": "Bathophenanthroline",
+  "ours": "DHDHJYNTEFLIHY-UHFFFAOYSA-N",
+  "cid": 72812,
+  "inchikey": "DHDHJYNTEFLIHY-UHFFFAOYSA-N",
+  "title": "4,7-Diphenyl-1,10-phenanthroline",
+  "how": "name",
+  "cite": 72812
+ },
+ "bcp": {
+  "q": "Bathocuproine",
+  "ours": "STTGYIUESPWXOW-UHFFFAOYSA-N",
+  "cid": 65149,
+  "inchikey": "STTGYIUESPWXOW-UHFFFAOYSA-N",
+  "title": "Bathocuproine",
+  "how": "name",
+  "cite": 65149
+ },
+ "me4phen": {
+  "q": "3,4,7,8-Tetramethyl-1,10-phenanthroline",
+  "ours": "NPAXPTHCUCUHPT-UHFFFAOYSA-N",
+  "cid": 74265,
+  "inchikey": "NPAXPTHCUCUHPT-UHFFFAOYSA-N",
+  "title": "3,4,7,8-Tetramethyl-1,10-phenanthroline",
+  "how": "name",
+  "cite": 74265
+ },
+ "dppz": {
+  "q": "Dipyrido[3,2-a:2',3'-c]phenazine",
+  "ours": "BVQAWSJMUYMNQN-UHFFFAOYSA-N",
+  "cid": 3081616,
+  "inchikey": "BVQAWSJMUYMNQN-UHFFFAOYSA-N",
+  "title": "Dipyridophenazine",
+  "how": "name",
+  "cite": 3081616
+ },
+ "terpy": {
+  "q": "2,2':6',2''-Terpyridine",
+  "ours": "DRGAZIDRYFYHIJ-UHFFFAOYSA-N",
+  "cid": 70848,
+  "inchikey": "DRGAZIDRYFYHIJ-UHFFFAOYSA-N",
+  "title": "2,2':6',2''-Terpyridine",
+  "how": "name",
+  "cite": 70848
+ },
+ "tbu3tpy": {
+  "q": "4,4',4''-Tri-tert-butyl-2,2':6',2''-terpyridine",
+  "ours": "QMABMHJGSFUTPF-UHFFFAOYSA-N",
+  "cid": 4229824,
+  "inchikey": "QMABMHJGSFUTPF-UHFFFAOYSA-N",
+  "title": "1~4~,2~4~,3~4~-Tri-tert-butyl-1~2~,2~2~:2~6~,3~2~-terpyridine",
+  "how": "name",
+  "cite": 4229824
+ },
+ "en": {
+  "q": "Ethylenediamine",
+  "ours": "PIICEJLVQHRZGT-UHFFFAOYSA-N",
+  "cid": 3301,
+  "inchikey": "PIICEJLVQHRZGT-UHFFFAOYSA-N",
+  "title": "Ethylenediamine",
+  "how": "name",
+  "cite": 3301
+ },
+ "tmeda": {
+  "q": "N,N,N′,N′-Tetramethylethylenediamine",
+  "ours": "KWYHDKDOAIKMQN-UHFFFAOYSA-N",
+  "cid": 8037,
+  "inchikey": "KWYHDKDOAIKMQN-UHFFFAOYSA-N",
+  "title": "N,N,N',N'-Tetramethylethylenediamine",
+  "how": "name",
+  "cite": 8037
+ },
+ "dmeda": {
+  "q": "N,N′-Dimethylethylenediamine",
+  "ours": "KVKFRMCSXWQSNT-UHFFFAOYSA-N",
+  "cid": 8070,
+  "inchikey": "KVKFRMCSXWQSNT-UHFFFAOYSA-N",
+  "title": "N,N'-Dimethylethylenediamine",
+  "how": "name",
+  "cite": 8070
+ },
+ "dmcda": {
+  "q": "trans-N,N'-Dimethylcyclohexane-1,2-diamine",
+  "ours": "JRHPOFJADXHYBR-HTQZYQBOSA-N",
+  "cid": 2733821,
+  "inchikey": "JRHPOFJADXHYBR-HTQZYQBOSA-N",
+  "title": "trans-N,N'-dimethyl-1,2-cyclohexanediamine",
+  "how": "name",
+  "cite": 2733821
+ },
+ "dach": {
+  "q": "trans-1,2-Diaminocyclohexane",
+  "ours": "SSJXIUAHEKJCMH-PHDIDXHHSA-N",
+  "cid": 43806,
+  "inchikey": "SSJXIUAHEKJCMH-PHDIDXHHSA-N",
+  "title": "1,2-Diaminocyclohexane, trans-",
+  "how": "name",
+  "cite": 43806
+ },
+ "dpen": {
+  "q": "(1R,2R)-1,2-Diphenylethylenediamine",
+  "ours": "PONXTPCRRASWKW-ZIAGYGMSSA-N",
+  "cid": 2724998,
+  "inchikey": "PONXTPCRRASWKW-ZIAGYGMSSA-N",
+  "title": "(1R,2R)-(+)-1,2-Diphenylethylenediamine",
+  "how": "name",
+  "cite": 2724998
+ },
+ "tsdpen": {
+  "q": "(1R,2R)-(-)-N-(4-Toluenesulfonyl)-1,2-diphenylethylenediamine",
+  "ours": "UOPFIWYXBIHPIP-NHCUHLMSSA-N",
+  "cid": 2734565,
+  "inchikey": "UOPFIWYXBIHPIP-NHCUHLMSSA-N",
+  "title": "N-((1R,2R)-2-Amino-1,2-diphenylethyl)-4-methylbenzene-1-sulfonamide",
+  "how": "name",
+  "cite": 2734565
+ },
+ "binam": {
+  "q": "1,1'-Binaphthyl-2,2'-diamine",
+  "ours": "DDAPSNKEOHDLKB-UHFFFAOYSA-N",
+  "cid": 20571,
+  "inchikey": "DDAPSNKEOHDLKB-UHFFFAOYSA-N",
+  "title": "(+-)-1,1'-Binaphthyl-2,2'-diamine",
+  "how": "name",
+  "cite": 20571
+ },
+ "sparteine": {
+  "q": "Sparteine",
+  "ours": "SLRCCWJSBJZJBV-ZQDZILKHSA-N",
+  "cid": 644020,
+  "inchikey": "SLRCCWJSBJZJBV-ZQDZILKHSA-N",
+  "title": "Sparteine",
+  "how": "name",
+  "cite": 644020
+ },
+ "dien": {
+  "q": "Diethylenetriamine",
+  "ours": "RPNUMPOLZDHAAY-UHFFFAOYSA-N",
+  "cid": 8111,
+  "inchikey": "RPNUMPOLZDHAAY-UHFFFAOYSA-N",
+  "title": "Diethylenetriamine",
+  "how": "name",
+  "cite": 8111
+ },
+ "pmdeta": {
+  "q": "N,N,N′,N′′,N′′-Pentamethyldiethylenetriamine",
+  "ours": "UKODFQOELJFMII-UHFFFAOYSA-N",
+  "cid": 18196,
+  "inchikey": "UKODFQOELJFMII-UHFFFAOYSA-N",
+  "title": "Pentamethyldiethylenetriamine",
+  "how": "name",
+  "cite": 18196
+ },
+ "tren": {
+  "q": "Tris(2-aminoethyl)amine",
+  "ours": "MBYLVOKEDDQJDY-UHFFFAOYSA-N",
+  "cid": 77731,
+  "inchikey": "MBYLVOKEDDQJDY-UHFFFAOYSA-N",
+  "title": "Tris(2-aminoethyl)amine",
+  "how": "name",
+  "cite": 77731
+ },
+ "me6tren": {
+  "q": "Tris[2-(dimethylamino)ethyl]amine",
+  "ours": "VMGSQCIDWAUGLQ-UHFFFAOYSA-N",
+  "cid": 263094,
+  "inchikey": "VMGSQCIDWAUGLQ-UHFFFAOYSA-N",
+  "title": "Tris(2-(dimethylamino)ethyl)amine",
+  "how": "name",
+  "cite": 263094
+ },
+ "tpa": {
+  "q": "Tris(2-pyridylmethyl)amine",
+  "ours": "VGUWFGWZSVLROP-UHFFFAOYSA-N",
+  "cid": 379259,
+  "inchikey": "VGUWFGWZSVLROP-UHFFFAOYSA-N",
+  "title": "Tris(2-pyridylmethyl)amine",
+  "how": "name",
+  "cite": 379259
+ },
+ "bpmen": {
+  "q": "none",
+  "ours": "NJAHJMGPPKJUTO-UHFFFAOYSA-N",
+  "cid": 11021969,
+  "inchikey": "NJAHJMGPPKJUTO-UHFFFAOYSA-N",
+  "title": "1,2-Ethanediamine, N,N'-dimethyl-N,N'-bis(2-pyridinylmethyl)-",
+  "how": "structure",
+  "cite": 11021969
+ },
+ "pdp": {
+  "q": "none",
+  "ours": "XMBZMHWNENRJHR-PMACEKPBSA-N",
+  "cid": 23659335,
+  "inchikey": "XMBZMHWNENRJHR-PMACEKPBSA-N",
+  "title": "(2S,2'S)-1,1'-Bis(pyridin-2-ylmethyl)-2,2'-bipyrrolidine",
+  "how": "structure",
+  "cite": 23659335
+ },
+ "tacn": {
+  "q": "1,4,7-Triazacyclononane",
+  "ours": "ITWBWJFEJCHKSN-UHFFFAOYSA-N",
+  "cid": 188318,
+  "inchikey": "ITWBWJFEJCHKSN-UHFFFAOYSA-N",
+  "title": "1,4,7-Triazacyclononane",
+  "how": "name",
+  "cite": 188318
+ },
+ "me3tacn": {
+  "q": "1,4,7-Trimethyl-1,4,7-triazacyclononane",
+  "ours": "WLDGDTPNAKWAIR-UHFFFAOYSA-N",
+  "cid": 546957,
+  "inchikey": "WLDGDTPNAKWAIR-UHFFFAOYSA-N",
+  "title": "1,4,7-Trimethyl-1,4,7-triazacyclononane",
+  "how": "name",
+  "cite": 546957
+ },
+ "cyclen": {
+  "q": "Cyclen",
+  "ours": "QBPPRVHXOZRESW-UHFFFAOYSA-N",
+  "cid": 64963,
+  "inchikey": "QBPPRVHXOZRESW-UHFFFAOYSA-N",
+  "title": "1,4,7,10-Tetraazacyclododecane",
+  "how": "name",
+  "cite": 64963
+ },
+ "cyclam": {
+  "q": "Cyclam",
+  "ours": "MDAXKAUIABOHTD-UHFFFAOYSA-N",
+  "cid": 64964,
+  "inchikey": "MDAXKAUIABOHTD-UHFFFAOYSA-N",
+  "title": "1,4,8,11-Tetraazacyclotetradecane",
+  "how": "name",
+  "cite": 64964
+ },
+ "phbox": {
+  "q": "2,2'-Isopropylidenebis[(4S)-4-phenyl-2-oxazoline]",
+  "ours": "JTNVCJCSECAMLD-QZTJIDSGSA-N",
+  "cid": 676388,
+  "inchikey": "JTNVCJCSECAMLD-QZTJIDSGSA-N",
+  "title": "(S,S)-2,2'-Isopropylidenebis(4-phenyl-2-oxazoline)",
+  "how": "name",
+  "cite": 676388
+ },
+ "tbubox": {
+  "q": "2,2'-Isopropylidenebis[(4S)-4-tert-butyl-2-oxazoline]",
+  "ours": "DPMGLJUMNRDNMX-VXGBXAGGSA-N",
+  "cid": 688208,
+  "inchikey": "DPMGLJUMNRDNMX-VXGBXAGGSA-N",
+  "title": "t-Bu-box, (S,S)-",
+  "how": "name",
+  "cite": 688208
+ },
+ "iprbox": {
+  "q": "2,2'-Isopropylidenebis[(4S)-4-isopropyl-2-oxazoline]",
+  "ours": "XFZUPCITFHSROM-VXGBXAGGSA-N",
+  "cid": 11821563,
+  "inchikey": "XFZUPCITFHSROM-VXGBXAGGSA-N",
+  "title": "2,2-Bis((4S)-(-)-4-isopropyloxazoline)propane",
+  "how": "structure",
+  "cite": 11821563
+ },
+ "bnbox": {
+  "q": "2,2'-Isopropylidenebis[(4S)-4-benzyl-2-oxazoline]",
+  "ours": "GAKCKAKYRQUVRK-PMACEKPBSA-N",
+  "cid": 11125615,
+  "inchikey": "GAKCKAKYRQUVRK-PMACEKPBSA-N",
+  "title": "2,2-Bis[(4S)-4-benzyl-2-oxazolin-2-yl]propane",
+  "how": "name",
+  "cite": 11125615
+ },
+ "indabox": {
+  "q": "2,2'-Methylenebis[(3aR,8aS)-3a,8a-dihydro-8H-indeno[1,2-d]oxazole]",
+  "ours": "BDHSVQLSNIGJNC-ZCLUNYJNSA-N",
+  "cid": 1268099,
+  "inchikey": "BDHSVQLSNIGJNC-ZCLUNYJNSA-N",
+  "title": "(+)-2,2'-Methylenebis((3aR,8aS)-3a,8a-dihydro-8H-indeno(1,2-d)oxazole)",
+  "how": "structure",
+  "cite": 1268099
+ },
+ "iprpybox": {
+  "q": "2,6-Bis[(4S)-4-isopropyl-2-oxazolinyl]pyridine",
+  "ours": "CSGQGLBCAHGJDR-HUUCEWRRSA-N",
+  "cid": 688211,
+  "inchikey": "CSGQGLBCAHGJDR-HUUCEWRRSA-N",
+  "title": "(S,S)-2,6-Bis(4-isopropyl-2-oxazolin-2-yl)pyridine",
+  "how": "structure",
+  "cite": 688211
+ },
+ "phpybox": {
+  "q": "2,6-Bis[(4S)-4-phenyl-2-oxazolinyl]pyridine",
+  "ours": "HLHBIMJNCKZZQO-NHCUHLMSSA-N",
+  "cid": 7010100,
+  "inchikey": "HLHBIMJNCKZZQO-NHCUHLMSSA-N",
+  "title": "(S,S)-2,6-Bis(4-phenyl-2-oxazolin-2-yl)pyridine",
+  "how": "name",
+  "cite": 7010100
+ },
+ "tbupyox": {
+  "q": "(S)-4-tert-Butyl-2-(2-pyridyl)oxazoline",
+  "ours": "JDOAIDZRVWJBEG-SNVBAGLBSA-N",
+  "cid": 14337774,
+  "inchikey": "JDOAIDZRVWJBEG-SNVBAGLBSA-N",
+  "title": "(S)-4-tert-Butyl-2-(2-pyridyl)oxazoline",
+  "how": "name",
+  "cite": 14337774
+ },
+ "dippdab": {
+  "q": "Glyoxal-bis(2,6-diisopropylphenyl)imine",
+  "ours": "JWVIIGXMTONOFR-UHFFFAOYSA-N",
+  "cid": 630473,
+  "inchikey": "JWVIIGXMTONOFR-UHFFFAOYSA-N",
+  "title": "N,N'-Bis(2,6-diisopropylphenyl)ethanediimine",
+  "how": "structure",
+  "cite": 630473
+ },
+ "dippbian": {
+  "q": "none",
+  "ours": "JBCIVYVLDKPKDM-UHFFFAOYSA-N",
+  "cid": 1818681,
+  "inchikey": "JBCIVYVLDKPKDM-UHFFFAOYSA-N",
+  "title": "1,2-Di(2,6-diisopropylphenylimino)acenaphthene",
+  "how": "structure",
+  "cite": 1818681
+ },
+ "pdi": {
+  "q": "2,6-Bis[1-(2,6-diisopropylphenylimino)ethyl]pyridine",
+  "ours": "NVPUVWBDTWBFRF-UHFFFAOYSA-N",
+  "cid": 10930103,
+  "inchikey": "NVPUVWBDTWBFRF-UHFFFAOYSA-N",
+  "title": "2,6-Bis[1-(2,6-DI-I-propylphenylimino)ethyl]pyridine",
+  "how": "name",
+  "cite": 10930103
+ },
+ "nacnac": {
+  "q": "none",
+  "ours": "FJSCMSKDOZRDQG-UHFFFAOYSA-N",
+  "cid": 3822180,
+  "inchikey": "FJSCMSKDOZRDQG-UHFFFAOYSA-N",
+  "title": "N-[4-[2,6-di(propan-2-yl)phenyl]iminopent-2-en-2-yl]-2,6-di(propan-2-yl)aniline",
+  "how": "structure",
+  "cite": 3822180
+ },
+ "salen": {
+  "q": "N,N'-Bis(salicylidene)ethylenediamine",
+  "ours": "VEUMANXWQDHAJV-UHFFFAOYSA-N",
+  "cid": 26518,
+  "inchikey": "VEUMANXWQDHAJV-UHFFFAOYSA-N",
+  "title": "N,N'-Bis(salicylidene)ethylenediamine",
+  "how": "name",
+  "cite": 26518
+ },
+ "jacobsen": {
+  "q": "(R,R)-(-)-N,N'-Bis(3,5-di-tert-butylsalicylidene)-1,2-cyclohexanediamine",
+  "ours": "FYNXDGNCEBQLGC-LOYHVIPDSA-N",
+  "cid": 2733339,
+  "inchikey": "FYNXDGNCEBQLGC-LOYHVIPDSA-N",
+  "title": "(R,R)-(-)-N,N'-Bis(3,5-di-tert-butylsalicylidene)-1,2-cyclohexanediamine",
+  "how": "name",
+  "cite": 2733339
+ },
+ "salophen": {
+  "q": "N,N'-Bis(salicylidene)-1,2-phenylenediamine",
+  "ours": "HXFYGSOGECBSOY-UHFFFAOYSA-N",
+  "cid": 221227,
+  "inchikey": "HXFYGSOGECBSOY-UHFFFAOYSA-N",
+  "title": "N,N'-bis(salicylidene)-1,2-phenylenediamine",
+  "how": "name",
+  "cite": 221227
+ },
+ "ppy": {
+  "q": "2-Phenylpyridine",
+  "ours": "VQGHOUODWALEFC-UHFFFAOYSA-N",
+  "cid": 13887,
+  "inchikey": "VQGHOUODWALEFC-UHFFFAOYSA-N",
+  "title": "2-Phenylpyridine",
+  "how": "name",
+  "cite": 13887
+ },
+ "dfcf3ppy": {
+  "q": "2-(2,4-Difluorophenyl)-5-(trifluoromethyl)pyridine",
+  "ours": "FMKQPMDFNYNYAG-UHFFFAOYSA-N",
+  "cid": 53260183,
+  "inchikey": "FMKQPMDFNYNYAG-UHFFFAOYSA-N",
+  "title": "2-(2,4-Difluorophenyl)-5-(trifluoromethyl)pyridine",
+  "how": "name",
+  "cite": 53260183
+ },
+ "dfppy": {
+  "q": "2-(2,4-Difluorophenyl)pyridine",
+  "ours": "SSABEFIRGJISFH-UHFFFAOYSA-N",
+  "cid": 11263359,
+  "inchikey": "SSABEFIRGJISFH-UHFFFAOYSA-N",
+  "title": "2-(2,4-Difluorophenyl)pyridine",
+  "how": "name",
+  "cite": 11263359
+ },
+ "piq": {
+  "q": "1-Phenylisoquinoline",
+  "ours": "LPCWDYWZIWDTCV-UHFFFAOYSA-N",
+  "cid": 137882,
+  "inchikey": "LPCWDYWZIWDTCV-UHFFFAOYSA-N",
+  "title": "1-Phenylisoquinoline",
+  "how": "name",
+  "cite": 137882
+ },
+ "bzq": {
+  "q": "Benzo[h]quinoline",
+  "ours": "WZJYKHNJTSNBHV-UHFFFAOYSA-N",
+  "cid": 9191,
+  "inchikey": "WZJYKHNJTSNBHV-UHFFFAOYSA-N",
+  "title": "Benzo(h)quinoline",
+  "how": "name",
+  "cite": 9191
+ },
+ "pic": {
+  "q": "Picolinic acid",
+  "ours": "SIOXPEMLGUPBBT-UHFFFAOYSA-N",
+  "cid": 1018,
+  "inchikey": "SIOXPEMLGUPBBT-UHFFFAOYSA-N",
+  "title": "Picolinic acid",
+  "how": "name",
+  "cite": 1018
+ },
+ "hq": {
+  "q": "8-Hydroxyquinoline",
+  "ours": "MCJGNVYPOGVAJF-UHFFFAOYSA-N",
+  "cid": 1923,
+  "inchikey": "MCJGNVYPOGVAJF-UHFFFAOYSA-N",
+  "title": "8-Hydroxyquinoline",
+  "how": "name",
+  "cite": 1923
+ },
+ "tp": {
+  "q": "none",
+  "ours": "MOZWBOMBTROSAX-UHFFFAOYSA-N",
+  "cid": 2725020,
+  "inchikey": "MOZWBOMBTROSAX-UHFFFAOYSA-N",
+  "title": "Tri(pyrazol-1-yl)boranuide",
+  "how": "structure",
+  "cite": 2725020
+ },
+ "tpstar": {
+  "q": "none",
+  "ours": "SZFJMUMEEUJMIF-UHFFFAOYSA-N",
+  "cid": 2725022,
+  "inchikey": "SZFJMUMEEUJMIF-UHFFFAOYSA-N",
+  "title": "Tris(3,5-dimethylpyrazol-1-yl)boranuide",
+  "how": "structure",
+  "cite": 2725022
+ },
+ "tpp": {
+  "q": "Tetraphenylporphyrin",
+  "ours": "YNHJECZULSZAQK-UHFFFAOYSA-N",
+  "cid": 86280046,
+  "inchikey": "YNHJECZULSZAQK-UHFFFAOYSA-N",
+  "title": "Tetraphenylporphyrin",
+  "how": "name",
+  "cite": 86280046
+ },
+ "oep": {
+  "q": "Octaethylporphyrin",
+  "ours": "XFIIGRBIXXECHR-UHFFFAOYSA-N",
+  "cid": 102311,
+  "inchikey": "XFIIGRBIXXECHR-UHFFFAOYSA-N",
+  "title": "2,3,7,8,12,13,17,18-Octaethyl-21H,23H-porphine",
+  "how": "name",
+  "cite": 102311
+ },
+ "pc": {
+  "q": "Phthalocyanine",
+  "ours": "IEQIEDJGQAUEQZ-UHFFFAOYSA-N",
+  "cid": 86280045,
+  "inchikey": "IEQIEDJGQAUEQZ-UHFFFAOYSA-N",
+  "title": "Phthalocyanine",
+  "how": "name",
+  "cite": 86280045
+ },
+ "tbupnp": {
+  "q": "2,6-Bis(di-tert-butylphosphinomethyl)pyridine",
+  "ours": "NJQAVBPPWNSBBC-UHFFFAOYSA-N",
+  "cid": 11157260,
+  "inchikey": "NJQAVBPPWNSBBC-UHFFFAOYSA-N",
+  "title": "2,6-Bis(DI-tert-butylphosphinomethyl)pyridine",
+  "how": "name",
+  "cite": 11157260
+ },
+ "iprpnp": {
+  "q": "2,6-Bis(diisopropylphosphinomethyl)pyridine",
+  "ours": "ISALXWZSPYRWEM-UHFFFAOYSA-N",
+  "cid": 15398915,
+  "inchikey": "ISALXWZSPYRWEM-UHFFFAOYSA-N",
+  "title": "2,6-Bis((diisopropylphosphino)methyl)pyridine",
+  "how": "name",
+  "cite": 15398915
+ },
+ "tbupcp": {
+  "q": "1,3-Bis(di-tert-butylphosphinomethyl)benzene",
+  "ours": "VNLHPVUKSKTUPA-UHFFFAOYSA-N",
+  "cid": 4188717,
+  "inchikey": "VNLHPVUKSKTUPA-UHFFFAOYSA-N",
+  "title": "(1,3-Phenylenebis(methylene))bis(di-tert-butylphosphane)",
+  "how": "name",
+  "cite": 4188717
+ },
+ "tbupocop": {
+  "q": "1,3-Bis(di-tert-butylphosphinito)benzene",
+  "ours": "WSKMTURBCLMNEL-UHFFFAOYSA-N",
+  "cid": 12992261,
+  "inchikey": "WSKMTURBCLMNEL-UHFFFAOYSA-N",
+  "title": "1,3-Bis((di-tert-butylphosphino)oxy)benzene",
+  "how": "structure",
+  "cite": 12992261
+ },
+ "iprpocop": {
+  "q": "1,3-Bis(diisopropylphosphinito)benzene",
+  "ours": "HEJJOSFVGLSLHS-UHFFFAOYSA-N",
+  "cid": 11329170,
+  "inchikey": "HEJJOSFVGLSLHS-UHFFFAOYSA-N",
+  "title": "[3-Di(propan-2-yl)phosphanyloxyphenoxy]-di(propan-2-yl)phosphane",
+  "how": "structure",
+  "cite": 11329170
+ },
+ "ncn": {
+  "q": "1,3-Bis(dimethylaminomethyl)benzene",
+  "ours": "OUWLQMIJGBZEME-UHFFFAOYSA-N",
+  "cid": 432841,
+  "inchikey": "OUWLQMIJGBZEME-UHFFFAOYSA-N",
+  "title": "1,3-Bis(dimethylaminomethyl)benzene",
+  "how": "name",
+  "cite": 432841
+ },
+ "pnn": {
+  "q": "2-(Di-tert-butylphosphinomethyl)-6-(diethylaminomethyl)pyridine",
+  "ours": "MTBWGMDPQBSPGF-UHFFFAOYSA-N",
+  "cid": 53234144,
+  "inchikey": "MTBWGMDPQBSPGF-UHFFFAOYSA-N",
+  "title": "2-((Di-tert-butylphosphinomethyl)-6-diethylaminomethyl)pyridine",
+  "how": "structure",
+  "cite": 53234144
+ },
+ "phmacho": {
+  "q": "Bis[2-(diphenylphosphino)ethyl]amine",
+  "ours": "RNRYVHUOQODQHG-UHFFFAOYSA-N",
+  "cid": 434330,
+  "inchikey": "RNRYVHUOQODQHG-UHFFFAOYSA-N",
+  "title": "Bis(2-(diphenylphosphino)ethyl)amine",
+  "how": "name",
+  "cite": 434330
+ },
+ "iprmacho": {
+  "q": "Bis[2-(diisopropylphosphino)ethyl]amine",
+  "ours": "FTVIGQGOGIHMBS-UHFFFAOYSA-N",
+  "cid": 15757160,
+  "inchikey": "FTVIGQGOGIHMBS-UHFFFAOYSA-N",
+  "title": "Bis[(2-di-i-propylphosphino)ethyl]amine, min. 97% (10 wt% in tetrahydrofuran)",
+  "how": "name",
+  "cite": 15757160
+ },
+ "acac": {
+  "q": "Acetylacetone",
+  "ours": "POILWHVDKZOXJZ-UHFFFAOYSA-N",
+  "cid": 18630,
+  "inchikey": "POILWHVDKZOXJZ-UHFFFAOYSA-N",
+  "title": "3-penten-2-one, 4-hydroxy-, (3Z)-",
+  "how": "structure",
+  "named": {
+   "cid": 31261,
+   "inchikey": "YRKCREAYFQTBPV-UHFFFAOYSA-N",
+   "title": "Acetylacetone"
+  },
+  "cite": 18630
+ },
+ "hfac": {
+  "q": "Hexafluoroacetylacetone",
+  "ours": "ZUSKFDORJCVUSD-UHFFFAOYSA-N",
+  "cid": 84644,
+  "inchikey": "ZUSKFDORJCVUSD-UHFFFAOYSA-N",
+  "title": "3H-Perfluoro-4-hydroxy-3-penten-2-one",
+  "how": "structure",
+  "named": {
+   "cid": 73706,
+   "inchikey": "QAMFBRUWYYMMGJ-UHFFFAOYSA-N",
+   "title": "Hexafluoroacetylacetone"
+  },
+  "cite": 84644
+ },
+ "tfac": {
+  "q": "Trifluoroacetylacetone",
+  "ours": "GEGQNWRDBRXWDX-UHFFFAOYSA-N",
+  "named": {
+   "cid": 73943,
+   "inchikey": "SHXHPUAKLCCLDV-UHFFFAOYSA-N",
+   "title": "1,1,1-Trifluoro-2,4-pentanedione"
+  },
+  "cite": 73943
+ },
+ "tmhd": {
+  "q": "2,2,6,6-Tetramethyl-3,5-heptanedione",
+  "ours": "SOZFXLUMSLXZFW-UHFFFAOYSA-N",
+  "cid": 84639,
+  "inchikey": "SOZFXLUMSLXZFW-UHFFFAOYSA-N",
+  "title": "5-Hydroxy-2,2,6,6-tetramethylhept-4-en-3-one",
+  "how": "structure",
+  "named": {
+   "cid": 70700,
+   "inchikey": "YRAJNWYBUCUFBD-UHFFFAOYSA-N",
+   "title": "2,2,6,6-Tetramethyl-3,5-heptanedione"
+  },
+  "cite": 84639
+ },
+ "dbm": {
+  "q": "Dibenzoylmethane",
+  "ours": "RZCYUOWKJNUVBF-UHFFFAOYSA-N",
+  "cid": 84413,
+  "inchikey": "RZCYUOWKJNUVBF-UHFFFAOYSA-N",
+  "title": "3-Hydroxy-1,3-diphenyl-propenone",
+  "how": "structure",
+  "named": {
+   "cid": 8433,
+   "inchikey": "NZZIMKJIVMHWJC-UHFFFAOYSA-N",
+   "title": "Dibenzoylmethane"
+  },
+  "cite": 84413
+ },
+ "oac": {
+  "q": "Acetic acid",
+  "ours": "QTBSBXVTEAMEQO-UHFFFAOYSA-N",
+  "cid": 176,
+  "inchikey": "QTBSBXVTEAMEQO-UHFFFAOYSA-N",
+  "title": "Acetic Acid",
+  "how": "name",
+  "cite": 176
+ },
+ "opiv": {
+  "q": "Pivalic acid",
+  "ours": "IUGYQRQAERSCNH-UHFFFAOYSA-N",
+  "cid": 6417,
+  "inchikey": "IUGYQRQAERSCNH-UHFFFAOYSA-N",
+  "title": "Pivalic acid",
+  "how": "name",
+  "cite": 6417
+ },
+ "tfa": {
+  "q": "Trifluoroacetic acid",
+  "ours": "DTQVDTLACAAQTR-UHFFFAOYSA-N",
+  "cid": 6422,
+  "inchikey": "DTQVDTLACAAQTR-UHFFFAOYSA-N",
+  "title": "Trifluoroacetic acid",
+  "how": "name",
+  "cite": 6422
+ },
+ "obz": {
+  "q": "Benzoic acid",
+  "ours": "WPYMKLBDIGXBTP-UHFFFAOYSA-N",
+  "cid": 243,
+  "inchikey": "WPYMKLBDIGXBTP-UHFFFAOYSA-N",
+  "title": "Benzoic Acid",
+  "how": "name",
+  "cite": 243
+ },
+ "otf": {
+  "q": "Trifluoromethanesulfonic acid",
+  "ours": "ITMCEJHCFYSIIV-UHFFFAOYSA-N",
+  "cid": 62406,
+  "inchikey": "ITMCEJHCFYSIIV-UHFFFAOYSA-N",
+  "title": "Trifluoromethanesulfonic acid",
+  "how": "name",
+  "cite": 62406
+ },
+ "ots": {
+  "q": "p-Toluenesulfonic acid",
+  "ours": "JOXIMZWYDAKGHI-UHFFFAOYSA-N",
+  "cid": 6101,
+  "inchikey": "JOXIMZWYDAKGHI-UHFFFAOYSA-N",
+  "title": "p-Toluenesulfonic acid",
+  "how": "name",
+  "cite": 6101
+ },
+ "esp": {
+  "q": "none",
+  "ours": "BZWQVGTVYGEXTE-UHFFFAOYSA-N",
+  "cid": 11204982,
+  "inchikey": "BZWQVGTVYGEXTE-UHFFFAOYSA-N",
+  "title": "alpha,alpha,alpha',alpha'-Tetramethyl-1,3-benzenedipropionic Acid",
+  "how": "structure",
+  "cite": 11204982
+ },
+ "ox": {
+  "q": "Oxalic acid",
+  "ours": "MUBZPKHOEPUJKR-UHFFFAOYSA-N",
+  "cid": 971,
+  "inchikey": "MUBZPKHOEPUJKR-UHFFFAOYSA-N",
+  "title": "Oxalic Acid",
+  "how": "name",
+  "cite": 971
+ },
+ "cat": {
+  "q": "Catechol",
+  "ours": "YCIMNLLNPGFGHC-UHFFFAOYSA-N",
+  "cid": 289,
+  "inchikey": "YCIMNLLNPGFGHC-UHFFFAOYSA-N",
+  "title": "Catechol",
+  "how": "name",
+  "cite": 289
+ },
+ "pin": {
+  "q": "Pinacol",
+  "ours": "IVDFJHOHABJVEH-UHFFFAOYSA-N",
+  "cid": 6425,
+  "inchikey": "IVDFJHOHABJVEH-UHFFFAOYSA-N",
+  "title": "Pinacol",
+  "how": "name",
+  "cite": 6425
+ },
+ "binol": {
+  "q": "1,1'-Bi-2-naphthol",
+  "ours": "PPTXVXKCQZKFBN-UHFFFAOYSA-N",
+  "cid": 11762,
+  "inchikey": "PPTXVXKCQZKFBN-UHFFFAOYSA-N",
+  "title": "Binol",
+  "how": "name",
+  "cite": 11762
+ },
+ "h8binol": {
+  "q": "5,5',6,6',7,7',8,8'-Octahydro-1,1'-bi-2-naphthol",
+  "ours": "UTXIFKBYNJRJPH-UHFFFAOYSA-N",
+  "cid": 3694111,
+  "inchikey": "UTXIFKBYNJRJPH-UHFFFAOYSA-N",
+  "title": "(S)-(-)-5,5',6,6',7,7',8,8'-Octahydro-1,1'-bi-2-naphthol",
+  "how": "name",
+  "cite": 3694111
+ },
+ "vanol": {
+  "q": "VANOL",
+  "ours": "NDTDVKKGYBULHF-UHFFFAOYSA-N",
+  "cid": 5251124,
+  "inchikey": "NDTDVKKGYBULHF-UHFFFAOYSA-N",
+  "title": "(R)-Vanol",
+  "how": "name",
+  "cite": 5251124
+ },
+ "taddol": {
+  "q": "TADDOL",
+  "ours": "OWVIRVJQDVCGQX-VSGBNLITSA-N",
+  "cid": 2725026,
+  "inchikey": "OWVIRVJQDVCGQX-VSGBNLITSA-N",
+  "title": "((4R,5R)-2,2-Dimethyl-1,3-dioxolane-4,5-diyl)bis(diphenylmethanol)",
+  "how": "name",
+  "cite": 2725026
+ },
+ "thf": {
+  "q": "Tetrahydrofuran",
+  "ours": "WYURNTSHIVDZCO-UHFFFAOYSA-N",
+  "cid": 8028,
+  "inchikey": "WYURNTSHIVDZCO-UHFFFAOYSA-N",
+  "title": "Tetrahydrofuran",
+  "how": "name",
+  "cite": 8028
+ },
+ "et2o": {
+  "q": "Diethyl ether",
+  "ours": "RTZKZFJDLAIYFH-UHFFFAOYSA-N",
+  "cid": 3283,
+  "inchikey": "RTZKZFJDLAIYFH-UHFFFAOYSA-N",
+  "title": "Diethyl Ether",
+  "how": "name",
+  "cite": 3283
+ },
+ "dme": {
+  "q": "1,2-Dimethoxyethane",
+  "ours": "XTHFKEDIFFGKHM-UHFFFAOYSA-N",
+  "cid": 8071,
+  "inchikey": "XTHFKEDIFFGKHM-UHFFFAOYSA-N",
+  "title": "1,2-Dimethoxyethane",
+  "how": "name",
+  "cite": 8071
+ },
+ "diglyme": {
+  "q": "Diglyme",
+  "ours": "SBZXBUIDTXKZTM-UHFFFAOYSA-N",
+  "cid": 8150,
+  "inchikey": "SBZXBUIDTXKZTM-UHFFFAOYSA-N",
+  "title": "Diglyme",
+  "how": "name",
+  "cite": 8150
+ },
+ "dioxane": {
+  "q": "1,4-Dioxane",
+  "ours": "RYHBNJHYFVUHQT-UHFFFAOYSA-N",
+  "cid": 31275,
+  "inchikey": "RYHBNJHYFVUHQT-UHFFFAOYSA-N",
+  "title": "1,4-Dioxane",
+  "how": "name",
+  "cite": 31275
+ },
+ "dmso": {
+  "q": "Dimethyl sulfoxide",
+  "ours": "IAZDPXIOMUYVGZ-UHFFFAOYSA-N",
+  "cid": 679,
+  "inchikey": "IAZDPXIOMUYVGZ-UHFFFAOYSA-N",
+  "title": "Dimethyl Sulfoxide",
+  "how": "name",
+  "cite": 679
+ },
+ "dmf": {
+  "q": "N,N-Dimethylformamide",
+  "ours": "ZMXDDKWLCZADIW-UHFFFAOYSA-N",
+  "cid": 6228,
+  "inchikey": "ZMXDDKWLCZADIW-UHFFFAOYSA-N",
+  "title": "Dimethylformamide",
+  "how": "name",
+  "cite": 6228
+ },
+ "dma": {
+  "q": "N,N-Dimethylacetamide",
+  "ours": "FXHOOIRPVKKKFG-UHFFFAOYSA-N",
+  "cid": 31374,
+  "inchikey": "FXHOOIRPVKKKFG-UHFFFAOYSA-N",
+  "title": "Dimethylacetamide",
+  "how": "name",
+  "cite": 31374
+ },
+ "nmp": {
+  "q": "N-Methyl-2-pyrrolidone",
+  "ours": "SECXISVLQFMRJM-UHFFFAOYSA-N",
+  "cid": 13387,
+  "inchikey": "SECXISVLQFMRJM-UHFFFAOYSA-N",
+  "title": "N-methyl-2-pyrrolidone",
+  "how": "name",
+  "cite": 13387
+ },
+ "hmpa": {
+  "q": "Hexamethylphosphoramide",
+  "ours": "GNOIPBMMFNIUFM-UHFFFAOYSA-N",
+  "cid": 12679,
+  "inchikey": "GNOIPBMMFNIUFM-UHFFFAOYSA-N",
+  "title": "Hexamethylphosphoramide",
+  "how": "name",
+  "cite": 12679
+ },
+ "dmpu": {
+  "q": "DMPU",
+  "ours": "GUVUOGQBMYCBQP-UHFFFAOYSA-N",
+  "cid": 81646,
+  "inchikey": "GUVUOGQBMYCBQP-UHFFFAOYSA-N",
+  "title": "2(1H)-Pyrimidinone, tetrahydro-1,3-dimethyl-",
+  "how": "name",
+  "cite": 81646
+ },
+ "tppo": {
+  "q": "Triphenylphosphine oxide",
+  "ours": "FIQMHBFVRAXMOP-UHFFFAOYSA-N",
+  "cid": 13097,
+  "inchikey": "FIQMHBFVRAXMOP-UHFFFAOYSA-N",
+  "title": "Triphenylphosphine Oxide",
+  "how": "name",
+  "cite": 13097
+ },
+ "topo": {
+  "q": "Trioctylphosphine oxide",
+  "ours": "ZMBHCYHQLYEYDV-UHFFFAOYSA-N",
+  "cid": 65577,
+  "inchikey": "ZMBHCYHQLYEYDV-UHFFFAOYSA-N",
+  "title": "Trioctylphosphine oxide",
+  "how": "name",
+  "cite": 65577
+ },
+ "12c4": {
+  "q": "12-Crown-4",
+  "ours": "XQQZRZQVBFHBHL-UHFFFAOYSA-N",
+  "cid": 9269,
+  "inchikey": "XQQZRZQVBFHBHL-UHFFFAOYSA-N",
+  "title": "1,4,7,10-Tetraoxacyclododecane",
+  "how": "name",
+  "cite": 9269
+ },
+ "15c5": {
+  "q": "15-Crown-5",
+  "ours": "VFTFKUDGYRBSAL-UHFFFAOYSA-N",
+  "cid": 36336,
+  "inchikey": "VFTFKUDGYRBSAL-UHFFFAOYSA-N",
+  "title": "15-Crown-5",
+  "how": "name",
+  "cite": 36336
+ },
+ "18c6": {
+  "q": "18-Crown-6",
+  "ours": "XEZNGIUYQVAUSS-UHFFFAOYSA-N",
+  "cid": 28557,
+  "inchikey": "XEZNGIUYQVAUSS-UHFFFAOYSA-N",
+  "title": "18-Crown-6",
+  "how": "name",
+  "cite": 28557
+ },
+ "db18c6": {
+  "q": "Dibenzo-18-crown-6",
+  "ours": "YSSSPARMOAYJTE-UHFFFAOYSA-N",
+  "cid": 26541,
+  "inchikey": "YSSSPARMOAYJTE-UHFFFAOYSA-N",
+  "title": "Dibenzo-18-crown-6",
+  "how": "name",
+  "cite": 26541
+ },
+ "crypt222": {
+  "q": "Cryptand 222",
+  "ours": "AUFVJZSDSXXFOI-UHFFFAOYSA-N",
+  "cid": 72801,
+  "inchikey": "AUFVJZSDSXXFOI-UHFFFAOYSA-N",
+  "title": "2,2,2-Cryptand",
+  "how": "name",
+  "cite": 72801
+ },
+ "sme2": {
+  "q": "Dimethyl sulfide",
+  "ours": "QMMFVYPAHWMCMS-UHFFFAOYSA-N",
+  "cid": 1068,
+  "inchikey": "QMMFVYPAHWMCMS-UHFFFAOYSA-N",
+  "title": "Dimethyl Sulfide",
+  "how": "name",
+  "cite": 1068
+ },
+ "tht": {
+  "q": "Tetrahydrothiophene",
+  "ours": "RAOIDOHSFRTOEL-UHFFFAOYSA-N",
+  "cid": 1127,
+  "inchikey": "RAOIDOHSFRTOEL-UHFFFAOYSA-N",
+  "title": "Tetrahydrothiophene",
+  "how": "name",
+  "cite": 1127
+ },
+ "dmso-s": {
+  "q": "Dimethyl sulfoxide",
+  "ours": "IAZDPXIOMUYVGZ-UHFFFAOYSA-N",
+  "cid": 679,
+  "inchikey": "IAZDPXIOMUYVGZ-UHFFFAOYSA-N",
+  "title": "Dimethyl Sulfoxide",
+  "how": "name",
+  "cite": 679
+ },
+ "dtc": {
+  "q": "Diethyldithiocarbamic acid",
+  "ours": "LMBWSYZSUOEYSN-UHFFFAOYSA-N",
+  "cid": 8987,
+  "inchikey": "LMBWSYZSUOEYSN-UHFFFAOYSA-N",
+  "title": "Diethyldithiocarbamic Acid",
+  "how": "name",
+  "cite": 8987
+ },
+ "hmds": {
+  "q": "Hexamethyldisilazane",
+  "ours": "FFUAGWLWBBFQJT-UHFFFAOYSA-N",
+  "cid": 13838,
+  "inchikey": "FFUAGWLWBBFQJT-UHFFFAOYSA-N",
+  "title": "Hexamethyldisilazane",
+  "how": "name",
+  "cite": 13838
+ },
+ "co": {
+  "q": "Carbon monoxide",
+  "ours": "UGFAIRIUMAVXCW-UHFFFAOYSA-N",
+  "cid": 281,
+  "inchikey": "UGFAIRIUMAVXCW-UHFFFAOYSA-N",
+  "title": "Carbon Monoxide",
+  "how": "name",
+  "cite": 281
+ },
+ "cp": {
+  "q": "Cyclopentadienide",
+  "ours": "SINKOGOPEQSHQD-UHFFFAOYSA-N",
+  "cid": 3490527,
+  "inchikey": "SINKOGOPEQSHQD-UHFFFAOYSA-N",
+  "title": "Cyclopentadienide",
+  "how": "name",
+  "cite": 3490527
+ },
+ "cpme": {
+  "q": "none",
+  "ours": "ZAKSCXKVYUNNHM-UHFFFAOYSA-N",
+  "cid": 11984645,
+  "inchikey": "ZAKSCXKVYUNNHM-UHFFFAOYSA-N",
+  "title": "CID 11984645",
+  "how": "structure",
+  "cite": 11984645
+ },
+ "cpstar": {
+  "q": "none",
+  "ours": "GPVVSRKZVHQKIX-UHFFFAOYSA-N",
+  "cid": 3845663,
+  "inchikey": "GPVVSRKZVHQKIX-UHFFFAOYSA-N",
+  "title": "CID 3845663",
+  "how": "structure",
+  "cite": 3845663
+ },
+ "indenyl": {
+  "q": "none",
+  "ours": "RREAVEQOCKXSHQ-UHFFFAOYSA-N",
+  "cid": 11984625,
+  "inchikey": "RREAVEQOCKXSHQ-UHFFFAOYSA-N",
+  "title": "5H-inden-5-ide",
+  "how": "structure",
+  "cite": 11984625
+ },
+ "benzene": {
+  "q": "Benzene",
+  "ours": "UHOVQNZJYSORNB-UHFFFAOYSA-N",
+  "cid": 241,
+  "inchikey": "UHOVQNZJYSORNB-UHFFFAOYSA-N",
+  "title": "Benzene",
+  "how": "name",
+  "cite": 241
+ },
+ "mesitylene": {
+  "q": "Mesitylene",
+  "ours": "AUHZEENZYGFFBQ-UHFFFAOYSA-N",
+  "cid": 7947,
+  "inchikey": "AUHZEENZYGFFBQ-UHFFFAOYSA-N",
+  "title": "Mesitylene",
+  "how": "name",
+  "cite": 7947
+ },
+ "c6me6": {
+  "q": "Hexamethylbenzene",
+  "ours": "YUWFEBAXEOLKSG-UHFFFAOYSA-N",
+  "cid": 6908,
+  "inchikey": "YUWFEBAXEOLKSG-UHFFFAOYSA-N",
+  "title": "Hexamethylbenzene",
+  "how": "name",
+  "cite": 6908
+ },
+ "cymene": {
+  "q": "p-Cymene",
+  "ours": "HFPZCAJZSCWRBC-UHFFFAOYSA-N",
+  "cid": 7463,
+  "inchikey": "HFPZCAJZSCWRBC-UHFFFAOYSA-N",
+  "title": "P-Cymene",
+  "how": "name",
+  "cite": 7463
+ },
+ "cod": {
+  "q": "1,5-Cyclooctadiene",
+  "ours": "VYXHVRARDIDEHS-UHFFFAOYSA-N",
+  "cid": 82916,
+  "inchikey": "VYXHVRARDIDEHS-QGTKBVGQSA-N",
+  "title": "1,5-Cyclooctadiene",
+  "how": "name",
+  "cite": 82916
+ },
+ "nbd": {
+  "q": "Norbornadiene",
+  "ours": "SJYNFBVQFBRSIB-UHFFFAOYSA-N",
+  "cid": 8473,
+  "inchikey": "SJYNFBVQFBRSIB-UHFFFAOYSA-N",
+  "title": "Norbornadiene",
+  "how": "name",
+  "cite": 8473
+ },
+ "butadiene": {
+  "q": "1,3-Butadiene",
+  "ours": "KAKZBPTYRLMSJV-UHFFFAOYSA-N",
+  "cid": 7845,
+  "inchikey": "KAKZBPTYRLMSJV-UHFFFAOYSA-N",
+  "title": "1,3-Butadiene",
+  "how": "name",
+  "cite": 7845
+ },
+ "ethylene": {
+  "q": "Ethylene",
+  "ours": "VGGSQFUCUMXWEO-UHFFFAOYSA-N",
+  "cid": 6325,
+  "inchikey": "VGGSQFUCUMXWEO-UHFFFAOYSA-N",
+  "title": "Ethylene",
+  "how": "name",
+  "cite": 6325
+ },
+ "allyl": {
+  "q": "Propene",
+  "ours": "QQONPFPTGQHPMA-UHFFFAOYSA-N",
+  "cid": 8252,
+  "inchikey": "QQONPFPTGQHPMA-UHFFFAOYSA-N",
+  "title": "Propylene",
+  "how": "name",
+  "cite": 8252
+ },
+ "methallyl": {
+  "q": "Isobutylene",
+  "ours": "VQTUBCCKSQIDNK-UHFFFAOYSA-N",
+  "cid": 8255,
+  "inchikey": "VQTUBCCKSQIDNK-UHFFFAOYSA-N",
+  "title": "Isobutylene",
+  "how": "name",
+  "cite": 8255
+ },
+ "crotyl": {
+  "q": "2-Butene",
+  "ours": "CRPTXKKKIGGDBX-UHFFFAOYSA-N",
+  "named": {
+   "cid": 62695,
+   "inchikey": "IAQRGUVFOMOMEM-ONEGZZNKSA-N",
+   "title": "trans-2-BUTENE"
+  },
+  "cite": 62695
+ },
+ "cinnamyl": {
+  "q": "beta-Methylstyrene",
+  "ours": "ICTGSQARZKHWET-UHFFFAOYSA-N",
+  "named": {
+   "cid": 12500,
+   "inchikey": "QROGIFZRVHSFLM-UHFFFAOYSA-N",
+   "title": "beta-Methylstyrene"
+  },
+  "cite": 12500
+ }
+}

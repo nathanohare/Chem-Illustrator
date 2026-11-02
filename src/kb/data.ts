@@ -7,9 +7,10 @@
 
 import { GLOSSARY } from './glossary';
 import { PURIFICATION_TABLE, TECHNIQUES_TABLE } from './handling';
-import type { KbTable } from './tables';
+import type { Cell, KbTable } from './tables';
 import { PHYSICAL_CONSTANTS, REAGENT_SAFETY } from './safety-tables';
 import { PKA_TABLE, SOLVENTS_TABLE } from './property-tables';
+import { HAMMETT_TABLE } from './hammett';
 
 /** The common NMR solvents: residual 1H and 13C peaks, the water peak, and boiling and melting points. */
 export const NMR_SOLVENTS: KbTable = {
@@ -63,9 +64,16 @@ export const GLOSSARY_TABLE: KbTable = {
 };
 
 /** The tables built in, in the order the window lists them. */
-export const BUILT_IN_TABLES: KbTable[] = [REAGENT_SAFETY, PURIFICATION_TABLE, TECHNIQUES_TABLE, SOLVENTS_TABLE, NMR_SOLVENTS, PHYSICAL_CONSTANTS, PKA_TABLE, GLOSSARY_TABLE];
+export const BUILT_IN_TABLES: KbTable[] = [REAGENT_SAFETY, PURIFICATION_TABLE, TECHNIQUES_TABLE, SOLVENTS_TABLE, NMR_SOLVENTS, PHYSICAL_CONSTANTS, PKA_TABLE, HAMMETT_TABLE, GLOSSARY_TABLE];
 
 /** Big tables loaded when the window first opens, kept out of the program's start-up. */
 export const LATER_TABLES: (() => Promise<KbTable>)[] = [
   async () => (await import('./solubility')).SOLUBILITY_TABLE,
+  async () => (await import('./green-nmr')).GREEN_NMR_TABLE,
+];
+
+/** More rows for built-in tables, loaded the same way: the big Reagent Safety table. */
+export const LATER_ROWS: { table: string; rows: () => Promise<Record<string, Cell>[]> }[] = [
+  { table: 'reagent-safety', rows: async () => (await import('./safety-extra')).extraSafetyRows() },
+  { table: 'physical-constants', rows: async () => (await import('./safety-extra')).extraConstantRows() },
 ];

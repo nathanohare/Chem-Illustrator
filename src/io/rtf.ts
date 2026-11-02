@@ -410,7 +410,7 @@ function finishCell(c: { runs: TextRun[]; paras: ParaStyle[] }, last: ParaStyle)
 
 export interface RtfDeps {
   /** A drawing's picture: PNG bytes and its size in points. */
-  picture?(contents: Contents, style: DocStyle): Promise<{ png: Uint8Array; w: number; h: number } | null>;
+  picture?(contents: Contents, style: DocStyle, frame?: { x: number; y: number; w: number; h: number }): Promise<{ png: Uint8Array; w: number; h: number } | null>;
 }
 
 /** Text for RTF: its special characters escaped, characters past ASCII as cp1252 or \uN. */
@@ -551,7 +551,7 @@ class RtfWriter {
     }
     if (o.kind === 'picture') return this.picture(o.src, o.w * (o.scale ?? 1), o.h * (o.scale ?? 1), o.px);
     if (o.kind === 'drawing' && this.deps.picture) {
-      const pic = await this.deps.picture(o.contents, this.t.drawingStyle);
+      const pic = await this.deps.picture(o.contents, this.t.drawingStyle, o.frame);
       if (pic) return this.pictureBytes(pic.png, 'png', pic.w * (o.scale ?? 1), pic.h * (o.scale ?? 1));
     }
     if (o.kind === 'math') return this.run({ ...r, obj: undefined, text: o.tex });

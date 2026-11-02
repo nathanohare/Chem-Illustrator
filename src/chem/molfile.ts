@@ -8,6 +8,7 @@ import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, valenceOfBonds
 import { CARBONYL_LIGAND, isCarbonylLabel, kekulize, labelDonates, labelGraph, MiniGraph } from './labels';
 import { stereoAnchor, stereoSense } from './stereo';
 import { kekuleDoubles } from './aromatic';
+import { flatStandIn } from './ring-views';
 
 export interface MolExport {
   molblock: string;
@@ -39,13 +40,50 @@ export interface MolfileOptions {
   species?: { graph: MiniGraph; x: number; y: number }[];
   /** Write atom-atom map numbers (Atom.mapNo) in the mmm column, for mapped reaction SMILES and RXN files. */
   maps?: boolean;
+  /** Write a V3000 molfile (otherwise V2000). */
+  v3000?: boolean;
 }
 
 /** Stands in for R groups when working out R/S: oganesson, heavier than any atom in a real drawing. */
 const GENERIC_STAND_IN = 'Og';
 
-interface MAtom { sym: string; x: number; y: number; charge: number; iso: number; rad?: number; map?: number }
-interface MBond { a: number; b: number; order: number; stereo: number }
+/** A molfile atom: an element symbol (or R#, *, or a label kept as an alias), position in bond lengths. */
+export interface MAtom { sym: string; x: number; y: number; charge: number; iso: number; rad?: number; map?: number; alias?: string }
+/** A molfile bond between atoms counted from 0, with V2000's bond type and stereo numbers (1 up, 6 down, 4 either, 3 cis or trans). */
+export interface MBond { a: number; b: number; order: number; stereo: number }
+
+/**
+ * The connection table of a V3000 molfile ("M  V30 BEGIN CTAB" … "M  V30 END CTAB"), from BIOVIA's
+ * CTfile Formats: atoms with CHG=, MASS=, RAD= and their map number; bonds with CFG= (1 up, 2 either,
+ * 3 down); a label kept as an alias is the atom's type, quoted when it has spaces. Lines longer than
+ * 80 characters go on to the next with "-".
+ */
+export function v3000Ctab(atoms: MAtom[], bonds: MBond[]): string[] {
+  const n = (v: number) => (Math.abs(v) < 5e-5 ? 0 : v).toFixed(4);
+  const type = (a: MAtom) => { const t = a.alias ?? a.sym; return /[\s"]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
+  const out = ['BEGIN CTAB', `COUNTS ${atoms.length} ${bonds.length} 0 0 0`, 'BEGIN ATOM'];
+  atoms.forEach((a, i) => out.push([i + 1, type(a), n(a.x), n(a.y), n(0), a.map ?? 0,
+    ...(a.charge ? [`CHG=${a.charge}`] : []), ...(a.rad ? [`RAD=${a.rad}`] : []), ...(a.iso ? [`MASS=${a.iso}`] : [])].join(' ')));
+  out.push('END ATOM');
+  if (bonds.length) {
+    out.push('BEGIN BOND');
+    bonds.forEach((b, i) => out.push([i + 1, b.order, b.a + 1, b.b + 1, ...(b.stereo === 1 ? ['CFG=1'] : b.stereo === 6 ? ['CFG=3'] : b.stereo === 4 || b.stereo === 3 ? ['CFG=2'] : [])].join(' ')));
+    out.push('END BOND');
+  }
+  out.push('END CTAB');
+  return out.flatMap((t) => {
+    const parts: string[] = [];
+    let rest = t;
+    while (rest.length > 72) { parts.push(`M  V30 ${rest.slice(0, 72)}-`); rest = rest.slice(72); }
+    parts.push(`M  V30 ${rest}`);
+    return parts;
+  });
+}
+
+/** A whole V3000 molfile: three header lines, the counts line, the connection table and M  END. */
+export function v3000Molfile(head: string[], atoms: MAtom[], bonds: MBond[]): string {
+  return [...head, '  0  0  0     0  0            999 V3000', ...v3000Ctab(atoms, bonds), 'M  END', ''].join('\n');
+}
 
 const f = (v: number, w: number, d = 4) => v.toFixed(d).padStart(w);
 const i3 = (v: number) => String(v).padStart(3);
@@ -57,6 +95,8 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
   // a ring's middle, where a metal is bonded (η⁵), is not an atom: it and its bonds are left out
   const ids = [...atomIds].filter((id) => doc.atoms.has(id) && !doc.atoms.get(id)!.multi);
   const inSet = new Set(ids);
+  // rings drawn as chairs or boats show their stereo by their shape: the engine is shown them flat, with wedges
+  const stand = flatStandIn(doc, inSet);
   const L = doc.style.bondLength || 14.4;
   const atoms: MAtom[] = [];
   const bonds: MBond[] = [];
@@ -192,7 +232,8 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
   }
   for (const id of ids) {
     const a = doc.atoms.get(id)!;
-    const x = (a.x - first.x) / L, y = -(a.y - first.y) / L;
+    const at = stand?.moves.get(id) ?? a;
+    const x = (at.x - first.x) / L, y = -(at.y - first.y) / L;
     let g: MiniGraph | null = null;
     if (a.label) {
       const own = valenceOfBonds((doc.adj.get(id) ?? []).map((bid) => doc.bonds.get(bid)!).filter((b) => !outsideValence(b) && !dative.has(b.id)).map((b) => b.order));
@@ -257,15 +298,21 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
       }
       const order = kekule.get(b.id) ?? (b.order === 1.5 ? 4 : b.order === 2 ? 2 : b.order === 3 ? 3 : 1);
       // a stereo bond is written from the atom it describes
-      const sense = stereoSense(b);
-      const from = sense ? stereoAnchor(doc, b)! : b.a1;
+      const flat = stand?.bonds.get(b.id);
+      const sb = flat ? { ...b, ...flat } : b;
+      const sense = stereoSense(sb);
+      const from = sense ? stereoAnchor(doc, sb)! : sb.a1;
       const stereo = sense === 'up' ? 1 : sense === 'down' ? 6 : sense === 'either' ? 4 : 0;
-      const to = from === b.a1 ? b.a2 : b.a1;
+      const to = from === sb.a1 ? sb.a2 : sb.a1;
       bonds.push({ a: attach.get(from)!, b: attach.get(to)!, order, stereo });
     }
   }
 
-  const lines: string[] = [name.slice(0, 80), '  ChemIllus         2D', ''];
+  const head = [name.slice(0, 80), '  ChemIllus         2D', ''];
+  if (opts.v3000) {
+    return { molblock: v3000Molfile(head, atoms, bonds), map, unknownLabels: unknown, inLabel, generic: genericAt };
+  }
+  const lines: string[] = [...head];
   lines.push(`${i3(atoms.length)}${i3(bonds.length)}  0  0  0  0  0  0  0  0999 V2000`);
   for (const a of atoms) {
     // (the ninth number after the charge is the atom-atom map number)

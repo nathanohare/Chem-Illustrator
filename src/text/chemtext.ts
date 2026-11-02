@@ -19,7 +19,7 @@ const alternatives = (words: string[]) => [...words].sort((a, b) => b.length - a
 
 // one unit of a formula: an element, a group, or an alkyl group with an i/n/s/t in front
 // (iPr2NEt, nBu4NI, tBu3P, N(iPr)2, Ti(OiPr)4)
-const UNIT = `(?:(?<![A-Za-z])[inst]-?(?:Pr|Bu)|(?<=O)[int](?:Pr|Bu)|${alternatives([...ELEMENTS, ...GROUPS])})`;
+const UNIT = `(?:(?<![A-Za-z])[inst]-?(?:Pr|Bu)|(?<=O)[int]-?(?:Pr|Bu)|${alternatives([...ELEMENTS, ...GROUPS])})`;
 const INNER = `(?:${alternatives(LIGANDS)}|${UNIT})`;
 const PAREN = `\\((?:${INNER}\\d*)+\\)\\d*`;
 const BRACKET = `\\[(?:${INNER}\\d*|${PAREN})+\\]\\d*`;
@@ -319,6 +319,60 @@ export function nameFormats(text: string, end: number, opts: { stereo: boolean; 
   if (opts.numbers) {
     const m = key === ')' ? NUMBER_IN_BRACKETS.exec(upto) : NUMBER_AFTER_WORD.exec(upto);
     if (m) out.push({ start: end - m[1].length, end, bold: true });
+  }
+  return out;
+}
+
+/** One descriptor in a parenthesised set: 2R, 4aS, 1'R*, Ra, Sp, P, M, RS, rel, rac. */
+const DESCRIPTOR = /^(?:\d{0,3}[a-z]?['′″]{0,2}(?:[RS][ap]?|[EZ]|[PM]|RS|SR|a[RS])\*?|rel|rac)$/;
+/** A parenthesised descriptor set: (S), (2R,3S), (E), (1R*,2S*), (Ra), (rac). */
+const DESCRIPTOR_SET = /\(([^()]{1,80})\)/g;
+/**
+ * Prefixes printed in italics before a hyphen in a name (IUPAC P-16.6, P-93): cis-, trans-, syn-,
+ * endo-, rel-, sec-, tert-, meso-, threo-; the n-, i-, s-, t- of alkyl groups (n-BuLi, t-BuOK);
+ * and o-, m-, p- before a name. Element locants (N-, O-) are left as they are: "N-H bond" is not one.
+ */
+const PREFIX_WORD = /(?<![A-Za-z0-9])(cis|trans|syn|anti|endo|exo|rel|rac|sec|tert|meso|erythro|threo|ent|epi|[nist](?=-(?:Bu|Pr|Pent|Hex|Am|Oct|Dec|C\d))|[omp](?=-[A-Za-z]))-/g;
+
+/**
+ * The letters of the stereodescriptors and italic prefixes found in text[from, to): letters in
+ * a descriptor set such as (2R,3S) or (E) that a name goes on from (a hyphen follows) or that
+ * has locants, and prefixes such as cis-, tert-, n-, p-. Each letter once, in order.
+ */
+export function stereoLetters(text: string, from = 0, to = text.length): number[] {
+  const out: number[] = [];
+  const inside = (i: number) => i >= from && i < to;
+  for (const m of text.matchAll(DESCRIPTOR_SET)) {
+    const start = m.index! + 1;
+    const tokens = m[1].split(',');
+    if (!tokens.every((t) => DESCRIPTOR.test(t.trim()))) continue;
+    // (R) and (S) are descriptors wherever they stand ("the (S) isomer"); a lone E, Z, P or M only
+    // when a name follows it, "(E)-" but not "panel (E)"
+    const named = text[m.index! + m[0].length] === '-' || /\d/.test(m[1]) || tokens.length > 1 || /^(?:rel|rac|[RS]\*?|[RS][ap]|RS|SR|a[RS])$/.test(m[1].trim());
+    if (!named) continue;
+    let at = start;
+    for (const t of tokens) {
+      for (let i = 0; i < t.length; i++) if (/[A-Za-z]/.test(t[i])) { const k = at + i; if (inside(k)) out.push(k); }
+      at += t.length + 1;
+    }
+  }
+  for (const m of text.matchAll(PREFIX_WORD)) for (let i = 0; i < m[1].length; i++) { const k = m.index! + i; if (inside(k)) out.push(k); }
+  return [...new Set(out)].sort((a, b) => a - b);
+}
+
+/**
+ * The one-click italic stereodescriptors: italics on every descriptor letter in text[from, to),
+ * or, when they are all italic already, off again.
+ */
+export function stereoItalics(text: string, italicAt: (i: number) => boolean, from = 0, to = text.length): FixEdit[] {
+  const at = stereoLetters(text, from, to);
+  if (!at.length) return [];
+  const on = !at.every(italicAt);
+  const out: FixEdit[] = [];
+  for (const i of at) {
+    const last = out[out.length - 1];
+    if (last && last.end === i) last.end = i + 1;
+    else out.push({ start: i, end: i + 1, italic: on });
   }
   return out;
 }

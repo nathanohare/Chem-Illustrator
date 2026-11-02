@@ -9,10 +9,11 @@ import { Doc, Atom, Bond, Arrow, PARTIAL, Caption, Shape, PICTURE_SHADOWS, pictu
 import { centredSpots, fullStyle, highlightPieces, highlightSizes, movePieces, tracePieces, type Piece } from './highlight';
 import { highlightFx, layerPaints, needsFx, patternMarks, regionOf, rgba, unionOf, type FxLayer, type FxPaint, type FxStep, type HighlightFx, type Region, shapeShadow } from './highlight-fx';
 import { ellipseArc, isCircleRing, ringCircle, ringsThroughBond, type RingCircle } from '../chem/aromatic';
+import { chainArc, piLooksOf } from '../chem/hapto';
 import { crossingGapsCached } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
-import { bondEndPrefs, doubleBondGap, wedgeWidth } from '../style';
+import { bondEndPrefs, doubleBondGap, mapLookPrefs, wedgeWidth } from '../style';
 import { depthFractions, depthShadePrefs, shadeLook, shadeStep } from './depth-shade';
 import { joinWideEnds, lineMitres, endTip, LINE_MITRE_LIMIT, type WideEnd, type EndJoin, type LineEnd } from './bond-joins';
 import { chargeInk, labelBonds, labelSpec, layoutLabel, LabelLayout, labelLook } from '../chem/labels';
@@ -21,7 +22,7 @@ import { isGenericLabel } from '../chem/labels';
 import { bracketPath, shaftOffset, shapeOrder, elbowRoute, boxOf, shapeBox, shapeMid, shapeTurn, bezPoints, bezHeadBack, bezPathAt, bezSlice, type PathStep } from '../objects';
 import { atomStereoText, bondStereoText, shownDescriptor, axialStyle, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
-import { attachDiamondSize, hasAttachDiamond } from './atom-marks';
+import { attachDiamondSize, hasAttachDiamond, isMapNumber, MAP_GREY, MAP_PEACH, mapBox, mapColour } from './atom-marks';
 import { layoutText, FONT_STACK, withStack, type TextLayout } from '../text/layout';
 import { drawLayout } from '../text/draw';
 import { geoDef, moveSteps, textArea, traceSteps, type GeoStep } from '../design/geo';
@@ -83,6 +84,11 @@ interface BondCache {
   trim2: number;
   /** An aromatic bond drawn with a circle: the circles of the rings it is in. */
   circles?: RingCircle[];
+  /**
+   * A bond of a π-system bonded to a metal as one (η³ and up), drawn delocalized: one line, and
+   * its stretch of the ring's circle or the allyl's arc.
+   */
+  pi?: { circle?: RingCircle; arc?: { from: Vec; ctrl: Vec; to: Vec } }[];
 }
 
 let mctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null = null;
@@ -275,6 +281,8 @@ export class Renderer {
       for (let d = 0; d < 4 && frontier.length; d++) {
         const next: number[] = [];
         for (const id of frontier) {
+          // a multicentre point changed (bonded to a metal, or switched to Kekulé form): its ring's bonds are drawn again
+          for (const m of doc.atoms.get(id)?.multi ?? []) if (!seen.has(m)) { seen.add(m); next.push(m); }
           for (const bid of doc.adj.get(id) ?? []) {
             this.bondCache.delete(bid);
             const b = doc.bonds.get(bid);
@@ -340,6 +348,23 @@ export class Renderer {
     let c = this.bondCache.get(b.id);
     if (c) return c;
     c = { side: 0, trim1: 0, trim2: 0 };
+    // a ring or allyl bonded to a metal as one, drawn delocalized (the bonds stay as they are)
+    if ((b.order === 1 || b.order === 2 || (b.order === 1.5 && !b.circle)) && (b.display ?? 'solid') === 'solid') {
+      const looks = piLooksOf(doc, b);
+      if (looks.length) {
+        const gap = doubleBondGap(doc.style) * (b.s ?? 1);
+        c.pi = looks.flatMap((lk) => {
+          if (lk.kind === 'ring') return [{ circle: ringCircle(doc, lk.ring) }];
+          const pieces = chainArc(lk.chain.map((id) => doc.atoms.get(id)!), gap);
+          if (!pieces) return [{}];
+          // this bond's stretch of the curve
+          const k = lk.chain.findIndex((id, i) => i + 1 < lk.chain.length && ((id === b.a1 && lk.chain[i + 1] === b.a2) || (id === b.a2 && lk.chain[i + 1] === b.a1)));
+          return k < 0 ? [{}] : pieces[k].map((arc) => ({ arc }));
+        });
+        this.bondCache.set(b.id, c);
+        return c;
+      }
+    }
     if (b.order === 1.5 && b.circle) {
       c.circles = ringsThroughBond(doc, b.id).filter((r) => isCircleRing(doc, r)).map((r) => ringCircle(doc, r));
     } else if (b.order === 2 || b.order === 1.5) {
@@ -454,7 +479,7 @@ export class Renderer {
       if (!o) continue;
       const k = b.s ?? 1, ds = doc.style;
       let h = (ds.lineWidth * k) / 2;
-      if (b.order === 1 || b.order === PARTIAL || b.display === 'dative') {
+      if (b.order === 1 || b.order === PARTIAL || b.display === 'dative' || this.bondInfo(doc, b).pi) {
         if (b.display === 'dative' || b.display === 'dash' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy') continue;
         if (b.display === 'bold') h = (ds.boldWidth * k) / 2;
         else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: ds.boldWidth * k }) / 2;
@@ -712,7 +737,22 @@ export class Renderer {
     const p = this.stereoPlacer(doc).number(a);
     const f = `${p.size}px ${FONT_STACK}`;
     if (f !== curFont) { ctx.font = f; curFont = f; }
-    ctx.fillStyle = a.color ?? '#000';
+    let ink = a.color ?? '#000';
+    if (isMapNumber(a)) {
+      // an atom-map number: in a small rounded box (Chemistry ▸ Map Atoms)
+      const b = mapBox(p, measureText(a.atomNumber!, p.size));
+      const look = mapLookPrefs.look;
+      const r = Math.min(b.x2 - b.x1, b.y2 - b.y1) * 0.3;
+      ctx.beginPath();
+      ctx.roundRect(b.x1, b.y1, b.x2 - b.x1, b.y2 - b.y1, r);
+      ctx.fillStyle = look === 'grey' ? '#ffffff' : look === 'tint' ? tint(mapColour(a.mapNo!), 0.45) : MAP_PEACH;
+      ctx.fill();
+      ctx.lineWidth = doc.style.lineWidth * (look === 'grey' ? 0.6 : 0.5);
+      ctx.strokeStyle = look === 'grey' ? MAP_GREY : '#000000';
+      ctx.stroke();
+      if (look === 'grey') ink = MAP_GREY;
+    }
+    ctx.fillStyle = ink;
     ctx.fillText(a.atomNumber!, p.x, p.y);
     return curFont;
   }
@@ -850,7 +890,7 @@ export class Renderer {
         const ab = a.color ? undefined : back?.get(a.id);
         ctx.fillStyle = a.color ?? (ab !== undefined ? shadeLook(shadeStep(ab)).color : '#000');
         for (const r of info.layout.runs) {
-          const f = `${r.size}px ${this.labelStack}`;
+          const f = `${r.italic ? 'italic ' : ''}${r.size}px ${this.labelStack}`;
           if (f !== curFont) { ctx.font = f; curFont = f; }
           ctx.fillText(r.text, a.x + r.dx, a.y + r.dy);
         }
@@ -1107,6 +1147,32 @@ export class Renderer {
     if (p.attach === 'Wavy') attachWave(thin, p, nrm, st.bondLength);
     if (q.attach === 'Wavy') attachWave(thin, q, nrm, st.bondLength);
 
+    // a ring or allyl bonded to a metal as one: a plain line, and its stretch of the circle or arc
+    const pi = this.bondInfo(doc, b).pi;
+    if (pi) {
+      line(thin, s, e);
+      for (const x of pi) {
+        if (x.arc) {
+          thin.moveTo(x.arc.from.x, x.arc.from.y);
+          thin.quadraticCurveTo(x.arc.ctrl.x, x.arc.ctrl.y, x.arc.to.x, x.arc.to.y);
+          continue;
+        }
+        if (!x.circle) continue;
+        const { center, radius, ellipse } = x.circle;
+        if (ellipse) {
+          ellipseArc(center, ellipse, p, q).forEach((pt, k) => (k ? thin.lineTo(pt.x, pt.y) : thin.moveTo(pt.x, pt.y)));
+          continue;
+        }
+        const a1 = angleOf(sub(p, center)), a2 = angleOf(sub(q, center));
+        let da = a2 - a1;
+        while (da > Math.PI) da -= 2 * Math.PI;
+        while (da < -Math.PI) da += 2 * Math.PI;
+        thin.moveTo(center.x + Math.cos(a1) * radius, center.y + Math.sin(a1) * radius);
+        thin.arc(center.x, center.y, radius, a1, a1 + da, da < 0);
+      }
+      return;
+    }
+
     // an aromatic ring drawn with a circle: a plain line, and the stretch of each ring's circle
     // that faces this bond
     if (b.order === 1.5 && b.circle) {
@@ -1250,7 +1316,7 @@ export class Renderer {
 
   private drawShape(ctx: CanvasRenderingContext2D, s: Shape, lw: number, labelSize = 10): void {
     const rot = shapeTurn(s);
-    if (!rot) { this.drawFlatShape(ctx, s, lw, labelSize); return; }
+    if (!rot) { this.drawFlatShape(ctx, s, lw, labelSize); if (s.dotted) ctx.lineCap = 'butt'; return; }
     // a turned shape (Slides and Design): drawn level, turned about its middle
     ctx.save();
     turnAt(ctx, shapeMid(s), rot);
@@ -1264,7 +1330,8 @@ export class Renderer {
     ctx.lineWidth = s.bold ? lw * 2.5 : lw;
     ctx.strokeStyle = s.color ?? '#000';
     ctx.fillStyle = s.color ?? '#000';
-    ctx.setLineDash(s.dashed ? [lw * 3, lw * 3] : []);
+    ctx.setLineDash(s.dotted ? [0.01, lw * 2.6] : s.dashed ? [lw * 3, lw * 3] : []);
+    if (s.dotted) ctx.lineCap = 'round';
     ctx.beginPath();
     switch (s.kind) {
       case 'picture': this.drawPicture(ctx, s, x, y, w, h); break;

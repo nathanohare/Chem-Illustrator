@@ -220,6 +220,8 @@ const REAGENTS: SpeciesEntry[] = [
   { names: ['N2'], smiles: 'N#N', name: 'nitrogen', kind: 'reagent' },
   { names: ['O2'], smiles: 'O=O', name: 'oxygen', kind: 'reagent' },
   { names: ['O3'], smiles: '[O-][O+]=O', name: 'ozone', kind: 'reagent' },
+  { names: ['C2H2'], smiles: 'C#C', name: 'acetylene', kind: 'reagent' },
+  { names: ['C2H4'], smiles: 'C=C', name: 'ethylene', kind: 'reagent' },
   { names: ['F2'], smiles: 'FF', name: 'fluorine', kind: 'reagent' },
   { names: ['Cl2'], smiles: 'ClCl', name: 'chlorine', kind: 'reagent' },
   { names: ['Br2'], smiles: 'BrBr', name: 'bromine', kind: 'reagent' },

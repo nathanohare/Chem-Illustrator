@@ -271,3 +271,12 @@ export function flatten(doc: Doc, atomIds: Iterable<number>): number {
   }
   return n;
 }
+
+/**
+ * Structures turned as they are (no shape built): flat sheets, or the 3-D shape their atoms'
+ * depths already give them (a structure turned with 3-D Perspective). For the slide show's Turn
+ * in 3-D, which turns copies of the slide's drawing frame by frame.
+ */
+export function sheetTurn(doc: Doc, atomIds: Iterable<number>): PerspectiveTurn {
+  return new PerspectiveTurn(structuresOf(doc, atomIds).map((ids) => flatPiece(doc, ids)));
+}

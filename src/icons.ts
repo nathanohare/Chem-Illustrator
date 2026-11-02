@@ -70,12 +70,16 @@ export const ICONS: Record<string, string> = {
   'bond-dash': svg('<line x1="5" y1="18" x2="19" y2="6" stroke-dasharray="2 2.2"/>'),
   // a bond forming in a transition state: dashed between two atoms, marked ‡
   'bond-partial': svg('<line x1="5" y1="18.5" x2="15" y2="9.5" stroke-dasharray="2 2"/><circle cx="4.2" cy="19.2" r="1.7" fill="currentColor" stroke="none"/><circle cx="15.8" cy="8.8" r="1.7" fill="currentColor" stroke="none"/><path d="M19.5 2.5v9M17 5h5M17 8.8h5" stroke-width="1.4"/>'),
+  // the Ligand Library: a metal held by a chelate ring, beside the lines of a list
+  'ligand-library-open': svg('<circle cx="7" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M7 12l4-4M7 12l4 4M11 8c2.5 1 2.5 7 0 8"/><path d="M15.5 5h5M15.5 9.5h5M15.5 14h5M15.5 18.5h5" stroke-width="1.4"/>'),
   'own-template-add': svg('<polygon points="12,3 19,7 19,15 12,19 5,15 5,7" stroke-dasharray="2 2"/><path d="M12 8v7M8.5 11.5h7"/>'),
   // a chain cut in two, the pieces moving apart
   sketch: svg('<path d="M3 19c3-1 4-6 7-6s2 5 5 4 3-6 6-8"/><path d="M15.5 3.5l3 3-7.5 7.5h-3v-3z" stroke-width="1.4"/>'),
   fragment: svg('<polyline points="2.5,17 6,13 9.5,17"/><polyline points="14.5,12 18,8 21.5,12"/><line x1="12" y1="3" x2="12" y2="21" stroke-dasharray="2 2"/><path d="M9 7.5l-2.5 2M15 16.5l2.5-2" stroke-width="1.3"/>'),
   // a ring tipped back into the page, and the way it turns
   perspective: svg('<polygon points="3.5,15 8,11.5 16,11.5 20.5,15 16,18.5 8,18.5"/><path d="M5 8.5C8 4.5 16 4.5 19 8.5"/><path d="M19.4 4.6l-.4 3.9-3.8-.7" stroke-width="1.4"/>'),
+  // an eye, side on, looking along a dotted arrow (the viewing mark of a Newman projection)
+  newman: svg('<path d="M3 12h9.5" stroke-dasharray="2.1 1.7"/><path d="M6.2 8.8L3 12l3.2 3.2"/><path d="M14.5 12l6.5-4.6M14.5 12l6.5 4.6"/><path d="M21 7.4c1.9 2.8 1.9 6.4 0 9.2"/><path d="M17.2 10.4c.7.9.7 2.3 0 3.2"/>'),
   // two rings at right angles (a biaryl seen in 3-D), and the way they turn
   'perspective-3d': svg('<polygon points="7,10.5 10.5,12.5 10.5,16.5 7,18.5 3.5,16.5 3.5,12.5"/><line x1="10.5" y1="14.5" x2="14" y2="14.5"/><polygon points="14,14.5 16,10.5 19.5,11.5 21,15.5 19,19.5 15.5,18.5"/><path d="M5 7C8 3 16 3 19 7"/><path d="M19.4 3.1l-.4 3.9-3.8-.7" stroke-width="1.4"/>'),
   element: svg('<rect x="3" y="4" width="5" height="5"/><rect x="3" y="9" width="5" height="5"/><rect x="8" y="9" width="5" height="5"/><rect x="16" y="4" width="5" height="5"/><rect x="16" y="9" width="5" height="5"/><rect x="8" y="16" width="8" height="4"/>'),
@@ -114,6 +118,8 @@ export const ICONS: Record<string, string> = {
   'shape-rect-shadow': svg('<rect x="3.5" y="5" width="15" height="12"/><path d="M20 7.2v11.8H6" stroke-width="2.4" opacity="0.45" stroke-linecap="butt"/>'),
   'shape-rect-rounded-shadow': svg('<rect x="3.5" y="5" width="15" height="12" rx="3"/><path d="M20 8.5v7.5a3 3 0 0 1-3 3H7.5" stroke-width="2.4" opacity="0.45" stroke-linecap="butt"/>'),
   'shape-rect-dashed': svg('<rect x="4" y="6" width="16" height="12" stroke-dasharray="2.6 2"/>'),
+  /** Insert Structure (Document and Spreadsheet): the dashed "+" box a reaction arrow shows on hover, where a structure can go. */
+  'insert-structure': svg('<rect x="3.5" y="5.5" width="17" height="13" stroke-dasharray="3 2.4"/><path d="M12 8.6v6.8M8.6 12h6.8" stroke-width="1.7"/>'),
   'shape-circle': svg('<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>'),
   'shape-circle-filled': svg('<circle cx="12" cy="12" r="5" fill="currentColor"/>'),
   'shape-oval': svg('<ellipse cx="12" cy="12" rx="9" ry="6"/>'),

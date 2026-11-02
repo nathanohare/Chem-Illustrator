@@ -1,7 +1,7 @@
 // The Solvents, pKa in Water and Solubility tables, and the skin permeability estimate.
 
 import { describe, expect, it } from 'vitest';
-import { CHEM21, PKA_TABLE, SOLVENTS_TABLE } from '../src/kb/property-tables';
+import { ICH_Q3C, PKA_TABLE, SOLVENTS_TABLE } from '../src/kb/property-tables';
 import { gramsPerLitre, SOLUBILITY_TABLE } from '../src/kb/solubility';
 import { logKowOf, skinKp, type SafetyRecord } from '../src/kb/safety';
 import { REAGENT_SAFETY, SAFETY_RECORDS } from '../src/kb/safety-tables';
@@ -36,15 +36,16 @@ describe('skin permeability estimate', () => {
 });
 
 describe('solvents', () => {
-  it('ranks solvents by CHEM21 and finds each in the safety data', () => {
-    expect(Object.keys(CHEM21).length).toBeGreaterThan(30);
-    expect(SOLVENTS_TABLE.rows.length).toBeGreaterThanOrEqual(Object.keys(CHEM21).length);
-    const rank = (n: string) => SOLVENTS_TABLE.rows.find((r) => r.name === n)?.chem21;
-    expect(rank('Ethanol')).toBe('Recommended');
-    expect(rank('Tetrahydrofuran')).toBe('Problematic');
-    expect(rank('Dichloromethane')).toBe('Hazardous');
-    expect(rank('Chloroform')).toBe('Highly hazardous');
-    expect(findRows(SOLVENTS_TABLE, '', { chem21: 'Recommended' }).every((m) => m.row.chem21 === 'Recommended')).toBe(true);
+  it('gives each solvent its ICH Q3C class and limit and finds each in the safety data', () => {
+    expect(Object.keys(ICH_Q3C).length).toBeGreaterThan(30);
+    expect(SOLVENTS_TABLE.rows.length).toBeGreaterThanOrEqual(Object.keys(ICH_Q3C).length);
+    const row = (n: string) => SOLVENTS_TABLE.rows.find((r) => r.name === n);
+    expect(row('Benzene')?.ich).toBe('Class 1 (avoid)');
+    expect(row('Benzene')?.limit).toBe('2');
+    expect(row('Dichloromethane')?.limit).toBe('600');
+    expect(row('Ethanol')?.ich).toBe('Class 3 (low toxicity)');
+    expect(row('Water')?.ich).toBe('Not listed');
+    expect(findRows(SOLVENTS_TABLE, '', { ich: 'Class 2 (limit)' }).every((m) => m.row.ich === 'Class 2 (limit)')).toBe(true);
     for (const r of SOLVENTS_TABLE.rows) if (r.cas) expect(isCas(String(r.cas)), String(r.name)).toBe(true);
   });
 });
@@ -68,6 +69,20 @@ describe('solubility', () => {
 
   it('is loaded only when the window opens', async () => {
     const tables = await Promise.all(LATER_TABLES.map((f) => f()));
-    expect(tables.map((t) => t.id)).toEqual(['solubility']);
+    expect(tables.map((t) => t.id)).toContain('solubility');
+  });
+});
+
+describe('Hammett constants', () => {
+  it('lists common groups with valid SMILES on benzene and finds them by group or name', async () => {
+    const { HAMMETT, HAMMETT_TABLE, onBenzene } = await import('../src/kb/hammett');
+    expect(HAMMETT.length).toBeGreaterThan(100);
+    expect(new Set(HAMMETT.map((x) => x.row)).size).toBe(HAMMETT.length);
+    const nitro = findRows(HAMMETT_TABLE, 'nitro').find((m) => m.row.group === 'NO2')!.row;
+    expect([nitro.sm, nitro.sp, nitro.F, nitro.R]).toEqual(['0.71', '0.78', '0.65', '0.13']);
+    expect(findRows(HAMMETT_TABLE, 'OCH3').find((m) => m.row.group === 'OCH3')!.row.sp).toBe('-0.27');
+    expect(onBenzene(HAMMETT.find((x) => x.name.startsWith('methylenedioxy'))!)).toBe('c1ccc2c(c1)OCO2');
+    // σp = F + R within rounding, as the Swain–Lupton split requires (bracketed values aside)
+    for (const x of HAMMETT) if (!x.approx && x.group !== 'H') expect(Math.abs(x.F + x.R - x.sp), x.group).toBeLessThan(0.1);
   });
 });
