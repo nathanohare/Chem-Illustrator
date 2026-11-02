@@ -32,11 +32,23 @@ const escape = (e: KeyboardEvent) => {
   e.preventDefault();
   e.stopPropagation();
   // Esc closes the innermost group first
-  const last = open.pop();
-  last?.remove();
+  open.pop()?.remove();
   if (!open.length) closeContextMenu();
-  else open[open.length - 1].querySelector<HTMLButtonElement>('button[aria-expanded="true"]')?.focus();
+  else backToGroupRow();
 };
+
+/** Close every group deeper than `depth` and take the highlight off the rows that opened them. */
+function closeBelow(depth: number): void {
+  while (open.length > depth + 1) open.pop()!.remove();
+  for (const o of open[depth]?.querySelectorAll('[aria-expanded="true"]') ?? []) o.setAttribute('aria-expanded', 'false');
+}
+
+/** After the innermost group shuts from the keyboard, put focus back on the row that opened it. */
+function backToGroupRow(): void {
+  const row = open[open.length - 1]?.querySelector<HTMLButtonElement>('button[aria-expanded="true"]');
+  row?.setAttribute('aria-expanded', 'false');
+  row?.focus();
+}
 
 /** The name and tick of a command as the top menus show it. */
 export function topMenuEntry(cmd: string): { label: string; checked: boolean | null } | null {
@@ -95,8 +107,7 @@ function build(items: MenuItem[], hooks: MenuHooks, depth: number): HTMLDivEleme
       b.classList.add('has-sub');
       const openSub = (focus: boolean) => {
         // close any deeper group, then open this one beside its row
-        while (open.length > depth + 1) open.pop()!.remove();
-        for (const o of m.querySelectorAll('[aria-expanded="true"]')) o.setAttribute('aria-expanded', 'false');
+        closeBelow(depth);
         const sub = build(it.items, hooks, depth + 1);
         if (!sub) return;
         b.setAttribute('aria-expanded', 'true');
@@ -104,7 +115,7 @@ function build(items: MenuItem[], hooks: MenuHooks, depth: number): HTMLDivEleme
         place(sub, r.right - 2, r.top - 5, r);
         if (focus) sub.querySelector<HTMLButtonElement>('button')?.focus();
       };
-      b.addEventListener('pointerenter', () => openSub(false));
+      b.addEventListener('pointerenter', () => { follow(b); if (b.getAttribute('aria-expanded') !== 'true') openSub(false); });
       b.addEventListener('click', () => openSub(true));
       b.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); openSub(true); } });
     } else {
@@ -122,7 +133,8 @@ function build(items: MenuItem[], hooks: MenuHooks, depth: number): HTMLDivEleme
         kbd.textContent = k;
         b.append(kbd);
       }
-      b.addEventListener('pointerenter', () => { while (open.length > depth + 1) open.pop()!.remove(); });
+      // moving onto a command shuts any open group beside this menu, and its row's highlight with it
+      b.addEventListener('pointerenter', () => { follow(b); closeBelow(depth); });
       b.addEventListener('click', () => { closeContextMenu(); hooks.run(it.cmd); });
     }
     m.append(b);
@@ -135,11 +147,17 @@ function build(items: MenuItem[], hooks: MenuHooks, depth: number): HTMLDivEleme
     if (e.key === 'ArrowLeft' && depth > 0) {
       e.preventDefault();
       open.pop()?.remove();
-      open[open.length - 1]?.querySelector<HTMLButtonElement>('button[aria-expanded="true"]')?.focus();
+      backToGroupRow();
     }
   });
   open.push(m);
   return m;
+}
+
+/** Keyboard focus follows the mouse, as in a system menu, so a focus ring left by the
+ * arrow keys (or by opening the menu from the keyboard) never stays on a row the mouse has left. */
+function follow(b: HTMLButtonElement): void {
+  if (document.activeElement !== b && document.activeElement?.closest('.context-menu')) b.focus({ preventScroll: true });
 }
 
 /** Put a menu at (x, y), kept on screen; a group that would run off the right opens to the left of its row. */
