@@ -44,7 +44,7 @@ const deg = (a: { x: number; y: number }, b: { x: number; y: number }) => -Math.
 describe('arrow sizes of their own', () => {
   it('gives new arrows the width and head size set, whatever the bonds\' width', () => {
     const { doc, ed, drag } = setup('arrow');
-    ed.arrowLook = { width: 1.2, headLength: 9, headWidth: 3 };
+    doc.style = { ...doc.style, arrowWidth: 1.2, arrowHeadLength: 9, arrowHeadWidth: 3 };
     drag({ x: 100, y: 100 }, { x: 200, y: 100 });
     const r = [...doc.arrows.values()][0];
     expect(r.lineWidth).toBe(1.2);
@@ -53,7 +53,7 @@ describe('arrow sizes of their own', () => {
   });
   it('sizes the head from the arrow\'s own width when only that is set', () => {
     const { doc, ed, drag } = setup('arrow');
-    ed.arrowLook = { width: 1, headLength: null, headWidth: null };
+    doc.style = { ...doc.style, arrowWidth: 1 };
     drag({ x: 100, y: 100 }, { x: 200, y: 100 });
     const r = [...doc.arrows.values()][0];
     expect(r.headLength).toBeCloseTo(10);

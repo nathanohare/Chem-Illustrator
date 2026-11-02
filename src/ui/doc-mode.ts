@@ -4,6 +4,7 @@
 // spelling check knows chemistry words. The panel on the right shows the paragraph's formatting,
 // its style, the page and the figure picked, every value of which can be typed in.
 
+import { applyFormat } from '../text/format';
 import { placeTextMenu } from './text-menu';
 import { Doc, type Contents, type ParaStyle, type Shape, type TabStop, type TextRun } from '../model';
 
@@ -172,7 +173,7 @@ const ignored = new Set<string>();
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 /** Commands that, in a text box, work on its text (others leave the box first). */
-const BOX_COMMANDS = /^(format-painter$|(insert|remove|open)-link$|insert-symbol$|doc-(align-|justify|bold|italic|underline|sub|sup|formula|highlight|bullets|numbering|indent|outdent)|line-|font-|select-all$|undo$|redo$|zoom-|copy$|cut$|paste$|box-|find$|replace$|wrap-)/;
+const BOX_COMMANDS = /^(format-painter$|(insert|remove|open)-link$|insert-symbol$|doc-(align-|justify|bold|italic|underline|sub|sup|formula|stereo-italic|highlight|bullets|numbering|indent|outdent)|line-|font-|select-all$|undo$|redo$|zoom-|copy$|cut$|paste$|box-|find$|replace$|wrap-)/;
 
 /** Commands that, in a table cell, work there too (others leave the cell first). */
 const CELL_COMMANDS = /^(table-|tbl-|insert-table$|insert-structure$|structure-from-name-doc$|name-to-structure$|insert-picture$|insert-object$|paste-object$|edit-figure$|compound-number$|cross-reference$|insert-citation$)/;
@@ -3158,6 +3159,7 @@ export class DocumentMode {
       case 'doc-sub': ed.toggle('sub'); break;
       case 'doc-sup': ed.toggle('sup'); break;
       case 'doc-formula': ed.toggle('formula'); break;
+      case 'doc-stereo-italic': applyFormat(ed, { kind: 'stereo' }); break;
       case 'doc-highlight': {
         const on = ed.currentStyle().highlight;
         ed.setStyle({ highlight: on && on === this.highlighter ? undefined : this.highlighter });

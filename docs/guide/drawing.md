@@ -26,7 +26,7 @@ Single, double and triple bonds (a quadruple bond is off the toolbox: find it wi
 - Click an existing bond with the single bond tool to step it through single, double and triple. Click a double bond again with the double bond tool to move its second line. Click a wedge or dative bond again to reverse it.
 - Draw a dative bond from the donor atom to the acceptor (H3N→BF3). Neither atom loses a hydrogen for it.
 - **Partial bond**: a bond forming or breaking in a transition state, drawn dashed (press `P` over any bond to make it one). Like a dative bond it leaves both atoms' hydrogens as they were, it gets no valence warning, and the formula and SMILES leave it out. It saves to CDXML as a half bond (Order 0.5). **Chemistry ▸ Reactions and Schemes ▸ Transition State Brackets ‡** then puts square brackets round the selected transition state with ‡ at the upper right.
-- **Hapto (η) bond**: drag from a metal into a ring, or onto a C=C, to bond the metal to its middle (η⁵-Cp, η⁶-arene, η³-allyl, η²-alkene; the η number is how many atoms it holds). Drag the other way, from the ring to empty space, for a new metal M. Click inside a ring or on a bond for a new metal there. The bond stays in the middle when you move or reshape the ring. Click a hapto bond to draw it as a line to each atom instead (some draw ferrocene that way). In ChemDraw the bond opens as a multicentre attachment.
+- **Hapto (η) bond**: drag from a metal into a ring, or onto a C=C, to bond the metal to its middle (η⁵-Cp, η⁶-arene, η³-allyl, η²-alkene; the η number is how many atoms it holds). Drag the other way, from the ring to empty space, for a new metal M. Click inside a ring or on a bond for a new metal there. The bond stays in the middle when you move or reshape the ring. Click a hapto bond to draw it as a line to each atom instead (some draw ferrocene that way). An η⁵ or η⁶ ring is drawn delocalized, with a circle inside, and an η³-allyl with an arc under its three atoms; **Chemistry ▸ Structure ▸ Kekulé Form for η Ligand** draws one with its double bonds again (the choice is saved in CDXML), and **Edit ▸ Settings ▸ Drawing** turns the delocalized look off everywhere. Only the look changes: the bonds stay as drawn, so SMILES, formula and files are the same either way. In ChemDraw the bond opens as a multicentre attachment.
 - **Chain**: drag from empty space or an atom; a number shows how many bonds you have. Or click and type how many atoms you want. Alt+click draws the same number again.
 
 ### Rings
@@ -233,6 +233,8 @@ The **Format** menu has:
 
 **View ▸ Alignment Guides** makes things you move snap into line with other structures, text, arrows and shapes, with pink guide lines. Structures line up by their atoms and bonds, not the edges of their labels. A guide only shows to something with nothing in between, and only the closest match each way. It starts off in drawings. Hold Alt while dragging to move freely.
 
+**View ▸ Toolboxes ▸ Toolbox: Guides** puts your own guides on the drawing, in blue, with ruler ticks along them: a **crosshair** (dragged by its middle), a line **across**, a line **up and down**, or a **grid** of lines every major tick over the whole drawing. Set the **Major** and **Minor** tick spacing (1 in and ¼ in to start) and what **Snap** goes to: major ticks, minor ticks, both, or none. With snapping on, the atom or bond end you grab, or a caption's corner, snaps onto a guide and slides along it from tick to tick. Drag a guide with the Select tool, and drop it off the drawing to take it away. Guides are saved in CDXML files (ChemDraw passes over them) but never show in pictures, exports or prints. Hold Alt while dragging to move freely.
+
 Undo (Ctrl+Z) and Redo (Ctrl+Y) select what they changed, so you can see what came back and move it straight away.
 
 To start a reaction quickly, select a structure and press Ctrl+→ (or Ctrl+←, Ctrl+↑, Ctrl+↓): you get a reaction arrow and a copy of the structure to edit into the product.
@@ -412,7 +414,7 @@ Rest the mouse on an abbreviation or condensed label (OTBS, NHBoc, CO2Me, CH2OH)
 
 ## Drawing styles
 
-**File ▸ Drawing Style…** sets how structures are drawn in the tab showing: bond length, line, bold and margin widths, hash spacing, double bond spacing, chain angle, and the fonts and sizes of atom labels and captions.
+**File ▸ Drawing Style…** sets how structures are drawn in the tab showing: bond length, line, bold and margin widths, hash spacing, double bond spacing, chain angle, the fonts and sizes of atom labels and captions, the font and size of text above and below reaction arrows (**1 pt smaller** sets it a point under the captions), and the reaction arrows' own line width and arrowhead length and width (blank: the bonds' line width, and a head ten line widths long and 2.5 wide). The preview beside it redraws as you type.
 
 - **Start from** picks a built-in style: **ACS Document 1996** (every ACS journal), **RSC**, **Nature journals**, **Thieme (Synthesis, Synlett)**, **Wiley (Angewandte, Chemistry Europe)**, **Elsevier (Tetrahedron and others)**, or **Slides (ACS 1996 × 2)**. The line under it says where the numbers come from. Wiley and Elsevier publish only the text size and font, so their bonds are ACS 1996 scaled to 7 pt text; the note under the style says so.
 - Every number can be typed over. With **Change widths and font sizes with it** ticked, changing the bond length scales the rest in proportion.
@@ -521,6 +523,8 @@ Every colour button opens a palette: Automatic, the standard colours, the colour
 - **Toolbox: Templates**: every template in one scrolling grid, under the names of their palettes.
 - **Toolbox: Colours**: pick **Colour**, **Highlight** or **Fill**, then click a swatch to apply it to the selection. Your palettes are there too, and in Highlight mode your highlight looks.
 - **Toolbox: Highlight**: Smooth, Centre, Soft, Outline only, Shadow and Glow switches for the selected highlight, **Save look…**, and every look, ready to click.
+- **Toolbox: Text Formatting**: font and size, bold, italic, underline, sub- and superscript, **CH₃** (a formula in one click: CH2Cl2 becomes CH₂Cl₂, charges go up), **(R)** (stereodescriptors and prefixes in italics in one click: (2R,3S)-, (E)-, cis-, tert-, n-Bu; again puts them back upright), and the symbols chemists type most (‡, °, ±, arrows, Greek letters), with **More symbols…** for the rest. It works on the text being typed, on the picked captions, and in documents.
+- **Toolbox: Guides**: your own guides and grid, with ruler ticks and snapping (see [Moving, turning and the Format menu](#moving-turning-and-the-format-menu)).
 - **Toolbox: My Toolbox**: the tools and commands you choose yourself (see below).
 
 ### Customize Toolboxes
