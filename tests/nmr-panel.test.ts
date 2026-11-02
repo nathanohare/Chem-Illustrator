@@ -57,6 +57,7 @@ describe('NMR panel views', () => {
   it('colours confidence by agreement', () => {
     expect(confidenceColour({ value: 1, spread: 0.5, radius: 4, n: 9 }, 3)).toBe('#2e9d5b');
     expect(confidenceColour({ value: 1, spread: 4, radius: 4, n: 9 }, 3)).toBe('#d99a1e');
-    expect(confidenceColour({ value: 1, spread: 0.5, radius: 0, n: 9 }, 3)).toBe('#c8423b');
+    expect(confidenceColour({ value: 1, spread: 0.5, radius: 0, n: 0 }, 3)).toBe('#c8423b');
+    expect(confidenceColour({ value: 1, spread: 7, radius: 4, n: 9 }, 3)).toBe('#c8423b');
   });
 });

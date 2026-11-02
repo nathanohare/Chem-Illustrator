@@ -4,10 +4,13 @@
 
 import type { EnvGraph } from './env';
 import { ATOM_BLOCKS, ATOM_DIM, graphFeatures, NET_SOLVENTS, solventIndex } from './features';
-import type { Nucleus } from './lookup';
+import type { AtomShifts, Nucleus, ShiftHit } from './lookup';
 
 interface TensorInfo { name: string; shape: number[]; offset: number }
-interface Header { version: number; models: { hidden: number; layers: number; tensors: TensorInfo[] }[]; norm: Record<Nucleus, [number, number]>; solvents: string[] }
+/** How the lookup and the networks are weighed (scripts/nmr/blend_tune.py), and the error bar. */
+export interface BlendParams { g: [number, number, number]; b: number; d: number; calib?: { c0: number; c1: number } }
+
+interface Header { blend?: Record<Nucleus, BlendParams> | null; version: number; models: { hidden: number; layers: number; tensors: TensorInfo[] }[]; norm: Record<Nucleus, [number, number]>; solvents: string[] }
 
 /** A dense layer: out = W x + b, with W stored rows = outputs. */
 interface Dense { w: Float32Array; b: Float32Array | null; out: number; inp: number }
@@ -115,5 +118,33 @@ export class ShiftNet {
       const sd = (v: number[]) => { const mu = mean(v); return Math.sqrt(v.reduce((t, z) => t + (z - mu) ** 2, 0) / Math.max(1, v.length - 1)); };
       return { c13: mean(c), c13sd: sd(c), h1: mean(h), h1sd: sd(h) };
     });
+  }
+
+  /**
+   * Blends the networks into the lookup's predictions (inverse-variance weights tuned on held-out
+   * papers). The value and its error bar change; the lookup's radius and count stay for the chip.
+   */
+  apply(g: EnvGraph, shifts: AtomShifts[], solvent: string | null): void {
+    const net = this.predict(g, solvent);
+    shifts.forEach((s, i) => {
+      const n = net[i];
+      if (s.c13 !== undefined && g.atoms[i].el === 'C') s.c13 = this.blendOne('13C', s.c13, n.c13, n.c13sd);
+      if (g.atoms[i].h > 0) s.h1 = this.blendOne('1H', s.h1, n.h1, n.h1sd);
+    });
+  }
+
+  private blendOne(nuc: Nucleus, look: ShiftHit | null, mean: number, sd: number): ShiftHit {
+    const p = this.head.blend?.[nuc] ?? { g: [1e6, 1e6, 1e6], b: 0, d: 0 };
+    const base = nuc === '13C' ? 2.0 : 0.17; // blend_tune.py BASE
+    const sn = base * (1 + (p.d * sd) / base);
+    let value = mean;
+    if (look) {
+      const grp = look.radius >= 4 ? 2 : look.radius >= 2 ? 1 : 0;
+      const sl = base * p.g[grp] + p.b * look.spread;
+      const wl = 1 / sl ** 2, wn = 1 / sn ** 2;
+      value = (look.value * wl + mean * wn) / (wl + wn);
+    }
+    const spread = p.calib ? p.calib.c0 + p.calib.c1 * sd : look?.spread ?? base;
+    return { value, spread, radius: look?.radius ?? 0, n: look?.n ?? 0 };
   }
 }
