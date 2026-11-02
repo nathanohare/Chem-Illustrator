@@ -31,7 +31,7 @@ import { readCml } from './io/cml';
 import { ChemClient } from './chem/client';
 import type { FragmentResult } from './worker/chem-worker';
 import { COMMON_ADDUCTS } from './chem/hrms';
-import { pubchemName, pubchemCid, pubchemCompound, compoundPage } from './chem/pubchem';
+import { pubchemName, pubchemCid, pubchemCompound, compoundPage, pubchemCidForCas, pubchemSafetyRecord, isCas as isCasNumber } from './chem/pubchem';
 import { CasMemory, readCas, casTypoMessage, structureForCas, casForStructure, type CasDeps, type CasFound } from './chem/cas';
 import { casHtml, casRuns, type CasState } from './ui/cas-panel';
 import { pubchemHtml, pubchemRuns, type PubChemState } from './ui/pubchem-panel';
@@ -265,7 +265,7 @@ import { structuresIn, foundInContents, foundInDocument, foundInWorkbook, foundI
 import { parseIndex, indexText } from './library/file-index';
 import { libraryHolder } from './ui/library-refs';
 import { CompoundLibraryWindow, addStructures, type StructureIn } from './ui/compound-library';
-import { KnowledgeBaseWindow } from './ui/knowledge-base';
+import { KnowledgeBaseWindow, looksLikeSmiles } from './ui/knowledge-base';
 import { readPdfPages } from './kb/pdf-library';
 import { FindInFilesWindow, type ListedFile } from './ui/find-in-files';
 import { later } from './lazy';
@@ -4840,6 +4840,11 @@ const knowledgeBase = new KnowledgeBaseWindow({
   writePdf: (id, json) => putText(keepStore(), `${KB_PDF_FOLDER}/${keyPart(id)}.json`, json),
   removePdf: (id) => keepStore().remove(`${KB_PDF_FOLDER}/${keyPart(id)}.json`),
   ...(isTauri() ? { openFile: async (path: string) => { const { openPath } = await import('@tauri-apps/plugin-opener'); await openPath(path); } } : {}),
+  cidForCas: (cas: string) => pubchemCidForCas(cas),
+  lookUpSafety: (q: string) => {
+    const t = q.trim();
+    return pubchemSafetyRecord(isCasNumber(t) ? { cas: t } : looksLikeSmiles(t) ? { smiles: t } : { name: t });
+  },
 });
 
 /** Chemistry > Look Up > Knowledge Base: reference tables searched by name, CAS number, SMILES or a shift. */
