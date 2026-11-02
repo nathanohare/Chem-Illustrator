@@ -225,6 +225,7 @@ export function analysisHtml(r: FragmentResult, i: number, adductText: string, e
       ${core ? '' : `<button type="button" data-insert="formula:${i}" title="Attach the formula and masses under the structure: they follow it and update when it changes (choose what is shown in the Style panel)">Attach descriptors</button>`}
       ${ion ? `<button type="button" data-insert="hrms:${i}" title="Put an HRMS line under the structure (ACS style); type the found value into it">HRMS text</button>` : ''}
       ${ea ? `<button type="button" data-insert="ea:${i}" title="Put an elemental analysis line under the structure (ACS style)">Anal. text</button>` : ''}
+      ${core ? '' : `<button type="button" data-calc="${i}" title="Mass, mmol and volume of this compound (neat or as a solution), the mass for a solution, and dilutions, with its molecular weight filled in">Calculator</button>`}
     </div>`;
   return `<div class="frag">
     <div class="formula">${formulaHtml(r.formula)}${core ? `·${extras.rGroups!.map(esc).join('·')} <span class="muted">(core only)</span>` : ''}</div>

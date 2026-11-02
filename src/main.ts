@@ -53,7 +53,7 @@ import { writeCdxml } from './io/cdxml-write';
 import { WORKSPACE, folderOf } from './io/workspace-file';
 import { askLink, followLink, setLinkHost, type LinkPlace } from './ui/links-ui';
 import { SHOW_JUMPS, cellOfLink, linkSpans, normalizeLink, removeLink, setLink, slideOfLink } from './links';
-import { openFileDialog, openBytesDialog, openAnyBytesDialog, stampOf, readRef, saveFileDialog, writeFile, showError, baseName, readPath, withExtension, setEmbeddedWriter, KEYMAP_FILE, SETTINGS_FILE, MOL, PDF, PICTURE, SVG, TIFF, EMF, EPS, PPTX, DOCX, PICTURE_EXTENSIONS, type FileType } from './io/files';
+import { openFileDialog, openManyBytesDialog, pickFolder, openBytesDialog, openAnyBytesDialog, stampOf, readRef, saveFileDialog, writeFile, showError, baseName, readPath, withExtension, setEmbeddedWriter, KEYMAP_FILE, SETTINGS_FILE, MOL, PDF, PICTURE, SVG, TIFF, EMF, EPS, PPTX, DOCX, PICTURE_EXTENSIONS, type FileType } from './io/files';
 import { writeTiff } from './render/tiff';
 import { itemsToEps } from './render/eps';
 import { Workspace, Tab } from './workspace';
@@ -142,6 +142,12 @@ import { StructureChecks } from './chem/warnings';
 import { idText, labelClashes, parseIdStart, type IdStyle } from './chem/compound-numbers';
 import { schemeItems, isReactionArrow, reactionSteps, itemFinder } from './chem/reaction';
 import { stoichiometryBook, type StoichRow, type StoichRole } from './chem/stoichiometry';
+import { isReactionSmiles, isRxn, parseRxn, reactionSmiles, rxnBlock, splitReactionSmiles } from './chem/reaction-io';
+import { showBalance } from './ui/balance-dialog';
+import { withoutCharge } from './chem/formula';
+import { showLabCalculator } from './ui/lab-calc-dialog';
+import { BATCH_FORMATS, BATCH_INPUTS, readBatchFile, smilesLine, uniqueName, writeBatchItem, type BatchDeps, type BatchFormat } from './io/batch-convert';
+import { zipSync } from 'fflate';
 import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
 import { plainText, savableChar } from './richtext';
 import { htmlToRich } from './text/html';
@@ -832,6 +838,7 @@ function pastePoint(): { x: number; y: number } {
 async function pasteChemistry(text: string, quiet = false): Promise<boolean> {
   if (!chem.ready) { flash('The chemistry engine is still loading.'); return true; }
   const c = pastePoint();
+  if (isRxn(text) || isReactionSmiles(text)) return pasteReaction(text.trim(), c);
   let mb: string | null = text.includes('M  END') ? text : null;
   if (!mb && !/\s/.test(text)) mb = await chem.smilesToMol(text);
   if (!mb) { if (!quiet) flash('Paste a SMILES string or a molfile.'); return false; }
@@ -1466,28 +1473,51 @@ function toggleStructureLock(): void {
   flash(structuresLocked ? 'Structures locked: clicks go to text and pictures. Click Lock Structures again to edit structures.' : 'Structures can be clicked again.');
 }
 
+/** A species of a reaction step, read by the chemistry engine (formula, weight, SMILES), or text. */
+interface StepSpecies {
+  role: StoichRole;
+  /** What the drawing calls it: a caption's text, else the structure's formula. */
+  name: string;
+  /** Its atoms on the drawing (none for conditions written as text). */
+  atoms: number[];
+  molblock?: string;
+  formula?: string;
+  charge?: number;
+  mw?: number;
+  smiles?: string;
+}
+
 /**
- * Chemistry > Reactions and Schemes > Stoichiometry Table: the amounts for a reaction step, in a
- * new sheet. The step is the selected arrow's, or the only one in the drawing.
+ * The step of the selected reaction arrow, or of the only one in the drawing; null (and a note
+ * said) when there is none to choose.
  */
-async function stoichiometryTable(): Promise<void> {
-  if (!chem.ready) { flash('The chemistry engine is still loading. Try again in a moment.'); return; }
+function pickedStep(what: string): { step: ReturnType<typeof reactionSteps>[number]; items: ReturnType<typeof schemeItems>; m: ReturnType<typeof editor.measure> } | null {
   const m = editor.measure();
   const items = schemeItems(doc, m);
   const steps = reactionSteps(doc, items);
   const picked = steps.filter((s) => editor.sel.arrows.has(s.arrow.id));
   const step = picked[0] ?? (steps.length === 1 ? steps[0] : null);
   if (!step) {
-    flash(steps.length ? 'Select the arrow of the step to make the table for.' : 'No reaction step found: draw the starting materials, an arrow and the products.', 6000);
-    return;
+    flash(steps.length ? `Select the arrow of the step to ${what}.` : 'No reaction step found: draw the starting materials, an arrow and the products.', 6000);
+    return null;
   }
+  return { step, items, m };
+}
+
+/**
+ * The species of a reaction step: its starting materials, the reagents over and under the arrow,
+ * and its products, each read by the chemistry engine; text that isn't a compound (a solvent and
+ * temperature, a yield) comes back as the conditions.
+ */
+async function stepSpecies(got: NonNullable<ReturnType<typeof pickedStep>>): Promise<StepSpecies[]> {
+  const { step, items, m } = got;
   const find = itemFinder(items);
   const wanted: { role: StoichRole; ref: string }[] = [
     ...step.roles.reactants.map((ref) => ({ role: 'Starting material' as const, ref })),
     ...[...step.roles.above, ...step.roles.below].map((ref) => ({ role: 'Reagent' as const, ref })),
     ...step.roles.products.map((ref) => ({ role: 'Product' as const, ref })),
   ];
-  const rows: StoichRow[] = [];
+  const rows: StepSpecies[] = [];
   const mols: { molblock: string; map: number[] }[] = [];
   const at: number[] = [];
   for (const w of wanted) {
@@ -1496,30 +1526,151 @@ async function stoichiometryTable(): Promise<void> {
     const cap = it.caption !== undefined ? doc.captions.get(it.caption) : undefined;
     const species = cap ? placeSpecies(doc, [cap], m) : [];
     if (!it.atoms.length && !species.length) {
-      // text that isn't a compound (a solvent and temperature, a yield): kept as the conditions
-      if (cap) rows.push({ role: 'Conditions', name: plainText(cap.runs).trim() });
+      if (cap) rows.push({ role: 'Conditions', name: plainText(cap.runs).trim(), atoms: [] });
       continue;
     }
-    const ex = toMolfile(doc, new Set(it.atoms), '', { species });
+    const name = cap ? plainText(cap.runs).trim() : '';
+    const ex = toMolfile(doc, new Set(it.atoms), name.replace(/\s+/g, ' ').slice(0, 80), { species });
     at.push(rows.length);
     mols.push({ molblock: ex.molblock, map: ex.map });
-    rows.push({ role: w.role, name: cap ? plainText(cap.runs).trim() : '' });
+    rows.push({ role: w.role, name, atoms: it.atoms, molblock: ex.molblock });
   }
-  const res = await chem.analyze(mols).catch(() => null);
+  const res = mols.length ? await chem.analyze(mols).catch(() => null) : null;
   at.forEach((r, i) => {
-    const got = res?.results[i];
-    if (!got || got.error) return;
-    rows[r].formula = got.formula;
-    rows[r].mw = got.mw;
-    if (!rows[r].name) rows[r].name = got.formula;
+    const one = res?.results[i];
+    if (!one || one.error) return;
+    Object.assign(rows[r], { formula: one.formula, charge: one.charge, mw: one.mw, smiles: one.smiles });
+    if (!rows[r].name) rows[r].name = one.formula;
   });
+  return rows;
+}
+
+/**
+ * Chemistry > Reactions and Schemes > Stoichiometry Table: the amounts for a reaction step, in a
+ * new sheet. The step is the selected arrow's, or the only one in the drawing.
+ */
+async function stoichiometryTable(): Promise<void> {
+  if (!chem.ready) { flash('The chemistry engine is still loading. Try again in a moment.'); return; }
+  const got = pickedStep('make the table for');
+  if (!got) return;
+  const rows: StoichRow[] = (await stepSpecies(got)).map((r) => ({ role: r.role, name: r.name, ...(r.formula ? { formula: r.formula } : {}), ...(r.mw ? { mw: r.mw } : {}) }));
   // starting materials, then reagents, then the conditions, then products
   const order: StoichRole[] = ['Starting material', 'Reagent', 'Conditions', 'Product'];
   rows.sort((a, b) => order.indexOf(a.role) - order.indexOf(b.role));
   if (!rows.some((r) => r.mw)) { flash('None of this step could be read as a compound.', 6000); return; }
   finishTyping();
   ws.newSheet(stoichiometryBook(rows));
-  flash('Stoichiometry table: type the equivalents, the millimoles of the first starting material and any densities; the rest follows.', 8000);
+  flash('Stoichiometry table: type the equivalents, the millimoles of the first starting material and any densities; the rest follows. Green metrics are under the table.', 8000);
+}
+
+/** Chemistry > Reactions and Schemes > Check Balance: the atoms on each side of the step's arrow. */
+async function checkStepBalance(): Promise<void> {
+  if (!chem.ready) { flash('The chemistry engine is still loading. Try again in a moment.'); return; }
+  const got = pickedStep('check');
+  if (!got) return;
+  const rows = await stepSpecies(got);
+  const read = (r: StepSpecies) => ({ formula: withoutCharge(r.formula!, r.charge ?? 0), charge: r.charge ?? 0 });
+  const of = (role: StoichRole) => rows.filter((r) => r.role === role && r.formula).map(read);
+  const unread = rows.filter((r) => r.role !== 'Conditions' && !r.formula).map((r) => r.name || 'a structure');
+  if (!of('Starting material').length && !of('Reagent').length) { flash('None of the starting materials could be read as a compound.', 6000); return; }
+  if (!of('Product').length) { flash('None of the products could be read as a compound.', 6000); return; }
+  await showBalance({ starting: of('Starting material'), reagents: of('Reagent'), products: of('Product'), unread });
+}
+
+/** Edit > Copy As > Reaction SMILES or RXN: the step of the selected arrow (or the only one). */
+async function copyReaction(as: 'smiles' | 'rxn'): Promise<void> {
+  if (!chem.ready) { flash('The chemistry engine is still loading.'); return; }
+  const got = pickedStep('copy');
+  if (!got) return;
+  const rows = await stepSpecies(got);
+  const bad = rows.filter((r) => r.role !== 'Conditions' && !r.smiles);
+  if (bad.length) { flash(`Not copied: ${bad.map((r) => r.name || 'a structure').join(', ')} can't be read as a compound (check its valences).`, 8000); return; }
+  const parts = <T,>(f: (r: StepSpecies) => T) => ({
+    reactants: rows.filter((r) => r.role === 'Starting material').map(f),
+    agents: rows.filter((r) => r.role === 'Reagent').map(f),
+    products: rows.filter((r) => r.role === 'Product').map(f),
+  });
+  const text = as === 'smiles' ? reactionSmiles(parts((r) => r.smiles!)) : rxnBlock(parts((r) => r.molblock!));
+  const left = rows.some((r) => r.role === 'Conditions') ? ' Conditions written as text are left out.' : '';
+  await copyText(text, as === 'smiles' ? `Copied reaction SMILES: ${text}${left}` : `Copied the reaction as an RXN file.${left}`);
+}
+
+/**
+ * Paste a reaction (reaction SMILES or an RXN file): its starting materials in a row with + signs,
+ * an arrow with the agents over it, and its products, tidied by Clean Up Reaction.
+ */
+async function pasteReaction(text: string, c: { x: number; y: number }): Promise<boolean> {
+  let mols: { reactants: string[]; agents: string[]; products: string[] } | null = null;
+  if (isRxn(text)) mols = parseRxn(text);
+  else {
+    const p = splitReactionSmiles(text);
+    const read = async (xs: string[]) => { const out: string[] = []; for (const x of xs) { const mb = await chem.smilesToMol(x); if (!mb) return null; out.push(mb); } return out; };
+    const r = await read(p.reactants), a = await read(p.agents), q = await read(p.products);
+    mols = r && a && q ? { reactants: r, agents: a, products: q } : null;
+  }
+  if (!mols) { flash('This reaction could not be read (each species must be valid SMILES, or the RXN file V2000).', 6000); return false; }
+  finishTyping();
+  renderer.useStyle(doc);
+  const bl = doc.style.bondLength, gap = bl * 1.2, lw = doc.style.lineWidth;
+  const made: number[] = [], arrows: number[] = [], caps: number[] = [];
+  const boxOf = (ids: number[]) => {
+    const pts = ids.map((i) => doc.atoms.get(i)!).filter(Boolean);
+    return { x1: Math.min(...pts.map((a) => a.x)), x2: Math.max(...pts.map((a) => a.x)), y1: Math.min(...pts.map((a) => a.y)), y2: Math.max(...pts.map((a) => a.y)) };
+  };
+  try {
+    doc.edit('Paste reaction', () => {
+      let x = 0;
+      const place = (mb: string, at: number, y = 0) => {
+        const ids = addMolfile(doc, mb, 0, 0);
+        const b = boxOf(ids);
+        doc.moveAtoms(ids, at - b.x1, y - (b.y1 + b.y2) / 2);
+        made.push(...ids);
+        return b.x2 - b.x1;
+      };
+      const plus = (at: number) => {
+        const runs = [{ text: '+' } as TextRun];
+        const f = renderer.captionFrame({ id: -1, x: 0, y: 0, runs, justify: 'left' } as Caption);
+        caps.push(doc.addCaption({ x: at - (f.x1 + f.x2) / 2, y: -(f.y1 + f.y2) / 2, runs, justify: 'left' }).id);
+        return f.x2 - f.x1;
+      };
+      mols!.reactants.forEach((mb, i) => {
+        if (i) { x += gap * 0.5; x += plus(x) + gap * 0.5; }
+        x += place(mb, x);
+      });
+      x += gap;
+      // the agents over the arrow, side by side
+      const tail = x;
+      let ax = tail + gap * 0.5;
+      for (const mb of mols!.agents) {
+        const ids = addMolfile(doc, mb, 0, 0);
+        const b = boxOf(ids);
+        doc.moveAtoms(ids, ax - b.x1, -bl * 0.6 - b.y2);
+        made.push(...ids);
+        ax += b.x2 - b.x1 + gap * 0.5;
+      }
+      const head = Math.max(tail + bl * 3, ax + gap * 0.5 - gap * 0.5 + gap * 0.5);
+      arrows.push(doc.addArrow({ tail: { x: tail, y: 0 }, head: { x: head, y: 0 }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: lw * 10, headWidth: lw * 2.5 }).id);
+      x = head + gap;
+      mols!.products.forEach((mb, i) => {
+        if (i) { x += gap * 0.5; x += plus(x) + gap * 0.5; }
+        x += place(mb, x);
+      });
+      // the whole reaction where pasting goes
+      const dx = c.x - x / 2, dy = c.y;
+      doc.moveAtoms(made, dx, dy);
+      for (const id of arrows) { const a = doc.arrows.get(id)!; doc.updateArrow(id, { tail: { x: a.tail.x + dx, y: a.tail.y + dy }, head: { x: a.head.x + dx, y: a.head.y + dy } }); }
+      for (const id of caps) { const k = doc.captions.get(id)!; doc.updateCaption(id, { x: k.x + dx, y: k.y + dy }); }
+      editor.sel = { atoms: new Set(made), bonds: new Set(), captions: new Set(caps), arrows: new Set(arrows), shapes: new Set() };
+      // tidied and moved clear of what is there, in the same undo step
+      editor.cleanUpReaction();
+      editor.placeClear(placingPage());
+    });
+    selectNewAtoms(made);
+    await keepPasteInside();
+  } catch (err) {
+    flash(String(err));
+  }
+  return true;
 }
 
 /** How Number Compounds counted last time (offered again). */
@@ -4589,6 +4740,77 @@ function customShowMenu(anchor: HTMLElement): void {
 
 // ---------------------------------------------------------------- export
 
+/** File > Export > Batch Convert: many structure files to one format, in a zip or a folder. */
+async function batchConvert(): Promise<void> {
+  const files = await openManyBytesDialog('Drawings and structure files', BATCH_INPUTS).catch(async (e) => { await showError(String(e)); return []; });
+  if (!files.length) return;
+  const desktopApp = isTauri() && !iPadApp;
+  const v = await ask(`Batch Convert ${files.length} File${files.length > 1 ? 's' : ''}`, [
+    { name: 'format', label: 'Convert to', value: batchChoices.format, options: BATCH_FORMATS },
+    { name: 'dpi', label: 'Resolution (PNG)', value: batchChoices.dpi, type: 'number', unit: 'dpi' },
+    ...(desktopApp ? [{ name: 'to', label: 'Save in', value: batchChoices.to, options: [{ value: 'folder', label: 'A folder (one file each)' }, { value: 'zip', label: 'One zip file' }] }] : []),
+  ], { ok: 'Convert…', note: 'Each record of an SD file and each line of a SMILES file becomes a file of its own. Molfiles and SMILES are drawn in this drawing\'s style.' });
+  if (!v) return;
+  Object.assign(batchChoices, v);
+  const format = v.format as BatchFormat;
+  if (format === 'smi' && !chem.ready) { flash('The chemistry engine is still loading.'); return; }
+  const deps: BatchDeps = { style: { ...doc.style }, smilesToMol: (smi) => chem.smilesToMol(smi), molToSmiles: (mb) => chem.molToSmiles(mb) };
+  const needsChem = files.some((f) => /\.(smi|smiles)$/i.test(f.name));
+  if (needsChem && !chem.ready) { flash('The chemistry engine is still loading; try again in a moment.'); return; }
+  const toFolder = desktopApp && v.to === 'folder';
+  const folder = toFolder ? await pickFolder() : null;
+  if (toFolder && !folder) return;
+  const ZIP_TYPE: FileType = { description: 'Converted files (zip)', extension: 'zip', mime: 'application/zip' };
+  const zipTarget = toFolder ? null : await saveFileDialog(files.length === 1 ? withExtension(files[0].name, 'zip') : 'converted.zip', format === 'smi' ? { description: 'SMILES list', extension: 'smi', mime: 'text/plain' } : ZIP_TYPE).catch(async (e) => { await showError(String(e)); return null; });
+  if (!toFolder && !zipTarget) return;
+  const used = new Set<string>();
+  const out: Record<string, Uint8Array> = {};
+  const lines: string[] = [];
+  let failed = 0, empty = 0, done = 0;
+  const enc = new TextEncoder();
+  flash('Converting…');
+  for (const f of files) {
+    let got: Awaited<ReturnType<typeof readBatchFile>>;
+    try { got = await readBatchFile(f.name, f.bytes, deps); } catch { failed++; continue; }
+    failed += got.failed;
+    for (const it of got.items) {
+      if (format === 'smi') {
+        const line = await smilesLine(it, deps);
+        if (line) { lines.push(line); done++; } else empty++;
+        continue;
+      }
+      let data: Uint8Array | string | null;
+      try { data = await writeBatchItem(it, format, Math.max(30, Math.min(2400, Number(v.dpi) || 300))); } catch { failed++; continue; }
+      if (data === null) { empty++; continue; }
+      out[uniqueName(it.name, format, used)] = typeof data === 'string' ? enc.encode(data) : data;
+      done++;
+    }
+  }
+  try {
+    if (format === 'smi') {
+      const text = lines.join('\n') + '\n';
+      if (folder) await writeFile({ kind: 'path', path: `${folder}/converted.smi` }, 'converted.smi', text, { description: 'SMILES list', extension: 'smi', mime: 'text/plain' });
+      else await writeFile(zipTarget!.ref, zipTarget!.name, text, { description: 'SMILES list', extension: 'smi', mime: 'text/plain' });
+    } else if (folder) {
+      const sep = folder.includes('\\') ? '\\' : '/';
+      for (const [name, bytes] of Object.entries(out)) await writeFile({ kind: 'path', path: folder.replace(/[\\/]$/, '') + sep + name }, name, bytes, ZIP_TYPE);
+    } else await writeFile(zipTarget!.ref, zipTarget!.name, zipSync(out), ZIP_TYPE);
+  } catch (e) {
+    await showError(`Could not save the converted files: ${e instanceof Error ? e.message : String(e)}`);
+    return;
+  }
+  const where = format === 'smi' ? (folder ? 'converted.smi' : zipTarget!.name) : folder ? baseName(folder) : zipTarget!.name;
+  const notes = [failed ? `${failed} could not be read` : '', empty ? `${empty} had no structure${format === 'smi' ? ' SMILES can show' : ''}` : ''].filter(Boolean).join('; ');
+  flash(`Converted ${done} structure${done === 1 ? '' : 's'} into ${where}${notes ? ` (${notes})` : ''}.`, notes ? 8000 : 4000);
+}
+const batchChoices = { format: 'cdxml', dpi: '300', to: 'folder' };
+
+/** Chemistry > Lab Calculator: the selected structure's molecular weight filled in. */
+function labCalculator(): void {
+  const r = lastAnalysis?.results.find((x) => !x.error && x.mw > 0);
+  void showLabCalculator(r ? { mw: r.mw, label: r.formula } : {});
+}
+
 async function exportMolfile(): Promise<void> {
   const { atoms: ids, species } = chemistryInSelection();
   if (!ids.length && !species.length) { flash('There is no structure to export.'); return; }
@@ -5754,6 +5976,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'next-tab': () => ws.cycle(1),
   'prev-tab': () => ws.cycle(-1),
   'export-mol': () => exportMolfile(),
+  'batch-convert': () => { finishTab(); return batchConvert(); },
   'export-pdf': () => { finishTab(); return exportPdf(); },
   print: () => void printNow(),
   'export-picture': () => { finishTab(); return exportPicture(); },
@@ -5891,6 +6114,8 @@ const COMMANDS: Record<string, () => unknown> = {
   copy: () => copy(),
   paste: () => paste(),
   'copy-smiles': () => copySmiles(),
+  'copy-reaction-smiles': () => copyReaction('smiles'),
+  'copy-rxn': () => copyReaction('rxn'),
   'paste-smiles': () => pasteSmiles(),
   'copy-mol': () => copyMolfile(),
   'copy-cdxml': () => copyCdxmlText(),
@@ -6118,6 +6343,8 @@ const COMMANDS: Record<string, () => unknown> = {
   'clean-up-reaction': () => editor.cleanUpReaction() || flash('No reaction to tidy: draw starting materials, an arrow and products (the arrow pointing from one to the other), or the scheme is already tidy.', 6000),
   'arrange-scheme': () => arrangeDialog.open(),
   'stoichiometry-table': () => void stoichiometryTable(),
+  'check-balance': () => void checkStepBalance(),
+  'lab-calculator': () => labCalculator(),
   'catalytic-cycle': () => void insertCycle(),
   'ts-brackets': () => { if (!editor.tsBrackets()) flash('Select the transition state first (draw it with partial bonds: P over a bond).'); },
   'energy-diagram': () => void energyDiagram(null),
@@ -7930,6 +8157,8 @@ $('#analysis-body').addEventListener('click', (e) => {
   if (page) { e.preventDefault(); openWebPage(compoundPage(Number(page.dataset.pubchemPage))); return; }
   const nm = t.closest<HTMLButtonElement>('button[data-name]');
   if (nm && lastAnalysis) { const k = Number(nm.dataset.name); const r = lastAnalysis.results[k]; if (r?.smiles && lastAnalysis.molblocks[k]) void nameForPanel(r.smiles, lastAnalysis.molblocks[k]); return; }
+  const calc = t.closest<HTMLButtonElement>('button[data-calc]');
+  if (calc && lastAnalysis) { const r = lastAnalysis.results[Number(calc.dataset.calc)]; if (r && !r.error) void showLabCalculator({ mw: r.mw, label: r.formula }); return; }
   const look = t.closest<HTMLButtonElement>('button[data-pubchem]');
   if (look && lastAnalysis) { const r = lastAnalysis.results[Number(look.dataset.pubchem)]; if (r?.smiles) void lookUpOnPubChem(r.smiles); return; }
   const b = t.closest<HTMLButtonElement>('button[data-insert]');
@@ -8721,7 +8950,7 @@ function drawingMenu(): MenuItem[] {
     ] }] : []),
     ...(s.bonds.size && s.bonds.size <= 2 && !s.arrows.size ? [{ cmd: 'homolysis-arrows' }] : []),
     ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : []),
-    ...(s.arrows.size || atoms ? [{ label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
+    ...(s.arrows.size || atoms ? [{ label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
     null,
     ...(atoms ? [{ label: 'Label the Structure', items: [{ cmd: 'add-id-label' }, { cmd: 'add-caption' }, { cmd: 'attach-descriptors' }, null, { cmd: 'number-compounds' }] }] : []),
     ...(atoms || shapes.some((x) => x.kind === 'ring') ? [{ label: 'Highlight and Fill', items: [{ cmd: 'highlight' }, { cmd: 'remove-highlight' }, { cmd: 'highlight-look' }, { cmd: 'select-highlight' }, null, { cmd: 'smooth-highlight' }, { cmd: 'centre-highlight' }, { cmd: 'soft-highlight' }, { cmd: 'outline-highlight' }, { cmd: 'shadow-highlight' }, { cmd: 'glow-highlight' }, { cmd: 'save-highlight-look' }, null, { cmd: 'fill-rings' }, { cmd: 'ring-shadow' }] }] : []),

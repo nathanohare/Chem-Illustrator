@@ -297,7 +297,8 @@ export function addMolfile(doc: Doc, molblock: string, cx: number, cy: number): 
   const raw: { x: number; y: number; sym: string; chg: number; iso: number; rad: number }[] = [];
   for (let i = 0; i < na; i++) {
     const l = lines[4 + i];
-    raw.push({ x: parseFloat(l.slice(0, 10)), y: parseFloat(l.slice(10, 20)), sym: l.slice(31, 34).trim(), chg: 0, iso: 0, rad: 0 });
+    // (RDKit writes nan for a lone atom it has no layout for, such as [H+])
+    raw.push({ x: parseFloat(l.slice(0, 10)) || 0, y: parseFloat(l.slice(10, 20)) || 0, sym: l.slice(31, 34).trim(), chg: 0, iso: 0, rad: 0 });
   }
   // average bond length, to scale to the document's bond length
   let sum = 0;

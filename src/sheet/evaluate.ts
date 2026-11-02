@@ -14,6 +14,7 @@ import { LOOKUP_FUNCTIONS, chooseIndex } from './fn-lookup';
 import { TEXT_FUNCTIONS } from './fn-text';
 import { STATS_FUNCTIONS } from './fn-stats';
 import { ANALYSIS_FUNCTIONS } from './fn-analysis';
+import { CHEM_FUNCTIONS } from './fn-chem';
 import { MolProps, PROPERTIES, propertyValue } from './properties';
 import { ISOTOPE_FUNCTIONS, isotopeValue, readsAsFormula, type IsotopeSource } from './isotopes';
 
@@ -496,6 +497,7 @@ const FUNCTIONS: Record<string, FnDef> = {
   ...CRITERIA_FUNCTIONS,
   ...LOOKUP_FUNCTIONS,
   ...TEXT_FUNCTIONS,
+  ...CHEM_FUNCTIONS,
   ...STATS_FUNCTIONS,
   ...ANALYSIS_FUNCTIONS,
   ...DATE_FUNCTIONS,
