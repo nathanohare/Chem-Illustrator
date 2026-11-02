@@ -270,6 +270,83 @@ def export_table(t, path, params, meta):
     return sections
 
 
+def hash52(s):
+    """The app's hash52 (src/chem/nmr/env.ts): two 32-bit FNV-1a lanes, 13 hex digits."""
+    a, b = 0x811c9dc5, 0x050c5d1f
+    for ch in s:
+        c = ord(ch)
+        a = ((a ^ c) * 0x01000193) & 0xffffffff
+        b = ((b ^ c) * (0x01000193 ^ 0x5bd1e995)) & 0xffffffff
+        b = (b ^ (b >> 13)) & 0xffffffff
+    return '%08x%05x' % (a, b & 0xfffff)
+
+
+def mol_key(m):
+    """Whole-structure key: hash52 of the sorted deepest atom codes (same as src/chem/nmr/measured.ts)."""
+    return int(hash52(','.join(sorted('%013x' % c[-1] for c in m.codes))), 16)
+
+
+STORE_MAGIC = b'NMRM'
+
+
+def export_store(db_rows, nb_assigned, nb_source, path, max_mw=500.0):
+    """Write the measured-shift store (public/nmr/nmr-measured.dat, read by src/chem/nmr/measured.ts).
+
+    For each structure up to max_mw (by mol_key): its measured shifts per atom environment, nucleus
+    and solvent, with the source (NMRShiftDB2 record or PMC article). Same structure from several
+    sources: the median per atom, source of the first. NMRBank atoms were assigned by matching.
+    An atom is named by the position of its deepest code among the structure's distinct deepest
+    codes, sorted (one byte).
+
+    Layout: 'NMRM', u32 version, u32 header length, JSON header (solvents, count, entries), padding
+    to 8, then f64 keys (sorted), u32 source, u32 entry offsets (count + 1), u8 atom positions,
+    i16 values (ppm x SCALE), u8 kinds (bit 7: 1H; bits 0-6: 1 + solvent index, 0 unknown), each
+    padded to 8. Source: NMRShiftDB2 id (0 unknown), or PMC number with bit 31 set."""
+    import struct
+    solvents = sorted({o[3] for _m, obs in list(db_rows) + list(nb_assigned) for o in obs if o[3]})[:127]
+    sidx = {s: i + 1 for i, s in enumerate(solvents)}
+    mols = {}
+    for kind, rows in (('db', db_rows), ('nb', nb_assigned)):
+        for m, obs in rows:
+            if m.mw > max_mw:
+                continue
+            uniq = sorted({c[-1] for c in m.codes})
+            if len(uniq) > 256:
+                continue
+            pos = {c: i for i, c in enumerate(uniq)}
+            if kind == 'db':
+                src = int(m.id[2:]) if m.id[2:].isdigit() else 0
+            else:
+                pm = nb_source.get(m.id) or ''
+                if not pm.startswith('PMC') or not pm[3:].isdigit():
+                    continue
+                src = int(pm[3:]) | 0x80000000
+            e = mols.setdefault(mol_key(m), {'src': src, 'vals': defaultdict(list)})
+            for nuc, a, shift, solv in obs:
+                e['vals'][(pos[m.codes[a][-1]], nuc == '1H', sidx.get(solv, 0))].append(shift)
+    keys = sorted(mols)
+    srcs, offs, atoms, vals, kinds = [], [0], [], [], []
+    for k in keys:
+        e = mols[k]
+        srcs.append(e['src'])
+        for (at, is_h, si), vs in sorted(e['vals'].items()):
+            atoms.append(at)
+            vals.append(float(np.median(vs)) * SCALE['1H' if is_h else '13C'])
+            kinds.append((0x80 if is_h else 0) | si)
+        offs.append(len(atoms))
+    head = json.dumps({'version': 1, 'scale': SCALE, 'solvents': solvents, 'count': len(keys), 'entries': len(atoms), 'max_mw': max_mw}).encode()
+    pre = STORE_MAGIC + struct.pack('<II', 1, len(head)) + head
+    pre += b'\0' * (-len(pre) % 8)
+    arrs = [np.array(keys, dtype='<f8'), np.array(srcs, dtype='<u4'), np.array(offs, dtype='<u4'), np.array(atoms, dtype='<u1'),
+            np.clip(np.round(vals), -32768, 32767).astype('<i2'), np.array(kinds, dtype='<u1')]
+    with open(path, 'wb') as f:
+        f.write(pre)
+        for a in arrs:
+            b = a.tobytes()
+            f.write(b + b'\0' * (-len(b) % 8))
+    return {'structures': len(keys), 'entries': len(atoms)}
+
+
 def build(maxr, db_rows, nb_assigned, w_nb):
     t = Table(maxr)
     for m, obs in db_rows:
@@ -519,6 +596,7 @@ def main():
     ap.add_argument('--report', default=None)
     ap.add_argument('--tune', action='store_true')
     ap.add_argument('--export', default=None, help='write the shipped table (all NMRShiftDB2 + CC BY/CC0 NMRBank) here')
+    ap.add_argument('--store', default=None, help='with --export: also write the measured-shift store here')
     ap.add_argument('--nb', default='nmrbank.jsonl')
     ap.add_argument('--p13', default='{"maxr": 5, "min_n": 1, "depth": 0}')
     ap.add_argument('--p1', default='{"maxr": 4, "min_n": 1, "depth": 1, "decay": 0.2, "c": 2.0}')
@@ -575,6 +653,13 @@ def main():
     if a.export:
         lic = {x[0].id: x[1].get('license') for x in nb}
         ship_nb = [x for x in assigned if lic.get(x[0].id) in SHIP_LICENCES]
+        if a.store:
+            import pickle
+            src_map = {x[0].id: x[1].get('pmcid') for x in nb}
+            with open(a.store + '.inputs.pkl', 'wb') as f:
+                pickle.dump((db_tr + db_held, ship_nb, src_map), f)
+            rep['store'] = export_store(db_tr + db_held, ship_nb, {x[0].id: x[1].get('pmcid') for x in nb}, a.store)
+            print('store', json.dumps(rep['store']), flush=True)
         del t
         t = build(a.maxr, db_tr + db_held, ship_nb, a.w_nb)
         params = {'13C': json.loads(a.p13), '1H': json.loads(a.p1)}
