@@ -70,6 +70,19 @@ export function cellNumbers(c: Cell): number[] {
   return [...c.matchAll(/-?\d+(?:\.\d+)?/g)].map((m) => Number(m[0]));
 }
 
+/** A shift cell's peaks as ranges: "3.69–3.46" is one multiplet spanning both, a lone number a point. */
+export function cellShiftRanges(c: Cell): [number, number][] {
+  if (c === null) return [];
+  if (typeof c === 'number') return [[c, c]];
+  const out: [number, number][] = [];
+  for (const m of c.matchAll(/(-?\d+(?:\.\d+)?)(?:\s*–\s*(-?\d+(?:\.\d+)?))?/g)) {
+    const a = Number(m[1]);
+    const b = m[2] === undefined ? a : Number(m[2]);
+    out.push([Math.min(a, b), Math.max(a, b)]);
+  }
+  return out;
+}
+
 const ROW_TEXT = new WeakMap<Record<string, Cell>, string>();
 
 /** A row's text for searching: every cell, lower case (kept, since a PDF's pages are long). */
@@ -119,8 +132,8 @@ export function findRows(t: KbTable, query: string, filters: Record<string, stri
       // the nearest shift, a 1H peak before a 13C one (a number under 12 is far more often a proton)
       let best: { nucleus: '1H' | '13C'; off: number } | null = null;
       for (const c of shiftCols) {
-        for (const v of cellNumbers(row[c.key])) {
-          const d = Math.abs(v - shift);
+        for (const [lo, hi] of cellShiftRanges(row[c.key])) {
+          const d = shift < lo ? lo - shift : shift > hi ? shift - hi : 0;
           if (d > SHIFT_TOLERANCE[c.shift!]) continue;
           if (!best || (c.shift === '1H' && best.nucleus === '13C') || (c.shift === best.nucleus && d < best.off)) best = { nucleus: c.shift!, off: d };
         }
