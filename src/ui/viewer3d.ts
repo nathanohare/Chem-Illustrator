@@ -130,7 +130,7 @@ export class Viewer3d {
     const spin = document.createElement('button');
     spin.type = 'button';
     spin.textContent = 'Spin';
-    spin.title = 'Turn the model slowly round and round';
+    spin.title = 'Turn the model slowly around and around';
     spin.setAttribute('aria-pressed', 'false');
     spin.addEventListener('click', () => { this.spinning = !this.spinning; spin.setAttribute('aria-pressed', String(this.spinning)); if (this.spinning) this.tick(); });
     const fog = check('Depth', 'Depth shading: the back of the model fades, as Format ▸ Depth Shading fades structures on the page', this.fog, (v) => (this.fog = v));

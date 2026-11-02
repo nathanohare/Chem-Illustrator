@@ -100,7 +100,7 @@ describe('the toolbox: the same bar as above text being typed', () => {
   });
   it('sends every kind of change, and links and symbols', () => {
     const { body, done, typed, links, backs } = make();
-    for (const t of ['Formula', 'Stereodescriptors', 'Center the lines', 'Numbering', 'More indent', 'Link']) btn(body, t).click();
+    for (const t of ['Formula', 'Stereodescriptors', 'Center', 'Numbering', 'More indent', 'Link']) btn(body, t).click();
     btn(body, 'Greek').click();
     expect(body.querySelector<HTMLElement>('.caption-symbols')!.hidden).toBe(false);
     [...body.querySelectorAll<HTMLButtonElement>('.cs-row button')].find((b) => b.textContent === '‡')!.click();

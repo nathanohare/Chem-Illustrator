@@ -138,11 +138,11 @@ export class DashboardUi {
             ...(['average', 'sum', 'count', 'median', 'min', 'max'] as Aggregate[]).map((a) => ({ value: a, label: `${AGGREGATE_NAMES[a]} of each label` })),
           ] },
           ...checks('y:', numeric, (n) => n === numeric.find((m) => m !== res.names[0])),
-        ], { ok: 'Add', note: 'Tick the columns of numbers to chart. Scatter charts always show every row.' });
+        ], { ok: 'Add', note: 'Check the columns of numbers to chart. Scatter charts always show every row.' });
         if (!got) return;
         if (isLevelled(got.kind as ChartKind)) { await this.addLevels(res, base, got.kind as ChartKind); return; }
         const ys = picked(got, 'y:');
-        if (!ys.length) { this.host.flash('Tick at least one column of numbers.'); return; }
+        if (!ys.length) { this.host.flash('Select at least one column of numbers.'); return; }
         const chart = chartOfColumns(res, got.kind as ChartKind, got.x || undefined, ys, newTileId());
         const xc = columnOf(res, got.x);
         const repeats = xc !== null && new Set(res.rows.map((r) => res.sheet.shownText(r, xc))).size < res.rows.length;
@@ -169,7 +169,7 @@ export class DashboardUi {
         return;
       }
       case 'table': {
-        const got = await ask('Add Table', checks('c:', res.names, () => true), { ok: 'Add', note: 'Tick the columns to show. Click a heading on the dashboard to sort by it.' });
+        const got = await ask('Add Table', checks('c:', res.names, () => true), { ok: 'Add', note: 'Check the columns to show. Click a heading on the dashboard to sort by it.' });
         if (!got) return;
         const columns = picked(got, 'c:');
         this.add({ ...base, kind: 'table', source: src, ...(columns.length < res.names.length ? { columns } : {}), title: sourceName(src) });
@@ -188,7 +188,7 @@ export class DashboardUi {
           { name: 'col', label: 'Structures in', value: structCol ?? res.names[0], options: cols },
           { name: 'size', label: 'Card width', value: '140', type: 'number', unit: 'px' },
           ...checks('l:', res.names.filter((n) => n !== structCol), (n) => n === res.names.find((m) => m !== structCol) || n === numeric[0]),
-        ], { ok: 'Add', note: 'Tick what to write under each structure (an ID, a yield…).' });
+        ], { ok: 'Add', note: 'Check what to write under each structure (an ID, a yield…).' });
         if (!got) return;
         this.add({ ...base, kind: 'gallery', source: src, structure: got.col, labels: picked(got, 'l:'), size: num(got.size) ?? 140, title: sourceName(src) });
         return;
@@ -204,9 +204,9 @@ export class DashboardUi {
     const numeric = res.names.filter((_, i) => res.rows.some((r) => typeof res.sheet.value(r, res.range.c1 + i) === 'number'));
     const value = numeric[numeric.length - 1];
     const notes: Partial<Record<ChartKind, string>> = {
-      sankey: 'Tick the columns to flow through, in the order they are in the table: each is a column of nodes, left to right. Click a node or band on the dashboard to filter the other tiles by it.',
-      treemap: 'Tick the columns to break the total down by, in the order they are in the table: the first gives the big boxes, the next the boxes inside them. Click a box to filter the other tiles by it; double-click it to drill into it.',
-      decomp: 'Tick the columns to split the total by, in the order they are in the table: each is a level of the tree. Click a node to split it by the next level (and filter the other tiles by it); click it again to close it up.',
+      sankey: 'Check the columns to flow through, in the order they are in the table: each is a column of nodes, left to right. Click a node or band on the dashboard to filter the other tiles by it.',
+      treemap: 'Check the columns to break the total down by, in the order they are in the table: the first gives the big boxes, the next the boxes inside them. Click a box to filter the other tiles by it; double-click it to drill into it.',
+      decomp: 'Check the columns to split the total by, in the order they are in the table: each is a level of the tree. Click a node to split it by the next level (and filter the other tiles by it); click it again to close it up.',
     };
     const got = await ask(`Add ${CHART_NAMES[kind]}`, [
       { name: 'value', label: 'How much each row carries', value: value ?? '', options: [{ value: '', label: 'Each row counts once' }, ...numeric.map((n) => ({ value: n, label: n }))] },
@@ -214,7 +214,7 @@ export class DashboardUi {
     ], { ok: 'Add', note: notes[kind] });
     if (!got) return;
     const levels = res.names.filter((n) => got['l:' + n] === 'true' && n !== got.value);
-    if (!levels.length) { this.host.flash('Tick at least one column of categories.'); return; }
+    if (!levels.length) { this.host.flash('Select at least one column of categories.'); return; }
     const chart = levelsOfSource(res, levels, got.value || undefined, newTileId(), kind);
     const title = kind === 'decomp' ? `${got.value || 'Rows'} by ${levels.join(', ')}` : levels.join(' → ');
     this.add({ ...base, kind: 'chart', chart, w: Math.min(12, this.dash!.cols), h: kind === 'decomp' ? 7 : 6, title });

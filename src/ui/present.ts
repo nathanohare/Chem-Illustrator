@@ -420,7 +420,7 @@ export class Presenter {
     const lines = rehearsalLines(r.times, r.recordings, this.deck?.slides.length ?? 0);
     const recorded = r.recordings.size > 0;
     const got = await ask(r.rec ? 'Keep Recording?' : 'Keep Timings?', recorded ? [
-      { name: 'narration', label: 'Keep the narration too', type: 'checkbox', value: 'true', help: 'Untick to keep only the times (the slides keep any narration they had)' },
+      { name: 'narration', label: 'Keep the narration too', type: 'checkbox', value: 'true', help: 'Clear to keep only the times (the slides keep any narration they had)' },
     ] : [], {
       ok: 'Keep',
       note: `This run took ${clockText(r.before)}. Keep each slide's time${recorded ? ' and its narration' : ''}, so the show goes on by itself when it is played? Slides not shown keep what they had. (${recorded ? 'Narration goes on each slide as a sound that plays as it comes in. ' : ''}Set Up Show can turn timings off.)`,
@@ -642,7 +642,7 @@ export class Presenter {
   /** Look round the Canvas slide showing freely (L, the show's menu, an action button). */
   private lookRound(quiet = false): void {
     if (this.player?.startLookRound()) this.updateCorner();
-    else if (!quiet) this.flashNote('Looking round works on Canvas slides.');
+    else if (!quiet) this.flashNote('Looking around works on Canvas slides.');
   }
 
   /** A short note over the show, fading after a moment. */

@@ -1521,8 +1521,8 @@ export class DocumentMode {
       const pd = this.file?.t.objects[picked];
       if (pd?.kind === 'drawing') {
         cmd('Edit Drawing', 'edit-figure');
-        if (pd.frame) cmd('Fit Figure to Structure', 'figure-fit', 'Its area just round what is drawn in it (the text round it moves to fit)');
-        else cmd('Make Figure', 'make-figure', 'Give the structure an area of its own on the page: drawing in it never moves the text round it, and text wraps round the area, even an empty one');
+        if (pd.frame) cmd('Fit Figure to Structure', 'figure-fit', 'Its area just around what is drawn in it (the text around it moves to fit)');
+        else cmd('Make Figure', 'make-figure', 'Give the structure an area of its own on the page: drawing in it never moves the text around it, and text wraps around the area, even an empty one');
         if (pd.frame) cmd('Remove Figure', 'remove-figure', 'Back to a plain structure, sized by what is drawn');
         cmd('Make All Structures Figures…', 'make-figures', 'Every structure in the document a figure: see how they would be grouped and change their areas first');
       }
@@ -1537,7 +1537,7 @@ export class DocumentMode {
       if (po?.kind === 'drawing' || po?.kind === 'picture') cmd('Alt Text…', 'alt-text', 'What it shows, for people who can\'t see it (screen readers); kept as its alt text in Word');
       cmd('Insert Caption…', 'insert-caption');
       const look = this.lookOf(picked);
-      item(look?.frame ? 'Remove Frame' : 'Add Frame', () => this.setLook(picked, { frame: look?.frame ? undefined : 0.75, frameColor: undefined }), 'A thin black line round it (Format in the panel sets its width and color)');
+      item(look?.frame ? 'Remove Frame' : 'Add Frame', () => this.setLook(picked, { frame: look?.frame ? undefined : 0.75, frameColor: undefined }), 'A thin black line around it (Format in the panel sets its width and color)');
       item(look?.shadow ? 'Remove Shadow' : 'Add Shadow', () => this.setLook(picked, { shadow: look?.shadow ? undefined : 'soft' }), 'A soft shadow down and to the right');
       menu.appendChild(document.createElement('hr'));
       const nested = this.file ? cellHolding(this.file.t, picked) !== null : false;
@@ -3135,7 +3135,7 @@ export class DocumentMode {
         if (need.x1 >= fr.x - 0.5 && need.y1 >= fr.y - 0.5 && need.x2 <= fr.x + fr.w + 0.5 && need.y2 <= fr.y + fr.h + 0.5) return true;
         const ok = await ask('Grow the Figure?', [], {
           ok: 'Grow Figure',
-          note: 'The structure reaches past the edges of its figure. Grow the figure to fit it (the text round it moves to make room), or Cancel to go back to the drawing. Nothing is cut off.',
+          note: 'The structure reaches past the edges of its figure. Grow the figure to fit it (the text around it moves to make room), or Cancel to go back to the drawing. Nothing is cut off.',
         });
         if (!ok) return false;
         // grown round the picture of it (with its margin)
@@ -3446,7 +3446,7 @@ export class DocumentMode {
     if (!b) return;
     const r = (x: number) => Math.round(x * 100) / 100;
     f.ed.update({ ...f.t, objects: { ...f.t.objects, [id]: { ...o, frame: { x: r(b.x1), y: r(b.y1), w: r(b.x2 - b.x1), h: r(b.y2 - b.y1) } } } } as DocText, 'Make figure');
-    this.host.flash('It is a figure now: drag its corner handle to give it room, and drawing in it won\'t move the text round it.', 6000);
+    this.host.flash('It is a figure now: drag its corner handle to give it room, and drawing in it won\'t move the text around it.', 6000);
   }
 
   /** Fit Figure to Structure (its area just round what is drawn), or Remove Figure (a plain structure again). */
@@ -3564,7 +3564,7 @@ export class DocumentMode {
       case 'undo': this.undo(false); break;
       case 'redo': this.undo(true); break;
       case 'insert-structure': this.drawNew(); break;
-      case 'insert-figure': this.placeNext = {}; this.view.scroller.style.cursor = 'crosshair'; this.host.flash('Drag on the page to draw the figure\'s area (Esc to stop). Text wraps round it; double-click it to draw in it.', 6000); break;
+      case 'insert-figure': this.placeNext = {}; this.view.scroller.style.cursor = 'crosshair'; this.host.flash('Drag on the page to draw the figure\'s area (Esc to stop). Text wraps around it; double-click it to draw in it.', 6000); break;
       case 'make-figures': this.figureOffer.start(f); break;
       case 'make-figure': { const id = this.pickedObject(); if (id !== null) this.makeFigure(id); break; }
       case 'figure-fit': { const id = this.pickedObject(); if (id !== null) this.fitFigure(id, false); break; }
@@ -3577,7 +3577,7 @@ export class DocumentMode {
       case 'insert-text-box': this.insertTextBox(); break;
       case 'wrap-inline': case 'wrap-square': case 'wrap-topBottom': case 'wrap-behind': case 'wrap-front': {
         const id = this.pickedObject() ?? f.box?.id ?? null;
-        if (id === null) { this.host.flash('Click a structure, picture or text box first, then choose how text wraps round it.'); break; }
+        if (id === null) { this.host.flash('Click a structure, picture or text box first, then choose how text wraps around it.'); break; }
         this.setWrap(id, cmd.slice(5) as WrapKind | 'inline');
         break;
       }
@@ -4858,7 +4858,7 @@ export class DocumentMode {
     const f = this.file!;
     const b: PageBorder = f.t.pageBorder ?? defaultPageBorder();
     const got = await ask('Page Borders', [
-      { name: 'on', label: 'A border round every page', value: String(!!f.t.pageBorder), type: 'checkbox' },
+      { name: 'on', label: 'A border around every page', value: String(!!f.t.pageBorder), type: 'checkbox' },
       { name: 'style', label: 'Style', value: b.style, options: [{ value: 'single', label: 'Single line' }, { value: 'double', label: 'Double line' }, { value: 'thick', label: 'Thick and thin' }, { value: 'dotted', label: 'Dotted' }, { value: 'dashed', label: 'Dashed' }] },
       { name: 'width', label: 'Width', value: String(b.width), unit: 'pt', options: ['0.25', '0.5', '0.75', '1', '1.5', '2.25', '3', '4.5', '6'].map((x) => ({ value: x, label: `${x} pt` })) },
       { name: 'color', label: 'Color', value: b.color, type: 'color' },
@@ -4955,7 +4955,7 @@ export class DocumentMode {
     const got = await ask('New Style', [
       { name: 'name', label: 'Name', value: '' , placeholder: 'Experimental heading' },
       { name: 'kind', label: 'Style type', value: ed.collapsed ? 'para' : 'char', options: [{ value: 'para', label: 'Paragraph (the whole paragraph’s look and spacing)' }, { value: 'char', label: 'Character (the look of the words picked)' }] },
-    ], { ok: 'Make Style', note: 'The new style takes the look of the text the caret is in, and is given to it. Change it later with Modify; every paragraph or word in it follows.' });
+    ], { ok: 'Create Style', note: 'The new style takes the look of the text the caret is in, and is given to it. Change it later with Modify; every paragraph or word in it follows.' });
     this.focus();
     if (!got || this.file !== f || !got.name.trim()) return;
     const look = ed.currentStyle();

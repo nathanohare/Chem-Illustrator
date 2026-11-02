@@ -320,7 +320,7 @@ export class SheetCharts {
     if (!yr) return;
     const at = { r: yr.range.r2 + 2, c: xr && xr.sheet === yr.sheet ? xr.range.c1 : yr.range.c1 };
     const got = await ask('Fitted Line in Cells', [{ name: 'at', label: 'Put it from cell', value: `${colName(at.c)}${at.r + 1}` }], {
-      ok: 'Put in cells',
+      ok: 'Insert into Cells',
       note: 'Writes Slope, Intercept and R² with formulas (SLOPE, INTERCEPT, RSQ) that follow the data, plus their standard errors (LINEST) as Excel does.',
     });
     const ref = got ? parseCellRef(got.at.trim()) : null;
@@ -439,7 +439,7 @@ export class SheetCharts {
     if (c.kind === 'treemap' || c.kind === 'decomp') {
       const tree = c.kind === 'decomp';
       out.push(row(tree ? 'Expanded' : 'Drilled into', note(c.path?.length ? c.path.join(' › ') : tree ? 'The first level only' : 'The whole', 'cp-value'),
-        c.path?.length ? button(tree ? 'Close up' : 'Back to the whole', () => this.patch((x) => clean({ ...x, path: undefined }), tree ? 'Close up tree' : 'Drill up')) : null));
+        c.path?.length ? button(tree ? 'Collapse' : 'Drill Up', () => this.patch((x) => clean({ ...x, path: undefined }), tree ? 'Collapse tree' : 'Drill up')) : null));
       out.push(note(tree ? 'Click a node of the chart to split it by the next level; click it again to close it up.' : 'Click a box of the chart to drill into it, and the trail over it to go back up.'));
     }
 
@@ -535,7 +535,7 @@ export class SheetCharts {
           const btns = document.createElement('div');
           btns.className = 'cp-buttons';
           btns.append(button('Copy equation', () => void navigator.clipboard?.writeText([fitEquation(fit, 6), ...fitResults(fit, 6), r2Text(fit, 5)].join('\n')).then(() => this.host.flash('Copied the equation.'), () => this.host.flash('This browser would not copy.'))));
-          if (fit.kind === 'linear' && f.intercept === undefined && s.x && c.kind === 'scatter' && !this.target) btns.append(button('Put in cells…', () => void this.fitToCells(i)));
+          if (fit.kind === 'linear' && f.intercept === undefined && s.x && c.kind === 'scatter' && !this.target) btns.append(button('Insert into Cells…', () => void this.fitToCells(i)));
           box.append(btns);
           out.push(box);
         } else out.push(note(isChemFit(f.kind)
@@ -557,7 +557,7 @@ const HINTS: Partial<Record<ChartKind, string>> = {
   histogram: 'A histogram counts the numbers of one column in bins of equal width; set the width or number of bins in the panel.',
   box: 'One box for each label in the first column (or one per column of numbers): the line is the median, the cross the mean.',
   bubble: 'Columns go x, y, then the bubble sizes (a bubble\'s area goes with its number).',
-  radar: 'One spoke for each row label; each column of numbers is a shape round them.',
+  radar: 'One spoke for each row label; each column of numbers is a shape around them.',
 };
 
 const seriesLabel = (c: Chart, i: number) => c.series[i].name && !c.series[i].name!.startsWith('=') ? c.series[i].name! : `Series ${i + 1}`;

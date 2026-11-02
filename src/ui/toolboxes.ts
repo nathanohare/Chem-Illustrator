@@ -688,7 +688,7 @@ export class Toolboxes {
       ...DOCKS.map((d) => ({ cmd: `tbx:${d}`, label: DOCK_LABEL[d] })), null,
       { cmd: 'tbx:lock', label: boxLocked(st, def.id) ? `Unlock ${def.title}` : `Lock ${def.title}` },
       { cmd: 'tbx:lock-all', label: st.locked ? 'Unlock All Toolboxes' : 'Lock All Toolboxes' },
-      { cmd: 'tbx:fold', label: (this.hooks.folded?.(def.id) ?? st.places[def.id]?.collapsed) ? 'Open Out' : 'Fold Up' },
+      { cmd: 'tbx:fold', label: (this.hooks.folded?.(def.id) ?? st.places[def.id]?.collapsed) ? 'Expand' : 'Collapse' },
       { cmd: 'tbx:customize', label: isEditable(def.id) ? 'Customize This Toolbox…' : 'Customize Toolboxes…' },
       ...(def.id === 'details' ? [] : [{ cmd: 'tbx:hide', label: `Hide ${def.title}` }]),
     ];
