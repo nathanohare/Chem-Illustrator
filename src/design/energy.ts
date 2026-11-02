@@ -98,11 +98,68 @@ export interface EnergyData {
   place?: 'above' | 'auto' | 'below';
   /** Brackets between any two species, chosen by hand. */
   brackets?: EnergyBracket[];
+  /**
+   * Where each species sits along the reaction coordinate (one per row, any units: only their
+   * spacing counts); null or missing ones are spaced evenly between their neighbors. Not set:
+   * evenly spaced.
+   */
+  xs?: (number | null)[];
+  /** How it looks, beyond its size and pathway colors; what isn't set follows the drawing style. */
+  look?: EnergyLook;
   /** The plot's size in points. */
   w: number;
   h: number;
   /** How far the plot sits inside its frame on each side, as last drawn (so it is drawn again in the same place). */
   margins?: { l: number; t: number; r: number; b: number };
+}
+
+/** An energy diagram's own look (the Format part of its window). Sizes and widths in points. */
+export interface EnergyLook {
+  font?: string;
+  /** Species names under (or over) their levels, and the key. */
+  labelSize?: number;
+  /** The energies, brackets and overall changes. */
+  valueSize?: number;
+  /** The axis titles. */
+  axisSize?: number;
+  /** The levels (bold lines by default). */
+  levelWidth?: number;
+  /** The lines and curves joining them. */
+  joinWidth?: number;
+  axisWidth?: number;
+  axisColor?: string;
+  /** Titles in place of the usual ones ("ΔG (kcal mol−1)" up the side, "Reaction coordinate" along the bottom). */
+  yTitle?: string;
+  xTitle?: string;
+  /** A fill behind the whole diagram, and a border round it. */
+  background?: string;
+  border?: string;
+  borderWidth?: number;
+}
+
+/** Where each of `n` columns sits across a plot `w` wide, from its xs (evenly spaced where not given). */
+export function columnXs(n: number, w: number, xs?: (number | null)[]): number[] {
+  const given = Array.from({ length: n }, (_, k) => {
+    const v = xs?.[k];
+    return typeof v === 'number' && isFinite(v) ? v : null;
+  });
+  const colW = w / Math.max(1, n);
+  if (given.filter((v) => v !== null).length < 2) return given.map((_, k) => (k + 0.5) * colW);
+  // fill the gaps: evenly between the given ones on either side, or stepping on from the nearest at the ends
+  const pos = [...given];
+  const known = pos.map((v, k) => (v !== null ? k : -1)).filter((k) => k >= 0);
+  const step = (pos[known[known.length - 1]]! - pos[known[0]]!) / Math.max(1, known[known.length - 1] - known[0]);
+  for (let k = 0; k < n; k++) {
+    if (pos[k] !== null) continue;
+    const a = known.filter((i) => i < k).pop(), b = known.find((i) => i > k);
+    if (a !== undefined && b !== undefined) pos[k] = pos[a]! + ((pos[b]! - pos[a]!) * (k - a)) / (b - a);
+    else if (a !== undefined) pos[k] = pos[a]! + step * (k - a);
+    else pos[k] = pos[b!]! - step * (b! - k);
+  }
+  const lo = Math.min(...(pos as number[])), hi = Math.max(...(pos as number[]));
+  if (hi - lo < 1e-9) return pos.map((_, k) => (k + 0.5) * colW);
+  // the ends sit half a column in, as when evenly spaced
+  return (pos as number[]).map((v) => colW / 2 + ((v - lo) / (hi - lo)) * (w - colW));
 }
 
 /** The colours pathways take in turn. */
@@ -123,10 +180,10 @@ export const ENERGY_PRESETS: EnergyPreset[] = [
     data: { quantity: 'ΔG', unit: 'kcal/mol', paths: [{ name: '', color: '#000000', points: pts([['SM', 0], ['TS1‡', 24], ['Int', 12], ['TS2‡', 16], ['P', -6]]) }] },
   },
   {
-    id: 'catalysed', name: 'Catalyzed vs uncatalysed', blurb: 'The same overall change by two routes: one high barrier, or two lower ones.',
+    id: 'catalysed', name: 'Catalyzed vs uncatalyzed', blurb: 'The same overall change by two routes: one high barrier, or two lower ones.',
     data: {
       quantity: 'ΔG', unit: 'kcal/mol', paths: [
-        { name: 'uncatalysed', color: '#c00000', points: pts([['SM', 0], ['', null], ['TS‡', 32], ['', null], ['P', -10]]) },
+        { name: 'uncatalyzed', color: '#c00000', points: pts([['SM', 0], ['', null], ['TS‡', 32], ['', null], ['P', -10]]) },
         { name: 'catalysed', color: '#000000', points: pts([['SM', 0], ['TS1‡', 17], ['Int', 4], ['TS2‡', 14], ['P', -10]]) },
       ],
     },
@@ -157,12 +214,20 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
   const all = d.paths.flatMap((p) => p.points.map((q) => q.g).filter((g): g is number => g !== null && isFinite(g)));
   if (!all.length) return out;
   const hi = Math.max(...all), lo = Math.min(...all);
-  const colW = d.w / n, bar = Math.min(colW * 0.55, 4 * L);
+  const look = d.look ?? {};
+  const cols = columnXs(n, d.w, d.xs);
+  // levels are as wide as the closest pair of columns allows
+  const closest = cols.slice(1).reduce((mn, c, k) => Math.min(mn, Math.abs(c - cols[k])), d.w / n);
+  const bar = Math.min(closest * 0.55, 4 * L);
   const y = (g: number) => (hi === lo ? at.y + d.h / 2 : at.y + ((hi - g) / (hi - lo)) * d.h);
-  const x = (k: number) => at.x + (k + 0.5) * colW;
+  const x = (k: number) => at.x + (cols[k] ?? (k + 0.5) * (d.w / n));
+  const sizeOf = { label: look.labelSize, value: look.valueSize, axis: look.axisSize } as const;
 
-  const caption = (text: string, target: Vec, anchor: 'above' | 'below' | 'left' | 'right' | 'centre', color?: string, extra: Partial<Caption> = {}): Caption => {
-    const runs = chemRuns(text).map((r) => (color && color !== '#000000' ? { ...r, color } : r));
+  const caption = (text: string, target: Vec, anchor: 'above' | 'below' | 'left' | 'right' | 'centre', color?: string, extra: Partial<Caption> = {}, role: 'label' | 'value' | 'axis' = 'value'): Caption => {
+    const size = sizeOf[role];
+    const runs = chemRuns(text).map((r) => ({
+      ...r, ...(color && color !== '#000000' ? { color } : {}), ...(look.font ? { font: look.font } : {}), ...(size ? { size } : {}),
+    }));
     const c = doc.addCaption({ x: 0, y: 0, runs, justify: 'left', ...extra });
     const b = m.captionBox(c);
     const w = b.x2 - b.x1, h = b.y2 - b.y1;
@@ -189,6 +254,7 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
     }).id);
 
   const gap = 0.25 * L;
+  const joinW = look.joinWidth ? { lineWidth: look.joinWidth } : {};
   const fmt = (g: number) => (g < 0 ? '−' : '') + Math.abs(g).toFixed(d.digits);
   // the column's name goes under the lowest level drawn in it, so pathways share it
   const labelled = new Set<string>();
@@ -202,7 +268,7 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
       if (d.paths.slice(0, pi).some((o) => o.points[k]?.g === q.g)) return;
       const both = d.paths.slice(pi + 1).some((o) => o.points[k]?.g === q.g);
       const own = both ? '#000000' : color;
-      if (d.style === 'levels') line(x(k) - bar / 2, yy, x(k) + bar / 2, yy, { bold: true, ...(own !== '#000000' ? { color: own } : {}) });
+      if (d.style === 'levels') line(x(k) - bar / 2, yy, x(k) + bar / 2, yy, { bold: true, ...(look.levelWidth ? { lineWidth: look.levelWidth } : {}), ...(own !== '#000000' ? { color: own } : {}) });
       // on a curve, a peak's name goes over it (the curve falls away beneath)
       const prev = shown[i - 1]?.q.g ?? -Infinity, next = shown[i + 1]?.q.g ?? -Infinity;
       const peak = d.style === 'curve' && q.g! > prev && q.g! > next;
@@ -215,8 +281,8 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
       if (q.label && !labelled.has(key)) {
         labelled.add(key);
         const ink2 = pi && d.paths.length > 1 && !both ? color : undefined;
-        if (peak) caption(q.label, { x: x(k), y: top }, 'above', ink2);
-        else caption(q.label, { x: x(k), y: bottom }, 'below', ink2);
+        if (peak) caption(q.label, { x: x(k), y: top }, 'above', ink2, {}, 'label');
+        else caption(q.label, { x: x(k), y: bottom }, 'below', ink2, {}, 'label');
       }
     });
     // joined: dashed between the ends of the levels, or a smooth S from middle to middle (or
@@ -226,7 +292,7 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
       const a = shown[i], b = shown[i + 1];
       const ya = y(a.q.g!), yb = y(b.q.g!);
       if (d.style === 'levels') {
-        line(x(a.k) + bar / 2, ya, x(b.k) - bar / 2, yb, { ...dashLook(dash), ...tint });
+        line(x(a.k) + bar / 2, ya, x(b.k) - bar / 2, yb, { ...dashLook(dash), ...tint, ...joinW });
         continue;
       }
       const p0 = { x: x(a.k), y: ya }, p1 = { x: x(b.k), y: yb };
@@ -239,7 +305,7 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
         }
         continue;
       }
-      for (const piece of sCurve(p0, p1)) arrow(piece.tail, piece.head, { sweep: piece.sweep, ...(dash === 'dashed' ? { line: 'dashed' as const } : {}), ...tint });
+      for (const piece of sCurve(p0, p1)) arrow(piece.tail, piece.head, { sweep: piece.sweep, ...(dash === 'dashed' ? { line: 'dashed' as const } : {}), ...tint, ...joinW });
     }
   });
 
@@ -265,13 +331,14 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
 
   if (d.axis) {
     const ax = at.x - 0.6 * L, top = at.y - 1.6 * L, bottom = at.y + d.h + 2.4 * L;
-    arrow({ x: ax, y: bottom }, { x: ax, y: top }, { headStyle: 'full' });
-    caption(`${d.quantity} (${d.unit.replace('/mol', ' mol^{−1}')})`, { x: ax - gap, y: (top + bottom) / 2 }, 'left', undefined);
+    const axisLook = { ...(look.axisWidth ? { lineWidth: look.axisWidth } : {}), ...(look.axisColor && look.axisColor !== '#000000' ? { color: look.axisColor } : {}) };
+    arrow({ x: ax, y: bottom }, { x: ax, y: top }, { headStyle: 'full', ...axisLook });
+    caption(look.yTitle?.trim() || `${d.quantity} (${d.unit.replace('/mol', ' mol^{−1}')})`, { x: ax - gap, y: (top + bottom) / 2 }, 'left', undefined, {}, 'axis');
     // the axis title reads up the page
     const t = doc.captions.get(out.captions[out.captions.length - 1])!;
     turnUp(doc, m, t, { x: ax - gap, y: (top + bottom) / 2 });
-    caption('Reaction coordinate', { x: at.x + d.w / 2, y: bottom + gap }, 'below');
-    line(ax, bottom, at.x + d.w, bottom);
+    caption(look.xTitle?.trim() || 'Reaction coordinate', { x: at.x + d.w / 2, y: bottom + gap }, 'below', undefined, {}, 'axis');
+    line(ax, bottom, at.x + d.w, bottom, axisLook);
   }
 
   // what is drawn so far, to keep a bracket's label clear of
@@ -330,7 +397,7 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
     let ky = at.y - 1.2 * L;
     for (const p of d.paths) {
       const x2 = at.x + d.w, x1 = x2 - 1.6 * L;
-      const k = caption(p.name || 'pathway', { x: x1 - gap, y: ky }, 'left', p.color);
+      const k = caption(p.name || 'pathway', { x: x1 - gap, y: ky }, 'left', p.color, {}, 'label');
       // the key shows a pathway's line style where the pathways differ in it, else its level
       const styled = d.paths.some((o) => joinDash(d, o) !== joinDash(d, p));
       line(x1, ky, x2, ky, { ...(styled ? dashLook(joinDash(d, p)) : { bold: d.style === 'levels' }), ...(p.color !== '#000000' ? { color: p.color } : {}) });
@@ -342,7 +409,7 @@ export function drawEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec): Energy
   if (d.structures || drawnAny) {
     // each species' structure (drawn here, else its file's geometry) above its level (or as
     // `place` says), moved on until it is clear of the text, lines and other structures
-    const box = Math.min(colW * 0.92, 5 * L), h = box * 0.8;
+    const box = Math.min(closest * 0.92, 5 * L), h = box * 0.8;
     const place = d.place ?? 'above';
     const taken: Rect[] = out.captions.map((id) => m.captionBox(doc.captions.get(id)!));
     const clear = (r: Rect) => !taken.some((o) => o.x1 < r.x2 && r.x1 < o.x2 && o.y1 < r.y2 && r.y1 < o.y2)
@@ -502,8 +569,11 @@ export function putEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec, id?: num
   const b = frameBox(doc, frame, m) ?? { x1: at.x, y1: at.y, x2: at.x + d.w, y2: at.y + d.h };
   const r = (v: number) => Math.round(v * 100) / 100;
   const energy: EnergyData = { ...d, margins: { l: r(at.x - b.x1), t: r(at.y - b.y1), r: r(b.x2 - at.x - d.w), b: r(b.y2 - at.y - d.h) } };
-  if (old) { doc.updateShape(old.id, { ...b, frame, energy }); return old.id; }
-  return doc.addShape({ kind: 'geo', geo: 'rect', ...b, filled: false, lineWidth: 0, color: '#000000', frame, energy, name: 'Energy diagram' }).id;
+  // its background and border, as the window asks
+  const lk = d.look ?? {};
+  const back = { filled: !!lk.background, ...(lk.background ? { fillColor: lk.background } : {}), lineWidth: lk.border ? lk.borderWidth ?? doc.style.lineWidth : 0, color: lk.border ?? '#000000' };
+  if (old) { doc.updateShape(old.id, { ...b, frame, energy, ...back }); return old.id; }
+  return doc.addShape({ kind: 'geo', geo: 'rect', ...b, ...back, frame, energy, name: 'Energy diagram' }).id;
 }
 
 /** The energy diagram a thing belongs to (its frame's id), if any. */

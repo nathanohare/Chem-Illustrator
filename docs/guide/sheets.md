@@ -38,7 +38,7 @@ When the pointer turns into a pointing hand over a cell, that cell holds a struc
 
 ### Property columns
 
-Click in your table and choose **Home** tab ▸ **Properties** (or **Insert ▸ Spreadsheet ▸ Insert Property Columns…**). Tick the columns you want:
+Click in your table and choose **Home** tab ▸ **Properties** (or **Insert ▸ Spreadsheet ▸ Insert Property Columns…**). Check the columns you want:
 
 Formula, MW, Exact mass, HRMS m/z, cLogP, TPSA, H-bond donors, H-bond acceptors, Rotatable bonds, SMILES, InChIKey and **Duplicate of**.
 
@@ -115,7 +115,7 @@ You can combine them as usual: `=1000*D2/MW(B2)` turns mg into mmol.
 - The **font box** takes any installed font; cells with no font of their own use the theme's body font. **Orientation** (ab↗) turns text up, down or to 45°, or stacks its letters, which suits narrow column headings. **⇤** and **⇥** indent text from the cell's edge.
 - **Cell Styles** puts one of Excel's named styles on the selected cells: Good, Bad and Neutral; Input, Output, Calculation, Note and the rest; Title, Heading 1 to 4 and Total; the Accent colors; and the Comma, Currency and Percent number styles. Excel shows them under the same names.
 - **Page Layout** tab ▸ **Themes** sets the workbook's colors and fonts together, with **Colors** and **Fonts** to change one part only. The color menus offer the theme's colors, and cells styled with Heading, Title, Total or Accent styles take the new theme's colors. The themes are Office (Excel's default) and a few of our own, including a colour-blind safe one.
-- **C₉H₈** sets formulas with proper subscripts. In a new workbook, formulas typed into text cells (Pd(PPh3)4, CH2Cl2) show this way on their own; click **C₉H₈** on such a cell to show it as typed. Labels like Q1 or B2 stay as typed. Text in a file from Excel or another program (.xlsx, .xls, .ods, .csv) shows exactly as it was written there; right-click a cell and choose **Formula Style ▸ Spot Formulas in Typed Text** to turn the automatic subscripts on or off for the workbook.
+- **C₉H₈** sets formulas with proper subscripts. In a new workbook, formulas typed into text cells (Pd(PPh3)4, CH2Cl2) show this way on their own; click **C₉H₈** on such a cell to show it as typed. Labels like Q1 or B2 stay as typed. Text in a file from Excel or another program (.xlsx, .xls, .ods, .csv) shows exactly as it was written there; right-click a cell and choose **Formula Style ▸ AutoFormat Chemical Formulas** to turn the automatic subscripts on or off for the workbook.
 - **Units:** the number format list has a **Units** group for reaction conditions: temperature (°C), catalyst loading (mol%), equivalents, concentration (M), density (g/mL), amount (mmol), mass (mg), volume (mL and µL), time (h and min), pressure (atm) and % ee. The cell keeps the plain number, so it still sorts and works in formulas. Typing "-78 °C" or "5 mol%" into a cell sets the unit for you.
 
 ### Conditional formatting
@@ -204,8 +204,8 @@ The **Data** tab has Excel's analysis tools. Their windows float at the right of
 
 Click in a table of records with a header row (one row per run: catalyst, solvent, temperature, yield…) and choose **Insert** tab ▸ **PivotTable**. Pick the records and where the report goes (a new sheet, or a cell on this one). The **PivotTable Fields** window then builds it:
 
-- Tick a field to add it: numbers go to **Values** (summed), anything else to **Rows**. Or drag fields into **Filters**, **Columns**, **Rows** and **Values**, and between them.
-- Click a field in an area for its menu: move it, **Filter Items…** (untick items to leave out), **Sort A to Z** or **Z to A**, **Value Field Settings…** (Sum, Count, Average, Max, Min, Product, StdDev, Var…; show as % of the grand total, of the row or of the column; its name and number format), or **Remove Field**.
+- Check a field to add it: numbers go to **Values** (summed), anything else to **Rows**. Or drag fields into **Filters**, **Columns**, **Rows** and **Values**, and between them.
+- Click a field in an area for its menu: move it, **Filter Items…** (clear items to leave out), **Sort A to Z** or **Z to A**, **Value Field Settings…** (Sum, Count, Average, Max, Min, Product, StdDev, Var…; show as % of the grand total, of the row or of the column; its name and number format), or **Remove Field**.
 - **Layout**: Compact, Outline or Tabular form; subtotals; grand totals for rows and columns; Σ Values down the rows; text for empty cells; the PivotTable's name.
 
 Click in a report to show the **PivotTable** tab: **Field List**, **Refresh** (after the records change), **Refresh All**, **Change Data Source…**, **Report Layout**, **Subtotals**, **Grand Totals**, **PivotChart**, **Show Details** (the records behind the number in the active cell, on a new sheet), **Select** and **Clear**. The right-click menu on a report has the same, with **Summarize Values By** and **Show Values As**.
@@ -244,7 +244,7 @@ The Insert tab also has **Combo**, **Histogram**, **Box**, **Bubble** and **Rada
 - **Histogram** counts the numbers of one column in bins of equal width. Set **Bin width** or the number of bins in the panel, plus an **Overflow** and **Underflow** bin if you want the tails lumped together. Left on automatic, the width follows Scott's rule, as Excel's does.
 - **Box** (box and whisker) shows the median, quartiles and spread of repeat runs. Put a label in the first column (the catalyst, say) and each different label gets its own box. Whiskers reach the furthest points within 1.5 × the box's height, and points beyond that are drawn as outliers. In the panel you can show or hide the mean (×), a line joining the means, the outliers and all the other points, and choose exclusive or inclusive quartiles (QUARTILE.EXC, Excel's default, or QUARTILE.INC).
 - **Bubble** takes x, y and then a column of bubble sizes. Each bubble's area goes with its number.
-- **Radar** draws one spoke for each row label and one shape for each column of numbers. Tick **Filled** in the panel for filled shapes.
+- **Radar** draws one spoke for each row label and one shape for each column of numbers. Check **Filled** in the panel for filled shapes.
 
 All five are saved as Excel's own chart types. Histograms and box charts use the newer chart format of Excel 2016 and later, so older versions of Excel show a note in their place.
 

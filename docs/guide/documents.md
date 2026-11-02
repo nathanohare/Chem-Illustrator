@@ -35,7 +35,7 @@ When the pointer turns into a pointing hand over a structure, it is a drawing yo
 - Indents and space before and after: **Layout** tab ▸ **Paragraph** group. Lengths are in inches; type `cm`, `mm` or `pt` after a number to use those instead.
 - **Bullets** and **Numbering** on the **Home** tab make lists. Tab and Shift+Tab change the level.
 - The small ⬊ in the corner of a ribbon group opens all of that group's settings. Its pin button docks the box in the right-hand panel so it stays open while you work.
-- **Borders** (the ▦ ▾ button on the **Home** tab) puts lines above, below, beside or round the selected paragraphs, as Word's Borders menu. Choosing a side again takes it off. **Borders and Shading…** sets the kind of line, its width and color, and a shading color; the shading button beside it shades paragraphs quickly. Paragraphs one after another with the same borders share one box.
+- **Borders** (the ▦ ▾ button on the **Home** tab) puts lines above, below, beside or around the selected paragraphs, as Word's Borders menu. Choosing a side again takes it off. **Borders and Shading…** sets the kind of line, its width and color, and a shading color; the shading button beside it shades paragraphs quickly. Paragraphs one after another with the same borders share one box.
 - **Sort** (A↓Z) puts the selected paragraphs in order (as text, numbers or dates, by the whole paragraph or by a field cut at tabs or commas), or, with the caret in a table, the table's rows by a column. A heading row stays at the top; rows with cells merged down can't be sorted.
 
 ## Styles
@@ -65,9 +65,9 @@ Formatting you set by hand stays as it is. The theme and style set are saved in 
 - **Insert** tab ▸ **From Name** draws a structure from a name or SMILES.
 - Paste a structure copied from a canvas tab, or from ChemDraw (Windows app).
 - **Insert** tab ▸ **Picture** adds a picture from a file; you can also paste or drop one.
-- **Insert** tab ▸ **Figure**: drag on the page to mark out an area for structures (a click gives one 3 × 2 in). Text wraps round it, even while it is empty, and it opens at once for drawing. A figure keeps its size whatever you draw in it, so changing a structure never moves the text round it. If what you draw reaches past its edges, **Done** asks to grow the figure (or go back to drawing); nothing is cut off. A figure has no border or background on paper or in files; on screen an empty one has a faint dashed outline, and any figure shows light gray when the pointer is over it. Drag its corner handle to change its area. Right-click a structure for **Make Figure** (an area just round it), and a figure for **Fit Figure to Structure** or **Remove Figure**.
+- **Insert** tab ▸ **Figure**: drag on the page to mark out an area for structures (a click gives one 3 × 2 in). Text wraps around it, even while it is empty, and it opens at once for drawing. A figure keeps its size whatever you draw in it, so changing a structure never moves the text around it. If what you draw reaches past its edges, **Done** asks to grow the figure (or go back to drawing); nothing is cut off. A figure has no border or background on paper or in files; on screen an empty one has a faint dashed outline, and any figure shows light gray when the pointer is over it. Drag its corner handle to change its area. Right-click a structure for **Make Figure** (an area just around it), and a figure for **Fit Figure to Structure** or **Remove Figure**.
 - When you open a document whose structures aren't figures, a bar over the pages offers to make them figures. **Preview Figures…** shows how they would be grouped (structures side by side in one line become one figure) with each figure's area drawn on the page: drag its edges or corners to change it, click its label to leave it out, then **Make Figures** (one step to undo). Right-click a structure ▸ **Make All Structures Figures…** does the same later.
-- **Insert** tab ▸ **Shapes**: pick a shape (basic shapes, block arrows, flowchart shapes, callouts, lab glassware), then drag on the page to draw it, or click for one of its usual size. It works as on a slide: click it to pick it and drag it to move it, drag its corner handle to change its width and height, and type (or double-click it) to write in it; its text sits in its middle. Text wraps round it (see the wrapping settings below), and the panel sets its fill and outline. In Word it is Word's own shape. **Icons** are still put in the text at the caret, as drawings.
+- **Insert** tab ▸ **Shapes**: pick a shape (basic shapes, block arrows, flowchart shapes, callouts, lab glassware), then drag on the page to draw it, or click for one of its usual size. It works as on a slide: click it to pick it and drag it to move it, drag its corner handle to change its width and height, and type (or double-click it) to write in it; its text sits in its middle. Text wraps around it (see the wrapping settings below), and the panel sets its fill and outline. In Word it is Word's own shape. **Icons** are still put in the text at the caret, as drawings.
 - **Insert** tab ▸ **Diagram** puts a SmartArt-style diagram (lists, processes, cycles, hierarchies and more) in the text at the caret, drawn from lines of text. Double-click it to change its text or look. Word gets it as a group of shapes. See [Design: Diagrams](design.md#diagrams).
 - **Insert** tab ▸ **Icons** puts an icon in the text the same way: about 7,000, lab and science ones (glassware, molecules, hazard and safety signs) first. See [Design: Icons](design.md#icons).
 
@@ -88,7 +88,7 @@ Pick a structure, picture or text box, then use **Layout** tab ▸ **Wrap Text**
 
 A floating item can be dragged anywhere and moves with the paragraph it is dropped beside. One in line with the text is dragged to another place in the text, as in Word: the caret shows where it will land (Ctrl+Z puts it back).
 
-**Insert** tab ▸ **Text Box** (also on the **Layout** tab) puts a box at the left margin with the text wrapping round it. Type in it, then press Esc to pick the box. Drag its edge to move it and its corner to make it wider. Fill color, frame and wrapping are in the panel.
+**Insert** tab ▸ **Text Box** (also on the **Layout** tab) puts a box at the left margin with the text wrapping around it. Type in it, then press Esc to pick the box. Drag its edge to move it and its corner to make it wider. Fill color, frame and wrapping are in the panel.
 
 ### Position, order, rotate and group
 
@@ -146,7 +146,7 @@ For a substrate-scope or screening table, put the caret in a cell and use **Inse
 
 ## Objects from other programs
 
-**Insert** ▸ **Object** puts another program's file in the document whole, as Word's Insert Object does: an Excel workbook, a PDF, a Word file or a presentation, or any other file. It shows what it holds where it can (a workbook's cells as Excel shows them, a PDF's first page, a picture), or an icon with the file's name: tick **Display as icon** for that. Right-click it to switch between the two.
+**Insert** ▸ **Object** puts another program's file in the document whole, as Word's Insert Object does: an Excel workbook, a PDF, a Word file or a presentation, or any other file. It shows what it holds where it can (a workbook's cells as Excel shows them, a PDF's first page, a picture), or an icon with the file's name: check **Display as icon** for that. Right-click it to switch between the two.
 
 Double-click the object (or right-click ▸ **Open Object**) to open the file in its own program. Each time you save it there, the document takes the changes and a new picture of them, so a table of results can be kept up to date in Excel. This needs the desktop app; in a browser the file is downloaded instead.
 
@@ -158,7 +158,7 @@ Objects are saved in Word files as Word's own embedded objects, so double-clicki
 
 Structures drawn with Chem4Word (the free Chemistry Add-in for Word) open here as structures you can change, at the size they had in Word. Saving keeps them linked to Chem4Word, so it can still edit them in Word: an unchanged structure keeps Chem4Word's own data exactly, and one changed here is written back for Chem4Word in its new form.
 
-Other programs' data in Word, PowerPoint and Excel files is kept as it was and saved back with the file, even though it isn't shown here: content controls round text and paragraphs (a template's fields, a form's boxes), custom XML data, custom document properties (**File ▸ Properties ▸ Custom** in Office), Word's document variables, and the settings Office add-ins store in the document.
+Other programs' data in Word, PowerPoint and Excel files is kept as it was and saved back with the file, even though it isn't shown here: content controls around text and paragraphs (a template's fields, a form's boxes), custom XML data, custom document properties (**File ▸ Properties ▸ Custom** in Office), Word's document variables, and the settings Office add-ins store in the document.
 
 ## Captions and cross-references
 
@@ -196,7 +196,7 @@ Pick the **Citation style** in **Manage References…**. Every citation and the 
 | Beilstein | Beilstein J. Org. Chem. |
 | MDPI | Molecules, Catalysts |
 
-**Style Options…** opens every detail of the style, with a preview: how citation numbers look, whether 1,2,3 becomes 1–3, how the list is numbered, how author names are written and when "et al." is used, the journal title, year, volume, pages and DOI. A changed detail is marked with a dot, and **Reset to …** puts the style's own details back. Tick **Use for new documents** to start every new document with your choice.
+**Style Options…** opens every detail of the style, with a preview: how citation numbers look, whether 1,2,3 becomes 1–3, how the list is numbered, how author names are written and when "et al." is used, the journal title, year, volume, pages and DOI. A changed detail is marked with a dot, and **Reset to …** puts the style's own details back. Check **Use for new documents** to start every new document with your choice.
 
 Journal requirements change, so check the result against a recent issue of your target journal.
 
@@ -222,7 +222,7 @@ In the desktop app, the **Zotero** group on the **References** tab works with th
 
 The first time you use Zotero in a document, Zotero asks for the citation style. Each command undoes in one step. If you change a citation here (with **Insert Citation** or **Manage References…**), it is numbered in the document's own style until the next **Refresh**.
 
-Saving as a Word file writes the citations (in the text or in footnotes) and the bibliography as Zotero's Word fields, with its preferences. So you can carry on with Zotero's Word plugin in Word, and a Word file with Zotero citations carries on here.
+Saving as a Word file writes the citations (in the text or in footnotes) and the bibliography as Zotero's Word fields, with its preferences. So you can continue with Zotero's Word plugin in Word, and a Word file with Zotero citations continues here.
 
 The browser version can't reach the Zotero app, so these buttons work only in the desktop app. If Zotero isn't running, or is busy with a citation in another document, a message says so.
 
@@ -256,7 +256,7 @@ A section break starts a new section, which can have its own paper size, orienta
 - **Continuous**: the new section starts on the same page. Use it for a title and abstract across the page with two columns of text under them. Columns before a continuous break are evened up, as in Word.
 - **Even Page** and **Odd Page**: the new section starts on the next even or odd page (a blank page is left when needed), as chapters of a thesis do.
 
-The margins, paper, orientation, columns, page numbers and line numbers on the ribbon and in the ⬊ settings are for the section the caret is in (the status bar says which). In the Page Setup settings, **Apply to: Whole document** changes every section at once. A new section's header and footer are **Same as previous section** (Word's Link to Previous) until you type a header or footer of its own or untick it; its page numbers carry on from the section before unless you untick **Continue from previous section** and give a first page number.
+The margins, paper, orientation, columns, page numbers and line numbers on the ribbon and in the ⬊ settings are for the section the caret is in (the status bar says which). In the Page Setup settings, **Apply to: Whole document** changes every section at once. A new section's header and footer are **Same as previous section** (Word's Link to Previous) until you type a header or footer of its own or clear it; its page numbers continue from the section before unless you clear **Continue from previous section** and give a first page number.
 
 To remove a section break, put the caret at the start of the paragraph after it and press **Backspace** (the text joins the section before). **Draft** view shows section breaks as double dotted lines, labeled with their kind. Sections, their headers and footers, page numbering and line numbers are saved in Word files as Word's own and open again here as they were.
 
@@ -281,10 +281,10 @@ The contents keep themselves up to date: page numbers change as text moves, and 
 
 1. Select a word or phrase (or just click in a word) and choose **References** tab ▸ **Mark Entry** (Alt+Shift+X, also **Insert ▸ Document ▸ Tables and Indexes ▸ Mark Index Entry…**).
 2. Check the **Main entry**, and type a **Subentry** to list it under the main one (Aldol reaction ▸ asymmetric).
-3. Leave **Current page** for its page number (in bold or italic if you tick them), or choose **Cross-reference** and type "See Enolates" to send readers elsewhere instead.
-4. Tick **Mark All** to mark every paragraph where the text comes up, once each, as Word does.
+3. Leave **Current page** for its page number (in bold or italic if you check them), or choose **Cross-reference** and type "See Enolates" to send readers elsewhere instead.
+4. Check **Mark All** to mark every paragraph where the text comes up, once each, as Word does.
 
-Each entry is kept on its paragraph, so it moves with the text. Open Mark Entry in a marked paragraph to see its entries, and tick **Take this paragraph's entries off** to remove them.
+Each entry is kept on its paragraph, so it moves with the text. Open Mark Entry in a marked paragraph to see its entries, and check **Take this paragraph's entries off** to remove them.
 
 **References** tab ▸ **Insert Index** (also **Insert ▸ Document ▸ Tables and Indexes ▸ Index…**) puts an Index heading and the index after the caret's paragraph: the entries A to Z, ignoring case and accents, with the subentries indented under them and each page once. It is set in two columns unless you choose another number (it gets a section of its own, with continuous section breaks before and after, as Word does). **Right align page numbers** puts them at the right after dots, and **A letter over each letter's entries** adds A, B, C headings. Like the contents, it keeps itself up to date; double-click it to change it. In Word, entries are Word's XE fields and the index is Word's own INDEX field.
 
@@ -355,7 +355,7 @@ A structure, picture, table or equation counts as one word: if it changed, the o
 
 Give a password if you want one: it is needed to stop the protection. Click **Restrict Editing** again to stop it. The protection and password are saved in the .docx the way Word keeps them, so the document is protected in Word too, with the same password, and a document protected in Word opens protected here. As in Word, this stops changes made by mistake; it does not encrypt the file, and the text can still be read.
 
-**Form fields** (Word's legacy form fields) go in from the same group, or from **Insert**: **Text Field** (a shaded box to type into), **Check Box** and **Drop-Down** (one of a list of items). Each has a name, a default and an optional line of help. Double-click a field to change its settings. In a document protected for filling in forms, click a field to fill it in (a check box ticks at once), press **Tab** to go to the next field and **Space** or **Enter** to fill in the one picked.
+**Form fields** (Word's legacy form fields) go in from the same group, or from **Insert**: **Text Field** (a shaded box to type into), **Check Box** and **Drop-Down** (one of a list of items). Each has a name, a default and an optional line of help. Double-click a field to change its settings. In a document protected for filling in forms, click a field to fill it in (a check box is checked at once), press **Tab** to go to the next field and **Space** or **Enter** to fill in the one picked.
 
 ## Comments
 
@@ -378,9 +378,9 @@ Comments are saved in the .docx as Word's own, with their replies and Resolved m
 **Insert** tab ▸ **Equation** (or **Insert ▸ Equation…**, or Alt+=) opens the equation window.
 
 - Type LaTeX in the box, for example `\Delta G = \Delta H - T\Delta S`. The preview updates as you type.
-- Or use the buttons above the box (fraction, scripts, root, brackets, sum, integral, arrow with conditions, Greek letters and signs). Select text first and the piece goes round it.
+- Or use the buttons above the box (fraction, scripts, root, brackets, sum, integral, arrow with conditions, Greek letters and signs). Select text first and the piece goes around it.
 - Or pick a common one from **Start from**: Gibbs, Arrhenius, Eyring, Beer–Lambert, ee, Henderson–Hasselbalch and others.
-- **On a line of its own, centered** is ticked for you on an empty line. Untick it to put the equation in the line of text.
+- **On a line of its own, centered** is checked for you on an empty line. Clear it to put the equation in the line of text.
 
 Letters are set in italic as variables. Use `\mathrm{…}` for element symbols, `\text{…}` for words and units, and `{-}` for a dash that is a bond rather than a minus sign. Double-click an equation (or right-click ▸ **Edit Equation…**) to change it.
 
@@ -396,7 +396,7 @@ The **Make it** buttons change how the replacement looks: formula, bold, italic,
 
 On the **Review** tab:
 
-- **Spelling & Grammar** (F7) goes through the document from the caret: misspelled words, chemistry formatting slips (formulas without subscripts, solvents, units, ranges) and a few grammar slips (a word written twice, two spaces, a space before a comma or full stop, "a" or "an" before the wrong sound, a sentence starting with a small letter). For each: **Ignore Once**, **Ignore All**, **Add to Dictionary**, **Change** or **Change All**. Untick **Check grammar as well** to look at spelling only.
+- **Spelling & Grammar** (F7) goes through the document from the caret: misspelled words, chemistry formatting slips (formulas without subscripts, solvents, units, ranges) and a few grammar slips (a word written twice, two spaces, a space before a comma or full stop, "a" or "an" before the wrong sound, a sentence starting with a small letter). For each: **Ignore Once**, **Ignore All**, **Add to Dictionary**, **Change** or **Change All**. Clear **Check grammar as well** to look at spelling only.
 - **Thesaurus** (Shift+F7) gives words with the same meaning as the word at the caret, and related words; click one to put it in. It looks the word up online (Datamuse), sending only that word.
 - **Word Count** (Ctrl+Shift+G) shows pages, words, characters with and without spaces, paragraphs and lines, of the document or the selection, with or without text boxes, footnotes and endnotes. The status bar shows the word count all the time.
 

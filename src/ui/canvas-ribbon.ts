@@ -37,7 +37,7 @@ export const CANVAS_TABS: RibbonTab[] = [
   {
     id: 'insert', title: 'Insert', groups: [
       { name: 'Structures', items: [c('name-to-structure', 'Name to Structure', true), c('import-picture', 'Structures from Picture…'), c('sequence-to-structure', 'Structure from Sequence…'), c('crystal-structure', 'Crystal Structure (CIF)…'), c('ligand-library', 'Ligand Library…'), c('compound-library', 'Compound Library…')] },
-      { name: 'Projections', items: [c('newman-projection', 'Newman Projection', true), c('model-3d', '3-D Model…'), c('turn-3d', 'Turn in 3-D…')] },
+      { name: 'Projections', items: [c('newman-projection', 'Newman Projection', true), c('model-3d', '3-D Model…'), c('turn-3d', '3-D Rotation…')] },
       { name: 'Lab', items: [c('tlc-plate', 'TLC Plate', true), c('insert-table', 'Table'), c('rgroup-table', 'R-Group Table…'), c('stoichiometry-table', 'Stoichiometry Table…')] },
     ],
   },
@@ -45,7 +45,7 @@ export const CANVAS_TABS: RibbonTab[] = [
     id: 'chemistry', title: 'Chemistry', groups: [
       { name: 'Structure', items: [c('clean-up', 'Clean Up', true), c('check-structure', 'Check Structure'), c('expand-label', 'Expand Label'), c('contract-label', 'Contract Label'), c('stereo-labels', 'Stereo Labels'), c('explicit-h', 'Show Hydrogens')] },
       { name: 'Reaction', items: [c('clean-up-reaction', 'Clean Up Reaction', true), c('number-compounds', 'Number Compounds'), c('add-frame', 'Add Frame'), c('attach-descriptors', 'Attach Descriptors')] },
-      { name: 'Rings', items: [c('aromatic-circles', 'Aromatic Circles'), c('fill-rings', 'Fill Rings'), c('hapto-bond', 'Bond Metal to Ring (η)')] },
+      { name: 'Rings', items: [c('aromatic-circles', 'Aromatic Circles'), c('fill-rings', 'Fill Rings'), c('hapto-bond', 'Add Hapto Bond (η)')] },
     ],
   },
   {
@@ -72,7 +72,7 @@ export const CANVAS_TABS: RibbonTab[] = [
   {
     id: 'ring', title: 'Ring', context: 'ring', groups: [
       { name: 'Rings', items: [t('ring-benzene', 'Benzene'), t('ring-cp', 'Cyclopentadiene'), t('ring-3', 'Cyclopropane'), t('ring-4', 'Cyclobutane'), t('ring-5', 'Cyclopentane'), t('ring-6', 'Cyclohexane'), t('ring-7', 'Cycloheptane'), t('ring-8', 'Cyclooctane')] },
-      { name: 'Aromatic', items: [c('aromatic-circles', 'Aromatic Circles'), c('fill-rings', 'Fill Rings'), c('hapto-bond', 'Bond Metal to Ring (η)')] },
+      { name: 'Aromatic', items: [c('aromatic-circles', 'Aromatic Circles'), c('fill-rings', 'Fill Rings'), c('hapto-bond', 'Add Hapto Bond (η)')] },
     ],
   },
   {

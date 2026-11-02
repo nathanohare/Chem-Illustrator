@@ -51,3 +51,16 @@ describe('search commands', () => {
     expect(uniqueCommands([{ id: 'cmd:a', n: 1 }, { id: 'cmd:b', n: 2 }, { id: 'cmd:a', n: 3 }])).toEqual([{ id: 'cmd:a', n: 1 }, { id: 'cmd:b', n: 2 }]);
   });
 });
+
+describe('former names', () => {
+  it('finds a renamed command by its old name', () => {
+    const items = [
+      { id: 'cmd:distribute-h', label: 'Distribute Horizontally', place: 'Object menu' },
+      { id: 'cmd:hotkeys', label: 'Keyboard Shortcuts…', place: 'Edit menu' },
+      { id: 'cmd:define-nickname', label: 'Define Abbreviation…', place: 'Structure ▸ Abbreviations and Templates' },
+    ];
+    expect(searchCommands(items, 'space evenly').map((i) => i.id)).toEqual(['cmd:distribute-h']);
+    expect(searchCommands(items, 'hotkeys').map((i) => i.id)).toEqual(['cmd:hotkeys']);
+    expect(searchCommands(items, 'nickname').map((i) => i.id)).toEqual(['cmd:define-nickname']);
+  });
+});

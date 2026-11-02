@@ -114,7 +114,7 @@ export function editSlideRefs(input: SlideRefsInput): Promise<SlideRefsResult | 
         if (labels[k]) p.prepend(`${labels[k]} `);
         return p;
       });
-      preview.replaceChildren(...(lines.length ? lines : [el('p', 'muted', 'Tick references to show them at the foot of the slide.')]));
+      preview.replaceChildren(...(lines.length ? lines : [el('p', 'muted', 'Check references to show them at the foot of the slide.')]));
       preview.style.color = l.color ?? input.footerColor;
       preview.style.textAlign = l.place === 'bottom-centre' ? 'center' : l.place.endsWith('right') ? 'right' : 'left';
     };
@@ -153,7 +153,7 @@ export function editSlideRefs(input: SlideRefsInput): Promise<SlideRefsResult | 
     form.addEventListener('input', showPreview);
     form.addEventListener('change', showPreview);
 
-    const note = el('p', 'muted small', `Ticks are for the ${input.picked > 1 ? `${input.picked} slides picked` : 'slide being edited'}. Apply gives ${input.picked > 1 ? 'them' : 'it'} this look of its own; Apply to All uses the look on every slide. The References slide (Insert > Presentation > References Slide) lists them all.`);
+    const note = el('p', 'muted small', `Check marks are for the ${input.picked > 1 ? `${input.picked} slides picked` : 'slide being edited'}. Apply gives ${input.picked > 1 ? 'them' : 'it'} this look of its own; Apply to All uses the look on every slide. The References slide (Insert > Presentation > References Slide) lists them all.`);
     const buttons = el('p', 'ask-buttons');
     const cancel = el('button', '', 'Cancel');
     cancel.type = 'button';
@@ -162,7 +162,7 @@ export function editSlideRefs(input: SlideRefsInput): Promise<SlideRefsResult | 
     apply.title = input.picked > 1 ? `The look for the ${input.picked} slides picked only` : 'The look for this slide only';
     const all = el('button', 'primary', 'Apply to All');
     all.type = 'submit';
-    all.title = 'The look for every slide (the ticks are for the slides picked)';
+    all.title = 'The look for every slide (the check marks are for the slides picked)';
     const spacer = el('span', 'spacer');
     buttons.append(manage, spacer, cancel, apply, all);
     form.append(

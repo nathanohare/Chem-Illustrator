@@ -63,7 +63,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     form.append(buttons);
     form.addEventListener('submit', (e) => { e.preventDefault(); done(); });
   } else {
-    note('Ticked kinds of file show Chem Illustrator under "Open with" when you right-click them in Explorer. This never changes the program that opens them now: ChemDraw, Word, PowerPoint and Excel stay the default unless you change it.');
+    note('Checked kinds of file show Chem Illustrator under "Open with" when you right-click them in Explorer. This never changes the program that opens them now: ChemDraw, Word, PowerPoint and Excel stay the default unless you change it.');
     const now = new Set(await host.get().catch(() => [] as string[]));
     const boxes = new Map<string, HTMLInputElement>();
     for (const t of FILE_TYPES) {

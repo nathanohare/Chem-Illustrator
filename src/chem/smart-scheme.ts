@@ -17,7 +17,8 @@ import { frameBox, frameMembers } from '../editor/frames';
 import type { Measure, Selection } from '../editor/arrange';
 import { applyArrange, planArrange, readScheme, type ArrangeKind, type Scope } from './scheme-arrange';
 import type { Item } from './reaction';
-import { spacing } from './scheme-layout';
+import { spacing, withSchemePrefs } from './scheme-layout';
+import { cleanFormat, formatPrefs, restyleSmart, type SmartFormat } from './smart-format';
 import { arrowMid } from '../objects';
 
 export type SmartLayout = Extract<ArrangeKind, 'line' | 'rows' | 'snake' | 'down' | 'cycle'>;
@@ -44,6 +45,8 @@ export interface SmartData {
    * can be retyped and its arrows follow its species, but it isn't laid out again by itself.
    */
   free?: boolean;
+  /** Its own font, text sizes, arrows and spacing (from the gear on its species list); unset parts follow the drawing style. */
+  fmt?: SmartFormat;
 }
 
 /** One species of the scheme: what it holds and where it is. */
@@ -90,6 +93,8 @@ export function cleanSmart(raw: unknown): SmartData | null {
   if (r.anticlockwise === true) out.anticlockwise = true;
   if (r.reagentArrows === true) out.reagentArrows = true;
   if (r.free === true) out.free = true;
+  const fmt = cleanFormat(r.fmt);
+  if (fmt) out.fmt = fmt;
   return out;
 }
 
@@ -257,14 +262,20 @@ export function arrangeSmart(doc: Doc, m: Measure, frameId: number, patch?: Part
     for (const r of [...doc.arrows.values()]) if (r.reagentFor === l.arrow.id) doc.removeArrow(r.id);
     doc.removeArrow(l.arrow.id);
   }
+  // its own look first, so it is laid out at the sizes it will have
+  restyleSmart(doc, frameId, data.fmt, smartParts(read));
   const scope = scopeOf(doc, doc.shapes.get(frameId)!.frame!);
   const first = read.slots[0]?.items[0]?.ref;
-  const plan = planArrange(doc, m, scope, {
-    kind: data.layout, perRow: data.perRow ?? 3, anticlockwise: data.anticlockwise, reagentArrows: data.reagentArrows,
-    ...(data.layout === 'cycle' && first ? { start: first, startAngle: -Math.PI / 2 } : {}),
-  });
-  if (!plan) return false;
-  const added = applyArrange(doc, m, plan, 'Arrange Smart Scheme');
+  const lay = () => {
+    const plan = planArrange(doc, m, scope, {
+      kind: data.layout, perRow: data.perRow ?? 3, anticlockwise: data.anticlockwise, reagentArrows: data.reagentArrows,
+      ...(data.layout === 'cycle' && first ? { start: first, startAngle: -Math.PI / 2 } : {}),
+    });
+    return plan ? applyArrange(doc, m, plan, 'Arrange Smart Scheme') : null;
+  };
+  const own = formatPrefs(doc, data.fmt);
+  const added = own ? withSchemePrefs(own, lay) : lay();
+  if (!added) return false;
   const now = doc.shapes.get(frameId)!;
   const f = now.frame!;
   const arrows = [...f.arrows.filter((id) => doc.arrows.has(id)), ...added];
@@ -273,6 +284,44 @@ export function arrangeSmart(doc: Doc, m: Measure, frameId: number, patch?: Part
   const b = frameBox(doc, doc.shapes.get(frameId)!.frame!, m);
   if (b) doc.updateShape(frameId, b);
   return true;
+}
+
+/** The scheme's text: species typed as text, and the conditions on its arrows. */
+function smartParts(read: SmartRead): { species: number[]; conditions: number[] } {
+  const caps = (its: Item[]) => its.flatMap((it) => (it.caption !== undefined ? [it.caption] : []));
+  return {
+    species: read.slots.flatMap((s) => (s.caption !== undefined ? [s.caption] : [])),
+    conditions: read.links.flatMap((l) => [...caps(l.above), ...caps(l.below), ...caps(l.inside)]),
+  };
+}
+
+/**
+ * Give the scheme its own look (the gear on its species list): undefined parts follow the
+ * drawing style again. Its text and arrows change, and it is laid out again with its spacing
+ * (one laid out by hand keeps its places). Call inside an edit.
+ */
+export function formatSmart(doc: Doc, m: Measure, frameId: number, fmt: SmartFormat | undefined): boolean {
+  const s = doc.shapes.get(frameId);
+  if (!s?.smart || !s.frame) return false;
+  const was = s.smart.fmt;
+  const data: SmartData = { ...s.smart };
+  const clean = cleanFormat(fmt);
+  if (clean) data.fmt = clean; else delete data.fmt;
+  doc.updateShape(frameId, { smart: data });
+  const read = readSmart(doc, m, frameId);
+  if (!read) return false;
+  // parts going back to the drawing style lose the look they were given
+  const back: SmartFormat = {};
+  const st = doc.style;
+  if (was?.font !== undefined && clean?.font === undefined) back.font = st.captionFont;
+  if (was?.speciesSize !== undefined && clean?.speciesSize === undefined) back.speciesSize = st.captionSize;
+  if (was?.textSize !== undefined && clean?.textSize === undefined) back.textSize = st.arrowTextSize ?? st.captionSize;
+  if (was?.arrowWidth !== undefined && clean?.arrowWidth === undefined) back.arrowWidth = st.lineWidth;
+  if (was?.headType !== undefined && clean?.headType === undefined) back.headType = 'solid';
+  if (was?.headLength !== undefined && clean?.headLength === undefined) back.headLength = st.lineWidth * 10;
+  if (Object.keys(back).length) restyleSmart(doc, frameId, back, smartParts(read));
+  if (data.free) { restyleSmart(doc, frameId, data.fmt, smartParts(read)); return true; }
+  return arrangeSmart(doc, m, frameId) || true;
 }
 
 /** A step's roles, joining slot `a` to slot `b`, with its conditions. */
@@ -389,8 +438,12 @@ function swapRef(doc: Doc, frameId: number, from: string, to: string[]): void {
   const sw = (xs: string[]) => xs.flatMap((x) => (x === from ? to : [x]));
   for (const id of f.arrows) {
     const st = doc.arrows.get(id)?.step;
-    if (!st || ![...st.reactants, ...st.products].includes(from)) continue;
-    doc.updateArrow(id, { step: { ...st, reactants: sw(st.reactants), products: sw(st.products) } });
+    if (!st) continue;
+    const parts = ['above', 'below', 'inside', 'plusses'] as const;
+    if (![...st.reactants, ...st.products, ...parts.flatMap((p) => st[p] ?? [])].includes(from)) continue;
+    const next = { ...st, reactants: sw(st.reactants), products: sw(st.products) };
+    for (const p of parts) if (st[p]) next[p] = sw(st[p]!);
+    doc.updateArrow(id, { step: next });
   }
 }
 
@@ -481,6 +534,73 @@ export function fillHoldersDrawn(doc: Doc, before: ReadonlyMap<string, Entity | 
 
 export type StepPart = 'above' | 'below' | 'inside';
 
+/** What a step's conditions above or below its arrow are: text, a dashed box waiting for a structure, or a drawn structure. */
+export function stepPartKind(doc: Doc, l: SmartLink, part: StepPart): 'text' | 'box' | 'structure' {
+  if (l[part].some((it) => it.shape !== undefined && doc.shapes.get(it.shape)?.holder)) return 'box';
+  if (l[part].some((it) => it.atoms.length)) return 'structure';
+  return 'text';
+}
+
+/** The dashed box in a step's conditions, if there is one. */
+export function stepHolder(doc: Doc, l: SmartLink, part: StepPart): number | null {
+  const it = l[part].find((x) => x.shape !== undefined && doc.shapes.get(x.shape)?.holder);
+  return it?.shape ?? null;
+}
+
+/**
+ * Make what joins or leaves at step `k` (its text above or below the arrow; outside a cycle's
+ * loop, or on its small curved arrow) a dashed box to draw or paste a structure in, keeping the
+ * text to go back to. Returns the box's id. Call inside an edit.
+ */
+export function stepToHolder(doc: Doc, m: Measure, frameId: number, k: number, part: Exclude<StepPart, 'inside'>): number | null {
+  const read = readSmart(doc, m, frameId);
+  const l = read?.links[k];
+  const f = doc.shapes.get(frameId)?.frame;
+  if (!read || !l || !f || stepPartKind(doc, l, part) !== 'text') return null;
+  const it = l[part].find((x) => x.caption !== undefined);
+  const c = it ? doc.captions.get(it.caption!) : undefined;
+  const L = doc.style.bondLength;
+  const am = arrowMid(l.arrow);
+  const at = it ? mid(it.box) : { x: am.x, y: am.y + (part === 'above' ? -L : L) };
+  const w = Math.max(3.5 * L, it ? it.box.x2 - it.box.x1 + 0.6 * L : 0), h = 2.2 * L;
+  const sh = doc.addShape({
+    kind: 'geo', geo: 'rect', x1: at.x - w / 2, y1: at.y - h / 2, x2: at.x + w / 2, y2: at.y + h / 2,
+    filled: false, dashed: true, lineWidth: doc.style.lineWidth, color: '#808080', holder: { runs: c ? structuredClone(c.runs) : [] }, name: 'Reagent placeholder',
+  });
+  const step = { ...(l.arrow.step ?? roles(read.slots[l.from], read.slots[l.to], l)) };
+  if (c) {
+    doc.removeCaption(c.id);
+    step[part] = (step[part] ?? []).map((r) => (r === 'c' + c.id ? 's' + sh.id : r));
+  } else step[part] = [...(step[part] ?? []), 's' + sh.id];
+  doc.updateArrow(l.arrow.id, { step: { ...step, manual: true } });
+  doc.updateShape(frameId, { frame: { ...f, captions: f.captions.filter((x) => x !== c?.id), shapes: [...f.shapes, sh.id] } });
+  arrangeSmart(doc, m, frameId);
+  return sh.id;
+}
+
+/** Make a step's dashed reagent box text again (the text it had, if any). Call inside an edit. */
+export function stepHolderToText(doc: Doc, m: Measure, frameId: number, k: number, part: Exclude<StepPart, 'inside'>): boolean {
+  const read = readSmart(doc, m, frameId);
+  const l = read?.links[k];
+  const f = doc.shapes.get(frameId)?.frame;
+  const id = l ? stepHolder(doc, l, part) : null;
+  const sh = id !== null ? doc.shapes.get(id) : undefined;
+  if (!read || !l || !f || !sh?.holder) return false;
+  const runs = sh.holder.runs?.some((r) => r.text.trim()) ? sh.holder.runs : null;
+  const step = { ...(l.arrow.step ?? roles(read.slots[l.from], read.slots[l.to], l)) };
+  let cap: number | null = null;
+  if (runs) {
+    const at = mid({ x1: Math.min(sh.x1, sh.x2), y1: Math.min(sh.y1, sh.y2), x2: Math.max(sh.x1, sh.x2), y2: Math.max(sh.y1, sh.y2) });
+    cap = doc.addCaption({ x: at.x, y: at.y, runs, justify: 'center' }).id;
+  }
+  doc.removeShape(sh.id);
+  step[part] = (step[part] ?? []).flatMap((r) => (r === 's' + sh.id ? (cap !== null ? ['c' + cap] : []) : [r]));
+  doc.updateArrow(l.arrow.id, { step: { ...step, manual: true } });
+  doc.updateShape(frameId, { frame: { ...f, shapes: f.shapes.filter((x) => x !== sh.id), captions: cap !== null ? [...f.captions, cap] : f.captions } });
+  arrangeSmart(doc, m, frameId);
+  return true;
+}
+
 /** The text of a step's conditions above or below its arrow, or its name inside a cycle (the first text box there). */
 export function stepText(doc: Doc, l: SmartLink, part: StepPart): string {
   const it = l[part].find((x) => x.caption !== undefined);
@@ -560,7 +680,7 @@ export function refitSmart(doc: Doc, before: ReadonlyMap<string, Entity | null>,
     if (!moved) continue;
     const read = readSmart(doc, m, s.id);
     if (!read) continue;
-    const gap = spacing(doc.style.bondLength).gap;
+    const gap = s.smart.fmt?.structGap ?? spacing(doc.style.bondLength).gap;
     for (const l of read.links) {
       const a = read.slots[l.from], b = read.slots[l.to];
       if (!a || !b) continue;

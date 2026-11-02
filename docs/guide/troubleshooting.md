@@ -14,7 +14,7 @@ This page covers the problems people meet most often: the program won't install 
 
 ## Settings
 
-Settings (hotkeys, your nicknames and templates, styles, palettes and every preference) are kept in one file, `settings.json`:
+Settings (hotkeys, your abbreviations and templates, styles, palettes and every preference) are kept in one file, `settings.json`:
 
 - **Windows:** `%APPDATA%\io.github.nathanohare.chemillustrator`
 - **macOS:** `~/Library/Application Support/io.github.nathanohare.chemillustrator`

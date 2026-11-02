@@ -172,7 +172,7 @@ export const DECORS: { id: Decor; name: string }[] = [
   { id: 'title-rule', name: 'Rule under the title' },
   { id: 'corner', name: 'Triangles in the corner' },
   { id: 'footer-band', name: 'Band along the bottom' },
-  { id: 'frame', name: 'Frame round the slide' },
+  { id: 'frame', name: 'Frame around the slide' },
 ];
 
 /** The colours a slide with this layout uses: title slides can have their own. */
