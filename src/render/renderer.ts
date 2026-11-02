@@ -355,6 +355,11 @@ export class Renderer {
     return c;
   }
 
+  /** Which side a double bond's second line is drawn on: +1 to the right of a1→a2 on screen, −1 the left, 0 centred. */
+  doubleSide(doc: Doc, b: Bond): number {
+    return this.bondInfo(doc, b).side;
+  }
+
   private bondInfo(doc: Doc, b: Bond): BondCache {
     let c = this.bondCache.get(b.id);
     if (c) return c;

@@ -154,6 +154,8 @@ export interface Settings {
   groupOutline: boolean;
   /** Mechanism arrows left running into something by a change find their own way round. */
   rerouteArrows: boolean;
+  /** Draw Next Intermediate and Check Arrows: curved arrows read as electrons moving (Settings ▸ Drawing). Off hides them. */
+  arrowProducts: boolean;
   /** Space (pt) between a mechanism arrow's start, or end, and its atom or lone pair; null for the usual space. */
   arrowStartGap: number | null;
   arrowEndGap: number | null;
@@ -263,7 +265,7 @@ export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, stickyHotspot: false, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
   modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', oneColumnTools: false, toolCells: 'off', canvasRibbon: 'classic', ribbonNames: 'side', startView: true, enterFinishesText: false, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
-  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', warnLook: 'disc', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'peach', depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
+  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowProducts: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', warnLook: 'disc', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'peach', depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
   orient: { ...DEFAULT_ORIENT },
@@ -296,7 +298,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (!raw || typeof raw !== 'object') return s;
   const r = raw as Record<string, unknown>;
   if (r.hotkeys && typeof r.hotkeys === 'object' && !Array.isArray(r.hotkeys)) s.hotkeys = r.hotkeys as KeyOverrides;
-  for (const k of ['keepHotspotOnBond', 'stickyHotspot', 'fixedLength', 'fixedAngles', 'devTools', 'showRoles', 'chemTyping', 'stereoItalic', 'boldNumbers', 'autoLinks', 'linkCtrlClick', 'spellCheck', 'scrollBars', 'ribbonCollapsed', 'ribbonAutoFold', 'tabsInMenu', 'welcomed', 'groupTips', 'toolTips', 'penSketch', 'askWholeDrawing', 'darkPage', 'circledCharges', 'textToAtom', 'ionCharges', 'saltGroups', 'groupOutline', 'rerouteArrows', 'superscriptR', 'updateCheck', 'pubchemNames', 'convertChemDraw', 'matchStructure', 'fileTypesOffered', 'wordObjectsOffered'] as const) if (typeof r[k] === 'boolean') s[k] = r[k] as boolean;
+  for (const k of ['keepHotspotOnBond', 'stickyHotspot', 'fixedLength', 'fixedAngles', 'devTools', 'showRoles', 'chemTyping', 'stereoItalic', 'boldNumbers', 'autoLinks', 'linkCtrlClick', 'spellCheck', 'scrollBars', 'ribbonCollapsed', 'ribbonAutoFold', 'tabsInMenu', 'welcomed', 'groupTips', 'toolTips', 'penSketch', 'askWholeDrawing', 'darkPage', 'circledCharges', 'textToAtom', 'ionCharges', 'saltGroups', 'groupOutline', 'rerouteArrows', 'arrowProducts', 'superscriptR', 'updateCheck', 'pubchemNames', 'convertChemDraw', 'matchStructure', 'fileTypesOffered', 'wordObjectsOffered'] as const) if (typeof r[k] === 'boolean') s[k] = r[k] as boolean;
   for (const k of ['arrowStartGap', 'arrowEndGap'] as const) if (typeof r[k] === 'number' && isFinite(r[k] as number) && (r[k] as number) >= 0) s[k] = Math.min(50, r[k] as number);
   if (typeof r.bondEnds === 'number' && isFinite(r.bondEnds)) s.bondEnds = Math.max(0, Math.min(1, r.bondEnds));
   if (MAP_LOOKS.some((l) => l.value === r.mapLook)) s.mapLook = r.mapLook as MapLook;

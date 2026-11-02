@@ -127,10 +127,10 @@ export function withSideFolded(st: ToolboxState, mode: string, folded: boolean):
  * Smart Schemes, Diagrams, Tables and Charts, Biopolymers and Perspective and 3-D are context
  * toolboxes: hidden until opened, and brought out while their kind of object is selected.
  */
-export const TOOLBOX_IDS = ['main', 'structure', 'arrange', 'templates', 'colours', 'highlight', 'text', 'guides', 'custom', 'smart', 'diagrams', 'tables', 'biopolymers', 'perspective', 'details'] as const;
+export const TOOLBOX_IDS = ['main', 'structure', 'arrange', 'templates', 'colours', 'highlight', 'text', 'guides', 'custom', 'smart', 'schemes', 'diagrams', 'tables', 'biopolymers', 'perspective', 'details'] as const;
 export type ToolboxId = (typeof TOOLBOX_IDS)[number];
 /** The context toolboxes (see TOOLBOX_IDS). */
-export const CONTEXT_BOXES = ['smart', 'diagrams', 'tables', 'biopolymers', 'perspective'] as const;
+export const CONTEXT_BOXES = ['schemes', 'diagrams', 'tables', 'biopolymers', 'perspective'] as const;
 export type ContextBox = (typeof CONTEXT_BOXES)[number];
 
 export function defaultToolboxes(): ToolboxState {
@@ -138,6 +138,8 @@ export function defaultToolboxes(): ToolboxState {
   TOOLBOX_IDS.forEach((id, i) => { places[id] = { shown: id === 'main', dock: id === 'main' ? 'left' : 'float', x: 110 + i * 24, y: 90 + i * 64 }; });
   // the side panel (Style, Warnings, Analysis) is always shown, docked at the right to start with
   places.details = { shown: true, dock: 'right', x: 900, y: 90 };
+  // the Smart Scheme species list floats beside its scheme until docked (then it is a toolbox, at the right to start with)
+  places.smart = { shown: false, dock: 'right', x: 900, y: 140 };
   return { locked: true, places, custom: ['cmd:clean-up', 'cmd:add-frame', 'cmd:fill-rings', 'cmd:highlight', 'cmd:chain-ends'], sideCollapsed: false };
 }
 
@@ -558,6 +560,11 @@ export class Toolboxes {
   /** Fold the side panel to a strip at the right, or open it again, in one mode. */
   setSideCollapsed(mode: string, collapsed: boolean): void {
     this.change(withSideFolded(this.hooks.get(), mode, collapsed));
+  }
+
+  /** Show a toolbox at a place (a dock, or floating at x, y). */
+  put(id: string, p: Partial<BoxPlace>): void {
+    this.place(id, { ...p, shown: true });
   }
 
   private place(id: string, p: Partial<BoxPlace>): void {

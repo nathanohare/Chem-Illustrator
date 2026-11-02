@@ -186,7 +186,7 @@ import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
 import { actionSet, askActionButton } from './ui/action-button-dialog';
 import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
-import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepPieces, type AutoStepsOptions } from './deck/auto-steps';
+import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepClicks, stepPieces, type AutoStepsOptions, type StepPiece } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
 import { canUpdate, appVersion, portableInfo, STAGE, STAGE_NOTE, UPDATE_CHANNELS, type UpdateChannel } from './updates';
 import { computerName } from './feedback';
@@ -672,11 +672,11 @@ const contextBoxes = {
   wanted(): Set<ContextBox> {
     const s = editor.sel;
     const want = new Set<ContextBox>();
-    if (s.shapes.size + s.captions.size + s.arrows.size + s.atoms.size && editor.selectedSmart() !== null) want.add('smart');
+    if (s.shapes.size + s.captions.size + s.arrows.size + s.atoms.size && editor.selectedSmart() !== null) want.add('schemes');
     for (const id of s.shapes) {
       const sh = doc.shapes.get(id);
       if (!sh) continue;
-      if (sh.smart) want.add('smart');
+      if (sh.smart) want.add('schemes');
       if (sh.energy || sh.torsion || sh.newman || sh.diagram) want.add('diagrams');
       if (sh.table || sh.chart || sh.plate) want.add('tables');
     }
@@ -6328,7 +6328,7 @@ async function autoAnimateSteps(): Promise<void> {
     { name: 'product', label: 'Each product', value: autoSteps.product, options: [{ value: 'after', label: 'Right after its arrow' }, { value: 'with', label: 'With its arrow' }, { value: 'click', label: 'On a click of its own' }] },
     { name: 'first', label: 'The first species comes in on the first click too', value: String(autoSteps.first), type: 'checkbox' },
     ...(canvas ? [{ name: 'camera', label: 'Camera Follow: a keyframe for each step, the view moving along the route (replaces this canvas slide\'s keyframes)', value: String(autoSteps.camera), type: 'checkbox' as const }] : []),
-  ], { ok: 'Animate', note: `${steps} step${steps > 1 ? 's' : ''} found. Each click brings the next arrow with its conditions, then what it makes. The animations are ordinary ones: change them in the Animation Pane.` });
+  ], { ok: 'Animate', note: `${steps} step${steps > 1 ? 's' : ''} found. Each click brings the next arrow with its conditions, then what it makes. The animations are ordinary ones: change them in the Animation Pane.`, preview: { title: 'Preview: the first clicks', draw: (v) => stepPreview(sdoc, pieces, v) } });
   if (!got || deckNow() !== d || d.index !== i) return;
   autoSteps = { effect: got.effect as AutoStepsOptions['effect'], product: got.product as AutoStepsOptions['product'], first: got.first === 'true', camera: got.camera === 'true' };
   sdoc.edit('Auto-Animate Steps', () => markPieces(sdoc, pieces));
@@ -6338,6 +6338,65 @@ async function autoAnimateSteps(): Promise<void> {
   if (animUi && !animUi.paneShown) animUi.showPane(true);
   buildHint.refresh();
   flash(`Animated ${steps} step${steps > 1 ? 's' : ''}${out.canvas ? `, with ${out.canvas.keys.length} keyframes` : ''}. Preview plays them.`);
+}
+
+/**
+ * The Auto-Animate Steps window's preview: the scheme as it stands before the first click and
+ * after each of the first few, played over and over (Play Again starts it from the top).
+ */
+function stepPreview(sdoc: Doc, pieces: StepPiece[], v: Record<string, string>): Node {
+  const { clicks } = stepClicks(pieces, { product: v.product as AutoStepsOptions['product'], first: v.first === 'true' });
+  const shown = Math.min(clicks.length, 4);
+  const wrap = document.createElement('div');
+  wrap.className = 'auto-steps-preview';
+  const canvas = document.createElement('canvas');
+  const W = 340, H = 190;
+  canvas.style.width = `${W}px`;
+  canvas.style.height = `${H}px`;
+  const label = document.createElement('div');
+  label.className = 'asp-label';
+  const again = document.createElement('button');
+  again.type = 'button';
+  again.textContent = '▶ Play Again';
+  const foot = document.createElement('div');
+  foot.className = 'asp-foot';
+  foot.append(label, again);
+  wrap.append(canvas, foot);
+  const all = sdoc.contents();
+  const L = sdoc.style.bondLength;
+  const box = pieces.reduce((b, p) => ({ x1: Math.min(b.x1, p.box.x1), y1: Math.min(b.y1, p.box.y1), x2: Math.max(b.x2, p.box.x2), y2: Math.max(b.y2, p.box.y2) }), { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity });
+  const frame = (k: number) => {
+    const gone = clicks.slice(k).flat();
+    const sets = { atoms: new Set(gone.flatMap((p) => [...p.sel.atoms])), bonds: new Set(gone.flatMap((p) => [...p.sel.bonds])), captions: new Set(gone.flatMap((p) => [...p.sel.captions])), arrows: new Set(gone.flatMap((p) => [...p.sel.arrows])), shapes: new Set(gone.flatMap((p) => [...p.sel.shapes])) };
+    const atoms = all.atoms.filter((a) => !sets.atoms.has(a.id));
+    const kept = new Set(atoms.map((a) => a.id));
+    const c: Contents = {
+      atoms, bonds: all.bonds.filter((b) => !sets.bonds.has(b.id) && kept.has(b.a1) && kept.has(b.a2)),
+      captions: all.captions.filter((t) => !sets.captions.has(t.id)), arrows: all.arrows.filter((r) => !sets.arrows.has(r.id)), shapes: all.shapes.filter((x) => !sets.shapes.has(x.id)),
+    };
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    const pad = L, bw = box.x2 - box.x1 + 2 * pad, bh = box.y2 - box.y1 + 2 * pad;
+    const z = Math.min((W - 8) / Math.max(1, bw), (H - 8) / Math.max(1, bh), 2);
+    ctx.setTransform(z * dpr, 0, 0, z * dpr, (W / 2 - ((box.x1 + box.x2) / 2) * z) * dpr, (H / 2 - ((box.y1 + box.y2) / 2) * z) * dpr);
+    drawDrawing(ctx, structureDoc(c, sdoc.style));
+    label.textContent = k === 0 ? 'Before the first click' : `After click ${k} of ${clicks.length}${k === shown && shown < clicks.length ? ' (the rest go on the same way)' : ''}`;
+  };
+  let timer = 0;
+  const play = (k = 0) => {
+    clearTimeout(timer);
+    if (!canvas.isConnected && k > 0) return;
+    frame(k);
+    timer = window.setTimeout(() => { if (canvas.isConnected) play(k >= shown ? 0 : k + 1); }, k >= shown ? 1800 : 1000);
+  };
+  again.addEventListener('click', () => play(0));
+  play(0);
+  return wrap;
 }
 
 function present(fromHere: boolean, notes = false, how: { custom?: number; windowed?: boolean; rehearse?: boolean; record?: boolean } = {}): void {
@@ -7532,7 +7591,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 /** Menu commands that work the same whatever shows. */
-const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'toolbox-guides', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'toolbox-smart', 'toolbox-diagrams', 'toolbox-tables', 'toolbox-biopolymers', 'toolbox-perspective', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
+const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'toolbox-guides', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'toolbox-schemes', 'toolbox-diagrams', 'toolbox-tables', 'toolbox-biopolymers', 'toolbox-perspective', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
   'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
@@ -8260,7 +8319,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'toolbox-text': () => toolboxes.toggle('text'),
   'toolbox-guides': () => toolboxes.toggle('guides'),
   'toolbox-custom': () => toolboxes.toggle('custom'),
-  'toolbox-smart': () => { contextBoxes.byHand('smart'); },
+  'toolbox-schemes': () => { contextBoxes.byHand('schemes'); },
   'toolbox-diagrams': () => { contextBoxes.byHand('diagrams'); },
   'toolbox-tables': () => { contextBoxes.byHand('tables'); },
   'toolbox-biopolymers': () => { contextBoxes.byHand('biopolymers'); },
@@ -8345,6 +8404,7 @@ const COMMANDS: Record<string, () => unknown> = {
     else editor.addHomolysisArrows();
   },
   'draw-from-arrows': () => {
+    if (!editor.options.arrowProducts) { flash('Draw Next Intermediate is turned off in Edit ▸ Settings ▸ Drawing.'); return; }
     const r = editor.drawFromArrows();
     if (r === 'many') { flash('The arrows are on more than one step: select an arrow or the structure of the step to draw.', 5000); return; }
     if (r === 'none') { flash('Draw curved (mechanism) arrows on a structure first, each from a lone pair or bond to where its electrons go.', 5000); return; }
@@ -9556,6 +9616,8 @@ async function drawingPreferences(): Promise<void> {
       help: 'Longer labels (OR1, CO2R1) and labels from files are left as they are.' },
     { name: 'reroute', label: 'Mechanism arrows find their own way round again when a change leaves them running into a structure, a label or another arrow', type: 'checkbox', value: String(editor.options.rerouteArrows),
       help: 'Arrows you bent by hand stay as they are.' },
+    { name: 'arrowProducts', label: 'Offer Draw Next Intermediate and Check Arrows (Chemistry ▸ Mechanism Arrows): curved arrows read as electrons moving, checked, and the structure they make drawn', type: 'checkbox', value: String(editor.options.arrowProducts),
+      help: 'Off takes both commands out of the menus. The arrows themselves are drawn as before.' },
     { name: 'startGap', label: 'Gap between a mechanism arrow\'s start and its atom or lone pair', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic' },
     { name: 'endGap', label: 'Gap between a mechanism arrow\'s head and its atom', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic',
       help: 'Measured from the atom\'s label (or a bare carbon\'s corner) or the lone pair\'s dots. Leave blank for the usual gap, which grows with the bond length. New arrows, and arrows stuck to a structure, use it when they are next drawn; Clean Up Arrow redraws the selected ones now.' },
@@ -9574,6 +9636,8 @@ async function drawingPreferences(): Promise<void> {
   chemText.ionCharges = r.ionCharges === 'true';
   chemText.saltGroups = r.saltGroups === 'true';
   editor.options.rerouteArrows = r.reroute === 'true';
+  editor.options.arrowProducts = r.arrowProducts === 'true';
+  showArrowProducts();
   const gap = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
   arrowGaps.start = gap(r.startGap);
   arrowGaps.end = gap(r.endGap);
@@ -9811,6 +9875,7 @@ function currentSettings(): Settings {
     groupClick: editor.options.groupClick,
     groupOutline: editor.options.groupOutline,
     rerouteArrows: editor.options.rerouteArrows,
+    arrowProducts: editor.options.arrowProducts,
     arrowStartGap: arrowGaps.start,
     arrowEndGap: arrowGaps.end,
     cursorAids: { ...editor.aids },
@@ -10054,6 +10119,8 @@ function applySettings(s: Settings): void {
   editor.options.groupClick = s.groupClick;
   editor.options.groupOutline = s.groupOutline;
   editor.options.rerouteArrows = s.rerouteArrows;
+  editor.options.arrowProducts = s.arrowProducts;
+  showArrowProducts();
   arrowGaps.start = s.arrowStartGap;
   arrowGaps.end = s.arrowEndGap;
   editor.aids = { ...s.cursorAids };
@@ -10963,9 +11030,15 @@ function updateWarnings(): void {
 }
 
 /** Chemistry > Check Structure: go to the next problem after the one selected. */
+/** Draw Next Intermediate and Check Arrows in the menus, or not (Settings ▸ Drawing). */
+function showArrowProducts(): void {
+  for (const el of document.querySelectorAll<HTMLElement>('[data-cmd="draw-from-arrows"], [data-cmd="check-arrows"], #arrow-products-rule')) el.hidden = !editor.options.arrowProducts;
+}
+
 /** Check Arrows: each problem with the mechanism arrows in turn, selected and said (like Check Structure). */
 let arrowIssue = 0;
 function checkArrows(): void {
+  if (!editor.options.arrowProducts) { flash('Check Arrows is turned off in Edit ▸ Settings ▸ Drawing.'); return; }
   const list = editor.checkArrows();
   if (list === 'many') { flash('The arrows are on more than one step: select an arrow or the structure of the step to check.', 5000); return; }
   if (list === 'none') { flash('There are no curved (mechanism) arrows on a structure to check.'); return; }
@@ -11309,7 +11382,7 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'arrow-add-bend', ...(editor.contextSpot?.t !== undefined ? { label: 'Add Bend Here' } : {}) }, ...(editor.pickedJoin() ? [{ cmd: 'arrow-remove-bend' }, { cmd: 'arrow-smooth-join' }, { cmd: 'arrow-symmetric-join' }] : []), null,
       { label: 'Shape', items: [{ cmd: 'arrow-s-shape', label: 'S' }, { cmd: 'arrow-single-curve', label: 'Single Curve' }, { cmd: 'arrow-shape-u', label: 'U-Turn' }, { cmd: 'arrow-shape-loop', label: 'Loop' }] },
       { cmd: 'flip-arrow-bend' }, { cmd: 'arrow-reverse' }, { cmd: 'arrow-smooth-path' }, { cmd: 'arrow-simplify-path' }, null, { cmd: 'attach-arrow' }, { cmd: 'detach-arrow' },
-    ] }, { cmd: 'draw-from-arrows' }, { cmd: 'check-arrows' }] : []),
+    ] }, ...(editor.options.arrowProducts ? [{ cmd: 'draw-from-arrows' }, { cmd: 'check-arrows' }] : [])] : []),
     ...(s.bonds.size && s.bonds.size <= 2 && !s.arrows.size ? [{ cmd: 'homolysis-arrows' }] : []),
     ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : []),
     ...(s.arrows.size || atoms ? [...(editor.selectedSmart() !== null ? [{ cmd: 'ungroup-smart-scheme' }, null] : []), { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, ...(editor.selectedSmart() === null ? [{ cmd: 'convert-smart-scheme' }] : []), { cmd: 'smart-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'map-atoms' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
@@ -11812,8 +11885,8 @@ function looksList(vertical: boolean): HTMLElement {
 
 /** The toolboxes' names, as they come. */
 const BOX_TITLES: Record<string, string> = {
-  main: 'Drawing Tools', structure: 'Structure', arrange: 'Object', templates: 'Templates', colours: 'Colours', highlight: 'Highlight', text: 'Text Formatting', guides: 'Guides', custom: 'My Toolbox', details: 'Side Panel',
-  smart: 'Smart Schemes', diagrams: 'Diagrams', tables: 'Tables and Charts', biopolymers: 'Biopolymers', perspective: 'Perspective and 3-D',
+  main: 'Drawing Tools', structure: 'Structure', arrange: 'Object', templates: 'Templates', colours: 'Colours', highlight: 'Highlight', text: 'Text Formatting', guides: 'Guides', custom: 'My Toolbox', smart: 'Smart Scheme', details: 'Side Panel',
+  schemes: 'Smart Schemes', diagrams: 'Diagrams', tables: 'Tables and Charts', biopolymers: 'Biopolymers', perspective: 'Perspective and 3-D',
 };
 /** What the toolboxes of buttons come with ("cmd:", "tool:", "pal:", "w:looks", "sep"). */
 const cmds = (list: (string | null)[]) => list.map((c) => (c ? `cmd:${c}` : 'sep'));
@@ -11823,7 +11896,7 @@ const BOX_ITEMS: Record<string, readonly string[]> = {
   arrange: cmds(['align-left', 'align-hcenter', 'align-right', 'align-top', 'align-vcenter', 'align-bottom', null, 'distribute-h', 'distribute-v', 'arrange-row', 'arrange-column', 'arrange-grid', null, 'flip-h', 'flip-v', 'rotate-cw', 'rotate-ccw', null, 'shape-front', 'shape-back']),
   highlight: [...cmds(['highlight', 'remove-highlight', null, 'smooth-highlight', 'centre-highlight', 'soft-highlight', 'outline-highlight', 'shadow-highlight', 'glow-highlight', null, 'save-highlight-look']), 'w:looks'],
   custom: defaultToolboxes().custom,
-  smart: cmds(['smart-scheme', 'catalytic-cycle', 'convert-smart-scheme', 'ungroup-smart-scheme', null, 'arrange-scheme', 'scheme-settings', null, 'stoichiometry-table', 'check-balance', 'map-atoms', 'animate-reaction']),
+  schemes: cmds(['smart-scheme', 'catalytic-cycle', 'convert-smart-scheme', 'ungroup-smart-scheme', null, 'arrange-scheme', 'scheme-settings', null, 'stoichiometry-table', 'check-balance', 'map-atoms', 'animate-reaction']),
   diagrams: cmds(['energy-diagram', 'edit-energy', 'mo-diagram', 'orbital', 'p-orbitals', 'ts-brackets', null, 'torsion-chart', 'edit-torsion', 'copy-torsion-data', null, 'newman-projection', 'edit-newman', 'unlink-newman', null, 'insert-diagram', 'edit-diagram', 'diagram-to-shapes']),
   tables: cmds(['insert-table', 'rgroup-table', 'stoichiometry-table', null, 'insert-chart', 'edit-chart', null, 'tlc-plate', 'gel', 'edit-plate']),
   biopolymers: ['cmd:sequence-to-structure', 'sep', 'pal:tpl-amino', 'pal:tpl-sugars', 'pal:tpl-nucleic'],
@@ -11968,7 +12041,11 @@ const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => vo
   details: (body) => { body.before($('#side-fold')); body.append(sideContent); },
   text: (body, vertical) => { textToolbox = buildTextToolbox(body, vertical, textToolboxHooks); },
   guides: (body, vertical) => { guidesToolbox = buildGuidesToolbox(body, vertical, guidesToolboxHooks); },
+  // the Smart Scheme species list, docked (it floats beside the scheme otherwise)
+  smart: (body) => { smartDockBody = body; queueMicrotask(() => { if (smartDockBody === body && body.isConnected) smartPane.dockInto(body); }); },
 };
+/** Where the docked Smart Scheme species list goes (its toolbox's body). */
+let smartDockBody: HTMLElement | null = null;
 
 const guidesToolboxHooks: GuidesToolboxHooks = {
   get: () => editor.doc.guides,
@@ -13045,6 +13122,11 @@ const smartPane = new SmartPane({
   move: (id, from, to) => editor.smartMove(id, from, to),
   arrange: (id, patch) => editor.smartArrange(id, patch),
   ungroup: (id) => editor.ungroupSmart(id),
+  dock: (where) => {
+    if (where === null) { smartDockBody = null; toolboxes.toggle('smart', false); smartPane.float(); return; }
+    toolboxes.put('smart', where);
+  },
+  work: () => $('#work').getBoundingClientRect(),
 });
 // Auto-Animate Steps offered when a scheme of two steps or more (or a Smart Scheme) is selected on a slide
 const buildHint = new BuildHint({

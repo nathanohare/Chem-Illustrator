@@ -18,7 +18,6 @@ import { groupNumber } from './electrons';
 import { headEnd, isAtomSymbol, pairOwner, pushEndAt, symbolSpot, tailEnd, type PushEnd } from './mechanism';
 import { sproutDir } from './chemgeom';
 import { atomWarnings } from './warnings';
-import { cleanUpMoves } from './cleanup';
 
 /** Something wrong (or worth a second look) with the arrows: what, and the arrows, atoms and bonds it is about. */
 export interface PushIssue {
@@ -269,8 +268,9 @@ const turn = (p: Vec, ang: number): Vec => ({ x: p.x * Math.cos(ang) - p.y * Mat
 
 /**
  * The next intermediate, as a drawing of its own: the structures the arrows are drawn on, copied
- * with the arrows' changes made. A new bond to another structure brings it alongside, turned so
- * its other bonds point away; a structure that comes away is moved off a little. Lone pairs,
+ * with the arrows' changes made and everything else left where it was drawn: a new bond to
+ * another structure brings that structure alongside (moved and turned whole, so its other bonds
+ * point away), and a structure that comes away is moved off a little. Lone pairs,
  * radical dots and circled charges are drawn as the starting drawing had them. The atoms keep
  * their ids (new bonds and symbols get new ones). Null when there is nothing to draw.
  */
@@ -337,15 +337,6 @@ export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Draw
       }
       out.addBond(p, q, order);
     }
-    // a structure with a new bond is cleaned up (as Clean Up Structure does): an atom that now has
-    // four bonds, or a ring just closed, is drawn evenly
-    const cleaned = new Set<number>();
-    for (const [p] of formed) {
-      if (cleaned.has(p)) continue;
-      const frag = out.fragmentOf(p);
-      for (const id of frag) cleaned.add(id);
-      for (const [id, at] of cleanUpMoves(out, [frag])) out.updateAtom(id, { x: at.x, y: at.y });
-    }
     // a structure that came away moves off a little, so it looks apart
     for (const [p, q] of broken) {
       const sideP = out.fragmentOf(p);
@@ -373,7 +364,7 @@ export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Draw
       const was = doc.atoms.get(id)!, now = out.atoms.get(id)!;
       const x = reading.after.get(id);
       const pairs = list.filter((s) => s.symbol === 'LonePair');
-      if (!x && !cleaned.has(id)) {
+      if (!x) {
         // unchanged: the same symbols, where they were round it (turned with its structure)
         const ang = turned.get(id) ?? 0;
         for (const s of list) {
@@ -387,7 +378,7 @@ export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Draw
       }
       const dnA = reading.dn.get(id) ?? 0;
       const nPairs = pairs.length || (showsPairs && dnA > 0) ? Math.max(0, pairs.length + Math.trunc(dnA / 2)) : 0;
-      const nDots = x ? (x.radical === 'doublet' ? 1 : 0) : list.filter((s) => s.symbol === 'Electron').length;
+      const nDots = x.radical === 'doublet' ? 1 : 0;
       const circle = now.hideCharge && Math.abs(now.charge) === 1 ? (now.charge > 0 ? 'CirclePlus' : 'CircleMinus') : null;
       const taken: Vec[] = [];
       const put = (kind: 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus', size: number) => {
