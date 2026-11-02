@@ -2,6 +2,7 @@
 // show from the drop-down under it (each button starts with the action it usually has), or put a
 // whole navigation set (back, home, next) on the slide at once.
 
+import { foldIntoInfo } from './info-tip';
 import { GEOS, ACTION_LINKS, type GeoStep } from '../design/geo';
 import { SHOW_JUMPS, SHOW_TOOLS } from '../links';
 
@@ -62,9 +63,10 @@ export function askActionButton(slides: SlideChoice[], regions: SlideChoice[] = 
       <label class="ask-row" data-for="slide" hidden><span>Slide</span><select name="slide"></select></label>
       <label class="ask-row" data-for="key" hidden><span>Region</span><select name="key"></select></label>
       <label class="ask-row" data-for="url" hidden><span>Web page or file</span><input name="url" placeholder="https://… or a file path" /></label>
-      <p class="muted small">The button goes in the slide's bottom right corner; move or resize it as any shape. Right-click ▸ Action… changes what it does later. Saved as PowerPoint's own action button; the slide picker, looking around and regions work in this app's slide show.</p>
+      <p class="muted small ab-help">The button goes in the slide's bottom right corner; move or resize it as any shape. Right-click ▸ Action… changes what it does later. Saved as PowerPoint's own action button; the slide picker, looking around and regions work in this app's slide show.</p>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">Insert</button></p>`;
     const $ = <T extends Element>(q: string) => form.querySelector<T>(q)!;
+    foldIntoInfo($('.ab-help'), $('h2'));
     const gallery = $<HTMLDivElement>('.ab-gallery');
     const action = $<HTMLSelectElement>('select[name=action]');
     const slideSel = $<HTMLSelectElement>('select[name=slide]');

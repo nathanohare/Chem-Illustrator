@@ -2,6 +2,7 @@
 // name and its spots or bands typed as a short list, the stain or dye, and what is written on it,
 // with a preview that redraws as you type.
 
+import { foldIntoInfo } from './info-tip';
 import { GEL_LOOKS, LADDERS, TLC_LOOKS, newPlate, type PlateData, type PlateKind, type PlateLane } from '../design/plates';
 
 /** How the last plate and gel looked, so a new one starts the same way. */
@@ -23,7 +24,7 @@ export function askPlate(kind: PlateKind, editing: PlateData | null, L: number, 
       <canvas class="plate-preview" aria-label="Preview" role="img"></canvas>
       <div class="plate-table-wrap"><table class="plate-table"><thead><tr><th>Lane</th><th>${tlc ? 'Spots (Rf)' : 'Bands (size)'}</th>${tlc ? '' : '<th title="A size marker: its sizes are written beside the gel">Marker</th>'}<th></th></tr></thead><tbody></tbody></table></div>
       <p class="plate-rows"><button type="button" data-act="lane">+ Lane</button>${tlc ? ' <button type="button" data-act="co" title="A lane with every spot of the lanes either side of it, as a co-spot shows">+ Co-spot lane</button>' : ` <label class="plate-ladder">Marker <select name="ladder"><option value="">Add a marker lane…</option>${LADDERS.map((l) => `<option value="${l.id}">${l.name}</option>`).join('')}</select></label>`}</p>
-      <p class="muted small">${tlc
+      <p class="muted small plate-help">${tlc
         ? 'Type each spot\'s Rf, with commas between: 0.45, 0.2. After a number: faint or strong, big or small, streak, or a color (blue, pink, yellow…).'
         : 'Type each band\'s size, with commas between: 3, 1.2 faint. Bands run by size on a log scale. After a number: faint or strong, big or small, or a color.'}</p>
       <label class="ask-row"><span>${tlc ? 'Stain' : 'Dye'}</span><select name="look">${looks}</select></label>
@@ -34,6 +35,7 @@ export function askPlate(kind: PlateKind, editing: PlateData | null, L: number, 
       <label class="ask-row ask-check"><input name="labels" type="checkbox" /><span>Lane names</span></label>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">${editing ? 'Redraw' : 'Insert'}</button></p>`;
     const $ = <T extends Element>(q: string) => form.querySelector<T>(q)!;
+    foldIntoInfo($('.plate-help'), form.querySelectorAll('.plate-table th')[1]);
     const body = $<HTMLTableElement>('.plate-table').tBodies[0];
 
     const read = () => {

@@ -1,3 +1,4 @@
+import { foldIntoInfo } from './info-tip';
 // Format ▸ Align ▸ Arrange in a Grid…: a small window saying how many things are picked, with
 // rows × columns and the spacing between rows and between columns, and a live preview beside it.
 
@@ -27,12 +28,13 @@ export function askGridLayout(n: number, start: GridPick, preview: (p: GridPick)
           <label class="ask-row"><span>Columns</span><input name="cols" type="number" min="1" step="1" /><span></span></label>
           <label class="ask-row"><span>Row spacing</span><input name="rowGap" type="number" min="0" step="1" /><span class="muted">pt</span></label>
           <label class="ask-row"><span>Column spacing</span><input name="colGap" type="number" min="0" step="1" /><span class="muted">pt</span></label>
-          <p class="muted small">Placed left to right, then down. Compound numbers move with their structures.</p>
+          <p class="muted small grid-pick-help">Placed left to right, then down. Compound numbers move with their structures.</p>
         </div>
         <div class="grid-pick-preview" aria-label="Preview"></div>
       </div>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">Arrange</button></p>`;
     form.querySelector('.grid-pick-count')!.textContent = `${n} ${n === 1 ? 'item' : 'items'} selected`;
+    foldIntoInfo(form.querySelector('.grid-pick-help'), form.querySelector('h2'));
     const input = (name: string) => form.querySelector<HTMLInputElement>(`input[name=${name}]`)!;
     const rows = input('rows'), cols = input('cols'), rowGap = input('rowGap'), colGap = input('colGap');
     rows.max = cols.max = String(n);

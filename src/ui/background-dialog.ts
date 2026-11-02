@@ -4,6 +4,7 @@
 // or to every slide (Apply to All), and Reset Background gives the slides the master's again.
 // A preview shows the slide as it will look; nothing changes until Apply, and Undo puts it back.
 
+import { foldIntoInfo } from './info-tip';
 import type { Image } from '../deck/deck';
 import {
   type Background, type GradientStop, type PatternId, type TileAlign, type TileMirror,
@@ -64,6 +65,7 @@ export function formatBackground(o: BackgroundDialogOptions): Promise<Background
     const note = document.createElement('p');
     note.className = 'muted';
     note.textContent = o.design ? 'The background of the page.' : o.count > 1 ? `For the ${o.count} slides picked in the slide list, or every slide with Apply to All.` : 'For this slide, or every slide with Apply to All.';
+    foldIntoInfo(note, h);
     const preview = document.createElement('canvas');
     preview.className = 'bg-preview';
     const PW = 280, PH = Math.round(PW / Math.max(0.2, o.aspect));

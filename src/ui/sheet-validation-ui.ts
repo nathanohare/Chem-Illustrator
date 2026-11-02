@@ -3,6 +3,7 @@
 // (or, in any cell, the entries already in its column: Excel's Pick From Drop-down List), the
 // alert when typing breaks a rule, and Circle Invalid Data.
 
+import { foldIntoInfo } from './info-tip';
 import { popupMenu } from './sheet-view';
 import type { SheetView } from './sheet-view';
 import type { Sheet } from '../sheet/workbook';
@@ -202,7 +203,10 @@ export class SheetValidation {
     const hint = el('p', 'muted small');
     const where = el('input');
     where.value = rule ? rangesText(rule.ranges) : rangeName(target);
-    settings.append(row('Allow', kind), rows.op, rows.v1, rows.v2, blank.row, drop.row, hint, row('Applies to', where));
+    const allow = row('Allow', kind);
+    settings.append(allow, rows.op, rows.v1, rows.v2, blank.row, drop.row, hint, row('Applies to', where));
+    // the help follows the kind of rule, in an "i" beside Allow
+    foldIntoInfo(hint, allow.firstElementChild);
     const sync = () => {
       const k = kind.value as ValidationKind;
       const comparing = k !== 'any' && k !== 'list' && k !== 'custom';

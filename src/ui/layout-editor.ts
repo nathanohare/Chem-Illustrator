@@ -5,6 +5,7 @@
 // here, and put a built-in layout back as it came. Slides with a changed layout follow it when
 // the window is closed with Apply; Undo puts everything back.
 
+import { foldIntoInfo } from './info-tip';
 import { Doc, type Placeholder } from '../model';
 import {
   type Master, type SlideSize, type LayoutDef, type LayoutId, type PlaceholderBox,
@@ -45,6 +46,7 @@ export function editLayouts(input: LayoutEditorInput): Promise<LayoutDef[] | nul
     const note = document.createElement('p');
     note.className = 'muted';
     note.textContent = 'Drag a placeholder to move it and its corner to size it. Slides with a layout follow it when you apply; text already typed is kept.';
+    foldIntoInfo(note, h);
     form.append(h, note);
 
     const body = document.createElement('div');

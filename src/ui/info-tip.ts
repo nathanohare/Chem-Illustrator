@@ -106,8 +106,8 @@ export function dialogTitle(d: ParentNode): HTMLElement | null {
  * Turn a line of help already in the page into an "i" on `header`: the line is hidden (kept, so
  * code that updates it still can) and the "i" reads it each time it is shown.
  */
-export function foldIntoInfo(line: HTMLElement | null | undefined, header: Element | null | undefined, className = ''): HTMLElement | null {
-  if (!line || !header) return null;
+export function foldIntoInfo(line: Element | null | undefined, header: Element | null | undefined, className = ''): HTMLElement | null {
+  if (!(line instanceof HTMLElement) || !header) return null;
   const text = line.textContent?.trim() ?? '';
   const i = addInfo(header, text || ' ', className);
   if (!i) return null;
@@ -117,4 +117,42 @@ export function foldIntoInfo(line: HTMLElement | null | undefined, header: Eleme
   new MutationObserver(sync).observe(line, { childList: true, characterData: true, subtree: true });
   sync();
   return i;
+}
+
+/**
+ * Give every `data-info="…"` element under `root` its "i" (once). Windows written as HTML put
+ * their help this way: `<h2 data-info="What this does">Title</h2>`.
+ */
+export function infoFromAttrs(root: ParentNode): void {
+  const all = root instanceof Element && root.matches('[data-info]') ? [root, ...root.querySelectorAll('[data-info]')] : [...root.querySelectorAll('[data-info]')];
+  for (const el of all) {
+    const text = el.getAttribute('data-info') ?? '';
+    const have = [...el.children].find((c) => c.classList.contains('info-icon')) as HTMLElement | undefined;
+    if (have) setInfo(have, text);
+    else addInfo(el, text);
+  }
+}
+
+let wrapped = false;
+
+/** Turn `data-info` into "i" tips in every window as it opens (each dialog's show and showModal). */
+export function infoTipsOnOpen(): void {
+  if (wrapped || typeof HTMLDialogElement === 'undefined') return;
+  wrapped = true;
+  const proto = HTMLDialogElement.prototype;
+  const modal = proto.showModal, show = proto.show;
+  proto.showModal = function (this: HTMLDialogElement) {
+    infoFromAttrs(this);
+    return modal.call(this);
+  };
+  proto.show = function (this: HTMLDialogElement) {
+    infoFromAttrs(this);
+    return show.call(this);
+  };
+}
+
+/** `header` with an "i" holding `text` (for building windows in one expression). */
+export function withInfo<T extends Element>(header: T, text: string): T {
+  addInfo(header, text);
+  return header;
 }

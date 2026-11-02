@@ -314,6 +314,10 @@ const pickTemplate = later(() => import('./ui/template-gallery'), 'pickTemplate'
 const askCycle = later(() => import('./ui/cycle-dialog'), 'askCycle');
 const askEnergy = later(() => import('./ui/energy-dialog'), 'askEnergy');
 import type { EnergyStructureHooks } from './ui/energy-dialog';
+import { infoTipsOnOpen } from './ui/info-tip';
+
+// help text in data-info attributes becomes an "i" beside its header as each window opens
+infoTipsOnOpen();
 const askNewman = later(() => import('./ui/newman-dialog'), 'askNewman');
 const newmanSettings = later(() => import('./ui/newman-settings'), 'newmanSettings');
 const askPlate = later(() => import('./ui/plate-dialog'), 'askPlate');
@@ -10102,8 +10106,7 @@ async function importSettingsFile(say: (text: string) => void = flash): Promise<
 function settingsTransfer(): void {
   const d = document.createElement('dialog');
   d.className = 'ask settings-transfer';
-  d.innerHTML = `<h2>Import and Export Settings</h2>
-    <p class="muted">One file holds every setting: hotkeys, toolboxes (and what is in them), preferences, your templates, abbreviations, drawing styles, color palettes, slide themes and highlight styles. Export it to keep a copy, or to set up another computer or a new install the same way; Import uses one. Recent files stay on each computer.</p>
+  d.innerHTML = `<h2 data-info="One file holds every setting: hotkeys, toolboxes (and what is in them), preferences, your templates, abbreviations, drawing styles, color palettes, slide themes and highlight styles. Export it to keep a copy, or to set up another computer or a new install the same way; Import uses one. Recent files stay on each computer.">Import and Export Settings</h2>
     <div class="ask-buttons"><button type="button" data-act="export">Export Settings…</button><button type="button" data-act="import">Import Settings…</button><button type="button" class="primary" data-act="close">Close</button></div>
     <p class="muted small" aria-live="polite"></p>`;
   const say = (t: string) => { d.querySelector('p.small')!.textContent = t; };

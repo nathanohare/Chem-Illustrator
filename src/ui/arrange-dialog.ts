@@ -2,6 +2,7 @@
 // the selected scheme out that way at once, so layouts can be tried one after another; Cancel
 // puts the scheme back as it was, Done keeps it (one Undo takes it back).
 
+import { foldIntoInfo } from './info-tip';
 import type { ArrangeKind, ArrangeOptions } from '../chem/scheme-arrange';
 
 export interface ArrangeHooks {
@@ -121,6 +122,7 @@ export class ArrangeDialog {
     for (const el of [perRow, anti, reagents, fork]) el.addEventListener('change', run);
     showOpts();
 
+    foldIntoInfo(note, h);
     form.append(h, note, grid, opts, status, buttons);
     d.append(form);
     let keep = false;

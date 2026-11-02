@@ -1,6 +1,7 @@
 // File > New > New Design: a blank page, or one of the ready-made designs, each shown as a small
 // picture of the page it makes.
 
+import { foldIntoInfo } from './info-tip';
 import { Doc } from '../model';
 import { Deck } from '../deck/deck';
 import { paintSlide } from '../deck/slide-view';
@@ -17,6 +18,7 @@ export function pickTemplate(): Promise<DesignTemplate | 'blank' | null> {
     const note = document.createElement('p');
     note.className = 'muted';
     note.textContent = 'Start from a blank page or a ready-made layout. Everything in a layout can be moved, retyped, recolored or deleted, and Page Size changes the page later.';
+    foldIntoInfo(note, h);
     const grid = document.createElement('div');
     grid.className = 'tg-grid';
     let result: DesignTemplate | 'blank' | null = null;

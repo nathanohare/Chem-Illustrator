@@ -2,6 +2,7 @@
 // Supporting Information, thesis chapter; reaction table, reagent sheet), each shown as a small
 // page of its headings, or its first row of column headings.
 
+import { foldIntoInfo } from './info-tip';
 import { DOC_TEMPLATES, type DocTemplate } from '../document/templates';
 import { SHEET_TEMPLATES, type SheetTemplate } from '../sheet/templates';
 import { keyOf } from '../sheet/refs';
@@ -54,6 +55,7 @@ export function pickFileTemplate(prefer: 'document' | 'sheet' = 'document'): Pro
     const note = document.createElement('p');
     note.className = 'muted';
     note.textContent = 'Each template opens as a new, unsaved file. Text in [brackets] says what goes there; type over it.';
+    foldIntoInfo(note, h);
     let result: TemplateChoice | null = null;
     const card = (name: string, blurb: string, preview: HTMLElement, choice: TemplateChoice) => {
       const b = document.createElement('button');

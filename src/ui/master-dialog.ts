@@ -2,6 +2,7 @@
 // background, a logo, slide numbers, a footer, and how big structures are drawn).
 // Everything here changes every slide at once, and Undo puts it back.
 
+import { foldIntoInfo } from './info-tip';
 import { Master, Corner, Image, DECORS, type Decor } from '../deck/deck';
 import { scaleStyle } from '../drawing-styles';
 import { ACS_1996 } from '../style';
@@ -26,6 +27,7 @@ export function editMaster(m: Master, hooks: MasterDialogHooks): Promise<Master 
     const note = document.createElement('p');
     note.className = 'muted';
     note.textContent = 'These settings apply to every slide. Text you have formatted yourself keeps its own formatting.';
+    foldIntoInfo(note, h);
     form.append(h, note);
 
 
