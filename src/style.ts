@@ -87,9 +87,9 @@ export const bondEndPrefs: { round: number } = { round: DEFAULT_BOND_ENDS };
  */
 export type MapLook = 'grey' | 'tint' | 'custom';
 export const MAP_LOOKS: { value: MapLook; label: string }[] = [
-  { value: 'grey', label: 'Gray outlines (as ChemDraw)' },
+  { value: 'grey', label: 'Gray outline (ChemDraw style)' },
   { value: 'tint', label: 'Each number in its own light color' },
-  { value: 'custom', label: 'My own format (Map Number Format…)' },
+  { value: 'custom', label: 'Custom (Map Number Format…)' },
 ];
 
 /** A format of the user's own for every map-number box. Colors are #rrggbb; '' is none. */
