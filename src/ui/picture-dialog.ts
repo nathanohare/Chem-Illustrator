@@ -30,8 +30,8 @@ export interface PictureFormatResult {
 }
 
 const RECOLORS: [string, string][] = [
-  ['none', 'No recolour'], ['grey', 'Greyscale'], ['sepia', 'Sepia'], ['washout', 'Washout'],
-  ['bw', 'Black and white'], ['tint', 'Two colours (dark to light)'],
+  ['none', 'No recolor'], ['grey', 'Grayscale'], ['sepia', 'Sepia'], ['washout', 'Washout'],
+  ['bw', 'Black and white'], ['tint', 'Two colors (dark to light)'],
 ];
 
 /** Proportions to crop to, as width over height ('' leaves the crop alone, 'own' the picture's own). */
@@ -156,10 +156,10 @@ export function pictureFormat(o: PictureFormatOptions): Promise<PictureFormatRes
     row(grid, 'Sharpen / soften', sharp);
 
     // ------------------------------------------------ colour
-    head('Colour');
+    head('Color');
     const recolor = document.createElement('select');
     for (const [id, name] of RECOLORS) recolor.add(new Option(name, id, false, id === (fx.recolor?.kind ?? 'none')));
-    row(grid, 'Recolour', recolor);
+    row(grid, 'Recolor', recolor);
     const level = slider(((fx.recolor?.kind === 'bw' ? fx.recolor.level : undefined) ?? 0.5) * 100, 1, 99, (v) => { if (fx.recolor?.kind === 'bw') fx.recolor = { kind: 'bw', ...(v !== 50 ? { level: v / 100 } : {}) }; draw(); }, 'Lighter than this turns white, darker turns black');
     const levelRow = row(grid, 'Black below', level);
     const tint0 = fx.recolor?.kind === 'tint' ? fx.recolor : { kind: 'tint' as const, dark: '#1f3864', light: '#ddebf7' };
@@ -176,10 +176,10 @@ export function pictureFormat(o: PictureFormatOptions): Promise<PictureFormatRes
     });
     const swatch = document.createElement('span');
     swatch.className = 'pic-swatch';
-    const pickClear = button('Pick in the picture', 'Click the colour in the preview that should be see-through (a white or coloured background)', () => { clickDoes = clickDoes === 'clear' ? 'none' : 'clear'; show(); });
-    const noClear = button('None', 'No colour see-through', () => { fx.clear = undefined; clickDoes = clickDoes === 'clear' ? 'none' : clickDoes; show(); draw(); });
-    row(grid, 'See-through colour', swatch, pickClear, noClear);
-    const alpha = slider((fx.alpha ?? 0) * 100, 0, 100, (v) => { fx.alpha = v / 100; draw(); }, 'How see-through the whole picture is');
+    const pickClear = button('Pick in the picture', 'Click the color in the preview to make transparent (a white or colored background)', () => { clickDoes = clickDoes === 'clear' ? 'none' : 'clear'; show(); });
+    const noClear = button('None', 'No transparent color', () => { fx.clear = undefined; clickDoes = clickDoes === 'clear' ? 'none' : clickDoes; show(); draw(); });
+    row(grid, 'Transparent Color', swatch, pickClear, noClear);
+    const alpha = slider((fx.alpha ?? 0) * 100, 0, 100, (v) => { fx.alpha = v / 100; draw(); }, 'Transparency: how much the whole picture lets show through');
     row(grid, 'Transparency', alpha);
 
     // ------------------------------------------------ remove background
@@ -187,8 +187,8 @@ export function pictureFormat(o: PictureFormatOptions): Promise<PictureFormatRes
     const bgOn = document.createElement('input');
     bgOn.type = 'checkbox';
     bgOn.checked = !!fx.bg;
-    row(grid, 'Remove background', bgOn, unit('(what joins the edges in colour goes)'));
-    const tol = slider((fx.bg?.tol ?? BG_TOL) * 100, 1, 60, (v) => { if (fx.bg) fx.bg = { ...fx.bg, tol: v / 100 }; draw(); }, 'How near in colour to the background a part must be to go: raise it if background is left, lower it if the subject loses parts');
+    row(grid, 'Remove background', bgOn, unit('(what joins the edges in color goes)'));
+    const tol = slider((fx.bg?.tol ?? BG_TOL) * 100, 1, 60, (v) => { if (fx.bg) fx.bg = { ...fx.bg, tol: v / 100 }; draw(); }, 'How near in color to the background a part must be to go: raise it if background is left, lower it if the subject loses parts');
     const tolRow = row(grid, 'How near counts', tol);
     const keepBtn = button('Mark to keep', 'Click parts of the preview that should stay', () => { clickDoes = clickDoes === 'keep' ? 'none' : 'keep'; show(); });
     const dropBtn = button('Mark to remove', 'Click parts of the preview that should go', () => { clickDoes = clickDoes === 'drop' ? 'none' : 'drop'; show(); });
@@ -217,7 +217,7 @@ export function pictureFormat(o: PictureFormatOptions): Promise<PictureFormatRes
       aspect = want;
       draw();
     });
-    row(grid, 'Crop to proportions', ratio, unit('(centred; drag the crop handles to move it)'));
+    row(grid, 'Crop to proportions', ratio, unit('(centered; drag the crop handles to move it)'));
 
     // ------------------------------------------------ buttons
     const buttons = document.createElement('p');
@@ -250,13 +250,13 @@ export function pictureFormat(o: PictureFormatOptions): Promise<PictureFormatRes
       tintRow.hidden = fx.recolor?.kind !== 'tint';
       tolRow.hidden = marksRow.hidden = !fx.bg;
       swatch.style.background = fx.clear ?? 'transparent';
-      swatch.title = fx.clear ? `${fx.clear} is see-through` : 'None';
+      swatch.title = fx.clear ? `${fx.clear} is transparent` : 'None';
       swatch.classList.toggle('pic-none', !fx.clear);
       pickClear.setAttribute('aria-pressed', String(clickDoes === 'clear'));
       keepBtn.setAttribute('aria-pressed', String(clickDoes === 'keep'));
       dropBtn.setAttribute('aria-pressed', String(clickDoes === 'drop'));
       preview.style.cursor = clickDoes === 'none' ? '' : 'crosshair';
-      hint.textContent = clickDoes === 'clear' ? 'Click the colour in the picture to make see-through.'
+      hint.textContent = clickDoes === 'clear' ? 'Click the color in the picture to make transparent.'
         : clickDoes === 'keep' ? 'Click parts of the picture to keep (green dots). Click Mark to keep again to stop.'
           : clickDoes === 'drop' ? 'Click parts of the picture to remove (red dots). Click Mark to remove again to stop.'
             : '';

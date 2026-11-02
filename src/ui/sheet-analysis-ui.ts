@@ -331,7 +331,7 @@ export class SheetAnalysis {
         rowLabels = block.slice(1).map((r) => String(r[0] ?? ''));
         block = block.slice(1).map((r) => r.slice(1));
       }
-      if (block.some((r) => r.some((v) => typeof v !== 'number'))) return 'Every cell of the input needs a number (tick Labels if the first row and column are labels).';
+      if (block.some((r) => r.some((v) => typeof v !== 'number'))) return 'Every cell of the input needs a number (check Labels if the first row and column are labels).';
       const nums = block as number[][];
       if (!labels.checked) { rowLabels = nums.map((_, i) => `Row ${i + 1}`); colLabels = nums[0].map((_, j) => `Column ${j + 1}`); }
       return this.write(anovaTwoNoRep(nums, rowLabels, colLabels, al), out(), 'Anova');
@@ -651,7 +651,7 @@ export class SheetAnalysis {
       let kept = false;
       st.onClose = () => {
         if (kept) return;
-        this.wb.edit('Goal Seek (cancelled)', () => sh.setCell(b.range.r1, b.range.c1, { ...was }), this.view.place());
+        this.wb.edit('Goal Seek (canceled)', () => sh.setCell(b.range.r1, b.range.c1, { ...was }), this.view.place());
         this.view.refresh();
       };
       st.actions('OK', () => { kept = true; });

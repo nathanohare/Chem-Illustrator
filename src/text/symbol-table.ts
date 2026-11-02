@@ -3,7 +3,7 @@
 // A character can be in more than one group.
 
 /** The groups, in the order the window lists them. */
-export const SYMBOL_GROUPS: { id: string; title: string }[] = [{id: 'greek', title: 'Greek'}, {id: 'arrows', title: 'Arrows'}, {id: 'maths', title: 'Maths'}, {id: 'chem', title: 'Chemistry and units'}, {id: 'scripts', title: 'Superscripts and subscripts'}, {id: 'numbers', title: 'Numbers and fractions'}, {id: 'punct', title: 'Punctuation'}, {id: 'letters', title: 'Accented letters'}, {id: 'currency', title: 'Currency'}, {id: 'shapes', title: 'Shapes and marks'}];
+export const SYMBOL_GROUPS: { id: string; title: string }[] = [{id: 'greek', title: 'Greek'}, {id: 'arrows', title: 'Arrows'}, {id: 'maths', title: 'Math'}, {id: 'chem', title: 'Chemistry and units'}, {id: 'scripts', title: 'Superscripts and subscripts'}, {id: 'numbers', title: 'Numbers and fractions'}, {id: 'punct', title: 'Punctuation'}, {id: 'letters', title: 'Accented letters'}, {id: 'currency', title: 'Currency'}, {id: 'shapes', title: 'Shapes and marks'}];
 
 /** [character, name, group]. */
 export const SYMBOL_TABLE: [string, string, string][] = [
@@ -93,9 +93,9 @@ export const SYMBOL_TABLE: [string, string, string][] = [
   ['↙', 'south west arrow', 'arrows'],
   ['↖', 'north west arrow', 'arrows'],
   ['↻', 'clockwise open circle arrow', 'arrows'],
-  ['↺', 'anticlockwise open circle arrow counterclockwise', 'arrows'],
+  ['↺', 'counterclockwise open circle arrow counterclockwise', 'arrows'],
   ['⟳', 'clockwise gapped circle arrow', 'arrows'],
-  ['⟲', 'anticlockwise gapped circle arrow', 'arrows'],
+  ['⟲', 'counterclockwise gapped circle arrow', 'arrows'],
   ['↝', 'rightwards wave arrow', 'arrows'],
   ['↜', 'leftwards wave arrow', 'arrows'],
   ['⇢', 'rightwards dashed arrow', 'arrows'],
@@ -177,7 +177,7 @@ export const SYMBOL_TABLE: [string, string, string][] = [
   ['∘', 'ring operator', 'maths'],
   ['∅', 'empty set', 'maths'],
   ['ℏ', 'planck constant over two pi h bar reduced', 'maths'],
-  ['ℓ', 'script small l litre', 'maths'],
+  ['ℓ', 'script small l liter', 'maths'],
   ['ℕ', 'double-struck capital n', 'maths'],
   ['ℤ', 'double-struck capital z', 'maths'],
   ['ℚ', 'double-struck capital q', 'maths'],
@@ -213,7 +213,7 @@ export const SYMBOL_TABLE: [string, string, string][] = [
   ['µ', 'micro sign mu', 'chem'],
   ['Ω', 'greek capital letter omega ohm', 'chem'],
   ['℧', 'inverted ohm sign mho siemens', 'chem'],
-  ['ℓ', 'script small l litre', 'chem'],
+  ['ℓ', 'script small l liter', 'chem'],
   ['≡', 'identical to triple bond', 'chem'],
   ['═', 'box drawings double horizontal bond', 'chem'],
   ['‖', 'double vertical line', 'chem'],

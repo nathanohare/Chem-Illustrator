@@ -3,7 +3,7 @@
 // place of the red smart guides, which it can still turn on. The Select tool drags a guide; one
 // dropped outside the drawing goes.
 
-import { DEFAULT_GUIDES, GUIDE_SNAPS, type CanvasGuides, type Guide, type GuideKind, type GuideSnap } from '../editor/guides';
+import { DEFAULT_GUIDES, GUIDE_COLOURS, GUIDE_SNAPS, type CanvasGuides, type Guide, type GuideKind, type GuideSnap } from '../editor/guides';
 
 export interface GuidesToolboxHooks {
   get(): CanvasGuides | null;
@@ -71,7 +71,7 @@ export function buildGuidesToolbox(body: HTMLElement, vertical: boolean, h: Guid
     });
   }
   button(add, 'shown', svg('<path d="M1 8s2.5-4.5 7-4.5S15 8 15 8s-2.5 4.5-7 4.5S1 8 1 8z"/><circle cx="8" cy="8" r="2"/>'), 'Show the guides (hidden guides are kept, and don\'t snap)', () => change({ shown: !now().shown }));
-  button(add, 'clear', svg('<path d="M3 3l10 10M13 3L3 13"/>'), 'Take every guide away', () => change({ list: [], grid: false }));
+  button(add, 'clear', svg('<path d="M3 3l10 10M13 3L3 13"/>'), 'Clear All Guides', () => change({ list: [], grid: false }));
   body.append(add);
 
   // the ticks
@@ -131,12 +131,58 @@ export function buildGuidesToolbox(body: HTMLElement, vertical: boolean, h: Guid
   }
   body.append(snap);
 
+  // how they look: a colour and how see-through
+  const look = d.createElement('div');
+  look.className = 'gt-row gt-look';
+  const lookLabel = d.createElement('span');
+  lookLabel.className = 'gt-label';
+  lookLabel.textContent = 'Look';
+  look.append(lookLabel);
+  const swatches: [string | undefined, HTMLButtonElement][] = [];
+  for (const c of GUIDE_COLOURS) {
+    const b = d.createElement('button');
+    b.type = 'button';
+    b.className = 'gt-swatch';
+    b.style.setProperty('--sw', c.value ?? '#1b8fd0');
+    b.title = c.name;
+    b.setAttribute('aria-label', `Guides in ${c.name.toLowerCase()}`);
+    b.addEventListener('click', () => change({ color: c.value }));
+    look.append(b);
+    swatches.push([c.value, b]);
+  }
+  const own = d.createElement('input');
+  own.type = 'color';
+  own.className = 'gt-own';
+  own.title = 'Any other color';
+  own.setAttribute('aria-label', 'Guides in any other color');
+  own.addEventListener('change', () => change({ color: own.value.toLowerCase() }));
+  look.append(own);
+  body.append(look);
+  const fade = d.createElement('label');
+  fade.className = 'gt-row gt-fade';
+  const fadeLabel = d.createElement('span');
+  fadeLabel.className = 'gt-label';
+  fadeLabel.textContent = 'Transparency';
+  const range = d.createElement('input');
+  range.type = 'range';
+  range.min = '0';
+  range.max = '90';
+  range.step = '5';
+  range.className = 'gt-range';
+  range.setAttribute('aria-label', 'Transparency of the guides');
+  const pct = d.createElement('span');
+  pct.className = 'gt-unit';
+  range.addEventListener('input', () => { pct.textContent = `${range.value}%`; const v = Number(range.value) / 100; h.set({ ...now(), clear: v || undefined }); });
+  range.addEventListener('change', () => refresh());
+  fade.append(fadeLabel, range, pct);
+  body.append(fade);
+
   const smart = d.createElement('label');
   smart.className = 'gt-row gt-check';
   const box = d.createElement('input');
   box.type = 'checkbox';
   box.addEventListener('change', () => h.setSmart(box.checked));
-  smart.append(box, d.createTextNode('Line up with other things (smart guides)'));
+  smart.append(box, d.createTextNode('Smart Guides'));
   smart.title = 'As something moves, its edges and middle snap into line with other structures, text and the page (View > Alignment Guides)';
   body.append(smart);
 
@@ -161,6 +207,10 @@ export function buildGuidesToolbox(body: HTMLElement, vertical: boolean, h: Guid
     unit.textContent = u === 'in' ? 'in' : 'cm';
     for (const [k, b] of snapButtons) { const on = at.snap === k; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }
     box.checked = h.smart();
+    for (const [v, b] of swatches) { const on = (at.color ?? undefined) === v; b.classList.toggle('on', on); b.setAttribute('aria-pressed', String(on)); }
+    own.value = at.color ?? '#1b8fd0';
+    if (d.activeElement !== range) range.value = String(Math.round((at.clear ?? 0) * 100));
+    pct.textContent = `${range.value}%`;
   }
   refresh();
   return { refresh };

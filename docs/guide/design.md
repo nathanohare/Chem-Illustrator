@@ -25,7 +25,7 @@ You can also type a custom size in in, cm, mm, pt or px. Journals change their r
 
 Structures are drawn larger on bigger pages so they stay readable: at their normal size on journal graphics and paper, twice as large on slides and four times as large on posters.
 
-The ribbon's **Page** group also sets the **Background** colour (**Format…** beside it gives the page a gradient, picture or pattern, as in Presentation mode), shows a **Grid** (on screen only, never saved or printed) with its spacing, and turns **Guides** on and off.
+The ribbon's **Page** group also sets the **Background** color (**Format…** beside it gives the page a gradient, picture or pattern, as in Presentation mode), shows a **Grid** (on screen only, never saved or printed) with its spacing, and turns **Guides** on and off.
 
 ## Ready-made layouts
 
@@ -59,7 +59,7 @@ To place a shape, click it and then click or drag on the page, or drag it straig
 
 The library's **Icons** tab (or **Icons** on the ribbon, or **Insert ▸ Icons…**) has about 7,000 icons. The list under the search box picks a group; **Lab and science** comes first, with glassware, molecules and atoms, lab equipment, hazard and safety signs (biohazard, radioactive, toxic, flammable, electrical, warning) and medical icons. Typing in the search box looks through all the icons, by name and by other words for them (try "hazard", "rbf" or "pipette"); choose a group from the list first to search only that group.
 
-An icon goes on the page like a shape (click it, then click or drag; or drag it onto the page) at one inch square. It is filled in one colour with no outline: change the colour, add an outline, a gradient or a shadow in the **Style** panel, and drag its corners to size it. Icons save to PowerPoint as shapes PowerPoint can recolour and resize, and come back here as the same icon. They are the Material Design Icons by Pictogrammers (Apache License 2.0); company and product logos are left out.
+An icon goes on the page like a shape (click it, then click or drag; or drag it onto the page) at one inch square. It is filled in one color with no outline: change the color, add an outline, a gradient or a shadow in the **Style** panel, and drag its corners to size it. Icons save to PowerPoint as shapes PowerPoint can recolor and resize, and come back here as the same icon. They are the Material Design Icons by Pictogrammers (Apache License 2.0); company and product logos are left out.
 
 The ribbon's **Insert** group also adds a **Text Box**, a **Picture** or a **Table**, and **Crop** trims a picture.
 
@@ -73,7 +73,7 @@ All the drawing tools and hotkeys work on a design page, so you can draw structu
 
 Insert a PNG or JPEG (a logo, say), select it, and click **Remove white…** in the **Style** panel. You can remove only the white joined to the edges, or all white, and set how near to white counts. Undo puts the white back.
 
-**Picture Format** (on the ribbon, in the panel or on right-click) does more: it removes a background of any colour, recolours, corrects and crops pictures to shapes, and keeps the picture itself as it was, so you can change your mind later. See [Presentation: Picture Format](slides.md#picture-format).
+**Picture Format** (on the ribbon, in the panel or on right-click) does more: it removes a background of any color, recolors, corrects and crops pictures to shapes, and keeps the picture itself as it was, so you can change your mind later. See [Presentation: Picture Format](slides.md#picture-format).
 
 ## Diagrams
 
@@ -104,14 +104,14 @@ Three layouts take more from each line, as Visio's templates do:
 
 Dates can be months (`Mar`, `March 2026`, `2026-03`), quarters (`Q2 2026`), days (`14 Mar 2026`, `Mar 14`, `2026-03-14`) or numbered steps (`Week 3`, `Day 10`, `Week 1 – 4`). A range runs from the start of the first to the end of the last, written with `–`, `-` or `to` between. A date without a year takes the year of the one before it, and a range that would run backwards (`Nov – Feb`) runs into the next year. Words typed into a step's or task's shape go back into the text, keeping its lane and dates.
 
-Below the text, choose the colours (the accent colour, shades of it, colourful, light, outline only, black and white for journals, or greys), the accent colour itself (from the drawing's colours, your palettes, or **More colours…** for any colour), rounded corners and a shadow. The text is made as big as fits, the same size in every shape; type a size to fix it.
+Below the text, choose the colors (the accent color, shades of it, colorful, light, outline only, black and white for journals, or grays), the accent color itself (from the drawing's colors, your palettes, or **More colors…** for any color), rounded corners and a shadow. The text is made as big as fits, the same size in every shape; type a size to fix it.
 
 ### Structures in a diagram
 
 Draw or drop a structure so its middle is in an item's shape, and it belongs to that item:
 
 - The item keeps room for it, with the item's words underneath, and the whole diagram grows, keeping its shape, until every item's structure fits.
-- The structure is centred in its item, and moves with the diagram. It stays an ordinary structure: edit it with the drawing tools and hotkeys, and the diagram makes room as it grows.
+- The structure is centered in its item, and moves with the diagram. It stays an ordinary structure: edit it with the drawing tools and hotkeys, and the diagram makes room as it grows.
 - Drag it out of the diagram and the item lets it go.
 
 A diagram resized smaller than its structures need is drawn again just big enough to hold them. The room is saved with the diagram, so it opens the same way in a PowerPoint file.
@@ -119,7 +119,7 @@ A diagram resized smaller than its structures need is drawn again just big enoug
 Once it is placed:
 
 - Double-click a shape to type in it. The diagram's text changes with it.
-- Double-click away from the words (or right-click ▸ **Edit Diagram…**, or the **Style** panel) to change the text, layout or colours. In a document, double-click the diagram; **Edit Drawing** opens the drawing tools on it.
+- Double-click away from the words (or right-click ▸ **Edit Diagram…**, or the **Style** panel) to change the text, layout or colors. In a document, double-click the diagram; **Edit Drawing** opens the drawing tools on it.
 - Drag a corner to resize it: it is drawn again to fill the new box.
 - Right-click ▸ **Convert Diagram to Shapes** makes it ordinary shapes and connectors, to change one by one.
 
@@ -131,11 +131,11 @@ PowerPoint and Word get a diagram as one group of shapes, so it can be moved, re
 
 ## Smart guides
 
-As you drag a shape near another, pink lines show when edges or centres line up, and the shape snaps into line. Page edges count too. Hold **Alt** to drag freely, or untick **Guides** on the ribbon to turn them off.
+As you drag a shape near another, pink lines show when edges or centers line up, and the shape snaps into line. Page edges count too. Hold **Alt** to drag freely, or clear **Guides** on the ribbon to turn them off.
 
 ## Arranging
 
-The ribbon's **Arrange** group has **Bring to Front**, **Bring Forward**, **Send to Back** and **Send Backward**, buttons to line up left edges, centres, right edges, tops, middles and bottoms, and **Space Across** and **Space Down** to space things evenly.
+The ribbon's **Arrange** group has **Bring to Front**, **Bring Forward**, **Send to Back** and **Send Backward**, **Align Left**, **Align Center**, **Align Right**, **Align Top**, **Align Middle** and **Align Bottom**, and **Distribute Horizontally** and **Distribute Vertically** to space things evenly.
 
 ## The Layers panel
 
@@ -147,12 +147,12 @@ The **Layers** panel on the right lists the shapes, pictures and tables on the p
 
 ## References
 
-A design keeps a reference list, as a presentation does. **References** on the Design tab ticks which ones the page shows at its foot, written and formatted for you (journal, year, volume and page by default). Add references, or copy them from another open file, in **Insert ▸ Reference Manager…**. **Insert ▸ Formatted Reference…** puts a reference anywhere on the page as text.
+A design keeps a reference list, as a presentation does. **References** on the Design tab checks which ones the page shows at its foot, written and formatted for you (journal, year, volume and page by default). Add references, or copy them from another open file, in **Insert ▸ Reference Manager…**. **Insert ▸ Formatted Reference…** puts a reference anywhere on the page as text.
 
 ## Saving and exporting
 
 - **Save** (Ctrl+S) writes a one-slide PowerPoint file (.pptx). In PowerPoint the shapes look the same and connectors are PowerPoint connectors. Open it here again and everything is editable, with connectors still attached to their shapes.
-- **Export Picture** (ribbon **Share** group, or **File ▸ Export ▸ Export Picture…**) saves a PNG or TIFF at the resolution you type, or an SVG, EMF or EPS. Choose the page colour or a see-through background. Journals usually ask for 300 dpi for colour pictures and 600 to 1200 dpi for line art. A very large page at a very high dpi is reduced to what fits in memory, and a message says which dpi was used.
+- **Export Picture** (ribbon **Share** group, or **File ▸ Export ▸ Export Picture…**) saves a PNG or TIFF at the resolution you type, or an SVG, EMF or EPS. Choose the page color or a see-through background. Journals usually ask for 300 dpi for color pictures and 600 to 1200 dpi for line art. A very large page at a very high dpi is reduced to what fits in memory, and a message says which dpi was used.
 - **Export PDF** (ribbon **Share** group, or **File ▸ Export ▸ Export PDF…**) saves the page at its exact size.
 - **File ▸ Print…** (Ctrl+P) prints the page at its own size.
 

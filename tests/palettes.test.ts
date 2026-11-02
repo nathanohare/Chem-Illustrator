@@ -39,8 +39,8 @@ describe('adding colours', () => {
   });
 
   it('names new rows so they differ', () => {
-    expect(freshName([])).toBe('My colours');
-    expect(freshName([{ name: 'My colours', colors: [] }])).toBe('My colours 2');
+    expect(freshName([])).toBe('My colors');
+    expect(freshName([{ name: 'My colors', colors: [] }])).toBe('My colors 2');
   });
 
   it('ready-made rows are proper colour codes', () => {

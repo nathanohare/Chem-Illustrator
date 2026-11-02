@@ -1443,6 +1443,9 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   if (!!r.strike !== !!cs?.strike) out.push(r.strike ? '<w:strike/>' : '<w:strike w:val="0"/>');
   const color = r.color ?? st.color;
   if ((color ?? '') !== (st.color ?? '')) out.push(`<w:color w:val="${color ? hex6(color) : 'auto'}"/>`);
+  // character spacing (twentieths of a point) and kerning taken off
+  if (r.spacing) out.push(`<w:spacing w:val="${Math.round(r.spacing * 20)}"/>`);
+  if (r.noKern) out.push('<w:kern w:val="0"/>');
   const size = r.size ?? st.size;
   if (size !== st.size) out.push(`<w:sz w:val="${half(size)}"/><w:szCs w:val="${half(size)}"/>`);
   const hl = r.highlight ? highlightName(r.highlight) : null;
@@ -1452,6 +1455,23 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   if (r.highlight && !hl) out.push(`<w:shd w:val="clear" w:color="auto" w:fill="${hex6(r.highlight)}"/>`);
   const pos = x.pos ?? (r.sub ? 'sub' : r.sup ? 'sup' : 'base');
   if (pos !== 'base') out.push(`<w:vertAlign w:val="${pos === 'sub' ? 'subscript' : 'superscript'}"/>`);
+  out.push(textEffects(r, color));
+  return out.join('');
+}
+
+/**
+ * The Font box's text effects as Word 2010's own (w14, last in a run's properties, in Word's
+ * order): a shadow, an outline round the letters, and the letters' fill (none, or see-through).
+ */
+function textEffects(r: TextRun, color: string | undefined): string {
+  if (!r.shadow && !r.outline && !r.noFill && !r.transparency) return '';
+  const ns = ` xmlns:w14="${W14_NS}"`;
+  const out: string[] = [];
+  if (r.shadow) out.push(`<w14:shadow${ns} w14:blurRad="38100" w14:dist="38100" w14:dir="2700000" w14:sx="100000" w14:sy="100000" w14:kx="0" w14:ky="0" w14:algn="tl"><w14:srgbClr w14:val="000000"><w14:alpha w14:val="60000"/></w14:srgbClr></w14:shadow>`);
+  if (r.outline) out.push(`<w14:textOutline${ns} w14:w="${Math.round((r.outlineW ?? 0.75) * 12700)}" w14:cap="flat" w14:cmpd="sng" w14:algn="ctr"><w14:solidFill><w14:srgbClr w14:val="${hex6(r.outline)}"/></w14:solidFill><w14:prstDash w14:val="solid"/><w14:round/></w14:textOutline>`);
+  // (w14's alpha is how see-through, not how solid)
+  if (r.noFill) out.push(`<w14:textFill${ns}><w14:noFill/></w14:textFill>`);
+  else if (r.transparency) out.push(`<w14:textFill${ns}><w14:solidFill><w14:srgbClr w14:val="${hex6(color ?? '#000000')}"><w14:alpha w14:val="${Math.round(r.transparency * 100000)}"/></w14:srgbClr></w14:solidFill></w14:textFill>`);
   return out.join('');
 }
 

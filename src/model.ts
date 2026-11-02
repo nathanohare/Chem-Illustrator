@@ -259,7 +259,22 @@ export interface TextRun {
   cstyle?: string;
   /** Documents: the content control (another program's, such as Chem4Word's) this text sits in, by id (see DocText.controls). */
   cc?: string;
+  /** Text effects (the Font box): no kerning between letter pairs (they are kerned unless this is set). */
+  noKern?: boolean;
+  /** Text effects: no fill inside the letters (outline-only text, with `outline`). */
+  noFill?: boolean;
+  /** Text effects: how much shows through the letters' fill, 0 (solid) to 1. */
+  transparency?: number;
+  /** Text effects: a line round each letter, in this colour, `outlineW` points wide (0.75 unless set). */
+  outline?: string;
+  outlineW?: number;
+  /** Text effects: a soft drop shadow, down and to the right. */
+  shadow?: boolean;
 }
+
+/** The text effects a run can have (the Font box), copied together onto every piece of it that is drawn. */
+export type TextFx = Pick<TextRun, 'noKern' | 'noFill' | 'transparency' | 'outline' | 'outlineW' | 'shadow'>;
+
 
 /**
  * Formatting a text takes where its runs don't set their own: the placeholders on slides take
@@ -991,7 +1006,7 @@ export const PICTURE_SHADOWS: Record<'soft' | 'hard', { off: number; blur: numbe
 export const PICTURE_STYLES: { id: string; name: string; look: PictureLook | undefined }[] = [
   { id: 'none', name: 'No frame', look: undefined },
   { id: 'thin', name: 'Thin line', look: { line: 1, lineColor: '#000000' } },
-  { id: 'grey', name: 'Grey line', look: { line: 1.5, lineColor: '#7f7f7f' } },
+  { id: 'grey', name: 'Gray line', look: { line: 1.5, lineColor: '#7f7f7f' } },
   { id: 'thick', name: 'Thick line', look: { line: 4, lineColor: '#000000' } },
   { id: 'white', name: 'White frame', look: { line: 10, lineColor: '#ffffff', shadow: 'soft' } },
   { id: 'black', name: 'Black frame', look: { line: 10, lineColor: '#000000' } },

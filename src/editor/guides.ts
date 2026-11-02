@@ -25,7 +25,22 @@ export interface CanvasGuides {
   snap: GuideSnap;
   /** The guides show (and snap); off keeps them for later. */
   shown: boolean;
+  /** Their colour (#rrggbb; absent: the usual blue, lighter on a dark page). */
+  color?: string;
+  /** How see-through they are, 0 (as usual) to 0.9 (faint). */
+  clear?: number;
 }
+
+/** The colours offered for guides: the usual blue first. */
+export const GUIDE_COLOURS: { value: string | undefined; name: string }[] = [
+  { value: undefined, name: 'Blue (the usual)' },
+  { value: '#00a8b5', name: 'Teal' },
+  { value: '#d81b8c', name: 'Magenta' },
+  { value: '#e53935', name: 'Red' },
+  { value: '#2e9b46', name: 'Green' },
+  { value: '#ef8a00', name: 'Orange' },
+  { value: '#8a8f98', name: 'Gray' },
+];
 
 export const DEFAULT_GUIDES: CanvasGuides = { list: [], grid: false, major: 72, minor: 18, snap: 'both', shown: true };
 
@@ -51,6 +66,9 @@ export function parseGuides(raw: unknown): CanvasGuides | null {
   const minor = Math.min(major, num(o.minor, 0.5, 2000) ?? Math.min(major, DEFAULT_GUIDES.minor));
   const snap = GUIDE_SNAPS.includes(o.snap as GuideSnap) ? (o.snap as GuideSnap) : DEFAULT_GUIDES.snap;
   const g: CanvasGuides = { list, grid: o.grid === true, major, minor, snap, shown: o.shown !== false };
+  if (typeof o.color === 'string' && /^#[0-9a-f]{6}$/i.test(o.color)) g.color = o.color.toLowerCase();
+  const clear = num(o.clear, 0, 0.9);
+  if (clear) g.clear = clear;
   return g.list.length || g.grid ? g : null;
 }
 
@@ -58,7 +76,7 @@ export function parseGuides(raw: unknown): CanvasGuides | null {
 export function guidesText(g: CanvasGuides | null): string | null {
   if (!g || (!g.list.length && !g.grid)) return null;
   const r = (v: number) => Math.round(v * 100) / 100;
-  return JSON.stringify({ list: g.list.map((x) => ({ kind: x.kind, x: r(x.x), y: r(x.y) })), grid: g.grid || undefined, major: r(g.major), minor: r(g.minor), snap: g.snap, shown: g.shown ? undefined : false });
+  return JSON.stringify({ list: g.list.map((x) => ({ kind: x.kind, x: r(x.x), y: r(x.y) })), grid: g.grid || undefined, major: r(g.major), minor: r(g.minor), snap: g.snap, shown: g.shown ? undefined : false, color: g.color, clear: g.clear ? r(g.clear) : undefined });
 }
 
 /** A line of a guide: up and down (at `at` = x) or across (at `at` = y), its ticks counted from `origin` along it. */

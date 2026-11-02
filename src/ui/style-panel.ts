@@ -11,7 +11,7 @@ export { tidyStyle };
 import { DESCRIPTORS } from './analysis-panel';
 import { captionReading, speciesSummary } from '../chem/species';
 import { COMMON_ADDUCTS } from '../chem/hrms';
-import { PATTERNS, RING_FILL_COLOUR, RING_PATTERN_COLOUR, patternSpacing, ringShadowSize, shadowLook } from '../render/fills';
+import { DOT_DENSITY, PATTERN_CHOICES, PATTERNS, RING_FILL_COLOUR, patternSwatch, RING_PATTERN_COLOUR, patternSpacing, ringShadowSize, shadowLook } from '../render/fills';
 import type { Role } from '../chem/reaction';
 import { setStereoShown, setStereoText } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
@@ -20,6 +20,7 @@ import { DEG, normDegrees } from '../geom';
 import { isCircle, cropTo, isCurved, headBend, swapHalf } from '../objects';
 import { firstBend, shapeBez, shapeOf } from '../arrow-path';
 import { GEOS, geoDef } from '../design/geo';
+import { drawGeoIcon } from './design-panel';
 import { nextNumber } from '../chem/sprouts';
 import { ringFillsOn } from '../chem/ring-fill';
 import { frameMembers } from '../editor/frames';
@@ -71,9 +72,9 @@ const LINES: Opt<Arrow['line']>[] = [['solid', 'Solid'], ['dashed', 'Dashed'], [
 const SHAFTS: Opt<string>[] = [['one', 'One line'], ['equilibrium', 'Equilibrium (two half arrows)'], ['retro', 'Retrosynthetic (double line)']];
 const BRACKETS: Opt<NonNullable<Shape['bracket']>>[] = [['square', 'Square [ ]'], ['round', 'Round ( )'], ['curly', 'Curly { }']];
 const VALIGN: Opt<NonNullable<Shape['textValign']>>[] = [['top', 'Top'], ['middle', 'Middle'], ['bottom', 'Bottom']];
-const HL_SHAPES: Opt<HighlightShape>[] = [['round', 'Round (discs and bands)'], ['straight', 'Straight (sharp corners, discs round labels)']];
+const HL_SHAPES: Opt<HighlightShape>[] = [['round', 'Round (discs and bands)'], ['straight', 'Straight (sharp corners, discs around labels)']];
 const HL_ENDS: Opt<HighlightEnds>[] = [['round', 'Round'], ['square', 'Square'], ['pointed', 'Pointed']];
-const HL_FILLS: Opt<HighlightFill>[] = [['solid', 'One colour'], ['linear', 'Gradient across'], ['edge', 'Gradient (bonds to edge)'], ['none', 'None (outline or texture only)']];
+const HL_FILLS: Opt<HighlightFill>[] = [['solid', 'One color'], ['linear', 'Gradient across'], ['edge', 'Gradient (bonds to edge)'], ['none', 'None (outline or texture only)']];
 const HL_LINES: Opt<HighlightLine>[] = [['none', 'None'], ['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']];
 const HL_SOFT_SIDES: Opt<HighlightSoftSide>[] = [['outer', 'At the outer edge'], ['inner', 'Inside (along the middle)'], ['both', 'Both (half each)']];
 const SHADOW_DIRS: Opt<string>[] = [['45', 'Down and right'], ['90', 'Down'], ['135', 'Down and left'], ['0', 'Right'], ['180', 'Left'], ['-45', 'Up and right'], ['-90', 'Up'], ['-135', 'Up and left']];
@@ -81,19 +82,21 @@ const SHADOW_DIRS: Opt<string>[] = [['45', 'Down and right'], ['90', 'Down'], ['
 const OPEN_GROUPS = new Set<string>();
 const SIDES: Opt<AttachSide>[] = [['below', 'Below'], ['above', 'Above'], ['left', 'Left'], ['right', 'Right']];
 const READ_AS: Opt<'auto' | 'on' | 'off'>[] = [['auto', 'Automatically'], ['on', 'Chemical'], ['off', 'Plain text']];
-const JUSTIFY: Opt<Caption['justify']>[] = [['left', 'Left'], ['center', 'Centre'], ['right', 'Right']];
+const JUSTIFY: Opt<Caption['justify']>[] = [['left', 'Left'], ['center', 'Center'], ['right', 'Right']];
 const TABLE_LINES: Opt<TableData['lines']>[] = [['acs', 'ACS style (rules above and below the headings, and at the end)'], ['grid', 'Every cell boxed'], ['none', 'None']];
 
 const LABEL_DIRS: Opt<Atom['just']>[] = [['auto', 'Automatically (away from the bonds)'], ['right', 'To the right (OMe)'], ['left', 'To the left (MeO)']];
 
 type Fill = 'none' | 'solid' | 'faded' | 'shaded' | 'gradient';
-const FILLS: Opt<Fill>[] = [['none', 'None'], ['solid', 'Solid colour'], ['faded', 'Faded (light tint)'], ['shaded', 'Shaded (light to dark)'], ['gradient', 'Gradient (two colours)']];
+const FILLS: Opt<Fill>[] = [['none', 'None'], ['solid', 'Solid color'], ['faded', 'Faded (light tint)'], ['shaded', 'Shaded (light to dark)'], ['gradient', 'Gradient (two colors)']];
 const GRAD_DIRS: Opt<string>[] = [['90', 'Top to bottom'], ['270', 'Bottom to top'], ['0', 'Left to right'], ['180', 'Right to left'], ['45', 'Diagonal, top left to bottom right'], ['-45', 'Diagonal, bottom left to top right'], ['radial', 'Out from the middle']];
 const PATTERN_OPTS: Opt<string>[] = [['none', 'None'], ...PATTERNS];
+/** The patterns shown as swatches (one Dots: its density is a setting of its own). */
+const PATTERN_PICKS: Opt<string>[] = [['none', 'None'], ...PATTERN_CHOICES];
 
 const BOND_ORDERS: Opt<string>[] = [['1', 'Single'], ['2', 'Double'], ['3', 'Triple'], ['1.5', 'Aromatic'], ['4', 'Quadruple'], ['0.5', 'Partial (transition state)']];
 const BOND_STYLES: Opt<Bond['display']>[] = [['solid', 'Plain'], ['wedge', 'Wedge'], ['hashWedge', 'Hashed wedge'], ['hash', 'Hashed'], ['bold', 'Bold'], ['dash', 'Dashed'], ['wavy', 'Wavy'], ['dative', 'Dative (arrow to the acceptor)']];
-const DOUBLE_POS: Opt<Bond['dpos']>[] = [['auto', 'Automatic'], ['left', 'Left'], ['center', 'Centred'], ['right', 'Right']];
+const DOUBLE_POS: Opt<Bond['dpos']>[] = [['auto', 'Automatic'], ['left', 'Left'], ['center', 'Centered'], ['right', 'Right']];
 
 const round = (x: number, k = 100) => Math.round(x * k) / k;
 
@@ -142,6 +145,9 @@ export class StylePanel {
   /** Pictures and shapes turn to any angle here (Slides and Design), so the panel offers a Rotation box. */
   turnable: () => boolean = () => false;
 
+  /** The first heading of this redraw has gone into the section's title. */
+  private titled = false;
+
   constructor(private section: HTMLElement, private body: HTMLElement, private doc: Doc, private sel: () => Selection, private changed: () => void) {}
 
   /** Redraw the panel for the current selection, keeping the focus on the same control. */
@@ -154,6 +160,8 @@ export class StylePanel {
     this.key = key;
     const focused = this.body.contains(document.activeElement) ? document.activeElement!.closest('.style-row')?.textContent : null;
     this.body.textContent = '';
+    this.titled = false;
+    this.subtitle('');
     const arrows = [...s.arrows].map((id) => this.doc.arrows.get(id)).filter((x): x is Arrow => !!x);
     const all = [...s.shapes].map((id) => this.doc.shapes.get(id)).filter((x): x is Shape => !!x && !x.picture);
     const shapes = all.filter((x) => x.kind !== 'picture' && x.kind !== 'table' && x.kind !== 'ring'), pictures = all.filter((x) => x.kind === 'picture');
@@ -213,7 +221,7 @@ export class StylePanel {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = 'Add frame';
-      b.title = 'Draw a box round the selection that grows and moves with it (Chemistry > Labels and Numbers > Add Frame)';
+      b.title = 'Draw a box around the selection that grows and moves with it (Chemistry > Labels and Numbers > Add Frame)';
       b.addEventListener('click', () => this.frames?.add());
       row.append(b);
       this.body.append(row);
@@ -250,16 +258,16 @@ export class StylePanel {
       this.note('Stuck to shapes: it follows them when they move.');
       const b = document.createElement('button');
       b.type = 'button';
-      b.textContent = 'Unstick from shapes';
+      b.textContent = 'Detach from Shapes';
       b.title = 'Let the ends stay where they are when the shapes move';
-      b.addEventListener('click', () => set('Unstick connector', loose));
+      b.addEventListener('click', () => set('Detach Connector', loose));
       this.body.append(b);
     }
     if (r.pin) {
       this.note('Stuck to the structure: it follows it when it moves.');
       const b = document.createElement('button');
       b.type = 'button';
-      b.textContent = 'Unstick from structure';
+      b.textContent = 'Detach from Structure';
       b.title = 'Let the ends stay where they are when the structure moves';
       b.addEventListener('click', () => set('Detach', () => ({ pin: undefined })));
       this.body.append(b);
@@ -286,7 +294,7 @@ export class StylePanel {
     this.number('Head length (pt)', round(r.headLength), 0.5, 0, 100, (v) => set('Arrowhead size', () => ({ headLength: v })));
     this.number('Head width (pt)', round(r.headWidth), 0.25, 0, 100, (v) => set('Arrowhead size', () => ({ headWidth: v })));
     this.number('Line width (pt)', round(r.lineWidth ?? lw), 0.1, 0.1, 20, (v) => set('Arrow line width', () => ({ lineWidth: Math.abs(v - lw) < 1e-9 ? undefined : v })));
-    this.color('Colour', r.color, (v) => set('Arrow colour', () => ({ color: v })));
+    this.color('Color', r.color, (v) => set('Arrow color', () => ({ color: v })));
     if (arrows.length === 1) this.reactionControls(r);
   }
 
@@ -336,7 +344,7 @@ export class StylePanel {
     this.note(r.step?.manual ? 'Chosen by hand.' : r.step ? 'Kept with the arrow (from the file, or when it was last tidied).' : 'Worked out from where things sit.');
     if (hooks.others()) {
       const opts: Opt<string>[] = [['', 'Choose…'], ['reactants', 'Starting materials'], ['products', 'Products'], ['above', 'Above the arrow'], ['below', 'Below the arrow'], ['none', 'Not part of this step']];
-      this.select('Selected things are', opts, '', (v) => { if (v) hooks.setRole(r.id, v as Role | 'none'); },);
+      this.select('Set Selection As', opts, '', (v) => { if (v) hooks.setRole(r.id, v as Role | 'none'); },);
     } else this.note('To change a role by hand, select the arrow and the things with Shift, then choose what they are here.');
     const buttons = document.createElement('div');
     buttons.className = 'style-buttons';
@@ -348,9 +356,9 @@ export class StylePanel {
       btn.addEventListener('click', on);
       buttons.append(btn);
     };
-    button('Clean Up Reaction', 'Space this step evenly: starting materials and products in line with the arrow, conditions centred on it (Ctrl+Shift+R)', () => hooks.cleanUp());
+    button('Clean Up Reaction', 'Space this step evenly: starting materials and products in line with the arrow, conditions centered on it (Ctrl+Shift+R)', () => hooks.cleanUp());
     button('Arrange…', 'Lay the scheme out as a line, rows, a snake, down the page, a catalytic cycle or a branching tree', () => hooks.arrange());
-    if (r.step) button('Work out again', 'Forget the kept roles and work them out from where things sit', () => hooks.reset(r.id));
+    if (r.step) button('Reset to Automatic', 'Forget the kept roles and work them out from where things sit', () => hooks.reset(r.id));
     this.body.appendChild(buttons);
   }
 
@@ -362,7 +370,7 @@ export class StylePanel {
     const set = (label: string, ok: (x: Shape) => boolean, patch: (x: Shape) => Partial<Shape>) =>
       this.edit(label, () => { for (const x of shapes) if (ok(x)) this.doc.updateShape(x.id, patch(x)); });
     const any = (f: (x: Shape) => boolean) => shapes.find(f);
-    const names: Record<Shape['kind'], string> = { line: 'Line', rect: 'Box', oval: 'Oval', symbol: 'Symbol', bracket: 'Bracket', picture: 'Picture', table: 'Table', geo: 'Shape', ring: 'Ring fill' };
+    const names: Record<Shape['kind'], string> = { line: 'Line', rect: 'Rectangle', oval: 'Oval', symbol: 'Symbol', bracket: 'Bracket', picture: 'Picture', table: 'Table', geo: 'Shape', ring: 'Ring fill' };
     this.heading(title ?? (shapes.length > 1 ? `${shapes.length} shapes` : isCircle(s) ? 'Circle' : s.kind === 'geo' ? geoDef(s.geo).name : names[s.kind]));
     this.rotation(shapes);
     const geo = any((x) => x.kind === 'geo');
@@ -371,16 +379,14 @@ export class StylePanel {
       // another shape from the library, keeping the size, colours and text
       // (an icon is listed too, so it can be swapped for a shape and back)
       const own = geoDef(geo.geo);
-      const opts = [...(own.icon ? [own] : []), ...GEOS].map((g): Opt<string> => [g.id, `${g.name} (${g.group.toLowerCase()})`]);
-      this.select('Shape', opts, own.id, (v) => set('Change shape', isGeo, () => ({ geo: v })));
+      if (this.pickShape) this.shapePicker(own.id, (v) => set('Change shape', isGeo, () => ({ geo: v })));
+      else {
+        const opts = [...(own.icon ? [own] : []), ...GEOS].map((g): Opt<string> => [g.id, `${g.name} (${g.group.toLowerCase()})`]);
+        this.select('Shape', opts, own.id, (v) => set('Change shape', isGeo, () => ({ geo: v })));
+      }
     }
     const lined = (x: Shape) => x.kind !== 'symbol' && x.kind !== 'ring';
     const l = any(lined);
-    if (l) {
-      this.check('Dashed', !!l.dashed && !l.dotted, (v) => set('Dashed', lined, () => ({ dashed: v, dotted: false })));
-      if (l.kind === 'line') this.check('Dotted', !!l.dotted, (v) => set('Dotted', (x) => x.kind === 'line', () => ({ dotted: v, dashed: v })));
-      if (!geo) this.check('Bold', !!l.bold, (v) => set('Bold', lined, () => ({ bold: v })));
-    }
     const fillable = (x: Shape) => x.kind === 'rect' || x.kind === 'oval' || x.kind === 'geo' || x.kind === 'ring';
     const f = any(fillable);
     if (f) {
@@ -389,29 +395,33 @@ export class StylePanel {
       // a ring fill has no line of its own: its colour unless chosen is the soft blue
       const ringOnly = shapes.every((x) => x.kind === 'ring');
       if (f.filled) {
-        this.color(f.fill === 'gradient' ? 'From colour' : 'Fill colour', f.fillColor, (v) => set('Fill colour', fillable, (x) => (x.kind === 'ring' && !v ? { fillColor: undefined, color: undefined } : { fillColor: v })),
+        this.color(f.fill === 'gradient' ? 'From color' : 'Fill color', f.fillColor, (v) => set('Fill color', fillable, (x) => (x.kind === 'ring' && !v ? { fillColor: undefined, color: undefined } : { fillColor: v })),
           ringOnly ? 'Soft blue' : 'Same as the line', ringOnly ? RING_FILL_COLOUR : f.color ?? '#000000');
       }
       if (f.filled && f.fill === 'gradient') {
-        this.color('To colour', f.fill2, (v) => set('Gradient colour', fillable, () => ({ fill2: v })), 'White', '#ffffff');
+        this.color('To color', f.fill2, (v) => set('Gradient color', fillable, () => ({ fill2: v })), 'White', '#ffffff');
         this.select('Direction', GRAD_DIRS, f.gradRadial ? 'radial' : String(f.gradAngle ?? 90), (v) => set('Gradient direction', fillable, () => (v === 'radial' ? { gradRadial: true } : { gradRadial: undefined, gradAngle: Number(v) })));
       }
       const see = any((x) => x.kind === 'geo' || x.kind === 'ring');
       if (f.filled && see) {
         const seeable = (x: Shape) => x.kind === 'geo' || x.kind === 'ring';
-        this.number('See-through (%)', Math.round((see.transparency ?? 0) * 100), 5, 0, 100, (v) => set('Transparency', seeable, () => ({ transparency: v ? v / 100 : undefined })), 'How much shows through the fill: 0 is solid');
+        this.number('Transparency (%)', Math.round((see.transparency ?? 0) * 100), 5, 0, 100, (v) => set('Transparency', seeable, () => ({ transparency: v ? v / 100 : undefined })), 'How much shows through the fill: 0 is solid');
       }
       // hatching and stippling, over the fill or on their own
-      this.select('Pattern', PATTERN_OPTS, f.pattern ?? 'none', (v) => set('Pattern', fillable, () => ({ pattern: v === 'none' ? undefined : (v as Pattern) })));
+      this.patternPicker('Pattern', f.pattern ?? 'none', (v) => set('Pattern', fillable, () => ({ pattern: v === 'none' ? undefined : (v as Pattern) })));
+      if (f.pattern === 'dots' || f.pattern === 'dense-dots') {
+        const ring = f.kind === 'ring';
+        this.densityPicker(patternSpacing(f), ring, (gap) => set('Dot density', fillable, () => ({ pattern: 'dots', patternSize: gap })));
+      }
       if (f.pattern) {
-        this.color('Pattern colour', f.patternColor, (v) => set('Pattern colour', fillable, () => ({ patternColor: v })),
-          f.kind === 'ring' ? 'Light grey' : 'Same as the line', f.kind === 'ring' ? RING_PATTERN_COLOUR : f.color ?? '#000000');
-        this.number('Pattern see-through (%)', Math.round((f.patternTransparency ?? 0) * 100), 5, 0, 100, (v) => set('Pattern transparency', fillable, () => ({ patternTransparency: v ? v / 100 : undefined })),
+        this.color('Pattern color', f.patternColor, (v) => set('Pattern color', fillable, () => ({ patternColor: v })),
+          f.kind === 'ring' ? 'Light gray' : 'Same as the line', f.kind === 'ring' ? RING_PATTERN_COLOUR : f.color ?? '#000000');
+        this.number('Pattern Transparency (%)', Math.round((f.patternTransparency ?? 0) * 100), 5, 0, 100, (v) => set('Pattern transparency', fillable, () => ({ patternTransparency: v ? v / 100 : undefined })),
           'How much shows through the lines or dots: 0 is solid');
         this.number('Pattern spacing (pt)', round(patternSpacing(f)), 0.25, 0.5, 40, (v) => set('Pattern spacing', fillable, () => ({ patternSize: v })), 'How far apart the lines or dots are');
         const ring = any((x) => x.kind === 'ring' && !!x.pattern);
         if (ring) this.check('Pattern under double bonds', !ring.patternClear, (v) => set('Pattern under double bonds', (x) => x.kind === 'ring', () => ({ patternClear: v ? undefined : true })),
-          'Run the lines or dots up to the bonds and under the double bonds; untick to keep them clear of the bonds and labels');
+          'Run the lines or dots up to the bonds and under the double bonds; clear to keep them clear of the bonds and labels');
       }
     }
     // ring fills and design shapes: a drop shadow, with its colour, darkness, direction and blur folded away
@@ -429,16 +439,26 @@ export class StylePanel {
         // fused ring fills cast one shadow round their outer edge unless asked for one between them
         const ring = any((x) => x.kind === 'ring' && !!x.shadow);
         if (ring) this.check('Shadow between fused rings', !!ring.shadowBetween, (v) => set('Shadow between fused rings', (x) => x.kind === 'ring', () => ({ shadowBetween: v || undefined })),
-          'Each ring casts its own shadow, onto the rings fused to it too; untick for one shadow round the outer edge');
+          'Each ring casts its own shadow, onto the rings fused to it too; clear for one shadow around the outer edge');
       });
     }
     if (geo) {
-      this.number('Outline (pt)', round(geo.lineWidth ?? (geo.bold ? lw * 2.5 : lw)), 0.25, 0, 50, (v) => set('Outline width', isGeo, () => ({ lineWidth: v, bold: undefined })), '0 for no outline');
-      this.select('Text across', JUSTIFY, geo.textAlign ?? 'center', (v) => set('Text alignment', isGeo, () => ({ textAlign: v === 'center' ? undefined : v })));
-      this.select('Text up and down', VALIGN, geo.textValign ?? 'middle', (v) => set('Text alignment', isGeo, () => ({ textValign: v === 'middle' ? undefined : v })));
-      this.note('Double-click the shape to type in it.');
+      this.select('Horizontal Alignment', JUSTIFY, geo.textAlign ?? 'center', (v) => set('Text alignment', isGeo, () => ({ textAlign: v === 'center' ? undefined : v })));
+      this.select('Vertical Alignment', VALIGN, geo.textValign ?? 'middle', (v) => set('Text alignment', isGeo, () => ({ textValign: v === 'middle' ? undefined : v })));
     }
+    const br = any((x) => x.kind === 'bracket');
+    if (br) this.select('Bracket', BRACKETS, br.bracket ?? 'square', (v) => set('Bracket shape', (x) => x.kind === 'bracket', () => ({ bracket: v })));
+    // the border together: its colour, weight, dashes, corners and shadow
+    // (ring fills have no line, so no line colour: it only stood in for a fill colour that wasn't set)
     const box = any((x) => x.kind === 'rect');
+    if (l || box) this.subheading('Border');
+    if (shapes.some((x) => x.kind !== 'ring')) this.color(f?.filled && f.fillColor ? 'Line color' : 'Color', s.color, (v) => set('Color', (x) => x.kind !== 'ring', () => ({ color: v })));
+    if (geo) this.number('Outline (pt)', round(geo.lineWidth ?? (geo.bold ? lw * 2.5 : lw)), 0.25, 0, 50, (v) => set('Outline width', isGeo, () => ({ lineWidth: v, bold: undefined })), '0 for no outline');
+    if (l) {
+      this.check('Dashed', !!l.dashed && !l.dotted, (v) => set('Dashed', lined, () => ({ dashed: v, dotted: false })));
+      if (l.kind === 'line') this.check('Dotted', !!l.dotted, (v) => set('Dotted', (x) => x.kind === 'line', () => ({ dotted: v, dashed: v })));
+      if (!geo) this.check('Bold', !!l.bold, (v) => set('Bold', lined, () => ({ bold: v })));
+    }
     if (box) {
       const isBox = (x: Shape) => x.kind === 'rect';
       this.check('Round corners', !!box.rounded, (v) => set('Round corners', isBox, () => ({ rounded: v })));
@@ -446,10 +466,6 @@ export class StylePanel {
       this.check('Shadow', !!box.shadow, (v) => set('Shadow', isBox, () => ({ shadow: v })));
       if (box.shadow) this.number('Shadow size (pt)', round(box.shadowSize ?? 4 * lw), 0.5, 0, 100, (v) => set('Shadow size', isBox, () => ({ shadowSize: v })));
     }
-    const br = any((x) => x.kind === 'bracket');
-    if (br) this.select('Bracket', BRACKETS, br.bracket ?? 'square', (v) => set('Bracket shape', (x) => x.kind === 'bracket', () => ({ bracket: v })));
-    // ring fills have no line, so no line colour (it only stood in for a fill colour that wasn't set)
-    if (shapes.some((x) => x.kind !== 'ring')) this.color(f?.filled && f.fillColor ? 'Line colour' : 'Colour', s.color, (v) => set('Colour', (x) => x.kind !== 'ring', () => ({ color: v })));
   }
 
   // ------------------------------------------------------------------ energy diagrams
@@ -503,7 +519,7 @@ export class StylePanel {
         const view = (patch: Partial<typeof c.view>) => this.plate?.restyle(sh.id, { crystal: { ...c, view: { ...c.view, ...patch } } });
         this.select('Drawing', [['ortep', 'Thermal ellipsoids'], ['ball', 'Ball-and-stick']], c.view.style, (v) => view({ style: v as typeof c.view.style }));
         this.check('Hydrogen atoms', c.view.hydrogens, (v) => view({ hydrogens: v }));
-        this.check('Colour', c.view.colour, (v) => view({ colour: v }));
+        this.check('Color', c.view.colour, (v) => view({ colour: v }));
         this.check('Atom labels', c.view.labels, (v) => view({ labels: v }));
       }
       this.note('Turn it, change the ellipsoids or see the crystal data in the window; drag a corner to resize it.');
@@ -547,11 +563,11 @@ export class StylePanel {
     this.heading('Diagram');
     const set = (patch: Partial<DiagramData>) => this.diagram?.restyle(sh.id, patch);
     this.select('Layout', DIAGRAM_LAYOUTS.map((l) => [l.id, `${l.category}: ${l.name}`] as [string, string]), d.layout, (v) => set({ layout: v }));
-    this.select('Colours', DIAGRAM_COLOURS, d.colours, (v) => set({ colours: v }));
-    if (d.colours !== 'colourful' && d.colours !== 'mono' && d.colours !== 'grey') this.color('Accent colour', d.accent, (v) => set({ accent: v ?? '#4472c4' }), 'Blue', '#4472c4');
+    this.select('Colors', DIAGRAM_COLOURS, d.colours, (v) => set({ colours: v }));
+    if (d.colours !== 'colourful' && d.colours !== 'mono' && d.colours !== 'grey') this.color('Accent color', d.accent, (v) => set({ accent: v ?? '#4472c4' }), 'Blue', '#4472c4');
     this.check('Rounded corners', d.rounded, (v) => set({ rounded: v }));
     this.check('Shadow', d.shadow, (v) => set({ shadow: v }));
-    this.check('Fit the text', d.size === undefined, (v) => set({ size: v ? undefined : 14 }), 'The text as big as fits, the same size in every shape; off, a size of your own');
+    this.check('AutoFit Text', d.size === undefined, (v) => set({ size: v ? undefined : 14 }), 'The text as big as fits, the same size in every shape; off, a size of your own');
     if (d.size !== undefined) this.number('Text size', d.size, 1, 4, 96, (v) => set({ size: v }));
     this.note('Double-click a shape to type in it, or change all the text in the window. Drag a corner to resize it: it is drawn again to fill the box.');
     const row = document.createElement('div');
@@ -575,31 +591,33 @@ export class StylePanel {
   /** A box: as a frame, the gap it keeps round what it surrounds and whether it follows them. */
   private frameControls(sh: Shape): void {
     const f = sh.frame;
+    // what a frame does, as the heading's tooltip rather than a paragraph in the panel
+    const about = 'A frame fits around what lies inside it, with a gap, and follows it from then on. Moving or resizing the frame by hand stops it fitting; check Fit to Contents to fit it again.';
     this.heading('Frame');
-    if (!f) {
-      this.note('Make this box a frame: it fits round what lies inside it, with a gap, and follows it from then on.');
-    } else {
+    (this.body.lastElementChild as HTMLElement).title = about;
+    if (f) {
       const set = (label: string, patch: Partial<NonNullable<Shape['frame']>>) => this.edit(label, () => {
         const now = this.doc.shapes.get(sh.id)?.frame;
         if (now) this.doc.updateShape(sh.id, { frame: { ...now, ...patch } });
       });
-      this.check('Fit round its contents', f.fit, (v) => (v ? this.frames?.fit(sh.id) : set('Stop fitting frame', { fit: false })));
-      this.number('Gap across (pt)', round(f.padX, 10), 0.5, 0, 500, (v) => set('Frame gap', { padX: v }),
-        'Space between the frame and what it surrounds, left and right.');
-      this.number('Gap up and down (pt)', round(f.padY, 10), 0.5, 0, 500, (v) => set('Frame gap', { padY: v }),
-        'Space between the frame and what it surrounds, above and below.');
       // each structure counts once, however many of its atoms were selected
       const seen = new Set<number>();
       let n = f.captions.length + f.arrows.length + f.shapes.length;
       for (const id of f.atoms) if (this.doc.atoms.has(id) && !seen.has(id)) { n++; for (const a of this.doc.fragmentOf(id)) seen.add(a); }
-      this.note(`${f.fit ? 'Follows' : 'Surrounds'} ${n} ${n === 1 ? 'thing' : 'things'} (structures, text, arrows, shapes). Moving or resizing the frame by hand stops it fitting; tick the box to fit it again.`);
+      this.check('Fit to Contents', f.fit, (v) => (v ? this.frames?.fit(sh.id) : set('Stop fitting frame', { fit: false })),
+        `${f.fit ? 'Follows' : 'Surrounds'} ${n} ${n === 1 ? 'thing' : 'things'} (structures, text, arrows, shapes). ${about}`);
+      this.number('Horizontal Padding (pt)', round(f.padX, 10), 0.5, 0, 500, (v) => set('Frame gap', { padX: v }),
+        'Space between the frame and what it surrounds, left and right.');
+      this.number('Vertical Padding (pt)', round(f.padY, 10), 0.5, 0, 500, (v) => set('Frame gap', { padY: v }),
+        'Space between the frame and what it surrounds, above and below.');
     }
     if (!f || !f.fit) {
       const row = document.createElement('div');
       row.className = 'style-buttons';
       const b = document.createElement('button');
       b.type = 'button';
-      b.textContent = f ? 'Fit now' : 'Fit round what is inside';
+      b.textContent = f ? 'Fit Now' : 'Fit to Contents';
+      b.title = about;
       b.addEventListener('click', () => this.frames?.fit(sh.id));
       row.append(b);
       this.body.append(row);
@@ -661,7 +679,7 @@ export class StylePanel {
       if (pics.length === 1) {
         const buttons = document.createElement('div');
         buttons.className = 'style-buttons';
-        const btn = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Edit chart…', title: 'Its data, the kind of chart, titles, axes, colours and fitted lines' });
+        const btn = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Edit chart…', title: 'Its data, the kind of chart, titles, axes, colors and fitted lines' });
         btn.addEventListener('click', () => this.onEditChart(p.id));
         buttons.append(btn);
         this.body.appendChild(buttons);
@@ -686,7 +704,7 @@ export class StylePanel {
       buttons.append(btn);
     };
     const plain = pics.filter((x) => !x.video);
-    if (plain.length) button('Picture Format…', 'Brightness, contrast, sharpen, recolour, transparency, Remove Background, crop to a shape or proportions (saved as PowerPoint\'s own settings)', () => this.formatPicture());
+    if (plain.length) button('Picture Format…', 'Brightness, contrast, sharpen, recolor, transparency, Remove Background, crop to a shape or proportions (saved as PowerPoint\'s own settings)', () => this.formatPicture());
     if (pics.length === 1) button('Crop with mouse', 'Drag the black handles to cut the edges off; Esc when done', () => this.cropWithMouse(p.id));
     if (pics.some((x) => x.crop)) button('Uncrop', 'Show the whole picture again', () => set('Uncrop picture', (x) => cropTo(x, { l: 0, t: 0, r: 0, b: 0 })));
     // only pictures made of pixels have a background to take out
@@ -706,7 +724,7 @@ export class StylePanel {
     const p = maths[0];
     this.heading(maths.length > 1 ? `${maths.length} equations` : 'Equation');
     this.note('Double-click it to change it in the equation window. Drag a corner to make it larger or smaller. PowerPoint opens it as its own equation.');
-    this.color('Colour', p.math!.color ?? '#000000', (v) => this.onEquationColour(maths.map((x) => x.id), v ?? '#000000'));
+    this.color('Color', p.math!.color ?? '#000000', (v) => this.onEquationColour(maths.map((x) => x.id), v ?? '#000000'));
     if (maths.length === 1) {
       const buttons = document.createElement('div');
       buttons.className = 'style-buttons';
@@ -729,14 +747,14 @@ export class StylePanel {
     const same = (a: PictureLook | undefined, b: PictureLook | undefined) => JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
     const preset = PICTURE_STYLES.find((p) => same(p.look, pics[0].look))?.id ?? 'custom';
     const opts: Opt<string>[] = PICTURE_STYLES.map((p) => [p.id, p.name]);
-    if (preset === 'custom') opts.push(['custom', 'Your own']);
+    if (preset === 'custom') opts.push(['custom', 'Custom']);
     this.select('Frame style', opts, preset, (v) => {
       const p = PICTURE_STYLES.find((x) => x.id === v);
       if (p) setLook('Picture style', () => p.look && { ...p.look });
     });
     this.number('Frame line (pt)', look.line ?? 0, 0.5, 0, 72, (v) => setLook('Picture frame', (l) => ({ ...l, line: v })),
-      'The width of the line round the picture; 0 for none.');
-    if (look.line) this.color('Frame colour', look.lineColor, (v) => setLook('Picture frame colour', (l) => ({ ...l, lineColor: v ?? '#000000' })));
+      'The width of the line around the picture; 0 for none.');
+    if (look.line) this.color('Frame color', look.lineColor, (v) => setLook('Picture frame color', (l) => ({ ...l, lineColor: v ?? '#000000' })));
     this.number('Rounded corners (%)', round((look.round ?? 0) * 100, 10), 1, 0, 50, (v) => setLook('Rounded corners', (l) => ({ ...l, round: v / 100 })),
       'How round the corners are, as a percentage of the shorter side (50 makes a circle or a pill).');
     this.select<'none' | 'soft' | 'hard'>('Shadow', [['none', 'None'], ['soft', 'Soft'], ['hard', 'Hard']], look.shadow ?? 'none',
@@ -798,16 +816,16 @@ export class StylePanel {
       const o = lookOf(t);
       const opt = (label: string, on: boolean, f: (v: boolean) => TableData, help: string) => this.check(label, on, (v) => set('Table style options', f(v)), help);
       const flag = (k: 'total' | 'bandRows' | 'firstCol' | 'lastCol' | 'bandCols') => (v: boolean): TableData => ({ ...t, look: { ...t.look, [k]: v } });
-      opt('Header row', o.header, (v) => ({ ...t, head: v ? Math.max(1, t.head) : 0 }), 'The first row in the style’s strong colour, its text bold');
+      opt('Header row', o.header, (v) => ({ ...t, head: v ? Math.max(1, t.head) : 0 }), 'The first row in the style’s strong color, its text bold');
       opt('Total row', o.total, flag('total'), 'The last row set off with a line above it, its text bold');
       opt('Banded rows', o.bandRows, flag('bandRows'), 'Every other row shaded, for reading across');
-      opt('First column', o.firstCol, flag('firstCol'), 'The first column in bold (or the strong colour)');
-      opt('Last column', o.lastCol, flag('lastCol'), 'The last column in bold (or the strong colour)');
+      opt('First column', o.firstCol, flag('firstCol'), 'The first column in bold (or the strong color)');
+      opt('Last column', o.lastCol, flag('lastCol'), 'The last column in bold (or the strong color)');
       opt('Banded columns', o.bandCols, flag('bandCols'), 'Every other column shaded');
     }
     if (cell) {
       const colAlign = t.align?.[cell.c] ?? (cell.c === 0 ? 'left' : 'center');
-      this.select('Column lines up', JUSTIFY, colAlign === 'justify' ? 'left' : colAlign, (v) => set('Column alignment', setColumnAlign(t, cell.c, v)));
+      this.select('Column Alignment', JUSTIFY, colAlign === 'justify' ? 'left' : colAlign, (v) => set('Column alignment', setColumnAlign(t, cell.c, v)));
       this.number('Column width (pt)', round(t.cols[cell.c], 10), 1, 4, 2000, (v) => set('Column width', setColumnWidth(t, cell.c, v)),
         'You can also drag the handle at the right of the text box while typing in a cell.');
       this.number('Cell spans (columns)', spanOf(t, cell.r, cell.c), 1, 1, t.cols.length - cell.c, (v) => set('Join table cells', setSpan(t, cell.r, cell.c, v)),
@@ -820,13 +838,13 @@ export class StylePanel {
         ['Split cell', 'Split a joined cell back into single cells', spanOf(t, cell.r, cell.c) > 1 || rowSpanOf(t, cell.r, cell.c) > 1 ? () => set('Split cell', splitCell(t, cell.r, cell.c), cell) : null],
       ]);
       const own = t.rows[cell.r][cell.c]?.fill;
-      this.color('Cell colour', own, (v) => set('Cell colour', { ...t, rows: t.rows.map((row, rr) => rr !== cell.r ? row : row.map((x, cc) => { if (cc !== cell.c) return x; const { fill: _, ...rest } = x; return v ? { ...rest, fill: v } : rest; })) }),
+      this.color('Cell color', own, (v) => set('Cell color', { ...t, rows: t.rows.map((row, rr) => rr !== cell.r ? row : row.map((x, cc) => { if (cc !== cell.c) return x; const { fill: _, ...rest } = x; return v ? { ...rest, fill: v } : rest; })) }),
         undefined, slideCellLook(t, cell.r, cell.c)?.fill);
     }
     const size = t.size ?? this.doc.style.captionSize;
     this.number('Text size (pt)', round(size, 10), 0.5, 1, 200, (v) => set('Table text size', resizeTableText(t, v)),
       'Changes all the table’s text; the footnotes are set a little smaller. Double-click a cell to change part of it.');
-    this.color('Line colour', s.color, (v) => this.edit('Table line colour', () => this.doc.updateShape(s.id, { color: v })));
+    this.color('Line color', s.color, (v) => this.edit('Table line color', () => this.doc.updateShape(s.id, { color: v })));
     buttons([
       [t.title ? 'Edit title' : 'Add title', 'The title above the table, such as “Table 1. Optimization of the Reaction Conditions”', () => hooks.edit(s.id, 'title')],
       [t.notes ? 'Edit footnotes' : 'Add footnotes', 'Notes under the table, such as “a Isolated yield.”', () => hooks.edit(s.id, 'notes')],
@@ -852,8 +870,8 @@ export class StylePanel {
     whole('Bold', 'bold');
     whole('Italic', 'italic');
     whole('Formula style (CH₃, NH₄⁺)', 'formula');
-    this.select('Line up', JUSTIFY, c.justify, (v) => set('Justification', () => ({ justify: v })));
-    this.color('Colour', c.runs[0]?.color, (v) => set('Text colour', (x) => ({ runs: x.runs.map((r) => ({ ...r, color: v })) })));
+    this.select('Alignment', JUSTIFY, c.justify, (v) => set('Justification', () => ({ justify: v })));
+    this.color('Color', c.runs[0]?.color, (v) => set('Text color', (x) => ({ runs: x.runs.map((r) => ({ ...r, color: v })) })));
     this.chemControls(caps);
     this.attachControls(caps);
   }
@@ -889,13 +907,13 @@ export class StylePanel {
       this.body.appendChild(row);
     };
     if (!tied.length) {
-      if (this.tie) button('Tie to nearest structure', 'Keep this caption beside the structure nearest it: it follows when the structure moves', () => this.tie?.(loose.map((x) => x.id)));
+      if (this.tie) button('Pin to Nearest Structure', 'Keep this caption beside the structure nearest it: it follows when the structure moves', () => this.tie?.(loose.map((x) => x.id)));
       return;
     }
     const a = tied[0].attach!;
     const setA = (label: string, patch: (x: Attachment) => Partial<Attachment>) =>
       this.edit(label, () => { for (const x of tied) this.doc.updateCaption(x.id, { attach: { ...x.attach!, ...patch(x.attach!) } }); });
-    this.heading(a.role === 'descriptors' ? 'Tied descriptors' : a.role === 'label' ? 'Tied ID label' : 'Tied to its structure');
+    this.heading(a.role === 'descriptors' ? 'Attached Descriptors' : a.role === 'label' ? 'Attached ID Label' : 'Attached to Structure');
     // text beside a structure lines up towards it; above and below, centred (Line up changes it back)
     this.select<AttachSide>('Sits', SIDES, a.side, (v) => this.edit('Caption side', () => {
       for (const x of tied) this.doc.updateCaption(x.id, { attach: { ...x.attach!, side: v, shift: 0 }, justify: v === 'right' ? 'left' : v === 'left' ? 'right' : 'center' });
@@ -903,7 +921,7 @@ export class StylePanel {
     this.number('Gap (pt)', round(a.gap, 10), 0.5, -200, 500, (v) => setA('Caption gap', () => ({ gap: v })),
       'Space between the structure (with its atom labels) and the caption. You can also drag the caption.');
     this.number('Shift (pt)', round(a.shift, 10), 0.5, -1000, 1000, (v) => setA('Caption shift', () => ({ shift: v })),
-      'How far off the middle of its side: across for below and above, down for left and right. 0 centres it.');
+      'How far off the middle of its side: across for below and above, down for left and right. 0 centers it.');
     const desc = tied.filter((x) => x.attach!.role === 'descriptors');
     if (desc.length) {
       const show = new Set<DescriptorKey>(desc[0].attach!.show ?? []);
@@ -923,8 +941,8 @@ export class StylePanel {
       this.check('Update when the structure changes', !desc[0].attach!.keepText, (v) => setA(v ? 'Update descriptors' : 'Keep descriptor text', (x) => (x.role === 'descriptors' ? { keepText: v ? undefined : true, sig: v ? undefined : x.sig } : {})),
         'Turn off to keep the text as it is, for instance after typing over it by hand.');
     }
-    button('Untie from structure', 'Leave the caption where it is as ordinary text: it no longer follows the structure', () =>
-      this.edit('Untie caption', () => { for (const x of tied) this.doc.updateCaption(x.id, { attach: undefined }); }));
+    button('Unpin from Structure', 'Leave the caption where it is as ordinary text: it no longer follows the structure', () =>
+      this.edit('Unpin Caption', () => { for (const x of tied) this.doc.updateCaption(x.id, { attach: undefined }); }));
     if (loose.length && this.tie) button('Tie the others too', 'Tie the selected captions that are loose to the structure nearest each', () => this.tie?.(loose.map((x) => x.id)));
   }
 
@@ -944,7 +962,13 @@ export class StylePanel {
     }
     if (a.attach) {
       this.heading('Point of attachment');
-      this.number('Number', a.attachNum ?? 0, 1, 0, 99, (v) => set('Attachment number', { attachNum: v || undefined }),
+      const kind = a.attach === 'Unspecified' || a.attach === 'Diamond' ? 'Numbered' : a.attach;
+      const kinds: Opt<string>[] = [['Wavy', 'Wavy bond'], ['Star', 'Star (*)'], ['Numbered', 'Numbered (diamond)']];
+      if (!kinds.some(([v]) => v === kind)) kinds.push([kind, kind]);
+      this.select('Kind', kinds, kind, (v) => set('Attachment point', v === 'Numbered'
+        ? { attach: 'Unspecified', attachNum: a.attachNum ?? nextNumber(this.doc, a.id, (x) => (x.attach ? x.attachNum : undefined)) }
+        : { attach: v, attachNum: undefined }));
+      if (kind === 'Numbered') this.number('Number', a.attachNum ?? 0, 1, 0, 99, (v) => set('Attachment number', { attachNum: v || undefined }),
         'The number in the black diamond; 0 for none.');
       return;
     }
@@ -952,7 +976,7 @@ export class StylePanel {
     this.text('Label', a.label ?? '', a.z === 6 ? 'carbon (no label)' : 'automatic', (v) => this.edit('Label', () => this.applyLabel(a.id, v)),
       'Type a label (O, NH2, OTBS, CO2Et…); leave empty for a plain carbon.');
     this.number('Charge', a.charge, 1, -8, 8, (v) => set('Charge', { charge: v }));
-    this.color('Colour', a.color, (v) => set('Atom colour', { color: v }));
+    this.color('Color', a.color, (v) => set('Atom color', { color: v }));
     this.color('Highlight', a.highlight, (v) => { set(v ? 'Highlight' : 'Remove highlight', { highlight: v }); if (v) this.highlightUsed(v); }, 'None');
     this.highlightControls([a], []);
     if (a.label || a.z !== 6 || a.showCarbon) {
@@ -979,7 +1003,7 @@ export class StylePanel {
       this.select('Style', BOND_STYLES.filter(([v]) => v !== 'wedge' && v !== 'hashWedge'), b.display, (v) => set('Bond style', { display: v }));
       this.check('A line to each atom', !!b.spokes, (v) => set(v ? 'Hapto bond to each atom' : 'Hapto bond to the middle', { spokes: v || undefined }),
         'Draw a line from the metal to each atom of the ring or π-bond, instead of one line to its middle. ChemDraw shows it to the middle either way.');
-      this.color('Colour', b.color, (v) => set('Bond colour', { color: v }));
+      this.color('Color', b.color, (v) => set('Bond color', { color: v }));
       const row = document.createElement('div');
       row.className = 'style-buttons';
       const split = document.createElement('button');
@@ -999,7 +1023,7 @@ export class StylePanel {
     }));
     this.select('Style', BOND_STYLES, b.display, (v) => set('Bond style', { display: v }));
     if (b.order === 2) this.select('Second line', DOUBLE_POS, b.dpos, (v) => set('Double bond position', { dpos: v }));
-    this.color('Colour', b.color, (v) => set('Bond colour', { color: v }));
+    this.color('Color', b.color, (v) => set('Bond color', { color: v }));
     this.color('Highlight', b.highlight, (v) => { set(v ? 'Highlight' : 'Remove highlight', { highlight: v }); if (v) this.highlightUsed(v); }, 'None');
     this.highlightControls([], [b]);
   }
@@ -1034,34 +1058,37 @@ export class StylePanel {
       '100% is the usual size; larger for a bolder highlight.');
 
     this.group('Placement', [st.centre && 'centred', !st.fit && 'labels not held'].filter(Boolean).join(', ') || 'on the bonds', () => {
-      this.check('Centre on double bonds', st.centre, (v) => set(v ? 'Centre highlight on double bonds' : 'Highlight on the bonds', { centre: v }),
-        'Run the highlight midway between a double bond\'s two lines, and round a ring midway between the ring and its inner double-bond lines (Chemistry > Highlight and Fill > Centre Highlight on Double Bonds).');
-      this.check('Grow round atom labels', st.fit, (v) => set(v ? 'Highlight round labels' : 'Highlight not round labels', { fit: v }),
-        'Make the highlight under a labelled atom (Me, OTBS, CO2Et) big enough to hold its whole label.');
+      this.check('Center on double bonds', st.centre, (v) => set(v ? 'Center highlight on double bonds' : 'Highlight on the bonds', { centre: v }),
+        'Run the highlight midway between a double bond\'s two lines, and around a ring midway between the ring and its inner double-bond lines (Chemistry > Highlight and Fill > Center Highlight on Double Bonds).');
+      this.check('Grow around atom labels', st.fit, (v) => set(v ? 'Highlight around labels' : 'Highlight not around labels', { fit: v }),
+        'Make the highlight under a labeled atom (Me, OTBS, CO2Et) big enough to hold its whole label.');
     });
 
     const fillName = HL_FILLS.find(([v]) => v === st.fill)![1].split(' (')[0];
-    this.group('Fill and texture', [fillName, st.transparency > 0 && `${pct(st.transparency)}% see-through`, st.pattern !== 'none' && PATTERN_OPTS.find(([v]) => v === st.pattern)?.[1].split(' (')[0].toLowerCase()].filter(Boolean).join(', '), () => {
+    this.group('Fill and texture', [fillName, st.transparency > 0 && `${pct(st.transparency)}% transparent`, st.pattern !== 'none' && PATTERN_OPTS.find(([v]) => v === st.pattern)?.[1].split(' (')[0].toLowerCase()].filter(Boolean).join(', '), () => {
       this.select<HighlightFill>('Fill', HL_FILLS, st.fill, (v) => set('Highlight fill', { fill: v }));
       if (st.fill === 'linear' || st.fill === 'edge') {
-        this.color(st.fill === 'edge' ? 'Colour at the edge' : 'Second colour', st.colour2 || undefined, (v) => set('Highlight gradient colour', { colour2: v ?? '' }), 'White', '#ffffff');
+        this.color(st.fill === 'edge' ? 'Color at the edge' : 'Second color', st.colour2 || undefined, (v) => set('Highlight gradient color', { colour2: v ?? '' }), 'White', '#ffffff');
         if (st.fill === 'linear') {
           const dirs = GRAD_DIRS.filter(([v]) => v !== 'radial');
           this.select<string>('Direction', dirs.some(([v]) => v === String(st.gradAngle)) ? dirs : [...dirs, [String(st.gradAngle), `${st.gradAngle}°`]], String(st.gradAngle), (v) => set('Highlight gradient direction', { gradAngle: Number(v) }));
         }
       }
-      this.number('See-through (%)', pct(st.transparency), 5, 0, 100, (v) => set('Highlight transparency', { transparency: v / 100 }), 'How much shows through the fill and texture: 0 is solid');
-      this.select<string>('Texture', PATTERN_OPTS, st.pattern, (v) => set('Highlight texture', { pattern: v as HighlightStyle['pattern'] }));
+      this.number('Transparency (%)', pct(st.transparency), 5, 0, 100, (v) => set('Highlight transparency', { transparency: v / 100 }), 'How much shows through the fill and texture: 0 is solid');
+      this.patternPicker('Texture', st.pattern, (v) => set('Highlight texture', { pattern: v as HighlightStyle['pattern'] }));
+      if (st.pattern === 'dots' || st.pattern === 'dense-dots') {
+        this.densityPicker(st.patternSize || (st.pattern === 'dense-dots' ? DOT_DENSITY[2].gap : DOT_DENSITY[1].gap), false, (gap) => set('Highlight dot density', { pattern: 'dots', patternSize: gap }));
+      }
       if (st.pattern !== 'none') {
-        this.color('Texture colour', st.patternColour || undefined, (v) => set('Highlight texture colour', { patternColour: v ?? '' }), 'A darker shade', '#808080');
+        this.color('Texture color', st.patternColour || undefined, (v) => set('Highlight texture color', { patternColour: v ?? '' }), 'A darker shade', '#808080');
         this.number('Texture spacing (pt)', st.patternSize, 0.25, 0, 40, (v) => set('Highlight texture spacing', { patternSize: v }), 'How far apart the lines or dots are: 0 for the usual spacing');
       }
     });
 
     this.group('Outline', st.line === 'none' ? 'none' : HL_LINES.find(([v]) => v === st.line)![1].toLowerCase(), () => {
-      this.select<HighlightLine>('Line round it', HL_LINES, st.line, (v) => set('Highlight outline', { line: v }));
+      this.select<HighlightLine>('Line around it', HL_LINES, st.line, (v) => set('Highlight outline', { line: v }));
       if (st.line !== 'none') {
-        this.color('Line colour', st.lineColour || undefined, (v) => set('Highlight outline colour', { lineColour: v ?? '' }), 'A darker shade', '#808080');
+        this.color('Line color', st.lineColour || undefined, (v) => set('Highlight outline color', { lineColour: v ?? '' }), 'A darker shade', '#808080');
         this.number('Line width (pt)', st.lineWidth, 0.25, 0.25, 10, (v) => set('Highlight outline width', { lineWidth: v }));
       }
       if (st.fill !== 'none') this.note('For an outline on its own, set Fill to None (Chemistry > Highlight and Fill > Outline-Only Highlight).');
@@ -1070,7 +1097,7 @@ export class StylePanel {
     this.group('Soft edges', st.soft ? `${pct(st.softAmount)}%, ${HL_SOFT_SIDES.find(([v]) => v === st.softSide)![1].split(' (')[0].toLowerCase()}` : 'off', () => {
       this.check('Soft edges', st.soft, (v) => set(v ? 'Soft highlight' : 'Sharp highlight', { soft: v }), 'Fade the highlight out instead of a sharp edge (Chemistry > Highlight and Fill > Soft Highlight Edges).');
       if (st.soft) {
-        this.number('How much fades (%)', pct(st.softAmount), 5, 5, 100, (v) => set('Soft edge amount', { softAmount: v / 100 }),
+        this.number('Soft Edge Amount (%)', pct(st.softAmount), 5, 5, 100, (v) => set('Soft edge amount', { softAmount: v / 100 }),
           'How much of the band fades, measured from its edge in to its middle: 25% fades only the outer quarter');
         this.select<HighlightSoftSide>('Fades', HL_SOFT_SIDES, st.softSide, (v) => set('Soft edge side', { softSide: v }));
       }
@@ -1087,11 +1114,11 @@ export class StylePanel {
     });
 
     this.group('Glow', st.glow ? `${pct(st.glowSize)}%` : 'off', () => {
-      this.check('Glow', st.glow, (v) => set(v ? 'Highlight glow' : 'No highlight glow', { glow: v }), 'A soft halo of colour round the outside (Chemistry > Highlight and Fill > Highlight Glow).');
+      this.check('Glow', st.glow, (v) => set(v ? 'Highlight glow' : 'No highlight glow', { glow: v }), 'A soft halo of color around the outside (Chemistry > Highlight and Fill > Highlight Glow).');
       if (st.glow) {
-        this.color('Glow colour', st.glowColour || undefined, (v) => set('Glow colour', { glowColour: v ?? '' }), 'The highlight\'s', '#ffe680');
+        this.color('Glow color', st.glowColour || undefined, (v) => set('Glow color', { glowColour: v ?? '' }), 'The highlight\'s', '#ffe680');
         this.number('Glow size (% of a bond)', pct(st.glowSize), 1, 1, 200, (v) => set('Glow size', { glowSize: v / 100 }));
-        this.number('Glow see-through (%)', pct(st.glowTransparency), 5, 0, 95, (v) => set('Glow transparency', { glowTransparency: v / 100 }));
+        this.number('Glow Transparency (%)', pct(st.glowTransparency), 5, 0, 95, (v) => set('Glow transparency', { glowTransparency: v / 100 }));
       }
     });
 
@@ -1100,7 +1127,7 @@ export class StylePanel {
     const save = document.createElement('button');
     save.type = 'button';
     save.textContent = 'Save look…';
-    save.title = 'Keep this highlight\'s look (and colour) under a name, to use again in any drawing (Chemistry > Highlight and Fill > Save Highlight Look)';
+    save.title = 'Keep this highlight\'s look (and color) under a name, to use again in any drawing (Chemistry > Highlight and Fill > Save Highlight Style)';
     save.addEventListener('click', () => this.highlightLooks.save());
     row.append(save);
     this.body.append(row);
@@ -1108,8 +1135,8 @@ export class StylePanel {
 
   /** A drop shadow's colour, darkness, direction, distance and blur (distance and blur in `unit`). */
   private shadowRows(now: { colour: string; opacity: number; angle: number; distance: number; blur: number }, unit: string, on: (patch: Partial<typeof now>) => void): void {
-    this.color('Shadow colour', now.colour === '#000000' ? undefined : now.colour, (v) => on({ colour: v ?? '#000000' }), 'Black', '#000000');
-    this.number('Darkness (%)', Math.round(now.opacity * 100), 5, 0, 100, (v) => on({ opacity: v / 100 }));
+    this.color('Shadow color', now.colour === '#000000' ? undefined : now.colour, (v) => on({ colour: v ?? '#000000' }), 'Black', '#000000');
+    this.number('Shadow Opacity (%)', Math.round(now.opacity * 100), 5, 0, 100, (v) => on({ opacity: v / 100 }));
     const a = Math.round(now.angle);
     this.select<string>('Falls', SHADOW_DIRS.some(([v]) => Number(v) === a) ? SHADOW_DIRS : [...SHADOW_DIRS, [String(a), `${a}°`]], String(a), (v) => on({ angle: Number(v) }));
     this.number(`Distance (${unit})`, round(now.distance), unit === 'pt' ? 0.25 : 1, 0, unit === 'pt' ? 50 : 200, (v) => on({ distance: v }));
@@ -1142,7 +1169,7 @@ export class StylePanel {
     const parts = [atoms.length && `${atoms.length} atom${atoms.length > 1 ? 's' : ''}`, bonds.length && `${bonds.length} bond${bonds.length > 1 ? 's' : ''}`].filter(Boolean);
     this.heading(parts.join(', '));
     const first = atoms[0]?.color ?? bonds[0]?.color;
-    this.color('Colour', first, (v) => this.edit('Colour', () => {
+    this.color('Color', first, (v) => this.edit('Color', () => {
       for (const a of atoms) this.doc.updateAtom(a.id, { color: v });
       for (const b of bonds) this.doc.updateBond(b.id, { color: v });
     }));
@@ -1162,7 +1189,7 @@ export class StylePanel {
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = 'Fill rings';
-      b.title = 'Colour in, shade or hatch the rings in the selection (Chemistry > Highlight and Fill > Fill Rings)';
+      b.title = 'Color in, shade or hatch the rings in the selection (Chemistry > Highlight and Fill > Fill Rings)';
       b.addEventListener('click', () => this.ringFill?.());
       row.append(b);
       this.body.append(row);
@@ -1187,7 +1214,7 @@ export class StylePanel {
   private stereoControls(centres: Atom[], dbls: Bond[]): void {
     const info = this.doc.stereo;
     const n = centres.length + dbls.length;
-    this.heading(n > 1 ? 'Stereo labels' : centres.length ? 'Stereocentre' : 'Double bond');
+    this.heading(n > 1 ? 'Stereo labels' : centres.length ? 'Stereocenter' : 'Double bond');
     const found = [...centres.map((a) => info?.atom(a.id)), ...dbls.map((b) => info?.bond(b.id))].filter(Boolean);
     if (found.length) this.note(`Worked out: ${found.join(', ')}`);
     if (centres.some((a) => info?.undecided?.('a', a.id)) || dbls.some((b) => info?.undecided?.('b', b.id))) {
@@ -1227,8 +1254,38 @@ export class StylePanel {
     this.changed();
   }
 
+  /**
+   * The name of what is being styled: the first one goes up beside the section's own title
+   * ("Style – Box"); any after it (a box's Frame) are headings in the panel.
+   */
   private heading(text: string): void {
+    if (!this.titled) {
+      this.titled = true;
+      this.subtitle(text);
+      return;
+    }
     const h = document.createElement('h3');
+    h.textContent = text;
+    this.body.appendChild(h);
+  }
+
+  /** The section title's second half, after "Style". */
+  private subtitle(text: string): void {
+    const h2 = this.section.querySelector<HTMLElement>(':scope > h2');
+    if (!h2) return;
+    let sp = h2.querySelector<HTMLElement>('.style-of');
+    if (!sp) {
+      sp = document.createElement('span');
+      sp.className = 'style-of';
+      h2.insertBefore(sp, h2.firstChild?.nextSibling ?? null);
+    }
+    sp.textContent = text ? ` – ${text}` : '';
+  }
+
+  /** A small label over a few rows that go together (a shape's border). */
+  private subheading(text: string): void {
+    const h = document.createElement('div');
+    h.className = 'style-sub';
     h.textContent = text;
     this.body.appendChild(h);
   }
@@ -1241,6 +1298,80 @@ export class StylePanel {
     l.append(span, control);
     if (help) l.title = help;
     this.body.appendChild(l);
+  }
+
+  /** A row of pattern swatches to click (None, the lines, Dots), with the one in use pressed. */
+  private patternPicker(label: string, value: string, on: (v: string) => void): void {
+    const now = value === 'dense-dots' ? 'dots' : value;
+    const row = document.createElement('div');
+    row.className = 'style-row';
+    const span = document.createElement('span');
+    span.textContent = label;
+    const grid = document.createElement('div');
+    grid.className = 'swatch-grid';
+    grid.setAttribute('role', 'radiogroup');
+    grid.setAttribute('aria-label', label);
+    for (const [v, name] of PATTERN_PICKS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'swatch-btn';
+      b.title = name;
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(v === now));
+      b.innerHTML = patternSwatch(v);
+      b.addEventListener('click', () => { if (v !== now) on(v); });
+      grid.append(b);
+    }
+    row.append(span, grid);
+    this.body.append(row);
+  }
+
+  /** Sparse, Medium or Dense dots: their spacing. */
+  private densityPicker(gap: number, ring: boolean, on: (gap: number) => void): void {
+    const row = document.createElement('div');
+    row.className = 'style-row';
+    const span = document.createElement('span');
+    span.textContent = 'Density';
+    const seg = document.createElement('div');
+    seg.className = 'seg';
+    seg.setAttribute('role', 'radiogroup');
+    seg.setAttribute('aria-label', 'Dot density');
+    for (const d of DOT_DENSITY) {
+      const g = ring ? d.ring : d.gap;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = d.name;
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(Math.abs(g - gap) < 0.05));
+      b.addEventListener('click', () => on(g));
+      seg.append(b);
+    }
+    row.append(span, seg);
+    this.body.append(row);
+  }
+
+  /** Design shapes: the library's shapes in a drop-down of pictures (set up by the app). */
+  pickShape?: (anchor: HTMLElement, pick: (id: string) => void) => void;
+
+  /** The shape in use as a picture and its name; a click opens the library's shapes to pick another. */
+  private shapePicker(id: string, on: (id: string) => void): void {
+    const def = geoDef(id);
+    const row = document.createElement('div');
+    row.className = 'style-row';
+    const span = document.createElement('span');
+    span.textContent = 'Shape';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'shape-pick';
+    b.title = 'Change to another shape, keeping the size, colors and text';
+    const c = document.createElement('canvas');
+    drawGeoIcon(c, def, 20, getComputedStyle(document.documentElement).getPropertyValue('--text').trim() || '#1d2330');
+    const name = document.createElement('span');
+    name.textContent = def.name;
+    b.append(c, name, ' ▾');
+    b.addEventListener('click', () => this.pickShape?.(b, on));
+    row.append(span, b);
+    this.body.append(row);
   }
 
   private select<T extends string>(label: string, opts: Opt<T>[], value: T, on: (v: T) => void): void {

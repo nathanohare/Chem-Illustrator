@@ -32,7 +32,7 @@ export class Turner {
     d.background = this.base.background;
     d.textStyles = this.base.textStyles;
     d.restoreContents(this.base.contents());
-    if (!isSameView(view) && !this.empty) d.edit('Turn in 3-D', () => { this.turn.apply(d, view as M3); });
+    if (!isSameView(view) && !this.empty) d.edit('3-D Rotation', () => { this.turn.apply(d, view as M3); });
     return d;
   }
 }

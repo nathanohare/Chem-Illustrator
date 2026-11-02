@@ -9,7 +9,7 @@ import type { Sheet } from '../sheet/workbook';
 import { Range, parseRange, rangeName, rangesOverlap, keyOf } from '../sheet/refs';
 import {
   CondFormat, CfRule, CfLook, CfOp, CfValue, IconSetName, newCondFormat, scaleRule, describeRule,
-  PRESET_LOOKS, PRESET_SCALES, PRESET_BARS, ICON_SETS, rulesAt,
+  PRESET_LOOKS, PRESET_SCALES, PRESET_BARS, ICON_SETS, rulesAt, mixColour,
 } from '../sheet/conditional';
 import { TABLE_STYLES, TableDef, newTable, tableCellLook, tableColumnNames, DEFAULT_TABLE_STYLE, tableStyleInfo } from '../sheet/table-styles';
 
@@ -20,7 +20,7 @@ export interface FormatHost {
   flash(msg: string, ms?: number): void;
 }
 
-const LOOK_OPTIONS = [...PRESET_LOOKS.map((p, i) => ({ value: String(i), label: p.name })), { value: 'custom', label: 'Your own colours…' }];
+const LOOK_OPTIONS = [...PRESET_LOOKS.map((p, i) => ({ value: String(i), label: p.name })), { value: 'custom', label: 'Custom Format…' }];
 
 /** A number when the text is one, else the text. */
 const numOrText = (s: string): number | string => (s.trim() !== '' && Number.isFinite(Number(s)) ? Number(s) : s.trim());
@@ -55,7 +55,39 @@ export class SheetFormatting {
     return this.sheet.clip(R) ?? R;
   }
 
+  /** The rules as they were while a rule is tried out on the cells (pointing at a choice, typing in a rule's window). */
+  private before: CondFormat[] | null = null;
+
+  /** Show a rule on the cells for now, without changing the sheet (null: back as they were). `instead` is a rule being changed, left out meanwhile. */
+  private tryOut(rule: CfRule | null, ranges: Range[] | null = [this.target()], instead?: number): void {
+    const s = this.host.view.sheet;
+    if (!s) return;
+    if (!rule || !ranges) {
+      if (this.before === null) return;
+      s.condFormats = this.before;
+      this.before = null;
+    } else {
+      if (this.before === null) this.before = s.condFormats;
+      s.condFormats = [{ id: -1, ranges, rule }, ...this.before.filter((cf) => cf.id !== instead)];
+    }
+    this.host.view.draw();
+  }
+
+  /** A menu's choices tried out on the cells as the pointer goes over them (Excel's live preview). */
+  private liveMenu(m: HTMLDivElement, rules: (CfRule | null)[]): void {
+    const items = [...m.querySelectorAll<HTMLButtonElement>(':scope > button')];
+    items.forEach((b, i) => {
+      const rule = rules[i];
+      if (!rule) return;
+      b.addEventListener('pointerenter', () => this.tryOut(rule));
+      b.addEventListener('focus', () => this.tryOut(rule));
+      b.addEventListener('pointerleave', () => this.tryOut(null));
+    });
+    new MutationObserver((_, o) => { if (!m.isConnected) { o.disconnect(); this.tryOut(null); } }).observe(document.body, { childList: true });
+  }
+
   private add(rule: CfRule, label: string, ranges = [this.target()]): void {
+    this.tryOut(null);
     this.host.edit(label, (s) => s.setCondFormats([newCondFormat(ranges, rule), ...s.condFormats]));
     this.host.view.focus();
   }
@@ -82,21 +114,21 @@ export class SheetFormatting {
         ['Above Average…', () => void this.average(false)],
         ['Below Average…', () => void this.average(true)],
       ])],
-      ['Data Bars ▸', sub([
-        ...PRESET_BARS.map((b) => [`${b.name} (shaded)`, () => this.add({ kind: 'bar', color: b.color, gradient: true }, 'Data bars')] as [string, () => void]),
+      ['Data Bars ▸', () => this.liveMenu(popupMenu(x, y, [
+        ...PRESET_BARS.map((b) => [`${b.name}, shaded`, () => this.add(barRule(b.color, true), 'Data bars'), true, barPic(b.color, true)] as MenuItem),
         null,
-        ...PRESET_BARS.map((b) => [`${b.name} (solid)`, () => this.add({ kind: 'bar', color: b.color, gradient: false }, 'Data bars')] as [string, () => void]),
+        ...PRESET_BARS.map((b) => [`${b.name}, solid`, () => this.add(barRule(b.color, false), 'Data bars'), true, barPic(b.color, false)] as MenuItem),
         null,
-        ['Your own…', () => void this.ruleDialog({ kind: 'bar', color: '#638ec6', gradient: true })],
-      ])],
-      ['Colour Scales ▸', sub([
-        ...PRESET_SCALES.map((p) => [p.name, () => this.add(scaleRule(p.colors), 'Colour scale')] as [string, () => void]),
+        ['Custom…', () => void this.ruleDialog(barRule('#638ec6', true))],
+      ]), [...PRESET_BARS.map((b) => barRule(b.color, true)), null, ...PRESET_BARS.map((b) => barRule(b.color, false))])],
+      ['Color Scales ▸', () => this.liveMenu(popupMenu(x, y, [
+        ...PRESET_SCALES.map((p) => [p.name, () => this.add(scaleRule(p.colors), 'Color scale'), true, scalePic(p.colors)] as MenuItem),
         null,
-        ['Your own…', () => void this.ruleDialog(scaleRule(['#f8696b', '#ffeb84', '#63be7b']))],
-      ])],
-      ['Icon Sets ▸', sub([
-        ...(Object.keys(ICON_SETS) as IconSetName[]).map((k) => [ICON_SETS[k], () => this.add({ kind: 'icons', set: k }, 'Icon set')] as [string, () => void]),
-      ])],
+        ['Custom…', () => void this.ruleDialog(scaleRule(['#f8696b', '#ffeb84', '#63be7b']))],
+      ]), PRESET_SCALES.map((p) => scaleRule(p.colors)))],
+      ['Icon Sets ▸', () => this.liveMenu(popupMenu(x, y, [
+        ...(Object.keys(ICON_SETS) as IconSetName[]).map((k) => [ICON_SETS[k], () => this.add({ kind: 'icons', set: k }, 'Icon set'), true, iconSetPic(k)] as MenuItem),
+      ]), (Object.keys(ICON_SETS) as IconSetName[]).map((k): CfRule => ({ kind: 'icons', set: k })))],
       null,
       ['New Rule…', () => void this.ruleDialog(null)],
       ['Clear Rules from Selected Cells', () => this.clear('selection')],
@@ -107,10 +139,10 @@ export class SheetFormatting {
 
   private async pickLook(values: Record<string, string>): Promise<CfLook | null> {
     if (values.look !== 'custom') return { ...PRESET_LOOKS[Number(values.look)].look };
-    const got = await ask('Your own look', [
+    const got = await ask('Custom Format', [
       { name: 'fill', label: 'Fill', type: 'color', value: '#ffeb9c' },
       { name: 'nofill', label: 'No fill', type: 'checkbox', value: 'false' },
-      { name: 'color', label: 'Text colour', type: 'color', value: '#9c5700' },
+      { name: 'color', label: 'Text color', type: 'color', value: '#9c5700' },
       { name: 'bold', label: 'Bold', type: 'checkbox', value: 'false' },
       { name: 'italic', label: 'Italic', type: 'checkbox', value: 'false' },
     ]);
@@ -128,18 +160,21 @@ export class SheetFormatting {
     else if (kind === 'duplicates') fields.push({ name: 'a', label: 'Show', value: 'dup', options: [{ value: 'dup', label: 'Duplicate values' }, { value: 'unique', label: 'Unique values' }] });
     else if (kind === 'blank') fields.push({ name: 'a', label: 'Show', value: 'blank', options: [{ value: 'blank', label: 'Empty cells' }, { value: 'filled', label: 'Cells with something in them' }] });
     else fields.push({ name: 'a', label: 'Value', value: '' });
-    const got = await ask(titles[kind], [...fields, look, range]);
+    const ruleOf = (g: Record<string, string>, l: CfLook): CfRule =>
+      kind === 'text' ? { kind: 'text', op: 'contains', text: g.a, look: l }
+        : kind === 'duplicates' ? { kind: 'duplicates', unique: g.a === 'unique', look: l }
+          : kind === 'blank' ? { kind: 'blank', not: g.a === 'filled', look: l }
+            : { kind: 'cells', op: kind, value: numOrText(g.a), ...(kind === 'between' ? { value2: numOrText(g.b) } : {}), look: l };
+    const got = await ask(titles[kind], [...fields, look, range], {
+      onInput: (g) => this.tryOut(g.look === 'custom' || (g.a ?? '') === '' ? null : ruleOf(g, PRESET_LOOKS[Number(g.look)].look), parseRanges(g.range)),
+    });
+    this.tryOut(null);
     if (!got) return;
     const ranges = parseRanges(got.range);
     if (!ranges) { this.host.flash('The "Applies to" cells don\'t read as a range (like B2:B20).'); return; }
     const l = await this.pickLook(got);
     if (!l) return;
-    let rule: CfRule;
-    if (kind === 'text') rule = { kind: 'text', op: 'contains', text: got.a, look: l };
-    else if (kind === 'duplicates') rule = { kind: 'duplicates', unique: got.a === 'unique', look: l };
-    else if (kind === 'blank') rule = { kind: 'blank', not: got.a === 'filled', look: l };
-    else rule = { kind: 'cells', op: kind, value: numOrText(got.a), ...(kind === 'between' ? { value2: numOrText(got.b) } : {}), look: l };
-    this.add(rule, 'Highlight cells', ranges);
+    this.add(ruleOf(got, l), 'Highlight cells', ranges);
   }
 
   private async topBottom(bottom: boolean, percent: boolean): Promise<void> {
@@ -186,7 +221,7 @@ export class SheetFormatting {
   /** The window for a new rule (or changing one): what kind, its settings, its look. */
   async ruleDialog(start: CfRule | null, existing?: CondFormat): Promise<void> {
     const kinds = [
-      { value: 'scale', label: 'Colour scale' },
+      { value: 'scale', label: 'Color scale' },
       { value: 'bar', label: 'Data bar' },
       { value: 'icons', label: 'Icon set' },
       { value: 'cells', label: 'Cells whose value is…' },
@@ -211,7 +246,7 @@ export class SheetFormatting {
     const lookFields = (l?: CfLook): Field[] => [
       { name: 'fill', label: 'Fill', type: 'color', value: l?.fill ?? '#ffc7ce' },
       { name: 'nofill', label: 'No fill', type: 'checkbox', value: String(!!l && !l.fill) },
-      { name: 'color', label: 'Text colour', type: 'color', value: l?.color ?? '#9c0006' },
+      { name: 'color', label: 'Text color', type: 'color', value: l?.color ?? '#9c0006' },
       { name: 'bold', label: 'Bold', type: 'checkbox', value: String(!!l?.bold) },
       { name: 'italic', label: 'Italic', type: 'checkbox', value: String(!!l?.italic) },
     ];
@@ -229,10 +264,10 @@ export class SheetFormatting {
         const three = s.stops.length >= 3;
         const st = (i: number) => s.stops[Math.min(i, s.stops.length - 1)];
         fields = [
-          { name: 'n', label: 'Colours', value: three ? '3' : '2', options: [{ value: '2', label: 'Two' }, { value: '3', label: 'Three' }] },
-          { name: 't0', label: 'Lowest is', value: st(0).at.type, options: pointOpts }, { name: 'v0', label: 'Number', value: String(st(0).at.value ?? '') }, { name: 'c0', label: 'Colour', type: 'color', value: st(0).color },
-          { name: 't1', label: 'Middle is', value: three ? st(1).at.type : 'percentile', options: pointOpts }, { name: 'v1', label: 'Number', value: String(three ? st(1).at.value ?? 50 : 50) }, { name: 'c1', label: 'Colour', type: 'color', value: three ? st(1).color : '#ffeb84' },
-          { name: 't2', label: 'Highest is', value: st(2).at.type, options: pointOpts }, { name: 'v2', label: 'Number', value: String(st(2).at.value ?? '') }, { name: 'c2', label: 'Colour', type: 'color', value: st(2).color },
+          { name: 'n', label: 'Colors', value: three ? '3' : '2', options: [{ value: '2', label: 'Two' }, { value: '3', label: 'Three' }] },
+          { name: 't0', label: 'Lowest is', value: st(0).at.type, options: pointOpts }, { name: 'v0', label: 'Number', value: String(st(0).at.value ?? '') }, { name: 'c0', label: 'Color', type: 'color', value: st(0).color },
+          { name: 't1', label: 'Middle is', value: three ? st(1).at.type : 'percentile', options: pointOpts }, { name: 'v1', label: 'Number', value: String(three ? st(1).at.value ?? 50 : 50) }, { name: 'c1', label: 'Color', type: 'color', value: three ? st(1).color : '#ffeb84' },
+          { name: 't2', label: 'Highest is', value: st(2).at.type, options: pointOpts }, { name: 'v2', label: 'Number', value: String(st(2).at.value ?? '') }, { name: 'c2', label: 'Color', type: 'color', value: st(2).color },
         ];
         build = (g) => ({ kind: 'scale', stops: (g.n === '3' ? [0, 1, 2] : [0, 2]).map((i) => ({ at: pt(g[`t${i}`], g[`v${i}`]), color: g[`c${i}`] })) });
         break;
@@ -240,7 +275,7 @@ export class SheetFormatting {
       case 'bar': {
         const b = r?.kind === 'bar' ? r : { kind: 'bar' as const, color: '#638ec6', gradient: true };
         fields = [
-          { name: 'color', label: 'Colour', type: 'color', value: b.color },
+          { name: 'color', label: 'Color', type: 'color', value: b.color },
           { name: 'gradient', label: 'Shaded (fades to white)', type: 'checkbox', value: String(b.gradient !== false) },
           { name: 'barOnly', label: 'Show the bar only (hide the value)', type: 'checkbox', value: String(!!b.barOnly) },
           { name: 'tmin', label: 'Shortest bar', value: b.min?.type ?? 'auto', options: pointOpts }, { name: 'vmin', label: 'Number', value: String(b.min?.value ?? '') },
@@ -321,8 +356,14 @@ export class SheetFormatting {
       }
     }
     const got = await ask(existing ? 'Change Formatting Rule' : 'New Formatting Rule', [...fields, rangeField, stopField], {
-      note: kind === 'formula' ? 'Write the formula for the first cell of the range; it moves to each other cell the way a copied formula does.' : undefined,
+      note: kind === 'formula' ? 'Write the formula for the first cell of the range; it moves to each other cell the way a copied formula does.' : 'The cells show the rule as you set it.',
+      onInput: (g) => {
+        let rule: CfRule | null = null;
+        try { rule = build(g); } catch { rule = null; }
+        this.tryOut(rule, parseRanges(g.range), existing?.id);
+      },
     });
+    this.tryOut(null);
     if (!got) return;
     const ranges = parseRanges(got.range);
     if (!ranges) { this.host.flash('The "Applies to" cells don\'t read as a range (like B2:B20).'); return; }
@@ -618,3 +659,40 @@ export function tablePreview(style: string): HTMLCanvasElement {
 }
 
 export { DEFAULT_TABLE_STYLE };
+
+type MenuItem = [string, () => void, boolean?, string?];
+
+const barRule = (color: string, gradient: boolean): CfRule => ({ kind: 'bar', color, gradient });
+
+/** Four cells with data bars of different lengths. */
+function barPic(color: string, shaded: boolean): string {
+  const id = `g${color.slice(1)}`;
+  const fill = shaded ? `url(#${id})` : color;
+  return `<svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">${shaded ? `<defs><linearGradient id="${id}"><stop offset="0" stop-color="${color}"/><stop offset="1" stop-color="#fff"/></linearGradient></defs>` : ''}` +
+    [16, 7, 12, 4].map((w, i) => `<rect x="2" y="${2 + i * 4.25}" width="${w}" height="3.25" fill="${fill}" stroke="${color}" stroke-width=".5"/>`).join('') + '</svg>';
+}
+
+/** A column of cells shading from one end of the scale to the other. */
+function scalePic(colors: string[]): string {
+  const n = 4;
+  const at = (t: number) => {
+    const seg = t * (colors.length - 1), i = Math.min(colors.length - 2, Math.floor(seg));
+    return mixColour(colors[i], colors[i + 1], seg - i);
+  };
+  let o = '';
+  for (let r = 0; r < n; r++) for (let c = 0; c < 2; c++) o += `<rect x="${2 + c * 8.25}" y="${2 + r * 4.25}" width="7.75" height="3.75" fill="${at((r * 2 + c) / (n * 2 - 1))}"/>`;
+  return `<svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">${o}</svg>`;
+}
+
+/** The set's three icons, best to worst. */
+function iconSetPic(set: IconSetName): string {
+  const col = ['#3a9b4a', '#f2b81b', '#e0453a'];
+  const one = (lv: number, x: number) => {
+    const c = col[lv];
+    if (set === 'arrows') return `<path d="${['M0 -3L3 0H1V3H-1V0H-3Z', 'M3 0L0 -3V-1H-3V1H0V3Z', 'M0 3L3 0H1V-3H-1V0H-3Z'][lv]}" transform="translate(${x + 3} 10)" fill="${c}"/>`;
+    if (set === 'lights' || set === 'marks') return `<circle cx="${x + 3}" cy="10" r="2.75" fill="${c}"/>`;
+    if (set === 'flags') return `<path d="M${x + 1} 13.5V6.5M${x + 1} 6.5l4.5 2-4.5 2z" stroke="#555" stroke-width=".6" fill="${c}"/>`;
+    return `<path d="M${x + 3} 7l.9 1.9 2 .3-1.5 1.4.4 2-1.8-1-1.8 1 .4-2-1.5-1.4 2-.3z" fill="${lv === 2 ? 'none' : '#f2b81b'}" stroke="#c99200" stroke-width=".5"/>`;
+  };
+  return `<svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">${one(0, 0)}${one(1, 7)}${one(2, 14)}</svg>`;
+}

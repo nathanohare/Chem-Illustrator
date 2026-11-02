@@ -207,7 +207,7 @@ export function chooseReferences(t: DocText, chosen: string[], manage: () => Pro
     ok.disabled = !ticked.length;
     const form = el('form', {},
       el('h2', { textContent: 'Insert Citation' }),
-      el('p', { className: 'muted', textContent: 'Tick one or more references: they make one citation (3,5–7). References are numbered in order of first citation, and the numbers change by themselves when text moves. The number shown is the one each has now.' }),
+      el('p', { className: 'muted', textContent: 'Check one or more references: they make one citation (3,5–7). References are numbered in order of first citation, and the numbers change by themselves when text moves. The number shown is the one each has now.' }),
       search, list, empty,
       el('p', { className: 'ask-buttons' },
         button('Manage References…', 'Add, edit or import references', async () => {
@@ -245,12 +245,12 @@ const STYLE_GROUPS: [string, Control[]][] = [
     { key: 'lastAuthor', label: 'Before the last author', kind: 'select', options: [['none', 'Nothing'], ['and', '"and"'], ['&', '"&"']] },
     { key: 'etAlOver', label: 'Use "et al." above (0: never)', kind: 'count', title: 'With more authors than this, only the first few are listed, then "et al."' },
     { key: 'etAlShow', label: 'Authors listed before "et al."', kind: 'count' },
-    { key: 'afterAuthors', label: 'After the authors', kind: 'select', options: [['. ', 'Full stop'], [', ', 'Comma']] },
+    { key: 'afterAuthors', label: 'After the authors', kind: 'select', options: [['. ', 'Period'], [', ', 'Comma']] },
   ]],
   ['Journal articles', [
     { key: 'title', label: 'Article title', kind: 'check' },
     { key: 'titleQuotes', label: 'Title in quotation marks', kind: 'check' },
-    { key: 'afterTitle', label: 'After the title', kind: 'select', options: [['. ', 'Full stop'], [', ', 'Comma']] },
+    { key: 'afterTitle', label: 'After the title', kind: 'select', options: [['. ', 'Period'], [', ', 'Comma']] },
     { key: 'journalItalic', label: 'Journal in italics', kind: 'check' },
     { key: 'yearAt', label: 'Year', kind: 'select', options: [['journal', 'After the journal: Org. Lett. 2024, 26'], ['volume', 'After the volume: Org. Lett. 26 (2024)'], ['end', 'At the end: … 1234–1240 (2024)']] },
     { key: 'yearBold', label: 'Year in bold', kind: 'check' },
@@ -260,7 +260,7 @@ const STYLE_GROUPS: [string, Control[]][] = [
     { key: 'firstPageOnly', label: 'First page only', kind: 'check' },
     { key: 'articleNumber', label: 'Article numbers', kind: 'check', title: 'Print an article number (pages without a range, such as e202301234). Off: the DOI is given instead.' },
     { key: 'doi', label: 'DOI', kind: 'select', options: [['no-pages', 'Only without pages'], ['always', 'Always'], ['never', 'Never']] },
-    { key: 'doiSep', label: 'Before the DOI', kind: 'select', options: [['. ', 'Full stop'], [', ', 'Comma']] },
+    { key: 'doiSep', label: 'Before the DOI', kind: 'select', options: [['. ', 'Period'], [', ', 'Comma']] },
     { key: 'doiForm', label: 'DOI written as', kind: 'select', options: [['DOI: ', 'DOI: 10.…'], ['DOI ', 'DOI 10.…'], ['doi:', 'doi:10.…'], ['https://doi.org/', 'https://doi.org/10.…']] },
   ]],
   ['Theses', [
@@ -583,7 +583,7 @@ export class ReferencesDialog {
         el('span', { className: 'refs-add' },
           button('Add by DOI…', 'Paste a DOI; the details are filled in from Crossref (needs the internet)', () => void this.addByDoi()),
           ...(this.host.pubmed ? [button('Add by PubMed ID…', 'Type one or more PubMed ids (PMID); the details are filled in from PubMed (needs the internet)', () => void this.addByPubmed())] : []),
-          button('Add by Hand…', 'Type the details in', () => void this.addByHand()),
+          button('Add Manually…', 'Type the details in', () => void this.addByHand()),
           button('Import BibTeX / RIS…', 'A file exported from Zotero, EndNote, Mendeley, or a journal\'s "Export citation"', () => void this.importFile()),
           button('Paste BibTeX / RIS…', 'Paste the text of BibTeX or RIS references', () => void this.pasteText())),
         el('span', { className: 'refs-edit' },
@@ -837,7 +837,7 @@ export class ReferencesDialog {
       found = await this.lookup(doi);
     } catch (e) {
       const why = e instanceof Error ? e.message : String(e);
-      const by = await ask('Could not look up the DOI', [], { ok: 'Enter by Hand', note: `${why} Enter the reference by hand instead?` });
+      const by = await ask('Could not look up the DOI', [], { ok: 'Enter Manually', note: `${why} Enter the reference by hand instead?` });
       if (by) await this.addByHand({ ...blankRef(), doi: normaliseDoi(doi) });
       return;
     }

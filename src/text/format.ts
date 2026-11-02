@@ -16,6 +16,10 @@ export type TextFormat =
   | { kind: 'list'; list: 'bullet' | 'number' }
   | { kind: 'indent'; by: 1 | -1 }
   | { kind: 'line'; v: number }
+  /** Space before or after the paragraphs, in points. */
+  | { kind: 'para'; patch: { spaceBefore?: number; spaceAfter?: number } }
+  /** The width the lines wrap to (none: they break only at Enter). */
+  | { kind: 'wrap'; w: number | undefined }
   | { kind: 'case'; mode: rt.CaseMode }
   | { kind: 'clear' }
   /** Stereodescriptors and prefixes such as (2R,3S)-, (E)-, cis-, tert-, n- in italics (or back, if they all are). */
@@ -41,6 +45,8 @@ export function applyFormat(ed: TextEditing, f: TextFormat): void {
     case 'list': ed.list(f.list); break;
     case 'indent': ed.indent(f.by); break;
     case 'line': ed.lineSpacing(f.v); break;
+    case 'para': ed.paraSpacing(f.patch); break;
+    case 'wrap': ed.setWrap(f.w); break;
     case 'case': ed.changeCase(f.mode); break;
     case 'clear': ed.clearFormatting(); break;
     case 'stereo': {

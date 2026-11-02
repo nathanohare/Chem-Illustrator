@@ -346,7 +346,7 @@ export function scaleRule(colors: string[]): CfRule {
 export function describeRule(rule: CfRule): string {
   const OPS: Record<CfOp, string> = { gt: 'greater than', ge: 'at least', lt: 'less than', le: 'at most', eq: 'equal to', ne: 'not equal to', between: 'between', notBetween: 'not between' };
   switch (rule.kind) {
-    case 'scale': return `Colour scale (${rule.stops.length} colours)`;
+    case 'scale': return `Color scale (${rule.stops.length} colors)`;
     case 'bar': return 'Data bar';
     case 'icons': return `Icons: ${rule.set}`;
     case 'cells': return `Value ${OPS[rule.op]} ${rule.value}${rule.value2 !== undefined && (rule.op === 'between' || rule.op === 'notBetween') ? ` and ${rule.value2}` : ''}`;

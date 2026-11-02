@@ -8,6 +8,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Doc } from '../src/model';
 import { plainMeasure, schemeItems } from '../src/chem/reaction';
 import { applySchemePlan, DEFAULT_SCHEME_PREFS, planCleanUp, setSchemePrefs, spacing } from '../src/chem/scheme-layout';
+import { Editor } from '../src/editor/editor';
+import { Renderer } from '../src/render/renderer';
+
+// the editor draws on the next frame; there is no canvas to draw on here
+window.requestAnimationFrame = () => 0;
 
 afterEach(() => setSchemePrefs(DEFAULT_SCHEME_PREFS));
 
@@ -126,5 +131,36 @@ describe('Clean Up Reaction on a scheme', () => {
     expect(doc.arrows.get(ids.r2)!.step?.reactants).toEqual(['a' + ids.b[0]]);
     // pressed again, nothing changes
     expect(planCleanUp(doc, m)).toBeNull();
+  });
+
+  it('pressed again, fits each arrow to its own text, moving the structures to keep the spacing even; again, they match', () => {
+    const { doc, L, a, r1, b, r2, c, r3, d } = threeSteps();
+    const scene = document.createElement('canvas'), overlay = document.createElement('canvas');
+    const host = document.createElement('div');
+    host.append(scene, overlay);
+    document.body.append(host);
+    const ed = new Editor(doc, new Renderer(scene, overlay), host);
+    ed.paused = true;
+    const m = plainMeasure(doc);
+    Object.assign(ed, { measure: () => m, fullMeasure: () => m });
+    const len = (r: number) => doc.arrows.get(r)!.head.x - doc.arrows.get(r)!.tail.x;
+    expect(ed.cleanUpReaction()).toBe('matched');
+    expect(len(r1)).toBeCloseTo(len(r2), 5);
+    const dWas = boxes(doc).of(d).x1;
+    expect(ed.cleanUpReaction()).toBe('fitted');
+    // the short ones shrank to their text; the long one kept its length
+    expect(len(r1)).toBeLessThan(len(r2) - 10);
+    expect(len(r3)).toBeLessThan(len(r2) - 10);
+    // still evenly spaced, so the products moved up
+    const bx = boxes(doc), g = spacing(L).gap;
+    const pairs: [number[], number, number[]][] = [[a, r1, b], [b, r2, c], [c, r3, d]];
+    for (const [from, r, to] of pairs) {
+      expect(doc.arrows.get(r)!.tail.x - bx.of(from).x2).toBeCloseTo(g, 5);
+      expect(bx.of(to).x1 - doc.arrows.get(r)!.head.x).toBeCloseTo(g, 5);
+    }
+    expect(bx.of(d).x1).toBeLessThan(dWas - 10);
+    // once more: matched again
+    expect(ed.cleanUpReaction()).toBe('matched');
+    expect(len(r1)).toBeCloseTo(len(r2), 5);
   });
 });

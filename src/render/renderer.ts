@@ -22,7 +22,7 @@ import { isGenericLabel } from '../chem/labels';
 import { bracketPath, shaftOffset, shapeOrder, elbowRoute, boxOf, shapeBox, shapeMid, shapeTurn, bezPoints, bezHeadBack, bezPathAt, bezSlice, type PathStep } from '../objects';
 import { atomStereoText, bondStereoText, shownDescriptor, axialStyle, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
-import { attachDiamondSize, hasAttachDiamond, isMapNumber, MAP_GREY, MAP_PEACH, mapBox, mapColour } from './atom-marks';
+import { attachDiamondSize, attachStarSize, hasAttachDiamond, isMapNumber, MAP_GREY, MAP_PEACH, mapBox, mapColour } from './atom-marks';
 import { layoutText, FONT_STACK, withStack, type TextLayout } from '../text/layout';
 import { drawLayout } from '../text/draw';
 import { geoDef, moveSteps, textArea, traceSteps, type GeoStep } from '../design/geo';
@@ -155,6 +155,8 @@ export class Renderer {
   width = 0;
   height = 0;
   showWarnings = true;
+  /** How a warning is marked on the drawing (Settings ▸ Preferences). */
+  warnLook: WarnLook = 'disc';
   /** The drawing's chemistry warnings, drawn as red boxes when `showWarnings` is on. */
   checks: StructureChecks | null = null;
   /**
@@ -335,6 +337,11 @@ export class Renderer {
       const m = doc.style.marginWidth * k;
       for (const b of layout.boxes) boxes.push({ x1: a.x + b.x1 - m, y1: a.y + b.y1 - m, x2: a.x + b.x2 + m, y2: a.y + b.y2 + m });
     }
+    // a star point of attachment: the bond stops short of its asterisk, as at a label
+    if (a.attach === 'Star') {
+      const h = attachStarSize(size) + doc.style.marginWidth * k;
+      boxes.push({ x1: a.x - h, y1: a.y - h, x2: a.x + h, y2: a.y + h });
+    }
     c = { layout, boxes };
     if (layout?.charge !== undefined) {
       // a bond is cut short at the charge only where it would touch the sign itself
@@ -346,6 +353,11 @@ export class Renderer {
     }
     this.atomCache.set(a.id, c);
     return c;
+  }
+
+  /** Which side a double bond's second line is drawn on: +1 to the right of a1→a2 on screen, −1 the left, 0 centred. */
+  doubleSide(doc: Doc, b: Bond): number {
+    return this.bondInfo(doc, b).side;
   }
 
   private bondInfo(doc: Doc, b: Bond): BondCache {
@@ -761,6 +773,24 @@ export class Renderer {
     return curFont;
   }
 
+  /** A star point of attachment: an asterisk of three lines crossing where the bond ends. */
+  private drawAttachStar(ctx: CanvasRenderingContext2D, doc: Doc, a: Atom): void {
+    const k = a.s ?? 1;
+    const r = attachStarSize(doc.style.labelSize * k);
+    ctx.save();
+    ctx.strokeStyle = a.color ?? '#000';
+    ctx.lineWidth = doc.style.lineWidth * k;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const t = (90 + 60 * i) * DEG, dx = Math.cos(t) * r, dy = Math.sin(t) * r;
+      ctx.moveTo(a.x - dx, a.y - dy);
+      ctx.lineTo(a.x + dx, a.y + dy);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   /** A numbered point of attachment: a black diamond with the number in white. */
   private drawAttachDiamond(ctx: CanvasRenderingContext2D, doc: Doc, a: Atom, curFont: string): string {
     const L = doc.style.labelSize * (a.s ?? 1);
@@ -903,6 +933,7 @@ export class Renderer {
       }
       if (a.showNumber && a.atomNumber) curFont = this.drawAtomNumber(ctx, doc, a, curFont);
       if (hasAttachDiamond(a)) curFont = this.drawAttachDiamond(ctx, doc, a, curFont);
+      if (a.attach === 'Star') this.drawAttachStar(ctx, doc, a);
       if (checks?.forAtom(a)) warns.push(this.warningBox(doc, a, info));
     }
     curFont = this.drawStereoLabels(ctx, doc, atoms, bondSet, curFont);
@@ -926,11 +957,60 @@ export class Renderer {
       else if (mark) this.drawChemMark(ctx, r);
     }
 
-    if (warns.length) {
-      ctx.strokeStyle = WARN_COLOR;
+    if (warns.length) this.drawWarnMarks(ctx, warns);
+  }
+
+  /**
+   * Mark what has a warning, in the look chosen in Settings ▸ Preferences: a soft red disc (the
+   * default), the thin red box, a circle, a dashed circle or corner marks. Round looks go round an
+   * atom and make a rounded band along a bond or text.
+   */
+  private drawWarnMarks(ctx: CanvasRenderingContext2D, warns: Rect[]): void {
+    const look = this.warnLook;
+    ctx.save();
+    ctx.strokeStyle = ctx.fillStyle = WARN_COLOR;
+    if (look === 'box') {
       ctx.lineWidth = 0.5;
       for (const w of warns) ctx.strokeRect(w.x1, w.y1, w.x2 - w.x1, w.y2 - w.y1);
+      ctx.restore();
+      return;
     }
+    if (look === 'corners') {
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      for (const w of warns) {
+        const p = 1, x1 = w.x1 - p, y1 = w.y1 - p, x2 = w.x2 + p, y2 = w.y2 + p;
+        const k = Math.min(x2 - x1, y2 - y1) * 0.35;
+        ctx.moveTo(x1, y1 + k); ctx.lineTo(x1, y1); ctx.lineTo(x1 + k, y1);
+        ctx.moveTo(x2 - k, y1); ctx.lineTo(x2, y1); ctx.lineTo(x2, y1 + k);
+        ctx.moveTo(x2, y2 - k); ctx.lineTo(x2, y2); ctx.lineTo(x2 - k, y2);
+        ctx.moveTo(x1 + k, y2); ctx.lineTo(x1, y2); ctx.lineTo(x1, y2 - k);
+      }
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+    // round: a circle round a square (an atom), a band with round ends round anything longer
+    const round = (w: Rect, pad: number) => {
+      const x1 = w.x1 - pad, y1 = w.y1 - pad, x2 = w.x2 + pad, y2 = w.y2 + pad;
+      const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2, ww = x2 - x1, hh = y2 - y1;
+      if (Math.abs(ww - hh) < Math.min(ww, hh) * 0.3) { ctx.moveTo(cx + Math.max(ww, hh) * 0.62, cy); ctx.arc(cx, cy, Math.max(ww, hh) * 0.62, 0, Math.PI * 2); return; }
+      const r = Math.min(ww, hh) / 2;
+      ctx.moveTo(x1 + r, y1);
+      ctx.arcTo(x2, y1, x2, y2, r); ctx.arcTo(x2, y2, x1, y2, r); ctx.arcTo(x1, y2, x1, y1, r); ctx.arcTo(x1, y1, x2, y1, r);
+      ctx.closePath();
+    };
+    ctx.beginPath();
+    for (const w of warns) round(w, look === 'disc' ? 1.2 : 0.8);
+    if (look === 'disc') {
+      ctx.globalAlpha = 0.22;
+      ctx.fill();
+    } else {
+      ctx.lineWidth = 0.75;
+      if (look === 'dashed') ctx.setLineDash([2, 1.6]);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /** The red box around an atom with a warning: around its whole label, or a small square on a bare carbon. */
@@ -2547,6 +2627,10 @@ export function attachWave(path: Path2D, at: Vec, across: Vec, bondLength: numbe
 }
 
 const WARN_COLOR = '#e0141e';
+
+/** The looks a warning's mark can take (Settings ▸ Preferences). */
+export const WARN_LOOKS = ['disc', 'box', 'circle', 'dashed', 'corners'] as const;
+export type WarnLook = (typeof WARN_LOOKS)[number];
 const CHEM_MARK_COLOR = '#1f8a7a';
 
 /**

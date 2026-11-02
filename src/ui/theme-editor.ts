@@ -20,7 +20,7 @@ export function editTheme(t: SlideTemplate, master: Master, size: SlideSize, tit
     h.textContent = title;
     const note = document.createElement('p');
     note.className = 'muted';
-    note.textContent = 'A theme sets the fonts, colours, background and shapes of every slide. Content slides read best light, so structures (drawn in black) stand out.';
+    note.textContent = 'A theme sets the fonts, colors, background and shapes of every slide. Content slides read best light, so structures (drawn in black) stand out.';
     form.append(h, note);
     const body = document.createElement('div');
     body.className = 'te-body';
@@ -77,7 +77,7 @@ export function editTheme(t: SlideTemplate, master: Master, size: SlideSize, tit
     row('Bold titles', titleBold);
     row('Text', bodyFont);
 
-    section('Colours');
+    section('Colors');
     const bg = colour(t.background), titleColor = colour(t.titleColor), textColor = colour(t.textColor), footerColor = colour(t.footerColor);
     row('Background', bg);
     row('Titles', titleColor);
@@ -89,13 +89,13 @@ export function editTheme(t: SlideTemplate, master: Master, size: SlideSize, tit
     for (const x of DECORS) decor.add(new Option(x.name, x.id, false, x.id === t.decor));
     row('Shapes', decor);
     const accent = colour(t.accent), accent2 = colour(t.accent2);
-    row('Accent colours', accent, accent2);
+    row('Accent colors', accent, accent2);
 
     section('Title slide');
     const ownTitle = check(!!t.titleSlide);
-    row('Own (dark) colours', ownTitle);
+    row('Own (dark) colors', ownTitle);
     const tsBg = colour(t.titleSlide?.background ?? '#1d3557'), tsTitle = colour(t.titleSlide?.titleColor ?? '#ffffff'), tsText = colour(t.titleSlide?.textColor ?? '#d9e2ec');
-    const tsRows = [row('Background', tsBg), row('Title colour', tsTitle), row('Text colour', tsText)];
+    const tsRows = [row('Background', tsBg), row('Title color', tsTitle), row('Text color', tsText)];
 
     const canvas = document.createElement('canvas');
     previews.append(canvas);

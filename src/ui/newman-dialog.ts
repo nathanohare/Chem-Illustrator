@@ -88,7 +88,7 @@ export function askNewman<S = never>(start: NewmanChoice, host: NewmanHost, edit
       </div>
       <label class="ask-row ask-check"><input name="mark" type="checkbox" /><span>Mark the viewing direction on the structure (eye and dotted arrow)</span></label>
       <label class="ask-row ask-check"><input name="linked" type="checkbox" /><span>Keep linked: draw it again when the structure changes</span></label>
-      <p class="muted small">Groups are coloured by size on each atom (largest, middle, smallest by A-value): change this in Settings ▸ Newman Projections.</p>
+      <p class="muted small">Groups are colored by size on each atom (largest, middle, smallest by A-value): change this in Settings ▸ Newman Projections.</p>
       </div>
       ${offer ? '<div class="np-page" data-page="chart" hidden></div>' : ''}
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">${editing ? 'Redraw' : 'Insert'}</button></p>`;

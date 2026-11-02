@@ -285,10 +285,10 @@ export interface PageLook {
   ghost: boolean;
   /** A fixed edge: a bold line with hatching on the outside ('hatch') or a bold line only. */
   wallStyle: 'hatch' | 'line';
-  /** The fixed edge's line width, in screen pixels. */
+  /** The fixed edge's line width, in screen pixels at 100% zoom (it grows and shrinks with the zoom). */
   wallWidth: number;
   /**
-   * The hatching, in screen pixels: the gap between strokes along the edge, how far out they
+   * The hatching, in screen pixels at 100% zoom (it grows and shrinks with the zoom): the gap between strokes along the edge, how far out they
    * reach, and their width; their slant in degrees (45 leans like /, 135 like \).
    */
   hatchSpacing: number;

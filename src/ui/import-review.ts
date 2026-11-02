@@ -74,8 +74,8 @@ export function openReview(o: ReviewOptions): void {
   const cancel = el('button', { type: 'button', textContent: 'Cancel' });
   const sends = o.alt?.sends ? 'Sends the pictures to the AI model you linked (Edit > Settings > AI Model)' : 'Reads them on this computer';
   const aiAll = o.alt ? el('button', { type: 'button', textContent: `Read Doubtful Ones with ${o.alt.name}`, title: sends }) : null;
-  const all = el('button', { type: 'button', textContent: 'Tick All' });
-  const none = el('button', { type: 'button', textContent: 'Tick None' });
+  const all = el('button', { type: 'button', textContent: 'Select All' });
+  const none = el('button', { type: 'button', textContent: 'Deselect All' });
   const showJunk = el('input', { type: 'checkbox' });
   const junkLabel = el('label', { className: 'import-junk', hidden: true }, showJunk, ' ');
   const junkText = el('span');

@@ -66,7 +66,7 @@ function poster(): Box[] {
     head(1, 452, 'Results'), body(1, 590, 1930, 'Schemes, tables and figures. Drag structures in from a canvas tab or paste them here.'),
     head(2, 452, 'Conclusions'), body(2, 590, 820, '• First conclusion\n• Second conclusion\n• What comes next'),
     head(2, 1482, 'References'), body(2, 1620, 520, '1. Reference one.\n2. Reference two.'),
-    head(2, 2212, 'Acknowledgements'), body(2, 2350, 170, 'Funding and thanks.'),
+    head(2, 2212, 'Acknowledgments'), body(2, 2350, 170, 'Funding and thanks.'),
   ];
 }
 
@@ -102,7 +102,7 @@ export const DESIGN_TEMPLATES: DesignTemplate[] = [
       { geo: 'fcDecision', x: 206, y: 232, w: 200, h: 100, text: 'Complete by TLC?', size: 12, fill: '#fff2cc', line: '#bf9000' },
       { geo: 'fcProcess', x: 216, y: 382, w: 180, h: 60, text: 'Work up', size: 12, ...BLUE },
       { geo: 'fcProcess', x: 216, y: 482, w: 180, h: 60, text: 'Purify', size: 12, ...BLUE },
-      { geo: 'fcTerminator', x: 226, y: 582, w: 160, h: 44, text: 'Characterise', size: 12, ...BLUE },
+      { geo: 'fcTerminator', x: 226, y: 582, w: 160, h: 44, text: 'Characterize', size: 12, ...BLUE },
       { geo: 'fcProcess', x: 446, y: 252, w: 130, h: 60, text: 'Stir longer or add more reagent', size: 11, ...BLUE },
       words(410, 256, 36, 18, 'No', 11, { bold: true }),
       words(312, 340, 36, 18, 'Yes', 11, { bold: true }),
@@ -142,7 +142,7 @@ export const DESIGN_TEMPLATES: DesignTemplate[] = [
       ...[0, 1, 2, 3, 4].flatMap((i): Box[] => {
         const cx = 120 + i * 180;
         const up = i % 2 === 0;
-        const label = ['Route scouting', 'Key step optimised', 'Scale-up', 'Analogue scope', 'Paper submitted'][i];
+        const label = ['Route scouting', 'Key step optimized', 'Scale-up', 'Analog scope', 'Paper submitted'][i];
         return [
           { geo: 'ellipse', x: cx - 16, y: 274, w: 32, h: 32, ...BLUE, name: `Milestone ${i + 1}` },
           words(cx - 80, up ? 170 : 326, 160, 84, `Month ${i * 3 + 1}\n${label}`, 16, { valign: up ? 'bottom' : 'top' }),

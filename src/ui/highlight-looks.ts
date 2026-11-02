@@ -14,7 +14,7 @@ export interface HighlightLookPreset {
 export const BUILT_IN_LOOKS: HighlightLookPreset[] = [
   { name: 'Classic', style: {} },
   { name: 'Smooth band', style: { smooth: true } },
-  { name: 'Straight, centred on double bonds', style: { shape: 'straight', centre: true } },
+  { name: 'Straight, centered on double bonds', style: { shape: 'straight', centre: true } },
   { name: 'Soft marker', style: { smooth: true, soft: true, softAmount: 0.5 } },
   { name: 'Hollow (soft middle)', style: { smooth: true, soft: true, softSide: 'inner', softAmount: 0.7 } },
   { name: 'Outline only', style: { smooth: true, fill: 'none', line: 'solid' } },
@@ -26,7 +26,7 @@ export const BUILT_IN_LOOKS: HighlightLookPreset[] = [
   { name: 'Lifted (soft shadow)', style: { smooth: true, shadow: true, shadowBlur: 0.15, shadowDistance: 0.08 } },
   { name: 'Gradient across', style: { smooth: true, fill: 'linear' } },
   { name: 'Bright middle (gradient to the edge)', style: { smooth: true, fill: 'edge' } },
-  { name: 'See-through', style: { smooth: true, transparency: 0.5 } },
+  { name: 'Transparent', style: { smooth: true, transparency: 0.5 } },
 ];
 
 /** Your own looks as read from the settings file, keeping only what makes sense. */

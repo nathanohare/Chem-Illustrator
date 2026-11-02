@@ -38,7 +38,7 @@ When the pointer turns into a pointing hand over a cell, that cell holds a struc
 
 ### Property columns
 
-Click in your table and choose **Home** tab ▸ **Properties** (or **Insert ▸ Spreadsheet ▸ Insert Property Columns…**). Tick the columns you want:
+Click in your table and choose **Home** tab ▸ **Properties** (or **Insert ▸ Spreadsheet ▸ Insert Property Columns…**). Check the columns you want:
 
 Formula, MW, Exact mass, HRMS m/z, cLogP, TPSA, H-bond donors, H-bond acceptors, Rotatable bonds, SMILES, InChIKey and **Duplicate of**.
 
@@ -110,25 +110,25 @@ You can combine them as usual: `=1000*D2/MW(B2)` turns mg into mmol.
 
 ## Formatting
 
-- **Home** tab: font size, bold, italic, underline, borders, fill and text colour, alignment, **Wrap**, **Merge**, and the number format with **+.0** and **−.0** for decimal places. **Other…** in the number format list takes your own Excel-style format, such as `0.00 "mg"`.
+- **Home** tab: font size, bold, italic, underline, borders, fill and text color, alignment, **Wrap**, **Merge**, and the number format with **+.0** and **−.0** for decimal places. **Other…** in the number format list takes your own Excel-style format, such as `0.00 "mg"`.
 - **Format Painter** (beside **Paste**) copies the formats of the selected cells to the cells you click or drag over next; double-click it to keep painting until Esc. **Insert** tab ▸ **Symbol** types °, µ, Å and other signs into the cell.
 - The **font box** takes any installed font; cells with no font of their own use the theme's body font. **Orientation** (ab↗) turns text up, down or to 45°, or stacks its letters, which suits narrow column headings. **⇤** and **⇥** indent text from the cell's edge.
-- **Cell Styles** puts one of Excel's named styles on the selected cells: Good, Bad and Neutral; Input, Output, Calculation, Note and the rest; Title, Heading 1 to 4 and Total; the Accent colours; and the Comma, Currency and Percent number styles. Excel shows them under the same names.
-- **Page Layout** tab ▸ **Themes** sets the workbook's colours and fonts together, with **Colours** and **Fonts** to change one part only. The colour menus offer the theme's colours, and cells styled with Heading, Title, Total or Accent styles take the new theme's colours. The themes are Office (Excel's default) and a few of our own, including a colour-blind safe one.
-- **C₉H₈** sets formulas with proper subscripts. In a new workbook, formulas typed into text cells (Pd(PPh3)4, CH2Cl2) show this way on their own; click **C₉H₈** on such a cell to show it as typed. Labels like Q1 or B2 stay as typed. Text in a file from Excel or another program (.xlsx, .xls, .ods, .csv) shows exactly as it was written there; right-click a cell and choose **Formula Style ▸ Spot Formulas in Typed Text** to turn the automatic subscripts on or off for the workbook.
+- **Cell Styles** puts one of Excel's named styles on the selected cells: Good, Bad and Neutral; Input, Output, Calculation, Note and the rest; Title, Heading 1 to 4 and Total; the Accent colors; and the Comma, Currency and Percent number styles. Excel shows them under the same names.
+- **Page Layout** tab ▸ **Themes** sets the workbook's colors and fonts together, with **Colors** and **Fonts** to change one part only. The color menus offer the theme's colors, and cells styled with Heading, Title, Total or Accent styles take the new theme's colors. The themes are Office (Excel's default) and a few of our own, including a colour-blind safe one.
+- **C₉H₈** sets formulas with proper subscripts. In a new workbook, formulas typed into text cells (Pd(PPh3)4, CH2Cl2) show this way on their own; click **C₉H₈** on such a cell to show it as typed. Labels like Q1 or B2 stay as typed. Text in a file from Excel or another program (.xlsx, .xls, .ods, .csv) shows exactly as it was written there; right-click a cell and choose **Formula Style ▸ AutoFormat Chemical Formulas** to turn the automatic subscripts on or off for the workbook.
 - **Units:** the number format list has a **Units** group for reaction conditions: temperature (°C), catalyst loading (mol%), equivalents, concentration (M), density (g/mL), amount (mmol), mass (mg), volume (mL and µL), time (h and min), pressure (atm) and % ee. The cell keeps the plain number, so it still sorts and works in formulas. Typing "-78 °C" or "5 mol%" into a cell sets the unit for you.
 
 ### Conditional formatting
 
-Select some numbers and open **Home** tab ▸ **Conditional Formatting**. Choose a colour scale, data bars, an icon set, or a rule that highlights cells (greater than a value, containing some text, top or bottom values, above or below average, duplicates, empty cells, or your own formula). **Manage Rules…** lists every rule so you can edit, reorder or delete them.
+Select some numbers and open **Home** tab ▸ **Conditional Formatting**. Choose a color scale, data bars, an icon set, or a rule that highlights cells (greater than a value, containing some text, top or bottom values, above or below average, duplicates, empty cells, or your own formula). **Manage Rules…** lists every rule so you can edit, reorder or delete them.
 
 ### Table styles
 
-Click in your data and choose **Home** tab ▸ **Format as Table** (or **Insert** tab ▸ **Table**). The **Table Design** tab then offers the table's name, **Header Row**, **Totals Row**, **Banded Rows**, first and last column, banded columns, the **Table Style**, its colours, and **Convert to Range** to make it plain cells again.
+Click in your data and choose **Home** tab ▸ **Format as Table** (or **Insert** tab ▸ **Table**). The **Table Design** tab then offers the table's name, **Header Row**, **Totals Row**, **Banded Rows**, first and last column, banded columns, the **Table Style**, its colors, and **Convert to Range** to make it plain cells again.
 
 ### Sparklines
 
-Select a block of numbers, such as yields across five runs, and choose **Insert** tab ▸ **Sparklines** ▸ **Line**, **Column** or **Win/Loss**. Give the cells to put them in (one cell for each row of data), then click OK. Click a sparkline to open the **Sparkline** tab. It changes the type, marks the high, low, first, last or negative points, sets the colours and line width, sets the axis (each sparkline its own, the same for all, or a number you choose), sets how empty cells show, changes the data, and clears them. Sparklines are saved as Excel's own.
+Select a block of numbers, such as yields across five runs, and choose **Insert** tab ▸ **Sparklines** ▸ **Line**, **Column** or **Win/Loss**. Give the cells to put them in (one cell for each row of data), then click OK. Click a sparkline to open the **Sparkline** tab. It changes the type, marks the high, low, first, last or negative points, sets the colors and line width, sets the axis (each sparkline its own, the same for all, or a number you choose), sets how empty cells show, changes the data, and clears them. Sparklines are saved as Excel's own.
 
 ## Outlines and subtotals
 
@@ -204,8 +204,8 @@ The **Data** tab has Excel's analysis tools. Their windows float at the right of
 
 Click in a table of records with a header row (one row per run: catalyst, solvent, temperature, yield…) and choose **Insert** tab ▸ **PivotTable**. Pick the records and where the report goes (a new sheet, or a cell on this one). The **PivotTable Fields** window then builds it:
 
-- Tick a field to add it: numbers go to **Values** (summed), anything else to **Rows**. Or drag fields into **Filters**, **Columns**, **Rows** and **Values**, and between them.
-- Click a field in an area for its menu: move it, **Filter Items…** (untick items to leave out), **Sort A to Z** or **Z to A**, **Value Field Settings…** (Sum, Count, Average, Max, Min, Product, StdDev, Var…; show as % of the grand total, of the row or of the column; its name and number format), or **Remove Field**.
+- Check a field to add it: numbers go to **Values** (summed), anything else to **Rows**. Or drag fields into **Filters**, **Columns**, **Rows** and **Values**, and between them.
+- Click a field in an area for its menu: move it, **Filter Items…** (clear items to leave out), **Sort A to Z** or **Z to A**, **Value Field Settings…** (Sum, Count, Average, Max, Min, Product, StdDev, Var…; show as % of the grand total, of the row or of the column; its name and number format), or **Remove Field**.
 - **Layout**: Compact, Outline or Tabular form; subtotals; grand totals for rows and columns; Σ Values down the rows; text for empty cells; the PivotTable's name.
 
 Click in a report to show the **PivotTable** tab: **Field List**, **Refresh** (after the records change), **Refresh All**, **Change Data Source…**, **Report Layout**, **Subtotals**, **Grand Totals**, **PivotChart**, **Show Details** (the records behind the number in the active cell, on a new sheet), **Select** and **Clear**. The right-click menu on a report has the same, with **Summarize Values By** and **Show Values As**.
@@ -230,7 +230,7 @@ A **PivotChart** (Insert tab, or the PivotTable tab) charts the report and chang
 Select a block of cells and choose **Insert** tab ▸ **Scatter**, **Line**, **Column**, **Bar**, **Area** or **Pie**. Click a chart to open the **Chart** tab; double-click it, or click **All Settings**, for every setting in the panel on the right.
 
 - **Change Type** and **Add Series…** change what is plotted.
-- **Titles…**, **Legend**, **Colours**, **Axes…** (limits, log scale, grid lines, number format) and **Data Labels**. Titles take subscripts and superscripts: `k_{obs}` and `s^{-1}`.
+- **Titles…**, **Legend**, **Colors**, **Axes…** (limits, log scale, grid lines, number format) and **Data Labels**. Titles take subscripts and superscripts: `k_{obs}` and `s^{-1}`.
 - **Error Bars**.
 - **Fit Line**: straight line, polynomial (x² or x³), exponential, logarithmic or power. The equation and R² appear in an empty corner of the chart, and you can drag the label. In the panel, **Put in cells…** writes the slope, intercept, R² and standard error to the sheet as live formulas.
 - **Chemistry fits** (under **Fit Line**, after the line): **First-order decay** (y = y₀·e^(−kt), with k and t½; leave the intercept free or set y₀), **Second-order** (1/y = 1/y₀ + kt), **Arrhenius** (k against T: Eₐ in kJ/mol and A), **Eyring** (k against T: ΔH‡, ΔS‡ and ΔG‡ at 298 K) and **Hammett** (log(k/k₀) against σ: ρ, optionally through the origin). Each is fitted on its straight-line form (ln y against t, 1/y against t, ln k or ln(k/T) against 1/T) and drawn on your axes, with the results under the equation. For Arrhenius and Eyring, choose whether T is in kelvin or °C. Excel has no such trendlines, so a first-order fit is saved as Excel's exponential trendline and a Hammett fit as a straight line; the others keep this program's picture of the chart.
@@ -244,7 +244,7 @@ The Insert tab also has **Combo**, **Histogram**, **Box**, **Bubble** and **Rada
 - **Histogram** counts the numbers of one column in bins of equal width. Set **Bin width** or the number of bins in the panel, plus an **Overflow** and **Underflow** bin if you want the tails lumped together. Left on automatic, the width follows Scott's rule, as Excel's does.
 - **Box** (box and whisker) shows the median, quartiles and spread of repeat runs. Put a label in the first column (the catalyst, say) and each different label gets its own box. Whiskers reach the furthest points within 1.5 × the box's height, and points beyond that are drawn as outliers. In the panel you can show or hide the mean (×), a line joining the means, the outliers and all the other points, and choose exclusive or inclusive quartiles (QUARTILE.EXC, Excel's default, or QUARTILE.INC).
 - **Bubble** takes x, y and then a column of bubble sizes. Each bubble's area goes with its number.
-- **Radar** draws one spoke for each row label and one shape for each column of numbers. Tick **Filled** in the panel for filled shapes.
+- **Radar** draws one spoke for each row label and one shape for each column of numbers. Check **Filled** in the panel for filled shapes.
 
 All five are saved as Excel's own chart types. Histograms and box charts use the newer chart format of Excel 2016 and later, so older versions of Excel show a note in their place.
 
@@ -256,7 +256,7 @@ All five are saved as Excel's own chart types. Histograms and box charts use the
 
 **Treemap** and **Decomp. tree** on the Insert tab break the same kind of block of cells down: the last column of numbers says how much each row carries (leave it out and each row counts once), and every other column is a level, from the first to the last. A blank cell ends a row there: it counts in the categories before it, and in none after.
 
-- **Treemap:** a box for each category of the first level, as big as the rows in it, holding a box for each of its categories at the next level, in shades of its colour. Pick the chart, then click a box to **drill into** it: the chart shows just what is under that category, with a trail over it (**All › Aromatic**) to click back up.
+- **Treemap:** a box for each category of the first level, as big as the rows in it, holding a box for each of its categories at the next level, in shades of its color. Pick the chart, then click a box to **drill into** it: the chart shows just what is under that category, with a trail over it (**All › Aromatic**) to click back up.
 - **Decomposition tree:** the total, then the first level's categories as bars, each as long as its share. Pick the chart, then click a node to **expand** it: its rows are split by the next level in a new column, with lines from it to its parts. Click an expanded node to close it up again, or the total to close everything.
 
 The chart's panel says what it is drilled into or expanded to, with a button to go back to the whole. Excel has no decomposition tree, and its treemap can't be drilled into, so both get a bar chart of the same cells; open the file here again and they are as they were, drilled and expanded the same.
@@ -282,12 +282,12 @@ The **Ion** cell in the table can be changed (to `[M+Na]+`, say), and the calcul
 
 ## Dashboards
 
-A dashboard is a page of tiles that summarise a table: useful for a catalyst screen or a substrate scope. Add one with **Insert** tab ▸ **Dashboard**, or right-click a sheet tab ▸ **Insert Dashboard**. The **Dashboard** tab then adds tiles:
+A dashboard is a page of tiles that summarize a table: useful for a catalyst screen or a substrate scope. Add one with **Insert** tab ▸ **Dashboard**, or right-click a sheet tab ▸ **Insert Dashboard**. The **Dashboard** tab then adds tiles:
 
 | Tile | What it shows |
 |---|---|
 | **Chart** | A chart of a table's columns. **Same labels** combines rows with the same label (average, sum, count…), for one bar per ligand rather than one per reaction. A **Sankey** chart, **treemap** or **decomposition tree** asks which columns are its levels and which says how much each row carries |
-| **Number** | One headline number (KPI): average, sum, median, smallest, largest, standard deviation, or a count; or any formula. A **Target** colours it green or red, and you choose whether higher is better |
+| **Number** | One headline number (KPI): average, sum, median, smallest, largest, standard deviation, or a count; or any formula. A **Target** colors it green or red, and you choose whether higher is better |
 | **Table** | Chosen columns, sortable by clicking a heading; structures are drawn |
 | **Slicer** | A button for each value of a column (catalyst, solvent…). Clicking buttons filters every tile fed by the same table |
 | **Gallery** | A card for each drawn structure in a table, with values such as the ID and yield under it |
@@ -314,7 +314,7 @@ Each new tile asks which table or block of cells to read. For a gallery, the str
 
 ## Printing
 
-The **Page Layout** tab sets how a sheet prints, as in Excel: **Margins**, **Orientation**, paper **Size**, the **Print Area** (Set, Add another block on pages of its own, or Clear), **Breaks** (Insert Page Break starts a new page above and to the left of the active cell), **Print Titles** (rows repeated at the top of every page, columns at the left), **Header & Footer** (left, centre and right parts; type &[Page], &[Pages], &[Date], &[Time], &[File] or &[Tab]), and **Scale to Fit** (a percentage, or so many pages wide and tall; fitting ignores breaks put in by hand, as Excel does). **Print Gridlines** and **Print Headings** print them; **Page Breaks** shows where pages end on the grid (dashed for automatic breaks, solid for your own). **Page Setup…** has everything in one window, with centring and page order too. **Print Preview** shows each page before printing, and **File ▸ Print…** prints the print area, the whole sheet or the selected cells. All of it is saved in .xlsx files as Excel's own page setup, so the sheet prints the same from Excel.
+The **Page Layout** tab sets how a sheet prints, as in Excel: **Margins**, **Orientation**, paper **Size**, the **Print Area** (Set, Add another block on pages of its own, or Clear), **Breaks** (Insert Page Break starts a new page above and to the left of the active cell), **Print Titles** (rows repeated at the top of every page, columns at the left), **Header & Footer** (left, center and right parts; type &[Page], &[Pages], &[Date], &[Time], &[File] or &[Tab]), and **Scale to Fit** (a percentage, or so many pages wide and tall; fitting ignores breaks put in by hand, as Excel does). **Print Gridlines** and **Print Headings** print them; **Page Breaks** shows where pages end on the grid (dashed for automatic breaks, solid for your own). **Page Setup…** has everything in one window, with centering and page order too. **Print Preview** shows each page before printing, and **File ▸ Print…** prints the print area, the whole sheet or the selected cells. All of it is saved in .xlsx files as Excel's own page setup, so the sheet prints the same from Excel.
 
 ## Saving and sharing
 

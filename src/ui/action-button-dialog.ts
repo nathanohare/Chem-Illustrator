@@ -8,9 +8,28 @@ import { SHOW_JUMPS, SHOW_TOOLS } from '../links';
 export interface ActionChoice {
   /** The button (a library shape id), or the navigation set. */
   geo: string | 'set';
+  /** How the buttons look (one of ACTION_LOOKS). */
+  look: string;
   /** What a click does: a show jump (#next…), a slide (#slide=id), a web page or file, or nothing (''). */
   link: string;
 }
+
+/**
+ * The looks a button can have: PowerPoint's own blue, and quieter ones that keep out of the way
+ * of the slide (Nate: "some smaller/more subdued ones"). `size` is a single button's side in
+ * points (the navigation set's are three quarters of it).
+ */
+export interface ActionLook { id: string; name: string; fill: string | null; line: string; width: number; size: number }
+export const ACTION_LOOKS: ActionLook[] = [
+  { id: 'office', name: 'Standard', fill: '#dae3f3', line: '#2f5597', width: 1, size: 40 },
+  { id: 'subtle', name: 'Subtle gray', fill: '#f2f2f2', line: '#a6a6a6', width: 0.75, size: 30 },
+  { id: 'outline', name: 'Small outline', fill: null, line: '#8c8c8c', width: 0.75, size: 22 },
+  { id: 'dark', name: 'Dark', fill: '#3a3f47', line: '#ffffff', width: 1, size: 32 },
+];
+export const actionLook = (id: string): ActionLook => ACTION_LOOKS.find((l) => l.id === id) ?? ACTION_LOOKS[0];
+
+/** The look last picked (the next window starts there). */
+let lastLook = 'office';
 
 /** A shape's outline and glyph as SVG path data, drawn w × h. */
 function pathD(steps: GeoStep[]): string {
@@ -37,12 +56,13 @@ export function askActionButton(slides: SlideChoice[], regions: SlideChoice[] = 
     const form = document.createElement('form');
     form.method = 'dialog';
     form.innerHTML = `<h2>Action Button</h2>
+      <div class="ab-looks" role="radiogroup" aria-label="Look"></div>
       <div class="ab-gallery" role="radiogroup" aria-label="Button"></div>
       <label class="ask-row"><span>On a click</span><select name="action"></select></label>
       <label class="ask-row" data-for="slide" hidden><span>Slide</span><select name="slide"></select></label>
       <label class="ask-row" data-for="key" hidden><span>Region</span><select name="key"></select></label>
       <label class="ask-row" data-for="url" hidden><span>Web page or file</span><input name="url" placeholder="https://… or a file path" /></label>
-      <p class="muted small">The button goes in the slide's bottom right corner; move or resize it as any shape. Right-click ▸ Action… changes what it does later. Saved as PowerPoint's own action button; the slide picker, looking round and regions work in this app's slide show.</p>
+      <p class="muted small">The button goes in the slide's bottom right corner; move or resize it as any shape. Right-click ▸ Action… changes what it does later. Saved as PowerPoint's own action button; the slide picker, looking around and regions work in this app's slide show.</p>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">Insert</button></p>`;
     const $ = <T extends Element>(q: string) => form.querySelector<T>(q)!;
     const gallery = $<HTMLDivElement>('.ab-gallery');
@@ -65,8 +85,10 @@ export function askActionButton(slides: SlideChoice[], regions: SlideChoice[] = 
     action.addEventListener('change', showFields);
 
     let picked = 'actNext';
+    let look = actionLook(lastLook);
     const defs = GEOS.filter((g) => g.group === 'Action buttons');
     const tiles: HTMLButtonElement[] = [];
+    const looks = $<HTMLDivElement>('.ab-looks');
     const pick = (id: string) => {
       picked = id;
       for (const t of tiles) t.setAttribute('aria-checked', String(t.dataset.geo === id));
@@ -76,6 +98,8 @@ export function askActionButton(slides: SlideChoice[], regions: SlideChoice[] = 
       showFields();
     };
     const tile = (id: string, title: string, svg: string) => {
+      const old = tiles.find((t) => t.dataset.geo === id);
+      if (old) { old.innerHTML = svg; return; }
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'ab-tile';
@@ -89,14 +113,33 @@ export function askActionButton(slides: SlideChoice[], regions: SlideChoice[] = 
       gallery.append(b);
       tiles.push(b);
     };
-    const S = 30;
-    const icon = (steps: { body: GeoStep[]; lines?: GeoStep[] }, x = 0) =>
-      `<path d="${pathD(steps.body)}" transform="translate(${x} 0)" fill="#dae3f3" stroke="#2f5597" stroke-width="1"/>${steps.lines ? `<path d="${pathD(steps.lines)}" transform="translate(${x} 0)" fill="#2f5597" stroke="none"/>` : ''}`;
-    for (const g of defs) tile(g.id, g.name, `<svg viewBox="-1 -1 ${S + 2} ${S + 2}" width="${S + 2}" height="${S + 2}" aria-hidden="true">${icon(g.draw(S, S))}</svg>`);
-    // the navigation set: back, home and next together
     const SET = actionSet(regions.length > 0);
-    const set = SET.map((id, i) => icon(defs.find((g) => g.id === id)!.draw(20, 20), i * 22)).join('');
-    tile('set', `Navigation set: Back, Home, Next and the slide picker${SET.length > 4 ? ', and Look around freely' : ''} together`, `<svg viewBox="-1 -6 ${SET.length * 22} 32" width="${SET.length * 22}" height="32" aria-hidden="true">${set}</svg>`);
+    // the buttons drawn in the look picked (smaller looks are drawn smaller here too)
+    const drawTiles = () => {
+      const S = Math.round(18 + 12 * Math.min(1, look.size / 40)), T = 30;
+      const icon = (steps: { body: GeoStep[]; lines?: GeoStep[] }, x = 0, y = 0) =>
+        `<path d="${pathD(steps.body)}" transform="translate(${x} ${y})" fill="${look.fill ?? 'none'}" stroke="${look.line}" stroke-width="1"/>${steps.lines ? `<path d="${pathD(steps.lines)}" transform="translate(${x} ${y})" fill="${look.line}" stroke="none"/>` : ''}`;
+      const off = (T - S) / 2;
+      for (const g of defs) tile(g.id, g.name, `<svg viewBox="-1 -1 ${T + 2} ${T + 2}" width="${T + 2}" height="${T + 2}" aria-hidden="true">${icon(g.draw(S, S), off, off)}</svg>`);
+      // the navigation set: back, home and next together
+      const s2 = Math.round(S * 0.66), gap = s2 + 2;
+      const set = SET.map((id, i) => icon(defs.find((g) => g.id === id)!.draw(s2, s2), i * gap, (20 - s2) / 2)).join('');
+      tile('set', `Navigation set: Back, Home, Next and the slide picker${SET.length > 4 ? ', and Look around freely' : ''} together`, `<svg viewBox="-1 -6 ${SET.length * 22} 32" width="${SET.length * 22}" height="32" aria-hidden="true">${set}</svg>`);
+    };
+    for (const l of ACTION_LOOKS) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ab-look';
+      b.setAttribute('role', 'radio');
+      b.dataset.look = l.id;
+      const sw = 14;
+      b.innerHTML = `<svg viewBox="-1 -1 ${sw + 2} ${sw + 2}" width="${sw + 2}" height="${sw + 2}" aria-hidden="true"><rect width="${sw}" height="${sw}" fill="${l.fill ?? 'none'}" stroke="${l.line}"/><path d="M4 3 L11 7 L4 11 Z" fill="${l.line}"/></svg><span>${l.name}</span>`;
+      b.title = `${l.name}: ${l.size} pt buttons`;
+      b.addEventListener('click', () => { look = l; lastLook = l.id; for (const x of looks.children) x.setAttribute('aria-checked', String((x as HTMLElement).dataset.look === l.id)); drawTiles(); });
+      b.setAttribute('aria-checked', String(l.id === look.id));
+      looks.append(b);
+    }
+    drawTiles();
     pick('actNext');
 
     d.append(form);
@@ -109,7 +152,7 @@ export function askActionButton(slides: SlideChoice[], regions: SlideChoice[] = 
       e.preventDefault();
       const link = action.value === 'slide' ? slideSel.value : action.value === 'url' ? url.value.trim() : action.value === 'key' ? keySel.value : action.value;
       d.close();
-      finish({ geo: picked, link });
+      finish({ geo: picked, link, look: look.id });
     });
     d.showModal();
     tiles.find((t) => t.dataset.geo === picked)?.focus();

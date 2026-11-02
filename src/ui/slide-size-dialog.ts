@@ -69,7 +69,7 @@ export function pickSlideSize(now: SlideSize): Promise<SlideSizeChoice | null> {
     const fit = document.createElement('select');
     fit.add(new Option('Ensure Fit: as big as fits on the new slide', 'fit'));
     fit.add(new Option('Maximize: as big as the slide allows (may run off)', 'max'));
-    fit.add(new Option('Don\'t scale: keep the size, centred', 'centre'));
+    fit.add(new Option('Don\'t scale: keep the size, centered', 'centre'));
     row('What is on the slides', fit);
     const note = document.createElement('p');
     note.className = 'muted';
