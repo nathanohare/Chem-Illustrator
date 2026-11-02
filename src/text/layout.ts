@@ -7,7 +7,8 @@
 // fit its width; a word longer than the width sticks out, as in ChemDraw. Coordinates are in points with
 // the origin at the left end of the first line's baseline, as captions are placed.
 
-import type { Justify, ParaStyle, TabStop, TextRun } from '../model';
+import type { Justify, ParaStyle, TabStop, TextFx, TextRun } from '../model';
+import { textFx } from './fx';
 import type { Rect } from '../geom';
 import { formulaParts } from '../richtext';
 import { fitParas, listMarkers, paraCount } from './paragraphs';
@@ -110,6 +111,8 @@ export interface Glyphs {
   highlight?: string;
   /** Character spacing: points added after each character. */
   spacing?: number;
+  /** Text effects: kerning off, no fill, see-through, an outline, a shadow. */
+  fx?: TextFx;
   /** Extra width each space gets in a justified line. */
   spread?: number;
   /** A figure, table or field (documents): its id. Its one character isn't drawn. */
@@ -190,6 +193,8 @@ interface Seg {
   text: string; start: number; size: number; base: number; dy: number; family: string; style: string; color?: string; underline?: boolean; strike?: boolean; highlight?: string;
   /** Character spacing: points added after each character. */
   spacing?: number;
+  /** Text effects (kerning, fill, outline, shadow). */
+  fx?: TextFx;
   /** A figure, table or field (documents): its id, and once laid out its width, what it shows and its height. */
   obj?: number; w?: number; shown?: string; objAscent?: number; objDescent?: number;
   /** A tab: its width (`w`) is worked out from where it starts and its tab stop. */
@@ -277,6 +282,9 @@ function segments(runs: TextRun[], defaultSize: number, n: number): { segs: Seg[
     }
     // character spacing goes on every piece the run made
     if (r.spacing) for (let q = from.p; q <= Math.min(p, n - 1); q++) for (const sg of segs[q].slice(q === from.p ? from.k : 0)) sg.spacing = r.spacing;
+    // and so do its text effects
+    const fx = textFx(r);
+    if (fx) for (let q = from.p; q <= Math.min(p, n - 1); q++) for (const sg of segs[q].slice(q === from.p ? from.k : 0)) sg.fx = fx;
   }
 }
 
@@ -570,6 +578,7 @@ function layoutPlain(f: TextFrame, defaultSize: number, measure: Measure): TextL
         if (s.highlight) g.highlight = s.highlight;
         if (s.strike) g.strike = true;
         if (s.spacing) g.spacing = s.spacing;
+        if (s.fx) g.fx = s.fx;
         if (s.tab) { g.tab = true; if (s.leader) g.leader = s.leader; }
         if (s.hide) { g.hidden = true; pieces.push(g); continue; }
         if (s.obj !== undefined) {

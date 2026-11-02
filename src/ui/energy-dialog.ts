@@ -61,14 +61,14 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
       <canvas class="energy-preview" aria-label="Preview of the diagram" role="img"></canvas>
       <div class="energy-table-wrap"><table class="energy-table"><thead></thead><tbody></tbody></table></div>
       <p class="energy-rows"><button type="button" data-act="row" title="Another species along the reaction coordinate">+ Species</button>
-        <button type="button" data-act="path" title="Another pathway drawn on the same diagram, in its own colour">+ Pathway</button>
+        <button type="button" data-act="path" title="Another pathway drawn on the same diagram, in its own color">+ Pathway</button>
         <button type="button" data-act="ddagger" title="Put a double dagger (‡) at the end of the species name you were last in, for a transition state">‡</button>
         <button type="button" data-act="import" title="Read energies, transition states, the level of theory and geometries from Gaussian or ORCA output files, into the pathway you were last in">Import Gaussian/ORCA…</button>
         <input type="file" name="qm" multiple accept=".log,.out,.txt" hidden /></p>
       <p class="muted small energy-import-note" hidden></p>
       <p class="muted small">Leave an energy empty where a pathway has nothing (so a one-step route can sit beside a two-step one). Name transition states with ‡ (TS1‡): the ‡ button adds one to the name box you were last in.</p>
       <div class="energy-brackets"><span class="energy-brackets-title">Brackets</span><ul class="energy-bracket-list"></ul>
-        <button type="button" data-act="bracket" title="A double arrow between any two species, labelled with the change (ΔG‡ up to a transition state, else ΔG)">+ Bracket</button></div>
+        <button type="button" data-act="bracket" title="A double arrow between any two species, labeled with the change (ΔG‡ up to a transition state, else ΔG)">+ Bracket</button></div>
       <label class="ask-row"><span>Axis</span><span class="energy-pair"><select name="quantity" title="With energies read from files: ΔG uses the free energies, ΔH the enthalpies, E and ΔE the electronic energies"><option>ΔG</option><option>ΔG°</option><option>ΔH</option><option>E</option><option>ΔE</option></select>
         <select name="unit"><option>kcal/mol</option><option>kJ/mol</option><option>eV</option></select></span></label>
       <label class="ask-row"><span>Joined by</span><select name="style"><option value="levels">Levels and dashed lines</option><option value="curve">A smooth curve</option></select></label>
@@ -183,7 +183,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         name.setAttribute('aria-label', `Pathway ${j + 1} name`);
         const col = Object.assign(document.createElement('input'), { type: 'color', value: p.color });
         col.dataset.c = String(j);
-        col.setAttribute('aria-label', `Pathway ${j + 1} colour`);
+        col.setAttribute('aria-label', `Pathway ${j + 1} color`);
         const dash = document.createElement('select');
         dash.dataset.d = String(j);
         dash.setAttribute('aria-label', `Pathway ${j + 1} line style`);

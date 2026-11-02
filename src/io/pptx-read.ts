@@ -984,7 +984,7 @@ class Reader {
   private pictureFx(from: string, pic: Element, img: { src: string; px: { w: number; h: number }; mime: string }, tag: string | undefined, origTag?: string): PictureFx | undefined {
     const blip = kid(pic, 'blipFill', 'blip');
     const got = readPictureFx(blip, kid(pic, 'spPr'));
-    if (got.dropped) this.warnings.add('Some picture effects (artistic effects, saturation, colour temperature) were left off.');
+    if (got.dropped) this.warnings.add('Some picture effects (artistic effects, saturation, color temperature) were left off.');
     // ours: the original kept beside the picture, named by the tag with what was worked in
     let t: { tol?: unknown; orig?: unknown; fx?: { bg?: unknown; sharpen?: unknown } } = {};
     try { if (tag) t = JSON.parse(tag) ?? {}; } catch { /* not ours */ }
@@ -1469,7 +1469,7 @@ class Reader {
     const def = kids(this.r.xml(this.r.relOfType(this.r.relOfType('', REL.officeDocument) ?? '', REL.tableStyles) ?? '')?.documentElement ?? null, 'tblStyle')
       .find((e) => e.getAttribute('styleId') === id);
     if (!def) {
-      this.warnings.add('A table\'s PowerPoint style wasn\'t in the file, so its colours were left out (pick a style in the Style panel).');
+      this.warnings.add('A table\'s PowerPoint style wasn\'t in the file, so its colors were left out (pick a style in the Style panel).');
       return { table: t };
     }
     const n = t.rows.length, m = t.cols.length;
@@ -1763,7 +1763,7 @@ class Reader {
       shaded = true;
     } else if (kid(spPr, 'pattFill')) {
       fill = this.color(kid(spPr, 'pattFill', 'fgClr'));
-      this.warnings.add('Patterned fills came in as plain colours.');
+      this.warnings.add('Patterned fills came in as plain colors.');
     } else if (!kid(spPr, 'noFill') && !kid(spPr, 'blipFill')) {
       const ref = kid(style, 'fillRef');
       if (ref && ref.getAttribute('idx') !== '0') fill = this.color(ref);
@@ -1916,11 +1916,26 @@ class Reader {
         if (strike && strike !== 'noStrike') r.strike = true;
         const spc = Number(get('spc') ?? 0);
         if (spc) r.spacing = spc / 100;
+        if (get('kern') === '0') r.noKern = true;
         const bl = Number(get('baseline') ?? 0);
         if (bl < 0) r.sub = true;
         else if (bl > 0) r.sup = true;
         const fillEl = inheritEl(rPr, chain, lvl, ['solidFill'], true);
         r.color = this.color(fillEl) ?? '#000000';
+        // the Font box's text effects: no fill, a see-through fill, an outline, a shadow
+        if (rPr) {
+          if (kid(rPr, 'noFill')) r.noFill = true;
+          const a = kid(rPr, 'solidFill')?.querySelector('alpha')?.getAttribute('val');
+          if (a && Number(a) < 100000) r.transparency = Math.round((1 - Number(a) / 100000) * 100) / 100;
+          const ln = kid(rPr, 'ln');
+          const lnCol = ln && !kid(ln, 'noFill') ? this.color(kid(ln, 'solidFill')) : undefined;
+          if (lnCol) {
+            r.outline = lnCol;
+            const w = Number(ln!.getAttribute('w') ?? 0);
+            if (w && Math.abs(w / 12700 - 0.75) > 0.01) r.outlineW = Math.round((w / 12700) * 100) / 100;
+          }
+          if (kid(rPr, 'effectLst')?.querySelector('outerShdw')) r.shadow = true;
+        }
         r.font = this.font(inheritEl(rPr, chain, lvl, ['latin'], true)?.getAttribute('typeface') ?? null, title);
         const link = this.hlinkOf(kid(rPr, 'hlinkClick'));
         if (link) {

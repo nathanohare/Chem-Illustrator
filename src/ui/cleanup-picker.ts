@@ -25,9 +25,9 @@ export function askCleanUpOption(labels: string[], preview: (k: number, turn: nu
       <p class="muted small">Pick a layout. Turn or flip them all first if you like; flipping keeps the molecule the same (its wedges turn over).</p>
       <div class="cleanup-picks" role="radiogroup" aria-label="Layouts"></div>
       <div class="cleanup-turns">
-        <button type="button" data-turn="15" title="Turn 15° anticlockwise">⟲ 15°</button>
+        <button type="button" data-turn="15" title="Turn 15° counterclockwise">⟲ 15°</button>
         <button type="button" data-turn="-15" title="Turn 15° clockwise">⟳ 15°</button>
-        <button type="button" data-turn="90" title="Turn 90° anticlockwise">⟲ 90°</button>
+        <button type="button" data-turn="90" title="Turn 90° counterclockwise">⟲ 90°</button>
         <button type="button" data-flip="h" title="Flip left to right">Flip ↔</button>
         <button type="button" data-flip="v" title="Flip top to bottom">Flip ↕</button>
         <button type="button" data-reset title="Back to how Clean Up turned them">Reset</button>

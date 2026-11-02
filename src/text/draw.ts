@@ -3,6 +3,7 @@
 
 import type { Glyphs, LaidLine, TextLayout } from './layout';
 import { pieceX } from './layout';
+import { withFx } from './fx';
 
 export const fontOf = (g: Glyphs): string => `${g.style}${g.size}px ${g.family}`;
 
@@ -29,6 +30,10 @@ function drawGlyphs(ctx: CanvasRenderingContext2D, lay: TextLayout, l: LaidLine,
   ctx.font = fontOf(g);
   ctx.fillStyle = g.color ?? '#000';
   const y = oy + l.y + g.dy;
+  // text effects: drawn in a state of their own
+  const fx = g.fx && !g.tab ? g.fx : undefined;
+  if (fx) ctx.save();
+  const put = fx ? withFx(ctx, fx, g.size) : (t: string, x: number, yy: number) => ctx.fillText(t, x, yy);
   if (g.tab) {
     // a tab shows nothing but its leader: dots, a dashed or a solid line along the baseline
     if (g.leader === 'underscore') ctx.fillRect(ox + g.x, oy + l.y + Math.max(1, g.size * 0.1), g.w, Math.max(0.5, g.size * 0.05));
@@ -38,18 +43,23 @@ function drawGlyphs(ctx: CanvasRenderingContext2D, lay: TextLayout, l: LaidLine,
       // dots line up from one line to the next (on a grid from the margin), as Word's do
       for (let x = Math.ceil((g.x + 0.5) / step) * step; x + step <= g.x + g.w + 0.01; x += step) ctx.fillText(mark, ox + x, y);
     }
-  } else if (g.shown !== undefined) ctx.fillText(g.shown, ox + g.x, y);
+  } else if (g.shown !== undefined) put(g.shown, ox + g.x, y);
   else if (g.spacing) {
     // spaced out (or condensed): each character where the spacing puts it
-    for (let k = 0; k < g.text.length; k++) if (g.text[k] !== ' ') ctx.fillText(g.text[k], ox + g.x + pieceX(lay, g, k), y);
+    for (let k = 0; k < g.text.length; k++) if (g.text[k] !== ' ') put(g.text[k], ox + g.x + pieceX(lay, g, k), y);
   } else if (g.spread) {
     // justified: each word goes where the stretched spaces put it
     let k = 0;
     for (const word of g.text.split(' ')) {
-      if (word) ctx.fillText(word, ox + g.x + pieceX(lay, g, k), y);
+      if (word) put(word, ox + g.x + pieceX(lay, g, k), y);
       k += word.length + 1;
     }
-  } else ctx.fillText(g.text, ox + g.x, y);
+  } else put(g.text, ox + g.x, y);
+  if (fx) {
+    ctx.restore();
+    ctx.font = fontOf(g);
+    ctx.fillStyle = g.color ?? '#000';
+  }
   if (g.underline) {
     // from the text's own size (the line's height also takes in pictures set in the line)
     const base = g.size;

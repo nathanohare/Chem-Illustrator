@@ -87,8 +87,8 @@ export const bondEndPrefs: { round: number } = { round: DEFAULT_BOND_ENDS };
 export type MapLook = 'peach' | 'tint' | 'grey';
 export const MAP_LOOKS: { value: MapLook; label: string }[] = [
   { value: 'peach', label: 'Light peach boxes' },
-  { value: 'tint', label: 'Each number in its own light colour' },
-  { value: 'grey', label: 'Grey outlines (as ChemDraw)' },
+  { value: 'tint', label: 'Each number in its own light color' },
+  { value: 'grey', label: 'Gray outlines (as ChemDraw)' },
 ];
 export const mapLookPrefs: { look: MapLook } = { look: 'peach' };
 

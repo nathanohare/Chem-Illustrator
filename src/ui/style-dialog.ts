@@ -116,7 +116,7 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     row('Arrowhead length, width', headLength, headWidth, el('span', { className: 'muted', textContent: 'pt' }));
     // how arrows sit in a scheme: as Clean Up Reaction and typing text by an arrow lay them out
     const align = el('select');
-    for (const [v, t] of [['center', 'Centred'], ['left', 'Left'], ['right', 'Right']]) align.append(new Option(t, v));
+    for (const [v, t] of [['center', 'Centered'], ['left', 'Left'], ['right', 'Right']]) align.append(new Option(t, v));
     row('Lines of text line up', align);
     const textGap = arrowNum('Leave blank to scale with the bond length');
     row('Gap between arrow and text', textGap, el('span', { className: 'muted', textContent: 'pt' }));

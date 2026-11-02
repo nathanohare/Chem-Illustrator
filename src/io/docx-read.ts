@@ -106,7 +106,7 @@ const WARN = {
   cellObjects: 'Pictures and structures inside table cells were left out.',
   cellBoxes: 'Text boxes inside table cells were left out.',
   wmf: 'Some pictures are in the older Windows Metafile (WMF) format, which can\'t be shown here yet. They are kept, and saved back to Word unchanged.',
-  pictureFx: 'Some picture effects (artistic effects, saturation, colour temperature) were left off.',
+  pictureFx: 'Some picture effects (artistic effects, saturation, color temperature) were left off.',
   numbering: 'Some numbered lists use numbering that shows here as 1., a., i.',
   citations: 'Citations from a reference manager were kept as plain text.',
   pageText: 'Text after the page number in the header or footer was left out.',
@@ -118,7 +118,7 @@ const WARN = {
 
 type Pos = 'base' | 'sub' | 'sup';
 /** Text formatting as a file gives it (only what it gives). `color` null is "automatic". */
-interface RProps { font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean; color?: string | null; highlight?: string | null; pos?: Pos; hidden?: boolean; formula?: boolean; strike?: boolean; smallCaps?: boolean; allCaps?: boolean; cstyle?: string }
+interface RProps { font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean; color?: string | null; highlight?: string | null; pos?: Pos; hidden?: boolean; formula?: boolean; strike?: boolean; smallCaps?: boolean; allCaps?: boolean; cstyle?: string; spacing?: number; noKern?: boolean; noFill?: boolean; transparency?: number; outline?: string; outlineW?: number; shadow?: boolean }
 /** Paragraph formatting as a file gives it, in points. */
 interface PProps {
   align?: Justify; before?: number; after?: number; line?: { v: number; rule: string };
@@ -419,6 +419,29 @@ class DocxReader {
         case 'strike': case 'dstrike': out.strike = this.on(c); break;
         case 'smallCaps': out.smallCaps = this.on(c); break;
         case 'caps': out.allCaps = this.on(c); break;
+        // character spacing (twentieths of a point) and kerning taken off
+        case 'spacing': { const v = parseFloat(this.a(c) ?? ''); out.spacing = Number.isFinite(v) && v ? Math.round((v / 20) * 100) / 100 : undefined; break; }
+        case 'kern': out.noKern = this.a(c) === '0' || undefined; break;
+        // Word 2010's text effects (w14)
+        case 'shadow': out.shadow = c.namespaceURI?.includes('2010') ? true : this.on(c) || undefined; break;
+        case 'textOutline': {
+          const clr = c.getElementsByTagNameNS('*', 'srgbClr')[0];
+          const v = clr ? (clr.getAttributeNS(clr.namespaceURI, 'val') || clr.getAttribute('w14:val')) : null;
+          const none = c.getElementsByTagNameNS('*', 'noFill').length > 0;
+          if (v && !none && /^[0-9a-f]{6}$/i.test(v)) {
+            out.outline = `#${v.toLowerCase()}`;
+            const w = Number(c.getAttributeNS(c.namespaceURI, 'w') || c.getAttribute('w14:w') || 0);
+            if (w && Math.abs(w / 12700 - 0.75) > 0.01) out.outlineW = Math.round((w / 12700) * 100) / 100;
+          }
+          break;
+        }
+        case 'textFill': {
+          if (c.getElementsByTagNameNS('*', 'noFill').length) { out.noFill = true; break; }
+          const al = c.getElementsByTagNameNS('*', 'alpha')[0];
+          const v = al ? Number(al.getAttributeNS(al.namespaceURI, 'val') || al.getAttribute('w14:val') || 0) : 0;
+          if (v > 0) out.transparency = Math.round((v / 100000) * 100) / 100;
+          break;
+        }
       }
     }
     return out;
@@ -1097,6 +1120,7 @@ class DocxReader {
     return rt.cleanStyle({
       font: r.font ?? WORD_FONT, size: r.size ?? WORD_SIZE, bold: r.bold, italic: r.italic, underline: r.underline,
       strike: r.strike, smallCaps: r.smallCaps, allCaps: r.allCaps, cstyle: r.cstyle,
+      spacing: r.spacing, noKern: r.noKern, noFill: r.noFill, transparency: r.transparency, outline: r.outline, outlineW: r.outlineW, shadow: r.shadow,
       color: r.color ?? undefined, highlight: r.highlight ?? undefined, formula: formula || undefined,
       sub: (!formula && r.pos === 'sub') || undefined, sup: (!formula && r.pos === 'sup') || undefined,
     });

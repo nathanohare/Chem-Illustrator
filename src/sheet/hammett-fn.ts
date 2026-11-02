@@ -54,7 +54,7 @@ export function hammettValue(res: HammettResult | CellError, what: HammettWhat, 
   for (const s of sites) {
     if (s.fused) return ERR.na(`The ${s.place} position is part of a fused ring: no single-group Hammett constant applies`);
     if (s.row < 0) return ERR.na(`The ${s.place} group (${s.smiles}) isn't in the Hammett table: Knowledge Base > Hammett Constants lists the groups, and Import Table adds more`);
-    if (s.place === 'ipso') return ERR.na('A marked position is the reaction centre\'s own ring atom');
+    if (s.place === 'ipso') return ERR.na('A marked position is the reaction center\'s own ring atom');
   }
   if (what === 'group') {
     const g = (s: HammettSite) => HAMMETT[s.row].group;

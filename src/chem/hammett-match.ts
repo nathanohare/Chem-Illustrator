@@ -140,7 +140,7 @@ function fromCore(RDKit: any, input: string, core: string): HammettResult {
     let centre = maps.findIndex((m) => m === 1);
     if (centre < 0) {
       const bearing = ring.filter((a) => cg.nb[a].some((b) => !ring.includes(b) && zOf(cg, b) !== 0 && !cg.rings.some((r) => r.includes(a) && r.includes(b))));
-      if (bearing.length !== 1) return { error: 'Mark the reaction centre with :1 in the core, e.g. [NH2:1]c1ccc(*)cc1' };
+      if (bearing.length !== 1) return { error: 'Mark the reaction center with :1 in the core, e.g. [NH2:1]c1ccc(*)cc1' };
       centre = bearing[0];
     }
     // the reaction centre's ring atom: the centre itself, or the nearest atom of the ring to it
@@ -156,7 +156,7 @@ function fromCore(RDKit: any, input: string, core: string): HammettResult {
         front = next;
       }
     }
-    if (rc < 0) return { error: 'The reaction centre must be joined to the marked ring' };
+    if (rc < 0) return { error: 'The reaction center must be joined to the marked ring' };
     const ringDist = (a: number): number => {
       const i = ring.indexOf(a), j = ring.indexOf(rc);
       const d = Math.abs(i - j);

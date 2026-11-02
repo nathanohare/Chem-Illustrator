@@ -47,7 +47,7 @@ export function systemPrompt(mode: AssistantMode): string {
     '  {"type": "check", "findings": [{"level": "ok"|"note"|"warn", "text": "<one sentence>", "step": <step number, if about one>}]}  (for checking a scheme or a structure)',
     '  {"type": "text", "text": "<the text>", "replace": true|false}  (replace: in place of the selected text; false: added after it)',
     'Propose an action only when the person asks for a change, a drawing, a check or writing. Give SMILES that RDKit can read, with the stereochemistry the person drew kept.',
-    'For an experimental write-up, follow common journal style (ACS): reagent amounts in mmol and equivalents, yields, and characterisation placeholders such as [1H NMR] where data is not given. Never invent data.',
+    'For an experimental write-up, follow common journal style (ACS): reagent amounts in mmol and equivalents, yields, and characterization placeholders such as [1H NMR] where data is not given. Never invent data.',
   ].join('\n');
 }
 

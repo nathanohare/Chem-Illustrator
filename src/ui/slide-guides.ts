@@ -178,7 +178,7 @@ export async function gridAndGuides(view: SlideView, shown: { grid: boolean; sma
     { name: 'addX', label: 'Add a vertical guide at', value: '', type: 'number', unit: prefs.units === 'in' ? 'in' : 'cm', help: `Measured as the rulers are, ${prefs.from === 'centre' ? 'from the middle of the slide (left is less than 0)' : 'from the slide\'s left edge'}.` },
     { name: 'addY', label: 'Add a horizontal guide at', value: '', type: 'number', unit: prefs.units === 'in' ? 'in' : 'cm', help: prefs.from === 'centre' ? 'From the middle (above is less than 0).' : 'From the top edge.' },
     { name: 'clear', label: 'Take away every guide', value: 'false', type: 'checkbox' },
-    { name: 'units', label: 'Ruler units', value: prefs.units, options: [{ value: 'in', label: 'Inches' }, { value: 'cm', label: 'Centimetres' }] },
+    { name: 'units', label: 'Ruler units', value: prefs.units, options: [{ value: 'in', label: 'Inches' }, { value: 'cm', label: 'Centimeters' }] },
     { name: 'from', label: 'Rulers count from', value: prefs.from, options: [{ value: 'centre', label: 'The middle of the slide (as PowerPoint)' }, { value: 'corner', label: 'The top left corner' }] },
   ], { ok: 'OK', note: 'Hold Alt while dragging to place things freely. Drag a guide off the slide to take it away; Ctrl+drag a guide for a copy.' });
   if (!v) return null;

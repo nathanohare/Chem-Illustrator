@@ -38,7 +38,7 @@ export const REF_NUMBERINGS: Record<RefNumbering, string> = {
   deck: 'Numbered through the presentation (as on the References slide)',
 };
 export const REF_PLACES: Record<RefPlace, string> = {
-  'bottom-left': 'Bottom left', 'bottom-centre': 'Bottom centre', 'bottom-right': 'Bottom right', 'top-right': 'Top right',
+  'bottom-left': 'Bottom left', 'bottom-centre': 'Bottom center', 'bottom-right': 'Bottom right', 'top-right': 'Top right',
 };
 
 export const defaultRefLook = (): RefLook => ({ form: 'short', numbering: 'none', place: 'bottom-left', size: 10 });

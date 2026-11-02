@@ -65,7 +65,7 @@ export const SPARK_STYLES: { name: string; color: string; mark: string; neg: str
   { name: 'Teal', color: '#2d6a7a', mark: '#e07a3f', neg: '#b33951' },
   { name: 'Green', color: '#548235', mark: '#c00000', neg: '#c00000' },
   { name: 'Orange', color: '#c55a11', mark: '#2f5597', neg: '#7f7f7f' },
-  { name: 'Grey', color: '#595959', mark: '#c00000', neg: '#c00000' },
+  { name: 'Gray', color: '#595959', mark: '#c00000', neg: '#c00000' },
   { name: 'Purple', color: '#7030a0', mark: '#00b050', neg: '#c00000' },
   { name: 'Black', color: '#000000', mark: '#ff0000', neg: '#ff0000' },
 ];

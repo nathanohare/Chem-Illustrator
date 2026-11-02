@@ -107,7 +107,13 @@ export interface Settings {
   /** Where the text formatting bar goes while typing text (View > Window and Colours > Text Formatting Bar). */
   textBar: 'docked' | 'floating' | 'hidden';
   /** The window's own colours: as the computer is set (light or dark), or always light or dark (View > Window and Colours > Theme). The page has its own Reading Mode. */
-  appTheme: 'system' | 'light' | 'dark';
+  appTheme: 'system' | 'light' | 'dark' | 'darkgray';
+  /** How roomy the toolboxes and ribbons are (View > Window and Colours > Density): Compact as the app comes, Standard or Large. */
+  density: 'compact' | 'standard' | 'large';
+  /** The icons' colours (View > Window and Colours > Icon Colours): gray with one part in the mode's colour, or a colour for each kind of command as Office does. */
+  iconLook: 'mode' | 'kind';
+  /** The Shapes menu's pictures: neutral (black on light, white on dark) or in the mode's colour (View > Window and Colours > Icon Colours). */
+  shapeInk: 'neutral' | 'accent';
   /** Toolboxes docked at a side show in one column in Slides, Sheet, Document and Design tabs (View > Toolboxes). */
   oneColumnTools: boolean;
   /** Settings ▸ Toolboxes: each toolbox button in a cell of its own, ruled off by lines, raised, or both. */
@@ -207,6 +213,8 @@ export interface Settings {
   sheetFormulaBar: boolean;
   /** Slides' View > Ruler and Gridlines, and how the rulers measure. */
   slideRuler: boolean;
+  /** Presentation and Design: the side panel's Warnings and Analysis shown (hidden at first). */
+  slidePanes: { warnings: boolean; analysis: boolean };
   slideGrid: boolean;
   rulerUnits: 'in' | 'cm';
   rulerFrom: 'centre' | 'corner';
@@ -264,7 +272,7 @@ export const SLIDE_PANE_MIN = 120, SLIDE_PANE_MAX = 480, NOTES_MIN = 36, NOTES_M
 export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, stickyHotspot: false, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
-  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', oneColumnTools: false, toolCells: 'off', canvasRibbon: 'classic', ribbonNames: 'side', startView: true, enterFinishesText: false, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
+  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', density: 'compact', iconLook: 'mode', shapeInk: 'neutral', oneColumnTools: false, toolCells: 'off', canvasRibbon: 'classic', ribbonNames: 'side', startView: true, enterFinishesText: false, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
   citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowProducts: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', warnLook: 'disc', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'peach', depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
@@ -275,6 +283,7 @@ export const DEFAULT_SETTINGS: Settings = {
   sheetFormulaBar: true,
   updateCheck: true, updateChannel: 'latest', pubchemNames: true, convertChemDraw: false, matchStructure: true, fileTypesOffered: false, wordObjectsOffered: false, reviewName: '', skipVersion: null, lastVersion: null, recentFiles: [], recentSymbols: [], highlightLooks: [], formatFavorites: [], quickParts: [], docDesign: null,
   slideRuler: false,
+  slidePanes: { warnings: false, analysis: false },
   slideGrid: false,
   rulerUnits: typeof navigator !== 'undefined' && /^[a-z]{2,3}-(US|LR|MM)\b/i.test(navigator.language) ? 'in' : 'cm',
   rulerFrom: 'centre',
@@ -322,8 +331,11 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.textBar === 'string' && ['docked', 'floating', 'hidden'].includes(r.textBar)) s.textBar = r.textBar as Settings['textBar'];
   if (r.canvasRibbon === 'classic' || r.canvasRibbon === 'simple') s.canvasRibbon = r.canvasRibbon;
   if (r.ribbonNames === 'top' || r.ribbonNames === 'side' || r.ribbonNames === 'none') s.ribbonNames = r.ribbonNames;
+  if (r.appTheme === 'system' || r.appTheme === 'light' || r.appTheme === 'dark' || r.appTheme === 'darkgray') s.appTheme = r.appTheme;
+  if (r.density === 'compact' || r.density === 'standard' || r.density === 'large') s.density = r.density;
+  if (r.iconLook === 'mode' || r.iconLook === 'kind') s.iconLook = r.iconLook;
+  if (r.shapeInk === 'neutral' || r.shapeInk === 'accent') s.shapeInk = r.shapeInk;
   if (typeof r.toolCells === 'string' && ['off', 'grid', 'raised', 'both'].includes(r.toolCells)) s.toolCells = r.toolCells as Settings['toolCells'];
-  if (r.appTheme === 'system' || r.appTheme === 'light' || r.appTheme === 'dark') s.appTheme = r.appTheme;
   if (typeof r.oneColumnTools === 'boolean') s.oneColumnTools = r.oneColumnTools;
   if (typeof r.startView === 'boolean') s.startView = r.startView;
   if (typeof r.enterFinishesText === 'boolean') s.enterFinishesText = r.enterFinishesText;
@@ -360,6 +372,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.docRuler === 'boolean') s.docRuler = r.docRuler;
   if (typeof r.sheetFormulaBar === 'boolean') s.sheetFormulaBar = r.sheetFormulaBar;
   if (typeof r.slideRuler === 'boolean') s.slideRuler = r.slideRuler;
+  if (r.slidePanes && typeof r.slidePanes === 'object') { const sp = r.slidePanes as Record<string, unknown>; s.slidePanes = { warnings: sp.warnings === true, analysis: sp.analysis === true }; }
   if (typeof r.slideGrid === 'boolean') s.slideGrid = r.slideGrid;
   if (r.rulerUnits === 'in' || r.rulerUnits === 'cm') s.rulerUnits = r.rulerUnits;
   if (r.rulerFrom === 'centre' || r.rulerFrom === 'corner') s.rulerFrom = r.rulerFrom;

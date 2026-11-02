@@ -65,15 +65,29 @@ const overflows = (row: HTMLElement) => row.scrollWidth > row.clientWidth + 1;
 const galleryExtras = (row: HTMLElement) =>
   [...row.querySelectorAll<HTMLElement>('.rb-styles')].flatMap((gal) => [...gal.querySelectorAll<HTMLElement>(':scope > .rb-style:not(.rb-styles-more)')].slice(3));
 
-/** Fit one row of groups to its width: fewer gallery choices, then words off from the right, then groups folded from the right. */
+/** A group of large buttons only (Insert's Tables, Images): it can step down to small buttons with their words, three to a column. */
+const canShrink = (g: HTMLElement) => {
+  const row = g.querySelector<HTMLElement>(':scope > .rb-row');
+  if (!row) return false;
+  const kids = [...row.children].filter((c) => !(c as HTMLElement).hidden);
+  return kids.length >= 2 && kids.every((c) => c.matches('button.rb-big:not(.rb-keep-big), .rb-fly:has(> button.rb-big)'));
+};
+
+/**
+ * Fit one row of groups to its width, as Office does: fewer gallery choices; then, from the right,
+ * large buttons become small ones with their words; then words off (icons only); then groups
+ * folded into one button each.
+ */
 export function fitRow(row: HTMLElement): void {
   if (!row.clientWidth) return;
   const groups = groupsOf(row);
-  for (const g of groups) g.classList.remove('rb-compact', 'rb-folded', 'rb-popped');
+  for (const g of groups) g.classList.remove('rb-small', 'rb-compact', 'rb-folded', 'rb-popped');
   const extras = galleryExtras(row);
   for (const x of extras) x.classList.remove('rb-gal-out');
   if (!overflows(row)) return;
   for (let i = extras.length - 1; i >= 0 && overflows(row); i--) extras[i].classList.add('rb-gal-out');
+  if (!overflows(row)) return;
+  for (let i = groups.length - 1; i >= 0 && overflows(row); i--) if (canShrink(groups[i])) groups[i].classList.add('rb-small');
   if (!overflows(row)) return;
   for (let i = groups.length - 1; i >= 0 && overflows(row); i--) groups[i].classList.add('rb-compact');
   // the first group (Clipboard, usually) keeps its place longest
@@ -92,7 +106,14 @@ export function fitRow(row: HTMLElement): void {
   for (const g of groups) {
     if (!g.classList.contains('rb-compact') || g.classList.contains('rb-folded')) continue;
     g.classList.remove('rb-compact');
-    if (overflows(row)) { g.classList.add('rb-compact'); break; }
+    // (one that doesn't fit stays as it is; the next may still fit)
+    if (overflows(row)) g.classList.add('rb-compact');
+  }
+  // and the large buttons, where they fit
+  for (const g of groups) {
+    if (!g.classList.contains('rb-small') || g.classList.contains('rb-folded') || g.classList.contains('rb-compact')) continue;
+    g.classList.remove('rb-small');
+    if (overflows(row)) g.classList.add('rb-small');
   }
 }
 

@@ -87,20 +87,20 @@ export function editMaster(m: Master, hooks: MasterDialogHooks): Promise<Master 
 
     section('Background');
     const bg = color(m.background);
-    const fancy = m.fill ? ({ gradient: 'a gradient', picture: 'a picture', pattern: 'a pattern', solid: 'a see-through colour' } as const)[m.fill.kind] : '';
-    row('Colour', bg, ...(fancy ? [unit(`(now ${fancy}, from Format Background; a colour here takes its place)`)] : []));
+    const fancy = m.fill ? ({ gradient: 'a gradient', picture: 'a picture', pattern: 'a pattern', solid: 'a see-through color' } as const)[m.fill.kind] : '';
+    row('Color', bg, ...(fancy ? [unit(`(now ${fancy}, from Format Background; a color here takes its place)`)] : []));
     const decor = document.createElement('select');
     for (const x of DECORS) decor.add(new Option(x.name, x.id, false, x.id === m.decor));
     row('Template shapes', decor);
     const accent = color(m.accent), accent2 = color(m.accent2);
-    row('Accent colours', accent, accent2);
+    row('Accent colors', accent, accent2);
 
     section('Title slides');
     const ts = m.titleSlide;
     const ownTitle = check(!!ts);
-    row('Own background and text colours', ownTitle);
+    row('Own background and text colors', ownTitle);
     const tsBg = color(ts?.background ?? '#1d3557'), tsTitle = color(ts?.titleColor ?? '#ffffff'), tsText = color(ts?.textColor ?? '#d9e2ec');
-    const tsRows = [row('Background', tsBg), row('Title colour', tsTitle), row('Text colour', tsText)];
+    const tsRows = [row('Background', tsBg), row('Title color', tsTitle), row('Text color', tsText)];
     const showTs = () => { for (const r of tsRows) r.hidden = !ownTitle.checked; };
     ownTitle.addEventListener('change', showTs);
     showTs();
@@ -109,7 +109,7 @@ export function editMaster(m: Master, hooks: MasterDialogHooks): Promise<Master 
     const titleFont = text(m.titleFont, true), titleSize = num(m.titleSize, 4, 200), titleColor = color(m.titleColor), titleBold = check(m.titleBold);
     row('Font', titleFont);
     row('Size', titleSize, unit('pt'));
-    row('Colour', titleColor);
+    row('Color', titleColor);
     row('Bold', titleBold);
 
     section('Text');
@@ -117,7 +117,7 @@ export function editMaster(m: Master, hooks: MasterDialogHooks): Promise<Master 
     row('Font', bodyFont);
     row('Size', bodySize, unit('pt'));
     row('Subtitle size', subtitleSize, unit('pt'));
-    row('Colour', textColor);
+    row('Color', textColor);
 
     section('Logo');
     const preview = document.createElement('img');
@@ -156,7 +156,7 @@ export function editMaster(m: Master, hooks: MasterDialogHooks): Promise<Master 
     row('Footer', footer);
     const footerSize = num(m.footerSize, 4, 72), footerColor = color(m.footerColor);
     row('Size', footerSize, unit('pt'));
-    row('Colour', footerColor);
+    row('Color', footerColor);
 
     section('Structures');
     const bond = num(m.drawing.bondLength, 2, 200, 0.1);
