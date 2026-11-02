@@ -123,9 +123,30 @@ export const GLOSSARY: GlossaryEntry[] = [
   { term: 'IPA', full: 'Isopropanol (2-propanol)', meaning: '', kind: 'Solvent' },
   { term: 'HFIP', full: '1,1,1,3,3,3-Hexafluoro-2-propanol', meaning: '', kind: 'Solvent' },
   { term: 'TFE', full: '2,2,2-Trifluoroethanol', meaning: '', kind: 'Solvent' },
+  { term: 'VP', full: 'Vapour pressure', meaning: 'How readily a liquid evaporates, in mmHg at about 25 °C. 760 mmHg is the boiling point.', kind: 'Property' },
+  { term: 'Ca', full: 'Potential occupational carcinogen (NIOSH)', meaning: 'NIOSH\'s mark on an IDLH or exposure limit for a substance it treats as a possible cause of cancer at work.', kind: 'Safety' },
+  { term: 'EROS', full: 'Encyclopedia of Reagents for Organic Synthesis', meaning: 'Wiley\'s reagent encyclopedia; its short summary for each reagent is free to read.', kind: 'Reagent' },
+  { term: 'Badges', full: 'Bench warnings', meaning: 'Skin: NIOSH notes absorption through skin. No warning: no smell or symptoms at harmful levels. Peroxide former, Pyrophoric, Water-reactive, Explosive, Oxidiser, Carcinogen 1A/1B: as named.', kind: 'Safety' },
 ];
 
 const BY_TERM = new Map(GLOSSARY.map((g) => [g.term.toLowerCase(), g]));
+
+/** Hazard statements (UN GHS / EU CLP wording, shortened), for tooltips on codes such as H330. */
+const H_STATEMENTS: Record<string, string> = {
+  H200: 'Unstable explosive', H201: 'Explosive; mass explosion hazard', H202: 'Explosive; severe projection hazard', H203: 'Explosive; fire, blast or projection hazard', H204: 'Fire or projection hazard', H205: 'May mass explode in fire',
+  H220: 'Extremely flammable gas', H221: 'Flammable gas', H224: 'Extremely flammable liquid and vapour', H225: 'Highly flammable liquid and vapour', H226: 'Flammable liquid and vapour', H228: 'Flammable solid',
+  H240: 'Heating may cause an explosion', H241: 'Heating may cause a fire or explosion', H242: 'Heating may cause a fire', H250: 'Catches fire spontaneously if exposed to air', H251: 'Self-heating; may catch fire',
+  H260: 'In contact with water releases flammable gases which may ignite spontaneously', H261: 'In contact with water releases flammable gas', H270: 'May cause or intensify fire; oxidiser', H271: 'May cause fire or explosion; strong oxidiser', H272: 'May intensify fire; oxidiser', H280: 'Contains gas under pressure', H290: 'May be corrosive to metals',
+  H300: 'Fatal if swallowed', H301: 'Toxic if swallowed', H302: 'Harmful if swallowed', H304: 'May be fatal if swallowed and enters airways', H310: 'Fatal in contact with skin', H311: 'Toxic in contact with skin', H312: 'Harmful in contact with skin',
+  H314: 'Causes severe skin burns and eye damage', H315: 'Causes skin irritation', H317: 'May cause an allergic skin reaction', H318: 'Causes serious eye damage', H319: 'Causes serious eye irritation',
+  H330: 'Fatal if inhaled', H331: 'Toxic if inhaled', H332: 'Harmful if inhaled', H334: 'May cause allergy or asthma symptoms if inhaled', H335: 'May cause respiratory irritation', H336: 'May cause drowsiness or dizziness',
+  H340: 'May cause genetic defects', H341: 'Suspected of causing genetic defects', H350: 'May cause cancer', H350i: 'May cause cancer by inhalation', H351: 'Suspected of causing cancer',
+  H360: 'May damage fertility or the unborn child', H360D: 'May damage the unborn child', H360F: 'May damage fertility', H360FD: 'May damage fertility; may damage the unborn child', H360Df: 'May damage the unborn child; suspected of damaging fertility', H360Fd: 'May damage fertility; suspected of damaging the unborn child',
+  H361: 'Suspected of damaging fertility or the unborn child', H361d: 'Suspected of damaging the unborn child', H361f: 'Suspected of damaging fertility', H361fd: 'Suspected of damaging fertility and the unborn child', H362: 'May cause harm to breast-fed children',
+  H370: 'Causes damage to organs', H371: 'May cause damage to organs', H372: 'Causes damage to organs through prolonged or repeated exposure', H373: 'May cause damage to organs through prolonged or repeated exposure',
+  H400: 'Very toxic to aquatic life', H410: 'Very toxic to aquatic life with long-lasting effects', H411: 'Toxic to aquatic life with long-lasting effects', H412: 'Harmful to aquatic life with long-lasting effects', H413: 'May cause long-lasting harmful effects to aquatic life',
+  EUH014: 'Reacts violently with water', EUH029: 'Contact with water liberates toxic gas', EUH031: 'Contact with acids liberates toxic gas', EUH032: 'Contact with acids liberates very toxic gas', EUH066: 'Repeated exposure may cause skin dryness or cracking', EUH070: 'Toxic by eye contact', EUH071: 'Corrosive to the respiratory tract',
+};
 
 /** The glossary entry for a term (any case), or null. */
 export function glossaryEntry(term: string): GlossaryEntry | null {
@@ -134,6 +155,8 @@ export function glossaryEntry(term: string): GlossaryEntry | null {
 
 /** The tooltip for a term: "IDLH: Immediately Dangerous to Life or Health. Air concentration…", or null. */
 export function glossaryTip(term: string): string | null {
+  const h = H_STATEMENTS[term.trim()];
+  if (h) return `${term.trim()}: ${h}`;
   const g = glossaryEntry(term);
   if (!g) return null;
   return g.meaning ? `${g.term}: ${g.full}. ${g.meaning}` : `${g.term}: ${g.full}`;
