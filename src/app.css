@@ -1236,6 +1236,21 @@ body.sheet-mode.floating-drawing #canvas-host, body.doc-mode.floating-drawing #c
   box-shadow: 0 10px 32px rgba(0, 0, 0, 0.28);
 }
 body.floating-drawing #sheet-pane, body.floating-drawing #doc-pane { opacity: 0.55; }
+/* a cell's structure is drawn in a box of a set size (6 × 4 in), centred under its bar; Bigger grows it */
+body.sheet-mode.floating-drawing #canvas-host, body.sheet-mode.floating-drawing #structure-bar {
+  justify-self: center;
+  width: min(var(--structure-w, 6in), calc(100% - 56px));
+  box-sizing: border-box;
+}
+body.sheet-mode.floating-drawing #canvas-host { align-self: start; height: min(var(--structure-h, 4in), calc(100% - 78px)); }
+body.sheet-mode.floating-drawing[data-structure-size='fill'] #canvas-host,
+body.sheet-mode.floating-drawing[data-structure-size='fill'] #structure-bar { width: auto; justify-self: stretch; }
+body.sheet-mode.floating-drawing[data-structure-size='fill'] #canvas-host { height: auto; align-self: stretch; }
+body.sheet-mode.floating-drawing #structure-bar .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+#structure-bigger { display: none; }
+body.sheet-mode.floating-drawing #structure-bigger { display: inline-block; }
+/* the pop-out drawing area has no scroll bars (the wheel and Space+drag move round it) */
+body.floating-drawing #canvas-host .scrollbar { display: none; }
 body.floating-drawing #sheet-ribbon, body.floating-drawing #doc-ribbon { opacity: 0.55; pointer-events: none; }
 #structure-bar {
   grid-area: host;

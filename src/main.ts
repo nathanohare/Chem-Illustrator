@@ -6944,6 +6944,7 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
   layoutSplit();
   $('#structure-title').textContent = title;
   $('#structure-bar').hidden = false;
+  if (ws.active.mode === 'sheet') setStructureSize(0);
   showSheetParts();
   editor.paused = false;
   editor.lastEdited = null;
@@ -7004,6 +7005,22 @@ function finishCellStructure(keep: boolean): void {
   if (!result && words) docMode?.focus();
 }
 
+/** A cell's drawing area: 6 × 4 in, then 9 × 6 in, then the whole window (Bigger steps through them, then back). */
+const STRUCTURE_SIZES = [{ w: '6in', h: '4in' }, { w: '9in', h: '6in' }, null] as const;
+let structureSize = 0;
+function setStructureSize(i: number): void {
+  structureSize = i % STRUCTURE_SIZES.length;
+  const sz = STRUCTURE_SIZES[structureSize];
+  const body = document.body;
+  if (sz) { body.style.setProperty('--structure-w', sz.w); body.style.setProperty('--structure-h', sz.h); delete body.dataset.structureSize; }
+  else body.dataset.structureSize = 'fill';
+  const last = structureSize === STRUCTURE_SIZES.length - 1;
+  const b = $('#structure-bigger');
+  b.textContent = last ? 'Smaller' : 'Bigger';
+  b.title = last ? 'Back to the 6 × 4 in drawing area' : 'Make the drawing area bigger';
+  if (cellEdit) { const before = { w: renderer.width, h: renderer.height }; resize(); renderer.view = { ...renderer.view, ox: renderer.view.ox + (renderer.width - before.w) / 2, oy: renderer.view.oy + (renderer.height - before.h) / 2 }; renderer.repaintAll(); editor.requestScene(); }
+}
+$('#structure-bigger').addEventListener('click', () => setStructureSize(structureSize + 1));
 $('#structure-done').addEventListener('click', () => finishCellStructure(true));
 $('#structure-cancel').addEventListener('click', () => finishCellStructure(false));
 // clicking the sheet or pages behind the drawing finishes it (as Done)
