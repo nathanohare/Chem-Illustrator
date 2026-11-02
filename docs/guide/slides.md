@@ -187,7 +187,7 @@ The small bar that appears above text while you type has the same buttons, plus 
 
 **Insert** tab ▸ **Shapes** opens the shape library: basic shapes, block arrows, flowchart shapes, callouts, action buttons and lab glassware. Type in its box to find one (for example "flask"). Click a shape, then click on the slide to place it at its usual size, or drag to draw it the size you want. Double-click a shape to type in it. Its fill, outline and text are in the **Style** panel, and shapes save to PowerPoint as PowerPoint's own shapes where it has a matching one.
 
-**Insert** tab ▸ **Action Button…** picks a ready-made button (back, next, beginning, end, home, return, information, document or blank) from a gallery, with what a click on it does in the show in the drop-down under it: each button starts with its usual action (next goes to the next slide, return to the last slide viewed), and the drop-down changes it to another jump, a particular slide, a web page or file, or nothing. The last tile puts the back, home and next set on the slide at once. Buttons go in the slide's bottom right corner; **Action…** changes what one does later.
+**Insert** tab ▸ **Action Button…** picks a ready-made button (back, next, beginning, end, home, return, information, document, blank, go to slide, slide picker, look around or zoom to a region) from a gallery, with what a click on it does in the show in the drop-down under it: each button starts with its usual action (next goes to the next slide, return to the last slide viewed), and the drop-down changes it to another jump, a particular slide, a web page or file, or nothing. The show has buttons of its own too: **Go to slide**, **Slide picker** (every slide, to pick one), and on a canvas slide **Look around freely** and **Zoom to a region** (a look at one of the slide's keyframes, after which the show goes on from where it was). PowerPoint has no actions like these, so there they are drawn but do nothing. The last tile puts the back, home, next and slide picker set on the slide at once, with look around freely on a canvas slide. Buttons go in the slide's bottom right corner; **Action…** changes what one does later.
 
 **Insert** tab ▸ **Diagram** draws a list, process, cycle, hierarchy, Venn diagram, matrix or pyramid from lines of text, like PowerPoint's SmartArt, saved to PowerPoint as a group of shapes. See [Design: Diagrams](design.md#diagrams).
 
@@ -303,7 +303,7 @@ The same effects are on the right-click menu under **Animation**. Each animation
 
 A reagent written over an arrow animates with its whole scheme, because the scheme is a single picture in PowerPoint.
 
-**Auto-Animate Steps…** (Animations tab, or right-click ▸ **Animation**) builds a scheme up a step at a time: select the scheme (or a Smart Scheme, or nothing for every scheme on the slide) and choose the effect (Wipe runs along each arrow), when each product comes (right after its arrow, with it, or on a click of its own) and whether the first species comes in on a click too. Each click then brings the next arrow with its conditions, and what it makes. The scheme's pieces are kept apart for this, in the show and as separate pictures in PowerPoint. On a canvas slide, **Camera Follow** replaces the keyframes with one for each step, so the view travels along the route as it is built. The animations are ordinary ones: change or remove them in the Animation pane, and run Auto-Animate Steps again to start over.
+**Auto-Animate Steps…** (Animations tab, or right-click ▸ **Animation**) builds a scheme up a step at a time. It is offered too: select a scheme of two steps or more (or a Smart Scheme) that isn't animated yet, and **▶ Animate n steps, one per click** shows at its top right corner (× hides it for that scheme). To use it, select the scheme (or a Smart Scheme, or nothing for every scheme on the slide) and choose the effect (Wipe runs along each arrow), when each product comes (right after its arrow, with it, or on a click of its own) and whether the first species comes in on a click too. Each click then brings the next arrow with its conditions, and what it makes. The scheme's pieces are kept apart for this, in the show and as separate pictures in PowerPoint. On a canvas slide, **Camera Follow** replaces the keyframes with one for each step, so the view travels along the route as it is built. The animations are ordinary ones: change or remove them in the Animation pane, and run Auto-Animate Steps again to start over.
 
 A highlight can animate on its own, like a shape in PowerPoint, so it can fade in over a structure that is already there. Click a highlighted atom or bond (or choose **Select Highlight** on the right-click menu or **Chemistry ▸ Highlight and Fill**), or pick the highlight under **Highlights** in the Animation pane, then pick an effect. Each run of highlight of one colour and look is one object. In PowerPoint the highlight is a picture of its own under its structure, and the animation stays on the highlight when the file comes back.
 
@@ -339,14 +339,15 @@ Undo works for every change. Comments are saved in the .pptx as PowerPoint comme
 | Jump to a slide | Type its number, then Enter |
 | Black or white screen | B or W (B or W again, or the next or back key, brings the slide back) |
 | Every slide, to pick one | G (arrow keys and Enter, or a click; Esc or G goes back) |
-| Look round a canvas slide | Drag, and scroll (or + and −) to zoom |
+| Look round a canvas slide | L (or right-click ▸ Look Around Freely), then drag, and scroll (or + and −) to zoom |
+| The show's menu | Right-click: next, previous, every slide, look around, the map, black screen, end |
 | Back to where the show was | Esc, a click or the next key |
 | The canvas's map | M |
 | End the show | Esc |
 
 Each click plays the next animation, then moves on to the next slide with its transition. A click while something is moving finishes it at once.
 
-On a canvas slide you can leave the route to look round: drag to pan and scroll to zoom anywhere on the canvas (up to twelve times closer, or out to the whole canvas). While you look round, the map of the whole canvas shows in the corner with where you are. Esc, a click or the next key glides back to where the show was, and the show goes on from there. The controls in the top right corner (they fade until you move the mouse) zoom, take you back, show the map and show every slide.
+On a canvas slide you can leave the route to look round: drag to pan and scroll to zoom anywhere on the canvas (up to twelve times closer, or out to the whole canvas). While you look round, the map of the whole canvas shows in the corner with where you are. Click the map to move the view there. Picking a canvas slide from every slide (G) opens it ready to look round. Esc, a click or the next key glides back to where the show was, and the show goes on from there. The controls in the top right corner (they fade until you move the mouse) zoom, take you back, show the map and show every slide.
 
 ### Presenter View
 

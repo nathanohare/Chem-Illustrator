@@ -54,7 +54,8 @@ import { setMethylStyle, toggleChainEndLabels, toggleExplicitHydrogens, type Met
 import { selectedGroup } from '../chem/group-smiles';
 import { groupMembers, groupSelection, selectedGroups, ungroupSelection, withGroups } from './groups';
 import { circleRing, circleRings, kekulize } from '../chem/aromatic';
-import { bondLayer, crossingBonds } from '../chem/crossing';
+import { bondLayer, crossingBonds, layerByDepth } from '../chem/crossing';
+import { RING_VIEW_NAMES, stepRing, viewNow, viewRingOf, type RingStep } from '../chem/ring-views';
 import { nextNumber as nextCompound, planNumbers, type NumberOptions } from '../chem/compound-numbers';
 import { arrowClash, bendSide, cleanUpArrow, endCentre, endPointToward, headEnd, isAtomSymbol, pushArrow, pushEndAt, pushPins, sameEnd, symbolAt, symbolPin, symbolSpot, tailEnd, SMALL_HEAD, type PushArrow, type PushEnd } from '../chem/mechanism';
 import { followPins, hasPins, makePin, mirrorBend } from '../chem/pins';
@@ -2043,6 +2044,50 @@ export class Editor {
     return kekule ? 'Drawn with its double bonds (Kekulé form).' : (haptoLook.delocalized ? 'Drawn delocalized again.' : 'Drawn delocalized when that is on in Settings ▸ Drawing.');
   }
 
+  /**
+   * Redraw the selected six-membered ring flat, as a chair, the other chair or a boat, or walk
+   * it round one place: the molecule and its stereochemistry stay the same (ring-views.ts).
+   * Returns what to say.
+   */
+  ringStep(step: RingStep): string {
+    const doc = this.doc;
+    const got = viewRingOf(doc, this.sel.atoms.size ? this.sel.atoms : this.hover?.kind === 'atom' ? [this.hover.id] : []);
+    if (!('ring' in got)) return got.why;
+    const vr = got.ring;
+    const walking = step === 'cw' || step === 'ccw';
+    let view = viewNow(doc, vr).view;
+    doc.edit(walking ? 'Walk Ring' : step === 'flip' ? 'Ring Flip' : 'Ring Shape', () => {
+      view = stepRing(doc, vr, step);
+      layerByDepth(doc, [...vr.ring, ...vr.subs.map((x) => x.first)]);
+    });
+    this.changed();
+    const subs = vr.subs.length > 0;
+    if (walking) return `Walked one place ${step === 'cw' ? 'clockwise' : 'counterclockwise'}. Tab goes on, [ goes back, Shift+Tab flips the chair.`;
+    if (view === 'flat') return 'Drawn flat. Tab: chair.';
+    const name = RING_VIEW_NAMES[view];
+    return view === 'boat'
+      ? `${name}. ${subs ? 'Tab walks it round; ' : 'Tab: flat; '}Shift+Tab: chair.`
+      : `${name}. ${subs ? 'Tab walks the ring round, [ goes back, ' : 'Tab: the next shape, '}Shift+Tab flips it.`;
+  }
+
+  /** What Tab, Shift+Tab, [ and ] do to the selected ring now, or null when they don't act on a ring. */
+  private ringKey(chord: string): RingStep | null {
+    if (!['Tab', 'Shift+Tab', '[', ']'].includes(chord) || !this.sel.atoms.size) return null;
+    // a structure picked with Tab: Tab goes on to the next structure
+    if (this.tabPicked !== null && this.tabPicked === [...this.sel.atoms].sort((a, b) => a - b).join(',')) return null;
+    const got = viewRingOf(this.doc, this.sel.atoms);
+    if (!('ring' in got)) return null;
+    const view = viewNow(this.doc, got.ring).view;
+    const shaped = view !== 'flat';
+    const walks = shaped && got.ring.subs.length > 0;
+    if (chord === '[') return walks ? 'ccw' : null;
+    if (chord === ']') return walks ? 'cw' : null;
+    if (chord === 'Shift+Tab') return view === 'chair' || view === 'chair-flip' ? 'flip' : 'chair';
+    return walks ? 'cw' : 'next';
+  }
+  /** The structure Tab last picked (its atoms, sorted), so Tab again goes on to the next. */
+  private tabPicked: string | null = null;
+
   /** The selected labels Expand Label can draw out: ligands on a metal (by template) and other labels (by SMILES). */
   expandableLabels(): { id: number; template: boolean; smiles: string | null }[] {
     const doc = this.doc;
@@ -3988,6 +4033,19 @@ export class Editor {
     return { deg, which: (c) => turns && !c.attach, shapes: this.textFirst };
   }
 
+  /**
+   * Whether the selection's dashed box would only clutter the blue highlight: one bond, or atoms
+   * and bonds lying in a thin strip (a chain drawn straight across or down).
+   */
+  private boxInsideHighlight(b: Rect): boolean {
+    const s = this.sel;
+    if (s.captions.size || s.arrows.size || s.shapes.size || !s.bonds.size) return false;
+    // one bond (with its atoms): the highlight shows it well enough at any angle
+    const one = s.bonds.size === 1 ? this.doc.bonds.get([...s.bonds][0]) : undefined;
+    if (one && [...s.atoms].every((id) => id === one.a1 || id === one.a2)) return true;
+    return Math.min(b.x2 - b.x1, b.y2 - b.y1) < this.doc.style.bondLength * 0.3;
+  }
+
   /** The handle above the selection that turns it (none when turning would do nothing). */
   rotateHandle(): Vec | null {
     const s = this.sel;
@@ -4530,18 +4588,37 @@ export class Editor {
 
   /**
    * Where crossing bonds are drawn bring the selected bonds in front of (or behind) the bonds they
-   * cross: the bond behind gets a gap. False when no bond is selected.
+   * cross, or one step either way: the bond behind gets a gap. False when no bond is selected,
+   * 'none' when none of the selected bonds crosses another bond.
    */
-  setBondLayer(front: boolean): boolean {
+  setBondLayer(how: 'front' | 'back' | 'forward' | 'backward'): boolean | 'none' {
     const doc = this.doc;
-    const ids = [...this.sel.bonds];
+    const ids = [...this.sel.bonds].filter((id) => doc.bonds.has(id));
     if (!ids.length) return false;
+    const picked = new Set(ids);
+    const crossing = new Map(ids.map((id) => [id, crossingBonds(doc, doc.bonds.get(id)!).filter((o) => !picked.has(o.id))]));
+    if (![...crossing.values()].some((c) => c.length)) return 'none';
     let hi = -Infinity, lo = Infinity;
     for (const b of doc.bonds.values()) { const l = bondLayer(b); hi = Math.max(hi, l); lo = Math.min(lo, l); }
-    doc.edit(front ? 'Bring to Front' : 'Send to Back', () => {
-      ids.forEach((id, i) => doc.updateBond(id, { z: front ? hi + 1 + i : lo - ids.length + i }));
+    // the selected bonds keep their order among themselves
+    const order = ids.sort((a, b) => bondLayer(doc.bonds.get(a)!) - bondLayer(doc.bonds.get(b)!) || a - b);
+    const label = { front: 'Bring to Front', back: 'Send to Back', forward: 'Bring Forward', backward: 'Send Backward' }[how];
+    doc.edit(label, () => {
+      if (how === 'front' || how === 'back') {
+        order.forEach((id, i) => doc.updateBond(id, { z: how === 'front' ? hi + 1 + i : lo - order.length + i }));
+      } else {
+        // one step: just past the nearest bond it crosses in that direction (between it and the next)
+        const up = how === 'forward';
+        for (const id of up ? [...order].reverse() : order) {
+          const me = bondLayer(doc.bonds.get(id)!);
+          const ls = crossing.get(id)!.map(bondLayer).filter((l) => (up ? l > me : l < me)).sort((a, b) => (up ? a - b : b - a));
+          if (!ls.length) continue;
+          const past = ls.find((l) => l !== ls[0]);
+          doc.updateBond(id, { z: past === undefined ? ls[0] + (up ? 1 : -1) : (ls[0] + past) / 2 });
+        }
+      }
       // the bonds crossing them are redrawn too (their gaps change)
-      for (const id of ids) for (const o of crossingBonds(doc, doc.bonds.get(id)!)) doc.updateBond(o.id, {});
+      for (const c of crossing.values()) for (const o of c) doc.updateBond(o.id, {});
     });
     this.changed();
     return true;
@@ -4731,6 +4808,7 @@ export class Editor {
     const cur = frags.findIndex((f) => [...this.sel.atoms].some((id) => f.has(id)));
     const i = cur < 0 ? (step > 0 ? 0 : frags.length - 1) : (cur + step + frags.length) % frags.length;
     this.selectFragment(frags[i].values().next().value!, false);
+    this.tabPicked = [...this.sel.atoms].sort((a, b) => a - b).join(',');
     return true;
   }
 
@@ -4811,6 +4889,10 @@ export class Editor {
     if (/^(Shift\+)?Tab$/.test(chord) && !this.pointerInside && target !== this.r.overlay) return;
     // drawing a curved arrow through points: Enter ends it, Backspace takes back a point, Esc stops
     if (this.routeKey(chord)) { e.preventDefault(); return; }
+    // a selected cyclohexane: Tab through its shapes (flat, chair, flipped chair, boat); on a chair
+    // with substituents Tab and ] walk it round, [ walks it back, and Shift+Tab flips it
+    const ringStep = this.pointerInside || target === this.r.overlay ? this.ringKey(chord) : null;
+    if (ringStep) { e.preventDefault(); this.say(this.ringStep(ringStep)); return; }
     // on a focused button or menu, Enter, Space and Tab do their usual jobs (unless the mouse
     // is over the drawing: then they are drawing keys, as in ChemDraw)
     if (!this.pointerInside && target && target !== document.body && target !== this.r.overlay && /^(Shift\+)?(Enter|Space|Tab)$/.test(chord)) return;
@@ -6483,9 +6565,12 @@ export class Editor {
       const b = this.selBox()!;
       ctx.lineWidth = px;
       ctx.strokeStyle = mk.box;
-      ctx.setLineDash([3 * px, 3 * px]);
-      ctx.strokeRect(b.x1 - 2 * px, b.y1 - 2 * px, b.x2 - b.x1 + 4 * px, b.y2 - b.y1 + 4 * px);
-      ctx.setLineDash([]);
+      // no box round a bond or a straight run of bonds: it would sit inside their blue highlight
+      if (!this.boxInsideHighlight(b)) {
+        ctx.setLineDash([3 * px, 3 * px]);
+        ctx.strokeRect(b.x1 - 2 * px, b.y1 - 2 * px, b.x2 - b.x1 + 4 * px, b.y2 - b.y1 + 4 * px);
+        ctx.setLineDash([]);
+      }
       ctx.beginPath();
       ctx.moveTo(rh.x, b.y1 - 2 * px);
       ctx.lineTo(rh.x, rh.y + 4.5 * px);

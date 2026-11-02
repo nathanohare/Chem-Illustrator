@@ -529,10 +529,10 @@
     <div class="submenu" data-modes="drawing slides design">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Order</button>
     <div class="menu sub" role="menu" hidden>
-    <button data-modes="drawing slides design" role="menuitem" data-cmd="shape-front" title="Put the selected shapes in front of everything else">Bring to Front</button>
-    <button data-modes="drawing slides design" role="menuitem" data-cmd="shape-back" title="Put the selected shapes behind everything else">Send to Back</button>
-    <button data-modes="drawing slides design" role="menuitem" data-cmd="bring-front">Bring Bond to Front</button>
-    <button data-modes="drawing slides design" role="menuitem" data-cmd="send-back">Send Bond to Back</button>
+    <button data-modes="drawing slides design" role="menuitem" data-cmd="shape-front" title="Put the selected shapes in front of everything else, and the selected bonds in front of the bonds they cross">Bring to Front</button>
+    <button data-modes="drawing slides design" role="menuitem" data-cmd="shape-forward" title="Put the selected shapes, or bonds, one step forward">Bring Forward</button>
+    <button data-modes="drawing slides design" role="menuitem" data-cmd="shape-backward" title="Put the selected shapes, or bonds, one step back">Send Backward</button>
+    <button data-modes="drawing slides design" role="menuitem" data-cmd="shape-back" title="Put the selected shapes behind everything else, and the selected bonds behind the bonds they cross">Send to Back</button>
     </div>
     </div>
     <button data-modes="drawing slides design" role="menuitem" data-cmd="scale">Scale…</button>
@@ -2287,8 +2287,8 @@
           </div>
           <div class="rb-col">
             <button data-cmd="flip-h" title="Flip the selection left to right">Flip Horizontal</button>
-            <button data-cmd="shape-front" title="Put the selected pictures and shapes in front of the others">Bring to Front</button>
-            <button data-cmd="shape-back" title="Put the selected pictures and shapes behind the others">Send to Back</button>
+            <button data-cmd="shape-front" title="Put the selected pictures and shapes in front of the others, and the selected bonds in front of the bonds they cross">Bring to Front</button>
+            <button data-cmd="shape-back" title="Put the selected pictures and shapes behind the others, and the selected bonds behind the bonds they cross">Send to Back</button>
           </div>
         </div>
         <div class="rb-label">Arrange</div>

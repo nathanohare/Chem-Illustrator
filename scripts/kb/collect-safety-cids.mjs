@@ -35,5 +35,8 @@ for (const h of H) {
 const file = join(here, 'safety-cids.txt');
 const kept = existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter((l) => /^\d+$/.test(l.trim())).map(Number) : [];
 const cids = [...new Set([...kept, ...all])].sort((a, b) => a - b);
-writeFileSync(file, `# PubChem CIDs for the big Reagent Safety table (scripts/kb/collect-safety-cids.mjs).\n# Compounds without open hazard data are dropped when the table is built.\n${cids.join('\n')}\n`);
+// the comment lines at the top are kept too (they say where hand-added compounds came from)
+const head = existsSync(file) ? readFileSync(file, 'utf8').split('\n').filter((l) => l.startsWith('#')) : [];
+if (!head.length) head.push('# PubChem CIDs for the big Reagent Safety table (scripts/kb/collect-safety-cids.mjs).', '# Compounds without open hazard data are dropped when the table is built.');
+writeFileSync(file, `${head.join('\n')}\n${cids.join('\n')}\n`);
 console.log(`${cids.length} compounds (${all.size} from PubChem's lists) in ${file}`);

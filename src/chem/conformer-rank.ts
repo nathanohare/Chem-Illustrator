@@ -25,7 +25,8 @@ const R_KCAL = 0.0019872043;
 export function withPopulations(cs: Conformer[], T = 298.15): Conformer[] {
   if (!cs.length || cs.some((c) => c.energy === null)) return cs;
   const e0 = Math.min(...cs.map((c) => c.energy!));
-  const w = cs.map((c) => Math.exp(-(c.energy! - e0) / (R_KCAL * T)));
+  // a conformer found more than once in equivalent forms (degeneracy) counts that many times
+  const w = cs.map((c) => (c.degeneracy ?? 1) * Math.exp(-(c.energy! - e0) / (R_KCAL * T)));
   const sum = w.reduce((a, b) => a + b, 0);
   return cs.map((c, i) => ({ ...c, population: w[i] / sum }));
 }

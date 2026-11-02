@@ -12,6 +12,7 @@ import type { Selection } from '../src/editor/arrange';
 import { slideParts } from '../src/deck/animation';
 import { splitSlide } from '../src/deck/split-slide';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepPieces } from '../src/deck/auto-steps';
+import { buildOffer } from '../src/ui/build-hint';
 
 const all = (): Selection => ({ atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() });
 
@@ -107,5 +108,22 @@ describe('Auto-Animate Steps', () => {
     const doc = new Doc();
     doc.edit('a', () => doc.addCaption({ x: 0, y: 0, runs: [{ text: 'alone' }], justify: 'left' }));
     expect(stepPieces(doc, plainMeasure(doc), all())).toBeNull();
+  });
+
+  it('is offered for a selected scheme of two steps or more that is not animated yet', () => {
+    const { doc, m } = scheme();
+    const arrows = [...doc.arrows.keys()];
+    const sel = (ids: number[]) => ({ atoms: new Set<number>(), captions: new Set<number>(), arrows: new Set(ids), shapes: new Set<number>() });
+    const o = buildOffer(doc, m, sel(arrows), false, [])!;
+    expect(o.steps).toBe(2);
+    expect(o.box.x2).toBeGreaterThan(o.box.x1);
+    // one step on its own is not a long scheme (a Smart Scheme of one step is)
+    expect(buildOffer(doc, m, sel([arrows[0]]), false, [])).toBeNull();
+    expect(buildOffer(doc, m, sel([arrows[0]]), true, [])!.steps).toBe(1);
+    // once built, nothing more to offer
+    const pieces = stepPieces(doc, m, all())!;
+    doc.edit('mark', () => markPieces(doc, pieces));
+    const { anims } = stepAnims(doc, pieces, AUTO_STEPS_DEFAULTS, []);
+    expect(buildOffer(doc, m, sel(arrows), false, anims)).toBeNull();
   });
 });
