@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // UI rule 2 (Nate, 2026-11-02): help text sits behind an "i" beside its header, never on a line
 // of its own.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { addInfo, foldIntoInfo, infoFromAttrs, setInfo } from '../src/ui/info-tip';
 import { ask } from '../src/ui/ask';
 
@@ -16,7 +16,7 @@ describe('info tips', () => {
     h.append('Title', Object.assign(document.createElement('button'), { textContent: '×' }));
     const i = addInfo(h, 'How it works')!;
     expect(i.textContent).toBe('i');
-    expect(i.title).toBe('How it works');
+    expect(i.dataset.tip).toBe('How it works');
     expect(i.nextElementSibling?.tagName).toBe('BUTTON');
     expect(addInfo(h, '')).toBeNull();
   });
@@ -27,10 +27,10 @@ describe('info tips', () => {
     p.textContent = 'First';
     const i = foldIntoInfo(p, h)!;
     expect(p.hidden).toBe(true);
-    expect(i.title).toBe('First');
+    expect(i.dataset.tip).toBe('First');
     p.textContent = 'Second';
     await Promise.resolve();
-    expect(i.title).toBe('Second');
+    expect(i.dataset.tip).toBe('Second');
     setInfo(i, '');
     expect(i.hidden).toBe(true);
   });
@@ -57,11 +57,44 @@ describe('info tips', () => {
     l.remove();
   });
 
+  it('resting the pointer on the "i" shows its tip, and leaving hides it unless it was clicked', () => {
+    vi.useFakeTimers();
+    try {
+      document.body.click();
+      document.dispatchEvent(new Event('pointerdown'));
+      const h = document.createElement('h3');
+      h.textContent = 'Section';
+      document.body.append(h);
+      const i = addInfo(h, 'Hover help')!;
+      expect(i.hasAttribute('title')).toBe(false); // no second, native tooltip
+      const pop = () => [...document.querySelectorAll('.info-pop')].find((p) => p.textContent === 'Hover help');
+      i.dispatchEvent(new Event('pointerenter'));
+      expect(pop()).toBeUndefined();
+      vi.advanceTimersByTime(200);
+      expect(pop()).toBeDefined();
+      i.dispatchEvent(new Event('pointerleave'));
+      vi.advanceTimersByTime(200);
+      expect(pop()).toBeUndefined();
+      // hover, then click: the tip stays after the pointer leaves
+      i.dispatchEvent(new Event('pointerenter'));
+      vi.advanceTimersByTime(200);
+      i.click();
+      i.dispatchEvent(new Event('pointerleave'));
+      vi.advanceTimersByTime(200);
+      expect(pop()).toBeDefined();
+      i.click(); // a second click closes it
+      expect(pop()).toBeUndefined();
+      h.remove();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('ask() puts its note beside the title and field help beside the field name', () => {
     void ask('Page Setup', [{ name: 'w', label: 'Width', value: '1', help: 'In inches' }], { note: 'About the page' });
     const d = document.querySelector('dialog.ask')!;
-    expect(d.querySelector('h2 .info-icon')?.getAttribute('title')).toBe('About the page');
-    expect(d.querySelector('.ask-name .info-icon')?.getAttribute('title')).toBe('In inches');
+    expect(d.querySelector('h2 .info-icon')?.getAttribute('data-tip')).toBe('About the page');
+    expect(d.querySelector('.ask-name .info-icon')?.getAttribute('data-tip')).toBe('In inches');
     expect(d.querySelector('p.muted, .ask-help')).toBeNull();
     d.querySelector<HTMLButtonElement>('.ask-buttons button')!.click();
   });

@@ -2,9 +2,23 @@
 // explanations never get a line of their own. Rest the pointer on it (or focus it with Tab) to
 // read the tip; click or tap it to pin the tip open, which is how it reads on a touch screen.
 
-let open: { icon: HTMLElement; pop: HTMLElement } | null = null;
+/** The tip on screen: `pinned` when clicked (stays until a click elsewhere or Escape). */
+let open: { icon: HTMLElement; pop: HTMLElement; pinned: boolean } | null = null;
+let showTimer = 0;
+let hideTimer = 0;
+
+/** How long the pointer rests on an "i" before its tip shows, and lingers after leaving. */
+const HOVER_SHOW_MS = 120;
+const HOVER_HIDE_MS = 150;
+
+function clearTimers(): void {
+  clearTimeout(showTimer);
+  clearTimeout(hideTimer);
+  showTimer = hideTimer = 0;
+}
 
 function closeTip(): void {
+  clearTimers();
   if (!open) return;
   open.pop.remove();
   open.icon.setAttribute('aria-expanded', 'false');
@@ -25,14 +39,15 @@ function onKey(e: KeyboardEvent): void {
   }
 }
 
-function showTip(icon: HTMLElement): void {
-  const was = open?.icon;
+function placeTip(icon: HTMLElement, pinned: boolean): void {
   closeTip();
-  if (was === icon) return;
   const pop = document.createElement('div');
   pop.className = 'info-pop';
   pop.setAttribute('role', 'tooltip');
   pop.textContent = icon.dataset.tip ?? '';
+  // the pointer may move from the "i" onto its tip (to select the words) without it closing
+  pop.addEventListener('pointerenter', () => clearTimeout(hideTimer));
+  pop.addEventListener('pointerleave', () => hideSoon(icon));
   // inside the open dialog (a modal's top layer hides anything outside it), else on the page
   (icon.closest('dialog') ?? document.body).append(pop);
   const r = icon.getBoundingClientRect();
@@ -44,9 +59,38 @@ function showTip(icon: HTMLElement): void {
   pop.style.left = `${left}px`;
   pop.style.top = `${below ? r.bottom + 6 : Math.max(8, r.top - 6 - pr.height)}px`;
   icon.setAttribute('aria-expanded', 'true');
-  open = { icon, pop };
+  open = { icon, pop, pinned };
   document.addEventListener('pointerdown', outside, true);
   document.addEventListener('keydown', onKey, true);
+}
+
+/** Click, tap, Enter or Space: pin the tip open, or close it if it was already pinned. */
+function toggleTip(icon: HTMLElement): void {
+  if (open?.icon === icon) {
+    if (open.pinned) closeTip();
+    else {
+      clearTimers();
+      open.pinned = true;
+    }
+    return;
+  }
+  placeTip(icon, true);
+}
+
+/** Pointer resting on the "i", or Tab onto it: show the tip until the pointer or focus leaves. */
+function showSoon(icon: HTMLElement, delay: number): void {
+  clearTimeout(hideTimer);
+  if (open?.icon === icon) return;
+  if (open?.pinned) return; // a pinned tip stays until dismissed
+  clearTimeout(showTimer);
+  showTimer = window.setTimeout(() => placeTip(icon, false), delay);
+}
+
+function hideSoon(icon: HTMLElement): void {
+  clearTimeout(showTimer);
+  if (open?.icon !== icon || open.pinned) return;
+  clearTimeout(hideTimer);
+  hideTimer = window.setTimeout(closeTip, HOVER_HIDE_MS);
 }
 
 /** An "i" whose tip is `text`: hover or focus shows it, a click pins it open. */
@@ -54,7 +98,7 @@ export function infoIcon(text: string, className = ''): HTMLElement {
   const i = document.createElement('span');
   i.className = className ? `info-icon ${className}` : 'info-icon';
   i.textContent = 'i';
-  i.title = text;
+  // no `title`: the browser's own tooltip would show on top of ours
   i.dataset.tip = text;
   i.tabIndex = 0;
   i.setAttribute('role', 'button');
@@ -64,21 +108,34 @@ export function infoIcon(text: string, className = ''): HTMLElement {
   i.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    showTip(i);
+    toggleTip(i);
   });
   i.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       e.stopPropagation();
-      showTip(i);
+      toggleTip(i);
     }
   });
+  // a mouse or pen resting on it shows the tip; touch goes through the click above
+  i.addEventListener('pointerenter', (e) => {
+    if (e.pointerType !== 'touch') showSoon(i, HOVER_SHOW_MS);
+  });
+  i.addEventListener('pointerleave', (e) => {
+    if (e.pointerType !== 'touch') hideSoon(i);
+  });
+  i.addEventListener('focus', () => {
+    // keyboard focus only: a click focuses it too, and pins the tip itself
+    let keyboard = true;
+    try { keyboard = i.matches(':focus-visible'); } catch { /* older engines */ }
+    if (keyboard) showSoon(i, 0);
+  });
+  i.addEventListener('blur', () => hideSoon(i));
   return i;
 }
 
 /** Change what an "i" says (for help that follows a choice). Empty text hides it. */
 export function setInfo(icon: HTMLElement, text: string): void {
-  icon.title = text;
   icon.dataset.tip = text;
   icon.setAttribute('aria-label', text);
   icon.hidden = !text;
