@@ -1,4 +1,4 @@
-# NMR shift data (nmr-hose.dat, nmr-measured.dat)
+# NMR shift data (nmr-hose.dat, nmr-measured.dat, nmr-net.dat)
 
 `nmr-hose.dat` holds median 13C and 1H chemical shifts for atom environments (HOSE-style
 codes, see `src/chem/nmr/env.ts`). It is built by `scripts/nmr/train_lookup.py` from:
@@ -15,5 +15,9 @@ codes, see `src/chem/nmr/env.ts`). It is built by `scripts/nmr/train_lookup.py` 
 `nmr-measured.dat` holds the measured shifts of whole structures (up to 500 Da) from the same
 two sources, so a structure that is already known shows its own measured shifts. It carries the
 same licences and credits.
+
+`nmr-net.dat` holds five small graph networks (weights only) trained by `scripts/nmr/train_net.py`
+on the same NMRShiftDB2 and CC BY/CC0 NMRBank data; they are a produced work of those sources and
+carry the same credits.
 
 No text from any article is included. Papers in the project's NMR test set were left out.

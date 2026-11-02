@@ -6,6 +6,7 @@ import type { NamerGraph } from '../chem/namer-graph';
 import { envCodes } from '../chem/nmr/env';
 import { ShiftTable, type AtomShifts, type ShiftHit } from '../chem/nmr/lookup';
 import { MeasuredStore } from '../chem/nmr/measured';
+import { ShiftNet } from '../chem/nmr/net';
 
 export const NMR_SOLVENTS = ['CDCl3', 'DMSO-d6', 'CD3OD', 'C6D6', 'acetone-d6', 'CD2Cl2', 'CD3CN', 'D2O'] as const;
 
@@ -79,11 +80,12 @@ function chip(h: ShiftHit | null, wide: number): string {
     const where = h.measured.source.startsWith('PMC') ? `article ${h.measured.source}` : h.measured.source;
     return `<span class="nmr-src measured" title="${esc(`Measured for this structure (${where}${h.measured.solvent ? `, ${h.measured.solvent}` : ''})`)}">M</span>`;
   }
-  // loose: the matched atoms disagree (wide spread) or only the atom type matched
-  const loose = h.radius === 0 || h.spread > wide;
-  const tip = loose
-    ? `Loose match: the closest measured atoms (${h.n}) spread ±${h.spread.toFixed(wide > 1 ? 1 : 2)} ppm`
-    : `${h.n} measured atom${h.n === 1 ? '' : 's'} with matching surroundings agree within ±${h.spread.toFixed(wide > 1 ? 1 : 2)} ppm`;
+  // loose: a wide expected error, or no measured atom shares the surroundings
+  const loose = h.spread > wide || h.n === 0;
+  const pmv = h.spread.toFixed(wide > 1 ? 1 : 2);
+  const tip = `Expected error ±${pmv} ppm. ` + (h.n
+    ? `${h.n} measured atom${h.n === 1 ? '' : 's'} share${h.n === 1 ? 's' : ''} this atom's surroundings ${h.radius} bond${h.radius === 1 ? '' : 's'} out.`
+    : 'No measured atom shares its surroundings.');
   return `<span class="nmr-src${loose ? ' loose' : ''}" title="${esc(tip)}">${loose ? '~' : h.n > 99 ? '99+' : h.n}</span>`;
 }
 
@@ -139,6 +141,8 @@ export interface NmrHost {
   url: string;
   /** The measured-shift store (whole structures); optional, predictions stand without it. */
   measuredUrl?: string;
+  /** The shift networks; optional, the lookup stands alone without them. */
+  netUrl?: string;
   graph(molblock: string): Promise<{ graph: NamerGraph | null }>;
   redraw(): void;
   copy(text: string): Promise<void>;
@@ -149,6 +153,7 @@ export interface NmrHost {
 export class NmrPanel {
   private table: Promise<ShiftTable> | null = null;
   private store: Promise<MeasuredStore | null> | null = null;
+  private net: Promise<ShiftNet | null> | null = null;
   private shown = new Map<number, Shown>();
   private items: (Item | null)[] = [];
   private marks = false;
@@ -183,6 +188,13 @@ export class NmrPanel {
     return this.store;
   }
 
+  private loadNet(): Promise<ShiftNet | null> {
+    const url = this.host.netUrl;
+    if (!url) return Promise.resolve(null);
+    this.net ??= fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => (b ? new ShiftNet(b) : null)).catch(() => null);
+    return this.net;
+  }
+
   /** Adds an NMR section to each structure's block in the panel (after the panel is rebuilt). */
   attach(panel: HTMLElement, items: (Item | null)[]): void {
     this.items = items;
@@ -197,11 +209,11 @@ export class NmrPanel {
       d.className = 'nmr';
       d.dataset.item = String(i);
       d.open = this.open;
-      d.innerHTML = `<summary>NMR (predicted) <span class="info-icon" tabindex="0" role="img" title="Predicted from measured shifts of atoms with the same surroundings (NMRShiftDB2 and CC BY journal data). ± is how far those measured shifts spread. The chip is how many measured atoms agree; ~ means only a loose match; M means this structure's own measured shift. Marker numbers on the drawing match the Atoms column." aria-label="About predicted NMR">i</span>
+      d.innerHTML = `<summary>NMR (predicted) <span class="info-icon" tabindex="0" role="img" title="Predicted by networks trained on measured shifts, blended with shifts of atoms with the same surroundings (NMRShiftDB2 and CC BY journal data). ± is the expected error. The chip is how many measured atoms share the atom's surroundings; ~ means a less certain prediction; M means this structure's own measured shift. Marker numbers on the drawing match the Atoms column." aria-label="About predicted NMR">i</span>
         <span class="nmr-nuc" role="group" aria-label="Nucleus"${this.report ? ' hidden' : ''}>${(['1H', '13C'] as const).map((n) => `<button type="button" data-nuc="${n}" aria-pressed="${n === this.nuc}"><sup>${n.slice(0, -1)}</sup>${n.slice(-1)}</button>`).join('')}</span>
         <select class="nmr-solvent" title="Solvent">${NMR_SOLVENTS.map((s) => `<option value="${s}"${s === this.solvent ? ' selected' : ''}>${s}</option>`).join('')}</select></summary>
         <div class="nmr-body"><p class="muted small">Loading…</p></div>
-        <div class="an-buttons"><button type="button" class="nmr-copy" title="Copy the predicted 1H and 13C lines as an SI writes them">Copy as SI Text</button><button type="button" class="nmr-view" aria-pressed="${this.report}" title="Show the predicted 1H and 13C lines as a journal prints them">Peak Report</button><button type="button" class="nmr-marks" aria-pressed="${this.marks}" title="Show the predictions on the drawing">Show on Drawing</button><select class="nmr-mode" title="What Show on Drawing shows: shifts by each atom, atom numbers matching the list, or confidence dots (green: measured atoms agree; amber: loose match; red: measured atoms disagree widely or only the atom type matched)">${(['shifts', 'numbers', 'confidence'] as const).map((m) => `<option value="${m}"${m === this.mode ? ' selected' : ''}>${{ shifts: 'Shifts', numbers: 'Atom Numbers', confidence: 'Confidence' }[m]}</option>`).join('')}</select></div>`;
+        <div class="an-buttons"><button type="button" class="nmr-copy" title="Copy the predicted 1H and 13C lines as an SI writes them">Copy as SI Text</button><button type="button" class="nmr-view" aria-pressed="${this.report}" title="Show the predicted 1H and 13C lines as a journal prints them">Peak Report</button><button type="button" class="nmr-marks" aria-pressed="${this.marks}" title="Show the predictions on the drawing">Show on Drawing</button><select class="nmr-mode" title="What Show on Drawing shows: shifts by each atom, atom numbers matching the list, or confidence dots (green: small expected error; amber: larger; red: large, or no similar measured atoms)">${(['shifts', 'numbers', 'confidence'] as const).map((m) => `<option value="${m}"${m === this.mode ? ' selected' : ''}>${{ shifts: 'Shifts', numbers: 'Atom Numbers', confidence: 'Confidence' }[m]}</option>`).join('')}</select></div>`;
       const buttons = [...frag.querySelectorAll(':scope > .an-buttons')].pop();
       frag.insertBefore(d, buttons ?? null);
       d.addEventListener('toggle', () => { this.open = d.open; if (d.open) void this.fill(i, d, seq); else if (this.marks) this.host.redraw(); });
@@ -250,11 +262,12 @@ export class NmrPanel {
     const body = d.querySelector<HTMLElement>('.nmr-body')!;
     if (!item) return;
     try {
-      const [table, store, { graph }] = await Promise.all([this.load(), this.loadStore(), this.host.graph(item.molblock)]);
+      const [table, store, net, { graph }] = await Promise.all([this.load(), this.loadStore(), this.loadNet(), this.host.graph(item.molblock)]);
       if (seq !== this.seq) return;
       const heavy = molfileHeavyAtoms(item.molblock);
       if (!graph || graph.atoms.length !== heavy.length) { body.innerHTML = '<p class="muted small">No prediction for this structure.</p>'; return; }
       const shifts = table.predictAll(graph, this.solvent);
+      net?.apply(graph, shifts, this.solvent);
       store?.apply(graph, shifts, this.solvent);
       const rows = nmrRows(graph, shifts);
       const ids = heavy.map((k) => { const id = item.map[k]; return id !== undefined && id >= 0 ? id : null; });
@@ -362,9 +375,10 @@ export class NmrPanel {
 
 export type DrawMode = 'shifts' | 'numbers' | 'confidence';
 
-/** Green when the measured atoms agree (as the list's number chip), amber for a loose match, red when they disagree widely or only the atom type matched. */
+/** Green for a small expected error (as the list's chip), amber for a loose one, red for a wide one or no similar measured atoms. */
 export function confidenceColour(h: ShiftHit, wide: number): string {
-  if (h.radius === 0 || h.spread > 2 * wide) return '#c8423b';
+  if (h.measured) return '#2e9d5b';
+  if (h.n === 0 || h.spread > 2 * wide) return '#c8423b';
   return h.spread > wide ? '#d99a1e' : '#2e9d5b';
 }
 

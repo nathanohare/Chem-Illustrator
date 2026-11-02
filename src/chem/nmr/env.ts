@@ -54,6 +54,14 @@ function bondRings(g: EnvGraph, adj: Adj[][]): number[] {
 }
 
 /** Per atom, the hashed environment code at each radius 0..maxRadius. */
+/** Smallest ring through each bond and each atom (0 when none of up to 8 atoms), and each atom's degree. */
+export function ringInfo(g: EnvGraph): { bond: number[]; atom: number[]; degree: number[] } {
+  const adj = adjacency(g);
+  const ring = bondRings(g, adj);
+  const atom = g.atoms.map((_, i) => adj[i].reduce((m, { bond }) => (ring[bond] && (!m || ring[bond] < m) ? ring[bond] : m), 0));
+  return { bond: ring, atom, degree: adj.map((a) => a.length) };
+}
+
 export function envCodes(g: EnvGraph, maxRadius = MAX_RADIUS): string[][] {
   const adj = adjacency(g);
   const ring = bondRings(g, adj);
