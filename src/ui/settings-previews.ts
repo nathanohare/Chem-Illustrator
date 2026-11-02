@@ -1,8 +1,9 @@
 // Pictures in the Settings window of what a page's settings will look like: a sample drawing in
-// the drawing style being edited (with an arrow in the arrow sizes chosen), the dot grid and tint,
+// the drawing style being edited (two molecules and an arrow in its sizes), the dot grid and tint,
 // the page grid's boundaries and fixed edges, Reading Mode's colours, and small ones beside a
 // single choice (bond ends, charges). Each is drawn again as the settings change.
 
+import { newTextLook } from '../chem/arrow-text';
 import { Doc } from '../model';
 import type { DocStyle } from '../style';
 import { freeRing, placeRing, sprout } from '../chem/chemgeom';
@@ -11,7 +12,6 @@ import { darkMatrix, type DarkPalette } from '../dark-page';
 import type { PageLook } from '../page-grid';
 import { SHADE_ALPHA } from '../page-grid';
 import { GRID_ALPHA, GRID_SPACING, TINT_ALPHA, type OrientPrefs } from '../orientation-prefs';
-import type { ArrowLook } from '../editor/editor';
 
 const dpr = () => (typeof window !== 'undefined' ? Math.min(3, window.devicePixelRatio || 1) : 1);
 
@@ -30,9 +30,10 @@ function sized(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasRe
 
 /**
  * The sample drawing: a Boc-protected amino ester on a benzene ring (a wedge, a hashed bond,
- * double bonds and labels), its compound number, and a reaction arrow with conditions.
+ * double bonds and labels), its compound number, a reaction arrow with conditions, and a
+ * second molecule after it (a ketone and an ammonium ion, with a bold bond).
  */
-export function sampleDrawing(style: DocStyle, arrow?: ArrowLook): Doc {
+export function sampleDrawing(style: DocStyle): Doc {
   const doc = new Doc();
   doc.style = { ...style };
   const L = style.bondLength;
@@ -53,14 +54,23 @@ export function sampleDrawing(style: DocStyle, arrow?: ArrowLook): Doc {
     let minY = Infinity, maxY = -Infinity, minX = Infinity, maxX = -Infinity;
     for (const at of doc.atoms.values()) { minX = Math.min(minX, at.x); maxX = Math.max(maxX, at.x); minY = Math.min(minY, at.y); maxY = Math.max(maxY, at.y); }
     doc.addCaption({ x: (minX + maxX) / 2 - style.captionSize * 0.3, y: maxY + L * 1.1, runs: [{ text: '1', bold: true }], justify: 'left' });
-    // a reaction arrow under it, in the arrow sizes chosen
-    const lw = arrow?.width ?? style.lineWidth;
+    // a reaction arrow under it, in the style's arrow sizes
+    const lw = style.arrowWidth ?? style.lineWidth;
     const y = maxY + L * 2.2;
     doc.addArrow({
       tail: { x: minX, y }, head: { x: minX + L * 3.4, y }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0,
-      headLength: arrow?.headLength ?? lw * 10, headWidth: arrow?.headWidth ?? lw * 2.5, ...(arrow?.width != null ? { lineWidth: arrow.width } : {}),
+      headLength: style.arrowHeadLength ?? lw * 10, headWidth: style.arrowHeadWidth ?? lw * 2.5, ...(style.arrowWidth !== undefined ? { lineWidth: style.arrowWidth } : {}),
     });
-    doc.addCaption({ x: minX + L * 0.6, y: y - L * 0.35, runs: [{ text: 'TFA, CH' }, { text: '2', sub: true }, { text: 'Cl' }, { text: '2', sub: true }], justify: 'left' });
+    doc.addCaption({ x: minX + L * 0.6, y: y - L * 0.35, runs: [{ text: 'TFA, CH' }, { text: '2', sub: true }, { text: 'Cl' }, { text: '2', sub: true }].map((r) => ({ ...r, ...newTextLook(doc) })), justify: 'left' });
+    // and its product beyond the arrow: a second molecule, with a charge and a bold bond
+    const px = minX + L * 6;
+    const ring2 = placeRing(doc, freeRing({ x: px, y }, 6, L), { aromatic: false });
+    // the ketone on the ring atom furthest up, the ammonium on the one furthest down
+    const far = (f: (p: { x: number; y: number }) => number) => ring2.reduce((b, id) => (f(doc.atoms.get(id)!) > f(doc.atoms.get(b)!) ? id : b));
+    sprout(doc, far((p) => -p.y), 2, 'solid', 8);
+    const nh = sprout(doc, far((p) => p.y), 1, 'bold', 7);
+    doc.updateAtom(nh.id, { charge: 1 });
+    doc.addCaption({ x: px - style.captionSize * 0.3, y: nh.y + L * 1.1, runs: [{ text: '2', bold: true }], justify: 'left' });
   });
   return doc;
 }
@@ -81,10 +91,10 @@ export function drawingCanvas(doc: Doc, w: number, h: number, pad = 10): HTMLCan
   return out.canvas;
 }
 
-/** Drawing Style, with the arrow sizes from Settings ▸ Drawing. */
-export function stylePreview(style: DocStyle, arrow?: ArrowLook): HTMLElement {
+/** Drawing Style: a sample drawn in it. */
+export function stylePreview(style: DocStyle): HTMLElement {
   const box = document.createElement('div');
-  box.append(drawingCanvas(sampleDrawing(style, arrow), 232, 220));
+  box.append(drawingCanvas(sampleDrawing(style), 260, 240));
   const p = document.createElement('p');
   p.className = 'muted sw-cap';
   p.textContent = `Bond ${+style.bondLength.toFixed(2)} pt · line ${+style.lineWidth.toFixed(2)} pt · ${style.labelFont} ${style.labelSize} pt`;

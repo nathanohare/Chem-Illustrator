@@ -46,6 +46,8 @@ export interface Tab {
   document: DocFile | null;
   /** Zoom and scroll, kept while another tab shows. */
   view: View | null;
+  /** Opened from a V3000 molfile, SD or RXN file, so saved back as V3000. */
+  v3000?: boolean;
   /** The view was a slide or page fitted to the window: fit it again on coming back (the window may have changed size). */
   fitted?: boolean;
   /** Sheets and documents: the selection and scroll, kept while another tab shows. */
@@ -143,9 +145,9 @@ const FORMAT_NAMES: Record<ChemFormat, string> = { mol: 'molfile', sdf: 'SD file
  * A drawing in another program's chemistry format. These keep structures (and, except molfiles
  * and SD files, straight arrows, + signs and text): what they can't hold is said, not stopped.
  */
-function exchangeFile(doc: Doc, type: FileType, name: string): { data: string; type: FileType; note: string } {
+function exchangeFile(doc: Doc, type: FileType, name: string, v3000 = false): { data: string; type: FileType; note: string } {
   const stem = name.replace(/\.[^.]+$/, '');
-  const got = type === MOL ? writeMolFile(doc, stem) : type === SDF ? writeSdfFile(doc) : type === RXN ? writeRxnFile(doc, stem)
+  const got = type === MOL ? writeMolFile(doc, stem, { v3000 }) : type === SDF ? writeSdfFile(doc, { v3000 }) : type === RXN ? writeRxnFile(doc, stem, { v3000 })
     : type === MRV ? writeMrvFile(doc) : type === KET ? writeKetFile(doc) : type === CML ? writeCmlFile(doc) : writeChemDoodleJson(doc);
   const kept = type === MOL || type === SDF ? 'structures only' : type === RXN ? 'the first reaction step only' : type === CDJSON ? 'structures and arrows only' : 'structures, straight arrows and text only';
   const unknown = got.unknown.length ? `; not understood, so written as R groups: ${got.unknown.join(', ')}` : '';
@@ -564,6 +566,8 @@ export class Workspace {
     const spare = this.spare();
     const t = this.makeTab('drawing', name, ref);
     t.stash = doc;
+    // a V3000 file is saved back as V3000
+    if ((fmt === 'mol' || fmt === 'sdf' || fmt === 'rxn') && /^\$RXN V3000|^[ \d]+V3000[ \t]*$/m.test(text)) t.v3000 = true;
     this.tabs.splice(this.tabs.indexOf(this.active) + 1, 0, t);
     this.activate(t, true);
     t.seen = this.host.version;
@@ -801,7 +805,7 @@ export class Workspace {
     }
     keepOnPage(this.docOf(tab));
     const exchange = CHEM_EXCHANGE.find((t) => t.extension === ext);
-    if (exchange) return exchangeFile(this.docOf(tab), exchange, name);
+    if (exchange) return exchangeFile(this.docOf(tab), exchange, name, tab.v3000);
     const text = atFirstPage(this.docOf(tab), () => writeCdxml(this.docOf(tab), { name, textMeasure: this.hooks.measure }));
     return ext === 'cdx' ? { data: cdxmlToCdx(text), type: CDX, note: '' } : { data: text, type: CDXML, note: '' };
   }

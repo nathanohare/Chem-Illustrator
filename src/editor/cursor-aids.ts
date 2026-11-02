@@ -14,11 +14,11 @@ export interface CursorAidPrefs {
   hints: boolean;
   /** The units lengths are written in. */
   units: 'in' | 'cm';
-  /** How the readout looks: blue words on a pale box (the default), plain blue words, or white on a blue box. */
+  /** How the readout looks: plain blue words (the default), blue words on a pale box, or white on a blue box. */
   look: 'box' | 'plain' | 'solid';
 }
 
-export const DEFAULT_CURSOR_AIDS: CursorAidPrefs = { angle: true, length: false, hints: true, units: 'in', look: 'box' };
+export const DEFAULT_CURSOR_AIDS: CursorAidPrefs = { angle: true, length: false, hints: true, units: 'in', look: 'plain' };
 
 export function parseCursorAids(v: unknown): CursorAidPrefs {
   const o = (v && typeof v === 'object' ? v : {}) as Partial<CursorAidPrefs>;
@@ -27,7 +27,7 @@ export function parseCursorAids(v: unknown): CursorAidPrefs {
     length: typeof o.length === 'boolean' ? o.length : DEFAULT_CURSOR_AIDS.length,
     hints: typeof o.hints === 'boolean' ? o.hints : DEFAULT_CURSOR_AIDS.hints,
     units: o.units === 'cm' ? 'cm' : 'in',
-    look: o.look === 'plain' || o.look === 'solid' ? o.look : 'box',
+    look: o.look === 'box' || o.look === 'solid' ? o.look : 'plain',
   };
 }
 

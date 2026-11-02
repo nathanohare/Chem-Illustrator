@@ -5,7 +5,7 @@
 
 import { Doc } from '../model';
 import type { DocStyle } from '../style';
-import { STYLE_PRESETS, sameLook, type StyleUse } from '../drawing-styles';
+import { STYLE_PRESETS, presetNamed, sameLook, type StyleUse } from '../drawing-styles';
 import { recordPicture, pictureSvg } from '../render/picture';
 
 /** One card: a built-in ('preset:<name>') or your own ('own:<name>'). */
@@ -33,6 +33,12 @@ export function cardFor(cards: StyleCard[], st: DocStyle): StyleCard | undefined
 /** A card's name: a built-in's without the bracket after it (the tooltip has the whole name). */
 export function cardName(c: StyleCard): string {
   return c.use === 'Yours' ? c.style.name : c.style.name.replace(/\s*\(.*\)$/, '');
+}
+
+/** A card's tip: its whole name and use, its numbers, and for a built-in where they come from. */
+export function cardTip(c: StyleCard): string {
+  const p = c.use === 'Yours' ? undefined : presetNamed(c.style.name);
+  return `${c.style.name} (${c.use})\n${styleNumbers(c.style)}${p ? `\nFrom: ${p.source}.${p.note ? ' ' + p.note : ''}` : ''}`;
 }
 
 /** A short line of a style's numbers, for a card's tooltip. */
@@ -121,7 +127,7 @@ export function styleCards(o: StyleCardsOptions): HTMLDivElement & { select(key:
     b.className = 'style-card';
     b.dataset.key = c.key;
     b.setAttribute('role', 'radio');
-    b.title = `${c.style.name}\n${styleNumbers(c.style)}`;
+    b.title = cardTip(c);
     const head = document.createElement('span');
     head.className = 'sc-use';
     head.textContent = c.use === 'Yours' ? 'Yours ★' : c.use;
@@ -285,7 +291,7 @@ export function ribbonStyles(host: HTMLElement, o: RibbonStylesOptions): { refre
       b.className = 'rbs-card';
       b.setAttribute('role', 'radio');
       b.setAttribute('aria-checked', String(c.key === on));
-      b.title = `${c.style.name} (${c.use})\n${styleNumbers(c.style)}`;
+      b.title = cardTip(c);
       b.innerHTML = `<span class="sc-pic">${styleThumb(c.style, 58, 30)}</span>`;
       const name = document.createElement('span');
       name.className = 'sc-name';

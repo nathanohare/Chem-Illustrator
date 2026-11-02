@@ -1,30 +1,44 @@
 // The Solvents and pKa in Water tables, from the same public-domain records as Reagent Safety
-// (HSDB, NIOSH, CAMEO via PubChem), with each solvent's CHEM21 ranking (Prat et al., Green Chem.
-// 2016, 18, 288: a ranking is a published fact, cited, not a copy of the paper's tables).
+// (HSDB, NIOSH, CAMEO via PubChem), with each solvent's class and residue limit under the ICH Q3C
+// guideline for residual solvents (ICH Q3C(R8), 2021), which drug regulators in the US, EU and Japan
+// apply. The class and limit are regulatory facts, cited.
 
 import { SAFETY_RECORDS, short } from './safety-tables';
 import { logKowOf } from './safety';
 import type { Cell, KbSource, KbTable } from './tables';
 
-type Chem21 = 'Recommended' | 'Problematic' | 'Hazardous' | 'Highly hazardous';
+export type IchClass = 'Class 1 (avoid)' | 'Class 2 (limit)' | 'Class 3 (low toxicity)' | 'No adequate data';
 
-/** CHEM21's ranking of the classical solvents, after the authors' discussion. */
-export const CHEM21: Record<string, Chem21> = {
-  Water: 'Recommended', Methanol: 'Recommended', Ethanol: 'Recommended', Isopropanol: 'Recommended', '1-Butanol': 'Recommended',
-  'Ethylene glycol': 'Recommended', Acetone: 'Recommended', 'Ethyl acetate': 'Recommended',
-  Tetrahydrofuran: 'Problematic', '2-Methyltetrahydrofuran': 'Problematic', Heptane: 'Problematic', Cyclohexane: 'Problematic',
-  Toluene: 'Problematic', 'o-Xylene': 'Problematic', Acetonitrile: 'Problematic', 'Dimethyl sulfoxide': 'Problematic', 'Acetic acid': 'Problematic',
-  'tert-Butyl methyl ether': 'Hazardous', 'Diisopropyl ether': 'Hazardous', '1,4-Dioxane': 'Hazardous', '1,2-Dimethoxyethane': 'Hazardous',
-  Pentane: 'Hazardous', Hexane: 'Hazardous', Dichloromethane: 'Hazardous', 'N,N-Dimethylformamide': 'Hazardous',
-  'N,N-Dimethylacetamide': 'Hazardous', 'N-Methyl-2-pyrrolidone': 'Hazardous', Sulfolane: 'Hazardous', Pyridine: 'Hazardous', Triethylamine: 'Hazardous',
-  'Diethyl ether': 'Highly hazardous', Benzene: 'Highly hazardous', Chloroform: 'Highly hazardous', 'Carbon tetrachloride': 'Highly hazardous',
-  '1,2-Dichloroethane': 'Highly hazardous', Nitromethane: 'Highly hazardous', 'Carbon disulfide': 'Highly hazardous', Hexamethylphosphoramide: 'Highly hazardous',
+/** ICH Q3C(R8): each solvent's class and concentration limit in a drug (ppm, Option 1). */
+export const ICH_Q3C: Record<string, { cls: IchClass; ppm?: number; note?: string }> = {
+  Benzene: { cls: 'Class 1 (avoid)', ppm: 2 }, 'Carbon tetrachloride': { cls: 'Class 1 (avoid)', ppm: 4 }, '1,2-Dichloroethane': { cls: 'Class 1 (avoid)', ppm: 5 },
+  Acetonitrile: { cls: 'Class 2 (limit)', ppm: 410 }, Chlorobenzene: { cls: 'Class 2 (limit)', ppm: 360 }, Chloroform: { cls: 'Class 2 (limit)', ppm: 60 },
+  Cyclohexane: { cls: 'Class 2 (limit)', ppm: 3880 }, Dichloromethane: { cls: 'Class 2 (limit)', ppm: 600 }, '1,2-Dimethoxyethane': { cls: 'Class 2 (limit)', ppm: 100 },
+  'N,N-Dimethylacetamide': { cls: 'Class 2 (limit)', ppm: 1090 }, 'N,N-Dimethylformamide': { cls: 'Class 2 (limit)', ppm: 880 }, '1,4-Dioxane': { cls: 'Class 2 (limit)', ppm: 380 },
+  'Ethylene glycol': { cls: 'Class 2 (limit)', ppm: 620 }, Formamide: { cls: 'Class 2 (limit)', ppm: 220 }, Hexane: { cls: 'Class 2 (limit)', ppm: 290 },
+  Methanol: { cls: 'Class 2 (limit)', ppm: 3000 }, 'N-Methyl-2-pyrrolidone': { cls: 'Class 2 (limit)', ppm: 530 }, Nitromethane: { cls: 'Class 2 (limit)', ppm: 50 },
+  Pyridine: { cls: 'Class 2 (limit)', ppm: 200 }, Sulfolane: { cls: 'Class 2 (limit)', ppm: 160 }, Tetrahydrofuran: { cls: 'Class 2 (limit)', ppm: 720 },
+  Toluene: { cls: 'Class 2 (limit)', ppm: 890 }, 'o-Xylene': { cls: 'Class 2 (limit)', ppm: 2170, note: 'as xylene' },
+  'Acetic acid': { cls: 'Class 3 (low toxicity)' }, Acetone: { cls: 'Class 3 (low toxicity)' }, '1-Butanol': { cls: 'Class 3 (low toxicity)' },
+  'tert-Butyl methyl ether': { cls: 'Class 3 (low toxicity)' }, 'Dimethyl sulfoxide': { cls: 'Class 3 (low toxicity)' }, Ethanol: { cls: 'Class 3 (low toxicity)' },
+  'Ethyl acetate': { cls: 'Class 3 (low toxicity)' }, 'Diethyl ether': { cls: 'Class 3 (low toxicity)' }, Heptane: { cls: 'Class 3 (low toxicity)' },
+  Pentane: { cls: 'Class 3 (low toxicity)' }, Isopropanol: { cls: 'Class 3 (low toxicity)' }, '2-Methyltetrahydrofuran': { cls: 'Class 3 (low toxicity)' },
+  Triethylamine: { cls: 'Class 3 (low toxicity)' },
+  'Diisopropyl ether': { cls: 'No adequate data' }, 'Petroleum ether': { cls: 'No adequate data' }, 'Trifluoroacetic acid': { cls: 'No adequate data' },
 };
 
-/** Solvents in the safety data the CHEM21 guide doesn't rank, shown in the table all the same. */
-const OTHER_SOLVENTS = ['Chlorobenzene', 'Formamide', 'Petroleum ether', 'Trifluoroacetic acid', '1,1,1,3,3,3-Hexafluoro-2-propanol', '2,2,2-Trifluoroethanol', 'Propylene carbonate'];
+/** Solvents in the safety data that ICH Q3C doesn't list, shown in the table all the same. */
+const OTHER_SOLVENTS = ['Water', 'Carbon disulfide', 'Hexamethylphosphoramide', '1,1,1,3,3,3-Hexafluoro-2-propanol', '2,2,2-Trifluoroethanol', 'Propylene carbonate'];
 
-const CHEM21_SOURCE: KbSource = { label: 'CHEM21 selection guide: Prat, D. et al. Green Chem. 2016, 18, 288–296', url: 'https://doi.org/10.1039/C5GC01008J' };
+const ICH_SOURCE: KbSource = { label: 'ICH Q3C(R8) Impurities: Guideline for Residual Solvents, International Council for Harmonisation, 2021 (Tables 1–4)', url: 'https://database.ich.org/sites/default/files/ICH_Q3C-R8_Guideline_Step4_2021_0422_1.pdf' };
+
+/** "600" for Class 2, "5000 (0.5%)" for Class 3 (50 mg a day without justification). */
+function ichLimit(n: string): string | null {
+  const q = ICH_Q3C[n];
+  if (!q) return null;
+  if (q.ppm !== undefined) return `${q.ppm.toLocaleString('en-US')}${q.note ? ` (${q.note})` : ''}`;
+  return q.cls.startsWith('Class 3') ? '5,000 (0.5%)' : null;
+}
 
 const byName = new Map(SAFETY_RECORDS.map((r) => [r.name, r]));
 const pubchem = (row: Record<string, Cell>): KbSource[] => (row.cid ? [{ label: 'PubChem', url: `https://pubchem.ncbi.nlm.nih.gov/compound/${row.cid}` }] : []);
@@ -35,10 +49,11 @@ const cut = (t: string | undefined, n = 90): string | null => (t ? (t.length > n
 export const SOLVENTS_TABLE: KbTable = {
   id: 'solvents',
   title: 'Solvents',
-  about: 'Common solvents: CHEM21 green ranking, boiling and melting points, density, flash point, viscosity, refractive index, solubility in water, what they mix with, and log Kow.',
+  about: 'Common solvents: ICH Q3C residual-solvent class and limit (Class 1 avoid, 2 limit, 3 low toxicity), with boiling and melting points, density, flash point, viscosity, refractive index, solubility in water, what they mix with, and log Kow.',
   columns: [
     { key: 'name', label: 'Solvent' },
-    { key: 'chem21', label: 'CHEM21', filter: true },
+    { key: 'ich', label: 'ICH Q3C class', filter: true },
+    { key: 'limit', label: 'ICH limit (ppm)', numeric: true },
     { key: 'bp', label: 'bp', numeric: true },
     { key: 'mp', label: 'mp', numeric: true },
     { key: 'density', label: 'Density', numeric: true },
@@ -50,18 +65,18 @@ export const SOLVENTS_TABLE: KbTable = {
     { key: 'logkow', label: 'log Kow', numeric: true },
     { key: 'cas', label: 'CAS' },
   ],
-  rows: [...Object.keys(CHEM21), ...OTHER_SOLVENTS].map((n): Record<string, Cell> | null => {
+  rows: [...Object.keys(ICH_Q3C), ...OTHER_SOLVENTS].map((n): Record<string, Cell> | null => {
     const r = byName.get(n);
     if (!r) return null;
     const k = logKowOf(r);
     return {
-      cid: r.cid, name: r.name, chem21: CHEM21[n] ?? 'Not ranked', bp: short(r.bp?.text), mp: short(r.mp?.text), density: short(r.density?.text), flash: short(r.flash?.text),
+      cid: r.cid, name: r.name, ich: ICH_Q3C[n]?.cls ?? 'Not listed', limit: ichLimit(n), bp: short(r.bp?.text), mp: short(r.mp?.text), density: short(r.density?.text), flash: short(r.flash?.text),
       viscosity: cut(r.viscosity?.text, 40), nd: cut(r.refractive?.text?.replace(/^Index of refraction:\s*/i, ''), 40),
       water: cut(r.water?.text), organic: cut(r.organic?.text, 120), logkow: k && !/XLogP/.test(k.source) ? k.value : null, cas: r.cas, smiles: r.smiles,
     };
   }).filter((r): r is Record<string, Cell> => !!r).sort((a, b) => String(a.name).localeCompare(String(b.name))),
   sources: [
-    CHEM21_SOURCE,
+    ICH_SOURCE,
     { label: 'Hazardous Substances Data Bank, NIOSH and NOAA CAMEO, via PubChem (physical data)', url: 'https://pubchem.ncbi.nlm.nih.gov/source/hsdb' },
   ],
   links: pubchem,
