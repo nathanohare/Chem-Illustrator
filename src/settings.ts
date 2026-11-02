@@ -16,6 +16,7 @@ import { DEFAULT_TYPING } from './text/typing';
 import { ModeColours, DEFAULT_MODE_COLOURS, parseModeColours } from './ui/mode-colours';
 import { parseOwnTemplates, type Template } from './chem/templates';
 import { parsePalettes, type Palette } from './palettes';
+import { parseFavorites, type FormatFavorite } from './favorites';
 import { defaultToolboxes, parseToolboxes, type ToolboxState } from './ui/toolboxes';
 import { parseRibbons, type RibbonsPrefs } from './ui/ribbon-custom';
 import { DEFAULT_DEPTH_SHADE, readDepthShade, type DepthShade } from './render/depth-shade';
@@ -224,6 +225,8 @@ export interface Settings {
   recentSymbols: string[];
   /** Your own saved highlight looks (Chemistry > Highlight and Fill > Save Highlight Look). */
   highlightLooks: HighlightLookPreset[];
+  /** Format Favorites: looks kept under a name, offered on the Home tab in every mode. */
+  formatFavorites: FormatFavorite[];
   /** Saved pieces of text for documents (Insert > Quick Parts). */
   quickParts: QuickPart[];
   /** The Design (theme, style set, spacing) new documents start with (Design > Set as Default). */
@@ -253,7 +256,7 @@ export const DEFAULT_SETTINGS: Settings = {
   docPins: [],
   docRuler: false,
   sheetFormulaBar: true,
-  updateCheck: true, updateChannel: 'latest', pubchemNames: true, convertChemDraw: false, matchStructure: true, fileTypesOffered: false, wordObjectsOffered: false, reviewName: '', skipVersion: null, lastVersion: null, recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], docDesign: null,
+  updateCheck: true, updateChannel: 'latest', pubchemNames: true, convertChemDraw: false, matchStructure: true, fileTypesOffered: false, wordObjectsOffered: false, reviewName: '', skipVersion: null, lastVersion: null, recentFiles: [], recentSymbols: [], highlightLooks: [], formatFavorites: [], quickParts: [], docDesign: null,
   slideRuler: false,
   slideGrid: false,
   rulerUnits: typeof navigator !== 'undefined' && /^[a-z]{2,3}-(US|LR|MM)\b/i.test(navigator.language) ? 'in' : 'cm',
@@ -286,7 +289,7 @@ const STORAGE_KEY = 'chem-illustrator.settings';
 
 /** Read settings saved as text, keeping only what makes sense. */
 export function parseSettings(text: string | null | undefined): Settings {
-  const s: Settings = { ...DEFAULT_SETTINGS, hotkeys: {}, replacements: DEFAULT_SETTINGS.replacements.map(([a, b]) => [a, b]), dictionary: [], modeColours: { ...DEFAULT_MODE_COLOURS }, nicknames: {}, templates: [], palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null, myStyles: [], modeStyles: {}, darkPalettes: [], guides: { ...DEFAULT_SETTINGS.guides }, orient: { ...DEFAULT_ORIENT }, pageLook: { ...DEFAULT_PAGE_LOOK }, docPins: [], recentFiles: [], recentSymbols: [], highlightLooks: [], quickParts: [], scheme: { ...DEFAULT_SCHEME_PREFS }, newman: parseNewmanPrefs(null), keep: { ...DEFAULT_KEEP }, ai: { ...DEFAULT_AI } };
+  const s: Settings = { ...DEFAULT_SETTINGS, hotkeys: {}, replacements: DEFAULT_SETTINGS.replacements.map(([a, b]) => [a, b]), dictionary: [], modeColours: { ...DEFAULT_MODE_COLOURS }, nicknames: {}, templates: [], palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null, myStyles: [], modeStyles: {}, darkPalettes: [], guides: { ...DEFAULT_SETTINGS.guides }, orient: { ...DEFAULT_ORIENT }, pageLook: { ...DEFAULT_PAGE_LOOK }, docPins: [], recentFiles: [], recentSymbols: [], highlightLooks: [], formatFavorites: [], quickParts: [], scheme: { ...DEFAULT_SCHEME_PREFS }, newman: parseNewmanPrefs(null), keep: { ...DEFAULT_KEEP }, ai: { ...DEFAULT_AI } };
   if (!text) return s;
   let raw: unknown;
   try { raw = JSON.parse(text); } catch { return s; }
@@ -360,6 +363,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.slideTemplate === 'string' || r.slideTemplate === null) s.slideTemplate = r.slideTemplate as string | null;
   s.slideThemes = parseThemes(r.slideThemes);
   s.highlightLooks = parseLooks(r.highlightLooks);
+  s.formatFavorites = parseFavorites(r.formatFavorites);
   if (Array.isArray(r.recentFiles)) s.recentFiles = r.recentFiles.filter((p): p is string => typeof p === 'string' && p.trim() !== '').slice(0, 10);
   s.recentSymbols = parseRecent(r.recentSymbols);
   if (typeof r.skipVersion === 'string' || r.skipVersion === null) s.skipVersion = r.skipVersion as string | null;

@@ -181,7 +181,7 @@ The **Font** and **Paragraph** groups on the **Home** tab work as in PowerPoint.
 
 The small bar that appears above text while you type has the same buttons, plus Greek letters and symbols and the paragraph spacing. **Insert** tab ▸ **Symbol** has many more, found by name.
 
-**Format Painter** (Home tab, beside **Copy**) copies the look of the selected text, text box, shape or arrow to the next one you click; double-click it to keep painting until Esc. See [Getting started](getting-started.md#format-painter-every-mode).
+**Format Painter** (Home tab, beside **Copy**) copies the look of the selected text, text box, shape or arrow to the next one you click; double-click it to keep painting until Esc. See [Getting started](getting-started.md#format-painter-every-mode). **Format Favorites** beside it keep whole looks under names, for one-click use on any slide ([Format Favorites](getting-started.md#format-favorites-every-mode)).
 
 ## Shapes
 

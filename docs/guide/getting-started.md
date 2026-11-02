@@ -171,6 +171,16 @@ What goes across is only the look, never the content or its meaning:
 - **Canvases, presentations and designs:** a shape's outline, fill, pattern, see-through amount and shadow; an arrow's colour, line and head size; the colour and highlight of atoms and bonds; the text look of a caption or of the text in a shape. A bond's order or wedge, an arrow's kind of head (one or two electrons) and a shape's kind never change. Something of another kind takes just the colour. Click one thing, or drag a box to paint everything in it.
 - **Spreadsheets:** the cells' formats (number format, font, fill, borders, alignment). Click one cell to paint a block the size of the one you picked up, or drag over a range to fill it, the pattern repeated across it.
 
+### Format Favorites (every mode)
+
+A **Format Favorite** is a complete look kept under a name: fill (colour, gradient or picture), pattern, see-through amount, shadow, outline and effects (glow, soft edges, bevel, reflection), with an arrow's line and heads, the colour and highlight of a structure, and the text's font and colour. Give it to anything with one click, like your own colour palettes.
+
+- **Save one:** select something with the look you want, then right-click it ▸ **Save Format as Favorite…** (or **+** in the **Format Favorites** gallery on the **Home** tab, or **Edit ▸ Save Format as Favorite…**) and give it a name.
+- **Use one:** select what should take the look and click the favorite's card in the gallery, or right-click ▸ **Format Favorites** ▸ its name, or **Edit ▸ Format Favorites…**. It is one step to undo.
+- **Change one:** right-click its card for **Update to Match Selection**, **Rename…**, **Move Earlier** and **Delete**.
+
+Favorites are kept with your settings, not in a file, so the same ones are there in every canvas, presentation, design and document (in a document, a favorite gives its text look). The things you paint keep their look when saved, in every format.
+
 ### Insert ▸ Symbol (every mode)
 
 **Insert ▸ Symbol…** (and **Symbol** on the **Insert** tab) opens a small window of characters: Greek letters, arrows, maths, chemistry signs and units (°, ‡, ⦵, Å, ⇌), superscripts and subscripts, fractions, punctuation, accented letters for authors' names, currency, and marks such as ✓.

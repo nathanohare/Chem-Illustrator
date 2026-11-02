@@ -181,6 +181,8 @@
     </div>
     </div>
     <button role="menuitem" data-cmd="format-painter" title="Format Painter: copy the look of what is selected to the next thing you click or drag over. Double-click to keep painting until Esc">Format Painter</button>
+    <button role="menuitem" data-cmd="save-format-favorite" title="Keep the look of what is selected (fill, pattern, shadow, transparency, line, effects, text) under a name, to give to other things with one click in any mode">Save Format as Favorite…</button>
+    <button role="menuitem" data-cmd="format-favorites" title="Your Format Favorites: click one to give the selection its look">Format Favorites…</button>
     <hr />
     <button role="menuitem" data-cmd="select-all">Select All</button>
     <button data-modes="sheet document" role="menuitem" data-cmd="find">Find…</button>
@@ -1454,6 +1456,7 @@
         </div>
         <div class="rb-label">Clipboard</div>
       </div>
+      <div class="rb-group"><div class="rb-row"><div class="rb-styles-host" data-favorites-gallery></div></div><div class="rb-label" title="Looks you keep under a name (fill, line, shadow, effects, text): click one to give it to the selection">Format Favorites</div></div>
       <div class="rb-group">
         <div class="rb-row">
           <div class="rb-col">
@@ -2159,6 +2162,7 @@
         </div>
         <div class="rb-label">Clipboard</div>
       </div>
+      <div class="rb-group"><div class="rb-row"><div class="rb-styles-host" data-favorites-gallery></div></div><div class="rb-label" title="Looks you keep under a name (fill, line, shadow, effects, text): click one to give it to the selection">Format Favorites</div></div>
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="new-slide" title="New slide after this one"><span class="rb-icon">＋</span>New Slide</button>
@@ -2631,6 +2635,7 @@
         </div>
         <div class="rb-label">Clipboard</div>
       </div>
+      <div class="rb-group"><div class="rb-row"><div class="rb-styles-host" data-favorites-gallery></div></div><div class="rb-label" title="Looks you keep under a name (fill, line, shadow, effects, text): click one to give it to the selection">Format Favorites</div></div>
       <div class="rb-group">
         <div class="rb-row"><div class="rb-styles-host" data-style-gallery></div></div>
         <div class="rb-label">Drawing Styles</div>
