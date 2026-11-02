@@ -219,6 +219,7 @@ The **Format** menu has:
 
 - **Align Left Edges**, **Align Centres Across**, **Align Right Edges**, **Align Top Edges**, **Align Middles Down**, **Align Bottom Edges**;
 - **Space Evenly Across** and **Space Evenly Down** (three or more things);
+- **Arrange in a Row**, **Arrange in a Column** and **Arrange in a Grid…** (two or more things): sets them out in reading order (left to right, then down) with the same space between each, each centred in its place. A grid asks how many columns (as near square as can be to start with: 3 for 9 things, 4 for 10) and the space between. Compound numbers under structures move with them, picked or not;
 - **Flip Left to Right** (Ctrl+Shift+H), **Flip Top to Bottom** (Ctrl+Shift+V). A flip makes the mirror image: wedged stereocentres turn over (S becomes R). When that happens a note says so, with an **Undo** button;
 - **Flip Left to Right, Keeping Configuration** and **Flip Top to Bottom, Keeping Configuration**: the structure is turned over and its wedges and hashes swap, so every stereocentre keeps its R or S;
 - **Rotate 90° Clockwise**, **Rotate 90° Anticlockwise**, **Rotate 180°** and **Rotate…** (Ctrl+R, any angle);
@@ -242,6 +243,7 @@ To start a reaction quickly, select a structure and press Ctrl+→ (or Ctrl+←,
   - **Tangled cages** (a bridged alkaloid pasted from SMILES with bonds crossing, say) are untangled: the rings are laid down as regular polygons and whatever bridges are left are drawn across, with as few crossing bonds as possible. The chemistry engine's own layouts are tried too, and the tidiest wins. Wedges are turned over where needed so every stereocentre stays as it was.
   - The first Clean Up keeps the structure where it was. Press it again straight away (with the structure selected) to step through other layouts, then the best one turned 30° either way and flipped.
   - **Clean Up Options…** (Structure toolbox, or right-click a structure) shows every layout side by side. Turn or flip them all with the buttons underneath, then pick one.
+  - Clean Up tidies what the structures sit in too, in the same undo step. Structures in a reaction scheme get **Clean Up Reaction** (below). Three or more structures that are clearly in rows already (two rows of five, say), in one row or in one column, are evened out into that grid, row or column, keeping about the spacing they mostly have; their compound numbers move with them. When it isn't clear (rows of different lengths, things scattered about), they stay where they are: use **Format ▸ Align ▸ Arrange in a Grid…** instead.
 - **Check Structure (next warning)**: goes to the next problem; see [Warnings](#warnings).
 - **Aromatic Rings: Circle or Double Bonds** (Alt+K): switches selected rings (or all) between a circle and alternating double bonds.
 - **H Atoms: Hide or Draw**: hides hydrogens that add nothing (not ones on wedges, charged ones, or ones on N or O); with nothing to hide, it draws the selected atoms' hydrogens.

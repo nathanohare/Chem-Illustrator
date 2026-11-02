@@ -3728,6 +3728,9 @@ export class Editor {
    * out, keeping the spacing they mostly have. False when it isn't clear or they are already even.
    */
   autoArrange(): boolean {
+    // (quick look first: three or more structures)
+    const frags = this.sel.atoms.size ? this.doc.fragments().filter((f) => [...f].some((id) => this.sel.atoms.has(id))) : this.doc.fragments();
+    if (frags.length < 3) return false;
     const us = this.gridUnits();
     // three or more structures and nothing else (a scheme is Clean Up Reaction's to tidy)
     if (us.length < 3 || us.some((u) => !u.atoms.length || u.arrows.length || u.shapes.length)) return false;
@@ -3829,7 +3832,13 @@ export class Editor {
     if (!options.length) return false;
     const cycle = { version: -1, key, options, k: 0 };
     this.cleanCycle = cycle;
-    if (!this.applyCleanUp(options.map((o) => o[0]))) {
+    // the structures, then what they sit in: their scheme, or rows and grids (one undo)
+    let did = false;
+    doc.edit('Clean Up Structure', () => {
+      did = this.applyCleanUp(options.map((o) => o[0]));
+      did = this.tidyLayout() || did;
+    });
+    if (!did) {
       // already tidy: show the next way instead, so the button always does something
       cycle.version = doc.version;
       return picked ? this.nextCleanUp(cycle) : false;
@@ -3846,6 +3855,26 @@ export class Editor {
     this.applyCleanUp(pick);
     c.version = this.doc.version;
     return { k: c.k, of, label: pick[0].label };
+  }
+
+  /**
+   * Clean Up's tidying round the structures: the reaction scheme they are in (as Clean Up
+   * Reaction), or, with no scheme, rows, a column or a grid they clearly sit in, evened out.
+   */
+  private tidyLayout(): boolean {
+    const picked = this.hasSelection();
+    if (!this.doc.arrows.size) return this.autoArrange();
+    const steps = picked ? this.selectedSteps() : undefined;
+    const anySteps = [...this.doc.arrows.values()].some((r) => { const q = !r.sweep && this.reactionRoles(r.id); return !!q && (q.reactants.length > 0 || q.products.length > 0); });
+    if (picked ? steps?.length : anySteps) {
+      const m = this.fullMeasure();
+      const plan = planCleanUp(this.doc, m, steps);
+      if (!plan) return false;
+      applySchemePlan(this.doc, m, plan, 'Clean Up Structure');
+      this.changed();
+      return true;
+    }
+    return this.autoArrange();
   }
 
   /** The ways Clean Up can lay out the target structures (for the Clean Up Options window). */

@@ -57,7 +57,10 @@ function labelOwner(doc: Doc, c: Unit, structures: Unit[], bond: number): Unit |
   let best: Unit | null = null, bestD = 1.4 * bond;
   for (const s of structures) {
     if (cx < s.box.x1 || cx > s.box.x2) continue;
-    const d = c.box.y1 >= s.box.y2 - 2 ? c.box.y1 - s.box.y2 : Infinity;
+    // under it: its middle below the structure's middle, and its top not far below the bottom
+    // (a number can tuck a little into a structure's box, beside a ring's lowest corner)
+    const under = mid(c.box).y > s.box.y2 - 0.3 * bond && c.box.y1 > mid(s.box).y;
+    const d = under ? Math.max(0, c.box.y1 - s.box.y2) : Infinity;
     if (d < bestD) { best = s; bestD = d; }
   }
   return best;
@@ -118,7 +121,9 @@ export function gridOffsets(boxes: Rect[], how: GridHow): Vec[] {
   const n = boxes.length;
   if (!n) return [];
   const cols = how.kind === 'row' ? n : how.kind === 'column' ? 1 : Math.max(1, Math.min(n, Math.round(how.cols ?? defaultColumns(n))));
-  const order = readRows(boxes).flat();
+  const byX = (a: number, b: number) => mid(boxes[a]).x - mid(boxes[b]).x, byY = (a: number, b: number) => mid(boxes[a]).y - mid(boxes[b]).y;
+  // a row goes left to right, a column top to bottom, a grid in reading order
+  const order = how.kind === 'row' ? boxes.map((_, i) => i).sort(byX) : how.kind === 'column' ? boxes.map((_, i) => i).sort(byY) : readRows(boxes).flat();
   const nRows = Math.ceil(n / cols);
   const colW = new Array<number>(cols).fill(0), rowH = new Array<number>(nRows).fill(0);
   order.forEach((i, k) => {
