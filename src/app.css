@@ -3658,13 +3658,13 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .smart-pane .sp-struct[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 .smart-pane .sp-holder { flex: 1; min-width: 0; text-align: left; padding: 2px 4px; border: 1px dashed var(--accent); border-radius: var(--r-control); background: none; color: var(--accent); font-size: var(--fs-xs); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* compact (Nate, choice 1): the layouts in the title row, steps' fields side by side; docked, it sits in its toolbox */
-.smart-pane { width: 264px; gap: 3px; padding: 4px 6px 6px; }
+.smart-pane { width: 288px; grid-template-columns: minmax(0, 1fr); gap: 3px; padding: 4px 6px 6px; }
 .smart-pane .sp-head { gap: 4px; font-size: var(--fs-sm); }
 .smart-pane .sp-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: move; user-select: none; }
 .smart-pane.docked .sp-head { justify-content: flex-end; }
 .smart-pane.docked .sp-head .sp-layouts { margin-right: auto; }
 .smart-pane .sp-head .sp-layouts { display: flex; gap: 1px; grid-template-columns: none; }
-.smart-pane .sp-head .sp-layout { display: grid; place-items: center; width: 24px; height: 22px; padding: 0; font-size: 0; }
+.smart-pane .sp-head .sp-layout { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; font-size: 0; }
 .smart-pane .sp-pin { border: none; background: none; color: var(--muted); padding: 2px 3px; line-height: 0; cursor: pointer; border-radius: var(--r-control); }
 .smart-pane .sp-pin:hover, .smart-pane .sp-fold:hover { color: var(--text); background: var(--accent-soft); }
 .smart-pane .sp-pin[aria-pressed='true'] { color: var(--accent); }
@@ -3852,3 +3852,8 @@ dialog.geom-view-dialog { width: min(96vw, 640px); }
 .geom-view-dialog .gv-gap { flex: 1; }
 .geom-view-dialog .gv-note { margin: 6px 0 4px; }
 @media (max-width: 560px) { .geom-view-dialog .gv-body { grid-template-columns: 1fr; } }
+.smart-pane .sp-info { display: grid; place-items: center; width: 16px; height: 16px; color: var(--muted); cursor: help; flex: none; border-radius: 50%; }
+.smart-pane .sp-info:hover, .smart-pane .sp-info:focus-visible { color: var(--accent); }
+.smart-pane.docked .sp-head .sp-info { order: -1; }
+.smart-pane .sp-head .sp-title { flex: 0 1 auto; }
+.smart-pane .sp-head .sp-title + .sp-info { margin-right: auto; }

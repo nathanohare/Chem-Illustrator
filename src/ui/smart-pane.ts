@@ -215,6 +215,18 @@ export class SmartPane {
       head.title = 'Drag to an edge of the drawing to dock this list there, like a toolbox';
       this.wireDrag(head);
     }
+    // how the list works, kept behind an "i" so it doesn't take room in the pane
+    const info = document.createElement('span');
+    info.className = 'sp-info';
+    info.tabIndex = 0;
+    info.setAttribute('role', 'img');
+    info.innerHTML = '<svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="7" cy="7" r="5.9"/><path d="M7 6.2v3.9" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="4.1" r=".85" fill="currentColor" stroke="none"/></svg>';
+    const help = data.layout === 'cycle'
+      ? 'Each row is a species of the cycle, as it looks on the page; the T row under it is the text on the arrow to the next species: the step\'s name, what joins the cycle there and what leaves it. Type in the rows, drag a row by its dots to reorder, or drag a species on the page and its arrows follow. The + buttons on the page add a species there.'
+      : 'Each row is a species of the scheme, as it looks on the page; the T row under it is the text above and below the arrow to the next species. Type in the rows, drag a row by its dots to reorder, or drag a species on the page and its arrows follow. The + buttons on the page add a species there.';
+    info.title = help;
+    info.setAttribute('aria-label', help);
+    head.append(info);
     const lay = document.createElement('div');
     lay.className = 'sp-layouts';
     lay.setAttribute('role', 'radiogroup');
@@ -334,7 +346,7 @@ export class SmartPane {
       arrow.setAttribute('aria-hidden', 'true');
       const part = (p: StepPart, ph: string, label: string) => field(`p${k}${p}`, stepParts(doc, l, p), ph, `${label}, step ${k + 1}`, (v) => this.hooks.stepRuns(id, k, p, v));
       const parts = cycle
-        ? [part('inside', 'step name (OA)', 'Step name'), part('above', 'in', 'Comes in'), part('below', 'out', 'Goes out')]
+        ? [part('inside', 'step name (OA)', 'Step name'), part('above', 'joins', 'What joins the cycle at this step, written outside its arrow'), part('below', 'leaves', 'What leaves the cycle at this step, written outside its arrow')]
         : [part('above', 'above the arrow', 'Above the arrow'), part('below', 'below the arrow', 'Below the arrow')];
       const box = document.createElement('div');
       box.className = 'sp-step-fields';
