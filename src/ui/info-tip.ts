@@ -93,7 +93,10 @@ export function addInfo(header: Element | null | undefined, text: string | undef
   if (!header || !text) return null;
   const i = infoIcon(text, className);
   header.classList.add('has-info');
-  header.append(i);
+  // beside the words, before any buttons the header ends with (a close ×)
+  const btn = header.querySelector(':scope > button');
+  if (btn) header.insertBefore(i, btn);
+  else header.append(i);
   return i;
 }
 

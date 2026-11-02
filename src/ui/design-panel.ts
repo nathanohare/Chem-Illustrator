@@ -2,6 +2,7 @@
 // (shapes and icons, searchable, in groups, each drawn as a small picture). Clicking a shape picks it as the
 // tool (click or drag on the page to place it); a shape can also be dragged straight onto the page.
 
+import { infoIcon } from './info-tip';
 import { DESIGN_SIZES, SlideSize } from '../deck/deck';
 import { GEOS, GEO_GROUPS, GeoDef, traceSteps } from '../design/geo';
 import { ICON_CREDIT, findIcons, iconGroups, iconSvg, iconsLoaded, loadIcons, whenIconsLoaded } from '../design/icons';
@@ -294,10 +295,8 @@ export class DesignLibrary {
       this.iconCount = ICON_PAGE;
       this.build();
     });
-    const tip = document.createElement('p');
-    tip.className = 'muted small';
-    tip.textContent = 'Click a shape, then click or drag on the page. Or drag it onto the page.';
-    head.append(bar, this.search, this.groupPick, tip);
+    bar.append(infoIcon('Click a shape, then click or drag on the page. Or drag it onto the page.', 'dl-info'));
+    head.append(bar, this.search, this.groupPick);
     this.body = document.createElement('div');
     this.body.className = 'dl-body';
     el.replaceChildren(head, this.body);

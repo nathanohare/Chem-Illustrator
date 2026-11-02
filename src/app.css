@@ -4013,3 +4013,4 @@ dialog.geom-view-dialog { width: min(96vw, 640px); }
 :root:not([data-shadows='off']) :is(#dock-left, #dock-right, #dock-top, #dock-bottom) { border: 0; }
 :root:not([data-shadows='off']) .dock > .toolbox:not(.floating) { background: var(--rb-surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--sh-dock); padding: 4px; }
 :root:not([data-shadows='off']) .dock > .toolbox:not(.floating) + .toolbox:not(.floating) { border: 1px solid var(--line); padding: 4px; }
+.dl-tabs .dl-info { align-self: center; margin-left: 6px; }

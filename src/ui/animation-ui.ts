@@ -6,6 +6,7 @@
 // effect; each animation has its start (on a click, with or after the one before), its length
 // and a delay, and the pane lists them in the order they play.
 
+import { foldIntoInfo } from './info-tip';
 import type { Doc } from '../model';
 import type { Deck } from '../deck/deck';
 import type { Selection } from '../editor/editor';
@@ -310,6 +311,7 @@ export class AnimationUI {
     // the slide's highlights, to pick one as an object (it is part of its structure on the slide)
     this.highlights = document.createElement('div');
     this.highlights.className = 'an-highlights';
+    foldIntoInfo(note, h);
     section.replaceChildren(h, bar, this.list, this.highlights, note);
   }
 
@@ -965,6 +967,7 @@ export class AnimationUI {
     close.textContent = 'Close';
     close.className = 'primary';
     buttons.append(again, close);
+    foldIntoInfo(note, h);
     d.append(h, canvas, note, buttons);
     document.body.append(d);
     const w = Math.min(720, window.innerWidth - 80), ht = w * deck.size.h / deck.size.w;
