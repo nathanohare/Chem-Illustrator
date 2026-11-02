@@ -217,6 +217,7 @@ export interface PreflightIssue {
 export interface PreflightResult {
   journal: JournalRules;
   size: FigureSize;
+  how: PrintSize;
   /** The figure as drawn, in points. */
   w: number;
   h: number;
@@ -312,6 +313,14 @@ const allowedFont = (f: string, list: string[]) => {
   return list.some((a) => n === a || n.startsWith(a + ' ') || n.startsWith(a + ','));
 };
 
+/** How far past the space (in points) still counts as fitting it. */
+const FIT_SLACK = 0.5;
+/**
+ * The fixes aim this much past the least size, so that a later small change (a caption made
+ * bigger, a line made thicker at the figure's edge) can't take the figure back under it.
+ */
+export const FIX_HEADROOM = 1.02;
+
 /**
  * Check a figure (what it draws, and the box it fills) against a journal's rules for one of its
  * sizes. `box` is the figure's extent in its own points.
@@ -323,16 +332,17 @@ export function preflight(items: Item[], box: Rect, journal: JournalRules, sizeI
   let scale = 1;
   if (w > 0 && h > 0) {
     if (how === 'fill') scale = Math.min(size.w / w, maxH / h);
-    else scale = Math.min(1, size.w / w, maxH / h);
+    // within half a point of the space counts as fitting (a line's own width at the edge), so it is not shrunk
+    else scale = Math.min(1, w > size.w + FIT_SLACK ? size.w / w : 1, h > maxH + FIT_SLACK ? maxH / h : 1);
   }
   const issues: PreflightIssue[] = [];
   const printed = (v: number) => v * scale;
 
   // ------------------------------------------------ size
   const pw = w * scale, ph = h * scale;
-  if (how === 'drawn' && w > size.w + 0.5) {
+  if (how === 'drawn' && w > size.w + FIT_SLACK) {
     issues.push({
-      rule: 'width', level: 'warning', fix: 'fit', want: size.w / w,
+      rule: 'width', level: 'warning', fix: 'fit', want: (size.w - 1) / w,
       title: `${cmText(w)} wide: too wide for ${size.name.replace(/ \(.*/, '').toLowerCase()} (${cmText(size.w)})`,
       detail: `The journal would print it at ${Math.round(scale * 100)} %, which makes its text and lines smaller by as much (they are checked below at that size). Make it fit, or draw it for a wider size.`,
     });
@@ -346,9 +356,9 @@ export function preflight(items: Item[], box: Rect, journal: JournalRules, sizeI
     issues.push({ rule: 'width', level: 'ok', title: `Width ${cmText(pw)}${scale !== 1 ? ` (printed at ${Math.round(scale * 100)} %)` : ''}: fits ${size.name.replace(/ \(.*/, '').toLowerCase()} (${cmText(size.w)})` });
   }
   if (Number.isFinite(maxH)) {
-    if (how === 'drawn' && h * Math.min(1, size.w / Math.max(w, 1e-9)) > maxH + 0.5) {
+    if (how === 'drawn' && h * Math.min(1, w > size.w + FIT_SLACK ? size.w / w : 1) > maxH + FIT_SLACK) {
       issues.push({
-        rule: 'height', level: size.h ? 'warning' : 'error', fix: 'fit', want: Math.min(size.w / w, maxH / h),
+        rule: 'height', level: size.h ? 'warning' : 'error', fix: 'fit', want: Math.min((size.w - 1) / w, (maxH - 1) / h),
         title: `${cmText(h * Math.min(1, size.w / Math.max(w, 1e-9)))} tall: taller than ${cmText(maxH)}${size.h ? '' : ` ${journal.maxHNote ?? ''}`.trimEnd()}`,
         detail: size.h ? 'It would be shrunk to fit the space, text and lines too.' : 'Split it into two figures, or lay it out wider and less tall.',
       });
@@ -378,14 +388,14 @@ export function preflight(items: Item[], box: Rect, journal: JournalRules, sizeI
     const small = journal.textUsual !== undefined ? texts.filter((t) => printed(t.size) < journal.textUsual! - 0.05 && !tooSmall.includes(t)) : [];
     if (tooSmall.length) {
       issues.push({
-        rule: 'text-min', level: 'error', fix: 'text', want: journal.textMin! / scale, ...placed(tooSmall),
+        rule: 'text-min', level: 'error', fix: 'text', want: (journal.textMin! / scale) * FIX_HEADROOM, ...placed(tooSmall),
         title: `${tooSmall.length} piece${tooSmall.length > 1 ? 's' : ''} of text smaller than ${r1(journal.textMin!)} pt once printed (smallest ${r2(smallest!)} pt)`,
         detail: journal.textNote,
       });
     }
     if (small.length) {
       issues.push({
-        rule: 'text-usual', level: 'warning', fix: 'text', want: journal.textUsual! / scale, ...placed(small),
+        rule: 'text-usual', level: 'warning', fix: 'text', want: (journal.textUsual! / scale) * FIX_HEADROOM, ...placed(small),
         title: `${small.length} piece${small.length > 1 ? 's' : ''} of text under the ${r1(journal.textUsual!)} pt asked for (smallest ${r2(Math.min(...small.map((t) => printed(t.size))))} pt)`,
         detail: `${journal.textNote ?? ''}${journal.textMin === undefined ? '' : ' Subscripts and superscripts are often this size on purpose.'}`.trim() || undefined,
       });
@@ -435,14 +445,14 @@ export function preflight(items: Item[], box: Rect, journal: JournalRules, sizeI
     const thin = journal.lineUsual !== undefined ? under(journal.lineUsual).filter((s) => !tooThin.includes(s)) : [];
     if (tooThin.length) {
       issues.push({
-        rule: 'line-min', level: 'error', fix: 'lines', want: journal.lineMin! / scale, ...placed(tooThin),
+        rule: 'line-min', level: 'error', fix: 'lines', want: (journal.lineMin! / scale) * FIX_HEADROOM, ...placed(tooThin),
         title: `${tooThin.length} line${tooThin.length > 1 ? 's' : ''} thinner than ${r2(journal.lineMin!)} pt once printed (thinnest ${r2(thinnest)} pt)`,
         detail: journal.id === 'acs' ? 'ACS: "Lines should be no thinner than 0.5 point."' : journal.id === 'elsevier' ? 'Elsevier: "Line weights range from 0.10 pt to 1.5 pt."' : undefined,
       });
     }
     if (thin.length) {
       issues.push({
-        rule: 'line-usual', level: 'warning', fix: 'lines', want: journal.lineUsual! / scale, ...placed(thin),
+        rule: 'line-usual', level: 'warning', fix: 'lines', want: (journal.lineUsual! / scale) * FIX_HEADROOM, ...placed(thin),
         title: `${thin.length} line${thin.length > 1 ? 's' : ''} under the ${r2(journal.lineUsual!)} pt asked for (thinnest ${r2(thinnest)} pt once printed)`,
         detail: journal.id === 'rsc' ? 'RSC asks for bonds "0.016 cm or 0.5 pt" wide.' : undefined,
       });
@@ -492,7 +502,7 @@ export function preflight(items: Item[], box: Rect, journal: JournalRules, sizeI
     detail: journal.formatNote ?? (fmt ? `Formats asked for: ${fmt}.` : undefined),
   });
 
-  return { journal, size, w, h, scale, kind, dpi, issues: sortIssues(issues) };
+  return { journal, size, how, w, h, scale, kind, dpi, issues: sortIssues(issues) };
 }
 
 const ORDER: Record<PreflightLevel, number> = { error: 0, warning: 1, tip: 2, ok: 3 };

@@ -75,8 +75,9 @@ describe('butane turned about its middle bond', () => {
     // a barrier for each distinct height: gauche, eclipsed and synperiplanar
     const barriers = frame.captions.map((c) => doc.captions.get(c)!).filter((c) => c.runs[0]?.color === '#1a56db');
     expect(barriers.length).toBe(3);
-    // seven projections (the one at 0° again at 360°), each a circle, and the sawhorse's box
-    expect(frame.shapes.filter((s) => doc.shapes.get(s)!.kind === 'oval').length).toBe(7);
+    // seven projections (the one at 0° again at 360°), each a circle, and the sawhorse's box with its eye (pupil and all)
+    expect(frame.shapes.filter((s) => doc.shapes.get(s)!.kind === 'oval' && doc.shapes.get(s)!.color === '#000000').length).toBe(7);
+    expect(frame.shapes.filter((s) => doc.shapes.get(s)!.kind === 'oval' && doc.shapes.get(s)!.color === '#1a56db').length).toBe(1);
     expect(frame.shapes.filter((s) => doc.shapes.get(s)!.kind === 'rect').length).toBe(1);
     expect(torsionFrameOf(doc, 'caption', frame.captions[0])).toBe(id);
     // a scan's turning point at 0° can land a few degrees off: it is still shown at 0° and 360°

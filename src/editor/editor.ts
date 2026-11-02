@@ -66,7 +66,7 @@ import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '..
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
-import { arrangeSmart, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotText, setStepText, smartFrameOf, smartMarks, ungroupSmart, type SmartData, type StepPart } from '../chem/smart-scheme';
+import { arrangeSmart, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
 import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
 import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
 import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
@@ -85,7 +85,7 @@ import { bezFrom, fitPath, dragCurveAt, throughPoints, dragPathPoint, firstBend,
 import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
 import { imageFor } from '../render/images';
-import { gridOffsets, inferGrid, usualGap, withLabels, type GridHow } from './grid-arrange';
+import { gridOffsets, inferGrid, sharedAnchors, usualGap, withLabels, type GridHow } from './grid-arrange';
 import { BEND, BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
 import { flatten, prepareTurn, stillMeans, structuresOf, type PerspectiveHost, type Prepared } from './perspective';
 import { anglesTurn, dragTurn, IDENT as IDENT_TURN, type M3 } from '../chem/perspective';
@@ -590,7 +590,7 @@ export class Editor {
       // structures in a diagram's items: room kept for them (the diagram growing to fit), and centred there
       if (diagrams) refitDiagramFigures(this.doc, before, this.measure());
       // a Smart Scheme's species moved by hand: its arrows and their conditions follow
-      if (smart) refitSmart(this.doc, before, this.measure());
+      if (smart) { fillHoldersDrawn(this.doc, before, this.measure()); refitSmart(this.doc, before, this.measure()); }
       if (frames) refitFrames(this.doc, before, this.measure());
       // mechanism arrows the change left running into something find their own way round again
       if (this.options.rerouteArrows) this.rerouteArrows(before);
@@ -3441,6 +3441,40 @@ export class Editor {
   smartMove(id: number, from: number, to: number): boolean { return this.smartEdit(id, 'Move Species', (m) => moveSlot(this.doc, m, id, from, to)); }
   smartSlotText(id: number, k: number, text: string): boolean { return this.smartEdit(id, 'Type Species', (m) => setSlotText(this.doc, m, id, k, text)); }
   smartStepText(id: number, k: number, part: StepPart, text: string): boolean { return this.smartEdit(id, 'Type Conditions', (m) => setStepText(this.doc, m, id, k, part, text)); }
+  /** Make species k of Smart Scheme `id` a dashed box to draw or paste its structure in (selected, ready for Ctrl+V). */
+  smartToHolder(id: number, k: number): boolean {
+    let box: number | null = null;
+    const ok = this.smartEdit(id, 'Make Species a Structure', (m) => (box = slotToHolder(this.doc, m, id, k)) !== null);
+    if (box !== null) { this.selectOnly({ kind: 'shape', id: box }); this.changed(); }
+    return ok;
+  }
+  /** Select one shape on its own (a Smart Scheme's dashed species box, from the species list). */
+  selectShape(id: number): void { if (this.doc.shapes.has(id)) { this.selectOnly({ kind: 'shape', id }); this.changed(); } }
+  /** Make species k's dashed box a text label again. */
+  smartToText(id: number, k: number): boolean { return this.smartEdit(id, 'Make Species Text', (m) => holderToSlotText(this.doc, m, id, k) !== null); }
+  /** The dashed species box selected on its own (a paste goes into it), or null. */
+  selectedHolder(): number | null {
+    const s = this.sel;
+    if (s.shapes.size !== 1 || s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size) return null;
+    const id = [...s.shapes][0];
+    return holderFrameOf(this.doc, id) !== null ? id : null;
+  }
+  /** Put a drawing in place of a dashed species box: it goes in the middle of the box and becomes that species. */
+  fillSpeciesBox(holder: number, drawing: Doc): boolean {
+    const sh = this.doc.shapes.get(holder);
+    const frame = holderFrameOf(this.doc, holder);
+    if (!sh || frame === null) return false;
+    let ok = false;
+    this.doc.edit('Paste into Species', () => {
+      const sel = insertDrawing(this.doc, drawing, { x: (sh.x1 + sh.x2) / 2, y: (sh.y1 + sh.y2) / 2 });
+      ok = fillHolder(this.doc, this.fullMeasure(), holder, [...sel.atoms], [...sel.captions]);
+    });
+    if (this.doc.shapes.has(frame)) this.selectOnly({ kind: 'shape', id: frame });
+    this.changed();
+    return ok;
+  }
+  smartSlotRuns(id: number, k: number, parts: TextPart[]): boolean { return this.smartEdit(id, 'Type Species', (m) => setSlotRuns(this.doc, m, id, k, parts)); }
+  smartStepRuns(id: number, k: number, part: StepPart, parts: TextPart[]): boolean { return this.smartEdit(id, 'Type Conditions', (m) => setStepRuns(this.doc, m, id, k, part, parts)); }
   /** Lay a Smart Scheme out again, with a new layout or other settings. */
   smartArrange(id: number, patch?: Partial<SmartData>): boolean { return this.smartEdit(id, 'Arrange Smart Scheme', (m) => arrangeSmart(this.doc, m, id, patch)); }
 
@@ -4329,8 +4363,19 @@ export class Editor {
     return this.applyGrid(us, { kind: shape.kind, cols: shape.cols, gap: usualGap(boxes, this.doc.style.bondLength) }, 'Clean Up: Arrange');
   }
 
+  /** Where Arrange in a Grid would move things, without moving them (for its preview). */
+  gridPlan(how: GridHow): { units: ReturnType<typeof units>; offsets: Vec[] } {
+    const us = this.gridUnits();
+    return { units: us, offsets: this.gridMoves(us, how) };
+  }
+
+  private gridMoves(us: ReturnType<typeof units>, how: GridHow): Vec[] {
+    // structures that share a ring line up on it
+    return gridOffsets(us.map((u) => u.box), { anchors: sharedAnchors(this.doc, us), ...how });
+  }
+
   private applyGrid(us: ReturnType<typeof units>, how: GridHow, label: string): boolean {
-    const off = gridOffsets(us.map((u) => u.box), how);
+    const off = this.gridMoves(us, how);
     if (off.every((d) => Math.hypot(d.x, d.y) < 0.05)) return false;
     this.doc.edit(label, () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
     this.changed();
@@ -4564,14 +4609,28 @@ export class Editor {
    * Clean Up Reaction: space the selected steps (or every step) evenly, add missing + signs,
    * centre the conditions and fit the arrows to them. False when there is no step to tidy.
    */
-  cleanUpReaction(): boolean {
+  cleanUpReaction(): false | 'matched' | 'fitted' {
     const m = this.fullMeasure();
-    const plan = planCleanUp(this.doc, m, this.selectedSteps());
+    const steps = this.selectedSteps();
+    const key = steps ? [...steps].sort((a, b) => a - b).join(',') : 'all';
+    // pressed again on the same steps: each arrow shrinks to fit its own text (the structures
+    // move up to keep the spacing even); again, and they match once more
+    const c = this.reactionCycle;
+    const again = !!c && c.version === this.doc.version && c.key === key;
+    const fitted = again ? !c!.fitted : false;
+    const same = prefsOf(this.doc).sameLength;
+    const plan = planCleanUp(this.doc, m, steps, fitted ? { sameLength: !same, fit: true } : undefined);
+    if (plan) {
+      applySchemePlan(this.doc, m, plan);
+      this.changed();
+    }
+    this.reactionCycle = { version: this.doc.version, key, fitted };
     if (!plan) return false;
-    applySchemePlan(this.doc, m, plan);
-    this.changed();
-    return true;
+    return fitted === same ? 'fitted' : 'matched';
   }
+
+  /** The last Clean Up Reaction: which steps, and whether it fitted each arrow to its own text. */
+  private reactionCycle: { version: number; key: string; fitted: boolean } | null = null;
 
   /**
    * Arrange the selected scheme (or the whole drawing) in one go: in a line, in rows, as a
@@ -4928,6 +4987,36 @@ export class Editor {
     if (walls && b) ({ x: dx, y: dy } = clampMove(b, { x: dx, y: dy }, walls));
     if (!dx && !dy) return true;
     this.doc.edit('Nudge', () => this.moveSelection(dx, dy));
+    this.changed();
+    return true;
+  }
+
+  /**
+   * Right-click > Attachment Point: make an atom a point of attachment of this kind (a wavy bond,
+   * a star or a numbered diamond), or a plain carbon again (null). An atom at the end of a single
+   * bond becomes the point itself; an atom with more bonds (a ring carbon) gets a new bond out to
+   * one, so the point sits right on it. False when nothing changed.
+   */
+  setAttachPoint(id: number, kind: 'Wavy' | 'Star' | 'Numbered' | null): boolean {
+    const doc = this.doc, a = doc.atoms.get(id);
+    if (!a || a.multi) return false;
+    if (kind === null && !a.attach) return false;
+    const look = (at: number, num?: number): Partial<Atom> => kind === 'Numbered'
+      ? { attach: 'Unspecified', attachNum: num ?? nextNumber(doc, at, (x) => (x.attach ? x.attachNum : undefined)) }
+      : { attach: kind!, attachNum: undefined };
+    const plain: Partial<Atom> = { z: 0, label: null, charge: 0, fileLabel: false, isotope: 0 };
+    let at = id;
+    doc.edit(kind ? 'Attachment Point' : 'Remove Attachment Point', () => {
+      if (kind === null) doc.updateAtom(id, { attach: undefined, attachNum: undefined, z: 6 });
+      else if (a.attach) doc.updateAtom(id, look(id, a.attach === 'Unspecified' || a.attach === 'Diamond' ? a.attachNum : undefined));
+      else if (doc.degree(id) <= 1 && !doc.neighbors(id).some((n) => n.attach)) doc.updateAtom(id, { ...plain, ...look(id) });
+      else {
+        const t = sprout(doc, id, 1, 'solid', 0);
+        at = t.id;
+        doc.updateAtom(t.id, { ...plain, ...look(t.id) });
+      }
+    });
+    this.selectOnly({ kind: 'atom', id: at });
     this.changed();
     return true;
   }
@@ -5713,11 +5802,11 @@ export class Editor {
         const t = { runs: applyBase(c.runs, base), paras: c.paras, justify: c.justify, wrap: c.wrap, width: c.width, lineHeight: c.lineHeight, lineSpacing: c.lineSpacing };
         const res = formatWhole(t, f, defaults, base?.size ?? st.captionSize, (x, sz, family, style) => measureText(x, sz, family, style));
         doc.dirtyRects.push(this.r.captionBox(c));
-        doc.updateCaption(c.id, { runs: stripBase(res.runs, base), paras: res.paras, justify: res.justify, lineHeight: res.lineHeight, lineSpacing: res.lineSpacing });
+        doc.updateCaption(c.id, { runs: stripBase(res.runs, base), paras: res.paras, justify: res.justify, lineHeight: res.lineHeight, lineSpacing: res.lineSpacing, ...(f.kind === 'wrap' ? { wrap: res.wrap } : {}) });
       }
       for (const sh of shapes) {
-        // a shape's text: its look and lining up (line spacing and lists don't apply to it)
-        if (!sh.text?.runs.length || f.kind === 'line') continue;
+        // a shape's text: its look and lining up (line spacing, lists and a wrap width don't apply to it)
+        if (!sh.text?.runs.length || f.kind === 'line' || f.kind === 'wrap') continue;
         const res = formatWhole({ runs: sh.text.runs, paras: sh.text.paras, justify: sh.textAlign ?? 'center' }, f, {}, this.r.geoTextSize());
         const text = { runs: res.runs, ...(res.paras?.length ? { paras: res.paras } : {}) };
         doc.dirtyRects.push(shapeBox(sh));
@@ -5780,19 +5869,19 @@ export class Editor {
   }
 
   /** How the text the ribbon's Font and Paragraph buttons would change looks now (for showing which are on). */
-  textLook(): { style: rt.RunStyle; align: Justify; list?: 'bullet' | 'number'; line: number; defaultSize: number; defaultFont?: string } | null {
+  textLook(): { style: rt.RunStyle; align: Justify; list?: 'bullet' | 'number'; line: number; before?: number; after?: number; wrap?: number; link?: boolean; defaultSize: number; defaultFont?: string } | null {
     const st = this.doc.style;
     const ed = this.captionEd?.ed;
     if (ed) {
       const p = ed.currentPara();
-      return { style: ed.currentStyle(), align: ed.currentAlign(), list: p.list, line: ed.t.lineSpacing ?? 1, defaultSize: ed.defaultSize, defaultFont: ed.defaults.font ?? st.captionFont };
+      return { style: ed.currentStyle(), align: ed.currentAlign(), list: p.list, line: ed.t.lineSpacing ?? 1, before: p.spaceBefore, after: p.spaceAfter, wrap: ed.t.wrap, link: !!ed.linkHere(), defaultSize: ed.defaultSize, defaultFont: ed.defaults.font ?? st.captionFont };
     }
     const c = [...this.sel.captions].map((id) => this.doc.captions.get(id)).find((x): x is Caption => !!x);
     if (c) {
       const base = c.ph ? this.doc.textStyles?.[c.ph] : undefined;
       const runs = applyBase(c.runs, base);
       const len = plainText(runs).length;
-      return { style: len ? rt.commonStyle(runs, 0, len) : { ...(base ?? {}) }, align: c.justify ?? 'left', list: c.paras?.[0]?.list, line: c.lineSpacing ?? 1, defaultSize: base?.size ?? st.captionSize, defaultFont: base?.font ?? st.captionFont };
+      return { style: len ? rt.commonStyle(runs, 0, len) : { ...(base ?? {}) }, align: c.justify ?? 'left', list: c.paras?.[0]?.list, line: c.lineSpacing ?? 1, before: c.paras?.[0]?.spaceBefore, after: c.paras?.[0]?.spaceAfter, wrap: c.wrap, defaultSize: base?.size ?? st.captionSize, defaultFont: base?.font ?? st.captionFont };
     }
     const sh = [...this.sel.shapes].map((id) => this.doc.shapes.get(id)).find((x): x is Shape => !!x && x.kind === 'geo' && !!x.text?.runs.length);
     if (sh?.text) {
@@ -6134,14 +6223,16 @@ export class Editor {
     const g = this.doc.guides;
     if (!g?.shown || (!g.list.length && !g.grid)) return;
     const area = this.viewArea();
-    const colour = this.dark ? '#4fc3f7' : '#1b8fd0';
+    const colour = g.color ?? (this.dark ? '#4fc3f7' : '#1b8fd0');
+    // (Guides toolbox > Look: how see-through, on top of the grid's own lightness)
+    const solid = 1 - (g.clear ?? 0);
     const lines = guideLines(g, area);
     const minGap = 5 * px;
     ctx.save();
     ctx.strokeStyle = colour;
     for (const l of lines) {
       const snapped = this.drag?.mode === 'move' && this.guideSnapped.some((s) => s.axis === l.axis && s.at === l.at);
-      ctx.globalAlpha = l.guide === null ? 0.35 : snapped ? 1 : 0.8;
+      ctx.globalAlpha = (l.guide === null ? 0.35 : snapped ? 1 : 0.8) * (snapped ? 1 : solid);
       ctx.lineWidth = (snapped ? 2 : 1) * px;
       ctx.beginPath();
       if (l.axis === 'x') { ctx.moveTo(l.at, area.y1); ctx.lineTo(l.at, area.y2); } else { ctx.moveTo(area.x1, l.at); ctx.lineTo(area.x2, l.at); }
@@ -6153,7 +6244,7 @@ export class Editor {
       }
       ctx.stroke();
     }
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = Math.max(0.3, solid);
     ctx.lineWidth = 1.5 * px;
     ctx.fillStyle = this.dark ? '#10161f' : '#ffffff';
     for (const x of g.list) {

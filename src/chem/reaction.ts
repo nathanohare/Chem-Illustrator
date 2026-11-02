@@ -43,7 +43,7 @@ export function schemeItems(doc: Doc, m: Measure): Item[] {
     out.push({ ref: 'c' + c.id, box: m.captionBox(c), plus: isPlus(text), atoms: [], caption: c.id });
   }
   for (const s of doc.shapes.values()) {
-    if (s.kind === 'picture' || s.kind === 'table') {
+    if (s.kind === 'picture' || s.kind === 'table' || s.holder) {
       out.push({ ref: 's' + s.id, box: { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) }, plus: false, atoms: [], shape: s.id });
     }
   }

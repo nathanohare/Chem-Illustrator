@@ -22,7 +22,7 @@ import { isGenericLabel } from '../chem/labels';
 import { bracketPath, shaftOffset, shapeOrder, elbowRoute, boxOf, shapeBox, shapeMid, shapeTurn, bezPoints, bezHeadBack, bezPathAt, bezSlice, type PathStep } from '../objects';
 import { atomStereoText, bondStereoText, shownDescriptor, axialStyle, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
-import { attachDiamondSize, hasAttachDiamond, isMapNumber, MAP_GREY, MAP_PEACH, mapBox, mapColour } from './atom-marks';
+import { attachDiamondSize, attachStarSize, hasAttachDiamond, isMapNumber, MAP_GREY, MAP_PEACH, mapBox, mapColour } from './atom-marks';
 import { layoutText, FONT_STACK, withStack, type TextLayout } from '../text/layout';
 import { drawLayout } from '../text/draw';
 import { geoDef, moveSteps, textArea, traceSteps, type GeoStep } from '../design/geo';
@@ -32,7 +32,7 @@ import { imageFor } from './images';
 import { hasShapeFx, shapeFx, type ShapeFxPaints } from './shape-fx';
 import { fxCanvas, fxSrc, shapeDef, traceShape } from './picture-fx';
 import { layoutTable, drawTable, type TableLayout, type TablePart } from '../table';
-import type { TableData } from '../model';
+import type { TableData, TextRun } from '../model';
 import { repeatLabelPlace } from '../chem/polymer';
 import { paintChartBox } from './chart-box-paint';
 import { paintShapeMath } from '../deck/equation';
@@ -50,6 +50,8 @@ export interface PageDecor {
 
 /** Words shown in an empty placeholder on screen. */
 const PROMPTS = { title: 'Click to add title', subtitle: 'Click to add subtitle', body: 'Click to add text' };
+/** What a Smart Scheme's dashed species box says on screen. */
+const HOLDER_HINT: { runs: TextRun[] } = { runs: [{ text: 'Draw the structure here, or select the box and paste', color: '#8a909b' }] };
 
 /** Something that can record a picture instead of drawing it (the vector recorder). */
 interface PictureSink { picture(s: Shape, radius?: number): void }
@@ -166,6 +168,8 @@ export class Renderer {
   lastSceneMs = 0;
   /** Drawing on screen for editing: empty placeholders show their prompts. */
   screen = false;
+  /** The drawing window: a Smart Scheme's dashed species boxes say how to fill them (never in pictures or print). */
+  holderHints = false;
   /** Drawn under everything (a slide and its master). */
   page: PageDecor | null = null;
   /** Placeholder text formatting of the document being drawn. */
@@ -330,6 +334,11 @@ export class Renderer {
       layout = layoutLabel(spec, labelBonds(doc, a), size, (t, s) => measureText(t, s, this.labelStack), a.just);
       const m = doc.style.marginWidth * k;
       for (const b of layout.boxes) boxes.push({ x1: a.x + b.x1 - m, y1: a.y + b.y1 - m, x2: a.x + b.x2 + m, y2: a.y + b.y2 + m });
+    }
+    // a star point of attachment: the bond stops short of its asterisk, as at a label
+    if (a.attach === 'Star') {
+      const h = attachStarSize(size) + doc.style.marginWidth * k;
+      boxes.push({ x1: a.x - h, y1: a.y - h, x2: a.x + h, y2: a.y + h });
     }
     c = { layout, boxes };
     if (layout?.charge !== undefined) {
@@ -757,6 +766,24 @@ export class Renderer {
     return curFont;
   }
 
+  /** A star point of attachment: an asterisk of three lines crossing where the bond ends. */
+  private drawAttachStar(ctx: CanvasRenderingContext2D, doc: Doc, a: Atom): void {
+    const k = a.s ?? 1;
+    const r = attachStarSize(doc.style.labelSize * k);
+    ctx.save();
+    ctx.strokeStyle = a.color ?? '#000';
+    ctx.lineWidth = doc.style.lineWidth * k;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const t = (90 + 60 * i) * DEG, dx = Math.cos(t) * r, dy = Math.sin(t) * r;
+      ctx.moveTo(a.x - dx, a.y - dy);
+      ctx.lineTo(a.x + dx, a.y + dy);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   /** A numbered point of attachment: a black diamond with the number in white. */
   private drawAttachDiamond(ctx: CanvasRenderingContext2D, doc: Doc, a: Atom, curFont: string): string {
     const L = doc.style.labelSize * (a.s ?? 1);
@@ -899,6 +926,7 @@ export class Renderer {
       }
       if (a.showNumber && a.atomNumber) curFont = this.drawAtomNumber(ctx, doc, a, curFont);
       if (hasAttachDiamond(a)) curFont = this.drawAttachDiamond(ctx, doc, a, curFont);
+      if (a.attach === 'Star') this.drawAttachStar(ctx, doc, a);
       if (checks?.forAtom(a)) warns.push(this.warningBox(doc, a, info));
     }
     curFont = this.drawStereoLabels(ctx, doc, atoms, bondSet, curFont);
@@ -2282,6 +2310,12 @@ export class Renderer {
     if (s.text && this.geoEdit !== s.id) {
       const g = this.geoText(s);
       if (g) drawLayout(ctx, g.lay, g.x, g.y);
+    } else if (s.holder && (this.screen || this.holderHints)) {
+      // a Smart Scheme species waiting for its structure says how, on screen only, small
+      const x1 = Math.min(s.x1, s.x2), x2 = Math.max(s.x1, s.x2), y1 = Math.min(s.y1, s.y2), y2 = Math.max(s.y1, s.y2);
+      const lay = layoutText({ runs: HOLDER_HINT.runs, justify: 'center', wrap: Math.max(4, x2 - x1 - 4) }, 0.62 * this.captionSize, (t, sz, family, style) => measureText(t, sz, family, style));
+      const th = lay.box.y2 - lay.box.y1;
+      if (th < y2 - y1) drawLayout(ctx, lay, x1 + 2, (y1 + y2) / 2 - th / 2 - lay.box.y1);
     }
   }
 
