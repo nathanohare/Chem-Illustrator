@@ -12,7 +12,7 @@ import { chemRuns } from '../text/chemtext';
 import { chordLocal, shapeBox } from '../objects';
 import { frameBox } from '../editor/frames';
 import { profileAt, type Extremum, type Profile } from '../chem/torsion-profile';
-import { norm180, type NewmanGroup } from '../chem/newman';
+import { norm180, norm360, type NewmanGroup } from '../chem/newman';
 import { drawEyeMark, drawNewman, type NewmanLook } from './newman';
 
 export type ConformerNames = 'textbook' | 'klyne' | 'none';
@@ -25,6 +25,11 @@ export interface TorsionData {
   front: NewmanGroup[];
   back: NewmanGroup[];
   phi0: number;
+  /** The groups the torsion is measured between (3-D model atoms, one in `front`, one in `back`). */
+  a?: number;
+  d?: number;
+  /** Barrier arrows (each with its number) dragged to the side: points moved, by `barrierKey`. */
+  shifts?: Record<string, number>;
   unit: 'kcal/mol' | 'kJ/mol';
   /** Newman projections at the minima and maxima. */
   insets: 'all' | 'minima' | 'none';
@@ -60,6 +65,32 @@ export function extremumName(phi: number, kind: 'min' | 'max', names: ConformerN
   return kind === 'min' ? 'gauche' : 'eclipsed';
 }
 
+/**
+ * The groups as a textbook draws them at torsion φ: 120° apart on each atom, and the torsion
+ * between the two compared groups taken to the nearest 60° (a gauche minimum at 65° is drawn at
+ * 60°, so its bottom bond points straight down). Returns the groups and the turn for drawNewman.
+ */
+export function idealView(d: Pick<TorsionData, 'front' | 'back' | 'a' | 'd'>, phi: number): { front: NewmanGroup[]; back: NewmanGroup[]; turn: number } {
+  const big = (gs: NewmanGroup[]) => [...gs].sort((p, q) => q.size - p.size || p.angle - q.angle)[0];
+  const fr = d.front.find((g) => g.atom === d.a) ?? big(d.front), br = d.back.find((g) => g.atom === d.d) ?? big(d.back);
+  const snap = (gs: NewmanGroup[], ref: NewmanGroup | undefined) => gs.map((g) => ({ ...g, angle: ref ? norm360(ref.angle + Math.round(norm180(g.angle - ref.angle) / 120) * 120) : g.angle }));
+  const front = snap(d.front, fr), back = snap(d.back, br);
+  if (!fr || !br) return { front, back, turn: 0 };
+  const want = Math.round(phi / 60) * 60;
+  return { front, back, turn: norm180(want - (br.angle - fr.angle)) };
+}
+
+/** The turning points as drawn: the one at 0° (within 10°: a scan's can sit a little off) shown at 360° too. */
+function shownExtrema(d: Pick<TorsionData, 'extrema'>): Extremum[] {
+  const ext = d.extrema.map((e) => ({ ...e }));
+  const atZero = ext.find((e) => e.phi < 10 || e.phi > 350);
+  if (atZero) { atZero.phi = 0; ext.push({ ...atZero, phi: 360 }); }
+  return ext.sort((p, q) => p.phi - q.phi);
+}
+
+/** The name a barrier's sideways move is kept under. */
+const barrierKey = (e: Extremum) => `${e.kind}${Math.round(e.phi)}`;
+
 export interface TorsionParts { captions: number[]; arrows: number[]; shapes: number[] }
 
 /** Draw the diagram with its plot's top left corner at `at`. Call inside an edit. */
@@ -86,7 +117,7 @@ export function drawTorsion(doc: Doc, m: Measure, d: TorsionData, at: Vec): Tors
     out.captions.push(c.id);
     return doc.captions.get(c.id)!;
   };
-  const line = (a: Vec, b: Vec, more: Record<string, unknown> = {}) => out.shapes.push(doc.addShape({ kind: 'line', x1: a.x, y1: a.y, x2: b.x, y2: b.y, color: '#000000', ...more }).id);
+  const line = (a: Vec, b: Vec, more: Record<string, unknown> = {}): number => out.shapes.push(doc.addShape({ kind: 'line', x1: a.x, y1: a.y, x2: b.x, y2: b.y, color: '#000000', ...more }).id);
   const arrow = (tail: Vec, head: Vec, more: Partial<Arrow> = {}) => out.arrows.push(doc.addArrow({
     tail, head, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0,
     headLength: lw * 8, headWidth: lw * 2.6, ...more,
@@ -122,16 +153,13 @@ export function drawTorsion(doc: Doc, m: Measure, d: TorsionData, at: Vec): Tors
   }).id);
 
   // each minimum and maximum: a level, its projection and name, and the climb to it
-  const ext = d.extrema.map((e) => ({ ...e }));
-  // the curve's ends are the same conformation: show the one at 0° at 360° too (a scan's
-  // turning point there can sit a few degrees off, as the fit is not quite symmetric)
-  const atZero = ext.find((e) => e.phi < 10 || e.phi > 350);
-  if (atZero) { atZero.phi = 0; ext.push({ ...atZero, phi: 360 }); }
+  const ext = shownExtrema(d);
   const bar = 0.9 * L;
   const fmt = (e: number) => (e * k).toFixed(d.digits).replace(/^-/, '−');
   /** A projection drawn with its top (or bottom, `fromTop` false) at y, centred on x; returns its top and bottom. */
-  const inset = (cx: number, yEdge: number, fromTop: boolean, turn: number) => {
-    const parts = drawNewman(doc, m, { kind: 'newman', front: d.front, back: d.back, turn, conformer: 0, source: 'angle', look: d.look }, { x: cx, y: 0 });
+  const inset = (cx: number, yEdge: number, fromTop: boolean, phi: number) => {
+    const v = idealView(d, phi);
+    const parts = drawNewman(doc, m, { kind: 'newman', front: v.front, back: v.back, turn: v.turn, conformer: 0, source: 'angle', look: d.look }, { x: cx, y: 0 });
     const boxes = [...parts.captions.map((id) => m.captionBox(doc.captions.get(id)!)), ...parts.shapes.map((id) => shapeBox(doc.shapes.get(id)!))];
     const y1 = Math.min(...boxes.map((r) => r.y1)), y2 = Math.max(...boxes.map((r) => r.y2));
     const dy = fromTop ? yEdge - y1 : yEdge - y2;
@@ -148,16 +176,15 @@ export function drawTorsion(doc: Doc, m: Measure, d: TorsionData, at: Vec): Tors
     if (e.energy > 0.02) line({ x: Math.max(at.x, px - half), y: py }, { x: Math.min(at.x + d.w, px + half), y: py });
     const name = extremumName(e.phi, e.kind, d.names);
     const show = d.insets === 'all' || (d.insets === 'minima' && e.kind === 'min');
-    const turn = norm180(e.phi - d.phi0);
     // the projection at 0° sits clear of the energy axis
     const cx = e.phi === 0 ? px + 2.3 * L : px;
     if (e.kind === 'max') {
       let yy = py - 0.3 * L;
-      if (show) yy = inset(cx, yy, false, turn).y1 - 0.1 * L;
+      if (show) yy = inset(cx, yy, false, e.phi).y1 - 0.1 * L;
       if (name) caption(name, { x: cx, y: yy }, 'above', { runs: [{ text: name, italic: true }] });
     } else {
       let yy = y0 + 1.1 * L;
-      if (show) yy = inset(cx, yy, true, turn).y2 + 0.1 * L;
+      if (show) yy = inset(cx, yy, true, e.phi).y2 + 0.1 * L;
       if (name) caption(name, { x: cx, y: yy }, 'below', { runs: [{ text: name, italic: true }] });
     }
     if (!d.barriers || e.energy <= 0.02 || e.phi === 0) continue;
@@ -165,9 +192,12 @@ export function drawTorsion(doc: Doc, m: Measure, d: TorsionData, at: Vec): Tors
     if (e.phi !== 360 && shown.some((o) => o.kind === e.kind && Math.abs(o.energy - e.energy) < 0.3)) continue;
     if (e.phi === 360) { const i = shown.findIndex((o) => o.kind === 'max' && Math.abs(o.energy - e.energy) < 0.3); if (i >= 0) continue; }
     shown.push(e);
-    arrow({ x: px, y: y0 }, { x: px, y: py + lw }, { line: 'dashed', color: d.barrierColor, headLength: lw * 6, headWidth: lw * 2.2 });
+    // dragged to the side: past the end of its level, a dashed grey line leads back to it
+    const ax = px + (d.shifts?.[barrierKey(e)] ?? 0);
+    if (Math.abs(ax - px) > half) line({ x: ax, y: py }, { x: px + Math.sign(ax - px) * half, y: py }, { color: '#9a9a9a', dashed: true });
+    arrow({ x: ax, y: y0 }, { x: ax, y: py + lw }, { line: 'dashed', color: d.barrierColor, headLength: lw * 6, headWidth: lw * 2.2 });
     const text = `${fmt(e.energy)} ${d.unit}`;
-    const cap = caption(text, { x: px - 0.2 * L, y: (y0 + py) / 2 }, 'left', { runs: [{ text, bold: true, color: d.barrierColor, size: doc.style.captionSize * 0.9 }] });
+    const cap = caption(text, { x: ax - 0.2 * L, y: (y0 + py) / 2 }, 'left', { runs: [{ text, bold: true, color: d.barrierColor, size: doc.style.captionSize * 0.9 }] });
     // beside the climb, on whichever side and at whichever height crosses the curve and other words least
     const b0 = m.captionBox(cap), w = b0.x2 - b0.x1, h = b0.y2 - b0.y1;
     const others = out.captions.filter((id) => id !== cap.id).map((id) => m.captionBox(doc.captions.get(id)!));
@@ -180,10 +210,10 @@ export function drawTorsion(doc: Doc, m: Measure, d: TorsionData, at: Vec): Tors
     };
     let best: Vec | null = null, bestCost = Infinity;
     const tries: Vec[] = [];
-    if (e.kind === 'min') tries.push({ x: px - 0.2 * L - w, y: py + 0.12 * L }, { x: px + 0.2 * L, y: py + 0.12 * L });
+    if (e.kind === 'min' && ax === px) tries.push({ x: ax - 0.2 * L - w, y: py + 0.12 * L }, { x: ax + 0.2 * L, y: py + 0.12 * L });
     for (const f of [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8]) {
       const cy = y0 + (py - y0) * f - h / 2;
-      tries.push({ x: px - 0.2 * L - w, y: cy }, { x: px + 0.2 * L, y: cy });
+      tries.push({ x: ax - 0.2 * L - w, y: cy }, { x: ax + 0.2 * L, y: cy });
     }
     for (const t of tries) { const c = cost(t.x, t.y); if (c < bestCost) { bestCost = c; best = t; } }
     if (best) doc.updateCaption(cap.id, { x: cap.x + best.x - b0.x1, y: cap.y + best.y - b0.y1 });
@@ -200,8 +230,8 @@ function drawSawhorseBox(doc: Doc, m: Measure, d: TorsionData, at: Vec, out: Tor
   const L = doc.style.bondLength;
   // the most stable conformation, the one the reader compares the rest with
   const lowest = [...d.extrema].filter((e) => e.kind === 'min').sort((p, q) => p.energy - q.energy)[0];
-  const turn = lowest ? norm180(lowest.phi - d.phi0) : 0;
-  const parts = drawNewman(doc, m, { kind: 'sawhorse', front: d.front, back: d.back, turn, conformer: 0, source: 'angle', look: d.look }, { x: 0, y: 0 });
+  const v = idealView(d, lowest ? lowest.phi : 180);
+  const parts = drawNewman(doc, m, { kind: 'sawhorse', front: v.front, back: v.back, turn: v.turn, conformer: 0, source: 'angle', look: d.look }, { x: 0, y: 0 });
   // where the sawhorse put its two atoms (drawNewman: yaw 48°, pitch 32°, the atoms 1.35 bond lengths apart)
   const sep = 1.35 * L, yaw = (48 * Math.PI) / 180, pitch = (32 * Math.PI) / 180;
   const back = { x: sep * Math.sin(yaw), y: -sep * Math.cos(yaw) * Math.sin(pitch) };
@@ -237,6 +267,59 @@ export function torsionFrameOf(doc: Doc, kind: 'atom' | 'bond' | 'caption' | 'ar
     if (!s.torsion || !s.frame) continue;
     const f = s.frame;
     if ((kind === 'caption' && f.captions.includes(id)) || (kind === 'arrow' && f.arrows.includes(id)) || (kind === 'shape' && f.shapes.includes(id))) return s.id;
+  }
+  return null;
+}
+
+/**
+ * A barrier arrow or its number dragged inside a chart (the rest of the chart where it was): the
+ * pair moves sideways together, kept as the chart's own, and the chart is drawn again (with a
+ * dashed grey line back to the level once the arrow is past its end). Call in doc.beforeCommit.
+ */
+export function refitTorsion(doc: Doc, m: Measure, before: ReadonlyMap<string, unknown>): void {
+  for (const s of [...doc.shapes.values()]) {
+    const d = s.torsion, f = s.frame;
+    if (!d || !f || before.has('s' + s.id)) continue;
+    const movedArrows = f.arrows.filter((id) => before.get('r' + id));
+    const movedCaps = f.captions.filter((id) => before.get('c' + id));
+    if (!movedArrows.length && !movedCaps.length) continue;
+    const at = plotCorner(doc, d, f.arrows);
+    // the whole chart moved (its axes too): nothing to do
+    if (!at || f.arrows.some((id) => before.get('r' + id) && isAxis(doc.arrows.get(id)!))) continue;
+    const k = d.unit === 'kJ/mol' ? KJ : 1;
+    const fmt = (e: number) => (e * k).toFixed(d.digits).replace(/^-/, '−');
+    const x = (phi: number) => at.x + (phi / 360) * d.w;
+    const shifts = { ...(d.shifts ?? {}) };
+    let changed = false;
+    for (const e of shownExtrema(d)) {
+      const key = barrierKey(e), was = x(e.phi) + (shifts[key] ?? 0);
+      // the arrow that stood at this barrier
+      const arrowMoved = movedArrows.find((id) => { const o = before.get('r' + id) as Arrow; return o.line === 'dashed' && o.color === d.barrierColor && Math.abs(o.tail.x - was) < 0.5 && Math.abs(o.tail.x - o.head.x) < 0.5; });
+      let dx: number | null = null;
+      if (arrowMoved !== undefined) dx = doc.arrows.get(arrowMoved)!.tail.x - (before.get('r' + arrowMoved) as Arrow).tail.x;
+      else {
+        const text = `${fmt(e.energy)} ${d.unit}`;
+        const capMoved = movedCaps.find((id) => { const o = before.get('c' + id) as Caption; return o.runs[0]?.color === d.barrierColor && o.runs.map((r) => r.text).join('') === text; });
+        if (capMoved !== undefined) dx = doc.captions.get(capMoved)!.x - (before.get('c' + capMoved) as Caption).x;
+      }
+      if (dx === null || Math.abs(dx) < 0.01) continue;
+      // a value shared by mirror-image turning points moves only the one drawn
+      shifts[key] = (shifts[key] ?? 0) + dx;
+      changed = true;
+      break;
+    }
+    if (changed) putTorsion(doc, m, { ...d, shifts }, at, s.id);
+  }
+}
+
+const isAxis = (a: Arrow) => a.line === 'solid' && !a.bez && a.headStyle !== 'none' && (!a.color || a.color === '#000000');
+
+/** Where a drawn chart's plot starts (its top left corner), found from its axes: two arrows from one point. */
+function plotCorner(doc: Doc, d: TorsionData, arrows: number[]): Vec | null {
+  const axes = arrows.map((id) => doc.arrows.get(id)).filter((a): a is Arrow => !!a && isAxis(a));
+  for (const a of axes) {
+    if (Math.abs(a.tail.x - a.head.x) > 0.01 || a.head.y >= a.tail.y) continue;
+    if (axes.some((b) => b !== a && Math.abs(b.tail.x - a.tail.x) < 0.01 && Math.abs(b.tail.y - a.tail.y) < 0.01 && Math.abs(b.head.y - b.tail.y) < 0.01)) return { x: a.tail.x, y: a.tail.y - d.h };
   }
   return null;
 }

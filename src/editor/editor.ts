@@ -66,7 +66,7 @@ import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } f
 import { arrangeSmart, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotText, setStepText, smartFrameOf, smartMarks, ungroupSmart, type SmartData, type StepPart } from '../chem/smart-scheme';
 import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
 import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
-import { putTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
+import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
@@ -567,10 +567,12 @@ export class Editor {
     window.addEventListener('blur', () => this.setMods({ shiftKey: false, altKey: false, ctrlKey: false, metaKey: false }));
     // frames that follow what they surround are refitted as each change finishes
     doc.beforeCommit = (before) => {
-      let frames = false, rings = false, tied = false, energy = false, tables = false, diagrams = false, plates = false, smart = false, newman = false;
-      for (const s of this.doc.shapes.values()) { if (s.frame?.fit) frames = true; if (s.kind === 'ring') rings = true; if (s.energy) energy = true; if (s.plate) plates = true; if (s.kind === 'table') tables = true; if (s.diagram) diagrams = true; if (s.smart) smart = true; if (s.newman?.link) newman = true; }
+      let frames = false, rings = false, tied = false, energy = false, tables = false, diagrams = false, plates = false, smart = false, newman = false, torsion = false;
+      for (const s of this.doc.shapes.values()) { if (s.frame?.fit) frames = true; if (s.kind === 'ring') rings = true; if (s.energy) energy = true; if (s.plate) plates = true; if (s.kind === 'table') tables = true; if (s.diagram) diagrams = true; if (s.smart) smart = true; if (s.newman?.link) newman = true; if (s.torsion) torsion = true; }
       // a linked Newman projection's viewing mark follows its bond; a changed structure is worked out again after
       if (newman) { const stale = refitNewman(this.doc, before); if (stale.length) queueMicrotask(() => this.onNewmanStale(stale)); }
+      // a torsion chart's barrier arrow or number dragged to the side: the pair moves together
+      if (torsion) refitTorsion(this.doc, this.fullMeasure(), before);
       for (const c of this.doc.captions.values()) if (c.attach) { tied = true; break; }
       // ring fills first, then labels beside their structures: a frame round a structure takes in both
       if (rings) refitRingFills(this.doc, before);
