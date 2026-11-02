@@ -125,7 +125,7 @@ export function withSideFolded(st: ToolboxState, mode: string, folded: boolean):
  * The toolboxes and where they start: the drawing tools on the left, the rest hidden until wanted.
  * "details" is the side panel taken out of its place at the right, to float or dock elsewhere.
  */
-export const TOOLBOX_IDS = ['main', 'structure', 'arrange', 'templates', 'colours', 'highlight', 'text', 'guides', 'custom', 'details'] as const;
+export const TOOLBOX_IDS = ['main', 'structure', 'arrange', 'templates', 'colours', 'highlight', 'text', 'guides', 'custom', 'smart', 'details'] as const;
 export type ToolboxId = (typeof TOOLBOX_IDS)[number];
 
 export function defaultToolboxes(): ToolboxState {
@@ -133,6 +133,8 @@ export function defaultToolboxes(): ToolboxState {
   TOOLBOX_IDS.forEach((id, i) => { places[id] = { shown: id === 'main', dock: id === 'main' ? 'left' : 'float', x: 110 + i * 24, y: 90 + i * 64 }; });
   // the side panel (Style, Warnings, Analysis) is always shown, docked at the right to start with
   places.details = { shown: true, dock: 'right', x: 900, y: 90 };
+  // the Smart Scheme species list floats beside its scheme until docked (then it is a toolbox, at the right to start with)
+  places.smart = { shown: false, dock: 'right', x: 900, y: 140 };
   return { locked: true, places, custom: ['cmd:clean-up', 'cmd:add-frame', 'cmd:fill-rings', 'cmd:highlight', 'cmd:chain-ends'], sideCollapsed: false };
 }
 
@@ -553,6 +555,11 @@ export class Toolboxes {
   /** Fold the side panel to a strip at the right, or open it again, in one mode. */
   setSideCollapsed(mode: string, collapsed: boolean): void {
     this.change(withSideFolded(this.hooks.get(), mode, collapsed));
+  }
+
+  /** Show a toolbox at a place (a dock, or floating at x, y). */
+  put(id: string, p: Partial<BoxPlace>): void {
+    this.place(id, { ...p, shown: true });
   }
 
   private place(id: string, p: Partial<BoxPlace>): void {
