@@ -21,7 +21,7 @@ import * as rt from '../richtext';
 import { cleanPara, fitParas, paraCount, paraRange } from '../text/paragraphs';
 import { citationTexts, type CiteStyle, type Reference } from './references';
 import type { CiteFormat } from './cite-styles';
-import type { CiteLive, CiteManager } from './live-cites';
+import type { BibLive, CiteLive, CiteManager } from './live-cites';
 import type { ContentControl, KeptParts } from '../io/kept-parts';
 import type { ChartBox } from '../sheet/chart-box';
 import type { DocHyphenation } from '../text/hyphenate';
@@ -354,7 +354,7 @@ export type DocObject =
   /** A citation of references in the document's list (by their ids): numbers in order of first citation. */
   | { kind: 'cite'; refs: string[]; live?: CiteLive }
   /** The bibliography: the references cited, in citation order, in the citation style (a block of its own). */
-  | { kind: 'bib' }
+  | { kind: 'bib'; /** Kept by Zotero, citing live through it: its field's code and entries. */ live?: BibLive }
   /** A table of contents: the headings down to `levels` (1 to 3) deep with their page numbers (a block of its own). */
   | { kind: 'toc'; levels: number }
   /**

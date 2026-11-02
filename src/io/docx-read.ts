@@ -1480,7 +1480,9 @@ class DocxReader {
     const bibApp = bibFieldApp(ins);
     if (bibApp && !ctx.cell) {
       this.manager ??= bibApp;
-      const id = this.emitObject(ctx, { kind: 'bib' }, f.props);
+      // Zotero's bibliography code (items added or left out of it by hand), kept for it
+      const code = bibApp === 'zotero' ? ins.replace(/^ADDIN\s+ZOTERO_/i, '').trim() : '';
+      const id = this.emitObject(ctx, { kind: 'bib', ...(/^BIBL\b/.test(code) ? { live: { code } } : {}) }, f.props);
       if (id !== null) { f.swallow = true; f.toc = true; }
       return;
     }

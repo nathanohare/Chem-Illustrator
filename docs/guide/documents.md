@@ -206,6 +206,22 @@ Saving writes the citations back as that program's own, with its item ids, so in
 
 To choose the program for a document made here, use **Save citations for** in **Manage References…**. **Chem Illustrator only** saves the numbers as text that Word shows as they are.
 
+### Citing with Zotero
+
+In the desktop app, the **Zotero** group on the **References** tab works with the Zotero app on your computer, as Zotero's Word plugin does in Word. Zotero 7 or later must be running.
+
+- **Add/Edit Citation** opens Zotero's own citation window. The items you choose go into the document's references, linked to your Zotero library, and Zotero formats the citation. With a Zotero citation picked (double-click it), it changes that citation.
+- **Add/Edit Bibliography** puts Zotero's bibliography at the caret, in a paragraph of its own. With one there already, it lets you add or leave out items.
+- **Refresh** brings every citation and the bibliography up to date from your library.
+- **Document Preferences** chooses the citation style (any style in Zotero, not only the ones above) and its language.
+- **Unlink Citations** turns the citations and the bibliography into plain text. You can undo this here, but once the text is plain, Zotero can't update it.
+
+The first time you use Zotero in a document, Zotero asks for the citation style. Each command undoes in one step. If you change a citation here (with **Insert Citation** or **Manage References…**), it is numbered in the document's own style until the next **Refresh**.
+
+Saving as a Word file writes the citations and the bibliography as Zotero's Word fields, with its preferences. So you can carry on with Zotero's Word plugin in Word, and a Word file with Zotero citations carries on here.
+
+The browser version can't reach the Zotero app, so these buttons work only in the desktop app. If Zotero isn't running, or is busy with a citation in another document, a message says so.
+
 ## Pages, columns, headers and footers
 
 On the **Layout** tab:

@@ -13,6 +13,7 @@ mod portable;
 mod print;
 mod recognise;
 mod web;
+mod zotero;
 
 use std::path::PathBuf;
 use std::time::Duration;
@@ -524,6 +525,8 @@ pub fn run() {
             ole::ole_register,
             ole::ole_object_folder,
             web::web_get,
+            zotero::zotero_post,
+            zotero::zotero_activate,
             ai::ai_key_set,
             ai::ai_key_has,
             ai::ai_request,
