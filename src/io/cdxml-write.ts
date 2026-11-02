@@ -21,7 +21,7 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl } from '../render/images';
-import { PAGE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
+import { PAGE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
 import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
@@ -658,9 +658,10 @@ class CdxmlWriter {
 
   /** A contracted label keeps the SMILES of its group in a hidden tag (ChemDraw sees the inner fragment). */
   private atomGroup(n: Element, a: Atom): void {
-    for (const c of kids(n)) if (c.nodeName === 'objecttag' && (c.getAttribute('Name') === GROUP_TAG || c.getAttribute('Name') === ALT_TAG)) n.removeChild(c);
+    for (const c of kids(n)) if (c.nodeName === 'objecttag' && (c.getAttribute('Name') === GROUP_TAG || c.getAttribute('Name') === ALT_TAG || c.getAttribute('Name') === MAP_TAG)) n.removeChild(c);
     if (a.group && a.label) n.appendChild(this.el('objecttag', { TagType: 'String', Name: GROUP_TAG, Value: a.group, Visible: 'no' }));
     if (a.alt) n.appendChild(this.el('objecttag', { TagType: 'String', Name: ALT_TAG, Value: a.alt, Visible: 'no' }));
+    if (a.mapNo) n.appendChild(this.el('objecttag', { TagType: 'String', Name: MAP_TAG, Value: String(a.mapNo), Visible: 'no' }));
     this.highlightTag(n, a.highlight, a.hl);
   }
 

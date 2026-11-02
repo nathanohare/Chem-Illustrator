@@ -272,6 +272,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (groupTag) extra.group = groupTag;
       const altTag = kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === ALT_TAG)?.getAttribute('Value');
       if (altTag) extra.alt = altTag;
+      const mapTag = Number(kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === MAP_TAG)?.getAttribute('Value'));
+      if (Number.isInteger(mapTag) && mapTag > 0) extra.mapNo = mapTag;
       const hlA = kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_TAG)?.getAttribute('Value');
       if (hlA && /^#[0-9a-f]{6}$/i.test(hlA)) extra.highlight = hlA.toLowerCase();
       const lookA = highlightStyleFromTag(kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_LOOK_TAG)?.getAttribute('Value'));
@@ -1108,6 +1110,8 @@ export const TURN_TAG = 'Chem Illustrator turn';
 export const GEO_TAG = 'Chem Illustrator shape';
 /** A reaction arrow's animation settings (MorphStep as JSON, atoms by the file's node ids). */
 export const MORPH_TAG = 'Chem Illustrator animation';
+/** An atom's atom-atom map number across a reaction (Atom.mapNo). */
+export const MAP_TAG = 'Chem Illustrator map';
 /** An electron-pushing arrow's pins (what its ends are stuck to: Pin as JSON without `was`, atoms by node id). */
 export const PIN_TAG = 'Chem Illustrator pin';
 /** An S-shaped arrow saved as a ChemDraw curve: its heads as they are here (JSON). */

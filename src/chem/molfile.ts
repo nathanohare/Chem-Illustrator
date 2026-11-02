@@ -37,12 +37,14 @@ export interface MolfileOptions {
    * placed round its point, as separate molecules (map −1).
    */
   species?: { graph: MiniGraph; x: number; y: number }[];
+  /** Write atom-atom map numbers (Atom.mapNo) in the mmm column, for mapped reaction SMILES and RXN files. */
+  maps?: boolean;
 }
 
 /** Stands in for R groups when working out R/S: oganesson, heavier than any atom in a real drawing. */
 const GENERIC_STAND_IN = 'Og';
 
-interface MAtom { sym: string; x: number; y: number; charge: number; iso: number; rad?: number }
+interface MAtom { sym: string; x: number; y: number; charge: number; iso: number; rad?: number; map?: number }
 interface MBond { a: number; b: number; order: number; stereo: number }
 
 const f = (v: number, w: number, d = 4) => v.toFixed(d).padStart(w);
@@ -202,7 +204,7 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
       const rad = a.radical === 'singlet' || carbene.has(id) ? 1 : a.radical === 'doublet' ? 2 : a.radical === 'triplet' ? 3 : 0;
       const sym = a.label && !g ? generic : SYMBOLS[a.z] || generic;
       if (sym === generic) genericAt.push([atoms.length, a.label ?? '']);
-      atoms.push({ sym, x, y, charge: a.charge + (charged.get(id) ?? 0), iso: a.isotope, rad });
+      atoms.push({ sym, x, y, charge: a.charge + (charged.get(id) ?? 0), iso: a.isotope, rad, ...(opts.maps && a.mapNo ? { map: a.mapNo } : {}) });
       map.push(id);
       continue;
     }
@@ -214,7 +216,7 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
       const r = k === 0 ? 0 : 0.35 + 0.05 * k;
       const sym = ga.dummy ? generic : SYMBOLS[ga.z] || generic;
       if (sym === generic) genericAt.push([atoms.length, `${a.label}/${k}`]);
-      atoms.push({ sym, x: x + r * Math.cos(ang), y: y + r * Math.sin(ang), charge: ga.charge + (k === 0 ? a.charge + (charged.get(id) ?? 0) : 0), iso: ga.iso ?? 0 });
+      atoms.push({ sym, x: x + r * Math.cos(ang), y: y + r * Math.sin(ang), charge: ga.charge + (k === 0 ? a.charge + (charged.get(id) ?? 0) : 0), iso: ga.iso ?? 0, ...(k === 0 && opts.maps && a.mapNo ? { map: a.mapNo } : {}) });
       map.push(k === 0 ? id : -1);
       if (g!.atoms.length > 1) inLabel.push(base + k);
     });
@@ -266,7 +268,8 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
   const lines: string[] = [name.slice(0, 80), '  ChemIllus         2D', ''];
   lines.push(`${i3(atoms.length)}${i3(bonds.length)}  0  0  0  0  0  0  0  0999 V2000`);
   for (const a of atoms) {
-    lines.push(`${f(a.x, 10)}${f(a.y, 10)}${f(0, 10)} ${a.sym.padEnd(3)} 0  0  0  0  0  0  0  0  0  0  0  0`);
+    // (the ninth number after the charge is the atom-atom map number)
+    lines.push(`${f(a.x, 10)}${f(a.y, 10)}${f(0, 10)} ${a.sym.padEnd(3)} 0  0  0  0  0  0  0  0  0${i3(a.map ?? 0)}  0  0`);
   }
   for (const b of bonds) lines.push(`${i3(b.a + 1)}${i3(b.b + 1)}${i3(b.order)}${i3(b.stereo)}`);
   const chg = atoms.map((a, i) => [i, a.charge] as const).filter(([, c]) => c !== 0);
@@ -294,11 +297,11 @@ export function addMolfile(doc: Doc, molblock: string, cx: number, cy: number): 
   const counts = lines[3] ?? '';
   const na = parseInt(counts.slice(0, 3), 10), nb = parseInt(counts.slice(3, 6), 10);
   if (!Number.isFinite(na) || counts.includes('V3000')) throw new Error('Only V2000 molfiles are supported so far.');
-  const raw: { x: number; y: number; sym: string; chg: number; iso: number; rad: number }[] = [];
+  const raw: { x: number; y: number; sym: string; chg: number; iso: number; rad: number; map: number }[] = [];
   for (let i = 0; i < na; i++) {
     const l = lines[4 + i];
     // (RDKit writes nan for a lone atom it has no layout for, such as [H+])
-    raw.push({ x: parseFloat(l.slice(0, 10)) || 0, y: parseFloat(l.slice(10, 20)) || 0, sym: l.slice(31, 34).trim(), chg: 0, iso: 0, rad: 0 });
+    raw.push({ x: parseFloat(l.slice(0, 10)) || 0, y: parseFloat(l.slice(10, 20)) || 0, sym: l.slice(31, 34).trim(), chg: 0, iso: 0, rad: 0, map: parseInt(l.slice(60, 63), 10) || 0 });
   }
   // average bond length, to scale to the document's bond length
   let sum = 0;
@@ -333,6 +336,8 @@ export function addMolfile(doc: Doc, molblock: string, cx: number, cy: number): 
     const radical = r.rad === 1 ? 'singlet' : r.rad === 2 ? 'doublet' : r.rad === 3 ? 'triplet' : undefined;
     const a = doc.addAtom(cx + (r.x - mx) * k, cy - (r.y - my) * k, z ?? 6, {
       charge: r.chg, label: z === undefined ? r.sym : null, ...(r.iso ? { isotope: r.iso } : {}), ...(radical ? { radical } : {}),
+      // a mapped reaction's atom-atom numbers are shown beside the atoms
+      ...(r.map > 0 ? { mapNo: r.map, atomNumber: String(r.map), showNumber: true } : {}),
     });
     ids.push(a.id);
     atoms.push(a);
