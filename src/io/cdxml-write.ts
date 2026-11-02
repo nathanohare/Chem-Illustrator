@@ -263,7 +263,9 @@ class CdxmlWriter {
   /** The guides' tag on the page, matching the drawing's guides; true when it had to change. */
   private writeGuides(): boolean {
     const st = this.doc.style;
-    const arrow = st.arrowTextSize !== undefined || st.arrowTextFont ? JSON.stringify({ size: st.arrowTextSize, font: st.arrowTextFont }) : null;
+    // the drawing style's text over arrows and arrow sizes (ChemDraw's style has no place for them)
+    const own = { size: st.arrowTextSize, font: st.arrowTextFont, width: st.arrowWidth, head: st.arrowHeadLength, headWidth: st.arrowHeadWidth };
+    const arrow = Object.values(own).some((v) => v !== undefined && v !== '') ? JSON.stringify(own) : null;
     const a = this.pageTag(GUIDES_TAG, guidesText(this.doc.guides));
     const b = this.pageTag(ARROW_TEXT_TAG, arrow);
     return a || b;

@@ -313,6 +313,11 @@ label.check { display: inline-flex; align-items: center; gap: 4px; color: var(--
 .tb-modes { display: flex; gap: 2px; }
 .tt-box { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; max-width: 640px; }
 .tt-box.tt-vertical { flex-direction: column; align-items: stretch; max-width: 156px; }
+.tt-faces { display: flex; gap: 3px; margin-bottom: 3px; }
+.tt-faces input { font: inherit; font-size: var(--fs-sm, 12px); height: 22px; padding: 0 4px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); color: var(--text); min-width: 0; }
+.tt-font { flex: 1 1 110px; }
+.tt-size { width: 44px; flex: 0 0 44px; }
+.tt-vertical .tt-faces { flex-wrap: wrap; }
 .tt-format, .tt-symbols { display: flex; flex-wrap: wrap; gap: 1px; }
 .tt-vertical .tt-symbols { display: grid; grid-template-columns: repeat(6, 1fr); }
 .tt-btn, .tt-sym { min-width: 24px; height: 24px; padding: 0 4px; border-color: transparent; background: transparent; font: var(--fs-md) var(--ui-font); line-height: 1; }

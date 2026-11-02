@@ -32,7 +32,6 @@ import { DEFAULT_AI, parseAiPrefs, type AiPrefs } from './ai/link';
 import { clampUiScale } from './ui/ui-scale';
 import { wellFormed } from './io/xml';
 import { DEFAULT_CURSOR_AIDS, parseCursorAids, type CursorAidPrefs } from './editor/cursor-aids';
-import type { ArrowLook } from './editor/editor';
 
 export interface Settings {
   /** Changes to ChemDraw's default keys. */
@@ -206,8 +205,6 @@ export interface Settings {
   cursorAids: CursorAidPrefs;
   /** η³ and larger ligands on a metal drawn delocalized (a circle in the ring, an arc over an allyl). */
   haptoDelocalized: boolean;
-  /** New arrows' line width and head size in points, apart from the bonds' (Settings ▸ Drawing); null for the usual. */
-  arrowLook: ArrowLook;
   /** The Windows app has offered to open the chemistry file types (once, at its first start). */
   fileTypesOffered: boolean;
   /** The Windows app has registered its drawings as objects Word can send back to edit (once, at its first start). */
@@ -262,7 +259,6 @@ export const DEFAULT_SETTINGS: Settings = {
   straightenLinear: true,
   cursorAids: { ...DEFAULT_CURSOR_AIDS },
   haptoDelocalized: true,
-  arrowLook: { width: null, headLength: null, headWidth: null },
 };
 
 const STORAGE_KEY = 'chem-illustrator.settings';
@@ -354,7 +350,6 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.straightenLinear === 'boolean') s.straightenLinear = r.straightenLinear;
   if (r.cursorAids) s.cursorAids = parseCursorAids(r.cursorAids);
   if (typeof r.haptoDelocalized === 'boolean') s.haptoDelocalized = r.haptoDelocalized;
-  s.arrowLook = parseArrowLook(r.arrowLook);
   return s;
 }
 
@@ -494,9 +489,3 @@ export async function settingsLocation(): Promise<string> {
   try { return await invoke<string>('settings_path'); } catch { return 'the app’s settings folder'; }
 }
 
-/** New arrows' sizes as saved: each a width in points from 0.05 to 30, or null for the usual. */
-export function parseArrowLook(v: unknown): ArrowLook {
-  const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
-  const size = (x: unknown) => (typeof x === 'number' && isFinite(x) && x >= 0.05 ? Math.min(30, x) : null);
-  return { width: size(o.width), headLength: size(o.headLength), headWidth: size(o.headWidth) };
-}

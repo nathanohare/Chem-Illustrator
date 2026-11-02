@@ -21,6 +21,10 @@ export interface DocStyle {
   /** Text above and below reaction arrows (reagents, conditions): its size and font, where not the captions'. */
   arrowTextSize?: number;
   arrowTextFont?: string;
+  /** Reaction arrows' line width and head length and width (each side), in points, where not the usual (the line width; a head 10 and 2.5 line widths). */
+  arrowWidth?: number;
+  arrowHeadLength?: number;
+  arrowHeadWidth?: number;
 }
 
 export const ACS_1996: DocStyle = {

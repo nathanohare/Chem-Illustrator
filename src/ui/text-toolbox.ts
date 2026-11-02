@@ -1,4 +1,4 @@
-// The Text Formatting toolbox (View > Toolboxes): bold, italic, underline, sub- and superscript,
+// The Text Formatting toolbox (View > Toolboxes): font and size, bold, italic, underline, sub- and superscript,
 // formula subscripts in one click, stereodescriptors in italics in one click, and the symbols a
 // chemist types most (‡, °, Greek letters). It docks at any edge or floats like the other
 // toolboxes, and works on the text being typed (its selection), or on the whole of each picked
@@ -6,7 +6,7 @@
 
 import type { RunStyle, Toggle } from '../richtext';
 import { savableChar } from '../richtext';
-import type { TextFormat } from '../text/format';
+import { FONT_STEPS, type TextFormat } from '../text/format';
 
 export interface TextToolboxHooks {
   /** Make the change; false when there is no text to change. */
@@ -15,6 +15,8 @@ export interface TextToolboxHooks {
   type(ch: string): boolean;
   /** How the text the buttons would change looks now, for showing which are on (null: no text). */
   look(): RunStyle | null;
+  /** The size and font that text without its own has there (the caption's or the drawing style's). */
+  defaults?(): { size?: number; font?: string } | null;
   /** Insert > Symbol, for every other character. */
   moreSymbols(): void;
   /** A short message in the status bar. */
@@ -55,6 +57,47 @@ export function buildTextToolbox(body: HTMLElement, vertical: boolean, h: TextTo
   body.dataset.keepsTyping = '';
   const keep = (b: HTMLElement) => b.addEventListener('mousedown', (e) => e.preventDefault());
 
+  // font and size, as on the Home tab (any installed font can be typed)
+  const faces = d.createElement('div');
+  faces.className = 'tt-faces';
+  const font = d.createElement('input');
+  font.className = 'tt-font font-box';
+  font.setAttribute('list', 'ci-fonts');
+  font.spellcheck = false;
+  font.placeholder = 'Font';
+  font.title = 'Font of the selected text, or of the whole of each picked caption (type any installed font)';
+  font.setAttribute('aria-label', 'Font');
+  const size = d.createElement('input');
+  size.className = 'tt-size';
+  size.inputMode = 'decimal';
+  size.placeholder = 'Size';
+  size.title = 'Font size in points';
+  size.setAttribute('aria-label', 'Font size');
+  const sizes = d.createElement('datalist');
+  sizes.id = `tt-sizes-${Math.random().toString(36).slice(2, 8)}`;
+  for (const n of FONT_STEPS) sizes.append(new Option(String(n)));
+  size.setAttribute('list', sizes.id);
+  const field = (input: HTMLInputElement, apply: () => void) => {
+    input.addEventListener('change', apply);
+    input.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); apply(); }
+      if (e.key === 'Escape') { e.preventDefault(); refresh(); }
+    });
+  };
+  const run = (f: TextFormat) => { if (!h.format(f)) h.say('Click into some text, or pick a caption or text box, first.'); refresh(); };
+  field(font, () => {
+    const v = font.value.trim();
+    run({ kind: 'style', patch: { font: v && v !== h.defaults?.()?.font ? v : undefined } });
+  });
+  field(size, () => {
+    const v = parseFloat(size.value);
+    if (Number.isFinite(v) && v > 0) run({ kind: 'style', patch: { size: Math.min(400, v) } });
+    else refresh();
+  });
+  faces.append(font, size, sizes);
+  body.append(faces);
+
   const fmt = d.createElement('div');
   fmt.className = 'tt-format';
   const pressed = new Map<string, HTMLButtonElement>();
@@ -66,11 +109,7 @@ export function buildTextToolbox(body: HTMLElement, vertical: boolean, h: TextTo
     b.title = spec.title;
     b.setAttribute('aria-label', spec.title);
     keep(b);
-    b.addEventListener('click', () => {
-      const f: TextFormat = spec.id === 'stereo' ? { kind: 'stereo' } : { kind: 'toggle', key: spec.id };
-      if (!h.format(f)) h.say('Click into some text, or pick a caption or text box, first.');
-      refresh();
-    });
+    b.addEventListener('click', () => run(spec.id === 'stereo' ? { kind: 'stereo' } : { kind: 'toggle', key: spec.id }));
     if (spec.id !== 'stereo') { b.setAttribute('aria-pressed', 'false'); pressed.set(spec.id, b); }
     fmt.append(b);
   }
@@ -110,6 +149,10 @@ export function buildTextToolbox(body: HTMLElement, vertical: boolean, h: TextTo
       b.classList.toggle('on', on);
       b.setAttribute('aria-pressed', String(on));
     }
+    const dflt = s ? h.defaults?.() ?? null : null;
+    const active = d.activeElement;
+    if (active !== font) { font.value = s?.font ?? ''; font.placeholder = s ? (s.font === undefined ? dflt?.font ?? 'Font' : '') : 'Font'; }
+    if (active !== size) { const z = s?.size ?? dflt?.size; size.value = z !== undefined ? String(+z.toFixed(2)) : ''; }
   }
   refresh();
   return { refresh };

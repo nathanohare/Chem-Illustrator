@@ -5355,7 +5355,7 @@ async function drawingStyleDialog(): Promise<void> {
   const got = await editDrawingStyle({
     current, own: ownStyles, kindPlural: STYLE_KINDS[mode].plural, where: STYLE_KINDS[mode].where,
     isDefault: modeStyleFor(mode) === current.name, hasStructures,
-    preview: (st) => stylePreview(st, editor.arrowLook),
+    preview: (st) => stylePreview(st),
   });
   if (!got || ws.active !== tab) return;
   ownStyles = got.own;
@@ -8612,10 +8612,6 @@ async function drawingPreferences(): Promise<void> {
     { name: 'startGap', label: 'Gap between a mechanism arrow\'s start and its atom or lone pair', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic' },
     { name: 'endGap', label: 'Gap between a mechanism arrow\'s head and its atom', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic',
       help: 'Measured from the atom\'s label (or a bare carbon\'s corner) or the lone pair\'s dots. Leave blank for the usual gap, which grows with the bond length. New arrows, and arrows stuck to a structure, use it when they are next drawn; Clean Up Arrow redraws the selected ones now.' },
-    { name: 'arrowWidth', label: 'Arrow line width', value: editor.arrowLook.width === null ? '' : String(editor.arrowLook.width), type: 'number', unit: 'pt', placeholder: `Same as bonds (${doc.style.lineWidth} pt)` },
-    { name: 'headLength', label: 'Arrowhead length', value: editor.arrowLook.headLength === null ? '' : String(editor.arrowLook.headLength), type: 'number', unit: 'pt', placeholder: 'Automatic' },
-    { name: 'headWidth', label: 'Arrowhead width (each side of the line)', value: editor.arrowLook.headWidth === null ? '' : String(editor.arrowLook.headWidth), type: 'number', unit: 'pt', placeholder: 'Automatic',
-      help: 'For new arrows, whatever the bonds\' line width. Leave blank for the usual: the drawing style\'s line width, and a head ten line widths long and 2.5 wide. Arrows already drawn keep their size (change them in the Style panel).' },
     { name: 'haptoDeloc', label: 'Draw η³, η⁵ and η⁶ ligands on a metal delocalized (a circle in the ring, an arc over an allyl)', type: 'checkbox', value: String(haptoLook.delocalized),
       help: 'Only the look: the bonds stay as drawn for SMILES and saving. Chemistry ▸ Structure ▸ Kekulé Form for η Ligand switches one back.' },
     { name: 'aidAngle', label: 'Show the angle beside the pointer while drawing bonds, arrows and lines', type: 'checkbox', value: String(editor.aids.angle) },
@@ -8624,10 +8620,7 @@ async function drawingPreferences(): Promise<void> {
     { name: 'aidLook', label: 'How the angle and hints look', value: editor.aids.look, options: [{ value: 'plain', label: 'Plain blue words' }, { value: 'box', label: 'Blue words on a pale box' }, { value: 'solid', label: 'White words on a blue box' }] },
     { name: 'aidHints', label: 'Show what Shift, Alt and Ctrl do beside the pointer', type: 'checkbox', value: String(editor.aids.hints),
       help: 'While dragging, the keys that change what the tool does are listed in blue (the one held in bold). With the button up they show as a key is held.' },
-  ], { ok: 'Save', preview: { title: 'Arrows and bonds', draw: (v) => {
-    const size = (x: string) => { const n = Number(x); return x.trim() === '' || !isFinite(n) || n < 0.05 ? null : Math.min(30, n); };
-    return stylePreview(doc.style, { width: size(v.arrowWidth), headLength: size(v.headLength), headWidth: size(v.headWidth) });
-  } } });
+  ], { ok: 'Save' });
   if (!r) return;
   editor.options.circledCharges = r.charges === 'circled';
   editor.options.textToAtom = r.textAtom === 'true';
@@ -8637,8 +8630,6 @@ async function drawingPreferences(): Promise<void> {
   const gap = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
   arrowGaps.start = gap(r.startGap);
   arrowGaps.end = gap(r.endGap);
-  const size = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0.05 ? null : Math.min(30, n); };
-  editor.arrowLook = { width: size(r.arrowWidth), headLength: size(r.headLength), headWidth: size(r.headWidth) };
   if ((r.haptoDeloc === 'true') !== haptoLook.delocalized) { haptoLook.delocalized = r.haptoDeloc === 'true'; renderer.invalidate(doc); editor.requestScene(); }
   editor.aids = { ...editor.aids, angle: r.aidAngle === 'true', length: r.aidLength === 'true', hints: r.aidHints === 'true', look: r.aidLook === 'box' || r.aidLook === 'solid' ? r.aidLook : 'plain' };
   const ends = Number(r.bondEnds);
@@ -8780,7 +8771,6 @@ function currentSettings(): Settings {
     arrowEndGap: arrowGaps.end,
     cursorAids: { ...editor.aids },
     haptoDelocalized: haptoLook.delocalized,
-    arrowLook: { ...editor.arrowLook },
     superscriptR: labelPrefs.superscriptR,
     bondEnds: bondEndPrefs.round,
     depthShade: { ...depthShadePrefs },
@@ -9014,7 +9004,6 @@ function applySettings(s: Settings): void {
   arrowGaps.end = s.arrowEndGap;
   editor.aids = { ...s.cursorAids };
   haptoLook.delocalized = s.haptoDelocalized;
-  editor.arrowLook = { ...s.arrowLook };
   labelPrefs.superscriptR = s.superscriptR;
   bondEndPrefs.round = s.bondEnds;
   Object.assign(depthShadePrefs, s.depthShade);
@@ -10792,6 +10781,7 @@ const DOC_TOGGLES: Partial<Record<string, string>> = { bold: 'doc-bold', italic:
 const textToolboxHooks: TextToolboxHooks = {
   format: (f) => {
     if (docActive()) {
+      if (f.kind === 'style') { flash('In a document, the Home tab\'s Font and Size boxes set these.'); return true; }
       const cmd = f.kind === 'stereo' ? 'doc-stereo-italic' : f.kind === 'toggle' ? DOC_TOGGLES[f.key] : undefined;
       return !!cmd && docMode.run(cmd);
     }
@@ -10802,6 +10792,7 @@ const textToolboxHooks: TextToolboxHooks = {
   },
   type: (ch) => { const ok = insertSymbol(ch); editor.refocusText(); return ok; },
   look: () => (docActive() || sheetActive() ? null : editor.textLook()?.style ?? null),
+  defaults: () => { if (docActive() || sheetActive()) return null; const l = editor.textLook(); return l ? { size: l.defaultSize, font: l.defaultFont } : null; },
   moreSymbols: () => symbolWindow.open(),
   say: (t) => flash(t),
 };

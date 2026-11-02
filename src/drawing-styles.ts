@@ -84,8 +84,12 @@ const NUMBERS = ['bondLength', 'lineWidth', 'boldWidth', 'marginWidth', 'hashSpa
 /** Do two styles draw the same? (Names aside.) */
 export function sameLook(a: DocStyle, b: DocStyle): boolean {
   return NUMBERS.every((k) => Math.abs(a[k] - b[k]) < 1e-6) && a.labelFont === b.labelFont && a.captionFont === b.captionFont
-    && Math.abs(arrowTextSizeOf(a) - arrowTextSizeOf(b)) < 1e-6 && arrowTextFontOf(a) === arrowTextFontOf(b);
+    && Math.abs(arrowTextSizeOf(a) - arrowTextSizeOf(b)) < 1e-6 && arrowTextFontOf(a) === arrowTextFontOf(b)
+    && ARROW_SIZES.every((k) => (a[k] ?? null) === (b[k] ?? null));
 }
+
+/** A style's own arrow sizes (absent: the usual for its line width). */
+export const ARROW_SIZES = ['arrowWidth', 'arrowHeadLength', 'arrowHeadWidth'] as const;
 
 /** The size of text above and below arrows in a style (the captions' unless set). */
 export const arrowTextSizeOf = (s: DocStyle): number => s.arrowTextSize ?? s.captionSize;
@@ -108,6 +112,7 @@ export function cleanStyle(raw: unknown): DocStyle | null {
   if (typeof r.captionFace === 'number') out.captionFace = r.captionFace;
   if (typeof r.arrowTextSize === 'number' && Number.isFinite(r.arrowTextSize) && r.arrowTextSize > 0) out.arrowTextSize = r.arrowTextSize;
   if (typeof r.arrowTextFont === 'string' && r.arrowTextFont.trim()) out.arrowTextFont = r.arrowTextFont.trim();
+  for (const k of ARROW_SIZES) { const v = r[k]; if (typeof v === 'number' && Number.isFinite(v) && v > 0) out[k] = Math.min(30, v); }
   return out;
 }
 
@@ -223,5 +228,6 @@ export function scaleStyle(st: DocStyle, k: number): DocStyle {
     ...st, bondLength: r(st.bondLength), lineWidth: r(st.lineWidth), boldWidth: r(st.boldWidth), marginWidth: r(st.marginWidth),
     hashSpacing: r(st.hashSpacing), labelSize: r(st.labelSize), captionSize: r(st.captionSize),
     ...(st.arrowTextSize !== undefined ? { arrowTextSize: r(st.arrowTextSize) } : {}),
+    ...Object.fromEntries(ARROW_SIZES.filter((x) => st[x] !== undefined).map((x) => [x, r(st[x]!)])),
   };
 }

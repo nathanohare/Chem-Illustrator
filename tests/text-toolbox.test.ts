@@ -78,6 +78,17 @@ describe('the toolbox', () => {
     // a click in it keeps the text being typed open
     expect(body.closest('[data-keeps-typing]')).toBe(body);
   });
+  it('sets the font and size, and shows the text\'s own', () => {
+    const { body, done, box } = make();
+    const font = body.querySelector<HTMLInputElement>('.tt-font')!, size = body.querySelector<HTMLInputElement>('.tt-size')!;
+    font.value = 'Helvetica';
+    font.dispatchEvent(new Event('change'));
+    size.value = '9';
+    size.dispatchEvent(new Event('change'));
+    expect(done.slice(-2)).toEqual([{ kind: 'style', patch: { font: 'Helvetica' } }, { kind: 'style', patch: { size: 9 } }]);
+    box.refresh();
+    expect(size.value).toBe('');
+  });
   it('sends formula, stereo and symbols', () => {
     const { body, done, typed } = make();
     const btn = (title: string) => [...body.querySelectorAll<HTMLButtonElement>('.tt-btn')].find((b) => b.title.startsWith(title))!;

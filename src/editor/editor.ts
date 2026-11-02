@@ -380,11 +380,14 @@ export class Editor {
     rerouteArrows: true,
   };
   /**
-   * New arrows' line width and head size, in points, apart from the bonds' line width
-   * (Settings ▸ Drawing); null for the usual: the drawing style's line width, and a head ten
-   * line widths long and 2.5 wide.
+   * New arrows' line width and head size, in points, apart from the bonds' line width (the
+   * drawing style's, Drawing Style ▸ Reaction arrows); null for the usual: the style's line
+   * width, and a head ten line widths long and 2.5 wide.
    */
-  arrowLook: ArrowLook = { width: null, headLength: null, headWidth: null };
+  get arrowLook(): ArrowLook {
+    const s = this.doc.style;
+    return { width: s.arrowWidth ?? null, headLength: s.arrowHeadLength ?? null, headWidth: s.arrowHeadWidth ?? null };
+  }
   /** The line width new arrows get. */
   arrowWidth(): number { return this.arrowLook.width ?? this.doc.style.lineWidth; }
   /** Tell the person something in the status bar. */
@@ -3426,7 +3429,7 @@ export class Editor {
   private addArrow(tail: Vec, head: Vec, style: ArrowStyle = {}, side = 1): Arrow {
     const lw = this.arrowWidth();
     const { retro, connector: _, s: sShape, ...rest } = style;
-    // ChemDraw's defaults: heads ten line widths long and 2.5 wide (unless Settings ▸ Drawing gives sizes)
+    // ChemDraw's defaults: heads ten line widths long and 2.5 wide (unless the drawing style gives sizes)
     const own = this.arrowLook;
     const a: Omit<Arrow, 'id'> = {
       tail, head, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false,

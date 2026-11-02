@@ -105,6 +105,20 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     row('Text above and below arrows', arrowFont, arrowSize, el('span', { className: 'muted', textContent: 'pt' }), smaller);
     const showArrowSize = () => { arrowSize.placeholder = captionSize.value; };
     captionSize.addEventListener('input', showArrowSize);
+    // reaction arrows: their own line width and head, apart from the bonds' (blank: the usual)
+    const arrowNum = (title: string) => { const i = el('input', { type: 'number', className: 'md-num', step: 'any', min: '0' }); i.title = title; return i; };
+    const arrowWidth = arrowNum('Leave blank for the bonds\' line width');
+    const headLength = arrowNum('Leave blank for ten line widths');
+    const headWidth = arrowNum('Leave blank for 2.5 line widths each side');
+    row('Reaction arrows: line width', arrowWidth, el('span', { className: 'muted', textContent: 'pt' }));
+    row('Arrowhead length, width', headLength, headWidth, el('span', { className: 'muted', textContent: 'pt' }));
+    const showArrowLook = () => {
+      const lw = parseFloat(arrowWidth.value) > 0 ? parseFloat(arrowWidth.value) : parseFloat(inputs.get('lineWidth')!.value);
+      arrowWidth.placeholder = inputs.get('lineWidth')!.value;
+      headLength.placeholder = lw > 0 ? String(+(lw * 10).toFixed(2)) : '';
+      headWidth.placeholder = lw > 0 ? String(+(lw * 2.5).toFixed(2)) : '';
+    };
+    for (const i of [arrowWidth, inputs.get('lineWidth')!]) i.addEventListener('input', showArrowLook);
 
     // your own
     grid.append(el('h3', { textContent: 'Your own styles' }));
@@ -143,6 +157,11 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       if (st.arrowTextFont) pickFont(arrowFont, st.arrowTextFont); else arrowFont.value = '';
       arrowSize.value = st.arrowTextSize !== undefined ? String(+st.arrowTextSize.toFixed(3)) : '';
       showArrowSize();
+      const pt = (v: number | undefined) => (v !== undefined ? String(+v.toFixed(3)) : '');
+      arrowWidth.value = pt(st.arrowWidth);
+      headLength.value = pt(st.arrowHeadLength);
+      headWidth.value = pt(st.arrowHeadWidth);
+      showArrowLook();
       name.value = st.name;
       showCm();
     };
@@ -164,6 +183,10 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       const af = arrowFont.value.trim(), as = parseFloat(arrowSize.value);
       if (af && af !== st.captionFont) st.arrowTextFont = af; else delete st.arrowTextFont;
       if (Number.isFinite(as) && as > 0 && Math.abs(as - st.captionSize) > 1e-6) st.arrowTextSize = as; else delete st.arrowTextSize;
+      const own = (i: HTMLInputElement, k: 'arrowWidth' | 'arrowHeadLength' | 'arrowHeadWidth') => { const v = parseFloat(i.value); if (Number.isFinite(v) && v >= 0.05) st[k] = Math.min(30, v); else delete st[k]; };
+      own(arrowWidth, 'arrowWidth');
+      own(headLength, 'arrowHeadLength');
+      own(headWidth, 'arrowHeadWidth');
       return st;
     };
 

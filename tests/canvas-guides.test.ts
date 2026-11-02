@@ -117,6 +117,15 @@ describe('text above and below arrows in the drawing style', () => {
     expect(back.style.arrowTextSize).toBe(9);
     expect(back.style.arrowTextFont).toBe('Helvetica');
   });
+  it('keeps the arrow sizes too, and new arrows take them', () => {
+    const doc = new Doc();
+    doc.bulk(() => doc.addAtom(100, 100));
+    doc.style = { ...doc.style, arrowWidth: 1.2, arrowHeadLength: 9 };
+    const back = readCdxml(writeCdxml(doc)).doc;
+    expect(back.style.arrowWidth).toBe(1.2);
+    expect(back.style.arrowHeadLength).toBe(9);
+    expect(back.style.arrowHeadWidth).toBeUndefined();
+  });
   it('gives new text its size and font', async () => {
     const { newTextLook, textSize } = await import('../src/chem/arrow-text');
     const doc = new Doc();

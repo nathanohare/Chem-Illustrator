@@ -121,9 +121,13 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   const arrowText = pg && kids(pg).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === ARROW_TEXT_TAG)?.getAttribute('Value');
   if (arrowText) {
     try {
-      const v = JSON.parse(arrowText) as { size?: unknown; font?: unknown };
+      const v = JSON.parse(arrowText) as { size?: unknown; font?: unknown; width?: unknown; head?: unknown; headWidth?: unknown };
       if (typeof v.size === 'number' && v.size > 0 && v.size < 400) doc.style.arrowTextSize = v.size;
       if (typeof v.font === 'string' && v.font.trim()) doc.style.arrowTextFont = v.font.trim().slice(0, 80);
+      const pt = (x: unknown) => (typeof x === 'number' && x > 0 && x <= 30 ? x : undefined);
+      if (pt(v.width)) doc.style.arrowWidth = pt(v.width);
+      if (pt(v.head)) doc.style.arrowHeadLength = pt(v.head);
+      if (pt(v.headWidth)) doc.style.arrowHeadWidth = pt(v.headWidth);
     } catch { /* not ours to read */ }
   }
   const pb = pg?.getAttribute('BoundingBox')?.trim().split(/\s+/).map(Number);
@@ -1127,7 +1131,7 @@ export const PAGE_TAG = 'Chem Illustrator page grid';
 /** The drawing's guides (crosshairs, lines, grid, ticks), as JSON on the page: only this program reads it. */
 export const GUIDES_TAG = 'Chem Illustrator guides';
 /** The drawing style's text above and below arrows (size, font), as JSON on the page: ChemDraw has no setting for it. */
-export const ARROW_TEXT_TAG = 'Chem Illustrator arrow text';
+export const ARROW_TEXT_TAG = 'Chem Illustrator arrows';
 /** On a MultiAttachment node: its π-system drawn in Kekulé form rather than delocalized (only this program reads it). */
 export const KEKULE_TAG = 'Chem Illustrator Kekule';
 /** The tag on turned text: degrees clockwise about the start of its first line (ChemDraw shows it level). */
