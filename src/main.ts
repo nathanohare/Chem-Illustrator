@@ -189,7 +189,9 @@ import { NameReader, captionName, attachmentAtoms, cxNotes } from './chem/names'
 import { Model3dBuilder } from './chem/model3d';
 import { StructureNamer, confirmedName, nameRuns, type NameTools } from './chem/namer';
 import { placeView } from './chem/place3d';
-import type { Viewer3d } from './ui/viewer3d';
+import type { ConformerTools, Viewer3d } from './ui/viewer3d';
+import { DEFAULT_XTB, type XtbOptions } from './chem/xtb';
+import type { QmOptions } from './chem/qm-input';
 import { NameDialog } from './ui/name-dialog';
 import { SequenceDialog } from './ui/sequence-dialog';
 import { ArrangeDialog } from './ui/arrange-dialog';
@@ -1480,6 +1482,47 @@ function depthShadingChanged(): void {
   viewer3d?.redraw();
 }
 
+/** The 3-D Model window's settings for xTB and Gaussian/ORCA input, kept in this browser or app between sessions. */
+const conformerPrefs = (() => {
+  const KEY = 'ci.conformerTools';
+  let saved: { xtb?: Partial<XtbOptions>; qm?: Partial<QmOptions> } = {};
+  try { saved = JSON.parse(localStorage.getItem(KEY) ?? '{}') ?? {}; } catch { saved = {}; }
+  const prefs = {
+    xtb: { ...DEFAULT_XTB, ...(saved.xtb ?? {}) } as XtbOptions,
+    qm: { ...(saved.qm ?? {}) } as Partial<QmOptions>,
+    save() { try { localStorage.setItem(KEY, JSON.stringify({ xtb: prefs.xtb, qm: prefs.qm })); } catch { /* not kept */ } },
+  };
+  return prefs;
+})();
+
+/** The conformer tiers of the 3-D Model window, for the structure `molblock`. */
+function conformerTools(molblock: string): ConformerTools {
+  return {
+    search: (opts, progress) => model3d.search(molblock, opts, progress),
+    stop: () => model3d.stop(),
+    ...(isTauri() ? {
+      xtb: (job) => invoke<{ xyz: string; energy: number }>('xtb_run', { job }),
+      xtbVersion: (exe: string) => invoke<string>('xtb_version', { exe }),
+    } : {}),
+    prefs: conformerPrefs,
+    async saveFiles(files, ext) {
+      const what = ext === 'gjf' ? 'Gaussian input' : 'ORCA input';
+      const one: FileType = { description: what, extension: ext, mime: 'text/plain' };
+      const zip: FileType = { description: `${what} files (zip)`, extension: 'zip', mime: 'application/zip' };
+      const single = files.length === 1;
+      const target = await saveFileDialog(single ? files[0].name : files[0].name.replace(/_conf\d+\.\w+$/, '') + `_${ext}.zip`, single ? one : zip).catch(async (e) => { await showError(String(e)); return null; });
+      if (!target) return;
+      try {
+        if (single) await writeFile(target.ref, target.name, files[0].text, one);
+        else await writeFile(target.ref, target.name, zipSync(Object.fromEntries(files.map((f) => [f.name, new TextEncoder().encode(f.text)]))), zip);
+        flash(`Saved ${target.name}.`);
+      } catch (e) {
+        await showError(`Could not save ${target.name}: ${String(e)}`);
+      }
+    },
+  };
+}
+
 async function show3dModel(): Promise<void> {
   const root = editor.sel.atoms.size ? [...editor.sel.atoms][0] : editor.lastEdited;
   if (root === null || !doc.atoms.has(root)) { flash('Select a structure to see in 3-D.'); return; }
@@ -1489,6 +1532,7 @@ async function show3dModel(): Promise<void> {
   if (!viewer3d) viewer3d = new (await import('./ui/viewer3d')).Viewer3d((m) => flash(m));
   viewer3d.showBusy('3-D Model');
   try {
+    viewer3d.tools = conformerTools(ex.molblock);
     const m = await model3d.build(ex.molblock, 12, 1);
     const before = await chem.molToSmiles(ex.molblock);
     viewer3d.show(m, '3-D Model', async (v) => {

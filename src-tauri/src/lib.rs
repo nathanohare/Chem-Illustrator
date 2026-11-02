@@ -13,6 +13,7 @@ mod portable;
 mod print;
 mod recognise;
 mod web;
+mod xtb;
 mod zotero;
 
 use std::path::PathBuf;
@@ -535,7 +536,9 @@ pub fn run() {
             recognise::pack_cancel,
             recognise::pack_read,
             print::printers,
-            print::print_page
+            print::print_page,
+            xtb::xtb_version,
+            xtb::xtb_run
         ])
         .build(tauri::generate_context!())
         .expect("error while running Chem Illustrator")
