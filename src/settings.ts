@@ -112,6 +112,10 @@ export interface Settings {
   oneColumnTools: boolean;
   /** Settings ▸ Toolboxes: each toolbox button in a cell of its own, ruled off by lines, raised, or both. */
   toolCells: 'off' | 'grid' | 'raised' | 'both';
+  /** Settings ▸ Toolboxes: the Canvas ribbon in two rows of buttons (Classic) or one (Simplified). */
+  canvasRibbon: 'classic' | 'simple';
+  /** Settings ▸ Toolboxes: where the Canvas ribbon's group names go: under each group, up its side, or nowhere. */
+  ribbonNames: 'top' | 'side' | 'none';
   /** The start view (new tabs, recent files) on the empty drawing the program opens with. */
   startView: boolean;
   /** Settings ▸ Preferences: Enter finishes text typed with the Text tool (in every mode) and Alt+Enter (Option+Enter on a Mac) starts a new line. Off: Enter starts a new line and Esc finishes (ChemDraw). */
@@ -258,7 +262,7 @@ export const SLIDE_PANE_MIN = 120, SLIDE_PANE_MAX = 480, NOTES_MIN = 36, NOTES_M
 export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, stickyHotspot: false, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
-  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', oneColumnTools: false, toolCells: 'off', startView: true, enterFinishesText: false, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
+  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', oneColumnTools: false, toolCells: 'off', canvasRibbon: 'classic', ribbonNames: 'top', startView: true, enterFinishesText: false, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
   citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'peach', depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
@@ -329,6 +333,8 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.uiScale === 'number') s.uiScale = clampUiScale(r.uiScale);
   if (r.updateChannel === 'stable' || r.updateChannel === 'latest') s.updateChannel = r.updateChannel;
   if (typeof r.textBar === 'string' && ['docked', 'floating', 'hidden'].includes(r.textBar)) s.textBar = r.textBar as Settings['textBar'];
+  if (r.canvasRibbon === 'classic' || r.canvasRibbon === 'simple') s.canvasRibbon = r.canvasRibbon;
+  if (r.ribbonNames === 'top' || r.ribbonNames === 'side' || r.ribbonNames === 'none') s.ribbonNames = r.ribbonNames;
   if (typeof r.toolCells === 'string' && ['off', 'grid', 'raised', 'both'].includes(r.toolCells)) s.toolCells = r.toolCells as Settings['toolCells'];
   if (r.appTheme === 'system' || r.appTheme === 'light' || r.appTheme === 'dark') s.appTheme = r.appTheme;
   if (typeof r.oneColumnTools === 'boolean') s.oneColumnTools = r.oneColumnTools;
