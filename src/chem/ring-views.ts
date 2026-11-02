@@ -111,7 +111,11 @@ export function viewRingOf(doc: Doc, atoms: Iterable<number>): { ring: ViewRing 
   if (!sel.size) return { why: 'Select a cyclohexane ring first.' };
   const rings = new Map<string, number[]>();
   const seenBonds = new Set<number>();
-  const frags = doc.fragments().filter((f) => [...sel].some((id) => f.has(id)));
+  // only the structures the selection touches: walking the whole drawing here made every
+  // molfile written (which calls this once per six-membered ring) take time in the drawing's
+  // size squared, freezing big drawings for minutes
+  const frags: Set<number>[] = [];
+  for (const id of sel) if (doc.atoms.has(id) && !frags.some((f) => f.has(id))) frags.push(doc.fragmentOf(id));
   for (const f of frags) {
     for (const id of f) {
       for (const bid of doc.adj.get(id) ?? []) {
