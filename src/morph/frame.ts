@@ -52,7 +52,7 @@ export interface Stroke {
   whole?: boolean;
 }
 
-export interface TextPiece { text: string; x: number; y: number; size: number; color: RGB; alpha: number }
+export interface TextPiece { text: string; x: number; y: number; size: number; color: RGB; alpha: number; italic?: boolean }
 export interface LabelBox { rects: Rect[]; alpha: number; at: Vec }
 export interface RingPiece { pts: Vec[]; color: RGB; alpha: number; w: number }
 
@@ -259,6 +259,7 @@ function placeGlyphs(texts: TextPiece[], gs: Glyph[], at: Vec, color: RGB, alpha
       y: at.y + (h ? lerp(g.dy, h.dy, t) : g.dy),
       size: h ? lerp(g.size, h.size, t) : g.size,
       color, alpha,
+      ...(g.italic ? { italic: true } : {}),
     });
   });
 }

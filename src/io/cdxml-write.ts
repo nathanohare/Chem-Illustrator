@@ -811,7 +811,9 @@ class CdxmlWriter {
     // keep the old label's font and bold/italic style
     const oldS = this.child(this.child(n, 't') ?? n, 's');
     const keepFont = oldS?.getAttribute('font') ?? null;
-    const keepBits = Number(oldS?.getAttribute('face') ?? 0) & 7;
+    // (the bits every run had, so an italic alkyl prefix doesn't spread to the whole label)
+    const oldRuns = [...(this.child(n, 't')?.childNodes ?? [])].filter((c): c is Element => c.nodeName === 's');
+    const keepBits = oldRuns.length ? oldRuns.reduce((m, e) => m & Number(e.getAttribute('face') ?? 0), 7) : Number(oldS?.getAttribute('face') ?? 0) & 7;
     for (const c of kids(n)) if (c.nodeName === 't' || (rebuildInner && c.nodeName === 'fragment')) n.removeChild(c);
     if (rebuildInner) for (const k of ['NodeType', 'GenericNickname', 'Warning', 'NumHydrogens', 'NeedsClean']) n.removeAttribute(k);
     if (!labelSpec(a.z, a.label, a.charge, a.isotope, this.doc.valenceSum(a.id), this.doc.degree(a.id), !a.hideCharge, !!a.showCarbon)) return;
@@ -2019,9 +2021,11 @@ export function labelRuns(text: string, look: { supDigits: boolean; marks?: stri
   const out: TextRun[] = [];
   [...text].forEach((ch, i) => {
     const m = look.marks?.[i];
-    const r: TextRun = m === '^' ? { text: ch, sup: true } : m === '_' ? { text: ch, sub: true } : m === '=' ? { text: ch } : digits && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
+    const base: TextRun = m === '^' ? { text: ch, sup: true } : m === '_' ? { text: ch, sub: true } : m === '=' ? { text: ch } : digits && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
+    // the t of tBu in italics (the alkyl look)
+    const r: TextRun = m === '/' ? { ...base, italic: true } : base;
     const last = out[out.length - 1];
-    if (last && !!last.sup === !!r.sup && !!last.sub === !!r.sub && !!last.formula === !!r.formula) last.text += ch;
+    if (last && !!last.sup === !!r.sup && !!last.sub === !!r.sub && !!last.formula === !!r.formula && !!last.italic === !!r.italic) last.text += ch;
     else out.push(r);
   });
   return out.length ? out : [{ text, formula: true }];

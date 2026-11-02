@@ -72,7 +72,7 @@ import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './att
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
 import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
-import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, CAP, SUB_SCALE } from '../chem/labels';
+import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
 import {
   Handle, type HandleId, arrowHit, shapeHit, arrowHandles, shapeHandles, dragArrowHandle, dragShapeHandle, dragCropHandle, shapeBox, shapeMid, shapeTurn,
   arrowPoints, bracketHalves, type BracketForm, bracketLip, unionRect,
@@ -5530,6 +5530,7 @@ export class Editor {
         const span = document.createElement('span');
         span.textContent = p.text.replace(/−/g, '-');
         if (p.sub || p.sup) { span.className = p.sub ? 'sub' : 'sup'; span.style.fontSize = `${SUB_SCALE * 100}%`; }
+        if (p.italic) span.style.fontStyle = 'italic';
         box.appendChild(span);
       }
       // what the label shows can differ from what was typed (a minus for a hyphen): keep the typed text
@@ -5581,10 +5582,13 @@ export class Editor {
       if (ok && doc.atoms.has(id) && (text !== was || marks !== wasMarks)) {
         const lead = text.length - text.trimStart().length;
         const kept = marks.slice(lead, lead + text.trim().length);
+        // tBu, iPr… in the alkyl look chosen in Settings ▸ Preferences (t-Bu, an italic t)
+        const styled = styleLabel(text.trim(), kept);
         doc.edit('Label', () => {
-          this.applyLabel(id, text);
+          this.applyLabel(id, styled.label);
           const now = doc.atoms.get(id)!;
-          const m = now.label !== null && /[\^_=]/.test(kept) ? kept : undefined;
+          const sm = styled.marks ?? '';
+          const m = now.label !== null && /[\^_=/]/.test(sm) ? sm : undefined;
           if (now.labelMarks !== m) doc.updateAtom(id, { labelMarks: m });
         });
         // remembered for Repeat Label on the right-click menu (clearing a label is not a label)
@@ -5913,7 +5917,12 @@ export class Editor {
     }
     if (!best) return false;
     const id = best.id;
-    doc.edit('Text to Atom', () => { doc.removeCaption(caption); this.applyLabel(id, text); });
+    const styled = styleLabel(text.trim());
+    doc.edit('Text to Atom', () => {
+      doc.removeCaption(caption);
+      this.applyLabel(id, styled.label);
+      if (styled.marks && doc.atoms.get(id)?.label) doc.updateAtom(id, { labelMarks: styled.marks });
+    });
     this.lastEdited = id;
     this.say(`${text} is now an atom on the bond. Undo (Ctrl+Z) to keep it as text, or turn this off in Edit > Settings.`);
     return true;

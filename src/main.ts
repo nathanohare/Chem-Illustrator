@@ -150,7 +150,8 @@ import { centreEnd, haptoLook } from './chem/hapto';
 import { viewNow, viewRingOf, type RingView } from './chem/ring-views';
 import { watchToolHover } from './ui/tool-demos';
 import { countElectrons } from './chem/electrons';
-import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, tokenize as tokenizeLabel } from './chem/labels';
+import { addNicknames, removeNickname, isBuiltInNickname, builtInNicknames, labelPrefs, alkylPrefs, ALKYL_LOOKS, type AlkylLook, tokenize as tokenizeLabel } from './chem/labels';
+import { restyleAlkyl } from './text/alkyl-restyle';
 import { selectedGroup } from './chem/group-smiles';
 import { templateIcon } from './ui/template-icons';
 import { StructureChecks } from './chem/warnings';
@@ -185,7 +186,7 @@ import { ask } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
 import { actionSet, askActionButton } from './ui/action-button-dialog';
-import { bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
+import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepPieces, type AutoStepsOptions } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
 import { canUpdate, appVersion, portableInfo, STAGE, STAGE_NOTE, UPDATE_CHANNELS, type UpdateChannel } from './updates';
@@ -9488,17 +9489,44 @@ async function generalPreferences(): Promise<void> {
   storeSettings();
 }
 
-/** Settings ▸ Preferences: how you like to work (keys and habits rather than how drawings look). */
+/** Settings ▸ Preferences: how you like to work, and matters of taste such as how alkyl groups are written. */
 async function personalPreferences(): Promise<void> {
   const alt = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? 'Option+Enter' : 'Alt+Enter';
   const r = await ask('Preferences', [
     { name: 'enterFinishes', label: 'Finish typing text from the Text tool with', value: enterFinishesText ? 'enter' : 'esc',
       options: [{ value: 'esc', label: 'Esc (Enter starts a new line), as in ChemDraw' }, { value: 'enter', label: `Enter (${alt} starts a new line)` }],
       help: 'Everywhere you draw: Canvas, structures in documents and spreadsheets, and text boxes on slides. Ctrl+Enter always finishes, and Shift+Enter always breaks the line.' },
-  ], { ok: 'Save' });
+    { name: 'alkylLook', label: 'Alkyl groups written as', value: alkylPrefs.look, options: ALKYL_LOOK_CHOICES,
+      help: 'For the n-, i-, s- and t- of Pr and Bu (tBu, iPr, nBu, sBu, iBu), wherever they sit in a label or text (OtBu, N(iPr)2, KOtBu). Atom labels and text boxes take the look as you finish typing them; you are asked whether to change the ones already in the drawing. A dash is never put in or taken out where the letters would read as an element (PtBu3 stays as it is).' },
+  ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(parseAlkylLook(v.alkylLook)) } });
   if (!r) return;
   enterFinishesText = r.enterFinishes === 'enter';
+  const look = parseAlkylLook(r.alkylLook);
+  const changed = look !== alkylPrefs.look;
+  alkylPrefs.look = look;
   storeSettings();
+  if (changed && look !== 'typed') await offerAlkylRestyle(look);
+}
+
+const ALKYL_LOOK_CHOICES: { value: AlkylLook; label: string }[] = [
+  { value: 'typed', label: 'As typed' },
+  { value: 'plain', label: 'tBu, iPr' },
+  { value: 'italic', label: 'tBu, iPr with the t and i in italics' },
+  { value: 'dash', label: 't-Bu, i-Pr' },
+  { value: 'both', label: 't-Bu, i-Pr with the t and i in italics' },
+];
+const parseAlkylLook = (v: string | undefined): AlkylLook => (ALKYL_LOOKS.includes(v as AlkylLook) ? v as AlkylLook : 'typed');
+
+/** After a new alkyl look is chosen: offer to give it to the labels and text boxes already in the drawing. */
+async function offerAlkylRestyle(look: AlkylLook): Promise<void> {
+  const n = restyleAlkyl(doc, look, false);
+  if (!n.labels && !n.texts) return;
+  const parts = [n.labels && `${n.labels} atom label${n.labels > 1 ? 's' : ''}`, n.texts && `${n.texts} text box${n.texts > 1 ? 'es' : ''}`].filter(Boolean).join(' and ');
+  const yes = await ask('Change Existing Alkyl Groups?', [], { ok: 'Change Them', note: `${parts} in this drawing ${n.labels + n.texts > 1 ? 'are' : 'is'} written another way. Change ${n.labels + n.texts > 1 ? 'them' : 'it'} to the new look? Cancel leaves ${n.labels + n.texts > 1 ? 'them' : 'it'} as ${n.labels + n.texts > 1 ? 'they are' : 'it is'}; new labels and text take the new look either way.` });
+  if (!yes) return;
+  restyleAlkyl(doc, look, true);
+  editor.requestScene();
+  flash(`Changed ${parts}`);
 }
 
 /** Settings ▸ Online: what the program asks the internet for. */
@@ -9598,6 +9626,7 @@ function currentSettings(): Settings {
     haptoDelocalized: haptoLook.delocalized,
     toolDemos,
     superscriptR: labelPrefs.superscriptR,
+    alkylLook: alkylPrefs.look,
     bondEnds: bondEndPrefs.round,
     depthShade: { ...depthShadePrefs },
     linkSide,
@@ -9836,6 +9865,7 @@ function applySettings(s: Settings): void {
   haptoLook.delocalized = s.haptoDelocalized;
   toolDemos = s.toolDemos;
   labelPrefs.superscriptR = s.superscriptR;
+  alkylPrefs.look = s.alkylLook;
   bondEndPrefs.round = s.bondEnds;
   Object.assign(depthShadePrefs, s.depthShade);
   for (const el of document.querySelectorAll('[data-cmd="depth-shading"][role="menuitemcheckbox"]')) el.setAttribute('aria-checked', String(depthShadePrefs.on));
@@ -12176,7 +12206,7 @@ const guide = {
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files demo clips hover tool tips animation', open: generalPreferences },
-  { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc', open: personalPreferences },
+  { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Hotkeys', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
