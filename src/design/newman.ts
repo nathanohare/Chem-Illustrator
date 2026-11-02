@@ -12,9 +12,9 @@ import { chemRuns } from '../text/chemtext';
 import { frameBox, frameMembers } from '../editor/frames';
 import { tokenize } from '../chem/labels';
 import { sizeRanks, type NewmanGroup } from '../chem/newman';
-import type { NewmanLook } from './newman-prefs';
+import { OLD_RING_ARC, type EyeStyle, type NewmanLook } from './newman-prefs';
 
-export { DEFAULT_NEWMAN_PREFS, NEWMAN_LOOK, parseNewmanPrefs, type NewmanLook, type NewmanPrefs, type RankLook } from './newman-prefs';
+export { DEFAULT_NEWMAN_PREFS, NEWMAN_LOOK, OLD_RING_ARC, parseNewmanPrefs, type EyeStyle, type NewmanLook, type NewmanPrefs, type RankLook, type RingArcLook } from './newman-prefs';
 
 /** What a projection keeps: the view it shows and where it came from. */
 export interface NewmanData {
@@ -31,7 +31,7 @@ export interface NewmanData {
    */
   link?: { atoms: number[]; front: number; back: number; key: string; at?: [number, number, number, number] };
   /** The viewing mark (eye and dotted arrow) drawn on the structure, while there is one. */
-  mark?: { arrows: number[]; shapes: number[]; color: string; at: [number, number, number, number] };
+  mark?: { arrows: number[]; shapes: number[]; color: string; at: [number, number, number, number]; eye?: EyeStyle };
   /** Which conformer (0 = the most stable), its energy above the lowest (kcal/mol) and how it was worked out. */
   conformer: number;
   energy?: number;
@@ -212,7 +212,9 @@ export function drawNewman(doc: Doc, m: Measure, d: NewmanData, c: Vec): NewmanP
     const chord = { x: bTip.tip.x - fTip.tip.x, y: bTip.tip.y - fTip.tip.y };
     const outward = chord.x * mid.y - chord.y * mid.x;
     const sweep = (outward > 0 ? -1 : 1) * 110 * RAD;
-    out.arrows.push(doc.addArrow({ tail: fTip.tip, head: bTip.tip, headStyle: 'none', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep, headLength: 0, headWidth: 0 } as Omit<Arrow, 'id'>).id);
+    const arc = d.look.arc ?? OLD_RING_ARC, ink = arc.color.toLowerCase() === '#000000' ? {} : { color: arc.color };
+    out.arrows.push(doc.addArrow({ tail: fTip.tip, head: bTip.tip, headStyle: 'none', tailStyle: 'none', headType: 'solid', line: arc.line, noGo: false, equilibrium: false, sweep, headLength: 0, headWidth: 0, ...ink } as Omit<Arrow, 'id'>).id);
+    if (arc.bonds) for (const j of jobs) if (j.g.ring !== undefined && j.bond !== undefined) doc.updateShape(j.bond, { color: arc.color });
   }
   for (const j of jobs.filter((j) => !j.back && (j.g.ring === undefined || !bTip))) label(j.g, j.rank, j.u, j.tip, j.bond);
   for (const j of jobs.filter((j) => j.back && (j.g.ring === undefined || !fTip))) label(j.g, j.rank, j.u, j.tip, j.bond);
@@ -279,23 +281,33 @@ export function newmanFrameOf(doc: Doc, kind: 'atom' | 'bond' | 'caption' | 'arr
 
 /**
  * The viewing-direction mark on the structure (an eye looking along the bond at its front atom,
- * with a dotted arrow), as in textbook figures. Returns what was made. Call inside an edit.
+ * with a dotted arrow), as in textbook figures. The eye is side on: its lids meet at the corner
+ * farthest from the bond and open toward it, with the eyeball's curve across the opening.
+ * Returns what was made. Call inside an edit.
  */
-export function drawEyeMark(doc: Doc, front: Vec, back: Vec, color = '#1a56db'): { arrows: number[]; shapes: number[] } {
+export function drawEyeMark(doc: Doc, front: Vec, back: Vec, color = '#1a56db', eye: EyeStyle = 'plain'): { arrows: number[]; shapes: number[] } {
   const L = doc.style.bondLength, lw = doc.style.lineWidth;
   const ux = (front.x - back.x), uy = (front.y - back.y), l = Math.hypot(ux, uy) || 1;
   const u = { x: ux / l, y: uy / l }, n = { x: -u.y, y: u.x };
-  const tip = { x: front.x + u.x * 0.35 * L, y: front.y + u.y * 0.35 * L };
-  const tail = { x: front.x + u.x * 1.9 * L, y: front.y + u.y * 1.9 * L };
+  // a point `a` bond lengths along the bond (away from it) and `k` across it from `o`
+  const at = (o: Vec, a: number, k: number): Vec => ({ x: o.x + (u.x * a + n.x * k) * L, y: o.y + (u.y * a + n.y * k) * L });
+  const tip = at(front, 0.35, 0), tail = at(front, 1.9, 0);
   const arrows: number[] = [], shapes: number[] = [];
+  const arc = (t: Vec, h: Vec, deg: number) => arrows.push(doc.addArrow({ tail: t, head: h, headStyle: 'none', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: deg * RAD, headLength: 0, headWidth: 0, color } as Omit<Arrow, 'id'>).id);
+  const line = (p: Vec, q: Vec) => shapes.push(doc.addShape({ kind: 'line', x1: p.x, y1: p.y, x2: q.x, y2: q.y, color }).id);
   arrows.push(doc.addArrow({ tail, head: tip, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'dashed', noGo: false, equilibrium: false, sweep: 0, headLength: lw * 7, headWidth: lw * 2.6, color } as Omit<Arrow, 'id'>).id);
-  // the eye, side on: two lids meeting at the corner farthest from the bond and opening toward it,
-  // the eyeball's curve across the open end looking down the arrow
-  const s = 0.6 * L;
-  const corner = { x: tail.x + u.x * (0.33 * L + s), y: tail.y + u.y * (0.33 * L + s) };
-  const lidEnd = (k: number) => ({ x: corner.x - u.x * s + n.x * k * s * 0.62, y: corner.y - u.y * s + n.y * k * s * 0.62 });
-  for (const k of [1, -1]) { const e = lidEnd(k); shapes.push(doc.addShape({ kind: 'line', x1: corner.x, y1: corner.y, x2: e.x, y2: e.y, color }).id); }
-  arrows.push(doc.addArrow({ tail: lidEnd(1), head: lidEnd(-1), headStyle: 'none', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 110 * RAD, headLength: 0, headWidth: 0, color } as Omit<Arrow, 'id'>).id);
+  // the opening's middle sits `o` past the arrow's tail; the lids are `s` long
+  const s = 0.6, o = 0.33, w = s * 0.62;
+  const corner = at(tail, o + s, 0), lid1 = at(tail, o, w), lid2 = at(tail, o, -w);
+  if (eye === 'almond') { arc(corner, lid1, -28); arc(lid2, corner, -28); }
+  else if (eye === 'lashes') { line(corner, at(tail, o - 0.08, w + 0.05)); line(corner, at(tail, o - 0.08, -w - 0.05)); }
+  else { line(corner, lid1); line(corner, lid2); }
+  arc(lid1, lid2, 110);
+  if (eye === 'inner' || eye === 'lashes') arc(at(tail, o + 0.2, 0.2), at(tail, o + 0.2, -0.2), 110);
+  if (eye === 'pupil' || eye === 'almond') {
+    const c = at(tail, o + 0.02, 0), r = 0.085 * L;
+    shapes.push(doc.addShape({ kind: 'oval', x1: c.x - r, y1: c.y - r, x2: c.x + r, y2: c.y + r, color, filled: true, fillColor: color }).id);
+  }
   return { arrows, shapes };
 }
 
@@ -326,7 +338,8 @@ export function putMark(doc: Doc, d: NewmanData, color: string): NewmanData['mar
   }
   const f = d.link && doc.atoms.get(d.link.front), b = d.link && doc.atoms.get(d.link.back);
   if (!f || !b) return undefined;
-  return { ...drawEyeMark(doc, f, b, color), color, at: [f.x, f.y, b.x, b.y] };
+  const eye = d.mark?.eye ?? d.look.eye ?? 'plain';
+  return { ...drawEyeMark(doc, f, b, color, eye), color, at: [f.x, f.y, b.x, b.y], ...(eye !== 'plain' ? { eye } : {}) };
 }
 
 /**
@@ -370,7 +383,7 @@ export function newmanForFile(doc: Doc, d: NewmanData): NewmanData {
   const f = d.link && doc.atoms.get(d.link.front), b = d.link && doc.atoms.get(d.link.back);
   if (!d.link || !f || !b) { const { link: _l, mark: _m, ...rest } = d; return rest; }
   const at: [number, number, number, number] = [f.x, f.y, b.x, b.y];
-  return { ...d, link: { atoms: [], front: -1, back: -1, key: '', at }, ...(d.mark ? { mark: { arrows: [], shapes: [], color: d.mark.color, at: d.mark.at } } : {}) };
+  return { ...d, link: { atoms: [], front: -1, back: -1, key: '', at }, ...(d.mark ? { mark: { arrows: [], shapes: [], color: d.mark.color, at: d.mark.at, ...(d.mark.eye ? { eye: d.mark.eye } : {}) } } : {}) };
 }
 
 /** After opening a file: each projection finds its bond again where it was drawn, and its viewing mark by its lines; one that can't lets go. */
@@ -396,11 +409,11 @@ export function relinkNewman(doc: Doc): void {
       tmp.style = { ...doc.style };
       const [mfx, mfy, mbx, mby] = d.mark.at;
       let want: { arrows: number[]; shapes: number[] } = { arrows: [], shapes: [] };
-      tmp.bulk(() => { want = drawEyeMark(tmp, { x: mfx, y: mfy }, { x: mbx, y: mby }, d.mark!.color); });
+      tmp.bulk(() => { want = drawEyeMark(tmp, { x: mfx, y: mfy }, { x: mbx, y: mby }, d.mark!.color, d.mark!.eye ?? 'plain'); });
       const close = (p: { x: number; y: number }, q: { x: number; y: number }) => Math.hypot(p.x - q.x, p.y - q.y) < 0.5;
       const arrows = want.arrows.map((id) => { const w = tmp.arrows.get(id)!; return [...doc.arrows.values()].find((a) => close(a.tail, w.tail) && close(a.head, w.head))?.id; });
-      const shapes = want.shapes.map((id) => { const w = tmp.shapes.get(id)!; return [...doc.shapes.values()].find((x) => x.kind === 'line' && close({ x: x.x1, y: x.y1 }, { x: w.x1, y: w.y1 }) && close({ x: x.x2, y: x.y2 }, { x: w.x2, y: w.y2 }))?.id; });
-      if (arrows.every((x) => x !== undefined) && shapes.every((x) => x !== undefined)) mark = { arrows: arrows as number[], shapes: shapes as number[], color: d.mark.color, at: d.mark.at };
+      const shapes = want.shapes.map((id) => { const w = tmp.shapes.get(id)!; return [...doc.shapes.values()].find((x) => x.kind === w.kind && close({ x: x.x1, y: x.y1 }, { x: w.x1, y: w.y1 }) && close({ x: x.x2, y: x.y2 }, { x: w.x2, y: w.y2 }))?.id; });
+      if (arrows.every((x) => x !== undefined) && shapes.every((x) => x !== undefined)) mark = { arrows: arrows as number[], shapes: shapes as number[], color: d.mark.color, at: d.mark.at, ...(d.mark.eye ? { eye: d.mark.eye } : {}) };
     }
     const { mark: _m, ...rest } = d;
     doc.updateShape(s.id, { newman: { ...rest, link, ...(mark ? { mark } : {}) } });
