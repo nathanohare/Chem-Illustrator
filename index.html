@@ -30,6 +30,7 @@
         <div id="recent-files" class="recent-files" hidden></div>
     </div>
     </div>
+        <button role="menuitem" class="desktop-only" data-cmd="find-structure-files" title="Search a folder of ChemDraw, Word, PowerPoint and Excel files for a structure (the same one, or any containing it), then open the file there" hidden>Find Structure in Files…</button>
         <button role="menuitem" data-cmd="save">Save</button>
         <button role="menuitem" data-cmd="save-as">Save As…</button>
         <button role="menuitemcheckbox" aria-checked="false" data-cmd="autosave" title="Save this file by itself a few seconds after each change (a file never saved is saved first). The default for all files is in AutoSave and Recovery Options"><span>AutoSave</span></button>
@@ -596,6 +597,14 @@
     <button role="menuitem" data-cmd="model-3d" title="Build the selected structure in 3-D (conformers relaxed with the MMFF94 force field) in a window where you can turn it, see its other conformers, and turn the drawing to match">3-D Model…</button>
     <button role="menuitem" data-cmd="pubchem-lookup" title="Send the selected structure (as SMILES) to PubChem, the free NIH database, and show its name, CAS number, hazards and measured values in the Analysis panel">Look Up on PubChem</button>
     <button role="menuitem" data-cmd="periodic-table">Periodic Table…</button>
+    </div>
+    </div>
+    <div class="submenu">
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Compound Library</button>
+    <div class="menu sub" role="menu" hidden>
+    <button role="menuitem" data-cmd="compound-library" title="Your own compounds, kept between sessions and shared by every file: each one's number, structure, names and notes, and the files it appears in. Find one, and insert it anywhere">Compound Library…</button>
+    <button role="menuitem" data-cmd="add-to-compound-library" title="Keep the selected structures in your Compound Library, with the numbers under them">Add Selected to Compound Library</button>
+    <button role="menuitem" data-cmd="library-location" title="Where your compound and reference library is kept: on this computer, or in a folder such as OneDrive to use it on other computers or share it with your group">Library Location…</button>
     </div>
     </div>
     <hr />
