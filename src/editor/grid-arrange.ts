@@ -6,6 +6,7 @@ import type { Rect, Vec } from '../geom';
 import type { Doc } from '../model';
 import { plainText } from '../richtext';
 import type { Unit } from './arrange';
+import { ringsAmong } from '../chem/aromatic';
 
 export type GridKind = 'row' | 'column' | 'grid';
 
@@ -15,6 +16,14 @@ export interface GridHow {
   cols?: number;
   /** Space between neighbours, in points. */
   gap: number;
+  /** Space between rows and between columns, when they differ (in points; `gap` otherwise). */
+  rowGap?: number;
+  colGap?: number;
+  /**
+   * The point of each thing that lines up with the others in its row and column (a ring they all
+   * share, say). The middle of its box when not given.
+   */
+  anchors?: (Vec | null)[];
 }
 
 /** How many across a grid of n things is by default: as near square as can be. */
@@ -122,19 +131,27 @@ export function gridOffsets(boxes: Rect[], how: GridHow): Vec[] {
   if (!n) return [];
   const cols = how.kind === 'row' ? n : how.kind === 'column' ? 1 : Math.max(1, Math.min(n, Math.round(how.cols ?? defaultColumns(n))));
   const byX = (a: number, b: number) => mid(boxes[a]).x - mid(boxes[b]).x, byY = (a: number, b: number) => mid(boxes[a]).y - mid(boxes[b]).y;
-  // a row goes left to right, a column top to bottom, a grid in reading order
-  const order = how.kind === 'row' ? boxes.map((_, i) => i).sort(byX) : how.kind === 'column' ? boxes.map((_, i) => i).sort(byY) : readRows(boxes).flat();
+  // a grid (or things in a grid now) in reading order; otherwise a row left to right, a column top to bottom
+  const inGrid = how.kind === 'grid' || (inferGrid(boxes)?.kind === 'grid' && readRows(boxes).filter((r) => r.length > 1).length > 1);
+  const order = inGrid ? readRows(boxes).flat() : boxes.map((_, i) => i).sort(how.kind === 'row' ? byX : byY);
   const nRows = Math.ceil(n / cols);
-  const colW = new Array<number>(cols).fill(0), rowH = new Array<number>(nRows).fill(0);
+  const colGap = how.colGap ?? how.gap, rowGap = how.rowGap ?? how.gap;
+  // each thing lines up on its anchor: how far its box reaches each way from it
+  const anchor = (i: number) => how.anchors?.[i] ?? mid(boxes[i]);
+  const left = new Array<number>(cols).fill(0), right = new Array<number>(cols).fill(0);
+  const up = new Array<number>(nRows).fill(0), down = new Array<number>(nRows).fill(0);
   order.forEach((i, k) => {
-    colW[k % cols] = Math.max(colW[k % cols], width(boxes[i]));
-    rowH[Math.floor(k / cols)] = Math.max(rowH[Math.floor(k / cols)], height(boxes[i]));
+    const c = k % cols, r = Math.floor(k / cols), p = anchor(i), b = boxes[i];
+    left[c] = Math.max(left[c], p.x - b.x1); right[c] = Math.max(right[c], b.x2 - p.x);
+    up[r] = Math.max(up[r], p.y - b.y1); down[r] = Math.max(down[r], b.y2 - p.y);
   });
+  // where each column's and row's line of anchors goes
   const colX: number[] = [], rowY: number[] = [];
-  colW.reduce((x, w, c) => { colX[c] = x + w / 2; return x + w + how.gap; }, 0);
-  rowH.reduce((y, h, r) => { rowY[r] = y + h / 2; return y + h + how.gap; }, 0);
-  const totalW = colW.reduce((s, w) => s + w, 0) + how.gap * (cols - 1);
-  const totalH = rowH.reduce((s, h) => s + h, 0) + how.gap * (nRows - 1);
+  let x = 0;
+  for (let c = 0; c < cols; c++) { colX[c] = x + left[c]; x += left[c] + right[c] + colGap; }
+  let y = 0;
+  for (let r = 0; r < nRows; r++) { rowY[r] = y + up[r]; y += up[r] + down[r] + rowGap; }
+  const totalW = x - colGap, totalH = y - rowGap;
   // keep the middle of the whole where it was
   const all = boxes.reduce((r, b) => ({ x1: Math.min(r.x1, b.x1), y1: Math.min(r.y1, b.y1), x2: Math.max(r.x2, b.x2), y2: Math.max(r.y2, b.y2) }));
   const c = mid(all);
@@ -142,8 +159,8 @@ export function gridOffsets(boxes: Rect[], how: GridHow): Vec[] {
   const out: Vec[] = new Array(n);
   order.forEach((i, k) => {
     const want = { x: x0 + colX[k % cols], y: y0 + rowY[Math.floor(k / cols)] };
-    const m = mid(boxes[i]);
-    out[i] = { x: want.x - m.x, y: want.y - m.y };
+    const p = anchor(i);
+    out[i] = { x: want.x - p.x, y: want.y - p.y };
   });
   return out;
 }
@@ -164,4 +181,41 @@ export function usualGap(boxes: Rect[], bond: number): number {
   gaps.sort((a, b) => a - b);
   const median = gaps[Math.floor(gaps.length / 2)];
   return Math.min(4 * bond, Math.max(0.5 * bond, median));
+}
+
+/**
+ * The point each structure lines up on: the middle of a ring they all have (a pyridine in a set
+ * of pyridines), the one nearest the middle of each where there are several. Things that aren't
+ * structures, or structures with no ring in common, line up on the middle of their boxes (null).
+ */
+export function sharedAnchors(doc: Doc, us: Unit[]): (Vec | null)[] {
+  const none = us.map(() => null);
+  const structs = us.map((u, i) => ({ u, i })).filter(({ u }) => u.atoms.length);
+  if (structs.length < 2) return none;
+  // each structure's rings, by kind: their size and the elements round them
+  const kinds = structs.map(({ u }) => {
+    const atoms = new Set(u.atoms);
+    const bonds = [...doc.bonds.values()].filter((b) => atoms.has(b.a1) && atoms.has(b.a2)).map((b) => b.id);
+    const out = new Map<string, Vec[]>();
+    if (!bonds.length) return out;
+    for (const r of ringsAmong(doc, bonds)) {
+      if (!r.every((a) => atoms.has(a))) continue;
+      const key = `${r.length}:${r.map((a) => doc.atoms.get(a)!.z).sort((p, q) => p - q).join(',')}`;
+      const c = r.reduce((s2, a) => ({ x: s2.x + doc.atoms.get(a)!.x / r.length, y: s2.y + doc.atoms.get(a)!.y / r.length }), { x: 0, y: 0 });
+      out.set(key, [...(out.get(key) ?? []), c]);
+    }
+    return out;
+  });
+  const shared = [...kinds[0].keys()].filter((k) => kinds.every((m) => m.has(k)));
+  if (!shared.length) return none;
+  // of the kinds they all have, the one that sits nearest the middle of each
+  const near = (k: string, j: number) => {
+    const m = mid(structs[j].u.box);
+    return kinds[j].get(k)!.reduce((best, c) => (Math.hypot(c.x - m.x, c.y - m.y) < Math.hypot(best.x - m.x, best.y - m.y) ? c : best));
+  };
+  const cost = (k: string) => structs.reduce((t, _, j) => { const c = near(k, j), m = mid(structs[j].u.box); return t + Math.hypot(c.x - m.x, c.y - m.y); }, 0);
+  const best = shared.reduce((a, b) => (cost(b) < cost(a) - 1e-6 || (Math.abs(cost(b) - cost(a)) <= 1e-6 && Number(b.split(':')[0]) > Number(a.split(':')[0])) ? b : a));
+  const out: (Vec | null)[] = none.slice();
+  structs.forEach(({ i }, j) => { out[i] = near(best, j); });
+  return out;
 }

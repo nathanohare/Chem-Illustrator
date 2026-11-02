@@ -25,6 +25,7 @@ import { Editor, TOOLS, ringsWereFilled, type HighlightToggle, type Selection } 
 import { BUILT_IN_LOOKS, type HighlightLookPreset } from './ui/highlight-looks';
 import { selectionBox, atomsBox, POINTS, type Align, units, moveUnit } from './editor/arrange';
 import { defaultColumns } from './editor/grid-arrange';
+import { askGridLayout, type GridPick } from './ui/grid-picker';
 import { groupSelection, selectedGroups } from './editor/groups';
 import { readCdxml, ReadStats } from './io/cdxml';
 import { readCml } from './io/cml';
@@ -2508,22 +2509,28 @@ async function structureKeys(): Promise<Map<number, string>> {
 
 /** Space left between things set out in a row, column or grid: as last chosen, or one and a half bonds. */
 let lastGridGap: number | null = null;
+let lastGridGaps: { rowGap: number; colGap: number } | null = null;
 const gridGap = () => lastGridGap ?? 1.5 * doc.style.bondLength;
 
-/** Format ▸ Align ▸ Arrange in a Grid…: how many across, and the space between. */
+/** Format ▸ Align ▸ Arrange in a Grid…: rows × columns and the spacing, with a live preview. */
 async function arrangeInGrid(): Promise<void> {
   finishTyping();
   const n = editor.gridCount();
   if (n < 2) { flash('Select two or more structures or objects to put in a grid.'); return; }
-  const got = await ask('Arrange in a Grid', [
-    { name: 'cols', label: 'Columns (across)', value: String(defaultColumns(n)), type: 'number' },
-    { name: 'gap', label: 'Space between', value: String(Math.round(gridGap() * 10) / 10), type: 'number', unit: 'pt' },
-  ], { ok: 'Arrange', note: `${n} things, set out in reading order (left to right, then down). Compound numbers move with their structures.` });
+  const start = { cols: defaultColumns(n), rowGap: lastGridGaps?.rowGap ?? gridGap(), colGap: lastGridGaps?.colGap ?? gridGap() };
+  const preview = (p: GridPick) => {
+    const { units: us, offsets } = editor.gridPlan({ kind: 'grid', cols: p.cols, gap: p.colGap, rowGap: p.rowGap, colGap: p.colGap });
+    const sel: Selection = { atoms: new Set(us.flatMap((u) => u.atoms)), bonds: new Set(), captions: new Set(us.flatMap((u) => u.captions)), arrows: new Set(us.flatMap((u) => u.arrows)), shapes: new Set(us.flatMap((u) => u.shapes)) };
+    sel.bonds = new Set([...doc.bonds.values()].filter((b) => sel.atoms.has(b.a1) && sel.atoms.has(b.a2)).map((b) => b.id));
+    const d = extractDrawing(doc, sel);
+    d.bulk(() => us.forEach((u, i) => moveUnit(d, u, offsets[i])));
+    const pic = recordPicture(d, 6);
+    return pic ? pictureSvg(pic).replace(/^<\?xml[^>]*>\s*/, '') : '';
+  };
+  const got = await askGridLayout(n, start, preview);
   if (!got) return;
-  const cols = Math.max(1, Math.min(n, Math.round(Number(got.cols)) || defaultColumns(n)));
-  const gap = Number(got.gap);
-  if (isFinite(gap) && gap >= 0) lastGridGap = Math.min(500, gap);
-  if (!editor.arrangeGrid({ kind: 'grid', cols, gap: gridGap() })) flash('They are already in that grid.');
+  lastGridGaps = { rowGap: got.rowGap, colGap: got.colGap };
+  if (!editor.arrangeGrid({ kind: 'grid', cols: got.cols, gap: got.colGap, rowGap: got.rowGap, colGap: got.colGap })) flash('They are already in that grid.');
 }
 
 // ---------------------------------------------------------------- Clean Up Structure
@@ -8243,7 +8250,11 @@ const COMMANDS: Record<string, () => unknown> = {
     await orientLikeFirst(true);
     if (!editor.cleanUpReaction()) flash('No reaction to tidy: draw starting materials, an arrow and products (the arrow pointing from one to the other), or the scheme is already tidy.', 6000);
   },
-  'clean-up-reaction': () => editor.cleanUpReaction() || flash('No reaction to tidy: draw starting materials, an arrow and products (the arrow pointing from one to the other), or the scheme is already tidy.', 6000),
+  'clean-up-reaction': () => {
+    const r = editor.cleanUpReaction();
+    if (!r) flash('No reaction to tidy: draw starting materials, an arrow and products (the arrow pointing from one to the other), or the scheme is already tidy. Press it again to fit each arrow to its own text.', 6000);
+    else if (r === 'fitted') flash('Each arrow fitted to its own text. Clean Up Reaction again to make them all the same length.', 4000);
+  },
   'arrange-scheme': () => arrangeDialog.open(),
   'stoichiometry-table': () => void stoichiometryTable(),
   'check-balance': () => void checkStepBalance(),

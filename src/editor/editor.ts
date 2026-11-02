@@ -82,7 +82,7 @@ import { bezFrom, fitPath, dragCurveAt, throughPoints, dragPathPoint, firstBend,
 import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
 import { imageFor } from '../render/images';
-import { gridOffsets, inferGrid, usualGap, withLabels, type GridHow } from './grid-arrange';
+import { gridOffsets, inferGrid, sharedAnchors, usualGap, withLabels, type GridHow } from './grid-arrange';
 import { BEND, BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
 import { flatten, prepareTurn, stillMeans, structuresOf, type PerspectiveHost, type Prepared } from './perspective';
 import { anglesTurn, dragTurn, IDENT as IDENT_TURN, type M3 } from '../chem/perspective';
@@ -4307,8 +4307,19 @@ export class Editor {
     return this.applyGrid(us, { kind: shape.kind, cols: shape.cols, gap: usualGap(boxes, this.doc.style.bondLength) }, 'Clean Up: Arrange');
   }
 
+  /** Where Arrange in a Grid would move things, without moving them (for its preview). */
+  gridPlan(how: GridHow): { units: ReturnType<typeof units>; offsets: Vec[] } {
+    const us = this.gridUnits();
+    return { units: us, offsets: this.gridMoves(us, how) };
+  }
+
+  private gridMoves(us: ReturnType<typeof units>, how: GridHow): Vec[] {
+    // structures that share a ring line up on it
+    return gridOffsets(us.map((u) => u.box), { anchors: sharedAnchors(this.doc, us), ...how });
+  }
+
   private applyGrid(us: ReturnType<typeof units>, how: GridHow, label: string): boolean {
-    const off = gridOffsets(us.map((u) => u.box), how);
+    const off = this.gridMoves(us, how);
     if (off.every((d) => Math.hypot(d.x, d.y) < 0.05)) return false;
     this.doc.edit(label, () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
     this.changed();
@@ -4542,14 +4553,28 @@ export class Editor {
    * Clean Up Reaction: space the selected steps (or every step) evenly, add missing + signs,
    * centre the conditions and fit the arrows to them. False when there is no step to tidy.
    */
-  cleanUpReaction(): boolean {
+  cleanUpReaction(): false | 'matched' | 'fitted' {
     const m = this.fullMeasure();
-    const plan = planCleanUp(this.doc, m, this.selectedSteps());
+    const steps = this.selectedSteps();
+    const key = steps ? [...steps].sort((a, b) => a - b).join(',') : 'all';
+    // pressed again on the same steps: each arrow shrinks to fit its own text (the structures
+    // move up to keep the spacing even); again, and they match once more
+    const c = this.reactionCycle;
+    const again = !!c && c.version === this.doc.version && c.key === key;
+    const fitted = again ? !c!.fitted : false;
+    const same = prefsOf(this.doc).sameLength;
+    const plan = planCleanUp(this.doc, m, steps, fitted ? { sameLength: !same, fit: true } : undefined);
+    if (plan) {
+      applySchemePlan(this.doc, m, plan);
+      this.changed();
+    }
+    this.reactionCycle = { version: this.doc.version, key, fitted };
     if (!plan) return false;
-    applySchemePlan(this.doc, m, plan);
-    this.changed();
-    return true;
+    return fitted === same ? 'fitted' : 'matched';
   }
+
+  /** The last Clean Up Reaction: which steps, and whether it fitted each arrow to its own text. */
+  private reactionCycle: { version: number; key: string; fitted: boolean } | null = null;
 
   /**
    * Arrange the selected scheme (or the whole drawing) in one go: in a line, in rows, as a
