@@ -54,6 +54,8 @@ export interface Slot {
   box: Rect;
   /** Its text, when it is one text box and no structure (the species list lets it be typed). */
   caption?: number;
+  /** Its dashed box, when it is waiting for a structure to be drawn or pasted in. */
+  holder?: number;
 }
 
 /** One step: its arrow, the slots it joins (by index) and its conditions. */
@@ -132,7 +134,8 @@ export function readSlots(doc: Doc, m: Measure, scope: Scope): SmartRead | null 
     const items = node.items.filter((it) => !it.plus);
     const labels = items.flatMap((it) => sh.labels.get(it) ?? []);
     const only = items.length === 1 && items[0].caption !== undefined ? items[0].caption : undefined;
-    return { items, labels, box: node.box, ...(only !== undefined ? { caption: only } : {}) };
+    const holder = items.length === 1 && items[0].shape !== undefined && doc.shapes.get(items[0].shape)?.holder ? items[0].shape : undefined;
+    return { items, labels, box: node.box, ...(only !== undefined ? { caption: only } : {}), ...(holder !== undefined ? { holder } : {}) };
   });
   const links: SmartLink[] = [];
   for (const l of sh.links) {
@@ -149,6 +152,7 @@ export function readSlots(doc: Doc, m: Measure, scope: Scope): SmartRead | null 
 /** A slot's name, for the species list: its text, or what kind of thing it is. */
 export function slotName(doc: Doc, slot: Slot): string {
   if (slot.caption !== undefined) return plainText(doc.captions.get(slot.caption)?.runs ?? []);
+  if (slot.holder !== undefined) return 'Structure: draw or paste in the box';
   const atoms = slot.items.filter((it) => it.atoms.length).length;
   const pics = slot.items.filter((it) => it.shape !== undefined).length;
   const texts = slot.items.filter((it) => it.caption !== undefined).map((it) => plainText(doc.captions.get(it.caption!)?.runs ?? []));
@@ -179,10 +183,19 @@ export function runsMarkup(runs: TextRun[]): string {
 
 /** Text typed in the species list as caption runs (keeping the font, size and colour of `like`). */
 export function markupRuns(text: string, like?: TextRun): TextRun[] {
-  const base: Partial<TextRun> = like ? { ...like } : {};
-  delete base.sub; delete base.sup; delete base.text;
-  return chemRuns(text).map((r) => ({ ...base, ...r }) as TextRun);
+  return partsRuns(chemRuns(text), like);
 }
+
+/** Pieces of text, each plain, subscript or superscript, as caption runs (keeping the font, size and colour of `like`). */
+export type TextPart = { text: string; sub?: boolean; sup?: boolean };
+export function partsRuns(parts: TextPart[], like?: TextRun): TextRun[] {
+  const base: Partial<TextRun> = like ? { ...like } : {};
+  delete base.sub; delete base.sup; delete base.text; delete base.formula;
+  const out = parts.filter((p) => p.text).map((p) => ({ ...base, text: p.text, ...(p.sub ? { sub: true } : p.sup ? { sup: true } : {}) }) as TextRun);
+  return out.length ? out : [{ ...base, text: '' } as TextRun];
+}
+
+const partsPlain = (parts: TextPart[]) => parts.map((p) => p.text).join('');
 
 /** Put a new Smart Scheme round the selection. Returns the frame's id, or null when there is no scheme there. Call inside an edit. */
 export function makeSmart(doc: Doc, m: Measure, sel: Selection, data?: Partial<SmartData>): number | null {
@@ -354,12 +367,116 @@ function removeItem(doc: Doc, it: Item): void {
 
 /** Retype slot `k` (only a slot that is one text box). Call inside an edit. */
 export function setSlotText(doc: Doc, m: Measure, frameId: number, k: number, text: string): boolean {
+  return setSlotRuns(doc, m, frameId, k, chemRuns(text));
+}
+
+/** Retype slot `k` with formatted text, as the species list's rows give it. Call inside an edit. */
+export function setSlotRuns(doc: Doc, m: Measure, frameId: number, k: number, parts: TextPart[]): boolean {
   const read = readSmart(doc, m, frameId);
   const id = read?.slots[k]?.caption;
   const c = id !== undefined ? doc.captions.get(id) : undefined;
-  if (!c || !text.trim()) return false;
-  doc.updateCaption(c.id, { runs: markupRuns(text, c.runs[0]) });
+  if (!c || !partsPlain(parts).trim()) return false;
+  doc.updateCaption(c.id, { runs: partsRuns(parts, c.runs[0]) });
   return true;
+}
+
+// ---------------------------------------------------------------- species waiting for a structure
+
+/** Point the steps at something new where they named `from` (a species changed from text to a box, or a box to a structure). */
+function swapRef(doc: Doc, frameId: number, from: string, to: string[]): void {
+  const f = doc.shapes.get(frameId)?.frame;
+  if (!f) return;
+  const sw = (xs: string[]) => xs.flatMap((x) => (x === from ? to : [x]));
+  for (const id of f.arrows) {
+    const st = doc.arrows.get(id)?.step;
+    if (!st || ![...st.reactants, ...st.products].includes(from)) continue;
+    doc.updateArrow(id, { step: { ...st, reactants: sw(st.reactants), products: sw(st.products) } });
+  }
+}
+
+/**
+ * Make slot `k` (a text label) a dashed box waiting for its structure: drawn in, or pasted into
+ * when the box is selected. The label is kept on the box, to go back to. Returns the box's id.
+ * Call inside an edit.
+ */
+export function slotToHolder(doc: Doc, m: Measure, frameId: number, k: number): number | null {
+  const read = readSmart(doc, m, frameId);
+  const slot = read?.slots[k];
+  const c = slot?.caption !== undefined ? doc.captions.get(slot.caption) : undefined;
+  const f = doc.shapes.get(frameId)?.frame;
+  if (!slot || !c || !f) return null;
+  const L = doc.style.bondLength, b = slot.box;
+  const w = Math.max(5 * L, b.x2 - b.x1 + 0.6 * L), h = 3 * L, at = mid(b);
+  const sh = doc.addShape({
+    kind: 'geo', geo: 'rect', x1: at.x - w / 2, y1: at.y - h / 2, x2: at.x + w / 2, y2: at.y + h / 2,
+    filled: false, dashed: true, lineWidth: doc.style.lineWidth, color: '#808080', holder: { runs: structuredClone(c.runs) }, name: 'Species placeholder',
+  });
+  doc.removeCaption(c.id);
+  doc.updateShape(frameId, { frame: { ...f, captions: f.captions.filter((x) => x !== c.id), shapes: [...f.shapes, sh.id] } });
+  swapRef(doc, frameId, 'c' + c.id, ['s' + sh.id]);
+  arrangeSmart(doc, m, frameId);
+  return sh.id;
+}
+
+/** Make slot `k`'s dashed box a text label again (the label it had, or "species N"). Returns the label's id. Call inside an edit. */
+export function holderToSlotText(doc: Doc, m: Measure, frameId: number, k: number): number | null {
+  const read = readSmart(doc, m, frameId);
+  const slot = read?.slots[k];
+  const sh = slot?.holder !== undefined ? doc.shapes.get(slot.holder) : undefined;
+  const f = doc.shapes.get(frameId)?.frame;
+  if (!slot || !sh?.holder || !f) return null;
+  const runs = sh.holder.runs?.some((r) => r.text.trim()) ? sh.holder.runs : chemRuns(`species ${k + 1}`);
+  const at = mid(slot.box);
+  const cap = doc.addCaption({ x: at.x, y: at.y, runs, justify: 'center' });
+  doc.removeShape(sh.id);
+  doc.updateShape(frameId, { frame: { ...f, shapes: f.shapes.filter((x) => x !== sh.id), captions: [...f.captions, cap.id] } });
+  swapRef(doc, frameId, 's' + sh.id, ['c' + cap.id]);
+  arrangeSmart(doc, m, frameId);
+  return cap.id;
+}
+
+/** The Smart Scheme a dashed species box is in. */
+export function holderFrameOf(doc: Doc, holder: number): number | null {
+  if (!doc.shapes.get(holder)?.holder) return null;
+  for (const s of doc.shapes.values()) if (s.smart && s.frame?.shapes.includes(holder)) return s.id;
+  return null;
+}
+
+/**
+ * A structure (these atoms, and any text with it) takes the place of a dashed species box: the
+ * box goes and the structure is that species. With `arrange`, the scheme is laid out again round
+ * it (a paste); otherwise it stays where it was drawn. Call inside an edit.
+ */
+export function fillHolder(doc: Doc, m: Measure, holder: number, atoms: number[], captions: number[] = [], arrange = true): boolean {
+  const frameId = holderFrameOf(doc, holder);
+  const f = frameId !== null ? doc.shapes.get(frameId)?.frame : undefined;
+  if (frameId === null || !f || !atoms.length) return false;
+  // one atom of each structure stands for it
+  const seen = new Set<number>(), firsts: number[] = [];
+  for (const a of atoms) {
+    if (seen.has(a) || !doc.atoms.has(a)) continue;
+    const frag = [...doc.fragmentOf(a)];
+    for (const x of frag) seen.add(x);
+    firsts.push(Math.min(...frag));
+  }
+  if (!firsts.length) return false;
+  doc.removeShape(holder);
+  doc.updateShape(frameId, { frame: { ...f, shapes: f.shapes.filter((x) => x !== holder), atoms: [...f.atoms, ...firsts], captions: [...f.captions, ...captions] } });
+  swapRef(doc, frameId, 's' + holder, firsts.map((a) => 'a' + a));
+  if (arrange) arrangeSmart(doc, m, frameId);
+  return true;
+}
+
+/** At the end of a change: atoms drawn inside a Smart Scheme's dashed species box become that species. */
+export function fillHoldersDrawn(doc: Doc, before: ReadonlyMap<string, Entity | null>, m: Measure): void {
+  const made = [...before].filter(([k, v]) => v === null && k[0] === 'a').map(([k]) => Number(k.slice(1))).filter((id) => doc.atoms.has(id));
+  if (!made.length) return;
+  for (const s of [...doc.shapes.values()]) {
+    if (!s.holder || holderFrameOf(doc, s.id) === null) continue;
+    const b = { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
+    const inside = made.filter((id) => { const a = doc.atoms.get(id)!; return a.x >= b.x1 && a.x <= b.x2 && a.y >= b.y1 && a.y <= b.y2; });
+    if (inside.length) fillHolder(doc, m, s.id, inside, [], false);
+  }
 }
 
 export type StepPart = 'above' | 'below' | 'inside';
@@ -377,13 +494,21 @@ export function stepText(doc: Doc, l: SmartLink, part: StepPart): string {
  * when one is added or taken away. Call inside an edit.
  */
 export function setStepText(doc: Doc, m: Measure, frameId: number, k: number, part: StepPart, text: string): boolean {
+  return setStepRuns(doc, m, frameId, k, part, chemRuns(text.trim()));
+}
+
+/** Retype a step's conditions with formatted text, as the species list's rows give it. Call inside an edit. */
+export function setStepRuns(doc: Doc, m: Measure, frameId: number, k: number, part: StepPart, parts: TextPart[]): boolean {
   const read = readSmart(doc, m, frameId);
   const l = read?.links[k];
   if (!read || !l) return false;
   const it = l[part].find((x) => x.caption !== undefined);
   const c = it ? doc.captions.get(it.caption!) : undefined;
-  const t = text.trim();
-  if (c && t) { doc.updateCaption(c.id, { runs: markupRuns(t, c.runs[0]) }); return true; }
+  // spaces at the ends go
+  const trimmed = parts.map((p) => ({ ...p })).filter((p) => p.text);
+  if (trimmed.length) { trimmed[0].text = trimmed[0].text.trimStart(); trimmed[trimmed.length - 1].text = trimmed[trimmed.length - 1].text.trimEnd(); }
+  const t = partsPlain(trimmed).trim();
+  if (c && t) { doc.updateCaption(c.id, { runs: partsRuns(trimmed, c.runs[0]) }); return true; }
   if (!c && !t) return false;
   const step = { ...(l.arrow.step ?? roles(read.slots[l.from], read.slots[l.to], l)) };
   const f = doc.shapes.get(frameId)!.frame!;
@@ -393,7 +518,7 @@ export function setStepText(doc: Doc, m: Measure, frameId: number, k: number, pa
     doc.updateArrow(l.arrow.id, { step });
   } else {
     const mid = arrowMid(l.arrow), L = doc.style.bondLength;
-    const n = doc.addCaption({ x: mid.x, y: mid.y + (part === 'above' ? -0.6 * L : part === 'below' ? 1.2 * L : 2 * L), runs: chemRuns(t), justify: 'center' });
+    const n = doc.addCaption({ x: mid.x, y: mid.y + (part === 'above' ? -0.6 * L : part === 'below' ? 1.2 * L : 2 * L), runs: partsRuns(trimmed), justify: 'center' });
     step[part] = [...(step[part] ?? []), 'c' + n.id];
     doc.updateArrow(l.arrow.id, { step: { ...step, manual: true } });
     doc.updateShape(frameId, { frame: { ...f, captions: [...f.captions, n.id] } });

@@ -852,6 +852,11 @@ export interface Shape {
   diagram?: DiagramData;
   /** A Smart Scheme's layout, kept on the invisible frame round the scheme (chem/smart-scheme.ts). */
   smart?: SmartData;
+  /**
+   * A Smart Scheme species waiting for its structure: a dashed box to draw in, or to select and
+   * paste into. `runs` is the text label it had, so it can go back to that.
+   */
+  holder?: { runs?: TextRun[] };
 }
 
 /** Can this shape be turned to any angle (Slides and Design), keeping its box and turning it as a whole? */

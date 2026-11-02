@@ -781,6 +781,10 @@ dialog.energy-dialog { width: min(96vw, 680px); max-height: 92vh; }
 .energy-table td input { width: 8em; font: inherit; padding: 2px 4px; box-sizing: border-box; }
 .energy-table td input.energy-num { width: 5em; text-align: right; }
 .energy-table .energy-grip { cursor: grab; color: var(--muted); padding: 0 2px; user-select: none; }
+.energy-table .energy-structure { width: 80px; height: 40px; padding: 1px; display: flex; align-items: center; justify-content: center; background: #fff; border: 1px solid var(--line); border-radius: 2px; cursor: pointer; font: inherit; font-size: 0.85em; color: var(--muted); }
+.energy-table .energy-structure canvas { width: 72px; height: 36px; display: block; }
+.energy-table .energy-structure.es-empty { border-style: dashed; color: var(--accent); background: none; }
+.energy-table .energy-structure:hover { border-color: var(--accent); }
 .energy-import-note { margin: 2px 0 4px; }
 .energy-brackets { margin: 4px 0 6px; }
 .energy-brackets-title { font-weight: 600; font-size: 0.9em; }
@@ -3255,6 +3259,26 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .smart-pane .sp-foot { display: flex; justify-content: space-between; gap: 6px; }
 .smart-pane .sp-add { border: none; background: none; color: var(--accent); font-weight: 600; cursor: pointer; padding: 2px 0; }
 .smart-pane .sp-ungroup { padding: 2px 8px; }
+/* the rows show their text as it looks on the page; the bar formats the row being typed in */
+.smart-pane .sp-rich { flex: 1; min-width: 0; min-height: 20px; box-sizing: border-box; padding: 2px 4px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); color: var(--text); font-family: Arial, Arimo, sans-serif; white-space: pre; overflow: hidden; outline: none; line-height: 1.35; cursor: text; }
+.smart-pane .sp-rich:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.smart-pane .sp-rich.empty::before { content: attr(data-placeholder); color: var(--muted); }
+.smart-pane .sp-rich sub, .smart-pane .sp-rich sup { font-size: 0.72em; line-height: 0; }
+.smart-pane .sp-step-fields .sp-rich { font-size: var(--fs-xs); min-height: 18px; }
+.smart-pane .sp-bar { display: flex; align-items: center; gap: 3px; padding: 3px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.smart-pane .sp-fmt { min-width: 24px; height: 22px; padding: 0 5px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); color: var(--text); cursor: pointer; line-height: 1; }
+.smart-pane .sp-fmt sub, .smart-pane .sp-fmt sup { font-size: 9px; }
+.smart-pane .sp-fmt:disabled { opacity: 0.45; cursor: default; }
+.smart-pane .sp-fmt[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.smart-pane .sp-chem { font-weight: 600; }
+.smart-pane .sp-bar-gap { width: 1px; height: 16px; background: var(--line); margin: 0 2px; }
+.smart-pane .sp-more { margin-left: auto; }
+.smart-pane .sp-symbols { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; padding-top: 3px; }
+.smart-pane .sp-symbols[hidden] { display: none; }
+.smart-pane .sp-symbols .sp-fmt { min-width: 0; padding: 0; }
+.smart-pane .sp-struct { flex: none; width: 24px; height: 22px; padding: 0; display: grid; place-items: center; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); color: var(--text); cursor: pointer; }
+.smart-pane .sp-struct[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.smart-pane .sp-holder { flex: 1; min-width: 0; text-align: left; padding: 2px 4px; border: 1px dashed var(--accent); border-radius: var(--r-control); background: none; color: var(--accent); font-size: var(--fs-xs); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 /* Chemistry > Newman Projection */
 dialog.newman-dialog { width: min(96vw, 640px); max-height: 92vh; }
 .np-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 0 0 8px; }

@@ -32,7 +32,7 @@ import { imageFor } from './images';
 import { hasShapeFx, shapeFx, type ShapeFxPaints } from './shape-fx';
 import { fxCanvas, fxSrc, shapeDef, traceShape } from './picture-fx';
 import { layoutTable, drawTable, type TableLayout, type TablePart } from '../table';
-import type { TableData } from '../model';
+import type { TableData, TextRun } from '../model';
 import { repeatLabelPlace } from '../chem/polymer';
 import { paintChartBox } from './chart-box-paint';
 import { paintShapeMath } from '../deck/equation';
@@ -50,6 +50,8 @@ export interface PageDecor {
 
 /** Words shown in an empty placeholder on screen. */
 const PROMPTS = { title: 'Click to add title', subtitle: 'Click to add subtitle', body: 'Click to add text' };
+/** What a Smart Scheme's dashed species box says on screen. */
+const HOLDER_HINT: { runs: TextRun[] } = { runs: [{ text: 'Draw the structure here, or select the box and paste', color: '#8a909b' }] };
 
 /** Something that can record a picture instead of drawing it (the vector recorder). */
 interface PictureSink { picture(s: Shape, radius?: number): void }
@@ -166,6 +168,8 @@ export class Renderer {
   lastSceneMs = 0;
   /** Drawing on screen for editing: empty placeholders show their prompts. */
   screen = false;
+  /** The drawing window: a Smart Scheme's dashed species boxes say how to fill them (never in pictures or print). */
+  holderHints = false;
   /** Drawn under everything (a slide and its master). */
   page: PageDecor | null = null;
   /** Placeholder text formatting of the document being drawn. */
@@ -2267,6 +2271,12 @@ export class Renderer {
     if (s.text && this.geoEdit !== s.id) {
       const g = this.geoText(s);
       if (g) drawLayout(ctx, g.lay, g.x, g.y);
+    } else if (s.holder && (this.screen || this.holderHints)) {
+      // a Smart Scheme species waiting for its structure says how, on screen only, small
+      const x1 = Math.min(s.x1, s.x2), x2 = Math.max(s.x1, s.x2), y1 = Math.min(s.y1, s.y2), y2 = Math.max(s.y1, s.y2);
+      const lay = layoutText({ runs: HOLDER_HINT.runs, justify: 'center', wrap: Math.max(4, x2 - x1 - 4) }, 0.62 * this.captionSize, (t, sz, family, style) => measureText(t, sz, family, style));
+      const th = lay.box.y2 - lay.box.y1;
+      if (th < y2 - y1) drawLayout(ctx, lay, x1 + 2, (y1 + y2) / 2 - th / 2 - lay.box.y1);
     }
   }
 
