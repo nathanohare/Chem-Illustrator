@@ -60,3 +60,17 @@ script to 0.01 ppm on 8,572 atoms.
 The measured store holds 98,522 structures (7.0 MB, 4.1 MB gzipped). Structures are matched by a
 key over their atom environments, so stereoisomers share an entry; the panel marks measured
 values with an M chip naming the source.
+
+## Phase 2: shift networks
+
+| Step | Script | Output |
+|---|---|---|
+| 1. Features | `graph_feats.ts` (esbuild bundle, Node) | atom and bond features from the app's own `src/chem/nmr/features.ts` |
+| 2. Train | `train_net.py WORK --seed N --epochs 60` (five seeds) | message-passing network, 5 rounds, width 128, about 276k weights; about 1 hour each on 4 CPU cores |
+| 3. Blend | `blend_dump.ts` then `blend_tune.py WORK tune` | weights between the lookup and the networks, and the error bar fit, tuned on NMRBank papers held out from both |
+| 4. Export | `export_net.py nmr-net.dat --blend blend.json net-*.pt` | float16 weights for `src/chem/nmr/net.ts` (plain TypeScript, matches PyTorch to 1e-4 ppm) |
+
+Results (2026-11-02, SI test set v1, compounds under 500 Da): five-network ensemble blended with
+the lookup, 13C MAE 1.83 ppm, 1H MAE 0.157 ppm (lookup alone 2.62 and 0.224; single networks
+1.96-2.00 and 0.163-0.168). The file is 2.8 MB. The error bar is the expected absolute error,
+c0 + c1 x ensemble spread, fitted on the held-out papers.
