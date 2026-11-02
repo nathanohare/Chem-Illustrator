@@ -18,6 +18,9 @@ export interface DocStyle {
   captionSize: number;
   /** How new captions look, as ChemDraw's face bits (1 bold, 2 italic, 4 underline, 96 formula). */
   captionFace: number;
+  /** Text above and below reaction arrows (reagents, conditions): its size and font, where not the captions'. */
+  arrowTextSize?: number;
+  arrowTextFont?: string;
 }
 
 export const ACS_1996: DocStyle = {

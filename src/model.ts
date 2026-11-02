@@ -1197,6 +1197,8 @@ export class Doc {
   background = '#ffffff';
   /** The page the drawing is on (File > Page Setup): its size in points, and whether it grows to hold the drawing. Null: no page shown. */
   page: PageSetup | null = null;
+  /** Guides drawn over the drawing to line things up by (View > Toolboxes > Guides). Saved with the file, never exported or printed. */
+  guides: import('./editor/guides').CanvasGuides | null = null;
   /**
    * Draw only the highlights (a highlight animated on its own in a slide show, or saved to
    * PowerPoint as its own picture behind its structure). Not saved.

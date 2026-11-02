@@ -322,6 +322,23 @@ label.check { display: inline-flex; align-items: center; gap: 4px; color: var(--
 .tt-symbols + .tt-symbols { padding-left: 8px; border-left: 1px solid var(--line); }
 .tt-vertical .tt-symbols + .tt-symbols { padding: 4px 0 0; border-left: 0; border-top: 1px solid var(--line); }
 .tt-more { height: 24px; padding: 0 6px; font-size: var(--fs-sm); }
+.gt-box { display: flex; flex-direction: column; gap: 6px; max-width: 300px; font-size: var(--fs-sm); }
+.gt-box.gt-vertical { max-width: 196px; }
+.gt-row { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; }
+.gt-btn { min-width: 26px; height: 26px; padding: 0 4px; border-color: transparent; background: transparent; display: inline-flex; align-items: center; justify-content: center; }
+.gt-btn:hover { background: var(--accent-soft); border-color: transparent; }
+.gt-btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.gt-field { display: inline-flex; align-items: center; gap: 4px; }
+.gt-num { width: 56px; padding: 2px 4px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
+.gt-unit, .gt-label { color: var(--muted); }
+.gt-snap { gap: 0; }
+.gt-snap .gt-label { margin-right: 6px; }
+.gt-seg { height: 24px; padding: 0 7px; border-radius: 0; margin-left: -1px; font-size: var(--fs-sm); }
+.gt-seg:first-of-type { border-radius: var(--r-control) 0 0 var(--r-control); }
+.gt-seg:last-child { border-radius: 0 var(--r-control) var(--r-control) 0; }
+.gt-seg.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); position: relative; }
+.gt-check { gap: 6px; cursor: pointer; }
+.gt-tip { color: var(--muted); font-size: var(--fs-xs); }
 .tb-modes button { padding: 2px 6px; font-size: var(--fs-xs); }
 .tb-modes button[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
 
@@ -1158,7 +1175,6 @@ dialog.design-size { width: min(94vw, 500px); }
 
 /* ------------------------------------------------------------------ Slide > Slide Master */
 dialog.master-dialog { width: min(94vw, 560px); }
-.style-dialog .style-source { margin: 2px 0 6px; max-width: 60ch; }
 .style-dialog .style-radio { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
 dialog.master-dialog form { margin: 0; }
 dialog.master-dialog > form > .muted { margin: 2px 0 6px; max-width: 60ch; }

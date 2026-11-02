@@ -3,6 +3,7 @@
 // the page grid's boundaries and fixed edges, Reading Mode's colours, and small ones beside a
 // single choice (bond ends, charges). Each is drawn again as the settings change.
 
+import { newTextLook } from '../chem/arrow-text';
 import { Doc } from '../model';
 import type { DocStyle } from '../style';
 import { freeRing, placeRing, sprout } from '../chem/chemgeom';
@@ -60,7 +61,7 @@ export function sampleDrawing(style: DocStyle, arrow?: ArrowLook): Doc {
       tail: { x: minX, y }, head: { x: minX + L * 3.4, y }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0,
       headLength: arrow?.headLength ?? lw * 10, headWidth: arrow?.headWidth ?? lw * 2.5, ...(arrow?.width != null ? { lineWidth: arrow.width } : {}),
     });
-    doc.addCaption({ x: minX + L * 0.6, y: y - L * 0.35, runs: [{ text: 'TFA, CH' }, { text: '2', sub: true }, { text: 'Cl' }, { text: '2', sub: true }], justify: 'left' });
+    doc.addCaption({ x: minX + L * 0.6, y: y - L * 0.35, runs: [{ text: 'TFA, CH' }, { text: '2', sub: true }, { text: 'Cl' }, { text: '2', sub: true }].map((r) => ({ ...r, ...newTextLook(doc) })), justify: 'left' });
   });
   return doc;
 }

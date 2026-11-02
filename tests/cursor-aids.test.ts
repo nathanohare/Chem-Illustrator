@@ -21,7 +21,7 @@ describe('angle and length beside the pointer', () => {
   });
   it('keeps only sensible saved settings, angle and hints on and length off to start', () => {
     expect(parseCursorAids(undefined)).toMatchObject({ angle: true, length: false, hints: true });
-    expect(parseCursorAids({ angle: false, length: true, look: 'odd' })).toMatchObject({ angle: false, length: true, look: 'box' });
+    expect(parseCursorAids({ angle: false, length: true, look: 'odd' })).toMatchObject({ angle: false, length: true, look: 'plain' });
     expect(parseSettings('{}').cursorAids.hints).toBe(true);
   });
 });

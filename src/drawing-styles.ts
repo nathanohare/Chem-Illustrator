@@ -83,8 +83,14 @@ const NUMBERS = ['bondLength', 'lineWidth', 'boldWidth', 'marginWidth', 'hashSpa
 
 /** Do two styles draw the same? (Names aside.) */
 export function sameLook(a: DocStyle, b: DocStyle): boolean {
-  return NUMBERS.every((k) => Math.abs(a[k] - b[k]) < 1e-6) && a.labelFont === b.labelFont && a.captionFont === b.captionFont;
+  return NUMBERS.every((k) => Math.abs(a[k] - b[k]) < 1e-6) && a.labelFont === b.labelFont && a.captionFont === b.captionFont
+    && Math.abs(arrowTextSizeOf(a) - arrowTextSizeOf(b)) < 1e-6 && arrowTextFontOf(a) === arrowTextFontOf(b);
 }
+
+/** The size of text above and below arrows in a style (the captions' unless set). */
+export const arrowTextSizeOf = (s: DocStyle): number => s.arrowTextSize ?? s.captionSize;
+/** Its font (the captions' unless set). */
+export const arrowTextFontOf = (s: DocStyle): string => s.arrowTextFont ?? s.captionFont;
 
 /** A style read back from the settings file: every number present and sensible, else null. */
 export function cleanStyle(raw: unknown): DocStyle | null {
@@ -100,6 +106,8 @@ export function cleanStyle(raw: unknown): DocStyle | null {
   if (typeof r.labelFont === 'string' && r.labelFont.trim()) out.labelFont = r.labelFont.trim();
   if (typeof r.captionFont === 'string' && r.captionFont.trim()) out.captionFont = r.captionFont.trim();
   if (typeof r.captionFace === 'number') out.captionFace = r.captionFace;
+  if (typeof r.arrowTextSize === 'number' && Number.isFinite(r.arrowTextSize) && r.arrowTextSize > 0) out.arrowTextSize = r.arrowTextSize;
+  if (typeof r.arrowTextFont === 'string' && r.arrowTextFont.trim()) out.arrowTextFont = r.arrowTextFont.trim();
   return out;
 }
 
@@ -214,5 +222,6 @@ export function scaleStyle(st: DocStyle, k: number): DocStyle {
   return {
     ...st, bondLength: r(st.bondLength), lineWidth: r(st.lineWidth), boldWidth: r(st.boldWidth), marginWidth: r(st.marginWidth),
     hashSpacing: r(st.hashSpacing), labelSize: r(st.labelSize), captionSize: r(st.captionSize),
+    ...(st.arrowTextSize !== undefined ? { arrowTextSize: r(st.arrowTextSize) } : {}),
   };
 }

@@ -64,15 +64,19 @@ export function takesHelpers(r: Arrow): boolean {
   return f.length > 1 && Math.abs(f.u.y) < 0.26;
 }
 
-/** The size new text above and below arrows takes. */
-export const textSize = (doc: Doc) => schemePrefs.textSize ?? doc.style.captionSize;
+/** The size new text above and below arrows takes: the drawing style's (Drawing Style > Text above and below arrows), else the captions'. */
+export const textSize = (doc: Doc) => doc.style.arrowTextSize ?? schemePrefs.textSize ?? doc.style.captionSize;
 
 /** How new text's lines line up. */
 export const textJustify = (): Justify => schemePrefs.textAlign;
 
 /** The look of new text: the settings' size when it differs from the drawing's caption size. */
 export function newTextLook(doc: Doc): Partial<TextRun> {
-  return schemePrefs.textSize && schemePrefs.textSize !== doc.style.captionSize ? { size: schemePrefs.textSize } : {};
+  const size = textSize(doc), font = doc.style.arrowTextFont;
+  return {
+    ...(size !== doc.style.captionSize ? { size } : {}),
+    ...(font && font !== doc.style.captionFont ? { font } : {}),
+  };
 }
 
 /** Plain text as caption runs: formulas' digits as subscripts, in the look of `like` (its first run). */
