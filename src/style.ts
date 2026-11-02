@@ -62,6 +62,19 @@ export function wedgeWidth(s: DocStyle): number {
 export const DEFAULT_BOND_ENDS = 0.25;
 export const bondEndPrefs: { round: number } = { round: DEFAULT_BOND_ENDS };
 
+/**
+ * How atom-map numbers (Chemistry ▸ Map Atoms) look, an app setting: a small rounded box beside
+ * the atom, filled light peach (Nate's pick), a light tint of the number's own colour (so an atom
+ * and where it goes match at a glance), or ChemDraw's grey outline.
+ */
+export type MapLook = 'peach' | 'tint' | 'grey';
+export const MAP_LOOKS: { value: MapLook; label: string }[] = [
+  { value: 'peach', label: 'Light peach boxes' },
+  { value: 'tint', label: 'Each number in its own light colour' },
+  { value: 'grey', label: 'Grey outlines (as ChemDraw)' },
+];
+export const mapLookPrefs: { look: MapLook } = { look: 'peach' };
+
 /** The choices offered for it (Settings > Drawing), from round to square. */
 export const BOND_END_CHOICES: { value: number; label: string }[] = [
   { value: 1, label: 'Round' },
