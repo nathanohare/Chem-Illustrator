@@ -37,6 +37,11 @@ export interface AnimationHooks {
   view(): View;
   /** A keyframe move was picked in the pane: pick its keyframe on the canvas (by the keyframe's id). */
   keyframe?(id: number): void;
+  /**
+   * Turn in 3-D: the Key Views window for a structure on the slide (named by one of its atoms),
+   * starting from the views it turns to now. Null: cancelled.
+   */
+  keyViews?(atom: number, views: number[][], dur: number): Promise<{ views: number[][]; dur: number } | null>;
 }
 
 const svg = (body: string, size = 22) => `<svg viewBox="0 0 22 22" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
@@ -61,6 +66,7 @@ const EFFECT_ICONS: Record<Effect, string> = {
   transparency: svg('<path d="M11 3l2 5.5 5.5.5-4.2 3.6 1.4 5.4L11 15l-4.7 3 1.4-5.4L3.5 9l5.5-.5z" fill="currentColor" opacity=".25"/><path d="M11 3l2 5.5 5.5.5-4.2 3.6 1.4 5.4L11 15l-4.7 3 1.4-5.4L3.5 9l5.5-.5z"/>'),
   colour: svg('<path d="M11 3l2 5.5 5.5.5-4.2 3.6 1.4 5.4L11 15l-4.7 3 1.4-5.4L3.5 9l5.5-.5z" fill="currentColor"/><path d="M3 20h16" stroke-width="2.5" stroke="#e53935"/>'),
   path: svg('<path d="M4 17C7 4 15 18 18 5" stroke-dasharray="2 2"/><circle cx="4" cy="17" r="2" fill="#2e8b57" stroke="none"/><circle cx="18" cy="5" r="2" fill="#c0392b" stroke="none"/>'),
+  turn3d: svg('<path d="M11 3l7 4v8l-7 4-7-4V7z" fill="currentColor" opacity=".25"/><path d="M11 3l7 4v8l-7 4-7-4V7zM4 7l7 4 7-4M11 11v8"/><path d="M2.5 13.5a9 4 0 0 0 17 0m0 0l.2-2.2m-.2 2.2l-2-.8" stroke-width="1.1"/>'),
   camera: svg('<rect x="2" y="6" width="8" height="6" rx="1" stroke-dasharray="2 1.5"/><rect x="12" y="9" width="8" height="6" rx="1" fill="currentColor" opacity=".8"/><path d="M8 15c2 2 4 2 5 1m0 0l-.3-2M13 16l-2 .2"/>'),
 };
 
@@ -154,6 +160,7 @@ export class AnimationUI {
       hooks.flash(`Every slide now has this slide's transition.`);
     });
     ribbon.querySelector('[data-tr="preview"]')!.addEventListener('click', () => this.preview());
+    this.$('#an-views').addEventListener('click', () => void this.keyViews());
     // animations
     const effects = this.$('#an-effects');
     const gallery = document.createElement('div');
@@ -164,6 +171,7 @@ export class AnimationUI {
       spin: 'the selected objects turn round; set how far in Effect Options',
       transparency: 'the selected objects become see-through and stay so; set how much in Effect Options',
       colour: 'a shape\'s fill, or text\'s colour, changes (a structure or picture is coloured all over); pick the colour in Effect Options. PowerPoint can\'t recolour a structure or picture',
+      turn3d: 'a structure turns smoothly in 3-D to each key view you set, one view per click (Key Views… in Effect Options). PowerPoint shows it still',
     };
     for (const exit of [false, true, null]) {
       for (const e of EFFECTS) {
@@ -576,6 +584,7 @@ export class AnimationUI {
       if (document.activeElement !== amount) amount.value = String(amt.v);
     }
     colourBox.style.display = a?.effect === 'colour' ? '' : 'none';
+    this.$<HTMLElement>('#an-views').style.display = a?.effect === 'turn3d' ? '' : 'none';
     if (a?.effect === 'colour' && document.activeElement !== colour) colour.value = a.color ?? EMPH_DEFAULTS.color;
     const cam = !!a && isCamera(a);
     (from.closest('label') ?? from).style.display = a && (isEmphasis(a.effect) || cam) ? 'none' : '';
@@ -641,6 +650,7 @@ export class AnimationUI {
   /** Give the selected objects an effect (or change the animation picked in the pane). */
   applyEffect(effect: Effect, exit: boolean): void {
     if (effect === 'path') { this.applyPath('down'); return; }
+    if (effect === 'turn3d') { void this.keyViews(); return; }
     const doc = this.hooks.doc();
     const parts = slideParts(doc);
     let anims = this.anims().map((a) => ({ ...a }));
@@ -664,6 +674,37 @@ export class AnimationUI {
     anims = [...anims, ...added];
     this.picked = anims.length - added.length;
     this.setAnims(anims, `${animName(added[0])} animation`);
+  }
+
+  /**
+   * Turn in 3-D: the Key Views window for the selected structure (or the one the picked
+   * animation turns). Its views become its Turn in 3-D animations, one per click, in place of
+   * those it had.
+   */
+  async keyViews(): Promise<void> {
+    const doc = this.hooks.doc();
+    const parts = slideParts(doc);
+    const pa = this.picked !== null ? this.anims()[this.picked] : undefined;
+    const chosen = selectedParts(parts, this.hooks.selection()).filter((p) => p.kind === 'drawing' && p.sel.atoms.size);
+    const part = chosen[0] ?? (pa?.effect === 'turn3d' ? partOf(parts, pa.target) : undefined);
+    if (!part || part.kind !== 'drawing' || !part.sel.atoms.size || !this.hooks.keyViews) {
+      this.hooks.flash('Select a structure on the slide first: Turn in 3-D turns structures.');
+      return;
+    }
+    const mine = (a: Anim) => a.effect === 'turn3d' && partOf(parts, a.target) === part;
+    const had = this.anims().filter(mine);
+    const got = await this.hooks.keyViews(Math.min(...part.sel.atoms), had.map((a) => a.view ?? [1, 0, 0, 0, 1, 0, 0, 0, 1]), had[0]?.dur ?? 1.5);
+    if (!got) return;
+    // the new views take the place of the first it had (or go at the end)
+    const all = this.anims();
+    const at = all.findIndex(mine);
+    const rest = all.filter((a) => !mine(a));
+    const target = had[0]?.target ?? targetOf(part);
+    const fresh = got.views.map((view): Anim => ({ target, effect: 'turn3d', start: 'click', dur: got.dur, delay: 0, view }));
+    const where = at < 0 ? rest.length : all.slice(0, at).filter((a) => !mine(a)).length;
+    const anims = [...rest.slice(0, where), ...fresh, ...rest.slice(where)];
+    this.picked = fresh.length ? where : null;
+    this.setAnims(anims, fresh.length ? 'Turn in 3-D' : 'Remove Turn in 3-D');
   }
 
   private changePicked(change: Partial<Anim>, label: string): void {

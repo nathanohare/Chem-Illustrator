@@ -377,7 +377,8 @@ export class StylePanel {
     const lined = (x: Shape) => x.kind !== 'symbol' && x.kind !== 'ring';
     const l = any(lined);
     if (l) {
-      this.check('Dashed', !!l.dashed, (v) => set('Dashed', lined, () => ({ dashed: v })));
+      this.check('Dashed', !!l.dashed && !l.dotted, (v) => set('Dashed', lined, () => ({ dashed: v, dotted: false })));
+      if (l.kind === 'line') this.check('Dotted', !!l.dotted, (v) => set('Dotted', (x) => x.kind === 'line', () => ({ dotted: v, dashed: v })));
       if (!geo) this.check('Bold', !!l.bold, (v) => set('Bold', lined, () => ({ bold: v })));
     }
     const fillable = (x: Shape) => x.kind === 'rect' || x.kind === 'oval' || x.kind === 'geo' || x.kind === 'ring';

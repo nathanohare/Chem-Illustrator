@@ -392,6 +392,29 @@ export function paintShapes(ctx: CanvasRenderingContext2D, items: XShape[], font
 export interface CrystalParts { captions: number[]; arrows: number[]; shapes: number[] }
 
 /**
+ * Where drawCrystal puts each atom's centre on the page (fitted to `w` × `h` points with its
+ * top left at `at`), and the points per Å it draws at: for marks drawn over it (distances).
+ */
+export function crystalPlacer(c: CrystalSpec, at: Vec, w: number, h: number): { place: (i: number) => Vec | null; scale: number } {
+  const v: XView = { ...c.view, zoom: fittingZoom(c, c.view, w, h) };
+  const b = shapesBounds(crystalShapes(c, v));
+  const dx = at.x + w / 2 - (b[0] + b[2]) / 2, dy = at.y + h / 2 - (b[1] + b[3]) / 2;
+  const keep = visible(c, v);
+  const scale = PT_PER_A * v.zoom;
+  if (!keep.length) return { place: () => null, scale };
+  const centre: V3 = [0, 1, 2].map((k) => keep.reduce((s, i) => s + c.atoms[i].xyz[k], 0) / keep.length) as V3;
+  const kept = new Set(keep);
+  return {
+    scale,
+    place: (i) => {
+      if (!kept.has(i)) return null;
+      const s = mvec(v.rotation, sub3(c.atoms[i].xyz, centre));
+      return { x: s[0] * scale + dx, y: -s[1] * scale + dy };
+    },
+  };
+}
+
+/**
  * Draw the structure into the drawing as ovals, lines, ink lines and text, fitted to `w` × `h`
  * points with its top left at `at`. Call inside an edit; the caller puts the parts in a frame.
  */

@@ -6,6 +6,7 @@
 
 import { Molecule, ConformerGenerator, ForceFieldMMFF94 } from 'openchemlib';
 import { choosePose, type DepthCues, type PoseProblem, type V3 } from './perspective';
+import { absoluteMolfile } from './model3d-build';
 
 export interface Pose {
   /** Every atom (the molfile's first, in its order, then added hydrogens), Å, the 3-D window's frame: x right, y up, z towards the reader. */
@@ -35,7 +36,7 @@ const viewOf = (m: Molecule): V3[] => {
 /** The drawing's shape in 3-D: up to `count` conformers are tried. */
 export function buildPose(molblock: string, cues: DepthCues, L: number, count = 8, seed = 1): PoseResult {
   const fail = (p: PoseProblem | 'build'): PoseResult => ({ problem: p, message: PROBLEM[p] });
-  const mol = Molecule.fromMolfile(molblock);
+  const mol = Molecule.fromMolfile(absoluteMolfile(molblock));
   if (!mol.getAllAtoms()) return fail('build');
   const gen = new ConformerGenerator(seed);
   if (!gen.initializeConformers(mol)) return fail('build');

@@ -1560,6 +1560,29 @@ export class SheetMode {
   }
 
   /** The structure in the active cell, if it holds one. */
+  /**
+   * The Assistant: the selected cells as tab-separated text (structures as SMILES, as a copy
+   * gives Excel), with the address of the first cell; null for a single empty cell. At most
+   * 2000 cells.
+   */
+  selectedCellsText(): { at: string; text: string } | null {
+    const v = this.view;
+    const s = v.sheet;
+    if (!s) return null;
+    const sel = growToMerges(s, v.sel.range);
+    const R = s.clip(sel) ?? { r1: sel.r1, c1: sel.c1, r2: sel.r1, c2: sel.c1 };
+    const rows: string[][] = [];
+    let n = 0;
+    for (let r = R.r1; r <= R.r2 && n < 2000; r++) {
+      if (s.hiddenRows.has(r)) continue;
+      const line: string[] = [];
+      for (let c = R.c1; c <= R.c2 && n < 2000; c++, n++) line.push(this.cellText(s, r, c));
+      rows.push(line);
+    }
+    const text = toDelimited(rows, '\t').trim();
+    return text ? { at: `${cellName(R.r1, R.c1)}${R.r1 === R.r2 && R.c1 === R.c2 ? '' : ':' + cellName(R.r2, R.c2)}`, text } : null;
+  }
+
   activeStructure(): Contents | null {
     const s = this.view.sheet;
     if (!s) return null;

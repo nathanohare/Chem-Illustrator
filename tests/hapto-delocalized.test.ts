@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { Doc } from '../src/model';
 import { writeCdxml } from '../src/io/cdxml-write';
 import { readCdxml } from '../src/io/cdxml';
-import { allylArc, bondHapto, haptoLook, piLook, piLooksOf } from '../src/chem/hapto';
+import { allylArc, bondHapto, chainArc, haptoLook, piLook, piLooksOf } from '../src/chem/hapto';
 
 /** A Kekulé cyclopentadienyl (two double bonds) over an iron atom, bonded η⁵. */
 function cpFe(bonded = true) {
@@ -56,7 +56,20 @@ describe('which ligands are drawn delocalized', () => {
     expect(look).toEqual({ kind: 'arc', chain: [chain[0], chain[1], chain[2]] });
     for (const id of bonds) expect(piLooksOf(doc, doc.bonds.get(id)!).length).toBe(1);
   });
-  it('not a ring on its own, not η² or η⁴, not in Kekulé form, not with the setting off', () => {
+  it('an η⁴-butadiene: one arc along all three bonds (Nate, 2026-11-02)', () => {
+    const doc = new Doc();
+    const { chain, bonds } = doc.edit('a', () => {
+      const ps = [[-18, -14], [-8, -26], [8, -26], [18, -14]].map(([x, y]) => doc.addAtom(x, y).id);
+      const bs = [doc.addBond(ps[0], ps[1], 2).id, doc.addBond(ps[1], ps[2], 1).id, doc.addBond(ps[2], ps[3], 2).id];
+      bondHapto(doc, doc.addAtom(0, 0, 26).id, ps);
+      return { chain: ps, bonds: bs };
+    });
+    const look = piLook(doc, centreOf(doc))!;
+    expect(look.kind).toBe('arc');
+    expect([chain, [...chain].reverse()].map((c) => JSON.stringify(c))).toContain(JSON.stringify((look as { chain: number[] }).chain));
+    for (const id of bonds) expect(piLooksOf(doc, doc.bonds.get(id)!).length).toBe(1);
+  });
+  it('not a ring on its own, not η² or a 4-ring, not in Kekulé form, not with the setting off', () => {
     expect(piLooksOf(cpFe(false).doc, cpFe(false).doc.bonds.values().next().value!)).toEqual([]);
     const { doc } = cpFe();
     const c = centreOf(doc);
@@ -85,6 +98,26 @@ describe('the allyl arc', () => {
     expect(dist(q.ctrl)).toBeCloseTo(2.6, 6);
     expect(Math.hypot(q.from.x - a.x, q.from.y - a.y)).toBeGreaterThan(2);
     expect(allylArc(a, { x: 0, y: -20 }, c, 2.6)).toBeNull();
+  });
+});
+
+describe('the arc along a longer chain', () => {
+  it('is one smooth curve, split so each bond draws its own stretch', () => {
+    const pts = [{ x: -18, y: -14 }, { x: -8, y: -26 }, { x: 8, y: -26 }, { x: 18, y: -14 }];
+    const pieces = chainArc(pts, 2.6)!;
+    expect(pieces.map((p) => p.length)).toEqual([1, 2, 1]);
+    // each stretch starts where the one before ends
+    const flat = pieces.flat();
+    for (let i = 1; i < flat.length; i++) {
+      expect(flat[i].from.x).toBeCloseTo(flat[i - 1].to.x, 6);
+      expect(flat[i].from.y).toBeCloseTo(flat[i - 1].to.y, 6);
+    }
+    // inside the U, below the carbons, and symmetric
+    expect(flat[1].to.y).toBeGreaterThan(-26);
+    expect(flat[0].from.x).toBeCloseTo(-flat[3].to.x, 6);
+    // three atoms: the allyl arc, halved
+    const three = chainArc(pts.slice(0, 3), 2.6)!;
+    expect(three.map((p) => p.length)).toEqual([1, 1]);
   });
 });
 

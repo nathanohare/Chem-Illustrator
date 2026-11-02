@@ -12,9 +12,9 @@ import { LIGANDS } from './ligands';
  * A subset of ChemDraw's 156 defaults (User Guide pp. 83–84) plus common protecting groups.
  */
 export const NICKNAMES: Record<string, string> = {
-  Me: 'C', Et: 'CC', Pr: 'CCC', 'n-Pr': 'CCC', 'i-Pr': 'C(C)C', iPr: 'C(C)C', Bu: 'CCCC', 'n-Bu': 'CCCC', nBu: 'CCCC',
+  Me: 'C', Et: 'CC', Pr: 'CCC', 'n-Pr': 'CCC', nPr: 'CCC', 'i-Pr': 'C(C)C', iPr: 'C(C)C', Bu: 'CCCC', 'n-Bu': 'CCCC', nBu: 'CCCC',
   'i-Bu': 'CC(C)C', iBu: 'CC(C)C', 's-Bu': 'C(C)CC', sBu: 'C(C)CC', 't-Bu': 'C(C)(C)C', tBu: 'C(C)(C)C',
-  Ph: 'c1ccccc1', Bn: 'Cc1ccccc1', Bz: 'C(=O)c1ccccc1', Ac: 'C(C)=O', Piv: 'C(=O)C(C)(C)C', Pv: 'C(=O)C(C)(C)C',
+  Ph: 'c1ccccc1', C6H5: 'c1ccccc1', C6F5: 'c1c(F)c(F)c(F)c(F)c1F', C6H11: 'C1CCCCC1', Bn: 'Cc1ccccc1', Bz: 'C(=O)c1ccccc1', Ac: 'C(C)=O', Piv: 'C(=O)C(C)(C)C', Pv: 'C(=O)C(C)(C)C',
   Boc: 'C(=O)OC(C)(C)C', Cbz: 'C(=O)OCc1ccccc1', Fmoc: 'C(=O)OCC1c2ccccc2-c2ccccc21', Troc: 'C(=O)OCC(Cl)(Cl)Cl',
   Alloc: 'C(=O)OCC=C', Allyl: 'CC=C', Ts: 'S(=O)(=O)c1ccc(C)cc1', Tos: 'S(=O)(=O)c1ccc(C)cc1', Ms: 'S(=O)(=O)C',
   Tf: 'S(=O)(=O)C(F)(F)F', Ns: 'S(=O)(=O)c1ccc(cc1)[N+](=O)[O-]', TMS: '[Si](C)(C)C', TES: '[Si](CC)(CC)CC',
@@ -240,11 +240,12 @@ export function tokenize(label: string): Token[] {
 }
 
 /** Text of one token as displayed, split into normal, subscript and superscript parts. */
-export interface Piece { text: string; sub?: boolean; sup?: boolean; /** Where it starts in the label text. */ at?: number }
+export interface Piece { text: string; sub?: boolean; sup?: boolean; italic?: boolean; /** Where it starts in the label text. */ at?: number }
 
 /**
  * Raised and lowered characters set by hand in a label, one mark per character of its text:
- * "^" superscript, "_" subscript, "=" on the line, anything else as the label would show it.
+ * "^" superscript, "_" subscript, "=" on the line, "/" in italics (the t of tBu, by the alkyl
+ * look), anything else as the label would show it.
  */
 export type LabelMarks = string;
 
@@ -259,6 +260,69 @@ function tokenPieces(t: Token, supDigits = false, marks?: LabelMarks): Piece[] {
   return marks ? markPieces(p, marks) : p;
 }
 
+/**
+ * How the n-, i-, s- and t- of alkyl groups (tBu, iPr, nBu, sBu, iBu) are written, from
+ * Settings ▸ Preferences: as typed, or one of four looks (no dash or a dash, upright or in
+ * italics). The look is given to labels and text as they are typed, and to what is already in a
+ * drawing when asked; it is kept in the text (the dash) and the label marks (the italics).
+ */
+export type AlkylLook = 'typed' | 'plain' | 'italic' | 'dash' | 'both';
+export const ALKYL_LOOKS: AlkylLook[] = ['typed', 'plain', 'italic', 'dash', 'both'];
+export const alkylPrefs: { look: AlkylLook } = { look: 'typed' };
+/** What a look asks for: the prefix in italics or not, and a dash after it or not (null: as typed). */
+export function alkylWants(look: AlkylLook = alkylPrefs.look): { italic: boolean; dash: boolean } | null {
+  return look === 'typed' ? null : { italic: look === 'italic' || look === 'both', dash: look === 'dash' || look === 'both' };
+}
+
+/**
+ * The prefix letters of alkyl groups in some text: the letter's index, and whether a dash follows
+ * it. A prefix counts at the start, after a non-letter (N(iPr)2, 2nBu) or after a capital
+ * (OtBu, PtBu3), and only before Pr or Bu that ends the group (not t-Butyl).
+ */
+export function alkylPrefixes(text: string): { at: number; dash: boolean }[] {
+  const out: { at: number; dash: boolean }[] = [];
+  for (const m of text.matchAll(/(?<![a-z])([nist])(-?)(?=(?:Pr|Bu)(?![a-z]))/g)) out.push({ at: m.index!, dash: !!m[2] });
+  return out;
+}
+
+/**
+ * Whether a dash may go after (or come out from after) the prefix at `at`: not where the letter
+ * before and the prefix would read as an element (Pt-Bu, Ni-Pr, Si-Pr, Os-Bu), either way.
+ */
+export function dashFree(text: string, at: number): boolean {
+  const before = text[at - 1];
+  return !before || !/[A-Z]/.test(before) || elementNumber(before + text[at]) === undefined;
+}
+
+/**
+ * A label (and its marks) in an alkyl look: a dash put in or taken out after each prefix of an
+ * abbreviation it reads as (the t of OtBu, not of Ts), and the prefix marked italic ("/") or not.
+ * The label is unchanged when the look is "as typed".
+ */
+export function styleLabel(label: string, marks?: LabelMarks, look: AlkylLook = alkylPrefs.look): { label: string; marks?: LabelMarks } {
+  const want = alkylWants(look);
+  const keep = { label, ...(marks ? { marks } : {}) };
+  if (!want) return keep;
+  const at = new Map<number, boolean>();
+  for (const t of tokenize(label)) {
+    if (t.kind !== 'nick' || t.at === undefined) continue;
+    for (const f of alkylPrefixes(t.text)) at.set(t.at + f.at, f.dash);
+  }
+  if (!at.size) return keep;
+  const was = (marks ?? '').padEnd(label.length, '.');
+  let text = '', m = '';
+  for (let i = 0; i < label.length; i++) {
+    const had = at.get(i);
+    if (had === undefined) { text += label[i]; m += was[i]; continue; }
+    text += label[i];
+    m += want.italic ? '/' : was[i] === '/' ? '.' : was[i];
+    const dash = dashFree(label, i) ? want.dash : had;
+    if (dash && !had) { text += '-'; m += '.'; }
+    else if (!dash && had) i++;
+  }
+  return { label: text, ...(/[\^_=/]/.test(m) ? { marks: m } : {}) };
+}
+
 /** Pieces with the hand-set marks applied, split where a mark changes how a character sits. */
 export function markPieces(pieces: Piece[], marks: LabelMarks): Piece[] {
   const out: Piece[] = [];
@@ -268,9 +332,10 @@ export function markPieces(pieces: Piece[], marks: LabelMarks): Piece[] {
       const m = marks[p.at! + k];
       const sup = m === '^' ? true : m === '_' || m === '=' ? false : !!p.sup;
       const sub = m === '_' ? true : m === '^' || m === '=' ? false : !!p.sub;
+      const italic = m === '/' || !!p.italic;
       const last = out[out.length - 1];
-      if (k > 0 && last && !!last.sup === sup && !!last.sub === sub) last.text += ch;
-      else out.push({ text: ch, at: p.at! + k, ...(sup ? { sup } : {}), ...(sub ? { sub } : {}) });
+      if (k > 0 && last && !!last.sup === sup && !!last.sub === sub && !!last.italic === italic) last.text += ch;
+      else out.push({ text: ch, at: p.at! + k, ...(sup ? { sup } : {}), ...(sub ? { sub } : {}), ...(italic ? { italic } : {}) });
     });
   }
   return out;
@@ -346,6 +411,8 @@ export interface GlyphRun {
   /** Baseline, relative to the atom position. */
   dy: number;
   size: number;
+  /** Set in italics (the t of tBu, when asked for). */
+  italic?: boolean;
 }
 
 export interface LabelLayout {
@@ -434,7 +501,7 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
       const s = p.sub || p.sup ? subSize : size;
       const dy = baseline + (p.sub ? size * 0.22 : p.sup ? -size * 0.42 : 0);
       const w = measure(p.text, s);
-      runs.push({ text: p.text, dx: x, dy, size: s });
+      runs.push({ text: p.text, dx: x, dy, size: s, ...(p.italic ? { italic: true } : {}) });
       boxes.push({ x1: x, y1: dy - CAP * s, x2: x + w, y2: dy + (p.sub ? 0.1 * s : 0) });
       x += w;
     }

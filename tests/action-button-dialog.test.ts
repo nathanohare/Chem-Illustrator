@@ -3,7 +3,7 @@
 // the action it usually has, the action changed from the drop-down under it, and the back,
 // home and next set at once.
 import { describe, expect, it } from 'vitest';
-import { askActionButton } from '../src/ui/action-button-dialog';
+import { actionSet, askActionButton } from '../src/ui/action-button-dialog';
 import { GEO_BY_ID } from '../src/design/geo';
 
 (HTMLDialogElement.prototype as unknown as { showModal: () => void }).showModal = function (this: HTMLDialogElement) { this.open = true; };
@@ -42,5 +42,29 @@ describe('Action Button window', () => {
     expect(action().disabled).toBe(true);
     submit();
     expect(await p).toEqual({ geo: 'set', link: '' });
+  });
+
+  it('has the show\'s own buttons: go to a slide, the slide picker, looking round, and a region of a Canvas slide', async () => {
+    const regions = [{ link: '#key=4', label: 'Aldol step' }];
+    const p = askActionButton(slides, regions);
+    for (const id of ['actJump', 'actGrid', 'actLook', 'actZoom']) expect(tile(id)).toBeTruthy();
+    // drawn as they are in PowerPoint (no PowerPoint button looks like them)
+    expect(GEO_BY_ID.get('actGrid')!.prst).toBeUndefined();
+    tile('actGrid').click();
+    expect(action().value).toBe('#grid');
+    tile('actLook').click();
+    expect(action().value).toBe('#look');
+    tile('actJump').click();
+    expect(action().value).toBe('slide');
+    tile('actZoom').click();
+    expect(action().value).toBe('key');
+    expect(document.querySelector<HTMLElement>('.action-button-dialog [data-for=key]')!.hidden).toBe(false);
+    submit();
+    expect(await p).toEqual({ geo: 'actZoom', link: '#key=4' });
+  });
+
+  it('the set adds the slide picker, and on a Canvas slide looking round', () => {
+    expect(actionSet(false)).toEqual(['actBack', 'actHome', 'actNext', 'actGrid']);
+    expect(actionSet(true)).toContain('actLook');
   });
 });

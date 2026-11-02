@@ -66,6 +66,23 @@ fn known(provider: &str) -> bool {
     fixed_base(provider).is_some() || provider == "compatible"
 }
 
+/// Whether an address is this computer's own (localhost, 127.x.x.x or [::1]): Local only sends nowhere else.
+fn local_address(base: &str) -> bool {
+    let rest = base.splitn(2, "://").nth(1).unwrap_or("");
+    let host_port = rest.split(['/', '?', '#']).next().unwrap_or("");
+    // (no user name in the address: "user@host" could hide where it really goes)
+    if host_port.contains('@') {
+        return false;
+    }
+    let host = if let Some(h) = host_port.strip_prefix('[') { h.split(']').next().unwrap_or("") } else { host_port.split(':').next().unwrap_or("") };
+    let host = host.to_ascii_lowercase();
+    if host == "localhost" || host == "::1" {
+        return true;
+    }
+    let parts: Vec<&str> = host.split('.').collect();
+    parts.len() == 4 && parts[0] == "127" && parts.iter().all(|p| !p.is_empty() && p.len() <= 3 && p.chars().all(|c| c.is_ascii_digit()))
+}
+
 fn web_address(base: &str) -> bool {
     let b = base.to_ascii_lowercase();
     b.starts_with("https://") || b.starts_with("http://")
@@ -120,6 +137,7 @@ pub async fn ai_request(
     method: String,
     path: String,
     body: Option<String>,
+    local_only: Option<bool>,
 ) -> Result<AiReply, String> {
     if !known(&provider) {
         return Err("Unknown AI service.".into());
@@ -127,6 +145,9 @@ pub async fn ai_request(
     let base = fixed_base(&provider).map(str::to_string).unwrap_or(base).trim_end_matches('/').to_string();
     if !web_address(&base) {
         return Err("The AI service's address must start with http:// or https://.".into());
+    }
+    if local_only.unwrap_or(false) && !local_address(&base) {
+        return Err("Local only is on, so nothing is sent off this computer. Link a model on this computer (Ollama or LM Studio) or turn Local only off in Edit > Settings > AI Model.".into());
     }
     if !path.starts_with('/') || path.contains("..") || path.contains("://") {
         return Err("Not a request the app sends.".into());
@@ -169,4 +190,20 @@ pub async fn ai_request(
         return Err("The AI service's answer is too large.".into());
     }
     Ok(AiReply { status, body: String::from_utf8_lossy(&bytes).into_owned() })
+}
+
+#[cfg(test)]
+mod local_tests {
+    use super::*;
+
+    #[test]
+    fn local_addresses() {
+        assert!(local_address("http://localhost:11434/v1"));
+        assert!(local_address("http://127.0.0.1:1234/v1"));
+        assert!(local_address("http://[::1]:8080/v1"));
+        assert!(!local_address("https://api.openai.com/v1"));
+        assert!(!local_address("http://localhost.evil.com/v1"));
+        assert!(!local_address("http://user@evil.com/v1"));
+        assert!(!local_address("http://127.0.0.1.evil.com/v1"));
+    }
 }

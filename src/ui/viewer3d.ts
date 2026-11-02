@@ -17,7 +17,7 @@ import { depthShadePrefs } from '../render/depth-shade';
 import { ask } from './ask';
 import { DEFAULT_SEARCH, type SearchOptions } from '../chem/conformer-rank';
 import { KCAL_PER_HARTREE, refineWithXtb, XTB_SOLVENTS, type XtbOptions, type XtbRunner } from '../chem/xtb';
-import { chargeAndMultiplicity, qmInput, QM_METHODS, type QmOptions, type QmProgram } from '../chem/qm-input';
+import { chargeAndMultiplicity, qmInput, xyzFile, QM_METHODS, type QmOptions, type QmProgram } from '../chem/qm-input';
 
 /** What the conformer tiers need from the app. */
 export interface ConformerTools {
@@ -36,6 +36,19 @@ export interface ConformerTools {
 }
 
 export type Style3d = 'ball-stick' | 'sticks' | 'wire' | 'spacefill';
+
+/** The three ways to get conformers, from fastest to most reliable. */
+type Tier = 'quick' | 'search' | 'xtb';
+const TIERS: Tier[] = ['quick', 'search', 'xtb'];
+const TIER_NAMES: Record<Tier, string> = { quick: 'Quick', search: 'Full Search', xtb: 'xTB Refine' };
+const TIER_TIPS: Record<Tier, string> = {
+  quick: 'About a dozen likely shapes, each relaxed with the MMFF94s+ force field. Takes seconds.',
+  search: 'Hundreds of starting shapes, each relaxed with MMFF94s+, duplicates removed. Finds shapes Quick misses; under a minute for most molecules.',
+  xtb: 'The lowest few re-optimised with GFN2-xTB, a fast quantum-chemical method: more trustworthy energies than a force field. Minutes; desktop app, with xtb installed.',
+};
+
+/** The model's background: light grey, so white hydrogens stand out. */
+const BACKGROUND = '#e1e4e9';
 
 /** Jmol's element colours (CPK), the usual ones in molecular graphics. */
 const CPK: Record<number, string> = {
@@ -73,11 +86,16 @@ export class Viewer3d {
   private fogBox: HTMLInputElement | null = null;
   private frame = 0;
   private onPlace: ((v: PlaceView) => void) | null = null;
-  private prev: HTMLButtonElement;
-  private next: HTMLButtonElement;
   /** The conformer tiers (set by the app). */
   tools: ConformerTools | null = null;
-  private tierBar: HTMLDivElement;
+  private tierBar: HTMLSpanElement;
+  private exportBtn: HTMLButtonElement;
+  private note: HTMLDivElement;
+  private again: HTMLButtonElement;
+  private list: HTMLDivElement;
+  /** Each method's result, kept to switch back to; and the one shown. */
+  private results: Partial<Record<Tier, Model3d>> = {};
+  private tier: Tier = 'quick';
   private stopBtn: HTMLButtonElement;
   private busy = false;
   private stopped = false;
@@ -119,21 +137,63 @@ export class Viewer3d {
     this.fogBox = fog.querySelector('input');
     bar.append(style, check('H', 'Show hydrogens', this.showH, (v) => (this.showH = v)), check('Labels', 'Show element symbols (not C or H)', this.labels, (v) => (this.labels = v)), fog, spin);
 
-    const confBar = document.createElement('div');
-    confBar.className = 'v3d-bar';
-    this.prev = document.createElement('button');
-    this.prev.type = 'button';
-    this.prev.textContent = '‹';
-    this.prev.title = 'Previous conformer (lower energy)';
-    this.prev.addEventListener('click', () => this.pick(this.conf - 1));
-    this.next = document.createElement('button');
-    this.next.type = 'button';
-    this.next.textContent = '›';
-    this.next.title = 'Next conformer (higher energy)';
-    this.next.addEventListener('click', () => this.pick(this.conf + 1));
+    // the method: Quick, Full Search or xTB Refine, each result kept to go back to
+    const methodBar = document.createElement('div');
+    methodBar.className = 'v3d-bar';
+    const seg = document.createElement('span');
+    seg.className = 'v3d-seg';
+    seg.setAttribute('role', 'group');
+    seg.setAttribute('aria-label', 'Method');
+    for (const t of TIERS) {
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.textContent = TIER_NAMES[t];
+      x.title = TIER_TIPS[t];
+      x.dataset.tier = t;
+      x.setAttribute('aria-pressed', String(t === 'quick'));
+      x.addEventListener('click', () => void this.chooseTier(t));
+      seg.append(x);
+    }
+    this.tierBar = seg;
+    const spacer = document.createElement('span');
+    spacer.style.flex = '1';
+    this.exportBtn = document.createElement('button');
+    this.exportBtn.type = 'button';
+    this.exportBtn.textContent = 'Export ▾';
+    this.exportBtn.title = 'Input files for Gaussian or ORCA, or every conformer as an XYZ or SD file';
+    this.exportBtn.setAttribute('aria-haspopup', 'menu');
+    this.exportBtn.addEventListener('click', () => this.exportMenu());
+    methodBar.append(seg, spacer, this.exportBtn);
+    // what the chosen method is, and what it found
+    this.note = document.createElement('div');
+    this.note.className = 'v3d-note';
+    this.again = document.createElement('button');
+    this.again.type = 'button';
+    this.again.className = 'link';
+    this.again.textContent = 'Run again…';
+    this.again.addEventListener('click', () => void this.runTier(this.tier));
+    // the conformers, lowest energy first
+    this.list = document.createElement('div');
+    this.list.className = 'v3d-list';
+    this.list.tabIndex = 0;
+    this.list.setAttribute('role', 'listbox');
+    this.list.setAttribute('aria-label', 'Conformers, lowest energy first');
+    this.list.addEventListener('keydown', (e) => {
+      const d = e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : e.key === 'Home' ? -1e6 : e.key === 'End' ? 1e6 : 0;
+      if (!d) return;
+      e.preventDefault();
+      this.pick(this.conf + d);
+    });
+    const status = document.createElement('div');
+    status.className = 'v3d-bar';
     this.info = document.createElement('span');
     this.info.className = 'v3d-info';
-    confBar.append(this.prev, this.info, this.next);
+    this.stopBtn = document.createElement('button');
+    this.stopBtn.type = 'button';
+    this.stopBtn.textContent = 'Stop';
+    this.stopBtn.hidden = true;
+    this.stopBtn.addEventListener('click', () => { this.stopped = true; this.tools?.stop(); });
+    status.append(this.info, this.stopBtn);
 
     const actions = document.createElement('div');
     actions.className = 'v3d-bar';
@@ -162,29 +222,7 @@ export class Viewer3d {
     copyMol.title = 'Copy this conformer as a 3-D molfile (with hydrogens), for Chem3D, Avogadro, PyMOL or a calculation';
     copyMol.addEventListener('click', () => void this.copyMol());
     actions.append(place, best, copyPic, copyMol);
-    this.tierBar = document.createElement('div');
-    this.tierBar.className = 'v3d-bar';
-    const tierButton = (label: string, title: string, run: () => Promise<void>) => {
-      const t = document.createElement('button');
-      t.type = 'button';
-      t.textContent = label;
-      t.title = title;
-      t.dataset.tier = '1';
-      t.addEventListener('click', () => { if (!this.busy) void run(); });
-      return t;
-    };
-    this.stopBtn = document.createElement('button');
-    this.stopBtn.type = 'button';
-    this.stopBtn.textContent = 'Stop';
-    this.stopBtn.hidden = true;
-    this.stopBtn.addEventListener('click', () => { this.stopped = true; this.tools?.stop(); });
-    this.tierBar.append(
-      tierButton('Search Conformers…', 'A wider search: hundreds of starting conformers, each relaxed with MMFF94s+, duplicates dropped, ranked by energy with their populations at 25 °C', () => this.searchConformers()),
-      tierButton('Refine with xTB…', 'Re-optimise the lowest conformers with GFN2-xTB, using the xtb program installed on this computer (desktop app)', () => this.refineXtb()),
-      tierButton('Gaussian/ORCA Input…', 'Save input files for a DFT calculation on this conformer or all of them', () => this.exportQm()),
-      this.stopBtn,
-    );
-    b.append(this.canvas, bar, confBar, actions, this.tierBar);
+    b.append(this.canvas, bar, methodBar, this.note, this.list, status, actions);
     this.wire();
     new ResizeObserver(() => this.draw()).observe(this.canvas);
   }
@@ -203,8 +241,12 @@ export class Viewer3d {
     this.box.title = title;
     this.conf = 0;
     this.drawn = drawn ?? null;
+    this.results = { quick: model };
+    this.tier = 'quick';
     this.reset();
     this.box.show();
+    this.showTier();
+    this.fillList();
     this.pick(0);
     this.canvas.focus();
   }
@@ -214,6 +256,8 @@ export class Viewer3d {
     this.model = null;
     this.box.title = title;
     this.info.textContent = 'Building the 3-D model…';
+    this.list.replaceChildren();
+    this.note.textContent = '';
     this.box.show();
     this.draw();
   }
@@ -236,17 +280,53 @@ export class Viewer3d {
     const m = this.model;
     if (!m) return;
     this.conf = Math.max(0, Math.min(k, m.conformers.length - 1));
-    const n = m.conformers.length, e0 = m.conformers[0].energy, c = m.conformers[this.conf], e = c.energy;
+    const n = m.conformers.length, c = m.conformers[this.conf], e = c.energy;
     const method = m.method ?? 'MMFF94s+';
     const xtb = method.startsWith('GFN2');
-    // ranked by energy relative to the lowest (an absolute energy means little on its own; it is in the tooltip)
-    const energy = e !== null && e0 !== null ? ` · ΔE ${this.conf ? '+' : ''}${(e - e0).toFixed(1)} kcal/mol` : '';
-    const pop = c.population !== undefined && n > 1 ? ` · ${c.population >= 0.995 ? '>99' : c.population < 0.005 ? '<1' : Math.round(c.population * 100)}%` : '';
-    this.info.textContent = `Conformer ${this.conf + 1} of ${n}${energy}${pop}`;
-    this.info.title = `${method} energies${e !== null ? ` (this one ${xtb ? `${(e / KCAL_PER_HARTREE).toFixed(6)} Eh` : `${e.toFixed(2)} kcal/mol`})` : ''}, relative to the lowest${m.starts ? `, from a search of ${m.starts} starting conformers` : ', after relaxing a dozen likely conformers (not a full search: try Search Conformers…)'}. Percentages are Boltzmann populations at 25 °C among the conformers shown.`;
-    this.prev.disabled = this.conf === 0;
-    this.next.disabled = this.conf >= n - 1;
+    this.info.textContent = `${n} conformer${n === 1 ? '' : 's'} · ${method}${m.starts ? ` · from ${m.starts} starts` : ''}`;
+    this.info.title = `ΔE: energy above the lowest (${method})${e !== null ? `; this one ${xtb ? `${(e / KCAL_PER_HARTREE).toFixed(6)} Eh` : `${e.toFixed(2)} kcal/mol`}` : ''}. Population: Boltzmann population at 25 °C among the conformers listed.`;
+    for (const [i, row] of [...this.list.querySelectorAll('tbody tr')].entries()) {
+      row.classList.toggle('sel', i === this.conf);
+      row.setAttribute('aria-selected', String(i === this.conf));
+      if (i === this.conf) (row as HTMLElement).scrollIntoView?.({ block: 'nearest' });
+    }
     this.draw();
+  }
+
+  /** The table of conformers: rank, energy above the lowest, population. */
+  private fillList(): void {
+    const m = this.model;
+    this.list.replaceChildren();
+    if (!m) return;
+    const e0 = m.conformers[0]?.energy ?? null;
+    const table = document.createElement('table');
+    table.innerHTML = '<thead><tr><th>#</th><th>ΔE (kcal/mol)</th><th>Population</th></tr></thead>';
+    const body = document.createElement('tbody');
+    m.conformers.forEach((c, i) => {
+      const tr = document.createElement('tr');
+      tr.setAttribute('role', 'option');
+      const de = c.energy !== null && e0 !== null ? c.energy - e0 : null;
+      const pop = c.population === undefined ? '' : c.population >= 0.995 ? '>99%' : c.population < 0.005 ? '<1%' : `${Math.round(c.population * 100)}%`;
+      for (const t of [String(i + 1), de === null ? '' : `${i ? '+' : ''}${de.toFixed(2)}`, pop]) { const td = document.createElement('td'); td.textContent = t; tr.append(td); }
+      if ((c.degeneracy ?? 1) > 1) tr.title = `Found in ${c.degeneracy} equivalent forms (mirror images, or equivalent atoms swapped), counted in its population`;
+      tr.addEventListener('click', () => this.pick(i));
+      body.append(tr);
+    });
+    table.append(body);
+    this.list.append(table);
+  }
+
+  /** The method switch and its note: what the chosen method is, and what it found. */
+  private showTier(): void {
+    for (const x of this.tierBar.querySelectorAll<HTMLButtonElement>('[data-tier]')) x.setAttribute('aria-pressed', String(x.dataset.tier === this.tier));
+    const m = this.results[this.tier];
+    const n = m?.conformers.length ?? 0;
+    const text = this.tier === 'quick' ? `Quick: about a dozen likely shapes, each relaxed with the MMFF94s+ force field. Fast, but it can miss shapes: try Full Search.`
+      : this.tier === 'search' ? (m ? `Full Search: ${n} distinct conformer${n === 1 ? '' : 's'} from ${m.starts} starting shapes, each relaxed with MMFF94s+, duplicates removed.` : 'Full Search: hundreds of starting shapes, each relaxed with MMFF94s+, duplicates removed.')
+      : m ? `xTB Refine: the lowest ${n} re-optimised with ${m.method}, a fast quantum-chemical method, and ranked again.`
+      : `xTB Refine: re-optimises the lowest few with GFN2-xTB, a fast quantum-chemical method, using the xtb program on this computer.${this.tools?.xtb ? '' : ' Desktop app only.'}`;
+    this.note.textContent = text + ' ';
+    if (m && this.tier !== 'quick') this.note.append(this.again);
   }
 
   /** The turn that makes the model look most like the drawing (or no turn, without one). */
@@ -389,7 +469,7 @@ export class Viewer3d {
     if (!ctx) return;
     const css = getComputedStyle(this.box.el);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = css.getPropertyValue('--panel').trim() || '#fff';
+    ctx.fillStyle = BACKGROUND;
     ctx.fillRect(0, 0, w, h);
     const m = this.model;
     if (!m) return;
@@ -404,7 +484,6 @@ export class Viewer3d {
       return { x: w / 2 + this.pan.x + p[0] * scale * f, y: h / 2 + this.pan.y - p[1] * scale * f, f };
     };
     const P = pts.map(proj);
-    const ink = css.getPropertyValue('--text').trim() || '#000';
     type Item = { z: number; draw: () => void };
     const items: Item[] = [];
     const ballR = (z: number) => {
@@ -415,20 +494,32 @@ export class Viewer3d {
     };
     const stickW = this.style === 'wire' ? 1.5 : this.style === 'sticks' ? 0.28 * scale : 0.12 * scale;
     if (this.style !== 'spacefill') {
+      // each half-bond starts where it leaves its atom's ball (not at the ball's centre, where it
+      // would be drawn over the ball), and is put in depth order by its own middle
+      const halfW = stickW / 2 / scale;
+      const leave = (z: number) => { const r = ballR(z) / scale; return r > halfW ? Math.sqrt(r * r - halfW * halfW) * 0.98 : 0; };
       for (const b of m.bonds) {
         if (!shown[b.a] || !shown[b.b]) continue;
+        const A = pts[b.a], B = pts[b.b];
+        const d = Math.hypot(B[0] - A[0], B[1] - A[1], B[2] - A[2]) || 1;
+        const u = [(B[0] - A[0]) / d, (B[1] - A[1]) / d, (B[2] - A[2]) / d];
+        const M: [number, number, number] = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2, (A[2] + B[2]) / 2];
         const p = P[b.a], q = P[b.b];
-        const mid = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
         const len = Math.hypot(q.x - p.x, q.y - p.y) || 1;
         const nx = -(q.y - p.y) / len, ny = (q.x - p.x) / len;
         const lines = this.style === 'ball-stick' && !b.aromatic ? Math.min(3, b.order) : 1;
         const gap = Math.min(stickW * 1.3, 0.16 * scale);
-        for (const [from, to, atom] of [[p, mid, b.a], [mid, q, b.b]] as const) {
+        for (const [atom, sign] of [[b.a, 1], [b.b, -1]] as const) {
+          const C = pts[atom], r = Math.min(leave(m.atoms[atom].z), d / 2 - 0.01);
+          const S: [number, number, number] = [C[0] + sign * u[0] * r, C[1] + sign * u[1] * r, C[2] + sign * u[2] * r];
+          if (Math.hypot(M[0] - S[0], M[1] - S[1], M[2] - S[2]) < 0.02) continue;
+          const from = proj(S), to = proj(M);
           items.push({
-            z: (pts[b.a][2] + pts[b.b][2]) / 2 + (atom === b.a ? (pts[b.a][2] - pts[b.b][2]) / 4 : (pts[b.b][2] - pts[b.a][2]) / 4) - 0.01,
+            z: (S[2] + M[2]) / 2,
             draw: () => {
               ctx.strokeStyle = colourOf(m.atoms[atom].z);
-              ctx.lineCap = 'round';
+              // a flat end at the ball, a round one where the two halves meet
+              ctx.lineCap = r > 0 ? 'butt' : 'round';
               for (let k = 0; k < lines; k++) {
                 const o = (k - (lines - 1) / 2) * gap * 1.6;
                 ctx.lineWidth = lines > 1 ? stickW * 0.6 : stickW;
@@ -483,9 +574,9 @@ export class Viewer3d {
         if (!shown[i] || a.z === 6 || a.z === 1) return;
         const t = (SYMBOLS[a.z] ?? '?') + (a.charge ? (Math.abs(a.charge) > 1 ? Math.abs(a.charge) : '') + (a.charge > 0 ? '+' : '−') : '');
         ctx.lineWidth = 3;
-        ctx.strokeStyle = ctx.fillStyle = css.getPropertyValue('--panel').trim() || '#fff';
+        ctx.strokeStyle = ctx.fillStyle = BACKGROUND;
         ctx.strokeText(t, P[i].x, P[i].y);
-        ctx.fillStyle = ink;
+        ctx.fillStyle = '#1d2330';
         ctx.fillText(t, P[i].x, P[i].y);
       });
     }
@@ -514,26 +605,99 @@ export class Viewer3d {
     }
   }
 
-  /** While a tier runs: the other tier buttons off, Stop on, the progress shown. */
+  /** While a method runs: the switch and Export off, Stop on, the progress shown. */
   private setBusy(on: boolean, text = ''): void {
     this.busy = on;
     for (const el of this.tierBar.querySelectorAll<HTMLButtonElement>('[data-tier]')) el.disabled = on;
+    this.exportBtn.disabled = on;
+    this.again.disabled = on;
     this.stopBtn.hidden = !on;
     if (on) { this.stopped = false; this.info.textContent = text; }
     else if (this.model) this.pick(this.conf);
   }
 
-  private replaceModel(m: Model3d): void {
+  private replaceModel(m: Model3d, tier: Tier): void {
+    this.results[tier] = m;
+    this.tier = tier;
     this.model = m;
     this.conf = 0;
+    this.showTier();
+    this.fillList();
     this.pick(0);
+  }
+
+  /** A method chosen on the switch: its result if it has one, otherwise it is run. */
+  private async chooseTier(t: Tier): Promise<void> {
+    if (this.busy) return;
+    const got = this.results[t];
+    if (got) {
+      this.tier = t;
+      this.model = got;
+      this.conf = 0;
+      this.showTier();
+      this.fillList();
+      this.pick(0);
+      return;
+    }
+    await this.runTier(t);
+  }
+
+  private async runTier(t: Tier): Promise<void> {
+    if (this.busy) return;
+    if (t === 'search') await this.searchConformers();
+    else if (t === 'xtb') await this.refineXtb();
+  }
+
+  /** Export ▾: Gaussian/ORCA input, or every conformer as an XYZ or SD file. */
+  private exportMenu(): void {
+    const t = this.tools, m = this.model;
+    document.querySelector('.v3d-menu')?.remove();
+    const menu = document.createElement('div');
+    menu.className = 'menu popup-menu v3d-menu';
+    menu.setAttribute('role', 'menu');
+    const item = (label: string, run: () => void, on = true) => {
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.setAttribute('role', 'menuitem');
+      x.textContent = label;
+      x.disabled = !on;
+      x.addEventListener('click', () => { close(); run(); });
+      menu.append(x);
+    };
+    item('Gaussian/ORCA Input…', () => void this.exportQm(), !!t && !!m);
+    item('XYZ File, All Conformers…', () => void this.exportAll('xyz'), !!t && !!m);
+    item('SD File, All Conformers…', () => void this.exportAll('sdf'), !!t && !!m);
+    document.body.append(menu);
+    const r = this.exportBtn.getBoundingClientRect(), mr = menu.getBoundingClientRect();
+    menu.style.left = `${Math.max(4, Math.min(r.right - mr.width, innerWidth - mr.width - 4))}px`;
+    menu.style.top = `${r.bottom + mr.height + 4 < innerHeight ? r.bottom + 2 : Math.max(4, r.top - mr.height - 2)}px`;
+    const close = () => { menu.remove(); document.removeEventListener('pointerdown', away, true); document.removeEventListener('keydown', esc, true); };
+    const away = (e: Event) => { if (!menu.contains(e.target as Node) && e.target !== this.exportBtn) close(); };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); this.exportBtn.focus(); } };
+    document.addEventListener('pointerdown', away, true);
+    document.addEventListener('keydown', esc, true);
+    menu.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
+  }
+
+  /** Every conformer listed, in one multi-structure XYZ or SD file (energies in the comment line or a data field). */
+  private async exportAll(kind: 'xyz' | 'sdf'): Promise<void> {
+    const t = this.tools, m = this.model;
+    if (!t || !m) return;
+    const base = (this.box.title || 'conformers').replace(/[^\w-]+/g, '_').replace(/^_+|_+$/g, '') || 'conformers';
+    const e0 = m.conformers[0]?.energy ?? null;
+    const method = m.method ?? 'MMFF94s+';
+    const de = (i: number) => { const e = m.conformers[i].energy; return e !== null && e0 !== null ? (e - e0).toFixed(3) : ''; };
+    const text = m.conformers.map((_, i) => kind === 'xyz'
+      ? xyzFile(m, i, `${base} conformer ${i + 1}${de(i) ? ` dE=${de(i)} kcal/mol` : ''} ${method}`)
+      : `${molfile3d(m, i, `${base} conformer ${i + 1}`).replace(/M {2}END\n$/, 'M  END\n')}${de(i) ? `> <dE (kcal/mol)>\n${de(i)}\n\n` : ''}> <Method>\n${method}\n\n$$$$\n`).join('');
+    await t.saveFiles([{ name: `${base}_conformers.${kind}`, text }], kind);
   }
 
   /** Search Conformers…: settings, then the search in the background with its progress. */
   private async searchConformers(): Promise<void> {
     const t = this.tools;
     if (!t || !this.model) return;
-    const got = await ask('Search Conformers', [
+    const got = await ask('Full Search', [
       { name: 'starts', label: 'Starting conformers', value: String(DEFAULT_SEARCH.starts), type: 'number', help: 'More finds more conformers but takes longer (each is relaxed with MMFF94s+).' },
       { name: 'window', label: 'Energy window', value: String(DEFAULT_SEARCH.window), type: 'number', unit: 'kcal/mol', help: 'Conformers higher than this above the lowest are left out.' },
       { name: 'rmsd', label: 'Same shape within', value: String(DEFAULT_SEARCH.rmsd), type: 'number', unit: 'Å RMSD', help: 'Heavy atoms, after fitting one onto the other.' },
@@ -544,7 +708,7 @@ export class Viewer3d {
     this.setBusy(true, `Searching… 0 of ${opts.starts}`);
     try {
       const m = await t.search(opts, (done, total) => { if (this.busy) this.info.textContent = `Searching… ${done} of ${total}`; });
-      this.replaceModel(m);
+      this.replaceModel(m, 'search');
       this.flash(`Found ${m.conformers.length} conformer${m.conformers.length === 1 ? '' : 's'} within ${opts.window} kcal/mol from ${m.starts} starting points.`);
     } catch (e) {
       this.flash(this.stopped ? 'Search stopped.' : (e as Error).message);
@@ -555,14 +719,15 @@ export class Viewer3d {
 
   /** Refine with xTB…: the program, solvent and how many, then each conformer through xtb. */
   private async refineXtb(): Promise<void> {
-    const t = this.tools, m = this.model;
+    // refined from the force-field conformers (Full Search's if it has run), not from xTB's own
+    const t = this.tools, m = this.tier === 'xtb' ? (this.results.search ?? this.results.quick ?? this.model) : this.model;
     if (!t || !m) return;
     if (!t.xtb) {
-      this.flash('xTB runs in the desktop app, which starts the xtb program installed on your computer. Use Gaussian/ORCA Input… here instead.');
+      this.flash('xTB runs in the desktop app, which starts the xtb program installed on your computer. Use Export ▸ Gaussian/ORCA Input… here instead.');
       return;
     }
     const p = t.prefs.xtb;
-    const got = await ask('Refine with xTB', [
+    const got = await ask('xTB Refine', [
       { name: 'exe', label: 'xtb program', value: p.exe, type: 'text', placeholder: 'xtb', help: '"xtb" finds it on your PATH; otherwise the full path to xtb (xtb.exe on Windows). Install it from conda-forge (conda install -c conda-forge xtb) or github.com/grimme-lab/xtb/releases. xtb is free software (LGPL 3.0).' },
       { name: 'solvent', label: 'Solvent (ALPB)', value: p.solvent, options: [{ value: '', label: 'Gas phase' }, ...XTB_SOLVENTS.map((s) => ({ value: s, label: s }))] },
       { name: 'opt', label: 'Optimise each conformer (otherwise energies only)', value: String(p.opt), type: 'checkbox' },
@@ -577,7 +742,7 @@ export class Viewer3d {
       if (t.xtbVersion) await t.xtbVersion(opts.exe);
       const refined = await refineWithXtb(m, opts, t.xtb, (done, total) => { this.info.textContent = `xTB: ${done} of ${total} done…`; }, () => this.stopped);
       if (refined !== m) {
-        this.replaceModel(refined);
+        this.replaceModel(refined, 'xtb');
         this.flash(`Refined ${refined.conformers.length} conformer${refined.conformers.length === 1 ? '' : 's'} with ${refined.method}; ranked again by their xTB energies.`);
       }
     } catch (e) {

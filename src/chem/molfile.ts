@@ -8,6 +8,7 @@ import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, valenceOfBonds
 import { CARBONYL_LIGAND, isCarbonylLabel, kekulize, labelDonates, labelGraph, MiniGraph } from './labels';
 import { stereoAnchor, stereoSense } from './stereo';
 import { kekuleDoubles } from './aromatic';
+import { flatStandIn } from './ring-views';
 
 export interface MolExport {
   molblock: string;
@@ -94,6 +95,8 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
   // a ring's middle, where a metal is bonded (η⁵), is not an atom: it and its bonds are left out
   const ids = [...atomIds].filter((id) => doc.atoms.has(id) && !doc.atoms.get(id)!.multi);
   const inSet = new Set(ids);
+  // rings drawn as chairs or boats show their stereo by their shape: the engine is shown them flat, with wedges
+  const stand = flatStandIn(doc, inSet);
   const L = doc.style.bondLength || 14.4;
   const atoms: MAtom[] = [];
   const bonds: MBond[] = [];
@@ -229,7 +232,8 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
   }
   for (const id of ids) {
     const a = doc.atoms.get(id)!;
-    const x = (a.x - first.x) / L, y = -(a.y - first.y) / L;
+    const at = stand?.moves.get(id) ?? a;
+    const x = (at.x - first.x) / L, y = -(at.y - first.y) / L;
     let g: MiniGraph | null = null;
     if (a.label) {
       const own = valenceOfBonds((doc.adj.get(id) ?? []).map((bid) => doc.bonds.get(bid)!).filter((b) => !outsideValence(b) && !dative.has(b.id)).map((b) => b.order));
@@ -294,10 +298,12 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
       }
       const order = kekule.get(b.id) ?? (b.order === 1.5 ? 4 : b.order === 2 ? 2 : b.order === 3 ? 3 : 1);
       // a stereo bond is written from the atom it describes
-      const sense = stereoSense(b);
-      const from = sense ? stereoAnchor(doc, b)! : b.a1;
+      const flat = stand?.bonds.get(b.id);
+      const sb = flat ? { ...b, ...flat } : b;
+      const sense = stereoSense(sb);
+      const from = sense ? stereoAnchor(doc, sb)! : sb.a1;
       const stereo = sense === 'up' ? 1 : sense === 'down' ? 6 : sense === 'either' ? 4 : 0;
-      const to = from === b.a1 ? b.a2 : b.a1;
+      const to = from === sb.a1 ? sb.a2 : sb.a1;
       bonds.push({ a: attach.get(from)!, b: attach.get(to)!, order, stereo });
     }
   }
