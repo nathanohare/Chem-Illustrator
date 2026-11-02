@@ -6099,6 +6099,15 @@ const COMMANDS: Record<string, () => unknown> = {
     else if (n > 4) flash('Select just the bond (or bonds) that break: click one with the selection tool, Shift+click for more.', 5000);
     else editor.addHomolysisArrows();
   },
+  'draw-from-arrows': () => {
+    const r = editor.drawFromArrows();
+    if (r === 'many') { flash('The arrows are on more than one step: select an arrow or the structure of the step to draw.', 5000); return; }
+    if (r === 'none') { flash('Draw curved (mechanism) arrows on a structure first, each from a lone pair or bond to where its electrons go.', 5000); return; }
+    const errors = r.issues.filter((i) => i.level === 'error'), warnings = r.issues.filter((i) => i.level === 'warning');
+    if (!r.drawn) flash(`Not drawn: ${errors[0]?.text ?? 'the arrows can\'t be read.'}${errors.length > 1 ? ` (${errors.length - 1} more: Check Arrows goes through them)` : ''}`, 9000);
+    else flash(warnings.length ? `Drawn. ${warnings[0].text}` : 'Next intermediate drawn from the arrows.', warnings.length ? 7000 : 3000);
+  },
+  'check-arrows': () => checkArrows(),
   'attach-arrow': () => {
     const n = editor.attachArrows();
     flash(n ? `${n === 1 ? 'It follows' : `${n} things follow`} the structure now.` : 'Select curved arrows whose ends sit on atoms, bonds or lone pairs (or lone pairs and charges) first.');
@@ -8452,6 +8461,20 @@ function updateWarnings(): void {
 }
 
 /** Chemistry > Check Structure: go to the next problem after the one selected. */
+/** Check Arrows: each problem with the mechanism arrows in turn, selected and said (like Check Structure). */
+let arrowIssue = 0;
+function checkArrows(): void {
+  const list = editor.checkArrows();
+  if (list === 'many') { flash('The arrows are on more than one step: select an arrow or the structure of the step to check.', 5000); return; }
+  if (list === 'none') { flash('There are no curved (mechanism) arrows on a structure to check.'); return; }
+  if (!list.length) { flash('The arrows make sense: each starts at electrons that are there, and nothing ends up past an octet.', 5000); return; }
+  arrowIssue = arrowIssue % list.length;
+  const w = list[arrowIssue];
+  editor.pickIssues([w]);
+  flash(`${list.length > 1 ? `${arrowIssue + 1} of ${list.length}: ` : ''}${w.level === 'warning' ? 'Worth a look: ' : ''}${w.text}`, 9000);
+  arrowIssue++;
+}
+
 function checkStructure(): void {
   const list = checks.list();
   if (!list.length) {
@@ -8747,7 +8770,7 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'arrow-add-bend', ...(editor.contextSpot?.t !== undefined ? { label: 'Add Bend Here' } : {}) }, ...(editor.pickedJoin() ? [{ cmd: 'arrow-remove-bend' }, { cmd: 'arrow-smooth-join' }, { cmd: 'arrow-symmetric-join' }] : []), null,
       { label: 'Shape', items: [{ cmd: 'arrow-s-shape', label: 'S' }, { cmd: 'arrow-single-curve', label: 'Single Curve' }, { cmd: 'arrow-shape-u', label: 'U-Turn' }, { cmd: 'arrow-shape-loop', label: 'Loop' }] },
       { cmd: 'flip-arrow-bend' }, { cmd: 'arrow-reverse' }, { cmd: 'arrow-smooth-path' }, { cmd: 'arrow-simplify-path' }, null, { cmd: 'attach-arrow' }, { cmd: 'detach-arrow' },
-    ] }] : []),
+    ] }, { cmd: 'draw-from-arrows' }, { cmd: 'check-arrows' }] : []),
     ...(s.bonds.size && s.bonds.size <= 2 && !s.arrows.size ? [{ cmd: 'homolysis-arrows' }] : []),
     ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : []),
     ...(s.arrows.size || atoms ? [{ label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, { cmd: 'number-compounds' }, { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
