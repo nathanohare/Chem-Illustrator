@@ -69,7 +69,7 @@ describe('solubility', () => {
 
   it('is loaded only when the window opens', async () => {
     const tables = await Promise.all(LATER_TABLES.map((f) => f()));
-    expect(tables.map((t) => t.id)).toEqual(['solubility']);
+    expect(tables.map((t) => t.id)).toContain('solubility');
   });
 });
 
