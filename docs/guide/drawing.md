@@ -188,7 +188,8 @@ A caption or text box whose whole text is a formula (CH2Cl2, Cs2CO3, NaBF4), an 
 
 - A counterion typed without its charge (BF4) is still read as that ion, and is flagged in Warnings until the charge is added. Turn on **Settings ▸ Drawing ▸ Add charges to common counterions** to have the charge added as you finish typing.
 - Turn on **Settings ▸ Drawing ▸ Group a counterion … as one salt** to have an ion typed next to a structure or ion of opposite charge grouped with it. Grouped, the two count as one salt: one formula and mass, and SMILES with both parts. You can also group them yourself with **Format ▸ Group**.
-- Right-click ▸ **Read Text As** (or **Read as** in the Style panel) sets a text box to **Chemical** or **Plain text** by hand, or back to **Automatically**. The Style panel says what the text is read as.
+- Right-click ▸ **Read Text As** (or **Read as** in the Style panel) sets a text box to **Chemical** or **Plain text** by hand, or back to **Automatically**. The Style panel says what the text is read as. A group or atom on its own (OH, CH3, NO2, CO2H, Cl) is left as text when read automatically, since it is usually a label; set to **Chemical**, it is read as the radical or atom it stands for (OH is the hydroxyl radical, HO•, 17.01 g/mol).
+- Formulas that spell out their hydrogens atom by atom get their double and triple bonds worked out (CH2CH2 is ethylene, HCCH acetylene), and a nitro group inside a formula (CH3NO2, PhNO2) is read as one.
 - Saved as CDXML, text read as chemistry is marked for ChemDraw to interpret chemically.
 
 ### Links in text
