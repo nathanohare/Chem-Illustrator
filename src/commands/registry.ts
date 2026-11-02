@@ -21,6 +21,7 @@ export type MenuEntry = CommandDef | '-' | { submenu: string; modes?: string; it
 /** Insert. */
 export const INSERT_MENU: MenuEntry[] = [
   { id: 'name-to-structure', label: 'Structure from Name or SMILES…', title: 'A structure from its name or SMILES: in the drawing, in the text at the caret, or in the selected cell' },
+  { id: 'sequence-to-structure', label: 'Structure from Sequence…', modes: 'drawing slides design', title: 'A peptide drawn out in full from its sequence: one-letter codes (GLYP, small letters for D) or three-letter codes (Boc-Ala-D-Phe-OMe), with the ends you pick' },
   { id: 'insert-structure', label: 'Structure', modes: 'document', title: 'Draw a structure or scheme to put in the text at the caret' },
   { id: 'draw-structure', label: 'Structure in Cell', modes: 'sheet' },
   '-',
