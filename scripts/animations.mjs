@@ -551,7 +551,11 @@ if (want('slide-highlights')) {
 }
 
 // ---------------------------------------------------------------- Slides: a canvas slide, a route drawn once and shown a step at a time
-if (want('canvas-slides')) {
+// (the route file is Nate's own drawing, kept out of the repository unless he adds it)
+if (want('canvas-slides') && (await import('node:fs')).existsSync(new URL('../docs/images/src/manzamine-route.cdxml', import.meta.url))) {
+  const { readFileSync } = await import('node:fs');
+  // the manzamine A endgame (Nate's seminar slides 23 to 27, joined into one line) on one canvas slide
+  const route = readFileSync(new URL('../docs/images/src/manzamine-route.cdxml', import.meta.url), 'utf8');
   const { browser, page } = await open(url, { width: 1280, height: 720 });
   await page.evaluate(async () => {
     const a = window.__app; a.ws.newSlides();
@@ -561,41 +565,26 @@ if (want('canvas-slides')) {
   });
   await bare(page);
   await page.waitForTimeout(800);
-  // a three-step route across the canvas, a slide width and a half apart
-  await page.evaluate(async () => {
-    const a = window.__app, doc = a.doc, y = 290;
-    (await import('/src/chem/scheme-layout.ts')).setSchemePrefs({ structGap: 17, lead: 8, headGap: 13 });
-    const xs = [170, 650, 1130, 1610];
-    const smiles = ['O=Cc1ccc(Br)cc1', 'O=Cc1ccc(-c2ccccc2)cc1', 'CCOC(=O)/C=C/c1ccc(-c2ccccc2)cc1', 'OC/C=C/c1ccc(-c2ccccc2)cc1'];
-    const mols = await Promise.all(smiles.map((s) => a.chem.smilesToMol(s)));
-    const ids = [];
-    doc.edit('Scheme', () => {
-      mols.forEach((m, i) => a.addMolfile(doc, m, xs[i], y));
-      for (const i of [0, 1, 2]) {
-        const x1 = xs[i] + (xs[i + 1] - xs[i]) * 0.3, x2 = xs[i] + (xs[i + 1] - xs[i]) * 0.6;
-        ids.push(doc.addArrow({ tail: { x: x1, y }, head: { x: x2, y }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: 10, headWidth: 3 }).id);
-      }
+  await page.evaluate(async (route) => {
+    const a = window.__app, doc = a.doc;
+    const { readCdxml } = await import('/src/io/cdxml.ts');
+    const { insertDrawing } = await import('/src/io/clipboard.ts');
+    insertDrawing(doc, readCdxml(route).doc, { x: 0, y: 300 }, 'Route');
+    a.editor.clearSelection();
+    a.renderer.showWarnings = false;
+    // a keyframe on each step (the structures either side of its arrow), then the whole route
+    const d = a.ws.active.deck, W = d.size.w, H = d.size.h, b = doc.bounds(), cy = (b.y1 + b.y2) / 2;
+    const arrows = [...doc.arrows.values()].sort((p, q) => p.tail.x - q.tail.x);
+    const titles = ['Wittig olefination', 'Reduction, then oxidation', 'Acetal, then butenyllithium', 'First ring-closing metathesis', 'Opening the carbamate, then acylation', 'Second ring-closing metathesis', 'Reduction, then oxidation: ircinol A', 'Tryptamine, then DDQ: manzamine A'];
+    const keys = arrows.map((ar, i) => {
+      const x1 = i ? arrows[i - 1].head.x : b.x1, x2 = i < arrows.length - 1 ? arrows[i + 1].tail.x : b.x2;
+      const zoom = Math.max(0.5, ((x2 - x1) * 1.1) / W, ((b.y2 - b.y1) * 1.35) / H);
+      return { id: i + 1, x: (x1 + x2) / 2 - (W * zoom) / 2, y: cy - (H * zoom) / 2 + 20 * zoom, zoom, title: titles[i] ?? '' };
     });
-    a.command('clean-up-reaction');
-    const e = a.editor;
-    e.setArrowSideText(ids[0], 'above', 'PhB(OH)2, Pd(PPh3)4');
-    e.setArrowSideText(ids[0], 'below', 'K2CO3, dioxane/H2O\n90 °C, 92%');
-    e.setArrowSideText(ids[1], 'above', '(EtO)2P(O)CH2CO2Et');
-    e.setArrowSideText(ids[1], 'below', 'NaH, THF, 0 °C\n88%, E/Z > 20:1');
-    e.setArrowSideText(ids[2], 'above', 'DIBAL-H');
-    e.setArrowSideText(ids[2], 'below', 'CH2Cl2, −78 °C\n95%');
-    a.command('clean-up-reaction');
-    e.numberCompounds({ start: 1, style: 'numbers', prefix: '', suffix: '', bold: true });
-    e.clearSelection();
-    // a keyframe on each step, then the whole route; a soft gradient along it and a mini-map
-    const b = doc.bounds(), d = a.ws.active.deck, W = d.size.w, H = d.size.h, cy = (b.y1 + b.y2) / 2;
-    const step = (b.x2 - b.x1 - W * 0.9) / 2;
-    const titles = ['Suzuki coupling', 'Olefination', 'Reduction'];
-    const keys = titles.map((title, i) => ({ id: i + 1, x: b.x1 - W * 0.05 + step * i, y: cy - H / 2 + 20, zoom: 1, title }));
-    const zoom = (b.x2 - b.x1) / W * 1.12;
-    keys.push({ id: 4, x: (b.x1 + b.x2) / 2 - W * zoom / 2, y: cy - H * zoom / 2 + 20 * zoom, zoom, title: 'The route' });
+    const zoom = ((b.x2 - b.x1) / W) * 1.08;
+    keys.push({ id: keys.length + 1, x: (b.x1 + b.x2) / 2 - (W * zoom) / 2, y: cy - (H * zoom) / 2 + 20 * zoom, zoom, title: 'Manzamine A: the endgame' });
     d.setCanvas({ keys, look: { route: ['#e8f1fa', '#eaf6ee', '#fbf1e4'] }, show: { minimap: 'show' } });
-  });
+  }, route);
   await page.waitForTimeout(800);
   await pointer(page);
   const W = 1280, H = 720;
@@ -606,14 +595,14 @@ if (want('canvas-slides')) {
     await page.waitForTimeout(900);
     await page.evaluate(() => window.__app.command('present-current'));
     await page.waitForTimeout(1800);
-    for (const what of ['glide to the next step', 'glide to the next step', 'fly out to the whole route']) {
-      await inputBadge(page, { keys: ['→'], text: what });
-      await page.waitForTimeout(500);
+    for (let i = 0; i < 8; i++) {
+      await inputBadge(page, { keys: ['→'], text: i < 7 ? 'on to the next step' : 'out to the whole route' });
+      await page.waitForTimeout(300);
       await page.keyboard.press('ArrowRight');
-      await page.waitForTimeout(2600);
+      await page.waitForTimeout(i < 7 ? 2000 : 2600);
     }
     await inputBadge(page, null);
-  }, { clip: { x: 0, y: 0, width: W, height: H }, width: 820, hold: 2000 });
+  }, { clip: { x: 0, y: 0, width: W, height: H }, width: 820, hold: 2500 });
   await browser.close();
 }
 
@@ -899,7 +888,8 @@ if (want('journal-check')) {
 }
 
 // ---------------------------------------------------------------- Canvas: a whole route on one canvas (Nate's slides 23 to 27, joined into one line)
-if (want('canvas-route')) {
+// (the route file is Nate's own drawing, kept out of the repository unless he adds it)
+if (want('canvas-route') && (await import('node:fs')).existsSync(new URL('../docs/images/src/manzamine-route.cdxml', import.meta.url))) {
   const { readFileSync } = await import('node:fs');
   const { browser, page } = await open(url, { width: 1440, height: 760, navigator: true });
   const text = readFileSync(new URL('../docs/images/src/manzamine-route.cdxml', import.meta.url), 'utf8');

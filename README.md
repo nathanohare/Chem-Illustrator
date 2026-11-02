@@ -95,10 +95,6 @@ Right-drag or middle-drag to pan, Ctrl+wheel to zoom in on the spot under the po
 
 ![Panning a long route with the right and middle mouse buttons, zooming at the pointer with Ctrl+wheel and scrolling sideways with Shift+wheel, with the keys and buttons shown as they are pressed](docs/images/navigation.gif)
 
-The canvas is laid out as pages, as in ChemDraw: whole pages are added as the drawing grows past them, empty pages are grey, and the fixed top and left edges are marked.
-
-![A route drawn across the first page adds a page to the right, then a row of pages below; the used pages turn white](docs/images/page-grid.gif)
-
 ## Make it yours
 
 Every hotkey can be changed (**Edit ▸ Hotkeys**), and the hotkeys can be exported and shared. Toolboxes unlock to dock on any edge or float anywhere, and **Customize Toolboxes** rearranges any of them (or new ones of your own) by dragging icons about, as on a phone's home screen. The Reading Mode colours, each mode's accent colour, the scheme spacing, your own templates, nicknames and drawing styles are all settings, kept in one file you can export and import on another computer.
@@ -127,7 +123,7 @@ Chem Illustrator has five modes: **Canvas** (chemistry), **Presentation** (slide
 
 Draw a whole synthesis once on an endless slide, then show it a step at a time: the show glides from one slide-shaped keyframe to the next, with the title fixed to the screen, and can fly out to the whole route. Saved as PowerPoint, each keyframe becomes a slide with a Morph transition.
 
-![A three-step route on a canvas slide: the show glides through it a step at a time, the title changing, then flies out to the whole route, with a mini-map in the corner](docs/images/canvas-slides.gif)
+![The manzamine A endgame on one canvas slide: the show glides along the route a step at a time, from the Wittig olefination through both ring-closing metatheses to manzamine A, the title changing with each step, then flies out to the whole route, with a mini-map in the corner](docs/images/canvas-slides.gif)
 
 ### References on slides
 
