@@ -234,7 +234,6 @@ export function suggestCore(RDKit: any, mols: string[], pick: { centre?: number;
   try {
     if (!first) return { error: 'The first structure can\'t be read' };
     const g = graphOf(first);
-    const n = g.atoms.length;
     // the shared part, as atoms of the first structure
     let shared = new Set<number>(g.atoms.map((_, i) => i));
     if (live.length > 1) {
