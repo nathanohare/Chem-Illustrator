@@ -584,6 +584,8 @@ class Reader {
     const canvas = readCanvasTag(tags[TAG.canvas]);
     // its keyframe moves (which PowerPoint can't hold) back among its animations
     if (canvas) anims = withCameraMoves(anims, tags[TAG.canvas]);
+    // Turn in 3-D (written for PowerPoint as a Spin of next to nothing): its views back
+    if (tags[TAG.turn3d]) anims = withTurns(anims, tags[TAG.turn3d]);
     // the references its lines show (the lines themselves are made again from them)
     let refs: SlideRefs = {};
     if (tags[TAG.slideRefs]) {
@@ -2192,4 +2194,18 @@ function readSections(root: Element, sldIds: string[]): SectionCount[] | undefin
     out.push({ name: sec.getAttribute('name') ?? 'Untitled Section', count: ids.length });
   }
   return out.length ? out : undefined;
+}
+
+/** Turn in 3-D animations back from the Spins of next to nothing PowerPoint was given, with their views from the tag. */
+export function withTurns(anims: Anim[], tag: string): Anim[] {
+  let views: unknown;
+  try { views = JSON.parse(tag); } catch { return anims; }
+  if (!Array.isArray(views)) return anims;
+  let k = 0;
+  return anims.map((a) => {
+    if (a.effect !== 'spin' || a.turn !== 0 || k >= views.length) return a;
+    const v = views[k++];
+    const { turn: _, ...rest } = a;
+    return { ...rest, effect: 'turn3d', ...(Array.isArray(v) && v.length === 9 && v.every((x) => typeof x === 'number') ? { view: v as number[] } : {}) };
+  });
 }

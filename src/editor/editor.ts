@@ -83,7 +83,7 @@ import { imageFor } from '../render/images';
 import { gridOffsets, inferGrid, usualGap, withLabels, type GridHow } from './grid-arrange';
 import { BEND, BRUSH, ROTATE, handleCursor, pointerFor } from './cursors';
 import { flatten, prepareTurn, stillMeans, structuresOf, type PerspectiveHost, type Prepared } from './perspective';
-import { anglesTurn, dragTurn, type M3 } from '../chem/perspective';
+import { anglesTurn, dragTurn, IDENT as IDENT_TURN, type M3 } from '../chem/perspective';
 import type { TextEditing } from '../text/editing';
 
 export type Tool =
@@ -3673,6 +3673,24 @@ export class Editor {
     this.changed();
     this.checkTurn(prep.turn, left);
     return true;
+  }
+
+  /**
+   * Give a structure its real 3-D shape where it lies (as 3-D Perspective does at its first
+   * move), so it can turn as the molecule does (Turn in 3-D). `doc` defaults to the drawing; a
+   * copy can be given to try it first. Returns why not when it can't.
+   */
+  async realShape(atom: number, doc: Doc = this.doc): Promise<string | null> {
+    const structures = structuresOf(doc, [atom]);
+    if (!structures.length) return 'There is no structure there.';
+    const prep = await prepareTurn(doc, structures, true, this.perspectiveHost);
+    if (prep.notes.length) return prep.notes[0];
+    doc.edit('Real 3-D shape', () => {
+      prep.turn.apply(doc, IDENT_TURN, true);
+      prep.turn.remember(doc);
+    });
+    if (doc === this.doc) this.changed();
+    return null;
   }
 
   /** Flatten: the selected structures become ordinary flat drawings, looking as they do now. False when nothing is selected. */

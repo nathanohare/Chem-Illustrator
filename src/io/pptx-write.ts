@@ -96,6 +96,8 @@ export const TAG = {
   math: 'CHEMILLUSTRATOR_MATH',
   /** A canvas slide's keyframes (its drawing is saved at its own places, the first keyframe's over the slide). */
   canvas: 'CHEMILLUSTRATOR_CANVAS',
+  /** Turn in 3-D: each one's key view, in the order of the slide's animations (PowerPoint is given a Spin of next to nothing in its place). */
+  turn3d: 'CHEMILLUSTRATOR_TURN3D',
   /**
    * A slide made from a canvas slide's keyframe: which canvas, which of its slides, and a print of
    * what it held (to tell whether PowerPoint changed it). The first also has canvasKeep, the canvas itself.
@@ -792,7 +794,7 @@ class Writer {
       part = { [TAG.canvasPart]: JSON.stringify({ ...where, print: slidePrintXml(`<p:spTree ${XMLNS}>${GROUP}${out.join('')}</p:spTree>`) }), ...(keep ? { [TAG.canvasKeep]: JSON.stringify(keep) } : {}) };
     }
     const refTag = slideRefsTag(s);
-    const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(refTag ? { [TAG.slideRefs]: refTag } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}), ...part });
+    const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(refTag ? { [TAG.slideRefs]: refTag } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}), ...turnTag(s.anims), ...part });
     const bg = s.background ? await this.background(path, s.background) : '';
     return `${HEAD}<p:sld ${XMLNS}${s.hideGraphics ? ' showMasterSp="0"' : ''}${s.hidden ? ' show="0"' : ''}><p:cSld>${bg}<p:spTree>${GROUP}${out.join('')}</p:spTree><p:custDataLst><p:tags r:id="${tags}"/></p:custDataLst></p:cSld>` +
       `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(s.transition)}${timingXml(expandParas(s.anims ?? [], (cid) => { const c = doc.captions.get(cid); return c ? plainText(c.runs).split('\n') : null; }), (a) => spids.get(targetKey(a.target)) ?? [], videos, (t) => spids.get(targetKey(t))?.[0])}` +
@@ -1657,4 +1659,10 @@ function withCanvasesSplit(deck: DeckData): DeckData {
     return { ...sec, count };
   });
   return { ...deck, slides: split.flat(), ...(sections ? { sections } : {}) };
+}
+
+/** The slide's Turn in 3-D views, for a tag (see TAG.turn3d). */
+function turnTag(anims: Anim[] | undefined): Record<string, string> {
+  const turns = (anims ?? []).filter((a) => a.effect === 'turn3d');
+  return turns.length ? { [TAG.turn3d]: JSON.stringify(turns.map((a) => a.view ?? null)) } : {};
 }
