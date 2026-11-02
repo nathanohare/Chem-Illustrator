@@ -934,8 +934,10 @@ dialog.typing-dialog p { margin: 2px 0 6px; }
   border-bottom: 1px solid var(--line);
 }
 .ribbon[hidden] { display: none; }
+/* the lines between a ribbon's groups: darker than the panel's hairlines, so the groups read apart */
+.ribbon { --rb-divider: color-mix(in srgb, var(--text) 30%, var(--panel)); }
 .rb-group { display: flex; flex-direction: column; align-items: center; padding: 0 6px; flex: none; }
-.rb-group + .rb-group { border-left: 1px solid var(--line); }
+.rb-group + .rb-group { border-left: 1px solid var(--rb-divider); }
 .rb-row { display: flex; align-items: stretch; gap: 2px; flex: 1 1 auto; }
 .rb-col { display: flex; flex-direction: column; justify-content: center; gap: 1px; }
 .rb-pair { display: flex; gap: 2px; }
