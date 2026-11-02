@@ -2322,6 +2322,8 @@ dialog.diagram-dialog { width: min(96vw, 1060px); max-height: 94vh; }
 /* The Settings window: a list of pages on the left; each page is a settings window shown inside it */
 dialog.settings-window { width: min(920px, calc(100vw - 32px)); height: min(680px, calc(100vh - 48px)); padding: 0; display: none; flex-direction: column; overflow: hidden; }
 dialog.settings-window[open] { display: flex; }
+dialog.settings-window.with-preview { width: min(1180px, calc(100vw - 32px)); max-width: none; }
+dialog.settings-window { max-width: none; }
 .sw-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 18px; border-bottom: 1px solid var(--line); }
 .sw-head h2 { margin: 0 auto 0 0; font-size: 1.15em; }
 .sw-search { width: 220px; height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--bg); color: var(--text); }
@@ -2333,11 +2335,21 @@ dialog.settings-window[open] { display: flex; }
 .sw-list button:hover { background: var(--hover, rgb(0 0 0 / 0.06)); }
 .sw-list button.on { background: var(--accent-soft); font-weight: 600; }
 .sw-list p { padding: 6px 10px; margin: 0; }
-.sw-pane { flex: 1; overflow: auto; padding: 4px 22px 18px; }
+.sw-pane { flex: 1; overflow: auto; padding: 4px 22px 18px; min-width: 0; }
+/* a page's preview, beside its settings */
+.sw-aside { flex: 0 0 260px; overflow: auto; padding: 12px 14px; border-left: 1px solid var(--line); background: var(--panel, var(--bg)); }
+.sw-aside[hidden] { display: none; }
+.sw-aside h3 { margin: 0 0 8px; font-size: var(--fs-sm, 0.85em); font-weight: 600; color: var(--muted, inherit); text-transform: uppercase; letter-spacing: 0.04em; }
+.sw-aside canvas, .sw-aside svg { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: var(--r-control); background: #fff; }
+/* Apply and Set as Default, the same on every page */
+.sw-foot { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); }
+.sw-foot .sw-note { margin-right: auto; font-size: var(--fs-sm, 0.85em); }
+.sw-foot.sw-actions .sw-default, .sw-foot.sw-actions .sw-apply { display: none; }
+.sw-pane .sw-hidden { display: none !important; }
 .sw-pane > dialog.embedded { position: static; display: block; inset: auto; margin: 0; padding: 0; border: 0; box-shadow: none; background: none; color: inherit;
   width: auto; height: auto; max-width: none; max-height: none; min-width: 0; overflow: visible; }
 .sw-pane > dialog.embedded > form > h2:first-child, .sw-pane > dialog.embedded > h2:first-child { margin-top: 12px; }
-@media (max-width: 640px) { .sw-list { flex-basis: 130px; } }
+@media (max-width: 640px) { .sw-list { flex-basis: 130px; } .sw-aside { display: none; } }
 
 /* Ribbons in a narrow window: groups lose their buttons' words (icons only), then fold into one button that drops them down */
 .rb-group.rb-compact button.rb-big:has(.rb-icon, svg) { min-width: 34px; font-size: 0; gap: 0; }
@@ -3063,6 +3075,41 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 .crystal-table td:first-child { color: var(--muted, #555); white-space: nowrap; }
 .crystal-page:has(.crystal-table-wrap) { flex-direction: column; }
 @media (max-width: 700px) { .crystal-page { flex-direction: column; } .crystal-side { width: auto; max-height: none; } }
+/* small pictures of a choice, beside its box; and a page's bigger preview when it isn't in the Settings window */
+.ask-inline { display: inline-flex; align-items: center; margin-left: 8px; min-width: 54px; }
+.ask-swatch { font: 600 15px Arial, sans-serif; padding: 0 6px; border: 1px solid var(--line); border-radius: var(--r-control); background: #fff; color: #111; line-height: 20px; }
+.ask-preview { margin: 6px 0 10px; }
+.ask-preview canvas { border: 1px solid var(--line); border-radius: var(--r-control); }
+.sw-cap { margin: 6px 0 0; font-size: var(--fs-sm, 0.85em); }
+/* the Hotkeys page's keyboard */
+.hk-views { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-control); overflow: hidden; }
+.hk-views button { border: 0; border-radius: 0; background: none; padding: 3px 10px; color: var(--text); cursor: pointer; }
+.hk-views button[aria-pressed="true"] { background: var(--accent-soft); font-weight: 600; }
+dialog.hotkeys[data-view="board"] .hk-body, dialog.hotkeys[data-view="board"] > .hk-opt { display: none; }
+dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
+.kb { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.kb-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.kb-bar select { font: inherit; padding: 2px 6px; }
+.kb-mod { border: 1px solid var(--line); border-radius: var(--r-control); background: var(--bg); color: var(--text); padding: 2px 10px; cursor: pointer; }
+.kb-mod.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.kb-board { display: flex; flex-direction: column; gap: 3px; padding: 6px; border: 1px solid var(--line); border-radius: 6px; background: color-mix(in srgb, var(--text) 4%, var(--bg)); }
+.kb-row { display: flex; gap: 3px; }
+.kb-key { flex: 1 1 0; min-width: 0; height: 40px; padding: 2px 3px; display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--text); cursor: pointer; overflow: hidden; text-align: left; }
+.kb-key:hover, .kb-key:focus-visible { border-color: var(--accent); }
+.kb-key.kb-bound { background: color-mix(in srgb, var(--kb) 14%, var(--bg)); border-color: color-mix(in srgb, var(--kb) 45%, var(--line)); }
+.kb-key.kb-changed { box-shadow: inset 0 -2px 0 var(--accent); }
+.kb-key.picked { outline: 2px solid var(--accent); outline-offset: 1px; }
+.kb-key.kb-modkey { background: color-mix(in srgb, var(--text) 8%, var(--bg)); color: var(--muted); }
+.kb-key.kb-modkey.on { background: var(--accent); color: #fff; }
+.kb-key:disabled { cursor: default; opacity: 0.6; }
+.kb-cap { font-size: 11px; line-height: 1; color: var(--muted); }
+.kb-act { font-size: 10px; line-height: 1.1; font-weight: 600; color: color-mix(in srgb, var(--kb) 80%, var(--text)); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kb-info { min-height: 1.3em; margin: 0; }
+.kb-edit { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.kb-edit:empty { display: none; }
+.kb-pick select { font: inherit; max-width: 24em; margin-left: 4px; }
+.kb-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--fs-sm, 0.85em); }
+.kb-kind::before { content: ''; display: inline-block; width: 10px; height: 10px; margin-right: 5px; border-radius: 2px; background: var(--kb); vertical-align: -1px; }
 
 /* the Smart Scheme pane: beside the selected scheme, like SmartArt's text pane */
 .smart-pane { position: fixed; z-index: 40; width: 300px; max-height: min(70vh, 560px); overflow: auto; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-panel); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14); font: var(--fs-sm) var(--ui-font); display: grid; gap: 6px; padding: 6px 8px 8px; }
