@@ -105,11 +105,11 @@ export class AnalysisBox extends DropBox {
     this.popOut.addEventListener('click', () => this.detach());
   }
 
-  protected beforeOpen(): void {
+  protected override beforeOpen(): void {
     this.pop.prepend(this.popOut);
   }
 
-  open(): void {
+  override open(): void {
     // (popped out already: the box brings the window forward instead)
     if (this.float?.open) { this.float.show(); return; }
     super.open();
