@@ -203,3 +203,28 @@ describe('ChemDraw\'s links to what is gone, and pictures ChemDraw can\'t hold',
     expect(all(parse(writeCdxml(doc, { raster: () => null })), 'embeddedobject')).toHaveLength(0);
   });
 });
+
+describe('groups inside groups (R1)', () => {
+  it('leaves a ChemDraw group of groups as it was when saved again', () => {
+    const t = (id: number, x: number, s: string) => `<t id="${id}" p="${x} 100" BoundingBox="${x} 92 ${x + 10} 100"><s font="3" size="10" face="0">${s}</s></t>`;
+    const body = `<group id="30">${t(10, 0, 'a')}<group id="37">${t(11, 20, 'b')}${t(12, 40, 'c')}</group></group>`
+      + '<fragment id="2"><n id="3" p="100 150"/><n id="4" p="114.4 150"/><b id="5" B="3" E="4"/></fragment>';
+    const doc = readCdxml(file(body)).doc;
+    const grps = new Set([...doc.captions.values()].map((c) => c.grp));
+    expect(grps.size).toBe(1);
+    // an edit elsewhere
+    doc.edit('Move', () => doc.moveAtoms(new Set([...doc.atoms.keys()]), 5, 0));
+    const x = parse(writeCdxml(doc));
+    const outer = all(x, 'group').find((g) => g.getAttribute('id') === '30')!;
+    const inner = all(outer, 'group').find((g) => g.getAttribute('id') === '37')!;
+    expect(inner).toBeDefined();
+    expect(all(inner, 't').map((e) => e.getAttribute('id'))).toEqual(['11', '12']);
+    expect(all(x, 'group')).toHaveLength(2);
+    // taken out of the group here: it leaves both
+    const b = [...doc.captions.values()].find((c) => c.runs[0].text === 'b')!;
+    doc.edit('Ungroup', () => doc.updateCaption(b.id, { grp: undefined }));
+    const y = parse(writeCdxml(doc));
+    const tb = all(y, 't').find((e) => e.getAttribute('id') === '11')!;
+    expect(tb.parentElement!.nodeName).toBe('page');
+  });
+});

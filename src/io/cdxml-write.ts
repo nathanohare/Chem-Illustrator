@@ -2228,10 +2228,27 @@ class CdxmlWriter {
       if (!list) members.set(g, (list = []));
       list.push(e);
     }
+    // a file's group is kept while it holds just the group's members, at any depth: ChemDraw nests
+    // groups (a group of groups), which this program keeps as one group, so the groups inside are
+    // left as they are
+    const outerOf = (e: Element): Element | null => {
+      let o: Element | null = null;
+      for (let p = e.parentElement; p && p !== this.page; p = p.parentElement) if (plain(p)) o = p;
+      return o;
+    };
+    const leaves = (g: Element, out: Element[] = []): Element[] => {
+      for (const k of kids(g)) {
+        if (k.nodeName === 'objecttag') continue;
+        if (plain(k)) leaves(k, out); else out.push(k);
+      }
+      return out;
+    };
     for (const list of members.values()) {
-      const parent = list[0].parentElement;
-      const kept = plain(parent) && list.every((e) => e.parentElement === parent)
-        && kids(parent).filter((k) => k.nodeName !== 'objecttag').every((k) => list.includes(k));
+      const outer = outerOf(list[0]);
+      const kept = !!outer && list.every((e) => outerOf(e) === outer) && (() => {
+        const ls = leaves(outer);
+        return ls.length === new Set(list).size && ls.every((k) => list.includes(k));
+      })();
       if (kept) continue;
       const g = this.el('group', { id: this.id() });
       list[0].parentNode!.insertBefore(g, list[0]);
