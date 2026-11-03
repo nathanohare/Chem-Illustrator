@@ -3482,6 +3482,8 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 /* Presentation and Design: Warnings and Analysis stay out of the side panel until View > Show asks for them */
 body:is(.slides-mode, .design-mode):not(.show-warnings-pane) #warnings-section,
 body:is(.slides-mode, .design-mode):not(.show-analysis-pane) #analysis-section { display: none; }
+/* Canvas: Warnings and Analysis live in the ribbon's two boxes, so the side panel leaves them out (they show again when a box borrows them) */
+body:not(.slides-mode, .design-mode, .sheet-mode, .doc-mode) #side-content > :is(#warnings-section, #analysis-section) { display: none; }
 /* the side panel closes all the way (no strip): the button at the bottom right, View > Side Panel or Ctrl+Alt+B bring it back */
 .dock-v > .toolbox[data-id="details"].collapsed { display: none; }
 /* its header is one row: the close button sits beside the first heading */
