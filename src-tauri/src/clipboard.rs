@@ -156,14 +156,23 @@ mod win {
         Ok(())
     }
 
+    /// The formats a name is read from. "Embedded Object" stands for another program's object as it
+    /// is: a program copying its own object puts it on the clipboard as "Embed Source", while
+    /// PowerPoint and Word copying an object kept in a file put it there as "Embedded Object".
+    fn read_ids(name: &str) -> Vec<u32> {
+        match name {
+            "Embedded Object" => vec![format_id(name), unsafe { RegisterClipboardFormatW(wide("Embedded Object").as_ptr()) }],
+            _ => vec![format_id(name)],
+        }
+    }
+
     /// The data of the first of `names` that is on the clipboard.
     pub fn read(owner: *mut c_void, names: &[String]) -> Result<Option<(String, Vec<u8>)>, String> {
         let _open = Open::new(owner)?;
         for name in names {
-            let id = format_id(name);
-            if id == 0 || unsafe { IsClipboardFormatAvailable(id) } == 0 {
+            let Some(id) = read_ids(name).into_iter().find(|&id| id != 0 && unsafe { IsClipboardFormatAvailable(id) } != 0) else {
                 continue;
-            }
+            };
             unsafe {
                 let h = GetClipboardData(id);
                 if h.is_null() {

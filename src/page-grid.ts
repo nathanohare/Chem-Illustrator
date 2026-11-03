@@ -100,6 +100,20 @@ export function clampMove(box: Rect, d: Vec, walls: Rect): Vec {
   return { x: axis(box.x1, box.x2, d.x, walls.x1, walls.x2), y: axis(box.y1, box.y2, d.y, walls.y1, walls.y2) };
 }
 
+/**
+ * The fixed edges moved in by `margin` (open sides stay open), for keeping `box` a little way in
+ * from them. Where the room between two edges is too small for the box and both margins, the
+ * margins shrink (to none when the box only just fits).
+ */
+export function insetWalls(walls: Rect, margin: number, box: Rect): Rect {
+  const axis = (w1: number, w2: number, size: number): [number, number] => {
+    const m = isFinite(w1) && isFinite(w2) ? Math.max(0, Math.min(margin, (w2 - w1 - size) / 2)) : margin;
+    return [w1 + m, w2 - m];
+  };
+  const [x1, x2] = axis(walls.x1, walls.x2, box.x2 - box.x1), [y1, y2] = axis(walls.y1, walls.y2, box.y2 - box.y1);
+  return { x1, y1, x2, y2 };
+}
+
 /** Whether a box goes past a fixed edge. */
 export function crossesWalls(box: Rect, walls: Rect, slack = 0.5): boolean {
   return box.x1 < walls.x1 - slack || box.y1 < walls.y1 - slack || box.x2 > walls.x2 + slack || box.y2 > walls.y2 + slack;
