@@ -2191,6 +2191,8 @@ const nmrPanel = new NmrPanel({
   redraw: () => editor.requestOverlay(),
   copy: (text) => navigator.clipboard.writeText(text),
   flash: (text) => flash(text),
+  copyPicture: (png) => navigator.clipboard.write([new ClipboardItem({ 'image/png': new Blob([png as Uint8Array<ArrayBuffer>], { type: 'image/png' }) })]),
+  placePicture: (png) => placePicture(png, 'image/png', null),
 });
 let namesReady = false;
 
