@@ -2051,6 +2051,9 @@ class CdxmlWriter {
     };
     const done = new Set<Element>();
     const kindOf = { shape: 's', structure: 'a', arrow: 'r', caption: 'c' } as const;
+    // ChemDraw paints in file order and takes no notice of Z, so what is on the page goes in this
+    // order too (a group by its backmost member)
+    const place = new Map<Element, number>();
     stackItems(doc).forEach((it, i) => {
       const z = String(i + 1);
       for (const id of it.ids) {
@@ -2058,8 +2061,19 @@ class CdxmlWriter {
         if (!e || done.has(e)) continue;
         done.add(e);
         if (e.getAttribute('Z') !== z) { e.setAttribute('Z', z); changed = true; }
+        let top: Element | null = e;
+        while (top && top.parentNode !== this.page) top = top.parentElement;
+        if (top && !place.has(top)) place.set(top, i);
       }
     });
+    const onPage = kids(this.page).filter((k) => place.has(k));
+    const wanted = [...onPage].sort((a, b) => place.get(a)! - place.get(b)!);
+    if (wanted.some((e, i) => e !== onPage[i])) {
+      // (in the places they took, so anything else on the page keeps its own)
+      const marks = onPage.map((e) => { const m = this.x.createComment(''); this.page.replaceChild(m, e); return m; });
+      marks.forEach((m, i) => this.page.replaceChild(wanted[i], m));
+      changed = true;
+    }
     return changed;
   }
 

@@ -107,6 +107,24 @@ describe('one drawing order for every object (#406)', () => {
     expect(writeCdxml(back)).toBe(xml);
   });
 
+  it('puts what is on the page in that order too, as ChemDraw paints in file order and not by Z', () => {
+    const { doc, a, b, box } = scene();
+    // the structure to the front, the box to the back: the box first in the file
+    doc.edit('front', () => restack(doc, sel({ atoms: new Set([a, b]) }), 'front'));
+    doc.edit('back', () => restack(doc, sel({ shapes: new Set([box]) }), 'back'));
+    let xml = writeCdxml(doc);
+    expect(xml.indexOf('<graphic')).toBeLessThan(xml.indexOf('<fragment'));
+    // and the other way round, saved over the same file
+    const again = readCdxml(xml).doc;
+    const box2 = [...again.shapes.keys()][0], atoms2 = new Set(again.atoms.keys());
+    again.edit('front', () => restack(again, sel({ shapes: new Set([box2]) }), 'front'));
+    xml = writeCdxml(again);
+    expect(xml.indexOf('<graphic')).toBeGreaterThan(xml.indexOf('<fragment'));
+    again.edit('front', () => restack(again, sel({ atoms: atoms2 }), 'front'));
+    xml = writeCdxml(again);
+    expect(xml.lastIndexOf('<fragment')).toBeGreaterThan(xml.lastIndexOf('<graphic'));
+  });
+
   it('a drawing never reordered saves no order', () => {
     const { doc } = scene();
     const xml = writeCdxml(doc);
