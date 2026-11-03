@@ -42,3 +42,19 @@ describe('the 3-D Model window\'s method help', () => {
     expect(i.dataset.tip).toMatch(/^Full Search/);
   });
 });
+
+// ---------------------------------------------------------------- Nate 2026-11-03: Dark Gray by default; one place for ribbon group names
+import { DEFAULT_SETTINGS, parseSettings } from '../src/settings';
+
+describe('settings Nate asked for', () => {
+  it('Dark Gray is the theme a new install starts with, and a saved choice is kept', () => {
+    expect(DEFAULT_SETTINGS.appTheme).toBe('darkgray');
+    expect(parseSettings('{}').appTheme).toBe('darkgray');
+    expect(parseSettings(JSON.stringify({ appTheme: 'system' })).appTheme).toBe('system');
+  });
+
+  it('the group names setting is gone, and an old saved value is ignored', () => {
+    expect('ribbonNames' in DEFAULT_SETTINGS).toBe(false);
+    expect('ribbonNames' in parseSettings(JSON.stringify({ ribbonNames: 'side' }))).toBe(false);
+  });
+});
