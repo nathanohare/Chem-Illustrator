@@ -1582,31 +1582,22 @@ export class Renderer {
   }
 
   /**
-   * A ring-fusion H drawn on its carbon (ChemDraw's H-Dot and H-Dash): a filled dot (toward the
-   * viewer), or a dot hatched with lines across the bonds' gaps (away), a little wider than a bold bond.
+   * A ring-fusion H drawn on its carbon, as ChemDraw 25 draws its H-Dot and H-Dash (they follow the
+   * line width, not the bold width): a filled dot on the atom, or two short bars under it, a line's
+   * width off centre, and over it only when a bond runs straight down.
    */
   private drawHDot(ctx: CanvasRenderingContext2D, doc: Doc, a: Atom): void {
-    const w = bondWidths(doc.style, { s: a.s } as Bond);
-    const r = w.boldWidth * 1.15;
+    const lw = bondWidths(doc.style, { s: a.s } as Bond).lineWidth;
     ctx.save();
-    ctx.fillStyle = ctx.strokeStyle = a.color ?? '#000';
+    ctx.fillStyle = a.color ?? '#000';
     ctx.beginPath();
-    ctx.arc(a.x, a.y, r, 0, Math.PI * 2);
-    if (a.hDot === 'dot') ctx.fill();
+    if (a.hDot === 'dot') ctx.arc(a.x, a.y, 2.5 * lw, 0, Math.PI * 2);
     else {
-      // white behind it, so the bonds meeting there don't show through, then hashes inside the ring
-      ctx.fillStyle = '#fff';
-      ctx.fill();
-      ctx.lineWidth = w.lineWidth;
-      ctx.stroke();
-      ctx.beginPath();
-      for (let k = -1.5; k <= 1.5; k++) {
-        const dy = k * r * 0.5, h = Math.sqrt(Math.max(0, r * r - dy * dy));
-        ctx.moveTo(a.x - h, a.y + dy); ctx.lineTo(a.x + h, a.y + dy);
-      }
-      ctx.lineWidth = w.lineWidth * 0.8;
-      ctx.stroke();
+      const down = doc.neighbors(a.id).some((n) => n.y > a.y && Math.abs(n.x - a.x) < 0.02 * (n.y - a.y));
+      const w = 2.5 * lw, cx = a.x - lw / 2;
+      for (const k of [3.5, 6]) ctx.rect(cx - w / 2, a.y + (down ? -k : k) * lw - lw / 2, w, lw);
     }
+    ctx.fill();
     ctx.restore();
   }
 
@@ -1735,7 +1726,7 @@ export class Renderer {
         break;
       }
       case 'symbol': {
-        const cx = (s.x1 + s.x2) / 2, cy = (s.y1 + s.y2) / 2, r = Math.max(1.6, Math.min(w, h) / 2);
+        const cx = (s.x1 + s.x2) / 2, cy = (s.y1 + s.y2) / 2;
         const flag = s.symbol ? CHIRAL_FLAGS[s.symbol] : undefined;
         if (flag) {
           // a chiral flag: the word in a rounded box
@@ -1745,34 +1736,51 @@ export class Renderer {
           ctx.font = `${size}px ${FONT_STACK}`;
           ctx.fillText(flag, cx - measureText(flag, size) / 2, cy + size * 0.32);
         } else if (s.symbol === 'CirclePlus' || s.symbol === 'CircleMinus') {
-          ctx.arc(cx, cy, r, 0, Math.PI * 2);
-          ctx.moveTo(cx - r * 0.6, cy); ctx.lineTo(cx + r * 0.6, cy);
-          if (s.symbol === 'CirclePlus') { ctx.moveTo(cx, cy - r * 0.6); ctx.lineTo(cx, cy + r * 0.6); }
+          // sized as ChemDraw 25 draws a sign this wide, in lines 0.8 of the line width
+          const d = Math.min(w, h), lw = ctx.lineWidth, a = ((4 * d) / 9 + lw) / 2;
+          ctx.lineWidth = 0.8 * lw;
+          ctx.arc(cx, cy, (4 * d) / 9 + 0.4 * lw, 0, Math.PI * 2);
+          ctx.moveTo(cx - a, cy); ctx.lineTo(cx + a, cy);
+          if (s.symbol === 'CirclePlus') { ctx.moveTo(cx, cy - a); ctx.lineTo(cx, cy + a); }
           ctx.stroke();
+          ctx.lineWidth = lw;
         } else if (s.symbol === 'Plus' || s.symbol === 'Minus') {
-          ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy);
-          if (s.symbol === 'Plus') { ctx.moveTo(cx, cy - r); ctx.lineTo(cx, cy + r); }
+          const d = Math.min(w, h), lw = ctx.lineWidth, a = ((4 * d) / 9 + lw) / 2;
+          ctx.lineWidth = 0.8 * lw;
+          ctx.moveTo(cx - a, cy); ctx.lineTo(cx + a, cy);
+          if (s.symbol === 'Plus') { ctx.moveTo(cx, cy - a); ctx.lineTo(cx, cy + a); }
           ctx.stroke();
+          ctx.lineWidth = lw;
         } else if (s.symbol === 'LonePair') {
-          // the two dots sit at the two ends
-          ctx.arc(s.x1, s.y1, 0.55, 0, Math.PI * 2); ctx.moveTo(s.x2 + 0.55, s.y2); ctx.arc(s.x2, s.y2, 0.55, 0, Math.PI * 2); ctx.fill();
+          // the two dots sit at the two ends, as big as ChemDraw 25 draws them for that distance
+          const dot = (Math.hypot(s.x2 - s.x1, s.y2 - s.y1) * 2) / 9;
+          ctx.arc(s.x1, s.y1, dot, 0, Math.PI * 2); ctx.moveTo(s.x2 + dot, s.y2); ctx.arc(s.x2, s.y2, dot, 0, Math.PI * 2); ctx.fill();
         } else if (s.symbol === 'Electron') {
           ctx.arc(s.x1, s.y1, 0.6, 0, Math.PI * 2); ctx.fill();
         } else if (s.symbol === 'RadicalCation' || s.symbol === 'RadicalAnion') {
-          // the radical's dot, then the charge's sign
-          const a = r * 0.45, sx = cx + r * 0.4;
-          ctx.moveTo(sx - a, cy); ctx.lineTo(sx + a, cy);
-          if (s.symbol === 'RadicalCation') { ctx.moveTo(sx, cy - a); ctx.lineTo(sx, cy + a); }
+          // the radical's dot at the first point, the charge's sign about the second (ChemDraw 25's sizes)
+          const d = Math.hypot(s.x2 - s.x1, s.y2 - s.y1), lw = ctx.lineWidth, a = ((8 * d) / 9 + lw) / 2;
+          ctx.lineWidth = 0.8 * lw;
+          ctx.moveTo(s.x2 - a, s.y2); ctx.lineTo(s.x2 + a, s.y2);
+          if (s.symbol === 'RadicalCation') { ctx.moveTo(s.x2, s.y2 - a); ctx.lineTo(s.x2, s.y2 + a); }
           ctx.stroke();
+          ctx.lineWidth = lw;
           ctx.beginPath();
-          ctx.arc(cx - r * 0.6, cy, Math.max(0.6, r * 0.15), 0, Math.PI * 2); ctx.fill();
+          ctx.arc(s.x1, s.y1, (d * 2) / 9, 0, Math.PI * 2); ctx.fill();
         } else if (s.symbol === 'Dagger' || s.symbol === 'DoubleDagger') {
-          const t = s.symbol === 'Dagger' ? '\u2020' : '\u2021', size = r * 2.4;
-          ctx.font = `${size}px ${FONT_STACK}`;
-          ctx.fillText(t, cx - measureText(t, size) / 2, cy + size * 0.32);
+          // a stem and one or two bars, as ChemDraw 25 draws them for a sign this wide
+          const d = Math.abs(s.x2 - s.x1), lw = ctx.lineWidth, up = (0.8 * d + lw) / 2, across = (0.4 * d + lw) / 2;
+          ctx.lineWidth = 0.8 * lw;
+          ctx.moveTo(cx, cy - up); ctx.lineTo(cx, cy + up);
+          for (const k of s.symbol === 'Dagger' ? [-0.2] : [-0.2, 0.2]) { ctx.moveTo(cx - across, cy + k * d); ctx.lineTo(cx + across, cy + k * d); }
+          ctx.stroke();
+          ctx.lineWidth = lw;
         } else if (s.symbol === 'LonePairBar') {
-          // a lone pair drawn as a bar between its two ends
-          ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
+          // a bar across a lone pair's two ends and a little past them, as ChemDraw 25 draws it
+          const lw = ctx.lineWidth, k = 13 / 18;
+          ctx.lineWidth = 0.8 * lw;
+          ctx.moveTo(cx - (s.x2 - s.x1) * k, cy - (s.y2 - s.y1) * k); ctx.lineTo(cx + (s.x2 - s.x1) * k, cy + (s.y2 - s.y1) * k); ctx.stroke();
+          ctx.lineWidth = lw;
         } else {
           ctx.arc(cx, cy, 0.6, 0, Math.PI * 2); ctx.fill();
         }
@@ -1934,13 +1942,13 @@ export class Renderer {
       ctx.setLineDash([]);
       ctx.beginPath();
       if (r.noGo) {
+        // sized by the head's width, as ChemDraw 25 draws them
         const m = at(0.5);
-        const k = Math.max(3, r.headWidth * 1.2);
+        const k = r.headWidth * 2;
         if (r.noGoKind === 'hash') {
           // two parallel strokes slanted across the shaft
-          const gap = Math.max(lw * 3, k * 0.5);
-          const s = add(mul(n, k * 1.3), mul(u, k * 0.55));
-          for (const o of [-gap / 2, gap / 2]) {
+          const s = sub(mul(u, k / 2), mul(n, k));
+          for (const o of [-k / 2, k / 2]) {
             const c = add(m, mul(u, o));
             ctx.moveTo(c.x - s.x, c.y - s.y); ctx.lineTo(c.x + s.x, c.y + s.y);
           }
@@ -1951,9 +1959,9 @@ export class Renderer {
         }
       }
       if (r.dipole) {
-        // the plus end: a stroke across the shaft a little in from the tail
-        const c = at(Math.min(0.15, (r.headWidth * 4) / L));
-        const h = Math.max(3, r.headWidth * 1.1);
+        // the plus end: a stroke across the shaft, a head's half width in from the tail and as long as the head is wide (ChemDraw 25)
+        const c = at(Math.min(0.5, r.headWidth / L));
+        const h = r.headWidth;
         ctx.moveTo(c.x - n.x * h, c.y - n.y * h); ctx.lineTo(c.x + n.x * h, c.y + n.y * h);
       }
       ctx.stroke();

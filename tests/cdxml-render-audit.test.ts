@@ -85,9 +85,10 @@ describe('ChemDraw drawings', () => {
     }
   });
 
-  it('draws daggers as their characters', () => {
-    expect(pic(symbol('Dagger')).some((i) => i.kind === 'text' && i.text === '†')).toBe(true);
-    expect(pic(symbol('DoubleDagger')).some((i) => i.kind === 'text' && i.text === '‡')).toBe(true);
+  it('draws daggers as ChemDraw 25 does: a stem and one or two bars', () => {
+    const moves = (sym: string) => pic(symbol(sym)).filter((i) => i.kind === 'path' && i.stroke).flatMap((i) => (i as unknown as { segs: { k: string }[] }).segs).filter((g) => g.k === 'M').length;
+    expect(moves('Dagger')).toBe(2);
+    expect(moves('DoubleDagger')).toBe(3);
   });
 
   it('draws a shadowed oval with its shadow', () => {

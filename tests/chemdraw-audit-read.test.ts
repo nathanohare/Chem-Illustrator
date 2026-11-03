@@ -53,12 +53,12 @@ describe('the CDXML audit, reading side (2)', () => {
     expect(b.grpPath).toBeUndefined();
   });
 
-  it('R3: a closed curve inside a structure (a perspective ring\'s ellipse) is kept as a shape, and a headless open curve as a line', () => {
+  it('R3: a closed curve inside a structure (a perspective ring\'s ellipse) is kept as a shape, and a headless open curve as a Freeform curve', () => {
     const d = doc('<fragment id="2"><n id="10" p="0 0"/><n id="11" p="30 0"/><b id="20" B="10" E="11"/><curve id="30" CurveType="1" Closed="yes" CurvePoints="10 10 0 10 0 20 0 30 10 30 20 30 20 20 20 10 10 10"/><curve id="31" CurvePoints="40 0 40 0 50 10 60 0 60 0 60 0"/></fragment>');
     const s = d.shapes.get(30)!;
     expect(s.kind).toBe('geo');
     expect(s.geo!.startsWith('path:')).toBe(true);
-    expect(d.arrows.get(31)!.headStyle).toBe('none');
+    expect(d.shapes.get(31)!.geo!.startsWith('pen:')).toBe(true);
   });
 
   it("ChemDraw's aromatic bond (Order 1.5) is one line; its dashed one is Order 1.5 with Display2 Dash", () => {

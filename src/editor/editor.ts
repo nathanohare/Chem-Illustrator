@@ -3405,6 +3405,8 @@ export class Editor {
         const n = perp(dir);
         box = { x1: at.x - n.x * 1.12, y1: at.y - n.y * 1.12, x2: at.x + n.x * 1.12, y2: at.y + n.y * 1.12 };
       } else if (kind === 'Electron') box = { x1: at.x, y1: at.y, x2: at.x, y2: at.y };
+      // a radical ion: its dot, then the middle of its sign
+      else if (kind === 'RadicalCation' || kind === 'RadicalAnion') box = { x1: at.x - 1.5, y1: at.y, x2: at.x + 1.5, y2: at.y };
       else box = { x1: at.x - size / 2, y1: at.y - size / 2, x2: at.x + size / 2, y2: at.y + size / 2 };
       this.sel.shapes.add(doc.addShape({ kind: 'symbol', symbol: kind, ...box }).id);
       // a radical cation or anion: the atom is a radical with that charge, shown by the symbol

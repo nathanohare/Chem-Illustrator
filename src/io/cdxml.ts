@@ -3,7 +3,7 @@
 // charge symbols). Anything not understood yet is counted and skipped, never fatal.
 
 import { tint } from '../colours';
-import { pathId } from '../design/geo';
+import { pathId, freeformId } from '../design/geo';
 import { parseGuides } from '../editor/guides';
 import { fillFrameMembers, frameFromTag } from '../editor/frames';
 import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachFromTag, fillAttachments } from '../editor/attached';
@@ -399,7 +399,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         if (size && ls === null) atom.s = size / st.labelSize;
         const lj = t.getAttribute('LabelJustification');
         const la = t.getAttribute('LabelAlignment');
-        if (la === 'Center' || t.getAttribute('Justification') === 'Center') atom.centred = true;
+        // (stacked above or below wins over centred)
+        if (la !== 'Above' && la !== 'Below' && (la === 'Center' || t.getAttribute('Justification') === 'Center')) atom.centred = true;
         // which way the label runs: the node's LabelDisplay, else the text's LabelJustification;
         // LabelAlignment counts only for labels stacked above or below (the spec: multi-attached labels)
         const ld = n.getAttribute('LabelDisplay');
@@ -843,6 +844,16 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     for (let k = 1; 3 * k + 1 < knots.length; k++) path.push(knots[3 * k - 1], knots[3 * k], knots[3 * k + 1]);
     const tail = path[0], head = path[path.length - 1];
     if (Math.hypot(head.x - tail.x, head.y - tail.y) < 1e-6) { skip('curve'); return; }
+    // an open curve with no heads (and not a curved arrow of ours with its heads off): a Freeform curve
+    if (!own && !(type & (8 | 16 | 32 | 64))) {
+      const xs = path.map((p) => p.x), ys = path.map((p) => p.y);
+      const box = { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
+      const lw = num(c, 'LineWidth', st.lineWidth);
+      const sh = doc.addShape({ id: idFor(c), kind: 'geo', geo: freeformId(path, box, false), ...box, color: color(c), z: num(c, 'Z', 0), filled: false, ...(type & 2 ? { dashed: true } : {}), ...(type & 4 ? { bold: true } : {}), ...(lw !== st.lineWidth ? { lineWidth: lw } : {}) });
+      from('s', sh.id, c);
+      stats.shapes++;
+      return;
+    }
     const lw = num(c, 'LineWidth', st.lineWidth);
     let look: Partial<Arrow> = {};
     try { look = own ? JSON.parse(own) : {}; } catch { look = {}; }
@@ -1038,8 +1049,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
           const r = tb.length >= 4 ? { x1: tb[0], y1: tb[1], x2: tb[2], y2: tb[3] } : { x1: Math.min(bb[0], bb[2]), y1: bb[1] - 11, x2: Math.max(bb[0], bb[2]), y2: bb[1] };
           const pad = 2;
           add({ ...base, kind: 'symbol', symbol: sym, x1: r.x1 - pad, y1: r.y1 - pad, x2: r.x2 + pad, y2: r.y2 + pad });
-        } else if (sym === 'LonePair' || sym === 'LonePairBar') {
-          // the two dots (or the bar's two ends)
+        } else if (sym === 'LonePair' || sym === 'LonePairBar' || sym === 'RadicalCation' || sym === 'RadicalAnion') {
+          // two points: a lone pair's ends, or a radical ion's dot and then the middle of its sign
           add({ ...base, kind: 'symbol', symbol: sym, x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3] });
         } else if (sym === 'Electron') {
           // the dot, then a point further out that only sets its size

@@ -261,7 +261,7 @@ const P: Record<string, Prop> = {
   ArrowheadHead: { tag: 0x0a35, kind: 'enum16', values: HEAD },
   ArrowheadTail: { tag: 0x0a36, kind: 'enum16', values: HEAD },
   FillType: { tag: 0x0a37, kind: 'enum16', values: FILL },
-  Dipole: { tag: 0x0a3a, kind: 'bool' },
+  Dipole: { tag: 0x0a3a, kind: 'implied' }, // no data in ChemDraw 25's files, and it won't open a file with a byte here
   NoGo: { tag: 0x0a3b, kind: 'enum8', values: NOGO },
   CornerRadius: { tag: 0x0a3c, kind: 'i16' },
   // reactions

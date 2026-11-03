@@ -2210,12 +2210,9 @@ class CdxmlWriter {
           t.appendChild(sp);
           g.appendChild(t);
         } else if (s.symbol === 'LonePair' || s.symbol === 'LonePairBar') set('BoundingBox', box(s));
-        else if (s.symbol === 'RadicalCation' || s.symbol === 'RadicalAnion') {
-          // a radical ion: the dot, then the middle of the charge's sign (as drawn here)
-          const c = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };
-          const r = Math.max(1.6, Math.min(Math.abs(s.x2 - s.x1), Math.abs(s.y2 - s.y1)) / 2);
-          set('BoundingBox', `${f2(c.x - r * 0.6)} ${f2(c.y)} ${f2(c.x + r * 0.4)} ${f2(c.y)}`);
-        } else {
+        // a radical ion: the dot, then the middle of the charge's sign (the shape's two points, as read)
+        else if (s.symbol === 'RadicalCation' || s.symbol === 'RadicalAnion') set('BoundingBox', `${f2(s.x1)} ${f2(s.y1)} ${f2(s.x2)} ${f2(s.y2)}`);
+        else {
           // a charge sign (or a dagger) as ChemDraw stores it: the sign's centre, then a point its width below
           const c = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };
           set('BoundingBox', `${f2(c.x)} ${f2(c.y)} ${f2(c.x)} ${f2(c.y + Math.abs(s.x2 - s.x1))}`);
