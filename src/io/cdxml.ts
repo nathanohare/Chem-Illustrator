@@ -230,7 +230,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const [sx, sy] = pts(st?.getAttribute('p') ?? null);
     const text = runs.map((r) => r.text).join('');
     if (!text || !Number.isFinite(sx) || !Number.isFinite(sy) || st!.getAttribute('Visible') === 'no') return undefined;
-    const l: StereoLabel = { text, dx: sx - ox, dy: sy - oy, size: runs[0].size ?? 4.5 };
+    const l: StereoLabel = { text, dx: sx - ox, dy: sy - oy, size: runs[0].size ?? 4.5, fromFile: true };
     if (runs[0].italic) l.italic = true;
     return l;
   };

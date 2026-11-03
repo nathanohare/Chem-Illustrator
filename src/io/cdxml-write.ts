@@ -857,14 +857,17 @@ class CdxmlWriter {
     const info = this.doc.stereo;
     const text = atomStereoText(a, info);
     const place = text ? this.placer.atom(a, text) : null;
-    return this.syncStereo(n, 'ShowAtomStereo', 'AS', !!a.showStereo, text, place, info?.atom(a.id), patched);
+    // (a file's label that stands says its own descriptor)
+    const desc = a.stereoLabel?.fromFile && a.stereoLabel.text === text ? undefined : info?.atom(a.id);
+    return this.syncStereo(n, 'ShowAtomStereo', 'AS', !!a.showStereo, text, place, desc, patched);
   }
 
   private bondStereo(e: Element, b: Bond, patched: boolean): boolean {
     const info = this.doc.stereo;
     const text = bondStereoText(b, info);
     const place = text ? this.placer.bond(b, text) : null;
-    return this.syncStereo(e, 'ShowBondStereo', 'BS', !!b.showStereo, text, place, info?.bond(b.id), patched);
+    const desc = b.stereoLabel?.fromFile && b.stereoLabel.text === text ? undefined : info?.bond(b.id);
+    return this.syncStereo(e, 'ShowBondStereo', 'BS', !!b.showStereo, text, place, desc, patched);
   }
 
   /**
