@@ -42,3 +42,28 @@ describe('the CDXML audit, reading side', () => {
     expect(fills).toBeGreaterThan(0);
   });
 });
+
+describe('the CDXML audit, reading side (2)', () => {
+  it('R1: things in groups inside groups keep the whole nesting', () => {
+    const d = doc('<group id="1"><group id="2"><t id="10" p="10 10"><s>a</s></t></group><t id="11" p="40 10"><s>b</s></t></group>');
+    const a = d.captions.get(10)!, b = d.captions.get(11)!;
+    expect(a.grp).toBe(b.grp);
+    expect(a.grpPath).toEqual([a.grp, expect.any(Number)]);
+    expect(b.grpPath).toBeUndefined();
+  });
+
+  it('R3: a closed curve inside a structure (a perspective ring\'s ellipse) is kept as a shape, and a headless open curve as a line', () => {
+    const d = doc('<fragment id="2"><n id="10" p="0 0"/><n id="11" p="30 0"/><b id="20" B="10" E="11"/><curve id="30" CurveType="1" Closed="yes" CurvePoints="10 10 0 10 0 20 0 30 10 30 20 30 20 20 20 10 10 10"/><curve id="31" CurvePoints="40 0 40 0 50 10 60 0 60 0 60 0"/></fragment>');
+    const s = d.shapes.get(30)!;
+    expect(s.kind).toBe('geo');
+    expect(s.geo!.startsWith('path:')).toBe(true);
+    expect(d.arrows.get(31)!.headStyle).toBe('none');
+  });
+
+  it("ChemDraw's aromatic bond (Order 1.5) is one line; its dashed one is Order 2 with Display2 Dash", () => {
+    const d = doc('<fragment id="2"><n id="10" p="0 0"/><n id="11" p="30 0"/><n id="12" p="60 0"/><b id="20" B="10" E="11" Order="1.5"/><b id="21" B="11" E="12" Order="2" Display2="Dash"/></fragment>');
+    expect(d.bonds.get(20)!.plain).toBe(true);
+    expect(d.bonds.get(21)!.order).toBe(1.5);
+    expect(d.bonds.get(21)!.plain).toBeUndefined();
+  });
+});

@@ -502,11 +502,11 @@ export class Renderer {
       if (!o) continue;
       const ds = doc.style, w = bondWidths(ds, b);
       let h = w.lineWidth / 2;
-      if (b.order === 1 || b.order === PARTIAL || b.display === 'dative' || this.bondInfo(doc, b).pi) {
+      if (b.order === 1 || b.order === PARTIAL || b.display === 'dative' || (b.order === 1.5 && b.plain && !b.circle) || this.bondInfo(doc, b).pi) {
         if (b.display === 'dative' || b.display === 'dash' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy') continue;
         if (b.display === 'bold') h = w.boldWidth / 2;
         else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: w.boldWidth }) / 2;
-      } else if (b.order === 2 || (b.order === 1.5 && !b.circle)) {
+      } else if (b.order === 2 || (b.order === 1.5 && !b.circle && !b.plain)) {
         if (this.bondInfo(doc, b).side === 0 || b.display === 'dash') continue;
         if (b.display === 'bold') h = w.boldWidth / 2;
       }
@@ -1338,6 +1338,9 @@ export class Renderer {
       }
       return;
     }
+
+    // ChemDraw's aromatic bond drawn as one line (no ring circle): drawn as the single bond would be
+    if (b.order === 1.5 && b.plain && !b.circle) { this.bondPaths(doc, { ...b, order: 1, plain: undefined }, p, q, bb); return; }
 
     // an aromatic ring drawn with a circle: a plain line, and the stretch of each ring's circle
     // that faces this bond

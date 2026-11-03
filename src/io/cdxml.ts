@@ -3,6 +3,7 @@
 // charge symbols). Anything not understood yet is counted and skipped, never fatal.
 
 import { tint } from '../colours';
+import { pathId } from '../design/geo';
 import { parseGuides } from '../editor/guides';
 import { fillFrameMembers, frameFromTag } from '../editor/frames';
 import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachFromTag, fillAttachments } from '../editor/attached';
@@ -399,6 +400,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const layered = kids(frag).some((k) => k.nodeName === 'b' && k.hasAttribute('CrossingBonds'));
     for (const b of kids(frag)) {
       if (b.nodeName === 'graphic') readGraphic(b); // circled charges and lone pairs sit with their structure
+      if (b.nodeName === 'curve') readCurve(b); // (a metal complex's perspective ring ellipse, a wave)
       if (b.nodeName !== 'b') continue;
       let a1 = nodeIds.get(b.getAttribute('B') ?? '');
       let a2 = nodeIds.get(b.getAttribute('E') ?? '');
@@ -431,6 +433,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         if (dpos === 'left') dpos = 'right'; else if (dpos === 'right') dpos = 'left';
       }
       const extra: Partial<Bond> = { id: idFor(b), dpos };
+      // ChemDraw's own aromatic bond (Order="1.5") is drawn as one line; its dashed one is Order 2 with Display2 Dash
+      if (ord === '1.5') extra.plain = true;
       if (b.getAttribute('IgnoreWarnings') === 'yes') extra.ignoreWarnings = true;
       if (b.getAttribute('ShowBondStereo') === 'yes') extra.showStereo = true;
       // a bond crossing others: the higher Z is in front
@@ -729,12 +733,25 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const type = num(c, 'CurveType', 0);
     const own = kids(c).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === CURVE_ARROW_TAG)?.getAttribute('Value');
     // CurveType bits: closed 1, dashed 2, bold 4, arrow at end 8, at start 16, half-arrow at end 32, at start 64
-    if (!own && !(type & 0x78)) { skip('curve'); return; }
-    if (type & 1) { skip('closed curve'); return; }
     const n = pts(c.getAttribute('CurvePoints'));
     const knots: { x: number; y: number }[] = [];
     for (let i = 0; i + 1 < n.length; i += 2) knots.push({ x: n[i], y: n[i + 1] });
     if (knots.length < 6 || knots.length % 3) { skip('curve'); return; }
+    if (type & 1) {
+      // a closed curve (a perspective ring's ellipse): a shape of its own, outlined as ChemDraw draws it
+      const m = knots.length / 3, P = (i: number) => knots[3 * (i % m) + 1];
+      const path = [P(0)];
+      for (let i = 0; i < m; i++) path.push(knots[3 * i + 2], knots[3 * ((i + 1) % m)], P(i + 1));
+      const xs = path.map((p) => p.x), ys = path.map((p) => p.y);
+      const box = { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
+      if (box.x2 - box.x1 < 1e-3 && box.y2 - box.y1 < 1e-3) { skip('closed curve'); return; }
+      const lw = num(c, 'LineWidth', st.lineWidth);
+      const filled = c.getAttribute('FillType') === 'Solid' || !!(type & 128);
+      const sh = doc.addShape({ id: idFor(c), kind: 'geo', geo: pathId(path, box), ...box, color: color(c), z: num(c, 'Z', 0), filled, ...(type & 2 ? { dashed: true } : {}), ...(type & 4 ? { bold: true } : {}), ...(lw !== st.lineWidth ? { lineWidth: lw } : {}) });
+      from('s', sh.id, c);
+      stats.shapes++;
+      return;
+    }
     // each point comes with its handle in before it and its handle out after it
     const path = [knots[1]];
     for (let k = 1; 3 * k + 1 < knots.length; k++) path.push(knots[3 * k - 1], knots[3 * k], knots[3 * k + 1]);
@@ -929,17 +946,20 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const plain = (g: Element) => g.nodeName === 'group'
       && !kids(g).some((k) => k.nodeName === 'table' || (k.nodeName === 'objecttag' && (k.getAttribute('Name') === GEO_TAG)));
     const numbers = new Map<Element, number>();
-    const maps: Partial<Record<Kind, Map<number, { grp?: number }>>> = { a: doc.atoms, c: doc.captions, r: doc.arrows, s: doc.shapes };
+    const numberOf = (g: Element) => { let n = numbers.get(g); if (n === undefined) numbers.set(g, (n = numbers.size + 1)); return n; };
+    const maps: Partial<Record<Kind, Map<number, { grp?: number; grpPath?: number[] }>>> = { a: doc.atoms, c: doc.captions, r: doc.arrows, s: doc.shapes };
     for (const [key, o] of ord) {
       const m = maps[key[0] as Kind];
       if (!m) continue;
-      let outer: Element | null = null;
-      for (let p = all[o].parentElement; p && p !== root; p = p.parentElement) if (p !== all[o] && plain(p)) outer = p;
-      if (!outer) continue;
-      let n = numbers.get(outer);
-      if (n === undefined) numbers.set(outer, (n = numbers.size + 1));
+      // every plain group round it, outermost first
+      const chain: Element[] = [];
+      for (let p = all[o].parentElement; p && p !== root; p = p.parentElement) if (p !== all[o] && plain(p)) chain.unshift(p);
+      if (!chain.length) continue;
+      const path = chain.map(numberOf);
       const e = m.get(Number(key.slice(1)));
-      if (e) e.grp = n;
+      if (!e) continue;
+      e.grp = path[0];
+      if (path.length > 1) e.grpPath = path;
     }
   };
 
