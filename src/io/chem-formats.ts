@@ -402,6 +402,9 @@ function cmlMolecule(m: Element, mrv: boolean): FMol {
           contracted.add(r.sgroupRef);
         } else if (sym === 'R' && r.rgroupRef && r.rgroupRef !== '0') sym = 'R' + r.rgroupRef;
         else if (sym === 'Du' || sym === 'R') sym = sym === 'Du' ? '*' : 'R';
+        // a label kept as an alias: Marvin's mrvAlias, or a CML atom's label
+        const alias = r.mrvAlias || (list.length ? kids(list[rows.indexOf(r)], 'label')[0]?.getAttribute('value') : '');
+        if (alias && (sym === '*' || sym === 'R')) sym = alias;
         const a: FAtom = { sym, x: num(r.x2 ?? r.x3), y: num(r.y2 ?? r.y3) };
         const chg = parseInt(r.formalCharge ?? '', 10), iso = parseInt(r.isotopeNumber ?? r.isotope ?? '', 10), map = parseInt(r.mrvMap ?? '', 10);
         if (chg) a.charge = chg;
@@ -817,7 +820,7 @@ export function docToScene(doc: Doc): { scene: FScene; unknown: string[]; step: 
     if (!cap) return null;
     const species = placeSpecies(doc, [cap], m);
     if (!species.length) return null;
-    const ex = toMolfile(doc, [], plainText(cap.runs).trim(), { species, maps: true });
+    const ex = toMolfile(doc, [], plainText(cap.runs).trim(), { species, maps: true, aliases: true });
     const mol = readMolfile(ex.molblock);
     return mol ? { ...mol, ...(role ? { role } : {}) } : null;
   };
@@ -841,7 +844,7 @@ export function docToScene(doc: Doc): { scene: FScene; unknown: string[]; step: 
   for (const it of items) {
     if (!it.atoms.length) continue;
     // (atom-atom map numbers go too, so a mapped reaction stays mapped in RXN, Marvin and Ketcher files)
-    const ex = toMolfile(doc, it.atoms, '', { maps: true });
+    const ex = toMolfile(doc, it.atoms, '', { maps: true, aliases: true });
     for (const u of ex.unknownLabels) unknown.add(u);
     const mol = readMolfile(ex.molblock);
     if (!mol || !mol.atoms.length) continue;
@@ -923,7 +926,7 @@ export function writeMolFile(doc: Doc, name = '', o: CtabOptions = {}): { text: 
   const species = placeSpecies(doc, doc.captions.values(), plainMeasure(doc));
   // V2000 can't count past 999 atoms or bonds
   const v3000 = o.v3000 || ids.length > 999 || doc.bonds.size > 999;
-  const ex = toMolfile(doc, ids, name, { species, v3000, maps: true });
+  const ex = toMolfile(doc, ids, name, { species, v3000, maps: true, aliases: true });
   return { text: ex.molblock, unknown: ex.unknownLabels };
 }
 
@@ -973,15 +976,17 @@ function cmlMoleculeXml(m: FMol, id: string, first: number, indent: string, mrv:
     const z = elementNumber(a.sym);
     const r = /^R(\d+)$/.exec(a.sym);
     const el = z !== undefined ? a.sym : r || a.sym === 'R' ? 'R' : mrv ? 'R' : 'Du';
+    // (a label kept as an alias: Marvin's mrvAlias; in CML the atom's label)
+    const label = z === undefined && !r && a.sym !== 'R' && a.sym !== '*' && !mrv ? `<label value="${att(a.sym)}"/>` : '';
     const extra = [
       a.charge ? ` formalCharge="${a.charge}"` : '',
       a.iso ? ` isotope${mrv ? '' : 'Number'}="${a.iso}"` : '',
       a.rad ? ` ${mrv ? 'radical' : 'spinMultiplicity'}="${mrv ? (a.rad === 2 ? 'monovalent' : a.rad === 1 ? 'divalent1' : 'divalent3') : a.rad === 2 ? 2 : a.rad === 1 ? 1 : 3}"` : '',
       r ? ` rgroupRef="${r[1]}"` : '',
       a.map && mrv ? ` mrvMap="${a.map}"` : '',
-      z === undefined && !r && a.sym !== 'R' && mrv ? ` mrvAlias="${att(a.sym)}"` : '',
+      z === undefined && !r && a.sym !== 'R' && a.sym !== '*' && mrv ? ` mrvAlias="${att(a.sym)}"` : '',
     ].join('');
-    lines.push(`${indent}    <atom id="${aid(i)}" elementType="${el}"${extra} x2="${fx(a.x)}" y2="${fx(a.y)}"/>`);
+    lines.push(`${indent}    <atom id="${aid(i)}" elementType="${el}"${extra} x2="${fx(a.x)}" y2="${fx(a.y)}"${label ? `>${label}</atom>` : '/>'}`);
   });
   lines.push(`${indent}  </atomArray>`);
   if (m.bonds.length) {

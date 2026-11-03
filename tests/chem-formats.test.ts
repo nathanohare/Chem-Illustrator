@@ -256,6 +256,23 @@ describe('writing drawings in other programs\' formats', () => {
 
   const roundTrip = (fmt: ChemFormat, text: string) => draw(readScene(fmt, text));
 
+  it('keeps a label it can\'t read as chemistry as that label, in every format (found in the 2026-11-03 review: it became R or *)', () => {
+    const d = new Doc();
+    d.bulk(() => { const a = d.addAtom(0, 0); const b = d.addAtom(14, 0); d.addBond(a.id, b.id); d.updateAtom(b.id, { label: 'Xyz' }); });
+    const files: [string, string][] = [
+      ['a.mol', writeMolFile(d).text], ['b.mol', writeMolFile(d, '', { v3000: true }).text], ['a.sdf', writeSdfFile(d).text],
+      ['a.mrv', writeMrvFile(d).text], ['a.ket', writeKetFile(d).text], ['a.cml', writeCmlFile(d).text], ['a.json', writeChemDoodleJson(d).text],
+    ];
+    for (const [name, text] of files) {
+      const scene = readScene(chemFormatOf(name, text)!, text)!;
+      expect(scene.mols.flatMap((m) => m.atoms.map((a) => a.sym)), name).toEqual(['C', 'Xyz']);
+    }
+    // other programs see an alias: a V2000 A line, Marvin's mrvAlias, Ketcher's alias
+    expect(files[0][1]).toMatch(/^A {2} {2}2\nXyz$/m);
+    expect(files[3][1]).toContain('mrvAlias="Xyz"');
+    expect(files[4][1]).toContain('"alias": "Xyz"');
+  });
+
   it('writes a molfile of everything drawn', () => {
     const d = draw(readScene('mol', ACETATE_V3000));
     const back = roundTrip('mol', writeMolFile(d).text);

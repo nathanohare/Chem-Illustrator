@@ -44,6 +44,8 @@ export class DeckStore implements ZoteroStore {
   /** References slides this command added (taken out again if Zotero drops them). */
   private added = new Set<number>();
   private bibs = new Set<number>();
+  /** Each slide given an empty citation this command, as it was before. */
+  private before = new Map<number, SlideRefs>();
   constructor(private host: DeckZoteroHost, private command: ZoteroCommand) {}
 
   get docId(): string { return this.host.docId; }
@@ -132,6 +134,7 @@ export class DeckStore implements ZoteroStore {
     }
     const s = this.st.slides[this.st.current];
     if (!s || s.refList) throw new Error('Show the slide the references are for first (not the References slide).');
+    if (!this.before.has(s.id)) this.before.set(s.id, this.own(s));
     this.set(s, { ...this.own(s), zotero: { code: 'TEMP', text: ZOTERO_PLACEHOLDER, for: refsKey(s.refs ?? []) } });
     return { id: CITE + s.id, code: 'TEMP', text: ZOTERO_PLACEHOLDER, noteIndex: 0 };
   }
@@ -185,6 +188,20 @@ export class DeckStore implements ZoteroStore {
   }
 
   convert(): void { /* slides have no notes */ }
+
+  /** Zotero went away part way: slides keep the citations they had, and a References slide it never filled goes. */
+  abandon(): void {
+    for (const [id, was] of this.before) {
+      const s = this.st.slides.find((x) => x.id === id);
+      if (s?.zotero?.code === 'TEMP') this.set(s, was);
+    }
+    for (const id of this.added) {
+      const s = this.st.slides.find((x) => x.id === id);
+      if (s && !s.refList?.zotero?.entries) this.host.removeSlide(id);
+    }
+    this.before.clear();
+    this.added.clear();
+  }
 
   finish(): void {
     if (!this.bibs.size) return;

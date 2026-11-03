@@ -431,8 +431,7 @@ export class CompoundLibraryWindow {
       const tags = text('Tags', c.tags.join(', '), 'separated by commas');
       const notes = el('textarea', { rows: 4, value: c.notes, placeholder: 'notebook page, where it is kept, how it was made…' });
       row('Notes', notes);
-      form.append(el('h3', { textContent: c.files.length ? 'Appears in' : 'Appears in no file yet' }));
-      if (!c.files.length) form.append(el('p', { className: 'muted small', textContent: 'Files are noted as they are saved or opened with this structure in them.' }));
+      form.append(withInfo(el('h3', { textContent: c.files.length ? 'Appears in' : 'Appears in no file yet' }), 'Files are noted as they are saved or opened with this structure in them.'));
       const files = el('ul', { className: 'compound-files' });
       for (const f of c.files) {
         const open = button('Open', `Open ${f.path}`, () => { done(null); void this.host.openFile(f.path, c); });

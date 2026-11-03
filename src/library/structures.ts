@@ -11,6 +11,7 @@ import { toMolfile } from '../chem/molfile';
 import { readCdxml } from '../io/cdxml';
 import { cdxToCdxml, isCdx } from '../io/cdx';
 import { extensionOf } from '../io/files';
+import { chemFormatOf, FOREIGN_EXTENSIONS, readScene, sceneToDoc } from '../io/chem-formats';
 import type { DocText } from '../document/document';
 import { usedObjects } from '../document/document';
 import type { Workbook } from '../sheet/workbook';
@@ -94,7 +95,7 @@ export interface FileReaders {
 }
 
 /** The kinds of file searched. */
-export const SEARCHED_EXTENSIONS = ['cdxml', 'cdx', 'docx', 'pptx', 'xlsx', 'xlsm'];
+export const SEARCHED_EXTENSIONS = ['cdxml', 'cdx', 'docx', 'pptx', 'xlsx', 'xlsm', 'sdf', 'sd', ...FOREIGN_EXTENSIONS];
 
 const zip = (b: Uint8Array) => b[0] === 0x50 && b[1] === 0x4b;
 
@@ -126,6 +127,14 @@ export async function foundInFile(bytes: Uint8Array, name: string, read: FileRea
   const ext = extensionOf(name);
   if (ext === 'cdx' || isCdx(bytes)) return foundIn(readCdxml(cdxToCdxml(bytes)).doc, { kind: 'drawing' });
   if (ext === 'cdxml') return foundIn(readCdxml(new TextDecoder().decode(bytes)).doc, { kind: 'drawing' });
+  // an SD file opens as a sheet, a structure to a row; the other chemistry files as a drawing
+  if (ext === 'sdf' || ext === 'sd') return foundInWorkbook(await read.sheet(bytes, name));
+  if (FOREIGN_EXTENSIONS.includes(ext)) {
+    const text = new TextDecoder().decode(bytes);
+    const fmt = chemFormatOf(name, text);
+    const scene = fmt && readScene(fmt, text);
+    return scene ? foundIn(sceneToDoc(scene, ACS_1996).doc, { kind: 'drawing' }) : [];
+  }
   if (!zip(bytes)) return [];
   if (ext === 'docx') return foundInDocument(await read.document(bytes, name));
   if (ext === 'xlsx' || ext === 'xlsm') return foundInWorkbook(await read.sheet(bytes, name));
