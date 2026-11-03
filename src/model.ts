@@ -1307,6 +1307,8 @@ export interface CdxmlSource {
    * changing it, so one still here is unchanged, and saving can pass it by without comparing.
    */
   loaded?: WeakSet<Entity>;
+  /** The page as read (JSON), to tell whether it has been set since. */
+  page?: string;
 }
 
 /**

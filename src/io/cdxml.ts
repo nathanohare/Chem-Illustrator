@@ -1346,7 +1346,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   const loaded = new WeakSet<Entity>();
   const keep = (kind: Kind, m: Map<number, Entity>) => { for (const e of m.values()) { const key = kind + e.id; if (ord.has(key)) { orig.set(key, { ...e }); loaded.add(e); } } };
   keep('a', doc.atoms); keep('b', doc.bonds); keep('c', doc.captions); keep('r', doc.arrows); keep('s', doc.shapes);
-  doc.source = { text, ord, orig, maxId, xml, loaded };
+  doc.source = { text, ord, orig, maxId, xml, loaded, page: JSON.stringify(doc.page ?? null) };
   doc.allDirty = true;
   stats.buildMs = performance.now() - t1;
   return { doc, stats };

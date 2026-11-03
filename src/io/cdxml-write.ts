@@ -7,7 +7,7 @@
 // the same form ChemDraw uses, so ChemDraw opens both.
 
 import { guidesText } from '../editor/guides';
-import { Doc, Atom, Bond, Caption, Arrow, Shape, TextRun, Entity, Kind, StepRoles, enhancedText, CHIRAL_FLAGS, flagTextSize, type HighlightStyle } from '../model';
+import { CdxmlSource, Doc, Atom, Bond, Caption, Arrow, Shape, TextRun, Entity, Kind, StepRoles, enhancedText, CHIRAL_FLAGS, flagTextSize, type HighlightStyle } from '../model';
 import { interpretArrow, isReactionArrow, linkRows, isStep, plainMeasure, schemeItems, type Item } from '../chem/reaction';
 import { SYMBOLS } from '../chem/elements';
 import { labelBonds, labelSpec, layoutLabel, labelDir, labelGraph, tokenize, isGenericLabel, Measure, MiniGraph, kekulize, labelLook } from '../chem/labels';
@@ -208,7 +208,7 @@ class CdxmlWriter {
     }
     const b = doc.bounds();
     // a page set here (File > Page Setup), or grown to hold the drawing, is written to the file's page
-    if (src && doc.page && this.pageNeeds(b)) this.changed = true;
+    if (src && doc.page && !(this.unchangedSinceRead() && this.samePageAsRead(src)) && this.pageNeeds(b)) this.changed = true;
     // the guides and the arrow-text style, kept for this program in tags ChemDraw passes over (guides are never drawn, exported or printed)
     if (this.writeGuides()) this.changed = true;
     if (src && !this.changed) return src.text;
@@ -342,6 +342,11 @@ class CdxmlWriter {
     return (this.pageGridTag()?.getAttribute('Value') ?? null) !== pageTag(p);
   }
 
+  /** The page is as the file had it (ChemDraw lets a drawing run past its pages; that alone is no change). */
+  private samePageAsRead(src: CdxmlSource): boolean {
+    return JSON.stringify(this.doc.page ?? null) === src.page;
+  }
+
   /** Size the page to the drawing's page, grown to hold the drawing. */
   private sizePage(b: Rect | null): void {
     // (the page as the file had it, before it is sized here)
@@ -449,6 +454,21 @@ class CdxmlWriter {
     from.parentNode?.replaceChild(to, from);
     const o = this.doc.source?.ord.get(kind + id);
     if (o !== undefined && this.all[o] === from) this.all[o] = to;
+  }
+
+  /**
+   * Nothing drawn has changed since the file was read: every entity is still the one read, and
+   * none has gone. What ChemDraw said then (its layers, its crossing lists, its page) still holds,
+   * even where this program would work out something else.
+   */
+  private unchangedSinceRead(): boolean {
+    const src = this.doc.source;
+    if (!src?.loaded) return false;
+    let n = 0;
+    for (const m of [this.doc.atoms, this.doc.bonds, this.doc.captions, this.doc.arrows, this.doc.shapes] as Map<number, Entity>[]) {
+      for (const e of m.values()) { if (!src.loaded.has(e)) return false; n++; }
+    }
+    return n === src.orig.size;
   }
 
   private orig<T extends Entity>(kind: Kind, id: number): T | null {
@@ -1098,6 +1118,7 @@ class CdxmlWriter {
    * of everything (ChemDraw muddles equal ones) in the order they are layered here.
    */
   private writeCrossings(): void {
+    if (this.unchangedSinceRead()) return;
     // the bonds that cross, and the near misses a ChemDraw file listed that still pass close
     const partners = new Map<number, Bond[]>();
     // (ChemDraw lists some a little further off than it leaves gaps for, so they are kept to half a bond)
@@ -2444,6 +2465,8 @@ class CdxmlWriter {
    */
   private writeStack(): boolean {
     const doc = this.doc;
+    // (the order was read from the file's own Z, so it says so already)
+    if (this.unchangedSinceRead()) return false;
     const on = usesStacking(doc);
     let changed = this.pageTag(STACK_TAG, on ? '1' : null);
     if (!on) return changed;
@@ -2562,7 +2585,8 @@ class CdxmlWriter {
     };
     const leaves = (g: Element, out: Element[] = []): Element[] => {
       for (const k of kids(g)) {
-        if (k.nodeName === 'objecttag') continue;
+        // (the old graphic ChemDraw keeps beside an arrow is no member of its own)
+        if (k.nodeName === 'objecttag' || k.hasAttribute('SupersededBy')) continue;
         if (plain(k)) leaves(k, out); else out.push(k);
       }
       return out;
@@ -2590,7 +2614,12 @@ class CdxmlWriter {
         }
         return at;
       };
-      for (const e of list) holder(nesting.get(e) ?? []).appendChild(e);
+      for (const e of list) {
+        const into = holder(nesting.get(e) ?? []);
+        into.appendChild(e);
+        // an arrow's old graphic goes with it: left behind, ChemDraw draws the arrow twice
+        if (e.nodeName === 'arrow') for (const old of this.legacyOf(e)) into.appendChild(old);
+      }
       this.changed = true;
     }
   }
