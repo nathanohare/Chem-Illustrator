@@ -1790,7 +1790,7 @@ export class Renderer {
       if (r.sweep) { this.arcArrow(ctx, r, tail, head); return; }
       const dir = mul(d, 1 / l);
       const hl = Math.min(r.headLength, l * 0.6);
-      const into = (style: Arrow['headStyle']) => style === 'none' ? 0 : shaftInto(hl, r.headType, ctx.lineWidth, isHalf(style) ? r.headWidth : undefined);
+      const into = (style: Arrow['headStyle']) => style === 'none' ? 0 : shaftInto(hl, r.headType, ctx.lineWidth, isHalf(style) ? r.headWidth : undefined, r.headCenter);
       const back = into(headStyle);
       const tback = into(tailStyle);
       ctx.setLineDash(r.line === 'dashed' ? [lw * 4, lw * 3] : []);
@@ -1889,7 +1889,7 @@ export class Renderer {
     const hDir = aim(head, a1 - s * back), tDir = aim(tail, a0 + s * back);
     // the line follows the arc to where the head starts, then runs straight along the head's
     // middle into it, so it can't show beside or past the head's point
-    const into = (style: Arrow['headStyle']) => shaftInto(r.headLength, r.headType, ctx.lineWidth, isHalf(style) ? r.headWidth : undefined);
+    const into = (style: Arrow['headStyle']) => shaftInto(r.headLength, r.headType, ctx.lineWidth, isHalf(style) ? r.headWidth : undefined, r.headCenter);
     const hasHead = r.headStyle !== 'none', hasTail = r.tailStyle !== 'none';
     const start = hasTail ? sub(tail, mul(tDir, into(r.tailStyle))) : tail;
     const end = hasHead ? sub(head, mul(hDir, into(r.headStyle))) : head;
@@ -1919,7 +1919,7 @@ export class Renderer {
     const tH = hasHead ? bezHeadBack(pts, reach, false) : n;
     const tT = hasTail ? bezHeadBack(pts, reach, true) : 0;
     const hDir = norm(sub(r.head, bezPathAt(pts, tH))), tDir = norm(sub(r.tail, bezPathAt(pts, tT)));
-    const into = (style: Arrow['headStyle']) => shaftInto(r.headLength, r.headType, ctx.lineWidth, isHalf(style) ? r.headWidth : undefined);
+    const into = (style: Arrow['headStyle']) => shaftInto(r.headLength, r.headType, ctx.lineWidth, isHalf(style) ? r.headWidth : undefined, r.headCenter);
     const start = hasTail ? sub(r.tail, mul(tDir, into(r.tailStyle))) : r.tail;
     const end = hasHead ? sub(r.head, mul(hDir, into(r.headStyle))) : r.head;
     const path = bezSlice(pts, tT, tH);
@@ -1944,7 +1944,19 @@ export class Renderer {
     const hl = r.headLength, hw = r.headWidth;
     const n = perp(dir);
     const base = sub(tip, mul(dir, hl));
-    const inner = sub(tip, mul(dir, hl * 0.75));
+    const c = r.headCenter ?? 0.75;
+    const inner = sub(tip, mul(dir, hl * c));
+    // ChemDraw's notched sides: curves from each barb, leaving it straight back and coming into the notch across the line
+    const toNotch = (barb: Vec, side: number) => {
+      if (r.headCenter === undefined) { ctx.lineTo(inner.x, inner.y); return; }
+      const c2 = add(inner, mul(n, side * hw * c / 2));
+      ctx.bezierCurveTo(barb.x, barb.y, c2.x, c2.y, inner.x, inner.y);
+    };
+    const fromNotch = (barb: Vec, side: number) => {
+      if (r.headCenter === undefined) { ctx.lineTo(barb.x, barb.y); return; }
+      const c1 = add(inner, mul(n, side * hw * c / 2));
+      ctx.bezierCurveTo(c1.x, c1.y, barb.x, barb.y, barb.x, barb.y);
+    };
     const left = add(base, mul(n, -hw)), right = add(base, mul(n, hw));
     const toLeft = style === 'full' || style === 'halfLeft', toRight = style === 'full' || style === 'halfRight';
     const half = toLeft !== toRight;
@@ -1981,16 +1993,15 @@ export class Renderer {
       const t = add(tip, off), i = add(inner, off), barb = toLeft ? left : right;
       ctx.moveTo(t.x, t.y);
       ctx.lineTo(barb.x, barb.y);
-      ctx.lineTo(inner.x, inner.y);
+      toNotch(barb, toLeft ? -1 : 1);
       ctx.lineTo(i.x, i.y);
       ctx.closePath();
       if (r.headType === 'hollow') ctx.stroke(); else ctx.fill();
       return;
     }
     ctx.moveTo(tip.x, tip.y);
-    if (toLeft) ctx.lineTo(left.x, left.y);
-    ctx.lineTo(inner.x, inner.y);
-    if (toRight) ctx.lineTo(right.x, right.y);
+    if (toLeft) { ctx.lineTo(left.x, left.y); toNotch(left, -1); } else ctx.lineTo(inner.x, inner.y);
+    if (toRight) fromNotch(right, 1);
     ctx.closePath();
     if (r.headType === 'hollow') ctx.stroke(); else ctx.fill();
   }
@@ -2832,8 +2843,9 @@ const isHalf = (style: Arrow['headStyle']): boolean => style === 'halfLeft' || s
  * line's square end can't show past the point), and just short of the point for an open head,
  * whose two barbs meet there.
  */
-export function shaftInto(headLength: number, headType: Arrow['headType'], lineWidth: number, halfWidth?: number): number {
-  if (headType !== 'angle') return headLength * 0.7;
+export function shaftInto(headLength: number, headType: Arrow['headType'], lineWidth: number, halfWidth?: number, center = 0.75): number {
+  // into a solid head, up to just short of its notch
+  if (headType !== 'angle') return headLength * Math.min(0.7, center * 0.95);
   // an open half head: the line stops where the barb's inner edge meets it (openHalfNotch)
   if (halfWidth) return openHalfNotch(headLength, halfWidth, lineWidth);
   return Math.min(lineWidth, headLength * 0.5);

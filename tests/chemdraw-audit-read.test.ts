@@ -5,7 +5,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { readCdxml } from '../src/io/cdxml';
-import { Renderer } from '../src/render/renderer';
+import { Renderer, shaftInto } from '../src/render/renderer';
 import { labelSpec, layoutLabel } from '../src/chem/labels';
 
 const doc = (body: string, root = '') => readCdxml(`<?xml version="1.0" encoding="UTF-8" ?><CDXML${root}><colortable><color r="1" g="1" b="1"/><color r="0" g="0" b="0"/></colortable><page id="1">${body}</page></CDXML>`).doc;
@@ -161,5 +161,60 @@ describe('the CDXML audit, reading side (7): R32, R11', () => {
     const p = readCdxml('<?xml version="1.0" encoding="UTF-8" ?><CDXML><page id="1" BoundingBox="0 0 1080 720" HeightPages="1" WidthPages="2"/></CDXML>').doc;
     expect(p.page).toMatchObject({ w: 540, h: 720, across: 2 });
     expect(p.page!.poster).toBeUndefined();
+  });
+});
+
+describe('the CDXML audit, reading side (8): R27, R31, R35, R40, R41, R42, E12', () => {
+  const page = (body: string, root = '', fonts = '') => readCdxml(`<?xml version="1.0" encoding="UTF-8" ?><CDXML LineWidth="1"${root}>${fonts}<page id="1">${body}</page></CDXML>`);
+
+  it('R35: a charge the label leaves out, with no circled charge, is not drawn (ChemDraw shows Cl, not Cl−)', () => {
+    const d = doc('<fragment id="2"><n id="10" p="10 10"/><n id="11" p="24.4 10" Element="17" Charge="-1" NumHydrogens="0"><t><s font="3" size="10" face="96">Cl</s></t></n><b id="20" B="10" E="11"/></fragment>'
+      + '<fragment id="3"><n id="30" p="10 40"/><n id="31" p="24.4 40" Element="7" Charge="1" NumHydrogens="3"><t><s font="3" size="10" face="96">NH3+</s></t></n><b id="40" B="30" E="31"/></fragment>');
+    expect(d.atoms.get(11)!.hideCharge).toBe(true);
+    expect(d.atoms.get(31)!.hideCharge).toBeFalsy();
+  });
+
+  it('R31: an Arial run keeps Arial in a drawing whose captions are in another font', () => {
+    const fonts = '<fonttable><font id="3" name="Arial"/><font id="4" name="Times New Roman"/></fonttable>';
+    const { doc: d } = page('<t id="5" p="10 10"><s font="3" size="12">Arial</s><s font="4" size="12">Times</s></t>', ' CaptionFont="4"', fonts);
+    const runs = [...d.captions.values()][0].runs;
+    expect(runs[0].font).toBe('Arial');
+    expect(runs[1].font).toBeUndefined();
+  });
+
+  it('R41: NoGo="None" is a plain arrow; a curve arrow keeps its own head size and shape', () => {
+    const { doc: d } = page('<arrow id="5" NoGo="None" ArrowheadHead="Full" Head3D="50 10 0" Tail3D="10 10 0"/><arrow id="6" NoGo="Cross" ArrowheadHead="Full" Head3D="50 30 0" Tail3D="10 30 0"/>'
+      + '<curve id="7" CurvePoints="10 60 10 60 25 40 35 40 50 60 50 60" CurveType="8" HeadSize="1500" ArrowheadWidth="400" ArrowheadType="Hollow"/>');
+    expect(d.arrows.get(5)!.noGo).toBe(false);
+    expect(d.arrows.get(6)!.noGo).toBe(true);
+    const c = d.arrows.get(7)!;
+    expect(c.headLength).toBeCloseTo(15, 6);
+    expect(c.headWidth).toBeCloseTo(4, 6);
+    expect(c.headType).toBe('hollow');
+  });
+
+  it("R42: an arrowhead's notch comes from ArrowheadCenterSize (7/8 when missing, as ChemDraw takes it)", () => {
+    const { doc: d } = page('<arrow id="5" ArrowheadHead="Full" HeadSize="1000" ArrowheadCenterSize="1000" Head3D="50 10 0" Tail3D="10 10 0"/><arrow id="6" ArrowheadHead="Full" HeadSize="1000" ArrowheadCenterSize="500" Head3D="50 30 0" Tail3D="10 30 0"/><arrow id="7" ArrowheadHead="Full" HeadSize="1000" Head3D="50 50 0" Tail3D="10 50 0"/>');
+    expect([5, 6, 7].map((id) => d.arrows.get(id)!.headCenter)).toEqual([1, 0.5, 0.875]);
+    // the line runs into the head up to just short of the notch, never stopping before it
+    expect(shaftInto(10, 'solid', 1, undefined, 0.5)).toBeLessThan(5);
+    expect(shaftInto(10, 'solid', 1)).toBeCloseTo(7, 6);
+  });
+
+  it('R27, R40: annotations are no warning; variable attachments and link nodes are', () => {
+    const { stats } = page('<annotation id="3" Keyword="x" Content="y"/><fragment id="2"><n id="10" p="10 10" NodeType="VariableAttachment" Attachments="2 11 12"/><n id="11" p="24.4 10"/><n id="12" p="30 20" NodeType="LinkNode"/><b id="20" B="10" E="11"/><b id="21" B="11" E="12"/></fragment>');
+    expect(stats.skipped.annotation).toBeUndefined();
+    expect(stats.skipped['VariableAttachment node']).toBe(1);
+    expect(stats.skipped['LinkNode node']).toBe(1);
+  });
+
+  it('E12: a design shape tag with values a shape cannot hold leaves them out', () => {
+    const tag = JSON.stringify({ kind: 'geo', geo: 'star', x1: 0, y1: 0, x2: 20, y2: 20, lineWidth: 'wide', z: { a: 1 }, id: 99 }).replace(/"/g, '&quot;');
+    const { doc: d } = page(`<group id="8" BoundingBox="0 0 20 20"><objecttag TagType="String" Name="Chem Illustrator shape" Value="${tag}"/></group>`);
+    const s = [...d.shapes.values()].find((x) => x.kind === 'geo')!;
+    expect(s.geo).toBe('star');
+    expect(s.lineWidth).toBeUndefined();
+    expect(s.z).toBeUndefined();
+    expect(s.id).not.toBe(99);
   });
 });
