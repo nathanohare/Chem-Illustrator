@@ -10,7 +10,7 @@ import { readCdxml, cycleOf } from '../src/io/cdxml';
 import { cdxToCdxml } from '../src/io/cdx';
 import { fitPasted } from '../src/io/clipboard';
 import { labelSpec, layoutLabel } from '../src/chem/labels';
-import { ACS_1996, labelBold } from '../src/style';
+import { ACS_1996, bondWidths, labelBold } from '../src/style';
 
 const dir = 'tests/fixtures/chemdraw-clipboard/';
 const fromChemDraw = () => readCdxml(readFileSync(dir + 'clip-props.cd.cdxml', 'utf8')).doc;
@@ -38,6 +38,18 @@ describe('a drawing from ChemDraw', () => {
     for (const a of labelled) expect(labelBold(doc.style, a)).toBe(true);
     fitPasted(doc, ACS_1996);
     for (const a of doc.atoms.values()) if (a.label) expect(labelBold(ACS_1996, a)).toBe(true);
+  });
+
+  it('keeps its hash spacing and wedge widths pasted into a drawing of another style', () => {
+    const doc = fromChemDraw();
+    const before = [...doc.bonds.values()].map((b) => bondWidths(doc.style, b));
+    fitPasted(doc, ACS_1996);
+    [...doc.bonds.values()].forEach((b, i) => {
+      const w = bondWidths(ACS_1996, b);
+      expect(w.hashSpacing).toBeCloseTo(before[i].hashSpacing, 3);
+      expect(w.boldWidth).toBeCloseTo(before[i].boldWidth, 3);
+      expect(w.marginWidth).toBeCloseTo(before[i].marginWidth, 3);
+    });
   });
 
   it('keeps the layers of crossing bonds: the gray bonds behind', () => {

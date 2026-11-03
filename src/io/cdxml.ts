@@ -285,6 +285,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (c) extra.color = c;
       if (chargeShown.has(n.getAttribute('id') ?? '')) extra.hideCharge = true;
       const ls = n.getAttribute('LabelSize');
+      const mw = Number(n.getAttribute('MarginWidth') ?? frag.getAttribute('MarginWidth'));
+      if (mw > 0 && Math.abs(mw - st.marginWidth) > 1e-3) extra.marginWidth = mw;
       if (ls !== null) extra.s = Number(ls) / st.labelSize;
       let t: Element | null = null;
       for (const ch of kids(n)) {
@@ -401,8 +403,15 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         const l = stereoTag(tag, (p.x + q.x) / 2, (p.y + q.y) / 2);
         if (l) extra.stereoLabel = l;
       }
-      const lw = b.getAttribute('LineWidth');
+      // the bond's own widths, else its structure's (ChemDraw keeps them on either)
+      const own = (name: string) => b.getAttribute(name) ?? frag.getAttribute(name);
+      const lw = own('LineWidth');
       if (lw !== null) extra.s = Number(lw) / st.lineWidth;
+      const widths = { BoldWidth: 'boldWidth', HashSpacing: 'hashSpacing', MarginWidth: 'marginWidth', BondLength: 'bondLength' } as const;
+      for (const [attr, key] of Object.entries(widths)) {
+        const v = Number(own(attr));
+        if (own(attr) !== null && v > 0 && Math.abs(v - st[key]) > 1e-3) extra[key] = v;
+      }
       const c = color(b);
       if (c) extra.color = c;
       const hlB = kids(b).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_TAG)?.getAttribute('Value');

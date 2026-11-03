@@ -16,8 +16,8 @@ import { remapFrames, remapStep, type IdMaps } from './remap-refs';
 import { freshGroups } from '../editor/groups';
 import { pastedTable, tableHtml, tableTsv, type PastedRows } from './table-clip';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { Doc, TextRun, applyBase, type TableData } from '../model';
-import { scaleOwnWidths, type DocStyle } from '../style';
+import { Doc, TextRun, applyBase, type Bond, type TableData } from '../model';
+import { bondWidths, scaleOwnWidths, type DocStyle } from '../style';
 import type { Vec } from '../geom';
 import type { Selection } from '../editor/editor';
 import { readCdxml } from './cdxml';
@@ -136,12 +136,22 @@ export function typicalBondLength(doc: Doc): number | null {
  */
 export function fitPasted(src: Doc, to: DocStyle, bondLength?: number): void {
   const from = src.style;
-  // labels keep their own look (ChemDraw's bold labels stay bold in a drawing whose labels are plain)
+  // labels keep their own look (ChemDraw's bold labels stay bold in a drawing whose labels are
+  // plain), and bonds their wedge, hash and margin widths where the drawing's own differ
+  const differs = (x: number, y: number) => Math.abs(x - y) > 1e-3;
   src.bulk(() => {
     for (const a of [...src.atoms.values()]) {
       const face = a.face ?? from.labelFace ?? 0;
       const own = (face & 1) !== ((to.labelFace ?? 0) & 1) ? face : undefined;
-      if (own !== a.face) src.updateAtom(a.id, { face: own });
+      const margin = a.marginWidth === undefined && differs(from.marginWidth, to.marginWidth) ? { marginWidth: from.marginWidth * (a.s ?? 1) } : {};
+      if (own !== a.face || 'marginWidth' in margin) src.updateAtom(a.id, { face: own, ...margin });
+    }
+    for (const b of [...src.bonds.values()]) {
+      const w = bondWidths(from, b), mine: Partial<Bond> = {};
+      if (b.boldWidth === undefined && differs(from.boldWidth, to.boldWidth)) mine.boldWidth = w.boldWidth;
+      if (b.hashSpacing === undefined && differs(from.hashSpacing, to.hashSpacing)) mine.hashSpacing = w.hashSpacing;
+      if (b.marginWidth === undefined && differs(from.marginWidth, to.marginWidth)) mine.marginWidth = w.marginWidth;
+      if (Object.keys(mine).length) src.updateBond(b.id, mine);
     }
   });
   const L = typicalBondLength(src);
