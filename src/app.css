@@ -795,7 +795,7 @@ dialog.cleanup-picker { width: min(96vw, 720px); max-height: 92vh; }
 dialog.grid-picker { width: min(96vw, 680px); }
 .grid-pick-body { display: grid; grid-template-columns: minmax(0, 16.5em) minmax(0, 1fr); gap: 12px; align-items: start; }
 .grid-pick-fields .ask-row { grid-template-columns: 8em 5.5em 1.5em; margin: 6px 0; }
-.grid-pick-count { font-weight: 600; margin: 0 0 4px; }
+.grid-pick-count { font-weight: 400; font-size: 0.85em; margin-left: 6px; }
 .grid-pick-preview { height: 280px; background: #fff; border: 1px solid var(--line); border-radius: var(--r-tab); padding: 6px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .grid-pick-preview svg { max-width: 100%; max-height: 100%; width: 100%; height: 100%; }
 @media (max-width: 560px) { .grid-pick-body { grid-template-columns: 1fr; } .grid-pick-preview { height: 200px; } }

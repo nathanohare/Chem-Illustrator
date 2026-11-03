@@ -24,3 +24,14 @@ export function chemistrySelection(doc: Doc, s: Selection, any: boolean): Select
   if (!lone) return any ? s : null;
   return { atoms: lone, bonds: new Set([...lone].flatMap((id) => doc.adj.get(id) ?? [])), captions: new Set(), arrows: new Set(), shapes: new Set() };
 }
+
+/**
+ * Whether Repeat Label from the right-click menu on atom `id` goes on every picked atom: only
+ * when the atom was one of several picked, and not when the whole structure it is in was picked
+ * (labelling every carbon of a selected structure is never meant).
+ */
+export function repeatsOnAll(doc: Doc, picked: Set<number>, id: number): boolean {
+  if (!picked.has(id) || picked.size < 2) return false;
+  const whole = doc.fragmentOf(id);
+  return !(whole.size > 1 && [...whole].every((a) => picked.has(a)));
+}
