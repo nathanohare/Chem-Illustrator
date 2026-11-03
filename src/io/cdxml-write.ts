@@ -717,8 +717,13 @@ class CdxmlWriter {
     this.highlightTag(n, a.highlight, a.hl);
   }
 
-  /** A highlight's colour, in a hidden tag (ChemDraw has no highlights). */
+  /**
+   * A highlight: ChemDraw's own highlightColor, which it draws as a disc behind the atom or bond,
+   * and the colour and look in hidden tags, which say how it is drawn here (CDX has no tag for
+   * highlightColor that we know of, so through CDX only the hidden tags carry it).
+   */
   private highlightTag(e: Element, colour: string | undefined, look: HighlightStyle | undefined): void {
+    this.set(e, 'highlightColor', colour && /^#[0-9a-f]{6}$/i.test(colour) ? String(this.colorIndex(colour)) : null);
     for (const c of kids(e)) if (c.nodeName === 'objecttag' && (c.getAttribute('Name') === HIGHLIGHT_TAG || c.getAttribute('Name') === HIGHLIGHT_LOOK_TAG)) e.removeChild(c);
     if (colour) e.appendChild(this.el('objecttag', { TagType: 'String', Name: HIGHLIGHT_TAG, Value: colour, Visible: 'no' }));
     if (colour && look && Object.keys(look).length) e.appendChild(this.el('objecttag', { TagType: 'String', Name: HIGHLIGHT_LOOK_TAG, Value: JSON.stringify(look), Visible: 'no' }));
@@ -1730,13 +1735,37 @@ class CdxmlWriter {
     return png || (!!this.opts.own && !!s.src);
   }
 
+  /** ChemDraw's FadePercent for a box or oval filled with a white tint of its own colour, or null. */
+  private fadeOf(s: Shape): number | null {
+    if (!s.filled || (s.kind !== 'rect' && s.kind !== 'oval') || s.fill || !s.fillColor || s.pattern || s.fill2) return null;
+    const hex = (c: string) => /^#([0-9a-f]{6})$/i.exec(c)?.[1];
+    const ink = hex(s.color ?? '#000000'), fill = hex(s.fillColor);
+    if (!ink || !fill) return null;
+    const ch = (h: string) => [0, 2, 4].map((k) => parseInt(h.slice(k, k + 2), 16));
+    const c = ch(ink), f = ch(fill);
+    // how much white is mixed in, from the channel with the most room
+    const k = c.indexOf(Math.min(...c));
+    if (c[k] > 250) return null;
+    const a = (f[k] - c[k]) / (255 - c[k]);
+    if (a <= 0.001 || a >= 0.999) return null;
+    const fade = Math.round((1 - a) * 1000);
+    // (it has to be that tint in every channel, as ChemDraw will draw it)
+    const back = ch(hex(tint('#' + ink, 1 - fade / 1000))!);
+    return back.every((v, i) => Math.abs(v - f[i]) <= 2) ? fade : null;
+  }
+
   private fillShape(g: Element, s: Shape): void {
     for (const k of ['GraphicType', 'LineType', 'RectangleType', 'OvalType', 'SymbolType', 'BracketType', 'Center3D', 'MajorAxisEnd3D', 'MinorAxisEnd3D', 'ArrowType', 'CornerRadius', 'ShadowSize']) g.removeAttribute(k);
     const style = [s.dashed && 'Dashed', s.bold && 'Bold'].filter(Boolean).join(' ') || null;
     const set = (k: string, v: string | null) => this.set(g, k, v);
     // ChemDraw fills with the shape's one colour, so a filled shape is saved in its fill colour
     // (a faded fill as its light tint); the outline colour and fill style ride along in a tag
-    const fillTo = s.filled ? (s.kind === 'ring' ? fillInk(s) : s.fillColor ?? s.color) : undefined;
+    // A fill that is the shape's own colour faded towards white is ChemDraw's faded shape: an
+    // outline in the full colour with FadePercent (in tenths of a percent of the colour)
+    const fade = this.fadeOf(s);
+    // (other graphics, such as orbitals, keep ChemDraw's own FadePercent)
+    if (fade !== null || s.kind === 'rect' || s.kind === 'oval') set('FadePercent', fade === null ? null : String(fade));
+    const fillTo = s.filled && fade === null ? (s.kind === 'ring' ? fillInk(s) : s.fillColor ?? s.color) : undefined;
     set('color', this.colorAttr(fillTo && s.fill === 'faded' ? tint(fillTo, FADE) : fillTo ?? s.color));
     for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === FILL_TAG) g.removeChild(c);
     if ((s.filled && (s.fill || s.fillColor)) || s.pattern) {
@@ -1745,7 +1774,7 @@ class CdxmlWriter {
     }
     for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === FRAME_TAG) g.removeChild(c);
     if (s.frame) g.appendChild(this.el('objecttag', { TagType: 'String', Name: FRAME_TAG, Value: frameTag(s.frame), Visible: 'no' }));
-    const filled = !s.filled ? null : s.fill === 'shaded' ? 'Shaded' : 'Filled';
+    const filled = !s.filled || fade !== null ? null : s.fill === 'shaded' ? 'Shaded' : 'Filled';
     switch (s.kind) {
       case 'line':
         set('GraphicType', 'Line');
