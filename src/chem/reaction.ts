@@ -171,9 +171,20 @@ export function interpretArrow(r: Arrow, items: Item[], bond: number): StepRoles
 /** Is this a step with something on both sides of the arrow? */
 export const isStep = (s: StepRoles | null | undefined): boolean => !!s && s.reactants.length > 0 && s.products.length > 0;
 
-/** The roles an arrow has: those stored with it (from a file, Clean Up Reaction or set by hand), or worked out. */
+/**
+ * The roles an arrow has: those stored with it (from a file, Clean Up Reaction or set by hand), or
+ * worked out. Text written over or under an arrow after its roles were stored (a step opened from
+ * a file, then a reagent typed in) is counted too, unless the roles were chosen by hand.
+ */
 export function rolesOf(r: Arrow, items: Item[], bond: number): StepRoles {
-  return r.step ?? interpretArrow(r, items, bond);
+  const st = r.step;
+  if (!st) return interpretArrow(r, items, bond);
+  if (st.manual || !items.some((it) => it.caption !== undefined)) return st;
+  const known = new Set([...st.reactants, ...st.products, ...st.above, ...st.below, ...(st.plusses ?? []), ...(st.inside ?? [])]);
+  const now = interpretArrow(r, items, bond);
+  const added = (refs: string[]) => refs.filter((ref) => ref[0] === 'c' && !known.has(ref));
+  const above = added(now.above), below = added(now.below);
+  return above.length || below.length ? { ...st, above: [...st.above, ...above], below: [...st.below, ...below] } : st;
 }
 
 /** Every reaction arrow in the drawing, with its roles (a row's first arrow continuing from the row above). */
