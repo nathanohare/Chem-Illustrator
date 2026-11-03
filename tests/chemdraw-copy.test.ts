@@ -12,6 +12,7 @@ import { cdxmlToCdx, cdxToCdxml } from '../src/io/cdx';
 import { extractDrawing } from '../src/io/clipboard';
 import { fillRings } from '../src/chem/ring-fill';
 import { ACS_1996 } from '../src/style';
+import { tint } from '../src/colours';
 import { readCdxml } from '../src/io/cdxml';
 import { readFileSync } from 'node:fs';
 import { crossingBonds, crossingGaps, crossingGapsCached } from '../src/chem/crossing';
@@ -187,5 +188,58 @@ describe('copying to ChemDraw', () => {
     const lone = [...doc.bonds.values()].filter((b) => b.crossing?.length && !crossingBonds(doc, b).length && crossingGaps(doc, b, half).length);
     expect(lone.length).toBeGreaterThan(0);
     for (const b of lone) expect(crossingGapsCached(doc, b, half)).toEqual(crossingGaps(doc, b, half));
+  });
+
+  it('writes highlights as ChemDraw\'s highlightColor, and reads them back the same', () => {
+    const doc = newDoc();
+    const L = doc.style.bondLength;
+    const disc = { shape: 'round' as const, size: (0.27 * L + doc.style.lineWidth / 2) / (0.27 * L) };
+    doc.edit('Draw', () => {
+      const a = doc.addAtom(0, 0, 6, { highlight: '#ffd966', hl: disc });
+      const b = doc.addAtom(L, 0);
+      doc.addBond(a.id, b.id, 1, 'Solid', { highlight: '#9fc5e8', hl: disc });
+    });
+    const { xml, cdx } = copied(doc);
+    const colourOf = (root: Element, i: string | null) => { const c = all(root, 'color')[Number(i) - 2]; return '#' + ['r', 'g', 'b'].map((k) => Math.round(Number(c.getAttribute(k)) * 255).toString(16).padStart(2, '0')).join(''); };
+    expect(colourOf(xml, all(xml, 'n').find((n) => n.hasAttribute('highlightColor'))!.getAttribute('highlightColor'))).toBe('#ffd966');
+    expect(colourOf(xml, all(xml, 'b').find((n) => n.hasAttribute('highlightColor'))!.getAttribute('highlightColor'))).toBe('#9fc5e8');
+    // read back from the CDXML and from the CDX (where our hidden tags carry it)
+    for (const x of [xml, cdx]) {
+      const back = readCdxml(new XMLSerializer().serializeToString(x)).doc;
+      const atom = [...back.atoms.values()].find((a) => a.highlight)!, bond = [...back.bonds.values()].find((b) => b.highlight)!;
+      expect([atom.highlight, bond.highlight]).toEqual(['#ffd966', '#9fc5e8']);
+      expect(atom.hl?.shape).toBe('round');
+      expect(atom.hl?.size).toBeCloseTo(disc.size, 3);
+    }
+    // and a ChemDraw file with only highlightColor (no tags of ours) reads as the same disc
+    const bare = new XMLSerializer().serializeToString(xml).replace(/<objecttag[^>]*Name="[^"]*[Hh]ighlight[^"]*"[^>]*\/>/g, '');
+    const fromChemDraw = readCdxml(bare).doc;
+    expect([...fromChemDraw.atoms.values()].find((a) => a.highlight)?.hl?.size).toBeCloseTo(disc.size, 3);
+  });
+
+  it('writes a box or circle filled with a pale tint of its own colour as ChemDraw\'s faded shape', () => {
+    const doc = newDoc();
+    doc.edit('Draw', () => {
+      doc.addShape({ kind: 'oval', x1: 0, y1: 0, x2: 40, y2: 40, color: '#c00000', filled: true, fillColor: tint('#c00000', 0.8) });
+      doc.addShape({ kind: 'rect', x1: 60, y1: 0, x2: 120, y2: 40, color: '#c00000', filled: true, fillColor: '#3366ff' });
+    });
+    const { xml, cdx } = copied(doc);
+    for (const x of [xml, cdx]) {
+      const oval = all(x, 'graphic').find((g) => g.getAttribute('GraphicType') === 'Oval')!;
+      expect(oval.getAttribute('FadePercent')).toBe('200');
+      expect(oval.getAttribute('OvalType') ?? '').not.toMatch(/Filled/);
+      // a fill of another colour stays a filled box
+      const rect = all(x, 'graphic').find((g) => g.getAttribute('GraphicType') === 'Rectangle')!;
+      expect(rect.hasAttribute('FadePercent')).toBe(false);
+      expect(rect.getAttribute('RectangleType')).toMatch(/Filled/);
+      // read back: the same fill and outline
+      const back = readCdxml(new XMLSerializer().serializeToString(x)).doc;
+      const o = [...back.shapes.values()].find((s) => s.kind === 'oval')!;
+      expect([o.filled, o.color, o.fillColor]).toEqual([true, '#c00000', tint('#c00000', 0.8)]);
+    }
+    // ChemDraw's own (no tag of ours) reads as the same tint, give or take rounding
+    const bare = new XMLSerializer().serializeToString(xml).replace(/<objecttag[^>]*\/>/g, '');
+    const o = [...readCdxml(bare).doc.shapes.values()].find((s) => s.kind === 'oval')!;
+    expect(o.fillColor).toBe(tint('#c00000', 0.8));
   });
 });
