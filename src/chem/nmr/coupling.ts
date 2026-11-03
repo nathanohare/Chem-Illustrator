@@ -99,7 +99,7 @@ export function predictCouplings(g: JGraph): Coupling[] {
       // sp3-sp3, rotating: ~7.2, lowered by electronegative substituents (Altona-like)
       const e = subst(u, [v]) + subst(v, [u]);
       const r = ring.bond[bi];
-      let j = 7.4 - 0.55 * e;
+      let j = 7.3 - 0.2 * e;
       if (r === 3) j = 7.0; // cyclopropane, cis/trans averaged
       else if (r === 4) j = 7.5;
       else if (r === 5) j = 7.0;
