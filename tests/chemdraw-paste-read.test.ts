@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { readCdxml, cycleOf } from '../src/io/cdxml';
 import { cdxToCdxml } from '../src/io/cdx';
-import { fitPasted } from '../src/io/clipboard';
+import { fitPasted } from '../src/io/fit-drawing';
 import { labelSpec, layoutLabel } from '../src/chem/labels';
 import { ACS_1996, bondWidths, labelBold } from '../src/style';
 
