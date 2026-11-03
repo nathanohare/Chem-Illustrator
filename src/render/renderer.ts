@@ -1155,7 +1155,8 @@ export class Renderer {
     const single = b.order === 1 || b.order === PARTIAL;
     const ds = doc.style, w = bondWidths(ds, b);
     let hs: number, he: number;
-    if (single && b.display === 'wedge') {
+    // (a wedge on a ring's aromatic or double bond too: ChemDraw's perspective Cp and arene rings)
+    if (b.display === 'wedge' && (single || b.order === 1.5 || b.order === 2)) {
       hs = w.lineWidth / 2;
       he = (wedgeWidth({ ...ds, boldWidth: w.boldWidth })) / 2;
     } else if (b.display === 'bold' && (single || (b.order === 2 && this.bondInfo(doc, b).side !== 0))) {
@@ -1470,7 +1471,10 @@ export class Renderer {
     const qLabelled = this.atomInfo(doc, q).boxes.length > 0;
     const t1 = pLabelled ? 0 : Math.min(gap * info.trim1 + gap * 0.15, l * 0.3);
     const t2 = qLabelled ? 0 : Math.min(gap * info.trim2 + gap * 0.15, l * 0.3);
-    if (main !== bold || !this.fillBand(doc, b, p, q, fills)) line(main, s, e);
+    // a wedged or hashed main line (a perspective ring) is drawn as the single bond would be
+    if (b.display === 'wedge') { if (!this.fillBand(doc, b, p, q, fills, gaps)) line(thin, s, e); }
+    else if (b.display === 'hashWedge' || b.display === 'hash') this.bondPaths(doc, { ...b, order: 1 }, p, q, bb);
+    else if (main !== bold || !this.fillBand(doc, b, p, q, fills)) line(main, s, e);
     offLine(second, add(add(s, off), mul(dir, t1)), sub(add(e, off), mul(dir, t2)));
   }
 

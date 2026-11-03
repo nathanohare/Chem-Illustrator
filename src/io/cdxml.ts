@@ -260,7 +260,11 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         }
       }
     }
-    if (asText.size && kids(frag).every((k) => k.nodeName !== 'n' || asText.has(k))) return;
+    if (asText.size && kids(frag).every((k) => k.nodeName !== 'n' || asText.has(k))) {
+      // the text's own marks stay: a counter-ion's circled charge (BF4⊖, TfO⊖) sits in its fragment
+      for (const g of kids(frag)) if (g.nodeName === 'graphic') readGraphic(g);
+      return;
+    }
     const nodeIds = new Map<string, number>();
     const pendingMulti: { id: number; key: string; ids: string[] }[] = [];
     for (const n of kids(frag)) {
@@ -365,9 +369,14 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         const lj = t.getAttribute('LabelJustification');
         const la = t.getAttribute('LabelAlignment');
         if (la === 'Center' || t.getAttribute('Justification') === 'Center') atom.centred = true;
+        // which way the label runs: the node's LabelDisplay, else the text's LabelJustification;
+        // LabelAlignment counts only for labels stacked above or below (the spec: multi-attached labels)
+        const ld = n.getAttribute('LabelDisplay');
         if (la === 'Above' || la === 'Below') atom.just = 'auto';
-        else if (la === 'Right' || lj === 'Right') atom.just = 'left';
-        else if (la === 'Left' || lj === 'Left') atom.just = 'right';
+        else if (ld === 'Left' || ld === 'Right') atom.just = ld === 'Left' ? 'right' : 'left';
+        else if (lj === 'Right' || lj === 'Left') atom.just = lj === 'Right' ? 'left' : 'right';
+        else if (la === 'Right') atom.just = 'left';
+        else if (la === 'Left') atom.just = 'right';
         const nh = n.getAttribute('NumHydrogens');
         const isPlain = !type || type === 'Element';
         pendingLabels.push({ atom, text: txt, hShown: isPlain && nh !== null ? Number(nh) : isPlain ? null : -1 });
@@ -990,8 +999,12 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
               fx = tag ? tidyFx(JSON.parse(tag) as PictureFx) : undefined;
             } catch { fx = undefined; }
             const alt = kids(ch).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === ALT_TAG)?.getAttribute('Value') || undefined;
+            // where ChemDraw draws it among the other objects, and turned as ChemDraw turns it (BoundingBox is the unturned frame)
+            const z = num(ch, 'Z', 0);
+            const ang = (Number(ch.getAttribute('RotationAngle') ?? NaN) / 65536) % 360;
+            const rot = Number.isFinite(ang) && Math.abs(ang) > 1e-3 ? +(ang > 180 ? ang - 360 : ang < -180 ? ang + 360 : ang).toFixed(3) : 0;
             const sh = pic
-              ? doc.addShape({ id: idFor(ch), kind: 'picture', x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], src: pic.src, px: pic.px, ...(pic.crop ? { crop: pic.crop } : {}), ...(chart ? { chart } : {}), ...(math ? { math } : {}), ...(fx ? { fx } : {}), ...(alt ? { alt } : {}) })
+              ? doc.addShape({ id: idFor(ch), kind: 'picture', z, ...(rot ? { rot } : {}), x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], src: pic.src, px: pic.px, ...(pic.crop ? { crop: pic.crop } : {}), ...(chart ? { chart } : {}), ...(math ? { math } : {}), ...(fx ? { fx } : {}), ...(alt ? { alt } : {}) })
               // only pictures this program can't show: mark where they sit, and keep them as they are
               : doc.addShape({ id: idFor(ch), kind: 'rect', x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], dashed: true, color: '#9aa4b2', picture: true });
             from('s', sh.id, ch);
