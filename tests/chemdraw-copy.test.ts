@@ -306,4 +306,26 @@ describe('copying to ChemDraw', () => {
       expect(o.lineWidth).toBeUndefined();
     }
   });
+  it('writes a turned picture with ChemDraw\'s RotationAngle, and a label\'s LabelDisplay as its justification', () => {
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const doc = newDoc();
+    doc.edit('Insert', () => { doc.addShape({ kind: 'picture', x1: 0, y1: 0, x2: 40, y2: 20, src: png, px: { w: 1, h: 1 }, rot: -30 } as never); });
+    for (const x of Object.values(copied(doc))) {
+      const eo = all(x, 'embeddedobject')[0];
+      expect(Number(eo.getAttribute('RotationAngle')) / 65536).toBeCloseTo(330, 3);
+      expect(eo.getAttribute('BoundingBox')!.split(' ').map(Number)).toEqual([0, 0, 40, 20]);
+      expect([...readCdxml(new XMLSerializer().serializeToString(x)).doc.shapes.values()][0].rot).toBeCloseTo(-30, 3);
+    }
+    // a ChemDraw label written with LabelDisplay: turned to run the other way, it says so too
+    const file = '<?xml version="1.0" encoding="UTF-8" ?><CDXML BondLength="14.40" LabelSize="10"><page id="1"><fragment id="2">'
+      + '<n id="3" p="100 100" NodeType="Fragment" LabelDisplay="Left"><t id="4" p="96 103.9" LabelJustification="Right" LabelAlignment="Right" Justification="Right"><s font="3" size="10" face="96">MeO2C</s></t></n>'
+      + '<n id="5" p="114.4 100"/><b id="6" B="3" E="5"/></fragment></page></CDXML>';
+    const opened = readCdxml(file).doc;
+    const me = [...opened.atoms.values()].find((a) => a.label)!;
+    opened.edit('Flip', () => { opened.updateAtom(me.id, { just: me.just === 'left' ? 'right' : 'left' }); });
+    const n = all(parse(writeCdxml(opened)), 'n').find((e) => e.getAttribute('id') === '3')!;
+    const lj = n.getElementsByTagName('t')[0].getAttribute('LabelJustification');
+    expect(n.getAttribute('LabelDisplay')).toBe(lj);
+    expect([...readCdxml(writeCdxml(opened)).doc.atoms.values()].find((a) => a.label)!.just).toBe(opened.atoms.get(me.id)!.just);
+  });
 });

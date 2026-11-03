@@ -977,6 +977,11 @@ class CdxmlWriter {
     // ChemDraw 25 writes a label that runs to the left (Cy3P on PCy3) right-justified both ways
     if (right || centred) t.setAttribute('Justification', centred ? 'Center' : 'Right');
     else t.removeAttribute('Justification');
+    // the node's LabelDisplay (a ChemDraw file's) says the same, as it comes first when read
+    const n = t.parentElement;
+    if (n?.nodeName === 'n' && n.hasAttribute('LabelDisplay')) {
+      n.setAttribute('LabelDisplay', centred ? 'Center' : dir === 'up' ? 'Above' : dir === 'down' ? 'Below' : right ? 'Right' : 'Left');
+    }
   }
 
   /**
@@ -1738,7 +1743,10 @@ class CdxmlWriter {
    * ChemDraw could show.
    */
   private fillPicture(e: Element, s: Shape, replace: boolean): boolean {
+    // the unturned frame, and the turn as ChemDraw keeps it (degrees × 65536)
     this.set(e, 'BoundingBox', box({ x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) }));
+    const turn = (((s.rot ?? 0) % 360) + 360) % 360;
+    this.set(e, 'RotationAngle', turn > 1e-6 && turn < 360 - 1e-6 ? String(Math.round(turn * 65536)) : null);
     let png = false, exact = false;
     if (replace && s.src) {
       for (const k of ['WindowsMetafile', 'EnhancedMetafile', 'PNG', 'GIF', 'JPEG', 'TIFF', 'BMP', 'OLEObject', 'MacPICT', 'CompressedWindowsMetafile', 'CompressedEnhancedMetafile', 'CompressedOLEObject', 'UncompressedWindowsMetafileSize', 'UncompressedEnhancedMetafileSize', 'UncompressedOLEObjectSize', OWN_PICTURE]) e.removeAttribute(k);
