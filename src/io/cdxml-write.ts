@@ -28,7 +28,7 @@ import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
 import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
 import { pageExtent, pageCount, pageTag } from '../page-grid';
-import { geoDef, isPathId, moveSteps, outlineParts, textArea, type GeoStep } from '../design/geo';
+import { geoDef, isPathId, isPenId, moveSteps, outlineParts, textArea, type GeoStep } from '../design/geo';
 import { FADE, tint } from '../colours';
 import { fillInk, mix, ringShadowGroups, ringShadowSize, shadowLook } from '../render/fills';
 import { shapeShadow } from '../render/highlight-fx';
@@ -1661,7 +1661,8 @@ class CdxmlWriter {
       ArrowheadCenterSize: Math.round(headSize * (r.headCenter ?? 0.75)),
       ArrowheadWidth: Math.round((r.headWidth / lw) * 100),
       LineType: r.line === 'dashed' ? 'Dashed' : r.line === 'bold' ? 'Bold' : r.line === 'wavy' ? 'Wavy' : null,
-      NoGo: r.noGo ? 'Cross' : null,
+      NoGo: r.noGo ? (r.noGoKind === 'hash' ? 'Hash' : 'Cross') : null,
+      Dipole: r.dipole ? 'yes' : null,
       ArrowShaftSpacing: r.equilibrium ? 300 : r.shaftSpacing ? Math.round((r.shaftSpacing / lw) * 100) : null,
       LineWidth: r.lineWidth !== undefined ? f2(r.lineWidth) : null,
       color: this.colorAttr(r.color),
@@ -1693,7 +1694,7 @@ class CdxmlWriter {
   private writeShape(s: Shape): void {
     if (s.kind === 'table') { this.writeTable(s); return; }
     if (s.kind === 'ring' && this.writeRingArea(s)) return;
-    if (s.kind === 'geo' && isPathId(s.geo) && this.writePathCurve(s)) return;
+    if (s.kind === 'geo' && (isPathId(s.geo) || isPenId(s.geo)) && this.writePathCurve(s)) return;
     if (s.kind === 'geo' || s.kind === 'ring') { this.writeGeo(s); return; }
     const pic = s.picture || s.kind === 'picture';
     const names = pic ? ['embeddedobject'] : ['graphic'];
@@ -1761,11 +1762,13 @@ class CdxmlWriter {
    * A closed curve read from ChemDraw (a perspective ring's ellipse) written back as ChemDraw's
    * own closed curve, where it was (in its structure, when it was there). Each point is written
    * with its handle in before it and its handle out after it. False when the shape has more than
-   * a curve can hold (text, effects): it is then written as a design shape.
+   * a curve can hold (text, effects): it is then written as a design shape. An open curve (the
+   * Freeform pen's) is written the same way without Closed, its two ends with handles on themselves.
    */
   private writePathCurve(s: Shape): boolean {
     const e = this.source('s', s.id, ['curve']);
-    if (Object.entries(s).some(([k, v]) => v !== undefined && v !== false && !PATH_CURVE_KEYS.has(k))) {
+    const open = isPenId(s.geo);
+    if (Object.entries(s).some(([k, v]) => v !== undefined && v !== false && !PATH_CURVE_KEYS.has(k)) || (open && s.filled)) {
       // (the design shape replaces the curve)
       if (e) { e.parentNode?.removeChild(e); this.changed = true; }
       return false;
@@ -1776,23 +1779,30 @@ class CdxmlWriter {
       const dx = s.x1 - o.x1, dy = s.y1 - o.y1;
       if (sameExcept(s, { ...o, x1: o.x1 + dx, y1: o.y1 + dy, x2: o.x2 + dx, y2: o.y2 + dy }, [])) { shift(e, dx, dy); this.changed = true; return true; }
     }
-    const n = s.geo!.slice(5).split(',').map(Number);
+    const n = s.geo!.slice(open ? 4 : 5).split(',').map(Number);
     const x1 = Math.min(s.x1, s.x2), y1 = Math.min(s.y1, s.y2), w = Math.abs(s.x2 - s.x1), h = Math.abs(s.y2 - s.y1);
     const path: Vec[] = [];
     for (let i = 0; i + 1 < n.length; i += 2) path.push({ x: x1 + (n[i] / 10000) * w, y: y1 + (n[i + 1] / 10000) * h });
-    // the start, then two handles and a point for each segment, the last back at the start
+    // the start, then two handles and a point for each segment (closed: the last back at the start)
     const m = Math.floor((path.length - 1) / 3);
     if (m < 1 || path.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) return false;
+    // (ChemDraw drops a curve whose points aren't three to a knot, so an open one must be all cubic)
+    if (open && path.length !== 3 * m + 1) return false;
     const knots: Vec[] = [];
-    for (let i = 0; i < m; i++) knots.push(path[3 * ((i + m - 1) % m) + 2], path[3 * i], path[3 * i + 1]);
+    if (open) {
+      // each point with its handles in and out; the two ends' outer handles are the ends themselves
+      knots.push(path[0], path[0], path[1]);
+      for (let i = 1; i < m; i++) knots.push(path[3 * i - 1], path[3 * i], path[3 * i + 1]);
+      knots.push(path[3 * m - 1], path[3 * m], path[3 * m]);
+    } else for (let i = 0; i < m; i++) knots.push(path[3 * ((i + m - 1) % m) + 2], path[3 * i], path[3 * i + 1]);
     const lw = this.doc.style.lineWidth;
-    const kinds = 1 | (s.dashed ? 2 : 0) | (s.bold ? 4 : 0);
+    const kinds = (open ? 0 : 1) | (s.dashed ? 2 : 0) | (s.bold ? 4 : 0);
     const c = e ?? this.el('curve', { id: s.id });
     this.set(c, 'BoundingBox', box({ x1, y1, x2: x1 + w, y2: y1 + h }));
     this.set(c, 'color', this.colorAttr(s.color));
     this.set(c, 'CurvePoints', knots.map((p) => `${f2(p.x)} ${f2(p.y)}`).join(' '));
     this.set(c, 'CurveType', String(kinds));
-    this.set(c, 'Closed', 'yes');
+    this.set(c, 'Closed', open ? null : 'yes');
     // ChemDraw 25 fills a curve by its FillType; the CurveType bit alone leaves it empty
     this.set(c, 'FillType', s.filled ? 'Solid' : null);
     this.set(c, 'LineWidth', s.lineWidth !== undefined && s.lineWidth !== lw ? f2(s.lineWidth) : null);

@@ -921,3 +921,47 @@ describe('ring-fusion H, stacked labels, the new symbols and shadowed ovals (Che
     expect(s.shadowSize).toBeCloseTo(4 * doc.style.lineWidth, 1);
   });
 });
+
+describe('arrow marks and open freeform curves (ChemDraw parity)', () => {
+  const straight = (extra: object) => ({ tail: { x: 0, y: 0 }, head: { x: 60, y: 0 }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: 6, headWidth: 1.5, ...extra } as never);
+
+  it('writes a hashed no-go arrow as NoGo Hash and a dipole arrow as Dipole, through CDX', () => {
+    const doc = newDoc();
+    doc.edit('Add', () => {
+      doc.addArrow(straight({ noGo: true, noGoKind: 'hash' }));
+      doc.addArrow(straight({ noGo: true }));
+      doc.addArrow(straight({ dipole: true }));
+    });
+    const xml = writeCdxml(doc);
+    const arrows = all(parse(xml), 'arrow');
+    expect(arrows.map((a) => a.getAttribute('NoGo'))).toEqual(['Hash', 'Cross', null]);
+    expect(arrows.map((a) => a.getAttribute('Dipole'))).toEqual([null, null, 'yes']);
+    const back = [...readCdxml(viaCdx(xml)).doc.arrows.values()];
+    expect(back.map((a) => [a.noGo, a.noGoKind, a.dipole])).toEqual([[true, 'hash', undefined], [true, undefined, undefined], [false, undefined, true]]);
+  });
+
+  it('writes an open freeform curve as a plain ChemDraw curve: three points to a knot, no Closed, dashed as CurveType 2', () => {
+    const doc = newDoc();
+    // start, then two handles and a point for each of two segments, on the page
+    const pts = [{ x: 0, y: 0 }, { x: 10, y: -10 }, { x: 20, y: -10 }, { x: 30, y: 0 }, { x: 40, y: 10 }, { x: 50, y: 10 }, { x: 60, y: 0 }];
+    const box = { x1: 0, y1: -10, x2: 60, y2: 10 };
+    const q = (v: number) => Math.round(v * 10000);
+    const geo = 'pen:' + pts.map((p) => `${q((p.x - box.x1) / 60)},${q((p.y - box.y1) / 20)}`).join(',');
+    doc.edit('Draw', () => { doc.addShape({ kind: 'geo', geo, ...box, dashed: true } as never); });
+    const xml = writeCdxml(doc);
+    const c = all(parse(xml), 'curve')[0];
+    expect(c).toBeDefined();
+    expect(c.getAttribute('Closed')).toBeNull();
+    expect(c.getAttribute('CurveType')).toBe('2');
+    const n = c.getAttribute('CurvePoints')!.trim().split(/\s+/).map(Number);
+    expect(n.length / 2).toBe(9);
+    // the ends' outer handles are the ends
+    expect(n.slice(0, 4)).toEqual([0, 0, 0, 0]);
+    expect(n.slice(-4)).toEqual([60, 0, 60, 0]);
+    expect(viaCdx(xml)).toMatch(/<curve[^>]*CurvePoints=/);
+    // a filled open curve stays a design shape
+    const d2 = newDoc();
+    d2.edit('Draw', () => { d2.addShape({ kind: 'geo', geo, ...box, filled: true } as never); });
+    expect(all(parse(writeCdxml(d2)), 'curve').every((e) => e.parentElement?.nodeName === 'group')).toBe(true);
+  });
+});

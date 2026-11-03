@@ -776,6 +776,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       headType: type === 'Hollow' ? 'hollow' : type === 'Angle' ? 'angle' : 'solid',
       line: lt.includes('Dashed') ? 'dashed' : lt.includes('Bold') ? 'bold' : lt.includes('Wavy') ? 'wavy' : 'solid',
       noGo: a.getAttribute('NoGo') === 'Cross' || a.getAttribute('NoGo') === 'Hash',
+      ...(a.getAttribute('NoGo') === 'Hash' ? { noGoKind: 'hash' as const } : {}),
+      ...(a.getAttribute('Dipole') === 'yes' ? { dipole: true } : {}),
       equilibrium: a.getAttribute('ArrowShaftSpacing') !== null && headStyle.startsWith('half') && tailStyle.startsWith('half'),
       sweep,
       headLength: (num(a, 'HeadSize', 1000) / 100) * lw,
