@@ -17,7 +17,8 @@ run() {  # name hidden layers epochs seed
   local log="$OUT/$1.log"
   python -I "$DIR/train_net.py" /nonexistent --bundle "$BUNDLE" --device "$DEV" --bs 256 \
     --hidden "$2" --layers "$3" --epochs "$4" --seed "$5" --out "$OUT/$1.pt" --report "$OUT/$1.json" > "$log" 2>&1
-  echo "$(date -Is) $1 exit $? $(tail -1 "$log" | cut -c1-200)" | tee -a "$OUT/run.log"
+  local rc=$?
+  echo "$(date -Is) $1 exit $rc $(tail -1 "$log" | cut -c1-200)" | tee -a "$OUT/run.log"
 }
 # 1. size search (one seed each), smallest first so something useful exists early
 for cfg in "128 5 60" "192 6 100" "256 6 120" "256 8 120" "384 6 120"; do

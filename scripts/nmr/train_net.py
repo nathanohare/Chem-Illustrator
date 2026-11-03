@@ -264,7 +264,7 @@ def main():
     net = Net(a.hidden, a.layers).to(DEV)
     opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=1e-5)
     steps = a.epochs * ((len(train) + a.bs - 1) // a.bs)
-    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=a.lr, total_steps=steps, pct_start=0.05)
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=a.lr, total_steps=steps, pct_start=max(0.05, 2 / steps))
     rep = {'args': vars(a), 'epochs': []}
     best, best_state = 1e9, None
     for ep in range(a.epochs):
