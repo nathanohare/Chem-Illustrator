@@ -21,7 +21,7 @@ import { runsForChemDraw, TEXT_TAG } from '../text/chemdraw-text';
 import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached';
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
-import { fromDataUrl } from '../render/images';
+import { fromDataUrl, rasterPng } from '../render/images';
 import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, DOTTED_TAG, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG, decodeTags, encodeTags } from './cdxml';
 import { stackItems, usesStacking } from '../editor/stacking';
 import { frameTag } from '../editor/frames';
@@ -71,6 +71,11 @@ export interface WriteOptions {
    * and how they are cropped). Files keep to what ChemDraw reads.
    */
   own?: boolean;
+  /**
+   * A picture of a type ChemDraw can't hold (SVG, WebP) as a PNG data URL of about w by h pixels,
+   * or null. By default the browser's copy of it (render/images.ts rasterPng).
+   */
+  raster?: (src: string, w: number, h: number) => string | null;
 }
 
 const NEW_PROLOG = '<?xml version="1.0" encoding="UTF-8" ?>\n<!DOCTYPE CDXML SYSTEM "http://www.cambridgesoft.com/xml/cdxml.dtd" >\n';
@@ -1734,29 +1739,40 @@ class CdxmlWriter {
    */
   private fillPicture(e: Element, s: Shape, replace: boolean): boolean {
     this.set(e, 'BoundingBox', box({ x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) }));
-    let png = false;
+    let png = false, exact = false;
     if (replace && s.src) {
       for (const k of ['WindowsMetafile', 'EnhancedMetafile', 'PNG', 'GIF', 'JPEG', 'TIFF', 'BMP', 'OLEObject', 'MacPICT', 'CompressedWindowsMetafile', 'CompressedEnhancedMetafile', 'CompressedOLEObject', 'UncompressedWindowsMetafileSize', 'UncompressedEnhancedMetafileSize', 'UncompressedOLEObjectSize', OWN_PICTURE]) e.removeAttribute(k);
-      try {
-        const { mime, bytes } = fromDataUrl(s.src);
-        const attr = ({ 'image/png': 'PNG', 'image/jpeg': 'JPEG', 'image/gif': 'GIF', 'image/bmp': 'BMP', 'image/x-emf': 'EnhancedMetafile' } as Record<string, string>)[mime];
-        if (attr) {
+      const types: Record<string, string> = { 'image/png': 'PNG', 'image/jpeg': 'JPEG', 'image/gif': 'GIF', 'image/bmp': 'BMP', 'image/x-emf': 'EnhancedMetafile' };
+      const put = (src: string): boolean => {
+        try {
+          const { mime, bytes } = fromDataUrl(src);
+          const attr = types[mime];
+          if (!attr) return false;
           const hex: string[] = [];
           for (const b of bytes) hex.push((b < 16 ? '0' : '') + b.toString(16));
           this.set(e, attr, hex.join('').toUpperCase());
-          png = true;
+          return true;
+        } catch {
+          // not a picture this program made; nothing to write
+          return false;
         }
-      } catch {
-        // not a picture this program made; nothing to write
+      };
+      exact = png = put(s.src);
+      // an equation or SVG or WebP picture: ChemDraw gets a PNG of it, at about 300 dpi (the
+      // equation itself rides along in its tag, and our own clipboard keeps the original)
+      if (!png && /^data:image\//.test(s.src)) {
+        const w = Math.abs(s.x2 - s.x1), h = Math.abs(s.y2 - s.y1), k = Math.min(300 / 72, 4000 / Math.max(w, h, 1));
+        const made = (this.opts.raster ?? rasterPng)(s.src, Math.max(1, w * k), Math.max(1, h * k));
+        png = !!made && put(made);
       }
-    } else png = ['PNG', 'JPEG', 'GIF', 'BMP', 'EnhancedMetafile', 'WindowsMetafile'].some((k) => e.hasAttribute(k));
+    } else png = exact = ['PNG', 'JPEG', 'GIF', 'BMP', 'EnhancedMetafile', 'WindowsMetafile'].some((k) => e.hasAttribute(k));
     for (const c of kids(e)) if (c.nodeName === 'objecttag' && [CHART_TAG, MATH_TAG, PICTURE_FX_TAG, ALT_TAG].includes(c.getAttribute('Name') ?? '')) e.removeChild(c);
     if (s.alt) e.appendChild(this.el('objecttag', { TagType: 'String', Name: ALT_TAG, Value: s.alt, Visible: 'no' }));
     if (s.fx) e.appendChild(this.el('objecttag', { TagType: 'String', Name: PICTURE_FX_TAG, Value: JSON.stringify(s.fx), Visible: 'no' }));
     if (s.chart) e.appendChild(this.el('objecttag', { TagType: 'String', Name: CHART_TAG, Value: JSON.stringify(s.chart), Visible: 'no' }));
     if (s.math) e.appendChild(this.el('objecttag', { TagType: 'String', Name: MATH_TAG, Value: JSON.stringify(s.math), Visible: 'no' }));
     if (this.opts.own) {
-      if (s.src && !png) this.set(e, OWN_PICTURE, s.src);
+      if (s.src && !exact) this.set(e, OWN_PICTURE, s.src);
       const c = s.crop;
       this.set(e, OWN_CROP, c && (c.l || c.t || c.r || c.b) ? [c.l, c.t, c.r, c.b].map((v) => +v.toFixed(5)).join(' ') : null);
     }
@@ -2183,7 +2199,7 @@ class CdxmlWriter {
     if (!this.changed) return;
     const all = descendants(this.root);
     const named = (name: string) => all.filter((e) => e.nodeName === name);
-    const refs = named('step').length + named('represent').length + named('crossingbond').length;
+    const refs = named('step').length + named('represent').length + named('crossingbond').length + named('chemicalproperty').length + named('bracketedgroup').length;
     const ids = new Set<string>();
     if (refs) for (const e of all) { const id = e.getAttribute('id'); if (id) ids.add(id); }
     for (const st of named('step')) {
@@ -2200,6 +2216,24 @@ class CdxmlWriter {
     for (const sc of named('scheme')) if (!sc.firstElementChild) sc.parentNode?.removeChild(sc);
     for (const r of named('represent')) if (!ids.has(r.getAttribute('object') ?? '')) r.parentNode?.removeChild(r);
     for (const c of named('crossingbond')) if (!ids.has(c.getAttribute('BondID') ?? '')) c.parentNode?.removeChild(c);
+    // a calculated property (ChemDraw's formula or mass under a structure): gone with its text, its
+    // list trimmed to what is left, and gone with the last of it
+    const trim = (e: Element, name: string): number => {
+      const list = (e.getAttribute(name) ?? '').trim().split(/\s+/).filter(Boolean);
+      const kept = list.filter((x) => ids.has(x));
+      if (kept.length !== list.length) this.set(e, name, kept.join(' '));
+      return kept.length;
+    };
+    for (const p of named('chemicalproperty')) {
+      const shown = p.getAttribute('ChemicalPropertyDisplayID');
+      if ((shown && !ids.has(shown)) || (p.hasAttribute('BasisObjects') && !trim(p, 'BasisObjects'))) p.parentNode?.removeChild(p);
+    }
+    // a bracketed group (ChemDraw's own, as well as the repeat groups written here): its brackets
+    // that are gone, and the group when nothing it holds is left
+    for (const bg of named('bracketedgroup')) {
+      for (const a of kids(bg)) if (a.nodeName === 'bracketattachment' && !ids.has(a.getAttribute('GraphicID') ?? '')) bg.removeChild(a);
+      if (bg.hasAttribute('BracketedObjectIDs') && !trim(bg, 'BracketedObjectIDs')) bg.parentNode?.removeChild(bg);
+    }
     for (const g of named('group')) if (!g.firstElementChild) g.parentNode?.removeChild(g);
     for (const f of named('fragment')) {
       if (f.parentElement?.nodeName === 'n') continue;

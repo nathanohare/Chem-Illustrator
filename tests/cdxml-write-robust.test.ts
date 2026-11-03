@@ -3,8 +3,9 @@
 // Saving keeps what it doesn't need to change, and what it saves comes back from CDX and from
 // ChemDraw: groups whose ids clash with other objects, the print record of an unchanged page,
 // repeat groups listed in another order, bond orders and looks we don't draw, dotted lines, a
-// design shape's saved box, and tag values outside Windows-1252 (CDXML audit R10, R15, R25, R39,
-// E6 and E7).
+// design shape's saved box, tag values outside Windows-1252, ChemDraw's calculated properties and
+// brackets that lose what they point at, and equations (CDXML audit R10, R15, R25, R39, E6, E7, R14
+// and E8).
 
 import { describe, it, expect } from 'vitest';
 import { Doc } from '../src/model';
@@ -148,5 +149,57 @@ describe('what is saved comes back from CDX and ChemDraw', () => {
     back.edit('move', () => back.moveAtoms(new Set([[...back.atoms.keys()][1]]), 5, 0));
     const again = writeCdxml(back);
     for (const t of [again, viaCdx(again)]) expect([...readCdxml(t).doc.atoms.values()].find((a) => a.alt)?.alt).toBe('ΔG‡');
+  });
+});
+
+describe('ChemDraw\'s links to what is gone, and pictures ChemDraw can\'t hold', () => {
+  it('drops a calculated property whose text is gone, and trims its structure to what is left (R14)', () => {
+    const body = '<fragment id="2"><n id="3" p="100 100"/><n id="4" p="114.4 100"/><b id="5" B="3" E="4"/></fragment>'
+      + '<fragment id="12"><n id="13" p="200 100"/><n id="14" p="214.4 100"/><b id="15" B="13" E="14"/></fragment>'
+      + '<t id="6" p="100 120"><s font="3" size="10" face="0">C2H6</s></t><t id="16" p="200 120"><s font="3" size="10" face="0">C2H6</s></t>'
+      + '<chemicalproperty id="7" ChemicalPropertyDisplayID="6" ChemicalPropertyIsActive="yes" BasisObjects="2" ChemicalPropertyType="ChemicalName"/>'
+      + '<chemicalproperty id="17" ChemicalPropertyDisplayID="16" ChemicalPropertyIsActive="yes" BasisObjects="12 13 14" ChemicalPropertyType="ChemicalName"/>';
+    const doc = readCdxml(file(body)).doc;
+    // the first one's text deleted, and one atom of the second structure
+    const cap = [...doc.captions.values()].find((c) => c.x < 150)!;
+    const atom = [...doc.atoms.values()].find((a) => a.x > 210)!;
+    doc.edit('Delete', () => { doc.removeCaption(cap.id); doc.removeAtom(atom.id); });
+    const ps = all(parse(writeCdxml(doc)), 'chemicalproperty');
+    expect(ps.map((p) => p.getAttribute('id'))).toEqual(['17']);
+    expect(ps[0].getAttribute('BasisObjects')).toBe('12 13');
+  });
+
+  it('drops a bracket\'s attachment when the bracket is gone (R14)', () => {
+    const body = '<fragment id="2"><n id="3" p="100 100"/><n id="4" p="114.4 100"/><b id="5" B="3" E="4"/></fragment>'
+      + '<graphic id="8" BoundingBox="95 90 95 110" GraphicType="Bracket" BracketType="Square"/><graphic id="9" BoundingBox="120 110 120 90" GraphicType="Bracket" BracketType="Square"/>'
+      + '<bracketedgroup id="10" BracketedObjectIDs="3 4"><bracketattachment id="11" GraphicID="8"/><bracketattachment id="12" GraphicID="9"/></bracketedgroup>';
+    const doc = readCdxml(file(body)).doc;
+    const br = [...doc.shapes.values()].find((s) => s.kind === 'bracket' && Math.min(s.x1, s.x2) > 110)!;
+    doc.edit('Delete', () => doc.removeShape(br.id));
+    const g = all(parse(writeCdxml(doc)), 'bracketedgroup');
+    expect(g).toHaveLength(1);
+    expect(all(g[0], 'bracketattachment').map((a) => a.getAttribute('GraphicID'))).toEqual(['8']);
+  });
+
+  it('gives ChemDraw a PNG of an equation, with the equation in its tag (E8)', () => {
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const svg = 'data:image/svg+xml;base64,' + btoa('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0L10 10"/></svg>');
+    const doc = newDoc();
+    doc.edit('Insert', () => { doc.addShape({ kind: 'picture', x1: 0, y1: 0, x2: 72, y2: 36, src: svg, px: { w: 10, h: 10 }, math: { tex: 'E=mc^2', size: 12 } } as never); });
+    const asked: number[][] = [];
+    const raster = (src: string, w: number, h: number) => { asked.push([w, h]); return src === svg ? png : null; };
+    const xml = writeCdxml(doc, { raster });
+    const eo = all(parse(xml), 'embeddedobject');
+    expect(eo).toHaveLength(1);
+    expect(eo[0].getAttribute('PNG')).toMatch(/^89504E47/);
+    // at about 300 dpi
+    expect(asked[0][0]).toBeCloseTo(300, 0);
+    for (const t of [xml, viaCdx(xml)]) expect([...readCdxml(t).doc.shapes.values()][0].math?.tex).toBe('E=mc^2');
+    // our own clipboard keeps the SVG itself
+    const own = all(parse(writeCdxml(doc, { raster, own: true })), 'embeddedobject')[0];
+    expect(own.getAttribute('ChemIllustratorPicture')).toBe(svg);
+    expect([...readCdxml(writeCdxml(doc, { raster, own: true })).doc.shapes.values()][0].src).toBe(svg);
+    // not drawn yet: left out, as before
+    expect(all(parse(writeCdxml(doc, { raster: () => null })), 'embeddedobject')).toHaveLength(0);
   });
 });
