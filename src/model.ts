@@ -361,6 +361,8 @@ export interface TextRun {
   outlineW?: number;
   /** Text effects: a soft drop shadow, down and to the right. */
   shadow?: boolean;
+  /** Read from ChemDraw's Symbol font, and saved in it again: its signs (•, °) stay in that font, which spaces lines differently from Arial. */
+  symbolFont?: boolean;
 }
 
 /** The text effects a run can have (the Font box), copied together onto every piece of it that is drawn. */
@@ -928,6 +930,8 @@ export interface Shape {
    * for a polymer's repeat unit, or a number for a group repeated that many times (chem/polymer.ts).
    */
   repeat?: string;
+  /** The repeat label's own look in the file it came from (a bold blue 4): colour, ChemDraw face bits and size in points. */
+  repeatLook?: { color?: string; face?: number; size?: number };
   /** Stands in for a picture in a ChemDraw file, which is kept as it was when saving. */
   picture?: boolean;
   /** A picture: its image as a data URL (PNG, JPEG, GIF or SVG); x1..y2 is where it shows. */

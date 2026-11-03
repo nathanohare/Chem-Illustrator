@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { readCdxml } from '../src/io/cdxml';
 import { writeCdxml } from '../src/io/cdxml-write';
 import { labelPieces } from '../src/chem/labels';
+import { toSymbolPieces } from '../src/richtext';
 import { Doc } from '../src/model';
 
 const table = '<fonttable><font id="3" name="Arial"/></fonttable><colortable><color r="1" g="1" b="1"/><color r="0" g="0" b="0"/><color r="0.18" g="0.306" b="0.78"/><color r="0.6" g="0.2" b="0.6"/></colortable>';
@@ -110,6 +111,25 @@ describe('a fresh save', () => {
     const fonts = new Map([...out.querySelectorAll('fonttable font')].map((f) => [f.getAttribute('id'), f.getAttribute('name')]));
     const runs = [...out.querySelectorAll('t > s')].map((s) => [fonts.get(s.getAttribute('font')), s.textContent]);
     expect(runs).toEqual([['Symbol', '\u00a8 '], ['Arial', 'made up text']]);
+  });
+  it('keeps a bullet ChemDraw wrote in the Symbol font in that font, with line starts counted as written', () => {
+    const { doc } = readCdxml('<?xml version="1.0" encoding="UTF-8" ?><CDXML><fonttable><font id="3" name="Arial"/><font id="23" name="Symbol"/></fonttable><page id="1"><t id="5" p="100 100" LineStarts="6 12"><s font="3" size="8" face="0">first\n</s><s font="23" size="8" face="0">\u00b7 </s><s font="3" size="8" face="0">two</s></t></page></CDXML>');
+    const cap = [...doc.captions.values()][0];
+    expect(cap.runs.find((r) => r.text.startsWith('\u2022'))?.symbolFont).toBe(true);
+    doc.source = null;
+    const out = new DOMParser().parseFromString(writeCdxml(doc), 'application/xml');
+    const fonts = new Map([...out.querySelectorAll('fonttable font')].map((f) => [f.getAttribute('id'), f.getAttribute('name')]));
+    const runs = [...out.querySelectorAll('t > s')].map((s) => [fonts.get(s.getAttribute('font')), s.textContent]);
+    expect(runs).toContainEqual(['Symbol', '\u00b7 ']);
+    expect(out.querySelector('t')!.getAttribute('LineStarts')).toBe('6 12');
+    // a bullet typed here still goes out in Arial
+    expect(toSymbolPieces('\u2022 x')).toEqual([{ text: '\u2022 x', symbol: false }]);
+  });
+  it('leaves NeedsClean off a label ChemDraw cannot interpret', () => {
+    const { out } = fresh(label('NodeType="Unspecified"', '<s font="3" size="10" face="96">(3,4)-XYZ</s>'));
+    expect(node(out).getAttribute('NodeType')).toBe('Unspecified');
+    expect(node(out).hasAttribute('NeedsClean')).toBe(false);
+    expect(fresh(label('Element="8" NumHydrogens="1"', '<s font="3" size="10" face="96">OH</s>')).out.querySelector('n[id="11"]')!.getAttribute('NeedsClean')).toBe('yes');
   });
   it("keeps ChemDraw's own FadePercent where a round one gives the same tint here (72, not 70)", () => {
     // on black, 72 and 70 both round to #ededed here, but ChemDraw draws 72 a level darker

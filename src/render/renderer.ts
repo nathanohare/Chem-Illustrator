@@ -1810,9 +1810,12 @@ export class Renderer {
         ctx.stroke();
         if (s.repeat) {
           // a repeat group's label (n, 3…) by the lower end, as ChemDraw puts it
-          const size = 0.75 * labelSize;
+          const look = s.repeatLook;
+          const size = look?.size || 0.75 * labelSize;
           const pos = repeatLabelPlace(s, size, measureText(s.repeat, size));
-          ctx.font = `${/^\d+$/.test(s.repeat) ? '' : 'italic '}${size}px ${FONT_STACK}`;
+          const face = look?.face ?? (/^\d+$/.test(s.repeat) ? 0 : 2);
+          ctx.font = `${face & 2 ? 'italic ' : ''}${face & 1 ? 'bold ' : ''}${size}px ${FONT_STACK}`;
+          if (look?.color) ctx.fillStyle = look.color;
           ctx.fillText(s.repeat, pos.x, pos.y);
         }
         break;

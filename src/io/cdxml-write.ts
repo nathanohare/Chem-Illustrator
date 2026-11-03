@@ -984,7 +984,8 @@ class CdxmlWriter {
     const { text, hCount } = this.autoText(a);
     if (a.label === null) n.setAttribute('NumHydrogens', String(hCount));
     else if (rebuildInner) this.labelChemistry(n, a);
-    n.setAttribute('NeedsClean', 'yes');
+    // (not on a label ChemDraw can't interpret, such as (3,4)-MDP: cleaning it turns it round)
+    this.set(n, 'NeedsClean', n.getAttribute('NodeType') === 'Unspecified' ? null : 'yes');
     const size = this.doc.style.labelSize * (a.s ?? 1);
     const t = this.el('t', {});
     const color = this.colorAttr(a.color);
@@ -1480,7 +1481,7 @@ class CdxmlWriter {
       const size = r.size ?? def;
       maxSize = Math.max(maxSize, size);
       // Greek letters and signs that an ordinary font can't hold go in the Symbol font, as ChemDraw does
-      for (const piece of toSymbolPieces(r.text)) {
+      for (const piece of toSymbolPieces(r.text, !!r.symbolFont)) {
         const s = this.el('s', { font: this.fontId(piece.symbol ? 'Symbol' : r.font ?? (this.doc.style.captionFont || 'Arial')), size: f2(size).replace(/\.00$/, ''), color: this.colorAttr(r.color) ?? '0', face: faceOf(r) });
         s.textContent = piece.text;
         t.appendChild(s);
@@ -2288,18 +2289,28 @@ class CdxmlWriter {
         set('BoundingBox', box(s));
         // a repeat group's label: the usage, and the label text as ChemDraw shows it by the bracket
         set('BracketUsage', s.repeat ? (repeatCount(s.repeat) === null ? 'SRU' : 'MultipleGroup') : null);
-        for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === 'bracketusage') g.removeChild(c);
+        for (const c of kids(g)) if (c.nodeName === 'objecttag' && (c.getAttribute('Name') === 'bracketusage' || c.getAttribute('Name') === 'parameterizedBracketLabel')) g.removeChild(c);
         if (s.repeat) {
-          const size = 0.75 * this.doc.style.labelSize;
+          const look = s.repeatLook;
+          const size = look?.size || 0.75 * this.doc.style.labelSize;
           const w = this.measure(s.repeat, size);
           const p = repeatLabelPlace(s, size, w);
           const tag = this.el('objecttag', { TagType: 'Unknown', Name: 'bracketusage' });
           const tt = this.el('t', { p: pt(p), BoundingBox: box({ x1: p.x, y1: p.y - CAP * size, x2: p.x + w, y2: p.y }), CaptionLineHeight: 'variable' });
-          const sp = this.el('s', { font: this.fontId(), size: f2(size).replace(/\.00$/, ''), color: '0', face: repeatCount(s.repeat) === null ? 2 : 0 });
-          sp.textContent = s.repeat;
-          tt.appendChild(sp);
+          const run = () => {
+            const sp = this.el('s', { font: this.fontId(), size: f2(size).replace(/\.00$/, ''), color: this.colorAttr(look?.color ?? s.color) ?? '0', face: look?.face ?? (repeatCount(s.repeat!) === null ? 2 : 0) });
+            sp.textContent = s.repeat!;
+            return sp;
+          };
+          tt.appendChild(run());
           tag.appendChild(tt);
           g.appendChild(tag);
+          // ChemDraw 25 keeps the label a second time, hidden, where it is drawn
+          const hidden = this.el('objecttag', { TagType: 'Unknown', Name: 'parameterizedBracketLabel', Visible: 'no' });
+          const ht = this.el('t', { p: pt(p), Visible: 'no' });
+          ht.appendChild(run());
+          hidden.appendChild(ht);
+          g.appendChild(hidden);
         }
         break;
       }
