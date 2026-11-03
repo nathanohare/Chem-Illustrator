@@ -4054,3 +4054,23 @@ details.nmr .nmr-mode { font: inherit; font-size: var(--fs-xs); padding: 0 2px; 
 .nmr-spec-tools [hidden] { display: none; }
 .nmr-spec-plot { flex: 1; min-height: 0; overflow: hidden; }
 .nmr-spec-plot svg { display: block; }
+
+/* Check Data (Analysis ▸ NMR): paste box, findings, overlay colors */
+.ck-box { margin: 3px 0; display: flex; flex-direction: column; gap: 3px; }
+.ck-box textarea { font-family: inherit; font-size: var(--fs-sm); line-height: 1.35; width: 100%; box-sizing: border-box; height: 72px; resize: vertical; padding: 3px 5px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg, var(--panel)); color: var(--text); }
+.ck-row { display: flex; gap: 6px; align-items: center; font-size: var(--fs-xs); color: var(--muted); }
+.ck-row .sp { margin-left: auto; display: flex; gap: 4px; }
+.ck-list { list-style: none; margin: 2px 0 3px; padding: 0; font-size: var(--fs-sm); }
+.ck-list li { display: grid; grid-template-columns: 10px 1fr auto; gap: 4px; padding: 2px 0; border-bottom: 1px solid var(--line); line-height: 1.3; }
+.ck-list li[data-row] { cursor: default; }
+.ck-list li.hot, .ck-list li[data-row]:hover { background: var(--accent-soft); }
+.ck-list .ck-dot { margin-top: 4px; }
+.ck-tools { display: flex; gap: 3px; align-items: start; }
+.ck-tools button { font-size: var(--fs-xs); padding: 0 6px; }
+.ck-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.ck-ok { background: #3c9a5f; } .ck-warn { background: #d08a1e; } .ck-bad { background: #c4483e; } .ck-info { background: #7b8a8f; }
+.nmr-spec .sp-meas { fill: none; stroke: var(--accent); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.nmr-spec .sp-link { fill: none; stroke-width: 1.4; }
+.nmr-spec .sp-mark { font-size: 10px; font-weight: 600; stroke: none; }
+.nmr-spec .sp-ok { stroke: #3c9a5f; fill: #3c9a5f; } .nmr-spec .sp-warn { stroke: #d08a1e; fill: #d08a1e; } .nmr-spec .sp-bad { stroke: #c4483e; fill: #c4483e; } .nmr-spec .sp-info { stroke: #7b8a8f; fill: #7b8a8f; }
+.nmr-spec text.sp-mark { stroke: none; }

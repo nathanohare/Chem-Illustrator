@@ -523,7 +523,17 @@ Above the list is the predicted spectrum. Hover a row to see its peaks, or a pea
 - **Balanced** (default): coupled protons simulated exactly in groups of up to 8, so roofing and second-order patterns such as AA′XX′ look as they would measured;
 - **Accurate**: groups of up to 12. The H on one carbon are simulated together, so a CH3 counts for less than three separate protons, and a large group runs in the background: the first-order spectrum shows at once and the exact one replaces it when ready (usually within a second; up to about ten seconds for twelve coupled protons that all differ).
 
-**Copy as Picture** copies the spectrum; **Put on Canvas** adds it to the drawing as a picture. Coupling constants come from the 2D structure, so protons on rings use averaged values for now.
+**Copy as Picture** copies the spectrum; **Put on Canvas** adds it to the drawing as a picture.
+
+**Check Data** compares your measured peak list with the prediction. Paste the list as an SI writes it, for example `1H NMR (400 MHz, CDCl3) δ 7.30 (d, J = 8.7 Hz, 2H), …` (a ¹H and a ¹³C list in one paragraph both count) and click **Check**. Each measured peak is matched to the atoms it most likely belongs to, and the panel lists what needs a look:
+
+- how many predicted signals were found, and whether the integrals add up to the structure's hydrogens;
+- peaks with no match in the structure, named when they sit on the solvent's residual or water peak or a green solvent from the Knowledge Base;
+- peaks further from their prediction than the expected error allows;
+- predicted signals with no peak (OH and NH are only noted, since they exchange);
+- multiplicities or coupling constants that differ from the prediction.
+
+Hover a line to see its atoms. The **⤢** window then shows the measured list above the prediction, mirrored, with matched peaks joined and the problem peaks labeled. **Edit** changes the list; **×** clears the check. Coupling constants come from the 2D structure, so protons on rings use averaged values for now.
 
 ## Mass fragmentation
 

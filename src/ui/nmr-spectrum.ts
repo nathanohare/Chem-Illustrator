@@ -16,6 +16,8 @@ export interface SpectrumData {
   sticks?: { shift: number; n: number; row: number }[];
   /** 1H: list row index for each proton group (same order as spec.groups), -1 when none. */
   groupRows?: number[];
+  /** A measured list to draw against the prediction (Check Data). */
+  measured?: MeasuredOverlay;
 }
 
 export interface DrawOpts { w: number; h: number; hi: number; lo: number; labels: boolean; hotRow: number | null }
@@ -23,6 +25,7 @@ export interface DrawOpts { w: number; h: number; hi: number; lo: number; labels
 /** A default ppm range: the predicted signals with a margin, on whole or half ppm. */
 export function autoRange(d: SpectrumData): { hi: number; lo: number } {
   const xs = d.nuc === '1H' ? (d.spec?.groups ?? []).map((g) => g.shift) : (d.sticks ?? []).map((s) => s.shift);
+  if (d.measured) xs.push(...d.measured.links.map((l) => l.m), ...d.measured.marks.map((m) => m.ppm));
   if (!xs.length) return d.nuc === '1H' ? { hi: 10, lo: 0 } : { hi: 220, lo: 0 };
   const m = d.nuc === '1H' ? 0.5 : 10;
   const hi = Math.ceil((Math.max(...xs) + m) / m) * m, lo = Math.max(d.nuc === '1H' ? -0.5 : -10, Math.floor((Math.min(...xs) - m) / m) * m);
@@ -39,45 +42,64 @@ function ticks(hi: number, lo: number, w: number): number[] {
 
 const multText = (g: ProtonGroup) => g.mult;
 
-/** The spectrum as SVG (theme colours from CSS variables). Peaks carry data-row for hovering. */
-export function spectrumSvg(d: SpectrumData, o: DrawOpts): string {
-  const top = o.labels ? 18 : 4, bot = 15, H = o.h - top - bot;
+/** A measured list drawn against the prediction (Check Data). */
+export interface MeasuredOverlay {
+  /** 1H: the list drawn as first-order lines. */
+  spec?: PredictedSpectrum;
+  /** 13C: one line per listed peak. */
+  sticks?: { shift: number; n: number }[];
+  /** Matched pairs: measured and predicted shift, how well they agree. */
+  links: { m: number; p: number; sev: Severity }[];
+  /** Labels over measured peaks that need a look. */
+  marks: { ppm: number; text: string; sev: Severity }[];
+}
+export type Severity = 'ok' | 'warn' | 'bad' | 'info';
+
+/** Per pixel column, the highest point of a sampled spectrum (narrow lines never vanish). */
+function columns(spec: PredictedSpectrum, o: DrawOpts): { col: Float64Array; ymax: number; n: number; y: Float64Array } {
+  const n = Math.max(64, Math.round(o.w * 3));
+  const { y } = sampleSpectrum(spec, o.hi, o.lo, n);
+  // the third-tallest point sets the height, so one tall singlet does not flatten the rest
+  const sortedY = [...y].sort((a, b) => b - a);
+  const ymax = (sortedY[Math.min(2 * Math.round(n / o.w), n - 1)] || sortedY[0] || 1) * 1.08;
+  const cols = Math.round(o.w), col = new Float64Array(cols);
+  for (let c = 0; c < cols; c++) {
+    let m = 0;
+    for (let i = Math.floor((c * n) / cols); i < Math.floor(((c + 1) * n) / cols); i++) m = Math.max(m, y[i]);
+    col[c] = m;
+  }
+  return { col, ymax, n, y };
+}
+
+/** The spectrum as SVG (theme colors from CSS variables). Peaks carry data-row for hovering. With
+ *  overlay and measured data: the measured list above, the prediction mirrored below. */
+export function spectrumSvg(d: SpectrumData, o: DrawOpts & { overlay?: boolean }): string {
+  const ov = o.overlay && d.measured ? d.measured : null;
+  const top = o.labels ? 18 : 4, bot = 15;
+  const mid = ov ? top + (o.h - top - bot) / 2 : 0;
+  // predicted band: base line and height (upward normally, downward under an overlay)
+  const pBase = ov ? mid + 2 : o.h - bot, pH = ov ? o.h - bot - mid - 4 : o.h - top - bot, pDir = ov ? 1 : -1;
   const xs = (v: number) => ((o.hi - v) / (o.hi - o.lo)) * o.w;
   let s = `<svg class="nmr-spec" viewBox="0 0 ${o.w} ${o.h}" width="${o.w}" height="${o.h}" xmlns="http://www.w3.org/2000/svg">`;
   s += `<rect x="0" y="0" width="${o.w}" height="${o.h}" class="sp-bg"/>`;
-  if (d.nuc === '1H' && d.spec) {
-    const n = Math.max(64, Math.round(o.w * 3));
-    const { y } = sampleSpectrum(d.spec, o.hi, o.lo, n);
-    // the third-tallest point sets the height, so one tall singlet does not flatten the rest
-    const sortedY = [...y].sort((a, b) => b - a);
-    const ymax = (sortedY[Math.min(2 * Math.round(n / o.w), n - 1)] || sortedY[0] || 1) * 1.08;
-    const yv = (v: number) => top + H - Math.min(1, v / ymax) * H;
+  const trace = (col: Float64Array, ymax: number, base: number, h: number, dir: number, from = 0, to = col.length) => {
     let path = '';
-    // per pixel column: the highest point, so narrow lines never vanish between samples
-    const cols = Math.round(o.w);
-    for (let c = 0; c < cols; c++) {
-      let m = 0;
-      for (let i = Math.floor((c * n) / cols); i < Math.floor(((c + 1) * n) / cols); i++) m = Math.max(m, y[i]);
-      path += `${c ? 'L' : 'M'}${c + 0.5},${yv(m).toFixed(1)}`;
-    }
-    s += `<path d="${path}" class="sp-line"/>`;
+    for (let c = from; c < to; c++) path += `${path ? 'L' : 'M'}${c + 0.5},${(base + dir * Math.min(1, col[c] / ymax) * h).toFixed(1)}`;
+    return path;
+  };
+  if (d.nuc === '1H' && d.spec) {
+    const { col, ymax } = columns(d.spec, o);
+    s += `<path d="${trace(col, ymax, pBase, pH, pDir)}" class="sp-line"/>`;
     const groups = d.spec.groups;
     if (o.hotRow !== null && d.groupRows) {
       groups.forEach((g, gi) => {
         if (d.groupRows![gi] !== o.hotRow) return;
         const hw = multipletHalfWidth(g, d.spec!.sf);
-        let hp = '';
-        for (let c = 0; c < cols; c++) {
-          const ppmC = o.hi - ((c + 0.5) / cols) * (o.hi - o.lo);
-          if (Math.abs(ppmC - g.shift) > hw) continue;
-          let m = 0;
-          for (let i = Math.floor((c * n) / cols); i < Math.floor(((c + 1) * n) / cols); i++) m = Math.max(m, y[i]);
-          hp += `${hp ? 'L' : 'M'}${c + 0.5},${yv(m).toFixed(1)}`;
-        }
-        if (hp) s += `<path d="${hp}" class="sp-hot"/>`;
+        const c0 = Math.max(0, Math.floor(xs(g.shift + hw))), c1 = Math.min(col.length, Math.ceil(xs(g.shift - hw)));
+        if (c1 > c0) s += `<path d="${trace(col, ymax, pBase, pH, pDir, c0, c1)}" class="sp-hot"/>`;
       });
     }
-    if (o.labels) {
+    if (o.labels && !ov) {
       const placed: number[] = [];
       [...groups].sort((a, b) => b.shift - a.shift).forEach((g) => {
         let x = xs(g.shift);
@@ -93,9 +115,33 @@ export function spectrumSvg(d: SpectrumData, o: DrawOpts): string {
       const x = xs(k.shift);
       if (x < 0 || x > o.w) continue;
       const hot = o.hotRow === k.row;
-      s += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${top + H}" y2="${(top + H - (0.55 + 0.45 * (k.n / maxN)) * H).toFixed(1)}" class="${hot ? 'sp-hot' : 'sp-line'}"/>`;
-      if (o.labels) s += `<text x="${x.toFixed(1)}" y="12" text-anchor="middle" class="sp-tick">${k.shift.toFixed(1)}</text>`;
+      s += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${pBase}" y2="${(pBase + pDir * (0.55 + 0.45 * (k.n / maxN)) * pH).toFixed(1)}" class="${hot ? 'sp-hot' : 'sp-line'}"/>`;
+      if (o.labels && !ov) s += `<text x="${x.toFixed(1)}" y="12" text-anchor="middle" class="sp-tick">${k.shift.toFixed(1)}</text>`;
     }
+  }
+  if (ov) {
+    const mBase = mid - 2, mH = mid - 2 - top;
+    if (ov.spec) {
+      const { col, ymax } = columns(ov.spec, o);
+      s += `<path d="${trace(col, ymax, mBase, mH, -1)}" class="sp-meas"/>`;
+    } else if (ov.sticks) {
+      const maxN = Math.max(1, ...ov.sticks.map((k) => k.n));
+      for (const k of ov.sticks) {
+        const x = xs(k.shift);
+        if (x >= 0 && x <= o.w) s += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${mBase}" y2="${(mBase - (0.55 + 0.45 * (k.n / maxN)) * mH).toFixed(1)}" class="sp-meas"/>`;
+      }
+    }
+    s += `<line x1="0" x2="${o.w}" y1="${mid}" y2="${mid}" class="sp-ax"/>`;
+    for (const l of ov.links) s += `<path d="M${xs(l.m).toFixed(1)},${mid - 2}L${xs(l.p).toFixed(1)},${mid + 2}" class="sp-link sp-${l.sev}"/>`;
+    const placed: number[] = [];
+    for (const m of [...ov.marks].sort((a, b) => b.ppm - a.ppm)) {
+      let x = xs(m.ppm);
+      if (x < 0 || x > o.w) continue;
+      for (const q of placed) if (Math.abs(q - x) < 56) x = q + 56;
+      placed.push(x);
+      s += `<text x="${x.toFixed(1)}" y="12" text-anchor="middle" class="sp-mark sp-${m.sev}">${esc(m.text)}</text>`;
+    }
+    s += `<text x="5" y="${top + 10}" class="sp-tick">Measured</text><text x="5" y="${o.h - bot - 5}" class="sp-tick">Predicted</text>`;
   }
   s += `<line x1="0" x2="${o.w}" y1="${o.h - bot + 0.5}" y2="${o.h - bot + 0.5}" class="sp-ax"/>`;
   for (const v of ticks(o.hi, o.lo, o.w)) {
@@ -125,7 +171,7 @@ export function rowAt(d: SpectrumData, ppm: number, tolerance: number): number |
 export async function svgToPng(svg: string, scale = 2): Promise<Uint8Array> {
   const css = getComputedStyle(document.documentElement);
   // pictures go on white paper with dark lines, whatever the theme
-  const style = `<style>.sp-bg{fill:#fff}.sp-line{fill:none;stroke:#1d2527;stroke-width:1}.sp-hot{fill:none;stroke:${css.getPropertyValue('--accent').trim() || '#0e7c86'};stroke-width:1.8}.sp-lab{font-size:10px;fill:#1d2527}.sp-tick{font-size:9.5px;fill:#5f6b6e}.sp-ax{stroke:#9aa5a7}text{font-family:system-ui,sans-serif}</style>`;
+  const style = `<style>.sp-bg{fill:#fff}.sp-line{fill:none;stroke:#1d2527;stroke-width:1}.sp-hot{fill:none;stroke:${css.getPropertyValue('--accent').trim() || '#0e7c86'};stroke-width:1.8}.sp-lab{font-size:10px;fill:#1d2527}.sp-tick{font-size:9.5px;fill:#5f6b6e}.sp-ax{stroke:#9aa5a7}.sp-meas{fill:none;stroke:${css.getPropertyValue('--accent').trim() || '#0e7c86'};stroke-width:1}.sp-link{fill:none;stroke-width:1.4}.sp-ok{stroke:#3c9a5f;fill:#3c9a5f}.sp-warn{stroke:#d08a1e;fill:#d08a1e}.sp-bad{stroke:#c4483e;fill:#c4483e}.sp-info{stroke:#7b8a8f;fill:#7b8a8f}.sp-mark{stroke:none;font-size:10px;font-weight:600}text{font-family:system-ui,sans-serif}</style>`;
   const solid = svg.replace(/(<svg[^>]*>)/, `$1${style}`);
   const m = /viewBox="0 0 ([\d.]+) ([\d.]+)"/.exec(solid)!;
   const w = +m[1], h = +m[2];
@@ -240,7 +286,8 @@ export class SpectrumWindow {
     const prev = this.d?.nuc;
     this.d = this.host.data(this.sf, this.quality);
     if (this.d?.nuc !== prev) this.range = null;
-    this.el.querySelector('.nmr-spec-title')!.innerHTML = this.d?.nuc === '13C' ? 'Predicted <sup>13</sup>C Spectrum' : 'Predicted <sup>1</sup>H Spectrum';
+    const nucHtml = this.d?.nuc === '13C' ? '<sup>13</sup>C' : '<sup>1</sup>H';
+    this.el.querySelector('.nmr-spec-title')!.innerHTML = this.d?.measured ? `Measured vs Predicted ${nucHtml} Spectrum` : `Predicted ${nucHtml} Spectrum`;
     this.el.querySelector<HTMLElement>('.nmr-spec-mhz')!.hidden = this.d?.nuc === '13C';
     this.el.querySelector<HTMLElement>('.nmr-spec-quality')!.hidden = this.d?.nuc === '13C';
     this.draw();
@@ -255,13 +302,13 @@ export class SpectrumWindow {
     if (!this.d) { plot.innerHTML = '<p class="muted small">Select a structure to see its predicted spectrum.</p>'; return; }
     const w = Math.max(200, plot.clientWidth), h = Math.max(120, plot.clientHeight);
     const r = this.range ?? autoRange(this.d);
-    plot.innerHTML = spectrumSvg(this.d, { w, h, hi: r.hi, lo: r.lo, labels: true, hotRow: this.hotRow });
+    plot.innerHTML = spectrumSvg(this.d, { w, h, hi: r.hi, lo: r.lo, labels: true, hotRow: this.hotRow, overlay: true });
   }
 
   private picture(): Promise<Uint8Array> {
     if (!this.d) return Promise.reject(new Error('Nothing to copy'));
     const r = this.range ?? autoRange(this.d);
-    return svgToPng(spectrumSvg(this.d, { w: 720, h: 260, hi: r.hi, lo: r.lo, labels: true, hotRow: null }));
+    return svgToPng(spectrumSvg(this.d, { w: 720, h: 260, hi: r.hi, lo: r.lo, labels: true, hotRow: null, overlay: true }));
   }
 
   dispose(): void { this.ro.disconnect(); this.el.remove(); }
