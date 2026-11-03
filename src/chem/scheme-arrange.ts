@@ -85,7 +85,8 @@ export function readScheme(doc: Doc, m: Measure, scope: Scope): SchemeShape {
     if (!(all || scope.arrows.has(r.id)) || !isReactionArrow(r)) continue;
     // roles kept with the arrow (by hand, by an earlier arrangement or tidy, or from the file) stay,
     // as long as what they name is still there, so a scheme can be rearranged again and again
-    const kept = r.step && [...r.step.reactants, ...r.step.products].every((ref) => find(ref)) ? r.step : null;
+    // (roles that lost what they named, as a step saved in a picture of its own, are worked out again from where things are)
+    const kept = isStep(r.step) && [...r.step!.reactants, ...r.step!.products].every((ref) => find(ref)) ? r.step! : null;
     const roles = kept ?? interpretArrow(r, items, bond);
     if (isStep(roles)) steps.push({ arrow: r, roles });
   }

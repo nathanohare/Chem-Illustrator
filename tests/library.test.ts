@@ -166,6 +166,35 @@ describe('keeping the library', () => {
     expect(place.writes).toBe(0);
   });
 
+  it('never writes over a library file it could not read (a cloud folder not synced, a half-written file)', async () => {
+    // (found in the 2026-11-03 review: a failed read was taken as "no file yet" and the whole library written over)
+    const place = memoryPlace();
+    place.text = libraryText({ ...emptyLibrary(), references: [ref('r-1', 'one'), ref('r-2', 'two')] });
+    const full = place.text;
+    const read = place.read;
+    place.read = async () => { throw new Error('The cloud file provider is not running'); };
+    const a = new Library(place, 0);
+    await a.load();
+    a.change((l) => ({ ...l, compounds: [cpd('c-1', 'CCO')] }));
+    await a.flush();
+    expect(place.text).toBe(full);
+    expect(a.problem).toMatch(/could not be saved/);
+    // a damaged file is left alone too
+    place.read = read;
+    place.text = full.slice(0, full.length / 2);
+    a.change((l) => ({ ...l, compounds: [...l.compounds, cpd('c-2', 'CCN')] }));
+    await a.flush();
+    expect(place.text).toBe(full.slice(0, full.length / 2));
+    expect(a.problem).toMatch(/damaged/);
+    // once it can be read again, nothing is lost on either side
+    place.text = full;
+    a.change((l) => ({ ...l, compounds: [...l.compounds, cpd('c-3', 'CCC')] }));
+    await a.flush();
+    const saved = parseLibrary(place.text);
+    expect(saved.references.map((r) => r.title).sort()).toEqual(['one', 'two']);
+    expect(saved.compounds.map((c) => c.id).sort()).toEqual(['c-1', 'c-2', 'c-3']);
+  });
+
   it('says when it could not be saved', async () => {
     const place = memoryPlace();
     place.write = async () => { throw new Error('disk full'); };

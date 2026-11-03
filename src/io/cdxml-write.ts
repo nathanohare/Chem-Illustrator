@@ -22,7 +22,7 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl } from '../render/images';
-import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
+import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
 import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
@@ -177,6 +177,7 @@ class CdxmlWriter {
     this.writeRepeatGroups();
     this.writeSteps();
     this.writeGroups();
+    this.writePieces();
     this.raiseTableFigures();
     if (src) this.cleanUp();
 
@@ -1947,6 +1948,41 @@ class CdxmlWriter {
       for (const e of list) g.appendChild(e);
       this.changed = true;
     }
+  }
+
+  /**
+   * Auto-Animate Steps' pieces (things marked to move together in the slide show) in a hidden tag
+   * on each thing's element, so a scheme built up step by step keeps its steps through CDXML and
+   * PowerPoint (whose drawings are CDXML) and back.
+   */
+  private writePieces(): void {
+    const doc = this.doc;
+    let byId: Map<string, Element> | null = null;
+    // (elements by name and id: a bond or fragment can share an atom's id number)
+    const ided = (id: number, names: string[]): Element | null => {
+      if (!byId) {
+        byId = new Map();
+        for (const e of descendants(this.root)) { const k = e.getAttribute('id'); if (k && !byId.has(`${e.nodeName}:${k}`)) byId.set(`${e.nodeName}:${k}`, e); }
+      }
+      for (const n of names) { const e = byId.get(`${n}:${id}`); if (e) return e; }
+      return null;
+    };
+    const put = (kind: Kind, id: number, names: string[], piece: number | undefined) => {
+      const was = this.orig<{ piece?: number } & Entity>(kind, id)?.piece;
+      if (piece === undefined && was === undefined) return;
+      const e = this.source(kind, id, names) ?? (kind === 'r' ? this.findArrow(id) : null) ?? ided(id, names);
+      if (!e || !names.includes(e.nodeName)) return;
+      const old = kids(e).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === PIECE_TAG);
+      const want = piece !== undefined ? String(piece) : null;
+      if ((old?.getAttribute('Value') ?? null) === want) return;
+      if (old) e.removeChild(old);
+      if (want !== null) e.appendChild(this.el('objecttag', { TagType: 'String', Name: PIECE_TAG, Value: want, Visible: 'no' }));
+      this.changed = true;
+    };
+    for (const a of doc.atoms.values()) put('a', a.id, ['n'], a.piece);
+    for (const c of doc.captions.values()) put('c', c.id, ['t'], c.piece);
+    for (const r of doc.arrows.values()) put('r', r.id, ['arrow', 'graphic'], r.piece);
+    for (const s of doc.shapes.values()) put('s', s.id, ['graphic', 'embeddedobject', 'table', 'group'], s.piece);
   }
 
   private cleanUp(): void {
