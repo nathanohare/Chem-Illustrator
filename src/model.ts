@@ -695,6 +695,10 @@ export interface Arrow {
   headType: 'solid' | 'hollow' | 'angle';
   line: 'solid' | 'dashed' | 'bold' | 'wavy';
   noGo: boolean;
+  /** How a no-go arrow is struck out: a cross (the default) or a hash of two slanted strokes. */
+  noGoKind?: 'hash';
+  /** A dipole arrow: a short stroke across the shaft near the tail makes its plus end. */
+  dipole?: boolean;
   /** Equilibrium arrows: two half-headed shafts. */
   equilibrium: boolean;
   /** Distance between two parallel shafts (a retrosynthetic arrow), in points; absent for one shaft. */

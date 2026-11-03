@@ -17,8 +17,10 @@ import type { Role } from '../chem/reaction';
 import { setStereoShown, setStereoText } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
 import { Selection } from '../editor/editor';
-import { DEG, normDegrees } from '../geom';
-import { isCircle, cropTo, isCurved, headBend, swapHalf } from '../objects';
+import { freeformPoints } from '../design/geo';
+import { isSmoothPath, reshapeFreeform } from '../design/freeform';
+import { DEG, normDegrees, mul, type Vec } from '../geom';
+import { isCircle, cropTo, isCurved, headBend, swapHalf, arrowEllipseFrame, ellipseArrow } from '../objects';
 import { firstBend, shapeBez, shapeOf } from '../arrow-path';
 import { GEOS, geoDef } from '../design/geo';
 import { drawGeoIcon } from './design-panel';
@@ -71,6 +73,7 @@ type Opt<T> = [T, string];
 
 const HEADS: Opt<Arrow['headStyle']>[] = [['none', 'None'], ['full', 'Full'], ['halfLeft', 'Half, left side'], ['halfRight', 'Half, right side']];
 const HEAD_TYPES: Opt<Arrow['headType']>[] = [['solid', 'Solid'], ['hollow', 'Hollow'], ['angle', 'Open']];
+const NO_GOS: Opt<'none' | 'cross' | 'hash'>[] = [['none', 'None'], ['cross', 'Cross'], ['hash', 'Hash']];
 const LINES: Opt<Arrow['line']>[] = [['solid', 'Solid'], ['dashed', 'Dashed'], ['bold', 'Bold'], ['wavy', 'Wavy']];
 const SHAFTS: Opt<string>[] = [['one', 'One line'], ['equilibrium', 'Equilibrium (two half arrows)'], ['retro', 'Retrosynthetic (double line)']];
 const BRACKETS: Opt<NonNullable<Shape['bracket']>>[] = [['square', 'Square [ ]'], ['round', 'Round ( )'], ['curly', 'Curly { }']];
@@ -257,7 +260,13 @@ export class StylePanel {
     }
     this.select('Head shape', HEAD_TYPES, r.headType, (v) => set('Arrowhead shape', () => ({ headType: v })));
     this.select('Line', LINES, r.line, (v) => set('Arrow line', () => ({ line: v })));
-    this.check('Crossed out (no reaction)', r.noGo, (v) => set('Crossed-out arrow', () => ({ noGo: v })));
+    this.select('No-go', NO_GOS, r.noGo ? r.noGoKind ?? 'cross' : 'none', (v) => set('No-go arrow', () => ({ noGo: v !== 'none', noGoKind: v === 'hash' ? 'hash' : undefined })));
+    this.check('Dipole', !!r.dipole, (v) => set('Dipole arrow', () => ({ dipole: v || undefined })));
+    if (r.headType === 'solid' && (r.headStyle !== 'none' || r.tailStyle !== 'none')) {
+      this.number('Head center (pt)', round(r.headLength * (r.headCenter ?? 0.75), 2), 0.25, 0, 100,
+        (v) => set('Arrowhead center', (a) => ({ headCenter: a.headLength > 0 ? Math.max(0, Math.min(1, v / a.headLength)) : undefined })),
+        'How far back from its point the head’s notch is. The head’s full length makes a plain triangle; less sweeps its back in.');
+    }
     if (!r.equilibrium && !r.shaftSpacing) {
       this.check('Square bends (elbow)', !!r.elbow, (v) => set('Elbow connector', () => ({ elbow: v || undefined, sweep: 0, bez: undefined })));
     }
@@ -280,7 +289,7 @@ export class StylePanel {
       b.addEventListener('click', () => set('Detach', () => ({ pin: undefined })));
       this.body.append(b);
     }
-    if (!r.equilibrium && !r.shaftSpacing && !r.elbow && isCurved(r)) {
+    if (!r.equilibrium && !r.shaftSpacing && !r.elbow && isCurved(r) && !(r.ellipse && arrowEllipseFrame(r))) {
       // a ready-made shape between the same two ends (or the arrow's own path, drawn or built up bend by bend)
       const now = shapeOf(r);
       const opts: Opt<string>[] = [['single', 'Single curve'], ['s', 'S (two bends)'], ['u', 'U-turn'], ['loop', 'Loop']];
@@ -294,6 +303,15 @@ export class StylePanel {
           return patch;
         });
       });
+    }
+    const ef = arrowEllipseFrame(r);
+    if (ef) {
+      const ratio = (f: { u: Vec; v: Vec }) => Math.hypot(f.u.x, f.u.y) / Math.max(Math.hypot(f.v.x, f.v.y), 1e-6);
+      this.number('Width/Height (%)', Math.round(ratio(ef) * 100), 5, 10, 1000, (v) => set('Reshape arc', (a) => {
+        const f = arrowEllipseFrame(a);
+        if (!f || !(v > 0)) return {};
+        return ellipseArrow(f.c, mul(f.u, v / 100 / ratio(f)), f.v, f.t0, f.sweep);
+      }), 'How wide the curve’s ellipse is for its height: 100 is a circle. Drag the diamonds on the selected arrow to reshape it.');
     }
     if (!r.equilibrium && !r.shaftSpacing && !r.elbow && !r.bez?.length) {
       this.number('Curve (°)', round(r.sweep / DEG, 1), 5, -330, 330, (v) => set('Bend arrow', () => ({ sweep: v * DEG })),
@@ -387,7 +405,13 @@ export class StylePanel {
       // another shape from the library, keeping the size, colours and text
       // (an icon is listed too, so it can be swapped for a shape and back)
       const own = geoDef(geo.geo);
-      if (this.pickShape) this.shapePicker(own.id, (v) => set('Change shape', isGeo, () => ({ geo: v })));
+      const ff = freeformPoints(geo);
+      if (ff) {
+        // a freeform (or ChemDraw curve): closed or open, smooth or with straight sides, through the same points
+        const isFree = (x: Shape) => !!freeformPoints(x);
+        this.check('Closed', ff.closed, (v) => set(v ? 'Close shape' : 'Open shape', isFree, (x) => reshapeFreeform(x, { closed: v }) ?? {}));
+        this.check('Smooth', isSmoothPath(ff.pts), (v) => set(v ? 'Smooth shape' : 'Straighten shape', isFree, (x) => reshapeFreeform(x, { smooth: v }) ?? {}));
+      } else if (this.pickShape) this.shapePicker(own.id, (v) => set('Change shape', isGeo, () => ({ geo: v })));
       else {
         const opts = [...(own.icon ? [own] : []), ...GEOS].map((g): Opt<string> => [g.id, `${g.name} (${g.group.toLowerCase()})`]);
         this.select('Shape', opts, own.id, (v) => set('Change shape', isGeo, () => ({ geo: v })));
