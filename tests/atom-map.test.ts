@@ -241,3 +241,70 @@ describe('mapping steps that split up, and big steps', () => {
     expect(n.unmatched).toBe(0);
   }), 30000);
 });
+
+// Review 2026-11-03: a starting material that falls apart into several products was mapped onto
+// one of them only (the rest left without numbers, bonds made and broken miscounted), and a big
+// step froze the program for seconds (7 s for 120 atoms each side, 22 s for 390 atoms).
+describe('mapping steps that split up, and big steps', () => {
+  let RDKit: { get_mol(s: string): { set_new_coords(): void; get_molblock(): string; delete(): void } };
+  beforeAll(async () => { RDKit = await createRequire(import.meta.url)('@rdkit/rdkit')(); });
+  /** Starting materials, an arrow and the products in a row, joined by + signs, laid out by RDKit. */
+  const reaction = (starting: string[], products: string[]) => {
+    const doc = new Doc();
+    const bl = doc.style.bondLength;
+    const ids = { r: [] as number[][], p: [] as number[][] };
+    doc.edit('Draw', () => {
+      let x = 0;
+      const put = (smiles: string, i: number) => {
+        if (i) doc.addCaption({ x: x - bl * 1.1, y: 4, runs: [{ text: '+' }], justify: 'left' });
+        const m = RDKit.get_mol(smiles);
+        m.set_new_coords();
+        const got = addMolfile(doc, m.get_molblock(), 0, 0);
+        m.delete();
+        const xs = got.map((id) => doc.atoms.get(id)!.x), ys = got.map((id) => doc.atoms.get(id)!.y);
+        doc.moveAtoms(got, x - Math.min(...xs), -(Math.min(...ys) + Math.max(...ys)) / 2);
+        x += Math.max(...xs) - Math.min(...xs) + bl * 2;
+        return got;
+      };
+      starting.forEach((s, i) => ids.r.push(put(s, i)));
+      const lw = doc.style.lineWidth;
+      doc.addArrow({ tail: { x, y: 0 }, head: { x: x + bl * 4, y: 0 }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: lw * 10, headWidth: lw * 2.5 });
+      x += bl * 5.5;
+      products.forEach((s, i) => ids.p.push(put(s, i)));
+    });
+    return { doc, ids };
+  };
+
+  it('maps every product of a Boc removal, an ester hydrolysis and a retro-Diels–Alder', arial(() => {
+    for (const [starting, products, made, broken] of [
+      [['CC(C)(C)OC(=O)NCc1ccccc1'], ['NCc1ccccc1', 'O=C=O', 'C=C(C)C'], 0, 2],
+      [['CC(=O)OC1CCC(OC(C)=O)CC1', 'O'], ['OC1CCC(OC(C)=O)CC1', 'CC(=O)O'], 1, 1],
+      [['C1=CCCCC1'], ['C=CC=C', 'C=C'], 0, 2],
+    ] as [string[], string[], number, number][]) {
+      const { doc, ids } = reaction(starting, products);
+      const m = mapAtoms(doc, new Renderer(noCanvas, noCanvas));
+      expect(m.unmatched, products.join(' + ')).toBe(0);
+      for (const p of ids.p) for (const id of p) expect(m.numbers.has(id)).toBe(true);
+      expect([m.made.length, m.broken.length], products.join(' + ')).toEqual([made, broken]);
+    }
+    // the acetate's carbonyl oxygen goes with the acetic acid, the water's oxygen too (acyl–O cleavage)
+    const { doc, ids } = reaction(['CC(=O)OC1CCC(OC(C)=O)CC1', 'O'], ['OC1CCC(OC(C)=O)CC1', 'CC(=O)O']);
+    const m = mapAtoms(doc, new Renderer(noCanvas, noCanvas));
+    const water = m.numbers.get(ids.r[1][0]);
+    expect(ids.p[1].map((id) => m.numbers.get(id))).toContain(water);
+  }));
+
+  it('maps a big step in well under a second', arial(() => {
+    const { doc } = reaction(['C'.repeat(60), 'C'.repeat(60)], ['C'.repeat(120)]);
+    const t0 = performance.now();
+    const m = mapAtoms(doc, new Renderer(noCanvas, noCanvas));
+    expect(performance.now() - t0).toBeLessThan(1000);
+    expect([m.unmatched, m.made.length, m.broken.length]).toEqual([0, 1, 0]);
+    const ring = 'c1ccc(cc1)'.repeat(16);
+    const big = reaction([ring + 'C', ring + 'Br'], [ring + 'C' + ring]);
+    const t1 = performance.now();
+    const n = mapAtoms(big.doc, new Renderer(noCanvas, noCanvas));
+    expect(performance.now() - t1).toBeLessThan(2500);
+    expect(n.unmatched).toBe(0);
+  }), 30000);
+});
