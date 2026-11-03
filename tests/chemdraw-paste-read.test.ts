@@ -153,3 +153,13 @@ describe("ChemDraw's own clipboard", () => {
     expect([...a.bonds.values()].filter((x) => x.crossing?.length).length).toBe([...b.bonds.values()].filter((x) => x.crossing?.length).length);
   });
 });
+
+describe('frames pasted from ChemDraw', () => {
+  it('keep their line width in a drawing with thinner lines', () => {
+    const doc = fromChemDraw();
+    const frames = [...doc.shapes.values()].filter((s) => s.kind === 'rect');
+    const before = frames.map((s) => s.lineWidth ?? doc.style.lineWidth);
+    fitPasted(doc, ACS_1996);
+    frames.forEach((s, i) => expect(doc.shapes.get(s.id)!.lineWidth ?? ACS_1996.lineWidth).toBeCloseTo(before[i], 6));
+  });
+});
