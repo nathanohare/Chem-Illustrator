@@ -6516,10 +6516,13 @@ async function autoAnimateSteps(): Promise<void> {
     flash(`Animated ${steps} step${steps > 1 ? 's' : ''} on a copy of the slide, with ${out.canvas?.keys.length ?? 0} keyframes. The original, with its own keyframes, is hidden from the show.`);
     return;
   }
-  sdoc.edit('Auto-Animate Steps', () => markPieces(sdoc, pieces));
-  const out = stepAnims(sdoc, pieces, autoSteps, slide.anims ?? [], canvas && autoSteps.camera ? { data: slide.canvas!, size: d.size } : undefined);
-  if (out.canvas) d.setCanvas(out.canvas, 'Auto-Animate Steps', i);
-  d.setAnims(out.anims, 'Auto-Animate Steps', i);
+  // the pieces, animations and keyframes: one undo step
+  let out: ReturnType<typeof stepAnims> = { anims: [] };
+  d.rebuildSlide(i, 'Auto-Animate Steps', (doc) => {
+    markPieces(doc, pieces);
+    out = stepAnims(doc, pieces, autoSteps, slide.anims ?? [], canvas && autoSteps.camera ? { data: slide.canvas!, size: d.size } : undefined);
+    return out;
+  });
   if (animUi && !animUi.paneShown) animUi.showPane(true);
   buildHint.refresh();
   flash(`Animated ${steps} step${steps > 1 ? 's' : ''}${out.canvas ? `, with ${out.canvas.keys.length} keyframes` : ''}. Preview plays them.`);

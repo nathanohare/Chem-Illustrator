@@ -286,6 +286,15 @@ export class RichField {
   /** The text as last finished (Escape goes back to it). */
   private wasParts: TextPart[] = [];
 
+  /** Typed and not finished yet (it goes to the drawing on Enter or when the caret leaves). */
+  unfinished(): boolean { return this.key() !== this.was; }
+
+  /** Hand what is typed on to another field: this one then has nothing of its own to finish. */
+  handOver(to: RichField): void {
+    if (this.unfinished()) { to.load(this.parts()); to.render(null); }
+    this.was = this.key();
+  }
+
   /** Finished: the text goes to the drawing if it changed. */
   commit(): void {
     const k = this.key();
