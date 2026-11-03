@@ -85,6 +85,31 @@ describe('atom mapping', () => {
     expect(doc.bonds.get(m.made[0])!.highlight).toBeUndefined();
   }));
 
+  it('saves the map as ChemDraw\'s own atom map on the step, and reads ChemDraw\'s map', arial(() => {
+    const doc = load('O6C cyclisation');
+    const m = mapAtoms(doc, new Renderer(noCanvas, noCanvas));
+    doc.edit('Map', () => { applyAtomMap(doc, m, { numbers: true, colours: false, bonds: false }); });
+    const x = new DOMParser().parseFromString(writeCdxml(doc).replace(/<!DOCTYPE[^>]*>/i, ''), 'application/xml');
+    const st = x.getElementsByTagName('step')[0];
+    const pairs = (st.getAttribute('ReactionStepAtomMap') ?? '').trim().split(/\s+/);
+    // a pair for each mapped reactant atom (unmatched atoms have none)
+    expect(pairs.length / 2).toBe(20);
+    expect(st.getAttribute('ReactionStepAtomMapManual')).toBe(st.getAttribute('ReactionStepAtomMap'));
+    // a file mapped in ChemDraw (no numbers of ours): read from the step
+    for (const t of [...x.getElementsByTagName('objecttag')]) if (t.getAttribute('Name') === 'Chem Illustrator map') t.parentNode!.removeChild(t);
+    const back = readCdxml(new XMLSerializer().serializeToString(x)).doc;
+    const mapped = [...back.atoms.values()].filter((a) => a.mapNo);
+    expect(mapped.length).toBe(40);
+    const byNo = new Map<number, number[]>();
+    for (const a of mapped) byNo.set(a.mapNo!, [...(byNo.get(a.mapNo!) ?? []), a.z]);
+    for (const zs of byNo.values()) { expect(zs).toHaveLength(2); expect(zs[0]).toBe(zs[1]); }
+    // saved again after an edit elsewhere, the step's map is left as ChemDraw wrote it
+    const one = [...back.atoms.values()][0];
+    back.edit('Move', () => back.moveAtoms(new Set([one.id]), 1, 0));
+    const again = new DOMParser().parseFromString(writeCdxml(back).replace(/<!DOCTYPE[^>]*>/i, ''), 'application/xml').getElementsByTagName('step')[0];
+    expect(again.getAttribute('ReactionStepAtomMap')).toBe(st.getAttribute('ReactionStepAtomMap'));
+  }));
+
   it('writes and reads map numbers in molfiles', () => {
     const d = new Doc();
     d.edit('Draw', () => {

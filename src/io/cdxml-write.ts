@@ -1975,7 +1975,7 @@ class CdxmlWriter {
       const old = stepOf.get(e);
       const o = this.orig<Arrow>('r', r.id);
       // a step from the file whose roles weren't changed stays exactly as ChemDraw wrote it
-      if (old && o && r.step && deepEqual(r.step, o.step)) { this.fixStepArrow(old, e); continue; }
+      if (old && o && r.step && deepEqual(r.step, o.step)) { this.fixStepArrow(old, e); this.fillAtomMap(old, r.step); continue; }
       if (!r.step && !rewriting && !old) continue;
       const roles = worked(r);
       if (!isStep(roles) && !r.step) {
@@ -2043,11 +2043,38 @@ class CdxmlWriter {
       this.set(st, k, v);
       this.changed = true;
     }
+    this.fillAtomMap(st, roles);
     const inside = ids(roles.inside);
     const tag = kids(st).find((c) => c.nodeName === 'objecttag' && c.getAttribute('Name') === INSIDE_TAG);
     if ((tag?.getAttribute('Value') ?? '') === inside) return;
     if (tag) st.removeChild(tag);
     if (inside) st.appendChild(this.el('objecttag', { TagType: 'String', Name: INSIDE_TAG, Value: inside, Visible: 'no' }));
+    this.changed = true;
+  }
+
+  /**
+   * Atom-atom map numbers (Atom.mapNo) as ChemDraw keeps them on the step: pairs of a reactant's
+   * atom and the product atom with the same number (set by hand, so also as the manual map).
+   * Left as the file has them while the pairs are the same.
+   */
+  private fillAtomMap(st: Element, roles: StepRoles): void {
+    const atomsOf = (refs: string[]): Atom[] => {
+      const frags = new Set(refs.filter((r) => r[0] === 'a').map((r) => this.fragOfAtom.get(Number(r.slice(1)))).filter(Boolean));
+      return frags.size ? [...this.doc.atoms.values()].filter((a) => frags.has(this.fragOfAtom.get(a.id))) : [];
+    };
+    const products = new Map<number, Atom>();
+    for (const a of atomsOf(roles.products)) if (a.mapNo && !products.has(a.mapNo)) products.set(a.mapNo, a);
+    const pairs: string[] = [];
+    for (const a of atomsOf(roles.reactants)) {
+      const p = a.mapNo ? products.get(a.mapNo) : undefined;
+      if (p) pairs.push(`${this.nodeId(a.id)} ${this.nodeId(p.id)}`);
+    }
+    const asSet = (v: string | null) => { const x = (v ?? '').trim().split(/\s+/).filter(Boolean), out: string[] = []; for (let i = 0; i + 1 < x.length; i += 2) out.push(`${x[i]} ${x[i + 1]}`); return out.sort().join('|'); };
+    const had = st.getAttribute('ReactionStepAtomMap') ?? [st.getAttribute('ReactionStepAtomMapManual'), st.getAttribute('ReactionStepAtomMapAuto')].filter(Boolean).join(' ');
+    if (asSet(had) === [...pairs].sort().join('|')) return;
+    this.set(st, 'ReactionStepAtomMap', pairs.join(' ') || null);
+    this.set(st, 'ReactionStepAtomMapManual', pairs.join(' ') || null);
+    st.removeAttribute('ReactionStepAtomMapAuto');
     this.changed = true;
   }
 

@@ -1231,6 +1231,23 @@ function readSteps(all: Element[], refs: () => Map<Element, string>, doc: Doc): 
     }
     r.step = roles;
   }
+  // ChemDraw's atom-atom map (pairs of a reactant atom and its product atom), when the file has
+  // no map numbers of ours: the atoms of each pair get one number, kept along a chain of steps
+  if ([...doc.atoms.values()].some((a) => a.mapNo)) return;
+  const num = new Map<number, number>();
+  let next = 1;
+  for (const st of all) {
+    if (st.nodeName !== 'step') continue;
+    const map = st.getAttribute('ReactionStepAtomMap') ?? [st.getAttribute('ReactionStepAtomMapManual'), st.getAttribute('ReactionStepAtomMapAuto')].filter(Boolean).join(' ');
+    const x = map.trim().split(/\s+/).filter(Boolean);
+    for (let i = 0; i + 1 < x.length; i += 2) {
+      const [ra, pa] = [x[i], x[i + 1]].map((id) => { const e = byId.get(id), ref = e && refOf.get(e); return ref?.[0] === 'a' ? Number(ref.slice(1)) : null; });
+      if (ra === null || pa === null) continue;
+      const n = num.get(ra) ?? num.get(pa) ?? next++;
+      num.set(ra, n); num.set(pa, n);
+    }
+  }
+  for (const [id, n] of num) { const a = doc.atoms.get(id); if (a) a.mapNo = n; }
 }
 
 /** Insert line breaks into styled runs at the given UTF-8 byte offsets. */
