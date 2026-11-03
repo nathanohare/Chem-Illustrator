@@ -67,6 +67,9 @@ const HAMMETT_BOXES: { value: HammettColumn; html: string; on: boolean }[] = [
 
 const PIC_W = 190, PIC_H = 120;
 
+/** The "i" by Reference position: how groups are counted from it (UI rule: help behind an "i", the line under it only says what was found). */
+export const HAMMETT_REF_INFO = 'Every group on the ring the reference position sits on is placed o, m or p from it; two or more add up (Σσ). SMILES are read as the values are worked out.';
+
 /** Ask which properties to add. Null when cancelled. */
 export function askProperties(opts: PropertyDialogOptions): Promise<PropertyAnswer | null> {
   return new Promise((resolve) => {
@@ -83,7 +86,7 @@ export function askProperties(opts: PropertyDialogOptions): Promise<PropertyAnsw
         <div class="hm-body">
           <div class="hm-pic" aria-hidden="true"></div>
           <div>
-            <label class="hm-row"><span>Reference position</span><select name="hm-ref"></select></label>
+            <label class="hm-row"><span data-info="${HAMMETT_REF_INFO}">Reference position</span><select name="hm-ref"></select></label>
             <p class="hm-note"></p>
             <div class="hm-cols" role="group" aria-label="Hammett columns"></div>
             <label class="hm-row"><span>Ortho groups</span><select name="hm-ortho"><option value="">Leave blank (#N/A)</option><option value="sp">Use σp</option></select></label>
