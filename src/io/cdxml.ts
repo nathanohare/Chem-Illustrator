@@ -296,7 +296,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (type === 'LinkNode') skip(`${type} node`);
       if (type === 'ExternalConnectionPoint') {
         // a point of attachment drawn on its own (the wavy line ending a substituent)
-        const a = doc.addAtom(x, y, 0, { id, attach: n.getAttribute('ExternalConnectionType') ?? 'Unspecified' });
+        const attachColor = color(n);
+        const a = doc.addAtom(x, y, 0, { id, attach: n.getAttribute('ExternalConnectionType') ?? 'Unspecified', ...(attachColor ? { color: attachColor } : {}) });
         const num = Number(n.getAttribute('ExternalConnectionNum'));
         if (Number.isInteger(num) && num > 0) a.attachNum = num;
         from('a', a.id, n);
@@ -375,8 +376,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (t) {
         const runs = runsOf(t);
         // a label set in a face of its own (bold labels in a drawing whose labels are plain, or the other way)
-        const s0 = kids(t).find((k) => k.nodeName === 's');
-        const face = s0 ? num(s0, 'face', 0) : undefined;
+        // (only what every run has: the italic t of tBu is the label's marks, not its face)
+        const faces = kids(t).filter((k) => k.nodeName === 's').map((k) => num(k, 'face', 0));
+        const face = faces.length ? faces.reduce((m, v) => m & v) : undefined;
         if (face !== undefined && (face & 1) !== ((st.labelFace ?? 0) & 1)) atom.face = face;
         let txt = runs.map((r) => r.text).join('');
         // a charge the label doesn't show (no sign, and no circled charge beside it) isn't shown
@@ -395,8 +397,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         const look = labelLookOf(runs, txt);
         if (look.supDigits !== undefined) atom.supDigits = look.supDigits;
         if (look.marks) atom.labelMarks = look.marks;
+        // (ChemDraw draws the text's size, whatever the node's LabelSize says)
         const size = runs[0]?.size;
-        if (size && ls === null) atom.s = size / st.labelSize;
+        if (size) atom.s = size / st.labelSize;
         const lj = t.getAttribute('LabelJustification');
         const la = t.getAttribute('LabelAlignment');
         // (stacked above or below wins over centred)
@@ -1834,7 +1837,7 @@ export function labelLookOf(runs: TextRun[], text: string): { supDigits?: boolea
   runs.forEach((r, k) => {
     for (const _ of r.text) {
       const raisedR = raisedDigits && k === runs.length - 1;
-      const m = r.sup && !raisedR ? '^' : r.sub ? '_' : r.italic ? '/' : '.';
+      const m = r.sup && !raisedR ? (r.italic ? '*' : '^') : r.sub ? (r.italic ? ',' : '_') : r.italic ? '/' : '.';
       if (m !== '.') any = true;
       marks += m;
     }

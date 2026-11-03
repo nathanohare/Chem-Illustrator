@@ -324,7 +324,7 @@ export function styleLabel(label: string, marks?: LabelMarks, look: AlkylLook = 
     if (dash && !had) { text += '-'; m += '.'; }
     else if (!dash && had) i++;
   }
-  return { label: text, ...(/[\^_=/]/.test(m) ? { marks: m } : {}) };
+  return { label: text, ...(/[\^_=/*,]/.test(m) ? { marks: m } : {}) };
 }
 
 /** Pieces with the hand-set marks applied, split where a mark changes how a character sits. */
@@ -334,9 +334,10 @@ export function markPieces(pieces: Piece[], marks: LabelMarks): Piece[] {
     if (p.at === undefined) { out.push(p); continue; }
     [...p.text].forEach((ch, k) => {
       const m = marks[p.at! + k];
-      const sup = m === '^' ? true : m === '_' || m === '=' ? false : !!p.sup;
-      const sub = m === '_' ? true : m === '^' || m === '=' ? false : !!p.sub;
-      const italic = m === '/' || !!p.italic;
+      const up = m === '^' || m === '*', down = m === '_' || m === ',';
+      const sup = up ? true : down || m === '=' ? false : !!p.sup;
+      const sub = down ? true : up || m === '=' ? false : !!p.sub;
+      const italic = m === '/' || m === '*' || m === ',' || !!p.italic;
       const last = out[out.length - 1];
       if (k > 0 && last && !!last.sup === sup && !!last.sub === sub && !!last.italic === italic) last.text += ch;
       else out.push({ text: ch, at: p.at! + k, ...(sup ? { sup } : {}), ...(sub ? { sub } : {}), ...(italic ? { italic } : {}) });
