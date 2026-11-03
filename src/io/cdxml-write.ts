@@ -802,10 +802,16 @@ class CdxmlWriter {
     return true;
   }
 
+  /** The label an atom shows: none for a stray carbon from ChemDraw (Atom.bare), which ChemDraw draws as nothing. */
+  private shownSpec(a: Atom): ReturnType<typeof labelSpec> {
+    const doc = this.doc;
+    if (a.bare && !a.label && doc.degree(a.id) === 0) return null;
+    return labelSpec(a.z, a.label, a.charge, a.isotope, doc.valenceSum(a.id), doc.degree(a.id), !a.hideCharge, !!a.showCarbon);
+  }
+
   /** Text of an atom's label as ChemDraw stores it ("OH", "NH3+", "OMe"), and its hydrogen count. */
   private autoText(a: Atom): { text: string; hCount: number } {
-    const doc = this.doc;
-    const spec = labelSpec(a.z, a.label, a.charge, a.isotope, doc.valenceSum(a.id), doc.degree(a.id), !a.hideCharge, !!a.showCarbon);
+    const spec = this.shownSpec(a);
     if (!spec) return { text: '', hCount: 0 };
     const chargeText = !a.hideCharge && a.charge ? (Math.abs(a.charge) > 1 ? String(Math.abs(a.charge)) : '') + (a.charge > 0 ? '+' : '-') : '';
     if (a.label !== null) return { text: a.label + (chargeText && !/[+\-−]$/.test(a.label) ? chargeText : ''), hCount: 0 };
@@ -839,7 +845,7 @@ class CdxmlWriter {
     const keepBits = oldRuns.length ? oldRuns.reduce((m, e) => m & Number(e.getAttribute('face') ?? 0), 7) : Number(oldS?.getAttribute('face') ?? 0) & 7;
     for (const c of kids(n)) if (c.nodeName === 't' || (rebuildInner && c.nodeName === 'fragment')) n.removeChild(c);
     if (rebuildInner) for (const k of ['NodeType', 'GenericNickname', 'Warning', 'NumHydrogens', 'NeedsClean']) n.removeAttribute(k);
-    if (!labelSpec(a.z, a.label, a.charge, a.isotope, this.doc.valenceSum(a.id), this.doc.degree(a.id), !a.hideCharge, !!a.showCarbon)) return;
+    if (!this.shownSpec(a)) return;
     const { text, hCount } = this.autoText(a);
     if (a.label === null) n.setAttribute('NumHydrogens', String(hCount));
     else if (rebuildInner) this.labelChemistry(n, a);
@@ -923,7 +929,7 @@ class CdxmlWriter {
   /** Position, box and justification of an atom label, from the same layout used on screen. */
   private placeLabel(t: Element, a: Atom): void {
     const doc = this.doc;
-    const spec = labelSpec(a.z, a.label, a.charge, a.isotope, doc.valenceSum(a.id), doc.degree(a.id), !a.hideCharge, !!a.showCarbon);
+    const spec = this.shownSpec(a);
     if (!spec) return;
     Object.assign(spec, labelLook(a));
     const dirs = labelBonds(doc, a);
