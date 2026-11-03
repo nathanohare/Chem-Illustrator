@@ -513,6 +513,18 @@ With nothing selected, the panel shows the structure you last drew on. Clearing 
 
 **Look up on PubChem** (needs the internet) sends the structure to PubChem, the free NIH database, and shows its common and IUPAC names, CAS number(s), its CID (click it to open the PubChem page), GHS hazards (signal word, pictograms and H statements) and measured physical data. **Name caption**, **CAS caption** and **Hazards caption** put that information under the structure. A structure is only sent when you click the button; nothing is looked up on its own.
 
+### Predicted NMR
+
+**NMR (predicted)** in the Analysis panel lists the predicted shifts for the structure, one nucleus at a time (pick ¹H or ¹³C, and the solvent). Each row gives the shift with its expected error (±), the number of hydrogens or carbons, and the atoms (numbered as on the drawing with **Show on Drawing ▸ Atom Numbers**). For ¹H, the **Mult., J (Hz)** column gives the predicted multiplicity and coupling constants, and **Peak Report** and **Copy as SI Text** write them the way an SI does: δ 6.31 (dt, *J* = 15.5, 6.8 Hz, 1H). OH and NH protons are written br s, since they usually exchange.
+
+Above the list is the predicted spectrum. Hover a row to see its peaks, or a peak to find its row and atoms. **⤢** opens it in a window you can move and resize: scroll to zoom, double-click to show everything, and pick the spectrometer frequency (300–800 MHz) and the quality:
+
+- **Fast**: first-order multiplets;
+- **Balanced** (default): coupled protons simulated exactly in groups of up to 8, so roofing and second-order patterns such as AA′XX′ look as they would measured;
+- **Accurate**: groups of up to 10.
+
+**Copy as Picture** copies the spectrum; **Put on Canvas** adds it to the drawing as a picture. Coupling constants come from the 2D structure, so protons on rings use averaged values for now.
+
 ## Mass fragmentation
 
 Pick the mass fragmentation tool (the dashed line through a bond) and drag a line across one or more bonds, or click a single bond. A dashed line is drawn and each piece gets a caption with its formula and exact mass, placed clear of the structure. They are ordinary captions, so you can move or retype them.
