@@ -228,11 +228,19 @@ export function insertDrawing(doc: Doc, src: Doc, center: Vec, label = 'Paste'):
       ids.set(id, n.id);
       sel.atoms.add(n.id);
     }
+    const bondIds = new Map<number, number>();
     for (const bd of src.bonds.values()) {
       const a1 = ids.get(bd.a1), a2 = ids.get(bd.a2);
       if (a1 === undefined || a2 === undefined) continue;
       const { id: _id, ...rest } = structuredClone(bd);
-      sel.bonds.add(doc.addBond(a1, a2, bd.order, bd.display, { ...rest, a1, a2 }).id);
+      const nb = doc.addBond(a1, a2, bd.order, bd.display, { ...rest, a1, a2 });
+      bondIds.set(bd.id, nb.id);
+      sel.bonds.add(nb.id);
+    }
+    // the bonds a file said each one crosses are the copies of them
+    for (const [from, to] of bondIds) {
+      const list = src.bonds.get(from)!.crossing;
+      if (list) doc.updateBond(to, { crossing: list.map((x) => bondIds.get(x)).filter((x): x is number => x !== undefined) });
     }
     for (const c of src.captions.values()) {
       const { id: cid, ...rest } = structuredClone(c);
