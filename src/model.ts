@@ -125,6 +125,8 @@ export interface Atom {
    * dot for an H toward the viewer, a hashed one for an H away.
    */
   hDot?: 'dot' | 'dash';
+  /** A stacked label with ChemDraw's LineHeight auto: its lines 1.15 of the size apart, not the tighter usual. */
+  stackedLoose?: boolean;
   /** The file's node said which way the label runs (ChemDraw's LabelDisplay), so a save says so too. */
   fixedDir?: boolean;
   /** Show this atom's R/S label when it has one (ChemDraw's "Show Stereochemistry"). */

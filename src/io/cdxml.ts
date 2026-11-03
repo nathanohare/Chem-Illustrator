@@ -409,7 +409,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         if (!above && !below && (la === 'Center' || t.getAttribute('Justification') === 'Center')) atom.centred = true;
         // which way the label runs: the node's LabelDisplay, else the text's LabelJustification;
         // LabelAlignment counts only for labels stacked above or below (the spec: multi-attached labels)
-        if (above || below) { atom.just = 'auto'; atom.stacked = above ? 'up' : 'down'; }
+        if (above || below) { atom.just = 'auto'; atom.stacked = above ? 'up' : 'down'; if (t.getAttribute('LineHeight') === 'auto') atom.stackedLoose = true; }
         else if (ld === 'Left' || ld === 'Right') { atom.just = ld === 'Left' ? 'right' : 'left'; atom.fixedDir = true; }
         else if (lj === 'Right' || lj === 'Left') atom.just = lj === 'Right' ? 'left' : 'right';
         else if (la === 'Right') atom.just = 'left';

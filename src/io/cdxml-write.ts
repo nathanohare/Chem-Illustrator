@@ -1133,6 +1133,7 @@ class CdxmlWriter {
     // ChemDraw 25 writes a label that runs to the left (Cy3P on PCy3) right-justified both ways
     if (right || centred) t.setAttribute('Justification', centred ? 'Center' : 'Right');
     else t.removeAttribute('Justification');
+    if (a.stackedLoose && a.stacked) t.setAttribute('LineHeight', 'auto');
     // the node's LabelDisplay (a ChemDraw file's) says the same, as it comes first when read
     const n = t.parentElement;
     if (n?.nodeName === 'n' && n.hasAttribute('LabelDisplay')) {
