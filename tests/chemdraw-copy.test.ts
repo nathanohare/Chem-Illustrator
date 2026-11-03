@@ -14,6 +14,7 @@ import { fillRings } from '../src/chem/ring-fill';
 import { ACS_1996 } from '../src/style';
 import { readCdxml } from '../src/io/cdxml';
 import { readFileSync } from 'node:fs';
+import { crossingBonds, crossingGaps, crossingGapsCached } from '../src/chem/crossing';
 
 const parse = (t: string) => new DOMParser().parseFromString(t.replace(/<!DOCTYPE[^>]*>/i, ''), 'application/xml').documentElement;
 const all = (e: Element, name: string) => Array.from(e.getElementsByTagName(name));
@@ -149,5 +150,42 @@ describe('copying to ChemDraw', () => {
     // and reading the copy back gives the same ring fills
     const back = readCdxml(writeCdxml(extractDrawing(doc, null))).doc;
     expect([...back.shapes.values()].filter((s) => s.kind === 'ring' && s.ring?.length === 6)).toHaveLength(2);
+  });
+
+  it('lists the bonds ChemDraw said cross, near misses too, and centres Ru as ChemDraw does', () => {
+    const text = readFileSync('tests/fixtures/chemdraw-clipboard/clip-props.cd.cdxml', 'utf8');
+    const want = parse(text);
+    const { doc } = readCdxml(text);
+    // a bond named by where its ends are, so lists from two files compare
+    const pairs = (root: Element) => {
+      const at = new Map(all(root, 'n').map((n) => [n.getAttribute('id'), n.getAttribute('p')!.split(' ').map((v) => Math.round(Number(v)))]));
+      const name = new Map(all(root, 'b').map((b) => [b.getAttribute('id'), [at.get(b.getAttribute('B')), at.get(b.getAttribute('E'))].map((p) => p!.join(',')).sort().join('-')]));
+      const out = new Set<string>();
+      for (const b of all(root, 'b')) for (const o of (b.getAttribute('CrossingBonds') ?? '').split(/\s+/).filter(Boolean)) out.add([name.get(b.getAttribute('id')), name.get(o)].sort().join(' x '));
+      return [...out].sort();
+    };
+    expect(pairs(want).length).toBeGreaterThan(0);
+    const { xml, cdx } = copied(doc);
+    for (const x of [xml, cdx]) {
+      expect(pairs(x)).toEqual(pairs(want));
+      const ru = all(x, 'n').find((n) => n.getAttribute('Element') === '44')!.querySelector(':scope > t')!;
+      for (const k of ['Justification', 'LabelJustification', 'LabelAlignment']) expect(ru.getAttribute(k)).toBe('Center');
+      expect(Number(ru.getAttribute('p')!.split(' ')[0])).toBeCloseTo(420, 0);
+    }
+    // a near miss moved well away is no longer listed
+    const listed = [...doc.bonds.values()].find((b) => b.crossing?.length)!;
+    expect(listed).toBeDefined();
+    doc.edit('Move', () => doc.moveAtoms(new Set([listed.a1, listed.a2]), 200, 200));
+    const moved = parse(writeCdxml(extractDrawing(doc, null), { name: 'Clipboard.cdxml' }));
+    expect(pairs(moved).length).toBeLessThan(pairs(want).length);
+  });
+
+  it('leaves the gap ChemDraw leaves at a near miss, on screen too', () => {
+    const { doc } = readCdxml(readFileSync('tests/fixtures/chemdraw-clipboard/clip-props.cd.cdxml', 'utf8'));
+    const half = doc.style.marginWidth + doc.style.lineWidth;
+    // a bond with near misses and nothing crossing it outright
+    const lone = [...doc.bonds.values()].filter((b) => b.crossing?.length && !crossingBonds(doc, b).length && crossingGaps(doc, b, half).length);
+    expect(lone.length).toBeGreaterThan(0);
+    for (const b of lone) expect(crossingGapsCached(doc, b, half)).toEqual(crossingGaps(doc, b, half));
   });
 });
