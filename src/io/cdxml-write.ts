@@ -707,7 +707,7 @@ class CdxmlWriter {
       this.ringTag(n, a);
       return n;
     }
-    if (a.attach) return this.el('n', { id: a.id, p: pt(a), NodeType: 'ExternalConnectionPoint', ExternalConnectionType: a.attach === 'Unspecified' ? null : a.attach, ExternalConnectionNum: a.attachNum ?? null });
+    if (a.attach) return this.el('n', { id: a.id, p: pt(a), NodeType: 'ExternalConnectionPoint', ExternalConnectionType: a.attach === 'Unspecified' ? null : a.attach, ExternalConnectionNum: a.attachNum ?? null, color: this.colorAttr(a.color) });
     const n = this.el('n', { id: a.id, p: pt(a) });
     this.nodeCore(n, a);
     this.nodeLabel(n, a, true);
@@ -796,6 +796,7 @@ class CdxmlWriter {
       this.set(n, 'NodeType', 'ExternalConnectionPoint');
       this.set(n, 'ExternalConnectionType', a.attach === 'Unspecified' ? null : a.attach);
       this.set(n, 'ExternalConnectionNum', a.attachNum ?? null);
+      this.set(n, 'color', this.colorAttr(a.color));
       // an atom turned into a point of attachment loses its label and element
       for (const c of kids(n)) if (c.nodeName === 't' || c.nodeName === 'fragment' || c.nodeName === 'objecttag') n.removeChild(c);
       for (const k of ['Element', 'NumHydrogens', 'NeedsClean', 'GenericNickname', 'Charge', 'Isotope', 'ShowAtomNumber', 'AtomNumber']) n.removeAttribute(k);
@@ -917,7 +918,20 @@ class CdxmlWriter {
     const chargeText = !a.hideCharge && a.charge ? (Math.abs(a.charge) > 1 ? String(Math.abs(a.charge)) : '') + (a.charge > 0 ? '+' : '-') : '';
     if (a.label !== null) return { text: a.label + (chargeText && !/[+\-−]$/.test(a.label) ? chargeText : ''), hCount: 0 };
     const sym = a.isotope === 2 && a.z === 1 ? 'D' : SYMBOLS[a.z] ?? '?';
-    return { text: sym + (spec.hCount ? 'H' + (spec.hCount > 1 ? spec.hCount : '') : '') + chargeText, hCount: spec.hCount };
+    const h = spec.hCount ? 'H' + (spec.hCount > 1 ? spec.hCount : '') : '';
+    // ChemDraw turns a label it lays out itself (OH reads HO where it runs left). One sent the other
+    // way than it would go by itself has LabelDisplay, and ChemDraw then draws the text as written.
+    const left = !!h && this.forcedDir(a) === 'left';
+    return { text: (left ? h + sym : sym + h) + chargeText, hCount: spec.hCount };
+  }
+
+  /** Which way a label runs when that is not the way it would run by itself, or null. */
+  private forcedDir(a: Atom): 'left' | 'right' | null {
+    const spec = this.shownSpec(a);
+    if (!spec || !a.just || a.just === 'auto' || a.stacked) return null;
+    const look = { ...spec, ...labelLook(a) }, dirs = labelBonds(this.doc, a);
+    const dir = labelDir(look, dirs, a.just);
+    return dir !== labelDir(look, dirs, 'auto') && (dir === 'left' || dir === 'right') ? dir : null;
   }
 
   /** Element, charge, isotope, colour and size of a node. */
@@ -1108,6 +1122,10 @@ class CdxmlWriter {
     const n = t.parentElement;
     if (n?.nodeName === 'n' && n.hasAttribute('LabelDisplay')) {
       n.setAttribute('LabelDisplay', centred ? 'Center' : dir === 'up' ? 'Above' : dir === 'down' ? 'Below' : right ? 'Right' : 'Left');
+    } else if (n?.nodeName === 'n' && !centred) {
+      // ChemDraw takes a label's way from this, not from its justification
+      const forced = this.forcedDir(a);
+      if (forced) n.setAttribute('LabelDisplay', forced === 'left' ? 'Right' : 'Left');
     }
   }
 
@@ -2118,9 +2136,12 @@ class CdxmlWriter {
     const a = (f[k] - c[k]) / (255 - c[k]);
     if (a <= 0.001 || a >= 0.999) return null;
     const fade = Math.round((1 - a) * 1000);
-    // (it has to be that tint in every channel, as ChemDraw will draw it)
-    const back = ch(hex(tint('#' + ink, 1 - fade / 1000))!);
-    return back.every((v, i) => Math.abs(v - f[i]) <= 2) ? fade : null;
+    // (it has to be that tint in every channel, as ChemDraw will draw it; rounding in the colours
+    // leaves it a little off, so a round number that gives this very tint is the one it was)
+    const isTint = (v: number, near: number) => ch(hex(tint('#' + ink, 1 - v / 1000))!).every((x, i) => Math.abs(x - f[i]) <= near);
+    const round = Math.round(fade / 10) * 10;
+    if (isTint(round, 0)) return round;
+    return isTint(fade, 2) ? fade : null;
   }
 
   private fillShape(g: Element, s: Shape): void {
@@ -2742,9 +2763,9 @@ export function labelRuns(text: string, look: { supDigits: boolean; marks?: stri
   const out: TextRun[] = [];
   [...text].forEach((ch, i) => {
     const m = look.marks?.[i];
-    const base: TextRun = m === '^' ? { text: ch, sup: true } : m === '_' ? { text: ch, sub: true } : m === '=' ? { text: ch } : digits && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
+    const base: TextRun = m === '^' || m === '*' ? { text: ch, sup: true } : m === '_' || m === ',' ? { text: ch, sub: true } : m === '=' ? { text: ch } : digits && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
     // the t of tBu in italics (the alkyl look)
-    const r: TextRun = m === '/' ? { ...base, italic: true } : base;
+    const r: TextRun = m === '/' || m === '*' || m === ',' ? { ...base, italic: true } : base;
     const last = out[out.length - 1];
     if (last && !!last.sup === !!r.sup && !!last.sub === !!r.sub && !!last.formula === !!r.formula && !!last.italic === !!r.italic) last.text += ch;
     else out.push(r);
