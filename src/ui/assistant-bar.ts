@@ -308,6 +308,9 @@ export class AssistantBar {
     if (!question || p.provider === 'none' || !p.assistant) return;
     const blocked = localOnlyBlock(p);
     if (blocked) { this.note(blocked, 'warn'); return; }
+    // another tab chosen while the bar stayed open: a new conversation, about that tab's page
+    const tab = this.host.tab();
+    if (tab !== this.tab) { this.tab = tab; this.msgs.replaceChildren(); this.busy++; }
     // what is on the page now (the selection may have changed since the bar opened)
     this.items = (await this.host.items().catch(() => [])).map((i) => ({ ...i, on: i.on && !this.off.has(i.id) }));
     this.drawChips();
@@ -323,7 +326,7 @@ export class AssistantBar {
       const answer = await aiAsk(p, q);
       if (seq !== this.busy) return;
       wait.remove();
-      this.answer(answer);
+      this.answer(answer, tab);
     } catch (e) {
       if (seq !== this.busy) return;
       wait.remove();
@@ -332,17 +335,17 @@ export class AssistantBar {
   }
 
   /** The answer's words, then a card for each change it proposes. */
-  private answer(text: string): void {
+  private answer(text: string, tab: object): void {
     const { prose, actions } = parseAnswer(text);
     const d = h('div', 'ai-it');
     for (const para of prose.split(/\n{2,}/).filter((x) => x.trim())) d.append(h('p', '', para.trim()));
-    for (const a of actions) d.append(this.card(a));
+    for (const a of actions) d.append(this.card(a, tab));
     if (!d.childNodes.length) d.append(h('p', 'ai-muted', '(No answer.)'));
     this.msgs.append(d);
     this.msgs.scrollTop = this.msgs.scrollHeight;
   }
 
-  private card(a: AssistantAction): HTMLElement {
+  private card(a: AssistantAction, tab: object): HTMLElement {
     const c = h('div', 'ai-prop');
     if (a.type === 'check') {
       c.append(h('b', '', 'Check'));
@@ -371,7 +374,9 @@ export class AssistantBar {
     }
     const row = h('div', 'ai-actions');
     const status = h('span', 'ai-muted');
+    // a proposal is for the tab it was asked in: the bar can stay open while another tab is chosen
     const accept = button('Accept', () => void (async () => {
+      if (this.host.tab() !== tab) { status.textContent = 'This was asked about another tab. Go back to that tab to accept it.'; return; }
       accept.disabled = reject.disabled = true;
       const said = await this.host.apply(a).catch((e) => `Could not: ${String(e)}`);
       status.textContent = said;
