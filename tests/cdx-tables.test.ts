@@ -76,10 +76,13 @@ describe('CDX keeps', () => {
     expect(first(back, 'chemicalproperty').getAttribute('ChemicalPropertyType')).toBe('ChemicalName');
   });
 
-  it('enumerated values it has no name for, as their numbers', () => {
-    // (ChemDraw's AS values beyond the documented ones; a lone pair drawn as a bar, SymbolType 13)
+  it('enumerated values it has no name for, as their numbers (and the bar lone pair by name)', () => {
+    // (ChemDraw's AS values beyond the documented ones; SymbolType 13 is a lone pair drawn as a bar,
+    // LonePairBar in ChemDraw 25's CDXML)
     const back = round(doc('', '<fragment id="2"><n id="3" p="0 0" AS="9"/></fragment><graphic id="4" BoundingBox="0 0 4 4" GraphicType="Symbol" SymbolType="13"/>'));
     expect(first(back, 'n').getAttribute('AS')).toBe('9');
-    expect(first(back, 'graphic').getAttribute('SymbolType')).toBe('13');
+    expect(first(back, 'graphic').getAttribute('SymbolType')).toBe('LonePairBar');
+    const bar = round(doc('', '<graphic id="4" BoundingBox="0 0 4 4" GraphicType="Symbol" SymbolType="LonePairBar"/>'));
+    expect(first(bar, 'graphic').getAttribute('SymbolType')).toBe('LonePairBar');
   });
 });
