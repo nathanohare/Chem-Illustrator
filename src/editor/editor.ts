@@ -20,6 +20,7 @@ import { geoDef, geoShapeStyle, moveSteps, traceSteps } from '../design/geo';
 import { distinctChoices } from '../chem/template-choices';
 import { TEMPLATES, Template, Placement, templateById, templatePoints, placePoint, fusePlacements, atomPlacements, freePlacement, crowdingOf, placeTemplate, snap15 } from '../chem/templates';
 import { fusions3d } from '../chem/fuse3d';
+import { labelAlignPatch, type LabelAlign } from '../chem/label-align';
 import { bondHapto, centreEnd, haptoLook, haptoTarget, haptoText, ringAround, splitHapto } from '../chem/hapto';
 import { expandInPlace, expandLigand, expandWithMolblock, freeLigandFor, inPlaceSmiles, labelSmiles, ligandTemplateFor } from '../chem/expand';
 import { styleFromFace, plainText } from '../richtext';
@@ -123,7 +124,7 @@ export type Tool =
   | { kind: 'newman' };
 
 /** Marks put on atoms for mechanisms: a lone pair, a radical's dot, a circled charge, or δ+ / δ−. */
-export type SymbolKind = 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus' | 'DeltaPlus' | 'DeltaMinus';
+export type SymbolKind = 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus' | 'DeltaPlus' | 'DeltaMinus' | 'RadicalCation' | 'RadicalAnion';
 
 /** How a new arrow looks (everything else is the document's default). */
 export type ArrowStyle = Partial<Pick<Arrow, 'headStyle' | 'tailStyle' | 'headType' | 'line' | 'noGo' | 'equilibrium' | 'sweep' | 'elbow' | 'from' | 'to' | 'bez' | 'pin'>> & {
@@ -200,6 +201,7 @@ export const TOOLS: Record<string, Tool> = {
   'shape-circle': { kind: 'shape', shape: { kind: 'oval' }, from: 'center' },
   'shape-circle-filled': { kind: 'shape', shape: { kind: 'oval', filled: true }, from: 'center' },
   'shape-oval': { kind: 'shape', shape: { kind: 'oval' }, from: 'corner' },
+  'shape-oval-shadow': { kind: 'shape', shape: { kind: 'oval', shadow: true }, from: 'corner' },
   'shape-line': { kind: 'shape', shape: { kind: 'line' }, from: 'corner' },
   'shape-line-dashed': { kind: 'shape', shape: { kind: 'line', dashed: true }, from: 'corner' },
   'shape-line-bold': { kind: 'shape', shape: { kind: 'line', bold: true }, from: 'corner' },
@@ -215,6 +217,9 @@ export const TOOLS: Record<string, Tool> = {
   'sym-minus': { kind: 'symbol', symbol: 'CircleMinus' },
   'sym-delta-plus': { kind: 'symbol', symbol: 'DeltaPlus' },
   'sym-delta-minus': { kind: 'symbol', symbol: 'DeltaMinus' },
+  'sym-radical-cation': { kind: 'symbol', symbol: 'RadicalCation' },
+  'sym-radical-anion': { kind: 'symbol', symbol: 'RadicalAnion' },
+  'sym-dagger': { kind: 'mark', text: '†' },
   'sym-ddagger': { kind: 'mark', text: '‡' },
 };
 for (const t of TEMPLATES) TOOLS[`tpl-${t.id}`] = { kind: 'template', id: t.id };
@@ -3263,6 +3268,7 @@ export class Editor {
   private symbolSize(kind: SymbolKind): number {
     if (kind === 'LonePair') return 2.6;
     if (kind === 'CirclePlus' || kind === 'CircleMinus') return 4.5;
+    if (kind === 'RadicalCation' || kind === 'RadicalAnion') return 6.5;
     if (kind === 'DeltaPlus' || kind === 'DeltaMinus') return 0.9 * this.doc.style.bondLength;
     return 1.4;
   }
@@ -3312,6 +3318,10 @@ export class Editor {
       } else if (kind === 'Electron') box = { x1: at.x, y1: at.y, x2: at.x, y2: at.y };
       else box = { x1: at.x - size / 2, y1: at.y - size / 2, x2: at.x + size / 2, y2: at.y + size / 2 };
       this.sel.shapes.add(doc.addShape({ kind: 'symbol', symbol: kind, ...box }).id);
+      // a radical cation or anion: the atom is a radical with that charge, shown by the symbol
+      if (atom && (kind === 'RadicalCation' || kind === 'RadicalAnion')) {
+        doc.updateAtom(atom.id, { radical: 'doublet', charge: atom.charge + (kind === 'RadicalCation' ? 1 : -1), hideCharge: true });
+      }
       // a radical's dot makes the atom a radical (one hydrogen fewer)
       if (atom && kind === 'Electron' && !atom.radical) doc.updateAtom(atom.id, { radical: 'doublet' });
       if (atom && circled) doc.updateAtom(atom.id, { charge: atom.charge + (kind === 'CirclePlus' ? 1 : -1), hideCharge: true });
@@ -6018,6 +6028,14 @@ export class Editor {
     const st = doc.style;
     const caps = [...this.sel.captions].map((id) => doc.captions.get(id)).filter((c): c is Caption => !!c);
     const shapes = [...this.sel.shapes].map((id) => doc.shapes.get(id)).filter((s): s is Shape => !!s && s.kind === 'geo');
+    // Align Left, Center or Right with atom labels picked lines the labels up (Style panel ▸ Label alignment)
+    if (f.kind === 'align' && f.j !== 'justify') {
+      const labelled = [...this.sel.atoms].map((id) => doc.atoms.get(id)).filter((a): a is Atom => !!a && (!!a.label || a.z !== 6 || !!a.showCarbon) && !a.multi);
+      if (labelled.length) {
+        doc.edit('Label alignment', () => { for (const a of labelled) doc.updateAtom(a.id, labelAlignPatch(doc, a, f.j as LabelAlign)); });
+        if (!caps.length && !shapes.length) { this.requestScene(); this.changed(); return true; }
+      }
+    }
     if (!caps.length && !shapes.length) return false;
     doc.edit('Format text', () => {
       for (const c of caps) {

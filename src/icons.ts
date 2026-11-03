@@ -68,6 +68,10 @@ function poly(n: number, r = 8, inner = false, flat = false, label = ''): string
 }
 
 export const ICONS: Record<string, string> = {
+  // a radical's dot with a small + or −
+  'sym-radical-cation': svg('<circle cx="7" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M12.5 12h8M16.5 8v8"/>'),
+  'sym-radical-anion': svg('<circle cx="7" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M12.5 12h8"/>'),
+  'sym-dagger': svg('<path d="M12 3.5v17M7.5 8.5h9"/>'),
   select: svg('<rect x="4" y="5" width="16" height="14" stroke-dasharray="2.5 2"/>'),
   lasso: svg('<path d="M7 17c-3.5-1.5-4-6 0-9s11-3.5 13 0-2 8.5-8 8.5c-2 0-3.5-.3-5-.5" stroke-dasharray="2.5 2"/><path d="M7 17c0 1.5 1 3 2.5 3.5"/>'),
   eraser: svg('<path d="M14.5 4.5l5 5-9 9H6l-2.5-2.5z"/><path d="M10 9l5 5"/><path d="M11 18.5h9"/>'),
@@ -146,6 +150,7 @@ export const ICONS: Record<string, string> = {
   'shape-circle': svg('<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>'),
   'shape-circle-filled': svg('<circle cx="12" cy="12" r="5" fill="currentColor"/>'),
   'shape-oval': svg('<ellipse cx="12" cy="12" rx="9" ry="6"/>'),
+  'shape-oval-shadow': svg('<path d="M19.5 9.5c1.6 1.2 2 2.6 2 3.6 0 3.3-4 6-9 6-2.4 0-4.5-.6-6.1-1.7" stroke-width="2.4" opacity="0.45" stroke-linecap="butt"/><ellipse cx="11" cy="11" rx="8.5" ry="5.8"/>'),
   'shape-line': svg('<line x1="4" y1="19" x2="20" y2="5"/>'),
   'shape-line-dashed': svg('<line x1="4" y1="19" x2="20" y2="5" stroke-dasharray="2.6 2.2"/>'),
   'shape-line-bold': svg('<line x1="5" y1="18" x2="19" y2="6" stroke-width="3.4"/>'),
