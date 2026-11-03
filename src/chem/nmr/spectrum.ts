@@ -1,14 +1,18 @@
 // A predicted 1H spectrum for one structure: predicted shifts per atom, couplings from coupling.ts,
 // and an exact simulation (spin.ts) of each group of coupled protons. Protons that couple to nothing
-// are single lines; larger coupled groups are split at their weakest couplings until each fits the
-// quality setting's size limit.
+// are single lines; larger coupled groups are split into clusters that fit the quality setting's
+// size limit, with the couplings between clusters kept to first order.
 
 import { predictCouplings, protonGroups, type JGraph, type ProtonGroup } from './coupling';
 import { lorentzian, transitions, type LineList } from './spin';
 
 export type NmrQuality = 'fast' | 'balanced' | 'accurate';
-/** Most protons simulated together per quality setting (fast: first-order lines only). */
-export const CLUSTER_CAP: Record<NmrQuality, number> = { fast: 1, balanced: 8, accurate: 10 };
+/** Size of the largest cluster simulated exactly, in spin-1/2 equivalents (2^cap states); fast:
+ *  first-order lines only. */
+export const CLUSTER_CAP: Record<NmrQuality, number> = { fast: 1, balanced: 8, accurate: 12 };
+
+/** |J| / shift difference below which two atoms' protons are left to first order. */
+const WEAK = 0.02;
 
 export interface PredictedSpectrum {
   sf: number;
@@ -56,43 +60,47 @@ export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 4
     }
     return { sf, lines: sorted(HZ, INT, W, sf), groups };
   }
-  // one spin per hydrogen on an atom with a predicted shift
-  const spins: { atom: number; shift: number }[] = [];
-  g.atoms.forEach((a, i) => { if (!Number.isNaN(h1[i])) for (let k = 0; k < a.h; k++) spins.push({ atom: i, shift: h1[i] }); });
-  const J = spins.map(() => new Float64Array(spins.length));
-  for (const c of cs) {
-    spins.forEach((s, x) => spins.forEach((t, y) => {
-      if (x === y) return;
-      if (c.a === c.b ? s.atom === c.a && t.atom === c.a : (c.a === s.atom && c.b === t.atom) || (c.b === s.atom && c.a === t.atom)) J[x][y] = c.j;
-    }));
+  // Clusters of atoms simulated together. The H on one atom share a shift and couplings, so the
+  // simulation treats them as one composite particle; a cluster's size is the dimension of its
+  // largest composite state space, prod (nH + 1), held to 2^cap (the same as cap separate spins).
+  // Atoms join along their strongest couplings first (|J| / shift difference: how far from first
+  // order the pair is); couplings left between clusters are kept as weak couplings (J Iz Iz),
+  // which is exact to first order, so every multiplet keeps all its splittings.
+  const hAtoms = g.atoms.map((a, i) => i).filter((i) => !Number.isNaN(h1[i]) && g.atoms[i].h > 0);
+  const jAt = new Map<string, number>();
+  for (const c of cs) if (c.a !== c.b) jAt.set(`${Math.min(c.a, c.b)},${Math.max(c.a, c.b)}`, c.j);
+  const J = (a: number, b: number) => jAt.get(`${Math.min(a, b)},${Math.max(a, b)}`) ?? 0;
+  const parent = new Map(hAtoms.map((i) => [i, i] as [number, number]));
+  const size = new Map(hAtoms.map((i) => [i, g.atoms[i].h + 1] as [number, number]));
+  const root = (i: number): number => { let r = i; while (parent.get(r)! !== r) r = parent.get(r)!; parent.set(i, r); return r; };
+  const limit = 2 ** cap;
+  const pairs = [...jAt.entries()].map(([k, j]) => { const [a, b] = k.split(',').map(Number); return { a, b, j }; })
+    .filter((p) => parent.has(p.a) && parent.has(p.b))
+    .map((p) => ({ ...p, strength: Math.abs(p.j) / Math.max(1e-9, Math.abs(h1[p.a] - h1[p.b]) * sf) }))
+    .sort((x, y) => y.strength - x.strength);
+  for (const p of pairs) {
+    // shifts more than 50 J apart: first order is within 1% of J, no need to simulate them together
+    if (p.strength < WEAK) break;
+    const ra = root(p.a), rb = root(p.b);
+    if (ra === rb) continue;
+    const merged = size.get(ra)! * size.get(rb)!;
+    if (merged > limit) continue;
+    parent.set(rb, ra); size.set(ra, merged);
   }
-  // groups of coupled spins; drop the weakest couplings inside a group until it fits the cap
-  let cut = 0.3;
-  const comps = (): number[][] => {
-    const seen = new Set<number>(), out: number[][] = [];
-    spins.forEach((_, x) => {
-      if (seen.has(x)) return;
-      const comp = [x]; seen.add(x);
-      for (let q = 0; q < comp.length; q++) spins.forEach((_, y) => { if (!seen.has(y) && Math.abs(J[comp[q]][y]) >= cut) { seen.add(y); comp.push(y); } });
-      out.push(comp);
-    });
-    return out;
-  };
-  const done: { comp: number[]; cut: number }[] = [];
-  let todo = comps();
-  for (;;) {
-    const big = todo.filter((c) => c.length > cap);
-    for (const c of todo) if (c.length <= cap) done.push({ comp: c, cut });
-    if (!big.length) break;
-    if (cut > 30) { for (const c of big) done.push({ comp: c.slice(0, cap), cut }); break; }
-    cut = cut < 1 ? 1 : cut * 1.5;
-    const keep = new Set(big.flat());
-    todo = comps().filter((c) => keep.has(c[0]));
-  }
-  for (const { comp, cut: k } of done) {
-    if (comp.length === 1) { push({ hz: [spins[comp[0]].shift * sf], int: [1], w: [width] }); continue; }
-    // couplings weaker than the cut that split this group are left out (they were the weakest)
-    push(transitions({ shifts: comp.map((x) => spins[x].shift), j: comp.map((x) => comp.map((z) => (Math.abs(J[x][z]) >= k ? J[x][z] : 0))), widths: width }, sf));
+  const clusters = new Map<number, number[]>();
+  for (const i of hAtoms) { const r = root(i); if (!clusters.has(r)) clusters.set(r, []); clusters.get(r)!.push(i); }
+  for (const atoms of clusters.values()) {
+    const inC = new Set(atoms);
+    const xs = hAtoms.filter((x) => !inC.has(x) && atoms.some((a) => J(a, x) !== 0));
+    const spinAtoms: { atom: number; obs: boolean }[] = [];
+    for (const a of atoms) for (let k = 0; k < g.atoms[a].h; k++) spinAtoms.push({ atom: a, obs: true });
+    for (const x of xs) for (let k = 0; k < g.atoms[x].h; k++) spinAtoms.push({ atom: x, obs: false });
+    if (spinAtoms.length === 1 || !xs.length && atoms.length === 1 && g.atoms[atoms[0]].h === 1) {
+      push({ hz: [h1[atoms[0]] * sf], int: [1], w: [width] });
+      continue;
+    }
+    const jm = spinAtoms.map((p) => spinAtoms.map((q) => (p.atom === q.atom ? 0 : J(p.atom, q.atom))));
+    push(transitions({ shifts: spinAtoms.map((p) => h1[p.atom]), j: jm, nuclei: spinAtoms.map((p) => (p.obs ? '1H' : 'X')), widths: width }, sf));
   }
   return { sf, lines: sorted(HZ, INT, W, sf), groups };
 }

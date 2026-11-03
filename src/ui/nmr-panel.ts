@@ -9,6 +9,7 @@ import { ShiftTable, type AtomShifts, type ShiftHit } from '../chem/nmr/lookup';
 import { MeasuredStore } from '../chem/nmr/measured';
 import { ShiftNet } from '../chem/nmr/net';
 import { predictSpectrum, type NmrQuality, type PredictedSpectrum } from '../chem/nmr/spectrum';
+import { spectrumInBackground } from '../chem/nmr/spectrum-client';
 import { autoRange, rowAt, spectrumSvg, SpectrumWindow, type SpectrumData } from './nmr-spectrum';
 
 export const NMR_SOLVENTS = ['CDCl3', 'DMSO-d6', 'CD3OD', 'C6D6', 'acetone-d6', 'CD2Cl2', 'CD3CN', 'D2O'] as const;
@@ -152,7 +153,8 @@ interface Shown {
   rows: NmrRow[]; /** doc atom id per graph atom */ ids: (number | null)[]; /** doc atom id pairs joined by a ring bond */ ring: Set<string>;
   /** For the spectrum: the graph, predicted 1H per atom, environment codes, list row per atom. */
   graph: NamerGraph; h1: number[]; codes: string[]; rowOf: number[];
-  spec: PredictedSpectrum | null; specKey: string;
+  /** Simulated spectra by field and quality; pending: simulations running in the background. */
+  specs: Map<string, PredictedSpectrum>; pending: Set<string>;
 }
 
 export interface NmrHost {
@@ -328,7 +330,7 @@ export class NmrPanel {
         if (!r) continue;
         if (graph.atoms[gr.atoms[0]].el === 'C') { r.mult = gr.mult; r.j = gr.j; } else { r.mult = 'br s'; r.j = []; }
       }
-      this.shown.set(i, { rows, ids, ring, graph, h1, codes, rowOf, spec: null, specKey: '' });
+      this.shown.set(i, { rows, ids, ring, graph, h1, codes, rowOf, specs: new Map(), pending: new Set() });
       this.render(i, d);
       if (this.win?.visible && this.winItem === i) this.win.refresh();
       if (this.marks) this.host.redraw();
@@ -357,8 +359,27 @@ export class NmrPanel {
     if (!s) return null;
     if (nuc === '13C') return { nuc, sticks: s.rows.flatMap((r, k) => (r.c13 ? [{ shift: r.c13.value, n: r.atoms.length, row: k }] : [])) };
     const key = `${sf}|${quality}`;
-    if (s.specKey !== key) { s.spec = predictSpectrum(s.graph, s.h1, s.codes, sf, quality); s.specKey = key; }
-    return { nuc, spec: s.spec!, groupRows: s.spec!.groups.map((g) => s.rowOf[g.atoms[0]]) };
+    let spec = s.specs.get(key);
+    if (!spec) {
+      const job = quality === 'fast' || s.pending.has(key) ? null : spectrumInBackground(s.graph, s.h1, s.codes, sf, quality);
+      if (job) {
+        // first-order lines straight away; the exact spectrum replaces them when it is ready
+        s.pending.add(key);
+        job.then((sp) => { s.specs.set(key, sp); this.specReady(i, s); }, () => { s.specs.set(key, predictSpectrum(s.graph, s.h1, s.codes, sf, 'fast')); this.specReady(i, s); });
+      }
+      if (s.pending.has(key)) spec = s.specs.get(`${sf}|fast`) ?? predictSpectrum(s.graph, s.h1, s.codes, sf, 'fast');
+      else { spec = predictSpectrum(s.graph, s.h1, s.codes, sf, quality); s.specs.set(key, spec); }
+      if (quality === 'fast') s.specs.set(key, spec);
+    }
+    return { nuc, spec, groupRows: spec.groups.map((g) => s.rowOf[g.atoms[0]]) };
+  }
+
+  /** A background simulation finished: redraw the strip and the window if they still show it. */
+  private specReady(i: number, s: Shown): void {
+    if (this.shown.get(i) !== s) return;
+    const d = document.querySelector<HTMLElement>(`details.nmr[data-item="${i}"]`);
+    if (d) this.drawStrip(i, d, null);
+    if (this.win?.visible && this.winItem === i) this.win.refresh();
   }
 
   /** Draws the panel's small spectrum (panel width, 400 MHz). */

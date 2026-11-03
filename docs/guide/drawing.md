@@ -521,7 +521,7 @@ Above the list is the predicted spectrum. Hover a row to see its peaks, or a pea
 
 - **Fast**: first-order multiplets;
 - **Balanced** (default): coupled protons simulated exactly in groups of up to 8, so roofing and second-order patterns such as AA′XX′ look as they would measured;
-- **Accurate**: groups of up to 10.
+- **Accurate**: groups of up to 12. The H on one carbon are simulated together, so a CH3 counts for less than three separate protons, and a large group runs in the background: the first-order spectrum shows at once and the exact one replaces it when ready (usually within a second; up to about ten seconds for twelve coupled protons that all differ).
 
 **Copy as Picture** copies the spectrum; **Put on Canvas** adds it to the drawing as a picture. Coupling constants come from the 2D structure, so protons on rings use averaged values for now.
 
