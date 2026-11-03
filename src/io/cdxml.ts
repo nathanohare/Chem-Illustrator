@@ -79,7 +79,14 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   const refOf = () => (refMap ??= new Map([...ord].map(([key, o]) => [all[o], key])));
   const morphTags: [number, string][] = [];
   const pinTags: [number, string][] = [];
-  const from = (kind: Kind, id: number, el: Element) => { const o = ordOf.get(el); if (o !== undefined) ord.set(kind + id, o); };
+  /** Auto-Animate Steps' pieces, from each thing's hidden tag (set on the things once the file is read). */
+  const pieces: [Kind, number, number][] = [];
+  const from = (kind: Kind, id: number, el: Element) => {
+    const o = ordOf.get(el);
+    if (o !== undefined) ord.set(kind + id, o);
+    const piece = Number(kids(el).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === PIECE_TAG)?.getAttribute('Value'));
+    if (Number.isInteger(piece) && piece > 0) pieces.push([kind, id, piece]);
+  };
   const stats: ReadStats = { atoms: 0, bonds: 0, captions: 0, arrows: 0, shapes: 0, skipped: {}, parseMs: t1 - t0, buildMs: 0 };
   const skip = (what: string) => { stats.skipped[what] = (stats.skipped[what] ?? 0) + 1; };
 
@@ -932,6 +939,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     readGroups();
   });
   doc.reserveIds(maxId);
+  const things: Partial<Record<Kind, Map<number, { piece?: number }>>> = { a: doc.atoms, c: doc.captions, r: doc.arrows, s: doc.shapes };
+  for (const [kind, id, piece] of pieces) { const e = things[kind]?.get(id); if (e) e.piece = piece; }
   const orig = new Map<string, Entity>();
   // (a shallow copy, as an undo step keeps: edits replace an entity's parts rather than change them)
   const loaded = new WeakSet<Entity>();
@@ -1148,6 +1157,8 @@ export const GEO_TAG = 'Chem Illustrator shape';
 export const MORPH_TAG = 'Chem Illustrator animation';
 /** An atom's atom-atom map number across a reaction (Atom.mapNo). */
 export const MAP_TAG = 'Chem Illustrator map';
+/** Auto-Animate Steps: the piece a thing moves with in the slide show (Atom.piece, Caption.piece and so on). */
+export const PIECE_TAG = 'Chem Illustrator piece';
 /** An electron-pushing arrow's pins (what its ends are stuck to: Pin as JSON without `was`, atoms by node id). */
 export const PIN_TAG = 'Chem Illustrator pin';
 /** An S-shaped arrow saved as a ChemDraw curve: its heads as they are here (JSON). */

@@ -11,6 +11,7 @@ import {
 import { Doc } from '../src/model';
 import { ACS_1996 } from '../src/style';
 import { plainMeasure, reactionSteps, schemeItems } from '../src/chem/reaction';
+import { writeCml } from '../src/io/cml';
 
 const ETHANOL_V2000 = `ethanol
   test
@@ -165,6 +166,18 @@ describe('reading other programs\' chemistry files', () => {
     expect([...d.atoms.values()].filter((a) => a.label === 'Me')).toHaveLength(1);
   });
 
+  it('puts a V3000 abbreviation (SGROUP SUP, ATOMS=(…)) back as its label, and keeps R-group numbers', () => {
+    // (found in the 2026-11-03 review: a bracketed list was cut at its first space)
+    const v3 = ACETATE_V3000.replace('COUNTS 4 3 0 0 0', 'COUNTS 6 5 1 0 0')
+      .replace('M  V30 4 O 1.299 2.25 0 0\n', 'M  V30 4 O 1.299 2.25 0 0\nM  V30 5 O 0 -1.5 0 0\nM  V30 6 C 1.3 -2.25 0 0\n')
+      .replace('M  V30 3 2 2 4\n', 'M  V30 3 2 2 4\nM  V30 4 1 1 5\nM  V30 5 1 5 6\n')
+      .replace('M  V30 END BOND\n', 'M  V30 END BOND\nM  V30 BEGIN SGROUP\nM  V30 1 SUP 0 ATOMS=(2 5 6) LABEL="OMe"\nM  V30 END SGROUP\n');
+    const m = readMolfile(v3)!;
+    expect(m.atoms.map((a) => a.sym)).toEqual(['C', 'C', 'O', 'O', 'OMe']);
+    const r = readMolfile(ACETATE_V3000.replace('M  V30 4 O 1.299 2.25 0 0', 'M  V30 4 R# 1.299 2.25 0 0 RGROUPS=(1 2)'))!;
+    expect(r.atoms[3].sym).toBe('R2');
+  });
+
   it('reads an SD file\'s records', () => {
     const sdf = `${ETHANOL_V2000}> <NAME>\nethanol\n\n$$$$\n${ACETATE_V3000}$$$$\n`;
     expect(readSdfMols(sdf).map((m) => m.atoms.length)).toEqual([3, 4]);
@@ -315,6 +328,39 @@ describe('writing drawings in other programs\' formats', () => {
       expect(atoms.find((a) => a.isotope === 13), fmt).toBeTruthy();
       expect([...back.bonds.values()].filter((b) => b.display === 'wedge'), fmt).toHaveLength(1);
     }
+  });
+
+  it('keeps atom-atom map numbers through RXN, molfile, Marvin and Ketcher files', () => {
+    // (found in the 2026-11-03 review: saving left the map numbers out)
+    const d = draw(readRxnFile(rxnV2000([ACETONE], [ISOPROPANOL])));
+    let n = 0;
+    d.bulk(() => { for (const a of d.atoms.values()) d.updateAtom(a.id, { mapNo: (n++ % 4) + 1 }); });
+    const maps = (doc: Doc) => [...doc.atoms.values()].map((a) => a.mapNo ?? 0).sort().join(' ');
+    expect(maps(d)).toBe('1 1 2 2 3 3 4 4');
+    expect(maps(draw(readRxnFile(writeRxnFile(d).text)))).toBe('1 1 2 2 3 3 4 4');
+    expect(maps(draw(readRxnFile(writeRxnFile(d, '', { v3000: true }).text)))).toBe('1 1 2 2 3 3 4 4');
+    expect(maps(roundTrip('mol', writeMolFile(d).text))).toBe('1 1 2 2 3 3 4 4');
+    expect(maps(roundTrip('mrv', writeMrvFile(d).text))).toBe('1 1 2 2 3 3 4 4');
+    expect(maps(roundTrip('ket', writeKetFile(d).text))).toBe('1 1 2 2 3 3 4 4');
+  });
+
+  it('reads a Chem4Word CML file the way Word shows it (Chem4Word keeps y downwards), so wedges keep their meaning', () => {
+    // (found in the 2026-11-03 review: opened as a .cml file it came in upside down, the mirror image)
+    const contents = { atoms: [
+      { id: 1, x: 0, y: 0, z: 6, label: null, charge: 0, isotope: 0, just: 'auto' as const },
+      { id: 2, x: 14.4, y: 0, z: 6, label: null, charge: 0, isotope: 0, just: 'auto' as const },
+      { id: 3, x: 21.6, y: 12.5, z: 8, label: null, charge: 0, isotope: 0, just: 'auto' as const },
+    ], bonds: [{ id: 4, a1: 1, a2: 2, order: 1, display: 'solid' as const, dpos: 'auto' as const }, { id: 5, a1: 2, a2: 3, order: 1, display: 'wedge' as const, dpos: 'auto' as const }], captions: [], arrows: [], shapes: [] };
+    const text = writeCml(contents, 'guid-1');
+    const d = draw(readCmlFile(text));
+    const o = [...d.atoms.values()].find((a) => a.z === 8)!;
+    const c = [...d.atoms.values()].filter((a) => a.z === 6).sort((p, q) => q.x - p.x)[0];
+    // in Word the O sits below the carbon it is on (y grows downwards on the page)
+    expect(o.y).toBeGreaterThan(c.y);
+    // plain CML stays y upwards
+    const plain = draw(readScene('cml', CML));
+    const n = [...plain.atoms.values()].find((a) => a.z === 7)!, c13 = [...plain.atoms.values()].find((a) => a.isotope === 13)!;
+    expect(c13.y).toBeLessThan(n.y);
   });
 
   it('keeps the conditions over the arrow as text in Marvin and Ketcher files, and leaves them out of RXN', () => {
