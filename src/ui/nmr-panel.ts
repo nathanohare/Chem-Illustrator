@@ -9,6 +9,7 @@ import { ShiftTable, type AtomShifts, type ShiftHit } from '../chem/nmr/lookup';
 import { MeasuredStore } from '../chem/nmr/measured';
 import { ShiftNet } from '../chem/nmr/net';
 import { predictSpectrum, type NmrQuality, type PredictedSpectrum } from '../chem/nmr/spectrum';
+import { exchangeRange, type ExchangeRange } from '../chem/nmr/exchange';
 import { spectrumInBackground } from '../chem/nmr/spectrum-client';
 import { checkData, measuredLines, parsePeakLists, type CheckNucleus, type CheckResult, type MeasuredList, type PredictedRow } from '../chem/nmr/check';
 import { knownPeaks, residualPeaks } from '../chem/nmr/known-peaks';
@@ -34,6 +35,9 @@ export interface NmrRow {
   /** Predicted 1H multiplicity (s, d, dd, m, br s ...) and coupling constants (Hz, largest first). */
   mult?: string;
   j?: number[];
+  /** OH, NH, SH: not predicted (their shifts move with concentration, water and temperature);
+   *  Check Data still matches them within the usual range for their kind of group. */
+  exch?: ExchangeRange | null;
 }
 
 /** "dd, J = 15.5, 6.8 Hz" as an SI writes it (empty without a multiplicity). */
@@ -112,17 +116,20 @@ const pm = (h: ShiftHit, wide: number) => (h.measured ? '' : `<span class="muted
 /** The list for one nucleus, highest shift first: shift, how many atoms, which atoms, source chip. */
 export function nmrListHtml(rows: NmrRow[], nuc: Nucleus): string {
   const c = nuc === '13C';
-  const list = rows.map((r, k) => ({ r, k, h: c ? r.c13 : r.h1 })).filter((x) => x.h && (c || x.r.hCount)).sort((a, b) => b.h!.value - a.h!.value);
-  if (!list.length) return `<p class="muted small">No ${c ? 'carbons' : 'hydrogens'} to predict.</p>`;
+  const all = rows.map((r, k) => ({ r, k, h: c ? r.c13 : r.h1 })).filter((x) => x.h && (c || x.r.hCount));
+  const left = c ? [] : [...new Set(all.filter((x) => x.r.exch).map((x) => `${rows[x.k].label.replace(/\d+$/, '')}`))];
+  const list = all.filter((x) => c || !x.r.exch).sort((a, b) => b.h!.value - a.h!.value);
+  if (!list.length) return `<p class="muted small">No ${c ? 'carbons' : 'hydrogens'} to predict.${left.length ? ` ${left.join(', ')} shifts are not predicted.` : ''}</p>`;
+  const tip = left.length ? ` <span class="info-icon" tabindex="0" role="img" aria-label="About ${left.join(', ')}" title="${esc(`${left.join(', ')} shifts are not predicted: they move with concentration, water and temperature, and the peak is often broad or not seen.`)}">i</span>` : '';
   const m = !c && list.some((x) => x.r.mult);
   const multCell = (r: NmrRow) => (m ? `<td class="nmr-mult">${esc(r.mult ?? '')}${r.j?.length && r.mult !== 'm' ? ` ${r.j.map((x) => x.toFixed(1)).join(', ')}` : ''}</td>` : '');
   const body = list.map(({ r, k, h }) => `<tr data-row="${k}"><td>${h!.value.toFixed(c ? 1 : 2)} ${pm(h!, c ? 3 : 0.3)}</td><td>${c ? (r.atoms.length > 1 ? `${r.atoms.length}C` : '') : `${r.hCount}H`}</td>${multCell(r)}<td>${esc(r.label)}</td><td>${chip(h, c ? 3 : 0.3)}</td></tr>`).join('');
-  return `<table class="nmr-table${m ? ' with-mult' : ''}"><thead><tr><th>δ (ppm)</th><th></th>${m ? '<th class="nmr-mult">Mult., J (Hz)</th>' : ''}<th>Atoms</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+  return `<table class="nmr-table${m ? ' with-mult' : ''}"><thead><tr><th>δ (ppm)${tip}</th><th></th>${m ? '<th class="nmr-mult">Mult., J (Hz)</th>' : ''}<th>Atoms</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
 }
 
 /** 1H signals highest first; equal shifts print once with their hydrogens added (and as m when their patterns differ). */
 function mergedH(rows: NmrRow[]): { v: number; n: number; k: number[]; m: string }[] {
-  const hs = [...rows.entries()].filter(([, r]) => r.h1 && r.hCount).map(([k, r]) => ({ v: r.h1!.value, n: r.hCount, k: [k], m: multSi(r) }));
+  const hs = [...rows.entries()].filter(([, r]) => r.h1 && r.hCount && !r.exch).map(([k, r]) => ({ v: r.h1!.value, n: r.hCount, k: [k], m: multSi(r) }));
   hs.sort((a, b) => b.v - a.v);
   const merged: typeof hs = [];
   for (const h of hs) {
@@ -352,6 +359,7 @@ export class NmrPanel {
       net?.apply(graph, shifts, this.solvent);
       store?.apply(graph, shifts, this.solvent);
       const rows = nmrRows(graph, shifts);
+      for (const r of rows) r.exch = exchangeRange(graph, r.atoms[0], this.solvent);
       const ids = heavy.map((k) => { const id = item.map[k]; return id !== undefined && id >= 0 ? id : null; });
       const ring = new Set<string>();
       for (const b of graph.bonds) {
@@ -368,6 +376,7 @@ export class NmrPanel {
         if (!r) continue;
         if (graph.atoms[gr.atoms[0]].el === 'C') { r.mult = gr.mult; r.j = gr.j; } else { r.mult = 'br s'; r.j = []; }
       }
+      for (const r of rows) if (r.exch) for (const a of r.atoms) h1[a] = NaN;
       this.shown.set(i, { rows, ids, ring, graph, h1, codes, rowOf, specs: new Map(), pending: new Set() });
       this.render(i, d);
       if (this.win?.visible && this.winItem === i) this.win.refresh();
@@ -481,7 +490,7 @@ export class NmrPanel {
       s.rows.forEach((r, k) => {
         const a = s.graph.atoms[r.atoms[0]];
         const name = a.el === 'C' ? r.numbers.map((x) => `C${x}`).join(', ') : r.label;
-        if (list.nuc === '1H' && r.h1 && r.hCount) { rowIdx.push(k); rows.push({ shift: r.h1.value, spread: r.h1.spread, n: r.hCount, mult: r.mult, j: r.j, exchangeable: a.el !== 'C', label: name }); }
+        if (list.nuc === '1H' && r.h1 && r.hCount) { rowIdx.push(k); rows.push({ shift: r.h1.value, spread: r.h1.spread, n: r.hCount, mult: r.mult, j: r.j, exchangeable: a.el !== 'C', range: r.exch && !r.exch.gone ? [r.exch.lo, r.exch.hi] : undefined, label: name }); }
         if (list.nuc === '13C' && r.c13) { rowIdx.push(k); rows.push({ shift: r.c13.value, spread: r.c13.spread, n: r.atoms.length, label: name }); }
       });
       const solvent = list.solvent ?? this.solvent;
@@ -670,7 +679,7 @@ export class NmrPanel {
           // shifts: δC by the atom, δH beyond it (stacked under δC when the label points sideways)
           const labels: { text: string; colour: string; bold: boolean }[] = [];
           if (row.c13) labels.push({ text: row.c13.value.toFixed(1), colour: '#555555', bold: false });
-          if (row.h1 && row.hCount) labels.push({ text: row.h1.value.toFixed(2), colour: accent, bold: true });
+          if (row.h1 && row.hCount && !row.exch) labels.push({ text: row.h1.value.toFixed(2), colour: accent, bold: true });
           if (!labels.length) return;
           const side = Math.abs(ux) > 0.6;
           const at = labels.map((_, j) => side

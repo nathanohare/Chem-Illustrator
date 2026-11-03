@@ -49,6 +49,13 @@ describe('NMR panel views', () => {
     expect(h).toContain('OH');
     expect(nmrListHtml(rows, '13C')).not.toContain('OH');
   });
+  it('leaves OH/NH/SH out, with a note in the header tip', () => {
+    const r2 = rows.map((r) => (r.label === 'OH' ? { ...r, exch: { kind: 'alcohol' as const, name: 'alcohol OH', lo: 1, hi: 4, gone: false } } : r));
+    const h = nmrListHtml(r2, '1H');
+    expect(h).not.toContain('<td>OH</td>');
+    expect(h).toContain('OH shifts are not predicted');
+    expect(siText(r2, 'CDCl3')).toBe('1H NMR (400 MHz, CDCl3) δ 3.70 (2H), 1.22 (3H); 13C NMR (101 MHz, CDCl3) δ 58.3, 18.4.');
+  });
   it('peak report subscripts the solvent and links each peak to its row', () => {
     const r = nmrReportHtml(rows, 'CDCl3');
     expect(r).toContain('CDCl<sub>3</sub>');

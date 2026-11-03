@@ -39,6 +39,8 @@ export interface PredictedRow {
   j?: number[];
   /** Hydrogens on O, N or S: they exchange, so their shift moves and they may not be seen. */
   exchangeable?: boolean;
+  /** OH/NH/SH: where this kind of group usually appears (ppm, low to high). */
+  range?: [number, number];
   /** How the atoms are named in sentences ("H5", "C3, C4", "OH"). */
   label: string;
 }
@@ -205,7 +207,7 @@ export function checkData(list: MeasuredList, rows: PredictedRow[], known: Known
   const solventPeak = peaks.map((p) => known.some((q) => (q.name === 'Water' || q.name.startsWith('Residual')) && dist(p, q.shift) <= (nuc === '1H' ? 0.02 : 0.2)));
   const cost = (r: PredictedRow, p: MeasuredPeak, pi: number) => {
     // OH/NH move with concentration and water: almost any peak will do, the integral decides
-    let c = r.exchangeable ? 0.5 + 0.1 * dist(p, r.shift) : dist(p, r.shift) / sig(r);
+    let c = r.exchangeable ? 0.5 + 0.1 * (r.range ? Math.max(0, r.range[0] - p.hi, p.lo - r.range[1]) : dist(p, r.shift)) : dist(p, r.shift) / sig(r);
     const a = pattern(r.mult), b = pattern(p.mult);
     if (nuc === '1H' && !r.exchangeable && a && b && a !== b) c += 0.5;
     if (solventPeak[pi]) c += 2;
