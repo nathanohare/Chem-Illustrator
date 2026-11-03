@@ -501,6 +501,8 @@ export interface Caption {
   lineHeight?: number;
   /** Line spacing as a multiple of single spacing (1.5, 2…), when there's no fixed lineHeight. */
   lineSpacing?: number;
+  /** ChemDraw's variable line spacing (its usual): lines as close as their ink lets them (layout.ts inkGap). */
+  inkLines?: boolean;
   /** Lines wrap to fit this width, in points (a text box); without it they break only at line breaks. */
   wrap?: number;
   /** Paragraph formatting, one per paragraph in order; missing entries are plain paragraphs. */
