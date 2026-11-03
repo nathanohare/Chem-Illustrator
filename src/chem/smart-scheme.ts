@@ -714,6 +714,10 @@ export function refitSmart(doc: Doc, before: ReadonlyMap<string, Entity | null>,
     for (const l of read.links) {
       const a = read.slots[l.from], b = read.slots[l.to];
       if (!a || !b) continue;
+      // a curved arrow (round a cycle) follows only a species that moved: one retyped, recolored
+      // or given another atom stays where it is, its arcs where the layout put them
+      const curved = !!l.arrow.sweep || !!l.arrow.bez?.length;
+      if (curved && !slotMoved(doc, a, before) && !slotMoved(doc, b, before)) continue;
       // conditions moved on their own were placed by hand: leave the step as it is
       if ([...l.above, ...l.below, ...l.inside].some((it) => it.caption !== undefined && before.has('c' + it.caption))
         && !a.items.some((it) => it.caption !== undefined && before.has('c' + it.caption))
@@ -737,6 +741,27 @@ export function refitSmart(doc: Doc, before: ReadonlyMap<string, Entity | null>,
       for (const x of [...doc.arrows.values()]) if (x.reagentFor === r.id) doc.updateArrow(x.id, { tail: { x: x.tail.x + d.x, y: x.tail.y + d.y }, head: { x: x.head.x + d.x, y: x.head.y + d.y } });
     }
   }
+}
+
+/** Whether something of a species was moved in the change (not just retyped or restyled). */
+function slotMoved(doc: Doc, slot: Slot, before: ReadonlyMap<string, Entity | null>): boolean {
+  const shifted = (x: number, y: number, was: { x: number; y: number } | null | undefined) => !!was && Math.hypot(x - was.x, y - was.y) > 1e-6;
+  for (const it of [...slot.items, ...slot.labels]) {
+    for (const id of it.atoms) {
+      if (!before.has('a' + id)) continue;
+      const a = doc.atoms.get(id), was = before.get('a' + id) as { x: number; y: number } | null;
+      if (a && shifted(a.x, a.y, was)) return true;
+    }
+    if (it.caption !== undefined && before.has('c' + it.caption)) {
+      const c = doc.captions.get(it.caption), was = before.get('c' + it.caption) as { x: number; y: number } | null;
+      if (c && shifted(c.x, c.y, was)) return true;
+    }
+    if (it.shape !== undefined && before.has('s' + it.shape)) {
+      const h = doc.shapes.get(it.shape), was = before.get('s' + it.shape) as { x1: number; y1: number; x2: number; y2: number } | null;
+      if (h && was && (shifted(h.x1, h.y1, { x: was.x1, y: was.y1 }) || shifted(h.x2, h.y2, { x: was.x2, y: was.y2 }))) return true;
+    }
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------- what shows while it is selected

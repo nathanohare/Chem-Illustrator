@@ -1,6 +1,7 @@
 // One six-membered ring drawn four ways: flat, as a chair, as the other (flipped) chair, and as
 // a boat. Tab goes from one to the next; on a chair with things on it, Tab walks the ring round
-// (each atom one place on, clockwise), ` walks it back, and Shift+Tab flips the chair. Every
+// (each atom one place on, clockwise), [ walks it back, and Shift+Tab flips the chair. \ goes
+// straight between the flat drawing and the chair. Every
 // substituent keeps its face of the ring (up or down), so the molecule and its stereochemistry
 // never change: a wedge on the flat ring becomes an axial or equatorial bond on that face.
 //
@@ -16,7 +17,7 @@
 import type { Doc, Bond, BondDisplay } from '../model';
 import type { Vec } from '../geom';
 import { templateById } from './templates';
-import { ringsThroughBond } from './aromatic';
+import { ringBonds, ringsThroughBond } from './aromatic';
 
 export type RingView = 'flat' | 'chair' | 'chair-flip' | 'boat';
 export const RING_VIEWS: RingView[] = ['flat', 'chair', 'chair-flip', 'boat'];
@@ -109,25 +110,32 @@ export interface ViewRing {
 export function viewRingOf(doc: Doc, atoms: Iterable<number>): { ring: ViewRing } | { why: string } {
   const sel = new Set(atoms);
   if (!sel.size) return { why: 'Select a cyclohexane ring first.' };
-  const rings = new Map<string, number[]>();
-  const seenBonds = new Set<number>();
-  // only the structures the selection touches: walking the whole drawing here made every
-  // molfile written (which calls this once per six-membered ring) take time in the drawing's
-  // size squared, freezing big drawings for minutes
-  const frags: Set<number>[] = [];
-  for (const id of sel) if (doc.atoms.has(id) && !frags.some((f) => f.has(id))) frags.push(doc.fragmentOf(id));
-  for (const f of frags) {
-    for (const id of f) {
-      for (const bid of doc.adj.get(id) ?? []) {
-        if (seenBonds.has(bid)) continue;
-        seenBonds.add(bid);
-        for (const r of ringsThroughBond(doc, bid)) if (r.length === 6) rings.set([...r].sort((a, b) => a - b).join(','), r);
-      }
-    }
+  const sixRings = (bonds: Iterable<number>, into: Map<string, number[]>) => {
+    for (const bid of bonds) for (const r of ringsThroughBond(doc, bid)) if (r.length === 6) into.set([...r].sort((a, b) => a - b).join(','), r);
+  };
+  // A ring with all its atoms selected has all its bonds between selected atoms, so those rings
+  // are found from the selection's own bonds. Only when there is none is the rest of the
+  // structure looked at (for its one ring). Walking whole structures for every ring made each
+  // molfile of a big structure (which asks once per six-membered ring) take time in its size
+  // squared: a third of a second for 600 atoms, on every edit.
+  const inner = new Set<number>();
+  for (const id of sel) for (const bid of doc.adj.get(id) ?? []) { const b = doc.bonds.get(bid); if (b && sel.has(b.a1) && sel.has(b.a2)) inner.add(bid); }
+  const own = new Map<string, number[]>();
+  sixRings(inner, own);
+  const whole = [...own.values()].filter((r) => r.every((id) => sel.has(id)));
+  let all = whole;
+  let frags = 1;
+  if (!whole.length) {
+    const rings = new Map<string, number[]>();
+    const seenBonds = new Set<number>();
+    // only the structures the selection touches: walking the whole drawing here froze big drawings for minutes
+    const fs: Set<number>[] = [];
+    for (const id of sel) if (doc.atoms.has(id) && !fs.some((f) => f.has(id))) fs.push(doc.fragmentOf(id));
+    for (const f of fs) for (const id of f) for (const bid of doc.adj.get(id) ?? []) if (!seenBonds.has(bid)) { seenBonds.add(bid); sixRings([bid], rings); }
+    all = [...rings.values()];
+    frags = fs.length;
   }
-  const all = [...rings.values()];
-  const whole = all.filter((r) => r.every((id) => sel.has(id)));
-  const picked = whole.length === 1 ? whole[0] : whole.length === 0 && all.length === 1 && frags.length === 1 ? all[0] : null;
+  const picked = whole.length === 1 ? whole[0] : whole.length === 0 && all.length === 1 && frags === 1 ? all[0] : null;
   if (!picked) return { why: all.length ? 'Select the atoms of just one six-membered ring.' : 'There is no six-membered ring here to draw as a chair.' };
   const ringBondsOk = picked.every((id, i) => {
     const next = picked[(i + 1) % 6];
@@ -457,6 +465,16 @@ export function nearestPlaces(doc: Doc, vr: ViewRing, view: RingView): number[] 
 }
 
 /**
+ * Is a ring (atoms in order round it) drawn as a regular hexagon, give or take? Then it is flat:
+ * no chair or boat comes near. (The two ways round are all that need trying: a hexagon's other
+ * starting places are the same fit turned.)
+ */
+function nearlyHexagon(doc: Doc, ring: number[]): boolean {
+  const drawn = ring.map((id) => { const a = doc.atoms.get(id)!; return { x: a.x, y: a.y }; });
+  return [ORDERS[0], ORDERS[6]].some((pos) => fitPoints(pos.map((p) => HEXAGON[p]), drawn).misfit < 0.05);
+}
+
+/**
  * What the chemistry engine is shown for rings drawn as chairs or boats, which show their
  * stereo by their shape, not by wedges: each such ring as it would be drawn flat, with wedges on
  * the faces its shape shows (positions and bonds to use in place of the drawing's; the drawing
@@ -466,17 +484,26 @@ export function nearestPlaces(doc: Doc, vr: ViewRing, view: RingView): number[] 
 export function flatStandIn(doc: Doc, atoms: Set<number>): RingLayout | null {
   let out: RingLayout | null = null;
   const done = new Set<string>();
+  const looked = new Set<number>();
   for (const id of atoms) {
     const a = doc.atoms.get(id);
     // (a ring atom with a stereocentre on it has three or four bonds)
     if (!a || a.multi || doc.degree(id) < 3) continue;
     for (const bid of doc.adj.get(id) ?? []) {
-      for (const r of ringsThroughBond(doc, bid)) {
+      // (a chair or boat is a ring of single bonds; each bond is looked round once)
+      if (looked.has(bid) || doc.bonds.get(bid)!.order !== 1) continue;
+      looked.add(bid);
+      for (const r of ringsThroughBond(doc, bid, 6)) {
         if (r.length !== 6) continue;
         const key = [...r].sort((x, y) => x - y).join(',');
         if (done.has(key)) continue;
         done.add(key);
         if (out && r.some((x) => out!.moves.has(x))) continue;
+        // (quick looks first, at the ring's own atoms and bonds: almost every ring is drawn flat,
+        // and finding a ring's substituents walks the rest of its structure)
+        if (!ringBonds(doc, r).every((x) => doc.bonds.get(x)!.order === 1) || nearlyHexagon(doc, r)) continue;
+        const rough = fitView(doc, { ring: r, subs: [] });
+        if (rough.view === 'flat' || rough.misfit >= FITS) continue;
         const got = viewRingOf(doc, r);
         if (!('ring' in got)) continue;
         const vr = got.ring;

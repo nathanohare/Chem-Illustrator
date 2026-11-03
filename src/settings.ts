@@ -175,7 +175,7 @@ export interface Settings {
   warnLook: 'disc' | 'box' | 'circle' | 'dashed' | 'corners';
   /** How round bond lines' free ends are, 1 (round) to 0 (square); see bondEndPrefs. */
   bondEnds: number;
-  /** How atom-map numbers look (Chemistry ▸ Map Atoms); see mapLookPrefs. */
+  /** The default look of atom-map numbers for drawings with none of their own (each drawing saves its own); see mapLookPrefs. */
   mapLook: MapLook;
   /** The user's own map-number box format (mapLook 'custom'). */
   mapBox: MapBoxStyle;

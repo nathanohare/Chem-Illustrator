@@ -13,7 +13,7 @@ import { chainArc, piLooksOf } from '../chem/hapto';
 import { crossingGapsCached } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
-import { bondEndPrefs, doubleBondGap, mapLookPrefs, wedgeWidth } from '../style';
+import { bondEndPrefs, docMapLook, doubleBondGap, wedgeWidth } from '../style';
 import { depthFractions, depthShadePrefs, shadeLook, shadeStep } from './depth-shade';
 import { joinWideEnds, lineMitres, endTip, LINE_MITRE_LIMIT, type WideEnd, type EndJoin, type LineEnd } from './bond-joins';
 import { chargeInk, labelBonds, labelSpec, layoutLabel, LabelLayout, labelLook } from '../chem/labels';
@@ -759,8 +759,9 @@ export class Renderer {
     let f = `${p.size}px ${FONT_STACK}`;
     let ink = a.color ?? '#000';
     if (isMapNumber(a)) {
-      // an atom-map number: in a small box (Chemistry ▸ Map Atoms), in the chosen look
-      const look = paintMapBox(ctx, mapBox(p, measureText(a.atomNumber!, p.size)), a.mapNo!, doc.style.lineWidth, mapLookPrefs.look, mapLookPrefs.custom);
+      // an atom-map number: in a small box (Chemistry ▸ Map Atoms), in the drawing's look
+      const mapLook = docMapLook(doc.style);
+      const look = paintMapBox(ctx, mapBox(p, measureText(a.atomNumber!, p.size)), a.mapNo!, doc.style.lineWidth, mapLook.look, mapLook.custom);
       ink = look.ink;
       if (look.bold) f = `bold ${f}`;
     }

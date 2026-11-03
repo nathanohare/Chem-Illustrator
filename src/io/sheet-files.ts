@@ -7,6 +7,7 @@
 import { Doc, Contents } from '../model';
 import type { DocStyle } from '../style';
 import { addMolfile } from '../chem/molfile';
+import { readMolfile, sceneToDoc } from './chem-formats';
 import { Workbook, Sheet } from '../sheet/workbook';
 import { keyOf, fixSheetName } from '../sheet/refs';
 import { isError, CellError } from '../sheet/values';
@@ -175,12 +176,22 @@ export function readSdf(text: string, sheetName: string, style?: DocStyle): { bo
     });
     s.setFrozen(1, 0);
   });
-  const warnings = failed ? [`${failed} structure${failed > 1 ? 's' : ''} could not be read (only V2000 molfiles are read so far).`] : [];
+  const warnings = failed ? [`${failed} structure${failed > 1 ? 's' : ''} could not be read.`] : [];
   return { book: wb, warnings };
 }
 
 /** A molfile drawn in a style (null when it can't be read). */
 export function molblockContents(molblock: string, style: DocStyle): Contents | null {
+  // a V3000 molfile (as this app writes SD files of big structures, or of files opened as V3000) through the reader that knows both
+  if ((molblock.split(/\r?\n/, 4)[3] ?? '').includes('V3000')) {
+    const m = readMolfile(molblock);
+    if (!m) return null;
+    try {
+      return sceneToDoc({ mols: [m], arrows: [], pluses: [], texts: [], unit: 1.5 }, style).doc.contents();
+    } catch {
+      return null;
+    }
+  }
   const d = new Doc();
   d.style = { ...style };
   try {

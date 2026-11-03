@@ -22,7 +22,7 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl } from '../render/images';
-import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG } from './cdxml';
+import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG } from './cdxml';
 import { stackItems, usesStacking } from '../editor/stacking';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
@@ -39,6 +39,18 @@ import { bondLayer, crossingBondsCached } from '../chem/crossing';
 import { repeatGroups, repeatCount, repeatLabelPlace } from '../chem/polymer';
 import { ellipseAxes, isCircleRing, ringCircle, ringsThroughBond } from '../chem/aromatic';
 import { newmanForFile } from '../design/newman';
+import { docMapLook } from '../style';
+import { isMapNumber } from '../render/atom-marks';
+
+/**
+ * The drawing's map-number look as the page tag's JSON: saved when the drawing has a look of its
+ * own or shows map numbers, so it opens the same on another computer; null otherwise.
+ */
+function mapLookText(doc: Doc): string | null {
+  if (!doc.style.mapLook && !doc.style.mapBox && ![...doc.atoms.values()].some(isMapNumber)) return null;
+  const { look, custom } = docMapLook(doc.style);
+  return JSON.stringify(look === 'custom' ? { look, box: custom } : { look });
+}
 
 /** Numbers in an attribute such as "12.5 30 0". */
 const pts = (v: string | null): number[] => (v ?? '').trim().split(/\s+/).filter(Boolean).map(Number);
@@ -178,6 +190,7 @@ class CdxmlWriter {
     this.writeRepeatGroups();
     this.writeSteps();
     this.writeGroups();
+    this.writePieces();
     if (this.writeStack()) this.changed = true;
     this.raiseTableFigures();
     if (src) this.cleanUp();
@@ -271,7 +284,8 @@ class CdxmlWriter {
     const arrow = Object.values(own).some((v) => v !== undefined && v !== '') ? JSON.stringify(own) : null;
     const a = this.pageTag(GUIDES_TAG, guidesText(this.doc.guides));
     const b = this.pageTag(ARROW_TEXT_TAG, arrow);
-    return a || b;
+    const c = this.pageTag(MAP_LOOK_TAG, mapLookText(this.doc));
+    return a || b || c;
   }
 
   /** One of this program's tags on the page, set to `want` (or taken away); true when it changed. */
@@ -1983,6 +1997,41 @@ class CdxmlWriter {
       for (const e of list) g.appendChild(e);
       this.changed = true;
     }
+  }
+
+  /**
+   * Auto-Animate Steps' pieces (things marked to move together in the slide show) in a hidden tag
+   * on each thing's element, so a scheme built up step by step keeps its steps through CDXML and
+   * PowerPoint (whose drawings are CDXML) and back.
+   */
+  private writePieces(): void {
+    const doc = this.doc;
+    let byId: Map<string, Element> | null = null;
+    // (elements by name and id: a bond or fragment can share an atom's id number)
+    const ided = (id: number, names: string[]): Element | null => {
+      if (!byId) {
+        byId = new Map();
+        for (const e of descendants(this.root)) { const k = e.getAttribute('id'); if (k && !byId.has(`${e.nodeName}:${k}`)) byId.set(`${e.nodeName}:${k}`, e); }
+      }
+      for (const n of names) { const e = byId.get(`${n}:${id}`); if (e) return e; }
+      return null;
+    };
+    const put = (kind: Kind, id: number, names: string[], piece: number | undefined) => {
+      const was = this.orig<{ piece?: number } & Entity>(kind, id)?.piece;
+      if (piece === undefined && was === undefined) return;
+      const e = this.source(kind, id, names) ?? (kind === 'r' ? this.findArrow(id) : null) ?? ided(id, names);
+      if (!e || !names.includes(e.nodeName)) return;
+      const old = kids(e).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === PIECE_TAG);
+      const want = piece !== undefined ? String(piece) : null;
+      if ((old?.getAttribute('Value') ?? null) === want) return;
+      if (old) e.removeChild(old);
+      if (want !== null) e.appendChild(this.el('objecttag', { TagType: 'String', Name: PIECE_TAG, Value: want, Visible: 'no' }));
+      this.changed = true;
+    };
+    for (const a of doc.atoms.values()) put('a', a.id, ['n'], a.piece);
+    for (const c of doc.captions.values()) put('c', c.id, ['t'], c.piece);
+    for (const r of doc.arrows.values()) put('r', r.id, ['arrow', 'graphic'], r.piece);
+    for (const s of doc.shapes.values()) put('s', s.id, ['graphic', 'embeddedobject', 'table', 'group'], s.piece);
   }
 
   private cleanUp(): void {

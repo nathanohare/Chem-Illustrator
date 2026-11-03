@@ -65,7 +65,7 @@ import { arrowClash, bendSide, cleanUpArrow, endCentre, endPointToward, headEnd,
 import { followPins, hasPins, makePin, mirrorBend } from '../chem/pins';
 import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '../chem/scheme-arrange';
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
-import { rebuildSmartCycle, smartCycleStart, type SmartCycleStart } from '../chem/smart-cycle';
+import { rebuildSmartCycle, smartCycleStart, structureReagents, type SmartCycleStart } from '../chem/smart-cycle';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
 import { arrangeSmart, formatSmart, stepToHolder, stepHolderToText, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
@@ -76,7 +76,7 @@ import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../d
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
-import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
+import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, joinGroups, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
 import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
 import {
@@ -462,6 +462,21 @@ export class Editor {
   get dragging(): boolean { return !!this.drag?.moved; }
   /** Text is being typed into a caption or label. */
   captionOpen(): boolean { return !!this.captionEd?.isOpen; }
+  /**
+   * Esc has something to let go of here first: a selection, a drag, text being typed, the
+   * keyboard highlight left on the atom last drawn, a path being drawn through points, or a crop.
+   */
+  escapeHasWork(): boolean {
+    const s = this.sel;
+    return !!(s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size || s.shapes.size) || this.dragging || this.captionOpen()
+      || this.hotNow() || this.route !== null || this.cropping !== null;
+  }
+
+  /** The keyboard highlight is on an atom or bond of this drawing. */
+  private hotNow(): boolean {
+    const k = this.keyHot;
+    return !!k && (k.kind === 'atom' ? this.doc.atoms.has(k.id) : k.kind === 'bond' && this.doc.bonds.has(k.id));
+  }
   private needScene = true;
   private needOverlay = true;
   private frameQueued = false;
@@ -2220,16 +2235,16 @@ export class Editor {
     this.changed();
     const subs = vr.subs.length > 0;
     if (walking) return `Walked one place ${step === 'cw' ? 'clockwise' : 'counterclockwise'}. Tab goes on, [ goes back, Shift+Tab flips the chair.`;
-    if (view === 'flat') return 'Drawn flat. Tab: chair.';
+    if (view === 'flat') return 'Drawn flat. Tab or \\: chair.';
     const name = RING_VIEW_NAMES[view];
     return view === 'boat'
-      ? `${name}. ${subs ? 'Tab walks it round; ' : 'Tab: flat; '}Shift+Tab: chair.`
-      : `${name}. ${subs ? 'Tab walks the ring round, [ goes back, ' : 'Tab: the next shape, '}Shift+Tab flips it.`;
+      ? `${name}. ${subs ? 'Tab walks it round; ' : 'Tab: flat; '}Shift+Tab: chair; \\: flat.`
+      : `${name}. ${subs ? 'Tab walks the ring round, [ goes back, ' : 'Tab: the next shape, '}Shift+Tab flips it, \\ draws it flat.`;
   }
 
-  /** What Tab, Shift+Tab, [ and ] do to the selected ring now, or null when they don't act on a ring. */
+  /** What Tab, Shift+Tab, [, ] and \\ do to the selected ring now, or null when they don't act on a ring. */
   private ringKey(chord: string): RingStep | null {
-    if (!['Tab', 'Shift+Tab', '[', ']'].includes(chord) || !this.sel.atoms.size) return null;
+    if (!['Tab', 'Shift+Tab', '[', ']', '\\'].includes(chord) || !this.sel.atoms.size) return null;
     // a structure picked with Tab: Tab goes on to the next structure
     if (this.tabPicked !== null && this.tabPicked === [...this.sel.atoms].sort((a, b) => a - b).join(',')) return null;
     const got = viewRingOf(this.doc, this.sel.atoms);
@@ -2237,6 +2252,8 @@ export class Editor {
     const view = viewNow(this.doc, got.ring).view;
     const shaped = view !== 'flat';
     const walks = shaped && got.ring.subs.length > 0;
+    // \ goes straight between the flat drawing and the chair, whatever shape it is in
+    if (chord === '\\') return shaped ? 'flat' : 'chair';
     if (chord === '[') return walks ? 'ccw' : null;
     if (chord === ']') return walks ? 'cw' : null;
     if (chord === 'Shift+Tab') return view === 'chair' || view === 'chair-flip' ? 'flip' : 'chair';
@@ -3600,6 +3617,8 @@ export class Editor {
   /** Lay a Smart Scheme out again, with a new layout or other settings. */
   /** A Smart Scheme's single loop as the Catalytic Cycle window's table, to add a second loop to (null for other schemes). */
   smartCycleStart(id: number): SmartCycleStart | null { return smartCycleStart(this.doc, this.fullMeasure(), id); }
+  /** Whether a step of Smart Scheme `id` has a structure (or a box for one) joining or leaving it (no second loop then). */
+  smartReagentStructures(id: number): boolean { return structureReagents(this.doc, this.fullMeasure(), id); }
   /**
    * Draw Smart Scheme `id`'s cycle again with the loops from the Catalytic Cycle window (`rows`:
    * the species each row of loop 1 keeps). It is a Smart Scheme again afterwards, selected.
@@ -4437,7 +4456,7 @@ export class Editor {
 
   /** Line up the selected objects. Returns false when fewer than two are selected. */
   align(how: Align): boolean {
-    const us = units(this.doc, this.sel, this.measure());
+    const us = joinGroups(this.doc, units(this.doc, this.sel, this.measure()));
     if (us.length < 2) return false;
     const off = alignOffsets(us, how);
     this.doc.edit('Align', () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
@@ -4447,7 +4466,7 @@ export class Editor {
 
   /** Space the selected objects evenly. Returns false when fewer than three are selected. */
   distribute(axis: 'h' | 'v'): boolean {
-    const us = units(this.doc, this.sel, this.measure());
+    const us = joinGroups(this.doc, units(this.doc, this.sel, this.measure()));
     if (us.length < 3) return false;
     const off = distributeOffsets(us, axis);
     this.doc.edit('Distribute', () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
@@ -4465,7 +4484,7 @@ export class Editor {
     const sel = none
       ? { atoms: new Set(doc.atoms.keys()), bonds: new Set(doc.bonds.keys()), captions: new Set(doc.captions.keys()), arrows: new Set(doc.arrows.keys()), shapes: new Set(doc.shapes.keys()) }
       : this.sel;
-    const chosen = units(doc, sel, m);
+    const chosen = joinGroups(doc, units(doc, sel, m));
     // numbers under the chosen structures come along, picked or not
     const others = none ? [] : units(doc, { atoms: new Set(), bonds: new Set(), captions: new Set([...doc.captions.keys()].filter((id) => !sel.captions.has(id))), arrows: new Set(), shapes: new Set() }, m);
     const folded = withLabels(doc, [...chosen, ...others], doc.style.bondLength);
@@ -4592,7 +4611,7 @@ export class Editor {
    * drawn; pressing it again straight away steps through other layouts and turns of the same
    * structures. `seeds` are other starting places for atoms (the chemistry engine's layouts),
    * tried for ring systems that need untangling. Returns which way was used (and how many there
-   * are), or false when there was nothing to change.
+   * are), or false when there was nothing to change (an already tidy structure is left as it is).
    */
   cleanUp(seeds: Map<number, Vec>[] = []): false | { k: number; of: number; label: string } {
     const doc = this.doc;
@@ -4613,9 +4632,21 @@ export class Editor {
       did = this.tidyLayout() || did;
     });
     if (!did) {
-      // already tidy: show the next way instead, so the button always does something
-      cycle.version = doc.version;
-      return picked ? this.nextCleanUp(cycle) : false;
+      // already tidy: leave it as it is (Clean Up Options... still shows the other ways)
+      this.cleanCycle = null;
+      return false;
+    }
+    // the tidying round them (a scheme, a grid) may have moved whole structures: the other ways
+    // go where each structure is now, so stepping through them doesn't undo that
+    for (const list of options) {
+      const first = list[0];
+      const ids = [...first.pos.keys()].filter((id) => doc.atoms.has(id));
+      if (!ids.length) continue;
+      const mean = (pick: (id: number) => Vec) => ids.reduce((s, id) => { const p = pick(id); return { x: s.x + p.x / ids.length, y: s.y + p.y / ids.length }; }, { x: 0, y: 0 });
+      const now = mean((id) => doc.atoms.get(id)!), was = mean((id) => first.pos.get(id)!);
+      const dx = now.x - was.x, dy = now.y - was.y;
+      if (Math.hypot(dx, dy) < 1e-6) continue;
+      for (const o of list) for (const [id, p] of o.pos) o.pos.set(id, { x: p.x + dx, y: p.y + dy });
     }
     cycle.version = doc.version;
     return { k: 0, of: Math.max(...options.map((o) => o.length)), label: options[0][0].label };
@@ -5315,7 +5346,8 @@ export class Editor {
     // drawing a curved arrow through points: Enter ends it, Backspace takes back a point, Esc stops
     if (this.routeKey(chord)) { e.preventDefault(); return; }
     // a selected cyclohexane: Tab through its shapes (flat, chair, flipped chair, boat); on a chair
-    // with substituents Tab and ] walk it round, [ walks it back, and Shift+Tab flips it
+    // with substituents Tab and ] walk it round, [ walks it back, and Shift+Tab flips it; \ goes
+    // between flat and chair
     const ringStep = this.pointerInside || target === this.r.overlay ? this.ringKey(chord) : null;
     if (ringStep) { e.preventDefault(); this.say(this.ringStep(ringStep)); return; }
     // on a focused button or menu, Enter, Space and Tab do their usual jobs (unless the mouse

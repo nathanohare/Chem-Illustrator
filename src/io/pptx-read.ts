@@ -10,6 +10,8 @@
 // warnings, never refused.
 
 import { remapFrames, remapStep } from './remap-refs';
+import { fillFrameMembers } from '../editor/frames';
+import { restoreSteps } from './step-tag';
 import { fromDataUrl } from '../render/images';
 import type { PinnedComment } from '../document/comments';
 import { COMMENT_REL, readCommentAuthors, readLegacyComments, readModernComments } from './pptx-comments';
@@ -542,6 +544,10 @@ class Reader {
     doc.bulk(() => {
       this.tree(s, layout, s.tree, IDENTITY, doc);
       this.placeTables(doc);
+      // a scheme saved over several pictures (a Smart Scheme built step by step, each step a
+      // picture): its steps are joined up again, and its frame finds what it surrounds
+      if (tags[TAG.steps]) restoreSteps(doc, tags[TAG.steps]);
+      fillFrameMembers(doc);
     });
     const id = (tags[TAG.layout] as LayoutId | undefined) ?? this.layoutId(layout, doc);
     const warn = (w: string) => this.warnings.add(w);

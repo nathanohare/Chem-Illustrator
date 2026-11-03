@@ -265,6 +265,8 @@ export class DesignLibrary {
   private iconGroup = '';
   private groupChosen = false;
   private iconCount = ICON_PAGE;
+  /** The pictures were left until the library shows (it starts hidden: Design mode, Insert > Shapes). */
+  private stale = false;
 
   constructor(private el: HTMLElement, private pick: (id: string) => void) {
     el.classList.add('design-lib');
@@ -305,7 +307,14 @@ export class DesignLibrary {
     const redraw = () => { if (this.tab === 'shapes' && this.el.isConnected) this.build(); };
     addEventListener('shape-ink-changed', redraw);
     addEventListener('surround-changed', redraw);
+    // drawn when it first comes into view, not while the app starts
+    if (typeof IntersectionObserver === 'function') new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) this.refresh(); }).observe(el);
     this.showTab('shapes');
+  }
+
+  /** Draw the pictures now if they were left while the library was hidden. */
+  refresh(): void {
+    if (this.stale) this.build();
   }
 
   /** Show the shapes or the icons. */
@@ -347,6 +356,9 @@ export class DesignLibrary {
   }
 
   private build(): void {
+    // ~200 shapes, each drawn on its own canvas: not worth doing until someone can see them
+    if (this.el.closest('[hidden]')) { this.stale = true; return; }
+    this.stale = false;
     this.body.replaceChildren(...(this.tab === 'icons' ? this.iconParts() : this.shapeParts()));
   }
 

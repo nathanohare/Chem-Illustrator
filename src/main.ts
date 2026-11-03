@@ -29,6 +29,7 @@ import { selectionBox, atomsBox, POINTS, type Align, units, moveUnit } from './e
 import { defaultColumns } from './editor/grid-arrange';
 import { askGridLayout, type GridPick } from './ui/grid-picker';
 import { groupSelection, selectedGroups } from './editor/groups';
+import { chemistrySelection, loneStructure } from './editor/lone-pick';
 import { readCdxml, ReadStats } from './io/cdxml';
 import { readCml } from './io/cml';
 import { ChemClient } from './chem/client';
@@ -59,7 +60,7 @@ import { cdxToCdxml } from './io/cdx';
 import { writeCdxml } from './io/cdxml-write';
 import { WORKSPACE, folderOf } from './io/workspace-file';
 import { askLink, followLink, setLinkHost, type LinkPlace } from './ui/links-ui';
-import { LigandLibraryWindow } from './ui/ligand-library';
+import type { LigandLibraryWindow } from './ui/ligand-library';
 import { SHOW_JUMPS, SHOW_TOOLS, cellOfLink, keyOfLink, linkSpans, normalizeLink, removeLink, setLink, slideOfLink } from './links';
 import { openFileDialog, openManyBytesDialog, openBytesDialog, CSV, openAnyBytesDialog, stampOf, readRef, saveFileDialog, writeFile, showError, baseName, readPath, withExtension, setEmbeddedWriter, KEYMAP_FILE, SETTINGS_FILE, MOL, PDF, SDF, PICTURE, SVG, TIFF, EMF, EPS, PPTX, DOCX, PICTURE_EXTENSIONS, type FileType } from './io/files';
 import { writeTiff } from './render/tiff';
@@ -71,7 +72,7 @@ import { solid } from './deck/background';
 import { pictureFormat } from './ui/picture-dialog';
 import { fxPng } from './render/picture-fx';
 import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND, type SlidePage } from './deck/slide-view';
-import { sameView, type InPlace, type PlaceView } from './ui/in-place';
+import { escapeAction, sameView, type InPlace, type PlaceView } from './ui/in-place';
 import { writePdf, jpegInfo, PdfPage, PdfImage } from './io/pdf';
 import { SlideList } from './ui/slide-list';
 import { CanvasKeys } from './ui/canvas-keys';
@@ -168,7 +169,6 @@ import { showBalance } from './ui/balance-dialog';
 import { withoutCharge } from './chem/formula';
 import { makePin } from './chem/pins';
 import { ORBITAL_KINDS, ORBITAL_LOOKS, orbitalShapes, shapeCentre, type OrbitalKind, type OrbitalLook } from './chem/orbitals';
-import { showLabCalculator } from './ui/lab-calc-dialog';
 import { BATCH_FORMATS, BATCH_INPUTS, readBatchFile, smilesLine, uniqueName, writeBatchItem, type BatchDeps, type BatchFormat } from './io/batch-convert';
 import { zipSync } from 'fflate';
 import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
@@ -190,7 +190,6 @@ import { NicknameChooser } from './ui/nickname-chooser';
 import { ask } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
-import { actionLook, actionSet, askActionButton } from './ui/action-button-dialog';
 import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepClicks, stepPieces, type AutoStepsOptions, type StepPiece } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
@@ -254,15 +253,13 @@ import { structurePlace } from './sheet/layout';
 import type { SheetFileDeps } from './io/sheet-files';
 import { fromEmbedSource, type Embedded } from './io/ole-object';
 import { objectPicture, type ObjectPicture } from './render/object-picture';
-import { ACS_1996, BOND_END_CHOICES, bondEndPrefs, DocStyle, MAP_LOOKS, mapLookPrefs, type MapLook } from './style';
+import { ACS_1996, BOND_END_CHOICES, bondEndPrefs, DocStyle, docMapLook, MAP_LOOKS, mapLookPrefs, type MapBoxStyle, type MapLook } from './style';
 import { DEFAULT_DEPTH_SHADE, depthShadePrefs } from './render/depth-shade';
 import { emptyTable, tableFromCells } from './table';
 import type { TableData } from './model';
 import { checkDrawing, checkDocument, checkWorkbook, repeatedTitles, structureAlt, setStructureAlt, type Issue, type IssuePlace } from './accessibility';
 import { AccessibilityPane, askAltText } from './ui/accessibility-pane';
-import { PreflightPane } from './ui/preflight-pane';
-import { enlargeText, thickenLines, useArial, fixUntilDone } from './preflight-fix';
-import { preflight } from './preflight';
+import type { PreflightPane } from './ui/preflight-pane';
 import { shapeBox } from './objects';
 import { SlideComparePane } from './ui/slide-compare';
 import { pickFileTemplate } from './ui/file-templates';
@@ -284,7 +281,7 @@ import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
 import type { AssistantAction, AssistantMode, SendItem } from './ai/assistant';
-import { AssistantBar } from './ui/assistant-bar';
+import type { AssistantBar } from './ui/assistant-bar';
 import { aiSettingsDialog } from './ui/ai-settings';
 import { freeSpace } from './editor/free-space';
 import { canReadStructures, importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
@@ -297,10 +294,11 @@ import { fetchPubmed, type ZoteroLink } from './library/online';
 import { structuresIn, foundInContents, foundInDocument, foundInWorkbook, foundInFile, type Found, type Spot, type FileReaders } from './library/structures';
 import { parseIndex, indexText } from './library/file-index';
 import { libraryHolder } from './ui/library-refs';
-import { CompoundLibraryWindow, addStructures, type StructureIn } from './ui/compound-library';
-import { KnowledgeBaseWindow, looksLikeSmiles } from './ui/knowledge-base';
-import { FindInFilesWindow, type ListedFile } from './ui/find-in-files';
-import { later } from './lazy';
+import type { CompoundLibraryWindow, CompoundLibraryHost, StructureIn } from './ui/compound-library';
+import type { KnowledgeBaseHost, KnowledgeBaseWindow } from './ui/knowledge-base';
+import { looksLikeSmiles } from './kb/tables';
+import type { FindInFilesWindow, FindInFilesHost, ListedFile } from './ui/find-in-files';
+import { later, madeLater } from './lazy';
 
 // dialogs for slides, design and charts load the first time they open
 const askEquation = later(() => import('./ui/equation-dialog'), 'askEquation');
@@ -327,6 +325,8 @@ const askDiagram = later(() => import('./ui/diagram-dialog'), 'askDiagram');
 const editChart = later(() => import('./ui/chart-editor'), 'editChart');
 const editMedia = later(() => import('./ui/media-dialog'), 'editMedia');
 const pickReuseSlides = later(() => import('./ui/reuse-slides'), 'pickReuseSlides');
+// and windows most sessions never open
+const showLabCalculator = later(() => import('./ui/lab-calc-dialog'), 'showLabCalculator');
 
 // Crash handling (src/diagnostics.ts): errors nothing else caught go to a log kept on this computer,
 // with a notice offering to report them through Send Feedback. The desktop app (not the iPad, whose
@@ -1509,6 +1509,7 @@ async function insertActionButton(): Promise<void> {
   const i = d.index;
   const slides = d.slides.map((s, k) => ({ link: `#slide=${s.id}`, label: `Slide ${k + 1}${slideTitle(d, k) ? `: ${slideTitle(d, k)}` : ''}` }));
   const regions = (d.slides[i].canvas?.keys ?? []).map((k, n) => ({ link: `#key=${k.id}`, label: k.title?.trim() || `View ${n + 1}` }));
+  const { actionLook, actionSet, askActionButton } = await import('./ui/action-button-dialog');
   const got = await askActionButton(slides, regions);
   if (!got || deckNow() !== d || d.index !== i) return;
   const sdoc = d.docOf(i), W = d.size.w, H = d.size.h, edge = 18;
@@ -1799,7 +1800,8 @@ const conformerPrefs = (() => {
 function conformerTools(molblock: string): ConformerTools {
   return {
     search: (opts, progress) => model3d.search(molblock, opts, progress),
-    stop: () => model3d.stop(),
+    // (Stop ends the xtb running now too, rather than leaving it to finish its conformer)
+    stop: () => { model3d.stop(); if (isTauri()) void invoke('xtb_stop').catch(() => {}); },
     ...(isTauri() ? {
       xtb: (job) => invoke<{ xyz: string; energy: number }>('xtb_run', { job }),
       xtbVersion: (exe: string) => invoke<string>('xtb_version', { exe }),
@@ -2551,7 +2553,9 @@ async function applyAssistantAction(a: AssistantAction): Promise<string> {
     await copyText(a.smiles, 'Copied the structure as SMILES: paste it into a drawing, a cell or the document.');
     return 'Copied the structure as SMILES.';
   }
-  const old = a.replace ? chosenStructures() : [];
+  // in place of what is selected now; with nothing selected it is drawn as a new structure (not in
+  // place of the one last edited, which chosenStructures() falls back to)
+  const old = a.replace && editor.sel.atoms.size ? chosenStructures() : [];
   let ids: number[] = [];
   if (old.length) {
     const atoms = old.flatMap((f) => [...f]);
@@ -2571,33 +2575,29 @@ async function applyAssistantAction(a: AssistantAction): Promise<string> {
   }
   selectNewAtoms(ids);
   await keepPasteInside();
-  return old.length ? 'Replaced the selected structure.' : 'Drew the structure.';
+  return old.length ? 'Replaced the selected structure.' : a.replace ? 'Drew the structure as a new one (nothing was selected to replace).' : 'Drew the structure.';
 }
 
-let assistantBarEl: AssistantBar | null = null;
 
 /** Edit > Assistant is only there once an AI model is linked. */
 function showAssistantMenu(): void {
   for (const b of document.querySelectorAll<HTMLElement>('[data-cmd="assistant"]')) b.hidden = aiPrefs.provider === 'none';
-  if (aiPrefs.provider === 'none') assistantBarEl?.close();
+  if (aiPrefs.provider === 'none') assistantBar.now()?.close();
 }
 
-/** Edit > Assistant (Ctrl+/): the prompt bar, made the first time. */
-function assistantBar(): AssistantBar {
-  assistantBarEl ??= new AssistantBar({
-    prefs: () => aiPrefs,
-    savePrefs: (p) => { aiPrefs = p; storeSettings(); },
-    mode: () => ws.active.mode as AssistantMode,
-    items: assistantItems,
-    apply: applyAssistantAction,
-    markStep: markAssistantStep,
-    undo: () => { command('undo'); },
-    openSettings: aiSettings,
-    area: () => document.getElementById('work')?.getBoundingClientRect() ?? null,
-    tab: () => ws.active,
-  });
-  return assistantBarEl;
-}
+/** Edit > Assistant (Ctrl+/): the prompt bar, loaded and made the first time. */
+const assistantBar = madeLater(async (): Promise<AssistantBar> => new (await import('./ui/assistant-bar')).AssistantBar({
+  prefs: () => aiPrefs,
+  savePrefs: (p) => { aiPrefs = p; storeSettings(); },
+  mode: () => ws.active.mode as AssistantMode,
+  items: assistantItems,
+  apply: applyAssistantAction,
+  markStep: markAssistantStep,
+  undo: () => { command('undo'); },
+  openSettings: aiSettings,
+  area: () => document.getElementById('work')?.getBoundingClientRect() ?? null,
+  tab: () => ws.active,
+}));
 
 /** "Mark on drawing" for a finding about a step: select that step's arrow. False when there is no such step. */
 function markAssistantStep(n: number): boolean {
@@ -2974,10 +2974,14 @@ function selectedSpecies(): Caption[] {
  * What a command on "the selection, or else everything" counts: the atoms, and the text boxes
  * read as chemistry (selected ones, and ions grouped with the atoms as their salt).
  */
+/** A lone picked atom or bond stands for its whole structure when copying chemistry (src/editor/lone-pick.ts). */
+const loneAtomStructure = (): Set<number> | null => loneStructure(doc, editor.sel);
+
 function chemistryInSelection(): { atoms: number[]; species: PlacedSpecies[] } {
   const chosen = selectedSpecies();
-  const any = editor.sel.atoms.size > 0 || chosen.length > 0;
-  const atoms = [...(any ? editor.sel.atoms : doc.atoms.keys())];
+  const lone = chosen.length ? null : loneAtomStructure();
+  const any = editor.sel.atoms.size > 0 || chosen.length > 0 || !!lone;
+  const atoms = [...(lone ?? (any ? editor.sel.atoms : doc.atoms.keys()))];
   const caps = new Set<Caption>(any ? [...chosen, ...groupedIons(doc, atoms, editor.measure())] : [...chemicalCaptions(doc, editor.measure()).keys()].map((id) => doc.captions.get(id)!));
   return { atoms, species: placeSpecies(doc, caps, editor.measure()) };
 }
@@ -3341,18 +3345,16 @@ async function mapAtomsCommand(): Promise<void> {
   const got = await ask('Map Atoms', [
     ...(arrow !== undefined ? [{ name: 'which', label: 'Map', value: 'step', options: [{ value: 'step', label: 'The selected reaction step' }, { value: 'all', label: 'Every step in the drawing' }] }] : []),
     { name: 'numbers', label: 'Show the map numbers beside the atoms', type: 'checkbox', value: mapChoice.numbers },
-    { name: 'look', label: 'Map number boxes', value: mapLookPrefs.look, options: MAP_LOOKS.map((l) => ({ value: l.value, label: l.label })) },
+    { name: 'look', label: 'Map number boxes', value: docMapLook(doc.style).look, options: MAP_LOOKS.map((l) => ({ value: l.value, label: l.label })) },
     { name: 'colours', label: 'Color each atom and where it goes the same', type: 'checkbox', value: mapChoice.colours },
     { name: 'bonds', label: 'Mark bonds made (green) and broken (red)', type: 'checkbox', value: mapChoice.bonds },
   ], { ok: 'Map', note: 'Atoms are paired the way Animate Reaction pairs them. To change a pair, pair it by hand in Animate Reaction and map again. Map numbers go into copied reaction SMILES and RXN files.' });
   if (!got) return;
   Object.assign(mapChoice, { numbers: got.numbers, colours: got.colours, bonds: got.bonds });
-  if (MAP_LOOKS.some((l) => l.value === got.look) && got.look !== mapLookPrefs.look) {
-    mapLookPrefs.look = got.look as MapLook;
-    doc.allDirty = true;
-    storeSettings();
+  if (MAP_LOOKS.some((l) => l.value === got.look) && got.look !== docMapLook(doc.style).look) {
+    setMapLook(got.look as MapLook);
     // your own format: set it now (it starts as light peach with a dark outline)
-    if (mapLookPrefs.look === 'custom') await mapFormatCommand(false);
+    if (got.look === 'custom') await mapFormatCommand(false);
   }
   const { mapAtoms, applyAtomMap } = await import('./morph/atom-map');
   const res = mapAtoms(doc, renderer, { arrow: got.which === 'step' ? arrow : undefined, measure: editor.measure() });
@@ -3373,19 +3375,29 @@ async function mapAtomsCommand(): Promise<void> {
 }
 
 /**
- * Chemistry > Reactions and Schemes > Map Number Format…: the user's own format for every
+ * The drawing's map-number look (and its own box format), saved with the file as one undoable
+ * step; the last one chosen is also the default for drawings with none of their own.
+ */
+function setMapLook(look: MapLook, box?: MapBoxStyle): void {
+  const own = { ...docMapLook(doc.style).custom, ...box };
+  doc.edit('Map Number Format', () => doc.setStyle({ ...doc.style, mapLook: look, mapBox: own }));
+  mapLookPrefs.look = look;
+  mapLookPrefs.custom = { ...own };
+  editor.changed();
+  storeSettings();
+}
+
+/**
+ * Chemistry > Reactions and Schemes > Map Number Format…: this drawing's own format for every
  * map-number box; choosing it also switches the boxes to that format.
  */
 async function mapFormatCommand(switchLook = true): Promise<void> {
   finishTyping();
   const { askMapFormat } = await import('./ui/map-format');
-  const got = await askMapFormat(mapLookPrefs.custom);
+  const now = docMapLook(doc.style);
+  const got = await askMapFormat(now.custom);
   if (!got) return;
-  mapLookPrefs.custom = got;
-  if (switchLook) mapLookPrefs.look = 'custom';
-  doc.allDirty = true;
-  editor.requestScene();
-  storeSettings();
+  setMapLook(switchLook ? 'custom' : now.look, got);
 }
 
 /** Chemistry > Reactions and Schemes > Clear Atom Map: on the selected structures, or everywhere. */
@@ -3512,14 +3524,14 @@ function copyText(text: string, done: string): Promise<void> {
 
 /** Copy the selected structures (or all of them) as molfile text. */
 function copyMolfile(): Promise<void> {
-  const atoms = editor.sel.atoms.size ? editor.sel.atoms : doc.atoms.keys();
+  const atoms = loneAtomStructure() ?? (editor.sel.atoms.size ? editor.sel.atoms : doc.atoms.keys());
   const { molblock } = toMolfile(doc, atoms);
   return copyText(molblock, 'Copied as molfile text.');
 }
 
 /** Copy the selection (or the whole drawing) as CDXML text, for pasting into a text editor or script. */
 function copyCdxmlText(): Promise<void> | void {
-  const part = extractDrawing(doc, editor.hasSelection() ? editor.sel : null);
+  const part = extractDrawing(doc, chemistrySelection(doc, editor.sel, editor.hasSelection()));
   if (isEmpty(part)) { flash('There is nothing to copy.'); return; }
   return copyText(writeCdxml(part, { name: 'Clipboard.cdxml', textMeasure: measureText }), 'Copied as CDXML text.');
 }
@@ -3842,6 +3854,7 @@ function enterTab(tab: Tab, opened: boolean): void {
   editor.textFirst = !!deck;
   editor.structuresLocked = slides && structuresLocked;
   for (const el of document.querySelectorAll<HTMLElement>('.design-only')) el.hidden = !design;
+  if (design) designLib?.refresh();
   document.body.classList.toggle('sheet-mode', sheet);
   document.body.classList.toggle('doc-mode', words);
   placeSidePanel();
@@ -5464,7 +5477,7 @@ async function libraryLocation(): Promise<void> {
   await writePlaceChoice(keepStore(), { folder });
   flash(`Your library is kept in ${folder} now. Choose the same folder on your other computers to share it.`, 8000);
   referencesWindow.fill();
-  compoundWindow.fill();
+  compoundWindow.now()?.fill();
 }
 
 const ZOTERO_KEY = 'library/zotero.json';
@@ -5633,7 +5646,8 @@ async function noteFileCompounds(tab: Tab): Promise<void> {
   lib.change((l) => noteMentions(l, path, found.map((f, i) => ({ smiles: w[i]?.smiles ?? '', ...(f.label ? { label: f.label } : {}) }))));
 }
 
-const compoundWindow = new CompoundLibraryWindow(library, {
+// (the window is loaded when first opened)
+const compoundHost = {
   flash,
   selected: () => selectedForLibrary(),
   numbered: () => numberedForLibrary(),
@@ -5674,7 +5688,7 @@ const compoundWindow = new CompoundLibraryWindow(library, {
     const i = w.findIndex((r) => r?.smiles === c.smiles);
     if (i >= 0) await openAt(path, found[i].spot, found[i].atoms);
   },
-  findInFiles: desktopFolders ? (c) => void findWindow.open({ smiles: c.smiles, label: c.label }) : undefined,
+  findInFiles: desktopFolders ? (c) => void openFindWindow({ smiles: c.smiles, label: c.label }) : undefined,
   pickSdf: async () => { const f = await openBytesDialog('SD file', [SDF], ['sd']); return f ? { name: f.name, text: new TextDecoder().decode(f.bytes) } : null; },
   saveSdf: async (name, text) => {
     const target = await saveFileDialog(name, SDF).catch(() => null);
@@ -5684,7 +5698,8 @@ const compoundWindow = new CompoundLibraryWindow(library, {
   },
   fileName: () => { const t = ws.mainOf(ws.active); return t.ref.kind === 'path' ? t.ref.path : ''; },
   location: () => libraryLocation(),
-});
+} satisfies CompoundLibraryHost;
+const compoundWindow = madeLater(async (): Promise<CompoundLibraryWindow> => new (await import('./ui/compound-library')).CompoundLibraryWindow(library, compoundHost));
 
 /** Chemistry > Compound Library > Add Selected to Compound Library. */
 async function addToCompoundLibrary(): Promise<void> {
@@ -5693,6 +5708,7 @@ async function addToCompoundLibrary(): Promise<void> {
   const got = await selectedForLibrary();
   if (typeof got === 'string') { flash(got, 6000); return; }
   const t = ws.mainOf(ws.active);
+  const { addStructures } = await import('./ui/compound-library');
   let res: ReturnType<typeof addStructures> | null = null;
   lib.change((l) => (res = addStructures(l, got, t.ref.kind === 'path' ? t.ref.path : '')).lib);
   const r = res as ReturnType<typeof addStructures> | null;
@@ -5705,7 +5721,7 @@ async function addToCompoundLibrary(): Promise<void> {
 async function openCompoundLibrary(select: string[] = []): Promise<void> {
   finishTyping();
   await useLibrary();
-  await compoundWindow.open(select);
+  await (await compoundWindow.get()).open(select);
 }
 
 // ---------------------------------------------------------------- Chemistry > Look Up > Knowledge Base
@@ -5713,7 +5729,8 @@ async function openCompoundLibrary(select: string[] = []): Promise<void> {
 /** Where the tables the user imported (from their own copies of published tables) are kept: this computer only. */
 const KB_IMPORTED_KEY = 'kb/imported-tables.json';
 
-const knowledgeBase = new KnowledgeBaseWindow({
+// (loaded when first opened: its tables are big, and most sessions never open it)
+const knowledgeBaseHost = {
   flash,
   canonical: async (smiles) => (chem.ready ? chem.canonical(smiles).catch(() => null) : null),
   readImported: () => getText(keepStore(), KB_IMPORTED_KEY).catch(() => null),
@@ -5729,26 +5746,30 @@ const knowledgeBase = new KnowledgeBaseWindow({
     const t = q.trim();
     return pubchemSafetyRecord(isCasNumber(t) ? { cas: t } : looksLikeSmiles(t) ? { smiles: t } : { name: t });
   },
-});
+} satisfies KnowledgeBaseHost;
+const knowledgeBase = madeLater(async (): Promise<KnowledgeBaseWindow> => new (await import('./ui/knowledge-base')).KnowledgeBaseWindow(knowledgeBaseHost));
 
 /** Chemistry > Look Up > Knowledge Base: reference tables searched by name, CAS number, SMILES or a shift. */
 function openKnowledgeBase(): void {
   finishTyping();
-  void knowledgeBase.open();
+  void (async () => {
+    await (await knowledgeBase.get()).open();
+  })().catch((e) => flash(`The Knowledge Base could not open: ${String(e)}`));
 }
 
 // ---------------------------------------------------------------- Chemistry > Metals > Ligand Library
 
-const ligandLibrary = new LigandLibraryWindow({
+// (loaded when first opened, as the other windows below are)
+const ligandLibrary = madeLater(async (): Promise<LigandLibraryWindow> => new (await import('./ui/ligand-library')).LigandLibraryWindow({
   useTemplate: (id) => pickTool(`tpl-${id}`),
   openUrl: (url) => openWebPage(url),
   copyText: (text, done) => void copyText(text, done),
-});
+}));
 
 /** Chemistry > Metals > Ligand Library, and the first button on the Ligands palette. */
 function openLigandLibrary(): void {
   finishTyping();
-  ligandLibrary.open();
+  void ligandLibrary.get().then((w) => w.open(), (e) => flash(`The Ligand Library could not open: ${String(e)}`));
 }
 
 // ---------------------------------------------------------------- File > Find Structure in Files (desktop app)
@@ -5762,7 +5783,7 @@ const folderReaders: FileReaders = {
   slides: async (bytes) => (await import('./io/pptx-read')).readPptx(bytes).slides.map((s) => s.contents),
 };
 
-const findWindow = new FindInFilesWindow({
+const findHost = {
   flash,
   pickFolder: (start) => pickFolder(start),
   listFolder: (path, extensions, sub) => invoke<{ files: ListedFile[]; complete: boolean }>('list_folder', { path, extensions, sub }),
@@ -5794,13 +5815,19 @@ const findWindow = new FindInFilesWindow({
     get: () => { try { return localStorage.getItem('ci-find-folder') ?? ''; } catch { return ''; } },
     set: (p) => { try { localStorage.setItem('ci-find-folder', p); } catch { /* not kept */ } },
   },
-});
+} satisfies FindInFilesHost;
+
+/** The Find Structure in Files window, loaded the first time it opens. */
+const findWindow = madeLater(async (): Promise<FindInFilesWindow> => new (await import('./ui/find-in-files')).FindInFilesWindow(findHost));
+async function openFindWindow(start?: Parameters<FindInFilesWindow['open']>[0]): Promise<void> {
+  await (await findWindow.get()).open(start);
+}
 
 function findStructureInFiles(): void {
   finishTyping();
   if (!desktopFolders) { flash('Find Structure in Files looks through a folder, which the desktop app (Windows, Mac or Linux) can do and a browser can\'t.', 7000); return; }
   if (!chem.ready) { flash('The chemistry engine is still loading; try again in a moment.'); return; }
-  void findWindow.open();
+  void openFindWindow().catch((e) => flash(String(e)));
 }
 
 // ---------------------------------------------------------------- references (every open file's)
@@ -6954,7 +6981,7 @@ async function exportPicture(preset: { format?: string; dpi?: number; note?: str
   const tab = ws.active, deck = tab.deck;
   const what = deck ? (tab.mode === 'design' ? 'the page' : 'this slide') : 'the drawing';
   // the figure check's journal sets the resolution it asks for
-  const checked = preflightPane.open ? preflightPane.last : null;
+  const checked = preflightPane.now()?.open ? preflightPane.now()!.last : null;
   const dpiNow = preset.dpi ?? checked?.dpi ?? 300;
   const v = await ask('Export Picture', [
     { name: 'format', label: 'Format', value: preset.format ?? 'png', options: [
@@ -7291,6 +7318,8 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
     document.body.classList.add('boxed-drawing');
   }
   editor.clearSelection();
+  // (no keyboard highlight left from the last structure: its atom ids mean nothing in this one)
+  editor.setKeyHot(null);
   doc.swap(drawing);
   // the drawing beside (split view) waits in `drawing`, its zoom kept for after
   cellEdit = { done, saved: drawing, view: { ...renderer.view } };
@@ -7346,6 +7375,7 @@ function finishCellStructure(keep: boolean): void {
   const result = keep && doc.canUndo() ? doc.contents() : null;
   modeTool[ws.active.mode] = editor.toolName;
   editor.clearSelection();
+  editor.setKeyHot(null);
   editor.lastEdited = null;
   editor.cropping = null;
   doc.swap(e.saved);
@@ -7417,14 +7447,25 @@ host.addEventListener('pointerdown', (e) => {
   e.stopPropagation();
   void doneCellStructure();
 }, true);
-// Esc with nothing picked: Cancel (with something picked, Esc lets it go first)
+// Esc: the drawing tools let go of what they hold first (a selection, the highlight on the atom
+// last drawn, text being typed); then Cancel, asking first when something was drawn (ui/in-place.ts)
+let askingDiscard = false;
 window.addEventListener('keydown', (e) => {
   if (!cellEdit || e.key !== 'Escape' || e.defaultPrevented || isTyping(e.target) || (e.target as HTMLElement | null)?.closest?.('dialog, .menu')) return;
-  const s = editor.sel;
-  if (s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size || s.shapes.size || editor.dragging || editor.captionOpen()) return;
+  const act = escapeAction({ toolsBusy: editor.escapeHasWork(), changed: doc.canUndo() });
+  if (act === 'tools') return;
   e.preventDefault();
   e.stopPropagation();
-  finishCellStructure(false);
+  if (act === 'cancel') { finishCellStructure(false); return; }
+  if (askingDiscard) return;
+  askingDiscard = true;
+  const e0 = cellEdit;
+  void ask('Discard Changes?', [], { ok: 'Discard', note: 'Esc cancels the structure: what was drawn since it opened will be lost. Done keeps it.' }).then((ok) => {
+    askingDiscard = false;
+    if (cellEdit !== e0) return;
+    if (ok) finishCellStructure(false);
+    else overlay.focus();
+  });
 }, true);
 window.addEventListener('keydown', (e) => {
   // Ctrl+Enter: Done
@@ -7807,75 +7848,80 @@ const JOURNAL_STYLES: Record<string, string> = {
 };
 
 /** File > Check Figure for Journal: the figure showing, as it draws (a drawing, a design page or a slide). */
-const preflightPane = new PreflightPane({
-  figure: () => {
-    if (sheetActive() || docActive()) return null;
-    const deck = deckNow();
-    if (deck) {
-      const i = deck.index;
-      const at = slidePages(deck, i)[deck.current?.canvas ? canvasKeys.picked(deck) : 0];
-      if (!at) return null;
-      return { items: recordSlide(at.page, at.doc), box: { x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h }, page: true };
-    }
-    const pic = recordPicture(doc, 0);
-    return pic ? { items: pic.items, box: pic.box } : null;
-  },
-  select: (where) => {
-    const sel = editor.touching(where);
-    editor.selectThese(sel);
-    const first = [...sel.atoms][0];
-    if (first !== undefined) editor.reveal('atom', first);
-    else if (sel.captions.size) editor.reveal('caption', [...sel.captions][0]);
-    else if (!sel.shapes.size && !sel.arrows.size) flash('That is part of a picture, chart or table: change it there.');
-  },
-  fix: (issue, r) => {
-    finishTyping();
-    // measured afresh for each step (text made bigger has a bigger box)
-    const fixCtx = () => { const m = editor.measure(); return { captionBox: (id: number) => m.captionBox(doc.captions.get(id)!), shapeBox: (id: number) => shapeBox(doc.shapes.get(id)!) }; };
-    let scaled = 1;
-    const apply = (i: typeof issue): boolean => {
-      if (i.fix === 'fit' && i.want) {
-        editor.selectAll();
-        const ok = editor.scaleSelection(i.want);
-        if (ok) scaled *= i.want;
-        return ok;
+/** The pane, loaded the first time it is used. */
+const preflightPane = madeLater(async (): Promise<PreflightPane> => {
+  const [m, { preflight }, { enlargeText, thickenLines, useArial, fixUntilDone }] = await Promise.all([import('./ui/preflight-pane'), import('./preflight'), import('./preflight-fix')]);
+  const pane: PreflightPane = new m.PreflightPane({
+    figure: () => {
+      if (sheetActive() || docActive()) return null;
+      const deck = deckNow();
+      if (deck) {
+        const i = deck.index;
+        const at = slidePages(deck, i)[deck.current?.canvas ? canvasKeys.picked(deck) : 0];
+        if (!at) return null;
+        return { items: recordSlide(at.page, at.doc), box: { x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h }, page: true };
       }
-      if (i.fix === 'text') return enlargeText(doc, i, fixCtx());
-      if (i.fix === 'lines') return thickenLines(doc, i, fixCtx());
-      if (i.fix === 'fonts') return useArial(doc, i.fonts ?? []);
-      return false;
-    };
-    // checked again after each step: one fix can undo another's work by a hair
-    const again = () => {
-      const fig = preflightPane.figureNow();
-      return fig ? preflight(fig.items, fig.box, r.journal, r.size.id, r.how) : null;
-    };
-    // all the steps are one undo
-    const label = { fit: 'Make it fit', text: 'Enlarge small text', lines: 'Thicken thin lines', fonts: 'Change fonts to Arial', style: 'Drawing style' }[issue.fix ?? 'style'];
-    const done = doc.edit(label, () => fixUntilDone(issue, apply, again));
-    if (done && issue.fix === 'fit') flash(`Scaled to ${Math.round(scaled * 100)} % to fit ${r.size.name.replace(/ \(.*/, '').toLowerCase()}. Text in captions keeps its size.`, 6000);
-    if (done) editor.changed();
-    else if (issue.fix !== 'fit') flash('This is in a picture, chart or table: change it there.');
-    return done;
-  },
-  styleFor: (id) => (JOURNAL_STYLES[id] && presetNamed(JOURNAL_STYLES[id]) ? JOURNAL_STYLES[id] : undefined),
-  useStyle: (name) => {
-    const next = presetNamed(name)?.style;
-    if (!next) return;
-    finishTyping();
-    const deck = deckNow();
-    if (deck) deck.setDrawingStyle({ ...next }, 'restyle');
-    else { doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, { ...next }, 'restyle')); editor.changed(); }
-    flash(`Structures are now drawn in ${next.name}.`, 4000);
-  },
-  exportFor: (r) => {
-    finishTab();
-    const name = r.journal.name.replace(/ \(.*/, '');
-    if (r.journal.vectorPreferred) { void exportPdf(); return; }
-    const raster = r.journal.formats?.find((f) => f === 'tiff' || f === 'png') ?? 'tiff';
-    void exportPicture({ format: raster, dpi: r.dpi, note: `The ${name} guidelines ask for ${r.dpi} dpi for this figure${r.journal.formats ? `, as ${r.journal.formats.map((f) => f.toUpperCase()).join(', ')}` : ''}.` });
-  },
-  open: (url) => openWebPage(url),
+      const pic = recordPicture(doc, 0);
+      return pic ? { items: pic.items, box: pic.box } : null;
+    },
+    select: (where) => {
+      const sel = editor.touching(where);
+      editor.selectThese(sel);
+      const first = [...sel.atoms][0];
+      if (first !== undefined) editor.reveal('atom', first);
+      else if (sel.captions.size) editor.reveal('caption', [...sel.captions][0]);
+      else if (!sel.shapes.size && !sel.arrows.size) flash('That is part of a picture, chart or table: change it there.');
+    },
+    fix: (issue, r) => {
+      finishTyping();
+      // measured afresh for each step (text made bigger has a bigger box)
+      const fixCtx = () => { const m = editor.measure(); return { captionBox: (id: number) => m.captionBox(doc.captions.get(id)!), shapeBox: (id: number) => shapeBox(doc.shapes.get(id)!) }; };
+      let scaled = 1;
+      const apply = (i: typeof issue): boolean => {
+        if (i.fix === 'fit' && i.want) {
+          editor.selectAll();
+          const ok = editor.scaleSelection(i.want);
+          if (ok) scaled *= i.want;
+          return ok;
+        }
+        if (i.fix === 'text') return enlargeText(doc, i, fixCtx());
+        if (i.fix === 'lines') return thickenLines(doc, i, fixCtx());
+        if (i.fix === 'fonts') return useArial(doc, i.fonts ?? []);
+        return false;
+      };
+      // checked again after each step: one fix can undo another's work by a hair
+      const again = () => {
+        const fig = pane.figureNow();
+        return fig ? preflight(fig.items, fig.box, r.journal, r.size.id, r.how) : null;
+      };
+      // all the steps are one undo
+      const label = { fit: 'Make it fit', text: 'Enlarge small text', lines: 'Thicken thin lines', fonts: 'Change fonts to Arial', style: 'Drawing style' }[issue.fix ?? 'style'];
+      const done = doc.edit(label, () => fixUntilDone(issue, apply, again));
+      if (done && issue.fix === 'fit') flash(`Scaled to ${Math.round(scaled * 100)} % to fit ${r.size.name.replace(/ \(.*/, '').toLowerCase()}. Text in captions keeps its size.`, 6000);
+      if (done) editor.changed();
+      else if (issue.fix !== 'fit') flash('This is in a picture, chart or table: change it there.');
+      return done;
+    },
+    styleFor: (id) => (JOURNAL_STYLES[id] && presetNamed(JOURNAL_STYLES[id]) ? JOURNAL_STYLES[id] : undefined),
+    useStyle: (name) => {
+      const next = presetNamed(name)?.style;
+      if (!next) return;
+      finishTyping();
+      const deck = deckNow();
+      if (deck) deck.setDrawingStyle({ ...next }, 'restyle');
+      else { doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, { ...next }, 'restyle')); editor.changed(); }
+      flash(`Structures are now drawn in ${next.name}.`, 4000);
+    },
+    exportFor: (r) => {
+      finishTab();
+      const name = r.journal.name.replace(/ \(.*/, '');
+      if (r.journal.vectorPreferred) { void exportPdf(); return; }
+      const raster = r.journal.formats?.find((f) => f === 'tiff' || f === 'png') ?? 'tiff';
+      void exportPicture({ format: raster, dpi: r.dpi, note: `The ${name} guidelines ask for ${r.dpi} dpi for this figure${r.journal.formats ? `, as ${r.journal.formats.map((f) => f.toUpperCase()).join(', ')}` : ''}.` });
+    },
+    open: (url) => openWebPage(url),
+  });
+  return pane;
 });
 
 const slideCompare = new SlideComparePane({
@@ -8095,7 +8141,11 @@ function restack(how: 'front' | 'back' | 'forward' | 'backward'): void {
 
 const COMMANDS: Record<string, () => unknown> = {
   new: () => { finishTab(); ws.newDrawing(); },
-  'preflight': () => { finishTyping(); if (preflightPane.open) preflightPane.refresh(); else preflightPane.show(document.querySelector<HTMLElement>('[data-cmd="preflight"]:not([hidden])')); },
+  'preflight': () => {
+    finishTyping();
+    void preflightPane.get().then((p) => { if (p.open) p.refresh(); else p.show(document.querySelector<HTMLElement>('[data-cmd="preflight"]:not([hidden])')); })
+      .catch((e) => flash(`Check Figure for Journal could not open: ${String(e)}`));
+  },
   'check-accessibility': () => { finishTyping(); if (accessibility.open) accessibility.refresh(); else accessibility.show(document.querySelector<HTMLElement>('[data-cmd="check-accessibility"]:not([hidden])')); },
   'alt-text': () => { finishTyping(); void drawingAltText(); },
   'new-slides': () => { finishTab(); ws.newSlides(); },
@@ -8466,7 +8516,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'command-search': () => commandSearch.open(),
   assistant: () => {
     if (aiPrefs.provider === 'none') { flash('Link an AI model in Edit > Settings > AI Model to use the Assistant.', 6000, { label: 'AI Model…', run: () => void aiSettings() }); return; }
-    assistantBar().toggle();
+    void assistantBar.get().then((b) => b.toggle(), (e) => flash(`The Assistant could not open: ${String(e)}`));
   },
   'next-region': () => cycleRegion(1),
   'prev-region': () => cycleRegion(-1),
@@ -11505,6 +11555,7 @@ function drawingMenu(): MenuItem[] {
   const s = editor.sel;
   const any = s.atoms.size + s.bonds.size + s.captions.size + s.arrows.size + s.shapes.size > 0;
   const atoms = s.atoms.size > 0;
+  const loneAtom = s.atoms.size === 1 && s.bonds.size + s.captions.size + s.arrows.size + s.shapes.size === 0;
   const texts = selectedSpecies().length > 0;
   const shapes = [...s.shapes].map((id) => doc.shapes.get(id)).filter((x): x is Shape => !!x);
   const design = ws.active.mode === 'design';
@@ -11592,8 +11643,8 @@ function drawingMenu(): MenuItem[] {
       ...(s.atoms.size + s.captions.size + s.arrows.size + s.shapes.size > 1 ? [{ cmd: 'group' }] : []),
       ...(selectedGroups(doc, s).size ? [{ cmd: 'ungroup' }] : []),
       null,
-      { label: 'Align', items: arrange },
-      { label: 'Rotate or Flip', items: turn },
+      // (one atom alone has nothing to line up, turn or flip)
+      ...(loneAtom ? [] : [{ label: 'Align', items: arrange }, { label: 'Rotate or Flip', items: turn }]),
       ...(order.length ? [{ label: 'Order', items: order }] : []),
       null,
       { cmd: 'add-frame' },
@@ -13389,7 +13440,10 @@ const smartPane = new SmartPane({
   format: (id, fmt) => editor.smartFormat(id, fmt),
   async secondLoop(id) {
     const st = editor.smartCycleStart(id);
-    if (!st) return;
+    if (!st) {
+      if (editor.smartReagentStructures(id)) flash('A second loop can\'t be added while a step has a structure joining or leaving it: make those steps\' reagents text first (in the species list), add the loop, then make them structures again.', 8000);
+      return;
+    }
     const got = await askCycle(0, { spec: { loops: [st.loop] }, look: st.look, drawn: st.drawn });
     if (got?.rows) editor.smartRebuildCycle(id, got.spec, got.look, got.rows);
   },

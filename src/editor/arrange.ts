@@ -73,6 +73,42 @@ export function units(doc: Doc, sel: Selection, m: Measure): Unit[] {
   return out;
 }
 
+/**
+ * The units with grouped things (Format > Group) joined into one, so a group lines up and spaces
+ * out as a single object, as in PowerPoint (issue #405).
+ */
+export function joinGroups(doc: Doc, us: Unit[]): Unit[] {
+  const grpOf = (u: Unit): number[] => {
+    const g = new Set<number>();
+    for (const id of u.atoms) { const x = doc.atoms.get(id)?.grp; if (x !== undefined) g.add(x); }
+    for (const id of u.captions) { const x = doc.captions.get(id)?.grp; if (x !== undefined) g.add(x); }
+    for (const id of u.arrows) { const x = doc.arrows.get(id)?.grp; if (x !== undefined) g.add(x); }
+    for (const id of u.shapes) { const x = doc.shapes.get(id)?.grp; if (x !== undefined) g.add(x); }
+    return [...g];
+  };
+  const out: Unit[] = [];
+  const byGrp = new Map<number, Unit>();
+  for (const u of us) {
+    const gs = grpOf(u);
+    // the joined units this one shares a group with (it can bridge two)
+    const hits = [...new Set(gs.map((g) => byGrp.get(g)).filter((x): x is Unit => !!x))];
+    if (!hits.length) {
+      const copy = { atoms: [...u.atoms], captions: [...u.captions], arrows: [...u.arrows], shapes: [...u.shapes], box: { ...u.box } };
+      out.push(copy);
+      for (const g of gs) byGrp.set(g, copy);
+      continue;
+    }
+    const into = hits[0];
+    for (const other of [u, ...hits.slice(1)]) {
+      into.atoms.push(...other.atoms); into.captions.push(...other.captions); into.arrows.push(...other.arrows); into.shapes.push(...other.shapes);
+      into.box = unionRect(into.box, other.box)!;
+      if (other !== u) { out.splice(out.indexOf(other), 1); for (const [g, v] of byGrp) if (v === other) byGrp.set(g, into); }
+    }
+    for (const g of gs) byGrp.set(g, into);
+  }
+  return out;
+}
+
 export function atomsBox(doc: Doc, atoms: Iterable<number>, m: Measure): Rect {
   let r: Rect | null = null;
   for (const id of atoms) {
