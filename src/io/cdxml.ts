@@ -1136,6 +1136,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       const auto = hShown !== null && hShown >= 0 && isAutoLabel(atom.z, text, hShown);
       const bos = doc.valenceSum(atom.id);
       const implicitOk = auto && (!hasImplicitH(atom.z) || implicitHydrogens(atom.z, bos, atom.charge) === hShown);
+      // a carbon written out (=CH2, CH3 at a chain end) stays shown, as ChemDraw shows it
+      if (implicitOk && atom.z === 6) atom.showCarbon = true;
       if (!implicitOk) {
         atom.label = text;
         atom.fileLabel = true;
@@ -1318,11 +1320,18 @@ export function applyLineEnds(runs: TextRun[], ends: number[]): void {
   const chars: { ch: string; run: number }[] = [];
   runs.forEach((r, k) => { for (const ch of r.text) chars.push({ ch, run: k }); });
   const breaks: number[] = [];
-  let bytes = 0;
+  const size = (ch: string) => { const cp = ch.codePointAt(0)!; return cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4; };
+  // ChemDraw counts LineStarts in bytes of UTF-8; some older files (ChemDraw 21) count characters
+  const byteLen = chars.reduce((n, c) => n + size(c.ch), 0), last = Math.max(...ends);
+  const inChars = last === chars.length && last !== byteLen;
+  if (!inChars && last > byteLen) return;
+  const hasNewlines = chars.some((c) => c.ch === '\n');
+  const word = /[\p{L}\p{N}]/u;
+  let at = 0;
   chars.forEach((c, i) => {
-    if (i > 0 && want.has(bytes)) breaks.push(i);
-    const cp = c.ch.codePointAt(0)!;
-    bytes += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+    // (never split a word or number where the text already breaks its own lines)
+    if (i > 0 && want.has(at) && !(hasNewlines && word.test(chars[i - 1].ch) && word.test(c.ch))) breaks.push(i);
+    at += inChars ? 1 : size(c.ch);
   });
   for (let k = breaks.length - 1; k >= 0; k--) {
     const i = breaks[k];
