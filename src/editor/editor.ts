@@ -2169,16 +2169,16 @@ export class Editor {
     this.changed();
     const subs = vr.subs.length > 0;
     if (walking) return `Walked one place ${step === 'cw' ? 'clockwise' : 'counterclockwise'}. Tab goes on, [ goes back, Shift+Tab flips the chair.`;
-    if (view === 'flat') return 'Drawn flat. Tab: chair.';
+    if (view === 'flat') return 'Drawn flat. Tab or \\: chair.';
     const name = RING_VIEW_NAMES[view];
     return view === 'boat'
-      ? `${name}. ${subs ? 'Tab walks it round; ' : 'Tab: flat; '}Shift+Tab: chair.`
-      : `${name}. ${subs ? 'Tab walks the ring round, [ goes back, ' : 'Tab: the next shape, '}Shift+Tab flips it.`;
+      ? `${name}. ${subs ? 'Tab walks it round; ' : 'Tab: flat; '}Shift+Tab: chair; \\: flat.`
+      : `${name}. ${subs ? 'Tab walks the ring round, [ goes back, ' : 'Tab: the next shape, '}Shift+Tab flips it, \\ draws it flat.`;
   }
 
-  /** What Tab, Shift+Tab, [ and ] do to the selected ring now, or null when they don't act on a ring. */
+  /** What Tab, Shift+Tab, [, ] and \\ do to the selected ring now, or null when they don't act on a ring. */
   private ringKey(chord: string): RingStep | null {
-    if (!['Tab', 'Shift+Tab', '[', ']'].includes(chord) || !this.sel.atoms.size) return null;
+    if (!['Tab', 'Shift+Tab', '[', ']', '\\'].includes(chord) || !this.sel.atoms.size) return null;
     // a structure picked with Tab: Tab goes on to the next structure
     if (this.tabPicked !== null && this.tabPicked === [...this.sel.atoms].sort((a, b) => a - b).join(',')) return null;
     const got = viewRingOf(this.doc, this.sel.atoms);
@@ -2186,6 +2186,8 @@ export class Editor {
     const view = viewNow(this.doc, got.ring).view;
     const shaped = view !== 'flat';
     const walks = shaped && got.ring.subs.length > 0;
+    // \ goes straight between the flat drawing and the chair, whatever shape it is in
+    if (chord === '\\') return shaped ? 'flat' : 'chair';
     if (chord === '[') return walks ? 'ccw' : null;
     if (chord === ']') return walks ? 'cw' : null;
     if (chord === 'Shift+Tab') return view === 'chair' || view === 'chair-flip' ? 'flip' : 'chair';
@@ -4543,7 +4545,7 @@ export class Editor {
    * drawn; pressing it again straight away steps through other layouts and turns of the same
    * structures. `seeds` are other starting places for atoms (the chemistry engine's layouts),
    * tried for ring systems that need untangling. Returns which way was used (and how many there
-   * are), or false when there was nothing to change.
+   * are), or false when there was nothing to change (an already tidy structure is left as it is).
    */
   cleanUp(seeds: Map<number, Vec>[] = []): false | { k: number; of: number; label: string } {
     const doc = this.doc;
@@ -4564,9 +4566,9 @@ export class Editor {
       did = this.tidyLayout() || did;
     });
     if (!did) {
-      // already tidy: show the next way instead, so the button always does something
-      cycle.version = doc.version;
-      return picked ? this.nextCleanUp(cycle) : false;
+      // already tidy: leave it as it is (Clean Up Options... still shows the other ways)
+      this.cleanCycle = null;
+      return false;
     }
     // the tidying round them (a scheme, a grid) may have moved whole structures: the other ways
     // go where each structure is now, so stepping through them doesn't undo that
@@ -5296,7 +5298,8 @@ export class Editor {
     // drawing a curved arrow through points: Enter ends it, Backspace takes back a point, Esc stops
     if (this.routeKey(chord)) { e.preventDefault(); return; }
     // a selected cyclohexane: Tab through its shapes (flat, chair, flipped chair, boat); on a chair
-    // with substituents Tab and ] walk it round, [ walks it back, and Shift+Tab flips it
+    // with substituents Tab and ] walk it round, [ walks it back, and Shift+Tab flips it; \ goes
+    // between flat and chair
     const ringStep = this.pointerInside || target === this.r.overlay ? this.ringKey(chord) : null;
     if (ringStep) { e.preventDefault(); this.say(this.ringStep(ringStep)); return; }
     // on a focused button or menu, Enter, Space and Tab do their usual jobs (unless the mouse

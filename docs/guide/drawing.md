@@ -43,6 +43,7 @@ A cyclohexane (or any six-membered ring of single bonds, such as a tetrahydropyr
 - Select the ring (or its whole structure) with the pointer over the drawing and press **Tab**: flat, then chair, then the flipped chair, then boat, then flat again. A wedge on the flat ring becomes an axial or equatorial bond on the same face of the chair.
 - On a chair with groups on it, **Tab** (or **]**) walks the ring around one place clockwise and **[** walks it back. The picture turns; the conformer doesn't, so axial groups stay axial.
 - **Shift+Tab** flips the chair: axial and equatorial swap.
+- **\\** goes straight between the flat drawing and the chair, from any shape, keeping the stereochemistry.
 - The same commands are on the right-click menu under **Ring Shape**.
 - A structure picked with Tab (Edit ▸ Select Next Structure) isn't changed: Tab goes on to the next one.
 - A ring fused or bridged to another keeps its shape.
