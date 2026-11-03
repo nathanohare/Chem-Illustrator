@@ -426,6 +426,26 @@ describe('the CDXML audit, writing side (4): R21', () => {
     expect(ma[0] - cc[0]).toBeCloseTo(0, 3);
   });
 
+  it('writes it as ChemDraw\'s arc arrow on a fresh save or copy too, moved or not', () => {
+    for (const shift of [0, 12]) {
+      const doc = read();
+      const r = doc.arrows.get(5)!;
+      if (shift) doc.edit('Move', () => doc.updateArrow(5, { tail: { x: r.tail.x + shift, y: r.tail.y }, head: { x: r.head.x + shift, y: r.head.y } }));
+      doc.source = null;
+      const xml = writeCdxml(doc), x = parse(xml);
+      expect(all(x, 'curve')).toHaveLength(0);
+      const a = all(x, 'arrow')[0];
+      expect(a.getAttribute('AngularSize')).toBe('200');
+      expect(nums(a, 'Center3D')[0]).toBeCloseTo(60 + shift, 2);
+      expect(nums(a, 'MajorAxisEnd3D')[0]).toBeCloseTo(95 + shift, 2);
+      for (const back of [readCdxml(xml).doc, readCdxml(viaCdx(xml)).doc]) {
+        const b = [...back.arrows.values()][0];
+        expect(b.ellipse).toBeDefined();
+        b.bez!.forEach((p, i) => { expect(p.x).toBeCloseTo(r.bez![i].x, 3); expect(p.y).toBeCloseTo(r.bez![i].y, 3); });
+      }
+    }
+  });
+
   it('writes it as a curve once its shape is changed here', () => {
     const doc = read();
     const r = doc.arrows.get(5)!;
