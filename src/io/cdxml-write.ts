@@ -35,7 +35,7 @@ import { shapeShadow } from '../render/highlight-fx';
 import { parseColor } from '../render/vector';
 import { layoutTable, cellAlign, isCovered, spanOf, partAt, NOTE_SCALE } from '../table';
 import { TABLE_TAG, TABLE_PART_TAG, tableBorders, type TableTag } from './cdxml-table';
-import { bondLayer, crossingBondsCached } from '../chem/crossing';
+import { bondLayer, crossingBondsCached, listedNearMisses } from '../chem/crossing';
 import { repeatGroups, repeatCount, repeatLabelPlace } from '../chem/polymer';
 import { ellipseAxes, isCircleRing, ringBonds, ringCircle, ringsThroughBond } from '../chem/aromatic';
 import { newmanForFile } from '../design/newman';
@@ -942,13 +942,15 @@ class CdxmlWriter {
       else if (/^\d+$/.test(run.text)) y1 = Math.min(y1, rowBase + dy - 1.15 * size);
     });
     if (below) y2 = Math.max(y2, baseline + 0.23 * size);
-    const right = dir === 'left' && [...layout.runs.map((r) => r.text).join('')].length > 1;
-    t.setAttribute('p', pt({ x: a.x + (right ? x2 : x1), y: a.y + baseline }));
+    // a label centred on its atom (Ru, Si): ChemDraw puts the text's point at the middle and writes Center three ways
+    const centred = !!a.centred && Math.abs(x1 + x2) < 1;
+    const right = !centred && dir === 'left' && [...layout.runs.map((r) => r.text).join('')].length > 1;
+    t.setAttribute('p', pt({ x: a.x + (centred ? (x1 + x2) / 2 : right ? x2 : x1), y: a.y + baseline }));
     t.setAttribute('BoundingBox', box({ x1: a.x + x1, y1: a.y + y1, x2: a.x + x2, y2: a.y + y2 }));
-    t.setAttribute('LabelJustification', right ? 'Right' : 'Left');
-    t.setAttribute('LabelAlignment', dir === 'up' ? 'Above' : dir === 'down' ? 'Below' : right ? 'Right' : 'Left');
+    t.setAttribute('LabelJustification', centred ? 'Center' : right ? 'Right' : 'Left');
+    t.setAttribute('LabelAlignment', centred ? 'Center' : dir === 'up' ? 'Above' : dir === 'down' ? 'Below' : right ? 'Right' : 'Left');
     // ChemDraw 25 writes a label that runs to the left (Cy3P on PCy3) right-justified both ways
-    if (right) t.setAttribute('Justification', 'Right');
+    if (right || centred) t.setAttribute('Justification', centred ? 'Center' : 'Right');
     else t.removeAttribute('Justification');
   }
 
@@ -959,10 +961,17 @@ class CdxmlWriter {
    * of everything (ChemDraw muddles equal ones) in the order they are layered here.
    */
   private writeCrossings(): void {
+    // the bonds that cross, and the near misses a ChemDraw file listed that still pass close
     const partners = new Map<number, Bond[]>();
+    // (ChemDraw lists some a little further off than it leaves gaps for, so they are kept to half a bond)
+    const st = this.doc.style, reach = Math.max(1.5 * (st.marginWidth + st.lineWidth), st.bondLength / 2);
+    const add = (b: Bond, o: Bond) => {
+      const l = partners.get(b.id) ?? [];
+      if (!l.includes(o)) partners.set(b.id, [...l, o]);
+    };
     for (const b of this.doc.bonds.values()) {
-      const cs = crossingBondsCached(this.doc, b);
-      if (cs.length) partners.set(b.id, cs);
+      for (const o of crossingBondsCached(this.doc, b)) add(b, o);
+      for (const o of listedNearMisses(this.doc, b, reach)) { add(b, o); add(o, b); }
     }
     const want = (b: Bond) => (partners.get(b.id) ?? []).map((o) => this.bondEls.get(o.id)?.getAttribute('id') ?? '').filter(Boolean).sort().join(' ');
     let ok = true;

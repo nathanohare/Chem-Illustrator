@@ -236,24 +236,34 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   const readFragment = (frag: Element) => {
     // text ChemDraw turned into a lone label on saving (Interpret Chemically): a text box again, as
     // it was written; ChemDraw's guess at what an unknown name is made of (DMAP as D, M, A, P) is not kept
-    const lone = kids(frag).filter((k) => k.nodeName === 'n');
-    if (lone.length === 1 && !kids(frag).some((k) => k.nodeName === 'b')) {
-      const n = lone[0], type = n.getAttribute('NodeType');
+    // (also such a label sharing a fragment with structures it has no bond to, as older ChemDraw
+    // versions save them: the same text box, so it reads back the same once saved here)
+    const bonded = new Set<string>();
+    for (const k of kids(frag)) {
+      if (k.nodeName === 'b') { bonded.add(k.getAttribute('B') ?? ''); bonded.add(k.getAttribute('E') ?? ''); }
+      if (k.nodeName === 'n') for (const a of (k.getAttribute('Attachments') ?? '').trim().split(/\s+/)) bonded.add(a);
+    }
+    const asText = new Set<Element>();
+    for (const n of kids(frag)) {
+      if (n.nodeName !== 'n' || bonded.has(n.getAttribute('id') ?? '')) continue;
+      const type = n.getAttribute('NodeType');
       const t = kids(n).find((k) => k.nodeName === 't');
-      if (t && (type === 'Unspecified' || ((type === 'Fragment' || type === 'Nickname') && n.getAttribute('NeedsClean') === 'yes'))) {
+      // (ChemDraw 25 keeps reagent text such as "MsCl, Et3N" as an AnonymousAlternativeGroup it couldn't interpret)
+      if (t && (type === 'Unspecified' || ((type === 'Fragment' || type === 'Nickname' || type === 'AnonymousAlternativeGroup') && n.getAttribute('NeedsClean') === 'yes'))) {
         const c = captionOf(t);
         if (c) {
           const cap = doc.addCaption({ id: idFor(t), ...c });
           from('c', cap.id, t);
           stats.captions++;
-          return;
+          asText.add(n);
         }
       }
     }
+    if (asText.size && kids(frag).every((k) => k.nodeName !== 'n' || asText.has(k))) return;
     const nodeIds = new Map<string, number>();
     const pendingMulti: { id: number; key: string; ids: string[] }[] = [];
     for (const n of kids(frag)) {
-      if (n.nodeName !== 'n') continue;
+      if (n.nodeName !== 'n' || asText.has(n)) continue;
       const type = n.getAttribute('NodeType');
       const [x, y] = pts(n.getAttribute('p'));
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;

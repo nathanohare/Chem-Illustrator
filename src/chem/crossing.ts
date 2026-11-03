@@ -39,6 +39,24 @@ function nearAt(p: Vec, q: Vec, r: Vec, s: Vec, reach: number): { t: number; sin
   return best;
 }
 
+/**
+ * The bonds a file listed as crossing this one (Bond.crossing) that don't cross it but still end
+ * just beside it, within `reach`, either way round: ChemDraw's near misses, for writing back.
+ */
+export function listedNearMisses(doc: Doc, b: Bond, reach: number): Bond[] {
+  if (!b.crossing?.length) return [];
+  const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
+  const out: Bond[] = [];
+  for (const id of b.crossing) {
+    const o = doc.bonds.get(id);
+    if (!o || o.id === b.id) continue;
+    const r = doc.atoms.get(o.a1)!, s = doc.atoms.get(o.a2)!;
+    if (crossAt(p, q, r, s)) continue;
+    if (nearAt(p, q, r, s, reach) || nearAt(r, s, p, q, reach)) out.push(o);
+  }
+  return out;
+}
+
 /** The bonds that cross this one (not counting bonds that share an atom with it). */
 export function crossingBonds(doc: Doc, b: Bond): Bond[] {
   const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
@@ -135,6 +153,7 @@ function sweepAll(doc: Doc, c: GapCache): void {
   c.swept = true;
   // (entries already worked out one at a time are kept as they are)
   const fresh = new Set<number>();
+  const use = (atom: number, bond: number) => { let s = c.users.get(atom); if (!s) c.users.set(atom, (s = new Set())); s.add(bond); };
   const span: { b: Bond; p: Vec; q: Vec; x1: number; x2: number; y1: number; y2: number }[] = [];
   for (const b of doc.bonds.values()) {
     const p = doc.atoms.get(b.a1), q = doc.atoms.get(b.a2);
@@ -142,9 +161,10 @@ function sweepAll(doc: Doc, c: GapCache): void {
     span.push({ b, p, q, x1: Math.min(p.x, q.x), x2: Math.max(p.x, q.x), y1: Math.min(p.y, q.y), y2: Math.max(p.y, q.y) });
     if (!c.bonds.has(b.id)) { c.bonds.set(b.id, { crossing: [] }); fresh.add(b.id); }
   }
+  // (a bond with near misses listed in a file looks again when those bonds move)
+  for (const id of fresh) for (const o of listedOf(doc, doc.bonds.get(id)!)) { use(o.a1, id); use(o.a2, id); }
   if (!fresh.size) return;
   span.sort((u, v) => u.x1 - v.x1);
-  const use = (atom: number, bond: number) => { let s = c.users.get(atom); if (!s) c.users.set(atom, (s = new Set())); s.add(bond); };
   for (let i = 0; i < span.length; i++) {
     const A = span[i];
     for (let j = i + 1; j < span.length && span[j].x1 <= A.x2; j++) {
@@ -160,6 +180,11 @@ function sweepAll(doc: Doc, c: GapCache): void {
   }
 }
 
+/** The bonds a file listed as crossing this one that are still in the drawing. */
+function listedOf(doc: Doc, b: Bond): Bond[] {
+  return (b.crossing ?? []).map((id) => doc.bonds.get(id)).filter((o): o is Bond => !!o && o.id !== b.id);
+}
+
 function entryOf(doc: Doc, b: Bond): { crossing: number[]; half?: number; gaps?: [number, number][] } {
   const c = freshCache(doc);
   let e = c.bonds.get(b.id);
@@ -173,7 +198,7 @@ function entryOf(doc: Doc, b: Bond): { crossing: number[]; half?: number; gaps?:
   c.bonds.set(b.id, (e = { crossing: crossing.map((o) => o.id) }));
   // (the bond's own atoms are found through their bonds when they change)
   const use = (atom: number) => { let s = c.users.get(atom); if (!s) c.users.set(atom, (s = new Set())); s.add(b.id); };
-  for (const o of crossing) { use(o.a1); use(o.a2); }
+  for (const o of [...crossing, ...listedOf(doc, b)]) { use(o.a1); use(o.a2); }
   return e;
 }
 
@@ -187,7 +212,8 @@ export function crossingGapsCached(doc: Doc, b: Bond, half: number): [number, nu
   const e = entryOf(doc, b);
   if (e.half !== half || !e.gaps) {
     e.half = half;
-    e.gaps = e.crossing.length ? crossingGaps(doc, b, half, e.crossing.map((id) => doc.bonds.get(id)!)) : [];
+    // (a near miss a file listed leaves a gap too, with nothing crossing outright)
+    e.gaps = e.crossing.length || b.crossing?.length ? crossingGaps(doc, b, half, e.crossing.map((id) => doc.bonds.get(id)!)) : [];
   }
   return e.gaps;
 }
