@@ -13,7 +13,7 @@ import { chainArc, piLooksOf } from '../chem/hapto';
 import { crossingGapsCached } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
-import { bondEndPrefs, doubleBondGap, mapLookPrefs, wedgeWidth } from '../style';
+import { atomMargin, bondEndPrefs, bondWidths, docMapLook, doubleBondGap, wedgeWidth } from '../style';
 import { depthFractions, depthShadePrefs, shadeLook, shadeStep } from './depth-shade';
 import { joinWideEnds, lineMitres, endTip, LINE_MITRE_LIMIT, type WideEnd, type EndJoin, type LineEnd } from './bond-joins';
 import { chargeInk, labelBonds, labelSpec, layoutLabel, LabelLayout, labelLook } from '../chem/labels';
@@ -37,6 +37,10 @@ import type { TableData, TextRun } from '../model';
 import { repeatLabelPlace } from '../chem/polymer';
 import { paintChartBox } from './chart-box-paint';
 import { paintShapeMath } from '../deck/equation';
+import { stackItems, usesStacking } from '../editor/stacking';
+
+/** A run of objects of one kind in the drawing order (see editor/stacking.ts). */
+type StackRun = { kind: 'shape'; shapes: Shape[] } | { kind: 'arrow'; arrows: Arrow[] } | { kind: 'caption'; captions: Caption[] } | { kind: 'structure'; atoms: Set<number> };
 
 export { FONT_STACK };
 
@@ -335,12 +339,12 @@ export class Renderer {
     if (spec) {
       Object.assign(spec, labelLook(a));
       layout = layoutLabel(spec, labelBonds(doc, a), size, (t, s) => measureText(t, s, this.labelStack), a.just);
-      const m = doc.style.marginWidth * k;
+      const m = atomMargin(doc.style, a);
       for (const b of layout.boxes) boxes.push({ x1: a.x + b.x1 - m, y1: a.y + b.y1 - m, x2: a.x + b.x2 + m, y2: a.y + b.y2 + m });
     }
     // a star point of attachment: the bond stops short of its asterisk, as at a label
     if (a.attach === 'Star') {
-      const h = attachStarSize(size) + doc.style.marginWidth * k;
+      const h = attachStarSize(size) + atomMargin(doc.style, a);
       boxes.push({ x1: a.x - h, y1: a.y - h, x2: a.x + h, y2: a.y + h });
     }
     c = { layout, boxes };
@@ -350,7 +354,7 @@ export class Renderer {
       const ink = chargeInk(r.text, a.x + r.dx, a.y + r.dy, r.size, (t, s) => measureText(t, s, this.labelStack));
       const grow = (m: number): Rect[] => ink.map((b) => ({ x1: b.x1 - m, y1: b.y1 - m, x2: b.x2 + m, y2: b.y2 + m }));
       // (the signs are small, so three quarters of the label margin keeps the same look of space)
-      c.charge = { index: layout.charge, hit: grow(doc.style.lineWidth * k / 2 + 0.3 * k), cut: grow(doc.style.marginWidth * k * 0.75) };
+      c.charge = { index: layout.charge, hit: grow(doc.style.lineWidth * k / 2 + 0.3 * k), cut: grow(atomMargin(doc.style, a) * 0.75) };
     }
     this.atomCache.set(a.id, c);
     return c;
@@ -494,15 +498,15 @@ export class Renderer {
       if (!b || b.spokes || b.order === 4) continue;
       const o = doc.atoms.get(b.a1 === a.id ? b.a2 : b.a1);
       if (!o) continue;
-      const k = b.s ?? 1, ds = doc.style;
-      let h = (ds.lineWidth * k) / 2;
+      const ds = doc.style, w = bondWidths(ds, b);
+      let h = w.lineWidth / 2;
       if (b.order === 1 || b.order === PARTIAL || b.display === 'dative' || this.bondInfo(doc, b).pi) {
         if (b.display === 'dative' || b.display === 'dash' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy') continue;
-        if (b.display === 'bold') h = (ds.boldWidth * k) / 2;
-        else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: ds.boldWidth * k }) / 2;
+        if (b.display === 'bold') h = w.boldWidth / 2;
+        else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: w.boldWidth }) / 2;
       } else if (b.order === 2 || (b.order === 1.5 && !b.circle)) {
         if (this.bondInfo(doc, b).side === 0 || b.display === 'dash') continue;
-        if (b.display === 'bold') h = (ds.boldWidth * k) / 2;
+        if (b.display === 'bold') h = w.boldWidth / 2;
       }
       const [s, e] = this.bondEnds(doc, b.a1 === a.id ? a : o, b.a1 === a.id ? o : a);
       const end = b.a1 === a.id ? s : e;
@@ -755,8 +759,9 @@ export class Renderer {
     let f = `${p.size}px ${FONT_STACK}`;
     let ink = a.color ?? '#000';
     if (isMapNumber(a)) {
-      // an atom-map number: in a small box (Chemistry ▸ Map Atoms), in the chosen look
-      const look = paintMapBox(ctx, mapBox(p, measureText(a.atomNumber!, p.size)), a.mapNo!, doc.style.lineWidth, mapLookPrefs.look, mapLookPrefs.custom);
+      // an atom-map number: in a small box (Chemistry ▸ Map Atoms), in the drawing's look
+      const mapLook = docMapLook(doc.style);
+      const look = paintMapBox(ctx, mapBox(p, measureText(a.atomNumber!, p.size)), a.mapNo!, doc.style.lineWidth, mapLook.look, mapLook.custom);
       ink = look.ink;
       if (look.bold) f = `bold ${f}`;
     }
@@ -840,25 +845,76 @@ export class Renderer {
   /** Draw everything that falls inside `vis` (document coordinates) with the current transform. */
   private drawContent(ctx: CanvasRenderingContext2D, doc: Doc, vis: Rect): void {
     this.useStyle(doc);
-    const st = doc.style;
     this.ringDoc = doc;
-
-    // Shapes behind the structures (filled boxes first).
     this.shadowsCast.clear();
-    for (const s of doc.onlyHighlights ? [] : this.sortedShapes(doc)) {
+    const shapes = doc.onlyHighlights ? [] : this.sortedShapes(doc);
+    const warns: Rect[] = [];
+    const checks = this.showWarnings ? this.checks : null;
+    const runs = doc.onlyHighlights ? null : this.stackRuns(doc);
+    if (!runs) {
+      // the usual layers: shapes behind the structures (filled boxes first), then arrows and text
+      this.drawShapeList(ctx, doc, shapes, vis);
+      if (!this.drawStructures(ctx, doc, vis, doc.atomsIn(vis), warns, checks)) return;
+      this.drawArrowList(ctx, doc, doc.arrows.values(), vis);
+      this.drawCaptionList(ctx, doc, doc.captions.values(), vis, warns, checks);
+    } else {
+      // objects put in order with Format > Order, back to front (issue #406)
+      for (const run of runs) {
+        if (run.kind === 'shape') this.drawShapeList(ctx, doc, run.shapes, vis);
+        else if (run.kind === 'arrow') this.drawArrowList(ctx, doc, run.arrows, vis);
+        else if (run.kind === 'caption') this.drawCaptionList(ctx, doc, run.captions, vis, warns, checks);
+        else this.drawStructures(ctx, doc, vis, doc.atomsIn(vis).filter((a) => run.atoms.has(a.id)), warns, checks);
+      }
+    }
+    if (warns.length) this.drawWarnMarks(ctx, warns);
+  }
+
+  private stackCache: { version: number; runs: StackRun[] | null } | null = null;
+
+  /** The drawing's objects as runs of one kind, back to front, when they have been put in order (else null). */
+  private stackRuns(doc: Doc): StackRun[] | null {
+    if (this.stackCache?.version === doc.version && this.stackDoc === doc) return this.stackCache.runs;
+    let runs: StackRun[] | null = null;
+    if (usesStacking(doc)) {
+      runs = [];
+      const shown = new Set(this.sortedShapes(doc));
+      for (const it of stackItems(doc)) {
+        let last = runs[runs.length - 1];
+        if (!last || last.kind !== it.kind) {
+          last = it.kind === 'shape' ? { kind: 'shape', shapes: [] } : it.kind === 'arrow' ? { kind: 'arrow', arrows: [] } : it.kind === 'caption' ? { kind: 'caption', captions: [] } : { kind: 'structure', atoms: new Set() };
+          runs.push(last);
+        }
+        if (last.kind === 'shape') { const s = doc.shapes.get(it.ids[0]); if (s && shown.has(s)) last.shapes.push(s); }
+        else if (last.kind === 'arrow') { const r = doc.arrows.get(it.ids[0]); if (r) last.arrows.push(r); }
+        else if (last.kind === 'caption') { const c = doc.captions.get(it.ids[0]); if (c) last.captions.push(c); }
+        else for (const id of it.ids) last.atoms.add(id);
+      }
+    }
+    this.stackCache = { version: doc.version, runs };
+    this.stackDoc = doc;
+    return runs;
+  }
+  private stackDoc: Doc | null = null;
+
+  private drawShapeList(ctx: CanvasRenderingContext2D, doc: Doc, list: Iterable<Shape>, vis: Rect): void {
+    const st = doc.style;
+    for (const s of list) {
       const b = s.kind === 'table' ? this.tableBox(s) : s.rot ? shapeBox(s) : { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
       if (b.x2 < vis.x1 || b.x1 > vis.x2 || b.y2 < vis.y1 || b.y1 > vis.y2) continue;
       this.drawShape(ctx, s, st.lineWidth, st.labelSize);
     }
+  }
 
+  /** Structures (the given atoms and their bonds): highlights, bonds, labels. False when only highlights are drawn. */
+  private drawStructures(ctx: CanvasRenderingContext2D, doc: Doc, vis: Rect, atoms: Atom[], warns: Rect[], checks: Renderer['checks'] | null): boolean {
+    const st = doc.style;
     // Only atoms near this area, and their bonds (found through the spatial index).
-    const atoms = doc.atomsIn(vis);
     const bondSet = new Set<Bond>();
     for (const a of atoms) for (const bid of doc.adj.get(a.id) ?? []) bondSet.add(doc.bonds.get(bid)!);
 
     // Highlights behind the structures: broad bands under bonds and discs under atoms
     this.drawHighlights(ctx, doc, atoms, bondSet);
-    if (doc.onlyHighlights) return;
+    if (doc.onlyHighlights) return false;
 
     // Bonds, batched by how they are stroked (and by size, for resized structures).
     const batches = new Map<number, BondBatch>();
@@ -870,7 +926,8 @@ export class Renderer {
       const p = doc.atoms.get(b.a1), q = doc.atoms.get(b.a2);
       if (!p || !q) continue;
       if ((p.x < vis.x1 && q.x < vis.x1) || (p.x > vis.x2 && q.x > vis.x2) || (p.y < vis.y1 && q.y < vis.y1) || (p.y > vis.y2 && q.y > vis.y2)) continue;
-      if (b.color) { colored.push(b); continue; }
+      // (a bond with its own bold width is stroked on its own, as coloured ones are)
+      if (b.color || b.boldWidth !== undefined) { colored.push(b); continue; }
       const bp = back?.get(p.id), bq = back?.get(q.id);
       if (bp !== undefined && bq !== undefined) {
         const k = b.s ?? 1, step = shadeStep((bp + bq) / 2), key = `${step}/${k}`;
@@ -894,13 +951,12 @@ export class Renderer {
       const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
       const bb = newBatch(this.makePath);
       this.bondOrSpokes(doc, b, p, q, bb);
-      this.strokeBatch(ctx, bb, b.s ?? 1, st.lineWidth, st.boldWidth, b.color!);
+      const k = b.s ?? 1;
+      this.strokeBatch(ctx, bb, k, st.lineWidth, b.boldWidth !== undefined ? b.boldWidth / k : st.boldWidth, b.color ?? '#000');
     }
     ctx.strokeStyle = ctx.fillStyle = '#000';
 
     // Atom labels and warnings.
-    const warns: Rect[] = [];
-    const checks = this.showWarnings ? this.checks : null;
     if (checks) {
       for (const b of bondSet) {
         if (!checks.forBond(b)) continue;
@@ -932,14 +988,22 @@ export class Renderer {
     curFont = this.drawStereoLabels(ctx, doc, atoms, bondSet, curFont);
     ctx.fillStyle = '#000';
 
-    for (const r of doc.arrows.values()) {
+    return true;
+  }
+
+  private drawArrowList(ctx: CanvasRenderingContext2D, doc: Doc, list: Iterable<Arrow>, vis: Rect): void {
+    const st = doc.style;
+    for (const r of list) {
       const lo = Math.min(r.tail.x, r.head.x), hi = Math.max(r.tail.x, r.head.x);
       const top = Math.min(r.tail.y, r.head.y), bot = Math.max(r.tail.y, r.head.y);
       const pad = r.sweep || r.bez ? Math.hypot(hi - lo, bot - top) * (r.bez ? 1.5 : 1) : 10;
       if (hi + pad < vis.x1 || lo - pad > vis.x2 || bot + pad < vis.y1 || top - pad > vis.y2) continue;
       this.drawArrow(ctx, r, r.lineWidth ?? st.lineWidth);
     }
-    for (const c of doc.captions.values()) {
+  }
+
+  private drawCaptionList(ctx: CanvasRenderingContext2D, _doc: Doc, list: Iterable<Caption>, vis: Rect, warns: Rect[], checks: Renderer['checks'] | null): void {
+    for (const c of list) {
       if (c.id === this.hiddenCaption || c.hidden) continue;
       const r = this.captionBox(c);
       if (r.x1 > vis.x2 || r.x2 < vis.x1 || r.y1 > vis.y2 || r.y2 < vis.y1) continue;
@@ -950,7 +1014,6 @@ export class Renderer {
       else if (mark) this.drawChemMark(ctx, r);
     }
 
-    if (warns.length) this.drawWarnMarks(ctx, warns);
   }
 
   /**
@@ -1088,14 +1151,14 @@ export class Renderer {
   private band(doc: Doc, b: Bond, p: Atom, q: Atom): { s: Vec; e: Vec; hs: number; he: number } | null {
     if (b.spokes || b.display === 'dative') return null;
     const single = b.order === 1 || b.order === PARTIAL;
-    const k = b.s ?? 1, ds = doc.style;
+    const ds = doc.style, w = bondWidths(ds, b);
     let hs: number, he: number;
     if (single && b.display === 'wedge') {
-      hs = (ds.lineWidth * k) / 2;
-      he = (wedgeWidth({ ...ds, boldWidth: ds.boldWidth * k })) / 2;
+      hs = w.lineWidth / 2;
+      he = (wedgeWidth({ ...ds, boldWidth: w.boldWidth })) / 2;
     } else if (b.display === 'bold' && (single || (b.order === 2 && this.bondInfo(doc, b).side !== 0))) {
-      hs = he = (ds.boldWidth * k) / 2;
-      if (crossingGapsCached(doc, b, ds.marginWidth * k + ds.lineWidth).length) return null;
+      hs = he = w.boldWidth / 2;
+      if (crossingGapsCached(doc, b, w.marginWidth + ds.lineWidth).length) return null;
     } else return null;
     const [s, e] = this.bondEnds(doc, p, q);
     return len(sub(e, s)) < 0.01 ? null : { s, e, hs, he };
@@ -1160,7 +1223,8 @@ export class Renderer {
     const { thin, bold, dashed, fills, tips } = bb;
     const k = b.s ?? 1;
     const ds = doc.style;
-    const st = { ...ds, lineWidth: ds.lineWidth * k, boldWidth: ds.boldWidth * k, hashSpacing: ds.hashSpacing * k, bondLength: ds.bondLength * k };
+    const w = bondWidths(ds, b);
+    const st = { ...ds, lineWidth: w.lineWidth, boldWidth: w.boldWidth, hashSpacing: w.hashSpacing, bondLength: ds.bondLength * k };
     const [s, e] = this.bondEnds(doc, p, q);
     const d = sub(e, s);
     const l = len(d);
@@ -1169,7 +1233,7 @@ export class Renderer {
     const nrm = perp(dir);
     const gap = doubleBondGap(st);
     // a bond behind a bond that crosses it has a gap there
-    const gaps = crossingGapsCached(doc, b, ds.marginWidth * k + ds.lineWidth);
+    const gaps = crossingGapsCached(doc, b, w.marginWidth + ds.lineWidth);
     const pq = sub(q, p), pq2 = dot(pq, pq) || 1;
     const along = (x: Vec) => dot(sub(x, p), pq) / pq2;
     // Square or part-round ends (a setting): thin lines are cut square, each free end gets its

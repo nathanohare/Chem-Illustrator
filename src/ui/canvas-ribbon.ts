@@ -1,9 +1,9 @@
 // The Canvas ribbon: a compact ribbon over the drawing with the chemistry commands that have no
 // toolbox of their own, or that are hard to find in the menus. It is a tabbed ribbon like the
 // other modes' (so collapsing, fitting a narrow window, command search and Customize work the
-// same), with two rows of buttons under the tabs. Only group names and the major commands carry
-// words; the rest are pictures, named in their tooltips. Settings ▸ Ribbon offers the one-row
-// Simplified look and where the group names go (on top, along the dividers, or none).
+// same), with two rows of buttons under the tabs. Only the major commands carry words (the groups
+// have no names shown); the rest are pictures, named in their tooltips. Settings ▸ Ribbon offers
+// the one-row Simplified look.
 //
 // Tabs for one kind of object (Arrow, Ring, Bond) come up beside the others while that kind is
 // being drawn or is selected, and the ribbon switches to them; it goes back to the tab you were
@@ -213,7 +213,7 @@ export class CanvasRibbon {
     this.el.hidden = !on;
   }
 
-  /** The look: two rows (Classic) or one (Simplified). (Where group names go is set on the body, for every ribbon.) */
+  /** The look: two rows (Classic) or one (Simplified). */
   setLook(look: RibbonLook): void {
     this.el.classList.toggle('cr-classic', look === 'classic');
     this.el.classList.toggle('cr-simple', look === 'simple');

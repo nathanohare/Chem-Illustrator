@@ -152,10 +152,18 @@ export class Toolbar {
     this.active = name;
     this.prune();
     this.mark(name);
-    // the tool in use stays in sight when the bar scrolls (picked from Search or by a key)
-    const on = this.buttons.find((t) => t.name === name && this.root.contains(t.b))?.b ?? this.palettes.find((p) => this.root.contains(p.button) && p.button.classList.contains('active'))?.button;
-    on?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // the tool in use stays in sight when the bar scrolls (picked from Search or by a key); in the
+    // next frame, when the page is laid out anyway (asking now forces a layout: ~15 ms as the app starts)
+    if (this.scrollQueued) return;
+    this.scrollQueued = true;
+    requestAnimationFrame(() => {
+      this.scrollQueued = false;
+      const now = this.active;
+      const on = this.buttons.find((t) => t.name === now && this.root.contains(t.b))?.b ?? this.palettes.find((p) => this.root.contains(p.button) && p.button.classList.contains('active'))?.button;
+      on?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    });
   }
+  private scrollQueued = false;
 
   private mark(name: string): void {
     // (pressed or not, for screen readers)

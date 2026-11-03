@@ -22,6 +22,8 @@ export interface ChemEngine {
 type Answer = MolProps | CellError;
 
 /** Answers kept at most (oldest go first; they're worked out again if needed). */
+/** How long building inputs may hold the window before letting it paint and take input, in ms. */
+const SLICE_MS = 40;
 const KEEP = 20000;
 
 export class SheetChem implements ChemHost {
@@ -152,6 +154,24 @@ export class SheetChem implements ChemHost {
     if (map.size > KEEP) map.delete(map.keys().next().value as K);
   }
 
+  /**
+   * Each item's input (a molfile built from a drawn structure, or SMILES), in slices of about
+   * SLICE_MS with the window free between them: thousands of drawn rows would otherwise hold it
+   * for most of a second. A short list is read in one go, as before.
+   */
+  private async inputs<T>(items: T[], input: (t: T) => string | null): Promise<(string | null)[]> {
+    const out: (string | null)[] = [];
+    let t0 = performance.now();
+    for (const it of items) {
+      out.push(input(it));
+      if (performance.now() - t0 > SLICE_MS) {
+        await new Promise((r) => setTimeout(r, 0));
+        t0 = performance.now();
+      }
+    }
+    return out;
+  }
+
   private async send(): Promise<void> {
     const props = [...this.wantProps.values()];
     const matches = [...this.wantMatch.values()];
@@ -159,58 +179,53 @@ export class SheetChem implements ChemHost {
     this.wantProps.clear();
     this.wantMatch.clear();
     this.wantHammett.clear();
+    // busy (for settled()) from here: the inputs may be built over several tasks
+    this.inFlight++;
     const jobs: Promise<void>[] = [];
-    if (props.length) {
-      const asked: { store: (a: Answer) => void }[] = [];
-      const inputs: string[] = [];
-      for (const p of props) {
-        const input = p.input();
-        if (input === null) continue;
-        asked.push(p);
-        inputs.push(input);
+    try {
+      if (props.length) {
+        const asked: { store: (a: Answer) => void }[] = [];
+        const inputs: string[] = [];
+        const got = await this.inputs(props, (p) => p.input());
+        props.forEach((p, i) => { const input = got[i]; if (input !== null) { asked.push(p); inputs.push(input); } });
+        if (inputs.length) {
+          jobs.push(this.engine.props(inputs).then(
+            (res) => res.forEach((r, i) => asked[i].store('error' in r ? ERR.value(r.error) : r)),
+            (e) => asked.forEach((p) => p.store(ERR.value(`The chemistry engine failed: ${String(e)}`))),
+          ));
+        }
       }
-      if (inputs.length) {
-        jobs.push(this.engine.props(inputs).then(
-          (res) => res.forEach((r, i) => asked[i].store('error' in r ? ERR.value(r.error) : r)),
-          (e) => asked.forEach((p) => p.store(ERR.value(`The chemistry engine failed: ${String(e)}`))),
+      for (const q of matches) {
+        const qm = this.molfile(q.query).molblock;
+        const items = [...q.items.values()];
+        if (!qm) { for (const it of items) this.matches.set(it.key, false); continue; }
+        const asked: string[] = [];
+        const inputs: string[] = [];
+        const got = await this.inputs(items, (it) => it.input());
+        items.forEach((it, i) => {
+          const input = got[i];
+          if (input === null) { this.matches.set(it.key, false); return; }
+          asked.push(it.key);
+          inputs.push(input);
+        });
+        if (!inputs.length) continue;
+        jobs.push(this.engine.substructure(qm, inputs).then(
+          (res) => res.results.forEach((r, i) => this.keep(this.matches, asked[i], r ?? false)),
+          () => asked.forEach((k) => this.matches.set(k, false)),
         ));
       }
-    }
-    for (const q of matches) {
-      const qm = this.molfile(q.query).molblock;
-      const items = [...q.items.values()];
-      if (!qm) { for (const it of items) this.matches.set(it.key, false); continue; }
-      const asked: string[] = [];
-      const inputs: string[] = [];
-      for (const it of items) {
-        const input = it.input();
-        if (input === null) { this.matches.set(it.key, false); continue; }
-        asked.push(it.key);
-        inputs.push(input);
+      for (const [ref, want] of hammetts) {
+        const ids: string[] = [], inputs: string[] = [];
+        const all = [...want];
+        const got = await this.inputs(all, ([, input]) => input());
+        all.forEach(([id], i) => { const text = got[i]; if (text !== null) { ids.push(id); inputs.push(text); } });
+        if (!inputs.length) continue;
+        const keep = (i: number, r: HammettResult) => this.keep(this.hammetts, `${ref}\n${ids[i]}`, r);
+        jobs.push(this.engine.hammett!(ref, inputs).then(
+          (res) => res.forEach((r, i) => keep(i, r)),
+          (e) => ids.forEach((_, i) => keep(i, { error: `The chemistry engine failed: ${String(e)}` })),
+        ));
       }
-      if (!inputs.length) continue;
-      jobs.push(this.engine.substructure(qm, inputs).then(
-        (res) => res.results.forEach((r, i) => this.keep(this.matches, asked[i], r ?? false)),
-        () => asked.forEach((k) => this.matches.set(k, false)),
-      ));
-    }
-    for (const [ref, want] of hammetts) {
-      const ids: string[] = [], inputs: string[] = [];
-      for (const [id, input] of want) {
-        const text = input();
-        if (text === null) continue;
-        ids.push(id);
-        inputs.push(text);
-      }
-      if (!inputs.length) continue;
-      const keep = (i: number, r: HammettResult) => this.keep(this.hammetts, `${ref}\n${ids[i]}`, r);
-      jobs.push(this.engine.hammett!(ref, inputs).then(
-        (res) => res.forEach((r, i) => keep(i, r)),
-        (e) => ids.forEach((_, i) => keep(i, { error: `The chemistry engine failed: ${String(e)}` })),
-      ));
-    }
-    this.inFlight++;
-    try {
       await Promise.all(jobs);
     } finally {
       this.inFlight--;

@@ -30,10 +30,10 @@ export interface Balance {
   extraName?: string;
 }
 
-/** Small molecules a scheme often leaves out, by Hill formula. */
+/** Small molecules a scheme often leaves out, by Hill formula (without carbon: alphabetical, so ClH and O2S). */
 const BY_PRODUCTS: Record<string, string> = {
-  H2O: 'water', H2: 'hydrogen', HCl: 'HCl', HBr: 'HBr', HI: 'HI', HF: 'HF', CO2: 'CO₂', CO: 'CO', N2: 'nitrogen',
-  O2: 'oxygen', H3N: 'ammonia', CH4O: 'methanol', C2H6O: 'ethanol', C2H4O2: 'acetic acid', SO2: 'SO₂',
+  H2O: 'water', H2: 'hydrogen', ClH: 'HCl', BrH: 'HBr', HI: 'HI', FH: 'HF', CO2: 'CO₂', CO: 'CO', N2: 'nitrogen',
+  O2: 'oxygen', H3N: 'ammonia', CH4O: 'methanol', C2H6O: 'ethanol', C2H4O2: 'acetic acid', O2S: 'SO₂',
   ClNa: 'NaCl', BrNa: 'NaBr', ClK: 'KCl', BrK: 'KBr', IK: 'KI', INa: 'NaI', CH2O: 'formaldehyde',
   C4H10O: 't-butanol or diethyl ether', C3H6O: 'acetone', C4H8: 'isobutene', C2H4: 'ethylene', CH4: 'methane',
 };

@@ -2,7 +2,8 @@
 // a time in the show. The first species is there (or comes in on the first click); each click
 // then brings the next arrow with its conditions, and the species it makes. The pieces of each
 // step are marked (`piece`) so they move on their own in the show and are pictures of their own
-// in PowerPoint. On a canvas slide, Camera Follow adds a keyframe for each step, so the view
+// in PowerPoint. On a canvas slide, Camera Follow adds a keyframe for each step (on a copy of the
+// slide when it has a route of its own, the original hidden: Deck.copyHidingOriginal), so the view
 // travels along the route as it is built. Everything made is ordinary: animations to change in
 // the Animation pane, keyframes to move.
 

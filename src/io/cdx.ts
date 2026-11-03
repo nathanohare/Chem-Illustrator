@@ -25,6 +25,9 @@ const OBJECTS: Record<string, number> = {
   // numbers carry on without the gap: its CDX files store arrows as 0x8021, not 0x8027.
   border: 0x801a, geometry: 0x801b, constraint: 0x801c, tlcplate: 0x801d, tlclane: 0x801e,
   tlcspot: 0x801f, chemicalproperty: 0x8020, arrow: 0x8021,
+  // a ring fill (bonds' enclosed area coloured in): 0x8032 in ChemDraw 25's files, its colour in
+  // bgcolor and its ring in BasisObjects (the bonds round it)
+  ColoredMolecularArea: 0x8032,
 };
 const OBJECT_NAMES = new Map(Object.entries(OBJECTS).map(([k, v]) => [v, k]));
 

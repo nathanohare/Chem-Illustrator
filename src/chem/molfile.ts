@@ -41,6 +41,11 @@ export interface MolfileOptions {
   species?: { graph: MiniGraph; x: number; y: number }[];
   /** Write atom-atom map numbers (Atom.mapNo) in the mmm column, for mapped reaction SMILES and RXN files. */
   maps?: boolean;
+  /**
+   * Keep a label that can't be read as chemistry (Xyz, Ar′) as the atom's alias (an A line, or
+   * the atom's type in V3000), as other programs show it; for files, not for the chemistry engine.
+   */
+  aliases?: boolean;
   /** Write a V3000 molfile (otherwise V2000). */
   v3000?: boolean;
   /** Write each attachment point's kind as its "*" atom's isotope (src/chem/attach-codes.ts), for Hammett's reference position. */
@@ -249,7 +254,7 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
       const sym = a.label && !g ? generic : SYMBOLS[a.z] || generic;
       if (sym === generic) genericAt.push([atoms.length, a.label ?? '']);
       const iso = opts.attachKinds && a.attach ? attachCode(a.attach, a.attachNum) : a.isotope;
-      atoms.push({ sym, x, y, charge: a.charge + (charged.get(id) ?? 0), iso, rad, ...(opts.maps && a.mapNo ? { map: a.mapNo } : {}) });
+      atoms.push({ sym, x, y, charge: a.charge + (charged.get(id) ?? 0), iso, rad, ...(opts.maps && a.mapNo ? { map: a.mapNo } : {}), ...(opts.aliases && a.label && !g ? { alias: a.label } : {}) });
       map.push(id);
       continue;
     }
@@ -323,6 +328,7 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
     lines.push(`${f(a.x, 10)}${f(a.y, 10)}${f(0, 10)} ${a.sym.padEnd(3)} 0  0  0  0  0  0  0  0  0${i3(a.map ?? 0)}  0  0`);
   }
   for (const b of bonds) lines.push(`${i3(b.a + 1)}${i3(b.b + 1)}${i3(b.order)}${i3(b.stereo)}`);
+  atoms.forEach((a, i) => { if (a.alias) lines.push(`A  ${i3(i + 1)}`, a.alias); });
   const chg = atoms.map((a, i) => [i, a.charge] as const).filter(([, c]) => c !== 0);
   for (let k = 0; k < chg.length; k += 8) {
     const part = chg.slice(k, k + 8);

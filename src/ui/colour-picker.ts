@@ -41,9 +41,12 @@ let open: HTMLElement | null = null;
 let owner: HTMLElement | null = null;
 
 function closePalette(): void {
-  open?.remove();
+  // forget it before taking it out: taking it out blurs the colour box inside it, which can
+  // fire its change (a colour chosen in the system window) and close it again mid-removal (#326)
+  const p = open;
   open = null;
   owner = null;
+  p?.remove();
 }
 
 function openPalette(btn: HTMLElement, doc: Doc, value: string | undefined, on: (v: string | undefined) => void, auto: string, autoSwatch?: string): void {

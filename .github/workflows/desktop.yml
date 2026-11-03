@@ -30,6 +30,7 @@ permissions:
 jobs:
   plan:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       matrix: ${{ steps.pick.outputs.matrix }}
       release: ${{ steps.pick.outputs.release }}
@@ -53,15 +54,19 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
+    # a build takes 10 to 15 minutes; this stops a stuck one long before GitHub's 6 hours
+    timeout-minutes: 60
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
       RELEASE: ${{ needs.plan.outputs.release }}
       # 0.1.<build number>: each build of main is newer than the one before
       VERSION: 0.1.${{ github.run_number }}
+      # the Windows signing tool (Azure Artifact Signing), built once per version and kept in the cache
+      SIGNING_TOOL_VERSION: 0.12.0
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -77,6 +82,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - name: Get the Windows signing tool from the cache
+        if: matrix.platform == 'windows'
+        uses: actions/cache@v6
+        with:
+          path: ~/signing-tool
+          key: artifact-signing-cli-${{ env.SIGNING_TOOL_VERSION }}-windows
       - name: Sign the Windows app and installers (once the Azure secrets are set)
         # With an Azure Artifact Signing account in the repository's secrets and variables
         # (docs/windows-signing.md), Tauri signs the app, the setup .exe and the .msi as it builds
@@ -95,7 +106,11 @@ jobs:
           if [ -z "$CLIENT_ID" ] || [ -z "$CLIENT_SECRET" ] || [ -z "$TENANT_ID" ] || [ -z "$ENDPOINT" ] || [ -z "$ACCOUNT" ] || [ -z "$PROFILE" ]; then
             echo "No Azure Artifact Signing account in the secrets and variables: the Windows app is not signed."; exit 0
           fi
-          cargo install artifact-signing-cli --locked
+          # built from source (about 4 minutes) only when the cache doesn't have this version yet
+          if [ ! -x "$HOME/signing-tool/bin/artifact-signing-cli.exe" ]; then
+            cargo install artifact-signing-cli --version "$SIGNING_TOOL_VERSION" --locked --root "$HOME/signing-tool"
+          fi
+          cygpath -w "$HOME/signing-tool/bin" >> "$GITHUB_PATH"
           {
             echo "AZURE_CLIENT_ID=$CLIENT_ID"
             echo "AZURE_CLIENT_SECRET=$CLIENT_SECRET"
@@ -165,7 +180,7 @@ jobs:
       - name: Gather the installers
         shell: bash
         run: node scripts/release.mjs collect "$VERSION" ${{ matrix.platform }} out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: chem-illustrator-${{ matrix.platform }}
           path: out/*
@@ -177,6 +192,7 @@ jobs:
     needs: [plan, build]
     if: needs.plan.outputs.release == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # One publish at a time, so two merges close together can't both decide which release is
     # "latest" at once. (GitHub keeps one waiting publish; if a third merge's publish arrives
     # while one is waiting, the waiting one is dropped and that build is not published, which
@@ -187,8 +203,8 @@ jobs:
     env:
       VERSION: 0.1.${{ github.run_number }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           path: out
           merge-multiple: true

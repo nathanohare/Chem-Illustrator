@@ -2,7 +2,7 @@
 // The Assistant (review item 35): what a request carries, what the model may propose, Local only
 // and the request log.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { buildQuestion, parseAnswer, sendSummary, logRequest, requestLog, clearRequestLog, type SendItem } from '../src/ai/assistant';
+import { buildQuestion, parseAnswer, sendSummary, logRequest, requestLog, requestLogPlace, clearRequestLog, type SendItem } from '../src/ai/assistant';
 import { aiAsk, isLocalAddress, localOnlyBlock, parseAiPrefs, type AiPrefs } from '../src/ai/link';
 
 const items: SendItem[] = [
@@ -80,5 +80,13 @@ describe('the request log', () => {
     expect(log[0].text).toHaveLength(8000);
     clearRequestLog();
     expect(requestLog()).toEqual([]);
+  });
+
+  it('in a browser, lasts only as long as the tab (other pages on the site can read localStorage)', () => {
+    localStorage.setItem('ci.ai-log', JSON.stringify([{ time: 0, service: 'old', local: false, sent: '', text: 'old', images: 0 }]));
+    logRequest({ time: 3, service: 'OpenAI', local: false, sent: 'the selected structure as SMILES', text: 'CCO', images: 0 });
+    expect(localStorage.getItem('ci.ai-log')).toBeNull();
+    expect(JSON.parse(sessionStorage.getItem('ci.ai-log') ?? '[]')[0].text).toBe('CCO');
+    expect(requestLogPlace()).toBe('in this browser tab until it is closed');
   });
 });

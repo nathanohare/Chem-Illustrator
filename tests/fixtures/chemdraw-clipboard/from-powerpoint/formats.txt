@@ -1,0 +1,19 @@
+﻿DataObject	8
+Preferred DropEffect	4
+InShellDragLoop	4
+Embedded Object	9216
+Native	9216
+OwnerLink	-1
+Object Descriptor	234
+PowerPoint 12.0 Internal Theme	8
+PowerPoint 12.0 Internal Color Scheme	8
+PowerPoint 12.0 Internal Shapes	8
+Web Custom Format0	29978
+Web Custom Format Map	35
+application/x-moz-custom-clipdata	30044
+CF_BITMAP	-1
+CF_ENHMETAFILE	34432
+CF_METAFILEPICT	-1
+Ole Private Data	696
+CF_DIB	583244
+CF_DIBV5	583328

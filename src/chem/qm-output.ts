@@ -49,13 +49,18 @@ const last = (text: string, re: RegExp): RegExpExecArray | null => {
   return out;
 };
 const num = (m: RegExpExecArray | null): number | null => (m ? Number(m[1]) : null);
+/** The last match of `re` on a line that has `key` (found from the end, so a long log isn't searched through). */
+const lastAt = (text: string, key: string, re: RegExp): RegExpExecArray | null => {
+  const at = text.lastIndexOf(key);
+  return at < 0 ? null : re.exec(text.slice(at, at + 400));
+};
 
 // ---------------------------------------------------------------- Gaussian
 
 function readGaussian(text: string, name: string): QmResult {
-  const scf = num(last(text, /SCF Done:\s+E\([^)]*\)\s*=\s*(-?\d+\.\d+)/));
-  const free = num(last(text, /Sum of electronic and thermal Free Energies=\s*(-?\d+\.\d+)/));
-  const enthalpy = num(last(text, /Sum of electronic and thermal Enthalpies=\s*(-?\d+\.\d+)/));
+  const scf = num(lastAt(text, 'SCF Done:', /SCF Done:\s+E\([^)]*\)\s*=\s*(-?\d+\.\d+)/));
+  const free = num(lastAt(text, 'Sum of electronic and thermal Free Energies=', /Sum of electronic and thermal Free Energies=\s*(-?\d+\.\d+)/));
+  const enthalpy = num(lastAt(text, 'Sum of electronic and thermal Enthalpies=', /Sum of electronic and thermal Enthalpies=\s*(-?\d+\.\d+)/));
   // the last frequency job: the negative frequencies it lists
   let imaginary: number | null = null;
   const freqAt = text.lastIndexOf('Harmonic frequencies');
@@ -69,8 +74,11 @@ function readGaussian(text: string, name: string): QmResult {
 }
 
 /** The first route section (# line and its continuations), as one line. */
-function gaussianRoute(text: string): string {
-  const lines = text.split(/\r?\n/);
+export function gaussianRoute(text: string): string {
+  // found without splitting the whole file into lines (a long optimization's log runs to tens of MB)
+  const at = /^[ \t]*#/m.exec(text)?.index;
+  if (at === undefined) return '';
+  const lines = text.slice(at, at + 8000).split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
     if (!/^\s*#/.test(lines[i])) continue;
     let r = lines[i].trim();

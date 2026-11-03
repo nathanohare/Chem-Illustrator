@@ -12,6 +12,8 @@ import { foundInContents, foundInFile, spotText, structuresIn, colName, type Fil
 import { emptyIndex, freshEntry, indexText, parseIndex, searchFiles, type SearchDeps } from '../src/library/file-index';
 import { fetchPubmed, fromZotero, parsePmids, pubmedAuthor, syncZotero, zoteroLibrary } from '../src/library/online';
 import { emptyLibrary } from '../src/library/library';
+import { writeMolFile, writeKetFile } from '../src/io/chem-formats';
+import { readSdf } from '../src/io/sheet-files';
 
 /** Ethane (a bond), with a number under it when `label` is given. */
 function drawing(label?: string, x = 0): Doc {
@@ -61,6 +63,24 @@ describe('the structures in a file', () => {
   });
 });
 
+describe('other programs\' chemistry files', () => {
+  it('searches molfiles, Ketcher files and SD files too (found in the 2026-11-03 review: they were left out)', async () => {
+    const doc = drawing();
+    const enc = (t: string) => new TextEncoder().encode(t);
+    const mol = await foundInFile(enc(writeMolFile(doc, 'ethane').text), 'ethane.mol', readers);
+    expect(mol.map((f) => f.spot)).toEqual([{ kind: 'drawing' }, { kind: 'drawing' }]);
+    expect(mol[0].molblock).toContain('M  END');
+    expect(await foundInFile(enc(writeKetFile(doc).text), 'ethane.ket', readers)).toHaveLength(2);
+    // an SD file: each record a row of the sheet it opens as
+    const sd = ['  1  0  0  0  0  0  0  0  0  0999 V2000', '    0.0000    0.0000    0.0000 C   0  0  0  0  0  0  0  0  0  0  0  0', 'M  END'];
+    const text = ['methane', '', '', ...sd, '$$$$', 'methane 2', '', '', ...sd, '$$$$', ''].join('\n');
+    const got = await foundInFile(enc(text), 'set.sdf', { ...readers, sheet: async (b, n) => readSdf(new TextDecoder().decode(b), n).book });
+    expect(got.map((f) => f.spot.kind === 'cell' ? f.spot.row : -1)).toEqual([1, 2]);
+    // a JSON file that is no chemistry file has none
+    expect(await foundInFile(enc('{"a":1}'), 'settings.json', readers)).toEqual([]);
+  });
+});
+
 describe('searching files', () => {
   const files = [{ path: '/f/a.cdxml', size: 10, modified: 1000 }, { path: '/f/b.cdxml', size: 20, modified: 1000 }];
   const structures: Record<string, string[]> = { '/f/a.cdxml': ['CC', 'O'], '/f/b.cdxml': ['CCO'] };
@@ -97,6 +117,23 @@ describe('searching files', () => {
     const r = await searchFiles(files, 'CC', 'exact', emptyIndex(), d);
     expect(r.failed).toEqual([{ path: '/f/a.cdxml', why: 'damaged' }]);
     expect(r.hits).toHaveLength(1);
+  });
+
+  it('reads a file that failed again next time (the engine was still loading, the cloud file was not downloaded)', async () => {
+    // (found in the 2026-11-03 review: the failure was kept in the index until the file changed)
+    let broken = true;
+    const reads: string[] = [];
+    const d = deps(reads);
+    const found = d.found;
+    d.found = async (b, p) => { if (broken && p.includes('a.')) throw new Error('The chemistry engine is still loading'); return found(b, p); };
+    const ix = emptyIndex();
+    expect((await searchFiles(files, 'CC', 'exact', ix, d)).failed).toHaveLength(1);
+    broken = false;
+    reads.length = 0;
+    const r = await searchFiles(files, 'CC', 'exact', parseIndex(indexText(ix)), d);
+    expect(reads).toEqual(['/f/a.cdxml']);
+    expect(r.failed).toEqual([]);
+    expect(r.hits.map((h) => h.path)).toEqual(['/f/a.cdxml']);
   });
 
   it('stops when asked', async () => {
@@ -174,6 +211,9 @@ describe('the Find Structure in Files window', () => {
     });
     await w.open();
     const d = document.querySelector('dialog.find-files')!;
+    // what it searches is behind the "i" by its title, not a line of its own
+    expect(d.querySelector('h2 .info-icon')?.getAttribute('aria-label')).toMatch(/MOL, SDF, RXN, MRV, KET, CML/);
+    expect(d.querySelector('p.muted:not([role=status])')).toBeNull();
     expect((d.querySelectorAll('input[type=text]')[1] as HTMLInputElement).value).toBe('3: CC');
     await w.search();
     const rows = [...d.querySelectorAll('tbody tr')].map((r) => [...r.querySelectorAll('td')].slice(0, 4).map((c) => c.textContent));

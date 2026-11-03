@@ -118,6 +118,15 @@ describe('reading a text box', () => {
     // groups and parts of molecules still aren't molecules on their own
     for (const t of ['CH2', 'CH', 'OH', 'CH3', 'NO2', 'CO2H', 'CF3', 'CHO']) expect(readSpecies(t), t).toBeNull();
   });
+  it('bonds groups written before an atom to that atom (Me2SO is DMSO, Me2CO acetone, not their isomers)', () => {
+    for (const [t, smi] of [['Me2SO', 'CS(C)=O'], ['Me2CO', 'CC(C)=O'], ['Me2O', 'COC'], ['Me3N', 'CN(C)C'], ['Me2NEt', 'CCN(C)C'],
+      ['Me2SiCl2', 'C[Si](C)(Cl)Cl'], ['(i-Pr)2NEt', 'CCN(C(C)C)C(C)C'], ['Me2NCHO', 'CN(C)C=O'], ['Ph2CO', 'O=C(c1ccccc1)c1ccccc1'],
+      ['Me3COH', 'CC(C)(C)O'], ['(CH3)2CO', 'CC(C)=O'], ['Cl2CO', 'O=C(Cl)Cl'], ['F3CCF3', 'FC(F)(F)C(F)(F)F'], ['Et2Zn', 'CC[Zn]CC'],
+      // one group before the atom, or none, reads as before
+      ['MeOtBu', 'COC(C)(C)C'], ['BrCH2CH2Br', 'BrCCBr'], ['Me2S', 'CSC']] as const) {
+      expect(engineSmiles(t), t).toBe(canonical(smi));
+    }
+  });
   it('reads a group or atom set to Chemical as the radical or atom it stands for', () => {
     const read = (t: string) => readSpecies(t, { fragments: true })!;
     for (const [t, name, f] of [['OH', 'hydroxyl radical', 'HO'], ['CH3', 'methyl radical', 'CH3'], ['Me', 'methyl radical', 'CH3'], ['NO2', 'nitrogen dioxide', 'NO2'],

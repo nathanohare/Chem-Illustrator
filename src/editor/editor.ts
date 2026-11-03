@@ -7,6 +7,7 @@ import { DEFAULT_CURSOR_AIDS, drawCursorAids, hintLines, modifierHints, readoutT
 import { Sketcher } from './sketch';
 import { installPenAndTouch } from './touch';
 import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAtom, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
+import { scaleOwnWidths } from '../style';
 import { CaptionEditor } from '../ui/caption-editor';
 import { followLink, linkTip } from '../ui/links-ui';
 import { stopAtEdge } from '../ui/scrollbars';
@@ -55,6 +56,7 @@ import { freeSpace } from './free-space';
 import { fillRings, refitRingFills, ringFillsOn } from '../chem/ring-fill';
 import { setMethylStyle, toggleChainEndLabels, toggleExplicitHydrogens, type MethylStyle } from '../chem/hydrogens';
 import { selectedGroup } from '../chem/group-smiles';
+import { restack as restackObjects, stackItems, usesStacking, type StackMove } from './stacking';
 import { groupMembers, groupSelection, selectedGroups, ungroupSelection, withGroups } from './groups';
 import { circleRing, circleRings, kekulize } from '../chem/aromatic';
 import { bondLayer, crossingBonds, layerByDepth } from '../chem/crossing';
@@ -64,7 +66,7 @@ import { arrowClash, bendSide, cleanUpArrow, endCentre, endPointToward, headEnd,
 import { followPins, hasPins, makePin, mirrorBend } from '../chem/pins';
 import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '../chem/scheme-arrange';
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
-import { rebuildSmartCycle, smartCycleStart, type SmartCycleStart } from '../chem/smart-cycle';
+import { rebuildSmartCycle, smartCycleStart, structureReagents, type SmartCycleStart } from '../chem/smart-cycle';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
 import { arrangeSmart, formatSmart, stepToHolder, stepHolderToText, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
@@ -75,7 +77,7 @@ import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../d
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
-import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
+import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, joinGroups, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
 import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
 import {
@@ -461,6 +463,21 @@ export class Editor {
   get dragging(): boolean { return !!this.drag?.moved; }
   /** Text is being typed into a caption or label. */
   captionOpen(): boolean { return !!this.captionEd?.isOpen; }
+  /**
+   * Esc has something to let go of here first: a selection, a drag, text being typed, the
+   * keyboard highlight left on the atom last drawn, a path being drawn through points, or a crop.
+   */
+  escapeHasWork(): boolean {
+    const s = this.sel;
+    return !!(s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size || s.shapes.size) || this.dragging || this.captionOpen()
+      || this.hotNow() || this.route !== null || this.cropping !== null;
+  }
+
+  /** The keyboard highlight is on an atom or bond of this drawing. */
+  private hotNow(): boolean {
+    const k = this.keyHot;
+    return !!k && (k.kind === 'atom' ? this.doc.atoms.has(k.id) : k.kind === 'bond' && this.doc.bonds.has(k.id));
+  }
   private needScene = true;
   private needOverlay = true;
   private frameQueued = false;
@@ -727,6 +744,65 @@ export class Editor {
   }
 
   private hitTestNow(p: Vec): Hit {
+    if (this.stackRank()) return this.stackedHit(p);
+    const sh = this.structureAt(p);
+    if (sh) return sh;
+    return this.restAt(p);
+  }
+
+  private stackRankCache: { doc: Doc; version: number; rank: Map<string, number> | null } | null = null;
+
+  /**
+   * Where each thing sits in the drawing order, once objects have been put in order with Format >
+   * Order (keys 'a' + atom id, 'c', 'r', 's' + id; higher is in front). Null when they haven't.
+   */
+  private stackRank(): Map<string, number> | null {
+    const doc = this.doc, c = this.stackRankCache;
+    if (c && c.doc === doc && c.version === doc.version) return c.rank;
+    let rank: Map<string, number> | null = null;
+    if (usesStacking(doc)) {
+      rank = new Map();
+      const pre = { shape: 's', structure: 'a', arrow: 'r', caption: 'c' } as const;
+      stackItems(doc).forEach((it, i) => { for (const id of it.ids) rank!.set(pre[it.kind] + id, i); });
+    }
+    this.stackRankCache = { doc, version: doc.version, rank };
+    return rank;
+  }
+
+  /** With objects in an order of their own, the one in front under the point wins (issue #406). */
+  private stackedHit(p: Vec): Hit {
+    const rank = this.stackRank()!;
+    const doc = this.doc;
+    const found: Hit[] = [];
+    const sh = this.structureAt(p);
+    if (sh) found.push(sh);
+    let room: Hit = null;
+    for (const c of doc.captions.values()) {
+      if (c.hidden) continue;
+      const r = c.rot ? this.r.captionFrame(c) : this.r.captionBox(c);
+      const q = c.rot ? turnAbout(p, c, -c.rot) : p;
+      if (q.x >= r.x1 - 1 && q.x <= r.x2 + 1 && q.y >= r.y1 - 1 && q.y <= r.y2 + 1) {
+        if (c.ph && !this.overText(c, p)) { room ??= { kind: 'caption', id: c.id }; continue; }
+        found.push({ kind: 'caption', id: c.id });
+      }
+    }
+    const at = this.tol(5);
+    for (const r of doc.arrows.values()) if (arrowHit(r, p, at)) found.push({ kind: 'arrow', id: r.id });
+    for (const s of doc.shapes.values()) if (!s.hidden && !s.locked && shapeHit(s, p, at)) found.push({ kind: 'shape', id: s.id });
+    const key = (h: NonNullable<Hit>): string => {
+      if (h.kind === 'bond') { const b = doc.bonds.get(h.id); return 'a' + (b?.a1 ?? -1); }
+      return ({ atom: 'a', caption: 'c', arrow: 'r', shape: 's' } as Record<string, string>)[h.kind] + h.id;
+    };
+    let best: Hit = null, br = -Infinity;
+    for (const h of found) {
+      const k = rank.get(key(h!)) ?? -1;
+      if (k > br) { br = k; best = h; }
+    }
+    return best ?? room;
+  }
+
+  /** The atom or bond under a point. */
+  private structureAt(p: Vec): Hit {
     const doc = this.doc;
     const L = doc.style.bondLength;
     const atomR = Math.max(L * 0.28, this.tol(6));
@@ -754,6 +830,12 @@ export class Editor {
       if (d < bbd) { bbd = d; bb = b; }
     }
     if (bb) return { kind: 'bond', id: bb.id };
+    return null;
+  }
+
+  /** Text, arrows and shapes under a point, in the usual layers. */
+  private restAt(p: Vec): Hit {
+    const doc = this.doc;
     // a slide placeholder's empty room (all of it, while it shows only its prompt) gives way to a
     // picture or shape put over it
     let room: Hit = null;
@@ -1460,12 +1542,6 @@ export class Editor {
     this.requestScene(e.timeStamp);
   }
 
-  /**
-   * Right-click: what is under the pointer. Something not already selected becomes the
-   * selection first (a whole structure for an atom or bond), as in ChemDraw, so the menu's
-   * commands act on what was clicked. Empty space away from the selection clears it. Null on
-   * empty space.
-   */
   /** The point on the page under the pointer, and whether something there (or the selection's box) would take a click. */
   pointAt(e: MouseEvent): { p: Vec; taken: boolean } {
     const p = this.docPoint(e);
@@ -1475,6 +1551,12 @@ export class Editor {
     return { p, taken: onSel || !!this.hitTest(p) || !!this.captionEd?.hit(p) };
   }
 
+  /**
+   * Right-click: what is under the pointer. Something not already selected becomes the
+   * selection first: just that atom or bond, not its whole structure (issue #327), so the menu
+   * is for what was clicked (commands for whole structures still reach the structure from it).
+   * Empty space away from the selection clears it. Null on empty space.
+   */
   contextPick(e: MouseEvent): Hit {
     const p = this.docPoint(e);
     if (this.captionEd?.hit(p)) return null;
@@ -1484,13 +1566,7 @@ export class Editor {
       const b = this.selBox();
       if (!b || p.x < b.x1 || p.x > b.x2 || p.y < b.y1 || p.y > b.y2) this.clearSelection();
     }
-    if (h && !this.isSelected(h)) {
-      if (h.kind === 'atom' || h.kind === 'bond') this.selectFragment(h.kind === 'atom' ? h.id : this.doc.bonds.get(h.id)!.a1, false);
-      else {
-        this.selectOnly(h);
-        this.onChange();
-      }
-    }
+    if (h && !this.isSelected(h)) this.selectOnly(h);
     // a join or a place on a curved arrow's line: what Add Bend Here and the join commands work on
     this.contextSpot = this.pathSpotAt(p);
     return h;
@@ -2160,16 +2236,16 @@ export class Editor {
     this.changed();
     const subs = vr.subs.length > 0;
     if (walking) return `Walked one place ${step === 'cw' ? 'clockwise' : 'counterclockwise'}. Tab goes on, [ goes back, Shift+Tab flips the chair.`;
-    if (view === 'flat') return 'Drawn flat. Tab: chair.';
+    if (view === 'flat') return 'Drawn flat. Tab or \\: chair.';
     const name = RING_VIEW_NAMES[view];
     return view === 'boat'
-      ? `${name}. ${subs ? 'Tab walks it round; ' : 'Tab: flat; '}Shift+Tab: chair.`
-      : `${name}. ${subs ? 'Tab walks the ring round, [ goes back, ' : 'Tab: the next shape, '}Shift+Tab flips it.`;
+      ? `${name}. ${subs ? 'Tab walks it round; ' : 'Tab: flat; '}Shift+Tab: chair; \\: flat.`
+      : `${name}. ${subs ? 'Tab walks the ring round, [ goes back, ' : 'Tab: the next shape, '}Shift+Tab flips it, \\ draws it flat.`;
   }
 
-  /** What Tab, Shift+Tab, [ and ] do to the selected ring now, or null when they don't act on a ring. */
+  /** What Tab, Shift+Tab, [, ] and \\ do to the selected ring now, or null when they don't act on a ring. */
   private ringKey(chord: string): RingStep | null {
-    if (!['Tab', 'Shift+Tab', '[', ']'].includes(chord) || !this.sel.atoms.size) return null;
+    if (!['Tab', 'Shift+Tab', '[', ']', '\\'].includes(chord) || !this.sel.atoms.size) return null;
     // a structure picked with Tab: Tab goes on to the next structure
     if (this.tabPicked !== null && this.tabPicked === [...this.sel.atoms].sort((a, b) => a - b).join(',')) return null;
     const got = viewRingOf(this.doc, this.sel.atoms);
@@ -2177,6 +2253,8 @@ export class Editor {
     const view = viewNow(this.doc, got.ring).view;
     const shaped = view !== 'flat';
     const walks = shaped && got.ring.subs.length > 0;
+    // \ goes straight between the flat drawing and the chair, whatever shape it is in
+    if (chord === '\\') return shaped ? 'flat' : 'chair';
     if (chord === '[') return walks ? 'ccw' : null;
     if (chord === ']') return walks ? 'cw' : null;
     if (chord === 'Shift+Tab') return view === 'chair' || view === 'chair-flip' ? 'flip' : 'chair';
@@ -2546,11 +2624,13 @@ export class Editor {
     let moved = false;
     for (const k of before.keys()) if (k[0] === 'a' || k[0] === 'b' || k[0] === 'r') { moved = true; break; }
     if (!moved) return;
+    // (no curved arrow stuck to anything: nothing to measure, which on a big drawing takes seconds)
+    const pinned = [...doc.arrows.values()].filter((r) => r.pin && !r.bent && !r.equilibrium && !r.elbow && isCurved(r));
+    if (!pinned.length) return;
     const m = this.measure();
     const L = doc.style.bondLength;
     const touched = (r: Arrow) => before.has('r' + r.id) || [r.pin?.tail, r.pin?.head].some((p) => p?.ref.some((id) => before.has('a' + id)));
-    for (const r of [...doc.arrows.values()]) {
-      if (!r.pin || r.bent || r.equilibrium || r.elbow || !isCurved(r)) continue;
+    for (const r of pinned) {
       // (only near what changed: an arrow elsewhere stays as it is)
       if (!touched(r) && ![...doc.arrows.values()].some((o) => o.id !== r.id && before.has('r' + o.id) && dist(o.head, r.head) < 1.5 * L)) continue;
       const now = arrowClash(doc, m, r);
@@ -3540,6 +3620,8 @@ export class Editor {
   /** Lay a Smart Scheme out again, with a new layout or other settings. */
   /** A Smart Scheme's single loop as the Catalytic Cycle window's table, to add a second loop to (null for other schemes). */
   smartCycleStart(id: number): SmartCycleStart | null { return smartCycleStart(this.doc, this.fullMeasure(), id); }
+  /** Whether a step of Smart Scheme `id` has a structure (or a box for one) joining or leaving it (no second loop then). */
+  smartReagentStructures(id: number): boolean { return structureReagents(this.doc, this.fullMeasure(), id); }
   /**
    * Draw Smart Scheme `id`'s cycle again with the loops from the Catalytic Cycle window (`rows`:
    * the species each row of loop 1 keeps). It is a Smart Scheme again afterwards, selected.
@@ -4377,7 +4459,7 @@ export class Editor {
 
   /** Line up the selected objects. Returns false when fewer than two are selected. */
   align(how: Align): boolean {
-    const us = units(this.doc, this.sel, this.measure());
+    const us = joinGroups(this.doc, units(this.doc, this.sel, this.measure()));
     if (us.length < 2) return false;
     const off = alignOffsets(us, how);
     this.doc.edit('Align', () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
@@ -4387,7 +4469,7 @@ export class Editor {
 
   /** Space the selected objects evenly. Returns false when fewer than three are selected. */
   distribute(axis: 'h' | 'v'): boolean {
-    const us = units(this.doc, this.sel, this.measure());
+    const us = joinGroups(this.doc, units(this.doc, this.sel, this.measure()));
     if (us.length < 3) return false;
     const off = distributeOffsets(us, axis);
     this.doc.edit('Distribute', () => us.forEach((u, i) => moveUnit(this.doc, u, off[i])));
@@ -4405,7 +4487,7 @@ export class Editor {
     const sel = none
       ? { atoms: new Set(doc.atoms.keys()), bonds: new Set(doc.bonds.keys()), captions: new Set(doc.captions.keys()), arrows: new Set(doc.arrows.keys()), shapes: new Set(doc.shapes.keys()) }
       : this.sel;
-    const chosen = units(doc, sel, m);
+    const chosen = joinGroups(doc, units(doc, sel, m));
     // numbers under the chosen structures come along, picked or not
     const others = none ? [] : units(doc, { atoms: new Set(), bonds: new Set(), captions: new Set([...doc.captions.keys()].filter((id) => !sel.captions.has(id))), arrows: new Set(), shapes: new Set() }, m);
     const folded = withLabels(doc, [...chosen, ...others], doc.style.bondLength);
@@ -4532,7 +4614,7 @@ export class Editor {
    * drawn; pressing it again straight away steps through other layouts and turns of the same
    * structures. `seeds` are other starting places for atoms (the chemistry engine's layouts),
    * tried for ring systems that need untangling. Returns which way was used (and how many there
-   * are), or false when there was nothing to change.
+   * are), or false when there was nothing to change (an already tidy structure is left as it is).
    */
   cleanUp(seeds: Map<number, Vec>[] = []): false | { k: number; of: number; label: string } {
     const doc = this.doc;
@@ -4553,9 +4635,21 @@ export class Editor {
       did = this.tidyLayout() || did;
     });
     if (!did) {
-      // already tidy: show the next way instead, so the button always does something
-      cycle.version = doc.version;
-      return picked ? this.nextCleanUp(cycle) : false;
+      // already tidy: leave it as it is (Clean Up Options... still shows the other ways)
+      this.cleanCycle = null;
+      return false;
+    }
+    // the tidying round them (a scheme, a grid) may have moved whole structures: the other ways
+    // go where each structure is now, so stepping through them doesn't undo that
+    for (const list of options) {
+      const first = list[0];
+      const ids = [...first.pos.keys()].filter((id) => doc.atoms.has(id));
+      if (!ids.length) continue;
+      const mean = (pick: (id: number) => Vec) => ids.reduce((s, id) => { const p = pick(id); return { x: s.x + p.x / ids.length, y: s.y + p.y / ids.length }; }, { x: 0, y: 0 });
+      const now = mean((id) => doc.atoms.get(id)!), was = mean((id) => first.pos.get(id)!);
+      const dx = now.x - was.x, dy = now.y - was.y;
+      if (Math.hypot(dx, dy) < 1e-6) continue;
+      for (const o of list) for (const [id, p] of o.pos) o.pos.set(id, { x: p.x + dx, y: p.y + dy });
     }
     cycle.version = doc.version;
     return { k: 0, of: Math.max(...options.map((o) => o.length)), label: options[0][0].label };
@@ -4978,34 +5072,16 @@ export class Editor {
   }
 
   /**
-   * Bring the selected shapes (boxes, design shapes, pictures, tables) in front of the other
-   * shapes, or send them behind, or one step either way. False when no shape is selected.
+   * Bring the selected objects (shapes, pictures, tables, whole structures, text and arrows) in
+   * front of everything else, or send them behind, or one step either way (issue #406). False when
+   * no whole object is selected.
    */
-  setShapeLayer(how: 'front' | 'back' | 'forward' | 'backward'): boolean {
-    const doc = this.doc;
-    const picked = new Set(this.sel.shapes);
-    if (!picked.size) return false;
-    const order = shapeOrder([...doc.shapes.values()]);
-    const rest = order.filter((s) => !picked.has(s.id)), mine = order.filter((s) => picked.has(s.id));
-    let next: Shape[];
-    if (how === 'front') next = [...rest, ...mine];
-    else if (how === 'back') next = [...mine, ...rest];
-    else {
-      // one step: past the next shape (not picked) in that direction
-      next = [...order];
-      const step = how === 'forward' ? 1 : -1;
-      const idx = (how === 'forward' ? [...next.keys()].reverse() : [...next.keys()]);
-      for (const i of idx) {
-        if (!picked.has(next[i].id)) continue;
-        const j = i + step;
-        if (j < 0 || j >= next.length || picked.has(next[j].id)) continue;
-        [next[i], next[j]] = [next[j], next[i]];
-      }
-    }
+  setObjectLayer(how: StackMove): boolean {
     const label = { front: 'Bring to Front', back: 'Send to Back', forward: 'Bring Forward', backward: 'Send Backward' }[how];
-    doc.edit(label, () => next.forEach((s, i) => { if ((s.z ?? 0) !== i + 1) doc.updateShape(s.id, { z: i + 1 }); }));
-    this.changed();
-    return true;
+    let done = false;
+    this.doc.edit(label, () => { done = restackObjects(this.doc, this.sel, how); });
+    if (done) this.changed();
+    return done;
   }
 
   /** The next free compound number in this drawing. */
@@ -5123,10 +5199,10 @@ export class Editor {
     doc.edit('Scale', () => {
       for (const id of s.atoms) {
         const a = doc.atoms.get(id);
-        if (a) doc.updateAtom(id, { ...at(a), s: (a.s ?? 1) * f });
+        if (a) doc.updateAtom(id, { ...at(a), s: (a.s ?? 1) * f, ...(a.marginWidth !== undefined ? { marginWidth: a.marginWidth * f } : {}) });
       }
       for (const bd of doc.bonds.values()) {
-        if (s.atoms.has(bd.a1) && s.atoms.has(bd.a2)) doc.updateBond(bd.id, { s: (bd.s ?? 1) * f });
+        if (s.atoms.has(bd.a1) && s.atoms.has(bd.a2)) doc.updateBond(bd.id, { s: (bd.s ?? 1) * f, ...scaleOwnWidths(bd, f) });
       }
       for (const id of s.captions) {
         const cap = doc.captions.get(id);
@@ -5238,6 +5314,8 @@ export class Editor {
    * it go doesn't send the keys to the menu bar.
    */
   private freeAngleKey(e: KeyboardEvent): boolean {
+    // Space let go anywhere (in a text box, or while the drawing was paused) is no longer held
+    if (e.type === 'keyup' && e.code === 'Space') this.spaceHeld = false;
     if (this.paused) return false;
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return false;
@@ -5273,7 +5351,8 @@ export class Editor {
     // drawing a curved arrow through points: Enter ends it, Backspace takes back a point, Esc stops
     if (this.routeKey(chord)) { e.preventDefault(); return; }
     // a selected cyclohexane: Tab through its shapes (flat, chair, flipped chair, boat); on a chair
-    // with substituents Tab and ] walk it round, [ walks it back, and Shift+Tab flips it
+    // with substituents Tab and ] walk it round, [ walks it back, and Shift+Tab flips it; \ goes
+    // between flat and chair
     const ringStep = this.pointerInside || target === this.r.overlay ? this.ringKey(chord) : null;
     if (ringStep) { e.preventDefault(); this.say(this.ringStep(ringStep)); return; }
     // on a focused button or menu, Enter, Space and Tab do their usual jobs (unless the mouse
@@ -6325,7 +6404,7 @@ export class Editor {
       ctx.lineWidth = (snapped ? 2 : 1) * px;
       ctx.beginPath();
       if (l.axis === 'x') { ctx.moveTo(l.at, area.y1); ctx.lineTo(l.at, area.y2); } else { ctx.moveTo(area.x1, l.at); ctx.lineTo(area.x2, l.at); }
-      // the ticks, as on a ruler (the grid's own lines carry only their minor ticks where they cross nothing)
+      // the ticks, as on a ruler, major and minor, on every line (the grid's own lines too)
       const [a, b] = l.axis === 'x' ? [area.y1, area.y2] : [area.x1, area.x2];
       for (const t of ticksBetween(a, b, l.origin, g, minGap)) {
         const half = (t.major ? 6 : 3) * px;

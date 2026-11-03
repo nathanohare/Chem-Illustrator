@@ -1787,8 +1787,7 @@ export class SheetMode {
       },
       look: (col, ref, w, h) => {
         const sts = structures(col);
-        const SAYS = 'Every group on the ring it sits on is placed o, m or p from it; two or more add up (Σσ).';
-        if (!sts.length) return { picture: null, note: `SMILES are read as the values are worked out: write the reference position as * on a ring carbon, e.g. *c1ccc(OC)cc1. ${SAYS}` };
+        if (!sts.length) return { picture: null, note: 'In SMILES, write the reference position as * on a ring carbon, e.g. *c1ccc(OC)cc1.' };
         let once = 0, several = 0;
         let onRing = null as Structure | null;
         for (const st of sts) {
@@ -1802,7 +1801,6 @@ export class SheetMode {
           : once || several ? `Found once in ${once} of the ${n} structures${none ? `; ${none} ${none === 1 ? 'has' : 'have'} none and will show #N/A` : ''}${several ? `; ${several} ${several === 1 ? 'has' : 'have'} more than one and will show #N/A` : ''}.`
           : `None of the structures has a ${name} attachment point yet: right-click a ring carbon and pick Attachment Point.`;
         if (once + several && !onRing) note += ' It must sit on a benzene ring carbon, with nothing between it and the ring.';
-        else if (once + several) note += ` ${SAYS}`;
         const fit = onRing && this.pictures.fitted(onRing, w, h);
         const m = fit && refMarks(fit.doc, ref);
         if (!fit || !m) return { picture: null, note };

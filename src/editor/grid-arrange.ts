@@ -7,6 +7,7 @@ import type { Doc } from '../model';
 import { plainText } from '../richtext';
 import type { Unit } from './arrange';
 import { ringsAmong } from '../chem/aromatic';
+import { bondsWithin } from '../chem/cleanup';
 
 export type GridKind = 'row' | 'column' | 'grid';
 
@@ -195,7 +196,7 @@ export function sharedAnchors(doc: Doc, us: Unit[]): (Vec | null)[] {
   // each structure's rings, by kind: their size and the elements round them
   const kinds = structs.map(({ u }) => {
     const atoms = new Set(u.atoms);
-    const bonds = [...doc.bonds.values()].filter((b) => atoms.has(b.a1) && atoms.has(b.a2)).map((b) => b.id);
+    const bonds = bondsWithin(doc, atoms).map((b) => b.id);
     const out = new Map<string, Vec[]>();
     if (!bonds.length) return out;
     for (const r of ringsAmong(doc, bonds)) {

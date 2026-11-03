@@ -85,6 +85,27 @@ describe('Chem4Word CML', () => {
     expect(Math.hypot(p.x - q.x, p.y - q.y)).toBeCloseTo(20, 1);
   });
 
+  it('keeps two molecules apart when both number their atoms from a1 (found in the 2026-11-03 review)', () => {
+    const mol = (id: string, x: number, el: string) => `<cml:molecule id="${id}"><cml:atomArray><cml:atom id="a1" elementType="C" x2="${x}" y2="0"/><cml:atom id="a2" elementType="${el}" x2="${x + 20}" y2="0"/></cml:atomArray><cml:bondArray><cml:bond id="b1" atomRefs2="a1 a2" order="S"/></cml:bondArray></cml:molecule>`;
+    const two = `<cml:cml xmlns:cml="http://www.xml-cml.org/schema" xmlns:c4w="http://www.chem4word.com/cml"><cml:molecule id="m0">${mol('m1', 0, 'O')}${mol('m2', 100, 'N')}</cml:molecule></cml:cml>`;
+    const c = readCml(two)!;
+    const el = new Map(c.atoms.map((a) => [a.id, a.z]));
+    expect(c.bonds.map((b) => [el.get(b.a1), el.get(b.a2)])).toEqual([[6, 8], [6, 7]]);
+  });
+
+  it('keeps Chem4Word\'s names and formula for a structure only moved, not for one changed (found in the 2026-11-03 review)', () => {
+    const named = CML.replace('<cml:molecule id="m1">', '<cml:molecule id="m1"><cml:name dictRef="chem4word:Synonym">methyl ester anion</cml:name><cml:formula concise="C 3 O 2"/>');
+    const c = readCml(named)!;
+    const moved = { ...c, atoms: c.atoms.map((a) => ({ ...a, x: a.x + 50, y: a.y + 7 })) };
+    const kept = writeCml(moved, GUID, named);
+    expect(kept).toContain('<cml:name dictRef="chem4word:Synonym">methyl ester anion</cml:name>');
+    expect(kept).toContain('<cml:formula concise="C 3 O 2"/>');
+    expect(readCml(kept)!.atoms).toHaveLength(4);
+    // a wedge flipped: no longer the same compound, so its name goes
+    const flipped = { ...c, bonds: c.bonds.map((b, i) => (i === 0 ? { ...b, display: 'hashWedge' as const } : b)) };
+    expect(writeCml(flipped, GUID, named)).not.toContain('methyl ester anion');
+  });
+
   it('writes a label that is just the element with hydrogens as the element', () => {
     const c: Contents = { atoms: [{ id: 1, x: 0, y: 0, z: 7, label: 'NH2', charge: 0, isotope: 0, just: 'auto' }, { id: 2, x: 14, y: 0, z: 6, label: null, charge: 0, isotope: 0, just: 'auto' }], bonds: [{ id: 3, a1: 1, a2: 2, order: 1, display: 'solid', dpos: 'auto' }], captions: [], arrows: [], shapes: [] };
     expect(writeCml(c, 'g')).toContain('elementType="N"');
