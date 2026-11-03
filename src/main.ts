@@ -2452,7 +2452,8 @@ async function stepSpecies(got: NonNullable<ReturnType<typeof pickedStep>>, maps
     const it = find(w.ref);
     if (!it || it.plus) continue;
     const cap = it.caption !== undefined ? doc.captions.get(it.caption) : undefined;
-    const species = cap ? placeSpecies(doc, [cap], m) : [];
+    // (a reagent's text over or under the arrow is read as the compound it names: Me2SO is DMSO)
+    const species = cap ? placeSpecies(doc, [cap], m, w.role === 'Reagent') : [];
     if (!it.atoms.length && !species.length) {
       if (cap) rows.push({ role: 'Conditions', name: plainText(cap.runs).trim(), atoms: [] });
       continue;
