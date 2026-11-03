@@ -1381,7 +1381,15 @@ export class Renderer {
         }
         // a band (narrow at a1 and wide at a2 for a wedge), mitred into bold bands it meets
         case 'bold': if (!this.fillBand(doc, b, p, q, fills, gaps)) line(bold, s, e); break;
-        case 'dash': line(dashed, s, e); break;
+        case 'dash': {
+          // as ChemDraw 25 draws a dashed bond: floor(length / 2.5 hash spacings) + 1 dashes, the
+          // bond cut into equal dashes and gaps, starting and ending with a dash
+          const n = Math.min(MAX_HASHES, Math.floor(l / (2.5 * st.hashSpacing)) + 1);
+          if (n < 2) { line(thin, s, e); break; }
+          const part = 1 / (2 * n - 1);
+          for (let i = 0; i < n; i++) line(thin, add(s, mul(d, 2 * i * part)), add(s, mul(d, (2 * i + 1) * part)));
+          break;
+        }
         case 'wedge': this.fillBand(doc, b, p, q, fills, gaps); break;
         case 'hashWedge': {
           const w = wedgeWidth(st) / 2;
@@ -1403,10 +1411,16 @@ export class Renderer {
           break;
         }
         case 'hash': {
-          const w = st.boldWidth / 2;
-          const n = Math.min(MAX_HASHES, Math.max(2, Math.floor(l / st.hashSpacing)));
-          for (let i = 0; i <= n; i++) {
-            const c = add(s, mul(d, i / n));
+          // as ChemDraw 25 draws it: like a hashed wedge's hashes (line-width thick, end to end,
+          // a hash spacing short at an atom with other bonds), all a bold width across
+          const w = st.boldWidth / 2, lw = st.lineWidth;
+          const short = (at: Atom, end: Vec) => doc.degree(at.id) > 1 && len(sub(end, at)) < 1e-6 ? st.hashSpacing : 0;
+          const h0 = Math.min(short(p, s), l / 3), h1 = Math.min(short(q, e), l / 3);
+          const run = Math.max(0, l - h0 - h1 - lw);
+          const n = Math.min(MAX_HASHES, Math.max(2, Math.floor(run / st.hashSpacing) + 1));
+          for (let i = 0; i < n; i++) {
+            const c = add(s, mul(d, (h0 + lw / 2 + (run * i) / (n - 1)) / l));
+            if (gaps.length) { const g = along(c); if (gaps.some(([g0, g1]) => g > g0 && g < g1)) continue; }
             line(thin, add(c, mul(nrm, w)), sub(c, mul(nrm, w)));
           }
           break;

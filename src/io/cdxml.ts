@@ -782,8 +782,21 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       case 'Rectangle': {
         if (bb.length < 4) return;
         const rt = g.getAttribute('RectangleType') ?? '';
+        // a turned box (a diamond, say) is kept by its middle and two half-axes; its BoundingBox doesn't show it
+        let [x1, y1, x2, y2] = bb, rot = 0;
+        const cen = pts(g.getAttribute('Center3D')), maj = pts(g.getAttribute('MajorAxisEnd3D')), min = pts(g.getAttribute('MinorAxisEnd3D'));
+        if (cen.length >= 2 && maj.length >= 2 && min.length >= 2) {
+          let hw = Math.hypot(maj[0] - cen[0], maj[1] - cen[1]), hh = Math.hypot(min[0] - cen[0], min[1] - cen[1]);
+          let deg = (Math.atan2(maj[1] - cen[1], maj[0] - cen[0]) * 180) / Math.PI;
+          deg = ((deg % 180) + 180) % 180;
+          if (Math.abs(deg - 90) < 0.05) { [hw, hh] = [hh, hw]; deg = 0; }
+          if (deg > 0.05 && deg < 179.95) {
+            rot = +deg.toFixed(3);
+            [x1, y1, x2, y2] = [cen[0] - hw, cen[1] - hh, cen[0] + hw, cen[1] + hh];
+          }
+        }
         const rect: Omit<Shape, 'id'> & { id: number } = {
-          ...base, kind: 'rect', x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], rounded: rt.includes('RoundEdge'), shadow: rt.includes('Shadow'),
+          ...base, kind: 'rect', x1, y1, x2, y2, ...(rot ? { rot } : {}), rounded: rt.includes('RoundEdge'), shadow: rt.includes('Shadow'),
           filled: rt.includes('Filled') || rt.includes('Shaded'), dashed: rt.includes('Dashed'), bold: rt.includes('Bold'),
           ...(rt.includes('Shaded') ? { fill: 'shaded' as const } : {}),
         };
