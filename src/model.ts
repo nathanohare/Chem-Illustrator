@@ -32,9 +32,19 @@ export function outsideValence(b: Pick<Bond, 'display' | 'order'>): boolean {
 }
 export type DoublePos = 'auto' | 'left' | 'right' | 'center';
 
+/**
+ * Marks what came from one ChemDraw object in a PowerPoint file (or was added to its structures):
+ * saved to PowerPoint, things with the same id are written back as one ChemDraw object, which a
+ * double-click in PowerPoint opens in ChemDraw. `prog` is the object's program name as PowerPoint
+ * kept it (ChemDraw_x64.Document.6.0 for 64-bit ChemDraw).
+ */
+export interface OleMark { id: number; prog: string }
+
 export interface Atom {
   /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
   piece?: number;
+  /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
+  ole?: OleMark;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -441,6 +451,8 @@ export interface TabStop {
 export interface Caption {
   /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
   piece?: number;
+  /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
+  ole?: OleMark;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -604,6 +616,8 @@ export type ArrowHead = 'none' | 'full' | 'halfLeft' | 'halfRight';
 export interface Arrow {
   /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
   piece?: number;
+  /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
+  ole?: OleMark;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -714,6 +728,8 @@ export type Pattern = 'hatch' | 'backhatch' | 'crosshatch' | 'horizontal' | 'ver
 export interface Shape {
   /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
   piece?: number;
+  /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
+  ole?: OleMark;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;

@@ -26,10 +26,12 @@ import { layoutTable, cellAlign, spanOf, rowSpanOf, coveringCell, tableText, NOT
 import { PPT_STYLE_IDS, lookOf, slideCellLook, styledRuns, type CellLine, type Side } from '../deck/table-styles';
 import { tableBorders } from './cdxml-table';
 import { writeCdxml } from './cdxml-write';
+import { cdxmlToCdx } from './cdx';
+import { chemdrawObject, chemdrawObjectName, OLE_REL, OLE_TYPE } from './ole-object';
 import { extractDrawing } from './clipboard';
 import { contentsAlt, titleOverlaps, roughCaptionBox } from '../accessibility';
 import type { Selection } from '../editor/editor';
-import { Package, NS, REL, emu, xml, xmlAttr, hex6, MediaFiles, structureAltText } from './ooxml';
+import { Package, NS, REL, emu, xml, xmlAttr, hex6, MediaFiles, structureAltText, bytesHash } from './ooxml';
 import { writeKeptParts, type KeptParts } from './kept-parts';
 import { facesToEmbed, toEot, type FontSource } from './font-embed';
 import { dataUrl, fromDataUrl } from '../render/images';
@@ -61,6 +63,12 @@ import { splitCanvas, slidePrintXml, type CanvasPart } from '../deck/canvas-expo
 export const TAG = {
   cdxml: 'CHEMILLUSTRATOR_CDXML',
   box: 'CHEMILLUSTRATOR_BOX',
+  /**
+   * On a ChemDraw object saved here: a fingerprint of the ChemDraw data written in it, so the
+   * drawing kept in CHEMILLUSTRATOR_CDXML is used only while the object is as it was saved (not
+   * after it was changed in ChemDraw).
+   */
+  oleCdx: 'CHEMILLUSTRATOR_OLE_CDX',
   text: 'CHEMILLUSTRATOR_TEXT',
   master: 'CHEMILLUSTRATOR_MASTER',
   layout: 'CHEMILLUSTRATOR_LAYOUT',
@@ -764,12 +772,17 @@ class Writer {
         out.push(picXml(id, `Highlight ${id - 1}`, hpng, hsvg, hp.box, null, htags));
         id++;
       }
-      const tags = this.addTags(path, { [TAG.cdxml]: cdxml, [TAG.box]: box });
+      // a ChemDraw object from PowerPoint goes back as one, which opens in ChemDraw (with the drawing as made here kept beside it)
+      const prog = parts.chemdraw.get(sel);
+      const cdx = prog ? chemdrawCdxOf(cdxml) : null;
+      const tags = this.addTags(path, { [TAG.cdxml]: cdxml, [TAG.box]: box, ...(cdx ? { [TAG.oleCdx]: bytesHash(cdx) } : {}) });
       const png = this.addMedia(path, pic.png, 'png');
       const svg = this.addMedia(path, new TextEncoder().encode(pic.svg), 'svg');
       mark(sel, id);
       const smiles = await this.opts.smiles?.(part).catch(() => null) ?? null;
-      out.push(picXml(id, `Structure ${id - 1}`, png, svg, pic.box, null, tags, undefined, contentsAlt(part.contents()) ?? structureAltText(smiles)));
+      const alt = contentsAlt(part.contents()) ?? structureAltText(smiles);
+      if (cdx) out.push(this.chemdrawObject(path, cdx, prog!, id, png, svg, pic.box, tags, alt));
+      else out.push(picXml(id, `Structure ${id - 1}`, png, svg, pic.box, null, tags, undefined, alt));
       id++;
     }
     // text on top
@@ -809,6 +822,25 @@ class Writer {
       `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(s.transition)}${timingXml(expandParas(s.anims ?? [], (cid) => { const c = doc.captions.get(cid); return c ? plainText(c.runs).split('\n') : null; }), (a) => spids.get(targetKey(a.target)) ?? [], videos, (t) => spids.get(targetKey(t))?.[0])}` +
       // the slide's creation number, which zooms name it by
       `<p:extLst><p:ext uri="{BB962C8B-B14F-4D97-AF65-F5344CB8AC3E}"><p14:creationId xmlns:p14="${NS_P14}" val="${creationId(index)}"/></p:ext></p:extLst></p:sld>`;
+  }
+
+  /**
+   * A ChemDraw object (an OLE object holding the drawing's CDX), as PowerPoint writes one: a
+   * double-click in PowerPoint opens it in ChemDraw; until then PowerPoint shows its picture.
+   */
+  private oleObjects = 0;
+  private chemdrawObject(path: string, cdx: Uint8Array, prog: string, id: number, png: string, svg: string, box: Rect, tags: string, alt?: string): string {
+    const part = `ppt/embeddings/oleObject${++this.oleObjects}.bin`;
+    this.pkg.defaultType('bin', OLE_TYPE);
+    this.pkg.add(part, chemdrawObject(cdx, prog));
+    const rid = this.pkg.relate(path, OLE_REL, fromPpt(path, part));
+    const w = emu(box.x2 - box.x1), h = emu(box.y2 - box.y1);
+    return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Object ${id - 1}"${alt ? ` descr="${xml(alt)}"` : ''}/><p:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></p:cNvGraphicFramePr>` +
+      `<p:nvPr><p:custDataLst><p:tags r:id="${tags}"/></p:custDataLst></p:nvPr></p:nvGraphicFramePr>` +
+      `<p:xfrm><a:off x="${emu(box.x1)}" y="${emu(box.y1)}"/><a:ext cx="${w}" cy="${h}"/></p:xfrm>` +
+      `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/presentationml/2006/ole">` +
+      `<p:oleObj name="${xmlAttr(chemdrawObjectName(prog))}" r:id="${rid}" imgW="${w}" imgH="${h}" progId="${xmlAttr(prog)}"><p:embed/>${picXml(0, '', png, svg, box, null, null)}</p:oleObj>` +
+      `</a:graphicData></a:graphic></p:graphicFrame>`;
   }
 
   /**
@@ -1450,6 +1482,15 @@ function picXml(id: number, name: string, blipId: string, svgId: string | null, 
   return `<p:pic><p:nvPicPr><p:cNvPr id="${id}"${nameAttrs(name, more.hidden)}${descr ? ` descr="${xml(descr)}"` : ''}/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>${nvPr}</p:nvPicPr>` +
     `<p:blipFill><a:blip r:embed="${blipId}">${blipEffectsXml(fx)}${ext}</a:blip>${src}<a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
     `<p:spPr>${xfrm(box, rotAttr(more.rot))}${pictureLookXml(look, fx)}</p:spPr></p:pic>`;
+}
+
+/** A drawing's CDXML as CDX, ChemDraw's own format, for a ChemDraw object; null when it can't be written. */
+function chemdrawCdxOf(cdxml: string): Uint8Array | null {
+  try {
+    return cdxmlToCdx(cdxml);
+  } catch {
+    return null;
+  }
 }
 
 /** A picture's outline (rounded, or the shape it is cut to), border line and shadow, as PowerPoint's picture formatting. */

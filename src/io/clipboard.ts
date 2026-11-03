@@ -16,14 +16,17 @@ import { remapFrames, remapStep, type IdMaps } from './remap-refs';
 import { freshGroups } from '../editor/groups';
 import { pastedTable, tableHtml, tableTsv, type PastedRows } from './table-clip';
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { Doc, TextRun, applyBase, type TableData } from '../model';
-import { scaleOwnWidths, type DocStyle } from '../style';
+import { Doc, applyBase, type TableData } from '../model';
 import type { Vec } from '../geom';
 import type { Selection } from '../editor/editor';
 import { readCdxml } from './cdxml';
 import { writeCdxml } from './cdxml-write';
-import { cdxmlToCdx, cdxToCdxml } from './cdx';
+import { cdxmlToCdx, cdxToCdxml, isCdx } from './cdx';
+import { chemdrawInObject } from './ole-object';
 import { measureText } from '../render/renderer';
+import { fitPasted, typicalBondLength } from './fit-drawing';
+
+export { fitPasted, typicalBondLength };
 import { recordPicture, pictureEmf, pictureCanvas, canvasPng, canvasDib } from '../render/picture';
 import { emfToSvg } from '../render/emf-read';
 import type { Item } from '../render/vector';
@@ -113,65 +116,6 @@ export function extractDrawing(doc: Doc, sel: Selection | null): Doc {
   });
   out.reserveIds(maxId);
   return out;
-}
-
-/** The usual bond length in a drawing (the median), or null when it has no bonds. */
-export function typicalBondLength(doc: Doc): number | null {
-  const ls: number[] = [];
-  for (const b of doc.bonds.values()) {
-    const p = doc.atoms.get(b.a1), q = doc.atoms.get(b.a2);
-    if (p && q) ls.push(Math.hypot(p.x - q.x, p.y - q.y));
-  }
-  if (!ls.length) return null;
-  ls.sort((a, b) => a - b);
-  return ls[ls.length >> 1];
-}
-
-/**
- * Get a pasted drawing ready for a document drawn in the style `to`. Sizes in a drawing are
- * relative to its own style, so they are converted: labels, lines and text keep the look they
- * had where they came from. With `bondLength`, the drawing is first resized so its bonds are
- * that long (structures pasted on slides take the slide master's bond length); its text and
- * arrowheads grow or shrink with it. Changes `src`, a drawing just read from the clipboard.
- */
-export function fitPasted(src: Doc, to: DocStyle, bondLength?: number): void {
-  const from = src.style;
-  const L = typicalBondLength(src);
-  const k = bondLength && L ? bondLength / L : 1;
-  const ka = (k * from.labelSize) / to.labelSize, kb = (k * from.lineWidth) / to.lineWidth;
-  const near = (a: number, b: number) => Math.abs(a - b) < 1e-3;
-  if (near(k, 1) && near(ka, 1) && near(kb, 1) && near(from.captionSize, to.captionSize)) return;
-  const at = (p: Vec): Vec => ({ x: p.x * k, y: p.y * k });
-  const rel = (s: number | undefined, f: number) => (near((s ?? 1) * f, 1) ? undefined : (s ?? 1) * f);
-  const run = (r: TextRun): TextRun => {
-    const size = (r.size ?? from.captionSize) * k;
-    const out: TextRun = { ...r, size };
-    if (Math.abs(size - to.captionSize) < 0.01) delete out.size;
-    return out;
-  };
-  const len = (v: number | undefined) => (v === undefined ? undefined : v * k);
-  const line = (w: number) => (Math.abs(w - to.lineWidth) < 1e-3 ? undefined : w);
-  src.bulk(() => {
-    for (const a of [...src.atoms.values()]) src.updateAtom(a.id, { ...at(a), s: rel(a.s, ka), ...(a.marginWidth !== undefined ? { marginWidth: a.marginWidth * k } : {}) });
-    for (const b of [...src.bonds.values()]) src.updateBond(b.id, { s: rel(b.s, kb), ...scaleOwnWidths(b, k) });
-    for (const c of [...src.captions.values()]) {
-      src.updateCaption(c.id, {
-        ...at(c), runs: c.runs.map(run), width: len(c.width), wrap: len(c.wrap), lineHeight: len(c.lineHeight), boxH: len(c.boxH),
-        paras: c.paras?.map((p) => ({ ...p, spaceBefore: len(p.spaceBefore), spaceAfter: len(p.spaceAfter), indent: len(p.indent) })),
-      });
-    }
-    for (const r of [...src.arrows.values()]) {
-      src.updateArrow(r.id, {
-        tail: at(r.tail), head: at(r.head), headLength: r.headLength * k, headWidth: r.headWidth * k,
-        shaftSpacing: len(r.shaftSpacing), lineWidth: line((r.lineWidth ?? from.lineWidth) * k),
-      });
-    }
-    for (const s of [...src.shapes.values()]) {
-      const p1 = at({ x: s.x1, y: s.y1 }), p2 = at({ x: s.x2, y: s.y2 });
-      src.updateShape(s.id, { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, radius: len(s.radius), shadowSize: len(s.shadowSize) });
-    }
-  });
-  src.style = { ...to };
 }
 
 /** True when a drawing has nothing in it. */
@@ -496,6 +440,23 @@ export function pictureDrawing(bytes: Uint8Array, mime: string): Doc | null {
   }
 }
 
+/**
+ * The drawing in a ChemDraw object (PowerPoint's or Word's copy of one, a compound file whose
+ * CONTENTS stream is ChemDraw's CDX), or null when the object isn't ChemDraw's or can't be read.
+ */
+export function chemdrawObjectDrawing(object: Uint8Array): Doc | null {
+  const data = chemdrawInObject(object);
+  if (!data) return null;
+  try {
+    const text = isCdx(data) ? cdxToCdxml(data) : new TextDecoder().decode(data);
+    if (!looksLikeCdxml(text)) return null;
+    const doc = readCdxml(text).doc;
+    return isEmpty(doc) ? null : doc;
+  } catch {
+    return null;
+  }
+}
+
 /** A pasted picture: the drawing it came from, when it is a copy of one made here, else the picture. */
 function picturePasted(bytes: Uint8Array, mime: string): Pasted {
   const inside = pictureDrawing(bytes, mime);
@@ -554,7 +515,7 @@ export async function nativeFirst(names: string[]): Promise<[string, Uint8Array]
 }
 
 /**
- * Read the Windows clipboard through the desktop app: a drawing (ours or ChemDraw's) first,
+ * Read the Windows clipboard through the desktop app: a drawing (ours or ChemDraw's, or a ChemDraw object copied in PowerPoint or Word) first,
  * then text that could be a structure, then a picture (PNG, SVG, a Windows metafile as
  * MestReNova and Office copy, or a bitmap), then any other text.
  */
@@ -565,6 +526,11 @@ export async function readNativeClipboard(): Promise<Pasted> {
     const [name, data] = drawing;
     return { kind: 'drawing', doc: readCdxml(name === CDX_FORMAT ? cdxToCdxml(data) : new TextDecoder().decode(data)).doc };
   }
+  // a ChemDraw object copied in PowerPoint or Word: no ChemDraw data of its own on the clipboard,
+  // but the object (a compound file) holds ChemDraw's drawing; its picture is only the fallback
+  const object = await nativeFirst(['Embedded Object']).catch(() => null);
+  const fromObject = object ? chemdrawObjectDrawing(object[1]) : null;
+  if (fromObject) return { kind: 'drawing', doc: fromObject };
   // a picture of a drawing copied from here, copied back out of Word or PowerPoint: the drawing rides inside it
   const emf = await nativeFirst(['CF_ENHMETAFILE']);
   const inside = emf ? pictureDrawing(emf[1], 'image/x-emf') : null;
