@@ -2536,6 +2536,7 @@ class DocxReader {
       ...(Object.keys(this.tableStyles).length ? { tableStyles: this.tableStyles } : {}),
       ...(this.liveRefs.length || Array.isArray(m?.references) ? { references: this.liveRefs } : {}),
       ...(parseDesign(m?.design) ? { design: parseDesign(m?.design)! } : {}),
+      ...(m?.noFigureOffer === true ? { noFigureOffer: true } : {}),
       ...(typeof m?.citeStyle === 'string' && m.citeStyle in CITE_PRESETS ? { citeStyle: m.citeStyle } : zoteroStyle ? { citeStyle: zoteroStyle } : {}),
       ...(manager ? { citeManager: manager } : {}),
       ...(zoteroPrefs ? { zoteroPrefs } : {}),

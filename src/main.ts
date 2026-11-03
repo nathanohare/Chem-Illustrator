@@ -2371,6 +2371,8 @@ let structuresLocked = false;
 let startView = true;
 /** Settings ▸ Preferences: Enter finishes text typed with the Text tool, Alt+Enter starts a new line. */
 let enterFinishesText = false;
+/** Settings ▸ Preferences: a document whose structures aren't figures offers to make them figures on opening. */
+let offerFigures = true;
 // everywhere the Text tool types (Canvas, structures in documents and spreadsheets, text boxes on
 // slides and designs); text in shapes, tables and slide placeholders follows it except on slides
 // and designs, which keep PowerPoint's keys there
@@ -7545,6 +7547,7 @@ function loadDocMode(): Promise<DocumentMode> {
       key: (e) => docKey(e),
       command: (name) => command(name),
       changed: () => ws.noteChange(),
+      offerFigures: () => offerFigures,
       editDrawing: (contents, title, done) => editCellStructure(contents, title, done, docStyle()),
       editInPlace: (contents, p, done) => editCellStructure(contents, p.title, done, docStyle(), p),
       editDiagram: (contents) => documentDiagram(contents),
@@ -9951,9 +9954,12 @@ async function personalPreferences(): Promise<void> {
       { value: 'disc', label: 'A soft red disc' }, { value: 'box', label: 'A thin red box' }, { value: 'circle', label: 'A red circle' },
       { value: 'dashed', label: 'A dashed red circle' }, { value: 'corners', label: 'Red corner marks' }],
       help: 'Atoms with too many bonds, labels that can\'t be read and other problems the Warnings box lists. Clear Show on drawing (Warnings) to hide the marks.' },
+    { name: 'offerFigures', label: 'Offer to make structures figures when opening a document', type: 'checkbox', value: String(offerFigures),
+      help: 'A bar over the pages offers Make Figures when a document\'s structures aren\'t figures yet (a Word file from ChemDraw, for one). Don\'t Ask for This File on the bar turns it off for one document. Make All Structures Figures… stays on a structure\'s right-click menu either way.' },
   ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(parseAlkylLook(v.alkylLook)) } });
   if (!r) return;
   enterFinishesText = r.enterFinishes === 'enter';
+  offerFigures = r.offerFigures === 'true';
   setWarnLook(r.warnLook as Settings['warnLook']);
   const look = parseAlkylLook(r.alkylLook);
   const changed = look !== alkylPrefs.look;
@@ -10050,6 +10056,7 @@ function currentSettings(): Settings {
     ribbonNames,
     startView,
     enterFinishesText,
+    offerFigures,
     page: defaultPage,
     welcomed,
     groupTips: labelTips.enabled,
@@ -10303,6 +10310,7 @@ function applySettings(s: Settings): void {
   setRibbonLook(s.canvasRibbon, s.ribbonNames);
   startView = s.startView;
   enterFinishesText = s.enterFinishesText;
+  offerFigures = s.offerFigures;
   showGroupTips(s.groupTips);
   showToolTips(s.toolTips);
   setTouchMode(s.touchMode);

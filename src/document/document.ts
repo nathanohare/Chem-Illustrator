@@ -432,6 +432,8 @@ export interface DocText extends RichText {
   zoteroPrefs?: string;
   /** Changes are being tracked (Review > Track Changes): edits are marked, not made outright. */
   track?: boolean;
+  /** Don't Ask for This File on the Make Figures offer: opening this document doesn't offer to make its structures figures. */
+  noFigureOffer?: boolean;
   /** Comments (Review > New Comment), by id; the text they are on carries the id (see comments.ts). */
   comments?: Record<number, CommentThread>;
   /** How footnotes and endnotes are numbered (1, 2, 3 and i, ii, iii unless chosen). */
