@@ -218,3 +218,46 @@ describe('the CDXML audit, reading side (8): R27, R31, R35, R40, R41, R42, E12',
     expect(s.id).not.toBe(99);
   });
 });
+
+describe('the CDXML audit, reading side (9): R24', () => {
+  // older files' arrows (Line and Arc graphics with an ArrowType), and the arrows ChemDraw 25 made
+  // of the same graphics when it opened and saved them
+  const legacy = `<graphic id="10" BoundingBox="80 20 20 20" GraphicType="Line" ArrowType="FullHead" HeadSize="1000"/>
+<graphic id="11" BoundingBox="80 40 20 40" GraphicType="Line" ArrowType="HalfHead" HeadSize="1000"/>
+<graphic id="12" BoundingBox="80 60 20 60" GraphicType="Line" ArrowType="Equilibrium" HeadSize="1000"/>
+<graphic id="13" BoundingBox="80 80 20 80" GraphicType="Line" ArrowType="Resonance" HeadSize="1000"/>
+<graphic id="14" BoundingBox="80 100 20 100" GraphicType="Line" ArrowType="RetroSynthetic" HeadSize="1000"/>
+<graphic id="15" BoundingBox="80 120 20 120" GraphicType="Line" ArrowType="Hollow" HeadSize="1000"/>
+<graphic id="18" BoundingBox="150 50 120 50" GraphicType="Arc" ArrowType="FullHead" HeadSize="1000" AngularSize="90"/>
+<graphic id="19" BoundingBox="150 120 120 120" GraphicType="Arc" ArrowType="NoHead" AngularSize="-120"/>`;
+  const chemdraw = `
+<arrow id="22" Z="1" ArrowheadHead="Full" ArrowheadType="Solid" HeadSize="1000" ArrowheadCenterSize="875" ArrowheadWidth="250" Head3D="80 20 0" Tail3D="20 20 0" Center3D="50 20 0" MajorAxisEnd3D="110 20 0" MinorAxisEnd3D="50 80 0" />
+<arrow id="23" Z="2" ArrowheadHead="HalfLeft" ArrowheadType="Solid" HeadSize="1000" ArrowheadCenterSize="875" ArrowheadWidth="250" Head3D="80 40 0" Tail3D="20 40 0" Center3D="50 40 0" MajorAxisEnd3D="110 40 0" MinorAxisEnd3D="50 100 0" />
+<arrow id="24" Z="3" ArrowheadHead="HalfLeft" ArrowheadTail="HalfLeft" ArrowheadType="Solid" HeadSize="1000" ArrowheadCenterSize="875" ArrowheadWidth="250" ArrowShaftSpacing="300" Head3D="80 60 0" Tail3D="20 60 0" Center3D="50 60 0" MajorAxisEnd3D="110 60 0" MinorAxisEnd3D="50 120 0" />
+<arrow id="25" Z="4" ArrowheadHead="Full" ArrowheadTail="Full" ArrowheadType="Solid" HeadSize="1000" ArrowheadCenterSize="875" ArrowheadWidth="250" Head3D="80 80 0" Tail3D="20 80 0" Center3D="50 80 0" MajorAxisEnd3D="110 80 0" MinorAxisEnd3D="50 140 0" />
+<arrow id="26" Z="5" ArrowheadHead="Full" ArrowheadType="Angle" HeadSize="1000" ArrowheadCenterSize="1000" ArrowheadWidth="250" ArrowShaftSpacing="1000" Head3D="80 100 0" Tail3D="20 100 0" Center3D="50 100 0" MajorAxisEnd3D="110 100 0" MinorAxisEnd3D="50 160 0" />
+<arrow id="27" Z="6" ArrowheadHead="Full" ArrowheadType="Hollow" HeadSize="1000" ArrowheadCenterSize="1000" ArrowheadWidth="250" ArrowShaftSpacing="1000" Head3D="80 120 0" Tail3D="20 120 0" Center3D="50 120 0" MajorAxisEnd3D="110 120 0" MinorAxisEnd3D="50 180 0" />
+<arrow id="30" Z="9" ArrowheadHead="Full" ArrowheadType="Solid" HeadSize="1000" ArrowheadCenterSize="875" ArrowheadWidth="250" AngularSize="90" Head3D="150 50 0" Tail3D="120 80 0" Center3D="120 50 0" MajorAxisEnd3D="150 50 0" MinorAxisEnd3D="120 80 0" />
+<arrow id="31" Z="10" ArrowheadType="Solid" AngularSize="120" Head3D="150 120 0" Tail3D="105 145.98 0" Center3D="120 120 0" MajorAxisEnd3D="150 120 0" MinorAxisEnd3D="120 150 0" />
+`;
+  const read = (body: string) => readCdxml(`<?xml version="1.0" encoding="UTF-8" ?><CDXML LineWidth="1" BondLength="14.4"><page id="1">${body}</page></CDXML>`);
+  it('reads them as the arrows ChemDraw makes of them', () => {
+    const ours = read(legacy), theirs = read(chemdraw);
+    expect(ours.stats.skipped).toEqual({});
+    const a = [...ours.doc.arrows.values()], b = [...theirs.doc.arrows.values()];
+    expect(a.length).toBe(8);
+    expect(b.length).toBe(8);
+    a.forEach((x, i) => {
+      const y = b[i];
+      for (const k of ['headStyle', 'tailStyle', 'headType', 'line', 'equilibrium', 'noGo', 'headCenter'] as const) expect([i, k, x[k]]).toEqual([i, k, y[k]]);
+      for (const k of ['headLength', 'headWidth', 'sweep'] as const) expect(x[k]).toBeCloseTo(y[k] as number, 6);
+      expect(x.shaftSpacing ?? 0).toBeCloseTo(y.shaftSpacing ?? 0, 6);
+      for (const end of ['head', 'tail'] as const) { expect(x[end].x).toBeCloseTo(y[end].x, 1); expect(x[end].y).toBeCloseTo(y[end].y, 1); }
+    });
+  });
+  it('keeps a line with no head a line', () => {
+    const { doc: d } = read('<graphic id="16" BoundingBox="80 140 20 140" GraphicType="Line" ArrowType="NoHead"/>');
+    expect(d.arrows.size).toBe(0);
+    expect([...d.shapes.values()][0].kind).toBe('line');
+  });
+});
