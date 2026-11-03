@@ -22,7 +22,7 @@ import { prettyChem } from '../kb/pretty';
 const PIC = 48;
 
 /** Rows built when a table is shown, and how many more each time it is scrolled near its end. */
-const FIRST_ROWS = 150;
+const FIRST_ROWS = 60;
 const MORE_ROWS = 300;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] => {
@@ -153,7 +153,13 @@ export class KnowledgeBaseWindow {
     d.addEventListener('keydown', (e) => { e.stopPropagation(); });
     this.search = el('input', { type: 'search', placeholder: 'Name, CAS, SMILES or a shift (2.17)', title: 'Search every table by name, CAS number, SMILES, any word, or a chemical shift (2.17 finds peaks within 0.05 ppm in 1H, 0.5 in 13C)', value: query });
     this.search.setAttribute('aria-label', 'Search the Knowledge Base');
-    this.search.addEventListener('input', () => this.searchChanged());
+    // a single letter matches most of every table (~110 ms): wait a moment for the next key first
+    let wait = 0;
+    this.search.addEventListener('input', () => {
+      clearTimeout(wait);
+      if (this.search.value.trim().length === 1) wait = window.setTimeout(() => this.searchChanged(), 200);
+      else this.searchChanged();
+    });
     this.list = el('div', { className: 'kb-list', role: 'tablist' });
     this.list.setAttribute('aria-label', 'Tables');
     this.filters = el('div', { className: 'refs-filter kb-filters' });
@@ -249,9 +255,22 @@ export class KnowledgeBaseWindow {
     }));
   }
 
+  /** The rows matched for each table and search, so one key typed matches each table once (the counts on the left and the table showing ask for the same). */
+  private matchMemo = new Map<string, readonly RowMatch[]>();
+
   private matches(t: KbTable, withFilters = true): RowMatch[] {
-    const same = this.queryCanon ? new Set(t.rows.filter((r) => typeof r.smiles === 'string' && this.canon.get(r.smiles) === this.queryCanon).map((r) => r.smiles as string)) : undefined;
     const filters = withFilters ? this.filtersFor(t) : {};
+    const key = JSON.stringify([t.id, t.personal === true, t.rows.length, this.search.value, this.queryCanon, this.casCid, this.canon.size, filters]);
+    const got = this.matchMemo.get(key);
+    if (got) return [...got];
+    if (this.matchMemo.size > 200) this.matchMemo.clear();
+    const found = this.findMatches(t, filters);
+    this.matchMemo.set(key, found);
+    return [...found];
+  }
+
+  private findMatches(t: KbTable, filters: Record<string, string>): RowMatch[] {
+    const same = this.queryCanon ? new Set(t.rows.filter((r) => typeof r.smiles === 'string' && this.canon.get(r.smiles) === this.queryCanon).map((r) => r.smiles as string)) : undefined;
     let found = findRows(t, this.queryCanon ? '' : this.search.value, filters, same).filter((m) => !this.queryCanon || same?.has(m.row.smiles as string));
     // a CAS number typed also finds rows without CAS numbers, by the compound PubChem gives it
     if (this.casCid !== null) {

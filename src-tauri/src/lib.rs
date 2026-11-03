@@ -146,7 +146,7 @@ fn write_bytes(path: &str, bytes: &[u8]) -> Result<(), String> {
 /// The person's settings file (key map and preferences): settings.json in the app's
 /// settings folder, e.g. %APPDATA%\io.github.nathanohare.chemillustrator on Windows, or in the
 /// "Chem Illustrator Data" folder next to a portable copy.
-fn settings_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+pub(crate) fn settings_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     use tauri::Manager;
     if let Some(dir) = portable::settings_folder() {
         return Ok(dir.join("settings.json"));

@@ -35,12 +35,15 @@ export async function aiSettingsDialog(now: AiPrefs, save: (p: AiPrefs) => void)
         { value: 'pane', label: 'A pane down the right' },
         { value: 'window', label: 'A floating window' },
       ], help: 'Edit > Assistant (Ctrl+/), there once a model is linked. It can be changed from the Assistant too.' },
+      { name: 'sendDocument', label: 'Assistant: send the whole document when no text is selected', type: 'checkbox', value: String(cur.sendDocument === true),
+        help: 'In Document mode. Off: only selected text is sent, and the whole document can still be ticked under the box for one question. A long document is a large (and costly) request.' },
       { name: 'forget', label: 'Forget the saved key for this service', type: 'checkbox', value: 'false' },
     ], { ok: 'Save and Test', note: NOTE });
     if (!r) return;
     const provider = (r.provider as AiProvider) || 'none';
     const next: AiPrefs = { provider, model: r.model.trim(), base: r.base.trim(), localOnly: r.localOnly === 'true', assistant: cur.assistant,
-      ...(r.look === 'pane' || r.look === 'window' ? { assistantLook: r.look } : {}) };
+      ...(r.look === 'pane' || r.look === 'window' ? { assistantLook: r.look } : {}),
+      ...(r.sendDocument === 'true' ? { sendDocument: true } : {}) };
     if (provider === 'compatible' && !/^https?:\/\//i.test(next.base)) {
       await ask('AI Model', [], { noCancel: true, note: 'For Other, type the service\'s address, starting with http:// or https://.' });
       cur = next;

@@ -281,6 +281,7 @@ import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
 import type { AssistantAction, AssistantMode, SendItem } from './ai/assistant';
+import { cappedText, TEXT_CAP } from './ai/assistant';
 import type { AssistantBar } from './ui/assistant-bar';
 import { aiSettingsDialog } from './ui/ai-settings';
 import { freeSpace } from './editor/free-space';
@@ -2487,9 +2488,10 @@ async function assistantItems(): Promise<SendItem[]> {
   if (mode === 'document') {
     if (!docMode?.file) return items;
     const sel = docMode.selectedText().trim();
-    if (sel) items.push({ id: 'text', label: 'the selected text', text: sel.slice(0, 20000), on: true });
+    if (sel) items.push({ id: 'text', ...cappedText('the selected text', sel, TEXT_CAP.selection), on: true });
     const all = docMode.documentText();
-    if (all.trim()) items.push({ id: 'document', label: 'the whole document\'s text', text: all, on: !sel });
+    // (ticked only when chosen in Settings > AI Model: a whole document is a large request)
+    if (all.trim()) items.push({ id: 'document', ...cappedText('the whole document\'s text', all, TEXT_CAP.document), on: !sel && aiPrefs.sendDocument === true });
     return items;
   }
   if (mode === 'sheet') {

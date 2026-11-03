@@ -111,7 +111,7 @@ export class SettingsWindow {
     d.setAttribute('aria-label', 'Settings');
     d.innerHTML = `<div class="sw-head"><h2>Settings</h2><input type="search" class="sw-search" placeholder="Find a setting" aria-label="Find a setting"><button type="button" class="sw-close" title="Close (Esc)">×</button></div>`
       + `<div class="sw-body"><nav class="sw-list" aria-label="Pages"></nav><div class="sw-pane"></div><div class="sw-aside" role="complementary" aria-label="Preview" hidden></div></div>`
-      + `<div class="sw-foot"><span class="sw-note muted"></span><button type="button" class="sw-default" title="Use these settings now and keep them: for next time, and for new files">Set as Default</button><button type="button" class="primary sw-apply" title="Use these settings now, until the program closes (on a page about the open file: for that file)">Apply</button></div>`;
+      + `<div class="sw-foot"><span class="sw-note muted"></span><button type="button" class="sw-default" title="Use these settings now and keep them: for next time, and for new files">Set as Default</button><button type="button" class="primary sw-apply" title="Use these settings now and keep them for next time">Apply</button></div>`;
     this.list = d.querySelector('.sw-list')!;
     this.pane = d.querySelector('.sw-pane')!;
     this.aside = d.querySelector('.sw-aside')!;
