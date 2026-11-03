@@ -519,9 +519,14 @@ class CdxmlWriter {
         if (f && f.nodeName === 'fragment') counts.set(f, (counts.get(f) ?? 0) + 1);
       }
       let target: Element | null = null, best = 0, near: Element | null = null;
+      // a piece that was already apart from the rest of its fragment in the file (ChemDraw keeps
+      // separate pieces, even a lone atom, in one fragment) stays in that fragment, leaving it free
+      // for a piece split off here
+      const apart = counts.size === 1 && this.wasApart(comp);
       for (const [f, n] of counts) {
         near = near ?? f;
-        if (!claimed.has(f) && n > best) { target = f; best = n; }
+        if (apart) target = f;
+        else if (!claimed.has(f) && n > best) { target = f; best = n; }
       }
       if (!target) {
         target = this.el('fragment', { id: this.id() });
@@ -529,13 +534,24 @@ class CdxmlWriter {
         else this.page.appendChild(target);
         this.changed = true;
       }
-      claimed.add(target);
+      if (!apart) claimed.add(target);
       for (const id of comp) this.fragOfAtom.set(id, target);
     }
     const touched = new Set<Element>();
     for (const a of doc.atoms.values()) if (this.writeAtom(a)) touched.add(this.fragOfAtom.get(a.id)!);
     for (const b of doc.bonds.values()) if (this.writeBond(b)) touched.add(this.fragOfAtom.get(b.a1)!);
     for (const f of touched) this.fitFragment(f);
+  }
+
+  /** True when every atom of a structure was read from the file with the same neighbours it has, none outside it. */
+  private wasApart(comp: Set<number>): boolean {
+    for (const id of comp) {
+      if (!this.orig<Atom>('a', id)) return false;
+      const was = this.origNeighbors.get(id) ?? new Set<number>();
+      const now = this.doc.neighbors(id).map((n) => n.id);
+      if (now.length !== was.size || now.some((n) => !was.has(n))) return false;
+    }
+    return true;
   }
 
   private neighborsMovedApart(a: Atom): boolean {
@@ -1392,7 +1408,7 @@ class CdxmlWriter {
     // (the turn is RotationAngle alone: a turn tag would outlive a turn changed in ChemDraw)
     const fixed = c.lineHeight ?? (c.lineSpacing && c.lineSpacing !== 1 ? SINGLE * c.lineSpacing * maxSize : undefined);
     // the text as it is drawn: wrapped to the box with the app's text widths (Arial's by default)
-    const lay = layoutText({ runs, justify: c.justify, wrap: c.wrap, width: c.width, lineHeight: fixed }, def, this.opts.textMeasure ?? ((text, size, _f, style) => arialWidth(text, size, /bold/.test(style))));
+    const lay = layoutText({ runs, justify: c.justify, wrap: c.wrap, width: c.width, lineHeight: fixed, inkLines: c.inkLines }, def, this.opts.textMeasure ?? ((text, size, _f, style) => arialWidth(text, size, /bold/.test(style))));
     const width = lay.boxWidth;
     const px = c.justify === 'center' ? c.x + width / 2 : c.justify === 'right' ? c.x + width : c.x;
     t.setAttribute('p', pt({ x: px, y: c.y }));
@@ -1416,9 +1432,13 @@ class CdxmlWriter {
     // as stored); without the list it drops blank lines.
     const starts = lay.lines.slice(1).map((l) => utf8Length(stored.slice(0, l.start)));
     starts.push(utf8Length(stored));
-    this.set(t, 'LineHeight', fixed ? f2(fixed) : starts.length > 1 ? 'auto' : null);
+    // ChemDraw's variable spacing (lines as close as their ink lets them) is CaptionLineHeight
+    // "variable" with no LineHeight; LineHeight "auto" is its looser single spacing
+    const ink = !!c.inkLines && fixed === undefined;
+    this.set(t, 'LineHeight', fixed ? f2(fixed) : starts.length > 1 && !ink ? 'auto' : null);
     // ChemDraw 25 writes a set line height here too, and its CDX reader spaces lines by this one
     if (fixed) this.set(t, 'CaptionLineHeight', f2(fixed));
+    else if (ink) this.set(t, 'CaptionLineHeight', 'variable');
     else if (Number.isFinite(Number(t.getAttribute('CaptionLineHeight')))) this.set(t, 'CaptionLineHeight', null);
     this.set(t, 'LineStarts', starts.length > 1 ? starts.join(' ') : null);
   }
