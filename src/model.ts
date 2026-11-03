@@ -774,6 +774,8 @@ export interface Shape {
   pin?: Pin;
   /** A design shape (kind 'geo'): which one, from the shape library (design/geo.ts). */
   geo?: string;
+  /** ChemDraw's orbital (an oval it draws as an orbital lobe or s orbital): its OrbitalType, kept for writing back. */
+  orbital?: string;
   /** Text inside a design shape: wraps to the shape's text area and moves with it. */
   text?: { runs: TextRun[]; paras?: ParaStyle[] };
   /** Text inside a design shape: across (centred unless set) and up and down (middle unless set). */
@@ -1305,6 +1307,12 @@ export class Doc {
   onlyHighlights = false;
   /** Set when the drawing came from a CDXML file. */
   source: CdxmlSource | null = null;
+  /**
+   * ChemDraw objects this program doesn't show but keeps for writing back (plain bracketed groups,
+   * chemical properties): each one's XML, and which of the drawing's things ("a12", "s5") the
+   * ids in it named, so a writer can point them at those things again.
+   */
+  kept: { xml: string; refs: Record<string, string> }[] = [];
   /** Live R/S and E/Z labels from the chemistry engine (not saved, not undone). */
   stereo: StereoInfo | null = null;
   /** Formatting of placeholder text by kind (from a slide master); null outside slides. */
@@ -1970,6 +1978,7 @@ export class Doc {
     this.background = other.background;
     this.page = other.page && { ...other.page };
     this.source = other.source;
+    this.kept = other.kept.slice();
     this.nextId = Math.max(this.nextId, other.nextId);
     this.atoms.clear(); this.bonds.clear(); this.captions.clear(); this.arrows.clear(); this.shapes.clear();
     this.adj.clear(); this.centresOf.clear(); this.grid.clear(); this.atomCell.clear(); this.maxBondLen = 0; this.bondLenStale = false; this.bondLenShrunk = false;

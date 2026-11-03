@@ -868,7 +868,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         }
         const ot = g.getAttribute('OvalType') ?? '';
         const filled = ot.includes('Filled') || ot.includes('Shaded');
-        const oval = () => add({ ...base, kind: 'oval', x1: cen[0] - rx, y1: cen[1] - ry, x2: cen[0] + rx, y2: cen[1] + ry, ...(rot ? { rot } : {}), filled, ...(ot.includes('Shaded') ? { fill: 'shaded' as const } : {}), dashed: ot.includes('Dashed'), bold: ot.includes('Bold'), shadow: ot.includes('Shadow') });
+        const orb = type === 'Orbital' ? g.getAttribute('OrbitalType') : null;
+        const oval = () => add({ ...base, ...(orb ? { orbital: orb } : {}), kind: 'oval', x1: cen[0] - rx, y1: cen[1] - ry, x2: cen[0] + rx, y2: cen[1] + ry, ...(rot ? { rot } : {}), filled, ...(ot.includes('Shaded') ? { fill: 'shaded' as const } : {}), dashed: ot.includes('Dashed'), bold: ot.includes('Bold'), shadow: ot.includes('Shadow') });
         // a plain circle kept with a structure may be an aromatic ring's circle (checked once the bonds are in)
         if (g.parentElement?.nodeName === 'fragment' && ot.includes('Circle') && !filled) pendingCircles.push({ x: cen[0], y: cen[1], oval });
         else oval();
@@ -912,6 +913,28 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     }
   };
 
+  /** ChemDraw objects not shown here, kept with the things their ids name (see Doc.kept). */
+  const keepLater: Element[] = [];
+  const keepXml = (el: Element) => {
+    const byId = new Map<string, Element>();
+    for (const e of all) { const id = e.getAttribute('id'); if (id) byId.set(id, e); }
+    const refs: Record<string, string> = {};
+    const scan = (e: Element) => {
+      for (const at of Array.from(e.attributes)) {
+        if (at.name === 'id') continue;
+        for (const tok of at.value.trim().split(/\s+/)) {
+          if (!/^\d+$/.test(tok) || refs[tok]) continue;
+          const target = byId.get(tok);
+          const key = target ? refOf().get(target) : undefined;
+          if (key) refs[tok] = key;
+        }
+      }
+      for (const k of kids(e)) scan(k);
+    };
+    scan(el);
+    doc.kept.push({ xml: new XMLSerializer().serializeToString(el), refs });
+  };
+
   /** Polymer and repeat groups (ChemDraw's bracketedgroup), read once the brackets are in. */
   const pendingRepeats: Element[] = [];
   const readRepeats = () => {
@@ -920,7 +943,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     for (const e of all) { const id = e.getAttribute('id'); if (id) byXmlId.set(id, e); }
     for (const g of pendingRepeats) {
       const usage = g.getAttribute('BracketUsage');
-      if (usage !== 'SRU' && usage !== 'MultipleGroup') { skip(`bracketedgroup ${usage ?? ''}`.trim()); continue; }
+      if (usage !== 'SRU' && usage !== 'MultipleGroup') { keepXml(g); continue; }
       const text = usage === 'SRU' ? g.getAttribute('SRULabel') || 'n' : String(Math.round(num(g, 'RepeatCount', 2)));
       const brackets: { e: Element; sh: Shape }[] = [];
       for (const k of kids(g)) {
@@ -1041,7 +1064,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
           break;
         }
         case 'bracketedgroup': pendingRepeats.push(ch); break;
-        case 'scheme': case 'step': case 'colortable': case 'fonttable': case 'objecttag': case 'chemicalproperty': break;
+        case 'chemicalproperty': keepLater.push(ch); break;
+        case 'scheme': case 'step': case 'colortable': case 'fonttable': case 'objecttag': break;
         default: skip(ch.nodeName);
       }
     }
@@ -1094,6 +1118,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     if (morphTags.length) readMorphTags(morphTags, refOf(), doc);
     if (pinTags.length) readPinTags(pinTags, refOf(), doc);
     readRepeats();
+    for (const el of keepLater) keepXml(el);
     for (const c of pendingCircles) if (!ringOfCircle(doc, c)) c.oval();
     // Element labels like "OH", "H2N" or "N" become automatic labels (so they re-justify
     // when the structure changes); anything else is kept exactly as written.
