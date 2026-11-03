@@ -8,6 +8,8 @@
 // H = sum_i nu_i Iz_i + sum_{i<j} J_ij (Ix Ix + Iy Iy + Iz Iz) between observed spins,
 // J Iz Iz only to heteronuclei. H commutes with Fz of the observed spins and with Iz of every
 // heteronucleus, so it splits into blocks (2 M_obs, heteronuclear bits), each diagonalized alone.
+// Magnetically equivalent spins (e.g. the H of one CH3) are combined into composite particles of
+// total spin I, one run per combination, each weighted by how often it occurs.
 // Lines: nu = E_upper - E_lower, intensity = |<lower|F-|upper>|^2 / 2^(N-1), so a spectrum's
 // intensities sum to the number of observed spins. Line width: mean of the involved spins' widths,
 // weighted by |<lower|I-_k|upper>|^2.
@@ -20,7 +22,8 @@ export interface SpinSystem {
   shifts: number[];
   /** Symmetric couplings, Hz: j[a][b]. */
   j: number[][];
-  /** Nucleus per spin, default all '1H'. */
+  /** Nucleus per spin, default all '1H'. Spins of any other label are coupled only through J Iz Iz
+   *  (weak coupling), which also serves for protons of a neighboring cluster ('X'). */
   nuclei?: string[];
   /** Lorentzian full width at half height per spin, Hz (default 1). */
   widths?: number[] | number;
@@ -34,17 +37,18 @@ interface Block { states: number[]; index: Map<number, number>; values: Float64A
  *  implicit QL (the public-domain JAMA / EISPACK tred2 + tql2). Eigenvalues ascending; vectors
  *  returned column-major (column k = eigenvector k). */
 export function eighSym(a: Float64Array, n: number): { values: Float64Array; vectors: Float64Array } {
-  const V: Float64Array[] = [];
-  for (let i = 0; i < n; i++) V.push(a.slice(i * n, i * n + n));
+  // w holds V transposed (w[c*n + r] = V[r][c]) so the inner loops, which walk down columns of V,
+  // run over contiguous memory. a is symmetric, so the starting w is a itself.
+  const w = a.slice(0, n * n);
   const d = new Float64Array(n), e = new Float64Array(n);
   // tred2
-  for (let j = 0; j < n; j++) d[j] = V[n - 1][j];
+  for (let j = 0; j < n; j++) d[j] = w[j * n + n - 1];
   for (let i = n - 1; i > 0; i--) {
     let scale = 0, h = 0;
     for (let k = 0; k < i; k++) scale += Math.abs(d[k]);
     if (scale === 0) {
       e[i] = d[i - 1];
-      for (let j = 0; j < i; j++) { d[j] = V[i - 1][j]; V[i][j] = 0; V[j][i] = 0; }
+      for (let j = 0; j < i; j++) { d[j] = w[j * n + i - 1]; w[j * n + i] = 0; w[i * n + j] = 0; }
     } else {
       for (let k = 0; k < i; k++) { d[k] /= scale; h += d[k] * d[k]; }
       let f = d[i - 1], g = Math.sqrt(h);
@@ -52,8 +56,9 @@ export function eighSym(a: Float64Array, n: number): { values: Float64Array; vec
       e[i] = scale * g; h -= f * g; d[i - 1] = f - g;
       for (let j = 0; j < i; j++) e[j] = 0;
       for (let j = 0; j < i; j++) {
-        f = d[j]; V[j][i] = f; g = e[j] + V[j][j] * f;
-        for (let k = j + 1; k <= i - 1; k++) { g += V[k][j] * d[k]; e[k] += V[k][j] * f; }
+        const cj = j * n;
+        f = d[j]; w[i * n + j] = f; g = e[j] + w[cj + j] * f;
+        for (let k = j + 1; k <= i - 1; k++) { const v = w[cj + k]; g += v * d[k]; e[k] += v * f; }
         e[j] = g;
       }
       f = 0;
@@ -61,32 +66,35 @@ export function eighSym(a: Float64Array, n: number): { values: Float64Array; vec
       const hh = f / (h + h);
       for (let j = 0; j < i; j++) e[j] -= hh * d[j];
       for (let j = 0; j < i; j++) {
+        const cj = j * n;
         f = d[j]; g = e[j];
-        for (let k = j; k <= i - 1; k++) V[k][j] -= f * e[k] + g * d[k];
-        d[j] = V[i - 1][j]; V[i][j] = 0;
+        for (let k = j; k <= i - 1; k++) w[cj + k] -= f * e[k] + g * d[k];
+        d[j] = w[cj + i - 1]; w[cj + i] = 0;
       }
     }
     d[i] = h;
   }
   for (let i = 0; i < n - 1; i++) {
-    V[n - 1][i] = V[i][i]; V[i][i] = 1;
+    const ci = i * n, c1 = (i + 1) * n;
+    w[ci + n - 1] = w[ci + i]; w[ci + i] = 1;
     const h = d[i + 1];
     if (h !== 0) {
-      for (let k = 0; k <= i; k++) d[k] = V[k][i + 1] / h;
+      for (let k = 0; k <= i; k++) d[k] = w[c1 + k] / h;
       for (let j = 0; j <= i; j++) {
+        const cj = j * n;
         let g = 0;
-        for (let k = 0; k <= i; k++) g += V[k][i + 1] * V[k][j];
-        for (let k = 0; k <= i; k++) V[k][j] -= g * d[k];
+        for (let k = 0; k <= i; k++) g += w[c1 + k] * w[cj + k];
+        for (let k = 0; k <= i; k++) w[cj + k] -= g * d[k];
       }
     }
-    for (let k = 0; k <= i; k++) V[k][i + 1] = 0;
+    for (let k = 0; k <= i; k++) w[c1 + k] = 0;
   }
-  for (let j = 0; j < n; j++) { d[j] = V[n - 1][j]; V[n - 1][j] = 0; }
-  if (n > 0) V[n - 1][n - 1] = 1;
+  for (let j = 0; j < n; j++) { d[j] = w[j * n + n - 1]; w[j * n + n - 1] = 0; }
+  if (n > 0) w[n * n - 1] = 1;
   e[0] = 0;
-  // tql2, on the transpose (Q[c] = column c of V) so the rotations run over contiguous memory
+  // tql2 (Q[c] = column c of V, a row of w) so the rotations run over contiguous memory
   const Q: Float64Array[] = [];
-  for (let c = 0; c < n; c++) { const q = new Float64Array(n); for (let r = 0; r < n; r++) q[r] = V[r][c]; Q.push(q); }
+  for (let c = 0; c < n; c++) Q.push(w.subarray(c * n, c * n + n));
   for (let i = 1; i < n; i++) e[i - 1] = e[i];
   if (n > 0) e[n - 1] = 0;
   let f = 0, tst1 = 0;
@@ -137,51 +145,142 @@ export function eighSym(a: Float64Array, n: number): { values: Float64Array; vec
   return { values, vectors };
 }
 
-const bit = (s: number, k: number) => (s >> k) & 1;
+/** One particle of the simulation: a spin-1/2 nucleus, or a group of magnetically equivalent
+ *  observed nuclei taken together at one total spin (i2 = 2I). */
+interface Site { i2: number; nu: number; obs: boolean; width: number }
 
-function buildBlocks(sys: SpinSystem, sf: number, obs: number[]): Map<string, Block> {
-  const n = sys.shifts.length;
-  const obsSet = new Set(obs);
-  const het = [...Array(n).keys()].filter((k) => !obsSet.has(k));
+/** Spins that are magnetically equivalent: same nucleus, shift and width, same coupling to every
+ *  spin outside the group. Couplings inside such a group never show in the spectrum. */
+function equivalentGroups(sys: SpinSystem, nuclei: string[], widths: number[]): number[][] {
+  const n = sys.shifts.length, used = new Set<number>(), out: number[][] = [];
+  for (let a = 0; a < n; a++) {
+    if (used.has(a)) continue;
+    let g = [...Array(n).keys()].filter((b) => b === a || (!used.has(b) && nuclei[b] === nuclei[a] && sys.shifts[b] === sys.shifts[a] && widths[b] === widths[a]));
+    for (let changed = true; changed;) {
+      changed = false;
+      const inG = new Set(g);
+      const bad = g.find((b) => b !== a && [...Array(n).keys()].some((x) => !inG.has(x) && sys.j[b][x] !== sys.j[a][x]));
+      if (bad !== undefined) { g = g.filter((b) => b !== bad); changed = true; }
+    }
+    g.forEach((b) => used.add(b));
+    out.push(g);
+  }
+  return out;
+}
+
+const binom = (n: number, k: number): number => {
+  if (k < 0 || k > n) return 0;
+  let r = 1;
+  for (let i = 1; i <= k; i++) r = (r * (n - k + i)) / i;
+  return r;
+};
+
+/** Lines of one set of sites (weight = how many copies of this total-spin combination there are). */
+function siteLines(sites: Site[], J: number[][], weight: number, norm: number, out: { F: number[]; I: number[]; W: number[] }): void {
+  const n = sites.length;
+  const dim = sites.map((t) => t.i2 + 1);
+  const stride: number[] = [];
+  let total = 1;
+  for (let k = 0; k < n; k++) { stride.push(total); total *= dim[k]; }
+  const obs = sites.map((t, k) => (t.obs ? k : -1)).filter((k) => k >= 0);
+  const het = sites.map((t, k) => (t.obs ? -1 : k)).filter((k) => k >= 0);
+  const digit = (s: number, k: number) => Math.floor(s / stride[k]) % dim[k];
+  const mOf = (s: number, k: number) => digit(s, k) - sites[k].i2 / 2;
+  const I = (k: number) => sites[k].i2 / 2;
+  const cMinus = (k: number, m: number) => Math.sqrt(I(k) * (I(k) + 1) - m * (m - 1));
+  const cPlus = (k: number, m: number) => Math.sqrt(I(k) * (I(k) + 1) - m * (m + 1));
+  // blocks by 2 M_obs and the heteronuclear states
   const groups = new Map<string, number[]>();
-  for (let s = 0; s < 1 << n; s++) {
+  for (let s = 0; s < total; s++) {
     let m2 = 0;
-    for (const k of obs) m2 += 2 * bit(s, k) - 1;
+    for (const k of obs) m2 += 2 * mOf(s, k);
     let hb = 0;
-    het.forEach((k, pos) => { hb |= bit(s, k) << pos; });
+    for (const k of het) hb = hb * dim[k] + digit(s, k);
     const key = `${m2},${hb}`;
     let g = groups.get(key);
     if (!g) groups.set(key, (g = []));
     g.push(s);
   }
-  const nu = sys.shifts.map((x) => x * sf);
-  const out = new Map<string, Block>();
+  const blocks = new Map<string, Block>();
   for (const [key, states] of groups) {
     const m = states.length;
     const index = new Map(states.map((s, i) => [s, i] as [number, number]));
     const h = new Float64Array(m * m);
     states.forEach((s, r) => {
       let diag = 0;
-      for (const k of obs) diag += nu[k] * (bit(s, k) - 0.5);
-      for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) {
-        const jab = sys.j[a][b];
-        if (jab) diag += jab * (bit(s, a) - 0.5) * (bit(s, b) - 0.5);
-      }
+      for (const k of obs) diag += sites[k].nu * mOf(s, k);
+      for (let a = 0; a < n; a++) for (let b = a + 1; b < n; b++) if (J[a][b]) diag += J[a][b] * mOf(s, a) * mOf(s, b);
       h[r * m + r] = diag;
-      for (let ai = 0; ai < obs.length; ai++) for (let bi = ai + 1; bi < obs.length; bi++) {
-        const a = obs[ai], b = obs[bi], jab = sys.j[a][b];
-        if (!jab || bit(s, a) === bit(s, b)) continue;
-        h[r * m + index.get(s ^ ((1 << a) | (1 << b)))!] += 0.5 * jab;
+      // flip-flop terms 1/2 J (I+a I-b + I-a I+b) between observed sites
+      for (let ai = 0; ai < obs.length; ai++) for (let bi = 0; bi < obs.length; bi++) {
+        if (ai === bi) continue;
+        const a = obs[ai], b = obs[bi], jab = J[a][b];
+        if (!jab || digit(s, a) === dim[a] - 1 || digit(s, b) === 0) continue;
+        const ma = mOf(s, a), mb = mOf(s, b);
+        h[r * m + index.get(s + stride[a] - stride[b])!] += 0.5 * jab * cPlus(a, ma) * cMinus(b, mb);
       }
     });
     const { values, vectors } = eighSym(h, m);
-    out.set(key, { states, index, values, vectors });
+    blocks.set(key, { states, index, values, vectors });
   }
-  return out;
+  const sameWidth = obs.every((k) => sites[k].width === sites[obs[0]].width);
+  const obsMean = obs.reduce((t, k) => t + sites[k].width, 0) / obs.length;
+  for (const [key, up] of blocks) {
+    const [m2, hb] = key.split(',').map(Number);
+    const low = blocks.get(`${m2 - 2},${hb}`);
+    if (!low) continue;
+    const nl = low.states.length, nu_ = up.states.length;
+    const tTot = new Float64Array(nl * nu_), tW = new Float64Array(nl * nu_), tN = new Float64Array(nl * nu_);
+    // upper eigenvectors by basis state (row su holds component su of every eigenvector)
+    const upT = new Float64Array(nu_ * nu_);
+    for (let j = 0; j < nu_; j++) for (let su = 0; su < nu_; su++) upT[su * nu_ + j] = up.vectors[j * nu_ + su];
+    // G_k = I-_k Vup in the lower block's basis; all of F- at once when every width is the same
+    const lowered = (ks: number[]) => {
+      const G = new Float64Array(nl * nu_);
+      for (let su = 0; su < nu_; su++) {
+        const s = up.states[su], src = su * nu_;
+        for (const k of ks) {
+          if (digit(s, k) === 0) continue;
+          const c = cMinus(k, mOf(s, k)), row = low.index.get(s - stride[k])! * nu_;
+          for (let j = 0; j < nu_; j++) G[row + j] += c * upT[src + j];
+        }
+      }
+      const T = new Float64Array(nl * nu_);
+      for (let i = 0; i < nl; i++) {
+        const row = i * nu_;
+        for (let sl = 0; sl < nl; sl++) {
+          const vl = low.vectors[i * nl + sl];
+          if (vl === 0) continue;
+          const g = sl * nu_;
+          for (let j = 0; j < nu_; j++) T[row + j] += vl * G[g + j];
+        }
+      }
+      return T;
+    };
+    if (sameWidth) {
+      tTot.set(lowered(obs));
+      tN.fill(1); tW.fill(obsMean);
+    } else {
+      for (const k of obs) {
+        const tk = lowered([k]);
+        for (let x = 0; x < tk.length; x++) {
+          const t = tk[x], t2 = t * t;
+          tTot[x] += t; tW[x] += t2 * sites[k].width; tN[x] += t2;
+        }
+      }
+    }
+    for (let i = 0; i < nl; i++) for (let j = 0; j < nu_; j++) {
+      const x = i * nu_ + j;
+      out.F.push(up.values[j] - low.values[i]);
+      out.I.push((weight * tTot[x] * tTot[x]) / norm);
+      out.W.push(tN[x] > 0 ? tW[x] / tN[x] : obsMean);
+    }
+  }
 }
 
 /** All transitions of the observed nucleus at spectrometer frequency sf (MHz). Frequencies in Hz
- *  from 0 ppm. */
+ *  from 0 ppm. Magnetically equivalent spins are simulated as composite particles (one run per
+ *  combination of their total spins), which gives the same spectrum from much smaller matrices. */
 export function transitions(sys: SpinSystem, sf: number, observed = '1H'): LineList {
   const n = sys.shifts.length;
   if (n === 0) return { hz: new Float64Array(0), intensity: new Float64Array(0), width: new Float64Array(0), sf };
@@ -190,73 +289,38 @@ export function transitions(sys: SpinSystem, sf: number, observed = '1H'): LineL
   const widths = typeof sys.widths === 'number' ? sys.shifts.map(() => sys.widths as number) : sys.widths ?? sys.shifts.map(() => 1);
   const obs = [...Array(n).keys()].filter((k) => nuclei[k] === observed);
   if (!obs.length) throw new Error(`no ${observed} spins in the system`);
-  const blocks = buildBlocks(sys, sf, obs);
+  const groups = equivalentGroups(sys, nuclei, widths);
+  // every group of k spins splits into total spins I = k/2, k/2 - 1, ... with multiplicities
+  // C(k, t) - C(k, t - 1), t = k/2 - I
+  const choices = groups.map((g) => {
+    const k = g.length, c: { i2: number; mult: number }[] = [];
+    for (let t = 0; 2 * t <= k; t++) c.push({ i2: k - 2 * t, mult: binom(k, t) - binom(k, t - 1) });
+    return c;
+  });
   const norm = 2 ** (n - 1);
-  const obsMean = obs.reduce((t, k) => t + widths[k], 0) / obs.length;
-  const sameWidth = obs.every((k) => widths[k] === widths[obs[0]]);
-  const F: number[] = [], I: number[] = [], W: number[] = [];
-  for (const [key, up] of blocks) {
-    const [m2, hb] = key.split(',').map(Number);
-    const low = blocks.get(`${m2 - 2},${hb}`);
-    if (!low) continue;
-    const nl = low.states.length, nu_ = up.states.length;
-    const tTot = new Float64Array(nl * nu_), tW = new Float64Array(nl * nu_), tN = new Float64Array(nl * nu_);
-    const tk = new Float64Array(nl * nu_);
-    // upper eigenvectors by basis state (row su holds component su of every eigenvector), for
-    // contiguous inner loops
-    const upT = new Float64Array(nu_ * nu_);
-    for (let j = 0; j < nu_; j++) for (let su = 0; su < nu_; su++) upT[su * nu_ + j] = up.vectors[j * nu_ + su];
-    if (sameWidth) {
-      // all observed spins share one width, so only <lower|F-|upper> is needed: G = F- Vup in the
-      // lower block's basis, then Vlow^T G
-      const G = new Float64Array(nl * nu_);
-      for (let su = 0; su < nu_; su++) {
-        const s = up.states[su], src = su * nu_;
-        for (const k of obs) {
-          if (!bit(s, k)) continue;
-          const row = low.index.get(s ^ (1 << k))! * nu_;
-          for (let j = 0; j < nu_; j++) G[row + j] += upT[src + j];
-        }
-      }
-      for (let i = 0; i < nl; i++) {
-        const row = i * nu_;
-        for (let sl = 0; sl < nl; sl++) {
-          const vl = low.vectors[i * nl + sl];
-          if (vl === 0) continue;
-          const g = sl * nu_;
-          for (let j = 0; j < nu_; j++) tTot[row + j] += vl * G[g + j];
-        }
-      }
-      tN.fill(1); tW.fill(obsMean);
-    }
-    for (const k of sameWidth ? [] : obs) {
-      tk.fill(0);
-      // <lower i|I-_k|upper j> = sum over upper basis states s with bit k set: Vlow[s^k, i] Vup[s, j]
-      for (let su = 0; su < nu_; su++) {
-        const s = up.states[su];
-        if (!bit(s, k)) continue;
-        const sl = low.index.get(s ^ (1 << k))!;
-        for (let i = 0; i < nl; i++) {
-          const vl = low.vectors[i * nl + sl];
-          if (vl === 0) continue;
-          const row = i * nu_, src = su * nu_;
-          for (let j = 0; j < nu_; j++) tk[row + j] += vl * upT[src + j];
-        }
-      }
-      for (let x = 0; x < tk.length; x++) {
-        const t = tk[x], t2 = t * t;
-        tTot[x] += t; tW[x] += t2 * widths[k]; tN[x] += t2;
-      }
-    }
-    for (let i = 0; i < nl; i++) for (let j = 0; j < nu_; j++) {
-      const x = i * nu_ + j;
-      F.push(up.values[j] - low.values[i]);
-      I.push((tTot[x] * tTot[x]) / norm);
-      W.push(tN[x] > 0 ? tW[x] / tN[x] : obsMean);
-    }
+  const out = { F: [] as number[], I: [] as number[], W: [] as number[] };
+  const pick = new Array(groups.length).fill(0);
+  for (;;) {
+    let weight = 1;
+    const sites: Site[] = [], who: number[] = [];
+    groups.forEach((g, gi) => {
+      const ch = choices[gi][pick[gi]];
+      weight *= ch.mult;
+      if (ch.i2 === 0) return; // total spin 0: no lines, no couplings
+      const o = nuclei[g[0]] === observed;
+      sites.push({ i2: ch.i2, nu: o ? sys.shifts[g[0]] * sf : 0, obs: o, width: widths[g[0]] });
+      who.push(g[0]);
+    });
+    if (sites.some((t) => t.obs)) siteLines(sites, who.map((a) => who.map((b) => (a === b ? 0 : sys.j[a][b]))), weight, norm, out);
+    let gi = 0;
+    while (gi < groups.length && ++pick[gi] === choices[gi].length) pick[gi++] = 0;
+    if (gi === groups.length) break;
   }
-  const max = I.reduce((m, v) => Math.max(m, v), 0);
-  const keep = I.map((v, i) => [v, i] as [number, number]).filter(([v]) => v > MIN_RELATIVE * max).map(([, i]) => i);
+  const { F, I, W } = out;
+  let max = 0;
+  for (const v of I) if (v > max) max = v;
+  const keep: number[] = [];
+  for (let i = 0; i < I.length; i++) if (I[i] > MIN_RELATIVE * max) keep.push(i);
   keep.sort((a, b) => F[a] - F[b]);
   return {
     hz: Float64Array.from(keep, (i) => F[i]),

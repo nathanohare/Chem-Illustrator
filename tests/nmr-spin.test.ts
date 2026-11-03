@@ -51,4 +51,15 @@ describe('spin simulation (port of nmrsuite.spin)', () => {
     expect(ints.length).toBe(3);
     expect(ints[1] / ints[0]).toBeCloseTo(2, 1);
   });
+
+  it('gives the same spectrum with equivalent spins combined as without', () => {
+    // CH3-CH2-CH (A3M2X, strongly coupled at 400 MHz); widths differing by 1e-9 Hz stop the grouping
+    const shifts = [1.0, 1.0, 1.0, 1.08, 1.08, 1.3];
+    const j = shifts.map((_, a) => shifts.map((_, b) => (a === b ? 0 : (a < 3) !== (b < 3) && Math.max(a, b) < 5 ? 7.2 : (a === 5) !== (b === 5) && (a >= 3 || b >= 3) && Math.min(a, b) >= 3 ? 6.5 : 0)));
+    const grouped = transitions({ shifts, j, widths: 0.9 }, 400);
+    const single = transitions({ shifts, j, widths: shifts.map((_, k) => 0.9 + k * 1e-9) }, 400);
+    const a = spectrum(grouped, 350, 560), b = spectrum(single, 350, 560);
+    const peak = Math.max(...b);
+    for (let k = 0; k < a.length; k++) expect(Math.abs(a[k] - b[k])).toBeLessThan(1e-6 * peak);
+  });
 });

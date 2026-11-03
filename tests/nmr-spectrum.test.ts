@@ -29,7 +29,18 @@ describe('predicted 1H spectrum', () => {
     // hexyl chain: 13 protons coupled in one chain, more than Balanced's 8
     const g: JGraph = { atoms: [C(3), C(2), C(2), C(2), C(2), C(3)], bonds: [0, 1, 2, 3, 4].map((i) => ({ u: i, v: i + 1, o: 1 })) };
     const s = predictSpectrum(g, [0.9, 1.3, 1.3, 1.3, 1.3, 0.9], ['m', 'a', 'b', 'b', 'a', 'm'], 400, 'balanced');
-    expect(s.lines.intensity.reduce((t, v) => t + v, 0)).toBeGreaterThan(5);
+    expect(s.lines.intensity.reduce((t, v) => t + v, 0)).toBeCloseTo(14, 3);
+    // the CH3 keeps its triplet: the coupling to the next cluster stays, to first order
+    const ch3 = [...s.lines.hz].map((f, k) => [f, s.lines.intensity[k]]).filter(([f, i]) => f < 0.95 * 400 && i > 0.02).map(([f]) => f);
+    expect(new Set(ch3.map((f) => Math.round(f))).size).toBe(3);
+  });
+
+  it('simulates 12 coupled protons exactly on Accurate', () => {
+    const g: JGraph = { atoms: [C(3), C(2), C(2), C(2), C(3)], bonds: [0, 1, 2, 3].map((i) => ({ u: i, v: i + 1, o: 1 })) };
+    const t = performance.now();
+    const s = predictSpectrum(g, [0.9, 1.31, 1.28, 1.33, 0.95], ['m', 'a', 'b', 'c', 'n'], 400, 'accurate');
+    expect(s.lines.intensity.reduce((t, v) => t + v, 0)).toBeCloseTo(12, 3);
+    expect(performance.now() - t).toBeLessThan(5000);
   });
 
   it('draws an SVG and finds the row under the pointer', () => {
