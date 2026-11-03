@@ -352,9 +352,9 @@ export const labelPrefs = { superscriptR: true };
 export const isNumberedR = (label: string | null): boolean => !!label && /^R\d+$/.test(label);
 
 /** How an atom's label raises its characters: R numbers (from the file, or by the preference) and marks set by hand. */
-export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string; centred?: boolean }): { supDigits: boolean; marks?: LabelMarks; centred?: boolean } {
+export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string; centred?: boolean; stacked?: 'up' | 'down' }): { supDigits: boolean; marks?: LabelMarks; centred?: boolean; stacked?: 'up' | 'down' } {
   const supDigits = a.supDigits ?? (labelPrefs.superscriptR && isNumberedR(a.label));
-  return { supDigits, ...(a.labelMarks && a.label ? { marks: a.labelMarks } : {}), ...(a.centred ? { centred: true } : {}) };
+  return { supDigits, ...(a.labelMarks && a.label ? { marks: a.labelMarks } : {}), ...(a.centred ? { centred: true } : {}), ...(a.stacked ? { stacked: a.stacked } : {}) };
 }
 
 /** The label's pieces in reading order, as `layoutLabel` shows them (for the typing box). */
@@ -374,6 +374,8 @@ export interface LabelSpec {
   marks?: LabelMarks;
   /** Centre the whole label on the atom (a label on one line with no hydrogens or charge). */
   centred?: boolean;
+  /** Stack the label above or below the atom, one piece per line. */
+  stacked?: 'up' | 'down';
 }
 
 /** Tokens to show for an atom: its custom label, or element + hydrogens. Null = no label (plain carbon). */
@@ -463,6 +465,7 @@ export function typedH(spec: LabelSpec): LabelSpec {
  * goes on the first free side of right, left, above, below.
  */
 export function labelDir(spec: LabelSpec, bondDirs: { x: number; y: number }[], just: 'auto' | 'left' | 'right' = 'auto'): 'right' | 'left' | 'up' | 'down' {
+  if (spec.stacked) return spec.stacked;
   if (just === 'left') return 'left';
   if (just === 'right') return 'right';
   spec = typedH(spec);
@@ -544,16 +547,30 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
   if (dir === 'right' || dir === 'up' || dir === 'down') {
     let x = pushPieces(headPieces, headX);
     if (dir === 'right' && hTok) x = pushPieces(tokenPieces(hTok), x);
-    for (const t of tail) x = pushPieces(tokenPieces(t, sd, mk), x);
-    if (chargeText) pushCharge(x);
-    if (hTok && dir !== 'right') {
-      // stacked H above or below the atom (e.g. the NH of a ring)
-      const w = pieceWidth({ text: 'H' }) + (hTok.count > 1 ? pieceWidth({ text: String(hTok.count), sub: true }) : 0);
-      const yOff = dir === 'up' ? -size * 1.0 : size * 1.0;
-      const start = runs.length;
-      pushPieces(tokenPieces(hTok), -firstCharW / 2 + (firstCharW - w) / 2 + (hTok.count > 1 ? 0 : 0));
-      for (let i = start; i < runs.length; i++) runs[i].dy += yOff;
-      for (let i = start; i < boxes.length; i++) { boxes[i].y1 += yOff; boxes[i].y2 += yOff; }
+    if (spec.stacked && dir !== 'right') {
+      // stacked as ChemDraw draws it: hydrogens, then each piece, on lines of their own lined up on
+      // the left edge of the atom symbol; a charge stays by the symbol
+      if (chargeText) pushCharge(x);
+      let line = 0;
+      for (const t of hTok ? [hTok, ...tail] : tail) {
+        const start = runs.length;
+        pushPieces(tokenPieces(t, sd, mk), headX);
+        const yOff = (dir === 'up' ? -1 : 1) * size * ++line;
+        for (let i = start; i < runs.length; i++) runs[i].dy += yOff;
+        for (let i = start; i < boxes.length; i++) { boxes[i].y1 += yOff; boxes[i].y2 += yOff; }
+      }
+    } else {
+      for (const t of tail) x = pushPieces(tokenPieces(t, sd, mk), x);
+      if (chargeText) pushCharge(x);
+      if (hTok && dir !== 'right') {
+        // stacked H above or below the atom (e.g. the NH of a ring)
+        const w = pieceWidth({ text: 'H' }) + (hTok.count > 1 ? pieceWidth({ text: String(hTok.count), sub: true }) : 0);
+        const yOff = dir === 'up' ? -size * 1.0 : size * 1.0;
+        const start = runs.length;
+        pushPieces(tokenPieces(hTok), -firstCharW / 2 + (firstCharW - w) / 2 + (hTok.count > 1 ? 0 : 0));
+        for (let i = start; i < runs.length; i++) runs[i].dy += yOff;
+        for (let i = start; i < boxes.length; i++) { boxes[i].y1 += yOff; boxes[i].y2 += yOff; }
+      }
     }
   } else if (spec.tokens.some((t) => t.kind === 'other') && (head.kind === 'other' || !bracketUnits(tail))) {
     // Text that is not a formula ("(3,4)-MDP", "Aryl") is never reversed: ChemDraw keeps its

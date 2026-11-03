@@ -108,6 +108,8 @@ export interface Atom {
   labelMarks?: string;
   /** The whole label is centred on the atom (ChemDraw's Center justification, as on Ru or Si), not its first letter. */
   centred?: boolean;
+  /** The label stacked one piece per line above or below the atom (ChemDraw's LabelAlignment Above or Below), whatever the bonds. */
+  stacked?: 'up' | 'down';
   /** Show this atom's R/S label when it has one (ChemDraw's "Show Stereochemistry"). */
   showStereo?: boolean;
   /** Where the stereo label sits (relative to the atom), and its text as saved or typed by hand. */
@@ -1190,6 +1192,8 @@ export interface PageSetup {
   down?: number;
   /** The fixed edges the page grid doesn't grow past (page-grid.ts); missing, top and left. */
   walls?: PageWalls;
+  /** One sheet of its own size, not paper: ChemDraw's poster document (DrawingSpace poster). */
+  poster?: boolean;
 }
 
 /**
