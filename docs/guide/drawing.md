@@ -555,7 +555,7 @@ Above the drawing, a compact ribbon holds the chemistry commands that have no to
 - **Tabs for what you're working on**: draw with an arrow tool or select an arrow and an **Arrow** tab comes up and opens, with its shape, path and structure commands. A ring tool or a selected ring brings up a **Ring** tab, and one or two selected bonds a **Bond** tab. When the selection or tool changes, the ribbon goes back to the tab you were on.
 - **Warnings**, at the far right of the tabs, counts the problems found in the drawing. Click it to see the list.
 - **Analysis**, at the right end of the buttons, shows the formula and molecular weight of what is selected (or the whole drawing) on one line. Click it to see everything the Analysis panel has, and **Pop Out** to put that in a window of its own, which you can move anywhere or pin at the right.
-- **Settings ▸ Toolboxes and Ribbon** offers the **Simplified** ribbon (one row of buttons) instead of the **Classic** two rows, and puts the group names under each group, up its side, or nowhere.
+- **Settings ▸ Toolboxes and Ribbon** offers the **Simplified** ribbon (one row of buttons) instead of the **Classic** two rows. The Canvas ribbon has no group names (rest the mouse on a button for its name); the other modes' ribbons name each group under it.
 
 ## Toolboxes
 

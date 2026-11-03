@@ -9948,14 +9948,10 @@ function setToolCells(v: Settings['toolCells']): void {
 
 /** Settings ▸ Toolboxes: how the toolboxes' buttons look and what their tips say. */
 let ribbonLook: Settings['canvasRibbon'] = 'classic';
-let ribbonNames: Settings['ribbonNames'] = 'side';
-function setRibbonLook(look: Settings['canvasRibbon'], names: Settings['ribbonNames']): void {
+function setRibbonLook(look: Settings['canvasRibbon']): void {
   ribbonLook = look;
-  ribbonNames = names;
   canvasRibbon.setLook(look);
   repaintArrows();
-  // (the names' place goes for every mode's ribbon)
-  for (const n of ['top', 'side', 'none'] as const) document.body.classList.toggle(`rb-names-${n}`, n === names);
   fitRibbons();
 }
 
@@ -9963,14 +9959,13 @@ async function toolboxPreferences(): Promise<void> {
   const r = await ask('Toolboxes and Ribbon', [
     { name: 'look', label: 'Canvas ribbon', value: ribbonLook, options: [{ value: 'classic', label: 'Classic: two rows of buttons' }, { value: 'simple', label: 'Simplified: one row' }],
       help: 'Both keep the tabs and fold away with the arrow at the right of the tabs.' },
-    { name: 'names', label: 'Group names on every ribbon', value: ribbonNames, options: [{ value: 'side', label: 'Along the dividers, up the side of each group' }, { value: 'top', label: 'Across each group (above it on the Canvas, below it elsewhere)' }, { value: 'none', label: 'None (rest the mouse on a button for its name)' }] },
     { name: 'cells', label: 'Button cells', value: toolCells, options: [{ value: 'off', label: 'None' }, { value: 'grid', label: 'Grid lines' }, { value: 'raised', label: 'Raised buttons' }, { value: 'both', label: 'Grid lines and raised buttons' }],
       help: 'Gives each toolbox button a cell of its own, so the buttons are easier to tell apart and to hit.' },
     { name: 'tips', label: 'Detailed tooltips: hold the mouse on a tool to see what it does and what Alt, Shift and Ctrl change', type: 'checkbox', value: String(toolTip.enabled) },
   ], { ok: 'Save' });
   if (!r) return;
   setToolCells((['grid', 'raised', 'both'].includes(r.cells) ? r.cells : 'off') as Settings['toolCells']);
-  setRibbonLook(r.look === 'simple' ? 'simple' : 'classic', (['side', 'none'].includes(r.names) ? r.names : 'top') as Settings['ribbonNames']);
+  setRibbonLook(r.look === 'simple' ? 'simple' : 'classic');
   showToolTips(r.tips === 'true');
   storeSettings();
 }
@@ -10096,7 +10091,6 @@ function currentSettings(): Settings {
     oneColumnTools,
     toolCells,
     canvasRibbon: ribbonLook,
-    ribbonNames,
     startView,
     enterFinishesText,
     offerFigures,
@@ -10350,7 +10344,7 @@ function applySettings(s: Settings): void {
   setShapesInk(s.shapeInk);
   setOneColumnTools(s.oneColumnTools);
   setToolCells(s.toolCells);
-  setRibbonLook(s.canvasRibbon, s.ribbonNames);
+  setRibbonLook(s.canvasRibbon);
   startView = s.startView;
   enterFinishesText = s.enterFinishesText;
   offerFigures = s.offerFigures;
@@ -12844,7 +12838,7 @@ const guide = {
 };
 watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 // the Canvas ribbon's arrow switches it between Classic and Simplified (Settings ▸ Toolboxes and Ribbon has both too)
-addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: () => { setRibbonLook(ribbonLook === 'simple' ? 'classic' : 'simple', ribbonNames); storeSettings(); } });
+addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: () => { setRibbonLook(ribbonLook === 'simple' ? 'classic' : 'simple'); storeSettings(); } });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files', open: generalPreferences },
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
@@ -12856,7 +12850,7 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'mode-colours', title: 'Mode Colors', words: 'tab colors accent window drawing slides sheet document design appearance', open: () => modeDialog.open() },
   { id: 'navigation', title: 'Navigation', words: 'document map navigator minimap map overview edge arrows off screen lost find dot grid dots tint outside fit go to selection orientation zoom', open: navigationSettings },
   { id: 'page-grid', title: 'Page Grid', words: 'pages page grid boundaries dashed dotted lines paper fixed edges hatched wall empty gray print chemdraw paste wrap', open: pageGridSettings },
-  { id: 'toolboxes', title: 'Toolboxes and Ribbon', words: 'toolbox ribbon classic simplified one row two rows group names buttons cells grid lines raised bevel borders tooltips hints keys modifiers shortcuts', open: toolboxPreferences },
+  { id: 'toolboxes', title: 'Toolboxes and Ribbon', words: 'toolbox ribbon classic simplified one row two rows buttons cells grid lines raised bevel borders tooltips hints keys modifiers shortcuts', open: toolboxPreferences },
   { id: 'dark', title: 'Reading Mode', words: 'reading mode dark page dark mode night paper ink graphite slate appearance colors', open: darkColours },
     { id: 'newman', title: 'Newman Projections', words: 'newman sawhorse projection conformation torsion dihedral gauche anti eclipsed color largest middle smallest group strain a-value energy chart rotation barrier kcal kj', open: () => newmanSettingsPage() },
   { id: 'schemes', title: 'Schemes', words: 'scheme arrow gap plus text reagents conditions boxes', open: schemeSettings },
@@ -13320,7 +13314,7 @@ function placeTextBar(where: Settings['textBar']): void {
 }
 
 /** View > Window and Colours > Theme: the window light or dark whatever the computer is set to, or as it is set. */
-let appTheme: Settings['appTheme'] = 'system';
+let appTheme: Settings['appTheme'] = 'darkgray';
 function setAppTheme(t: Settings['appTheme']): void {
   appTheme = t;
   const root = document.documentElement;
