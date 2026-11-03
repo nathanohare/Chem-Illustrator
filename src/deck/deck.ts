@@ -1009,6 +1009,33 @@ export class Deck {
   }
 
   /**
+   * Change a slide's drawing and then its animations (and a canvas slide's keyframes) from it, as
+   * one step of the history: Auto-Animate Steps splits a scheme into pieces and animates them.
+   * `fn` changes the drawing and gives back the animations (and keyframes) that go with it.
+   */
+  rebuildSlide(i: number, label: string, fn: (doc: Doc) => { anims: Anim[]; canvas?: CanvasData }): void {
+    const s = this.slides[i];
+    if (!s) return;
+    const was = { anims: copyMotion(s).anims ?? [], canvas: s.canvas ? copyCanvas(s.canvas) : undefined };
+    let now = was;
+    const put = (v: typeof was) => {
+      if (v.canvas) s.canvas = copyCanvas(v.canvas);
+      if (v.anims.length) s.anims = copyMotion({ anims: v.anims }).anims; else delete s.anims;
+      this.looks++;
+      this.onMotion();
+    };
+    this.contentEdit(label, [i], () => {
+      const d = this.docOf(i);
+      let got: { anims: Anim[]; canvas?: CanvasData } = { anims: was.anims };
+      d.bulk(() => { got = fn(d); });
+      // (keyframes given without a look keep the canvas's look; a canvas slide keeps one move to each keyframe after the first)
+      const canvas = got.canvas && s.canvas && got.canvas.keys.length ? copyCanvas({ ...s.canvas, ...got.canvas }) : was.canvas;
+      now = { anims: copyMotion({ anims: canvas ? syncCamera(got.anims, canvas.keys) : got.anims }).anims ?? [], canvas };
+      put(now);
+    }, () => put(was), () => put(now));
+  }
+
+  /**
    * A new slide of a layout at place `at` (0 is first), filled in by `fill` (Insert > Summary
    * Zoom), as one step of the history.
    */
