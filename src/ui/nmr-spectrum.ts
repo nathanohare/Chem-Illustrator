@@ -48,6 +48,8 @@ export interface MeasuredOverlay {
   spec?: PredictedSpectrum;
   /** 13C: one line per listed peak. */
   sticks?: { shift: number; n: number }[];
+  /** A measured spectrum (ppm high to low) instead of lines drawn from a list. */
+  trace?: { ppm: Float64Array; y: Float64Array };
   /** Matched pairs: measured and predicted shift, how well they agree. */
   links: { m: number; p: number; sev: Severity }[];
   /** Labels over measured peaks that need a look. */
@@ -121,7 +123,20 @@ export function spectrumSvg(d: SpectrumData, o: DrawOpts & { overlay?: boolean }
   }
   if (ov) {
     const mBase = mid - 2, mH = mid - 2 - top;
-    if (ov.spec) {
+    if (ov.trace) {
+      // per pixel column, the highest point; the scale from the third-tallest column, as above
+      const cols = Math.round(o.w), col = new Float64Array(cols);
+      const { ppm, y } = ov.trace;
+      for (let i = 0; i < ppm.length; i++) {
+        const c = Math.floor(((o.hi - ppm[i]) / (o.hi - o.lo)) * cols);
+        if (c < 0 || c >= cols) continue;
+        if (y[i] > col[c] || col[c] === 0) col[c] = y[i];
+      }
+      const base = [...col].filter((v) => v !== 0).sort((a, b) => a - b)[Math.floor(cols * 0.25)] ?? 0;
+      for (let c = 0; c < cols; c++) col[c] = Math.max(0, col[c] - base);
+      const sorted = [...col].sort((a, b) => b - a);
+      s += `<path d="${trace(col, (sorted[2] || sorted[0] || 1) * 1.08, mBase, mH, -1)}" class="sp-meas"/>`;
+    } else if (ov.spec) {
       const { col, ymax } = columns(ov.spec, o);
       s += `<path d="${trace(col, ymax, mBase, mH, -1)}" class="sp-meas"/>`;
     } else if (ov.sticks) {

@@ -11,7 +11,8 @@ import { ShiftNet } from '../chem/nmr/net';
 import { predictSpectrum, type NmrQuality, type PredictedSpectrum } from '../chem/nmr/spectrum';
 import { spectrumInBackground } from '../chem/nmr/spectrum-client';
 import { checkData, measuredLines, parsePeakLists, type CheckNucleus, type CheckResult, type MeasuredList, type PredictedRow } from '../chem/nmr/check';
-import { knownPeaks } from '../chem/nmr/known-peaks';
+import { knownPeaks, residualPeaks } from '../chem/nmr/known-peaks';
+import { nucleusOfSpectrum, readSpectrumFile, referenceToSolvent, spectrumToList, SpectrumFileError, type MeasuredSpectrum } from '../chem/nmr/spectrum-file';
 import { autoRange, rowAt, spectrumSvg, SpectrumWindow, type MeasuredOverlay, type SpectrumData } from './nmr-spectrum';
 
 export const NMR_SOLVENTS = ['CDCl3', 'DMSO-d6', 'CD3OD', 'C6D6', 'acetone-d6', 'CD2Cl2', 'CD3CN', 'D2O'] as const;
@@ -33,13 +34,6 @@ export interface NmrRow {
   /** Predicted 1H multiplicity (s, d, dd, m, br s ...) and coupling constants (Hz, largest first). */
   mult?: string;
   j?: number[];
-}
-
-/** What the paste box has read so far ("1H list · 9 peaks"). */
-function readNote(text: string): string {
-  const lists = parsePeakLists(text);
-  if (!lists.length) return text.trim() ? 'No peaks read yet' : 'Paste a 1H or 13C list';
-  return lists.map((l) => `${l.nuc} list · ${l.peaks.length} peak${l.peaks.length === 1 ? '' : 's'}${l.solvent ? ` · ${l.solvent}` : ''}`).join(', ');
 }
 
 /** "dd, J = 15.5, 6.8 Hz" as an SI writes it (empty without a multiplicity). */
@@ -162,7 +156,9 @@ interface Item { molblock: string; map: number[] }
 interface CheckState {
   text: string;
   editing: boolean;
-  results: Map<CheckNucleus, { list: MeasuredList; res: CheckResult; rowIdx: number[]; note?: string }>;
+  results: Map<CheckNucleus, { list: MeasuredList; res: CheckResult; rowIdx: number[]; note?: string; trace?: MeasuredSpectrum }>;
+  /** Spectra opened from files, by nucleus (they take the place of a pasted list of the same nucleus). */
+  spectra: Map<CheckNucleus, { sp: MeasuredSpectrum; name: string }>;
 }
 
 interface Shown {
@@ -326,11 +322,12 @@ export class NmrPanel {
         const st = this.checkState(i, true)!;
         st.text = ta.value;
         const note = nb.querySelector('.ck-read');
-        if (note) note.textContent = readNote(ta.value);
+        if (note) note.textContent = this.readNote(st);
       });
       nb.addEventListener('click', (e) => {
         const t = e.target as HTMLElement;
         if (t.closest('.ck-run')) { void this.runCheck(i, d); return; }
+        if (t.closest('.ck-open')) { this.openSpectrum(i, d); return; }
         if (t.closest('.ck-cancel')) { const st = this.checkState(i, false); if (st) { st.editing = false; if (!st.results.size) this.checks.delete(item.molblock); } this.render(i, d); return; }
         if (t.closest('.ck-edit')) { const st = this.checkState(i, false); if (st) st.editing = true; this.render(i, d); return; }
         if (t.closest('.ck-clear')) { this.checks.delete(item.molblock); this.render(i, d); if (this.win?.visible && this.winItem === i) this.win.refresh(); return; }
@@ -397,7 +394,7 @@ export class NmrPanel {
     const key = this.items[i]?.molblock;
     if (key === undefined) return null;
     let st = this.checks.get(key) ?? null;
-    if (!st && make) this.checks.set(key, (st = { text: '', editing: false, results: new Map() }));
+    if (!st && make) this.checks.set(key, (st = { text: '', editing: false, results: new Map(), spectra: new Map() }));
     return st;
   }
 
@@ -409,7 +406,7 @@ export class NmrPanel {
     if (!st) return '';
     if (st.editing) {
       return `<div class="ck-box"><textarea spellcheck="false" aria-label="Measured peak list" placeholder="Paste a peak list as an SI writes it: 1H NMR (400 MHz, CDCl3) δ 7.30 (d, J = 8.7 Hz, 2H), …">${esc(st.text)}</textarea>`
-        + `<div class="ck-row"><span class="ck-read">${esc(readNote(st.text))}</span><span class="sp"><button type="button" class="ck-run primary">Check</button><button type="button" class="ck-cancel">Cancel</button></span></div></div>`;
+        + `<div class="ck-row"><span class="ck-read">${esc(this.readNote(st))}</span><span class="sp"><button type="button" class="ck-open" title="Open a measured spectrum: JCAMP-DX (.jdx, .dx) or a Bruker experiment folder as a .zip (with its processed pdata)">Open Spectrum…</button><button type="button" class="ck-run primary">Check</button><button type="button" class="ck-cancel">Cancel</button></span></div></div>`;
     }
     const nucs: CheckNucleus[] = this.report ? ['1H', '13C'] : [this.nuc];
     const sev = { ok: 'ck-ok', warn: 'ck-warn', bad: 'ck-bad', info: 'ck-info' } as const;
@@ -428,16 +425,57 @@ export class NmrPanel {
     return `<ul class="ck-list">${html}</ul>`;
   }
 
+  /** What the paste box has: lists read from the text and spectra opened. */
+  private readNote(st: CheckState): string {
+    const files = [...st.spectra].map(([n, f]) => `${n} spectrum · ${f.name}`);
+    const text = parsePeakLists(st.text).filter((l) => !st.spectra.has(l.nuc)).map((l) => `${l.nuc} list · ${l.peaks.length} peak${l.peaks.length === 1 ? '' : 's'}${l.solvent ? ` · ${l.solvent}` : ''}`);
+    const all = [...files, ...text];
+    return all.length ? all.join(', ') : st.text.trim() ? 'No peaks read yet' : 'Paste a 1H or 13C list, or open a spectrum';
+  }
+
+  /** Open Spectrum…: a JCAMP-DX file or a zipped Bruker folder. */
+  private openSpectrum(i: number, d: HTMLElement): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.jdx,.dx,.jcamp,.zip';
+    input.addEventListener('change', () => {
+      const f = input.files?.[0];
+      if (!f) return;
+      void f.arrayBuffer().then((buf) => {
+        try {
+          const sp = readSpectrumFile(f.name, new Uint8Array(buf));
+          const st = this.checkState(i, true)!;
+          st.spectra.set(nucleusOfSpectrum(sp), { sp, name: f.name });
+          const note = d.querySelector('.ck-read');
+          if (note) note.textContent = this.readNote(st);
+        } catch (e) {
+          this.host.flash(e instanceof SpectrumFileError ? e.message : `The spectrum could not be read: ${e instanceof Error ? e.message : String(e)}`);
+        }
+      });
+    });
+    input.click();
+  }
+
   /** Reads the pasted lists and compares each with the prediction. */
   private async runCheck(i: number, d: HTMLElement): Promise<void> {
     const st = this.checkState(i, true)!, s = this.shown.get(i);
     const ta = d.querySelector<HTMLTextAreaElement>('.ck-box textarea');
     if (ta) st.text = ta.value;
     if (!s) return;
-    const lists = parsePeakLists(st.text);
-    if (!lists.length) { this.host.flash('No peaks found: paste a list such as 1H NMR (400 MHz, CDCl3) δ 7.26 (s, 1H).'); return; }
+    const hTotal = s.rows.reduce((t, r) => t + (r.h1 ? r.hCount : 0), 0);
+    const fromFiles: { list: MeasuredList; sp: MeasuredSpectrum }[] = [];
+    for (const [nuc, f] of st.spectra) {
+      // reference to the residual solvent peak, as the list's solvent says (or the panel's)
+      referenceToSolvent(f.sp, nuc, residualPeaks(f.sp.solvent ?? this.solvent, nuc));
+      const sol = f.sp.solvent ?? this.solvent;
+      const skip = (await knownPeaks(sol, nuc)).filter((k) => k.name === 'Water' || k.name.startsWith('Residual')).map((k) => k.shift);
+      fromFiles.push({ list: spectrumToList(f.sp, nuc, hTotal, skip), sp: f.sp });
+    }
+    const lists = [...fromFiles.map((x) => x.list), ...parsePeakLists(st.text).filter((l) => !st.spectra.has(l.nuc))];
+    if (!lists.length) { this.host.flash('No peaks found: paste a list such as 1H NMR (400 MHz, CDCl3) δ 7.26 (s, 1H), or open a spectrum.'); return; }
     st.results.clear();
     for (const list of lists) {
+      const trace = fromFiles.find((x) => x.list === list)?.sp;
       if (st.results.has(list.nuc)) continue;
       const rowIdx: number[] = [], rows: PredictedRow[] = [];
       s.rows.forEach((r, k) => {
@@ -447,9 +485,21 @@ export class NmrPanel {
         if (list.nuc === '13C' && r.c13) { rowIdx.push(k); rows.push({ shift: r.c13.value, spread: r.c13.spread, n: r.atoms.length, label: name }); }
       });
       const solvent = list.solvent ?? this.solvent;
-      const res = checkData(list, rows, await knownPeaks(solvent, list.nuc, await this.host.importedTables?.().catch(() => null) ?? null));
+      const known = await knownPeaks(solvent, list.nuc, await this.host.importedTables?.().catch(() => null) ?? null);
+      let res = checkData(list, rows, known);
+      if (trace && list.nuc === '1H') {
+        // integrals from a spectrum: rescale on the matched peaks only (not solvent, impurities or OH/NH), then check again
+        const used = new Set<number>(), pred = new Map<number, number>();
+        res.rows.forEach((m, k) => { if (m.peak !== null && !rows[k].exchangeable && m.status === 'ok') { used.add(m.peak); pred.set(m.peak, (pred.get(m.peak) ?? 0) + rows[k].n); } });
+        const meas = [...used].reduce((t, pi) => t + (list.peaks[pi].n ?? 0), 0), want = [...pred.values()].reduce((t, v) => t + v, 0);
+        if (meas > 0 && want > 0) {
+          const k = want / meas;
+          for (const p of list.peaks) if (p.n !== undefined) p.n = +(p.n * k).toFixed(2);
+          res = checkData(list, rows, known);
+        }
+      }
       const note = list.solvent && list.solvent.toLowerCase() !== this.solvent.toLowerCase() ? `The list is in ${list.solvent}; the prediction is for ${this.solvent}. Pick ${list.solvent} above to compare like with like.` : undefined;
-      st.results.set(list.nuc, { list, res, rowIdx, note });
+      st.results.set(list.nuc, { list, res, rowIdx, note, trace });
     }
     st.editing = false;
     if (!this.report && !st.results.has(this.nuc)) { this.nuc = st.results.keys().next().value!; this.restyle(d.closest<HTMLElement>('.frag')?.parentElement ?? document.body); }
@@ -466,10 +516,14 @@ export class NmrPanel {
     const pv = (k: number) => (nuc === '1H' ? rows[k].h1!.value : rows[k].c13!.value);
     const links = res.rows.filter((m) => m.peak !== null).map((m) => ({ m: list.peaks[m.peak!].value, p: pv(m.row), sev: m.status === 'off' ? 'warn' as const : 'ok' as const }));
     const marks = [
-      ...res.extras.map((e) => ({ ppm: list.peaks[e.peak].value, text: e.maybe ? `${e.maybe}?` : `extra${nuc === '1H' ? ` ${e.n}H` : ''}`, sev: 'bad' as const })),
+      ...res.extras.map((e) => {
+        const solvent = e.maybe === 'Water' || e.maybe?.startsWith('Residual');
+        return { ppm: list.peaks[e.peak].value, text: solvent ? (e.maybe === 'Water' ? 'water' : e.maybe!.replace('Residual ', '')) : e.maybe ? `${e.maybe}?` : `extra${nuc === '1H' ? ` ${e.n}H` : ''}`, sev: solvent ? 'info' as const : 'bad' as const };
+      }),
       ...res.rows.filter((m) => m.status === 'off').map((m) => ({ ppm: list.peaks[m.peak!].value, text: `Δ ${Math.abs(m.delta).toFixed(nuc === '1H' ? 2 : 1)}`, sev: 'warn' as const })),
       ...res.rows.filter((m) => m.pattern && m.status !== 'off').map((m) => ({ ppm: list.peaks[m.peak!].value, text: `${list.peaks[m.peak!].mult} vs ${rows[m.row].mult}`, sev: 'info' as const })),
     ];
+    if (r.trace) return { trace: { ppm: r.trace.ppm, y: r.trace.y }, links, marks };
     return nuc === '1H'
       ? { spec: { sf, lines: measuredLines(list, sf), groups: [] }, links, marks }
       : { sticks: list.peaks.map((p) => ({ shift: p.value, n: p.n ?? 1 })), links, marks };

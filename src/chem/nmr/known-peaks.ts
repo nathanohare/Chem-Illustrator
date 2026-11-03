@@ -69,3 +69,13 @@ export function importedPeaks(json: string | null, solvent: string, nuc: CheckNu
   }
   return out;
 }
+
+/** The residual peaks of a solvent (for referencing a measured spectrum). */
+export function residualPeaks(solvent: string, nuc: CheckNucleus): number[] {
+  const key = Object.keys(FORMULA).find((k) => k.toLowerCase() === solvent.toLowerCase()) ?? solvent;
+  const row = NMR_SOLVENTS.rows.find((r) => r.formula === FORMULA[key]);
+  if (!row) return [];
+  const cell = row[nuc === '1H' ? 'h' : 'c'];
+  // methanol-d4's OH (4.87) moves; reference to the CHD2 line
+  return nums(typeof cell === 'string' ? cell.replace(/[\d.]+\s*\(OH\)/, '') : cell);
+}

@@ -533,6 +533,8 @@ Above the list is the predicted spectrum. Hover a row to see its peaks, or a pea
 - predicted signals with no peak (OH and NH are only noted, since they exchange);
 - multiplicities or coupling constants that differ from the prediction.
 
+**Open Spectrum…** reads the spectrum itself instead: a JCAMP-DX file (.jdx, .dx) or a Bruker experiment folder zipped with its processed data (pdata). The spectrum is referenced to the solvent's residual peak, its peaks are grouped into multiplets with integrals, and the result is checked the same way, with the real trace drawn in the **⤢** window.
+
 Hover a line to see its atoms. The **⤢** window then shows the measured list above the prediction, mirrored, with matched peaks joined and the problem peaks labeled. **Edit** changes the list; **×** clears the check. Coupling constants come from the 2D structure, so protons on rings use averaged values for now.
 
 ## Mass fragmentation

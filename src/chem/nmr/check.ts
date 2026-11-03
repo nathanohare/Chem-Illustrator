@@ -200,14 +200,18 @@ export function checkData(list: MeasuredList, rows: PredictedRow[], known: Known
   const cap = peaks.map((p) => (nuc === '1H' ? (hasN ? Math.round(p.n ?? 0) : 1e6) : Math.max(1, p.n ?? 1)));
   const units = rows.map((r) => (nuc === '1H' ? Math.max(1, Math.round(r.n)) : 1));
   const sig = (r: PredictedRow) => Math.max(r.spread, tol.shift / 2);
-  const cost = (r: PredictedRow, p: MeasuredPeak) => {
-    let c = dist(p, r.shift) / sig(r);
+  // peaks on the solvent's own residual or water shift: a compound peak can hide there, but
+  // only when nothing else fits
+  const solventPeak = peaks.map((p) => known.some((q) => (q.name === 'Water' || q.name.startsWith('Residual')) && dist(p, q.shift) <= (nuc === '1H' ? 0.02 : 0.2)));
+  const cost = (r: PredictedRow, p: MeasuredPeak, pi: number) => {
+    // OH/NH move with concentration and water: almost any peak will do, the integral decides
+    let c = r.exchangeable ? 0.5 + 0.1 * dist(p, r.shift) : dist(p, r.shift) / sig(r);
     const a = pattern(r.mult), b = pattern(p.mult);
-    if (nuc === '1H' && a && b && a !== b) c += 0.5;
-    if (r.exchangeable) c *= 0.3; // OH/NH move with concentration and water
+    if (nuc === '1H' && !r.exchangeable && a && b && a !== b) c += 0.5;
+    if (solventPeak[pi]) c += 2;
     return c;
   };
-  const flow = minCostAssign(units, cap, rows.map((r) => peaks.map((p) => cost(r, p))), (k) => (rows[k].exchangeable ? 1.5 : tol.unmatched), nuc === '1H' ? (hasN ? 2.5 : 0) : 1.5);
+  const flow = minCostAssign(units, cap, rows.map((r) => peaks.map((p, pi) => cost(r, p, pi))), (k) => (rows[k].exchangeable ? 1.5 : tol.unmatched), nuc === '1H' ? (hasN ? 2.5 : 0) : 1.5);
   const out: RowMatch[] = rows.map((r, k) => {
     // the peak holding most of the row's units
     let best: number | null = null, most = 0;
@@ -232,7 +236,7 @@ export function checkData(list: MeasuredList, rows: PredictedRow[], known: Known
   const extras: ExtraPeak[] = [];
   peaks.forEach((p, pi) => {
     const left = nuc === '1H' ? (hasN ? (p.n ?? 0) - used[pi] : used[pi] ? 0 : 1) : used[pi] ? 0 : p.n ?? 1;
-    if (left < (nuc === '1H' ? 0.3 : 1) && !(nuc === '1H' && hasN && used[pi] === 0 && (p.n ?? 0) > 0)) return;
+    if (left < (nuc === '1H' ? 0.3 : 1) && !(nuc === '1H' && hasN && used[pi] === 0 && (p.n ?? 0) >= 0.1)) return;
     if (used[pi] > 0 && nuc === '1H' && left < 0.6) return;
     const near = known.map((q) => ({ q, d: Math.abs(q.shift - p.value) })).filter((x) => x.d <= (nuc === '1H' ? 0.03 : 0.3)).sort((a, b) => a.d - b.d)[0];
     extras.push({ peak: pi, n: Math.round(left * 100) / 100, maybe: near?.q.name });
@@ -259,10 +263,12 @@ function findings(list: MeasuredList, rows: PredictedRow[], m: RowMatch[], extra
   const out: Finding[] = [];
   const sig = nuc === '1H' ? 'signals' : 'carbons';
   const tot = listTotal !== null ? ` · ${nuc === '1H' ? 'integrals' : 'listed'} ${+listTotal.toFixed(1)}${unit}, structure ${structureTotal}${unit}` : '';
-  out.push({ severity: found === expected && !extras.length && m.every((x) => x.status !== 'off') ? 'ok' : found >= expected - 1 ? 'ok' : 'warn', text: `${found} of ${expected} predicted ${sig} found${tot}` });
+  out.push({ severity: found >= expected - (expected > 6 ? 1 : 0) ? 'ok' : 'warn', text: `${found} of ${expected} predicted ${sig} found${tot}` });
   for (const e of extras) {
     const p = list.peaks[e.peak];
-    out.push({ severity: 'bad', peak: e.peak, text: `${peakName(p, nuc)} has no match in the structure.${e.maybe ? ` ${e.maybe}?` : ''}` });
+    const solvent = e.maybe && (e.maybe === 'Water' || e.maybe.startsWith('Residual'));
+    if (solvent) out.push({ severity: 'info', peak: e.peak, text: `${peakName(p, nuc)}: ${e.maybe === 'Water' ? 'water' : e.maybe!.replace('Residual', 'residual')}.` });
+    else out.push({ severity: 'bad', peak: e.peak, text: `${peakName(p, nuc)} has no match in the structure.${e.maybe ? ` ${e.maybe}?` : ''}` });
   }
   m.forEach((x, k) => {
     const r = rows[k];
