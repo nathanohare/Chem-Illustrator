@@ -453,8 +453,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         if (dpos === 'left') dpos = 'right'; else if (dpos === 'right') dpos = 'left';
       }
       const extra: Partial<Bond> = { id: idFor(b), dpos };
-      // ChemDraw's own aromatic bond (Order="1.5") is drawn as one line; its dashed one is Order 2 with Display2 Dash
-      if (ord === '1.5') extra.plain = true;
+      // ChemDraw's aromatic bond (Order="1.5") on its own is drawn as one line; with Display2 Dash it is its
+      // dashed aromatic bond (as ChemDraw saves one, though it reads Order 2 with Display2 Dash the same way)
+      if (ord === '1.5' && b.getAttribute('Display2') !== 'Dash') extra.plain = true;
       if (b.getAttribute('IgnoreWarnings') === 'yes') extra.ignoreWarnings = true;
       if (b.getAttribute('ShowBondStereo') === 'yes') extra.showStereo = true;
       // the label characters the bond meets (counted from 0; 0 is the default), with their atoms
@@ -563,6 +564,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     if (wrap !== undefined) extra.wrap = wrap;
     if (back.paras) extra.paras = back.paras;
     if (back.lineSpacing) { extra.lineSpacing = back.lineSpacing; lineHeight = undefined; }
+    // ChemDraw's usual spacing, variable (which it takes a text with no line height of its own to have):
+    // lines as close as their ink lets them
+    else if (lineHeight === undefined && (lh === null || lh === 'variable')) extra.inkLines = true;
     const attach = attachFromTag(kids(t).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === ATTACH_TAG)?.getAttribute('Value') ?? null);
     if (attach) extra.attach = attach;
     if (kids(t).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === IGNORE_TAG)) extra.ignoreWarnings = true;
