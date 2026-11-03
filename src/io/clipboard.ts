@@ -136,6 +136,14 @@ export function typicalBondLength(doc: Doc): number | null {
  */
 export function fitPasted(src: Doc, to: DocStyle, bondLength?: number): void {
   const from = src.style;
+  // labels keep their own look (ChemDraw's bold labels stay bold in a drawing whose labels are plain)
+  src.bulk(() => {
+    for (const a of [...src.atoms.values()]) {
+      const face = a.face ?? from.labelFace ?? 0;
+      const own = (face & 1) !== ((to.labelFace ?? 0) & 1) ? face : undefined;
+      if (own !== a.face) src.updateAtom(a.id, { face: own });
+    }
+  });
   const L = typicalBondLength(src);
   const k = bondLength && L ? bondLength / L : 1;
   const ka = (k * from.labelSize) / to.labelSize, kb = (k * from.lineWidth) / to.lineWidth;

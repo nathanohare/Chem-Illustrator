@@ -18,6 +18,8 @@ export interface DocStyle {
   captionSize: number;
   /** How new captions look, as ChemDraw's face bits (1 bold, 2 italic, 4 underline, 96 formula). */
   captionFace: number;
+  /** How atom labels look, as the same face bits (absent: plain); bold is drawn, the rest is kept for saving. */
+  labelFace?: number;
   /** Text above and below reaction arrows (reagents, conditions): its size and font, where not the captions'. */
   arrowTextSize?: number;
   arrowTextFont?: string;
@@ -69,6 +71,11 @@ export const ACS_1996: DocStyle = {
 
 export function doubleBondGap(s: DocStyle): number {
   return (s.bondSpacing / 100) * s.bondLength;
+}
+
+/** Whether an atom's label is drawn in bold: its own face where it has one, else the drawing's. */
+export function labelBold(s: DocStyle, a: { face?: number }): boolean {
+  return !!((a.face ?? s.labelFace ?? 0) & 1);
 }
 
 /** Width of a wedge's wide end: 1.5 × bold width (User Guide p. 41). */

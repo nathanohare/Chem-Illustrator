@@ -13,7 +13,7 @@ import { chainArc, piLooksOf } from '../chem/hapto';
 import { crossingGapsCached } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
-import { bondEndPrefs, docMapLook, doubleBondGap, wedgeWidth } from '../style';
+import { bondEndPrefs, docMapLook, doubleBondGap, labelBold, wedgeWidth } from '../style';
 import { depthFractions, depthShadePrefs, shadeLook, shadeStep } from './depth-shade';
 import { joinWideEnds, lineMitres, endTip, LINE_MITRE_LIMIT, type WideEnd, type EndJoin, type LineEnd } from './bond-joins';
 import { chargeInk, labelBonds, labelSpec, layoutLabel, LabelLayout, labelLook } from '../chem/labels';
@@ -338,7 +338,9 @@ export class Renderer {
     const size = doc.style.labelSize * k;
     if (spec) {
       Object.assign(spec, labelLook(a));
-      layout = layoutLabel(spec, labelBonds(doc, a), size, (t, s) => measureText(t, s, this.labelStack), a.just);
+      const weight = labelBold(doc.style, a) ? 'bold' : '';
+      layout = layoutLabel(spec, labelBonds(doc, a), size, (t, s) => measureText(t, s, this.labelStack, weight), a.just);
+      if (weight) layout.bold = true;
       const m = doc.style.marginWidth * k;
       for (const b of layout.boxes) boxes.push({ x1: a.x + b.x1 - m, y1: a.y + b.y1 - m, x2: a.x + b.x2 + m, y2: a.y + b.y2 + m });
     }
@@ -351,7 +353,7 @@ export class Renderer {
     if (layout?.charge !== undefined) {
       // a bond is cut short at the charge only where it would touch the sign itself
       const r = layout.runs[layout.charge];
-      const ink = chargeInk(r.text, a.x + r.dx, a.y + r.dy, r.size, (t, s) => measureText(t, s, this.labelStack));
+      const ink = chargeInk(r.text, a.x + r.dx, a.y + r.dy, r.size, (t, s) => measureText(t, s, this.labelStack, layout!.bold ? 'bold' : ''));
       const grow = (m: number): Rect[] => ink.map((b) => ({ x1: b.x1 - m, y1: b.y1 - m, x2: b.x2 + m, y2: b.y2 + m }));
       // (the signs are small, so three quarters of the label margin keeps the same look of space)
       c.charge = { index: layout.charge, hit: grow(doc.style.lineWidth * k / 2 + 0.3 * k), cut: grow(doc.style.marginWidth * k * 0.75) };
@@ -971,7 +973,7 @@ export class Renderer {
         const ab = a.color ? undefined : back?.get(a.id);
         ctx.fillStyle = a.color ?? (ab !== undefined ? shadeLook(shadeStep(ab)).color : '#000');
         for (const r of info.layout.runs) {
-          const f = `${r.italic ? 'italic ' : ''}${r.size}px ${this.labelStack}`;
+          const f = `${r.italic ? 'italic ' : ''}${info.layout.bold ? 'bold ' : ''}${r.size}px ${this.labelStack}`;
           if (f !== curFont) { ctx.font = f; curFont = f; }
           ctx.fillText(r.text, a.x + r.dx, a.y + r.dy);
         }
@@ -1358,12 +1360,18 @@ export class Renderer {
         case 'wedge': this.fillBand(doc, b, p, q, fills); break;
         case 'hashWedge': {
           const w = wedgeWidth(st) / 2;
-          const n = Math.min(MAX_HASHES, Math.max(2, Math.floor(l / st.hashSpacing)));
-          // no hash at the narrow end, where it would sit on the stereocentre (as ChemDraw draws it)
-          for (let i = 1; i <= n; i++) {
-            const t = i / n;
+          // as ChemDraw 25 draws them: hashes a line width thick, the first at the narrow end and
+          // the last at the wide end, as many as fit at the hash spacing, spread evenly between
+          // An end at an atom with other bonds (and no label to stop at) stops a hash spacing short.
+          const lw = st.lineWidth;
+          const short = (at: Atom, end: Vec) => doc.degree(at.id) > 1 && len(sub(end, at)) < 1e-6 ? st.hashSpacing : 0;
+          const h0 = Math.min(short(p, s), l / 3), h1 = Math.min(short(q, e), l / 3);
+          const hl = l - h0 - h1, run = Math.max(0, hl - lw);
+          const n = Math.min(MAX_HASHES, Math.max(2, Math.floor(run / st.hashSpacing) + 1));
+          for (let i = 0; i < n; i++) {
+            const t = (h0 + lw / 2 + (run * i) / (n - 1)) / l;
             const c = add(s, mul(d, t));
-            const hw = st.lineWidth / 2 + (w - st.lineWidth / 2) * t;
+            const hw = lw / 2 + (w - lw / 2) * t;
             line(thin, add(c, mul(nrm, hw)), sub(c, mul(nrm, hw)));
           }
           break;
