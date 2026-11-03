@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 //
-// A hashed wedge has no hash on its narrow-end atom (issue #272): the first hash sits a
-// spacing out from the stereocentre, as ChemDraw draws it.
+// A hashed wedge has no hash on its stereocentre (issue #272): the first hash sits a spacing
+// out from an atom with other bonds, as ChemDraw 25 draws it. A bond on its own (no other bonds
+// at either end) has hashes from end to end, as in ChemDraw too.
 
 import { describe, it, expect } from 'vitest';
 import { Renderer } from '../src/render/renderer';
@@ -27,14 +28,15 @@ describe('hashed wedge', () => {
       a = doc.addAtom(100, 100).id;
       b = doc.addAtom(100, 100 - doc.style.bondLength).id;
       doc.addBond(a, b, 1, 'hashWedge');
+      doc.addBond(a, doc.addAtom(100 + doc.style.bondLength, 100).id, 1, 'solid');
     });
     const bond = [...doc.bonds.values()][0];
     const batch = { thin: recPath(), bold: recPath(), dashed: recPath(), fills: recPath(), tips: recPath() };
     (new Renderer(noCanvas, noCanvas) as any).bondPaths(doc, bond, doc.atoms.get(a), doc.atoms.get(b), batch);
     const ys = batch.thin.starts.map((p) => p.y);
     expect(ys.length).toBeGreaterThanOrEqual(2);
-    // every hash sits clear of the stereocentre (y = 100), the last at the wide end
+    // every hash sits clear of the stereocentre (y = 100), the last one ending at the wide end
     expect(Math.max(...ys)).toBeLessThan(100 - doc.style.hashSpacing * 0.5);
-    expect(Math.min(...ys)).toBeCloseTo(100 - doc.style.bondLength, 3);
+    expect(Math.min(...ys)).toBeCloseTo(100 - doc.style.bondLength + doc.style.lineWidth / 2, 3);
   });
 });

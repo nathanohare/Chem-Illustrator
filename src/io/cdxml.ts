@@ -7,7 +7,7 @@ import { fillFrameMembers, frameFromTag } from '../editor/frames';
 import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachFromTag, fillAttachments } from '../editor/attached';
 import { readSpecies } from '../chem/species';
 import { highlightStyleFromTag } from '../render/highlight';
-import { attachRingFills } from '../chem/ring-fill';
+import { attachRingFills, ringGeometry } from '../chem/ring-fill';
 import { paperOf } from './cdxml-print';
 import { lipDirection } from '../chem/polymer';
 import { Doc, Atom, Bond, BondDisplay, TextRun, Arrow, Shape, Entity, Kind, StereoLabel, Caption, StepRoles, MorphStep, CHIRAL_FLAGS, PARTIAL, PAPER, type Pin, type PictureFx, type ShapeMath } from '../model';
@@ -104,6 +104,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   st.labelSize = size('LabelSize', 10);
   st.captionSize = size('CaptionSize', 12);
   st.captionFace = num(root, 'CaptionFace', 0);
+  if (root.hasAttribute('LabelFace')) st.labelFace = num(root, 'LabelFace', 0); else delete st.labelFace;
   doc.style = st;
 
   // Colours: index 0 is black and 1 white; the colour table starts at index 2.
@@ -284,6 +285,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (c) extra.color = c;
       if (chargeShown.has(n.getAttribute('id') ?? '')) extra.hideCharge = true;
       const ls = n.getAttribute('LabelSize');
+      const mw = Number(n.getAttribute('MarginWidth') ?? frag.getAttribute('MarginWidth'));
+      if (mw > 0 && Math.abs(mw - st.marginWidth) > 1e-3) extra.marginWidth = mw;
       if (ls !== null) extra.s = Number(ls) / st.labelSize;
       let t: Element | null = null;
       for (const ch of kids(n)) {
@@ -322,6 +325,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       stats.atoms++;
       if (t) {
         const runs = runsOf(t);
+        // a label set in a face of its own (bold labels in a drawing whose labels are plain, or the other way)
+        const s0 = kids(t).find((k) => k.nodeName === 's');
+        const face = s0 ? num(s0, 'face', 0) : undefined;
+        if (face !== undefined && (face & 1) !== ((st.labelFace ?? 0) & 1)) atom.face = face;
         let txt = runs.map((r) => r.text).join('');
         if (atom.charge) {
           // the charge is part of the label text ("N+", "O2−"); it is drawn from the charge instead
@@ -348,6 +355,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (atoms.length >= 2) doc.updateAtom(m.id, { multi: atoms });
       else { doc.removeAtom(m.id); nodeIds.delete(m.key); skip('multicenter attachment without its atoms'); }
     }
+    const bondIds = new Map<string, number>();
+    // ChemDraw lists near misses among a fragment's crossing bonds too, so every bond keeps its layer there
+    const layered = kids(frag).some((k) => k.nodeName === 'b' && k.hasAttribute('CrossingBonds'));
     for (const b of kids(frag)) {
       if (b.nodeName === 'graphic') readGraphic(b); // circled charges and lone pairs sit with their structure
       if (b.nodeName !== 'b') continue;
@@ -385,7 +395,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (b.getAttribute('IgnoreWarnings') === 'yes') extra.ignoreWarnings = true;
       if (b.getAttribute('ShowBondStereo') === 'yes') extra.showStereo = true;
       // a bond crossing others: the higher Z is in front
-      if (b.hasAttribute('CrossingBonds') && b.hasAttribute('Z')) extra.z = num(b, 'Z');
+      if (layered && b.hasAttribute('Z')) extra.z = num(b, 'Z');
       const tag = kids(b).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === 'stereo');
       if (tag) {
         // ChemDraw's (E)/(Z) label by the double bond, kept relative to the bond's middle
@@ -393,8 +403,15 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         const l = stereoTag(tag, (p.x + q.x) / 2, (p.y + q.y) / 2);
         if (l) extra.stereoLabel = l;
       }
-      const lw = b.getAttribute('LineWidth');
+      // the bond's own widths, else its structure's (ChemDraw keeps them on either)
+      const own = (name: string) => b.getAttribute(name) ?? frag.getAttribute(name);
+      const lw = own('LineWidth');
       if (lw !== null) extra.s = Number(lw) / st.lineWidth;
+      const widths = { BoldWidth: 'boldWidth', HashSpacing: 'hashSpacing', MarginWidth: 'marginWidth', BondLength: 'bondLength' } as const;
+      for (const [attr, key] of Object.entries(widths)) {
+        const v = Number(own(attr));
+        if (own(attr) !== null && v > 0 && Math.abs(v - st[key]) > 1e-3) extra[key] = v;
+      }
       const c = color(b);
       if (c) extra.color = c;
       const hlB = kids(b).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_TAG)?.getAttribute('Value');
@@ -404,7 +421,18 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (kids(b).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === SPOKES_TAG)) extra.spokes = true;
       const bond = doc.addBond(a1, a2, order, display, extra);
       from('b', bond.id, b);
+      bondIds.set(b.getAttribute('id') ?? '', bond.id);
       stats.bonds++;
+    }
+    // ChemDraw's ring fills: an area coloured in behind the bonds that go round it
+    for (const area of kids(frag)) {
+      if (area.nodeName !== 'ColoredMolecularArea') continue;
+      const ring = cycleOf(doc, (area.getAttribute('BasisObjects') ?? '').trim().split(/\s+/).map((x) => bondIds.get(x)).filter((x): x is number => x !== undefined));
+      const fill = colors[num(area, 'bgcolor', -1)];
+      if (!ring || !fill) { skip('ring fill'); continue; }
+      const sh = doc.addShape({ id: idFor(area), kind: 'ring', ring, ...ringGeometry(doc, ring), filled: true, fillColor: fill, z: -1000 });
+      from('s', sh.id, area);
+      stats.shapes++;
     }
   };
 
@@ -1273,4 +1301,36 @@ function movePoints(e: Element, dx: number, dy: number): void {
     if (v === null) continue;
     e.setAttribute(name, pts(v).map((x, i) => String(+(x + (i % 2 ? dy : dx)).toFixed(3))).join(' '));
   }
+}
+
+/**
+ * The atoms in order round a closed loop of bonds (a ring fill's bonds), or null when the bonds
+ * are not one simple loop.
+ */
+export function cycleOf(doc: Doc, bonds: number[]): number[] | null {
+  if (bonds.length < 3) return null;
+  const next = new Map<number, number[]>();
+  for (const id of bonds) {
+    const b = doc.bonds.get(id);
+    if (!b) return null;
+    for (const [p, q] of [[b.a1, b.a2], [b.a2, b.a1]]) {
+      const l = next.get(p) ?? [];
+      l.push(q);
+      next.set(p, l);
+    }
+  }
+  if ([...next.values()].some((l) => l.length !== 2)) return null;
+  const start = doc.bonds.get(bonds[0])!.a1;
+  const ring = [start];
+  let prev = -1, at = start;
+  for (;;) {
+    const [u, v] = next.get(at)!;
+    const go = u !== prev ? u : v;
+    if (go === start) break;
+    ring.push(go);
+    prev = at;
+    at = go;
+    if (ring.length > bonds.length) return null;
+  }
+  return ring.length === bonds.length ? ring : null;
 }

@@ -55,6 +55,8 @@ export interface Atom {
   color?: string;
   /** Size relative to the document style (structures shrunk or enlarged in ChemDraw keep their own scale). */
   s?: number;
+  /** The label's own face bits (1 bold, 96 formula) where they differ from the drawing's labelFace. */
+  face?: number;
   /** The gap bonds keep from this atom's label, in points, where it isn't the document's scaled by `s` (ChemDraw's MarginWidth on an atom). */
   marginWidth?: number;
   /** A 3-D position kept from a file (ChemDraw's xyz on a structure built from a crystal file). */
