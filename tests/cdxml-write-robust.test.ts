@@ -517,3 +517,51 @@ describe('the CDXML audit, R18 and R33 (reading and writing)', () => {
     expect(Number(g.getAttribute('ShadowSize')) * lw / 100).toBeCloseTo(3, 1);
   });
 });
+
+describe('the CDXML audit, writing side: R32 and R11', () => {
+  it('R32: a label stacked below its atom is written back as LabelAlignment Below, through a fresh copy', () => {
+    const body = '<fragment id="2"><n id="3" p="100 100" NodeType="Fragment"><t p="96 103.6" LabelJustification="Left" LabelAlignment="Below" LineStarts="2 4"><s font="3" size="10" face="96">NMe</s></t></n>'
+      + '<n id="4" p="87.5 92.8"/><n id="5" p="112.5 92.8"/><b id="6" B="3" E="4"/><b id="7" B="3" E="5"/></fragment>';
+    const doc = readCdxml(file(body)).doc;
+    const a = [...doc.atoms.values()].find((x) => x.label === 'NMe')!;
+    expect(a.stacked).toBe('down');
+    doc.source = null;
+    const t = all(parse(writeCdxml(doc)), 't').find((e) => e.textContent === 'NMe')!;
+    expect(t.getAttribute('LabelAlignment')).toBe('Below');
+    expect([...readCdxml(viaCdx(writeCdxml(doc))).doc.atoms.values()].find((x) => x.label === 'NMe')!.stacked).toBe('down');
+  });
+
+  const poster = (body: string) => `<?xml version="1.0" encoding="UTF-8" ?><CDXML CreationProgram="ChemDraw 25.0.2.14" BondLength="14.40"><page id="1" BoundingBox="0 0 5121 5040" Width="5121" Height="5040" HeightPages="8" WidthPages="11" DrawingSpace="poster">${body}</page></CDXML>`;
+  const cap = '<t id="10" p="100 100"><s font="3" size="10" face="0">x</s></t>';
+
+  it('R11: a poster stays one poster when saved again, and when written afresh', () => {
+    const doc = readCdxml(poster(cap)).doc;
+    expect(doc.page?.poster).toBe(true);
+    // unchanged: written as it was
+    expect(writeCdxml(doc)).toBe(poster(cap));
+    // a caption moved: the poster keeps its size three ways
+    const c = [...doc.captions.values()][0];
+    doc.edit('Move', () => doc.updateCaption(c.id, { x: 300 }));
+    const pg = all(parse(writeCdxml(doc)), 'page')[0];
+    expect(pg.getAttribute('DrawingSpace')).toBe('poster');
+    expect(Number(pg.getAttribute('Width'))).toBeCloseTo(5121, 1);
+    expect(pg.getAttribute('BoundingBox')!.split(' ').map(Number)).toEqual([0, 0, 5121, 5040]);
+    expect(pg.getAttribute('WidthPages')).toBe('11');
+    // written afresh (a copy): still a poster
+    doc.source = null;
+    const fresh = all(parse(writeCdxml(doc)), 'page')[0];
+    expect(fresh.getAttribute('DrawingSpace')).toBe('poster');
+    expect(Number(fresh.getAttribute('Height'))).toBeCloseTo(5040, 1);
+    const back = readCdxml(viaCdx(writeCdxml(doc))).doc;
+    expect(back.page?.poster).toBe(true);
+    expect(back.page?.w).toBeCloseTo(5121, 0);
+  });
+
+  it('R11: a poster made into paper pages loses its poster size', () => {
+    const doc = readCdxml(poster(cap)).doc;
+    doc.page = { w: 540, h: 720 };
+    const pg = all(parse(writeCdxml(doc)), 'page')[0];
+    expect(pg.getAttribute('DrawingSpace')).toBeNull();
+    expect(pg.getAttribute('Width')).toBeNull();
+  });
+});

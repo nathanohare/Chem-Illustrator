@@ -279,6 +279,15 @@ class CdxmlWriter {
   private pageAttrs(b: Rect | null): Record<string, string> {
     const p = this.doc.page;
     const W = p?.w ?? 540, H = p?.h ?? 720;
+    if (p?.poster) {
+      // ChemDraw's poster: one sheet of its own size (Width, Height); WidthPages and HeightPages only
+      // say how many sheets of paper it prints on (the file's own, else US Letter's)
+      const own = (k: string) => Number(this.page.getAttribute(k)) || 0;
+      return {
+        BoundingBox: `0 0 ${f2(W)} ${f2(H)}`, Width: f2(W), Height: f2(H), DrawingSpace: 'poster', HeaderPosition: '36', FooterPosition: '36',
+        WidthPages: String(own('WidthPages') || Math.max(1, Math.ceil(W / 540))), HeightPages: String(own('HeightPages') || Math.max(1, Math.ceil(H / 720))),
+      };
+    }
     let wp: number, hp: number;
     if (p) ({ across: wp, down: hp } = pageCount(pageExtent(p, b)));
     else { wp = Math.ceil(((b?.x2 ?? 0) + 36) / W); hp = Math.ceil(((b?.y2 ?? 0) + 36) / H); }
@@ -318,6 +327,14 @@ class CdxmlWriter {
     if (!p) return false;
     const bb = (this.page.getAttribute('BoundingBox') ?? '').trim().split(/\s+/).map(Number);
     if (bb.length !== 4 || !bb.every(isFinite)) return true;
+    // a poster (or a page that was one): its own size, three ways
+    const poster = this.page.getAttribute('DrawingSpace') === 'poster';
+    if (!!p.poster !== poster) return true;
+    if (p.poster) {
+      const near = (k: string, v: number) => Math.abs(Number(this.page.getAttribute(k)) - v) <= 0.5;
+      // (a poster never grows: the page grid's tag is not needed to say so)
+      return !(near('Width', p.w) && near('Height', p.h) && Math.abs(bb[2] - bb[0] - p.w) <= 0.5 && Math.abs(bb[3] - bb[1] - p.h) <= 0.5);
+    }
     const wp = Math.max(1, Number(this.page.getAttribute('WidthPages')) || 1), hp = Math.max(1, Number(this.page.getAttribute('HeightPages')) || 1);
     if (Math.abs((bb[2] - bb[0]) / wp - p.w) > 0.5 || Math.abs((bb[3] - bb[1]) / hp - p.h) > 0.5) return true;
     const want = this.pageAttrs(b);
@@ -333,6 +350,8 @@ class CdxmlWriter {
     const was = this.doc.source && bb.length === 4 && bb.every(isFinite) ? { w: (bb[2] - bb[0]) / wp, h: (bb[3] - bb[1]) / hp } : null;
     if (!this.page.getAttribute('id')) this.page.setAttribute('id', this.id());
     for (const [k, v] of Object.entries(this.pageAttrs(b))) this.page.setAttribute(k, v);
+    // (no longer a poster: paper pages)
+    if (!this.doc.page?.poster) for (const k of ['DrawingSpace', 'Width', 'Height']) this.page.removeAttribute(k);
     const old = this.pageGridTag(), tag = this.doc.page && pageTag(this.doc.page);
     if (old && old.getAttribute('Value') !== tag) this.page.removeChild(old);
     if (tag && old?.getAttribute('Value') !== tag) this.page.insertBefore(this.el('objecttag', { TagType: 'String', Name: PAGE_TAG, Value: tag, Visible: 'no' }), this.page.firstChild);
@@ -346,6 +365,11 @@ class CdxmlWriter {
   private writePaper(was: { w: number; h: number } | null): void {
     const p = this.doc.page;
     if (!p) return;
+    // a poster prints on sheets of paper: the file's own print record, else US Letter's
+    if (p.poster) {
+      if (!this.root.hasAttribute('MacPrintInfo')) { this.root.setAttribute('MacPrintInfo', macPrintInfo(612, 792, false)); this.root.setAttribute('PrintMargins', '36 36 36 36'); }
+      return;
+    }
     const paper = paperOf(this.root.getAttribute('MacPrintInfo'));
     // the file's own print settings stay while its page is the size it was (a scaled page setup
     // has margins and a print record that don't add up to the page, and they are the user's)
@@ -611,7 +635,7 @@ class CdxmlWriter {
       }
       if (this.bondStereo(e, b, false)) wrote = true;
       // (a label retyped: the character the bond met may be gone)
-      if (this.bondAttach(e, b)) wrote = true;
+      if (this.bondAttach(e, b, e.getAttribute('B'))) wrote = true;
     }
     if (wrote) this.changed = true;
     return wrote;
@@ -1244,24 +1268,29 @@ class CdxmlWriter {
 
   /**
    * The label characters a bond meets (BeginAttach, EndAttach), with B and E: only while that
-   * atom's label still has the character. True when the element changed.
+   * atom's label still has the character. `fileB` is the element's B as the file had it (before B
+   * and E were written again here), which says whose index each attribute held. True when the
+   * element changed.
    */
-  private bondAttach(e: Element, b: Bond, o?: Bond | null): boolean {
-    // turned round since it was read: the file's own indices go with their atoms
-    if (o && o.a1 === b.a2 && o.a2 === b.a1) {
-      const [p, q] = [e.getAttribute('BeginAttach'), e.getAttribute('EndAttach')];
-      this.set(e, 'BeginAttach', q);
-      this.set(e, 'EndAttach', p);
+  private bondAttach(e: Element, b: Bond, fileB: string | null): boolean {
+    // the file's own index for each atom it named (they go with their atoms, whichever end)
+    const was = this.orig<Bond>('b', b.id);
+    const fileIdx = new Map<number, string | null>();
+    if (was) {
+      const [first, second] = fileB !== null && fileB === this.nodeId(was.a2) ? [was.a2, was.a1] : [was.a1, was.a2];
+      fileIdx.set(first, e.getAttribute('BeginAttach'));
+      fileIdx.set(second, e.getAttribute('EndAttach'));
     }
-    const attach = (atom: number, i: number | undefined): string | null | undefined => {
-      const a = this.doc.atoms.get(atom), label = a?.label;
-      // (an automatic label, such as HO, unchanged since it was read keeps the file's own index)
-      if (!label && a && this.orig<Atom>('a', atom) && this.orig<Atom>('a', atom)!.label === label && this.orig<Atom>('a', atom)!.z === a.z) return undefined;
+    const attach = (atom: number, i: number | undefined): string | null => {
+      const a = this.doc.atoms.get(atom), label = a?.label, oa = this.orig<Atom>('a', atom);
+      // (an automatic label, such as HO, unchanged since it was read and still on this bond keeps
+      // the file's own index)
+      if (!label && a && oa && oa.label === label && oa.z === a.z && fileIdx.has(atom)) return fileIdx.get(atom) ?? null;
       return i && i > 0 && label && i < [...label].length ? String(i) : null;
     };
     let changed = false;
     for (const [k, v] of [['BeginAttach', attach(b.a1, b.beginAttach)], ['EndAttach', attach(b.a2, b.endAttach)]] as const) {
-      if (v === undefined || e.getAttribute(k) === v) continue;
+      if (e.getAttribute(k) === v) continue;
       this.set(e, k, v);
       changed = true;
     }
@@ -1269,9 +1298,10 @@ class CdxmlWriter {
   }
 
   private patchBond(e: Element, b: Bond, o?: Bond | null): void {
+    const fileB = e.getAttribute('B');
     e.setAttribute('B', this.nodeId(b.a1));
     e.setAttribute('E', this.nodeId(b.a2));
-    this.bondAttach(e, b, o);
+    this.bondAttach(e, b, fileB);
     // a bond read from a file whose order and look haven't changed keeps ChemDraw's own words for
     // them (orders such as 2.5 or ionic, hollow and wavy wedges, Display2), which we don't draw
     if (!o || o.order !== b.order || o.display !== b.display || !o.plain !== !b.plain || !o.circle !== !b.circle) {
