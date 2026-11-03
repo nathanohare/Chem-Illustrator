@@ -93,6 +93,8 @@ export interface Atom {
   supDigits?: boolean;
   /** Characters of the label raised or lowered by hand, one mark per character ("^" up, "_" down, "=" on the line). */
   labelMarks?: string;
+  /** The whole label is centred on the atom (ChemDraw's Center justification, as on Ru or Si), not its first letter. */
+  centred?: boolean;
   /** Show this atom's R/S label when it has one (ChemDraw's "Show Stereochemistry"). */
   showStereo?: boolean;
   /** Where the stereo label sits (relative to the atom), and its text as saved or typed by hand. */
@@ -232,6 +234,11 @@ export interface Bond {
   circle?: boolean;
   /** Where it sits among bonds that cross it (higher in front; else the order it was drawn in). ChemDraw's Z. */
   z?: number;
+  /**
+   * Bonds a file says this one crosses (ChemDraw's CrossingBonds, which counts near misses too: a
+   * bond passing just beyond another's end). Used only while they still pass close.
+   */
+  crossing?: number[];
   /** The person chose to ignore this bond's chemistry warnings. */
   ignoreWarnings?: boolean;
   /**

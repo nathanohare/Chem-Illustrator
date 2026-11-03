@@ -352,9 +352,9 @@ export const labelPrefs = { superscriptR: true };
 export const isNumberedR = (label: string | null): boolean => !!label && /^R\d+$/.test(label);
 
 /** How an atom's label raises its characters: R numbers (from the file, or by the preference) and marks set by hand. */
-export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string }): { supDigits: boolean; marks?: LabelMarks } {
+export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string; centred?: boolean }): { supDigits: boolean; marks?: LabelMarks; centred?: boolean } {
   const supDigits = a.supDigits ?? (labelPrefs.superscriptR && isNumberedR(a.label));
-  return a.labelMarks && a.label ? { supDigits, marks: a.labelMarks } : { supDigits };
+  return { supDigits, ...(a.labelMarks && a.label ? { marks: a.labelMarks } : {}), ...(a.centred ? { centred: true } : {}) };
 }
 
 /** The label's pieces in reading order, as `layoutLabel` shows them (for the typing box). */
@@ -372,6 +372,8 @@ export interface LabelSpec {
   supDigits?: boolean;
   /** Characters raised or lowered by hand. */
   marks?: LabelMarks;
+  /** Centre the whole label on the atom (a label on one line with no hydrogens or charge). */
+  centred?: boolean;
 }
 
 /** Tokens to show for an atom: its custom label, or element + hydrogens. Null = no label (plain carbon). */
@@ -593,6 +595,13 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
     const s = subSize, w = measure(chargeText, s);
     runs.push({ text: chargeText, dx: spot.x, dy: spot.dy, size: s });
     boxes.push({ x1: spot.x, y1: spot.dy - CAP * s, x2: spot.x + w, y2: spot.dy });
+  }
+  // a centred label: the middle of its letters on the atom
+  if (spec.centred && charge === undefined && runs.length && runs.every((r) => Math.abs(r.dy - runs[0].dy) < size)) {
+    const x1 = Math.min(...boxes.map((b) => b.x1)), x2 = Math.max(...boxes.map((b) => b.x2));
+    const dx = -(x1 + x2) / 2;
+    for (const r of runs) r.dx += dx;
+    for (const b of boxes) { b.x1 += dx; b.x2 += dx; }
   }
   return { runs, boxes, charge };
 }
