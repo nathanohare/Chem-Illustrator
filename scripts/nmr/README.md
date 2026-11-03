@@ -74,3 +74,16 @@ Results (2026-11-02, SI test set v1, compounds under 500 Da): five-network ensem
 the lookup, 13C MAE 1.83 ppm, 1H MAE 0.157 ppm (lookup alone 2.62 and 0.224; single networks
 1.96-2.00 and 0.163-0.168). The file is 2.8 MB. The error bar is the expected absolute error,
 c0 + c1 x ensemble spread, fitted on the held-out papers.
+
+## Phase 3: couplings and spectra
+
+| Step | Script | Output |
+|---|---|---|
+| Couplings | `src/chem/nmr/coupling.ts` | J (Hz) by bond path from the 2D structure: geminal (sp2, and sp3 CH2 when diastereotopic), vicinal (rotating sp3, alkene cis/trans, aromatic ortho in 5- and 6-rings), meta, allylic, propargylic, H-F; first-order multiplet text per proton group |
+| Simulation | `src/chem/nmr/spin.ts` | exact spin simulation, a TypeScript port of Open-NMR's `nmrsuite.spin` (BSD-3); parity test `tests/nmr-spin.test.ts` against nmrsuite line lists |
+| Score | `j_dump.ts` (esbuild bundle, Node) then `j_bench.py records-v1.jsonl j-out.jsonl` | multiplicity exact-match rate and J errors against published signals, matched through predicted shifts |
+
+Results (2026-11-03, SI test set v1, CDCl3, compounds under 500 Da; thresholds chosen on the first 400
+compounds, scored on the other 1,156): multiplicity exact for 61% of first-order signals (s 79%, d 65%,
+t 73%, dd 17%), J median error 0.5 Hz, 69% within 1 Hz. Simulation speed: 8 coupled protons 0.1 s,
+10 protons 0.5 s, 12 protons about 19 s (so the Accurate setting caps clusters at 10 for now).
