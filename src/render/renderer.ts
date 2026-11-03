@@ -1901,6 +1901,7 @@ export class Renderer {
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
     ctx.setLineDash([]);
+    this.roundTail(ctx, r, hasTail, tail);
     this.arrowHead(ctx, head, hDir, r.headStyle, r);
     this.arrowHead(ctx, tail, tDir, r.tailStyle, r);
   }
@@ -1935,9 +1936,18 @@ export class Renderer {
     ctx.lineTo(end.x, end.y);
     ctx.stroke();
     ctx.setLineDash([]);
+    if (r.ellipse) this.roundTail(ctx, r, hasTail, r.tail);
     this.arrowHead(ctx, r.head, hDir, r.headStyle, r);
     this.arrowHead(ctx, r.tail, tDir, r.tailStyle, r);
     return true;
+  }
+
+  /** ChemDraw rounds the end of an arc arrow's line where it has no head (its tail, usually). */
+  private roundTail(ctx: CanvasRenderingContext2D, r: Arrow, hasTail: boolean, at: Vec): void {
+    if (hasTail || r.line === 'dashed') return;
+    ctx.beginPath();
+    ctx.arc(at.x, at.y, ctx.lineWidth / 2, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   private arrowHead(ctx: CanvasRenderingContext2D, tip: Vec, dir: Vec, style: Arrow['headStyle'], r: Arrow): void {

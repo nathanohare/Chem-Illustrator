@@ -12,7 +12,7 @@ import { interpretArrow, isReactionArrow, linkRows, isStep, plainMeasure, scheme
 import { SYMBOLS } from '../chem/elements';
 import { labelBonds, labelSpec, layoutLabel, labelDir, labelGraph, tokenize, isGenericLabel, Measure, MiniGraph, kekulize, labelLook } from '../chem/labels';
 import { Vec, DEG, arcCenter, norm, sub, Rect } from '../geom';
-import { bezPoints } from '../objects';
+import { arrowEllipse, bezPoints } from '../objects';
 import { kids, descendants, wellFormed, withoutDoctype } from './xml';
 import { arialWidth } from '../text-metrics';
 import { toSymbolPieces, isSymbolFont, faceFromStyle } from '../richtext';
@@ -1535,9 +1535,22 @@ class CdxmlWriter {
    */
   private writeCurveArrow(r: Arrow, e: Element | null, o: Arrow | null): void {
     if (e && o && sameExcept(r, o, ['step', 'reagentFor', 'morph', 'pin']) && this.pinValue(r) === this.pinValue(o)) return;
-    const pts = bezPoints(r);
+    // still the arc of an ellipse ChemDraw drew (moved, turned or scaled whole): its arc arrow again,
+    // whose head and line ChemDraw draws its own way, not a curve
+    const ell = arrowEllipse(r);
+    const pts = ell ? null : bezPoints(r);
     const el = this.el(pts ? 'curve' : 'arrow', { id: (e?.nodeName === 'graphic' && e.getAttribute('id')) || r.id });
-    if (pts) {
+    if (ell) {
+      this.fillArrow(el, { ...r, sweep: 0, bez: undefined });
+      this.set(el, 'Center3D', pt3(ell.center));
+      this.set(el, 'MajorAxisEnd3D', pt3(ell.major));
+      this.set(el, 'MinorAxisEnd3D', pt3(ell.minor));
+      this.set(el, 'AngularSize', f2(ell.angularSize).replace(/\.?0+$/, ''));
+      const all = bezPoints(r) ?? [r.tail, r.head];
+      const xs = all.map((p) => p.x), ys = all.map((p) => p.y), pad = r.headWidth;
+      this.set(el, 'BoundingBox', box({ x1: Math.min(...xs) - pad, y1: Math.min(...ys) - pad, x2: Math.max(...xs) + pad, y2: Math.max(...ys) + pad }));
+      this.writeMorph(el, r);
+    } else if (pts) {
       const n = (pts.length - 1) / 3;
       const knots: Vec[] = [];
       for (let i = 0; i <= n; i++) knots.push(i ? pts[3 * i - 1] : pts[0], pts[3 * i], i < n ? pts[3 * i + 1] : pts[3 * i]);
