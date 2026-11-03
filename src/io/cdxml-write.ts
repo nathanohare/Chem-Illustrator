@@ -728,7 +728,8 @@ class CdxmlWriter {
   /** A contracted label keeps the SMILES of its group in a hidden tag (ChemDraw sees the inner fragment). */
   private atomGroup(n: Element, a: Atom): void {
     for (const c of kids(n)) if (c.nodeName === 'objecttag' && (c.getAttribute('Name') === GROUP_TAG || c.getAttribute('Name') === ALT_TAG || c.getAttribute('Name') === MAP_TAG)) n.removeChild(c);
-    if (a.group && a.label) n.appendChild(this.el('objecttag', { TagType: 'String', Name: GROUP_TAG, Value: a.group, Visible: 'no' }));
+    // (with the label it belongs to: a label retyped in ChemDraw no longer takes this group)
+    if (a.group && a.label) n.appendChild(this.el('objecttag', { TagType: 'String', Name: GROUP_TAG, Value: JSON.stringify({ label: a.label, smiles: a.group }), Visible: 'no' }));
     if (a.alt) n.appendChild(this.el('objecttag', { TagType: 'String', Name: ALT_TAG, Value: a.alt, Visible: 'no' }));
     if (a.mapNo) n.appendChild(this.el('objecttag', { TagType: 'String', Name: MAP_TAG, Value: String(a.mapNo), Visible: 'no' }));
     this.highlightTag(n, a.highlight, a.hl);
@@ -1322,7 +1323,7 @@ class CdxmlWriter {
     // text read as chemistry is marked for ChemDraw (Interpret Chemically); a choice made by hand is kept for us
     if (c.chem !== undefined) t.appendChild(this.el('objecttag', { TagType: 'String', Name: CHEM_TAG, Value: c.chem ? 'yes' : 'no', Visible: 'no' }));
     this.set(t, 'InterpretChemically', captionSpecies(this.doc, c) ? 'yes' : null);
-    if (c.rot) t.appendChild(this.el('objecttag', { TagType: 'String', Name: TURN_TAG, Value: String(+c.rot.toFixed(3)), Visible: 'no' }));
+    // (the turn is RotationAngle alone: a turn tag would outlive a turn changed in ChemDraw)
     const fixed = c.lineHeight ?? (c.lineSpacing && c.lineSpacing !== 1 ? SINGLE * c.lineSpacing * maxSize : undefined);
     // the text as it is drawn: wrapped to the box with the app's text widths (Arial's by default)
     const lay = layoutText({ runs, justify: c.justify, wrap: c.wrap, width: c.width, lineHeight: fixed }, def, this.opts.textMeasure ?? ((text, size, _f, style) => arialWidth(text, size, /bold/.test(style))));
@@ -1448,7 +1449,8 @@ class CdxmlWriter {
         color: this.colorAttr(r.color), LineWidth: r.lineWidth !== undefined ? f2(r.lineWidth) : null,
         CurvePoints: knots.map((p) => `${f2(p.x)} ${f2(p.y)}`).join(' '), CurveType: String(kinds),
       })) this.set(el, k, v);
-      const look = { headStyle: r.headStyle, tailStyle: r.tailStyle, headType: r.headType, line: r.line, headLength: r.headLength, headWidth: r.headWidth };
+      // (with the CurveType written beside it: heads or dashes changed in ChemDraw win over the tag)
+      const look = { headStyle: r.headStyle, tailStyle: r.tailStyle, headType: r.headType, line: r.line, headLength: r.headLength, headWidth: r.headWidth, seen: { curveType: kinds } };
       el.appendChild(this.el('objecttag', { TagType: 'String', Name: CURVE_ARROW_TAG, Value: JSON.stringify(look), Visible: 'no' }));
     } else {
       this.fillArrow(el, r);
@@ -1727,7 +1729,10 @@ class CdxmlWriter {
     if (ringPts) look.poly = ringPts.map((p) => ({ x: p.x, y: p.y }));
     // with the group's box as saved (ChemDraw rewrites BoundingBox when the group is moved), in the
     // tag: ChemDraw and CDX drop attributes of our own
-    g.appendChild(this.el('objecttag', { TagType: 'String', Name: GEO_TAG, Value: JSON.stringify({ ...look, savedBox: box(b) }), Visible: 'no' }));
+    // (with the first curve's points as written: ChemDraw keeps them as they are unless the shape is
+    // moved or changed there, when the curves are read instead)
+    const first = kids(g).find((k) => k.nodeName === 'curve')?.getAttribute('CurvePoints');
+    g.appendChild(this.el('objecttag', { TagType: 'String', Name: GEO_TAG, Value: JSON.stringify({ ...look, savedBox: box(b), ...(first ? { seen: { curve: first } } : {}) }), Visible: 'no' }));
     this.set(g, 'BoundingBox', box(b));
     g.removeAttribute(GEO_BOX_ATTR);
     this.changed = true;
@@ -1947,10 +1952,13 @@ class CdxmlWriter {
     // (other graphics, such as orbitals, keep ChemDraw's own FadePercent)
     if (fade !== null || s.kind === 'rect' || s.kind === 'oval') set('FadePercent', fade === null ? null : String(fade));
     const fillTo = s.filled && fade === null ? (s.kind === 'ring' ? fillInk(s) : s.fillColor ?? s.color) : undefined;
-    set('color', this.colorAttr(fillTo && s.fill === 'faded' ? tint(fillTo, FADE) : fillTo ?? s.color));
+    const ink = fillTo && s.fill === 'faded' ? tint(fillTo, FADE) : fillTo ?? s.color;
+    set('color', this.colorAttr(ink));
     for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === FILL_TAG) g.removeChild(c);
     if ((s.filled && (s.fill || s.fillColor)) || s.pattern) {
-      const v = { fill: s.fill, fillColor: s.fillColor, color: s.color, fill2: s.fill2, gradAngle: s.gradAngle, gradRadial: s.gradRadial, pattern: s.pattern, patternColor: s.patternColor, patternSize: s.patternSize, patternTransparency: s.patternTransparency, patternClear: s.patternClear, ...(s.filled ? {} : { filled: false }) };
+      // (with the colour written beside it: a recolour in ChemDraw wins over the tag)
+      const seen = { color: (ink ?? '#000000').toLowerCase() };
+      const v = { fill: s.fill, fillColor: s.fillColor, color: s.color, fill2: s.fill2, gradAngle: s.gradAngle, gradRadial: s.gradRadial, pattern: s.pattern, patternColor: s.patternColor, patternSize: s.patternSize, patternTransparency: s.patternTransparency, patternClear: s.patternClear, ...(s.filled ? {} : { filled: false }), seen };
       g.appendChild(this.el('objecttag', { TagType: 'String', Name: FILL_TAG, Value: JSON.stringify(v), Visible: 'no' }));
     }
     for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === FRAME_TAG) g.removeChild(c);
