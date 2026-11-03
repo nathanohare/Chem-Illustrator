@@ -402,13 +402,15 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         if (size) atom.s = size / st.labelSize;
         const lj = t.getAttribute('LabelJustification');
         const la = t.getAttribute('LabelAlignment');
-        // (stacked above or below wins over centred)
-        if (la !== 'Above' && la !== 'Below' && (la === 'Center' || t.getAttribute('Justification') === 'Center')) atom.centred = true;
+        const ld = n.getAttribute('LabelDisplay');
+        // stacked above or below, as ChemDraw draws it: not when the node says the label runs left or right
+        const below = ld === 'Below' || (ld !== 'Left' && ld !== 'Right' && la === 'Below'), above = ld === 'Above' || (ld !== 'Left' && ld !== 'Right' && la === 'Above');
+        // (stacked wins over centred)
+        if (!above && !below && (la === 'Center' || t.getAttribute('Justification') === 'Center')) atom.centred = true;
         // which way the label runs: the node's LabelDisplay, else the text's LabelJustification;
         // LabelAlignment counts only for labels stacked above or below (the spec: multi-attached labels)
-        const ld = n.getAttribute('LabelDisplay');
-        if (la === 'Above' || la === 'Below') { atom.just = 'auto'; atom.stacked = la === 'Above' ? 'up' : 'down'; }
-        else if (ld === 'Left' || ld === 'Right') atom.just = ld === 'Left' ? 'right' : 'left';
+        if (above || below) { atom.just = 'auto'; atom.stacked = above ? 'up' : 'down'; }
+        else if (ld === 'Left' || ld === 'Right') { atom.just = ld === 'Left' ? 'right' : 'left'; atom.fixedDir = true; }
         else if (lj === 'Right' || lj === 'Left') atom.just = lj === 'Right' ? 'left' : 'right';
         else if (la === 'Right') atom.just = 'left';
         else if (la === 'Left') atom.just = 'right';

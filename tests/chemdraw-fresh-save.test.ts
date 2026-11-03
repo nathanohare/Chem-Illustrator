@@ -19,6 +19,22 @@ const node = (d: Document) => [...d.querySelectorAll('n')].find((n) => n.getAttr
 const runsOf = (d: Document) => [...node(d).querySelectorAll('t > s')].map((s) => [s.textContent, Number(s.getAttribute('face'))]);
 
 describe('a fresh save', () => {
+  it('turns a formula label set to run left, not a name', () => {
+    const left = 'LabelDisplay="Right"', j = 'LabelJustification="Right"';
+    const text = (attrs: string, run: string) => runsOf(fresh(label(attrs, `<s font="3" size="10" face="96">${run}</s>`, j)).out).map((r) => r[0]).join('');
+    expect(text(`NodeType="Fragment" ${left}`, 'MeO')).toBe('MeO');
+    expect(text(`NodeType="Unspecified" ${left}`, '(3,4)-MDP')).toBe('(3,4)-MDP');
+  });
+  it('says which way a label from a file ran, even where we would run it that way ourselves', () => {
+    // R4 on the left end of a bond, as ChemDraw had it; ChemDraw left to itself runs it elsewhere
+    const { out } = fresh(label('NodeType="GenericNickname" LabelDisplay="Right" Element="6"', '<s font="3" size="10" face="96">R</s><s font="3" size="10" face="64">4</s>', 'LabelJustification="Right"'));
+    expect(node(out).getAttribute('LabelDisplay')).toBe('Right');
+  });
+  it('runs a label left or right when its node says so, whatever its LabelAlignment', () => {
+    const { doc } = fresh(label('NodeType="Fragment" LabelDisplay="Left"', '<s font="3" size="10" face="96">N(CHPh2)</s>', 'LabelJustification="Left" LabelAlignment="Below"'));
+    expect(doc.atoms.get(11)!.stacked).toBeUndefined();
+    expect(doc.atoms.get(11)!.just).toBe('right');
+  });
   it('writes a label running left as it is drawn: HO, not OH', () => {
     const { out } = fresh(label('Element="8" LabelDisplay="Right" NumHydrogens="1"', '<s font="3" size="10" face="96">HO</s>', 'LabelJustification="Right"'));
     expect(runsOf(out).map((r) => r[0]).join('')).toBe('HO');

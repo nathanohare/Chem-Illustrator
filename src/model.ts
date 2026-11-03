@@ -125,6 +125,8 @@ export interface Atom {
    * dot for an H toward the viewer, a hashed one for an H away.
    */
   hDot?: 'dot' | 'dash';
+  /** The file's node said which way the label runs (ChemDraw's LabelDisplay), so a save says so too. */
+  fixedDir?: boolean;
   /** Show this atom's R/S label when it has one (ChemDraw's "Show Stereochemistry"). */
   showStereo?: boolean;
   /** Where the stereo label sits (relative to the atom), and its text as saved or typed by hand. */
