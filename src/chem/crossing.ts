@@ -94,7 +94,8 @@ export function crossingGaps(doc: Doc, b: Bond, half: number, crossing = crossin
   for (const o of [...crossing, ...listed]) {
     if (bondLayer(o) <= me) continue;
     const r = doc.atoms.get(o.a1)!, s = doc.atoms.get(o.a2)!;
-    const c = crossAt(p, q, r, s) ?? (listed.includes(o) ? nearAt(p, q, r, s, half * 1.5) : null);
+    // (ChemDraw lists pairs up to about half a bond apart, as the writer keeps them)
+    const c = crossAt(p, q, r, s) ?? (listed.includes(o) ? nearAt(p, q, r, s, Math.max(half * 1.5, doc.style.bondLength / 2)) : null);
     if (!c) continue;
     // a shallow crossing needs a longer gap to clear the other bond
     const h = half / Math.max(0.35, c.sin) / l;
