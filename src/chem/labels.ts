@@ -419,6 +419,8 @@ export interface GlyphRun {
   size: number;
   /** Set in italics (the t of tBu, when asked for). */
   italic?: boolean;
+  /** Where its text starts in the label text (none for automatic hydrogens and the charge). */
+  at?: number;
 }
 
 export interface LabelLayout {
@@ -526,7 +528,7 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
       const s = p.sub || p.sup ? subSize : size;
       const dy = baseline + (p.sub ? size * 0.22 : p.sup ? -size * 0.42 : 0);
       const w = measure(p.text, s);
-      runs.push({ text: p.text, dx: x, dy, size: s, ...(p.italic ? { italic: true } : {}) });
+      runs.push({ text: p.text, dx: x, dy, size: s, ...(p.italic ? { italic: true } : {}), ...(p.at !== undefined ? { at: p.at } : {}) });
       boxes.push({ x1: x, y1: dy - CAP * s, x2: x + w, y2: dy + (p.sub ? 0.1 * s : 0) });
       x += w;
     }

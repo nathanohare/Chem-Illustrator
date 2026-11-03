@@ -16,6 +16,8 @@ import type { SmartData } from './chem/smart-scheme';
 import type { ChartBox } from './sheet/chart-box';
 import { isMetal, isMetalLabel, lowestValence } from './chem/elements';
 import { NICKNAMES } from './chem/labels';
+import { layoutText } from './text/layout';
+import { arialWidth } from './text-metrics';
 
 /** 'dative' is a coordinate bond, drawn as an arrow from the donor (a1) to the acceptor (a2). */
 export type BondDisplay = 'solid' | 'wedge' | 'hashWedge' | 'hash' | 'bold' | 'dash' | 'wavy' | 'dative';
@@ -266,6 +268,12 @@ export interface Bond {
   /** A highlight drawn behind the bond (a broad band of this colour), to pick out part of a structure. */
   highlight?: string;
   hl?: HighlightStyle;
+  /**
+   * Which character of a1's (begin) or a2's (end) label the bond meets, counted from 0 in the
+   * label text; none or 0 is the atom itself. ChemDraw's BeginAttach and EndAttach.
+   */
+  beginAttach?: number;
+  endAttach?: number;
 }
 
 export interface TextRun {
@@ -1844,6 +1852,18 @@ export class Doc {
     // a multicentre point always sits in the middle of its atoms, wherever it is asked to go
     if (n.multi) { const c = this.centreOf(n); if (c) { n.x = c.x; n.y = c.y; } }
     this.rawSet('a', id, n);
+    if ('label' in patch && n.label !== a.label) {
+      // the label characters its bonds met (ChemDraw's BeginAttach/EndAttach) no longer name the same ones
+      for (const bid of this.adj.get(id) ?? []) {
+        const b = this.bonds.get(bid);
+        const key = b?.a1 === id ? 'beginAttach' : 'endAttach';
+        if (!b || b[key] === undefined) continue;
+        this.touch('b', bid);
+        const next: Bond = { ...b };
+        delete next[key];
+        this.rawSet('b', bid, next);
+      }
+    }
     if (n.x !== a.x || n.y !== a.y || patch.multi) {
       for (const bid of this.adj.get(id) ?? []) this.noteBondLength(this.bonds.get(bid)!);
       for (const c of [...(this.centresOf.get(id) ?? [])]) this.updateAtom(c, {});
@@ -1885,7 +1905,16 @@ export class Doc {
     const b = this.bonds.get(id);
     if (!b) return;
     this.touch('b', id);
-    this.rawSet('b', id, { ...b, ...patch, id });
+    const next: Bond = { ...b, ...patch, id };
+    if ((next.a1 !== b.a1 || next.a2 !== b.a2) && !('beginAttach' in patch) && !('endAttach' in patch)) {
+      // the label characters a bond meets go with their atoms: swapped with the ends, dropped for a new atom
+      const at = (a: number) => (a === b.a1 ? b.beginAttach : a === b.a2 ? b.endAttach : undefined);
+      const s = at(next.a1), e = at(next.a2);
+      delete next.beginAttach; delete next.endAttach;
+      if (s) next.beginAttach = s;
+      if (e) next.endAttach = e;
+    }
+    this.rawSet('b', id, next);
   }
 
   removeBond(id: number): void {
@@ -2189,7 +2218,11 @@ export class Doc {
     let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
     const grow = (x: number, y: number) => { if (x < x1) x1 = x; if (y < y1) y1 = y; if (x > x2) x2 = x; if (y > y2) y2 = y; };
     for (const a of this.atoms.values()) grow(a.x, a.y);
-    for (const c of this.captions.values()) { grow(c.x, c.y - 10); grow(c.x + (c.width ?? 40), c.y + 4); }
+    for (const c of this.captions.values()) {
+      // without a stored width, measure the text (a guess past a short caption at the page's edge adds a page)
+      const b = c.width === undefined ? layoutText(c, this.style.captionSize, (t, s, _f, st) => arialWidth(t, s, st.includes('bold'))).box : null;
+      grow(c.x + Math.min(0, b?.x1 ?? 0), c.y - 10); grow(c.x + (b ? b.x2 : c.width!), c.y + 4);
+    }
     for (const r of this.arrows.values()) for (const p of arrowPoints(r, 12)) grow(p.x, p.y);
     for (const s of this.shapes.values()) { grow(s.x1, s.y1); grow(s.x2, s.y2); }
     if (x1 === Infinity) return null;
