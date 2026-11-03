@@ -107,6 +107,9 @@ const P: Record<string, Prop> = {
   color: { tag: 0x0301, kind: 'u16' },
   bgcolor: { tag: 0x0302, kind: 'i16' },
   FadePercent: { tag: 0x0303, kind: 'i16' }, // how faint an orbital is drawn (from ChemDraw's files)
+  // an atom's or bond's highlight colour (a colour table index, as color): found by saving the same
+  // drawing with and without highlights from ChemDraw 25 as CDX and comparing the files
+  highlightColor: { tag: 0x0308, kind: 'u16' },
   // atoms
   NodeType: { tag: 0x0400, kind: 'enum16', values: NODE_TYPE },
   LabelDisplay: { tag: 0x0401, kind: 'enum8', values: list('Auto', 'Left', 'Center', 'Right', 'Above', 'Below', 'BestInitial') },
