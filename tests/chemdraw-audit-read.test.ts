@@ -111,3 +111,25 @@ describe('the CDXML audit, reading side (5): R19, R20', () => {
     expect(bytes[0].text).toBe('é ab\ncd');
   });
 });
+
+describe('the CDXML audit, reading side (6): our tags give way to edits made in ChemDraw (E1–E5)', () => {
+  const tag = (name: string, value: string) => `<objecttag TagType="String" Name="${name}" Value="${value.replace(/"/g, '&quot;')}"/>`;
+  it('E3: a group counts only while the label still says it', () => {
+    const g = (shown: string) => doc(`<fragment id="2"><n id="10" p="0 0"/><n id="11" p="14 0" NodeType="Fragment"><t><s>${shown}</s></t>${tag('Chem Illustrator group', JSON.stringify({ label: 'OMe', smiles: '*OC' }))}</n><b id="20" B="10" E="11"/></fragment>`);
+    expect(g('OMe').atoms.get(11)!.group).toBe('*OC');
+    expect(g('OEt').atoms.get(11)!.group).toBeUndefined();
+  });
+  it("E4: ChemDraw's RotationAngle wins over our turn tag", () => {
+    const d = doc(`<t id="5" p="10 10" RotationAngle="${10 * 65536}"><s>x</s>${tag('Chem Illustrator turn', '30')}</t>`);
+    expect(d.captions.get(5)!.rot).toBeCloseTo(10, 6);
+  });
+  it('E5: a shape recoloured in ChemDraw keeps ChemDraw\'s colour', () => {
+    const d = doc(`<graphic id="30" BoundingBox="20 20 0 0" GraphicType="Rectangle" RectangleType="Filled" color="1">${tag('Chem Illustrator fill', JSON.stringify({ fill: 'faded', fillColor: '#ff0000', color: '#ff0000', seen: { color: '#ff0000' } }))}</graphic>`);
+    expect(d.shapes.get(30)!.color).not.toBe('#ff0000');
+    expect((d.shapes.get(30) as { seen?: unknown }).seen).toBeUndefined();
+  });
+  it('E2: heads changed in ChemDraw win over our curve tag', () => {
+    const d = doc(`<curve id="40" CurveType="0" CurvePoints="0 0 0 0 10 10 20 0 20 0 20 0">${tag('Chem Illustrator arrow', JSON.stringify({ headStyle: 'full', seen: { curveType: 8 } }))}</curve>`);
+    expect(d.arrows.get(40)!.headStyle).toBe('none');
+  });
+});

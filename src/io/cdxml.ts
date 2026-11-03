@@ -329,7 +329,15 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (enh === 'Absolute') extra.enhStereo = { type: 'abs' };
       else if (enh === 'And' || enh === 'Or') extra.enhStereo = { type: enh === 'And' ? 'and' : 'or', group: num(n, 'EnhancedStereoGroupNum', 1) };
       const groupTag = kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === GROUP_TAG)?.getAttribute('Value');
-      if (groupTag) extra.group = groupTag;
+      // (a group saved with its label text counts only while ChemDraw shows that text: a label
+      // retyped there, OMe to OEt, means a different group)
+      if (groupTag) {
+        let g: { label?: unknown; smiles?: unknown } | null = null;
+        try { g = groupTag.trim().startsWith('{') ? JSON.parse(groupTag) : null; } catch { g = null; }
+        const shown = kids(n).find((k) => k.nodeName === 't')?.textContent ?? '';
+        if (!g) extra.group = groupTag;
+        else if (typeof g.smiles === 'string' && (typeof g.label !== 'string' || g.label === shown)) extra.group = g.smiles;
+      }
       const altTag = kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === ALT_TAG)?.getAttribute('Value');
       if (altTag) extra.alt = altTag;
       const mapTag = Number(kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === MAP_TAG)?.getAttribute('Value'));
@@ -548,8 +556,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const turn = Number(kids(t).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === TURN_TAG)?.getAttribute('Value'));
     // ChemDraw's own turn (1/65536 degree, clockwise about the text's origin) when this program left no tag
     const angle = (Number(t.getAttribute('RotationAngle') ?? NaN) / 65536) % 360;
-    if (Number.isFinite(turn) && turn) extra.rot = turn;
-    else if (Number.isFinite(angle) && angle) extra.rot = angle > 180 ? angle - 360 : angle;
+    // ChemDraw's own angle wins when it has one (turned again or set level there); our tag only
+    // for files that have none
+    if (t.hasAttribute('RotationAngle') && Number.isFinite(angle)) { if (angle) extra.rot = angle > 180 ? angle - 360 : angle; }
+    else if (Number.isFinite(turn) && turn) extra.rot = turn;
     return { x, y: py, runs: back.runs, justify, width, lineHeight, ...extra };
   };
 
@@ -764,6 +774,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const lw = num(c, 'LineWidth', st.lineWidth);
     let look: Partial<Arrow> = {};
     try { look = own ? JSON.parse(own) : {}; } catch { look = {}; }
+    // heads, dashes or weight changed in ChemDraw since we wrote it: its own bits win, and only what
+    // they can't say (head shape and size) comes from our tag
+    const seen = (look as { seen?: { curveType?: unknown } }).seen;
+    if (seen && typeof seen.curveType === 'number' && seen.curveType !== type) look = { headType: look.headType, headLength: look.headLength, headWidth: look.headWidth };
     const arrow: Omit<Arrow, 'id'> & { id: number } = {
       id: idFor(c), tail, head,
       headStyle: type & 8 ? 'full' : type & 32 ? 'halfLeft' : 'none',
@@ -803,10 +817,15 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       const tag = kids(g).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === FILL_TAG);
       if (tag) {
         try {
-          const v = JSON.parse(tag.getAttribute('Value') ?? '{}') as Partial<Shape>;
+          const v = JSON.parse(tag.getAttribute('Value') ?? '{}') as Partial<Shape> & { seen?: { color?: unknown } };
+          // recoloured in ChemDraw since we wrote it: ChemDraw's colour wins, our style stays
+          const recoloured = typeof v.seen?.color === 'string' && v.seen.color.toLowerCase() !== (c ?? '#000000').toLowerCase();
+          delete v.seen;
           s.fill = v.fill === 'faded' || v.fill === 'shaded' || v.fill === 'gradient' ? v.fill : undefined;
-          s.fillColor = typeof v.fillColor === 'string' ? v.fillColor : undefined;
-          s.color = typeof v.color === 'string' ? v.color : undefined;
+          if (!recoloured) {
+            s.fillColor = typeof v.fillColor === 'string' ? v.fillColor : undefined;
+            s.color = typeof v.color === 'string' ? v.color : undefined;
+          } else if (s.filled) s.fillColor = c;
           Object.assign(s, fillExtras(v));
           // a pattern with no fill under it
           if (v.filled === false) s.filled = false;
@@ -1009,14 +1028,31 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
             const savedBox = typeof saved?.savedBox === 'string' ? saved.savedBox : null;
             if (saved) delete saved.savedBox;
             const bb = pts(ch.getAttribute('BoundingBox'));
+            // what we wrote natively beside it: moved in ChemDraw (every point by the same offset) moves
+            // the shape; reshaped there, ChemDraw's own curves are read instead
+            const seen = (saved as { seen?: { curve?: unknown } } | null)?.seen;
+            let shift: { dx: number; dy: number } | null = null;
+            if (saved) delete (saved as { seen?: unknown }).seen;
+            if (saved && typeof seen?.curve === 'string') {
+              delete (saved as { seen?: unknown }).seen;
+              const firstCurve = Array.from(ch.getElementsByTagName('curve'))[0];
+              const was = pts(seen.curve), now = pts(firstCurve?.getAttribute('CurvePoints') ?? null);
+              if (was.length && was.length === now.length) {
+                const dx = now[0] - was[0], dy = now[1] - was[1];
+                const moved = was.every((v, i) => Math.abs(now[i] - v - (i % 2 ? dy : dx)) < 0.05);
+                if (moved) shift = { dx, dy };
+                else saved = null;
+              } else saved = null;
+            }
             if (saved && (saved.kind === 'geo' || (saved.kind === 'ring' && Array.isArray(saved.poly))) && [saved.x1, saved.y1, saved.x2, saved.y2].every((v) => typeof v === 'number')) {
               // a ring fill finds its ring again by where the atoms are (atom ids change between files)
               const sh = doc.addShape({ ...(saved as Omit<Shape, 'id'>), ...(saved.kind === 'ring' ? { ring: undefined } : {}), id: idFor(ch) });
               // moved in ChemDraw: the group's box says where it is now
               const was = ch.getAttribute(GEO_BOX_ATTR) ?? savedBox;
               const wb = pts(was);
-              if (bb.length === 4 && wb.length === 4 && (Math.abs(bb[0] - wb[0]) > 0.01 || Math.abs(bb[1] - wb[1]) > 0.01)) {
-                const dx = bb[0] - wb[0], dy = bb[1] - wb[1];
+              const move = shift ?? (bb.length === 4 && wb.length === 4 ? { dx: bb[0] - wb[0], dy: bb[1] - wb[1] } : null);
+              if (move && (Math.abs(move.dx) > 0.01 || Math.abs(move.dy) > 0.01)) {
+                const { dx, dy } = move;
                 doc.updateShape(sh.id, { x1: sh.x1 + dx, y1: sh.y1 + dy, x2: sh.x2 + dx, y2: sh.y2 + dy, ...(sh.poly ? { poly: sh.poly.map((p) => ({ x: p.x + dx, y: p.y + dy })) } : {}) });
               }
               from('s', sh.id, ch);
