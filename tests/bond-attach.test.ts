@@ -109,5 +109,9 @@ describe('BeginAttach and EndAttach', () => {
     doc.edit('Flip', () => doc.updateBond(b.id, { a1: b.a2, a2: b.a1 }));
     const flipped = attrsOf(writeCdxml(doc));
     expect([flipped.B, flipped.E, flipped.begin, flipped.end]).toEqual(['2', '1', null, '2']);
+    // joined to another atom, the index is gone
+    doc.edit('Move end', () => { const n = doc.addAtom(80, 80, 6).id; doc.updateBond(b.id, { a2: n }); });
+    const moved = attrsOf(writeCdxml(doc));
+    expect([moved.begin, moved.end]).toEqual([null, null]);
   });
 });
