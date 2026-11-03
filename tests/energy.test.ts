@@ -207,7 +207,9 @@ describe('energy diagrams', () => {
 
   it('gives turned text in an older file of ours ChemDraw\'s turn when saved again', () => {
     const { doc } = put('catalysed');
-    const old = writeCdxml(doc).replace(/ RotationAngle="[^"]*"/g, '');
+    // (older files of ours kept the turn in a tag of their own, without RotationAngle)
+    const old = writeCdxml(doc).replace(/ RotationAngle="(\d+)"([^>]*)>/g, (_m, a, rest) => `${rest}><objecttag TagType="String" Name="Chem Illustrator turn" Value="${Number(a) / 65536}" Visible="no"/>`);
+    expect(old).not.toMatch(/RotationAngle/);
     const xml = writeCdxml(readCdxml(old).doc);
     expect(xml).toMatch(/RotationAngle="17694720"/);
     expect(xml.match(/kcal/g)?.length).toBe(old.match(/kcal/g)?.length);

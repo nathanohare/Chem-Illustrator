@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { Doc } from '../src/model';
 import { writeCdxml } from '../src/io/cdxml-write';
-import { readCdxml, encodeTagValue, GEO_TAG } from '../src/io/cdxml';
+import { readCdxml, encodeTagValue, GEO_TAG, CURVE_ARROW_TAG, GROUP_TAG, FILL_TAG } from '../src/io/cdxml';
 import { cdxmlToCdx, cdxToCdxml } from '../src/io/cdx';
 import { bracketsAround } from '../src/objects';
 import { ACS_1996 } from '../src/style';
@@ -116,9 +116,10 @@ describe('what is saved comes back from CDX and ChemDraw', () => {
     expect(xml).not.toContain('ChemIllustratorBox');
     const x = parse(viaCdx(xml));
     const g = all(x, 'group').find((e) => all(e, 'objecttag').some((t) => t.getAttribute('Name') === GEO_TAG))!;
-    // moved 20 pt right in ChemDraw: it rewrites the group's box
+    // moved 20 pt right in ChemDraw: it rewrites the group's box and moves its curves
     const bb = g.getAttribute('BoundingBox')!.split(' ').map(Number);
     g.setAttribute('BoundingBox', [bb[0] + 20, bb[1], bb[2] + 20, bb[3]].join(' '));
+    for (const c of all(g, 'curve')) c.setAttribute('CurvePoints', c.getAttribute('CurvePoints')!.split(' ').map((v, i) => Number(v) + (i % 2 ? 0 : 20)).join(' '));
     const s = [...readCdxml(new XMLSerializer().serializeToString(x)).doc.shapes.values()].find((v) => v.kind === 'geo')!;
     expect(s.x1).toBeCloseTo(20, 1);
     expect((s as unknown as Record<string, unknown>).savedBox).toBeUndefined();
@@ -432,5 +433,43 @@ describe('the CDXML audit, writing side (4): R21', () => {
     const x = parse(writeCdxml(doc));
     expect(all(x, 'curve')).toHaveLength(1);
     expect(all(x, 'arrow')).toHaveLength(0);
+  });
+});
+
+describe('our tags carry what was written beside them (CDXML audit E1–E5)', () => {
+  const tagOf = (e: Element, name: string) => JSON.parse(Array.from(e.children).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === name)!.getAttribute('Value')!);
+
+  it('a design shape\'s tag holds its first curve\'s points (E1)', () => {
+    const doc = newDoc();
+    doc.edit('Add', () => { doc.addShape({ kind: 'geo', geo: 'star5', x1: 0, y1: 0, x2: 40, y2: 40, filled: true, color: '#1f5fbf' } as never); });
+    const g = all(parse(writeCdxml(doc)), 'group')[0];
+    const curve = all(g, 'curve')[0];
+    expect(tagOf(g, GEO_TAG).seen).toEqual({ curve: curve.getAttribute('CurvePoints') });
+  });
+
+  it('a curved arrow\'s tag holds the CurveType written (E2)', () => {
+    const doc = newDoc();
+    doc.edit('Add', () => { doc.addArrow({ tail: { x: 0, y: 0 }, head: { x: 60, y: 0 }, bez: [{ x: 0.3, y: 0.4 }, { x: 0.7, y: -0.4 }], headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'dashed', headLength: 8, headWidth: 3, sweep: 0 } as never); });
+    const c = all(parse(writeCdxml(doc)), 'curve')[0];
+    expect(tagOf(c, CURVE_ARROW_TAG).seen).toEqual({ curveType: Number(c.getAttribute('CurveType')) });
+  });
+
+  it('a contracted label\'s group tag names its label (E3)', () => {
+    const doc = newDoc();
+    doc.edit('Draw', () => { const a = doc.addAtom(0, 0), b = doc.addAtom(14.4, 0, 6, { label: 'OMe', group: 'OC' }); doc.addBond(a.id, b.id); });
+    const n = all(parse(writeCdxml(doc)), 'n').find((e) => e.textContent === 'OMe')!;
+    expect(tagOf(n, GROUP_TAG)).toEqual({ label: 'OMe', smiles: 'OC' });
+  });
+
+  it('a styled fill\'s tag holds the colour written (E5)', () => {
+    const doc = newDoc();
+    doc.edit('Add', () => { doc.addShape({ kind: 'rect', x1: 0, y1: 0, x2: 40, y2: 20, filled: true, fill: 'faded', color: '#1F5FBF' } as never); });
+    const x = parse(writeCdxml(doc));
+    const g = all(x, 'graphic')[0];
+    const seen = tagOf(g, FILL_TAG).seen.color as string;
+    const idx = Number(g.getAttribute('color') ?? 0);
+    const c = all(x, 'color')[idx - 2];
+    const hex = idx < 2 ? ['#000000', '#ffffff'][idx] : '#' + ['r', 'g', 'b'].map((k) => Math.round(Number(c.getAttribute(k)) * 255).toString(16).padStart(2, '0')).join('');
+    expect(seen).toBe(hex);
   });
 });
