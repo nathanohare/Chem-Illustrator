@@ -528,7 +528,7 @@ Above the list is the predicted spectrum. Hover a row to see its peaks, or a pea
 **Check Data** compares your measured peak list with the prediction. Paste the list as an SI writes it, for example `1H NMR (400 MHz, CDCl3) δ 7.30 (d, J = 8.7 Hz, 2H), …` (a ¹H and a ¹³C list in one paragraph both count) and click **Check**. Each measured peak is matched to the atoms it most likely belongs to, and the panel lists what needs a look:
 
 - how many predicted signals were found, and whether the integrals add up to the structure's hydrogens;
-- peaks with no match in the structure, named when they sit on the solvent's residual or water peak or a green solvent from the Knowledge Base;
+- peaks with no match in the structure, named when they sit on the solvent's residual or water peak, a green solvent from the Knowledge Base, or a shift in a table you imported into the Knowledge Base (such as your copy of a published impurity table);
 - peaks further from their prediction than the expected error allows;
 - predicted signals with no peak (OH and NH are only noted, since they exchange);
 - multiplicities or coupling constants that differ from the prediction.

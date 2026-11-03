@@ -180,6 +180,8 @@ export interface NmrHost {
   /** The shift networks; optional, the lookup stands alone without them. */
   netUrl?: string;
   graph(molblock: string): Promise<{ graph: NamerGraph | null }>;
+  /** The Knowledge Base tables the user imported (JSON), for naming extra peaks in Check Data. */
+  importedTables?(): Promise<string | null>;
   redraw(): void;
   copy(text: string): Promise<void>;
   flash(text: string): void;
@@ -445,7 +447,7 @@ export class NmrPanel {
         if (list.nuc === '13C' && r.c13) { rowIdx.push(k); rows.push({ shift: r.c13.value, spread: r.c13.spread, n: r.atoms.length, label: name }); }
       });
       const solvent = list.solvent ?? this.solvent;
-      const res = checkData(list, rows, await knownPeaks(solvent, list.nuc));
+      const res = checkData(list, rows, await knownPeaks(solvent, list.nuc, await this.host.importedTables?.().catch(() => null) ?? null));
       const note = list.solvent && list.solvent.toLowerCase() !== this.solvent.toLowerCase() ? `The list is in ${list.solvent}; the prediction is for ${this.solvent}. Pick ${list.solvent} above to compare like with like.` : undefined;
       st.results.set(list.nuc, { list, res, rowIdx, note });
     }

@@ -2193,6 +2193,7 @@ const nmrPanel = new NmrPanel({
   flash: (text) => flash(text),
   copyPicture: (png) => navigator.clipboard.write([new ClipboardItem({ 'image/png': new Blob([png as Uint8Array<ArrayBuffer>], { type: 'image/png' }) })]),
   placePicture: (png) => placePicture(png, 'image/png', null),
+  importedTables: () => getText(keepStore(), KB_IMPORTED_KEY).catch(() => null),
 });
 let namesReady = false;
 
