@@ -3927,6 +3927,8 @@ function enterTab(tab: Tab, opened: boolean): void {
   refreshKeys();
   analysisKey = '';
   scheduleAnalysis(true);
+  // descriptors saved for a structure since changed (in ChemDraw) are worked out again
+  void refreshDescriptors();
   if (sheet && !splitDrawing) setHint(SHEET_HINT);
   else if (words && !splitDrawing) setHint(DOC_HINT);
   else editor.onToolChange(editor.toolName);
@@ -13553,6 +13555,7 @@ chem.onReady = () => {
   updatePanels();
   updateStereo();
   scheduleAnalysis(true);
+  void refreshDescriptors();
 };
 
 /** A sample molecule, for the self-test and the speed tests. */

@@ -331,7 +331,7 @@ export function shapeBox(s: Shape): Rect {
 function flatBox(s: Shape): Rect {
   const r = { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
   if (s.kind === 'bracket') return padRect(r, bracketReach(s));
-  if (s.kind === 'rect' && s.shadow) return { ...r, x2: r.x2 + (s.shadowSize ?? 2.4), y2: r.y2 + (s.shadowSize ?? 2.4) };
+  if ((s.kind === 'rect' || s.kind === 'oval') && s.shadow) return { ...r, x2: r.x2 + (s.shadowSize ?? 2.4), y2: r.y2 + (s.shadowSize ?? 2.4) };
   if (s.kind === 'picture' && s.look) {
     // half the frame's line sits outside the picture; the shadow reaches down and right
     const f = (s.look.line ?? 0) / 2, sh = s.look.shadow ? PICTURE_SHADOWS[s.look.shadow] : null;

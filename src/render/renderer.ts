@@ -16,7 +16,7 @@ import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, a
 import { atomMargin, bondEndPrefs, bondWidths, docMapLook, doubleBondGap, labelBold, wedgeWidth } from '../style';
 import { depthFractions, depthShadePrefs, shadeLook, shadeStep } from './depth-shade';
 import { joinWideEnds, lineMitres, endTip, LINE_MITRE_LIMIT, type WideEnd, type EndJoin, type LineEnd } from './bond-joins';
-import { chargeInk, labelBonds, labelSpec, layoutLabel, LabelLayout, labelLook } from '../chem/labels';
+import { CAP, chargeInk, labelBonds, labelSpec, layoutLabel, LabelLayout, labelLook } from '../chem/labels';
 import type { StructureChecks } from '../chem/warnings';
 import { isGenericLabel } from '../chem/labels';
 import { bracketPath, shaftOffset, shapeOrder, elbowRoute, boxOf, shapeBox, shapeMid, shapeTurn, bezPoints, bezHeadBack, bezPathAt, bezSlice, type PathStep } from '../objects';
@@ -1113,14 +1113,30 @@ export class Renderer {
    */
   bondEnds(doc: Doc, p: Atom, q: Atom): [Vec, Vec] {
     const ip = this.atomInfo(doc, p), iq = this.atomInfo(doc, q);
+    // a bond the file says meets another character of a label (ChemDraw's BeginAttach) aims at it
+    const b = (p.label && ip.layout) || (q.label && iq.layout) ? doc.bondBetween(p.id, q.id) : undefined;
+    const ps = b ? this.attachPoint(doc, p, p.id === b.a1 ? b.beginAttach : b.endAttach) : p;
+    const qs = b ? this.attachPoint(doc, q, q.id === b.a1 ? b.beginAttach : b.endAttach) : q;
+    // (from a character off the atom it may cross the rest of the label on its way out)
+    const cut = (s: Vec, e: Vec, onAtom: boolean, r: Rect) => (onAtom ? exitParam(s, e, r) : passParam(s, e, r));
     let t1 = 0, t2 = 0;
-    ip.boxes.forEach((r, i) => { if (i !== ip.charge?.index) t1 = Math.max(t1, exitParam(p, q, r)); });
-    iq.boxes.forEach((r, i) => { if (i !== iq.charge?.index) t2 = Math.max(t2, exitParam(q, p, r)); });
-    t1 = Math.max(t1, chargeCut(p, q, ip.charge));
-    t2 = Math.max(t2, chargeCut(q, p, iq.charge));
+    ip.boxes.forEach((r, i) => { if (i !== ip.charge?.index) t1 = Math.max(t1, cut(ps, qs, ps === p, r)); });
+    iq.boxes.forEach((r, i) => { if (i !== iq.charge?.index) t2 = Math.max(t2, cut(qs, ps, qs === q, r)); });
+    t1 = Math.max(t1, chargeCut(ps, qs, ip.charge));
+    t2 = Math.max(t2, chargeCut(qs, ps, iq.charge));
     if (t1 + t2 >= 0.95) { t1 = Math.min(t1, 0.45); t2 = Math.min(t2, 0.45); }
-    const d = sub(q, p);
-    return [add(p, mul(d, t1)), sub(q, mul(d, t2))];
+    const d = sub(qs, ps);
+    return [add(ps, mul(d, t1)), sub(qs, mul(d, t2))];
+  }
+
+  /** The middle of character i of a typed label, or the atom itself (i 0, missing or not in the label). */
+  attachPoint(doc: Doc, a: Atom, i: number | undefined): Vec {
+    const lay = i && a.label && i < a.label.length ? this.atomInfo(doc, a).layout : null;
+    const r = lay?.runs.find((r, k) => k !== lay.charge && r.at !== undefined && i! >= r.at && i! < r.at + r.text.length);
+    if (!lay || !r) return a;
+    const m = (t: string) => measureText(t, r.size, this.labelStack, lay.bold ? 'bold' : '');
+    const k = i! - r.at!;
+    return { x: a.x + r.dx + m(r.text.slice(0, k)) + m(r.text[k]) / 2, y: a.y + r.dy - (CAP * r.size) / 2 };
   }
 
   /** One line of a multiple bond, from a to c, pulled back out of the charges by its two atoms. */
@@ -1457,6 +1473,14 @@ export class Renderer {
     const info = this.bondInfo(doc, b);
     const second = b.order === 1.5 ? dashed : thin;
     const main = b.display === 'bold' ? bold : b.display === 'dash' ? dashed : thin;
+    if (b.order === 2 && b.display === 'wavy') {
+      // a wavy double bond is ChemDraw's either (crossed) double bond: two lines, each from one
+      // end's side to the other end's other side
+      const h = mul(nrm, gap / 2);
+      line(thin, add(s, h), sub(e, h));
+      line(thin, sub(s, h), add(e, h));
+      return;
+    }
     if (info.side === 0) {
       // Each line is carried in to meet the bond beside it at a bare atom (an exocyclic C=O on a
       // ring), so it joins that bond with no gap; that end is then covered by the bond, not capped.
@@ -1562,6 +1586,16 @@ export class Renderer {
         break;
       }
       case 'oval':
+        if (s.shadow) {
+          // as a box's: the oval moved down and to the right, showing only where it sticks out
+          ctx.save();
+          ctx.fillStyle = '#c0c0c0';
+          ctx.beginPath();
+          ovalShadow(ctx, x + w / 2, y + h / 2, w / 2, h / 2, s.shadowSize ?? 4 * lw);
+          ctx.fill();
+          ctx.restore();
+          ctx.beginPath();
+        }
         ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
         this.fillAndOutline(ctx, s, x, y, w, h);
         break;
@@ -1619,6 +1653,21 @@ export class Renderer {
           ctx.arc(s.x1, s.y1, 0.55, 0, Math.PI * 2); ctx.moveTo(s.x2 + 0.55, s.y2); ctx.arc(s.x2, s.y2, 0.55, 0, Math.PI * 2); ctx.fill();
         } else if (s.symbol === 'Electron') {
           ctx.arc(s.x1, s.y1, 0.6, 0, Math.PI * 2); ctx.fill();
+        } else if (s.symbol === 'RadicalCation' || s.symbol === 'RadicalAnion') {
+          // the radical's dot, then the charge's sign
+          const a = r * 0.45, sx = cx + r * 0.4;
+          ctx.moveTo(sx - a, cy); ctx.lineTo(sx + a, cy);
+          if (s.symbol === 'RadicalCation') { ctx.moveTo(sx, cy - a); ctx.lineTo(sx, cy + a); }
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.arc(cx - r * 0.6, cy, Math.max(0.6, r * 0.15), 0, Math.PI * 2); ctx.fill();
+        } else if (s.symbol === 'Dagger' || s.symbol === 'DoubleDagger') {
+          const t = s.symbol === 'Dagger' ? '\u2020' : '\u2021', size = r * 2.4;
+          ctx.font = `${size}px ${FONT_STACK}`;
+          ctx.fillText(t, cx - measureText(t, size) / 2, cy + size * 0.32);
+        } else if (s.symbol === 'LonePairBar') {
+          // a lone pair drawn as a bar between its two ends
+          ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
         } else {
           ctx.arc(cx, cy, 0.6, 0, Math.PI * 2); ctx.fill();
         }
@@ -2672,6 +2721,24 @@ function traceRegion(ctx: { moveTo(x: number, y: number): void; lineTo(x: number
 }
 
 type HighlightGroup = { colour: string; style: Required<HighlightStyle>; scale: number; atoms: Atom[]; bonds: [Atom, Atom][]; lit: Bond[]; at?: Map<Vec, Vec> };
+
+/**
+ * The part of an oval's shadow that sticks out below and to the right: the oval (centre cx, cy,
+ * half-axes rx, ry) shifted by `d`, minus the oval itself.
+ */
+function ovalShadow(ctx: CanvasRenderingContext2D, cx: number, cy: number, rx: number, ry: number, d: number): void {
+  if (rx <= 0 || ry <= 0 || d <= 0) return;
+  // worked out on the unit circle, where the shift is v; the angles carry over to the oval
+  const v = { x: d / rx, y: d / ry }, lv = Math.hypot(v.x, v.y);
+  if (lv >= 2) { ctx.ellipse(cx + d, cy + d, rx, ry, 0, 0, Math.PI * 2); return; }
+  const a = Math.atan2(v.y, v.x), h = Math.sqrt(1 - (lv * lv) / 4);
+  // where the two outlines cross, seen from the moved oval's middle (b) and the oval's own (g)
+  const b = Math.atan2(h, -lv / 2), g = Math.atan2(h, lv / 2);
+  ctx.moveTo(cx + d + rx * Math.cos(a + b), cy + d + ry * Math.sin(a + b));
+  ctx.ellipse(cx + d, cy + d, rx, ry, 0, a + b, a - b, true);
+  ctx.ellipse(cx, cy, rx, ry, 0, a - g, a + g, false);
+  ctx.closePath();
+}
 
 /**
  * The part of a box's shadow that sticks out below and to the right: the box shifted by `d`,

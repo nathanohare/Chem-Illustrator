@@ -48,18 +48,41 @@ export function differences(got: Summary, want: Summary, tol = 0.05): string[] {
   return out;
 }
 
-/** Object ids used more than once in a CDXML file (font ids are a separate list in ChemDraw). */
-export function duplicateIds(text: string): string[] {
+/** Object ids used more than once in a CDXML file (font ids are a separate list in ChemDraw).
+ *  With `source`, an id is reported only when it is used more often than that file used it
+ *  (ChemDraw itself sometimes writes the same id twice). */
+export function duplicateIds(text: string, source?: string): string[] {
+  const allowed = source ? idCounts(source) : new Map<string, number>();
   const root = new DOMParser().parseFromString(text.replace(/<!DOCTYPE[^>]*>/i, ''), 'application/xml').documentElement;
-  const seen = new Set<string>(), dups: string[] = [];
+  const seen = new Map<string, number>(), dups: string[] = [];
   const visit = (e: Element) => {
     for (let c = e.firstElementChild; c; c = c.nextElementSibling) {
       if (c.nodeName === 'fonttable' || c.nodeName === 'colortable') continue;
       const id = c.getAttribute('id');
-      if (id) { if (seen.has(id)) dups.push(`${c.nodeName} ${id}`); seen.add(id); }
+      if (id) {
+        const k = (seen.get(id) ?? 0) + 1;
+        seen.set(id, k);
+        if (k > Math.max(1, allowed.get(id) ?? 0)) dups.push(`${c.nodeName} ${id}`);
+      }
       visit(c);
     }
   };
   visit(root);
   return dups;
+}
+
+/** How many times each object id is used in a CDXML file. */
+function idCounts(text: string): Map<string, number> {
+  const root = new DOMParser().parseFromString(text.replace(/<!DOCTYPE[^>]*>/i, ''), 'application/xml').documentElement;
+  const out = new Map<string, number>();
+  const visit = (e: Element) => {
+    for (let c = e.firstElementChild; c; c = c.nextElementSibling) {
+      if (c.nodeName === 'fonttable' || c.nodeName === 'colortable') continue;
+      const id = c.getAttribute('id');
+      if (id) out.set(id, (out.get(id) ?? 0) + 1);
+      visit(c);
+    }
+  };
+  visit(root);
+  return out;
 }
