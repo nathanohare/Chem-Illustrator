@@ -458,6 +458,7 @@ const SHAPES: PaletteDef = {
     { name: 'shape-rect-rounded-shadow', title: 'Rounded rectangle with shadow' },
     { name: 'shape-rect-dashed', title: 'Dashed rectangle' },
     { name: 'shape-oval', title: 'Oval (Shift: circle)' },
+    { name: 'shape-oval-shadow', title: 'Oval with shadow (Shift: circle)' },
     { name: 'shape-circle', title: 'Circle, drawn from its center' },
     { name: 'shape-circle-filled', title: 'Filled circle, drawn from its center' },
     { name: 'shape-line', title: 'Line' },
@@ -489,7 +490,10 @@ const SYMBOLS: PaletteDef = {
     { name: 'sym-minus', title: 'Circled minus: click an atom to give it a − charge shown in a circle; drag around the atom to aim it' },
     { name: 'sym-delta-plus', title: 'Partial positive charge (δ+): click an atom' },
     { name: 'sym-delta-minus', title: 'Partial negative charge (δ−): click an atom' },
-    { name: 'sym-ddagger', title: 'Double dagger (‡) for a transition state: click where it goes' },
+    { name: 'sym-radical-cation', title: 'Radical cation (•+): click an atom or a bracket; an atom becomes a radical with a + charge' },
+    { name: 'sym-radical-anion', title: 'Radical anion (•−): click an atom or a bracket; an atom becomes a radical with a − charge' },
+    { name: 'sym-dagger', title: 'Dagger (†), for a footnote or a compound' },
+    { name: 'sym-ddagger', title: 'Double dagger (‡) for a transition state' },
   ],
 };
 

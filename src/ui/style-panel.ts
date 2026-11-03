@@ -27,6 +27,8 @@ import { ringFillsOn } from '../chem/ring-fill';
 import { frameMembers } from '../editor/frames';
 import { methylState, writeTerminalMethyls, type MethylStyle } from '../chem/hydrogens';
 import type { TableData } from '../model';
+import { labelAlignment, labelAlignPatch, type LabelAlign } from '../chem/label-align';
+import { ringsThroughBond } from '../chem/aromatic';
 import { canMerge, deleteColumn, deleteRow, fitColumns, insertColumn, insertRow, mergeDown, mergeRight, rowSpanOf, setColumnAlign, setColumnWidth, setRowSpan, setSpan, spanOf, splitCell, type TablePart } from '../table';
 import { SLIDE_TABLE_STYLES, lookOf, slideCellLook, slideTableStyle } from '../deck/table-styles';
 import type { Measure } from '../text/layout';
@@ -86,7 +88,8 @@ const READ_AS: Opt<'auto' | 'on' | 'off'>[] = [['auto', 'Automatically'], ['on',
 const JUSTIFY: Opt<Caption['justify']>[] = [['left', 'Left'], ['center', 'Center'], ['right', 'Right']];
 const TABLE_LINES: Opt<TableData['lines']>[] = [['acs', 'ACS style (rules above and below the headings, and at the end)'], ['grid', 'Every cell boxed'], ['none', 'None']];
 
-const LABEL_DIRS: Opt<Atom['just']>[] = [['auto', 'Automatically (away from the bonds)'], ['right', 'To the right (OMe)'], ['left', 'To the left (MeO)']];
+/** How an atom's label lines up on the atom (ChemDraw's label alignment; Above and Below are one Center choice). */
+const LABEL_ALIGNS: Opt<LabelAlign>[] = [['auto', 'Auto (away from the bonds)'], ['left', 'Left (OMe)'], ['center', 'Center (stacked on the atom)'], ['right', 'Right (MeO)']];
 
 type Fill = 'none' | 'solid' | 'faded' | 'shaded' | 'gradient';
 const FILLS: Opt<Fill>[] = [['none', 'None'], ['solid', 'Solid color'], ['faded', 'Faded (light tint)'], ['shaded', 'Shaded (light to dark)'], ['gradient', 'Gradient (two colors)']];
@@ -456,6 +459,19 @@ export class StylePanel {
     // the border together: its colour, weight, dashes, corners and shadow
     // (ring fills have no line, so no line colour: it only stood in for a fill colour that wasn't set)
     const box = any((x) => x.kind === 'rect');
+    const oval = any((x) => x.kind === 'oval');
+    // a lone pair: two dots, or ChemDraw's bar
+    const pair = any((x) => x.kind === 'symbol' && (x.symbol === 'LonePair' || x.symbol === 'LonePairBar'));
+    if (pair) {
+      const isPair = (x: Shape) => x.kind === 'symbol' && (x.symbol === 'LonePair' || x.symbol === 'LonePairBar');
+      this.select('Drawn as', [['LonePair', 'Two dots'], ['LonePairBar', 'Bar']], pair.symbol as string, (v) => set('Lone pair look', isPair, (x) => {
+        if (x.symbol === v) return {};
+        // a bar is a little longer than the pair of dots is wide, across the same middle
+        const k = v === 'LonePairBar' ? 1.6 : 1 / 1.6;
+        const cx = (x.x1 + x.x2) / 2, cy = (x.y1 + x.y2) / 2;
+        return { symbol: v, x1: cx + (x.x1 - cx) * k, y1: cy + (x.y1 - cy) * k, x2: cx + (x.x2 - cx) * k, y2: cy + (x.y2 - cy) * k };
+      }));
+    }
     if (l || box) this.subheading('Border');
     if (shapes.some((x) => x.kind !== 'ring')) this.color(f?.filled && f.fillColor ? 'Line color' : 'Color', s.color, (v) => set('Color', (x) => x.kind !== 'ring', () => ({ color: v })));
     if (geo) this.number('Outline (pt)', round(geo.lineWidth ?? (geo.bold ? lw * 2.5 : lw)), 0.25, 0, 50, (v) => set('Outline width', isGeo, () => ({ lineWidth: v, bold: undefined })), '0 for no outline');
@@ -470,6 +486,11 @@ export class StylePanel {
       if (box.rounded) this.number('Corner radius (pt)', round(box.radius ?? 6 * lw), 0.5, 0, 200, (v) => set('Corner radius', isBox, () => ({ radius: v })));
       this.check('Shadow', !!box.shadow, (v) => set('Shadow', isBox, () => ({ shadow: v })));
       if (box.shadow) this.number('Shadow size (pt)', round(box.shadowSize ?? 4 * lw), 0.5, 0, 100, (v) => set('Shadow size', isBox, () => ({ shadowSize: v })));
+    }
+    if (oval && !box) {
+      const isOval = (x: Shape) => x.kind === 'oval';
+      this.check('Shadow', !!oval.shadow, (v) => set('Shadow', isOval, () => ({ shadow: v || undefined })));
+      if (oval.shadow) this.number('Shadow size (pt)', round(oval.shadowSize ?? 4 * lw), 0.5, 0, 100, (v) => set('Shadow size', isOval, () => ({ shadowSize: v })));
     }
   }
 
@@ -987,7 +1008,11 @@ export class StylePanel {
     this.color('Highlight', a.highlight, (v) => { set(v ? 'Highlight' : 'Remove highlight', { highlight: v }); if (v) this.highlightUsed(v); }, 'None');
     this.highlightControls([a], []);
     if (a.label || a.z !== 6 || a.showCarbon) {
-      this.select('Label runs', LABEL_DIRS, a.just, (v) => set('Label direction', { just: v }));
+      this.select('Label alignment', LABEL_ALIGNS, labelAlignment(a), (v) => this.edit('Label alignment', () => this.doc.updateAtom(a.id, labelAlignPatch(this.doc, a, v))));
+    } else if (a.z === 6 && this.doc.degree(a.id) === 3 && (this.doc.adj.get(a.id) ?? []).every((bid) => ringsThroughBond(this.doc, bid).length > 0)) {
+      // a ring-fusion carbon: its H shown as a dot (toward the viewer) or a hashed dot (away)
+      this.select<'' | 'dot' | 'dash'>('Ring-fusion H', [['', 'None'], ['dot', 'H-Dot (toward viewer)'], ['dash', 'H-Dash (away from viewer)']], a.hDot ?? '',
+        (v) => set(v ? 'Ring-fusion H' : 'No ring-fusion H', { hDot: v || undefined }));
     }
     if (methylState(this.doc, [a.id]) !== 'none') this.methylControls([a.id]);
     else if (a.z === 6 && !a.label && this.doc.degree(a.id) > 0) {

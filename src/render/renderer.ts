@@ -982,6 +982,7 @@ export class Renderer {
       } else if (a.charge && a.z === 6 && !a.hideCharge) {
         curFont = this.drawCarbonCharge(ctx, doc, a);
       }
+      if (a.hDot && !info.layout) this.drawHDot(ctx, doc, a);
       if (a.showNumber && a.atomNumber) curFont = this.drawAtomNumber(ctx, doc, a, curFont);
       if (hasAttachDiamond(a)) curFont = this.drawAttachDiamond(ctx, doc, a, curFont);
       if (a.attach === 'Star') this.drawAttachStar(ctx, doc, a);
@@ -1478,7 +1479,7 @@ export class Renderer {
           const he = wedgeWidth(st) / 2;
           const end = this.atomInfo(doc, q).boxes.length ? sub(e, mul(dir, Math.min(he + st.lineWidth, l * 0.3))) : e;
           const lw = len(sub(end, s));
-          const waves = Math.min(MAX_HASHES, Math.max(3, Math.round(lw / (st.bondLength * 0.1))));
+          const waves = Math.min(MAX_HASHES, Math.max(3, Math.round(lw / (st.bondLength * 0.075))));
           const step = lw / waves;
           thin.moveTo(s.x, s.y);
           for (let i = 0; i < waves; i++) {
@@ -1490,9 +1491,9 @@ export class Renderer {
           break;
         }
         case 'wavy': {
-          const waves = Math.min(MAX_HASHES, Math.max(2, Math.round(l / (st.bondLength * 0.17))));
+          const waves = Math.min(MAX_HASHES, Math.max(2, Math.round(l / (st.bondLength * 0.11))));
           const step = l / waves;
-          const amp = st.bondLength * 0.09;
+          const amp = st.bondLength * 0.07;
           thin.moveTo(s.x, s.y);
           for (let i = 0; i < waves; i++) {
             const a = add(s, mul(dir, step * i));
@@ -1578,6 +1579,35 @@ export class Renderer {
     if (t1 + t2 >= 0.95) return [a, c];
     const d = sub(c, a);
     return [add(a, mul(d, t1)), sub(c, mul(d, t2))];
+  }
+
+  /**
+   * A ring-fusion H drawn on its carbon (ChemDraw's H-Dot and H-Dash): a filled dot (toward the
+   * viewer), or a dot hatched with lines across the bonds' gaps (away), a little wider than a bold bond.
+   */
+  private drawHDot(ctx: CanvasRenderingContext2D, doc: Doc, a: Atom): void {
+    const w = bondWidths(doc.style, { s: a.s } as Bond);
+    const r = w.boldWidth * 1.15;
+    ctx.save();
+    ctx.fillStyle = ctx.strokeStyle = a.color ?? '#000';
+    ctx.beginPath();
+    ctx.arc(a.x, a.y, r, 0, Math.PI * 2);
+    if (a.hDot === 'dot') ctx.fill();
+    else {
+      // white behind it, so the bonds meeting there don't show through, then hashes inside the ring
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.lineWidth = w.lineWidth;
+      ctx.stroke();
+      ctx.beginPath();
+      for (let k = -1.5; k <= 1.5; k++) {
+        const dy = k * r * 0.5, h = Math.sqrt(Math.max(0, r * r - dy * dy));
+        ctx.moveTo(a.x - h, a.y + dy); ctx.lineTo(a.x + h, a.y + dy);
+      }
+      ctx.lineWidth = w.lineWidth * 0.8;
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /** A charge beside a carbon drawn without a label. Returns the font it leaves set. */

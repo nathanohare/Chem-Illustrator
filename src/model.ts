@@ -120,6 +120,11 @@ export interface Atom {
   centred?: boolean;
   /** The label stacked one piece per line above or below the atom (ChemDraw's LabelAlignment Above or Below), whatever the bonds. */
   stacked?: 'up' | 'down';
+  /**
+   * A ring-fusion carbon's H drawn as a mark on the atom (ChemDraw's H-Dot and H-Dash): a filled
+   * dot for an H toward the viewer, a hashed one for an H away.
+   */
+  hDot?: 'dot' | 'dash';
   /** Show this atom's R/S label when it has one (ChemDraw's "Show Stereochemistry"). */
   showStereo?: boolean;
   /** Where the stereo label sits (relative to the atom), and its text as saved or typed by hand. */
