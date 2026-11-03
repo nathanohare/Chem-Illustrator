@@ -451,7 +451,7 @@ describe('our tags carry what was written beside them (CDXML audit E1–E5)', ()
     const doc = newDoc();
     doc.edit('Add', () => { doc.addArrow({ tail: { x: 0, y: 0 }, head: { x: 60, y: 0 }, bez: [{ x: 0.3, y: 0.4 }, { x: 0.7, y: -0.4 }], headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'dashed', headLength: 8, headWidth: 3, sweep: 0 } as never); });
     const c = all(parse(writeCdxml(doc)), 'curve')[0];
-    expect(tagOf(c, CURVE_ARROW_TAG).seen).toEqual({ curveType: Number(c.getAttribute('CurveType')) });
+    expect(tagOf(c, CURVE_ARROW_TAG).seen.curveType).toBe(Number(c.getAttribute('CurveType')));
   });
 
   it('a contracted label\'s group tag names its label (E3)', () => {
@@ -563,5 +563,138 @@ describe('the CDXML audit, writing side: R32 and R11', () => {
     const pg = all(parse(writeCdxml(doc)), 'page')[0];
     expect(pg.getAttribute('DrawingSpace')).toBeNull();
     expect(pg.getAttribute('Width')).toBeNull();
+  });
+});
+
+describe('the CDXML audit, writing side (5): R41, R42', () => {
+  const arrow = (extra: Record<string, unknown> = {}) => ({ tail: { x: 0, y: 0 }, head: { x: 60, y: 0 }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: 8, headWidth: 3, ...extra } as never);
+  const curved = (extra: Record<string, unknown> = {}) => arrow({ bez: [{ x: 0.3, y: 0.4 }, { x: 0.7, y: -0.4 }], ...extra });
+
+  it('R42: our arrowheads are written with their 3/4 notch, and read back as ours', () => {
+    const doc = newDoc();
+    doc.edit('Add', () => { doc.addArrow(arrow()); });
+    const xml = writeCdxml(doc);
+    const a = all(parse(xml), 'arrow')[0];
+    const hs = Number(a.getAttribute('HeadSize'));
+    expect(Number(a.getAttribute('ArrowheadCenterSize'))).toBe(Math.round(hs * 0.75));
+    expect([...readCdxml(xml).doc.arrows.values()][0].headCenter).toBeUndefined();
+  });
+
+  it("R42: ChemDraw's notch comes back as it was, also when the arrow is changed", () => {
+    for (const [attr, want] of [['', 875], [' ArrowheadCenterSize="500"', 500], [' ArrowheadCenterSize="1000"', 1000]] as const) {
+      const doc = readCdxml(file(`<arrow id="5" ArrowheadHead="Full" ArrowheadType="Solid" HeadSize="1000"${attr} ArrowheadWidth="250" Head3D="50 10 0" Tail3D="10 10 0"/>`)).doc;
+      const r = [...doc.arrows.values()][0];
+      doc.edit('Move', () => doc.updateArrow(r.id, { head: { x: 70, y: 30 } }));
+      const a = all(parse(writeCdxml(doc)), 'arrow')[0];
+      expect(Number(a.getAttribute('ArrowheadCenterSize'))).toBe(want);
+    }
+  });
+
+  it('R41: a curved arrow writes its head size and shape on the curve, only when not the default', () => {
+    const doc = newDoc();
+    const lw = doc.style.lineWidth;
+    doc.edit('Add', () => { doc.addArrow(curved({ headType: 'hollow', headLength: lw * 15, headWidth: lw * 4 })); doc.addArrow(curved({ headLength: lw * 10, headWidth: lw * 2.5, tail: { x: 0, y: 40 }, head: { x: 60, y: 40 } })); });
+    const [c1, c2] = all(parse(writeCdxml(doc)), 'curve');
+    expect([c1.getAttribute('HeadSize'), c1.getAttribute('ArrowheadWidth'), c1.getAttribute('ArrowheadType')]).toEqual(['1500', '400', 'Hollow']);
+    expect([c2.getAttribute('HeadSize'), c2.getAttribute('ArrowheadWidth'), c2.getAttribute('ArrowheadType')]).toEqual([null, null, null]);
+  });
+
+  it("R41: a curved arrow's head changed in ChemDraw wins over our tag; unchanged, the tag's exact sizes stay", () => {
+    const doc = newDoc();
+    const lw = doc.style.lineWidth;
+    doc.edit('Add', () => { doc.addArrow(curved({ headLength: lw * 12.345, headWidth: lw * 3 })); });
+    const xml = writeCdxml(doc);
+    const same = [...readCdxml(xml).doc.arrows.values()][0];
+    expect(same.headLength).toBeCloseTo(lw * 12.345, 9);
+    const edited = xml.replace(/HeadSize="\d+"/, 'HeadSize="2000"').replace(/ArrowheadWidth="\d+"/, 'ArrowheadWidth="600" ArrowheadType="Angle"');
+    const back = [...readCdxml(edited).doc.arrows.values()][0];
+    expect(back.headLength).toBeCloseTo(lw * 20, 6);
+    expect(back.headWidth).toBeCloseTo(lw * 6, 6);
+    expect(back.headType).toBe('angle');
+    // and through CDX
+    const cdx = [...readCdxml(viaCdx(xml)).doc.arrows.values()][0];
+    expect(cdx.headLength).toBeCloseTo(lw * 12.345, 6);
+  });
+});
+
+describe('the CDXML audit, writing side (6): R24, arrows an older ChemDraw kept only as graphics', () => {
+  // (as the reader takes them: an arrow read from the graphic in its place)
+  const legacyDoc = (arrow: string, graphic: string) => {
+    const doc = readCdxml(file(arrow)).doc;
+    const text = file(graphic);
+    doc.source!.text = text;
+    (doc.source as { xml?: unknown }).xml = undefined;
+    return { doc, text };
+  };
+  const line = () => legacyDoc('<arrow id="5" ArrowheadHead="Full" ArrowheadType="Solid" HeadSize="1000" ArrowheadCenterSize="875" ArrowheadWidth="250" Head3D="50 10 0" Tail3D="10 10 0"/>',
+    '<graphic id="5" BoundingBox="50 10 10 10" GraphicType="Line" ArrowType="FullHead" HeadSize="1000"/>');
+
+  it('an unchanged one is left as it is', () => {
+    const { doc, text } = line();
+    expect(writeCdxml(doc)).toBe(text);
+  });
+
+  it('a changed one becomes a ChemDraw arrow in its place, with its id, and no copy is left behind', () => {
+    const { doc } = line();
+    const r = [...doc.arrows.values()][0];
+    doc.edit('Move', () => doc.updateArrow(r.id, { head: { x: 70, y: 30 } }));
+    const x = parse(writeCdxml(doc));
+    expect(all(x, 'graphic')).toHaveLength(0);
+    const arrows = all(x, 'arrow');
+    expect(arrows).toHaveLength(1);
+    expect(arrows[0].getAttribute('id')).toBe('5');
+    expect(arrows[0].getAttribute('Head3D')).toBe('70.00 30.00 0');
+    expect(arrows[0].getAttribute('ArrowheadHead')).toBe('Full');
+  });
+
+  it('one made into a curve becomes a ChemDraw curve in its place', () => {
+    const { doc } = line();
+    const r = [...doc.arrows.values()][0];
+    doc.edit('Bend', () => doc.updateArrow(r.id, { bez: [{ x: 0.3, y: 0.4 }, { x: 0.7, y: -0.4 }] }));
+    const x = parse(writeCdxml(doc));
+    expect(all(x, 'graphic')).toHaveLength(0);
+    expect(all(x, 'curve').map((c) => c.getAttribute('id'))).toEqual(['5']);
+    expect(all(x, 'arrow')).toHaveLength(0);
+  });
+
+  it('an arc is written as a ChemDraw arc arrow; a deleted one is gone', () => {
+    const { doc } = legacyDoc('<arrow id="5" ArrowheadHead="Full" HeadSize="1000" Head3D="40 10 0" Tail3D="10 40 0" Center3D="10 10 0" MajorAxisEnd3D="40 10 0" MinorAxisEnd3D="10 40 0" AngularSize="-90"/>',
+      '<graphic id="5" BoundingBox="40 10 10 10" GraphicType="Arc" ArrowType="FullHead" AngularSize="-90"/>');
+    const r = [...doc.arrows.values()][0];
+    doc.edit('Colour', () => doc.updateArrow(r.id, { color: '#ff0000' }));
+    const x = parse(writeCdxml(doc));
+    expect(all(x, 'graphic')).toHaveLength(0);
+    expect(all(x, 'arrow')[0].getAttribute('AngularSize')).not.toBeNull();
+    const { doc: d2 } = line();
+    d2.edit('Delete', () => d2.removeArrow([...d2.arrows.keys()][0]));
+    const y = parse(writeCdxml(d2));
+    expect([all(y, 'graphic').length, all(y, 'arrow').length]).toEqual([0, 0]);
+  });
+
+  it('read from the graphics themselves: unchanged they save as they were; changed, as ChemDraw arrows that read back the same', () => {
+    const graphics = '<graphic id="10" BoundingBox="80 20 20 20" GraphicType="Line" ArrowType="FullHead" HeadSize="1000"/><graphic id="11" BoundingBox="80 40 20 40" GraphicType="Line" ArrowType="HalfHead" HeadSize="1000"/>'
+      + '<graphic id="12" BoundingBox="80 60 20 60" GraphicType="Line" ArrowType="Equilibrium" HeadSize="1000"/><graphic id="13" BoundingBox="80 80 20 80" GraphicType="Line" ArrowType="Resonance" HeadSize="1000"/>'
+      + '<graphic id="14" BoundingBox="80 100 20 100" GraphicType="Line" ArrowType="RetroSynthetic" HeadSize="1000"/><graphic id="15" BoundingBox="80 120 20 120" GraphicType="Line" ArrowType="Hollow" HeadSize="1000"/>'
+      + '<graphic id="16" BoundingBox="80 140 20 140" GraphicType="Line" ArrowType="NoHead"/>'
+      + '<graphic id="18" BoundingBox="150 50 120 50" GraphicType="Arc" ArrowType="FullHead" HeadSize="1000" AngularSize="90"/><graphic id="19" BoundingBox="150 120 120 120" GraphicType="Arc" ArrowType="NoHead" AngularSize="-120"/>';
+    const text = file(graphics);
+    const doc = readCdxml(text).doc;
+    expect(doc.arrows.size).toBe(8);
+    expect(writeCdxml(doc)).toBe(text);
+    const before = [...doc.arrows.values()];
+    doc.edit('Colour', () => { for (const r of doc.arrows.values()) doc.updateArrow(r.id, { color: '#ff0000' }); });
+    const out = writeCdxml(doc), x = parse(out);
+    // (the plain line stays a line)
+    expect(all(x, 'graphic').map((g) => g.getAttribute('id'))).toEqual(['16']);
+    expect(all(x, 'arrow').map((a) => a.getAttribute('id'))).toEqual(['10', '11', '12', '13', '14', '15', '18', '19']);
+    const after = [...readCdxml(out).doc.arrows.values()];
+    expect(after).toHaveLength(8);
+    after.forEach((b, i) => {
+      const a = before[i];
+      for (const k of ['headStyle', 'tailStyle', 'headType', 'equilibrium', 'headCenter'] as const) expect([i, k, b[k]]).toEqual([i, k, a[k]]);
+      for (const k of ['sweep', 'headLength', 'headWidth'] as const) expect(b[k]).toBeCloseTo(a[k] as number, 2);
+      expect(b.shaftSpacing ?? 0).toBeCloseTo(a.shaftSpacing ?? 0, 2);
+      for (const end of ['head', 'tail'] as const) { expect(b[end].x).toBeCloseTo(a[end].x, 1); expect(b[end].y).toBeCloseTo(a[end].y, 1); }
+    });
   });
 });

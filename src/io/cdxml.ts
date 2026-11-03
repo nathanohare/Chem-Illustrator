@@ -742,7 +742,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     };
     // the head's notch (ChemDraw takes a missing or zero ArrowheadCenterSize as 7/8 of the head)
     const cs = num(a, 'ArrowheadCenterSize', 0), hs = num(a, 'HeadSize', 1000);
-    arrow.headCenter = cs > 0 && hs > 0 ? Math.min(1, cs / hs) : 0.875;
+    // (3/4, the notch our own arrows are drawn with and written as, reads back as ours: straight sides)
+    if (!(cs > 0 && hs > 0 && cs === Math.round(hs * 0.75))) arrow.headCenter = cs > 0 && hs > 0 ? Math.min(1, cs / hs) : 0.875;
     // an arc of an ellipse (its axes differ): drawn along the ellipse, as Bézier pieces, instead of
     // the circle through the tail
     const ell = ellipseArcBez(a, tail, head, Number(ang ?? 0));
@@ -799,6 +800,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     // they can't say (head shape and size) comes from our tag
     const seen = (look as { seen?: { curveType?: unknown } }).seen;
     if (seen && typeof seen.curveType === 'number' && seen.curveType !== type) look = { headType: look.headType, headLength: look.headLength, headWidth: look.headWidth };
+    // the head's size or shape changed there: the curve's own (read below) win over the tag's
+    const headNow = `${num(c, 'HeadSize', 1000)} ${num(c, 'ArrowheadWidth', 250)} ${c.getAttribute('ArrowheadType') ?? 'Solid'}`;
+    if (seen && typeof (seen as { head?: unknown }).head === 'string' && (seen as { head: string }).head !== headNow) { delete look.headType; delete look.headLength; delete look.headWidth; }
     const arrow: Omit<Arrow, 'id'> & { id: number } = {
       id: idFor(c), tail, head,
       headStyle: type & 8 ? 'full' : type & 32 ? 'halfLeft' : 'none',
