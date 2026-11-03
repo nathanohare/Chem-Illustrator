@@ -168,6 +168,19 @@ describe('Zotero in a presentation', () => {
     expect(deck.slides[1].refs).toBeUndefined();
   });
 
+  it('leaves slides as they were when Zotero goes away part way (found in the 2026-11-03 review)', async () => {
+    const deck = await citedDeck();
+    const before = structuredClone(deck.slides);
+    // a new citation on the slide that has one, then Zotero quits (its next request never comes)
+    const z = fakeZotero([() => ['Document.insertField', [D, 'Http', 0]], () => { throw new Error('Zotero closed'); }]);
+    await expect(runZoteroOn('addEditCitation', new DeckStore(deck, 'addEditCitation'), z.post)).rejects.toThrow('Zotero closed');
+    expect(deck.slides).toEqual(before);
+    // and a References slide it never filled goes again
+    const z2 = fakeZotero([() => ['Document.insertField', [D, 'Http', 0]], () => { throw new Error('Zotero closed'); }]);
+    await expect(runZoteroOn('addEditBibliography', new DeckStore(deck, 'addEditBibliography'), z2.post)).rejects.toThrow();
+    expect(deck.slides.map((x) => x.id)).toEqual([1, 2, 3]);
+  });
+
   it('won\'t put a citation on the References slide', async () => {
     const deck = new TestDeck();
     deck.slides[1] = { id: 2, refList: { which: 'shown' } };

@@ -1735,7 +1735,7 @@ function changedCml(t: DocText): Map<number, string> {
     if (o?.kind !== 'drawing' || !o.c4w) continue;
     const i = index.get(o.c4w.guid);
     if (i === undefined || out.has(i) || contentsSig(o.contents) === o.c4w.sig) continue;
-    out.set(i, writeCml(o.contents, o.c4w.guid));
+    out.set(i, writeCml(o.contents, o.c4w.guid, parts[i].xml));
   }
   return out;
 }

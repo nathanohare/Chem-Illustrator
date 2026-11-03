@@ -48,6 +48,12 @@ export function cmlGuid(text: string): string {
   return g?.textContent?.trim() ?? '';
 }
 
+/** The molecule element an element is inside (the nearest), or null. */
+function moleculeOf(el: Element): Element | null {
+  for (let p = el.parentElement; p; p = p.parentElement) if (p.localName === 'molecule') return p;
+  return null;
+}
+
 const ORDERS: Record<string, number> = { S: 1, D: 2, T: 3, A: 1.5, partial01: PARTIAL, partial12: 1.5, partial23: 2, hbond: PARTIAL, other: PARTIAL };
 
 /**
@@ -60,7 +66,9 @@ export function readCml(text: string): Contents | null {
   if (!root || !isCml(root)) return null;
   const atoms: Atom[] = [];
   const bonds: Bond[] = [];
+  // atom ids are looked up in the bond's own molecule first: two molecules can both have an a1
   const ids = new Map<string, number>();
+  const idsIn = new Map<Element, Map<string, number>>();
   let next = 1;
   for (const a of all(root, 'atom')) {
     const x = Number(a.getAttribute('x2')), y = Number(a.getAttribute('y2'));
@@ -68,7 +76,10 @@ export function readCml(text: string): Contents | null {
     const type = a.getAttribute('elementType') ?? 'C';
     const z = elementNumber(type);
     const id = next++;
-    ids.set(a.getAttribute('id') ?? `#${id}`, id);
+    const key = a.getAttribute('id') ?? `#${id}`;
+    if (!ids.has(key)) ids.set(key, id);
+    const mol = moleculeOf(a);
+    if (mol) { if (!idsIn.has(mol)) idsIn.set(mol, new Map()); idsIn.get(mol)!.set(key, id); }
     atoms.push({
       id, x, y, z: z ?? 6, label: z === undefined ? type : null,
       charge: Math.round(Number(a.getAttribute('formalCharge') ?? 0)) || 0,
@@ -79,7 +90,8 @@ export function readCml(text: string): Contents | null {
   if (!atoms.length) return null;
   for (const b of all(root, 'bond')) {
     const [r1, r2] = (b.getAttribute('atomRefs2') ?? '').trim().split(/\s+/);
-    const a1 = ids.get(r1), a2 = ids.get(r2);
+    const look = (ref: string) => { for (let m = moleculeOf(b); m; m = moleculeOf(m)) { const got = idsIn.get(m)?.get(ref); if (got !== undefined) return got; } return ids.get(ref); };
+    const a1 = look(r1), a2 = look(r2);
     if (a1 === undefined || a2 === undefined || a1 === a2) continue;
     const o = b.getAttribute('order') ?? 'S';
     const order = ORDERS[o] ?? (Number.isFinite(Number(o)) && Number(o) > 0 ? Math.min(4, Number(o)) : 1);
@@ -111,11 +123,56 @@ function cmlElementType(a: Atom): string {
 }
 
 /**
+ * A molecule's chemistry, for telling whether a structure is still the same one: each atom's
+ * type, charge and isotope with its bonds (order and stereo mark) and neighbors. Moving or
+ * turning a structure keeps it; changing an atom, a bond or a wedge does not.
+ */
+function chemSig(atoms: { key: string; type: string; charge: number; iso: number }[], bonds: { a: string; b: string; order: string; stereo: string }[]): string {
+  const at = new Map(atoms.map((a) => [a.key, a]));
+  const own = (a: { type: string; charge: number; iso: number }) => `${a.type}${a.charge || ''}${a.iso ? `@${a.iso}` : ''}`;
+  const near = new Map<string, string[]>(atoms.map((a) => [a.key, []]));
+  for (const b of bonds) {
+    const p = at.get(b.a), q = at.get(b.b);
+    if (!p || !q) continue;
+    near.get(b.a)!.push(`${b.order}${b.stereo}>${own(q)}`);
+    near.get(b.b)!.push(`${b.order}${b.stereo}<${own(p)}`);
+  }
+  return atoms.map((a) => `${own(a)}[${near.get(a.key)!.sort().join(',')}]`).sort().join(';');
+}
+
+/** Chem4Word's own data on each molecule of a CML document (its names, formulae and labels), by the molecule's chemistry. */
+function keptNames(text: string | undefined): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  const root = text ? parse(text) : null;
+  if (!root || !isCml(root)) return out;
+  const ser = new XMLSerializer();
+  for (const m of all(root, 'molecule')) {
+    const arr = Array.from(m.children).find((k) => k.localName === 'atomArray');
+    if (!arr) continue;
+    const atoms = Array.from(arr.children).filter((k) => k.localName === 'atom').map((a) => ({
+      key: a.getAttribute('id') ?? '', type: a.getAttribute('elementType') ?? 'C',
+      charge: Math.round(Number(a.getAttribute('formalCharge') ?? 0)) || 0, iso: Math.round(Number(a.getAttribute('isotopeNumber') ?? 0)) || 0,
+    }));
+    const bondArr = Array.from(m.children).find((k) => k.localName === 'bondArray');
+    const bonds = bondArr ? Array.from(bondArr.children).filter((k) => k.localName === 'bond').map((b) => {
+      const [a, z] = (b.getAttribute('atomRefs2') ?? '').trim().split(/\s+/);
+      const o = b.getAttribute('order') ?? 'S';
+      return { a, b: z, order: ({ '1': 'S', '2': 'D', '3': 'T' } as Record<string, string>)[o] ?? o, stereo: all(b, 'bondStereo')[0]?.textContent?.trim() ?? '' };
+    }) : [];
+    const names = Array.from(m.children).filter((k) => k.localName === 'name' || k.localName === 'formula' || k.localName === 'label').map((k) => ser.serializeToString(k).replace(/ xmlns(:\w+)?="[^"]*"/g, '').replace(/<(\/?)(?!\w+:)(\w+)/g, '<$1cml:$2'));
+    if (names.length) out.set(chemSig(atoms, bonds), names);
+  }
+  return out;
+}
+
+/**
  * A drawing's atoms and bonds as a Chem4Word CML document carrying the structure's id, at
  * Chem4Word's scale: each connected structure a molecule of its own. Labels that are not an
- * element's symbol go out as Chem4Word's functional groups, by name.
+ * element's symbol go out as Chem4Word's functional groups, by name. With the CML it replaces
+ * (`old`), a molecule that is still the same chemistry keeps Chem4Word's names and formulae.
  */
-export function writeCml(c: Contents, guid: string): string {
+export function writeCml(c: Contents, guid: string, old?: string): string {
+  const names = keptNames(old);
   const L = medianBond(c);
   const k = L > 0 ? C4W_BOND / L : 1;
   const num = (v: number) => String(Math.round(v * k * 1e4) / 1e4);
@@ -145,7 +202,11 @@ export function writeCml(c: Contents, guid: string): string {
       const stereo = STEREO_OUT[b.display];
       return `<cml:bond id="m${m}.b${i + 1}" atomRefs2="${atomId.get(b.a1)} ${atomId.get(b.a2)}" order="${order}"${stereo ? `><cml:bondStereo>${stereo}</cml:bondStereo></cml:bond>` : '/>'}`;
     });
-    out.push(`<cml:molecule id="m${m}"><cml:atomArray>${atomXml.join('')}</cml:atomArray>${bondXml.length ? `<cml:bondArray>${bondXml.join('')}</cml:bondArray>` : ''}</cml:molecule>`);
+    const sig = chemSig(atoms.map((a) => ({ key: atomId.get(a.id)!, type: cmlElementType(a), charge: a.charge || 0, iso: a.isotope || 0 })),
+      bonds.map((b) => ({ a: atomId.get(b.a1)!, b: atomId.get(b.a2)!, order: ORDER_OUT.find(([v]) => Math.abs(v - b.order) < 1e-6)?.[1] ?? (b.order >= 3 ? 'T' : 'S'), stereo: STEREO_OUT[b.display] ?? '' })));
+    const own = names.get(sig) ?? [];
+    names.delete(sig);
+    out.push(`<cml:molecule id="m${m}">${own.join('')}<cml:atomArray>${atomXml.join('')}</cml:atomArray>${bondXml.length ? `<cml:bondArray>${bondXml.join('')}</cml:bondArray>` : ''}</cml:molecule>`);
   }
   return `<?xml version="1.0" encoding="utf-8"?>\n<cml:cml xmlns:conventions="http://www.xml-cml.org/convention/" xmlns:cml="${CML_NS}" xmlns:cmlDict="http://www.xml-cml.org/dictionary/cml/" xmlns:nameDict="http://www.xml-cml.org/dictionary/cml/name/" xmlns:c4w="${C4W_NS}" conventions="convention:molecular"><c4w:customXmlPartGuid>${xml(guid)}</c4w:customXmlPartGuid>${out.join('')}</cml:cml>`;
 }

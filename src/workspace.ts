@@ -150,7 +150,7 @@ function exchangeFile(doc: Doc, type: FileType, name: string, v3000 = false): { 
   const got = type === MOL ? writeMolFile(doc, stem, { v3000 }) : type === SDF ? writeSdfFile(doc, { v3000 }) : type === RXN ? writeRxnFile(doc, stem, { v3000 })
     : type === MRV ? writeMrvFile(doc) : type === KET ? writeKetFile(doc) : type === CML ? writeCmlFile(doc) : writeChemDoodleJson(doc);
   const kept = type === MOL || type === SDF ? 'structures only' : type === RXN ? 'the first reaction step only' : type === CDJSON ? 'structures and arrows only' : 'structures, straight arrows and text only';
-  const unknown = got.unknown.length ? `; not understood, so written as R groups: ${got.unknown.join(', ')}` : '';
+  const unknown = got.unknown.length ? `; labels kept as text, not read as chemistry: ${got.unknown.join(', ')}` : '';
   return { data: got.text, type, note: ` (${kept}: save as .cdxml to keep everything${unknown})` };
 }
 
@@ -524,6 +524,7 @@ export class Workspace {
       else {
         const text = new TextDecoder().decode(bytes);
         const fmt = FOREIGN_EXTENSIONS.includes(ext) || !/^\s*(<\?xml[^>]*>\s*)?(<!DOCTYPE[^>]*>\s*)?<CDXML/i.test(text) ? chemFormatOf(file, text) : null;
+        if (!fmt && ext === 'json') throw new Error('it isn\'t a Ketcher (KET) or ChemDoodle JSON file');
         ok = fmt ? this.openForeign(fmt, text, name, ref) : this.openDrawing(text, name, ref);
       }
       if (ok && ref.kind === 'path' && !this.quiet) this.hooks.remember?.(ref.path);

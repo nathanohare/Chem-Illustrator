@@ -7,6 +7,7 @@
 
 import { emptyIndex, searchFiles, type FileIndex, type Hit, type SearchDeps, type SearchMode } from '../library/file-index';
 import { SEARCHED_EXTENSIONS, spotText } from '../library/structures';
+import { withInfo } from './info-tip';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] => {
   const e = Object.assign(document.createElement(tag), props);
@@ -109,8 +110,7 @@ export class FindInFilesWindow {
     });
     this.go = button('Search', 'Search the folder (Enter)', () => void (this.running ? (this.stop = true) : this.search()), true);
     d.append(
-      el('div', { className: 'refs-head' }, el('h2', { textContent: 'Find Structure in Files' })),
-      el('p', { className: 'muted', textContent: `Searches the ChemDraw drawings (CDXML, CDX), Word documents, PowerPoint presentations and Excel workbooks in a folder for a structure. Files read once aren't read again until they change, so searching the same folder again is quick.` }),
+      el('div', { className: 'refs-head' }, withInfo(el('h2', { textContent: 'Find Structure in Files' }), `Searches the ChemDraw drawings (CDXML, CDX), Word documents, PowerPoint presentations, Excel workbooks and other programs' chemistry files (MOL, SDF, RXN, MRV, KET, CML) in a folder for a structure. Files read once aren't read again until they change, so searching the same folder again is quick.`)),
       el('div', { className: 'ask-row refs-style' }, el('label', { textContent: 'Folder' }), this.folder,
         button('Choose…', 'Pick the folder to search', () => void this.choose())),
       el('label', { className: 'ref-own' }, this.sub, el('span', { textContent: 'And the folders inside it' })),

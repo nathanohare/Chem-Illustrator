@@ -137,3 +137,13 @@ describe('the note about structures in Word', () => {
     expect(hasStructures({ ...d, runs: [objectRun(1, {})], objects: { 1: { kind: 'drawing', contents: { ...empty, atoms: [atom] } } } })).toBe(true);
   });
 });
+
+describe('opening a file that is not what its name says', () => {
+  it('says a .json file is not a Ketcher or ChemDoodle file (found in the 2026-11-03 review: it was read as CDXML)', async () => {
+    const { ws } = workspace();
+    const alert = vi.spyOn(window, 'alert').mockImplementation(() => {});
+    expect(await ws.openBytes(new TextEncoder().encode('{"theme":"dark"}'), 'settings.json', { kind: 'none' })).toBe(false);
+    expect(alert).toHaveBeenCalledWith('Could not open settings.json: it isn\'t a Ketcher (KET) or ChemDoodle JSON file');
+    alert.mockRestore();
+  });
+});
