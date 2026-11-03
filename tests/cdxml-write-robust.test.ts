@@ -670,4 +670,31 @@ describe('the CDXML audit, writing side (6): R24, arrows an older ChemDraw kept 
     const y = parse(writeCdxml(d2));
     expect([all(y, 'graphic').length, all(y, 'arrow').length]).toEqual([0, 0]);
   });
+
+  it('read from the graphics themselves: unchanged they save as they were; changed, as ChemDraw arrows that read back the same', () => {
+    const graphics = '<graphic id="10" BoundingBox="80 20 20 20" GraphicType="Line" ArrowType="FullHead" HeadSize="1000"/><graphic id="11" BoundingBox="80 40 20 40" GraphicType="Line" ArrowType="HalfHead" HeadSize="1000"/>'
+      + '<graphic id="12" BoundingBox="80 60 20 60" GraphicType="Line" ArrowType="Equilibrium" HeadSize="1000"/><graphic id="13" BoundingBox="80 80 20 80" GraphicType="Line" ArrowType="Resonance" HeadSize="1000"/>'
+      + '<graphic id="14" BoundingBox="80 100 20 100" GraphicType="Line" ArrowType="RetroSynthetic" HeadSize="1000"/><graphic id="15" BoundingBox="80 120 20 120" GraphicType="Line" ArrowType="Hollow" HeadSize="1000"/>'
+      + '<graphic id="16" BoundingBox="80 140 20 140" GraphicType="Line" ArrowType="NoHead"/>'
+      + '<graphic id="18" BoundingBox="150 50 120 50" GraphicType="Arc" ArrowType="FullHead" HeadSize="1000" AngularSize="90"/><graphic id="19" BoundingBox="150 120 120 120" GraphicType="Arc" ArrowType="NoHead" AngularSize="-120"/>';
+    const text = file(graphics);
+    const doc = readCdxml(text).doc;
+    expect(doc.arrows.size).toBe(8);
+    expect(writeCdxml(doc)).toBe(text);
+    const before = [...doc.arrows.values()];
+    doc.edit('Colour', () => { for (const r of doc.arrows.values()) doc.updateArrow(r.id, { color: '#ff0000' }); });
+    const out = writeCdxml(doc), x = parse(out);
+    // (the plain line stays a line)
+    expect(all(x, 'graphic').map((g) => g.getAttribute('id'))).toEqual(['16']);
+    expect(all(x, 'arrow').map((a) => a.getAttribute('id'))).toEqual(['10', '11', '12', '13', '14', '15', '18', '19']);
+    const after = [...readCdxml(out).doc.arrows.values()];
+    expect(after).toHaveLength(8);
+    after.forEach((b, i) => {
+      const a = before[i];
+      for (const k of ['headStyle', 'tailStyle', 'headType', 'equilibrium', 'headCenter'] as const) expect([i, k, b[k]]).toEqual([i, k, a[k]]);
+      for (const k of ['sweep', 'headLength', 'headWidth'] as const) expect(b[k]).toBeCloseTo(a[k] as number, 2);
+      expect(b.shaftSpacing ?? 0).toBeCloseTo(a.shaftSpacing ?? 0, 2);
+      for (const end of ['head', 'tail'] as const) { expect(b[end].x).toBeCloseTo(a[end].x, 1); expect(b[end].y).toBeCloseTo(a[end].y, 1); }
+    });
+  });
 });
