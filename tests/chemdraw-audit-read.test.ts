@@ -61,8 +61,8 @@ describe('the CDXML audit, reading side (2)', () => {
     expect(d.arrows.get(31)!.headStyle).toBe('none');
   });
 
-  it("ChemDraw's aromatic bond (Order 1.5) is one line; its dashed one is Order 2 with Display2 Dash", () => {
-    const d = doc('<fragment id="2"><n id="10" p="0 0"/><n id="11" p="30 0"/><n id="12" p="60 0"/><b id="20" B="10" E="11" Order="1.5"/><b id="21" B="11" E="12" Order="2" Display2="Dash"/></fragment>');
+  it("ChemDraw's aromatic bond (Order 1.5) is one line; its dashed one is Order 1.5 with Display2 Dash", () => {
+    const d = doc('<fragment id="2"><n id="10" p="0 0"/><n id="11" p="30 0"/><n id="12" p="60 0"/><b id="20" B="10" E="11" Order="1.5"/><b id="21" B="11" E="12" Order="1.5" Display2="Dash"/></fragment>');
     expect(d.bonds.get(20)!.plain).toBe(true);
     expect(d.bonds.get(21)!.order).toBe(1.5);
     expect(d.bonds.get(21)!.plain).toBeUndefined();
@@ -201,10 +201,10 @@ describe('the CDXML audit, reading side (8): R27, R31, R35, R40, R41, R42, E12',
     expect(shaftInto(10, 'solid', 1)).toBeCloseTo(7, 6);
   });
 
-  it('R27, R40: annotations are no warning; variable attachments and link nodes are', () => {
+  it('R27, R40: annotations are no warning; link nodes are', () => {
     const { stats } = page('<annotation id="3" Keyword="x" Content="y"/><fragment id="2"><n id="10" p="10 10" NodeType="VariableAttachment" Attachments="2 11 12"/><n id="11" p="24.4 10"/><n id="12" p="30 20" NodeType="LinkNode"/><b id="20" B="10" E="11"/><b id="21" B="11" E="12"/></fragment>');
     expect(stats.skipped.annotation).toBeUndefined();
-    expect(stats.skipped['VariableAttachment node']).toBe(1);
+    expect(stats.skipped['VariableAttachment node']).toBeUndefined();
     expect(stats.skipped['LinkNode node']).toBe(1);
   });
 

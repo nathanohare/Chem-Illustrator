@@ -9,7 +9,7 @@ import { fillFrameMembers, frameFromTag } from '../editor/frames';
 import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachFromTag, fillAttachments } from '../editor/attached';
 import { readSpecies } from '../chem/species';
 import { highlightStyleFromTag } from '../render/highlight';
-import { attachRingFills, ringGeometry } from '../chem/ring-fill';
+import { attachRingFills, ringGeometry, ringsIn } from '../chem/ring-fill';
 import { paperOf } from './cdxml-print';
 import { lipDirection } from '../chem/polymer';
 import { Doc, Atom, Bond, BondDisplay, TextRun, Arrow, Shape, Entity, Kind, StereoLabel, Caption, StepRoles, MorphStep, CHIRAL_FLAGS, PARTIAL, PAPER, type Pin, type PictureFx, type ShapeMath, type HighlightStyle } from '../model';
@@ -275,24 +275,25 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       return;
     }
     const nodeIds = new Map<string, number>();
-    const pendingMulti: { id: number; key: string; ids: string[] }[] = [];
+    const pendingMulti: { id: number; key: string; ids: string[]; x: number; y: number; el: Element }[] = [];
+    const variables: { id: number; x: number; y: number; ring: number[] | null }[] = [];
     for (const n of kids(frag)) {
       if (n.nodeName !== 'n' || asText.has(n)) continue;
       const type = n.getAttribute('NodeType');
       const [x, y] = pts(n.getAttribute('p'));
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
       const id = idFor(n);
-      if (type === 'MultiAttachment') {
+      if (type === 'MultiAttachment' || type === 'VariableAttachment') {
         // the middle of a ring or π-bond a metal is bonded to: its atoms are read once they all are
-        const a = doc.addAtom(x, y, 0, { id, multi: [] });
+        const a = doc.addAtom(x, y, 0, { id, multi: [], ...(type === 'VariableAttachment' ? { variable: true } : {}) });
         if (kids(n).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === KEKULE_TAG)) a.kekule = true;
-        pendingMulti.push({ id: a.id, key: n.getAttribute('id') ?? '', ids: (n.getAttribute('Attachments') ?? '').trim().split(/\s+/).filter(Boolean) });
+        pendingMulti.push({ id: a.id, key: n.getAttribute('id') ?? '', ids: (n.getAttribute('Attachments') ?? '').trim().split(/\s+/).filter(Boolean), x, y, el: n });
         from('a', a.id, n);
         nodeIds.set(n.getAttribute('id') ?? '', id);
         continue;
       }
       // read as plain atoms, which they aren't quite: said so in the read's warnings
-      if (type === 'VariableAttachment' || type === 'LinkNode') skip(`${type} node`);
+      if (type === 'LinkNode') skip(`${type} node`);
       if (n.getAttribute('HDot') === 'yes' || n.getAttribute('HDash') === 'yes') skip('H dot or dash on an atom');
       if (type === 'ExternalConnectionPoint') {
         // a point of attachment drawn on its own (the wavy line ending a substituent)
@@ -412,7 +413,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     }
     for (const m of pendingMulti.splice(0)) {
       const atoms = m.ids.map((x) => nodeIds.get(x)).filter((x): x is number => x !== undefined);
-      if (atoms.length >= 2) doc.updateAtom(m.id, { multi: atoms });
+      if (atoms.length >= 2) { doc.updateAtom(m.id, { multi: atoms }); if (doc.atoms.get(m.id)!.variable) variables.push({ ...m, ring: ringFromTag(m.el, nodeIds) }); }
       else { doc.removeAtom(m.id); nodeIds.delete(m.key); skip('multicenter attachment without its atoms'); }
     }
     const bondIds = new Map<string, number>();
@@ -431,8 +432,12 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       const disp = b.getAttribute('Display');
       let swap = false;
       switch (disp) {
-        case 'WedgeBegin': case 'HollowWedgeBegin': display = 'wedge'; break;
-        case 'WedgeEnd': case 'HollowWedgeEnd': display = 'wedge'; swap = true; break;
+        case 'WedgeBegin': display = 'wedge'; break;
+        case 'WedgeEnd': display = 'wedge'; swap = true; break;
+        case 'HollowWedgeBegin': display = 'hollowWedge'; break;
+        case 'HollowWedgeEnd': display = 'hollowWedge'; swap = true; break;
+        case 'WavyWedgeBegin': display = 'wavyWedge'; break;
+        case 'WavyWedgeEnd': display = 'wavyWedge'; swap = true; break;
         case 'WedgedHashBegin': display = 'hashWedge'; break;
         case 'WedgedHashEnd': display = 'hashWedge'; swap = true; break;
         case 'Hash': display = 'hash'; break;
@@ -440,14 +445,26 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         case 'Dash': display = 'dash'; break;
         case 'Wavy': display = 'wavy'; break;
       }
-      if (ord === 'hydrogen' || (order === PARTIAL && display === 'solid')) display = 'dash';
+      if (order === PARTIAL && display === 'solid') display = 'dash';
       if (ord === 'dative') display = 'dative';
-      if (order === 2 && b.getAttribute('Display2') === 'Dash') order = 1.5;
+      if (ord === 'hydrogen') display = 'hydrogen';
+      if (ord === 'ionic') display = 'ionic';
+      const d2 = b.getAttribute('Display2');
+      // looks of ours that ChemDraw 25 can't keep (it draws the nearest it has): our tag holds them,
+      // while ChemDraw's words are still the ones written beside it
+      const look = bondLookOf(kids(b).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === BOND_LOOK_TAG)?.getAttribute('Value'));
+      if (look.display && ord === '1' && disp === (look.display === 'wavyWedge' ? 'Wavy' : 'Dash')) display = look.display;
+      let line2: Bond['line2'];
+      // (ChemDraw saves a double bond with a dashed second line as its dashed aromatic bond, Order 1.5)
+      if (d2 === 'Dash' && (ord === '2' || (ord === '1.5' && look.line2 === 'dash'))) { order = 2; line2 = 'dash'; }
+      else if (order === 2 && (d2 === 'Bold' || d2 === 'Hash')) line2 = d2 === 'Bold' ? 'bold' : 'hash';
+      else if (order === 2 && !d2 && (look.line2 === 'bold' || look.line2 === 'hash')) line2 = look.line2;
       let dpos: Bond['dpos'] = 'auto';
       const dp = b.getAttribute('DoublePosition');
+      // (ChemDraw's Right is on the left of B to E as drawn, y running down, whichever way the bond runs: measured from its pictures)
       if (dp === 'Center') dpos = 'center';
-      else if (dp === 'Right') dpos = 'right';
-      else if (dp === 'Left') dpos = 'left';
+      else if (dp === 'Right') dpos = 'left';
+      else if (dp === 'Left') dpos = 'right';
       if (swap) {
         [a1, a2] = [a2, a1];
         if (dpos === 'left') dpos = 'right'; else if (dpos === 'right') dpos = 'left';
@@ -455,7 +472,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       const extra: Partial<Bond> = { id: idFor(b), dpos };
       // ChemDraw's aromatic bond (Order="1.5") on its own is drawn as one line; with Display2 Dash it is its
       // dashed aromatic bond (as ChemDraw saves one, though it reads Order 2 with Display2 Dash the same way)
-      if (ord === '1.5' && b.getAttribute('Display2') !== 'Dash') extra.plain = true;
+      if (ord === '1.5' && d2 !== 'Dash') extra.plain = true;
+      if (line2) extra.line2 = line2;
       if (b.getAttribute('IgnoreWarnings') === 'yes') extra.ignoreWarnings = true;
       if (b.getAttribute('ShowBondStereo') === 'yes') extra.showStereo = true;
       // the label characters the bond meets (counted from 0; 0 is the default), with their atoms
@@ -501,6 +519,17 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       const crosses = (b.getAttribute('CrossingBonds') ?? '').trim();
       if (crosses) fileCrossings.push([bond.id, crosses.split(/\s+/)]);
       stats.bonds++;
+    }
+    // a variable attachment goes where the file has it: the middle of its atoms, or of the smallest
+    // ring they are all in (this program keeps it at one or the other, so anywhere else is said so)
+    for (const v of variables) {
+      const a = doc.atoms.get(v.id)!;
+      if (v.ring) { doc.updateAtom(v.id, { ringOf: v.ring }); continue; }
+      const near = (c: { x: number; y: number } | null) => !!c && Math.hypot(c.x - v.x, c.y - v.y) < 0.5;
+      if (near(doc.centreOf({ multi: a.multi }))) { const whole = smallestRing(a.multi!); if (whole && whole.length === a.multi!.length) doc.updateAtom(v.id, { ringOf: whole }); continue; }
+      const ring = smallestRing(a.multi!);
+      if (ring) doc.updateAtom(v.id, { ringOf: ring });
+      if (!near(doc.centreOf(doc.atoms.get(v.id)!))) skip('variable attachment moved to the middle of its atoms');
     }
     // a carbon left on its own with no label (a stray atom): ChemDraw draws nothing there
     for (const n of kids(frag)) {
@@ -706,6 +735,13 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   };
 
   const headOf = (v: string | null): Arrow['headStyle'] => (v === 'Full' ? 'full' : v === 'HalfLeft' ? 'halfLeft' : v === 'HalfRight' ? 'halfRight' : 'none');
+
+  /** The smallest ring holding all of these atoms. */
+  const smallestRing = (atoms: number[]): number[] | null => {
+    let best: number[] | null = null;
+    for (const r of ringsIn(doc, [])) if ((!best || r.length < best.length) && atoms.every((id) => r.includes(id))) best = r;
+    return best;
+  };
 
   const readArrow = (a: Element) => {
     const head = pts(a.getAttribute('Head3D'));
@@ -1572,6 +1608,36 @@ export const PIECE_TAG = 'Chem Illustrator piece';
 export const PIN_TAG = 'Chem Illustrator pin';
 /** An S-shaped arrow saved as a ChemDraw curve: its heads as they are here (JSON). */
 export const CURVE_ARROW_TAG = 'Chem Illustrator arrow';
+
+/** A variable attachment's ring from our tag, while its atoms are still the ones written beside it. */
+function ringFromTag(n: Element, nodeIds: Map<string, number>): number[] | null {
+  const json = kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === RING_TAG)?.getAttribute('Value');
+  if (!json) return null;
+  try {
+    const v = JSON.parse(json) as { ring?: unknown; seen?: { attachments?: unknown } };
+    if (!Array.isArray(v.ring) || v.seen?.attachments !== n.getAttribute('Attachments')) return null;
+    const ring = v.ring.map((id) => nodeIds.get(String(id)));
+    return ring.length > 2 && ring.every((id) => id !== undefined) ? ring as number[] : null;
+  } catch { return null; }
+}
+
+/**
+ * A bond's look from our tag: what ChemDraw 25 has no way to keep (it ignores Order hydrogen and
+ * ionic, Display WavyWedge and Display2 Bold and Hash, in CDXML and CDX, and draws a plain bond).
+ * Written beside the nearest ChemDraw has (Display Dash for hydrogen and ionic, Wavy for the wavy
+ * wedge, Display2 Dash for a dashed second line, a plain double bond for the others), and used
+ * only while those words stand.
+ */
+function bondLookOf(json: string | null | undefined): { display?: 'hydrogen' | 'ionic' | 'wavyWedge'; line2?: 'dash' | 'bold' | 'hash' } {
+  if (!json) return {};
+  try {
+    const v = JSON.parse(json) as { display?: unknown; line2?: unknown };
+    return {
+      ...(v.display === 'hydrogen' || v.display === 'ionic' || v.display === 'wavyWedge' ? { display: v.display } : {}),
+      ...(v.line2 === 'dash' || v.line2 === 'bold' || v.line2 === 'hash' ? { line2: v.line2 } : {}),
+    };
+  } catch { return {}; }
+}
 /** The group's box when saved here (ChemDraw rewrites BoundingBox when the group is moved). */
 export const GEO_BOX_ATTR = 'ChemIllustratorBox';
 /** A tag of this program's own (ChemDraw's own tags, such as "stereo", are left as they are). */

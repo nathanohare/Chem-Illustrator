@@ -1464,11 +1464,12 @@ export class Renderer {
           break;
         }
         case 'hollowWedge': {
-          // the outline of a wedge: a point at a1, the wide end at a2
-          const he = wedgeWidth(st) / 2 - st.lineWidth / 2;
-          thin.moveTo(s.x, s.y);
+          // the outline of a wedge, as ChemDraw 25 strokes it: a line width across at a1, a wedge's width at a2
+          const he = wedgeWidth(st) / 2, ne = st.lineWidth / 2;
+          thin.moveTo(s.x + nrm.x * ne, s.y + nrm.y * ne);
           thin.lineTo(e.x + nrm.x * he, e.y + nrm.y * he);
           thin.lineTo(e.x - nrm.x * he, e.y - nrm.y * he);
+          thin.lineTo(s.x - nrm.x * ne, s.y - nrm.y * ne);
           thin.closePath();
           break;
         }
@@ -1558,8 +1559,9 @@ export class Renderer {
     const off = mul(nrm, gap * info.side);
     const pLabelled = this.atomInfo(doc, p).boxes.length > 0;
     const qLabelled = this.atomInfo(doc, q).boxes.length > 0;
-    const t1 = pLabelled ? 0 : Math.min(gap * info.trim1 + gap * 0.15, l * 0.3);
-    const t2 = qLabelled ? 0 : Math.min(gap * info.trim2 + gap * 0.15, l * 0.3);
+    // (as ChemDraw 25 draws it: back only as far as the bond beside it on that side, so a free end is full length)
+    const t1 = pLabelled ? 0 : Math.min(gap * info.trim1, l * 0.3);
+    const t2 = qLabelled ? 0 : Math.min(gap * info.trim2, l * 0.3);
     // a wedged or hashed main line (a perspective ring) is drawn as the single bond would be
     if (b.display === 'wedge') { if (!this.fillBand(doc, b, p, q, fills, gaps)) line(thin, s, e); }
     else if (b.display === 'hashWedge' || b.display === 'hash') this.bondPaths(doc, { ...b, order: 1 }, p, q, bb);

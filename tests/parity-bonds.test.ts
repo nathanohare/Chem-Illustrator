@@ -99,9 +99,9 @@ describe('new bond styles', () => {
     // the dots: one filled path of many closed circles along y = 0
     const dots = fills(items).flatMap((f) => f.segs.filter((s) => s.k === 'M')).filter((s) => Math.abs(s.y) < 1);
     expect(dots.length).toBeGreaterThan(4);
-    // the outline: a closed stroked triangle from the point at c
+    // the outline: closed and stroked, a line width across at c as ChemDraw 25 draws it
     const tri = lines(items).filter(([x1, y1]) => y1 > 30 || x1 > 100);
-    expect(tri.some(([x1, y1]) => near(x1, y1, c))).toBe(true);
+    expect(tri.some(([x1, y1]) => Math.hypot(x1 - c.x, y1 - c.y) <= doc.style.lineWidth / 2 + 1e-6)).toBe(true);
   });
 
   it('draws a hashed second line as strokes across it', () => {
