@@ -66,7 +66,7 @@ export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 4
   // Atoms join along their strongest couplings first (|J| / shift difference: how far from first
   // order the pair is); couplings left between clusters are kept as weak couplings (J Iz Iz),
   // which is exact to first order, so every multiplet keeps all its splittings.
-  const hAtoms = g.atoms.map((a, i) => i).filter((i) => !Number.isNaN(h1[i]) && g.atoms[i].h > 0);
+  const hAtoms = g.atoms.map((_, i) => i).filter((i) => !Number.isNaN(h1[i]) && g.atoms[i].h > 0);
   const jAt = new Map<string, number>();
   for (const c of cs) if (c.a !== c.b) jAt.set(`${Math.min(c.a, c.b)},${Math.max(c.a, c.b)}`, c.j);
   const J = (a: number, b: number) => jAt.get(`${Math.min(a, b)},${Math.max(a, b)}`) ?? 0;
