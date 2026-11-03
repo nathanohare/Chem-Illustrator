@@ -1193,13 +1193,43 @@ export class Renderer {
   }
 
   /** A band's outline, its ends mitred into the bands they meet, into the batch's fills. */
-  private fillBand(doc: Doc, b: Bond, p: Atom, q: Atom, fills: Path2D): boolean {
+  private fillBand(doc: Doc, b: Bond, p: Atom, q: Atom, fills: Path2D, gaps: [number, number][] = []): boolean {
     const band = this.band(doc, b, p, q);
     if (!band) return false;
     const { s, e, hs, he } = band;
     const nrm = perp(norm(sub(e, s)));
     // at s, "plus" is the +nrm side; at e (looking back along the bond) it is the -nrm side
     const js = this.bandJoin(doc, p, b.id), je = this.bandJoin(doc, q, b.id);
+    const fillPoly = (poly: Vec[]) => {
+      // all one way round, so where bands overlap at a join (non-zero fill) they don't cancel
+      let area = 0;
+      poly.forEach((v, i) => { const w = poly[(i + 1) % poly.length]; area += v.x * w.y - w.x * v.y; });
+      const ring = area < 0 ? [...poly].reverse() : poly;
+      fills.moveTo(ring[0].x, ring[0].y);
+      for (const v of ring.slice(1)) fills.lineTo(v.x, v.y);
+      fills.closePath();
+    };
+    if (gaps.length) {
+      // behind a bond that crosses it: the band in pieces, with a gap where the other passes in front
+      const d = sub(e, s), dd = dot(d, d) || 1, pq = sub(q, p);
+      const tOf = (g: number) => dot(sub(add(p, mul(pq, g)), s), d) / dd;
+      let from = 0;
+      const piece = (t0: number, t1: number) => {
+        if (t1 - t0 < 1e-3) return;
+        const at = (t: number, side: number) => add(add(s, mul(d, t)), mul(nrm, side * (hs + (he - hs) * t)));
+        // the pieces that reach the bond's ends keep their joins there
+        const j0 = t0 <= 0 ? js : null, j1 = t1 >= 1 ? je : null;
+        fillPoly([j0?.plus ?? at(t0, 1), j1?.minus ?? at(t1, 1), ...(j1 ? [e] : []), j1?.plus ?? at(t1, -1), j0?.minus ?? at(t0, -1), ...(j0 ? [s] : [])]);
+        for (const poly of [...(j0?.fill ?? []), ...(j1?.fill ?? [])]) fillPoly(poly);
+      };
+      for (const [g0, g1] of gaps.map(([a, c]) => [tOf(a), tOf(c)].sort((x, y) => x - y)).sort((x, y) => x[0] - y[0])) {
+        if (g1 <= from || g0 >= 1) continue;
+        if (g0 > from) piece(from, Math.min(1, g0));
+        from = Math.max(from, g1);
+      }
+      if (from < 1) piece(Math.max(0, from), 1);
+      return true;
+    }
     // a joined end also takes in the atom, so where three bands meet none leaves a hole between them
     const pts = [
       js?.plus ?? add(s, mul(nrm, hs)),
@@ -1209,15 +1239,7 @@ export class Renderer {
       js?.minus ?? sub(s, mul(nrm, hs)),
       ...(js ? [s] : []),
     ];
-    for (const poly of [pts, ...(js?.fill ?? []), ...(je?.fill ?? [])]) {
-      // all one way round, so where bands overlap at a join (non-zero fill) they don't cancel
-      let area = 0;
-      poly.forEach((v, i) => { const w = poly[(i + 1) % poly.length]; area += v.x * w.y - w.x * v.y; });
-      const ring = area < 0 ? [...poly].reverse() : poly;
-      fills.moveTo(ring[0].x, ring[0].y);
-      for (const v of ring.slice(1)) fills.lineTo(v.x, v.y);
-      fills.closePath();
-    }
+    for (const poly of [pts, ...(js?.fill ?? []), ...(je?.fill ?? [])]) fillPoly(poly);
     return true;
   }
 
@@ -1358,9 +1380,9 @@ export class Renderer {
           break;
         }
         // a band (narrow at a1 and wide at a2 for a wedge), mitred into bold bands it meets
-        case 'bold': if (!this.fillBand(doc, b, p, q, fills)) line(bold, s, e); break;
+        case 'bold': if (!this.fillBand(doc, b, p, q, fills, gaps)) line(bold, s, e); break;
         case 'dash': line(dashed, s, e); break;
-        case 'wedge': this.fillBand(doc, b, p, q, fills); break;
+        case 'wedge': this.fillBand(doc, b, p, q, fills, gaps); break;
         case 'hashWedge': {
           const w = wedgeWidth(st) / 2;
           // as ChemDraw 25 draws them: hashes a line width thick, the first at the narrow end and
@@ -1374,6 +1396,7 @@ export class Renderer {
           for (let i = 0; i < n; i++) {
             const t = (h0 + lw / 2 + (run * i) / (n - 1)) / l;
             const c = add(s, mul(d, t));
+            if (gaps.length) { const g = along(c); if (gaps.some(([g0, g1]) => g > g0 && g < g1)) continue; }
             const hw = lw / 2 + (w - lw / 2) * t;
             line(thin, add(c, mul(nrm, hw)), sub(c, mul(nrm, hw)));
           }
