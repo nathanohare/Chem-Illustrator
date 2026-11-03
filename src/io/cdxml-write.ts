@@ -1792,6 +1792,18 @@ class CdxmlWriter {
         // in hundredths of the line width, as ChemDraw stores them
         set('CornerRadius', s.rounded ? String(Math.round(((s.radius ?? 6 * this.doc.style.lineWidth) / this.doc.style.lineWidth) * 100)) : null);
         set('ShadowSize', s.shadow ? String(Math.round(((s.shadowSize ?? 4 * this.doc.style.lineWidth) / this.doc.style.lineWidth) * 100)) : null);
+        // a turned box (ChemDraw's diamond is a square turned 45°): its middle and the ends of its
+        // two half-axes, turned, as ChemDraw stores them, and the box round its turned corners
+        if (s.rot && ((s.rot % 360) + 360) % 360 > 1e-6) {
+          const c = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };
+          const hw = Math.abs(s.x2 - s.x1) / 2, hh = Math.abs(s.y2 - s.y1) / 2;
+          const t = (s.rot * Math.PI) / 180, cos = Math.cos(t), sin = Math.sin(t);
+          const ex = Math.abs(hw * cos) + Math.abs(hh * sin), ey = Math.abs(hw * sin) + Math.abs(hh * cos);
+          set('BoundingBox', s.shadow ? box({ x1: c.x + ex, y1: c.y + ey, x2: c.x - ex, y2: c.y - ey }) : box({ x1: c.x - ex, y1: c.y - ey, x2: c.x + ex, y2: c.y + ey }));
+          set('Center3D', pt3(c));
+          set('MajorAxisEnd3D', pt3({ x: c.x + hw * cos, y: c.y + hw * sin }));
+          set('MinorAxisEnd3D', pt3({ x: c.x - hh * sin, y: c.y + hh * cos }));
+        }
         break;
       case 'oval': {
         const c = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };
