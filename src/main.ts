@@ -2371,6 +2371,8 @@ let structuresLocked = false;
 let startView = true;
 /** Settings ▸ Preferences: Enter finishes text typed with the Text tool, Alt+Enter starts a new line. */
 let enterFinishesText = false;
+/** Settings ▸ Preferences: a document whose structures aren't figures offers to make them figures on opening. */
+let offerFigures = true;
 // everywhere the Text tool types (Canvas, structures in documents and spreadsheets, text boxes on
 // slides and designs); text in shapes, tables and slide placeholders follows it except on slides
 // and designs, which keep PowerPoint's keys there
@@ -6456,6 +6458,8 @@ async function customSlideSize(): Promise<void> {
 
 /** How Auto-Animate Steps was last set (the next starts the same way). */
 let autoSteps: AutoStepsOptions = { ...AUTO_STEPS_DEFAULTS };
+/** Camera Follow on a canvas slide with a route of its own: in a copy of the slide (the original hidden), or replacing its keyframes. */
+let autoStepsRoute: 'copy' | 'replace' = 'copy';
 
 /** Animations ▸ Auto-Animate Steps…: the selected scheme (every scheme on the slide when nothing is selected) built a step at a time. */
 async function autoAnimateSteps(): Promise<void> {
@@ -6474,14 +6478,37 @@ async function autoAnimateSteps(): Promise<void> {
   if (!pieces) { flash('Select a scheme with reaction arrows first (or nothing, to build every scheme on the slide).'); return; }
   const steps = Math.max(...pieces.map((p) => p.step));
   const canvas = !!slide.canvas;
+  // a route built by hand (more than the one keyframe a canvas slide starts with) can be kept
+  const route = (slide.canvas?.keys.length ?? 0) > 1;
+  const cameraNow = !autoSteps.camera ? 'off' : route ? autoStepsRoute : 'on';
+  const cameraOptions = route
+    ? [{ value: 'copy', label: 'On, in a copy of this slide (this one is hidden)' }, { value: 'replace', label: 'On, replacing this slide\'s keyframes' }, { value: 'off', label: 'Off' }]
+    : [{ value: 'on', label: 'On' }, { value: 'off', label: 'Off' }];
   const got = await ask('Auto-Animate Steps', [
     { name: 'effect', label: 'Effect', value: autoSteps.effect, options: [{ value: 'wipe', label: 'Wipe, along each arrow' }, { value: 'fade', label: 'Fade' }, { value: 'appear', label: 'Appear' }] },
     { name: 'product', label: 'Each product', value: autoSteps.product, options: [{ value: 'after', label: 'Right after its arrow' }, { value: 'with', label: 'With its arrow' }, { value: 'click', label: 'On a click of its own' }] },
     { name: 'first', label: 'The first species comes in on the first click too', value: String(autoSteps.first), type: 'checkbox' },
-    ...(canvas ? [{ name: 'camera', label: 'Camera Follow: a keyframe for each step, the view moving along the route (replaces this canvas slide\'s keyframes)', value: String(autoSteps.camera), type: 'checkbox' as const }] : []),
+    ...(canvas ? [{ name: 'camera', label: 'Camera Follow', value: cameraNow, options: cameraOptions, help: route
+      ? 'A keyframe for each step, the view moving along the route as it is built. This slide already has keyframes: a copy keeps them, as this slide (hidden from the show, so you can go back to it); replacing them puts the steps\' keyframes in their place.'
+      : 'A keyframe for each step, the view moving along the route as it is built.' }] : []),
   ], { ok: 'Animate', note: `${steps} step${steps > 1 ? 's' : ''} found. Each click brings the next arrow with its conditions, then what it makes. The animations are ordinary ones: change them in the Animation Pane.`, preview: { title: 'Preview: the first clicks', draw: (v) => stepPreview(sdoc, pieces, v) } });
   if (!got || deckNow() !== d || d.index !== i) return;
-  autoSteps = { effect: got.effect as AutoStepsOptions['effect'], product: got.product as AutoStepsOptions['product'], first: got.first === 'true', camera: got.camera === 'true' };
+  const camera = got.camera ?? (autoSteps.camera ? 'on' : 'off');
+  autoSteps = { effect: got.effect as AutoStepsOptions['effect'], product: got.product as AutoStepsOptions['product'], first: got.first === 'true', camera: camera !== 'off' };
+  if (camera === 'copy' || camera === 'replace') autoStepsRoute = camera;
+  if (canvas && route && camera === 'copy') {
+    // the steps go on a copy of the slide (one undo step); this slide keeps its route, hidden from the show
+    const copy = new Doc();
+    copy.style = { ...sdoc.style };
+    copy.restoreContents(sdoc.contents());
+    copy.edit('Auto-Animate Steps', () => markPieces(copy, pieces));
+    const out = stepAnims(copy, pieces, autoSteps, slide.anims ?? [], { data: slide.canvas!, size: d.size });
+    d.copyHidingOriginal(i, copy.contents(), { anims: out.anims, ...(out.canvas ? { canvas: out.canvas } : {}) }, 'Auto-Animate Steps');
+    if (animUi && !animUi.paneShown) animUi.showPane(true);
+    buildHint.refresh();
+    flash(`Animated ${steps} step${steps > 1 ? 's' : ''} on a copy of the slide, with ${out.canvas?.keys.length ?? 0} keyframes. The original, with its own keyframes, is hidden from the show.`);
+    return;
+  }
   sdoc.edit('Auto-Animate Steps', () => markPieces(sdoc, pieces));
   const out = stepAnims(sdoc, pieces, autoSteps, slide.anims ?? [], canvas && autoSteps.camera ? { data: slide.canvas!, size: d.size } : undefined);
   if (out.canvas) d.setCanvas(out.canvas, 'Auto-Animate Steps', i);
@@ -7553,6 +7580,7 @@ function loadDocMode(): Promise<DocumentMode> {
       key: (e) => docKey(e),
       command: (name) => command(name),
       changed: () => ws.noteChange(),
+      offerFigures: () => offerFigures,
       editDrawing: (contents, title, done) => editCellStructure(contents, title, done, docStyle()),
       editInPlace: (contents, p, done) => editCellStructure(contents, p.title, done, docStyle(), p),
       editDiagram: (contents) => documentDiagram(contents),
@@ -9959,9 +9987,12 @@ async function personalPreferences(): Promise<void> {
       { value: 'disc', label: 'A soft red disc' }, { value: 'box', label: 'A thin red box' }, { value: 'circle', label: 'A red circle' },
       { value: 'dashed', label: 'A dashed red circle' }, { value: 'corners', label: 'Red corner marks' }],
       help: 'Atoms with too many bonds, labels that can\'t be read and other problems the Warnings box lists. Clear Show on drawing (Warnings) to hide the marks.' },
+    { name: 'offerFigures', label: 'Offer to make structures figures when opening a document', type: 'checkbox', value: String(offerFigures),
+      help: 'A bar over the pages offers Make Figures when a document\'s structures aren\'t figures yet (a Word file from ChemDraw, for one). Don\'t Ask for This File on the bar turns it off for one document. Make All Structures Figures… stays on a structure\'s right-click menu either way.' },
   ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(parseAlkylLook(v.alkylLook)) } });
   if (!r) return;
   enterFinishesText = r.enterFinishes === 'enter';
+  offerFigures = r.offerFigures === 'true';
   setWarnLook(r.warnLook as Settings['warnLook']);
   const look = parseAlkylLook(r.alkylLook);
   const changed = look !== alkylPrefs.look;
@@ -10058,6 +10089,7 @@ function currentSettings(): Settings {
     ribbonNames,
     startView,
     enterFinishesText,
+    offerFigures,
     page: defaultPage,
     welcomed,
     groupTips: labelTips.enabled,
@@ -10311,6 +10343,7 @@ function applySettings(s: Settings): void {
   setRibbonLook(s.canvasRibbon, s.ribbonNames);
   startView = s.startView;
   enterFinishesText = s.enterFinishesText;
+  offerFigures = s.offerFigures;
   showGroupTips(s.groupTips);
   showToolTips(s.toolTips);
   setTouchMode(s.touchMode);

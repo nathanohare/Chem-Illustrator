@@ -135,7 +135,11 @@ export class FigureOffer {
   /** Files already offered (once each). */
   private offered = new WeakSet<DocFile>();
 
-  constructor(pane: HTMLElement, private hooks: { view(): DocView; apply(t: DocText, kind: string): void; redraw(): void; flash(msg: string): void }) {
+  constructor(pane: HTMLElement, private hooks: {
+    view(): DocView; apply(t: DocText, kind: string): void; redraw(): void; flash(msg: string): void;
+    /** Settings ▸ Preferences: offer on opening a document at all (true unless turned off). */
+    allowed?(): boolean;
+  }) {
     this.bar = document.createElement('div');
     this.bar.className = 'figure-offer';
     this.bar.setAttribute('role', 'status');
@@ -146,17 +150,29 @@ export class FigureOffer {
   /** Previewing: the pages take no other clicks. */
   get previewing(): boolean { return !!this.proposals; }
 
-  /** A file opened: offer once when it has structures that aren't figures. */
+  /**
+   * A file opened: offer once when it has structures that aren't figures, unless the offer is
+   * turned off (Settings ▸ Preferences) or the file says not to ask (Don't Ask for This File).
+   */
   opened(f: DocFile): void {
     if (this.offered.has(f)) return;
     this.offered.add(f);
+    if (f.t.noFigureOffer || this.hooks.allowed?.() === false) return;
     const n = plainStructures(f.t).length;
     if (!n) return;
     this.file = f;
     this.show(`${n === 1 ? 'A structure in this document isn\'t a figure' : `${n} structures in this document aren't figures`}. A figure keeps its area on the page, so drawing in it never moves the text around it.`, [
       ['Preview Figures…', () => this.preview(f), true],
+      ['Don\'t Ask for This File', () => this.dontAsk(f), false],
       ['Not Now', () => this.close(), false],
     ]);
+  }
+
+  /** Don't Ask for This File: the file keeps the answer (it is saved in the .docx), so opening it again doesn't offer. */
+  private dontAsk(f: DocFile): void {
+    this.close();
+    if (!f.t.noFigureOffer) this.hooks.apply({ ...f.t, noFigureOffer: true }, 'Don\'t ask about figures');
+    this.hooks.flash('This file won\'t ask again (saved with it). Right-click a structure for Make All Structures Figures…, or turn the offer off for every file in Settings ▸ Preferences.');
   }
 
   /** Make Figures (from the menu): the preview straight away. */
