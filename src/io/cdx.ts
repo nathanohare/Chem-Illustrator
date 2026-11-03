@@ -36,7 +36,7 @@ const OBJECT_NAMES = new Map(Object.entries(OBJECTS).map(([k, v]) => [v, k]));
 type Kind =
   | 'i8' | 'u8' | 'i16' | 'u16' | 'i32' | 'u32' | 'f64'
   | 'coord' | 'pt2' | 'pt3' | 'rect' | 'str' | 'id' | 'ids' | 'idsCounted' | 'i16list' | 'curvepts'
-  | 'bool' | 'implied' | 'hex'
+  | 'bool' | 'implied' | 'hex' | 'elemlist' | 'genlist'
   | 'x10' | 'deg65536' // INT16 stored ×10 (bond spacing, arc angles); INT32 angle × 65536
   | 'x20' // line heights: UINT16 in 1/20 pt, with 0 and 1 kept for "variable" and "auto"
   | 'enum8' | 'enum16' | 'bits16'
@@ -123,6 +123,9 @@ const P: Record<string, Prop> = {
   NumHydrogens: { tag: 0x042b, kind: 'u16' },
   HDot: { tag: 0x042e, kind: 'implied' },
   HDash: { tag: 0x042f, kind: 'implied' },
+  // a list of elements (or of generic names, such as R or X), "NOT" first for a list of exclusions
+  ElementList: { tag: 0x0403, kind: 'elemlist' },
+  GenericList: { tag: 0x0441, kind: 'genlist' },
   Geometry: { tag: 0x0430, kind: 'enum8', values: { Tetrahedral: 7 } }, // the one value seen in ChemDraw's files
   BondOrdering: { tag: 0x0431, kind: 'ids' },
   Attachments: { tag: 0x0432, kind: 'idsCounted' },
@@ -145,7 +148,7 @@ const P: Record<string, Prop> = {
   ShowNonTerminalCarbonLabels: { tag: 0x0443, kind: 'bool' },
   HideImplicitHydrogens: { tag: 0x0444, kind: 'bool' },
   ShowAtomEnhancedStereo: { tag: 0x0445, kind: 'bool' },
-  EnhancedStereoType: { tag: 0x0446, kind: 'u8' },
+  EnhancedStereoType: { tag: 0x0446, kind: 'enum8', values: list('Unspecified', 'None', 'Absolute', 'Or', 'And') },
   EnhancedStereoGroupNum: { tag: 0x0447, kind: 'u16' },
   // not in the documentation; matched to CDXML in ChemDraw's files
   NeedsClean: { tag: 0x0448, kind: 'implied' },
@@ -220,13 +223,25 @@ const P: Record<string, Prop> = {
   OvalType: { tag: 0x0a04, kind: 'bits16', values: { Plain: 0, Circle: 1, Shaded: 2, Filled: 4, Dashed: 8, Bold: 16, Shadowed: 32 } },
   BracketType: { tag: 0x0a06, kind: 'enum16', values: list('RoundPair', 'SquarePair', 'CurlyPair', 'Square', 'Curly', 'Round') },
   SymbolType: { tag: 0x0a07, kind: 'enum16', values: list('LonePair', 'Electron', 'RadicalCation', 'RadicalAnion', 'CirclePlus', 'CircleMinus', 'Dagger', 'DoubleDagger', 'Plus', 'Minus', 'Racemic', 'Absolute', 'Relative') },
-  OrbitalType: { tag: 0x0a05, kind: 'enum16', values: { s: 0 } }, // only "s" (0) is confirmed
+  OrbitalType: {
+    tag: 0x0a05, kind: 'enum16', values: {
+      s: 0, oval: 1, lobe: 2, p: 3, hybridPlus: 4, hybridMinus: 5, dz2Plus: 6, dz2Minus: 7, dxy: 8,
+      sShaded: 256, ovalShaded: 257, lobeShaded: 258, pShaded: 259,
+      sFilled: 512, ovalFilled: 513, lobeFilled: 514, pFilled: 515, hybridPlusFilled: 516, hybridMinusFilled: 517,
+      dz2PlusFilled: 518, dz2MinusFilled: 519, dxyFilled: 520,
+    },
+  },
   CurveType: { tag: 0x0a08, kind: 'i16' },
   // a count, then each point y first (as 2D points are)
   CurvePoints: { tag: 0x0a23, kind: 'curvepts' },
   HeadSize: { tag: 0x0a20, kind: 'i16' },
   AngularSize: { tag: 0x0a21, kind: 'x10' },
   LipSize: { tag: 0x0a22, kind: 'i16' },
+  BracketUsage: { tag: 0x0a24, kind: 'enum8', values: list('Unspecified', 'Unused1', 'Unused2', 'SRU', 'Monomer', 'Mer', 'Copolymer',
+    'CopolymerAlternating', 'CopolymerRandom', 'CopolymerBlock', 'Crosslink', 'Graft', 'Modification', 'Component',
+    'MixtureUnordered', 'MixtureOrdered', 'MultipleGroup', 'Generic', 'Anypolymer') },
+  PolymerRepeatPattern: { tag: 0x0a25, kind: 'enum8', values: list('HeadToTail', 'HeadToHead', 'EitherUnknown') },
+  PolymerFlipType: { tag: 0x0a26, kind: 'enum8', values: list('Unspecified', 'NoFlip', 'Flip') },
   BracketedObjectIDs: { tag: 0x0a27, kind: 'ids' },
   RepeatCount: { tag: 0x0a28, kind: 'f64' },
   ComponentOrder: { tag: 0x0a29, kind: 'i16' },
@@ -261,7 +276,8 @@ const P: Record<string, Prop> = {
   // FLOAT64 and a Long as INT32.
   TagType: { tag: 0x0d00, kind: 'enum16', values: { Unknown: 0, Double: 1, Long: 2, String: 3 } },
   Value: { tag: 0x0d05, kind: 'str' },
-  PositioningType: { tag: 0x0d06, kind: 'enum8', values: { offset: 2 } },
+  PositioningType: { tag: 0x0d06, kind: 'enum8', values: list('auto', 'angle', 'offset', 'absolute') },
+  PositioningAngle: { tag: 0x0d07, kind: 'deg65536' },
   PositioningOffset: { tag: 0x0d08, kind: 'pt2' },
   // pictures: the picture data, as raw bytes in CDX and in hexadecimal in CDXML
   Edition: { tag: 0x0a60, kind: 'hex' },
@@ -276,6 +292,11 @@ const P: Record<string, Prop> = {
   JPEG: { tag: 0x0a71, kind: 'hex' },
   BMP: { tag: 0x0a72, kind: 'hex' },
   BasisObjects: { tag: 0x0b82, kind: 'ids' },
+  // print settings: the system's print records, kept byte for byte (the paper size and its
+  // orientation are read from MacPrintInfo)
+  MacPrintInfo: { tag: 0x0800, kind: 'hex' },
+  WinPrintInfo: { tag: 0x0801, kind: 'hex' },
+  ChemicalPropertyType: { tag: 0x0bb0, kind: 'u32', values: list('Unspecified', 'ChemicalName') },
   ChemicalPropertyDisplayID: { tag: 0x0bb1, kind: 'id' },
   ChemicalPropertyIsActive: { tag: 0x0bb2, kind: 'bool' },
 };
@@ -386,7 +407,7 @@ function encodeValue(p: Prop, v: string): Uint8Array | null {
       else if (Number.isFinite(n[0])) b.u16(int(n[0]));
       else return null;
       break;
-    case 'i32': case 'u32': if (!Number.isFinite(n[0])) return null; b.i32(int(n[0])); break;
+    case 'i32': case 'u32': if (named !== undefined) b.i32(named); else if (Number.isFinite(n[0])) b.i32(int(n[0])); else return null; break;
     case 'f64': if (!Number.isFinite(n[0])) return null; b.f64(n[0]); break;
     case 'x10': if (!Number.isFinite(n[0])) return null; b.u16(int(n[0] * 10)); break;
     case 'x20':
@@ -410,8 +431,27 @@ function encodeValue(p: Prop, v: string): Uint8Array | null {
     case 'bool': if (v !== 'yes' && v !== 'no') return null; b.u8(v === 'yes' ? 1 : 0); break;
     case 'implied': if (v !== 'yes') return null; break;
     case 'hex': for (let i = 0; i + 1 < v.length; i += 2) b.u8(parseInt(v.slice(i, i + 2), 16)); break;
-    case 'enum8': if (named === undefined) return null; b.u8(named); break;
-    case 'enum16': if (named === undefined) return null; b.u16(named); break;
+    // a count (negative for a NOT list), then the atomic numbers, or the names each as a text
+    case 'elemlist': case 'genlist': {
+      const words = v.trim().split(/\s+/).filter(Boolean);
+      const not = words[0] === 'NOT';
+      const items = not ? words.slice(1) : words;
+      if (!items.length) return null;
+      b.u16((not ? -items.length : items.length) & 0xffff);
+      for (const w of items) {
+        if (p.kind === 'elemlist') {
+          if (!/^\d+$/.test(w)) return null;
+          b.u16(Number(w));
+        } else {
+          const t = encode1252(w);
+          b.u16(t.length + 2); b.u16(0); b.bytes(t);
+        }
+      }
+      break;
+    }
+    // (a value with no name here, written as its number, goes back as that number)
+    case 'enum8': if (named !== undefined) b.u8(named); else if (/^\d+$/.test(v)) b.u8(int(n[0])); else return null; break;
+    case 'enum16': if (named !== undefined) b.u16(named); else if (/^\d+$/.test(v)) b.u16(int(n[0])); else return null; break;
     case 'side': {
       const i = SIDES.indexOf(v);
       if (i < 0) return null;
@@ -510,6 +550,11 @@ function writeObject(out: Bytes, e: Element): void {
   out.u16(tag);
   out.u32(Number(e.getAttribute('id')) || 0);
   writeAttributes(out, e);
+  // an atom's, bond's or text's own label style, and a text's, graphic's or arrow's own caption style
+  // (ChemDraw keeps these on the object, as CDXML does)
+  const at = (k: string) => e.getAttribute(k);
+  if (['n', 'b', 't'].includes(e.nodeName) && (at('LabelFont') || at('LabelSize') || at('LabelFace'))) writeProp(out, TAG_LABELSTYLE, fontStyle(at('LabelFont'), at('LabelFace'), at('LabelSize'), null));
+  if (['t', 'graphic', 'arrow'].includes(e.nodeName) && (at('CaptionFont') || at('CaptionSize') || at('CaptionFace'))) writeProp(out, TAG_CAPTIONSTYLE, fontStyle(at('CaptionFont'), at('CaptionFace'), at('CaptionSize'), null));
   if (e.nodeName === 't') writeText(out, e);
   for (const c of kids(e)) {
     if (c.nodeName === 'represent') {
@@ -639,7 +684,26 @@ function decodeValue(p: Prop, d: Uint8Array): string | null {
     // present means yes, unless ChemDraw wrote a yes/no byte
     case 'implied': return len && !d[0] ? 'no' : 'yes';
     case 'hex': return Array.from(d, (x) => x.toString(16).padStart(2, '0').toUpperCase()).join('');
-    case 'enum8': case 'enum16': return name(int(true));
+    case 'elemlist': case 'genlist': {
+      if (len < 2) return null;
+      const count = v.getInt16(0, true), items: string[] = [];
+      let at = 2;
+      for (let i = 0; i < Math.abs(count) && at < len; i++) {
+        if (p.kind === 'elemlist') { if (at + 2 > len) break; items.push(String(v.getUint16(at, true))); at += 2; continue; }
+        // each name: its length, then a text (a style-run count and the characters)
+        if (at + 2 > len) break;
+        const l = v.getUint16(at, true), end = Math.min(len, at + 2 + l);
+        const runs = l >= 2 ? v.getUint16(at + 2, true) : 0;
+        items.push(decode1252(d.subarray(Math.min(end, at + 4 + runs * 10), end)));
+        at = end;
+      }
+      return items.length ? (count < 0 ? 'NOT ' : '') + items.join(' ') : null;
+    }
+    case 'enum8': case 'enum16': {
+      // a value with no name here is kept as its number, so it goes back to ChemDraw unchanged
+      const x = p.kind === 'enum8' ? (len >= 1 ? v.getUint8(0) : null) : (len >= 2 ? v.getUint16(0, true) : null);
+      return x === null ? null : name(x) ?? (name(int(true)) ?? String(x));
+    }
     case 'side': {
       const x = int(false);
       return x !== null && x & USER_SIDE ? SIDES[x & 0xff] ?? null : null;
@@ -671,7 +735,9 @@ function readObject(r: Reader, name: string, id: number): Node {
     if (tag & 0x8000) {
       const childId = r.u32();
       const child = readObject(r, OBJECT_NAMES.get(tag) ?? '', childId);
+      // an object of a kind not known here: what it holds is kept, in its place
       if (child.name) node.children.push(child);
+      else node.children.push(...child.children.filter((c) => c.name !== 'represent'));
       continue;
     }
     let len = r.u16();
