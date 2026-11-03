@@ -3833,6 +3833,11 @@ function finishTyping(): void {
  * finishTyping: they work on the structure being drawn and leave it open.
  */
 function finishTab(): void {
+  // a figure's structures reaching past its edges: grown round them (Done would ask; here nothing can wait for an answer)
+  if (cellEdit && place?.fitNow) {
+    editor.closeCaption();
+    if (doc.canUndo()) place.fitNow(doc.contents());
+  }
   finishCellStructure(true);
   finishTyping();
 }
@@ -11928,7 +11933,13 @@ function favoritesChanged(): void {
 /** The look of what is selected, wherever it is: a document's text, a caption being typed in, or things on a drawing. */
 function selectionLook(): ObjectLook | null {
   if (sheetActive()) return sheetMode.favoriteLook();
-  if (docActive()) { const t = docMode.pickLook(); return t ? { text: t, colour: { color: t.run.color } } : null; }
+  if (docActive()) {
+    // a picked shape, text box, figure or picture gives its fill and outline; else the text's look
+    const o = docMode.objectLook();
+    if (o) return o;
+    const t = docMode.pickLook();
+    return t ? { text: t, colour: { color: t.run.color } } : null;
+  }
   const cap = editor.typingCaption;
   if (cap) { const t = cap.ed.pickLook(); return { text: t, colour: { color: t.run.color } }; }
   return pickObjectLook(editor.doc, editor.sel);
@@ -11959,6 +11970,10 @@ function applyFavorite(f: FormatFavorite): void {
   const look = f.look;
   if (sheetActive()) { if (!sheetMode.paintFavorite(look, f.name)) flash(`“${f.name}” has no look cells or this object can take.`); return; }
   if (docActive()) {
+    if (docMode.objectLook()) {
+      if (!docMode.paintObjectLook(look, f.name)) flash(`“${f.name}” has no fill or outline for this to take.`);
+      return;
+    }
     if (!look.text) { flash(`“${f.name}” has no text look to give to text.`); return; }
     if (!docMode.paintLook(look.text)) flash('Put the caret in a word, or select some text, first.');
     return;

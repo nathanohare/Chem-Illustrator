@@ -17,7 +17,7 @@ import { askAltText } from './accessibility-pane';
 import { keymap, chordOf, parseAction, type KeyContext } from '../editor/keymap';
 import * as rt from '../richtext';
 import type { Move, TextEditing } from '../text/editing';
-import type { TextLook } from '../format-painter';
+import type { ObjectLook, TextLook } from '../format-painter';
 import { BRUSH } from '../editor/cursors';
 import { offsetAt, caretPos, selectionRects } from '../text/layout';
 import type { Rect } from '../geom';
@@ -61,6 +61,8 @@ import { showsContents, type ObjectPicture } from '../render/object-picture';
 import { newChartBox, sizedBox } from '../sheet/chart-box';
 import { chartBoxPng } from '../render/chart-box-paint';
 import { figures, type DocFile } from '../document/doc-file';
+import { outgrownFrame } from '../document/figures';
+import { docObjectLook, withObjectLook } from '../document/object-look';
 import type { TableData } from '../model';
 import {
   canMerge, coveringCell, deleteColumn, deleteRow, emptyTable, insertColumn, tableFromCells, insertRow, isCovered, mergeDown, mergeRight, nextCell, rowSpanOf, setColumnAlign, setColumnWidth, setPart, splitCell, spanOf,
@@ -490,6 +492,30 @@ export class DocumentMode {
   /** Format Favorites: give the selection (or the word at the caret) a text look kept. False when there was nothing to give it to. */
   paintLook(look: TextLook): boolean {
     return this.file && !this.reading ? this.ed.paintLook(look) : false;
+  }
+
+  /**
+   * Format Favorites: the fill and outline of the picked shape, text box, figure or picture
+   * (null when the caret is in text instead), so a favorite can carry them to other modes.
+   */
+  objectLook(): ObjectLook | null {
+    if (!this.file || this.reading) return null;
+    const id = this.pickedObject();
+    return id !== null ? docObjectLook(this.file.t.objects[id]) : null;
+  }
+
+  /**
+   * Format Favorites: give the picked shape, text box, figure or picture a favorite's fill and
+   * outline (one step to undo). False when nothing is picked or the favorite has neither.
+   */
+  paintObjectLook(look: ObjectLook, name: string): boolean {
+    const f = this.file;
+    const id = this.pickedObject();
+    if (!f || id === null || this.reading) return false;
+    const next = withObjectLook(f.t.objects[id], look);
+    if (!next) return false;
+    f.ed.update({ ...f.t, objects: { ...f.t.objects, [id]: next } } as DocText, `Format Favorite “${name}”`);
+    return true;
   }
 
   /** Insert > Symbol: type a character where the caret is. False when the text can't be typed in (Read Mode). */
@@ -3074,6 +3100,13 @@ export class DocumentMode {
     if (!box) return null;
     // drawing points to the page's
     const s = at0.w / Math.max(1e-6, box.x2 - box.x1);
+    // the figure's area grown round structures that reach past it (null when they fit); grown
+    // round their picture (with its margin), though what is drawn up to the edges still fits
+    const outgrown = (c: Contents): FigureFrame | null => {
+      if (!fr || emptyContents(c)) return null;
+      const rec = figures.record(c, style);
+      return outgrownFrame(fr, rec.doc.bounds(), rec.pic?.box ?? null);
+    };
     const place: InPlace = {
       title: fr ? 'Figure' : fresh ? 'New Structure' : 'Structure',
       rect: () => {
@@ -3130,23 +3163,20 @@ export class DocumentMode {
       },
       beforeDone: fr ? async (c) => {
         // structures reaching past the figure: grow it round them, or go back and draw on
-        // (what is drawn, without the picture's margin round it: a structure drawn up to the edges still fits)
-        const rec = figures.record(c, style);
-        const b = rec.doc.bounds();
-        if (!b || !rec.pic || emptyContents(c)) return true;
-        const need = { x1: Math.min(fr.x, b.x1), y1: Math.min(fr.y, b.y1), x2: Math.max(fr.x + fr.w, b.x2), y2: Math.max(fr.y + fr.h, b.y2) };
-        if (need.x1 >= fr.x - 0.5 && need.y1 >= fr.y - 0.5 && need.x2 <= fr.x + fr.w + 0.5 && need.y2 <= fr.y + fr.h + 0.5) return true;
+        const need = outgrown(c);
+        if (!need) return true;
         const ok = await ask('Grow the Figure?', [], {
           ok: 'Grow Figure',
           note: 'The structure reaches past the edges of its figure. Grow the figure to fit it (the text around it moves to make room), or Cancel to go back to the drawing. Nothing is cut off.',
         });
         if (!ok) return false;
-        // grown round the picture of it (with its margin)
-        const pb = rec.pic.box;
-        const all = { x1: Math.min(fr.x, pb.x1), y1: Math.min(fr.y, pb.y1), x2: Math.max(fr.x + fr.w, pb.x2), y2: Math.max(fr.y + fr.h, pb.y2) };
-        const r = (x: number) => Math.round(x * 100) / 100;
-        grow({ x: r(all.x1), y: r(all.y1), w: r(all.x2 - all.x1), h: r(all.y2 - all.y1) });
+        grow(need);
         return true;
+      } : undefined,
+      // saving, switching tabs or closing mid-drawing: grown without asking (there's no going back to the drawing then)
+      fitNow: fr ? (c) => {
+        const need = outgrown(c);
+        if (need) grow(need);
       } : undefined,
     };
     this.inPlace = { v, place };

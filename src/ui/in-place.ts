@@ -26,6 +26,8 @@ export interface InPlace {
   area(drawn: Rect | null): Rect;
   /** Before Done: false keeps drawing (the structure outgrew its figure and the user went back to it). */
   beforeDone?(c: Contents): Promise<boolean>;
+  /** Saving, switching tabs or closing while drawing: what beforeDone would ask, done without asking (a figure grows round its structures). */
+  fitNow?(c: Contents): void;
 }
 
 /** How far round a structure clicks still draw (when it isn't in a figure), in drawing points. */
