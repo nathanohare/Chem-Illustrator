@@ -184,4 +184,30 @@ describe('which rings', () => {
     expect(whole).not.toHaveBeenCalled();
     expect(performance.now() - t0).toBeLessThan(2000);
   });
+
+  it('checks a molfile of one big structure with many rings quickly', () => {
+    // 200 cyclohexanes joined in a chain (1,200 atoms, like a long polymer): every edit's live
+    // stereo read made a molfile of it, and checking each ring walked the whole structure (1.4 s)
+    const doc = new Doc();
+    const L = doc.style.bondLength;
+    doc.bulk(() => {
+      let prev: number | null = null;
+      for (let m = 0; m < 200; m++) {
+        const ring: number[] = [];
+        for (let k = 0; k < 6; k++) ring.push(doc.addAtom(200 + 3 * L * m + L * Math.cos(k * Math.PI / 3), 200 + L * Math.sin(k * Math.PI / 3)).id);
+        ring.forEach((id, k) => doc.addBond(id, ring[(k + 1) % 6], 1));
+        if (prev !== null) doc.addBond(prev, ring[3], 1);
+        prev = ring[0];
+      }
+    });
+    const t0 = performance.now();
+    toMolfile(doc, doc.atoms.keys());
+    expect(performance.now() - t0).toBeLessThan(150);
+  });
+
+  it('still picks one ring of a selected chain of rings', () => {
+    const { doc, ring } = flat([[0, 'solid']]);
+    const got = viewRingOf(doc, ring);
+    expect('ring' in got && [...got.ring.ring].sort((a, b) => a - b)).toEqual([...ring].sort((a, b) => a - b));
+  });
 });

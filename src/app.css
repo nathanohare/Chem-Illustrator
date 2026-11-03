@@ -795,7 +795,7 @@ dialog.cleanup-picker { width: min(96vw, 720px); max-height: 92vh; }
 dialog.grid-picker { width: min(96vw, 680px); }
 .grid-pick-body { display: grid; grid-template-columns: minmax(0, 16.5em) minmax(0, 1fr); gap: 12px; align-items: start; }
 .grid-pick-fields .ask-row { grid-template-columns: 8em 5.5em 1.5em; margin: 6px 0; }
-.grid-pick-count { font-weight: 600; margin: 0 0 4px; }
+.grid-pick-count { font-weight: 400; font-size: 0.85em; margin-left: 6px; }
 .grid-pick-preview { height: 280px; background: #fff; border: 1px solid var(--line); border-radius: var(--r-tab); padding: 6px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .grid-pick-preview svg { max-width: 100%; max-height: 100%; width: 100%; height: 100%; }
 @media (max-width: 560px) { .grid-pick-body { grid-template-columns: 1fr; } .grid-pick-preview { height: 200px; } }
@@ -1653,7 +1653,8 @@ body.slides-mode #canvas-ribbon, body.design-mode #canvas-ribbon, body.sheet-mod
 /* two rows of buttons under the tabs; the major commands picture over name, both rows tall */
 .canvas-ribbon > .rb-panel { padding: 2px 4px 3px; align-items: stretch; }
 .canvas-ribbon .rb-group { flex-direction: column; align-items: stretch; padding: 0 6px; }
-.canvas-ribbon .rb-label { order: -1; margin: 0 0 1px 3px; font-size: 10px; line-height: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+/* (no group names on the Canvas ribbon: the other modes' ribbons have theirs centered under each group) */
+.canvas-ribbon .rb-label { display: none; }
 .canvas-ribbon .cr-rows { display: grid; grid-auto-flow: column; grid-template-rows: 24px 24px; gap: 1px 2px; align-content: center; }
 .canvas-ribbon button.cr-minor { display: inline-flex; align-items: center; justify-content: center; width: 26px; min-width: 26px; height: 24px; padding: 0; color: var(--accent); }
 .canvas-ribbon button.cr-minor svg { width: 18px; height: 18px; }
@@ -1665,17 +1666,8 @@ body.slides-mode #canvas-ribbon, body.design-mode #canvas-ribbon, body.sheet-mod
 .canvas-ribbon button[data-cr-tool] { color: var(--text); }
 .canvas-ribbon .cr-gallery { align-items: center; }
 .canvas-ribbon.cr-simple .cr-gallery { display: none; }
-/* Settings ▸ Toolboxes and Ribbon: every ribbon's group names along the dividers (reading bottom
-   to top, the group's buttons beside them in as many rows as they have), or none */
-body.rb-names-side .ribbon .rb-group:not(.rb-folded) { display: grid; grid-template-columns: auto auto; justify-content: start; align-items: center; column-gap: 4px; padding-left: 2px; }
-body.rb-names-side .ribbon .rb-group:not(.rb-folded) > * { grid-column: 2; }
-/* (a long name wraps onto a second line rather than making the ribbon taller) */
-body.rb-names-side .ribbon .rb-group:not(.rb-folded) > .rb-label { grid-column: 1; grid-row: 1 / span 8; align-self: center; margin: 0; writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; font-size: 8.5px; line-height: 9.5px; letter-spacing: 0.02em; text-transform: uppercase; max-height: var(--rb-side-name, 66px); white-space: normal; overflow: hidden; }
-.canvas-ribbon { --rb-side-name: 54px; }
-body.rb-names-none .ribbon .rb-label { display: none; }
 /* Simplified: one row, the major commands' names beside their pictures, no group names */
 .canvas-ribbon.cr-simple .cr-rows { grid-template-rows: 26px; }
-.canvas-ribbon.cr-simple .rb-label { display: none; }
 .canvas-ribbon.cr-simple button.cr-major { grid-row: auto; flex-direction: row; gap: 4px; height: 26px; padding: 0 6px; font-size: var(--fs-sm); }
 .canvas-ribbon button.cr-major .cr-line { display: block; }
 .canvas-ribbon.cr-simple button.cr-major .cr-line { display: inline; }
@@ -4015,6 +4007,8 @@ dialog.geom-view-dialog { width: min(96vw, 640px); }
 :root[data-theme='dark'] { --sh-top: 0 1px 4px rgb(0 0 0 / 0.45); --sh-dock: 0 1px 4px rgb(0 0 0 / 0.5); --sh-float: 0 4px 14px rgb(0 0 0 / 0.5); }
 :root[data-shadows='strong'] { --sh-top: 0 2px 6px rgb(0 0 0 / 0.18); --sh-dock: 0 2px 6px rgb(0 0 0 / 0.16), 0 1px 2px rgb(0 0 0 / 0.08); --sh-float: 0 10px 28px rgb(0 0 0 / 0.26), 0 2px 6px rgb(0 0 0 / 0.1); }
 :root[data-shadows='strong'][data-theme='dark'] { --sh-top: 0 2px 8px rgb(0 0 0 / 0.6); --sh-dock: 0 2px 8px rgb(0 0 0 / 0.6); --sh-float: 0 10px 30px rgb(0 0 0 / 0.65); }
+/* (and when the dark theme comes from the system: without this, Strong was fainter than Light there) */
+@media (prefers-color-scheme: dark) { :root[data-shadows='strong']:not([data-theme='light']) { --sh-top: 0 2px 8px rgb(0 0 0 / 0.6); --sh-dock: 0 2px 8px rgb(0 0 0 / 0.6); --sh-float: 0 10px 30px rgb(0 0 0 / 0.65); } }
 /* relative without a z-index: the shadow paints over what is below, and the menus keep their own layering */
 :root:not([data-shadows='off']) header { position: relative; box-shadow: var(--sh-top); }
 .toolbox.floating { box-shadow: var(--sh-float); }

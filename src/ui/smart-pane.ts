@@ -95,6 +95,9 @@ export class SmartPane {
   private active: RichField | null = null;
   private activeKey = '';
   private fields = new Map<string, RichField>();
+  /** The scheme's make-up when the rows were drawn (its members and layout), and what each row stands for. */
+  private drawnShape = '';
+  private rowOf = new Map<string, string>();
   private bar: HTMLDivElement | null = null;
   private symbols = false;
   /** Docked: the toolbox body it shows in (it is then there whether or not a scheme is selected). */
@@ -158,9 +161,38 @@ export class SmartPane {
     const key = `${id} ${doc.version} ${folded}`;
     // a row being typed in is left alone until it is finished
     const typing = document.activeElement as HTMLElement | null;
-    if (this.shown === id && typing && this.el.contains(typing) && (typing.tagName === 'INPUT' || typing.isContentEditable)) { this.place(); return; }
+    if (this.shown === id && typing && this.el.contains(typing) && (typing.tagName === 'INPUT' || typing.isContentEditable)) {
+      // ... unless the scheme gained or lost species or steps meanwhile (the + buttons on the page
+      // leave the caret where it is): what is typed is finished, and the rows drawn again with the
+      // caret back in the same row
+      if (this.shapeOf(id) !== this.drawnShape && key !== this.drawnFor) this.redrawTyping(id);
+      this.place();
+      return;
+    }
     if (this.shown !== id || key !== this.drawnFor) this.render(id);
     this.place();
+  }
+
+  /** What a scheme is made of (its members and layout): the rows change only when this does. */
+  private shapeOf(id: number): string {
+    const s = this.hooks.doc().shapes.get(id);
+    const f = s?.frame;
+    return f ? `${f.atoms.length} ${f.captions.length} ${f.arrows.length} ${f.shapes.length} ${s?.smart?.layout ?? ''}` : '';
+  }
+
+  /** Draw the rows again while one is being typed in, keeping the caret in that row (found by what it stands for). */
+  private redrawTyping(id: number): void {
+    const key = this.activeKey, f = this.fields.get(key);
+    const what = this.rowOf.get(key);
+    this.render(id);
+    const back = what === undefined ? undefined : [...this.rowOf].find(([, w]) => w === what)?.[0];
+    const g = back === undefined ? undefined : this.fields.get(back);
+    // (the row may have moved: what is typed goes on with the new row, so it lands on the right species)
+    if (f && g) f.handOver(g);
+    else f?.handOver(f);
+    if (!g) return;
+    g.el.focus();
+    g.select(g.parts().reduce((n, p) => n + p.text.length, 0));
   }
 
   hide(): void {
@@ -194,6 +226,8 @@ export class SmartPane {
     if (!s?.smart || !read) { this.hide(); return; }
     this.shown = id;
     this.drawnFor = `${id} ${doc.version} ${folded}`;
+    this.drawnShape = this.shapeOf(id);
+    this.rowOf.clear();
     this.el.hidden = false;
     this.el.classList.toggle('folded', folded && !this.host);
     this.el.replaceChildren();
@@ -330,6 +364,7 @@ export class SmartPane {
       num.className = 'sp-num';
       num.textContent = String(k + 1);
       let name: HTMLElement;
+      if (slot.caption !== undefined) this.rowOf.set(`s${k}`, `c${slot.caption}`);
       if (slot.caption !== undefined) name = field(`s${k}`, runParts(doc.captions.get(slot.caption)?.runs ?? []), 'Species', `Species ${k + 1}`, (v) => this.hooks.slotRuns(id, k, v));
       else if (slot.holder !== undefined) {
         const h = slot.holder;
@@ -357,6 +392,7 @@ export class SmartPane {
       });
       const l = read.links.find((x) => x.from === k);
       if (!l) return;
+      for (const p of ['inside', 'above', 'below'] as const) this.rowOf.set(`p${k}${p}`, `r${l.arrow.id}${p}`);
       const step = document.createElement('li');
       step.className = 'sp-step';
       const arrow = document.createElement('span');

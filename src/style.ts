@@ -32,6 +32,13 @@ export interface DocStyle {
    * arrow beyond the text before it starts and before the head.
    */
   scheme?: StyleScheme;
+  /**
+   * How this drawing's atom-map number boxes look, and its own box format, saved with the file so
+   * a figure looks the same on any computer (Nate, 2026-11-03). Absent: the program's default
+   * (mapLookPrefs), as in files from before.
+   */
+  mapLook?: MapLook;
+  mapBox?: MapBoxStyle;
 }
 
 export interface StyleScheme {
@@ -80,7 +87,8 @@ export const DEFAULT_BOND_ENDS = 0.25;
 export const bondEndPrefs: { round: number } = { round: DEFAULT_BOND_ENDS };
 
 /**
- * How atom-map numbers look (Chemistry ▸ Map Atoms), an app setting: a small rounded box beside
+ * How atom-map numbers look (Chemistry ▸ Map Atoms), saved with each drawing (DocStyle.mapLook),
+ * with the last one chosen as the default for drawings that have none of their own: a small rounded box beside
  * the atom with ChemDraw's gray outline (Nate's pick, 2026-11-02), a light tint of the number's own
  * color (so an atom and where it goes match at a glance), or a format of the user's own
  * (Map Number Format…) used for every box.
@@ -129,7 +137,13 @@ export function mapBoxStyle(raw: unknown): MapBoxStyle {
     rounded: typeof r.rounded === 'boolean' ? r.rounded : d.rounded,
   };
 }
+/** The default for drawings with no map-number look of their own (a program setting). */
 export const mapLookPrefs: { look: MapLook; custom: MapBoxStyle } = { look: 'grey', custom: { ...DEFAULT_MAP_BOX } };
+
+/** The map-number look a drawing uses: its own, else the program's default. */
+export function docMapLook(st: DocStyle): { look: MapLook; custom: MapBoxStyle } {
+  return { look: st.mapLook ?? mapLookPrefs.look, custom: st.mapBox ?? mapLookPrefs.custom };
+}
 
 /** The choices offered for it (Settings > Drawing), from round to square. */
 export const BOND_END_CHOICES: { value: number; label: string }[] = [

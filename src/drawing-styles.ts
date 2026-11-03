@@ -193,7 +193,8 @@ export function applyStyle(doc: Doc, next: DocStyle, how: RestyleHow): void {
       doc.updateCaption(c.id, { runs: c.runs.map((r) => ({ ...r, size: r.size ?? old.captionSize, font: r.font ?? old.captionFont })) });
     }
   }
-  doc.setStyle({ ...next });
+  // the drawing's map-number look is its own, not part of a drawing style
+  doc.setStyle({ ...next, mapLook: old.mapLook, mapBox: old.mapBox });
 }
 
 /** Change a stored drawing (a document's figure, a slide) to a new style, as `applyStyle` does. */

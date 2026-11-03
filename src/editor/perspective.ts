@@ -56,6 +56,16 @@ export function structureKey(doc: Doc, ids: Iterable<number>): string {
 
 /** Shapes built (or being built), by document and structure: built once, used for every turn after. */
 const built = new WeakMap<Doc, Map<string, { map: number[]; result: Promise<PoseResult> }>>();
+/** How many structures' shapes a drawing keeps (the ones used last), so a long session doesn't hold every shape ever built. */
+export const POSES_KEPT = 40;
+/** How many shapes a drawing keeps now (for tests). */
+export function posesKept(doc: Doc): number { return built.get(doc)?.size ?? 0; }
+/** Keep a shape, as the one used last, dropping the shape used longest ago when there are too many. */
+function keep(byKey: Map<string, { map: number[]; result: Promise<PoseResult> }>, key: string, v: { map: number[]; result: Promise<PoseResult> }): void {
+  byKey.delete(key);
+  byKey.set(key, v);
+  while (byKey.size > POSES_KEPT) byKey.delete(byKey.keys().next().value!);
+}
 
 function poseFor(doc: Doc, ids: number[], host: PerspectiveHost): { ex: MolExport; result: Promise<PoseResult> } {
   const ex = toMolfile(doc, ids);
@@ -63,11 +73,11 @@ function poseFor(doc: Doc, ids: number[], host: PerspectiveHost): { ex: MolExpor
   if (!byKey) built.set(doc, (byKey = new Map()));
   const key = structureKey(doc, ids);
   const had = byKey.get(key);
-  if (had && had.map.length === ex.map.length && had.map.every((v, i) => v === ex.map[i])) return { ex, result: had.result };
+  if (had && had.map.length === ex.map.length && had.map.every((v, i) => v === ex.map[i])) { keep(byKey, key, had); return { ex, result: had.result }; }
   const result: Promise<PoseResult> = ex.generic.length
     ? Promise.resolve({ problem: 'build', message: 'A structure with R groups, or labels that can\'t be read, has no 3-D shape.' })
     : host.pose(ex.molblock, depthCues(doc, ex), doc.style.bondLength || 14.4).catch((e) => ({ problem: 'build' as const, message: String((e as Error)?.message ?? e) }));
-  byKey.set(key, { map: ex.map, result });
+  keep(byKey, key, { map: ex.map, result });
   // a failure is tried again next time (the worker may have been busy starting)
   void result.then((r) => { if ('problem' in r && r.problem === 'build' && byKey!.get(key)?.result === result) byKey!.delete(key); });
   return { ex, result };
@@ -77,7 +87,7 @@ function poseFor(doc: Doc, ids: number[], host: PerspectiveHost): { ex: MolExpor
 function rememberAs(doc: Doc, oldKey: string, ids: number[]): void {
   const byKey = built.get(doc);
   const had = byKey?.get(oldKey);
-  if (had) byKey!.set(structureKey(doc, ids), had);
+  if (had) keep(byKey!, structureKey(doc, ids), had);
 }
 
 /** The structures (atom ids, η-centres left out) these atoms belong to. */

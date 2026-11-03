@@ -114,7 +114,9 @@ export class SheetPage {
     // whole rows or columns: only as far as the sheet is in use
     const s = this.sheet;
     const block: Range = { r1: R.r1, c1: R.c1, r2: R.r2 >= MAX_ROWS - 1 ? Math.max(R.r1, s.lastRow) : R.r2, c2: R.c2 >= MAX_COLS - 1 ? Math.max(R.c1, s.lastCol) : R.c2 };
-    const list = add ? [...(this.setup?.printArea ?? []), block] : [block];
+    const now = this.setup?.printArea ?? [];
+    const list = add ? withPrintBlock(now, block) : [block];
+    if (add && list === now) { this.host.flash(`${rangeName(block)} is in the print area already.`); return; }
     this.set(add ? 'Add to print area' : 'Set print area', { printArea: list });
     this.view.showPageBreaks = true;
     this.host.flash(`Print area: ${list.map(rangeName).join(', ')}. ${list.length > 1 ? 'Each block prints on pages of its own.' : 'Only these cells print.'}`, 5000);
@@ -283,4 +285,10 @@ export class SheetPage {
       firstHeader: first ? read('fh') : undefined, firstFooter: first ? read('ff') : undefined,
     });
   }
+}
+
+/** Add to Print Area: the list with the block added, or the same list when a block already in it takes in those cells (so they don't print twice). */
+export function withPrintBlock(list: Range[], b: Range): Range[] {
+  if (list.some((a) => a.r1 <= b.r1 && a.c1 <= b.c1 && a.r2 >= b.r2 && a.c2 >= b.c2)) return list;
+  return [...list, b];
 }

@@ -11,7 +11,7 @@ import { BUILT_IN_TABLES, LATER_ROWS, LATER_TABLES } from '../kb/data';
 import type { SafetyRecord } from '../kb/safety';
 import { safetyRow, sortSafety } from '../kb/safety-tables';
 import { explainPieces, glossaryEntry } from '../kb/glossary';
-import { CANONICAL_ROWS, PRESENT, filterValues, findRows, isCas, parseUserTable, searchedShift, sortRows, tableTsv, type KbColumn, type KbTable, type RowMatch } from '../kb/tables';
+import { CANONICAL_ROWS, PRESENT, filterValues, findRows, isCas, looksLikeSmiles, parseUserTable, sortRows, tableTsv, type KbColumn, type KbTable, type RowMatch } from '../kb/tables';
 import { ask } from './ask';
 import { infoIcon, setInfo } from './info-tip';
 import { templateIcon } from './template-icons';
@@ -20,6 +20,10 @@ import { prettyChem } from '../kb/pretty';
 
 /** A structure picture in a table cell, in pixels. */
 const PIC = 48;
+
+/** Rows built when a table is shown, and how many more each time it is scrolled near its end. */
+const FIRST_ROWS = 60;
+const MORE_ROWS = 300;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] => {
   const e = Object.assign(document.createElement(tag), props);
@@ -106,12 +110,7 @@ export interface KnowledgeBaseHost {
   lookUpSafety?(query: string): Promise<SafetyRecord | null>;
 }
 
-/** Does this look like SMILES rather than a word or number (has ring digits, bonds or brackets)? */
-export function looksLikeSmiles(q: string): boolean {
-  const s = q.trim();
-  if (!s || /\s/.test(s) || isCas(s) || searchedShift(s) !== null) return false;
-  return /[=#()[\]@]|[a-z]\d|\d[A-Za-z]/.test(s) && /^[A-Za-z0-9@+\-[\]()=#$/\\%.:*]+$/.test(s);
-}
+export { looksLikeSmiles };
 
 export class KnowledgeBaseWindow {
   private d: HTMLDialogElement | null = null;
@@ -136,6 +135,8 @@ export class KnowledgeBaseWindow {
   /** The canonical form of the SMILES typed, when the search is one. */
   private queryCanon: string | null = null;
   private searchToken = 0;
+  /** Builds more rows of the table showing (as it is scrolled down). */
+  private moreRows: ((n?: number) => void) | null = null;
   private loaded = false;
   /** The PubChem compound a CAS number typed belongs to, for rows that carry no CAS number. */
   private casCid: number | null = null;
@@ -152,7 +153,13 @@ export class KnowledgeBaseWindow {
     d.addEventListener('keydown', (e) => { e.stopPropagation(); });
     this.search = el('input', { type: 'search', placeholder: 'Name, CAS, SMILES or a shift (2.17)', title: 'Search every table by name, CAS number, SMILES, any word, or a chemical shift (2.17 finds peaks within 0.05 ppm in 1H, 0.5 in 13C)', value: query });
     this.search.setAttribute('aria-label', 'Search the Knowledge Base');
-    this.search.addEventListener('input', () => this.searchChanged());
+    // a single letter matches most of every table (~110 ms): wait a moment for the next key first
+    let wait = 0;
+    this.search.addEventListener('input', () => {
+      clearTimeout(wait);
+      if (this.search.value.trim().length === 1) wait = window.setTimeout(() => this.searchChanged(), 200);
+      else this.searchChanged();
+    });
     this.list = el('div', { className: 'kb-list', role: 'tablist' });
     this.list.setAttribute('aria-label', 'Tables');
     this.filters = el('div', { className: 'refs-filter kb-filters' });
@@ -163,6 +170,7 @@ export class KnowledgeBaseWindow {
     this.about = infoIcon('');
     this.title.append(this.titleText, this.about);
     this.wrap = el('div', { className: 'refs-table-wrap kb-table-wrap' });
+    this.wrap.addEventListener('scroll', () => { const w = this.wrap; if (w.scrollTop + w.clientHeight > w.scrollHeight - 600) this.moreRows?.(); }, { passive: true });
     this.sources = el('p', { className: 'muted kb-sources' });
     this.count = el('span', { className: 'muted' });
     this.removeBtn = button('Remove Table…', 'Remove the imported table showing (only from this computer)', () => void this.removeImported());
@@ -247,9 +255,22 @@ export class KnowledgeBaseWindow {
     }));
   }
 
+  /** The rows matched for each table and search, so one key typed matches each table once (the counts on the left and the table showing ask for the same). */
+  private matchMemo = new Map<string, readonly RowMatch[]>();
+
   private matches(t: KbTable, withFilters = true): RowMatch[] {
-    const same = this.queryCanon ? new Set(t.rows.filter((r) => typeof r.smiles === 'string' && this.canon.get(r.smiles) === this.queryCanon).map((r) => r.smiles as string)) : undefined;
     const filters = withFilters ? this.filtersFor(t) : {};
+    const key = JSON.stringify([t.id, t.personal === true, t.rows.length, this.search.value, this.queryCanon, this.casCid, this.canon.size, filters]);
+    const got = this.matchMemo.get(key);
+    if (got) return [...got];
+    if (this.matchMemo.size > 200) this.matchMemo.clear();
+    const found = this.findMatches(t, filters);
+    this.matchMemo.set(key, found);
+    return [...found];
+  }
+
+  private findMatches(t: KbTable, filters: Record<string, string>): RowMatch[] {
+    const same = this.queryCanon ? new Set(t.rows.filter((r) => typeof r.smiles === 'string' && this.canon.get(r.smiles) === this.queryCanon).map((r) => r.smiles as string)) : undefined;
     let found = findRows(t, this.queryCanon ? '' : this.search.value, filters, same).filter((m) => !this.queryCanon || same?.has(m.row.smiles as string));
     // a CAS number typed also finds rows without CAS numbers, by the compound PubChem gives it
     if (this.casCid !== null) {
@@ -387,40 +408,15 @@ export class KnowledgeBaseWindow {
     let rows = this.matches(t);
     const sortCol = this.sort && t.columns.find((c) => c.key === this.sort!.key);
     if (sortCol) rows = sortRows(rows, sortCol, this.sort!.down);
-    const shown = rows.slice(0, 2000);
+    // the first rows straight away and the rest as the table is scrolled down: building every
+    // row of a big table (Reagent Safety, Solubility) on each key typed took most of a second
     const body = el('tbody');
-    for (const m of shown) {
-      const tr = el('tr');
-      for (const c of t.columns) {
-        if (c.hidden) continue;
-        const v = m.row[c.key];
-        const td = el('td');
-        if (c.numeric || c.shift) td.className = 'num';
-        if (c.narrow) td.classList.add('narrow');
-        if (c.prose) td.classList.add('prose');
-        if (c.key === 'cas') td.classList.add('cas');
-        if (c.picture) {
-          const tpl = t.picture?.(m.row);
-          td.className = 'kb-pic';
-          { const icon = tpl ? svgNode(templateIcon(tpl, PIC, 14)) : null; if (icon) td.append(icon); }
-          tr.append(td);
-          continue;
-        }
-        if (v !== null && v !== undefined && v !== '') td.append(typeof v === 'number' ? String(v) : c.key === 'atom' ? v : cellExplained(v, !!c.narrow, c.key === 'nucleus')); // atom labels (H2, C3) are not formulas
-        tr.append(td);
-      }
-      if (t.links) {
-        const td = el('td', { className: 'kb-links' });
-        t.links(m.row).forEach((l, i) => {
-          if (i) td.append(' · ');
-          const a = el('a', { href: l.url ?? '#', textContent: l.label });
-          a.addEventListener('click', (e) => { e.preventDefault(); if (l.url) this.host.openUrl(l.url); });
-          td.append(a);
-        });
-        tr.append(td);
-      }
-      body.append(tr);
-    }
+    let next = 0;
+    this.moreRows = (n = MORE_ROWS) => {
+      const end = Math.min(rows.length, next + n);
+      for (; next < end; next++) body.append(this.rowEl(t, rows[next]));
+    };
+    this.moreRows(FIRST_ROWS);
     const table = el('table', { className: 'refs-table kb-table' + (t.picture ? ' kb-pictures' : '') }, el('thead', {}, el('tr', {}, ...t.columns.filter((c) => !c.hidden).map((c) => this.header(c)), ...(t.links ? [el('th', { textContent: 'Look up' })] : []))), body);
     if (!rows.length) {
       const q = this.search.value.trim();
@@ -442,6 +438,40 @@ export class KnowledgeBaseWindow {
         this.sources.append(a);
       } else this.sources.append(s.label);
     });
+  }
+
+  /** One row of the table. */
+  private rowEl(t: KbTable, m: RowMatch): HTMLTableRowElement {
+    const tr = el('tr');
+    for (const c of t.columns) {
+      if (c.hidden) continue;
+      const v = m.row[c.key];
+      const td = el('td');
+      if (c.numeric || c.shift) td.className = 'num';
+      if (c.narrow) td.classList.add('narrow');
+      if (c.prose) td.classList.add('prose');
+      if (c.key === 'cas') td.classList.add('cas');
+      if (c.picture) {
+        const tpl = t.picture?.(m.row);
+        td.className = 'kb-pic';
+        { const icon = tpl ? svgNode(templateIcon(tpl, PIC, 14)) : null; if (icon) td.append(icon); }
+        tr.append(td);
+        continue;
+      }
+      if (v !== null && v !== undefined && v !== '') td.append(typeof v === 'number' ? String(v) : c.key === 'atom' ? v : cellExplained(v, !!c.narrow, c.key === 'nucleus')); // atom labels (H2, C3) are not formulas
+      tr.append(td);
+    }
+    if (t.links) {
+      const td = el('td', { className: 'kb-links' });
+      t.links(m.row).forEach((l, i) => {
+        if (i) td.append(' · ');
+        const a = el('a', { href: l.url ?? '#', textContent: l.label });
+        a.addEventListener('click', (e) => { e.preventDefault(); if (l.url) this.host.openUrl(l.url); });
+        td.append(a);
+      });
+      tr.append(td);
+    }
+    return tr;
   }
 
   private async copy(): Promise<void> {

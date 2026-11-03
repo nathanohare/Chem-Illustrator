@@ -108,6 +108,13 @@ export function isCas(text: string): boolean {
   return sum % 10 === Number(m[3]);
 }
 
+/** Does this look like SMILES rather than a word or number (has ring digits, bonds or brackets)? */
+export function looksLikeSmiles(q: string): boolean {
+  const s = q.trim();
+  if (!s || /\s/.test(s) || isCas(s) || searchedShift(s) !== null) return false;
+  return /[=#()[\]@]|[a-z]\d|\d[A-Za-z]/.test(s) && /^[A-Za-z0-9@+\-[\]()=#$/\\%.:*]+$/.test(s);
+}
+
 export interface RowMatch {
   row: Record<string, Cell>;
   /** For a shift search: how far the nearest shift is from the one typed (ppm). */

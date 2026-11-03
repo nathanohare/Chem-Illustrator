@@ -24,7 +24,7 @@ describe('stoichiometry table', () => {
 });
 
 describe('green metrics', () => {
-  it('works out atom economy, yield, E-factor and PMI from the table', async () => {
+  it('works out yield, E-factor and PMI from the table, with no atom economy', async () => {
     const { greenRows } = await import('../src/chem/stoichiometry');
     const wb = stoichiometryBook([
       { role: 'Starting material', name: 'benzaldehyde', formula: 'C7H6O', mw: 106.12 },
@@ -34,12 +34,13 @@ describe('green metrics', () => {
     const sh = wb.sheets[0];
     const g = greenRows(3);
     const v = (r: number) => Number(sh.value(r, 3));
-    expect(sh.value(g.economy, 0)).toBe('Atom economy (%)');
-    expect(v(g.economy)).toBeCloseTo((100 * 108.14) / (106.12 + 37.83), 3);
+    // no atom economy row or "In atom economy" column (Nate, 2026-11-03)
+    for (let r = 0; r <= g.note; r++) for (let c = 0; c < 12; c++) expect(String(sh.value(r, c) ?? ''), `${r},${c}`).not.toMatch(/atom economy/i);
+    expect(sh.value(0, 9) ?? '').toBe('');
+    expect(sh.value(g.title + 1, 0)).toBe('Product isolated (mg)');
     expect(sh.value(g.eFactor, 3)).toBe('');
-    // the borohydride is set not to count, and 190 mg of product were isolated
-    wb.edit('Mass', () => { sh.setInput(2, 9, 'No'); sh.setInput(g.isolated, 3, '190'); });
-    expect(v(g.economy)).toBeCloseTo((100 * 108.14) / 106.12, 3);
+    // 190 mg of product were isolated
+    wb.edit('Mass', () => { sh.setInput(g.isolated, 3, '190'); });
     const inMass = 2 * 106.12 + 2 * 37.83;
     expect(v(g.yield)).toBeCloseTo((100 * 190) / (2 * 108.14), 3);
     expect(v(g.eFactor)).toBeCloseTo((inMass - 190) / 190, 4);

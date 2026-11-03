@@ -123,11 +123,20 @@ function evenHeights(ribbon: HTMLElement): void {
   if (panels.length < 2) return;
   ribbon.style.removeProperty('--rb-panel-h');
   let tallest = 0;
-  for (const p of panels) {
-    const was = p.hidden;
-    p.hidden = false;
-    tallest = Math.max(tallest, p.offsetHeight);
-    p.hidden = was;
+  if (ribbon.matches('.ribbon.tabbed, .doc-ribbon')) {
+    // the panels stack in a column, so they can all show at once and be measured in one layout
+    // (one at a time made a layout each, ~25 ms as the app starts)
+    const was = panels.map((p) => p.hidden);
+    for (const p of panels) p.hidden = false;
+    for (const p of panels) tallest = Math.max(tallest, p.offsetHeight);
+    panels.forEach((p, i) => { p.hidden = was[i]; });
+  } else {
+    for (const p of panels) {
+      const was = p.hidden;
+      p.hidden = false;
+      tallest = Math.max(tallest, p.offsetHeight);
+      p.hidden = was;
+    }
   }
   if (tallest) ribbon.style.setProperty('--rb-panel-h', `${tallest}px`);
 }
@@ -165,7 +174,7 @@ function paintArrow(b: HTMLElement): void {
   if (look && !collapsed) {
     const simple = look.simple();
     b.textContent = simple ? '˅' : '˄';
-    b.title = simple ? 'Classic ribbon: two rows of buttons, with group names' : 'Simplified ribbon: one row of buttons, for more room';
+    b.title = simple ? 'Classic ribbon: two rows of buttons' : 'Simplified ribbon: one row of buttons, for more room';
     b.title += '. Double-click a tab (or Ctrl+F1) to fold the ribbon to its tabs';
   } else {
     b.textContent = collapsed ? '˅' : '˄';

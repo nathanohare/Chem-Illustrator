@@ -66,6 +66,19 @@ fn known(provider: &str) -> bool {
     fixed_base(provider).is_some() || provider == "compatible"
 }
 
+/// Whether Local only is on in the saved settings (settings.json's `ai.localOnly`). Read here
+/// too, so it holds even if the page leaves it out of a request.
+fn local_only_in(settings: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(settings)
+        .ok()
+        .and_then(|v| v.get("ai")?.get("localOnly")?.as_bool())
+        .unwrap_or(false)
+}
+
+fn local_only_saved(app: &tauri::AppHandle) -> bool {
+    crate::settings_file(app).ok().and_then(|p| std::fs::read_to_string(p).ok()).is_some_and(|s| local_only_in(&s))
+}
+
 /// Whether an address is this computer's own (localhost, 127.x.x.x or [::1]): Local only sends nowhere else.
 fn local_address(base: &str) -> bool {
     let rest = base.splitn(2, "://").nth(1).unwrap_or("");
@@ -146,7 +159,7 @@ pub async fn ai_request(
     if !web_address(&base) {
         return Err("The AI service's address must start with http:// or https://.".into());
     }
-    if local_only.unwrap_or(false) && !local_address(&base) {
+    if (local_only.unwrap_or(false) || local_only_saved(&app)) && !local_address(&base) {
         return Err("Local only is on, so nothing is sent off this computer. Link a model on this computer (Ollama or LM Studio) or turn Local only off in Edit > Settings > AI Model.".into());
     }
     if !path.starts_with('/') || path.contains("..") || path.contains("://") {
@@ -205,5 +218,13 @@ mod local_tests {
         assert!(!local_address("http://localhost.evil.com/v1"));
         assert!(!local_address("http://user@evil.com/v1"));
         assert!(!local_address("http://127.0.0.1.evil.com/v1"));
+    }
+
+    #[test]
+    fn local_only_read_from_the_settings_file() {
+        assert!(local_only_in(r#"{"app":"Chem Illustrator","version":1,"ai":{"provider":"openai","localOnly":true}}"#));
+        assert!(!local_only_in(r#"{"ai":{"provider":"openai","localOnly":false}}"#));
+        assert!(!local_only_in(r#"{"ai":{"provider":"openai"}}"#));
+        assert!(!local_only_in("not json"));
     }
 }

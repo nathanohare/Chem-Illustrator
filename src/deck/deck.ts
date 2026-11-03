@@ -922,7 +922,7 @@ export class Deck {
   // ---------------------------------------------------------------- slide operations
 
   /** Put slides in, at position `at`, and edit the first of them. */
-  private insert(at: number, slides: Slide[], label: string, master?: Master, refs?: DeckRefs): void {
+  private insert(at: number, slides: Slide[], label: string, master?: Master, refs?: DeckRefs, also?: { redo: () => void; undo: () => void }): void {
     const beforeIndex = this.index;
     const beforeMaster = this.master;
     const beforeRefs = this.settings.refs;
@@ -935,10 +935,12 @@ export class Deck {
       if (master) useMaster(master);
       useRefs(refs);
       this.detachKeep(() => this.slides.splice(at, 0, ...slides));
+      also?.redo();
       this.goFresh(at);
     };
     const undoIt = () => {
       this.detachKeep(() => this.slides.splice(at, slides.length));
+      also?.undo();
       if (master) useMaster(beforeMaster);
       useRefs(beforeRefs);
       this.goFresh(beforeIndex);
@@ -1004,6 +1006,33 @@ export class Deck {
     };
     put(after, animsAfter);
     this.record(label, () => put(before, animsBefore), () => put(after, animsAfter), s);
+  }
+
+  /**
+   * Change a slide's drawing and then its animations (and a canvas slide's keyframes) from it, as
+   * one step of the history: Auto-Animate Steps splits a scheme into pieces and animates them.
+   * `fn` changes the drawing and gives back the animations (and keyframes) that go with it.
+   */
+  rebuildSlide(i: number, label: string, fn: (doc: Doc) => { anims: Anim[]; canvas?: CanvasData }): void {
+    const s = this.slides[i];
+    if (!s) return;
+    const was = { anims: copyMotion(s).anims ?? [], canvas: s.canvas ? copyCanvas(s.canvas) : undefined };
+    let now = was;
+    const put = (v: typeof was) => {
+      if (v.canvas) s.canvas = copyCanvas(v.canvas);
+      if (v.anims.length) s.anims = copyMotion({ anims: v.anims }).anims; else delete s.anims;
+      this.looks++;
+      this.onMotion();
+    };
+    this.contentEdit(label, [i], () => {
+      const d = this.docOf(i);
+      let got: { anims: Anim[]; canvas?: CanvasData } = { anims: was.anims };
+      d.bulk(() => { got = fn(d); });
+      // (keyframes given without a look keep the canvas's look; a canvas slide keeps one move to each keyframe after the first)
+      const canvas = got.canvas && s.canvas && got.canvas.keys.length ? copyCanvas({ ...s.canvas, ...got.canvas }) : was.canvas;
+      now = { anims: copyMotion({ anims: canvas ? syncCamera(got.anims, canvas.keys) : got.anims }).anims ?? [], canvas };
+      put(now);
+    }, () => put(was), () => put(now));
   }
 
   /**
@@ -1074,6 +1103,20 @@ export class Deck {
     if (!sorted.length) return;
     const copies = sorted.map((i) => this.makeSlide(this.slides[i].layout, this.docOf(i).contents(), this.slides[i].notes, this.slides[i]));
     this.insert(sorted[sorted.length - 1] + 1, copies, sorted.length > 1 ? 'Duplicate slides' : 'Duplicate slide');
+  }
+
+  /**
+   * A copy of slide i after it, with its own drawing and animations (and keyframes), slide i
+   * hidden from the show: Auto-Animate Steps on a copy, so a canvas slide's own route is kept.
+   * One undo step, which shows slide i again.
+   */
+  copyHidingOriginal(i: number, contents: Contents, motion: Pick<Motion, 'anims' | 'canvas'>, label: string): void {
+    const s = this.slides[i];
+    if (!s) return;
+    const copy = this.makeSlide(s.layout, contents, s.notes, { ...copyMotion(s), hidden: false, ...motion });
+    const wasHidden = !!s.hidden;
+    const put = (v: boolean) => { if (v) s.hidden = true; else delete s.hidden; this.looks++; };
+    this.insert(i + 1, [copy], label, undefined, undefined, { redo: () => put(true), undo: () => put(wasHidden) });
   }
 
   /** Delete slides (the current one by default). The last slide can't be deleted. */

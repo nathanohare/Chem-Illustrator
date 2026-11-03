@@ -122,12 +122,12 @@ export interface Settings {
   toolCells: 'off' | 'grid' | 'raised' | 'both';
   /** Settings ▸ Toolboxes: the Canvas ribbon in two rows of buttons (Classic) or one (Simplified). */
   canvasRibbon: 'classic' | 'simple';
-  /** Settings ▸ Toolboxes and Ribbon: where every ribbon's group names go: along the dividers, across each group, or nowhere. */
-  ribbonNames: 'top' | 'side' | 'none';
   /** The start view (new tabs, recent files) on the empty drawing the program opens with. */
   startView: boolean;
   /** Settings ▸ Preferences: Enter finishes text typed with the Text tool (in every mode) and Alt+Enter (Option+Enter on a Mac) starts a new line. Off: Enter starts a new line and Esc finishes (ChemDraw). */
   enterFinishesText: boolean;
+  /** Settings ▸ Preferences: opening a document whose structures aren't figures offers to make them figures (Make All Structures Figures stays on the right-click menu either way). */
+  offerFigures: boolean;
   /** Resting the mouse on an abbreviation shows the group written out (View > Group Tooltips). */
   groupTips: boolean;
   /** Tooltips that show what a tool does and its keys (off: the plain one-line tip). */
@@ -175,7 +175,7 @@ export interface Settings {
   warnLook: 'disc' | 'box' | 'circle' | 'dashed' | 'corners';
   /** How round bond lines' free ends are, 1 (round) to 0 (square); see bondEndPrefs. */
   bondEnds: number;
-  /** How atom-map numbers look (Chemistry ▸ Map Atoms); see mapLookPrefs. */
+  /** The default look of atom-map numbers for drawings with none of their own (each drawing saves its own); see mapLookPrefs. */
   mapLook: MapLook;
   /** The user's own map-number box format (mapLook 'custom'). */
   mapBox: MapBoxStyle;
@@ -276,7 +276,7 @@ export const SLIDE_PANE_MIN = 120, SLIDE_PANE_MAX = 480, NOTES_MIN = 36, NOTES_M
 export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, stickyHotspot: false, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
-  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', density: 'cozy', shadows: 'light', iconLook: 'mode', shapeInk: 'neutral', oneColumnTools: false, toolCells: 'off', canvasRibbon: 'classic', ribbonNames: 'side', startView: true, enterFinishesText: false, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
+  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'darkgray', density: 'cozy', shadows: 'light', iconLook: 'mode', shapeInk: 'neutral', oneColumnTools: false, toolCells: 'off', canvasRibbon: 'classic', startView: true, enterFinishesText: false, offerFigures: true, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
   citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowProducts: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', warnLook: 'disc', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'grey', mapBox: { ...DEFAULT_MAP_BOX }, depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { drawing: false, slides: true, design: true },
@@ -337,7 +337,6 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (r.updateChannel === 'stable' || r.updateChannel === 'latest') s.updateChannel = r.updateChannel;
   if (typeof r.textBar === 'string' && ['docked', 'floating', 'hidden'].includes(r.textBar)) s.textBar = r.textBar as Settings['textBar'];
   if (r.canvasRibbon === 'classic' || r.canvasRibbon === 'simple') s.canvasRibbon = r.canvasRibbon;
-  if (r.ribbonNames === 'top' || r.ribbonNames === 'side' || r.ribbonNames === 'none') s.ribbonNames = r.ribbonNames;
   if (r.appTheme === 'system' || r.appTheme === 'light' || r.appTheme === 'dark' || r.appTheme === 'darkgray') s.appTheme = r.appTheme;
   if (r.density === 'snug' || r.density === 'cozy' || r.density === 'normal' || r.density === 'standard' || r.density === 'large') s.density = r.density;
   // ('compact' was the old name for the default, now Cozy)
@@ -349,6 +348,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.oneColumnTools === 'boolean') s.oneColumnTools = r.oneColumnTools;
   if (typeof r.startView === 'boolean') s.startView = r.startView;
   if (typeof r.enterFinishesText === 'boolean') s.enterFinishesText = r.enterFinishesText;
+  if (typeof r.offerFigures === 'boolean') s.offerFigures = r.offerFigures;
   if (typeof r.linkSide === 'string' && ['keep', 'below', 'above', 'left', 'right'].includes(r.linkSide)) s.linkSide = r.linkSide as Settings['linkSide'];
   if (Array.isArray(r.replacements)) {
     s.replacements = r.replacements.filter((x): x is [string, string] => Array.isArray(x) && typeof x[0] === 'string' && typeof x[1] === 'string' && x[0] !== '').map(([a, b]) => [a, b]);

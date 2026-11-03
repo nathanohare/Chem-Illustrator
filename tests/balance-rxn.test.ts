@@ -30,6 +30,14 @@ describe('Check Balance', () => {
     expect(byProductName('H4O2')).toBe('2 × water');
     expect(byProductName('C9H9')).toBeUndefined();
   });
+
+  // Review 2026-11-03 L1: formulas without carbon are in Hill order (ClH, not HCl), so these were never named
+  it('names hydrogen halides and SO2 left out of a step', () => {
+    const b = checkBalance([{ formula: 'C7H5ClO' }, { formula: 'CH5N' }], [{ formula: 'C8H9NO' }]);
+    expect(b.missing).toBe('ClH');
+    expect(b.missingName).toBe('HCl');
+    for (const [f, name] of [['BrH', 'HBr'], ['FH', 'HF'], ['HI', 'HI'], ['O2S', 'SO₂'], ['Cl2H2', '2 × HCl']]) expect(byProductName(f), f).toBe(name);
+  });
 });
 
 describe('reaction SMILES and RXN', () => {

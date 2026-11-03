@@ -270,32 +270,68 @@ export function grow(s: Structure): Grown {
   // every copy of every atom that a placed atom is bonded to (each operation, at the lattice
   // shift nearest to it and the shifts next to that) is placed too, and so on
   const images = ops.map(([r, t]) => s.atoms.map((a) => { const f = mvec(r, a.frac); return [f[0] + t[0], f[1] + t[1], f[2] + t[2]] as V3; }));
-  const shifts: V3[] = [];
-  for (const a of [-1, 0, 1]) for (const b of [-1, 0, 1]) for (const c of [-1, 0, 1]) shifts.push([a, b, c]);
+  // (each image's place in Å, and each of the 27 neighbouring cells' offset in Å, worked out once:
+  // a network grown to MAX_ATOMS in a high-symmetry group checks millions of candidates)
+  const imageXyz = images.map((f0) => f0.map((f) => mvec(s.orth, f)));
+  // an atom on a special position is the same image under many operations (48 of Fm-3m's 192 for
+  // Na in NaCl): each place is tried once
+  const tried: [number, number][] = [];
+  const seenImage = new Set<string>();
+  images.forEach((f0, op) => f0.forEach((f, j) => {
+    const k = `${j}:${f.map((v) => Math.round((v - Math.floor(v)) * 2000) % 2000).join(',')}`;
+    if (!seenImage.has(k)) { seenImage.add(k); tried.push([op, j]); }
+  }));
+  const STEPS = [-1, 0, 1];
+  const O = s.orth;
   const reach = 2 * Math.max(...s.atoms.map((a) => COVALENT[a.element] ?? 1.5)) + BOND_TOLERANCE;
+  const reach2 = reach * reach;
+  const spacing = orthInv.map((row) => 1 / Math.hypot(row[0], row[1], row[2]));
   let complete = true;
   const queue = placed.map((_, i) => i);
   const queued = new Set(queue);
-  while (queue.length) {
-    const here = placed[queue.shift()!];
+  for (let qi = 0; qi < queue.length; qi++) {
+    const here = placed[queue[qi]];
     const hf = mvec(orthInv, here.xyz);
-    images.forEach((f0, op) => {
-      f0.forEach((f, j) => {
-        const near: V3 = [Math.round(hf[0] - f[0]), Math.round(hf[1] - f[1]), Math.round(hf[2] - f[2])];
-        for (const sh of shifts) {
-          const cand: V3 = [f[0] + near[0] + sh[0], f[1] + near[1] + sh[1], f[2] + near[2] + sh[2]];
-          const d = norm3(sub3(mvec(s.orth, cand), here.xyz));
-          if (d > reach || !bonded(s.atoms[here.site], s.atoms[j], d)) continue;
-          const g = add(j, op, [near[0] + sh[0], near[1] + sh[1], near[2] + sh[2]]);
-          if (g === null) complete = false;
-          else if (!queued.has(g)) { queued.add(g); queue.push(g); }
-        }
-      });
-    });
+    const [hx, hy, hz] = here.xyz;
+    for (const [op, j] of tried) {
+      const f = images[op][j], c = imageXyz[op][j];
+      const n0 = Math.round(hf[0] - f[0]), n1 = Math.round(hf[1] - f[1]), n2 = Math.round(hf[2] - f[2]);
+      // a neighbouring cell along an axis is tried only when it can come within reach (an image
+      // u cells along an axis is at least u × the spacing of the cell's faces across it away)
+      const u0 = f[0] + n0 - hf[0], u1 = f[1] + n1 - hf[1], u2 = f[2] + n2 - hf[2];
+      const s0 = STEPS.filter((k) => Math.abs(u0 + k) * spacing[0] <= reach), s1 = STEPS.filter((k) => Math.abs(u1 + k) * spacing[1] <= reach), s2 = STEPS.filter((k) => Math.abs(u2 + k) * spacing[2] <= reach);
+      if (!s0.length || !s1.length || !s2.length) continue;
+      for (const a of s0) for (const b of s1) for (const e of s2) {
+        const t0 = n0 + a, t1 = n1 + b, t2 = n2 + e;
+        const dx = c[0] + O[0][0] * t0 + O[0][1] * t1 + O[0][2] * t2 - hx;
+        const dy = c[1] + O[1][0] * t0 + O[1][1] * t1 + O[1][2] * t2 - hy;
+        const dz = c[2] + O[2][0] * t0 + O[2][1] * t1 + O[2][2] * t2 - hz;
+        const d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > reach2) continue;
+        const d = Math.sqrt(d2);
+        if (!bonded(s.atoms[here.site], s.atoms[j], d)) continue;
+        const g = add(j, op, [t0, t1, t2]);
+        if (g === null) complete = false;
+        else if (!queued.has(g)) { queued.add(g); queue.push(g); }
+      }
+    }
   }
+  // bonds between the atoms placed: only atoms in the same or a touching 4 Å box can be bonded
   const bonds: [number, number][] = [];
+  const cell = (v: number) => Math.floor(v / 4);
+  const boxes = new Map<string, number[]>();
+  placed.forEach((p, i) => {
+    const k = `${cell(p.xyz[0])},${cell(p.xyz[1])},${cell(p.xyz[2])}`;
+    const list = boxes.get(k);
+    if (list) list.push(i); else boxes.set(k, [i]);
+  });
   for (let i = 0; i < placed.length; i++) {
-    for (let j = i + 1; j < placed.length; j++) {
+    const [x, y, z] = placed[i].xyz;
+    const cx = cell(x), cy = cell(y), cz = cell(z);
+    const near: number[] = [];
+    for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) for (let c = -1; c <= 1; c++) for (const j of boxes.get(`${cx + a},${cy + b},${cz + c}`) ?? []) if (j > i) near.push(j);
+    near.sort((p, q) => p - q);
+    for (const j of near) {
       const d = norm3(sub3(placed[j].xyz, placed[i].xyz));
       if (d < 4 && bonded(s.atoms[placed[i].site], s.atoms[placed[j].site], d)) bonds.push([i, j]);
     }

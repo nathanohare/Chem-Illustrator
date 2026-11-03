@@ -183,6 +183,16 @@ export function parseLibrary(text: string | null | undefined): LibraryData {
   };
 }
 
+/** Whether a library file's text can be read (JSON holding an object), so that saving over it can't lose what it holds. */
+export function isLibraryText(text: string): boolean {
+  try {
+    const raw = JSON.parse(text) as unknown;
+    return !!raw && typeof raw === 'object' && !Array.isArray(raw);
+  } catch {
+    return false;
+  }
+}
+
 export function libraryText(lib: LibraryData): string {
   return JSON.stringify(lib, null, 1);
 }

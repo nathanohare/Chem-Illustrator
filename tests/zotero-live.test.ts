@@ -301,6 +301,21 @@ describe('Zotero HTTP citing', () => {
     expect(z.answers[2]).toMatchObject({ error: 'Chem Illustrator Error' });
   });
 
+  it('leaves no empty {Citation} behind when Zotero goes away part way (found in the 2026-11-03 review)', async () => {
+    const host = new TestHost();
+    const before = host.t.runs;
+    const z = fakeZotero([
+      () => ['Document.canInsertField', [D, 'Http']],
+      () => ['Document.insertField', [D, 'Http', 0]],
+      // Zotero quits while its citation window is open: the next post fails
+    ]);
+    await expect(runZotero('addEditCitation', host, z.post)).rejects.toThrow();
+    expect(host.t.runs).toEqual(before);
+    // a citation Zotero did fill in stays
+    const done = await citedDocument();
+    expect(Object.values(done.t.objects).filter((o) => o.kind === 'cite')).toHaveLength(1);
+  });
+
   it('tells when Zotero is busy or not running', async () => {
     const host = new TestHost();
     expect(await runZotero('addEditCitation', host, fakeZotero([], { status: 503 }).post)).toBe('busy');

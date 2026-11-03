@@ -135,6 +135,8 @@ export interface DocxModel {
    * had ("Chem Illustrator drawing 3"), which says which of ours it is.
    */
   floats?: Record<number, { group?: number; name?: string; was?: string }>;
+  /** Don't Ask for This File on the Make Figures offer (see DocText.noFigureOffer). */
+  noFigureOffer?: true;
 }
 
 /** The name of a chart's frame in Word ("Chart 4", 4 its id in our part). */
