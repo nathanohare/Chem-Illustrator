@@ -205,7 +205,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (size !== null) run.size = Number(size);
       // Greek letters and signs written in the Symbol font become the characters they show
       if (isSymbolFont(fontName) && !raw) run.text = fromSymbolFont(run.text);
-      else if (fontName && !/^arial$/i.test(fontName) && fontName !== doc.style.captionFont) run.font = fontName;
+      // a run in another font than the captions' keeps it, Arial included (ChemDraw's own default)
+      else if (fontName?.trim() && fontName.trim().toLowerCase() !== (doc.style.captionFont || 'Arial').toLowerCase()) run.font = fontName.trim();
       const c = color(s);
       if (c) run.color = c;
       out.push(run);
@@ -290,6 +291,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         nodeIds.set(n.getAttribute('id') ?? '', id);
         continue;
       }
+      // read as plain atoms, which they aren't quite: said so in the read's warnings
+      if (type === 'VariableAttachment' || type === 'LinkNode') skip(`${type} node`);
+      if (n.getAttribute('HDot') === 'yes' || n.getAttribute('HDash') === 'yes') skip('H dot or dash on an atom');
       if (type === 'ExternalConnectionPoint') {
         // a point of attachment drawn on its own (the wavy line ending a substituent)
         const a = doc.addAtom(x, y, 0, { id, attach: n.getAttribute('ExternalConnectionType') ?? 'Unspecified' });
@@ -372,6 +376,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         const face = s0 ? num(s0, 'face', 0) : undefined;
         if (face !== undefined && (face & 1) !== ((st.labelFace ?? 0) & 1)) atom.face = face;
         let txt = runs.map((r) => r.text).join('');
+        // a charge the label doesn't show (no sign, and no circled charge beside it) isn't shown
+        if (atom.charge && !/[+−]|-d*$/.test(txt)) atom.hideCharge = true;
         if (atom.charge) {
           // the charge is part of the label text ("N+", "O2−"); it is drawn from the charge instead
           const n = Math.abs(atom.charge);
@@ -527,6 +533,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     if (!runs.length || t.getAttribute('Visible') === 'no') return null;
     const [px, py] = pts(t.getAttribute('p'));
     const bb = pts(t.getAttribute('BoundingBox'));
+    // (ChemDraw 25 leaves a text without its own justification on the left, whatever the document's CaptionJustification)
     const j = t.getAttribute('Justification') ?? t.getAttribute('CaptionJustification');
     const justify = j === 'Center' ? 'center' : j === 'Right' ? 'right' : j === 'Full' ? 'justify' : 'left';
     const ww = Number(t.getAttribute('WordWrapWidth'));
@@ -726,13 +733,16 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       tailStyle,
       headType: type === 'Hollow' ? 'hollow' : type === 'Angle' ? 'angle' : 'solid',
       line: lt.includes('Dashed') ? 'dashed' : lt.includes('Bold') ? 'bold' : lt.includes('Wavy') ? 'wavy' : 'solid',
-      noGo: a.getAttribute('NoGo') !== null,
+      noGo: a.getAttribute('NoGo') === 'Cross' || a.getAttribute('NoGo') === 'Hash',
       equilibrium: a.getAttribute('ArrowShaftSpacing') !== null && headStyle.startsWith('half') && tailStyle.startsWith('half'),
       sweep,
       headLength: (num(a, 'HeadSize', 1000) / 100) * lw,
       headWidth: (num(a, 'ArrowheadWidth', 250) / 100) * lw,
       color: color(a),
     };
+    // the head's notch (ChemDraw takes a missing or zero ArrowheadCenterSize as 7/8 of the head)
+    const cs = num(a, 'ArrowheadCenterSize', 0), hs = num(a, 'HeadSize', 1000);
+    arrow.headCenter = cs > 0 && hs > 0 ? Math.min(1, cs / hs) : 0.875;
     // an arc of an ellipse (its axes differ): drawn along the ellipse, as Bézier pieces, instead of
     // the circle through the tail
     const ell = ellipseArcBez(a, tail, head, Number(ang ?? 0));
@@ -799,7 +809,12 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     };
     // a half head's barb goes on the outside of the last bend (ChemDraw's own side isn't stored)
     if (!own && headBend(arrow) < 0) { arrow.headStyle = swapHalf(arrow.headStyle); arrow.tailStyle = swapHalf(arrow.tailStyle); }
-    for (const k of ['headStyle', 'tailStyle', 'headType', 'line', 'headLength', 'headWidth'] as const) if (look[k] !== undefined) (arrow as Record<string, unknown>)[k] = look[k];
+    // the head's shape and size, when the curve has them as an arrow has
+    if (c.hasAttribute('HeadSize')) arrow.headLength = (num(c, 'HeadSize', 1000) / 100) * lw;
+    if (c.hasAttribute('ArrowheadWidth')) arrow.headWidth = (num(c, 'ArrowheadWidth', 250) / 100) * lw;
+    const ht = c.getAttribute('ArrowheadType');
+    if (ht === 'Hollow' || ht === 'Angle') arrow.headType = ht === 'Hollow' ? 'hollow' : 'angle';
+    for (const k of ['headStyle', 'tailStyle', 'headType', 'line', 'headLength', 'headWidth'] as const) if (lookOk(k, look[k])) (arrow as Record<string, unknown>)[k] = look[k];
     if (lw !== st.lineWidth) arrow.lineWidth = lw;
     doc.addArrow(arrow);
     from('r', arrow.id, c);
@@ -1041,6 +1056,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
             // the group's box as saved: in the tag, or (older files) an attribute of ours
             const savedBox = typeof saved?.savedBox === 'string' ? saved.savedBox : null;
             if (saved) delete saved.savedBox;
+            if (saved) saved = geoFromTag(saved);
             const bb = pts(ch.getAttribute('BoundingBox'));
             // what we wrote natively beside it: moved in ChemDraw (every point by the same offset) moves
             // the shape; reshaped there, ChemDraw's own curves are read instead
@@ -1125,7 +1141,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         }
         case 'bracketedgroup': pendingRepeats.push(ch); break;
         case 'chemicalproperty': keepLater.push(ch); break;
-        case 'scheme': case 'step': case 'colortable': case 'fonttable': case 'objecttag': break;
+        // (an annotation is a note about the document, such as clip art's keywords: nothing is drawn)
+        case 'scheme': case 'step': case 'colortable': case 'fonttable': case 'objecttag': case 'annotation': break;
         default: skip(ch.nodeName);
       }
     }
@@ -1281,7 +1298,7 @@ function readPinTags(tags: [number, string][], refOf: Map<Element, string>, doc:
       const pin: Arrow['pin'] = {};
       for (const end of ['tail', 'head'] as const) {
         const p = v[end];
-        if (!p) continue;
+        if (!p || !Array.isArray(p.ref) || !Array.isArray(p.at) || !p.at.slice(0, 2).every((n) => typeof n === 'number' && Number.isFinite(n))) continue;
         const ref = p.ref.map((k) => atomOf.get(String(k)));
         if (ref.some((x) => x === undefined) || !['atom', 'bond', 'gap'].includes(p.on)) continue;
         pin[end] = { on: p.on, ref: ref as number[], at: { x: p.at[0], y: p.at[1] }, hand: p.hand < 0 ? -1 : 1, was: { ...r[end] } };
@@ -1452,6 +1469,34 @@ export const KEKULE_TAG = 'Chem Illustrator Kekule';
 export const TURN_TAG = 'Chem Illustrator turn';
 /** The tag on the group that draws a design shape in ChemDraw: the shape as it is here. */
 export const GEO_TAG = 'Chem Illustrator shape';
+
+/** A curve arrow's look from our tag, only where it is one the arrow can have. */
+function lookOk(k: 'headStyle' | 'tailStyle' | 'headType' | 'line' | 'headLength' | 'headWidth', v: unknown): boolean {
+  if (k === 'headStyle' || k === 'tailStyle') return v === 'none' || v === 'full' || v === 'halfLeft' || v === 'halfRight';
+  if (k === 'headType') return v === 'solid' || v === 'hollow' || v === 'angle';
+  if (k === 'line') return v === 'solid' || v === 'dashed' || v === 'bold' || v === 'wavy';
+  return typeof v === 'number' && Number.isFinite(v) && v > 0;
+}
+
+const GEO_KINDS: Record<string, 'string' | 'number' | 'boolean'> = {
+  kind: 'string', geo: 'string', color: 'string', fillColor: 'string', fill: 'string',
+  x1: 'number', y1: 'number', x2: 'number', y2: 'number', z: 'number', rot: 'number', lineWidth: 'number', stack: 'number',
+  filled: 'boolean', dashed: 'boolean', bold: 'boolean', dotted: 'boolean',
+};
+
+/** A design shape from our tag, without what a shape can't hold (one bad value would stop the drawing saving). */
+function geoFromTag(saved: Partial<Shape> & Record<string, unknown>): (Partial<Shape> & Record<string, unknown>) | null {
+  if (typeof saved !== 'object' || Array.isArray(saved)) return null;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(saved)) {
+    if (k === 'id') continue;
+    const want = GEO_KINDS[k];
+    if (want && (typeof v !== want || (want === 'number' && !Number.isFinite(v as number)))) continue;
+    if (k === 'poly' && !(Array.isArray(v) && v.every((p) => p && typeof p.x === 'number' && typeof p.y === 'number'))) continue;
+    out[k] = v;
+  }
+  return out as Partial<Shape> & Record<string, unknown>;
+}
 /** A reaction arrow's animation settings (MorphStep as JSON, atoms by the file's node ids). */
 export const MORPH_TAG = 'Chem Illustrator animation';
 /** An atom's atom-atom map number across a reaction (Atom.mapNo). */

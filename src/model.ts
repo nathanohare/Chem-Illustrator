@@ -673,6 +673,12 @@ export interface Arrow {
   sweep: number;
   headLength: number;
   headWidth: number;
+  /**
+   * How far back from its point a solid head's notch is, as a part of its length (ChemDraw's
+   * ArrowheadCenterSize over HeadSize: 1 a plain triangle), its sides curving into it as ChemDraw
+   * draws them; missing, 0.75 with straight sides.
+   */
+  headCenter?: number;
   color?: string;
   /** Line width when it differs from the document's. */
   lineWidth?: number;
