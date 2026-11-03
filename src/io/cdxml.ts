@@ -64,6 +64,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   const root = xml.documentElement;
   if (!root || root.nodeName !== 'CDXML') throw new Error('This does not look like a CDXML file.');
   decodeTags(root);
+  hoistOwnTags(root);
   const doc = new Doc();
   // Remember where each object came from, so saving can rewrite only what changed.
   const all = descendants(root);
@@ -1378,6 +1379,85 @@ export function encodeTags(root: Element): void {
   for (const e of descendants(root)) {
     const v = ownTag(e) ? e.getAttribute('Value') : null;
     if (v) { const w = encodeTagValue(v); if (w !== v) e.setAttribute('Value', w); }
+  }
+}
+
+/** This program's tags for the whole page (ChemDraw drops tags kept on the page itself). */
+const PAGE_LEVEL_TAGS = (): string[] => [PAGE_TAG, GUIDES_TAG, STACK_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG];
+
+/** An element's own tag of a name. */
+const ownTagOf = (e: Element, name: string) => kids(e).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === name) ?? null;
+
+/** A step's arrow elements: the ones it names, and the arrows that took their place. */
+function stepArrows(st: Element, byId: Map<string, Element>): Element[] {
+  const out: Element[] = [];
+  for (const id of (st.getAttribute('ReactionStepArrows') ?? '').split(/\s+/).filter(Boolean)) {
+    const el = byId.get(id);
+    if (!el) continue;
+    out.push(el);
+    const newer = el.getAttribute('SupersededBy');
+    const n = newer ? byId.get(newer) : undefined;
+    if (n) out.push(n);
+  }
+  return out;
+}
+
+const idMap = (root: Element): Map<string, Element> => {
+  const m = new Map<string, Element>();
+  for (const e of descendants(root)) { const id = e.getAttribute('id'); if (id && e.nodeName !== 'font' && !m.has(id)) m.set(id, e); }
+  return m;
+};
+
+/**
+ * ChemDraw keeps tags on objects (text, graphics, groups, arrows) but drops the ones on the page
+ * and on reaction steps. So files keep this program's page tags on the first object on the page,
+ * and a step's tag on its arrow (see lowerOwnTags); on opening they go back where they are read
+ * from (the page, the step). Older files have them there already.
+ */
+export function hoistOwnTags(root: Element): void {
+  const page = kids(root).find((k) => k.nodeName === 'page');
+  if (!page) return;
+  const names = PAGE_LEVEL_TAGS();
+  for (const ch of kids(page)) {
+    if (ch.nodeName === 'objecttag') continue;
+    for (const k of kids(ch)) {
+      const name = k.getAttribute('Name') ?? '';
+      if (k.nodeName !== 'objecttag' || !names.includes(name)) continue;
+      ch.removeChild(k);
+      if (!ownTagOf(page, name)) page.appendChild(k);
+    }
+  }
+  let byId: Map<string, Element> | null = null;
+  for (const st of descendants(page)) {
+    if (st.nodeName !== 'step') continue;
+    byId ??= idMap(root);
+    for (const a of stepArrows(st, byId)) {
+      const tag = ownTagOf(a, INSIDE_TAG);
+      if (!tag) continue;
+      a.removeChild(tag);
+      if (!ownTagOf(st, INSIDE_TAG)) st.appendChild(tag);
+    }
+  }
+}
+
+/** Where a file keeps this program's page and step tags (the other way from hoistOwnTags). */
+export function lowerOwnTags(root: Element): void {
+  const page = kids(root).find((k) => k.nodeName === 'page');
+  if (!page) return;
+  const names = PAGE_LEVEL_TAGS();
+  const tags = kids(page).filter((k) => k.nodeName === 'objecttag' && names.includes(k.getAttribute('Name') ?? ''));
+  const ok = (e: Element) => !e.hasAttribute('SupersededBy');
+  const carrier = kids(page).find((e) => ['t', 'graphic', 'group', 'curve', 'table', 'arrow', 'embeddedobject'].includes(e.nodeName) && ok(e))
+    ?? kids(page).find((e) => e.nodeName === 'fragment');
+  if (carrier) for (const t of tags) carrier.appendChild(t);
+  let byId: Map<string, Element> | null = null;
+  for (const st of descendants(page)) {
+    if (st.nodeName !== 'step') continue;
+    const tag = ownTagOf(st, INSIDE_TAG);
+    if (!tag) continue;
+    byId ??= idMap(root);
+    const arrow = stepArrows(st, byId).find((a) => a.nodeName === 'arrow' || (a.nodeName === 'graphic' && ok(a)));
+    if (arrow) arrow.appendChild(tag);
   }
 }
 

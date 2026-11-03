@@ -14,6 +14,7 @@ import { readCdxml, encodeTagValue, GEO_TAG } from '../src/io/cdxml';
 import { cdxmlToCdx, cdxToCdxml } from '../src/io/cdx';
 import { bracketsAround } from '../src/objects';
 import { ACS_1996 } from '../src/style';
+import { parseGuides } from '../src/editor/guides';
 
 const parse = (t: string) => new DOMParser().parseFromString(t.replace(/<!DOCTYPE[^>]*>/i, ''), 'application/xml').documentElement;
 const all = (e: Element, name: string) => Array.from(e.getElementsByTagName(name));
@@ -226,5 +227,46 @@ describe('groups inside groups (R1)', () => {
     const y = parse(writeCdxml(doc));
     const tb = all(y, 't').find((e) => e.getAttribute('id') === '11')!;
     expect(tb.parentElement!.nodeName).toBe('page');
+  });
+});
+
+describe('our page and step tags where ChemDraw keeps them (E10)', () => {
+  /** What a ChemDraw re-save does to them: tags on the page and on steps are dropped. */
+  const resaved = (xml: string): string => {
+    const x = parse(xml);
+    for (const e of [...all(x, 'page'), ...all(x, 'step')]) for (const k of [...e.children]) if (k.nodeName === 'objecttag') e.removeChild(k);
+    return new XMLSerializer().serializeToString(x);
+  };
+
+  it('keeps the guides and a cycle step\'s names through a ChemDraw re-save', () => {
+    const doc = newDoc();
+    let arrowId = 0, capId = 0;
+    doc.edit('Draw', () => {
+      const a = doc.addAtom(0, 0), b = doc.addAtom(14.4, 0); doc.addBond(a.id, b.id);
+      const c = doc.addAtom(120, 0), d = doc.addAtom(134.4, 0); doc.addBond(c.id, d.id);
+      capId = doc.addCaption({ x: 60, y: 20, runs: [{ text: 'step 1' }] } as never).id;
+      arrowId = doc.addArrow({ tail: { x: 30, y: 0 }, head: { x: 100, y: 0 }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: 6, headWidth: 1.5,
+        step: { reactants: ['a' + a.id], products: ['a' + c.id], above: [], below: [], inside: ['c' + capId], manual: true } } as never).id;
+    });
+    doc.guides = parseGuides('{"list":[{"kind":"v","x":50}],"grid":true}');
+    const xml = writeCdxml(doc);
+    const x = parse(xml);
+    // nothing of ours left on the page itself or on the step
+    for (const e of [...all(x, 'page'), ...all(x, 'step')]) expect([...e.children].some((k) => k.nodeName === 'objecttag')).toBe(false);
+    expect(all(x, 'arrow')[0].getElementsByTagName('objecttag')[0]?.getAttribute('Name')).toBe('Chem Illustrator inside');
+    for (const t of [resaved(xml), resaved(viaCdx(xml))]) {
+      const back = readCdxml(t).doc;
+      expect(back.guides?.list).toHaveLength(1);
+      const r = [...back.arrows.values()][0];
+      expect(r.step?.inside).toHaveLength(1);
+      expect(back.captions.has(Number(r.step!.inside![0].slice(1)))).toBe(true);
+    }
+    // our own file, opened and saved again untouched, comes back the same
+    expect(writeCdxml(readCdxml(xml).doc)).toBe(xml);
+  });
+
+  it('still reads the tags older files keep on the page', () => {
+    const old = file('<objecttag TagType="String" Name="Chem Illustrator guides" Value="{&quot;list&quot;:[{&quot;kind&quot;:&quot;h&quot;,&quot;y&quot;:40}],&quot;grid&quot;:false}" Visible="no"/><fragment id="2"><n id="3" p="100 100"/></fragment>');
+    expect(readCdxml(old).doc.guides?.list).toHaveLength(1);
   });
 });
