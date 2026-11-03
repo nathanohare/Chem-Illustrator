@@ -9,6 +9,9 @@ import { readFileSync } from 'node:fs';
 import { readCdxml, cycleOf } from '../src/io/cdxml';
 import { cdxToCdxml } from '../src/io/cdx';
 import { fitPasted } from '../src/io/fit-drawing';
+import { insertDrawing } from '../src/io/clipboard';
+import { crossingGaps } from '../src/chem/crossing';
+import { Doc } from '../src/model';
 import { labelSpec, layoutLabel } from '../src/chem/labels';
 import { ACS_1996, bondWidths, labelBold } from '../src/style';
 
@@ -83,5 +86,35 @@ describe('ring fills from bonds', () => {
     const ring = cycleOf(doc, bonds)!;
     expect(ring).toHaveLength(6);
     expect(cycleOf(doc, bonds.slice(1))).toBeNull();
+  });
+});
+
+describe('what ChemDraw says crosses', () => {
+  it('leaves gaps where ChemDraw does, near misses included', () => {
+    const doc = fromChemDraw();
+    const gray = doc.bonds.get(1038)!;
+    expect(gray.crossing).toEqual(expect.arrayContaining([1017, 1018, 1025, 1040]));
+    // the bonds it lists know it too
+    expect(doc.bonds.get(1025)!.crossing).toContain(1038);
+    const withList = crossingGaps(doc, gray, 3);
+    const geometric = crossingGaps(doc, { ...gray, crossing: undefined }, 3);
+    expect(withList.length).toBeGreaterThan(geometric.length);
+  });
+
+  it('are the copies when pasted', () => {
+    const src = fromChemDraw();
+    const doc = new Doc();
+    const sel = insertDrawing(doc, src, { x: 0, y: 0 });
+    for (const id of sel.bonds) for (const o of doc.bonds.get(id)!.crossing ?? []) expect(sel.bonds.has(o)).toBe(true);
+    expect([...sel.bonds].some((id) => doc.bonds.get(id)!.crossing?.length)).toBe(true);
+  });
+});
+
+describe('labels ChemDraw centres', () => {
+  it('sit with their middle on the atom (Ru, Si)', () => {
+    const spec = { ...labelSpec(44, 'Ru', 0, 0, 3, 3, true, false)!, centred: true };
+    const lay = layoutLabel(spec, [{ x: 1, y: 0 }], 10, (t, s) => t.length * s * 0.6, 'auto');
+    const x1 = Math.min(...lay.boxes.map((b) => b.x1)), x2 = Math.max(...lay.boxes.map((b) => b.x2));
+    expect(x1 + x2).toBeCloseTo(0, 6);
   });
 });

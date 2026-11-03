@@ -227,6 +227,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   /** Circles drawn inside structures: ring circles when they sit in the middle of an aromatic ring. */
   const pendingCircles: { x: number; y: number; oval: () => void }[] = [];
 
+  /** Every bond read, by its id in the file, and the bonds the file says each one crosses. */
+  const allBondIds = new Map<string, number>();
+  const fileCrossings: [number, string[]][] = [];
   const readFragment = (frag: Element) => {
     // text ChemDraw turned into a lone label on saving (Interpret Chemically): a text box again, as
     // it was written; ChemDraw's guess at what an unknown name is made of (DMAP as D, M, A, P) is not kept
@@ -342,6 +345,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         if (size && ls === null) atom.s = size / st.labelSize;
         const lj = t.getAttribute('LabelJustification');
         const la = t.getAttribute('LabelAlignment');
+        if (la === 'Center' || t.getAttribute('Justification') === 'Center') atom.centred = true;
         if (la === 'Above' || la === 'Below') atom.just = 'auto';
         else if (la === 'Right' || lj === 'Right') atom.just = 'left';
         else if (la === 'Left' || lj === 'Left') atom.just = 'right';
@@ -411,6 +415,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       for (const [attr, key] of Object.entries(widths)) {
         const v = Number(own(attr));
         if (own(attr) !== null && v > 0 && Math.abs(v - st[key]) > 1e-3) extra[key] = v;
+        // a bond with a line width of its own keeps the drawing's other widths (they would scale with it)
+        else if (extra.s !== undefined && Math.abs(extra.s - 1) > 1e-3) extra[key] = own(attr) !== null && v > 0 ? v : st[key];
       }
       const c = color(b);
       if (c) extra.color = c;
@@ -422,6 +428,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       const bond = doc.addBond(a1, a2, order, display, extra);
       from('b', bond.id, b);
       bondIds.set(b.getAttribute('id') ?? '', bond.id);
+      allBondIds.set(b.getAttribute('id') ?? '', bond.id);
+      const crosses = (b.getAttribute('CrossingBonds') ?? '').trim();
+      if (crosses) fileCrossings.push([bond.id, crosses.split(/\s+/)]);
       stats.bonds++;
     }
     // ChemDraw's ring fills: an area coloured in behind the bonds that go round it
@@ -964,6 +973,15 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
 
   doc.bulk(() => {
     walk(root);
+    // the bonds ChemDraw says cross, near misses included, both ways round
+    for (const [id, others] of fileCrossings) {
+      for (const o of others.map((x) => allBondIds.get(x)).filter((x): x is number => x !== undefined && x !== id)) {
+        for (const [p, q] of [[id, o], [o, id]]) {
+          const b = doc.bonds.get(p)!;
+          if (!b.crossing?.includes(q)) doc.updateBond(p, { crossing: [...(b.crossing ?? []), q] });
+        }
+      }
+    }
     readSteps(all, refOf, doc);
     if (morphTags.length) readMorphTags(morphTags, refOf(), doc);
     if (pinTags.length) readPinTags(pinTags, refOf(), doc);

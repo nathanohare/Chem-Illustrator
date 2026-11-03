@@ -20,6 +20,25 @@ function crossAt(p: Vec, q: Vec, r: Vec, s: Vec): { t: number; u: number; sin: n
   return { t, u, sin: Math.abs(den) / (l1 * l2) };
 }
 
+/**
+ * Where segment r→s ends just beside p→q (within `reach`), as a fraction along p→q: a near miss
+ * that ChemDraw counts as a crossing (CrossingBonds) and leaves a gap for. Null when it doesn't.
+ */
+function nearAt(p: Vec, q: Vec, r: Vec, s: Vec, reach: number): { t: number; sin: number } | null {
+  const d = { x: q.x - p.x, y: q.y - p.y }, l2 = d.x * d.x + d.y * d.y;
+  if (l2 < 1e-12) return null;
+  const e = { x: s.x - r.x, y: s.y - r.y }, le = Math.hypot(e.x, e.y);
+  const sin = le ? Math.abs(d.x * e.y - d.y * e.x) / (Math.sqrt(l2) * le) : 1;
+  let best: { t: number; sin: number } | null = null, bd = reach;
+  for (const x of [r, s]) {
+    const t = ((x.x - p.x) * d.x + (x.y - p.y) * d.y) / l2;
+    if (t <= 0.02 || t >= 0.98) continue;
+    const dist = Math.hypot(p.x + d.x * t - x.x, p.y + d.y * t - x.y);
+    if (dist <= bd) { bd = dist; best = { t, sin }; }
+  }
+  return best;
+}
+
 /** The bonds that cross this one (not counting bonds that share an atom with it). */
 export function crossingBonds(doc: Doc, b: Bond): Bond[] {
   const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
@@ -52,9 +71,12 @@ export function crossingGaps(doc: Doc, b: Bond, half: number, crossing = crossin
   if (l < 1e-6) return [];
   const out: [number, number][] = [];
   const me = bondLayer(b);
-  for (const o of crossing) {
+  // and the bonds a file says cross it, where they still pass close (ChemDraw counts near misses)
+  const listed = (b.crossing ?? []).map((id) => doc.bonds.get(id)).filter((o): o is Bond => !!o && !crossing.includes(o));
+  for (const o of [...crossing, ...listed]) {
     if (bondLayer(o) <= me) continue;
-    const c = crossAt(p, q, doc.atoms.get(o.a1)!, doc.atoms.get(o.a2)!);
+    const r = doc.atoms.get(o.a1)!, s = doc.atoms.get(o.a2)!;
+    const c = crossAt(p, q, r, s) ?? (listed.includes(o) ? nearAt(p, q, r, s, half * 1.5) : null);
     if (!c) continue;
     // a shallow crossing needs a longer gap to clear the other bond
     const h = half / Math.max(0.35, c.sin) / l;
