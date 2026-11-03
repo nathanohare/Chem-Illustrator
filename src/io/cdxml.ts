@@ -13,7 +13,7 @@ import { lipDirection } from '../chem/polymer';
 import { Doc, Atom, Bond, BondDisplay, TextRun, Arrow, Shape, Entity, Kind, StereoLabel, Caption, StepRoles, MorphStep, CHIRAL_FLAGS, PARTIAL, PAPER, type Pin, type PictureFx, type ShapeMath } from '../model';
 import { TEXT_TAG, parseTextTag, runsFromChemDraw } from '../text/chemdraw-text';
 import { readPageTag } from '../page-grid';
-import { DocStyle } from '../style';
+import { DocStyle, MAP_LOOKS, mapBoxStyle, type MapLook } from '../style';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
 import { addNicknames } from '../chem/labels';
 import { ringBonds, ringsThroughBond } from '../chem/aromatic';
@@ -139,6 +139,14 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (pt(v.headWidth)) doc.style.arrowHeadWidth = pt(v.headWidth);
       const scheme = cleanScheme(v.scheme);
       if (scheme) doc.style.scheme = scheme;
+    } catch { /* not ours to read */ }
+  }
+  const mapLook = pg && kids(pg).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === MAP_LOOK_TAG)?.getAttribute('Value');
+  if (mapLook) {
+    try {
+      const v = JSON.parse(mapLook) as { look?: unknown; box?: unknown };
+      if (MAP_LOOKS.some((l) => l.value === v.look)) doc.style.mapLook = v.look as MapLook;
+      if (v.box !== undefined) doc.style.mapBox = mapBoxStyle(v.box);
     } catch { /* not ours to read */ }
   }
   const pb = pg?.getAttribute('BoundingBox')?.trim().split(/\s+/).map(Number);
@@ -1147,6 +1155,8 @@ export const PAGE_TAG = 'Chem Illustrator page grid';
 export const GUIDES_TAG = 'Chem Illustrator guides';
 /** The drawing style's text above and below arrows (size, font), as JSON on the page: ChemDraw has no setting for it. */
 export const ARROW_TEXT_TAG = 'Chem Illustrator arrows';
+/** The drawing's map-number box look and its own box format, as JSON on the page (ChemDraw draws its own gray boxes). */
+export const MAP_LOOK_TAG = 'Chem Illustrator map numbers';
 /** On a MultiAttachment node: its π-system drawn in Kekulé form rather than delocalized (only this program reads it). */
 export const KEKULE_TAG = 'Chem Illustrator Kekule';
 /** The tag on turned text: degrees clockwise about the start of its first line (ChemDraw shows it level). */
