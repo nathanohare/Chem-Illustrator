@@ -751,7 +751,9 @@ class CdxmlWriter {
     const p = this.placer.number(a);
     const tag = this.el('objecttag', { TagType: 'Unknown', Name: 'number' });
     const t = this.el('t', { p: pt(p), BoundingBox: box({ x1: p.x, y1: p.y - CAP * p.size, x2: p.x + this.measure(a.atomNumber, p.size), y2: p.y }), CaptionLineHeight: 'variable' });
-    const s = this.el('s', { font: this.fontId(), size: f2(p.size).replace(/\.00$/, ''), color: '0' });
+    // in the atom's colour, or the number's own, bold or italic as it was
+    const nl = a.numberLabel;
+    const s = this.el('s', { font: this.fontId(), size: f2(p.size).replace(/\.00$/, ''), color: this.colorAttr(nl?.color ?? a.color) ?? '0', face: nl?.face || null });
     s.textContent = a.atomNumber;
     t.appendChild(s);
     tag.appendChild(t);
@@ -982,7 +984,8 @@ class CdxmlWriter {
     const { text, hCount } = this.autoText(a);
     if (a.label === null) n.setAttribute('NumHydrogens', String(hCount));
     else if (rebuildInner) this.labelChemistry(n, a);
-    n.setAttribute('NeedsClean', 'yes');
+    // (not on a label ChemDraw can't interpret, such as (3,4)-MDP: cleaning it turns it round)
+    this.set(n, 'NeedsClean', n.getAttribute('NodeType') === 'Unspecified' ? null : 'yes');
     const size = this.doc.style.labelSize * (a.s ?? 1);
     const t = this.el('t', {});
     const color = this.colorAttr(a.color);
@@ -1133,6 +1136,7 @@ class CdxmlWriter {
     // ChemDraw 25 writes a label that runs to the left (Cy3P on PCy3) right-justified both ways
     if (right || centred) t.setAttribute('Justification', centred ? 'Center' : 'Right');
     else t.removeAttribute('Justification');
+    if (a.stackedLoose && a.stacked) t.setAttribute('LineHeight', 'auto');
     // the node's LabelDisplay (a ChemDraw file's) says the same, as it comes first when read
     const n = t.parentElement;
     if (n?.nodeName === 'n' && n.hasAttribute('LabelDisplay')) {
@@ -1477,7 +1481,7 @@ class CdxmlWriter {
       const size = r.size ?? def;
       maxSize = Math.max(maxSize, size);
       // Greek letters and signs that an ordinary font can't hold go in the Symbol font, as ChemDraw does
-      for (const piece of toSymbolPieces(r.text)) {
+      for (const piece of toSymbolPieces(r.text, !!r.symbolFont)) {
         const s = this.el('s', { font: this.fontId(piece.symbol ? 'Symbol' : r.font ?? (this.doc.style.captionFont || 'Arial')), size: f2(size).replace(/\.00$/, ''), color: this.colorAttr(r.color) ?? '0', face: faceOf(r) });
         s.textContent = piece.text;
         t.appendChild(s);
@@ -2150,6 +2154,8 @@ class CdxmlWriter {
     if (c[k] > 250) return null;
     const a = (f[k] - c[k]) / (255 - c[k]);
     if (a <= 0.001 || a >= 0.999) return null;
+    // ChemDraw's own value, read with the fill, while the fill is still that tint of this colour
+    if (s.fade !== undefined && s.fade > 0 && s.fade < 1000 && tint('#' + ink, 1 - s.fade / 1000).toLowerCase() === '#' + fill.toLowerCase()) return Math.round(s.fade);
     const fade = Math.round((1 - a) * 1000);
     // (it has to be that tint in every channel, as ChemDraw will draw it; rounding in the colours
     // leaves it a little off, so a round number that gives this very tint is the one it was)
@@ -2283,18 +2289,28 @@ class CdxmlWriter {
         set('BoundingBox', box(s));
         // a repeat group's label: the usage, and the label text as ChemDraw shows it by the bracket
         set('BracketUsage', s.repeat ? (repeatCount(s.repeat) === null ? 'SRU' : 'MultipleGroup') : null);
-        for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === 'bracketusage') g.removeChild(c);
+        for (const c of kids(g)) if (c.nodeName === 'objecttag' && (c.getAttribute('Name') === 'bracketusage' || c.getAttribute('Name') === 'parameterizedBracketLabel')) g.removeChild(c);
         if (s.repeat) {
-          const size = 0.75 * this.doc.style.labelSize;
+          const look = s.repeatLook;
+          const size = look?.size || 0.75 * this.doc.style.labelSize;
           const w = this.measure(s.repeat, size);
           const p = repeatLabelPlace(s, size, w);
           const tag = this.el('objecttag', { TagType: 'Unknown', Name: 'bracketusage' });
           const tt = this.el('t', { p: pt(p), BoundingBox: box({ x1: p.x, y1: p.y - CAP * size, x2: p.x + w, y2: p.y }), CaptionLineHeight: 'variable' });
-          const sp = this.el('s', { font: this.fontId(), size: f2(size).replace(/\.00$/, ''), color: '0', face: repeatCount(s.repeat) === null ? 2 : 0 });
-          sp.textContent = s.repeat;
-          tt.appendChild(sp);
+          const run = () => {
+            const sp = this.el('s', { font: this.fontId(), size: f2(size).replace(/\.00$/, ''), color: this.colorAttr(look?.color ?? s.color) ?? '0', face: look?.face ?? (repeatCount(s.repeat!) === null ? 2 : 0) });
+            sp.textContent = s.repeat!;
+            return sp;
+          };
+          tt.appendChild(run());
           tag.appendChild(tt);
           g.appendChild(tag);
+          // ChemDraw 25 keeps the label a second time, hidden, where it is drawn
+          const hidden = this.el('objecttag', { TagType: 'Unknown', Name: 'parameterizedBracketLabel', Visible: 'no' });
+          const ht = this.el('t', { p: pt(p), Visible: 'no' });
+          ht.appendChild(run());
+          hidden.appendChild(ht);
+          g.appendChild(hidden);
         }
         break;
       }

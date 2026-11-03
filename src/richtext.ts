@@ -256,6 +256,9 @@ export function fromSymbolFont(text: string): string {
 const WIN_EXTRA = new Set('€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ');
 const plainFontChar = (ch: string) => ch.charCodeAt(0) < 0x100 || WIN_EXTRA.has(ch);
 
+/** Does text read from the Symbol font hold a sign an ordinary font has too (•, °, ±), which would otherwise be saved in that font? */
+export const symbolOnlyByChoice = (text: string): boolean => [...text].some((ch) => plainFontChar(ch) && TO_SYMBOL.has(ch) && ch !== ' ');
+
 /** Can this character be saved for ChemDraw (directly, or through the Symbol font)? */
 export const savableChar = (ch: string): boolean => plainFontChar(ch) || TO_SYMBOL.has(ch);
 
@@ -263,15 +266,20 @@ export const savableChar = (ch: string): boolean => plainFontChar(ch) || TO_SYMB
  * Split text for saving: characters an ordinary font can't hold but the Symbol font can
  * (Greek letters, arrows, ≤ and so on) come out as Symbol-font pieces.
  */
-export function toSymbolPieces(text: string): { text: string; symbol: boolean }[] {
+export function toSymbolPieces(text: string, symbolFont = false): { text: string; symbol: boolean }[] {
   const out: { text: string; symbol: boolean }[] = [];
   for (const ch of text) {
-    const sym = !plainFontChar(ch) && TO_SYMBOL.has(ch);
+    // (a run read from ChemDraw's Symbol font keeps signs such as • in it, though Arial has them too)
+    const sym = (symbolFont || !plainFontChar(ch)) && TO_SYMBOL.has(ch);
     const t = sym ? TO_SYMBOL.get(ch)! : ch;
     const last = out[out.length - 1];
     if (last && last.symbol === sym) last.text += t;
     else out.push({ text: t, symbol: sym });
   }
+  // spaces ending the text after a Symbol piece stay in it, as ChemDraw keeps them in that font
+  // (a space in Arial is wider, which moves a centred line)
+  const n = out.length;
+  if (n >= 2 && out[n - 2].symbol && /^ +$/.test(out[n - 1].text)) out[n - 2].text += out.pop()!.text;
   return out;
 }
 

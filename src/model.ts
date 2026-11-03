@@ -125,6 +125,8 @@ export interface Atom {
    * dot for an H toward the viewer, a hashed one for an H away.
    */
   hDot?: 'dot' | 'dash';
+  /** A stacked label with ChemDraw's LineHeight auto: its lines 1.15 of the size apart, not the tighter usual. */
+  stackedLoose?: boolean;
   /** The file's node said which way the label runs (ChemDraw's LabelDisplay), so a save says so too. */
   fixedDir?: boolean;
   /** Show this atom's R/S label when it has one (ChemDraw's "Show Stereochemistry"). */
@@ -151,7 +153,11 @@ export interface Atom {
   /** Show the atom number beside the atom (the ' key; ChemDraw's ShowAtomNumber). */
   showNumber?: boolean;
   /** Where the shown number sits, relative to the atom, when the file says or it was moved. */
-  numberLabel?: { dx: number; dy: number; size: number };
+  numberLabel?: {
+    dx: number; dy: number; size: number;
+    /** The number's own colour and ChemDraw face bits (1 bold, 2 italic), when the file gives it one (a bold blue 4). */
+    color?: string; face?: number;
+  };
   /**
    * The atom-atom map number across a reaction (Chemistry ▸ Reactions and Schemes ▸ Map Atoms, or a
    * mapped reaction SMILES or RXN file): an atom in a product has the number of the starting-material
@@ -355,6 +361,8 @@ export interface TextRun {
   outlineW?: number;
   /** Text effects: a soft drop shadow, down and to the right. */
   shadow?: boolean;
+  /** Read from ChemDraw's Symbol font, and saved in it again: its signs (•, °) stay in that font, which spaces lines differently from Arial. */
+  symbolFont?: boolean;
 }
 
 /** The text effects a run can have (the Font box), copied together onto every piece of it that is drawn. */
@@ -879,6 +887,12 @@ export interface Shape {
   patternClear?: boolean;
   /** Fill colour, when it differs from the outline colour (the outline is then drawn too). */
   fillColor?: string;
+  /**
+   * ChemDraw's FadePercent the fill was read from (tenths of a percent of the colour). Several
+   * values give the same tint here but not in ChemDraw's drawing, so it is written back while the
+   * fill is still that tint of the colour.
+   */
+  fade?: number;
   rounded?: boolean;
   /** Corner radius of a rounded box, in points (ChemDraw's default is six line widths). */
   radius?: number;
@@ -916,6 +930,8 @@ export interface Shape {
    * for a polymer's repeat unit, or a number for a group repeated that many times (chem/polymer.ts).
    */
   repeat?: string;
+  /** The repeat label's own look in the file it came from (a bold blue 4): colour, ChemDraw face bits and size in points. */
+  repeatLook?: { color?: string; face?: number; size?: number };
   /** Stands in for a picture in a ChemDraw file, which is kept as it was when saving. */
   picture?: boolean;
   /** A picture: its image as a data URL (PNG, JPEG, GIF or SVG); x1..y2 is where it shows. */

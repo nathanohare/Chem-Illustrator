@@ -23,7 +23,7 @@ import { DEG } from '../geom';
 import { chordLocal, ellipseArcPoints, headBend, swapHalf } from '../objects';
 import { pinSymbols } from '../chem/pins';
 import { kids, descendants, withoutDoctype } from './xml';
-import { styleFromFace, isSymbolFont, fromSymbolFont } from '../richtext';
+import { styleFromFace, isSymbolFont, fromSymbolFont, symbolOnlyByChoice } from '../richtext';
 import { dataUrl, fromDataUrl, imageSize } from '../render/images';
 import { emfToSvg } from '../render/emf-read';
 import { tidyFx } from '../render/picture-fx';
@@ -335,7 +335,15 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         } else if (ch.nodeName === 'objecttag' && ch.getAttribute('Name') === 'number') {
           // where the atom number sits (the ' key)
           const l = stereoTag(ch, x, y);
-          if (l) extra.numberLabel = { dx: l.dx, dy: l.dy, size: l.size };
+          if (l) {
+            extra.numberLabel = { dx: l.dx, dy: l.dy, size: l.size };
+            // its own colour and weight, as ChemDraw keeps them on the number's text
+            const s = kids(kids(ch).find((k) => k.nodeName === 't') ?? ch).find((k) => k.nodeName === 's');
+            const nc = s ? color(s) : undefined;
+            const nf = s ? num(s, 'face', 0) & 7 : 0;
+            if (nc && nc !== (color(n) ?? '#000000')) extra.numberLabel.color = nc;
+            if (nf) extra.numberLabel.face = nf;
+          }
         }
       }
       if (n.getAttribute('ShowAtomStereo') === 'yes') extra.showStereo = true;
@@ -409,7 +417,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         if (!above && !below && (la === 'Center' || t.getAttribute('Justification') === 'Center')) atom.centred = true;
         // which way the label runs: the node's LabelDisplay, else the text's LabelJustification;
         // LabelAlignment counts only for labels stacked above or below (the spec: multi-attached labels)
-        if (above || below) { atom.just = 'auto'; atom.stacked = above ? 'up' : 'down'; }
+        if (above || below) { atom.just = 'auto'; atom.stacked = above ? 'up' : 'down'; if (t.getAttribute('LineHeight') === 'auto') atom.stackedLoose = true; }
         else if (ld === 'Left' || ld === 'Right') { atom.just = ld === 'Left' ? 'right' : 'left'; atom.fixedDir = true; }
         else if (lj === 'Right' || lj === 'Left') atom.just = lj === 'Right' ? 'left' : 'right';
         else if (la === 'Right') atom.just = 'left';
@@ -591,7 +599,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const ls = t.getAttribute('LineStarts');
     if (ls && wrap === undefined) applyLineEnds(runs, ls.trim().split(/\s+/).map(Number).slice(0, -1));
     // (the line ends count the text as stored, so Symbol-font text is turned into Greek letters afterwards)
-    for (const r of runs) if (isSymbolFont(r.font)) { r.text = fromSymbolFont(r.text); delete r.font; }
+    for (const r of runs) if (isSymbolFont(r.font)) { r.text = fromSymbolFont(r.text); delete r.font; if (symbolOnlyByChoice(r.text)) r.symbolFont = true; }
     const lh = t.getAttribute('LineHeight') ?? t.getAttribute('CaptionLineHeight');
     let lineHeight = lh && /^[\d.]+$/.test(lh) ? Number(lh) : undefined;
     // lists and paragraph formatting saved by this program, if the text still matches them
@@ -955,6 +963,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         s.filled = true;
         // (its outline stays in the full colour, so the fill is a colour of its own)
         s.fillColor = tint(ink, 1 - Math.min(1, fade / 1000));
+        if (fade <= 1000) s.fade = fade;
       }
       // our fill style and outline colour, which ChemDraw has no words for
       const tag = kids(g).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === FILL_TAG);
@@ -1130,9 +1139,22 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       }
       if (!brackets.length) continue;
       // the label goes where ChemDraw shows it: on the bracket holding the label text, else the closing one
-      const labelled = (brackets.find((b) => kids(b.e).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === 'bracketusage'))
-        ?? brackets.find((b) => lipDirection(b.sh).x < -0.5) ?? brackets[brackets.length - 1]).sh;
+      const usageTag = (b: { e: Element }) => kids(b.e).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === 'bracketusage');
+      const withText = brackets.find((b) => usageTag(b));
+      const labelled = (withText ?? brackets.find((b) => lipDirection(b.sh).x < -0.5) ?? brackets[brackets.length - 1]).sh;
       labelled.repeat = text;
+      // the label's own colour, weight and size, as ChemDraw keeps them on its text
+      const s0 = withText ? kids(kids(usageTag(withText)!).find((k) => k.nodeName === 't') ?? usageTag(withText)!).find((k) => k.nodeName === 's') : undefined;
+      if (s0) {
+        const look: NonNullable<Shape['repeatLook']> = {};
+        const lc = color(s0);
+        if (lc && lc !== (labelled.color ?? '#000000')) look.color = lc;
+        // (only what differs from how a label is drawn here: plain numbers, italic letters, 3/4 of the label size)
+        const face = num(s0, 'face', 0), size = num(s0, 'size', 0);
+        if ((face & 3) !== (/^\d+$/.test(text) ? 0 : 2)) look.face = face;
+        if (size > 0 && Math.abs(size - 0.75 * st.labelSize) > 0.01) look.size = size;
+        if (Object.keys(look).length) labelled.repeatLook = look;
+      }
     }
   };
 

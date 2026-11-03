@@ -758,8 +758,9 @@ export class Renderer {
   /** The atom number shown with the ' key, on the open side of the atom or its label. */
   private drawAtomNumber(ctx: CanvasRenderingContext2D, doc: Doc, a: Atom, curFont: string): string {
     const p = this.stereoPlacer(doc).number(a);
-    let f = `${p.size}px ${FONT_STACK}`;
-    let ink = a.color ?? '#000';
+    const own = a.numberLabel;
+    let f = `${own?.face && own.face & 2 ? 'italic ' : ''}${own?.face && own.face & 1 ? 'bold ' : ''}${p.size}px ${FONT_STACK}`;
+    let ink = own?.color ?? a.color ?? '#000';
     if (isMapNumber(a)) {
       // an atom-map number: in a small box (Chemistry ▸ Map Atoms), in the drawing's look
       const mapLook = docMapLook(doc.style);
@@ -1809,9 +1810,12 @@ export class Renderer {
         ctx.stroke();
         if (s.repeat) {
           // a repeat group's label (n, 3…) by the lower end, as ChemDraw puts it
-          const size = 0.75 * labelSize;
+          const look = s.repeatLook;
+          const size = look?.size || 0.75 * labelSize;
           const pos = repeatLabelPlace(s, size, measureText(s.repeat, size));
-          ctx.font = `${/^\d+$/.test(s.repeat) ? '' : 'italic '}${size}px ${FONT_STACK}`;
+          const face = look?.face ?? (/^\d+$/.test(s.repeat) ? 0 : 2);
+          ctx.font = `${face & 2 ? 'italic ' : ''}${face & 1 ? 'bold ' : ''}${size}px ${FONT_STACK}`;
+          if (look?.color) ctx.fillStyle = look.color;
           ctx.fillText(s.repeat, pos.x, pos.y);
         }
         break;
