@@ -137,9 +137,16 @@ def loss_fn(o, y):
     yn = norm_y(y)
     mask = ~torch.isnan(yn)
     # 1H errors weigh as much as 13C errors relative to their typical size
-    w = torch.tensor([1.0, 1.5])
+    w = torch.tensor([1.0, 1.5], device=o.device)
     d = (o - torch.nan_to_num(yn)).abs() * w
     return (d * mask).sum() / mask.sum().clamp(min=1)
+
+
+DEV = torch.device('cpu')
+
+
+def to_dev(*ts):
+    return [t.to(DEV) if t is not None else None for t in ts]
 
 
 def evaluate(net, exs, bs=256):
@@ -147,7 +154,7 @@ def evaluate(net, exs, bs=256):
     err = {'13C': [], '1H': []}
     with torch.no_grad():
         for i in range(0, len(exs), bs):
-            x, s, d, t, y = batch(exs[i:i + bs])
+            x, s, d, t, y = to_dev(*batch(exs[i:i + bs]))
             p = denorm(net(x, s, d, t))
             for k, nuc in enumerate(('13C', '1H')):
                 m = ~torch.isnan(y[:, k])
@@ -157,9 +164,9 @@ def evaluate(net, exs, bs=256):
 
 
 def predict_mol(net, a, b, solv):
-    x, s, d, t, _ = batch([{'a': a, 'b': b, 'solv': solv}])
+    x, s, d, t, _ = to_dev(*batch([{'a': a, 'b': b, 'solv': solv}]))
     with torch.no_grad():
-        return denorm(net(x, s, d, t)).numpy()
+        return denorm(net(x, s, d, t)).cpu().numpy()
 
 
 def score_si(net, si_rows, feats):
@@ -219,24 +226,42 @@ def main():
     ap.add_argument('--lr', type=float, default=2e-3)
     ap.add_argument('--limit', type=int, default=0, help='use only this many training examples (quick runs)')
     ap.add_argument('--out', default='net.pt')
+    ap.add_argument('--bundle', default=None, help='read training examples from this file (see --write-bundle) instead of WORK/data')
+    ap.add_argument('--write-bundle', default=None, help='write the training and validation examples here and stop')
+    ap.add_argument('--device', default='cpu', help="'cuda' for an NVIDIA or ROCm (AMD) GPU")
     ap.add_argument('--report', default=None)
     a = ap.parse_args()
     torch.manual_seed(a.seed)
     random.seed(a.seed)
     torch.set_num_threads(os.cpu_count() or 4)
+    global DEV
+    DEV = torch.device(a.device)
     d = a.work.rstrip('/') + '/data/'
-    feats = load_feats(d + 'feats.jsonl')
-    db_all, ship_nb, srcmap = pickle.load(open(d + 'nmr-measured.dat.inputs.pkl', 'rb'))
-    ex = make_examples(db_all, feats) + make_examples(ship_nb, feats, srcmap)
-    val = [e for e in ex if bucket(e['key']) < 5]
-    train = [e for e in ex if bucket(e['key']) >= 5]
+    if a.bundle:
+        import gzip
+        train, val = pickle.load(gzip.open(a.bundle, 'rb'))
+        feats = None
+    else:
+        feats = load_feats(d + 'feats.jsonl')
+        db_all, ship_nb, srcmap = pickle.load(open(d + 'nmr-measured.dat.inputs.pkl', 'rb'))
+        ex = make_examples(db_all, feats) + make_examples(ship_nb, feats, srcmap)
+        val = [e for e in ex if bucket(e['key']) < 5]
+        train = [e for e in ex if bucket(e['key']) >= 5]
+    if a.write_bundle:
+        import gzip
+        slim = lambda es: [{'key': e['key'], 'a': e['a'], 'b': e['b'], 'solv': e['solv'], 'y': e['y']} for e in es]  # noqa: E731
+        with gzip.open(a.write_bundle, 'wb') as f:
+            pickle.dump((slim(train), slim(val)), f, protocol=4)
+        print(json.dumps({'train': len(train), 'val': len(val), 'bundle': a.write_bundle}))
+        return
     if a.limit:
         random.shuffle(train)
         train = train[:a.limit]
-    si_rows = [json.loads(l) for l in open(d + 'records-v1.jsonl')]
+    si_path = d + 'records-v1.jsonl'
+    si_rows = [json.loads(l) for l in open(si_path)] if feats and os.path.exists(si_path) else []
     si_rows = [r for r in si_rows if r.get('tier') in ('gold', 'silver') and r.get('smiles')]
     print(json.dumps({'train': len(train), 'val': len(val), 'si': len(si_rows)}), flush=True)
-    net = Net(a.hidden, a.layers)
+    net = Net(a.hidden, a.layers).to(DEV)
     opt = torch.optim.AdamW(net.parameters(), lr=a.lr, weight_decay=1e-5)
     steps = a.epochs * ((len(train) + a.bs - 1) // a.bs)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=a.lr, total_steps=steps, pct_start=0.05)
@@ -247,7 +272,7 @@ def main():
         random.shuffle(train)
         tot = 0.0
         for i in range(0, len(train), a.bs):
-            x, s, dd, t, y = batch(train[i:i + a.bs])
+            x, s, dd, t, y = to_dev(*batch(train[i:i + a.bs]))
             loss = loss_fn(net(x, s, dd, t), y)
             opt.zero_grad()
             loss.backward()
@@ -258,13 +283,14 @@ def main():
         v = evaluate(net, val)
         score = v['13C']['MAE'] / 2.0 + v['1H']['MAE'] / 0.2
         if score < best:
-            best, best_state = score, {k: t.clone() for k, t in net.state_dict().items()}
+            best, best_state = score, {k: t.detach().cpu().clone() for k, t in net.state_dict().items()}
         rep['epochs'].append({'epoch': ep, 'loss': tot / sum(len(e['a']) for e in train), 'val': v, 'sec': round(time.time() - t0)})
         print(json.dumps(rep['epochs'][-1]), flush=True)
     net.load_state_dict(best_state)
-    torch.save({'state': best_state, 'hidden': a.hidden, 'layers': a.layers}, a.out)
-    rep['si'] = score_si(net, si_rows, feats)
-    print('si', json.dumps({n: rep['si'][n].get('under 500') for n in tl.NUCS}), flush=True)
+    torch.save({'state': best_state, 'hidden': a.hidden, 'layers': a.layers, 'val': best}, a.out)
+    if si_rows:
+        rep['si'] = score_si(net, si_rows, feats)
+        print('si', json.dumps({n: rep['si'][n].get('under 500') for n in tl.NUCS}), flush=True)
     if a.report:
         json.dump(rep, open(a.report, 'w'), indent=1)
 
