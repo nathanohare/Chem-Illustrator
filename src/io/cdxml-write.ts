@@ -2167,8 +2167,8 @@ class CdxmlWriter {
         set('MajorAxisEnd3D', pt3({ x: c.x + rx * cos, y: c.y + rx * sin }));
         set('MinorAxisEnd3D', pt3({ x: c.x - ry * sin, y: c.y + ry * cos }));
         set('OvalType', [Math.abs(rx - ry) < 0.01 && 'Circle', filled, s.dashed && 'Dashed', s.bold && 'Bold', s.shadow && 'Shadowed'].filter(Boolean).join(' ') || null);
-        // in hundredths of the line width, as for a box
-        set('ShadowSize', s.shadow && s.shadowSize !== undefined ? String(Math.round((s.shadowSize / lwRef) * 100)) : null);
+        // in hundredths of the line width, as for a box (and, as there, ours by default when not set)
+        set('ShadowSize', s.shadow ? String(Math.round(((s.shadowSize ?? 4 * this.doc.style.lineWidth) / lwRef) * 100)) : null);
         break;
       }
       case 'symbol': {

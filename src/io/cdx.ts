@@ -225,7 +225,7 @@ const P: Record<string, Prop> = {
   RectangleType: { tag: 0x0a03, kind: 'bits16', values: { Plain: 0, RoundEdge: 1, Shadow: 2, Shaded: 4, Filled: 8, Dashed: 16, Bold: 32 } },
   OvalType: { tag: 0x0a04, kind: 'bits16', values: { Plain: 0, Circle: 1, Shaded: 2, Filled: 4, Dashed: 8, Bold: 16, Shadowed: 32 } },
   BracketType: { tag: 0x0a06, kind: 'enum16', values: list('RoundPair', 'SquarePair', 'CurlyPair', 'Square', 'Curly', 'Round') },
-  SymbolType: { tag: 0x0a07, kind: 'enum16', values: list('LonePair', 'Electron', 'RadicalCation', 'RadicalAnion', 'CirclePlus', 'CircleMinus', 'Dagger', 'DoubleDagger', 'Plus', 'Minus', 'Racemic', 'Absolute', 'Relative') },
+  SymbolType: { tag: 0x0a07, kind: 'enum16', values: list('LonePair', 'Electron', 'RadicalCation', 'RadicalAnion', 'CirclePlus', 'CircleMinus', 'Dagger', 'DoubleDagger', 'Plus', 'Minus', 'Racemic', 'Absolute', 'Relative', 'LonePairBar') },
   OrbitalType: {
     tag: 0x0a05, kind: 'enum16', values: {
       s: 0, oval: 1, lobe: 2, p: 3, hybridPlus: 4, hybridMinus: 5, dz2Plus: 6, dz2Minus: 7, dxy: 8,
