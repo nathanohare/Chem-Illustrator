@@ -55,6 +55,8 @@ export interface Atom {
   color?: string;
   /** Size relative to the document style (structures shrunk or enlarged in ChemDraw keep their own scale). */
   s?: number;
+  /** The gap bonds keep from this atom's label, in points, where it isn't the document's scaled by `s` (ChemDraw's MarginWidth on an atom). */
+  marginWidth?: number;
   /** A 3-D position kept from a file (ChemDraw's xyz on a structure built from a crystal file). */
   xyz?: [number, number, number];
   /**
@@ -203,6 +205,17 @@ export interface Bond {
   color?: string;
   /** Line widths relative to the document style. */
   s?: number;
+  /**
+   * A structure's own drawing settings, in points, where they aren't the document's scaled by `s`
+   * (ChemDraw keeps these on each bond of a structure drawn at other settings): the width of a bold
+   * bond (a wedge's wide end is 1.5 times it), the distance between a hashed bond's hashes, the gap
+   * kept round labels and at crossings, and the bond length new bonds on the structure get.
+   * Read with bondWidths (style.ts).
+   */
+  boldWidth?: number;
+  hashSpacing?: number;
+  marginWidth?: number;
+  bondLength?: number;
   /** An aromatic bond (order 1.5) in a ring drawn with a circle rather than a dashed second line. */
   circle?: boolean;
   /** Where it sits among bonds that cross it (higher in front; else the order it was drawn in). ChemDraw's Z. */
