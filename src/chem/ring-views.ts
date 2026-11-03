@@ -1,6 +1,7 @@
 // One six-membered ring drawn four ways: flat, as a chair, as the other (flipped) chair, and as
 // a boat. Tab goes from one to the next; on a chair with things on it, Tab walks the ring round
-// (each atom one place on, clockwise), ` walks it back, and Shift+Tab flips the chair. Every
+// (each atom one place on, clockwise), [ walks it back, and Shift+Tab flips the chair. \ goes
+// straight between the flat drawing and the chair. Every
 // substituent keeps its face of the ring (up or down), so the molecule and its stereochemistry
 // never change: a wedge on the flat ring becomes an axial or equatorial bond on that face.
 //

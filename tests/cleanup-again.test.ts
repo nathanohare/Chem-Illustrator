@@ -51,3 +51,20 @@ it('Clean Up again keeps the product centred on its arrow', () => {
   expect(Math.abs(after2.y - after1.y)).toBeLessThan(0.3 * L);
   expect(Math.abs(after2.x - after1.x)).toBeLessThan(0.3 * L);
 });
+
+it('Clean Up leaves an already tidy structure alone, however often it is pressed', () => {
+  const doc = new Doc();
+  doc.edit('build', () => pyridine(doc, 0, 0));
+  const ed = editorFor(doc);
+  ed.sel.atoms = new Set(doc.atoms.keys());
+  ed.cleanUp();
+  const v = doc.version;
+  const at = [...doc.atoms.values()].map((a) => [a.x, a.y]);
+  // a fresh press on the tidy structure (a new window on the same drawing), then again
+  const fresh = editorFor(doc);
+  fresh.sel.atoms = new Set(doc.atoms.keys());
+  expect(fresh.cleanUp()).toBe(false);
+  expect(fresh.cleanUp()).toBe(false);
+  expect(doc.version).toBe(v);
+  expect([...doc.atoms.values()].map((a) => [a.x, a.y])).toEqual(at);
+});
