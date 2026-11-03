@@ -136,6 +136,43 @@ describe('map number boxes', () => {
     const own = parseSettings(JSON.stringify({ mapBox: { fill: '', pattern: 'dots', border: 'red', borderWidth: 99, shadow: true } })).mapBox;
     expect(own).toMatchObject({ fill: '', pattern: 'dots', border: '#000000', borderWidth: 5, shadow: true, rounded: true });
   });
+
+  // Nate, 2026-11-03: the box look is saved with the drawing, so a figure looks the same on any
+  // computer; the program's setting is only the default for drawings with none of their own
+  it('saves the box look with the drawing, and keeps it on another computer and through a style change', async () => {
+    const { docMapLook, mapLookPrefs, ACS_1996 } = await import('../src/style');
+    const { applyStyle } = await import('../src/drawing-styles');
+    const before = { look: mapLookPrefs.look, custom: { ...mapLookPrefs.custom } };
+    try {
+      const doc = new Doc();
+      doc.edit('Draw', () => {
+        const a = doc.addAtom(0, 0), b = doc.addAtom(30, 0);
+        doc.addBond(a.id, b.id);
+        doc.updateAtom(a.id, { mapNo: 1, atomNumber: '1', showNumber: true });
+      });
+      const box = { fill: '#c0ffee', pattern: 'dots' as const, patternColor: '#112233', border: '#445566', borderWidth: 1.2, text: '#778899', bold: true, shadow: true, rounded: false };
+      doc.edit('Map Number Format', () => doc.setStyle({ ...doc.style, mapLook: 'custom', mapBox: box }));
+      const xml = writeCdxml(doc);
+      // another computer, whose own default is the gray outline
+      mapLookPrefs.look = 'grey';
+      mapLookPrefs.custom = { ...before.custom };
+      const back = readCdxml(xml).doc;
+      expect(docMapLook(back.style)).toEqual({ look: 'custom', custom: box });
+      back.edit('Drawing style', () => applyStyle(back, { ...ACS_1996 }, 'restyle'));
+      expect(docMapLook(back.style)).toEqual({ look: 'custom', custom: box });
+      // a drawing with map numbers saves the look it shows (here the default), so it is fixed from then on
+      const plain = readCdxml(writeCdxml(new Doc())).doc;
+      expect(plain.style.mapLook).toBeUndefined();
+      const d2 = readCdxml(xml.replace(/<objecttag[^>]*Chem Illustrator map numbers[^>]*\/>/, '')).doc;
+      expect(d2.style.mapLook).toBeUndefined();
+      expect(docMapLook(d2.style).look).toBe('grey');
+      mapLookPrefs.look = 'tint';
+      expect(readCdxml(writeCdxml(d2)).doc.style.mapLook).toBe('tint');
+    } finally {
+      mapLookPrefs.look = before.look;
+      mapLookPrefs.custom = before.custom;
+    }
+  });
 });
 
 // Review 2026-11-03: a starting material that falls apart into several products was mapped onto

@@ -22,7 +22,7 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl } from '../render/images';
-import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
+import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG } from './cdxml';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
 import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
@@ -38,6 +38,18 @@ import { bondLayer, crossingBondsCached } from '../chem/crossing';
 import { repeatGroups, repeatCount, repeatLabelPlace } from '../chem/polymer';
 import { ellipseAxes, isCircleRing, ringCircle, ringsThroughBond } from '../chem/aromatic';
 import { newmanForFile } from '../design/newman';
+import { docMapLook } from '../style';
+import { isMapNumber } from '../render/atom-marks';
+
+/**
+ * The drawing's map-number look as the page tag's JSON: saved when the drawing has a look of its
+ * own or shows map numbers, so it opens the same on another computer; null otherwise.
+ */
+function mapLookText(doc: Doc): string | null {
+  if (!doc.style.mapLook && !doc.style.mapBox && ![...doc.atoms.values()].some(isMapNumber)) return null;
+  const { look, custom } = docMapLook(doc.style);
+  return JSON.stringify(look === 'custom' ? { look, box: custom } : { look });
+}
 
 /** Numbers in an attribute such as "12.5 30 0". */
 const pts = (v: string | null): number[] => (v ?? '').trim().split(/\s+/).filter(Boolean).map(Number);
@@ -270,7 +282,8 @@ class CdxmlWriter {
     const arrow = Object.values(own).some((v) => v !== undefined && v !== '') ? JSON.stringify(own) : null;
     const a = this.pageTag(GUIDES_TAG, guidesText(this.doc.guides));
     const b = this.pageTag(ARROW_TEXT_TAG, arrow);
-    return a || b;
+    const c = this.pageTag(MAP_LOOK_TAG, mapLookText(this.doc));
+    return a || b || c;
   }
 
   /** One of this program's tags on the page, set to `want` (or taken away); true when it changed. */
