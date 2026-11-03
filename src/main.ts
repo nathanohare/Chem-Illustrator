@@ -509,6 +509,8 @@ const OFF_PALETTE = new Set([
   'boat-ae', 'twist-boat', 'half-chair', 'half-chair-ae', 'cyclohexanone', 'envelope', 'envelope-ae', 'c5-twist', 'cyclopentene',
   'cyclobutane', 'cyclobutane-ae', 'cyclopropane-ae', 'c7-twist-chair', 'c8-boat-chair', 'c8-crown', 'cot-tub',
   'cis-bicyclooctane', 'perhydroazulene', 'twistane',
+  // taken off the Projections palette in review (3 Nov 2026)
+  'sawhorse-eclipsed', 'fischer-1', 'stereo-4c', 'stereo-4d', 'stereo-tbp', 'stereo-oct', 'stereo-sqpy', 'stereo-sqpl', 'stereo-chain-1w', 'stereo-chain-1h',
 ]);
 const templatePalette = (group: Template['group'] | Template['group'][], palette: string, title: string, columns: number, iconSize?: number, first: { name: string; title: string }[] = []): PaletteDef => ({
   palette,
