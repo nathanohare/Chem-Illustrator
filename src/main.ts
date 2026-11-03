@@ -20,7 +20,7 @@ import { ToolboxEditor } from './ui/toolbox-editor';
 import { RibbonEditor } from './ui/ribbon-editor';
 import { readRibbons, applyRibbon, type RibbonInfo, type RibbonsPrefs } from './ui/ribbon-custom';
 import { editPalettes, getPalettes, onPalettes, setPalettes, useDrawingColours, usePaletteMenus } from './ui/palette-ui';
-import { Doc, Atom, Caption, Shape, type TextRun, outsideValence, Contents, CHIRAL_FLAGS, PICTURE_STYLES, type PictureLook, type Attachment, type HighlightStyle, type ShapeMath, PAPER, keepOnPage, type PageSetup, type PageWalls } from './model';
+import { Doc, Atom, Bond, type BondDisplay, PARTIAL, Caption, Shape, type TextRun, outsideValence, Contents, CHIRAL_FLAGS, PICTURE_STYLES, type PictureLook, type Attachment, type HighlightStyle, type ShapeMath, PAPER, keepOnPage, type PageSetup, type PageWalls } from './model';
 import { Renderer, measureText, forgetTextWidths } from './render/renderer';
 import { Editor, TOOLS, ringsWereFilled, setMarkTint, type HighlightToggle, type Selection } from './editor/editor';
 import { setAidTint } from './editor/cursor-aids';
@@ -141,7 +141,7 @@ import { PAPERS, defaultPaper, orient, placeIn, inside, placeSvg, pageSvg } from
 import { printPages } from './ui/print';
 import { SHEETS } from './io/cdxml-print';
 import { dataUrl, fromDataUrl, imageSize, loadImage, onImageReady, pictureMime, showableSrc, webpToPng } from './render/images';
-import { freeRing, matchStructure, straightenLinear, fusedRing, placeRing, sprout, ringOnAtom, ringDir } from './chem/chemgeom';
+import { freeRing, matchStructure, straightenLinear, fusedRing, placeRing, sprout, ringOnAtom, ringDir, straightenAt } from './chem/chemgeom';
 import { Toolbar, ToolbarItem, PaletteDef, type ToolDef } from './ui/toolbar';
 import { StylePanel, tidyStyle } from './ui/style-panel';
 import { installCombos } from './ui/combo';
@@ -534,6 +534,41 @@ const PERSPECTIVE_TOOLS: PaletteDef = {
   columns: 2,
 };
 
+/** The wedges that are drawn from scratch: solid, hollow and wavy (the hashed wedge has its own button). */
+const WEDGES: PaletteDef = {
+  palette: 'wedges',
+  title: 'Wedges',
+  items: [
+    { name: 'bond-wedge', title: 'Wedge. Click again to reverse' },
+    { name: 'bond-hollowWedge', title: 'Hollow wedge. Click again to reverse' },
+    { name: 'bond-wavyWedge', title: 'Wavy wedge: the wave widens away from the stereocenter. Click again to reverse' },
+  ],
+  columns: 3,
+};
+
+/** Dashed lines between atoms: a dashed bond, a hydrogen bond and an ionic bond. */
+const DASHES: PaletteDef = {
+  palette: 'dashes',
+  title: 'Dashed and Non-Covalent Bonds',
+  items: [
+    { name: 'bond-dash', title: 'Dashed bond' },
+    { name: 'bond-hydrogen', title: 'Hydrogen bond: drag from the H to the acceptor. Dotted, and leaves both atoms\' hydrogens as they were' },
+    { name: 'bond-ionic', title: 'Ionic bond: drag from the positive end. Dashed, and leaves both atoms\' hydrogens as they were' },
+  ],
+  columns: 3,
+};
+
+/** Bonds to the middle of a ring: hapto (to a metal) and variable attachment (a group on one of its atoms). */
+const HAPTO_TOOLS: PaletteDef = {
+  palette: 'hapto',
+  title: 'Hapto and Variable Attachment',
+  items: [
+    { name: 'bond-hapto', title: 'Hapto (η) bond: drag from a metal into a ring or onto a π-bond to bond it to the middle (η⁵-Cp, η⁶-arene, η²-alkene); click inside a ring or on a bond for a new metal there. Click a hapto bond to draw it to each atom' },
+    { name: 'bond-variable', title: 'Variable attachment: drag from a group into a ring to put it on one of the ring\'s atoms, then click ring atoms to add or take them out' },
+  ],
+  columns: 2,
+};
+
 /** Box select, with the lasso (freehand) on the same button. */
 const SELECT_TOOLS: PaletteDef = {
   palette: 'select',
@@ -554,15 +589,15 @@ const TOOL_GROUPS: ToolbarItem[][] = [
     { name: 'bond-single', title: 'Single bond. Click a bond: single, double, triple' },
     { name: 'bond-double', title: 'Double bond. Click again to move the second line' },
     { name: 'bond-triple', title: 'Triple bond' },
-    { name: 'bond-wedge', title: 'Wedge. Click again to reverse' },
+    WEDGES,
     { name: 'bond-hashWedge', title: 'Hashed wedge. Click again to reverse' },
     { name: 'bond-hash', title: 'Hashed bond' },
     { name: 'bond-bold', title: 'Bold bond' },
-    { name: 'bond-dash', title: 'Dashed bond' },
+    DASHES,
     { name: 'bond-partial', title: 'Partial bond: one forming or breaking in a transition state, drawn dashed. It leaves both atoms\' hydrogens as they were (hotkey P over a bond)' },
     { name: 'bond-wavy', title: 'Wavy bond' },
     { name: 'bond-dative', title: 'Dative bond: draw from the donor atom to the acceptor. Click again to reverse' },
-    { name: 'bond-hapto', title: 'Hapto (η) bond: drag from a metal into a ring or onto a π-bond to bond it to the middle (η⁵-Cp, η⁶-arene, η²-alkene); click inside a ring or on a bond for a new metal there. Click a hapto bond to draw it to each atom' },
+    HAPTO_TOOLS,
     { name: 'chain', title: 'Chain: drag to draw a zig-zag chain, or click to type how many atoms (Alt+click: the same number again)' },
   ],
   // the everyday tools next, where they show without scrolling
@@ -8052,6 +8087,7 @@ function command(name: string): boolean {
     return false;
   }
   if (name === 'repeat-label:here') return repeatLabel(contextAtom);
+  if (name.startsWith('bond-as:') || name.startsWith('bond-line2:') || name.startsWith('bond-pos:')) return bondFromMenu(name);
   if (name.startsWith('fuse-ring:')) {
     const [, id, index] = name.split(':');
     return contextBond !== null && editor.fuseRing(contextBond, id, Number(index));
@@ -11602,6 +11638,66 @@ function attachPointMenu(): MenuItem[] {
   ] }];
 }
 
+/** The bonds a right-click bond command changes: the selected ones, or the one clicked. */
+function menuBonds(): Bond[] {
+  const ids = editor.sel.bonds.size ? [...editor.sel.bonds] : contextBond !== null ? [contextBond] : [];
+  return ids.map((id) => doc.bonds.get(id)).filter((b): b is Bond => !!b && !centreEnd(doc, b));
+}
+
+/**
+ * Right-click on bonds: every bond type, grouped by order as ChemDraw's menu has them (Single,
+ * Double, Triple…), each with its styles, ticked where all the bonds are that type.
+ */
+function bondMenu(): MenuItem[] {
+  const bonds = menuBonds();
+  if (!bonds.length) return [];
+  const all = (f: (b: Bond) => boolean) => bonds.every(f);
+  const as = (order: number, display: BondDisplay, label: string): MenuItem =>
+    ({ cmd: `bond-as:${order}:${display}`, label, checked: all((b) => b.order === order && b.display === display) });
+  const doubles = all((b) => b.order === 2 && b.display !== 'wavy');
+  return [
+    { label: 'Single', items: [
+      as(1, 'solid', 'Plain'), as(1, 'dash', 'Dashed'), as(1, 'hash', 'Hashed'), as(1, 'hashWedge', 'Hashed Wedged'), as(1, 'bold', 'Bold'),
+      as(1, 'wedge', 'Bold Wedged'), as(1, 'hollowWedge', 'Hollow Wedged'), as(1, 'wavyWedge', 'Wavy Wedged'), as(1, 'dative', 'Dative'), as(1, 'wavy', 'Wavy'),
+    ] },
+    { label: 'Double', items: [
+      as(2, 'solid', 'Plain'), as(2, 'bold', 'Bold'), as(2, 'dash', 'Dashed'), as(2, 'wavy', 'Crossed (E or Z)'),
+      ...(doubles ? [null,
+        { label: 'Second Line Style', items: (['plain', 'dash', 'bold', 'hash'] as const).map((v): MenuItem => ({ cmd: `bond-line2:${v}`, label: { plain: 'Plain', dash: 'Dashed', bold: 'Bold', hash: 'Hashed' }[v], checked: all((b) => (b.line2 ?? 'plain') === v) })) },
+        { label: 'Second Line Position', items: (['auto', 'left', 'center', 'right'] as const).map((v): MenuItem => ({ cmd: `bond-pos:${v}`, label: { auto: 'Automatic', left: 'Left', center: 'Centered', right: 'Right' }[v], checked: all((b) => b.dpos === v) })) },
+      ] : []),
+    ] },
+    { label: 'Triple', items: [as(3, 'solid', 'Plain'), as(3, 'bold', 'Bold')] },
+    as(4, 'solid', 'Quadruple'),
+    { label: 'Other', items: [
+      as(1.5, 'solid', 'Aromatic'), as(PARTIAL, 'dash', 'Partial (Transition State)'), null,
+      as(1, 'hydrogen', 'Hydrogen Bond'), as(1, 'ionic', 'Ionic Bond'),
+    ] },
+    { cmd: 'show-style', label: 'Bond Properties…' },
+    null,
+  ];
+}
+
+/** Right-click ▸ Single/Double/Triple/Other ▸ …, Second Line Style and Position: change the bonds (one undo step). */
+function bondFromMenu(name: string): boolean {
+  const bonds = menuBonds();
+  if (!bonds.length) return false;
+  const [kind, a, b2] = name.split(':');
+  doc.edit('Bond type', () => {
+    for (const b of bonds) {
+      if (kind === 'bond-line2') doc.updateBond(b.id, { line2: a === 'plain' ? undefined : a as Bond['line2'] });
+      else if (kind === 'bond-pos') doc.updateBond(b.id, { dpos: a as Bond['dpos'] });
+      else {
+        const order = Number(a), display = b2 as BondDisplay;
+        doc.updateBond(b.id, { order, display, ...(order !== 2 ? { line2: undefined } : {}), ...(order !== b.order ? { dpos: 'auto' as const } : {}) });
+        straightenAt(doc, b.id);
+      }
+    }
+  });
+  editor.changed();
+  return true;
+}
+
 function drawingMenu(): MenuItem[] {
   const s = editor.sel;
   const any = s.atoms.size + s.bonds.size + s.captions.size + s.arrows.size + s.shapes.size > 0;
@@ -11642,6 +11738,7 @@ function drawingMenu(): MenuItem[] {
     { cmd: 'cut' }, { cmd: 'copy' }, { cmd: 'paste' }, { cmd: 'delete', label: 'Delete' }, { cmd: 'format-painter' }, { cmd: 'save-format-favorite' },
     ...(favorites.length ? [{ label: 'Format Favorites', items: favorites.slice(0, 20).map((f, i): MenuItem => ({ cmd: `format-favorite-${i}`, label: f.name })) }] : []), null,
     ...repeatLabelMenu(),
+    ...bondMenu(),
     ...(editor.selectedEnergy() !== null ? [{ cmd: 'edit-energy' }, null] : []),
     ...(editor.selectedTorsion() !== null ? [{ cmd: 'edit-torsion' }, { cmd: 'copy-torsion-data' }, null] : []),
     ...(editor.selectedNewman() !== null ? [{ cmd: 'edit-newman' }, ...(doc.shapes.get(editor.selectedNewman()!)?.newman?.link ? [{ cmd: 'unlink-newman' }] : []), null] : []),

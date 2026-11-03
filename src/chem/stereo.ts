@@ -6,7 +6,7 @@
 // count as wedges and plain hashed or dashed bonds as hashed wedges, and R groups and labels
 // that can't be read rank above every real atom.
 
-import { Doc, Bond, Atom, StereoInfo } from '../model';
+import { Doc, Bond, Atom, StereoInfo, isWedge } from '../model';
 import { axialTags } from './axial';
 import { Vec, Rect, norm, sub, len, lerp, distToSegment } from '../geom';
 import { labelBonds, labelSpec, layoutLabel, labelLook } from './labels';
@@ -19,9 +19,10 @@ export type StereoSense = 'up' | 'down' | 'either';
 export function stereoSense(b: Bond): StereoSense | null {
   if (b.order !== 1) return null;
   switch (b.display) {
-    case 'wedge': case 'bold': return 'up';
+    // (a hollow wedge is read as a wedge: toward you)
+    case 'wedge': case 'hollowWedge': case 'bold': return 'up';
     case 'hashWedge': case 'hash': case 'dash': return 'down';
-    case 'wavy': return 'either';
+    case 'wavy': case 'wavyWedge': return 'either';
     default: return null;
   }
 }
@@ -34,7 +35,7 @@ export function stereoSense(b: Bond): StereoSense | null {
  */
 export function stereoAnchor(doc: Doc, b: Bond): number | null {
   if (!stereoSense(b)) return null;
-  if (b.display === 'wedge' || b.display === 'hashWedge' || b.display === 'wavy') return b.a1;
+  if (isWedge(b.display) || b.display === 'wavy') return b.a1;
   return doc.degree(b.a1) < 3 && doc.degree(b.a2) >= 3 ? b.a2 : b.a1;
 }
 
@@ -607,7 +608,7 @@ export class StereoPlacer {
       // half the drawn width, plus a little room: a double bond's second line, a bold bond, and a
       // wedge, which widens from its narrow end (a1) to its wide end in steps
       const m = 0.02 * L, p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
-      if (b.order === 1 && (b.display === 'wedge' || b.display === 'hashWedge')) {
+      if (b.order === 1 && isWedge(b.display)) {
         const r0 = st.lineWidth / 2, r1 = wedgeWidth(st) / 2;
         for (let k = 0; k < 4; k++) segs.push({ p: lerp(p, q, k / 4), q: lerp(p, q, (k + 1) / 4), r: r0 + ((r1 - r0) * (k + 1)) / 4 + m });
         continue;

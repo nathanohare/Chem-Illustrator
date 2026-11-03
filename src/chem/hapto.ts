@@ -103,7 +103,7 @@ export type PiLook = { kind: 'ring'; ring: number[] } | { kind: 'arc'; chain: nu
  */
 export function piLook(doc: Doc, c: Atom): PiLook | null {
   const m = c.multi;
-  if (!haptoLook.delocalized || c.kekule || !m || m.length < 3 || !(doc.adj.get(c.id)?.length)) return null;
+  if (!haptoLook.delocalized || c.variable || c.kekule || !m || m.length < 3 || !(doc.adj.get(c.id)?.length)) return null;
   const set = new Set(m);
   const nbrs = (id: number) => (doc.adj.get(id) ?? []).map((bid) => { const b = doc.bonds.get(bid)!; return b.a1 === id ? b.a2 : b.a1; }).filter((o) => set.has(o));
   // a chain (an allyl, an η⁴-diene, a pentadienyl): an arc along it

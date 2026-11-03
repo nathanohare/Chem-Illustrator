@@ -503,11 +503,11 @@ export class Renderer {
       const ds = doc.style, w = bondWidths(ds, b);
       let h = w.lineWidth / 2;
       if (b.order === 1 || b.order === PARTIAL || b.display === 'dative' || (b.order === 1.5 && b.plain && !b.circle) || this.bondInfo(doc, b).pi) {
-        if (b.display === 'dative' || b.display === 'dash' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy') continue;
+        if (b.display === 'dative' || b.display === 'dash' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy' || b.display === 'wavyWedge' || b.display === 'hydrogen' || b.display === 'ionic') continue;
         if (b.display === 'bold') h = w.boldWidth / 2;
         else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: w.boldWidth }) / 2;
       } else if (b.order === 2 || (b.order === 1.5 && !b.circle && !b.plain)) {
-        if (this.bondInfo(doc, b).side === 0 || b.display === 'dash') continue;
+        if (this.bondInfo(doc, b).side === 0 || b.display === 'dash' || (b.order === 2 && b.display === 'wavy')) continue;
         if (b.display === 'bold') h = w.boldWidth / 2;
       }
       const [s, e] = this.bondEnds(doc, b.a1 === a.id ? a : o, b.a1 === a.id ? o : a);
@@ -1445,6 +1445,49 @@ export class Renderer {
           }
           break;
         }
+        case 'ionic': {
+          // dashed, as a dashed bond is (at least two dashes, so a short one never reads as a plain bond)
+          const n = Math.min(MAX_HASHES, Math.max(2, Math.floor(l / (2.5 * st.hashSpacing)) + 1));
+          const part = 1 / (2 * n - 1);
+          for (let i = 0; i < n; i++) line(thin, add(s, mul(d, 2 * i * part)), add(s, mul(d, (2 * i + 1) * part)));
+          break;
+        }
+        case 'hydrogen': {
+          // round dots, a little over a line width across, spread evenly end to end
+          const r = st.lineWidth * 0.7, step = st.lineWidth * 3;
+          const n = Math.min(MAX_HASHES, Math.max(2, Math.floor(l / step) + 1));
+          for (let i = 0; i < n; i++) {
+            const c = add(s, mul(d, i / (n - 1)));
+            fills.moveTo(c.x + r, c.y);
+            fills.arc(c.x, c.y, r, 0, Math.PI * 2);
+          }
+          break;
+        }
+        case 'hollowWedge': {
+          // the outline of a wedge: a point at a1, the wide end at a2
+          const he = wedgeWidth(st) / 2 - st.lineWidth / 2;
+          thin.moveTo(s.x, s.y);
+          thin.lineTo(e.x + nrm.x * he, e.y + nrm.y * he);
+          thin.lineTo(e.x - nrm.x * he, e.y - nrm.y * he);
+          thin.closePath();
+          break;
+        }
+        case 'wavyWedge': {
+          // a wave that widens from nothing at a1 to a wedge's width at a2, kept clear of a2's label
+          const he = wedgeWidth(st) / 2;
+          const end = this.atomInfo(doc, q).boxes.length ? sub(e, mul(dir, Math.min(he + st.lineWidth, l * 0.3))) : e;
+          const lw = len(sub(end, s));
+          const waves = Math.min(MAX_HASHES, Math.max(3, Math.round(lw / (st.bondLength * 0.1))));
+          const step = lw / waves;
+          thin.moveTo(s.x, s.y);
+          for (let i = 0; i < waves; i++) {
+            const c = add(s, mul(dir, step * (i + 1)));
+            const amp = he * 2 * (i + 1) / waves;
+            const m = add(add(s, mul(dir, step * (i + 0.5))), mul(nrm, (i % 2 ? -1 : 1) * amp));
+            thin.quadraticCurveTo(m.x, m.y, c.x, c.y);
+          }
+          break;
+        }
         case 'wavy': {
           const waves = Math.min(MAX_HASHES, Math.max(2, Math.round(l / (st.bondLength * 0.17))));
           const step = l / waves;
@@ -1471,24 +1514,43 @@ export class Renderer {
 
     // double or aromatic
     const info = this.bondInfo(doc, b);
-    const second = b.order === 1.5 ? dashed : thin;
+    const two = b.order === 2 ? b.line2 : undefined;
+    const second = b.order === 1.5 || two === 'dash' ? dashed : two === 'bold' ? bold : thin;
     const main = b.display === 'bold' ? bold : b.display === 'dash' ? dashed : thin;
+    // the second line, or a hashed second line (ChemDraw's Display2 Hash): short strokes across it
+    const secondLine = (a: Vec, c: Vec, capA = true, capC = true) => {
+      if (two !== 'hash') { offLine(second, a, c, capA, capC); return; }
+      const [u, v] = this.clearCharges(doc, p, q, a, c);
+      const run = len(sub(v, u)), w = st.boldWidth / 2;
+      if (run < 1e-6) return;
+      const n = Math.min(MAX_HASHES, Math.max(2, Math.floor(run / st.hashSpacing) + 1));
+      for (let i = 0; i < n; i++) {
+        const m = add(u, mul(sub(v, u), (st.lineWidth / 2 + (run - st.lineWidth) * i / (n - 1)) / run));
+        line(thin, add(m, mul(nrm, w)), sub(m, mul(nrm, w)), true, true);
+      }
+    };
     if (b.order === 2 && b.display === 'wavy') {
       // a wavy double bond is ChemDraw's either (crossed) double bond: two lines, each from one
-      // end's side to the other end's other side
-      const h = mul(nrm, gap / 2);
-      line(thin, add(s, h), sub(e, h));
-      line(thin, sub(s, h), add(e, h));
+      // atom's side to the other atom's other side, stopped at labels, and carried in to meet the
+      // bonds beside them at a bare atom so they join with no gap
+      const h = gap / 2;
+      for (const sg of [1, -1]) {
+        const [a, c] = this.cutAtLabels(doc, p, q, add(s, mul(nrm, h * sg)), sub(e, mul(nrm, h * sg)));
+        const u = norm(sub(c, a));
+        const a2 = this.meetNeighbour(doc, p, q, a, u), c2 = this.meetNeighbour(doc, q, p, c, mul(u, -1));
+        offLine(thin, a2 ?? a, c2 ?? c, !a2, !c2);
+      }
       return;
     }
     if (info.side === 0) {
       // Each line is carried in to meet the bond beside it at a bare atom (an exocyclic C=O on a
       // ring), so it joins that bond with no gap; that end is then covered by the bond, not capped.
       const h = gap / 2;
-      for (const [path, sg] of [[main, 1], [second, -1]] as const) {
+      for (const sg of [1, -1]) {
         const a = add(s, mul(nrm, h * sg)), c = add(e, mul(nrm, h * sg));
         const a2 = this.meetNeighbour(doc, p, q, a, dir), c2 = this.meetNeighbour(doc, q, p, c, mul(dir, -1));
-        offLine(path, a2 ?? a, c2 ?? c, !a2, !c2);
+        if (sg > 0) offLine(main, a2 ?? a, c2 ?? c, !a2, !c2);
+        else secondLine(a2 ?? a, c2 ?? c, !a2, !c2);
       }
       return;
     }
@@ -1502,7 +1564,18 @@ export class Renderer {
     if (b.display === 'wedge') { if (!this.fillBand(doc, b, p, q, fills, gaps)) line(thin, s, e); }
     else if (b.display === 'hashWedge' || b.display === 'hash') this.bondPaths(doc, { ...b, order: 1 }, p, q, bb);
     else if (main !== bold || !this.fillBand(doc, b, p, q, fills)) line(main, s, e);
-    offLine(second, add(add(s, off), mul(dir, t1)), sub(add(e, off), mul(dir, t2)));
+    secondLine(add(add(s, off), mul(dir, t1)), sub(add(e, off), mul(dir, t2)));
+  }
+
+  /** The line from a to c (one of a multiple bond's lines, off the atoms' centres) stopped where it meets p's and q's labels. */
+  private cutAtLabels(doc: Doc, p: Atom, q: Atom, a: Vec, c: Vec): [Vec, Vec] {
+    const ip = this.atomInfo(doc, p), iq = this.atomInfo(doc, q);
+    let t1 = 0, t2 = 0;
+    ip.boxes.forEach((r, i) => { if (i !== ip.charge?.index) t1 = Math.max(t1, passParam(a, c, r)); });
+    iq.boxes.forEach((r, i) => { if (i !== iq.charge?.index) t2 = Math.max(t2, passParam(c, a, r)); });
+    if (t1 + t2 >= 0.95) return [a, c];
+    const d = sub(c, a);
+    return [add(a, mul(d, t1)), sub(c, mul(d, t2))];
   }
 
   /** A charge beside a carbon drawn without a label. Returns the font it leaves set. */

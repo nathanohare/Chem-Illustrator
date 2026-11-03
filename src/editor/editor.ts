@@ -6,7 +6,7 @@ import { guideAt, guideLines, movedGuide, snapToGuides, ticksBetween, type Guide
 import { DEFAULT_CURSOR_AIDS, drawCursorAids, hintLines, modifierHints, readoutText, type CursorAidPrefs, type HintState, type Mods } from './cursor-aids';
 import { Sketcher } from './sketch';
 import { installPenAndTouch } from './touch';
-import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAtom, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
+import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAtom, isWedge, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
 import { scaleOwnWidths } from '../style';
 import { CaptionEditor } from '../ui/caption-editor';
 import { followLink, linkTip } from '../ui/links-ui';
@@ -20,7 +20,7 @@ import { geoDef, geoShapeStyle, moveSteps, traceSteps } from '../design/geo';
 import { distinctChoices } from '../chem/template-choices';
 import { TEMPLATES, Template, Placement, templateById, templatePoints, placePoint, fusePlacements, atomPlacements, freePlacement, crowdingOf, placeTemplate, snap15 } from '../chem/templates';
 import { fusions3d } from '../chem/fuse3d';
-import { bondHapto, centreEnd, haptoLook, haptoTarget, haptoText, splitHapto } from '../chem/hapto';
+import { bondHapto, centreEnd, haptoLook, haptoTarget, haptoText, ringAround, splitHapto } from '../chem/hapto';
 import { expandInPlace, expandLigand, expandWithMolblock, freeLigandFor, inPlaceSmiles, labelSmiles, ligandTemplateFor } from '../chem/expand';
 import { styleFromFace, plainText } from '../richtext';
 import * as rt from '../richtext';
@@ -100,7 +100,7 @@ export type Tool =
   | { kind: 'select'; lasso?: boolean }
   | { kind: 'eraser' }
   /** `hapto`: bonds a metal to the middle of a ring or π-bond (η⁵, η²), or splits one into a line to each atom. */
-  | { kind: 'bond'; order: number; display: BondDisplay; hapto?: boolean }
+  | { kind: 'bond'; order: number; display: BondDisplay; hapto?: boolean; variable?: boolean }
   | { kind: 'chain' }
   | { kind: 'ring'; size: number; aromatic: boolean }
   | { kind: 'text' }
@@ -159,6 +159,11 @@ export const TOOLS: Record<string, Tool> = {
   'bond-hapto': { kind: 'bond', order: 1, display: 'solid', hapto: true },
   'bond-wedge': { kind: 'bond', order: 1, display: 'wedge' },
   'bond-hashWedge': { kind: 'bond', order: 1, display: 'hashWedge' },
+  'bond-hollowWedge': { kind: 'bond', order: 1, display: 'hollowWedge' },
+  'bond-wavyWedge': { kind: 'bond', order: 1, display: 'wavyWedge' },
+  'bond-hydrogen': { kind: 'bond', order: 1, display: 'hydrogen' },
+  'bond-ionic': { kind: 'bond', order: 1, display: 'ionic' },
+  'bond-variable': { kind: 'bond', order: 1, display: 'solid', variable: true },
   'bond-hash': { kind: 'bond', order: 1, display: 'hash' },
   'bond-bold': { kind: 'bond', order: 1, display: 'bold' },
   'bond-dash': { kind: 'bond', order: 1, display: 'dash' },
@@ -1875,6 +1880,7 @@ export class Editor {
       }
       case 'bond': {
         if (t.hapto) { this.clickHapto(h, p); return; }
+        if (t.variable) { this.clickVariable(h); return; }
         // the second click of a double-click on an atom takes back the first click's bond and edits the label
         const last = this.lastSprout;
         this.lastSprout = null;
@@ -1945,12 +1951,21 @@ export class Editor {
         const flip = dist(p, a2) < dist(p, a1);
         doc.updateBond(id, { order: 1, display: 'dative', ...(flip ? { a1: b.a2, a2: b.a1 } : {}) });
       }
-    } else if (t.display === 'wedge' || t.display === 'hashWedge') {
+    } else if (isWedge(t.display)) {
       if (b.display === t.display) doc.updateBond(id, { a1: b.a2, a2: b.a1 });
       else {
         // narrow end at the atom nearer the click
         const a1 = doc.atoms.get(b.a1)!, a2 = doc.atoms.get(b.a2)!;
         const flip = dist(p, a2) < dist(p, a1);
+        doc.updateBond(id, { order: 1, display: t.display, ...(flip ? { a1: b.a2, a2: b.a1 } : {}) });
+      }
+    } else if (t.display === 'hydrogen' || t.display === 'ionic') {
+      // a hydrogen bond starts at its H, an ionic bond at its positive end
+      if (b.display === t.display) doc.updateBond(id, { display: 'solid' });
+      else {
+        const a1 = doc.atoms.get(b.a1)!, a2 = doc.atoms.get(b.a2)!;
+        const first = (a: Atom) => (t.display === 'hydrogen' ? a.z === 1 || a.label === 'H' : a.charge > 0);
+        const flip = first(a2) && !first(a1);
         doc.updateBond(id, { order: 1, display: t.display, ...(flip ? { a1: b.a2, a2: b.a1 } : {}) });
       }
     } else {
@@ -2354,6 +2369,45 @@ export class Editor {
   }
 
   /**
+   * The variable attachment tool's drag: from a group (or empty space, for a new carbon) into a
+   * ring, bonding it to a variable attachment point in the ring's middle that stands for any of
+   * the ring's atoms. Clicking ring atoms afterwards narrows down which ones (clickVariable).
+   */
+  private dragVariable(d: Drag, p: Vec): void {
+    const doc = this.doc;
+    const ring = ringAround(doc, p);
+    if (!ring) return;
+    const h = this.hitTest(d.start);
+    let from = h?.kind === 'atom' ? doc.atoms.get(h.id) : undefined;
+    if (from && (from.multi || ring.includes(from.id))) return;
+    from ??= doc.addAtom(d.start.x, d.start.y);
+    const at = doc.centreOf({ multi: ring })!;
+    const pt = doc.addAtom(at.x, at.y, 0, { multi: ring.slice(), ringOf: ring.slice(), variable: true, ...(from.s && from.s !== 1 ? { s: from.s } : {}) });
+    doc.addBond(from.id, pt.id, 1, 'solid', from.s && from.s !== 1 ? { s: from.s } : {});
+    this.lastEdited = from.id;
+    this.sel = emptySel();
+    this.sel.bonds.add(doc.adj.get(pt.id)![0]);
+  }
+
+  /**
+   * The variable attachment tool's click on a ring atom: add it to the atoms a variable attachment
+   * on its ring stands for, or take it out (at least two stay).
+   */
+  private clickVariable(h: Hit): void {
+    const doc = this.doc;
+    if (h?.kind !== 'atom') return;
+    for (const c of doc.centresOf.get(h.id) ?? []) {
+      const pt = doc.atoms.get(c);
+      if (!pt?.variable) continue;
+      const has = pt.multi!.includes(h.id);
+      if (has && pt.multi!.length <= 2) return;
+      doc.edit(has ? 'Remove attachment atom' : 'Add attachment atom', () => doc.updateAtom(c, { multi: has ? pt.multi!.filter((m) => m !== h.id) : [...pt.multi!, h.id] }));
+      this.changed();
+      return;
+    }
+  }
+
+  /**
    * The hapto tool's click. On a ring (inside it) or a bond: a new metal bonded to its middle,
    * on the side away from the rest of the structure. On a hapto bond: draw it to each atom
    * instead of to the middle, or back. On a metal with atoms selected: bond it to their middle
@@ -2463,6 +2517,8 @@ export class Editor {
     }
     if (t.kind === 'bond' && t.hapto) {
       doc.edit('Hapto bond', () => this.dragHapto(d, p));
+    } else if (t.kind === 'bond' && t.variable) {
+      doc.edit('Variable attachment', () => this.dragVariable(d, p));
     } else if (t.kind === 'bond') {
       doc.edit('Bond', () => {
         const a = startAtom ?? doc.addAtom(start.x, start.y);
@@ -6740,7 +6796,7 @@ export class Editor {
     const doc = this.doc;
     const t = this.tool;
     if (d.mode === 'draw') {
-      if (t.kind === 'bond' && !t.hapto) {
+      if (t.kind === 'bond' && !t.hapto && !t.variable) {
         const startAtom = d.hit?.kind === 'atom' ? doc.atoms.get(d.hit.id) ?? null : null;
         const start: Vec = startAtom ?? d.start;
         const L = startAtom ? bondLength(doc, startAtom) : doc.style.bondLength;
@@ -6811,6 +6867,38 @@ export class Editor {
     drawCursorAids(ctx, this.pointer, px, readout, hintLines(hints), { dark: this.dark, look: a.look });
   }
 
+  /**
+   * The atoms a variable attachment can be on, circled (dashed) while its bond or point is selected
+   * or the Variable Attachment tool is in use, as ChemDraw shows them.
+   */
+  private drawVariableAtoms(ctx: CanvasRenderingContext2D, px: number): void {
+    const doc = this.doc;
+    const tool = this.tool.kind === 'bond' && !!this.tool.variable;
+    const points = new Set<number>();
+    for (const a of doc.atoms.values()) {
+      if (!a.variable || !a.multi) continue;
+      const picked = this.sel.atoms.has(a.id) || (doc.adj.get(a.id) ?? []).some((bid) => this.sel.bonds.has(bid));
+      if (tool || picked) points.add(a.id);
+    }
+    if (!points.size) return;
+    ctx.save();
+    ctx.strokeStyle = this.dark ? MARKS.dark.selLine : MARKS.light.selLine;
+    ctx.lineWidth = 1.2 * px;
+    ctx.setLineDash([3 * px, 2 * px]);
+    for (const id of points) {
+      const c = doc.atoms.get(id)!;
+      const r = doc.style.bondLength * 0.3 * (c.s ?? 1);
+      for (const m of c.multi!) {
+        const a = doc.atoms.get(m);
+        if (!a) continue;
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   private drawOverlay(): void {
     this.captionEd?.place();
     const ctx = this.r.clearOverlay();
@@ -6865,6 +6953,7 @@ export class Editor {
         else if (sh) outlineShape(ctx, sh);
       }
     }
+    this.drawVariableAtoms(ctx, px);
     if (this.showRoles && s.arrows.size === 1 && !this.drag) this.drawRoles(ctx, [...s.arrows][0], px);
     // a selected Smart Scheme: a dashed box round each species, numbered, and + buttons to add one
     const smartId = this.drag?.moved ? null : this.selectedSmart();
@@ -7208,6 +7297,18 @@ export class Editor {
       ctx.lineWidth = 1 / this.r.view.scale;
       ctx.strokeRect(Math.min(d.start.x, d.last.x), Math.min(d.start.y, d.last.y), Math.abs(d.last.x - d.start.x), Math.abs(d.last.y - d.start.y));
       ctx.setLineDash([]);
+    } else if (t.kind === 'bond' && t.variable) {
+      // the line from the group into the ring, with the ring's atoms outlined
+      const ring = ringAround(doc, d.last);
+      const from = startAtom ?? d.start;
+      const at = ring ? doc.centreOf({ multi: ring })! : d.last;
+      poly([from, at], false);
+      if (ring) {
+        ctx.save();
+        ctx.setLineDash([3 / this.r.view.scale, 2 / this.r.view.scale]);
+        poly(ring.map((id) => doc.atoms.get(id)!), true);
+        ctx.restore();
+      }
     } else if (t.kind === 'bond' && t.hapto) {
       // the line from one end's atom or π-system to the other's, with the π-system outlined
       const from = this.haptoEnd(d.start), to = this.haptoEnd(d.last, from.atom?.id);

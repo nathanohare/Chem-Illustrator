@@ -96,7 +96,10 @@ const PATTERN_OPTS: Opt<string>[] = [['none', 'None'], ...PATTERNS];
 const PATTERN_PICKS: Opt<string>[] = [['none', 'None'], ...PATTERN_CHOICES];
 
 const BOND_ORDERS: Opt<string>[] = [['1', 'Single'], ['2', 'Double'], ['3', 'Triple'], ['1.5', 'Aromatic'], ['4', 'Quadruple'], ['0.5', 'Partial (transition state)']];
-const BOND_STYLES: Opt<Bond['display']>[] = [['solid', 'Plain'], ['wedge', 'Wedge'], ['hashWedge', 'Hashed wedge'], ['hash', 'Hashed'], ['bold', 'Bold'], ['dash', 'Dashed'], ['wavy', 'Wavy'], ['dative', 'Dative (arrow to the acceptor)']];
+const BOND_STYLES: Opt<Bond['display']>[] = [['solid', 'Plain'], ['wedge', 'Wedge'], ['hashWedge', 'Hashed wedge'], ['hollowWedge', 'Hollow wedge'], ['wavyWedge', 'Wavy wedge'], ['hash', 'Hashed'], ['bold', 'Bold'], ['dash', 'Dashed'], ['wavy', 'Wavy'], ['dative', 'Dative (arrow to the acceptor)'], ['hydrogen', 'Hydrogen bond (dotted, from the H)'], ['ionic', 'Ionic (dashed, from the + end)']];
+/** A double bond's styles: wavy is the crossed (either E or Z) double bond. */
+const DOUBLE_STYLES: Opt<Bond['display']>[] = [['solid', 'Plain'], ['bold', 'Bold'], ['dash', 'Dashed'], ['wavy', 'Crossed (E or Z)'], ['wedge', 'Wedge'], ['hashWedge', 'Hashed wedge']];
+const SECOND_LINES: Opt<string>[] = [['', 'Plain'], ['dash', 'Dashed'], ['bold', 'Bold'], ['hash', 'Hashed']];
 const DOUBLE_POS: Opt<Bond['dpos']>[] = [['auto', 'Automatic'], ['left', 'Left'], ['center', 'Centered'], ['right', 'Right']];
 
 const round = (x: number, k = 100) => Math.round(x * k) / k;
@@ -1001,6 +1004,14 @@ export class StylePanel {
   private bondControls(b: Bond): void {
     const set = (label: string, patch: Partial<Bond>) => this.edit(label, () => this.doc.updateBond(b.id, patch));
     const centre = centreEnd(this.doc, b);
+    if (centre?.variable) {
+      // a group on one of several ring atoms
+      this.heading('Variable attachment');
+      this.help(`The group is on one of ${centre.multi!.length} ring atoms. With the Variable Attachment tool (on the Hapto bond button), click a ring atom to add it or take it out.`);
+      this.select('Style', BOND_STYLES.filter(([v]) => !['wedge', 'hashWedge', 'hollowWedge', 'wavyWedge', 'hydrogen', 'ionic', 'dative'].includes(v)), b.display, (v) => set('Bond style', { display: v }));
+      this.color('Color', b.color, (v) => set('Bond color', { color: v }));
+      return;
+    }
     if (centre) {
       // a metal bonded to the middle of a ring or π-bond
       this.heading(`Hapto bond (${haptoText(centre.multi!.length)})`);
@@ -1025,8 +1036,12 @@ export class StylePanel {
       this.doc.updateBond(b.id, { order: Number(v), ...(Number(v) === 0.5 && b.display === 'solid' ? { display: 'dash' as const } : {}) });
       straightenAt(this.doc, b.id);
     }));
-    this.select('Style', BOND_STYLES, b.display, (v) => set('Bond style', { display: v }));
-    if (b.order === 2) this.select('Second line', DOUBLE_POS, b.dpos, (v) => set('Double bond position', { dpos: v }));
+    const styles = b.order === 2 ? DOUBLE_STYLES : b.order === 1 || b.order === 0.5 ? BOND_STYLES : BOND_STYLES.filter(([v]) => !['hollowWedge', 'wavyWedge', 'hydrogen', 'ionic', 'dative'].includes(v));
+    this.select('Style', styles.some(([v]) => v === b.display) ? styles : [...styles, ...BOND_STYLES.filter(([v]) => v === b.display)], b.display, (v) => set('Bond style', { display: v }));
+    if (b.order === 2 && b.display !== 'wavy') {
+      this.select('Second line', DOUBLE_POS, b.dpos, (v) => set('Double bond position', { dpos: v }));
+      this.select('Second line style', SECOND_LINES, b.line2 ?? '', (v) => set('Second line style', { line2: (v || undefined) as Bond['line2'] }));
+    }
     this.color('Color', b.color, (v) => set('Bond color', { color: v }));
     this.color('Highlight', b.highlight, (v) => { set(v ? 'Highlight' : 'Remove highlight', { highlight: v }); if (v) this.highlightUsed(v); }, 'None');
     this.highlightControls([], [b]);
