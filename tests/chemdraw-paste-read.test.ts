@@ -118,3 +118,24 @@ describe('labels ChemDraw centres', () => {
     expect(x1 + x2).toBeCloseTo(0, 6);
   });
 });
+
+describe('ChemDraw shapes and highlights', () => {
+  const cdxml = `<?xml version="1.0" encoding="UTF-8" ?><CDXML BondLength="14.4" LineWidth="1"><colortable><color r="1" g="1" b="1"/><color r="0" g="0" b="0"/><color r="0" g="0.4157" b="0.8353"/><color r="1" g="0.2706" b="0.2706"/></colortable><page id="1">
+<fragment id="2" Z="1"><n id="10" p="50 50" Z="2" highlightColor="5"/><n id="11" p="64.4 50" Z="3"/><b id="20" B="10" E="11" Z="4"/></fragment>
+<graphic id="30" BoundingBox="72 50 64.4 50" Z="9" color="4" GraphicType="Oval" OvalType="Circle" FadePercent="300" Center3D="64.4 50 0" MajorAxisEnd3D="72 50 0" MinorAxisEnd3D="64.4 57.6 0"/></page></CDXML>`;
+  it('fill a faded circle with its colour faded, keeping the outline, and draw it over the structure behind', () => {
+    const { doc } = readCdxml(cdxml);
+    const s = doc.shapes.get(30)!;
+    expect(s.filled).toBe(true);
+    expect(s.color).toBe('#006ad5');
+    expect(s.fillColor).toBe('#b3d2f2');
+    expect(s.stack).toBeGreaterThan(doc.atoms.get(11)!.stack!);
+  });
+  it('keep ChemDraw atom highlights, as large as ChemDraw draws them', () => {
+    const { doc } = readCdxml(cdxml);
+    const a = doc.atoms.get(10)!;
+    expect(a.highlight).toBe('#ff4545');
+    expect(a.hl?.shape).toBe('round');
+    expect(0.27 * 14.4 * a.hl!.size!).toBeCloseTo(0.27 * 14.4 + 0.5, 6);
+  });
+});

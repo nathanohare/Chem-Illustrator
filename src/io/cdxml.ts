@@ -2,6 +2,7 @@
 // their formatting, arrows, and the common graphics (lines, boxes, circles, brackets,
 // charge symbols). Anything not understood yet is counted and skipped, never fatal.
 
+import { tint } from '../colours';
 import { parseGuides } from '../editor/guides';
 import { fillFrameMembers, frameFromTag } from '../editor/frames';
 import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachFromTag, fillAttachments } from '../editor/attached';
@@ -10,7 +11,7 @@ import { highlightStyleFromTag } from '../render/highlight';
 import { attachRingFills, ringGeometry } from '../chem/ring-fill';
 import { paperOf } from './cdxml-print';
 import { lipDirection } from '../chem/polymer';
-import { Doc, Atom, Bond, BondDisplay, TextRun, Arrow, Shape, Entity, Kind, StereoLabel, Caption, StepRoles, MorphStep, CHIRAL_FLAGS, PARTIAL, PAPER, type Pin, type PictureFx, type ShapeMath } from '../model';
+import { Doc, Atom, Bond, BondDisplay, TextRun, Arrow, Shape, Entity, Kind, StereoLabel, Caption, StepRoles, MorphStep, CHIRAL_FLAGS, PARTIAL, PAPER, type Pin, type PictureFx, type ShapeMath, type HighlightStyle } from '../model';
 import { TEXT_TAG, parseTextTag, runsFromChemDraw } from '../text/chemdraw-text';
 import { readPageTag } from '../page-grid';
 import { DocStyle, MAP_LOOKS, mapBoxStyle, type MapLook } from '../style';
@@ -106,6 +107,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   st.captionFace = num(root, 'CaptionFace', 0);
   if (root.hasAttribute('LabelFace')) st.labelFace = num(root, 'LabelFace', 0); else delete st.labelFace;
   doc.style = st;
+  // ChemDraw's highlight disc (measured from its own pictures): 0.27 bond lengths plus half a line width across
+  const chemdrawHighlight: HighlightStyle = { shape: 'round', size: (0.27 * st.bondLength + st.lineWidth / 2) / (0.27 * st.bondLength) };
 
   // Colours: index 0 is black and 1 white; the colour table starts at index 2.
   const colors: string[] = ['#000000', '#ffffff'];
@@ -316,6 +319,11 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (Number.isInteger(mapTag) && mapTag > 0) extra.mapNo = mapTag;
       const hlA = kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_TAG)?.getAttribute('Value');
       if (hlA && /^#[0-9a-f]{6}$/i.test(hlA)) extra.highlight = hlA.toLowerCase();
+      // ChemDraw's own atom highlight
+      else if (n.hasAttribute('highlightColor') && colors[num(n, 'highlightColor', -1)]) {
+        extra.highlight = colors[num(n, 'highlightColor', -1)];
+        extra.hl = chemdrawHighlight;
+      }
       const lookA = highlightStyleFromTag(kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_LOOK_TAG)?.getAttribute('Value'));
       if (lookA && extra.highlight) extra.hl = lookA;
       if (n.getAttribute('ShowTerminalCarbonLabels') === 'yes' || n.getAttribute('ShowNonTerminalCarbonLabels') === 'yes') extra.showCarbon = true;
@@ -422,6 +430,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (c) extra.color = c;
       const hlB = kids(b).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_TAG)?.getAttribute('Value');
       if (hlB && /^#[0-9a-f]{6}$/i.test(hlB)) extra.highlight = hlB.toLowerCase();
+      else if (b.hasAttribute('highlightColor') && colors[num(b, 'highlightColor', -1)]) {
+        extra.highlight = colors[num(b, 'highlightColor', -1)];
+        extra.hl = chemdrawHighlight;
+      }
       const lookB = highlightStyleFromTag(kids(b).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_LOOK_TAG)?.getAttribute('Value'));
       if (lookB && extra.highlight) extra.hl = lookB;
       if (kids(b).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === SPOKES_TAG)) extra.spokes = true;
@@ -725,6 +737,14 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const z = num(g, 'Z', 0);
     const base = { id: idFor(g), color: c, z };
     const add = (s: Omit<Shape, 'id'> & { id: number }) => {
+      // ChemDraw's faded shape: filled with its colour faded towards white (FadePercent, in tenths of a percent)
+      const fade = num(g, 'FadePercent', -1);
+      if (fade >= 0 && !s.filled) {
+        const ink = c ?? '#000000';
+        s.filled = true;
+        // (its outline stays in the full colour, so the fill is a colour of its own)
+        s.fillColor = tint(ink, 1 - Math.min(1, fade / 1000));
+      }
       // our fill style and outline colour, which ChemDraw has no words for
       const tag = kids(g).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === FILL_TAG);
       if (tag) {
@@ -951,8 +971,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   };
 
   /** Each object's place in the drawing order, from ChemDraw's Z (a structure's from its fragment's). */
-  const readStack = () => {
-    const zOf = (el: Element | undefined, top: boolean): number | undefined => {
+  const zOf = (el: Element | undefined, top: boolean): number | undefined => {
       let e: Element | null = el ?? null, found: number | undefined;
       while (e && e !== pg) {
         const v = e.getAttribute('Z');
@@ -963,8 +982,20 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         e = p;
       }
       return top ? undefined : found;
-    };
-    const at = (kind: Kind, id: number) => { const o = ord.get(kind + id); return o === undefined ? undefined : all[o]; };
+  };
+  const at = (kind: Kind, id: number) => { const o = ord.get(kind + id); return o === undefined ? undefined : all[o]; };
+  /** ChemDraw draws everything in its Z order: a filled shape over a structure behind it hides that part of it. */
+  const shapeOverStructure = (): boolean => {
+    for (const sh of doc.shapes.values()) {
+      if (!sh.filled || sh.kind === 'ring') continue;
+      const z = zOf(at('s', sh.id), false);
+      if (z === undefined) continue;
+      const box = { x1: Math.min(sh.x1, sh.x2), y1: Math.min(sh.y1, sh.y2), x2: Math.max(sh.x1, sh.x2), y2: Math.max(sh.y1, sh.y2) };
+      for (const a of doc.atomsIn(box)) { const za = zOf(at('a', a.id), true); if (za !== undefined && za < z) return true; }
+    }
+    return false;
+  };
+  const readStack = () => {
     for (const a of doc.atoms.values()) { const z = zOf(at('a', a.id), true); if (z !== undefined) a.stack = z; }
     for (const c of doc.captions.values()) { const z = zOf(at('c', c.id), false); if (z !== undefined) c.stack = z; }
     for (const r of doc.arrows.values()) { const z = zOf(at('r', r.id), false); if (z !== undefined) r.stack = z; }
@@ -1012,7 +1043,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     relinkNewman(doc);
     fillAttachments(doc);
     readGroups();
-    if (pg && kids(pg).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === STACK_TAG)) readStack();
+    if ((pg && kids(pg).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === STACK_TAG)) || shapeOverStructure()) readStack();
   });
   doc.reserveIds(maxId);
   const things: Partial<Record<Kind, Map<number, { piece?: number }>>> = { a: doc.atoms, c: doc.captions, r: doc.arrows, s: doc.shapes };
