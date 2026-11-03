@@ -48,6 +48,8 @@ export interface Atom {
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
+  /** Groups inside groups as ChemDraw keeps them (outermost first; grp is the first), for writing the nesting back. Set only when nested. */
+  grpPath?: number[];
   /** Place in the drawing order set by Format > Order (higher is in front); not set keeps the usual layers (issue #406, editor/stacking.ts). */
   stack?: number;
   x: number;
@@ -241,6 +243,8 @@ export interface Bond {
   bondLength?: number;
   /** An aromatic bond (order 1.5) in a ring drawn with a circle rather than a dashed second line. */
   circle?: boolean;
+  /** An aromatic bond (order 1.5) drawn as one line, as ChemDraw draws its Order="1.5" with no second line (its dashed aromatic bond is Order 2 with Display2 Dash). */
+  plain?: boolean;
   /** Where it sits among bonds that cross it (higher in front; else the order it was drawn in). ChemDraw's Z. */
   z?: number;
   /**
@@ -474,6 +478,8 @@ export interface Caption {
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
+  /** Groups inside groups as ChemDraw keeps them (outermost first; grp is the first), for writing the nesting back. Set only when nested. */
+  grpPath?: number[];
   /** Place in the drawing order set by Format > Order (higher is in front); not set keeps the usual layers (issue #406, editor/stacking.ts). */
   stack?: number;
   /** Left end of the first line's baseline (for centred/right text, of the line box). */
@@ -639,6 +645,8 @@ export interface Arrow {
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
+  /** Groups inside groups as ChemDraw keeps them (outermost first; grp is the first), for writing the nesting back. Set only when nested. */
+  grpPath?: number[];
   /** Place in the drawing order set by Format > Order (higher is in front); not set keeps the usual layers (issue #406, editor/stacking.ts). */
   stack?: number;
   tail: Vec;
@@ -751,6 +759,8 @@ export interface Shape {
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
+  /** Groups inside groups as ChemDraw keeps them (outermost first; grp is the first), for writing the nesting back. Set only when nested. */
+  grpPath?: number[];
   /** Place in the drawing order set by Format > Order (higher is in front); not set keeps the usual layers (issue #406, editor/stacking.ts). */
   stack?: number;
   kind: 'line' | 'rect' | 'oval' | 'symbol' | 'bracket' | 'picture' | 'table' | 'geo' | 'ring';

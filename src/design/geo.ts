@@ -584,8 +584,48 @@ export function inkDef(id: string): GeoDef {
   return d;
 }
 
+// ---------------------------------------------------------------- closed curves
+
+/**
+ * A closed curve from ChemDraw (a perspective ring's ellipse, a hand-drawn outline): a design
+ * shape whose id holds its Bézier path, `path:<x,y,x,y…>` as ten-thousandths of its box: the start
+ * point, then two handles and a point for each segment, the last ending back at the start.
+ */
+export const isPathId = (id: string | undefined): id is string => !!id && id.startsWith('path:');
+
+/** The id for a closed Bézier path (points in points on the page) within its box. */
+export function pathId(pts: Vec[], box: Rect): string {
+  const w = Math.max(1e-6, box.x2 - box.x1), h = Math.max(1e-6, box.y2 - box.y1);
+  const q = (v: number) => Math.round(v * 10000);
+  return `path:${pts.map((p) => `${q((p.x - box.x1) / w)},${q((p.y - box.y1) / h)}`).join(',')}`;
+}
+
+const pathDefs = new Map<string, GeoDef>();
+
+/** The library shape for a closed curve. */
+export function pathDef(id: string): GeoDef {
+  let d = pathDefs.get(id);
+  if (d) return d;
+  const n = id.slice(5).split(',').map(Number);
+  const rel: Vec[] = [];
+  for (let i = 0; i + 1 < n.length; i += 2) if (Number.isFinite(n[i]) && Number.isFinite(n[i + 1])) rel.push({ x: n[i] / 10000, y: n[i + 1] / 10000 });
+  d = {
+    id, name: 'Curve', group: 'Ink', size: [72, 72], outline: true,
+    draw: (w, h) => {
+      const at = (p: Vec) => [p.x * w, p.y * h] as const;
+      const body: GeoStep[] = rel.length ? [['M', ...at(rel[0])]] : [];
+      for (let i = 1; i + 2 < rel.length; i += 3) body.push(['C', ...at(rel[i]), ...at(rel[i + 1]), ...at(rel[i + 2])]);
+      if (body.length) body.push(['Z']);
+      return { body };
+    },
+  };
+  if (pathDefs.size > 500) pathDefs.clear();
+  pathDefs.set(id, d);
+  return d;
+}
+
 /** The shape with this id (an icon for "icon:…"), or the rectangle for one not known (from a newer version). */
-export const geoDef = (id: string | undefined): GeoDef => (isIconId(id) ? iconDef(id) : isSliceId(id) ? sliceDef(id) : isSectorId(id) ? sectorDef(id) : id === HEX_CELL ? hexCellDef : isInkId(id) ? inkDef(id) : GEO_BY_ID.get(id ?? '')) ?? GEO_BY_ID.get('rect')!;
+export const geoDef = (id: string | undefined): GeoDef => (isIconId(id) ? iconDef(id) : isSliceId(id) ? sliceDef(id) : isSectorId(id) ? sectorDef(id) : id === HEX_CELL ? hexCellDef : isInkId(id) ? inkDef(id) : isPathId(id) ? pathDef(id) : GEO_BY_ID.get(id ?? '')) ?? GEO_BY_ID.get('rect')!;
 
 /** The box of an outline's points (control points included: a little generous on curves). */
 export function stepsBox(steps: GeoStep[]): Rect {
