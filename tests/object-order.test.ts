@@ -114,6 +114,11 @@ describe('one drawing order for every object (#406)', () => {
     doc.edit('back', () => restack(doc, sel({ shapes: new Set([box]) }), 'back'));
     let xml = writeCdxml(doc);
     expect(xml.indexOf('<graphic')).toBeLessThan(xml.indexOf('<fragment'));
+    // ChemDraw layers each atom and bond by its own Z: all of them above the box's
+    const boxZ = Number(xml.match(/<graphic [^>]*Z="(\d+)"/)![1]);
+    const parts = [...xml.matchAll(/<(n|b) [^>]*>/g)].map((m) => Number(m[0].match(/ Z="(\d+)"/)?.[1] ?? NaN));
+    expect(parts.length).toBe(3);
+    for (const z of parts) expect(z).toBeGreaterThan(boxZ);
     // and the other way round, saved over the same file
     const again = readCdxml(xml).doc;
     const box2 = [...again.shapes.keys()][0], atoms2 = new Set(again.atoms.keys());
