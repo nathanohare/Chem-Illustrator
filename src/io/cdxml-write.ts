@@ -39,7 +39,7 @@ import { bondLayer, crossingBondsCached } from '../chem/crossing';
 import { repeatGroups, repeatCount, repeatLabelPlace } from '../chem/polymer';
 import { ellipseAxes, isCircleRing, ringBonds, ringCircle, ringsThroughBond } from '../chem/aromatic';
 import { newmanForFile } from '../design/newman';
-import { bondWidths, docMapLook } from '../style';
+import { bondWidths, docMapLook, labelBold } from '../style';
 import { isMapNumber } from '../render/atom-marks';
 
 /**
@@ -241,7 +241,7 @@ class CdxmlWriter {
     const attrs: Record<string, string> = {
       CreationProgram: 'Chem Illustrator',
       Name: this.opts.name ?? '',
-      LabelFont: '3', LabelSize: String(st.labelSize), LabelFace: '96',
+      LabelFont: '3', LabelSize: String(st.labelSize), LabelFace: String((st.labelFace ?? 0) | 96),
       CaptionFont: '3', CaptionSize: String(st.captionSize), CaptionFace: String(st.captionFace),
       HashSpacing: f2(st.hashSpacing), MarginWidth: f2(st.marginWidth), LineWidth: f2(st.lineWidth),
       BoldWidth: f2(st.boldWidth), BondLength: f2(st.bondLength), BondSpacing: String(st.bondSpacing),
@@ -843,8 +843,12 @@ class CdxmlWriter {
     const t = this.el('t', {});
     const color = this.colorAttr(a.color);
     const runs = labelRuns(text, a.label !== null ? labelLook(a) : { supDigits: false });
+    // bold as the label is drawn (its own face, else the drawing's); italic and underline as the
+    // label or the file had them
+    const bold = labelBold(this.doc.style, a);
+    const italicUnder = (keepBits | (a.face ?? this.doc.style.labelFace ?? 0)) & 6;
     for (const r of runs) {
-      const s = this.el('s', { font: keepFont ?? this.fontId(this.doc.style.labelFont || 'Arial'), size: f2(size).replace(/\.00$/, ''), color: color ?? '0', face: (faceOf(r) ?? 0) | keepBits });
+      const s = this.el('s', { font: keepFont ?? this.fontId(this.doc.style.labelFont || 'Arial'), size: f2(size).replace(/\.00$/, ''), color: color ?? '0', face: (faceOf(r) ?? 0) | italicUnder | (bold ? 1 : 0) });
       s.textContent = r.text;
       t.appendChild(s);
     }

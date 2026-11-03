@@ -12,6 +12,8 @@ import { cdxmlToCdx, cdxToCdxml } from '../src/io/cdx';
 import { extractDrawing } from '../src/io/clipboard';
 import { fillRings } from '../src/chem/ring-fill';
 import { ACS_1996 } from '../src/style';
+import { readCdxml } from '../src/io/cdxml';
+import { readFileSync } from 'node:fs';
 
 const parse = (t: string) => new DOMParser().parseFromString(t.replace(/<!DOCTYPE[^>]*>/i, ''), 'application/xml').documentElement;
 const all = (e: Element, name: string) => Array.from(e.getElementsByTagName(name));
@@ -107,5 +109,45 @@ describe('copying to ChemDraw', () => {
     const t = all(xml, 'n').map((n) => n.querySelector(':scope > t')).find((t) => t?.textContent === 'PCy3')!;
     expect(t.getAttribute('LabelJustification')).toBe('Right');
     expect(t.getAttribute('Justification')).toBe('Right');
+  });
+
+  it('writes bold labels bold, with the formula bit, as the drawing and each label have them', () => {
+    const doc = newDoc();
+    doc.style = { ...doc.style, labelFace: 97 };
+    doc.bulk(() => {
+      const a = doc.addAtom(0, 0, 8, { label: 'OMe' }), b = doc.addAtom(21.6, 0);
+      const c = doc.addAtom(43.2, 0, 7, { label: 'NMe2', face: 96 });
+      doc.addBond(a.id, b.id); doc.addBond(b.id, c.id);
+    });
+    const { xml, cdx } = copied(doc);
+    for (const x of [xml, cdx]) {
+      expect(x.getAttribute('LabelFace')).toBe('97');
+      const face = (text: string) => all(x, 'n').map((n) => n.querySelector(':scope > t')).filter((t) => t?.textContent === text).flatMap((t) => all(t!, 's').map((s) => Number(s.getAttribute('face'))));
+      expect(face('OMe').every((f) => (f & 97) === 97)).toBe(true);
+      expect(face('NMe2').every((f) => (f & 1) === 0)).toBe(true);
+    }
+  });
+
+  it('gives ChemDraw back its own test drawing: ring fills, widths, bold labels, stacking', () => {
+    const text = readFileSync('tests/fixtures/chemdraw-clipboard/clip-props.cd.cdxml', 'utf8');
+    const want = parse(text);
+    const { doc } = readCdxml(text);
+    const { xml, cdx } = copied(doc);
+    for (const x of [xml, cdx]) {
+      // the two ring fills, each round its own ring of bonds, in ChemDraw's colours
+      const rgb = (root: Element, e: Element) => { const c = all(root, 'color')[Number(e.getAttribute('bgcolor')) - 2]; return ['r', 'g', 'b'].map((k) => Math.round(Number(c.getAttribute(k)) * 255)).join(','); };
+      expect(all(x, 'ColoredMolecularArea').map((e) => rgb(x, e)).sort()).toEqual(all(want, 'ColoredMolecularArea').map((e) => rgb(want, e)).sort());
+      expect(all(x, 'ColoredMolecularArea').every((e) => e.getAttribute('BasisObjects')!.split(' ').length === 6)).toBe(true);
+      // bold labels
+      expect(Number(x.getAttribute('LabelFace')) & 1).toBe(1);
+      // the gray bonds stay behind the black ones they cross
+      // (not the bonds inside abbreviations: those stand for the label)
+      const bonds = all(x, 'b').filter((b) => b.parentElement!.parentElement!.nodeName !== 'n');
+      const gray = bonds.filter((b) => b.getAttribute('color')), black = bonds.filter((b) => !b.getAttribute('color'));
+      expect(Math.max(...gray.map((b) => Number(b.getAttribute('Z'))))).toBeLessThan(Math.min(...black.map((b) => Number(b.getAttribute('Z')))));
+    }
+    // and reading the copy back gives the same ring fills
+    const back = readCdxml(writeCdxml(extractDrawing(doc, null))).doc;
+    expect([...back.shapes.values()].filter((s) => s.kind === 'ring' && s.ring?.length === 6)).toHaveLength(2);
   });
 });
