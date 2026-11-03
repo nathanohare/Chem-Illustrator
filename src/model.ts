@@ -239,6 +239,8 @@ export interface StereoLabel {
   italic?: boolean;
   /** Typed by hand: always shows `text` instead of the worked-out label. */
   manual?: boolean;
+  /** From ChemDraw's file: `text` stands until the structure changes, with a warning where the rules work out otherwise. */
+  fromFile?: boolean;
 }
 
 /** R/S and E/Z labels worked out for a drawing: a descriptor, null for none, undefined while not known. */
@@ -250,6 +252,8 @@ export interface StereoInfo {
    * a label that can't be read) sets the order of its neighbours.
    */
   undecided?(kind: 'a' | 'b', id: number): boolean;
+  /** True while what the rules work out is what they first worked out for it: its structure hasn't changed since. */
+  asFirst?(kind: 'a' | 'b', id: number): boolean;
   /** Changes whenever a label does. */
   readonly version?: number;
 }
