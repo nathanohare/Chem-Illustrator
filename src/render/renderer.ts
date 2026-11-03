@@ -1309,8 +1309,8 @@ export class Renderer {
     if (joinP) for (const t of this.lineMitres(doc, p).get(b.id) ?? []) bend(p, t);
     if (joinQ) for (const t of this.lineMitres(doc, q).get(b.id) ?? []) bend(q, t);
     // a point of attachment: a wavy line across the end of the bond
-    if (p.attach === 'Wavy') attachWave(thin, p, nrm, st.bondLength);
-    if (q.attach === 'Wavy') attachWave(thin, q, nrm, st.bondLength);
+    if (p.attach === 'Wavy') attachWave(thin, p, nrm, ds.labelSize * k, st.boldWidth);
+    if (q.attach === 'Wavy') attachWave(thin, q, nrm, ds.labelSize * k, st.boldWidth);
 
     // a ring or allyl bonded to a metal as one: a plain line, and its stretch of the circle or arc
     const pi = this.bondInfo(doc, b).pi;
@@ -2712,11 +2712,12 @@ function newBatch(mk: () => Path2D): BondBatch {
 }
 
 /** The wavy line marking a point of attachment, centred on `at` and running along `across`. */
-export function attachWave(path: Path2D, at: Vec, across: Vec, bondLength: number): void {
-  const half = bondLength * ATTACH_HALF;
-  const waves = ATTACH_HALF_WAVES;
-  const step = (2 * half) / waves;
-  const amp = bondLength * ATTACH_AMP;
+export function attachWave(path: Path2D, at: Vec, across: Vec, labelSize: number, boldWidth: number): void {
+  // (measured from ChemDraw 25's pictures: the waves are a quarter of the bold width high and
+  // half of it long, and the line runs about 1.5 label sizes plus 3 points)
+  const amp = boldWidth / 4, pitch = boldWidth / 2;
+  const waves = Math.max(2, Math.min(60, Math.round((1.5 * labelSize + 3) / pitch)));
+  const step = pitch, half = (waves * step) / 2;
   const dir = { x: -across.y, y: across.x };
   const s = { x: at.x - across.x * half, y: at.y - across.y * half };
   path.moveTo(s.x, s.y);
@@ -2735,13 +2736,6 @@ export const WARN_LOOKS = ['disc', 'box', 'circle', 'dashed', 'corners'] as cons
 export type WarnLook = (typeof WARN_LOOKS)[number];
 const CHEM_MARK_COLOR = '#1f8a7a';
 
-/**
- * Half the length and the height of the attachment wave, as fractions of the bond length, and
- * its number of half waves (measured in ChemDraw 25: 1.2 bond lengths long, about 12 small waves).
- */
-const ATTACH_HALF = 0.6;
-const ATTACH_AMP = 0.06;
-const ATTACH_HALF_WAVES = 24;
 
 /** A colour with some see-through: "#rrggbb" and opacity 0–1 as rgba(). */
 function withAlpha(c: string, a: number): string {
