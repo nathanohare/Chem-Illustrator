@@ -57,6 +57,7 @@ describe('Check Data', () => {
     const [h] = parsePeakLists('1H NMR (400 MHz, CDCl3) δ 7.30 (d, J = 8.7 Hz, 2H), 6.85 (d, J = 8.7 Hz, 2H), 4.17 (q, J = 7.1 Hz, 2H), 3.80 (s, 3H), 1.56 (s, 0.8H), 1.27 (t, J = 7.1 Hz, 3H)');
     const r = checkData(h, H, [{ name: 'Water', shift: 1.56 }]);
     expect(r.extras[0].maybe).toBe('Water');
+    expect(r.findings.some((f) => f.text === '1.56 (s, 0.8H): water.' && f.severity === 'info')).toBe(true);
     expect(r.rows.filter((m) => m.status === 'missing').length).toBe(3);
     expect(r.findings.some((f) => f.text.startsWith('No peak for C5'))).toBe(true);
   });
