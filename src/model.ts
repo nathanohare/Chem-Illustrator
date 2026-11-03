@@ -32,9 +32,19 @@ export function outsideValence(b: Pick<Bond, 'display' | 'order'>): boolean {
 }
 export type DoublePos = 'auto' | 'left' | 'right' | 'center';
 
+/**
+ * Marks what came from one ChemDraw object in a PowerPoint file (or was added to its structures):
+ * saved to PowerPoint, things with the same id are written back as one ChemDraw object, which a
+ * double-click in PowerPoint opens in ChemDraw. `prog` is the object's program name as PowerPoint
+ * kept it (ChemDraw_x64.Document.6.0 for 64-bit ChemDraw).
+ */
+export interface OleMark { id: number; prog: string }
+
 export interface Atom {
   /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
   piece?: number;
+  /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
+  ole?: OleMark;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -55,6 +65,10 @@ export interface Atom {
   color?: string;
   /** Size relative to the document style (structures shrunk or enlarged in ChemDraw keep their own scale). */
   s?: number;
+  /** The label's own face bits (1 bold, 96 formula) where they differ from the drawing's labelFace. */
+  face?: number;
+  /** The gap bonds keep from this atom's label, in points, where it isn't the document's scaled by `s` (ChemDraw's MarginWidth on an atom). */
+  marginWidth?: number;
   /** A 3-D position kept from a file (ChemDraw's xyz on a structure built from a crystal file). */
   xyz?: [number, number, number];
   /**
@@ -73,12 +87,16 @@ export interface Atom {
   alt?: string;
   /** A carbon shown with its letter and hydrogens (CH3 at a chain end; ChemDraw's ShowTerminalCarbonLabels). */
   showCarbon?: boolean;
+  /** A carbon with no bonds and no label, from a ChemDraw file: drawn as nothing, as ChemDraw draws it (not CH4). */
+  bare?: boolean;
   /** The charge is drawn by a separate circled-charge symbol, so the label leaves it out. */
   hideCharge?: boolean;
   /** Numbers after R groups are superscripts (R¹ rather than R₁); false keeps them down. Not set: R1, R12… go up, as the preferences say. */
   supDigits?: boolean;
   /** Characters of the label raised or lowered by hand, one mark per character ("^" up, "_" down, "=" on the line). */
   labelMarks?: string;
+  /** The whole label is centred on the atom (ChemDraw's Center justification, as on Ru or Si), not its first letter. */
+  centred?: boolean;
   /** Show this atom's R/S label when it has one (ChemDraw's "Show Stereochemistry"). */
   showStereo?: boolean;
   /** Where the stereo label sits (relative to the atom), and its text as saved or typed by hand. */
@@ -203,10 +221,26 @@ export interface Bond {
   color?: string;
   /** Line widths relative to the document style. */
   s?: number;
+  /**
+   * A structure's own drawing settings, in points, where they aren't the document's scaled by `s`
+   * (ChemDraw keeps these on each bond of a structure drawn at other settings): the width of a bold
+   * bond (a wedge's wide end is 1.5 times it), the distance between a hashed bond's hashes, the gap
+   * kept round labels and at crossings, and the bond length new bonds on the structure get.
+   * Read with bondWidths (style.ts).
+   */
+  boldWidth?: number;
+  hashSpacing?: number;
+  marginWidth?: number;
+  bondLength?: number;
   /** An aromatic bond (order 1.5) in a ring drawn with a circle rather than a dashed second line. */
   circle?: boolean;
   /** Where it sits among bonds that cross it (higher in front; else the order it was drawn in). ChemDraw's Z. */
   z?: number;
+  /**
+   * Bonds a file says this one crosses (ChemDraw's CrossingBonds, which counts near misses too: a
+   * bond passing just beyond another's end). Used only while they still pass close.
+   */
+  crossing?: number[];
   /** The person chose to ignore this bond's chemistry warnings. */
   ignoreWarnings?: boolean;
   /**
@@ -428,6 +462,8 @@ export interface TabStop {
 export interface Caption {
   /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
   piece?: number;
+  /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
+  ole?: OleMark;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -591,6 +627,8 @@ export type ArrowHead = 'none' | 'full' | 'halfLeft' | 'halfRight';
 export interface Arrow {
   /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
   piece?: number;
+  /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
+  ole?: OleMark;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -701,6 +739,8 @@ export type Pattern = 'hatch' | 'backhatch' | 'crosshatch' | 'horizontal' | 'ver
 export interface Shape {
   /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
   piece?: number;
+  /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
+  ole?: OleMark;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;

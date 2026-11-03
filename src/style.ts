@@ -18,6 +18,8 @@ export interface DocStyle {
   captionSize: number;
   /** How new captions look, as ChemDraw's face bits (1 bold, 2 italic, 4 underline, 96 formula). */
   captionFace: number;
+  /** How atom labels look, as the same face bits (absent: plain); bold is drawn, the rest is kept for saving. */
+  labelFace?: number;
   /** Text above and below reaction arrows (reagents, conditions): its size and font, where not the captions'. */
   arrowTextSize?: number;
   arrowTextFont?: string;
@@ -69,6 +71,35 @@ export const ACS_1996: DocStyle = {
 
 export function doubleBondGap(s: DocStyle): number {
   return (s.bondSpacing / 100) * s.bondLength;
+}
+
+/** Whether an atom's label is drawn in bold: its own face where it has one, else the drawing's. */
+export function labelBold(s: DocStyle, a: { face?: number }): boolean {
+  return !!((a.face ?? s.labelFace ?? 0) & 1);
+}
+
+/** A bond's own widths, in points: its structure's settings where it has them, else the document's scaled by its `s`. */
+export function bondWidths(ds: DocStyle, b: { s?: number; boldWidth?: number; hashSpacing?: number; marginWidth?: number; bondLength?: number }): { lineWidth: number; boldWidth: number; hashSpacing: number; marginWidth: number; bondLength: number } {
+  const k = b.s ?? 1;
+  return {
+    lineWidth: ds.lineWidth * k,
+    boldWidth: b.boldWidth ?? ds.boldWidth * k,
+    hashSpacing: b.hashSpacing ?? ds.hashSpacing * k,
+    marginWidth: b.marginWidth ?? ds.marginWidth * k,
+    bondLength: b.bondLength ?? ds.bondLength * k,
+  };
+}
+
+/** A bond's own widths (bondWidths) made f times as big, as an update, when it has any (scaling a structure). */
+export function scaleOwnWidths(b: { boldWidth?: number; hashSpacing?: number; marginWidth?: number; bondLength?: number }, f: number): { boldWidth?: number; hashSpacing?: number; marginWidth?: number; bondLength?: number } {
+  const out: { boldWidth?: number; hashSpacing?: number; marginWidth?: number; bondLength?: number } = {};
+  for (const k of ['boldWidth', 'hashSpacing', 'marginWidth', 'bondLength'] as const) if (b[k] !== undefined) out[k] = b[k]! * f;
+  return out;
+}
+
+/** The gap bonds keep from an atom's label, in points. */
+export function atomMargin(ds: DocStyle, a: { s?: number; marginWidth?: number }): number {
+  return a.marginWidth ?? ds.marginWidth * (a.s ?? 1);
 }
 
 /** Width of a wedge's wide end: 1.5 × bold width (User Guide p. 41). */

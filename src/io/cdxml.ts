@@ -2,15 +2,16 @@
 // their formatting, arrows, and the common graphics (lines, boxes, circles, brackets,
 // charge symbols). Anything not understood yet is counted and skipped, never fatal.
 
+import { tint } from '../colours';
 import { parseGuides } from '../editor/guides';
 import { fillFrameMembers, frameFromTag } from '../editor/frames';
 import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachFromTag, fillAttachments } from '../editor/attached';
 import { readSpecies } from '../chem/species';
 import { highlightStyleFromTag } from '../render/highlight';
-import { attachRingFills } from '../chem/ring-fill';
+import { attachRingFills, ringGeometry } from '../chem/ring-fill';
 import { paperOf } from './cdxml-print';
 import { lipDirection } from '../chem/polymer';
-import { Doc, Atom, Bond, BondDisplay, TextRun, Arrow, Shape, Entity, Kind, StereoLabel, Caption, StepRoles, MorphStep, CHIRAL_FLAGS, PARTIAL, PAPER, type Pin, type PictureFx, type ShapeMath } from '../model';
+import { Doc, Atom, Bond, BondDisplay, TextRun, Arrow, Shape, Entity, Kind, StereoLabel, Caption, StepRoles, MorphStep, CHIRAL_FLAGS, PARTIAL, PAPER, type Pin, type PictureFx, type ShapeMath, type HighlightStyle } from '../model';
 import { TEXT_TAG, parseTextTag, runsFromChemDraw } from '../text/chemdraw-text';
 import { readPageTag } from '../page-grid';
 import { DocStyle, MAP_LOOKS, mapBoxStyle, type MapLook } from '../style';
@@ -104,7 +105,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   st.labelSize = size('LabelSize', 10);
   st.captionSize = size('CaptionSize', 12);
   st.captionFace = num(root, 'CaptionFace', 0);
+  if (root.hasAttribute('LabelFace')) st.labelFace = num(root, 'LabelFace', 0); else delete st.labelFace;
   doc.style = st;
+  // ChemDraw's highlight disc (measured from its own pictures): 0.27 bond lengths plus half a line width across
+  const chemdrawHighlight: HighlightStyle = { shape: 'round', size: (0.27 * st.bondLength + st.lineWidth / 2) / (0.27 * st.bondLength) };
 
   // Colours: index 0 is black and 1 white; the colour table starts at index 2.
   const colors: string[] = ['#000000', '#ffffff'];
@@ -226,27 +230,40 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   /** Circles drawn inside structures: ring circles when they sit in the middle of an aromatic ring. */
   const pendingCircles: { x: number; y: number; oval: () => void }[] = [];
 
+  /** Every bond read, by its id in the file, and the bonds the file says each one crosses. */
+  const allBondIds = new Map<string, number>();
+  const fileCrossings: [number, string[]][] = [];
   const readFragment = (frag: Element) => {
     // text ChemDraw turned into a lone label on saving (Interpret Chemically): a text box again, as
     // it was written; ChemDraw's guess at what an unknown name is made of (DMAP as D, M, A, P) is not kept
-    const lone = kids(frag).filter((k) => k.nodeName === 'n');
-    if (lone.length === 1 && !kids(frag).some((k) => k.nodeName === 'b')) {
-      const n = lone[0], type = n.getAttribute('NodeType');
+    // (also such a label sharing a fragment with structures it has no bond to, as older ChemDraw
+    // versions save them: the same text box, so it reads back the same once saved here)
+    const bonded = new Set<string>();
+    for (const k of kids(frag)) {
+      if (k.nodeName === 'b') { bonded.add(k.getAttribute('B') ?? ''); bonded.add(k.getAttribute('E') ?? ''); }
+      if (k.nodeName === 'n') for (const a of (k.getAttribute('Attachments') ?? '').trim().split(/\s+/)) bonded.add(a);
+    }
+    const asText = new Set<Element>();
+    for (const n of kids(frag)) {
+      if (n.nodeName !== 'n' || bonded.has(n.getAttribute('id') ?? '')) continue;
+      const type = n.getAttribute('NodeType');
       const t = kids(n).find((k) => k.nodeName === 't');
-      if (t && (type === 'Unspecified' || ((type === 'Fragment' || type === 'Nickname') && n.getAttribute('NeedsClean') === 'yes'))) {
+      // (ChemDraw 25 keeps reagent text such as "MsCl, Et3N" as an AnonymousAlternativeGroup it couldn't interpret)
+      if (t && (type === 'Unspecified' || ((type === 'Fragment' || type === 'Nickname' || type === 'AnonymousAlternativeGroup') && n.getAttribute('NeedsClean') === 'yes'))) {
         const c = captionOf(t);
         if (c) {
           const cap = doc.addCaption({ id: idFor(t), ...c });
           from('c', cap.id, t);
           stats.captions++;
-          return;
+          asText.add(n);
         }
       }
     }
+    if (asText.size && kids(frag).every((k) => k.nodeName !== 'n' || asText.has(k))) return;
     const nodeIds = new Map<string, number>();
     const pendingMulti: { id: number; key: string; ids: string[] }[] = [];
     for (const n of kids(frag)) {
-      if (n.nodeName !== 'n') continue;
+      if (n.nodeName !== 'n' || asText.has(n)) continue;
       const type = n.getAttribute('NodeType');
       const [x, y] = pts(n.getAttribute('p'));
       if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
@@ -284,6 +301,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (c) extra.color = c;
       if (chargeShown.has(n.getAttribute('id') ?? '')) extra.hideCharge = true;
       const ls = n.getAttribute('LabelSize');
+      const mw = Number(n.getAttribute('MarginWidth') ?? frag.getAttribute('MarginWidth'));
+      if (mw > 0 && Math.abs(mw - st.marginWidth) > 1e-3) extra.marginWidth = mw;
       if (ls !== null) extra.s = Number(ls) / st.labelSize;
       let t: Element | null = null;
       for (const ch of kids(n)) {
@@ -310,6 +329,11 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (Number.isInteger(mapTag) && mapTag > 0) extra.mapNo = mapTag;
       const hlA = kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_TAG)?.getAttribute('Value');
       if (hlA && /^#[0-9a-f]{6}$/i.test(hlA)) extra.highlight = hlA.toLowerCase();
+      // ChemDraw's own atom highlight
+      else if (n.hasAttribute('highlightColor') && colors[num(n, 'highlightColor', -1)]) {
+        extra.highlight = colors[num(n, 'highlightColor', -1)];
+        extra.hl = chemdrawHighlight;
+      }
       const lookA = highlightStyleFromTag(kids(n).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_LOOK_TAG)?.getAttribute('Value'));
       if (lookA && extra.highlight) extra.hl = lookA;
       if (n.getAttribute('ShowTerminalCarbonLabels') === 'yes' || n.getAttribute('ShowNonTerminalCarbonLabels') === 'yes') extra.showCarbon = true;
@@ -322,6 +346,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       stats.atoms++;
       if (t) {
         const runs = runsOf(t);
+        // a label set in a face of its own (bold labels in a drawing whose labels are plain, or the other way)
+        const s0 = kids(t).find((k) => k.nodeName === 's');
+        const face = s0 ? num(s0, 'face', 0) : undefined;
+        if (face !== undefined && (face & 1) !== ((st.labelFace ?? 0) & 1)) atom.face = face;
         let txt = runs.map((r) => r.text).join('');
         if (atom.charge) {
           // the charge is part of the label text ("N+", "O2−"); it is drawn from the charge instead
@@ -335,6 +363,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         if (size && ls === null) atom.s = size / st.labelSize;
         const lj = t.getAttribute('LabelJustification');
         const la = t.getAttribute('LabelAlignment');
+        if (la === 'Center' || t.getAttribute('Justification') === 'Center') atom.centred = true;
         if (la === 'Above' || la === 'Below') atom.just = 'auto';
         else if (la === 'Right' || lj === 'Right') atom.just = 'left';
         else if (la === 'Left' || lj === 'Left') atom.just = 'right';
@@ -348,6 +377,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (atoms.length >= 2) doc.updateAtom(m.id, { multi: atoms });
       else { doc.removeAtom(m.id); nodeIds.delete(m.key); skip('multicenter attachment without its atoms'); }
     }
+    const bondIds = new Map<string, number>();
+    // ChemDraw lists near misses among a fragment's crossing bonds too, so every bond keeps its layer there
+    const layered = kids(frag).some((k) => k.nodeName === 'b' && k.hasAttribute('CrossingBonds'));
     for (const b of kids(frag)) {
       if (b.nodeName === 'graphic') readGraphic(b); // circled charges and lone pairs sit with their structure
       if (b.nodeName !== 'b') continue;
@@ -385,7 +417,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (b.getAttribute('IgnoreWarnings') === 'yes') extra.ignoreWarnings = true;
       if (b.getAttribute('ShowBondStereo') === 'yes') extra.showStereo = true;
       // a bond crossing others: the higher Z is in front
-      if (b.hasAttribute('CrossingBonds') && b.hasAttribute('Z')) extra.z = num(b, 'Z');
+      if (layered && b.hasAttribute('Z')) extra.z = num(b, 'Z');
       const tag = kids(b).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === 'stereo');
       if (tag) {
         // ChemDraw's (E)/(Z) label by the double bond, kept relative to the bond's middle
@@ -393,18 +425,51 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         const l = stereoTag(tag, (p.x + q.x) / 2, (p.y + q.y) / 2);
         if (l) extra.stereoLabel = l;
       }
-      const lw = b.getAttribute('LineWidth');
+      // the bond's own widths, else its structure's (ChemDraw keeps them on either)
+      const own = (name: string) => b.getAttribute(name) ?? frag.getAttribute(name);
+      const lw = own('LineWidth');
       if (lw !== null) extra.s = Number(lw) / st.lineWidth;
+      const widths = { BoldWidth: 'boldWidth', HashSpacing: 'hashSpacing', MarginWidth: 'marginWidth', BondLength: 'bondLength' } as const;
+      for (const [attr, key] of Object.entries(widths)) {
+        const v = Number(own(attr));
+        if (own(attr) !== null && v > 0 && Math.abs(v - st[key]) > 1e-3) extra[key] = v;
+        // a bond with a line width of its own keeps the drawing's other widths (they would scale with it)
+        else if (extra.s !== undefined && Math.abs(extra.s - 1) > 1e-3) extra[key] = own(attr) !== null && v > 0 ? v : st[key];
+      }
       const c = color(b);
       if (c) extra.color = c;
       const hlB = kids(b).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_TAG)?.getAttribute('Value');
       if (hlB && /^#[0-9a-f]{6}$/i.test(hlB)) extra.highlight = hlB.toLowerCase();
+      else if (b.hasAttribute('highlightColor') && colors[num(b, 'highlightColor', -1)]) {
+        extra.highlight = colors[num(b, 'highlightColor', -1)];
+        extra.hl = chemdrawHighlight;
+      }
       const lookB = highlightStyleFromTag(kids(b).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === HIGHLIGHT_LOOK_TAG)?.getAttribute('Value'));
       if (lookB && extra.highlight) extra.hl = lookB;
       if (kids(b).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === SPOKES_TAG)) extra.spokes = true;
       const bond = doc.addBond(a1, a2, order, display, extra);
       from('b', bond.id, b);
+      bondIds.set(b.getAttribute('id') ?? '', bond.id);
+      allBondIds.set(b.getAttribute('id') ?? '', bond.id);
+      const crosses = (b.getAttribute('CrossingBonds') ?? '').trim();
+      if (crosses) fileCrossings.push([bond.id, crosses.split(/\s+/)]);
       stats.bonds++;
+    }
+    // a carbon left on its own with no label (a stray atom): ChemDraw draws nothing there
+    for (const n of kids(frag)) {
+      if (n.nodeName !== 'n' || n.getAttribute('NodeType') || kids(n).some((k) => k.nodeName === 't') || num(n, 'Element', 6) !== 6) continue;
+      const id = nodeIds.get(n.getAttribute('id') ?? '');
+      if (id !== undefined && doc.degree(id) === 0) doc.updateAtom(id, { bare: true });
+    }
+    // ChemDraw's ring fills: an area coloured in behind the bonds that go round it
+    for (const area of kids(frag)) {
+      if (area.nodeName !== 'ColoredMolecularArea') continue;
+      const ring = cycleOf(doc, (area.getAttribute('BasisObjects') ?? '').trim().split(/\s+/).map((x) => bondIds.get(x)).filter((x): x is number => x !== undefined));
+      const fill = colors[num(area, 'bgcolor', -1)];
+      if (!ring || !fill) { skip('ring fill'); continue; }
+      const sh = doc.addShape({ id: idFor(area), kind: 'ring', ring, ...ringGeometry(doc, ring), filled: true, fillColor: fill, z: -1000 });
+      from('s', sh.id, area);
+      stats.shapes++;
     }
   };
 
@@ -688,6 +753,14 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const z = num(g, 'Z', 0);
     const base = { id: idFor(g), color: c, z };
     const add = (s: Omit<Shape, 'id'> & { id: number }) => {
+      // ChemDraw's faded shape: filled with its colour faded towards white (FadePercent, in tenths of a percent)
+      const fade = num(g, 'FadePercent', -1);
+      if (fade >= 0 && !s.filled) {
+        const ink = c ?? '#000000';
+        s.filled = true;
+        // (its outline stays in the full colour, so the fill is a colour of its own)
+        s.fillColor = tint(ink, 1 - Math.min(1, fade / 1000));
+      }
       // our fill style and outline colour, which ChemDraw has no words for
       const tag = kids(g).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === FILL_TAG);
       if (tag) {
@@ -715,8 +788,21 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       case 'Rectangle': {
         if (bb.length < 4) return;
         const rt = g.getAttribute('RectangleType') ?? '';
+        // a turned box (a diamond, say) is kept by its middle and two half-axes; its BoundingBox doesn't show it
+        let [x1, y1, x2, y2] = bb, rot = 0;
+        const cen = pts(g.getAttribute('Center3D')), maj = pts(g.getAttribute('MajorAxisEnd3D')), min = pts(g.getAttribute('MinorAxisEnd3D'));
+        if (cen.length >= 2 && maj.length >= 2 && min.length >= 2) {
+          let hw = Math.hypot(maj[0] - cen[0], maj[1] - cen[1]), hh = Math.hypot(min[0] - cen[0], min[1] - cen[1]);
+          let deg = (Math.atan2(maj[1] - cen[1], maj[0] - cen[0]) * 180) / Math.PI;
+          deg = ((deg % 180) + 180) % 180;
+          if (Math.abs(deg - 90) < 0.05) { [hw, hh] = [hh, hw]; deg = 0; }
+          if (deg > 0.05 && deg < 179.95) {
+            rot = +deg.toFixed(3);
+            [x1, y1, x2, y2] = [cen[0] - hw, cen[1] - hh, cen[0] + hw, cen[1] + hh];
+          }
+        }
         const rect: Omit<Shape, 'id'> & { id: number } = {
-          ...base, kind: 'rect', x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], rounded: rt.includes('RoundEdge'), shadow: rt.includes('Shadow'),
+          ...base, kind: 'rect', x1, y1, x2, y2, ...(rot ? { rot } : {}), rounded: rt.includes('RoundEdge'), shadow: rt.includes('Shadow'),
           filled: rt.includes('Filled') || rt.includes('Shaded'), dashed: rt.includes('Dashed'), bold: rt.includes('Bold'),
           ...(rt.includes('Shaded') ? { fill: 'shaded' as const } : {}),
         };
@@ -914,8 +1000,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   };
 
   /** Each object's place in the drawing order, from ChemDraw's Z (a structure's from its fragment's). */
-  const readStack = () => {
-    const zOf = (el: Element | undefined, top: boolean): number | undefined => {
+  const zOf = (el: Element | undefined, top: boolean): number | undefined => {
       let e: Element | null = el ?? null, found: number | undefined;
       while (e && e !== pg) {
         const v = e.getAttribute('Z');
@@ -926,8 +1011,20 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         e = p;
       }
       return top ? undefined : found;
-    };
-    const at = (kind: Kind, id: number) => { const o = ord.get(kind + id); return o === undefined ? undefined : all[o]; };
+  };
+  const at = (kind: Kind, id: number) => { const o = ord.get(kind + id); return o === undefined ? undefined : all[o]; };
+  /** ChemDraw draws everything in its Z order: a filled shape over a structure behind it hides that part of it. */
+  const shapeOverStructure = (): boolean => {
+    for (const sh of doc.shapes.values()) {
+      if (!sh.filled || sh.kind === 'ring') continue;
+      const z = zOf(at('s', sh.id), false);
+      if (z === undefined) continue;
+      const box = { x1: Math.min(sh.x1, sh.x2), y1: Math.min(sh.y1, sh.y2), x2: Math.max(sh.x1, sh.x2), y2: Math.max(sh.y1, sh.y2) };
+      for (const a of doc.atomsIn(box)) { const za = zOf(at('a', a.id), true); if (za !== undefined && za < z) return true; }
+    }
+    return false;
+  };
+  const readStack = () => {
     for (const a of doc.atoms.values()) { const z = zOf(at('a', a.id), true); if (z !== undefined) a.stack = z; }
     for (const c of doc.captions.values()) { const z = zOf(at('c', c.id), false); if (z !== undefined) c.stack = z; }
     for (const r of doc.arrows.values()) { const z = zOf(at('r', r.id), false); if (z !== undefined) r.stack = z; }
@@ -936,6 +1033,15 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
 
   doc.bulk(() => {
     walk(root);
+    // the bonds ChemDraw says cross, near misses included, both ways round
+    for (const [id, others] of fileCrossings) {
+      for (const o of others.map((x) => allBondIds.get(x)).filter((x): x is number => x !== undefined && x !== id)) {
+        for (const [p, q] of [[id, o], [o, id]]) {
+          const b = doc.bonds.get(p)!;
+          if (!b.crossing?.includes(q)) doc.updateBond(p, { crossing: [...(b.crossing ?? []), q] });
+        }
+      }
+    }
     readSteps(all, refOf, doc);
     if (morphTags.length) readMorphTags(morphTags, refOf(), doc);
     if (pinTags.length) readPinTags(pinTags, refOf(), doc);
@@ -966,7 +1072,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     relinkNewman(doc);
     fillAttachments(doc);
     readGroups();
-    if (pg && kids(pg).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === STACK_TAG)) readStack();
+    if ((pg && kids(pg).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === STACK_TAG)) || shapeOverStructure()) readStack();
   });
   doc.reserveIds(maxId);
   const things: Partial<Record<Kind, Map<number, { piece?: number }>>> = { a: doc.atoms, c: doc.captions, r: doc.arrows, s: doc.shapes };
@@ -1273,4 +1379,36 @@ function movePoints(e: Element, dx: number, dy: number): void {
     if (v === null) continue;
     e.setAttribute(name, pts(v).map((x, i) => String(+(x + (i % 2 ? dy : dx)).toFixed(3))).join(' '));
   }
+}
+
+/**
+ * The atoms in order round a closed loop of bonds (a ring fill's bonds), or null when the bonds
+ * are not one simple loop.
+ */
+export function cycleOf(doc: Doc, bonds: number[]): number[] | null {
+  if (bonds.length < 3) return null;
+  const next = new Map<number, number[]>();
+  for (const id of bonds) {
+    const b = doc.bonds.get(id);
+    if (!b) return null;
+    for (const [p, q] of [[b.a1, b.a2], [b.a2, b.a1]]) {
+      const l = next.get(p) ?? [];
+      l.push(q);
+      next.set(p, l);
+    }
+  }
+  if ([...next.values()].some((l) => l.length !== 2)) return null;
+  const start = doc.bonds.get(bonds[0])!.a1;
+  const ring = [start];
+  let prev = -1, at = start;
+  for (;;) {
+    const [u, v] = next.get(at)!;
+    const go = u !== prev ? u : v;
+    if (go === start) break;
+    ring.push(go);
+    prev = at;
+    at = go;
+    if (ring.length > bonds.length) return null;
+  }
+  return ring.length === bonds.length ? ring : null;
 }

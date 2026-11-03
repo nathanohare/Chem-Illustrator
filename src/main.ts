@@ -275,7 +275,7 @@ import { favoriteSummary, freshFavoriteName, ribbonFavorites, withFavorite, type
 import { SymbolWindow } from './ui/symbol-window';
 import { Navigator, EdgeArrows, paintGrid, paintTint, type Target } from './ui/orientation';
 import { type OrientPrefs, DEFAULT_ORIENT } from './orientation-prefs';
-import { type PageLook, type Side, DEFAULT_PAGE_LOOK, SIDES, SIDE_NAMES, pageExtent, extentRect, pageCount, pageKey, scrollBox, wallRect, wallsOf, setWall, usedPages, pagesToPrint, fixedCount, crossesWalls, clampMove, wrapPieces } from './page-grid';
+import { type PageLook, type Side, DEFAULT_PAGE_LOOK, SIDES, SIDE_NAMES, pageExtent, extentRect, pageCount, pageKey, scrollBox, wallRect, wallsOf, setWall, usedPages, pagesToPrint, fixedCount, crossesWalls, clampMove, insetWalls, wrapPieces } from './page-grid';
 import { paintPages } from './ui/page-grid-view';
 import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
@@ -13054,13 +13054,21 @@ function pageEdgesMenu(): MenuItem | null {
  * or its pieces are wrapped at the page's edges like a line of text (asked, unless a choice is set
  * in Settings ▸ Page Grid). The change joins the paste, so one undo takes both back.
  */
+/** How far in from a fixed page edge a paste is kept (points: a quarter of an inch). */
+const PASTE_MARGIN = 18;
+
 async function keepPasteInside(): Promise<void> {
   const p = gridPage();
   if (!p || !editor.hasSelection()) return;
   const walls = wallRect(p), box = editor.selBox();
-  if (!box || !crossesWalls(box, walls)) return;
+  if (!box) return;
+  // a paste is kept a little way in from a fixed edge, not right against it
+  const inner = insetWalls(walls, PASTE_MARGIN, box);
+  if (!crossesWalls(box, inner)) return;
   let how: 'pages' | 'wrap' = pageLook.pasteAtWall === 'wrap' ? 'wrap' : 'pages';
-  if (pageLook.pasteAtWall === 'ask') {
+  // only near the edge, not past it: moved in, without asking
+  if (!crossesWalls(box, walls)) how = 'pages';
+  else if (pageLook.pasteAtWall === 'ask') {
     const got = await ask('Pasted past a fixed edge', [
       { name: 'how', label: 'Fit it in by', value: 'pages', options: [
         { value: 'pages', label: 'Adding pages: keep it as it was pasted' },
@@ -13085,7 +13093,7 @@ async function keepPasteInside(): Promise<void> {
       pieces.forEach((u, i) => moveUnit(doc, u, moves[i]));
     }
     const now = editor.selBox();
-    if (now) { const d = clampMove(now, { x: 0, y: 0 }, walls); if (d.x || d.y) for (const u of units(doc, sel, editor.measure())) moveUnit(doc, u, d); }
+    if (now) { const d = clampMove(now, { x: 0, y: 0 }, insetWalls(walls, PASTE_MARGIN, now)); if (d.x || d.y) for (const u of units(doc, sel, editor.measure())) moveUnit(doc, u, d); }
   });
   editor.changed();
   if (crossesWalls(editor.selBox() ?? box, walls)) flash('What was pasted is bigger than the room between the fixed edges. Free an edge (right-click > Page Edges) or choose a bigger page.', 7000);
@@ -13594,7 +13602,7 @@ requestAnimationFrame(() => {
 });
 
 // Hooks for the automated speed tests.
-(window as any).__app = { assistant: { items: assistantItems, apply: applyAssistantAction, markStep: markAssistantStep }, doc, editor, renderer, settingsWindow, toolboxes, chem, live, command, setRibbonLook, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
+(window as any).__app = { assistant: { items: assistantItems, apply: applyAssistantAction, markStep: markAssistantStep }, doc, editor, renderer, settingsWindow, toolboxes, chem, live, command, setRibbonLook, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, picture: (dpi = 150) => { const p = recordPicture(doc, 0); if (!p) return null; const c = pictureCanvas(doc, p, dpi); return { url: c.canvas.toDataURL('image/png'), box: p.box, dpi: c.dpi }; }, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
   pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, canvas: s.canvas })) }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test

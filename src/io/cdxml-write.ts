@@ -35,11 +35,11 @@ import { shapeShadow } from '../render/highlight-fx';
 import { parseColor } from '../render/vector';
 import { layoutTable, cellAlign, isCovered, spanOf, partAt, NOTE_SCALE } from '../table';
 import { TABLE_TAG, TABLE_PART_TAG, tableBorders, type TableTag } from './cdxml-table';
-import { bondLayer, crossingBondsCached } from '../chem/crossing';
+import { bondLayer, crossingBondsCached, listedNearMisses } from '../chem/crossing';
 import { repeatGroups, repeatCount, repeatLabelPlace } from '../chem/polymer';
-import { ellipseAxes, isCircleRing, ringCircle, ringsThroughBond } from '../chem/aromatic';
+import { ellipseAxes, isCircleRing, ringBonds, ringCircle, ringsThroughBond } from '../chem/aromatic';
 import { newmanForFile } from '../design/newman';
-import { docMapLook } from '../style';
+import { bondWidths, docMapLook, labelBold } from '../style';
 import { isMapNumber } from '../render/atom-marks';
 
 /**
@@ -241,7 +241,7 @@ class CdxmlWriter {
     const attrs: Record<string, string> = {
       CreationProgram: 'Chem Illustrator',
       Name: this.opts.name ?? '',
-      LabelFont: '3', LabelSize: String(st.labelSize), LabelFace: '96',
+      LabelFont: '3', LabelSize: String(st.labelSize), LabelFace: String((st.labelFace ?? 0) | 96),
       CaptionFont: '3', CaptionSize: String(st.captionSize), CaptionFace: String(st.captionFace),
       HashSpacing: f2(st.hashSpacing), MarginWidth: f2(st.marginWidth), LineWidth: f2(st.lineWidth),
       BoldWidth: f2(st.boldWidth), BondLength: f2(st.bondLength), BondSpacing: String(st.bondSpacing),
@@ -717,8 +717,13 @@ class CdxmlWriter {
     this.highlightTag(n, a.highlight, a.hl);
   }
 
-  /** A highlight's colour, in a hidden tag (ChemDraw has no highlights). */
+  /**
+   * A highlight: ChemDraw's own highlightColor, which it draws as a disc behind the atom or bond,
+   * and the colour and look in hidden tags, which say how it is drawn here (CDX has no tag for
+   * highlightColor that we know of, so through CDX only the hidden tags carry it).
+   */
   private highlightTag(e: Element, colour: string | undefined, look: HighlightStyle | undefined): void {
+    this.set(e, 'highlightColor', colour && /^#[0-9a-f]{6}$/i.test(colour) ? String(this.colorIndex(colour)) : null);
     for (const c of kids(e)) if (c.nodeName === 'objecttag' && (c.getAttribute('Name') === HIGHLIGHT_TAG || c.getAttribute('Name') === HIGHLIGHT_LOOK_TAG)) e.removeChild(c);
     if (colour) e.appendChild(this.el('objecttag', { TagType: 'String', Name: HIGHLIGHT_TAG, Value: colour, Visible: 'no' }));
     if (colour && look && Object.keys(look).length) e.appendChild(this.el('objecttag', { TagType: 'String', Name: HIGHLIGHT_LOOK_TAG, Value: JSON.stringify(look), Visible: 'no' }));
@@ -797,10 +802,16 @@ class CdxmlWriter {
     return true;
   }
 
+  /** The label an atom shows: none for a stray carbon from ChemDraw (Atom.bare), which ChemDraw draws as nothing. */
+  private shownSpec(a: Atom): ReturnType<typeof labelSpec> {
+    const doc = this.doc;
+    if (a.bare && !a.label && doc.degree(a.id) === 0) return null;
+    return labelSpec(a.z, a.label, a.charge, a.isotope, doc.valenceSum(a.id), doc.degree(a.id), !a.hideCharge, !!a.showCarbon);
+  }
+
   /** Text of an atom's label as ChemDraw stores it ("OH", "NH3+", "OMe"), and its hydrogen count. */
   private autoText(a: Atom): { text: string; hCount: number } {
-    const doc = this.doc;
-    const spec = labelSpec(a.z, a.label, a.charge, a.isotope, doc.valenceSum(a.id), doc.degree(a.id), !a.hideCharge, !!a.showCarbon);
+    const spec = this.shownSpec(a);
     if (!spec) return { text: '', hCount: 0 };
     const chargeText = !a.hideCharge && a.charge ? (Math.abs(a.charge) > 1 ? String(Math.abs(a.charge)) : '') + (a.charge > 0 ? '+' : '-') : '';
     if (a.label !== null) return { text: a.label + (chargeText && !/[+\-−]$/.test(a.label) ? chargeText : ''), hCount: 0 };
@@ -816,6 +827,8 @@ class CdxmlWriter {
     this.set(n, 'Isotope', a.isotope || null);
     this.set(n, 'color', this.colorAttr(a.color));
     this.set(n, 'LabelSize', a.s && a.s !== 1 ? f2(a.s * this.doc.style.labelSize) : null);
+    // the gap round its label, where the structure has its own (ChemDraw's MarginWidth on the atom)
+    this.set(n, 'MarginWidth', a.marginWidth !== undefined ? f2(a.marginWidth) : null);
     this.set(n, 'IgnoreWarnings', a.ignoreWarnings ? 'yes' : null);
     this.set(n, 'ShowTerminalCarbonLabels', a.showCarbon && !labelled ? 'yes' : null);
     this.set(n, 'Radical', a.radical ? a.radical[0].toUpperCase() + a.radical.slice(1) : null);
@@ -832,7 +845,7 @@ class CdxmlWriter {
     const keepBits = oldRuns.length ? oldRuns.reduce((m, e) => m & Number(e.getAttribute('face') ?? 0), 7) : Number(oldS?.getAttribute('face') ?? 0) & 7;
     for (const c of kids(n)) if (c.nodeName === 't' || (rebuildInner && c.nodeName === 'fragment')) n.removeChild(c);
     if (rebuildInner) for (const k of ['NodeType', 'GenericNickname', 'Warning', 'NumHydrogens', 'NeedsClean']) n.removeAttribute(k);
-    if (!labelSpec(a.z, a.label, a.charge, a.isotope, this.doc.valenceSum(a.id), this.doc.degree(a.id), !a.hideCharge, !!a.showCarbon)) return;
+    if (!this.shownSpec(a)) return;
     const { text, hCount } = this.autoText(a);
     if (a.label === null) n.setAttribute('NumHydrogens', String(hCount));
     else if (rebuildInner) this.labelChemistry(n, a);
@@ -841,8 +854,12 @@ class CdxmlWriter {
     const t = this.el('t', {});
     const color = this.colorAttr(a.color);
     const runs = labelRuns(text, a.label !== null ? labelLook(a) : { supDigits: false });
+    // bold as the label is drawn (its own face, else the drawing's); italic and underline as the
+    // label or the file had them
+    const bold = labelBold(this.doc.style, a);
+    const italicUnder = (keepBits | (a.face ?? this.doc.style.labelFace ?? 0)) & 6;
     for (const r of runs) {
-      const s = this.el('s', { font: keepFont ?? this.fontId(this.doc.style.labelFont || 'Arial'), size: f2(size).replace(/\.00$/, ''), color: color ?? '0', face: (faceOf(r) ?? 0) | keepBits });
+      const s = this.el('s', { font: keepFont ?? this.fontId(this.doc.style.labelFont || 'Arial'), size: f2(size).replace(/\.00$/, ''), color: color ?? '0', face: (faceOf(r) ?? 0) | italicUnder | (bold ? 1 : 0) });
       s.textContent = r.text;
       t.appendChild(s);
     }
@@ -912,7 +929,7 @@ class CdxmlWriter {
   /** Position, box and justification of an atom label, from the same layout used on screen. */
   private placeLabel(t: Element, a: Atom): void {
     const doc = this.doc;
-    const spec = labelSpec(a.z, a.label, a.charge, a.isotope, doc.valenceSum(a.id), doc.degree(a.id), !a.hideCharge, !!a.showCarbon);
+    const spec = this.shownSpec(a);
     if (!spec) return;
     Object.assign(spec, labelLook(a));
     const dirs = labelBonds(doc, a);
@@ -936,12 +953,16 @@ class CdxmlWriter {
       else if (/^\d+$/.test(run.text)) y1 = Math.min(y1, rowBase + dy - 1.15 * size);
     });
     if (below) y2 = Math.max(y2, baseline + 0.23 * size);
-    const right = dir === 'left' && [...layout.runs.map((r) => r.text).join('')].length > 1;
-    t.setAttribute('p', pt({ x: a.x + (right ? x2 : x1), y: a.y + baseline }));
+    // a label centred on its atom (Ru, Si): ChemDraw puts the text's point at the middle and writes Center three ways
+    const centred = !!a.centred && Math.abs(x1 + x2) < 1;
+    const right = !centred && dir === 'left' && [...layout.runs.map((r) => r.text).join('')].length > 1;
+    t.setAttribute('p', pt({ x: a.x + (centred ? (x1 + x2) / 2 : right ? x2 : x1), y: a.y + baseline }));
     t.setAttribute('BoundingBox', box({ x1: a.x + x1, y1: a.y + y1, x2: a.x + x2, y2: a.y + y2 }));
-    t.setAttribute('LabelJustification', right ? 'Right' : 'Left');
-    t.setAttribute('LabelAlignment', dir === 'up' ? 'Above' : dir === 'down' ? 'Below' : right ? 'Right' : 'Left');
-    t.removeAttribute('Justification');
+    t.setAttribute('LabelJustification', centred ? 'Center' : right ? 'Right' : 'Left');
+    t.setAttribute('LabelAlignment', centred ? 'Center' : dir === 'up' ? 'Above' : dir === 'down' ? 'Below' : right ? 'Right' : 'Left');
+    // ChemDraw 25 writes a label that runs to the left (Cy3P on PCy3) right-justified both ways
+    if (right || centred) t.setAttribute('Justification', centred ? 'Center' : 'Right');
+    else t.removeAttribute('Justification');
   }
 
   /**
@@ -951,13 +972,35 @@ class CdxmlWriter {
    * of everything (ChemDraw muddles equal ones) in the order they are layered here.
    */
   private writeCrossings(): void {
+    // the bonds that cross, and the near misses a ChemDraw file listed that still pass close
     const partners = new Map<number, Bond[]>();
+    // (ChemDraw lists some a little further off than it leaves gaps for, so they are kept to half a bond)
+    const st = this.doc.style, reach = Math.max(1.5 * (st.marginWidth + st.lineWidth), st.bondLength / 2);
+    const add = (b: Bond, o: Bond) => {
+      const l = partners.get(b.id) ?? [];
+      if (!l.includes(o)) partners.set(b.id, [...l, o]);
+    };
     for (const b of this.doc.bonds.values()) {
-      const cs = crossingBondsCached(this.doc, b);
-      if (cs.length) partners.set(b.id, cs);
+      for (const o of crossingBondsCached(this.doc, b)) add(b, o);
+      for (const o of listedNearMisses(this.doc, b, reach)) { add(b, o); add(o, b); }
     }
     const want = (b: Bond) => (partners.get(b.id) ?? []).map((o) => this.bondEls.get(o.id)?.getAttribute('id') ?? '').filter(Boolean).sort().join(' ');
     let ok = true;
+    // A drawing written afresh (a copy for ChemDraw): every bond gets its Z, in the order they are
+    // layered here. ChemDraw also counts near misses as crossings, which this program doesn't,
+    // so the bonds round a crossing need their order too, not just the ones that cross.
+    if (!this.doc.source && (partners.size || [...this.doc.bonds.values()].some((b) => b.z !== undefined))) {
+      let top = 0;
+      for (const e of this.page.querySelectorAll('[Z]')) top = Math.max(top, Number(e.getAttribute('Z')) || 0);
+      const order = [...this.doc.bonds.values()].sort((a, b) => bondLayer(a) - bondLayer(b) || a.id - b.id);
+      order.forEach((b, i) => {
+        const e = this.bondEls.get(b.id);
+        if (!e) return;
+        e.setAttribute('Z', String(top + 1 + i));
+        if (partners.has(b.id)) e.setAttribute('CrossingBonds', want(b));
+      });
+      return;
+    }
     // bonds that no longer cross anything lose their list
     for (const [id, e] of this.bondEls) {
       if (partners.has(id) || !e.hasAttribute('CrossingBonds')) continue;
@@ -1141,6 +1184,15 @@ class CdxmlWriter {
     this.set(e, 'DoublePosition', dp);
     this.set(e, 'color', this.colorAttr(b.color));
     this.set(e, 'LineWidth', b.s && b.s !== 1 ? f2(b.s * this.doc.style.lineWidth) : null);
+    // a structure at its own settings: ChemDraw keeps all of them on each bond, so new bonds and
+    // its Drawing Settings match the structure
+    const own = (b.s !== undefined && b.s !== 1) || b.boldWidth !== undefined || b.hashSpacing !== undefined || b.marginWidth !== undefined || b.bondLength !== undefined;
+    const w = bondWidths(this.doc.style, b);
+    if (own && !e.hasAttribute('LineWidth')) e.setAttribute('LineWidth', f2(w.lineWidth));
+    this.set(e, 'BoldWidth', own ? f2(w.boldWidth) : null);
+    this.set(e, 'HashSpacing', own ? f2(w.hashSpacing) : null);
+    this.set(e, 'MarginWidth', own ? f2(w.marginWidth) : null);
+    this.set(e, 'BondLength', own ? f2(w.bondLength) : null);
     this.set(e, 'IgnoreWarnings', b.ignoreWarnings ? 'yes' : null);
     e.removeAttribute('BondCircularOrdering');
     // a hapto bond drawn to each atom (ChemDraw draws it to the middle)
@@ -1372,6 +1424,7 @@ class CdxmlWriter {
 
   private writeShape(s: Shape): void {
     if (s.kind === 'table') { this.writeTable(s); return; }
+    if (s.kind === 'ring' && this.writeRingArea(s)) return;
     if (s.kind === 'geo' || s.kind === 'ring') { this.writeGeo(s); return; }
     const pic = s.picture || s.kind === 'picture';
     const names = pic ? ['embeddedobject'] : ['graphic'];
@@ -1404,6 +1457,35 @@ class CdxmlWriter {
       (host ?? this.page).appendChild(g);
     }
     this.changed = true;
+  }
+
+  /**
+   * A plain ring fill (one solid colour, nothing more) as ChemDraw's own ring fill: a
+   * ColoredMolecularArea in the ring's structure, naming the bonds round the ring (BasisObjects)
+   * and the colour (bgcolor). ChemDraw then keeps it on the ring as the ring is edited. Fills
+   * ChemDraw can't show that way (shadows, patterns, shading, see-through) are written as a
+   * filled outline instead (writeGeo). False when this fill isn't written this way.
+   */
+  private writeRingArea(s: Shape): boolean {
+    const e = this.source('s', s.id, ['ColoredMolecularArea']);
+    const o = this.orig<Shape>('s', s.id);
+    const ring = s.ring?.every((id) => this.doc.atoms.has(id)) ? s.ring : null;
+    const bonds = ring ? ringBonds(this.doc, ring) : [];
+    const frag = ring ? this.fragOfAtom.get(ring[0]) : undefined;
+    const ids = bonds.map((id) => this.bondEls.get(id)?.getAttribute('id'));
+    const plain = s.filled && !s.fill && !s.pattern && !s.shadow && !s.transparency && !s.glow && !s.softEdge && !s.bevel && !s.reflection && !s.picFill
+      && !(s.lineWidth && s.color) && ring && bonds.length === ring.length && frag && ring.every((id) => this.fragOfAtom.get(id) === frag) && ids.every(Boolean);
+    if (!plain) {
+      if (e) { e.parentNode?.removeChild(e); this.changed = true; }
+      return false;
+    }
+    if (e && o && sameExcept(s, o, ['poly', 'x1', 'y1', 'x2', 'y2']) && e.parentElement === frag) return true;
+    const g = e ?? this.el('ColoredMolecularArea', { id: s.id });
+    this.set(g, 'bgcolor', this.colorIndex(fillInk(s), true));
+    this.set(g, 'BasisObjects', ids.join(' '));
+    if (g.parentElement !== frag) frag!.appendChild(g);
+    this.changed = true;
+    return true;
   }
 
   /**
@@ -1659,13 +1741,37 @@ class CdxmlWriter {
     return png || (!!this.opts.own && !!s.src);
   }
 
+  /** ChemDraw's FadePercent for a box or oval filled with a white tint of its own colour, or null. */
+  private fadeOf(s: Shape): number | null {
+    if (!s.filled || (s.kind !== 'rect' && s.kind !== 'oval') || s.fill || !s.fillColor || s.pattern || s.fill2) return null;
+    const hex = (c: string) => /^#([0-9a-f]{6})$/i.exec(c)?.[1];
+    const ink = hex(s.color ?? '#000000'), fill = hex(s.fillColor);
+    if (!ink || !fill) return null;
+    const ch = (h: string) => [0, 2, 4].map((k) => parseInt(h.slice(k, k + 2), 16));
+    const c = ch(ink), f = ch(fill);
+    // how much white is mixed in, from the channel with the most room
+    const k = c.indexOf(Math.min(...c));
+    if (c[k] > 250) return null;
+    const a = (f[k] - c[k]) / (255 - c[k]);
+    if (a <= 0.001 || a >= 0.999) return null;
+    const fade = Math.round((1 - a) * 1000);
+    // (it has to be that tint in every channel, as ChemDraw will draw it)
+    const back = ch(hex(tint('#' + ink, 1 - fade / 1000))!);
+    return back.every((v, i) => Math.abs(v - f[i]) <= 2) ? fade : null;
+  }
+
   private fillShape(g: Element, s: Shape): void {
     for (const k of ['GraphicType', 'LineType', 'RectangleType', 'OvalType', 'SymbolType', 'BracketType', 'Center3D', 'MajorAxisEnd3D', 'MinorAxisEnd3D', 'ArrowType', 'CornerRadius', 'ShadowSize']) g.removeAttribute(k);
     const style = [s.dashed && 'Dashed', s.bold && 'Bold'].filter(Boolean).join(' ') || null;
     const set = (k: string, v: string | null) => this.set(g, k, v);
     // ChemDraw fills with the shape's one colour, so a filled shape is saved in its fill colour
     // (a faded fill as its light tint); the outline colour and fill style ride along in a tag
-    const fillTo = s.filled ? (s.kind === 'ring' ? fillInk(s) : s.fillColor ?? s.color) : undefined;
+    // A fill that is the shape's own colour faded towards white is ChemDraw's faded shape: an
+    // outline in the full colour with FadePercent (in tenths of a percent of the colour)
+    const fade = this.fadeOf(s);
+    // (other graphics, such as orbitals, keep ChemDraw's own FadePercent)
+    if (fade !== null || s.kind === 'rect' || s.kind === 'oval') set('FadePercent', fade === null ? null : String(fade));
+    const fillTo = s.filled && fade === null ? (s.kind === 'ring' ? fillInk(s) : s.fillColor ?? s.color) : undefined;
     set('color', this.colorAttr(fillTo && s.fill === 'faded' ? tint(fillTo, FADE) : fillTo ?? s.color));
     for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === FILL_TAG) g.removeChild(c);
     if ((s.filled && (s.fill || s.fillColor)) || s.pattern) {
@@ -1674,7 +1780,7 @@ class CdxmlWriter {
     }
     for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === FRAME_TAG) g.removeChild(c);
     if (s.frame) g.appendChild(this.el('objecttag', { TagType: 'String', Name: FRAME_TAG, Value: frameTag(s.frame), Visible: 'no' }));
-    const filled = !s.filled ? null : s.fill === 'shaded' ? 'Shaded' : 'Filled';
+    const filled = !s.filled || fade !== null ? null : s.fill === 'shaded' ? 'Shaded' : 'Filled';
     switch (s.kind) {
       case 'line':
         set('GraphicType', 'Line');
@@ -1692,6 +1798,18 @@ class CdxmlWriter {
         // in hundredths of the line width, as ChemDraw stores them
         set('CornerRadius', s.rounded ? String(Math.round(((s.radius ?? 6 * this.doc.style.lineWidth) / this.doc.style.lineWidth) * 100)) : null);
         set('ShadowSize', s.shadow ? String(Math.round(((s.shadowSize ?? 4 * this.doc.style.lineWidth) / this.doc.style.lineWidth) * 100)) : null);
+        // a turned box (ChemDraw's diamond is a square turned 45°): its middle and the ends of its
+        // two half-axes, turned, as ChemDraw stores them, and the box round its turned corners
+        if (s.rot && ((s.rot % 360) + 360) % 360 > 1e-6) {
+          const c = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };
+          const hw = Math.abs(s.x2 - s.x1) / 2, hh = Math.abs(s.y2 - s.y1) / 2;
+          const t = (s.rot * Math.PI) / 180, cos = Math.cos(t), sin = Math.sin(t);
+          const ex = Math.abs(hw * cos) + Math.abs(hh * sin), ey = Math.abs(hw * sin) + Math.abs(hh * cos);
+          set('BoundingBox', s.shadow ? box({ x1: c.x + ex, y1: c.y + ey, x2: c.x - ex, y2: c.y - ey }) : box({ x1: c.x - ex, y1: c.y - ey, x2: c.x + ex, y2: c.y + ey }));
+          set('Center3D', pt3(c));
+          set('MajorAxisEnd3D', pt3({ x: c.x + hw * cos, y: c.y + hw * sin }));
+          set('MinorAxisEnd3D', pt3({ x: c.x - hh * sin, y: c.y + hh * cos }));
+        }
         break;
       case 'oval': {
         const c = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };

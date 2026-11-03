@@ -102,9 +102,11 @@ export function isGenericLabel(label: string): boolean {
 const WHOLE_ONLY = new Set<string>();
 
 // Formula-like entries (CO2Me, NO2, CF3…) are shown as their elements so they can be
-// reversed the ChemDraw way (MeO2C, O2N, F3C); true abbreviations stay whole.
+// reversed the ChemDraw way (MeO2C, O2N, F3C); true abbreviations stay whole. Phosphines
+// (PPh3, PCy3, PtBu3) are P and their groups, so they read Ph₃P and Cy₃P on the right, as in ChemDraw.
+const PHOSPHINE = /^P(?:Ph|Cy|Me|Et|t-?Bu|n-?Bu|i-?Pr)\d$/;
 const nickNames = () => Object.keys(NICKNAMES)
-  .filter((k) => !/^[CNOSB][A-Z0-9]/.test(k) && !WHOLE_ONLY.has(k))
+  .filter((k) => !/^[CNOSB][A-Z0-9]/.test(k) && !PHOSPHINE.test(k) && !WHOLE_ONLY.has(k))
   .sort((a, b) => b.length - a.length);
 let NICK_NAMES = nickNames();
 
@@ -192,7 +194,9 @@ export function tokenize(label: string): Token[] {
       i += g.length;
     } else if (/[A-Z]/.test(label[i])) {
       const two = label.slice(i, i + 2);
-      if (two.length === 2 && /[a-z]/.test(two[1]) && elementNumber(two) !== undefined) {
+      // (the P of a phosphine such as PtBu3 or PnBu3, not platinum or nobelium)
+      const phosphineP = i === 0 && PHOSPHINE.test(label);
+      if (two.length === 2 && /[a-z]/.test(two[1]) && elementNumber(two) !== undefined && !phosphineP) {
         tok = { kind: 'el', text: two, count: 1, charge: '' };
         i += 2;
       } else if (elementNumber(label[i]) !== undefined) {
@@ -348,9 +352,9 @@ export const labelPrefs = { superscriptR: true };
 export const isNumberedR = (label: string | null): boolean => !!label && /^R\d+$/.test(label);
 
 /** How an atom's label raises its characters: R numbers (from the file, or by the preference) and marks set by hand. */
-export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string }): { supDigits: boolean; marks?: LabelMarks } {
+export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string; centred?: boolean }): { supDigits: boolean; marks?: LabelMarks; centred?: boolean } {
   const supDigits = a.supDigits ?? (labelPrefs.superscriptR && isNumberedR(a.label));
-  return a.labelMarks && a.label ? { supDigits, marks: a.labelMarks } : { supDigits };
+  return { supDigits, ...(a.labelMarks && a.label ? { marks: a.labelMarks } : {}), ...(a.centred ? { centred: true } : {}) };
 }
 
 /** The label's pieces in reading order, as `layoutLabel` shows them (for the typing box). */
@@ -368,6 +372,8 @@ export interface LabelSpec {
   supDigits?: boolean;
   /** Characters raised or lowered by hand. */
   marks?: LabelMarks;
+  /** Centre the whole label on the atom (a label on one line with no hydrogens or charge). */
+  centred?: boolean;
 }
 
 /** Tokens to show for an atom: its custom label, or element + hydrogens. Null = no label (plain carbon). */
@@ -421,6 +427,8 @@ export interface LabelLayout {
   boxes: { x1: number; y1: number; x2: number; y2: number }[];
   /** Which of the runs (and boxes) is the charge, when one is shown after the label. */
   charge?: number;
+  /** Set in bold (measured and drawn so). */
+  bold?: boolean;
 }
 
 export type Measure = (text: string, size: number) => number;
@@ -587,6 +595,13 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
     const s = subSize, w = measure(chargeText, s);
     runs.push({ text: chargeText, dx: spot.x, dy: spot.dy, size: s });
     boxes.push({ x1: spot.x, y1: spot.dy - CAP * s, x2: spot.x + w, y2: spot.dy });
+  }
+  // a centred label: the middle of its letters on the atom
+  if (spec.centred && charge === undefined && runs.length && runs.every((r) => Math.abs(r.dy - runs[0].dy) < size)) {
+    const x1 = Math.min(...boxes.map((b) => b.x1)), x2 = Math.max(...boxes.map((b) => b.x2));
+    const dx = -(x1 + x2) / 2;
+    for (const r of runs) r.dx += dx;
+    for (const b of boxes) { b.x1 += dx; b.x2 += dx; }
   }
   return { runs, boxes, charge };
 }

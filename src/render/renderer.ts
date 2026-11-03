@@ -13,7 +13,7 @@ import { chainArc, piLooksOf } from '../chem/hapto';
 import { crossingGapsCached } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
-import { bondEndPrefs, docMapLook, doubleBondGap, wedgeWidth } from '../style';
+import { atomMargin, bondEndPrefs, bondWidths, docMapLook, doubleBondGap, labelBold, wedgeWidth } from '../style';
 import { depthFractions, depthShadePrefs, shadeLook, shadeStep } from './depth-shade';
 import { joinWideEnds, lineMitres, endTip, LINE_MITRE_LIMIT, type WideEnd, type EndJoin, type LineEnd } from './bond-joins';
 import { chargeInk, labelBonds, labelSpec, layoutLabel, LabelLayout, labelLook } from '../chem/labels';
@@ -331,30 +331,32 @@ export class Renderer {
     if (c) return c;
     const deg = doc.degree(a.id);
     const bos = doc.valenceSum(a.id);
-    const spec = a.attach || a.multi ? null : labelSpec(a.z, a.label, a.charge, a.isotope, bos, deg, !a.hideCharge, !!a.showCarbon);
+    const spec = a.attach || a.multi || (a.bare && !a.label && doc.degree(a.id) === 0) ? null : labelSpec(a.z, a.label, a.charge, a.isotope, bos, deg, !a.hideCharge, !!a.showCarbon);
     let layout: LabelLayout | null = null;
     const boxes: Rect[] = [];
     const k = a.s ?? 1;
     const size = doc.style.labelSize * k;
     if (spec) {
       Object.assign(spec, labelLook(a));
-      layout = layoutLabel(spec, labelBonds(doc, a), size, (t, s) => measureText(t, s, this.labelStack), a.just);
-      const m = doc.style.marginWidth * k;
+      const weight = labelBold(doc.style, a) ? 'bold' : '';
+      layout = layoutLabel(spec, labelBonds(doc, a), size, (t, s) => measureText(t, s, this.labelStack, weight), a.just);
+      if (weight) layout.bold = true;
+      const m = atomMargin(doc.style, a);
       for (const b of layout.boxes) boxes.push({ x1: a.x + b.x1 - m, y1: a.y + b.y1 - m, x2: a.x + b.x2 + m, y2: a.y + b.y2 + m });
     }
     // a star point of attachment: the bond stops short of its asterisk, as at a label
     if (a.attach === 'Star') {
-      const h = attachStarSize(size) + doc.style.marginWidth * k;
+      const h = attachStarSize(size) + atomMargin(doc.style, a);
       boxes.push({ x1: a.x - h, y1: a.y - h, x2: a.x + h, y2: a.y + h });
     }
     c = { layout, boxes };
     if (layout?.charge !== undefined) {
       // a bond is cut short at the charge only where it would touch the sign itself
       const r = layout.runs[layout.charge];
-      const ink = chargeInk(r.text, a.x + r.dx, a.y + r.dy, r.size, (t, s) => measureText(t, s, this.labelStack));
+      const ink = chargeInk(r.text, a.x + r.dx, a.y + r.dy, r.size, (t, s) => measureText(t, s, this.labelStack, layout!.bold ? 'bold' : ''));
       const grow = (m: number): Rect[] => ink.map((b) => ({ x1: b.x1 - m, y1: b.y1 - m, x2: b.x2 + m, y2: b.y2 + m }));
       // (the signs are small, so three quarters of the label margin keeps the same look of space)
-      c.charge = { index: layout.charge, hit: grow(doc.style.lineWidth * k / 2 + 0.3 * k), cut: grow(doc.style.marginWidth * k * 0.75) };
+      c.charge = { index: layout.charge, hit: grow(doc.style.lineWidth * k / 2 + 0.3 * k), cut: grow(atomMargin(doc.style, a) * 0.75) };
     }
     this.atomCache.set(a.id, c);
     return c;
@@ -498,15 +500,15 @@ export class Renderer {
       if (!b || b.spokes || b.order === 4) continue;
       const o = doc.atoms.get(b.a1 === a.id ? b.a2 : b.a1);
       if (!o) continue;
-      const k = b.s ?? 1, ds = doc.style;
-      let h = (ds.lineWidth * k) / 2;
+      const ds = doc.style, w = bondWidths(ds, b);
+      let h = w.lineWidth / 2;
       if (b.order === 1 || b.order === PARTIAL || b.display === 'dative' || this.bondInfo(doc, b).pi) {
         if (b.display === 'dative' || b.display === 'dash' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy') continue;
-        if (b.display === 'bold') h = (ds.boldWidth * k) / 2;
-        else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: ds.boldWidth * k }) / 2;
+        if (b.display === 'bold') h = w.boldWidth / 2;
+        else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: w.boldWidth }) / 2;
       } else if (b.order === 2 || (b.order === 1.5 && !b.circle)) {
         if (this.bondInfo(doc, b).side === 0 || b.display === 'dash') continue;
-        if (b.display === 'bold') h = (ds.boldWidth * k) / 2;
+        if (b.display === 'bold') h = w.boldWidth / 2;
       }
       const [s, e] = this.bondEnds(doc, b.a1 === a.id ? a : o, b.a1 === a.id ? o : a);
       const end = b.a1 === a.id ? s : e;
@@ -926,7 +928,8 @@ export class Renderer {
       const p = doc.atoms.get(b.a1), q = doc.atoms.get(b.a2);
       if (!p || !q) continue;
       if ((p.x < vis.x1 && q.x < vis.x1) || (p.x > vis.x2 && q.x > vis.x2) || (p.y < vis.y1 && q.y < vis.y1) || (p.y > vis.y2 && q.y > vis.y2)) continue;
-      if (b.color) { colored.push(b); continue; }
+      // (a bond with its own bold width is stroked on its own, as coloured ones are)
+      if (b.color || b.boldWidth !== undefined) { colored.push(b); continue; }
       const bp = back?.get(p.id), bq = back?.get(q.id);
       if (bp !== undefined && bq !== undefined) {
         const k = b.s ?? 1, step = shadeStep((bp + bq) / 2), key = `${step}/${k}`;
@@ -950,7 +953,8 @@ export class Renderer {
       const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
       const bb = newBatch(this.makePath);
       this.bondOrSpokes(doc, b, p, q, bb);
-      this.strokeBatch(ctx, bb, b.s ?? 1, st.lineWidth, st.boldWidth, b.color!);
+      const k = b.s ?? 1;
+      this.strokeBatch(ctx, bb, k, st.lineWidth, b.boldWidth !== undefined ? b.boldWidth / k : st.boldWidth, b.color ?? '#000');
     }
     ctx.strokeStyle = ctx.fillStyle = '#000';
 
@@ -971,7 +975,7 @@ export class Renderer {
         const ab = a.color ? undefined : back?.get(a.id);
         ctx.fillStyle = a.color ?? (ab !== undefined ? shadeLook(shadeStep(ab)).color : '#000');
         for (const r of info.layout.runs) {
-          const f = `${r.italic ? 'italic ' : ''}${r.size}px ${this.labelStack}`;
+          const f = `${r.italic ? 'italic ' : ''}${info.layout.bold ? 'bold ' : ''}${r.size}px ${this.labelStack}`;
           if (f !== curFont) { ctx.font = f; curFont = f; }
           ctx.fillText(r.text, a.x + r.dx, a.y + r.dy);
         }
@@ -1149,14 +1153,14 @@ export class Renderer {
   private band(doc: Doc, b: Bond, p: Atom, q: Atom): { s: Vec; e: Vec; hs: number; he: number } | null {
     if (b.spokes || b.display === 'dative') return null;
     const single = b.order === 1 || b.order === PARTIAL;
-    const k = b.s ?? 1, ds = doc.style;
+    const ds = doc.style, w = bondWidths(ds, b);
     let hs: number, he: number;
     if (single && b.display === 'wedge') {
-      hs = (ds.lineWidth * k) / 2;
-      he = (wedgeWidth({ ...ds, boldWidth: ds.boldWidth * k })) / 2;
+      hs = w.lineWidth / 2;
+      he = (wedgeWidth({ ...ds, boldWidth: w.boldWidth })) / 2;
     } else if (b.display === 'bold' && (single || (b.order === 2 && this.bondInfo(doc, b).side !== 0))) {
-      hs = he = (ds.boldWidth * k) / 2;
-      if (crossingGapsCached(doc, b, ds.marginWidth * k + ds.lineWidth).length) return null;
+      hs = he = w.boldWidth / 2;
+      if (crossingGapsCached(doc, b, w.marginWidth + ds.lineWidth).length) return null;
     } else return null;
     const [s, e] = this.bondEnds(doc, p, q);
     return len(sub(e, s)) < 0.01 ? null : { s, e, hs, he };
@@ -1189,13 +1193,43 @@ export class Renderer {
   }
 
   /** A band's outline, its ends mitred into the bands they meet, into the batch's fills. */
-  private fillBand(doc: Doc, b: Bond, p: Atom, q: Atom, fills: Path2D): boolean {
+  private fillBand(doc: Doc, b: Bond, p: Atom, q: Atom, fills: Path2D, gaps: [number, number][] = []): boolean {
     const band = this.band(doc, b, p, q);
     if (!band) return false;
     const { s, e, hs, he } = band;
     const nrm = perp(norm(sub(e, s)));
     // at s, "plus" is the +nrm side; at e (looking back along the bond) it is the -nrm side
     const js = this.bandJoin(doc, p, b.id), je = this.bandJoin(doc, q, b.id);
+    const fillPoly = (poly: Vec[]) => {
+      // all one way round, so where bands overlap at a join (non-zero fill) they don't cancel
+      let area = 0;
+      poly.forEach((v, i) => { const w = poly[(i + 1) % poly.length]; area += v.x * w.y - w.x * v.y; });
+      const ring = area < 0 ? [...poly].reverse() : poly;
+      fills.moveTo(ring[0].x, ring[0].y);
+      for (const v of ring.slice(1)) fills.lineTo(v.x, v.y);
+      fills.closePath();
+    };
+    if (gaps.length) {
+      // behind a bond that crosses it: the band in pieces, with a gap where the other passes in front
+      const d = sub(e, s), dd = dot(d, d) || 1, pq = sub(q, p);
+      const tOf = (g: number) => dot(sub(add(p, mul(pq, g)), s), d) / dd;
+      let from = 0;
+      const piece = (t0: number, t1: number) => {
+        if (t1 - t0 < 1e-3) return;
+        const at = (t: number, side: number) => add(add(s, mul(d, t)), mul(nrm, side * (hs + (he - hs) * t)));
+        // the pieces that reach the bond's ends keep their joins there
+        const j0 = t0 <= 0 ? js : null, j1 = t1 >= 1 ? je : null;
+        fillPoly([j0?.plus ?? at(t0, 1), j1?.minus ?? at(t1, 1), ...(j1 ? [e] : []), j1?.plus ?? at(t1, -1), j0?.minus ?? at(t0, -1), ...(j0 ? [s] : [])]);
+        for (const poly of [...(j0?.fill ?? []), ...(j1?.fill ?? [])]) fillPoly(poly);
+      };
+      for (const [g0, g1] of gaps.map(([a, c]) => [tOf(a), tOf(c)].sort((x, y) => x - y)).sort((x, y) => x[0] - y[0])) {
+        if (g1 <= from || g0 >= 1) continue;
+        if (g0 > from) piece(from, Math.min(1, g0));
+        from = Math.max(from, g1);
+      }
+      if (from < 1) piece(Math.max(0, from), 1);
+      return true;
+    }
     // a joined end also takes in the atom, so where three bands meet none leaves a hole between them
     const pts = [
       js?.plus ?? add(s, mul(nrm, hs)),
@@ -1205,15 +1239,7 @@ export class Renderer {
       js?.minus ?? sub(s, mul(nrm, hs)),
       ...(js ? [s] : []),
     ];
-    for (const poly of [pts, ...(js?.fill ?? []), ...(je?.fill ?? [])]) {
-      // all one way round, so where bands overlap at a join (non-zero fill) they don't cancel
-      let area = 0;
-      poly.forEach((v, i) => { const w = poly[(i + 1) % poly.length]; area += v.x * w.y - w.x * v.y; });
-      const ring = area < 0 ? [...poly].reverse() : poly;
-      fills.moveTo(ring[0].x, ring[0].y);
-      for (const v of ring.slice(1)) fills.lineTo(v.x, v.y);
-      fills.closePath();
-    }
+    for (const poly of [pts, ...(js?.fill ?? []), ...(je?.fill ?? [])]) fillPoly(poly);
     return true;
   }
 
@@ -1221,7 +1247,8 @@ export class Renderer {
     const { thin, bold, dashed, fills, tips } = bb;
     const k = b.s ?? 1;
     const ds = doc.style;
-    const st = { ...ds, lineWidth: ds.lineWidth * k, boldWidth: ds.boldWidth * k, hashSpacing: ds.hashSpacing * k, bondLength: ds.bondLength * k };
+    const w = bondWidths(ds, b);
+    const st = { ...ds, lineWidth: w.lineWidth, boldWidth: w.boldWidth, hashSpacing: w.hashSpacing, bondLength: ds.bondLength * k };
     const [s, e] = this.bondEnds(doc, p, q);
     const d = sub(e, s);
     const l = len(d);
@@ -1230,7 +1257,7 @@ export class Renderer {
     const nrm = perp(dir);
     const gap = doubleBondGap(st);
     // a bond behind a bond that crosses it has a gap there
-    const gaps = crossingGapsCached(doc, b, ds.marginWidth * k + ds.lineWidth);
+    const gaps = crossingGapsCached(doc, b, w.marginWidth + ds.lineWidth);
     const pq = sub(q, p), pq2 = dot(pq, pq) || 1;
     const along = (x: Vec) => dot(sub(x, p), pq) / pq2;
     // Square or part-round ends (a setting): thin lines are cut square, each free end gets its
@@ -1282,8 +1309,8 @@ export class Renderer {
     if (joinP) for (const t of this.lineMitres(doc, p).get(b.id) ?? []) bend(p, t);
     if (joinQ) for (const t of this.lineMitres(doc, q).get(b.id) ?? []) bend(q, t);
     // a point of attachment: a wavy line across the end of the bond
-    if (p.attach === 'Wavy') attachWave(thin, p, nrm, st.bondLength);
-    if (q.attach === 'Wavy') attachWave(thin, q, nrm, st.bondLength);
+    if (p.attach === 'Wavy') attachWave(thin, p, nrm, ds.labelSize * k, st.boldWidth);
+    if (q.attach === 'Wavy') attachWave(thin, q, nrm, ds.labelSize * k, st.boldWidth);
 
     // a ring or allyl bonded to a metal as one: a plain line, and its stretch of the circle or arc
     const pi = this.bondInfo(doc, b).pi;
@@ -1353,26 +1380,47 @@ export class Renderer {
           break;
         }
         // a band (narrow at a1 and wide at a2 for a wedge), mitred into bold bands it meets
-        case 'bold': if (!this.fillBand(doc, b, p, q, fills)) line(bold, s, e); break;
-        case 'dash': line(dashed, s, e); break;
-        case 'wedge': this.fillBand(doc, b, p, q, fills); break;
+        case 'bold': if (!this.fillBand(doc, b, p, q, fills, gaps)) line(bold, s, e); break;
+        case 'dash': {
+          // as ChemDraw 25 draws a dashed bond: floor(length / 2.5 hash spacings) + 1 dashes, the
+          // bond cut into equal dashes and gaps, starting and ending with a dash
+          const n = Math.min(MAX_HASHES, Math.floor(l / (2.5 * st.hashSpacing)) + 1);
+          if (n < 2) { line(thin, s, e); break; }
+          const part = 1 / (2 * n - 1);
+          for (let i = 0; i < n; i++) line(thin, add(s, mul(d, 2 * i * part)), add(s, mul(d, (2 * i + 1) * part)));
+          break;
+        }
+        case 'wedge': this.fillBand(doc, b, p, q, fills, gaps); break;
         case 'hashWedge': {
           const w = wedgeWidth(st) / 2;
-          const n = Math.min(MAX_HASHES, Math.max(2, Math.floor(l / st.hashSpacing)));
-          // no hash at the narrow end, where it would sit on the stereocentre (as ChemDraw draws it)
-          for (let i = 1; i <= n; i++) {
-            const t = i / n;
+          // as ChemDraw 25 draws them: hashes a line width thick, the first at the narrow end and
+          // the last at the wide end, as many as fit at the hash spacing, spread evenly between
+          // An end at an atom with other bonds (and no label to stop at) stops a hash spacing short.
+          const lw = st.lineWidth;
+          const short = (at: Atom, end: Vec) => doc.degree(at.id) > 1 && len(sub(end, at)) < 1e-6 ? st.hashSpacing : 0;
+          const h0 = Math.min(short(p, s), l / 3), h1 = Math.min(short(q, e), l / 3);
+          const hl = l - h0 - h1, run = Math.max(0, hl - lw);
+          const n = Math.min(MAX_HASHES, Math.max(2, Math.floor(run / st.hashSpacing) + 1));
+          for (let i = 0; i < n; i++) {
+            const t = (h0 + lw / 2 + (run * i) / (n - 1)) / l;
             const c = add(s, mul(d, t));
-            const hw = st.lineWidth / 2 + (w - st.lineWidth / 2) * t;
+            if (gaps.length) { const g = along(c); if (gaps.some(([g0, g1]) => g > g0 && g < g1)) continue; }
+            const hw = lw / 2 + (w - lw / 2) * t;
             line(thin, add(c, mul(nrm, hw)), sub(c, mul(nrm, hw)));
           }
           break;
         }
         case 'hash': {
-          const w = st.boldWidth / 2;
-          const n = Math.min(MAX_HASHES, Math.max(2, Math.floor(l / st.hashSpacing)));
-          for (let i = 0; i <= n; i++) {
-            const c = add(s, mul(d, i / n));
+          // as ChemDraw 25 draws it: like a hashed wedge's hashes (line-width thick, end to end,
+          // a hash spacing short at an atom with other bonds), all a bold width across
+          const w = st.boldWidth / 2, lw = st.lineWidth;
+          const short = (at: Atom, end: Vec) => doc.degree(at.id) > 1 && len(sub(end, at)) < 1e-6 ? st.hashSpacing : 0;
+          const h0 = Math.min(short(p, s), l / 3), h1 = Math.min(short(q, e), l / 3);
+          const run = Math.max(0, l - h0 - h1 - lw);
+          const n = Math.min(MAX_HASHES, Math.max(2, Math.floor(run / st.hashSpacing) + 1));
+          for (let i = 0; i < n; i++) {
+            const c = add(s, mul(d, (h0 + lw / 2 + (run * i) / (n - 1)) / l));
+            if (gaps.length) { const g = along(c); if (gaps.some(([g0, g1]) => g > g0 && g < g1)) continue; }
             line(thin, add(c, mul(nrm, w)), sub(c, mul(nrm, w)));
           }
           break;
@@ -2664,11 +2712,12 @@ function newBatch(mk: () => Path2D): BondBatch {
 }
 
 /** The wavy line marking a point of attachment, centred on `at` and running along `across`. */
-export function attachWave(path: Path2D, at: Vec, across: Vec, bondLength: number): void {
-  const half = bondLength * ATTACH_HALF;
-  const waves = ATTACH_HALF_WAVES;
-  const step = (2 * half) / waves;
-  const amp = bondLength * ATTACH_AMP;
+export function attachWave(path: Path2D, at: Vec, across: Vec, labelSize: number, boldWidth: number): void {
+  // (measured from ChemDraw 25's pictures: the waves are a quarter of the bold width high and
+  // half of it long, and the line runs about 1.5 label sizes plus 3 points)
+  const amp = boldWidth / 4, pitch = boldWidth / 2;
+  const waves = Math.max(2, Math.min(60, Math.round((1.5 * labelSize + 3) / pitch)));
+  const step = pitch, half = (waves * step) / 2;
   const dir = { x: -across.y, y: across.x };
   const s = { x: at.x - across.x * half, y: at.y - across.y * half };
   path.moveTo(s.x, s.y);
@@ -2687,13 +2736,6 @@ export const WARN_LOOKS = ['disc', 'box', 'circle', 'dashed', 'corners'] as cons
 export type WarnLook = (typeof WARN_LOOKS)[number];
 const CHEM_MARK_COLOR = '#1f8a7a';
 
-/**
- * Half the length and the height of the attachment wave, as fractions of the bond length, and
- * its number of half waves (measured in ChemDraw 25: 1.2 bond lengths long, about 12 small waves).
- */
-const ATTACH_HALF = 0.6;
-const ATTACH_AMP = 0.06;
-const ATTACH_HALF_WAVES = 24;
 
 /** A colour with some see-through: "#rrggbb" and opacity 0–1 as rgba(). */
 function withAlpha(c: string, a: number): string {

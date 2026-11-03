@@ -7,6 +7,7 @@ import { DEFAULT_CURSOR_AIDS, drawCursorAids, hintLines, modifierHints, readoutT
 import { Sketcher } from './sketch';
 import { installPenAndTouch } from './touch';
 import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAtom, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
+import { scaleOwnWidths } from '../style';
 import { CaptionEditor } from '../ui/caption-editor';
 import { followLink, linkTip } from '../ui/links-ui';
 import { stopAtEdge } from '../ui/scrollbars';
@@ -5198,10 +5199,10 @@ export class Editor {
     doc.edit('Scale', () => {
       for (const id of s.atoms) {
         const a = doc.atoms.get(id);
-        if (a) doc.updateAtom(id, { ...at(a), s: (a.s ?? 1) * f });
+        if (a) doc.updateAtom(id, { ...at(a), s: (a.s ?? 1) * f, ...(a.marginWidth !== undefined ? { marginWidth: a.marginWidth * f } : {}) });
       }
       for (const bd of doc.bonds.values()) {
-        if (s.atoms.has(bd.a1) && s.atoms.has(bd.a2)) doc.updateBond(bd.id, { s: (bd.s ?? 1) * f });
+        if (s.atoms.has(bd.a1) && s.atoms.has(bd.a2)) doc.updateBond(bd.id, { s: (bd.s ?? 1) * f, ...scaleOwnWidths(bd, f) });
       }
       for (const id of s.captions) {
         const cap = doc.captions.get(id);
