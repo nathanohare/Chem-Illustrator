@@ -242,4 +242,32 @@ describe('copying to ChemDraw', () => {
     const o = [...readCdxml(bare).doc.shapes.values()].find((s) => s.kind === 'oval')!;
     expect(o.fillColor).toBe(tint('#c00000', 0.8));
   });
+
+  it('writes a turned box (a diamond) with ChemDraw\'s middle and axis ends', () => {
+    const doc = newDoc();
+    doc.edit('Draw', () => { doc.addShape({ kind: 'rect', x1: 40, y1: 40, x2: 60, y2: 70, rot: 30 }); });
+    const t = (30 * Math.PI) / 180;
+    for (const x of Object.values(copied(doc))) {
+      const g = all(x, 'graphic').find((e) => e.getAttribute('GraphicType') === 'Rectangle')!;
+      const p = (k: string) => g.getAttribute(k)!.split(' ').map(Number);
+      expect(p('Center3D').slice(0, 2)).toEqual([50, 55]);
+      const maj = p('MajorAxisEnd3D'), min = p('MinorAxisEnd3D');
+      expect(maj[0]).toBeCloseTo(50 + 10 * Math.cos(t), 1); expect(maj[1]).toBeCloseTo(55 + 10 * Math.sin(t), 1);
+      expect(min[0]).toBeCloseTo(50 - 15 * Math.sin(t), 1); expect(min[1]).toBeCloseTo(55 + 15 * Math.cos(t), 1);
+      // the box round its turned corners
+      const [x1, y1, x2, y2] = p('BoundingBox');
+      expect(x2 - x1).toBeCloseTo(2 * (10 * Math.cos(t) + 15 * Math.sin(t)), 1);
+      expect(y2 - y1).toBeCloseTo(2 * (10 * Math.sin(t) + 15 * Math.cos(t)), 1);
+    }
+    // and read back, the same turned box
+    for (const x of Object.values(copied(doc))) {
+      const r = [...readCdxml(new XMLSerializer().serializeToString(x)).doc.shapes.values()].find((s) => s.kind === 'rect')!;
+      expect(r.rot).toBeCloseTo(30, 1);
+      expect([r.x1, r.y1, r.x2, r.y2].map((v) => +v.toFixed(1))).toEqual([40, 40, 60, 70]);
+    }
+    // an upright box has none of them
+    const flat = newDoc();
+    flat.edit('Draw', () => { flat.addShape({ kind: 'rect', x1: 40, y1: 40, x2: 60, y2: 70 }); });
+    expect(all(copied(flat).xml, 'graphic')[0].hasAttribute('Center3D')).toBe(false);
+  });
 });
