@@ -1310,7 +1310,8 @@ export class Doc {
   /**
    * ChemDraw objects this program doesn't show but keeps for writing back (plain bracketed groups,
    * chemical properties): each one's XML, and which of the drawing's things ("a12", "s5") the
-   * ids in it named, so a writer can point them at those things again.
+   * ids in it named, so a writer can point them at those things again. A structure (fragment) is
+   * named by its first atom as "frag:a12".
    */
   kept: { xml: string; refs: Record<string, string> }[] = [];
   /** Live R/S and E/Z labels from the chemistry engine (not saved, not undone). */

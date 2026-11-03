@@ -346,3 +346,46 @@ describe('the CDXML audit, writing side (2)', () => {
     expect(bb[1].plain).toBe(true);
   });
 });
+
+describe('the CDXML audit, writing side (3): R26', () => {
+  const body = '<fragment id="2"><n id="10" p="0 0"/><n id="11" p="30 0"/><b id="20" B="10" E="11"/></fragment>'
+    + '<graphic id="30" BoundingBox="10 0 0 0" GraphicType="Orbital" OrbitalType="sShaded" Center3D="0 0 0" MajorAxisEnd3D="10 0 0" MinorAxisEnd3D="0 10 0"/>'
+    + '<t id="31" p="0 40"><s font="3" size="10" face="0">MW 28</s></t>'
+    + '<bracketedgroup id="40" BracketedObjectIDs="10 11" RepeatCount="2"/>'
+    + '<chemicalproperty id="50" ChemicalPropertyDisplayID="31" ChemicalPropertyType="2" BasisObjects="2"/>';
+  /** As a copy is written: the drawing without the file it came from. */
+  const fresh = () => { const d = readCdxml(file(body)).doc; d.source = null; return d; };
+
+  it('writes orbitals back as orbitals, and kept objects pointed at the ids written now', () => {
+    const doc = fresh();
+    // the ids written now are not the file's
+    doc.edit('Move', () => doc.moveAtoms(new Set([...doc.atoms.keys()]), 5, 0));
+    const x = parse(writeCdxml(doc));
+    const orb = all(x, 'graphic').find((g) => g.getAttribute('GraphicType') === 'Orbital')!;
+    expect(orb.getAttribute('OrbitalType')).toBe('sShaded');
+    const nodes = all(x, 'n').map((n) => n.getAttribute('id'));
+    const bg = all(x, 'bracketedgroup')[0];
+    expect(bg.getAttribute('BracketedObjectIDs')!.split(' ').sort()).toEqual([...nodes].sort());
+    expect(bg.getAttribute('RepeatCount')).toBe('2');
+    const cp = all(x, 'chemicalproperty')[0];
+    const cap = all(x, 't').find((t) => t.textContent === 'MW 28')!;
+    expect(cp.getAttribute('ChemicalPropertyDisplayID')).toBe(cap.getAttribute('id'));
+    expect(cp.getAttribute('BasisObjects')).toBe(all(x, 'fragment')[0].getAttribute('id'));
+    // every id written once
+    const ids = all(x, '*').filter((e) => e.nodeName !== 'font').map((e) => e.getAttribute('id')).filter(Boolean);
+    expect(new Set(ids).size).toBe(ids.length);
+    // and through CDX
+    const back = readCdxml(viaCdx(writeCdxml(doc))).doc;
+    expect([...back.shapes.values()].some((s) => s.orbital === 'sShaded')).toBe(true);
+    expect(back.kept).toHaveLength(2);
+  });
+
+  it('drops a kept object when what it names is gone', () => {
+    const doc = fresh();
+    const cap = [...doc.captions.values()][0];
+    doc.edit('Delete', () => { doc.removeCaption(cap.id); for (const a of [...doc.atoms.keys()]) doc.removeAtom(a); });
+    const x = parse(writeCdxml(doc));
+    expect(all(x, 'bracketedgroup')).toHaveLength(0);
+    expect(all(x, 'chemicalproperty')).toHaveLength(0);
+  });
+});
