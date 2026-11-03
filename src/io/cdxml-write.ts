@@ -22,7 +22,7 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl } from '../render/images';
-import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG } from './cdxml';
+import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, DOTTED_TAG, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG, decodeTags, encodeTags } from './cdxml';
 import { stackItems, usesStacking } from '../editor/stacking';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
@@ -210,6 +210,7 @@ class CdxmlWriter {
     if (!src || doc.page) this.sizePage(b);
     // characters XML 1.0 can't hold (from text pasted out of Word or a PDF) would make the file
     // unreadable: Word's line break (U+000B) becomes a line break, half an emoji U+FFFD, and the rest are dropped
+    encodeTags(this.root);
     const out = wellFormed(new XMLSerializer().serializeToString(this.root).replace(/\u000B/g, '\n').replace(/[\u0000-\u0008\u000C\u000E-\u001F\uFFFE\uFFFF]/g, ''));
     return this.prolog + out + '\n';
   }
@@ -220,7 +221,8 @@ class CdxmlWriter {
     const src = this.doc.source!, text = src.text;
     const start = text.search(/<CDXML[\s>]/);
     this.prolog = start > 0 ? text.slice(0, start) : NEW_PROLOG;
-    src.xml ??= new DOMParser().parseFromString(withoutDoctype(text), 'application/xml');
+    // (the reader's copy holds our tags' values as they are; one parsed here gets the same)
+    if (!src.xml) { src.xml = new DOMParser().parseFromString(withoutDoctype(text), 'application/xml'); decodeTags(src.xml.documentElement); }
     this.x = src.xml.cloneNode(true) as XMLDocument;
     this.root = this.x.documentElement;
     this.all = descendants(this.root);
@@ -317,22 +319,29 @@ class CdxmlWriter {
 
   /** Size the page to the drawing's page, grown to hold the drawing. */
   private sizePage(b: Rect | null): void {
+    // (the page as the file had it, before it is sized here)
+    const bb = (this.page.getAttribute('BoundingBox') ?? '').trim().split(/\s+/).map(Number);
+    const wp = Math.max(1, Number(this.page.getAttribute('WidthPages')) || 1), hp = Math.max(1, Number(this.page.getAttribute('HeightPages')) || 1);
+    const was = this.doc.source && bb.length === 4 && bb.every(isFinite) ? { w: (bb[2] - bb[0]) / wp, h: (bb[3] - bb[1]) / hp } : null;
     if (!this.page.getAttribute('id')) this.page.setAttribute('id', this.id());
     for (const [k, v] of Object.entries(this.pageAttrs(b))) this.page.setAttribute(k, v);
     const old = this.pageGridTag(), tag = this.doc.page && pageTag(this.doc.page);
     if (old && old.getAttribute('Value') !== tag) this.page.removeChild(old);
     if (tag && old?.getAttribute('Value') !== tag) this.page.insertBefore(this.el('objecttag', { TagType: 'String', Name: PAGE_TAG, Value: tag, Visible: 'no' }), this.page.firstChild);
-    this.writePaper();
+    this.writePaper(was);
   }
 
   /**
    * The paper as ChemDraw takes it (its print record), with half-inch margins round the page, unless
    * the file's own record already gives this page.
    */
-  private writePaper(): void {
+  private writePaper(was: { w: number; h: number } | null): void {
     const p = this.doc.page;
     if (!p) return;
     const paper = paperOf(this.root.getAttribute('MacPrintInfo'));
+    // the file's own print settings stay while its page is the size it was (a scaled page setup
+    // has margins and a print record that don't add up to the page, and they are the user's)
+    if (was && Math.abs(was.w - p.w) < 0.5 && Math.abs(was.h - p.h) < 0.5 && this.root.hasAttribute('MacPrintInfo')) return;
     const m = (this.root.getAttribute('PrintMargins') ?? '').trim().split(/\s+/).map(Number);
     if (paper && m.length === 4 && m.every(isFinite) && Math.abs(paper.w - m[0] - m[2] - p.w) < 1 && Math.abs(paper.h - m[1] - m[3] - p.h) < 1) return;
     // a named paper at its true size (A4 is not a whole number of points), turned to the page
@@ -584,7 +593,7 @@ class CdxmlWriter {
       return wrote;
     }
     if (!sameExcept(b, o, [])) {
-      this.patchBond(e, b);
+      this.patchBond(e, b, o);
       wrote = true;
     } else {
       const p = this.doc.atoms.get(b.a1)!, q = this.doc.atoms.get(b.a2)!;
@@ -1062,9 +1071,16 @@ class CdxmlWriter {
       });
       return e;
     });
-    // the same groups as before (ids aside): leave the file as it was
-    const key = (e: Element) => e.outerHTML.replace(/ id="[^"]*"/g, '');
-    if (old.length === made.length && old.every((e, i) => key(e) === key(made[i]))) return;
+    // the same groups as before: leave the file as it was. Compared in any order (ChemDraw often
+    // lists the closing bracket first), with the bonds crossing the brackets taken together, and a
+    // file's group that lists only some of the crossing bonds counted as the same
+    const attrs = (e: Element) => [e.getAttribute('BracketUsage'), e.getAttribute('SRULabel'), e.getAttribute('RepeatCount'),
+      (e.getAttribute('BracketedObjectIDs') ?? '').trim().split(/\s+/).sort().join(' ')].join('|');
+    const graphics = (e: Element) => [...e.getElementsByTagName('bracketattachment')].map((x) => x.getAttribute('GraphicID')).sort().join(' ');
+    const crossings = (e: Element) => new Set([...e.getElementsByTagName('crossingbond')].map((x) => `${x.getAttribute('BondID')}:${x.getAttribute('InnerAtomID')}`));
+    const same = (o: Element, m: Element) => attrs(o) === attrs(m) && graphics(o) === graphics(m) && [...crossings(o)].every((c) => crossings(m).has(c));
+    const left = [...made];
+    if (old.length === made.length && old.every((o) => { const i = left.findIndex((m) => same(o, m)); if (i < 0) return false; left.splice(i, 1); return true; })) return;
     for (const e of old) e.parentNode?.removeChild(e);
     for (const e of made) {
       e.setAttribute('id', this.id());
@@ -1174,12 +1190,16 @@ class CdxmlWriter {
     return e;
   }
 
-  private patchBond(e: Element, b: Bond): void {
+  private patchBond(e: Element, b: Bond, o?: Bond | null): void {
     e.setAttribute('B', this.nodeId(b.a1));
     e.setAttribute('E', this.nodeId(b.a2));
-    this.set(e, 'Order', b.display === 'dative' ? 'dative' : orderAttr(b.order));
-    this.set(e, 'Display', DISPLAY[b.display] ?? null);
-    e.removeAttribute('Display2');
+    // a bond read from a file whose order and look haven't changed keeps ChemDraw's own words for
+    // them (orders such as 2.5 or ionic, hollow and wavy wedges, Display2), which we don't draw
+    if (!o || o.order !== b.order || o.display !== b.display) {
+      this.set(e, 'Order', b.display === 'dative' ? 'dative' : orderAttr(b.order));
+      this.set(e, 'Display', DISPLAY[b.display] ?? null);
+      e.removeAttribute('Display2');
+    }
     const dp = b.order === 2 || b.order === 1.5 ? { left: 'Left', right: 'Right', center: 'Center', auto: null }[b.dpos] : null;
     this.set(e, 'DoublePosition', dp);
     this.set(e, 'color', this.colorAttr(b.color));
@@ -1566,9 +1586,11 @@ class CdxmlWriter {
     if (look.frame) look.frame = { ...look.frame, atoms: [], captions: [], arrows: [], shapes: [] };
     if (look.newman) look.newman = newmanForFile(this.doc, look.newman);
     if (ringPts) look.poly = ringPts.map((p) => ({ x: p.x, y: p.y }));
-    g.appendChild(this.el('objecttag', { TagType: 'String', Name: GEO_TAG, Value: JSON.stringify(look), Visible: 'no' }));
+    // with the group's box as saved (ChemDraw rewrites BoundingBox when the group is moved), in the
+    // tag: ChemDraw and CDX drop attributes of our own
+    g.appendChild(this.el('objecttag', { TagType: 'String', Name: GEO_TAG, Value: JSON.stringify({ ...look, savedBox: box(b) }), Visible: 'no' }));
     this.set(g, 'BoundingBox', box(b));
-    this.set(g, GEO_BOX_ATTR, box(b));
+    g.removeAttribute(GEO_BOX_ATTR);
     this.changed = true;
   }
 
@@ -1795,7 +1817,10 @@ class CdxmlWriter {
         set('BoundingBox', box(s));
         // ChemDraw has no dotted line: it shows dashes, and the dots come back on opening here
         set('LineType', s.dotted ? [s.bold && 'Bold', 'Dashed'].filter(Boolean).join(' ') : style);
-        set(DOTTED_ATTR, s.dotted ? 'yes' : null);
+        // (dotted in a tag of our own: ChemDraw and CDX drop attributes they don't know)
+        g.removeAttribute(DOTTED_ATTR);
+        for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === DOTTED_TAG) g.removeChild(c);
+        if (s.dotted) g.appendChild(this.el('objecttag', { TagType: 'String', Name: DOTTED_TAG, Value: 'yes', Visible: 'no' }));
         break;
       case 'rect':
         set('GraphicType', 'Rectangle');
@@ -2034,10 +2059,27 @@ class CdxmlWriter {
    * holds just its members; things taken out of a group go back onto the page.
    */
   /** The element written for a thing: a structure's fragment for an atom. */
-  private elementOf(kind: Kind, id: number, ided: () => Map<string, Element>): Element | null {
+  private elementOf(kind: Kind, id: number, ided: (id: number, names: string[]) => Element | null): Element | null {
     if (kind === 'a') return this.fragOfAtom.get(id) ?? null;
     const names = kind === 'c' ? ['t'] : kind === 'r' ? ['arrow', 'graphic'] : ['graphic', 'embeddedobject', 'table', 'group'];
-    return this.source(kind, id, names) ?? (kind === 'r' ? this.findArrow(id) : null) ?? ided().get(String(id)) ?? null;
+    return this.source(kind, id, names) ?? (kind === 'r' ? this.findArrow(id) : null) ?? ided(id, names);
+  }
+
+  /**
+   * Looks up page elements by name and id, built the first time it is asked (only when something
+   * isn't found where it was read). By name too, since ids repeat across kinds of element and the
+   * font table numbers its fonts from the same small numbers.
+   */
+  private idedFinder(): (id: number, names: string[]) => Element | null {
+    let byId: Map<string, Element> | null = null;
+    return (id, names) => {
+      if (!byId) {
+        byId = new Map();
+        for (const e of descendants(this.page)) { const k = e.getAttribute('id'); if (k && !byId.has(`${e.nodeName}:${k}`)) byId.set(`${e.nodeName}:${k}`, e); }
+      }
+      for (const n of names) { const e = byId.get(`${n}:${id}`); if (e) return e; }
+      return null;
+    };
   }
 
   /**
@@ -2049,14 +2091,7 @@ class CdxmlWriter {
     const on = usesStacking(doc);
     let changed = this.pageTag(STACK_TAG, on ? '1' : null);
     if (!on) return changed;
-    let byId: Map<string, Element> | null = null;
-    const ided = () => {
-      if (!byId) {
-        byId = new Map();
-        for (const e of descendants(this.root)) { const id = e.getAttribute('id'); if (id && !byId.has(id)) byId.set(id, e); }
-      }
-      return byId;
-    };
+    const ided = this.idedFinder();
     const done = new Set<Element>();
     const kindOf = { shape: 's', structure: 'a', arrow: 'r', caption: 'c' } as const;
     stackItems(doc).forEach((it, i) => {
@@ -2073,15 +2108,7 @@ class CdxmlWriter {
 
   private writeGroups(): void {
     const doc = this.doc;
-    // (every element by its id, only when something isn't found where it was read)
-    let byId: Map<string, Element> | null = null;
-    const ided = () => {
-      if (!byId) {
-        byId = new Map();
-        for (const e of descendants(this.root)) { const id = e.getAttribute('id'); if (id && !byId.has(id)) byId.set(id, e); }
-      }
-      return byId;
-    };
+    const ided = this.idedFinder();
     const elementOf = (kind: Kind, id: number): Element | null => this.elementOf(kind, id, ided);
     const plain = (g: Element | null): g is Element => !!g && g.nodeName === 'group'
       && !kids(g).some((k) => k.nodeName === 'table' || (k.nodeName === 'objecttag' && k.getAttribute('Name') === GEO_TAG));
@@ -2094,7 +2121,8 @@ class CdxmlWriter {
     const wanted = new Map<Element, number | undefined>();
     const note = (kind: Kind, id: number, grp: number | undefined) => {
       const e = elementOf(kind, id);
-      if (!e) return;
+      // (only things on the page can be grouped)
+      if (!e || e === this.page || !this.page.contains(e)) return;
       const t = topOf(e);
       if (!wanted.has(t) || grp !== undefined) wanted.set(t, grp);
     };
@@ -2132,16 +2160,7 @@ class CdxmlWriter {
    */
   private writePieces(): void {
     const doc = this.doc;
-    let byId: Map<string, Element> | null = null;
-    // (elements by name and id: a bond or fragment can share an atom's id number)
-    const ided = (id: number, names: string[]): Element | null => {
-      if (!byId) {
-        byId = new Map();
-        for (const e of descendants(this.root)) { const k = e.getAttribute('id'); if (k && !byId.has(`${e.nodeName}:${k}`)) byId.set(`${e.nodeName}:${k}`, e); }
-      }
-      for (const n of names) { const e = byId.get(`${n}:${id}`); if (e) return e; }
-      return null;
-    };
+    const ided = this.idedFinder();
     const put = (kind: Kind, id: number, names: string[], piece: number | undefined) => {
       const was = this.orig<{ piece?: number } & Entity>(kind, id)?.piece;
       if (piece === undefined && was === undefined) return;

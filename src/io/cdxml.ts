@@ -63,6 +63,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   const t1 = performance.now();
   const root = xml.documentElement;
   if (!root || root.nodeName !== 'CDXML') throw new Error('This does not look like a CDXML file.');
+  decodeTags(root);
   const doc = new Doc();
   // Remember where each object came from, so saving can rewrite only what changed.
   const all = descendants(root);
@@ -786,7 +787,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       case 'Line': {
         if (bb.length < 4) return;
         const lt = g.getAttribute('LineType') ?? '';
-        add({ ...base, kind: 'line', x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], dashed: lt.includes('Dashed'), bold: lt.includes('Bold'), ...(g.getAttribute(DOTTED_ATTR) === 'yes' ? { dotted: true } : {}) });
+        add({ ...base, kind: 'line', x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], dashed: lt.includes('Dashed'), bold: lt.includes('Bold'), ...(g.getAttribute(DOTTED_ATTR) === 'yes' || kids(g).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === DOTTED_TAG && k.getAttribute('Value') === 'yes') ? { dotted: true } : {}) });
         return;
       }
       case 'Rectangle': {
@@ -933,14 +934,17 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
           // a design shape saved here: drawn in ChemDraw as curves and text, read back as the shape
           const geoTag = kids(ch).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === GEO_TAG)?.getAttribute('Value');
           if (geoTag) {
-            let saved: Partial<Shape> | null = null;
+            let saved: (Partial<Shape> & { savedBox?: unknown }) | null = null;
             try { saved = JSON.parse(geoTag); } catch { saved = null; }
+            // the group's box as saved: in the tag, or (older files) an attribute of ours
+            const savedBox = typeof saved?.savedBox === 'string' ? saved.savedBox : null;
+            if (saved) delete saved.savedBox;
             const bb = pts(ch.getAttribute('BoundingBox'));
             if (saved && (saved.kind === 'geo' || (saved.kind === 'ring' && Array.isArray(saved.poly))) && [saved.x1, saved.y1, saved.x2, saved.y2].every((v) => typeof v === 'number')) {
               // a ring fill finds its ring again by where the atoms are (atom ids change between files)
               const sh = doc.addShape({ ...(saved as Omit<Shape, 'id'>), ...(saved.kind === 'ring' ? { ring: undefined } : {}), id: idFor(ch) });
               // moved in ChemDraw: the group's box says where it is now
-              const was = ch.getAttribute(GEO_BOX_ATTR);
+              const was = ch.getAttribute(GEO_BOX_ATTR) ?? savedBox;
               const wb = pts(was);
               if (bb.length === 4 && wb.length === 4 && (Math.abs(bb[0] - wb[0]) > 0.01 || Math.abs(bb[1] - wb[1]) > 0.01)) {
                 const dx = bb[0] - wb[0], dy = bb[1] - wb[1];
@@ -1309,8 +1313,42 @@ export const PIN_TAG = 'Chem Illustrator pin';
 export const CURVE_ARROW_TAG = 'Chem Illustrator arrow';
 /** The group's box when saved here (ChemDraw rewrites BoundingBox when the group is moved). */
 export const GEO_BOX_ATTR = 'ChemIllustratorBox';
-/** A line drawn dotted here (ChemDraw is given dashes). */
+/** A tag of this program's own (ChemDraw's own tags, such as "stereo", are left as they are). */
+const ownTag = (e: Element) => e.nodeName === 'objecttag' && /^(Chem Illustrator |ci-)/.test(e.getAttribute('Name') ?? '');
+
+/**
+ * A tag value as saved: CDX keeps strings in one code page (Windows-1252 here), so a value with
+ * anything outside printable ASCII is saved as a JSON string with \uXXXX escapes, which comes
+ * through CDX, ChemDraw and any code page unchanged. (So is a value that starts with a quote, so
+ * that reading it back is never in doubt.) Plain ASCII values are saved as they are.
+ */
+export function encodeTagValue(v: string): string {
+  if (!/[^\x20-\x7e]/.test(v) && !v.startsWith('"')) return v;
+  return JSON.stringify(v).replace(/[^\x20-\x7e]/g, (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'));
+}
+
+/** Our tags' values as they were (see encodeTagValue); older files' raw values read as they are. */
+export function decodeTags(root: Element): void {
+  for (const e of descendants(root)) {
+    if (!ownTag(e)) continue;
+    const v = e.getAttribute('Value');
+    if (!v || v.length < 2 || !v.startsWith('"') || !v.endsWith('"')) continue;
+    try { const s: unknown = JSON.parse(v); if (typeof s === 'string') e.setAttribute('Value', s); } catch { /* an older raw value */ }
+  }
+}
+
+/** Saves our tags' values (in place), see encodeTagValue. */
+export function encodeTags(root: Element): void {
+  for (const e of descendants(root)) {
+    const v = ownTag(e) ? e.getAttribute('Value') : null;
+    if (v) { const w = encodeTagValue(v); if (w !== v) e.setAttribute('Value', w); }
+  }
+}
+
+/** A line drawn dotted here (ChemDraw is given dashes): the attribute of older files. */
 export const DOTTED_ATTR = 'ChemIllustratorDotted';
+/** A line drawn dotted here (ChemDraw is given dashes), value "yes". */
+export const DOTTED_TAG = 'Chem Illustrator dotted';
 /** A chart (Insert > Chart on slides): the chart and its data, on the picture standing for it. */
 export const CHART_TAG = 'Chem Illustrator chart';
 /** An equation (Insert > Equation on slides): its LaTeX, size, colour and font, on the picture standing for it. */

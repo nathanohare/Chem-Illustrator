@@ -200,6 +200,6 @@ describe('energy diagrams: the detailed list', () => {
     expect(f.energy!.paths[0].points[2].flat![2]).toEqual([1.5, -0.87]);
     expect([...back.shapes.values()].some((s) => s.kind === 'line' && s.dotted)).toBe(true);
     // ChemDraw is given dashes
-    expect(writeCdxml(doc)).toMatch(/LineType="Dashed"[^>]*ChemIllustratorDotted="yes"|ChemIllustratorDotted="yes"[^>]*LineType="Dashed"/);
+    expect(writeCdxml(doc)).toMatch(/LineType="Dashed"><objecttag TagType="String" Name="Chem Illustrator dotted" Value="yes"/);
   });
 });
