@@ -26,6 +26,8 @@ export interface AiPrefs {
   assistant: boolean;
   /** How the Assistant shows: a prompt bar (the usual), a pane down the right, or a floating window. */
   assistantLook?: AssistantLook;
+  /** In Document mode with nothing selected, the whole document's text starts ticked in "Will send" (off unless chosen). */
+  sendDocument?: boolean;
 }
 
 export type AssistantLook = 'bar' | 'pane' | 'window';
@@ -36,7 +38,8 @@ export function parseAiPrefs(v: unknown): AiPrefs {
   const r = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
   const provider = (['none', 'anthropic', 'openai', 'gemini', 'compatible'] as const).find((p) => p === r.provider) ?? 'none';
   return { provider, model: typeof r.model === 'string' ? r.model.trim() : '', base: typeof r.base === 'string' ? r.base.trim() : '', localOnly: r.localOnly === true, assistant: r.assistant === true,
-    ...(r.assistantLook === 'pane' || r.assistantLook === 'window' ? { assistantLook: r.assistantLook } : {}) };
+    ...(r.assistantLook === 'pane' || r.assistantLook === 'window' ? { assistantLook: r.assistantLook } : {}),
+    ...(r.sendDocument === true ? { sendDocument: true } : {}) };
 }
 
 interface ProviderInfo {

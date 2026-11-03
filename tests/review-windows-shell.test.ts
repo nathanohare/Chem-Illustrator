@@ -136,18 +136,18 @@ describe('the Knowledge Base window', () => {
     const count = document.querySelector('.kb-window .refs-edit .muted')!.textContent!;
     // Reagent Safety: thousands of compounds, of which only the first rows are built
     expect(parseInt(count.replace(/\D/g, ''), 10)).toBeGreaterThan(5000);
-    expect(rows()).toBeLessThanOrEqual(150);
+    expect(rows()).toBeLessThanOrEqual(60);
     // scrolled near its end, the table grows (each row can be reached, not only the first 2,000)
     const wrap = document.querySelector<HTMLElement>('.kb-window .kb-table-wrap')!;
     Object.defineProperty(wrap, 'scrollHeight', { value: 1000, configurable: true });
     Object.defineProperty(wrap, 'clientHeight', { value: 500, configurable: true });
     wrap.scrollTop = 400;
     wrap.dispatchEvent(new Event('scroll'));
-    expect(rows()).toBe(450);
+    expect(rows()).toBe(360);
     // a search typed rebuilds only its first rows too
     const box = document.querySelector<HTMLInputElement>('.kb-window input[type=search]')!;
-    box.value = 'a';
+    box.value = 'ac';
     box.dispatchEvent(new Event('input'));
-    expect(rows()).toBeLessThanOrEqual(150);
+    expect(rows()).toBeLessThanOrEqual(60);
   });
 });

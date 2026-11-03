@@ -78,22 +78,29 @@ fn command(exe: &str) -> Command {
 fn run_to_end(mut c: Command, limit: Duration) -> Result<String, String> {
     let stop_at = STOP.load(Ordering::SeqCst);
     let mut child = c.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn().map_err(|e| format!("xtb could not be started: {e}"))?;
-    let out = child.stdout.take();
-    let reader = std::thread::spawn(move || {
-        let mut s = String::new();
-        if let Some(mut o) = out {
-            use std::io::Read;
-            let _ = o.read_to_string(&mut s);
-        }
-        s
-    });
+    // both outputs are read as they come: a pipe nobody reads fills (about 64 KB) and xtb then
+    // waits on it until the time limit
+    fn read_all<R: std::io::Read + Send + 'static>(from: Option<R>) -> std::thread::JoinHandle<String> {
+        std::thread::spawn(move || {
+            let mut s = String::new();
+            if let Some(mut o) = from {
+                let _ = o.read_to_string(&mut s);
+            }
+            s
+        })
+    }
+    let reader = read_all(child.stdout.take());
+    let errors = read_all(child.stderr.take());
     let start = Instant::now();
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
                 let text = reader.join().unwrap_or_default();
+                let err = errors.join().unwrap_or_default();
                 if !status.success() && parse_energy(&text).is_none() {
-                    let tail: Vec<&str> = text.lines().rev().take(6).collect();
+                    // what xtb said about it: its error output, else the end of its output
+                    let said = if err.trim().is_empty() { &text } else { &err };
+                    let tail: Vec<&str> = said.lines().rev().take(6).collect();
                     return Err(format!("xtb stopped with an error: {}", tail.into_iter().rev().collect::<Vec<_>>().join(" ").trim()));
                 }
                 return Ok(text);
@@ -106,6 +113,7 @@ fn run_to_end(mut c: Command, limit: Duration) -> Result<String, String> {
                 }
                 if start.elapsed() > limit {
                     let _ = child.kill();
+                    let _ = child.wait();
                     return Err("xtb took more than 15 minutes on one conformer, so it was stopped.".into());
                 }
                 std::thread::sleep(Duration::from_millis(100));
@@ -220,6 +228,34 @@ mod tests {
         xtb_stop();
         assert_eq!(t.join().unwrap(), Err("stopped".to_string()));
         assert!(start.elapsed() < Duration::from_secs(5));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn much_error_output_does_not_stall_a_run() {
+        // 200 KB on stderr, more than a pipe holds; an unread pipe left this waiting for the limit
+        let run = || {
+            let mut c = Command::new("sh");
+            c.args(["-c", "head -c 200000 /dev/zero | tr '\\0' x >&2; echo done"]);
+            run_to_end(c, Duration::from_secs(10))
+        };
+        let start = Instant::now();
+        // (Stop pressed by the test above, running at the same time, ends a run too: once more then)
+        let got = match run() { Err(e) if e == "stopped" => run(), r => r };
+        assert_eq!(got.map(|s| s.trim().to_string()), Ok("done".to_string()));
+        assert!(start.elapsed() < Duration::from_secs(5));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_run_says_what_xtb_wrote_to_its_error_output() {
+        let run = || {
+            let mut c = Command::new("sh");
+            c.args(["-c", "echo normal output; echo 'abnormal termination of xtb' >&2; exit 1"]);
+            run_to_end(c, Duration::from_secs(10))
+        };
+        let got = match run() { Err(e) if e == "stopped" => run(), r => r };
+        assert_eq!(got, Err("xtb stopped with an error: abnormal termination of xtb".to_string()));
     }
 
     #[test]

@@ -25,6 +25,15 @@ export interface SendItem {
   image?: AiImage;
 }
 
+/** The most text one item carries: selected text, or a whole document (about 15,000 words). */
+export const TEXT_CAP = { selection: 20_000, document: 100_000 } as const;
+
+/** Text to send, cut at `max` characters, and how the "Will send" list names it then. */
+export function cappedText(label: string, text: string, max: number): { label: string; text: string } {
+  if (text.length <= max) return { label, text };
+  return { label: `${label} (the first ${max.toLocaleString('en-US')} characters)`, text: text.slice(0, max) };
+}
+
 export type Finding = { level: 'ok' | 'note' | 'warn'; text: string; step?: number };
 
 export type AssistantAction =

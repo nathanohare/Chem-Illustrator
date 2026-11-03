@@ -15,6 +15,7 @@ import { hornFit, rotation } from '../morph/rotate';
 import { ident, mul, axisTurn, skeleton, cleanerNearby, cleanestView, type M3, type P3 } from '../chem/view3d';
 import { depthShadePrefs } from '../render/depth-shade';
 import { ask } from './ask';
+import { infoIcon, setInfo } from './info-tip';
 import { DEFAULT_SEARCH, type SearchOptions } from '../chem/conformer-rank';
 import { KCAL_PER_HARTREE, refineWithXtb, XTB_SOLVENTS, type XtbOptions, type XtbRunner } from '../chem/xtb';
 import { chargeAndMultiplicity, qmInput, xyzFile, QM_METHODS, type QmOptions, type QmProgram } from '../chem/qm-input';
@@ -91,6 +92,8 @@ export class Viewer3d {
   private tierBar: HTMLSpanElement;
   private exportBtn: HTMLButtonElement;
   private note: HTMLDivElement;
+  /** What the chosen method does, behind an "i" by the switch. */
+  private tierInfo: HTMLElement;
   private again: HTMLButtonElement;
   private list: HTMLDivElement;
   /** Each method's result, kept to switch back to; and the one shown. */
@@ -165,7 +168,8 @@ export class Viewer3d {
     this.exportBtn.title = 'Input files for Gaussian or ORCA, or every conformer as an XYZ or SD file';
     this.exportBtn.setAttribute('aria-haspopup', 'menu');
     this.exportBtn.addEventListener('click', () => this.exportMenu());
-    methodBar.append(seg, spacer, this.exportBtn);
+    this.tierInfo = infoIcon('');
+    methodBar.append(seg, this.tierInfo, spacer, this.exportBtn);
     // what the chosen method is, and what it found
     this.note = document.createElement('div');
     this.note.className = 'v3d-note';
@@ -262,6 +266,7 @@ export class Viewer3d {
     this.info.textContent = 'Building the 3-D model…';
     this.list.replaceChildren();
     this.note.textContent = '';
+    this.note.hidden = true;
     this.box.show();
     this.draw();
   }
@@ -334,12 +339,16 @@ export class Viewer3d {
     for (const x of this.tierBar.querySelectorAll<HTMLButtonElement>('[data-tier]')) x.setAttribute('aria-pressed', String(x.dataset.tier === this.tier));
     const m = this.results[this.tier];
     const n = m?.conformers.length ?? 0;
-    const text = this.tier === 'quick' ? `Quick: about a dozen likely shapes, each relaxed with the MMFF94s+ force field. Fast, but it can miss shapes: try Full Search.`
-      : this.tier === 'search' ? (m ? `Full Search: ${n} distinct conformer${n === 1 ? '' : 's'} from ${m.starts} starting shapes, each relaxed with MMFF94s+, duplicates removed.` : 'Full Search: hundreds of starting shapes, each relaxed with MMFF94s+, duplicates removed.')
-      : m ? `xTB Refine: the lowest ${n} re-optimized with ${m.method}, a fast quantum-chemical method, and ranked again.`
-      : `xTB Refine: re-optimizes the lowest few with GFN2-xTB, a fast quantum-chemical method, using the xtb program on this computer.${this.tools?.xtb ? '' : ' Desktop app only.'}`;
-    this.note.textContent = text + ' ';
+    // what the method does is help, behind the "i"; the line under the switch only says what it found
+    setInfo(this.tierInfo, this.tier === 'quick' ? 'Quick: about a dozen likely shapes, each relaxed with the MMFF94s+ force field. Fast, but it can miss shapes: try Full Search.'
+      : this.tier === 'search' ? 'Full Search: hundreds of starting shapes, each relaxed with MMFF94s+, duplicates removed.'
+      : 'xTB Refine: re-optimizes the lowest few with GFN2-xTB, a fast quantum-chemical method, using the xtb program on this computer (desktop app only), and ranks them again.');
+    const text = this.tier === 'search' ? (m ? `${n} distinct conformer${n === 1 ? '' : 's'} from ${m.starts} starting shapes.` : '')
+      : this.tier === 'xtb' ? (m ? `The lowest ${n} re-optimized with ${m.method}.` : this.tools?.xtb ? '' : 'xTB Refine needs the desktop app.')
+      : '';
+    this.note.textContent = text ? text + ' ' : '';
     if (m && this.tier !== 'quick') this.note.append(this.again);
+    this.note.hidden = !this.note.childNodes.length;
   }
 
   /** The turn that makes the model look most like the drawing (or no turn, without one). */
