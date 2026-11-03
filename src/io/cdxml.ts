@@ -827,10 +827,57 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     stats.arrows++;
   };
 
+  /**
+   * An arrow as older files keep it, a Line or Arc graphic with an ArrowType and no arrow of its
+   * own: read as ChemDraw 25 reads it (it makes the same arrow, measured by opening such a file
+   * and saving it). A Line is stored head then tail, an Arc head then centre, sweeping round from
+   * its head by AngularSize; a Line with no head stays a line. Saved, it is written back in its
+   * place as an arrow (the writer replaces the graphic, as ChemDraw does).
+   */
+  const legacyArrow = (g: Element, bb: number[]): boolean => {
+    const kind = g.getAttribute('ArrowType') ?? 'NoHead';
+    const heads: Record<string, Record<string, string>> = {
+      FullHead: { ArrowheadHead: 'Full' },
+      HalfHead: { ArrowheadHead: 'HalfLeft' },
+      Equilibrium: { ArrowheadHead: 'HalfLeft', ArrowheadTail: 'HalfLeft', ArrowShaftSpacing: '300' },
+      Resonance: { ArrowheadHead: 'Full', ArrowheadTail: 'Full' },
+      RetroSynthetic: { ArrowheadHead: 'Full', ArrowheadType: 'Angle', ArrowheadCenterSize: '1000', ArrowShaftSpacing: '1000' },
+      Hollow: { ArrowheadHead: 'Full', ArrowheadType: 'Hollow', ArrowheadCenterSize: '1000', ArrowShaftSpacing: '1000' },
+    };
+    const arc = g.getAttribute('GraphicType') === 'Arc';
+    if (!arc && !heads[kind]) return false;
+    const head = { x: bb[0], y: bb[1] };
+    let tail = { x: bb[2], y: bb[3] };
+    const a = g.ownerDocument.createElement('arrow');
+    if (arc) {
+      const c = { x: bb[2], y: bb[3] }, r = Math.hypot(head.x - c.x, head.y - c.y);
+      const sweep = Math.abs(num(g, 'AngularSize', 0));
+      if (!(r > 0) || !(sweep > 0)) return false;
+      const a0 = Math.atan2(head.y - c.y, head.x - c.x), a1 = a0 + sweep * DEG;
+      tail = { x: c.x + r * Math.cos(a1), y: c.y + r * Math.sin(a1) };
+      const minor = { x: c.x + r * Math.cos(a0 + Math.PI / 2), y: c.y + r * Math.sin(a0 + Math.PI / 2) };
+      a.setAttribute('AngularSize', String(sweep));
+      a.setAttribute('Center3D', `${c.x} ${c.y} 0`);
+      a.setAttribute('MajorAxisEnd3D', `${head.x} ${head.y} 0`);
+      a.setAttribute('MinorAxisEnd3D', `${minor.x} ${minor.y} 0`);
+    }
+    for (const [k, v] of Object.entries({ ArrowheadType: 'Solid', HeadSize: g.getAttribute('HeadSize') ?? '1000', ArrowheadCenterSize: '875', ArrowheadWidth: '250', ...heads[kind] })) a.setAttribute(k, v);
+    for (const k of ['id', 'Z', 'color', 'LineWidth', 'LineType']) { const v = g.getAttribute(k); if (v !== null) a.setAttribute(k, v); }
+    a.setAttribute('Head3D', `${head.x} ${head.y} 0`);
+    a.setAttribute('Tail3D', `${tail.x} ${tail.y} 0`);
+    const before = doc.arrows.size;
+    readArrow(a);
+    if (doc.arrows.size === before) return false;
+    // (the graphic is where it came from, for saving it back in place)
+    from('r', [...doc.arrows.keys()].pop()!, g);
+    return true;
+  };
+
   const readGraphic = (g: Element) => {
     if (g.getAttribute('SupersededBy') !== null) return;
     const type = g.getAttribute('GraphicType');
     const bb = pts(g.getAttribute('BoundingBox'));
+    if ((type === 'Line' || type === 'Arc') && bb.length >= 4 && legacyArrow(g, bb)) return;
     const c = color(g);
     const z = num(g, 'Z', 0);
     const base = { id: idFor(g), color: c, z };
