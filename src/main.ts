@@ -10694,13 +10694,25 @@ async function findCas(smiles: string, fresh = false): Promise<CasFound | null> 
   return got;
 }
 
+/**
+ * Bring the Analysis list into view for an answer that shows there: in the Canvas, the ribbon's
+ * Analysis box drops it down (or pops it out while the ribbon is folded to its tabs); elsewhere
+ * the side panel opens.
+ */
+function showAnalysisList(): void {
+  if (!canvasRibbon.el.hidden) {
+    if (analysisBox.button.offsetParent) analysisBox.open();
+    else analysisBox.detach();
+  } else if (sideIsFolded()) command('fold-side');
+}
+
 /** Chemistry > Look Up > Find CAS RN (and the right-click menu): the structure picked, its CAS RN shown in the Analysis panel. */
 async function findCasChosen(): Promise<void> {
   const f = chosenStructures()[0];
   if (!f) { flash('Select a structure first.'); return; }
   const r = await weigh(f);
   if (!r?.smiles) { flash('Couldn\'t read that structure to look it up.'); return; }
-  if (sideIsFolded()) command('fold-side');
+  showAnalysisList();
   const got = await findCas(r.smiles, casStates.get(r.smiles)?.kind === 'none' || casStates.get(r.smiles)?.kind === 'error');
   $('#analysis-body .an-cas')?.scrollIntoView({ block: 'nearest' });
   if (got?.kind === 'found') flash(`CAS RN ${got.cas[0]}${got.name ? ` (${got.name})` : ''}, from ${got.from}. It is in the Analysis panel.`);
@@ -10732,8 +10744,7 @@ async function lookUpChosen(): Promise<void> {
   if (!f) { flash('Select a structure first.'); return; }
   const r = await weigh(f);
   if (!r?.smiles) { flash('Couldn\'t read that structure to look it up.'); return; }
-  // the answer shows in the Analysis panel, so unfold it if it's folded away
-  if (sideIsFolded()) command('fold-side');
+  showAnalysisList();
   await lookUpOnPubChem(r.smiles);
   $('#analysis-body .pubchem')?.scrollIntoView({ block: 'nearest' });
 }
