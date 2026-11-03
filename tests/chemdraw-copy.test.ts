@@ -328,4 +328,33 @@ describe('copying to ChemDraw', () => {
     expect(n.getAttribute('LabelDisplay')).toBe(lj);
     expect([...readCdxml(writeCdxml(opened)).doc.atoms.values()].find((a) => a.label)!.just).toBe(opened.atoms.get(me.id)!.just);
   });
+  it('keeps a ChemDraw label\'s own inner fragment when copied back, while the label is unchanged (R28)', () => {
+    const file = '<?xml version="1.0" encoding="UTF-8" ?><CDXML BondLength="14.40" LabelSize="10"><page id="1"><fragment id="2">'
+      + '<n id="3" p="100 100" NodeType="Fragment"><fragment id="10"><n id="11" p="110 100" Element="15"/><n id="12" p="120 95"/><n id="13" p="120 105"/><n id="14" p="90 100" NodeType="ExternalConnectionPoint"/>'
+      + '<b id="15" B="11" E="12"/><b id="16" B="11" E="13"/><b id="17" B="14" E="11"/></fragment>'
+      + '<t id="4" p="96 103.9"><s font="3" size="10" face="96">PQz2</s></t></n>'
+      + '<n id="5" p="85.6 100"/><b id="6" B="3" E="5"/></fragment></page></CDXML>';
+    const doc = readCdxml(file).doc;
+    // moved 10 pt right after opening
+    doc.edit('Move', () => doc.moveAtoms(new Set([...doc.atoms.keys()]), 10, 0));
+    for (const x of Object.values(copied(doc))) {
+      const n = all(x, 'n').find((e) => e.getAttribute('NodeType') === 'Fragment')!;
+      const inner = n.getElementsByTagName('fragment')[0];
+      expect(inner).toBeDefined();
+      expect(all(inner, 'n')).toHaveLength(4);
+      expect(all(inner, 'b')).toHaveLength(3);
+      const p = all(inner, 'n').find((e) => e.getAttribute('Element') === '15')!.getAttribute('p')!.split(' ').map(Number);
+      expect(p[0]).toBeCloseTo(120, 1);
+      // its ids are new, and its bonds name its own atoms
+      const ids = all(x, '*').filter((e) => e.nodeName !== 'font').map((e) => e.getAttribute('id')).filter(Boolean);
+      expect(new Set(ids).size).toBe(ids.length);
+      const own = new Set(all(inner, 'n').map((e) => e.getAttribute('id')));
+      for (const b of all(inner, 'b')) { expect(own.has(b.getAttribute('B'))).toBe(true); expect(own.has(b.getAttribute('E'))).toBe(true); }
+    }
+    // a label changed here is written afresh
+    const a = [...doc.atoms.values()].find((v) => v.label)!;
+    doc.edit('Label', () => doc.updateAtom(a.id, { label: 'OMe' }));
+    const n2 = all(copied(doc).xml, 'n').find((e) => e.getElementsByTagName('t')[0]?.textContent === 'OMe')!;
+    expect(all(n2.getElementsByTagName('fragment')[0], 'n').some((e) => e.getAttribute('Element') === '15')).toBe(false);
+  });
 });

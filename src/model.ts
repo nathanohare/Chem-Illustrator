@@ -80,6 +80,13 @@ export interface Atom {
   /** A contracted label: the group it stands for, as SMILES from the atom where it joins (Chemistry > Contract Label). */
   group?: string;
   /**
+   * A ChemDraw label's own inner fragment (what the label stands for, as ChemDraw expands it), kept
+   * as the file had it so a copy back to ChemDraw keeps it while the label is unchanged: the label
+   * it belongs to, the node's NodeType (and GenericNickname), the fragment's XML, and where the
+   * atom was then (the fragment moves with it).
+   */
+  cdxInner?: { label: string; type: string; nick?: string; xml: string; x?: number; y?: number };
+  /**
    * Alt text for the whole structure this atom is in (Alt Text…), for people who can't see it:
    * kept on one of its atoms (see accessibility.ts). Saved as the description of the structure's
    * picture in Word and PowerPoint; a structure without it is described by its SMILES.

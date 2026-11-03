@@ -884,6 +884,7 @@ class CdxmlWriter {
   /** What a text label means chemically, in ChemDraw's terms. */
   private labelChemistry(n: Element, a: Atom): void {
     const label = a.label!;
+    if (this.keptInner(n, a)) return;
     const toks = tokenize(label);
     if (isGenericLabel(label) || (toks.length === 1 && toks[0].kind === 'generic')) {
       n.setAttribute('NodeType', 'GenericNickname');
@@ -902,6 +903,41 @@ class CdxmlWriter {
     n.removeAttribute('Element');
     n.setAttribute('NodeType', toks.length === 1 && toks[0].kind === 'nick' && toks[0].count <= 1 ? 'Nickname' : 'Fragment');
     n.insertBefore(this.innerFragment(a, g), n.firstChild);
+  }
+
+  /**
+   * A ChemDraw label's own inner fragment, as the file had it (its ids made new), while the label
+   * is unchanged and it still has a connection point for each bond. False when there is none.
+   */
+  private keptInner(n: Element, a: Atom): boolean {
+    const k = a.cdxInner;
+    if (!k || k.label !== a.label) return false;
+    let f: Element;
+    try {
+      const d = new DOMParser().parseFromString(k.xml, 'application/xml');
+      if (d.getElementsByTagName('parsererror').length || d.documentElement.nodeName !== 'fragment') return false;
+      f = this.x.importNode(d.documentElement, true) as Element;
+    } catch {
+      return false;
+    }
+    const all = [f, ...descendants(f)];
+    const points = all.filter((e) => e.nodeName === 'n' && e.getAttribute('NodeType') === 'ExternalConnectionPoint').length;
+    if (points !== Math.max(1, this.doc.neighbors(a.id).length) && points !== this.doc.neighbors(a.id).length) return false;
+    const fresh = new Map<string, string>();
+    for (const e of all) { const id = e.getAttribute('id'); if (id) { const v = this.id(); fresh.set(id, v); e.setAttribute('id', v); } }
+    for (const e of all) {
+      for (const name of ['B', 'E', 'Attachments', 'BondCircularOrdering', 'SupersededBy']) {
+        const v = e.getAttribute(name);
+        if (v !== null) e.setAttribute(name, v.trim().split(/\s+/).map((x) => fresh.get(x) ?? x).join(' '));
+      }
+    }
+    // (the fragment moves with its atom)
+    if (k.x !== undefined && k.y !== undefined && (Math.abs(a.x - k.x) > 0.005 || Math.abs(a.y - k.y) > 0.005)) shift(f, a.x - k.x, a.y - k.y);
+    n.removeAttribute('Element');
+    n.setAttribute('NodeType', k.type);
+    this.set(n, 'GenericNickname', k.nick ?? null);
+    n.insertBefore(f, n.firstChild);
+    return true;
   }
 
   /** The atoms an abbreviation stands for, joined to the outside through connection points. */
