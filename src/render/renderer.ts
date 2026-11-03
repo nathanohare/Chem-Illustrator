@@ -1478,7 +1478,7 @@ export class Renderer {
           const he = wedgeWidth(st) / 2;
           const end = this.atomInfo(doc, q).boxes.length ? sub(e, mul(dir, Math.min(he + st.lineWidth, l * 0.3))) : e;
           const lw = len(sub(end, s));
-          const waves = Math.min(MAX_HASHES, Math.max(3, Math.round(lw / (st.bondLength * 0.1))));
+          const waves = Math.min(MAX_HASHES, Math.max(3, Math.round(lw / (st.bondLength * 0.075))));
           const step = lw / waves;
           thin.moveTo(s.x, s.y);
           for (let i = 0; i < waves; i++) {
@@ -1490,9 +1490,9 @@ export class Renderer {
           break;
         }
         case 'wavy': {
-          const waves = Math.min(MAX_HASHES, Math.max(2, Math.round(l / (st.bondLength * 0.17))));
+          const waves = Math.min(MAX_HASHES, Math.max(2, Math.round(l / (st.bondLength * 0.11))));
           const step = l / waves;
-          const amp = st.bondLength * 0.09;
+          const amp = st.bondLength * 0.07;
           thin.moveTo(s.x, s.y);
           for (let i = 0; i < waves; i++) {
             const a = add(s, mul(dir, step * i));
