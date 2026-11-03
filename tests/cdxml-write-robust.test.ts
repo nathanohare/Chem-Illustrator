@@ -834,3 +834,90 @@ describe('the new bond types and variable attachments (ChemDraw parity)', () => 
     expect(Array.from(n2.children).some((c) => c.getAttribute('Name') === 'Chem Illustrator ring')).toBe(false);
   });
 });
+
+describe('ring-fusion H, stacked labels, the new symbols and shadowed ovals (ChemDraw parity)', () => {
+  const ringAtom = () => {
+    const doc = newDoc();
+    let c = 0;
+    doc.edit('Draw', () => {
+      const ids: number[] = [];
+      for (let i = 0; i < 6; i++) ids.push(doc.addAtom(50 + 14.4 * Math.cos((i * Math.PI) / 3), 50 + 14.4 * Math.sin((i * Math.PI) / 3), 6).id);
+      for (let i = 0; i < 6; i++) doc.addBond(ids[i], ids[(i + 1) % 6]);
+      c = ids[0];
+    });
+    return { doc, c };
+  };
+
+  it('writes a ring-fusion H as HDot or HDash, through CDX, and a change on a read file', () => {
+    const { doc, c } = ringAtom();
+    doc.edit('H', () => doc.updateAtom(c, { hDot: 'dot' }));
+    let xml = writeCdxml(doc);
+    let n = all(parse(xml), 'n').find((e) => e.getAttribute('id') === String(c))!;
+    expect(n.getAttribute('HDot')).toBe('yes');
+    expect(n.getAttribute('HDash')).toBeNull();
+    expect(readCdxml(viaCdx(xml)).doc.atoms.get(c)?.hDot).toBe('dot');
+    // on a file read back, H-Dot made H-Dash, then none
+    const back = readCdxml(xml).doc;
+    back.edit('H', () => back.updateAtom(c, { hDot: 'dash' }));
+    xml = writeCdxml(back);
+    n = all(parse(xml), 'n').find((e) => e.getAttribute('id') === String(c))!;
+    expect([n.getAttribute('HDot'), n.getAttribute('HDash')]).toEqual([null, 'yes']);
+    expect(readCdxml(viaCdx(xml)).doc.atoms.get(c)?.hDot).toBe('dash');
+    const again = readCdxml(xml).doc;
+    again.edit('H', () => again.updateAtom(c, { hDot: undefined }));
+    n = all(parse(writeCdxml(again)), 'n').find((e) => e.getAttribute('id') === String(c))!;
+    expect([n.getAttribute('HDot'), n.getAttribute('HDash')]).toEqual([null, null]);
+  });
+
+  it('a label stacked and centred is written stacked (Above or Below), not Center', () => {
+    const doc = newDoc();
+    let nId = 0;
+    doc.edit('Draw', () => {
+      const n = doc.addAtom(100, 100, 7);
+      nId = n.id;
+      doc.addBond(n.id, doc.addAtom(87.5, 92.8, 6).id);
+      doc.addBond(n.id, doc.addAtom(112.5, 92.8, 6).id);
+    });
+    doc.edit('Align', () => doc.updateAtom(nId, { centred: true, stacked: 'down' }));
+    const t = all(parse(writeCdxml(doc)), 't').find((e) => e.textContent === 'NH')!;
+    expect(t.getAttribute('LabelAlignment')).toBe('Below');
+    expect(t.getAttribute('LabelJustification')).not.toBe('Center');
+    expect(readCdxml(viaCdx(writeCdxml(doc))).doc.atoms.get(nId)?.stacked).toBe('down');
+  });
+
+  it('writes radical ions, the dagger and the bar lone pair as ChemDraw symbols, through CDX', () => {
+    const doc = newDoc();
+    doc.edit('Draw', () => {
+      doc.addShape({ kind: 'symbol', symbol: 'RadicalCation', x1: 10, y1: 10, x2: 16.5, y2: 16.5 });
+      doc.addShape({ kind: 'symbol', symbol: 'RadicalAnion', x1: 30, y1: 10, x2: 36.5, y2: 16.5 });
+      doc.addShape({ kind: 'symbol', symbol: 'Dagger', x1: 50, y1: 10, x2: 56, y2: 16 });
+      doc.addShape({ kind: 'symbol', symbol: 'LonePairBar', x1: 70, y1: 10, x2: 76, y2: 10 });
+    });
+    const xml = writeCdxml(doc);
+    const types = all(parse(xml), 'graphic').map((g) => g.getAttribute('SymbolType'));
+    expect(types).toEqual(['RadicalCation', 'RadicalAnion', 'Dagger', 'LonePairBar']);
+    // no shape tag: ChemDraw's own words carry them
+    expect(all(parse(xml), 'objecttag').length).toBe(0);
+    expect(viaCdx(xml)).toMatch(/SymbolType="LonePairBar"/);
+    const back = [...readCdxml(viaCdx(xml)).doc.shapes.values()];
+    expect(back.map((s) => s.symbol)).toEqual(['RadicalCation', 'RadicalAnion', 'Dagger', 'LonePairBar']);
+    // the bar keeps its two ends
+    const bar = back[3];
+    expect([bar.x1, bar.y1, bar.x2, bar.y2].map((v) => Math.round(v))).toEqual([70, 10, 76, 10]);
+    // boxes: a radical ion's dot then its sign's middle; a dagger's centre then its width, as for a charge sign
+    const bbs = all(parse(xml), 'graphic').map((g) => g.getAttribute('BoundingBox'));
+    expect(bbs[0]).toBe('11.30 13.25 14.55 13.25');
+    expect(bbs[2]).toBe('53.00 13.00 53.00 19.00');
+  });
+
+  it('a shadowed oval is written Shadowed with a shadow size, as a shadowed box is', () => {
+    const doc = newDoc();
+    doc.edit('Draw', () => { doc.addShape({ kind: 'oval', x1: 0, y1: 0, x2: 40, y2: 20, shadow: true }); });
+    const g = all(parse(writeCdxml(doc)), 'graphic')[0];
+    expect(g.getAttribute('OvalType')).toMatch(/Shadowed/);
+    expect(Number(g.getAttribute('ShadowSize'))).toBeGreaterThan(0);
+    const s = [...readCdxml(viaCdx(writeCdxml(doc))).doc.shapes.values()][0];
+    expect(s.shadow).toBe(true);
+    expect(s.shadowSize).toBeCloseTo(4 * doc.style.lineWidth, 1);
+  });
+});

@@ -294,7 +294,6 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       }
       // read as plain atoms, which they aren't quite: said so in the read's warnings
       if (type === 'LinkNode') skip(`${type} node`);
-      if (n.getAttribute('HDot') === 'yes' || n.getAttribute('HDash') === 'yes') skip('H dot or dash on an atom');
       if (type === 'ExternalConnectionPoint') {
         // a point of attachment drawn on its own (the wavy line ending a substituent)
         const a = doc.addAtom(x, y, 0, { id, attach: n.getAttribute('ExternalConnectionType') ?? 'Unspecified' });
@@ -315,6 +314,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (xyz.length === 3 && xyz.every(Number.isFinite)) extra.xyz = xyz as [number, number, number];
       const rad = n.getAttribute('Radical');
       if (rad === 'Singlet' || rad === 'Doublet' || rad === 'Triplet') extra.radical = rad.toLowerCase() as Atom['radical'];
+      // a ring-fusion H: a filled dot (toward the viewer) or a hashed one (away)
+      if (n.getAttribute('HDot') === 'yes') extra.hDot = 'dot';
+      else if (n.getAttribute('HDash') === 'yes') extra.hDot = 'dash';
       const c = color(n);
       if (c) extra.color = c;
       if (chargeShown.has(n.getAttribute('id') ?? '')) extra.hideCharge = true;
@@ -1034,8 +1036,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
           const r = tb.length >= 4 ? { x1: tb[0], y1: tb[1], x2: tb[2], y2: tb[3] } : { x1: Math.min(bb[0], bb[2]), y1: bb[1] - 11, x2: Math.max(bb[0], bb[2]), y2: bb[1] };
           const pad = 2;
           add({ ...base, kind: 'symbol', symbol: sym, x1: r.x1 - pad, y1: r.y1 - pad, x2: r.x2 + pad, y2: r.y2 + pad });
-        } else if (sym === 'LonePair') {
-          // the two dots
+        } else if (sym === 'LonePair' || sym === 'LonePairBar') {
+          // the two dots (or the bar's two ends)
           add({ ...base, kind: 'symbol', symbol: sym, x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3] });
         } else if (sym === 'Electron') {
           // the dot, then a point further out that only sets its size

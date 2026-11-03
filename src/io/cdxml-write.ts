@@ -913,6 +913,9 @@ class CdxmlWriter {
     this.set(n, 'IgnoreWarnings', a.ignoreWarnings ? 'yes' : null);
     this.set(n, 'ShowTerminalCarbonLabels', a.showCarbon && !labelled ? 'yes' : null);
     this.set(n, 'Radical', a.radical ? a.radical[0].toUpperCase() + a.radical.slice(1) : null);
+    // a ring-fusion H drawn as a filled (toward the viewer) or hashed (away) dot
+    this.set(n, 'HDot', a.hDot === 'dot' ? 'yes' : null);
+    this.set(n, 'HDash', a.hDot === 'dash' ? 'yes' : null);
     this.set(n, 'xyz', a.xyz ? a.xyz.map(f2).join(' ') : null);
   }
 
@@ -1071,7 +1074,8 @@ class CdxmlWriter {
     });
     if (below) y2 = Math.max(y2, baseline + 0.23 * size);
     // a label centred on its atom (Ru, Si): ChemDraw puts the text's point at the middle and writes Center three ways
-    const centred = !!a.centred && Math.abs(x1 + x2) < 1;
+    // (a label stacked above or below is written as that, even when it is also centred)
+    const centred = !!a.centred && !a.stacked && Math.abs(x1 + x2) < 1;
     const right = !centred && dir === 'left' && [...layout.runs.map((r) => r.text).join('')].length > 1;
     t.setAttribute('p', pt({ x: a.x + (centred ? (x1 + x2) / 2 : right ? x2 : x1), y: a.y + baseline }));
     t.setAttribute('BoundingBox', box({ x1: a.x + x1, y1: a.y + y1, x2: a.x + x2, y2: a.y + y2 }));
@@ -2195,9 +2199,14 @@ class CdxmlWriter {
           sp.textContent = word;
           t.appendChild(sp);
           g.appendChild(t);
-        } else if (s.symbol === 'LonePair') set('BoundingBox', box(s));
-        else {
-          // a charge sign as ChemDraw stores it: the sign's centre, then a point its width below
+        } else if (s.symbol === 'LonePair' || s.symbol === 'LonePairBar') set('BoundingBox', box(s));
+        else if (s.symbol === 'RadicalCation' || s.symbol === 'RadicalAnion') {
+          // a radical ion: the dot, then the middle of the charge's sign (as drawn here)
+          const c = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };
+          const r = Math.max(1.6, Math.min(Math.abs(s.x2 - s.x1), Math.abs(s.y2 - s.y1)) / 2);
+          set('BoundingBox', `${f2(c.x - r * 0.6)} ${f2(c.y)} ${f2(c.x + r * 0.4)} ${f2(c.y)}`);
+        } else {
+          // a charge sign (or a dagger) as ChemDraw stores it: the sign's centre, then a point its width below
           const c = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };
           set('BoundingBox', `${f2(c.x)} ${f2(c.y)} ${f2(c.x)} ${f2(c.y + Math.abs(s.x2 - s.x1))}`);
         }
