@@ -610,6 +610,8 @@ class CdxmlWriter {
         wrote = true;
       }
       if (this.bondStereo(e, b, false)) wrote = true;
+      // (a label retyped: the character the bond met may be gone)
+      if (this.bondAttach(e, b)) wrote = true;
     }
     if (wrote) this.changed = true;
     return wrote;
@@ -1240,9 +1242,36 @@ class CdxmlWriter {
     return e;
   }
 
+  /**
+   * The label characters a bond meets (BeginAttach, EndAttach), with B and E: only while that
+   * atom's label still has the character. True when the element changed.
+   */
+  private bondAttach(e: Element, b: Bond, o?: Bond | null): boolean {
+    // turned round since it was read: the file's own indices go with their atoms
+    if (o && o.a1 === b.a2 && o.a2 === b.a1) {
+      const [p, q] = [e.getAttribute('BeginAttach'), e.getAttribute('EndAttach')];
+      this.set(e, 'BeginAttach', q);
+      this.set(e, 'EndAttach', p);
+    }
+    const attach = (atom: number, i: number | undefined): string | null | undefined => {
+      const a = this.doc.atoms.get(atom), label = a?.label;
+      // (an automatic label, such as HO, unchanged since it was read keeps the file's own index)
+      if (!label && a && this.orig<Atom>('a', atom) && this.orig<Atom>('a', atom)!.label === label && this.orig<Atom>('a', atom)!.z === a.z) return undefined;
+      return i && i > 0 && label && i < [...label].length ? String(i) : null;
+    };
+    let changed = false;
+    for (const [k, v] of [['BeginAttach', attach(b.a1, b.beginAttach)], ['EndAttach', attach(b.a2, b.endAttach)]] as const) {
+      if (v === undefined || e.getAttribute(k) === v) continue;
+      this.set(e, k, v);
+      changed = true;
+    }
+    return changed;
+  }
+
   private patchBond(e: Element, b: Bond, o?: Bond | null): void {
     e.setAttribute('B', this.nodeId(b.a1));
     e.setAttribute('E', this.nodeId(b.a2));
+    this.bondAttach(e, b, o);
     // a bond read from a file whose order and look haven't changed keeps ChemDraw's own words for
     // them (orders such as 2.5 or ionic, hollow and wavy wedges, Display2), which we don't draw
     if (!o || o.order !== b.order || o.display !== b.display || !o.plain !== !b.plain || !o.circle !== !b.circle) {
@@ -2019,6 +2048,8 @@ class CdxmlWriter {
         set('MajorAxisEnd3D', pt3({ x: c.x + rx * cos, y: c.y + rx * sin }));
         set('MinorAxisEnd3D', pt3({ x: c.x - ry * sin, y: c.y + ry * cos }));
         set('OvalType', [Math.abs(rx - ry) < 0.01 && 'Circle', filled, s.dashed && 'Dashed', s.bold && 'Bold', s.shadow && 'Shadowed'].filter(Boolean).join(' ') || null);
+        // in hundredths of the line width, as for a box
+        set('ShadowSize', s.shadow && s.shadowSize !== undefined ? String(Math.round((s.shadowSize / lwRef) * 100)) : null);
         break;
       }
       case 'symbol': {
