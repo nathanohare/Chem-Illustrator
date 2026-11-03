@@ -56,3 +56,15 @@ describe('a stray carbon from ChemDraw', () => {
     expect(doc.atoms.get(11)!.bare).toBeUndefined();
   });
 });
+
+describe('the wavy line of a point of attachment', () => {
+  it('is sized as ChemDraw sizes it: waves from the bold width, length from the label size', async () => {
+    const { attachWave } = await import('../src/render/renderer');
+    const pts: number[] = [];
+    const path = { moveTo(x: number) { pts.push(x); }, quadraticCurveTo(_cx: number, _cy: number, x: number) { pts.push(x); } } as unknown as Path2D;
+    attachWave(path, { x: 0, y: 0 }, { x: 1, y: 0 }, 10, 4);
+    // 1.5 label sizes + 3 points, in half waves of half the bold width (ChemDraw: 19 pt, 10 half waves)
+    expect(pts.length - 1).toBe(9);
+    expect(Math.max(...pts) - Math.min(...pts)).toBeCloseTo(18, 6);
+  });
+});
