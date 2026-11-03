@@ -2,7 +2,7 @@
 // pictures, shapes and tables, and which structures and schemes become one picture each.
 // Kept apart from the PowerPoint writer so animations can use it without loading the writer.
 
-import type { Doc, Caption, Shape, Arrow } from '../model';
+import type { Doc, Caption, Shape, Arrow, OleMark } from '../model';
 import type { Rect } from '../geom';
 import { layoutText, type Measure } from '../text/layout';
 import { arialWidth } from '../text-metrics';
@@ -23,6 +23,8 @@ export interface SlideParts {
   connectors: Arrow[];
   /** Structures and schemes, each with the captions, arrows and shapes around it: one picture each. */
   drawings: Selection[];
+  /** The drawings that are ChemDraw objects from PowerPoint (saved back as ChemDraw objects), with their program's name. */
+  chemdraw: Map<Selection, string>;
   /** SmartArt-style diagrams: their frame (which keeps the text), shapes and connectors, each saved as one group. */
   diagrams: SlideDiagram[];
 }
@@ -55,7 +57,7 @@ const emptySel = (): Selection => ({ atoms: new Set(), bonds: new Set(), caption
 export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlideParts {
   const L = doc.style.bondLength;
   const gap = 0.75 * L;
-  type Item = { box: Rect; chem: boolean; add: (s: Selection) => void; text?: Caption; shape?: Shape; piece?: number };
+  type Item = { box: Rect; chem: boolean; add: (s: Selection) => void; text?: Caption; shape?: Shape; piece?: number; ole?: OleMark };
   const items: Item[] = [];
   const texts: Caption[] = [];
   const pictures: Shape[] = [];
@@ -66,8 +68,10 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
     const b = boxOf(pts);
     const pad = doc.style.labelSize * 0.6;
     const piece = pts.find((a) => a.piece !== undefined)?.piece;
+    // a structure drawn onto one from a ChemDraw object (a bond added to it) is part of that object
+    const ole = pts.find((a) => a.ole)?.ole;
     items.push({
-      box: { x1: b.x1 - pad, y1: b.y1 - pad, x2: b.x2 + pad, y2: b.y2 + pad }, chem: true, ...(piece !== undefined ? { piece } : {}),
+      box: { x1: b.x1 - pad, y1: b.y1 - pad, x2: b.x2 + pad, y2: b.y2 + pad }, chem: true, ...(piece !== undefined ? { piece } : {}), ...(ole ? { ole } : {}),
       add: (s) => {
         for (const id of frag) {
           s.atoms.add(id);
@@ -78,11 +82,13 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
   }
   const dia = slideDiagrams(doc);
   const connectors: Arrow[] = [];
-  for (const r of doc.arrows.values()) if (!dia.arrows.has(r.id) && (r.from || r.to || r.elbow)) connectors.push(r);
-  for (const r of doc.arrows.values()) if (!dia.arrows.has(r.id) && !(r.from || r.to || r.elbow)) items.push({ box: boxOf(arrowPoints(r, 12)), chem: true, add: (s) => s.arrows.add(r.id), ...(r.piece !== undefined ? { piece: r.piece } : {}) });
+  for (const r of doc.arrows.values()) if (!dia.arrows.has(r.id) && !r.ole && (r.from || r.to || r.elbow)) connectors.push(r);
+  for (const r of doc.arrows.values()) if (!dia.arrows.has(r.id) && (r.ole || !(r.from || r.to || r.elbow))) items.push({ box: boxOf(arrowPoints(r, 12)), chem: true, add: (s) => s.arrows.add(r.id), ...(r.piece !== undefined ? { piece: r.piece } : {}), ...(r.ole ? { ole: r.ole } : {}) });
   for (const sh of doc.shapes.values()) {
     if (sh.picture) continue; // a stand-in for a picture from a ChemDraw file
     if (dia.shapes.has(sh.id)) continue;
+    // everything from a ChemDraw object goes back in it (its boxes, tables and pictures too)
+    if (sh.ole) { items.push({ box: shapeBox(sh), chem: true, add: (s) => s.shapes.add(sh.id), shape: sh, ole: sh.ole }); continue; }
     if (sh.kind === 'picture') { pictures.push(sh); continue; }
     if (sh.kind === 'table') { if (sh.table) tables.push(sh); continue; }
     // a Smart Scheme's frame goes in its scheme's picture (in the scheme's ChemDraw data), so it finds its scheme again when read back
@@ -98,9 +104,9 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
   for (const c of doc.captions.values()) {
     // titles, text placeholders and text boxes are always PowerPoint text
     // (and hidden text, kept hidden in PowerPoint rather than left out of a structure's picture)
-    if (c.ph || c.wrap !== undefined || c.hidden) { texts.push(c); continue; }
+    if (!c.ole && (c.ph || c.wrap !== undefined || c.hidden)) { texts.push(c); continue; }
     const lay = layoutText(c, doc.style.captionSize, measure);
-    items.push({ box: { x1: c.x + lay.box.x1, y1: c.y + lay.box.y1, x2: c.x + lay.box.x2, y2: c.y + lay.box.y2 }, chem: false, add: (s) => s.captions.add(c.id), text: c, ...(c.piece !== undefined ? { piece: c.piece } : {}) });
+    items.push({ box: { x1: c.x + lay.box.x1, y1: c.y + lay.box.y1, x2: c.x + lay.box.x2, y2: c.y + lay.box.y2 }, chem: !!c.ole, add: (s) => s.captions.add(c.id), text: c, ...(c.piece !== undefined ? { piece: c.piece } : {}), ...(c.ole ? { ole: c.ole } : {}) });
   }
   // group things that touch (within the gap), by joining groups
   const parent = items.map((_, i) => i);
@@ -109,6 +115,9 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
   // pieces (Auto-Animate Steps) stay apart from everything else, and each is one whatever its gaps
   for (let i = 0; i < items.length; i++) {
     for (let j = i + 1; j < items.length; j++) {
+      // so do ChemDraw objects: each is one object, and nothing else joins it
+      const oa = items[i].ole?.id, ob = items[j].ole?.id;
+      if (oa !== undefined || ob !== undefined) { if (oa === ob) parent[find(i)] = find(j); continue; }
       const a = items[i].piece, b = items[j].piece;
       if (a !== undefined || b !== undefined ? a === b : near(items[i].box, items[j].box)) parent[find(i)] = find(j);
     }
@@ -120,12 +129,15 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
     groups.set(find(i), g);
   });
   const drawings: Selection[] = [];
+  const chemdraw = new Map<Selection, string>();
   const shapes: Shape[] = [];
   for (const g of groups.values()) {
     if (g.some((it) => it.chem)) {
       const s = emptySel();
       for (const it of g) it.add(s);
       drawings.push(s);
+      const ole = g.find((it) => it.ole)?.ole;
+      if (ole) chemdraw.set(s, ole.prog);
     } else {
       for (const it of g) {
         if (it.text) texts.push(it.text);
@@ -136,7 +148,7 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
   // top to bottom, then left to right, as people read (and as PowerPoint tabs through them)
   const top = (s: Selection) => Math.min(...[...s.atoms].map((id) => doc.atoms.get(id)!.y), ...[...s.arrows].map((id) => doc.arrows.get(id)!.tail.y), ...[...s.shapes].map((id) => doc.shapes.get(id)!.y1));
   drawings.sort((a, b) => top(a) - top(b));
-  return { texts, pictures, shapes: shapeOrder([...shapes, ...geos]), tables, drawings, connectors, diagrams: dia.diagrams };
+  return { texts, pictures, shapes: shapeOrder([...shapes, ...geos]), tables, drawings, chemdraw, connectors, diagrams: dia.diagrams };
 }
 
 export const arialMeasure: Measure = (t, size, _family, style) => arialWidth(t, size, /bold/.test(style));
