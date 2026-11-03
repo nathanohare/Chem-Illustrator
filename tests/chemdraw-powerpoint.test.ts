@@ -210,6 +210,14 @@ describe('reagent text ChemDraw keeps in a structure\'s fragment', () => {
     expect(back.atoms.size).toBe(2);
     expect(back.captions.size).toBe(1);
   });
+  it('reads ChemDraw 25\'s uninterpreted reagent label (an alternative group) in a fragment of its own as text', () => {
+    const own = `<?xml version="1.0"?><CDXML LabelSize="10"><page><fragment id="1">
+      <n id="5" p="100 0" NodeType="AnonymousAlternativeGroup" NeedsClean="yes" GenericNickname="MsCl, Et3N"><fragment id="7"><n id="8" p="0 0" Element="16"/><n id="9" p="10 0" Element="17"/><b id="10" B="8" E="9"/></fragment><t p="80 3" LabelJustification="Left" LabelAlignment="Left"><s font="3" size="5.25" face="96">MsCl, Et3N</s></t></n>
+    </fragment></page></CDXML>`;
+    const doc = readCdxml(own).doc;
+    expect(doc.atoms.size).toBe(0);
+    expect([...doc.captions.values()].map((c) => c.runs.map((r) => r.text).join(''))).toEqual(['MsCl, Et3N']);
+  });
   it('leaves a bonded label an atom', () => {
     const doc = readCdxml(cdxml.replace('<b id="4" B="2" E="3"/>', '<b id="4" B="2" E="3"/><b id="6" B="3" E="5"/>')).doc;
     expect(doc.atoms.size).toBe(3);

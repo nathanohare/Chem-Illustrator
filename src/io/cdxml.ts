@@ -241,7 +241,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (n.nodeName !== 'n' || bonded.has(n.getAttribute('id') ?? '')) continue;
       const type = n.getAttribute('NodeType');
       const t = kids(n).find((k) => k.nodeName === 't');
-      if (t && (type === 'Unspecified' || ((type === 'Fragment' || type === 'Nickname') && n.getAttribute('NeedsClean') === 'yes'))) {
+      // (ChemDraw 25 keeps reagent text such as "MsCl, Et3N" as an AnonymousAlternativeGroup it couldn't interpret)
+      if (t && (type === 'Unspecified' || ((type === 'Fragment' || type === 'Nickname' || type === 'AnonymousAlternativeGroup') && n.getAttribute('NeedsClean') === 'yes'))) {
         const c = captionOf(t);
         if (c) {
           const cap = doc.addCaption({ id: idFor(t), ...c });
