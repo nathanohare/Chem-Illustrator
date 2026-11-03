@@ -253,7 +253,7 @@ import { structurePlace } from './sheet/layout';
 import type { SheetFileDeps } from './io/sheet-files';
 import { fromEmbedSource, type Embedded } from './io/ole-object';
 import { objectPicture, type ObjectPicture } from './render/object-picture';
-import { ACS_1996, BOND_END_CHOICES, bondEndPrefs, DocStyle, MAP_LOOKS, mapLookPrefs, type MapLook } from './style';
+import { ACS_1996, BOND_END_CHOICES, bondEndPrefs, DocStyle, docMapLook, MAP_LOOKS, mapLookPrefs, type MapBoxStyle, type MapLook } from './style';
 import { DEFAULT_DEPTH_SHADE, depthShadePrefs } from './render/depth-shade';
 import { emptyTable, tableFromCells } from './table';
 import type { TableData } from './model';
@@ -3345,18 +3345,16 @@ async function mapAtomsCommand(): Promise<void> {
   const got = await ask('Map Atoms', [
     ...(arrow !== undefined ? [{ name: 'which', label: 'Map', value: 'step', options: [{ value: 'step', label: 'The selected reaction step' }, { value: 'all', label: 'Every step in the drawing' }] }] : []),
     { name: 'numbers', label: 'Show the map numbers beside the atoms', type: 'checkbox', value: mapChoice.numbers },
-    { name: 'look', label: 'Map number boxes', value: mapLookPrefs.look, options: MAP_LOOKS.map((l) => ({ value: l.value, label: l.label })) },
+    { name: 'look', label: 'Map number boxes', value: docMapLook(doc.style).look, options: MAP_LOOKS.map((l) => ({ value: l.value, label: l.label })) },
     { name: 'colours', label: 'Color each atom and where it goes the same', type: 'checkbox', value: mapChoice.colours },
     { name: 'bonds', label: 'Mark bonds made (green) and broken (red)', type: 'checkbox', value: mapChoice.bonds },
   ], { ok: 'Map', note: 'Atoms are paired the way Animate Reaction pairs them. To change a pair, pair it by hand in Animate Reaction and map again. Map numbers go into copied reaction SMILES and RXN files.' });
   if (!got) return;
   Object.assign(mapChoice, { numbers: got.numbers, colours: got.colours, bonds: got.bonds });
-  if (MAP_LOOKS.some((l) => l.value === got.look) && got.look !== mapLookPrefs.look) {
-    mapLookPrefs.look = got.look as MapLook;
-    doc.allDirty = true;
-    storeSettings();
+  if (MAP_LOOKS.some((l) => l.value === got.look) && got.look !== docMapLook(doc.style).look) {
+    setMapLook(got.look as MapLook);
     // your own format: set it now (it starts as light peach with a dark outline)
-    if (mapLookPrefs.look === 'custom') await mapFormatCommand(false);
+    if (got.look === 'custom') await mapFormatCommand(false);
   }
   const { mapAtoms, applyAtomMap } = await import('./morph/atom-map');
   const res = mapAtoms(doc, renderer, { arrow: got.which === 'step' ? arrow : undefined, measure: editor.measure() });
@@ -3377,19 +3375,29 @@ async function mapAtomsCommand(): Promise<void> {
 }
 
 /**
- * Chemistry > Reactions and Schemes > Map Number Format…: the user's own format for every
+ * The drawing's map-number look (and its own box format), saved with the file as one undoable
+ * step; the last one chosen is also the default for drawings with none of their own.
+ */
+function setMapLook(look: MapLook, box?: MapBoxStyle): void {
+  const own = { ...docMapLook(doc.style).custom, ...box };
+  doc.edit('Map Number Format', () => doc.setStyle({ ...doc.style, mapLook: look, mapBox: own }));
+  mapLookPrefs.look = look;
+  mapLookPrefs.custom = { ...own };
+  editor.changed();
+  storeSettings();
+}
+
+/**
+ * Chemistry > Reactions and Schemes > Map Number Format…: this drawing's own format for every
  * map-number box; choosing it also switches the boxes to that format.
  */
 async function mapFormatCommand(switchLook = true): Promise<void> {
   finishTyping();
   const { askMapFormat } = await import('./ui/map-format');
-  const got = await askMapFormat(mapLookPrefs.custom);
+  const now = docMapLook(doc.style);
+  const got = await askMapFormat(now.custom);
   if (!got) return;
-  mapLookPrefs.custom = got;
-  if (switchLook) mapLookPrefs.look = 'custom';
-  doc.allDirty = true;
-  editor.requestScene();
-  storeSettings();
+  setMapLook(switchLook ? 'custom' : now.look, got);
 }
 
 /** Chemistry > Reactions and Schemes > Clear Atom Map: on the selected structures, or everywhere. */
