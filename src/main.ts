@@ -29,7 +29,7 @@ import { selectionBox, atomsBox, POINTS, type Align, units, moveUnit } from './e
 import { defaultColumns } from './editor/grid-arrange';
 import { askGridLayout, type GridPick } from './ui/grid-picker';
 import { groupSelection, selectedGroups } from './editor/groups';
-import { chemistrySelection, loneStructure } from './editor/lone-pick';
+import { chemistrySelection, loneStructure, repeatsOnAll } from './editor/lone-pick';
 import { readCdxml, ReadStats } from './io/cdxml';
 import { readCml } from './io/cml';
 import { ChemClient } from './chem/client';
@@ -11780,8 +11780,8 @@ editor.onContextMenu = (e) => {
   const picked = new Set(editor.sel.atoms);
   const h = editor.contextPick(e);
   contextBond = h?.kind === 'bond' ? h.id : null;
-  // (Repeat Label is for that atom only, unless it was one of several picked)
-  contextAtom = h?.kind === 'atom' ? { id: h.id, all: picked.has(h.id) && picked.size > 1 } : null;
+  // (Repeat Label is for that atom only, unless it was one of several picked, not a whole structure)
+  contextAtom = h?.kind === 'atom' ? { id: h.id, all: repeatsOnAll(doc, picked, h.id) } : null;
   rightClickAt = { left: e.clientX, bottom: e.clientY };
   showContextMenu(e.clientX, e.clientY, drawingMenu(), { run: (cmd) => void command(cmd), key: commandKey });
 };

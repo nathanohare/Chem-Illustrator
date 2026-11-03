@@ -39,3 +39,15 @@ it('anything bigger is taken as it is', () => {
   expect(chemistrySelection(doc, two, true)).toBe(two);
   expect(chemistrySelection(doc, sel([]), false)).toBeNull();
 });
+
+it('Repeat Label from the menu goes on every picked atom, but not on a whole picked structure', async () => {
+  const { repeatsOnAll } = await import('../src/editor/lone-pick');
+  const { doc, c1, c2, o, w } = ethanolAndWater();
+  // the O of ethanol and the water picked: both get the label
+  expect(repeatsOnAll(doc, new Set([o, w]), o)).toBe(true);
+  // all of ethanol picked: just the atom right-clicked
+  expect(repeatsOnAll(doc, new Set([c1, c2, o]), o)).toBe(false);
+  // the atom right-clicked wasn't picked, or was picked alone
+  expect(repeatsOnAll(doc, new Set([c1, w]), o)).toBe(false);
+  expect(repeatsOnAll(doc, new Set([o]), o)).toBe(false);
+});

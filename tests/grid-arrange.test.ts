@@ -225,7 +225,8 @@ describe('the Arrange in a Grid window', () => {
     const seen: string[] = [];
     const got = askGridLayout(10, { cols: 4, rowGap: 20, colGap: 15 }, (p) => { seen.push(`${p.cols}/${p.rowGap}/${p.colGap}`); return '<svg></svg>'; });
     const d = document.querySelector('dialog.grid-picker')!;
-    expect(d.querySelector('.grid-pick-count')!.textContent).toBe('10 items selected');
+    // the count sits in the title row, not on a line of its own
+    expect(d.querySelector('h2 .grid-pick-count')!.textContent).toBe('10 items');
     const input = (n: string) => d.querySelector<HTMLInputElement>(`input[name=${n}]`)!;
     expect(input('rows').value).toBe('3');
     input('rows').value = '2';

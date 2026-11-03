@@ -2557,11 +2557,13 @@ export class Editor {
     let moved = false;
     for (const k of before.keys()) if (k[0] === 'a' || k[0] === 'b' || k[0] === 'r') { moved = true; break; }
     if (!moved) return;
+    // (no curved arrow stuck to anything: nothing to measure, which on a big drawing takes seconds)
+    const pinned = [...doc.arrows.values()].filter((r) => r.pin && !r.bent && !r.equilibrium && !r.elbow && isCurved(r));
+    if (!pinned.length) return;
     const m = this.measure();
     const L = doc.style.bondLength;
     const touched = (r: Arrow) => before.has('r' + r.id) || [r.pin?.tail, r.pin?.head].some((p) => p?.ref.some((id) => before.has('a' + id)));
-    for (const r of [...doc.arrows.values()]) {
-      if (!r.pin || r.bent || r.equilibrium || r.elbow || !isCurved(r)) continue;
+    for (const r of pinned) {
       // (only near what changed: an arrow elsewhere stays as it is)
       if (!touched(r) && ![...doc.arrows.values()].some((o) => o.id !== r.id && before.has('r' + o.id) && dist(o.head, r.head) < 1.5 * L)) continue;
       const now = arrowClash(doc, m, r);
@@ -5263,6 +5265,8 @@ export class Editor {
    * it go doesn't send the keys to the menu bar.
    */
   private freeAngleKey(e: KeyboardEvent): boolean {
+    // Space let go anywhere (in a text box, or while the drawing was paused) is no longer held
+    if (e.type === 'keyup' && e.code === 'Space') this.spaceHeld = false;
     if (this.paused) return false;
     const target = e.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) return false;
@@ -6351,7 +6355,7 @@ export class Editor {
       ctx.lineWidth = (snapped ? 2 : 1) * px;
       ctx.beginPath();
       if (l.axis === 'x') { ctx.moveTo(l.at, area.y1); ctx.lineTo(l.at, area.y2); } else { ctx.moveTo(area.x1, l.at); ctx.lineTo(area.x2, l.at); }
-      // the ticks, as on a ruler (the grid's own lines carry only their minor ticks where they cross nothing)
+      // the ticks, as on a ruler, major and minor, on every line (the grid's own lines too)
       const [a, b] = l.axis === 'x' ? [area.y1, area.y2] : [area.x1, area.x2];
       for (const t of ticksBetween(a, b, l.origin, g, minGap)) {
         const half = (t.major ? 6 : 3) * px;
