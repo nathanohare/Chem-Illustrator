@@ -259,6 +259,9 @@ const plainFontChar = (ch: string) => ch.charCodeAt(0) < 0x100 || WIN_EXTRA.has(
 /** Does text read from the Symbol font hold a sign an ordinary font has too (•, °, ±), which would otherwise be saved in that font? */
 export const symbolOnlyByChoice = (text: string): boolean => [...text].some((ch) => plainFontChar(ch) && TO_SYMBOL.has(ch) && ch !== ' ');
 
+/** Does text read from an ordinary font hold a sign that would otherwise be saved in the Symbol font (−)? */
+export const plainByChoice = (text: string): boolean => [...text].some((ch) => !plainFontChar(ch) && TO_SYMBOL.has(ch));
+
 /** Can this character be saved for ChemDraw (directly, or through the Symbol font)? */
 export const savableChar = (ch: string): boolean => plainFontChar(ch) || TO_SYMBOL.has(ch);
 
@@ -266,11 +269,12 @@ export const savableChar = (ch: string): boolean => plainFontChar(ch) || TO_SYMB
  * Split text for saving: characters an ordinary font can't hold but the Symbol font can
  * (Greek letters, arrows, ≤ and so on) come out as Symbol-font pieces.
  */
-export function toSymbolPieces(text: string, symbolFont = false): { text: string; symbol: boolean }[] {
+export function toSymbolPieces(text: string, symbolFont?: boolean): { text: string; symbol: boolean }[] {
   const out: { text: string; symbol: boolean }[] = [];
   for (const ch of text) {
-    // (a run read from ChemDraw's Symbol font keeps signs such as • in it, though Arial has them too)
-    const sym = (symbolFont || !plainFontChar(ch)) && TO_SYMBOL.has(ch);
+    // (a run read from ChemDraw's Symbol font keeps signs such as • in it, though Arial has them too;
+    // one read from an ordinary font keeps its − there)
+    const sym = symbolFont !== false && (symbolFont || !plainFontChar(ch)) && TO_SYMBOL.has(ch);
     const t = sym ? TO_SYMBOL.get(ch)! : ch;
     const last = out[out.length - 1];
     if (last && last.symbol === sym) last.text += t;

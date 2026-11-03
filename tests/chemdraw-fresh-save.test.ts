@@ -131,6 +131,26 @@ describe('a fresh save', () => {
     expect(node(out).hasAttribute('NeedsClean')).toBe(false);
     expect(fresh(label('Element="8" NumHydrogens="1"', '<s font="3" size="10" face="96">OH</s>')).out.querySelector('n[id="11"]')!.getAttribute('NeedsClean')).toBe('yes');
   });
+  it("keeps a label ChemDraw couldn't interpret as Unspecified while it is unchanged", () => {
+    const { doc, out } = fresh(label('NodeType="Unspecified"', '<s font="3" size="10" face="96">(3,4)-XYZ</s>'));
+    expect(node(out).getAttribute('NodeType')).toBe('Unspecified');
+    expect(node(out).hasAttribute('NeedsClean')).toBe(false);
+    expect(node(out).querySelector('fragment')).toBeNull();
+    // retyped: worked out again
+    doc.edit('Label', () => doc.updateAtom(11, { label: 'OMe' }));
+    doc.source = null;
+    const again = new DOMParser().parseFromString(writeCdxml(doc), 'application/xml');
+    expect(node(again).getAttribute('NodeType')).not.toBe('Unspecified');
+  });
+  it('keeps a minus sign ChemDraw wrote in Arial in Arial', () => {
+    const { doc } = readCdxml('<?xml version="1.0" encoding="UTF-8" ?><CDXML><fonttable><font id="3" name="Arial"/></fonttable><page id="1"><t id="5" p="100 100"><s font="3" size="8" face="0">\u2212' + '10 \u00baC</s></t></page></CDXML>');
+    doc.source = null;
+    const out = new DOMParser().parseFromString(writeCdxml(doc), 'application/xml');
+    const fonts = new Map([...out.querySelectorAll('fonttable font')].map((f) => [f.getAttribute('id'), f.getAttribute('name')]));
+    expect([...out.querySelectorAll('t > s')].map((s) => [fonts.get(s.getAttribute('font')), s.textContent])).toEqual([['Arial', '\u221210 \u00baC']]);
+    // typed here, a minus still goes in Symbol as ChemDraw writes it
+    expect(toSymbolPieces('\u2212')).toEqual([{ text: '-', symbol: true }]);
+  });
   it("keeps ChemDraw's own FadePercent where a round one gives the same tint here (72, not 70)", () => {
     // on black, 72 and 70 both round to #ededed here, but ChemDraw draws 72 a level darker
     const rect = (f: number) => `<graphic id="31" BoundingBox="10 10 40 30" color="3" GraphicType="Rectangle" FadePercent="${f}"/>`;
