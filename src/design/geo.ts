@@ -153,23 +153,23 @@ export const GEOS: GeoDef[] = [
   {
     id: 'cloud', name: 'Cloud', group: 'Basic shapes', prst: 'cloud', size: [108, 72], keywords: 'thought idea',
     draw: (w, h) => {
-      // bumps round an oval
-      const n = 9, out: GeoStep[] = [];
+      // round bumps of a few sizes on an oval, meeting in dips: each bump is near a half circle
+      // standing on the chord between two points of the oval (worked in a unit square, then stretched)
+      const steps = [1, 0.8, 1.15, 0.9, 1.2, 0.85, 1.05, 0.95, 1.1, 0.9];
+      const total = steps.reduce((x, y) => x + y, 0);
       const pts: Vec[] = [];
-      for (let i = 0; i < n; i++) {
-        const a = -Math.PI / 2 + (i * 2 * Math.PI) / n;
-        pts.push({ x: w / 2 + 0.42 * w * Math.cos(a), y: h / 2 + 0.38 * h * Math.sin(a) });
+      let a = -Math.PI / 2;
+      for (const st of steps) {
+        pts.push({ x: 0.5 + 0.36 * Math.cos(a), y: 0.5 + 0.34 * Math.sin(a) });
+        a += (st / total) * 2 * Math.PI;
       }
-      for (let i = 0; i < n; i++) {
-        const p = pts[i], q = pts[(i + 1) % n];
-        const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
-        // push the middle of each bump out from the centre
-        const dx = mx - w / 2, dy = my - h / 2, d = Math.hypot(dx / w, dy / h) || 1;
-        const bx = mx + (dx / d) * 0.17, by = my + (dy / d) * 0.17;
-        const cx1 = p.x + (bx - p.x) * 1.1, cy1 = p.y + (by - p.y) * 1.1;
-        const cx2 = q.x + (bx - q.x) * 1.1, cy2 = q.y + (by - q.y) * 1.1;
-        if (!i) out.push(['M', p.x, p.y]);
-        out.push(['C', cx1 + (dx / d) * 0.12, cy1 + (dy / d) * 0.12, cx2 + (dx / d) * 0.12, cy2 + (dy / d) * 0.12, q.x, q.y]);
+      const out: GeoStep[] = [['M', pts[0].x * w, pts[0].y * h]];
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i], q = pts[(i + 1) % pts.length];
+        // outward, going clockwise on the screen
+        const nx = q.y - p.y, ny = p.x - q.x;
+        const k = 0.75;
+        out.push(['C', (p.x + nx * k) * w, (p.y + ny * k) * h, (q.x + nx * k) * w, (q.y + ny * k) * h, q.x * w, q.y * h]);
       }
       out.push(['Z']);
       // keep it inside its box

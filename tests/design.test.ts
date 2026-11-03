@@ -429,3 +429,30 @@ describe('remove white background', () => {
     expect(grey[3]).toBe(128);
   });
 });
+
+describe('cloud shape', () => {
+  it('is round bumps that bulge out, not spikes (laptop bench wd-review-1103)', () => {
+    const w = 300, h = 200;
+    const body = GEO_BY_ID.get('cloud')!.draw(w, h).body;
+    const curves = body.filter((s) => s[0] === 'C');
+    expect(curves.length).toBeGreaterThanOrEqual(8);
+    let from = body[0] as [string, number, number];
+    for (const c of curves) {
+      const [, x1, y1, x2, y2, x, y] = c as [string, number, number, number, number, number, number];
+      // in the unit square, each bump's control points stand off its chord by most of the chord's length (a half circle)
+      const px = from[1] / w, py = from[2] / h, qx = x / w, qy = y / h;
+      const chord = Math.hypot(qx - px, qy - py);
+      const nx = (qy - py) / chord, ny = (px - qx) / chord;
+      for (const [cx, cy] of [[x1 / w - px, y1 / h - py], [x2 / w - qx, y2 / h - qy]]) {
+        expect(cx * nx + cy * ny).toBeGreaterThan(0.6 * chord);
+        // straight out, not leaning into a point
+        expect(Math.abs(cx * -ny + cy * nx)).toBeLessThan(0.05 * chord);
+      }
+      from = ['C', x, y];
+    }
+    // and it fills its box
+    const xs = body.flatMap((s) => (s[0] === 'C' ? [s[1], s[3], s[5]] : s[0] === 'Z' ? [] : [s[1]]));
+    expect(Math.min(...xs)).toBeCloseTo(0, 3);
+    expect(Math.max(...xs)).toBeCloseTo(w, 3);
+  });
+});
