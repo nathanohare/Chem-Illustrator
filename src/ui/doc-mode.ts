@@ -104,6 +104,8 @@ export interface DocModeHost {
   command(name: string): boolean;
   /** The document changed (for the unsaved mark on its tab). */
   changed(): void;
+  /** Settings ▸ Preferences: offer to make structures figures when a document opens (true unless turned off). */
+  offerFigures?(): boolean;
   /** Open the drawing tools on a drawing (null to draw a new one); `done` gets it, or null when cancelled. */
   editDrawing(contents: Contents | null, title: string, done: (c: Contents | null) => void): void;
   /** Draw a structure in place on its page (the pages follow the drawing tools' zoom and scrolling); `done` as for editDrawing. */
@@ -351,6 +353,7 @@ export class DocumentMode {
       apply: (t, kind) => { this.file?.ed.update(t, kind); this.focus(); },
       redraw: () => this.redraw(),
       flash: (msg) => this.host.flash(msg),
+      allowed: () => this.host.offerFigures?.() ?? true,
     });
     this.comments = new DocComments(docHost, this.view, {
       file: () => this.file,
