@@ -157,7 +157,13 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     } catch { /* not ours to read */ }
   }
   const pb = pg?.getAttribute('BoundingBox')?.trim().split(/\s+/).map(Number);
-  if (pb && pb.length === 4 && pb.every(isFinite)) {
+  const posterW = Number(pg?.getAttribute('Width')), posterH = Number(pg?.getAttribute('Height'));
+  if (pg?.getAttribute('DrawingSpace') === 'poster' && pb && pb.length === 4 && pb.every(isFinite)) {
+    // a poster is one sheet of its own size (Width and Height); WidthPages and HeightPages only say
+    // how many sheets of paper it prints on
+    const w = posterW > 10 ? posterW : pb[2] - pb[0], h = posterH > 10 ? posterH : pb[3] - pb[1];
+    if (w > 10 && h > 10) doc.page = { w, h, grow: false, poster: true };
+  } else if (pb && pb.length === 4 && pb.every(isFinite)) {
     const wp = Math.max(1, Number(pg!.getAttribute('WidthPages')) || 1), hp = Math.max(1, Number(pg!.getAttribute('HeightPages')) || 1);
     const w = (pb[2] - pb[0]) / wp, h = (pb[3] - pb[1]) / hp;
     if (w > 10 && h > 10) {
@@ -388,7 +394,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         // which way the label runs: the node's LabelDisplay, else the text's LabelJustification;
         // LabelAlignment counts only for labels stacked above or below (the spec: multi-attached labels)
         const ld = n.getAttribute('LabelDisplay');
-        if (la === 'Above' || la === 'Below') atom.just = 'auto';
+        if (la === 'Above' || la === 'Below') { atom.just = 'auto'; atom.stacked = la === 'Above' ? 'up' : 'down'; }
         else if (ld === 'Left' || ld === 'Right') atom.just = ld === 'Left' ? 'right' : 'left';
         else if (lj === 'Right' || lj === 'Left') atom.just = lj === 'Right' ? 'left' : 'right';
         else if (la === 'Right') atom.just = 'left';

@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 //
-// Reading fixes from the CDXML audit (findings R4, R5, R6, R8, R9), each against a small drawing
+// Reading fixes from the CDXML audit (findings R4, R5, R6, R8, R9 and on), each against a small drawing
 // written the way ChemDraw 25 saves it.
 
 import { describe, it, expect } from 'vitest';
 import { readCdxml } from '../src/io/cdxml';
 import { Renderer } from '../src/render/renderer';
+import { labelSpec, layoutLabel } from '../src/chem/labels';
 
 const doc = (body: string, root = '') => readCdxml(`<?xml version="1.0" encoding="UTF-8" ?><CDXML${root}><colortable><color r="1" g="1" b="1"/><color r="0" g="0" b="0"/></colortable><page id="1">${body}</page></CDXML>`).doc;
 const PNG = '89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4890000000D4944415478DA63F8CFC0F01F0005000201E3F7B3E60000000049454E44AE426082';
@@ -131,5 +132,34 @@ describe('the CDXML audit, reading side (6): our tags give way to edits made in 
   it('E2: heads changed in ChemDraw win over our curve tag', () => {
     const d = doc(`<curve id="40" CurveType="0" CurvePoints="0 0 0 0 10 10 20 0 20 0 20 0">${tag('Chem Illustrator arrow', JSON.stringify({ headStyle: 'full', seen: { curveType: 8 } }))}</curve>`);
     expect(d.arrows.get(40)!.headStyle).toBe('none');
+  });
+});
+
+describe('the CDXML audit, reading side (7): R32, R11', () => {
+  const measure = (t: string, s: number) => t.length * s * 0.6;
+  it('R32: a label ChemDraw stacks below (or above) keeps one piece per line, lined up on the atom symbol', () => {
+    const d = doc('<fragment id="2"><n id="10" p="10 10"/><n id="11" p="22.47 17.2" Element="7" NumHydrogens="0"><t LabelJustification="Left" LabelAlignment="Below"><s font="3" size="10" face="96">NCO2Me</s></t></n><n id="12" p="34.94 10"/><b id="20" B="10" E="11"/><b id="21" B="11" E="12"/></fragment>'
+      + '<fragment id="3"><n id="30" p="10 60"/><n id="31" p="22.47 52.8" Element="8" NumHydrogens="0"><t LabelJustification="Left" LabelAlignment="Above"><s font="3" size="10" face="96">OMe</s></t></n><n id="32" p="34.94 60"/><b id="40" B="30" E="31"/><b id="41" B="31" E="32"/></fragment>');
+    const n = d.atoms.get(11)!, o = d.atoms.get(31)!;
+    expect(n.stacked).toBe('down');
+    expect(o.stacked).toBe('up');
+    const lay = (label: string, stacked: 'up' | 'down', bonds: { x: number; y: number }[]) =>
+      layoutLabel({ ...labelSpec(7, label, 0, 0, 2, 2, true, false)!, stacked }, bonds, 10, measure, 'auto');
+    const below = lay('NCO2Me', 'down', [{ x: -0.87, y: -0.5 }, { x: 0.87, y: -0.5 }]);
+    const big = below.runs.filter((r) => r.size === 10);
+    expect(big.map((r) => r.text)).toEqual(['N', 'C', 'O', 'Me']);
+    // each line a label size lower, all starting at the left edge of the N
+    expect(big.map((r) => Math.round(r.dy - big[0].dy))).toEqual([0, 10, 20, 30]);
+    expect(new Set(big.map((r) => r.dx)).size).toBe(1);
+    const above = lay('OMe', 'up', [{ x: -0.87, y: 0.5 }, { x: 0.87, y: 0.5 }]);
+    expect(above.runs[1].dy - above.runs[0].dy).toBeCloseTo(-10, 6);
+  });
+
+  it('R11: a poster is one sheet of its own size, not a grid of letter pages', () => {
+    const d = readCdxml('<?xml version="1.0" encoding="UTF-8" ?><CDXML><page id="1" BoundingBox="0 0 5121 5040" Width="5121" Height="5040" HeightPages="8" WidthPages="11" DrawingSpace="poster"/></CDXML>').doc;
+    expect(d.page).toEqual({ w: 5121, h: 5040, grow: false, poster: true });
+    const p = readCdxml('<?xml version="1.0" encoding="UTF-8" ?><CDXML><page id="1" BoundingBox="0 0 1080 720" HeightPages="1" WidthPages="2"/></CDXML>').doc;
+    expect(p.page).toMatchObject({ w: 540, h: 720, across: 2 });
+    expect(p.page!.poster).toBeUndefined();
   });
 });
