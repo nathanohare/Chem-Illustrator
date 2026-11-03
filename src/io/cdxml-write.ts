@@ -916,22 +916,37 @@ class CdxmlWriter {
     const spec = this.shownSpec(a);
     if (!spec) return { text: '', hCount: 0 };
     const chargeText = !a.hideCharge && a.charge ? (Math.abs(a.charge) > 1 ? String(Math.abs(a.charge)) : '') + (a.charge > 0 ? '+' : '-') : '';
-    if (a.label !== null) return { text: a.label + (chargeText && !/[+\-−]$/.test(a.label) ? chargeText : ''), hCount: 0 };
+    if (a.label !== null) {
+      // told to run left, ChemDraw draws the text as written: MeO, not OMe
+      let label = a.label;
+      // (only a formula turns: a name like (3,4)-MDP reads the same both ways round)
+      if (!a.labelMarks && /^[A-Za-z0-9]+$/.test(a.label) && this.forcedDir(a) === 'left') {
+        const size = this.doc.style.labelSize * (a.s ?? 1);
+        const noCharge = { ...spec, ...labelLook(a), charge: 0 };
+        const drawn = layoutLabel(noCharge, labelBonds(this.doc, a), size, this.measure, a.just).runs.map((r) => r.text).join('');
+        if ([...drawn].sort().join('') === [...a.label].sort().join('')) label = drawn;
+      }
+      return { text: label + (chargeText && !/[+\-−]$/.test(a.label) ? chargeText : ''), hCount: 0 };
+    }
     const sym = a.isotope === 2 && a.z === 1 ? 'D' : SYMBOLS[a.z] ?? '?';
     const h = spec.hCount ? 'H' + (spec.hCount > 1 ? spec.hCount : '') : '';
-    // ChemDraw turns a label it lays out itself (OH reads HO where it runs left). One sent the other
-    // way than it would go by itself has LabelDisplay, and ChemDraw then draws the text as written.
+    // ChemDraw turns a label it lays out itself (OH reads HO where it runs left). One set to run a
+    // way has LabelDisplay, and ChemDraw then draws the text as written.
     const left = !!h && this.forcedDir(a) === 'left';
     return { text: (left ? h + sym : sym + h) + chargeText, hCount: spec.hCount };
   }
 
-  /** Which way a label runs when that is not the way it would run by itself, or null. */
+  /**
+   * Which way a label runs when ChemDraw has to be told: its file said so (ChemDraw's own choice
+   * isn't always ours), or it runs against the way it would go by itself. Else null.
+   */
   private forcedDir(a: Atom): 'left' | 'right' | null {
     const spec = this.shownSpec(a);
     if (!spec || !a.just || a.just === 'auto' || a.stacked) return null;
     const look = { ...spec, ...labelLook(a) }, dirs = labelBonds(this.doc, a);
     const dir = labelDir(look, dirs, a.just);
-    return dir !== labelDir(look, dirs, 'auto') && (dir === 'left' || dir === 'right') ? dir : null;
+    if (dir !== 'left' && dir !== 'right') return null;
+    return a.fixedDir || dir !== labelDir(look, dirs, 'auto') ? dir : null;
   }
 
   /** Element, charge, isotope, colour and size of a node. */
