@@ -41,6 +41,53 @@ export function chordLocal(tail: Vec, head: Vec, p: Vec): Vec {
   return { x: dot(d, u) / l2, y: dot(d, perp(u)) / l2 };
 }
 
+/**
+ * ChemDraw's arc of an ellipse as Bézier pieces (the controls and joins between the ends, as an
+ * arrow's `bez` has them, on the page): centre c, half-axes u (major) and v (minor) from it, going
+ * |angularSize| degrees round from the tail, the way that ends nearer the head. Null when it is
+ * a circle (an arc arrow draws that itself) or not an ellipse at all.
+ */
+export function ellipseArcPoints(c: Vec, u: Vec, v: Vec, tail: Vec, head: Vec, angularSize: number): Vec[] | null {
+  const ru = Math.hypot(u.x, u.y), rv = Math.hypot(v.x, v.y);
+  if (!angularSize || !ru || !rv || Math.abs(ru - rv) / Math.max(ru, rv) < 0.03) return null;
+  const det = u.x * v.y - u.y * v.x;
+  if (Math.abs(det) < 1e-9) return null;
+  const E = (t: number) => ({ x: c.x + u.x * Math.cos(t) + v.x * Math.sin(t), y: c.y + u.y * Math.cos(t) + v.y * Math.sin(t) });
+  const dE = (t: number) => ({ x: -u.x * Math.sin(t) + v.x * Math.cos(t), y: -u.y * Math.sin(t) + v.y * Math.cos(t) });
+  // the tail's place on the ellipse, in its own angle
+  const dx = tail.x - c.x, dy = tail.y - c.y;
+  const t0 = Math.atan2((u.x * dy - u.y * dx) / det, (dx * v.y - dy * v.x) / det);
+  const span = (Math.abs(angularSize) * Math.PI) / 180;
+  const off = (sg: number) => dist(E(t0 + sg * span), head);
+  const sweep = (off(1) <= off(-1) ? 1 : -1) * span;
+  const n = Math.max(1, Math.ceil(Math.abs(sweep) / (Math.PI / 2)));
+  const out: Vec[] = [];
+  for (let i = 0; i < n; i++) {
+    const t1 = t0 + (sweep * i) / n, t2 = t0 + (sweep * (i + 1)) / n;
+    const k = (4 / 3) * Math.tan((t2 - t1) / 4);
+    const p1 = E(t1), p2 = E(t2), d1 = dE(t1), d2 = dE(t2);
+    out.push({ x: p1.x + k * d1.x, y: p1.y + k * d1.y }, { x: p2.x - k * d2.x, y: p2.y - k * d2.y });
+    if (i < n - 1) out.push(p2);
+  }
+  return out;
+}
+
+/**
+ * An arrow's ChemDraw ellipse on the page (its centre, the ends of its half-axes and its
+ * AngularSize), for writing it back as ChemDraw's arc arrow; null once its curve is no longer
+ * that arc (reshaped, or flipped), when it is drawn and saved as the curve it is.
+ */
+export function arrowEllipse(r: Pick<Arrow, 'tail' | 'head' | 'bez' | 'ellipse'>): { center: Vec; major: Vec; minor: Vec; angularSize: number } | null {
+  const e = r.ellipse;
+  if (!e || !r.bez?.length) return null;
+  const P = (q: Vec) => chordPoint(r.tail, r.head, q);
+  const center = P(e.center), major = P(e.major), minor = P(e.minor);
+  const pts = ellipseArcPoints(center, sub(major, center), sub(minor, center), r.tail, r.head, e.angular);
+  const tol = 1e-3 * Math.max(1, dist(r.tail, r.head));
+  if (!pts || pts.length !== r.bez.length || pts.some((p, i) => dist(p, P(r.bez![i])) > tol)) return null;
+  return { center, major, minor, angularSize: e.angular };
+}
+
 /** A Bézier arrow's control points on the page: the tail, then two controls and an end for each curve (3n + 1 points). */
 export function bezPoints(r: Pick<Arrow, 'tail' | 'head'> & Partial<Pick<Arrow, 'bez'>>): Vec[] | null {
   if (!r.bez?.length || (r.bez.length + 1) % 3) return null;
