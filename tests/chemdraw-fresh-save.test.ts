@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { readCdxml } from '../src/io/cdxml';
 import { writeCdxml } from '../src/io/cdxml-write';
 import { labelPieces } from '../src/chem/labels';
+import { Doc } from '../src/model';
 
 const table = '<fonttable><font id="3" name="Arial"/></fonttable><colortable><color r="1" g="1" b="1"/><color r="0" g="0" b="0"/><color r="0.18" g="0.306" b="0.78"/><color r="0.6" g="0.2" b="0.6"/></colortable>';
 const fresh = (body: string) => {
@@ -20,10 +21,19 @@ const runsOf = (d: Document) => [...node(d).querySelectorAll('t > s')].map((s) =
 
 describe('a fresh save', () => {
   it('turns a formula label set to run left, not a name', () => {
-    const left = 'LabelDisplay="Right"', j = 'LabelJustification="Right"';
-    const text = (attrs: string, run: string) => runsOf(fresh(label(attrs, `<s font="3" size="10" face="96">${run}</s>`, j)).out).map((r) => r[0]).join('');
-    expect(text(`NodeType="Fragment" ${left}`, 'MeO')).toBe('MeO');
-    expect(text(`NodeType="Unspecified" ${left}`, '(3,4)-MDP')).toBe('(3,4)-MDP');
+    const write = (label: string) => {
+      const doc = new Doc();
+      let id = 0;
+      doc.edit('Draw', () => {
+        const c = doc.addAtom(50, 50), a = doc.addAtom(80, 50, 6, { label, just: 'left', fixedDir: true });
+        id = a.id;
+        doc.addBond(c.id, a.id);
+      });
+      const out = new DOMParser().parseFromString(writeCdxml(doc), 'application/xml');
+      return [...out.querySelectorAll('n')].find((n) => n.getAttribute('id') === String(id))!.querySelector('t')!.textContent;
+    };
+    expect(write('OMe')).toBe('MeO');
+    expect(write('(3,4)-MDP')).toBe('(3,4)-MDP');
   });
   it('says which way a label from a file ran, even where we would run it that way ourselves', () => {
     // R4 on the left end of a bond, as ChemDraw had it; ChemDraw left to itself runs it elsewhere
