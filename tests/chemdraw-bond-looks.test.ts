@@ -44,3 +44,15 @@ describe('a turned box from ChemDraw', () => {
     expect(s.y2 - s.y1).toBeCloseTo(2 * Math.hypot(1.65, 1.64), 2);
   });
 });
+
+describe('a stray carbon from ChemDraw', () => {
+  it('is drawn as nothing, as ChemDraw draws it (not CH4)', () => {
+    const { doc } = readCdxml(`<?xml version="1.0" encoding="UTF-8" ?><CDXML><page id="1"><fragment id="2"><n id="10" p="20 20"/></fragment><fragment id="3"><n id="11" p="60 20"/><n id="12" p="74.4 20"/><b id="13" B="11" E="12"/><n id="14" p="67 40"/></fragment></page></CDXML>`);
+    const r = new Renderer(noCanvas, noCanvas) as any;
+    for (const id of [10, 14]) {
+      expect(doc.atoms.get(id)!.bare).toBe(true);
+      expect(r.atomInfo(doc, doc.atoms.get(id)).layout).toBeNull();
+    }
+    expect(doc.atoms.get(11)!.bare).toBeUndefined();
+  });
+});

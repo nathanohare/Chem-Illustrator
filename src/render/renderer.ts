@@ -331,7 +331,7 @@ export class Renderer {
     if (c) return c;
     const deg = doc.degree(a.id);
     const bos = doc.valenceSum(a.id);
-    const spec = a.attach || a.multi ? null : labelSpec(a.z, a.label, a.charge, a.isotope, bos, deg, !a.hideCharge, !!a.showCarbon);
+    const spec = a.attach || a.multi || (a.bare && !a.label && doc.degree(a.id) === 0) ? null : labelSpec(a.z, a.label, a.charge, a.isotope, bos, deg, !a.hideCharge, !!a.showCarbon);
     let layout: LabelLayout | null = null;
     const boxes: Rect[] = [];
     const k = a.s ?? 1;
