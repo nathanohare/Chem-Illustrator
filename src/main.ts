@@ -11572,6 +11572,7 @@ function drawingMenu(): MenuItem[] {
   const s = editor.sel;
   const any = s.atoms.size + s.bonds.size + s.captions.size + s.arrows.size + s.shapes.size > 0;
   const atoms = s.atoms.size > 0;
+  const loneAtom = s.atoms.size === 1 && s.bonds.size + s.captions.size + s.arrows.size + s.shapes.size === 0;
   const texts = selectedSpecies().length > 0;
   const shapes = [...s.shapes].map((id) => doc.shapes.get(id)).filter((x): x is Shape => !!x);
   const design = ws.active.mode === 'design';
@@ -11659,8 +11660,8 @@ function drawingMenu(): MenuItem[] {
       ...(s.atoms.size + s.captions.size + s.arrows.size + s.shapes.size > 1 ? [{ cmd: 'group' }] : []),
       ...(selectedGroups(doc, s).size ? [{ cmd: 'ungroup' }] : []),
       null,
-      { label: 'Align', items: arrange },
-      { label: 'Rotate or Flip', items: turn },
+      // (one atom alone has nothing to line up, turn or flip)
+      ...(loneAtom ? [] : [{ label: 'Align', items: arrange }, { label: 'Rotate or Flip', items: turn }]),
       ...(order.length ? [{ label: 'Order', items: order }] : []),
       null,
       { cmd: 'add-frame' },
