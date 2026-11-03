@@ -515,7 +515,7 @@ With nothing selected, the panel shows the structure you last drew on. Clearing 
 
 ### Predicted NMR
 
-**NMR (predicted)** in the Analysis panel lists the predicted shifts for the structure, one nucleus at a time (pick ¹H or ¹³C, and the solvent). Each row gives the shift with its expected error (±), the number of hydrogens or carbons, and the atoms (numbered as on the drawing with **Show on Drawing ▸ Atom Numbers**). For ¹H, the **Mult., J (Hz)** column gives the predicted multiplicity and coupling constants, and **Peak Report** and **Copy as SI Text** write them the way an SI does: δ 6.31 (dt, *J* = 15.5, 6.8 Hz, 1H). OH and NH protons are written br s, since they usually exchange.
+**NMR (predicted)** in the Analysis panel lists the predicted shifts for the structure, one nucleus at a time (pick ¹H or ¹³C, and the solvent). Each row gives the shift with its expected error (±), the number of hydrogens or carbons, and the atoms (numbered as on the drawing with **Show on Drawing ▸ Atom Numbers**). For ¹H, the **Mult., J (Hz)** column gives the predicted multiplicity and coupling constants, and **Peak Report** and **Copy as SI Text** write them the way an SI does: δ 6.31 (dt, *J* = 15.5, 6.8 Hz, 1H). OH, NH and SH protons are not predicted, since their shifts move with concentration, water and temperature; they are left out of the list, the spectrum and the SI text (the **i** by **δ (ppm)** says so). Check Data still matches a measured OH or NH peak to its group.
 
 Above the list is the predicted spectrum. Hover a row to see its peaks, or a peak to find its row and atoms. **⤢** opens it in a window you can move and resize: scroll to zoom, double-click to show everything, and pick the spectrometer frequency (300–800 MHz) and the quality:
 
