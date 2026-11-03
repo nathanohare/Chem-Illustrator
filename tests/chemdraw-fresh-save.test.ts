@@ -20,6 +20,12 @@ const node = (d: Document) => [...d.querySelectorAll('n')].find((n) => n.getAttr
 const runsOf = (d: Document) => [...node(d).querySelectorAll('t > s')].map((s) => [s.textContent, Number(s.getAttribute('face'))]);
 
 describe('a fresh save', () => {
+  it("keeps a stacked label's LineHeight auto", () => {
+    const { doc, out } = fresh(label('Element="7" NumHydrogens="1"', '<s font="3" size="12" face="96">NH</s>', 'LabelAlignment="Below" LineHeight="auto"'));
+    expect(doc.atoms.get(11)!.stackedLoose).toBe(true);
+    expect(node(out).querySelector('t')!.getAttribute('LineHeight')).toBe('auto');
+    expect(fresh(label('Element="7" NumHydrogens="1"', '<s font="3" size="12" face="96">NH</s>', 'LabelAlignment="Below"')).doc.atoms.get(11)!.stackedLoose).toBeUndefined();
+  });
   it('turns a formula label set to run left, not a name', () => {
     const write = (label: string) => {
       const doc = new Doc();

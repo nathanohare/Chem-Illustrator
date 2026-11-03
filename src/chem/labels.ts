@@ -353,9 +353,9 @@ export const labelPrefs = { superscriptR: true };
 export const isNumberedR = (label: string | null): boolean => !!label && /^R\d+$/.test(label);
 
 /** How an atom's label raises its characters: R numbers (from the file, or by the preference) and marks set by hand. */
-export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string; centred?: boolean; stacked?: 'up' | 'down' }): { supDigits: boolean; marks?: LabelMarks; centred?: boolean; stacked?: 'up' | 'down' } {
+export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string; centred?: boolean; stacked?: 'up' | 'down'; stackedLoose?: boolean }): { supDigits: boolean; marks?: LabelMarks; centred?: boolean; stacked?: 'up' | 'down'; stackedLoose?: boolean } {
   const supDigits = a.supDigits ?? (labelPrefs.superscriptR && isNumberedR(a.label));
-  return { supDigits, ...(a.labelMarks && a.label ? { marks: a.labelMarks } : {}), ...(a.centred ? { centred: true } : {}), ...(a.stacked ? { stacked: a.stacked } : {}) };
+  return { supDigits, ...(a.labelMarks && a.label ? { marks: a.labelMarks } : {}), ...(a.centred ? { centred: true } : {}), ...(a.stacked ? { stacked: a.stacked } : {}), ...(a.stacked && a.stackedLoose ? { stackedLoose: true } : {}) };
 }
 
 /** The label's pieces in reading order, as `layoutLabel` shows them (for the typing box). */
@@ -377,6 +377,8 @@ export interface LabelSpec {
   centred?: boolean;
   /** Stack the label above or below the atom, one piece per line. */
   stacked?: 'up' | 'down';
+  /** Its lines 1.15 of the size apart (ChemDraw's LineHeight auto). */
+  stackedLoose?: boolean;
 }
 
 /** Tokens to show for an atom: its custom label, or element + hydrogens. Null = no label (plain carbon). */
@@ -556,7 +558,7 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
       for (const t of hTok ? [hTok, ...tail] : tail) {
         const start = runs.length;
         pushPieces(tokenPieces(t, sd, mk), headX);
-        const yOff = (dir === 'up' ? -1 : 1) * size * ++line;
+        const yOff = (dir === 'up' ? -1 : 1) * size * (spec.stackedLoose ? 1.15 : 1) * ++line;
         for (let i = start; i < runs.length; i++) runs[i].dy += yOff;
         for (let i = start; i < boxes.length; i++) { boxes[i].y1 += yOff; boxes[i].y2 += yOff; }
       }
