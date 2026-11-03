@@ -712,6 +712,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       headWidth: (num(a, 'ArrowheadWidth', 250) / 100) * lw,
       color: color(a),
     };
+    // an arc of an ellipse (its axes differ): drawn along the ellipse, as Bézier pieces, instead of
+    // the circle through the tail
+    const ell = ellipseArcBez(a, tail, head, Number(ang ?? 0));
+    if (ell) { arrow.sweep = 0; arrow.bez = ell.map((p) => chordLocal(arrow.tail, arrow.head, p)); }
     if (lw !== st.lineWidth) arrow.lineWidth = lw;
     // two shafts with a full head: a retrosynthetic arrow (spacing in hundredths of the line width)
     const spacing = a.getAttribute('ArrowShaftSpacing');
@@ -1620,4 +1624,38 @@ export function cycleOf(doc: Doc, bonds: number[]): number[] | null {
     if (ring.length > bonds.length) return null;
   }
   return ring.length === bonds.length ? ring : null;
+}
+
+/**
+ * The inner Bézier points (two controls and an end per piece, the last end left out) of a ChemDraw
+ * arc arrow along an ellipse, from its tail through AngularSize degrees on the side that ends at its
+ * head; null for a circular arc (axes within 3%) or one without its axes.
+ */
+export function ellipseArcBez(el: Element, tail: number[], head: number[], angularSize: number): { x: number; y: number }[] | null {
+  const c = pts(el.getAttribute('Center3D')), ma = pts(el.getAttribute('MajorAxisEnd3D')), mi = pts(el.getAttribute('MinorAxisEnd3D'));
+  if (!angularSize || c.length < 2 || ma.length < 2 || mi.length < 2) return null;
+  const u = { x: ma[0] - c[0], y: ma[1] - c[1] }, v = { x: mi[0] - c[0], y: mi[1] - c[1] };
+  const ru = Math.hypot(u.x, u.y), rv = Math.hypot(v.x, v.y);
+  if (!ru || !rv || Math.abs(ru - rv) / Math.max(ru, rv) < 0.03) return null;
+  const det = u.x * v.y - u.y * v.x;
+  if (Math.abs(det) < 1e-9) return null;
+  const E = (t: number) => ({ x: c[0] + u.x * Math.cos(t) + v.x * Math.sin(t), y: c[1] + u.y * Math.cos(t) + v.y * Math.sin(t) });
+  const dE = (t: number) => ({ x: -u.x * Math.sin(t) + v.x * Math.cos(t), y: -u.y * Math.sin(t) + v.y * Math.cos(t) });
+  // the tail's place on the ellipse, in its own angle
+  const dx = tail[0] - c[0], dy = tail[1] - c[1];
+  const t0 = Math.atan2((u.x * dy - u.y * dx) / det, (dx * v.y - dy * v.x) / det);
+  const span = (Math.abs(angularSize) * Math.PI) / 180;
+  const end = (sg: number) => E(t0 + sg * span);
+  const off = (sg: number) => Math.hypot(end(sg).x - head[0], end(sg).y - head[1]);
+  const sweep = (off(1) <= off(-1) ? 1 : -1) * span;
+  const n = Math.max(1, Math.ceil(Math.abs(sweep) / (Math.PI / 2)));
+  const out: { x: number; y: number }[] = [];
+  for (let i = 0; i < n; i++) {
+    const t1 = t0 + (sweep * i) / n, t2 = t0 + (sweep * (i + 1)) / n;
+    const k = (4 / 3) * Math.tan((t2 - t1) / 4);
+    const p1 = E(t1), p2 = E(t2), d1 = dE(t1), d2 = dE(t2);
+    out.push({ x: p1.x + k * d1.x, y: p1.y + k * d1.y }, { x: p2.x - k * d2.x, y: p2.y - k * d2.y });
+    if (i < n - 1) out.push(p2);
+  }
+  return out;
 }
