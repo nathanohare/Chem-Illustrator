@@ -595,26 +595,30 @@ describe('chiral ligands, Et, and Nate\'s layouts (2026-11-02, round 2)', () => 
   const drawing = (abbr: string) => templateById(ligandByAbbr(abbr)!.tpl) as unknown as T;
   const canon = (mb: string) => { const m = RDKit.get_mol(mb); if (!m) return null; try { return m.get_smiles(); } finally { m.delete(); } };
   /**
-   * The ligand as drawn on its metal, labels read out, as isomeric SMILES: the metal as a silicon
-   * bonded to each donor (an L donor then charged +1), so a P-stereogenic phosphine's wedges are
-   * read with its bond to the metal, as a chemist reads the drawing.
+   * The ligand as drawn on its metal, labels read out, as R/S tags: the bond to the metal kept as
+   * a bond to H, so a P-stereogenic phosphine's wedges are read with it, as a chemist reads the drawing.
    */
   const drawnSmiles = (l: (typeof LIGANDS)[number], drawing?: unknown) => {
     const t = (drawing ?? templateById(l.tpl)!) as Parameters<typeof placeTemplate>[1];
     const doc = new Doc();
     const ids = doc.edit('t', () => placeTemplate(doc, t, freePlacement({ x: 100, y: 100 }, doc.style.bondLength), { noMerge: true }));
+    const hs: number[] = [];
     doc.edit('m', () => {
+      // the metal taken off, an H left on each donor where its bond to the metal was: the free
+      // ligand, its lone pair (an H, ranked lowest as a lone pair is) pointing at the metal
       const m = ids.map((id) => doc.atoms.get(id)!).find((a) => a.label === 'M')!;
-      m.label = null;
-      m.z = 14;
-      for (const bid of doc.adj.get(m.id) ?? []) {
+      for (const bid of [...(doc.adj.get(m.id) ?? [])]) {
         const b = doc.bonds.get(bid)!;
         const d = doc.atoms.get(b.a1 === m.id ? b.a2 : b.a1)!;
         const order = (doc.adj.get(d.id) ?? []).reduce((s, x) => s + (doc.bonds.get(x)!.order ?? 1), 0);
-        if ((d.z === 15 || d.z === 7) && order === 4 || d.z === 8 && order === 3) d.charge = 1;
+        if ((d.z === 15 || d.z === 7) && order === 4) doc.updateAtom(d.id, { charge: d.charge + 1 });
+        const h = doc.addAtom((d.x + m.x) / 2, (d.y + m.y) / 2, 1, { label: 'H' });
+        doc.addBond(d.id, h.id, 1);
+        hs.push(h.id);
       }
+      doc.removeAtom(m.id);
     });
-    return tags(toMolfile(doc, ids).molblock);
+    return tags(toMolfile(doc, [...ids.filter((id) => doc.atoms.has(id)), ...hs]).molblock);
   };
   /** Each stereocenter's element and R/S (RDKit's labels), sorted: what the wedges say. */
   const tags = (mb: string) => {
@@ -626,17 +630,6 @@ describe('chiral ligands, Et, and Nate\'s layouts (2026-11-02, round 2)', () => 
       return (JSON.parse(m.get_stereo_tags()).CIP_atoms as [number, string][]).map(([i, l]) => `${els[i]}${l}`).filter((x) => x !== '7(?)').sort().join(' ');
     } finally { m.delete(); }
   };
-  /** The ligand's SMILES on the same silicon "metal", bonded where each donor's lone pair (or lost H) was. */
-  const onMetal = (smiles: string) => {
-    let k = 0;
-    const bound = smiles.replace(/\[([A-Z][a-z]?)(@{0,2})(H(\d?))?([+-]\d?)?:(\d+)\]/g, (_x, el, chi, _h, hn, chg, map) => {
-      let h = _h ? Number(hn || 1) : 0;
-      let c = chg ? (chg[0] === '+' ? 1 : -1) * Number(chg.slice(1) || 1) : 0;
-      if (Number(map) >= 50 && h) h -= 1; else c += 1;
-      return `[${el}${chi}${h ? 'H' + (h > 1 ? h : '') : ''}${c ? (c > 0 ? '+' : '-') + (Math.abs(c) > 1 ? Math.abs(c) : '') : ''}]%${81 + k++}`;
-    });
-    return `[Si]${Array.from({ length: k }, (_, i) => `%${81 + i}`).join('')}.${bound}`;
-  };
   /** Each ligand's SMILES as written in scripts/ligands/ligand-data.mjs, stereo and all (the library keeps it without). */
   const source = new Map<string, string>((SOURCE as { items: [string, string, string, string][] }[]).flatMap((f) => f.items.map((i) => [i[0], i[3]] as [string, string])));
   const plain = (smiles: string) => canon(smiles.replace(/:\d+\]/g, ']'))!;
@@ -645,7 +638,9 @@ describe('chiral ligands, Et, and Nate\'s layouts (2026-11-02, round 2)', () => 
   it('every ligand with stereocenters is drawn as the enantiomer its SMILES and label say, no other stereoisomer', () => {
     expect(chiral().length).toBeGreaterThan(30);
     // (a donor N's H, kept on the source, makes it look like a stereocenter: not one drawn)
-    const want = (l: (typeof LIGANDS)[number]) => tags(onMetal(source.get(l.id)!))!.split(' ').filter((x) => !x.endsWith('(?)')).join(' ');
+    // (the free ligand's own R/S: the metal's place on the drawing must not turn a donor over,
+    // as it once did the first P of DIPAMP, BenzP*, QuinoxP*, TangPhos and DuanPhos, drawn meso)
+    const want = (l: (typeof LIGANDS)[number]) => tags(plain(source.get(l.id)!))!.split(' ').filter((x) => !x.endsWith('(?)')).join(' ');
     const wrong = chiral().filter((l) => drawnSmiles(l) !== want(l)).map((l) => `${l.id}: ${drawnSmiles(l)} not ${want(l)}`);
     expect(wrong.join('\n')).toBe('');
     for (const l of chiral()) expect(l.drawn, `${l.id}: says which enantiomer is drawn`).toBeTruthy();
