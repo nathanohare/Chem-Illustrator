@@ -1361,7 +1361,8 @@ class CdxmlWriter {
       for (const c of kids(e)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === BOND_LOOK_TAG) e.removeChild(c);
       if (look.display || look.line2) e.appendChild(this.el('objecttag', { TagType: 'String', Name: BOND_LOOK_TAG, Value: JSON.stringify(look), Visible: 'no' }));
     }
-    const dp = b.order === 2 || b.order === 1.5 ? { left: 'Left', right: 'Right', center: 'Center', auto: null }[b.dpos] : null;
+    // (ChemDraw's Right is on the left of B to E as drawn, y running down)
+    const dp = b.order === 2 || b.order === 1.5 ? { left: 'Right', right: 'Left', center: 'Center', auto: null }[b.dpos] : null;
     this.set(e, 'DoublePosition', dp);
     this.set(e, 'color', this.colorAttr(b.color));
     this.set(e, 'LineWidth', b.s && b.s !== 1 ? f2(b.s * this.doc.style.lineWidth) : null);
