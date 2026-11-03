@@ -13,7 +13,7 @@ import { chainArc, piLooksOf } from '../chem/hapto';
 import { crossingGapsCached } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
-import { bondEndPrefs, docMapLook, doubleBondGap, wedgeWidth } from '../style';
+import { atomMargin, bondEndPrefs, bondWidths, docMapLook, doubleBondGap, wedgeWidth } from '../style';
 import { depthFractions, depthShadePrefs, shadeLook, shadeStep } from './depth-shade';
 import { joinWideEnds, lineMitres, endTip, LINE_MITRE_LIMIT, type WideEnd, type EndJoin, type LineEnd } from './bond-joins';
 import { chargeInk, labelBonds, labelSpec, layoutLabel, LabelLayout, labelLook } from '../chem/labels';
@@ -339,12 +339,12 @@ export class Renderer {
     if (spec) {
       Object.assign(spec, labelLook(a));
       layout = layoutLabel(spec, labelBonds(doc, a), size, (t, s) => measureText(t, s, this.labelStack), a.just);
-      const m = doc.style.marginWidth * k;
+      const m = atomMargin(doc.style, a);
       for (const b of layout.boxes) boxes.push({ x1: a.x + b.x1 - m, y1: a.y + b.y1 - m, x2: a.x + b.x2 + m, y2: a.y + b.y2 + m });
     }
     // a star point of attachment: the bond stops short of its asterisk, as at a label
     if (a.attach === 'Star') {
-      const h = attachStarSize(size) + doc.style.marginWidth * k;
+      const h = attachStarSize(size) + atomMargin(doc.style, a);
       boxes.push({ x1: a.x - h, y1: a.y - h, x2: a.x + h, y2: a.y + h });
     }
     c = { layout, boxes };
@@ -354,7 +354,7 @@ export class Renderer {
       const ink = chargeInk(r.text, a.x + r.dx, a.y + r.dy, r.size, (t, s) => measureText(t, s, this.labelStack));
       const grow = (m: number): Rect[] => ink.map((b) => ({ x1: b.x1 - m, y1: b.y1 - m, x2: b.x2 + m, y2: b.y2 + m }));
       // (the signs are small, so three quarters of the label margin keeps the same look of space)
-      c.charge = { index: layout.charge, hit: grow(doc.style.lineWidth * k / 2 + 0.3 * k), cut: grow(doc.style.marginWidth * k * 0.75) };
+      c.charge = { index: layout.charge, hit: grow(doc.style.lineWidth * k / 2 + 0.3 * k), cut: grow(atomMargin(doc.style, a) * 0.75) };
     }
     this.atomCache.set(a.id, c);
     return c;
@@ -498,15 +498,15 @@ export class Renderer {
       if (!b || b.spokes || b.order === 4) continue;
       const o = doc.atoms.get(b.a1 === a.id ? b.a2 : b.a1);
       if (!o) continue;
-      const k = b.s ?? 1, ds = doc.style;
-      let h = (ds.lineWidth * k) / 2;
+      const ds = doc.style, w = bondWidths(ds, b);
+      let h = w.lineWidth / 2;
       if (b.order === 1 || b.order === PARTIAL || b.display === 'dative' || this.bondInfo(doc, b).pi) {
         if (b.display === 'dative' || b.display === 'dash' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy') continue;
-        if (b.display === 'bold') h = (ds.boldWidth * k) / 2;
-        else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: ds.boldWidth * k }) / 2;
+        if (b.display === 'bold') h = w.boldWidth / 2;
+        else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: w.boldWidth }) / 2;
       } else if (b.order === 2 || (b.order === 1.5 && !b.circle)) {
         if (this.bondInfo(doc, b).side === 0 || b.display === 'dash') continue;
-        if (b.display === 'bold') h = (ds.boldWidth * k) / 2;
+        if (b.display === 'bold') h = w.boldWidth / 2;
       }
       const [s, e] = this.bondEnds(doc, b.a1 === a.id ? a : o, b.a1 === a.id ? o : a);
       const end = b.a1 === a.id ? s : e;
@@ -926,7 +926,8 @@ export class Renderer {
       const p = doc.atoms.get(b.a1), q = doc.atoms.get(b.a2);
       if (!p || !q) continue;
       if ((p.x < vis.x1 && q.x < vis.x1) || (p.x > vis.x2 && q.x > vis.x2) || (p.y < vis.y1 && q.y < vis.y1) || (p.y > vis.y2 && q.y > vis.y2)) continue;
-      if (b.color) { colored.push(b); continue; }
+      // (a bond with its own bold width is stroked on its own, as coloured ones are)
+      if (b.color || b.boldWidth !== undefined) { colored.push(b); continue; }
       const bp = back?.get(p.id), bq = back?.get(q.id);
       if (bp !== undefined && bq !== undefined) {
         const k = b.s ?? 1, step = shadeStep((bp + bq) / 2), key = `${step}/${k}`;
@@ -950,7 +951,8 @@ export class Renderer {
       const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
       const bb = newBatch(this.makePath);
       this.bondOrSpokes(doc, b, p, q, bb);
-      this.strokeBatch(ctx, bb, b.s ?? 1, st.lineWidth, st.boldWidth, b.color!);
+      const k = b.s ?? 1;
+      this.strokeBatch(ctx, bb, k, st.lineWidth, b.boldWidth !== undefined ? b.boldWidth / k : st.boldWidth, b.color ?? '#000');
     }
     ctx.strokeStyle = ctx.fillStyle = '#000';
 
@@ -1149,14 +1151,14 @@ export class Renderer {
   private band(doc: Doc, b: Bond, p: Atom, q: Atom): { s: Vec; e: Vec; hs: number; he: number } | null {
     if (b.spokes || b.display === 'dative') return null;
     const single = b.order === 1 || b.order === PARTIAL;
-    const k = b.s ?? 1, ds = doc.style;
+    const ds = doc.style, w = bondWidths(ds, b);
     let hs: number, he: number;
     if (single && b.display === 'wedge') {
-      hs = (ds.lineWidth * k) / 2;
-      he = (wedgeWidth({ ...ds, boldWidth: ds.boldWidth * k })) / 2;
+      hs = w.lineWidth / 2;
+      he = (wedgeWidth({ ...ds, boldWidth: w.boldWidth })) / 2;
     } else if (b.display === 'bold' && (single || (b.order === 2 && this.bondInfo(doc, b).side !== 0))) {
-      hs = he = (ds.boldWidth * k) / 2;
-      if (crossingGapsCached(doc, b, ds.marginWidth * k + ds.lineWidth).length) return null;
+      hs = he = w.boldWidth / 2;
+      if (crossingGapsCached(doc, b, w.marginWidth + ds.lineWidth).length) return null;
     } else return null;
     const [s, e] = this.bondEnds(doc, p, q);
     return len(sub(e, s)) < 0.01 ? null : { s, e, hs, he };
@@ -1221,7 +1223,8 @@ export class Renderer {
     const { thin, bold, dashed, fills, tips } = bb;
     const k = b.s ?? 1;
     const ds = doc.style;
-    const st = { ...ds, lineWidth: ds.lineWidth * k, boldWidth: ds.boldWidth * k, hashSpacing: ds.hashSpacing * k, bondLength: ds.bondLength * k };
+    const w = bondWidths(ds, b);
+    const st = { ...ds, lineWidth: w.lineWidth, boldWidth: w.boldWidth, hashSpacing: w.hashSpacing, bondLength: ds.bondLength * k };
     const [s, e] = this.bondEnds(doc, p, q);
     const d = sub(e, s);
     const l = len(d);
@@ -1230,7 +1233,7 @@ export class Renderer {
     const nrm = perp(dir);
     const gap = doubleBondGap(st);
     // a bond behind a bond that crosses it has a gap there
-    const gaps = crossingGapsCached(doc, b, ds.marginWidth * k + ds.lineWidth);
+    const gaps = crossingGapsCached(doc, b, w.marginWidth + ds.lineWidth);
     const pq = sub(q, p), pq2 = dot(pq, pq) || 1;
     const along = (x: Vec) => dot(sub(x, p), pq) / pq2;
     // Square or part-round ends (a setting): thin lines are cut square, each free end gets its
