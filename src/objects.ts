@@ -88,6 +88,55 @@ export function arrowEllipse(r: Pick<Arrow, 'tail' | 'head' | 'bez' | 'ellipse'>
   return { center, major, minor, angularSize: e.angular };
 }
 
+/**
+ * The ellipse a single-arc arrow runs along, on the page: its centre, two half-axes (u, then v),
+ * the tail's angle in the frame of those axes and the turn to the head (radians, positive the way
+ * u turns toward v). A circular arc (sweep) gives a circle with u along the tail-to-head line; a
+ * ChemDraw arc arrow gives its ellipse. Null for a straight, S-shaped or reshaped arrow.
+ */
+export function arrowEllipseFrame(r: Pick<Arrow, 'tail' | 'head' | 'bez' | 'ellipse' | 'sweep'> & Partial<Pick<Arrow, 'equilibrium' | 'shaftSpacing' | 'elbow'>>): { c: Vec; u: Vec; v: Vec; t0: number; sweep: number } | null {
+  if (r.equilibrium || r.shaftSpacing || r.elbow) return null;
+  const local = (c: Vec, u: Vec, v: Vec, q: Vec) => {
+    const det = u.x * v.y - u.y * v.x, dx = q.x - c.x, dy = q.y - c.y;
+    return Math.atan2((u.x * dy - u.y * dx) / det, (dx * v.y - dy * v.x) / det);
+  };
+  const e = arrowEllipse(r);
+  if (e) {
+    const c = e.center, u = sub(e.major, c), v = sub(e.minor, c);
+    const t0 = local(c, u, v, r.tail), t1 = local(c, u, v, r.head);
+    const span = (Math.abs(e.angularSize) * Math.PI) / 180;
+    // the way round that ends at the head
+    const fwd = normAngle(t1 - t0 - span), back = normAngle(t1 - t0 + span);
+    return { c, u, v, t0, sweep: Math.abs(fwd) <= Math.abs(back) ? span : -span };
+  }
+  if (!r.sweep || r.bez?.length) return null;
+  const { center, radius } = arcCenter(r.tail, r.head, r.sweep);
+  const d = sub(r.head, r.tail), l = len(d) || 1;
+  const u = mul(d, radius / l), v = perp(u);
+  return { c: center, u, v, t0: local(center, u, v, r.tail), sweep: r.sweep };
+}
+
+/**
+ * A single-arc arrow along an ellipse (centre c, half-axes u and v) from angle t0 through
+ * `sweep`: its ends and its curve, kept as ChemDraw's arc arrow. Axes the same length give a
+ * plain circular arc.
+ */
+export function ellipseArrow(c: Vec, u: Vec, v: Vec, t0: number, sweep: number): Pick<Arrow, 'tail' | 'head' | 'sweep' | 'bez' | 'ellipse'> {
+  const E = (t: number) => add(c, add(mul(u, Math.cos(t)), mul(v, Math.sin(t))));
+  const tail = E(t0), head = E(t0 + sweep);
+  const deg = (Math.abs(sweep) * 180) / Math.PI;
+  // the longer half-axis is the major one, as ChemDraw keeps them
+  const [a, b] = len(u) >= len(v) ? [u, v] : [v, u];
+  const pts = ellipseArcPoints(c, a, b, tail, head, deg);
+  if (!pts) {
+    // a circle: an arc, turning the way u turns toward v
+    const turn = u.x * v.y - u.y * v.x >= 0 ? 1 : -1;
+    return { tail, head, sweep: sweep * turn, bez: undefined, ellipse: undefined };
+  }
+  const L = (q: Vec) => chordLocal(tail, head, q);
+  return { tail, head, sweep: 0, bez: pts.map(L), ellipse: { center: L(c), major: L(add(c, a)), minor: L(add(c, b)), angular: Math.round(deg * 1000) / 1000 } };
+}
+
 /** A Bézier arrow's control points on the page: the tail, then two controls and an end for each curve (3n + 1 points). */
 export function bezPoints(r: Pick<Arrow, 'tail' | 'head'> & Partial<Pick<Arrow, 'bez'>>): Vec[] | null {
   if (!r.bez?.length || (r.bez.length + 1) % 3) return null;
@@ -433,7 +482,7 @@ export function shapeHit(s: Shape, p: Vec, tol: number): boolean {
 
 // ------------------------------------------------------------------ handles
 
-export type HandleId = 'tail' | 'head' | 'mid' | `b${number}` | 'p1' | 'p2' | 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
+export type HandleId = 'tail' | 'head' | 'mid' | 'ea' | 'eb' | `b${number}` | 'p1' | 'p2' | 'nw' | 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w';
 
 export interface Handle {
   kind: 'arrow' | 'shape';
@@ -447,10 +496,16 @@ export interface Handle {
 export function arrowHandles(r: Arrow): Handle[] {
   const h = (which: HandleId, at: Vec): Handle => ({ kind: 'arrow', id: r.id, which, at });
   // an S-shaped (Bézier) arrow: a handle on each control point (and join) instead of the middle
+  // an arc arrow along an ellipse: diamonds on the ends of its two axes reshape the ellipse
+  const ef = r.ellipse ? arrowEllipseFrame(r) : null;
+  if (ef) return [h('tail', r.tail), h('head', r.head), h('ea', add(ef.c, ef.u)), h('eb', add(ef.c, ef.v))];
   const bz = bezPoints(r);
   if (bz) return [h('tail', r.tail), h('head', r.head), ...bz.slice(1, -1).map((p, i) => h(`b${i}`, p))];
   // an elbow connector's bends follow its ends, so it has no middle handle
-  return r.elbow ? [h('tail', r.tail), h('head', r.head)] : [h('tail', r.tail), h('head', r.head), h('mid', arrowMid(r))];
+  if (r.elbow) return [h('tail', r.tail), h('head', r.head)];
+  // a curved arrow also gets the diamonds, to stretch its circle into an ellipse
+  const cf = r.sweep ? arrowEllipseFrame(r) : null;
+  return [h('tail', r.tail), h('head', r.head), h('mid', arrowMid(r)), ...(cf ? [h('ea', add(cf.c, cf.u)), h('eb', add(cf.c, cf.v))] : [])];
 }
 
 export function shapeHandles(s: Shape): Handle[] {
@@ -576,6 +631,20 @@ export function dragArrowHandle(r: Arrow, which: HandleId, p: Vec, free: boolean
     let q = snapEnd(other, p, free);
     if (dist(q, other) < 2) q = add(other, mul(sub(which === 'tail' ? r.tail : r.head, other), 2 / Math.max(dist(r.tail, r.head), 1e-6)));
     return which === 'tail' ? { tail: q } : { head: q };
+  }
+  // an axis diamond: that half-axis takes the pointer's distance along it from the centre
+  if (which === 'ea' || which === 'eb') {
+    const f = arrowEllipseFrame(r);
+    if (!f) return {};
+    const ax = which === 'ea' ? f.u : f.v, l = len(ax) || 1;
+    const want = Math.max(2, dot(sub(p, f.c), ax) / l);
+    const k = free ? want / l : (() => {
+      // snaps to the other axis's length (a circle) when close
+      const other = len(which === 'ea' ? f.v : f.u);
+      return Math.abs(want - other) < other * 0.04 ? other / l : want / l;
+    })();
+    const u = which === 'ea' ? mul(f.u, k) : f.u, v = which === 'eb' ? mul(f.v, k) : f.v;
+    return ellipseArrow(f.c, u, v, f.t0, f.sweep);
   }
   // a control point of an S-shaped arrow goes where it is dragged
   if (which[0] === 'b' && r.bez) {

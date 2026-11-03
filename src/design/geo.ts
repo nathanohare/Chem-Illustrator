@@ -610,7 +610,7 @@ export function pathDef(id: string): GeoDef {
   const rel: Vec[] = [];
   for (let i = 0; i + 1 < n.length; i += 2) if (Number.isFinite(n[i]) && Number.isFinite(n[i + 1])) rel.push({ x: n[i] / 10000, y: n[i + 1] / 10000 });
   d = {
-    id, name: 'Curve', group: 'Ink', size: [72, 72], outline: true,
+    id, name: 'Freeform', group: 'Ink', size: [72, 72], outline: true,
     draw: (w, h) => {
       const at = (p: Vec) => [p.x * w, p.y * h] as const;
       const body: GeoStep[] = rel.length ? [['M', ...at(rel[0])]] : [];
@@ -624,8 +624,44 @@ export function pathDef(id: string): GeoDef {
   return d;
 }
 
+/**
+ * An open curve drawn with the Freeform pen: like a closed curve (`path:`) but its last segment
+ * stays where it ends, `pen:<x,y,x,y…>`: the start point, then two handles and a point for each segment.
+ */
+export const isPenId = (id: string | undefined): id is string => !!id && id.startsWith('pen:');
+
+/** A freeform's Bézier points (3n + 1) on the page and whether it is closed, as the id of its shape within `box`. */
+export function freeformId(pts: Vec[], box: Rect, closed: boolean): string {
+  return closed ? pathId(pts, box) : `pen:${pathId(pts, box).slice(5)}`;
+}
+
+/** A freeform's Bézier points on the page (start, then two handles and a point for each segment) and whether it is closed; null for other shapes. */
+export function freeformPoints(s: { geo?: string; x1: number; y1: number; x2: number; y2: number }): { pts: Vec[]; closed: boolean } | null {
+  const closed = isPathId(s.geo);
+  if (!closed && !isPenId(s.geo)) return null;
+  const n = s.geo!.slice(closed ? 5 : 4).split(',').map(Number);
+  const x1 = Math.min(s.x1, s.x2), y1 = Math.min(s.y1, s.y2), w = Math.abs(s.x2 - s.x1), h = Math.abs(s.y2 - s.y1);
+  const pts: Vec[] = [];
+  for (let i = 0; i + 1 < n.length; i += 2) if (Number.isFinite(n[i]) && Number.isFinite(n[i + 1])) pts.push({ x: x1 + (n[i] / 10000) * w, y: y1 + (n[i + 1] / 10000) * h });
+  return pts.length >= 4 ? { pts, closed } : null;
+}
+
+/** The library shape for an open freeform curve. */
+function penDef(id: string): GeoDef {
+  let d = pathDefs.get(id);
+  if (d) return d;
+  const closed = pathDef(`path:${id.slice(4)}`);
+  d = {
+    id, name: 'Freeform', group: 'Ink', size: [72, 72], outline: true,
+    draw: (w, h) => ({ body: closed.draw(w, h).body.filter((st) => st[0] !== 'Z') }),
+  };
+  if (pathDefs.size > 500) pathDefs.clear();
+  pathDefs.set(id, d);
+  return d;
+}
+
 /** The shape with this id (an icon for "icon:…"), or the rectangle for one not known (from a newer version). */
-export const geoDef = (id: string | undefined): GeoDef => (isIconId(id) ? iconDef(id) : isSliceId(id) ? sliceDef(id) : isSectorId(id) ? sectorDef(id) : id === HEX_CELL ? hexCellDef : isInkId(id) ? inkDef(id) : isPathId(id) ? pathDef(id) : GEO_BY_ID.get(id ?? '')) ?? GEO_BY_ID.get('rect')!;
+export const geoDef = (id: string | undefined): GeoDef => (isIconId(id) ? iconDef(id) : isSliceId(id) ? sliceDef(id) : isSectorId(id) ? sectorDef(id) : id === HEX_CELL ? hexCellDef : isInkId(id) ? inkDef(id) : isPathId(id) ? pathDef(id) : isPenId(id) ? penDef(id) : GEO_BY_ID.get(id ?? '')) ?? GEO_BY_ID.get('rect')!;
 
 /** The box of an outline's points (control points included: a little generous on curves). */
 export function stepsBox(steps: GeoStep[]): Rect {

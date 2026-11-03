@@ -1919,12 +1919,43 @@ export class Renderer {
     } else {
       shaft(r.tail, r.head, r.headStyle, r.tailStyle);
     }
-    if (r.noGo) {
-      const m = mul(add(r.tail, r.head), 0.5);
-      const k = 3;
+    const d = sub(r.head, r.tail), L = len(d);
+    if ((r.noGo || r.dipole) && L > 0.1 && !r.elbow) {
+      // a point part way along (on the arc of a curved arrow) and the way the arrow runs there
+      const arc = r.sweep && !r.bez?.length && !r.equilibrium && !r.shaftSpacing ? arcCenter(r.tail, r.head, r.sweep) : null;
+      let u = mul(d, 1 / L), n = perp(u);
+      const at = (t: number) => {
+        if (!arc) return add(r.tail, mul(d, t));
+        const ang = angleOf(sub(r.tail, arc.center)) + r.sweep * t;
+        u = mul(fromAngle(ang + Math.PI / 2, 1), Math.sign(r.sweep)); n = perp(u);
+        return add(arc.center, fromAngle(ang, arc.radius));
+      };
+      ctx.lineWidth = lw;
+      ctx.setLineDash([]);
       ctx.beginPath();
-      ctx.moveTo(m.x - k, m.y - k); ctx.lineTo(m.x + k, m.y + k);
-      ctx.moveTo(m.x + k, m.y - k); ctx.lineTo(m.x - k, m.y + k);
+      if (r.noGo) {
+        const m = at(0.5);
+        const k = Math.max(3, r.headWidth * 1.2);
+        if (r.noGoKind === 'hash') {
+          // two parallel strokes slanted across the shaft
+          const gap = Math.max(lw * 3, k * 0.5);
+          const s = add(mul(n, k * 1.3), mul(u, k * 0.55));
+          for (const o of [-gap / 2, gap / 2]) {
+            const c = add(m, mul(u, o));
+            ctx.moveTo(c.x - s.x, c.y - s.y); ctx.lineTo(c.x + s.x, c.y + s.y);
+          }
+        } else {
+          const a = mul(add(u, n), k), b = mul(sub(u, n), k);
+          ctx.moveTo(m.x - a.x, m.y - a.y); ctx.lineTo(m.x + a.x, m.y + a.y);
+          ctx.moveTo(m.x - b.x, m.y - b.y); ctx.lineTo(m.x + b.x, m.y + b.y);
+        }
+      }
+      if (r.dipole) {
+        // the plus end: a stroke across the shaft a little in from the tail
+        const c = at(Math.min(0.15, (r.headWidth * 4) / L));
+        const h = Math.max(3, r.headWidth * 1.1);
+        ctx.moveTo(c.x - n.x * h, c.y - n.y * h); ctx.lineTo(c.x + n.x * h, c.y + n.y * h);
+      }
       ctx.stroke();
     }
   }

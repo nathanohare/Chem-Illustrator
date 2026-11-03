@@ -20,7 +20,7 @@ import { ToolboxEditor } from './ui/toolbox-editor';
 import { RibbonEditor } from './ui/ribbon-editor';
 import { readRibbons, applyRibbon, type RibbonInfo, type RibbonsPrefs } from './ui/ribbon-custom';
 import { editPalettes, getPalettes, onPalettes, setPalettes, useDrawingColours, usePaletteMenus } from './ui/palette-ui';
-import { Doc, Atom, Bond, type BondDisplay, PARTIAL, Caption, Shape, type TextRun, outsideValence, Contents, CHIRAL_FLAGS, PICTURE_STYLES, type PictureLook, type Attachment, type HighlightStyle, type ShapeMath, PAPER, keepOnPage, type PageSetup, type PageWalls } from './model';
+import { Doc, Atom, Bond, type BondDisplay, type Arrow, PARTIAL, Caption, Shape, type TextRun, outsideValence, Contents, CHIRAL_FLAGS, PICTURE_STYLES, type PictureLook, type Attachment, type HighlightStyle, type ShapeMath, PAPER, keepOnPage, type PageSetup, type PageWalls } from './model';
 import { Renderer, measureText, forgetTextWidths } from './render/renderer';
 import { Editor, TOOLS, ringsWereFilled, setMarkTint, type HighlightToggle, type Selection } from './editor/editor';
 import { setAidTint } from './editor/cursor-aids';
@@ -441,6 +441,8 @@ const ARROWS: PaletteDef = {
     { name: 'arrow-equilibrium', title: 'Equilibrium arrows' },
     { name: 'arrow-retro', title: 'Retrosynthetic arrow' },
     { name: 'arrow-nogo', title: 'Crossed-out arrow (reaction does not go)' },
+    { name: 'arrow-nogo-hash', title: 'Hashed-out arrow (reaction does not go)' },
+    { name: 'arrow-dipole', title: 'Dipole arrow (the crossed end is the positive end)' },
     { name: 'arrow-curved', title: 'Curved arrow (electron pair). Drag from an atom or bond to an atom or bond and it snaps like a mechanism arrow; hold Alt or Space to draw freely' },
     { name: 'arrow-fishhook', title: 'Curved half-headed arrow (one electron). Snaps between atoms and bonds like the curved arrow; hold Alt or Space to draw freely' },
     { name: 'arrow-s', title: 'S-shaped curved arrow (two bends), for electrons that have to go around something. Snaps like the curved arrow; hold Alt to draw freely' },
@@ -464,6 +466,7 @@ const SHAPES: PaletteDef = {
     { name: 'shape-line', title: 'Line' },
     { name: 'shape-line-dashed', title: 'Dashed line' },
     { name: 'shape-line-bold', title: 'Bold line' },
+    { name: 'shape-freeform', title: 'Freeform: click each point (drag to curve through it); click the first point to close, double-click to end open' },
   ],
 };
 
@@ -8091,6 +8094,7 @@ function command(name: string): boolean {
     return false;
   }
   if (name === 'repeat-label:here') return repeatLabel(contextAtom);
+  if (name.startsWith('arrow-as:')) return arrowFromMenu(name);
   if (name.startsWith('bond-as:') || name.startsWith('bond-line2:') || name.startsWith('bond-pos:')) return bondFromMenu(name);
   if (name.startsWith('fuse-ring:')) {
     const [, id, index] = name.split(':');
@@ -11702,6 +11706,54 @@ function bondFromMenu(name: string): boolean {
   return true;
 }
 
+/** The arrows a right-click arrow command changes: the selected ones (drawn arrows, not a picture's). */
+function menuArrows(): Arrow[] {
+  return [...editor.sel.arrows].map((id) => doc.arrows.get(id)).filter((a): a is Arrow => !!a);
+}
+
+/**
+ * Right-click on arrows: ChemDraw's three sets of three, the line (Plain, Dashed, Bold), the head
+ * (Solid, Hollow, Angled) and the marks (No-Go Cross or Hash, Dipole), ticked where all the arrows have it.
+ */
+function arrowMenu(): MenuItem[] {
+  const arrows = menuArrows();
+  if (!arrows.length) return [];
+  const all = (f: (a: Arrow) => boolean) => arrows.every(f);
+  return [
+    { cmd: 'arrow-as:line:solid', label: 'Plain', checked: all((a) => a.line === 'solid') },
+    { cmd: 'arrow-as:line:dashed', label: 'Dashed', checked: all((a) => a.line === 'dashed') },
+    { cmd: 'arrow-as:line:bold', label: 'Bold', checked: all((a) => a.line === 'bold') },
+    null,
+    { cmd: 'arrow-as:head:solid', label: 'Solid Arrowhead', checked: all((a) => a.headType === 'solid') },
+    { cmd: 'arrow-as:head:hollow', label: 'Hollow Arrowhead', checked: all((a) => a.headType === 'hollow') },
+    { cmd: 'arrow-as:head:angle', label: 'Angled Arrowhead', checked: all((a) => a.headType === 'angle') },
+    null,
+    { cmd: 'arrow-as:nogo:cross', label: 'No-Go (Cross)', checked: all((a) => a.noGo && !a.noGoKind) },
+    { cmd: 'arrow-as:nogo:hash', label: 'No-Go (Hash)', checked: all((a) => a.noGo && a.noGoKind === 'hash') },
+    { cmd: 'arrow-as:dipole', label: 'Dipole', checked: all((a) => !!a.dipole) },
+    { cmd: 'show-style', label: 'Arrow Properties…' },
+    null,
+  ];
+}
+
+/** Right-click ▸ Plain/Dashed/Bold, Solid/Hollow/Angled Arrowhead, No-Go, Dipole: change the arrows (one undo step). Ticked marks toggle off. */
+function arrowFromMenu(name: string): boolean {
+  const arrows = menuArrows();
+  if (!arrows.length) return false;
+  const [, kind, v] = name.split(':');
+  const on = (f: (a: Arrow) => boolean) => arrows.every(f);
+  const patch: Partial<Arrow> =
+    kind === 'line' ? { line: v as Arrow['line'] }
+    : kind === 'head' ? { headType: v as Arrow['headType'] }
+    : kind === 'nogo' ? (on((a) => a.noGo && (a.noGoKind ?? 'cross') === v) ? { noGo: false, noGoKind: undefined } : { noGo: true, noGoKind: v === 'hash' ? 'hash' : undefined })
+    : { dipole: on((a) => !!a.dipole) ? undefined : true };
+  doc.edit(kind === 'nogo' ? 'No-go arrow' : kind === 'dipole' ? 'Dipole arrow' : kind === 'head' ? 'Arrowhead shape' : 'Arrow line', () => {
+    for (const a of arrows) doc.updateArrow(a.id, patch);
+  });
+  editor.changed();
+  return true;
+}
+
 function drawingMenu(): MenuItem[] {
   const s = editor.sel;
   const any = s.atoms.size + s.bonds.size + s.captions.size + s.arrows.size + s.shapes.size > 0;
@@ -11743,6 +11795,7 @@ function drawingMenu(): MenuItem[] {
     ...(favorites.length ? [{ label: 'Format Favorites', items: favorites.slice(0, 20).map((f, i): MenuItem => ({ cmd: `format-favorite-${i}`, label: f.name })) }] : []), null,
     ...repeatLabelMenu(),
     ...bondMenu(),
+    ...arrowMenu(),
     ...(editor.selectedEnergy() !== null ? [{ cmd: 'edit-energy' }, null] : []),
     ...(editor.selectedTorsion() !== null ? [{ cmd: 'edit-torsion' }, { cmd: 'copy-torsion-data' }, null] : []),
     ...(editor.selectedNewman() !== null ? [{ cmd: 'edit-newman' }, ...(doc.shapes.get(editor.selectedNewman()!)?.newman?.link ? [{ cmd: 'unlink-newman' }] : []), null] : []),
