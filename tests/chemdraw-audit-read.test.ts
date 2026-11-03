@@ -94,3 +94,20 @@ describe('the CDXML audit, reading side (4): R21', () => {
     expect(((p.x - 60) / 35) ** 2 + ((p.y - 60) / 25.4) ** 2).toBeCloseTo(1, 2);
   });
 });
+
+describe('the CDXML audit, reading side (5): R19, R20', () => {
+  it('R20: a carbon written out (=CH2) stays shown', () => {
+    const d = doc('<fragment id="2"><n id="10" p="0 0"/><n id="11" p="14.4 0" NumHydrogens="2"><t><s>CH2</s></t></n><b id="20" B="10" E="11" Order="2"/></fragment>');
+    expect(d.atoms.get(11)!.showCarbon).toBe(true);
+  });
+  it('R19: line starts counted in characters (older ChemDraw) break at the right places', async () => {
+    const { applyLineEnds } = await import('../src/io/cdxml');
+    const runs = [{ text: '• Ab cd\n• Ef gh' }];
+    // ChemDraw 21: characters, with the text's own newline already there
+    applyLineEnds(runs, [8, 15]);
+    expect(runs[0].text).toBe('• Ab cd\n• Ef gh');
+    const bytes = [{ text: 'é ab cd' }];
+    applyLineEnds(bytes, [6, 8]);
+    expect(bytes[0].text).toBe('é ab\ncd');
+  });
+});
