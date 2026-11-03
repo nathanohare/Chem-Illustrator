@@ -78,3 +78,19 @@ describe('the CDXML audit, reading side (3): R26', () => {
     expect(d.kept[1].refs['30']).toBe('s30');
   });
 });
+
+describe('the CDXML audit, reading side (4): R21', () => {
+  it('an arc arrow on an ellipse follows the ellipse (checked against ChemDraw 25\'s picture)', () => {
+    const c = [60, 60], E = (t: number) => [c[0] + 35 * Math.cos(t), c[1] + 25.4 * Math.sin(t)];
+    const T = E(0.5), H = E(0.5 - (200 * Math.PI) / 180);
+    const d = doc(`<arrow id="5" ArrowheadHead="Full" Head3D="${H[0]} ${H[1]} 0" Tail3D="${T[0]} ${T[1]} 0" Center3D="60 60 0" MajorAxisEnd3D="95 60 0" MinorAxisEnd3D="60 85.4 0" AngularSize="200"/>`);
+    const r = d.arrows.get(5)!;
+    expect(r.sweep).toBe(0);
+    expect(r.bez!.length).toBe(3 * 3 - 1);
+    // the middle of the path is on the ellipse, at the far side (x near 25)
+    const mid = r.bez![2];
+    const u = { x: r.head.x - r.tail.x, y: r.head.y - r.tail.y };
+    const p = { x: r.tail.x + mid.x * u.x - mid.y * u.y, y: r.tail.y + mid.x * u.y + mid.y * u.x };
+    expect(((p.x - 60) / 35) ** 2 + ((p.y - 60) / 25.4) ** 2).toBeCloseTo(1, 2);
+  });
+});
