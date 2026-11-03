@@ -61,8 +61,8 @@ describe.skipIf(!files.length)('opening real PowerPoint decks', { timeout: 30000
       // saved and opened again: the same ChemDraw objects, holding the same atoms
       const slides = got.slides.map((s) => { const doc = new Doc(); doc.restoreContents(s.contents); return { layout: s.layout, doc, notes: s.notes }; });
       const again = readPptx(await writePptx({ size: got.size, master: got.master, slides }, opts));
-      const atoms = (c: { atoms: { ole?: unknown }[] }) => c.atoms.filter((a) => a.ole).length;
-      expect(again.slides.map((s) => atoms(s.contents))).toEqual(got.slides.map((s) => atoms(s.contents)));
+      const count = (c: { atoms: { ole?: unknown }[]; captions: { ole?: unknown }[] }) => `${c.atoms.filter((a) => a.ole).length} atoms, ${c.captions.filter((a) => a.ole).length} text`;
+      expect(again.slides.map((s) => count(s.contents))).toEqual(got.slides.map((s) => count(s.contents)));
     });
   }
 });

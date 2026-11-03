@@ -190,3 +190,29 @@ describe('a margin when pasting near a fixed page edge', () => {
     expect(clampMove(box, { x: 0, y: 0 }, inner).x).toBe(10);
   });
 });
+
+describe('reagent text ChemDraw keeps in a structure\'s fragment', () => {
+  // as older ChemDraw saved "MsCl, Et3N" over an arrow: a label node with no bonds, in the same
+  // fragment as a structure; it must read back as the same kind of thing after saving here
+  const cdxml = `<?xml version="1.0"?><CDXML LabelSize="10"><page><fragment id="1">
+    <n id="2" p="10 10"/><n id="3" p="30 10"/><b id="4" B="2" E="3"/>
+    <n id="5" p="100 0" NodeType="Unspecified" NeedsClean="yes"><t p="80 3" LabelJustification="Right"><s font="3" size="5.25" face="96">MsCl, Et3N</s></t></n>
+  </fragment></page></CDXML>`;
+  it('reads it as text beside the structure', () => {
+    const doc = readCdxml(cdxml).doc;
+    expect(doc.atoms.size).toBe(2);
+    expect([...doc.captions.values()].map((c) => c.runs.map((r) => r.text).join(''))).toEqual(['MsCl, Et3N']);
+  });
+  it('keeps it text when saved and read again', async () => {
+    const { writeCdxml } = await import('../src/io/cdxml-write');
+    const doc = readCdxml(cdxml).doc;
+    const back = readCdxml(writeCdxml(doc, { name: 'x.cdxml' })).doc;
+    expect(back.atoms.size).toBe(2);
+    expect(back.captions.size).toBe(1);
+  });
+  it('leaves a bonded label an atom', () => {
+    const doc = readCdxml(cdxml.replace('<b id="4" B="2" E="3"/>', '<b id="4" B="2" E="3"/><b id="6" B="3" E="5"/>')).doc;
+    expect(doc.atoms.size).toBe(3);
+    expect(doc.captions.size).toBe(0);
+  });
+});
