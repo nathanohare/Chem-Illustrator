@@ -2,7 +2,8 @@
 // Off until they turn it on. Before anything goes, the "Will send" list names each thing a
 // request would carry (the selected structure as SMILES, the scheme, the selected text, the
 // question), and any of them can be left out; nothing else (files, other tabs, file names, the
-// key) is ever sent. Each request is kept in a log on this computer that can be cleared. Under
+// key) is ever sent. Each request is kept in a log that can be cleared: on this computer in the
+// desktop app, and only until the tab closes in a browser (see requestLogPlace). Under
 // Local only (link.ts) nothing goes to any address but this computer's own.
 //
 // What the model may do is propose, never change: a structure (drawn new, or in place of the
@@ -10,6 +11,7 @@
 // proposal is checked here (structures again with RDKit by the app) and the person accepts or
 // rejects it; an accepted one is one undoable step.
 
+import { isTauri } from '@tauri-apps/api/core';
 import type { AiQuestion, AiImage } from './link';
 
 /** One thing a request would carry, shown in the "Will send" list (the person can switch it off). */
@@ -123,8 +125,23 @@ export interface LogEntry {
 const LOG_KEY = 'ci.ai-log';
 const LOG_MAX = 200;
 
+/**
+ * Where the log is kept. The desktop app keeps it on this computer. In a browser it lasts only
+ * until the tab closes: localStorage there is shared by every page on the same site (other
+ * projects under nathanohare.github.io could read the questions and structures sent).
+ */
+const inBrowser = () => !isTauri();
+export const requestLogPlace = (): string => (inBrowser() ? 'in this browser tab until it is closed' : 'on this computer');
+
 function storage(): Storage | null {
-  try { return localStorage; } catch { return null; }
+  try {
+    if (!inBrowser()) return localStorage;
+    // a log kept by an earlier version where other pages could read it is not kept
+    try { localStorage.removeItem(LOG_KEY); } catch { /* none */ }
+    return sessionStorage;
+  } catch {
+    return null;
+  }
 }
 
 export function requestLog(): LogEntry[] {

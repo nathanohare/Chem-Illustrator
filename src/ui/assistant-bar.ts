@@ -7,7 +7,7 @@
 // turned the Assistant on once, having been told what goes where.
 
 import { aiAsk, aiName, aiBase, isLocalAddress, localOnlyBlock, type AiPrefs, type AssistantLook } from '../ai/link';
-import { buildQuestion, clearRequestLog, logRequest, parseAnswer, requestLog, sendSummary, type AssistantAction, type AssistantMode, type SendItem } from '../ai/assistant';
+import { buildQuestion, clearRequestLog, logRequest, parseAnswer, requestLog, requestLogPlace, sendSummary, type AssistantAction, type AssistantMode, type SendItem } from '../ai/assistant';
 import { showDialog } from './dialog-host';
 
 export interface AssistantHost {
@@ -107,7 +107,7 @@ export class AssistantBar {
     const links = h('div', 'ai-links');
     this.looks = h('span', 'ai-looks');
     links.append(
-      button('Request Log', () => this.showLog(), 'ai-link', 'Every question sent, kept on this computer'),
+      button('Request Log', () => this.showLog(), 'ai-link', `Every question sent, kept ${requestLogPlace()}`),
       this.looks,
       button('Settings', () => void this.host.openSettings().then(() => { this.applyLook(); return this.refresh(); }), 'ai-link', 'Edit > Settings > AI Model'),
     );
@@ -274,7 +274,7 @@ export class AssistantBar {
       `Questions go to ${aiName(p)}${local ? ', on this computer: nothing leaves it.' : ', over the internet. It is billed to your account there, and its own terms say what it keeps.'}`,
       'Each question carries only what "Will send" lists under the box (such as the selected structure as SMILES, or the selected text). Click any of them to leave it out. Other files, other tabs, file names and your key are never sent.',
       'The Assistant only proposes. Nothing on the page changes until you click Accept, and Undo takes it back.',
-      'Every question sent is kept in a Request Log on this computer, which you can read or clear.',
+      `Every question sent is kept in a Request Log ${requestLogPlace()}, which you can read or clear.`,
       ...(local ? [] : ['For unpublished structures, tick Local only and use a model on this computer.']),
     ]) ul.append(h('li', '', t));
     d.append(ul);
@@ -407,7 +407,7 @@ export class AssistantBar {
       }
       d.replaceChildren(
         h('h2', '', 'Request Log'),
-        h('p', 'ai-muted', 'Every question the Assistant sent, and everything sent with it. Kept on this computer only (the last 200).'),
+        h('p', 'ai-muted', `Every question the Assistant sent, and everything sent with it. Kept ${requestLogPlace()} only (the last 200).`),
         body,
         (() => {
           const row = h('div', 'ai-actions');
