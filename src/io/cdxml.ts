@@ -1526,6 +1526,10 @@ export const ARROW_TEXT_TAG = 'Chem Illustrator arrows';
 export const MAP_LOOK_TAG = 'Chem Illustrator map numbers';
 /** On a MultiAttachment node: its π-system drawn in Kekulé form rather than delocalized (only this program reads it). */
 export const KEKULE_TAG = 'Chem Illustrator Kekule';
+/** A variable attachment's ring, whose middle it sits at: {ring: node ids, seen: {attachments: the Attachments written beside it}}. */
+export const RING_TAG = 'Chem Illustrator ring';
+/** A bond's look that ChemDraw 25 drops (hydrogen, ionic and wavy wedge bonds, second-line styles): {display?, line2?}. */
+export const BOND_LOOK_TAG = 'Chem Illustrator bond look';
 /** The tag on turned text: degrees clockwise about the start of its first line (ChemDraw shows it level). */
 export const TURN_TAG = 'Chem Illustrator turn';
 /** The tag on the group that draws a design shape in ChemDraw: the shape as it is here. */
