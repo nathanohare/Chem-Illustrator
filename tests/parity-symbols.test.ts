@@ -50,7 +50,7 @@ describe('ring-fusion H', () => {
     return curves.length >= 3 && curves.every((c) => Math.hypot(c.x - x, c.y - y) < 4);
   }).length;
 
-  it('draws an H-Dot as a filled dot and an H-Dash as a ringed dot with hashes', () => {
+  it('draws an H-Dot as a filled dot on the atom and an H-Dash as two short bars under it, as ChemDraw 25 does', () => {
     const doc = new Doc();
     const [a, b] = ed(doc, () => {
       const a = doc.addAtom(0, 0, 6, { hDot: 'dot' }), b = doc.addAtom(30, 0, 6, { hDot: 'dash' });
@@ -59,17 +59,17 @@ describe('ring-fusion H', () => {
     });
     const items = recordPicture(doc)!.items;
     expect(arcsAt(items, a.x, a.y, true)).toBeGreaterThan(0);
-    expect(arcsAt(items, b.x, b.y, false)).toBeGreaterThan(0);
+    expect(arcsAt(items, b.x, b.y, true)).toBe(0);
   });
 });
 
 describe('lone pair as a bar', () => {
-  it('draws a LonePairBar as one line between its ends', () => {
+  it('draws a LonePairBar as one line through its ends and a little past them, as ChemDraw 25 does', () => {
     const doc = new Doc();
     ed(doc, () => doc.addShape({ kind: 'symbol', symbol: 'LonePairBar', x1: 10, y1: 10, x2: 14, y2: 10 }));
     const items = recordPicture(doc)!.items;
     const segs = items.filter((i) => i.kind === 'path' && i.stroke).flatMap((i) => (i as { segs: Seg[] }).segs);
-    expect(segs.some((s) => s.k === 'M' && Math.abs(s.x - 10) < 1e-6 && Math.abs(s.y - 10) < 1e-6)).toBe(true);
-    expect(segs.some((s) => s.k === 'L' && Math.abs(s.x - 14) < 1e-6)).toBe(true);
+    expect(segs.some((s) => s.k === 'M' && Math.abs(s.x - (12 - 26 / 9)) < 1e-6 && Math.abs(s.y - 10) < 1e-6)).toBe(true);
+    expect(segs.some((s) => s.k === 'L' && Math.abs(s.x - (12 + 26 / 9)) < 1e-6)).toBe(true);
   });
 });

@@ -906,7 +906,7 @@ describe('ring-fusion H, stacked labels, the new symbols and shadowed ovals (Che
     expect([bar.x1, bar.y1, bar.x2, bar.y2].map((v) => Math.round(v))).toEqual([70, 10, 76, 10]);
     // boxes: a radical ion's dot then its sign's middle; a dagger's centre then its width, as for a charge sign
     const bbs = all(parse(xml), 'graphic').map((g) => g.getAttribute('BoundingBox'));
-    expect(bbs[0]).toBe('11.30 13.25 14.55 13.25');
+    expect(bbs[0]).toBe('10.00 10.00 16.50 16.50');
     expect(bbs[2]).toBe('53.00 13.00 53.00 19.00');
   });
 

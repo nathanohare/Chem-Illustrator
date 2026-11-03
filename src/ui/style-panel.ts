@@ -489,11 +489,8 @@ export class StylePanel {
     if (pair) {
       const isPair = (x: Shape) => x.kind === 'symbol' && (x.symbol === 'LonePair' || x.symbol === 'LonePairBar');
       this.select('Drawn as', [['LonePair', 'Two dots'], ['LonePairBar', 'Bar']], pair.symbol as string, (v) => set('Lone pair look', isPair, (x) => {
-        if (x.symbol === v) return {};
-        // a bar is a little longer than the pair of dots is wide, across the same middle
-        const k = v === 'LonePairBar' ? 1.6 : 1 / 1.6;
-        const cx = (x.x1 + x.x2) / 2, cy = (x.y1 + x.y2) / 2;
-        return { symbol: v, x1: cx + (x.x1 - cx) * k, y1: cy + (x.y1 - cy) * k, x2: cx + (x.x2 - cx) * k, y2: cy + (x.y2 - cy) * k };
+        // (the same two ends: a bar runs a little past them, as ChemDraw draws it)
+        return x.symbol === v ? {} : { symbol: v };
       }));
     }
     if (l || box) this.subheading('Border');
