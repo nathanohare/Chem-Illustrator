@@ -8,7 +8,7 @@ import type { Doc } from '../model';
 import type { Vec } from '../geom';
 import { frameMembers } from '../editor/frames';
 import type { Measure } from '../editor/arrange';
-import { readSmart, runsMarkup, slotName, stepText, ungroupSmart } from './smart-scheme';
+import { readSmart, runsMarkup, slotName, stepPartKind, stepText, ungroupSmart } from './smart-scheme';
 import { buildCycle, type BuiltCycle, type CycleLook, type CycleLoop, type CycleSpec } from './cycles';
 
 export interface SmartCycleStart {
@@ -36,6 +36,9 @@ export function smartCycleStart(doc: Doc, m: Measure, frameId: number): SmartCyc
   if (!data || data.layout !== 'cycle' || data.free) return null;
   const read = readSmart(doc, m, frameId);
   if (!read || !read.closed || !read.chain || read.slots.length < 2) return null;
+  // what joins or leaves as a structure (or a box waiting for one) has no place in the window's
+  // table, and would be left behind outside the new drawing
+  if (structureReagents(doc, m, frameId)) return null;
   const { others } = loose(doc, m, frameId);
   const drawn = read.slots.map((sl, k) => (sl.caption !== undefined || sl.holder !== undefined ? null : `${slotName(doc, sl)} ${k + 1} (as drawn)`));
   const stations = read.slots.map((sl) => {
@@ -52,6 +55,12 @@ export function smartCycleStart(doc: Doc, m: Measure, frameId: number): SmartCyc
     // the names are kept as they are written (short or in full)
     look: { anticlockwise: !!data.anticlockwise, names: 'full', reagentArrows: !!data.reagentArrows },
   };
+}
+
+/** Whether a step of the Smart Scheme has a structure, or a box waiting for one, joining or leaving it. */
+export function structureReagents(doc: Doc, m: Measure, frameId: number): boolean {
+  const read = readSmart(doc, m, frameId);
+  return !!read?.links.some((l) => stepPartKind(doc, l, 'above') !== 'text' || stepPartKind(doc, l, 'below') !== 'text');
 }
 
 export interface RebuiltCycle extends BuiltCycle {

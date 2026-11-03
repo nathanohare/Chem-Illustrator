@@ -13389,7 +13389,10 @@ const smartPane = new SmartPane({
   format: (id, fmt) => editor.smartFormat(id, fmt),
   async secondLoop(id) {
     const st = editor.smartCycleStart(id);
-    if (!st) return;
+    if (!st) {
+      if (editor.smartReagentStructures(id)) flash('A second loop can\'t be added while a step has a structure joining or leaving it: make those steps\' reagents text first (in the species list), add the loop, then make them structures again.', 8000);
+      return;
+    }
     const got = await askCycle(0, { spec: { loops: [st.loop] }, look: st.look, drawn: st.drawn });
     if (got?.rows) editor.smartRebuildCycle(id, got.spec, got.look, got.rows);
   },

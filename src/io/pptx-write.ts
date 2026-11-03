@@ -35,7 +35,7 @@ import { facesToEmbed, toEot, type FontSource } from './font-embed';
 import { dataUrl, fromDataUrl } from '../render/images';
 import { patternClear, patternInk, shadowLook } from '../render/fills';
 import { FADE, tint } from '../colours';
-import { transitionXml, timingXml, highlightParts, partHolds, expandParas, targetKey, type Transition, type Anim, type MediaTiming } from '../deck/animation';
+import { transitionXml, timingXml, highlightParts, partHolds, expandParas, targetKey, mainAnims, triggerSeqs, type Transition, type Anim, type MediaTiming } from '../deck/animation';
 import { MEDIA_EXT } from '../deck/media';
 import { effectsXml } from './pptx-effects';
 import { viewPropsXml, slideGuidesExt } from '../deck/guides';
@@ -98,6 +98,8 @@ export const TAG = {
   canvas: 'CHEMILLUSTRATOR_CANVAS',
   /** Turn in 3-D: each one's key view, in the order of the slide's animations (PowerPoint is given a Spin of next to nothing in its place). */
   turn3d: 'CHEMILLUSTRATOR_TURN3D',
+  /** Reaction steps whose roles name things in another picture (a scheme built step by step): see step-tag.ts. */
+  steps: 'CHEMILLUSTRATOR_STEPS',
   /**
    * A slide made from a canvas slide's keyframe: which canvas, which of its slides, and a print of
    * what it held (to tell whether PowerPoint changed it). The first also has canvasKeep, the canvas itself.
@@ -221,6 +223,7 @@ export const MIME_EXT: Record<string, string> = {
 // ---------------------------------------------------------------- what goes where
 
 import { splitSlide, arialMeasure } from '../deck/split-slide';
+import { stepsTag } from './step-tag';
 export { splitSlide, slideDiagrams, arialMeasure, type SlideParts, type SlideDiagram } from '../deck/split-slide';
 
 // ---------------------------------------------------------------- text
@@ -799,7 +802,8 @@ class Writer {
       part = { [TAG.canvasPart]: JSON.stringify({ ...where, print: slidePrintXml(`<p:spTree ${XMLNS}>${GROUP}${out.join('')}</p:spTree>`) }), ...(keep ? { [TAG.canvasKeep]: JSON.stringify(keep) } : {}) };
     }
     const refTag = slideRefsTag(s);
-    const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(refTag ? { [TAG.slideRefs]: refTag } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}), ...turnTag(s.anims), ...part });
+    const stepTag = stepsTag(doc, parts.drawings);
+    const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(refTag ? { [TAG.slideRefs]: refTag } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}), ...turnTag(s.anims, (a) => !!spids.get(targetKey(a.target))?.length && (!a.trigger || spids.get(targetKey(a.trigger))?.[0] !== undefined)), ...(stepTag ? { [TAG.steps]: stepTag } : {}), ...part });
     const bg = s.background ? await this.background(path, s.background) : '';
     return `${HEAD}<p:sld ${XMLNS}${s.hideGraphics ? ' showMasterSp="0"' : ''}${s.hidden ? ' show="0"' : ''}><p:cSld>${bg}<p:spTree>${GROUP}${out.join('')}</p:spTree><p:custDataLst><p:tags r:id="${tags}"/></p:custDataLst></p:cSld>` +
       `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(s.transition)}${timingXml(expandParas(s.anims ?? [], (cid) => { const c = doc.captions.get(cid); return c ? plainText(c.runs).split('\n') : null; }), (a) => spids.get(targetKey(a.target)) ?? [], videos, (t) => spids.get(targetKey(t))?.[0])}` +
@@ -1668,8 +1672,13 @@ function withCanvasesSplit(deck: DeckData): DeckData {
   return { ...deck, slides: split.flat(), ...(sections ? { sections } : {}) };
 }
 
-/** The slide's Turn in 3-D views, for a tag (see TAG.turn3d). */
-function turnTag(anims: Anim[] | undefined): Record<string, string> {
-  const turns = (anims ?? []).filter((a) => a.effect === 'turn3d');
+/**
+ * The slide's Turn in 3-D views, for a tag (see TAG.turn3d), in the order the Spins standing for
+ * them are written and read back: the click sequence first, then each trigger's, leaving out
+ * animations that aren't written (`saved`: their object, and any trigger, went into the file).
+ */
+export function turnTag(anims: Anim[] | undefined, saved: (a: Anim) => boolean = () => true): Record<string, string> {
+  const live = (anims ?? []).filter(saved);
+  const turns = [...mainAnims(live), ...[...triggerSeqs(live).values()].flatMap((g) => g.anims)].filter((a) => a.effect === 'turn3d');
   return turns.length ? { [TAG.turn3d]: JSON.stringify(turns.map((a) => a.view ?? null)) } : {};
 }
