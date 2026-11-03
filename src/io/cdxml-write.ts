@@ -444,6 +444,13 @@ class CdxmlWriter {
     return e && names.includes(e.nodeName) ? e : null;
   }
 
+  /** Puts `to` in the place of the element an entity was read from, and finds it as that entity's from now on. */
+  private replaceSource(kind: Kind, id: number, from: Element, to: Element): void {
+    from.parentNode?.replaceChild(to, from);
+    const o = this.doc.source?.ord.get(kind + id);
+    if (o !== undefined && this.all[o] === from) this.all[o] = to;
+  }
+
   private orig<T extends Entity>(kind: Kind, id: number): T | null {
     return (this.doc.source?.orig.get(kind + id) as T) ?? null;
   }
@@ -1417,8 +1424,23 @@ class CdxmlWriter {
   }
 
   private writeArrow(r: Arrow): void {
-    const e = this.source('r', r.id, ['arrow', 'curve']);
     const o = this.orig<Arrow>('r', r.id);
+    // an arrow an older ChemDraw kept only as a line or arc graphic: left as it is while unchanged,
+    // otherwise made a ChemDraw arrow in its place (with its id, so schemes still find it), as
+    // ChemDraw does
+    const legacy = this.source('r', r.id, ['graphic']);
+    if (legacy) {
+      if (o && sameExcept(r, o, ['step', 'reagentFor', 'pin']) && this.pinValue(r) === this.pinValue(o)) return;
+      if (r.bez?.length) { this.writeCurveArrow(r, legacy, null); return; }
+      const a = this.el('arrow', { id: legacy.getAttribute('id') ?? r.id });
+      this.fillArrow(a, r);
+      this.writeMorph(a, r);
+      this.writePin(a, r);
+      this.replaceSource('r', r.id, legacy, a);
+      this.changed = true;
+      return;
+    }
+    const e = this.source('r', r.id, ['arrow', 'curve']);
     // ChemDraw's arc along an ellipse stays its arc arrow while its shape is the one read
     if (e?.nodeName === 'arrow' && o?.bez?.length && e.hasAttribute('AngularSize') && deepEqual(r.bez, o.bez) && this.writeEllipseArrow(e, r, o)) return;
     // an S-shaped arrow is a ChemDraw curve (and one made back into an arc, an arrow again)
@@ -1494,7 +1516,7 @@ class CdxmlWriter {
   private writeCurveArrow(r: Arrow, e: Element | null, o: Arrow | null): void {
     if (e && o && sameExcept(r, o, ['step', 'reagentFor', 'morph', 'pin']) && this.pinValue(r) === this.pinValue(o)) return;
     const pts = bezPoints(r);
-    const el = this.el(pts ? 'curve' : 'arrow', { id: r.id });
+    const el = this.el(pts ? 'curve' : 'arrow', { id: (e?.nodeName === 'graphic' && e.getAttribute('id')) || r.id });
     if (pts) {
       const n = (pts.length - 1) / 3;
       const knots: Vec[] = [];
@@ -1503,13 +1525,19 @@ class CdxmlWriter {
       const tail = r.tailStyle === 'full' ? 16 : r.tailStyle !== 'none' ? 64 : 0;
       const kinds = head | tail | (r.line === 'dashed' ? 2 : r.line === 'bold' ? 4 : 0);
       const xs = knots.map((p) => p.x), ys = knots.map((p) => p.y);
+      // the head's size and shape as ChemDraw keeps them on a curve (left out where they are its defaults)
+      const lw = r.lineWidth ?? this.doc.style.lineWidth;
+      const hs = Math.round((r.headLength / lw) * 100), aw = Math.round((r.headWidth / lw) * 100);
+      const ht = r.headType === 'hollow' ? 'Hollow' : r.headType === 'angle' ? 'Angle' : 'Solid';
       for (const [k, v] of Object.entries({
         BoundingBox: box({ x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) }),
         color: this.colorAttr(r.color), LineWidth: r.lineWidth !== undefined ? f2(r.lineWidth) : null,
         CurvePoints: knots.map((p) => `${f2(p.x)} ${f2(p.y)}`).join(' '), CurveType: String(kinds),
+        HeadSize: hs !== 1000 ? String(hs) : null, ArrowheadWidth: aw !== 250 ? String(aw) : null, ArrowheadType: ht !== 'Solid' ? ht : null,
       })) this.set(el, k, v);
-      // (with the CurveType written beside it: heads or dashes changed in ChemDraw win over the tag)
-      const look = { headStyle: r.headStyle, tailStyle: r.tailStyle, headType: r.headType, line: r.line, headLength: r.headLength, headWidth: r.headWidth, seen: { curveType: kinds } };
+      // (with the CurveType and head written beside it: heads, dashes or head sizes changed in
+      // ChemDraw win over the tag)
+      const look = { headStyle: r.headStyle, tailStyle: r.tailStyle, headType: r.headType, line: r.line, headLength: r.headLength, headWidth: r.headWidth, seen: { curveType: kinds, head: `${hs} ${aw} ${ht}` } };
       el.appendChild(this.el('objecttag', { TagType: 'String', Name: CURVE_ARROW_TAG, Value: JSON.stringify(look), Visible: 'no' }));
     } else {
       this.fillArrow(el, r);
@@ -1518,7 +1546,7 @@ class CdxmlWriter {
     this.writePin(el, r);
     if (e?.parentNode) {
       if (e.nodeName === 'arrow') this.removeLegacyArrow(e);
-      e.parentNode.replaceChild(el, e);
+      this.replaceSource('r', r.id, e, el);
     } else this.page.appendChild(el);
     this.changed = true;
   }
@@ -1565,7 +1593,8 @@ class CdxmlWriter {
       ArrowheadTail: headName(r.tailStyle),
       ArrowheadType: r.headType === 'hollow' ? 'Hollow' : r.headType === 'angle' ? 'Angle' : 'Solid',
       HeadSize: headSize,
-      ArrowheadCenterSize: Math.round(headSize * 0.875),
+      // the notch as read, or ours (3/4 of the head; ChemDraw takes a missing one as 7/8)
+      ArrowheadCenterSize: Math.round(headSize * (r.headCenter ?? 0.75)),
       ArrowheadWidth: Math.round((r.headWidth / lw) * 100),
       LineType: r.line === 'dashed' ? 'Dashed' : r.line === 'bold' ? 'Bold' : r.line === 'wavy' ? 'Wavy' : null,
       NoGo: r.noGo ? 'Cross' : null,
@@ -2312,7 +2341,7 @@ class CdxmlWriter {
   /** The element written for a thing: a structure's fragment for an atom. */
   private elementOf(kind: Kind, id: number, ided: (id: number, names: string[]) => Element | null): Element | null {
     if (kind === 'a') return this.fragOfAtom.get(id) ?? null;
-    const names = kind === 'c' ? ['t'] : kind === 'r' ? ['arrow', 'graphic'] : ['graphic', 'embeddedobject', 'table', 'group', 'curve'];
+    const names = kind === 'c' ? ['t'] : kind === 'r' ? ['arrow', 'graphic', 'curve'] : ['graphic', 'embeddedobject', 'table', 'group', 'curve'];
     return this.source(kind, id, names) ?? (kind === 'r' ? this.findArrow(id) : null) ?? ided(id, names);
   }
 
