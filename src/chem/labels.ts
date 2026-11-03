@@ -102,9 +102,11 @@ export function isGenericLabel(label: string): boolean {
 const WHOLE_ONLY = new Set<string>();
 
 // Formula-like entries (CO2Me, NO2, CF3…) are shown as their elements so they can be
-// reversed the ChemDraw way (MeO2C, O2N, F3C); true abbreviations stay whole.
+// reversed the ChemDraw way (MeO2C, O2N, F3C); true abbreviations stay whole. Phosphines
+// (PPh3, PCy3, PtBu3) are P and their groups, so they read Ph₃P and Cy₃P on the right, as in ChemDraw.
+const PHOSPHINE = /^P(?:Ph|Cy|Me|Et|t-?Bu|n-?Bu|i-?Pr)\d$/;
 const nickNames = () => Object.keys(NICKNAMES)
-  .filter((k) => !/^[CNOSB][A-Z0-9]/.test(k) && !WHOLE_ONLY.has(k))
+  .filter((k) => !/^[CNOSB][A-Z0-9]/.test(k) && !PHOSPHINE.test(k) && !WHOLE_ONLY.has(k))
   .sort((a, b) => b.length - a.length);
 let NICK_NAMES = nickNames();
 
@@ -192,7 +194,9 @@ export function tokenize(label: string): Token[] {
       i += g.length;
     } else if (/[A-Z]/.test(label[i])) {
       const two = label.slice(i, i + 2);
-      if (two.length === 2 && /[a-z]/.test(two[1]) && elementNumber(two) !== undefined) {
+      // (the P of a phosphine such as PtBu3 or PnBu3, not platinum or nobelium)
+      const phosphineP = i === 0 && PHOSPHINE.test(label);
+      if (two.length === 2 && /[a-z]/.test(two[1]) && elementNumber(two) !== undefined && !phosphineP) {
         tok = { kind: 'el', text: two, count: 1, charge: '' };
         i += 2;
       } else if (elementNumber(label[i]) !== undefined) {
@@ -421,6 +425,8 @@ export interface LabelLayout {
   boxes: { x1: number; y1: number; x2: number; y2: number }[];
   /** Which of the runs (and boxes) is the charge, when one is shown after the label. */
   charge?: number;
+  /** Set in bold (measured and drawn so). */
+  bold?: boolean;
 }
 
 export type Measure = (text: string, size: number) => number;
