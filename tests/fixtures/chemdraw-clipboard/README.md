@@ -16,3 +16,8 @@ To remake the ChemDraw files on a Windows computer with ChemDraw:
 `node scripts/chemdraw-bench/make-fixture.mjs tests/fixtures/chemdraw-clipboard/clip-props.cdxml` then
 `powershell -File scripts/chemdraw-bench/chemdraw-reference.ps1 tests/fixtures/chemdraw-clipboard/clip-props.cdxml`.
 `scripts/chemdraw-bench/clip-dump.ps1 <folder>` saves whatever is on the clipboard, one file per format.
+
+`from-chemdraw/` is the Windows clipboard after Ctrl+A, Ctrl+C on `clip-props.cd.cdxml` in ChemDraw 25.0.2
+(`formats.txt` lists every format). ChemDraw puts its drawing on the clipboard only as CDX ("ChemDraw
+Interchange Format"), alongside an OLE object ("Embed Source"), a metafile, SMILES, SLN and MDL
+sketch formats; there is no CDXML text format.
