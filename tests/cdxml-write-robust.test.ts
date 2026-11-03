@@ -330,7 +330,7 @@ describe('the CDXML audit, writing side (2)', () => {
     expect(all(x, 'group')).toHaveLength(0);
   });
 
-  it('writes our dashed aromatic bond as ChemDraw\'s (Order 2, Display2 Dash), and its one-line and ring-circle ones as 1.5', () => {
+  it('writes our dashed aromatic bond as ChemDraw saves its own (Order 1.5, Display2 Dash), and its one-line and ring-circle ones as 1.5 alone', () => {
     const doc = newDoc();
     doc.edit('Draw', () => {
       const a = doc.addAtom(0, 0, 6), b = doc.addAtom(14.4, 0, 6), c = doc.addAtom(28.8, 0, 6), d = doc.addAtom(43.2, 0, 6);
@@ -339,7 +339,7 @@ describe('the CDXML audit, writing side (2)', () => {
       doc.addBond(c.id, d.id, 1.5, 'solid', { circle: true });
     });
     const bonds = all(parse(writeCdxml(doc)), 'b');
-    expect(bonds.map((e) => [e.getAttribute('Order'), e.getAttribute('Display2')])).toEqual([['2', 'Dash'], ['1.5', null], ['1.5', null]]);
+    expect(bonds.map((e) => [e.getAttribute('Order'), e.getAttribute('Display2')])).toEqual([['1.5', 'Dash'], ['1.5', null], ['1.5', null]]);
     const back = readCdxml(viaCdx(writeCdxml(doc))).doc;
     const bb = [...back.bonds.values()];
     expect(bb[0].order).toBe(1.5);
@@ -753,5 +753,78 @@ describe('what a round trip through ChemDraw 25 showed (writing side)', () => {
     const b = [...d2.bonds.values()][0];
     d2.edit('Delete', () => d2.removeBond(b.id));
     expect(all(parse(writeCdxml(d2)), 'fragment')).toHaveLength(2);
+  });
+});
+
+describe('the new bond types and variable attachments (ChemDraw parity)', () => {
+  const draw = () => {
+    const doc = newDoc();
+    const ids: number[] = [];
+    doc.edit('Draw', () => {
+      for (let i = 0; i < 8; i++) ids.push(doc.addAtom(i * 14.4, 0, i === 6 ? 1 : 6).id);
+      doc.addBond(ids[0], ids[1], 1, 'hollowWedge');
+      doc.addBond(ids[1], ids[2], 1, 'wavyWedge');
+      doc.addBond(ids[2], ids[3], 2, 'solid', { line2: 'dash' } as never);
+      doc.addBond(ids[3], ids[4], 2, 'solid', { line2: 'bold' } as never);
+      doc.addBond(ids[4], ids[5], 2, 'solid', { line2: 'hash' } as never);
+      doc.addBond(ids[6], ids[5], 1, 'hydrogen');
+      doc.addBond(ids[7], ids[0], 1, 'ionic');
+    });
+    return { doc, ids };
+  };
+  const attrs = (xml: string) => all(parse(xml), 'b').map((e) => [e.getAttribute('B'), e.getAttribute('E'), e.getAttribute('Order'), e.getAttribute('Display'), e.getAttribute('Display2')]);
+
+  it('writes hollow and wavy wedges, hydrogen and ionic bonds and second-line styles as ChemDraw has them, through CDX too', () => {
+    const { doc, ids } = draw();
+    const n = (i: number) => String(ids[i]);
+    const want = [
+      [n(0), n(1), null, 'HollowWedgeBegin', null],
+      [n(1), n(2), null, 'WavyWedgeBegin', null],
+      [n(2), n(3), '2', null, 'Dash'],
+      [n(3), n(4), '2', null, 'Bold'],
+      [n(4), n(5), '2', null, 'Hash'],
+      [n(6), n(5), 'hydrogen', null, null],
+      [n(7), n(0), 'ionic', null, null],
+    ];
+    const xml = writeCdxml(doc);
+    expect(attrs(xml)).toEqual(want);
+    expect(attrs(viaCdx(xml))).toEqual(want);
+  });
+
+  it('changes them on a bond read from a file, and keeps a file\'s unchanged', () => {
+    const { doc } = draw();
+    const xml = writeCdxml(doc);
+    const d2 = readCdxml(xml).doc;
+    expect(writeCdxml(d2)).toBe(xml);
+    const b = [...d2.bonds.values()][3];
+    d2.edit('Style', () => d2.updateBond(b.id, { line2: 'hash' } as never));
+    expect(attrs(writeCdxml(d2))[3].slice(2)).toEqual(['2', null, 'Hash']);
+    d2.edit('Style', () => d2.updateBond(b.id, { order: 1 } as never));
+    expect(attrs(writeCdxml(d2))[3].slice(2)).toEqual([null, null, null]);
+  });
+
+  it('writes a variable attachment as ChemDraw\'s VariableAttachment node, with its ring in our tag', () => {
+    const doc = newDoc();
+    const ring: number[] = [];
+    let v = 0;
+    doc.edit('Draw', () => {
+      for (let i = 0; i < 6; i++) ring.push(doc.addAtom(50 + 14.4 * Math.cos((i * Math.PI) / 3), 50 + 14.4 * Math.sin((i * Math.PI) / 3), 6).id);
+      for (let i = 0; i < 6; i++) doc.addBond(ring[i], ring[(i + 1) % 6], i % 2 ? 1 : 2);
+      v = doc.addAtom(50, 50, 0, { multi: [ring[0], ring[1], ring[2]], variable: true, ringOf: [...ring] } as never).id;
+      const me = doc.addAtom(50, 90, 6).id;
+      doc.addBond(v, me);
+    });
+    const xml = writeCdxml(doc);
+    const node = all(parse(xml), 'n').find((e) => e.getAttribute('NodeType') === 'VariableAttachment')!;
+    expect(node.getAttribute('Attachments')).toBe(ring.slice(0, 3).join(' '));
+    const tag = Array.from(node.children).find((c) => c.getAttribute('Name') === 'Chem Illustrator ring')!;
+    expect(JSON.parse(tag.getAttribute('Value')!)).toEqual({ ring: ring.map(String), seen: { attachments: ring.slice(0, 3).join(' ') } });
+    // through CDX
+    expect(viaCdx(xml)).toMatch(/NodeType="VariableAttachment"/);
+    // a plain multicentre point stays a MultiAttachment
+    doc.edit('Hapto', () => doc.updateAtom(v, { variable: undefined, ringOf: undefined } as never));
+    const n2 = all(parse(writeCdxml(doc)), 'n').find((e) => e.getAttribute('Attachments'))!;
+    expect(n2.getAttribute('NodeType')).toBe('MultiAttachment');
+    expect(Array.from(n2.children).some((c) => c.getAttribute('Name') === 'Chem Illustrator ring')).toBe(false);
   });
 });

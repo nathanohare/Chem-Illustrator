@@ -22,7 +22,7 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl, rasterPng } from '../render/images';
-import { PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, DOTTED_TAG, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG, decodeTags, encodeTags, hoistOwnTags, lowerOwnTags } from './cdxml';
+import { RING_TAG, PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, DOTTED_TAG, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG, decodeTags, encodeTags, hoistOwnTags, lowerOwnTags } from './cdxml';
 import { stackItems, usesStacking } from '../editor/stacking';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
@@ -682,8 +682,9 @@ class CdxmlWriter {
 
   private buildNode(a: Atom): Element {
     if (a.multi) {
-      const n = this.el('n', { id: a.id, p: pt(a), NodeType: 'MultiAttachment', Attachments: this.attachments(a) });
+      const n = this.el('n', { id: a.id, p: pt(a), NodeType: a.variable ? 'VariableAttachment' : 'MultiAttachment', Attachments: this.attachments(a) });
       this.kekuleTag(n, a);
+      this.ringTag(n, a);
       return n;
     }
     if (a.attach) return this.el('n', { id: a.id, p: pt(a), NodeType: 'ExternalConnectionPoint', ExternalConnectionType: a.attach === 'Unspecified' ? null : a.attach, ExternalConnectionNum: a.attachNum ?? null });
@@ -745,6 +746,18 @@ class CdxmlWriter {
     if (!old && a.kekule) n.appendChild(this.el('objecttag', { TagType: 'String', Name: KEKULE_TAG, Value: 'yes', Visible: 'no' }));
   }
 
+  /**
+   * A variable attachment's ring, whose middle it sits at (ChemDraw has no place for it): the ring's
+   * nodes, with the Attachments written beside it, so a list changed in ChemDraw wins over the tag.
+   */
+  private ringTag(n: Element, a: Atom): void {
+    for (const c of kids(n)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === RING_TAG) n.removeChild(c);
+    const ring = a.variable ? (a.ringOf ?? []).filter((id) => this.doc.atoms.has(id)) : [];
+    if (!ring.length) return;
+    const v = { ring: ring.map((id) => this.nodeId(id)), seen: { attachments: this.attachments(a) } };
+    n.appendChild(this.el('objecttag', { TagType: 'String', Name: RING_TAG, Value: JSON.stringify(v), Visible: 'no' }));
+  }
+
   private attachments(a: Atom): string {
     return (a.multi ?? []).filter((id) => this.doc.atoms.has(id)).map((id) => this.nodeId(id)).join(' ');
   }
@@ -753,9 +766,10 @@ class CdxmlWriter {
     const dx = a.x - o.x, dy = a.y - o.y;
     n.setAttribute('p', pt(a));
     if (a.multi) {
-      this.set(n, 'NodeType', 'MultiAttachment');
+      this.set(n, 'NodeType', a.variable ? 'VariableAttachment' : 'MultiAttachment');
       this.set(n, 'Attachments', this.attachments(a));
       this.kekuleTag(n, a);
+      this.ringTag(n, a);
       return;
     }
     if (a.attach) {
@@ -1326,14 +1340,16 @@ class CdxmlWriter {
     e.setAttribute('E', this.nodeId(b.a2));
     this.bondAttach(e, b, fileB);
     // a bond read from a file whose order and look haven't changed keeps ChemDraw's own words for
-    // them (orders such as 2.5 or ionic, hollow and wavy wedges, Display2), which we don't draw
-    if (!o || o.order !== b.order || o.display !== b.display || !o.plain !== !b.plain || !o.circle !== !b.circle) {
-      // ChemDraw 25 draws Order="1.5" as one line: our dashed aromatic bond is its Order 2 with a
-      // dashed second line; one-line and ring-circle aromatic bonds stay 1.5
+    // them (orders such as 2.5), which we don't draw
+    if (!o || o.order !== b.order || o.display !== b.display || !o.plain !== !b.plain || !o.circle !== !b.circle || o.line2 !== b.line2) {
+      // ChemDraw draws Order="1.5" alone as one line, and with a dashed second line (Display2 Dash)
+      // as its dashed aromatic bond, as it saves one; one-line and ring-circle aromatic bonds are 1.5 alone
       const dashed = b.order === 1.5 && !b.circle && !b.plain && b.display !== 'dative';
-      this.set(e, 'Order', b.display === 'dative' ? 'dative' : dashed ? '2' : orderAttr(b.order));
+      // hydrogen and ionic bonds are orders of their own there, as a dative bond is
+      const kind = b.display === 'dative' || b.display === 'hydrogen' || b.display === 'ionic' ? b.display : null;
+      this.set(e, 'Order', kind ?? orderAttr(b.order));
       this.set(e, 'Display', DISPLAY[b.display] ?? null);
-      this.set(e, 'Display2', dashed ? 'Dash' : null);
+      this.set(e, 'Display2', dashed ? 'Dash' : b.order === 2 && b.line2 && !kind ? LINE2[b.line2] : null);
     }
     const dp = b.order === 2 || b.order === 1.5 ? { left: 'Left', right: 'Right', center: 'Center', auto: null }[b.dpos] : null;
     this.set(e, 'DoublePosition', dp);
@@ -2631,7 +2647,11 @@ class CdxmlWriter {
 
 const DISPLAY: Partial<Record<Bond['display'], string>> = {
   wedge: 'WedgeBegin', hashWedge: 'WedgedHashBegin', hash: 'Hash', bold: 'Bold', dash: 'Dash', wavy: 'Wavy',
+  hollowWedge: 'HollowWedgeBegin', wavyWedge: 'WavyWedgeBegin',
 };
+
+/** A double bond's second line as ChemDraw's Display2. */
+const LINE2: Record<NonNullable<Bond['line2']>, string> = { dash: 'Dash', bold: 'Bold', hash: 'Hash' };
 
 /** UTF-8 byte offset of the end of each line (after its line break), as CDXML LineStarts. */
 /** Length of a text in UTF-8 bytes (how CDXML counts line starts). */
