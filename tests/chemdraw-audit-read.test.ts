@@ -67,3 +67,14 @@ describe('the CDXML audit, reading side (2)', () => {
     expect(d.bonds.get(21)!.plain).toBeUndefined();
   });
 });
+
+describe('the CDXML audit, reading side (3): R26', () => {
+  it('keeps orbital types, and plain bracketed groups and chemical properties with the things they name', () => {
+    const d = doc('<fragment id="2"><n id="10" p="0 0"/><n id="11" p="30 0"/><b id="20" B="10" E="11"/></fragment><graphic id="30" BoundingBox="10 0 0 0" GraphicType="Orbital" OrbitalType="sShaded" Center3D="0 0 0" MajorAxisEnd3D="10 0 0" MinorAxisEnd3D="0 10 0"/><bracketedgroup id="40" BracketedObjectIDs="10 11"/><chemicalproperty id="50" ChemicalPropertyDisplayID="30" BasisObjects="2"/>');
+    expect(d.shapes.get(30)!.orbital).toBe('sShaded');
+    expect(d.kept).toHaveLength(2);
+    expect(d.kept[0].xml).toContain('bracketedgroup');
+    expect(d.kept[0].refs).toEqual({ 10: 'a10', 11: 'a11' });
+    expect(d.kept[1].refs['30']).toBe('s30');
+  });
+});
