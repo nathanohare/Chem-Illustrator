@@ -11,7 +11,7 @@ const POP_OUT = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="tr
 export const WARN_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 2.5L22.5 21h-21z" fill="#f2b01e" stroke="#c98a00" stroke-width="1" stroke-linejoin="round"/><path d="M12 9v6" stroke="#3a2a00" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="18" r="1.25" fill="#3a2a00"/></svg>';
 
 /** A side panel section lent to a drop-down or a floating window, and given back. */
-class Borrowed {
+export class Borrowed {
   private home: Comment;
   constructor(readonly section: HTMLElement) {
     this.home = document.createComment(`${section.id} goes here`);

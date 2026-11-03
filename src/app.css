@@ -1678,11 +1678,13 @@ body.slides-mode #canvas-ribbon, body.design-mode #canvas-ribbon, body.sheet-mod
 body.mode-window .canvas-ribbon .rb-tabs button.cr-ctx-tab:not([aria-selected='true']) { color: #ffd77a; }
 .canvas-ribbon > .rb-panel.cr-ctx-panel { background: color-mix(in srgb, #e8a400 6%, var(--panel)); }
 /* the warnings at the right of the tabs; Analysis at the right of the buttons */
-.canvas-ribbon .cr-tab-end { margin-left: auto; display: flex; align-items: center; padding: 0 2px 1px; }
+.ribbon .cr-tab-end { margin-left: auto; display: flex; align-items: center; padding: 0 2px 1px; }
 .canvas-ribbon .rb-tabs .rb-collapse { margin-left: 4px; }
-.canvas-ribbon .rb-tabs button.cr-warnings { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border: 1px solid color-mix(in srgb, currentColor 30%, transparent); border-radius: var(--r-control); background: transparent; box-shadow: none; font-size: var(--fs-sm); }
-.canvas-ribbon .rb-tabs button.cr-warnings.has { border-color: #e2b23c; background: rgb(242 176 30 / 0.18); color: var(--text); font-weight: 600; }
-body.mode-window .canvas-ribbon .rb-tabs button.cr-warnings.has { color: #fff; }
+/* (the warnings box takes the free space before the gear and the collapse arrow in every ribbon) */
+.rb-tabs .cr-tab-end ~ :is(.rb-gear, .rb-collapse) { margin-left: 4px; }
+.ribbon .rb-tabs button.cr-warnings { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border: 1px solid color-mix(in srgb, currentColor 30%, transparent); border-radius: var(--r-control); background: transparent; box-shadow: none; font-size: var(--fs-sm); }
+.ribbon .rb-tabs button.cr-warnings.has { border-color: #e2b23c; background: rgb(242 176 30 / 0.18); color: var(--text); font-weight: 600; }
+body.mode-window .ribbon .rb-tabs button.cr-warnings.has { color: #fff; }
 .cr-warnings .cr-ok { color: #2e9e5b; font-weight: 700; }
 body.mode-window .cr-warnings .cr-ok { color: #7ddc9a; }
 .cr-body-end { margin-left: auto; display: flex; align-items: center; padding: 0 4px 0 12px; flex: none; }
@@ -3479,9 +3481,20 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 .gal-colour-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 .rb-field > .rb-lead { display: inline-flex; vertical-align: -3px; margin-right: 3px; }
 
-/* Presentation and Design: Warnings and Analysis stay out of the side panel until View > Show asks for them */
-body:is(.slides-mode, .design-mode):not(.show-warnings-pane) #warnings-section,
+/* Warnings is a box on every mode's ribbon, never in the side panel; Presentation and Design keep Analysis out of it until View > Show asks */
+#side-content > #warnings-section,
 body:is(.slides-mode, .design-mode):not(.show-analysis-pane) #analysis-section { display: none; }
+/* the Canvas has no side panel: Style is a ribbon tab, Warnings and Analysis boxes on the ribbon */
+body:not(.slides-mode, .design-mode, .sheet-mode, .doc-mode) :is(.toolbox[data-id='details'], [data-cmd='fold-side'], #status-side) { display: none !important; }
+/* the Style tab: the Style panel's rows in columns across the ribbon, scrolling sideways when they don't fit */
+.canvas-ribbon > .rb-panel.cr-pane { height: 150px; padding: 4px 4px 4px 10px; align-items: stretch; }
+.canvas-ribbon.cr-simple > .rb-panel.cr-pane { height: 120px; }
+.cr-pane > #style-section { flex: 1 1 auto; min-width: 0; height: 100%; overflow: auto hidden; }
+.cr-pane > #style-section > h2 { display: none; }
+.cr-pane #style-body { height: 100%; column-width: 270px; column-gap: 22px; column-fill: auto; column-rule: 1px solid var(--line); }
+.cr-pane #style-body > * { break-inside: avoid; }
+.cr-pane #style-body > :first-child { margin-top: 0; }
+.cr-pane #style-body > p.muted { margin: 4px 0; }
 /* the side panel closes all the way (no strip): the button at the bottom right, View > Side Panel or Ctrl+Alt+B bring it back */
 .dock-v > .toolbox[data-id="details"].collapsed { display: none; }
 /* its header is one row: the close button sits beside the first heading */

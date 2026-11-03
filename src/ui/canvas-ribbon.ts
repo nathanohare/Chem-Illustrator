@@ -8,14 +8,15 @@
 // Tabs for one kind of object (Arrow, Ring, Bond) come up beside the others while that kind is
 // being drawn or is selected, and the ribbon switches to them; it goes back to the tab you were
 // on when they leave. The right end of the tab row holds the warnings, and the right end of the
-// buttons a one-line Analysis drop-down (see canvas-ribbon-boxes.ts).
+// buttons a one-line Analysis drop-down (see canvas-ribbon-boxes.ts). The Style tab has no buttons
+// of its own: it holds the Style panel (the Canvas has no side panel).
 
 /** A command button (data-cmd, run as the menus run it) or a drawing tool. */
 export type RibbonItem =
   | { cmd: string; label: string; major?: boolean; tip?: string }
   | { tool: string; label: string; major?: boolean; tip?: string };
 export interface RibbonGroup { name: string; items: RibbonItem[]; gallery?: 'favorites' }
-export interface RibbonTab { id: string; title: string; groups: RibbonGroup[]; context?: ContextKind }
+export interface RibbonTab { id: string; title: string; groups: RibbonGroup[]; context?: ContextKind; /** It holds a panel put there by the app (Style) instead of buttons. */ pane?: boolean }
 export type ContextKind = 'arrow' | 'ring' | 'bond';
 
 const c = (cmd: string, label: string, major = false): RibbonItem => ({ cmd, label, major });
@@ -34,6 +35,7 @@ export const CANVAS_TABS: RibbonTab[] = [
       { name: 'Look Up', items: [c('structure-to-name', 'Structure to Name'), c('find-cas', 'Find CAS RN'), c('pubchem-lookup', 'Look Up on PubChem'), c('knowledge-base', 'Knowledge Base…'), c('compound-library', 'Compound Library…'), c('periodic-table', 'Periodic Table…')] },
     ],
   },
+  { id: 'style', title: 'Style', groups: [], pane: true },
   {
     id: 'insert', title: 'Insert', groups: [
       { name: 'Structures', items: [c('name-to-structure', 'Name to Structure', true), c('import-picture', 'Structures from Picture…'), c('sequence-to-structure', 'Structure from Sequence…'), c('crystal-structure', 'Crystal Structure (CIF)…'), c('ligand-library', 'Ligand Library…'), c('compound-library', 'Compound Library…')] },
@@ -160,6 +162,8 @@ export class CanvasRibbon {
     p.hidden = tab.id !== 'home';
     p.setAttribute('role', 'tabpanel');
     if (tab.context) p.classList.add('cr-ctx-panel');
+    // (cr-lent: what it holds is styled as it is in the side panel)
+    if (tab.pane) p.classList.add('cr-pane', 'cr-lent');
     for (const g of tab.groups) {
       const items = g.items.filter((it) => !('tool' in it) || this.host.hasTool(it.tool));
       if (!items.length && !g.gallery) continue;
@@ -206,6 +210,11 @@ export class CanvasRibbon {
       b.innerHTML = pic ?? `<span class="cr-word">${esc(name)}</span>`;
     }
     return b;
+  }
+
+  /** A tab's panel (the Style tab's, to put the Style panel in). */
+  panelOf(id: string): HTMLDivElement | undefined {
+    return this.panels.get(id);
   }
 
   /** Show it (the Canvas) or hide it (other modes). */

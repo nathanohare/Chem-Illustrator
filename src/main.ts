@@ -201,7 +201,7 @@ import { SettingsWindow, type SettingsHost, type SettingsPage } from './ui/setti
 import { fileTypesPage, FILE_TYPES } from './ui/file-types-page';
 import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed, addLookToggle, repaintArrows } from './ui/ribbon-fit';
 import { CanvasRibbon, type ContextKind } from './ui/canvas-ribbon';
-import { AnalysisBox, WarningsBox } from './ui/canvas-ribbon-boxes';
+import { AnalysisBox, Borrowed, WarningsBox } from './ui/canvas-ribbon-boxes';
 import { placeTitleBar, titleBarPlace } from './ui/title-bar';
 import { canScaleUi, setUiScale, stepUiScale, uiScale, UI_SCALES } from './ui/ui-scale';
 import { installTouchUi, keypadShowing, markSketch, setTouchMode, showKeypad, touchMode, touchOn } from './ui/touch-ui';
@@ -670,6 +670,27 @@ const analysisBox = new AnalysisBox($('#analysis-section'));
 const warningsBox = new WarningsBox($('#warnings-section'));
 canvasRibbon.bodyEnd.append(analysisBox.button);
 canvasRibbon.tabEnd.append(warningsBox.button);
+// The Canvas has no side panel: Style is a tab of its ribbon (the panel goes back to the side panel in the other modes)
+const styleInRibbon = new Borrowed($('#style-section'));
+// The other modes' ribbons have the same warnings box at the right end of their tabs (one box, moved to the ribbon showing)
+for (const id of ['ribbon', 'design-ribbon', 'sheet-ribbon', 'doc-ribbon']) {
+  const end = document.createElement('div');
+  end.className = 'cr-tab-end';
+  document.querySelector(`#${id} > .rb-tabs`)?.append(end);
+}
+/** The warnings box at the right end of the tabs of the ribbon showing, and Style in the Canvas ribbon or the side panel. */
+function placeChemBoxes(mode: string, canvas: boolean): void {
+  const ribbon = canvas ? null : ({ slides: 'ribbon', design: 'design-ribbon', sheet: 'sheet-ribbon', document: 'doc-ribbon' } as Record<string, string>)[mode];
+  const end = canvas ? canvasRibbon.tabEnd : ribbon ? document.querySelector<HTMLElement>(`#${ribbon} > .rb-tabs > .cr-tab-end`) : null;
+  warningsBox.close();
+  if (end && warningsBox.button.parentElement !== end) end.append(warningsBox.button);
+  if (canvas) styleInRibbon.lend(canvasRibbon.panelOf('style')!);
+  else styleInRibbon.giveBack();
+}
+/** The Canvas is showing (it has no side panel: Style is a ribbon tab, Warnings and Analysis are boxes on the ribbon). */
+const canvasShowing = () => !document.body.matches('.slides-mode, .design-mode, .sheet-mode, .doc-mode');
+// (the first tab is a Canvas until a tab comes to the front)
+placeChemBoxes('drawing', true);
 canvasRibbon.el.addEventListener('cr-tab', () => fitRibbons());
 
 /** The kind of object being drawn or selected that has a ribbon tab of its own (Arrow, Ring, Bond). */
@@ -747,12 +768,10 @@ let animUi: AnimationUI | null = null;
 let slideCmts: SlideComments | null = null;
 /** View > Ruler and Gridlines (kept in the settings); the rulers' units and where they count from. */
 const slideLook = { ruler: false, grid: false };
-/** Presentation and Design keep the side panel's Warnings and Analysis hidden until asked for (View > Show). */
+/** Presentation and Design keep the side panel's Analysis hidden until asked for (View > Show); Warnings is a box on every ribbon. */
 const chemPanes = { warnings: false, analysis: false };
 function showChemPanes(): void {
-  document.body.classList.toggle('show-warnings-pane', chemPanes.warnings);
   document.body.classList.toggle('show-analysis-pane', chemPanes.analysis);
-  for (const b of document.querySelectorAll<HTMLInputElement>('[data-cmd="view-warnings-pane"]')) b.checked = chemPanes.warnings;
   for (const b of document.querySelectorAll<HTMLInputElement>('[data-cmd="view-analysis-pane"]')) b.checked = chemPanes.analysis;
 }
 const rulerPrefs: RulerPrefs = { units: 'in', from: 'centre' };
@@ -3875,6 +3894,7 @@ function enterTab(tab: Tab, opened: boolean): void {
   applyModeColours(tab.mode, modeColours);
   for (const el of document.querySelectorAll<HTMLElement>('.slides-only')) el.hidden = !slides;
   canvasRibbon.show(!deck && !sheet && !words && !design);
+  placeChemBoxes(tab.mode, !deck && !sheet && !words && !design);
   // another tab: back to Normal view
   if (sorterOn) {
     sorterOn = false;
@@ -8197,7 +8217,6 @@ const COMMANDS: Record<string, () => unknown> = {
   'shape-styles': () => shapeStyles(),
   'view-notes': () => { slidePanes.notes = !slidePanes.notes; applySlidePanes(); storeSettings(); mainResized(); },
   'view-slide-ruler': () => { slideLook.ruler = !slideLook.ruler; showRulers(); storeSettings(); },
-  'view-warnings-pane': () => { chemPanes.warnings = !chemPanes.warnings; showChemPanes(); storeSettings(); if (chemPanes.warnings && sideIsFolded()) command('fold-side'); },
   'view-analysis-pane': () => { chemPanes.analysis = !chemPanes.analysis; showChemPanes(); storeSettings(); if (chemPanes.analysis && sideIsFolded()) command('fold-side'); },
   'view-gridlines': () => { slideLook.grid = !slideLook.grid; showRulers(); storeSettings(); renderer.repaintAll(); editor.requestScene(); },
   'view-guides': () => toggleGuides(),
@@ -8576,7 +8595,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'toolbox-biopolymers': () => { contextBoxes.byHand('biopolymers'); },
   'toolbox-perspective': () => { contextBoxes.byHand('perspective'); },
   // the panel taken out as a toolbox folds up to its title bar; at the right it folds to a strip
-  'fold-side': () => foldSide(!sideIsFolded()),
+  'fold-side': () => { if (canvasShowing()) revealStylePanel(); else foldSide(!sideIsFolded()); },
   'customize-toolbox': () => openCustomToolbox(),
   'customize-quick-bar': () => quickBar?.edit(),
   'customize-ribbon': () => ribbonEditor.open(RIBBON_OF_MODE[ws.active.mode]),
@@ -10525,7 +10544,8 @@ editor.onProperties = () => revealStylePanel(true);
  * Document) and bring the Style panel into view, after it has caught up with the selection.
  */
 function revealStylePanel(focus = false): void {
-  if (sideIsFolded()) command('fold-side');
+  if (canvasShowing()) canvasRibbon.pick('style');
+  else if (sideIsFolded()) command('fold-side');
   setTimeout(() => {
     const sec = $('#style-section');
     if (sec.hidden || sec.classList.contains('empty')) return;
@@ -10697,13 +10717,19 @@ async function findCas(smiles: string, fresh = false): Promise<CasFound | null> 
   return got;
 }
 
+/** The Analysis panel brought into view: dropped down from its box on the Canvas, or the side panel unfolded. */
+function revealAnalysis(): void {
+  if (canvasShowing()) analysisBox.open();
+  else if (sideIsFolded()) command('fold-side');
+}
+
 /** Chemistry > Look Up > Find CAS RN (and the right-click menu): the structure picked, its CAS RN shown in the Analysis panel. */
 async function findCasChosen(): Promise<void> {
   const f = chosenStructures()[0];
   if (!f) { flash('Select a structure first.'); return; }
   const r = await weigh(f);
   if (!r?.smiles) { flash('Couldn\'t read that structure to look it up.'); return; }
-  if (sideIsFolded()) command('fold-side');
+  revealAnalysis();
   const got = await findCas(r.smiles, casStates.get(r.smiles)?.kind === 'none' || casStates.get(r.smiles)?.kind === 'error');
   $('#analysis-body .an-cas')?.scrollIntoView({ block: 'nearest' });
   if (got?.kind === 'found') flash(`CAS RN ${got.cas[0]}${got.name ? ` (${got.name})` : ''}, from ${got.from}. It is in the Analysis panel.`);
@@ -10736,7 +10762,7 @@ async function lookUpChosen(): Promise<void> {
   const r = await weigh(f);
   if (!r?.smiles) { flash('Couldn\'t read that structure to look it up.'); return; }
   // the answer shows in the Analysis panel, so unfold it if it's folded away
-  if (sideIsFolded()) command('fold-side');
+  revealAnalysis();
   await lookUpOnPubChem(r.smiles);
   $('#analysis-body .pubchem')?.scrollIntoView({ block: 'nearest' });
 }
