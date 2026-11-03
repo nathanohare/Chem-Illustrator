@@ -361,6 +361,12 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
           const n = Math.abs(atom.charge);
           txt = txt.replace(new RegExp(`${n > 1 ? n : ''}[${atom.charge > 0 ? '+' : '\\-−'}]$`), '');
         }
+        // the label's inner fragment as ChemDraw has it (written back while the label is unchanged)
+        const innerEl = kids(n).find((k) => k.nodeName === 'fragment');
+        if (innerEl && type && typeof XMLSerializer !== 'undefined') {
+          const nick = n.getAttribute('GenericNickname');
+          atom.cdxInner = { label: txt, type, ...(nick ? { nick } : {}), xml: new XMLSerializer().serializeToString(innerEl), x, y };
+        }
         const look = labelLookOf(runs, txt);
         if (look.supDigits !== undefined) atom.supDigits = look.supDigits;
         if (look.marks) atom.labelMarks = look.marks;
