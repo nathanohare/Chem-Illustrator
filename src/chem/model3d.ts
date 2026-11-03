@@ -11,6 +11,8 @@ import type { ScanResult } from './torsion-scan';
 export class Model3dBuilder {
   private worker: Worker | null = null;
   private started: Promise<void> | null = null;
+  /** Fails the start still under way (Stop pressed while the worker loads). */
+  private failStart: ((e: Error) => void) | null = null;
   private nextId = 1;
   private pending = new Map<number, (m: Extract<Model3dResponse, { type: 'build' }>) => void>();
   private poses = new Map<number, (r: PoseResult) => void>();
@@ -25,6 +27,7 @@ export class Model3dBuilder {
   start(): Promise<void> {
     if (this.started) return this.started;
     this.started = new Promise<void>((resolve, reject) => {
+      this.failStart = reject;
       try {
         this.worker = import.meta.env.DEV
           ? new Worker(new URL('../worker/model3d-worker.ts', import.meta.url), { type: 'module' })
@@ -54,8 +57,10 @@ export class Model3dBuilder {
       this.send({ type: 'init', resources: this.resourcesUrl });
     });
     // let a later call try again after a failure
-    this.started.catch(() => { this.worker?.terminate(); this.worker = null; this.started = null; });
-    return this.started;
+    const started = this.started;
+    // (only if it is still the start in hand: Stop may have begun another since)
+    started.catch(() => { if (this.started !== started) return; this.worker?.terminate(); this.worker = null; this.started = null; });
+    return started;
   }
 
   private send(m: Model3dRequest): void {
@@ -96,6 +101,9 @@ export class Model3dBuilder {
 
   /** Stop whatever the worker is doing (a long search): it is started afresh when next needed, and calls waiting get 'stopped'. */
   stop(): void {
+    // (a call waiting for the worker to start would otherwise wait for ever)
+    this.failStart?.(new Error('stopped'));
+    this.failStart = null;
     this.worker?.terminate();
     this.worker = null;
     this.started = null;

@@ -538,7 +538,8 @@ pub fn run() {
             print::printers,
             print::print_page,
             xtb::xtb_version,
-            xtb::xtb_run
+            xtb::xtb_run,
+            xtb::xtb_stop
         ])
         .build(tauri::generate_context!())
         .expect("error while running Chem Illustrator")

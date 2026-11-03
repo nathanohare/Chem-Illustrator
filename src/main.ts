@@ -298,7 +298,8 @@ import { structuresIn, foundInContents, foundInDocument, foundInWorkbook, foundI
 import { parseIndex, indexText } from './library/file-index';
 import { libraryHolder } from './ui/library-refs';
 import { CompoundLibraryWindow, addStructures, type StructureIn } from './ui/compound-library';
-import { KnowledgeBaseWindow, looksLikeSmiles } from './ui/knowledge-base';
+import type { KnowledgeBaseHost, KnowledgeBaseWindow } from './ui/knowledge-base';
+import { looksLikeSmiles } from './kb/tables';
 import { FindInFilesWindow, type ListedFile } from './ui/find-in-files';
 import { later } from './lazy';
 
@@ -1799,7 +1800,8 @@ const conformerPrefs = (() => {
 function conformerTools(molblock: string): ConformerTools {
   return {
     search: (opts, progress) => model3d.search(molblock, opts, progress),
-    stop: () => model3d.stop(),
+    // (Stop ends the xtb running now too, rather than leaving it to finish its conformer)
+    stop: () => { model3d.stop(); if (isTauri()) void invoke('xtb_stop').catch(() => {}); },
     ...(isTauri() ? {
       xtb: (job) => invoke<{ xyz: string; energy: number }>('xtb_run', { job }),
       xtbVersion: (exe: string) => invoke<string>('xtb_version', { exe }),
@@ -2551,7 +2553,9 @@ async function applyAssistantAction(a: AssistantAction): Promise<string> {
     await copyText(a.smiles, 'Copied the structure as SMILES: paste it into a drawing, a cell or the document.');
     return 'Copied the structure as SMILES.';
   }
-  const old = a.replace ? chosenStructures() : [];
+  // in place of what is selected now; with nothing selected it is drawn as a new structure (not in
+  // place of the one last edited, which chosenStructures() falls back to)
+  const old = a.replace && editor.sel.atoms.size ? chosenStructures() : [];
   let ids: number[] = [];
   if (old.length) {
     const atoms = old.flatMap((f) => [...f]);
@@ -2571,7 +2575,7 @@ async function applyAssistantAction(a: AssistantAction): Promise<string> {
   }
   selectNewAtoms(ids);
   await keepPasteInside();
-  return old.length ? 'Replaced the selected structure.' : 'Drew the structure.';
+  return old.length ? 'Replaced the selected structure.' : a.replace ? 'Drew the structure as a new one (nothing was selected to replace).' : 'Drew the structure.';
 }
 
 let assistantBarEl: AssistantBar | null = null;
@@ -5713,7 +5717,9 @@ async function openCompoundLibrary(select: string[] = []): Promise<void> {
 /** Where the tables the user imported (from their own copies of published tables) are kept: this computer only. */
 const KB_IMPORTED_KEY = 'kb/imported-tables.json';
 
-const knowledgeBase = new KnowledgeBaseWindow({
+// (loaded when first opened: its tables are big, and most sessions never open it)
+let knowledgeBase: KnowledgeBaseWindow | null = null;
+const knowledgeBaseHost = {
   flash,
   canonical: async (smiles) => (chem.ready ? chem.canonical(smiles).catch(() => null) : null),
   readImported: () => getText(keepStore(), KB_IMPORTED_KEY).catch(() => null),
@@ -5729,12 +5735,15 @@ const knowledgeBase = new KnowledgeBaseWindow({
     const t = q.trim();
     return pubchemSafetyRecord(isCasNumber(t) ? { cas: t } : looksLikeSmiles(t) ? { smiles: t } : { name: t });
   },
-});
+} satisfies KnowledgeBaseHost;
 
 /** Chemistry > Look Up > Knowledge Base: reference tables searched by name, CAS number, SMILES or a shift. */
 function openKnowledgeBase(): void {
   finishTyping();
-  void knowledgeBase.open();
+  void (async () => {
+    knowledgeBase ??= new (await import('./ui/knowledge-base')).KnowledgeBaseWindow(knowledgeBaseHost);
+    await knowledgeBase.open();
+  })().catch((e) => flash(`The Knowledge Base could not open: ${String(e)}`));
 }
 
 // ---------------------------------------------------------------- Chemistry > Metals > Ligand Library
