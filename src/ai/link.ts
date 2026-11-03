@@ -208,11 +208,14 @@ function store(remember: boolean): Storage | null {
   try { return remember ? localStorage : sessionStorage; } catch { return null; }
 }
 
-function readKeys(remember: boolean): Record<string, string> {
+/** A key as kept in a browser, with the address it was typed for (a bare string: kept before that was recorded). */
+type WebKey = string | { key: string; base: string };
+
+function readKeys(remember: boolean): Record<string, WebKey> {
   try { return JSON.parse(store(remember)?.getItem(WEB_KEYS) ?? '{}') ?? {}; } catch { return {}; }
 }
 
-function writeKeys(remember: boolean, k: Record<string, string>): void {
+function writeKeys(remember: boolean, k: Record<string, WebKey>): void {
   try {
     const st = store(remember);
     if (!st) return;
@@ -220,8 +223,27 @@ function writeKeys(remember: boolean, k: Record<string, string>): void {
   } catch { /* storage refused: the key isn't kept */ }
 }
 
-function webKeys(): Record<string, string> {
-  return { ...readKeys(true), ...readKeys(false) };
+/**
+ * In a browser: the key for this service, only for the address it was typed for (as the desktop
+ * app does, ai.rs), so pointing Other at another address never sends it there. A key kept before
+ * the address was recorded is tied to the address it is first used with.
+ */
+function webKey(p: AiPrefs): string {
+  if (p.provider === 'none') return '';
+  const base = aiBase(p);
+  // (this tab's key first, then the one remembered in this browser)
+  for (const where of [false, true]) {
+    const k = readKeys(where);
+    const v = k[p.provider];
+    if (!v) continue;
+    if (typeof v === 'string') {
+      k[p.provider] = { key: v, base };
+      writeKeys(where, k);
+      return v;
+    }
+    return p.provider !== 'compatible' || v.base === base ? v.key : '';
+  }
+  return '';
 }
 
 /** Keep the key for this service (empty forgets it). In a browser, `remember` keeps it after the tab closes. */
@@ -230,7 +252,7 @@ export async function setAiKey(p: AiPrefs, key: string, remember = false): Promi
   if (isTauri()) { await invoke('ai_key_set', { provider: p.provider, key, base: aiBase(p) }); return; }
   for (const where of [true, false]) {
     const k = readKeys(where);
-    if (key && where === remember) k[p.provider] = key; else delete k[p.provider];
+    if (key && where === remember) k[p.provider] = { key, base: aiBase(p) }; else delete k[p.provider];
     writeKeys(where, k);
   }
 }
@@ -243,7 +265,7 @@ export function aiKeyRemembered(p: AiPrefs): boolean {
 /** In a browser: move the kept key to where `remember` says, without typing it again. */
 export async function rememberAiKey(p: AiPrefs, remember: boolean): Promise<void> {
   if (isTauri() || p.provider === 'none') return;
-  const key = webKeys()[p.provider];
+  const key = webKey(p);
   if (key) await setAiKey(p, key, remember);
 }
 
@@ -251,7 +273,7 @@ export async function rememberAiKey(p: AiPrefs, remember: boolean): Promise<void
 export async function hasAiKey(p: AiPrefs): Promise<boolean> {
   if (p.provider === 'none') return false;
   if (isTauri()) return invoke<boolean>('ai_key_has', { provider: p.provider });
-  return !!webKeys()[p.provider];
+  return !!webKey(p);
 }
 
 /** Whether a model is linked and ready to ask (a service on this computer needs no key). */
@@ -283,7 +305,7 @@ async function send(p: AiPrefs, req: AiRequest): Promise<unknown> {
     try {
       const res = await fetch(base + req.path, {
         method: req.method,
-        headers: { ...keyHeaders(p, webKeys()[p.provider] ?? ''), ...(req.body !== undefined ? { 'content-type': 'application/json' } : {}) },
+        headers: { ...keyHeaders(p, webKey(p)), ...(req.body !== undefined ? { 'content-type': 'application/json' } : {}) },
         ...(req.body !== undefined ? { body: JSON.stringify(req.body) } : {}),
         signal: stop.signal,
       });

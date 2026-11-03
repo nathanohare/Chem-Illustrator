@@ -126,10 +126,24 @@ describe('SD files', () => {
   });
 
   it('says how many structures it could not read', () => {
-    const v3000 = 'x\n  test\n\n  0  0  0     0  0            999 V3000\nM  V30 BEGIN CTAB\nM  V30 COUNTS 1 0 0 0 0\nM  END';
-    const { book, warnings } = readSdf(`${v3000}\n$$$$\n${ETHANOL}\n$$$$\n`, 'mixed');
+    const broken = 'x\n  test\n\n  ?  ?\nM  END';
+    const { book, warnings } = readSdf(`${broken}\n$$$$\n${ETHANOL}\n$$$$\n`, 'mixed');
     expect(warnings[0]).toMatch(/^1 structure could not be read/);
     expect(book.sheet.cell(2, 0)?.structure).toBeTruthy();
+  });
+
+  it('opens V3000 records too, as this app writes SD files of big structures (and of V3000 files opened)', () => {
+    // (found in the 2026-11-03 review: every V3000 record was "could not be read")
+    const v3000 = ['x', '  test', '', '  0  0  0     0  0            999 V3000', 'M  V30 BEGIN CTAB', 'M  V30 COUNTS 3 2 0 0 0', 'M  V30 BEGIN ATOM',
+      'M  V30 1 C 0 0 0 0', 'M  V30 2 C 1.299 0.75 0 0', 'M  V30 3 O 2.598 0 0 0 CHG=-1', 'M  V30 END ATOM', 'M  V30 BEGIN BOND', 'M  V30 1 1 1 2', 'M  V30 2 1 2 3 CFG=1',
+      'M  V30 END BOND', 'M  V30 END CTAB', 'M  END'].join('\n');
+    const { book, warnings } = readSdf(`${v3000}\n> <Yield>\n85%\n\n$$$$\n${ETHANOL}\n$$$$\n`, 'mixed');
+    expect(warnings).toEqual([]);
+    const c = book.sheet.cell(1, 0)?.structure?.contents;
+    expect(c?.atoms).toHaveLength(3);
+    expect(c?.atoms.find((a) => a.z === 8)?.charge).toBe(-1);
+    expect(c?.bonds.filter((b) => b.display === 'wedge')).toHaveLength(1);
+    expect(book.sheet.cell(2, 0)?.structure?.contents.atoms).toHaveLength(3);
   });
 
   it('needs a structure to save as an SD file', () => {

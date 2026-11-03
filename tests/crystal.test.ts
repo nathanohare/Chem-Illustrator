@@ -127,6 +127,46 @@ describe('crystal structures (matching Chem SI Assistant)', () => {
     expect(table.get('space_group')).toBe('*P*2_{1}/*c*');
   });
 
+  it('grows a network (NaCl, Fm-3m, 192 operations) to its cap without holding up the app', () => {
+    // (found in the 2026-11-03 review: this took about 1.5 s on the main thread)
+    const perms = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
+    const ops: string[] = [];
+    for (const t of [['', '', ''], ['', '+1/2', '+1/2'], ['+1/2', '', '+1/2'], ['+1/2', '+1/2', '']])
+      for (const p of perms) for (let s = 0; s < 8; s++) ops.push(`'${p.map((k, i) => `${s >> i & 1 ? '-' : ''}${'xyz'[k]}${t[i]}`).join(',')}'`);
+    const [block] = readCif(`data_nacl
+_cell_length_a 5.64
+_cell_length_b 5.64
+_cell_length_c 5.64
+_cell_angle_alpha 90
+_cell_angle_beta 90
+_cell_angle_gamma 90
+loop_
+_space_group_symop_operation_xyz
+${ops.join('\n')}
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+Na1 Na 0 0 0
+Cl1 Cl 0.5 0 0
+`);
+    const s = structureFromCif(block);
+    expect(s.symops.length).toBe(192);
+    grow(s); // warm up
+    const t = performance.now();
+    const g = grow(s);
+    const took = performance.now() - t;
+    expect(g.complete).toBe(false);
+    expect(g.atoms.length).toBeGreaterThan(1000);
+    // each ion has its six neighbors at 2.82 Å, and no bond is longer
+    const d = (i: number, j: number) => Math.hypot(...[0, 1, 2].map((k) => g.atoms[i].xyz[k] - g.atoms[j].xyz[k]));
+    expect(g.bonds.length).toBeGreaterThan(g.atoms.length);
+    expect(g.bonds.every(([i, j]) => Math.abs(d(i, j) - 2.82) < 0.01)).toBe(true);
+    expect(took).toBeLessThan(600);
+  });
+
   it('says plainly when a file has no atoms', () => {
     const [block] = readCif('data_empty\n_cell_length_a 5\n');
     expect(() => structureFromCif(block)).toThrow(CrystalError);

@@ -1069,6 +1069,24 @@ function reversedItems(items: Item[]): Item[] | null {
   return null;
 }
 
+/**
+ * A whole molecule written with its groups first (Me2SO, Me3N, Me2CO, (i-Pr)2NEt, Cl2CO): the
+ * items with the first heavy atom moved to the front, so every group before it bonds to it, or
+ * null when the label doesn't start that way. One group before the atom (MeOH, BrCH2CH2Br) reads
+ * the same either way; read forwards, two or more would bond to each other.
+ */
+function leadingGroupsFirst(items: Item[]): Item[] | null {
+  let k = 0, groups = 0;
+  for (; k < items.length && terminal(items[k]); k++) {
+    const it = items[k];
+    if ('tok' in it && it.tok.kind === 'generic') return null;
+    groups += 'tok' in it ? Math.max(1, it.tok.count) : it.count;
+  }
+  const atom = items[k];
+  if (groups < 2 || !atom || !('tok' in atom) || atom.tok.kind !== 'el' || atom.tok.text === 'H' || atom.tok.count > 1) return null;
+  return [atom, ...items.slice(0, k), ...items.slice(k + 1)];
+}
+
 const graphCache = new Map<string, { g: MiniGraph | null; over: OverValent[] }>();
 
 /** An element list such as [Cl, Br, I] (or [Rh]): any one of these, left out of the formula. */
@@ -1109,7 +1127,7 @@ function buildLabel(label: string, ext: number, charge = 0): { g: MiniGraph | nu
       const t = rev.map(itemText).join('');
       if (NICKNAMES[t]) nick = t;
       else items = rev;
-    }
+    } else if (items && ext === 0) items = leadingGroupsFirst(items) ?? items;
   }
   // an abbreviation is read as one token, so a second bond to it shows up as too many bonds
   if (nick) items = [{ tok: { kind: 'nick', text: nick, count: 1, charge: '' } }];

@@ -64,7 +64,7 @@ import { arrowClash, bendSide, cleanUpArrow, endCentre, endPointToward, headEnd,
 import { followPins, hasPins, makePin, mirrorBend } from '../chem/pins';
 import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '../chem/scheme-arrange';
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
-import { rebuildSmartCycle, smartCycleStart, type SmartCycleStart } from '../chem/smart-cycle';
+import { rebuildSmartCycle, smartCycleStart, structureReagents, type SmartCycleStart } from '../chem/smart-cycle';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
 import { arrangeSmart, formatSmart, stepToHolder, stepHolderToText, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
@@ -461,6 +461,21 @@ export class Editor {
   get dragging(): boolean { return !!this.drag?.moved; }
   /** Text is being typed into a caption or label. */
   captionOpen(): boolean { return !!this.captionEd?.isOpen; }
+  /**
+   * Esc has something to let go of here first: a selection, a drag, text being typed, the
+   * keyboard highlight left on the atom last drawn, a path being drawn through points, or a crop.
+   */
+  escapeHasWork(): boolean {
+    const s = this.sel;
+    return !!(s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size || s.shapes.size) || this.dragging || this.captionOpen()
+      || this.hotNow() || this.route !== null || this.cropping !== null;
+  }
+
+  /** The keyboard highlight is on an atom or bond of this drawing. */
+  private hotNow(): boolean {
+    const k = this.keyHot;
+    return !!k && (k.kind === 'atom' ? this.doc.atoms.has(k.id) : k.kind === 'bond' && this.doc.bonds.has(k.id));
+  }
   private needScene = true;
   private needOverlay = true;
   private frameQueued = false;
@@ -3534,6 +3549,8 @@ export class Editor {
   /** Lay a Smart Scheme out again, with a new layout or other settings. */
   /** A Smart Scheme's single loop as the Catalytic Cycle window's table, to add a second loop to (null for other schemes). */
   smartCycleStart(id: number): SmartCycleStart | null { return smartCycleStart(this.doc, this.fullMeasure(), id); }
+  /** Whether a step of Smart Scheme `id` has a structure (or a box for one) joining or leaving it (no second loop then). */
+  smartReagentStructures(id: number): boolean { return structureReagents(this.doc, this.fullMeasure(), id); }
   /**
    * Draw Smart Scheme `id`'s cycle again with the loops from the Catalytic Cycle window (`rows`:
    * the species each row of loop 1 keeps). It is a Smart Scheme again afterwards, selected.

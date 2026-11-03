@@ -70,7 +70,7 @@ export interface FScene {
   pluses: { x: number; y: number }[];
   /** Text, centred on (x, y). */
   texts: { x: number; y: number; text: string }[];
-  /** y grows downwards in the file (ChemDoodle); otherwise upwards, as in molfiles. */
+  /** y grows downwards in the file (ChemDoodle, Chem4Word's CML); otherwise upwards, as in molfiles. */
   yDown?: boolean;
   /** The file's usual bond length, for a file whose structures have no bonds to measure. */
   unit?: number;
@@ -227,7 +227,8 @@ function v3Lines(lines: string[], from: number): { words: string[][]; end: numbe
     if (body.trim() === 'END CTAB') break;
     if (body.endsWith('-')) { cur += body.slice(0, -1); continue; }
     cur += body;
-    words.push(cur.match(/"[^"]*"|\([^)]*\)|\S+/g)?.map((w) => w.replace(/^"|"$/g, '')) ?? []);
+    // a word runs to the next space outside quotes and brackets: ATOMS=(3 7 8) and LABEL="t Bu" are one word each
+    words.push(cur.match(/(?:"[^"]*"|\([^)]*\)|[^\s"(])+/g)?.map((w) => w.replace(/="(.*)"$/, '=$1').replace(/^"|"$/g, '')) ?? []);
     cur = '';
   }
   return { words, end: i };
@@ -500,7 +501,10 @@ export function readMrv(text: string): FScene | null {
 export function readCmlFile(text: string): FScene | null {
   const doc = parseXml(text);
   if (!doc) return null;
-  const scene: FScene = { mols: [], arrows: [], pluses: [], texts: [], unit: 1.54 };
+  // Chem4Word keeps its coordinates y downwards (as on its page), unlike CML's usual y upwards:
+  // read the other way up, its wedges would show the other enantiomer (src/io/cml.ts reads them the same way)
+  const c4w = /xmlns:\w+="http:\/\/www\.chem4word\.com\/cml"/.test(text.slice(0, 4000));
+  const scene: FScene = { mols: [], arrows: [], pluses: [], texts: [], unit: 1.54, ...(c4w ? { yDown: true } : {}) };
   const inReaction = new Set<Element>();
   for (const r of below(doc, 'reaction')) {
     const lists: [string, string, FRole][] = [['reactantList', 'reactant', 'reactant'], ['spectatorList', 'spectator', 'agent'], ['productList', 'product', 'product']];
@@ -813,7 +817,7 @@ export function docToScene(doc: Doc): { scene: FScene; unknown: string[]; step: 
     if (!cap) return null;
     const species = placeSpecies(doc, [cap], m);
     if (!species.length) return null;
-    const ex = toMolfile(doc, [], plainText(cap.runs).trim(), { species });
+    const ex = toMolfile(doc, [], plainText(cap.runs).trim(), { species, maps: true });
     const mol = readMolfile(ex.molblock);
     return mol ? { ...mol, ...(role ? { role } : {}) } : null;
   };
@@ -836,7 +840,8 @@ export function docToScene(doc: Doc): { scene: FScene; unknown: string[]; step: 
   }
   for (const it of items) {
     if (!it.atoms.length) continue;
-    const ex = toMolfile(doc, it.atoms);
+    // (atom-atom map numbers go too, so a mapped reaction stays mapped in RXN, Marvin and Ketcher files)
+    const ex = toMolfile(doc, it.atoms, '', { maps: true });
     for (const u of ex.unknownLabels) unknown.add(u);
     const mol = readMolfile(ex.molblock);
     if (!mol || !mol.atoms.length) continue;
@@ -918,7 +923,7 @@ export function writeMolFile(doc: Doc, name = '', o: CtabOptions = {}): { text: 
   const species = placeSpecies(doc, doc.captions.values(), plainMeasure(doc));
   // V2000 can't count past 999 atoms or bonds
   const v3000 = o.v3000 || ids.length > 999 || doc.bonds.size > 999;
-  const ex = toMolfile(doc, ids, name, { species, v3000 });
+  const ex = toMolfile(doc, ids, name, { species, v3000, maps: true });
   return { text: ex.molblock, unknown: ex.unknownLabels };
 }
 

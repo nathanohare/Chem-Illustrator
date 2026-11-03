@@ -7,7 +7,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getText, keepStore, putText, type KeepStore } from '../keep/store';
 import { joinPath } from '../io/workspace-file';
-import { emptyLibrary, libraryText, mergeLibraries, parseLibrary, pruneDeleted, type LibraryData } from './library';
+import { emptyLibrary, isLibraryText, libraryText, mergeLibraries, parseLibrary, pruneDeleted, type LibraryData } from './library';
 
 /** Where the library's file and its PDFs are read and written. */
 export interface LibraryPlace {
@@ -170,8 +170,11 @@ export class Library {
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     this.saving = this.saving.then(async () => {
       try {
-        let there: LibraryData | null = null;
-        try { there = parseLibrary(await this.place.read()); } catch { /* written fresh */ }
+        // what is there now; if it can't be read (a cloud folder not synced, a file half written),
+        // nothing is written over it: the changes wait here, and are saved with the next change
+        const text = await this.place.read();
+        if (text?.trim() && !isLibraryText(text)) throw new Error('the file there is damaged, so it was left as it is');
+        const there: LibraryData | null = text ? parseLibrary(text) : null;
         const merged = pruneDeleted(there ? mergeLibraries(there, this.data) : this.data);
         await this.place.write(libraryText(merged));
         // what came from elsewhere shows here too

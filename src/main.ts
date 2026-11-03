@@ -72,7 +72,7 @@ import { solid } from './deck/background';
 import { pictureFormat } from './ui/picture-dialog';
 import { fxPng } from './render/picture-fx';
 import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND, type SlidePage } from './deck/slide-view';
-import { sameView, type InPlace, type PlaceView } from './ui/in-place';
+import { escapeAction, sameView, type InPlace, type PlaceView } from './ui/in-place';
 import { writePdf, jpegInfo, PdfPage, PdfImage } from './io/pdf';
 import { SlideList } from './ui/slide-list';
 import { CanvasKeys } from './ui/canvas-keys';
@@ -299,7 +299,8 @@ import { structuresIn, foundInContents, foundInDocument, foundInWorkbook, foundI
 import { parseIndex, indexText } from './library/file-index';
 import { libraryHolder } from './ui/library-refs';
 import { CompoundLibraryWindow, addStructures, type StructureIn } from './ui/compound-library';
-import { KnowledgeBaseWindow, looksLikeSmiles } from './ui/knowledge-base';
+import type { KnowledgeBaseHost, KnowledgeBaseWindow } from './ui/knowledge-base';
+import { looksLikeSmiles } from './kb/tables';
 import { FindInFilesWindow, type ListedFile } from './ui/find-in-files';
 import { later } from './lazy';
 
@@ -1800,7 +1801,8 @@ const conformerPrefs = (() => {
 function conformerTools(molblock: string): ConformerTools {
   return {
     search: (opts, progress) => model3d.search(molblock, opts, progress),
-    stop: () => model3d.stop(),
+    // (Stop ends the xtb running now too, rather than leaving it to finish its conformer)
+    stop: () => { model3d.stop(); if (isTauri()) void invoke('xtb_stop').catch(() => {}); },
     ...(isTauri() ? {
       xtb: (job) => invoke<{ xyz: string; energy: number }>('xtb_run', { job }),
       xtbVersion: (exe: string) => invoke<string>('xtb_version', { exe }),
@@ -2552,7 +2554,9 @@ async function applyAssistantAction(a: AssistantAction): Promise<string> {
     await copyText(a.smiles, 'Copied the structure as SMILES: paste it into a drawing, a cell or the document.');
     return 'Copied the structure as SMILES.';
   }
-  const old = a.replace ? chosenStructures() : [];
+  // in place of what is selected now; with nothing selected it is drawn as a new structure (not in
+  // place of the one last edited, which chosenStructures() falls back to)
+  const old = a.replace && editor.sel.atoms.size ? chosenStructures() : [];
   let ids: number[] = [];
   if (old.length) {
     const atoms = old.flatMap((f) => [...f]);
@@ -2572,7 +2576,7 @@ async function applyAssistantAction(a: AssistantAction): Promise<string> {
   }
   selectNewAtoms(ids);
   await keepPasteInside();
-  return old.length ? 'Replaced the selected structure.' : 'Drew the structure.';
+  return old.length ? 'Replaced the selected structure.' : a.replace ? 'Drew the structure as a new one (nothing was selected to replace).' : 'Drew the structure.';
 }
 
 let assistantBarEl: AssistantBar | null = null;
@@ -5718,7 +5722,9 @@ async function openCompoundLibrary(select: string[] = []): Promise<void> {
 /** Where the tables the user imported (from their own copies of published tables) are kept: this computer only. */
 const KB_IMPORTED_KEY = 'kb/imported-tables.json';
 
-const knowledgeBase = new KnowledgeBaseWindow({
+// (loaded when first opened: its tables are big, and most sessions never open it)
+let knowledgeBase: KnowledgeBaseWindow | null = null;
+const knowledgeBaseHost = {
   flash,
   canonical: async (smiles) => (chem.ready ? chem.canonical(smiles).catch(() => null) : null),
   readImported: () => getText(keepStore(), KB_IMPORTED_KEY).catch(() => null),
@@ -5734,12 +5740,15 @@ const knowledgeBase = new KnowledgeBaseWindow({
     const t = q.trim();
     return pubchemSafetyRecord(isCasNumber(t) ? { cas: t } : looksLikeSmiles(t) ? { smiles: t } : { name: t });
   },
-});
+} satisfies KnowledgeBaseHost;
 
 /** Chemistry > Look Up > Knowledge Base: reference tables searched by name, CAS number, SMILES or a shift. */
 function openKnowledgeBase(): void {
   finishTyping();
-  void knowledgeBase.open();
+  void (async () => {
+    knowledgeBase ??= new (await import('./ui/knowledge-base')).KnowledgeBaseWindow(knowledgeBaseHost);
+    await knowledgeBase.open();
+  })().catch((e) => flash(`The Knowledge Base could not open: ${String(e)}`));
 }
 
 // ---------------------------------------------------------------- Chemistry > Metals > Ligand Library
@@ -7296,6 +7305,8 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
     document.body.classList.add('boxed-drawing');
   }
   editor.clearSelection();
+  // (no keyboard highlight left from the last structure: its atom ids mean nothing in this one)
+  editor.setKeyHot(null);
   doc.swap(drawing);
   // the drawing beside (split view) waits in `drawing`, its zoom kept for after
   cellEdit = { done, saved: drawing, view: { ...renderer.view } };
@@ -7351,6 +7362,7 @@ function finishCellStructure(keep: boolean): void {
   const result = keep && doc.canUndo() ? doc.contents() : null;
   modeTool[ws.active.mode] = editor.toolName;
   editor.clearSelection();
+  editor.setKeyHot(null);
   editor.lastEdited = null;
   editor.cropping = null;
   doc.swap(e.saved);
@@ -7422,14 +7434,25 @@ host.addEventListener('pointerdown', (e) => {
   e.stopPropagation();
   void doneCellStructure();
 }, true);
-// Esc with nothing picked: Cancel (with something picked, Esc lets it go first)
+// Esc: the drawing tools let go of what they hold first (a selection, the highlight on the atom
+// last drawn, text being typed); then Cancel, asking first when something was drawn (ui/in-place.ts)
+let askingDiscard = false;
 window.addEventListener('keydown', (e) => {
   if (!cellEdit || e.key !== 'Escape' || e.defaultPrevented || isTyping(e.target) || (e.target as HTMLElement | null)?.closest?.('dialog, .menu')) return;
-  const s = editor.sel;
-  if (s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size || s.shapes.size || editor.dragging || editor.captionOpen()) return;
+  const act = escapeAction({ toolsBusy: editor.escapeHasWork(), changed: doc.canUndo() });
+  if (act === 'tools') return;
   e.preventDefault();
   e.stopPropagation();
-  finishCellStructure(false);
+  if (act === 'cancel') { finishCellStructure(false); return; }
+  if (askingDiscard) return;
+  askingDiscard = true;
+  const e0 = cellEdit;
+  void ask('Discard Changes?', [], { ok: 'Discard', note: 'Esc cancels the structure: what was drawn since it opened will be lost. Done keeps it.' }).then((ok) => {
+    askingDiscard = false;
+    if (cellEdit !== e0) return;
+    if (ok) finishCellStructure(false);
+    else overlay.focus();
+  });
 }, true);
 window.addEventListener('keydown', (e) => {
   // Ctrl+Enter: Done
@@ -13394,7 +13417,10 @@ const smartPane = new SmartPane({
   format: (id, fmt) => editor.smartFormat(id, fmt),
   async secondLoop(id) {
     const st = editor.smartCycleStart(id);
-    if (!st) return;
+    if (!st) {
+      if (editor.smartReagentStructures(id)) flash('A second loop can\'t be added while a step has a structure joining or leaving it: make those steps\' reagents text first (in the species list), add the loop, then make them structures again.', 8000);
+      return;
+    }
     const got = await askCycle(0, { spec: { loops: [st.loop] }, look: st.look, drawn: st.drawn });
     if (got?.rows) editor.smartRebuildCycle(id, got.spec, got.look, got.rows);
   },
