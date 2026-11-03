@@ -2051,15 +2051,39 @@ class CdxmlWriter {
     };
     const done = new Set<Element>();
     const kindOf = { shape: 's', structure: 'a', arrow: 'r', caption: 'c' } as const;
+    // ChemDraw paints in file order and takes no notice of Z, so what is on the page goes in this
+    // order too (a group by its backmost member)
+    const place = new Map<Element, number>();
+    let next = 0;
+    const setZ = (e: Element) => { const z = String(++next); if (e.getAttribute('Z') !== z) { e.setAttribute('Z', z); changed = true; } };
     stackItems(doc).forEach((it, i) => {
-      const z = String(i + 1);
       for (const id of it.ids) {
         const e = this.elementOf(kindOf[it.kind], id, ided);
         if (!e || done.has(e)) continue;
         done.add(e);
-        if (e.getAttribute('Z') !== z) { e.setAttribute('Z', z); changed = true; }
+        setZ(e);
+        if (it.kind === 'structure' && e.nodeName === 'fragment') {
+          // ChemDraw layers a structure's bonds and atoms by their own Z (none counts as the very
+          // back), so they follow the fragment's: bonds in their crossing order, then atoms and marks
+          const ks = kids(e);
+          const bonds = ks.filter((k) => k.nodeName === 'b').map((k, j) => ({ k, j, z: Number(k.getAttribute('Z')) }));
+          bonds.sort((x, y) => (isFinite(x.z) && isFinite(y.z) ? x.z - y.z : 0) || x.j - y.j);
+          for (const { k } of bonds) setZ(k);
+          for (const k of ks) if (k.nodeName === 'n' || k.nodeName === 'graphic') setZ(k);
+        }
+        let top: Element | null = e;
+        while (top && top.parentNode !== this.page) top = top.parentElement;
+        if (top && !place.has(top)) place.set(top, i);
       }
     });
+    const onPage = kids(this.page).filter((k) => place.has(k));
+    const wanted = [...onPage].sort((a, b) => place.get(a)! - place.get(b)!);
+    if (wanted.some((e, i) => e !== onPage[i])) {
+      // (in the places they took, so anything else on the page keeps its own)
+      const marks = onPage.map((e) => { const m = this.x.createComment(''); this.page.replaceChild(m, e); return m; });
+      marks.forEach((m, i) => this.page.replaceChild(wanted[i], m));
+      changed = true;
+    }
     return changed;
   }
 
