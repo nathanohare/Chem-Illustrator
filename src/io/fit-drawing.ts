@@ -2,7 +2,7 @@
 // for the document it goes into.
 
 import type { Doc, TextRun } from '../model';
-import type { DocStyle } from '../style';
+import { scaleOwnWidths, type DocStyle } from '../style';
 import type { Vec } from '../geom';
 
 /** The usual bond length in a drawing (the median), or null when it has no bonds. */
@@ -42,8 +42,8 @@ export function fitPasted(src: Doc, to: DocStyle, bondLength?: number): void {
   const len = (v: number | undefined) => (v === undefined ? undefined : v * k);
   const line = (w: number) => (Math.abs(w - to.lineWidth) < 1e-3 ? undefined : w);
   src.bulk(() => {
-    for (const a of [...src.atoms.values()]) src.updateAtom(a.id, { ...at(a), s: rel(a.s, ka) });
-    for (const b of [...src.bonds.values()]) src.updateBond(b.id, { s: rel(b.s, kb) });
+    for (const a of [...src.atoms.values()]) src.updateAtom(a.id, { ...at(a), s: rel(a.s, ka), ...(a.marginWidth !== undefined ? { marginWidth: a.marginWidth * k } : {}) });
+    for (const b of [...src.bonds.values()]) src.updateBond(b.id, { s: rel(b.s, kb), ...scaleOwnWidths(b, k) });
     for (const c of [...src.captions.values()]) {
       src.updateCaption(c.id, {
         ...at(c), runs: c.runs.map(run), width: len(c.width), wrap: len(c.wrap), lineHeight: len(c.lineHeight), boxH: len(c.boxH),

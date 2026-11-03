@@ -13,7 +13,7 @@ import type { SlideView } from './guides';
 import type { HandoutSetup, NotesPageSetup } from './notes-pages';
 import { copyPinned, type PinnedComment } from '../document/comments';
 import { Doc, Caption, Placeholder, TextBase, ParaStyle, Contents, Shape, applyBase } from '../model';
-import { DocStyle, ACS_1996 } from '../style';
+import { DocStyle, ACS_1996, scaleOwnWidths } from '../style';
 import { applyStyle, type RestyleHow } from '../drawing-styles';
 import type { Rect } from '../geom';
 import { ASCENT } from '../text/layout';
@@ -616,8 +616,8 @@ function scaleContents(d: Doc, from: SlideSize, to: SlideSize, k: number, placeh
     const dx = (to.w - from.w) / 2, dy = (to.h - from.h) / 2;
     d.moveAtoms([...d.atoms.keys()], dx, dy);
   } else {
-    for (const a of [...d.atoms.values()]) d.updateAtom(a.id, { ...at(a.x, a.y), s: (a.s ?? 1) * k });
-    for (const b of [...d.bonds.values()]) d.updateBond(b.id, { s: (b.s ?? 1) * k });
+    for (const a of [...d.atoms.values()]) d.updateAtom(a.id, { ...at(a.x, a.y), s: (a.s ?? 1) * k, ...(a.marginWidth !== undefined ? { marginWidth: a.marginWidth * k } : {}) });
+    for (const b of [...d.bonds.values()]) d.updateBond(b.id, { s: (b.s ?? 1) * k, ...scaleOwnWidths(b, k) });
   }
   for (const c of [...d.captions.values()]) if (!c.ph || placeholders) d.updateCaption(c.id, at(c.x, c.y));
   for (const r of [...d.arrows.values()]) {
