@@ -254,6 +254,10 @@ export interface Bond {
    * bond passing just beyond another's end). Used only while they still pass close.
    */
   crossing?: number[];
+  /** Which character of a1's label the bond meets, counted from 0 (ChemDraw's BeginAttach; unset is the default). */
+  beginAttach?: number;
+  /** Which character of a2's label the bond meets, counted from 0 (ChemDraw's EndAttach; unset is the default). */
+  endAttach?: number;
   /** The person chose to ignore this bond's chemistry warnings. */
   ignoreWarnings?: boolean;
   /**
