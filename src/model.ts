@@ -87,6 +87,8 @@ export interface Atom {
   alt?: string;
   /** A carbon shown with its letter and hydrogens (CH3 at a chain end; ChemDraw's ShowTerminalCarbonLabels). */
   showCarbon?: boolean;
+  /** A carbon with no bonds and no label, from a ChemDraw file: drawn as nothing, as ChemDraw draws it (not CH4). */
+  bare?: boolean;
   /** The charge is drawn by a separate circled-charge symbol, so the label leaves it out. */
   hideCharge?: boolean;
   /** Numbers after R groups are superscripts (R¹ rather than R₁); false keeps them down. Not set: R1, R12… go up, as the preferences say. */

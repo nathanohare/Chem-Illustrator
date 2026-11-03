@@ -455,6 +455,12 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (crosses) fileCrossings.push([bond.id, crosses.split(/\s+/)]);
       stats.bonds++;
     }
+    // a carbon left on its own with no label (a stray atom): ChemDraw draws nothing there
+    for (const n of kids(frag)) {
+      if (n.nodeName !== 'n' || n.getAttribute('NodeType') || kids(n).some((k) => k.nodeName === 't') || num(n, 'Element', 6) !== 6) continue;
+      const id = nodeIds.get(n.getAttribute('id') ?? '');
+      if (id !== undefined && doc.degree(id) === 0) doc.updateAtom(id, { bare: true });
+    }
     // ChemDraw's ring fills: an area coloured in behind the bonds that go round it
     for (const area of kids(frag)) {
       if (area.nodeName !== 'ColoredMolecularArea') continue;
