@@ -270,3 +270,79 @@ describe('our page and step tags where ChemDraw keeps them (E10)', () => {
     expect(readCdxml(old).doc.guides?.list).toHaveLength(1);
   });
 });
+
+describe('the CDXML audit, writing side (2)', () => {
+  it('R1: a group rebuilt after an edit keeps the groups inside it', () => {
+    const t = (id: number, x: number, s: string) => `<t id="${id}" p="${x} 100" BoundingBox="${x} 92 ${x + 10} 100"><s font="3" size="10" face="0">${s}</s></t>`;
+    const body = `<group id="30">${t(10, 0, 'a')}<group id="37">${t(11, 20, 'b')}${t(12, 40, 'c')}</group></group>${t(13, 80, 'd')}`;
+    const doc = readCdxml(file(body)).doc;
+    const by = (s: string) => [...doc.captions.values()].find((c) => c.runs[0].text === s)!;
+    const g = by('a').grp;
+    // d joins the group: the group is written again, with b and c still in a group of their own
+    doc.edit('Group', () => doc.updateCaption(by('d').id, { grp: g }));
+    const x = parse(writeCdxml(doc));
+    const groups = all(x, 'group');
+    expect(groups).toHaveLength(2);
+    const outer = groups.find((e) => e.parentElement!.nodeName === 'page')!;
+    const inner = groups.find((e) => e !== outer)!;
+    expect(inner.parentElement).toBe(outer);
+    expect(all(inner, 't').map((e) => e.textContent)).toEqual(['b', 'c']);
+    expect(all(outer, 't').map((e) => e.textContent).sort()).toEqual(['a', 'b', 'c', 'd']);
+    // and read back the same
+    const back = readCdxml(new XMLSerializer().serializeToString(x)).doc;
+    const bb = [...back.captions.values()].find((c) => c.runs[0].text === 'b')!;
+    expect(bb.grpPath).toHaveLength(2);
+  });
+
+  it('R3: a closed ChemDraw curve is written back as a closed curve, moved with its shape', () => {
+    const pts = '10 10 0 10 0 20 0 30 10 30 20 30 20 20 20 10 10 10';
+    const body = `<fragment id="2"><n id="3" p="100 150"/><n id="4" p="114.4 150"/><b id="5" B="3" E="4"/></fragment><curve id="30" CurveType="1" Closed="yes" CurvePoints="${pts}"/>`;
+    const doc = readCdxml(file(body)).doc;
+    const s = doc.shapes.get(30)!;
+    expect(s.geo!.startsWith('path:')).toBe(true);
+    // unchanged: written as it was
+    const same = all(parse(writeCdxml(doc)), 'curve');
+    expect(same).toHaveLength(1);
+    expect(same[0].getAttribute('CurvePoints')).toBe(pts);
+    // made dashed: written again as a closed curve with the same points
+    doc.edit('Dash', () => doc.updateShape(30, { dashed: true }));
+    const c = all(parse(writeCdxml(doc)), 'curve');
+    expect(c).toHaveLength(1);
+    expect(all(parse(writeCdxml(doc)), 'group')).toHaveLength(0);
+    expect(Number(c[0].getAttribute('CurveType')) & 3).toBe(3);
+    expect(c[0].getAttribute('Closed')).toBe('yes');
+    expect(c[0].getAttribute('CurvePoints')!.split(' ').map(Number)).toEqual(pts.split(' ').map(Number));
+    const back = readCdxml(viaCdx(writeCdxml(doc))).doc;
+    const bs = [...back.shapes.values()].find((x) => x.geo?.startsWith('path:'))!;
+    expect(bs.geo).toBe(s.geo);
+    expect(bs.dashed).toBe(true);
+  });
+
+  it('R3: a new drawing with a closed curve shape writes a ChemDraw curve, not a design group', () => {
+    const doc = readCdxml(file('<curve id="30" CurveType="1" Closed="yes" CurvePoints="10 10 0 10 0 20 0 30 10 30 20 30 20 20 20 10 10 10"/>')).doc;
+    const fresh = newDoc();
+    const s = doc.shapes.get(30)!;
+    const { id: _id, ...rest } = s;
+    fresh.edit('Paste', () => { fresh.addShape(rest); });
+    const x = parse(writeCdxml(fresh));
+    expect(all(x, 'curve')).toHaveLength(1);
+    expect(all(x, 'group')).toHaveLength(0);
+  });
+
+  it('writes our dashed aromatic bond as ChemDraw\'s (Order 2, Display2 Dash), and its one-line and ring-circle ones as 1.5', () => {
+    const doc = newDoc();
+    doc.edit('Draw', () => {
+      const a = doc.addAtom(0, 0, 6), b = doc.addAtom(14.4, 0, 6), c = doc.addAtom(28.8, 0, 6), d = doc.addAtom(43.2, 0, 6);
+      doc.addBond(a.id, b.id, 1.5);
+      doc.addBond(b.id, c.id, 1.5, 'solid', { plain: true });
+      doc.addBond(c.id, d.id, 1.5, 'solid', { circle: true });
+    });
+    const bonds = all(parse(writeCdxml(doc)), 'b');
+    expect(bonds.map((e) => [e.getAttribute('Order'), e.getAttribute('Display2')])).toEqual([['2', 'Dash'], ['1.5', null], ['1.5', null]]);
+    const back = readCdxml(viaCdx(writeCdxml(doc))).doc;
+    const bb = [...back.bonds.values()];
+    expect(bb[0].order).toBe(1.5);
+    expect(bb[0].plain).toBeUndefined();
+    expect(bb[1].plain).toBe(true);
+  });
+});

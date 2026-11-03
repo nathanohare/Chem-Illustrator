@@ -28,7 +28,7 @@ import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
 import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
 import { pageExtent, pageCount, pageTag } from '../page-grid';
-import { geoDef, moveSteps, outlineParts, textArea, type GeoStep } from '../design/geo';
+import { geoDef, isPathId, moveSteps, outlineParts, textArea, type GeoStep } from '../design/geo';
 import { FADE, tint } from '../colours';
 import { fillInk, mix, ringShadowGroups, ringShadowSize, shadowLook } from '../render/fills';
 import { shapeShadow } from '../render/highlight-fx';
@@ -1243,10 +1243,13 @@ class CdxmlWriter {
     e.setAttribute('E', this.nodeId(b.a2));
     // a bond read from a file whose order and look haven't changed keeps ChemDraw's own words for
     // them (orders such as 2.5 or ionic, hollow and wavy wedges, Display2), which we don't draw
-    if (!o || o.order !== b.order || o.display !== b.display) {
-      this.set(e, 'Order', b.display === 'dative' ? 'dative' : orderAttr(b.order));
+    if (!o || o.order !== b.order || o.display !== b.display || !o.plain !== !b.plain || !o.circle !== !b.circle) {
+      // ChemDraw 25 draws Order="1.5" as one line: our dashed aromatic bond is its Order 2 with a
+      // dashed second line; one-line and ring-circle aromatic bonds stay 1.5
+      const dashed = b.order === 1.5 && !b.circle && !b.plain && b.display !== 'dative';
+      this.set(e, 'Order', b.display === 'dative' ? 'dative' : dashed ? '2' : orderAttr(b.order));
       this.set(e, 'Display', DISPLAY[b.display] ?? null);
-      e.removeAttribute('Display2');
+      this.set(e, 'Display2', dashed ? 'Dash' : null);
     }
     const dp = b.order === 2 || b.order === 1.5 ? { left: 'Left', right: 'Right', center: 'Center', auto: null }[b.dpos] : null;
     this.set(e, 'DoublePosition', dp);
@@ -1493,6 +1496,7 @@ class CdxmlWriter {
   private writeShape(s: Shape): void {
     if (s.kind === 'table') { this.writeTable(s); return; }
     if (s.kind === 'ring' && this.writeRingArea(s)) return;
+    if (s.kind === 'geo' && isPathId(s.geo) && this.writePathCurve(s)) return;
     if (s.kind === 'geo' || s.kind === 'ring') { this.writeGeo(s); return; }
     const pic = s.picture || s.kind === 'picture';
     const names = pic ? ['embeddedobject'] : ['graphic'];
@@ -1552,6 +1556,50 @@ class CdxmlWriter {
     this.set(g, 'bgcolor', this.colorIndex(fillInk(s), true));
     this.set(g, 'BasisObjects', ids.join(' '));
     if (g.parentElement !== frag) frag!.appendChild(g);
+    this.changed = true;
+    return true;
+  }
+
+  /**
+   * A closed curve read from ChemDraw (a perspective ring's ellipse) written back as ChemDraw's
+   * own closed curve, where it was (in its structure, when it was there). Each point is written
+   * with its handle in before it and its handle out after it. False when the shape has more than
+   * a curve can hold (text, effects): it is then written as a design shape.
+   */
+  private writePathCurve(s: Shape): boolean {
+    const e = this.source('s', s.id, ['curve']);
+    if (Object.entries(s).some(([k, v]) => v !== undefined && v !== false && !PATH_CURVE_KEYS.has(k))) {
+      // (the design shape replaces the curve)
+      if (e) { e.parentNode?.removeChild(e); this.changed = true; }
+      return false;
+    }
+    const o = this.orig<Shape>('s', s.id);
+    if (e && o) {
+      if (sameExcept(s, o, [])) return true;
+      const dx = s.x1 - o.x1, dy = s.y1 - o.y1;
+      if (sameExcept(s, { ...o, x1: o.x1 + dx, y1: o.y1 + dy, x2: o.x2 + dx, y2: o.y2 + dy }, [])) { shift(e, dx, dy); this.changed = true; return true; }
+    }
+    const n = s.geo!.slice(5).split(',').map(Number);
+    const x1 = Math.min(s.x1, s.x2), y1 = Math.min(s.y1, s.y2), w = Math.abs(s.x2 - s.x1), h = Math.abs(s.y2 - s.y1);
+    const path: Vec[] = [];
+    for (let i = 0; i + 1 < n.length; i += 2) path.push({ x: x1 + (n[i] / 10000) * w, y: y1 + (n[i + 1] / 10000) * h });
+    // the start, then two handles and a point for each segment, the last back at the start
+    const m = Math.floor((path.length - 1) / 3);
+    if (m < 1 || path.some((p) => !Number.isFinite(p.x) || !Number.isFinite(p.y))) return false;
+    const knots: Vec[] = [];
+    for (let i = 0; i < m; i++) knots.push(path[3 * ((i + m - 1) % m) + 2], path[3 * i], path[3 * i + 1]);
+    const lw = this.doc.style.lineWidth;
+    const kinds = 1 | (s.dashed ? 2 : 0) | (s.bold ? 4 : 0);
+    const c = e ?? this.el('curve', { id: s.id });
+    this.set(c, 'BoundingBox', box({ x1, y1, x2: x1 + w, y2: y1 + h }));
+    this.set(c, 'color', this.colorAttr(s.color));
+    this.set(c, 'CurvePoints', knots.map((p) => `${f2(p.x)} ${f2(p.y)}`).join(' '));
+    this.set(c, 'CurveType', String(kinds));
+    this.set(c, 'Closed', 'yes');
+    // ChemDraw 25 fills a curve by its FillType; the CurveType bit alone leaves it empty
+    this.set(c, 'FillType', s.filled ? 'Solid' : null);
+    this.set(c, 'LineWidth', s.lineWidth !== undefined && s.lineWidth !== lw ? f2(s.lineWidth) : null);
+    if (!c.parentNode) this.page.appendChild(c);
     this.changed = true;
     return true;
   }
@@ -2068,7 +2116,7 @@ class CdxmlWriter {
     switch (ref[0]) {
       case 'a': return this.fragOfAtom.get(id)?.getAttribute('id') ?? null;
       case 'c': return this.doc.captions.has(id) ? this.source('c', id, ['t'])?.getAttribute('id') ?? String(id) : null;
-      case 's': return this.doc.shapes.has(id) ? this.source('s', id, ['graphic', 'embeddedobject', 'table', 'group'])?.getAttribute('id') ?? String(id) : null;
+      case 's': return this.doc.shapes.has(id) ? this.source('s', id, ['graphic', 'embeddedobject', 'table', 'group', 'curve'])?.getAttribute('id') ?? String(id) : null;
     }
     return null;
   }
@@ -2150,7 +2198,7 @@ class CdxmlWriter {
   /** The element written for a thing: a structure's fragment for an atom. */
   private elementOf(kind: Kind, id: number, ided: (id: number, names: string[]) => Element | null): Element | null {
     if (kind === 'a') return this.fragOfAtom.get(id) ?? null;
-    const names = kind === 'c' ? ['t'] : kind === 'r' ? ['arrow', 'graphic'] : ['graphic', 'embeddedobject', 'table', 'group'];
+    const names = kind === 'c' ? ['t'] : kind === 'r' ? ['arrow', 'graphic'] : ['graphic', 'embeddedobject', 'table', 'group', 'curve'];
     return this.source(kind, id, names) ?? (kind === 'r' ? this.findArrow(id) : null) ?? ided(id, names);
   }
 
@@ -2208,17 +2256,20 @@ class CdxmlWriter {
       return t;
     };
     const wanted = new Map<Element, number | undefined>();
-    const note = (kind: Kind, id: number, grp: number | undefined) => {
+    // the groups inside the group, as ChemDraw nested them (only while the outer group is still the one read)
+    const nesting = new Map<Element, number[]>();
+    const note = (kind: Kind, id: number, grp: number | undefined, path: number[] | undefined) => {
       const e = elementOf(kind, id);
       // (only things on the page can be grouped)
       if (!e || e === this.page || !this.page.contains(e)) return;
       const t = topOf(e);
       if (!wanted.has(t) || grp !== undefined) wanted.set(t, grp);
+      if (grp !== undefined && path && path.length > 1 && path[0] === grp && !nesting.has(t)) nesting.set(t, path.slice(1));
     };
-    for (const a of doc.atoms.values()) note('a', a.id, a.grp);
-    for (const c of doc.captions.values()) note('c', c.id, c.grp);
-    for (const r of doc.arrows.values()) note('r', r.id, r.grp);
-    for (const s of doc.shapes.values()) note('s', s.id, s.grp);
+    for (const a of doc.atoms.values()) note('a', a.id, a.grp, a.grpPath);
+    for (const c of doc.captions.values()) note('c', c.id, c.grp, c.grpPath);
+    for (const r of doc.arrows.values()) note('r', r.id, r.grp, r.grpPath);
+    for (const s of doc.shapes.values()) note('s', s.id, s.grp, s.grpPath);
     const members = new Map<number, Element[]>();
     for (const [e, g] of wanted) {
       if (g === undefined) {
@@ -2253,8 +2304,22 @@ class CdxmlWriter {
       })();
       if (kept) continue;
       const g = this.el('group', { id: this.id() });
-      list[0].parentNode!.insertBefore(g, list[0]);
-      for (const e of list) g.appendChild(e);
+      // where the first member's old group was (not inside it: that is emptied and dropped)
+      const at = outer ?? list[0];
+      at.parentNode!.insertBefore(g, at);
+      // groups inside it, rebuilt as they were read (a member's place is its path inside the group)
+      const inner = new Map<string, Element>();
+      const holder = (path: number[]): Element => {
+        let at = g;
+        for (let i = 1; i <= path.length; i++) {
+          const key = path.slice(0, i).join(' ');
+          let sub = inner.get(key);
+          if (!sub) { sub = this.el('group', { id: this.id() }); at.appendChild(sub); inner.set(key, sub); }
+          at = sub;
+        }
+        return at;
+      };
+      for (const e of list) holder(nesting.get(e) ?? []).appendChild(e);
       this.changed = true;
     }
   }
@@ -2282,7 +2347,7 @@ class CdxmlWriter {
     for (const a of doc.atoms.values()) put('a', a.id, ['n'], a.piece);
     for (const c of doc.captions.values()) put('c', c.id, ['t'], c.piece);
     for (const r of doc.arrows.values()) put('r', r.id, ['arrow', 'graphic'], r.piece);
-    for (const s of doc.shapes.values()) put('s', s.id, ['graphic', 'embeddedobject', 'table', 'group'], s.piece);
+    for (const s of doc.shapes.values()) put('s', s.id, ['graphic', 'embeddedobject', 'table', 'group', 'curve'], s.piece);
   }
 
   private cleanUp(): void {
@@ -2324,7 +2389,8 @@ class CdxmlWriter {
       for (const a of kids(bg)) if (a.nodeName === 'bracketattachment' && !ids.has(a.getAttribute('GraphicID') ?? '')) bg.removeChild(a);
       if (bg.hasAttribute('BracketedObjectIDs') && !trim(bg, 'BracketedObjectIDs')) bg.parentNode?.removeChild(bg);
     }
-    for (const g of named('group')) if (!g.firstElementChild) g.parentNode?.removeChild(g);
+    // (inner ones first, so a group left holding only empty groups goes too)
+    for (const g of named('group').reverse()) if (!g.firstElementChild) g.parentNode?.removeChild(g);
     for (const f of named('fragment')) {
       if (f.parentElement?.nodeName === 'n') continue;
       // a structure with nothing left in it (ChemDraw also keeps lone charge symbols in fragments)
@@ -2413,6 +2479,9 @@ function shift(e: Element, dx: number, dy: number): void {
 }
 
 /** Are two entities equal, ignoring the listed fields? */
+/** What a closed curve can hold: a path shape with any other setting is written as a design shape. */
+const PATH_CURVE_KEYS = new Set(['id', 'grp', 'grpPath', 'stack', 'piece', 'kind', 'geo', 'x1', 'y1', 'x2', 'y2', 'color', 'z', 'filled', 'dashed', 'bold', 'lineWidth']);
+
 function sameExcept(a: object, b: object, skip: string[]): boolean {
   // (which group a thing is in is written by writeGroups, as the file's group elements)
   const ka = Object.keys(a).filter((k) => k !== 'grp' && !skip.includes(k) && (a as any)[k] !== undefined);
