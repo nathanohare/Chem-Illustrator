@@ -15,16 +15,20 @@ import { restoreSteps } from './step-tag';
 import { fromDataUrl } from '../render/images';
 import type { PinnedComment } from '../document/comments';
 import { COMMENT_REL, readCommentAuthors, readLegacyComments, readModernComments } from './pptx-comments';
-import { Doc, Caption, Shape, TextRun, ParaStyle, Arrow, Contents, Placeholder, Justify, stripBase, type TableCell, type TableData, type PictureFx, type BackgroundRemoval, type PictureLook, type Frame, type ShapeMath, type Media } from '../model';
+import { Doc, Caption, Shape, TextRun, ParaStyle, Arrow, Contents, Placeholder, Justify, stripBase, type TableCell, type TableData, type PictureFx, type BackgroundRemoval, type PictureLook, type Frame, type ShapeMath, type Media, type OleMark } from '../model';
 import { layoutTable, NOTE_SCALE } from '../table';
 import { PPT_STYLE_IDS, slideCellLook, unstyledRuns } from '../deck/table-styles';
 import { linesFromBorders, type Borders } from './cdxml-table';
 import { turnAbout, normDegrees, DEG, type Vec, type Rect } from '../geom';
 import { POINTS, rotation, snapshot, transform } from '../editor/arrange';
-import { PackageReader, NS, REL, kids, kid, rAttr, fromEmu } from './ooxml';
+import { PackageReader, NS, REL, kids, kid, rAttr, fromEmu, bytesHash } from './ooxml';
 import { readKeptParts, type KeptParts } from './kept-parts';
 import { linkFromTarget, officeTarget, slideOfLink } from '../links';
 import { readCdxml } from './cdxml';
+import { cdxToCdxml, isCdx } from './cdx';
+import { chemdrawInObject, isChemDraw, CHEMDRAW_PROG } from './ole-object';
+import { fitPasted, typicalBondLength } from './fit-drawing';
+import type { DocStyle } from '../style';
 import { drawingInEmf } from '../render/emf';
 import { dataUrl, imageSize } from '../render/images';
 import { knownShape, tidyFx } from '../render/picture-fx';
@@ -871,14 +875,51 @@ class Reader {
       return null;
     };
     const ole = data ? Array.from(data.getElementsByTagNameNS(NS.p, 'oleObj'))[0] : undefined;
+    // a ChemDraw object: its drawing comes in as structures, kept as a ChemDraw object when saved
+    if (ole && isChemDraw(ole.getAttribute('progId') ?? '') && this.chemdrawObject(s, el, ole, t, doc)) return;
     const pic = find(data);
     if (!pic) { this.warnings.add('Some objects from other programs had no picture and were left out.'); return; }
     const box = boxOf(kid(el, 'xfrm'), t);
     const img = this.image(s.path, pic);
     if (!img || !box) return;
-    if (/ChemDraw/i.test(ole?.getAttribute('progId') ?? '')) this.warnings.add('ChemDraw objects came in as pictures.');
+    if (/ChemDraw/i.test(ole?.getAttribute('progId') ?? '')) this.warnings.add('Some ChemDraw objects could not be read and came in as pictures.');
     doc.addShape({ kind: 'picture', x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2, src: img.src, px: img.px, ...(img.crop ? { crop: img.crop } : {}), ...turn(box) });
   }
+
+  /**
+   * A ChemDraw object (an OLE object whose CONTENTS stream is ChemDraw's CDX): its drawing, sized
+   * and placed as PowerPoint shows the object, each part marked (OleMark) so the slide saves it
+   * back as a ChemDraw object. One saved here and not changed in ChemDraw since comes back from
+   * the drawing kept with it, with everything ChemDraw has no place for. False when there is
+   * no drawing to read (the object's picture then comes in instead).
+   */
+  private chemdrawObject(s: Part, el: Element, ole: Element, t: Xf, doc: Doc): boolean {
+    const box = boxOf(kid(el, 'xfrm'), t);
+    const target = this.r.rels(s.path).get(rAttr(ole, 'id') ?? '')?.target;
+    const bin = target ? this.r.bytes(target) : null;
+    const cdx = bin ? chemdrawInObject(bin) : null;
+    if (!box || !cdx) return false;
+    const prog = ole.getAttribute('progId') || CHEMDRAW_PROG;
+    const from = doc.idMark;
+    const tags = this.tagsOf(s.path, kid(el, 'nvGraphicFramePr', 'nvPr'));
+    if (tags[TAG.cdxml] && tags[TAG.oleCdx] === bytesHash(cdx)) {
+      if (!this.drawing(tags[TAG.cdxml], tags[TAG.box], box, doc)) return false;
+    } else {
+      let text: string, src: Doc;
+      try {
+        text = isCdx(cdx) ? cdxToCdxml(cdx) : new TextDecoder().decode(cdx);
+        src = readCdxml(text).doc;
+      } catch {
+        return false;
+      }
+      const placed = placeChemdraw(src, text, box, { w: fromEmu(ole.getAttribute('imgW')), h: fromEmu(ole.getAttribute('imgH')) }, doc.style);
+      if (!placed) return false;
+      mergeDrawing(doc, src, placed);
+    }
+    markOle(doc, from, { id: ++this.oleCount, prog });
+    return true;
+  }
+  private oleCount = 0;
 
   /** A chart: PowerPoint's own (its numbers from what PowerPoint cached), or ours when it charts the same numbers. */
   private chart(s: Part, el: Element, data: Element, t: Xf, doc: Doc): void {
@@ -2091,6 +2132,41 @@ export function mergeDrawing(doc: Doc, src: Doc, map: (p: Vec) => Vec): void {
     arrows.set(id, doc.addArrow({ ...rest, tail: map(r.tail), head: map(r.head) }).id);
   }
   remapFrames(doc, maps);
+}
+
+/**
+ * Size a ChemDraw object's drawing (changes `src`) as PowerPoint shows the object, in `box`, and
+ * return the move that puts it there; null when it has nothing in it. ChemDraw makes the object
+ * the drawing's BoundingBox plus a small margin, and PowerPoint keeps that size as imgW and imgH,
+ * so the scale is the box's size over that one (labels and lines too, as PowerPoint scales the
+ * picture); without them, the drawing's own size is used.
+ */
+export function placeChemdraw(src: Doc, cdxml: string, box: Rect, img: { w: number; h: number }, style: DocStyle): ((p: Vec) => Vec) | null {
+  const own = src.bounds();
+  if (!own) return null;
+  const m = /<CDXML\b[^>]*?\sBoundingBox="([^"]+)"/.exec(cdxml);
+  const bb = m ? m[1].trim().split(/\s+/).map(Number) : [];
+  const was = bb.length === 4 && bb.every(Number.isFinite) && bb[2] > bb[0] && bb[3] > bb[1] ? { x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3] } : own;
+  const w = box.x2 - box.x1, h = box.y2 - box.y1;
+  const iw = img.w > 0 ? img.w : was.x2 - was.x1, ih = img.h > 0 ? img.h : was.y2 - was.y1;
+  const k = Math.min(w / Math.max(1e-6, iw), h / Math.max(1e-6, ih));
+  const L = typicalBondLength(src);
+  // labels, lines and text grow or shrink with it; a drawing with no bonds keeps its size
+  const ks = L && Number.isFinite(k) && k > 0 ? k : 1;
+  fitPasted(src, style, L ? L * ks : undefined);
+  const cx = ((was.x1 + was.x2) / 2) * ks, cy = ((was.y1 + was.y2) / 2) * ks;
+  const nx = (box.x1 + box.x2) / 2, ny = (box.y1 + box.y2) / 2;
+  return (p) => ({ x: p.x - cx + nx, y: p.y - cy + ny });
+}
+
+/** Mark everything added to `doc` since id `from` as part of one ChemDraw object. */
+function markOle(doc: Doc, from: number, ole: OleMark): void {
+  const to = doc.idMark;
+  const mine = (id: number) => id >= from && id < to;
+  for (const a of [...doc.atoms.values()]) if (mine(a.id)) doc.updateAtom(a.id, { ole });
+  for (const c of [...doc.captions.values()]) if (mine(c.id)) doc.updateCaption(c.id, { ole });
+  for (const r of [...doc.arrows.values()]) if (mine(r.id)) doc.updateArrow(r.id, { ole });
+  for (const sh of [...doc.shapes.values()]) if (mine(sh.id)) doc.updateShape(sh.id, { ole });
 }
 
 /** Read a PowerPoint file. Throws only when the file is not a PowerPoint file at all. */
