@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { Doc } from '../src/model';
 import { writeCdxml } from '../src/io/cdxml-write';
-import { readCdxml, encodeTagValue, GEO_TAG, CURVE_ARROW_TAG, GROUP_TAG, FILL_TAG } from '../src/io/cdxml';
+import { readCdxml, encodeTagValue, BOND_LOOK_TAG, GEO_TAG, CURVE_ARROW_TAG, GROUP_TAG, FILL_TAG } from '../src/io/cdxml';
 import { cdxmlToCdx, cdxToCdxml } from '../src/io/cdx';
 import { bracketsAround } from '../src/objects';
 import { ACS_1996 } from '../src/style';
@@ -774,21 +774,26 @@ describe('the new bond types and variable attachments (ChemDraw parity)', () => 
   };
   const attrs = (xml: string) => all(parse(xml), 'b').map((e) => [e.getAttribute('B'), e.getAttribute('E'), e.getAttribute('Order'), e.getAttribute('Display'), e.getAttribute('Display2')]);
 
-  it('writes hollow and wavy wedges, hydrogen and ionic bonds and second-line styles as ChemDraw has them, through CDX too', () => {
+  it('writes hollow and wavy wedges, hydrogen and ionic bonds and second-line styles as ChemDraw 25 keeps them, with our tag, through CDX too', () => {
     const { doc, ids } = draw();
     const n = (i: number) => String(ids[i]);
+    // (ChemDraw 25 keeps only some of these: the rest go as its nearest look, ours in our tag)
     const want = [
       [n(0), n(1), null, 'HollowWedgeBegin', null],
-      [n(1), n(2), null, 'WavyWedgeBegin', null],
+      [n(1), n(2), null, 'Wavy', null],
       [n(2), n(3), '2', null, 'Dash'],
-      [n(3), n(4), '2', null, 'Bold'],
-      [n(4), n(5), '2', null, 'Hash'],
-      [n(6), n(5), 'hydrogen', null, null],
-      [n(7), n(0), 'ionic', null, null],
+      [n(3), n(4), '2', null, null],
+      [n(4), n(5), '2', null, null],
+      [n(6), n(5), null, 'Dash', null],
+      [n(7), n(0), null, 'Dash', null],
     ];
+    const looks = [null, { display: 'wavyWedge' }, { line2: 'dash' }, { line2: 'bold' }, { line2: 'hash' }, { display: 'hydrogen' }, { display: 'ionic' }];
     const xml = writeCdxml(doc);
-    expect(attrs(xml)).toEqual(want);
-    expect(attrs(viaCdx(xml))).toEqual(want);
+    for (const out of [xml, viaCdx(xml)]) {
+      expect(attrs(out)).toEqual(want);
+      const tags = all(parse(out), 'b').map((b) => Array.from(b.children).find((c) => c.getAttribute('Name') === BOND_LOOK_TAG)?.getAttribute('Value') ?? null);
+      expect(tags.map((t) => (t ? JSON.parse(t) : null))).toEqual(looks);
+    }
   });
 
   it('changes them on a bond read from a file, and keeps a file\'s unchanged', () => {
@@ -798,7 +803,8 @@ describe('the new bond types and variable attachments (ChemDraw parity)', () => 
     expect(writeCdxml(d2)).toBe(xml);
     const b = [...d2.bonds.values()][3];
     d2.edit('Style', () => d2.updateBond(b.id, { line2: 'hash' } as never));
-    expect(attrs(writeCdxml(d2))[3].slice(2)).toEqual(['2', null, 'Hash']);
+    expect(attrs(writeCdxml(d2))[3].slice(2)).toEqual(['2', null, null]);
+    expect(writeCdxml(d2)).toContain('{&quot;line2&quot;:&quot;hash&quot;}');
     d2.edit('Style', () => d2.updateBond(b.id, { order: 1 } as never));
     expect(attrs(writeCdxml(d2))[3].slice(2)).toEqual([null, null, null]);
   });
