@@ -921,11 +921,17 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const refs: Record<string, string> = {};
     const scan = (e: Element) => {
       for (const at of Array.from(e.attributes)) {
-        if (at.name === 'id') continue;
+        // (only attributes that name objects: a RepeatCount of 2 is not object 2)
+        if (at.name === 'id' || !/(ID|IDs|Objects)$/.test(at.name)) continue;
         for (const tok of at.value.trim().split(/\s+/)) {
           if (!/^\d+$/.test(tok) || refs[tok]) continue;
           const target = byId.get(tok);
-          const key = target ? refOf().get(target) : undefined;
+          let key = target ? refOf().get(target) : undefined;
+          // a structure is named by its first atom ("frag:a10")
+          if (!key && target?.nodeName === 'fragment') {
+            const n = kids(target).find((c) => c.nodeName === 'n' && refOf().has(c));
+            if (n) key = `frag:${refOf().get(n)}`;
+          }
           if (key) refs[tok] = key;
         }
       }

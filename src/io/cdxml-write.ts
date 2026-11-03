@@ -193,6 +193,7 @@ class CdxmlWriter {
     this.writeRingCircles();
     this.raiseSymbols();
     this.writeRepeatGroups();
+    if (!src) this.writeKept();
     this.writeSteps();
     this.writeGroups();
     this.writePieces();
@@ -1957,7 +1958,9 @@ class CdxmlWriter {
       case 'oval': {
         const c = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };
         const rx = Math.abs(s.x2 - s.x1) / 2, ry = Math.abs(s.y2 - s.y1) / 2;
-        set('GraphicType', 'Oval');
+        // ChemDraw's orbital (an s orbital, a lobe) stays one
+        set('GraphicType', s.orbital ? 'Orbital' : 'Oval');
+        set('OrbitalType', s.orbital ?? null);
         set('BoundingBox', box(s));
         set('Center3D', pt3(c));
         // a turned oval (an ellipsoid of a crystal structure) has its axes turned: ChemDraw draws
@@ -2243,6 +2246,58 @@ class CdxmlWriter {
     return changed;
   }
 
+  /**
+   * ChemDraw objects this program keeps but doesn't show (plain bracketed groups, chemical
+   * properties), for a drawing written afresh (a copy): each one with its ids pointed at the
+   * things written now. A name whose thing is gone is dropped, and the object too when nothing
+   * it names is left. (A file saved in place still holds them where they were.)
+   */
+  private writeKept(): void {
+    if (!this.doc.kept.length) return;
+    const ided = this.idedFinder();
+    const idOf = (key: string): string | null => {
+      const frag = key.startsWith('frag:');
+      const k = frag ? key.slice(5) : key;
+      const kind = k[0] as Kind, id = Number(k.slice(1));
+      if (!Number.isInteger(id)) return null;
+      if (frag) return kind === 'a' ? this.fragOfAtom.get(id)?.getAttribute('id') ?? null : null;
+      if (kind === 'a') return this.doc.atoms.has(id) ? this.nodeId(id) : null;
+      if (kind === 'b') return this.bondEls.get(id)?.getAttribute('id') ?? null;
+      if (kind !== 'c' && kind !== 'r' && kind !== 's') return null;
+      if (!(kind === 'c' ? this.doc.captions : kind === 'r' ? this.doc.arrows : this.doc.shapes).has(id)) return null;
+      const e = this.elementOf(kind, id, ided);
+      return e && this.page.contains(e) ? e.getAttribute('id') : null;
+    };
+    for (const k of this.doc.kept) {
+      let el: Element;
+      try {
+        const x = new DOMParser().parseFromString(k.xml, 'application/xml');
+        if (x.getElementsByTagName('parsererror').length) continue;
+        el = this.x.importNode(x.documentElement, true) as Element;
+      } catch {
+        continue;
+      }
+      // its names, pointed at what is written now; true when something it names is left
+      const repoint = (e: Element): boolean => {
+        let named = false, any = false;
+        for (const at of Array.from(e.attributes)) {
+          if (!REF_ATTR.test(at.name)) continue;
+          any = true;
+          const ids = at.value.trim().split(/\s+/).filter(Boolean).map((t) => (k.refs[t] ? idOf(k.refs[t]) : null)).filter((v): v is string => !!v);
+          if (ids.length) { e.setAttribute(at.name, [...new Set(ids)].join(' ')); named = true; } else e.removeAttribute(at.name);
+        }
+        return named || !any;
+      };
+      if (!repoint(el)) continue;
+      // a calculated property shows its value in a caption: without the caption it is dropped
+      if (el.nodeName === 'chemicalproperty' && !el.hasAttribute('ChemicalPropertyDisplayID')) continue;
+      for (const c of descendants(el)) if (c !== el && c.parentNode && !repoint(c)) c.parentNode.removeChild(c);
+      for (const c of [el, ...descendants(el)]) if (c.hasAttribute('id')) c.setAttribute('id', String(this.id()));
+      this.page.appendChild(el);
+      this.changed = true;
+    }
+  }
+
   private writeGroups(): void {
     const doc = this.doc;
     const ided = this.idedFinder();
@@ -2479,6 +2534,9 @@ function shift(e: Element, dx: number, dy: number): void {
 }
 
 /** Are two entities equal, ignoring the listed fields? */
+/** Attributes that name other objects by id (in kept ChemDraw objects: BracketedObjectIDs, BasisObjects, GraphicID…). */
+export const REF_ATTR = /(ID|IDs|Objects)$/;
+
 /** What a closed curve can hold: a path shape with any other setting is written as a design shape. */
 const PATH_CURVE_KEYS = new Set(['id', 'grp', 'grpPath', 'stack', 'piece', 'kind', 'geo', 'x1', 'y1', 'x2', 'y2', 'color', 'z', 'filled', 'dashed', 'bold', 'lineWidth']);
 
