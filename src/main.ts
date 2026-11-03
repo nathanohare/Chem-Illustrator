@@ -29,6 +29,7 @@ import { selectionBox, atomsBox, POINTS, type Align, units, moveUnit } from './e
 import { defaultColumns } from './editor/grid-arrange';
 import { askGridLayout, type GridPick } from './ui/grid-picker';
 import { groupSelection, selectedGroups } from './editor/groups';
+import { chemistrySelection, loneStructure } from './editor/lone-pick';
 import { readCdxml, ReadStats } from './io/cdxml';
 import { readCml } from './io/cml';
 import { ChemClient } from './chem/client';
@@ -2974,10 +2975,14 @@ function selectedSpecies(): Caption[] {
  * What a command on "the selection, or else everything" counts: the atoms, and the text boxes
  * read as chemistry (selected ones, and ions grouped with the atoms as their salt).
  */
+/** A lone picked atom or bond stands for its whole structure when copying chemistry (src/editor/lone-pick.ts). */
+const loneAtomStructure = (): Set<number> | null => loneStructure(doc, editor.sel);
+
 function chemistryInSelection(): { atoms: number[]; species: PlacedSpecies[] } {
   const chosen = selectedSpecies();
-  const any = editor.sel.atoms.size > 0 || chosen.length > 0;
-  const atoms = [...(any ? editor.sel.atoms : doc.atoms.keys())];
+  const lone = chosen.length ? null : loneAtomStructure();
+  const any = editor.sel.atoms.size > 0 || chosen.length > 0 || !!lone;
+  const atoms = [...(lone ?? (any ? editor.sel.atoms : doc.atoms.keys()))];
   const caps = new Set<Caption>(any ? [...chosen, ...groupedIons(doc, atoms, editor.measure())] : [...chemicalCaptions(doc, editor.measure()).keys()].map((id) => doc.captions.get(id)!));
   return { atoms, species: placeSpecies(doc, caps, editor.measure()) };
 }
@@ -3512,14 +3517,14 @@ function copyText(text: string, done: string): Promise<void> {
 
 /** Copy the selected structures (or all of them) as molfile text. */
 function copyMolfile(): Promise<void> {
-  const atoms = editor.sel.atoms.size ? editor.sel.atoms : doc.atoms.keys();
+  const atoms = loneAtomStructure() ?? (editor.sel.atoms.size ? editor.sel.atoms : doc.atoms.keys());
   const { molblock } = toMolfile(doc, atoms);
   return copyText(molblock, 'Copied as molfile text.');
 }
 
 /** Copy the selection (or the whole drawing) as CDXML text, for pasting into a text editor or script. */
 function copyCdxmlText(): Promise<void> | void {
-  const part = extractDrawing(doc, editor.hasSelection() ? editor.sel : null);
+  const part = extractDrawing(doc, chemistrySelection(doc, editor.sel, editor.hasSelection()));
   if (isEmpty(part)) { flash('There is nothing to copy.'); return; }
   return copyText(writeCdxml(part, { name: 'Clipboard.cdxml', textMeasure: measureText }), 'Copied as CDXML text.');
 }
