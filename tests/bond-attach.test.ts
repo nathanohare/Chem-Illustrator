@@ -2,11 +2,12 @@
 //
 // ChemDraw's BeginAttach and EndAttach: which character of a label a bond meets, counted from 0
 // in the label text (0 or none is the default). A bond to the O of "PhO" runs straight into the O
-// rather than slanting to the P on the atom, and the indices go with their atoms when the bond is
-// flipped. (Reading and writing the attributes is done in the CDXML reader and writer.)
+// rather than slanting to the P on the atom; the indices are read, go with their atoms when the
+// bond is flipped, and are written back.
 
 import { describe, it, expect } from 'vitest';
 import { readCdxml } from '../src/io/cdxml';
+import { writeCdxml } from '../src/io/cdxml-write';
 import { Renderer, withMeasure } from '../src/render/renderer';
 import { arialWidth } from '../src/text-metrics';
 import { Doc } from '../src/model';
@@ -29,9 +30,21 @@ const attrsOf = (out: string) => {
 };
 
 describe('BeginAttach and EndAttach', () => {
+  it('are read onto the bond, and follow its atoms when ChemDraw draws it from its end', () => {
+    expect(bondOf(readCdxml(file('B="1" E="2" BeginAttach="2"')).doc).beginAttach).toBe(2);
+    const plain = bondOf(readCdxml(file('B="1" E="2"')).doc);
+    expect(plain.beginAttach).toBeUndefined();
+    expect(bondOf(readCdxml(file('B="1" E="2" BeginAttach="0"')).doc).beginAttach).toBeUndefined();
+    // a wedge drawn from its end is turned round on reading, so the label's index goes to the bond's end
+    const doc = readCdxml(file('B="2" E="1" Display="WedgeEnd" EndAttach="2"')).doc;
+    const b = bondOf(doc);
+    expect(b.a1).toBe(phoOf(doc).id);
+    expect(b.beginAttach).toBe(2);
+    expect(b.endAttach).toBeUndefined();
+  });
+
   it('aim the bond at the middle of that character', () => withMeasure(measure, () => {
-    const doc = readCdxml(file('B="1" E="2"')).doc;
-    doc.edit('Attach', () => doc.updateBond(bondOf(doc).id, { beginAttach: 2 }));
+    const doc = readCdxml(file('B="1" E="2" BeginAttach="2"')).doc;
     const r = new Renderer(noCanvas, noCanvas);
     const p = phoOf(doc), q = doc.atoms.get(bondOf(doc).a2)!;
     // P is centred on the atom, so the O's middle is past the P and the h
@@ -55,16 +68,14 @@ describe('BeginAttach and EndAttach', () => {
   }));
 
   it('mean the atom itself when 0 or not a character of the label', () => withMeasure(measure, () => {
-    const doc = readCdxml(file('B="1" E="2"')).doc;
-    doc.edit('Attach', () => doc.updateBond(bondOf(doc).id, { beginAttach: 2 }));
+    const doc = readCdxml(file('B="1" E="2" BeginAttach="2"')).doc;
     const r = new Renderer(noCanvas, noCanvas);
     const p = phoOf(doc);
     for (const i of [0, 3, 12, undefined]) expect(r.attachPoint(doc, p, i)).toBe(p);
   }));
 
   it('go with their atoms when the bond is turned round, and are dropped for a new atom', () => {
-    const doc = readCdxml(file('B="1" E="2"')).doc;
-    doc.edit('Attach', () => doc.updateBond(bondOf(doc).id, { beginAttach: 2 }));
+    const doc = readCdxml(file('B="1" E="2" BeginAttach="2"')).doc;
     const b = bondOf(doc);
     doc.edit('Flip', () => doc.updateBond(b.id, { a1: b.a2, a2: b.a1 }));
     expect(bondOf(doc).beginAttach).toBeUndefined();
@@ -76,8 +87,7 @@ describe('BeginAttach and EndAttach', () => {
   });
 
   it('are dropped when the label is retyped, and come back with it on undo', () => {
-    const doc = readCdxml(file('B="1" E="2"')).doc;
-    doc.edit('Attach', () => doc.updateBond(bondOf(doc).id, { beginAttach: 2 }));
+    const doc = readCdxml(file('B="1" E="2" BeginAttach="2"')).doc;
     const p = phoOf(doc);
     doc.edit('Same', () => doc.updateAtom(p.id, { label: 'PhO' }));
     expect(bondOf(doc).beginAttach).toBe(2);
@@ -85,5 +95,19 @@ describe('BeginAttach and EndAttach', () => {
     expect(bondOf(doc).beginAttach).toBeUndefined();
     doc.undo();
     expect(bondOf(doc).beginAttach).toBe(2);
+  });
+
+  it('are written back with B and E, and moved or removed when they change', () => {
+    // a new file writes them
+    const fresh = readCdxml(file('B="1" E="2" BeginAttach="2"')).doc;
+    fresh.source = null;
+    expect(attrsOf(writeCdxml(fresh)).begin).toBe('2');
+    // saving the file again keeps them; turning the bond round moves the index to its end
+    const doc = readCdxml(file('B="1" E="2" BeginAttach="2"')).doc;
+    expect(attrsOf(writeCdxml(doc)).begin).toBe('2');
+    const b = bondOf(doc);
+    doc.edit('Flip', () => doc.updateBond(b.id, { a1: b.a2, a2: b.a1 }));
+    const flipped = attrsOf(writeCdxml(doc));
+    expect([flipped.B, flipped.E, flipped.begin, flipped.end]).toEqual(['2', '1', null, '2']);
   });
 });

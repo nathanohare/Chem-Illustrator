@@ -272,12 +272,6 @@ export interface Bond {
   /** A highlight drawn behind the bond (a broad band of this colour), to pick out part of a structure. */
   highlight?: string;
   hl?: HighlightStyle;
-  /**
-   * Which character of a1's (begin) or a2's (end) label the bond meets, counted from 0 in the
-   * label text; none or 0 is the atom itself. ChemDraw's BeginAttach and EndAttach.
-   */
-  beginAttach?: number;
-  endAttach?: number;
 }
 
 export interface TextRun {
