@@ -4568,6 +4568,18 @@ export class Editor {
       cycle.version = doc.version;
       return picked ? this.nextCleanUp(cycle) : false;
     }
+    // the tidying round them (a scheme, a grid) may have moved whole structures: the other ways
+    // go where each structure is now, so stepping through them doesn't undo that
+    for (const list of options) {
+      const first = list[0];
+      const ids = [...first.pos.keys()].filter((id) => doc.atoms.has(id));
+      if (!ids.length) continue;
+      const mean = (pick: (id: number) => Vec) => ids.reduce((s, id) => { const p = pick(id); return { x: s.x + p.x / ids.length, y: s.y + p.y / ids.length }; }, { x: 0, y: 0 });
+      const now = mean((id) => doc.atoms.get(id)!), was = mean((id) => first.pos.get(id)!);
+      const dx = now.x - was.x, dy = now.y - was.y;
+      if (Math.hypot(dx, dy) < 1e-6) continue;
+      for (const o of list) for (const [id, p] of o.pos) o.pos.set(id, { x: p.x + dx, y: p.y + dy });
+    }
     cycle.version = doc.version;
     return { k: 0, of: Math.max(...options.map((o) => o.length)), label: options[0][0].label };
   }
