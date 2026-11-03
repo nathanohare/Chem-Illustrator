@@ -706,6 +706,12 @@ export interface Arrow {
    * between curves; the arrow follows its ends this way, as an arc does with its sweep.
    */
   bez?: Vec[];
+  /**
+   * ChemDraw's arc of an ellipse that `bez` was made from, in the same frame as `bez`: its centre,
+   * the ends of its major and minor half-axes, and its AngularSize (degrees, as the file has it).
+   * Good only while `bez` is still that arc (arrowEllipse in objects.ts checks).
+   */
+  ellipse?: { center: Vec; major: Vec; minor: Vec; angular: number };
   /** What an electron-pushing arrow's ends are stuck to, so they follow the structure when it moves. */
   pin?: { tail?: Pin; head?: Pin };
   /** Bent by hand: it keeps its curve when the structure changes, rather than finding its own way round. */

@@ -1884,7 +1884,7 @@ export class Renderer {
     const s = Math.sign(sweep);
     // a head points from where its base meets the arc to its tip, so on a tight curl it sits
     // across the curve instead of sticking out along the last bit of it
-    const back = arcHeadBack(r.headLength, radius, sweep);
+    const back = arcHeadBack(r.headLength, radius, sweep, r.headCenter);
     const aim = (tip: Vec, a: number) => norm(sub(tip, add(center, fromAngle(a, radius))));
     const hDir = aim(head, a1 - s * back), tDir = aim(tail, a0 + s * back);
     // the line follows the arc to where the head starts, then runs straight along the head's
@@ -1915,7 +1915,8 @@ export class Renderer {
     if (!pts) return false;
     const n = (pts.length - 1) / 3;
     const hasHead = r.headStyle !== 'none', hasTail = r.tailStyle !== 'none';
-    const reach = r.headLength * 0.8;
+    // (a head with ChemDraw's notch points from the curve where its notch sits, as ChemDraw draws it)
+    const reach = r.headLength * (r.headCenter ?? 0.8);
     const tH = hasHead ? bezHeadBack(pts, reach, false) : n;
     const tT = hasTail ? bezHeadBack(pts, reach, true) : 0;
     const hDir = norm(sub(r.head, bezPathAt(pts, tH))), tDir = norm(sub(r.tail, bezPathAt(pts, tT)));
@@ -2860,7 +2861,13 @@ export function openHalfNotch(headLength: number, headWidth: number, lineWidth: 
   return Math.min(lineWidth / Math.max(Math.tan(half), 1e-3), headLength * 0.9);
 }
 
-/** How far round a curved arrow's arc (radians) its head's base sits from the point. */
-export function arcHeadBack(headLength: number, radius: number, sweep: number): number {
-  return Math.min(Math.abs(sweep) / 2, (headLength * 0.8) / Math.max(radius, 1e-6));
+/**
+ * How far round a curved arrow's arc (radians) its head's base sits from the point. With
+ * ChemDraw's notch (center, a part of the head's length) it is where the notch meets the arc, as
+ * ChemDraw draws it (measured from its pictures: the notch is on the arc, that far from the point).
+ */
+export function arcHeadBack(headLength: number, radius: number, sweep: number, center?: number): number {
+  const r = Math.max(radius, 1e-6);
+  if (center !== undefined) return Math.min(Math.abs(sweep) / 2, 2 * Math.asin(Math.min(1, (headLength * center) / (2 * r))));
+  return Math.min(Math.abs(sweep) / 2, (headLength * 0.8) / r);
 }
