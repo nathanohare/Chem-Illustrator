@@ -461,6 +461,21 @@ export class Editor {
   get dragging(): boolean { return !!this.drag?.moved; }
   /** Text is being typed into a caption or label. */
   captionOpen(): boolean { return !!this.captionEd?.isOpen; }
+  /**
+   * Esc has something to let go of here first: a selection, a drag, text being typed, the
+   * keyboard highlight left on the atom last drawn, a path being drawn through points, or a crop.
+   */
+  escapeHasWork(): boolean {
+    const s = this.sel;
+    return !!(s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size || s.shapes.size) || this.dragging || this.captionOpen()
+      || this.hotNow() || this.route !== null || this.cropping !== null;
+  }
+
+  /** The keyboard highlight is on an atom or bond of this drawing. */
+  private hotNow(): boolean {
+    const k = this.keyHot;
+    return !!k && (k.kind === 'atom' ? this.doc.atoms.has(k.id) : k.kind === 'bond' && this.doc.bonds.has(k.id));
+  }
   private needScene = true;
   private needOverlay = true;
   private frameQueued = false;

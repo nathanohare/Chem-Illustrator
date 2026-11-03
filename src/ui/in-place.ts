@@ -35,3 +35,14 @@ export const PLACE_MARGIN = 36;
 export function sameView(a: PlaceView, b: PlaceView): boolean {
   return Math.abs(a.scale - b.scale) <= 1e-4 * b.scale && Math.abs(a.ox - b.ox) < 0.75 && Math.abs(a.oy - b.oy) < 0.75;
 }
+
+/**
+ * What Esc does in the structure editor (a cell's, a document's in place, or the pop-out one):
+ * first it lets go of whatever the drawing tools hold (a selection, the highlight on the atom last
+ * drawn, text being typed, a drag); then it cancels, asking first when something was drawn, so a
+ * second Esc pressed out of habit never throws the drawing away.
+ */
+export function escapeAction(o: { toolsBusy: boolean; changed: boolean }): 'tools' | 'cancel' | 'ask' {
+  if (o.toolsBusy) return 'tools';
+  return o.changed ? 'ask' : 'cancel';
+}
