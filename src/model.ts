@@ -153,7 +153,11 @@ export interface Atom {
   /** Show the atom number beside the atom (the ' key; ChemDraw's ShowAtomNumber). */
   showNumber?: boolean;
   /** Where the shown number sits, relative to the atom, when the file says or it was moved. */
-  numberLabel?: { dx: number; dy: number; size: number };
+  numberLabel?: {
+    dx: number; dy: number; size: number;
+    /** The number's own colour and ChemDraw face bits (1 bold, 2 italic), when the file gives it one (a bold blue 4). */
+    color?: string; face?: number;
+  };
   /**
    * The atom-atom map number across a reaction (Chemistry ▸ Reactions and Schemes ▸ Map Atoms, or a
    * mapped reaction SMILES or RXN file): an atom in a product has the number of the starting-material
@@ -881,6 +885,12 @@ export interface Shape {
   patternClear?: boolean;
   /** Fill colour, when it differs from the outline colour (the outline is then drawn too). */
   fillColor?: string;
+  /**
+   * ChemDraw's FadePercent the fill was read from (tenths of a percent of the colour). Several
+   * values give the same tint here but not in ChemDraw's drawing, so it is written back while the
+   * fill is still that tint of the colour.
+   */
+  fade?: number;
   rounded?: boolean;
   /** Corner radius of a rounded box, in points (ChemDraw's default is six line widths). */
   radius?: number;

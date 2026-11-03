@@ -335,7 +335,15 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         } else if (ch.nodeName === 'objecttag' && ch.getAttribute('Name') === 'number') {
           // where the atom number sits (the ' key)
           const l = stereoTag(ch, x, y);
-          if (l) extra.numberLabel = { dx: l.dx, dy: l.dy, size: l.size };
+          if (l) {
+            extra.numberLabel = { dx: l.dx, dy: l.dy, size: l.size };
+            // its own colour and weight, as ChemDraw keeps them on the number's text
+            const s = kids(kids(ch).find((k) => k.nodeName === 't') ?? ch).find((k) => k.nodeName === 's');
+            const nc = s ? color(s) : undefined;
+            const nf = s ? num(s, 'face', 0) & 7 : 0;
+            if (nc && nc !== (color(n) ?? '#000000')) extra.numberLabel.color = nc;
+            if (nf) extra.numberLabel.face = nf;
+          }
         }
       }
       if (n.getAttribute('ShowAtomStereo') === 'yes') extra.showStereo = true;
@@ -955,6 +963,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         s.filled = true;
         // (its outline stays in the full colour, so the fill is a colour of its own)
         s.fillColor = tint(ink, 1 - Math.min(1, fade / 1000));
+        if (fade <= 1000) s.fade = fade;
       }
       // our fill style and outline colour, which ChemDraw has no words for
       const tag = kids(g).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === FILL_TAG);

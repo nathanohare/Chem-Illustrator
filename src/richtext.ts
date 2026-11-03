@@ -272,6 +272,10 @@ export function toSymbolPieces(text: string): { text: string; symbol: boolean }[
     if (last && last.symbol === sym) last.text += t;
     else out.push({ text: t, symbol: sym });
   }
+  // spaces ending the text after a Symbol piece stay in it, as ChemDraw keeps them in that font
+  // (a space in Arial is wider, which moves a centred line)
+  const n = out.length;
+  if (n >= 2 && out[n - 2].symbol && /^ +$/.test(out[n - 1].text)) out[n - 2].text += out.pop()!.text;
   return out;
 }
 

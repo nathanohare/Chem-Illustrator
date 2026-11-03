@@ -751,7 +751,9 @@ class CdxmlWriter {
     const p = this.placer.number(a);
     const tag = this.el('objecttag', { TagType: 'Unknown', Name: 'number' });
     const t = this.el('t', { p: pt(p), BoundingBox: box({ x1: p.x, y1: p.y - CAP * p.size, x2: p.x + this.measure(a.atomNumber, p.size), y2: p.y }), CaptionLineHeight: 'variable' });
-    const s = this.el('s', { font: this.fontId(), size: f2(p.size).replace(/\.00$/, ''), color: '0' });
+    // in the atom's colour, or the number's own, bold or italic as it was
+    const nl = a.numberLabel;
+    const s = this.el('s', { font: this.fontId(), size: f2(p.size).replace(/\.00$/, ''), color: this.colorAttr(nl?.color ?? a.color) ?? '0', face: nl?.face || null });
     s.textContent = a.atomNumber;
     t.appendChild(s);
     tag.appendChild(t);
@@ -2151,6 +2153,8 @@ class CdxmlWriter {
     if (c[k] > 250) return null;
     const a = (f[k] - c[k]) / (255 - c[k]);
     if (a <= 0.001 || a >= 0.999) return null;
+    // ChemDraw's own value, read with the fill, while the fill is still that tint of this colour
+    if (s.fade !== undefined && s.fade > 0 && s.fade < 1000 && tint('#' + ink, 1 - s.fade / 1000).toLowerCase() === '#' + fill.toLowerCase()) return Math.round(s.fade);
     const fade = Math.round((1 - a) * 1000);
     // (it has to be that tint in every channel, as ChemDraw will draw it; rounding in the colours
     // leaves it a little off, so a round number that gives this very tint is the one it was)

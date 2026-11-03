@@ -87,4 +87,42 @@ describe('a fresh save', () => {
     const { out } = fresh('<graphic id="30" BoundingBox="72 50 64.4 50" color="5" GraphicType="Oval" OvalType="Circle" FadePercent="300" Center3D="64.4 50 0" MajorAxisEnd3D="72 50 0" MinorAxisEnd3D="64.4 57.6 0"/>');
     expect(out.querySelector('graphic')!.getAttribute('FadePercent')).toBe('300');
   });
+  it('keeps a bold blue atom number bold and blue, and an uncoloured one in its atom\'s colour', () => {
+    const num = (nodeColor: string, run: string) => `<fragment id="2"><n id="10" p="50 50"/><n id="11" p="80 50" ${nodeColor} ShowAtomNumber="yes" AtomNumber="4"><objecttag TagType="Unknown" Name="number"><t p="84 44" BoundingBox="84 40 88 44"><s font="3" size="7" ${run}>4</s></t></objecttag></n><b id="20" B="10" E="11"/></fragment>`;
+    const numRun = (d: Document) => node(d).querySelector('objecttag[Name="number"] s')!;
+    const { doc, out } = fresh(num('', 'color="4" face="1"'));
+    expect(doc.atoms.get(11)!.numberLabel).toMatchObject({ color: '#2e4ec7', face: 1 });
+    const blue = out.querySelectorAll('colortable color');
+    const idx = Number(numRun(out).getAttribute('color'));
+    const c = blue[idx - 2];
+    expect([c.getAttribute('r'), c.getAttribute('g'), c.getAttribute('b')].map(Number).map((v) => Math.round(v * 255))).toEqual([46, 78, 199]);
+    expect(numRun(out).getAttribute('face')).toBe('1');
+    // a plain number on a coloured atom: in the atom's colour, with nothing of its own
+    const plain = fresh(num('color="5"', 'color="5"'));
+    expect(plain.doc.atoms.get(11)!.numberLabel?.color).toBeUndefined();
+    expect(numRun(plain.out).getAttribute('color')).toBe(node(plain.out).getAttribute('color'));
+    expect(numRun(plain.out).hasAttribute('face')).toBe(false);
+  });
+  it('keeps a space that follows a Symbol letter in the Symbol font', () => {
+    const { doc } = readCdxml('<?xml version="1.0" encoding="UTF-8" ?><CDXML><fonttable><font id="3" name="Arial"/><font id="23" name="Symbol"/></fonttable><page id="1"><t id="5" p="100 100" Justification="Center"><s font="23" size="12" face="0">\u00a8 </s><s font="3" size="12" face="0">made up text</s></t></page></CDXML>');
+    doc.source = null;
+    const out = new DOMParser().parseFromString(writeCdxml(doc), 'application/xml');
+    const fonts = new Map([...out.querySelectorAll('fonttable font')].map((f) => [f.getAttribute('id'), f.getAttribute('name')]));
+    const runs = [...out.querySelectorAll('t > s')].map((s) => [fonts.get(s.getAttribute('font')), s.textContent]);
+    expect(runs).toEqual([['Symbol', '\u00a8 '], ['Arial', 'made up text']]);
+  });
+  it("keeps ChemDraw's own FadePercent where a round one gives the same tint here (72, not 70)", () => {
+    // on black, 72 and 70 both round to #ededed here, but ChemDraw draws 72 a level darker
+    const rect = (f: number) => `<graphic id="31" BoundingBox="10 10 40 30" color="3" GraphicType="Rectangle" FadePercent="${f}"/>`;
+    const { doc, out } = fresh(rect(72));
+    expect(out.querySelector('graphic')!.getAttribute('FadePercent')).toBe('72');
+    // the round one still comes out round
+    expect(fresh(rect(70)).out.querySelector('graphic')!.getAttribute('FadePercent')).toBe('70');
+    // a fill changed since: worked out from the new tint, not the old value
+    const s = [...doc.shapes.values()][0];
+    doc.edit('Fill', () => doc.updateShape(s.id, { fillColor: '#cccccc' }));
+    doc.source = null;
+    const again = new DOMParser().parseFromString(writeCdxml(doc), 'application/xml');
+    expect(again.querySelector('graphic')!.getAttribute('FadePercent')).toBe('200');
+  });
 });
