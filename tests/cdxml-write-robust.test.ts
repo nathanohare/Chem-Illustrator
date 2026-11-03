@@ -698,3 +698,40 @@ describe('the CDXML audit, writing side (6): R24, arrows an older ChemDraw kept 
     });
   });
 });
+
+describe('what a round trip through ChemDraw 25 showed (writing side)', () => {
+  it("a caption with ChemDraw's variable spacing is written with it, not LineHeight auto, also when changed or copied", () => {
+    const text = file('<t id="5" p="10 10" CaptionLineHeight="variable" LineStarts="4 7"><s font="3" size="10" face="0">AAA\nBBB</s></t>', '');
+    const doc = readCdxml(text).doc;
+    const c = [...doc.captions.values()][0];
+    expect(c.inkLines).toBe(true);
+    doc.edit('Move', () => doc.updateCaption(c.id, { x: 40 }));
+    const check = (xml: string) => {
+      const t = all(parse(xml), 't')[0];
+      expect([t.getAttribute('LineHeight'), t.getAttribute('CaptionLineHeight')]).toEqual([null, 'variable']);
+      expect([...readCdxml(xml).doc.captions.values()][0].inkLines).toBe(true);
+    };
+    check(writeCdxml(doc));
+    doc.source = null;
+    check(writeCdxml(doc));
+    check(viaCdx(writeCdxml(doc)));
+    // our own captions keep single spacing (LineHeight auto)
+    const d2 = newDoc();
+    d2.edit('Add', () => { d2.addCaption({ x: 0, y: 0, runs: [{ text: 'AAA\nBBB' }] } as never); });
+    expect(all(parse(writeCdxml(d2)), 't')[0].getAttribute('LineHeight')).toBe('auto');
+  });
+
+  it("separate pieces ChemDraw keeps in one fragment stay in it: unchanged byte for byte, and when edited", () => {
+    const text = file('<fragment id="2" BoundingBox="10 10 100 40"><n id="3" p="10 10"/><n id="4" p="24.4 10"/><n id="5" p="60 10"/><n id="6" p="74.4 10"/><n id="7" p="100 40"/><b id="8" B="3" E="4"/><b id="9" B="5" E="6"/></fragment>');
+    const doc = readCdxml(text).doc;
+    expect(writeCdxml(doc)).toBe(text);
+    const a = [...doc.atoms.values()][0];
+    doc.edit('Move', () => doc.updateAtom(a.id, { x: a.x + 2 }));
+    expect(all(parse(writeCdxml(doc)), 'fragment')).toHaveLength(1);
+    // a piece broken off here gets a fragment of its own, as before
+    const d2 = readCdxml(text).doc;
+    const b = [...d2.bonds.values()][0];
+    d2.edit('Delete', () => d2.removeBond(b.id));
+    expect(all(parse(writeCdxml(d2)), 'fragment')).toHaveLength(2);
+  });
+});
