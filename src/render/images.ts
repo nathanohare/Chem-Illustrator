@@ -69,6 +69,35 @@ export function imageFor(src: string): HTMLImageElement | null {
   return e.ready ? e.img : null;
 }
 
+const rasters = new Map<string, string | null>();
+
+/**
+ * A picture the browser has already decoded (an SVG equation, a WebP photo) as a PNG data URL,
+ * about `w` by `h` pixels, for files that hold only some picture types (ChemDraw's). Null while
+ * it is still loading, or when it can't be drawn. Made at once, so a save or copy needs no wait.
+ */
+export function rasterPng(src: string, w: number, h: number): string | null {
+  const key = `${Math.round(w)}x${Math.round(h)}:${src}`;
+  if (rasters.has(key)) return rasters.get(key)!;
+  const img = imageFor(src);
+  if (!img || typeof document === 'undefined') return null;
+  let out: string | null = null;
+  try {
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w));
+    c.height = Math.max(1, Math.round(h));
+    const ctx = c.getContext('2d');
+    if (ctx) { ctx.drawImage(img, 0, 0, c.width, c.height); out = c.toDataURL('image/png'); }
+    if (!out?.startsWith('data:image/png')) out = null;
+  } catch {
+    out = null;
+  }
+  // (only the last few are kept: they are big)
+  if (rasters.size > 20) rasters.delete(rasters.keys().next().value!);
+  rasters.set(key, out);
+  return out;
+}
+
 /** True when a picture's data could not be read as an image. */
 export function imageFailed(src: string): boolean {
   return cache.get(src)?.failed ?? false;
