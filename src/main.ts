@@ -71,7 +71,7 @@ import { solid } from './deck/background';
 import { pictureFormat } from './ui/picture-dialog';
 import { fxPng } from './render/picture-fx';
 import { drawSlidePage, recordSlide, paintSlide, drawDrawing, SURROUND, type SlidePage } from './deck/slide-view';
-import { sameView, type InPlace, type PlaceView } from './ui/in-place';
+import { escapeAction, sameView, type InPlace, type PlaceView } from './ui/in-place';
 import { writePdf, jpegInfo, PdfPage, PdfImage } from './io/pdf';
 import { SlideList } from './ui/slide-list';
 import { CanvasKeys } from './ui/canvas-keys';
@@ -7300,6 +7300,8 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
     document.body.classList.add('boxed-drawing');
   }
   editor.clearSelection();
+  // (no keyboard highlight left from the last structure: its atom ids mean nothing in this one)
+  editor.setKeyHot(null);
   doc.swap(drawing);
   // the drawing beside (split view) waits in `drawing`, its zoom kept for after
   cellEdit = { done, saved: drawing, view: { ...renderer.view } };
@@ -7355,6 +7357,7 @@ function finishCellStructure(keep: boolean): void {
   const result = keep && doc.canUndo() ? doc.contents() : null;
   modeTool[ws.active.mode] = editor.toolName;
   editor.clearSelection();
+  editor.setKeyHot(null);
   editor.lastEdited = null;
   editor.cropping = null;
   doc.swap(e.saved);
@@ -7426,14 +7429,25 @@ host.addEventListener('pointerdown', (e) => {
   e.stopPropagation();
   void doneCellStructure();
 }, true);
-// Esc with nothing picked: Cancel (with something picked, Esc lets it go first)
+// Esc: the drawing tools let go of what they hold first (a selection, the highlight on the atom
+// last drawn, text being typed); then Cancel, asking first when something was drawn (ui/in-place.ts)
+let askingDiscard = false;
 window.addEventListener('keydown', (e) => {
   if (!cellEdit || e.key !== 'Escape' || e.defaultPrevented || isTyping(e.target) || (e.target as HTMLElement | null)?.closest?.('dialog, .menu')) return;
-  const s = editor.sel;
-  if (s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size || s.shapes.size || editor.dragging || editor.captionOpen()) return;
+  const act = escapeAction({ toolsBusy: editor.escapeHasWork(), changed: doc.canUndo() });
+  if (act === 'tools') return;
   e.preventDefault();
   e.stopPropagation();
-  finishCellStructure(false);
+  if (act === 'cancel') { finishCellStructure(false); return; }
+  if (askingDiscard) return;
+  askingDiscard = true;
+  const e0 = cellEdit;
+  void ask('Discard Changes?', [], { ok: 'Discard', note: 'Esc cancels the structure: what was drawn since it opened will be lost. Done keeps it.' }).then((ok) => {
+    askingDiscard = false;
+    if (cellEdit !== e0) return;
+    if (ok) finishCellStructure(false);
+    else overlay.focus();
+  });
 }, true);
 window.addEventListener('keydown', (e) => {
   // Ctrl+Enter: Done
