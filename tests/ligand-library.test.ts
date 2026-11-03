@@ -368,6 +368,22 @@ describe('the Ligand Library window', () => {
     expect(w.isOpen).toBe(false);
   });
 
+  it('keeps each card as the search changes, so typing doesn\'t draw every ligand again (review 2026-11-03)', () => {
+    // (each keystroke made all 269 cards and their drawings again: 210 ms a key in Chromium)
+    const w = new LigandLibraryWindow({ useTemplate: () => {}, openUrl: () => {}, copyText: () => {} });
+    w.open();
+    const d = document.querySelector('dialog.ligand-library')!;
+    const search = d.querySelector<HTMLInputElement>('input[type=search]')!;
+    const cardOf = (id: string) => [...d.querySelectorAll<HTMLElement>('.lig-card')].find((c) => c.dataset.id === id);
+    const before = cardOf('dppf')!;
+    for (const q of ['d', 'dp', 'dppf', '']) {
+      search.value = q;
+      search.dispatchEvent(new Event('input'));
+      expect(cardOf('dppf')).toBe(before);
+    }
+    w.close();
+  });
+
   it('lists the families with their counts', () => {
     const w = new LigandLibraryWindow({ useTemplate: () => {}, openUrl: () => {}, copyText: () => {} });
     w.open();
