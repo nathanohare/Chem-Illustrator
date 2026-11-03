@@ -270,4 +270,16 @@ describe('copying to ChemDraw', () => {
     flat.edit('Draw', () => { flat.addShape({ kind: 'rect', x1: 40, y1: 40, x2: 60, y2: 70 }); });
     expect(all(copied(flat).xml, 'graphic')[0].hasAttribute('Center3D')).toBe(false);
   });
+
+  it('writes a stray carbon from ChemDraw as a plain atom, with no CH4 label', () => {
+    const doc = newDoc();
+    doc.edit('Draw', () => { doc.addAtom(10, 10, 6, { bare: true }); doc.addAtom(60, 10); });
+    for (const x of Object.values(copied(doc))) {
+      const [bare, lone] = all(x, 'n');
+      expect(bare.querySelector(':scope > t')).toBeNull();
+      expect(bare.hasAttribute('NumHydrogens')).toBe(false);
+      // (a lone carbon of our own still shows CH4)
+      expect(lone.querySelector(':scope > t')?.textContent).toBe('CH4');
+    }
+  });
 });
