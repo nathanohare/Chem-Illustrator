@@ -59,7 +59,7 @@ import { cdxToCdxml } from './io/cdx';
 import { writeCdxml } from './io/cdxml-write';
 import { WORKSPACE, folderOf } from './io/workspace-file';
 import { askLink, followLink, setLinkHost, type LinkPlace } from './ui/links-ui';
-import { LigandLibraryWindow } from './ui/ligand-library';
+import type { LigandLibraryWindow } from './ui/ligand-library';
 import { SHOW_JUMPS, SHOW_TOOLS, cellOfLink, keyOfLink, linkSpans, normalizeLink, removeLink, setLink, slideOfLink } from './links';
 import { openFileDialog, openManyBytesDialog, openBytesDialog, CSV, openAnyBytesDialog, stampOf, readRef, saveFileDialog, writeFile, showError, baseName, readPath, withExtension, setEmbeddedWriter, KEYMAP_FILE, SETTINGS_FILE, MOL, PDF, SDF, PICTURE, SVG, TIFF, EMF, EPS, PPTX, DOCX, PICTURE_EXTENSIONS, type FileType } from './io/files';
 import { writeTiff } from './render/tiff';
@@ -168,7 +168,6 @@ import { showBalance } from './ui/balance-dialog';
 import { withoutCharge } from './chem/formula';
 import { makePin } from './chem/pins';
 import { ORBITAL_KINDS, ORBITAL_LOOKS, orbitalShapes, shapeCentre, type OrbitalKind, type OrbitalLook } from './chem/orbitals';
-import { showLabCalculator } from './ui/lab-calc-dialog';
 import { BATCH_FORMATS, BATCH_INPUTS, readBatchFile, smilesLine, uniqueName, writeBatchItem, type BatchDeps, type BatchFormat } from './io/batch-convert';
 import { zipSync } from 'fflate';
 import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
@@ -190,7 +189,6 @@ import { NicknameChooser } from './ui/nickname-chooser';
 import { ask } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
-import { actionLook, actionSet, askActionButton } from './ui/action-button-dialog';
 import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepClicks, stepPieces, type AutoStepsOptions, type StepPiece } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
@@ -260,9 +258,7 @@ import { emptyTable, tableFromCells } from './table';
 import type { TableData } from './model';
 import { checkDrawing, checkDocument, checkWorkbook, repeatedTitles, structureAlt, setStructureAlt, type Issue, type IssuePlace } from './accessibility';
 import { AccessibilityPane, askAltText } from './ui/accessibility-pane';
-import { PreflightPane } from './ui/preflight-pane';
-import { enlargeText, thickenLines, useArial, fixUntilDone } from './preflight-fix';
-import { preflight } from './preflight';
+import type { PreflightPane } from './ui/preflight-pane';
 import { shapeBox } from './objects';
 import { SlideComparePane } from './ui/slide-compare';
 import { pickFileTemplate } from './ui/file-templates';
@@ -284,7 +280,7 @@ import { addRecent as addRecentSymbol } from './text/symbols';
 import type { CellBlock } from './sheet/workbook';
 import { DEFAULT_AI, type AiPrefs } from './ai/link';
 import type { AssistantAction, AssistantMode, SendItem } from './ai/assistant';
-import { AssistantBar } from './ui/assistant-bar';
+import type { AssistantBar } from './ui/assistant-bar';
 import { aiSettingsDialog } from './ui/ai-settings';
 import { freeSpace } from './editor/free-space';
 import { canReadStructures, importPictureFiles, importPdfDrawings, MOST_PAGES, pdfDrawings, type ImportHost } from './ui/import-structures';
@@ -297,11 +293,11 @@ import { fetchPubmed, type ZoteroLink } from './library/online';
 import { structuresIn, foundInContents, foundInDocument, foundInWorkbook, foundInFile, type Found, type Spot, type FileReaders } from './library/structures';
 import { parseIndex, indexText } from './library/file-index';
 import { libraryHolder } from './ui/library-refs';
-import { CompoundLibraryWindow, addStructures, type StructureIn } from './ui/compound-library';
+import type { CompoundLibraryWindow, CompoundLibraryHost, StructureIn } from './ui/compound-library';
 import type { KnowledgeBaseHost, KnowledgeBaseWindow } from './ui/knowledge-base';
 import { looksLikeSmiles } from './kb/tables';
-import { FindInFilesWindow, type ListedFile } from './ui/find-in-files';
-import { later } from './lazy';
+import type { FindInFilesWindow, FindInFilesHost, ListedFile } from './ui/find-in-files';
+import { later, madeLater } from './lazy';
 
 // dialogs for slides, design and charts load the first time they open
 const askEquation = later(() => import('./ui/equation-dialog'), 'askEquation');
@@ -328,6 +324,8 @@ const askDiagram = later(() => import('./ui/diagram-dialog'), 'askDiagram');
 const editChart = later(() => import('./ui/chart-editor'), 'editChart');
 const editMedia = later(() => import('./ui/media-dialog'), 'editMedia');
 const pickReuseSlides = later(() => import('./ui/reuse-slides'), 'pickReuseSlides');
+// and windows most sessions never open
+const showLabCalculator = later(() => import('./ui/lab-calc-dialog'), 'showLabCalculator');
 
 // Crash handling (src/diagnostics.ts): errors nothing else caught go to a log kept on this computer,
 // with a notice offering to report them through Send Feedback. The desktop app (not the iPad, whose
@@ -1510,6 +1508,7 @@ async function insertActionButton(): Promise<void> {
   const i = d.index;
   const slides = d.slides.map((s, k) => ({ link: `#slide=${s.id}`, label: `Slide ${k + 1}${slideTitle(d, k) ? `: ${slideTitle(d, k)}` : ''}` }));
   const regions = (d.slides[i].canvas?.keys ?? []).map((k, n) => ({ link: `#key=${k.id}`, label: k.title?.trim() || `View ${n + 1}` }));
+  const { actionLook, actionSet, askActionButton } = await import('./ui/action-button-dialog');
   const got = await askActionButton(slides, regions);
   if (!got || deckNow() !== d || d.index !== i) return;
   const sdoc = d.docOf(i), W = d.size.w, H = d.size.h, edge = 18;
@@ -2578,30 +2577,26 @@ async function applyAssistantAction(a: AssistantAction): Promise<string> {
   return old.length ? 'Replaced the selected structure.' : a.replace ? 'Drew the structure as a new one (nothing was selected to replace).' : 'Drew the structure.';
 }
 
-let assistantBarEl: AssistantBar | null = null;
 
 /** Edit > Assistant is only there once an AI model is linked. */
 function showAssistantMenu(): void {
   for (const b of document.querySelectorAll<HTMLElement>('[data-cmd="assistant"]')) b.hidden = aiPrefs.provider === 'none';
-  if (aiPrefs.provider === 'none') assistantBarEl?.close();
+  if (aiPrefs.provider === 'none') assistantBar.now()?.close();
 }
 
-/** Edit > Assistant (Ctrl+/): the prompt bar, made the first time. */
-function assistantBar(): AssistantBar {
-  assistantBarEl ??= new AssistantBar({
-    prefs: () => aiPrefs,
-    savePrefs: (p) => { aiPrefs = p; storeSettings(); },
-    mode: () => ws.active.mode as AssistantMode,
-    items: assistantItems,
-    apply: applyAssistantAction,
-    markStep: markAssistantStep,
-    undo: () => { command('undo'); },
-    openSettings: aiSettings,
-    area: () => document.getElementById('work')?.getBoundingClientRect() ?? null,
-    tab: () => ws.active,
-  });
-  return assistantBarEl;
-}
+/** Edit > Assistant (Ctrl+/): the prompt bar, loaded and made the first time. */
+const assistantBar = madeLater(async (): Promise<AssistantBar> => new (await import('./ui/assistant-bar')).AssistantBar({
+  prefs: () => aiPrefs,
+  savePrefs: (p) => { aiPrefs = p; storeSettings(); },
+  mode: () => ws.active.mode as AssistantMode,
+  items: assistantItems,
+  apply: applyAssistantAction,
+  markStep: markAssistantStep,
+  undo: () => { command('undo'); },
+  openSettings: aiSettings,
+  area: () => document.getElementById('work')?.getBoundingClientRect() ?? null,
+  tab: () => ws.active,
+}));
 
 /** "Mark on drawing" for a finding about a step: select that step's arrow. False when there is no such step. */
 function markAssistantStep(n: number): boolean {
@@ -3846,6 +3841,7 @@ function enterTab(tab: Tab, opened: boolean): void {
   editor.textFirst = !!deck;
   editor.structuresLocked = slides && structuresLocked;
   for (const el of document.querySelectorAll<HTMLElement>('.design-only')) el.hidden = !design;
+  if (design) designLib?.refresh();
   document.body.classList.toggle('sheet-mode', sheet);
   document.body.classList.toggle('doc-mode', words);
   placeSidePanel();
@@ -5468,7 +5464,7 @@ async function libraryLocation(): Promise<void> {
   await writePlaceChoice(keepStore(), { folder });
   flash(`Your library is kept in ${folder} now. Choose the same folder on your other computers to share it.`, 8000);
   referencesWindow.fill();
-  compoundWindow.fill();
+  compoundWindow.now()?.fill();
 }
 
 const ZOTERO_KEY = 'library/zotero.json';
@@ -5637,7 +5633,8 @@ async function noteFileCompounds(tab: Tab): Promise<void> {
   lib.change((l) => noteMentions(l, path, found.map((f, i) => ({ smiles: w[i]?.smiles ?? '', ...(f.label ? { label: f.label } : {}) }))));
 }
 
-const compoundWindow = new CompoundLibraryWindow(library, {
+// (the window is loaded when first opened)
+const compoundHost = {
   flash,
   selected: () => selectedForLibrary(),
   numbered: () => numberedForLibrary(),
@@ -5678,7 +5675,7 @@ const compoundWindow = new CompoundLibraryWindow(library, {
     const i = w.findIndex((r) => r?.smiles === c.smiles);
     if (i >= 0) await openAt(path, found[i].spot, found[i].atoms);
   },
-  findInFiles: desktopFolders ? (c) => void findWindow.open({ smiles: c.smiles, label: c.label }) : undefined,
+  findInFiles: desktopFolders ? (c) => void openFindWindow({ smiles: c.smiles, label: c.label }) : undefined,
   pickSdf: async () => { const f = await openBytesDialog('SD file', [SDF], ['sd']); return f ? { name: f.name, text: new TextDecoder().decode(f.bytes) } : null; },
   saveSdf: async (name, text) => {
     const target = await saveFileDialog(name, SDF).catch(() => null);
@@ -5688,7 +5685,8 @@ const compoundWindow = new CompoundLibraryWindow(library, {
   },
   fileName: () => { const t = ws.mainOf(ws.active); return t.ref.kind === 'path' ? t.ref.path : ''; },
   location: () => libraryLocation(),
-});
+} satisfies CompoundLibraryHost;
+const compoundWindow = madeLater(async (): Promise<CompoundLibraryWindow> => new (await import('./ui/compound-library')).CompoundLibraryWindow(library, compoundHost));
 
 /** Chemistry > Compound Library > Add Selected to Compound Library. */
 async function addToCompoundLibrary(): Promise<void> {
@@ -5697,6 +5695,7 @@ async function addToCompoundLibrary(): Promise<void> {
   const got = await selectedForLibrary();
   if (typeof got === 'string') { flash(got, 6000); return; }
   const t = ws.mainOf(ws.active);
+  const { addStructures } = await import('./ui/compound-library');
   let res: ReturnType<typeof addStructures> | null = null;
   lib.change((l) => (res = addStructures(l, got, t.ref.kind === 'path' ? t.ref.path : '')).lib);
   const r = res as ReturnType<typeof addStructures> | null;
@@ -5709,7 +5708,7 @@ async function addToCompoundLibrary(): Promise<void> {
 async function openCompoundLibrary(select: string[] = []): Promise<void> {
   finishTyping();
   await useLibrary();
-  await compoundWindow.open(select);
+  await (await compoundWindow.get()).open(select);
 }
 
 // ---------------------------------------------------------------- Chemistry > Look Up > Knowledge Base
@@ -5718,7 +5717,6 @@ async function openCompoundLibrary(select: string[] = []): Promise<void> {
 const KB_IMPORTED_KEY = 'kb/imported-tables.json';
 
 // (loaded when first opened: its tables are big, and most sessions never open it)
-let knowledgeBase: KnowledgeBaseWindow | null = null;
 const knowledgeBaseHost = {
   flash,
   canonical: async (smiles) => (chem.ready ? chem.canonical(smiles).catch(() => null) : null),
@@ -5736,28 +5734,29 @@ const knowledgeBaseHost = {
     return pubchemSafetyRecord(isCasNumber(t) ? { cas: t } : looksLikeSmiles(t) ? { smiles: t } : { name: t });
   },
 } satisfies KnowledgeBaseHost;
+const knowledgeBase = madeLater(async (): Promise<KnowledgeBaseWindow> => new (await import('./ui/knowledge-base')).KnowledgeBaseWindow(knowledgeBaseHost));
 
 /** Chemistry > Look Up > Knowledge Base: reference tables searched by name, CAS number, SMILES or a shift. */
 function openKnowledgeBase(): void {
   finishTyping();
   void (async () => {
-    knowledgeBase ??= new (await import('./ui/knowledge-base')).KnowledgeBaseWindow(knowledgeBaseHost);
-    await knowledgeBase.open();
+    await (await knowledgeBase.get()).open();
   })().catch((e) => flash(`The Knowledge Base could not open: ${String(e)}`));
 }
 
 // ---------------------------------------------------------------- Chemistry > Metals > Ligand Library
 
-const ligandLibrary = new LigandLibraryWindow({
+// (loaded when first opened, as the other windows below are)
+const ligandLibrary = madeLater(async (): Promise<LigandLibraryWindow> => new (await import('./ui/ligand-library')).LigandLibraryWindow({
   useTemplate: (id) => pickTool(`tpl-${id}`),
   openUrl: (url) => openWebPage(url),
   copyText: (text, done) => void copyText(text, done),
-});
+}));
 
 /** Chemistry > Metals > Ligand Library, and the first button on the Ligands palette. */
 function openLigandLibrary(): void {
   finishTyping();
-  ligandLibrary.open();
+  void ligandLibrary.get().then((w) => w.open(), (e) => flash(`The Ligand Library could not open: ${String(e)}`));
 }
 
 // ---------------------------------------------------------------- File > Find Structure in Files (desktop app)
@@ -5771,7 +5770,7 @@ const folderReaders: FileReaders = {
   slides: async (bytes) => (await import('./io/pptx-read')).readPptx(bytes).slides.map((s) => s.contents),
 };
 
-const findWindow = new FindInFilesWindow({
+const findHost = {
   flash,
   pickFolder: (start) => pickFolder(start),
   listFolder: (path, extensions, sub) => invoke<{ files: ListedFile[]; complete: boolean }>('list_folder', { path, extensions, sub }),
@@ -5803,13 +5802,19 @@ const findWindow = new FindInFilesWindow({
     get: () => { try { return localStorage.getItem('ci-find-folder') ?? ''; } catch { return ''; } },
     set: (p) => { try { localStorage.setItem('ci-find-folder', p); } catch { /* not kept */ } },
   },
-});
+} satisfies FindInFilesHost;
+
+/** The Find Structure in Files window, loaded the first time it opens. */
+const findWindow = madeLater(async (): Promise<FindInFilesWindow> => new (await import('./ui/find-in-files')).FindInFilesWindow(findHost));
+async function openFindWindow(start?: Parameters<FindInFilesWindow['open']>[0]): Promise<void> {
+  await (await findWindow.get()).open(start);
+}
 
 function findStructureInFiles(): void {
   finishTyping();
   if (!desktopFolders) { flash('Find Structure in Files looks through a folder, which the desktop app (Windows, Mac or Linux) can do and a browser can\'t.', 7000); return; }
   if (!chem.ready) { flash('The chemistry engine is still loading; try again in a moment.'); return; }
-  void findWindow.open();
+  void openFindWindow().catch((e) => flash(String(e)));
 }
 
 // ---------------------------------------------------------------- references (every open file's)
@@ -6963,7 +6968,7 @@ async function exportPicture(preset: { format?: string; dpi?: number; note?: str
   const tab = ws.active, deck = tab.deck;
   const what = deck ? (tab.mode === 'design' ? 'the page' : 'this slide') : 'the drawing';
   // the figure check's journal sets the resolution it asks for
-  const checked = preflightPane.open ? preflightPane.last : null;
+  const checked = preflightPane.now()?.open ? preflightPane.now()!.last : null;
   const dpiNow = preset.dpi ?? checked?.dpi ?? 300;
   const v = await ask('Export Picture', [
     { name: 'format', label: 'Format', value: preset.format ?? 'png', options: [
@@ -7830,75 +7835,80 @@ const JOURNAL_STYLES: Record<string, string> = {
 };
 
 /** File > Check Figure for Journal: the figure showing, as it draws (a drawing, a design page or a slide). */
-const preflightPane = new PreflightPane({
-  figure: () => {
-    if (sheetActive() || docActive()) return null;
-    const deck = deckNow();
-    if (deck) {
-      const i = deck.index;
-      const at = slidePages(deck, i)[deck.current?.canvas ? canvasKeys.picked(deck) : 0];
-      if (!at) return null;
-      return { items: recordSlide(at.page, at.doc), box: { x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h }, page: true };
-    }
-    const pic = recordPicture(doc, 0);
-    return pic ? { items: pic.items, box: pic.box } : null;
-  },
-  select: (where) => {
-    const sel = editor.touching(where);
-    editor.selectThese(sel);
-    const first = [...sel.atoms][0];
-    if (first !== undefined) editor.reveal('atom', first);
-    else if (sel.captions.size) editor.reveal('caption', [...sel.captions][0]);
-    else if (!sel.shapes.size && !sel.arrows.size) flash('That is part of a picture, chart or table: change it there.');
-  },
-  fix: (issue, r) => {
-    finishTyping();
-    // measured afresh for each step (text made bigger has a bigger box)
-    const fixCtx = () => { const m = editor.measure(); return { captionBox: (id: number) => m.captionBox(doc.captions.get(id)!), shapeBox: (id: number) => shapeBox(doc.shapes.get(id)!) }; };
-    let scaled = 1;
-    const apply = (i: typeof issue): boolean => {
-      if (i.fix === 'fit' && i.want) {
-        editor.selectAll();
-        const ok = editor.scaleSelection(i.want);
-        if (ok) scaled *= i.want;
-        return ok;
+/** The pane, loaded the first time it is used. */
+const preflightPane = madeLater(async (): Promise<PreflightPane> => {
+  const [m, { preflight }, { enlargeText, thickenLines, useArial, fixUntilDone }] = await Promise.all([import('./ui/preflight-pane'), import('./preflight'), import('./preflight-fix')]);
+  const pane: PreflightPane = new m.PreflightPane({
+    figure: () => {
+      if (sheetActive() || docActive()) return null;
+      const deck = deckNow();
+      if (deck) {
+        const i = deck.index;
+        const at = slidePages(deck, i)[deck.current?.canvas ? canvasKeys.picked(deck) : 0];
+        if (!at) return null;
+        return { items: recordSlide(at.page, at.doc), box: { x1: 0, y1: 0, x2: deck.size.w, y2: deck.size.h }, page: true };
       }
-      if (i.fix === 'text') return enlargeText(doc, i, fixCtx());
-      if (i.fix === 'lines') return thickenLines(doc, i, fixCtx());
-      if (i.fix === 'fonts') return useArial(doc, i.fonts ?? []);
-      return false;
-    };
-    // checked again after each step: one fix can undo another's work by a hair
-    const again = () => {
-      const fig = preflightPane.figureNow();
-      return fig ? preflight(fig.items, fig.box, r.journal, r.size.id, r.how) : null;
-    };
-    // all the steps are one undo
-    const label = { fit: 'Make it fit', text: 'Enlarge small text', lines: 'Thicken thin lines', fonts: 'Change fonts to Arial', style: 'Drawing style' }[issue.fix ?? 'style'];
-    const done = doc.edit(label, () => fixUntilDone(issue, apply, again));
-    if (done && issue.fix === 'fit') flash(`Scaled to ${Math.round(scaled * 100)} % to fit ${r.size.name.replace(/ \(.*/, '').toLowerCase()}. Text in captions keeps its size.`, 6000);
-    if (done) editor.changed();
-    else if (issue.fix !== 'fit') flash('This is in a picture, chart or table: change it there.');
-    return done;
-  },
-  styleFor: (id) => (JOURNAL_STYLES[id] && presetNamed(JOURNAL_STYLES[id]) ? JOURNAL_STYLES[id] : undefined),
-  useStyle: (name) => {
-    const next = presetNamed(name)?.style;
-    if (!next) return;
-    finishTyping();
-    const deck = deckNow();
-    if (deck) deck.setDrawingStyle({ ...next }, 'restyle');
-    else { doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, { ...next }, 'restyle')); editor.changed(); }
-    flash(`Structures are now drawn in ${next.name}.`, 4000);
-  },
-  exportFor: (r) => {
-    finishTab();
-    const name = r.journal.name.replace(/ \(.*/, '');
-    if (r.journal.vectorPreferred) { void exportPdf(); return; }
-    const raster = r.journal.formats?.find((f) => f === 'tiff' || f === 'png') ?? 'tiff';
-    void exportPicture({ format: raster, dpi: r.dpi, note: `The ${name} guidelines ask for ${r.dpi} dpi for this figure${r.journal.formats ? `, as ${r.journal.formats.map((f) => f.toUpperCase()).join(', ')}` : ''}.` });
-  },
-  open: (url) => openWebPage(url),
+      const pic = recordPicture(doc, 0);
+      return pic ? { items: pic.items, box: pic.box } : null;
+    },
+    select: (where) => {
+      const sel = editor.touching(where);
+      editor.selectThese(sel);
+      const first = [...sel.atoms][0];
+      if (first !== undefined) editor.reveal('atom', first);
+      else if (sel.captions.size) editor.reveal('caption', [...sel.captions][0]);
+      else if (!sel.shapes.size && !sel.arrows.size) flash('That is part of a picture, chart or table: change it there.');
+    },
+    fix: (issue, r) => {
+      finishTyping();
+      // measured afresh for each step (text made bigger has a bigger box)
+      const fixCtx = () => { const m = editor.measure(); return { captionBox: (id: number) => m.captionBox(doc.captions.get(id)!), shapeBox: (id: number) => shapeBox(doc.shapes.get(id)!) }; };
+      let scaled = 1;
+      const apply = (i: typeof issue): boolean => {
+        if (i.fix === 'fit' && i.want) {
+          editor.selectAll();
+          const ok = editor.scaleSelection(i.want);
+          if (ok) scaled *= i.want;
+          return ok;
+        }
+        if (i.fix === 'text') return enlargeText(doc, i, fixCtx());
+        if (i.fix === 'lines') return thickenLines(doc, i, fixCtx());
+        if (i.fix === 'fonts') return useArial(doc, i.fonts ?? []);
+        return false;
+      };
+      // checked again after each step: one fix can undo another's work by a hair
+      const again = () => {
+        const fig = pane.figureNow();
+        return fig ? preflight(fig.items, fig.box, r.journal, r.size.id, r.how) : null;
+      };
+      // all the steps are one undo
+      const label = { fit: 'Make it fit', text: 'Enlarge small text', lines: 'Thicken thin lines', fonts: 'Change fonts to Arial', style: 'Drawing style' }[issue.fix ?? 'style'];
+      const done = doc.edit(label, () => fixUntilDone(issue, apply, again));
+      if (done && issue.fix === 'fit') flash(`Scaled to ${Math.round(scaled * 100)} % to fit ${r.size.name.replace(/ \(.*/, '').toLowerCase()}. Text in captions keeps its size.`, 6000);
+      if (done) editor.changed();
+      else if (issue.fix !== 'fit') flash('This is in a picture, chart or table: change it there.');
+      return done;
+    },
+    styleFor: (id) => (JOURNAL_STYLES[id] && presetNamed(JOURNAL_STYLES[id]) ? JOURNAL_STYLES[id] : undefined),
+    useStyle: (name) => {
+      const next = presetNamed(name)?.style;
+      if (!next) return;
+      finishTyping();
+      const deck = deckNow();
+      if (deck) deck.setDrawingStyle({ ...next }, 'restyle');
+      else { doc.edit(`Drawing style: ${next.name}`, () => applyStyle(doc, { ...next }, 'restyle')); editor.changed(); }
+      flash(`Structures are now drawn in ${next.name}.`, 4000);
+    },
+    exportFor: (r) => {
+      finishTab();
+      const name = r.journal.name.replace(/ \(.*/, '');
+      if (r.journal.vectorPreferred) { void exportPdf(); return; }
+      const raster = r.journal.formats?.find((f) => f === 'tiff' || f === 'png') ?? 'tiff';
+      void exportPicture({ format: raster, dpi: r.dpi, note: `The ${name} guidelines ask for ${r.dpi} dpi for this figure${r.journal.formats ? `, as ${r.journal.formats.map((f) => f.toUpperCase()).join(', ')}` : ''}.` });
+    },
+    open: (url) => openWebPage(url),
+  });
+  return pane;
 });
 
 const slideCompare = new SlideComparePane({
@@ -8118,7 +8128,11 @@ function restack(how: 'front' | 'back' | 'forward' | 'backward'): void {
 
 const COMMANDS: Record<string, () => unknown> = {
   new: () => { finishTab(); ws.newDrawing(); },
-  'preflight': () => { finishTyping(); if (preflightPane.open) preflightPane.refresh(); else preflightPane.show(document.querySelector<HTMLElement>('[data-cmd="preflight"]:not([hidden])')); },
+  'preflight': () => {
+    finishTyping();
+    void preflightPane.get().then((p) => { if (p.open) p.refresh(); else p.show(document.querySelector<HTMLElement>('[data-cmd="preflight"]:not([hidden])')); })
+      .catch((e) => flash(`Check Figure for Journal could not open: ${String(e)}`));
+  },
   'check-accessibility': () => { finishTyping(); if (accessibility.open) accessibility.refresh(); else accessibility.show(document.querySelector<HTMLElement>('[data-cmd="check-accessibility"]:not([hidden])')); },
   'alt-text': () => { finishTyping(); void drawingAltText(); },
   'new-slides': () => { finishTab(); ws.newSlides(); },
@@ -8489,7 +8503,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'command-search': () => commandSearch.open(),
   assistant: () => {
     if (aiPrefs.provider === 'none') { flash('Link an AI model in Edit > Settings > AI Model to use the Assistant.', 6000, { label: 'AI Model…', run: () => void aiSettings() }); return; }
-    assistantBar().toggle();
+    void assistantBar.get().then((b) => b.toggle(), (e) => flash(`The Assistant could not open: ${String(e)}`));
   },
   'next-region': () => cycleRegion(1),
   'prev-region': () => cycleRegion(-1),
