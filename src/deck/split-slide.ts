@@ -103,8 +103,10 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
   }
   for (const c of doc.captions.values()) {
     // titles, text placeholders and text boxes are always PowerPoint text
-    // (and hidden text, kept hidden in PowerPoint rather than left out of a structure's picture)
-    if (!c.ole && (c.ph || c.wrap !== undefined || c.hidden)) { texts.push(c); continue; }
+    // (and hidden text, kept hidden in PowerPoint rather than left out of a structure's picture;
+    // and linked text, such as a compound number linking back to where it was first shown, whose
+    // link would be lost in a picture even when it sits under its structure)
+    if (!c.ole && (c.ph || c.wrap !== undefined || c.hidden || c.runs.some((r) => r.link))) { texts.push(c); continue; }
     const lay = layoutText(c, doc.style.captionSize, measure);
     items.push({ box: { x1: c.x + lay.box.x1, y1: c.y + lay.box.y1, x2: c.x + lay.box.x2, y2: c.y + lay.box.y2 }, chem: !!c.ole, add: (s) => s.captions.add(c.id), text: c, ...(c.piece !== undefined ? { piece: c.piece } : {}), ...(c.ole ? { ole: c.ole } : {}) });
   }
