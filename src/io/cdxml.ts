@@ -776,6 +776,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       }
       const ft = kids(g).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === FRAME_TAG);
       if (ft) s.frame = frameFromTag(ft.getAttribute('Value'));
+      // an outline of its own width: ChemDraw draws a graphic's lines at its LineWidth, and bold
+      // ones at its BoldWidth, when the graphic has one that isn't the drawing's
+      const ownW = g.getAttribute(s.bold ? 'BoldWidth' : 'LineWidth');
+      if (s.kind !== 'picture' && ownW !== null && Number(ownW) > 0 && Math.abs(Number(ownW) - (s.bold ? st.boldWidth : st.lineWidth)) > 0.005) s.lineWidth = Number(ownW);
       doc.addShape(s); from('s', s.id, g); stats.shapes++;
     };
     switch (type) {

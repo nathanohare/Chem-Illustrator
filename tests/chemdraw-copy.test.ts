@@ -282,4 +282,28 @@ describe('copying to ChemDraw', () => {
       expect(lone.querySelector(':scope > t')?.textContent).toBe('CH4');
     }
   });
+  it('writes a frame of its own width as the graphic\'s LineWidth, or BoldWidth when bold, and reads it back', () => {
+    const doc = newDoc();
+    doc.edit('Draw', () => {
+      doc.addShape({ kind: 'rect', x1: 0, y1: 0, x2: 80, y2: 40, rounded: true, radius: 6, lineWidth: 1.44 });
+      doc.addShape({ kind: 'line', x1: 0, y1: 60, x2: 80, y2: 60, bold: true, lineWidth: 3.6 });
+      doc.addShape({ kind: 'oval', x1: 100, y1: 0, x2: 140, y2: 40 });
+    });
+    for (const x of Object.values(copied(doc))) {
+      const [rect, line, oval] = ['Rectangle', 'Line', 'Oval'].map((k) => all(x, 'graphic').find((e) => e.getAttribute('GraphicType') === k)!);
+      expect(Number(rect.getAttribute('LineWidth'))).toBeCloseTo(1.44, 2);
+      expect(rect.hasAttribute('BoldWidth')).toBe(false);
+      // (the corner in hundredths of the box's own width)
+      expect(rect.getAttribute('CornerRadius')).toBe(String(Math.round((6 / 1.44) * 100)));
+      expect(Number(line.getAttribute('BoldWidth'))).toBeCloseTo(3.6, 2);
+      expect(line.hasAttribute('LineWidth')).toBe(false);
+      expect(oval.hasAttribute('LineWidth') || oval.hasAttribute('BoldWidth')).toBe(false);
+      const shapes = [...readCdxml(new XMLSerializer().serializeToString(x)).doc.shapes.values()];
+      const r = shapes.find((s) => s.kind === 'rect')!, l = shapes.find((s) => s.kind === 'line')!, o = shapes.find((s) => s.kind === 'oval')!;
+      expect(r.lineWidth).toBeCloseTo(1.44, 2);
+      expect(r.radius).toBeCloseTo(6, 1);
+      expect(l.lineWidth).toBeCloseTo(3.6, 2);
+      expect(o.lineWidth).toBeUndefined();
+    }
+  });
 });

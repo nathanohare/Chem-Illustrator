@@ -1781,6 +1781,14 @@ class CdxmlWriter {
     for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === FRAME_TAG) g.removeChild(c);
     if (s.frame) g.appendChild(this.el('objecttag', { TagType: 'String', Name: FRAME_TAG, Value: frameTag(s.frame), Visible: 'no' }));
     const filled = !s.filled || fade !== null ? null : s.fill === 'shaded' ? 'Shaded' : 'Filled';
+    // an outline of its own width (a frame pasted from ChemDraw keeps its drawing's width): ChemDraw
+    // draws a graphic's lines at its own LineWidth, and bold ones at its BoldWidth
+    if (s.lineWidth && s.kind !== 'picture') {
+      set(s.bold ? 'BoldWidth' : 'LineWidth', f2(s.lineWidth));
+      g.removeAttribute(s.bold ? 'LineWidth' : 'BoldWidth');
+    } else for (const k of ['LineWidth', 'BoldWidth']) g.removeAttribute(k);
+    // corner radius and shadow size are in hundredths of the graphic's line width
+    const lwRef = Number(g.getAttribute('LineWidth')) || this.doc.style.lineWidth;
     switch (s.kind) {
       case 'line':
         set('GraphicType', 'Line');
@@ -1796,8 +1804,8 @@ class CdxmlWriter {
         set('BoundingBox', s.shadow ? box({ x1: Math.max(s.x1, s.x2), y1: Math.max(s.y1, s.y2), x2: Math.min(s.x1, s.x2), y2: Math.min(s.y1, s.y2) }) : box(s));
         set('RectangleType', [s.rounded && 'RoundEdge', s.shadow && 'Shadow', filled, s.dashed && 'Dashed', s.bold && 'Bold'].filter(Boolean).join(' ') || 'Plain');
         // in hundredths of the line width, as ChemDraw stores them
-        set('CornerRadius', s.rounded ? String(Math.round(((s.radius ?? 6 * this.doc.style.lineWidth) / this.doc.style.lineWidth) * 100)) : null);
-        set('ShadowSize', s.shadow ? String(Math.round(((s.shadowSize ?? 4 * this.doc.style.lineWidth) / this.doc.style.lineWidth) * 100)) : null);
+        set('CornerRadius', s.rounded ? String(Math.round(((s.radius ?? 6 * this.doc.style.lineWidth) / lwRef) * 100)) : null);
+        set('ShadowSize', s.shadow ? String(Math.round(((s.shadowSize ?? 4 * this.doc.style.lineWidth) / lwRef) * 100)) : null);
         // a turned box (ChemDraw's diamond is a square turned 45°): its middle and the ends of its
         // two half-axes, turned, as ChemDraw stores them, and the box round its turned corners
         if (s.rot && ((s.rot % 360) + 360) % 360 > 1e-6) {
