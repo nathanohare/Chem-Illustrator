@@ -156,6 +156,49 @@ describe('Auto-Animate Steps', () => {
     expect(anims.find((a) => a.effect === 'camera')!.target.id).toBe(canvas!.keys[1].id);
   });
 
+  it('on a copy of a canvas slide with its own route: the original keeps its keyframes, hidden from the show, in one undo step', () => {
+    const host = new Doc();
+    const d = Deck.blank(host);
+    d.attach();
+    d.addCanvasSlide();
+    const i = d.index;
+    const route = { keys: [{ id: 1, x: 0, y: 0, zoom: 1 }, { id: 2, x: 400, y: 0, zoom: 1 }, { id: 3, x: 800, y: 200, zoom: 1.5 }] };
+    d.setCanvas(route, 'Keyframes', i);
+    const { doc: made, m } = scheme();
+    d.docOf(i).restoreContents(made.contents());
+    const was = JSON.stringify(d.slides[i].canvas!.keys);
+    const count = d.slides.length;
+    // as the app does it
+    const sdoc = d.docOf(i);
+    const pieces = stepPieces(sdoc, m, all())!;
+    const copy = new Doc();
+    copy.style = { ...sdoc.style };
+    copy.restoreContents(sdoc.contents());
+    copy.edit('Auto-Animate Steps', () => markPieces(copy, pieces));
+    const out = stepAnims(copy, pieces, AUTO_STEPS_DEFAULTS, d.slides[i].anims ?? [], { data: d.slides[i].canvas!, size: d.size });
+    d.copyHidingOriginal(i, copy.contents(), { anims: out.anims, canvas: out.canvas }, 'Auto-Animate Steps');
+
+    expect(d.slides.length).toBe(count + 1);
+    expect(d.index).toBe(i + 1);
+    const [orig, built] = [d.slides[i], d.slides[i + 1]];
+    expect(orig.hidden).toBe(true);
+    expect(built.hidden).toBeUndefined();
+    expect(JSON.stringify(orig.canvas!.keys)).toBe(was);
+    expect(built.canvas!.keys.length).toBe(2);
+    expect(built.anims!.some((a) => a.effect === 'camera')).toBe(true);
+    // the original drawing is not split into pieces; the copy's is
+    expect([...d.docOf(i).atoms.values()].some((a) => a.piece !== undefined)).toBe(false);
+    expect([...d.docOf(i + 1).atoms.values()].every((a) => a.piece !== undefined)).toBe(true);
+
+    expect(d.undo()).toBe(true);
+    expect(d.slides.length).toBe(count);
+    expect(d.slides[i].hidden).toBeUndefined();
+    expect(JSON.stringify(d.slides[i].canvas!.keys)).toBe(was);
+    expect(d.redo()).toBe(true);
+    expect(d.slides[i].hidden).toBe(true);
+    expect(d.slides.length).toBe(count + 1);
+  });
+
   it('finds nothing to build without a step', () => {
     const doc = new Doc();
     doc.edit('a', () => doc.addCaption({ x: 0, y: 0, runs: [{ text: 'alone' }], justify: 'left' }));
