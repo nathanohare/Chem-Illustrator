@@ -1635,6 +1635,13 @@ export const ALT_TAG = 'Chem Illustrator alt text';
 export const OWN_PICTURE = 'ChemIllustratorPicture';
 export const OWN_CROP = 'ChemIllustratorCrop';
 
+/** Each hex digit's value, by character code (anything else 0, as parseInt's NaN became). */
+const HEX = (() => {
+  const t = new Uint8Array(128);
+  for (let i = 0; i < 16; i++) { t['0123456789abcdef'.charCodeAt(i)] = i; t['0123456789ABCDEF'.charCodeAt(i)] = i; }
+  return t;
+})();
+
 /** The picture in a ChemDraw embedded object, when there is one this program can show. */
 function pictureOf(el: Element): { src: string; px: { w: number; h: number }; crop: Shape['crop'] | null } | null {
   const own = el.getAttribute(OWN_PICTURE);
@@ -1651,8 +1658,9 @@ function pictureOf(el: Element): { src: string; px: { w: number; h: number }; cr
   const hexBytes = (name: string): Uint8Array | null => {
     const hex = el.getAttribute(name);
     if (!hex || hex.length < 48 || !/^[0-9a-f]+$/i.test(hex.slice(0, 64))) return null;
+    // (by character codes: a big picture is megabytes of hex)
     const bytes = new Uint8Array(hex.length >> 1);
-    for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(hex.substr(i * 2, 2), 16);
+    for (let i = 0, j = 0; i < bytes.length; i++, j += 2) bytes[i] = (HEX[hex.charCodeAt(j)] << 4) | HEX[hex.charCodeAt(j + 1)];
     return bytes;
   };
   const picture = (bytes: Uint8Array, mime: string) => ({ src: dataUrl(bytes, mime), px: imageSize(bytes, mime) ?? { w: 100, h: 100 }, crop });
