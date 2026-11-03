@@ -473,3 +473,47 @@ describe('our tags carry what was written beside them (CDXML audit E1–E5)', ()
     expect(seen).toBe(hex);
   });
 });
+
+describe('the CDXML audit, R18 and R33 (reading and writing)', () => {
+  const pho = (attrs: string) => file('<fragment id="8"><n id="1" p="100 100" NodeType="Fragment"><t p="97 103.6" LabelJustification="Left" LabelAlignment="Left"><s font="3" size="10" face="96">PhO</s></t></n>'
+    + `<n id="2" p="120 90"/><b id="3" ${attrs}/></fragment>`);
+  const lastBond = (xml: string) => { const bs = all(parse(xml), 'b'); return bs[bs.length - 1]; };
+
+  it('R18: a bond keeps the label character it meets (BeginAttach / EndAttach), through a fresh copy and CDX', () => {
+    const doc = readCdxml(pho('B="1" E="2" BeginAttach="2"')).doc;
+    const b = [...doc.bonds.values()][0];
+    expect(b.beginAttach).toBe(2);
+    // drawn from its end in ChemDraw: the index goes with its atom
+    const back = readCdxml(pho('B="2" E="1" Display="WedgeEnd" EndAttach="2"')).doc;
+    const bb = [...back.bonds.values()][0];
+    expect(back.atoms.get(bb.a1)!.label).toBe('PhO');
+    expect(bb.beginAttach).toBe(2);
+    doc.source = null;
+    const out = lastBond(writeCdxml(doc));
+    expect(out.getAttribute('BeginAttach')).toBe('2');
+    expect(out.getAttribute('EndAttach')).toBeNull();
+    expect([...readCdxml(viaCdx(writeCdxml(doc))).doc.bonds.values()][0].beginAttach).toBe(2);
+  });
+
+  it('R18: an index no longer on its atom\'s label is not written', () => {
+    const doc = readCdxml(pho('B="1" E="2" BeginAttach="2"')).doc;
+    const b = [...doc.bonds.values()][0];
+    doc.edit('Retype', () => doc.updateAtom(b.a1, { label: 'O' }));
+    expect(lastBond(writeCdxml(doc)).getAttribute('BeginAttach')).toBeNull();
+  });
+
+  it('R33: a symbol with no SymbolType is a lone pair', () => {
+    const doc = readCdxml(file('<graphic id="5" BoundingBox="10 10 14 14" GraphicType="Symbol"/>')).doc;
+    expect([...doc.shapes.values()][0].symbol).toBe('LonePair');
+  });
+
+  it('R33: a shadowed oval keeps its shadow size, in hundredths of its line width', () => {
+    const doc = readCdxml(file('<graphic id="5" BoundingBox="0 0 0 0" GraphicType="Oval" OvalType="Circle Shadowed" LineWidth="1" ShadowSize="300" Center3D="50 50 0" MajorAxisEnd3D="70 50 0" MinorAxisEnd3D="50 70 0"/>')).doc;
+    const s = [...doc.shapes.values()][0];
+    expect(s.shadowSize).toBeCloseTo(3, 5);
+    doc.source = null;
+    const g = all(parse(writeCdxml(doc)), 'graphic')[0];
+    const lw = Number(g.getAttribute('LineWidth') ?? doc.style.lineWidth);
+    expect(Number(g.getAttribute('ShadowSize')) * lw / 100).toBeCloseTo(3, 1);
+  });
+});

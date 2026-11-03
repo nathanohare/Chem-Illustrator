@@ -445,6 +445,11 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (ord === '1.5') extra.plain = true;
       if (b.getAttribute('IgnoreWarnings') === 'yes') extra.ignoreWarnings = true;
       if (b.getAttribute('ShowBondStereo') === 'yes') extra.showStereo = true;
+      // the label characters the bond meets (counted from 0; 0 is the default), with their atoms
+      const ba = num(b, 'BeginAttach', 0), ea = num(b, 'EndAttach', 0);
+      const [at1, at2] = swap ? [ea, ba] : [ba, ea];
+      if (at1 > 0) extra.beginAttach = at1;
+      if (at2 > 0) extra.endAttach = at2;
       // a bond crossing others: the higher Z is in front
       if (layered && b.hasAttribute('Z')) extra.z = num(b, 'Z');
       const tag = kids(b).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === 'stereo');
@@ -892,7 +897,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         const ot = g.getAttribute('OvalType') ?? '';
         const filled = ot.includes('Filled') || ot.includes('Shaded');
         const orb = type === 'Orbital' ? g.getAttribute('OrbitalType') : null;
-        const oval = () => add({ ...base, ...(orb ? { orbital: orb } : {}), kind: 'oval', x1: cen[0] - rx, y1: cen[1] - ry, x2: cen[0] + rx, y2: cen[1] + ry, ...(rot ? { rot } : {}), filled, ...(ot.includes('Shaded') ? { fill: 'shaded' as const } : {}), dashed: ot.includes('Dashed'), bold: ot.includes('Bold'), shadow: ot.includes('Shadow') });
+        // shadow size, as a box's, in hundredths of the oval's line width
+        const shadowSize = () => { const ss = g.getAttribute('ShadowSize'); return ot.includes('Shadow') && ss !== null && Number.isFinite(Number(ss)) ? { shadowSize: (Number(ss) / 100) * num(g, 'LineWidth', st.lineWidth) } : {}; };
+        const oval = () => add({ ...base, ...(orb ? { orbital: orb } : {}), kind: 'oval', x1: cen[0] - rx, y1: cen[1] - ry, x2: cen[0] + rx, y2: cen[1] + ry, ...(rot ? { rot } : {}), filled, ...(ot.includes('Shaded') ? { fill: 'shaded' as const } : {}), dashed: ot.includes('Dashed'), bold: ot.includes('Bold'), shadow: ot.includes('Shadow'), ...shadowSize() });
         // a plain circle kept with a structure may be an aromatic ring's circle (checked once the bonds are in)
         if (g.parentElement?.nodeName === 'fragment' && ot.includes('Circle') && !filled) pendingCircles.push({ x: cen[0], y: cen[1], oval });
         else oval();
@@ -900,7 +907,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       }
       case 'Symbol': {
         if (bb.length < 4) return;
-        const sym = g.getAttribute('SymbolType') ?? '';
+        // (with no SymbolType, ChemDraw takes it for a lone pair)
+        const sym = g.getAttribute('SymbolType') ?? 'LonePair';
         if (CHIRAL_FLAGS[sym]) {
           // a chiral flag: ChemDraw keeps the word as text inside it, and draws the box round that
           const t = kids(g).find((k) => k.nodeName === 't');
