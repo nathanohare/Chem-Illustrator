@@ -389,3 +389,48 @@ describe('the CDXML audit, writing side (3): R26', () => {
     expect(all(x, 'chemicalproperty')).toHaveLength(0);
   });
 });
+
+describe('the CDXML audit, writing side (4): R21', () => {
+  const c = [60, 60], E = (t: number) => [c[0] + 35 * Math.cos(t), c[1] + 25.4 * Math.sin(t)];
+  const T = E(0.5), H = E(0.5 - (200 * Math.PI) / 180);
+  const arrow = `<arrow id="5" ArrowheadHead="Full" ArrowheadType="Solid" HeadSize="1000" ArrowheadCenterSize="875" ArrowheadWidth="250" Head3D="${H[0]} ${H[1]} 0" Tail3D="${T[0]} ${T[1]} 0" Center3D="60 60 0" MajorAxisEnd3D="95 60 0" MinorAxisEnd3D="60 85.4 0" AngularSize="200"/>`;
+  const read = () => readCdxml(file(arrow + '<fragment id="2"><n id="3" p="200 150"/><n id="4" p="214.4 150"/><b id="6" B="3" E="4"/></fragment>')).doc;
+  const nums = (e: Element, k: string) => e.getAttribute(k)!.split(' ').map(Number);
+
+  it('writes an arc on an ellipse back as ChemDraw\'s arc arrow when moved or recoloured', () => {
+    const doc = read();
+    const r = doc.arrows.get(5)!;
+    doc.edit('Move', () => doc.updateArrow(5, { tail: { x: r.tail.x + 10, y: r.tail.y + 5 }, head: { x: r.head.x + 10, y: r.head.y + 5 }, color: '#ff0000' }));
+    const x = parse(writeCdxml(doc));
+    expect(all(x, 'curve')).toHaveLength(0);
+    const a = all(x, 'arrow')[0];
+    expect(a.getAttribute('AngularSize')).toBe('200');
+    expect(nums(a, 'Center3D').slice(0, 2)).toEqual([70, 65]);
+    expect(nums(a, 'MajorAxisEnd3D').slice(0, 2)).toEqual([105, 65]);
+    expect(nums(a, 'MinorAxisEnd3D')[1]).toBeCloseTo(90.4, 2);
+    // read back: the same arc
+    const back = readCdxml(writeCdxml(doc)).doc.arrows.get(5)!;
+    back.bez!.forEach((p, i) => { expect(p.x).toBeCloseTo(r.bez![i].x, 3); expect(p.y).toBeCloseTo(r.bez![i].y, 3); });
+  });
+
+  it('turns and scales the ellipse with its ends', () => {
+    const doc = read();
+    const r = doc.arrows.get(5)!;
+    // turned 90° about the tail and made twice as long
+    const turn = (p: { x: number; y: number }) => ({ x: r.tail.x - 2 * (p.y - r.tail.y), y: r.tail.y + 2 * (p.x - r.tail.x) });
+    doc.edit('Turn', () => doc.updateArrow(5, { head: turn(r.head) }));
+    const a = all(parse(writeCdxml(doc)), 'arrow')[0];
+    const cc = nums(a, 'Center3D'), ma = nums(a, 'MajorAxisEnd3D');
+    expect(Math.hypot(ma[0] - cc[0], ma[1] - cc[1])).toBeCloseTo(70, 3);
+    expect(ma[0] - cc[0]).toBeCloseTo(0, 3);
+  });
+
+  it('writes it as a curve once its shape is changed here', () => {
+    const doc = read();
+    const r = doc.arrows.get(5)!;
+    doc.edit('Bend', () => doc.updateArrow(5, { bez: r.bez!.map((p) => ({ x: p.x, y: p.y * 1.5 })) }));
+    const x = parse(writeCdxml(doc));
+    expect(all(x, 'curve')).toHaveLength(1);
+    expect(all(x, 'arrow')).toHaveLength(0);
+  });
+});

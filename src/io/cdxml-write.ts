@@ -1359,6 +1359,8 @@ class CdxmlWriter {
   private writeArrow(r: Arrow): void {
     const e = this.source('r', r.id, ['arrow', 'curve']);
     const o = this.orig<Arrow>('r', r.id);
+    // ChemDraw's arc along an ellipse stays its arc arrow while its shape is the one read
+    if (e?.nodeName === 'arrow' && o?.bez?.length && e.hasAttribute('AngularSize') && deepEqual(r.bez, o.bez) && this.writeEllipseArrow(e, r, o)) return;
     // an S-shaped arrow is a ChemDraw curve (and one made back into an arc, an arrow again)
     if (r.bez?.length || e?.nodeName === 'curve') { this.writeCurveArrow(r, e, o); return; }
     if (e && o) {
@@ -1382,6 +1384,46 @@ class CdxmlWriter {
       this.page.appendChild(a);
     }
     this.changed = true;
+  }
+
+  /**
+   * A ChemDraw arc arrow along an ellipse (read as Bézier pieces along it), written back as that
+   * arc: its ellipse moved, turned and scaled with its ends, its other settings as they are here.
+   * False when it can't be (its ends have met): it is then written as a curve.
+   */
+  private writeEllipseArrow(e: Element, r: Arrow, o: Arrow): boolean {
+    const ox = o.head.x - o.tail.x, oy = o.head.y - o.tail.y, d2 = ox * ox + oy * oy;
+    if (d2 < 1e-9) return false;
+    if (!deepEqual(r.morph, o.morph)) { this.writeMorph(e, r); this.changed = true; }
+    if (this.pinValue(r) !== this.pinValue(o)) { this.writePin(e, r); this.changed = true; }
+    if (sameExcept(r, o, ['step', 'reagentFor', 'morph', 'pin'])) return true;
+    // the move taking the old ends to the new (complex numbers: z -> tail + (z - oldTail) k)
+    const rx = r.head.x - r.tail.x, ry = r.head.y - r.tail.y;
+    const kx = (rx * ox + ry * oy) / d2, ky = (ry * ox - rx * oy) / d2;
+    const T = (p: number[]): Vec => {
+      const dx = p[0] - o.tail.x, dy = p[1] - o.tail.y;
+      return { x: r.tail.x + dx * kx - dy * ky, y: r.tail.y + dx * ky + dy * kx };
+    };
+    const xyz = (k: string) => (e.getAttribute(k) ?? '').trim().split(/\s+/).map(Number);
+    const [c, ma, mi] = ['Center3D', 'MajorAxisEnd3D', 'MinorAxisEnd3D'].map(xyz);
+    if ([c, ma, mi].some((p) => p.length < 2 || p.some((v) => !Number.isFinite(v)))) return false;
+    const angular = e.getAttribute('AngularSize');
+    this.fillArrow(e, { ...r, sweep: 0, bez: undefined });
+    const center = T(c);
+    this.set(e, 'Center3D', pt3(center));
+    this.set(e, 'MajorAxisEnd3D', pt3(T(ma)));
+    this.set(e, 'MinorAxisEnd3D', pt3(T(mi)));
+    this.set(e, 'AngularSize', angular);
+    const pts = bezPoints(r);
+    if (pts) {
+      const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y), pad = r.headWidth;
+      this.set(e, 'BoundingBox', box({ x1: Math.min(...xs) - pad, y1: Math.min(...ys) - pad, x2: Math.max(...xs) + pad, y2: Math.max(...ys) + pad }));
+    }
+    for (const g of this.legacyOf(e)) {
+      g.setAttribute('BoundingBox', g.getAttribute('GraphicType') === 'Arc' ? `${pt(r.head)} ${pt(center)}` : `${pt(r.head)} ${pt(r.tail)}`);
+    }
+    this.changed = true;
+    return true;
   }
 
   /**
