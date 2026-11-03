@@ -26,6 +26,8 @@ export class LiveStereo implements StereoInfo {
   /** Atoms and bonds whose label the rules can't decide (an R group sets the order). */
   private undecidedAtoms = new Set<number>();
   private undecidedBonds = new Set<number>();
+  /** What the rules first worked out for each thing asked about (asFirst). */
+  private first = new Map<string, string | null>();
   private cache = new Map<string, StereoTags>();
   private watch: AtomWatch;
   private running: Promise<void> | null = null;
@@ -47,6 +49,14 @@ export class LiveStereo implements StereoInfo {
     if (this.undecidedBonds.has(id)) return undefined;
     const b = this.doc.bonds.get(id);
     return b && this.known.has(b.a1) ? null : undefined;
+  }
+
+  asFirst(kind: 'a' | 'b', id: number): boolean {
+    const d = kind === 'a' ? this.atom(id) : this.bond(id);
+    if (d === undefined) return true;
+    const key = kind + id;
+    if (!this.first.has(key)) this.first.set(key, d);
+    return this.first.get(key) === d;
   }
 
   undecided(kind: 'a' | 'b', id: number): boolean {
@@ -79,6 +89,7 @@ export class LiveStereo implements StereoInfo {
       for (const id of this.bondLabels.keys()) changedBonds.add(id);
       for (const id of this.undecidedAtoms) changedAtoms.add(id);
       for (const id of this.undecidedBonds) changedBonds.add(id);
+      this.first.clear();
       this.atomLabels.clear();
       this.bondLabels.clear();
       this.known.clear();
