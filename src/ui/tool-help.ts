@@ -49,6 +49,11 @@ const BY_NAME: Record<string, ToolHelp> = {
     steps: ['Drag from a metal to a ring or π-bond'],
     keys: [],
   },
+  'bond-variable': {
+    what: 'Drag from a group (or empty space) into a ring: the group is on one of the ring\'s atoms. Then click ring atoms to add them or take them out.',
+    steps: ['Drag from the group into the ring', 'Click ring atoms to add or remove'],
+    keys: [],
+  },
   newman: { what: 'Click a single bond to draw its Newman projection: the end you click nearer is in front. The window shows its most stable conformers (Tab steps through them).', steps: ['Click a single bond'], keys: [] },
   fragment: { what: 'Drag a line across the bonds to break (or click one bond). Each piece gets a caption with its formula and exact mass, which you can edit.', steps: ['Drag across the bonds to break'], keys: [] },
 };

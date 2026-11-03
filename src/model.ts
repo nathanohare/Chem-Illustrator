@@ -19,8 +19,13 @@ import { NICKNAMES } from './chem/labels';
 import { layoutText } from './text/layout';
 import { arialWidth } from './text-metrics';
 
-/** 'dative' is a coordinate bond, drawn as an arrow from the donor (a1) to the acceptor (a2). */
-export type BondDisplay = 'solid' | 'wedge' | 'hashWedge' | 'hash' | 'bold' | 'dash' | 'wavy' | 'dative';
+/**
+ * 'dative' is a coordinate bond, drawn as an arrow from the donor (a1) to the acceptor (a2).
+ * 'hollowWedge' and 'wavyWedge' have their narrow end at a1, as a wedge does. 'hydrogen' is a
+ * hydrogen bond (dotted, a1 the H) and 'ionic' an ionic bond (dashed, a1 the positive end):
+ * neither counts toward valence (ChemDraw's Order hydrogen and ionic).
+ */
+export type BondDisplay = 'solid' | 'wedge' | 'hashWedge' | 'hash' | 'bold' | 'dash' | 'wavy' | 'dative' | 'hollowWedge' | 'wavyWedge' | 'hydrogen' | 'ionic';
 
 /** A partial bond (order 0.5), one forming or breaking in a transition state: drawn dashed. */
 export const PARTIAL = 0.5;
@@ -30,7 +35,12 @@ export const PARTIAL = 0.5;
  * bond in a transition state. Neither counts toward hydrogens, and neither goes to RDKit.
  */
 export function outsideValence(b: Pick<Bond, 'display' | 'order'>): boolean {
-  return b.display === 'dative' || b.order === PARTIAL;
+  return b.display === 'dative' || b.display === 'hydrogen' || b.display === 'ionic' || b.order === PARTIAL;
+}
+
+/** A bond drawn narrow at a1 and wide at a2: a wedge, hashed, hollow or wavy wedge. */
+export function isWedge(d: BondDisplay): boolean {
+  return d === 'wedge' || d === 'hashWedge' || d === 'hollowWedge' || d === 'wavyWedge';
 }
 export type DoublePos = 'auto' | 'left' | 'right' | 'center';
 
@@ -160,6 +170,14 @@ export interface Atom {
    * when bonded to a metal. Only the look: the bonds are the same either way.
    */
   kekule?: boolean;
+  /**
+   * On a multicentre point: a variable attachment (ChemDraw's VariableAttachment node) rather
+   * than a hapto bond's middle. The bond to it says the group is on one of `multi`'s atoms, which
+   * one not known or not mattering. It sits at the middle of `ringOf` (the whole ring) when set.
+   */
+  variable?: boolean;
+  /** A variable attachment's ring: the atoms whose middle it sits at (all of `multi` when not set). */
+  ringOf?: number[];
 }
 
 /** A metal atom: a metal element, or a label written for one (Pd, PdCl2, LnPd, [M]). */
@@ -256,6 +274,11 @@ export interface Bond {
    * bond passing just beyond another's end). Used only while they still pass close.
    */
   crossing?: number[];
+  /**
+   * How a double bond's second line is drawn, where it isn't a plain line (ChemDraw's Display2):
+   * dashed (a partial double bond, as in an amide's resonance form), bold or hashed.
+   */
+  line2?: 'dash' | 'bold' | 'hash';
   /** Which character of a1's label the bond meets, counted from 0 (ChemDraw's BeginAttach; unset is the default). */
   beginAttach?: number;
   /** Which character of a2's label the bond meets, counted from 0 (ChemDraw's EndAttach; unset is the default). */
@@ -1722,7 +1745,7 @@ export class Doc {
   }
 
   private linkCentre(c: Atom): void {
-    for (const m of c.multi!) {
+    for (const m of new Set([...c.multi!, ...(c.ringOf ?? [])])) {
       const l = this.centresOf.get(m);
       if (!l) this.centresOf.set(m, [c.id]);
       else if (!l.includes(c.id)) l.push(c.id);
@@ -1730,7 +1753,7 @@ export class Doc {
   }
 
   private unlinkCentre(c: Atom): void {
-    for (const m of c.multi!) {
+    for (const m of new Set([...c.multi!, ...(c.ringOf ?? [])])) {
       const l = this.centresOf.get(m);
       if (!l) continue;
       const i = l.indexOf(c.id);
@@ -1740,9 +1763,11 @@ export class Doc {
   }
 
   /** The middle of a multicentre point's atoms, where it sits (null when none of them are left). */
-  centreOf(c: Pick<Atom, 'multi'>): Vec | null {
+  centreOf(c: Pick<Atom, 'multi' | 'ringOf'>): Vec | null {
     let x = 0, y = 0, n = 0;
-    for (const id of c.multi ?? []) { const a = this.atoms.get(id); if (a) { x += a.x; y += a.y; n++; } }
+    // a variable attachment sits in the middle of its ring
+    const ring = c.ringOf?.filter((id) => this.atoms.has(id));
+    for (const id of ring && ring.length > 2 ? ring : c.multi ?? []) { const a = this.atoms.get(id); if (a) { x += a.x; y += a.y; n++; } }
     return n ? { x: x / n, y: y / n } : null;
   }
 
@@ -1904,8 +1929,9 @@ export class Doc {
       const ca = this.atoms.get(c);
       if (!ca?.multi) continue;
       const rest = ca.multi.filter((m) => m !== id && this.atoms.has(m));
+      const ring = ca.ringOf?.filter((m) => m !== id && this.atoms.has(m));
       if (rest.length < 2) this.removeAtom(c);
-      else this.updateAtom(c, { multi: rest });
+      else this.updateAtom(c, { multi: rest, ...(ca.ringOf ? { ringOf: ring } : {}) });
     }
   }
 
