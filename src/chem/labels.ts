@@ -471,19 +471,21 @@ export function labelDir(spec: LabelSpec, bondDirs: { x: number; y: number }[], 
 }
 
 /**
- * The tokens after a label's first in reading units, a bracketed abbreviation and its count
- * (the "(t-Bu)2" of P(t-Bu)2) as one, or null if the label has other punctuation in it.
+ * The tokens after a label's first in reading units, a bracketed group and its count (the
+ * "(t-Bu)2" of P(t-Bu)2, the "(OH)2" of B(OH)2) as one, or null if the label has other punctuation in it.
  */
 function bracketUnits(tail: Token[]): Token[][] | null {
   const units: Token[][] = [];
   for (let i = 0; i < tail.length; i++) {
     const t = tail[i];
     if (t.kind !== 'other') { units.push([t]); continue; }
-    if (t.text !== '(' || tail[i + 2]?.kind !== 'other' || tail[i + 2].text !== ')') return null;
-    const inside = tail[i + 1];
-    if (inside.kind === 'other') return null;
-    units.push([t, inside, tail[i + 2]]);
-    i += 2;
+    if (t.text !== '(') return null;
+    // the formula inside the brackets: one abbreviation (t-Bu) or elements and abbreviations (OH, OMe)
+    let j = i + 1;
+    while (j < tail.length && tail[j].kind !== 'other') j++;
+    if (j === i + 1 || tail[j]?.text !== ')') return null;
+    units.push(tail.slice(i, j + 1));
+    i = j;
   }
   return units;
 }
@@ -559,7 +561,9 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
   } else {
     // Reversed: rest of the label to the left, abbreviations kept whole (THPO, not PHTO), and a
     // bracketed group with its count too ((t-Bu)2P, not )2t-Bu(P).
-    const leftTokens: Token[] = (bracketUnits(tail) ?? tail.map((t) => [t])).reverse().flat();
+    // what is inside brackets reads backwards too ((HO)2B, (MeO)2HC), as ChemDraw writes it
+    const leftTokens: Token[] = (bracketUnits(tail) ?? tail.map((t) => [t])).reverse()
+      .flatMap((u) => (u.length > 3 ? [u[0], ...u.slice(1, -1).reverse(), u[u.length - 1]] : u));
     const leftPieces: Piece[] = [];
     for (const t of leftTokens) leftPieces.push(...tokenPieces(t, sd, mk));
     if (hTok) leftPieces.push(...tokenPieces(hTok));
