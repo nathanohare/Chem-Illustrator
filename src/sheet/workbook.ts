@@ -18,6 +18,7 @@ import { evaluate, evaluateArg, tidyValue, EvalHost, VOLATILE_FUNCTIONS } from '
 import { Arg, isBlock, isMulti, rowsOf } from './args';
 import { DefinedName, resolveName } from './names';
 import { CellError, ERR, Value, readTyped, compareValues, isError } from './values';
+import { type TextRun, runsOf, sameRuns } from './rich-text';
 import { MolProps } from './properties';
 import { formatValue } from './numfmt';
 import { MAX_COLS, MAX_ROWS, Range, cellName, colOf, keyOf, normRange, rowOf, inRange, rangesOverlap, rangeName, parseRange } from './refs';
@@ -97,6 +98,8 @@ export interface Cell {
   link?: string;
   /** Data > Data Types > Compound: what PubChem knows about the compound named in the cell. */
   compound?: CompoundCard;
+  /** Formatting on part of typed text (a bold word), over the text without its leading apostrophe; see rich-text.ts. */
+  runs?: TextRun[];
 }
 
 /** A property column: every row from `firstRow` down to the end of the table works out this formula. */
@@ -194,7 +197,7 @@ const sameStyle = (a: CellStyle | undefined, b: CellStyle | undefined): boolean 
 function sameCell(a: Cell | undefined, b: Cell | undefined): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  return (a.input || undefined) === (b.input || undefined) && a.structure === b.structure && a.link === b.link && a.compound === b.compound && sameStyle(a.style, b.style);
+  return (a.input || undefined) === (b.input || undefined) && a.structure === b.structure && a.link === b.link && a.compound === b.compound && sameStyle(a.style, b.style) && sameRuns(a.runs, b.runs);
 }
 
 /** Two styles merged, the second's settings winning. */
@@ -515,6 +518,14 @@ export class Sheet {
     this.setCell(row, col, { input: text || undefined, style, link: old?.link });
   }
 
+  /** Type text into a cell with formatting on part of it (runs over the text, see rich-text.ts). */
+  setRichInput(row: number, col: number, input: string, runs: TextRun[] | undefined): void {
+    this.setInput(row, col, input);
+    const cell = this.cell(row, col);
+    const fit = runsOf({ input: cell?.input, runs });
+    if (cell && fit) this.setCell(row, col, { ...cell, runs: fit });
+  }
+
   /** Link a cell somewhere (undefined takes its link off); its text and formatting stay. */
   setLink(row: number, col: number, link: string | undefined): void {
     const old = this.cell(row, col);
@@ -742,7 +753,8 @@ export class Sheet {
         if (what === 'values' && input?.startsWith('=') && block.shown?.[i]?.[j] !== undefined) input = block.shown[i][j];
         else if (input?.startsWith('=') && block.origin) input = shiftFormula(input, row - (block.origin.row + i), col - (block.origin.col + j));
         const style = what === 'values' ? old?.style : src?.style;
-        this.setCell(row, col, { input, structure: src?.structure, style, link: what === 'values' ? old?.link : src?.link });
+        const runs = what === 'all' && input === src?.input ? runsOf(src) : undefined;
+        this.setCell(row, col, { input, structure: src?.structure, style, link: what === 'values' ? old?.link : src?.link, ...(runs ? { runs } : {}) });
         const note = block.notes?.[i]?.[j];
         if (what === 'all' && note) this.setNote(row, col, copyNote(note));
       }
@@ -780,7 +792,8 @@ export class Sheet {
         // a cell an array spilled into is copied as its value, as in Excel
         const input = this.effectiveInput(row, col) ?? (this.spillOwner.has(keyOf(row, col)) ? valueInput(this.value(row, col)) || undefined : undefined);
         const style = this.styleAt(row, col);
-        line.push(input || c?.structure || style || c?.link ? { input, structure: c?.structure, style, ...(c?.link ? { link: c.link } : {}) } : undefined);
+        const runs = runsOf(c);
+        line.push(input || c?.structure || style || c?.link ? { input, structure: c?.structure, style, ...(c?.link ? { link: c.link } : {}), ...(runs ? { runs } : {}) } : undefined);
         if (input?.startsWith('=')) { formulas = true; seen.push(valueInput(this.value(row, col))); } else seen.push(undefined);
       }
       cells.push(line);

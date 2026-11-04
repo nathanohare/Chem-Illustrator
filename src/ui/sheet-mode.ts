@@ -624,6 +624,9 @@ export class SheetMode {
     // File > Print > Paper Size
     const paper = name.startsWith('sheet-paper-') ? name.slice('sheet-paper-'.length) : '';
     if (paper && paper in SHEET_PAPERS) { this.page.set('Paper size', { paper: paper as PaperName }); return true; }
+    // while typing in a cell, Bold, Italic and Underline are for the selected text (issue #503)
+    const typing = name === 'cell-bold' ? 'bold' : name === 'cell-italic' ? 'italic' : name === 'cell-underline' ? 'underline' : null;
+    if (typing && v.styleTyping(typing)) { this.showRibbonState(); return true; }
     switch (name) {
       case 'cell-bold': this.style('Bold', { bold: !a.bold || undefined }); break;
       case 'cell-italic': this.style('Italic', { italic: !a.italic || undefined }); break;
@@ -2403,9 +2406,10 @@ export class SheetMode {
     const st = s.styleAt(r, c) ?? {};
     // (some buttons are on two tabs, as in Excel: Filter on Home and on Data)
     const press = (name: string, on: boolean) => { for (const b of this.ribbon.querySelectorAll(`[data-sh="${name}"]`)) b.setAttribute('aria-pressed', String(on)); };
-    press('cell-bold', !!st.bold);
-    press('cell-italic', !!st.italic);
-    press('cell-underline', !!st.underline);
+    // while typing: the look where the caret is
+    press('cell-bold', this.view.typingHas('bold') ?? !!st.bold);
+    press('cell-italic', this.view.typingHas('italic') ?? !!st.italic);
+    press('cell-underline', this.view.typingHas('underline') ?? !!st.underline);
     press('align-left', st.align === 'left');
     press('align-center', st.align === 'center');
     press('align-right', st.align === 'right');
