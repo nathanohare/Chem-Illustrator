@@ -1009,6 +1009,8 @@ class CdxmlWriter {
   /** What a text label means chemically, in ChemDraw's terms. */
   private labelChemistry(n: Element, a: Atom): void {
     const label = a.label!;
+    // one ChemDraw couldn't interpret, as the file had it, while it is unchanged
+    if (a.cdxInner?.type === 'Unspecified' && a.cdxInner.label === label) { n.setAttribute('NodeType', 'Unspecified'); n.removeAttribute('Element'); return; }
     if (this.keptInner(n, a)) return;
     const toks = tokenize(label);
     if (isGenericLabel(label) || (toks.length === 1 && toks[0].kind === 'generic')) {
@@ -1484,7 +1486,7 @@ class CdxmlWriter {
       const size = r.size ?? def;
       maxSize = Math.max(maxSize, size);
       // Greek letters and signs that an ordinary font can't hold go in the Symbol font, as ChemDraw does
-      for (const piece of toSymbolPieces(r.text, !!r.symbolFont)) {
+      for (const piece of toSymbolPieces(r.text, r.symbolFont)) {
         const s = this.el('s', { font: this.fontId(piece.symbol ? 'Symbol' : r.font ?? (this.doc.style.captionFont || 'Arial')), size: f2(size).replace(/\.00$/, ''), color: this.colorAttr(r.color) ?? '0', face: faceOf(r) });
         s.textContent = piece.text;
         t.appendChild(s);

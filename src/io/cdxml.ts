@@ -23,7 +23,7 @@ import { DEG } from '../geom';
 import { chordLocal, ellipseArcPoints, headBend, swapHalf } from '../objects';
 import { pinSymbols } from '../chem/pins';
 import { kids, descendants, withoutDoctype } from './xml';
-import { styleFromFace, isSymbolFont, fromSymbolFont, symbolOnlyByChoice } from '../richtext';
+import { styleFromFace, isSymbolFont, fromSymbolFont, symbolOnlyByChoice, plainByChoice } from '../richtext';
 import { dataUrl, fromDataUrl, imageSize } from '../render/images';
 import { emfToSvg } from '../render/emf-read';
 import { tidyFx } from '../render/picture-fx';
@@ -401,6 +401,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         if (innerEl && type && typeof XMLSerializer !== 'undefined') {
           const nick = n.getAttribute('GenericNickname');
           atom.cdxInner = { label: txt, type, ...(nick ? { nick } : {}), xml: new XMLSerializer().serializeToString(innerEl), x, y };
+        } else if (type === 'Unspecified') {
+          // a label ChemDraw couldn't interpret ((3,4)-MDP) stays one while unchanged: read as a group
+          // and cleaned, ChemDraw turns it round
+          atom.cdxInner = { label: txt, type, xml: '' };
         }
         const look = labelLookOf(runs, txt);
         if (look.supDigits !== undefined) atom.supDigits = look.supDigits;
@@ -599,7 +603,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const ls = t.getAttribute('LineStarts');
     if (ls && wrap === undefined) applyLineEnds(runs, ls.trim().split(/\s+/).map(Number).slice(0, -1));
     // (the line ends count the text as stored, so Symbol-font text is turned into Greek letters afterwards)
-    for (const r of runs) if (isSymbolFont(r.font)) { r.text = fromSymbolFont(r.text); delete r.font; if (symbolOnlyByChoice(r.text)) r.symbolFont = true; }
+    for (const r of runs) {
+      if (isSymbolFont(r.font)) { r.text = fromSymbolFont(r.text); delete r.font; if (symbolOnlyByChoice(r.text)) r.symbolFont = true; }
+      else if (plainByChoice(r.text)) r.symbolFont = false;
+    }
     const lh = t.getAttribute('LineHeight') ?? t.getAttribute('CaptionLineHeight');
     let lineHeight = lh && /^[\d.]+$/.test(lh) ? Number(lh) : undefined;
     // lists and paragraph formatting saved by this program, if the text still matches them

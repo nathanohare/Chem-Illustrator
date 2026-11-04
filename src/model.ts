@@ -365,7 +365,11 @@ export interface TextRun {
   outlineW?: number;
   /** Text effects: a soft drop shadow, down and to the right. */
   shadow?: boolean;
-  /** Read from ChemDraw's Symbol font, and saved in it again: its signs (•, °) stay in that font, which spaces lines differently from Arial. */
+  /**
+   * Which font a ChemDraw file had the run's signs in: true for its Symbol font (•, ° stay in it,
+   * though Arial has them), false for an ordinary font (a − stays in Arial, though Symbol has it).
+   * Absent: signs only Symbol holds go in it, as ChemDraw writes them.
+   */
   symbolFont?: boolean;
 }
 
