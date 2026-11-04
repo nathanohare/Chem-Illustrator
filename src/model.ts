@@ -239,6 +239,8 @@ export interface StereoLabel {
   italic?: boolean;
   /** Typed by hand: always shows `text` instead of the worked-out label. */
   manual?: boolean;
+  /** Placed by ChemDraw as an offset from its atom or bond (PositioningType offset), which a save has to say or ChemDraw moves it. */
+  offset?: boolean;
   /** From ChemDraw's file: `text` stands until the structure changes, with a warning where the rules work out otherwise. */
   fromFile?: boolean;
 }
@@ -719,6 +721,9 @@ export interface Arrow {
   dipole?: boolean;
   /** Equilibrium arrows: two half-headed shafts. */
   equilibrium: boolean;
+  /** A bold shaft's width and a dashed shaft's dash length from ChemDraw (its BoldWidth and HashSpacing); missing, this program's own. */
+  boldWidth?: number;
+  hashSpacing?: number;
   /** Distance between two parallel shafts (a retrosynthetic arrow), in points; absent for one shaft. */
   shaftSpacing?: number;
   /** For curved arrows: signed sweep of the arc in radians (0 = straight). */
@@ -869,6 +874,8 @@ export interface Shape {
    */
   rot?: number;
   dashed?: boolean;
+  /** A dashed outline's dash length from ChemDraw (its HashSpacing); missing, this program's own. */
+  hashSpacing?: number;
   /** A line drawn as a row of round dots (with `dashed` too, for programs that only know dashes). */
   dotted?: boolean;
   filled?: boolean;

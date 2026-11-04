@@ -21,6 +21,17 @@ const node = (d: Document) => [...d.querySelectorAll('n')].find((n) => n.getAttr
 const runsOf = (d: Document) => [...node(d).querySelectorAll('t > s')].map((s) => [s.textContent, Number(s.getAttribute('face'))]);
 
 describe('a fresh save', () => {
+  it("keeps an arrow's own bold width and dash length, and a box's dash length", () => {
+    const arrow = (a: string) => `<arrow id="5" ArrowheadHead="Full" ${a} Head3D="50 10 0" Tail3D="10 10 0"/>`;
+    const { doc, out } = fresh(arrow('LineType="Bold" BoldWidth="2"') + '<arrow id="6" ArrowheadHead="Full" LineType="Dashed" HashSpacing="2.5" Head3D="50 30 0" Tail3D="10 30 0"/><graphic id="7" BoundingBox="90 90 20 50" GraphicType="Rectangle" RectangleType="Dashed" HashSpacing="2.5"/>');
+    expect(doc.arrows.get(5)!.boldWidth).toBe(2);
+    expect(doc.arrows.get(6)!.hashSpacing).toBe(2.5);
+    expect(doc.shapes.get(7)!.hashSpacing).toBe(2.5);
+    const byId = (id: string) => [...out.querySelectorAll('arrow,graphic')].find((e) => e.getAttribute('id') === id)!;
+    expect(Number(byId('5').getAttribute('BoldWidth'))).toBe(2);
+    expect(Number(byId('6').getAttribute('HashSpacing'))).toBe(2.5);
+    expect(Number(byId('7').getAttribute('HashSpacing'))).toBe(2.5);
+  });
   it('keeps a label of mixed styles: [(S,S)-28Rh], the 28 bold and on the line', () => {
     const runs = '<s font="3" size="10" face="96">[</s><s font="3" size="10" face="98">(S,S)</s><s font="3" size="10">-</s><s font="3" size="10" face="1">28</s><s font="3" size="10" face="96">Rh]</s>';
     const { doc, out } = fresh(label('NodeType="Unspecified"', runs));
@@ -179,5 +190,28 @@ describe('a fresh save', () => {
     doc.source = null;
     const again = new DOMParser().parseFromString(writeCdxml(doc), 'application/xml');
     expect(again.querySelector('graphic')!.getAttribute('FadePercent')).toBe('200');
+  });
+});
+
+describe('a fresh save, labels placed by ChemDraw', () => {
+  const body = (attr: string) => `<fragment id="2"><n id="10" p="50 50" AS="S"><objecttag TagType="Unknown" ${attr} Name="stereo"><t p="42.56 48.4"><s size="4.5">(S)</s></t></objecttag></n><n id="11" p="80 50"/><b id="20" B="10" E="11"/></fragment>`;
+  const write = (attr: string) => {
+    const { doc } = readCdxml(`<?xml version="1.0" encoding="UTF-8" ?><CDXML BondLength="30"><page id="1">${body(attr)}</page></CDXML>`);
+    doc.source = null;
+    return new DOMParser().parseFromString(writeCdxml(doc), 'application/xml').querySelector('objecttag[Name="stereo"]')!;
+  };
+  it("keeps a stereo label ChemDraw placed as an offset, which it would move otherwise", () => {
+    const tag = write('PositioningType="offset" PositioningOffset="-7.44 -1.60"');
+    expect(tag.getAttribute('PositioningType')).toBe('offset');
+    expect(tag.getAttribute('PositioningOffset')).toBe('-7.44 -1.60');
+  });
+  it('adds no offset to one that had none', () => {
+    expect(write('').hasAttribute('PositioningType')).toBe(false);
+  });
+  it("keeps a centered label's LabelDisplay", () => {
+    const { doc } = readCdxml('<?xml version="1.0" encoding="UTF-8" ?><CDXML BondLength="30" LabelSize="10"><page id="1"><fragment id="2"><n id="10" p="50 50"/><n id="11" p="80 50" NodeType="Nickname" LabelDisplay="Center"><t LabelJustification="Center" Justification="Center"><s size="10" face="96">Ph</s></t></n><b id="20" B="10" E="11"/></fragment></page></CDXML>');
+    doc.source = null;
+    const out = new DOMParser().parseFromString(writeCdxml(doc), 'application/xml');
+    expect([...out.querySelectorAll('n')].find((n) => n.getAttribute('id') === '11')!.getAttribute('LabelDisplay')).toBe('Center');
   });
 });
