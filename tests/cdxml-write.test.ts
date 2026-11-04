@@ -193,11 +193,11 @@ describe('saving a file that was opened', () => {
     const text = FILE.replace(/(id="12"\n p="112.47 102.80"\n AS="N"\n)\/>/, '$1 ShowAtomStereo="yes"\n><objecttag\n TagType="Unknown"\n Name="stereo"\n><t\n p="114.47 98.80"\n BoundingBox="114.47 95.58 120.47 99.70"\n CaptionLineHeight="variable"\n><s font="3" size="4.5" color="0" face="2">(S)</s></t></objecttag></n>');
     expect(text).not.toBe(FILE);
     const doc = open(text);
-    expect(doc.atoms.get(12)!.stereoLabel).toEqual({ text: '(S)', dx: 2, dy: -4, size: 4.5, italic: true });
+    expect(doc.atoms.get(12)!.stereoLabel).toEqual({ text: '(S)', dx: 2, dy: -4, size: 4.5, italic: true, fromFile: true });
     doc.edit('move', () => doc.moveAtoms([11, 12, 13], 10, -5));
     const out = writeCdxml(doc);
     expect(out).toContain('p="124.47 93.80"');
-    expect(open(out).atoms.get(12)!.stereoLabel).toEqual({ text: '(S)', dx: 2, dy: -4, size: 4.5, italic: true });
+    expect(open(out).atoms.get(12)!.stereoLabel).toEqual({ text: '(S)', dx: 2, dy: -4, size: 4.5, italic: true, fromFile: true });
   });
 
   it('adds new objects with fresh ids', () => {

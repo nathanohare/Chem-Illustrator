@@ -367,6 +367,8 @@ renderer.checks = checks;
 const live = new LiveStereo(doc, (jobs) => chem.stereo(jobs));
 doc.stereo = live;
 live.onChange = (atoms, bonds) => {
+  checks.recheck(atoms);
+  checks.recheck(bonds.flatMap((id) => { const b = doc.bonds.get(id); return b ? [b.a1] : []; }));
   const all = renderer.previewStereo;
   for (const id of atoms) {
     const a = doc.atoms.get(id);

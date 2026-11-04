@@ -231,9 +231,23 @@ export function shownDescriptor(d: string): string {
  * otherwise it shows the worked-out descriptor, falling back to the text saved in the file while
  * the chemistry engine hasn't looked at the structure, can't read it, or the rules can't decide it.
  */
+/**
+ * Where a label from ChemDraw's file disagrees with what the rules work out, and the file's label
+ * still stands: the two, for a warning. (ChemDraw may be reading a group label differently.)
+ */
+export function stereoDisagrees(kind: 'a' | 'b', x: Atom | Bond, info: StereoInfo | null | undefined): { file: string; rules: string } | null {
+  const l = x.stereoLabel;
+  if (!l?.fromFile || l.manual || !info?.asFirst?.(kind, x.id)) return null;
+  const d = kind === 'a' ? info.atom(x.id) : info.bond(x.id);
+  if (!d) return null;
+  const rules = `(${shownDescriptor(d)})`;
+  return rules === l.text.trim() ? null : { file: l.text.trim(), rules };
+}
+
 export function atomStereoText(a: Atom, info: StereoInfo | null): string | null {
   const l = a.stereoLabel;
   if (l?.manual) return l.text || null;
+  if (l?.fromFile && info?.asFirst?.('a', a.id)) return l.text || null;
   if (!a.showStereo && !l) return null;
   const d = info?.atom(a.id);
   if (d === undefined) return l?.text ?? null;
@@ -243,6 +257,7 @@ export function atomStereoText(a: Atom, info: StereoInfo | null): string | null 
 export function bondStereoText(b: Bond, info: StereoInfo | null): string | null {
   const l = b.stereoLabel;
   if (l?.manual) return l.text || null;
+  if (l?.fromFile && info?.asFirst?.('b', b.id)) return l.text || null;
   if (!b.showStereo && !l) return null;
   const d = info?.bond(b.id);
   if (d === undefined) return l?.text ?? null;
