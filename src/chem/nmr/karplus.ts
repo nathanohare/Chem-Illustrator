@@ -23,7 +23,7 @@ const SET_D: HlaSet = { p1: 13.22, p2: -0.99, p4: 0.87, p5: -2.46, p6: 19.9, p7:
 const SET_E: HlaSet = { p1: 13.24, p2: -0.91, p4: 0.53, p5: -2.41, p6: 15.5, p7: 0.19 };
 
 /** Huggins electronegativity minus that of H, by atomic number (Altona 1989, p. 566). */
-const DCHI: Record<number, number> = { 1: 0, 3: -0.9, 6: 0.4, 7: 0.85, 8: 1.3, 9: 1.7, 14: -0.3, 15: -0.05, 16: 0.4, 17: 0.95, 35: 0.75, 53: 0.45 };
+export const DCHI: Record<number, number> = { 1: 0, 3: -0.9, 6: 0.4, 7: 0.85, 8: 1.3, 9: 1.7, 14: -0.3, 15: -0.05, 16: 0.4, 17: 0.95, 35: 0.75, 53: 0.45 };
 const dchi = (z: number) => DCHI[z] ?? 0.4;
 
 const RAD = Math.PI / 180;
@@ -125,7 +125,7 @@ export function vicinal3d(model: Model3d): Vicinal3d[] {
  * them afresh each time). They are told apart by their handedness about the carbon, as in the
  * first conformer: at(ci, h) is the atom in conformer ci that is hydrogen h of the first.
  */
-function sameProtons(model: Model3d, nb: number[][], isH: (i: number) => boolean): (ci: number, h: number) => number {
+export function sameProtons(model: Model3d, nb: number[][], isH: (i: number) => boolean): (ci: number, h: number) => number {
   const swap: Map<number, number>[] = model.conformers.map(() => new Map());
   const side = (x: number[], c: number, p: number, q: number, h: number) => {
     const v = (i: number) => [x[3 * i] - x[3 * c], x[3 * i + 1] - x[3 * c + 1], x[3 * i + 2] - x[3 * c + 2]];
