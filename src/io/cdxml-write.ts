@@ -861,7 +861,7 @@ class CdxmlWriter {
     const place = text ? this.placer.atom(a, text) : null;
     // (a file's label that stands says its own descriptor)
     const desc = a.stereoLabel?.fromFile && a.stereoLabel.text === text ? undefined : info?.atom(a.id);
-    return this.syncStereo(n, 'ShowAtomStereo', 'AS', !!a.showStereo, text, place, desc, patched);
+    return this.syncStereo(n, 'ShowAtomStereo', 'AS', !!a.showStereo, text, place, desc, patched, a.stereoLabel?.offset ? a : null);
   }
 
   private bondStereo(e: Element, b: Bond, patched: boolean): boolean {
@@ -869,7 +869,9 @@ class CdxmlWriter {
     const text = bondStereoText(b, info);
     const place = text ? this.placer.bond(b, text) : null;
     const desc = b.stereoLabel?.fromFile && b.stereoLabel.text === text ? undefined : info?.bond(b.id);
-    return this.syncStereo(e, 'ShowBondStereo', 'BS', !!b.showStereo, text, place, desc, patched);
+    const ends = this.doc.atoms.get(b.a1), ende = this.doc.atoms.get(b.a2);
+    const from = b.stereoLabel?.offset && ends && ende ? { x: (ends.x + ende.x) / 2, y: (ends.y + ende.y) / 2 } : null;
+    return this.syncStereo(e, 'ShowBondStereo', 'BS', !!b.showStereo, text, place, desc, patched, from);
   }
 
   /**
@@ -877,7 +879,7 @@ class CdxmlWriter {
    * (at an absolute position), the "show" flag, and the descriptor (AS or BS). An untouched
    * element is left exactly as it was unless its label's text or place changed.
    */
-  private syncStereo(e: Element, showAttr: string, descAttr: string, show: boolean, text: string | null, place: PlacedLabel | null, desc: string | null | undefined, patched: boolean): boolean {
+  private syncStereo(e: Element, showAttr: string, descAttr: string, show: boolean, text: string | null, place: PlacedLabel | null, desc: string | null | undefined, patched: boolean, from: { x: number; y: number } | null = null): boolean {
     const old = kids(e).find((c) => c.nodeName === 'objecttag' && c.getAttribute('Name') === 'stereo') ?? null;
     let same = !old && !text;
     if (old && text && place) {
@@ -894,7 +896,8 @@ class CdxmlWriter {
     if (!same) {
       if (old) e.removeChild(old);
       if (text && place) {
-        const tag = this.el('objecttag', { TagType: 'Unknown', Name: 'stereo' });
+        // (ChemDraw moves a label it had as an offset unless this says so)
+        const tag = this.el('objecttag', { TagType: 'Unknown', ...(from ? { PositioningType: 'offset', PositioningOffset: `${f2(place.x - from.x)} ${f2(place.y - from.y)}` } : {}), Name: 'stereo' });
         const t = this.el('t', { p: pt(place), BoundingBox: box({ x1: place.x, y1: place.y - CAP * place.size, x2: place.x + this.measure(text, place.size), y2: place.y + 0.2 * place.size }), CaptionLineHeight: 'variable' });
         const s = this.el('s', { font: this.fontId(), size: f2(place.size).replace(/\.00$/, ''), color: '0', face: place.italic ? 2 : 0 });
         s.textContent = text;
@@ -1146,7 +1149,9 @@ class CdxmlWriter {
     const n = t.parentElement;
     if (n?.nodeName === 'n' && n.hasAttribute('LabelDisplay')) {
       n.setAttribute('LabelDisplay', centred ? 'Center' : dir === 'up' ? 'Above' : dir === 'down' ? 'Below' : right ? 'Right' : 'Left');
-    } else if (n?.nodeName === 'n' && !centred) {
+    } else if (n?.nodeName === 'n' && centred) {
+      if (a.fixedDir) n.setAttribute('LabelDisplay', 'Center');
+    } else if (n?.nodeName === 'n') {
       // ChemDraw takes a label's way from this, not from its justification
       const forced = this.forcedDir(a);
       if (forced) n.setAttribute('LabelDisplay', forced === 'left' ? 'Right' : 'Left');
@@ -1724,6 +1729,8 @@ class CdxmlWriter {
       ArrowheadCenterSize: Math.round(headSize * (r.headCenter ?? 0.75)),
       ArrowheadWidth: Math.round((r.headWidth / lw) * 100),
       LineType: r.line === 'dashed' ? 'Dashed' : r.line === 'bold' ? 'Bold' : r.line === 'wavy' ? 'Wavy' : null,
+      BoldWidth: r.line === 'bold' && r.boldWidth !== undefined ? f2(r.boldWidth) : null,
+      HashSpacing: r.line === 'dashed' && r.hashSpacing !== undefined ? f2(r.hashSpacing) : null,
       NoGo: r.noGo ? (r.noGoKind === 'hash' ? 'Hash' : 'Cross') : null,
       Dipole: r.dipole ? 'yes' : null,
       ArrowShaftSpacing: r.equilibrium ? 300 : r.shaftSpacing ? Math.round((r.shaftSpacing / lw) * 100) : null,
@@ -2200,6 +2207,7 @@ class CdxmlWriter {
       set(s.bold ? 'BoldWidth' : 'LineWidth', f2(s.lineWidth));
       g.removeAttribute(s.bold ? 'LineWidth' : 'BoldWidth');
     } else for (const k of ['LineWidth', 'BoldWidth']) g.removeAttribute(k);
+    set('HashSpacing', s.dashed && s.hashSpacing !== undefined ? f2(s.hashSpacing) : null);
     // corner radius and shadow size are in hundredths of the graphic's line width
     const lwRef = Number(g.getAttribute('LineWidth')) || this.doc.style.lineWidth;
     switch (s.kind) {

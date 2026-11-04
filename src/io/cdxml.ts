@@ -230,7 +230,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const [sx, sy] = pts(st?.getAttribute('p') ?? null);
     const text = runs.map((r) => r.text).join('');
     if (!text || !Number.isFinite(sx) || !Number.isFinite(sy) || st!.getAttribute('Visible') === 'no') return undefined;
-    const l: StereoLabel = { text, dx: sx - ox, dy: sy - oy, size: runs[0].size ?? 4.5, fromFile: true };
+    const l: StereoLabel = { text, dx: sx - ox, dy: sy - oy, size: runs[0].size ?? 4.5, fromFile: true, ...(tag.getAttribute('PositioningType') === 'offset' ? { offset: true } : {}) };
     if (runs[0].italic) l.italic = true;
     return l;
   };
@@ -423,6 +423,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         // LabelAlignment counts only for labels stacked above or below (the spec: multi-attached labels)
         if (above || below) { atom.just = 'auto'; atom.stacked = above ? 'up' : 'down'; if (t.getAttribute('LineHeight') === 'auto') atom.stackedLoose = true; }
         else if (ld === 'Left' || ld === 'Right') { atom.just = ld === 'Left' ? 'right' : 'left'; atom.fixedDir = true; }
+        else if (ld === 'Center') atom.fixedDir = true;
         else if (lj === 'Right' || lj === 'Left') atom.just = lj === 'Right' ? 'left' : 'right';
         else if (la === 'Right') atom.just = 'left';
         else if (la === 'Left') atom.just = 'right';
@@ -820,6 +821,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       arrow.ellipse = { center: P('Center3D'), major: P('MajorAxisEnd3D'), minor: P('MinorAxisEnd3D'), angular: Number(ang) };
     }
     if (lw !== st.lineWidth) arrow.lineWidth = lw;
+    // ChemDraw draws a bold shaft at the BoldWidth and dashes it at the HashSpacing, the arrow's or the drawing's
+    if (arrow.line === 'bold') arrow.boldWidth = num(a, 'BoldWidth', st.boldWidth);
+    if (arrow.line === 'dashed') arrow.hashSpacing = num(a, 'HashSpacing', st.hashSpacing);
     // two shafts with a full head: a retrosynthetic arrow (spacing in hundredths of the line width)
     const spacing = a.getAttribute('ArrowShaftSpacing');
     if (spacing !== null && !arrow.equilibrium && Number(spacing) > 0) arrow.shaftSpacing = (Number(spacing) / 100) * lw;
@@ -996,6 +1000,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       // ones at its BoldWidth, when the graphic has one that isn't the drawing's
       const ownW = g.getAttribute(s.bold ? 'BoldWidth' : 'LineWidth');
       if (s.kind !== 'picture' && ownW !== null && Number(ownW) > 0 && Math.abs(Number(ownW) - (s.bold ? st.boldWidth : st.lineWidth)) > 0.005) s.lineWidth = Number(ownW);
+      // ChemDraw dashes an outline at the HashSpacing, the graphic's or the drawing's
+      if (s.dashed) s.hashSpacing = num(g, 'HashSpacing', st.hashSpacing);
       doc.addShape(s); from('s', s.id, g); stats.shapes++;
     };
     switch (type) {
