@@ -78,6 +78,7 @@ export function vicinal3d(model: Model3d): Vicinal3d[] {
   const confs = model.conformers;
   const pops = confs.map((c) => c.population ?? 1 / confs.length);
   const tot = pops.reduce((a, b) => a + b, 0) || 1;
+  const at = sameProtons(model, nb, isH);
   const out: Vicinal3d[] = [];
   for (const bd of model.bonds) {
     const [c1, c2] = [bd.a, bd.b];
@@ -104,18 +105,42 @@ export function vicinal3d(model: Model3d): Vicinal3d[] {
       let j = 0;
       confs.forEach((cf, ci) => {
         const x = cf.xyz;
-        const phi = torsion(x, h1, c1, c2, h2);
+        const phi = torsion(x, at(ci, h1), c1, c2, at(ci, h2));
         const subs: { dchi: number; xi: number }[] = [];
         // substituent on c1: c1 in front; angle clockwise from h1 to s = phi(h1) − phi(s), both to h2
-        for (const s of s1) subs.push({ dchi: dEff(s, c1), xi: xiOf(phi - torsion(x, s, c1, c2, h2)) });
+        const a1 = at(ci, h1), a2 = at(ci, h2);
+        for (const s of s1) subs.push({ dchi: dEff(s, c1), xi: xiOf(phi - torsion(x, s, c1, c2, a2)) });
         // substituent on c2: c2 in front, coupled proton h2
-        for (const s of s2) subs.push({ dchi: dEff(s, c2), xi: xiOf(torsion(x, h2, c2, c1, h1) - torsion(x, s, c2, c1, h1)) });
+        for (const s of s2) subs.push({ dchi: dEff(s, c2), xi: xiOf(torsion(x, a2, c2, c1, a1) - torsion(x, s, c2, c1, a1)) });
         j += pops[ci] * hla(phi, subs, n);
       });
       out.push({ h1, h2, c1, c2, j: j / tot });
     }
   }
   return out;
+}
+
+/**
+ * The two hydrogens of a CH2 can swap places between conformers (the conformer generator adds
+ * them afresh each time). They are told apart by their handedness about the carbon, as in the
+ * first conformer: at(ci, h) is the atom in conformer ci that is hydrogen h of the first.
+ */
+function sameProtons(model: Model3d, nb: number[][], isH: (i: number) => boolean): (ci: number, h: number) => number {
+  const swap: Map<number, number>[] = model.conformers.map(() => new Map());
+  const side = (x: number[], c: number, p: number, q: number, h: number) => {
+    const v = (i: number) => [x[3 * i] - x[3 * c], x[3 * i + 1] - x[3 * c + 1], x[3 * i + 2] - x[3 * c + 2]];
+    const [a, b, d] = [v(p), v(q), v(h)];
+    return a[0] * (b[1] * d[2] - b[2] * d[1]) - a[1] * (b[0] * d[2] - b[2] * d[0]) + a[2] * (b[0] * d[1] - b[1] * d[0]) > 0;
+  };
+  model.atoms.forEach((_, c) => {
+    const hs = nb[c].filter(isH), heavy = nb[c].filter((k) => !isH(k));
+    if (hs.length !== 2 || heavy.length !== 2) return;
+    const first = side(model.conformers[0].xyz, c, heavy[0], heavy[1], hs[0]);
+    model.conformers.forEach((cf, ci) => {
+      if (ci && side(cf.xyz, c, heavy[0], heavy[1], hs[0]) !== first) { swap[ci].set(hs[0], hs[1]); swap[ci].set(hs[1], hs[0]); }
+    });
+  });
+  return (ci, h) => swap[ci].get(h) ?? h;
 }
 
 /** +1 when the clockwise angle (degrees) is nearer +120°, −1 when nearer 240°. */

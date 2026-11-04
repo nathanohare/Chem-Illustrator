@@ -33,6 +33,21 @@ describe('vicinal couplings from conformers', () => {
     expect(Math.max(...js)).toBeGreaterThan(10.5);
     expect(Math.min(...js)).toBeLessThan(5);
   });
+  it('follows each CH2 proton when conformers list them in a different order', () => {
+    const m = buildModel(molOf('C1CCCCC1C(C)(C)C'), 1, 1)!;
+    const ref = vicinal3d({ ...m, conformers: [m.conformers[0], m.conformers[0]] });
+    // the same shape again with the two H of every CH2 swapped in the second conformer
+    const nb: number[][] = m.atoms.map(() => []);
+    for (const b of m.bonds) { nb[b.a].push(b.b); nb[b.b].push(b.a); }
+    const x = [...m.conformers[0].xyz];
+    m.atoms.forEach((a, c) => {
+      const hs = nb[c].filter((k) => m.atoms[k].z === 1);
+      if (a.z !== 6 || hs.length !== 2) return;
+      for (let d = 0; d < 3; d++) [x[3 * hs[0] + d], x[3 * hs[1] + d]] = [x[3 * hs[1] + d], x[3 * hs[0] + d]];
+    });
+    const got = vicinal3d({ ...m, conformers: [m.conformers[0], { ...m.conformers[0], xyz: x }] });
+    got.forEach((v, k) => expect(v.j).toBeCloseTo(ref[k].j, 6));
+  });
   it('averages a freely rotating ethyl group to about 7 Hz', () => {
     const m = buildModel(molOf('CCO'), 12, 1)!;
     const pairs = vicinal3d({ ...m, conformers: withPopulations(m.conformers) });
