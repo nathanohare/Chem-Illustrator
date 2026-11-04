@@ -161,7 +161,7 @@ export class Renderer {
   height = 0;
   showWarnings = true;
   /** How a warning is marked on the drawing (Settings ▸ Preferences). */
-  warnLook: WarnLook = 'disc';
+  warnLook: WarnLook = 'box';
   /** The drawing's chemistry warnings, drawn as red boxes when `showWarnings` is on. */
   checks: StructureChecks | null = null;
   /**
@@ -1021,8 +1021,8 @@ export class Renderer {
   }
 
   /**
-   * Mark what has a warning, in the look chosen in Settings ▸ Preferences: a soft red disc (the
-   * default), the thin red box, a circle, a dashed circle or corner marks. Round looks go round an
+   * Mark what has a warning, in the look chosen in Settings ▸ Preferences: the thin red box (the
+   * default), a soft red disc, a circle, a dashed circle or corner marks. Round looks go round an
    * atom and make a rounded band along a bond or text.
    */
   private drawWarnMarks(ctx: CanvasRenderingContext2D, warns: Rect[]): void {
@@ -1061,8 +1061,8 @@ export class Renderer {
       ctx.closePath();
     };
     ctx.beginPath();
-    for (const w of warns) round(w, look === 'disc' ? 1.2 : 0.8);
-    if (look === 'disc') {
+    for (const w of warns) round(w, look === 'soft' ? 1.2 : 0.8);
+    if (look === 'soft') {
       ctx.globalAlpha = 0.22;
       ctx.fill();
     } else {
@@ -2976,7 +2976,7 @@ export function attachWave(path: Path2D, at: Vec, across: Vec, labelSize: number
 const WARN_COLOR = '#e0141e';
 
 /** The looks a warning's mark can take (Settings ▸ Preferences). */
-export const WARN_LOOKS = ['disc', 'box', 'circle', 'dashed', 'corners'] as const;
+export const WARN_LOOKS = ['box', 'soft', 'circle', 'dashed', 'corners'] as const;
 export type WarnLook = (typeof WARN_LOOKS)[number];
 const CHEM_MARK_COLOR = '#1f8a7a';
 

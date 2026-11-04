@@ -10022,7 +10022,7 @@ async function toolboxPreferences(): Promise<void> {
 /** Settings ▸ Preferences: how you like to work, and matters of taste such as how alkyl groups are written. */
 /** How problems are marked on the drawing (Settings ▸ Preferences). */
 function setWarnLook(look: Settings['warnLook']): void {
-  const now = (['disc', 'box', 'circle', 'dashed', 'corners'] as const).includes(look) ? look : 'disc';
+  const now = (['box', 'soft', 'circle', 'dashed', 'corners'] as const).includes(look) ? look : 'box';
   if (now === renderer.warnLook) return;
   renderer.warnLook = now;
   doc.allDirty = true;
@@ -10038,7 +10038,7 @@ async function personalPreferences(): Promise<void> {
     { name: 'alkylLook', label: 'Alkyl groups written as', value: alkylPrefs.look, options: ALKYL_LOOK_CHOICES,
       help: 'For the n-, i-, s- and t- of Pr and Bu (tBu, iPr, nBu, sBu, iBu), wherever they sit in a label or text (OtBu, N(iPr)2, KOtBu). Atom labels and text boxes take the look as you finish typing them; you are asked whether to change the ones already in the drawing. A dash is never put in or taken out where the letters would read as an element (PtBu3 stays as it is).' },
     { name: 'warnLook', label: 'Mark problems on the drawing with', value: renderer.warnLook, options: [
-      { value: 'disc', label: 'A soft red disc' }, { value: 'box', label: 'A thin red box' }, { value: 'circle', label: 'A red circle' },
+      { value: 'box', label: 'A thin red box' }, { value: 'soft', label: 'A soft red disc' }, { value: 'circle', label: 'A red circle' },
       { value: 'dashed', label: 'A dashed red circle' }, { value: 'corners', label: 'Red corner marks' }],
       help: 'Atoms with too many bonds, labels that can\'t be read and other problems the Warnings box lists. Clear Show on drawing (Warnings) to hide the marks.' },
     { name: 'offerFigures', label: 'Offer to make structures figures when opening a document', type: 'checkbox', value: String(offerFigures),
