@@ -230,7 +230,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     const [sx, sy] = pts(st?.getAttribute('p') ?? null);
     const text = runs.map((r) => r.text).join('');
     if (!text || !Number.isFinite(sx) || !Number.isFinite(sy) || st!.getAttribute('Visible') === 'no') return undefined;
-    const l: StereoLabel = { text, dx: sx - ox, dy: sy - oy, size: runs[0].size ?? 4.5, fromFile: true };
+    const l: StereoLabel = { text, dx: sx - ox, dy: sy - oy, size: runs[0].size ?? 4.5, fromFile: true, ...(tag.getAttribute('PositioningType') === 'offset' ? { offset: true } : {}) };
     if (runs[0].italic) l.italic = true;
     return l;
   };
@@ -423,6 +423,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         // LabelAlignment counts only for labels stacked above or below (the spec: multi-attached labels)
         if (above || below) { atom.just = 'auto'; atom.stacked = above ? 'up' : 'down'; if (t.getAttribute('LineHeight') === 'auto') atom.stackedLoose = true; }
         else if (ld === 'Left' || ld === 'Right') { atom.just = ld === 'Left' ? 'right' : 'left'; atom.fixedDir = true; }
+        else if (ld === 'Center') atom.fixedDir = true;
         else if (lj === 'Right' || lj === 'Left') atom.just = lj === 'Right' ? 'left' : 'right';
         else if (la === 'Right') atom.just = 'left';
         else if (la === 'Left') atom.just = 'right';
@@ -820,6 +821,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       arrow.ellipse = { center: P('Center3D'), major: P('MajorAxisEnd3D'), minor: P('MinorAxisEnd3D'), angular: Number(ang) };
     }
     if (lw !== st.lineWidth) arrow.lineWidth = lw;
+    // ChemDraw draws a bold shaft at the BoldWidth and dashes it at the HashSpacing, the arrow's or the drawing's
+    if (arrow.line === 'bold') arrow.boldWidth = num(a, 'BoldWidth', st.boldWidth);
+    if (arrow.line === 'dashed') arrow.hashSpacing = num(a, 'HashSpacing', st.hashSpacing);
     // two shafts with a full head: a retrosynthetic arrow (spacing in hundredths of the line width)
     const spacing = a.getAttribute('ArrowShaftSpacing');
     if (spacing !== null && !arrow.equilibrium && Number(spacing) > 0) arrow.shaftSpacing = (Number(spacing) / 100) * lw;
@@ -978,7 +982,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         try {
           const v = JSON.parse(tag.getAttribute('Value') ?? '{}') as Partial<Shape> & { seen?: { color?: unknown } };
           // recoloured in ChemDraw since we wrote it: ChemDraw's colour wins, our style stays
-          const recoloured = typeof v.seen?.color === 'string' && v.seen.color.toLowerCase() !== (c ?? '#000000').toLowerCase();
+          // (a tag from before we noted what we wrote says only its own colour: far from the file's, it is out of date)
+          const now = c ?? '#000000';
+          const recoloured = typeof v.seen?.color === 'string' ? v.seen.color.toLowerCase() !== now.toLowerCase() : typeof v.color === 'string' && !v.fill && colorsFar(v.color, now);
           delete v.seen;
           s.fill = v.fill === 'faded' || v.fill === 'shaded' || v.fill === 'gradient' ? v.fill : undefined;
           if (!recoloured) {
@@ -996,6 +1002,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       // ones at its BoldWidth, when the graphic has one that isn't the drawing's
       const ownW = g.getAttribute(s.bold ? 'BoldWidth' : 'LineWidth');
       if (s.kind !== 'picture' && ownW !== null && Number(ownW) > 0 && Math.abs(Number(ownW) - (s.bold ? st.boldWidth : st.lineWidth)) > 0.005) s.lineWidth = Number(ownW);
+      // ChemDraw dashes an outline at the HashSpacing, the graphic's or the drawing's
+      if (s.dashed) s.hashSpacing = num(g, 'HashSpacing', st.hashSpacing);
       doc.addShape(s); from('s', s.id, g); stats.shapes++;
     };
     switch (type) {
@@ -1626,6 +1634,13 @@ export const BOND_LOOK_TAG = 'Chem Illustrator bond look';
 export const TURN_TAG = 'Chem Illustrator turn';
 /** The tag on the group that draws a design shape in ChemDraw: the shape as it is here. */
 export const GEO_TAG = 'Chem Illustrator shape';
+
+/** Two colours further apart than ChemDraw's rounding of a colour table can make them. */
+function colorsFar(a: string, b: string): boolean {
+  const ch = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+  const x = ch(a), y = ch(b);
+  return x.some((v, i) => !(Math.abs(v - y[i]) <= 8));
+}
 
 /** A curve arrow's look from our tag, only where it is one the arrow can have. */
 function lookOk(k: 'headStyle' | 'tailStyle' | 'headType' | 'line' | 'headLength' | 'headWidth', v: unknown): boolean {

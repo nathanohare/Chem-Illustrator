@@ -161,7 +161,7 @@ export class Renderer {
   height = 0;
   showWarnings = true;
   /** How a warning is marked on the drawing (Settings ▸ Preferences). */
-  warnLook: WarnLook = 'disc';
+  warnLook: WarnLook = 'box';
   /** The drawing's chemistry warnings, drawn as red boxes when `showWarnings` is on. */
   checks: StructureChecks | null = null;
   /**
@@ -1021,8 +1021,8 @@ export class Renderer {
   }
 
   /**
-   * Mark what has a warning, in the look chosen in Settings ▸ Preferences: a soft red disc (the
-   * default), the thin red box, a circle, a dashed circle or corner marks. Round looks go round an
+   * Mark what has a warning, in the look chosen in Settings ▸ Preferences: the thin red box (the
+   * default), a soft red disc, a circle, a dashed circle or corner marks. Round looks go round an
    * atom and make a rounded band along a bond or text.
    */
   private drawWarnMarks(ctx: CanvasRenderingContext2D, warns: Rect[]): void {
@@ -1061,8 +1061,8 @@ export class Renderer {
       ctx.closePath();
     };
     ctx.beginPath();
-    for (const w of warns) round(w, look === 'disc' ? 1.2 : 0.8);
-    if (look === 'disc') {
+    for (const w of warns) round(w, look === 'soft' ? 1.2 : 0.8);
+    if (look === 'soft') {
       ctx.globalAlpha = 0.22;
       ctx.fill();
     } else {
@@ -1644,7 +1644,7 @@ export class Renderer {
     ctx.lineWidth = s.bold ? lw * 2.5 : lw;
     ctx.strokeStyle = s.color ?? '#000';
     ctx.fillStyle = s.color ?? '#000';
-    ctx.setLineDash(s.dotted ? [0.01, lw * 2.6] : s.dashed ? [lw * 3, lw * 3] : []);
+    ctx.setLineDash(s.dotted ? [0.01, lw * 2.6] : s.dashed ? (s.hashSpacing ? [s.hashSpacing, s.hashSpacing] : [lw * 3, lw * 3]) : []);
     if (s.dotted) ctx.lineCap = 'round';
     ctx.beginPath();
     switch (s.kind) {
@@ -1897,7 +1897,7 @@ export class Renderer {
 
   drawArrow(ctx: CanvasRenderingContext2D, r: Arrow, lw: number): void {
     ctx.strokeStyle = ctx.fillStyle = r.color ?? '#000';
-    ctx.lineWidth = r.line === 'bold' ? lw * 2.5 : lw;
+    ctx.lineWidth = r.line === 'bold' ? r.boldWidth ?? lw * 2.5 : lw;
     ctx.lineCap = 'butt';
     const shaft = (tail: Vec, head: Vec, headStyle: Arrow['headStyle'], tailStyle: Arrow['headStyle']) => {
       const d = sub(head, tail);
@@ -1910,7 +1910,7 @@ export class Renderer {
       const into = (style: Arrow['headStyle']) => style === 'none' ? 0 : shaftInto(hl, r.headType, ctx.lineWidth, isHalf(style) ? r.headWidth : undefined, r.headCenter);
       const back = into(headStyle);
       const tback = into(tailStyle);
-      ctx.setLineDash(r.line === 'dashed' ? [lw * 4, lw * 3] : []);
+      ctx.setLineDash(r.line === 'dashed' ? (r.hashSpacing ? [r.hashSpacing, r.hashSpacing] : [lw * 4, lw * 3]) : []);
       ctx.beginPath();
       const s = add(tail, mul(dir, tback)), e = sub(head, mul(dir, back));
       ctx.moveTo(s.x, s.y); ctx.lineTo(e.x, e.y);
@@ -1982,7 +1982,7 @@ export class Renderer {
     const lastLen = len(sub(pts[n - 1], pts[n - 2])), firstLen = len(sub(pts[1], pts[0]));
     const e = r.headStyle === 'none' ? pts[n - 1] : sub(pts[n - 1], mul(dirEnd, Math.min(hl * 0.7, lastLen * 0.6)));
     const s0 = r.tailStyle === 'none' ? pts[0] : sub(pts[0], mul(dirStart, Math.min(hl * 0.7, firstLen * 0.6)));
-    ctx.setLineDash(r.line === 'dashed' ? [lw * 4, lw * 3] : []);
+    ctx.setLineDash(r.line === 'dashed' ? (r.hashSpacing ? [r.hashSpacing, r.hashSpacing] : [lw * 4, lw * 3]) : []);
     ctx.lineJoin = 'miter';
     ctx.beginPath();
     ctx.moveTo(s0.x, s0.y);
@@ -2007,7 +2007,7 @@ export class Renderer {
     const hw = h + r.headWidth;
     const stop = sub(r.head, mul(dir, (hl * h) / hw));
     const base = sub(r.head, mul(dir, hl));
-    ctx.setLineDash(r.line === 'dashed' ? [lw * 4, lw * 3] : []);
+    ctx.setLineDash(r.line === 'dashed' ? (r.hashSpacing ? [r.hashSpacing, r.hashSpacing] : [lw * 4, lw * 3]) : []);
     ctx.beginPath();
     for (const k of [h, -h]) {
       ctx.moveTo(r.tail.x + n.x * k, r.tail.y + n.y * k);
@@ -2976,7 +2976,7 @@ export function attachWave(path: Path2D, at: Vec, across: Vec, labelSize: number
 const WARN_COLOR = '#e0141e';
 
 /** The looks a warning's mark can take (Settings ▸ Preferences). */
-export const WARN_LOOKS = ['disc', 'box', 'circle', 'dashed', 'corners'] as const;
+export const WARN_LOOKS = ['box', 'soft', 'circle', 'dashed', 'corners'] as const;
 export type WarnLook = (typeof WARN_LOOKS)[number];
 const CHEM_MARK_COLOR = '#1f8a7a';
 
