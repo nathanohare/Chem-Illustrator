@@ -1393,6 +1393,7 @@ button.primary:hover { filter: brightness(1.08); }
   white-space: pre;
   outline: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  cursor: text;
 }
 .sh-input[hidden] { display: none; }
 .sh-tabs { flex: none; display: flex; align-items: stretch; gap: 1px; min-height: 28px; padding: 0 6px; overflow-x: auto; background: var(--bg); border-top: 1px solid var(--line); scrollbar-width: thin; }
