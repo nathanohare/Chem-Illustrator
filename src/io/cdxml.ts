@@ -17,7 +17,7 @@ import { TEXT_TAG, parseTextTag, runsFromChemDraw } from '../text/chemdraw-text'
 import { readPageTag } from '../page-grid';
 import { DocStyle, MAP_LOOKS, mapBoxStyle, type MapLook } from '../style';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
-import { addNicknames } from '../chem/labels';
+import { addNicknames, labelBonds, labelSpec, layoutLabel } from '../chem/labels';
 import { ringBonds, ringsThroughBond } from '../chem/aromatic';
 import { DEG } from '../geom';
 import { chordLocal, ellipseArcPoints, headBend, swapHalf } from '../objects';
@@ -1354,6 +1354,13 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       if (!implicitOk) {
         atom.label = text;
         atom.fileLabel = true;
+        // told to run left, ChemDraw draws the text as written (MeO, the O on the atom); this program
+        // keeps a label from the atom out (OMe) and turns it to draw it
+        if (atom.fixedDir && atom.just === 'left' && !atom.labelMarks) {
+          const drawn = (label: string) => layoutLabel(labelSpec(atom.z, label, 0, 0, 1, 1, false, false)!, labelBonds(doc, atom), 10, (t, z) => t.length * z, 'left').runs.map((r) => r.text).join('');
+          const turned = drawn(text);
+          if (turned !== text && drawn(turned) === text) atom.label = turned;
+        }
         // a contracted label brings its group with it, as a nickname for this session
         if (atom.group) addNicknames({ [text]: atom.group });
         if (hShown === null && atom.z === 6 && /^[A-Z][a-z]?$/.test(text) && elementNumber(text) !== undefined) {
@@ -1860,6 +1867,7 @@ function pictureOf(el: Element): { src: string; px: { w: number; h: number }; cr
  * written on the line or lowered) and any other characters raised, lowered by hand.
  */
 export function labelLookOf(runs: TextRun[], text: string): { supDigits?: boolean; marks?: string } {
+  const mixed = runs.some((r) => r.formula) && runs.some((r) => !r.formula && !r.sup && !r.sub);
   const out: { supDigits?: boolean; marks?: string } = {};
   const raisedDigits = runs.length > 1 && runs[runs.length - 1].sup && /^\d+$/.test(runs[runs.length - 1].text);
   if (raisedDigits) out.supDigits = true;
@@ -1868,7 +1876,8 @@ export function labelLookOf(runs: TextRun[], text: string): { supDigits?: boolea
   runs.forEach((r, k) => {
     for (const _ of r.text) {
       const raisedR = raisedDigits && k === runs.length - 1;
-      const m = r.sup && !raisedR ? (r.italic ? '*' : '^') : r.sub ? (r.italic ? ',' : '_') : r.italic ? '/' : '.';
+      // (in a label of mixed styles, a run in bold or out of formula style stays as it is: a 28 in bold is no subscript)
+      const m = r.sup && !raisedR ? (r.italic ? '*' : '^') : r.sub ? (r.italic ? ',' : '_') : r.italic ? '/' : mixed && r.bold ? '!' : mixed && !r.formula ? '=' : '.';
       if (m !== '.') any = true;
       marks += m;
     }

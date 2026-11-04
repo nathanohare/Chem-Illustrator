@@ -21,6 +21,21 @@ const node = (d: Document) => [...d.querySelectorAll('n')].find((n) => n.getAttr
 const runsOf = (d: Document) => [...node(d).querySelectorAll('t > s')].map((s) => [s.textContent, Number(s.getAttribute('face'))]);
 
 describe('a fresh save', () => {
+  it('keeps a label of mixed styles: [(S,S)-28Rh], the 28 bold and on the line', () => {
+    const runs = '<s font="3" size="10" face="96">[</s><s font="3" size="10" face="98">(S,S)</s><s font="3" size="10">-</s><s font="3" size="10" face="1">28</s><s font="3" size="10" face="96">Rh]</s>';
+    const { doc, out } = fresh(label('NodeType="Unspecified"', runs));
+    expect(doc.atoms.get(11)!.labelMarks).toBe('./////=!!...');
+    expect(runsOf(out)).toEqual([['[', 96], ['(S,S)', 98], ['-', 0], ['28', 1], ['Rh]', 96]]);
+    const pieces = labelPieces('[(S,S)-28Rh]', false, './////=!!...');
+    const digits = pieces.filter((p) => /\d/.test(p.text));
+    expect(digits.map((p) => p.text).join('')).toBe('28');
+    for (const p of digits) { expect(p.bold).toBe(true); expect(p.sub).toBeFalsy(); }
+  });
+  it('draws a label as ChemDraw does when its node says it runs left: MeO stays MeO', () => {
+    const { doc, out } = fresh('<fragment id="2"><n id="10" p="80 50"/><n id="11" p="50 50" NodeType="Fragment" LabelDisplay="Right"><t LabelJustification="Right"><s font="3" size="10" face="96">MeO</s></t></n><b id="20" B="10" E="11"/></fragment>');
+    expect(doc.atoms.get(11)!.label).toBe('OMe');
+    expect(runsOf(out).map((r) => r[0]).join('')).toBe('MeO');
+  });
   it("keeps a stacked label's LineHeight auto", () => {
     const { doc, out } = fresh(label('Element="7" NumHydrogens="1"', '<s font="3" size="12" face="96">NH</s>', 'LabelAlignment="Below" LineHeight="auto"'));
     expect(doc.atoms.get(11)!.stackedLoose).toBe(true);
