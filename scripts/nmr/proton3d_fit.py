@@ -37,7 +37,9 @@ def load(path):
             for c in r['ch2']:
                 if not c['dia'] or not c['terms']:
                     continue
-                fa, fb = (np.asarray(t, float) for t in c['terms'])
+                fa, fb = (np.asarray([np.nan if v is None else v for v in t], float) for t in c['terms'])
+                if not (np.isfinite(fa).all() and np.isfinite(fb).all()):
+                    continue  # conformer build gave no usable geometry
                 s = c['shifts']
                 X.append(fa - fb)
                 y.append(abs(s[0] - s[1]) if len(s) == 2 else 0.0)
@@ -73,20 +75,20 @@ def fit(X, y, wt, starts=8, iters=50, seed=0):
 
 def score(X, y, wt, w, label):
     d = np.clip(np.abs(X @ w), 0, MAX)
-    two = wt == 1.0
+    two = y > 0.005   # reported as two different shifts
     mae2 = np.mean(np.abs(d[two] - y[two])) if two.any() else float('nan')
     base2 = np.mean(y[two]) if two.any() else float('nan')  # predicting no split
     one = ~two
     mae1 = np.mean(d[one]) if one.any() else float('nan')
     # does the model rank larger splits higher?
     rho = np.corrcoef(np.argsort(np.argsort(d[two])), np.argsort(np.argsort(y[two])))[0, 1] if two.sum() > 2 else float('nan')
-    print(f'{label:10s} two-shift n={two.sum():5d}  MAE {mae2:.3f} (no split {base2:.3f})  rank corr {rho:.2f}  |  one-shift n={one.sum():5d} mean split {mae1:.3f}')
+    print(f'{label:10s} two-shift n={two.sum():5d}  MAE {mae2:.3f} (no split {base2:.3f})  rank corr {rho:.2f}  |  one shift or equal n={one.sum():5d} mean split {mae1:.3f}')
     return {'n2': int(two.sum()), 'mae2': mae2, 'nosplit2': base2, 'rank': rho, 'n1': int(one.sum()), 'split1': mae1}
 
 
 def main():
     X, y, wt, held = load(sys.argv[1])
-    print(f'{len(y)} diastereotopic CH2 ({int((wt == 1).sum())} with two shifts)')
+    print(f'{len(y)} diastereotopic CH2 ({int((y > 0.005).sum())} with two different shifts)')
     w = fit(X[~held], y[~held], wt[~held])
     rep = {'train': score(X[~held], y[~held], wt[~held], w, 'train'), 'held-out': score(X[held], y[held], wt[held], w, 'held-out')}
     wall = fit(X, y, wt)
