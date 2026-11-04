@@ -24,6 +24,7 @@ for await (const line of createInterface({ input: createReadStream(inp) })) {
     const mol = Molecule.fromMolfile(r.molblock);
     mol.addImplicitHydrogens();
     const ids = mol.getDiastereotopicAtomIDs();
+    mol.ensureHelperArrays(Molecule.cHelperNeighbours);
     const ch2 = r.ch2.map((x) => {
       const hs = model.bonds.map((b) => (b.a === x.c ? b.b : b.b === x.c ? b.a : -1)).filter((k) => k >= 0 && model.atoms[k].z === 1);
       const oh: number[] = [];
