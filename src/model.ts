@@ -16,9 +16,16 @@ import type { SmartData } from './chem/smart-scheme';
 import type { ChartBox } from './sheet/chart-box';
 import { isMetal, isMetalLabel, lowestValence } from './chem/elements';
 import { NICKNAMES } from './chem/labels';
+import { layoutText } from './text/layout';
+import { arialWidth } from './text-metrics';
 
-/** 'dative' is a coordinate bond, drawn as an arrow from the donor (a1) to the acceptor (a2). */
-export type BondDisplay = 'solid' | 'wedge' | 'hashWedge' | 'hash' | 'bold' | 'dash' | 'wavy' | 'dative';
+/**
+ * 'dative' is a coordinate bond, drawn as an arrow from the donor (a1) to the acceptor (a2).
+ * 'hollowWedge' and 'wavyWedge' have their narrow end at a1, as a wedge does. 'hydrogen' is a
+ * hydrogen bond (dotted, a1 the H) and 'ionic' an ionic bond (dashed, a1 the positive end):
+ * neither counts toward valence (ChemDraw's Order hydrogen and ionic).
+ */
+export type BondDisplay = 'solid' | 'wedge' | 'hashWedge' | 'hash' | 'bold' | 'dash' | 'wavy' | 'dative' | 'hollowWedge' | 'wavyWedge' | 'hydrogen' | 'ionic';
 
 /** A partial bond (order 0.5), one forming or breaking in a transition state: drawn dashed. */
 export const PARTIAL = 0.5;
@@ -28,7 +35,12 @@ export const PARTIAL = 0.5;
  * bond in a transition state. Neither counts toward hydrogens, and neither goes to RDKit.
  */
 export function outsideValence(b: Pick<Bond, 'display' | 'order'>): boolean {
-  return b.display === 'dative' || b.order === PARTIAL;
+  return b.display === 'dative' || b.display === 'hydrogen' || b.display === 'ionic' || b.order === PARTIAL;
+}
+
+/** A bond drawn narrow at a1 and wide at a2: a wedge, hashed, hollow or wavy wedge. */
+export function isWedge(d: BondDisplay): boolean {
+  return d === 'wedge' || d === 'hashWedge' || d === 'hollowWedge' || d === 'wavyWedge';
 }
 export type DoublePos = 'auto' | 'left' | 'right' | 'center';
 
@@ -48,6 +60,8 @@ export interface Atom {
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
+  /** Groups inside groups as ChemDraw keeps them (outermost first; grp is the first), for writing the nesting back. Set only when nested. */
+  grpPath?: number[];
   /** Place in the drawing order set by Format > Order (higher is in front); not set keeps the usual layers (issue #406, editor/stacking.ts). */
   stack?: number;
   x: number;
@@ -80,6 +94,13 @@ export interface Atom {
   /** A contracted label: the group it stands for, as SMILES from the atom where it joins (Chemistry > Contract Label). */
   group?: string;
   /**
+   * A ChemDraw label's own inner fragment (what the label stands for, as ChemDraw expands it), kept
+   * as the file had it so a copy back to ChemDraw keeps it while the label is unchanged: the label
+   * it belongs to, the node's NodeType (and GenericNickname), the fragment's XML, and where the
+   * atom was then (the fragment moves with it).
+   */
+  cdxInner?: { label: string; type: string; nick?: string; xml: string; x?: number; y?: number };
+  /**
    * Alt text for the whole structure this atom is in (Alt Text…), for people who can't see it:
    * kept on one of its atoms (see accessibility.ts). Saved as the description of the structure's
    * picture in Word and PowerPoint; a structure without it is described by its SMILES.
@@ -97,6 +118,17 @@ export interface Atom {
   labelMarks?: string;
   /** The whole label is centred on the atom (ChemDraw's Center justification, as on Ru or Si), not its first letter. */
   centred?: boolean;
+  /** The label stacked one piece per line above or below the atom (ChemDraw's LabelAlignment Above or Below), whatever the bonds. */
+  stacked?: 'up' | 'down';
+  /**
+   * A ring-fusion carbon's H drawn as a mark on the atom (ChemDraw's H-Dot and H-Dash): a filled
+   * dot for an H toward the viewer, a hashed one for an H away.
+   */
+  hDot?: 'dot' | 'dash';
+  /** A stacked label with ChemDraw's LineHeight auto: its lines 1.15 of the size apart, not the tighter usual. */
+  stackedLoose?: boolean;
+  /** The file's node said which way the label runs (ChemDraw's LabelDisplay), so a save says so too. */
+  fixedDir?: boolean;
   /** Show this atom's R/S label when it has one (ChemDraw's "Show Stereochemistry"). */
   showStereo?: boolean;
   /** Where the stereo label sits (relative to the atom), and its text as saved or typed by hand. */
@@ -121,7 +153,11 @@ export interface Atom {
   /** Show the atom number beside the atom (the ' key; ChemDraw's ShowAtomNumber). */
   showNumber?: boolean;
   /** Where the shown number sits, relative to the atom, when the file says or it was moved. */
-  numberLabel?: { dx: number; dy: number; size: number };
+  numberLabel?: {
+    dx: number; dy: number; size: number;
+    /** The number's own colour and ChemDraw face bits (1 bold, 2 italic), when the file gives it one (a bold blue 4). */
+    color?: string; face?: number;
+  };
   /**
    * The atom-atom map number across a reaction (Chemistry ▸ Reactions and Schemes ▸ Map Atoms, or a
    * mapped reaction SMILES or RXN file): an atom in a product has the number of the starting-material
@@ -147,6 +183,14 @@ export interface Atom {
    * when bonded to a metal. Only the look: the bonds are the same either way.
    */
   kekule?: boolean;
+  /**
+   * On a multicentre point: a variable attachment (ChemDraw's VariableAttachment node) rather
+   * than a hapto bond's middle. The bond to it says the group is on one of `multi`'s atoms, which
+   * one not known or not mattering. It sits at the middle of `ringOf` (the whole ring) when set.
+   */
+  variable?: boolean;
+  /** A variable attachment's ring: the atoms whose middle it sits at (all of `multi` when not set). */
+  ringOf?: number[];
 }
 
 /** A metal atom: a metal element, or a label written for one (Pd, PdCl2, LnPd, [M]). */
@@ -195,6 +239,8 @@ export interface StereoLabel {
   italic?: boolean;
   /** Typed by hand: always shows `text` instead of the worked-out label. */
   manual?: boolean;
+  /** From ChemDraw's file: `text` stands until the structure changes, with a warning where the rules work out otherwise. */
+  fromFile?: boolean;
 }
 
 /** R/S and E/Z labels worked out for a drawing: a descriptor, null for none, undefined while not known. */
@@ -206,6 +252,8 @@ export interface StereoInfo {
    * a label that can't be read) sets the order of its neighbours.
    */
   undecided?(kind: 'a' | 'b', id: number): boolean;
+  /** True while what the rules work out is what they first worked out for it: its structure hasn't changed since. */
+  asFirst?(kind: 'a' | 'b', id: number): boolean;
   /** Changes whenever a label does. */
   readonly version?: number;
 }
@@ -234,6 +282,8 @@ export interface Bond {
   bondLength?: number;
   /** An aromatic bond (order 1.5) in a ring drawn with a circle rather than a dashed second line. */
   circle?: boolean;
+  /** An aromatic bond (order 1.5) drawn as one line, as ChemDraw draws its Order="1.5" with no second line (its dashed aromatic bond is Order 2 with Display2 Dash). */
+  plain?: boolean;
   /** Where it sits among bonds that cross it (higher in front; else the order it was drawn in). ChemDraw's Z. */
   z?: number;
   /**
@@ -241,6 +291,15 @@ export interface Bond {
    * bond passing just beyond another's end). Used only while they still pass close.
    */
   crossing?: number[];
+  /**
+   * How a double bond's second line is drawn, where it isn't a plain line (ChemDraw's Display2):
+   * dashed (a partial double bond, as in an amide's resonance form), bold or hashed.
+   */
+  line2?: 'dash' | 'bold' | 'hash';
+  /** Which character of a1's label the bond meets, counted from 0 (ChemDraw's BeginAttach; unset is the default). */
+  beginAttach?: number;
+  /** Which character of a2's label the bond meets, counted from 0 (ChemDraw's EndAttach; unset is the default). */
+  endAttach?: number;
   /** The person chose to ignore this bond's chemistry warnings. */
   ignoreWarnings?: boolean;
   /**
@@ -306,6 +365,12 @@ export interface TextRun {
   outlineW?: number;
   /** Text effects: a soft drop shadow, down and to the right. */
   shadow?: boolean;
+  /**
+   * Which font a ChemDraw file had the run's signs in: true for its Symbol font (•, ° stay in it,
+   * though Arial has them), false for an ordinary font (a − stays in Arial, though Symbol has it).
+   * Absent: signs only Symbol holds go in it, as ChemDraw writes them.
+   */
+  symbolFont?: boolean;
 }
 
 /** The text effects a run can have (the Font box), copied together onto every piece of it that is drawn. */
@@ -467,6 +532,8 @@ export interface Caption {
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
+  /** Groups inside groups as ChemDraw keeps them (outermost first; grp is the first), for writing the nesting back. Set only when nested. */
+  grpPath?: number[];
   /** Place in the drawing order set by Format > Order (higher is in front); not set keeps the usual layers (issue #406, editor/stacking.ts). */
   stack?: number;
   /** Left end of the first line's baseline (for centred/right text, of the line box). */
@@ -480,6 +547,8 @@ export interface Caption {
   lineHeight?: number;
   /** Line spacing as a multiple of single spacing (1.5, 2…), when there's no fixed lineHeight. */
   lineSpacing?: number;
+  /** ChemDraw's variable line spacing (its usual): lines as close as their ink lets them (layout.ts inkGap). */
+  inkLines?: boolean;
   /** Lines wrap to fit this width, in points (a text box); without it they break only at line breaks. */
   wrap?: number;
   /** Paragraph formatting, one per paragraph in order; missing entries are plain paragraphs. */
@@ -632,6 +701,8 @@ export interface Arrow {
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
+  /** Groups inside groups as ChemDraw keeps them (outermost first; grp is the first), for writing the nesting back. Set only when nested. */
+  grpPath?: number[];
   /** Place in the drawing order set by Format > Order (higher is in front); not set keeps the usual layers (issue #406, editor/stacking.ts). */
   stack?: number;
   tail: Vec;
@@ -642,6 +713,10 @@ export interface Arrow {
   headType: 'solid' | 'hollow' | 'angle';
   line: 'solid' | 'dashed' | 'bold' | 'wavy';
   noGo: boolean;
+  /** How a no-go arrow is struck out: a cross (the default) or a hash of two slanted strokes. */
+  noGoKind?: 'hash';
+  /** A dipole arrow: a short stroke across the shaft near the tail makes its plus end. */
+  dipole?: boolean;
   /** Equilibrium arrows: two half-headed shafts. */
   equilibrium: boolean;
   /** Distance between two parallel shafts (a retrosynthetic arrow), in points; absent for one shaft. */
@@ -650,6 +725,12 @@ export interface Arrow {
   sweep: number;
   headLength: number;
   headWidth: number;
+  /**
+   * How far back from its point a solid head's notch is, as a part of its length (ChemDraw's
+   * ArrowheadCenterSize over HeadSize: 1 a plain triangle), its sides curving into it as ChemDraw
+   * draws them; missing, 0.75 with straight sides.
+   */
+  headCenter?: number;
   color?: string;
   /** Line width when it differs from the document's. */
   lineWidth?: number;
@@ -675,6 +756,12 @@ export interface Arrow {
    * between curves; the arrow follows its ends this way, as an arc does with its sweep.
    */
   bez?: Vec[];
+  /**
+   * ChemDraw's arc of an ellipse that `bez` was made from, in the same frame as `bez`: its centre,
+   * the ends of its major and minor half-axes, and its AngularSize (degrees, as the file has it).
+   * Good only while `bez` is still that arc (arrowEllipse in objects.ts checks).
+   */
+  ellipse?: { center: Vec; major: Vec; minor: Vec; angular: number };
   /** What an electron-pushing arrow's ends are stuck to, so they follow the structure when it moves. */
   pin?: { tail?: Pin; head?: Pin };
   /** Bent by hand: it keeps its curve when the structure changes, rather than finding its own way round. */
@@ -744,6 +831,8 @@ export interface Shape {
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
+  /** Groups inside groups as ChemDraw keeps them (outermost first; grp is the first), for writing the nesting back. Set only when nested. */
+  grpPath?: number[];
   /** Place in the drawing order set by Format > Order (higher is in front); not set keeps the usual layers (issue #406, editor/stacking.ts). */
   stack?: number;
   kind: 'line' | 'rect' | 'oval' | 'symbol' | 'bracket' | 'picture' | 'table' | 'geo' | 'ring';
@@ -757,6 +846,8 @@ export interface Shape {
   pin?: Pin;
   /** A design shape (kind 'geo'): which one, from the shape library (design/geo.ts). */
   geo?: string;
+  /** ChemDraw's orbital (an oval it draws as an orbital lobe or s orbital): its OrbitalType, kept for writing back. */
+  orbital?: string;
   /** Text inside a design shape: wraps to the shape's text area and moves with it. */
   text?: { runs: TextRun[]; paras?: ParaStyle[] };
   /** Text inside a design shape: across (centred unless set) and up and down (middle unless set). */
@@ -804,6 +895,12 @@ export interface Shape {
   patternClear?: boolean;
   /** Fill colour, when it differs from the outline colour (the outline is then drawn too). */
   fillColor?: string;
+  /**
+   * ChemDraw's FadePercent the fill was read from (tenths of a percent of the colour). Several
+   * values give the same tint here but not in ChemDraw's drawing, so it is written back while the
+   * fill is still that tint of the colour.
+   */
+  fade?: number;
   rounded?: boolean;
   /** Corner radius of a rounded box, in points (ChemDraw's default is six line widths). */
   radius?: number;
@@ -841,6 +938,8 @@ export interface Shape {
    * for a polymer's repeat unit, or a number for a group repeated that many times (chem/polymer.ts).
    */
   repeat?: string;
+  /** The repeat label's own look in the file it came from (a bold blue 4): colour, ChemDraw face bits and size in points. */
+  repeatLook?: { color?: string; face?: number; size?: number };
   /** Stands in for a picture in a ChemDraw file, which is kept as it was when saving. */
   picture?: boolean;
   /** A picture: its image as a data URL (PNG, JPEG, GIF or SVG); x1..y2 is where it shows. */
@@ -1165,6 +1264,8 @@ export interface PageSetup {
   down?: number;
   /** The fixed edges the page grid doesn't grow past (page-grid.ts); missing, top and left. */
   walls?: PageWalls;
+  /** One sheet of its own size, not paper: ChemDraw's poster document (DrawingSpace poster). */
+  poster?: boolean;
 }
 
 /**
@@ -1232,6 +1333,8 @@ export interface CdxmlSource {
    * changing it, so one still here is unchanged, and saving can pass it by without comparing.
    */
   loaded?: WeakSet<Entity>;
+  /** The page as read (JSON), to tell whether it has been set since. */
+  page?: string;
 }
 
 /**
@@ -1288,6 +1391,13 @@ export class Doc {
   onlyHighlights = false;
   /** Set when the drawing came from a CDXML file. */
   source: CdxmlSource | null = null;
+  /**
+   * ChemDraw objects this program doesn't show but keeps for writing back (plain bracketed groups,
+   * chemical properties): each one's XML, and which of the drawing's things ("a12", "s5") the
+   * ids in it named, so a writer can point them at those things again. A structure (fragment) is
+   * named by its first atom as "frag:a12".
+   */
+  kept: { xml: string; refs: Record<string, string> }[] = [];
   /** Live R/S and E/Z labels from the chemistry engine (not saved, not undone). */
   stereo: StereoInfo | null = null;
   /** Formatting of placeholder text by kind (from a slide master); null outside slides. */
@@ -1672,7 +1782,7 @@ export class Doc {
   }
 
   private linkCentre(c: Atom): void {
-    for (const m of c.multi!) {
+    for (const m of new Set([...c.multi!, ...(c.ringOf ?? [])])) {
       const l = this.centresOf.get(m);
       if (!l) this.centresOf.set(m, [c.id]);
       else if (!l.includes(c.id)) l.push(c.id);
@@ -1680,7 +1790,7 @@ export class Doc {
   }
 
   private unlinkCentre(c: Atom): void {
-    for (const m of c.multi!) {
+    for (const m of new Set([...c.multi!, ...(c.ringOf ?? [])])) {
       const l = this.centresOf.get(m);
       if (!l) continue;
       const i = l.indexOf(c.id);
@@ -1690,9 +1800,11 @@ export class Doc {
   }
 
   /** The middle of a multicentre point's atoms, where it sits (null when none of them are left). */
-  centreOf(c: Pick<Atom, 'multi'>): Vec | null {
+  centreOf(c: Pick<Atom, 'multi' | 'ringOf'>): Vec | null {
     let x = 0, y = 0, n = 0;
-    for (const id of c.multi ?? []) { const a = this.atoms.get(id); if (a) { x += a.x; y += a.y; n++; } }
+    // a variable attachment sits in the middle of its ring
+    const ring = c.ringOf?.filter((id) => this.atoms.has(id));
+    for (const id of ring && ring.length > 2 ? ring : c.multi ?? []) { const a = this.atoms.get(id); if (a) { x += a.x; y += a.y; n++; } }
     return n ? { x: x / n, y: y / n } : null;
   }
 
@@ -1818,6 +1930,18 @@ export class Doc {
     // a multicentre point always sits in the middle of its atoms, wherever it is asked to go
     if (n.multi) { const c = this.centreOf(n); if (c) { n.x = c.x; n.y = c.y; } }
     this.rawSet('a', id, n);
+    if ('label' in patch && n.label !== a.label) {
+      // the label characters its bonds met (ChemDraw's BeginAttach/EndAttach) no longer name the same ones
+      for (const bid of this.adj.get(id) ?? []) {
+        const b = this.bonds.get(bid);
+        const key = b?.a1 === id ? 'beginAttach' : 'endAttach';
+        if (!b || b[key] === undefined) continue;
+        this.touch('b', bid);
+        const next: Bond = { ...b };
+        delete next[key];
+        this.rawSet('b', bid, next);
+      }
+    }
     if (n.x !== a.x || n.y !== a.y || patch.multi) {
       for (const bid of this.adj.get(id) ?? []) this.noteBondLength(this.bonds.get(bid)!);
       for (const c of [...(this.centresOf.get(id) ?? [])]) this.updateAtom(c, {});
@@ -1842,8 +1966,9 @@ export class Doc {
       const ca = this.atoms.get(c);
       if (!ca?.multi) continue;
       const rest = ca.multi.filter((m) => m !== id && this.atoms.has(m));
+      const ring = ca.ringOf?.filter((m) => m !== id && this.atoms.has(m));
       if (rest.length < 2) this.removeAtom(c);
-      else this.updateAtom(c, { multi: rest });
+      else this.updateAtom(c, { multi: rest, ...(ca.ringOf ? { ringOf: ring } : {}) });
     }
   }
 
@@ -1859,7 +1984,16 @@ export class Doc {
     const b = this.bonds.get(id);
     if (!b) return;
     this.touch('b', id);
-    this.rawSet('b', id, { ...b, ...patch, id });
+    const next: Bond = { ...b, ...patch, id };
+    if ((next.a1 !== b.a1 || next.a2 !== b.a2) && !('beginAttach' in patch) && !('endAttach' in patch)) {
+      // the label characters a bond meets go with their atoms: swapped with the ends, dropped for a new atom
+      const at = (a: number) => (a === b.a1 ? b.beginAttach : a === b.a2 ? b.endAttach : undefined);
+      const s = at(next.a1), e = at(next.a2);
+      delete next.beginAttach; delete next.endAttach;
+      if (s) next.beginAttach = s;
+      if (e) next.endAttach = e;
+    }
+    this.rawSet('b', id, next);
   }
 
   removeBond(id: number): void {
@@ -1953,6 +2087,7 @@ export class Doc {
     this.background = other.background;
     this.page = other.page && { ...other.page };
     this.source = other.source;
+    this.kept = other.kept.slice();
     this.nextId = Math.max(this.nextId, other.nextId);
     this.atoms.clear(); this.bonds.clear(); this.captions.clear(); this.arrows.clear(); this.shapes.clear();
     this.adj.clear(); this.centresOf.clear(); this.grid.clear(); this.atomCell.clear(); this.maxBondLen = 0; this.bondLenStale = false; this.bondLenShrunk = false;
@@ -2162,7 +2297,11 @@ export class Doc {
     let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
     const grow = (x: number, y: number) => { if (x < x1) x1 = x; if (y < y1) y1 = y; if (x > x2) x2 = x; if (y > y2) y2 = y; };
     for (const a of this.atoms.values()) grow(a.x, a.y);
-    for (const c of this.captions.values()) { grow(c.x, c.y - 10); grow(c.x + (c.width ?? 40), c.y + 4); }
+    for (const c of this.captions.values()) {
+      // without a stored width, measure the text (a guess past a short caption at the page's edge adds a page)
+      const b = c.width === undefined ? layoutText(c, this.style.captionSize, (t, s, _f, st) => arialWidth(t, s, st.includes('bold'))).box : null;
+      grow(c.x + Math.min(0, b?.x1 ?? 0), c.y - 10); grow(c.x + (b ? b.x2 : c.width!), c.y + 4);
+    }
     for (const r of this.arrows.values()) for (const p of arrowPoints(r, 12)) grow(p.x, p.y);
     for (const s of this.shapes.values()) { grow(s.x1, s.y1); grow(s.x2, s.y2); }
     if (x1 === Infinity) return null;

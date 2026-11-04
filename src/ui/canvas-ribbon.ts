@@ -78,7 +78,8 @@ export const CANVAS_TABS: RibbonTab[] = [
   {
     id: 'bond', title: 'Bond', context: 'bond', groups: [
       { name: 'Order', items: [t('bond-single', 'Single'), t('bond-double', 'Double'), t('bond-triple', 'Triple'), t('bond-dative', 'Dative'), t('bond-wavy', 'Wavy'), t('bond-bold', 'Bold')] },
-      { name: 'Stereo', items: [t('bond-wedge', 'Wedge'), t('bond-hashWedge', 'Hashed Wedge'), t('bond-hash', 'Hashed')] },
+      { name: 'Stereo', items: [t('bond-wedge', 'Wedge'), t('bond-hashWedge', 'Hashed Wedge'), t('bond-hollowWedge', 'Hollow Wedge'), t('bond-wavyWedge', 'Wavy Wedge'), t('bond-hash', 'Hashed')] },
+      { name: 'Non-Covalent', items: [t('bond-hydrogen', 'Hydrogen Bond'), t('bond-ionic', 'Ionic Bond')] },
       { name: 'Highlight', items: [c('centre-highlight', 'Center Highlight on Double Bonds')] },
     ],
   },

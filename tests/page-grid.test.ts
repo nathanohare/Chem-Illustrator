@@ -185,6 +185,40 @@ describe('the page grid in the file', () => {
     expect(doc.page.walls).toEqual({ t: 0 });
   });
 
+  it('measures a short caption with no stored width, so one at the right edge adds no page', () => {
+    const doc = new Doc();
+    doc.edit('build', () => { doc.addCaption({ x: 505, y: 266, runs: [{ text: '4', size: 12 }], justify: 'left' }); });
+    doc.page = letter();
+    // "4" in 12 pt Arial is 6.67 pt wide, not a guessed 40
+    expect(doc.bounds()!.x2).toBeCloseTo(505 + 6.672, 2);
+    expect(pageCount(pageExtent(doc.page, doc.bounds()))).toEqual({ across: 1, down: 1 });
+    expect(writeCdxml(doc)).toMatch(/WidthPages="1"/);
+  });
+
+  it('saves an unchanged file with a caption near the right edge as it was', () => {
+    const text = `<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE CDXML SYSTEM "http://www.cambridgesoft.com/xml/cdxml.dtd" >
+<CDXML
+ BoundingBox="505 257.53 512.67 266"
+ CaptionFont="3"
+ CaptionSize="12"
+><fonttable>
+<font id="3" charset="iso-8859-1" name="Arial"/>
+</fonttable><page
+ id="1"
+ BoundingBox="0 0 540 720"
+ HeightPages="1"
+ WidthPages="1"
+><t
+ id="2"
+ p="505 266"
+ BoundingBox="505 257.53 512.67 266"
+><s font="3" size="12" face="1">4</s></t></page></CDXML>
+`;
+    const { doc } = readCdxml(text);
+    expect(writeCdxml(doc)).toBe(text);
+  });
+
   it('keeps a drawing on a set number of pages', () => {
     const doc = drawing(1500, 100);
     doc.page = letter({ grow: false, across: 2, down: 1 });

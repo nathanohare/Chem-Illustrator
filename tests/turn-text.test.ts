@@ -61,11 +61,12 @@ describe('turning the selection', () => {
 });
 
 describe('files', () => {
-  it('keeps the turn in CDXML (a hidden tag; ChemDraw shows the text level)', () => {
+  it('keeps the turn in CDXML as ChemDraw\'s RotationAngle (no tag of ours, which could outlive a turn changed in ChemDraw)', () => {
     const doc = new Doc();
     doc.edit('add', () => doc.addCaption({ x: 50, y: 60, runs: [{ text: 'Pd/C, H2' }], justify: 'left', rot: -45 }));
     const xml = writeCdxml(doc);
-    expect(xml).toContain('Name="Chem Illustrator turn" Value="-45"');
+    expect(xml).toContain(`RotationAngle="${315 * 65536}"`);
+    expect(xml).not.toContain('Chem Illustrator turn');
     const back = [...readCdxml(xml).doc.captions.values()][0];
     expect(back.rot).toBe(-45);
     expect(back.x).toBeCloseTo(50, 1);

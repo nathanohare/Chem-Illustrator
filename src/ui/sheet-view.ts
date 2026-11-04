@@ -12,6 +12,11 @@ import { Range, MAX_ROWS, MAX_COLS, colName, rangeName, normRange, inRange, keyO
 import { formatValue, generalFitting } from '../sheet/numfmt';
 import { readTyped, isError, CellError, maxOf, minOf } from '../sheet/values';
 import { chemPieces, showsChem } from '../sheet/cell-text';
+import { type RunLook, type TextRun, type ToggleLook, looksOf, lookOver, runsOf, runsForInput, looksForInput, sameRuns } from '../sheet/rich-text';
+import { RichInput } from './rich-input';
+
+/** Keys that format the selected text while typing in a cell. */
+const TYPING_KEYS: Record<string, ToggleLook> = { b: 'bold', i: 'italic', u: 'underline', 2: 'bold', 3: 'italic', 4: 'underline', 5: 'strike' };
 import { DEFAULT_COL_W, DEFAULT_ROW_H, STRUCTURE_SCALE, STRUCTURE_PAD, MAX_AUTO_ROW, structureHeight, structurePlace } from '../sheet/layout';
 import { formulaRefs, normalizeFormula } from '../sheet/formula';
 import { Chart, chartData } from '../sheet/chart';
@@ -187,14 +192,14 @@ export class SheetView {
   wb: Workbook | null = null;
   zoom = 1;
   /** The cell being typed in, if any. 'enter': arrows finish typing (Excel's Enter mode); 'edit': arrows move in the text. */
-  editing: { r: number; c: number; mode: 'enter' | 'edit'; original: string } | null = null;
+  editing: { r: number; c: number; mode: 'enter' | 'edit'; original: string; runs?: TextRun[] } | null = null;
   /** Format Painter, while the brush is held (set by the app): called when a click or drag has picked the cells to paint. */
   painter: (() => void) | null = null;
   /** Cells copied (shown with a dashed border until Esc or the next edit). */
   copied: { sheet: Sheet; range: Range } | null = null;
   /** Called with the reference to put in a formula being typed (pointing at cells). */
   readonly el: HTMLDivElement;
-  readonly input: HTMLTextAreaElement;
+  readonly input: RichInput;
   readonly scroller: HTMLDivElement;
   private spacer: HTMLDivElement;
   private canvas: HTMLCanvasElement;
@@ -269,7 +274,7 @@ export class SheetView {
     this.canvas = document.createElement('canvas');
     this.canvas.className = 'sh-canvas';
     this.ctx = this.canvas.getContext('2d')!;
-    this.input = document.createElement('textarea');
+    this.input = new RichInput();
     this.input.className = 'sh-input';
     this.input.spellcheck = false;
     this.input.hidden = true;
@@ -280,7 +285,7 @@ export class SheetView {
     this.promptBox.setAttribute('role', 'tooltip');
     this.noteLayer = document.createElement('div');
     this.noteLayer.className = 'sh-note-layer';
-    this.scroller.append(this.canvas, this.spacer, this.noteLayer, this.input, this.promptBox);
+    this.scroller.append(this.canvas, this.spacer, this.noteLayer, this.input.el, this.promptBox);
     this.tabsEl = document.createElement('div');
     this.tabsEl.className = 'sh-tabs';
     this.tabsEl.setAttribute('role', 'tablist');
@@ -1850,6 +1855,9 @@ export class SheetView {
     style = this.chemLook(style, v);
     const shown = formatValue(v, style?.numFmt);
     let text = shown.text;
+    // part of the text bold, italic… (typed text only, shown as typed)
+    const runs = typeof v === 'string' ? runsOf(s.cell(r, c)) : undefined;
+    let looks = runs && runs.map((x) => x.text).join('') === text ? looksOf(text, runs) : undefined;
     const align = style?.align ?? shown.align;
     const font = this.font(style);
     ctx.font = font;
@@ -1868,21 +1876,26 @@ export class SheetView {
       ctx.beginPath();
       ctx.rect(x, y, w - 1, h - 1);
       ctx.clip();
+      let at = 0;
       for (const line of lines) {
-        this.drawLine(line, style, x, w, pad, ty + lineH * 0.78, align);
+        // where the line is in the text, for its runs' looks
+        const from = looks ? Math.max(at, text.indexOf(line, at)) : 0;
+        this.drawLine(line, style, x, w, pad, ty + lineH * 0.78, align, looks?.slice(from, from + line.length));
+        at = from + line.length;
         ty += lineH;
       }
       ctx.restore();
       return c;
     }
     text = text.replace(/\n/g, ' ');
-    const widthOf = (t: string) => (style?.chem ? this.piecesWidth(t, style) : this.textWidth(t, font));
+    const widthOf = (t: string) => (looks && t.length === looks.length ? this.richWidth(t, style, looks) : style?.chem ? this.piecesWidth(t, style) : this.textWidth(t, font));
     let tw = widthOf(text);
     // a number too wide for its column: fewer decimals (General), else ### as in Excel
     if (typeof v === 'number' && tw > w - 2 * pad) {
       const general = !style?.numFmt || /^general$/i.test(style.numFmt);
       text = (general ? generalFitting(v, (t) => widthOf(t) <= w - 2 * pad) : null) ?? '#'.repeat(Math.max(1, Math.floor((w - 2 * pad) / Math.max(1, this.textWidth('#', font)))));
       tw = widthOf(text);
+      looks = undefined;
     }
     let clipW = w;
     // text too long for its cell runs on over empty cells beside it (as in Excel)
@@ -1907,9 +1920,9 @@ export class SheetView {
     ctx.beginPath();
     ctx.rect(x, y, clipW - 1, h - 1);
     ctx.clip();
-    this.drawLine(text, style, x, clipW, pad, baseline, align);
+    this.drawLine(text, style, x, clipW, pad, baseline, align, looks);
     ctx.restore();
-    if (style?.underline) {
+    if (style?.underline && !looks) {
       const lw = Math.min(tw, clipW - 2 * pad);
       const lx = align === 'right' ? x + clipW - pad - lw : align === 'center' ? x + (clipW - lw) / 2 : x + pad;
       ctx.fillRect(lx, baseline + 2, lw, Math.max(1, this.zoom));
@@ -1970,8 +1983,49 @@ export class SheetView {
     return w;
   }
 
-  private drawLine(text: string, style: CellStyle | undefined, x: number, w: number, pad: number, baseline: number, align: string): void {
+  /** Text in pieces of one look each: its chemistry (C9H8O4) and its runs' looks (a bold word) over the cell's. */
+  private richPieces(text: string, style: CellStyle | undefined, looks: RunLook[]): { text: string; look: ReturnType<typeof lookOver<CellStyle>> }[] {
+    const chem: { pos?: 'sub' | 'sup'; italic?: boolean }[] = [];
+    if (style?.chem) for (const p of chemPieces(text)) for (let i = 0; i < p.text.length; i++) chem.push({ ...(p.pos !== 'base' ? { pos: p.pos } : {}), ...(p.italic ? { italic: true } : {}) });
+    const out: { text: string; look: ReturnType<typeof lookOver<CellStyle>>; key: string }[] = [];
+    for (let i = 0; i < text.length; i++) {
+      const look = lookOver({ ...style, ...(chem[i]?.italic ? { italic: true } : {}), ...(chem[i]?.pos ? { pos: chem[i].pos } : {}) }, looks[i]);
+      const key = JSON.stringify([look.bold, look.italic, look.underline, look.strike, look.color, look.pos, look.font, look.size]);
+      const last = out[out.length - 1];
+      if (last && last.key === key) last.text += text[i];
+      else out.push({ text: text[i], look, key });
+    }
+    return out;
+  }
+
+  private richWidth(text: string, style: CellStyle | undefined, looks: RunLook[]): number {
+    let w = 0;
+    for (const p of this.richPieces(text, style, looks)) w += this.textWidth(p.text, this.font(p.look, this.zoom, p.look.pos ?? 'base'));
+    return w;
+  }
+
+  private drawLine(text: string, style: CellStyle | undefined, x: number, w: number, pad: number, baseline: number, align: string, looks?: RunLook[]): void {
     const ctx = this.ctx;
+    if (looks && looks.length === text.length) {
+      const pieces = this.richPieces(text, style, looks);
+      const tw = this.richWidth(text, style, looks);
+      let tx = align === 'right' ? x + w - pad - tw : align === 'center' ? x + (w - tw) / 2 : x + pad;
+      const ink = ctx.fillStyle;
+      for (const p of pieces) {
+        const l = p.look;
+        ctx.font = this.font(l, this.zoom, l.pos ?? 'base');
+        const pw = this.textWidth(p.text, ctx.font);
+        const size = ((l.size ?? CELL_SIZE) * 96) / 72 * this.zoom;
+        const dy = l.pos === 'sub' ? size * 0.25 : l.pos === 'sup' ? -size * 0.38 : 0;
+        ctx.fillStyle = l.color && l.color !== style?.color ? l.color : ink;
+        ctx.fillText(p.text, tx, baseline + dy);
+        if (l.underline) ctx.fillRect(tx, baseline + dy + 2, pw, Math.max(1, this.zoom));
+        if (l.strike) ctx.fillRect(tx, baseline + dy - size * 0.28, pw, Math.max(1, this.zoom));
+        tx += pw;
+      }
+      ctx.fillStyle = ink;
+      return;
+    }
     if (!style?.chem) {
       ctx.font = this.font(style);
       const tw = this.textWidth(text, ctx.font);
@@ -2560,8 +2614,9 @@ export class SheetView {
       return;
     }
     const original = s.effectiveInput(r, c) ?? '';
-    this.editing = { r, c, mode: text === undefined ? 'edit' : 'enter', original };
-    this.input.value = text ?? original;
+    const runs = runsOf(cell);
+    this.editing = { r, c, mode: text === undefined ? 'edit' : 'enter', original, runs };
+    this.input.setText(text ?? original, text === undefined ? looksForInput(original, runs) : undefined);
     this.input.hidden = false;
     this.pointRef = null;
     this.placeInput();
@@ -2578,8 +2633,9 @@ export class SheetView {
       const { r, c } = this.sel.active;
       const s = this.sheet!;
       if (s.cell(r, c)?.structure) return;
-      this.editing = { r, c, mode: 'edit', original: s.effectiveInput(r, c) ?? '' };
-      this.input.value = this.editing.original;
+      const runs = runsOf(s.cell(r, c));
+      this.editing = { r, c, mode: 'edit', original: s.effectiveInput(r, c) ?? '', runs };
+      this.input.setText(this.editing.original, looksForInput(this.editing.original, runs));
       this.input.hidden = false;
       this.placeInput();
       this.render();
@@ -2630,6 +2686,8 @@ export class SheetView {
     if (!e || !wb) return false;
     const s = wb.sheet;
     const text = this.input.value;
+    // part of the text bold, italic… (only typed text holds it)
+    const runs = runsForInput(text, this.input.charLooks);
     if (this.alerting) return true;
     const rule = !force && text !== e.original && this.host.invalid ? s.validationAt(e.r, e.c) : undefined;
     if (rule && !rule.noAlert && !this.typedPasses(s, rule, e.r, e.c, text)) {
@@ -2647,7 +2705,7 @@ export class SheetView {
     this.pointRef = null;
     this.input.hidden = true;
     this.copied = null;
-    if (text !== e.original) {
+    if (text !== e.original || !sameRuns(runs, e.runs)) {
       const areas = this.areas();
       wb.edit('Typing', () => {
         if (allSelected) {
@@ -2656,11 +2714,11 @@ export class SheetView {
           for (const sel of areas) {
             for (let r = sel.r1; r <= Math.min(sel.r2, Math.max(s.lastRow, e.r, sel.r1) + 1); r++) for (let c = sel.c1; c <= Math.min(sel.c2, Math.max(s.lastCol, e.c, sel.c1) + 1); c++) {
               if (text.startsWith('=')) s.paste({ row: r, col: c }, block, 'values');
-              else s.setInput(r, c, text);
+              else s.setRichInput(r, c, text, runs);
             }
           }
         } else {
-          this.typeInto(s, e.r, e.c, text);
+          this.typeInto(s, e.r, e.c, text, runs);
           this.widenForDate(s, e.r, e.c, text);
         }
       }, this.place());
@@ -2697,7 +2755,7 @@ export class SheetView {
   }
 
   /** Typing into a property column puts back its own formula when the typing is that formula, or nothing at all. */
-  private typeInto(s: Sheet, r: number, c: number, text: string): void {
+  private typeInto(s: Sheet, r: number, c: number, text: string, runs?: TextRun[]): void {
     const def = s.colDefs.get(c);
     const cell = s.cell(r, c);
     if (def && r >= def.firstRow && !text) {
@@ -2705,7 +2763,30 @@ export class SheetView {
       s.setCell(r, c, { style: cell?.style });
       return;
     }
-    s.setInput(r, c, text);
+    s.setRichInput(r, c, text, runs);
+  }
+
+  /**
+   * Bold, Italic or Underline pressed while typing in a cell: on the selected text, or on what
+   * is typed next (as in Excel). False when not typing, or typing a formula (whose answer has
+   * one look).
+   */
+  styleTyping(key: ToggleLook): boolean {
+    const e = this.editing;
+    if (!e || !this.sheet) return false;
+    if (this.input.value.startsWith('=')) return true;
+    const base = this.sheet.styleAt(e.r, e.c);
+    this.input.toggle(key, !!base?.[key as 'bold' | 'italic' | 'underline']);
+    this.input.focus();
+    this.host.changed();
+    return true;
+  }
+
+  /** Whether the text being typed has a look where the caret is (the ribbon's Bold shows pressed). */
+  typingHas(key: ToggleLook): boolean | null {
+    const e = this.editing;
+    if (!e || !this.sheet || this.input.value.startsWith('=')) return null;
+    return this.input.has(key, !!this.sheet.styleAt(e.r, e.c)?.[key as 'bold' | 'italic' | 'underline']);
   }
 
   cancelEdit(): void {
@@ -2714,7 +2795,7 @@ export class SheetView {
     this.pointRef = null;
     this.input.hidden = true;
     this.host.typing(null);
-    if (document.activeElement === this.input) this.scroller.focus({ preventScroll: true });
+    if (document.activeElement === this.input.el) this.scroller.focus({ preventScroll: true });
     this.render();
   }
 
@@ -2821,6 +2902,9 @@ export class SheetView {
     if (k === 'Escape') { e.preventDefault(); this.cancelEdit(); return; }
     if (k === 'F2') { e.preventDefault(); ed.mode = ed.mode === 'enter' ? 'edit' : 'enter'; return; }
     if (k === 'F3' && this.host.f3) { e.preventDefault(); this.host.f3(e); return; }
+    // Ctrl+B, I, U (and Excel's Ctrl+2, 3, 4) on the selected text
+    const look = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey ? TYPING_KEYS[k.toLowerCase()] : undefined;
+    if (look) { e.preventDefault(); this.styleTyping(look); return; }
     if (ed.mode === 'enter' && /^Arrow/.test(k) && !this.pointing()) {
       e.preventDefault();
       const [dr, dc] = k === 'ArrowUp' ? [-1, 0] : k === 'ArrowDown' ? [1, 0] : k === 'ArrowLeft' ? [0, -1] : [0, 1];
@@ -2955,7 +3039,7 @@ export class SheetView {
 
   private onDown(e: PointerEvent): void {
     if (!this.wb || e.button !== 0) return;
-    if ((e.target as HTMLElement) === this.input) return;
+    if (this.input.el.contains(e.target as Node)) return;
     const { x, y } = this.viewPoint(e);
     if (x > this.scroller.clientWidth || y > this.scroller.clientHeight) return; // the scroll bars
     e.preventDefault();

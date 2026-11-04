@@ -2,6 +2,8 @@
 //
 // Save tests against real ChemDraw files. The files are private, so they are not in the
 // repository: point CHEM_TEST_FILES at a folder of .cdxml files to run these locally.
+// Big files need more memory than Node's default, e.g.
+//   CHEM_TEST_FILES=/path/to/folder NODE_OPTIONS=--max-old-space-size=8192 npx vitest run tests/cdxml-files.test.ts
 
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
@@ -43,7 +45,8 @@ describe.skipIf(!files.length)('saving real ChemDraw files', { timeout: 120000 }
         // left, top and right edges (ChemDraw's box bottom varies between versions)
         if ([0, 1, 2].every((i) => Math.abs(a[i] - b[i]) < 1.5)) close++;
       }
-      expect(close / Math.max(1, total)).toBeGreaterThan(0.9);
+      // (nothing to check in a file with no labels; labels that all went missing still fail)
+      if (was.size) expect(close / Math.max(1, total)).toBeGreaterThan(0.9);
     });
 
     it(`${f}: a rebuilt file lists the same lines in each caption`, () => {
@@ -51,7 +54,12 @@ describe.skipIf(!files.length)('saving real ChemDraw files', { timeout: 120000 }
       const { doc } = readCdxml(text);
       doc.source = null;
       const was = captionLines(text), now = captionLines(writeCdxml(doc));
-      const diff = [...was].filter(([id, n]) => now.has(id) && now.get(id) !== n).map(([id, n]) => `caption ${id}: ${n} lines, now ${now.get(id)}`);
+      // (matched by where they sit, as a rebuilt file numbers captions afresh)
+      const diff: string[] = [];
+      for (const a of was) {
+        const b = nearest(now, a);
+        if (b && b.n !== a.n) diff.push(`caption ${a.id} at ${a.x},${a.y}: ${a.n} lines, now ${b.n}`);
+      }
       expect(diff.slice(0, 10)).toEqual([]);
     });
 
@@ -77,7 +85,7 @@ describe.skipIf(!files.length)('saving real ChemDraw files', { timeout: 120000 }
       const out = writeCdxml(doc);
       const back = readCdxml(out).doc;
       expectSame(summarize(back), before);
-      expect(duplicateIds(out)).toEqual([]);
+      expect(duplicateIds(out, text)).toEqual([]);
     });
   }
 });
@@ -104,17 +112,29 @@ function labelBoxes(text: string): Map<string, number[]> {
   return out;
 }
 
-/** Number of lines ChemDraw will show for each caption, by id (1 when no line ends are listed). */
-function captionLines(text: string): Map<string, number> {
+interface CaptionLines { id: string; x: number; y: number; n: number }
+
+/** The caption whose origin is nearest `a`, if one is within a point. */
+function nearest(list: CaptionLines[], a: { x: number; y: number }): CaptionLines | undefined {
+  let best: CaptionLines | undefined, bd = 1;
+  for (const b of list) { const d = Math.hypot(b.x - a.x, b.y - a.y); if (d <= bd) { best = b; bd = d; } }
+  return best;
+}
+
+/** Number of lines ChemDraw will show for each caption, with its origin (1 when no line ends are listed). */
+function captionLines(text: string): CaptionLines[] {
   const fonts = new Map<string, string>();
   const arialOnly = (t: Element) => [...t.getElementsByTagName('s')].every((s) => /^(arial|symbol)$/i.test(fonts.get(s.getAttribute('font') ?? '') ?? ''));
   const root = new DOMParser().parseFromString(text.replace(/<!DOCTYPE[^>]*>/i, ''), 'application/xml').documentElement;
-  const out = new Map<string, number>();
+  const out: CaptionLines[] = [];
   const visit = (e: Element) => {
     for (let c = e.firstElementChild; c; c = c.nextElementSibling) {
       if (c.nodeName === 'n') continue;
       // (text boxes in fonts other than Arial wrap with that font's widths, which Node doesn't have)
-      if (c.nodeName === 't' && c.getAttribute('id') && !(c.getAttribute('WordWrapWidth') && !arialOnly(c))) out.set(c.getAttribute('id')!, (c.getAttribute('LineStarts') ?? '0').trim().split(/\s+/).length);
+      if (c.nodeName === 't' && c.getAttribute('p') && !(c.getAttribute('WordWrapWidth') && !arialOnly(c))) {
+        const [x, y] = c.getAttribute('p')!.trim().split(/\s+/).map(Number);
+        out.push({ id: c.getAttribute('id') ?? '', x, y, n: (c.getAttribute('LineStarts') ?? '0').trim().split(/\s+/).length });
+      }
       else visit(c);
     }
   };

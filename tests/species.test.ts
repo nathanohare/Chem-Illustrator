@@ -7,7 +7,9 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
 import { Doc } from '../src/model';
 import { toMolfile } from '../src/chem/molfile';
-import { allSpecies, captionChemWarning, captionReading, captionSpecies, groupedIons, readSpecies, speciesFormula, speciesSmiles } from '../src/chem/species';
+import { allSpecies, captionChemWarning, captionReading, captionSpecies, groupedIons, placeSpecies, reagentSpecies, readSpecies, speciesFormula, speciesSmiles } from '../src/chem/species';
+import { addMolfile } from '../src/chem/molfile';
+import { reactionSteps, schemeItems } from '../src/chem/reaction';
 import { plainMeasure } from '../src/chem/reaction';
 import { setSideText } from '../src/chem/arrow-text';
 import { writeCdxml } from '../src/io/cdxml-write';
@@ -198,6 +200,51 @@ describe('text boxes in a drawing', () => {
     // and a free one set to Plain text doesn't
     doc.edit('c', () => doc.updateCaption(free.id, { chem: false }));
     expect(captionReading(doc, doc.captions.get(free.id)!, m)).toMatchObject({ species: null, why: 'plain' });
+  });
+  // Laptop bench 2026-11-03 (cd-recheck-414-text-reagent-smiles): Me2SO typed over the arrow and
+  // Me2CO under it were left out of Copy Reaction as SMILES ("Conditions written as text are left
+  // out"), and on a step opened from a file they weren't counted at all until Clean Up Reaction
+  it('reads text typed over and under a step\'s arrow as its reagents, also on a step opened from a file', () => {
+    const doc = new Doc();
+    const at = (smi: string, x: number) => {
+      const mol = RDKit.get_mol(smi);
+      mol.set_new_coords();
+      const mb = mol.get_molblock();
+      mol.delete();
+      let ids: number[] = [];
+      doc.edit('Paste', () => { ids = addMolfile(doc, mb, 0, 0); });
+      const xs = ids.map((id) => doc.atoms.get(id)!.x), ys = ids.map((id) => doc.atoms.get(id)!.y);
+      doc.edit('Move', () => doc.moveAtoms(ids, x - Math.min(...xs), 200 - (Math.min(...ys) + Math.max(...ys)) / 2));
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    const w = at('CC(=O)c1ccccc1', 0);
+    doc.edit('arrow', () => doc.addArrow({ tail: { x: w + 20, y: 200 }, head: { x: w + 100, y: 200 }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: 6, headWidth: 1.5 }));
+    at('CC(O)c1ccccc1', w + 120);
+    // saved and opened again: the step's roles are stored with its arrow
+    const back = readCdxml(writeCdxml(doc)).doc;
+    expect([...back.arrows.values()][0].step).toBeTruthy();
+    // then the reagents typed just over and under the arrow
+    const over = text(back, 'Me2SO', w + 45, 195), under = text(back, 'Me2CO', w + 45, 212);
+    const m = plainMeasure(back);
+    const [step] = reactionSteps(back, schemeItems(back, m));
+    expect(step.roles.above).toContain('c' + over.id);
+    expect(step.roles.below).toContain('c' + under.id);
+    // text over an arrow stays text in the drawing's own formula, but is the step's reagent
+    expect(captionSpecies(back, over, m)).toBeNull();
+    const smiles = (c: typeof over) => {
+      const species = placeSpecies(back, [c], m, true);
+      const mol = RDKit.get_mol(toMolfile(back, new Set(), '', { species }).molblock);
+      const smi = mol.get_smiles();
+      mol.delete();
+      return smi;
+    };
+    expect(smiles(over)).toBe(canonical('CS(C)=O'));
+    expect(smiles(under)).toBe(canonical('CC(C)=O'));
+    // conditions that aren't a compound, and text set to Plain, stay conditions
+    const temp = text(back, '0 °C', w + 45, 224);
+    expect(reagentSpecies(back, temp, m)).toBeNull();
+    back.edit('c', () => back.updateCaption(over.id, { chem: false }));
+    expect(reagentSpecies(back, back.captions.get(over.id)!, m)).toBeNull();
   });
   it('leaves text tied to a structure and ordinary captions alone', () => {
     const doc = new Doc();

@@ -34,6 +34,18 @@ function sineAlong(x1: number, y1: number, x2: number, y2: number, waves: number
   return 'M' + pts.join(' L');
 }
 
+/** sineAlong with the amplitude growing from nothing at the start to `amp` at the end (a wavy wedge). */
+function growingSine(x1: number, y1: number, x2: number, y2: number, waves: number, amp: number): string {
+  const len = Math.hypot(x2 - x1, y2 - y1), ux = (x2 - x1) / len, uy = (y2 - y1) / len;
+  const steps = waves * 24;
+  const pts: string[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps, a = amp * t * Math.sin(t * waves * 2 * Math.PI);
+    pts.push(`${(x1 + ux * len * t - uy * a).toFixed(2)} ${(y1 + uy * len * t + ux * a).toFixed(2)}`);
+  }
+  return 'M' + pts.join(' L');
+}
+
 function poly(n: number, r = 8, inner = false, flat = false, label = ''): string {
   const pts: [number, number][] = [];
   const start = flat ? -Math.PI / 2 + Math.PI / n : -Math.PI / 2;
@@ -56,6 +68,10 @@ function poly(n: number, r = 8, inner = false, flat = false, label = ''): string
 }
 
 export const ICONS: Record<string, string> = {
+  // a radical's dot with a small + or −
+  'sym-radical-cation': svg('<circle cx="7" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M12.5 12h8M16.5 8v8"/>'),
+  'sym-radical-anion': svg('<circle cx="7" cy="12" r="2.2" fill="currentColor" stroke="none"/><path d="M12.5 12h8"/>'),
+  'sym-dagger': svg('<path d="M12 3.5v17M7.5 8.5h9"/>'),
   select: svg('<rect x="4" y="5" width="16" height="14" stroke-dasharray="2.5 2"/>'),
   lasso: svg('<path d="M7 17c-3.5-1.5-4-6 0-9s11-3.5 13 0-2 8.5-8 8.5c-2 0-3.5-.3-5-.5" stroke-dasharray="2.5 2"/><path d="M7 17c0 1.5 1 3 2.5 3.5"/>'),
   eraser: svg('<path d="M14.5 4.5l5 5-9 9H6l-2.5-2.5z"/><path d="M10 9l5 5"/><path d="M11 18.5h9"/>'),
@@ -68,6 +84,16 @@ export const ICONS: Record<string, string> = {
   'bond-hash': svg(hashes(6, 3.2, 3.2)),
   'bond-bold': svg('<line x1="5" y1="18" x2="19" y2="6" stroke-width="4" stroke-linecap="butt"/>'),
   'bond-dash': svg('<line x1="5" y1="18" x2="19" y2="6" stroke-dasharray="2 2.2"/>'),
+  // the outline of a wedge
+  'bond-hollowWedge': svg('<path d="M4.5 18.8L17.4 4.2 20.6 7.3z" stroke-width="1.4" stroke-linejoin="miter"/>'),
+  // a wave that widens from the stereocenter
+  'bond-wavyWedge': svg(`<path d="${growingSine(4, 19, 20, 5, 3, 3)}" stroke-width="1.4"/>`),
+  // a hydrogen bond: H, then dots to the acceptor
+  'bond-hydrogen': svg('<text x="5" y="20.5" font-size="8.5" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none" font-family="system-ui, sans-serif">H</text><line x1="9.5" y1="14" x2="20" y2="4.5" stroke-width="2.2" stroke-dasharray="0.01 3.4"/>'),
+  // an ionic bond: dashed, from + to −
+  'bond-ionic': svg('<line x1="7" y1="16" x2="17" y2="7" stroke-dasharray="2 2.2"/><path d="M2.5 19.5h4.5M4.75 17.25v4.5M17.5 3h4.5" stroke-width="1.3"/>'),
+  // a group bonded into a ring's middle, any of the ring's atoms
+  'bond-variable': svg('<polygon points="15,5 21,8.5 21,15.5 15,19 9,15.5 9,8.5"/><line x1="2" y1="12" x2="15" y2="12"/><circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none"/>'),
   // a bond forming in a transition state: dashed between two atoms, marked ‡
   'bond-partial': svg('<line x1="5" y1="18.5" x2="15" y2="9.5" stroke-dasharray="2 2"/><circle cx="4.2" cy="19.2" r="1.7" fill="currentColor" stroke="none"/><circle cx="15.8" cy="8.8" r="1.7" fill="currentColor" stroke="none"/><path d="M19.5 2.5v9M17 5h5M17 8.8h5" stroke-width="1.4"/>'),
   // the Ligand Library: a metal held by a chelate ring, beside the lines of a list
@@ -109,6 +135,9 @@ export const ICONS: Record<string, string> = {
   'arrow-equilibrium': svg('<path d="M3 9.5h17l-5-3.5M21 14.5H4l5 3.5"/>'),
   'arrow-retro': svg('<path d="M3 9.8h13.5M3 14.2h13.5M14 6.5l6 5.5-6 5.5"/>'),
   'arrow-nogo': svg('<line x1="3" y1="12" x2="18" y2="12"/><path d="M15 8.5l5 3.5-5 3.5z" fill="currentColor"/><path d="M8.5 8.5l4 7M12.5 8.5l-4 7"/>'),
+  'arrow-nogo-hash': svg('<line x1="3" y1="12" x2="18" y2="12"/><path d="M15 8.5l5 3.5-5 3.5z" fill="currentColor"/><path d="M7.5 16l3-8M10.5 16l3-8"/>'),
+  'arrow-dipole': svg('<line x1="3" y1="12" x2="18" y2="12"/><path d="M15 8.5l5 3.5-5 3.5z" fill="currentColor"/><path d="M6.5 8.5v7"/>'),
+  'shape-freeform': svg('<path d="M4 18C5 9 9 6 12 10s5 7 8-4"/><path d="M3 16.5l2 3M4 15l2.5 4" stroke-width="0" /><circle cx="4" cy="18" r="1.4" fill="currentColor" stroke="none"/><circle cx="12" cy="10" r="1.4" fill="currentColor" stroke="none"/><circle cx="20" cy="6" r="1.4" fill="currentColor" stroke="none"/>'),
   'arrow-curved': svg('<path d="M4 17A8 8 0 0 1 20 16"/><path d="M20 19.5l-2.9-5.6h5.8z" fill="currentColor" stroke="none"/>'),
   'arrow-fishhook': svg('<path d="M4 17A8 8 0 0 1 20 16"/><path d="M20 19.5l2.9-5.6H20z" fill="currentColor" stroke="none"/>'),
   'arrow-s': svg('<path d="M3 16C4.5 6 10.5 6 12 12S19.6 19 20 10.6"/><path d="M20 5l2.9 5.6h-5.8z" fill="currentColor" stroke="none"/>'),
@@ -124,6 +153,7 @@ export const ICONS: Record<string, string> = {
   'shape-circle': svg('<circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>'),
   'shape-circle-filled': svg('<circle cx="12" cy="12" r="5" fill="currentColor"/>'),
   'shape-oval': svg('<ellipse cx="12" cy="12" rx="9" ry="6"/>'),
+  'shape-oval-shadow': svg('<path d="M19.5 9.5c1.6 1.2 2 2.6 2 3.6 0 3.3-4 6-9 6-2.4 0-4.5-.6-6.1-1.7" stroke-width="2.4" opacity="0.45" stroke-linecap="butt"/><ellipse cx="11" cy="11" rx="8.5" ry="5.8"/>'),
   'shape-line': svg('<line x1="4" y1="19" x2="20" y2="5"/>'),
   'shape-line-dashed': svg('<line x1="4" y1="19" x2="20" y2="5" stroke-dasharray="2.6 2.2"/>'),
   'shape-line-bold': svg('<line x1="5" y1="18" x2="19" y2="6" stroke-width="3.4"/>'),

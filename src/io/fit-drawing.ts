@@ -76,7 +76,10 @@ export function fitPasted(src: Doc, to: DocStyle, bondLength?: number): void {
     }
     for (const s of [...src.shapes.values()]) {
       const p1 = at({ x: s.x1, y: s.y1 }), p2 = at({ x: s.x2, y: s.y2 });
-      src.updateShape(s.id, { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, radius: len(s.radius), shadowSize: len(s.shadowSize) });
+      // outlines keep the width they had (a ChemDraw frame drawn at its drawing's line width stays that wide)
+      const outlined = s.kind !== 'picture' && s.kind !== 'table' && s.kind !== 'ring';
+      const lw = s.bold ? from.lineWidth * 2.5 * k : line(from.lineWidth * k);
+      src.updateShape(s.id, { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, radius: len(s.radius), shadowSize: len(s.shadowSize), ...(outlined && s.lineWidth === undefined ? { lineWidth: lw } : {}) });
     }
   });
   src.style = { ...to };

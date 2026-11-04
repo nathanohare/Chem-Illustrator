@@ -1393,6 +1393,7 @@ button.primary:hover { filter: brightness(1.08); }
   white-space: pre;
   outline: none;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  cursor: text;
 }
 .sh-input[hidden] { display: none; }
 .sh-tabs { flex: none; display: flex; align-items: stretch; gap: 1px; min-height: 28px; padding: 0 6px; overflow-x: auto; background: var(--bg); border-top: 1px solid var(--line); scrollbar-width: thin; }
@@ -3482,6 +3483,8 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 /* Presentation and Design: Warnings and Analysis stay out of the side panel until View > Show asks for them */
 body:is(.slides-mode, .design-mode):not(.show-warnings-pane) #warnings-section,
 body:is(.slides-mode, .design-mode):not(.show-analysis-pane) #analysis-section { display: none; }
+/* Canvas: Warnings and Analysis live in the ribbon's two boxes, so the side panel leaves them out (they show again when a box borrows them) */
+body:not(.slides-mode, .design-mode, .sheet-mode, .doc-mode) #side-content > :is(#warnings-section, #analysis-section) { display: none; }
 /* the side panel closes all the way (no strip): the button at the bottom right, View > Side Panel or Ctrl+Alt+B bring it back */
 .dock-v > .toolbox[data-id="details"].collapsed { display: none; }
 /* its header is one row: the close button sits beside the first heading */

@@ -197,8 +197,9 @@ describe('designs saved for ChemDraw', () => {
     expect(s.geo).toBe('labBeaker');
     expect(s.text?.runs[0].text).toBe('H2O');
     expect(back.captions.size).toBe(0);
-    // moved in ChemDraw: the group's box moves
-    const moved = xml.replace(/(<group[^>]*BoundingBox=")([\d.]+) ([\d.]+)/, (_m, a, x, y) => `${a}${+x + 30} ${+y + 5}`);
+    // moved in ChemDraw: the group's box and its curves move
+    const moved = xml.replace(/(<group[^>]*BoundingBox=")([\d.]+) ([\d.]+)/, (_m, a, x, y) => `${a}${+x + 30} ${+y + 5}`)
+      .replace(/CurvePoints="([^"]*)"/g, (_m, p: string) => `CurvePoints="${p.split(' ').map((v, i) => Number(v) + (i % 2 ? 5 : 30)).join(' ')}"`);
     const [m] = [...readCdxml(moved).doc.shapes.values()];
     expect(Math.round(m.x1)).toBe(40);
     expect(Math.round(m.y1)).toBe(25);

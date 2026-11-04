@@ -47,7 +47,7 @@ Every pull request runs all of these (the **Checks** workflow), plus a speed che
 
 To see whether real drawings survive a save and reopen, `npm run roundtrip -- <folder>` (after a build) opens every `.cdxml`, `.cdx`, `.mol` and `.sdf` file in the folder, saves it as CDXML, opens it again and lists any file whose atoms, bonds, text, arrows or structures changed. The files are read where they are and never copied.
 
-To also check saving against your own ChemDraw files (they stay on your computer), point the tests at a folder of `.cdxml` files: in PowerShell `$env:CHEM_TEST_FILES="C:\path\to\folder"; npm test`. Any `.cdx` files saved by ChemDraw in that folder, or in a folder inside it, are also checked against the `.cdxml` file of the same name.
+To also check saving against your own ChemDraw files (they stay on your computer), point the tests at a folder of `.cdxml` files: in PowerShell `$env:CHEM_TEST_FILES="C:\path\to\folder"; npm test`. Any `.cdx` files saved by ChemDraw in that folder, or in a folder inside it, are also checked against the `.cdxml` file of the same name. Big files need more memory than Node gives by default: also set `$env:NODE_OPTIONS="--max-old-space-size=8192"`.
 
 The `bench/` scripts drive the app in a headless browser to measure speed. Start `npm run build` and `npm run preview` first, then for example `node bench/perf.mjs stress`. They need Playwright's Chromium once: `npx playwright install chromium`.
 

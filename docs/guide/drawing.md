@@ -441,7 +441,7 @@ With an arrow selected, the **Reaction** section of the Style panel also has **A
 
 ## Warnings
 
-A soft red disc marks atoms with too many or too few bonds, labels that can't be read, and atoms sitting on top of each other. Point at one to see why. The **Warnings** box at the right end of the ribbon's tabs counts them; click it (or look in the Warnings panel on the right) for the list, with **Ignore** to hide one. **Show on drawing** turns the marks off. They are never printed, saved or copied. **Settings ▸ Preferences** offers a thin red box, a circle, a dashed circle or corner marks instead of the disc.
+A soft red disc marks atoms with too many or too few bonds, labels that can't be read, and atoms sitting on top of each other. Point at one to see why. The **Warnings** box at the right end of the ribbon's tabs counts them; click it for the list, with **Ignore** to hide one. **Show on drawing** turns the marks off. They are never printed, saved or copied. **Settings ▸ Preferences** offers a thin red box, a circle, a dashed circle or corner marks instead of the disc.
 
 Rest the mouse on an abbreviation or condensed label (OTBS, NHBoc, CO2Me, CH2OH) to see the group written out, with its name and formula. **View ▸ Chemical Abbreviation Tooltips** turns this off.
 
@@ -491,7 +491,7 @@ A drawing is laid out on pages, as in ChemDraw, so you can see how it will print
 
 ## The Analysis panel
 
-Select a structure and the **Analysis** panel on the right shows:
+Select a structure and the **Analysis** panel shows the list below. In the Canvas it drops down from the **Analysis** box at the right end of the ribbon (see [The Canvas ribbon](#the-canvas-ribbon)); in the other modes it is in the side panel on the right.
 
 - its formula, exact mass and molecular weight;
 - its systematic name (see [Structure to Name](#structure-to-name)), with a **Name caption** button. Until the namer has been loaded this session, an **IUPAC name** button loads it;
@@ -553,7 +553,7 @@ Every color button opens a palette: Automatic, the standard colors, the colors a
 Above the drawing, a compact ribbon holds the chemistry commands that have no toolbox of their own. Its tabs are **Home** (Format Favorites, Schemes, Diagrams, Mechanism, Insert and Look Up), **Insert**, **Chemistry**, **Arrange** and **View**. The bigger commands (Smart Scheme, Catalytic Cycle, Energy Diagram, Animate) carry their names; the rest show their names when you rest the mouse on them. The arrow at the right end of the tabs folds the ribbon away to just its tabs.
 
 - **Tabs for what you're working on**: draw with an arrow tool or select an arrow and an **Arrow** tab comes up and opens, with its shape, path and structure commands. A ring tool or a selected ring brings up a **Ring** tab, and one or two selected bonds a **Bond** tab. When the selection or tool changes, the ribbon goes back to the tab you were on.
-- **Warnings**, at the far right of the tabs, counts the problems found in the drawing. Click it to see the list.
+- **Warnings**, at the far right of the tabs, counts the problems found in the drawing. Click it to see the list. Warnings and Analysis live only here in the Canvas, so the side panel keeps to Style.
 - **Analysis**, at the right end of the buttons, shows the formula and molecular weight of what is selected (or the whole drawing) on one line. Click it to see everything the Analysis panel has, and **Pop Out** to put that in a window of its own, which you can move anywhere or pin at the right.
 - **Settings ▸ Toolboxes and Ribbon** offers the **Simplified** ribbon (one row of buttons) instead of the **Classic** two rows. The Canvas ribbon has no group names (rest the mouse on a button for its name); the other modes' ribbons name each group under it.
 
@@ -597,7 +597,7 @@ Five more toolboxes stay hidden until you open them, and come out on their own w
 
 The Templates, Colors and side panel toolboxes are laid out by the app; they can be renamed, hidden, moved in the list and (except the side panel) deleted.
 
-To move a toolbox, unlock it first: click the padlock on its title bar (or right-click the toolbox and choose **Unlock**). Each toolbox locks on its own. The padlock in the top bar (or **View ▸ Toolboxes ▸ Lock Toolboxes**) locks or unlocks them all at once. Then drag a toolbox by its title to the left, right, top or bottom edge of the drawing to dock it there, or anywhere else to float it. Right-click a toolbox's title for **Dock Left**, **Dock Right**, **Dock at the Top**, **Dock at the Bottom**, **Float** and more. The side panel (Style, Warnings, Analysis) is a toolbox too: it starts docked at the right, and moves, floats and locks like the others. Its arrow (or **View ▸ Collapse Side Panel**) folds it to a strip, separately in each mode. The app remembers where you left them.
+To move a toolbox, unlock it first: click the padlock on its title bar (or right-click the toolbox and choose **Unlock**). Each toolbox locks on its own. The padlock in the top bar (or **View ▸ Toolboxes ▸ Lock Toolboxes**) locks or unlocks them all at once. Then drag a toolbox by its title to the left, right, top or bottom edge of the drawing to dock it there, or anywhere else to float it. Right-click a toolbox's title for **Dock Left**, **Dock Right**, **Dock at the Top**, **Dock at the Bottom**, **Float** and more. The side panel (Style, and in the other modes Warnings and Analysis) is a toolbox too: it starts docked at the right, and moves, floats and locks like the others. Its arrow (or **View ▸ Collapse Side Panel**) folds it to a strip, separately in each mode. The app remembers where you left them.
 
 ## The right-click menu
 

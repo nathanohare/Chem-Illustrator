@@ -244,12 +244,13 @@ export function tokenize(label: string): Token[] {
 }
 
 /** Text of one token as displayed, split into normal, subscript and superscript parts. */
-export interface Piece { text: string; sub?: boolean; sup?: boolean; italic?: boolean; /** Where it starts in the label text. */ at?: number }
+export interface Piece { text: string; sub?: boolean; sup?: boolean; italic?: boolean; bold?: boolean; /** Where it starts in the label text. */ at?: number }
 
 /**
  * Raised and lowered characters set by hand in a label, one mark per character of its text:
  * "^" superscript, "_" subscript, "=" on the line, "/" in italics (the t of tBu, by the alkyl
- * look), anything else as the label would show it.
+ * look), "*" raised and "," lowered in italics, "!" on the line in bold, anything else as the
+ * label would show it.
  */
 export type LabelMarks = string;
 
@@ -324,7 +325,7 @@ export function styleLabel(label: string, marks?: LabelMarks, look: AlkylLook = 
     if (dash && !had) { text += '-'; m += '.'; }
     else if (!dash && had) i++;
   }
-  return { label: text, ...(/[\^_=/]/.test(m) ? { marks: m } : {}) };
+  return { label: text, ...(/[\^_=/*,!]/.test(m) ? { marks: m } : {}) };
 }
 
 /** Pieces with the hand-set marks applied, split where a mark changes how a character sits. */
@@ -334,12 +335,14 @@ export function markPieces(pieces: Piece[], marks: LabelMarks): Piece[] {
     if (p.at === undefined) { out.push(p); continue; }
     [...p.text].forEach((ch, k) => {
       const m = marks[p.at! + k];
-      const sup = m === '^' ? true : m === '_' || m === '=' ? false : !!p.sup;
-      const sub = m === '_' ? true : m === '^' || m === '=' ? false : !!p.sub;
-      const italic = m === '/' || !!p.italic;
+      const up = m === '^' || m === '*', down = m === '_' || m === ',';
+      const sup = up ? true : down || m === '=' || m === '!' ? false : !!p.sup;
+      const sub = down ? true : up || m === '=' || m === '!' ? false : !!p.sub;
+      const bold = m === '!';
+      const italic = m === '/' || m === '*' || m === ',' || !!p.italic;
       const last = out[out.length - 1];
-      if (k > 0 && last && !!last.sup === sup && !!last.sub === sub && !!last.italic === italic) last.text += ch;
-      else out.push({ text: ch, at: p.at! + k, ...(sup ? { sup } : {}), ...(sub ? { sub } : {}), ...(italic ? { italic } : {}) });
+      if (k > 0 && last && !!last.sup === sup && !!last.sub === sub && !!last.italic === italic && !!last.bold === bold) last.text += ch;
+      else out.push({ text: ch, at: p.at! + k, ...(sup ? { sup } : {}), ...(sub ? { sub } : {}), ...(italic ? { italic } : {}), ...(bold ? { bold } : {}) });
     });
   }
   return out;
@@ -352,9 +355,9 @@ export const labelPrefs = { superscriptR: true };
 export const isNumberedR = (label: string | null): boolean => !!label && /^R\d+$/.test(label);
 
 /** How an atom's label raises its characters: R numbers (from the file, or by the preference) and marks set by hand. */
-export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string; centred?: boolean }): { supDigits: boolean; marks?: LabelMarks; centred?: boolean } {
+export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string; centred?: boolean; stacked?: 'up' | 'down'; stackedLoose?: boolean }): { supDigits: boolean; marks?: LabelMarks; centred?: boolean; stacked?: 'up' | 'down'; stackedLoose?: boolean } {
   const supDigits = a.supDigits ?? (labelPrefs.superscriptR && isNumberedR(a.label));
-  return { supDigits, ...(a.labelMarks && a.label ? { marks: a.labelMarks } : {}), ...(a.centred ? { centred: true } : {}) };
+  return { supDigits, ...(a.labelMarks && a.label ? { marks: a.labelMarks } : {}), ...(a.centred ? { centred: true } : {}), ...(a.stacked ? { stacked: a.stacked } : {}), ...(a.stacked && a.stackedLoose ? { stackedLoose: true } : {}) };
 }
 
 /** The label's pieces in reading order, as `layoutLabel` shows them (for the typing box). */
@@ -374,6 +377,10 @@ export interface LabelSpec {
   marks?: LabelMarks;
   /** Centre the whole label on the atom (a label on one line with no hydrogens or charge). */
   centred?: boolean;
+  /** Stack the label above or below the atom, one piece per line. */
+  stacked?: 'up' | 'down';
+  /** Its lines 1.15 of the size apart (ChemDraw's LineHeight auto). */
+  stackedLoose?: boolean;
 }
 
 /** Tokens to show for an atom: its custom label, or element + hydrogens. Null = no label (plain carbon). */
@@ -419,6 +426,10 @@ export interface GlyphRun {
   size: number;
   /** Set in italics (the t of tBu, when asked for). */
   italic?: boolean;
+  /** Set in bold, when the rest of the label needn't be. */
+  bold?: boolean;
+  /** Where its text starts in the label text (none for automatic hydrogens and the charge). */
+  at?: number;
 }
 
 export interface LabelLayout {
@@ -461,6 +472,7 @@ export function typedH(spec: LabelSpec): LabelSpec {
  * goes on the first free side of right, left, above, below.
  */
 export function labelDir(spec: LabelSpec, bondDirs: { x: number; y: number }[], just: 'auto' | 'left' | 'right' = 'auto'): 'right' | 'left' | 'up' | 'down' {
+  if (spec.stacked) return spec.stacked;
   if (just === 'left') return 'left';
   if (just === 'right') return 'right';
   spec = typedH(spec);
@@ -526,7 +538,7 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
       const s = p.sub || p.sup ? subSize : size;
       const dy = baseline + (p.sub ? size * 0.22 : p.sup ? -size * 0.42 : 0);
       const w = measure(p.text, s);
-      runs.push({ text: p.text, dx: x, dy, size: s, ...(p.italic ? { italic: true } : {}) });
+      runs.push({ text: p.text, dx: x, dy, size: s, ...(p.italic ? { italic: true } : {}), ...(p.bold ? { bold: true } : {}), ...(p.at !== undefined ? { at: p.at } : {}) });
       boxes.push({ x1: x, y1: dy - CAP * s, x2: x + w, y2: dy + (p.sub ? 0.1 * s : 0) });
       x += w;
     }
@@ -542,16 +554,30 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
   if (dir === 'right' || dir === 'up' || dir === 'down') {
     let x = pushPieces(headPieces, headX);
     if (dir === 'right' && hTok) x = pushPieces(tokenPieces(hTok), x);
-    for (const t of tail) x = pushPieces(tokenPieces(t, sd, mk), x);
-    if (chargeText) pushCharge(x);
-    if (hTok && dir !== 'right') {
-      // stacked H above or below the atom (e.g. the NH of a ring)
-      const w = pieceWidth({ text: 'H' }) + (hTok.count > 1 ? pieceWidth({ text: String(hTok.count), sub: true }) : 0);
-      const yOff = dir === 'up' ? -size * 1.0 : size * 1.0;
-      const start = runs.length;
-      pushPieces(tokenPieces(hTok), -firstCharW / 2 + (firstCharW - w) / 2 + (hTok.count > 1 ? 0 : 0));
-      for (let i = start; i < runs.length; i++) runs[i].dy += yOff;
-      for (let i = start; i < boxes.length; i++) { boxes[i].y1 += yOff; boxes[i].y2 += yOff; }
+    if (spec.stacked && dir !== 'right') {
+      // stacked as ChemDraw draws it: hydrogens, then each piece, on lines of their own lined up on
+      // the left edge of the atom symbol; a charge stays by the symbol
+      if (chargeText) pushCharge(x);
+      let line = 0;
+      for (const t of hTok ? [hTok, ...tail] : tail) {
+        const start = runs.length;
+        pushPieces(tokenPieces(t, sd, mk), headX);
+        const yOff = (dir === 'up' ? -1 : 1) * size * (spec.stackedLoose ? 1.15 : 1) * ++line;
+        for (let i = start; i < runs.length; i++) runs[i].dy += yOff;
+        for (let i = start; i < boxes.length; i++) { boxes[i].y1 += yOff; boxes[i].y2 += yOff; }
+      }
+    } else {
+      for (const t of tail) x = pushPieces(tokenPieces(t, sd, mk), x);
+      if (chargeText) pushCharge(x);
+      if (hTok && dir !== 'right') {
+        // stacked H above or below the atom (e.g. the NH of a ring)
+        const w = pieceWidth({ text: 'H' }) + (hTok.count > 1 ? pieceWidth({ text: String(hTok.count), sub: true }) : 0);
+        const yOff = dir === 'up' ? -size * 1.0 : size * 1.0;
+        const start = runs.length;
+        pushPieces(tokenPieces(hTok), -firstCharW / 2 + (firstCharW - w) / 2 + (hTok.count > 1 ? 0 : 0));
+        for (let i = start; i < runs.length; i++) runs[i].dy += yOff;
+        for (let i = start; i < boxes.length; i++) { boxes[i].y1 += yOff; boxes[i].y2 += yOff; }
+      }
     }
   } else if (spec.tokens.some((t) => t.kind === 'other') && (head.kind === 'other' || !bracketUnits(tail))) {
     // Text that is not a formula ("(3,4)-MDP", "Aryl") is never reversed: ChemDraw keeps its

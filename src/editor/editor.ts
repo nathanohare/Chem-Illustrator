@@ -6,7 +6,7 @@ import { guideAt, guideLines, movedGuide, snapToGuides, ticksBetween, type Guide
 import { DEFAULT_CURSOR_AIDS, drawCursorAids, hintLines, modifierHints, readoutText, type CursorAidPrefs, type HintState, type Mods } from './cursor-aids';
 import { Sketcher } from './sketch';
 import { installPenAndTouch } from './touch';
-import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAtom, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
+import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAtom, isWedge, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
 import { scaleOwnWidths } from '../style';
 import { CaptionEditor } from '../ui/caption-editor';
 import { followLink, linkTip } from '../ui/links-ui';
@@ -20,7 +20,8 @@ import { geoDef, geoShapeStyle, moveSteps, traceSteps } from '../design/geo';
 import { distinctChoices } from '../chem/template-choices';
 import { TEMPLATES, Template, Placement, templateById, templatePoints, placePoint, fusePlacements, atomPlacements, freePlacement, crowdingOf, placeTemplate, snap15 } from '../chem/templates';
 import { fusions3d } from '../chem/fuse3d';
-import { bondHapto, centreEnd, haptoLook, haptoTarget, haptoText, splitHapto } from '../chem/hapto';
+import { labelAlignPatch, type LabelAlign } from '../chem/label-align';
+import { bondHapto, centreEnd, haptoLook, haptoTarget, haptoText, ringAround, splitHapto } from '../chem/hapto';
 import { expandInPlace, expandLigand, expandWithMolblock, freeLigandFor, inPlaceSmiles, labelSmiles, ligandTemplateFor } from '../chem/expand';
 import { styleFromFace, plainText } from '../richtext';
 import * as rt from '../richtext';
@@ -31,7 +32,7 @@ import { tidyStyle } from '../render/highlight';
 import { ASCENT, blankRoomAt } from '../text/layout';
 import { cellAlign, insertRow, nextCell, partAt, partRuns, setColumnWidth, setPart, spanOf, NOTE_SCALE, type TablePart } from '../table';
 import { slideCellLook, styledRuns, unstyledRuns } from '../deck/table-styles';
-import { Vec, Rect, add, sub, mul, norm, dist, dot, distToSegment, rectContains, angleOf, fromAngle, snapAngle, normAngle, perp, DEG, exitParam, lockAxis, turnAbout, turnedCorners, normDegrees } from '../geom';
+import { Vec, Rect, add, sub, mul, norm, dist, len, dot, distToSegment, rectContains, angleOf, fromAngle, snapAngle, normAngle, perp, DEG, exitParam, lockAxis, turnAbout, turnedCorners, normDegrees } from '../geom';
 import { clampMove, inWalls } from '../page-grid';
 
 /** A change to a text box's settings from the ribbon (see Editor.setTextBox). */
@@ -81,10 +82,11 @@ import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, joinG
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
 import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
 import {
-  Handle, type HandleId, arrowHit, shapeHit, arrowHandles, shapeHandles, dragArrowHandle, dragShapeHandle, dragCropHandle, shapeBox, shapeMid, shapeTurn,
+  Handle, type HandleId, arrowEllipseFrame, arrowHit, shapeHit, arrowHandles, shapeHandles, dragArrowHandle, dragShapeHandle, dragCropHandle, shapeBox, shapeMid, shapeTurn,
   arrowPoints, bracketHalves, type BracketForm, bracketLip, unionRect,
   shapeOrder, portNear, shapePorts, isCurved, headBend, swapHalf, bezPoints,
 } from '../objects';
+import { freeformShape, smoothThrough, straightThrough } from '../design/freeform';
 import { bezFrom, fitPath, dragCurveAt, throughPoints, dragPathPoint, firstBend, reversePath, shapeBez, shapeOf, simplifyPath, smoothPath, type ArrowShape, insertJoin, joinIndexes, nearestOnPath, pathPoints, removeJoin, setJoin } from '../arrow-path';
 import { isEmptyText } from '../deck/deck';
 import { crossedBonds, lineAcross } from '../chem/fragments';
@@ -100,7 +102,7 @@ export type Tool =
   | { kind: 'select'; lasso?: boolean }
   | { kind: 'eraser' }
   /** `hapto`: bonds a metal to the middle of a ring or π-bond (η⁵, η²), or splits one into a line to each atom. */
-  | { kind: 'bond'; order: number; display: BondDisplay; hapto?: boolean }
+  | { kind: 'bond'; order: number; display: BondDisplay; hapto?: boolean; variable?: boolean }
   | { kind: 'chain' }
   | { kind: 'ring'; size: number; aromatic: boolean }
   | { kind: 'text' }
@@ -120,13 +122,15 @@ export type Tool =
   /** Drag a structure to turn it in perspective: as a flat sheet, or (`real`) its true 3-D shape (perspective.ts). */
   | { kind: 'perspective'; real: boolean }
   /** Click a single bond for its Newman projection: the end clicked nearer is in front (newman.ts). */
-  | { kind: 'newman' };
+  | { kind: 'newman' }
+  /** Frames ▸ Freeform: a line through points clicked one after another (drag a point out to curve through it). */
+  | { kind: 'pen' };
 
 /** Marks put on atoms for mechanisms: a lone pair, a radical's dot, a circled charge, or δ+ / δ−. */
-export type SymbolKind = 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus' | 'DeltaPlus' | 'DeltaMinus';
+export type SymbolKind = 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus' | 'DeltaPlus' | 'DeltaMinus' | 'RadicalCation' | 'RadicalAnion';
 
 /** How a new arrow looks (everything else is the document's default). */
-export type ArrowStyle = Partial<Pick<Arrow, 'headStyle' | 'tailStyle' | 'headType' | 'line' | 'noGo' | 'equilibrium' | 'sweep' | 'elbow' | 'from' | 'to' | 'bez' | 'pin'>> & {
+export type ArrowStyle = Partial<Pick<Arrow, 'headStyle' | 'tailStyle' | 'headType' | 'line' | 'noGo' | 'noGoKind' | 'dipole' | 'equilibrium' | 'sweep' | 'elbow' | 'from' | 'to' | 'bez' | 'pin'>> & {
   /** An S-shaped curved arrow (two bends). */
   s?: boolean;
   /** Two shafts and an open head (⇒). */
@@ -159,6 +163,11 @@ export const TOOLS: Record<string, Tool> = {
   'bond-hapto': { kind: 'bond', order: 1, display: 'solid', hapto: true },
   'bond-wedge': { kind: 'bond', order: 1, display: 'wedge' },
   'bond-hashWedge': { kind: 'bond', order: 1, display: 'hashWedge' },
+  'bond-hollowWedge': { kind: 'bond', order: 1, display: 'hollowWedge' },
+  'bond-wavyWedge': { kind: 'bond', order: 1, display: 'wavyWedge' },
+  'bond-hydrogen': { kind: 'bond', order: 1, display: 'hydrogen' },
+  'bond-ionic': { kind: 'bond', order: 1, display: 'ionic' },
+  'bond-variable': { kind: 'bond', order: 1, display: 'solid', variable: true },
   'bond-hash': { kind: 'bond', order: 1, display: 'hash' },
   'bond-bold': { kind: 'bond', order: 1, display: 'bold' },
   'bond-dash': { kind: 'bond', order: 1, display: 'dash' },
@@ -181,6 +190,8 @@ export const TOOLS: Record<string, Tool> = {
   'arrow-equilibrium': { kind: 'arrow', style: { headStyle: 'halfLeft', tailStyle: 'halfLeft', equilibrium: true } },
   'arrow-retro': { kind: 'arrow', style: { headType: 'angle', retro: true } },
   'arrow-nogo': { kind: 'arrow', style: { noGo: true } },
+  'arrow-nogo-hash': { kind: 'arrow', style: { noGo: true, noGoKind: 'hash' } },
+  'arrow-dipole': { kind: 'arrow', style: { dipole: true } },
   'arrow-curved': { kind: 'arrow', style: { sweep: 120 * DEG } },
   'arrow-fishhook': { kind: 'arrow', style: { sweep: 120 * DEG, headStyle: 'halfLeft' } },
   'arrow-s': { kind: 'arrow', style: { sweep: 120 * DEG, s: true } },
@@ -195,9 +206,11 @@ export const TOOLS: Record<string, Tool> = {
   'shape-circle': { kind: 'shape', shape: { kind: 'oval' }, from: 'center' },
   'shape-circle-filled': { kind: 'shape', shape: { kind: 'oval', filled: true }, from: 'center' },
   'shape-oval': { kind: 'shape', shape: { kind: 'oval' }, from: 'corner' },
+  'shape-oval-shadow': { kind: 'shape', shape: { kind: 'oval', shadow: true }, from: 'corner' },
   'shape-line': { kind: 'shape', shape: { kind: 'line' }, from: 'corner' },
   'shape-line-dashed': { kind: 'shape', shape: { kind: 'line', dashed: true }, from: 'corner' },
   'shape-line-bold': { kind: 'shape', shape: { kind: 'line', bold: true }, from: 'corner' },
+  'shape-freeform': { kind: 'pen' },
   'bracket-square': { kind: 'bracket', bracket: 'square' },
   'bracket-round': { kind: 'bracket', bracket: 'round' },
   'bracket-curly': { kind: 'bracket', bracket: 'curly' },
@@ -210,6 +223,9 @@ export const TOOLS: Record<string, Tool> = {
   'sym-minus': { kind: 'symbol', symbol: 'CircleMinus' },
   'sym-delta-plus': { kind: 'symbol', symbol: 'DeltaPlus' },
   'sym-delta-minus': { kind: 'symbol', symbol: 'DeltaMinus' },
+  'sym-radical-cation': { kind: 'symbol', symbol: 'RadicalCation' },
+  'sym-radical-anion': { kind: 'symbol', symbol: 'RadicalAnion' },
+  'sym-dagger': { kind: 'mark', text: '†' },
   'sym-ddagger': { kind: 'mark', text: '‡' },
 };
 for (const t of TEMPLATES) TOOLS[`tpl-${t.id}`] = { kind: 'template', id: t.id };
@@ -254,7 +270,7 @@ interface Drag {
   shift: boolean;
   alt: boolean;
   ctrl: boolean;
-  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'reshape' | 'turn3d' | 'guide';
+  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'pen' | 'reshape' | 'turn3d' | 'guide';
   last: Vec;
   panOrigin?: { ox: number; oy: number };
   /** The arrow or shape handle being dragged. */
@@ -470,7 +486,7 @@ export class Editor {
   escapeHasWork(): boolean {
     const s = this.sel;
     return !!(s.atoms.size || s.bonds.size || s.captions.size || s.arrows.size || s.shapes.size) || this.dragging || this.captionOpen()
-      || this.hotNow() || this.route !== null || this.cropping !== null;
+      || this.hotNow() || this.route !== null || this.pen !== null || this.cropping !== null;
   }
 
   /** The keyboard highlight is on an atom or bond of this drawing. */
@@ -534,6 +550,8 @@ export class Editor {
    * first where it starts), and the direction dragged out at each (null: the usual smooth turn).
    */
   route: { from: PushEnd; at: Vec[]; dirs: (Vec | null)[] } | null = null;
+  /** A freeform being drawn with the pen: its points so far, and the way it runs through each one dragged out. */
+  pen: { at: Vec[]; dirs: (Vec | null)[] } | null = null;
   /** The join or place on a curved arrow that was right-clicked. */
   contextSpot: { id: number; join?: number; t?: number } | null = null;
   /**
@@ -703,6 +721,8 @@ export class Editor {
     this.toolName = name;
     // (a curved arrow half drawn through points is dropped)
     if (this.route) { this.route = null; this.requestOverlay(); }
+    // (and so is a freeform half drawn: it ends where it got to)
+    if (this.pen && t.kind !== 'pen') this.finishPen(false);
     this.onToolChange(name);
     this.showPointer(false);
     this.requestOverlay();
@@ -1085,6 +1105,13 @@ export class Editor {
       this.drag = { start: p, startScreen: { x: e.clientX - rect.left, y: e.clientY - rect.top }, hit: null, button: 0, moved: false, shift: e.shiftKey, alt: e.altKey, ctrl: false, mode: 'sketch', last: p, path: [p] };
       return;
     }
+    // the Freeform pen: each press puts the next point down (drag out from it to curve through it)
+    if (e.button === 0 && !this.painter && this.tool.kind === 'pen') {
+      this.r.overlay.setPointerCapture(e.pointerId);
+      const p = this.wallPoint(this.docPoint(e)), rect = this.r.overlay.getBoundingClientRect();
+      this.drag = { start: p, startScreen: { x: e.clientX - rect.left, y: e.clientY - rect.top }, hit: null, button: 0, moved: false, shift: e.shiftKey, alt: e.altKey, ctrl: false, mode: 'pen', last: p };
+      return;
+    }
     this.keyHot = null;
     this.r.overlay.setPointerCapture(e.pointerId);
     const p = this.wallPoint(this.docPoint(e));
@@ -1190,6 +1217,13 @@ export class Editor {
       this.requestOverlay(e.timeStamp);
       return;
     }
+    if (d.mode === 'pen') {
+      const rect = this.r.overlay.getBoundingClientRect();
+      if (Math.hypot(e.clientX - rect.left - d.startScreen.x, e.clientY - rect.top - d.startScreen.y) > 3) d.moved = true;
+      d.last = this.wallPoint(this.docPoint(e));
+      this.requestOverlay(e.timeStamp);
+      return;
+    }
     if (d.mode === 'sketch') {
       // every point the pen reported, for smooth ink
       for (const c of e.getCoalescedEvents?.() ?? [e]) d.path!.push(this.wallPoint(this.docPoint(c)));
@@ -1204,7 +1238,7 @@ export class Editor {
       d.moved = true;
       if (d.mode === 'none') d.mode = this.dragModeFor(d);
       if (d.mode === 'reshape') this.doc.begin('Bend arrow');
-      if (d.mode === 'handle') this.doc.begin(d.handle!.which === 'mid' || d.handle!.which[0] === 'b' ? 'Bend arrow' : this.cropping === d.handle!.id ? 'Crop picture' : 'Resize');
+      if (d.mode === 'handle') this.doc.begin(d.handle!.which === 'mid' || d.handle!.which[0] === 'b' ? 'Bend arrow' : d.handle!.which === 'ea' || d.handle!.which === 'eb' ? 'Reshape arc' : this.cropping === d.handle!.id ? 'Crop picture' : 'Resize');
       if (d.mode === 'rotate') this.doc.begin('Rotate');
       if (d.mode === 'move') {
         this.r.overlay.style.cursor = d.ctrl ? 'copy' : 'grabbing';
@@ -1367,7 +1401,7 @@ export class Editor {
           // a half head keeps its barb on the outside of an S's last bend
           if (h.which[0] === 'b' && headBend(r) !== headBend({ ...r, ...patch })) Object.assign(patch, { headStyle: swapHalf(r.headStyle), tailStyle: swapHalf(r.tailStyle) });
           // bent by hand, it keeps that bend from now on (Clean Up Arrow lets it find its own way again)
-          if ((h.which === 'mid' || h.which[0] === 'b') && r.pin) patch = { ...patch, bent: true };
+          if ((h.which === 'mid' || h.which[0] === 'b' || h.which === 'ea' || h.which === 'eb') && r.pin) patch = { ...patch, bent: true };
           // a connector's end sticks to the connection point it is dropped on, and comes loose elsewhere
           if ((h.which === 'tail' || h.which === 'head') && (this.glueArrows || r.from || r.to || r.elbow)) {
             const key = h.which === 'tail' ? 'from' : 'to';
@@ -1424,6 +1458,7 @@ export class Editor {
       case 'fragment':
         return 'draw';
       case 'sketch':
+      case 'pen':
       case 'newman':
         return 'none';
       case 'perspective':
@@ -1461,6 +1496,11 @@ export class Editor {
     if (!d) return;
     if (d.moved) this.showPointer(e.ctrlKey || e.metaKey);
     const p = this.wallPoint(this.docPoint(e));
+    if (d.mode === 'pen') {
+      if (e.type !== 'pointercancel') this.penPress(d.start, d.moved ? sub(d.last, d.start) : null);
+      this.requestOverlay(e.timeStamp);
+      return;
+    }
     if (d.mode === 'sketch') {
       // a stroke we cancel ourselves (two fingers came down, or a long press) is not ink; one the
       // system cancels at the lift (Safari does, when iPadOS wants the pencil) still is
@@ -1578,6 +1618,7 @@ export class Editor {
     if (this.captionEd?.hit(p)) return;
     // drawing through points: a double-click ends the arrow there
     if (this.route) { this.finishRoute(); return; }
+    if (this.pen) { this.finishPen(false); return; }
     // on a selected curved arrow: a join comes out, anywhere else on its line a join goes in
     const spot = e.button === 0 ? this.pathSpotAt(p) : null;
     if (spot && energyFrameOf(this.doc, 'arrow', spot.id) === null && diagramFrameOf(this.doc, 'arrow', spot.id) === null) {
@@ -1875,6 +1916,7 @@ export class Editor {
       }
       case 'bond': {
         if (t.hapto) { this.clickHapto(h, p); return; }
+        if (t.variable) { this.clickVariable(h); return; }
         // the second click of a double-click on an atom takes back the first click's bond and edits the label
         const last = this.lastSprout;
         this.lastSprout = null;
@@ -1945,12 +1987,21 @@ export class Editor {
         const flip = dist(p, a2) < dist(p, a1);
         doc.updateBond(id, { order: 1, display: 'dative', ...(flip ? { a1: b.a2, a2: b.a1 } : {}) });
       }
-    } else if (t.display === 'wedge' || t.display === 'hashWedge') {
+    } else if (isWedge(t.display)) {
       if (b.display === t.display) doc.updateBond(id, { a1: b.a2, a2: b.a1 });
       else {
         // narrow end at the atom nearer the click
         const a1 = doc.atoms.get(b.a1)!, a2 = doc.atoms.get(b.a2)!;
         const flip = dist(p, a2) < dist(p, a1);
+        doc.updateBond(id, { order: 1, display: t.display, ...(flip ? { a1: b.a2, a2: b.a1 } : {}) });
+      }
+    } else if (t.display === 'hydrogen' || t.display === 'ionic') {
+      // a hydrogen bond starts at its H, an ionic bond at its positive end
+      if (b.display === t.display) doc.updateBond(id, { display: 'solid' });
+      else {
+        const a1 = doc.atoms.get(b.a1)!, a2 = doc.atoms.get(b.a2)!;
+        const first = (a: Atom) => (t.display === 'hydrogen' ? a.z === 1 || a.label === 'H' : a.charge > 0);
+        const flip = first(a2) && !first(a1);
         doc.updateBond(id, { order: 1, display: t.display, ...(flip ? { a1: b.a2, a2: b.a1 } : {}) });
       }
     } else {
@@ -2354,6 +2405,45 @@ export class Editor {
   }
 
   /**
+   * The variable attachment tool's drag: from a group (or empty space, for a new carbon) into a
+   * ring, bonding it to a variable attachment point in the ring's middle that stands for any of
+   * the ring's atoms. Clicking ring atoms afterwards narrows down which ones (clickVariable).
+   */
+  private dragVariable(d: Drag, p: Vec): void {
+    const doc = this.doc;
+    const ring = ringAround(doc, p);
+    if (!ring) return;
+    const h = this.hitTest(d.start);
+    let from = h?.kind === 'atom' ? doc.atoms.get(h.id) : undefined;
+    if (from && (from.multi || ring.includes(from.id))) return;
+    from ??= doc.addAtom(d.start.x, d.start.y);
+    const at = doc.centreOf({ multi: ring })!;
+    const pt = doc.addAtom(at.x, at.y, 0, { multi: ring.slice(), ringOf: ring.slice(), variable: true, ...(from.s && from.s !== 1 ? { s: from.s } : {}) });
+    doc.addBond(from.id, pt.id, 1, 'solid', from.s && from.s !== 1 ? { s: from.s } : {});
+    this.lastEdited = from.id;
+    this.sel = emptySel();
+    this.sel.bonds.add(doc.adj.get(pt.id)![0]);
+  }
+
+  /**
+   * The variable attachment tool's click on a ring atom: add it to the atoms a variable attachment
+   * on its ring stands for, or take it out (at least two stay).
+   */
+  private clickVariable(h: Hit): void {
+    const doc = this.doc;
+    if (h?.kind !== 'atom') return;
+    for (const c of doc.centresOf.get(h.id) ?? []) {
+      const pt = doc.atoms.get(c);
+      if (!pt?.variable) continue;
+      const has = pt.multi!.includes(h.id);
+      if (has && pt.multi!.length <= 2) return;
+      doc.edit(has ? 'Remove attachment atom' : 'Add attachment atom', () => doc.updateAtom(c, { multi: has ? pt.multi!.filter((m) => m !== h.id) : [...pt.multi!, h.id] }));
+      this.changed();
+      return;
+    }
+  }
+
+  /**
    * The hapto tool's click. On a ring (inside it) or a bond: a new metal bonded to its middle,
    * on the side away from the rest of the structure. On a hapto bond: draw it to each atom
    * instead of to the middle, or back. On a metal with atoms selected: bond it to their middle
@@ -2463,6 +2553,8 @@ export class Editor {
     }
     if (t.kind === 'bond' && t.hapto) {
       doc.edit('Hapto bond', () => this.dragHapto(d, p));
+    } else if (t.kind === 'bond' && t.variable) {
+      doc.edit('Variable attachment', () => this.dragVariable(d, p));
     } else if (t.kind === 'bond') {
       doc.edit('Bond', () => {
         const a = startAtom ?? doc.addAtom(start.x, start.y);
@@ -2806,6 +2898,64 @@ export class Editor {
     });
     this.changed();
     return true;
+  }
+
+  /**
+   * A press of the Freeform pen at `p` (`dir` the way it was dragged out): the first point, the
+   * next one, or, back on the first point, the end of a closed shape.
+   */
+  private penPress(p: Vec, dir: Vec | null): void {
+    const pen = this.pen;
+    if (!pen) {
+      this.pen = { at: [p], dirs: [dir] };
+      this.onHint('Click each next point (drag out from it to curve through it). Click the first point to close the shape; double-click or press Enter to end it open. Backspace takes back a point; Esc stops.');
+      this.requestOverlay();
+      return;
+    }
+    const last = pen.at[pen.at.length - 1];
+    if (pen.at.length >= 3 && dist(p, pen.at[0]) < this.tol(5)) {
+      if (dir) pen.dirs[0] = dir;
+      this.finishPen(true);
+      return;
+    }
+    if (dist(p, last) < this.tol(3)) { if (dir) pen.dirs[pen.dirs.length - 1] = dir; return; }
+    pen.at.push(p);
+    pen.dirs.push(dir);
+  }
+
+  /** End the freeform being drawn: closed back to its first point, or open at its last. Points only clicked make straight sides; any point dragged out makes it smooth. */
+  finishPen(closed: boolean): boolean {
+    const pen = this.pen;
+    if (!pen) return false;
+    this.pen = null;
+    this.onHint('');
+    this.requestOverlay();
+    const at = pen.at;
+    if (at.length < (closed ? 3 : 2)) return false;
+    const smooth = pen.dirs.some((d) => !!d);
+    const pts = smooth ? smoothThrough(at, closed, pen.dirs) : straightThrough(at, closed);
+    const lw = this.doc.style.lineWidth;
+    this.doc.edit('Freeform', () => {
+      const s = this.doc.addShape(freeformShape(pts, closed, { lineWidth: lw }));
+      this.selectOnly({ kind: 'shape', id: s.id });
+    });
+    this.changed();
+    return true;
+  }
+
+  /** Freeform keys: Enter ends it open, Backspace takes back a point, Esc stops without a shape. */
+  private penKey(chord: string): boolean {
+    const pen = this.pen;
+    if (!pen) return false;
+    if (chord === 'Escape') { this.pen = null; this.onHint(''); this.requestOverlay(); return true; }
+    if (chord === 'Backspace' || chord === 'Delete') {
+      pen.at.pop(); pen.dirs.pop();
+      if (!pen.at.length) { this.pen = null; this.onHint(''); }
+      this.requestOverlay();
+      return true;
+    }
+    if (chord === 'Enter') { this.finishPen(false); return true; }
+    return false;
   }
 
   /** Stop drawing through points without an arrow (Esc), or take back the last point (Backspace). */
@@ -3207,6 +3357,7 @@ export class Editor {
   private symbolSize(kind: SymbolKind): number {
     if (kind === 'LonePair') return 2.6;
     if (kind === 'CirclePlus' || kind === 'CircleMinus') return 4.5;
+    if (kind === 'RadicalCation' || kind === 'RadicalAnion') return 6.5;
     if (kind === 'DeltaPlus' || kind === 'DeltaMinus') return 0.9 * this.doc.style.bondLength;
     return 1.4;
   }
@@ -3254,8 +3405,14 @@ export class Editor {
         const n = perp(dir);
         box = { x1: at.x - n.x * 1.12, y1: at.y - n.y * 1.12, x2: at.x + n.x * 1.12, y2: at.y + n.y * 1.12 };
       } else if (kind === 'Electron') box = { x1: at.x, y1: at.y, x2: at.x, y2: at.y };
+      // a radical ion: its dot, then the middle of its sign
+      else if (kind === 'RadicalCation' || kind === 'RadicalAnion') box = { x1: at.x - 1.5, y1: at.y, x2: at.x + 1.5, y2: at.y };
       else box = { x1: at.x - size / 2, y1: at.y - size / 2, x2: at.x + size / 2, y2: at.y + size / 2 };
       this.sel.shapes.add(doc.addShape({ kind: 'symbol', symbol: kind, ...box }).id);
+      // a radical cation or anion: the atom is a radical with that charge, shown by the symbol
+      if (atom && (kind === 'RadicalCation' || kind === 'RadicalAnion')) {
+        doc.updateAtom(atom.id, { radical: 'doublet', charge: atom.charge + (kind === 'RadicalCation' ? 1 : -1), hideCharge: true });
+      }
       // a radical's dot makes the atom a radical (one hydrogen fewer)
       if (atom && kind === 'Electron' && !atom.radical) doc.updateAtom(atom.id, { radical: 'doublet' });
       if (atom && circled) doc.updateAtom(atom.id, { charge: atom.charge + (kind === 'CirclePlus' ? 1 : -1), hideCharge: true });
@@ -5349,7 +5506,7 @@ export class Editor {
     // Tab moves on through the window's buttons unless the drawing has the keys (or the mouse)
     if (/^(Shift\+)?Tab$/.test(chord) && !this.pointerInside && target !== this.r.overlay) return;
     // drawing a curved arrow through points: Enter ends it, Backspace takes back a point, Esc stops
-    if (this.routeKey(chord)) { e.preventDefault(); return; }
+    if (this.routeKey(chord) || this.penKey(chord)) { e.preventDefault(); return; }
     // a selected cyclohexane: Tab through its shapes (flat, chair, flipped chair, boat); on a chair
     // with substituents Tab and ] walk it round, [ walks it back, and Shift+Tab flips it; \ goes
     // between flat and chair
@@ -5962,6 +6119,14 @@ export class Editor {
     const st = doc.style;
     const caps = [...this.sel.captions].map((id) => doc.captions.get(id)).filter((c): c is Caption => !!c);
     const shapes = [...this.sel.shapes].map((id) => doc.shapes.get(id)).filter((s): s is Shape => !!s && s.kind === 'geo');
+    // Align Left, Center or Right with atom labels picked lines the labels up (Style panel ▸ Label alignment)
+    if (f.kind === 'align' && f.j !== 'justify') {
+      const labelled = [...this.sel.atoms].map((id) => doc.atoms.get(id)).filter((a): a is Atom => !!a && (!!a.label || a.z !== 6 || !!a.showCarbon) && !a.multi);
+      if (labelled.length) {
+        doc.edit('Label alignment', () => { for (const a of labelled) doc.updateAtom(a.id, labelAlignPatch(doc, a, f.j as LabelAlign)); });
+        if (!caps.length && !shapes.length) { this.requestScene(); this.changed(); return true; }
+      }
+    }
     if (!caps.length && !shapes.length) return false;
     doc.edit('Format text', () => {
       for (const c of caps) {
@@ -6740,7 +6905,7 @@ export class Editor {
     const doc = this.doc;
     const t = this.tool;
     if (d.mode === 'draw') {
-      if (t.kind === 'bond' && !t.hapto) {
+      if (t.kind === 'bond' && !t.hapto && !t.variable) {
         const startAtom = d.hit?.kind === 'atom' ? doc.atoms.get(d.hit.id) ?? null : null;
         const start: Vec = startAtom ?? d.start;
         const L = startAtom ? bondLength(doc, startAtom) : doc.style.bondLength;
@@ -6811,6 +6976,38 @@ export class Editor {
     drawCursorAids(ctx, this.pointer, px, readout, hintLines(hints), { dark: this.dark, look: a.look });
   }
 
+  /**
+   * The atoms a variable attachment can be on, circled (dashed) while its bond or point is selected
+   * or the Variable Attachment tool is in use, as ChemDraw shows them.
+   */
+  private drawVariableAtoms(ctx: CanvasRenderingContext2D, px: number): void {
+    const doc = this.doc;
+    const tool = this.tool.kind === 'bond' && !!this.tool.variable;
+    const points = new Set<number>();
+    for (const a of doc.atoms.values()) {
+      if (!a.variable || !a.multi) continue;
+      const picked = this.sel.atoms.has(a.id) || (doc.adj.get(a.id) ?? []).some((bid) => this.sel.bonds.has(bid));
+      if (tool || picked) points.add(a.id);
+    }
+    if (!points.size) return;
+    ctx.save();
+    ctx.strokeStyle = this.dark ? MARKS.dark.selLine : MARKS.light.selLine;
+    ctx.lineWidth = 1.2 * px;
+    ctx.setLineDash([3 * px, 2 * px]);
+    for (const id of points) {
+      const c = doc.atoms.get(id)!;
+      const r = doc.style.bondLength * 0.3 * (c.s ?? 1);
+      for (const m of c.multi!) {
+        const a = doc.atoms.get(m);
+        if (!a) continue;
+        ctx.beginPath();
+        ctx.arc(a.x, a.y, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
   private drawOverlay(): void {
     this.captionEd?.place();
     const ctx = this.r.clearOverlay();
@@ -6865,6 +7062,7 @@ export class Editor {
         else if (sh) outlineShape(ctx, sh);
       }
     }
+    this.drawVariableAtoms(ctx, px);
     if (this.showRoles && s.arrows.size === 1 && !this.drag) this.drawRoles(ctx, [...s.arrows][0], px);
     // a selected Smart Scheme: a dashed box round each species, numbered, and + buttons to add one
     const smartId = this.drag?.moved ? null : this.selectedSmart();
@@ -6952,6 +7150,32 @@ export class Editor {
       for (const q of route.at) { ctx.beginPath(); ctx.arc(q.x, q.y, 2.5 * px, 0, Math.PI * 2); ctx.fill(); }
       ctx.restore();
     }
+    // the freeform being drawn: its sides so far and on to the pointer, its points as dots
+    const pen = this.pen;
+    if (pen || (this.drag?.mode === 'pen')) {
+      const d = this.drag;
+      const at = pen ? [...pen.at] : [], dirs = pen ? [...pen.dirs] : [];
+      if (d?.mode === 'pen') {
+        if (!at.length || dist(at[at.length - 1], d.start) > this.tol(3)) { at.push(d.start); dirs.push(null); }
+        if (d.moved) dirs[dirs.length - 1] = sub(d.last, d.start);
+      } else if (at.length && dist(this.pointer, at[at.length - 1]) > this.tol(3)) { at.push(this.pointer); dirs.push(null); }
+      ctx.save();
+      ctx.strokeStyle = PREVIEW;
+      ctx.lineWidth = 1.5 * px;
+      if (at.length > 1) {
+        const pts = dirs.some((x) => !!x) ? smoothThrough(at, false, dirs) : straightThrough(at, false);
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i + 2 < pts.length; i += 3) ctx.bezierCurveTo(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, pts[i + 2].x, pts[i + 2].y);
+        ctx.stroke();
+      }
+      if (d?.mode === 'pen' && d.moved) { ctx.setLineDash([2 * px, 2 * px]); ctx.beginPath(); ctx.moveTo(d.start.x, d.start.y); ctx.lineTo(d.last.x, d.last.y); ctx.stroke(); ctx.setLineDash([]); }
+      ctx.fillStyle = PREVIEW;
+      for (const q of pen?.at ?? []) { ctx.beginPath(); ctx.arc(q.x, q.y, 2.5 * px, 0, Math.PI * 2); ctx.fill(); }
+      // the first point is where a click closes the shape
+      if (pen && pen.at.length >= 3) { ctx.beginPath(); ctx.arc(pen.at[0].x, pen.at[0].y, 5 * px, 0, Math.PI * 2); ctx.stroke(); }
+      ctx.restore();
+    }
     // handles on selected arrows and shapes
     const handles = this.drag?.mode === 'move' ? [] : this.handles();
     if (handles.length) {
@@ -6973,8 +7197,35 @@ export class Editor {
         const to = k % 3 === 1 ? pts[k - 1] : k % 3 === 2 ? pts[k + 1] : null;
         if (to) { ctx.moveTo(hd.at.x, hd.at.y); ctx.lineTo(to.x, to.y); }
       }
+      // an arc arrow's whole ellipse (or circle), dashed, with spokes out to its axis diamonds
+      for (const hd of handles) {
+        if (hd.kind !== 'arrow' || hd.which !== 'ea') continue;
+        const r = doc.arrows.get(hd.id);
+        const f = r && arrowEllipseFrame(r);
+        if (!f) continue;
+        for (let i = 0; i <= 72; i++) {
+          const t = (i / 72) * Math.PI * 2;
+          const q = add(f.c, add(mul(f.u, Math.cos(t)), mul(f.v, Math.sin(t))));
+          if (i) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y);
+        }
+        for (const ax of [f.u, f.v]) { ctx.moveTo(f.c.x, f.c.y); ctx.lineTo(f.c.x + ax.x, f.c.y + ax.y); }
+      }
       ctx.stroke();
       ctx.restore();
+      // while a diamond is dragged: how wide the ellipse is for its height
+      const dh = this.drag?.mode === 'handle' ? this.drag.handle : undefined;
+      if (dh && dh.kind === 'arrow' && (dh.which === 'ea' || dh.which === 'eb')) {
+        const r = doc.arrows.get(dh.id);
+        const f = r && arrowEllipseFrame(r);
+        const at = f && add(f.c, dh.which === 'ea' ? f.u : f.v);
+        if (f && at) {
+          ctx.save();
+          ctx.font = `${11 * px}px system-ui, sans-serif`;
+          ctx.fillStyle = PREVIEW;
+          ctx.fillText(`Width/Height ${Math.round((len(f.u) / Math.max(len(f.v), 1e-6)) * 100)}%`, at.x + 8 * px, at.y - 8 * px);
+          ctx.restore();
+        }
+      }
       for (const hd of handles) {
         ctx.beginPath();
         if (hd.kind === 'shape' && hd.id === this.cropping) {
@@ -6990,7 +7241,7 @@ export class Editor {
         }
         if (hd.which === 'mid') ctx.arc(hd.at.x, hd.at.y, k * 1.1, 0, Math.PI * 2);
         else if (hd.which[0] === 'b' && (Number(hd.which.slice(1)) + 1) % 3 === 0) ctx.arc(hd.at.x, hd.at.y, k * 1.1, 0, Math.PI * 2);
-        else if (hd.which[0] === 'b') { ctx.moveTo(hd.at.x, hd.at.y - k * 1.2); ctx.lineTo(hd.at.x + k * 1.2, hd.at.y); ctx.lineTo(hd.at.x, hd.at.y + k * 1.2); ctx.lineTo(hd.at.x - k * 1.2, hd.at.y); ctx.closePath(); }
+        else if (hd.which[0] === 'b' || hd.which === 'ea' || hd.which === 'eb') { ctx.moveTo(hd.at.x, hd.at.y - k * 1.2); ctx.lineTo(hd.at.x + k * 1.2, hd.at.y); ctx.lineTo(hd.at.x, hd.at.y + k * 1.2); ctx.lineTo(hd.at.x - k * 1.2, hd.at.y); ctx.closePath(); }
         else ctx.rect(hd.at.x - k, hd.at.y - k, 2 * k, 2 * k);
         // the handle or join the arrow keys move is filled in
         const active = this.activeHandle?.id === hd.id && this.activeHandle.which === hd.which && hd.kind === 'arrow';
@@ -7208,6 +7459,18 @@ export class Editor {
       ctx.lineWidth = 1 / this.r.view.scale;
       ctx.strokeRect(Math.min(d.start.x, d.last.x), Math.min(d.start.y, d.last.y), Math.abs(d.last.x - d.start.x), Math.abs(d.last.y - d.start.y));
       ctx.setLineDash([]);
+    } else if (t.kind === 'bond' && t.variable) {
+      // the line from the group into the ring, with the ring's atoms outlined
+      const ring = ringAround(doc, d.last);
+      const from = startAtom ?? d.start;
+      const at = ring ? doc.centreOf({ multi: ring })! : d.last;
+      poly([from, at], false);
+      if (ring) {
+        ctx.save();
+        ctx.setLineDash([3 / this.r.view.scale, 2 / this.r.view.scale]);
+        poly(ring.map((id) => doc.atoms.get(id)!), true);
+        ctx.restore();
+      }
     } else if (t.kind === 'bond' && t.hapto) {
       // the line from one end's atom or π-system to the other's, with the π-system outlined
       const from = this.haptoEnd(d.start), to = this.haptoEnd(d.last, from.atom?.id);

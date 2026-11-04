@@ -282,4 +282,79 @@ describe('copying to ChemDraw', () => {
       expect(lone.querySelector(':scope > t')?.textContent).toBe('CH4');
     }
   });
+  it('writes a frame of its own width as the graphic\'s LineWidth, or BoldWidth when bold, and reads it back', () => {
+    const doc = newDoc();
+    doc.edit('Draw', () => {
+      doc.addShape({ kind: 'rect', x1: 0, y1: 0, x2: 80, y2: 40, rounded: true, radius: 6, lineWidth: 1.44 });
+      doc.addShape({ kind: 'line', x1: 0, y1: 60, x2: 80, y2: 60, bold: true, lineWidth: 3.6 });
+      doc.addShape({ kind: 'oval', x1: 100, y1: 0, x2: 140, y2: 40 });
+    });
+    for (const x of Object.values(copied(doc))) {
+      const [rect, line, oval] = ['Rectangle', 'Line', 'Oval'].map((k) => all(x, 'graphic').find((e) => e.getAttribute('GraphicType') === k)!);
+      expect(Number(rect.getAttribute('LineWidth'))).toBeCloseTo(1.44, 2);
+      expect(rect.hasAttribute('BoldWidth')).toBe(false);
+      // (the corner in hundredths of the box's own width)
+      expect(rect.getAttribute('CornerRadius')).toBe(String(Math.round((6 / 1.44) * 100)));
+      expect(Number(line.getAttribute('BoldWidth'))).toBeCloseTo(3.6, 2);
+      expect(line.hasAttribute('LineWidth')).toBe(false);
+      expect(oval.hasAttribute('LineWidth') || oval.hasAttribute('BoldWidth')).toBe(false);
+      const shapes = [...readCdxml(new XMLSerializer().serializeToString(x)).doc.shapes.values()];
+      const r = shapes.find((s) => s.kind === 'rect')!, l = shapes.find((s) => s.kind === 'line')!, o = shapes.find((s) => s.kind === 'oval')!;
+      expect(r.lineWidth).toBeCloseTo(1.44, 2);
+      expect(r.radius).toBeCloseTo(6, 1);
+      expect(l.lineWidth).toBeCloseTo(3.6, 2);
+      expect(o.lineWidth).toBeUndefined();
+    }
+  });
+  it('writes a turned picture with ChemDraw\'s RotationAngle, and a label\'s LabelDisplay as its justification', () => {
+    const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    const doc = newDoc();
+    doc.edit('Insert', () => { doc.addShape({ kind: 'picture', x1: 0, y1: 0, x2: 40, y2: 20, src: png, px: { w: 1, h: 1 }, rot: -30 } as never); });
+    for (const x of Object.values(copied(doc))) {
+      const eo = all(x, 'embeddedobject')[0];
+      expect(Number(eo.getAttribute('RotationAngle')) / 65536).toBeCloseTo(330, 3);
+      expect(eo.getAttribute('BoundingBox')!.split(' ').map(Number)).toEqual([0, 0, 40, 20]);
+      expect([...readCdxml(new XMLSerializer().serializeToString(x)).doc.shapes.values()][0].rot).toBeCloseTo(-30, 3);
+    }
+    // a ChemDraw label written with LabelDisplay: turned to run the other way, it says so too
+    const file = '<?xml version="1.0" encoding="UTF-8" ?><CDXML BondLength="14.40" LabelSize="10"><page id="1"><fragment id="2">'
+      + '<n id="3" p="100 100" NodeType="Fragment" LabelDisplay="Left"><t id="4" p="96 103.9" LabelJustification="Right" LabelAlignment="Right" Justification="Right"><s font="3" size="10" face="96">MeO2C</s></t></n>'
+      + '<n id="5" p="114.4 100"/><b id="6" B="3" E="5"/></fragment></page></CDXML>';
+    const opened = readCdxml(file).doc;
+    const me = [...opened.atoms.values()].find((a) => a.label)!;
+    opened.edit('Flip', () => { opened.updateAtom(me.id, { just: me.just === 'left' ? 'right' : 'left' }); });
+    const n = all(parse(writeCdxml(opened)), 'n').find((e) => e.getAttribute('id') === '3')!;
+    const lj = n.getElementsByTagName('t')[0].getAttribute('LabelJustification');
+    expect(n.getAttribute('LabelDisplay')).toBe(lj);
+    expect([...readCdxml(writeCdxml(opened)).doc.atoms.values()].find((a) => a.label)!.just).toBe(opened.atoms.get(me.id)!.just);
+  });
+  it('keeps a ChemDraw label\'s own inner fragment when copied back, while the label is unchanged (R28)', () => {
+    const file = '<?xml version="1.0" encoding="UTF-8" ?><CDXML BondLength="14.40" LabelSize="10"><page id="1"><fragment id="2">'
+      + '<n id="3" p="100 100" NodeType="Fragment"><fragment id="10"><n id="11" p="110 100" Element="15"/><n id="12" p="120 95"/><n id="13" p="120 105"/><n id="14" p="90 100" NodeType="ExternalConnectionPoint"/>'
+      + '<b id="15" B="11" E="12"/><b id="16" B="11" E="13"/><b id="17" B="14" E="11"/></fragment>'
+      + '<t id="4" p="96 103.9"><s font="3" size="10" face="96">PQz2</s></t></n>'
+      + '<n id="5" p="85.6 100"/><b id="6" B="3" E="5"/></fragment></page></CDXML>';
+    const doc = readCdxml(file).doc;
+    // moved 10 pt right after opening
+    doc.edit('Move', () => doc.moveAtoms(new Set([...doc.atoms.keys()]), 10, 0));
+    for (const x of Object.values(copied(doc))) {
+      const n = all(x, 'n').find((e) => e.getAttribute('NodeType') === 'Fragment')!;
+      const inner = n.getElementsByTagName('fragment')[0];
+      expect(inner).toBeDefined();
+      expect(all(inner, 'n')).toHaveLength(4);
+      expect(all(inner, 'b')).toHaveLength(3);
+      const p = all(inner, 'n').find((e) => e.getAttribute('Element') === '15')!.getAttribute('p')!.split(' ').map(Number);
+      expect(p[0]).toBeCloseTo(120, 1);
+      // its ids are new, and its bonds name its own atoms
+      const ids = all(x, '*').filter((e) => e.nodeName !== 'font').map((e) => e.getAttribute('id')).filter(Boolean);
+      expect(new Set(ids).size).toBe(ids.length);
+      const own = new Set(all(inner, 'n').map((e) => e.getAttribute('id')));
+      for (const b of all(inner, 'b')) { expect(own.has(b.getAttribute('B'))).toBe(true); expect(own.has(b.getAttribute('E'))).toBe(true); }
+    }
+    // a label changed here is written afresh
+    const a = [...doc.atoms.values()].find((v) => v.label)!;
+    doc.edit('Label', () => doc.updateAtom(a.id, { label: 'OMe' }));
+    const n2 = all(copied(doc).xml, 'n').find((e) => e.getElementsByTagName('t')[0]?.textContent === 'OMe')!;
+    expect(all(n2.getElementsByTagName('fragment')[0], 'n').some((e) => e.getAttribute('Element') === '15')).toBe(false);
+  });
 });

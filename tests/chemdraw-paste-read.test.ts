@@ -139,3 +139,27 @@ describe('ChemDraw shapes and highlights', () => {
     expect(0.27 * 14.4 * a.hl!.size!).toBeCloseTo(0.27 * 14.4 + 0.5, 6);
   });
 });
+
+describe("ChemDraw's own clipboard", () => {
+  it('reads the same as the saved drawing (ChemDraw puts only CDX on it, no CDXML)', () => {
+    const formats = readFileSync(dir + 'from-chemdraw/formats.txt', 'utf8');
+    expect(formats).toContain('ChemDraw Interchange Format');
+    expect(formats).not.toMatch(/xml/i);
+    const a = readCdxml(cdxToCdxml(new Uint8Array(readFileSync(dir + 'from-chemdraw/chemdraw-interchange-format.cdx')))).doc;
+    const b = fromChemDraw();
+    expect([a.atoms.size, a.bonds.size, a.shapes.size, a.captions.size]).toEqual([b.atoms.size, b.bonds.size, b.shapes.size, b.captions.size]);
+    expect(a.style.labelFace).toBe(97);
+    expect([...a.shapes.values()].filter((s) => s.kind === 'ring')).toHaveLength(2);
+    expect([...a.bonds.values()].filter((x) => x.crossing?.length).length).toBe([...b.bonds.values()].filter((x) => x.crossing?.length).length);
+  });
+});
+
+describe('frames pasted from ChemDraw', () => {
+  it('keep their line width in a drawing with thinner lines', () => {
+    const doc = fromChemDraw();
+    const frames = [...doc.shapes.values()].filter((s) => s.kind === 'rect');
+    const before = frames.map((s) => s.lineWidth ?? doc.style.lineWidth);
+    fitPasted(doc, ACS_1996);
+    frames.forEach((s, i) => expect(doc.shapes.get(s.id)!.lineWidth ?? ACS_1996.lineWidth).toBeCloseTo(before[i], 6));
+  });
+});
