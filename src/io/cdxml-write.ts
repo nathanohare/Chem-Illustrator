@@ -2801,9 +2801,9 @@ export function labelRuns(text: string, look: { supDigits: boolean; marks?: stri
     const m = look.marks?.[i];
     const base: TextRun = m === '^' || m === '*' ? { text: ch, sup: true } : m === '_' || m === ',' ? { text: ch, sub: true } : m === '=' ? { text: ch } : digits && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
     // the t of tBu in italics (the alkyl look)
-    const r: TextRun = m === '/' || m === '*' || m === ',' ? { ...base, italic: true } : base;
+    const r: TextRun = m === '/' || m === '*' || m === ',' ? { ...base, italic: true } : m === '!' ? { text: ch, bold: true } : base;
     const last = out[out.length - 1];
-    if (last && !!last.sup === !!r.sup && !!last.sub === !!r.sub && !!last.formula === !!r.formula && !!last.italic === !!r.italic) last.text += ch;
+    if (last && !!last.sup === !!r.sup && !!last.sub === !!r.sub && !!last.formula === !!r.formula && !!last.italic === !!r.italic && !!last.bold === !!r.bold) last.text += ch;
     else out.push(r);
   });
   return out.length ? out : [{ text, formula: true }];
