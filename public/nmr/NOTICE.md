@@ -17,7 +17,12 @@ two sources, so a structure that is already known shows its own measured shifts.
 same licences and credits.
 
 `nmr-net.dat` holds five small graph networks (weights only) trained by `scripts/nmr/train_net.py`
-on the same NMRShiftDB2 and CC BY/CC0 NMRBank data; they are a produced work of those sources and
-carry the same credits.
+on the same NMRShiftDB2 and CC BY/CC0 NMRBank data, plus unassigned peak lists from NMRexp; they
+are a produced work of those sources and carry the same credits.
+
+- **NMRexp** (Zenodo, doi 10.5281/zenodo.17296666, CC BY 4.0): experimental 1H and 13C peak lists
+  with structures, extracted from the supporting information of published articles. Contains data
+  from NMRexp (CC BY 4.0), DOI 10.5281/zenodo.17296666. Used to train the networks only; no records
+  are included in the app.
 
 No text from any article is included. Papers in the project's NMR test set were left out.

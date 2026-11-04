@@ -86,10 +86,25 @@ labels, scored on SI test set v1 (under 500 Da, OH/NH/SH 1H from the lookup for 
 | previously shipped | 1.827 | 4.50 | 0.168 |
 | original labels (control) | 1.816 | 4.55 | 0.167 |
 | conservative cleaning (about 3.5% of labels changed) | 1.763 | 4.61 | 0.166 |
-| full cleaning (shipped now) | 1.743 | 4.61 | 0.167 |
+| full cleaning | 1.743 | 4.61 | 0.167 |
 | full cleaning, 3 x h384-l6 (17 MB) | 1.779 | 4.61 | 0.165 |
 
 Cleaning helps 13C by about 0.07-0.08 ppm and leaves C-H 1H unchanged.
+
+NMRexp (2026-11-04): five networks of the same size trained on the cleaned labels plus 1.67 million
+unassigned NMRexp peak lists (Zenodo 10.5281/zenodo.17296666, CC BY 4.0; 1H lists kept when their H
+count matches the structure, 13C lists when the peak count is within 1 of the carbon environments),
+with an assignment-free loss: each molecule's predicted shifts are matched to its peak list
+(Hungarian matching, capped cost so OH/NH/SH peaks stay unmatched). NMRexp comes from journal SI
+files, so 439 of the test set's 4,239 compound skeletons are in it; those compounds are left out of
+the second score.
+
+| Networks | 13C MAE | 13C RMSE | 1H MAE |
+|---|---|---|---|
+| full cleaning, whole test set | 1.743 | 4.61 | 0.167 |
+| cleaning + NMRexp (shipped now), whole test set | 1.460 | 4.39 | 0.150 |
+| full cleaning, compounds not in NMRexp | 1.819 | 4.80 | 0.172 |
+| cleaning + NMRexp, compounds not in NMRexp | 1.540 | 4.59 | 0.155 |
 
 ## Phase 3: couplings and spectra
 
