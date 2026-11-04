@@ -75,6 +75,22 @@ the lookup, 13C MAE 1.83 ppm, 1H MAE 0.157 ppm (lookup alone 2.62 and 0.224; sin
 1.96-2.00 and 0.163-0.168). The file is 2.8 MB. The error bar is the expected absolute error,
 c0 + c1 x ensemble spread, fitted on the held-out papers.
 
+Label audit (2026-11-04): 5-fold cross-validated networks flagged swapped assignments, single
+outliers, wrong structures and referencing errors in the NMRShiftDB2 + NMRBank training labels
+(full cleaning changes about 11% of 13C labels); OH, NH and SH 1H labels are left out of training,
+since the app does not predict them. Five networks of the shipped size retrained on the cleaned
+labels, scored on SI test set v1 (under 500 Da, OH/NH/SH 1H from the lookup for every variant):
+
+| Networks (5 x h128-l5 unless noted) | 13C MAE | 13C RMSE | 1H MAE |
+|---|---|---|---|
+| previously shipped | 1.827 | 4.50 | 0.168 |
+| original labels (control) | 1.816 | 4.55 | 0.167 |
+| conservative cleaning (about 3.5% of labels changed) | 1.763 | 4.61 | 0.166 |
+| full cleaning (shipped now) | 1.743 | 4.61 | 0.167 |
+| full cleaning, 3 x h384-l6 (17 MB) | 1.779 | 4.61 | 0.165 |
+
+Cleaning helps 13C by about 0.07-0.08 ppm and leaves C-H 1H unchanged.
+
 ## Phase 3: couplings and spectra
 
 | Step | Script | Output |
