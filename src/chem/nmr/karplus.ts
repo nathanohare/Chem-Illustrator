@@ -170,3 +170,39 @@ function lambda(model: Model3d, nb: number[][], order: Map<string, number>, s: n
     default: return 0.4;
   }
 }
+
+/** A vicinal coupling between single protons of the NMR graph: proton ka of heavy atom a and
+ *  proton kb of heavy atom b (protons counted in the 3-D model's order). */
+export interface ProtonJ { a: number; ka: number; b: number; kb: number; j: number }
+
+/**
+ * The 3-D couplings on the NMR graph's atoms. heavy: the model atom of each graph atom (the
+ * model keeps the molfile's atom order). Atoms whose hydrogen count differs from the graph's
+ * are left out.
+ */
+export function graphCouplings3d(model: Model3d, heavy: number[], hCount: number[]): ProtonJ[] {
+  const toGraph = new Map(heavy.map((m, g) => [m, g] as [number, number]));
+  const hs = new Map<number, number[]>();
+  const hOf = (m: number) => {
+    let l = hs.get(m);
+    if (!l) {
+      l = [];
+      for (const b of model.bonds) {
+        const o = b.a === m ? b.b : b.b === m ? b.a : -1;
+        if (o >= 0 && model.atoms[o].z === 1) l.push(o);
+      }
+      l.sort((p, q) => p - q);
+      hs.set(m, l);
+    }
+    return l;
+  };
+  const out: ProtonJ[] = [];
+  for (const v of vicinal3d(model)) {
+    const a = toGraph.get(v.c1), b = toGraph.get(v.c2);
+    if (a === undefined || b === undefined) continue;
+    const la = hOf(v.c1), lb = hOf(v.c2);
+    if (la.length !== hCount[a] || lb.length !== hCount[b]) continue;
+    out.push({ a, ka: la.indexOf(v.h1), b, kb: lb.indexOf(v.h2), j: v.j });
+  }
+  return out;
+}
