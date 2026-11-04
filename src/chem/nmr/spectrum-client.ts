@@ -2,6 +2,7 @@
 // browsers), in which case callers simulate on the spot.
 
 import type { JGraph } from './coupling';
+import type { ProtonJ } from './karplus';
 import type { NmrQuality, PredictedSpectrum } from './spectrum';
 import type { SpectrumRequest, SpectrumResponse } from '../../worker/nmr-spectrum-worker';
 
@@ -30,12 +31,12 @@ function start(): Worker | null {
 }
 
 /** The spectrum, simulated in the background; null when no worker can run. */
-export function spectrumInBackground(g: JGraph, h1: number[], codes: string[], sf: number, quality: NmrQuality): Promise<PredictedSpectrum> | null {
+export function spectrumInBackground(g: JGraph, h1: number[], codes: string[], sf: number, quality: NmrQuality, pj?: ProtonJ[]): Promise<PredictedSpectrum> | null {
   const w = start();
   if (!w) return null;
   const id = next++;
   return new Promise((resolve, reject) => {
     waiting.set(id, { resolve, reject });
-    w.postMessage({ id, g, h1, codes, sf, quality } satisfies SpectrumRequest);
+    w.postMessage({ id, g, h1, codes, sf, quality, pj } satisfies SpectrumRequest);
   });
 }

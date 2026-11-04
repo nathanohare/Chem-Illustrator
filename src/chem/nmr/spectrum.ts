@@ -5,6 +5,7 @@
 
 import { predictCouplings, protonGroups, type JGraph, type ProtonGroup } from './coupling';
 import { lorentzian, transitions, type LineList } from './spin';
+import type { ProtonJ } from './karplus';
 
 export type NmrQuality = 'fast' | 'balanced' | 'accurate';
 /** Size of the largest cluster simulated exactly, in spin-1/2 equivalents (2^cap states); fast:
@@ -35,10 +36,46 @@ function firstOrder(shiftHz: number, partners: [number, number][], n: number, wi
   return { hz, int, w: hz.map(() => width) };
 }
 
-/** The structure's predicted 1H spectrum at sf MHz. h1: predicted shift per heavy atom (NaN when none). */
-export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 400, quality: NmrQuality = 'balanced', width = 0.9): PredictedSpectrum {
+/** Per-proton couplings on one atom that differ by more than this (Hz) make its protons separate spins. */
+const SPLIT = 0.5;
+/** Geminal coupling of an sp3 CH2 whose protons are told apart by their 3-D couplings, when coupling.ts gives none. */
+const GEM_SP3 = -12.5;
+
+/**
+ * The structure's predicted 1H spectrum at sf MHz. h1: predicted shift per heavy atom (NaN when
+ * none). pj: vicinal couplings from 3-D conformers (karplus.ts), which replace the 2-D values for
+ * their atom pairs; where the protons of one CH2 couple differently (axial and equatorial, or the
+ * two sides of a stereocentre), they are simulated as separate spins.
+ */
+export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 400, quality: NmrQuality = 'balanced', width = 0.9, pj: ProtonJ[] = []): PredictedSpectrum {
   const groups = protonGroups(g, h1, codes);
-  const cs = predictCouplings(g).filter((c) => g.atoms[c.a].el !== 'F' && g.atoms[c.b].el !== 'F');
+  let cs = predictCouplings(g).filter((c) => g.atoms[c.a].el !== 'F' && g.atoms[c.b].el !== 'F');
+  // 3-D couplings: per proton, and their mean per atom pair in place of the 2-D value
+  const perH = new Map<string, number>(), mean = new Map<string, { t: number; n: number }>();
+  for (const c of pj) {
+    const [a, ka, b, kb] = c.a < c.b ? [c.a, c.ka, c.b, c.kb] : [c.b, c.kb, c.a, c.ka];
+    perH.set(`${a}.${ka},${b}.${kb}`, c.j);
+    const m = mean.get(`${a},${b}`) ?? { t: 0, n: 0 };
+    m.t += c.j; m.n++; mean.set(`${a},${b}`, m);
+  }
+  if (mean.size) {
+    cs = cs.filter((c) => c.a === c.b || !mean.has(`${c.a},${c.b}`));
+    for (const [k, m] of mean) { const [a, b] = k.split(',').map(Number); cs.push({ a, b, j: m.t / m.n, kind: 'vic-3d' }); }
+  }
+  // atoms whose protons couple differently to some neighbour
+  const split = new Set<number>();
+  for (const k of mean.keys()) {
+    const [a, b] = k.split(',').map(Number);
+    for (const [x, y] of [[a, b], [b, a]]) {
+      if (g.atoms[x].h < 2) continue;
+      const avg = [...Array(g.atoms[x].h).keys()].map((kx) => {
+        let t = 0;
+        for (let ky = 0; ky < g.atoms[y].h; ky++) t += perH.get(x < y ? `${x}.${kx},${y}.${ky}` : `${y}.${ky},${x}.${kx}`) ?? NaN;
+        return t / g.atoms[y].h;
+      });
+      if (avg.every(Number.isFinite) && Math.max(...avg) - Math.min(...avg) > SPLIT) split.add(x);
+    }
+  }
   const HZ: number[] = [], INT: number[] = [], W: number[] = [];
   const push = (l: { hz: ArrayLike<number>; intensity?: ArrayLike<number>; int?: ArrayLike<number>; width?: ArrayLike<number>; w?: ArrayLike<number> }) => {
     const ii = (l.intensity ?? l.int)!, ww = (l.width ?? l.w)!;
@@ -68,10 +105,10 @@ export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 4
   // which is exact to first order, so every multiplet keeps all its splittings.
   const hAtoms = g.atoms.map((_, i) => i).filter((i) => !Number.isNaN(h1[i]) && g.atoms[i].h > 0);
   const jAt = new Map<string, number>();
-  for (const c of cs) if (c.a !== c.b) jAt.set(`${Math.min(c.a, c.b)},${Math.max(c.a, c.b)}`, c.j);
+  for (const c of cs) jAt.set(`${Math.min(c.a, c.b)},${Math.max(c.a, c.b)}`, c.j);
   const J = (a: number, b: number) => jAt.get(`${Math.min(a, b)},${Math.max(a, b)}`) ?? 0;
   const parent = new Map(hAtoms.map((i) => [i, i] as [number, number]));
-  const size = new Map(hAtoms.map((i) => [i, g.atoms[i].h + 1] as [number, number]));
+  const size = new Map(hAtoms.map((i) => [i, split.has(i) ? 2 ** g.atoms[i].h : g.atoms[i].h + 1] as [number, number]));
   const root = (i: number): number => { let r = i; while (parent.get(r)! !== r) r = parent.get(r)!; parent.set(i, r); return r; };
   const limit = 2 ** cap;
   const pairs = [...jAt.entries()].map(([k, j]) => { const [a, b] = k.split(',').map(Number); return { a, b, j }; })
@@ -87,19 +124,29 @@ export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 4
     if (merged > limit) continue;
     parent.set(rb, ra); size.set(ra, merged);
   }
+  // coupling between two protons: per proton where either atom's protons are told apart
+  const pairJ = (p: { atom: number; k: number }, q: { atom: number; k: number }): number => {
+    if (p.atom === q.atom) return p.k === q.k || !split.has(p.atom) ? 0 : (jAt.get(`${p.atom},${p.atom}`) ?? GEM_SP3);
+    if (split.has(p.atom) || split.has(q.atom)) {
+      const [x, y] = p.atom < q.atom ? [p, q] : [q, p];
+      const v = perH.get(`${x.atom}.${x.k},${y.atom}.${y.k}`);
+      if (v !== undefined) return v;
+    }
+    return J(p.atom, q.atom);
+  };
   const clusters = new Map<number, number[]>();
   for (const i of hAtoms) { const r = root(i); if (!clusters.has(r)) clusters.set(r, []); clusters.get(r)!.push(i); }
   for (const atoms of clusters.values()) {
     const inC = new Set(atoms);
     const xs = hAtoms.filter((x) => !inC.has(x) && atoms.some((a) => J(a, x) !== 0));
-    const spinAtoms: { atom: number; obs: boolean }[] = [];
-    for (const a of atoms) for (let k = 0; k < g.atoms[a].h; k++) spinAtoms.push({ atom: a, obs: true });
-    for (const x of xs) for (let k = 0; k < g.atoms[x].h; k++) spinAtoms.push({ atom: x, obs: false });
+    const spinAtoms: { atom: number; k: number; obs: boolean }[] = [];
+    for (const a of atoms) for (let k = 0; k < g.atoms[a].h; k++) spinAtoms.push({ atom: a, k, obs: true });
+    for (const x of xs) for (let k = 0; k < g.atoms[x].h; k++) spinAtoms.push({ atom: x, k, obs: false });
     if (spinAtoms.length === 1 || !xs.length && atoms.length === 1 && g.atoms[atoms[0]].h === 1) {
       push({ hz: [h1[atoms[0]] * sf], int: [1], w: [width] });
       continue;
     }
-    const jm = spinAtoms.map((p) => spinAtoms.map((q) => (p.atom === q.atom ? 0 : J(p.atom, q.atom))));
+    const jm = spinAtoms.map((p) => spinAtoms.map((q) => pairJ(p, q)));
     push(transitions({ shifts: spinAtoms.map((p) => h1[p.atom]), j: jm, nuclei: spinAtoms.map((p) => (p.obs ? '1H' : 'X')), widths: width }, sf));
   }
   return { sf, lines: sorted(HZ, INT, W, sf), groups };

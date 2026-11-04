@@ -98,8 +98,14 @@ Cleaning helps 13C by about 0.07-0.08 ppm and leaves C-H 1H unchanged.
 | Couplings | `src/chem/nmr/coupling.ts` | J (Hz) by bond path from the 2D structure: geminal (sp2, and sp3 CH2 when diastereotopic), vicinal (rotating sp3, alkene cis/trans, aromatic ortho in 5- and 6-rings), meta, allylic, propargylic, H-F; first-order multiplet text per proton group |
 | Simulation | `src/chem/nmr/spin.ts` | exact spin simulation, a TypeScript port of Open-NMR's `nmrsuite.spin` (BSD-3); parity test `tests/nmr-spin.test.ts` against nmrsuite line lists |
 | Score | `j_dump.ts` (esbuild bundle, Node) then `j_bench.py records-v1.jsonl j-out.jsonl` | multiplicity exact-match rate and J errors against published signals, matched through predicted shifts |
+| 3-D couplings | `src/chem/nmr/karplus.ts`; scored by `j3d_bench.ts` (esbuild bundle, Node) | Haasnoot–de Leeuw–Altona 3JHH per conformer, averaged over populations (Accurate setting); scored on the Dickson et al. 2025 measured couplings (Analyst, doi 10.1039/d5an00240k; ESI read locally, not kept here) |
 
 Results (2026-11-03, SI test set v1, CDCl3, compounds under 500 Da; thresholds chosen on the first 400
 compounds, scored on the other 1,156): multiplicity exact for 61% of first-order signals (s 79%, d 65%,
 t 73%, dd 17%), J median error 0.5 Hz, 69% within 1 Hz. Simulation speed: 8 coupled protons 0.1 s,
 10 protons 0.5 s, 12 protons about 19 s (so the Accurate setting caps clusters at 10 for now).
+
+3-D couplings (2026-11-04, Dickson 2025, 138 measured H–C(sp3)–C(sp3)–H couplings in 11 natural
+products and drugs): mean absolute error 0.58 Hz for HLA on the authors' DFT conformers and
+populations, 0.85 Hz on the app's own OpenChemLib/MMFF94s+ conformers, 0.92 Hz for the authors'
+DFT couplings, and 3.55 Hz for the 2-D rules.

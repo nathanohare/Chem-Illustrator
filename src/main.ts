@@ -2188,6 +2188,7 @@ const names = new NameReader(new URL('opsin/opsin-data.dat', document.baseURI).h
 const nmrPanel = new NmrPanel({
   url: new URL('nmr/nmr-hose.dat', document.baseURI).href, measuredUrl: new URL('nmr/nmr-measured.dat', document.baseURI).href, netUrl: new URL('nmr/nmr-net.dat', document.baseURI).href,
   graph: (molblock) => chem.namerGraph(molblock),
+  conformers: (molblock) => model3d.build(molblock, 30),
   redraw: () => editor.requestOverlay(),
   copy: (text) => navigator.clipboard.writeText(text),
   flash: (text) => flash(text),

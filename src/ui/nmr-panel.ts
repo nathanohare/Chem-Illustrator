@@ -11,6 +11,9 @@ import { ShiftNet } from '../chem/nmr/net';
 import { predictSpectrum, type NmrQuality, type PredictedSpectrum } from '../chem/nmr/spectrum';
 import { exchangeRange, type ExchangeRange } from '../chem/nmr/exchange';
 import { spectrumInBackground } from '../chem/nmr/spectrum-client';
+import { graphCouplings3d, type ProtonJ } from '../chem/nmr/karplus';
+import { withPopulations } from '../chem/conformer-rank';
+import type { Model3d } from '../chem/model3d-build';
 import { checkData, measuredLines, parsePeakLists, type CheckNucleus, type CheckResult, type MeasuredList, type PredictedRow } from '../chem/nmr/check';
 import { knownPeaks, residualPeaks } from '../chem/nmr/known-peaks';
 import { nucleusOfSpectrum, readSpectrumFile, referenceToSolvent, spectrumToList, SpectrumFileError, type MeasuredSpectrum } from '../chem/nmr/spectrum-file';
@@ -174,6 +177,10 @@ interface Shown {
   graph: NamerGraph; h1: number[]; codes: string[]; rowOf: number[];
   /** Simulated spectra by field and quality; pending: simulations running in the background. */
   specs: Map<string, PredictedSpectrum>; pending: Set<string>;
+  /** The structure, and the molfile atom of each graph atom (for 3-D couplings). */
+  molblock: string; heavy: number[];
+  /** Vicinal couplings from 3-D conformers (Accurate), once asked for; empty when no model could be built. */
+  pj?: Promise<ProtonJ[]>;
 }
 
 export interface NmrHost {
@@ -183,6 +190,8 @@ export interface NmrHost {
   /** The shift networks; optional, the lookup stands alone without them. */
   netUrl?: string;
   graph(molblock: string): Promise<{ graph: NamerGraph | null }>;
+  /** Low-energy conformers of a structure (molfile) for Accurate spectra; optional. */
+  conformers?(molblock: string): Promise<Model3d>;
   /** The Knowledge Base tables the user imported (JSON), for naming extra peaks in Check Data. */
   importedTables?(): Promise<string | null>;
   redraw(): void;
@@ -377,7 +386,7 @@ export class NmrPanel {
         if (graph.atoms[gr.atoms[0]].el === 'C') { r.mult = gr.mult; r.j = gr.j; } else { r.mult = 'br s'; r.j = []; }
       }
       for (const r of rows) if (r.exch) for (const a of r.atoms) h1[a] = NaN;
-      this.shown.set(i, { rows, ids, ring, graph, h1, codes, rowOf, specs: new Map(), pending: new Set() });
+      this.shown.set(i, { rows, ids, ring, graph, h1, codes, rowOf, specs: new Map(), pending: new Set(), molblock: item.molblock, heavy });
       this.render(i, d);
       if (this.win?.visible && this.winItem === i) this.win.refresh();
       if (this.marks) this.host.redraw();
@@ -549,7 +558,9 @@ export class NmrPanel {
     const key = `${sf}|${quality}`;
     let spec = s.specs.get(key);
     if (!spec) {
-      const job = quality === 'fast' || s.pending.has(key) ? null : spectrumInBackground(s.graph, s.h1, s.codes, sf, quality);
+      const job = quality === 'fast' || s.pending.has(key) ? null : quality === 'accurate' && this.host.conformers
+        ? this.couplings3d(s).then((pj) => spectrumInBackground(s.graph, s.h1, s.codes, sf, quality, pj) ?? predictSpectrum(s.graph, s.h1, s.codes, sf, quality, undefined, pj))
+        : spectrumInBackground(s.graph, s.h1, s.codes, sf, quality);
       if (job) {
         // first-order lines straight away; the exact spectrum replaces them when it is ready
         s.pending.add(key);
@@ -560,6 +571,14 @@ export class NmrPanel {
       if (quality === 'fast') s.specs.set(key, spec);
     }
     return { nuc, spec, groupRows: spec.groups.map((g) => s.rowOf[g.atoms[0]]), measured: this.overlayFor(i, nuc, sf) };
+  }
+
+  /** Vicinal couplings from the structure's conformers (built once); none when no model can be built. */
+  private couplings3d(s: Shown): Promise<ProtonJ[]> {
+    s.pj ??= this.host.conformers!(s.molblock)
+      .then((m) => graphCouplings3d({ ...m, conformers: withPopulations(m.conformers) }, s.heavy, s.graph.atoms.map((a) => a.h)))
+      .catch(() => []);
+    return s.pj;
   }
 
   /** A background simulation finished: redraw the strip and the window if they still show it. */
