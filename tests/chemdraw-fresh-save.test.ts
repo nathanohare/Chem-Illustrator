@@ -215,3 +215,17 @@ describe('a fresh save, labels placed by ChemDraw', () => {
     expect([...out.querySelectorAll('n')].find((n) => n.getAttribute('id') === '11')!.getAttribute('LabelDisplay')).toBe('Center');
   });
 });
+
+describe('a filled circle recolored in ChemDraw', () => {
+  const oval = (color: string, tag: object) => `<graphic id="30" BoundingBox="72 50 64.4 50" color="${color}" GraphicType="Oval" OvalType="Circle Filled" Center3D="64.4 50 0" MajorAxisEnd3D="72 50 0" MinorAxisEnd3D="64.4 57.6 0"><objecttag TagType="String" Name="Chem Illustrator fill" Visible="no" Value="${JSON.stringify(tag).replace(/"/g, '&quot;')}"/></graphic>`;
+  const read = (body: string) => readCdxml(`<?xml version="1.0" encoding="UTF-8" ?><CDXML>${table}<page id="1">${body}</page></CDXML>`).doc.shapes.get(30)!;
+  it('takes ChemDraw\'s color over an old tag that says only its own', () => {
+    const s = read(oval('5', { fillColor: '#a52a2a', color: '#a52a2a' }));
+    expect(s.color).toBe('#993399');
+    expect(s.fillColor).toBe('#993399');
+  });
+  it('keeps the tag when it is the same color, give or take rounding', () => {
+    const s = read(oval('4', { fillColor: '#2f4fc8', color: '#2f4fc8' }));
+    expect(s.fillColor).toBe('#2f4fc8');
+  });
+});
