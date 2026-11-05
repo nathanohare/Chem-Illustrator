@@ -144,3 +144,15 @@ silver, its structures left out of training): 19F median error 0.73 ppm on held-
 SI set (44% within 2 ppm, 59% within 5 ppm, 142 shifts). Means are 5-10 ppm because of a tail of
 unusual environments (metal complexes, hypervalent P and F) with few or no close matches.
 
+
+## Head-to-head with other programs
+
+| Step | Script | What it does |
+|---|---|---|
+| Sample | `head_to_head.py sample records.jsonl OUT --n 100000 --tiers gold,silver --per-paper 4 --exclude nmrexp-overlap.json --prefix HX --width 4` | random CDCl3 compounds under 500 Da; writes `sample.jsonl` plus `.smi`/`.sdf` with numbered ids only |
+| Ours | `app_predict.ts` | the app's own predictions for the sample |
+| Mnova | `mnova_predict.qs` (MestReNova Script Editor) | 13C and 1H prediction for every line of the `.smi` file |
+| nmrdb.org | `node scripts/nmr/nmrdb_predict.mjs sample.smi nmrdb.jsonl` | the prediction service behind nmrdb.org; it is rate limited, so the script keeps to one request every 8 s, waits out 429 answers and resumes where it stopped |
+| Score | `head_to_head.py score OUT ours=... mnova=... nmrdb=... --bootstrap 2000` | the same Hungarian matching for every program, only compounds all of them predicted, and a paper-level bootstrap interval for each program minus the first |
+
+Results stay with the private test set (`nmr-prediction/head-to-head/` in the project's shared files).
