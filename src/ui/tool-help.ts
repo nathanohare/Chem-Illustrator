@@ -49,6 +49,11 @@ const BY_NAME: Record<string, ToolHelp> = {
     steps: ['Drag from a metal to a ring or π-bond'],
     keys: [],
   },
+  'bond-variable': {
+    what: 'Drag from a group (or empty space) into a ring: the group is on one of the ring\'s atoms. Then click ring atoms to add them or take them out.',
+    steps: ['Drag from the group into the ring', 'Click ring atoms to add or remove'],
+    keys: [],
+  },
   newman: { what: 'Click a single bond to draw its Newman projection: the end you click nearer is in front. The window shows its most stable conformers (Tab steps through them).', steps: ['Click a single bond'], keys: [] },
   fragment: { what: 'Drag a line across the bonds to break (or click one bond). Each piece gets a caption with its formula and exact mass, which you can edit.', steps: ['Drag across the bonds to break'], keys: [] },
 };
@@ -115,6 +120,12 @@ export function toolHelp(name: string, t: Tool | undefined): ToolHelp {
         steps: ['Drag a structure to turn it'],
         keys: [['Shift', 'Snap to 15°']],
       };
+    case 'pen':
+      return {
+        what: 'Draw a freeform shape point by point. Click for a corner; drag out from a point to curve through it.',
+        steps: ['Click each point', 'Click the first point to close', 'Double-click to end open'],
+        keys: [['Enter', 'End open'], ['Backspace', 'Take back a point'], ['Esc', 'Stop']],
+      };
     case 'bond':
     default:
       return { what: 'Click empty space or an atom to draw; drag to aim (hold Alt or Space: any angle). Point at an atom or bond and press a hotkey (Edit > Keyboard Shortcuts lists them).', steps: BOND_STEPS, keys: BOND_KEYS };
@@ -122,7 +133,14 @@ export function toolHelp(name: string, t: Tool | undefined): ToolHelp {
 }
 
 /** The status bar's guide to a selected arrow's handles: which handle does what, and the keys. */
-export function arrowHandleHelp(r: Pick<Arrow, 'sweep' | 'bez' | 'equilibrium'>): { name: string; handles: string[]; keys: [string, string][] } {
+export function arrowHandleHelp(r: Pick<Arrow, 'sweep' | 'bez' | 'equilibrium'> & Partial<Pick<Arrow, 'ellipse'>>): { name: string; handles: string[]; keys: [string, string][] } {
+  if (r.bez?.length && r.ellipse) {
+    return {
+      name: 'Elliptical arrow selected',
+      handles: ['Drag ends to reattach', 'Drag diamonds to stretch the ellipse'],
+      keys: [['Alt', 'Toggle snapping to a circle']],
+    };
+  }
   if (r.bez?.length) {
     return {
       name: 'S-shaped arrow selected',
@@ -133,7 +151,7 @@ export function arrowHandleHelp(r: Pick<Arrow, 'sweep' | 'bez' | 'equilibrium'>)
   if (r.sweep) {
     return {
       name: 'Curved arrow selected',
-      handles: ['Drag ends to reattach', 'Drag middle dot to bend'],
+      handles: ['Drag ends to reattach', 'Drag middle dot to bend', 'Drag diamonds to stretch into an ellipse'],
       keys: [['Alt', 'Toggle snapping']],
     };
   }

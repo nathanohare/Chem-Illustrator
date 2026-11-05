@@ -10,7 +10,7 @@
 // by hand keeps its new place, and the arrows to and from it follow it.
 
 import type { Arrow, Caption, Doc, Entity, Frame, Shape, StepRoles, TextRun } from '../model';
-import type { Rect, Vec } from '../geom';
+import { arcCenter, type Rect, type Vec } from '../geom';
 import { chemRuns } from '../text/chemtext';
 import { plainText } from '../richtext';
 import { frameBox, frameMembers } from '../editor/frames';
@@ -262,6 +262,10 @@ export function arrangeSmart(doc: Doc, m: Measure, frameId: number, patch?: Part
     for (const r of [...doc.arrows.values()]) if (r.reagentFor === l.arrow.id) doc.removeArrow(r.id);
     doc.removeArrow(l.arrow.id);
   }
+  // a cycle laid out again (a species added, removed or made a structure) keeps its middle where it was:
+  // the middle of the circle its curved step arrows lie on
+  const steps = read.links.map((l) => l.arrow.id);
+  const was = s.smart.layout === 'cycle' && data.layout === 'cycle' ? circleMiddle(doc, steps) : null;
   // its own look first, so it is laid out at the sizes it will have
   restyleSmart(doc, frameId, data.fmt, smartParts(read));
   const scope = scopeOf(doc, doc.shapes.get(frameId)!.frame!);
@@ -282,8 +286,34 @@ export function arrangeSmart(doc: Doc, m: Measure, frameId: number, patch?: Part
   doc.updateShape(frameId, { frame: { ...f, arrows }, ...(data.free ? { smart: { ...data, free: undefined } } : {}) });
   // the frame fits round it again now (as it would at the end of the change), so it is right in a file saved straight after
   const b = frameBox(doc, doc.shapes.get(frameId)!.frame!, m);
-  if (b) doc.updateShape(frameId, b);
+  const mid = was && circleMiddle(doc, steps);
+  if (b && was && mid && Math.hypot(was.x - mid.x, was.y - mid.y) > 1e-6) {
+    const dx = was.x - mid.x, dy = was.y - mid.y;
+    moveFrameBy(doc, doc.shapes.get(frameId)!.frame!, dx, dy);
+    doc.updateShape(frameId, { x1: b.x1 + dx, y1: b.y1 + dy, x2: b.x2 + dx, y2: b.y2 + dy });
+  } else if (b) doc.updateShape(frameId, b);
   return true;
+}
+
+/** The middle of the circle a cycle's curved step arrows lie on (their arcs' centres, averaged), or null. */
+function circleMiddle(doc: Doc, arrows: number[]): Vec | null {
+  let x = 0, y = 0, n = 0;
+  for (const id of arrows) {
+    const r = doc.arrows.get(id);
+    if (!r?.sweep || r.bez?.length) continue;
+    const c = arcCenter(r.tail, r.head, r.sweep).center;
+    x += c.x; y += c.y; n++;
+  }
+  return n ? { x: x / n, y: y / n } : null;
+}
+
+/** Move everything in a frame by (dx, dy). Call inside an edit. */
+function moveFrameBy(doc: Doc, f: Frame, dx: number, dy: number): void {
+  const mem = frameMembers(doc, f);
+  doc.moveAtoms([...mem.atoms], dx, dy);
+  for (const id of mem.captions) { const c = doc.captions.get(id); if (c) doc.updateCaption(id, { x: c.x + dx, y: c.y + dy }); }
+  for (const id of mem.arrows) { const a = doc.arrows.get(id); if (a) doc.updateArrow(id, { tail: { x: a.tail.x + dx, y: a.tail.y + dy }, head: { x: a.head.x + dx, y: a.head.y + dy } }); }
+  for (const id of mem.shapes) { const h = doc.shapes.get(id); if (h) doc.updateShape(id, { x1: h.x1 + dx, y1: h.y1 + dy, x2: h.x2 + dx, y2: h.y2 + dy }); }
 }
 
 /** The scheme's text: species typed as text, and the conditions on its arrows. */
@@ -684,6 +714,10 @@ export function refitSmart(doc: Doc, before: ReadonlyMap<string, Entity | null>,
     for (const l of read.links) {
       const a = read.slots[l.from], b = read.slots[l.to];
       if (!a || !b) continue;
+      // a curved arrow (round a cycle) follows only a species that moved: one retyped, recolored
+      // or given another atom stays where it is, its arcs where the layout put them
+      const curved = !!l.arrow.sweep || !!l.arrow.bez?.length;
+      if (curved && !slotMoved(doc, a, before) && !slotMoved(doc, b, before)) continue;
       // conditions moved on their own were placed by hand: leave the step as it is
       if ([...l.above, ...l.below, ...l.inside].some((it) => it.caption !== undefined && before.has('c' + it.caption))
         && !a.items.some((it) => it.caption !== undefined && before.has('c' + it.caption))
@@ -707,6 +741,27 @@ export function refitSmart(doc: Doc, before: ReadonlyMap<string, Entity | null>,
       for (const x of [...doc.arrows.values()]) if (x.reagentFor === r.id) doc.updateArrow(x.id, { tail: { x: x.tail.x + d.x, y: x.tail.y + d.y }, head: { x: x.head.x + d.x, y: x.head.y + d.y } });
     }
   }
+}
+
+/** Whether something of a species was moved in the change (not just retyped or restyled). */
+function slotMoved(doc: Doc, slot: Slot, before: ReadonlyMap<string, Entity | null>): boolean {
+  const shifted = (x: number, y: number, was: { x: number; y: number } | null | undefined) => !!was && Math.hypot(x - was.x, y - was.y) > 1e-6;
+  for (const it of [...slot.items, ...slot.labels]) {
+    for (const id of it.atoms) {
+      if (!before.has('a' + id)) continue;
+      const a = doc.atoms.get(id), was = before.get('a' + id) as { x: number; y: number } | null;
+      if (a && shifted(a.x, a.y, was)) return true;
+    }
+    if (it.caption !== undefined && before.has('c' + it.caption)) {
+      const c = doc.captions.get(it.caption), was = before.get('c' + it.caption) as { x: number; y: number } | null;
+      if (c && shifted(c.x, c.y, was)) return true;
+    }
+    if (it.shape !== undefined && before.has('s' + it.shape)) {
+      const h = doc.shapes.get(it.shape), was = before.get('s' + it.shape) as { x1: number; y1: number; x2: number; y2: number } | null;
+      if (h && was && (shifted(h.x1, h.y1, { x: was.x1, y: was.y1 }) || shifted(h.x2, h.y2, { x: was.x2, y: was.y2 }))) return true;
+    }
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------- what shows while it is selected

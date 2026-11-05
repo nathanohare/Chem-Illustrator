@@ -407,6 +407,47 @@ function bestLayout(m, metal, faults = layoutFaults) {
   return out;
 }
 
+/** R/S of each atom of a SMILES, by atom index (RDKit's CIP labeller). */
+function cipLabels(smiles) {
+  const m = RDKit.get_mol(smiles);
+  if (!m) return null;
+  try {
+    const atoms = JSON.parse(m.get_json()).molecules[0].atoms.length;
+    return Object.assign(new Map(JSON.parse(m.get_stereo_tags()).CIP_atoms ?? []), { atoms });
+  } finally { m.delete(); }
+}
+
+/**
+ * The ligand bound by ring closures (`bound`) with each stereogenic donor the same way round as in
+ * the free ligand. RDKit reads a lone pair on a SMILES's first atom as coming before the bond that
+ * replaces it, so the first P of DIPAMP, BenzP*, QuinoxP*, TangPhos and DuanPhos came out turned
+ * over and the drawings on the metal were the meso isomers. Checked with an H where the metal goes
+ * (an H ranks lowest, as the lone pair does): a donor whose R/S differs from the free ligand's has
+ * its @ and @@ swapped.
+ */
+function keepDonorStereo(smiles, bound, closures) {
+  const free = cipLabels(smiles);
+  if (!free?.size) return bound;
+  const n = closures.length;
+  const misses = (b) => {
+    const got = cipLabels(`${closures.map((c) => `[H]${c}`).join('.')}.${b}`);
+    if (!got) return Infinity;
+    // (the H atoms come first, unless RDKit took them off and left them implicit)
+    const off = got.atoms > free.atoms ? n : 0;
+    let k = 0;
+    for (const [i, l] of free) if (got.get(i + off) !== l) k++;
+    return k;
+  };
+  let best = bound, worst = misses(bound);
+  for (const map of donorMaps(smiles)) {
+    if (!worst) break;
+    const flipped = eachDonor(best, (p) => bracketText(p.map === map && p.chiral ? { ...p, chiral: p.chiral === '@' ? '@@' : '@' } : p));
+    const k = misses(flipped);
+    if (k < worst) { best = flipped; worst = k; }
+  }
+  return best;
+}
+
 /** The ligand on a metal, laid out by RDKit: atoms with places, bonds with wedges. */
 function layOut(id, smiles, opts) {
   const maps = donorMaps(smiles);
@@ -421,7 +462,7 @@ function layOut(id, smiles, opts) {
     // the ring closure sits where the lone pair (or lost hydrogen) was, so stereo is kept
     return bracketText(q) + closures[k];
   });
-  const m = RDKit.get_mol(`${metalAtom}${closures.join('')}.${bound}`);
+  const m = RDKit.get_mol(`${metalAtom}${closures.join('')}.${keepDonorStereo(smiles, bound, closures)}`);
   if (!m) throw new Error(`${id}: RDKit cannot read the ligand on its metal`);
   // (drawn in full: whichever layout has fewer crossing bonds and atoms on top of each other)
   const t = bestLayout(m, opts.free ? -1 : 0, opts.full ? tangles : layoutFaults);

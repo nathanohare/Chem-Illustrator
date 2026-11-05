@@ -278,6 +278,8 @@ export interface ZoteroStore {
   readonly notes: string[];
   /** At the end of a command. */
   finish(): void;
+  /** When Zotero went away part way through: take out the empty citations put in for it. */
+  abandon?(): void;
   choose(text: string, labels: string[]): Promise<number>;
   activate(): void;
 }
@@ -313,6 +315,8 @@ export const ZOTERO_BIBL = BIBL;
 /** A document (doc-mode.ts gives its host) as Zotero's fields: citation and bibliography objects in the text. */
 class DocStore implements ZoteroStore {
   private bibs = new Set<number>();
+  /** The citations put in during this command (Zotero fills them in or takes them out before it ends). */
+  private placed: number[] = [];
   readonly notes: string[] = ['footnotes', 'endnotes'];
   constructor(private host: ZoteroHost) {}
 
@@ -347,11 +351,25 @@ class DocStore implements ZoteroStore {
       const id = nextObjectId(t);
       this.host.change({ ...t, objects: { ...t.objects, [id]: cite } });
       this.host.insert({ kind: 'note', ...(note === 2 ? { end: true } : {}), runs: [{ text: OBJECT_CHAR, obj: id }] }, true);
+      this.placed.push(id);
       const holder = noteHolding(this.t, id);
       return { id: String(id), code: 'TEMP', text: PLACEHOLDER, noteIndex: holder !== undefined ? noteNumbers(this.t).get(holder) ?? 1 : 1 };
     }
     const id = this.host.insert(cite);
+    this.placed.push(id);
     return { id: String(id), code: 'TEMP', text: PLACEHOLDER, noteIndex: 0 };
+  }
+  abandon(): void {
+    for (const id of this.placed) {
+      const o = this.t.objects[id];
+      if (o?.kind !== 'cite' || o.refs.length || o.live?.code !== 'TEMP') continue;
+      const holder = noteHolding(this.t, id);
+      const n = holder !== undefined ? this.t.objects[holder] : undefined;
+      // a footnote holding only this citation goes with it
+      if (n?.kind === 'note' && !n.runs.some((r) => r.obj !== id && (r.obj !== undefined || r.text.trim()))) this.host.replaceObject(holder!, []);
+      else if (objectRunOf(this.t, id)) this.host.replaceObject(id, []);
+    }
+    this.placed = [];
   }
   remove(id: string): void { this.host.replaceObject(this.field(id).id, []); }
   select(id: string): void { this.host.select(this.field(id).id); }
@@ -542,6 +560,16 @@ export async function runZoteroOn(command: ZoteroCommand, store: ZoteroStore, po
   if (res.status === 503) return 'busy';
   if (res.status !== 200) throw new Error(`Zotero answered with an error (${res.status}): ${res.text.slice(0, 200)}`);
   const tx = new Transaction(store);
+  try {
+    return await answerZotero(tx, store, res, post);
+  } catch (e) {
+    // Zotero closed or the connection dropped part way: no empty {Citation} is left behind
+    store.abandon?.();
+    throw e;
+  }
+}
+
+async function answerZotero(tx: Transaction, store: ZoteroStore, res: { status: number; text: string }, post: ZoteroPost): Promise<ZoteroOutcome> {
   for (;;) {
     let req: ZoteroRequest;
     try { req = JSON.parse(res.text) as ZoteroRequest; } catch { throw new Error('Zotero sent something that could not be read.'); }

@@ -230,16 +230,19 @@ function readNative(s: Uint8Array): { name: string; bytes: Uint8Array } | null {
 /** The "\u0001Ole" stream of an embedded (not linked) object: [MS-OLEDS] 2.3.3, version 0x02000001 with nothing set. */
 const OLE_STREAM = Uint8Array.from([1, 0, 0, 2, ...new Array(16).fill(0)]);
 
-/** A "\u0001CompObj" stream ([MS-OLEDS] 2.3.8): the object's type for people and its program's name. */
-function compObj(userType: string, prog: string): Uint8Array {
+/**
+ * A "\u0001CompObj" stream ([MS-OLEDS] 2.3.8): the object's type for people, the clipboard format
+ * its data is in (none when not given) and its program's name.
+ */
+function compObj(userType: string, prog: string, clsid = PACKAGE_CLASS, format?: string): Uint8Array {
   const out: number[] = [];
   const u32 = (n: number) => out.push(n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255);
   const str = (t: string) => { const b = ansi(t); u32(b.length); out.push(...b); };
   u32(0xfffe0001); u32(0x00000a03); u32(0xffffffff);
-  // the class id again (Package's), as programs write it
-  out.push(0x0c, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46);
+  // the class id again, as programs write it
+  out.push(...clsidBytes(clsid));
   str(userType);
-  u32(0); // no clipboard format
+  if (format) str(format); else u32(0);
   str(prog);
   u32(0x71b239f4);
   u32(0); u32(0); u32(0);
@@ -276,6 +279,53 @@ export function progIdOf(cfb: Uint8Array): string | null {
   } catch {
     return null;
   }
+}
+
+/** A class id ("{XXXXXXXX-XXXX-...}") as the 16 bytes compound files store ([MS-DTYP] GUID: the first three parts little-endian). */
+function clsidBytes(id: string): number[] {
+  const h = id.replace(/[{}-]/g, '');
+  const at = (i: number, n: number) => { const v: number[] = []; for (let k = 0; k < n; k++) v.push(parseInt(h.slice(i + 2 * k, i + 2 * k + 2), 16)); return v; };
+  return [...at(0, 4).reverse(), ...at(8, 2).reverse(), ...at(12, 2).reverse(), ...at(16, 8)];
+}
+
+// ---------------------------------------------------------------- ChemDraw objects
+
+/** ChemDraw's document class (the same for 32- and 64-bit ChemDraw), which Windows starts when the object is opened. */
+export const CHEMDRAW_CLASS = '{41BA6D21-A02E-11CE-8FD9-0020AFD1F20C}';
+/** The program name older and 32-bit ChemDraw give its objects; 64-bit ChemDraw writes ChemDraw_x64.Document.6.0. */
+export const CHEMDRAW_PROG = 'ChemDraw.Document.6.0';
+
+/**
+ * The CDX in another program's object (a compound file, as PowerPoint copies it and keeps it in
+ * its files), when the object is ChemDraw's; null for anything else. An Excel or Word object can
+ * have a stream named CONTENTS too, so only ChemDraw's objects, or a stream that is CDX, count.
+ */
+export function chemdrawInObject(cfb: Uint8Array): Uint8Array | null {
+  if (isCdx(cfb)) return cfb;
+  if (!isCfb(cfb)) return null;
+  try {
+    const streams = cfbStreams(cfb);
+    const cdx = [...streams.values()].find(isCdx);
+    if (cdx) return cdx;
+    const prog = progIdOf(cfb) ?? '';
+    return isChemDraw(prog) || cfbClass(cfb) === CHEMDRAW_CLASS ? streams.get('CONTENTS') ?? null : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A ChemDraw object holding a drawing (its CDX), as PowerPoint keeps one: double-clicked in PowerPoint, it opens in ChemDraw. */
+export function chemdrawObject(cdx: Uint8Array, prog = CHEMDRAW_PROG): Uint8Array {
+  return writeCfb([
+    ['\u0001CompObj', compObj(chemdrawObjectName(prog), prog, CHEMDRAW_CLASS, 'ChemDraw Interchange Format')],
+    ['\u0001Ole', OLE_STREAM],
+    ['CONTENTS', cdx],
+  ], CHEMDRAW_CLASS);
+}
+
+/** The name PowerPoint shows for a ChemDraw object (its oleObj's name). */
+export function chemdrawObjectName(prog: string): string {
+  return /x64/i.test(prog) ? 'CS ChemDraw 64-bit Drawing' : 'CS ChemDraw Drawing';
 }
 
 // ---------------------------------------------------------------- telling files apart

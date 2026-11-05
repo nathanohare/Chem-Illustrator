@@ -189,6 +189,7 @@ class DocxWriter {
     if (t.references?.length || Object.values(t.objects).some((o) => o.kind === 'cite' || o.kind === 'bib')) this.model.references = t.references ?? [];
     if (t.citeStyle) this.model.citeStyle = t.citeStyle;
     if (t.design) this.model.design = t.design;
+    if (t.noFigureOffer) this.model.noFigureOffer = true;
     if (t.citeOptions && Object.keys(t.citeOptions).length) this.model.citeOptions = t.citeOptions;
     if (t.citeManager) this.model.citeManager = t.citeManager;
     this.fullW = Math.max(36, t.page.w - t.page.left - t.page.right);
@@ -1735,7 +1736,7 @@ function changedCml(t: DocText): Map<number, string> {
     if (o?.kind !== 'drawing' || !o.c4w) continue;
     const i = index.get(o.c4w.guid);
     if (i === undefined || out.has(i) || contentsSig(o.contents) === o.c4w.sig) continue;
-    out.set(i, writeCml(o.contents, o.c4w.guid));
+    out.set(i, writeCml(o.contents, o.c4w.guid, parts[i].xml));
   }
   return out;
 }

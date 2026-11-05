@@ -153,23 +153,23 @@ export const GEOS: GeoDef[] = [
   {
     id: 'cloud', name: 'Cloud', group: 'Basic shapes', prst: 'cloud', size: [108, 72], keywords: 'thought idea',
     draw: (w, h) => {
-      // bumps round an oval
-      const n = 9, out: GeoStep[] = [];
+      // round bumps of a few sizes on an oval, meeting in dips: each bump is near a half circle
+      // standing on the chord between two points of the oval (worked in a unit square, then stretched)
+      const steps = [1, 0.8, 1.15, 0.9, 1.2, 0.85, 1.05, 0.95, 1.1, 0.9];
+      const total = steps.reduce((x, y) => x + y, 0);
       const pts: Vec[] = [];
-      for (let i = 0; i < n; i++) {
-        const a = -Math.PI / 2 + (i * 2 * Math.PI) / n;
-        pts.push({ x: w / 2 + 0.42 * w * Math.cos(a), y: h / 2 + 0.38 * h * Math.sin(a) });
+      let a = -Math.PI / 2;
+      for (const st of steps) {
+        pts.push({ x: 0.5 + 0.36 * Math.cos(a), y: 0.5 + 0.34 * Math.sin(a) });
+        a += (st / total) * 2 * Math.PI;
       }
-      for (let i = 0; i < n; i++) {
-        const p = pts[i], q = pts[(i + 1) % n];
-        const mx = (p.x + q.x) / 2, my = (p.y + q.y) / 2;
-        // push the middle of each bump out from the centre
-        const dx = mx - w / 2, dy = my - h / 2, d = Math.hypot(dx / w, dy / h) || 1;
-        const bx = mx + (dx / d) * 0.17, by = my + (dy / d) * 0.17;
-        const cx1 = p.x + (bx - p.x) * 1.1, cy1 = p.y + (by - p.y) * 1.1;
-        const cx2 = q.x + (bx - q.x) * 1.1, cy2 = q.y + (by - q.y) * 1.1;
-        if (!i) out.push(['M', p.x, p.y]);
-        out.push(['C', cx1 + (dx / d) * 0.12, cy1 + (dy / d) * 0.12, cx2 + (dx / d) * 0.12, cy2 + (dy / d) * 0.12, q.x, q.y]);
+      const out: GeoStep[] = [['M', pts[0].x * w, pts[0].y * h]];
+      for (let i = 0; i < pts.length; i++) {
+        const p = pts[i], q = pts[(i + 1) % pts.length];
+        // outward, going clockwise on the screen
+        const nx = q.y - p.y, ny = p.x - q.x;
+        const k = 0.75;
+        out.push(['C', (p.x + nx * k) * w, (p.y + ny * k) * h, (q.x + nx * k) * w, (q.y + ny * k) * h, q.x * w, q.y * h]);
       }
       out.push(['Z']);
       // keep it inside its box
@@ -584,8 +584,84 @@ export function inkDef(id: string): GeoDef {
   return d;
 }
 
+// ---------------------------------------------------------------- closed curves
+
+/**
+ * A closed curve from ChemDraw (a perspective ring's ellipse, a hand-drawn outline): a design
+ * shape whose id holds its Bézier path, `path:<x,y,x,y…>` as ten-thousandths of its box: the start
+ * point, then two handles and a point for each segment, the last ending back at the start.
+ */
+export const isPathId = (id: string | undefined): id is string => !!id && id.startsWith('path:');
+
+/** The id for a closed Bézier path (points in points on the page) within its box. */
+export function pathId(pts: Vec[], box: Rect): string {
+  const w = Math.max(1e-6, box.x2 - box.x1), h = Math.max(1e-6, box.y2 - box.y1);
+  const q = (v: number) => Math.round(v * 10000);
+  return `path:${pts.map((p) => `${q((p.x - box.x1) / w)},${q((p.y - box.y1) / h)}`).join(',')}`;
+}
+
+const pathDefs = new Map<string, GeoDef>();
+
+/** The library shape for a closed curve. */
+export function pathDef(id: string): GeoDef {
+  let d = pathDefs.get(id);
+  if (d) return d;
+  const n = id.slice(5).split(',').map(Number);
+  const rel: Vec[] = [];
+  for (let i = 0; i + 1 < n.length; i += 2) if (Number.isFinite(n[i]) && Number.isFinite(n[i + 1])) rel.push({ x: n[i] / 10000, y: n[i + 1] / 10000 });
+  d = {
+    id, name: 'Freeform', group: 'Ink', size: [72, 72], outline: true,
+    draw: (w, h) => {
+      const at = (p: Vec) => [p.x * w, p.y * h] as const;
+      const body: GeoStep[] = rel.length ? [['M', ...at(rel[0])]] : [];
+      for (let i = 1; i + 2 < rel.length; i += 3) body.push(['C', ...at(rel[i]), ...at(rel[i + 1]), ...at(rel[i + 2])]);
+      if (body.length) body.push(['Z']);
+      return { body };
+    },
+  };
+  if (pathDefs.size > 500) pathDefs.clear();
+  pathDefs.set(id, d);
+  return d;
+}
+
+/**
+ * An open curve drawn with the Freeform pen: like a closed curve (`path:`) but its last segment
+ * stays where it ends, `pen:<x,y,x,y…>`: the start point, then two handles and a point for each segment.
+ */
+export const isPenId = (id: string | undefined): id is string => !!id && id.startsWith('pen:');
+
+/** A freeform's Bézier points (3n + 1) on the page and whether it is closed, as the id of its shape within `box`. */
+export function freeformId(pts: Vec[], box: Rect, closed: boolean): string {
+  return closed ? pathId(pts, box) : `pen:${pathId(pts, box).slice(5)}`;
+}
+
+/** A freeform's Bézier points on the page (start, then two handles and a point for each segment) and whether it is closed; null for other shapes. */
+export function freeformPoints(s: { geo?: string; x1: number; y1: number; x2: number; y2: number }): { pts: Vec[]; closed: boolean } | null {
+  const closed = isPathId(s.geo);
+  if (!closed && !isPenId(s.geo)) return null;
+  const n = s.geo!.slice(closed ? 5 : 4).split(',').map(Number);
+  const x1 = Math.min(s.x1, s.x2), y1 = Math.min(s.y1, s.y2), w = Math.abs(s.x2 - s.x1), h = Math.abs(s.y2 - s.y1);
+  const pts: Vec[] = [];
+  for (let i = 0; i + 1 < n.length; i += 2) if (Number.isFinite(n[i]) && Number.isFinite(n[i + 1])) pts.push({ x: x1 + (n[i] / 10000) * w, y: y1 + (n[i + 1] / 10000) * h });
+  return pts.length >= 4 ? { pts, closed } : null;
+}
+
+/** The library shape for an open freeform curve. */
+function penDef(id: string): GeoDef {
+  let d = pathDefs.get(id);
+  if (d) return d;
+  const closed = pathDef(`path:${id.slice(4)}`);
+  d = {
+    id, name: 'Freeform', group: 'Ink', size: [72, 72], outline: true,
+    draw: (w, h) => ({ body: closed.draw(w, h).body.filter((st) => st[0] !== 'Z') }),
+  };
+  if (pathDefs.size > 500) pathDefs.clear();
+  pathDefs.set(id, d);
+  return d;
+}
+
 /** The shape with this id (an icon for "icon:…"), or the rectangle for one not known (from a newer version). */
-export const geoDef = (id: string | undefined): GeoDef => (isIconId(id) ? iconDef(id) : isSliceId(id) ? sliceDef(id) : isSectorId(id) ? sectorDef(id) : id === HEX_CELL ? hexCellDef : isInkId(id) ? inkDef(id) : GEO_BY_ID.get(id ?? '')) ?? GEO_BY_ID.get('rect')!;
+export const geoDef = (id: string | undefined): GeoDef => (isIconId(id) ? iconDef(id) : isSliceId(id) ? sliceDef(id) : isSectorId(id) ? sectorDef(id) : id === HEX_CELL ? hexCellDef : isInkId(id) ? inkDef(id) : isPathId(id) ? pathDef(id) : isPenId(id) ? penDef(id) : GEO_BY_ID.get(id ?? '')) ?? GEO_BY_ID.get('rect')!;
 
 /** The box of an outline's points (control points included: a little generous on curves). */
 export function stepsBox(steps: GeoStep[]): Rect {
@@ -676,6 +752,18 @@ export function moveSteps(steps: GeoStep[], dx: number, dy: number): GeoStep[] {
     if (s[0] === 'Z') return s;
     if (s[0] === 'C') return ['C', s[1] + dx, s[2] + dy, s[3] + dx, s[4] + dy, s[5] + dx, s[6] + dy];
     return [s[0], s[1] + dx, s[2] + dy];
+  });
+}
+
+/** Steps turned `deg` degrees clockwise (on the page, y down) about `c`, as a turned shape is drawn. */
+export function turnSteps(steps: GeoStep[], c: Vec, deg: number): GeoStep[] {
+  if (!deg) return steps;
+  const a = (deg * Math.PI) / 180, cos = Math.cos(a), sin = Math.sin(a);
+  const t = (x: number, y: number): [number, number] => [c.x + (x - c.x) * cos - (y - c.y) * sin, c.y + (x - c.x) * sin + (y - c.y) * cos];
+  return steps.map((s): GeoStep => {
+    if (s[0] === 'Z') return s;
+    if (s[0] === 'C') return ['C', ...t(s[1], s[2]), ...t(s[3], s[4]), ...t(s[5], s[6])];
+    return [s[0], ...t(s[1], s[2])];
   });
 }
 

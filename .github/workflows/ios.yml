@@ -18,6 +18,7 @@ permissions:
 jobs:
   ios:
     runs-on: macos-latest
+    timeout-minutes: 60
     env:
       # The iPad version stays the same from build to build, and only the build number goes up, so
       # TestFlight's outside testers get each new build without another Beta App Review. Raise
@@ -26,10 +27,10 @@ jobs:
       VERSION: 0.2.0
       BUILD: ${{ github.run_number }}
       # TestFlight uploads also wait for the repository variable TESTFLIGHT = on
-      SHIP: ${{ github.event_name != 'pull_request' && secrets.IOS_CERTIFICATE != '' && secrets.IOS_MOBILE_PROVISION != '' && secrets.APPLE_API_KEY_P8 != '' && secrets.APPLE_TEAM_ID != '' && vars.TESTFLIGHT == 'on' }}
+      SHIP: ${{ secrets.IOS_CERTIFICATE != '' && secrets.IOS_MOBILE_PROVISION != '' && secrets.APPLE_API_KEY_P8 != '' && secrets.APPLE_TEAM_ID != '' && vars.TESTFLIGHT == 'on' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -93,5 +94,5 @@ jobs:
           echo "Uploading $ipa"
           xcrun altool --upload-app --type ios --file "$ipa" --apiKey "$API_KEY_ID" --apiIssuer "$API_ISSUER"
       - name: Say what was skipped
-        if: env.SHIP != 'true' && github.event_name != 'pull_request'
+        if: env.SHIP != 'true'
         run: echo "Not signed or sent to TestFlight, because the Apple secrets or the TESTFLIGHT = on variable are not set yet (docs/apple-signing.md)."

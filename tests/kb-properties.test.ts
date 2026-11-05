@@ -1,12 +1,11 @@
-// The Solvents, pKa in Water and Solubility tables, and the skin permeability estimate.
+// The ICH Q3C classes, the pKa in Water table, Hammett constants and the skin permeability estimate.
 
 import { describe, expect, it } from 'vitest';
-import { ICH_Q3C, PKA_TABLE, SOLVENTS_TABLE } from '../src/kb/property-tables';
-import { gramsPerLitre, SOLUBILITY_TABLE } from '../src/kb/solubility';
+import { ICH_Q3C, PKA_TABLE } from '../src/kb/property-tables';
+import { SOLVENTS_TABLE } from '../src/kb/solvents';
 import { logKowOf, skinKp, type SafetyRecord } from '../src/kb/safety';
 import { REAGENT_SAFETY, SAFETY_RECORDS } from '../src/kb/safety-tables';
-import { findRows, isCas } from '../src/kb/tables';
-import { LATER_TABLES } from '../src/kb/data';
+import { findRows } from '../src/kb/tables';
 
 const base = (over: Partial<SafetyRecord>): SafetyRecord => ({
   name: 'x', cid: 1, cas: null, formula: null, mw: 100, smiles: 'CCO', idlh: null, lethal: [], vp: null, bp: null, mp: null,
@@ -36,17 +35,14 @@ describe('skin permeability estimate', () => {
 });
 
 describe('solvents', () => {
-  it('gives each solvent its ICH Q3C class and limit and finds each in the safety data', () => {
+  it('gives each solvent its ICH Q3C class', () => {
     expect(Object.keys(ICH_Q3C).length).toBeGreaterThan(30);
-    expect(SOLVENTS_TABLE.rows.length).toBeGreaterThanOrEqual(Object.keys(ICH_Q3C).length);
     const row = (n: string) => SOLVENTS_TABLE.rows.find((r) => r.name === n);
     expect(row('Benzene')?.ich).toBe('Class 1 (avoid)');
-    expect(row('Benzene')?.limit).toBe('2');
-    expect(row('Dichloromethane')?.limit).toBe('600');
+    expect(row('Dichloromethane')?.ich).toBe('Class 2 (limit)');
     expect(row('Ethanol')?.ich).toBe('Class 3 (low toxicity)');
     expect(row('Water')?.ich).toBe('Not listed');
     expect(findRows(SOLVENTS_TABLE, '', { ich: 'Class 2 (limit)' }).every((m) => m.row.ich === 'Class 2 (limit)')).toBe(true);
-    for (const r of SOLVENTS_TABLE.rows) if (r.cas) expect(isCas(String(r.cas)), String(r.name)).toBe(true);
   });
 });
 
@@ -54,22 +50,6 @@ describe('pKa in water', () => {
   it('lists recorded values', () => {
     expect(PKA_TABLE.rows.length).toBeGreaterThan(30);
     expect(String(findRows(PKA_TABLE, 'acetic acid')[0].row.pka)).toMatch(/4\.7/);
-  });
-});
-
-describe('solubility', () => {
-  it('holds AqSolDB with canonical SMILES and works out g/L', () => {
-    expect(SOLUBILITY_TABLE.rows.length).toBe(9982);
-    expect(SOLUBILITY_TABLE.canonicalSmiles).toBe(true);
-    expect(gramsPerLitre(-1, 100)).toBeCloseTo(10);
-    // the window compares RDKit's SMILES of what was typed with these as they are
-    expect(SOLUBILITY_TABLE.rows.find((r) => r.smiles === 'O=Cc1ccc(Cl)cc1')?.name).toBe('4-chlorobenzaldehyde');
-    expect(findRows(SOLUBILITY_TABLE, '', { reliability: 'Three or more, agreeing' }).length).toBeGreaterThan(100);
-  });
-
-  it('is loaded only when the window opens', async () => {
-    const tables = await Promise.all(LATER_TABLES.map((f) => f()));
-    expect(tables.map((t) => t.id)).toContain('solubility');
   });
 });
 

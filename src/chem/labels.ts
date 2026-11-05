@@ -102,9 +102,11 @@ export function isGenericLabel(label: string): boolean {
 const WHOLE_ONLY = new Set<string>();
 
 // Formula-like entries (CO2Me, NO2, CF3…) are shown as their elements so they can be
-// reversed the ChemDraw way (MeO2C, O2N, F3C); true abbreviations stay whole.
+// reversed the ChemDraw way (MeO2C, O2N, F3C); true abbreviations stay whole. Phosphines
+// (PPh3, PCy3, PtBu3) are P and their groups, so they read Ph₃P and Cy₃P on the right, as in ChemDraw.
+const PHOSPHINE = /^P(?:Ph|Cy|Me|Et|t-?Bu|n-?Bu|i-?Pr)\d$/;
 const nickNames = () => Object.keys(NICKNAMES)
-  .filter((k) => !/^[CNOSB][A-Z0-9]/.test(k) && !WHOLE_ONLY.has(k))
+  .filter((k) => !/^[CNOSB][A-Z0-9]/.test(k) && !PHOSPHINE.test(k) && !WHOLE_ONLY.has(k))
   .sort((a, b) => b.length - a.length);
 let NICK_NAMES = nickNames();
 
@@ -192,7 +194,9 @@ export function tokenize(label: string): Token[] {
       i += g.length;
     } else if (/[A-Z]/.test(label[i])) {
       const two = label.slice(i, i + 2);
-      if (two.length === 2 && /[a-z]/.test(two[1]) && elementNumber(two) !== undefined) {
+      // (the P of a phosphine such as PtBu3 or PnBu3, not platinum or nobelium)
+      const phosphineP = i === 0 && PHOSPHINE.test(label);
+      if (two.length === 2 && /[a-z]/.test(two[1]) && elementNumber(two) !== undefined && !phosphineP) {
         tok = { kind: 'el', text: two, count: 1, charge: '' };
         i += 2;
       } else if (elementNumber(label[i]) !== undefined) {
@@ -240,12 +244,13 @@ export function tokenize(label: string): Token[] {
 }
 
 /** Text of one token as displayed, split into normal, subscript and superscript parts. */
-export interface Piece { text: string; sub?: boolean; sup?: boolean; italic?: boolean; /** Where it starts in the label text. */ at?: number }
+export interface Piece { text: string; sub?: boolean; sup?: boolean; italic?: boolean; bold?: boolean; /** Where it starts in the label text. */ at?: number }
 
 /**
  * Raised and lowered characters set by hand in a label, one mark per character of its text:
  * "^" superscript, "_" subscript, "=" on the line, "/" in italics (the t of tBu, by the alkyl
- * look), anything else as the label would show it.
+ * look), "*" raised and "," lowered in italics, "!" on the line in bold, anything else as the
+ * label would show it.
  */
 export type LabelMarks = string;
 
@@ -320,7 +325,7 @@ export function styleLabel(label: string, marks?: LabelMarks, look: AlkylLook = 
     if (dash && !had) { text += '-'; m += '.'; }
     else if (!dash && had) i++;
   }
-  return { label: text, ...(/[\^_=/]/.test(m) ? { marks: m } : {}) };
+  return { label: text, ...(/[\^_=/*,!]/.test(m) ? { marks: m } : {}) };
 }
 
 /** Pieces with the hand-set marks applied, split where a mark changes how a character sits. */
@@ -330,12 +335,14 @@ export function markPieces(pieces: Piece[], marks: LabelMarks): Piece[] {
     if (p.at === undefined) { out.push(p); continue; }
     [...p.text].forEach((ch, k) => {
       const m = marks[p.at! + k];
-      const sup = m === '^' ? true : m === '_' || m === '=' ? false : !!p.sup;
-      const sub = m === '_' ? true : m === '^' || m === '=' ? false : !!p.sub;
-      const italic = m === '/' || !!p.italic;
+      const up = m === '^' || m === '*', down = m === '_' || m === ',';
+      const sup = up ? true : down || m === '=' || m === '!' ? false : !!p.sup;
+      const sub = down ? true : up || m === '=' || m === '!' ? false : !!p.sub;
+      const bold = m === '!';
+      const italic = m === '/' || m === '*' || m === ',' || !!p.italic;
       const last = out[out.length - 1];
-      if (k > 0 && last && !!last.sup === sup && !!last.sub === sub && !!last.italic === italic) last.text += ch;
-      else out.push({ text: ch, at: p.at! + k, ...(sup ? { sup } : {}), ...(sub ? { sub } : {}), ...(italic ? { italic } : {}) });
+      if (k > 0 && last && !!last.sup === sup && !!last.sub === sub && !!last.italic === italic && !!last.bold === bold) last.text += ch;
+      else out.push({ text: ch, at: p.at! + k, ...(sup ? { sup } : {}), ...(sub ? { sub } : {}), ...(italic ? { italic } : {}), ...(bold ? { bold } : {}) });
     });
   }
   return out;
@@ -348,9 +355,9 @@ export const labelPrefs = { superscriptR: true };
 export const isNumberedR = (label: string | null): boolean => !!label && /^R\d+$/.test(label);
 
 /** How an atom's label raises its characters: R numbers (from the file, or by the preference) and marks set by hand. */
-export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string }): { supDigits: boolean; marks?: LabelMarks } {
+export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string; centred?: boolean; stacked?: 'up' | 'down'; stackedLoose?: boolean }): { supDigits: boolean; marks?: LabelMarks; centred?: boolean; stacked?: 'up' | 'down'; stackedLoose?: boolean } {
   const supDigits = a.supDigits ?? (labelPrefs.superscriptR && isNumberedR(a.label));
-  return a.labelMarks && a.label ? { supDigits, marks: a.labelMarks } : { supDigits };
+  return { supDigits, ...(a.labelMarks && a.label ? { marks: a.labelMarks } : {}), ...(a.centred ? { centred: true } : {}), ...(a.stacked ? { stacked: a.stacked } : {}), ...(a.stacked && a.stackedLoose ? { stackedLoose: true } : {}) };
 }
 
 /** The label's pieces in reading order, as `layoutLabel` shows them (for the typing box). */
@@ -368,6 +375,12 @@ export interface LabelSpec {
   supDigits?: boolean;
   /** Characters raised or lowered by hand. */
   marks?: LabelMarks;
+  /** Centre the whole label on the atom (a label on one line with no hydrogens or charge). */
+  centred?: boolean;
+  /** Stack the label above or below the atom, one piece per line. */
+  stacked?: 'up' | 'down';
+  /** Its lines 1.15 of the size apart (ChemDraw's LineHeight auto). */
+  stackedLoose?: boolean;
 }
 
 /** Tokens to show for an atom: its custom label, or element + hydrogens. Null = no label (plain carbon). */
@@ -413,6 +426,10 @@ export interface GlyphRun {
   size: number;
   /** Set in italics (the t of tBu, when asked for). */
   italic?: boolean;
+  /** Set in bold, when the rest of the label needn't be. */
+  bold?: boolean;
+  /** Where its text starts in the label text (none for automatic hydrogens and the charge). */
+  at?: number;
 }
 
 export interface LabelLayout {
@@ -421,12 +438,41 @@ export interface LabelLayout {
   boxes: { x1: number; y1: number; x2: number; y2: number }[];
   /** Which of the runs (and boxes) is the charge, when one is shown after the label. */
   charge?: number;
+  /** Set in bold (measured and drawn so). */
+  bold?: boolean;
 }
 
 export type Measure = (text: string, size: number) => number;
 
 export const SUB_SCALE = 0.75;
 export const CAP = 0.716; // Arial cap height as a fraction of the font size
+
+/**
+ * A label typed as an element and its hydrogens ("NH", "NH2", "OH") laid out as if the H were
+ * automatic, so a typed NH in a ring stacks its H below or above the N, as ChemDraw does, rather
+ * than running across a bond (issue #407). Labels with hand-raised characters are left alone.
+ */
+export function typedH(spec: LabelSpec): LabelSpec {
+  const [el, h] = spec.tokens;
+  if (spec.tokens.length !== 2 || spec.hCount || spec.marks) return spec;
+  if (el.kind !== 'el' || el.text === 'H' || el.count !== 1 || el.charge) return spec;
+  if (h.kind !== 'el' || h.text !== 'H' || h.charge) return spec;
+  return { ...spec, tokens: [el], hCount: h.count };
+}
+
+/**
+ * A label stacked above or below (Center alignment, or ChemDraw's Above and Below) goes on the
+ * side away from its bonds: once the structure is turned or flipped over (#520), or a file says
+ * Above for an NH whose bonds go up, the H would sit on the bonds, inside the ring.
+ */
+export function fitStacked<T extends { stacked?: 'up' | 'down' }>(spec: T, bondDirs: { x: number; y: number }[]): T {
+  if (!spec.stacked || bondDirs.length === 0) return spec;
+  let sy = 0;
+  for (const d of bondDirs) sy += d.y;
+  // y points down: bonds going up (sy < 0) leave room below, and the other way round
+  const toward = spec.stacked === 'up' ? -sy : sy;
+  return toward > 0.25 ? { ...spec, stacked: spec.stacked === 'up' ? 'down' : 'up' } : spec;
+}
 
 /**
  * Which way a label runs from its atom: to the right (OH), to the left (HO), or with the
@@ -440,8 +486,11 @@ export const CAP = 0.716; // Arial cap height as a fraction of the font size
  * goes on the first free side of right, left, above, below.
  */
 export function labelDir(spec: LabelSpec, bondDirs: { x: number; y: number }[], just: 'auto' | 'left' | 'right' = 'auto'): 'right' | 'left' | 'up' | 'down' {
+  spec = fitStacked(spec, bondDirs);
+  if (spec.stacked) return spec.stacked;
   if (just === 'left') return 'left';
   if (just === 'right') return 'right';
+  spec = typedH(spec);
   let sx = 0, sy = 0;
   for (const d of bondDirs) { sx += d.x; sy += d.y; }
   const EPS = 1e-3; // saved coordinates are rounded, so smaller differences mean nothing
@@ -457,19 +506,21 @@ export function labelDir(spec: LabelSpec, bondDirs: { x: number; y: number }[], 
 }
 
 /**
- * The tokens after a label's first in reading units, a bracketed abbreviation and its count
- * (the "(t-Bu)2" of P(t-Bu)2) as one, or null if the label has other punctuation in it.
+ * The tokens after a label's first in reading units, a bracketed group and its count (the
+ * "(t-Bu)2" of P(t-Bu)2, the "(OH)2" of B(OH)2) as one, or null if the label has other punctuation in it.
  */
 function bracketUnits(tail: Token[]): Token[][] | null {
   const units: Token[][] = [];
   for (let i = 0; i < tail.length; i++) {
     const t = tail[i];
     if (t.kind !== 'other') { units.push([t]); continue; }
-    if (t.text !== '(' || tail[i + 2]?.kind !== 'other' || tail[i + 2].text !== ')') return null;
-    const inside = tail[i + 1];
-    if (inside.kind === 'other') return null;
-    units.push([t, inside, tail[i + 2]]);
-    i += 2;
+    if (t.text !== '(') return null;
+    // the formula inside the brackets: one abbreviation (t-Bu) or elements and abbreviations (OH, OMe)
+    let j = i + 1;
+    while (j < tail.length && tail[j].kind !== 'other') j++;
+    if (j === i + 1 || tail[j]?.text !== ')') return null;
+    units.push(tail.slice(i, j + 1));
+    i = j;
   }
   return units;
 }
@@ -481,6 +532,7 @@ function bracketUnits(tail: Token[]): Token[][] | null {
  * position, and the rest of the label runs away from the bonds (p. 46).
  */
 export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number, measure: Measure, just: 'auto' | 'left' | 'right' = 'auto'): LabelLayout {
+  spec = fitStacked(typedH(spec), bondDirs);
   const head = spec.tokens[0];
   const tail = spec.tokens.slice(1);
   const hTok: Token | null = spec.hCount > 0 ? { kind: 'el', text: 'H', count: spec.hCount, charge: '' } : null;
@@ -501,7 +553,7 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
       const s = p.sub || p.sup ? subSize : size;
       const dy = baseline + (p.sub ? size * 0.22 : p.sup ? -size * 0.42 : 0);
       const w = measure(p.text, s);
-      runs.push({ text: p.text, dx: x, dy, size: s, ...(p.italic ? { italic: true } : {}) });
+      runs.push({ text: p.text, dx: x, dy, size: s, ...(p.italic ? { italic: true } : {}), ...(p.bold ? { bold: true } : {}), ...(p.at !== undefined ? { at: p.at } : {}) });
       boxes.push({ x1: x, y1: dy - CAP * s, x2: x + w, y2: dy + (p.sub ? 0.1 * s : 0) });
       x += w;
     }
@@ -517,16 +569,30 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
   if (dir === 'right' || dir === 'up' || dir === 'down') {
     let x = pushPieces(headPieces, headX);
     if (dir === 'right' && hTok) x = pushPieces(tokenPieces(hTok), x);
-    for (const t of tail) x = pushPieces(tokenPieces(t, sd, mk), x);
-    if (chargeText) pushCharge(x);
-    if (hTok && dir !== 'right') {
-      // stacked H above or below the atom (e.g. the NH of a ring)
-      const w = pieceWidth({ text: 'H' }) + (hTok.count > 1 ? pieceWidth({ text: String(hTok.count), sub: true }) : 0);
-      const yOff = dir === 'up' ? -size * 1.0 : size * 1.0;
-      const start = runs.length;
-      pushPieces(tokenPieces(hTok), -firstCharW / 2 + (firstCharW - w) / 2 + (hTok.count > 1 ? 0 : 0));
-      for (let i = start; i < runs.length; i++) runs[i].dy += yOff;
-      for (let i = start; i < boxes.length; i++) { boxes[i].y1 += yOff; boxes[i].y2 += yOff; }
+    if (spec.stacked && dir !== 'right') {
+      // stacked as ChemDraw draws it: hydrogens, then each piece, on lines of their own lined up on
+      // the left edge of the atom symbol; a charge stays by the symbol
+      if (chargeText) pushCharge(x);
+      let line = 0;
+      for (const t of hTok ? [hTok, ...tail] : tail) {
+        const start = runs.length;
+        pushPieces(tokenPieces(t, sd, mk), headX);
+        const yOff = (dir === 'up' ? -1 : 1) * size * (spec.stackedLoose ? 1.15 : 1) * ++line;
+        for (let i = start; i < runs.length; i++) runs[i].dy += yOff;
+        for (let i = start; i < boxes.length; i++) { boxes[i].y1 += yOff; boxes[i].y2 += yOff; }
+      }
+    } else {
+      for (const t of tail) x = pushPieces(tokenPieces(t, sd, mk), x);
+      if (chargeText) pushCharge(x);
+      if (hTok && dir !== 'right') {
+        // stacked H above or below the atom (e.g. the NH of a ring)
+        const w = pieceWidth({ text: 'H' }) + (hTok.count > 1 ? pieceWidth({ text: String(hTok.count), sub: true }) : 0);
+        const yOff = dir === 'up' ? -size * 1.0 : size * 1.0;
+        const start = runs.length;
+        pushPieces(tokenPieces(hTok), -firstCharW / 2 + (firstCharW - w) / 2 + (hTok.count > 1 ? 0 : 0));
+        for (let i = start; i < runs.length; i++) runs[i].dy += yOff;
+        for (let i = start; i < boxes.length; i++) { boxes[i].y1 += yOff; boxes[i].y2 += yOff; }
+      }
     }
   } else if (spec.tokens.some((t) => t.kind === 'other') && (head.kind === 'other' || !bracketUnits(tail))) {
     // Text that is not a formula ("(3,4)-MDP", "Aryl") is never reversed: ChemDraw keeps its
@@ -544,7 +610,9 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
   } else {
     // Reversed: rest of the label to the left, abbreviations kept whole (THPO, not PHTO), and a
     // bracketed group with its count too ((t-Bu)2P, not )2t-Bu(P).
-    const leftTokens: Token[] = (bracketUnits(tail) ?? tail.map((t) => [t])).reverse().flat();
+    // what is inside brackets reads backwards too ((HO)2B, (MeO)2HC), as ChemDraw writes it
+    const leftTokens: Token[] = (bracketUnits(tail) ?? tail.map((t) => [t])).reverse()
+      .flatMap((u) => (u.length > 3 ? [u[0], ...u.slice(1, -1).reverse(), u[u.length - 1]] : u));
     const leftPieces: Piece[] = [];
     for (const t of leftTokens) leftPieces.push(...tokenPieces(t, sd, mk));
     if (hTok) leftPieces.push(...tokenPieces(hTok));
@@ -568,6 +636,13 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
     const s = subSize, w = measure(chargeText, s);
     runs.push({ text: chargeText, dx: spot.x, dy: spot.dy, size: s });
     boxes.push({ x1: spot.x, y1: spot.dy - CAP * s, x2: spot.x + w, y2: spot.dy });
+  }
+  // a centred label: the middle of its letters on the atom
+  if (spec.centred && charge === undefined && runs.length && runs.every((r) => Math.abs(r.dy - runs[0].dy) < size)) {
+    const x1 = Math.min(...boxes.map((b) => b.x1)), x2 = Math.max(...boxes.map((b) => b.x2));
+    const dx = -(x1 + x2) / 2;
+    for (const r of runs) r.dx += dx;
+    for (const b of boxes) { b.x1 += dx; b.x2 += dx; }
   }
   return { runs, boxes, charge };
 }
@@ -1054,6 +1129,24 @@ function reversedItems(items: Item[]): Item[] | null {
   return null;
 }
 
+/**
+ * A whole molecule written with its groups first (Me2SO, Me3N, Me2CO, (i-Pr)2NEt, Cl2CO): the
+ * items with the first heavy atom moved to the front, so every group before it bonds to it, or
+ * null when the label doesn't start that way. One group before the atom (MeOH, BrCH2CH2Br) reads
+ * the same either way; read forwards, two or more would bond to each other.
+ */
+function leadingGroupsFirst(items: Item[]): Item[] | null {
+  let k = 0, groups = 0;
+  for (; k < items.length && terminal(items[k]); k++) {
+    const it = items[k];
+    if ('tok' in it && it.tok.kind === 'generic') return null;
+    groups += 'tok' in it ? Math.max(1, it.tok.count) : it.count;
+  }
+  const atom = items[k];
+  if (groups < 2 || !atom || !('tok' in atom) || atom.tok.kind !== 'el' || atom.tok.text === 'H' || atom.tok.count > 1) return null;
+  return [atom, ...items.slice(0, k), ...items.slice(k + 1)];
+}
+
 const graphCache = new Map<string, { g: MiniGraph | null; over: OverValent[] }>();
 
 /** An element list such as [Cl, Br, I] (or [Rh]): any one of these, left out of the formula. */
@@ -1094,7 +1187,7 @@ function buildLabel(label: string, ext: number, charge = 0): { g: MiniGraph | nu
       const t = rev.map(itemText).join('');
       if (NICKNAMES[t]) nick = t;
       else items = rev;
-    }
+    } else if (items && ext === 0) items = leadingGroupsFirst(items) ?? items;
   }
   // an abbreviation is read as one token, so a second bond to it shows up as too many bonds
   if (nick) items = [{ tok: { kind: 'nick', text: nick, count: 1, charge: '' } }];

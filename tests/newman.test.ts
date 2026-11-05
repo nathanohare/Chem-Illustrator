@@ -85,6 +85,16 @@ describe('the view down a bond', () => {
     expect(v.front.find((g) => g.label === 'CH3')!.angle).toBeCloseTo(0, 5);
   }, 60000);
 
+  // Review 2026-11-03 L2: the benzoate key never matched (the ring was keyed atom by atom), so OBz showed as OCR
+  it('names a benzoate OBz and a benzyl Bn', () => {
+    const bz = drawn('CC(OC(=O)c1ccccc1)C').model;
+    expect(groupLabel(bz, 2, 1, neighbours(bz))).toBe('OBz');
+    const ac = drawn('CC(OC(C)=O)C').model;
+    expect(groupLabel(ac, 2, 1, neighbours(ac))).toBe('OAc');
+    const bn = drawn('CC(Cc1ccccc1)C').model;
+    expect(groupLabel(bn, 2, 1, neighbours(bn))).toBe('Bn');
+  }, 60000);
+
   it('writes labels the other way round on the left', () => {
     expect(reversedLabel('CH3')).toBe('H3C');
     expect(reversedLabel('CO2Me')).toBe('MeO2C');

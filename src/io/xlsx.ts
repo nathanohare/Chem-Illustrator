@@ -28,6 +28,7 @@ import { readTyped, isError, CellError, Value, EXCEL_ERRORS } from '../sheet/val
 import { PROPERTIES } from '../sheet/properties';
 import { ISOTOPE_FUNCTIONS } from '../sheet/isotopes';
 import { chemPieces, showsChem } from '../sheet/cell-text';
+import { type TextRun, looksOf, lookOver, runsFrom, runsOf } from '../sheet/rich-text';
 import { DEFAULT_COL_W, DEFAULT_ROW_H, MAX_AUTO_ROW, structureHeight } from '../sheet/layout';
 import type { Contents } from '../model';
 import type { DocStyle } from '../style';
@@ -388,19 +389,42 @@ class Strings {
   private byKey = new Map<string, number>();
   count = 0;
 
-  index(text: string, chem: boolean): number {
+  constructor(private minor = 'Calibri') {}
+
+  /** A text's number; `runs` (part of it bold…) over the cell's look `style`. */
+  index(text: string, chem: boolean, runs?: TextRun[], style?: CellStyle): number {
     this.count++;
     const pieces = chem ? chemPieces(text) : null;
-    const rich = !!pieces && pieces.some((p) => p.pos !== 'base' || p.italic);
-    const key = (rich ? '1' : '0') + text;
+    const chemRich = !!pieces && pieces.some((p) => p.pos !== 'base' || p.italic);
+    const fit = runs && runsOf({ input: text, runs }) ? runs : undefined;
+    const key = fit ? '2' + JSON.stringify([text, chem, fit, style?.bold, style?.italic, style?.underline, style?.color, style?.size, style?.font]) : (chemRich ? '1' : '0') + text;
     const got = this.byKey.get(key);
     if (got !== undefined) return got;
     const t = (s: string) => `<t${/^\s|\s$|\n/.test(s) ? ' xml:space="preserve"' : ''}>${xml(excelEscape(s))}</t>`;
-    this.list.push(rich
-      ? `<si>${pieces!.map((p) => `<r>${p.pos !== 'base' || p.italic ? `<rPr>${p.italic ? '<i/>' : ''}${p.pos !== 'base' ? `<vertAlign val="${p.pos === 'sub' ? 'subscript' : 'superscript'}"/>` : ''}</rPr>` : ''}${t(p.text)}</r>`).join('')}</si>`
-      : `<si>${t(text)}</si>`);
+    if (fit) {
+      // each run with its whole look, as Excel writes them (a run's look doesn't fall back to its cell's)
+      const looks = looksOf(text, fit);
+      if (pieces) {
+        let i = 0;
+        for (const p of pieces) for (let j = 0; j < p.text.length; j++, i++) {
+          looks[i] = { ...looks[i], ...(p.pos !== 'base' && !looks[i].pos ? { pos: p.pos } : {}), ...(p.italic && looks[i].italic === undefined ? { italic: true } : {}) };
+        }
+      }
+      const merged = runsFrom(text, looks) ?? [{ text }];
+      this.list.push(`<si>${merged.map((r) => `<r>${this.runLook(lookOver(style, r))}${t(r.text)}</r>`).join('')}</si>`);
+    } else {
+      this.list.push(chemRich
+        ? `<si>${pieces!.map((p) => `<r>${p.pos !== 'base' || p.italic ? `<rPr>${p.italic ? '<i/>' : ''}${p.pos !== 'base' ? `<vertAlign val="${p.pos === 'sub' ? 'subscript' : 'superscript'}"/>` : ''}</rPr>` : ''}${t(p.text)}</r>`).join('')}</si>`
+        : `<si>${t(text)}</si>`);
+    }
     this.byKey.set(key, this.list.length - 1);
     return this.list.length - 1;
+  }
+
+  private runLook(l: ReturnType<typeof lookOver<CellStyle>>): string {
+    return `<rPr>${l.bold ? '<b/>' : ''}${l.italic ? '<i/>' : ''}${l.strike ? '<strike/>' : ''}${l.underline ? '<u/>' : ''}` +
+      `${l.pos ? `<vertAlign val="${l.pos === 'sub' ? 'subscript' : 'superscript'}"/>` : ''}<sz val="${l.size ?? 11}"/>` +
+      `${l.color ? `<color rgb="FF${hex6(l.color)}"/>` : '<color theme="1"/>'}<rFont val="${xmlAttr(l.font ?? this.minor)}"/><family val="2"/>${l.font ? '' : '<scheme val="minor"/>'}</rPr>`;
   }
 
   toXml(): string {
@@ -449,7 +473,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   const pkg = new Package();
   const vba = opts.macros ? book.macros : null;
   const styles = new Styles(book.theme);
-  const strings = new Strings();
+  const strings = new Strings(themeOf(book.theme).minor);
   const model: Model = { app: 'Chem Illustrator', version: 1, drawingStyle: book.drawingStyle, sheets: [], autoChem: book.autoChem, ...(book.customViews.length ? { customViews: book.customViews } : {}), ...(book.queries.length ? { queries: book.queries } : {}) };
   const sheetEntries: string[] = [];
   const filterNames: string[] = [];
@@ -589,7 +613,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
           wrote = excelCellText(v as string);
           body = f
             ? `<c r="${ref}"${sAttr} t="str">${f}<v>${xml(wrote)}</v></c>`
-            : `<c r="${ref}"${sAttr} t="s"><v>${strings.index(wrote, chem)}</v></c>`;
+            : `<c r="${ref}"${sAttr} t="s"><v>${strings.index(wrote, chem, wrote === v ? runsOf(cell) : undefined, style)}</v></c>`;
         }
         if (entry) entry.wrote = wrote;
         if (body) cells.push(body);
@@ -1019,17 +1043,68 @@ function readTheme(doc: Document | null): string[] {
 const excelUnescape = (s: string) => s.replace(/_x([0-9A-Fa-f]{4})_/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
 export const excelEscape = (s: string) => s.replace(/_(?=x[0-9A-Fa-f]{4}_)/g, '_x005F_').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, (c) => `_x${c.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}_`);
 
-/** A shared string's text, and whether some of it is lowered or raised (chemistry). */
-function stringItem(si: Element): { text: string; chem: boolean } {
+/** A run of a shared string as the file has it: its whole look, or none (the cell's). */
+interface FileRun {
+  text: string;
+  look?: { bold: boolean; italic: boolean; underline: boolean; strike: boolean; color?: string; pos?: 'sub' | 'sup'; size?: number; font?: string; minor: boolean };
+}
+
+/** A shared string's text, whether some of it is lowered or raised (chemistry), and its runs. */
+function stringItem(si: Element, theme: string[] = []): { text: string; chem: boolean; runs?: FileRun[] } {
   const t = kid(si, 't');
   if (t) return { text: excelUnescape(t.textContent ?? ''), chem: false };
   let text = '', chem = false;
+  const runs: FileRun[] = [];
+  const on = (el: Element | null) => !!el && !['0', 'false', 'none'].includes(el.getAttribute('val') ?? '');
   for (const r of kids(si, 'r')) {
-    text += excelUnescape(kid(r, 't')?.textContent ?? '');
+    const part = excelUnescape(kid(r, 't')?.textContent ?? '');
+    text += part;
+    const pr = kid(r, 'rPr');
     const va = kid(r, 'rPr', 'vertAlign')?.getAttribute('val');
     if (va === 'subscript' || va === 'superscript') chem = true;
+    if (!part) continue;
+    if (!pr) { runs.push({ text: part }); continue; }
+    const sz = kid(pr, 'sz')?.getAttribute('val');
+    runs.push({
+      text: part,
+      look: {
+        bold: on(kid(pr, 'b')), italic: on(kid(pr, 'i')), underline: on(kid(pr, 'u')), strike: on(kid(pr, 'strike')),
+        color: readColour(kid(pr, 'color'), theme),
+        pos: va === 'subscript' ? 'sub' : va === 'superscript' ? 'sup' : undefined,
+        size: sz ? Number(sz) : undefined,
+        font: kid(pr, 'rFont')?.getAttribute('val') ?? undefined,
+        minor: kid(pr, 'scheme')?.getAttribute('val') === 'minor',
+      },
+    });
   }
-  return { text, chem };
+  return { text, chem, ...(runs.some((x) => x.look) ? { runs } : {}) };
+}
+
+/**
+ * A shared string's runs as they differ from their cell (Excel gives each run its whole look,
+ * font and size too): undefined when no part of the text looks different from the rest of it.
+ */
+function cellRuns(runs: FileRun[] | undefined, style: CellStyle | undefined, minorFont: string): TextRun[] | undefined {
+  if (!runs) return undefined;
+  const size = style?.size ?? 11;
+  const out: TextRun[] = runs.map((r) => {
+    const l = r.look;
+    if (!l) return { text: r.text };
+    const font = l.font && !l.minor && l.font !== (style?.font ?? minorFont) && !(l.font === 'Calibri' && !style?.font) ? l.font : undefined;
+    const color = l.color && l.color !== (style?.color ?? '#000000') ? l.color : undefined;
+    return {
+      text: r.text,
+      ...(l.bold !== !!style?.bold ? { bold: l.bold } : {}),
+      ...(l.italic !== !!style?.italic ? { italic: l.italic } : {}),
+      ...(l.underline !== !!style?.underline ? { underline: l.underline } : {}),
+      ...(l.strike ? { strike: true } : {}),
+      ...(color ? { color } : {}),
+      ...(l.pos ? { pos: l.pos } : {}),
+      ...(l.size !== undefined && l.size !== size ? { size: l.size } : {}),
+      ...(font ? { font } : {}),
+    };
+  });
+  return runsFrom(out.map((r) => r.text).join(''), out.flatMap((r) => Array.from({ length: r.text.length }, () => r)));
 }
 
 /** A cell typed as it shows: text that would read as a number is kept as text. */
@@ -1068,12 +1143,14 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const workbookTheme = readWorkbookTheme(themeDoc);
   const stylesDoc = relTarget(RELS.styles) ? pkg.xml(relTarget(RELS.styles)!) : null;
   const xfs = readStyles(stylesDoc, theme);
+  // the workbook's own font (the Normal style's), which a run of rich text in it isn't set apart by
+  const baseFont = kid(kids(kid(stylesDoc?.documentElement ?? null, 'fonts'), 'font')[0] ?? null, 'name')?.getAttribute('val') ?? themeOf(workbookTheme).minor;
   const colourOf = (el: Element | null) => readColour(el, theme);
   const dxfs = readDxfs(stylesDoc, colourOf);
   const personsPath = relTarget(NOTES_REL.persons);
   const personsDoc = personsPath ? pkg.xml(personsPath) : null;
   const ssPath = relTarget(RELS.sharedStrings);
-  const shared = ssPath ? kids(pkg.xml(ssPath)?.documentElement, 'si').map(stringItem) : [];
+  const shared = ssPath ? kids(pkg.xml(ssPath)?.documentElement, 'si').map((si) => stringItem(si, theme)) : [];
 
   // our own part, if this file was saved here (found by name: programs that keep it don't all keep its link)
   let model: Model | null = null;
@@ -1198,15 +1275,18 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           let input: string | undefined;
           let chem = false;
           let value: Wrote = null;
+          let fileRuns: FileRun[] | undefined;
           if (t === 's' && v !== null) {
             const item = shared[Number(v)];
             value = item?.text ?? '';
             chem = !!item?.chem;
+            fileRuns = item?.runs;
           } else if (t === 'inlineStr') {
             const is = kid(c, 'is');
-            const item = is ? stringItem(is) : { text: '', chem: false };
+            const item = is ? stringItem(is, theme) : { text: '', chem: false };
             value = item.text;
             chem = item.chem;
+            fileRuns = item.runs;
           } else if (t === 'str' || t === 'e') value = v ?? '';
           else if (t === 'b') value = isOn(v);
           else if (t === 'd' && v) value = Date.parse(v) / 86400000 + 25569;
@@ -1249,7 +1329,9 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
             else if (typeof value === 'string') input = t === 'e' ? value : textInput(value);
           }
           const st = chem ? { ...style, chem: true } : style;
-          if (input || st) s.setCell(r, col, { input: input || undefined, style: st });
+          // part of the text bold, italic, coloured… (rich text)
+          const runs = !f && typeof value === 'string' && input ? runsOf({ input, runs: cellRuns(fileRuns, style, baseFont) }) : undefined;
+          if (input || st) s.setCell(r, col, { input: input || undefined, style: st, ...(runs ? { runs } : {}) });
         }
       }
       if (defW !== DEFAULT_COL_W) for (let c = 0; c <= maxCol; c++) if (!widthSet.has(c)) s.setColWidth(c, defW);
@@ -1311,7 +1393,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
               if ((r !== m.r || c !== m.c) && x?.input && !x.input.startsWith('=')) s.setCell(r, c, { style: x.style });
             }
           }
-          else s.setCell(m.r, m.c, { input: cur?.input, style });
+          else s.setCell(m.r, m.c, { input: cur?.input, style, ...(cur?.runs ? { runs: cur.runs } : {}) });
           if (m.compound && isCard(m.compound)) { const x = s.cell(m.r, m.c); s.setCell(m.r, m.c, { ...x, compound: m.compound }); }
         }
         if (ms.filter && afRange && sameRange(ms.filter.range, afRange)) {

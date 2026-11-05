@@ -105,7 +105,7 @@ describe('the new things through every file', () => {
   it('CDXML: kept, and ChemDraw gets ordinary text, arrows, dashes and shapes', () => {
     const doc = everything();
     const xml = writeCdxml(doc);
-    expect(xml).toContain('ChemIllustratorDotted="yes"');
+    expect(xml).toContain('Name="Chem Illustrator dotted" Value="yes"');
     expectKept(readCdxml(xml).doc);
   });
 

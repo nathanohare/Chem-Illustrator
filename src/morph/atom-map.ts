@@ -1,8 +1,9 @@
 // Chemistry ▸ Reactions and Schemes ▸ Map Atoms: which atom goes where across each reaction step,
 // as atom-atom map numbers. Each starting material is laid onto the products along its bonds,
 // element to element, keeping as many of its bonds as it can (the fewest bonds made and broken).
-// Where that leaves a choice, the pairing Animate Reaction uses breaks the tie, and pairs chosen
-// by hand in its pairing editor are kept, so fixing a pair there fixes the map too.
+// Where that leaves a choice, the pairing Animate Reaction uses breaks the tie (on steps of up to
+// about 50 atoms a side), and pairs chosen by hand in its pairing editor are kept, so fixing a pair
+// there fixes the map too.
 
 import type { Doc } from '../model';
 import type { Renderer } from '../render/renderer';
@@ -51,7 +52,9 @@ export function mapAtoms(doc: Doc, r: Renderer, opts: { arrow?: number; measure?
     let cfg = configOf(doc.arrows.get(arrow)?.morph, A, B);
     let hint: NodeMap;
     try {
-      hint = resolve(cfg, A, B).nmap;
+      // (the animation's own pairing only breaks ties, and takes seconds on a big step: there, only
+      // the pairs chosen by hand are used)
+      hint = A.nodes.size * B.nodes.size > HINT_LIMIT && !cfg.pairs?.length ? new Map() : resolve(cfg, A, B).nmap;
     } catch (e) {
       // pairs saved in Animate Reaction that no longer fit: map without them
       out.errors.push((e as Error).message);
@@ -73,6 +76,9 @@ export function mapAtoms(doc: Doc, r: Renderer, opts: { arrow?: number; measure?
   }
   return out;
 }
+
+/** Atoms on one side times the other above which the animation's pairing is not worked out for a step. */
+const HINT_LIMIT = 50 * 50;
 
 const zOf = (doc: Doc) => (k: string) => doc.atoms.get(Number(k))?.z;
 
@@ -97,8 +103,8 @@ export function chemMap(doc: Doc, A: MScene, B: MScene, hint: NodeMap, forced: N
   /** Pair along the bonds out from the pairs already made, as far as it goes. */
   const grow = (m: NodeMap, used: Set<string>) => {
     const queue = [...m];
-    while (queue.length) {
-      const [a, b] = queue.shift()!;
+    for (let q = 0; q < queue.length; q++) {
+      const [a, b] = queue[q];
       for (const y of B.nbr.get(b) ?? []) {
         if (used.has(y)) continue;
         let best: string | null = null, bestScore = -1;
@@ -130,20 +136,41 @@ export function chemMap(doc: Doc, A: MScene, B: MScene, hint: NodeMap, forced: N
   let m: NodeMap = sameElement(doc, forced);
   let used = new Set(m.values());
   grow(m, used);
-  // each starting material in turn, biggest first, from the seed pair that keeps most of its bonds
-  for (const frag of components(A).sort((p, q) => q.length - p.length)) {
-    if (frag.every((x) => m.has(x))) continue;
-    const free = frag.filter((x) => !m.has(x));
-    // every atom as a seed for a small structure; for a big one, the rarest element's atoms (a lone
-    // N or O rather than every carbon) and those the animation paired, to keep this quick
-    const count = new Map<number | undefined, number>();
-    for (const x of free) count.set(z(x), (count.get(z(x)) ?? 0) + 1);
-    const rare = Math.min(...count.values());
-    const seeds = free.length * B.nodes.size <= 20000 ? free : free.filter((x) => count.get(z(x)) === rare || hint.has(x)).slice(0, 60);
-    let best: { m: NodeMap; used: Set<string>; score: number } | null = null;
-    for (const x of seeds) {
-      for (const y of B.nodes.keys()) {
-        if (used.has(y) || z(x) !== z(y)) continue;
+  /** The most bonds a starting material's pairing can keep: every one, with its order. */
+  const allKept = (atoms: string[]) => {
+    let n = 0;
+    for (const u of atoms) for (const v of A.nbr.get(u) ?? []) if (u < v) n += 11;
+    return n;
+  };
+  // Each starting material in turn, biggest first, from the seed pair that keeps most of its
+  // bonds; then again for what is left of each, so one that falls apart into several products
+  // (a Boc group off as CO2 and isobutylene, an acetate as acetic acid, a retro-Diels–Alder) is
+  // paired with all of them. A later round only takes a pairing that keeps another bond.
+  for (let round = 0, more = true; more && round < 8; round++) {
+    more = false;
+    for (const frag of components(A).sort((p, q) => q.length - p.length)) {
+      if (frag.every((x) => m.has(x))) continue;
+      const free = frag.filter((x) => !m.has(x));
+      // every atom as a seed for a small structure; for a big one, the rarest element's atoms (a lone
+      // N or O rather than every carbon) and those the animation paired, to keep this quick
+      const count = new Map<number | undefined, number>();
+      for (const x of free) count.set(z(x), (count.get(z(x)) ?? 0) + 1);
+      const rare = Math.min(...count.values());
+      const big = free.length * B.nodes.size > 20000;
+      const seeds = big ? free.filter((x) => count.get(z(x)) === rare || hint.has(x)).slice(0, 60) : free;
+      // seed pairs to try: all of them, in drawing order, when there are few; for a big structure the
+      // likeliest first (the animation's pair, then atoms most alike), as many as time allows
+      let tries: [string, string][] = [];
+      for (const x of seeds) for (const y of B.nodes.keys()) if (!used.has(y) && z(x) === z(y)) tries.push([x, y]);
+      const budget = Math.max(400, Math.floor(TRIAL_BUDGET / (A.nodes.size + B.nodes.size)));
+      const pruned = tries.length > budget;
+      if (pruned) {
+        const rank = ([x, y]: [string, string]) => (hint.get(x) === y ? 100 : 0) + alike(x, y);
+        tries = tries.map((t, i) => ({ t, r: rank(t), i })).sort((p, q) => q.r - p.r || p.i - q.i).slice(0, budget).map((o) => o.t);
+      }
+      const before = keeps(m, frag), most = allKept(frag);
+      let best: { m: NodeMap; used: Set<string>; score: number; kept: number } | null = null;
+      for (const [x, y] of tries) {
         const tm: NodeMap = new Map(m), tu = new Set(used);
         tm.set(x, y);
         tu.add(y);
@@ -155,11 +182,14 @@ export function chemMap(doc: Doc, A: MScene, B: MScene, hint: NodeMap, forced: N
           like += alike(k, tm.get(k)!);
         }
         // most bonds kept, then atoms most like their partners (a methyl to a methyl, not to a ring carbon)
-        const score = keeps(tm, frag) * 1000 + like * 10 + frag.filter((k) => tm.has(k)).length * 5 + agree;
-        if (!best || score > best.score) best = { m: tm, used: tu, score };
+        const kept = keeps(tm, frag);
+        const score = kept * 1000 + like * 10 + frag.filter((k) => tm.has(k)).length * 5 + agree;
+        if (!best || score > best.score) best = { m: tm, used: tu, score, kept };
+        // (cut short, a structure laid on with every bond kept: nothing better to find)
+        if (pruned && kept === most) break;
       }
+      if (best && (round === 0 || best.kept > before)) { m = best.m; used = best.used; more = true; }
     }
-    if (best) { m = best.m; used = best.used; }
   }
   // an element with one atom left over on each side: those two
   const left = (sc: MScene, taken: (k: string) => boolean) => {
@@ -171,6 +201,9 @@ export function chemMap(doc: Doc, A: MScene, B: MScene, hint: NodeMap, forced: N
   for (const [el, as] of la) { const bs = lb.get(el); if (as.length === 1 && bs?.length === 1) { m.set(as[0], bs[0]); used.add(bs[0]); } }
   return m;
 }
+
+/** Seed pairs tried for one structure, times the atoms on both sides: keeps a big step to a fraction of a second. */
+const TRIAL_BUDGET = 250000;
 
 /** Atoms in a ring: an end of a bond whose ends are still joined without it. */
 function ringAtoms(sc: MScene): Set<string> {

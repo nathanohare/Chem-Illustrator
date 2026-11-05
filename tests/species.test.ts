@@ -7,7 +7,9 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
 import { Doc } from '../src/model';
 import { toMolfile } from '../src/chem/molfile';
-import { allSpecies, captionChemWarning, captionReading, captionSpecies, groupedIons, readSpecies, speciesFormula, speciesSmiles } from '../src/chem/species';
+import { allSpecies, captionChemWarning, captionReading, captionSpecies, groupedIons, placeSpecies, reagentSpecies, readSpecies, speciesFormula, speciesSmiles } from '../src/chem/species';
+import { addMolfile } from '../src/chem/molfile';
+import { reactionSteps, schemeItems } from '../src/chem/reaction';
 import { plainMeasure } from '../src/chem/reaction';
 import { setSideText } from '../src/chem/arrow-text';
 import { writeCdxml } from '../src/io/cdxml-write';
@@ -118,6 +120,15 @@ describe('reading a text box', () => {
     // groups and parts of molecules still aren't molecules on their own
     for (const t of ['CH2', 'CH', 'OH', 'CH3', 'NO2', 'CO2H', 'CF3', 'CHO']) expect(readSpecies(t), t).toBeNull();
   });
+  it('bonds groups written before an atom to that atom (Me2SO is DMSO, Me2CO acetone, not their isomers)', () => {
+    for (const [t, smi] of [['Me2SO', 'CS(C)=O'], ['Me2CO', 'CC(C)=O'], ['Me2O', 'COC'], ['Me3N', 'CN(C)C'], ['Me2NEt', 'CCN(C)C'],
+      ['Me2SiCl2', 'C[Si](C)(Cl)Cl'], ['(i-Pr)2NEt', 'CCN(C(C)C)C(C)C'], ['Me2NCHO', 'CN(C)C=O'], ['Ph2CO', 'O=C(c1ccccc1)c1ccccc1'],
+      ['Me3COH', 'CC(C)(C)O'], ['(CH3)2CO', 'CC(C)=O'], ['Cl2CO', 'O=C(Cl)Cl'], ['F3CCF3', 'FC(F)(F)C(F)(F)F'], ['Et2Zn', 'CC[Zn]CC'],
+      // one group before the atom, or none, reads as before
+      ['MeOtBu', 'COC(C)(C)C'], ['BrCH2CH2Br', 'BrCCBr'], ['Me2S', 'CSC']] as const) {
+      expect(engineSmiles(t), t).toBe(canonical(smi));
+    }
+  });
   it('reads a group or atom set to Chemical as the radical or atom it stands for', () => {
     const read = (t: string) => readSpecies(t, { fragments: true })!;
     for (const [t, name, f] of [['OH', 'hydroxyl radical', 'HO'], ['CH3', 'methyl radical', 'CH3'], ['Me', 'methyl radical', 'CH3'], ['NO2', 'nitrogen dioxide', 'NO2'],
@@ -189,6 +200,51 @@ describe('text boxes in a drawing', () => {
     // and a free one set to Plain text doesn't
     doc.edit('c', () => doc.updateCaption(free.id, { chem: false }));
     expect(captionReading(doc, doc.captions.get(free.id)!, m)).toMatchObject({ species: null, why: 'plain' });
+  });
+  // Laptop bench 2026-11-03 (cd-recheck-414-text-reagent-smiles): Me2SO typed over the arrow and
+  // Me2CO under it were left out of Copy Reaction as SMILES ("Conditions written as text are left
+  // out"), and on a step opened from a file they weren't counted at all until Clean Up Reaction
+  it('reads text typed over and under a step\'s arrow as its reagents, also on a step opened from a file', () => {
+    const doc = new Doc();
+    const at = (smi: string, x: number) => {
+      const mol = RDKit.get_mol(smi);
+      mol.set_new_coords();
+      const mb = mol.get_molblock();
+      mol.delete();
+      let ids: number[] = [];
+      doc.edit('Paste', () => { ids = addMolfile(doc, mb, 0, 0); });
+      const xs = ids.map((id) => doc.atoms.get(id)!.x), ys = ids.map((id) => doc.atoms.get(id)!.y);
+      doc.edit('Move', () => doc.moveAtoms(ids, x - Math.min(...xs), 200 - (Math.min(...ys) + Math.max(...ys)) / 2));
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    const w = at('CC(=O)c1ccccc1', 0);
+    doc.edit('arrow', () => doc.addArrow({ tail: { x: w + 20, y: 200 }, head: { x: w + 100, y: 200 }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: 6, headWidth: 1.5 }));
+    at('CC(O)c1ccccc1', w + 120);
+    // saved and opened again: the step's roles are stored with its arrow
+    const back = readCdxml(writeCdxml(doc)).doc;
+    expect([...back.arrows.values()][0].step).toBeTruthy();
+    // then the reagents typed just over and under the arrow
+    const over = text(back, 'Me2SO', w + 45, 195), under = text(back, 'Me2CO', w + 45, 212);
+    const m = plainMeasure(back);
+    const [step] = reactionSteps(back, schemeItems(back, m));
+    expect(step.roles.above).toContain('c' + over.id);
+    expect(step.roles.below).toContain('c' + under.id);
+    // text over an arrow stays text in the drawing's own formula, but is the step's reagent
+    expect(captionSpecies(back, over, m)).toBeNull();
+    const smiles = (c: typeof over) => {
+      const species = placeSpecies(back, [c], m, true);
+      const mol = RDKit.get_mol(toMolfile(back, new Set(), '', { species }).molblock);
+      const smi = mol.get_smiles();
+      mol.delete();
+      return smi;
+    };
+    expect(smiles(over)).toBe(canonical('CS(C)=O'));
+    expect(smiles(under)).toBe(canonical('CC(C)=O'));
+    // conditions that aren't a compound, and text set to Plain, stay conditions
+    const temp = text(back, '0 °C', w + 45, 224);
+    expect(reagentSpecies(back, temp, m)).toBeNull();
+    back.edit('c', () => back.updateCaption(over.id, { chem: false }));
+    expect(reagentSpecies(back, back.captions.get(over.id)!, m)).toBeNull();
   });
   it('leaves text tied to a structure and ordinary captions alone', () => {
     const doc = new Doc();

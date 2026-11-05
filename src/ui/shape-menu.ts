@@ -39,10 +39,11 @@ export class ShapeMenu {
     if (this.shown) { this.hide(); return; }
     this.pick = pick;
     this.back = document.activeElement;
+    // shown first: the library draws its pictures only once it can be seen
+    this.pop.hidden = false;
     this.lib.showTab(tab);
     const p = this.pop.querySelector('.dl-head p');
     if (p) p.textContent = tip;
-    this.pop.hidden = false;
     const r = button.getBoundingClientRect();
     const w = this.pop.offsetWidth;
     this.pop.style.left = `${Math.max(4, Math.min(r.left, innerWidth - w - 4))}px`;

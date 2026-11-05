@@ -26,3 +26,7 @@ src/design/icons/mdi.json
 
 # OPSIN build folder (see opsin-js/README.md)
 opsin-js/target/
+# our own ChemDraw test drawings (tests/fixtures/chemdraw-clipboard/README.md)
+!tests/fixtures/chemdraw-clipboard/*.cdx
+!tests/fixtures/chemdraw-clipboard/*.cdxml
+!tests/fixtures/chemdraw-clipboard/*/*.cdx

@@ -1,7 +1,7 @@
 // The Guides toolbox (View > Toolboxes > Guides): add crosshairs, lines across or up and down, or
 // a grid; set the ruler ticks on them; choose what a grabbed atom or bond snaps to. It takes the
-// place of the red smart guides, which it can still turn on. The Select tool drags a guide; one
-// dropped outside the drawing goes.
+// place of the pink smart guides canvases had. The Select tool drags a guide; one dropped outside
+// the drawing goes. Each drawing has its own guides.
 
 import { infoIcon } from './toolboxes';
 import { DEFAULT_GUIDES, GUIDE_COLOURS, parseGuideLength, showGuideLength, GUIDE_SNAPS, type CanvasGuides, type Guide, type GuideKind, type GuideSnap } from '../editor/guides';
@@ -13,9 +13,6 @@ export interface GuidesToolboxHooks {
   centre(): { x: number; y: number };
   /** The rulers' units. */
   units(): 'in' | 'cm';
-  /** The smart guides (things line up with each other as they move). */
-  smart(): boolean;
-  setSmart(on: boolean): void;
 }
 
 const SNAP_LABEL: Record<GuideSnap, [string, string]> = {
@@ -111,15 +108,15 @@ export function buildGuidesToolbox(body: HTMLElement, vertical: boolean, h: Guid
   const minor = field('Minor', 'minor');
   body.append(ticks);
 
-  // snapping on or off: onto the guides and their ticks, and into line with other things (smart guides)
-  const smart = d.createElement('label');
-  smart.className = 'gt-row gt-check';
+  // snapping onto the guides and their ticks, on or off
+  const snapRow = d.createElement('label');
+  snapRow.className = 'gt-row gt-check';
   const box = d.createElement('input');
   box.type = 'checkbox';
-  box.addEventListener('change', () => { h.setSmart(box.checked); change({ snapOff: box.checked ? undefined : true }); });
-  smart.append(box, d.createTextNode('Toggle object snapping'));
-  smart.title = 'What you drag snaps onto the guides and their ticks, and its edges and middle into line with other structures, text and the page (smart guides). Hold Alt while dragging to move freely.';
-  body.append(smart);
+  box.addEventListener('change', () => change({ snapOff: box.checked ? undefined : true }));
+  snapRow.append(box, d.createTextNode('Toggle object snapping'));
+  snapRow.title = 'What you drag snaps onto the guides and their ticks. Hold Alt while dragging to move freely.';
+  body.append(snapRow);
 
   // snapping
   const snap = d.createElement('div');

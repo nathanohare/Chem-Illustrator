@@ -3,7 +3,7 @@
 // One cyclohexane drawn flat, as a chair, as the flipped chair and as a boat, and walked round:
 // the molecule the chemistry engine reads, stereocentres and all, never changes.
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { createRequire } from 'node:module';
 import { Doc } from '../src/model';
 import type { BondDisplay } from '../src/model';
@@ -155,5 +155,59 @@ describe('which rings', () => {
     const subs = vrOf(doc, ring).subs.map((s) => s.first);
     doc.bulk(() => doc.addBond(subs[0], subs[1], 1));
     expect('why' in viewRingOf(doc, ring)).toBe(true);
+  });
+
+  it('looks only at the structure picked, so big drawings stay quick', () => {
+    // many methylcyclohexanes side by side, as in the desktop self-test's 2,000-molecule drawing
+    const doc = new Doc();
+    const rings: number[][] = [];
+    const L = doc.style.bondLength;
+    doc.bulk(() => {
+      for (let m = 0; m < 300; m++) {
+        const ring: number[] = [];
+        for (let k = 0; k < 6; k++) {
+          const t = (-90 + 60 * k) * Math.PI / 180;
+          ring.push(doc.addAtom(200 + 5 * L * m + L * Math.cos(t), 200 + L * Math.sin(t)).id);
+        }
+        ring.forEach((id, k) => doc.addBond(id, ring[(k + 1) % 6], 1));
+        doc.addBond(ring[0], doc.addAtom(200 + 5 * L * m, 200 - 2 * L).id, 1, 'wedge');
+        rings.push(ring);
+      }
+    });
+    const whole = vi.spyOn(doc, 'fragments');
+    // one atom picked: its ring, though the drawing holds 300
+    const got = viewRingOf(doc, [rings[7][2]]);
+    expect('ring' in got && [...got.ring.ring].sort((a, b) => a - b)).toEqual([...rings[7]].sort((a, b) => a - b));
+    // a molfile of everything checks every ring without walking the whole drawing each time
+    const t0 = performance.now();
+    toMolfile(doc, doc.atoms.keys());
+    expect(whole).not.toHaveBeenCalled();
+    expect(performance.now() - t0).toBeLessThan(2000);
+  });
+
+  it('checks a molfile of one big structure with many rings quickly', () => {
+    // 200 cyclohexanes joined in a chain (1,200 atoms, like a long polymer): every edit's live
+    // stereo read made a molfile of it, and checking each ring walked the whole structure (1.4 s)
+    const doc = new Doc();
+    const L = doc.style.bondLength;
+    doc.bulk(() => {
+      let prev: number | null = null;
+      for (let m = 0; m < 200; m++) {
+        const ring: number[] = [];
+        for (let k = 0; k < 6; k++) ring.push(doc.addAtom(200 + 3 * L * m + L * Math.cos(k * Math.PI / 3), 200 + L * Math.sin(k * Math.PI / 3)).id);
+        ring.forEach((id, k) => doc.addBond(id, ring[(k + 1) % 6], 1));
+        if (prev !== null) doc.addBond(prev, ring[3], 1);
+        prev = ring[0];
+      }
+    });
+    const t0 = performance.now();
+    toMolfile(doc, doc.atoms.keys());
+    expect(performance.now() - t0).toBeLessThan(150);
+  });
+
+  it('still picks one ring of a selected chain of rings', () => {
+    const { doc, ring } = flat([[0, 'solid']]);
+    const got = viewRingOf(doc, ring);
+    expect('ring' in got && [...got.ring.ring].sort((a, b) => a - b)).toEqual([...ring].sort((a, b) => a - b));
   });
 });

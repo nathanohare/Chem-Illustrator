@@ -59,10 +59,14 @@ export function indexText(ix: FileIndex): string {
   return JSON.stringify({ version: 1, files: Object.fromEntries(keep) });
 }
 
-/** A file's entry, if it hasn't changed since it was read (same size, the same time to within 2 s: network drives round). */
+/**
+ * A file's entry, if it hasn't changed since it was read (same size, the same time to within 2 s:
+ * network drives round). A file that couldn't be read is read again each time: what stopped it
+ * (the chemistry engine still loading, a cloud file not downloaded yet) may have passed.
+ */
 export function freshEntry(ix: FileIndex, f: { path: string; size: number; modified: number }): IndexedFile | null {
   const e = ix.files[f.path];
-  return e && e.size === f.size && Math.abs(e.modified - f.modified) < 2000 ? e : null;
+  return e && !e.error && e.size === f.size && Math.abs(e.modified - f.modified) < 2000 ? e : null;
 }
 
 /** What the index keeps for the structures found in a file, given their SMILES. */

@@ -6,7 +6,7 @@
 // count as wedges and plain hashed or dashed bonds as hashed wedges, and R groups and labels
 // that can't be read rank above every real atom.
 
-import { Doc, Bond, Atom, StereoInfo } from '../model';
+import { Doc, Bond, Atom, StereoInfo, isWedge } from '../model';
 import { axialTags } from './axial';
 import { Vec, Rect, norm, sub, len, lerp, distToSegment } from '../geom';
 import { labelBonds, labelSpec, layoutLabel, labelLook } from './labels';
@@ -19,9 +19,10 @@ export type StereoSense = 'up' | 'down' | 'either';
 export function stereoSense(b: Bond): StereoSense | null {
   if (b.order !== 1) return null;
   switch (b.display) {
-    case 'wedge': case 'bold': return 'up';
+    // (a hollow wedge is read as a wedge: toward you)
+    case 'wedge': case 'hollowWedge': case 'bold': return 'up';
     case 'hashWedge': case 'hash': case 'dash': return 'down';
-    case 'wavy': return 'either';
+    case 'wavy': case 'wavyWedge': return 'either';
     default: return null;
   }
 }
@@ -34,7 +35,7 @@ export function stereoSense(b: Bond): StereoSense | null {
  */
 export function stereoAnchor(doc: Doc, b: Bond): number | null {
   if (!stereoSense(b)) return null;
-  if (b.display === 'wedge' || b.display === 'hashWedge' || b.display === 'wavy') return b.a1;
+  if (isWedge(b.display) || b.display === 'wavy') return b.a1;
   return doc.degree(b.a1) < 3 && doc.degree(b.a2) >= 3 ? b.a2 : b.a1;
 }
 
@@ -230,9 +231,23 @@ export function shownDescriptor(d: string): string {
  * otherwise it shows the worked-out descriptor, falling back to the text saved in the file while
  * the chemistry engine hasn't looked at the structure, can't read it, or the rules can't decide it.
  */
+/**
+ * Where a label from ChemDraw's file disagrees with what the rules work out, and the file's label
+ * still stands: the two, for a warning. (ChemDraw may be reading a group label differently.)
+ */
+export function stereoDisagrees(kind: 'a' | 'b', x: Atom | Bond, info: StereoInfo | null | undefined): { file: string; rules: string } | null {
+  const l = x.stereoLabel;
+  if (!l?.fromFile || l.manual || !info?.asFirst?.(kind, x.id)) return null;
+  const d = kind === 'a' ? info.atom(x.id) : info.bond(x.id);
+  if (!d) return null;
+  const rules = `(${shownDescriptor(d)})`;
+  return rules === l.text.trim() ? null : { file: l.text.trim(), rules };
+}
+
 export function atomStereoText(a: Atom, info: StereoInfo | null): string | null {
   const l = a.stereoLabel;
   if (l?.manual) return l.text || null;
+  if (l?.fromFile && info?.asFirst?.('a', a.id)) return l.text || null;
   if (!a.showStereo && !l) return null;
   const d = info?.atom(a.id);
   if (d === undefined) return l?.text ?? null;
@@ -242,6 +257,7 @@ export function atomStereoText(a: Atom, info: StereoInfo | null): string | null 
 export function bondStereoText(b: Bond, info: StereoInfo | null): string | null {
   const l = b.stereoLabel;
   if (l?.manual) return l.text || null;
+  if (l?.fromFile && info?.asFirst?.('b', b.id)) return l.text || null;
   if (!b.showStereo && !l) return null;
   const d = info?.bond(b.id);
   if (d === undefined) return l?.text ?? null;
@@ -607,7 +623,7 @@ export class StereoPlacer {
       // half the drawn width, plus a little room: a double bond's second line, a bold bond, and a
       // wedge, which widens from its narrow end (a1) to its wide end in steps
       const m = 0.02 * L, p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
-      if (b.order === 1 && (b.display === 'wedge' || b.display === 'hashWedge')) {
+      if (b.order === 1 && isWedge(b.display)) {
         const r0 = st.lineWidth / 2, r1 = wedgeWidth(st) / 2;
         for (let k = 0; k < 4; k++) segs.push({ p: lerp(p, q, k / 4), q: lerp(p, q, (k + 1) / 4), r: r0 + ((r1 - r0) * (k + 1)) / 4 + m });
         continue;
