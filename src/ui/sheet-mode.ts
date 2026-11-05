@@ -6,6 +6,7 @@
 
 import { paletteRows } from './palette-ui';
 import { SheetView, popupMenu, selectionName } from './sheet-view';
+import { showContextMenu, type MenuItem } from './context-menu';
 import { Workbook, Sheet, Structure, CellStyle, CellBlock, Cell, Condition, CompareOp, makeStructure, growToMerges } from '../sheet/workbook';
 import { Range, MAX_ROWS, MAX_COLS, colName, colIndex, cellName, parseRange, parseCellRef, keyOf, rowOf, colOf, inRange } from '../sheet/refs';
 import { showsChem, chemPieces } from '../sheet/cell-text';
@@ -2227,78 +2228,87 @@ export class SheetMode {
     const R = v.sel.range;
     const overrides = s.keysIn(R).some((k) => s.isOverride(rowOf(k), colOf(k)));
     const structure = !!s.cell(v.sel.active.r, v.sel.active.c)?.structure;
-    const items: ([string, () => void, boolean?] | null)[] = [
-      ['Cut', () => void this.copy(true)],
-      ['Copy', () => void this.copy()],
-      ['Paste', () => void this.paste(null)],
-      ['Paste Values', () => void this.paste(null, 'values')],
-      ['Paste Special…', () => this.run('paste-special')],
+    // the same menu as the Canvas's: Title Case names, each command's key, groups that open beside their row
+    const act = (label: string, run: () => void, cmd?: string, more: { disabled?: boolean; key?: string } = {}): MenuItem => ({ label, run, cmd, ...more });
+    // a row that opens a menu of its own (a gallery) beside it
+    const opens = (label: string, open: (x: number, y: number) => void): MenuItem => ({ label, run: (r) => open(r.right - 2, r.top - 5), opens: true });
+    const items: MenuItem[] = [
+      act('Cut', () => void this.copy(true), 'cut'),
+      act('Copy', () => void this.copy(), 'copy'),
+      act('Paste', () => void this.paste(null), 'paste'),
+      act('Paste Values', () => void this.paste(null, 'values')),
+      act('Paste Special…', () => this.run('paste-special'), 'paste-special'),
       null,
     ];
     if (where === 'row') {
-      items.push(['Insert rows above', () => this.insertCells('row')], ['Delete rows', () => this.deleteCells('row')],
-        ['Hide rows', () => this.hide('row', true)], ['Show hidden rows', () => this.hide('row', false)],
-        ['Row height…', () => void this.askSize('row')], ['Fit height to contents', () => { for (let r = R.r1; r <= Math.min(R.r2, s.lastRow + 1); r++) v.autoFit('row', r); }]);
+      items.push(act('Insert Rows Above', () => this.insertCells('row'), 'insert-cells'), act('Delete Rows', () => this.deleteCells('row'), 'delete-cells'),
+        act('Hide Rows', () => this.hide('row', true), 'hide-rows'), act('Show Hidden Rows', () => this.hide('row', false), 'unhide-rows'),
+        act('Row Height…', () => void this.askSize('row')), act('Fit Height to Contents', () => { for (let r = R.r1; r <= Math.min(R.r2, s.lastRow + 1); r++) v.autoFit('row', r); }));
     } else if (where === 'col') {
-      items.push(['Insert columns to the left', () => this.insertCells('col')], ['Delete columns', () => this.deleteCells('col')],
-        ['Hide columns', () => this.hide('col', true)], ['Show hidden columns', () => this.hide('col', false)],
-        ['Column width…', () => void this.askSize('col')], ['Fit width to contents', () => { for (let c = R.c1; c <= Math.min(R.c2, s.lastCol + 1); c++) v.autoFit('col', c); }]);
-      if (s.colDefs.has(R.c1)) items.push(['Change the column\'s formula…', () => void this.editColumnFormula(R.c1)], ['Stop calculating this column (keep the values)', () => this.freezeColumn(R.c1)]);
+      items.push(act('Insert Columns to the Left', () => this.insertCells('col'), 'insert-cells'), act('Delete Columns', () => this.deleteCells('col'), 'delete-cells'),
+        act('Hide Columns', () => this.hide('col', true), 'hide-cols'), act('Show Hidden Columns', () => this.hide('col', false), 'unhide-cols'),
+        act('Column Width…', () => void this.askSize('col')), act('Fit Width to Contents', () => { for (let c = R.c1; c <= Math.min(R.c2, s.lastCol + 1); c++) v.autoFit('col', c); }));
+      if (s.colDefs.has(R.c1)) items.push(act('Change the Column\'s Formula…', () => void this.editColumnFormula(R.c1)), act('Stop Calculating This Column (Keep the Values)', () => this.freezeColumn(R.c1)));
     } else {
       // in a PivotTable, its own commands first, as Excel's menu has them
       const pivot = this.pivots.contextItems(x, y);
-      if (pivot) items.push(...pivot, null);
+      if (pivot) items.push(...fromTuples(pivot), null);
       const q = this.queries.here();
-      if (q) items.push(['Refresh', () => void this.queries.refresh(q).then((p) => this.host.flash(p ?? `Refreshed ${q.name}.`, p ? 8000 : 2500))], ['Edit Query…', () => this.queries.editor(q, null, false)], null);
+      if (q) items.push(act('Refresh', () => void this.queries.refresh(q).then((p) => this.host.flash(p ?? `Refreshed ${q.name}.`, p ? 8000 : 2500))), act('Edit Query…', () => this.queries.editor(q, null, false)), null);
       if (s.cell(v.sel.active.r, v.sel.active.c)?.compound) {
-        items.push(['Data Type ▸', () => popupMenu(x, y, [
-          ['Insert Data ▸', () => this.compounds.insertMenu(x, y)],
-          ['Refresh', () => void this.compounds.refreshCards()],
-          ['Convert to Text', () => this.compounds.toText()],
-        ])], null);
+        items.push({ label: 'Data Type', items: [
+          opens('Insert Data', (px, py) => this.compounds.insertMenu(px, py)),
+          act('Refresh', () => void this.compounds.refreshCards()),
+          act('Convert to Text', () => this.compounds.toText()),
+        ] }, null);
       }
-      items.push(['Insert…', () => this.insertCells()], ['Delete…', () => this.deleteCells()], ['Clear contents', () => v.clearSelection()]);
+      items.push(act('Insert…', () => this.insertCells(), 'insert-cells'), act('Delete…', () => this.deleteCells(), 'delete-cells'), act('Clear Contents', () => v.clearSelection(), undefined, { key: 'Delete' }));
       // notes and comments, as Excel's right-click menu has them
       const note = s.noteAt(v.sel.active.r, v.sel.active.c);
       items.push(null);
-      if (!note) items.push(['New Comment', () => void this.notes.newComment()], ['New Note', () => void this.notes.newNote()]);
-      else if (note.kind === 'comment') items.push(['Show Comment', () => this.notes.edit()], ['Delete Comment', () => this.notes.remove()]);
-      else items.push(['Edit Note', () => this.notes.edit()], ['Delete Note', () => this.notes.remove()], [note.shown ? 'Hide Note' : 'Show Note', () => this.notes.toggleShown()]);
-      items.push(['Pick From Drop-down List…', () => v.openDropDown()]);
+      if (!note) items.push(act('New Comment', () => void this.notes.newComment(), 'new-comment'), act('New Note', () => void this.notes.newNote(), 'new-note'));
+      else if (note.kind === 'comment') items.push(act('Show Comment', () => this.notes.edit()), act('Delete Comment', () => this.notes.remove()));
+      else items.push(act('Edit Note', () => this.notes.edit()), act('Delete Note', () => this.notes.remove()), act(note.shown ? 'Hide Note' : 'Show Note', () => this.notes.toggleShown()));
+      items.push(act('Pick From Drop-down List…', () => v.openDropDown()));
       // links, as Excel's right-click menu has them
       const link = v.linkOf(v.sel.active.r, v.sel.active.c);
       items.push(null);
-      if (link) items.push(['Edit Link…', () => void this.run('insert-link')], ['Open Link', () => void followLink(link)], ['Copy Link', () => void navigator.clipboard?.writeText(link).catch(() => {})], ['Remove Link', () => this.run('remove-link')]);
-      else items.push(['Link…', () => void this.run('insert-link')]);
+      if (link) items.push(act('Edit Link…', () => void this.run('insert-link'), 'insert-link'), act('Open Link', () => void followLink(link)), act('Copy Link', () => void navigator.clipboard?.writeText(link).catch(() => {})), act('Remove Link', () => this.run('remove-link')));
+      else items.push(act('Link…', () => void this.run('insert-link'), 'insert-link'));
     }
     items.push(null,
-      ['Sort smallest to largest', () => void this.sort(false)],
-      ['Sort largest to smallest', () => void this.sort(true)],
-      ['Custom Sort…', () => this.run('custom-sort')],
-      [s.filter ? 'Filter off' : 'Filter', () => this.toggleFilter()],
+      act('Sort Smallest to Largest', () => void this.sort(false)),
+      act('Sort Largest to Smallest', () => void this.sort(true)),
+      act('Custom Sort…', () => this.run('custom-sort')),
+      act(s.filter ? 'Filter Off' : 'Filter', () => this.toggleFilter(), 'filter'),
       null,
-      [structure ? 'Change structure…' : 'Draw structure…', () => this.drawStructure(v.sel.active.r, v.sel.active.c)],
-      ['Structure from name or SMILES…', () => void this.structureFromName()],
-      ['Insert property columns…', () => void this.propertyColumns()],
-      ['Isotope pattern…', () => void this.isotopePattern()],
-      ['Formula Style ▸', () => popupMenu(x, y, [
-        [this.chemShown() ? 'Turn Off for These Cells' : 'Turn On for These Cells', () => this.run('format-chem')],
-        [`${s.wb.autoChem ? '✓ ' : ''}AutoFormat Chemical Formulas (CH2Cl2 → CH₂Cl₂)`, () => s.wb.edit('AutoFormat chemical formulas', () => s.wb.setAutoChem(!s.wb.autoChem))],
-      ])],
-      ['Reset to calculated', () => this.resetCalculated(), overrides],
+      // the chemistry commands in one group, so the menu fits a laptop's window
+      { label: 'Chemistry', items: [
+        act(structure ? 'Change Structure…' : 'Draw Structure…', () => this.drawStructure(v.sel.active.r, v.sel.active.c)),
+        act('Structure from Name or SMILES…', () => void this.structureFromName(), 'structure-from-name'),
+        act('Insert Property Columns…', () => void this.propertyColumns()),
+        act('Isotope Pattern…', () => void this.isotopePattern()),
+        { label: 'Formula Style', items: [
+          act(this.chemShown() ? 'Turn Off for These Cells' : 'Turn On for These Cells', () => this.run('format-chem')),
+          { label: 'AutoFormat Chemical Formulas (CH2Cl2 → CH₂Cl₂)', run: () => s.wb.edit('AutoFormat chemical formulas', () => s.wb.setAutoChem(!s.wb.autoChem)), checked: s.wb.autoChem },
+        ] },
+        act('Reset to Calculated', () => this.resetCalculated(), undefined, { disabled: !overrides }),
+      ] },
       null,
-      ['Conditional Formatting ▸', () => this.formatting.conditionalMenu(x, y)],
-      ['Data Validation…', () => this.validation.dialog()],
+      opens('Conditional Formatting', (px, py) => this.formatting.conditionalMenu(px, py)),
+      act('Data Validation…', () => this.validation.dialog()),
     );
     const table = this.tableHere();
     if (table) {
       items.push(
-        ['Table Style ▸', () => this.formatting.tableMenu(x, y, (style) => this.formatting.setTable(table, { style }, 'Table style'))],
-        [table.totals ? 'Remove the totals row' : 'Add a totals row', () => this.formatting.toggleTotals(table)],
-        ['Convert table to range', () => this.formatting.convertToRange(table)],
+        opens('Table Style', (px, py) => this.formatting.tableMenu(px, py, (style) => this.formatting.setTable(table, { style }, 'Table style'))),
+        act(table.totals ? 'Remove the Totals Row' : 'Add a Totals Row', () => this.formatting.toggleTotals(table)),
+        act('Convert Table to Range', () => this.formatting.convertToRange(table)),
       );
-    } else items.push(['Format as Table ▸', () => this.formatting.tableMenu(x, y)]);
-    popupMenu(x, y, items);
+    } else items.push(opens('Format as Table', (px, py) => this.formatting.tableMenu(px, py)));
+    // Escape puts the keys back on the cell
+    const back = document.activeElement;
+    showContextMenu(x, y, items, { run: (cmd) => this.run(cmd), escaped: () => { if (back instanceof HTMLElement && back.isConnected) back.focus({ preventScroll: true }); } });
   }
 
   private async askSize(kind: 'row' | 'col'): Promise<void> {
@@ -2730,3 +2740,11 @@ function reviveBlock(b: CellBlock): CellBlock {
   };
 }
 
+/** A PivotTable's [name, action, enabled?] items as right-click menu items (a name ending ▸ opens a menu of its own). */
+function fromTuples(items: ([string, () => void, boolean?] | null)[]): MenuItem[] {
+  return items.map((it): MenuItem => {
+    if (!it) return null;
+    const sub = it[0].endsWith(' ▸');
+    return { label: sub ? it[0].slice(0, -2) : it[0], run: () => it[1](), disabled: it[2] === false, ...(sub ? { opens: true } : {}) };
+  });
+}
