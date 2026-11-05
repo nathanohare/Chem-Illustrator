@@ -14,7 +14,7 @@ import './app.css';
 import type { MethylStyle } from './chem/hydrogens';
 import { STANDARD_COLOURS, usedColours } from './colours';
 import { ICONS } from './icons';
-import { Toolboxes, lockIcon, sideFolded, boxLocked, commandButton, defaultToolboxes, menuCommands, boxIds, boxGrid, boxTitle, flyGrid, isEditable, withoutGoneItems, isOwnBox, overflowOf, CONTEXT_BOXES, type ContextBox, type Pickable, type ToolboxDef, type ToolboxState } from './ui/toolboxes';
+import { Toolboxes, lockIcon, sideFolded, commandButton, defaultToolboxes, menuCommands, boxIds, boxGrid, boxTitle, flyGrid, isEditable, withoutGoneItems, isOwnBox, overflowOf, CONTEXT_BOXES, type ContextBox, type Pickable, type ToolboxDef, type ToolboxState } from './ui/toolboxes';
 import { gridItems, inBlock, oneColumn, shownGrid, wrapped, type Grid, type Shown } from './ui/toolbox-grid';
 import { ToolboxEditor } from './ui/toolbox-editor';
 import { RibbonEditor } from './ui/ribbon-editor';
@@ -8804,8 +8804,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'toolbox-biopolymers': () => { contextBoxes.byHand('biopolymers'); },
   'toolbox-perspective': () => { contextBoxes.byHand('perspective'); },
   // the panel taken out as a toolbox folds up to its title bar; at the right it folds to a strip
-  // resting as a strip with nothing to show: brought out; otherwise closed all the way, or opened again
-  'fold-side': () => { if (sideResting()) { sideForced = 'open'; restSidePanel(); return; } foldSide(!sideIsFolded()); },
+  'fold-side': () => foldSide(!sideIsFolded()),
   'customize-toolbox': () => openCustomToolbox(),
   'customize-quick-bar': () => quickBar?.edit(),
   'customize-ribbon': () => ribbonEditor.open(RIBBON_OF_MODE[ws.active.mode]),
@@ -12750,7 +12749,7 @@ const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => vo
   // The side panel (Style, Warnings, Analysis; Format in documents, Cell in sheets) is a toolbox,
   // docked at the right to start with. Its arrow goes with it, so it shows even when the title bar is
   // locked away.
-  details: (body) => { body.before($('#side-strip'), $('#side-fold')); body.append(sideContent); },
+  details: (body) => { body.before($('#side-fold')); body.append(sideContent); },
   text: (body, vertical) => { textToolbox = buildTextToolbox(body, vertical, textToolboxHooks); },
   guides: (body, vertical) => { guidesToolbox = buildGuidesToolbox(body, vertical, guidesToolboxHooks); },
   // the Smart Scheme species list, docked (it floats beside the scheme otherwise)
@@ -12843,7 +12842,7 @@ const toolboxes = new Toolboxes(toolboxDefs, {
   folded: (id) => (id === 'details' ? sideIsFolded() : undefined),
   fold: (id) => { if (id !== 'details') return false; command('fold-side'); return true; },
   say: (text) => flash(text),
-  rendered: () => { fitTools(); restSidePanel(); },
+  rendered: () => fitTools(),
 });
 contextBoxes.ready = true;
 
@@ -12942,7 +12941,7 @@ function fadeDocks(): void {
   for (const d of document.querySelectorAll<HTMLElement>('.dock-v')) d.classList.toggle('more-below', d.scrollTop + d.clientHeight < d.scrollHeight - 2);
 }
 for (const d of document.querySelectorAll<HTMLElement>('.dock-v')) d.addEventListener('scroll', fadeDocks, { passive: true });
-addEventListener('resize', () => { fitTools(); autoFoldRibbon(); restSidePanel(); });
+addEventListener('resize', () => { fitTools(); autoFoldRibbon(); });
 
 /** The ribbon folded or whole as you last chose it (Ctrl+F1, View > Ribbon > Collapse the Ribbon). */
 let ribbonChosen = false;
@@ -12976,94 +12975,9 @@ function placeSidePanel(): void {
   fold.textContent = '×';
   fold.title = 'Close the side panel (Ctrl+Alt+B, or the panel button at the bottom right, opens it again)';
   fold.setAttribute('aria-label', fold.title);
-  restSidePanel();
 }
 $('#side-fold').addEventListener('click', () => command('fold-side'));
 $('#status-side').addEventListener('click', () => command('fold-side'));
-
-/*
- * While the side panel has nothing to show (nothing selected, and no Warnings, Analysis, Layers,
- * Comments or Animation pane open), it rests as a thin strip at the right edge, docked there or
- * floating. Something selected, or a click on the strip, brings it out: docked, over the edge of
- * the work rather than beside it, so the drawing never moves or changes size as the selection
- * changes. Documents and spreadsheets always have their Format or Cell pane, so it never rests there.
- */
-const sideStrip = $<HTMLButtonElement>('#side-strip');
-/** The strip clicked: the panel out though it has nothing to show ('open'), or put away though it has ('closed'), until the selection changes. */
-let sideForced: 'open' | 'closed' | null = null;
-let sideSelKey = '';
-
-/** The panes the side panel shows now. */
-const sidePanes = (): HTMLElement[] => [...sideContent.children].filter((el): el is HTMLElement => el instanceof HTMLElement && !el.hidden && getComputedStyle(el).display !== 'none');
-
-/** The side panel has only the Style pane's "Select something" to show. */
-const sideHasNothing = (): boolean => sidePanes().every((el) => el.id === 'style-section' && el.classList.contains('empty'));
-
-/**
- * The side panel rests as a strip when it has nothing to show and comes out over the work: when
- * it is open, docked at the right (its place locked) or floating, and shows only the Style pane.
- * Another pane turned on (Warnings, Analysis, Layers, Comments, Animation; a document's Format or a
- * sheet's Cell) keeps it open beside the work, as before.
- */
-function sideCanRest(): boolean {
-  const p = toolboxState.places.details;
-  if (!p?.shown || sideIsFolded() || !(p.dock === 'float' || (p.dock === 'right' && boxLocked(toolboxState, 'details')))) return false;
-  return sidePanes().every((el) => el.id === 'style-section');
-}
-
-/** The side panel resting as a strip now. */
-const sideResting = (): boolean => !!$('.toolbox[data-id="details"]')?.classList.contains('side-rest');
-
-/** Rest the side panel as a strip, or bring it out, as what it has to show and the strip say. */
-function restSidePanel(): void {
-  const box = document.querySelector<HTMLElement>('.toolbox[data-id="details"]');
-  if (!box) return;
-  const s = editor.sel;
-  const key = `${ws.active.id}|${s.atoms.size}.${s.bonds.size}.${s.captions.size}.${s.arrows.size}.${s.shapes.size}|${[s.atoms, s.bonds, s.captions, s.arrows, s.shapes].map((x) => x.values().next().value ?? '').join('.')}`;
-  // (a new selection, or another tab, ends what a click on the strip asked for)
-  if (key !== sideSelKey) { sideSelKey = key; sideForced = null; }
-  const auto = sideCanRest();
-  const nothing = auto && sideHasNothing();
-  const rest = auto && (sideForced === 'closed' || (nothing && sideForced !== 'open'));
-  const over = auto && !rest && box.classList.contains('vertical') && !box.classList.contains('floating');
-  box.classList.toggle('side-auto', auto);
-  box.classList.toggle('side-rest', rest);
-  box.classList.toggle('side-over', over);
-  sideStrip.setAttribute('aria-expanded', String(auto && !rest));
-  sideStrip.title = rest ? 'Show the side panel (Ctrl+Alt+B): its Style settings come out here when something is selected' : 'Put the side panel away to its strip';
-  sideStrip.setAttribute('aria-label', rest ? 'Show the side panel' : 'Put the side panel away');
-  if (over) {
-    // out over the work, beside the strip, as tall as the dock leaves
-    const r = sideStrip.getBoundingClientRect(), dock = box.parentElement!.getBoundingClientRect();
-    box.style.setProperty('--so-right', `${Math.round(innerWidth - r.left + 4)}px`);
-    box.style.setProperty('--so-top', `${Math.round(r.top)}px`);
-    box.style.setProperty('--so-h', `${Math.max(120, Math.round(dock.bottom - r.top - 6))}px`);
-  }
-  if (rest && box.classList.contains('floating')) {
-    // floating: the strip at the top of the work's right edge
-    const w = $('#work').getBoundingClientRect();
-    box.style.setProperty('--sr-right', `${Math.round(innerWidth - w.right)}px`);
-    box.style.setProperty('--sr-top', `${Math.round(w.top + 8)}px`);
-  }
-}
-sideStrip.addEventListener('click', () => {
-  sideForced = sideResting() ? 'open' : 'closed';
-  restSidePanel();
-});
-// a panel brought out by the strip with nothing to show goes back on a click elsewhere or Escape
-document.addEventListener('pointerdown', (e) => {
-  if (sideForced !== 'open' || !sideHasNothing()) return;
-  const t = e.target as HTMLElement;
-  if (t.closest?.('.toolbox[data-id="details"]')) return;
-  sideForced = null;
-  restSidePanel();
-}, true);
-window.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (e.key === 'Escape' && sideForced === 'open') { sideForced = null; restSidePanel(); }
-});
-// what the panel shows changes with the selection, the tab and the panes turned on: rest it or bring it out to match
-new MutationObserver(() => restSidePanel()).observe(sideContent, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'class'] });
-new MutationObserver(() => restSidePanel()).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
 /** Below this window width the side panel folds by itself, so the drawing keeps its room. */
 const NARROW_WINDOW = 1200;
@@ -14068,7 +13982,7 @@ const buildHint = new BuildHint({
 });
 editor.onOverlay = () => { smartPane.place(); buildHint.place(); };
 editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
-editor.onChange = () => { welcomeWatch?.(); showToolStatus(); showRibbonContext(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); canvasFont?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); restSidePanel(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); showToolStatus(); showRibbonContext(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); canvasFont?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();
