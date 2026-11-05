@@ -203,8 +203,8 @@ export interface Settings {
   darkPalette: string;
   /** Your own dark palettes (View > Window and Colours > Reading Mode Colours). */
   darkPalettes: DarkPalette[];
-  /** Alignment guides on or off in each kind of tab (View > Alignment Guides). */
-  guides: { drawing: boolean; slides: boolean; design: boolean };
+  /** Smart guides on or off in presentations (View > Grid Settings) and designs (the ribbon's Guides box). */
+  guides: { slides: boolean; design: boolean };
   /** Finding your way around drawings: the Document Map, edge arrows, dot grid, outside tint, Fit and Go to Selection buttons (Settings ▸ Navigation). */
   orient: OrientPrefs;
   /** How the drawing's page grid looks, and what a paste past a fixed edge does (Settings ▸ Page Grid). */
@@ -279,7 +279,7 @@ export const DEFAULT_SETTINGS: Settings = {
   modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'darkgray', density: 'cozy', shadows: 'light', iconLook: 'mode', shapeInk: 'neutral', oneColumnTools: false, toolCells: 'off', canvasRibbon: 'classic', startView: true, enterFinishesText: false, offerFigures: true, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
   citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowProducts: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', warnLook: 'box', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'grey', mapBox: { ...DEFAULT_MAP_BOX }, depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
-  guides: { drawing: false, slides: true, design: true },
+  guides: { slides: true, design: true },
   orient: { ...DEFAULT_ORIENT },
   pageLook: { ...DEFAULT_PAGE_LOOK },
   docPins: [],
@@ -377,7 +377,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   s.darkPalettes = parseDarkPalettes(r.darkPalettes);
   if (r.guides && typeof r.guides === 'object') {
     const g = r.guides as Record<string, unknown>;
-    for (const k of ['drawing', 'slides', 'design'] as const) if (typeof g[k] === 'boolean') s.guides[k] = g[k] as boolean;
+    for (const k of ['slides', 'design'] as const) if (typeof g[k] === 'boolean') s.guides[k] = g[k] as boolean;
   }
   if (typeof r.docRuler === 'boolean') s.docRuler = r.docRuler;
   if (typeof r.sheetFormulaBar === 'boolean') s.sheetFormulaBar = r.sheetFormulaBar;

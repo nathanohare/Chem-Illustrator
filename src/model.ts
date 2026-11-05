@@ -2101,6 +2101,7 @@ export class Doc {
     this.style = { ...other.style };
     this.background = other.background;
     this.page = other.page && { ...other.page };
+    this.guides = other.guides && { ...other.guides, list: other.guides.list.map((g) => ({ ...g })) };
     this.source = other.source;
     this.kept = other.kept.slice();
     this.nextId = Math.max(this.nextId, other.nextId);
@@ -2126,7 +2127,7 @@ export class Doc {
    */
   swap(other: Doc): void {
     if (this.tx || other.tx) throw new Error('Cannot swap documents in the middle of an edit');
-    const fields = ['style', 'background', 'page', 'source', 'textStyles', 'atoms', 'bonds', 'captions', 'arrows', 'shapes', 'adj', 'centresOf',
+    const fields = ['style', 'background', 'page', 'guides', 'source', 'textStyles', 'atoms', 'bonds', 'captions', 'arrows', 'shapes', 'adj', 'centresOf',
       'grid', 'atomCell', 'maxBondLen', 'bondLenStale', 'bondLenShrunk', 'undoStack', 'redoStack'] as const;
     const a = this as unknown as Record<string, unknown>, b = other as unknown as Record<string, unknown>;
     for (const f of fields) { const t = a[f]; a[f] = b[f]; b[f] = t; }
