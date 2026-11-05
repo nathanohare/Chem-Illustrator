@@ -23,6 +23,7 @@ import { fieldInstr } from '../document/fields';
 import type { DocStyle } from '../style';
 import * as rt from '../richtext';
 import { Package, REL, NS, xml, xmlAttr, hex6, emu, MediaFiles, bytesHash, structureAltText } from './ooxml';
+import { fragment, wordTablePrint } from './native-print';
 import { contentsAlt } from '../accessibility';
 import { THEMES, THEME_COLORS, THEME_FONTS, type DocDesign } from '../document/themes';
 import { DEFAULT_THEME, type WorkbookTheme } from '../sheet/themes';
@@ -54,10 +55,10 @@ import { addChart, C_NS } from './office-chart';
 import { CX_NS, CX1_NS } from './xlsx-chart';
 import { isChartEx } from '../sheet/chart';
 import type { ChartBox } from '../sheet/chart-box';
-import { writeKeptParts, type ContentControl } from './kept-parts';
+import { appPropsXml, corePropsXml, writeKeptParts, type ContentControl } from './kept-parts';
 import { cmlGuid, contentsSig, writeCml } from './cml';
 import {
-  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_NAME, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
+  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_MARK, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
 } from './docx-base';
 
 export interface DocxDeps {
@@ -221,11 +222,13 @@ class DocxWriter {
     pkg.add(main, `${HEAD}<w:document ${PART_NS}>${bg}<w:body>${body}${sect}</w:body></w:document>`, DOCX_CT.document);
     pkg.relate(main, DOCX_REL.styles, 'styles.xml');
     pkg.add('word/styles.xml', this.styles(), DOCX_CT.styles);
-    // Design's theme as Word's own, so Word's Design tab shows it and new text and shapes take its fonts and colours
+    // Design's theme as Word's own, so Word's Design tab shows it and new text and shapes take its
+    // fonts and colours; else the document's own theme as it came
     const theme = wordTheme(this.t.design);
-    if (theme) {
+    const keptTheme = theme ? null : this.t.kept?.theme?.xml;
+    if (theme || keptTheme) {
       pkg.relate(main, DOCX_REL.theme, 'theme/theme1.xml');
-      pkg.add('word/theme/theme1.xml', themeXml(theme), THEME_CT);
+      pkg.add('word/theme/theme1.xml', theme ? themeXml(theme) : keptTheme!, THEME_CT);
     }
     if (this.cmts.size) this.commentParts(main);
     const notes = this.noteParts(main);
@@ -238,21 +241,18 @@ class DocxWriter {
     pkg.add('word/settings.xml', settings(false), DOCX_CT.settings);
     // our own part: each structure's drawing, and each table as made here
     pkg.relate(main, DOCX_REL.customXml, '../customXml/item1.xml');
-    pkg.add('customXml/item1.xml', `${HEAD}<chemIllustrator xmlns="${MODEL_NS}" version="1">${xml(JSON.stringify(this.model))}</chemIllustrator>`);
+    pkg.add('customXml/item1.xml', `${HEAD}<chemIllustrator xmlns="${MODEL_NS}" version="1">${xml(JSON.stringify(this.model, shortNumbers))}</chemIllustrator>`);
     pkg.relate('customXml/item1.xml', DOCX_REL.customXmlProps, 'itemProps1.xml');
     pkg.add('customXml/itemProps1.xml', `${HEAD}<ds:datastoreItem ds:itemID="{3B7E2C41-8F0A-4D6B-A9C2-5E1D7F3A2B90}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"><ds:schemaRefs><ds:schemaRef ds:uri="${MODEL_NS}"/></ds:schemaRefs></ds:datastoreItem>`, DOCX_CT.itemProps);
     pkg.relate('', REL.officeDocument, main);
     pkg.relate('', REL.coreProps, 'docProps/core.xml');
     pkg.relate('', REL.extendedProps, 'docProps/app.xml');
-    const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
-    // the document's properties (File > Properties), which fields and Word show
+    // the document's properties (File > Properties), which fields and Word show: the ones edited
+    // here as they are now, the rest (comments, category, status...) as the file had them
     const pr = this.t.props ?? {};
-    const name = pr.title || title;
-    const tag = (k: string, v: string | undefined) => (v ? `<${k}>${xml(v)}</${k}>` : '');
-    pkg.add('docProps/core.xml', `${HEAD}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
-      `${tag('dc:title', name)}${tag('dc:subject', pr.subject)}${tag('dc:creator', pr.author)}${tag('cp:keywords', pr.keywords)}${pr.author ? `<cp:lastModifiedBy>${xml(pr.author)}</cp:lastModifiedBy>` : ''}` +
-      `<dcterms:created xsi:type="dcterms:W3CDTF">${xml(pr.created ?? now)}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`, DOCX_CT.core);
-    pkg.add('docProps/app.xml', `${HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Chem Illustrator</Application>${tag('Company', pr.company)}</Properties>`, DOCX_CT.app);
+    const kept = this.t.kept?.docProps;
+    pkg.add('docProps/core.xml', corePropsXml(kept, { set: { title: pr.title || title || null, subject: pr.subject ?? null, creator: pr.author ?? null, keywords: pr.keywords ?? null, created: pr.created } }), DOCX_CT.core);
+    pkg.add('docProps/app.xml', appPropsXml(kept, '', { Company: pr.company ?? null }), DOCX_CT.app);
     // Zotero's document preferences (its style and settings) as custom document properties, with
     // other programs' data kept from the file read: custom XML (Chem4Word's structures written
     // afresh where they were changed here), custom properties and add-ins' settings
@@ -882,8 +882,9 @@ class DocxWriter {
   private chartNo = 0;
   private async chart(main: string, id: number, o: Extract<DocObject, { kind: 'picture' }>, box: ChartBox, rPr: string): Promise<string> {
     const size = shownSize({ w: o.w, h: o.h }, o.scale ?? 1, this.textW);
-    const rid = await addChart(this.pkg, main, 'word', ++this.chartNo, box, size.w, size.h);
+    const { rid, print } = await addChart(this.pkg, main, 'word', ++this.chartNo, box, size.w, size.h);
     (this.model.charts ??= {})[id] = box;
+    if (print) (this.model.chartPrints ??= {})[id] = print;
     const n = this.docPr++;
     const ex = isChartEx(box.chart.kind);
     const uri = ex ? CX_NS : C_NS;
@@ -975,9 +976,10 @@ class DocxWriter {
           `<wpg:grpSpPr><a:xfrm${turnAttrs(o)}><a:off x="0" y="0"/><a:ext cx="${emu(size.w)}" cy="${emu(size.h)}"/><a:chOff x="${emu(at.x)}" y="${emu(at.y)}"/><a:chExt cx="${emu(at.w)}" cy="${emu(at.h)}"/></a:xfrm></wpg:grpSpPr>` +
           `${kids}</wpg:wgp></a:graphicData></a:graphic>`;
       }
-      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), ...(o.frame ? { frame: o.frame } : {}) };
+      const svg = pic.svg ? new TextEncoder().encode(pic.svg) : null;
+      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), ...(svg ? { svg: bytesHash(svg) } : {}), ...(o.frame ? { frame: o.frame } : {}) };
       blip = this.media(main, pic.png, 'png');
-      if (pic.svg) svgId = this.media(main, new TextEncoder().encode(pic.svg), 'svg');
+      if (svg) svgId = this.media(main, svg, 'svg');
       size = shownSize({ w: pic.w, h: pic.h }, o.scale ?? 1, this.textW);
       name = `${DRAWING_NAME} ${id}`;
       smiles = await this.deps.smiles?.(o.contents, t.drawingStyle).catch(() => null) ?? null;
@@ -1047,7 +1049,8 @@ class DocxWriter {
     const style = this.t.drawingStyle;
     const size = tab.size ?? style.captionSize;
     const font = style.captionFont || 'Arial';
-    this.model.tables[id] = { table: tab, text: tableText(tab) };
+    const entry: DocxModel['tables'][number] = { table: tab, text: tableText(tab) };
+    this.model.tables[id] = entry;
     const lw = Math.max(2, Math.min(96, Math.round(style.lineWidth * 8)));
     const line = `w:val="single" w:sz="${lw}" w:space="0" w:color="000000"`;
     const none = 'w:val="nil"';
@@ -1057,11 +1060,16 @@ class DocxWriter {
         : `<w:top ${none}/><w:left ${none}/><w:bottom ${none}/><w:right ${none}/><w:insideH ${none}/><w:insideV ${none}/>`;
     const width = tab.cols.reduce((a, b) => a + b, 0);
     const padX = twips(PAD_X * size), padY = twips(PAD_Y * size);
+    const title = tab.title?.length ? rt.plainText(tab.title).replace(/\s+/g, ' ').trim() : '';
+    // which of ours it is: a hidden bookmark at the start of its first cell
+    const markId = this.bookmarkId++;
+    let mark = `<w:bookmarkStart w:id="${markId}" w:name="${TABLE_MARK}${id}"/><w:bookmarkEnd w:id="${markId}"/>`;
     const tblPr = `<w:tblPr><w:tblW w:w="${twips(width)}" w:type="dxa"/><w:jc w:val="${align === 'right' ? 'right' : align === 'left' ? 'left' : 'center'}"/>` +
       `<w:tblBorders>${borders}</w:tblBorders><w:tblLayout w:type="fixed"/>` +
       `<w:tblCellMar><w:top w:w="${padY}" w:type="dxa"/><w:left w:w="${padX}" w:type="dxa"/><w:bottom w:w="${padY}" w:type="dxa"/><w:right w:w="${padX}" w:type="dxa"/></w:tblCellMar>` +
       `<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>` +
-      `<w:tblCaption w:val="${TABLE_NAME} ${id}"/></w:tblPr>`;
+      // its alt-text title: the table's own title (which of ours it is goes in a hidden bookmark)
+      `${title ? `<w:tblCaption w:val="${xmlAttr(title)}"/>` : ''}</w:tblPr>`;
     const grid = `<w:tblGrid>${tab.cols.map((w) => `<w:gridCol w:w="${twips(w)}"/>`).join('')}</w:tblGrid>`;
     const cellPara = (runs: TextRun[], paras: ParaStyle[] | undefined, jc: Justify, k = 1): string => {
       const n = paraCount(rt.plainText(runs));
@@ -1081,14 +1089,19 @@ class DocxWriter {
         const w = tab.cols.slice(c, c + span).reduce((a, b) => a + b, 0);
         const cell = row[c] ?? { runs: [] };
         const tcBorders = tab.lines === 'acs' && lastHead && r < tab.rows.length - 1 ? `<w:tcBorders><w:bottom ${line}/></w:tcBorders>` : '';
-        cells.push(`<w:tc><w:tcPr><w:tcW w:w="${twips(w)}" w:type="dxa"/>${span > 1 ? `<w:gridSpan w:val="${span}"/>` : ''}${tcBorders}</w:tcPr>` +
-          `${cellPara(cell.runs, cell.paras, cellAlign(tab, r, c))}</w:tc>`);
+        const text = cellPara(cell.runs, cell.paras, cellAlign(tab, r, c)).replace('</w:pPr>', `</w:pPr>${mark}`);
+        mark = '';
+        cells.push(`<w:tc><w:tcPr><w:tcW w:w="${twips(w)}" w:type="dxa"/>${span > 1 ? `<w:gridSpan w:val="${span}"/>` : ''}${tcBorders}</w:tcPr>${text}</w:tc>`);
       }
       rows.push(`<w:tr>${r < tab.head ? '<w:trPr><w:tblHeader/></w:trPr>' : ''}${cells.join('')}</w:tr>`);
     });
     const titlePara = tab.title?.length ? cellPara(tab.title, undefined, 'left') : '';
     const notesPara = tab.notes?.length ? cellPara(tab.notes, undefined, 'left', 0.8) : '';
-    return `${titlePara}<w:tbl>${tblPr}${grid}${rows.join('')}</w:tbl>${notesPara}`;
+    const tbl = `<w:tbl>${tblPr}${grid}${rows.join('')}</w:tbl>`;
+    // with a print of how its text looks as written, to tell whether Word changed it (native-print.ts)
+    const el = fragment(tbl);
+    if (el) entry.pr = wordTablePrint(el);
+    return `${titlePara}${tbl}${notesPara}`;
   }
 
   /**
@@ -1492,6 +1505,15 @@ function textEffects(r: TextRun, color: string | undefined): string {
 function turnAttrs(o: DocObject): string {
   if (o.kind !== 'picture' && o.kind !== 'drawing') return '';
   return `${o.rot ? ` rot="${Math.round(o.rot * 60000)}"` : ''}${o.flipH ? ' flipH="1"' : ''}${o.flipV ? ' flipV="1"' : ''}`;
+}
+
+/**
+ * Numbers in our part to nine significant figures (a structure's coordinates are worked out to
+ * sixteen, 39.42107070546791): a millionth of a point and finer is never seen, and the part is
+ * a good deal smaller.
+ */
+function shortNumbers(_key: string, v: unknown): unknown {
+  return typeof v === 'number' && Number.isFinite(v) && !Number.isInteger(v) ? Number(v.toPrecision(9)) : v;
 }
 
 /** A table cell's run: its font and size always given (tables are set in the drawing's font). */

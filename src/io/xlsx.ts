@@ -17,7 +17,7 @@
 
 import { MAX_CELL_TEXT } from './sheet-sniff';
 import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr, PackageError } from './ooxml';
-import { readKeptParts, writeKeptParts, readTree, writeTree, type KeptTree } from './kept-parts';
+import { appPropsXml, corePropsXml, readKeptParts, writeKeptParts, readTree, writeTree, type KeptTree } from './kept-parts';
 import { GRID_NAME, gridOf, gridNameXml, readGridName, restoreSheet, moveFilter, STILL, type Grid } from './xlsx-relocate';
 import { officeTarget, linkFromTarget } from '../links';
 import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side } from '../sheet/workbook';
@@ -51,6 +51,7 @@ import { type DataTable, seenDataTableId } from '../sheet/what-if';
 import { type PivotTable, seenPivotId } from '../sheet/pivot';
 import { Persons, notesParts, readNotes, shownNotes, validationsXml, readValidations, NOTES_CT, NOTES_REL } from './xlsx-notes';
 import { textRotation, readTextRotation, sheetViewAttrs, readSheetViewOpts, outlinePrXml, outlineLevelAttrs, outlineAttrs, sparklinesExt, readSparklines, customWorkbookViewsXml, customSheetViewsXml, readCustomViews, themeXml, readWorkbookTheme } from './xlsx-view';
+import { readSheetKept, readBookKept, sheetProtectionXml, cellProtectionXml, paneKey, keptPanes } from './xlsx-view';
 import { CELL_STYLES, cellStyleNamed, cellStylePatch, cellStyleBorders } from '../sheet/cell-styles';
 import type { WorkbookTheme } from '../sheet/themes';
 import { themeOf } from '../sheet/themes';
@@ -58,6 +59,9 @@ import type { CustomView } from '../sheet/views';
 import { seenSparkId } from '../sheet/sparklines';
 import { type CompoundCard } from '../sheet/compound';
 import { type Query, seenQueryId } from '../sheet/query';
+import { keepFileValues, fileValues, type FileValue } from './xlsx-cached';
+import { readRichValues, writeRichParts, richMetadataXml, keepPointers, pointerOf } from './xlsx-rich';
+import { LeftOut } from './xlsx-left-out';
 export { applyTint };
 
 /** Pictures of structures for Excel (the app draws them; tests use stand-ins). */
@@ -121,10 +125,11 @@ const RELS = {
  * The cell metadata that marks a formula as a dynamic array formula (cm="1" on its cell), as
  * Excel writes it: without it Excel works a formula out the old way, one value per cell.
  */
-const DYNAMIC_ARRAY_METADATA = `<metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:xda="http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray">` +
-  `<metadataTypes count="1"><metadataType name="XLDAPR" minSupportedVersion="120000" copy="1" pasteAll="1" pasteValues="1" merge="1" splitFirst="1" rowColShift="1" clearFormats="1" clearComments="1" assign="1" coerce="1" cellMeta="1"/></metadataTypes>` +
-  `<futureMetadata name="XLDAPR" count="1"><bk><extLst><ext uri="{bdbb8cdc-fa1e-496e-a857-3c3f30c029c3}"><xda:dynamicArrayProperties fDynamic="1" fCollapsed="0"/></ext></extLst></bk></futureMetadata>` +
-  `<cellMetadata count="1"><bk><rc t="1" v="0"/></bk></cellMetadata></metadata>`;
+const DYNAMIC_ARRAY_METADATA = {
+  type: `<metadataType name="XLDAPR" minSupportedVersion="120000" copy="1" pasteAll="1" pasteValues="1" merge="1" splitFirst="1" rowColShift="1" clearFormats="1" clearComments="1" assign="1" coerce="1" cellMeta="1"/>`,
+  future: `<futureMetadata name="XLDAPR" count="1"><bk><extLst><ext uri="{bdbb8cdc-fa1e-496e-a857-3c3f30c029c3}"><xda:dynamicArrayProperties fDynamic="1" fCollapsed="0"/></ext></extLst></bk></futureMetadata>`,
+  cells: `<cellMetadata count="1"><bk><rc t="1" v="0"/></bk></cellMetadata>`,
+};
 
 /** Pixels to Office's drawing units (EMU): 9525 to the pixel at 96 to the inch. */
 const PX = 9525;
@@ -335,7 +340,7 @@ class Styles {
   /** The style index for a cell's formatting. */
   xf(st: CellStyle | undefined): number {
     const s = st ?? {};
-    const key = xfKey(s);
+    const key = xfKey(s) + (s.unlocked ? '|unlocked' : '') + (s.formulaHidden ? '|hidden' : '');
     const got = this.byKey.get(key);
     if (got !== undefined) return got;
     const { font, fill, border } = this.parts(s);
@@ -346,9 +351,10 @@ class Styles {
       ? `<alignment${horizontal ? ` horizontal="${horizontal}"` : ''}${s.valign && s.valign !== 'bottom' ? ` vertical="${s.valign === 'middle' ? 'center' : 'top'}"` : ''}${s.rotate ? ` textRotation="${textRotation(s.rotate)}"` : ''}${s.wrap ? ' wrapText="1"' : ''}${s.indent && horizontal !== 'center' ? ` indent="${s.indent}"` : ''}/>`
       : '';
     const xfId = s.cellStyle ? this.namedStyle(s.cellStyle) : 0;
+    const protection = cellProtectionXml(s);
     const x = `<xf numFmtId="${fmt}" fontId="${font}" fillId="${fill}" borderId="${border}" xfId="${xfId}"` +
       `${fmt ? ' applyNumberFormat="1"' : ''}${font ? ' applyFont="1"' : ''}${fill ? ' applyFill="1"' : ''}${border ? ' applyBorder="1"' : ''}` +
-      `${align ? ` applyAlignment="1">${align}</xf>` : '/>'}`;
+      `${align || protection ? `${align ? ' applyAlignment="1"' : ''}${protection ? ' applyProtection="1"' : ''}>${align}${protection}</xf>` : '/>'}`;
     this.xfs.push(x);
     const i = this.xfs.length - 1;
     this.byKey.set(key, i);
@@ -525,6 +531,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   const lambdaNames = new Set(book.names.map((n) => n.name.toUpperCase()));
   const nameCase = book.nameCase();
   const persons = new Persons();
+  // Excel's own values for formulas this program can't work out, while they still hold
+  const saved = fileValues(book);
   pkg.defaultType('png', 'image/png');
   // drop-down lists too long for Excel to hold typed: their items on a hidden sheet, as Excel does itself
   const lists: { ref: string; text: string; items: string[] }[] = [];
@@ -559,11 +567,12 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     const headerName = new Map<number, string>();
     const tableNames = new Map<TableDef, string[]>();
     for (const t of s.tables) {
+      // (a table without a header row has its names only in its part: its first row is data)
       const heads: string[] = [];
-      for (let c = t.range.c1; c <= t.range.c2; c++) heads.push(s.shownText(t.range.r1, c));
+      for (let c = t.range.c1; c <= t.range.c2; c++) heads.push(t.header ? s.shownText(t.range.r1, c) : t.columns?.[c - t.range.c1]?.name ?? '');
       const names = tableColumnNames(heads);
       tableNames.set(t, names);
-      names.forEach((n, i) => headerName.set(keyOf(t.range.r1, t.range.c1 + i), n));
+      if (t.header) names.forEach((n, i) => headerName.set(keyOf(t.range.r1, t.range.c1 + i), n));
     }
     for (const [c, st] of s.colStyles) if (st.chem) ms.chemCols.push(c);
 
@@ -601,7 +610,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         const c = colOf(k);
         const cell = s.cell(r, c);
         const header = headerName.get(k);
-        const v = header ?? s.values.get(k) ?? null;
+        const v = header ?? saved(s, k) ?? s.values.get(k) ?? null;
         const style = s.styleAt(r, c);
         const ref = cellName(r, c);
         const own = cell?.style;
@@ -641,7 +650,9 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         const blockRef = arrayRef ?? legacyRef;
         const f = dt ? dataTableXml(dt) : formula === null ? '' : blockRef ? `<f t="array" ref="${blockRef}">${xml(formula)}</f>` : `<f>${xml(formula)}</f>`;
         // a dynamic array formula's cell points at the metadata that says so
-        const sAttr = arrayRef ? `${sAttr0} cm="1"` : sAttr0;
+        // a picture placed in the cell (a rich value), while the cell is as it was read
+        const vm = book.excel?.richValues ? pointerOf(cell) : undefined;
+        const sAttr = (arrayRef ? `${sAttr0} cm="1"` : sAttr0) + (vm !== undefined ? ` vm="${vm}"` : '');
         let body = '';
         if (v === null || v === '') {
           body = f ? `<c r="${ref}"${sAttr}>${f}</c>` : sAttr ? `<c r="${ref}"${sAttr}/>` : '';
@@ -663,6 +674,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
             : `<c r="${ref}"${sAttr} t="s"><v>${strings.index(wrote, chem, wrote === v ? runsOf(cell) : undefined, style)}</v></c>`;
         }
         if (entry) entry.wrote = wrote;
+        // (a rich value's cell holds the error Excel shows where it can't show the value)
+        if (vm !== undefined && !f && typeof v === 'string' && FILE_ERRORS.includes(v)) body = `<c r="${ref}"${sAttr} t="e"><v>${v}</v></c>`;
         if (body) cells.push(body);
 
         // the structure's picture, over the cell (or merged block)
@@ -847,18 +860,21 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     printTitleNames.push(...printNames(own.pageSetup, s.name, si));
     const code = vba && own.codeName ? ` codeName="${xmlAttr(own.codeName)}"` : '';
     const outlinePr = outlinePrXml(s);
-    const sheetPr = s.filter && !filterTable || page.fitToPage || outlinePr || code
-      ? `<sheetPr${code}${s.filter && !filterTable ? ' filterMode="1"' : ''}>${outlinePr}${page.fitToPage ? '<pageSetUpPr fitToPage="1"/>' : ''}</sheetPr>`
+    const tabColor = own.excel?.tabColor ?? '';
+    const sheetPr = s.filter && !filterTable || page.fitToPage || outlinePr || code || tabColor
+      ? `<sheetPr${code}${s.filter && !filterTable ? ' filterMode="1"' : ''}>${tabColor}${outlinePr}${page.fitToPage ? '<pageSetUpPr fitToPage="1"/>' : ''}</sheetPr>`
       : '';
+    // where the sheet was scrolled to and what was selected, and the like, as the file had them
+    const view = keptPanes(own.excel, fr || fc ? paneKey(fr, fc, true) : paneKey(sp?.rows ?? 0, sp?.cols ?? 0), pane);
     const sparkExt = standIn ? '' : sparklinesExt(s.sparklines, s.name);
     pkg.add(path,
       `${HEAD}<worksheet xmlns="${MAIN}" xmlns:r="${RNS}">` +
       `${sheetPr}<dimension ref="${used}"/>` +
-      `<sheetViews><sheetView${sheetViewAttrs(own.viewOpts)}${si === book.active ? ' tabSelected="1"' : ''} workbookViewId="0">${pane}</sheetView></sheetViews>` +
+      `<sheetViews><sheetView${sheetViewAttrs(own.viewOpts)}${own.excel?.viewAttrs ?? ''}${si === book.active ? ' tabSelected="1"' : ''} workbookViewId="0">${view}</sheetView></sheetViews>` +
       `<sheetFormatPr defaultRowHeight="15"${outlineLevelAttrs(s)}/>` +
       (colXml.length ? `<cols>${colXml.join('')}</cols>` : '') +
-      `<sheetData>${rowXml.join('')}</sheetData>${filterXml}${standIn ? '' : customSheetViewsXml(book, own)}${merges}${cfXml}${dvXml}${hyperlinks}` +
-      `${page.printOptions}${page.pageMargins}${page.pageSetup}${page.headerFooter}${page.breaks}${drawingXml}${tableParts}${sparkExt ? `<extLst>${sparkExt}</extLst>` : ''}</worksheet>`,
+      `<sheetData>${rowXml.join('')}</sheetData>${sheetProtectionXml(own.excel)}${filterXml}${own.excel?.sortState ?? ''}${standIn ? '' : customSheetViewsXml(book, own)}${merges}${cfXml}${dvXml}${hyperlinks}` +
+      `${page.printOptions}${page.pageMargins}${page.pageSetup}${page.headerFooter}${page.breaks}${own.excel?.ignoredErrors ?? ''}${drawingXml}${tableParts}${sparkExt ? `<extLst>${sparkExt}</extLst>` : ''}</worksheet>`,
       CT.sheet);
     const rid = pkg.relate('xl/workbook.xml', RELS.worksheet, `worksheets/sheet${si + 1}.xml`);
     sheetEntries.push(`<sheet name="${xml(s.name)}" sheetId="${si + 1}" r:id="${rid}"/>`);
@@ -884,10 +900,12 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
 
   pkg.relate('xl/workbook.xml', RELS.styles, 'styles.xml');
   pkg.add('xl/styles.xml', styles.toXml(), CT.styles);
-  // the theme, when it isn't Excel's own default
-  if (book.theme) {
+  // the theme: the file's own while it isn't changed here (its fonts for each script, effects and
+  // the rest kept), else made from the workbook's when it isn't Excel's own default
+  const keptTheme = book.kept?.theme && book.kept.theme.look === JSON.stringify(book.theme) ? book.kept.theme.xml : null;
+  if (keptTheme || book.theme) {
     pkg.relate('xl/workbook.xml', RELS.theme, 'theme/theme1.xml');
-    pkg.add('xl/theme/theme1.xml', themeXml(book.theme), CT.theme);
+    pkg.add('xl/theme/theme1.xml', keptTheme ?? themeXml(book.theme!), CT.theme);
   }
   pkg.relate('xl/workbook.xml', RELS.sharedStrings, 'sharedStrings.xml');
   pkg.add('xl/sharedStrings.xml', strings.toXml(), CT.strings);
@@ -906,9 +924,16 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   // links to other workbooks, in the order their formulas number them ([1]Sheet1!A1)
   const linkIds = book.externalLinks.map((t) => writeTree(pkg, t, 'xl/workbook.xml')).filter((id): id is string => !!id);
 
-  if (anyDynamic) {
+  // cell metadata (dynamic arrays) and value metadata (rich values, with their parts)
+  const rich = book.excel?.richValues;
+  if (rich) writeRichParts(pkg, rich.trees, 'xl/workbook.xml');
+  if (anyDynamic || rich) {
+    const dyn = anyDynamic ? DYNAMIC_ARRAY_METADATA : null;
+    const values = rich ? richMetadataXml(rich.metadata, dyn ? [dyn.type] : []) : null;
+    const types = [...(dyn ? [dyn.type] : []), ...(values?.types ?? [])];
     pkg.relate('xl/workbook.xml', RELS.metadata, 'metadata.xml');
-    pkg.add('xl/metadata.xml', HEAD + DYNAMIC_ARRAY_METADATA, CT.metadata);
+    pkg.add('xl/metadata.xml', `${HEAD}<metadata xmlns="${MAIN}" xmlns:xda="http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray">` +
+      `<metadataTypes count="${types.length}">${types.join('')}</metadataTypes>${dyn?.future ?? ''}${values?.future ?? ''}${dyn?.cells ?? ''}${values?.values ?? ''}</metadata>`, CT.metadata);
   }
 
   // defined names (Name Manager): a sheet's own carry its place in the list of sheets
@@ -919,13 +944,13 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   });
   const allNames = [...filterNames, ...printTitleNames, ...nameXml, ...gridNames];
   pkg.add('xl/workbook.xml',
-    `${HEAD}<workbook xmlns="${MAIN}" xmlns:r="${RNS}"><workbookPr${book.date1904 ? ' date1904="1"' : ''}${vba?.codeName ? ` codeName="${xmlAttr(vba.codeName)}"` : ''}/>` +
+    `${HEAD}<workbook xmlns="${MAIN}" xmlns:r="${RNS}">${book.excel?.fileSharing ?? ''}<workbookPr${book.date1904 ? ' date1904="1"' : ''}${vba?.codeName ? ` codeName="${xmlAttr(vba.codeName)}"` : ''}/>${book.excel?.protection ?? ''}` +
     `<bookViews><workbookView activeTab="${book.active}"/></bookViews>` +
     `<sheets>${sheetEntries.join('')}</sheets>` +
     (linkIds.length ? `<externalReferences>${linkIds.map((id) => `<externalReference r:id="${id}"/>`).join('')}</externalReferences>` : '') +
     (allNames.length ? `<definedNames>${allNames.join('')}</definedNames>` : '') +
     // formulas are worked out again when Excel opens the file
-    `<calcPr calcId="191029" fullCalcOnLoad="1"/>` + customWorkbookViewsXml(book) +
+    `<calcPr calcId="191029"${book.excel?.calcAttrs ?? ''} fullCalcOnLoad="1"/>` + customWorkbookViewsXml(book) +
     (pivotCaches.length ? `<pivotCaches>${pivotCaches.join('')}</pivotCaches>` : '') + '</workbook>',
     opts.macros ? CT.workbookMacros : CT.workbook);
   if (vba) {
@@ -941,10 +966,9 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   pkg.relate('', REL.officeDocument, 'xl/workbook.xml');
   pkg.relate('', REL.coreProps, 'docProps/core.xml');
   pkg.relate('', REL.extendedProps, 'docProps/app.xml');
-  const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
-  pkg.add('docProps/core.xml', `${HEAD}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
-    `<dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`, CT.core);
-  pkg.add('docProps/app.xml', `${HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Chem Illustrator</Application></Properties>`, CT.app);
+  // the workbook's properties (File > Info) as the file had them, brought up to date
+  pkg.add('docProps/core.xml', corePropsXml(book.kept?.docProps), CT.core);
+  pkg.add('docProps/app.xml', appPropsXml(book.kept?.docProps), CT.app);
   return pkg.build();
 }
 
@@ -1071,6 +1095,10 @@ function readStyles(doc: Document | null, theme: string[]): (CellStyle | undefin
       const rot = readTextRotation(a.getAttribute('textRotation'));
       if (rot) st.rotate = rot;
     }
+    // Format Cells > Protection, for Excel (cells are locked, formulas shown, unless it says otherwise)
+    const prot = kid(x, 'protection');
+    if (prot?.getAttribute('locked') === '0' || prot?.getAttribute('locked') === 'false') st.unlocked = true;
+    if (isOn(prot?.getAttribute('hidden'))) st.formulaHidden = true;
     return Object.keys(st).some((k) => (st as Record<string, unknown>)[k] !== undefined) ? st : undefined;
   });
 }
@@ -1190,6 +1218,13 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const notKept = new Set<string>();
   // dates counted from 1904 (the old Mac default) are held here counting from 1900, and saved back as they were
   const date1904 = isOn(kid(root, 'workbookPr')?.getAttribute('date1904'));
+  const bookKept = readBookKept(root);
+  // pictures placed in cells and other rich values: their parts and the metadata cells point into
+  const richValues = readRichValues(pkg, wbPath, [...rels.values()].find((r) => r.type === RELS.metadata)?.target ?? null);
+  const pointers = new Map<Sheet, Map<number, number>>();
+  let richCells = 0;
+  // controls, data connections, query tables, background pictures, macro sheets and XML maps: named on opening
+  const leftOut = new LeftOut();
 
   const relTarget = (type: string) => [...rels.values()].find((r) => r.type === type)?.target ?? null;
   const themeDoc = relTarget(RELS.theme) ? pkg.xml(relTarget(RELS.theme)!) : null;
@@ -1229,13 +1264,15 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   book.date1904 = date1904;
   const activeTab = Number(kid(root, 'bookViews', 'workbookView')?.getAttribute('activeTab') ?? 0);
   if (sheetEls.some((s) => s.getAttribute('state') === 'hidden' || s.getAttribute('state') === 'veryHidden')) notKept.add('hidden sheets (shown here)');
+  leftOut.workbook(pkg, wbPath, sheetEls.map((el) => rels.get(rAttr(el, 'id') ?? '')?.type ?? ''));
   const definedNames = kids(kid(root, 'definedNames'), 'definedName');
   const nameSet = new Set(definedNames.map((d) => (d.getAttribute('name') ?? '').toUpperCase()));
   const nameCase = new Map(definedNames.map((d) => [(d.getAttribute('name') ?? '').toUpperCase(), d.getAttribute('name') ?? '']));
 
   if (model?.drawingStyle) book.drawingStyle = { ...book.drawingStyle, ...model.drawingStyle };
   // other programs' data (custom XML, custom properties, add-ins' settings), to save back
-  book.kept = readKeptParts(pkg, { main: wbPath, ours: (r) => r.namespaceURI === MODEL_NS });
+  book.kept = readKeptParts(pkg, { main: wbPath, ours: (r) => r.namespaceURI === MODEL_NS, theme: true });
+  if (book.kept?.theme) book.kept.theme.look = JSON.stringify(workbookTheme);
   // links to other workbooks (formulas reading [1]Sheet1!A1), kept as they are to save back in the same order
   for (const ref of kids(kid(root, 'externalReferences'), 'externalReference')) {
     const r = rels.get(rAttr(ref, 'id') ?? '');
@@ -1269,6 +1306,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
     else if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
   };
   let foreignPictures = 0;
+  // the values formulas had in the file, for those this program can't work out
+  const formulaValues = new Map<Sheet, Map<number, FileValue>>();
   const restored = { structures: 0, changed: 0 };
   book.build(() => {
     sheetEls.forEach((el, si) => {
@@ -1281,6 +1320,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       const raw = new Map<number, Wrote>();
       const codeName = kid(ws, 'sheetPr')?.getAttribute('codeName');
       if (codeName) s.codeName = codeName;
+      // protection and the like, for Excel
+      s.excel = readSheetKept(ws);
       const sheetView = kid(ws, 'sheetViews', 'sheetView');
       const viewOpts = readSheetViewOpts(sheetView);
       if (viewOpts) s.setViewOpts(viewOpts);
@@ -1361,6 +1402,14 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           else if (t === 'd' && v) value = Date.parse(v) / 86400000 + 25569;
           else if (v !== null && v !== '') value = Number(v);
           raw.set(keyOf(r, col), value);
+          // a rich value's cell (a picture placed in it): its pointer, kept with the cell
+          const vm = c.getAttribute('vm');
+          if (vm !== null) {
+            richCells++;
+            let list = pointers.get(s);
+            if (!list) pointers.set(s, (list = new Map()));
+            if (richValues && Number(vm) >= 1 && Number(vm) <= richValues.metadata.blocks.length) list.set(keyOf(r, col), Number(vm));
+          }
           // a data table: its results are worked out again here (its formula is on the first of them)
           const dt = f ? readDataTable(f) : null;
           if (dt) {
@@ -1388,9 +1437,19 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
               if (R && (R.r2 > R.r1 || R.c2 > R.c1)) arrays.push({ R, r, c: col });
               // an array formula not marked as dynamic (cm, Excel 365's cell metadata) is a legacy one: it fills its block and no more
               if (isArray && !c.hasAttribute('cm')) legacyArray = R && R.r1 === r && R.c1 === col ? { rows: R.r2 - R.r1 + 1, cols: R.c2 - R.c1 + 1 } : { rows: 1, cols: 1 };
+              if (v !== null && value !== null) {
+                let list = formulaValues.get(s);
+                if (!list) formulaValues.set(s, (list = new Map()));
+                list.set(keyOf(r, col), { v: value, ...(t === 'e' ? { error: true } : {}) });
+              }
             }
           } else if (arrays.some((a) => inRange(a.R, r, col) && !(a.r === r && a.c === col))) {
-            // spilled there: the formula fills it again
+            // spilled there: the formula fills it again (the file's value is kept for one this program can't work out)
+            if (v !== null && value !== null) {
+              let list = formulaValues.get(s);
+              if (!list) formulaValues.set(s, (list = new Map()));
+              list.set(keyOf(r, col), { v: value, ...(t === 'e' ? { error: true } : {}) });
+            }
             if (style) s.setCell(r, col, { style });
             continue;
           }
@@ -1570,6 +1629,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       const sheetRelList = [...pkg.rels(path!).values()];
       const relOf = (type: string) => sheetRelList.find((r) => r.type === type)?.target;
       const commentsPath = relOf(NOTES_REL.comments), vmlPath = relOf(NOTES_REL.vml), threadedPath = relOf(NOTES_REL.threaded);
+      leftOut.sheet(pkg, path!, ws, vmlPath ? pkg.text(vmlPath) : null);
       if (commentsPath || threadedPath) {
         const notes = readNotes(commentsPath ? pkg.xml(commentsPath) : null, shownNotes(vmlPath ? pkg.text(vmlPath) : null), threadedPath ? pkg.xml(threadedPath) : null, personsDoc);
         for (const [k, n] of notes) s.setNote(rowOf(k), colOf(k), n);
@@ -1627,7 +1687,15 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   // a filter goes back as it was: the rows it hid are hidden already
   if (filters.length) book.build(() => { for (const { s, f } of filters) s.restoreFilter(f); });
   book.active = Math.min(Math.max(0, activeTab), book.sheets.length - 1);
+  book.excel = richValues ? { ...bookKept, richValues } : bookKept;
+  keepFileValues(book, formulaValues);
+  if (richValues) keepPointers(book, pointers);
 
+  if (richCells && richValues) {
+    warnings.push(`${richCells} cell${richCells > 1 ? 's hold pictures or other values' : ' holds a picture or other value'} placed in ${richCells > 1 ? 'them' : 'it'} in Excel: ` +
+      `shown as #VALUE! here, and kept for Excel unless ${richCells > 1 ? 'the cells are' : 'the cell is'} changed.`);
+  } else if (richCells) notKept.add(`${richCells} picture${richCells > 1 ? 's' : ''} or other value${richCells > 1 ? 's' : ''} placed in cells`);
+  for (const item of leftOut.items()) notKept.add(item);
   if (foreignPictures) notKept.add(`${foreignPictures} picture${foreignPictures > 1 ? 's' : ''} or chart${foreignPictures > 1 ? 's' : ''}`);
   if (unknownFormulas) warnings.push(`${unknownFormulas} formula${unknownFormulas > 1 ? 's use' : ' uses'} Excel functions this program can't work out yet.`);
   if (linkedFormulas) {

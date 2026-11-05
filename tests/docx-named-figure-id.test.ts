@@ -61,9 +61,9 @@ describe('a structure named in the Selection Pane', () => {
   it('is still told apart from a copy of another file\'s structure (its picture and alt text differ)', async () => {
     const files = unzipSync(await writeDocx(docWith({ wrap: 'square', x: 10, y: 10, name: 'Benzene' }), deps));
     const rels = strFromU8(files['word/_rels/document.xml.rels']);
-    const rid = /<a:blip r:embed="([^"]+)"/.exec(strFromU8(files['word/document.xml']))![1];
-    const png = 'word/' + new RegExp(`Id="${rid}"[^>]*Target="([^"]+)"`).exec(rels)![1];
-    const other = { ...files, [png]: new Uint8Array([...PNG, 1, 2, 3]) };
+    const target = (re: RegExp) => 'word/' + new RegExp(`Id="${re.exec(strFromU8(files['word/document.xml']))![1]}"[^>]*Target="([^"]+)"`).exec(rels)![1];
+    const png = target(/<a:blip r:embed="([^"]+)"/), svg = target(/<asvg:svgBlip [^>]*r:embed="([^"]+)"/);
+    const other = { ...files, [png]: new Uint8Array([...PNG, 1, 2, 3]), [svg]: new Uint8Array(strToU8('<svg xmlns="http://www.w3.org/2000/svg" width="81" height="40"/>')) };
     const { doc } = await readDocx(withDoc(other, (x) => x.replace(/<wp:docPr id="\d+"/, '<wp:docPr id="77"').replace(/descr="[^"]*"/, 'descr="Chemical structure (SMILES): c1ccncc1"')));
     expect(Object.values(doc.objects).map((o) => o.kind)).toEqual(['picture']);
   });

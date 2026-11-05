@@ -4,6 +4,7 @@
 // bars, star icons, our own table colours) is also kept in this program's part of the file.
 
 import { xml, hex6, kid, kids } from './ooxml';
+import { mainXml } from './xlsx-view';
 import type { CondFormat, CfRule, CfLook, CfValue, CfOp, IconSetName } from '../sheet/conditional';
 import { newCondFormat } from '../sheet/conditional';
 import type { TableDef } from '../sheet/table-styles';
@@ -89,19 +90,29 @@ export function condFormatsXml(rules: CondFormat[], dxf: (l: CfLook) => number):
   }).join('');
 }
 
+/**
+ * A column name as Excel writes it in a table part: characters an attribute can't hold as they
+ * are (a line break) as _xHHHH_, and a typed "_x0041_" kept from reading as one.
+ */
+const columnName = (n: string) => xml(n.replace(/_(?=x[0-9A-Fa-f]{4}_)/g, '_x005F_').replace(/[\u0000-\u001F]/g, (c) => `_x${c.charCodeAt(0).toString(16).padStart(4, '0')}_`));
+
 /** A table part. `names` are the header texts (as written in the header cells); `totals` what each totals-row cell holds. */
 export function tableXml(t: TableDef, id: number, names: string[], totals: (string | { formula: string } | null)[] | null, autoFilter: string): string {
   const R = t.range;
   const columns = names.map((n, i) => {
     const tot = totals?.[i];
-    if (!tot) return `<tableColumn id="${i + 1}" name="${xml(n)}"/>`;
-    if (typeof tot === 'string') return `<tableColumn id="${i + 1}" name="${xml(n)}" totalsRowLabel="${xml(tot)}"/>`;
-    return `<tableColumn id="${i + 1}" name="${xml(n)}" totalsRowFunction="custom"><totalsRowFormula>${xml(tot.formula.replace(/^=/, ''))}</totalsRowFormula></tableColumn>`;
+    // a calculated column's formula, which Excel fills new rows with
+    const calc = t.columns?.find((c) => c.name.toLowerCase() === n.toLowerCase())?.calc ?? '';
+    const head = `<tableColumn id="${i + 1}" name="${columnName(n)}"`;
+    if (!tot) return calc ? `${head}>${calc}</tableColumn>` : `${head}/>`;
+    if (typeof tot === 'string') return calc ? `${head} totalsRowLabel="${xml(tot)}">${calc}</tableColumn>` : `${head} totalsRowLabel="${xml(tot)}"/>`;
+    return `${head} totalsRowFunction="custom">${calc}<totalsRowFormula>${xml(tot.formula.replace(/^=/, ''))}</totalsRowFormula></tableColumn>`;
   }).join('');
   const info = tableStyleXml(t);
   return `<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="${id}" name="${xml(t.name)}" displayName="${xml(t.name)}" ref="${rangeName(R)}"` +
-    `${t.totals ? ' totalsRowCount="1"' : ' totalsRowShown="0"'}>` +
-    autoFilter +
+    `${t.header ? '' : ' headerRowCount="0"'}${t.totals ? ' totalsRowCount="1"' : ' totalsRowShown="0"'}>` +
+    // (a table without a header row has no filter buttons)
+    (t.header ? autoFilter + (t.sortState ?? '') : '') +
     `<tableColumns count="${names.length}">${columns}</tableColumns>${info}</table>`;
 }
 
@@ -267,6 +278,15 @@ export function readTable(doc: Document, id: number): { table: TableDef; autoFil
     ...(on('showFirstColumn') ? { firstCol: true } : {}),
     ...(on('showLastColumn') ? { lastCol: true } : {}),
   };
+  // the columns' names as the file has them (_xHHHH_ for a character such as a line break), and calculated columns
+  const columns = kids(kid(t, 'tableColumns'), 'tableColumn').map((c) => {
+    const calc = kid(c, 'calculatedColumnFormula');
+    const name = (c.getAttribute('name') ?? '').replace(/_x([0-9A-Fa-f]{4})_/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)));
+    return { name, ...(calc?.textContent ? { calc: mainXml(calc) } : {}) };
+  });
+  if (columns.some((c) => c.calc) || !table.header) table.columns = columns;
+  const sort = kid(t, 'sortState');
+  if (sort) table.sortState = mainXml(sort);
   return { table, autoFilter: kid(t, 'autoFilter') };
 }
 

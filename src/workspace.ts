@@ -24,7 +24,7 @@ import { isXls, isOds, excelLimitNote } from './io/sheet-sniff';
 import { DOC_OPEN_ONLY, documentSaveNote, isOtherDocument } from './io/doc-sniff';
 import { adoptSaved } from './io/document-file';
 import {
-  FileRef, FileHandle, FileType, CDXML, CDX, CDS, MOL, RXN, MRV, KET, CML, CDJSON, CHEM_EXCHANGE, PPTX, XLSX, XLSM, SHEET_OPEN_ONLY, CSV, SDF, DOCX, RTF, ODT, TABLE_TEXT_EXTENSIONS, openBytesDialog, saveFileDialog, writeFile, canSaveInPlace, askSaveChanges,
+  FileRef, FileHandle, FileType, CDXML, CDX, CDS, MOL, RXN, MRV, KET, CML, CDJSON, CHEM_EXCHANGE, PPTX, SLIDES_OPEN_ONLY, XLSX, XLSM, SHEET_OPEN_ONLY, CSV, SDF, DOCX, RTF, ODT, TABLE_TEXT_EXTENSIONS, openBytesDialog, saveFileDialog, writeFile, canSaveInPlace, askSaveChanges,
   showError, withExtension, extensionOf, baseName, readPath, pathExists, stampOf,
 } from './io/files';
 import type { FileStamp } from './keep/recovery';
@@ -499,7 +499,7 @@ export class Workspace {
   async open(): Promise<void> {
     let f;
     try {
-      f = await openBytesDialog('Canvases, presentations, spreadsheets and documents', [CDXML, CDX, CDS, PPTX, XLSX, XLSM, DOCX, RTF, ODT, CSV, SDF, MOL, RXN, MRV, KET, CML, CDJSON], ['sd', 'mdl', ...SHEET_OPEN_ONLY, ...DOC_OPEN_ONLY, ...TABLE_TEXT_EXTENSIONS]);
+      f = await openBytesDialog('Canvases, presentations, spreadsheets and documents', [CDXML, CDX, CDS, PPTX, XLSX, XLSM, DOCX, RTF, ODT, CSV, SDF, MOL, RXN, MRV, KET, CML, CDJSON], ['sd', 'mdl', ...SLIDES_OPEN_ONLY, ...SHEET_OPEN_ONLY, ...DOC_OPEN_ONLY, ...TABLE_TEXT_EXTENSIONS]);
     } catch (e) {
       await showError('Could not open the file: ' + String(e));
       return;
@@ -832,7 +832,8 @@ export class Workspace {
     tab = this.mainOf(tab);
     const types = SAVE_TYPES[tab.mode];
     const ext = extensionOf(tab.name);
-    const first = types.find((t) => t.extension === ext) ?? types[0];
+    // (a file of another kind, such as a template, as the usual kind: a workbook with macros as .xlsm)
+    const first = types.find((t) => t.extension === ext) ?? (tab.book?.macros ? XLSM : types[0]);
     const target = await saveFileDialog(withExtension(tab.name, first.extension), [first, ...types.filter((t) => t !== first)]).catch(async (e) => { await showError(String(e)); return null; });
     if (!target) return false;
     return this.writeTo(tab, target.ref, target.name);

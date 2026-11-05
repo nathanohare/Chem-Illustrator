@@ -40,7 +40,8 @@ import { shownSize } from '../document/doc-layout';
 import { coveringCell, layoutTable } from '../table';
 import { chemdrawCdx, isChemDraw, readEmbedded } from './ole-object';
 import { cmtIds, cmtString, type CommentNote, type CommentThread } from '../document/comments';
-import { BIB_MARK, CHART_NAME, CITE_FIELD, WORD_HIGHLIGHTS, DOCX_REL, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, fromWordDate, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, TABLE_NAME, W_NS, type DocxModel } from './docx-base';
+import { BIB_MARK, CHART_NAME, CITE_FIELD, WORD_HIGHLIGHTS, DOCX_REL, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, fromWordDate, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, TABLE_MARK, TABLE_NAME, W_NS, type DocxModel } from './docx-base';
+import { wordTablePrint } from './native-print';
 import { citationNumbers, cleanRef, type Piece as BibPiece, type Reference } from '../document/references';
 import { bibFieldApp, placeRef, readCiteField, readMendeleyTag, styleFromCsl, zoteroStyleOf, MANAGERS, type CiteLive, type CiteManager, type ManagerCite } from '../document/live-cites';
 import { retypedDiagram } from '../design/diagrams';
@@ -123,6 +124,9 @@ const WARN = {
   restart: 'Caption numbers that were set to start again were numbered straight through.',
   hfPictures: 'Pictures and tables in the header and footer were left out.',
   pictureWatermark: 'A picture watermark was left out (text watermarks are kept).',
+  drawingChanged: 'Some structures were changed in Word (Change Picture) or copied in from another file, so they came in as pictures.',
+  drawingCrop: 'Cropping and color changes made in Word to some structures were left off (the structures stay editable).',
+  macros: 'This document has macros (VBA). They are never run here, and they are left out when it is saved.',
 };
 
 type Pos = 'base' | 'sub' | 'sup';
@@ -300,6 +304,8 @@ class DocxReader {
     this.readNumbering();
     this.readModel();
     this.readKept();
+    // a .docm's (or macro-enabled template's) macros, which a .docx can't hold
+    if ([...pkg.rels(this.main).values()].some((r) => r.type === REL.vbaProject)) this.warn('macros');
     // the sections: each paragraph's section properties end a section, the body's the last
     // (not those kept in a tracked change's record of what they were)
     const sects = Array.from(root.getElementsByTagNameNS(this.W, 'sectPr')).filter((e) => e.parentElement?.localName !== 'sectPrChange');
@@ -696,7 +702,7 @@ class DocxReader {
 
   /** Other programs' data, kept as it is; Chem4Word's structures by their id. */
   private readKept(): void {
-    this.kept = readKeptParts(this.pkg, { main: this.main, ours: (root) => root.namespaceURI === MODEL_NS, ownProp: (name) => /^ZOTERO_PREF_\d+$/.test(name) });
+    this.kept = readKeptParts(this.pkg, { main: this.main, ours: (root) => root.namespaceURI === MODEL_NS, ownProp: (name) => /^ZOTERO_PREF_\d+$/.test(name), theme: true });
     for (const x of this.kept?.xml ?? []) {
       const guid = cmlGuid(x.xml);
       if (guid) this.cml.set(guid, x.xml);
@@ -1883,7 +1889,9 @@ class DocxReader {
       if (!got) { this.warn('shapes'); return; }
       const mine = new RegExp(`^${CHART_NAME} (\\d+)$`).exec(name);
       const kept = mine ? this.model?.charts?.[Number(mine[1])] : undefined;
-      const chosen = sizedBox(kept && sameBoxData(kept, got.box) ? freshBox(kept) : got.box, shown.w, shown.h);
+      // (and, in files with its print, still the same type with the same look: not changed in Word)
+      const print = mine ? this.model?.chartPrints?.[Number(mine[1])] : undefined;
+      const chosen = sizedBox(kept && sameBoxData(kept, got.box) && (typeof print !== 'string' || print === got.print) ? freshBox(kept) : got.box, shown.w, shown.h);
       if (chosen === got.box && got.partial) this.warn('chartParts');
       const float = box.localName === 'anchor' ? this.floatOf(box, null, shown.w) : null;
       this.emitObject(ctx, { kind: 'picture', src: chartBoxPng(chosen, shown.w, shown.h), w: round(shown.w), h: round(shown.h), px: { w: chosen.chart.w, h: chosen.chart.h }, chart: chosen, ...(float ? { float } : {}), ...alt }, r);
@@ -1896,7 +1904,14 @@ class DocxReader {
     const ours = new RegExp(`^${DRAWING_NAME} (\\d+)$`).exec(name);
     const m = ours ? this.model?.drawings?.[Number(ours[1])] : undefined;
     const look = pic ? readLook(kid(pic, 'spPr')) : null;
-    if (m?.contents && this.isOurDrawing(m, pic, descr)) {
+    const mineNow = !!m?.contents && this.isOurDrawing(m, pic, descr);
+    // one of ours by its name whose picture is no longer the one written: Word's picture
+    if (m?.contents && !mineNow) this.warn('drawingChanged');
+    if (m?.contents && mineNow) {
+      // cropped or recoloured in Word: the structure, without them
+      const blipNow = kid(pic, 'blipFill', 'blip');
+      const sr = kid(pic, 'blipFill', 'srcRect');
+      if (['l', 't', 'r', 'b'].some((k) => Number(sr?.getAttribute(k) ?? 0)) || kids(blipNow).some((k) => k.localName !== 'extLst')) this.warn('drawingCrop');
       const natural = shownSize({ w: m.w, h: m.h }, 1, this.textW);
       const scale = Math.abs(natural.w - shown.w) < 0.75 || m.w <= 0 ? undefined : round(shown.w / m.w, 1e4);
       // a diagram's shapes may have been typed into in Word: their words go back into its text
@@ -1941,11 +1956,19 @@ class DocxReader {
    * Files from before the fingerprints were kept are taken by the name.
    */
   private isOurDrawing(m: DocxModel['drawings'][number], pic: Element | null, descr: string): boolean {
-    if (m.png === undefined && m.alt === undefined) return true;
+    if (m.png === undefined && m.alt === undefined && m.svg === undefined) return true;
     const blip = kid(pic, 'blipFill', 'blip');
     const path = this.relTarget(rAttr(blip, 'embed'));
     const bytes = path ? this.pkg.bytes(path) : null;
     if (m.png !== undefined && bytes && bytesHash(bytes) === m.png) return true;
+    // the SVG, which Word keeps as written: the picture is ours exactly while it is the same (the
+    // alt text is the person's to change, and stays with a picture changed by Change Picture)
+    if (m.svg !== undefined && pic) {
+      const svg = Array.from(blip?.getElementsByTagNameNS('*', 'svgBlip') ?? [])[0];
+      const svgPath = this.relTarget(rAttr(svg, 'embed'));
+      const svgBytes = svgPath ? this.pkg.bytes(svgPath) : null;
+      return !!svgBytes && bytesHash(svgBytes) === m.svg;
+    }
     return m.alt !== undefined && m.alt.trim() === descr;
   }
 
@@ -2036,17 +2059,33 @@ class DocxReader {
 
   // ---------------------------------------------------------------- tables
 
+  /**
+   * Which of our tables a Word table is (its id in our part), or null: by the hidden bookmark at
+   * the start of its first cell, or (files from before it) by its alt-text title.
+   */
+  private ourTableId(tbl: Element): number | null {
+    const first = kids(kids(tbl, 'tr')[0] ?? null).find((k) => k.localName === 'tc');
+    for (const p of kids(first ?? null, 'p')) {
+      for (const b of kids(p, 'bookmarkStart')) {
+        const m = new RegExp(`^${TABLE_MARK}(\\d+)$`).exec(b.getAttributeNS(W_NS, 'name') ?? '');
+        if (m) return Number(m[1]);
+      }
+    }
+    const cap = new RegExp(`^${TABLE_NAME} (\\d+)$`).exec(this.a(kid(kid(tbl, 'tblPr'), 'tblCaption')) ?? '');
+    return cap ? Number(cap[1]) : null;
+  }
+
   private table(tbl: Element): void {
     this.pendingNotes = null;
     const tblPr = kid(tbl, 'tblPr');
     // a table from Word (or one typed into here) is a table in the text; an ACS table drawn here
     // comes back as its drawing, and a table inside a cell as a drawn table
-    const cap0 = new RegExp(`^${TABLE_NAME} (\\d+)$`).exec(this.a(kid(tblPr, 'tblCaption')) ?? '');
-    if (!(cap0 && this.model?.tables?.[Number(cap0[1])])) { this.textTable(tbl); return; }
+    const ourId = this.ourTableId(tbl);
+    if (!(ourId !== null && this.model?.tables?.[ourId])) { this.textTable(tbl); return; }
     const rows = kids(tbl, 'tr');
     let cols = kids(kid(tbl, 'tblGrid'), 'gridCol').map((g) => this.tw(g, 'w') ?? 0);
     // the cells, each with how many grid columns it spans
-    type Cell = { cell: TableCell; span: number; vmerge: boolean; borders: Element | null };
+    type Cell = { cell: TableCell; span: number; vmerge: boolean; borders: Element | null; fill?: string };
     const grid: Cell[][] = [];
     let head = 0, counting = true;
     for (const tr of rows) {
@@ -2062,7 +2101,8 @@ class DocxReader {
         const vm = kid(tcPr, 'vMerge');
         const vmerge = !!vm && this.a(vm) !== 'restart';
         if (vmerge) this.warn('vmerge');
-        row.push({ cell: vmerge ? { runs: [] } : this.cellText(tc), span, vmerge, borders: kid(tcPr, 'tcBorders') });
+        const shd = kid(tcPr, 'shd')?.getAttributeNS(W_NS, 'fill');
+        row.push({ cell: vmerge ? { runs: [] } : this.cellText(tc), span, vmerge, borders: kid(tcPr, 'tcBorders'), ...(shd && /^[0-9a-f]{6}$/i.test(shd) ? { fill: `#${shd.toLowerCase()}` } : {}) });
       }
       grid.push(row);
     }
@@ -2074,10 +2114,15 @@ class DocxReader {
     }
     cols = cols.map((w) => round(Math.max(6, w)));
     const table: TableData = { cols, rows: [], head: 0, lines: 'none' };
+    // each cell's shading, by its place (used only for our own tables shaded in Word)
+    const shades: (string | undefined)[][] = [];
     for (const row of grid) {
       const out: TableCell[] = [];
+      const shade: (string | undefined)[] = [];
+      shades.push(shade);
       for (const c of row) {
         if (out.length >= cols.length) break;
+        shade[out.length] = c.fill;
         out.push(c.span > 1 ? { ...c.cell, span: Math.min(c.span, cols.length - out.length) } : c.cell);
         for (let k = 1; k < c.span && out.length < cols.length; k++) out.push({ runs: [] });
       }
@@ -2124,11 +2169,26 @@ class DocxReader {
     table.rows.forEach((row) => row.forEach((c, ci) => { if (c.align === table.align![ci]) delete c.align; }));
 
     // our own table: as it was made here, while its text is the same
-    const cap = new RegExp(`^${TABLE_NAME} (\\d+)$`).exec(this.a(kid(tblPr, 'tblCaption')) ?? '');
-    const mine = cap ? this.model?.tables?.[Number(cap[1])] : undefined;
+    const mine = this.model?.tables?.[ourId];
     let final = table;
     if (mine?.table && mine.text === tableText(table)) {
       final = structuredClone(mine.table);
+      // its text bolded, coloured, resized or shaded in Word (its words the same; files with a
+      // print only): Word's text and lines in our table
+      if (typeof mine.pr === 'string' && mine.pr !== wordTablePrint(tbl) && final.rows.length === table.rows.length && final.cols.length === table.cols.length) {
+        final.rows = final.rows.map((row, ri) => row.map((c, ci) => {
+          const theirs = table.rows[ri][ci];
+          const out: TableCell = { ...c, runs: theirs.runs };
+          if (theirs.paras) out.paras = theirs.paras; else delete out.paras;
+          const align = theirs.align ?? table.align?.[ci];
+          if (align && align !== (final.align?.[ci] ?? 'left')) out.align = align; else delete out.align;
+          const fill = shades[ri]?.[ci];
+          if (fill) out.fill = fill;
+          return out;
+        }));
+        final.size = table.size;
+        final.lines = table.lines;
+      }
       // its title was written just before it as a paragraph, and its notes just after
       const title = final.title?.length ? rt.plainText(final.title) : null;
       const prev = this.out[this.out.length - 1];
@@ -2750,7 +2810,8 @@ class DocxReader {
       ...(typeof m?.citeStyle === 'string' && m.citeStyle in CITE_PRESETS ? { citeStyle: m.citeStyle } : zoteroStyle ? { citeStyle: zoteroStyle } : {}),
       ...(manager ? { citeManager: manager } : {}),
       ...(zoteroPrefs ? { zoteroPrefs } : {}),
-      ...(this.kept ? { kept: this.kept } : {}),
+      // (a theme made here from a Design choice is written from that choice, not kept)
+      ...(this.kept ? { kept: parseDesign(m?.design) && this.kept.theme ? { ...this.kept, theme: undefined } : this.kept } : {}),
       ...(usedControls(runs, out.map((p) => p.ps), this.controls) ?? {}),
       ...(m?.citeOptions && Object.keys(cleanOptions(m.citeOptions)).length ? { citeOptions: cleanOptions(m.citeOptions) } : {}),
     };

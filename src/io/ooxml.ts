@@ -37,6 +37,8 @@ export const REL = {
   viewProps: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/viewProps',
   tableStyles: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/tableStyles',
   font: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/font',
+  /** Macros (VBA), in .docm, .pptm and .xlsm files and their templates. */
+  vbaProject: 'http://schemas.microsoft.com/office/2006/relationships/vbaProject',
 };
 
 /** Escape text for XML (also the characters XML 1.0 can't hold at all, which are dropped). */
@@ -108,7 +110,10 @@ export class Package {
   build(): Uint8Array {
     const files: Record<string, Uint8Array> = {};
     const ct = [`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`, `<Types xmlns="${NS.ct}">`];
-    for (const [ext, type] of this.defaults) ct.push(`<Default Extension="${ext}" ContentType="${type}"/>`);
+    // a default type only for the extensions parts use, as Office writes them (rels and xml always)
+    const used = new Set(['rels', 'xml']);
+    for (const path of this.parts.keys()) if (!this.types.has(path)) used.add(/\.([^./]+)$/.exec(path)?.[1]?.toLowerCase() ?? '');
+    for (const [ext, type] of this.defaults) if (used.has(ext.toLowerCase())) ct.push(`<Default Extension="${ext}" ContentType="${type}"/>`);
     for (const [path, type] of this.types) ct.push(`<Override PartName="/${xml(path)}" ContentType="${type}"/>`);
     ct.push('</Types>');
     files['[Content_Types].xml'] = strToU8(ct.join(''));

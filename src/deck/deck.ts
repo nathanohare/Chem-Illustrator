@@ -40,7 +40,14 @@ export interface DeckSettings {
 
 export const copySettings = (s: DeckSettings): DeckSettings => structuredClone(s);
 
-export interface SlideSize { w: number; h: number }
+export interface SlideSize {
+  w: number;
+  h: number;
+  /** PowerPoint's name for the size (p:sldSz's type: Letter, A4, 16:9...), kept from the file read while the size stays. */
+  type?: string;
+}
+/** PowerPoint's names for slide sizes (ECMA-376 Part 1 §19.7.18). */
+export const SLIDE_SIZE_TYPES = ['35mm', 'A3', 'A4', 'B4ISO', 'B4JIS', 'B5ISO', 'B5JIS', 'banner', 'custom', 'hagakiCard', 'ledger', 'letter', 'overhead', 'screen16x10', 'screen16x9', 'screen4x3'];
 /** PowerPoint's two standard sizes, in points: widescreen 13.33 × 7.5 in, and 10 × 7.5 in. */
 export const WIDE: SlideSize = { w: 960, h: 540 };
 export const STANDARD: SlideSize = { w: 720, h: 540 };

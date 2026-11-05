@@ -32,7 +32,8 @@ import { extractDrawing } from './clipboard';
 import { contentsAlt, titleOverlaps, roughCaptionBox } from '../accessibility';
 import type { Selection } from '../editor/editor';
 import { Package, NS, REL, emu, xml, xmlAttr, hex6, MediaFiles, structureAltText, bytesHash } from './ooxml';
-import { writeKeptParts, type KeptParts } from './kept-parts';
+import { SLIDE_SIZE_TYPES } from '../deck/deck';
+import { appPropsXml, corePropsXml, writeKeptParts, type KeptParts } from './kept-parts';
 import { facesToEmbed, toEot, type FontSource } from './font-embed';
 import { dataUrl, fromDataUrl } from '../render/images';
 import { patternClear, patternInk, shadowLook } from '../render/fills';
@@ -59,6 +60,7 @@ import { toOmml, mathText } from '../document/math';
 import { shapeMathPicture, shapeMathScale } from '../deck/equation';
 import { canvasTag, type CanvasData } from '../deck/canvas';
 import { splitCanvas, slidePrintXml, type CanvasPart } from '../deck/canvas-export';
+import { fragment, textPrint, spPrPrint, slideTablePrint } from './native-print';
 
 /** Tag names (PowerPoint keeps tags when it saves). */
 export const TAG = {
@@ -459,6 +461,12 @@ const nameAttrs = (name: string, hidden?: boolean): string => ` name="${xml(name
 export const xfrm = (r: Rect, extra = '') => `<a:xfrm${extra}><a:off x="${emu(r.x1)}" y="${emu(r.y1)}"/><a:ext cx="${Math.max(0, emu(r.x2 - r.x1))}" cy="${Math.max(0, emu(r.y2 - r.y1))}"/></a:xfrm>`;
 const GROUP = '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>';
 
+/** The slide size's type attribute (ECMA-376 Part 1 §19.7.18): the file's own (Letter, A4...), else 4:3's for 10 × 7.5 in. */
+function sizeType(s: SlideSize): string {
+  const type = s.type && SLIDE_SIZE_TYPES.includes(s.type) ? s.type : s.w === 720 && s.h === 540 ? 'screen4x3' : '';
+  return type ? ` type="${type}"` : '';
+}
+
 class Writer {
   pkg = new Package();
   private media = 0;
@@ -542,8 +550,10 @@ class Writer {
     pkg.relate('', REL.officeDocument, 'ppt/presentation.xml');
     pkg.relate('', REL.coreProps, 'docProps/core.xml');
     pkg.relate('', REL.extendedProps, 'docProps/app.xml');
-    pkg.add('docProps/core.xml', this.core(), CT.core);
-    pkg.add('docProps/app.xml', `${HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Chem Illustrator</Application><Slides>${n}</Slides><Notes>${deck.slides.filter((s) => s.notes.trim()).length}</Notes><PresentationFormat>${deck.size.w === 960 && deck.size.h === 540 ? 'Widescreen' : deck.size.w === 720 && deck.size.h === 540 ? 'On-screen Show (4:3)' : 'Custom'}</PresentationFormat></Properties>`, CT.app);
+    // the deck's properties (File > Info) as the file had them, brought up to date; a new deck is titled by its name
+    pkg.add('docProps/core.xml', corePropsXml(deck.kept?.docProps, { fresh: { title: this.opts.title ?? 'Slides', revision: '1' } }), CT.core);
+    const format = deck.size.w === 960 && deck.size.h === 540 ? 'Widescreen' : deck.size.w === 720 && deck.size.h === 540 ? 'On-screen Show (4:3)' : 'Custom';
+    pkg.add('docProps/app.xml', appPropsXml(deck.kept?.docProps, `<PresentationFormat>${format}</PresentationFormat><Slides>${n}</Slides><Notes>${deck.slides.filter((s) => s.notes.trim()).length}</Notes><HiddenSlides>${deck.slides.filter((s) => s.hidden).length}</HiddenSlides>`), CT.app);
 
     const P = 'ppt/presentation.xml';
     const masterRel = pkg.relate(P, REL.slideMaster, 'slideMasters/slideMaster1.xml');
@@ -634,7 +644,7 @@ class Writer {
       (hasNotes ? `<p:notesMasterIdLst><p:notesMasterId r:id="${notesMasterRel}"/></p:notesMasterIdLst>` : '') +
       (hasHandout ? `<p:handoutMasterIdLst><p:handoutMasterId r:id="${handoutRel}"/></p:handoutMasterIdLst>` : '') +
       `<p:sldIdLst>${slideRels.map((r, i) => `<p:sldId id="${256 + i}" r:id="${r}"/>`).join('')}</p:sldIdLst>` +
-      `<p:sldSz cx="${emu(w)}" cy="${emu(h)}"${w === 720 && h === 540 ? ' type="screen4x3"' : ''}/>` +
+      `<p:sldSz cx="${emu(w)}" cy="${emu(h)}"${sizeType(deck.size)}/>` +
       (deck.master.notesPage?.landscape ? `<p:notesSz cx="9144000" cy="6858000"/>` : `<p:notesSz cx="6858000" cy="9144000"/>`) + fontList +
       custShowsXml(deck.settings?.customShows ?? [], (sid) => slideRels[deck.slides.findIndex((x) => x.id === sid)], xml) +
       `<p:custDataLst><p:tags r:id="${masterTags}"/></p:custDataLst>` +
@@ -644,13 +654,6 @@ class Writer {
       `</p:presentation>`, CT.presentation);
     writeKeptParts(pkg, deck.kept, { main: P, firstItem: 1 });
     return pkg.build();
-  }
-
-  private core(): string {
-    const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
-    return `${HEAD}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
-      `<dc:title>${xml(this.opts.title ?? 'Slides')}</dc:title><cp:revision>1</cp:revision>` +
-      `<dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
   }
 
   // ---------------------------------------------------------------- master and layouts
@@ -1037,8 +1040,9 @@ class Writer {
   private charts = 0;
   private async chart(path: string, box0: ChartBox, box: Rect, id: number, src?: string, alt?: string): Promise<string> {
     const w = box.x2 - box.x1, h = box.y2 - box.y1;
-    const rid = await addChart(this.pkg, path, 'ppt', ++this.charts, box0, w, h);
-    const tags = this.addTags(path, { [TAG.chart]: JSON.stringify(box0) });
+    const { rid, print } = await addChart(this.pkg, path, 'ppt', ++this.charts, box0, w, h);
+    // with the chart's print, to tell whether it was changed in PowerPoint (native-print.ts)
+    const tags = this.addTags(path, { [TAG.chart]: JSON.stringify(print ? { ...box0, pr: print } : box0) });
     const ex = isChartEx(box0.chart.kind);
     const uri = ex ? CX_NS : C_NS, tag = ex ? 'cx' : 'c';
     const frame = `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Chart ${id - 1}"${alt?.trim() ? ` descr="${xmlAttr(alt.trim())}"` : ''}/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>` +
@@ -1237,10 +1241,15 @@ class Writer {
     const { id: _, x1: _a, y1: _b, x2: _c, y2: _d, ...look } = s;
     if (look.picFill) look.picFill = { ...look.picFill, src: '' };
     const plain = s.text?.runs.map((r) => r.text).join('') ?? '';
-    const tag = this.addTags(path, { [TAG.geo]: JSON.stringify({ v: 1, s: look, plain, sid: s.id }) });
+    const spPr = `<p:spPr>${xfrm(box, rotAttr(s.rot))}${geom}${fill}${ln}${shadow}</p:spPr>`;
+    const txBody = `<p:txBody>${bodyPr}<a:lstStyle/>${body}</p:txBody>`;
+    // prints of its outline, look and text as written, to tell what PowerPoint changed (native-print.ts)
+    const sp = fragment(spPr);
+    const pr = sp ? { g: spPrPrint(sp, 'geom'), l: spPrPrint(sp, 'look'), t: textPrint(fragment(txBody)) } : undefined;
+    const tag = this.addTags(path, { [TAG.geo]: JSON.stringify({ v: 1, s: look, plain, sid: s.id, ...(pr ? { pr } : {}) }) });
     const click = s.link ? this.hlink(s.link) : '';
     return `<p:sp><p:nvSpPr><p:cNvPr id="${id}"${nameAttrs(s.name?.trim() || `${def.name} ${id - 1}`, s.hidden)}${click ? `>${click}</p:cNvPr>` : '/>'}<p:cNvSpPr/><p:nvPr><p:custDataLst><p:tags r:id="${tag}"/></p:custDataLst></p:nvPr></p:nvSpPr>` +
-      `<p:spPr>${xfrm(box, rotAttr(s.rot))}${geom}${fill}${ln}${shadow}</p:spPr><p:txBody>${bodyPr}<a:lstStyle/>${body}</p:txBody></p:sp>`;
+      `${spPr}${txBody}</p:sp>`;
   }
 
   /** A shape's picture fill as PowerPoint's blipFill, the picture added to the file (null when it can't be read). */
@@ -1268,7 +1277,10 @@ class Writer {
     const bent = r.elbow ? bentConnector(elbowRoute(r)) : null;
     if (bent) { frame = bent.frame; geom = bent.geom; curved = false; name = `Elbow Connector ${id - 1}`; }
     const { id: _, ...keep } = r;
-    const tag = this.addTags(path, { [TAG.connector]: JSON.stringify({ v: 1, a: keep }) });
+    // with a print of its line as written, to tell whether PowerPoint changed it (native-print.ts)
+    const lineXml = fragment(`<p:spPr>${geom}${ln}</p:spPr>`);
+    const pr = lineXml ? spPrPrint(lineXml, 'look') : '';
+    const tag = this.addTags(path, { [TAG.connector]: JSON.stringify({ v: 1, a: keep, ...(pr ? { pr } : {}) }) });
     const nvPr = `<p:nvPr><p:custDataLst><p:tags r:id="${tag}"/></p:custDataLst></p:nvPr>`;
     // a curved arrow is a shape drawn along the curve (programs route a connector afresh, square),
     // and so is an elbow PowerPoint has no bent connector for: PowerPoint repairs a connector
@@ -1362,7 +1374,10 @@ class Writer {
     // the caption's exact settings, used when it comes back unchanged from PowerPoint
     const plain = c.runs.map((r) => r.text).join('');
     const at = [box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1].map((v) => +v.toFixed(2));
-    const tag = this.addTags(path, { [TAG.text]: JSON.stringify({ c: { ...c, id: undefined }, plain, at, o }), ...more });
+    const txBody = `<p:txBody>${bodyPr}<a:lstStyle/>${body}</p:txBody>`;
+    // and a print of the text as written (how each piece looks), to tell whether PowerPoint changed it (native-print.ts)
+    const pr = textPrint(fragment(txBody));
+    const tag = this.addTags(path, { [TAG.text]: JSON.stringify({ c: { ...c, id: undefined }, plain, at, o, ...(pr ? { pr } : {}) }), ...more });
     let ph = '';
     if (c.ph) {
       const k = c.ph === 'title' ? 'title' : 'body';
@@ -1380,7 +1395,7 @@ class Writer {
     const quarter = c.dir === 'vert' ? 90 : c.dir === 'vert270' ? -90 : 0;
     const shape = quarter ? swapBox(box) : box;
     const rot = rotAttr((c.rot ?? 0) - quarter);
-    return `<p:sp>${nvSp}<p:spPr>${xfrm(shape, rot)}${geom}</p:spPr><p:txBody>${bodyPr}<a:lstStyle/>${body}</p:txBody></p:sp>`;
+    return `<p:sp>${nvSp}<p:spPr>${xfrm(shape, rot)}${geom}</p:spPr>${txBody}</p:sp>`;
   }
 
   /**
@@ -1457,17 +1472,20 @@ class Writer {
     }
     const grid = t.cols.map((w) => `<a:gridCol w="${emu(w)}"/>`).join('');
     const id = next();
-    const tag = this.addTags(path, { [TAG.table]: JSON.stringify({ v: 1, key, table: t, plain: tableText(t) }) });
-    const frame = { x1: s.x1, y1: s.y1 + lay.ys[0], x2: s.x1 + lay.width, y2: s.y1 + lay.ys[n] };
     // the cells carry every fill and line themselves, so PowerPoint shows the same whatever the
     // style id; a style PowerPoint knows by id is named so its gallery and options show it,
     // otherwise "No Style, No Grid"
     const { styleId, flags } = tableStyleOf(t);
+    const tbl = `<a:tbl><a:tblPr${flags}><a:tableStyleId>${styleId}</a:tableStyleId></a:tblPr><a:tblGrid>${grid}</a:tblGrid>${rows.join('')}</a:tbl>`;
+    // with prints of its text and its cells as written, to tell what PowerPoint changed (native-print.ts)
+    const tblEl = fragment(tbl);
+    const pr = tblEl ? slideTablePrint(tblEl) : null;
+    const tag = this.addTags(path, { [TAG.table]: JSON.stringify({ v: 1, key, table: t, plain: tableText(t), ...(pr ? { pt: pr.text, pf: pr.frame } : {}) }) });
+    const frame = { x1: s.x1, y1: s.y1 + lay.ys[0], x2: s.x1 + lay.width, y2: s.y1 + lay.ys[n] };
     out.push(`<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}"${nameAttrs(s.name?.trim() || `Table ${id - 1}`, s.hidden)}/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>` +
       `<p:nvPr><p:custDataLst><p:tags r:id="${tag}"/></p:custDataLst></p:nvPr></p:nvGraphicFramePr>` +
       `<p:xfrm><a:off x="${emu(frame.x1)}" y="${emu(frame.y1)}"/><a:ext cx="${emu(frame.x2 - frame.x1)}" cy="${emu(frame.y2 - frame.y1)}"/></p:xfrm>` +
-      `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr${flags}><a:tableStyleId>${styleId}</a:tableStyleId></a:tblPr>` +
-      `<a:tblGrid>${grid}</a:tblGrid>${rows.join('')}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`);
+      `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">${tbl}</a:graphicData></a:graphic></p:graphicFrame>`);
     if (lay.notes) part('notes', lay.notes, t.notes!, size * NOTE_SCALE);
     return out.join('');
   }
