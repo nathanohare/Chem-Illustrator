@@ -598,8 +598,10 @@ class DocxWriter {
     const mark = this.bookmarkId++;
     const name = `${BIB_MARK}${id}`;
     const pPr = `<w:pPr><w:spacing w:before="0" w:after="0"/><w:ind w:left="${twips(hang)}" w:hanging="${twips(hang)}"/><w:jc w:val="left"/></w:pPr>`;
+    // (a manager's entries kept from Word may also be underlined, raised, lowered or linked)
     const paras = entries.map((e) => run(runProps({ ...base, text: '' }, st, {}), `${e.label}\t`) +
-      e.pieces.map((p) => run(runProps({ ...base, italic: p.italic, bold: p.bold, text: p.text }, st, {}), p.text)).join(''));
+      this.linkedRuns('word/document.xml', e.pieces.map((p): TextRun => ({ ...rt.cleanStyle({ ...base, italic: p.italic, bold: p.bold, underline: p.underline, sup: p.sup, sub: p.sub, link: p.link }), text: p.text })),
+        (r) => run(runProps(r, st, {}), r.text)));
     if (!paras.length) paras.push('');
     const app = t.citeManager;
     if (app && app !== 'mendeley-cite') {
