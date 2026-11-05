@@ -174,6 +174,7 @@ import { zipSync } from 'fflate';
 import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
 import { plainText, savableChar } from './richtext';
 import { buildTextToolbox, type TextToolboxHooks } from './ui/text-toolbox';
+import { buildTextBar } from './ui/text-bar';
 import { buildGuidesToolbox, GUIDES_INFO, type GuidesToolboxHooks } from './ui/guides-toolbox';
 import { htmlToRich } from './text/html';
 import { LiveStereo } from './chem/live-stereo';
@@ -701,11 +702,16 @@ const toolbar = new Toolbar($<HTMLDivElement>('#tools'), TOOL_GROUPS, (name) => 
 
 // The Canvas ribbon: the chemistry commands without a toolbox of their own (Smart Schemes, energy
 // diagrams, mechanism checks, look-ups), with Analysis and the warnings in two small boxes
+/** The Canvas ribbon's Font and Paragraph groups: their rows, filled once the text hooks are made (further down). */
+let canvasTextRows: { font: HTMLElement; paragraph: HTMLElement } | null = null;
+let canvasFont: { refresh(): void } | null = null;
 const canvasRibbon = new CanvasRibbon({
   command: (cmd) => { command(cmd); },
   pickTool: (name) => pickTool(name),
   hasTool: (name) => name in TOOLS,
   icon: (it) => ('cmd' in it ? commandIcon(it.cmd) ?? RIBBON_ONLY_ICONS[it.cmd] ?? ICONS[it.cmd] : ICONS[it.tool]),
+  textGroups: (font, paragraph) => { canvasTextRows = { font, paragraph }; },
+  pasteMenu: (r) => { popupMenu(r.left, r.bottom + 2, [['Paste', () => command('paste')], ['Paste SMILES', () => command('paste-smiles')]]); },
 }, $('#sheet-ribbon'));
 const analysisBox = new AnalysisBox($('#analysis-section'));
 const warningsBox = new WarningsBox($('#warnings-section'));
@@ -847,6 +853,12 @@ function showToolStatus(): void {
   // (the first tool is picked before the tabs exist: its hint comes once they do)
   if (!statusReady) { queueMicrotask(() => { statusReady = true; showToolStatus(); }); return; }
   if (stepHintOn || (ws.active.mode === 'sheet' || ws.active.mode === 'document') && !splitDrawing) return;
+  // while text is typed: the keys that work in it
+  if (typingKeys) {
+    const keys = typingKeys.split(' · ').map((k): [string, string] => { const i = k.indexOf(': '); return [k.slice(0, i), k.slice(i + 2)]; });
+    setStatus({ name: 'Typing', steps: [], numbered: false, at: -1, keys, full: typingKeys });
+    return;
+  }
   const name = editor.toolName, t = TOOLS[name];
   const sel = editor.sel;
   const one = sel.atoms.size + sel.bonds.size + sel.captions.size === 0 && sel.arrows.size + sel.shapes.size === 1;
@@ -859,6 +871,9 @@ function showToolStatus(): void {
   const h = toolHelp(name, t);
   setStatus({ name: toolLabel(name), steps: h.steps, numbered: h.steps.length > 1 && name !== 'select', at: Math.min(toolStep, h.steps.length - 1), keys: h.keys, full: h.what });
 }
+/** The keys that work in the text being typed ("Enter: new paragraph · …"), shown in the status bar; null when nothing is typed. */
+let typingKeys: string | null = null;
+CaptionEditor.onHint = (h) => { typingKeys = h; showToolStatus(); };
 /** The status bar's step-by-step hint: the tool, its steps (the one in hand marked), then its keys. */
 function setStatus(s: { name: string; steps: string[]; numbered: boolean; at: number; keys: [string, string][]; full: string }): void {
   const el = $('#hint');
@@ -12088,6 +12103,8 @@ setTimeout(() => {
     save: () => void saveFavorite(),
     menu: (f, at) => favoriteMenu(f, at),
   }));
+  // (the galleries make their groups wider: fit the ribbons again, so none runs past the window's edge)
+  fitRibbons();
 }, 400);
 
 function favoritesChanged(): void {
@@ -12540,6 +12557,20 @@ const textToolboxHooks: TextToolboxHooks = {
   back: () => editor.refocusText(),
   say: (t) => flash(t),
 };
+// the Canvas ribbon's Font and Paragraph groups: all of the typing bar, working as the Text Formatting
+// toolbox does (and while they show, the bar above the text hides: see CaptionEditor.barElsewhere)
+// (set by the ribbon's callback, which TypeScript can't see)
+const textRows = canvasTextRows as { font: HTMLElement; paragraph: HTMLElement } | null;
+if (textRows) {
+  canvasFont = buildTextBar(textRows.font, {
+    format: (f) => textToolboxHooks.format(f),
+    type: (ch) => textToolboxHooks.type(ch),
+    link: () => textToolboxHooks.link(),
+    state: () => textToolboxHooks.look(),
+    back: () => textToolboxHooks.back(),
+    nothing: () => flash('Click into some text, or pick a caption or text box, first.'),
+  }, { ribbon: { paragraph: textRows.paragraph } });
+}
 
 /** Ring Shape on the right-click menu, when the selection is one cyclohexane that can be redrawn. */
 function ringShapeMenu(): MenuItem[] {
@@ -13730,9 +13761,11 @@ const designText = new SlideTextRibbon($('#design-ribbon'), {
 });
 /** The text groups of the ribbon showing (Presentation or Design) follow the text being edited. */
 const textRibbonNow = () => (ws.active.mode === 'slides' ? slideText : ws.active.mode === 'design' ? designText : null);
-// the Text Formatting toolbox is the typing bar, so with it showing the bar above the text hides
-CaptionEditor.barElsewhere = () => toolboxes.isShown('text');
-CaptionEditor.onState = () => { textRibbonNow()?.refresh(); textToolbox?.refresh(); };
+// the Text Formatting toolbox is the typing bar, and so are the Canvas ribbon's Home tab's Font and
+// Paragraph groups: with either showing, the bar above the text hides (with the ribbon collapsed or on
+// another tab, it shows as before)
+CaptionEditor.barElsewhere = () => toolboxes.isShown('text') || (!canvasRibbon.el.hidden && !ribbonCollapsed() && canvasRibbon.tab === 'home');
+CaptionEditor.onState = () => { textRibbonNow()?.refresh(); textToolbox?.refresh(); canvasFont?.refresh(); };
 // the Smart Scheme pane: the selected scheme's species, beside it
 const smartPane = new SmartPane({
   doc: () => editor.doc,
@@ -13797,7 +13830,7 @@ const buildHint = new BuildHint({
 });
 editor.onOverlay = () => { smartPane.place(); buildHint.place(); };
 editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
-editor.onChange = () => { welcomeWatch?.(); showToolStatus(); showRibbonContext(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); restSidePanel(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); showToolStatus(); showRibbonContext(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); canvasFont?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); restSidePanel(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();
