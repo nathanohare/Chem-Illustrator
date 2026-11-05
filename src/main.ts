@@ -875,6 +875,8 @@ function showToolStatus(): void {
 /** The keys that work in the text being typed ("Enter: new paragraph · …"), shown in the status bar; null when nothing is typed. */
 let typingKeys: string | null = null;
 CaptionEditor.onHint = (h) => { typingKeys = h; showToolStatus(); };
+/** The hint the status bar shows now (to fit it again when the window changes width). */
+let lastStatus: { name: string; steps: string[]; numbered: boolean; at: number; keys: [string, string][]; full: string } | null = null;
 /** The status bar's step-by-step hint: the tool, its steps (the one in hand marked), then its keys. */
 function setStatus(s: { name: string; steps: string[]; numbered: boolean; at: number; keys: [string, string][]; full: string }): void {
   const el = $('#hint');
@@ -885,7 +887,29 @@ function setStatus(s: { name: string; steps: string[]; numbered: boolean; at: nu
     + s.keys.map(([k, what]) => `<span class="st-key">${kbd(k)} ${esc(what)}</span>`).join('');
   el.classList.add('steps');
   el.title = s.full;
+  lastStatus = s;
+  fitStatus(el);
 }
+/**
+ * Drop whole hints from the end of the status bar until the rest fit, never leaving one cut off
+ * ("Double-…"): the keys go first (the last first), then the steps after the one in hand. All of
+ * them are in the bar's tooltip.
+ */
+function fitStatus(el: HTMLElement): void {
+  const over = () => el.scrollWidth > el.clientWidth + 1;
+  if (!el.clientWidth) return;
+  while (over()) {
+    const keys = el.querySelectorAll('.st-key');
+    if (keys.length) { keys[keys.length - 1].remove(); continue; }
+    const steps = [...el.querySelectorAll('.st-step')];
+    const last = steps.length > 1 ? steps[steps.length - 1] : null;
+    if (!last || last.classList.contains('now')) break;
+    if (last.previousElementSibling?.classList.contains('st-sep')) last.previousElementSibling.remove();
+    last.remove();
+  }
+}
+// (a wider window has room for the hints dropped again)
+window.addEventListener('resize', () => { const el = $('#hint'); if (lastStatus && el.classList.contains('steps')) setStatus(lastStatus); });
 // resting the mouse on a tool: what it does and the keys that change it
 const toolTip = new ToolTip((b) => {
   const name = b.dataset.tipTool!, t = TOOLS[name];
@@ -5400,12 +5424,29 @@ function placeTabs(inMenu: boolean): void {
   fitTabs();
 }
 
-/** When the tabs would be squeezed too narrow for their names, they show only their icons (the name is in each one's tooltip). */
+/** A tab's own room besides its name: its padding and border, its icon, its × and the gaps between them (app.css, header .tab), and the gap to the next tab. */
+const TAB_CHROME = 68;
+let nameRoom = { font: '', px: 0 };
+/** How wide eight characters of a tab's name are (an average mix of letters), measured in the tabs' own font. */
+function eightChars(): number {
+  const el = tabStrip.querySelector('.tab-name');
+  const font = el ? getComputedStyle(el).font : '';
+  if (font && font !== nameRoom.font) {
+    const g = document.createElement('canvas').getContext('2d');
+    if (g) { g.font = font; nameRoom = { font, px: g.measureText('Presenta').width }; }
+  }
+  return nameRoom.px || 56;
+}
+
+/**
+ * When the tabs would be squeezed so far that their names show fewer than about eight characters
+ * ("Ca…" says nothing), they show only their icons (the name is in each one's tooltip); the active
+ * one keeps its name.
+ */
 function fitTabs(): void {
   const ctl = [tabList, tabAdd].reduce((w, b) => w + b.offsetWidth + 2, 0);
   const room = tabsEl.clientWidth - ctl - 12;
-  // squeezed, the other tabs show their icons only; the active one keeps its name (about 140 px of it)
-  tabsEl.classList.toggle('tabs-narrow', room > 0 && room / Math.max(1, ws.tabs.length) < 96);
+  tabsEl.classList.toggle('tabs-narrow', room > 0 && room / Math.max(1, ws.tabs.length) - TAB_CHROME < eightChars());
   showTabArrows();
 }
 

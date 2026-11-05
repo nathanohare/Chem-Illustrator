@@ -472,6 +472,11 @@ export class SheetMode {
       if (!btn) return;
       this.ribbonCommand(btn.dataset.sh!, btn);
     });
+    // the View and Page Layout tabs' on/off switches are checkboxes, as in Excel
+    rb.addEventListener('change', (e) => {
+      const box = (e.target as HTMLElement).closest<HTMLInputElement>('input[type=checkbox][data-sh]');
+      if (box) this.ribbonCommand(box.dataset.sh!, box);
+    });
     // units for reaction conditions, before "Other…"
     const numfmt = rb.querySelector<HTMLSelectElement>('#sh-numfmt')!;
     const units = document.createElement('optgroup');
@@ -2405,7 +2410,12 @@ export class SheetMode {
     const { r, c } = this.view.sel.active;
     const st = s.styleAt(r, c) ?? {};
     // (some buttons are on two tabs, as in Excel: Filter on Home and on Data)
-    const press = (name: string, on: boolean) => { for (const b of this.ribbon.querySelectorAll(`[data-sh="${name}"]`)) b.setAttribute('aria-pressed', String(on)); };
+    const press = (name: string, on: boolean) => {
+      for (const b of this.ribbon.querySelectorAll(`[data-sh="${name}"]`)) {
+        if (b instanceof HTMLInputElement) b.checked = on;
+        else b.setAttribute('aria-pressed', String(on));
+      }
+    };
     // while typing: the look where the caret is
     press('cell-bold', this.view.typingHas('bold') ?? !!st.bold);
     press('cell-italic', this.view.typingHas('italic') ?? !!st.italic);

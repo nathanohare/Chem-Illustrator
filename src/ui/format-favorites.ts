@@ -7,6 +7,7 @@
 import { Doc } from '../model';
 import { paintObjects, type ObjectLook } from '../format-painter';
 import { recordPicture, pictureSvg } from '../render/picture';
+import { fitRibbons } from './ribbon-fit';
 
 export type { FormatFavorite } from '../favorites';
 export { FAVORITES_MAX, parseFavorites, withFavorite } from '../favorites';
@@ -116,9 +117,17 @@ export function ribbonFavorites(host: HTMLElement, o: RibbonFavoritesOptions): {
   const add = mk('+', 'Save Format as Favorite: keep the look of what is selected under a name', () => o.save());
   add.className = 'rbs-all';
   host.replaceChildren(strip, side);
+  // the gallery's group is the first to fold in a narrow window, and until a favorite is saved it is
+  // only its Format Favorites ▾ button (which drops down the + to save one): an empty gallery is wasted room
+  const group = host.closest<HTMLElement>('.rb-group');
+  group?.classList.add('rb-fold-first');
   const refresh = () => {
     strip.replaceChildren();
     const list = o.list();
+    if (group && group.classList.contains('rb-fold-always') !== !list.length) {
+      group.classList.toggle('rb-fold-always', !list.length);
+      fitRibbons();
+    }
     for (const f of list) {
       const b = document.createElement('button');
       b.type = 'button';
