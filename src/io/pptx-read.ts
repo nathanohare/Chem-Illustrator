@@ -23,6 +23,7 @@ import { turnAbout, normDegrees, DEG, type Vec, type Rect } from '../geom';
 import { POINTS, rotation, snapshot, transform, mirrorX, mirrorY } from '../editor/arrange';
 import { BULLETS, autoNumLabel, listInfo } from '../text/paragraphs';
 import { PackageReader, NS, REL, kids, kid, rAttr, fromEmu, bytesHash } from './ooxml';
+import { SLIDE_SIZE_TYPES } from '../deck/deck';
 import { readKeptParts, elementXml, type KeptParts } from './kept-parts';
 import { linkFromTarget, officeTarget, slideOfLink } from '../links';
 import { readCdxml } from './cdxml';
@@ -327,7 +328,12 @@ class Reader {
     // a .pptm's (or macro-enabled template's) macros, which a .pptx can't hold
     if ([...this.r.rels(main).values()].some((r) => r.type === REL.vbaProject)) this.warnings.add('This presentation has macros (VBA). They are never run here, and they are left out when it is saved.');
     const sz = kid(root, 'sldSz');
-    if (sz) this.size = { w: Math.round(fromEmu(sz.getAttribute('cx'))), h: Math.round(fromEmu(sz.getAttribute('cy'))) };
+    if (sz) {
+      this.size = { w: Math.round(fromEmu(sz.getAttribute('cx'))), h: Math.round(fromEmu(sz.getAttribute('cy'))) };
+      // the size's name in Page Setup (Letter, A4...), unless it is the one 10 × 7.5 in is written with anyway
+      const type = sz.getAttribute('type');
+      if (type && SLIDE_SIZE_TYPES.includes(type) && !(type === 'screen4x3' && this.size.w === 720 && this.size.h === 540)) this.size.type = type;
+    }
     this.defaultText = kid(root, 'defaultTextStyle');
     const tags = this.tagsOf(main, root);
     const ours = tags[TAG.master];

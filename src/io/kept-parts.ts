@@ -207,7 +207,8 @@ export interface CorePropsOptions {
 /**
  * docProps/core.xml for a save: the file's own properties kept, as Office keeps them, with the
  * ones set here put in, and what Office brings up to date on each save: when the file was
- * modified, who modified it and its revision number. A file with no creation date is made now.
+ * modified, who modified it and its revision number. A file with no creation date is made now,
+ * and a new file's author is whoever saves it.
  */
 export function corePropsXml(kept: KeptProps | undefined, opts: CorePropsOptions = {}): string {
   const now = opts.now ?? new Date().toISOString().replace(/\.\d+Z$/, 'Z');
@@ -216,6 +217,8 @@ export function corePropsXml(kept: KeptProps | undefined, opts: CorePropsOptions
   const rev = kept?.core.revision?.trim();
   if (rev && /^\d{1,9}$/.test(rev)) v.revision = String(Number(rev) + 1);
   v.lastModifiedBy = by || null;
+  // a new file is made by whoever saves it first, as in Office
+  if (!kept && by && !v.creator) v.creator = by;
   v.created = v.created || now;
   v.modified = now;
   const body = CORE_PROPS.map(([pre, name]) => {

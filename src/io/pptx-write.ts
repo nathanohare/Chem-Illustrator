@@ -32,6 +32,7 @@ import { extractDrawing } from './clipboard';
 import { contentsAlt, titleOverlaps, roughCaptionBox } from '../accessibility';
 import type { Selection } from '../editor/editor';
 import { Package, NS, REL, emu, xml, xmlAttr, hex6, MediaFiles, structureAltText, bytesHash } from './ooxml';
+import { SLIDE_SIZE_TYPES } from '../deck/deck';
 import { appPropsXml, corePropsXml, writeKeptParts, type KeptParts } from './kept-parts';
 import { facesToEmbed, toEot, type FontSource } from './font-embed';
 import { dataUrl, fromDataUrl } from '../render/images';
@@ -460,6 +461,12 @@ const nameAttrs = (name: string, hidden?: boolean): string => ` name="${xml(name
 export const xfrm = (r: Rect, extra = '') => `<a:xfrm${extra}><a:off x="${emu(r.x1)}" y="${emu(r.y1)}"/><a:ext cx="${Math.max(0, emu(r.x2 - r.x1))}" cy="${Math.max(0, emu(r.y2 - r.y1))}"/></a:xfrm>`;
 const GROUP = '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>';
 
+/** The slide size's type attribute (ECMA-376 Part 1 §19.7.18): the file's own (Letter, A4...), else 4:3's for 10 × 7.5 in. */
+function sizeType(s: SlideSize): string {
+  const type = s.type && SLIDE_SIZE_TYPES.includes(s.type) ? s.type : s.w === 720 && s.h === 540 ? 'screen4x3' : '';
+  return type ? ` type="${type}"` : '';
+}
+
 class Writer {
   pkg = new Package();
   private media = 0;
@@ -546,7 +553,7 @@ class Writer {
     // the deck's properties (File > Info) as the file had them, brought up to date; a new deck is titled by its name
     pkg.add('docProps/core.xml', corePropsXml(deck.kept?.docProps, { fresh: { title: this.opts.title ?? 'Slides', revision: '1' } }), CT.core);
     const format = deck.size.w === 960 && deck.size.h === 540 ? 'Widescreen' : deck.size.w === 720 && deck.size.h === 540 ? 'On-screen Show (4:3)' : 'Custom';
-    pkg.add('docProps/app.xml', appPropsXml(deck.kept?.docProps, `<PresentationFormat>${format}</PresentationFormat><Slides>${n}</Slides><Notes>${deck.slides.filter((s) => s.notes.trim()).length}</Notes>`), CT.app);
+    pkg.add('docProps/app.xml', appPropsXml(deck.kept?.docProps, `<PresentationFormat>${format}</PresentationFormat><Slides>${n}</Slides><Notes>${deck.slides.filter((s) => s.notes.trim()).length}</Notes><HiddenSlides>${deck.slides.filter((s) => s.hidden).length}</HiddenSlides>`), CT.app);
 
     const P = 'ppt/presentation.xml';
     const masterRel = pkg.relate(P, REL.slideMaster, 'slideMasters/slideMaster1.xml');
@@ -637,7 +644,7 @@ class Writer {
       (hasNotes ? `<p:notesMasterIdLst><p:notesMasterId r:id="${notesMasterRel}"/></p:notesMasterIdLst>` : '') +
       (hasHandout ? `<p:handoutMasterIdLst><p:handoutMasterId r:id="${handoutRel}"/></p:handoutMasterIdLst>` : '') +
       `<p:sldIdLst>${slideRels.map((r, i) => `<p:sldId id="${256 + i}" r:id="${r}"/>`).join('')}</p:sldIdLst>` +
-      `<p:sldSz cx="${emu(w)}" cy="${emu(h)}"${w === 720 && h === 540 ? ' type="screen4x3"' : ''}/>` +
+      `<p:sldSz cx="${emu(w)}" cy="${emu(h)}"${sizeType(deck.size)}/>` +
       (deck.master.notesPage?.landscape ? `<p:notesSz cx="9144000" cy="6858000"/>` : `<p:notesSz cx="6858000" cy="9144000"/>`) + fontList +
       custShowsXml(deck.settings?.customShows ?? [], (sid) => slideRels[deck.slides.findIndex((x) => x.id === sid)], xml) +
       `<p:custDataLst><p:tags r:id="${masterTags}"/></p:custDataLst>` +

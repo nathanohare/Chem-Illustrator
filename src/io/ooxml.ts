@@ -110,7 +110,10 @@ export class Package {
   build(): Uint8Array {
     const files: Record<string, Uint8Array> = {};
     const ct = [`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`, `<Types xmlns="${NS.ct}">`];
-    for (const [ext, type] of this.defaults) ct.push(`<Default Extension="${ext}" ContentType="${type}"/>`);
+    // a default type only for the extensions parts use, as Office writes them (rels and xml always)
+    const used = new Set(['rels', 'xml']);
+    for (const path of this.parts.keys()) if (!this.types.has(path)) used.add(/\.([^./]+)$/.exec(path)?.[1]?.toLowerCase() ?? '');
+    for (const [ext, type] of this.defaults) if (used.has(ext.toLowerCase())) ct.push(`<Default Extension="${ext}" ContentType="${type}"/>`);
     for (const [path, type] of this.types) ct.push(`<Override PartName="/${xml(path)}" ContentType="${type}"/>`);
     ct.push('</Types>');
     files['[Content_Types].xml'] = strToU8(ct.join(''));
