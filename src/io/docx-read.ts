@@ -41,7 +41,7 @@ import { coveringCell, layoutTable } from '../table';
 import { chemdrawCdx, isChemDraw, readEmbedded } from './ole-object';
 import { cmtIds, cmtString, type CommentNote, type CommentThread } from '../document/comments';
 import { BIB_MARK, CHART_NAME, CITE_FIELD, WORD_HIGHLIGHTS, DOCX_REL, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, fromWordDate, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, TABLE_NAME, W_NS, type DocxModel } from './docx-base';
-import { cleanRef, type Reference } from '../document/references';
+import { citationNumbers, cleanRef, type Piece as BibPiece, type Reference } from '../document/references';
 import { bibFieldApp, placeRef, readCiteField, readMendeleyTag, styleFromCsl, zoteroStyleOf, MANAGERS, type CiteLive, type CiteManager, type ManagerCite } from '../document/live-cites';
 import { retypedDiagram } from '../design/diagrams';
 import { fmtText, revText } from '../document/revisions';
@@ -75,6 +75,12 @@ export interface DocxReadDeps {
   drawingSize?(contents: Contents, style: DocStyle): { w: number; h: number } | null;
   /** A table as a drawing, laid out with the fonts on screen (else with published font widths). */
   tableDrawing?(t: TableData, style: DocStyle): Contents;
+  /**
+   * The document has a reference manager's bibliography (EndNote, Mendeley or Zotero): true keeps
+   * it and the citations' text exactly as Word showed them, until a citation is changed here; false
+   * works them out here in the document's citation style. Without it they are worked out here.
+   */
+  keepBibliography?(app: CiteManager): boolean | Promise<boolean>;
 }
 
 /** Word's text font and size when a file gives none. */
@@ -92,6 +98,9 @@ const SYMBOL_BULLETS: Record<string, string> = { '\uf0b7': '•', '\uf0a7': '■
 /** VML's named colours a watermark may use. */
 const VML_COLOURS: Record<string, string> = { silver: '#c0c0c0', gray: '#808080', grey: '#808080', black: '#000000', white: '#ffffff', red: '#ff0000', blue: '#0000ff', green: '#008000', yellow: '#ffff00', navy: '#000080', maroon: '#800000', teal: '#008080', purple: '#800080', olive: '#808000', lime: '#00ff00', aqua: '#00ffff', fuchsia: '#ff00ff' };
 const JUSTIFY: Record<string, Justify> = { left: 'left', start: 'left', center: 'center', right: 'right', end: 'right', both: 'justify', distribute: 'justify' };
+/** VML (Word 2003's drawings, and the fallback Word writes for its newer shapes): the elements that draw something. */
+const VML_NS = 'urn:schemas-microsoft-com:vml';
+const VML_SHAPES = new Set(['shape', 'rect', 'roundrect', 'oval', 'line', 'polyline', 'arc', 'curve', 'image']);
 const EXT_MIME: Record<string, string> = { wmf: 'image/x-wmf', emf: 'image/x-emf', tif: 'image/tiff', tiff: 'image/tiff' };
 
 const WARN = {
@@ -153,12 +162,15 @@ interface WStyle { id: string; type: string; name: string; basedOn?: string; nex
 interface Level { fmt: string; text: string; p: PProps }
 interface Piece { runs: TextRun[]; pageBreak: boolean; soft: boolean; colBreak?: boolean; /** Index entries and marked citations in it (XE and TA fields). */ xe?: IndexMark[]; ta?: AuthorityMark[] }
 interface Ctx { base: RProps; pieces: Piece[]; cell: boolean }
-interface Field { instr: string; phase: 'instr' | 'result'; swallow: boolean; /** The field's own data (w:fldData, base64): EndNote's citations. */ data?: string; text: string; props: RProps; done: boolean; ref?: { id: number; mark: string; text: string; above?: boolean; page?: boolean }; toc?: boolean; /** A form field's settings (w:ffData), and the form field made of it. */ ff?: Element; form?: number; /** A HYPERLINK field: the link open before it, put back at its end. */ before?: { link: string | undefined } }
+interface Field { instr: string; phase: 'instr' | 'result'; swallow: boolean; /** The field's own data (w:fldData, base64): EndNote's citations. */ data?: string; text: string; props: RProps; /** How its result's first text looks, which is what Word shows (EndNote sets superscript only there). */ shown?: RProps; done: boolean; ref?: { id: number; mark: string; text: string; above?: boolean; page?: boolean }; toc?: boolean; /** A form field's settings (w:ffData), and the form field made of it. */ ff?: Element; form?: number; /** A HYPERLINK field: the link open before it, put back at its end. */ before?: { link: string | undefined }; /** A manager's citation (its object) whose shown text is kept; a manager's bibliography (its object) whose entries are kept. */ cite?: number; bib?: number }
 interface OutPara { ps: ParaStyle; runs: TextRun[]; mark: rt.RunStyle; style: string; contextual: boolean; table?: boolean; bib?: string; markRev?: string }
 
 /** Open a Word file. Throws only when the file is not a Word file at all. */
 export async function readDocx(bytes: Uint8Array, deps: DocxReadDeps = {}): Promise<{ doc: DocText; warnings: string[] }> {
-  return new DocxReader(bytes, deps).read();
+  const reader = new DocxReader(bytes, deps);
+  const app = deps.keepBibliography ? reader.bibliographyApp() : null;
+  if (app) reader.keepBib = await deps.keepBibliography!(app);
+  return reader.read();
 }
 
 /** An on/off attribute that is there and on. */
@@ -242,8 +254,32 @@ class DocxReader {
   /** The notes in footnotes.xml and endnotes.xml, by Word's id (read when first needed). */
   private noteEls: Partial<Record<'foot' | 'end', Map<string, Element>>> = {};
 
+  /** Keep reference managers' citations and bibliographies as Word showed them (asked on open). */
+  keepBib = false;
+  /** A manager's bibliography being kept: the runs of each of its paragraphs, as read. */
+  private capture: { id: number; paras: TextRun[][] } | null = null;
+  /** Citations and bibliographies kept as Word showed them, by object id. */
+  private keptCites: number[] = [];
+  private keptBibs: number[] = [];
+
   constructor(bytes: Uint8Array, private deps: DocxReadDeps) {
     this.pkg = new PackageReader(bytes);
+  }
+
+  /** The reference manager whose bibliography the document has (EndNote, Mendeley, Zotero), or null. */
+  bibliographyApp(): CiteManager | null {
+    const main = this.pkg.relOfType('', REL.officeDocument) ?? 'word/document.xml';
+    const root = this.pkg.xml(main)?.documentElement;
+    if (!root) return null;
+    // a field's instruction can be split over runs: all of them joined, each field's apart
+    const instr = Array.from(root.getElementsByTagNameNS('*', 'instrText')).map((e) => e.textContent ?? '').join('')
+      + Array.from(root.getElementsByTagNameNS('*', 'fldSimple')).map((e) => ` ${e.getAttributeNS(this.W, 'instr') ?? e.getAttribute('w:instr') ?? ''} `).join('');
+    for (const m of instr.matchAll(/ADDIN\s+(?:EN\.REFLIST|ZOTERO_BIBL|Mendeley\s+Bibliography)\b/gi)) {
+      const app = bibFieldApp(m[0]);
+      if (app) return app;
+    }
+    const tagged = Array.from(root.getElementsByTagNameNS('*', 'tag')).some((t) => (t.getAttributeNS(this.W, 'val') ?? t.getAttribute('w:val')) === 'MENDELEY_BIBLIOGRAPHY');
+    return tagged ? 'mendeley-cite' : null;
   }
 
   read(): { doc: DocText; warnings: string[] } {
@@ -273,6 +309,7 @@ class DocxReader {
     this.resolveRefs();
     this.joinBibliographies();
     const out = this.assemble(hf, first);
+    this.keptValidFor(out);
     this.readPageLook(out, root, first);
     keepUsedMarks(out);
     const props = this.readProps();
@@ -872,7 +909,16 @@ class DocxReader {
         case 'p': this.paragraph(el); break;
         case 'tbl': this.table(el); break;
         case 'sdt': {
-          if (this.sdtTag(el) === 'MENDELEY_BIBLIOGRAPHY') { this.managedBibliography(); break; }
+          if (this.sdtTag(el) === 'MENDELEY_BIBLIOGRAPHY') {
+            const id = this.managedBibliography();
+            // kept as Word had it: its paragraphs become the bibliography's entries
+            if (this.keepBib && !this.capture) {
+              this.capture = { id, paras: [] };
+              this.blocks(kids(kid(el, 'sdtContent')));
+              this.keepEntries();
+            }
+            break;
+          }
           // another program's content control round paragraphs (Chem4Word's structure, a template's field): kept round them
           const before = this.ccBlock, c4w = this.c4w;
           this.ccBlock = this.control(el);
@@ -892,20 +938,76 @@ class DocxReader {
   }
 
   /** Mendeley Cite's bibliography (a content control of paragraphs): ours, worked out here, in a paragraph of its own. */
-  private managedBibliography(): void {
+  private managedBibliography(): number {
     this.manager ??= 'mendeley-cite';
     const id = this.nextId++;
     this.objects[id] = { kind: 'bib' };
     const base = merge<RProps>(this.docDefaults.r, this.chain('paragraph', this.defaultPara).r);
     const ps = cleanPara({ section: this.takeBreak() });
     this.out.push({ ps, runs: [{ ...this.runStyle(base), obj: id, text: OBJECT_CHAR }], mark: this.runStyle(base), style: 'Normal', contextual: false });
+    return id;
+  }
+
+  /**
+   * A manager's bibliography kept as Word had it: each paragraph read is an entry, its number (the
+   * text before the first tab, when short) apart from its text, which keeps its italics, bold,
+   * underlining, raised and lowered text and links.
+   */
+  private keepEntries(): void {
+    const cap = this.capture;
+    this.capture = null;
+    if (!cap) return;
+    const o = this.objects[cap.id];
+    if (o?.kind !== 'bib') return;
+    const entries: { label: string; pieces: BibPiece[] }[] = [];
+    for (const runs of cap.paras) {
+      const text = runs.map((r) => r.text).join('');
+      if (!text.trim()) continue;
+      // the number before a tab ("1.", "(1)", "[1]"), or a number such as "(1)" before a space
+      const tab = text.indexOf('\t');
+      const spaced = /^\s*(\(\d+[a-z]?\)|\[\d+[a-z]?\]|\d+[a-z]?\.)[ \u00a0\t]+/.exec(text);
+      const label = tab >= 0 && tab <= 12 ? text.slice(0, tab).trim() : spaced?.[1] ?? '';
+      let skip = tab >= 0 && tab <= 12 ? tab + 1 : spaced?.[0].length ?? 0;
+      const pieces: BibPiece[] = [];
+      for (const r of runs) {
+        let t = r.text;
+        if (skip > 0) { const n = Math.min(skip, t.length); t = t.slice(n); skip -= n; }
+        if (!t) continue;
+        const pc: BibPiece = { text: t, ...(r.italic ? { italic: true } : {}), ...(r.bold ? { bold: true } : {}), ...(r.underline ? { underline: true } : {}), ...(r.sup ? { sup: true } : {}), ...(r.sub ? { sub: true } : {}), ...(r.link ? { link: r.link } : {}) };
+        const last = pieces[pieces.length - 1];
+        if (last && !!last.italic === !!pc.italic && !!last.bold === !!pc.bold && !!last.underline === !!pc.underline && !!last.sup === !!pc.sup && !!last.sub === !!pc.sub && last.link === pc.link) last.text += pc.text;
+        else pieces.push(pc);
+      }
+      if (pieces.length) {
+        pieces[0].text = pieces[0].text.replace(/^[ \t]+/, '');
+        pieces[pieces.length - 1].text = pieces[pieces.length - 1].text.replace(/[ \t]+$/, '');
+      }
+      entries.push({ label, pieces: pieces.filter((pc) => pc.text) });
+    }
+    this.objects[cap.id] = { ...o, live: { ...o.live, entries, for: '' } };
+    this.keptBibs.push(cap.id);
+  }
+
+  /** Kept citations and bibliographies stand while the document cites what it does now (every reference cited, in order). */
+  private keptValidFor(t: DocText): void {
+    if (!this.keptCites.length && !this.keptBibs.length) return;
+    const all = [...citationNumbers(t).keys()].join(' ');
+    for (const id of this.keptCites) {
+      const o = t.objects[id];
+      if (o?.kind === 'cite' && o.live) t.objects[id] = { ...o, live: { ...o.live, all } };
+    }
+    for (const id of this.keptBibs) {
+      const o = t.objects[id];
+      if (o?.kind === 'bib' && o.live) t.objects[id] = { ...o, live: { ...o.live, for: all } };
+    }
   }
 
   /** The part of a choice of contents (mc:AlternateContent) to read: the plain one meant for older programs. */
   private alternate(el: Element): Element | null {
     // Word 2010's text boxes (wps) are read from the choice itself; their fallback is an older shape
     const choice = kid(el, 'Choice');
-    if (choice && /(^|\s)wps(\s|$)/.test(choice.getAttribute('Requires') ?? '') && choice.getElementsByTagNameNS('*', 'txbx').length) return choice;
+    // (so are its shapes without text: their fallback is a VML rect, line or oval, never read)
+    if (choice && /(^|\s)wps(\s|$)/.test(choice.getAttribute('Requires') ?? '') && choice.getElementsByTagNameNS('*', 'wsp').length) return choice;
     // one of our diagrams as a group of shapes (Word puts an older shape in place of our picture when it saves)
     if (choice && /(^|\s)wpg(\s|$)/.test(choice.getAttribute('Requires') ?? '') && Array.from(choice.getElementsByTagNameNS('*', 'docPr')).some((d) => new RegExp(`^${DRAWING_NAME} \\d+$`).test(this.model?.floats?.[Number(d.getAttribute('id'))]?.was ?? d.getAttribute('name') ?? ''))) return choice;
     // Word 2016's newer charts (histograms, box charts): their fallback is only a picture
@@ -957,6 +1059,7 @@ class DocxReader {
     const shown = pr?.getAttribute('name');
     if (kept?.was !== undefined && shown && shown !== kept.was) fl.name = shown;
     else if (kept?.name) fl.name = kept.name;
+    else if (!kept && shown && ownName(pr, anchor)) fl.name = shown;
     // which is drawn over which: worked out once every figure is read
     const rh = Number(anchor.getAttribute('relativeHeight'));
     if (Number.isFinite(rh)) this.stack.push({ fl, rh });
@@ -1010,7 +1113,9 @@ class DocxReader {
     const ctx: Ctx = { base, pieces: [{ runs: [], pageBreak: false, soft: false }], cell: false };
     const bibBefore = this.bibOpen;
     this.bibMet = null;
-    const inToc = this.fields.some((f) => f.toc);
+    // a kept bibliography's paragraph: its text goes to the bibliography's entries
+    if (this.capture) this.capture.paras.push([]);
+    const inToc = this.fields.some((f) => f.toc) || !!this.capture;
     this.displayMath = false;
     this.inline(kids(el), ctx);
     // the contents' own lines (and the paragraph its field ends in): left out
@@ -1140,7 +1245,7 @@ class DocxReader {
   private emitText(ctx: Ctx, text: string, r: RProps): void {
     if (!text || r.hidden) return;
     const top = this.fields[this.fields.length - 1];
-    if ((top?.ref || top?.form !== undefined) && top.phase === 'result') top.text += text;
+    if ((top?.ref || top?.form !== undefined || top?.cite !== undefined) && top.phase === 'result') top.text += text;
     if (this.swallowing()) return;
     let props = r;
     if (r.font && /^symbol$/i.test(r.font)) {
@@ -1149,7 +1254,9 @@ class DocxReader {
       text = rt.fromSymbolFont(plain);
       props = { ...r, font: ctx.base.font };
     }
-    this.piece(ctx).runs.push({ ...this.runStyle(props), ...(this.rev ? { rev: this.rev } : {}), ...(this.fmt ? { fmt: this.fmt } : {}), ...this.cmtMark(ctx), ...(this.link ? { link: this.link } : {}), ...this.ccMark(ctx), text });
+    const run: TextRun = { ...this.runStyle(props), ...(this.rev ? { rev: this.rev } : {}), ...(this.fmt ? { fmt: this.fmt } : {}), ...this.cmtMark(ctx), ...(this.link ? { link: this.link } : {}), ...this.ccMark(ctx), text };
+    if (this.capture) { this.capture.paras[this.capture.paras.length - 1]?.push(run); return; }
+    this.piece(ctx).runs.push(run);
   }
 
   /** Where a Word link goes: a web page or file (through the part's relationships), or a bookmark here. */
@@ -1293,7 +1400,11 @@ class DocxReader {
         case 'sdt': {
           // a Mendeley Cite citation: its content control's tag holds the citation
           const m = !ctx.cell && !this.swallowing() ? readMendeleyTag(this.sdtTag(el)) : null;
-          if (m && this.managedCite(m, ctx, merge<RProps>(ctx.base, this.readRPr(kid(kid(el, 'sdtContent'), 'r', 'rPr'))))) break;
+          const mid = m ? this.managedCite(m, ctx, merge<RProps>(ctx.base, this.readRPr(kid(kid(el, 'sdtContent'), 'r', 'rPr')))) : null;
+          if (mid !== null) {
+            if (this.keepBib) this.keepCite(mid, Array.from(kid(el, 'sdtContent')?.getElementsByTagNameNS('*', 't') ?? []).map((x) => x.textContent ?? '').join(''));
+            break;
+          }
           // another program's content control round text (Chem4Word's structure, a form field): kept round it
           const before = this.ccRun, c4w = this.c4w;
           if (!ctx.cell) this.ccRun = this.control(el);
@@ -1349,6 +1460,7 @@ class DocxReader {
         case 'br': {
           if (this.swallowing()) break;
           const type = this.a(c, 'type');
+          if (this.capture && type !== 'page' && type !== 'column') { this.emitText(ctx, ' ', r); break; }
           if (type === 'page') this.pageBreak(ctx);
           else if (type === 'column') this.pageBreak(ctx, true);
           else this.lineBreak(ctx);
@@ -1398,6 +1510,7 @@ class DocxReader {
       const f = this.fields[this.fields.length - 1];
       if (!f) return;
       f.phase = 'result';
+      f.shown = this.resultLook(c, ctx);
       this.startField(f, ctx);
     } else if (type === 'end') {
       const f = this.fields.pop();
@@ -1409,7 +1522,29 @@ class DocxReader {
       if (f.ref) f.ref.text = f.text;
       if (f.form !== undefined) this.formEnded(f);
       if (f.before) this.link = f.before.link;
+      if (f.cite !== undefined) this.keepCite(f.cite, f.text);
+      if (f.bib !== undefined && this.capture?.id === f.bib) this.keepEntries();
     }
+  }
+
+  /** A manager's citation kept as Word showed it: its text stands while it, and the document, cite what they do now. */
+  private keepCite(id: number, text: string): void {
+    const o = this.objects[id];
+    if (o?.kind !== 'cite' || !o.live || !text.trim()) return;
+    this.objects[id] = { ...o, live: { ...o.live, text, for: (o.refs ?? []).join(' ') } };
+    this.keptCites.push(id);
+  }
+
+  /** How a field's result looks: its first run of text after the separator, in the same paragraph. */
+  private resultLook(sep: Element, ctx: Ctx): RProps | undefined {
+    const own = sep.parentElement;
+    for (let el: Element | null = own; el; el = el.nextElementSibling) {
+      if (el.localName !== 'r') continue;
+      const ks = kids(el);
+      if (el !== own && ks.some((k) => k.localName === 'fldChar')) return undefined;
+      if (ks.some((k) => k.localName === 't')) return merge<RProps>(ctx.base, this.readRPr(kid(el, 'rPr')));
+    }
+    return undefined;
   }
 
   private simpleField(el: Element, ctx: Ctx): void {
@@ -1498,7 +1633,8 @@ class DocxReader {
     // a citation from Zotero, Mendeley or EndNote: its items become the document's references
     const managed = /^ADDIN\s/i.test(ins) ? readCiteField(ins, f.data) : null;
     if (managed && !ctx.cell) {
-      if (this.managedCite(managed, ctx, f.props)) f.swallow = true;
+      const id = this.managedCite(managed, ctx, f.shown ?? f.props);
+      if (id !== null) { f.swallow = true; if (this.keepBib) f.cite = id; }
       return;
     }
     // a reference manager's bibliography: ours, worked out here, in its place
@@ -1508,7 +1644,10 @@ class DocxReader {
       // Zotero's bibliography code (items added or left out of it by hand), kept for it
       const code = bibApp === 'zotero' ? ins.replace(/^ADDIN\s+ZOTERO_/i, '').trim() : '';
       const id = this.emitObject(ctx, { kind: 'bib', ...(/^BIBL\b/.test(code) ? { live: { code } } : {}) }, f.props);
-      if (id !== null) { f.swallow = true; f.toc = true; }
+      if (id === null) return;
+      f.toc = true;
+      // kept as Word had it: the field's paragraphs become the bibliography's entries
+      if (this.keepBib && !this.capture) { f.bib = id; this.capture = { id, paras: [[]] }; } else f.swallow = true;
       return;
     }
     // a citation saved here: live again, citing the references in our part
@@ -1554,9 +1693,9 @@ class DocxReader {
     if (v) o.value = v;
   }
 
-  /** A reference manager's citation as ours, its items put in the document's references. True when it was put in. */
-  private managedCite(c: ManagerCite, ctx: Ctx, props: RProps): boolean {
-    if (!c.items.length) return false;
+  /** A reference manager's citation as ours, its items put in the document's references. Its object's id when it was put in, else null. */
+  private managedCite(c: ManagerCite, ctx: Ctx, props: RProps): number | null {
+    if (!c.items.length) return null;
     this.manager ??= c.app;
     const refs: string[] = [];
     const items: Record<string, Record<string, unknown>> = {};
@@ -1573,7 +1712,7 @@ class DocxReader {
       live.for = refs.join(' ');
       if (c.shown !== undefined && /[^\d\s,;.\u2013\-[\]()]/.test(c.shown)) live.text = c.shown;
     }
-    return this.emitObject(ctx, { kind: 'cite', refs, live }, props, true) !== null;
+    return this.emitObject(ctx, { kind: 'cite', refs, live }, props, true);
   }
 
   /** Zotero's document preferences: the ZOTERO_PREF_1, _2… custom document properties joined, or null. */
@@ -1683,7 +1822,7 @@ class DocxReader {
     const shown = { w: fromEmu(ext?.getAttribute('cx')), h: fromEmu(ext?.getAttribute('cy')) };
     // a figure named in the Selection Pane: which of ours it is goes by the name it would have had
     const pr = kid(box, 'docPr');
-    const name = this.model?.floats?.[Number(pr?.getAttribute('id'))]?.was ?? pr?.getAttribute('name') ?? '';
+    const name = this.model?.floats?.[Number(pr?.getAttribute('id'))]?.was ?? ownName(pr, box) ?? pr?.getAttribute('name') ?? '';
     // alt text: a structure's own, not the description by SMILES written when it has none
     const descr = kid(box, 'docPr')?.getAttribute('descr')?.trim() ?? '';
     const alt = descr && !/^Chemical structure( \(SMILES\): | or scheme$)/.test(descr) ? { alt: descr } : {};
@@ -1825,10 +1964,13 @@ class DocxReader {
       embed = ole && img ? this.embedded(ole, prog) : null;
       if (ole && !embed) this.warn('ole');
     }
+    // (VML's other shapes, and a group's pictures after the first, aren't read: say so)
+    const drawn = Array.from(el.getElementsByTagNameNS(VML_NS, '*')).filter((k) => VML_SHAPES.has(k.localName));
     if (!img) {
-      if (shape || Array.from(el.getElementsByTagNameNS('*', 'textbox')).length) this.warn('shapes');
+      if (drawn.length || Array.from(el.getElementsByTagNameNS('*', 'textbox')).length) this.warn('shapes');
       return;
     }
+    if (drawn.some((k) => k.localName !== 'shape') || el.getElementsByTagNameNS(VML_NS, 'imagedata').length > 1) this.warn('shapes');
     this.picture(this.relTarget(rAttr(img, 'id')), shown, r, ctx, null, null, embed ? { embed } : {});
   }
 
@@ -2350,6 +2492,7 @@ class DocxReader {
     let rich = false;
     let page: { zone: number; prefix: string } | null = null;
     let after = '';
+    let lines = 0;
     for (const p of Array.from(root.getElementsByTagNameNS(this.W, 'p'))) {
       const { p: props } = this.paraProps(kid(p, 'pPr'));
       let zone = props.align === 'center' ? 1 : props.align === 'right' ? 2 : 0;
@@ -2407,9 +2550,11 @@ class DocxReader {
         }
       };
       visit(p);
+      if (texts.some((t) => t.trim())) lines++;
       texts.forEach((t, i) => { const s = t.trim(); if (s) zones[i] = zones[i] ? `${zones[i]} ${s}` : s; });
     }
-    if (root.getElementsByTagNameNS(this.W, 'tbl').length) rich = true;
+    // (text on more than one line is kept as it is, not run together on one)
+    if (lines > 1 || root.getElementsByTagNameNS(this.W, 'tbl').length) rich = true;
     if (after.trim() && !rich) this.warn('pageText');
     return { zones, page, rich };
   }
@@ -2641,4 +2786,17 @@ function usedControls(runs: TextRun[], paras: ParaStyle[], all: Record<string, C
   const controls: Record<string, ContentControl> = {};
   for (const id of used) if (all[id]) controls[id] = all[id];
   return { controls };
+}
+
+/**
+ * One of our drawings named in the Selection Pane, whose wp:docPr id no longer names it in our
+ * part (Word gave it a new id: copied, or numbered afresh): its picture's own name inside
+ * (pic:cNvPr, which Word keeps as written while wp:docPr carries the name shown) says which of
+ * ours it is. Null when wp:docPr's name says so itself, or the picture isn't named as ours.
+ */
+function ownName(pr: Element | null, box: Element): string | null {
+  const ours = new RegExp(`^${DRAWING_NAME} \\d+$`);
+  if (ours.test(pr?.getAttribute('name') ?? '')) return null;
+  const inner = kid(box, 'graphic', 'graphicData', 'pic', 'nvPicPr', 'cNvPr')?.getAttribute('name') ?? '';
+  return ours.test(inner) ? inner : null;
 }

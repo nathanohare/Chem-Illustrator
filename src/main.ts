@@ -83,7 +83,7 @@ import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel, setShapeInk } 
 import { ShapeMenu } from './ui/shape-menu';
 import { whenIconsLoaded } from './design/icons';
 import { SlideTextRibbon } from './ui/slide-text-ribbon';
-import { CaptionEditor } from './ui/caption-editor';
+import { CaptionEditor, setCaptionTint } from './ui/caption-editor';
 import { LayersPanel } from './ui/layers-panel';
 import { Scrollbars } from './ui/scrollbars';
 import type { Presenter, ShowOptions } from './ui/present';
@@ -167,13 +167,13 @@ import { stoichiometryBook, type StoichRow, type StoichRole } from './chem/stoic
 import { isReactionSmiles, isRxn, parseRxn, reactionSmiles, rxnBlock, splitReactionSmiles } from './chem/reaction-io';
 import { showBalance } from './ui/balance-dialog';
 import { withoutCharge } from './chem/formula';
-import { makePin, shapeAxis } from './chem/pins';
-import { ORBITAL_KINDS, ORBITAL_LOOKS, orbitalShapes, shapeCentre, type OrbitalKind, type OrbitalLook } from './chem/orbitals';
+import { ORBITAL_KINDS, ORBITAL_LOOKS, angleOfDir, openDirection, orbitalAtom, orbitalShapes, orbitalsAmong, putOrbital, readAngle, readOrbital, redrawOrbital, takenDirections, type OrbitalKind, type OrbitalLook, type OrbitalSpec } from './chem/orbitals';
 import { BATCH_FORMATS, BATCH_INPUTS, readBatchFile, smilesLine, uniqueName, writeBatchItem, type BatchDeps, type BatchFormat } from './io/batch-convert';
 import { zipSync } from 'fflate';
 import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
 import { plainText, savableChar } from './richtext';
 import { buildTextToolbox, type TextToolboxHooks } from './ui/text-toolbox';
+import { buildTextBar } from './ui/text-bar';
 import { buildGuidesToolbox, GUIDES_INFO, type GuidesToolboxHooks } from './ui/guides-toolbox';
 import { htmlToRich } from './text/html';
 import { LiveStereo } from './chem/live-stereo';
@@ -187,7 +187,7 @@ import { TypingDialog } from './ui/typing-dialog';
 import { ModeColoursDialog, ModeColours, DEFAULT_MODE_COLOURS, applyModeColours as applyModeColoursOnly, modeColour } from './ui/mode-colours';
 import { typingPrefs, setTypingPrefs, onTypingPrefs } from './text/typing';
 import { NicknameChooser } from './ui/nickname-chooser';
-import { ask } from './ui/ask';
+import { ask, askChoice, type Field } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
 import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
@@ -349,14 +349,15 @@ const renderer = new Renderer(scene, overlay);
 const editor = new Editor(doc, renderer, host);
 
 /**
- * Colour the window for a mode; in Canvas mode the selection, hover and drawing marks take the
- * mode's teal too, so the accent is the same everywhere (UI rule 5).
+ * Colour the window for a mode; in Canvas mode the selection, hover and drawing marks and the box
+ * round text being typed take the mode's teal too, so the accent is the same everywhere (UI rule 5).
  */
 function applyModeColours(mode: Parameters<typeof applyModeColoursOnly>[0], c: ModeColours): void {
   applyModeColoursOnly(mode, c);
   const tint = mode === 'drawing' ? modeColour('drawing', c) : null;
   setMarkTint(tint);
   setAidTint(tint);
+  setCaptionTint(tint);
   editor.requestScene();
 }
 editor.lengthUnits = () => rulerPrefs.units;
@@ -499,6 +500,7 @@ const SYMBOLS: PaletteDef = {
     { name: 'sym-radical-anion', title: 'Radical anion (•−): click an atom or a bracket; an atom becomes a radical with a − charge' },
     { name: 'sym-dagger', title: 'Dagger (†), for a footnote or a compound' },
     { name: 'sym-ddagger', title: 'Double dagger (‡) for a transition state' },
+    { name: 'sym-lobe', title: 'Single orbital lobe: click an atom to put one in its most open space, or press on the atom and drag around it to aim it (Alt: 15° steps). Uses the phases and size last picked in the Orbital window; double-click it to change it' },
   ],
 };
 
@@ -701,11 +703,16 @@ const toolbar = new Toolbar($<HTMLDivElement>('#tools'), TOOL_GROUPS, (name) => 
 
 // The Canvas ribbon: the chemistry commands without a toolbox of their own (Smart Schemes, energy
 // diagrams, mechanism checks, look-ups), with Analysis and the warnings in two small boxes
+/** The Canvas ribbon's Font and Paragraph groups: their rows, filled once the text hooks are made (further down). */
+let canvasTextRows: { font: HTMLElement; paragraph: HTMLElement } | null = null;
+let canvasFont: { refresh(): void } | null = null;
 const canvasRibbon = new CanvasRibbon({
   command: (cmd) => { command(cmd); },
   pickTool: (name) => pickTool(name),
   hasTool: (name) => name in TOOLS,
   icon: (it) => ('cmd' in it ? commandIcon(it.cmd) ?? RIBBON_ONLY_ICONS[it.cmd] ?? ICONS[it.cmd] : ICONS[it.tool]),
+  textGroups: (font, paragraph) => { canvasTextRows = { font, paragraph }; },
+  pasteMenu: (r) => { popupMenu(r.left, r.bottom + 2, [['Paste', () => command('paste')], ['Paste SMILES', () => command('paste-smiles')]]); },
 }, $('#sheet-ribbon'));
 const analysisBox = new AnalysisBox($('#analysis-section'));
 const warningsBox = new WarningsBox($('#warnings-section'));
@@ -847,6 +854,12 @@ function showToolStatus(): void {
   // (the first tool is picked before the tabs exist: its hint comes once they do)
   if (!statusReady) { queueMicrotask(() => { statusReady = true; showToolStatus(); }); return; }
   if (stepHintOn || (ws.active.mode === 'sheet' || ws.active.mode === 'document') && !splitDrawing) return;
+  // while text is typed: the keys that work in it
+  if (typingKeys) {
+    const keys = typingKeys.split(' · ').map((k): [string, string] => { const i = k.indexOf(': '); return [k.slice(0, i), k.slice(i + 2)]; });
+    setStatus({ name: 'Typing', steps: [], numbered: false, at: -1, keys, full: typingKeys });
+    return;
+  }
   const name = editor.toolName, t = TOOLS[name];
   const sel = editor.sel;
   const one = sel.atoms.size + sel.bonds.size + sel.captions.size === 0 && sel.arrows.size + sel.shapes.size === 1;
@@ -859,6 +872,9 @@ function showToolStatus(): void {
   const h = toolHelp(name, t);
   setStatus({ name: toolLabel(name), steps: h.steps, numbered: h.steps.length > 1 && name !== 'select', at: Math.min(toolStep, h.steps.length - 1), keys: h.keys, full: h.what });
 }
+/** The keys that work in the text being typed ("Enter: new paragraph · …"), shown in the status bar; null when nothing is typed. */
+let typingKeys: string | null = null;
+CaptionEditor.onHint = (h) => { typingKeys = h; showToolStatus(); };
 /** The status bar's step-by-step hint: the tool, its steps (the one in hand marked), then its keys. */
 function setStatus(s: { name: string; steps: string[]; numbered: boolean; at: number; keys: [string, string][]; full: string }): void {
   const el = $('#hint');
@@ -1309,6 +1325,7 @@ async function plateFigure(kind: PlateKind | null, id: number | null, file?: { n
   if (got) editor.putPlateAt(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);
 }
 editor.onPlate = (id) => void plateFigure(null, id);
+editor.onOrbital = () => void editOrbital();
 
 /** What the crystal structure window needs from here: a CIF file to open, and the clipboard. */
 function crystalOptions(file?: { name: string; text: string }) {
@@ -1328,11 +1345,13 @@ function crystalOptions(file?: { name: string; text: string }) {
   };
 }
 
-/** How the last orbital was asked for, so the next starts the same way. */
-const orbitalChoice: Record<string, string> = { kind: 'p', look: 'shaded', size: '1.1', angle: 'auto', flip: 'false' };
+/** How the last orbital was asked for, so the next starts the same way (and the single-lobe button's phases and size). */
+const orbitalChoice: Record<string, string> = { kind: 'p', look: 'shaded', size: '1.1', angle: 'Auto', flip: 'false' };
+editor.lobeLook = () => ({ look: (ORBITAL_LOOKS.some((k) => k.value === orbitalChoice.look) ? orbitalChoice.look : 'shaded') as OrbitalLook, size: orbitalSize(orbitalChoice.size), flip: orbitalChoice.flip === 'true' });
 
-/** Which way an orbital on this atom points when left to choose: hybrids away from its bonds, others up. */
+/** Which way an orbital on this atom points when left to choose: hybrids away from its bonds, a single lobe into the most open space, others up. */
 function orbitalAngle(kind: OrbitalKind, atom: Atom | undefined): number {
+  if (atom && kind === 'lobe') return angleOfDir(openDirection(takenDirections(doc, atom.id)));
   if (!atom || (kind !== 'sp' && kind !== 'sp2' && kind !== 'sp3')) return 0;
   let vx = 0, vy = 0;
   for (const n of doc.neighbors(atom.id)) { const d = Math.hypot(n.x - atom.x, n.y - atom.y) || 1; vx -= (n.x - atom.x) / d; vy -= (n.y - atom.y) / d; }
@@ -1340,45 +1359,119 @@ function orbitalAngle(kind: OrbitalKind, atom: Atom | undefined): number {
   return (Math.atan2(vx, -vy) * 180) / Math.PI;
 }
 
+/** A lobe length typed in bond lengths, kept to a sensible range. */
+const orbitalSize = (text: string | undefined): number => Math.max(0.2, Math.min(5, Number(text) || 1.1));
+
+/** The Orbital window's settings as an orbital to draw, on `atom` (or pointing up off it). */
+function orbitalSpec(v: Record<string, string>, atom: Atom | undefined): OrbitalSpec {
+  const kind = (ORBITAL_KINDS.some((k) => k.value === v.kind) ? v.kind : 'p') as OrbitalKind;
+  const a = readAngle(v.angle);
+  return { kind, look: (ORBITAL_LOOKS.some((k) => k.value === v.look) ? v.look : 'shaded') as OrbitalLook, angle: a === 'auto' ? orbitalAngle(kind, atom) : a, size: orbitalSize(v.size) * doc.style.bondLength, ...(v.flip === 'true' ? { flip: true } : {}) };
+}
+
+/** A picture of an orbital as the window will draw it: on its atom with the atom's bonds, as it will look there. */
+function orbitalPreview(spec: OrbitalSpec, atom: Atom | undefined, at?: Vec): Node {
+  const x = new Doc();
+  x.style = { ...doc.style };
+  x.edit('Preview', () => {
+    let c = at ?? { x: 0, y: 0 };
+    if (atom) {
+      const a = x.addAtom(atom.x, atom.y, atom.z);
+      x.updateAtom(a.id, { label: atom.label, charge: atom.charge });
+      for (const n of doc.neighbors(atom.id)) { const m = x.addAtom(n.x, n.y, n.z); x.updateAtom(m.id, { label: n.label }); x.addBond(a.id, m.id); }
+      c = atom;
+    }
+    for (const sh of orbitalShapes(spec, c)) x.addShape(sh);
+  });
+  const pic = recordPicture(x, 4);
+  const box = document.createElement('div');
+  box.className = 'orbital-preview';
+  box.innerHTML = pic ? pictureSvg(pic).replace(/^<\?xml[^>]*>\s*/, '') : '';
+  return box;
+}
+
+/** The Orbital window's boxes, filled in from `v`. */
+function orbitalFields(v: Record<string, string>): Field[] {
+  return [
+    { name: 'kind', label: 'Orbital', value: v.kind, options: ORBITAL_KINDS },
+    { name: 'look', label: 'Phases', value: v.look, options: ORBITAL_LOOKS },
+    { name: 'angle', label: 'Pointing', value: v.angle, unit: '°', suggestions: ['Auto', '0', '45', '90', '135', '180', '225', '270', '315'], help: 'Degrees clockwise from straight up. Auto points hybrids away from the bonds, a single lobe into the most open space, and the others straight up.' },
+    { name: 'size', label: 'Lobe length', value: v.size, type: 'number', unit: 'bond lengths' },
+    { name: 'flip', label: 'Swap the phases', value: v.flip, type: 'checkbox' },
+  ];
+}
+
 /** Chemistry ▸ Orbitals: an orbital on each selected atom (or in the middle of the view), its lobes stuck to the atom. */
 async function insertOrbital(quick: boolean): Promise<void> {
   finishTyping();
   const atoms = [...editor.sel.atoms].map((id) => doc.atoms.get(id)).filter((a): a is Atom => !!a && !a.multi);
   if (quick && !atoms.length) { flash('Select the atoms of the π system first (drag around them, or Shift-click each).'); return; }
-  let v: Record<string, string> = { ...orbitalChoice, kind: 'p', angle: 'auto' };
+  let v: Record<string, string> = { ...orbitalChoice, kind: 'p', angle: 'Auto' };
   if (!quick) {
-    const got = await ask('Orbital', [
-      { name: 'kind', label: 'Orbital', value: orbitalChoice.kind, options: ORBITAL_KINDS },
-      { name: 'look', label: 'Phases', value: orbitalChoice.look, options: ORBITAL_LOOKS },
-      { name: 'angle', label: 'Pointing', value: orbitalChoice.angle, options: [
-        { value: 'auto', label: 'By itself (hybrids away from the bonds, others up)' }, { value: '0', label: 'Up' }, { value: '90', label: 'Right' }, { value: '180', label: 'Down' }, { value: '270', label: 'Left' }, { value: '45', label: 'Up and right (45°)' }, { value: '315', label: 'Up and left (45°)' },
-      ] },
-      { name: 'size', label: 'Lobe length', value: orbitalChoice.size, type: 'number', unit: 'bond lengths' },
-      { name: 'flip', label: 'Swap the phases', value: orbitalChoice.flip, type: 'checkbox' },
-    ], { ok: 'Insert', note: atoms.length ? `One on each of the ${atoms.length} selected atom${atoms.length > 1 ? 's' : ''}; the lobes stay with the atoms.` : 'Select atoms first to put one on each; otherwise it goes in the middle of the view.' });
+    const got = await ask('Orbital', orbitalFields(orbitalChoice), { ok: 'Insert', preview: { title: 'Preview', draw: (vals) => orbitalPreview(orbitalSpec(vals, atoms[0]), atoms[0]) }, note: atoms.length ? `One on each of the ${atoms.length} selected atom${atoms.length > 1 ? 's' : ''}; the lobes stay with the atoms. Double-click one later to change it.` : 'Select atoms first to put one on each; otherwise it goes in the middle of the view. Double-click one later to change it.' });
     if (!got) return;
     Object.assign(orbitalChoice, got);
     v = got;
   }
-  const L = doc.style.bondLength;
-  const kind = v.kind as OrbitalKind;
-  const size = Math.max(0.2, Math.min(5, Number(v.size) || 1.1)) * L;
   const made: number[] = [];
-  doc.edit(kind === 'p' && quick ? 'p Orbitals' : 'Orbital', () => {
-    let top = 0;
-    for (const m of [doc.atoms, doc.captions, doc.arrows, doc.shapes] as Map<number, { grp?: number }>[]) for (const e of m.values()) if (e.grp !== undefined && e.grp > top) top = e.grp;
-    for (const at of atoms.length ? atoms : [undefined]) {
-      const c = at ?? pasteCentre();
-      const angle = v.angle === 'auto' ? orbitalAngle(kind, at) : Number(v.angle) || 0;
-      const grp = ++top;
-      for (const sh of orbitalShapes({ kind, look: v.look as OrbitalLook, angle, size, flip: v.flip === 'true' }, c)) {
-        const pin = at ? makePin(doc, 'atom', [at.id], shapeCentre(sh), shapeAxis(sh)) ?? undefined : undefined;
-        made.push(doc.addShape({ ...sh, grp, ...(pin ? { pin } : {}) }).id);
-      }
-    }
+  doc.edit(v.kind === 'p' && quick ? 'p Orbitals' : 'Orbital', () => {
+    for (const at of atoms.length ? atoms : [undefined]) made.push(...putOrbital(doc, orbitalSpec(v, at), at ?? pasteCentre(), at?.id));
   });
   editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set(made) };
   editor.changed();
+}
+
+/** The orbitals selected (each as its parts). */
+const selectedOrbitals = (): Shape[][] => orbitalsAmong(doc, editor.sel.shapes);
+
+/**
+ * Draw orbitals again with some settings changed (the Style panel's rows, the Edit Orbital
+ * window): each keeps the settings not changed, its own angle and size among them, and stays
+ * selected.
+ */
+function restyleOrbitals(list: Shape[][], patch: Partial<OrbitalSpec>, autoAngle = false): void {
+  const made: number[] = [];
+  doc.edit(list.length > 1 ? 'Change Orbitals' : 'Change Orbital', () => {
+    for (const parts of list) {
+      const now = readOrbital(parts);
+      if (!now) continue;
+      const spec: OrbitalSpec = { ...now.spec, ...patch };
+      if (!spec.flip) delete spec.flip;
+      // Auto: each points its own way on its own atom
+      if (autoAngle) { const at = orbitalAtom(doc, parts); spec.angle = orbitalAngle(spec.kind, at !== undefined ? doc.atoms.get(at) : undefined); }
+      made.push(...redrawOrbital(doc, parts, spec));
+    }
+  });
+  editor.sel = { ...editor.sel, shapes: new Set([...[...editor.sel.shapes].filter((id) => doc.shapes.has(id)), ...made]) };
+  editor.changed();
+}
+
+/** Edit Orbital… (or a double-click on one): the Orbital window with the selected orbitals' settings, to draw them again. */
+async function editOrbital(): Promise<void> {
+  finishTyping();
+  const list = selectedOrbitals();
+  if (!list.length) { flash('Select an orbital first.'); return; }
+  const first = readOrbital(list[0]);
+  if (!first) return;
+  const atomId = orbitalAtom(doc, list[0]);
+  const atom = atomId !== undefined ? doc.atoms.get(atomId) : undefined;
+  const was: Record<string, string> = { kind: first.spec.kind, look: first.spec.look, angle: String(Math.round(first.spec.angle * 10) / 10), size: String(Math.round((first.spec.size / doc.style.bondLength) * 100) / 100), flip: String(!!first.spec.flip) };
+  const got = await ask(list.length > 1 ? `Edit ${list.length} Orbitals` : 'Edit Orbital', orbitalFields(was), {
+    ok: 'Apply',
+    preview: { title: 'Preview', draw: (vals) => orbitalPreview({ ...orbitalSpec(vals, atom), ...(vals.size === was.size ? { size: first.spec.size } : {}) }, atom, first.at) },
+    note: list.length > 1 ? 'Only the settings you change are applied to each orbital; each keeps its own angle and size unless you change them.' : 'Draws the orbital again with these settings, on the same atom.',
+  });
+  if (!got) return;
+  // only what was changed: several orbitals each keep their own angle and size
+  const patch: Partial<OrbitalSpec> = {};
+  if (got.kind !== was.kind) patch.kind = got.kind as OrbitalKind;
+  if (got.look !== was.look) patch.look = got.look as OrbitalLook;
+  if (got.flip !== was.flip) patch.flip = got.flip === 'true';
+  if (got.size !== was.size) patch.size = orbitalSize(got.size) * doc.style.bondLength;
+  if (got.angle !== was.angle) { const a = readAngle(got.angle); if (a !== 'auto') patch.angle = a; }
+  orbitalChoice.look = got.look; orbitalChoice.flip = got.flip; orbitalChoice.size = got.size;
+  const auto = readAngle(got.angle) === 'auto';
+  if (Object.keys(patch).length || auto) restyleOrbitals(list, patch, auto);
 }
 
 /** A diagram drawn as an SVG picture, for the diagram window's preview and its layout buttons. */
@@ -3761,6 +3854,15 @@ const docRead: DocxReadDeps = {
     return pic ? { w: pic.box.x2 - pic.box.x1, h: pic.box.y2 - pic.box.y1 } : null;
   },
   tableDrawing,
+  // a reference manager's bibliography: kept as Word had it, or worked out here (asked each time)
+  keepBibliography: async (app) => {
+    const name = app === 'endnote' ? 'EndNote' : app === 'zotero' ? 'Zotero' : 'Mendeley';
+    const got = await askChoice(`Keep ${name} Bibliography?`,
+      `Keep this document's citations and bibliography as ${name} formatted them, or restyle them in the document's citation style?`,
+      [{ value: 'restyle', label: 'Restyle' }, { value: 'keep', label: 'Keep', primary: true }], 'keep',
+      'Restyling renumbers the citations and rebuilds the bibliography here, which can change entries (DOIs, links, lettered numbers such as 2c). Kept, they stay exactly as they are until you change a citation; then they are restyled.');
+    return got === 'keep';
+  },
 };
 
 const ws: Workspace = new Workspace(doc, {
@@ -5837,7 +5939,7 @@ const INDEX_KEY = 'library/file-index.json';
 
 /** How files found in a folder are read: with the app's own readers, ChemDraw objects in Word files read as structures. */
 const folderReaders: FileReaders = {
-  document: async (bytes, name) => (await (await import('./io/doc-files')).readDocumentFile(bytes, name, { ...docRead, convertChemDraw: true })).doc,
+  document: async (bytes, name) => (await (await import('./io/doc-files')).readDocumentFile(bytes, name, { ...docRead, convertChemDraw: true, keepBibliography: undefined })).doc,
   sheet: async (bytes, name) => (await (await import('./io/sheet-files')).readSheetFile(bytes, name, sheetFiles)).book,
   slides: async (bytes) => (await import('./io/pptx-read')).readPptx(bytes).slides.map((s) => s.contents),
 };
@@ -8741,6 +8843,7 @@ const COMMANDS: Record<string, () => unknown> = {
   orbital: () => void insertOrbital(false),
   gel: () => void plateFigure('gel', null),
   'crystal-structure': () => void plateFigure('crystal', null),
+  'edit-orbital': () => void editOrbital(),
   'edit-plate': () => { const id = editor.selectedPlate(); if (id === null) flash('Select a lab figure (TLC plate, gel, MO diagram or crystal structure) first.'); else void plateFigure(null, id); },
   'insert-diagram': () => void smartDiagram(null),
   'edit-diagram': () => { const id = editor.selectedDiagram(); if (id === null) flash('Select a diagram first.'); else void smartDiagram(id); },
@@ -11798,6 +11901,7 @@ function drawingMenu(): MenuItem[] {
     ...(editor.selectedTorsion() !== null ? [{ cmd: 'edit-torsion' }, { cmd: 'copy-torsion-data' }, null] : []),
     ...(editor.selectedNewman() !== null ? [{ cmd: 'edit-newman' }, ...(doc.shapes.get(editor.selectedNewman()!)?.newman?.link ? [{ cmd: 'unlink-newman' }] : []), null] : []),
     ...(editor.selectedPlate() !== null ? [{ cmd: 'edit-plate' }, null] : []),
+    ...(selectedOrbitals().length ? [{ cmd: 'edit-orbital' }, null] : []),
     ...(editor.selectedDiagram() !== null ? [{ cmd: 'edit-diagram' }, { cmd: 'diagram-to-shapes' }, null] : []),
     ...(atoms || texts ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }, null] : []),
     ...(s.captions.size ? [readAsMenu(), ...(texts && !atoms ? [{ cmd: 'expand-label', label: 'Expand to Structure' }, { cmd: 'expand-label-full', label: 'Expand to Full Structure' }] : []), null] : []),
@@ -12002,6 +12106,10 @@ stylePanel.plate = {
   edit: (id) => void plateFigure(null, id),
   restyle: (id, patch) => { const d = doc.shapes.get(id)?.plate; if (d) editor.putPlateAt({ ...d, ...patch }, pasteCentre(), id); },
 };
+stylePanel.orbital = {
+  edit: () => void editOrbital(),
+  restyle: (ids, patch) => restyleOrbitals(orbitalsAmong(doc, ids), patch),
+};
 stylePanel.energy = {
   edit: (id) => void energyDiagram(id),
   restyle: (id, patch) => { const d = doc.shapes.get(id)?.energy; if (d) editor.putEnergyDiagram({ ...d, ...patch }, pasteCentre(), id); },
@@ -12088,6 +12196,8 @@ setTimeout(() => {
     save: () => void saveFavorite(),
     menu: (f, at) => favoriteMenu(f, at),
   }));
+  // (the galleries make their groups wider: fit the ribbons again, so none runs past the window's edge)
+  fitRibbons();
 }, 400);
 
 function favoritesChanged(): void {
@@ -12540,6 +12650,20 @@ const textToolboxHooks: TextToolboxHooks = {
   back: () => editor.refocusText(),
   say: (t) => flash(t),
 };
+// the Canvas ribbon's Font and Paragraph groups: all of the typing bar, working as the Text Formatting
+// toolbox does (and while they show, the bar above the text hides: see CaptionEditor.barElsewhere)
+// (set by the ribbon's callback, which TypeScript can't see)
+const textRows = canvasTextRows as { font: HTMLElement; paragraph: HTMLElement } | null;
+if (textRows) {
+  canvasFont = buildTextBar(textRows.font, {
+    format: (f) => textToolboxHooks.format(f),
+    type: (ch) => textToolboxHooks.type(ch),
+    link: () => textToolboxHooks.link(),
+    state: () => textToolboxHooks.look(),
+    back: () => textToolboxHooks.back(),
+    nothing: () => flash('Click into some text, or pick a caption or text box, first.'),
+  }, { ribbon: { paragraph: textRows.paragraph } });
+}
 
 /** Ring Shape on the right-click menu, when the selection is one cyclohexane that can be redrawn. */
 function ringShapeMenu(): MenuItem[] {
@@ -13730,9 +13854,11 @@ const designText = new SlideTextRibbon($('#design-ribbon'), {
 });
 /** The text groups of the ribbon showing (Presentation or Design) follow the text being edited. */
 const textRibbonNow = () => (ws.active.mode === 'slides' ? slideText : ws.active.mode === 'design' ? designText : null);
-// the Text Formatting toolbox is the typing bar, so with it showing the bar above the text hides
-CaptionEditor.barElsewhere = () => toolboxes.isShown('text');
-CaptionEditor.onState = () => { textRibbonNow()?.refresh(); textToolbox?.refresh(); };
+// the Text Formatting toolbox is the typing bar, and so are the Canvas ribbon's Home tab's Font and
+// Paragraph groups: with either showing, the bar above the text hides (with the ribbon collapsed or on
+// another tab, it shows as before)
+CaptionEditor.barElsewhere = () => toolboxes.isShown('text') || (!canvasRibbon.el.hidden && !ribbonCollapsed() && canvasRibbon.tab === 'home');
+CaptionEditor.onState = () => { textRibbonNow()?.refresh(); textToolbox?.refresh(); canvasFont?.refresh(); };
 // the Smart Scheme pane: the selected scheme's species, beside it
 const smartPane = new SmartPane({
   doc: () => editor.doc,
@@ -13797,7 +13923,7 @@ const buildHint = new BuildHint({
 });
 editor.onOverlay = () => { smartPane.place(); buildHint.place(); };
 editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
-editor.onChange = () => { welcomeWatch?.(); showToolStatus(); showRibbonContext(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); restSidePanel(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); showToolStatus(); showRibbonContext(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); canvasFont?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); restSidePanel(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();

@@ -65,7 +65,14 @@ const MISSPELLED = '#e0302f';
 const FORMATTING = '#2f6fdf';
 /** Words ignored with "Ignore" or "Leave as written" while the program is open (lower case). */
 const ignored = new Set<string>();
-const FRAME = 'rgba(47, 111, 223, 0.6)';
+/** The dashed box round the text being typed: the usual blue, or Canvas mode's teal (setCaptionTint). */
+let FRAME = 'rgba(47, 111, 223, 0.6)';
+
+/** Draw the box round the text being typed in `hex` (Canvas mode's teal, as the selection is), or in the usual blue (null). */
+export function setCaptionTint(hex: string | null): void {
+  const c = hex && /^#[0-9a-f]{6}$/i.test(hex) ? [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) : [47, 111, 223];
+  FRAME = `rgba(${c.join(', ')}, 0.6)`;
+}
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 /** The keys shown at the end of the bar, with Enter finishing the text when `enterDone`. */
@@ -80,6 +87,8 @@ export class CaptionEditor {
   private ta: HTMLTextAreaElement;
   private bar: HTMLDivElement;
   private textBar!: TextBar;
+  /** The keys that work while typing here ("Enter: new paragraph · Tab: indent · Esc: done"): the status bar shows them. */
+  readonly hint: string;
   private closed = false;
   private caretOn = true;
   private blink: ReturnType<typeof setInterval> | null = null;
@@ -127,6 +136,9 @@ export class CaptionEditor {
     this.bar.setAttribute('role', 'toolbar');
     this.bar.setAttribute('aria-label', 'Text style');
     this.buildBar();
+    this.hint = keyHint(this.h.hint ?? 'Enter: new paragraph · Tab: indent · Esc: done', !!this.h.enterFinishes?.());
+    CaptionEditor.typingHere = this;
+    CaptionEditor.onHint?.(this.hint);
     // View > Window and Colours > Text Formatting Bar: along the top of the drawing (so it never covers what is
     // drawn), floating by the text, or hidden (the keys still work)
     this.bar.classList.toggle('docked', CaptionEditor.barPlace === 'docked');
@@ -506,6 +518,11 @@ export class CaptionEditor {
   /** Called whenever the text or the selection changes (the Slides ribbon shows how it looks). */
   static onState: (() => void) | null = null;
 
+  /** Typing starts (the keys that work, for the status bar) or ends (null). */
+  static onHint: ((hint: string | null) => void) | null = null;
+  /** The text being typed in now, if any (so a box that closes after the next one opened says nothing). */
+  private static typingHere: CaptionEditor | null = null;
+
   /** Put the keyboard back in the text (after a ribbon button or box). */
   focusText(): void {
     if (!this.closed) this.ta.focus({ preventScroll: true });
@@ -517,6 +534,7 @@ export class CaptionEditor {
     // the last word gets its chemistry formatting (CH2Cl2 typed in a table cell, then Tab)
     finishWord(this.ed);
     this.closed = true;
+    if (CaptionEditor.typingHere === this) { CaptionEditor.typingHere = null; CaptionEditor.onHint?.(null); }
     this.closeMenu();
     if (this.blink) clearInterval(this.blink);
     this.ta.remove();
@@ -672,9 +690,6 @@ export class CaptionEditor {
       back: () => { if (!this.closed) this.ta.focus({ preventScroll: true }); },
       resized: () => this.place(),
     });
-    const hint = this.h.host.ownerDocument.createElement('span');
-    hint.className = 'cb-hint';
-    hint.textContent = keyHint(this.h.hint ?? 'Enter: new paragraph · Tab: indent · Esc: done', !!this.h.enterFinishes?.());
-    this.bar.appendChild(hint);
+    // (the keys that work while typing go in the status bar, so the bar is only as long as its buttons)
   }
 }

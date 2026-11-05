@@ -165,15 +165,23 @@ export function pinSymbol(doc: Doc, s: Shape): Pin | undefined {
   return best === null ? undefined : makePin(doc, 'atom', [best], c, shapeAxis(s)) ?? undefined;
 }
 
+/** An orbital's sphere or ring (saved as a plain oval) stuck again to the atom at its middle. */
+function pinOrbitalOval(doc: Doc, s: Shape): Pin | undefined {
+  if (s.kind !== 'oval' || !s.orb) return undefined;
+  const c = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };
+  const a = doc.atomsNear(c, 0.05 * doc.style.bondLength).find((x) => dist(x, c) < 0.05 * doc.style.bondLength && !x.multi);
+  return a ? makePin(doc, 'atom', [a.id], c, shapeAxis(s)) ?? undefined : undefined;
+}
+
 /**
  * Pin every lone pair, radical dot and circled charge to its atom (a drawing just read from a
- * file). A shape saved stuck to its atoms (an orbital's lobe) is checked: one whose atoms aren't
+ * file); an orbital's sphere or ring to the atom it is on. A shape saved stuck to its atoms (an orbital's lobe) is checked: one whose atoms aren't
  * where it is any more (they were numbered afresh) comes loose, and one saved before shapes
  * turned with their atoms learns which way it points.
  */
 export function pinSymbols(doc: Doc): void {
   for (const s of doc.shapes.values()) {
-    if (!s.pin) { const p = pinSymbol(doc, s); if (p) s.pin = p; continue; }
+    if (!s.pin) { const p = pinSymbol(doc, s) ?? pinOrbitalOval(doc, s); if (p) s.pin = p; continue; }
     const c = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 };
     const at = pinPoint(doc, s.pin);
     if (!at || dist(at, c) > 0.01) { s.pin = undefined; continue; }

@@ -2,6 +2,7 @@
 // of XML parts, described in the published Office Open XML standard (ECMA-376).
 
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
+import { cfbStreams, isCfb } from './cfb';
 
 /** Points to English Metric Units, Office's measure (12,700 to the point). */
 export const EMU = 12700;
@@ -177,6 +178,8 @@ function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 export function resolvePath(from: string, target: string): string {
+  // some writers give a target with Windows backslashes (media\image1.png)
+  target = target.replace(/\\/g, '/');
   if (target.startsWith('/')) return target.slice(1);
   const parts = from.split('/');
   parts.pop();
@@ -187,8 +190,11 @@ export function resolvePath(from: string, target: string): string {
   return parts.join('/');
 }
 
+/** Thrown when an Office or OpenDocument file can't be read, with a reason to show as it is. */
+export class PackageError extends Error {}
+
 /** Thrown for an Office or OpenDocument file whose parts would unpack to too much. */
-export class ZipTooBigError extends Error {}
+export class ZipTooBigError extends PackageError {}
 
 const MB = 1024 * 1024;
 /** The most one part of an Office or OpenDocument file may unpack to, and all its parts together. */
@@ -200,26 +206,87 @@ const MAX_PART = 256 * MB, MAX_UNPACKED = 1024 * MB;
  * file over the limits is refused before anything is unpacked (no part is unpacked past its listed size).
  */
 export function unzipPackage(bytes: Uint8Array): Record<string, Uint8Array> {
+  // Office saves a file with a password to open as a compound file holding the encrypted zip
+  // ([MS-OFFCRYPTO]: streams EncryptionInfo and EncryptedPackage)
+  if (isCfb(bytes)) {
+    let locked = false;
+    try { locked = cfbStreams(bytes).has('EncryptedPackage'); } catch { /* a damaged compound file */ }
+    if (locked) throw new PackageError('This file is protected with a password. Open it in Word, Excel or PowerPoint, take the password off, and save it again.');
+  }
   let total = 0, largest = 0;
-  unzipSync(bytes, { filter: (f) => { total += f.originalSize; largest = Math.max(largest, f.originalSize); return false; } });
+  try {
+    unzipSync(bytes, { filter: (f) => { total += f.originalSize; largest = Math.max(largest, f.originalSize); return false; } });
+  } catch {
+    throw new Error('This file is damaged, or it is not an Office file (its contents can\'t be unpacked).');
+  }
   if (largest > MAX_PART || total > MAX_UNPACKED) {
     const what = largest > MAX_PART ? `one of its parts unpacks to ${Math.round(largest / MB)} MB (at most ${MAX_PART / MB} MB is read)` : `it unpacks to ${Math.round(total / MB)} MB (at most ${MAX_UNPACKED / MB} MB is read)`;
     throw new ZipTooBigError(`This file is too big to open: ${what}. It may be damaged.`);
   }
-  return unzipSync(bytes);
+  try {
+    return unzipSync(bytes);
+  } catch {
+    throw new Error('This file is damaged, or it is not an Office file (its contents can\'t be unpacked).');
+  }
+}
+
+/** A part name as compared with another: ECMA-376 Part 2 §6.2.2.3 makes part names equal when they
+ * differ only in ASCII case, and a target may be written as an IRI (é) or a URI (%C3%A9). */
+function partKey(path: string): string {
+  try { path = decodeURIComponent(path); } catch { /* a stray % */ }
+  return path.toLowerCase();
+}
+
+/** A part's text: UTF-8, or UTF-16 when it starts with a byte order mark (Office reads both,
+ * ECMA-376 Part 2 §6.2.5), with a UTF-16 declaration then made UTF-8, as the text is kept as it is
+ * in a part saved again (which is UTF-8). */
+export function partText(b: Uint8Array): string {
+  if (b.length >= 2 && ((b[0] === 0xff && b[1] === 0xfe) || (b[0] === 0xfe && b[1] === 0xff))) {
+    const t = new TextDecoder(b[0] === 0xff ? 'utf-16le' : 'utf-16be').decode(b);
+    return t.replace(/^(<\?xml[^>]*?encoding\s*=\s*["'])utf-16(?:le|be)?(["'])/i, '$1UTF-8$2');
+  }
+  return strFromU8(b);
+}
+
+/**
+ * A Strict Office Open XML part's text with its namespaces and relationship types made the usual
+ * (Transitional) ones, so the readers find their elements. Office saves Strict files (Excel's "Strict
+ * Open XML Spreadsheet", Word's and PowerPoint's Strict options) under http://purl.oclc.org/ooxml/
+ * (ECMA-376 Part 1 Annex A); the elements are mostly the same. Values Strict writes differently,
+ * such as percentages ("50%" for 50000) in DrawingML, are not changed here.
+ */
+export function fromStrict(text: string): string {
+  if (!text.includes('http://purl.oclc.org/ooxml/')) return text;
+  return text.replace(/http:\/\/purl\.oclc\.org\/ooxml\/(?:officeDocument\/(\w+)(\/\w+)?|(drawingml|wordprocessingml|presentationml|spreadsheetml|schemaLibrary)\/(\w+))/g,
+    (_all, doc?: string, rel?: string, family?: string, name?: string) => {
+      const rename = (n: string) => (n === 'extendedProperties' ? 'extended-properties' : n === 'customProperties' ? 'custom-properties' : n);
+      if (doc) return `http://schemas.openxmlformats.org/officeDocument/2006/${rename(doc)}${rel ? `/${rename(rel.slice(1))}` : ''}`;
+      return `http://schemas.openxmlformats.org/${family}/2006/${name}`;
+    });
 }
 
 /** A package being read. */
 export class PackageReader {
   private files: Record<string, Uint8Array>;
+  private byKey: Map<string, string> | null = null;
   private relCache = new Map<string, Map<string, { type: string; target: string; external: boolean }>>();
 
   constructor(bytes: Uint8Array) {
     this.files = unzipPackage(bytes);
   }
 
+  /** The zip entry of a part: its own name, else one equal to it ignoring case and percent-encoding. */
+  private entry(path: string): string | undefined {
+    if (Object.prototype.hasOwnProperty.call(this.files, path)) return path;
+    if (!this.byKey) {
+      this.byKey = new Map();
+      for (const name of Object.keys(this.files)) if (!this.byKey.has(partKey(name))) this.byKey.set(partKey(name), name);
+    }
+    return this.byKey.get(partKey(path));
+  }
+
   has(path: string): boolean {
-    return path in this.files;
+    return this.entry(path) !== undefined;
   }
 
   /** Every part's path. */
@@ -228,12 +295,13 @@ export class PackageReader {
   }
 
   bytes(path: string): Uint8Array | null {
-    return this.files[path] ?? null;
+    const name = this.entry(path);
+    return name === undefined ? null : this.files[name];
   }
 
   text(path: string): string | null {
-    const b = this.files[path];
-    return b ? strFromU8(b) : null;
+    const b = this.bytes(path);
+    return b ? fromStrict(partText(b)) : null;
   }
 
   xml(path: string): Document | null {

@@ -12,19 +12,22 @@
 // substructure filters) is kept in a part of the file Excel keeps but doesn't show (a "custom XML
 // part"). On opening, each piece of it is used only where the cell still holds what was saved:
 // a structure whose SMILES was changed in Excel, or a calculated value typed over there, stays
-// as Excel left it.
+// as Excel left it. Rows and columns put in, taken out or sorted in Excel are followed (see
+// xlsx-relocate.ts).
 
 import { MAX_CELL_TEXT } from './sheet-sniff';
-import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr, ZipTooBigError } from './ooxml';
-import { readKeptParts, writeKeptParts } from './kept-parts';
+import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr, PackageError } from './ooxml';
+import { readKeptParts, writeKeptParts, readTree, writeTree, type KeptTree } from './kept-parts';
+import { GRID_NAME, gridOf, gridNameXml, readGridName, restoreSheet, moveFilter, STILL, type Grid } from './xlsx-relocate';
 import { officeTarget, linkFromTarget } from '../links';
-import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side, makeStructure } from '../sheet/workbook';
+import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side } from '../sheet/workbook';
 import { keyOf, rowOf, colOf, colName, cellName, parseRange, quoteSheet, Range, MAX_COLS, rangesOverlap, rangeName, inRange, MAX_ROWS, sheetNameProblem, fixSheetName } from '../sheet/refs';
 import { normalizeFormula, shiftFormula } from '../sheet/formula';
 import { callsName, fileFormula, legacyFormula, needsDynamic, readFileFormula } from '../sheet/array-formulas';
 import { DefinedName, isBuiltInName } from '../sheet/names';
 import { FUNCTION_NAMES } from '../sheet/evaluate';
-import { readTyped, isError, CellError, Value, EXCEL_ERRORS } from '../sheet/values';
+import { readTyped, isError, CellError, Value } from '../sheet/values';
+import { DAYS_1900_TO_1904, holdsDate } from '../sheet/numfmt';
 import { PROPERTIES } from '../sheet/properties';
 import { ISOTOPE_FUNCTIONS } from '../sheet/isotopes';
 import { chemPieces, showsChem } from '../sheet/cell-text';
@@ -53,7 +56,7 @@ import type { WorkbookTheme } from '../sheet/themes';
 import { themeOf } from '../sheet/themes';
 import type { CustomView } from '../sheet/views';
 import { seenSparkId } from '../sheet/sparklines';
-import { type CompoundCard, isCard } from '../sheet/compound';
+import { type CompoundCard } from '../sheet/compound';
 import { type Query, seenQueryId } from '../sheet/query';
 export { applyTint };
 
@@ -163,8 +166,16 @@ const XLFN = new Set(['AGGREGATE', 'BETA.DIST', 'BETA.INV', 'BINOM.DIST', 'BINOM
   'STDEV.P', 'STDEV.S', 'SWITCH', 'T.DIST', 'T.DIST.2T', 'T.DIST.RT', 'T.INV', 'T.INV.2T', 'T.TEST', 'TEXTJOIN', 'TEXTSPLIT', 'UNIQUE',
   'VAR.P', 'VAR.S', 'WEIBULL.DIST', 'XLOOKUP', 'XMATCH', 'XOR', 'Z.TEST', 'NETWORKDAYS.INTL', 'WORKDAY.INTL', 'LAMBDA', 'MAP', 'REDUCE',
   'SCAN', 'BYROW', 'BYCOL', 'MAKEARRAY', 'ISOMITTED', 'VSTACK', 'HSTACK', 'TAKE', 'DROP', 'CHOOSEROWS', 'CHOOSECOLS', 'TOCOL', 'TOROW',
-  'RANDARRAY', 'EXPAND', 'WRAPROWS', 'WRAPCOLS']);
-const XLWS = new Set(['FILTER', 'SORT', 'SORTBY']);
+  'RANDARRAY', 'EXPAND', 'WRAPROWS', 'WRAPCOLS', 'SORTBY']);
+// (SORTBY came later than these, and Excel writes it with only _xlfn.)
+const XLWS = new Set(['FILTER', 'SORT']);
+
+/**
+ * The errors a cell's value can be in the file. Excel keeps the newer ones (#SPILL!, #CALC!,
+ * #FIELD!…) as rich values with #VALUE! in the cell (MS-XLSX 2.3.6.1.3), so they are written as
+ * #VALUE! here; Excel works the formula out again on opening.
+ */
+const FILE_ERRORS = ['#NULL!', '#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#NUM!', '#N/A'];
 
 /** A formula (without its =) with Excel's prefixes on the newer functions, leaving text in quotes alone. */
 export function excelFunctionNames(f: string): string {
@@ -192,6 +203,19 @@ function usesUnknownFunction(text: string, names: ReadonlySet<string>): boolean 
   return false;
 }
 
+/** Does a formula read another workbook ([1]Sheet1!A1 or '[2]My data'!A1, numbered by the workbook's external links)? */
+function readsOtherWorkbook(text: string): boolean {
+  return /(^|[^A-Za-z0-9_.'"])'?\[[1-9]\d*\]/.test(text.replace(/"(?:[^"]|"")*"/g, '""'));
+}
+
+/** The file an external link points at, by its name ("Inventory.xlsx"; '' when the link doesn't say). */
+function linkedFile(t: KeptTree): string {
+  const target = t.rels.find((r) => r.from === t.path && r.external)?.target ?? '';
+  let name = target.split(/[\\/]/).pop() ?? '';
+  try { name = decodeURIComponent(name); } catch { /* left as written */ }
+  return name;
+}
+
 /** Does a formula use a chemistry function (which Excel can't work out)? */
 export function usesChemistry(formula: string): boolean {
   return CHEM_FUNCTION.test(formula.replace(/"(?:[^"]|"")*"/g, '""'));
@@ -200,9 +224,9 @@ export function usesChemistry(formula: string): boolean {
 // ---------------------------------------------------------------- what only this program reads
 
 /** What a cell held when saved, to tell on opening whether Excel changed it. */
-type Wrote = number | string | boolean | null;
+export type Wrote = number | string | boolean | null;
 
-interface ModelCell {
+export interface ModelCell {
   r: number;
   c: number;
   /** The value saved in the cell. */
@@ -223,8 +247,15 @@ interface ModelCell {
   compound?: CompoundCard;
 }
 
-interface ModelSheet {
+export interface ModelSheet {
   name: string;
+  /** The sheet's sheetId in the file (Excel keeps it when a sheet is renamed or moved). */
+  id?: number;
+  /**
+   * The columns and rows this part points at, as the sheet's hidden name lists them: where Excel
+   * moved them is found from the name (see xlsx-relocate.ts).
+   */
+  grid?: Grid;
   cells: ModelCell[];
   defs: { col: number; def: ColumnDef }[];
   /** Columns formatted as chemistry. */
@@ -278,7 +309,7 @@ class Styles {
   private borders = ['<border><left/><right/><top/><bottom/><diagonal/></border>'];
   private formats = new Map<string, number>();
   private xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'];
-  private byKey = new Map<string, number>([['{}', 0]]);
+  private byKey = new Map<string, number>([[xfKey({}), 0]]);
   private dxfs: string[] = [];
 
   /** The number of a highlight look (conditional formatting). */
@@ -304,7 +335,7 @@ class Styles {
   /** The style index for a cell's formatting. */
   xf(st: CellStyle | undefined): number {
     const s = st ?? {};
-    const key = JSON.stringify([s.bold, s.italic, s.underline, s.color, s.fill, s.font, s.size, s.align, s.valign, s.wrap, s.numFmt, s.borders, s.indent, s.rotate, s.cellStyle]);
+    const key = xfKey(s);
     const got = this.byKey.get(key);
     if (got !== undefined) return got;
     const { font, fill, border } = this.parts(s);
@@ -370,6 +401,11 @@ class Styles {
   }
 }
 
+/** What makes two cell looks the same style in the file (an empty look is style 0). */
+function xfKey(s: CellStyle): string {
+  return JSON.stringify([s.bold, s.italic, s.underline, s.color, s.fill, s.font, s.size, s.align, s.valign, s.wrap, s.numFmt, s.borders, s.indent, s.rotate, s.cellStyle]);
+}
+
 function borderName(b: BorderStyle): string {
   return b === 'dashed' ? 'dashed' : b === 'dotted' ? 'dotted' : b;
 }
@@ -397,7 +433,8 @@ class Strings {
     const pieces = chem ? chemPieces(text) : null;
     const chemRich = !!pieces && pieces.some((p) => p.pos !== 'base' || p.italic);
     const fit = runs && runsOf({ input: text, runs }) ? runs : undefined;
-    const key = fit ? '2' + JSON.stringify([text, chem, fit, style?.bold, style?.italic, style?.underline, style?.color, style?.size, style?.font]) : (chemRich ? '1' : '0') + text;
+    const look = [style?.bold, style?.italic, style?.underline, style?.color, style?.size, style?.font];
+    const key = fit ? '2' + JSON.stringify([text, chem, fit, ...look]) : chemRich ? '1' + JSON.stringify([text, ...look]) : '0' + text;
     const got = this.byKey.get(key);
     if (got !== undefined) return got;
     const t = (s: string) => `<t${/^\s|\s$|\n/.test(s) ? ' xml:space="preserve"' : ''}>${xml(excelEscape(s))}</t>`;
@@ -413,8 +450,10 @@ class Strings {
       const merged = runsFrom(text, looks) ?? [{ text }];
       this.list.push(`<si>${merged.map((r) => `<r>${this.runLook(lookOver(style, r))}${t(r.text)}</r>`).join('')}</si>`);
     } else {
+      // a lowered or raised piece with its cell's whole look as well: Excel fills a run's missing
+      // font and size with its own defaults (11 pt), not the cell's
       this.list.push(chemRich
-        ? `<si>${pieces!.map((p) => `<r>${p.pos !== 'base' || p.italic ? `<rPr>${p.italic ? '<i/>' : ''}${p.pos !== 'base' ? `<vertAlign val="${p.pos === 'sub' ? 'subscript' : 'superscript'}"/>` : ''}</rPr>` : ''}${t(p.text)}</r>`).join('')}</si>`
+        ? `<si>${pieces!.map((p) => `<r>${p.pos !== 'base' || p.italic ? this.runLook(lookOver(style, { ...(p.italic ? { italic: true } : {}), ...(p.pos !== 'base' ? { pos: p.pos } : {}) })) : ''}${t(p.text)}</r>`).join('')}</si>`
         : `<si>${t(text)}</si>`);
     }
     this.byKey.set(key, this.list.length - 1);
@@ -478,6 +517,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   const sheetEntries: string[] = [];
   const filterNames: string[] = [];
   const printTitleNames: string[] = [];
+  const gridNames: string[] = [];
   let imageNo = 0, drawingNo = 0, tableNo = 0, chartNo = 0, notesNo = 0, pivotNo = 0;
   const pivotCaches: string[] = [];
   let anyDynamic = false;
@@ -506,7 +546,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     const standIn = own.dashboard ? dashboardStandIn(book, own) : null;
     const s = standIn?.sheet ?? own;
     const path = `xl/worksheets/sheet${si + 1}.xml`;
-    const ms: ModelSheet = { name: s.name, cells: [], defs: [...s.colDefs].map(([col, def]) => ({ col, def })), chemCols: [], filter: s.filter };
+    const ms: ModelSheet = { name: s.name, id: si + 1, cells: [], defs: [...s.colDefs].map(([col, def]) => ({ col, def })), chemCols: [], filter: s.filter };
     if (s.condFormats.length) ms.condFormats = s.condFormats;
     if (s.tables.length) ms.tables = s.tables;
     if (s.charts.length && !own.dashboard) ms.charts = s.charts;
@@ -569,6 +609,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         let formula: string | null = null;
         /** The block a dynamic array formula fills (its own cell when it doesn't spill). */
         let arrayRef: string | null = null;
+        /** The block a legacy array formula fills. */
+        let legacyRef: string | null = null;
         let wrote: Wrote = null;
         // what only this program reads, kept for the cell
         let entry: ModelCell | null = null;
@@ -582,9 +624,12 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
           entry = { r, c, wrote: null, fix, formula: input, ...(sp ? { spill: [sp.r2, sp.c2] as [number, number] } : {}) };
         } else if (input?.startsWith('=') && header === undefined) {
           const sp = s.spills.get(k);
-          const dynamic = !!sp || s.spillWanted.has(k) || needsDynamic(input) || callsName(input, lambdaNames);
+          // a legacy array formula (Ctrl+Shift+Enter) goes back as one, over its block, unless something here is in its way
+          const legacy = cell?.array && (cell.array.rows * cell.array.cols === 1 || sp) ? (sp ? rangeName(sp) : ref) : null;
+          const dynamic = !legacy && (!!sp || s.spillWanted.has(k) || needsDynamic(input) || callsName(input, lambdaNames));
           formula = excelFunctionNames(fileFormula(normalizeFormula(input, nameCase), dynamic));
-          if (dynamic) { arrayRef = sp ? rangeName(sp) : ref; anyDynamic = true; }
+          if (legacy) legacyRef = legacy;
+          else if (dynamic) { arrayRef = sp ? rangeName(sp) : ref; anyDynamic = true; }
         }
         if (!entry && fix) entry = { r, c, wrote: null, fix };
         if (cell?.compound) entry = { ...(entry ?? { r, c, wrote: null }), compound: cell.compound };
@@ -593,22 +638,24 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         const xf = styles.xf(cell?.structure ? { ...style, numFmt: HIDDEN } : style);
         const sAttr0 = xf ? ` s="${xf}"` : '';
         const dt = dataTableAt.get(k);
-        const f = dt ? dataTableXml(dt) : formula === null ? '' : arrayRef ? `<f t="array" ref="${arrayRef}">${xml(formula)}</f>` : `<f>${xml(formula)}</f>`;
+        const blockRef = arrayRef ?? legacyRef;
+        const f = dt ? dataTableXml(dt) : formula === null ? '' : blockRef ? `<f t="array" ref="${blockRef}">${xml(formula)}</f>` : `<f>${xml(formula)}</f>`;
         // a dynamic array formula's cell points at the metadata that says so
         const sAttr = arrayRef ? `${sAttr0} cm="1"` : sAttr0;
         let body = '';
         if (v === null || v === '') {
           body = f ? `<c r="${ref}"${sAttr}>${f}</c>` : sAttr ? `<c r="${ref}"${sAttr}/>` : '';
         } else if (typeof v === 'number') {
-          wrote = v;
-          body = `<c r="${ref}"${sAttr}>${f}<v>${Number.isFinite(v) ? String(v) : 0}</v></c>`;
+          // a workbook counting from 1904 holds its dates 1462 lower than they are held here
+          wrote = book.date1904 && holdsDate(style?.numFmt, v) ? v - DAYS_1900_TO_1904 : v;
+          body = `<c r="${ref}"${sAttr}>${f}<v>${Number.isFinite(wrote) ? String(wrote) : 0}</v></c>`;
         } else if (typeof v === 'boolean') {
           wrote = v;
           body = `<c r="${ref}"${sAttr} t="b">${f}<v>${v ? 1 : 0}</v></c>`;
         } else if (isError(v)) {
           const code = (v as CellError).code;
           wrote = code;
-          body = `<c r="${ref}"${sAttr} t="e">${f}<v>${EXCEL_ERRORS.includes(code) ? code : '#VALUE!'}</v></c>`;
+          body = `<c r="${ref}"${sAttr} t="e">${f}<v>${FILE_ERRORS.includes(code) ? code : '#VALUE!'}</v></c>`;
         } else {
           wrote = excelCellText(v as string);
           body = f
@@ -648,7 +695,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
                 `<xdr:twoCellAnchor editAs="oneCell">` +
                 `<xdr:from><xdr:col>${from.col}</xdr:col><xdr:colOff>${from.colOff * PX}</xdr:colOff><xdr:row>${from.row}</xdr:row><xdr:rowOff>${from.rowOff * PX}</xdr:rowOff></xdr:from>` +
                 `<xdr:to><xdr:col>${end.i}</xdr:col><xdr:colOff>${Math.round(end.off * PX)}</xdr:colOff><xdr:row>${endR.i}</xdr:row><xdr:rowOff>${Math.round(endR.off * PX)}</xdr:rowOff></xdr:to>` +
-                `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${n}" name="Structure ${ref}" descr="${xml(smiles)}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
+                `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${n}" name="Structure ${ref}" descr="${xmlAttr(smiles)}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
                 `<xdr:blipFill><a:blip r:embed="${id}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
                 `<xdr:spPr><a:xfrm><a:off x="${(x + 1) * PX}" y="${(y + 1) * PX}"/><a:ext cx="${(w - 2) * PX}" cy="${(h - 2) * PX}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>` +
                 `<xdr:clientData/></xdr:twoCellAnchor>`,
@@ -785,7 +832,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       const vid = pkg.relate(sheetRels, NOTES_REL.vml, `../drawings/vmlDrawing${notesNo}.vml`);
       drawingXml += `<legacyDrawing r:id="${vid}"/>`;
     }
-    const dvXml = standIn ? '' : validationsXml(s.validations, excelFunctionNames, longList);
+    const dvXml = standIn ? '' : validationsXml(s.validations, excelFunctionNames, longList, book.date1904 ? DAYS_1900_TO_1904 : 0);
     // links (Insert > Link): a place in the workbook as Excel's location, anything else through a relationship
     const linkXml: string[] = [];
     for (const [k, c] of s.cells) {
@@ -815,6 +862,9 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       CT.sheet);
     const rid = pkg.relate('xl/workbook.xml', RELS.worksheet, `worksheets/sheet${si + 1}.xml`);
     sheetEntries.push(`<sheet name="${xml(s.name)}" sheetId="${si + 1}" r:id="${rid}"/>`);
+    // the columns and rows the part points at, in a hidden name Excel moves when rows and columns are put in or taken out
+    const grid = gridOf(ms, s.name);
+    if (grid) { ms.grid = grid; gridNames.push(gridNameXml(grid, s.name, si)); }
     model.sheets.push(ms);
   }
   if (lists.length) {
@@ -853,6 +903,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   pkg.add('customXml/itemProps1.xml', `${HEAD}<ds:datastoreItem ds:itemID="{6D1F3A52-6C1B-4D5E-9A57-3C0B1E0C1A01}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"><ds:schemaRefs><ds:schemaRef ds:uri="${MODEL_NS}"/></ds:schemaRefs></ds:datastoreItem>`, CT.itemProps);
   // other programs' data kept from the file read: custom XML, custom properties, add-ins' settings
   writeKeptParts(pkg, book.kept, { main: 'xl/workbook.xml', firstItem: 2 });
+  // links to other workbooks, in the order their formulas number them ([1]Sheet1!A1)
+  const linkIds = book.externalLinks.map((t) => writeTree(pkg, t, 'xl/workbook.xml')).filter((id): id is string => !!id);
 
   if (anyDynamic) {
     pkg.relate('xl/workbook.xml', RELS.metadata, 'metadata.xml');
@@ -865,11 +917,12 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     const f = n.formula.startsWith('=') ? n.formula : '=' + n.formula;
     return `<definedName name="${xmlAttr(n.name)}"${local}${n.comment ? ` comment="${xmlAttr(n.comment)}"` : ''}${n.hidden ? ' hidden="1"' : ''}>${xml(excelFunctionNames(fileFormula(f, true)))}</definedName>`;
   });
-  const allNames = [...filterNames, ...printTitleNames, ...nameXml];
+  const allNames = [...filterNames, ...printTitleNames, ...nameXml, ...gridNames];
   pkg.add('xl/workbook.xml',
-    `${HEAD}<workbook xmlns="${MAIN}" xmlns:r="${RNS}"><workbookPr${vba?.codeName ? ` codeName="${xmlAttr(vba.codeName)}"` : ''}/>` +
+    `${HEAD}<workbook xmlns="${MAIN}" xmlns:r="${RNS}"><workbookPr${book.date1904 ? ' date1904="1"' : ''}${vba?.codeName ? ` codeName="${xmlAttr(vba.codeName)}"` : ''}/>` +
     `<bookViews><workbookView activeTab="${book.active}"/></bookViews>` +
     `<sheets>${sheetEntries.join('')}</sheets>` +
+    (linkIds.length ? `<externalReferences>${linkIds.map((id) => `<externalReference r:id="${id}"/>`).join('')}</externalReferences>` : '') +
     (allNames.length ? `<definedNames>${allNames.join('')}</definedNames>` : '') +
     // formulas are worked out again when Excel opens the file
     `<calcPr calcId="191029" fullCalcOnLoad="1"/>` + customWorkbookViewsXml(book) +
@@ -1126,7 +1179,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   try {
     pkg = new PackageReader(bytes);
   } catch (e) {
-    throw e instanceof ZipTooBigError ? e : new Error('This is not an Excel workbook (or it is damaged).');
+    throw e instanceof PackageError ? e : new Error('This is not an Excel workbook (or it is damaged).');
   }
   const wbPath = pkg.relOfType('', REL.officeDocument) ?? 'xl/workbook.xml';
   const wbDoc = pkg.xml(wbPath);
@@ -1135,7 +1188,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const rels = pkg.rels(wbPath);
   const warnings: string[] = [];
   const notKept = new Set<string>();
-  if (isOn(kid(root, 'workbookPr')?.getAttribute('date1904'))) warnings.push('This workbook counts dates from 1904 (an old Mac setting): dates may show four years early.');
+  // dates counted from 1904 (the old Mac default) are held here counting from 1900, and saved back as they were
+  const date1904 = isOn(kid(root, 'workbookPr')?.getAttribute('date1904'));
 
   const relTarget = (type: string) => [...rels.values()].find((r) => r.type === type)?.target ?? null;
   const themeDoc = relTarget(RELS.theme) ? pkg.xml(relTarget(RELS.theme)!) : null;
@@ -1167,10 +1221,12 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   }
 
   // (the hidden sheet saved here to hold long drop-down lists is not one of the workbook's own)
-  const sheetEls = kids(kid(root, 'sheets'), 'sheet').filter((el) => !model?.listSheet || el.getAttribute('name') !== model.listSheet);
+  const allSheetEls = kids(kid(root, 'sheets'), 'sheet');
+  const sheetEls = allSheetEls.filter((el) => !model?.listSheet || el.getAttribute('name') !== model.listSheet);
   if (!sheetEls.length) throw new Error('This workbook has no sheets.');
   const names = sheetEls.map((s, i) => s.getAttribute('name') || `Sheet${i + 1}`);
   const book = new Workbook(names);
+  book.date1904 = date1904;
   const activeTab = Number(kid(root, 'bookViews', 'workbookView')?.getAttribute('activeTab') ?? 0);
   if (sheetEls.some((s) => s.getAttribute('state') === 'hidden' || s.getAttribute('state') === 'veryHidden')) notKept.add('hidden sheets (shown here)');
   const definedNames = kids(kid(root, 'definedNames'), 'definedName');
@@ -1180,6 +1236,12 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   if (model?.drawingStyle) book.drawingStyle = { ...book.drawingStyle, ...model.drawingStyle };
   // other programs' data (custom XML, custom properties, add-ins' settings), to save back
   book.kept = readKeptParts(pkg, { main: wbPath, ours: (r) => r.namespaceURI === MODEL_NS });
+  // links to other workbooks (formulas reading [1]Sheet1!A1), kept as they are to save back in the same order
+  for (const ref of kids(kid(root, 'externalReferences'), 'externalReference')) {
+    const r = rels.get(rAttr(ref, 'id') ?? '');
+    const tree = r && !r.external ? readTree(pkg, r.target) : null;
+    if (r && tree) book.externalLinks.push({ from: 'main', type: r.type, path: r.target, ...tree });
+  }
   // another program's text is shown as it wrote it (Q1 stays Q1); ours as it was made here
   book.autoChem = !!model && model.autoChem !== false;
 
@@ -1200,6 +1262,12 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const filters: { s: Sheet; f: Filter }[] = [];
   const sheetDocs: { name: string; ws: Element | null }[] = [];
   let unknownFormulas = 0;
+  /** Formulas reading other workbooks ([1]Sheet1!A1): kept for Excel, not worked out here. */
+  let linkedFormulas = 0;
+  const countFormula = (text: string) => {
+    if (readsOtherWorkbook(text)) linkedFormulas++;
+    else if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
+  };
   let foreignPictures = 0;
   const restored = { structures: 0, changed: 0 };
   book.build(() => {
@@ -1276,6 +1344,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           let chem = false;
           let value: Wrote = null;
           let fileRuns: FileRun[] | undefined;
+          let legacyArray: { rows: number; cols: number } | undefined;
           if (t === 's' && v !== null) {
             const item = shared[Number(v)];
             value = item?.text ?? '';
@@ -1311,12 +1380,14 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
               }
             }
             if (text) {
-              if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
+              countFormula(text);
               const isArray = f.getAttribute('t') === 'array';
               // a formula from before arrays spilled keeps working out one value (Excel shows it with @)
               input = normalizeFormula(isArray ? readFileFormula(text) : legacyFormula(readFileFormula(text)), nameCase);
               const R = isArray ? parseRange(f.getAttribute('ref') ?? '') : null;
               if (R && (R.r2 > R.r1 || R.c2 > R.c1)) arrays.push({ R, r, c: col });
+              // an array formula not marked as dynamic (cm, Excel 365's cell metadata) is a legacy one: it fills its block and no more
+              if (isArray && !c.hasAttribute('cm')) legacyArray = R && R.r1 === r && R.c1 === col ? { rows: R.r2 - R.r1 + 1, cols: R.c2 - R.c1 + 1 } : { rows: 1, cols: 1 };
             }
           } else if (arrays.some((a) => inRange(a.R, r, col) && !(a.r === r && a.c === col))) {
             // spilled there: the formula fills it again
@@ -1324,14 +1395,17 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
             continue;
           }
           if (input === undefined) {
-            if (typeof value === 'number') input = Number.isFinite(value) ? String(value) : undefined;
+            if (typeof value === 'number') {
+              const n = date1904 && t !== 'd' && holdsDate(style?.numFmt, value + DAYS_1900_TO_1904) ? value + DAYS_1900_TO_1904 : value;
+              input = Number.isFinite(n) ? String(n) : undefined;
+            }
             else if (typeof value === 'boolean') input = value ? 'TRUE' : 'FALSE';
             else if (typeof value === 'string') input = t === 'e' ? value : textInput(value);
           }
           const st = chem ? { ...style, chem: true } : style;
           // part of the text bold, italic, coloured… (rich text)
           const runs = !f && typeof value === 'string' && input ? runsOf({ input, runs: cellRuns(fileRuns, style, baseFont) }) : undefined;
-          if (input || st) s.setCell(r, col, { input: input || undefined, style: st, ...(runs ? { runs } : {}) });
+          if (input || st) s.setCell(r, col, { input: input || undefined, style: st, ...(runs ? { runs } : {}), ...(legacyArray && input ? { array: legacyArray } : {}) });
         }
       }
       if (defW !== DEFAULT_COL_W) for (let c = 0; c <= maxCol; c++) if (!widthSet.has(c)) s.setColWidth(c, defW);
@@ -1369,36 +1443,24 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
         filters.push({ s, f: { range: afRange, conditions } });
       }
 
-      // what Excel can't show for itself, where the cells still hold what was saved
-      const ms = model?.sheets.find((x) => x.name === s.name) ?? (model?.sheets.length === book.sheets.length ? model.sheets[si] : undefined);
+      // what Excel can't show for itself, where the cells still hold what was saved (wherever Excel moved them)
+      const sheetId = Number(el.getAttribute('sheetId') ?? NaN);
+      const ms = model?.sheets.find((x) => x.id !== undefined && x.id === sheetId)
+        ?? model?.sheets.find((x) => x.name === s.name) ?? (model?.sheets.length === book.sheets.length ? model.sheets[si] : undefined);
+      // (the drawing is read here for where Excel moved the structures' pictures, and below for its own pictures and charts)
+      const drawingPath = [...pkg.rels(path!).values()].find((r) => r.type === RELS.drawing)?.target;
+      const dr = drawingPath ? pkg.xml(drawingPath) : null;
       if (ms) {
-        for (const [r, px] of ms.autoRows ?? []) if (s.rowHeights.get(r) === px) s.setRowHeight(r, undefined);
-        for (const { col, def } of ms.defs) s.setColDef(col, def);
-        for (const col of ms.chemCols) s.setColStyle(col, { ...s.colStyles.get(col), chem: true });
-        for (const m of ms.cells) {
-          const same = sameWrote(raw.get(keyOf(m.r, m.c)) ?? null, m.wrote);
-          if (!same) { if (m.structure || m.computed || m.formula) restored.changed++; continue; }
-          const cur = s.cell(m.r, m.c);
-          // Excel's formatting, with what it couldn't hold put back
-          const style = m.fix ? tidy({ ...cur?.style, ...m.fix } as Record<string, unknown>) : cur?.style;
-          if (m.structure) {
-            s.setCell(m.r, m.c, { structure: makeStructure(m.structure), style });
-            restored.structures++;
-          } else if (m.computed) s.setCell(m.r, m.c, { style });
-          else if (m.formula) {
-            s.setCell(m.r, m.c, { input: m.formula, style });
-            // the array it spilled was saved as values: the formula fills those cells again
-            if (m.spill) for (let r = m.r; r <= m.spill[0]; r++) for (let c = m.c; c <= m.spill[1]; c++) {
-              const x = s.cell(r, c);
-              if ((r !== m.r || c !== m.c) && x?.input && !x.input.startsWith('=')) s.setCell(r, c, { style: x.style });
-            }
-          }
-          else s.setCell(m.r, m.c, { input: cur?.input, style, ...(cur?.runs ? { runs: cur.runs } : {}) });
-          if (m.compound && isCard(m.compound)) { const x = s.cell(m.r, m.c); s.setCell(m.r, m.c, { ...x, compound: m.compound }); }
-        }
-        if (ms.filter && afRange && sameRange(ms.filter.range, afRange)) {
+        const fileIndex = allSheetEls.indexOf(el);
+        const gridName = definedNames.find((d) => d.getAttribute('name') === GRID_NAME && Number(d.getAttribute('localSheetId')) === fileIndex);
+        const mover = ms.grid ? readGridName(gridName?.textContent, ms.grid) : STILL;
+        const got = restoreSheet(s, ms, raw, mover, dr ? structurePictures(dr) : new Map(), sameWrote, HIDDEN);
+        restored.structures += got.structures;
+        restored.changed += got.changed;
+        const mine = ms.filter ? moveFilter(ms.filter, mover) : null;
+        if (mine && afRange && sameRange(mine.range, afRange)) {
           const i = filters.findIndex((x) => x.s === s);
-          if (i >= 0) filters[i].f = ms.filter;
+          if (i >= 0) filters[i].f = mine;
         }
       }
 
@@ -1451,8 +1513,6 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       if (pivots.length) s.setPivots(pivots);
 
       // pictures and charts that aren't structures saved here
-      const drawingPath = [...pkg.rels(path!).values()].find((r) => r.type === RELS.drawing)?.target;
-      const dr = drawingPath ? pkg.xml(drawingPath) : null;
       if (dr) {
         const colPx = (c: number) => (s.hiddenCols.has(c) ? 0 : s.colWidths.get(c) ?? DEFAULT_COL_W);
         const rowPx = (r: number) => (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? DEFAULT_ROW_H);
@@ -1514,7 +1574,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
         const notes = readNotes(commentsPath ? pkg.xml(commentsPath) : null, shownNotes(vmlPath ? pkg.text(vmlPath) : null), threadedPath ? pkg.xml(threadedPath) : null, personsDoc);
         for (const [k, n] of notes) s.setNote(rowOf(k), colOf(k), n);
       }
-      const dv = readValidations(ws).map((v) => {
+      const dv = readValidations(ws, date1904 ? DAYS_1900_TO_1904 : 0).map((v) => {
         const typed = v.kind === 'list' ? model?.lists?.find((l) => '=' + l.ref === v.value1) : undefined;
         return typed ? { ...v, value1: typed.text } : v;
       });
@@ -1539,11 +1599,11 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
     for (const d of kids(kid(root, 'definedNames'), 'definedName')) {
       const name = d.getAttribute('name') ?? '';
       const text = d.textContent ?? '';
-      if (!name || isBuiltInName(name) || !text) continue;
+      if (!name || isBuiltInName(name) || name === GRID_NAME || !text) continue;
       const local = d.getAttribute('localSheetId');
       const sheet = local !== null ? book.sheets[Number(local)] : undefined;
       if (local !== null && !sheet) continue;
-      if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
+      countFormula(text);
       names.push({
         name, formula: normalizeFormula(readFileFormula(text), nameCase),
         ...(sheet ? { sheet } : {}),
@@ -1570,9 +1630,28 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
 
   if (foreignPictures) notKept.add(`${foreignPictures} picture${foreignPictures > 1 ? 's' : ''} or chart${foreignPictures > 1 ? 's' : ''}`);
   if (unknownFormulas) warnings.push(`${unknownFormulas} formula${unknownFormulas > 1 ? 's use' : ' uses'} Excel functions this program can't work out yet.`);
+  if (linkedFormulas) {
+    const files = [...new Set(book.externalLinks.map(linkedFile).filter(Boolean))];
+    warnings.push(`${linkedFormulas} formula${linkedFormulas > 1 ? 's read' : ' reads'} values from other workbooks${files.length ? ` (${files.join(', ')})` : ''}. ` +
+      `${linkedFormulas > 1 ? 'They are' : 'It is'} kept for Excel, which updates ${linkedFormulas > 1 ? 'them' : 'it'} from those files, but can't be worked out here.`);
+  }
   if (restored.changed) warnings.push(`${restored.changed} structure or calculated cell${restored.changed > 1 ? 's were' : ' was'} changed in another program: ${restored.changed > 1 ? 'they show' : 'it shows'} what that program saved.`);
   if (notKept.size) warnings.push(`Not shown here, and left out if you save over this file: ${[...notKept].join(', ')}.`);
   return { book, warnings };
+}
+
+/** The cell each structure's picture (named "Structure A2" by the cell it was saved over) is over now. */
+function structurePictures(dr: Document): Map<string, { r: number; c: number }> {
+  const out = new Map<string, { r: number; c: number }>();
+  for (const anchor of Array.from(dr.documentElement.children)) {
+    const name = anchor.getElementsByTagNameNS(XDR, 'cNvPr')[0]?.getAttribute('name') ?? '';
+    const m = /^Structure ([A-Z]{1,3}\d{1,7})$/.exec(name);
+    const from = kid(anchor, 'from');
+    if (!m || !from || !anchor.getElementsByTagNameNS(XDR, 'pic').length) continue;
+    const a = anchorPos(from);
+    out.set(m[1], { r: a.row, c: a.col });
+  }
+  return out;
 }
 
 /** A drawing anchor's corner: its cell (held within Excel's last row and column, as a damaged file
@@ -1612,13 +1691,6 @@ function anchorPlace(anchor: Element, colPx: (c: number) => number, rowPx: (r: n
   const editAs = anchor.getAttribute('editAs');
   const placement = anchor.localName === 'oneCellAnchor' ? 'oneCell' : editAs === 'oneCell' || editAs === 'absolute' ? editAs : 'twoCell';
   return { from: a, w, h, placement };
-}
-
-/** A style without its unset parts (undefined when nothing is set). */
-function tidy(st: Record<string, unknown>): CellStyle | undefined {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(st)) if (v !== undefined && v !== null && v !== false) out[k] = v;
-  return Object.keys(out).length ? (out as CellStyle) : undefined;
 }
 
 const sameRange = (a: Range, b: Range) => a.r1 === b.r1 && a.c1 === b.c1 && a.c2 === b.c2;

@@ -183,3 +183,48 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
     first?.select();
   });
 }
+
+/**
+ * A message with a button for each choice (the primary one last, as the system's own windows
+ * have it), and more about it behind an "i" beside the title; resolves with the choice picked.
+ * Escape, or closing the window, picks `dismiss`.
+ */
+export function askChoice<T extends string>(title: string, message: string, choices: { value: T; label: string; primary?: boolean }[], dismiss: T, info?: string): Promise<T> {
+  return new Promise((resolve) => {
+    const d = document.createElement('dialog');
+    d.className = 'ask';
+    const form = document.createElement('form');
+    form.className = 'ask-form';
+    const h = document.createElement('h2');
+    h.textContent = title;
+    if (info) addInfo(h, info);
+    const p = document.createElement('p');
+    p.className = 'muted ask-message';
+    p.textContent = message;
+    const buttons = document.createElement('p');
+    buttons.className = 'ask-buttons';
+    let finished = false;
+    const done = (v: T) => {
+      if (finished) return;
+      finished = true;
+      if (d.open) d.close();
+      d.remove();
+      resolve(v);
+    };
+    let primary: HTMLButtonElement | null = null;
+    for (const c of choices) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = c.label;
+      if (c.primary) { b.className = 'primary'; primary = b; }
+      b.addEventListener('click', () => done(c.value));
+      buttons.append(b);
+    }
+    form.append(h, p, buttons);
+    form.addEventListener('submit', (e) => e.preventDefault());
+    d.append(form);
+    d.addEventListener('close', () => done(dismiss));
+    showDialog(d);
+    primary?.focus();
+  });
+}

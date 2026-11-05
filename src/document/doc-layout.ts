@@ -132,7 +132,7 @@ export function bibFrame(entries: BibEntry[], st: NamedStyle, ps: ParaStyle, mea
     if (i) runs.push({ ...base, text: '\n' });
     runs.push({ ...base, text: e.label }, { ...base, obj: -(i + 1), text: OBJECT_CHAR });
     widths.push(Math.max(0.25 * size, hang - measure(e.label, size, family, '')));
-    for (const p of e.pieces) runs.push({ ...rt.cleanStyle({ ...base, italic: p.italic, bold: p.bold }), text: p.text });
+    for (const p of e.pieces) runs.push({ ...rt.cleanStyle({ ...base, italic: p.italic, bold: p.bold, underline: p.underline, sup: p.sup, sub: p.sub, link: p.link }), text: p.text });
   });
   const paras = entries.map((): ParaStyle => ({ indent: hang, firstLine: -hang, line: ps.line }));
   return { runs, paras, spacer: (id) => widths[-id - 1] ?? 0 };

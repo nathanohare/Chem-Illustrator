@@ -161,7 +161,7 @@ const inner = (cmd: string) => COMMAND_ICONS[cmd]?.replace(/^<svg[^>]*>|<\/svg>$
 const PENCIL = '<path d="M13.5 22l.7-3.2 6-6 2.5 2.5-6 6zM18.7 14.3l2.5 2.5" stroke-width="1.4"/>';
 const SLIDERS = '<path d="M13 16h9.5M13 20.5h9.5" stroke-width="1.3"/><circle cx="16" cy="16" r="1.5" fill="currentColor"/><circle cx="19.5" cy="20.5" r="1.5" fill="currentColor"/>';
 const corner = (of: string, mark: string) => svg(`<g transform="scale(.72)">${inner(of)}</g>${mark}`);
-for (const [cmd, of] of [['edit-energy', 'energy-diagram'], ['edit-torsion', 'torsion-chart'], ['edit-newman', 'newman-projection'], ['edit-diagram', 'insert-diagram'], ['edit-chart', 'insert-chart'], ['edit-plate', 'tlc-plate']] as const) COMMAND_ICONS[cmd] ??= corner(of, PENCIL);
+for (const [cmd, of] of [['edit-energy', 'energy-diagram'], ['edit-torsion', 'torsion-chart'], ['edit-newman', 'newman-projection'], ['edit-diagram', 'insert-diagram'], ['edit-chart', 'insert-chart'], ['edit-plate', 'tlc-plate'], ['edit-orbital', 'orbital']] as const) COMMAND_ICONS[cmd] ??= corner(of, PENCIL);
 COMMAND_ICONS['depth-shading-settings'] ??= corner('depth-shading', SLIDERS);
 
 /** Pictures used on the Canvas ribbon only (the toolboxes show these commands by name, beside others like them). */

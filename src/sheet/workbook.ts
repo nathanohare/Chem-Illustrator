@@ -7,7 +7,7 @@
 // one undo history across its sheets. After each change every formula is worked out again in
 // the order they depend on each other; a formula that depends on itself shows #CIRC!.
 
-import type { KeptParts } from '../io/kept-parts';
+import type { KeptParts, KeptTree } from '../io/kept-parts';
 import type { Contents } from '../model';
 import type { DocStyle } from '../style';
 import { ACS_1996 } from '../style';
@@ -100,6 +100,13 @@ export interface Cell {
   compound?: CompoundCard;
   /** Formatting on part of typed text (a bold word), over the text without its leading apostrophe; see rich-text.ts. */
   runs?: TextRun[];
+  /**
+   * A legacy array formula (entered with Ctrl+Shift+Enter in Excel before arrays spilled): the
+   * block it fills from its own cell, `rows` × `cols`, whatever size its answer is. A smaller
+   * answer is repeated (one row or column) or padded with #N/A, as Excel does. Typing a new
+   * formula in the cell makes it an ordinary one.
+   */
+  array?: { rows: number; cols: number };
 }
 
 /** A property column: every row from `firstRow` down to the end of the table works out this formula. */
@@ -169,6 +176,26 @@ export interface CellBlock {
   notes?: (CellNote | undefined)[][];
 }
 
+/**
+ * An answer fitted to the block a legacy array formula fills, as Excel does: a single value fills
+ * every cell, one row is repeated down and one column across, and cells past the answer's edge
+ * show #N/A.
+ */
+function fillBlock(a: Arg, rows: number, cols: number): Arg {
+  const src = rowsOf(a);
+  const h = src.length, w = src[0]?.length ?? 0;
+  const block: Value[][] = [];
+  for (let i = 0; i < rows; i++) {
+    const row: Value[] = [];
+    for (let j = 0; j < cols; j++) {
+      const si = h === 1 ? 0 : i, sj = w === 1 ? 0 : j;
+      row.push(si < h && sj < w ? src[si][sj] : ERR.na('The array formula\'s answer is smaller than its block'));
+    }
+    block.push(row);
+  }
+  return { block, h: rows, w: cols, array: true };
+}
+
 /** A worked-out value as text that types back in as the same value. */
 export function valueInput(v: Value | CellError): string {
   if (v instanceof CellError) return v.code;
@@ -197,7 +224,8 @@ const sameStyle = (a: CellStyle | undefined, b: CellStyle | undefined): boolean 
 function sameCell(a: Cell | undefined, b: Cell | undefined): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  return (a.input || undefined) === (b.input || undefined) && a.structure === b.structure && a.link === b.link && a.compound === b.compound && sameStyle(a.style, b.style) && sameRuns(a.runs, b.runs);
+  return (a.input || undefined) === (b.input || undefined) && a.structure === b.structure && a.link === b.link && a.compound === b.compound && sameStyle(a.style, b.style) && sameRuns(a.runs, b.runs)
+    && a.array?.rows === b.array?.rows && a.array?.cols === b.array?.cols;
 }
 
 /** Two styles merged, the second's settings winning. */
@@ -1228,6 +1256,12 @@ export class Workbook {
   drawingStyle: DocStyle = { ...ACS_1996 };
   /** Other programs' data in the file read (custom XML, custom properties, add-ins' settings), saved back with it. */
   kept: KeptParts | undefined = undefined;
+  /**
+   * Links to other workbooks (Excel's externalLink parts, with the file each points at and the
+   * values last read from it), in the order formulas number them: [1]Sheet1!A1 reads from the
+   * first. Kept as they were and saved back in the same order, so Excel can still update them.
+   */
+  externalLinks: KeptTree[] = [];
   chem: ChemHost | null = null;
   /**
    * Text typed into cells with a formula in it (CH2Cl2, Pd(PPh3)4) is shown as chemistry without
@@ -1235,6 +1269,12 @@ export class Workbook {
    * it was written; turned on or off from the cell menu (Formula Style).
    */
   autoChem = true;
+  /**
+   * The workbook came from a file that counts its days from 1904 (Excel's date1904, the old Mac
+   * default). Its dates are held here counting from 1900, as everywhere else in this program,
+   * and saved back counting from 1904, so Excel shows them as before.
+   */
+  date1904 = false;
   /** Names defined for cells, values and formulas (Formulas > Name Manager). */
   names: DefinedName[] = [];
   /**
@@ -2083,7 +2123,9 @@ export class Workbook {
       else if (n.def) v = evaluate(tree, host);
       else {
         const a = evaluateArg(tree, host);
-        v = isMulti(a) ? this.spill(s, n.key, a) : tidyValue(isBlock(a) ? rowsOf(a)[0][0] : a);
+        const block = s.cells.get(n.key)?.array;
+        if (block && block.rows * block.cols > 1) v = this.spill(s, n.key, fillBlock(a, block.rows, block.cols));
+        else v = isMulti(a) && !block ? this.spill(s, n.key, a) : tidyValue(isBlock(a) ? rowsOf(a)[0][0] : a);
       }
     } catch (e) {
       // one formula that fails outright shows an error in its cell rather than stopping every other

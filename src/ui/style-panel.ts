@@ -18,6 +18,7 @@ import { setStereoShown, setStereoText } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
 import { Selection } from '../editor/editor';
 import { freeformPoints } from '../design/geo';
+import { ORBITAL_KIND_NAMES, ORBITAL_LOOK_NAMES, orbitalsAmong, readOrbital, type OrbitalKind, type OrbitalLook, type OrbitalSpec } from '../chem/orbitals';
 import { isSmoothPath, reshapeFreeform } from '../design/freeform';
 import { DEG, normDegrees, mul, type Vec } from '../geom';
 import { isCircle, cropTo, isCurved, headBend, swapHalf, arrowEllipseFrame, ellipseArrow } from '../objects';
@@ -142,6 +143,8 @@ export class StylePanel {
   plate: { edit(shapeId: number): void; restyle(shapeId: number, patch: Partial<PlateData>): void } | null = null;
   /** SmartArt-style diagrams: the window with their text, a change of layout or look, and Convert to Shapes. */
   diagram: { edit(shapeId: number): void; restyle(shapeId: number, patch: Partial<DiagramData>): void; ungroup(shapeId: number): void } | null = null;
+  /** Orbitals drawn here (set up by the app): the Edit Orbital window, or the selected ones drawn again with some settings changed. */
+  orbital: { edit(): void; restyle(shapeIds: number[], patch: Partial<OrbitalSpec>): void } | null = null;
   /** Tie captions to the structure nearest each (Tie to Structure). */
   tie: ((captionIds: number[]) => void) | null = null;
 
@@ -217,6 +220,7 @@ export class StylePanel {
       // how its list works is behind the "i" by the list's title
       this.heading('Smart Scheme');
     }
+    else if (shapes.length && this.orbital && shapes.every((x) => x.orb)) this.orbitalControls(shapes);
     else if (shapes.length) this.shapeControls(shapes);
     if (rings.length) this.shapeControls(rings, rings.length > 1 ? `${rings.length} ring fills` : 'Ring fill');
     if (pictures.length) this.pictureControls(pictures);
@@ -390,14 +394,32 @@ export class StylePanel {
 
   // ------------------------------------------------------------------ shapes
 
-  private shapeControls(shapes: Shape[], title?: string): void {
+  /** Orbitals drawn here: their type, phases, angle and size, drawn again as they change; then their outline and fill. */
+  private orbitalControls(shapes: Shape[]): void {
+    const list = orbitalsAmong(this.doc, shapes.map((x) => x.id));
+    const first = list.length ? readOrbital(list[0]) : null;
+    if (!first) { this.shapeControls(shapes); return; }
+    const spec = first.spec;
+    const L = this.doc.style.bondLength;
+    this.heading(list.length > 1 ? `${list.length} orbitals` : 'Orbital');
+    const set = (patch: Partial<OrbitalSpec>) => { this.key = ''; this.orbital?.restyle(shapes.map((x) => x.id), patch); };
+    this.select('Orbital', ORBITAL_KIND_NAMES.map((k): Opt<OrbitalKind> => [k.value, k.label]), spec.kind, (v) => set({ kind: v }));
+    this.select('Phases', ORBITAL_LOOK_NAMES.map((k): Opt<OrbitalLook> => [k.value, k.label]), spec.look, (v) => set({ look: v }));
+    if (spec.kind !== 's') this.number('Angle (°)', round(spec.angle, 10), 1, -360, 360, (v) => set({ angle: ((v % 360) + 360) % 360 }), 'Which way it points: degrees clockwise from straight up');
+    this.number('Lobe length', round(spec.size / L, 100), 0.1, 0.2, 5, (v) => set({ size: v * L }), 'In bond lengths');
+    if (spec.look !== 'outline') this.check('Swap phases', !!spec.flip, (v) => set({ flip: v }));
+    this.subheading('Outline and fill');
+    this.shapeControls(shapes, null);
+  }
+
+  private shapeControls(shapes: Shape[], title?: string | null): void {
     const s = shapes[0];
     const lw = this.doc.style.lineWidth;
     const set = (label: string, ok: (x: Shape) => boolean, patch: (x: Shape) => Partial<Shape>) =>
       this.edit(label, () => { for (const x of shapes) if (ok(x)) this.doc.updateShape(x.id, patch(x)); });
     const any = (f: (x: Shape) => boolean) => shapes.find(f);
     const names: Record<Shape['kind'], string> = { line: 'Line', rect: 'Rectangle', oval: 'Oval', symbol: 'Symbol', bracket: 'Bracket', picture: 'Picture', table: 'Table', geo: 'Shape', ring: 'Ring fill' };
-    this.heading(title ?? (shapes.length > 1 ? `${shapes.length} shapes` : isCircle(s) ? 'Circle' : s.kind === 'geo' ? geoDef(s.geo).name : names[s.kind]));
+    if (title !== null) this.heading(title ?? (shapes.length > 1 ? `${shapes.length} shapes` : isCircle(s) ? 'Circle' : s.kind === 'geo' ? geoDef(s.geo).name : names[s.kind]));
     this.rotation(shapes);
     const geo = any((x) => x.kind === 'geo');
     const isGeo = (x: Shape) => x.kind === 'geo';

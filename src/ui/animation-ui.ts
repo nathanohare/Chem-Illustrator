@@ -176,7 +176,8 @@ export class AnimationUI {
     };
     for (const exit of [false, true, null]) {
       for (const e of EFFECTS) {
-        // entrance and exit effects, then emphasis (null) in a row of its own
+        // a row each: entrance, exit, then emphasis (null), so the gallery is three rows tall like the
+        // ribbon's other groups
         if ((exit === null) !== !!e.emph) continue;
         const b = document.createElement('button');
         b.type = 'button';
@@ -186,11 +187,11 @@ export class AnimationUI {
         b.title = exit === null ? `${name} (emphasis): ${EMPH_TIPS[e.id]}` : `${name}: ${exit ? 'the selected objects go' : 'the selected objects come in'}${e.id === 'appear' ? ' at once' : e.id === 'fade' ? ' by fading' : e.id === 'wipe' ? ', uncovered from one side' : exit ? ' off the slide' : ' from off the slide'}`;
         b.dataset.effect = e.id;
         b.dataset.exit = String(!!exit);
+        b.style.gridRow = exit === null ? '3' : exit ? '2' : '1';
         b.addEventListener('click', () => this.applyEffect(e.id, !!exit));
         this.effectBtns.push(b);
         gallery.append(b);
       }
-      if (exit !== null) gallery.append(document.createElement('span'));
     }
     effects.append(gallery);
     const from = this.$<HTMLSelectElement>('#an-from');
