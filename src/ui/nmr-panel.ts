@@ -265,8 +265,10 @@ interface Shown {
   pj?: Promise<ProtonJ[]>;
   /** The conformers (Accurate), once asked for; null when no model could be built. */
   model?: Promise<Model3d | null>;
-  /** Diastereotopic CH2 gaps (ppm) by graph atom (Accurate), once asked for. */
+  /** Diastereotopic CH2 gaps (ppm) by graph atom, once asked for: the networks' when they give them, else from conformers (Accurate). */
   gap?: Promise<Record<number, number>>;
+  /** CH2 gaps (ppm) by graph atom from the shift networks, on every quality; empty when the networks give none. */
+  netGap: Record<number, number>;
   /** The rows with each such CH2 as two rows, and the list row of each atom for them; set when the gaps are in. */
   baseRows: NmrRow[]; baseRowOf: number[]; splitRows?: NmrRow[]; splitRowOf?: number[];
 }
@@ -493,7 +495,9 @@ export class NmrPanel {
         if (graph.atoms[gr.atoms[0]].el === 'C') { r.mult = gr.mult; r.j = gr.j; } else { r.mult = 'br s'; r.j = []; }
       }
       for (const r of rows) if (r.exch) for (const a of r.atoms) h1[a] = NaN;
-      this.shown.set(i, { rows, ids, ring, graph, h1, codes, rowOf, specs: new Map(), pending: new Set(), molblock: item.molblock, heavy, baseRows: rows, baseRowOf: rowOf });
+      const netGap: Record<number, number> = {};
+      for (const sh of shifts) if (sh.h1gap !== undefined && sh.h1gap >= MIN_GAP && graph.atoms[sh.atom].h === 2 && !Number.isNaN(h1[sh.atom])) netGap[sh.atom] = sh.h1gap;
+      this.shown.set(i, { rows, ids, ring, graph, h1, codes, rowOf, specs: new Map(), pending: new Set(), molblock: item.molblock, heavy, baseRows: rows, baseRowOf: rowOf, netGap });
       this.render(i, d);
       if (this.win?.visible && this.winItem === i) this.win.refresh();
       if (this.marks) this.host.redraw();
@@ -664,14 +668,14 @@ export class NmrPanel {
     if (!spec) {
       const job = quality === 'fast' || s.pending.has(key) ? null : quality === 'accurate' && this.host.conformers
         ? Promise.all([this.couplings3d(s), this.gaps(s)]).then(([pj, gap]) => spectrumInBackground(s.graph, s.h1, s.codes, sf, quality, pj, gap) ?? predictSpectrum(s.graph, s.h1, s.codes, sf, quality, undefined, pj, gap))
-        : spectrumInBackground(s.graph, s.h1, s.codes, sf, quality);
+        : spectrumInBackground(s.graph, s.h1, s.codes, sf, quality, undefined, s.netGap);
       if (job) {
         // first-order lines straight away; the exact spectrum replaces them when it is ready
         s.pending.add(key);
-        job.then((sp) => { s.specs.set(key, sp); this.specReady(i, s); }, () => { s.specs.set(key, predictSpectrum(s.graph, s.h1, s.codes, sf, 'fast')); this.specReady(i, s); });
+        job.then((sp) => { s.specs.set(key, sp); this.specReady(i, s); }, () => { s.specs.set(key, predictSpectrum(s.graph, s.h1, s.codes, sf, 'fast', undefined, undefined, s.netGap)); this.specReady(i, s); });
       }
-      if (s.pending.has(key)) spec = s.specs.get(`${sf}|fast`) ?? predictSpectrum(s.graph, s.h1, s.codes, sf, 'fast');
-      else { spec = predictSpectrum(s.graph, s.h1, s.codes, sf, quality); s.specs.set(key, spec); }
+      if (s.pending.has(key)) spec = s.specs.get(`${sf}|fast`) ?? predictSpectrum(s.graph, s.h1, s.codes, sf, 'fast', undefined, undefined, s.netGap);
+      else { spec = predictSpectrum(s.graph, s.h1, s.codes, sf, quality, undefined, undefined, s.netGap); s.specs.set(key, spec); }
       if (quality === 'fast') s.specs.set(key, spec);
     }
     return { nuc, spec, groupRows: spec.groups.map((g) => s.rowOf[g.atoms[0]]), measured: this.overlayFor(i, nuc, sf) };
@@ -698,6 +702,7 @@ export class NmrPanel {
 
   /** Predicted gaps between the two protons of each diastereotopic CH2, by graph atom (once). */
   private gaps(s: Shown): Promise<Record<number, number>> {
+    if (Object.keys(s.netGap).length) s.gap ??= Promise.resolve(s.netGap);
     s.gap ??= Promise.all([this.model3d(s), this.loadSplit()]).then(([m, trees]) => {
       const out: Record<number, number> = {};
       if (!m || !trees) return out;
@@ -708,17 +713,17 @@ export class NmrPanel {
     return s.gap;
   }
 
-  /** The rows for the quality setting: on Accurate, each diastereotopic CH2 as two rows once its gap is predicted. */
+  /** The rows for the quality setting: each diastereotopic CH2 as two rows once its gap is predicted (on every quality when the networks give gaps, else on Accurate). */
   private useRows(i: number, s: Shown): void {
-    const accurate = this.quality === 'accurate' && !!this.host.conformers && !!this.host.splitUrl;
-    if (accurate && !s.gap) {
+    const gapped = Object.keys(s.netGap).length > 0 || (this.quality === 'accurate' && !!this.host.conformers && !!this.host.splitUrl);
+    if (gapped && !s.gap) {
       void this.gaps(s).then((gap) => {
         if (this.shown.get(i) !== s || !Object.keys(gap).length) return;
         s.splitRows = splitRows(s.baseRows, gap, s.graph);
         s.splitRowOf = s.graph.atoms.map(() => -1);
         s.splitRows.forEach((r, k) => { for (const a of r.atoms) if (s.splitRowOf![a] < 0) s.splitRowOf![a] = k; });
         const d = document.querySelector<HTMLElement>(`details.nmr[data-item="${i}"]`);
-        if (d && this.quality === 'accurate') {
+        if (d && (this.quality === 'accurate' || Object.keys(s.netGap).length)) {
           this.render(i, d);
           // Check Data matched the old rows: match again
           if (this.checkState(i, false)?.results.size && d instanceof HTMLDetailsElement) void this.runCheck(i, d);
@@ -727,7 +732,7 @@ export class NmrPanel {
         if (this.marks) this.host.redraw();
       });
     }
-    const split = accurate && s.splitRows;
+    const split = gapped && s.splitRows;
     s.rows = split ? s.splitRows! : s.baseRows;
     s.rowOf = split ? s.splitRowOf! : s.baseRowOf;
   }
