@@ -3,7 +3,8 @@
 // are built here, so they stay exactly alike: bold, italic, underline; sub- and superscript, a
 // formula in one click, stereodescriptors in italics in one click; font, size and color; lining
 // up; bullets, numbering and indents; line and paragraph spacing and the text box width; links;
-// and the Greek letters and symbols chemists type.
+// and the Greek letters and symbols chemists type. The Canvas ribbon's Font group is built here too,
+// from the same buttons and boxes (`basics`), so it works and looks as they do.
 
 import type { Justify } from '../model';
 import * as rt from '../richtext';
@@ -83,8 +84,16 @@ const lineIcon = (j: string) => {
 };
 const listIcon = (marks: string[]) => svg(marks.map((m, i) => `${m.replace(/Y/g, String(3 + i * 5))}<rect x="6" y="${2 + i * 5}" width="9" height="1.6"/>`).join(''));
 
+export interface TextBarOptions {
+  /**
+   * The basics only, in two rows as a ribbon's Font group has them: the font and size, then bold,
+   * italic, underline, sub- and superscript, formula and color. No lining up, lists, links or symbols.
+   */
+  basics?: boolean;
+}
+
 /** Fill `bar` with the text formatting bar. Its groups, then the two panels, go straight into it. */
-export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
+export function buildTextBar(bar: HTMLElement, ops: TextBarOps, opts: TextBarOptions = {}): TextBar {
   const d = bar.ownerDocument;
   const buttons = new Map<string, HTMLButtonElement>();
   const inputs = {} as Record<'font' | 'size' | 'color' | 'line' | 'before' | 'after' | 'wrap', HTMLInputElement>;
@@ -97,7 +106,11 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
 
   const run = (f: TextFormat) => { if (!ops.format(f)) ops.nothing?.(); };
   const after = () => { refresh(); ops.back(); };
-  const group = () => { const g = d.createElement('span'); g.className = 'cb-group'; bar.appendChild(g); return g; };
+  // (basics: the font and size in the top row, the rest in the bottom one)
+  const rows = opts.basics ? [d.createElement('div'), d.createElement('div')] : null;
+  if (rows) for (const r of rows) { r.className = 'cb-row'; bar.appendChild(r); }
+  let into: HTMLElement = rows ? rows[1] : bar;
+  const group = () => { const g = d.createElement('span'); g.className = 'cb-group'; into.appendChild(g); return g; };
   const button = (g: HTMLElement, id: string, html: string, title: string, on: () => void) => {
     const b = d.createElement('button');
     b.type = 'button';
@@ -154,8 +167,9 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
   button(g, 'sub', 'x<sub>2</sub>', 'Subscript (Ctrl+=)', () => run({ kind: 'toggle', key: 'sub' }));
   button(g, 'sup', 'x<sup>2</sup>', 'Superscript (Ctrl+Shift+=)', () => run({ kind: 'toggle', key: 'sup' }));
   button(g, 'formula', 'CH<sub>3</sub>', 'Formula: numbers after letters go down, charges go up (CH2Cl2 → CH₂Cl₂)', () => run({ kind: 'toggle', key: 'formula' }));
-  button(g, 'stereo', '(<i>R</i>)', 'Stereodescriptors in italics: (2R,3S)-, (E)-, cis-, tert-, n-Bu, p- (again: back to upright)', () => run({ kind: 'stereo' }));
+  if (!opts.basics) button(g, 'stereo', '(<i>R</i>)', 'Stereodescriptors in italics: (2R,3S)-, (E)-, cis-, tert-, n-Bu, p- (again: back to upright)', () => run({ kind: 'stereo' }));
 
+  if (rows) into = rows[0];
   g = group();
   const font = d.createElement('input');
   font.type = 'text';
@@ -180,8 +194,10 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
   color.title = 'Text color';
   color.setAttribute('aria-label', 'Text color');
   color.addEventListener('change', () => { run({ kind: 'style', patch: { color: color.value.toLowerCase() === '#000000' ? undefined : color.value } }); after(); });
-  g.appendChild(color);
+  // (basics: at the end of the bottom row, after the style buttons)
+  (rows ? rows[1].lastElementChild! : g).appendChild(color);
   inputs.color = color;
+  if (rows) return finish();
 
   g = group();
   button(g, 'left', lineIcon('left'), 'Align Left', () => run({ kind: 'align', j: 'left' }));
@@ -236,13 +252,14 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
   number(row('Space after (pt)'), 'after', 'Space after the selected paragraphs, in points', { min: 0, max: 200, step: 1, cls: 'cb-num' }, (v) => run({ kind: 'para', patch: { spaceAfter: v ?? 0 } }));
   number(row('Box width (pt)'), 'wrap', 'Width the lines wrap to, in points (blank: lines break only where you press Enter)', { min: 4, max: 5000, step: 1, cls: 'cb-num', blank: 'none' }, (v) => run({ kind: 'wrap', w: v ?? undefined }));
   bar.append(symbols, spacing);
+  return finish();
 
-  const press = (id: string, on: boolean) => {
+  function press(id: string, on: boolean): void {
     const b = buttons.get(id);
     if (!b) return;
     b.classList.toggle('on', on);
     b.setAttribute('aria-pressed', String(on));
-  };
+  }
 
   function refresh(): void {
     const s = ops.state();
@@ -255,7 +272,8 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
     press('symbols', !symbols.hidden);
     press('spacing', !spacing.hidden);
     const active = d.activeElement;
-    const show = (k: keyof typeof inputs, v: string) => { if (active !== inputs[k]) inputs[k].value = v; };
+    // (the basics have no spacing boxes)
+    const show = (k: keyof typeof inputs, v: string) => { if (inputs[k] && active !== inputs[k]) inputs[k].value = v; };
     const r2 = (v: number) => String(Math.round(v * 100) / 100);
     show('font', st.font ?? '');
     inputs.font.placeholder = st.font === undefined ? s?.defaultFont ?? 'Font' : '';
@@ -267,6 +285,8 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
     show('after', s ? r2(s.after) : '');
     show('wrap', s?.wrap !== undefined ? r2(s.wrap) : '');
   }
-  refresh();
-  return { refresh, closePanels: () => { symbols.hidden = true; spacing.hidden = true; refresh(); } };
+  function finish(): TextBar {
+    refresh();
+    return { refresh, closePanels: () => { symbols.hidden = true; spacing.hidden = true; refresh(); } };
+  }
 }

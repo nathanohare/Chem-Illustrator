@@ -261,8 +261,13 @@ label.check { display: inline-flex; align-items: center; gap: 4px; color: var(--
 .toolbox.locked > .tb-head { cursor: default; }
 .toolbox.locked:not(.floating) + .toolbox { padding-top: 6px; }
 /* docked down a side, the title bar takes the toolbox's width rather than widening it: the name on its own line */
-.toolbox.vertical:not(.floating) > .tb-head { contain: inline-size; flex-wrap: wrap; row-gap: 0; }
-.toolbox.vertical:not(.floating) > .tb-head > .tb-title { order: -1; flex-basis: 100%; white-space: normal; line-height: 1.2; }
+.toolbox.vertical:not(.floating) > .tb-head, .toolbox.floating.upright:not(.collapsed) > .tb-head { contain: inline-size; flex-wrap: wrap; row-gap: 0; }
+.toolbox.vertical:not(.floating) > .tb-head > .tb-title, .toolbox.floating.upright:not(.collapsed) > .tb-head > .tb-title { order: -1; flex-basis: 100%; white-space: normal; line-height: 1.2; }
+/* two columns wide: the grip, padlock, fold and close fit on one line under the title (and still have
+   their room when the box is one column wide) */
+html:not(.touch-ui) .toolbox.upright:not(.collapsed) > .tb-head { column-gap: 2px; min-width: 64px; }
+html:not(.touch-ui) .toolbox.upright:not(.collapsed) > .tb-head > :is(.tb-lock, .tb-fold, .tb-close) { width: 14px; }
+html:not(.touch-ui) .toolbox.upright:not(.collapsed) > .tb-head > .tb-grip { letter-spacing: -4px; }
 .tb-body { display: flex; flex-wrap: wrap; gap: 3px; align-items: flex-start; }
 .toolbox.vertical .tb-body { flex-direction: column; flex-wrap: nowrap; align-items: stretch; }
 .toolbox.vertical .tb-body.tb-grid { flex-direction: row; flex-wrap: wrap; max-width: 76px; }
@@ -1574,8 +1579,13 @@ body.doc-reading #doc-pane.nav-open > :not(#doc-nav) { margin-left: 0; }
 .rb-tabs button[aria-selected='true'] { background: var(--panel); color: var(--accent); font-weight: 600; }
 .rb-panel { display: flex; align-items: stretch; min-width: 0; padding: 3px 4px 1px; overflow-x: auto; }
 .rb-panel[hidden] { display: none; }
-/* one height for every tab of a ribbon: its tallest tab's (src/ui/ribbon-fit.ts) */
-.ribbon > .rb-panel { min-height: var(--rb-panel-h, 0); }
+/* one height for every ribbon, the Spreadsheet's: three rows of buttons and the group names under
+   them (bigger buttons, bigger ribbon). A tab that needed more would still get it, from its ribbon's
+   tallest tab (src/ui/ribbon-fit.ts), but none does: the smoke test checks every tab of every ribbon */
+:root { --rb-body-h: 92px; }
+html[data-density='standard'] { --rb-body-h: 110px; }
+html[data-density='large'] { --rb-body-h: 128px; }
+.ribbon > .rb-panel { min-height: max(var(--rb-panel-h, 0px), var(--rb-body-h)); }
 /* while a ribbon is fitted and measured it keeps its height (set on it), so nothing below it moves;
    its tabs' buttons keep their own heights inside it, to be measured */
 .ribbon.rb-measuring { overflow: hidden; }
@@ -1657,24 +1667,49 @@ body.ribbon-collapsed .ribbon.rb-peek > .rb-tabs [role='tab'][aria-selected='tru
 /* ------------------------------------------------------------------ the Canvas ribbon */
 /* (only on a Canvas: the other modes have ribbons of their own) */
 body.slides-mode #canvas-ribbon, body.design-mode #canvas-ribbon, body.sheet-mode #canvas-ribbon, body.doc-mode #canvas-ribbon { display: none; }
-/* two rows of buttons under the tabs; the major commands picture over name, both rows tall */
-.canvas-ribbon > .rb-panel { padding: 2px 4px 3px; align-items: stretch; }
+/* three rows of buttons under the tabs, as the other ribbons have, with the group names under them;
+   the major commands picture over name, all three rows tall */
+.canvas-ribbon > .rb-panel { align-items: stretch; }
 .canvas-ribbon .rb-group { flex-direction: column; align-items: stretch; padding: 0 6px; }
-/* (no group names on the Canvas ribbon: the other modes' ribbons have theirs centered under each group) */
-.canvas-ribbon .rb-label { display: none; }
-.canvas-ribbon .cr-rows { display: grid; grid-auto-flow: column; grid-template-rows: 24px 24px; gap: 1px 2px; align-content: center; }
-.canvas-ribbon button.cr-minor { display: inline-flex; align-items: center; justify-content: center; width: 26px; min-width: 26px; height: 24px; padding: 0; color: var(--accent); }
+.canvas-ribbon .rb-group > .rb-label { text-align: center; }
+.canvas-ribbon .rb-group > .rb-row { flex: 1 1 auto; }
+.canvas-ribbon .cr-rows { display: grid; grid-auto-flow: column; grid-template-rows: repeat(3, 23px); gap: 1px 2px; align-content: center; }
+.canvas-ribbon button.cr-minor { display: inline-flex; align-items: center; justify-content: center; width: 26px; min-width: 26px; height: 23px; padding: 0; color: var(--accent); }
+/* (option B: no group names; the three rows a little taller to fill the same height) */
+.canvas-ribbon.cr-no-names .rb-label { display: none; }
+.canvas-ribbon.cr-no-names .cr-rows { grid-template-rows: repeat(3, 26px); }
+.canvas-ribbon.cr-no-names button.cr-minor { height: 26px; }
+.canvas-ribbon.cr-no-names .cr-font .cb-row { height: 26px; }
+/* Clipboard: as the Spreadsheet's; Font: the typing bar's basics in two rows, as the Spreadsheet's Font group */
+.canvas-ribbon .cr-clipboard { align-items: stretch; }
+.canvas-ribbon .cr-font { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.canvas-ribbon .cr-font .cb-row { display: flex; align-items: center; gap: 2px; height: 23px; }
+.canvas-ribbon .cr-font .cb-group { gap: 1px; }
+.canvas-ribbon .cr-font .cb-group + .cb-group { margin-left: 4px; padding-left: 0; border-left: 0; }
+.canvas-ribbon .cr-font .cb-btn { min-width: 24px; height: 23px; padding: 0 4px; font-size: var(--fs-md); }
+.canvas-ribbon .cr-font .cb-font { width: 132px; height: 23px; }
+.canvas-ribbon .cr-font .cb-size { width: 50px; height: 23px; }
+.canvas-ribbon .cr-font .cb-color { width: 26px; height: 21px; margin-left: 2px; }
 .canvas-ribbon button.cr-minor svg { width: 18px; height: 18px; }
 .canvas-ribbon button.cr-minor .cr-word { font-size: 10px; color: var(--text); padding: 0 3px; }
 .canvas-ribbon button.cr-minor:has(.cr-word) { width: auto; }
-.canvas-ribbon button.cr-major { grid-row: span 2; justify-content: center; gap: 1px; min-width: 40px; padding: 1px 4px; font-size: 11px; line-height: 11px; text-align: center; }
-.canvas-ribbon button.cr-major .rb-icon { height: 22px; line-height: 22px; }
-.canvas-ribbon button.cr-major .rb-icon svg { width: 22px; height: 22px; }
+.canvas-ribbon button.cr-major { grid-row: span 3; justify-content: center; gap: 2px; min-width: 44px; padding: 2px 4px; font-size: var(--fs-sm); line-height: 1.15; text-align: center; }
+.canvas-ribbon button.cr-major .rb-icon { height: 26px; line-height: 26px; }
+.canvas-ribbon button.cr-major .rb-icon svg { width: 24px; height: 24px; }
 .canvas-ribbon button[data-cr-tool] { color: var(--text); }
 .canvas-ribbon .cr-gallery { align-items: center; }
 .canvas-ribbon.cr-simple .cr-gallery { display: none; }
 /* Simplified: one row, the major commands' names beside their pictures, no group names */
+.canvas-ribbon.cr-simple > .rb-panel { min-height: var(--rb-panel-h, 0px); }
+.canvas-ribbon.cr-simple .rb-label { display: none; }
 .canvas-ribbon.cr-simple .cr-rows { grid-template-rows: 26px; }
+.canvas-ribbon.cr-simple :is(.cr-clipboard, .cr-clipboard > .rb-col, .cr-font) { flex-direction: row; align-items: center; gap: 2px; }
+.canvas-ribbon.cr-simple .cr-clipboard button.rb-big { flex-direction: row; gap: 4px; height: 26px; padding: 0 6px; }
+.canvas-ribbon.cr-simple .cr-clipboard button.rb-big .rb-icon { height: 18px; line-height: 18px; }
+.canvas-ribbon.cr-simple .cr-clipboard button.rb-big .rb-icon .ci-ic { width: 18px; height: 18px; }
+.canvas-ribbon.cr-simple .cr-clipboard .rb-paste-more { height: 26px; }
+.canvas-ribbon.cr-simple .cr-clipboard .rb-col > button { font-size: 0; }
+.canvas-ribbon.cr-simple .cr-clipboard .rb-col > button .rb-lead :is(svg, .ci-ic) { margin-right: 0; }
 .canvas-ribbon.cr-simple button.cr-major { grid-row: auto; flex-direction: row; gap: 4px; height: 26px; padding: 0 6px; font-size: var(--fs-sm); }
 .canvas-ribbon button.cr-major .cr-line { display: block; }
 .canvas-ribbon.cr-simple button.cr-major .cr-line { display: inline; }
@@ -2290,9 +2325,10 @@ dialog.cf-manage { width: min(92vw, 640px); }
 
 /* ---------------------------------------------------------------- slide transitions and animations */
 #tr-kinds { gap: 2px; }
-.an-gallery { display: grid; grid-template-columns: repeat(5, auto); gap: 1px 2px; align-content: start; }
-.ribbon button.an-effect { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px 1px 4px; white-space: nowrap; }
-.ribbon button.an-effect svg { width: 18px; height: 18px; }
+.an-gallery { display: grid; grid-auto-columns: auto; grid-template-rows: repeat(3, 23px); gap: 1px 2px; align-content: start; }
+.ribbon button.an-effect { display: inline-flex; align-items: center; gap: 4px; height: 23px; padding: 0 8px 0 4px; white-space: nowrap; }
+.ribbon button.an-effect > span { display: inline-flex; }
+.ribbon button.an-effect svg { width: 16px; height: 16px; }
 #anim-section h2, #cmt-section h2 { display: flex; align-items: center; }
 #anim-section .an-close, #cmt-section .an-close { margin-left: auto; padding: 0 6px; border: 0; background: transparent; font-size: var(--fs-lg); line-height: 1; color: var(--muted); }
 .an-bar { display: flex; gap: 4px; margin-bottom: 6px; }

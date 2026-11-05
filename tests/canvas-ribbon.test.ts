@@ -9,9 +9,12 @@ describe('Canvas ribbon', () => {
     expect(bare).toEqual([]);
   });
 
-  it('has Home first, with Format Favorites as its first group, and the object tabs last', () => {
+  it('has Home first, opening with Clipboard and Font (as the Spreadsheet does), then Format Favorites, and the object tabs last', () => {
     expect(CANVAS_TABS[0].id).toBe('home');
-    expect(CANVAS_TABS[0].groups[0].gallery).toBe('favorites');
+    const [clip, font, favs] = CANVAS_TABS[0].groups;
+    expect([clip.name, clip.special]).toEqual(['Clipboard', 'clipboard']);
+    expect([font.name, font.special]).toEqual(['Font', 'font']);
+    expect(favs.gallery).toBe('favorites');
     const ctx = CANVAS_TABS.filter((t) => t.context).map((t) => t.id);
     expect(ctx).toEqual(['arrow', 'ring', 'bond']);
     expect(CANVAS_TABS.slice(-3).every((t) => t.context)).toBe(true);
