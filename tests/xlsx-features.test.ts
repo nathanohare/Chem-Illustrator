@@ -237,3 +237,34 @@ describe('pictures placed in cells (X13)', () => {
     expect(xml).not.toContain('vm=');
   });
 });
+
+describe('features left out (X16)', () => {
+  const SHEET = 'xl/worksheets/sheet1.xml';
+  const vml = '<xml xmlns:v="urn:schemas-microsoft-com:vml" xmlns:x="urn:schemas-microsoft-com:office:excel">' +
+    '<v:shape id="a"><x:ClientData ObjectType="Checkbox"/></v:shape><v:shape id="b"><x:ClientData ObjectType="Checkbox"/></v:shape>' +
+    '<v:shape id="c"><x:ClientData ObjectType="Note"><x:Row>0</x:Row><x:Column>0</x:Column></x:ClientData></v:shape></xml>';
+  const file = () => excelBook([['Data', '<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData><picture r:id="rId5"/><tableParts count="1"><tablePart r:id="rId6"/></tableParts>']], {
+    // (the macro sheet's relationship is the workbook's fourth)
+    workbook: (list) => `<workbook xmlns="${MAIN}" xmlns:r="${R}"><sheets>${list}<sheet name="Macro1" sheetId="2" r:id="rId4"/></sheets></workbook>`,
+    parts: [
+      { path: 'xl/connections.xml', rel: `${R}/connections`, xml: `<connections xmlns="${MAIN}"><connection id="1" name="Assays" type="1"/><connection id="2" name="Web" type="4"/></connections>` },
+      { path: 'xl/xmlMaps.xml', rel: `${R}/xmlMaps`, xml: `<MapInfo xmlns="${MAIN}" SelectionNamespaces=""/>` },
+      { path: 'xl/macrosheets/sheet1.xml', rel: 'http://schemas.microsoft.com/office/2006/relationships/xlMacrosheet', xml: `<xm:macrosheet xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main" xmlns="${MAIN}"><sheetData/></xm:macrosheet>` },
+      { path: 'xl/drawings/vmlDrawing1.vml', from: SHEET, rel: `${R}/vmlDrawing`, xml: vml },
+      { path: 'xl/media/image1.jpeg', from: SHEET, rel: `${R}/image`, xml: new Uint8Array([255, 216, 255]) },
+      { path: 'xl/tables/table1.xml', from: SHEET, rel: `${R}/table`, xml: `<table xmlns="${MAIN}" id="1" name="Assays" displayName="Assays" ref="A1:A2" tableType="queryTable"><tableColumns count="1"><tableColumn id="1" name="n"/></tableColumns></table>` },
+      { path: 'xl/queryTables/queryTable1.xml', from: 'xl/tables/table1.xml', rel: `${R}/queryTable`, target: '../queryTables/queryTable1.xml', xml: `<queryTable xmlns="${MAIN}" name="Assays" connectionId="1"/>` },
+      { path: 'xl/ctrlProps/ctrlProp1.xml', from: SHEET, rel: `${R}/ctrlProp`, xml: `<formControlPr xmlns="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main" objectType="CheckBox"/>` },
+      { path: 'xl/ctrlProps/ctrlProp2.xml', from: SHEET, rel: `${R}/ctrlProp`, xml: `<formControlPr xmlns="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main" objectType="CheckBox"/>` },
+      { path: 'xl/activeX/activeX1.xml', from: SHEET, rel: `${R}/control`, xml: '<ax:ocx xmlns:ax="http://schemas.microsoft.com/office/2006/activeX" ax:classid="{8BD21D40-EC42-11CE-9E0D-00AA006002F3}"/>' },
+    ],
+  });
+
+  it('names controls, connections, query tables, background pictures, macro sheets and XML maps on opening', async () => {
+    const { warnings } = await readXlsx(file());
+    const list = warnings.find((w) => w.startsWith('Not shown here'));
+    expect(list).toBeDefined();
+    for (const item of ['2 form controls (buttons, check boxes, lists)', '1 ActiveX control', '2 data connections', '1 query table\'s link to the data it was imported from',
+      '1 sheet background picture', '1 Excel 4 macro sheet (opened as an ordinary sheet)', 'XML maps']) expect(list).toContain(item);
+  });
+});

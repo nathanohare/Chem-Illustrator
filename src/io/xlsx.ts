@@ -61,6 +61,7 @@ import { type CompoundCard } from '../sheet/compound';
 import { type Query, seenQueryId } from '../sheet/query';
 import { keepFileValues, fileValues, type FileValue } from './xlsx-cached';
 import { readRichValues, writeRichParts, richMetadataXml, keepPointers, pointerOf } from './xlsx-rich';
+import { LeftOut } from './xlsx-left-out';
 export { applyTint };
 
 /** Pictures of structures for Excel (the app draws them; tests use stand-ins). */
@@ -1218,6 +1219,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const richValues = readRichValues(pkg, wbPath, [...rels.values()].find((r) => r.type === RELS.metadata)?.target ?? null);
   const pointers = new Map<Sheet, Map<number, number>>();
   let richCells = 0;
+  // controls, data connections, query tables, background pictures, macro sheets and XML maps: named on opening
+  const leftOut = new LeftOut();
 
   const relTarget = (type: string) => [...rels.values()].find((r) => r.type === type)?.target ?? null;
   const themeDoc = relTarget(RELS.theme) ? pkg.xml(relTarget(RELS.theme)!) : null;
@@ -1257,6 +1260,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   book.date1904 = date1904;
   const activeTab = Number(kid(root, 'bookViews', 'workbookView')?.getAttribute('activeTab') ?? 0);
   if (sheetEls.some((s) => s.getAttribute('state') === 'hidden' || s.getAttribute('state') === 'veryHidden')) notKept.add('hidden sheets (shown here)');
+  leftOut.workbook(pkg, wbPath, sheetEls.map((el) => rels.get(rAttr(el, 'id') ?? '')?.type ?? ''));
   const definedNames = kids(kid(root, 'definedNames'), 'definedName');
   const nameSet = new Set(definedNames.map((d) => (d.getAttribute('name') ?? '').toUpperCase()));
   const nameCase = new Map(definedNames.map((d) => [(d.getAttribute('name') ?? '').toUpperCase(), d.getAttribute('name') ?? '']));
@@ -1615,6 +1619,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       const sheetRelList = [...pkg.rels(path!).values()];
       const relOf = (type: string) => sheetRelList.find((r) => r.type === type)?.target;
       const commentsPath = relOf(NOTES_REL.comments), vmlPath = relOf(NOTES_REL.vml), threadedPath = relOf(NOTES_REL.threaded);
+      leftOut.sheet(pkg, path!, ws, vmlPath ? pkg.text(vmlPath) : null);
       if (commentsPath || threadedPath) {
         const notes = readNotes(commentsPath ? pkg.xml(commentsPath) : null, shownNotes(vmlPath ? pkg.text(vmlPath) : null), threadedPath ? pkg.xml(threadedPath) : null, personsDoc);
         for (const [k, n] of notes) s.setNote(rowOf(k), colOf(k), n);
@@ -1680,6 +1685,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
     warnings.push(`${richCells} cell${richCells > 1 ? 's hold pictures or other values' : ' holds a picture or other value'} placed in ${richCells > 1 ? 'them' : 'it'} in Excel: ` +
       `shown as #VALUE! here, and kept for Excel unless ${richCells > 1 ? 'the cells are' : 'the cell is'} changed.`);
   } else if (richCells) notKept.add(`${richCells} picture${richCells > 1 ? 's' : ''} or other value${richCells > 1 ? 's' : ''} placed in cells`);
+  for (const item of leftOut.items()) notKept.add(item);
   if (foreignPictures) notKept.add(`${foreignPictures} picture${foreignPictures > 1 ? 's' : ''} or chart${foreignPictures > 1 ? 's' : ''}`);
   if (unknownFormulas) warnings.push(`${unknownFormulas} formula${unknownFormulas > 1 ? 's use' : ' uses'} Excel functions this program can't work out yet.`);
   if (linkedFormulas) {
