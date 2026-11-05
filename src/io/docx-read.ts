@@ -1330,12 +1330,10 @@ class DocxReader {
         q.pageBreak = pc.pageBreak || undefined;
         q.colBreak = pc.colBreak || undefined;
         if (pc.soft) {
-          // a line break inside a paragraph: the next line as a paragraph of its own, with no space between
+          // a line break inside a paragraph: the next line as a paragraph of its own that carries on
+          // this one (no space between them, and saved back in the same Word paragraph)
+          q.soft = true;
           if (list) q.cont = true;
-          q.spaceBefore = 0;
-          q.firstLine = undefined;
-          const prev = this.out[this.out.length - 1];
-          if (prev) prev.ps = cleanPara({ ...prev.ps, spaceAfter: 0 });
         }
       } else {
         if (pc.pageBreak) q.pageBreak = true;

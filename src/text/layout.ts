@@ -11,7 +11,7 @@ import type { Justify, ParaStyle, TabStop, TextFx, TextRun } from '../model';
 import { textFx } from './fx';
 import type { Rect } from '../geom';
 import { formulaRunParts } from '../richtext';
-import { fitParas, listMarkers, paraCount } from './paragraphs';
+import { fitParas, laidParas, listMarkers, paraCount } from './paragraphs';
 
 export const FONT_STACK = "Arial, 'Liberation Sans', Helvetica, sans-serif";
 
@@ -417,7 +417,7 @@ function inColumns(f: TextFrame, defaultSize: number, measure: Measure): TextLay
 function layoutPlain(f: TextFrame, defaultSize: number, measure: Measure): TextLayout {
   const text = f.runs.map((r) => r.text).join('');
   const n = paraCount(text);
-  const paras = fitParas(f.paras, n);
+  const paras = laidParas(fitParas(f.paras, n));
   const markers = f.markers ?? listMarkers(paras);
   const { segs, sizes } = segments(f.runs, defaultSize, n);
   const spacing = f.lineSpacing && f.lineSpacing > 0 ? f.lineSpacing : 1;

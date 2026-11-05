@@ -14,7 +14,7 @@ import type { FieldObj } from './fields';
 import type { CellMargins, Contents, Justify, ParaStyle, TableData, TextRun } from '../model';
 import type { DocStyle } from '../style';
 import { withStack, layoutText, type Glyphs, type InlineBox, type LaidLine, type Measure, type Narrow, type TextFrame, type TextLayout } from '../text/layout';
-import { fitParas, listMarkers, paraCount, splitParagraphs } from '../text/paragraphs';
+import { fitParas, laidParas, listMarkers, paraCount, splitParagraphs } from '../text/paragraphs';
 import { isCovered, rowSpanOf, spanOf } from '../table';
 import * as rt from '../richtext';
 import { drawingOwnSize, nestedTables, BOX_PAD, LINE_NUMBER_GAP, OBJECT_CHAR, columnsOf, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, styleOf, FORM_SHADE, type DocObject, type DocText, type HeaderFooter, type NamedStyle, type PageSetup, type WrapKind } from './document';
@@ -450,7 +450,7 @@ export class DocLayouter {
     this.used.clear();
     const text = rt.plainText(t.runs);
     const n = paraCount(text);
-    const paras = fitParas(t.paras, n);
+    const paras = laidParas(fitParas(t.paras, n));
     const markers = listMarkers(paras);
     const fields = fieldTexts(t, (p) => this.tocPages[p] ?? '', this.pageCount);
     const hyph = hyphenation(t.hyphen);

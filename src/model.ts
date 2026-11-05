@@ -452,6 +452,12 @@ export interface ParaStyle {
   level?: number;
   /** Carries on the list item above (Shift+Enter): indented with it, with no bullet of its own. */
   cont?: boolean;
+  /**
+   * Documents: the next line of the paragraph above, after a line break (Shift+Enter; Word's text
+   * wrapping break): no space between them and no first-line indent of its own, and saved to Word
+   * in the same paragraph as that one.
+   */
+  soft?: boolean;
   /** This paragraph's own alignment, in place of the text box's. */
   align?: Justify;
   /** Extra space above and below the paragraph, in points. */

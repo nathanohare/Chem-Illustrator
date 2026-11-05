@@ -5,7 +5,7 @@
 
 import type { ParaStyle, TextRun } from '../model';
 
-const KEYS = ['list', 'level', 'cont', 'align', 'spaceBefore', 'spaceAfter', 'indent', 'style', 'pageBreak', 'colBreak', 'firstLine', 'line', 'keepNext', 'keepLines', 'noWidow', 'indentRight', 'linePt', 'lineRule', 'section', 'noLineNumbers', 'noHyphen', 'marks', 'tabs', 'scheme', 'bullet', 'numType', 'startAt', 'border', 'shade', 'xe', 'ta', 'cc'] as const;
+const KEYS = ['list', 'level', 'cont', 'soft', 'align', 'spaceBefore', 'spaceAfter', 'indent', 'style', 'pageBreak', 'colBreak', 'firstLine', 'line', 'keepNext', 'keepLines', 'noWidow', 'indentRight', 'linePt', 'lineRule', 'section', 'noLineNumbers', 'noHyphen', 'marks', 'tabs', 'scheme', 'bullet', 'numType', 'startAt', 'border', 'shade', 'xe', 'ta', 'cc'] as const;
 
 /** A paragraph style with nothing unset or zero, so two styles compare simply. */
 export function cleanPara(p: ParaStyle | undefined): ParaStyle {
@@ -22,6 +22,23 @@ export function cleanPara(p: ParaStyle | undefined): ParaStyle {
   else if (o.list === 'bullet') { delete o.scheme; delete o.numType; delete o.startAt; }
   else delete o.bullet;
   return o as ParaStyle;
+}
+
+/**
+ * The paragraphs as they are laid out: one that carries on the paragraph above after a line break
+ * (soft) has no space between it and that one, and no first-line indent, as Word sets the lines of
+ * one paragraph.
+ */
+export function laidParas(paras: ParaStyle[]): ParaStyle[] {
+  if (!paras.some((p) => p.soft)) return paras;
+  return paras.map((p, i) => {
+    const next = paras[i + 1];
+    if (!p.soft && !next?.soft) return p;
+    const q: ParaStyle = { ...p };
+    if (p.soft && i > 0) { q.spaceBefore = 0; q.firstLine = 0; }
+    if (next?.soft) q.spaceAfter = 0;
+    return q;
+  });
 }
 
 export const samePara = (a: ParaStyle | undefined, b: ParaStyle | undefined): boolean =>
