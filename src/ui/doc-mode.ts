@@ -4120,7 +4120,8 @@ export class DocumentMode {
     const shown = shownSize({ w: o.w, h: o.h }, o.scale ?? 1, textW);
     const natural = shownSize({ w: got.w, h: 0 }, 1, textW);
     const scale = got.w > 0 && Math.abs(natural.w - shown.w) > 0.01 * shown.w ? Math.round((shown.w / got.w) * 1e4) / 1e4 : undefined;
-    const next: DocObject = { kind: 'drawing', contents: got.contents, ...(scale ? { scale } : {}), ...(o.look ? { look: o.look } : {}), ...(o.float ? { float: o.float } : {}), ...(o.alt ? { alt: o.alt } : {}) };
+    // (saved as a ChemDraw object again, so it still opens in ChemDraw from Word)
+    const next: DocObject = { kind: 'drawing', contents: got.contents, ole: o.embed.prog, ...(scale ? { scale } : {}), ...(o.look ? { look: o.look } : {}), ...(o.float ? { float: o.float } : {}), ...(o.alt ? { alt: o.alt } : {}) };
     f.ed.update({ ...f.t, objects: { ...f.t.objects, [id]: next } } as DocText, 'Edit ChemDraw object');
     return true;
   }

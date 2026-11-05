@@ -1227,6 +1227,8 @@ class Reader {
     const tags = this.tagsOf(s.path, kid(el, 'nvGraphicFramePr', 'nvPr'));
     if (tags[TAG.cdxml] && tags[TAG.oleCdx] === bytesHash(cdx)) {
       if (!this.drawing(tags[TAG.cdxml], tags[TAG.box], box, doc)) return false;
+      // one of ours saved as a ChemDraw object by the setting: a plain structure again
+      if (tags[TAG.oleOwn] === '1') return true;
     } else {
       let text: string, src: Doc;
       try {

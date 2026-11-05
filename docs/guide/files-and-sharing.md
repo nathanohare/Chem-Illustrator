@@ -26,9 +26,11 @@ Open files with **File ▸ Open…** (Ctrl+O), or drop them onto the window. Pic
 
 ### Structures in Office files
 
-- **Word (.docx):** structures show as pictures in Word. Open the file here again and they are editable drawings, even after Word has saved it. ChemDraw drawings embedded in a Word file made elsewhere keep the look they had in Word; double-click one to make it an editable structure.
+- **Word (.docx):** structures show as pictures in Word. Open the file here again and they are editable drawings, even after Word has saved it. ChemDraw drawings embedded in a Word file made elsewhere keep the look they had in Word; double-click one to make it an editable structure. Edited, it is saved back as a ChemDraw object, so it still opens in ChemDraw from Word.
 - **PowerPoint (.pptx):** the same: pictures in PowerPoint, editable drawings when opened here again. A ChemDraw object embedded in a PowerPoint slide comes in as editable structures, where and at the size PowerPoint showed it, and is saved back as a ChemDraw object, so double-clicking it in PowerPoint still opens it in ChemDraw. Anything drawn onto its structures (a bond added to one) goes back in the object with them.
 - **Excel (.xlsx):** structures are pictures with their SMILES in the cell, and become editable drawings again when opened here.
+
+To save structures as ChemDraw objects instead of pictures, so that double-clicking one in Word or PowerPoint opens it in ChemDraw, choose **ChemDraw objects** in **Settings ▸ General ▸ Save structures in Word files as** (and **…in PowerPoint files as**). The choice is used each time a file is saved, so changing it and saving again converts the structures drawn here either way. ChemDraw objects show as their picture on computers without ChemDraw, and pictures (SVG and PNG) look the same in every program, including Google Docs, LibreOffice and Keynote. Either way the file opens here again with editable drawings. In Word, structures that float on the page, are turned or flipped, or have a frame or border are saved as pictures, since Word keeps objects in line with the text.
 
 ### Older Excel files, macro-enabled workbooks and OpenDocument
 
