@@ -17,7 +17,7 @@ import type { CellBorders, Contents, Justify, ParaStyle, PictureFx, TableData, T
 import { bakedPart } from '../render/picture-fx';
 import { blipEffectsXml, imgPropsXml, pictureGeomXml } from './picture-xml';
 import { DEFAULT_MARGINS, builtInStyle } from '../document/table-styles';
-import { borderXml, bordersXml, lookXml as tableLookXml, marginsXml, tableStyleXml } from './docx-table-styles';
+import { borderXml, bordersXml, lookXml as tableLookXml, marginsXml, tableFloatXml, tableStyleXml, tableWidthXml } from './docx-table-styles';
 import { BORDER_SPACE, cleanBorders } from '../document/para-borders';
 import { fieldInstr } from '../document/fields';
 import type { DocStyle } from '../style';
@@ -298,7 +298,7 @@ class DocxWriter {
     for (const r of t.runs) for (const ch of r.text) if (ch === '\n') markRev.push(r.rev);
     this.markRev = markRev;
     const out: string[] = [];
-    let lastWasTable = false;
+    let lastWasTable = false, lastFloats = false;
     let listNum = 0;
     // each section but the last ends with its section properties in its last paragraph (Word's way)
     const secs = sectionsOf({ ...t, paras });
@@ -325,9 +325,12 @@ class DocxWriter {
       // a paragraph holding just a table: Word's own table
       const only = runs.length === 1 && runs[0].obj !== undefined && runs[0].text === OBJECT_CHAR ? t.objects[runs[0].obj] : undefined;
       if (only?.kind === 'table') {
-        if (lastWasTable) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
+        // Word joins two tables with nothing between them into one: an empty paragraph keeps them
+        // apart. Two floating tables are placed apart and stay two tables, as Word writes them (a label sheet's).
+        if (lastWasTable && !(lastFloats && only.table.float)) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
         out.push(await this.docTable(main, only.table, ps.align ?? styleOf(t, ps).align));
         lastWasTable = true;
+        lastFloats = !!only.table.float;
         close();
         continue;
       }
@@ -336,6 +339,7 @@ class DocxWriter {
         if (lastWasTable) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
         out.push(this.table(runs[0].obj!, table, ps.align ?? styleOf(t, ps).align));
         lastWasTable = true;
+        lastFloats = false;
         close();
         continue;
       }
@@ -1099,11 +1103,11 @@ class DocxWriter {
       ? `<w:top ${grid}/><w:left ${grid}/><w:bottom ${grid}/><w:right ${grid}/><w:insideH ${grid}/><w:insideV ${grid}/>`
       : tab.lines === 'acs' ? `<w:top ${rule}/><w:left ${none}/><w:bottom ${rule}/><w:right ${none}/><w:insideH ${none}/><w:insideV ${none}/>`
         : `<w:top ${none}/><w:left ${none}/><w:bottom ${none}/><w:right ${none}/><w:insideH ${none}/><w:insideV ${none}/>`;
-    const width = tab.cols.reduce((a, b) => a + b, 0);
     // a table style: Word's own (written in styles.xml), with the parts it picks out; else the lines themselves
     const styled = !!tab.style && !!(this.t.tableStyles?.[tab.style] ?? builtInStyle(tab.style));
-    const tblPr = `<w:tblPr>${styled ? `<w:tblStyle w:val="${tab.style}"/>` : ''}<w:tblW w:w="${twips(width)}" w:type="dxa"/><w:jc w:val="${align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'}"/>` +
-      `${styled ? '' : `<w:tblBorders>${borders}</w:tblBorders>`}<w:tblLayout w:type="fixed"/>` +
+    // (a floating table, its width, indent and AutoFit as Word had them; a table made here has fixed columns)
+    const tblPr = `<w:tblPr>${styled ? `<w:tblStyle w:val="${tab.style}"/>` : ''}${tableFloatXml(tab.float)}${tableWidthXml(tab)}<w:jc w:val="${align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'}"/>` +
+      `${tab.indent ? `<w:tblInd w:w="${twips(tab.indent)}" w:type="dxa"/>` : ''}${styled ? '' : `<w:tblBorders>${borders}</w:tblBorders>`}${tab.autofit ? '' : '<w:tblLayout w:type="fixed"/>'}` +
       marginsXml('tblCellMar', tab.pad ?? DEFAULT_MARGINS) +
       `${styled ? tableLookXml(tab) : '<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>'}</w:tblPr>`;
     const gridXml = `<w:tblGrid>${tab.cols.map((w) => `<w:gridCol w:w="${twips(w)}"/>`).join('')}</w:tblGrid>`;

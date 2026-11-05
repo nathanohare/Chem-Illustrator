@@ -168,6 +168,8 @@ export interface TableBox {
   rows: { page: number; x: number; y: number }[];
   /** 0 for a table in the text, 1 for one in a cell of such a table, and so on. */
   depth: number;
+  /** How far it is moved in from the left margin when it lines up at the left (Word's indent from left). */
+  indent?: number;
 }
 
 export { CELL_PAD, GRID_LINE, ACS_LINE } from './table-styles';
@@ -327,7 +329,7 @@ export class DocLayouter {
         const w = tb.xs[tb.xs.length - 1];
         const room = frame.wrap ?? w;
         const align = ps.align ?? 'left';
-        const x = align === 'center' ? Math.max(0, (room - w) / 2) : align === 'right' ? Math.max(0, room - w) : 0;
+        const x = align === 'center' ? Math.max(0, (room - w) / 2) : align === 'right' ? Math.max(0, room - w) : tb.indent ?? 0;
         const family = withStack(st.font);
         let y = 0;
         tb.hs.forEach((h, i) => {
@@ -1052,7 +1054,7 @@ export class DocLayouter {
           }
           const { tb } = part;
           const tw = tb.xs[tb.xs.length - 1];
-          const tx = x0 + (part.align === 'center' ? (W - tw) / 2 : part.align === 'right' ? W - tw : 0);
+          const tx = x0 + (part.align === 'center' ? (W - tw) / 2 : part.align === 'right' ? W - tw : tb.indent ?? 0);
           const rows = tb.hs.map((_rh, r) => { const at = { page: pg.index, x: tx, y: y + sum(tb.hs.slice(0, r)) }; return at; });
           const box: TableBox = { ...tb, rows };
           placed.tables.push({ id: part.id, tb: box });
@@ -1174,7 +1176,7 @@ export class DocLayouter {
       const v = tb.rows[r]?.[c]?.valign;
       return v === 'center' ? room / 2 : v === 'bottom' ? room : 0;
     }));
-    return { id, xs, hs, cells, drop, pads, rows: [], depth };
+    return { id, xs, hs, cells, drop, pads, rows: [], depth, ...(tb.indent ? { indent: tb.indent } : {}) };
   }
 
   /** A table cell's text laid out in its width (`w`, the inner margins taken off). */

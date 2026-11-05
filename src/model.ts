@@ -1295,6 +1295,35 @@ export interface TableData {
   look?: TableLook;
   /** Documents: the margins of every cell (Word's default cell margins), when not the standard ones. */
   pad?: CellMargins;
+  /** Documents: the width Word gives the table, when not its columns' total: a share of the text's width (in percent) or as its contents need ('auto'). */
+  width?: 'auto' | { pct: number };
+  /** Documents: how far the table is moved in from the left margin, in points (Word's Indent from left). */
+  indent?: number;
+  /** Documents: Word fits the columns to their contents (AutoFit), rather than keeping their widths. */
+  autofit?: boolean;
+  /** Documents: a table Word places on the page with the text going round it (a floating table); kept for Word, shown in its line here. */
+  float?: TableFloat;
+}
+
+/**
+ * Where Word places a floating table (w:tblpPr), in points. Across, it is measured from the text's
+ * column, the margin or the page (`hFrom`), at `x` or lined up as `xAlign` says; down, from the
+ * paragraph after it, the margin or the page (`vFrom`), at `y` or as `yAlign` says. `left` to
+ * `bottom` is the room kept between it and the text round it. Only what the file gave is set.
+ */
+export interface TableFloat {
+  hFrom?: 'text' | 'margin' | 'page';
+  vFrom?: 'text' | 'margin' | 'page';
+  x?: number;
+  y?: number;
+  xAlign?: 'left' | 'center' | 'right' | 'inside' | 'outside';
+  yAlign?: 'top' | 'center' | 'bottom' | 'inside' | 'outside' | 'inline';
+  left?: number;
+  right?: number;
+  top?: number;
+  bottom?: number;
+  /** Other floating tables may not overlap it (Word's Allow overlap off). */
+  noOverlap?: boolean;
 }
 
 /** A drawing's page: the drawing area of one sheet of paper (inside its margins), in points. */

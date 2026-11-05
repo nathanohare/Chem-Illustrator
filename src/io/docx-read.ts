@@ -19,7 +19,7 @@ import { ALG_SIDS, type ProtectKind, type Protection } from '../document/protect
 import { tidyFx } from '../render/picture-fx';
 import { readPictureFx } from './picture-xml';
 import { DEFAULT_MARGINS, builtInStyle, type TableStyleDef } from '../document/table-styles';
-import { keepDirectBorders, readBorder, readBorders, readLook as readTableLook, readMargins, readTableStyle, sameStyle, styleIsRich } from './docx-table-styles';
+import { keepDirectBorders, readBorder, readBorders, readLook as readTableLook, readMargins, readTableFloat, readTableStyle, readTableWidth, sameStyle, styleIsRich } from './docx-table-styles';
 import { cleanBorders } from '../document/para-borders';
 import { ACS_1996, type DocStyle } from '../style';
 import * as rt from '../richtext';
@@ -2189,6 +2189,17 @@ class DocxReader {
     return Object.keys(ch.p).length || Object.keys(r).length ? { p: ch.p, r } : null;
   }
 
+  /** Word lays the table out to fit its contents (AutoFit): no fixed layout of its own, nor from its style. */
+  private autofitOf(tblPr: Element | null, id: string | null): boolean {
+    let el = kid(tblPr, 'tblLayout');
+    const seen = new Set<string>();
+    for (let st = this.wstyles.get(`table:${id ?? this.defaultTable}`); !el && st && !seen.has(st.id); st = st.basedOn ? this.wstyles.get(`table:${st.basedOn}`) : undefined) {
+      seen.add(st.id);
+      el = kid(kid(st.el, 'tblPr'), 'tblLayout');
+    }
+    return this.a(el, 'type') !== 'fixed';
+  }
+
   /** A Word table as a table in the text: its cells read as text is (structures and pictures kept). */
   private textTable(tbl: Element): void {
     const tblPr = kid(tbl, 'tblPr');
@@ -2291,6 +2302,15 @@ class DocxReader {
       if (look) table.look = look;
       if ((look?.header ?? true) && !table.head) table.head = 1;
     }
+    // where Word places it and how wide, kept for saving: floating, its width, its indent and AutoFit
+    const float = readTableFloat(tblPr, this.a.bind(this));
+    if (float) table.float = float;
+    const wide = readTableWidth(tblPr, this.a.bind(this));
+    if (wide) table.width = wide;
+    const ind = kid(tblPr, 'tblInd');
+    const indent = (this.a(ind, 'type') ?? 'dxa') === 'dxa' ? this.tw(ind, 'w') : undefined;
+    if (indent && Math.abs(indent) >= 0.05) table.indent = round(indent);
+    if (this.autofitOf(tblPr, style)) table.autofit = true;
     // the cell margins, when not the standard ones
     const mar = readMargins(kid(tblPr, 'tblCellMar'), this.a.bind(this));
     if (Object.keys(mar).length) {
@@ -2651,11 +2671,13 @@ class DocxReader {
   }
 
   private assemble(hf: HeaderFooter, sect: Element | null): DocText {
-    // the empty paragraphs Word needs between tables and after a table at the end
+    // the empty paragraphs Word needs between tables and after a table at the end (after a
+    // floating table, which Word keeps apart from the next without one, the paragraph is the text's own)
+    const floats = (p: OutPara) => { const o = this.objects[p.runs.find((r) => r.obj !== undefined)?.obj ?? -1]; return o?.kind === 'table' && !!o.table.float; };
     const out = this.out.filter((p, i, all) => {
       if (p.runs.length || p.table) return true;
       const prev = all[i - 1], next = all[i + 1];
-      return !(prev?.table && (!next || next.table));
+      return !(prev?.table && !floats(prev) && (!next || next.table));
     });
     // Word's "don't add space between paragraphs of the same style"
     for (let i = 0; i + 1 < out.length; i++) {
