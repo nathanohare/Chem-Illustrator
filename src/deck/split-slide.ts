@@ -23,8 +23,8 @@ export interface SlideParts {
   connectors: Arrow[];
   /** Structures and schemes, each with the captions, arrows and shapes around it: one picture each. */
   drawings: Selection[];
-  /** The drawings that are ChemDraw objects from PowerPoint (saved back as ChemDraw objects), with their program's name. */
-  chemdraw: Map<Selection, string>;
+  /** The drawings that are ChemDraw objects from PowerPoint (saved back as ChemDraw objects). */
+  chemdraw: Map<Selection, OleMark>;
   /** SmartArt-style diagrams: their frame (which keeps the text), shapes and connectors, each saved as one group. */
   diagrams: SlideDiagram[];
 }
@@ -132,7 +132,7 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
     groups.set(find(i), g);
   });
   const drawings: Selection[] = [];
-  const chemdraw = new Map<Selection, string>();
+  const chemdraw = new Map<Selection, OleMark>();
   const shapes: Shape[] = [];
   for (const g of groups.values()) {
     if (g.some((it) => it.chem)) {
@@ -140,7 +140,7 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
       for (const it of g) it.add(s);
       drawings.push(s);
       const ole = g.find((it) => it.ole)?.ole;
-      if (ole) chemdraw.set(s, ole.prog);
+      if (ole) chemdraw.set(s, ole);
     } else {
       for (const it of g) {
         if (it.text) texts.push(it.text);

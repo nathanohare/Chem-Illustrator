@@ -5390,10 +5390,10 @@ export function tsvTable(text: string): ReturnType<typeof pastedTable> {
 /** How each character of some runs looks (its position, formula style worked out, and italics). */
 function runLooks(runs: TextRun[]): CharLook[] {
   const looks: CharLook[] = [];
-  for (const r of runs) {
+  for (const [k, r] of runs.entries()) {
     const italic = !!r.italic;
     if (r.sub || r.sup) for (let i = 0; i < r.text.length; i++) looks.push({ pos: r.sub ? 'sub' : 'sup', italic });
-    else if (r.formula) for (const p of rt.formulaParts(r.text)) for (let i = 0; i < p.text.length; i++) looks.push({ pos: p.pos, italic });
+    else if (r.formula) for (const p of rt.formulaRunParts(runs, k)) for (let i = 0; i < p.text.length; i++) looks.push({ pos: p.pos, italic });
     else for (let i = 0; i < r.text.length; i++) looks.push({ pos: 'base', italic });
   }
   return looks;

@@ -407,6 +407,6 @@ For handouts you can also pick the paper and **Frame the slides**. The printer a
 - **File ▸ Export ▸ Export PDF…** makes a PDF with one page per slide.
 - **File ▸ Export ▸ Export Picture…** saves the current slide as a PNG or TIFF at the dpi you choose, or as an SVG, EMF or EPS.
 
-Opening a deck made in PowerPoint works too. A ChemDraw object embedded in a PowerPoint slide comes in as a picture, not an editable structure. More on file types in [Files and sharing](files-and-sharing.md).
+Opening a deck made in PowerPoint works too. A ChemDraw object embedded in a PowerPoint slide comes in as structures you can edit. Saved without changes it goes back exactly as it was, with ChemDraw's own picture; edited here, it gets a new picture and still opens in ChemDraw. More on file types in [Files and sharing](files-and-sharing.md).
 
 Next: [Getting started](getting-started.md) · [Canvas](drawing.md) · [Keyboard and mouse](keyboard-and-mouse.md) · [Document](documents.md) · [Spreadsheet](sheets.md) · [Design](design.md) · [Files and sharing](files-and-sharing.md) · [Feedback](feedback.md)

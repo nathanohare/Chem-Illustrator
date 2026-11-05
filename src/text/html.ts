@@ -38,8 +38,8 @@ export function richToHtml(text: ClipText, opts: { justify?: Justify; defaultSiz
   };
   const paraHtml = (runs: TextRun[]): string => {
     let out = '';
-    for (const r of runs) {
-      if (r.formula && !r.sub && !r.sup) for (const p of rt.formulaParts(r.text)) out += span(r, p.text, p.pos);
+    for (const [k, r] of runs.entries()) {
+      if (r.formula && !r.sub && !r.sup) for (const p of rt.formulaRunParts(runs, k)) out += span(r, p.text, p.pos);
       else out += span(r, r.text, r.sub ? 'sub' : r.sup ? 'sup' : 'base');
     }
     return out || '&nbsp;';
