@@ -1772,6 +1772,9 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
             if (ext) { w = Number(ext.getAttribute('cx') ?? 0) / 9525; h = Number(ext.getAttribute('cy') ?? 0) / 9525; }
           }
           const at = { row: a.row, col: a.col, dx: Math.round(a.colOff), dy: Math.round(a.rowOff) };
+          // how it follows its cells in Excel, as the file had it
+          const editAs = anchor?.localName === 'oneCellAnchor' ? 'oneCell' : anchor?.localName === 'absoluteAnchor' ? 'absolute' : anchor?.getAttribute('editAs');
+          const placement = editAs === 'oneCell' || editAs === 'absolute' ? { placement: editAs as Chart['placement'] } : {};
           const name = kid(gf, 'nvGraphicFramePr', 'cNvPr')?.getAttribute('name') ?? '';
           const mine = ms?.charts?.find((c) => name === `Chart ${c.id}`);
           const got = readChartXml(cdoc, at, w, h, mine?.id ?? newChartId());
@@ -1779,9 +1782,9 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           // its alt text, as set here or in Excel
           const descr = kid(gf, 'nvGraphicFramePr', 'cNvPr')?.getAttribute('descr')?.trim();
           const alt = descr ? { alt: descr } : {};
-          if (mine && sameChartData(mine, got.chart)) { seenChartId(mine.id); const { alt: _was, ...kept } = mine; charts.push({ ...kept, at, ...alt }); continue; }
+          if (mine && sameChartData(mine, got.chart)) { seenChartId(mine.id); const { alt: _was, placement: _had, ...kept } = mine; charts.push({ ...kept, at, ...alt, ...placement }); continue; }
           if (got.partial) notKept.add('parts of combined charts');
-          charts.push({ ...got.chart, ...alt });
+          charts.push({ ...got.chart, ...alt, ...placement });
         }
         if (charts.length) s.setCharts(charts);
       }

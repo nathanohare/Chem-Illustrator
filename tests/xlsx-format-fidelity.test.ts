@@ -311,3 +311,36 @@ describe('row heights', () => {
     expect(xml).toContain('<row r="2" ht="30" customHeight="1">');
   });
 });
+
+describe('chart anchors', () => {
+  const chartXml = '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:plotArea><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/>' +
+    '<c:ser><c:idx val="0"/><c:order val="0"/><c:val><c:numRef><c:f>Data!$A$1:$A$2</c:f></c:numRef></c:val></c:ser><c:axId val="1"/><c:axId val="2"/></c:barChart><c:catAx><c:axId val="1"/><c:crossAx val="2"/></c:catAx><c:valAx><c:axId val="2"/><c:crossAx val="1"/></c:valAx></c:plotArea></c:chart></c:chartSpace>';
+  const anchor = (editAs: string) => '<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' +
+    `<xdr:twoCellAnchor${editAs}><xdr:from><xdr:col>2</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from><xdr:to><xdr:col>8</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>15</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to>` +
+    '<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr><xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>' +
+    '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>';
+  const file = (editAs: string) => {
+    const pkg = new Package();
+    pkg.relate('', REL.officeDocument, 'xl/workbook.xml');
+    pkg.add('xl/workbook.xml', `<workbook xmlns="${MAIN}" xmlns:r="${R}"><sheets><sheet name="Data" sheetId="1" r:id="rId1"/></sheets></workbook>`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml');
+    pkg.relate('xl/workbook.xml', `${R}/worksheet`, 'worksheets/sheet1.xml');
+    pkg.add('xl/worksheets/sheet1.xml', `<worksheet xmlns="${MAIN}" xmlns:r="${R}"><sheetData><row r="1"><c r="A1"><v>1</v></c></row><row r="2"><c r="A2"><v>2</v></c></row></sheetData><drawing r:id="rId1"/></worksheet>`);
+    pkg.relate('xl/worksheets/sheet1.xml', `${R}/drawing`, '../drawings/drawing1.xml');
+    pkg.add('xl/drawings/drawing1.xml', anchor(editAs));
+    pkg.relate('xl/drawings/drawing1.xml', `${R}/chart`, '../charts/chart1.xml');
+    pkg.add('xl/charts/chart1.xml', chartXml);
+    return pkg.build();
+  };
+  const editAsOf = async (bytes: Uint8Array) => {
+    const { book } = await readXlsx(bytes);
+    expect(book.sheet.charts).toHaveLength(1);
+    const dr = part(await writeXlsx(book, pictures), 'xl/drawings/drawing1.xml');
+    return dr.includes('<xdr:twoCellAnchor>') ? 'twoCell' : /<xdr:twoCellAnchor editAs="(\w+)">/.exec(dr)?.[1];
+  };
+
+  it('keeps how a chart follows its cells, as the file had it', async () => {
+    expect(await editAsOf(file(''))).toBe('twoCell');
+    expect(await editAsOf(file(' editAs="oneCell"'))).toBe('oneCell');
+    expect(await editAsOf(file(' editAs="absolute"'))).toBe('absolute');
+  });
+});

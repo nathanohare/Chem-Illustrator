@@ -134,6 +134,11 @@ export interface Chart {
   pivot?: number;
   /** Where it sits: its top-left corner in a cell, and its size, in pixels at 100%. */
   at: { row: number; col: number; dx: number; dy: number };
+  /**
+   * How it follows its cells in Excel when their rows and columns are resized: moving but keeping
+   * its size, or staying put (unset: moving and sizing with them, Excel's default for charts).
+   */
+  placement?: 'oneCell' | 'absolute';
   w: number;
   h: number;
 }
