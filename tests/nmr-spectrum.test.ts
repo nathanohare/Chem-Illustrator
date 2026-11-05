@@ -43,6 +43,20 @@ describe('predicted 1H spectrum', () => {
     expect(performance.now() - t).toBeLessThan(5000);
   });
 
+  it('simulates long alkyl chains on Balanced and Accurate without failing or stalling', () => {
+    // decyl chain with every CH2 a little apart: big clusters with many coupled neighbours (once
+    // "15 spins: exact simulation is limited to 14" and the whole spectrum fell back to first order)
+    const n = 10;
+    const g: JGraph = { atoms: Array.from({ length: n }, (_, i) => C(i === 0 || i === n - 1 ? 3 : 2)), bonds: Array.from({ length: n - 1 }, (_, i) => ({ u: i, v: i + 1, o: 1 })) };
+    const shifts = Array.from({ length: n }, (_, i) => (i === 0 || i === n - 1 ? 0.88 : 1.25 + 0.012 * i));
+    for (const q of ['balanced', 'accurate'] as const) {
+      const t = performance.now();
+      const s = predictSpectrum(g, shifts, shifts.map((_, i) => `c${i}`), 400, q);
+      expect(s.lines.intensity.reduce((t, v) => t + v, 0)).toBeCloseTo(22, 2);
+      expect(performance.now() - t).toBeLessThan(4000);
+    }
+  });
+
   it('draws an SVG and finds the row under the pointer', () => {
     const s = predictSpectrum(ea, h1, codes, 400);
     const d = { nuc: '1H' as const, spec: s, groupRows: s.groups.map((_, i) => i) };

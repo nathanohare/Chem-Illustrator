@@ -14,6 +14,7 @@
 // intensities sum to the number of observed spins. Line width: mean of the involved spins' widths,
 // weighted by |<lower|I-_k|upper>|^2.
 
+/** Exact simulation is held to the state space of this many separate spin-1/2 nuclei. */
 export const MAX_SPINS = 14;
 const MIN_RELATIVE = 1e-6;
 
@@ -284,12 +285,15 @@ function siteLines(sites: Site[], J: number[][], weight: number, norm: number, o
 export function transitions(sys: SpinSystem, sf: number, observed = '1H'): LineList {
   const n = sys.shifts.length;
   if (n === 0) return { hz: new Float64Array(0), intensity: new Float64Array(0), width: new Float64Array(0), sf };
-  if (n > MAX_SPINS) throw new Error(`${n} spins: exact simulation is limited to ${MAX_SPINS}`);
   const nuclei = sys.nuclei ?? sys.shifts.map(() => '1H');
   const widths = typeof sys.widths === 'number' ? sys.shifts.map(() => sys.widths as number) : sys.widths ?? sys.shifts.map(() => 1);
   const obs = [...Array(n).keys()].filter((k) => nuclei[k] === observed);
   if (!obs.length) throw new Error(`no ${observed} spins in the system`);
   const groups = equivalentGroups(sys, nuclei, widths);
+  // the work grows with the composite state space (a group of k equivalent spins has at most k + 1
+  // states), not with the raw number of spins: hold it to what MAX_SPINS separate spins would need
+  const states = groups.reduce((t, g) => t * (g.length + 1), 1);
+  if (states > 2 ** MAX_SPINS) throw new Error(`${n} spins (${states} composite states): exact simulation is limited to ${2 ** MAX_SPINS}`);
   // every group of k spins splits into total spins I = k/2, k/2 - 1, ... with multiplicities
   // C(k, t) - C(k, t - 1), t = k/2 - I
   const choices = groups.map((g) => {

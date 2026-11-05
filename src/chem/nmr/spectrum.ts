@@ -10,7 +10,9 @@ import type { ProtonJ } from './karplus';
 export type NmrQuality = 'fast' | 'balanced' | 'accurate';
 /** Size of the largest cluster simulated exactly, in spin-1/2 equivalents (2^cap states); fast:
  *  first-order lines only. */
-export const CLUSTER_CAP: Record<NmrQuality, number> = { fast: 1, balanced: 8, accurate: 12 };
+export const CLUSTER_CAP: Record<NmrQuality, number> = { fast: 1, balanced: 8, accurate: 10 };
+/** How many times a cluster's own state space its coupled neighbours may multiply it by. */
+export const X_BUDGET = 4;
 
 /** |J| / shift difference below which two atoms' protons are left to first order. */
 const WEAK = 0.02;
@@ -92,19 +94,21 @@ export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 4
     for (let k = 0; k < l.hz.length; k++) { HZ.push(l.hz[k]); INT.push(ii[k]); W.push(ww[k]); }
   };
   const cap = CLUSTER_CAP[quality];
+  // a group's first-order multiplet, for n of its protons (all of them by default)
+  const firstOrderGroup = (gr: ProtonGroup, n = gr.n) => {
+    const rep = gr.atoms[0], same = new Set(gr.atoms);
+    const partners: [number, number][] = [];
+    for (const c of cs) {
+      if (c.a !== rep && c.b !== rep) continue;
+      const o = c.a === rep ? c.b : c.a;
+      if (o === rep) { partners.push([c.j, 1]); continue; }
+      if (!same.has(o)) partners.push([c.j, g.atoms[o].h]);
+    }
+    push(firstOrder(gr.shift * sf, partners, n, width));
+  };
   if (cap <= 1) {
     // fast: each group as its first-order multiplet
-    for (const gr of groups) {
-      const rep = gr.atoms[0], same = new Set(gr.atoms);
-      const partners: [number, number][] = [];
-      for (const c of cs) {
-        if (c.a !== rep && c.b !== rep) continue;
-        const o = c.a === rep ? c.b : c.a;
-        if (o === rep) { partners.push([c.j, 1]); continue; }
-        if (!same.has(o)) partners.push([c.j, g.atoms[o].h]);
-      }
-      push(firstOrder(gr.shift * sf, partners, gr.n, width));
-    }
+    for (const gr of groups) firstOrderGroup(gr);
     return { sf, lines: sorted(HZ, INT, W, sf), groups };
   }
   // Clusters of atoms simulated together. The H on one atom share a shift and couplings, so the
@@ -148,7 +152,19 @@ export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 4
   for (const i of hAtoms) { const r = root(i); if (!clusters.has(r)) clusters.set(r, []); clusters.get(r)!.push(i); }
   for (const atoms of clusters.values()) {
     const inC = new Set(atoms);
-    const xs = hAtoms.filter((x) => !inC.has(x) && atoms.some((a) => J(a, x) !== 0));
+    // protons of other clusters coupled to this one join as weakly coupled spins; they multiply the
+    // states simulated, so keep the most strongly coupled ones within the quality's budget (the
+    // weakest long-range couplings of a crowded cluster are left out)
+    let states = atoms.reduce((t, a) => t * (split.has(a) ? 2 ** g.atoms[a].h : g.atoms[a].h + 1), 1);
+    const xs: number[] = [];
+    const near = hAtoms.filter((x) => !inC.has(x)).map((x) => ({ x, j: Math.max(...atoms.map((a) => Math.abs(J(a, x)))) }))
+      .filter((c) => c.j > 0).sort((p, q) => q.j - p.j);
+    for (const { x } of near) {
+      const f = split.has(x) ? 2 ** g.atoms[x].h : g.atoms[x].h + 1;
+      if (states * f > X_BUDGET * limit) continue;
+      states *= f;
+      xs.push(x);
+    }
     const spinAtoms: { atom: number; k: number; obs: boolean }[] = [];
     for (const a of atoms) for (let k = 0; k < g.atoms[a].h; k++) spinAtoms.push({ atom: a, k, obs: true });
     for (const x of xs) for (let k = 0; k < g.atoms[x].h; k++) spinAtoms.push({ atom: x, k, obs: false });
@@ -157,7 +173,12 @@ export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 4
       continue;
     }
     const jm = spinAtoms.map((p) => spinAtoms.map((q) => pairJ(p, q)));
-    push(transitions({ shifts: spinAtoms.map(shiftOf), j: jm, nuclei: spinAtoms.map((p) => (p.obs ? '1H' : 'X')), widths: width }, sf));
+    try {
+      push(transitions({ shifts: spinAtoms.map(shiftOf), j: jm, nuclei: spinAtoms.map((p) => (p.obs ? '1H' : 'X')), widths: width }, sf));
+    } catch {
+      // too many neighbouring spins to simulate exactly: this cluster's protons to first order
+      for (const a of atoms) { const gr = groups.find((x) => x.atoms.includes(a)); if (gr) firstOrderGroup(gr, g.atoms[a].h); }
+    }
   }
   return { sf, lines: sorted(HZ, INT, W, sf), groups };
 }
