@@ -168,3 +168,35 @@ describe('columns to the end of the sheet, after inserting one', () => {
     expect(xml).toMatch(/<col min="6" max="16384" width="[\d.]+" hidden="1"\/>/);
   });
 });
+
+describe('built-in number formats', () => {
+  const file = () => excelFile(
+    '<sheetData><row r="1"><c r="A1" s="1"><v>46331</v></c><c r="B1" s="2"><v>46331</v></c><c r="C1" s="3"><v>0.5</v></c></row></sheetData>',
+    { styles: styles(['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>', '<xf numFmtId="14" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>',
+      '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>', '<xf numFmtId="20" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'],
+    { numFmts: '<numFmts count="1"><numFmt numFmtId="164" formatCode="d-mmm-yy"/></numFmts>' }) },
+  );
+
+  it('writes the short date and other built-in formats by their numbers, so Excel shows them as the system has them', async () => {
+    const { book } = await readXlsx(file());
+    expect(book.sheet.shownText(0, 0)).toBe('11/5/2026');
+    const bytes = await writeXlsx(book, pictures);
+    const st = part(bytes, 'xl/styles.xml');
+    expect(st).toMatch(/<xf numFmtId="14" /);
+    expect(st).toMatch(/<xf numFmtId="20" /);
+    expect(st).not.toContain('formatCode="m/d/yyyy"');
+    expect(st).not.toContain('formatCode="h:mm"');
+  });
+
+  it("keeps a file's own code that is also a built-in one's as its own", async () => {
+    const st = part(await writeXlsx((await readXlsx(file())).book, pictures), 'xl/styles.xml');
+    expect(st).toMatch(/<numFmt numFmtId="16\d" formatCode="d-mmm-yy"\/>/);
+  });
+
+  it('gives a date typed here the short date', async () => {
+    const wb = new Workbook();
+    wb.edit('type', () => wb.sheet.setInput(0, 0, '11/5/2026'));
+    expect(wb.sheet.styleAt(0, 0)?.numFmt).toBe('m/d/yyyy');
+    expect(part(await writeXlsx(wb, pictures), 'xl/styles.xml')).toMatch(/<xf numFmtId="14" /);
+  });
+});

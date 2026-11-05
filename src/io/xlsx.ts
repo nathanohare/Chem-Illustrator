@@ -302,6 +302,8 @@ class Styles {
   /** The body font of the workbook's theme: cells with no font of their own. */
   private minor: string;
   private fonts: string[];
+  /** Number formats the file read had as its own though they are a built-in one's code (m/d/yyyy from a German Excel). */
+  private ownCodes: Set<string>;
   /** Named cell styles (Good, Heading 1…): the base formats cells point at, by name. */
   private named = new Map<string, number>();
   private namedXfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>'];
@@ -312,6 +314,7 @@ class Styles {
    */
   constructor(private theme: WorkbookTheme | null = null, private normal: CellStyle = {}, kept: ExcelStyles = {}) {
     this.minor = themeOf(theme).minor;
+    this.ownCodes = new Set(kept.numFmts);
     this.fonts = [Object.keys(normal).length && kept.normalFont ? kept.normalFont : `<font><sz val="11"/><color theme="1"/><name val="${xml(this.minor)}"/><family val="2"/><scheme val="minor"/></font>`];
     if (Object.keys(normal).length) {
       // style 0 (and the Normal style's base format) in that look: the plain look is a style of its own
@@ -343,7 +346,8 @@ class Styles {
 
   private numFmt(code: string | undefined): number {
     if (!code || /^general$/i.test(code)) return 0;
-    for (const [id, c] of Object.entries(BUILTIN_FORMATS)) if (c === code && Number(id) < 14 || (c === code && Number(id) === 49)) return Number(id);
+    // a built-in format by its number (Excel shows the short date, 14, as the reader's system has it), unless the file had the code as its own
+    if (!this.ownCodes.has(code)) for (const [id, c] of Object.entries(BUILTIN_FORMATS)) if (c === code) return Number(id);
     let id = this.formats.get(code);
     if (id === undefined) { id = 164 + this.formats.size; this.formats.set(code, id); }
     return id;
@@ -1073,7 +1077,12 @@ function readStyles(doc: Document | null, theme: string[], faces: { minor: strin
   if (!doc) return [];
   const root = doc.documentElement;
   const formats = new Map<number, string>(Object.entries(BUILTIN_FORMATS).map(([k, v]) => [Number(k), v]));
-  for (const f of kids(kid(root, 'numFmts'), 'numFmt')) formats.set(Number(f.getAttribute('numFmtId')), f.getAttribute('formatCode') ?? 'General');
+  for (const f of kids(kid(root, 'numFmts'), 'numFmt')) {
+    const id = Number(f.getAttribute('numFmtId')), code = f.getAttribute('formatCode') ?? 'General';
+    // a code of the file's own that is also a built-in one's stays the file's own when saved
+    if (!(id in BUILTIN_FORMATS) && Object.values(BUILTIN_FORMATS).includes(code)) (kept.numFmts ??= []).push(code);
+    formats.set(id, code);
+  }
   const fontEls = kids(kid(root, 'fonts'), 'font');
   const val = (el: Element, name: string) => kid(el, name)?.getAttribute('val');
   const on = (el: Element, name: string) => { const k = kid(el, name); return !!k && k.getAttribute('val') !== '0' && k.getAttribute('val') !== 'false' && k.getAttribute('val') !== 'none'; };

@@ -81,6 +81,8 @@ export interface CellStyle {
 export interface ExcelStyles {
   /** The Normal style's font (font 0) as the file had it. */
   normalFont?: string;
+  /** Number formats of the file's own whose code is also a built-in format's (kept as its own, not the built-in). */
+  numFmts?: string[];
 }
 
 /** The macros of an .xlsm workbook, as its file held them. */
