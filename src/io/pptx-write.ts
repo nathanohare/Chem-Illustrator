@@ -27,13 +27,14 @@ import { PPT_STYLE_IDS, lookOf, slideCellLook, styledRuns, type CellLine, type S
 import { tableBorders } from './cdxml-table';
 import { writeCdxml } from './cdxml-write';
 import { cdxmlToCdx } from './cdx';
-import { chemdrawObject, chemdrawObjectName, OLE_REL, OLE_TYPE } from './ole-object';
+import { chemdrawInObject, chemdrawObject, chemdrawObjectName, OLE_REL, OLE_TYPE } from './ole-object';
 import { extractDrawing } from './clipboard';
 import { contentsAlt, titleOverlaps, roughCaptionBox } from '../accessibility';
 import type { Selection } from '../editor/editor';
 import { Package, NS, REL, emu, xml, xmlAttr, hex6, MediaFiles, structureAltText, bytesHash } from './ooxml';
 import { SLIDE_SIZE_TYPES } from '../deck/deck';
 import { appPropsXml, corePropsXml, writeKeptParts, type KeptParts } from './kept-parts';
+import { olePrint, type KeptOle } from './ole-kept';
 import { facesToEmbed, toEot, type FontSource } from './font-embed';
 import { dataUrl, fromDataUrl } from '../render/images';
 import { patternClear, patternInk, shadowLook } from '../render/fills';
@@ -212,6 +213,8 @@ export interface DeckData {
   settings?: DeckSettings;
   /** Other programs' data kept from the file read (custom XML, custom properties, add-ins' settings). */
   kept?: KeptParts;
+  /** ChemDraw objects as the file read has them (by OleMark id), saved back while they stay unchanged. */
+  oleKept?: Map<number, KeptOle>;
 }
 
 /**
@@ -970,6 +973,18 @@ class Writer {
    */
   private async drawingJob(path: string, d: Doc, sel: Selection, parts: SlideParts, anims: Anim[] | undefined, mark: (sel: Partial<Selection>, ...ids: number[]) => void, out: string[], next: () => number, spids: Map<string, number[]>): Promise<void> {
     const part = extractDrawing(d, sel);
+    // a ChemDraw object not changed here goes back as the file had it, picture and all
+    const was = parts.chemdraw.get(sel);
+    const keptOle = was && this.deck.oleKept?.get(was.id);
+    if (was && keptOle && !highlightParts(d, sel).some((h) => (anims ?? []).some((a) => partHolds(h, a.target)))) {
+      const now = olePrint(d, sel);
+      if (now.print === keptOle.print) {
+        const id = next();
+        mark(sel, id);
+        out.push(this.keptChemdraw(path, keptOle, was.prog, id, now.x - keptOle.x, now.y - keptOle.y, contentsAlt(part.contents())));
+        return;
+      }
+    }
     // highlights animated on their own go in pictures of their own, under the structure
     const moving = highlightParts(d, sel).filter((h) => (anims ?? []).some((a) => partHolds(h, a.target)));
     const bare = moving.length ? extractDrawing(d, sel) : part;
@@ -999,7 +1014,7 @@ class Writer {
       out.push(picXml(id, `Highlight ${id - 1}`, hpng, hsvg, hp.box, null, htags));
     }
     // a ChemDraw object from PowerPoint goes back as one, which opens in ChemDraw (with the drawing as made here kept beside it)
-    const prog = parts.chemdraw.get(sel);
+    const prog = was?.prog;
     const cdx = prog ? chemdrawCdxOf(cdxml) : null;
     const svgBytes = new TextEncoder().encode(pic.svg);
     // (a picture's print, its SVG's and its PNG's: the drawing kept with it is used only while PowerPoint shows this picture)
@@ -1030,6 +1045,25 @@ class Writer {
       `<p:xfrm><a:off x="${emu(box.x1)}" y="${emu(box.y1)}"/><a:ext cx="${w}" cy="${h}"/></p:xfrm>` +
       `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/presentationml/2006/ole">` +
       `<p:oleObj name="${xmlAttr(chemdrawObjectName(prog))}" r:id="${rid}" imgW="${w}" imgH="${h}" progId="${xmlAttr(prog)}"><p:embed/>${picXml(0, '', png, svg, box, null, null)}</p:oleObj>` +
+      `</a:graphicData></a:graphic></p:graphicFrame>`;
+  }
+
+  /** A ChemDraw object as the file read had it (its object and picture), moved by (dx, dy). */
+  private keptChemdraw(path: string, k: KeptOle, prog: string, id: number, dx: number, dy: number, alt?: string): string {
+    const part = `ppt/embeddings/oleObject${++this.oleObjects}.bin`;
+    this.pkg.defaultType('bin', OLE_TYPE);
+    this.pkg.add(part, k.bin);
+    const rid = this.pkg.relate(path, OLE_REL, fromPpt(path, part));
+    const box = { x1: k.frame.x1 + dx, y1: k.frame.y1 + dy, x2: k.frame.x2 + dx, y2: k.frame.y2 + dy };
+    const png = this.addMedia(path, k.picture, k.pictureExt);
+    const svg = k.svg ? this.addMedia(path, k.svg, 'svg') : null;
+    const tags = k.cdxmlTag ? this.addTags(path, { [TAG.cdxml]: k.cdxmlTag, [TAG.box]: k.boxTag ?? '', [TAG.oleCdx]: oleCdxHash(k.bin) }) : null;
+    const descr = k.descr || alt;
+    return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="${xmlAttr(k.name || `Object ${id - 1}`)}"${descr ? ` descr="${xmlAttr(descr)}"` : ''}/><p:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></p:cNvGraphicFramePr>` +
+      (tags ? `<p:nvPr><p:custDataLst><p:tags r:id="${tags}"/></p:custDataLst></p:nvPr>` : '<p:nvPr/>') + '</p:nvGraphicFramePr>' +
+      `<p:xfrm><a:off x="${emu(box.x1)}" y="${emu(box.y1)}"/><a:ext cx="${emu(box.x2 - box.x1)}" cy="${emu(box.y2 - box.y1)}"/></p:xfrm>` +
+      `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/presentationml/2006/ole">` +
+      `<p:oleObj name="${xmlAttr(k.objectName || chemdrawObjectName(prog))}" r:id="${rid}" imgW="${k.imgW || emu(box.x2 - box.x1)}" imgH="${k.imgH || emu(box.y2 - box.y1)}" progId="${xmlAttr(prog)}"><p:embed/>${picXml(0, '', png, svg, box, k.crop ?? null, null)}</p:oleObj>` +
       `</a:graphicData></a:graphic></p:graphicFrame>`;
   }
 
@@ -1691,6 +1725,12 @@ function picXml(id: number, name: string, blipId: string, svgId: string | null, 
   return `<p:pic><p:nvPicPr><p:cNvPr id="${id}"${nameAttrs(name, more.hidden)}${descr ? ` descr="${xmlAttr(descr)}"` : ''}/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>${nvPr}</p:nvPicPr>` +
     `<p:blipFill><a:blip r:embed="${blipId}">${blipEffectsXml(fx)}${ext}</a:blip>${src}<a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
     `<p:spPr>${xfrm(box, rotAttr(more.rot))}${pictureLookXml(look, fx)}</p:spPr></p:pic>`;
+}
+
+/** The hash the CDX tag holds, of the drawing in an object's part. */
+function oleCdxHash(bin: Uint8Array): string {
+  const cdx = chemdrawInObject(bin);
+  return cdx ? bytesHash(cdx) : '';
 }
 
 /** A drawing's CDXML as CDX, ChemDraw's own format, for a ChemDraw object; null when it can't be written. */

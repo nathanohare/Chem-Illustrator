@@ -2144,7 +2144,7 @@ class CdxmlWriter {
         const made = (this.opts.raster ?? rasterPng)(s.src, Math.max(1, w * k), Math.max(1, h * k));
         png = !!made && put(made);
       }
-    } else png = exact = ['PNG', 'JPEG', 'GIF', 'BMP', 'EnhancedMetafile', 'WindowsMetafile'].some((k) => e.hasAttribute(k));
+    } else png = exact = ['PNG', 'JPEG', 'GIF', 'BMP', 'EnhancedMetafile', 'WindowsMetafile', 'CompressedEnhancedMetafile', 'CompressedWindowsMetafile'].some((k) => e.hasAttribute(k));
     for (const c of kids(e)) if (c.nodeName === 'objecttag' && [CHART_TAG, MATH_TAG, PICTURE_FX_TAG, ALT_TAG].includes(c.getAttribute('Name') ?? '')) e.removeChild(c);
     if (s.alt) e.appendChild(this.el('objecttag', { TagType: 'String', Name: ALT_TAG, Value: s.alt, Visible: 'no' }));
     if (s.fx) e.appendChild(this.el('objecttag', { TagType: 'String', Name: PICTURE_FX_TAG, Value: JSON.stringify(s.fx), Visible: 'no' }));

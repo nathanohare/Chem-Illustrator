@@ -184,39 +184,62 @@ export function faceFromStyle(r: RunStyle): number {
 
 export type Part = { text: string; pos: 'base' | 'sub' | 'sup' };
 
+/** What a count or a charge can't follow in formula style: nothing, a space, an opening bracket or , . : ; */
+const FORMULA_NO_MARK = /[\s(\[{,.:;]/;
+
 /**
- * How formula style shows a piece of text, as ChemDraw does: numbers straight after a letter or
- * a closing bracket are subscripts (CH3, Pd(PPh3)4, [Fe(CN)6]3), and a + ending a word there is
- * a superscript charge (NH4+, K+). A - stays a plain hyphen, as in ChemDraw, since it is also
- * used in names (n-BuLi); superscript a minus charge, or a charge's number (Fe³⁺), by hand.
+ * How formula style shows a piece of text, as measured from ChemDraw:
+ * - Numbers go down unless they follow what FORMULA_NO_MARK lists or a sign (CH3, Pd(PPh3)4, not 80 °C or 1,4).
+ * - A range of counts goes down whole (C8-12), unless it reads as a charge: a one-digit end no
+ *   more than the last digit before it (C2-1).
+ * - A sign goes up with the numbers after it (K+, TfO-, Fe2+, a-1), unless it follows what
+ *   FORMULA_NO_MARK lists or is the start of the text. Before a letter it stays on the line, as a
+ *   hyphen does (Red-Al), but a - goes up there when a + comes later in the text (CO2-Na+).
+ * - Two or more hyphens are names, not charges, and none goes up (Me-Al-).
+ * `before` and `after` are the rest of the text, in other runs: ChemDraw reads across them.
  */
-export function formulaParts(text: string): Part[] {
+export function formulaParts(text: string, before = '', after = ''): Part[] {
+  const whole = before + text + after;
+  const pos: Part['pos'][] = new Array<Part['pos']>(whole.length).fill('base');
+  const counts = new Set<number>();
+  for (const m of whole.matchAll(/\d+(?:-\d+)+/g)) {
+    const prev = whole[m.index - 1];
+    if (prev === undefined || FORMULA_NO_MARK.test(prev) || /[-+]/.test(prev)) continue;
+    const [from, to] = m[0].split('-');
+    if (to.length === 1 && Number(to) <= Number(from) % 10) continue;
+    for (let k = 0; k < m[0].length; k++) { pos[m.index + k] = 'sub'; counts.add(m.index + k); }
+  }
+  let hyphens = 0;
+  for (let i = 0; i < whole.length; i++) if (whole[i] === '-' && !counts.has(i)) hyphens++;
+  const lastPlus = whole.lastIndexOf('+');
+  let raised = false;
+  for (let i = 0; i < whole.length; i++) {
+    if (counts.has(i)) { raised = false; continue; }
+    const c = whole[i], prev = whole[i - 1];
+    if (c === '+' || c === '-') {
+      const letter = /[A-Za-z]/.test(whole[i + 1] ?? '');
+      raised = prev !== undefined && !FORMULA_NO_MARK.test(prev) && (c === '+' ? !letter : hyphens < 2 && (!letter || lastPlus > i));
+      if (raised) pos[i] = 'sup';
+    } else if (c >= '0' && c <= '9') {
+      if (raised) pos[i] = 'sup';
+      else if (prev >= '0' && prev <= '9' ? pos[i - 1] === 'sub' : prev !== undefined && !FORMULA_NO_MARK.test(prev) && prev !== '+' && prev !== '-') pos[i] = 'sub';
+    } else raised = false;
+  }
   const out: Part[] = [];
-  const push = (t: string, pos: Part['pos']) => {
+  for (let i = before.length; i < before.length + text.length; i++) {
     const last = out[out.length - 1];
-    if (last && last.pos === pos) last.text += t;
-    else out.push({ text: t, pos });
-  };
-  const wordEnd = /^\+(?=$|[\s,;:)\]])/;
-  let i = 0;
-  while (i < text.length) {
-    const rest = text.slice(i);
-    const prev = i > 0 ? text[i - 1] : '';
-    if (/[A-Za-z)\]]/.test(prev)) {
-      const count = /^\d+/.exec(rest);
-      if (count) { push(count[0], 'sub'); i += count[0].length; continue; }
-    }
-    // a charge after a letter, a bracket or a subscript number
-    if ((/[A-Za-z)\]]/.test(prev) || out[out.length - 1]?.pos === 'sub') && wordEnd.test(rest)) {
-      push(rest[0], 'sup');
-      i += 1;
-      continue;
-    }
-    const plain = /^(\d+|[^\d])/.exec(rest)!;
-    push(plain[0], 'base');
-    i += plain[0].length;
+    if (last && last.pos === pos[i]) last.text += whole[i];
+    else out.push({ text: whole[i], pos: pos[i] });
   }
   return out;
+}
+
+/** Formula style for one of a text's runs: the parts it shows, reading across the runs around it. */
+export function formulaRunParts(runs: readonly TextRun[], k: number): Part[] {
+  let before = '', after = '';
+  for (let i = 0; i < k; i++) before += runs[i].text;
+  for (let i = k + 1; i < runs.length; i++) after += runs[i].text;
+  return formulaParts(runs[k].text, before, after);
 }
 
 // ------------------------------------------------------------------ the Symbol font

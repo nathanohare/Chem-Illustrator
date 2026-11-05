@@ -9,7 +9,8 @@
 // lines, arrows and tables. What has no place here yet (charts, rotated things) is noted in
 // warnings, never refused.
 
-import { remapFrames, remapStep } from './remap-refs';
+import { mergeDrawing, olePrint, type KeptOle } from './ole-kept';
+import type { Selection } from '../editor/arrange';
 import { fillFrameMembers } from '../editor/frames';
 import { restoreSteps } from './step-tag';
 import { fromDataUrl } from '../render/images';
@@ -95,6 +96,8 @@ export interface PptxRead {
   canvasEdited?: number;
   /** Other programs' data in the file (custom XML, custom properties, add-ins' settings), to save back. */
   kept?: KeptParts;
+  /** ChemDraw objects as the file has them (by OleMark id), to save back while they stay unchanged. */
+  oleKept?: Map<number, KeptOle>;
 }
 
 /** A plain box or oval that needs a design shape to keep its look: a picture or gradient fill, or effects past a shadow. */
@@ -404,6 +407,7 @@ class Reader {
       size: this.size, master: this.masterOut, slides, warnings: [...this.warnings], design: this.design, ...(sections ? { sections } : {}), ...(Object.keys(settings).length ? { settings } : {}),
       ...(joined.edited ? { canvasEdited: joined.edited } : {}),
       ...(kept ? { kept } : {}),
+      ...(this.oleKept.size ? { oleKept: this.oleKept } : {}),
     };
   }
 
@@ -874,6 +878,8 @@ class Reader {
     if (tags[TAG.slideRefs]) {
       try { refs = cleanSlideRefs(JSON.parse(tags[TAG.slideRefs])); } catch { /* none */ }
     }
+    // what its ChemDraw objects read as, with the slide finished
+    for (const [id, k] of this.oleKept) if (!k.print) Object.assign(k, olePrint(doc, oleItems(doc, id)));
     return {
       ...refs,
       layout: lay, contents: doc.contents(), ...this.notes(path),
@@ -1233,10 +1239,40 @@ class Reader {
       if (!placed) return false;
       mergeDrawing(doc, src, placed);
     }
-    markOle(doc, from, { id: ++this.oleCount, prog });
+    const mark = { id: ++this.oleCount, prog };
+    markOle(doc, from, mark);
+    const preview = this.olePreview(s.path, el);
+    if (preview && bin) {
+      const nv = kid(el, 'nvGraphicFramePr', 'cNvPr');
+      this.oleKept.set(mark.id, {
+        bin, ...preview, print: '', x: 0, y: 0, frame: { x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2 },
+        imgW: ole.getAttribute('imgW') ?? '', imgH: ole.getAttribute('imgH') ?? '', objectName: ole.getAttribute('name') ?? '',
+        name: nv?.getAttribute('name') ?? '', descr: nv?.getAttribute('descr') ?? '',
+        ...(tags[TAG.cdxml] && tags[TAG.oleCdx] === bytesHash(cdx) ? { cdxmlTag: tags[TAG.cdxml], boxTag: tags[TAG.box] ?? '' } : {}),
+      });
+    }
     return true;
   }
   private oleCount = 0;
+  private oleKept = new Map<number, KeptOle>();
+
+  /** The picture PowerPoint shows for an object, as its file has it. */
+  private olePreview(from: string, el: Element): Pick<KeptOle, 'picture' | 'pictureExt' | 'svg' | 'crop'> | null {
+    const pic = Array.from(el.getElementsByTagNameNS(NS.p, 'pic'))[0];
+    const fill = pic ? kid(pic, 'blipFill') : null;
+    const blip = fill ? kid(fill, 'blip') : null;
+    if (!fill || !blip) return null;
+    const rels = this.r.rels(from);
+    const target = rels.get(rAttr(blip, 'embed') ?? '')?.target;
+    const picture = target ? this.r.bytes(target) : null;
+    if (!target || !picture) return null;
+    const svgEl = blip.getElementsByTagNameNS('http://schemas.microsoft.com/office/drawing/2016/SVG/main', 'svgBlip')[0];
+    const svgTarget = svgEl && rels.get(rAttr(svgEl, 'embed') ?? '')?.target;
+    const svg = svgTarget ? this.r.bytes(svgTarget) : null;
+    const src = kid(fill, 'srcRect');
+    const cut = (k: string) => Math.max(0, Number(src?.getAttribute(k) ?? 0) / 100000);
+    return { picture, pictureExt: target.split('.').pop()!.toLowerCase(), ...(svg ? { svg } : {}), ...(src ? { crop: { l: cut('l'), t: cut('t'), r: cut('r'), b: cut('b') } } : {}) };
+  }
 
   /**
    * A chart: PowerPoint's own (its numbers from what PowerPoint cached), or ours when it charts the
@@ -2622,43 +2658,6 @@ function merge(runs: TextRun[]): TextRun[] {
   return out.filter((r) => r.text !== '');
 }
 
-/** Add a drawing to `doc`, with every position passed through `map`. */
-export function mergeDrawing(doc: Doc, src: Doc, map: (p: Vec) => Vec): void {
-  const ids = new Map<number, number>();
-  // (multicentre points after the atoms they stand for)
-  const atoms = [...src.atoms.values()];
-  for (const a of [...atoms.filter((x) => !x.multi), ...atoms.filter((x) => x.multi)]) {
-    const { id, ...rest } = structuredClone(a);
-    if (rest.multi) rest.multi = rest.multi.map((m) => ids.get(m)).filter((m): m is number => m !== undefined);
-    const p = map(a);
-    ids.set(id, doc.addAtom(p.x, p.y, a.z, { ...rest, x: p.x, y: p.y }).id);
-  }
-  for (const b of src.bonds.values()) {
-    const a1 = ids.get(b.a1), a2 = ids.get(b.a2);
-    if (a1 === undefined || a2 === undefined) continue;
-    const { id: _id, ...rest } = structuredClone(b);
-    doc.addBond(a1, a2, b.order, b.display, { ...rest, a1, a2 });
-  }
-  const caps = new Map<number, number>(), shapes = new Map<number, number>(), arrows = new Map<number, number>();
-  const maps = { atoms: ids, captions: caps, shapes, arrows };
-  for (const c of src.captions.values()) {
-    const { id, ...rest } = structuredClone(c);
-    const p = map(c);
-    caps.set(id, doc.addCaption({ ...rest, x: p.x, y: p.y }).id);
-  }
-  for (const s of src.shapes.values()) {
-    const { id, ...rest } = structuredClone(s);
-    const a = map({ x: s.x1, y: s.y1 }), b = map({ x: s.x2, y: s.y2 });
-    shapes.set(id, doc.addShape({ ...rest, x1: a.x, y1: a.y, x2: b.x, y2: b.y }).id);
-  }
-  for (const r of src.arrows.values()) {
-    const { id, ...rest } = structuredClone(r);
-    if (rest.step) rest.step = remapStep(rest.step, maps);
-    arrows.set(id, doc.addArrow({ ...rest, tail: map(r.tail), head: map(r.head) }).id);
-  }
-  remapFrames(doc, maps);
-}
-
 /**
  * Size a ChemDraw object's drawing (changes `src`) as PowerPoint shows the object, in `box`, and
  * return the move that puts it there; null when it has nothing in it. ChemDraw makes the object
@@ -2682,6 +2681,17 @@ export function placeChemdraw(src: Doc, cdxml: string, box: Rect, img: { w: numb
   const cx = ((was.x1 + was.x2) / 2) * ks, cy = ((was.y1 + was.y2) / 2) * ks;
   const nx = (box.x1 + box.x2) / 2, ny = (box.y1 + box.y2) / 2;
   return (p) => ({ x: p.x - cx + nx, y: p.y - cy + ny });
+}
+
+/** What belongs to one ChemDraw object on a slide. */
+function oleItems(doc: Doc, id: number): Selection {
+  const atoms = new Set<number>(), captions = new Set<number>(), arrows = new Set<number>(), shapes = new Set<number>(), bonds = new Set<number>();
+  for (const a of doc.atoms.values()) if (a.ole?.id === id) atoms.add(a.id);
+  for (const b of doc.bonds.values()) if (atoms.has(b.a1) && atoms.has(b.a2)) bonds.add(b.id);
+  for (const c of doc.captions.values()) if (c.ole?.id === id) captions.add(c.id);
+  for (const r of doc.arrows.values()) if (r.ole?.id === id) arrows.add(r.id);
+  for (const sh of doc.shapes.values()) if (sh.ole?.id === id) shapes.add(sh.id);
+  return { atoms, bonds, captions, arrows, shapes };
 }
 
 /** Mark everything added to `doc` since id `from` as part of one ChemDraw object. */

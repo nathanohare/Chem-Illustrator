@@ -598,11 +598,11 @@ export class TextEditing {
     if (this.lookCache?.t === this.t) return this.lookCache.looks.slice(from, to);
     const out: CharLook[] = [];
     let at = 0;
-    for (const r of this.t.runs) {
+    for (const [k, r] of this.t.runs.entries()) {
       const n = r.text.length;
       if (at + n > from && at < to) {
         const italic = !!r.italic;
-        const parts = r.formula && !r.sub && !r.sup ? rt.formulaParts(r.text) : null;
+        const parts = r.formula && !r.sub && !r.sup ? rt.formulaRunParts(this.t.runs, k) : null;
         const pos: CharLook['pos'][] = [];
         if (parts) for (const p of parts) for (let i = 0; i < p.text.length; i++) pos.push(p.pos);
         for (let i = Math.max(0, from - at); i < Math.min(n, to - at); i++) out.push({ pos: r.sub ? 'sub' : r.sup ? 'sup' : parts ? pos[i] : 'base', italic });
@@ -616,10 +616,10 @@ export class TextEditing {
   looks(): CharLook[] {
     if (this.lookCache?.t === this.t) return this.lookCache.looks;
     const looks: CharLook[] = [];
-    for (const r of this.t.runs) {
+    for (const [k, r] of this.t.runs.entries()) {
       const italic = !!r.italic;
       if (r.sub || r.sup) for (let i = 0; i < r.text.length; i++) looks.push({ pos: r.sub ? 'sub' : 'sup', italic });
-      else if (r.formula) for (const p of rt.formulaParts(r.text)) for (let i = 0; i < p.text.length; i++) looks.push({ pos: p.pos, italic });
+      else if (r.formula) for (const p of rt.formulaRunParts(this.t.runs, k)) for (let i = 0; i < p.text.length; i++) looks.push({ pos: p.pos, italic });
       else for (let i = 0; i < r.text.length; i++) looks.push({ pos: 'base', italic });
     }
     this.lookCache = { t: this.t, looks };

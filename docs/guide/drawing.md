@@ -178,7 +178,7 @@ Useful keys while typing:
 | Tab, Shift+Tab | Change the level of a list item |
 | Ctrl+Shift+V | Paste as plain text |
 
-Formula style writes CH3CO2H with its numbers lowered and raises a + at the end of a word (NH4+). To raise a minus charge or a charge with a number (Fe3+), select it and use superscript, as in ChemDraw.
+Formula style writes CH3CO2H with its numbers lowered and raises a charge (NH4+, TfO-), as ChemDraw does. A hyphen in a name stays on the line (Red-Al). To raise a charge's number (Fe3+), select it and use superscript.
 
 As you type, common chemistry is tidied for you: CH2Cl2 gets its subscripts, `0 oC` becomes 0 °C, `1H NMR` gets its superscript, and the letters of a stereodescriptor go italic as the name goes on ((*S*)-proline, (2*E*,4*Z*)-). Compound numbers can go bold as you type them, (**4**) or compound **4a**: check that in **Edit ▸ Typing and Spelling…** (it is off at first, so list items such as (1) stay plain). Press Ctrl+Z straight away to undo just that change. Misspelled words get a red underline and formatting slips (a hyphen in a range, a number run into its unit) a blue one; right-click for suggestions. **Edit ▸ Typing and Spelling…** turns these helpers off, adds your own replacements (`rxn` → reaction) and edits your dictionary.
 

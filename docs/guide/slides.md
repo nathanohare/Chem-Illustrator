@@ -410,7 +410,7 @@ For handouts you can also pick the paper and **Frame the slides**. The printer a
 Opening a deck made in PowerPoint works too:
 
 - The template's own artwork on its slide master and layouts (title bars, rules, logos) and its theme come in with it and are saved back as they were. Picking one of this app's templates (**Design & Transitions** tab ▸ **Templates…**) replaces them.
-- ChemDraw objects come in as editable structures and are saved back as ChemDraw objects.
+- ChemDraw objects come in as editable structures. Saved without changes, one goes back exactly as it was, with ChemDraw's own picture; edited here, it gets a new picture and still opens in ChemDraw.
 - Shapes and structures keep the order PowerPoint stacks them in, groups stay grouped, PowerPoint's arrows and boxes stay PowerPoint shapes, and SmartArt comes in as shapes and text.
 - Bullets, numbering styles, language, all caps, highlighting, slide number fields and formatted speaker notes are kept.
 - A structure saved here and then turned or flipped in PowerPoint comes back turned or flipped. One whose picture was replaced there (**Change Picture**) comes back as the new picture.

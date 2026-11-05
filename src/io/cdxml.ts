@@ -25,7 +25,9 @@ import { pinSymbols } from '../chem/pins';
 import { kids, descendants, withoutDoctype } from './xml';
 import { styleFromFace, isSymbolFont, fromSymbolFont, symbolOnlyByChoice, plainByChoice } from '../richtext';
 import { dataUrl, fromDataUrl, imageSize } from '../render/images';
+import { unzlibSync } from 'fflate';
 import { emfToSvg } from '../render/emf-read';
+import { emfInWmf } from '../render/wmf-read';
 import { tidyFx } from '../render/picture-fx';
 import { TABLE_TAG, TABLE_PART_TAG, applyTableTag, gridOf, linesFromBorders, parseTableTag, type ReadCell } from './cdxml-table';
 import { layoutTable, NOTE_SCALE } from '../table';
@@ -1882,7 +1884,13 @@ function pictureOf(el: Element): { src: string; px: { w: number; h: number }; cr
   };
   const picture = (bytes: Uint8Array, mime: string) => ({ src: dataUrl(bytes, mime), px: imageSize(bytes, mime) ?? { w: 100, h: 100 }, crop });
   // a Windows metafile with lines and text (a chart or spectrum) is sharper than ChemDraw's PNG copy of it
-  const emf = hexBytes('EnhancedMetafile');
+  const unpack = (name: string): Uint8Array | null => {
+    const packed = hexBytes(name);
+    if (!packed) return null;
+    try { return unzlibSync(packed); } catch { return null; }
+  };
+  const wmf = hexBytes('WindowsMetafile') ?? unpack('CompressedWindowsMetafile');
+  const emf = hexBytes('EnhancedMetafile') ?? unpack('CompressedEnhancedMetafile') ?? (wmf ? emfInWmf(wmf) : null);
   const drawn = emf ? emfToSvg(emf) : null;
   if (emf && drawn && drawn.vectors > 0) return picture(emf, 'image/x-emf');
   for (const [name, mime] of [['PNG', 'image/png'], ['JPEG', 'image/jpeg'], ['GIF', 'image/gif'], ['BMP', 'image/bmp']]) {

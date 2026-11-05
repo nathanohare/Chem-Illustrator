@@ -9,6 +9,7 @@
 // moving slides, or changing the master, are undone too.
 
 import type { KeptParts } from '../io/kept-parts';
+import type { KeptOle } from '../io/ole-kept';
 import type { SlideView } from './guides';
 import type { HandoutSetup, NotesPageSetup } from './notes-pages';
 import { copyPinned, type PinnedComment } from '../document/comments';
@@ -716,6 +717,8 @@ export class Deck {
   settings: DeckSettings = {};
   /** Other programs' data in the file read (custom XML, custom properties, add-ins' settings), saved back with it. */
   kept: KeptParts | undefined = undefined;
+  /** ChemDraw objects as the file read has them, saved back while they stay unchanged. */
+  oleKept: Map<number, KeptOle> | undefined = undefined;
   /** The slide being edited; its drawing is in `host`. */
   index = -1;
   /** Called whenever the deck changes in a way the slide list or title bar should show. */
