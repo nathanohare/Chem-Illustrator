@@ -75,6 +75,8 @@ interface AtomCache {
   boxes: Rect[];
   /** The charge shown by the label: which of `boxes` it is, where a bond touches it, and where a bond touching it stops. */
   charge?: { index: number; hit: Rect[]; cut: Rect[] };
+  /** The font list the label is set in: the drawing's, or the atom's own. */
+  stack: string;
 }
 
 /** How far along p→q a bond from p starts so as to clear p's charge: 0 unless it would touch the sign. */
@@ -321,6 +323,15 @@ export class Renderer {
     return this.labelStack;
   }
 
+  /** The font list an atom's label is set in: its own font, else the drawing's. */
+  stackOf(a: Atom): string {
+    if (!a.font?.trim()) return this.labelStack;
+    let s = this.stacks.get(a.font);
+    if (s === undefined) this.stacks.set(a.font, (s = /^arial$/i.test(a.font.trim()) ? FONT_STACK : withStack(a.font)));
+    return s;
+  }
+  private stacks = new Map<string, string>();
+
   /** Width of label text at a size, measured as labels are. */
   measure(text: string, size: number): number {
     return measureText(text, size, this.labelStack);
@@ -336,10 +347,11 @@ export class Renderer {
     const boxes: Rect[] = [];
     const k = a.s ?? 1;
     const size = doc.style.labelSize * k;
+    const stack = this.stackOf(a);
     if (spec) {
       Object.assign(spec, labelLook(a));
       const weight = labelBold(doc.style, a) ? 'bold' : '';
-      layout = layoutLabel(spec, labelBonds(doc, a), size, (t, s) => measureText(t, s, this.labelStack, weight), a.just);
+      layout = layoutLabel(spec, labelBonds(doc, a), size, (t, s) => measureText(t, s, stack, weight), a.just);
       if (weight) layout.bold = true;
       const m = atomMargin(doc.style, a);
       for (const b of layout.boxes) boxes.push({ x1: a.x + b.x1 - m, y1: a.y + b.y1 - m, x2: a.x + b.x2 + m, y2: a.y + b.y2 + m });
@@ -349,11 +361,11 @@ export class Renderer {
       const h = attachStarSize(size) + atomMargin(doc.style, a);
       boxes.push({ x1: a.x - h, y1: a.y - h, x2: a.x + h, y2: a.y + h });
     }
-    c = { layout, boxes };
+    c = { layout, boxes, stack };
     if (layout?.charge !== undefined) {
       // a bond is cut short at the charge only where it would touch the sign itself
       const r = layout.runs[layout.charge];
-      const ink = chargeInk(r.text, a.x + r.dx, a.y + r.dy, r.size, (t, s) => measureText(t, s, this.labelStack, layout!.bold ? 'bold' : ''));
+      const ink = chargeInk(r.text, a.x + r.dx, a.y + r.dy, r.size, (t, s) => measureText(t, s, stack, layout!.bold ? 'bold' : ''));
       const grow = (m: number): Rect[] => ink.map((b) => ({ x1: b.x1 - m, y1: b.y1 - m, x2: b.x2 + m, y2: b.y2 + m }));
       // (the signs are small, so three quarters of the label margin keeps the same look of space)
       c.charge = { index: layout.charge, hit: grow(doc.style.lineWidth * k / 2 + 0.3 * k), cut: grow(atomMargin(doc.style, a) * 0.75) };
@@ -1003,7 +1015,7 @@ export class Renderer {
         const ab = a.color ? undefined : back?.get(a.id);
         ctx.fillStyle = a.color ?? (ab !== undefined ? shadeLook(shadeStep(ab)).color : '#000');
         for (const r of info.layout.runs) {
-          const f = `${r.italic ? 'italic ' : ''}${info.layout.bold || r.bold ? 'bold ' : ''}${r.size}px ${this.labelStack}`;
+          const f = `${r.italic ? 'italic ' : ''}${info.layout.bold || r.bold ? 'bold ' : ''}${r.size}px ${info.stack}`;
           if (f !== curFont) { ctx.font = f; curFont = f; }
           ctx.fillText(r.text, a.x + r.dx, a.y + r.dy);
         }
@@ -1163,7 +1175,7 @@ export class Renderer {
     const lay = i && a.label && i < a.label.length ? this.atomInfo(doc, a).layout : null;
     const r = lay?.runs.find((r, k) => k !== lay.charge && r.at !== undefined && i! >= r.at && i! < r.at + r.text.length);
     if (!lay || !r) return a;
-    const m = (t: string) => measureText(t, r.size, this.labelStack, lay.bold ? 'bold' : '');
+    const m = (t: string) => measureText(t, r.size, this.stackOf(a), lay.bold ? 'bold' : '');
     const k = i! - r.at!;
     return { x: a.x + r.dx + m(r.text.slice(0, k)) + m(r.text[k]) / 2, y: a.y + r.dy - (CAP * r.size) / 2 };
   }

@@ -390,6 +390,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
         const faces = kids(t).filter((k) => k.nodeName === 's').map((k) => num(k, 'face', 0));
         const face = faces.length ? faces.reduce((m, v) => m & v) : undefined;
         if (face !== undefined && (face & 1) !== ((st.labelFace ?? 0) & 1)) atom.face = face;
+        // a label set in another font than the drawing's labels keeps it (not a Symbol font, which is for single characters)
+        const s0 = kids(t).find((k) => k.nodeName === 's');
+        const fontName = fonts.get(s0?.getAttribute('font') ?? '')?.trim();
+        if (fontName && !isSymbolFont(fontName) && fontName.toLowerCase() !== (st.labelFont || 'Arial').toLowerCase()) atom.font = fontName;
         let txt = runs.map((r) => r.text).join('');
         // a charge the label doesn't show (no sign, and no circled charge beside it) isn't shown
         if (atom.charge && !/[+−]|-d*$/.test(txt)) atom.hideCharge = true;
