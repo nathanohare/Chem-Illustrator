@@ -519,8 +519,6 @@ export class Editor {
   onFrame: () => void = () => {};
   /** Drawn on the overlay before the marks, in points (the tint outside the drawing). */
   underlay: ((ctx: CanvasRenderingContext2D) => void) | null = null;
-  /** Draws on the overlay above the selection and every other mark (e.g. predicted NMR labels). */
-  overlayTop: ((ctx: CanvasRenderingContext2D) => void) | null = null;
   onToolChange: (name: string) => void = () => {};
   /** Show a hint for the step in hand in the status bar (empty: the tool's own hint again). */
   onHint: (text: string) => void = () => {};
@@ -7402,7 +7400,6 @@ export class Editor {
     this.drawArrowHelpers(ctx, px, mk.box);
     this.captionEd?.draw(ctx);
     this.drawAids(ctx, px);
-    this.overlayTop?.(ctx);
   }
 
   /** The pen's ink: the stroke being drawn, and letters waiting to be read. */
