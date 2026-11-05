@@ -71,7 +71,6 @@ export const GLOSSARY: GlossaryEntry[] = [
   { term: 'σm', full: 'Hammett sigma, meta', meaning: 'How strongly a group meta to a reaction site pulls (positive) or pushes (negative) electron density, from the ionization of benzoic acids.', kind: 'Property' },
   { term: 'σp', full: 'Hammett sigma, para', meaning: 'The same for a para group, where resonance adds to the field effect: NMe2 −0.83, NO2 +0.78.', kind: 'Property' },
   { term: 'ICH Q3C', full: 'International Council for Harmonisation guideline Q3C, Impurities: Residual Solvents', meaning: 'Sorts solvents by how much may remain in a medicine: Class 1 to be avoided, Class 2 limited by toxicity (a ppm limit each), Class 3 low toxicity (up to 0.5%).', kind: 'Solvent' },
-  { term: 'AqSolDB', full: 'Aqueous Solubility Database', meaning: 'Measured water solubility of about 10,000 compounds, merged from nine datasets (Sorkun et al., 2019).', kind: 'Property' },
   { term: 'Rf', full: 'Retention factor', meaning: 'Distance a spot moves on a TLC plate divided by the solvent front\'s distance.', kind: 'Lab' },
   { term: 'TLC', full: 'Thin-layer chromatography', meaning: '', kind: 'Lab' },
   { term: 'KF', full: 'Karl Fischer titration', meaning: 'Measures water content, often in ppm.', kind: 'Lab' },

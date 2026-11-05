@@ -17,9 +17,14 @@ import { infoIcon, setInfo } from './info-tip';
 import { templateIcon } from './template-icons';
 import { svgNode } from './svg-node';
 import { prettyChem } from '../kb/pretty';
+import type { Template } from '../chem/templates';
 
 /** A structure picture in a table cell, in pixels. */
 const PIC = 48;
+/** The structure shown beside a solvent's name, in pixels. */
+const STRUCTURE_PIC = 120;
+/** The miscibility chart shows each pair once (a triangle, like the printed charts). */
+const MATRIX_HALF = true;
 
 /** Rows built when a table is shown, and how many more each time it is scrolled near its end. */
 const FIRST_ROWS = 60;
@@ -130,6 +135,8 @@ export class KnowledgeBaseWindow {
   /** The NMR solvent last picked in a Solvent filter: impurity tables open showing that solvent. */
   private nmrSolvent = readNmrSolvent();
   private sort: { key: string; down: boolean } | null = null;
+  /** The table showing last (a different one starts scrolled to its top). */
+  private shownId = '';
   /** Canonical SMILES of each row's structure (worked out once, when a SMILES is first searched). */
   private canon = new Map<string, string | null>();
   /** The canonical form of the SMILES typed, when the search is one. */
@@ -385,6 +392,10 @@ export class KnowledgeBaseWindow {
   private showTable(): void {
     if (!this.d) return;
     const t = this.current;
+    // another table starts at its top
+    if (this.shownId !== t.id) { this.shownId = t.id; this.wrap.scrollTop = 0; this.wrap.scrollLeft = 0; }
+    // a chart gets the room to show whole
+    this.wrap.classList.toggle('kb-mx-host', !!t.matrix);
     this.titleText.textContent = prettyChem(t.title);
     setInfo(this.about, prettyChem(t.about));
     this.removeBtn.hidden = !t.personal;
@@ -426,7 +437,9 @@ export class KnowledgeBaseWindow {
         ? [button(`Rate “${q.length > 40 ? q.slice(0, 39) + '…' : q}” from PubChem`, 'Look the compound up on PubChem and rate it with the same rules, from the same open sources (needs the internet)', () => void this.rateLive(q))]
         : [];
       this.wrap.replaceChildren(empty, ...live);
-    } else this.wrap.replaceChildren(table);
+    } else if (t.matrix) this.wrap.replaceChildren(this.matrixEl(t, rows));
+    else if (t.parts) this.wrap.replaceChildren(...this.partsEl(t, rows));
+    else this.wrap.replaceChildren(table);
     this.count.textContent = rows.length === t.rows.length ? `${t.rows.length} rows` : `${rows.length} of ${t.rows.length} rows`;
     // sources, each a link when it has one
     this.sources.replaceChildren(t.sources.length > 1 ? 'Sources: ' : 'Source: ');
@@ -459,6 +472,7 @@ export class KnowledgeBaseWindow {
         continue;
       }
       if (v !== null && v !== undefined && v !== '') td.append(typeof v === 'number' ? String(v) : c.key === 'atom' ? v : cellExplained(v, !!c.narrow, c.key === 'nucleus')); // atom labels (H2, C3) are not formulas
+      if (c.key === 'name' && t.structure) this.structureOnHover(td, () => t.structure!(m.row));
       tr.append(td);
     }
     if (t.links) {
@@ -472,6 +486,101 @@ export class KnowledgeBaseWindow {
       tr.append(td);
     }
     return tr;
+  }
+
+  /** The structure in a little card beside a name while the pointer rests on it (Solvents). */
+  private structureOnHover(td: HTMLElement, tpl: () => Template | null): void {
+    td.classList.add('kb-structure-name');
+    let pop: HTMLElement | null = null;
+    const hide = () => { pop?.remove(); pop = null; };
+    td.addEventListener('pointerenter', () => {
+      const t = tpl();
+      const icon = t ? svgNode(templateIcon(t, STRUCTURE_PIC, 30)) : null;
+      if (!icon) return;
+      hide();
+      pop = el('div', { className: 'info-pop kb-structure-pop' });
+      pop.setAttribute('role', 'tooltip');
+      pop.append(icon);
+      (td.closest('dialog') ?? document.body).append(pop);
+      // just after the name, level with the row, kept on the screen
+      const range = document.createRange();
+      range.selectNodeContents(td);
+      const r = td.getBoundingClientRect(), words = range.getBoundingClientRect(), size = STRUCTURE_PIC + 10;
+      pop.style.left = `${Math.max(8, Math.min((words.width ? words.right : r.right) + 10, window.innerWidth - size - 8))}px`;
+      pop.style.top = `${Math.max(8, Math.min(r.top + r.height / 2 - size / 2, window.innerHeight - size - 8))}px`;
+    });
+    td.addEventListener('pointerleave', hide);
+  }
+
+  /**
+   * A miscibility chart: the solvents down the side and across the top, a shaded square where a
+   * pair forms two layers. Solvents matching the search are picked out; resting the pointer on a
+   * square names the pair and lights up its row and column.
+   */
+  private matrixEl(t: KbTable, rows: RowMatch[]): HTMLElement {
+    const m = t.matrix!;
+    const q = this.search.value.trim();
+    const hit = new Set(q ? rows.map((r) => String(r.row.name)) : []);
+    const marked = new Set(m.pairs.flatMap(([a, b]) => [`${a}|${b}`, `${b}|${a}`]));
+    const n = m.names.length;
+    const head = el('tr', {}, el('th', { className: 'kb-mx-corner' }));
+    m.names.forEach((name, j) => {
+      const th = el('th', { className: 'kb-mx-col' }, el('span', {}, prettyChem(name)));
+      th.dataset.c = String(j);
+      if (hit.has(name)) th.classList.add('hit');
+      // half a chart: the last solvent has no column (its pairs are all in rows above)
+      if (!(MATRIX_HALF && j === n - 1)) head.append(th);
+    });
+    const body = el('tbody');
+    m.names.forEach((a, i) => {
+      // ...and the first has no row
+      if (MATRIX_HALF && i === 0) return;
+      const th = el('th', { className: 'kb-mx-row', textContent: prettyChem(a) });
+      th.dataset.r = String(i);
+      if (hit.has(a)) th.classList.add('hit');
+      const tr = el('tr', {}, th);
+      m.names.forEach((b, j) => {
+        if (MATRIX_HALF && j === n - 1) return;
+        const td = el('td');
+        // half the chart (each pair once, like the printed charts) or all of it
+        if (MATRIX_HALF ? j >= i : j === i) { td.className = MATRIX_HALF ? 'kb-mx-none' : 'kb-mx-self'; tr.append(td); return; }
+        const two = marked.has(`${a}|${b}`);
+        td.className = two ? 'kb-mx-two' : 'kb-mx-one';
+        td.dataset.r = String(i);
+        td.dataset.c = String(j);
+        if (hit.has(a) || hit.has(b)) td.classList.add('hit');
+        td.title = `${a} + ${b}: ${two ? `${m.mark.toLowerCase()} (two layers form in some proportions)` : `${m.other.toLowerCase()} in all proportions`}`;
+        tr.append(td);
+      });
+      body.append(tr);
+    });
+    const table = el('table', { className: `kb-matrix${MATRIX_HALF ? ' half' : ''}` }, el('thead', {}, head), body);
+    // the row and column of the square under the pointer
+    let lit: Element[] = [];
+    table.addEventListener('pointerover', (e) => {
+      const cell = (e.target as Element).closest('td[data-r]') as HTMLElement | null;
+      lit.forEach((x) => x.classList.remove('lit'));
+      lit = cell ? [...table.querySelectorAll(`[data-r="${cell.dataset.r}"], [data-c="${cell.dataset.c}"]`)] : [];
+      lit.forEach((x) => x.classList.add('lit'));
+    });
+    table.addEventListener('pointerleave', () => { lit.forEach((x) => x.classList.remove('lit')); lit = []; });
+    const key = el('div', { className: 'kb-mx-key' },
+      el('span', { className: 'kb-mx-swatch two' }), el('span', { textContent: m.mark }), infoIcon(m.markInfo),
+      el('span', { className: 'kb-mx-swatch one' }), el('span', { textContent: m.other }));
+    return el('div', { className: 'kb-mx-wrap' }, table, key);
+  }
+
+  /** A table in parts (Acids and Bases): each part under its own heading, with its own columns. */
+  private partsEl(t: KbTable, rows: RowMatch[]): HTMLElement[] {
+    return t.parts!.flatMap((p) => {
+      const mine = rows.filter((m) => m.row.part === p.key);
+      if (!mine.length) return [];
+      const shown: KbTable = { ...t, columns: p.columns, parts: undefined };
+      const table = el('table', { className: 'refs-table kb-table kb-part' },
+        el('thead', {}, el('tr', {}, ...p.columns.filter((c) => !c.hidden).map((c) => this.header(c)))),
+        el('tbody', {}, ...mine.map((m) => this.rowEl(shown, m))));
+      return [el('h4', { className: 'kb-part-title', textContent: p.title }), table];
+    });
   }
 
   private async copy(): Promise<void> {
