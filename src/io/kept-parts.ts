@@ -124,7 +124,7 @@ export function readKeptParts(pkg: PackageReader, opts: KeptReadOptions): KeptPa
 }
 
 /** A part and the XML parts it leads to, with their relationships; null when the part isn't there. */
-function readTree(pkg: PackageReader, start: string): Pick<KeptTree, 'parts' | 'rels'> | null {
+export function readTree(pkg: PackageReader, start: string): Pick<KeptTree, 'parts' | 'rels'> | null {
   const parts: KeptTree['parts'] = [];
   const rels: KeptTree['rels'] = [];
   const seen = new Set<string>();
@@ -186,14 +186,17 @@ export function writeKeptParts(pkg: Package, kept: KeptParts | undefined, opts: 
     pkg.relate('', KEPT_REL.customProps, 'docProps/custom.xml');
     pkg.add('docProps/custom.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">${body.join('')}</Properties>`, CUSTOM_PROPS_CT);
   }
-  for (const tree of kept?.trees ?? []) {
-    if (pkg.has(tree.path)) continue;
-    for (const p of tree.parts) pkg.add(p.path, p.xml ?? fromDataUrl(p.data ?? 'data:application/octet-stream,').bytes, p.type);
-    for (const r of tree.rels) {
-      if (r.external) pkg.relate(r.from, r.type, r.target, true);
-      else if (tree.parts.some((p) => p.path === r.target)) pkg.relate(r.from, r.type, relativeTarget(r.from, r.target));
-    }
-    const from = tree.from === 'main' ? opts.main : '';
-    pkg.relate(from, tree.type, from ? relativeTarget(from, tree.path) : tree.path);
+  for (const tree of kept?.trees ?? []) writeTree(pkg, tree, opts.main);
+}
+
+/** Write a kept part and the parts it leads to, and relate it from where it hangs: the relationship's id (null when its path is taken). */
+export function writeTree(pkg: Package, tree: KeptTree, main: string): string | null {
+  if (pkg.has(tree.path)) return null;
+  for (const p of tree.parts) pkg.add(p.path, p.xml ?? fromDataUrl(p.data ?? 'data:application/octet-stream,').bytes, p.type);
+  for (const r of tree.rels) {
+    if (r.external) pkg.relate(r.from, r.type, r.target, true);
+    else if (tree.parts.some((p) => p.path === r.target)) pkg.relate(r.from, r.type, relativeTarget(r.from, r.target));
   }
+  const from = tree.from === 'main' ? main : '';
+  return pkg.relate(from, tree.type, from ? relativeTarget(from, tree.path) : tree.path);
 }
