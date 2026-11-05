@@ -4115,6 +4115,76 @@ dialog.geom-view-dialog { width: min(96vw, 640px); }
    Only the gap changes; the buttons and icons keep their size. (Compact's setting value is 'snug'.) */
 html[data-density='normal'] body:not(.cells-grid) .tb-cells, html[data-density='normal'] .tool-group { gap: 2px; }
 html[data-density='snug'] .tb-cells, html[data-density='snug'] .tool-group { gap: 0; }
+
+/* Analysis ▸ NMR (predicted) */
+details.nmr { margin-top: 4px; }
+details.nmr > summary { cursor: pointer; line-height: 20px; }
+details.nmr > summary .info-icon { vertical-align: -2px; margin-left: 3px; }
+details.nmr > summary .nmr-solvent { float: right; font: inherit; font-size: var(--fs-xs); padding: 0 2px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
+.nmr-table { border-collapse: collapse; width: 100%; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.nmr-table th { font-weight: 500; font-size: var(--fs-xs); color: var(--muted); text-align: right; padding: 0 3px; }
+.nmr-table td { text-align: right; padding: 0 3px; line-height: 17px; }
+.nmr-table th:first-child, .nmr-table td:first-child { text-align: left; }
+.nmr-table tbody tr:hover td { background: var(--accent-soft); }
+.nmr-src { display: inline-block; min-width: 14px; padding: 0 3px; border-radius: 3px; font-size: 10px; line-height: 13px; text-align: center; background: var(--accent-soft); color: var(--accent); }
+.nmr-src.measured { background: var(--accent); color: #fff; }
+.nmr-src.loose { background: color-mix(in srgb, #d99a1e 22%, transparent); color: #8a5a00; }
+details.nmr .an-buttons { margin-top: 3px; }
+details.nmr .nmr-marks[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+details.nmr > summary .nmr-nuc { display: inline-flex; margin-left: 6px; vertical-align: 1px; border: 1px solid var(--line); border-radius: var(--r-control); overflow: hidden; }
+details.nmr > summary .nmr-nuc[hidden] { display: none; }
+details.nmr > summary .nmr-nuc button { border: 0; border-radius: 0; padding: 0 7px; min-height: 0; font-size: var(--fs-xs); line-height: 16px; background: var(--panel); color: var(--text); }
+details.nmr > summary .nmr-nuc button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+details.nmr > summary .nmr-nuc sup { font-size: 0.75em; }
+.nmr-table td:nth-child(3) { text-align: left; }
+.nmr-report { margin: 2px 0; line-height: 1.35; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; user-select: text; }
+.nmr-report span[data-row]:hover { background: var(--accent-soft); outline: 1px solid var(--accent); border-radius: 2px; }
+details.nmr .nmr-view[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); }
+details.nmr .nmr-mode { font: inherit; font-size: var(--fs-xs); padding: 0 2px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
+.nmr-table td:nth-child(2) { color: var(--muted); text-align: left; padding-left: 10px; }
+.nmr-table td:nth-child(3), .nmr-table th:nth-child(3) { padding-left: 6px; }
+.nmr-table.with-mult td:nth-child(4), .nmr-table.with-mult th:nth-child(4) { text-align: right; }
+.nmr-table .nmr-mult { text-align: left; white-space: nowrap; padding-left: 4px; }
+.nmr-table tbody tr.hot td, .nmr-report span.hot { background: var(--accent-soft); }
+.nmr-strip { position: relative; margin: 2px 0 3px; border-bottom: 1px solid var(--line); }
+.nmr-strip svg { display: block; width: 100%; height: auto; cursor: crosshair; }
+.nmr-popout { position: absolute; top: 0; right: 0; min-height: 0; padding: 0 5px; line-height: 16px; font-size: var(--fs-xs); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); color: var(--text); }
+.nmr-popout:hover { border-color: var(--accent); color: var(--accent); }
+.nmr-spec .sp-bg { fill: var(--panel); }
+.nmr-spec .sp-line { fill: none; stroke: var(--text); stroke-width: 1; }
+.nmr-spec .sp-hot { fill: none; stroke: var(--accent); stroke-width: 1.8; }
+.nmr-spec .sp-lab { font-size: 10px; fill: var(--text); }
+.nmr-spec .sp-tick { font-size: 9.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.nmr-spec .sp-ax { stroke: var(--line); }
+.nmr-spec-win { position: fixed; z-index: 60; display: flex; flex-direction: column; min-width: 320px; min-height: 180px; height: 300px; resize: both; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
+.nmr-spec-win[hidden] { display: none; }
+.nmr-spec-hd { display: flex; align-items: center; gap: 6px; padding: 2px 6px 2px 8px; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); font-weight: 600; cursor: move; user-select: none; }
+.nmr-spec-hd sup { font-size: .72em; }
+.nmr-spec-tools { margin-left: auto; display: flex; gap: 4px; align-items: center; font-weight: 400; cursor: default; }
+.nmr-spec-tools select, .nmr-spec-tools button { font: inherit; font-size: var(--fs-xs); padding: 0 6px; min-height: 0; line-height: 18px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
+.nmr-spec-tools [hidden] { display: none; }
+.nmr-spec-plot { flex: 1; min-height: 0; overflow: hidden; }
+.nmr-spec-plot svg { display: block; }
+
+/* Check Data (Analysis ▸ NMR): paste box, findings, overlay colors */
+.ck-box { margin: 3px 0; display: flex; flex-direction: column; gap: 3px; }
+.ck-box textarea { font-family: inherit; font-size: var(--fs-sm); line-height: 1.35; width: 100%; box-sizing: border-box; height: 72px; resize: vertical; padding: 3px 5px; border: 1px solid var(--line); border-radius: 3px; background: var(--bg, var(--panel)); color: var(--text); }
+.ck-row { display: flex; gap: 6px; align-items: center; font-size: var(--fs-xs); color: var(--muted); }
+.ck-row .sp { margin-left: auto; display: flex; gap: 4px; }
+.ck-list { list-style: none; margin: 2px 0 3px; padding: 0; font-size: var(--fs-sm); }
+.ck-list li { display: grid; grid-template-columns: 10px 1fr auto; gap: 4px; padding: 2px 0; border-bottom: 1px solid var(--line); line-height: 1.3; }
+.ck-list li[data-row] { cursor: default; }
+.ck-list li.hot, .ck-list li[data-row]:hover { background: var(--accent-soft); }
+.ck-list .ck-dot { margin-top: 4px; }
+.ck-tools { display: flex; gap: 3px; align-items: start; }
+.ck-tools button { font-size: var(--fs-xs); padding: 0 6px; }
+.ck-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.ck-ok { background: #3c9a5f; } .ck-warn { background: #d08a1e; } .ck-bad { background: #c4483e; } .ck-info { background: #7b8a8f; }
+.nmr-spec .sp-meas { fill: none; stroke: var(--accent); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.nmr-spec .sp-link { fill: none; stroke-width: 1.4; }
+.nmr-spec .sp-mark { font-size: 10px; font-weight: 600; stroke: none; }
+.nmr-spec .sp-ok { stroke: #3c9a5f; fill: #3c9a5f; } .nmr-spec .sp-warn { stroke: #d08a1e; fill: #d08a1e; } .nmr-spec .sp-bad { stroke: #c4483e; fill: #c4483e; } .nmr-spec .sp-info { stroke: #7b8a8f; fill: #7b8a8f; }
+.nmr-spec text.sp-mark { stroke: none; }
 /* Chemistry ▸ Orbital: the orbital as it will go in */
 .orbital-preview { display: flex; justify-content: center; align-items: center; height: 132px; border: 1px solid var(--line); border-radius: var(--r-control); background: #fff; }
 .orbital-preview svg { height: 120px; width: auto; max-width: 100%; }
