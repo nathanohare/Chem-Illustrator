@@ -40,6 +40,8 @@ export const DOCX_CT = {
   font: 'application/vnd.openxmlformats-officedocument.obfuscatedFont',
   comments: 'application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml',
   commentsExtended: 'application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml',
+  commentsIds: 'application/vnd.openxmlformats-officedocument.wordprocessingml.commentsIds+xml',
+  commentsExtensible: 'application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtensible+xml',
   footnotes: 'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml',
   endnotes: 'application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml',
 };
@@ -93,6 +95,13 @@ export function fromWordDate(s: string): string {
 export const DRAWING_NAME = 'Chem Illustrator drawing';
 /** Alternative text Word's tables of ours carry. */
 export const TABLE_NAME = 'Chem Illustrator table';
+/**
+ * The hidden bookmark (its name starts with an underscore, so Word doesn't list it) at the start of
+ * one of our tables' first cell, `_ChemTable_3` for table 3 in our part: which of ours it is. Older
+ * files said so in the table's alt-text title (w:tblCaption "Chem Illustrator table 3"), which Word
+ * shows and reads out, and LibreOffice drops.
+ */
+export const TABLE_MARK = '_ChemTable_';
 /** The character style that marks chemical formulas (CH₂Cl₂), so they stay formulas here. */
 export const FORMULA_STYLE = 'ChemFormula';
 
@@ -106,15 +115,20 @@ export interface DocxModel {
   drawingStyle: DocStyle;
   /** Each drawing by its id: what it is, and its picture's own size (for its scale). */
   /**
-   * Each drawing, by the number in its picture's name. `png` (the picture's fingerprint) and `alt`
-   * (its alt text as written) tell it from a picture Word copied in from another of our files
-   * under the same name.
+   * Each drawing, by the number in its picture's name. `svg` (the fingerprint of its SVG, which
+   * Word keeps byte for byte), or in older files `png` (the PNG's, which Word makes afresh when it
+   * saves) and `alt` (its alt text as written), tell it from a picture changed in Word (Change
+   * Picture) or copied in from another of our files under the same name.
    */
-  drawings: Record<number, { contents: Contents; w: number; h: number; png?: string; alt?: string; /** A figure's area (Insert > Figure): the picture is of all of it. */ frame?: FigureFrame }>;
+  drawings: Record<number, { contents: Contents; w: number; h: number; png?: string; svg?: string; alt?: string; /** A figure's area (Insert > Figure): the picture is of all of it. */ frame?: FigureFrame }>;
   /** Each shape's library outline (Insert > Shapes in a document), by its id ("Shape 3"): Word keeps those without a preset as custom shapes. */
   geos?: Record<number, string>;
-  /** Each table by its id, with its text (used when the text is the same in the file). */
-  tables: Record<number, { table: TableData; text: string }>;
+  /**
+   * Each table by its id, with its text (used when the text is the same in the file) and the print
+   * of the table as written (native-print.ts: in files with one, used only while the text also
+   * looks the same).
+   */
+  tables: Record<number, { table: TableData; text: string; pr?: string }>;
   /** The document's references and citation style (citations are ADDIN fields naming them). */
   references?: Reference[];
   citeStyle?: CiteStyle;
@@ -125,6 +139,8 @@ export interface DocxModel {
   bibliographies?: Record<number, { text: string; ps: ParaStyle }>;
   /** Each chart by its id, as made here (used when Word's copy charts the same numbers). */
   charts?: Record<number, ChartBox>;
+  /** Each chart's print as written (native-print.ts): Word's copy is still ours while it has the same type and look. */
+  chartPrints?: Record<number, string>;
   /** How near a colour Remove Background takes, for each picture by its id ("Picture 4"), which Word has no place for. */
   pictureTol?: Record<number, number>;
   /** Design's theme, style set and paragraph spacing, by name. */

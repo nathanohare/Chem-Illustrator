@@ -62,7 +62,7 @@ import { WORKSPACE, folderOf } from './io/workspace-file';
 import { askLink, followLink, setLinkHost, type LinkPlace } from './ui/links-ui';
 import type { LigandLibraryWindow } from './ui/ligand-library';
 import { SHOW_JUMPS, SHOW_TOOLS, cellOfLink, keyOfLink, linkSpans, normalizeLink, removeLink, setLink, slideOfLink } from './links';
-import { openFileDialog, openManyBytesDialog, openBytesDialog, CSV, openAnyBytesDialog, stampOf, readRef, saveFileDialog, writeFile, showError, baseName, readPath, withExtension, setEmbeddedWriter, KEYMAP_FILE, SETTINGS_FILE, MOL, PDF, SDF, PICTURE, SVG, TIFF, EMF, EPS, PPTX, DOCX, PICTURE_EXTENSIONS, type FileType } from './io/files';
+import { openFileDialog, openManyBytesDialog, openBytesDialog, CSV, openAnyBytesDialog, stampOf, readRef, saveFileDialog, writeFile, showError, baseName, readPath, withExtension, setEmbeddedWriter, KEYMAP_FILE, SETTINGS_FILE, MOL, PDF, SDF, PICTURE, SVG, TIFF, EMF, EPS, PPTX, SLIDES_OPEN_ONLY, DOCX, PICTURE_EXTENSIONS, type FileType } from './io/files';
 import { writeTiff } from './render/tiff';
 import { itemsToEps } from './render/eps';
 import { Workspace, Tab } from './workspace';
@@ -187,7 +187,7 @@ import { TypingDialog } from './ui/typing-dialog';
 import { ModeColoursDialog, ModeColours, DEFAULT_MODE_COLOURS, applyModeColours as applyModeColoursOnly, modeColour } from './ui/mode-colours';
 import { typingPrefs, setTypingPrefs, onTypingPrefs } from './text/typing';
 import { NicknameChooser } from './ui/nickname-chooser';
-import { ask, type Field } from './ui/ask';
+import { ask, askChoice, type Field } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
 import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
@@ -3854,6 +3854,15 @@ const docRead: DocxReadDeps = {
     return pic ? { w: pic.box.x2 - pic.box.x1, h: pic.box.y2 - pic.box.y1 } : null;
   },
   tableDrawing,
+  // a reference manager's bibliography: kept as Word had it, or worked out here (asked each time)
+  keepBibliography: async (app) => {
+    const name = app === 'endnote' ? 'EndNote' : app === 'zotero' ? 'Zotero' : 'Mendeley';
+    const got = await askChoice(`Keep ${name} Bibliography?`,
+      `Keep this document's citations and bibliography as ${name} formatted them, or restyle them in the document's citation style?`,
+      [{ value: 'restyle', label: 'Restyle' }, { value: 'keep', label: 'Keep', primary: true }], 'keep',
+      'Restyling renumbers the citations and rebuilds the bibliography here, which can change entries (DOIs, links, lettered numbers such as 2c). Kept, they stay exactly as they are until you change a citation; then they are restyled.');
+    return got === 'keep';
+  },
 };
 
 const ws: Workspace = new Workspace(doc, {
@@ -3926,13 +3935,21 @@ function tickAutoSave(): void {
   b.setAttribute('aria-checked', String(keeper.autoSaveWanted(t) && ws.canAutoSave(t)));
 }
 
+/**
+ * The resolution of the PNG saved beside each structure's SVG in a deck. PowerPoint 2016 and later
+ * show the SVG; the PNG is for programs that can't, such as Google Slides and older PowerPoint, and
+ * at 150 dots to the inch it is as sharp as a 1080p projector shows a 13.33-inch slide, at a quarter
+ * of the size (and encoding time) of 300.
+ */
+const PPTX_FALLBACK_DPI = 150;
+
 /** How slides are saved for PowerPoint: structures as pictures (PNG and SVG), the bundled fonts inside. */
 function pptxOptions(): PptxOptions {
   return {
     picture: async (d) => {
       const pic = recordPicture(d, 1);
       if (!pic) return null;
-      const png = new Uint8Array(await (await canvasPng(pictureCanvas(d, pic).canvas)).arrayBuffer());
+      const png = new Uint8Array(await (await canvasPng(pictureCanvas(d, pic, PPTX_FALLBACK_DPI).canvas)).arrayBuffer());
       return { svg: pictureSvg(pic), png, box: pic.box };
     },
     svgToPng,
@@ -5056,7 +5073,7 @@ async function reuseSlides(): Promise<void> {
   const d = deckNow();
   if (!d || ws.active.mode !== 'slides') return;
   finishTyping();
-  const f = await openBytesDialog('PowerPoint presentations', [PPTX]).catch(async (e) => { await showError(String(e)); return null; });
+  const f = await openBytesDialog('PowerPoint presentations', [PPTX], SLIDES_OPEN_ONLY).catch(async (e) => { await showError(String(e)); return null; });
   if (!f) return;
   let got: ReturnType<typeof import('./io/pptx-read').readPptx>;
   try {
@@ -5898,6 +5915,24 @@ const knowledgeBaseHost = {
     const t = q.trim();
     return pubchemSafetyRecord(isCasNumber(t) ? { cas: t } : looksLikeSmiles(t) ? { smiles: t } : { name: t });
   },
+  contains: async (q: string, smiles: string[]) => (chem.ready ? (await chem.substructureIn('knowledge-base', smiles, q)).results : null),
+  selected: async () => {
+    const got = await selectedForLibrary();
+    return typeof got === 'string' ? got : { smiles: got[0].smiles };
+  },
+  drawing: {
+    start: (c, area, done) => editCellStructure(c, 'Search Structure', done, sheetStyle(), undefined, area),
+    finish: (keep) => { if (!kbArea) return; if (keep) void doneCellStructure(); else finishCellStructure(false); },
+    tool: (t) => { if (typeof t === 'number') editor.pickElement(t); else pickTool(t); overlay.focus(); },
+    current: () => (editor.toolName === 'element' ? editor.element : editor.toolName),
+    selection: () => selectionContents(),
+    smiles: async (c) => {
+      if (!chem.ready) return 'The chemistry engine is still loading; try again in a moment.';
+      const d = structureDoc(c, sheetStyle());
+      const got = await structuresFor(d, partsOf(d));
+      return got.length ? { smiles: got.map((g) => g.smiles).join('.') } : 'The structure couldn\'t be read (check its valences).';
+    },
+  },
 } satisfies KnowledgeBaseHost;
 const knowledgeBase = madeLater(async (): Promise<KnowledgeBaseWindow> => new (await import('./ui/knowledge-base')).KnowledgeBaseWindow(knowledgeBaseHost));
 
@@ -5930,7 +5965,7 @@ const INDEX_KEY = 'library/file-index.json';
 
 /** How files found in a folder are read: with the app's own readers, ChemDraw objects in Word files read as structures. */
 const folderReaders: FileReaders = {
-  document: async (bytes, name) => (await (await import('./io/doc-files')).readDocumentFile(bytes, name, { ...docRead, convertChemDraw: true })).doc,
+  document: async (bytes, name) => (await (await import('./io/doc-files')).readDocumentFile(bytes, name, { ...docRead, convertChemDraw: true, keepBibliography: undefined })).doc,
   sheet: async (bytes, name) => (await (await import('./io/sheet-files')).readSheetFile(bytes, name, sheetFiles)).book,
   slides: async (bytes) => (await import('./io/pptx-read')).readPptx(bytes).slides.map((s) => s.contents),
 };
@@ -7473,6 +7508,34 @@ function placeHost(): void {
 }
 window.addEventListener('resize', () => { if (place) requestAnimationFrame(placeHost); });
 
+// The Knowledge Base's Draw window (ui/knowledge-base.ts): the drawing tools work in the window's
+// own box, which the drawing area is placed exactly over; the window has its own buttons, not the bar.
+let kbArea: (() => DOMRect | null) | null = null;
+/** The tab the drawing was lent from, as it was (unsaved or not), and the slide's edit hooks, set aside meanwhile. */
+let kbLent: { tab: Tab; dirty: boolean; changes: number; commit: Doc['onCommit']; amend: Doc['onAmend'] } | null = null;
+
+/** The drawing area over the Draw window's box. */
+function placeKbArea(): void {
+  const r = kbArea?.();
+  if (!r) return;
+  Object.assign(host.style, { left: `${r.left}px`, top: `${r.top}px`, width: `${r.width}px`, height: `${r.height}px` });
+  resize();
+}
+window.addEventListener('resize', () => { if (kbArea) requestAnimationFrame(placeKbArea); });
+
+/** What was selected in the drawing, as a drawing of its own (Draw window's Use Selected), or a sentence saying why there is none. */
+function selectionContents(): Contents | string {
+  if (docActive() || sheetActive()) {
+    const d = pickedDrawing();
+    return d?.atoms.size ? d.contents() : docActive() ? 'Click a structure in the document before opening Draw.' : 'Click a cell with a structure in it before opening Draw.';
+  }
+  const frags = chosenStructures();
+  if (!frags.length) return 'Select a structure in the drawing before opening Draw.';
+  const atoms = new Set(frags.flatMap((f) => [...f]));
+  const bonds = new Set([...doc.bonds.values()].filter((b) => atoms.has(b.a1) && atoms.has(b.a2)).map((b) => b.id));
+  return extractDrawing(doc, { atoms, bonds, captions: new Set(), arrows: new Set(), shapes: new Set() }).contents();
+}
+
 /** Done: a figure first checks its structures still fit it (or the user goes back to drawing). */
 async function doneCellStructure(): Promise<void> {
   const p = place;
@@ -7483,19 +7546,21 @@ async function doneCellStructure(): Promise<void> {
   finishCellStructure(true);
 }
 
-function editCellStructure(contents: Contents | null, title: string, done: (c: Contents | null) => void, style: DocStyle = sheetStyle(), inPlace?: InPlace): void {
+function editCellStructure(contents: Contents | null, title: string, done: (c: Contents | null) => void, style: DocStyle = sheetStyle(), inPlace?: InPlace, area?: () => DOMRect | null): void {
   finishCellStructure(true);
   const blank: Contents = { atoms: [], bonds: [], captions: [], arrows: [], shapes: [] };
   const drawing = structureDoc(contents ?? blank, style);
   // in a mode whose page is the drawing area itself (Canvas, Presentation, Design), the structure
-  // is drawn in a box over a faded picture of the page, as a spreadsheet cell's is
-  const boxed = !inPlace && ws.active.mode !== 'sheet' && ws.active.mode !== 'document';
-  if (boxed) {
+  // is drawn in a box over a faded picture of the page, as a spreadsheet cell's is (or, for the
+  // Knowledge Base's Draw window, in the window's box, the page left as a picture behind it)
+  const pageIsDrawing = ws.active.mode !== 'sheet' && ws.active.mode !== 'document';
+  const boxed = !inPlace && !area && pageIsDrawing;
+  if (boxed || (area && pageIsDrawing)) {
     const back = $<HTMLDivElement>('#drawing-backdrop');
     const scene = host.querySelector<HTMLCanvasElement>('#scene');
     try { back.style.backgroundImage = scene ? `url(${scene.toDataURL('image/png')})` : ''; } catch { back.style.backgroundImage = ''; }
     back.hidden = false;
-    document.body.classList.add('boxed-drawing');
+    if (boxed) document.body.classList.add('boxed-drawing');
   }
   editor.clearSelection();
   // (no keyboard highlight left from the last structure: its atom ids mean nothing in this one)
@@ -7516,6 +7581,15 @@ function editCellStructure(contents: Contents | null, title: string, done: (c: C
   const mode = ws.active.mode;
   if (editor.toolName !== modeTool[mode]) editor.setTool(modeTool[mode]);
   editor.onToolChange(editor.toolName);
+  if (area) {
+    kbArea = area;
+    // (the search structure is no change to the tab, nor a step in a slide's undo list)
+    const t = ws.active;
+    kbLent = { tab: t, dirty: t.dirty, changes: t.changes, commit: doc.onCommit, amend: doc.onAmend };
+    doc.onCommit = doc.onAmend = null;
+    document.body.classList.add('kb-drawing');
+    placeKbArea();
+  }
   resize();
   if (inPlace) {
     // in place: over the pages, lined up with the structure where it is on its page
@@ -7552,7 +7626,8 @@ function finishCellStructure(keep: boolean): void {
   if (!e) return;
   editor.closeCaption();
   cellEdit = null;
-  const result = keep && doc.canUndo() ? doc.contents() : null;
+  // (the Draw window's drawing counts whether or not it changed: it may have opened with the one searched for last)
+  const result = keep && (doc.canUndo() || !!kbArea) ? doc.contents() : null;
   modeTool[ws.active.mode] = editor.toolName;
   editor.clearSelection();
   editor.setKeyHot(null);
@@ -7566,6 +7641,17 @@ function finishCellStructure(keep: boolean): void {
     place = placeSeen = null;
     document.body.classList.remove('drawing-in-place');
     for (const k of ['left', 'top', 'width', 'height'] as const) { host.style[k] = ''; $('#structure-bar').style[k] = ''; }
+  }
+  if (kbArea) {
+    kbArea = null;
+    document.body.classList.remove('kb-drawing');
+    for (const k of ['left', 'top', 'width', 'height'] as const) host.style[k] = '';
+    if (kbLent) {
+      doc.onCommit = kbLent.commit;
+      doc.onAmend = kbLent.amend;
+      ws.forgetLentChanges(kbLent.tab, kbLent);
+      kbLent = null;
+    }
   }
   // the drawing beside is back as it was: not changed, at its own zoom
   if (ws.pane) ws.pane.seen = doc.version;

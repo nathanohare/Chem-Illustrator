@@ -764,8 +764,9 @@ export class DocumentMode {
       case 'table-fit': this.setTable(id, fitDocColumns(t, f, lay.textW), 'Fit columns'); break;
       case 'table-even': this.setTable(id, { ...t, cols: t.cols.map(() => Math.floor((Math.min(lay.textW, t.cols.reduce((a, b) => a + b, 0)) / t.cols.length) * 100) / 100) }, 'Even columns'); break;
       case 'table-fill-width': this.setTable(id, { ...t, cols: t.cols.map((w) => (w * lay.textW) / t.cols.reduce((a, b) => a + b, 0)) }, 'Fit to page'); break;
-      case 'table-head-more': this.setTable(id, { ...t, head: Math.min(t.rows.length, t.head + 1) }, 'Heading rows'); break;
-      case 'table-head-less': this.setTable(id, { ...t, head: Math.max(0, t.head - 1) }, 'Heading rows'); break;
+      // (heading rows set here repeat at the top of each page, as Word's Repeat Header Rows)
+      case 'table-head-more': this.setTable(id, { ...t, head: Math.min(t.rows.length, t.head + 1), noRepeat: undefined }, 'Heading rows'); break;
+      case 'table-head-less': this.setTable(id, { ...t, head: Math.max(0, t.head - 1), noRepeat: undefined }, 'Heading rows'); break;
       case 'table-styles': {
         const r0 = this.view.host.getBoundingClientRect();
         this.tables.styleGallery(r0.left + 40, r0.top + 8);

@@ -10,6 +10,8 @@ export interface CellNote extends CommentThread {
   kind: 'note' | 'comment';
   /** A note shown all the time, not only when the pointer is over its cell. */
   shown?: boolean;
+  /** A note from a file whose text didn't start with its author's name (Excel adds that line only to notes it makes): saved without it. */
+  noAuthorLine?: true;
 }
 
 /** A note copied (for the undo history and pasting). */

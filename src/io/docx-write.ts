@@ -17,12 +17,13 @@ import type { CellBorders, Contents, Justify, ParaStyle, PictureFx, TableData, T
 import { bakedPart } from '../render/picture-fx';
 import { blipEffectsXml, imgPropsXml, pictureGeomXml } from './picture-xml';
 import { DEFAULT_MARGINS, builtInStyle } from '../document/table-styles';
-import { borderXml, bordersXml, lookXml as tableLookXml, marginsXml, tableStyleXml } from './docx-table-styles';
+import { borderXml, bordersXml, lookXml as tableLookXml, marginsXml, rowHeightXml, tableFloatXml, tableStyleXml, tableWidthXml } from './docx-table-styles';
 import { BORDER_SPACE, cleanBorders } from '../document/para-borders';
 import { fieldInstr } from '../document/fields';
 import type { DocStyle } from '../style';
 import * as rt from '../richtext';
 import { Package, REL, NS, xml, xmlAttr, hex6, emu, MediaFiles, bytesHash, structureAltText } from './ooxml';
+import { fragment, wordTablePrint } from './native-print';
 import { contentsAlt } from '../accessibility';
 import { THEMES, THEME_COLORS, THEME_FONTS, type DocDesign } from '../document/themes';
 import { DEFAULT_THEME, type WorkbookTheme } from '../sheet/themes';
@@ -31,7 +32,7 @@ import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed'
 import { fromDataUrl } from '../render/images';
 import { embeddedPart } from './ole-object';
 import { BULLETS, fitParas, listInfo, paraCount, schemeOf, splitParagraphs } from '../text/paragraphs';
-import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FLOAT_GAP, FOOT_FORMAT, columnsOf, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
+import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FOOT_FORMAT, columnsOf, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
 import { ACS_LINE, GRID_LINE, bibHang, docCellAlign, shownSize } from '../document/doc-layout';
 import { sectionsOf, type Section } from '../document/sections';
 import { bibliography, piecesText, type Reference } from '../document/references';
@@ -42,7 +43,7 @@ import { INDEX_INDENT, authorities, indexInstr, indexItems, taInstr, toaInstr, t
 import { ALG_SIDS, type Protection } from '../document/protect';
 import { parseFmt, parseRev } from '../document/revisions';
 import { officeTarget } from '../links';
-import { cmtIds, initials, placedComments, type CommentThread } from '../document/comments';
+import { cmtIds, initials, placedComments, type CommentNote, type CommentThread } from '../document/comments';
 import { toOmml } from '../document/math';
 import { documentMeasure } from '../text/font-measure';
 import { arialWidth } from '../text-metrics';
@@ -54,10 +55,10 @@ import { addChart, C_NS } from './office-chart';
 import { CX_NS, CX1_NS } from './xlsx-chart';
 import { isChartEx } from '../sheet/chart';
 import type { ChartBox } from '../sheet/chart-box';
-import { writeKeptParts, type ContentControl } from './kept-parts';
+import { appPropsXml, corePropsXml, writeKeptParts, type ContentControl } from './kept-parts';
 import { cmlGuid, contentsSig, writeCml } from './cml';
 import {
-  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_NAME, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
+  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_MARK, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
 } from './docx-base';
 
 export interface DocxDeps {
@@ -151,24 +152,25 @@ class DocxWriter {
   private charStyles: Record<string, CharStyle>;
   /** Word's lists (numbering.xml): the levels of each kind of list (abstractNum), and each list using them (num, by numId from 1). */
   private abstractNums = new Map<string, number>();
-  private nums: { abs: number; restart: boolean }[] = [];
+  /** Each list's levels (abs), whether it counts from 1 (restart), and a level it starts again at a number of its own (at). */
+  private nums: { abs: number; restart: boolean; at?: { level: number; value: number } }[] = [];
   /** Each list's kind (its key), by numId − 1. */
   private numKeys: string[] = [];
   /** The one list each kind of bulleted list (and each numbered list in table cells) shares. */
   private sharedNums = new Map<string, number>();
 
   /** A Word list of a kind ('b' and its bullet, or 'n' and its scheme): its numId. */
-  private addNum(key: string, restart: boolean): number {
+  private addNum(key: string, restart: boolean, at?: { level: number; value: number }): number {
     let abs = this.abstractNums.get(key);
     if (abs === undefined) { abs = this.abstractNums.size; this.abstractNums.set(key, abs); }
-    this.nums.push({ abs, restart });
+    this.nums.push({ abs, restart, ...(at ? { at } : {}) });
     this.numKeys.push(key);
     return this.nums.length;
   }
 
-  /** A new numbered list, counting from 1. */
-  private newList(key: string): number {
-    return this.addNum(key, true);
+  /** A new numbered list, counting from 1 (or from its first item's own number). */
+  private newList(key: string, start?: number): number {
+    return this.addNum(key, true, start !== undefined ? { level: 0, value: start } : undefined);
   }
 
   private sharedNum(key: string): number {
@@ -221,11 +223,13 @@ class DocxWriter {
     pkg.add(main, `${HEAD}<w:document ${PART_NS}>${bg}<w:body>${body}${sect}</w:body></w:document>`, DOCX_CT.document);
     pkg.relate(main, DOCX_REL.styles, 'styles.xml');
     pkg.add('word/styles.xml', this.styles(), DOCX_CT.styles);
-    // Design's theme as Word's own, so Word's Design tab shows it and new text and shapes take its fonts and colours
+    // Design's theme as Word's own, so Word's Design tab shows it and new text and shapes take its
+    // fonts and colours; else the document's own theme as it came
     const theme = wordTheme(this.t.design);
-    if (theme) {
+    const keptTheme = theme ? null : this.t.kept?.theme?.xml;
+    if (theme || keptTheme) {
       pkg.relate(main, DOCX_REL.theme, 'theme/theme1.xml');
-      pkg.add('word/theme/theme1.xml', themeXml(theme), THEME_CT);
+      pkg.add('word/theme/theme1.xml', theme ? themeXml(theme) : keptTheme!, THEME_CT);
     }
     if (this.cmts.size) this.commentParts(main);
     const notes = this.noteParts(main);
@@ -238,21 +242,18 @@ class DocxWriter {
     pkg.add('word/settings.xml', settings(false), DOCX_CT.settings);
     // our own part: each structure's drawing, and each table as made here
     pkg.relate(main, DOCX_REL.customXml, '../customXml/item1.xml');
-    pkg.add('customXml/item1.xml', `${HEAD}<chemIllustrator xmlns="${MODEL_NS}" version="1">${xml(JSON.stringify(this.model))}</chemIllustrator>`);
+    pkg.add('customXml/item1.xml', `${HEAD}<chemIllustrator xmlns="${MODEL_NS}" version="1">${xml(JSON.stringify(this.model, shortNumbers))}</chemIllustrator>`);
     pkg.relate('customXml/item1.xml', DOCX_REL.customXmlProps, 'itemProps1.xml');
     pkg.add('customXml/itemProps1.xml', `${HEAD}<ds:datastoreItem ds:itemID="{3B7E2C41-8F0A-4D6B-A9C2-5E1D7F3A2B90}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"><ds:schemaRefs><ds:schemaRef ds:uri="${MODEL_NS}"/></ds:schemaRefs></ds:datastoreItem>`, DOCX_CT.itemProps);
     pkg.relate('', REL.officeDocument, main);
     pkg.relate('', REL.coreProps, 'docProps/core.xml');
     pkg.relate('', REL.extendedProps, 'docProps/app.xml');
-    const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
-    // the document's properties (File > Properties), which fields and Word show
+    // the document's properties (File > Properties), which fields and Word show: the ones edited
+    // here as they are now, the rest (comments, category, status...) as the file had them
     const pr = this.t.props ?? {};
-    const name = pr.title || title;
-    const tag = (k: string, v: string | undefined) => (v ? `<${k}>${xml(v)}</${k}>` : '');
-    pkg.add('docProps/core.xml', `${HEAD}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
-      `${tag('dc:title', name)}${tag('dc:subject', pr.subject)}${tag('dc:creator', pr.author)}${tag('cp:keywords', pr.keywords)}${pr.author ? `<cp:lastModifiedBy>${xml(pr.author)}</cp:lastModifiedBy>` : ''}` +
-      `<dcterms:created xsi:type="dcterms:W3CDTF">${xml(pr.created ?? now)}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`, DOCX_CT.core);
-    pkg.add('docProps/app.xml', `${HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Chem Illustrator</Application>${tag('Company', pr.company)}</Properties>`, DOCX_CT.app);
+    const kept = this.t.kept?.docProps;
+    pkg.add('docProps/core.xml', corePropsXml(kept, { set: { title: pr.title || title || null, subject: pr.subject ?? null, creator: pr.author ?? null, keywords: pr.keywords ?? null, created: pr.created } }), DOCX_CT.core);
+    pkg.add('docProps/app.xml', appPropsXml(kept, '', { Company: pr.company ?? null }), DOCX_CT.app);
     // Zotero's document preferences (its style and settings) as custom document properties, with
     // other programs' data kept from the file read: custom XML (Chem4Word's structures written
     // afresh where they were changed here), custom properties and add-ins' settings
@@ -298,7 +299,7 @@ class DocxWriter {
     for (const r of t.runs) for (const ch of r.text) if (ch === '\n') markRev.push(r.rev);
     this.markRev = markRev;
     const out: string[] = [];
-    let lastWasTable = false;
+    let lastWasTable = false, lastFloats = false;
     let listNum = 0;
     // each section but the last ends with its section properties in its last paragraph (Word's way)
     const secs = sectionsOf({ ...t, paras });
@@ -325,9 +326,12 @@ class DocxWriter {
       // a paragraph holding just a table: Word's own table
       const only = runs.length === 1 && runs[0].obj !== undefined && runs[0].text === OBJECT_CHAR ? t.objects[runs[0].obj] : undefined;
       if (only?.kind === 'table') {
-        if (lastWasTable) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
+        // Word joins two tables with nothing between them into one: an empty paragraph keeps them
+        // apart. Two floating tables are placed apart and stay two tables, as Word writes them (a label sheet's).
+        if (lastWasTable && !(lastFloats && only.table.float)) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
         out.push(await this.docTable(main, only.table, ps.align ?? styleOf(t, ps).align));
         lastWasTable = true;
+        lastFloats = !!only.table.float;
         close();
         continue;
       }
@@ -336,11 +340,16 @@ class DocxWriter {
         if (lastWasTable) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
         out.push(this.table(runs[0].obj!, table, ps.align ?? styleOf(t, ps).align));
         lastWasTable = true;
+        lastFloats = false;
         close();
         continue;
       }
       // numbered lists: a new Word list where our numbers start again
-      if (ps.list === 'number' && lists[p].start) listNum = this.newList(`n${ps.scheme ?? ''}`);
+      if (ps.list === 'number' && lists[p].start) listNum = this.newList(`n${ps.scheme ?? ''}`, ps.startAt);
+      // an item further in with its own number: the list carries on in a Word list of the same levels that starts that level again from it
+      else if (ps.list === 'number' && !ps.cont && ps.startAt !== undefined && lists[p].n === ps.startAt && listNum > 0 && this.numKeys[listNum - 1] === `n${ps.scheme ?? ''}`) {
+        listNum = this.addNum(`n${ps.scheme ?? ''}`, false, { level: Math.max(0, Math.min(8, ps.level ?? 0)), value: ps.startAt });
+      }
       // a bibliography: its entries as paragraphs of their own, with any text round it in paragraphs before and after
       const isBib = (r: TextRun) => r.obj !== undefined && ['bib', 'toc', 'tof', 'index', 'toa'].includes(t.objects[r.obj]?.kind ?? '');
       if (runs.some(isBib)) {
@@ -429,15 +438,25 @@ class DocxWriter {
    */
   private commentParts(main: string): void {
     let para = 0x10000000;
-    const notes: string[] = [], ex: string[] = [];
-    const note = (id: number, c: { author: string; date: string; text: string }, parent: string | null, done: boolean): string => {
+    const notes: string[] = [], ex: string[] = [], cids: string[] = [], cex: string[] = [];
+    const note = (id: number, c: CommentNote, parent: string | null, done: boolean): string => {
+      // a comment from a Word file whose text wasn't changed here: its paragraphs as Word wrote them (with their formatting)
+      const kept = c.word?.paras?.length && c.word.text === c.text ? c.word.paras : null;
       const lines = c.text.split('\n');
-      const ids = lines.map(() => (para++).toString(16).toUpperCase());
-      const ps = lines.map((line, i) => `<w:p w14:paraId="${ids[i]}" w14:textId="77777777">${i === 0 ? '<w:r><w:annotationRef/></w:r>' : ''}${run('', line)}</w:p>`);
+      const ids = (kept ?? lines).map(() => (para++).toString(16).toUpperCase());
+      const ps = kept ? kept.map((p, i) => p.replace(/^<w:p\b/, `<w:p w14:paraId="${ids[i]}" w14:textId="77777777"`))
+        : lines.map((line, i) => `<w:p w14:paraId="${ids[i]}" w14:textId="77777777">${i === 0 ? '<w:r><w:annotationRef/></w:r>' : ''}${run('', line)}</w:p>`);
       const last = ids[ids.length - 1];
       const date = c.date ? ` w:date="${xml(toWordDate(c.date))}"` : '';
       notes.push(`<w:comment w:id="${id}" w:author="${xml(c.author || 'Author')}"${date} w:initials="${xml(initials(c.author) || 'A')}">${ps.join('')}</w:comment>`);
       ex.push(`<w15:commentEx w15:paraId="${last}"${parent ? ` w15:paraIdParent="${parent}"` : ''} w15:done="${done ? 1 : 0}"/>`);
+      // Word 365's lasting id for the comment, and its time in UTC
+      const did = c.word?.id && /^[0-9A-F]{8}$/i.test(c.word.id) ? c.word.id.toUpperCase() : null;
+      const utc = new Date(c.date);
+      if (did) {
+        cids.push(`<w16cid:commentId w16cid:paraId="${last}" w16cid:durableId="${did}"/>`);
+        if (!isNaN(utc.getTime())) cex.push(`<w16cex:commentExtensible w16cex:durableId="${did}" w16cex:dateUtc="${utc.toISOString().replace(/\.\d+Z$/, 'Z')}"/>`);
+      }
       return last;
     };
     for (const [id, { c, replies }] of this.cmts) {
@@ -449,6 +468,14 @@ class DocxWriter {
     this.pkg.add('word/comments.xml', `${HEAD}<w:comments xmlns:w="${W_NS}" xmlns:w14="${W14_NS}" xmlns:mc="${MC_NS}" mc:Ignorable="w14">${notes.join('')}</w:comments>`, DOCX_CT.comments);
     this.pkg.relate(main, DOCX_REL.commentsExtended, 'commentsExtended.xml');
     this.pkg.add('word/commentsExtended.xml', `${HEAD}<w15:commentsEx xmlns:w15="${W15_NS}" xmlns:mc="${MC_NS}">${ex.join('')}</w15:commentsEx>`, DOCX_CT.commentsExtended);
+    if (cids.length) {
+      this.pkg.relate(main, DOCX_REL.commentsIds, 'commentsIds.xml');
+      this.pkg.add('word/commentsIds.xml', `${HEAD}<w16cid:commentsIds xmlns:w16cid="${W16CID_NS}">${cids.join('')}</w16cid:commentsIds>`, DOCX_CT.commentsIds);
+    }
+    if (cex.length) {
+      this.pkg.relate(main, DOCX_REL.commentsExtensible, 'commentsExtensible.xml');
+      this.pkg.add('word/commentsExtensible.xml', `${HEAD}<w16cex:commentsExtensible xmlns:w16cex="${W16CEX_NS}">${cex.join('')}</w16cex:commentsExtensible>`, DOCX_CT.commentsExtensible);
+    }
   }
 
   private async paragraph(main: string, ps: ParaStyle, runs: TextRun[], listNum: number, index = -1, sectXml = ''): Promise<string> {
@@ -457,7 +484,9 @@ class DocxWriter {
     const pPr: string[] = [];
     if (st.id !== 'Normal') pPr.push(`<w:pStyle w:val="${xml(st.id)}"/>`);
     if (!!ps.keepNext !== st.keepNext) pPr.push(ps.keepNext ? '<w:keepNext/>' : '<w:keepNext w:val="0"/>');
+    if (!!ps.keepLines !== !!st.keepLines) pPr.push(ps.keepLines ? '<w:keepLines/>' : '<w:keepLines w:val="0"/>');
     if (ps.pageBreak) pPr.push('<w:pageBreakBefore/>');
+    if (!!ps.noWidow !== !!st.noWidow) pPr.push(ps.noWidow ? '<w:widowControl w:val="0"/>' : '<w:widowControl/>');
     // Word has no "start a new column" for a paragraph: a column break begins it
     const colBreak = ps.colBreak ? '<w:r><w:br w:type="column"/></w:r>' : '';
     const em = runs.find((r) => r.obj === undefined)?.size ?? st.size;
@@ -598,8 +627,10 @@ class DocxWriter {
     const mark = this.bookmarkId++;
     const name = `${BIB_MARK}${id}`;
     const pPr = `<w:pPr><w:spacing w:before="0" w:after="0"/><w:ind w:left="${twips(hang)}" w:hanging="${twips(hang)}"/><w:jc w:val="left"/></w:pPr>`;
+    // (a manager's entries kept from Word may also be underlined, raised, lowered or linked)
     const paras = entries.map((e) => run(runProps({ ...base, text: '' }, st, {}), `${e.label}\t`) +
-      e.pieces.map((p) => run(runProps({ ...base, italic: p.italic, bold: p.bold, text: p.text }, st, {}), p.text)).join(''));
+      this.linkedRuns('word/document.xml', e.pieces.map((p): TextRun => ({ ...rt.cleanStyle({ ...base, italic: p.italic, bold: p.bold, underline: p.underline, sup: p.sup, sub: p.sub, link: p.link }), text: p.text })),
+        (r) => run(runProps(r, st, {}), r.text)));
     if (!paras.length) paras.push('');
     const app = t.citeManager;
     if (app && app !== 'mendeley-cite') {
@@ -731,7 +762,8 @@ class DocxWriter {
           const pPr: string[] = [`<w:pStyle w:val="${style}"/>`];
           const align = p.align ?? 'left';
           if (align !== st.align) pPr.push(`<w:jc w:val="${JC[align]}"/>`);
-          const mark = i === 0 ? `<w:r><w:rPr><w:rStyle w:val="${ref}"/></w:rPr><w:${tag}Ref/></w:r><w:r><w:t xml:space="preserve"> </w:t></w:r>` : '';
+          // the note's number, and the space after it (or what the note had there in Word)
+          const mark = i === 0 ? `<w:r><w:rPr><w:rStyle w:val="${ref}"/></w:rPr><w:${tag}Ref/></w:r>${run('', o.lead ?? ' ')}` : '';
           // its text, and its citations (note styles put them in footnotes)
           const cite = (r: TextRun) => { const c = r.obj !== undefined ? t.objects[r.obj] : undefined; return c?.kind === 'cite' ? c : null; };
           const body = this.linkedRuns(`word/${tag}s.xml`, (runsOf[i] ?? []).filter((r) => r.obj === undefined || cite(r)), (r) => {
@@ -796,6 +828,9 @@ class DocxWriter {
       const name = /\s/.test(o.name) ? `"${o.name}"` : o.name;
       return field(rPr, ` SEQ ${xml(name)} \\* ARABIC \\* CHARFORMAT `, shown);
     }
+    // hidden text kept from a Word file, as it was; a field kept from Word with the result it showed (none: no result)
+    if (o.kind === 'field' && o.code === 'hidden') return run(runProps(r, st, { cs: this.charStyleOf(r), vanish: true }), o.text ?? '');
+    if (o.kind === 'field' && o.code === 'word' && !shown) return markField(fieldInstr(o), rPr);
     if (o.kind === 'field') return field(rPr, xml(fieldInstr(o)), shown);
     if (o.kind === 'ref') {
       const bm = this.bookmarks.get(o.target);
@@ -831,12 +866,12 @@ class DocxWriter {
     const was = fl.name ? /<wp:docPr [^>]*?name="([^"]*)"/.exec(inner)?.[1] : undefined;
     if (fl.name && was !== undefined) inner = inner.replace(/(<wp:docPr [^>]*?name=")[^"]*"/, (_, a: string) => `${a}${xmlAttr(fl.name!)}"`);
     if (pr && (fl.group !== undefined || fl.name)) (this.model.floats ??= {})[Number(pr[1])] = { ...(fl.group !== undefined ? { group: fl.group } : {}), ...(fl.name ? { name: fl.name } : {}), ...(was !== undefined ? { was } : {}) };
-    const gap = emu(fl.gap ?? FLOAT_GAP);
+    const gap = floatGaps(fl);
     const [l, t] = lookExtent(lookOf(o));
     const h = fl.xFrom === 'page' ? 'page' : 'margin';
     const v = fl.yFrom === 'page' ? 'page' : fl.yFrom === 'margin' ? 'margin' : 'paragraph';
     const wrap = fl.wrap === 'square' ? '<wp:wrapSquare wrapText="largest"/>' : fl.wrap === 'topBottom' ? '<wp:wrapTopAndBottom/>' : '<wp:wrapNone/>';
-    return `<wp:anchor distT="${gap}" distB="${gap}" distL="${gap}" distR="${gap}" simplePos="0" relativeHeight="${251659264 + (fl.z !== undefined ? fl.z + 1 : this.docPr) * 1024}" behindDoc="${fl.wrap === 'behind' ? 1 : 0}" locked="0" layoutInCell="1" allowOverlap="1">` +
+    return `<wp:anchor distT="${emu(gap.t)}" distB="${emu(gap.b)}" distL="${emu(gap.l)}" distR="${emu(gap.r)}" simplePos="0" relativeHeight="${251659264 + (fl.z !== undefined ? fl.z + 1 : this.docPr) * 1024}" behindDoc="${fl.wrap === 'behind' ? 1 : 0}" locked="0" layoutInCell="1" allowOverlap="1">` +
       `<wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="${h}"><wp:posOffset>${emu(fl.x + l)}</wp:posOffset></wp:positionH>` +
       `<wp:positionV relativeFrom="${v}"><wp:posOffset>${emu(fl.y + t)}</wp:posOffset></wp:positionV>${ext}${wrap}${inner}</wp:anchor>`;
   }
@@ -876,8 +911,9 @@ class DocxWriter {
   private chartNo = 0;
   private async chart(main: string, id: number, o: Extract<DocObject, { kind: 'picture' }>, box: ChartBox, rPr: string): Promise<string> {
     const size = shownSize({ w: o.w, h: o.h }, o.scale ?? 1, this.textW);
-    const rid = await addChart(this.pkg, main, 'word', ++this.chartNo, box, size.w, size.h);
+    const { rid, print } = await addChart(this.pkg, main, 'word', ++this.chartNo, box, size.w, size.h);
     (this.model.charts ??= {})[id] = box;
+    if (print) (this.model.chartPrints ??= {})[id] = print;
     const n = this.docPr++;
     const ex = isChartEx(box.chart.kind);
     const uri = ex ? CX_NS : C_NS;
@@ -969,9 +1005,10 @@ class DocxWriter {
           `<wpg:grpSpPr><a:xfrm${turnAttrs(o)}><a:off x="0" y="0"/><a:ext cx="${emu(size.w)}" cy="${emu(size.h)}"/><a:chOff x="${emu(at.x)}" y="${emu(at.y)}"/><a:chExt cx="${emu(at.w)}" cy="${emu(at.h)}"/></a:xfrm></wpg:grpSpPr>` +
           `${kids}</wpg:wgp></a:graphicData></a:graphic>`;
       }
-      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), ...(o.frame ? { frame: o.frame } : {}) };
+      const svg = pic.svg ? new TextEncoder().encode(pic.svg) : null;
+      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), ...(svg ? { svg: bytesHash(svg) } : {}), ...(o.frame ? { frame: o.frame } : {}) };
       blip = this.media(main, pic.png, 'png');
-      if (pic.svg) svgId = this.media(main, new TextEncoder().encode(pic.svg), 'svg');
+      if (svg) svgId = this.media(main, svg, 'svg');
       size = shownSize({ w: pic.w, h: pic.h }, o.scale ?? 1, this.textW);
       name = `${DRAWING_NAME} ${id}`;
       smiles = await this.deps.smiles?.(o.contents, t.drawingStyle).catch(() => null) ?? null;
@@ -1041,7 +1078,8 @@ class DocxWriter {
     const style = this.t.drawingStyle;
     const size = tab.size ?? style.captionSize;
     const font = style.captionFont || 'Arial';
-    this.model.tables[id] = { table: tab, text: tableText(tab) };
+    const entry: DocxModel['tables'][number] = { table: tab, text: tableText(tab) };
+    this.model.tables[id] = entry;
     const lw = Math.max(2, Math.min(96, Math.round(style.lineWidth * 8)));
     const line = `w:val="single" w:sz="${lw}" w:space="0" w:color="000000"`;
     const none = 'w:val="nil"';
@@ -1051,11 +1089,16 @@ class DocxWriter {
         : `<w:top ${none}/><w:left ${none}/><w:bottom ${none}/><w:right ${none}/><w:insideH ${none}/><w:insideV ${none}/>`;
     const width = tab.cols.reduce((a, b) => a + b, 0);
     const padX = twips(PAD_X * size), padY = twips(PAD_Y * size);
+    const title = tab.title?.length ? rt.plainText(tab.title).replace(/\s+/g, ' ').trim() : '';
+    // which of ours it is: a hidden bookmark at the start of its first cell
+    const markId = this.bookmarkId++;
+    let mark = `<w:bookmarkStart w:id="${markId}" w:name="${TABLE_MARK}${id}"/><w:bookmarkEnd w:id="${markId}"/>`;
     const tblPr = `<w:tblPr><w:tblW w:w="${twips(width)}" w:type="dxa"/><w:jc w:val="${align === 'right' ? 'right' : align === 'left' ? 'left' : 'center'}"/>` +
       `<w:tblBorders>${borders}</w:tblBorders><w:tblLayout w:type="fixed"/>` +
       `<w:tblCellMar><w:top w:w="${padY}" w:type="dxa"/><w:left w:w="${padX}" w:type="dxa"/><w:bottom w:w="${padY}" w:type="dxa"/><w:right w:w="${padX}" w:type="dxa"/></w:tblCellMar>` +
       `<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>` +
-      `<w:tblCaption w:val="${TABLE_NAME} ${id}"/></w:tblPr>`;
+      // its alt-text title: the table's own title (which of ours it is goes in a hidden bookmark)
+      `${title ? `<w:tblCaption w:val="${xmlAttr(title)}"/>` : ''}</w:tblPr>`;
     const grid = `<w:tblGrid>${tab.cols.map((w) => `<w:gridCol w:w="${twips(w)}"/>`).join('')}</w:tblGrid>`;
     const cellPara = (runs: TextRun[], paras: ParaStyle[] | undefined, jc: Justify, k = 1): string => {
       const n = paraCount(rt.plainText(runs));
@@ -1075,14 +1118,19 @@ class DocxWriter {
         const w = tab.cols.slice(c, c + span).reduce((a, b) => a + b, 0);
         const cell = row[c] ?? { runs: [] };
         const tcBorders = tab.lines === 'acs' && lastHead && r < tab.rows.length - 1 ? `<w:tcBorders><w:bottom ${line}/></w:tcBorders>` : '';
-        cells.push(`<w:tc><w:tcPr><w:tcW w:w="${twips(w)}" w:type="dxa"/>${span > 1 ? `<w:gridSpan w:val="${span}"/>` : ''}${tcBorders}</w:tcPr>` +
-          `${cellPara(cell.runs, cell.paras, cellAlign(tab, r, c))}</w:tc>`);
+        const text = cellPara(cell.runs, cell.paras, cellAlign(tab, r, c)).replace('</w:pPr>', `</w:pPr>${mark}`);
+        mark = '';
+        cells.push(`<w:tc><w:tcPr><w:tcW w:w="${twips(w)}" w:type="dxa"/>${span > 1 ? `<w:gridSpan w:val="${span}"/>` : ''}${tcBorders}</w:tcPr>${text}</w:tc>`);
       }
       rows.push(`<w:tr>${r < tab.head ? '<w:trPr><w:tblHeader/></w:trPr>' : ''}${cells.join('')}</w:tr>`);
     });
     const titlePara = tab.title?.length ? cellPara(tab.title, undefined, 'left') : '';
     const notesPara = tab.notes?.length ? cellPara(tab.notes, undefined, 'left', 0.8) : '';
-    return `${titlePara}<w:tbl>${tblPr}${grid}${rows.join('')}</w:tbl>${notesPara}`;
+    const tbl = `<w:tbl>${tblPr}${grid}${rows.join('')}</w:tbl>`;
+    // with a print of how its text looks as written, to tell whether Word changed it (native-print.ts)
+    const el = fragment(tbl);
+    if (el) entry.pr = wordTablePrint(el);
+    return `${titlePara}${tbl}${notesPara}`;
   }
 
   /**
@@ -1097,11 +1145,11 @@ class DocxWriter {
       ? `<w:top ${grid}/><w:left ${grid}/><w:bottom ${grid}/><w:right ${grid}/><w:insideH ${grid}/><w:insideV ${grid}/>`
       : tab.lines === 'acs' ? `<w:top ${rule}/><w:left ${none}/><w:bottom ${rule}/><w:right ${none}/><w:insideH ${none}/><w:insideV ${none}/>`
         : `<w:top ${none}/><w:left ${none}/><w:bottom ${none}/><w:right ${none}/><w:insideH ${none}/><w:insideV ${none}/>`;
-    const width = tab.cols.reduce((a, b) => a + b, 0);
     // a table style: Word's own (written in styles.xml), with the parts it picks out; else the lines themselves
     const styled = !!tab.style && !!(this.t.tableStyles?.[tab.style] ?? builtInStyle(tab.style));
-    const tblPr = `<w:tblPr>${styled ? `<w:tblStyle w:val="${tab.style}"/>` : ''}<w:tblW w:w="${twips(width)}" w:type="dxa"/><w:jc w:val="${align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'}"/>` +
-      `${styled ? '' : `<w:tblBorders>${borders}</w:tblBorders>`}<w:tblLayout w:type="fixed"/>` +
+    // (a floating table, its width, indent and AutoFit as Word had them; a table made here has fixed columns)
+    const tblPr = `<w:tblPr>${styled ? `<w:tblStyle w:val="${tab.style}"/>` : ''}${tableFloatXml(tab.float)}${tableWidthXml(tab)}<w:jc w:val="${align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'}"/>` +
+      `${tab.indent ? `<w:tblInd w:w="${twips(tab.indent)}" w:type="dxa"/>` : ''}${styled ? '' : `<w:tblBorders>${borders}</w:tblBorders>`}${tab.autofit ? '' : '<w:tblLayout w:type="fixed"/>'}` +
       marginsXml('tblCellMar', tab.pad ?? DEFAULT_MARGINS) +
       `${styled ? tableLookXml(tab) : '<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>'}</w:tblPr>`;
     const gridXml = `<w:tblGrid>${tab.cols.map((w) => `<w:gridCol w:w="${twips(w)}"/>`).join('')}</w:tblGrid>`;
@@ -1156,7 +1204,9 @@ class DocxWriter {
         if (lastTable || !paras.length) paras.push('<w:p/>');
         cells.push(`<w:tc><w:tcPr>${tcPr.join('')}</w:tcPr>${paras.join('')}</w:tc>`);
       }
-      rows.push(`<w:tr>${r < tab.head ? '<w:trPr><w:tblHeader/></w:trPr>' : ''}${cells.join('')}</w:tr>`);
+      // its height, and whether it repeats at the top of each page as a heading row
+      const trPr = rowHeightXml(tab.rowH?.[r]) + (r < tab.head && !tab.noRepeat ? '<w:tblHeader/>' : '');
+      rows.push(`<w:tr>${trPr ? `<w:trPr>${trPr}</w:trPr>` : ''}${cells.join('')}</w:tr>`);
     }
     return `<w:tbl>${tblPr}${gridXml}${rows.join('')}</w:tbl>`;
   }
@@ -1210,7 +1260,8 @@ class DocxWriter {
     const L = sec.lines;
     const lines = L ? `<w:lnNumType w:countBy="${Math.max(1, Math.round(L.countBy))}"${L.start !== 1 ? ` w:start="${Math.max(0, Math.round(L.start) - 1)}"` : ''}${L.distance !== undefined ? ` w:distance="${twips(L.distance)}"` : ''} w:restart="${L.restart === 'page' ? 'newPage' : L.restart === 'section' ? 'newSection' : 'continuous'}"/>` : '';
     const numFmt = sec.format !== 'decimal' ? ` w:fmt="${sec.format}"` : '';
-    const start = sec.restart !== undefined ? ` w:start="${Math.round(sec.restart)}"` : '';
+    // (the first section's numbers start at 1 without saying so: a start there would restart them if the document is put inside another)
+    const start = sec.restart !== undefined && !(sec.index === 0 && Math.round(sec.restart) === 1) ? ` w:start="${Math.round(sec.restart)}"` : '';
     return `<w:sectPr>${refs.join('')}<w:pgSz w:w="${twips(pg.w)}" w:h="${twips(pg.h)}"${land ? ' w:orient="landscape"' : ''}/>` +
       `<w:pgMar w:top="${twips(pg.top)}" w:right="${twips(pg.right)}" w:bottom="${twips(pg.bottom)}" w:left="${twips(pg.left)}" w:header="${twips(pg.header)}" w:footer="${twips(pg.footer)}" w:gutter="0"/>` +
       `${t.pageBorder ? pageBordersXml(t.pageBorder) : ''}${lines}${numFmt || start ? `<w:pgNumType${numFmt}${start}/>` : ''}${colsXml(pg)}${titlePg ? '<w:titlePg/>' : ''}<w:docGrid w:linePitch="360"/></w:sectPr>`;
@@ -1287,8 +1338,8 @@ class DocxWriter {
     const t = this.t;
     const normal = styleOf(t, undefined);
     const out: string[] = [HEAD, `<w:styles xmlns:w="${W_NS}">`];
-    out.push(`<w:docDefaults><w:rPrDefault><w:rPr>${fontsXml(normal.font)}<w:sz w:val="${half(normal.size)}"/><w:szCs w:val="${half(normal.size)}"/><w:lang w:val="en-US" w:eastAsia="en-US" w:bidi="ar-SA"/></w:rPr></w:rPrDefault>` +
-      `<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`);
+    out.push(`<w:docDefaults><w:rPrDefault><w:rPr>${fontsXml(normal.font)}<w:sz w:val="${half(normal.size)}"/><w:szCs w:val="${half(normal.size)}"/><w:lang w:val="${xml(t.lang ?? 'en-US')}" w:eastAsia="en-US" w:bidi="ar-SA"/></w:rPr></w:rPrDefault>` +
+      `<w:pPrDefault><w:pPr><w:widowControl/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`);
     const ids = Object.keys(t.styles);
     for (const id of ['Normal', ...ids.filter((k) => k !== 'Normal')]) {
       const s = t.styles[id];
@@ -1362,7 +1413,8 @@ class DocxWriter {
     const out = [HEAD, `<w:numbering xmlns:w="${W_NS}">`];
     for (const [key, abs] of this.abstractNums) out.push(`<w:abstractNum w:abstractNumId="${abs}"><w:multiLevelType w:val="${key === 'b' || key === 'n' ? 'hybridMultilevel' : 'multilevel'}"/>${lvls(key)}</w:abstractNum>`);
     this.nums.forEach((n, k) => {
-      const restart = n.restart ? Array.from({ length: 9 }, (_, i) => `<w:lvlOverride w:ilvl="${i}"><w:startOverride w:val="1"/></w:lvlOverride>`).join('') : '';
+      const over = (i: number, v: number) => `<w:lvlOverride w:ilvl="${i}"><w:startOverride w:val="${v}"/></w:lvlOverride>`;
+      const restart = n.restart ? Array.from({ length: 9 }, (_, i) => over(i, n.at?.level === i ? n.at.value : 1)).join('') : n.at ? over(n.at.level, n.at.value) : '';
       out.push(`<w:num w:numId="${k + 1}"><w:abstractNumId w:val="${n.abs}"/>${restart}</w:num>`);
     });
     out.push('</w:numbering>');
@@ -1431,7 +1483,7 @@ export function highlightName(color: string): string | null {
  * A run's formatting where it differs from its paragraph's style (and its character style, when
  * it is in one: Word then gives it that style, so changing the style in Word changes it too).
  */
-function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'base' | 'sub' | 'sup'; cs?: CharStyle }): string {
+function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'base' | 'sub' | 'sup'; cs?: CharStyle; vanish?: boolean }): string {
   const out: string[] = [];
   // (a run has one character style in Word: a formula's mark wins)
   const cs = x.formula ? undefined : x.cs;
@@ -1446,6 +1498,8 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   if (!!r.allCaps !== !!cs?.allCaps) out.push(r.allCaps ? '<w:caps/>' : '<w:caps w:val="0"/>');
   if (!!r.smallCaps !== !!cs?.smallCaps) out.push(r.smallCaps ? '<w:smallCaps/>' : '<w:smallCaps w:val="0"/>');
   if (!!r.strike !== !!cs?.strike) out.push(r.strike ? '<w:strike/>' : '<w:strike w:val="0"/>');
+  if (r.noProof) out.push('<w:noProof/>');
+  if (x.vanish) out.push('<w:vanish/>');
   const color = r.color ?? st.color;
   if ((color ?? '') !== (st.color ?? '')) out.push(`<w:color w:val="${color ? hex6(color) : 'auto'}"/>`);
   // character spacing (twentieths of a point) and kerning taken off
@@ -1460,6 +1514,7 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   if (r.highlight && !hl) out.push(`<w:shd w:val="clear" w:color="auto" w:fill="${hex6(r.highlight)}"/>`);
   const pos = x.pos ?? (r.sub ? 'sub' : r.sup ? 'sup' : 'base');
   if (pos !== 'base') out.push(`<w:vertAlign w:val="${pos === 'sub' ? 'subscript' : 'superscript'}"/>`);
+  if (r.lang) out.push(`<w:lang w:val="${xml(r.lang)}"/>`);
   out.push(textEffects(r, color));
   return out.join('');
 }
@@ -1484,6 +1539,15 @@ function textEffects(r: TextRun, color: string | undefined): string {
 function turnAttrs(o: DocObject): string {
   if (o.kind !== 'picture' && o.kind !== 'drawing') return '';
   return `${o.rot ? ` rot="${Math.round(o.rot * 60000)}"` : ''}${o.flipH ? ' flipH="1"' : ''}${o.flipV ? ' flipV="1"' : ''}`;
+}
+
+/**
+ * Numbers in our part to nine significant figures (a structure's coordinates are worked out to
+ * sixteen, 39.42107070546791): a millionth of a point and finer is never seen, and the part is
+ * a good deal smaller.
+ */
+function shortNumbers(_key: string, v: unknown): unknown {
+  return typeof v === 'number' && Number.isFinite(v) && !Number.isInteger(v) ? Number(v.toPrecision(9)) : v;
 }
 
 /** A table cell's run: its font and size always given (tables are set in the drawing's font). */
@@ -1545,8 +1609,9 @@ export function paraBorderXml(ps: ParaStyle): string {
 }
 
 /** A field with no result (an index entry, a marked citation): Word keeps it as hidden text. */
-function markField(instr: string): string {
-  return `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">${xml(instr)}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+function markField(instr: string, rPr = ''): string {
+  const pr = rPr ? `<w:rPr>${rPr}</w:rPr>` : '';
+  return `<w:r>${pr}<w:fldChar w:fldCharType="begin"/></w:r><w:r>${pr}<w:instrText xml:space="preserve">${xml(instr)}</w:instrText></w:r><w:r>${pr}<w:fldChar w:fldCharType="end"/></w:r>`;
 }
 
 /**
@@ -1662,7 +1727,9 @@ function styleXml(s: NamedStyle, ids: string[]): string {
       `${s.next && ids.includes(s.next) ? `<w:next w:val="${xml(s.next)}"/>` : ''}<w:uiPriority w:val="${PRIORITY[id] ?? 29}"/><w:qFormat/>`;
   const pPr: string[] = [];
   pPr.push(s.keepNext ? '<w:keepNext/>' : '<w:keepNext w:val="0"/>');
-  pPr.push('<w:widowControl/>');
+  // (widow and orphan control is on for every style, from the document's defaults, unless a style turns it off)
+  if (s.keepLines) pPr.push('<w:keepLines/>');
+  if (s.noWidow) pPr.push('<w:widowControl w:val="0"/>');
   pPr.push(`<w:spacing w:before="${twips(s.spaceBefore)}" w:after="${twips(s.spaceAfter)}" w:line="${Math.round(240 * s.line)}" w:lineRule="auto"/>`);
   pPr.push(`<w:ind w:left="${twips(s.indent)}" ${s.firstLine < 0 ? `w:hanging="${twips(-s.firstLine)}"` : `w:firstLine="${twips(s.firstLine)}"`}/>`);
   pPr.push(`<w:jc w:val="${JC[s.align]}"/>`);

@@ -58,12 +58,21 @@ export interface CiteLive {
   code?: string;
   text?: string;
   for?: string;
+  /**
+   * The citation's text kept as its manager showed it in Word (chosen on open): valid while the
+   * document cites what it did then (every reference id cited, in order, joined by spaces).
+   */
+  all?: string;
 }
 
-/** A bibliography Zotero keeps (citing live through it): its field's code, and its entries while they are up to date (`for`: the references cited, in order). */
+/**
+ * A bibliography Zotero keeps (citing live through it): its field's code, and its entries while
+ * they are up to date (`for`: the references cited, in order). A reference manager's bibliography
+ * kept as Word had it (chosen on open) has entries and `for` only.
+ */
 export interface BibLive {
-  code: string;
-  entries?: { label: string; pieces: { text: string; italic?: boolean; bold?: boolean }[] }[];
+  code?: string;
+  entries?: { label: string; pieces: { text: string; italic?: boolean; bold?: boolean; underline?: boolean; sup?: boolean; sub?: boolean; link?: string }[] }[];
   for?: string;
 }
 

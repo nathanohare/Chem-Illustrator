@@ -179,7 +179,7 @@ describe('the outline', () => {
     expect(sheet).toContain('outlineLevelRow="1"');
     expect(sheet).toMatch(/<row r="1" collapsed="1"/);
     expect(sheet).toMatch(/<row r="2" hidden="1" outlineLevel="1"/);
-    expect(sheet).toMatch(/<col min="2" max="2"[^>]*outlineLevel="1"/);
+    expect(sheet).toMatch(/<col min="2" max="3"[^>]*outlineLevel="1"/);
     expect([...back.sheet.rowLevels]).toEqual([[1, 1], [2, 1], [3, 1]]);
     expect([...back.sheet.colLevels]).toEqual([[1, 1], [2, 1]]);
     expect(back.sheet.outline).toEqual({ summaryAbove: true });

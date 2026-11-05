@@ -1,9 +1,10 @@
 // Table styles, cell borders and cell margins in Word files: a style as Word's own table style
 // in styles.xml (w:style w:type="table", with a w:tblStylePr for each part it formats; ECMA-376
 // part 1, 17.7.6), a table's choice of parts as w:tblLook, lines as w:tblBorders and
-// w:tcBorders, and margins as w:tblCellMar and w:tcMar.
+// w:tcBorders, and margins as w:tblCellMar and w:tcMar. Also a table's place and size as Word
+// keeps them: a floating table's w:tblpPr, its w:tblW, and each row's w:trHeight.
 
-import type { BorderLine, BorderSide, CellBorders, CellMargins, TableData, TableLook } from '../model';
+import type { BorderLine, BorderSide, CellBorders, CellMargins, RowHeight, TableData, TableFloat, TableLook } from '../model';
 import { kid, kids } from './ooxml';
 import { twips } from './docx-base';
 import { coveringCell } from '../table';
@@ -274,4 +275,92 @@ export function keepDirectBorders(t: TableData, table: Partial<Record<StyleEdge,
       return w ? { ...cell, borders: { ...cell.borders, ...w } } : cell;
     })),
   };
+}
+
+// ---------------------------------------------------------------- place, width and row heights
+
+const ANCHORS: readonly string[] = ['text', 'margin', 'page'];
+const X_SPECS: readonly string[] = ['left', 'center', 'right', 'inside', 'outside'];
+const Y_SPECS: readonly string[] = ['top', 'center', 'bottom', 'inside', 'outside', 'inline'];
+
+/** A measure in twentieths of a point (as Word writes it), in points; undefined when not given. */
+function pts(el: Element, name: string, a: Attr): number | undefined {
+  const v = parseFloat(a(el, name) ?? '');
+  return Number.isFinite(v) ? v / 20 : undefined;
+}
+
+/** A floating table's place (w:tblpPr, ECMA-376 part 1, 17.4.57) and w:tblOverlap; undefined for a table in its line. */
+export function readTableFloat(tblPr: Element | null, a: Attr): TableFloat | undefined {
+  const el = kid(tblPr, 'tblpPr');
+  if (!el) return undefined;
+  const f: TableFloat = {};
+  const h = a(el, 'horzAnchor'), v = a(el, 'vertAnchor'), xs = a(el, 'tblpXSpec'), ys = a(el, 'tblpYSpec');
+  if (h && ANCHORS.includes(h)) f.hFrom = h as TableFloat['hFrom'];
+  if (v && ANCHORS.includes(v)) f.vFrom = v as TableFloat['vFrom'];
+  if (xs && X_SPECS.includes(xs)) f.xAlign = xs as TableFloat['xAlign'];
+  if (ys && Y_SPECS.includes(ys)) f.yAlign = ys as TableFloat['yAlign'];
+  const at: [keyof TableFloat, string][] = [['x', 'tblpX'], ['y', 'tblpY'], ['left', 'leftFromText'], ['right', 'rightFromText'], ['top', 'topFromText'], ['bottom', 'bottomFromText']];
+  for (const [k, n] of at) {
+    const p = pts(el, n, a);
+    if (p !== undefined) (f as Record<string, number>)[k] = p;
+  }
+  if (a(kid(tblPr, 'tblOverlap')) === 'never') f.noOverlap = true;
+  return f;
+}
+
+/** A floating table's w:tblpPr (and w:tblOverlap), with what was kept of it. */
+export function tableFloatXml(f: TableFloat | undefined): string {
+  if (!f) return '';
+  const at: string[] = [];
+  const room = (n: string, v: number | undefined) => { if (v !== undefined) at.push(`w:${n}="${Math.max(0, twips(v))}"`); };
+  room('leftFromText', f.left);
+  room('rightFromText', f.right);
+  room('topFromText', f.top);
+  room('bottomFromText', f.bottom);
+  if (f.vFrom) at.push(`w:vertAnchor="${f.vFrom}"`);
+  if (f.hFrom) at.push(`w:horzAnchor="${f.hFrom}"`);
+  if (f.xAlign) at.push(`w:tblpXSpec="${f.xAlign}"`);
+  if (f.x !== undefined) at.push(`w:tblpX="${twips(f.x)}"`);
+  if (f.yAlign) at.push(`w:tblpYSpec="${f.yAlign}"`);
+  if (f.y !== undefined) at.push(`w:tblpY="${twips(f.y)}"`);
+  return `<w:tblpPr${at.length ? ' ' + at.join(' ') : ''}/>${f.noOverlap ? '<w:tblOverlap w:val="never"/>' : ''}`;
+}
+
+/** A table's width when Word sets it other than in points (w:tblW of type pct or auto, 17.4.63). */
+export function readTableWidth(tblPr: Element | null, a: Attr): TableData['width'] {
+  const el = kid(tblPr, 'tblW');
+  const type = a(el, 'type');
+  if (type === 'auto') return 'auto';
+  if (type !== 'pct') return undefined;
+  // fiftieths of a percent, or (newer files) a percentage
+  const v = a(el, 'w') ?? '';
+  const n = parseFloat(v);
+  if (!Number.isFinite(n) || n <= 0) return 'auto';
+  return { pct: Math.round((v.trim().endsWith('%') ? n : n / 50) * 100) / 100 };
+}
+
+/** A table's w:tblW: as Word had it (a share of the text's width, or auto), else its columns' total in twips. */
+export function tableWidthXml(t: TableData): string {
+  if (t.width === 'auto') return '<w:tblW w:w="0" w:type="auto"/>';
+  if (t.width) return `<w:tblW w:w="${Math.max(0, Math.round(t.width.pct * 50))}" w:type="pct"/>`;
+  return `<w:tblW w:w="${twips(t.cols.reduce((x, y) => x + y, 0))}" w:type="dxa"/>`;
+}
+
+/**
+ * A row's height (w:trHeight, 17.4.80): at least that tall, or exactly with hRule exact. Word
+ * takes a missing hRule as atLeast (MS-OI29500 2.1.180); auto (or no height) leaves the row to its text.
+ */
+export function readRowHeight(trPr: Element | null, a: Attr): RowHeight | null {
+  const el = kid(trPr, 'trHeight');
+  if (!el) return null;
+  const h = pts(el, 'val', a);
+  const rule = a(el, 'hRule');
+  if (!h || h <= 0 || rule === 'auto') return null;
+  return rule === 'exact' ? { h, exact: true } : { h };
+}
+
+/** A row's w:trHeight, with its rule written out (the standard's default is auto, Word's atLeast). */
+export function rowHeightXml(h: RowHeight | null | undefined): string {
+  if (!h || !(h.h > 0)) return '';
+  return `<w:trHeight w:val="${Math.min(31680, Math.max(1, twips(h.h)))}" w:hRule="${h.exact ? 'exact' : 'atLeast'}"/>`;
 }

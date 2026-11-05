@@ -105,6 +105,24 @@ export class ChemClient {
     return { results: r.results, error: r.error };
   }
 
+  /** Which version of each named set the worker has (see substructureIn): its size and a hash of its SMILES. */
+  private sets = new Map<string, string>();
+
+  /**
+   * Which of a set of SMILES (the Knowledge Base's) contain the query: their indexes. The worker
+   * keeps the set ready between searches; it is sent again only when it changes.
+   */
+  async substructureIn(name: string, mols: string[], query: string): Promise<{ results: number[]; error?: string }> {
+    const ask = (send: boolean) => this.request<Extract<ChemResponse, { type: 'substructureIn' }>>((id) => ({ type: 'substructureIn', id, name, query, ...(send ? { mols } : {}) }));
+    let h = 0x811c9dc5;
+    for (const s of mols) for (let i = 0; i <= s.length; i++) h = Math.imul(h ^ (i < s.length ? s.charCodeAt(i) : 10), 0x01000193);
+    const version = `${mols.length}:${h >>> 0}`;
+    let r = await ask(this.sets.get(name) !== version);
+    this.sets.set(name, version);
+    if (r.missing) r = await ask(true);
+    return { results: r.results, error: r.error };
+  }
+
   /** The Hammett groups at a core's marked positions in each molecule (SMILES or molfiles). */
   async hammett(core: string, mols: string[]): Promise<HammettResult[]> {
     const r = await this.request<Extract<ChemResponse, { type: 'hammett' }>>((id) => ({ type: 'hammett', id, core, mols }));

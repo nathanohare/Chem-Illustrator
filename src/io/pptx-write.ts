@@ -17,7 +17,7 @@ import { bakedPart, tidyFx } from '../render/picture-fx';
 import { blipEffectsXml, pictureGeomXml } from './picture-xml';
 import { turnAbout, type Rect, type Vec } from '../geom';
 import { layoutText, ASCENT, FONT_STACK, type Measure } from '../text/layout';
-import { fitParas, listMarkers, splitParagraphs } from '../text/paragraphs';
+import { fitParas, listInfo, autoNumLabel, splitParagraphs } from '../text/paragraphs';
 import { formulaParts, plainText } from '../richtext';
 import { officeTarget, slideOfLink } from '../links';
 import { arrowPoints, shapeBox, boxOf, shapeOrder, elbowRoute } from '../objects';
@@ -32,23 +32,25 @@ import { extractDrawing } from './clipboard';
 import { contentsAlt, titleOverlaps, roughCaptionBox } from '../accessibility';
 import type { Selection } from '../editor/editor';
 import { Package, NS, REL, emu, xml, xmlAttr, hex6, MediaFiles, structureAltText, bytesHash } from './ooxml';
-import { writeKeptParts, type KeptParts } from './kept-parts';
+import { SLIDE_SIZE_TYPES } from '../deck/deck';
+import { appPropsXml, corePropsXml, writeKeptParts, type KeptParts } from './kept-parts';
 import { olePrint, type KeptOle } from './ole-kept';
 import { facesToEmbed, toEot, type FontSource } from './font-embed';
 import { dataUrl, fromDataUrl } from '../render/images';
 import { patternClear, patternInk, shadowLook } from '../render/fills';
 import { FADE, tint } from '../colours';
-import { transitionXml, timingXml, highlightParts, partHolds, expandParas, targetKey, mainAnims, triggerSeqs, type Transition, type Anim, type MediaTiming } from '../deck/animation';
+import { transitionXml, timingXml, highlightParts, partHolds, expandParas, targetKey, mainAnims, triggerSeqs, type Transition, type Anim, type AnimTarget, type MediaTiming } from '../deck/animation';
 import { MEDIA_EXT } from '../deck/media';
 import { effectsXml } from './pptx-effects';
 import { viewPropsXml, slideGuidesExt } from '../deck/guides';
 import { handoutMasterXml, notesMasterXml } from '../deck/notes-pages';
 import { showPrXml, custShowsXml } from '../deck/show-setup';
 import {
-  Master, SlideSize, LayoutId, layoutFrames, deckLayouts, layoutDef, titleLook, isBuiltinLayout, type LayoutDef, type SectionCount, decorFrames, showsNumber, showsFooter, showsDate, dateText, type SlideHF, type DeckSettings, textStyles, isEmptyText, slideColours, slideBackground, decorShapes, type DecorShape, placeRefs, type PlacedRefs,
+  Master, SlideSize, LayoutId, type KeptRel, type NotesKept, layoutFrames, deckLayouts, layoutDef, titleLook, isBuiltinLayout, type LayoutDef, type SectionCount, decorFrames, showsNumber, showsFooter, showsDate, dateText, type SlideHF, type DeckSettings, textStyles, isEmptyText, slideColours, slideBackground, decorShapes, type DecorShape, placeRefs, type PlacedRefs,
 } from '../deck/deck';
 import { lineGap, slideRefBlock, slideRefsTag, type RefListSpec, type RefLook, type SlideZotero } from '../deck/slide-refs';
 import { sameBackground, type Background } from '../deck/background';
+import type { ArtIds, MasterPrint } from './pptx-read';
 import { bgXml, type BlipIds } from './pptx-background';
 import { addChart, C_NS } from './office-chart';
 import { CX_NS, CX1_NS } from './xlsx-chart';
@@ -59,6 +61,7 @@ import { toOmml, mathText } from '../document/math';
 import { shapeMathPicture, shapeMathScale } from '../deck/equation';
 import { canvasTag, type CanvasData } from '../deck/canvas';
 import { splitCanvas, slidePrintXml, type CanvasPart } from '../deck/canvas-export';
+import { fragment, textPrint, spPrPrint, slideTablePrint } from './native-print';
 
 /** Tag names (PowerPoint keeps tags when it saves). */
 export const TAG = {
@@ -121,7 +124,49 @@ export const TAG = {
   slideRefs: 'CHEMILLUSTRATOR_SLIDE_REFS',
   /** The text box of a slide's reference lines, made from the references (read back from them, not from the box). */
   refLines: 'CHEMILLUSTRATOR_REF_LINES',
+  /**
+   * On a structure's picture: prints of the picture written (its SVG and its PNG, which PowerPoint
+   * keeps as they are), so the drawing in CHEMILLUSTRATOR_CDXML is used only while PowerPoint still
+   * shows that picture (not after Change Picture there).
+   */
+  picPrint: 'CHEMILLUSTRATOR_PIC_PRINT',
 };
+
+/** The group a structure or scheme picture's things are all in, if they are all in one. */
+function selGroup(doc: Doc, sel: Selection): number | undefined {
+  const gs = new Set<number | undefined>();
+  for (const id of sel.atoms) gs.add(doc.atoms.get(id)?.grp);
+  for (const id of sel.captions) gs.add(doc.captions.get(id)?.grp);
+  for (const id of sel.arrows) gs.add(doc.arrows.get(id)?.grp);
+  for (const id of sel.shapes) gs.add(doc.shapes.get(id)?.grp);
+  return gs.size === 1 ? [...gs][0] : undefined;
+}
+
+/** The group an animation's target is in, if any. */
+function targetGroup(doc: Doc, t: AnimTarget): number | undefined {
+  switch (t.kind) {
+    case 'atom': return doc.atoms.get(t.id)?.grp;
+    case 'caption': return doc.captions.get(t.id)?.grp;
+    case 'arrow': return doc.arrows.get(t.id)?.grp;
+    case 'shape': return doc.shapes.get(t.id)?.grp;
+    case 'highlight': return t.bond ? doc.atoms.get(doc.bonds.get(t.id)?.a1 ?? -1)?.grp : doc.atoms.get(t.id)?.grp;
+    default: return undefined;
+  }
+}
+
+/** The box round everything in a group, roughly (PowerPoint works it out again when it is moved). */
+function groupBox(doc: Doc, grp: number): Rect | null {
+  let box: Rect | null = null;
+  for (const it of stackItems(doc)) {
+    const id = it.ids[0];
+    const g = it.kind === 'structure' ? doc.atoms.get(id)?.grp : it.kind === 'caption' ? doc.captions.get(id)?.grp : it.kind === 'arrow' ? doc.arrows.get(id)?.grp : doc.shapes.get(id)?.grp;
+    if (g !== grp) continue;
+    const b = roughBox(doc, it);
+    if (!b) continue;
+    box = box ? { x1: Math.min(box.x1, b.x1), y1: Math.min(box.y1, b.y1), x2: Math.max(box.x2, b.x2), y2: Math.max(box.y2, b.y2) } : b;
+  }
+  return box;
+}
 
 /** Where a highlight is, for finding it again: one of its atoms, else the middle of one of its bonds. */
 function highlightSpot(doc: Doc, h: Selection): { x: number; y: number; bond?: true } | null {
@@ -159,7 +204,7 @@ export interface DeckData {
   size: SlideSize;
   master: Master;
   /** `id` is the slide's id in the deck, for links to it (#slide=id). */
-  slides: { id?: number; layout: LayoutId; doc: Doc; notes: string; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; part?: CanvasPart; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec; zotero?: SlideZotero }[];
+  slides: { id?: number; layout: LayoutId; doc: Doc; notes: string; notesKept?: NotesKept; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; part?: CanvasPart; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec; zotero?: SlideZotero }[];
   /** A design (Design mode): marked so it opens in Design mode again. */
   design?: boolean;
   /** The deck's sections, in order (none when left out). */
@@ -233,7 +278,8 @@ export const MIME_EXT: Record<string, string> = {
 
 // ---------------------------------------------------------------- what goes where
 
-import { splitSlide, arialMeasure } from '../deck/split-slide';
+import { splitSlide, arialMeasure, roughBox, type SlideParts } from '../deck/split-slide';
+import { stackItems, usesStacking, type StackItem } from '../editor/stacking';
 import { stepsTag } from './step-tag';
 export { splitSlide, slideDiagrams, arialMeasure, type SlideParts, type SlideDiagram } from '../deck/split-slide';
 
@@ -245,18 +291,27 @@ const lang = 'lang="en-US"';
 export type LinkXml = (link: string) => string;
 
 /** One run as PowerPoint runs (formula style turns into subscripts and superscripts). */
+/** A new field id (a GUID, as PowerPoint gives each field). */
+let fields = 0;
+function fieldId(): string {
+  const n = (++fields).toString(16).padStart(12, '0');
+  return `{5C0E1D2A-7F3B-4C59-9A61-${n.toUpperCase()}}`;
+}
+
 function runXml(r: TextRun, explicit: { size: number; font: string } | null, hlink?: LinkXml): string {
   const click = r.link && hlink ? hlink(r.link) : '';
   const parts = r.formula && !r.sub && !r.sup ? formulaParts(r.text) : [{ text: r.text, pos: r.sub ? 'sub' : r.sup ? 'sup' : 'base' }];
   return parts.map((p) => {
     const size = r.size ?? explicit?.size;
     const font = r.font ?? explicit?.font;
-    const attrs = [lang];
+    const attrs = [r.lang && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(r.lang) ? `lang="${r.lang}"` : lang];
     if (size) attrs.push(`sz="${Math.round(size * 100)}"`);
     if (r.bold !== undefined) attrs.push(`b="${r.bold ? 1 : 0}"`);
     if (r.italic !== undefined) attrs.push(`i="${r.italic ? 1 : 0}"`);
     if (r.underline) attrs.push('u="sng"');
     if (r.strike) attrs.push('strike="sngStrike"');
+    if (r.allCaps) attrs.push('cap="all"');
+    else if (r.smallCaps) attrs.push('cap="small"');
     if (r.spacing) attrs.push(`spc="${Math.round(r.spacing * 100)}"`);
     if (r.noKern) attrs.push('kern="0"');
     if (p.pos === 'sub') attrs.push('baseline="-25000"');
@@ -269,7 +324,11 @@ function runXml(r: TextRun, explicit: { size: number; font: string } | null, hli
     const ln = r.outline ? `<a:ln w="${Math.round((r.outlineW ?? 0.75) * 12700)}"><a:solidFill><a:srgbClr val="${hex6(r.outline)}"/></a:solidFill></a:ln>` : '';
     const shadow = r.shadow ? '<a:effectLst><a:outerShdw blurRad="38100" dist="38100" dir="2700000" algn="tl" rotWithShape="0"><a:prstClr val="black"><a:alpha val="40000"/></a:prstClr></a:outerShdw></a:effectLst>' : '';
     const latin = font ? `<a:latin typeface="${xml(font)}"/><a:cs typeface="${xml(font)}"/>` : '';
-    return `<a:r><a:rPr ${attrs.join(' ')}>${ln}${fill}${shadow}${latin}${ownColour(click, color)}</a:rPr><a:t>${xml(p.text)}</a:t></a:r>`;
+    const highlight = r.highlight ? `<a:highlight><a:srgbClr val="${hex6(r.highlight)}"/></a:highlight>` : '';
+    const rPr = `<a:rPr ${attrs.join(' ')}>${ln}${fill}${shadow}${highlight}${latin}${ownColour(click, color)}</a:rPr>`;
+    // a slide number or date: PowerPoint's field, which it fills in
+    if (r.field && /^(slidenum|datetime\d*)$/.test(r.field)) return `<a:fld id="${fieldId()}" type="${r.field}">${rPr}<a:t>${xml(p.text)}</a:t></a:fld>`;
+    return `<a:r>${rPr}<a:t>${xml(p.text)}</a:t></a:r>`;
   }).join('');
 }
 
@@ -297,7 +356,8 @@ export function swapBox(b: Rect): Rect {
 export function paragraphsXml(c: Caption, explicit: { size: number; font: string } | null, defaultSize: number, measure: Measure, hlink?: LinkXml): string {
   const paras = splitParagraphs(c.runs);
   const styles = fitParas(c.paras, paras.length);
-  const markers = listMarkers(styles);
+  const lists = listInfo(styles);
+  const markers = lists.map((x) => x.marker);
   return paras.map((runs, i) => {
     const ps: ParaStyle = styles[i];
     const em = runs[0]?.size ?? explicit?.size ?? defaultSize;
@@ -321,7 +381,11 @@ export function paragraphsXml(c: Caption, explicit: { size: number; font: string
       if (level) attrs.push(`lvl="${level}"`);
       if (ps.cont) inner += '<a:buNone/>';
       else if (ps.list === 'bullet') inner += `<a:buFont typeface="Arial"/><a:buChar char="${xml(m ?? '•')}"/>`;
-      else {
+      else if (ps.numType && autoNumLabel(ps.numType, 1)) {
+        // PowerPoint's own numbering, kept
+        const n = lists[i].n ?? 1;
+        inner += `<a:buFont typeface="+mj-lt"/><a:buAutoNum type="${ps.numType}"${n > 1 ? ` startAt="${n}"` : ''}/>`;
+      } else {
         const n = parseInt(m ?? '1', 10);
         const start = Number.isFinite(n) && n > 1 ? ` startAt="${n}"` : m && /^[a-z]+\./.test(m) ? ` startAt="${letterValue(m)}"` : m && /^[ivxlcdm]+\./.test(m) ? ` startAt="${romanValue(m)}"` : '';
         inner += `<a:buFont typeface="+mj-lt"/><a:buAutoNum type="${NUMBER_TYPES[level % 3]}"${start === ' startAt="1"' ? '' : start}/>`;
@@ -399,6 +463,12 @@ export const rotAttr = (deg: number | undefined): string => (deg ? ` rot="${Math
 const nameAttrs = (name: string, hidden?: boolean): string => ` name="${xml(name)}"${hidden ? ' hidden="1"' : ''}`;
 export const xfrm = (r: Rect, extra = '') => `<a:xfrm${extra}><a:off x="${emu(r.x1)}" y="${emu(r.y1)}"/><a:ext cx="${Math.max(0, emu(r.x2 - r.x1))}" cy="${Math.max(0, emu(r.y2 - r.y1))}"/></a:xfrm>`;
 const GROUP = '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>';
+
+/** The slide size's type attribute (ECMA-376 Part 1 §19.7.18): the file's own (Letter, A4...), else 4:3's for 10 × 7.5 in. */
+function sizeType(s: SlideSize): string {
+  const type = s.type && SLIDE_SIZE_TYPES.includes(s.type) ? s.type : s.w === 720 && s.h === 540 ? 'screen4x3' : '';
+  return type ? ` type="${type}"` : '';
+}
 
 class Writer {
   pkg = new Package();
@@ -483,12 +553,17 @@ class Writer {
     pkg.relate('', REL.officeDocument, 'ppt/presentation.xml');
     pkg.relate('', REL.coreProps, 'docProps/core.xml');
     pkg.relate('', REL.extendedProps, 'docProps/app.xml');
-    pkg.add('docProps/core.xml', this.core(), CT.core);
-    pkg.add('docProps/app.xml', `${HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Chem Illustrator</Application><Slides>${n}</Slides><Notes>${deck.slides.filter((s) => s.notes.trim()).length}</Notes><PresentationFormat>${deck.size.w === 960 && deck.size.h === 540 ? 'Widescreen' : deck.size.w === 720 && deck.size.h === 540 ? 'On-screen Show (4:3)' : 'Custom'}</PresentationFormat></Properties>`, CT.app);
+    // the deck's properties (File > Info) as the file had them, brought up to date; a new deck is titled by its name
+    pkg.add('docProps/core.xml', corePropsXml(deck.kept?.docProps, { fresh: { title: this.opts.title ?? 'Slides', revision: '1' } }), CT.core);
+    const format = deck.size.w === 960 && deck.size.h === 540 ? 'Widescreen' : deck.size.w === 720 && deck.size.h === 540 ? 'On-screen Show (4:3)' : 'Custom';
+    pkg.add('docProps/app.xml', appPropsXml(deck.kept?.docProps, `<PresentationFormat>${format}</PresentationFormat><Slides>${n}</Slides><Notes>${deck.slides.filter((s) => s.notes.trim()).length}</Notes><HiddenSlides>${deck.slides.filter((s) => s.hidden).length}</HiddenSlides>`), CT.app);
 
     const P = 'ppt/presentation.xml';
     const masterRel = pkg.relate(P, REL.slideMaster, 'slideMasters/slideMaster1.xml');
-    pkg.add('ppt/theme/theme1.xml', theme(deck.master, deck.master.template || 'Chem Illustrator'), CT.theme);
+    // a PowerPoint template's own theme (its artwork's colors and styles refer to it), else ours
+    const keptTheme = deck.master.art?.theme ? this.keptTheme(deck.master) : null;
+    pkg.add('ppt/theme/theme1.xml', keptTheme ?? theme(deck.master, deck.master.template || 'Chem Illustrator'), CT.theme);
+    if (keptTheme) this.artIds.theme = true;
     pkg.relate('ppt/slideMasters/slideMaster1.xml', REL.theme, '../theme/theme1.xml');
     // layouts first, so the master can list them
     const layoutRels: string[] = [];
@@ -534,7 +609,7 @@ class Writer {
       }
       if (s.notes.trim()) {
         const np = `ppt/notesSlides/notesSlide${i + 1}.xml`;
-        pkg.add(np, this.notesSlide(s.notes), CT.notes);
+        pkg.add(np, this.notesSlide(s.notes, np, s.notesKept), CT.notes);
         pkg.relate(np, REL.notesMaster, '../notesMasters/notesMaster1.xml');
         pkg.relate(np, REL.slide, `../slides/slide${i + 1}.xml`);
         pkg.relate(path, REL.notesSlide, `../notesSlides/notesSlide${i + 1}.xml`);
@@ -548,7 +623,7 @@ class Writer {
     pkg.add('ppt/tableStyles.xml', `${HEAD}<a:tblStyleLst xmlns:a="${NS.a}" def="{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}"/>`, CT.tableStyles);
     pkg.relate(P, REL.tableStyles, 'tableStyles.xml');
     pkg.relate(P, REL.theme, 'theme/theme1.xml');
-    const masterTags = this.addTags(P, { [TAG.master]: JSON.stringify(masterSettings(deck.master)), ...(deck.design ? { [TAG.design]: '1' } : {}), ...(deck.settings?.refs?.list.length ? { [TAG.refs]: JSON.stringify(deck.settings.refs) } : {}) });
+    const masterTags = this.addTags(P, { [TAG.master]: JSON.stringify(masterSettings(deck.master, this.artIds)), ...(deck.design ? { [TAG.design]: '1' } : {}), ...(deck.settings?.refs?.list.length ? { [TAG.refs]: JSON.stringify(deck.settings.refs) } : {}) });
     const { w, h } = deck.size;
     // the free fonts the slides use go inside the file, so they look the same where they aren't installed
     const embed = await facesToEmbed(pkg.xmlTexts(), this.opts.fonts);
@@ -572,7 +647,7 @@ class Writer {
       (hasNotes ? `<p:notesMasterIdLst><p:notesMasterId r:id="${notesMasterRel}"/></p:notesMasterIdLst>` : '') +
       (hasHandout ? `<p:handoutMasterIdLst><p:handoutMasterId r:id="${handoutRel}"/></p:handoutMasterIdLst>` : '') +
       `<p:sldIdLst>${slideRels.map((r, i) => `<p:sldId id="${256 + i}" r:id="${r}"/>`).join('')}</p:sldIdLst>` +
-      `<p:sldSz cx="${emu(w)}" cy="${emu(h)}"${w === 720 && h === 540 ? ' type="screen4x3"' : ''}/>` +
+      `<p:sldSz cx="${emu(w)}" cy="${emu(h)}"${sizeType(deck.size)}/>` +
       (deck.master.notesPage?.landscape ? `<p:notesSz cx="9144000" cy="6858000"/>` : `<p:notesSz cx="6858000" cy="9144000"/>`) + fontList +
       custShowsXml(deck.settings?.customShows ?? [], (sid) => slideRels[deck.slides.findIndex((x) => x.id === sid)], xml) +
       `<p:custDataLst><p:tags r:id="${masterTags}"/></p:custDataLst>` +
@@ -582,13 +657,6 @@ class Writer {
       `</p:presentation>`, CT.presentation);
     writeKeptParts(pkg, deck.kept, { main: P, firstItem: 1 });
     return pkg.build();
-  }
-
-  private core(): string {
-    const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
-    return `${HEAD}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
-      `<dc:title>${xml(this.opts.title ?? 'Slides')}</dc:title><cp:revision>1</cp:revision>` +
-      `<dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
   }
 
   // ---------------------------------------------------------------- master and layouts
@@ -609,9 +677,12 @@ class Writer {
       logo,
     ].join('');
     const bg = await this.background(P, m.fill ?? { kind: 'solid', color: m.background });
+    // a PowerPoint template's artwork behind everything, as its master had it
+    const art = m.art?.master ? this.artXml(P, m.art.master, (this.artIds.master = [])) : '';
+    const map = { ...USUAL_CLRMAP, ...(m.art?.clrMap ?? {}) };
     return `${HEAD}<p:sldMaster ${XMLNS}><p:cSld>${bg}` +
-      `<p:spTree>${GROUP}${tree}</p:spTree></p:cSld>` +
-      `<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/>` +
+      `<p:spTree>${GROUP}${art}${tree}</p:spTree></p:cSld>` +
+      `<p:clrMap ${Object.entries(map).map(([k, v]) => `${k}="${xmlAttr(v)}"`).join(' ')}/>` +
       `<p:sldLayoutIdLst>${layoutRels.map((r, i) => `<p:sldLayoutId id="${2147483649 + i}" r:id="${r}"/>`).join('')}</p:sldLayoutIdLst>` +
       `<p:txStyles><p:titleStyle>${titleLevel(m)}</p:titleStyle><p:bodyStyle>${bodyLevels(m)}</p:bodyStyle><p:otherStyle>${defaultLevels(m)}</p:otherStyle></p:txStyles>` +
       `</p:sldMaster>`;
@@ -649,8 +720,87 @@ class Writer {
     // a title slide's own background goes on its layout
     const ownBg = slideBackground(m, id), base: Background = m.fill ?? { kind: 'solid', color: m.background };
     const bg = own && !sameBackground(ownBg, base) ? await this.background(path, ownBg) : '';
-    return `${HEAD}<p:sldLayout ${XMLNS} type="${layoutType(id)}" preserve="1"><p:cSld name="${xml(name)}">${bg}<p:spTree>${GROUP}${shapes.join('')}</p:spTree></p:cSld>` +
-      `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`;
+    // a PowerPoint template's artwork for this layout behind everything, and whether it hides the master's
+    const layer = m.art?.layouts?.[id];
+    const art = layer?.xml.length ? this.artXml(path, layer, ((this.artIds.layouts ??= {})[id] = [])) : '';
+    const map = layer?.clrMap ? `<a:overrideClrMapping ${Object.entries({ ...USUAL_CLRMAP, ...(m.art?.clrMap ?? {}), ...layer.clrMap }).map(([k, v]) => `${k}="${xmlAttr(v)}"`).join(' ')}/>` : '<a:masterClrMapping/>';
+    return `${HEAD}<p:sldLayout ${XMLNS} type="${layoutType(id)}" preserve="1"${layer?.hideMaster ? ' showMasterSp="0"' : ''}><p:cSld name="${xml(name)}">${bg}<p:spTree>${GROUP}${art}${shapes.join('')}</p:spTree></p:cSld>` +
+      `<p:clrMapOvr>${map}</p:clrMapOvr></p:sldLayout>`;
+  }
+
+  /** Which shapes on the master and layouts are the template's artwork (by the ids written), for reading the file back. */
+  private artIds: ArtIds = {};
+  /** Shape ids for the template's artwork: clear of the master's and layouts' own. */
+  private artId = 1000;
+
+  /**
+   * A master's or layout's artwork as the template had it: its pictures and links related from
+   * `path` again, its shapes given ids of their own (connectors still naming the shapes they join),
+   * scaled in a group when the deck's slide size has changed since. The ids written go in `ids`.
+   */
+  private artXml(path: string, layer: { xml: string[]; rels: KeptRel[] }, ids: number[]): string {
+    const art = this.deck.master.art!;
+    const rid = layer.rels.map((r) => this.keptRel(path, r));
+    const renumber = new Map<string, number>();
+    const pieces = layer.xml.map((x) => {
+      let first = -1;
+      const out = x.replace(/__REL_(\d+)__/g, (_all, n: string) => rid[Number(n)] ?? '')
+        .replace(/(<(?:[\w-]+:)?cNvPr\b[^>]*?\sid=")(\d+)(")/g, (_all, a: string, old: string, b: string) => {
+          const id = this.artId++;
+          renumber.set(old, id);
+          if (first < 0) first = id;
+          return `${a}${id}${b}`;
+        });
+      return { out, first };
+    }).map(({ out, first }) => {
+      if (first >= 0) ids.push(first);
+      // connectors glued to the template's own shapes still name them
+      return out.replace(/(<(?:[\w-]+:)?(?:stCxn|endCxn)\b[^>]*?\sid=")(\d+)(")/g, (all, a: string, old: string, b: string) => (renumber.has(old) ? `${a}${renumber.get(old)}${b}` : all));
+    });
+    const body = pieces.join('');
+    const { w, h } = this.deck.size;
+    if (Math.abs(art.size.w - w) < 0.01 && Math.abs(art.size.h - h) < 0.01) return body;
+    // made for another slide size: scaled to this one, as PowerPoint scales a master
+    const gid = this.artId++;
+    ids.splice(0, ids.length, gid);
+    return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${gid}" name="Template Artwork"/><p:cNvGrpSpPr/><p:nvPr userDrawn="1"/></p:nvGrpSpPr>` +
+      `<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${emu(w)}" cy="${emu(h)}"/><a:chOff x="0" y="0"/><a:chExt cx="${emu(art.size.w)}" cy="${emu(art.size.h)}"/></a:xfrm></p:grpSpPr>${body}</p:grpSp>`;
+  }
+
+  /** The template's theme, with the master's fonts (changed here, perhaps) as its title and body fonts. */
+  private keptTheme(m: Master): string | null {
+    const t = m.art!.theme!;
+    const doc = new DOMParser().parseFromString(t.xml, 'application/xml');
+    if (doc.getElementsByTagName('parsererror').length) return null;
+    const fonts = Array.from(doc.getElementsByTagNameNS(NS.a, 'fontScheme'))[0];
+    for (const [which, face] of [['majorFont', m.titleFont], ['minorFont', m.bodyFont]] as const) {
+      const latin = Array.from(fonts?.getElementsByTagNameNS(NS.a, which) ?? [])[0]?.getElementsByTagNameNS(NS.a, 'latin')[0];
+      if (!latin || latin.getAttribute('typeface') === face) continue;
+      latin.setAttribute('typeface', face);
+      latin.removeAttribute('panose');
+    }
+    const from = 'ppt/theme/theme1.xml';
+    const rid = t.rels.map((r) => this.keptRel(from, r));
+    return HEAD + new XMLSerializer().serializeToString(doc.documentElement).replace(/__REL_(\d+)__/g, (_all, n: string) => rid[Number(n)] ?? '');
+  }
+
+  /** A kept part's relationship made again from `from`: its picture in ppt/media, or its link. */
+  private keptRel(from: string, rel: KeptRel): string {
+    if (rel.external) return this.pkg.relate(from, rel.type, rel.target ?? '', true);
+    try {
+      const { mime, bytes } = fromDataUrl(rel.data ?? '');
+      const ext = (rel.ext ?? MIME_EXT[mime] ?? 'bin').toLowerCase();
+      if (!Object.values(MIME_EXT).includes(ext)) this.pkg.defaultType(ext, mime);
+      let path = this.mediaFiles.find(bytes, ext);
+      if (!path) {
+        path = `ppt/media/image${++this.media}.${ext}`;
+        this.pkg.add(path, bytes);
+        this.mediaFiles.note(bytes, ext, path);
+      }
+      return this.pkg.relate(from, rel.type, fromPpt(from, path));
+    } catch {
+      return '';
+    }
   }
 
   // ---------------------------------------------------------------- slides
@@ -695,7 +845,14 @@ class Writer {
       mark({ captions: new Set([c.id]) }, id);
       out.push(this.text(path, c, id++, s.layout, styles, phCount, doc));
     }
-    // pictures and shapes at the back, as on screen
+    // The rest in the order things are stacked on the slide, back to front. Until something has been
+    // put in order (Format > Order, or a file from PowerPoint, whose shapes come in stacked as
+    // PowerPoint had them) the usual layers hold: pictures and shapes at the back, as on screen,
+    // then connectors, diagrams, tables, structures and text on top.
+    const rank = stackRanks(doc);
+    // (each with the group what it writes is in, if any)
+    const jobs: { rank: number; run: () => Promise<void>; grp?: number }[] = [];
+    const job = (r: number, run: () => Promise<void>, grp?: number) => jobs.push({ rank: r, run, grp });
     const videos: MediaTiming[] = [];
     // the PowerPoint id each shape went into, for the connectors stuck to them
     const spOf = new Map<number, number>();
@@ -703,32 +860,33 @@ class Writer {
     // a Summary Zoom's parts go in one frame, PowerPoint's, where the first of them is
     const summary = this.summaryParts(parts.pictures);
     // pictures and shapes in their order front to back (the Selection Pane's), back first
-    for (const p of shapeOrder([...parts.pictures, ...parts.shapes])) {
+    shapeOrder([...parts.pictures, ...parts.shapes]).forEach((p, k) => job(rank ? rank.of('shape', p.id) : 1e6 + k, async () => {
       if (summary?.some((x) => x.p === p)) {
-        if (p !== summary[0].p) continue;
+        if (p !== summary[0].p) return;
         const z = this.summaryZoomXml(path, summary, id);
-        if (z) { mark({ shapes: new Set(summary.map((x) => x.p.id)) }, id); out.push(z); id++; continue; }
+        if (z) { mark({ shapes: new Set(summary.map((x) => x.p.id)) }, id); out.push(z); id++; return; }
       }
       mark({ shapes: new Set([p.id]) }, id);
       if (p.kind !== 'picture') {
         spOf.set(p.id, id);
         out.push(p.kind === 'geo' ? this.geo(path, p, id++, doc, styles.body?.size ?? doc.style.captionSize) : shapeXml(p, id++, doc.style.lineWidth));
-        continue;
+        return;
       }
       const box = { x1: Math.min(p.x1, p.x2), y1: Math.min(p.y1, p.y2), x2: Math.max(p.x1, p.x2), y2: Math.max(p.y1, p.y2) };
-      if (p.chart) { out.push(await this.chart(path, p.chart, box, id++, p.src, p.alt)); continue; }
-      if (p.math) { out.push(await this.equation(path, p, box, id++)); continue; }
-      if (p.zoom && p.link) { const z = this.zoomXml(path, p, box, id); if (z) { out.push(z); id++; continue; } }
+      if (p.chart) { out.push(await this.chart(path, p.chart, box, id++, p.src, p.alt)); return; }
+      if (p.math) { out.push(await this.equation(path, p, box, id++)); return; }
+      if (p.zoom && p.link) { const z = this.zoomXml(path, p, box, id); if (z) { out.push(z); id++; return; } }
       const v = p.video ? this.video(path, p.video, p.src!, box, id, p) : '';
-      if (v) { videos.push({ spid: id, media: p.video! }); out.push(v); id++; continue; }
+      if (v) { videos.push({ spid: id, media: p.video! }); out.push(v); id++; return; }
       out.push(await this.picture(path, p.src!, box, p.name?.trim() || `Picture ${id - 1}`, id++, p.crop ?? null, p.look, p));
-    }
-    for (const r of parts.connectors) {
+    }, p.grp));
+    // (a connector goes after the shapes it is stuck to, which give it their ids)
+    parts.connectors.forEach((r, k) => job(rank ? Math.max(rank.of('arrow', r.id), ...[r.from, r.to].map((g) => (g ? rank.of('shape', g.shape) + 0.5 : -Infinity))) : 2e6 + k, async () => {
       mark({ arrows: new Set([r.id]) }, id);
       out.push(this.connector(path, r, id++, doc.style.lineWidth, site));
-    }
+    }, r.grp));
     // diagrams: a group each, which animates as one
-    for (const g of parts.diagrams) {
+    parts.diagrams.forEach((g, k) => job(rank ? Math.min(rank.of('shape', g.frame.id), ...g.shapes.map((x) => rank.of('shape', x.id))) : 3e6 + k, async () => {
       const gid = id++;
       mark({ shapes: new Set([g.frame.id, ...g.shapes.map((x) => x.id)]), arrows: new Set(g.connectors.map((x) => x.id)) }, gid);
       const kids = [
@@ -738,73 +896,42 @@ class Writer {
       const { id: _, x1: _a, y1: _b, x2: _c, y2: _d, frame: _f, ...look } = g.frame;
       const tag = this.addTags(path, { [TAG.diagram]: JSON.stringify({ v: 1, s: look }) });
       out.push(groupXml(gid, `Diagram ${gid - 1}`, shapeBox(g.frame), kids.join(''), `<p:custDataLst><p:tags r:id="${tag}"/></p:custDataLst>`));
-    }
-    for (const tb of parts.tables) {
+    }));
+    parts.tables.forEach((tb, k) => job(rank ? rank.of('shape', tb.id) : 4e6 + k, async () => {
       const used: number[] = [];
       out.push(this.table(path, tb, () => { used.push(id); return id++; }, s.layout, styles, phCount, doc));
       mark({ shapes: new Set([tb.id]) }, ...used);
-    }
-    // structures and schemes
-    for (const sel of parts.drawings) {
-      const part = extractDrawing(doc, sel);
-      // a ChemDraw object not changed here goes back as the file had it, picture and all
-      const was = parts.chemdraw.get(sel);
-      const keptOle = was && this.deck.oleKept?.get(was.id);
-      if (was && keptOle && !highlightParts(doc, sel).some((h) => (s.anims ?? []).some((a) => partHolds(h, a.target)))) {
-        const now = olePrint(doc, sel);
-        if (now.print === keptOle.print) {
-          mark(sel, id);
-          out.push(this.keptChemdraw(path, keptOle, was.prog, id, now.x - keptOle.x, now.y - keptOle.y, contentsAlt(part.contents())));
-          id++;
-          continue;
-        }
-      }
-      // highlights animated on their own go in pictures of their own, under the structure
-      const moving = highlightParts(doc, sel).filter((h) => (s.anims ?? []).some((a) => partHolds(h, a.target)));
-      const bare = moving.length ? extractDrawing(doc, sel) : part;
-      for (const h of moving) {
-        for (const a of h.sel.atoms) { const x = bare.atoms.get(a); if (x) { delete x.highlight; delete x.hl; } }
-        for (const b of h.sel.bonds) { const x = bare.bonds.get(b); if (x) { delete x.highlight; delete x.hl; } }
-      }
-      const pic = await this.opts.picture(bare);
-      if (!pic) continue;
-      const cdxml = writeCdxml(part, { name: 'Slide drawing.cdxml', textMeasure: this.measure });
-      const box = [pic.box.x1, pic.box.y1, pic.box.x2, pic.box.y2].map((v) => +v.toFixed(3)).join(' ');
-      for (const h of moving) {
-        const only = extractDrawing(doc, sel);
-        only.onlyHighlights = true;
-        for (const a of only.atoms.values()) if (!h.sel.atoms.has(a.id)) { delete a.highlight; delete a.hl; }
-        for (const b of only.bonds.values()) if (!h.sel.bonds.has(b.id)) { delete b.highlight; delete b.hl; }
-        const hp = await this.opts.picture(only);
-        if (!hp) continue;
-        const at = highlightSpot(doc, h.sel);
-        if (!at) continue;
-        const htags = this.addTags(path, { [TAG.highlight]: JSON.stringify({ ...at, box }) });
-        const hpng = this.addMedia(path, hp.png, 'png');
-        const hsvg = this.addMedia(path, new TextEncoder().encode(hp.svg), 'svg');
-        for (const a of h.sel.atoms) spids.set(`highlight ${a}`, [...(spids.get(`highlight ${a}`) ?? []), id]);
-        for (const b of h.sel.bonds) spids.set(`highlight b${b}`, [...(spids.get(`highlight b${b}`) ?? []), id]);
-        out.push(picXml(id, `Highlight ${id - 1}`, hpng, hsvg, hp.box, null, htags));
-        id++;
-      }
-      // a ChemDraw object from PowerPoint goes back as one, which opens in ChemDraw (with the drawing as made here kept beside it)
-      const prog = was?.prog;
-      const cdx = prog ? chemdrawCdxOf(cdxml) : null;
-      const tags = this.addTags(path, { [TAG.cdxml]: cdxml, [TAG.box]: box, ...(cdx ? { [TAG.oleCdx]: bytesHash(cdx) } : {}) });
-      const png = this.addMedia(path, pic.png, 'png');
-      const svg = this.addMedia(path, new TextEncoder().encode(pic.svg), 'svg');
-      mark(sel, id);
-      const smiles = await this.opts.smiles?.(part).catch(() => null) ?? null;
-      const alt = contentsAlt(part.contents()) ?? structureAltText(smiles);
-      if (cdx) out.push(this.chemdrawObject(path, cdx, prog!, id, png, svg, pic.box, tags, alt));
-      else out.push(picXml(id, `Structure ${id - 1}`, png, svg, pic.box, null, tags, undefined, alt));
-      id++;
-    }
+    }, tb.grp));
+    // structures and schemes: one picture each, split where something stacked between their
+    // parts covers them (a box over one structure of a scheme and under the next)
+    const drawings = rank ? splitStacked(doc, parts, rank) : parts.drawings.map((sel, k) => ({ sel, rank: 5e6 + k }));
+    for (const d of drawings) job(d.rank, () => this.drawingJob(path, doc, d.sel, parts, s.anims, mark, out, () => id++, spids), selGroup(doc, d.sel));
     // text on top
-    for (const c of parts.texts) {
+    parts.texts.forEach((c, k) => job(rank ? rank.of('caption', c.id) : 6e6 + k, async () => {
       mark({ captions: new Set([c.id]) }, id);
       out.push(this.text(path, c, id++, s.layout, styles, phCount, doc));
+    }, c.ph ? undefined : c.grp));
+    jobs.sort((a, b) => a.rank - b.rank);
+    const first = out.length, grpOf: (number | undefined)[] = [];
+    for (const j of jobs) {
+      const n = out.length;
+      await j.run();
+      for (let k = n; k < out.length; k++) grpOf[k - first] = j.grp;
     }
+    // groups as PowerPoint's: what is in one group and stacked together goes in a group (not
+    // one with animated things in it: PowerPoint animates a group only as a whole)
+    const animated = new Set((s.anims ?? []).map((a) => targetGroup(doc, a.target)).filter((g) => g !== undefined));
+    const wrapped: string[] = [];
+    for (let k = 0; k < out.length - first;) {
+      const g = grpOf[k];
+      let e = k + 1;
+      while (g !== undefined && e < out.length - first && grpOf[e] === g) e++;
+      const box = g !== undefined && e - k > 1 && !animated.has(g) ? groupBox(doc, g) : null;
+      if (box) wrapped.push(groupXml(id++, `Group ${id - 2}`, box, out.slice(first + k, first + e).join('')));
+      else wrapped.push(...out.slice(first + k, first + e));
+      k = e;
+    }
+    out.splice(first, out.length - first, ...wrapped);
     // slide number and footer, when the master shows them
     const m = this.deck.master;
     const d = decorFrames(this.deck.size, m);
@@ -830,13 +957,76 @@ class Writer {
       part = { [TAG.canvasPart]: JSON.stringify({ ...where, print: slidePrintXml(`<p:spTree ${XMLNS}>${GROUP}${out.join('')}</p:spTree>`) }), ...(keep ? { [TAG.canvasKeep]: JSON.stringify(keep) } : {}) };
     }
     const refTag = slideRefsTag(s);
-    const stepTag = stepsTag(doc, parts.drawings);
+    const stepTag = stepsTag(doc, drawings.map((d) => d.sel));
     const tags = this.addTags(path, { [TAG.layout]: s.layout, ...(s.id !== undefined ? { [TAG.slideId]: String(s.id) } : {}), ...(refTag ? { [TAG.slideRefs]: refTag } : {}), ...(s.canvas ? { [TAG.canvas]: canvasTag(s.canvas, s.anims) } : {}), ...turnTag(s.anims, (a) => !!spids.get(targetKey(a.target))?.length && (!a.trigger || spids.get(targetKey(a.trigger))?.[0] !== undefined)), ...(stepTag ? { [TAG.steps]: stepTag } : {}), ...part });
     const bg = s.background ? await this.background(path, s.background) : '';
     return `${HEAD}<p:sld ${XMLNS}${s.hideGraphics ? ' showMasterSp="0"' : ''}${s.hidden ? ' show="0"' : ''}><p:cSld>${bg}<p:spTree>${GROUP}${out.join('')}</p:spTree><p:custDataLst><p:tags r:id="${tags}"/></p:custDataLst></p:cSld>` +
       `<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>${transitionXml(s.transition)}${timingXml(expandParas(s.anims ?? [], (cid) => { const c = doc.captions.get(cid); return c ? plainText(c.runs).split('\n') : null; }), (a) => spids.get(targetKey(a.target)) ?? [], videos, (t) => spids.get(targetKey(t))?.[0])}` +
       // the slide's creation number, which zooms name it by
       `<p:extLst><p:ext uri="{BB962C8B-B14F-4D97-AF65-F5344CB8AC3E}"><p14:creationId xmlns:p14="${NS_P14}" val="${creationId(index)}"/></p:ext></p:extLst></p:sld>`;
+  }
+
+  /**
+   * A structure or scheme as a picture (SVG, with a PNG for older programs) carrying its drawing
+   * as CDXML, or a ChemDraw object from PowerPoint back as one; highlights animated on their own
+   * as pictures of their own under it. `next` gives each its PowerPoint id.
+   */
+  private async drawingJob(path: string, d: Doc, sel: Selection, parts: SlideParts, anims: Anim[] | undefined, mark: (sel: Partial<Selection>, ...ids: number[]) => void, out: string[], next: () => number, spids: Map<string, number[]>): Promise<void> {
+    const part = extractDrawing(d, sel);
+    // a ChemDraw object not changed here goes back as the file had it, picture and all
+    const was = parts.chemdraw.get(sel);
+    const keptOle = was && this.deck.oleKept?.get(was.id);
+    if (was && keptOle && !highlightParts(d, sel).some((h) => (anims ?? []).some((a) => partHolds(h, a.target)))) {
+      const now = olePrint(d, sel);
+      if (now.print === keptOle.print) {
+        const id = next();
+        mark(sel, id);
+        out.push(this.keptChemdraw(path, keptOle, was.prog, id, now.x - keptOle.x, now.y - keptOle.y, contentsAlt(part.contents())));
+        return;
+      }
+    }
+    // highlights animated on their own go in pictures of their own, under the structure
+    const moving = highlightParts(d, sel).filter((h) => (anims ?? []).some((a) => partHolds(h, a.target)));
+    const bare = moving.length ? extractDrawing(d, sel) : part;
+    for (const h of moving) {
+      for (const a of h.sel.atoms) { const x = bare.atoms.get(a); if (x) { delete x.highlight; delete x.hl; } }
+      for (const b of h.sel.bonds) { const x = bare.bonds.get(b); if (x) { delete x.highlight; delete x.hl; } }
+    }
+    const pic = await this.opts.picture(bare);
+    if (!pic) return;
+    const cdxml = writeCdxml(part, { name: 'Slide drawing.cdxml', textMeasure: this.measure });
+    const box = [pic.box.x1, pic.box.y1, pic.box.x2, pic.box.y2].map((v) => +v.toFixed(3)).join(' ');
+    for (const h of moving) {
+      const only = extractDrawing(d, sel);
+      only.onlyHighlights = true;
+      for (const a of only.atoms.values()) if (!h.sel.atoms.has(a.id)) { delete a.highlight; delete a.hl; }
+      for (const b of only.bonds.values()) if (!h.sel.bonds.has(b.id)) { delete b.highlight; delete b.hl; }
+      const hp = await this.opts.picture(only);
+      if (!hp) continue;
+      const at = highlightSpot(d, h.sel);
+      if (!at) continue;
+      const htags = this.addTags(path, { [TAG.highlight]: JSON.stringify({ ...at, box }) });
+      const hpng = this.addMedia(path, hp.png, 'png');
+      const hsvg = this.addMedia(path, new TextEncoder().encode(hp.svg), 'svg');
+      const id = next();
+      for (const a of h.sel.atoms) spids.set(`highlight ${a}`, [...(spids.get(`highlight ${a}`) ?? []), id]);
+      for (const b of h.sel.bonds) spids.set(`highlight b${b}`, [...(spids.get(`highlight b${b}`) ?? []), id]);
+      out.push(picXml(id, `Highlight ${id - 1}`, hpng, hsvg, hp.box, null, htags));
+    }
+    // a ChemDraw object from PowerPoint goes back as one, which opens in ChemDraw (with the drawing as made here kept beside it)
+    const prog = was?.prog;
+    const cdx = prog ? chemdrawCdxOf(cdxml) : null;
+    const svgBytes = new TextEncoder().encode(pic.svg);
+    // (a picture's print, its SVG's and its PNG's: the drawing kept with it is used only while PowerPoint shows this picture)
+    const tags = this.addTags(path, { [TAG.cdxml]: cdxml, [TAG.box]: box, ...(cdx ? { [TAG.oleCdx]: bytesHash(cdx) } : { [TAG.picPrint]: `${bytesHash(svgBytes)} ${bytesHash(pic.png)}` }) });
+    const png = this.addMedia(path, pic.png, 'png');
+    const svg = this.addMedia(path, svgBytes, 'svg');
+    const id = next();
+    mark(sel, id);
+    const smiles = await this.opts.smiles?.(part).catch(() => null) ?? null;
+    const alt = contentsAlt(part.contents()) ?? structureAltText(smiles);
+    if (cdx) out.push(this.chemdrawObject(path, cdx, prog!, id, png, svg, pic.box, tags, alt));
+    else out.push(picXml(id, `Structure ${id - 1}`, png, svg, pic.box, null, tags, undefined, alt));
   }
 
   /**
@@ -884,8 +1074,9 @@ class Writer {
   private charts = 0;
   private async chart(path: string, box0: ChartBox, box: Rect, id: number, src?: string, alt?: string): Promise<string> {
     const w = box.x2 - box.x1, h = box.y2 - box.y1;
-    const rid = await addChart(this.pkg, path, 'ppt', ++this.charts, box0, w, h);
-    const tags = this.addTags(path, { [TAG.chart]: JSON.stringify(box0) });
+    const { rid, print } = await addChart(this.pkg, path, 'ppt', ++this.charts, box0, w, h);
+    // with the chart's print, to tell whether it was changed in PowerPoint (native-print.ts)
+    const tags = this.addTags(path, { [TAG.chart]: JSON.stringify(print ? { ...box0, pr: print } : box0) });
     const ex = isChartEx(box0.chart.kind);
     const uri = ex ? CX_NS : C_NS, tag = ex ? 'cx' : 'c';
     const frame = `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Chart ${id - 1}"${alt?.trim() ? ` descr="${xmlAttr(alt.trim())}"` : ''}/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>` +
@@ -1084,10 +1275,15 @@ class Writer {
     const { id: _, x1: _a, y1: _b, x2: _c, y2: _d, ...look } = s;
     if (look.picFill) look.picFill = { ...look.picFill, src: '' };
     const plain = s.text?.runs.map((r) => r.text).join('') ?? '';
-    const tag = this.addTags(path, { [TAG.geo]: JSON.stringify({ v: 1, s: look, plain, sid: s.id }) });
+    const spPr = `<p:spPr>${xfrm(box, rotAttr(s.rot))}${geom}${fill}${ln}${shadow}</p:spPr>`;
+    const txBody = `<p:txBody>${bodyPr}<a:lstStyle/>${body}</p:txBody>`;
+    // prints of its outline, look and text as written, to tell what PowerPoint changed (native-print.ts)
+    const sp = fragment(spPr);
+    const pr = sp ? { g: spPrPrint(sp, 'geom'), l: spPrPrint(sp, 'look'), t: textPrint(fragment(txBody)) } : undefined;
+    const tag = this.addTags(path, { [TAG.geo]: JSON.stringify({ v: 1, s: look, plain, sid: s.id, ...(pr ? { pr } : {}) }) });
     const click = s.link ? this.hlink(s.link) : '';
     return `<p:sp><p:nvSpPr><p:cNvPr id="${id}"${nameAttrs(s.name?.trim() || `${def.name} ${id - 1}`, s.hidden)}${click ? `>${click}</p:cNvPr>` : '/>'}<p:cNvSpPr/><p:nvPr><p:custDataLst><p:tags r:id="${tag}"/></p:custDataLst></p:nvPr></p:nvSpPr>` +
-      `<p:spPr>${xfrm(box, rotAttr(s.rot))}${geom}${fill}${ln}${shadow}</p:spPr><p:txBody>${bodyPr}<a:lstStyle/>${body}</p:txBody></p:sp>`;
+      `${spPr}${txBody}</p:sp>`;
   }
 
   /** A shape's picture fill as PowerPoint's blipFill, the picture added to the file (null when it can't be read). */
@@ -1115,7 +1311,10 @@ class Writer {
     const bent = r.elbow ? bentConnector(elbowRoute(r)) : null;
     if (bent) { frame = bent.frame; geom = bent.geom; curved = false; name = `Elbow Connector ${id - 1}`; }
     const { id: _, ...keep } = r;
-    const tag = this.addTags(path, { [TAG.connector]: JSON.stringify({ v: 1, a: keep }) });
+    // with a print of its line as written, to tell whether PowerPoint changed it (native-print.ts)
+    const lineXml = fragment(`<p:spPr>${geom}${ln}</p:spPr>`);
+    const pr = lineXml ? spPrPrint(lineXml, 'look') : '';
+    const tag = this.addTags(path, { [TAG.connector]: JSON.stringify({ v: 1, a: keep, ...(pr ? { pr } : {}) }) });
     const nvPr = `<p:nvPr><p:custDataLst><p:tags r:id="${tag}"/></p:custDataLst></p:nvPr>`;
     // a curved arrow is a shape drawn along the curve (programs route a connector afresh, square),
     // and so is an elbow PowerPoint has no bent connector for: PowerPoint repairs a connector
@@ -1151,6 +1350,8 @@ class Writer {
       if (fx?.bg?.tol !== undefined) t.tol = fx.bg.tol;
       if (orig) {
         t.orig = 'tag';
+        // the picture the original belongs to (after Change Picture in PowerPoint it belongs to none)
+        if (baked) t.print = bytesHash(baked);
         t.fx = { ...(fx?.bg ? { bg: fx.bg } : {}), ...(fx?.sharpen ? { sharpen: fx.sharpen } : {}) };
       }
       return Object.keys(t).length ? this.addTags(from, { [TAG.picture]: JSON.stringify({ v: 1, ...t }), ...(orig ? { [TAG.pictureOrig]: dataUrl(orig.bytes, orig.mime) } : {}) }) : null;
@@ -1207,7 +1408,10 @@ class Writer {
     // the caption's exact settings, used when it comes back unchanged from PowerPoint
     const plain = c.runs.map((r) => r.text).join('');
     const at = [box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1].map((v) => +v.toFixed(2));
-    const tag = this.addTags(path, { [TAG.text]: JSON.stringify({ c: { ...c, id: undefined }, plain, at, o }), ...more });
+    const txBody = `<p:txBody>${bodyPr}<a:lstStyle/>${body}</p:txBody>`;
+    // and a print of the text as written (how each piece looks), to tell whether PowerPoint changed it (native-print.ts)
+    const pr = textPrint(fragment(txBody));
+    const tag = this.addTags(path, { [TAG.text]: JSON.stringify({ c: { ...c, id: undefined }, plain, at, o, ...(pr ? { pr } : {}) }), ...more });
     let ph = '';
     if (c.ph) {
       const k = c.ph === 'title' ? 'title' : 'body';
@@ -1225,7 +1429,7 @@ class Writer {
     const quarter = c.dir === 'vert' ? 90 : c.dir === 'vert270' ? -90 : 0;
     const shape = quarter ? swapBox(box) : box;
     const rot = rotAttr((c.rot ?? 0) - quarter);
-    return `<p:sp>${nvSp}<p:spPr>${xfrm(shape, rot)}${geom}</p:spPr><p:txBody>${bodyPr}<a:lstStyle/>${body}</p:txBody></p:sp>`;
+    return `<p:sp>${nvSp}<p:spPr>${xfrm(shape, rot)}${geom}</p:spPr>${txBody}</p:sp>`;
   }
 
   /**
@@ -1302,29 +1506,34 @@ class Writer {
     }
     const grid = t.cols.map((w) => `<a:gridCol w="${emu(w)}"/>`).join('');
     const id = next();
-    const tag = this.addTags(path, { [TAG.table]: JSON.stringify({ v: 1, key, table: t, plain: tableText(t) }) });
-    const frame = { x1: s.x1, y1: s.y1 + lay.ys[0], x2: s.x1 + lay.width, y2: s.y1 + lay.ys[n] };
     // the cells carry every fill and line themselves, so PowerPoint shows the same whatever the
     // style id; a style PowerPoint knows by id is named so its gallery and options show it,
     // otherwise "No Style, No Grid"
     const { styleId, flags } = tableStyleOf(t);
+    const tbl = `<a:tbl><a:tblPr${flags}><a:tableStyleId>${styleId}</a:tableStyleId></a:tblPr><a:tblGrid>${grid}</a:tblGrid>${rows.join('')}</a:tbl>`;
+    // with prints of its text and its cells as written, to tell what PowerPoint changed (native-print.ts)
+    const tblEl = fragment(tbl);
+    const pr = tblEl ? slideTablePrint(tblEl) : null;
+    const tag = this.addTags(path, { [TAG.table]: JSON.stringify({ v: 1, key, table: t, plain: tableText(t), ...(pr ? { pt: pr.text, pf: pr.frame } : {}) }) });
+    const frame = { x1: s.x1, y1: s.y1 + lay.ys[0], x2: s.x1 + lay.width, y2: s.y1 + lay.ys[n] };
     out.push(`<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}"${nameAttrs(s.name?.trim() || `Table ${id - 1}`, s.hidden)}/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>` +
       `<p:nvPr><p:custDataLst><p:tags r:id="${tag}"/></p:custDataLst></p:nvPr></p:nvGraphicFramePr>` +
       `<p:xfrm><a:off x="${emu(frame.x1)}" y="${emu(frame.y1)}"/><a:ext cx="${emu(frame.x2 - frame.x1)}" cy="${emu(frame.y2 - frame.y1)}"/></p:xfrm>` +
-      `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblPr${flags}><a:tableStyleId>${styleId}</a:tableStyleId></a:tblPr>` +
-      `<a:tblGrid>${grid}</a:tblGrid>${rows.join('')}</a:tbl></a:graphicData></a:graphic></p:graphicFrame>`);
+      `<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">${tbl}</a:graphicData></a:graphic></p:graphicFrame>`);
     if (lay.notes) part('notes', lay.notes, t.notes!, size * NOTE_SCALE);
     return out.join('');
   }
 
   // ---------------------------------------------------------------- notes
 
-  private notesSlide(text: string): string {
+  /** A slide's notes page: its notes as PowerPoint had them while they are unchanged, else as plain paragraphs. */
+  private notesSlide(text: string, path: string, kept?: NotesKept): string {
+    const body = kept && kept.text === text ? kept.xml.replace(/__REL_(\d+)__/g, (_m, n: string) => (kept.rels[Number(n)] ? this.keptRel(path, kept.rels[Number(n)]) : '')) : null;
     const paras = text.split('\n').map((t) => (t ? `<a:p><a:r><a:rPr ${lang} dirty="0"/><a:t>${xml(t)}</a:t></a:r></a:p>` : `<a:p><a:endParaRPr ${lang} dirty="0"/></a:p>`)).join('');
     return `${HEAD}<p:notes ${XMLNS}><p:cSld><p:spTree>${GROUP}` +
       `<p:sp><p:nvSpPr><p:cNvPr id="2" name="Slide Image Placeholder 1"/><p:cNvSpPr><a:spLocks noGrp="1" noRot="1" noChangeAspect="1"/></p:cNvSpPr><p:nvPr><p:ph type="sldImg"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp>` +
       `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Notes Placeholder 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/>` +
-      `<p:txBody><a:bodyPr/><a:lstStyle/>${paras}</p:txBody></p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>`;
+      `${body ?? `<p:txBody><a:bodyPr/><a:lstStyle/>${paras}</p:txBody>`}</p:sp></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:notes>`;
   }
 }
 
@@ -1701,6 +1910,66 @@ function defaultLevels(m: Master): string {
   return out.join('');
 }
 
+/** Where each object is in the slide's stacking order (`of`: its place, back first), or null while the usual layers hold. */
+interface StackRanks { of(kind: StackItem['kind'], id: number): number; items: StackItem[] }
+
+function stackRanks(doc: Doc): StackRanks | null {
+  if (!usesStacking(doc)) return null;
+  const items = stackItems(doc);
+  const at = new Map<string, number>();
+  items.forEach((it, i) => { for (const id of it.ids) at.set(`${it.kind} ${id}`, i); });
+  return { items, of: (kind, id) => at.get(`${kind} ${id}`) ?? Infinity };
+}
+
+/**
+ * A slide's structures and schemes, each with its place in the stacking order (its backmost
+ * part's), split where something not in it is stacked between its parts and covers it, so each
+ * piece goes in its own picture at its own place (a ChemDraw object stays whole).
+ */
+function splitStacked(doc: Doc, parts: SlideParts, rank: StackRanks): { sel: Selection; rank: number }[] {
+  const out: { sel: Selection; rank: number }[] = [];
+  const mine = new Map<StackItem, number>();
+  parts.drawings.forEach((sel, k) => {
+    for (const it of rank.items) {
+      const hit = it.kind === 'structure' ? it.ids.some((id) => sel.atoms.has(id)) : it.kind === 'caption' ? sel.captions.has(it.ids[0]) : it.kind === 'arrow' ? sel.arrows.has(it.ids[0]) : sel.shapes.has(it.ids[0]);
+      if (hit) mine.set(it, k);
+    }
+  });
+  const boxes = new Map<StackItem, Rect | null>();
+  const box = (it: StackItem) => { if (!boxes.has(it)) boxes.set(it, roughBox(doc, it)); return boxes.get(it)!; };
+  const meets = (a: Rect | null, b: Rect | null) => !!a && !!b && a.x1 < b.x2 && b.x1 < a.x2 && a.y1 < b.y2 && b.y1 < a.y2;
+  parts.drawings.forEach((sel, k) => {
+    const members = rank.items.map((it, i) => ({ it, i })).filter((x) => mine.get(x.it) === k);
+    if (!members.length) { out.push({ sel, rank: Infinity }); return; }
+    if (parts.chemdraw.has(sel)) { out.push({ sel, rank: members[0].i }); return; }
+    let all: Rect | null = null;
+    for (const m of members) { const b = box(m.it); if (b) all = all ? { x1: Math.min(all.x1, b.x1), y1: Math.min(all.y1, b.y1), x2: Math.max(all.x2, b.x2), y2: Math.max(all.y2, b.y2) } : b; }
+    // runs of its parts with nothing of anything else's over it stacked in between
+    let run: typeof members = [];
+    const flush = () => {
+      if (!run.length) return;
+      const s: Selection = { atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() };
+      for (const { it } of run) {
+        if (it.kind === 'structure') for (const id of it.ids) { if (!sel.atoms.has(id)) continue; s.atoms.add(id); for (const b of doc.adj.get(id) ?? []) if (sel.bonds.has(b)) s.bonds.add(b); }
+        else if (it.kind === 'caption') s.captions.add(it.ids[0]);
+        else if (it.kind === 'arrow') s.arrows.add(it.ids[0]);
+        else s.shapes.add(it.ids[0]);
+      }
+      out.push({ sel: run.length === members.length ? sel : s, rank: run[0].i });
+      run = [];
+    };
+    members.forEach((m, j) => {
+      if (j > 0) {
+        const between = rank.items.slice(members[j - 1].i + 1, m.i).filter((it) => mine.get(it) !== k);
+        if (between.some((it) => meets(box(it), all))) flush();
+      }
+      run.push(m);
+    });
+    flush();
+  });
+  return out;
+}
+
 /** The theme: colours and the two fonts (titles and body). */
 function theme(m: Master, name: string): string {
   // the template's two accent colours first, so PowerPoint's own shapes and charts pick them up
@@ -1721,19 +1990,34 @@ function theme(m: Master, name: string): string {
     `</a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>`;
 }
 
-/** Master settings PowerPoint has no place for, kept in a tag (the logo is in the master itself). */
-export function masterSettings(m: Master): Partial<Master> {
+/**
+ * Master settings PowerPoint has no place for, kept in a tag (the logo is in the master itself,
+ * and a template's artwork and theme in the master, layouts and theme: `artIds` says which shapes
+ * are the artwork). `print` is what the master's own fonts, sizes and colors were saved as, so
+ * that changes made to them in PowerPoint win when the file is read again.
+ */
+export function masterSettings(m: Master, artIds?: ArtIds): Partial<Master> & { artIds?: ArtIds; print?: MasterPrint } {
   // (backgrounds that are more than a colour are PowerPoint's own, in the master and title layout)
-  const { logo: _logo, fill: _fill, ...rest } = m;
+  const { logo: _logo, fill: _fill, art: _art, ...rest } = m;
   void _logo;
   void _fill;
+  void _art;
   if (rest.titleSlide?.fill) {
     const { fill: _f, ...ts } = rest.titleSlide;
     void _f;
     rest.titleSlide = ts;
   }
-  return rest;
+  const colour = (c: string) => `#${hex6(c).toLowerCase()}`;
+  const size = (v: number) => Math.round(v * 100) / 100;
+  const print: MasterPrint = {
+    titleFont: m.titleFont, bodyFont: m.bodyFont, titleSize: size(m.titleSize), bodySize: size(m.bodySize), titleBold: m.titleBold,
+    titleColor: colour(m.titleColor), textColor: colour(m.textColor), ...(m.fill ? {} : { background: colour(m.background) }),
+  };
+  return { ...rest, print, ...(artIds && (artIds.theme || artIds.master?.length || Object.keys(artIds.layouts ?? {}).length) ? { artIds } : {}) };
 }
+
+/** PowerPoint's usual color map: light backgrounds, dark text. */
+const USUAL_CLRMAP: Record<string, string> = { bg1: 'lt1', tx1: 'dk1', bg2: 'lt2', tx2: 'dk2', accent1: 'accent1', accent2: 'accent2', accent3: 'accent3', accent4: 'accent4', accent5: 'accent5', accent6: 'accent6', hlink: 'hlink', folHlink: 'folHlink' };
 
 /** The deck as a PowerPoint file. */
 export function writePptx(deck: DeckData, opts: PptxOptions): Promise<Uint8Array> {

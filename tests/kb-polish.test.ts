@@ -6,7 +6,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { prettyChem } from '../src/kb/pretty';
-import { HAMMETT, HAMMETT_TABLE, groupPicture } from '../src/kb/hammett';
+import { HAMMETT } from '../src/kb/hammett';
+import { HAMMETT_TABLE, groupPicture } from '../src/kb/hammett-table';
 import { SOLVENTS_TABLE } from '../src/kb/solvents';
 import { REAGENT_SAFETY } from '../src/kb/safety-tables';
 import { findRows, tableTsv } from '../src/kb/tables';
@@ -62,9 +63,9 @@ describe('ⓘ notes on rated columns', () => {
 
 describe('Hammett group pictures', () => {
   it('draws every group with a structure, attached by a wavy line', () => {
-    const missing = HAMMETT.filter((x) => x.smiles && !groupPicture(x.group)).map((x) => x.group);
-    // ferrocenyl is a sandwich RDKit can't lay out flat
-    expect(missing.filter((g) => g !== 'Fc')).toEqual([]);
+    // ferrocenyl (a sandwich RDKit can't lay out flat) and the two salts are written with dots: no drawing
+    const missing = HAMMETT.filter((x) => x.smiles && !x.smiles.includes('.') && !groupPicture(x.group)).map((x) => x.group);
+    expect(missing).toEqual([]);
     const cf3 = groupPicture('CF3')!;
     expect(cf3.atoms.filter((a) => a[2] === 'F')).toHaveLength(3);
     expect(cf3.stubs).toHaveLength(1);

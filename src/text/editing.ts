@@ -150,9 +150,10 @@ export class TextEditing {
       const text = this.text;
       const p = paraAt(text, this.focus);
       const r = paraRange(text, p);
-      if (r.start === r.end) return rt.cleanStyle({ ...this.emptyParaStyle(p), ...this.pending });
+      if (r.start === r.end) return rt.cleanStyle({ ...this.emptyParaStyle(p), ...this.pending, field: undefined });
     }
-    return rt.cleanStyle({ ...rt.typingStyle(this.t.runs, this.start, this.end, this.defaults), ...this.pending });
+    // (typed text is never part of a slide number or date field beside it)
+    return rt.cleanStyle({ ...rt.typingStyle(this.t.runs, this.start, this.end, this.defaults), ...this.pending, field: undefined });
   }
 
   /** The style shown on the bar: what the selection has in common, or what typing will use. */

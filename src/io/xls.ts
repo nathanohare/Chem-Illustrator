@@ -11,6 +11,7 @@ import { normalizeFormula } from '../sheet/formula';
 import type { DefinedName } from '../sheet/names';
 import { BUILTIN_FORMATS, pxFromWidth, textInput } from './xlsx';
 import { safeSheetName } from './sheet-files';
+import { DAYS_1900_TO_1904, holdsDate } from '../sheet/numfmt';
 
 export { isXls } from './sheet-sniff';
 
@@ -331,6 +332,7 @@ export function readXls(bytes: Uint8Array): { book: Workbook; warnings: string[]
   const book = new Workbook(names);
   // another program's text is shown as it wrote it (Q1 stays Q1, not Q₁)
   book.autoChem = false;
+  book.date1904 = date1904;
   let unreadFormulas = 0;
   const defined: DefinedName[] = [];
   book.build(() => {
@@ -346,7 +348,8 @@ export function readXls(bytes: Uint8Array): { book: Workbook; warnings: string[]
         if (input === undefined && !style) return;
         s.setCell(r, c, { input: input || undefined, style });
       };
-      const num = (v: number) => (Number.isFinite(v) ? String(v) : undefined);
+      // dates counted from 1904 (the old Mac default) are held here counting from 1900, and saved as they were
+      const num = (v: number, xf = -1) => (Number.isFinite(v) ? String(date1904 && xf >= 0 && holdsDate(xfs[xf]?.numFmt, v + DAYS_1900_TO_1904) ? v + DAYS_1900_TO_1904 : v) : undefined);
       let stringFor: { r: number; c: number; xf: number } | null = null;
       for (const rec of recs) {
         const d = rec.data;
@@ -354,11 +357,11 @@ export function readXls(bytes: Uint8Array): { book: Workbook; warnings: string[]
         switch (rec.id) {
           case R.LABELSST: put(r, c, xf, textInput(sst[u32(d, 6)] ?? '')); break;
           case R.LABEL: case R.RSTRING: put(r, c, xf, textInput(xlString(d, 6, biff8))); break;
-          case R.NUMBER: put(r, c, xf, num(f64(d, 6))); break;
-          case R.RK: put(r, c, xf, num(rk(u32(d, 6)))); break;
+          case R.NUMBER: put(r, c, xf, num(f64(d, 6), xf)); break;
+          case R.RK: put(r, c, xf, num(rk(u32(d, 6)), xf)); break;
           case R.MULRK: {
             const last = u16(d, d.length - 2);
-            for (let k = 0; c + k <= last; k++) put(r, c + k, u16(d, 4 + 6 * k), num(rk(u32(d, 6 + 6 * k))));
+            for (let k = 0; c + k <= last; k++) put(r, c + k, u16(d, 4 + 6 * k), num(rk(u32(d, 6 + 6 * k)), u16(d, 4 + 6 * k)));
             break;
           }
           case R.BOOLERR: put(r, c, xf, d[7] ? ERRORS[d[6]] ?? '#N/A' : d[6] ? 'TRUE' : 'FALSE'); break;
@@ -366,7 +369,7 @@ export function readXls(bytes: Uint8Array): { book: Workbook; warnings: string[]
             // the value it last worked out: a number, or (marked by FFFF at the top) text, TRUE/FALSE or an error
             let cached: string | undefined;
             const isNum = u16(d, 12) !== 0xffff;
-            if (isNum) cached = num(f64(d, 6));
+            if (isNum) cached = num(f64(d, 6), xf);
             else if (d[6] === 1) cached = d[8] ? 'TRUE' : 'FALSE';
             else if (d[6] === 2) cached = ERRORS[d[8]] ?? '#N/A';
             else if (d[6] === 3) cached = '';
@@ -446,7 +449,6 @@ export function readXls(bytes: Uint8Array): { book: Workbook; warnings: string[]
     }
     if (defined.length) book.setNames(defined);
   });
-  if (date1904) warnings.push('This workbook counts dates from 1904 (an old Mac setting): dates may show four years early.');
   if (!biff8) warnings.push('This is an Excel 5 or 95 workbook: its formulas open as the values they last worked out.');
   else if (unreadFormulas) warnings.push(`${unreadFormulas} formula${unreadFormulas > 1 ? 's' : ''} could not be read and ${unreadFormulas > 1 ? 'show' : 'shows'} the value Excel last worked out.`);
   if (otherSheets) warnings.push(`${otherSheets} chart or macro sheet${otherSheets > 1 ? 's were' : ' was'} left out.`);

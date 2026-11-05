@@ -37,6 +37,8 @@ export const REL = {
   viewProps: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/viewProps',
   tableStyles: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/tableStyles',
   font: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/font',
+  /** Macros (VBA), in .docm, .pptm and .xlsm files and their templates. */
+  vbaProject: 'http://schemas.microsoft.com/office/2006/relationships/vbaProject',
 };
 
 /** Escape text for XML (also the characters XML 1.0 can't hold at all, which are dropped). */
@@ -83,14 +85,18 @@ export class Package {
     this.defaults.set(ext, type);
   }
 
-  /** Relate `from` (a part path, or '' for the package) to `target`; returns the relationship id. */
-  relate(from: string, type: string, target: string, external = false): string {
+  /**
+   * Relate `from` (a part path, or '' for the package) to `target`; returns the relationship id.
+   * `keepId` is the id a part kept from a file read uses for it (its XML refers to it).
+   */
+  relate(from: string, type: string, target: string, external = false, keepId?: string): string {
     const list = this.rels.get(from) ?? [];
     this.rels.set(from, list);
     // the same target and type share one relationship
-    const same = list.find((r) => r.type === type && r.target === target);
+    const same = keepId ? undefined : list.find((r) => r.type === type && r.target === target);
     if (same) return same.id;
-    const id = `rId${list.length + 1}`;
+    let id = keepId && !list.some((r) => r.id === keepId) ? keepId : `rId${list.length + 1}`;
+    for (let n = list.length + 2; list.some((r) => r.id === id); n++) id = `rId${n}`;
     list.push({ id, type, target, external });
     return id;
   }
@@ -108,7 +114,10 @@ export class Package {
   build(): Uint8Array {
     const files: Record<string, Uint8Array> = {};
     const ct = [`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`, `<Types xmlns="${NS.ct}">`];
-    for (const [ext, type] of this.defaults) ct.push(`<Default Extension="${ext}" ContentType="${type}"/>`);
+    // a default type only for the extensions parts use, as Office writes them (rels and xml always)
+    const used = new Set(['rels', 'xml']);
+    for (const path of this.parts.keys()) if (!this.types.has(path)) used.add(/\.([^./]+)$/.exec(path)?.[1]?.toLowerCase() ?? '');
+    for (const [ext, type] of this.defaults) if (used.has(ext.toLowerCase())) ct.push(`<Default Extension="${ext}" ContentType="${type}"/>`);
     for (const [path, type] of this.types) ct.push(`<Override PartName="/${xml(path)}" ContentType="${type}"/>`);
     ct.push('</Types>');
     files['[Content_Types].xml'] = strToU8(ct.join(''));
