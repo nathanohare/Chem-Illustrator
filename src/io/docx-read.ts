@@ -133,7 +133,7 @@ const WARN = {
   fields: 'Some fields were kept as the text they showed.',
   hidden: 'Hidden text is kept and saved back to Word, but isn\'t shown here.',
   hiddenCells: 'Hidden text in table cells and notes was left out.',
-  moves: 'Text moved while changes were tracked shows as a deletion and an insertion.',
+  moves: 'Text moved while changes were tracked, without a name for the move, shows as a deletion and an insertion.',
   propChanges: 'Tracked changes to paragraph, section and table formatting were accepted (changes to text and its formatting are kept).',
 };
 
@@ -223,6 +223,8 @@ class DocxReader {
   private fields: Field[] = [];
   /** The tracked change the text being read is in (w:ins or w:del), as stored on runs. */
   private rev: string | undefined;
+  /** The moves whose ranges are open (moved from, moved to): their names, and the range ids that end them. */
+  private moving: { from?: string; fromId?: string; to?: string; toId?: string } = {};
   /** The formatting change (w:rPrChange) on the run being read, as stored on runs. */
   private fmt: string | undefined;
   /** Word's comments whose range the text being read is in, and those met so far. */
@@ -406,7 +408,8 @@ class DocxReader {
   /** Tracked changes kept only in part: moves (as a deletion and an insertion), and formatting changes other than to text (accepted). */
   private trackedOthers(root: Element): void {
     const has = (name: string) => root.getElementsByTagNameNS(this.W, name).length > 0;
-    if (has('moveFrom') || has('moveTo')) this.warn('moves');
+    // (a move's two ends are paired by the name on their ranges)
+    if ((has('moveFrom') && !has('moveFromRangeStart')) || (has('moveTo') && !has('moveToRangeStart'))) this.warn('moves');
     if (['pPrChange', 'sectPrChange', 'tblPrChange', 'trPrChange', 'tcPrChange', 'tblGridChange', 'numberingChange', 'tblPrExChange'].some(has)) this.warn('propChanges');
   }
 
@@ -1052,6 +1055,7 @@ class DocxReader {
           break;
         }
         case 'customXml': case 'ins': case 'moveTo': case 'smartTag': this.blocks(kids(el)); break;
+        case 'moveFromRangeStart': case 'moveToRangeStart': case 'moveFromRangeEnd': case 'moveToRangeEnd': this.moveRange(el); break;
         case 'AlternateContent': this.blocks(kids(this.alternate(el))); break;
         case 'bookmarkStart': this.markStart(el); break;
         case 'bookmarkEnd': this.markEnd(el); break;
@@ -1609,13 +1613,16 @@ class DocxReader {
         case 'ins': case 'moveTo': case 'del': case 'moveFrom': {
           const before = this.rev;
           const kind = el.localName === 'ins' || el.localName === 'moveTo' ? 'ins' : 'del';
-          this.rev = revText({ kind, author: this.a(el, 'author') ?? '', date: this.a(el, 'date') ?? '' });
+          // moved text keeps its move's name, so its two ends stay one move
+          const move = el.localName === 'moveFrom' ? this.moving.from : el.localName === 'moveTo' ? this.moving.to : undefined;
+          this.rev = revText({ kind, author: this.a(el, 'author') ?? '', date: this.a(el, 'date') ?? '', ...(move ? { move } : {}) });
           this.inline(kids(el), ctx);
           this.rev = before;
           break;
         }
         case 'bookmarkStart': this.markStart(el); break;
         case 'bookmarkEnd': this.markEnd(el); break;
+        case 'moveFromRangeStart': case 'moveToRangeStart': case 'moveFromRangeEnd': case 'moveToRangeEnd': this.moveRange(el); break;
         case 'commentRangeStart': case 'commentRangeEnd': this.cmtRange(el); break;
         case 'oMath': case 'oMathPara': this.math(el, ctx); break;
         case 'AlternateContent': this.inline(kids(this.alternate(el)), ctx); break;
@@ -1974,6 +1981,19 @@ class DocxReader {
   /** A content control's tag (w:sdtPr/w:tag), or ''. */
   private sdtTag(el: Element): string {
     return this.a(kid(kid(el, 'sdtPr'), 'tag'), 'val') ?? '';
+  }
+
+  /** A move's range starting or ending (Word's moveFromRangeStart and the like): the name its moved text is paired by. */
+  private moveRange(el: Element): void {
+    const from = el.localName.startsWith('moveFrom');
+    const id = this.a(el, 'id') ?? '';
+    if (el.localName.endsWith('Start')) {
+      const name = this.a(el, 'name') || undefined;
+      if (from) this.moving = { ...this.moving, from: name, fromId: id };
+      else this.moving = { ...this.moving, to: name, toId: id };
+    } else if (from ? this.moving.fromId === id : this.moving.toId === id) {
+      this.moving = from ? { ...this.moving, from: undefined, fromId: undefined } : { ...this.moving, to: undefined, toId: undefined };
+    }
   }
 
   private markStart(el: Element): void {
