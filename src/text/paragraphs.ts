@@ -207,21 +207,27 @@ export function autoNumLabel(type: string, n: number): string | null {
  * The bullet or number shown in front of each paragraph, and where numbered lists start.
  * Numbers count up through a list and start again after a paragraph that is not in it; a
  * deeper level starts again under each item of the level above, and a level of another kind
- * (or another scheme) starts again too.
+ * (or another scheme) starts again too. A list starts at its startAt; further on, an item whose
+ * startAt the item before it at its level doesn't share starts the list again from it (Word's
+ * Restart Numbering), and the items after count on.
  */
 export function listInfo(paras: ParaStyle[]): ListInfo[] {
   const counts: number[] = [];
   const kinds: (string | undefined)[] = [];
+  const ats: (number | undefined)[] = [];
   return paras.map((p) => {
-    if (!p.list) { counts.length = 0; kinds.length = 0; return { marker: null, start: false }; }
+    if (!p.list) { counts.length = 0; kinds.length = 0; ats.length = 0; return { marker: null, start: false }; }
     const level = Math.max(0, Math.min(8, p.level ?? 0));
     if (p.cont) return { marker: null, start: false };
     const kind = p.list === 'number' ? `n${p.scheme ?? ''}${p.numType ?? ''}` : 'b';
     if (kinds[level] !== kind) counts[level] = p.list === 'number' && p.startAt && p.startAt > 1 ? p.startAt - 1 : 0;
+    else if (p.list === 'number' && p.startAt && p.startAt >= 1 && p.startAt !== ats[level]) counts[level] = p.startAt - 1;
     kinds[level] = kind;
+    ats[level] = p.startAt;
     counts[level] = (counts[level] ?? 0) + 1;
     counts.length = level + 1;
     kinds.length = level + 1;
+    ats.length = level + 1;
     if (p.list === 'bullet') return { marker: p.bullet || BULLETS[level % BULLETS.length], start: false };
     const own = p.numType ? autoNumLabel(p.numType, counts[level]) : null;
     return { marker: own ?? schemeLabel(schemeOf(p.scheme), level, counts), start: level === 0 && counts[0] === (p.startAt && p.startAt > 1 ? p.startAt : 1), n: counts[level] };

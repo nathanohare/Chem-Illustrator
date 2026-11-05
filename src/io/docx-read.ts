@@ -26,7 +26,7 @@ import * as rt from '../richtext';
 import { PackageReader, REL, bytesHash, kid, kids, rAttr, fromEmu } from './ooxml';
 import { dataUrl, imageSize, pictureMime } from '../render/images';
 import { drawingInEmf } from '../render/emf';
-import { BULLETS, BULLET_LIBRARY, LIST_SCHEMES, cleanPara } from '../text/paragraphs';
+import { BULLETS, BULLET_LIBRARY, LIST_SCHEMES, cleanPara, listInfo } from '../text/paragraphs';
 import { SINGLE, type Measure } from '../text/layout';
 import { arialWidth } from '../text-metrics';
 import { documentMeasure } from '../text/font-measure';
@@ -168,11 +168,12 @@ function finalTabs(p: PProps): TabStop[] | undefined {
 /** What a table's style gives the paragraphs and text in its cells. */
 interface CellLook { p: PProps; r: RProps }
 interface WStyle { id: string; type: string; name: string; basedOn?: string; next?: string; isDefault: boolean; p: PProps; r: RProps; el: Element }
-interface Level { fmt: string; text: string; p: PProps }
+/** A list level: its number format and text, its indents, its start value and the level after which it starts again (lvlRestart, 1-based; 0 never). */
+interface Level { fmt: string; text: string; p: PProps; start: number; restart?: number }
 interface Piece { runs: TextRun[]; pageBreak: boolean; soft: boolean; colBreak?: boolean; /** Index entries and marked citations in it (XE and TA fields). */ xe?: IndexMark[]; ta?: AuthorityMark[] }
 interface Ctx { base: RProps; pieces: Piece[]; cell: boolean }
 interface Field { instr: string; phase: 'instr' | 'result'; swallow: boolean; /** The field's own data (w:fldData, base64): EndNote's citations. */ data?: string; text: string; props: RProps; /** How its result's first text looks, which is what Word shows (EndNote sets superscript only there). */ shown?: RProps; done: boolean; ref?: { id: number; mark: string; text: string; above?: boolean; page?: boolean }; toc?: boolean; /** A form field's settings (w:ffData), and the form field made of it. */ ff?: Element; form?: number; /** A HYPERLINK field: the link open before it, put back at its end. */ before?: { link: string | undefined }; /** A manager's citation (its object) whose shown text is kept; a manager's bibliography (its object) whose entries are kept. */ cite?: number; bib?: number; /** Its separator (where its result starts). */ sep?: Element; /** Another field inside its instruction. */ inner?: boolean; /** A field kept as Word had it: the object made of it (its result is gathered into it). */ kept?: number }
-interface OutPara { ps: ParaStyle; runs: TextRun[]; mark: rt.RunStyle; style: string; contextual: boolean; table?: boolean; bib?: string; markRev?: string }
+interface OutPara { ps: ParaStyle; runs: TextRun[]; mark: rt.RunStyle; style: string; contextual: boolean; table?: boolean; bib?: string; markRev?: string; /** A list item: Word's list (numId), the levels it uses (abstractNumId) and its level. */ num?: { id: string; abs: string; ilvl: number } }
 
 /** Open a Word file. Throws only when the file is not a Word file at all. */
 export async function readDocx(bytes: Uint8Array, deps: DocxReadDeps = {}): Promise<{ doc: DocText; warnings: string[] }> {
@@ -205,6 +206,8 @@ class DocxReader {
   private used = new Set<string>();
   private abstracts = new Map<string, Level[]>();
   private nums = new Map<string, string>();
+  /** Each list's own changes to its levels (w:lvlOverride): numbers it starts again from, and levels it defines afresh. */
+  private numOverrides = new Map<string, { starts: Map<number, number>; levels: Map<number, Level> }>();
   private model: DocxModel | null = null;
   private objects: Record<number, DocObject> = {};
   private nextId = 1;
@@ -688,18 +691,89 @@ class DocxReader {
       const levels: Level[] = [];
       for (const l of kids(an, 'lvl')) {
         const i = Number(this.a(l, 'ilvl') ?? levels.length);
-        levels[i] = { fmt: this.a(kid(l, 'numFmt')) ?? 'decimal', text: this.a(kid(l, 'lvlText')) ?? '', p: this.readPPr(kid(l, 'pPr')) };
+        levels[i] = this.readLevel(l);
       }
       this.abstracts.set(id, levels);
       const link = this.a(kid(an, 'numStyleLink'));
       if (link) links.set(id, link);
     }
-    for (const n of kids(root, 'num')) this.nums.set(this.a(n, 'numId') ?? '', this.a(kid(n, 'abstractNumId')) ?? '');
+    for (const n of kids(root, 'num')) {
+      const numId = this.a(n, 'numId') ?? '';
+      this.nums.set(numId, this.a(kid(n, 'abstractNumId')) ?? '');
+      // a list's own start values (Restart Numbering, Set Numbering Value) and levels
+      const starts = new Map<number, number>(), own = new Map<number, Level>();
+      for (const o of kids(n, 'lvlOverride')) {
+        const i = Number(this.a(o, 'ilvl'));
+        if (!Number.isInteger(i) || i < 0 || i > 8) continue;
+        const so = Number(this.a(kid(o, 'startOverride')));
+        if (kid(o, 'startOverride') && Number.isFinite(so)) starts.set(i, Math.round(so));
+        const l = kid(o, 'lvl');
+        if (l) own.set(i, this.readLevel(l));
+      }
+      if (starts.size || own.size) this.numOverrides.set(numId, { starts, levels: own });
+    }
     // a list that takes its levels from a numbering style
     for (const [id, link] of links) {
       const numId = this.chain('numbering', link).p.numId;
       const target = numId ? this.abstracts.get(this.nums.get(numId) ?? '') : undefined;
       if (target?.length) this.abstracts.set(id, target);
+    }
+  }
+
+  /** A list level (w:lvl). Its start value is 0 when the file gives none, as the standard says. */
+  private readLevel(l: Element): Level {
+    const start = Number(this.a(kid(l, 'start')) ?? 0);
+    const restart = kid(l, 'lvlRestart') ? Number(this.a(kid(l, 'lvlRestart'))) : NaN;
+    return {
+      fmt: this.a(kid(l, 'numFmt')) ?? 'decimal', text: this.a(kid(l, 'lvlText')) ?? '', p: this.readPPr(kid(l, 'pPr')),
+      start: Number.isFinite(start) ? Math.round(start) : 0, ...(Number.isFinite(restart) ? { restart: Math.round(restart) } : {}),
+    };
+  }
+
+  /** The levels a list (numId) uses: those of its abstractNum, with any it defines afresh. */
+  private levelsOf(numId: string): Level[] | undefined {
+    const levels = this.abstracts.get(this.nums.get(numId) ?? '');
+    const own = this.numOverrides.get(numId)?.levels;
+    if (!levels || !own?.size) return levels;
+    const out = [...levels];
+    for (const [i, l] of own) out[i] = l;
+    return out;
+  }
+
+  /**
+   * Each numbered item's number as Word counts it (ECMA-376 §17.9): lists that share their levels
+   * (an abstractNum) count on together, a list's start override applies where it is first used,
+   * a level begins at its start value and starts again after a level above it is used (unless
+   * its lvlRestart says otherwise). An item whose number here would differ keeps Word's as its own.
+   */
+  private listNumbers(out: OutPara[]): void {
+    if (!out.some((p) => p.num)) return;
+    const counters = new Map<string, (number | undefined)[]>(), pending = new Map<string, (number | undefined)[]>();
+    const used = new Set<string>();
+    const word = out.map((p) => {
+      const nm = p.num;
+      if (!nm) return undefined;
+      const levels = this.levelsOf(nm.id) ?? [];
+      const c = counters.get(nm.abs) ?? [], pend = pending.get(nm.abs) ?? [];
+      counters.set(nm.abs, c);
+      pending.set(nm.abs, pend);
+      if (!used.has(nm.id)) { used.add(nm.id); for (const [l, v] of this.numOverrides.get(nm.id)?.starts ?? []) pend[l] = v; }
+      const L = nm.ilvl;
+      if (pend[L] !== undefined) { c[L] = pend[L]; pend[L] = undefined; } else c[L] = c[L] === undefined ? levels[L]?.start ?? 0 : c[L]! + 1;
+      for (let m = L + 1; m < 9; m++) {
+        const r = levels[m]?.restart;
+        const after = r === undefined || r > m ? m : r;
+        if (after > 0 && L < after) c[m] = undefined;
+      }
+      return c[L];
+    });
+    // (each change carries on to the items after it, so the numbers are counted again after each)
+    for (let from = 0, k = 0; k < 2000; k++) {
+      const info = listInfo(out.map((p) => p.ps));
+      const i = out.findIndex((p, j) => j >= from && p.ps.list === 'number' && !p.ps.cont && word[j] !== undefined && word[j]! >= 1 && info[j].n !== word[j]);
+      if (i < 0) return;
+      out[i].ps = cleanPara({ ...out[i].ps, startAt: word[i] });
+      from = i + 1;
     }
   }
 
@@ -1177,7 +1251,7 @@ class DocxReader {
     const size = mark.size ?? WORD_SIZE;
     // the numbering's indents come between the style's and the paragraph's own
     const numId = own.numId;
-    const levels = numId && numId !== '0' ? this.abstracts.get(this.nums.get(numId) ?? '') : undefined;
+    const levels = numId && numId !== '0' ? this.levelsOf(numId) : undefined;
     const ilvl = Math.max(0, Math.min(8, own.ilvl ?? 0));
     const level = levels?.[ilvl];
     const p = level ? mergeP(this.docDefaults.p, this.cellLook?.p, this.chain('paragraph', style).p, level.p, direct) : own;
@@ -1236,7 +1310,8 @@ class DocxReader {
       q = cleanPara(q);
       // the paragraph mark inserted or deleted while Word tracked changes (on the last piece: the real mark)
       const mr = i === ctx.pieces.length - 1 ? markRevOf : undefined;
-      this.out.push({ ps: q, runs: pc.runs, mark: markStyle, style: ours, contextual: !!p.contextual, bib, ...(mr ? { markRev: mr } : {}) });
+      const num = i === 0 && list && numId ? { id: numId, abs: this.nums.get(numId) ?? '', ilvl } : undefined;
+      this.out.push({ ps: q, runs: pc.runs, mark: markStyle, style: ours, contextual: !!p.contextual, bib, ...(mr ? { markRev: mr } : {}), ...(num ? { num } : {}) });
     });
     sectionBreak();
   }
@@ -2836,6 +2911,7 @@ class DocxReader {
       if (a.contextual) a.ps = cleanPara({ ...a.ps, spaceAfter: 0 });
       if (b.contextual) b.ps = cleanPara({ ...b.ps, spaceBefore: 0 });
     }
+    this.listNumbers(out);
     // the standard styles (the file's, or ours where it has none) and the others the text uses
     const styles = defaultStyles();
     for (const [wordId, ours] of this.idMap) if (BUILT_IN_IDS[ours] || this.used.has(wordId)) styles[ours] = this.named(wordId, ours);

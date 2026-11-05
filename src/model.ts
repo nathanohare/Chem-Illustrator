@@ -483,7 +483,11 @@ export interface ParaStyle {
   bullet?: string;
   /** Slides: a numbered item's numbering as PowerPoint's (its buAutoNum type, such as alphaUcParenR), in place of its level's. */
   numType?: string;
-  /** Slides: the number a numbered list starts at (PowerPoint's Start at), when not 1. */
+  /**
+   * The number a numbered list starts at (PowerPoint's Start at, Word's Set Numbering Value), when
+   * not 1. In a document it may also stand further on in a list, where Word's numbers start again
+   * (Restart Numbering): an item whose startAt the item before it at its level doesn't share.
+   */
   startAt?: number;
   /**
    * Documents: lines round the paragraph (Home > Borders), as Word's paragraph borders. Paragraphs

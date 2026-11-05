@@ -152,24 +152,25 @@ class DocxWriter {
   private charStyles: Record<string, CharStyle>;
   /** Word's lists (numbering.xml): the levels of each kind of list (abstractNum), and each list using them (num, by numId from 1). */
   private abstractNums = new Map<string, number>();
-  private nums: { abs: number; restart: boolean }[] = [];
+  /** Each list's levels (abs), whether it counts from 1 (restart), and a level it starts again at a number of its own (at). */
+  private nums: { abs: number; restart: boolean; at?: { level: number; value: number } }[] = [];
   /** Each list's kind (its key), by numId − 1. */
   private numKeys: string[] = [];
   /** The one list each kind of bulleted list (and each numbered list in table cells) shares. */
   private sharedNums = new Map<string, number>();
 
   /** A Word list of a kind ('b' and its bullet, or 'n' and its scheme): its numId. */
-  private addNum(key: string, restart: boolean): number {
+  private addNum(key: string, restart: boolean, at?: { level: number; value: number }): number {
     let abs = this.abstractNums.get(key);
     if (abs === undefined) { abs = this.abstractNums.size; this.abstractNums.set(key, abs); }
-    this.nums.push({ abs, restart });
+    this.nums.push({ abs, restart, ...(at ? { at } : {}) });
     this.numKeys.push(key);
     return this.nums.length;
   }
 
-  /** A new numbered list, counting from 1. */
-  private newList(key: string): number {
-    return this.addNum(key, true);
+  /** A new numbered list, counting from 1 (or from its first item's own number). */
+  private newList(key: string, start?: number): number {
+    return this.addNum(key, true, start !== undefined ? { level: 0, value: start } : undefined);
   }
 
   private sharedNum(key: string): number {
@@ -344,7 +345,11 @@ class DocxWriter {
         continue;
       }
       // numbered lists: a new Word list where our numbers start again
-      if (ps.list === 'number' && lists[p].start) listNum = this.newList(`n${ps.scheme ?? ''}`);
+      if (ps.list === 'number' && lists[p].start) listNum = this.newList(`n${ps.scheme ?? ''}`, ps.startAt);
+      // an item further in with its own number: the list carries on in a Word list of the same levels that starts that level again from it
+      else if (ps.list === 'number' && !ps.cont && ps.startAt !== undefined && lists[p].n === ps.startAt && listNum > 0 && this.numKeys[listNum - 1] === `n${ps.scheme ?? ''}`) {
+        listNum = this.addNum(`n${ps.scheme ?? ''}`, false, { level: Math.max(0, Math.min(8, ps.level ?? 0)), value: ps.startAt });
+      }
       // a bibliography: its entries as paragraphs of their own, with any text round it in paragraphs before and after
       const isBib = (r: TextRun) => r.obj !== undefined && ['bib', 'toc', 'tof', 'index', 'toa'].includes(t.objects[r.obj]?.kind ?? '');
       if (runs.some(isBib)) {
@@ -1386,7 +1391,8 @@ class DocxWriter {
     const out = [HEAD, `<w:numbering xmlns:w="${W_NS}">`];
     for (const [key, abs] of this.abstractNums) out.push(`<w:abstractNum w:abstractNumId="${abs}"><w:multiLevelType w:val="${key === 'b' || key === 'n' ? 'hybridMultilevel' : 'multilevel'}"/>${lvls(key)}</w:abstractNum>`);
     this.nums.forEach((n, k) => {
-      const restart = n.restart ? Array.from({ length: 9 }, (_, i) => `<w:lvlOverride w:ilvl="${i}"><w:startOverride w:val="1"/></w:lvlOverride>`).join('') : '';
+      const over = (i: number, v: number) => `<w:lvlOverride w:ilvl="${i}"><w:startOverride w:val="${v}"/></w:lvlOverride>`;
+      const restart = n.restart ? Array.from({ length: 9 }, (_, i) => over(i, n.at?.level === i ? n.at.value : 1)).join('') : n.at ? over(n.at.level, n.at.value) : '';
       out.push(`<w:num w:numId="${k + 1}"><w:abstractNumId w:val="${n.abs}"/>${restart}</w:num>`);
     });
     out.push('</w:numbering>');
