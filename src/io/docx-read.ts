@@ -137,7 +137,7 @@ const WARN = {
 
 type Pos = 'base' | 'sub' | 'sup';
 /** Text formatting as a file gives it (only what it gives). `color` null is "automatic". */
-interface RProps { font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean; color?: string | null; highlight?: string | null; pos?: Pos; hidden?: boolean; formula?: boolean; strike?: boolean; smallCaps?: boolean; allCaps?: boolean; cstyle?: string; spacing?: number; noKern?: boolean; noFill?: boolean; transparency?: number; outline?: string; outlineW?: number; shadow?: boolean }
+interface RProps { lang?: string; noProof?: boolean; font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean; color?: string | null; highlight?: string | null; pos?: Pos; hidden?: boolean; formula?: boolean; strike?: boolean; smallCaps?: boolean; allCaps?: boolean; cstyle?: string; spacing?: number; noKern?: boolean; noFill?: boolean; transparency?: number; outline?: string; outlineW?: number; shadow?: boolean }
 /** Paragraph formatting as a file gives it, in points. */
 interface PProps {
   align?: Justify; before?: number; after?: number; line?: { v: number; rule: string };
@@ -458,6 +458,9 @@ class DocxReader {
         }
         case 'vertAlign': { const v = this.a(c); out.pos = v === 'subscript' ? 'sub' : v === 'superscript' ? 'sup' : 'base'; break; }
         case 'vanish': out.hidden = this.on(c); break;
+        // the proofing language (its Latin text's), and text marked not to be checked
+        case 'lang': { const v = this.a(c); if (v) out.lang = v; break; }
+        case 'noProof': out.noProof = this.on(c); break;
         case 'rStyle': {
           const id = this.a(c) ?? '';
           Object.assign(out, this.charStyle(id));
@@ -1351,6 +1354,7 @@ class DocxReader {
       font: r.font ?? WORD_FONT, size: r.size ?? WORD_SIZE, bold: r.bold, italic: r.italic, underline: r.underline,
       strike: r.strike, smallCaps: r.smallCaps, allCaps: r.allCaps, cstyle: r.cstyle,
       spacing: r.spacing, noKern: r.noKern, noFill: r.noFill, transparency: r.transparency, outline: r.outline, outlineW: r.outlineW, shadow: r.shadow,
+      lang: r.lang && r.lang.toLowerCase() !== (this.docDefaults.r.lang ?? 'en-US').toLowerCase() ? r.lang : undefined, noProof: r.noProof,
       color: r.color ?? undefined, highlight: r.highlight ?? undefined, formula: formula || undefined,
       sub: (!formula && r.pos === 'sub') || undefined, sup: (!formula && r.pos === 'sup') || undefined,
     });
@@ -2999,6 +3003,7 @@ class DocxReader {
       hf,
       objects,
       drawingStyle: this.drawingStyle,
+      ...(this.docDefaults.r.lang && !/^en-US$/i.test(this.docDefaults.r.lang) ? { lang: this.docDefaults.r.lang } : {}),
       ...(this.trackOn() ? { track: true } : {}),
       ...(this.hyphenRead() ? { hyphen: this.hyphenRead()! } : {}),
       ...(this.protection() ? { protect: this.protection()! } : {}),

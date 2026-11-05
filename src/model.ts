@@ -350,7 +350,10 @@ export interface TextRun {
   spacing?: number;
   /** Slides: a PowerPoint field (slidenum, datetime1…) that PowerPoint fills in; this is the text it last showed. */
   field?: string;
-  /** The text's language (a tag such as de-DE), for spelling, when not US English: kept from PowerPoint. */
+  /**
+   * The text's language (a tag such as de-DE), for spelling, when not US English: kept from
+   * PowerPoint, and from Word (w:lang) where not the document's own language (DocText.lang).
+   */
   lang?: string;
   /** Small capitals: lower-case letters shown as smaller capitals (documents). */
   smallCaps?: boolean;
@@ -371,6 +374,8 @@ export interface TextRun {
   outlineW?: number;
   /** Text effects: a soft drop shadow, down and to the right. */
   shadow?: boolean;
+  /** Documents: not spell- or grammar-checked (Word's Do not check spelling or grammar: chemical names, citations). */
+  noProof?: boolean;
   /**
    * Which font a ChemDraw file had the run's signs in: true for its Symbol font (•, ° stay in it,
    * though Arial has them), false for an ordinary font (a − stays in Arial, though Symbol has it).

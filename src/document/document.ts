@@ -428,6 +428,8 @@ export type FormType = 'text' | 'check' | 'drop';
 
 export interface DocText extends RichText {
   styles: Record<string, NamedStyle>;
+  /** The language the text is spell-checked in (Word's default w:lang), when not US English. */
+  lang?: string;
   page: PageSetup;
   hf: HeaderFooter;
   objects: Record<number, DocObject>;
