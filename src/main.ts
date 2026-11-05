@@ -14,7 +14,7 @@ import './app.css';
 import type { MethylStyle } from './chem/hydrogens';
 import { STANDARD_COLOURS, usedColours } from './colours';
 import { ICONS } from './icons';
-import { Toolboxes, lockIcon, sideFolded, boxLocked, commandButton, defaultToolboxes, menuCommands, boxIds, boxGrid, boxTitle, flyGrid, isEditable, withoutGoneItems, isOwnBox, overflowOf, CONTEXT_BOXES, type ContextBox, type Pickable, type ToolboxDef, type ToolboxState } from './ui/toolboxes';
+import { Toolboxes, lockIcon, sideFolded, commandButton, defaultToolboxes, menuCommands, boxIds, boxGrid, boxTitle, flyGrid, isEditable, withoutGoneItems, isOwnBox, overflowOf, CONTEXT_BOXES, type ContextBox, type Pickable, type ToolboxDef, type ToolboxState } from './ui/toolboxes';
 import { gridItems, inBlock, oneColumn, shownGrid, wrapped, type Grid, type Shown } from './ui/toolbox-grid';
 import { ToolboxEditor } from './ui/toolbox-editor';
 import { RibbonEditor } from './ui/ribbon-editor';
@@ -115,7 +115,7 @@ import type { PptxOptions } from './io/pptx-write';
 import { EFFECTS, animName, newAnim, highlightParts } from './deck/animation';
 import { askKeyViews } from './ui/key-views';
 import { SLIDE_TEMPLATES, applyTemplate, type SlideTemplate } from './deck/templates';
-import { showContextMenu, topMenuEntry, type MenuItem } from './ui/context-menu';
+import { showContextMenu, setMenuKeys, topMenuEntry, type MenuItem } from './ui/context-menu';
 import { QuickBar } from './ui/quick-bar';
 import { SmartPane } from './ui/smart-pane';
 import { commandDef } from './commands/registry';
@@ -875,6 +875,8 @@ function showToolStatus(): void {
 /** The keys that work in the text being typed ("Enter: new paragraph · …"), shown in the status bar; null when nothing is typed. */
 let typingKeys: string | null = null;
 CaptionEditor.onHint = (h) => { typingKeys = h; showToolStatus(); };
+/** The hint the status bar shows now (to fit it again when the window changes width). */
+let lastStatus: { name: string; steps: string[]; numbered: boolean; at: number; keys: [string, string][]; full: string } | null = null;
 /** The status bar's step-by-step hint: the tool, its steps (the one in hand marked), then its keys. */
 function setStatus(s: { name: string; steps: string[]; numbered: boolean; at: number; keys: [string, string][]; full: string }): void {
   const el = $('#hint');
@@ -885,7 +887,29 @@ function setStatus(s: { name: string; steps: string[]; numbered: boolean; at: nu
     + s.keys.map(([k, what]) => `<span class="st-key">${kbd(k)} ${esc(what)}</span>`).join('');
   el.classList.add('steps');
   el.title = s.full;
+  lastStatus = s;
+  fitStatus(el);
 }
+/**
+ * Drop whole hints from the end of the status bar until the rest fit, never leaving one cut off
+ * ("Double-…"): the keys go first (the last first), then the steps after the one in hand. All of
+ * them are in the bar's tooltip.
+ */
+function fitStatus(el: HTMLElement): void {
+  const over = () => el.scrollWidth > el.clientWidth + 1;
+  if (!el.clientWidth) return;
+  while (over()) {
+    const keys = el.querySelectorAll('.st-key');
+    if (keys.length) { keys[keys.length - 1].remove(); continue; }
+    const steps = [...el.querySelectorAll('.st-step')];
+    const last = steps.length > 1 ? steps[steps.length - 1] : null;
+    if (!last || last.classList.contains('now')) break;
+    if (last.previousElementSibling?.classList.contains('st-sep')) last.previousElementSibling.remove();
+    last.remove();
+  }
+}
+// (a wider window has room for the hints dropped again)
+window.addEventListener('resize', () => { const el = $('#hint'); if (lastStatus && el.classList.contains('steps')) setStatus(lastStatus); });
 // resting the mouse on a tool: what it does and the keys that change it
 const toolTip = new ToolTip((b) => {
   const name = b.dataset.tipTool!, t = TOOLS[name];
@@ -5400,12 +5424,29 @@ function placeTabs(inMenu: boolean): void {
   fitTabs();
 }
 
-/** When the tabs would be squeezed too narrow for their names, they show only their icons (the name is in each one's tooltip). */
+/** A tab's own room besides its name: its padding and border, its icon, its × and the gaps between them (app.css, header .tab), and the gap to the next tab. */
+const TAB_CHROME = 68;
+let nameRoom = { font: '', px: 0 };
+/** How wide eight characters of a tab's name are (an average mix of letters), measured in the tabs' own font. */
+function eightChars(): number {
+  const el = tabStrip.querySelector('.tab-name');
+  const font = el ? getComputedStyle(el).font : '';
+  if (font && font !== nameRoom.font) {
+    const g = document.createElement('canvas').getContext('2d');
+    if (g) { g.font = font; nameRoom = { font, px: g.measureText('Presenta').width }; }
+  }
+  return nameRoom.px || 56;
+}
+
+/**
+ * When the tabs would be squeezed so far that their names show fewer than about eight characters
+ * ("Ca…" says nothing), they show only their icons (the name is in each one's tooltip); the active
+ * one keeps its name.
+ */
 function fitTabs(): void {
   const ctl = [tabList, tabAdd].reduce((w, b) => w + b.offsetWidth + 2, 0);
   const room = tabsEl.clientWidth - ctl - 12;
-  // squeezed, the other tabs show their icons only; the active one keeps its name (about 140 px of it)
-  tabsEl.classList.toggle('tabs-narrow', room > 0 && room / Math.max(1, ws.tabs.length) < 96);
+  tabsEl.classList.toggle('tabs-narrow', room > 0 && room / Math.max(1, ws.tabs.length) - TAB_CHROME < eightChars());
   showTabArrows();
 }
 
@@ -8286,6 +8327,7 @@ function command(name: string): boolean {
     return false;
   }
   if (name === 'repeat-label:here') return repeatLabel(contextAtom);
+  if (name.startsWith('atom-label:') || name.startsWith('atom-key:')) return atomFromMenu(name);
   if (name.startsWith('arrow-as:')) return arrowFromMenu(name);
   if (name.startsWith('bond-as:') || name.startsWith('bond-line2:') || name.startsWith('bond-pos:')) return bondFromMenu(name);
   if (name.startsWith('fuse-ring:')) {
@@ -8804,8 +8846,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'toolbox-biopolymers': () => { contextBoxes.byHand('biopolymers'); },
   'toolbox-perspective': () => { contextBoxes.byHand('perspective'); },
   // the panel taken out as a toolbox folds up to its title bar; at the right it folds to a strip
-  // resting as a strip with nothing to show: brought out; otherwise closed all the way, or opened again
-  'fold-side': () => { if (sideResting()) { sideForced = 'open'; restSidePanel(); return; } foldSide(!sideIsFolded()); },
+  'fold-side': () => foldSide(!sideIsFolded()),
   'customize-toolbox': () => openCustomToolbox(),
   'customize-quick-bar': () => quickBar?.edit(),
   'customize-ribbon': () => ribbonEditor.open(RIBBON_OF_MODE[ws.active.mode]),
@@ -11243,7 +11284,8 @@ async function runAnalysis(force: boolean): Promise<void> {
     for (const x of f) seen.add(x);
     const ions = groupedIons(doc, f, editor.measure());
     for (const c of ions) counted.add(c.id);
-    frags.push(editor.sel.atoms.size ? new Set([...f].filter((x) => editor.sel.atoms.has(x))) : f);
+    // any atom picked analyses its whole structure (one carbon of a molecule is not CH4)
+    frags.push(f);
     extras.push(ions);
     if (frags.length >= 12) break;
   }
@@ -11856,14 +11898,14 @@ function fuseRingMenu(): MenuItem[] {
 function readAsMenu(): MenuItem {
   const caps = [...editor.sel.captions].map((id) => doc.captions.get(id)).filter((c): c is Caption => !!c);
   const now = new Set<string>(caps.map((c) => (c.chem === undefined ? 'auto' : c.chem ? 'on' : 'off')));
-  const tick = (k: string, label: string) => (now.size === 1 && now.has(k) ? '✓ ' : '') + label;
+  const tick = (k: string) => now.size === 1 && now.has(k);
   const m = editor.measure();
   const reads = caps.length === 1 ? captionReading(doc, caps[0], m) : null;
-  const auto = reads?.species ? ' (now: chemistry)' : reads && !reads.forced ? ' (now: text)' : '';
+  const auto = reads?.species ? ' (Now: Chemistry)' : reads && !reads.forced ? ' (Now: Text)' : '';
   return { label: 'Read Text As', items: [
-    { cmd: 'caption-chem:auto', label: tick('auto', 'Automatically' + auto) },
-    { cmd: 'caption-chem:on', label: tick('on', 'Chemical') },
-    { cmd: 'caption-chem:off', label: tick('off', 'Plain Text') },
+    { cmd: 'caption-chem:auto', label: 'Automatically' + auto, checked: tick('auto') },
+    { cmd: 'caption-chem:on', label: 'Chemical', checked: tick('on') },
+    { cmd: 'caption-chem:off', label: 'Plain Text', checked: tick('off') },
   ] };
 }
 
@@ -11922,9 +11964,8 @@ function bondMenu(): MenuItem[] {
       ] : []),
     ] },
     { label: 'Triple', items: [as(3, 'solid', 'Plain'), as(3, 'bold', 'Bold')] },
-    as(4, 'solid', 'Quadruple'),
     { label: 'Other', items: [
-      as(1.5, 'solid', 'Aromatic'), as(PARTIAL, 'dash', 'Partial (Transition State)'), null,
+      as(4, 'solid', 'Quadruple'), as(1.5, 'solid', 'Aromatic'), as(PARTIAL, 'dash', 'Partial (Transition State)'), null,
       as(1, 'hydrogen', 'Hydrogen Bond'), as(1, 'ionic', 'Ionic Bond'),
     ] },
     { cmd: 'show-style', label: 'Bond Properties…' },
@@ -11965,18 +12006,23 @@ function arrowMenu(): MenuItem[] {
   const arrows = menuArrows();
   if (!arrows.length) return [];
   const all = (f: (a: Arrow) => boolean) => arrows.every(f);
+  // (each set of three in a group of its own, so the menu fits a laptop's window)
   return [
-    { cmd: 'arrow-as:line:solid', label: 'Plain', checked: all((a) => a.line === 'solid') },
-    { cmd: 'arrow-as:line:dashed', label: 'Dashed', checked: all((a) => a.line === 'dashed') },
-    { cmd: 'arrow-as:line:bold', label: 'Bold', checked: all((a) => a.line === 'bold') },
-    null,
-    { cmd: 'arrow-as:head:solid', label: 'Solid Arrowhead', checked: all((a) => a.headType === 'solid') },
-    { cmd: 'arrow-as:head:hollow', label: 'Hollow Arrowhead', checked: all((a) => a.headType === 'hollow') },
-    { cmd: 'arrow-as:head:angle', label: 'Angled Arrowhead', checked: all((a) => a.headType === 'angle') },
-    null,
-    { cmd: 'arrow-as:nogo:cross', label: 'No-Go (Cross)', checked: all((a) => a.noGo && !a.noGoKind) },
-    { cmd: 'arrow-as:nogo:hash', label: 'No-Go (Hash)', checked: all((a) => a.noGo && a.noGoKind === 'hash') },
-    { cmd: 'arrow-as:dipole', label: 'Dipole', checked: all((a) => !!a.dipole) },
+    { label: 'Line', items: [
+      { cmd: 'arrow-as:line:solid', label: 'Plain', checked: all((a) => a.line === 'solid') },
+      { cmd: 'arrow-as:line:dashed', label: 'Dashed', checked: all((a) => a.line === 'dashed') },
+      { cmd: 'arrow-as:line:bold', label: 'Bold', checked: all((a) => a.line === 'bold') },
+    ] },
+    { label: 'Arrowhead', items: [
+      { cmd: 'arrow-as:head:solid', label: 'Solid Arrowhead', checked: all((a) => a.headType === 'solid') },
+      { cmd: 'arrow-as:head:hollow', label: 'Hollow Arrowhead', checked: all((a) => a.headType === 'hollow') },
+      { cmd: 'arrow-as:head:angle', label: 'Angled Arrowhead', checked: all((a) => a.headType === 'angle') },
+    ] },
+    { label: 'No-Go and Dipole', items: [
+      { cmd: 'arrow-as:nogo:cross', label: 'No-Go (Cross)', checked: all((a) => a.noGo && !a.noGoKind) },
+      { cmd: 'arrow-as:nogo:hash', label: 'No-Go (Hash)', checked: all((a) => a.noGo && a.noGoKind === 'hash') },
+      { cmd: 'arrow-as:dipole', label: 'Dipole', checked: all((a) => !!a.dipole) },
+    ] },
     { cmd: 'show-style', label: 'Arrow Properties…' },
     null,
   ];
@@ -12036,60 +12082,75 @@ function drawingMenu(): MenuItem[] {
   const order: MenuItem[] = shapes.length || s.bonds.size || s.atoms.size || s.captions.size || s.arrows.size
     ? [{ cmd: 'shape-front', label: 'Bring to Front' }, { cmd: 'shape-forward', label: 'Bring Forward' }, { cmd: 'shape-backward', label: 'Send Backward' }, { cmd: 'shape-back', label: 'Send to Back' }]
     : [];
+  // what the menu leads with: the atoms, the bonds, or the whole structure (and anything else) picked
+  const focus = menuFocus();
+  const bonds = focus === 'bond' ? bondMenu() : [];
+  const arrows = arrowMenu();
+  // (the bond and arrow commands end with their own Properties…)
+  const props: MenuItem[] = bonds.length || arrows.length ? [] : [{ cmd: 'show-style', ...(focus === 'atom' && !s.captions.size ? { label: 'Atom Properties…' } : {}) }];
   return [
-    { cmd: 'cut' }, { cmd: 'copy' }, { cmd: 'paste' }, { cmd: 'delete', label: 'Delete' }, { cmd: 'format-painter' }, { cmd: 'save-format-favorite' },
-    ...(favorites.length ? [{ label: 'Format Favorites', items: favorites.slice(0, 20).map((f, i): MenuItem => ({ cmd: `format-favorite-${i}`, label: f.name })) }] : []), null,
-    ...repeatLabelMenu(),
-    ...bondMenu(),
-    ...arrowMenu(),
+    { row: [{ cmd: 'cut' }, { cmd: 'copy' }, { cmd: 'paste' }, { cmd: 'delete', label: 'Delete' }] },
+    null,
+    ...(focus === 'atom' ? atomMenu() : repeatLabelMenu()),
+    ...bonds,
+    ...fuseRingMenu(),
+    ...(focus === 'bond' && s.bonds.size <= 2 && !s.arrows.size ? [{ cmd: 'homolysis-arrows' }] : []),
+    ...arrows,
     ...(editor.selectedEnergy() !== null ? [{ cmd: 'edit-energy' }, null] : []),
     ...(editor.selectedTorsion() !== null ? [{ cmd: 'edit-torsion' }, { cmd: 'copy-torsion-data' }, null] : []),
     ...(editor.selectedNewman() !== null ? [{ cmd: 'edit-newman' }, ...(doc.shapes.get(editor.selectedNewman()!)?.newman?.link ? [{ cmd: 'unlink-newman' }] : []), null] : []),
     ...(editor.selectedPlate() !== null ? [{ cmd: 'edit-plate' }, null] : []),
     ...(selectedOrbitals().length ? [{ cmd: 'edit-orbital' }, null] : []),
     ...(editor.selectedDiagram() !== null ? [{ cmd: 'edit-diagram' }, { cmd: 'diagram-to-shapes' }, null] : []),
-    ...(atoms || texts ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }, null] : []),
-    ...(s.captions.size ? [readAsMenu(), ...(texts && !atoms ? [{ cmd: 'expand-label', label: 'Expand to Structure' }, { cmd: 'expand-label-full', label: 'Expand to Full Structure' }] : []), null] : []),
+    ...(s.captions.size ? [readAsMenu(), ...(texts && !atoms ? [{ cmd: 'expand-label', label: 'Expand to Structure' }, { cmd: 'expand-label-full', label: 'Expand to Full Structure' }] : [])] : []),
+    ...(s.captions.size ? [{ cmd: 'link-text' }] : []),
+    ...([...s.captions].some((id) => doc.captions.get(id)?.runs.some((r) => r.link))
+      ? [{ cmd: 'open-link', label: 'Open Link' }, { cmd: 'insert-link', label: 'Edit Link…' }, { cmd: 'remove-link', label: 'Remove Link' }]
+      : s.captions.size ? [{ cmd: 'insert-link', label: 'Link…' }] : []),
+    ...([...s.captions].some((id) => doc.captions.get(id)?.attach) ? [{ cmd: 'unlink-text' }] : []),
+    null,
     ...(atoms ? [
       { cmd: 'clean-up' },
-      { cmd: 'clean-up-options' },
-      ...fuseRingMenu(),
       ...ringShapeMenu(),
       ...metalMenu(),
-      ...attachPointMenu(),
       { label: 'Structure', items: [
+        { cmd: 'clean-up-options' }, null,
         { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'chain-ends' }, { cmd: 'explicit-h' }, null,
         { cmd: 'contract-label' }, { cmd: 'expand-label' }, { cmd: 'expand-label-full' }, { cmd: 'join' }, null,
         { cmd: 'hapto-bond' }, { cmd: 'split-hapto' }, { cmd: 'hapto-kekule' }, null,
         { cmd: 'enhanced-stereo' }, { cmd: 'chiral-flag' }, { cmd: 'repeat-group' }, { cmd: 'rgroup-table' }, null,
         { cmd: 'check-structure' }, { cmd: 'save-template' }, { cmd: 'define-nickname' }, null,
-        { cmd: 'pubchem-lookup' },
+        { label: 'Perspective', items: [{ cmd: 'turn-3d' }, { cmd: 'flatten-3d' }, null, { cmd: 'depth-shading', checked: depthShadePrefs.on }, { cmd: 'depth-shading-settings' }] },
       ] },
-      { cmd: 'structure-to-name' },
-      { cmd: 'find-cas' },
-      { cmd: 'model-3d' },
-      ...(contextBond !== null && doc.bonds.get(contextBond)?.order === 1 ? [{ cmd: 'newman-projection' }, { cmd: 'torsion-chart' }] : []),
-      { label: 'Perspective', items: [{ cmd: 'turn-3d' }, { cmd: 'flatten-3d' }, null, { cmd: 'depth-shading', checked: depthShadePrefs.on }, { cmd: 'depth-shading-settings' }] },
+      // the look-ups in one group, named as on the Chemistry menu
+      { label: 'Look Up', items: [
+        { cmd: 'structure-to-name' }, { cmd: 'find-cas' }, { cmd: 'pubchem-lookup' }, { cmd: 'model-3d' },
+        ...(contextBond !== null && doc.bonds.get(contextBond)?.order === 1 ? [{ cmd: 'newman-projection' }, { cmd: 'torsion-chart' }] : []),
+        null,
+        { cmd: 'add-to-compound-library', label: 'Add to Compound Library' },
+        // Presentation and Design keep Analysis hidden until it is wanted (View > Show turns it on for good)
+        ...((ws.active.mode === 'slides' || ws.active.mode === 'design') && !chemPanes.analysis ? [{ cmd: 'view-analysis-pane', label: 'Show Analysis' }] : []),
+      ] },
     ] : []),
     ...(pickedCurved() ? [{ cmd: 'clean-up-arrow' }, { label: 'Mechanism Arrow', items: [
       { cmd: 'arrow-add-bend', ...(editor.contextSpot?.t !== undefined ? { label: 'Add Bend Here' } : {}) }, ...(editor.pickedJoin() ? [{ cmd: 'arrow-remove-bend' }, { cmd: 'arrow-smooth-join' }, { cmd: 'arrow-symmetric-join' }] : []), null,
       { label: 'Shape', items: [{ cmd: 'arrow-s-shape', label: 'S' }, { cmd: 'arrow-single-curve', label: 'Single Curve' }, { cmd: 'arrow-shape-u', label: 'U-Turn' }, { cmd: 'arrow-shape-loop', label: 'Loop' }] },
       { cmd: 'flip-arrow-bend' }, { cmd: 'arrow-reverse' }, { cmd: 'arrow-smooth-path' }, { cmd: 'arrow-simplify-path' }, null, { cmd: 'attach-arrow' }, { cmd: 'detach-arrow' },
     ] }, ...(editor.options.arrowProducts ? [{ cmd: 'draw-from-arrows' }, { cmd: 'check-arrows' }] : [])] : []),
-    ...(s.bonds.size && s.bonds.size <= 2 && !s.arrows.size ? [{ cmd: 'homolysis-arrows' }] : []),
     ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : []),
-    ...(s.arrows.size || atoms ? [...(editor.selectedSmart() !== null ? [{ cmd: 'ungroup-smart-scheme' }, null] : []), { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, ...(editor.selectedSmart() === null ? [{ cmd: 'convert-smart-scheme' }] : []), { cmd: 'smart-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'map-atoms' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
-    null,
-    ...(atoms ? [{ label: 'Label the Structure', items: [{ cmd: 'add-id-label' }, { cmd: 'add-caption' }, { cmd: 'attach-descriptors' }, null, { cmd: 'number-compounds' }] }] : []),
-    ...(atoms ? [{ cmd: 'add-to-compound-library', label: 'Add to Compound Library' }] : []),
-    // Presentation and Design keep Analysis hidden until it is wanted (View > Show turns it on for good)
-    ...(atoms && (ws.active.mode === 'slides' || ws.active.mode === 'design') && !chemPanes.analysis ? [{ cmd: 'view-analysis-pane', label: 'Show Analysis' }] : []),
+    // (a scheme is about whole structures and arrows, not an atom or a bond picked on its own)
+    ...(s.arrows.size || (atoms && focus === 'structure') ? [...(editor.selectedSmart() !== null ? [{ cmd: 'ungroup-smart-scheme' }, null] : []), { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, ...(editor.selectedSmart() === null ? [{ cmd: 'convert-smart-scheme' }] : []), { cmd: 'smart-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'map-atoms' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
+    ...(atoms && focus !== 'bond' ? [{ label: 'Label the Structure', items: [
+      { cmd: 'add-id-label' }, { cmd: 'add-caption' }, { cmd: 'attach-descriptors' }, null, { cmd: 'number-compounds' },
+      ...(!shapes.length ? [null, { cmd: 'alt-text', label: 'Alt Text…' }] : []),
+    ] }] : []),
     ...(atoms || shapes.some((x) => x.kind === 'ring') ? [{ label: 'Highlight and Fill', items: [{ cmd: 'highlight' }, { cmd: 'remove-highlight' }, { cmd: 'highlight-look' }, { cmd: 'select-highlight' }, null, { cmd: 'smooth-highlight' }, { cmd: 'centre-highlight' }, { cmd: 'soft-highlight' }, { cmd: 'outline-highlight' }, { cmd: 'shadow-highlight' }, { cmd: 'glow-highlight' }, { cmd: 'save-highlight-look' }, null, { cmd: 'fill-rings' }, { cmd: 'ring-shadow' }] }] : []),
-    ...(s.captions.size ? [{ cmd: 'link-text' }] : []),
-    ...([...s.captions].some((id) => doc.captions.get(id)?.runs.some((r) => r.link))
-      ? [{ cmd: 'open-link', label: 'Open Link' }, { cmd: 'insert-link', label: 'Edit Link…' }, { cmd: 'remove-link', label: 'Remove Link' }]
-      : s.captions.size ? [{ cmd: 'insert-link', label: 'Link…' }] : []),
-    ...([...s.captions].some((id) => doc.captions.get(id)?.attach) ? [{ cmd: 'unlink-text' }] : []),
+    null,
+    ...(atoms || texts ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }] : []),
+    { label: 'Format', items: [
+      { cmd: 'format-painter' }, { cmd: 'save-format-favorite' },
+      ...(favorites.length ? [{ label: 'Format Favorites', items: favorites.slice(0, 20).map((f, i): MenuItem => ({ cmd: `format-favorite-${i}`, label: f.name })) }] : []),
+    ] },
     // grouping, lining up, turning and stacking in one group, so the menu stays short
     { label: 'Arrange', items: [
       ...(s.atoms.size + s.captions.size + s.arrows.size + s.shapes.size > 1 ? [{ cmd: 'group' }] : []),
@@ -12102,7 +12163,7 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'add-frame' },
     ] },
     ...(shapes.some((x) => x.chart) ? [{ cmd: 'edit-chart', label: 'Edit Chart…' }] : []),
-    ...((shapes.length === 1 && shapes[0].kind === 'picture') || (atoms && !shapes.length) ? [{ cmd: 'alt-text', label: 'Alt Text…' }] : []),
+    ...(shapes.length === 1 && shapes[0].kind === 'picture' ? [{ cmd: 'alt-text', label: 'Alt Text…' }] : []),
     // (Design keeps fill and effects on its ribbon: Home and Shape Format)
     ...(shapes.some((x) => x.kind === 'geo' && !x.diagram) && ws.active.mode !== 'design' ? [
       { cmd: 'shape-styles-here', label: 'Shape Style…' },
@@ -12115,10 +12176,77 @@ function drawingMenu(): MenuItem[] {
       { cmd: 'remove-animation', label: 'Remove Animation' }, ...(s.arrows.size ? [{ cmd: 'auto-animate-steps' }] : []), { cmd: 'animation-pane', label: 'Animation Pane' }, { cmd: 'preview-slide', label: 'Preview Slide' },
     ] }, { cmd: 'new-comment', label: 'New Comment' }] : []),
     null,
-    { cmd: 'show-style' },
+    ...props,
     { cmd: 'select-all' },
     view,
   ];
+}
+
+/**
+ * What the right-click menu leads with: `atom` for atoms picked on their own (one clicked, or
+ * several shift-clicked), `bond` for bonds picked without the rest of their structure (or one
+ * clicked), and `structure` for whole structures and anything else.
+ */
+function menuFocus(): 'atom' | 'bond' | 'structure' {
+  const s = editor.sel;
+  if (s.captions.size + s.arrows.size + s.shapes.size) return 'structure';
+  if (s.atoms.size && !s.bonds.size) return 'atom';
+  if (!s.bonds.size) return 'structure';
+  if (contextBond !== null && s.bonds.has(contextBond) && s.bonds.size === 1) return 'bond';
+  // bonds with only their own end atoms, leaving out some bond of their structure
+  const ends = new Set<number>();
+  for (const id of s.bonds) { const b = doc.bonds.get(id); if (b) { ends.add(b.a1); ends.add(b.a2); } }
+  if ([...s.atoms].some((a) => !ends.has(a))) return 'structure';
+  for (const a of ends) if ((doc.adj.get(a) ?? []).some((b) => !s.bonds.has(b))) return 'bond';
+  // a whole structure picked: a bond right-clicked in it still leads with the bond types
+  return contextBond !== null ? 'bond' : 'structure';
+}
+
+/** The atoms the right-click atom commands change: the one clicked, or every one picked when it was one of several. */
+function menuAtoms(): number[] {
+  const ids = contextAtom && doc.atoms.has(contextAtom.id) ? (contextAtom.all ? [...editor.sel.atoms] : [contextAtom.id]) : [...editor.sel.atoms];
+  return ids.filter((id) => doc.atoms.has(id));
+}
+
+/** The elements on the right-click menu's Element group (each shows its hotkey). */
+const MENU_ELEMENTS = ['C', 'H', 'N', 'O', 'S', 'P', 'F', 'Cl', 'Br', 'I', 'Si', 'B'];
+
+/** Right-click on atoms: the label, element, charge and attachment point first. */
+function atomMenu(): MenuItem[] {
+  const ids = menuAtoms();
+  if (!ids.length) return [];
+  const key = (action: string) => keysOf('atom', action)[0];
+  return [
+    ...repeatLabelMenu(),
+    ...(ids.length === 1 ? [{ cmd: 'atom-key:edit-label', label: 'Edit Label…', key: key('atom edit-label') }] : []),
+    { label: 'Element', items: [
+      ...MENU_ELEMENTS.map((el): MenuItem => ({ cmd: `atom-label:${el}`, label: el, key: key(`label ${el}`) })),
+      null, { cmd: 'periodic-table' },
+    ] },
+    { label: 'Charge', items: [
+      { cmd: 'atom-key:plus', label: 'Increase Charge', key: key('atom plus') },
+      { cmd: 'atom-key:minus', label: 'Decrease Charge', key: key('atom minus') },
+    ] },
+    ...attachPointMenu(),
+    null,
+  ];
+}
+
+/** Right-click ▸ Element ▸ N…, Charge ▸ …, Edit Label…: on the atoms the menu is for (one undo step). */
+function atomFromMenu(name: string): boolean {
+  const ids = menuAtoms();
+  if (!ids.length) return false;
+  const i = name.indexOf(':');
+  const kind = name.slice(0, i), arg = name.slice(i + 1);
+  if (kind === 'atom-label') {
+    doc.edit(`Make ${arg}`, () => { for (const id of ids) editor.applyLabel(id, arg); });
+    editor.changed();
+    return true;
+  }
+  if (arg === 'edit-label') return editor.atomKey(ids[0], arg);
+  let done = false;
+  doc.edit(arg === 'plus' || arg === 'minus' ? 'Charge' : 'Atom', () => { for (const id of ids) done = editor.atomKey(id, arg) || done; });
+  return done;
 }
 
 // ---------------------------------------------------------------- group tooltips (View > Group Tooltips)
@@ -12223,6 +12351,9 @@ function showGroupTips(on: boolean): void {
   if (!on) labelTips.hide();
   $('[data-cmd="group-tips"]')?.setAttribute('aria-checked', String(on));
 }
+
+// right-click menus show each command's key (the Document's and Spreadsheet's too)
+setMenuKeys(commandKey);
 
 editor.onContextMenu = (e) => {
   if (sheetActive() || docActive()) return;
@@ -12750,7 +12881,7 @@ const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => vo
   // The side panel (Style, Warnings, Analysis; Format in documents, Cell in sheets) is a toolbox,
   // docked at the right to start with. Its arrow goes with it, so it shows even when the title bar is
   // locked away.
-  details: (body) => { body.before($('#side-strip'), $('#side-fold')); body.append(sideContent); },
+  details: (body) => { body.before($('#side-fold')); body.append(sideContent); },
   text: (body, vertical) => { textToolbox = buildTextToolbox(body, vertical, textToolboxHooks); },
   guides: (body, vertical) => { guidesToolbox = buildGuidesToolbox(body, vertical, guidesToolboxHooks); },
   // the Smart Scheme species list, docked (it floats beside the scheme otherwise)
@@ -12843,7 +12974,7 @@ const toolboxes = new Toolboxes(toolboxDefs, {
   folded: (id) => (id === 'details' ? sideIsFolded() : undefined),
   fold: (id) => { if (id !== 'details') return false; command('fold-side'); return true; },
   say: (text) => flash(text),
-  rendered: () => { fitTools(); restSidePanel(); },
+  rendered: () => fitTools(),
 });
 contextBoxes.ready = true;
 
@@ -12924,8 +13055,42 @@ function fitTools(): void {
     const over = () => (floating ? box.scrollHeight > box.clientHeight + 1 : across ? c.scrollWidth > dock.clientWidth - 16 : tall() > room + 1);
     for (let f = (across ? s.cols : s.rows) - 1; f >= 1 && over(); f--) layCells(c, f);
   }
+  scrollMainTools();
   settleDocks();
   fadeDocks();
+}
+
+/**
+ * The drawing tools stay two columns wide in every mode and dock, and scroll inside their own box
+ * when the window is too short for them. Whether they scroll is judged against the room the window
+ * has in its busiest mode (as wrapping is, above), and the box then keeps room for its scroll bar
+ * in every mode, so it never widens or narrows as a ribbon tab, a selection or the mode changes.
+ */
+function scrollMainTools(): void {
+  const box = document.querySelector<HTMLElement>('.toolbox[data-id="main"]');
+  const body = box?.querySelector<HTMLElement>(':scope > .tb-body');
+  if (!box || !body) return;
+  // (scrolling the tools takes a fly-out away from its button)
+  body.onscroll = () => toolbar.close();
+  const dock = box.parentElement!;
+  const across = dock.classList.contains('dock-h');
+  const floating = box.classList.contains('floating');
+  // floating, the box ends above the window's foot (it scrolls from there)
+  if (floating) box.style.maxHeight = `${Math.max(120, Math.round(innerHeight - Math.max(0, box.getBoundingClientRect().top) - 8))}px`;
+  else box.style.removeProperty('max-height');
+  let scrolls = false;
+  if (!box.classList.contains('collapsed') && !across) {
+    const own = box.offsetHeight - body.clientHeight + body.scrollHeight;
+    if (floating) scrolls = own > parseFloat(box.style.maxHeight);
+    else {
+      const kids = [...dock.children].filter((el): el is HTMLElement => el instanceof HTMLElement && el.offsetParent !== null);
+      const gap = parseFloat(getComputedStyle(dock).rowGap) || 0, pad = parseFloat(getComputedStyle(dock).paddingTop) + parseFloat(getComputedStyle(dock).paddingBottom);
+      const tall = kids.reduce((h, el) => h + (el === box ? own : el.offsetHeight), 0) + gap * Math.max(0, kids.length - 1) + pad;
+      scrolls = tall > innerHeight - SIDE_DOCK_CHROME + 1;
+    }
+    scrolls ||= body.scrollHeight > body.clientHeight + 1;
+  }
+  box.classList.toggle('tb-scrolls', scrolls);
 }
 /**
  * Let the docks down the sides measure their width afresh. A dock squeezed or overfilled for a
@@ -12933,7 +13098,7 @@ function fitTools(): void {
  * bar's width after the bar went: the toolbox stayed wider and the work moved over (a jump).
  */
 function settleDocks(): void {
-  const docks = [...document.querySelectorAll<HTMLElement>('.dock-v')];
+  const docks = [...document.querySelectorAll<HTMLElement>('.dock-v, .toolbox[data-id="main"] > .tb-body')];
   for (const d of docks) d.style.overflowY = 'hidden';
   void document.body.offsetWidth;
   for (const d of docks) d.style.removeProperty('overflow-y');
@@ -12942,7 +13107,7 @@ function fadeDocks(): void {
   for (const d of document.querySelectorAll<HTMLElement>('.dock-v')) d.classList.toggle('more-below', d.scrollTop + d.clientHeight < d.scrollHeight - 2);
 }
 for (const d of document.querySelectorAll<HTMLElement>('.dock-v')) d.addEventListener('scroll', fadeDocks, { passive: true });
-addEventListener('resize', () => { fitTools(); autoFoldRibbon(); restSidePanel(); });
+addEventListener('resize', () => { fitTools(); autoFoldRibbon(); });
 
 /** The ribbon folded or whole as you last chose it (Ctrl+F1, View > Ribbon > Collapse the Ribbon). */
 let ribbonChosen = false;
@@ -12976,94 +13141,9 @@ function placeSidePanel(): void {
   fold.textContent = '×';
   fold.title = 'Close the side panel (Ctrl+Alt+B, or the panel button at the bottom right, opens it again)';
   fold.setAttribute('aria-label', fold.title);
-  restSidePanel();
 }
 $('#side-fold').addEventListener('click', () => command('fold-side'));
 $('#status-side').addEventListener('click', () => command('fold-side'));
-
-/*
- * While the side panel has nothing to show (nothing selected, and no Warnings, Analysis, Layers,
- * Comments or Animation pane open), it rests as a thin strip at the right edge, docked there or
- * floating. Something selected, or a click on the strip, brings it out: docked, over the edge of
- * the work rather than beside it, so the drawing never moves or changes size as the selection
- * changes. Documents and spreadsheets always have their Format or Cell pane, so it never rests there.
- */
-const sideStrip = $<HTMLButtonElement>('#side-strip');
-/** The strip clicked: the panel out though it has nothing to show ('open'), or put away though it has ('closed'), until the selection changes. */
-let sideForced: 'open' | 'closed' | null = null;
-let sideSelKey = '';
-
-/** The panes the side panel shows now. */
-const sidePanes = (): HTMLElement[] => [...sideContent.children].filter((el): el is HTMLElement => el instanceof HTMLElement && !el.hidden && getComputedStyle(el).display !== 'none');
-
-/** The side panel has only the Style pane's "Select something" to show. */
-const sideHasNothing = (): boolean => sidePanes().every((el) => el.id === 'style-section' && el.classList.contains('empty'));
-
-/**
- * The side panel rests as a strip when it has nothing to show and comes out over the work: when
- * it is open, docked at the right (its place locked) or floating, and shows only the Style pane.
- * Another pane turned on (Warnings, Analysis, Layers, Comments, Animation; a document's Format or a
- * sheet's Cell) keeps it open beside the work, as before.
- */
-function sideCanRest(): boolean {
-  const p = toolboxState.places.details;
-  if (!p?.shown || sideIsFolded() || !(p.dock === 'float' || (p.dock === 'right' && boxLocked(toolboxState, 'details')))) return false;
-  return sidePanes().every((el) => el.id === 'style-section');
-}
-
-/** The side panel resting as a strip now. */
-const sideResting = (): boolean => !!$('.toolbox[data-id="details"]')?.classList.contains('side-rest');
-
-/** Rest the side panel as a strip, or bring it out, as what it has to show and the strip say. */
-function restSidePanel(): void {
-  const box = document.querySelector<HTMLElement>('.toolbox[data-id="details"]');
-  if (!box) return;
-  const s = editor.sel;
-  const key = `${ws.active.id}|${s.atoms.size}.${s.bonds.size}.${s.captions.size}.${s.arrows.size}.${s.shapes.size}|${[s.atoms, s.bonds, s.captions, s.arrows, s.shapes].map((x) => x.values().next().value ?? '').join('.')}`;
-  // (a new selection, or another tab, ends what a click on the strip asked for)
-  if (key !== sideSelKey) { sideSelKey = key; sideForced = null; }
-  const auto = sideCanRest();
-  const nothing = auto && sideHasNothing();
-  const rest = auto && (sideForced === 'closed' || (nothing && sideForced !== 'open'));
-  const over = auto && !rest && box.classList.contains('vertical') && !box.classList.contains('floating');
-  box.classList.toggle('side-auto', auto);
-  box.classList.toggle('side-rest', rest);
-  box.classList.toggle('side-over', over);
-  sideStrip.setAttribute('aria-expanded', String(auto && !rest));
-  sideStrip.title = rest ? 'Show the side panel (Ctrl+Alt+B): its Style settings come out here when something is selected' : 'Put the side panel away to its strip';
-  sideStrip.setAttribute('aria-label', rest ? 'Show the side panel' : 'Put the side panel away');
-  if (over) {
-    // out over the work, beside the strip, as tall as the dock leaves
-    const r = sideStrip.getBoundingClientRect(), dock = box.parentElement!.getBoundingClientRect();
-    box.style.setProperty('--so-right', `${Math.round(innerWidth - r.left + 4)}px`);
-    box.style.setProperty('--so-top', `${Math.round(r.top)}px`);
-    box.style.setProperty('--so-h', `${Math.max(120, Math.round(dock.bottom - r.top - 6))}px`);
-  }
-  if (rest && box.classList.contains('floating')) {
-    // floating: the strip at the top of the work's right edge
-    const w = $('#work').getBoundingClientRect();
-    box.style.setProperty('--sr-right', `${Math.round(innerWidth - w.right)}px`);
-    box.style.setProperty('--sr-top', `${Math.round(w.top + 8)}px`);
-  }
-}
-sideStrip.addEventListener('click', () => {
-  sideForced = sideResting() ? 'open' : 'closed';
-  restSidePanel();
-});
-// a panel brought out by the strip with nothing to show goes back on a click elsewhere or Escape
-document.addEventListener('pointerdown', (e) => {
-  if (sideForced !== 'open' || !sideHasNothing()) return;
-  const t = e.target as HTMLElement;
-  if (t.closest?.('.toolbox[data-id="details"]')) return;
-  sideForced = null;
-  restSidePanel();
-}, true);
-window.addEventListener('keydown', (e: KeyboardEvent) => {
-  if (e.key === 'Escape' && sideForced === 'open') { sideForced = null; restSidePanel(); }
-});
-// what the panel shows changes with the selection, the tab and the panes turned on: rest it or bring it out to match
-new MutationObserver(() => restSidePanel()).observe(sideContent, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'class'] });
-new MutationObserver(() => restSidePanel()).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
 /** Below this window width the side panel folds by itself, so the drawing keeps its room. */
 const NARROW_WINDOW = 1200;
@@ -14068,7 +14148,7 @@ const buildHint = new BuildHint({
 });
 editor.onOverlay = () => { smartPane.place(); buildHint.place(); };
 editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
-editor.onChange = () => { welcomeWatch?.(); showToolStatus(); showRibbonContext(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); canvasFont?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); restSidePanel(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); showToolStatus(); ($('#go-sel') as HTMLButtonElement).disabled = !editor.hasSelection(); showRibbonContext(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); canvasFont?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();

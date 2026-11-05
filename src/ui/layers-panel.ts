@@ -13,6 +13,7 @@ import { plainText } from '../richtext';
 import { shapeOrder } from '../objects';
 import { usesStacking } from '../editor/stacking';
 import { geoDef } from '../design/geo';
+import { foldIntoInfo } from './info-tip';
 
 const icon = (body: string) => `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 const ICONS = {
@@ -68,6 +69,8 @@ export class LayersPanel {
   private doc: Doc | null = null;
   private heading: HTMLHeadingElement;
   private note: HTMLParagraphElement;
+  /** The heading's words (the heading also holds the help "i"). */
+  private headText: HTMLSpanElement;
   private bar: HTMLDivElement;
   /** Slides' Selection Pane (text boxes, structures and arrows listed too) rather than Design's Layers. */
   private pane = false;
@@ -76,7 +79,8 @@ export class LayersPanel {
 
   constructor(private section: HTMLElement, private hooks: LayersHooks) {
     this.heading = document.createElement('h2');
-    this.heading.textContent = 'Layers';
+    this.headText = Object.assign(document.createElement('span'), { textContent: 'Layers' });
+    this.heading.append(this.headText);
     this.note = document.createElement('p');
     this.note.className = 'muted small layers-note';
     this.note.textContent = 'Front at the top. Drag to reorder; double-click a name to rename.';
@@ -98,6 +102,8 @@ export class LayersPanel {
     this.list.setAttribute('aria-label', 'Layers');
     this.list.setAttribute('aria-multiselectable', 'true');
     section.replaceChildren(this.heading, this.note, this.bar, this.list);
+    // the how-to goes in an "i" beside the heading, never a line of its own (UI rule 2)
+    foldIntoInfo(this.note, this.heading);
   }
 
   /** Show the panel for a drawing: Design's Layers, or (with `pane`) Slides' Selection Pane. */
@@ -105,7 +111,7 @@ export class LayersPanel {
     this.doc = doc;
     this.pane = pane;
     this.section.hidden = !doc;
-    this.heading.textContent = pane ? 'Selection Pane' : 'Layers';
+    this.headText.textContent = pane ? 'Selection Pane' : 'Layers';
     this.list.setAttribute('aria-label', pane ? 'Objects on the slide' : 'Layers');
     this.note.textContent = pane
       ? 'Front at the top. Click to select, the eye to hide; drag pictures and shapes to reorder; double-click a name to rename.'

@@ -127,8 +127,6 @@ The panel on the right changes with what you are doing. In a canvas it has:
 - **Warnings**: possible problems in the structures, such as a carbon with five bonds (see [Canvas](drawing.md#warnings)).
 - **Analysis**: formula, masses and more for the selected structure (see [Canvas](drawing.md#the-analysis-panel)).
 
-While the panel has nothing to show (nothing selected, and no Warnings, Analysis, Layers or Comments pane open), it rests as a thin **Side Panel** strip at the right edge. Select something and it comes out over the edge of the work, so the drawing doesn't move or change size; deselect and it goes back to the strip. Click the strip (or press Ctrl+Alt+B) to bring it out with nothing selected, and click it again to put it away. A floating side panel rests the same way, as a strip at the top of the work's right edge.
-
 The **×** at the top of the panel closes it all the way to give the drawing more room (also **View ▸ Collapse Side Panel**). Each kind of tab remembers this on its own, so you can keep the panel folded in spreadsheets and open in canvases. In a window narrower than about 1,200 pixels the panel folds by itself so the drawing keeps its room, and opens again when the window is widened; **›** still opens it while the window is narrow.
 
 **View ▸ Focus View** (Ctrl+Shift+F1) hides the toolboxes, the side panel and the ribbon at once, to give the page the whole window on a laptop; the same key brings them back. In Presentation, Spreadsheet, Document and Design tabs, **View ▸ Toolboxes ▸ One Column Outside Canvas** shows the toolboxes docked at the side in one narrow column.

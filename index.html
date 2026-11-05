@@ -646,9 +646,9 @@
     <div id="chemistry-menu" class="menu" role="menu" data-item-modes="drawing slides design" hidden>
     <button role="menuitem" data-cmd="clean-up">Clean Up Structure</button>
     <button role="menuitem" data-cmd="clean-up-reaction">Clean Up Reaction</button>
-    <button role="menuitem" data-cmd="clean-up-reaction-orient" title="Turn every structure so the part it shares with the starting material lies the same way around (configuration kept), then tidy the scheme">Clean Up Reaction, Orienting Like the Start</button>
+    <button role="menuitem" data-cmd="clean-up-reaction-orient" title="Turn every structure so the part it shares with the starting material lies the same way around (configuration kept), then tidy the scheme">Clean Up and Orient Reaction</button>
     <button role="menuitem" data-cmd="orient-like" title="Turn each selected structure so the part it shares with the first one (top left) lies the same way around; structures turned over have their wedges swapped, so configuration is kept">Orient Like First</button>
-    <button role="menuitem" data-cmd="check-structure">Check Structure (next warning)</button>
+    <button role="menuitem" data-cmd="check-structure" title="Go to the next structure warning (valence, charge, stereo)">Check Structure</button>
     <button role="menuitem" data-cmd="join">Join</button>
     <button role="menuitem" data-cmd="expand-label" title="Expand the selected labels into atoms and bonds: abbreviations (OMe, Boc, CO2Et), ligands (BINAP keeps its PPh2) and ligands on metals (PPh3, dppe, Cp*, COD)">Expand Label</button>
     <button role="menuitem" data-cmd="expand-label-full" title="Draw the selected labels out completely: as Expand Label, then the labels that brings in (PPh2, P(t-Bu)2, CHPh2) drawn out too, down to every atom">Expand Label Fully</button>
@@ -801,14 +801,19 @@
     </div>
     </div>
     <hr />
+    <div class="submenu">
+    <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Drawing Aids</button>
+    <div class="menu sub" role="menu" hidden>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="fixed-length"><span>Fixed Bond Lengths</span></button>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="fixed-angles"><span>Fixed Angles</span></button>
+    </div>
+    </div>
     </div>
     </div>
     <div class="menu-wrap">
       <button id="btn-help" aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu" title="Hotkeys, the user guide, and sending feedback" aria-keyshortcuts="Alt+H"><span class="mn">H</span>elp</button>
       <div id="help-menu" class="menu" role="menu" hidden>
-        <button role="menuitem" data-cmd="help" title="The most used hotkeys and tips, with a button to change any key">Hotkeys and Tips</button>
+        <button role="menuitem" data-cmd="help" title="The most used keyboard shortcuts and tips, with a button to change any key">Keyboard Shortcuts and Tips</button>
         <button role="menuitem" data-cmd="user-guide" title="How to use the program (built in: works without a connection)">User Guide</button>
         <button role="menuitem" data-cmd="help-here" title="The part of the User Guide about the tool or mode in use">Help on This Tool or Mode</button>
         <hr />
@@ -1099,9 +1104,9 @@
       <div class="rb-group">
         <div class="rb-row">
           <div class="rb-col">
-            <button data-sh="view-gridlines" aria-pressed="true" title="Gridlines: show the lines between cells">Gridlines</button>
-            <button data-sh="view-headings" aria-pressed="true" title="Headings: show the row numbers and column letters">Headings</button>
-            <button data-sh="view-formula-bar" aria-pressed="true" title="Formula Bar: show the box above the grid with the cell's name and contents">Formula Bar</button>
+            <label class="rb-field check" title="Gridlines: show the lines between cells"><input type="checkbox" data-sh="view-gridlines" checked /> Gridlines</label>
+            <label class="rb-field check" title="Headings: show the row numbers and column letters"><input type="checkbox" data-sh="view-headings" checked /> Headings</label>
+            <label class="rb-field check" title="Formula Bar: show the box above the grid with the cell's name and contents"><input type="checkbox" data-sh="view-formula-bar" checked /> Formula Bar</label>
           </div>
         </div>
         <div class="rb-label">Show</div>
@@ -1193,10 +1198,21 @@
       </div>
       <div class="rb-group">
         <div class="rb-row">
+          <button class="rb-big" data-sh="page-margins" title="Margins: Normal, Wide, Narrow, or your own"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="2.5" width="12" height="15"/><path d="M4 5.5h12M4 14.5h12M7 2.5v15M13 2.5v15" stroke-dasharray="1.5 1.5"/></svg></span>Margins ▾</button>
+          <button class="rb-big" data-sh="page-orientation" title="Orientation: portrait or landscape pages"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="6" width="15" height="10"/><path d="M6 3h7l-1.5-1.5M13 3l-1.5 1.5"/></svg></span>Orientation ▾</button>
+          <button class="rb-big" data-sh="page-size" title="Size: the paper (Letter, A4, Legal…)"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M5 2.5h7l3.5 3.5v11.5H5z"/><path d="M12 2.5V6h3.5"/></svg></span>Size ▾</button>
+          <button class="rb-big" data-sh="print-area" title="Print Area: print only the selected cells (Set), more blocks on pages of their own (Add), or everything in use again (Clear). Saved in .xlsx"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="14" height="14"/><rect x="6" y="6" width="8" height="6" stroke-dasharray="2 1.5"/></svg></span>Print Area ▾</button>
+          <button class="rb-big" data-sh="print-titles" title="Print Titles: rows printed at the top of every page (a header row) and columns at the left (compound numbers)"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="14" height="14"/><path d="M3 7h14" stroke-width="3"/></svg></span>Print Titles…</button>
+        </div>
+        <div class="rb-label">Page Setup</div>
+        <button class="rb-launch" data-sh="page-setup" title="Page Setup: paper, orientation, scaling, margins, centering, print area, titles and page order in one window">⬊</button>
+      </div>
+      <div class="rb-group">
+        <div class="rb-row">
           <div class="rb-col">
-            <button data-sh="view-gridlines" aria-pressed="true" title="View Gridlines: show the lines between cells on the screen">View Gridlines</button>
-            <button data-sh="view-headings" aria-pressed="true" title="View Headings: show the row numbers and column letters on the screen">View Headings</button>
-            <button data-sh="show-page-breaks" aria-pressed="false" title="Show where pages end on the grid: dashed lines for Excel's own breaks, solid ones for breaks put in by hand">Page Breaks</button>
+            <label class="rb-field check" title="View Gridlines: show the lines between cells on the screen"><input type="checkbox" data-sh="view-gridlines" checked /> View Gridlines</label>
+            <label class="rb-field check" title="View Headings: show the row numbers and column letters on the screen"><input type="checkbox" data-sh="view-headings" checked /> View Headings</label>
+            <label class="rb-field check" title="Show where pages end on the grid: dashed lines for Excel's own breaks, solid ones for breaks put in by hand"><input type="checkbox" data-sh="show-page-breaks" /> Page Breaks</label>
           </div>
         </div>
         <div class="rb-label">Sheet Options</div>
@@ -1282,7 +1298,7 @@
           <button class="rb-big" data-sh="dash-add-gallery" title="A card for each drawn structure in a table, with an ID, yield or other values under it"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="2.5" y="3" width="6.5" height="6.5" rx="1"/><rect x="11" y="3" width="6.5" height="6.5" rx="1"/><rect x="2.5" y="11" width="6.5" height="6.5" rx="1"/><rect x="11" y="11" width="6.5" height="6.5" rx="1"/><path d="M4.5 6.2l1.3-1.6 1.4.8"/><path d="M13 6.2l1.3-1.6 1.4.8"/></svg></span>Gallery</button>
           <button class="rb-big" data-sh="dash-add-text" title="A heading or a note"><span class="rb-icon"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 4.5h12M10 4.5v12"/></svg></span>Text</button>
         </div>
-        <div class="rb-label">Add a tile</div>
+        <div class="rb-label">Add a Tile</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
@@ -1432,7 +1448,7 @@
             <button data-sh="chart-edit" title="Every setting of the chart, in the panel on the right (or double-click the chart)">All Settings</button>
           </div>
         </div>
-        <div class="rb-label">Type and data</div>
+        <div class="rb-label">Type and Data</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
@@ -1614,7 +1630,7 @@
           <button class="rb-big" data-doc="insert-icons" aria-haspopup="true" title="About 7,000 icons, lab and science ones first (glassware, molecules, hazard signs): the one you pick goes in the text at the caret. Find one by name"><span class="rb-icon">⚗</span>Icons ▾</button>
           <button class="rb-big" data-doc="insert-diagram" title="Lists, processes, cycles, hierarchies, Venn diagrams, matrices and pyramids drawn from lines of text, like PowerPoint's SmartArt: it goes in the text at the caret. Double-click it to change its text or look"><span class="rb-icon">⧉</span>Diagram</button>
         </div>
-        <div class="rb-label">Tables, pictures and shapes</div>
+        <div class="rb-label">Tables, Pictures and Shapes</div>
       </div>
       <div class="rb-group">
         <div class="rb-row">
@@ -2190,10 +2206,10 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="paste" title="Paste text, a structure from ChemDraw, or a picture"><span class="rb-icon">⎘</span>Paste</button>
-          <div class="rb-icongrid">
-            <button class="rb-iconbtn" data-cmd="cut" title="Cut" aria-label="Cut">✂</button>
-            <button class="rb-iconbtn" data-cmd="copy" title="Copy" aria-label="Copy">⧉</button>
-            <button class="rb-iconbtn" data-cmd="format-painter" aria-pressed="false" title="Format Painter: copy the look of what is selected to the next thing you click or drag over. Double-click to keep painting until Esc" aria-label="Format Painter">🖌</button>
+          <div class="rb-col">
+            <button data-cmd="cut" title="Cut (Ctrl+X)">Cut</button>
+            <button data-cmd="copy" title="Copy (Ctrl+C): structures go as a drawing for ChemDraw, Word and PowerPoint">Copy</button>
+            <button data-cmd="format-painter" aria-pressed="false" title="Format Painter: copy the look of what is selected to the next thing you click or drag over. Double-click to keep painting until Esc"><svg class="fp-icon" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="2.5" width="12" height="5" rx="1"/><path d="M15 5h2v4.5h-7V12"/><rect x="8.5" y="12" width="3" height="6" rx="0.8"/></svg> Format Painter</button>
           </div>
         </div>
         <div class="rb-label">Clipboard</div>
@@ -2768,10 +2784,10 @@
       <div class="rb-group">
         <div class="rb-row">
           <button class="rb-big" data-cmd="paste" title="Paste a structure, a picture or text"><span class="rb-icon">⎘</span>Paste</button>
-          <div class="rb-icongrid">
-            <button class="rb-iconbtn" data-cmd="cut" title="Cut" aria-label="Cut">✂</button>
-            <button class="rb-iconbtn" data-cmd="copy" title="Copy" aria-label="Copy">⧉</button>
-            <button class="rb-iconbtn" data-cmd="format-painter" aria-pressed="false" title="Format Painter: copy the look of what is selected to the next thing you click or drag over. Double-click to keep painting until Esc" aria-label="Format Painter">🖌</button>
+          <div class="rb-col">
+            <button data-cmd="cut" title="Cut (Ctrl+X)">Cut</button>
+            <button data-cmd="copy" title="Copy (Ctrl+C): structures go as a drawing for ChemDraw, Word and PowerPoint">Copy</button>
+            <button data-cmd="format-painter" aria-pressed="false" title="Format Painter: copy the look of what is selected to the next thing you click or drag over. Double-click to keep painting until Esc"><svg class="fp-icon" viewBox="0 0 20 20" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="2.5" width="12" height="5" rx="1"/><path d="M15 5h2v4.5h-7V12"/><rect x="8.5" y="12" width="3" height="6" rx="0.8"/></svg> Format Painter</button>
           </div>
         </div>
         <div class="rb-label">Clipboard</div>
@@ -3007,7 +3023,6 @@
   </main>
 
   <aside>
-    <button id="side-strip" type="button" aria-expanded="false" title="Show the side panel (Ctrl+Alt+B)" aria-label="Show the side panel"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="ss-label">Side Panel</span></button>
     <button id="side-fold" type="button" title="Close the side panel (Ctrl+Alt+B)" aria-label="Close the side panel">×</button>
     <div id="side-content">
     <section id="anim-section" hidden></section>
@@ -3054,12 +3069,12 @@
   <footer id="status"><span id="hint"></span><div id="doc-statusbar" class="doc-only" hidden><span id="doc-status"></span><button type="button" class="doc-viewbtn" data-doc="view-read" aria-pressed="false" title="Read Mode">📖</button><button type="button" class="doc-viewbtn" data-doc="view-print" aria-pressed="true" title="Print Layout">▯</button><button type="button" class="doc-viewbtn" data-doc="view-web" aria-pressed="false" title="Web Layout">🌐</button><button type="button" data-doc="zoom-out" title="Zoom out">−</button><span id="doc-zoom">100%</span><button type="button" data-doc="zoom-in" title="Zoom in">+</button><button type="button" data-doc="zoom-fit" title="Fit the page width in the window">Page Width</button></div><button type="button" id="status-notes" class="slides-only" data-cmd="view-notes" aria-pressed="true" title="Show or hide the speaker notes under the slide" hidden>✎ Notes</button><label class="zoom-pick canvas-only" title="Zoom (Ctrl+= and Ctrl+− also zoom; F6 fits the window)"><span class="sr-only">Zoom</span><select id="zoom-pick">
     <option value="fit">Fit</option><option value="actual">Actual size</option><option disabled>──</option>
     <option value="25">25%</option><option value="50">50%</option><option value="75">75%</option><option value="100">100%</option><option value="150">150%</option><option value="200">200%</option><option value="300">300%</option><option value="400">400%</option><option value="800">800%</option>
-    <option value="now" hidden></option></select></label><span id="go-buttons" class="go-buttons canvas-only"><button type="button" id="go-fit" title="Fit the whole drawing in the window (F6)">Fit</button><button type="button" id="go-sel" title="Go to Selection: bring what is selected into view (Shift+F6)">Go to Selection</button></span><button type="button" id="status-side" data-cmd="fold-side" aria-pressed="true" title="Side panel: show or close it (Ctrl+Alt+B)" aria-label="Side panel"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor"/><path d="M10 2.5v11" stroke="currentColor"/><rect class="sp-fill" x="10.5" y="3" width="3.5" height="10" fill="currentColor" opacity=".35"/></svg></button></footer>
+    <option value="now" hidden></option></select></label><span id="go-buttons" class="go-buttons canvas-only"><button type="button" id="go-fit" title="Fit the whole drawing in the window (F6)">Fit</button><button type="button" id="go-sel" title="Go to Selection: bring what is selected into view (Shift+F6). Select something first." disabled>Go to Selection</button></span><button type="button" id="status-side" data-cmd="fold-side" aria-pressed="true" title="Side panel: show or close it (Ctrl+Alt+B)" aria-label="Side panel"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor"/><path d="M10 2.5v11" stroke="currentColor"/><rect class="sp-fill" x="10.5" y="3" width="3.5" height="10" fill="currentColor" opacity=".35"/></svg></button></footer>
   <div id="flash" role="status" aria-live="polite"></div>
   <div id="sr-say" class="sr-only" aria-live="polite"></div>
 
   <dialog id="help">
-    <h2>Hotkeys and Tips</h2>
+    <h2>Keyboard Shortcuts and Tips</h2>
     <p class="muted"><span id="app-version"></span>. Free software under the GNU General Public License, version 3 or later.</p>
     <p class="muted">Hotkeys work like ChemDraw: point at an atom or bond (it highlights blue) and press a key. A key that grows something moves the highlight to the new atom, so you can keep typing (<kbd>8</kbd> then <kbd>1</kbd> makes an E double bond). <kbd>1</kbd> and <kbd>0</kbd> keep the highlight under the mouse, so pressing 1 three times adds three bonds; after a click or another key they move it, so 1 1 1 draws a chain. Every key can be changed.</p>
     <p><button id="help-hotkeys" type="button">Show and change all keyboard shortcuts…</button></p>

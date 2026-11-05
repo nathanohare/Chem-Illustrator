@@ -130,7 +130,9 @@ export class AnalysisBox extends DropBox {
     this.float.show(this.button);
   }
 
-  /** Show what was analysed: a formula (HTML, with subscripts), its weight and exact mass, or nothing. */
+  /**
+   * Show what was analysed: a formula (HTML, with subscripts), its weight and exact mass, or nothing.
+   */
   set(formulaHtml: string | null, mw: string | null, exact: string | null = null): void {
     const f = this.button.querySelector<HTMLElement>('.cr-an-f')!;
     f.classList.toggle('muted', !formulaHtml);

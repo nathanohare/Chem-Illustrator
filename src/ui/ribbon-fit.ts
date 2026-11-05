@@ -31,8 +31,11 @@ function foldButton(g: HTMLElement): HTMLButtonElement {
   // the group's first picture over its name, like a big button, so a folded group is never a bare word
   const pic = g.querySelector('.rb-icon, button svg');
   const icon = `<span class="rb-icon">${!pic ? GENERIC_GROUP : pic.classList.contains('rb-icon') ? pic.innerHTML : pic.outerHTML}</span>`;
-  b.innerHTML = `${icon}<span class="rb-fold-name">${name.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)} <span aria-hidden="true">▾</span></span>`;
+  // (the name shows under the group, as every group's does; the button itself shows it only where
+  // groups have no names under them, the Canvas's Simplified ribbon)
+  b.innerHTML = `${icon}<span class="rb-fold-name"><span class="rb-fold-text">${name.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)} </span><span aria-hidden="true">▾</span></span>`;
   b.title = `${name}: show this group's buttons`;
+  b.setAttribute('aria-label', name);
   b.setAttribute('aria-expanded', 'false');
   b.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -59,7 +62,8 @@ function closePopped(): void {
   }
 }
 
-const overflows = (row: HTMLElement) => row.scrollWidth > row.clientWidth + 1;
+// (strictly: a row one pixel too wide already shows a scroll bar)
+const overflows = (row: HTMLElement) => row.scrollWidth > row.clientWidth;
 
 /** A gallery's choices that can be left out when room is short (all but the first three and More). */
 const galleryExtras = (row: HTMLElement) =>
@@ -74,31 +78,39 @@ const canShrink = (g: HTMLElement) => {
 };
 
 /**
- * Fit one row of groups to its width, as Office does: fewer gallery choices; then, from the right,
- * large buttons become small ones with their words; then words off (icons only); then groups
- * folded into one button each.
+ * Fit one row of groups to its width, as Office does: fewer gallery choices; then the Format
+ * Favorites gallery folds; then, from the right, large buttons become small ones with their words;
+ * then words off (icons only); then groups folded into one button each; the first group (Clipboard)
+ * last of all.
  */
 export function fitRow(row: HTMLElement): void {
   if (!row.clientWidth) return;
   const groups = groupsOf(row);
   for (const g of groups) g.classList.remove('rb-small', 'rb-compact', 'rb-folded', 'rb-popped');
+  const fold = (g: HTMLElement) => { foldButton(g); g.classList.add('rb-folded'); };
+  // a group with nothing in it yet (Format Favorites before the first is saved) is only its button
+  for (const g of groups) if (g.classList.contains('rb-fold-always')) fold(g);
   const extras = galleryExtras(row);
   for (const x of extras) x.classList.remove('rb-gal-out');
   if (!overflows(row)) return;
   for (let i = extras.length - 1; i >= 0 && overflows(row); i--) extras[i].classList.add('rb-gal-out');
   if (!overflows(row)) return;
+  // then the groups that go first (Format Favorites), before any other group gives up anything
+  const first = groups.filter((g) => g.classList.contains('rb-fold-first'));
+  for (let i = first.length - 1; i >= 0 && overflows(row); i--) fold(first[i]);
+  if (!overflows(row)) return;
   for (let i = groups.length - 1; i >= 0 && overflows(row); i--) if (canShrink(groups[i])) groups[i].classList.add('rb-small');
   if (!overflows(row)) return;
-  for (let i = groups.length - 1; i >= 0 && overflows(row); i--) groups[i].classList.add('rb-compact');
-  // the first group (Clipboard, usually) keeps its place longest
-  for (let i = groups.length - 1; i >= 1 && overflows(row); i--) {
-    foldButton(groups[i]);
-    groups[i].classList.add('rb-folded');
-  }
+  // the first group (Clipboard, usually) keeps its place and its words longest: Cut, Copy and Format
+  // Painter keep their names, in every mode, until every other group has given up its words and folded
+  for (let i = groups.length - 1; i >= 1 && overflows(row); i--) groups[i].classList.add('rb-compact');
+  for (let i = groups.length - 1; i >= 1 && overflows(row); i--) fold(groups[i]);
+  if (overflows(row)) groups[0]?.classList.add('rb-compact');
   // folding a wide group (Styles) can make room for a narrow one folded before it: open those back up
-  for (let i = groups.length - 1; i >= 1; i--) {
-    const g = groups[i];
-    if (!g.classList.contains('rb-folded')) continue;
+  // (the groups that fold first open last; one with nothing in it stays folded)
+  const reopen = groups.slice(1).reverse();
+  for (const g of [...reopen.filter((x) => !x.classList.contains('rb-fold-first')), ...reopen.filter((x) => x.classList.contains('rb-fold-first'))]) {
+    if (!g.classList.contains('rb-folded') || g.classList.contains('rb-fold-always')) continue;
     g.classList.remove('rb-folded');
     if (overflows(row)) g.classList.add('rb-folded');
   }
