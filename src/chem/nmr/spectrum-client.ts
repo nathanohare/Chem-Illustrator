@@ -31,12 +31,12 @@ function start(): Worker | null {
 }
 
 /** The spectrum, simulated in the background; null when no worker can run. */
-export function spectrumInBackground(g: JGraph, h1: number[], codes: string[], sf: number, quality: NmrQuality, pj?: ProtonJ[]): Promise<PredictedSpectrum> | null {
+export function spectrumInBackground(g: JGraph, h1: number[], codes: string[], sf: number, quality: NmrQuality, pj?: ProtonJ[], gap?: Record<number, number>): Promise<PredictedSpectrum> | null {
   const w = start();
   if (!w) return null;
   const id = next++;
   return new Promise((resolve, reject) => {
     waiting.set(id, { resolve, reject });
-    w.postMessage({ id, g, h1, codes, sf, quality, pj } satisfies SpectrumRequest);
+    w.postMessage({ id, g, h1, codes, sf, quality, pj, gap } satisfies SpectrumRequest);
   });
 }

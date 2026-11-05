@@ -114,6 +114,7 @@ the second score.
 | Simulation | `src/chem/nmr/spin.ts` | exact spin simulation, a TypeScript port of Open-NMR's `nmrsuite.spin` (BSD-3); parity test `tests/nmr-spin.test.ts` against nmrsuite line lists |
 | Score | `j_dump.ts` (esbuild bundle, Node) then `j_bench.py records-v1.jsonl j-out.jsonl` | multiplicity exact-match rate and J errors against published signals, matched through predicted shifts |
 | 3-D couplings | `src/chem/nmr/karplus.ts`; scored by `j3d_bench.ts` (esbuild bundle, Node) | Haasnoot–de Leeuw–Altona 3JHH per conformer, averaged over populations (Accurate setting); scored on the Dickson et al. 2025 measured couplings (Analyst, doi 10.1039/d5an00240k; ESI read locally, not kept here) |
+| Diastereotopic CH2 split | `src/chem/nmr/proton3d.ts` (`ch2Splits`); data from `proton3d_dump.ts` (3-D terms per CH2) and `proton3d_topo.ts` (the app's structure features), fit by `proton3d_fit.py TERMS TOPO public/nmr/nmr-ch2split.json` | gradient-boosted trees predict the SIZE of the gap between the two protons of a diastereotopic CH2 (Accurate setting); which proton is downfield is not predicted |
 
 Results (2026-11-03, SI test set v1, CDCl3, compounds under 500 Da; thresholds chosen on the first 400
 compounds, scored on the other 1,156): multiplicity exact for 61% of first-order signals (s 79%, d 65%,
@@ -124,3 +125,9 @@ t 73%, dd 17%), J median error 0.5 Hz, 69% within 1 Hz. Simulation speed: 8 coup
 products and drugs): mean absolute error 0.58 Hz for HLA on the authors' DFT conformers and
 populations, 0.85 Hz on the app's own OpenChemLib/MMFF94s+ conformers, 0.92 Hz for the authors'
 DFT couplings, and 3.55 Hz for the 2-D rules.
+
+Diastereotopic CH2 split (2026-11-05, NMRShiftDB2 training, 3,441 CH2 with two different shifts; SI
+test set: 909 compounds, 2,593 diastereotopic CH2): mean absolute error for the CH2 protons 0.132 ->
+0.126 ppm and for all C-H 0.1073 -> 0.1054 ppm (bootstrap 95% CI of the gain 0.0015 to 0.0024).
+Direction (which proton is downfield) was tested on the Dickson 2025 assigned pairs and reached only
+about 70% with simple 3-D terms, so the rows are ordered by shift with no Ha/Hb labels.

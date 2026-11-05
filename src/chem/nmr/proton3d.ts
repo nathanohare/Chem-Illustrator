@@ -173,3 +173,92 @@ export function splitPairs(terms: Map<number, number[]>, model: Model3d, weights
   }
   return out;
 }
+
+/** Structure features of a CH2 carbon for the split (heavy-atom graph of the model). */
+export const CH2_TOPO = ['ring', 'ringSize', 'stereoDist', 'stereoCount', 'aromaticNb', 'carbonylNb', 'nosNb', 'halogenNb', 'heavy'] as const;
+
+export function ch2Topology(model: Pick<Model3d, 'atoms' | 'bonds'>, c: number, stereo: number[]): number[] {
+  const z = model.atoms.map((a) => a.z);
+  const nb: number[][] = z.map(() => []);
+  const arom = new Set<number>(), dbl = new Map<number, number[]>();
+  for (const b of model.bonds) {
+    if (z[b.a] === 1 || z[b.b] === 1) continue;
+    nb[b.a].push(b.b); nb[b.b].push(b.a);
+    if (b.aromatic) { arom.add(b.a); arom.add(b.b); }
+    else if (b.order === 2) { dbl.set(b.a, [...(dbl.get(b.a) ?? []), b.b]); dbl.set(b.b, [...(dbl.get(b.b) ?? []), b.a]); }
+  }
+  // graph distances from c
+  const dist = new Map([[c, 0]]);
+  let front = [c];
+  while (front.length) {
+    const next: number[] = [];
+    for (const a of front) for (const k of nb[a]) if (!dist.has(k)) { dist.set(k, dist.get(a)! + 1); next.push(k); }
+    front = next;
+  }
+  // smallest ring through c: shortest path between two of its neighbours that avoids c
+  let ring = 0;
+  for (let i = 0; i < nb[c].length; i++) {
+    const seen = new Map([[nb[c][i], 0]]);
+    let f = [nb[c][i]];
+    while (f.length && !ring) {
+      const nx: number[] = [];
+      for (const a of f) for (const k of nb[a]) {
+        if (k === c || seen.has(k)) continue;
+        seen.set(k, seen.get(a)! + 1);
+        nx.push(k);
+      }
+      f = nx;
+    }
+    for (let j = i + 1; j < nb[c].length; j++) {
+      const d = seen.get(nb[c][j]);
+      if (d !== undefined && (!ring || d + 2 < ring)) ring = d + 2;
+    }
+  }
+  const sd = stereo.filter((s) => s !== c).map((s) => dist.get(s) ?? 99);
+  const ns = nb[c];
+  return [
+    ring ? 1 : 0, ring, sd.length ? Math.min(9, ...sd) : 9, stereo.length,
+    ns.filter((k) => arom.has(k)).length,
+    ns.filter((k) => z[k] === 6 && (dbl.get(k) ?? []).some((o) => z[o] === 8)).length,
+    ns.filter((k) => z[k] === 7 || z[k] === 8 || z[k] === 16).length,
+    ns.filter((k) => z[k] === 9 || z[k] === 17 || z[k] === 35 || z[k] === 53).length,
+    z.filter((x) => x > 1).length,
+  ];
+}
+
+/** Model input for one CH2: |difference| and mean of its two protons' terms, then its structure features. */
+export function ch2Features(fa: number[], fb: number[], topo: number[]): number[] {
+  return [...fa.map((v, k) => Math.abs(v - fb[k])), ...fa.map((v, k) => (v + fb[k]) / 2), ...topo];
+}
+
+/**
+ * Gradient-boosted trees for the size of the split (scripts/nmr/proton3d_fit.py, NMRShiftDB2):
+ * per tree, nodes as parallel arrays (feature, threshold, left, right, value; feature -1 = leaf).
+ */
+export interface Ch2SplitTrees { base: number; max: number; trees: { f: number[]; t: number[]; l: number[]; r: number[]; v: number[] }[] }
+
+export function treeSplit(m: Ch2SplitTrees, x: number[]): number {
+  let s = m.base;
+  for (const t of m.trees) {
+    let n = 0;
+    while (t.f[n] >= 0) n = x[t.f[n]] <= t.t[n] ? t.l[n] : t.r[n];
+    s += t.v[n];
+  }
+  return Math.max(0, Math.min(m.max, s));
+}
+
+/**
+ * The predicted gap (ppm) between the two protons of each diastereotopic sp3 CH2, keyed by model
+ * atom. Which proton is downfield is not predicted (not reliable yet), only how far apart they are.
+ */
+export function ch2Splits(model: Model3d, trees: Ch2SplitTrees): Map<number, number> {
+  const out = new Map<number, number>();
+  if (!model.diaCH2?.length) return out;
+  const terms = protonTerms(model);
+  for (const c of model.diaCH2) {
+    const hs = model.bonds.map((b) => (b.a === c ? b.b : b.b === c ? b.a : -1)).filter((k) => k >= 0 && model.atoms[k].z === 1);
+    if (hs.length !== 2 || !terms.has(hs[0]) || !terms.has(hs[1])) continue;
+    out.set(c, treeSplit(trees, ch2Features(terms.get(hs[0])!, terms.get(hs[1])!, ch2Topology(model, c, model.stereo ?? []))));
+  }
+  return out;
+}

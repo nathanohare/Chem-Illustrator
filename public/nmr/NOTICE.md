@@ -25,4 +25,8 @@ are a produced work of those sources and carry the same credits.
   from NMRexp (CC BY 4.0), DOI 10.5281/zenodo.17296666. Used to train the networks only; no records
   are included in the app.
 
+`nmr-ch2split.json` holds decision trees (numbers only) that predict the gap between the two
+protons of a diastereotopic CH2, trained by `scripts/nmr/proton3d_fit.py` on NMRShiftDB2 shifts. It is a
+produced work of NMRShiftDB2 and carries the same nmrshiftdb2 Database License and credit.
+
 No text from any article is included. Papers in the project's NMR test set were left out.
