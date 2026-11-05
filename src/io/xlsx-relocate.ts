@@ -187,6 +187,9 @@ export function restoreSheet(
     const c = m.col(col);
     if (c !== null) s.setColStyle(c, { ...s.colStyles.get(c), chem: true });
   }
+  // cells with formatting of their own in a chemistry column are chemistry too
+  const chemCols = new Set(ms.chemCols.map((col) => m.col(col)).filter((c): c is number => c !== null));
+  if (chemCols.size) for (const [k, c] of [...s.cells]) if (c.style && c.style.chem === undefined && chemCols.has(colOf(k))) s.setCell(rowOf(k), colOf(k), { ...c, style: { ...c.style, chem: true } });
   // property columns, with their formulas' references moved as Excel moved the cells
   for (const { col, def } of ms.defs) {
     // it starts under its header row, wherever that went (rows put in under the header are in the table)
