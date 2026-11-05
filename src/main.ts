@@ -12923,8 +12923,42 @@ function fitTools(): void {
     const over = () => (floating ? box.scrollHeight > box.clientHeight + 1 : across ? c.scrollWidth > dock.clientWidth - 16 : tall() > room + 1);
     for (let f = (across ? s.cols : s.rows) - 1; f >= 1 && over(); f--) layCells(c, f);
   }
+  scrollMainTools();
   settleDocks();
   fadeDocks();
+}
+
+/**
+ * The drawing tools stay two columns wide in every mode and dock, and scroll inside their own box
+ * when the window is too short for them. Whether they scroll is judged against the room the window
+ * has in its busiest mode (as wrapping is, above), and the box then keeps room for its scroll bar
+ * in every mode, so it never widens or narrows as a ribbon tab, a selection or the mode changes.
+ */
+function scrollMainTools(): void {
+  const box = document.querySelector<HTMLElement>('.toolbox[data-id="main"]');
+  const body = box?.querySelector<HTMLElement>(':scope > .tb-body');
+  if (!box || !body) return;
+  // (scrolling the tools takes a fly-out away from its button)
+  body.onscroll = () => toolbar.close();
+  const dock = box.parentElement!;
+  const across = dock.classList.contains('dock-h');
+  const floating = box.classList.contains('floating');
+  // floating, the box ends above the window's foot (it scrolls from there)
+  if (floating) box.style.maxHeight = `${Math.max(120, Math.round(innerHeight - Math.max(0, box.getBoundingClientRect().top) - 8))}px`;
+  else box.style.removeProperty('max-height');
+  let scrolls = false;
+  if (!box.classList.contains('collapsed') && !across) {
+    const own = box.offsetHeight - body.clientHeight + body.scrollHeight;
+    if (floating) scrolls = own > parseFloat(box.style.maxHeight);
+    else {
+      const kids = [...dock.children].filter((el): el is HTMLElement => el instanceof HTMLElement && el.offsetParent !== null);
+      const gap = parseFloat(getComputedStyle(dock).rowGap) || 0, pad = parseFloat(getComputedStyle(dock).paddingTop) + parseFloat(getComputedStyle(dock).paddingBottom);
+      const tall = kids.reduce((h, el) => h + (el === box ? own : el.offsetHeight), 0) + gap * Math.max(0, kids.length - 1) + pad;
+      scrolls = tall > innerHeight - SIDE_DOCK_CHROME + 1;
+    }
+    scrolls ||= body.scrollHeight > body.clientHeight + 1;
+  }
+  box.classList.toggle('tb-scrolls', scrolls);
 }
 /**
  * Let the docks down the sides measure their width afresh. A dock squeezed or overfilled for a
@@ -12932,7 +12966,7 @@ function fitTools(): void {
  * bar's width after the bar went: the toolbox stayed wider and the work moved over (a jump).
  */
 function settleDocks(): void {
-  const docks = [...document.querySelectorAll<HTMLElement>('.dock-v')];
+  const docks = [...document.querySelectorAll<HTMLElement>('.dock-v, .toolbox[data-id="main"] > .tb-body')];
   for (const d of docks) d.style.overflowY = 'hidden';
   void document.body.offsetWidth;
   for (const d of docks) d.style.removeProperty('overflow-y');

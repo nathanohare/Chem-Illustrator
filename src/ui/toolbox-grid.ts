@@ -208,6 +208,30 @@ export function oneColumn(g: Grid): Grid {
   return inside.length ? { ...out, lines: inside } : out;
 }
 
+/**
+ * A grid at most `cols` columns wide (the drawing tools never take more than two): its buttons in
+ * reading order, gaps left out, each group between lines starting a row of its own with its line
+ * above it. A grid already that narrow comes back as it is.
+ */
+export function narrowed(g: Grid, cols: number): Grid {
+  const n = clampInt(cols, 1, MAX_COLS);
+  if (g.cols <= n) return g;
+  const starts = [0, ...(g.lines ?? []).filter((r) => r > 0 && r < g.rows).sort((a, b) => a - b), g.rows];
+  const cells: (string | null)[] = [];
+  const lines: number[] = [];
+  for (let i = 0; i + 1 < starts.length; i++) {
+    const group = g.cells.slice(starts[i] * g.cols, starts[i + 1] * g.cols).filter((k): k is string => !!k);
+    if (!group.length) continue;
+    if (cells.length) lines.push(cells.length / n);
+    cells.push(...group, ...Array((n - (group.length % n)) % n).fill(null));
+  }
+  if (!cells.length) return { cols: n, rows: 1, cells: Array(n).fill(null) };
+  const rows = Math.min(MAX_ROWS, cells.length / n);
+  const inside = lines.filter((l) => l > 0 && l < rows);
+  const out: Grid = { cols: n, rows, cells: cells.slice(0, rows * n) };
+  return inside.length ? { ...out, lines: inside } : out;
+}
+
 // ------------------------------------------------------------------ the grid on screen
 
 /** Where a grid shows: how it is turned, and the cells' places before any wrapping. */

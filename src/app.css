@@ -373,6 +373,16 @@ body.cells-raised .tb-cells .tool.active { background: var(--accent-soft); borde
 .tb-modes button[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
 
 .tool-group { display: grid; grid-template-columns: repeat(2, 34px); gap: 1px; }
+/* the drawing tools: two columns in every dock and mode (src/ui/toolboxes.ts MAIN_COLS). When the window
+   is too short for them they scroll inside their own box rather than wrap into more columns, and while
+   they scroll the box keeps room for its scroll bar (src/main.ts scrollMainTools), so its width never
+   changes with a selection or a ribbon tab. Fly-outs open on the page, beside the box, so they are not cut off. */
+.toolbox[data-id='main']:not(.collapsed) { flex-shrink: 1; min-height: 0; }
+.toolbox[data-id='main'].floating:not(.collapsed) { overflow: hidden; }
+.toolbox[data-id='main'] > .tb-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.toolbox[data-id='main'].tb-scrolls > .tb-body { scrollbar-gutter: stable; }
+.dock-h > .toolbox[data-id='main'] { flex-shrink: 1; min-width: 0; }
+.dock-h > .toolbox[data-id='main'] > .tb-body { overflow: auto hidden; min-width: 0; }
 /* more tools below: the dock fades out at its foot */
 .dock-v.more-below { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); }
 .tool { width: 34px; height: 32px; padding: 0; display: grid; place-items: center; border-color: transparent; background: transparent; }
