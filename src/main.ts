@@ -41,7 +41,7 @@ import { casHtml, casRuns, type CasState } from './ui/cas-panel';
 import { pubchemHtml, pubchemRuns, type PubChemState } from './ui/pubchem-panel';
 import { paragraphPages } from './document/doc-file';
 import { reviewAuthor, setReviewAuthor } from './document/revisions';
-import { analysisHtml, formulaHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, DEFAULT_DESCRIPTORS, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
+import { analysisHtml, adductHtml, ionInfo, formulaHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, DEFAULT_DESCRIPTORS, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
 import { attachedAtoms, attachWhereItIs, defaultGap, nearestStructure, placeAttached, structureSig } from './editor/attached';
 import { repeatGroups, lipDirection } from './chem/polymer';
 import { rGroupsOf, substituted, rowNumbers, parseRows, rGroupCells, type RowMass } from './chem/rgroup';
@@ -716,7 +716,7 @@ const canvasRibbon = new CanvasRibbon({
 }, $('#sheet-ribbon'));
 const analysisBox = new AnalysisBox($('#analysis-section'));
 const warningsBox = new WarningsBox($('#warnings-section'));
-canvasRibbon.bodyEnd.append(analysisBox.button);
+canvasRibbon.bodyEnd.append(analysisBox.el);
 canvasRibbon.tabEnd.append(warningsBox.button);
 canvasRibbon.el.addEventListener('cr-tab', () => fitRibbons());
 
@@ -11304,7 +11304,7 @@ async function runAnalysis(force: boolean): Promise<void> {
   const panel = $('#analysis-body');
   if (!frags.length) {
     panel.innerHTML = '<p class="muted" title="Or select text read as chemistry, such as BF4⁻ or DMAP, or draw a structure.">Select a structure to see its formula and masses.</p>';
-    analysisBox.set(null, null);
+    analysisBox.set(null);
     return;
   }
   const seq = ++analysisSeq;
@@ -11343,9 +11343,16 @@ async function runAnalysis(force: boolean): Promise<void> {
   // once the namer is running, every structure analysed gets its name without asking
   if (namer.ready) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !nameStates.has(r.smiles)) void nameForPanel(r.smiles, exports[i].molblock); });
   saySelection(results);
-  // the ribbon's one line: the first structure's formula and weight (and how many more)
-  const first = results.find((r) => !r.error && r.formula);
-  analysisBox.set(first ? formulaHtml(first.formula) + (results.length > 1 ? ` <span class="muted">+${results.length - 1}</span>` : '') : null, first ? first.mw.toFixed(2) : null, first ? first.exact.toFixed(4) : null);
+  // the ribbon's Analysis box: the first structure's formula (and how many more), weight, exact mass and m/z
+  const firstAt = results.findIndex((r) => !r.error && r.formula);
+  const first = firstAt >= 0 ? results[firstAt] : null;
+  const firstIon = first && !polymers[firstAt] && !rGroupNames(frags[firstAt]).length ? ionInfo(first, adductSel.value) : null;
+  analysisBox.set(first ? {
+    formula: formulaHtml(first.formula) + (results.length > 1 ? ` <span class="muted">+${results.length - 1}</span>` : ''),
+    mw: first.mw.toFixed(2),
+    exact: first.exact.toFixed(4),
+    ion: firstIon ? { label: adductHtml(firstIon.adduct.label), mz: firstIon.mz.toFixed(4) } : null,
+  } : null);
   panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
   updatePanels();
 }

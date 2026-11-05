@@ -1774,25 +1774,41 @@ body.mode-window .canvas-ribbon .rb-tabs button.cr-warnings.has { color: #fff; }
 .cr-warnings .cr-ok { color: #2e9e5b; font-weight: 700; }
 body.mode-window .cr-warnings .cr-ok { color: #7ddc9a; }
 .cr-body-end { margin-left: auto; display: flex; align-items: center; padding: 0 4px 0 12px; flex: none; }
+.cr-an-group { display: flex; flex-direction: column; align-self: stretch; }
 .ribbon button.cr-analysis { display: inline-flex; align-items: center; gap: 8px; width: 210px; height: 28px; padding: 0 6px 0 8px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--bg); text-align: left; }
 .ribbon button.cr-analysis:hover, .ribbon button.cr-analysis.open { border-color: var(--accent); background: var(--bg); }
 .cr-analysis .cr-an-f { font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cr-analysis .cr-an-f.muted { font-weight: 400; color: var(--muted); }
-.cr-analysis .cr-an-mw, .cr-analysis .cr-an-ex { color: var(--muted); font-family: var(--mono-font); font-size: 11.5px; white-space: nowrap; }
-.cr-analysis .cr-an-k { margin-right: 5px; font-family: var(--ui-font, inherit); font-size: 10.5px; letter-spacing: 0.03em; }
-.cr-analysis .cr-chev { margin-left: auto; }
-/* Classic: a box of three lines (formula, weight, exact mass), the height of the two rows of buttons */
-.canvas-ribbon.cr-classic button.cr-analysis { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: repeat(3, 16px); align-content: center; row-gap: 0; column-gap: 6px; width: 180px; height: 54px; padding: 1px 6px 1px 9px; }
-.canvas-ribbon.cr-classic .cr-analysis .cr-an-f { grid-row: 1; grid-column: 1; height: 17px; line-height: 15px; }
 .cr-analysis .cr-an-f sub { line-height: 0; }
-.canvas-ribbon.cr-classic .cr-analysis .cr-an-mw { grid-row: 2; grid-column: 1; line-height: 16px; }
-.canvas-ribbon.cr-classic .cr-analysis .cr-an-ex { grid-row: 3; grid-column: 1; line-height: 16px; }
-.canvas-ribbon.cr-classic .cr-analysis .cr-chev { grid-row: 1 / 4; grid-column: 2; align-self: center; }
-/* Simplified: one line, formula and weight */
-.canvas-ribbon.cr-simple .cr-analysis .cr-an-ex, .canvas-ribbon.cr-simple .cr-analysis .cr-an-k { display: none; }
-/* the Simplified ribbon has room for one line: say "part" after the weight there */
-/* a narrow window: the Classic box slims so it stays inside the ribbon (it was cut off at 1024 px) */
-@media (max-width: 1150px) { .canvas-ribbon.cr-classic button.cr-analysis { width: 136px; } }
+.cr-analysis .cr-an-row { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.cr-analysis .cr-an-v { font-family: var(--mono-font); color: var(--text); }
+.cr-analysis .cr-an-k sup { font-size: 0.75em; line-height: 0; }
+.cr-analysis .cr-chev { margin-left: auto; }
+.cr-an-label { display: flex; align-items: center; justify-content: center; gap: 2px; }
+.cr-an-label > button { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 14px; padding: 0; border: 0; border-radius: 2px; background: transparent; color: var(--muted); }
+.cr-an-label > button:hover { background: var(--accent-soft); color: var(--accent); }
+.cr-an-label > .cr-an-more { margin-left: 2px; }
+.cr-an-label > .cr-an-pop svg { width: 11px; height: 11px; }
+/* Full-size (Classic): a group of its own at the end of Home, its name under it like the others:
+   the formula, then Mol. wt., Exact mass and m/z in two columns */
+.canvas-ribbon.cr-classic .cr-body-end { align-self: stretch; padding: 0 2px 0 0; border-left: 1px solid var(--rb-divider); }
+.canvas-ribbon.cr-classic .cr-an-group { padding: 0 6px; }
+.canvas-ribbon.cr-classic button.cr-analysis { flex: 1 1 auto; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: 20px; grid-auto-rows: 16px; align-content: center; row-gap: 0; column-gap: 12px; width: 196px; height: auto; min-height: 0; overflow: hidden; padding: 0 4px; border-color: transparent; background: transparent; }
+.canvas-ribbon.cr-classic button.cr-analysis:hover, .canvas-ribbon.cr-classic button.cr-analysis.open { border-color: transparent; background: var(--accent-soft); }
+.canvas-ribbon.cr-classic .cr-analysis .cr-an-f { grid-column: 1 / -1; height: 20px; font-size: 14px; line-height: 18px; }
+.canvas-ribbon.cr-classic .cr-analysis .cr-an-row { display: contents; }
+.canvas-ribbon.cr-classic .cr-analysis .cr-an-row:empty { display: none; }
+.canvas-ribbon.cr-classic .cr-analysis .cr-an-k { line-height: 16px; }
+.canvas-ribbon.cr-classic .cr-analysis .cr-an-v { text-align: right; line-height: 16px; }
+.canvas-ribbon.cr-classic .cr-analysis .cr-chev { display: none; }
+/* Simplified: one line, formula and weight (MW), no group name */
+.canvas-ribbon.cr-simple .cr-an-label, .canvas-ribbon.cr-simple .cr-analysis .cr-an-ex, .canvas-ribbon.cr-simple .cr-analysis .cr-an-mz { display: none; }
+.canvas-ribbon.cr-simple .cr-an-group { justify-content: center; }
+.canvas-ribbon.cr-simple .cr-analysis .cr-an-k { margin-right: 5px; font-size: 0; letter-spacing: 0.03em; }
+.canvas-ribbon.cr-simple .cr-analysis .cr-an-k::before { content: attr(data-short); font-size: 10.5px; }
+.canvas-ribbon.cr-simple .cr-analysis .cr-an-v { color: var(--muted); }
+/* a narrow window: the Classic group slims so it stays inside the ribbon (it was cut off at 1024 px) */
+@media (max-width: 1150px) { .canvas-ribbon.cr-classic button.cr-analysis { width: 168px; column-gap: 6px; } .canvas-ribbon.cr-classic .cr-analysis .cr-an-row, .canvas-ribbon.cr-classic .cr-analysis .cr-an-f { font-size: 11px; } }
 .cr-chev { margin-left: auto; color: var(--muted); display: inline-flex; }
 /* their drop-downs: the side panel's own section, lent */
 .cr-pop { position: fixed; z-index: 60; width: 340px; overflow: auto; padding: 2px 10px 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: 0 6px 18px rgb(0 0 0 / 0.18); font-size: var(--fs-sm); }
