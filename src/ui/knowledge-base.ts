@@ -1,6 +1,8 @@
 // The Knowledge Base window (Chemistry > Knowledge Base…, in every mode): reference tables to look
 // things up in while working, without a drawing. One search box finds rows by name, CAS number,
-// formula or SMILES, and a number typed alone (2.17) finds the chemical shifts near it. Each table
+// formula or SMILES, and a number typed alone (2.17) finds the chemical shifts near it. A SMILES
+// (typed, or the structure selected in the drawing) finds that compound and then every compound
+// containing it. Each table
 // can be filtered by a column (Solvent, Kind), sorted by any column, and copied to paste into a
 // sheet or document. Every abbreviation shows what it means when the mouse rests on it.
 //
@@ -18,6 +20,8 @@ import { templateIcon } from './template-icons';
 import { svgNode } from './svg-node';
 import { prettyChem } from '../kb/pretty';
 import type { Template } from '../chem/templates';
+import type { Contents } from '../model';
+import { ICONS } from '../icons';
 
 /** A structure picture in a table cell, in pixels. */
 const PIC = 48;
@@ -71,8 +75,9 @@ function cellExplained(text: string, list: boolean, nuclei = false): DocumentFra
   return f;
 }
 
-/** A table's Solvent filter column (an impurity table's NMR solvent), if it has one. */
+/** A table's NMR solvent filter column (an impurity table's), if it has one: a table of shifts with a Solvent column. */
 function solventColumn(t: KbTable): KbColumn | undefined {
+  if (!t.columns.some((c) => c.shift)) return undefined;
   return t.columns.find((c) => c.filter === true && /^(nmr )?solvent$/i.test(c.label));
 }
 
@@ -111,7 +116,37 @@ export interface KnowledgeBaseHost {
   cidForCas?(cas: string): Promise<number | null>;
   /** A compound's hazard record read live from PubChem (a name, CAS number or SMILES), or null. */
   lookUpSafety?(query: string): Promise<SafetyRecord | null>;
+  /** Which of these SMILES contain the structure (a substructure search): their indexes, or null when the engine isn't ready. */
+  contains?(query: string, smiles: string[]): Promise<number[] | null>;
+  /** The SMILES of the structure selected in the drawing, or a sentence saying why there is none. */
+  selected?(): Promise<{ smiles: string } | string>;
+  /** Drawing the structure to search for with the program's drawing tools (the Draw window). */
+  drawing?: KbDrawing;
 }
+
+/** The program's drawing tools, working in the Draw window's box. */
+export interface KbDrawing {
+  /** Draw `contents` (null: start empty) in the box `area` gives the place of on screen; `done` hears the drawing when it ends (null: cancelled). */
+  start(contents: Contents | null, area: () => DOMRect | null, done: (c: Contents | null) => void): void;
+  /** End the drawing: true keeps it (Search), false cancels. */
+  finish(keep: boolean): void;
+  /** Pick a drawing tool by name (bond-single, ring-benzene, eraser…), or an element by its atomic number. */
+  tool(t: string | number): void;
+  /** The tool in use (the element tool as its element's atomic number), to light its button. */
+  current(): string | number;
+  /** The structure selected in the drawing (read before the Draw window opens), or a sentence saying why there is none. */
+  selection(): Contents | string;
+  /** A drawing's SMILES (several structures joined by "."), or a sentence saying why it can't be read. */
+  smiles(c: Contents): Promise<{ smiles: string } | string>;
+}
+
+/** The Draw window's tools: bonds, rings, a chain and the eraser, then common elements. */
+const DRAW_TOOLS: [string, string][] = [
+  ['bond-single', 'Single bond'], ['bond-double', 'Double bond'], ['bond-triple', 'Triple bond'], ['bond-wedge', 'Wedged bond'], ['bond-hashWedge', 'Hashed wedged bond'],
+  ['ring-benzene', 'Benzene ring'], ['ring-6', 'Cyclohexane ring'], ['ring-5', 'Cyclopentane ring'], ['chain', 'Chain'], ['eraser', 'Eraser'],
+];
+const DRAW_ATOMS: [string, number][] = [['C', 6], ['H', 1], ['N', 7], ['O', 8], ['S', 16], ['P', 15], ['F', 9], ['Cl', 17], ['Br', 35], ['I', 53]];
+const DRAW_INFO = 'Draw the structure, or the part of one, to look for: with these buttons, the toolbox and the usual keys (point at an atom and type N, O, Cl…). Search finds that compound, then every compound containing it, in every table. The drawing is kept: Draw… opens it again to change it. Use Selected starts from the structure selected in the drawing.';
 
 export { looksLikeSmiles };
 
@@ -139,12 +174,26 @@ export class KnowledgeBaseWindow {
   private canon = new Map<string, string | null>();
   /** The canonical form of the SMILES typed, when the search is one. */
   private queryCanon: string | null = null;
+  /** The rows' SMILES that contain the structure searched for (null: not looked for yet). */
+  private containing: Set<string> | null = null;
+  /** Still looking for the structures containing the one searched for. */
+  private lookingInside = false;
   private searchToken = 0;
   /** Builds more rows of the table showing (as it is scrolled down). */
   private moreRows: ((n?: number) => void) | null = null;
   private loaded = false;
   /** The PubChem compound a CAS number typed belongs to, for rows that carry no CAS number. */
   private casCid: number | null = null;
+  /** The Draw window, while it is open, and its box (where the drawing tools work). */
+  private drawWin: HTMLDivElement | null = null;
+  private drawBox: HTMLDivElement | null = null;
+  /** The drawing searched for last: Draw… opens it again. */
+  private drawn: Contents | null = null;
+  /** The structure selected in the drawing when Draw… was pressed (or why there was none). */
+  private drawSelected: Contents | string = '';
+  /** Each drawing started (a newer one makes the older one's end not count). */
+  private drawToken = 0;
+  private drawLight = 0;
 
   constructor(private host: KnowledgeBaseHost) {}
 
@@ -156,7 +205,7 @@ export class KnowledgeBaseWindow {
     const d = (this.d = el('dialog', { className: 'refs-dialog kb-window' }));
     d.setAttribute('aria-label', 'Knowledge Base');
     d.addEventListener('keydown', (e) => { e.stopPropagation(); });
-    this.search = el('input', { type: 'search', placeholder: 'Name, CAS, SMILES or a shift (2.17)', title: 'Search every table by name, CAS number, SMILES, any word, or a chemical shift (2.17 finds peaks within 0.05 ppm in 1H, 0.5 in 13C)', value: query });
+    this.search = el('input', { type: 'search', placeholder: 'Name, CAS, SMILES or a shift (2.17)', title: 'Search every table by name, CAS number, any word, or a chemical shift (2.17 finds peaks within 0.05 ppm in 1H, 0.5 in 13C). A SMILES finds that compound, then every compound containing it', value: query });
     this.search.setAttribute('aria-label', 'Search the Knowledge Base');
     // a single letter matches most of every table (~110 ms): wait a moment for the next key first
     let wait = 0;
@@ -180,7 +229,9 @@ export class KnowledgeBaseWindow {
     this.count = el('span', { className: 'muted' });
     this.removeBtn = button('Remove Table…', 'Remove the imported table showing (only from this computer)', () => void this.removeImported());
     d.append(
-      el('div', { className: 'refs-head kb-head' }, el('h2', { textContent: 'Knowledge Base' }), el('div', { className: 'kb-top' }, this.title, this.filters), this.search),
+      el('div', { className: 'refs-head kb-head' }, el('h2', { textContent: 'Knowledge Base' }), el('div', { className: 'kb-top' }, this.title, this.filters), this.search,
+        ...(this.host.drawing ? [button('Draw…', 'Draw the structure to search for: that compound, then every compound containing it', () => this.openDraw())]
+          : this.host.selected ? [button('Use Selected', 'Search for the structure selected in the drawing: that compound, then every compound containing it', () => void this.useSelected())] : [])),
       el('div', { className: 'kb-body' },
         this.list,
         el('div', { className: 'kb-main' }, this.wrap, this.sources)),
@@ -193,7 +244,7 @@ export class KnowledgeBaseWindow {
           button('Copy Table', 'Copy the rows showing, to paste into a sheet, a document table, Word or Excel', () => void this.copy()),
           button('Close', '', () => d.close()))),
     );
-    d.addEventListener('close', () => { d.remove(); this.d = null; });
+    d.addEventListener('close', () => { this.closeDraw(true); d.remove(); this.d = null; });
     document.body.append(d);
     this.showList();
     this.showTable();
@@ -265,7 +316,7 @@ export class KnowledgeBaseWindow {
 
   private matches(t: KbTable, withFilters = true): RowMatch[] {
     const filters = withFilters ? this.filtersFor(t) : {};
-    const key = JSON.stringify([t.id, t.personal === true, t.rows.length, this.search.value, this.queryCanon, this.casCid, this.canon.size, filters]);
+    const key = JSON.stringify([t.id, t.personal === true, t.rows.length, this.search.value, this.queryCanon, this.casCid, this.canon.size, this.containing?.size ?? -1, filters]);
     const got = this.matchMemo.get(key);
     if (got) return [...got];
     if (this.matchMemo.size > 200) this.matchMemo.clear();
@@ -275,8 +326,18 @@ export class KnowledgeBaseWindow {
   }
 
   private findMatches(t: KbTable, filters: Record<string, string>): RowMatch[] {
-    const same = this.queryCanon ? new Set(t.rows.filter((r) => typeof r.smiles === 'string' && this.canon.get(r.smiles) === this.queryCanon).map((r) => r.smiles as string)) : undefined;
-    let found = findRows(t, this.queryCanon ? '' : this.search.value, filters, same).filter((m) => !this.queryCanon || same?.has(m.row.smiles as string));
+    // a structure: the same compound first, then the ones containing it
+    if (this.queryCanon) {
+      const same: RowMatch[] = [], inside: RowMatch[] = [];
+      for (const m of findRows(t, '', filters)) {
+        const s = m.row.smiles;
+        if (typeof s !== 'string') continue;
+        if (this.canon.get(s) === this.queryCanon) same.push({ ...m, same: true });
+        else if (this.containing?.has(s)) inside.push({ ...m, same: false });
+      }
+      return [...same, ...inside];
+    }
+    let found = findRows(t, this.search.value, filters);
     // a CAS number typed also finds rows without CAS numbers, by the compound PubChem gives it
     if (this.casCid !== null) {
       const seen = new Set(found.map((m) => m.row));
@@ -293,6 +354,8 @@ export class KnowledgeBaseWindow {
     const q = this.search.value.trim();
     const token = ++this.searchToken;
     this.queryCanon = null;
+    this.containing = null;
+    this.lookingInside = false;
     this.casCid = null;
     if (looksLikeSmiles(q)) void this.smilesSearch(q, token);
     if (isCas(q)) void this.casSearch(q, token);
@@ -303,6 +366,8 @@ export class KnowledgeBaseWindow {
     }
     this.showList();
     this.showTable();
+    // what was found starts at the top
+    this.wrap.scrollTop = 0;
   }
 
   /** A CAS number typed: ask PubChem which compound it is, to find rows that carry no CAS number. */
@@ -346,7 +411,10 @@ export class KnowledgeBaseWindow {
     h.flash(`${r.name}: rated from PubChem's open records. It stays in the table until the program closes.`, 6000);
   }
 
-  /** A SMILES typed: match rows whose structure is the same compound (canonical SMILES equal). */
+  /**
+   * A SMILES typed: match rows whose structure is the same compound (canonical SMILES equal), then
+   * the rows whose structure contains it (a substructure search, shown when it comes back).
+   */
   private async smilesSearch(q: string, token: number): Promise<void> {
     const c = await this.host.canonical(q);
     if (token !== this.searchToken || !c) return;
@@ -355,12 +423,118 @@ export class KnowledgeBaseWindow {
     for (const s of todo) this.canon.set(s, await this.host.canonical(s));
     if (token !== this.searchToken) return;
     this.queryCanon = c;
+    this.lookingInside = !!this.host.contains;
+    this.showFound();
+    if (!this.host.contains) return;
+    const all = [...new Set(this.tables.flatMap((t) => t.rows.map((r) => r.smiles)).filter((s): s is string => typeof s === 'string'))];
+    const hits = await this.host.contains(c, all).catch(() => null);
+    if (token !== this.searchToken) return;
+    this.lookingInside = false;
+    this.containing = new Set((hits ?? []).map((i) => all[i]));
+    this.showFound();
+  }
+
+  /** Show what a search found, moving to a table with matches when the one showing has none. */
+  private showFound(): void {
     if (!this.matches(this.current).length) {
       const other = this.tables.find((t) => this.matches(t, false).length);
       if (other) { this.current = other; this.picked = {}; }
     }
     this.showList();
     this.showTable();
+  }
+
+  /** Draw…: a window with the drawing tools, over the table, to draw the structure to search for. */
+  private openDraw(): void {
+    const dr = this.host.drawing;
+    if (!dr || !this.d || this.drawWin) return;
+    this.drawSelected = dr.selection();
+    const tools = el('div', { className: 'kb-draw-tools', role: 'toolbar' });
+    tools.setAttribute('aria-label', 'Drawing tools');
+    const lit: { b: HTMLButtonElement; t: string | number }[] = [];
+    const tool = (t: string | number, title: string, face: string | null, text = ''): HTMLButtonElement => {
+      const b = el('button', { type: 'button', title, className: typeof t === 'number' ? 'kb-draw-atom' : '' });
+      if (face) b.innerHTML = face; else b.textContent = text;
+      b.addEventListener('click', () => { dr.tool(t); light(); });
+      lit.push({ b, t });
+      return b;
+    };
+    for (const [name, title] of DRAW_TOOLS) tools.append(tool(name, title, ICONS[name] ?? null, title));
+    tools.append(el('span', { className: 'kb-draw-sep' }));
+    for (const [sym, z] of DRAW_ATOMS) tools.append(tool(z, `${sym}: click an atom to make it ${sym}, or empty space to add one`, null, sym));
+    const light = () => { const now = dr.current(); for (const { b, t } of lit) b.classList.toggle('on', t === now); };
+    this.drawBox = el('div', { className: 'kb-draw-box' });
+    const title = el('h3', { className: 'kb-draw-title has-info', textContent: 'Draw a Structure to Search' });
+    title.append(infoIcon(DRAW_INFO));
+    const w = (this.drawWin = el('div', { className: 'kb-draw', role: 'dialog' },
+      el('div', { className: 'kb-draw-head' }, title, button('✕', 'Close without searching (Esc)', () => dr.finish(false))),
+      tools,
+      this.drawBox,
+      el('div', { className: 'kb-draw-foot' },
+        button('Clear', 'Start again with an empty drawing', () => this.restartDrawing(null)),
+        button('Use Selected', 'Start from the structure selected in the drawing', () => {
+          if (typeof this.drawSelected === 'string') this.host.flash(this.drawSelected || 'Select a structure in the drawing before opening Draw.', 6000);
+          else this.restartDrawing(this.drawSelected);
+        }),
+        el('span', { className: 'kb-draw-gap' }),
+        button('Cancel', 'Close without searching (Esc)', () => dr.finish(false)),
+        button('Search', 'Find this compound, then every compound containing it (Ctrl+Enter)', () => dr.finish(true), true))));
+    w.setAttribute('aria-label', 'Draw a Structure to Search');
+    this.d.append(w);
+    this.startDrawing(this.drawn);
+    light();
+    this.drawLight = window.setInterval(light, 250);
+  }
+
+  /** The drawing tools start on `c` in the Draw window's box. */
+  private startDrawing(c: Contents | null): void {
+    const token = ++this.drawToken;
+    const box = this.drawBox;
+    this.host.drawing?.start(c, () => (box?.isConnected ? box.getBoundingClientRect() : null), (got) => { if (token === this.drawToken) void this.drawEnded(got); });
+  }
+
+  /** Clear and Use Selected: the drawing starts again on `c`. */
+  private restartDrawing(c: Contents | null): void {
+    this.drawToken++;
+    this.host.drawing?.finish(false);
+    this.startDrawing(c);
+  }
+
+  /** The drawing ended: Search (with the drawing) or Cancel (null). */
+  private async drawEnded(got: Contents | null): Promise<void> {
+    if (got && !got.atoms.length) {
+      this.host.flash('Draw a structure to search for first.');
+      this.startDrawing(null);
+      return;
+    }
+    this.closeDraw(false);
+    if (!got) return;
+    const r = await this.host.drawing!.smiles(got);
+    if (typeof r === 'string') { this.host.flash(r, 6000); return; }
+    this.drawn = got;
+    if (!this.d) return;
+    this.search.value = r.smiles;
+    this.searchChanged();
+    this.search.focus();
+  }
+
+  /** The Draw window goes (`stop`: the drawing tools are still at work in it, and stop without searching). */
+  private closeDraw(stop: boolean): void {
+    if (!this.drawWin) return;
+    clearInterval(this.drawLight);
+    if (stop) { this.drawToken++; this.host.drawing?.finish(false); }
+    this.drawWin.remove();
+    this.drawWin = this.drawBox = null;
+  }
+
+  /** Use Selected: search for the structure selected in the drawing. */
+  private async useSelected(): Promise<void> {
+    const got = await this.host.selected?.();
+    if (!got) return;
+    if (typeof got === 'string') { this.host.flash(got, 6000); return; }
+    this.search.value = got.smiles;
+    this.searchChanged();
+    this.search.focus();
   }
 
   /** The filters picked, with the remembered NMR solvent in a Solvent column nobody has set yet. */
@@ -416,20 +590,28 @@ export class KnowledgeBaseWindow {
     this.filters.hidden = !this.filters.childElementCount;
     let rows = this.matches(t);
     const sortCol = this.sort && t.columns.find((c) => c.key === this.sort!.key);
-    if (sortCol) rows = sortRows(rows, sortCol, this.sort!.down);
+    // a structure search keeps the same compound above the ones containing it, each sorted
+    if (sortCol) rows = this.queryCanon ? [...sortRows(rows.filter((m) => m.same), sortCol, this.sort!.down), ...sortRows(rows.filter((m) => !m.same), sortCol, this.sort!.down)] : sortRows(rows, sortCol, this.sort!.down);
+    const span = t.columns.filter((c) => !c.hidden).length + (t.links ? 1 : 0);
+    const sameCount = rows.filter((m) => m.same).length;
     // the first rows straight away and the rest as the table is scrolled down: building every
     // row of a big table (Reagent Safety, Solubility) on each key typed took most of a second
     const body = el('tbody');
     let next = 0;
     this.moreRows = (n = MORE_ROWS) => {
       const end = Math.min(rows.length, next + n);
-      for (; next < end; next++) body.append(this.rowEl(t, rows[next]));
+      for (; next < end; next++) {
+        // a structure search: a heading over the same compound and over the ones containing it
+        if (this.queryCanon && (next === 0 || rows[next].same !== rows[next - 1].same)) body.append(this.groupRow(span, rows[next].same ? `This compound (${sameCount})` : `Containing it (${rows.length - sameCount})`));
+        body.append(this.rowEl(t, rows[next]));
+      }
+      if (this.queryCanon && next === rows.length && this.lookingInside) body.append(this.groupRow(span, 'Looking for compounds containing it…'));
     };
     this.moreRows(FIRST_ROWS);
-    const table = el('table', { className: 'refs-table kb-table' + (t.picture ? ' kb-pictures' : '') }, el('thead', {}, el('tr', {}, ...t.columns.filter((c) => !c.hidden).map((c) => this.header(c)), ...(t.links ? [el('th', { textContent: 'Look up' })] : []))), body);
+    const table = el('table', { className: 'refs-table kb-table' + (t.picture ? ' kb-pictures' : '') + (t.fit ? ' kb-fit' : '') }, el('thead', {}, el('tr', {}, ...t.columns.filter((c) => !c.hidden).map((c) => this.header(c)), ...(t.links ? [el('th', { textContent: 'Look up' })] : []))), body);
     if (!rows.length) {
       const q = this.search.value.trim();
-      const empty = el('p', { className: 'muted kb-empty', textContent: q ? `Nothing in ${t.title} matches “${q}”.` : 'This table is empty.' });
+      const empty = el('p', { className: 'muted kb-empty', textContent: this.lookingInside ? `Looking for compounds containing ${q}…` : this.queryCanon ? `Nothing in ${t.title} is or contains ${q}.` : q ? `Nothing in ${t.title} matches “${q}”.` : 'This table is empty.' });
       // a compound the table doesn't have can be rated live from PubChem
       const live = q && t.id === 'reagent-safety' && this.host.lookUpSafety && !Object.values(this.picked).some(Boolean)
         ? [button(`Rate “${q.length > 40 ? q.slice(0, 39) + '…' : q}” from PubChem`, 'Look the compound up on PubChem and rate it with the same rules, from the same open sources (needs the internet)', () => void this.rateLive(q))]
@@ -451,6 +633,13 @@ export class KnowledgeBaseWindow {
     });
   }
 
+  /** A heading row across the table (a structure search's two groups). */
+  private groupRow(span: number, text: string): HTMLTableRowElement {
+    const th = el('th', { colSpan: span, textContent: text });
+    th.scope = 'rowgroup';
+    return el('tr', { className: 'kb-group' }, th);
+  }
+
   /** One row of the table. */
   private rowEl(t: KbTable, m: RowMatch): HTMLTableRowElement {
     const tr = el('tr');
@@ -465,7 +654,8 @@ export class KnowledgeBaseWindow {
       if (c.picture) {
         const tpl = t.picture?.(m.row);
         td.className = 'kb-pic';
-        { const icon = tpl ? svgNode(templateIcon(tpl, PIC, 14)) : null; if (icon) td.append(icon); }
+        { const icon = tpl ? svgNode(templateIcon(tpl, t.pictureSize ?? PIC, 14)) : null; if (icon) td.append(icon); }
+        if (t.pictureSize) td.style.width = td.style.minWidth = `${t.pictureSize}px`;
         tr.append(td);
         continue;
       }

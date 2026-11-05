@@ -311,6 +311,16 @@ export class Workspace {
   }
 
   /**
+   * The app's drawing was lent to something that isn't the tab's (the Knowledge Base's search
+   * structure, drawn with the drawing tools) and is back: what was drawn meanwhile wasn't a change.
+   */
+  forgetLentChanges(tab: Tab, before: { dirty: boolean; changes: number }): void {
+    tab.seen = this.host.version;
+    tab.changes = before.changes;
+    if (tab.dirty !== before.dirty) { tab.dirty = before.dirty; this.hooks.changed(); }
+  }
+
+  /**
    * Something a drawing's file keeps outside its undo history changed (its guides): the tab has
    * unsaved changes, and AutoSave and recovery copies have something new.
    */

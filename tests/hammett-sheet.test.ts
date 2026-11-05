@@ -93,6 +93,18 @@ describe('HAMMETT in a sheet', () => {
     expect(orthoAsPara('ortho=σp')).toBe(true);
     expect(orthoAsPara('blank')).toBe(false);
     expect(hammettValue({ error: 'x' }, 'F')).toBeInstanceOf(CellError);
+    expect(['sp+', 'σp⁺', 'sigma+', 'σ-', 'sp−', 'sigma_p-', 'sm+'].map(hammettWhat)).toEqual(['spPlus', 'spPlus', 'spPlus', 'spMinus', 'spMinus', 'spMinus', null]);
+  });
+
+  it('gives σp⁺ and σp⁻, and #N/A for a group without one', async () => {
+    const wb = await sheetOf([
+      ['COc1ccc(N)cc1', `=HAMMETT(A1,"sp+",${ANILINE})`, `=HAMMETT(A1,"sp-",${ANILINE})`],
+      ['Nc1ccc(cc1)[N+](=O)[O-]', `=HAMMETT(A2,"σp⁺",${ANILINE})`, `=HAMMETT(A2,"σp⁻",${ANILINE})`],
+      ['Nc1ccc(cc1)S(N)(=O)=O', `=HAMMETT(A3,"sp+",${ANILINE})`, `=HAMMETT(A3,"sp-",${ANILINE})`],
+    ]);
+    const s = wb.sheet;
+    expect([s.value(0, 1), s.value(0, 2), s.value(1, 1), s.value(1, 2), s.value(2, 2)]).toEqual([-0.78, -0.26, 0.79, 1.27, 0.94]);
+    expect(s.value(2, 1)).toBeInstanceOf(CellError);
   });
 
   it('is saved for Excel as its value (Excel has no HAMMETT)', () => {
