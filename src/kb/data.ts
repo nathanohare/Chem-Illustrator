@@ -10,7 +10,7 @@ import { PHYSICAL_CONSTANTS, REAGENT_SAFETY } from './safety-tables';
 import { PKA_TABLE } from './property-tables';
 import { SOLVENTS_TABLE } from './solvents';
 import { ACIDS_TABLE, MISCIBILITY_TABLE } from './lab-tables';
-import { HAMMETT_TABLE } from './hammett';
+import { HAMMETT_TABLE } from './hammett-table';
 
 /** The glossary as a table. */
 export const GLOSSARY_TABLE: KbTable = {
