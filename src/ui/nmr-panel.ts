@@ -219,10 +219,36 @@ export function siText(rows: NmrRow[], solvent: string, mhz = 400): string {
 interface Item { molblock: string; map: number[] }
 
 /** Check Data for one structure: the pasted text, and the result per nucleus. */
+/**
+ * One nucleus's check: the measured list, how it matched, and the predicted rows it was matched
+ * against (`pred`, with `rowIdx` their places in `basis`, the structure's rows at the time). The
+ * rows can change after the check (CH2 protons split once the accurate gaps arrive, or the quality
+ * changes), so the drawing uses `pred`, never the current rows by index (issue #546).
+ */
+export interface CheckEntry { list: MeasuredList; res: CheckResult; pred: PredictedRow[]; rowIdx: number[]; basis: readonly unknown[]; note?: string; trace?: MeasuredSpectrum }
+
+/** The measured list drawn against the prediction in the Spectrum window. */
+export function measuredOverlay(r: CheckEntry, nuc: CheckNucleus, sf: number): MeasuredOverlay {
+  const { list, res, pred } = r;
+  const links = res.rows.filter((m) => m.peak !== null && pred[m.row]).map((m) => ({ m: list.peaks[m.peak!].value, p: pred[m.row].shift, sev: m.status === 'off' ? 'warn' as const : 'ok' as const }));
+  const marks = [
+    ...res.extras.map((e) => {
+      const solvent = e.maybe === 'Water' || e.maybe?.startsWith('Residual');
+      return { ppm: list.peaks[e.peak].value, text: solvent ? (e.maybe === 'Water' ? 'water' : e.maybe!.replace('Residual ', '')) : e.maybe ? `${e.maybe}?` : `extra${nuc === '1H' ? ` ${e.n}H` : ''}`, sev: solvent ? 'info' as const : 'bad' as const };
+    }),
+    ...res.rows.filter((m) => m.status === 'off' && m.peak !== null).map((m) => ({ ppm: list.peaks[m.peak!].value, text: `Δ ${Math.abs(m.delta).toFixed(nuc === '1H' ? 2 : 1)}`, sev: 'warn' as const })),
+    ...res.rows.filter((m) => m.pattern && m.status !== 'off' && m.peak !== null).map((m) => ({ ppm: list.peaks[m.peak!].value, text: `${list.peaks[m.peak!].mult} vs ${pred[m.row]?.mult ?? '?'}`, sev: 'info' as const })),
+  ];
+  if (r.trace) return { trace: { ppm: r.trace.ppm, y: r.trace.y }, links, marks };
+  return nuc === '1H'
+    ? { spec: { sf, lines: measuredLines(list, sf), groups: [] }, links, marks }
+    : { sticks: list.peaks.map((p) => ({ shift: p.value, n: p.n ?? 1 })), links, marks };
+}
+
 interface CheckState {
   text: string;
   editing: boolean;
-  results: Map<CheckNucleus, { list: MeasuredList; res: CheckResult; rowIdx: number[]; note?: string; trace?: MeasuredSpectrum }>;
+  results: Map<CheckNucleus, CheckEntry>;
   /** Spectra opened from files, by nucleus (they take the place of a pasted list of the same nucleus). */
   spectra: Map<CheckNucleus, { sp: MeasuredSpectrum; name: string }>;
 }
@@ -522,7 +548,7 @@ export class NmrPanel {
       const r = st.results.get(n);
       if (!r) continue;
       for (const f of [...(r.note ? [{ severity: 'info' as const, text: r.note }] : []), ...r.res.findings]) {
-        const row = 'row' in f && f.row !== undefined ? ` data-row="${r.rowIdx[f.row]}"` : '';
+        const row = 'row' in f && f.row !== undefined && r.basis === this.shown.get(i)?.rows ? ` data-row="${r.rowIdx[f.row]}"` : '';
         const tools = first ? '<span class="ck-tools"><button type="button" class="ck-edit" title="Change the peak list">Edit</button><button type="button" class="ck-clear" aria-label="Clear the check" title="Clear the check">×</button></span>' : '';
         html += `<li${row}><span class="ck-dot ${sev[f.severity]}"></span><span>${nucs.length > 1 && f === r.res.findings[0] ? `<sup>${n.slice(0, -1)}</sup>${n.slice(-1)}: ` : ''}${esc(f.text)}</span>${tools}</li>`;
         first = false;
@@ -606,7 +632,7 @@ export class NmrPanel {
         }
       }
       const note = list.solvent && list.solvent.toLowerCase() !== this.solvent.toLowerCase() ? `The list is in ${list.solvent}; the prediction is for ${this.solvent}. Pick ${list.solvent} above to compare like with like.` : undefined;
-      st.results.set(list.nuc, { list, res, rowIdx, note, trace });
+      st.results.set(list.nuc, { list, res, pred: rows, rowIdx, basis: s.rows, note, trace });
     }
     st.editing = false;
     if (!this.report && !st.results.has(this.nuc as CheckNucleus)) { this.nuc = st.results.keys().next().value!; this.restyle(d.closest<HTMLElement>('.frag')?.parentElement ?? document.body); }
@@ -618,23 +644,7 @@ export class NmrPanel {
   private overlayFor(i: number, nuc: Nucleus, sf: number): MeasuredOverlay | undefined {
     if (!isCheckNuc(nuc)) return undefined;
     const r = this.checkState(i, false)?.results.get(nuc);
-    if (!r) return undefined;
-    const { list, res } = r;
-    const rows = r.rowIdx.map((k) => this.shown.get(i)!.rows[k]);
-    const pv = (k: number) => (nuc === '1H' ? rows[k].h1!.value : rows[k].c13!.value);
-    const links = res.rows.filter((m) => m.peak !== null).map((m) => ({ m: list.peaks[m.peak!].value, p: pv(m.row), sev: m.status === 'off' ? 'warn' as const : 'ok' as const }));
-    const marks = [
-      ...res.extras.map((e) => {
-        const solvent = e.maybe === 'Water' || e.maybe?.startsWith('Residual');
-        return { ppm: list.peaks[e.peak].value, text: solvent ? (e.maybe === 'Water' ? 'water' : e.maybe!.replace('Residual ', '')) : e.maybe ? `${e.maybe}?` : `extra${nuc === '1H' ? ` ${e.n}H` : ''}`, sev: solvent ? 'info' as const : 'bad' as const };
-      }),
-      ...res.rows.filter((m) => m.status === 'off').map((m) => ({ ppm: list.peaks[m.peak!].value, text: `Δ ${Math.abs(m.delta).toFixed(nuc === '1H' ? 2 : 1)}`, sev: 'warn' as const })),
-      ...res.rows.filter((m) => m.pattern && m.status !== 'off').map((m) => ({ ppm: list.peaks[m.peak!].value, text: `${list.peaks[m.peak!].mult} vs ${rows[m.row].mult}`, sev: 'info' as const })),
-    ];
-    if (r.trace) return { trace: { ppm: r.trace.ppm, y: r.trace.y }, links, marks };
-    return nuc === '1H'
-      ? { spec: { sf, lines: measuredLines(list, sf), groups: [] }, links, marks }
-      : { sticks: list.peaks.map((p) => ({ shift: p.value, n: p.n ?? 1 })), links, marks };
+    return r ? measuredOverlay(r, nuc, sf) : undefined;
   }
 
   /** Which nucleus the spectrum shows: the list's, or 1H beside the peak report. */
