@@ -133,6 +133,8 @@ const WARN = {
   fields: 'Some fields were kept as the text they showed.',
   hidden: 'Hidden text is kept and saved back to Word, but isn\'t shown here.',
   hiddenCells: 'Hidden text in table cells and notes was left out.',
+  moves: 'Text moved while changes were tracked shows as a deletion and an insertion.',
+  propChanges: 'Tracked changes to paragraph, section and table formatting were accepted (changes to text and its formatting are kept).',
 };
 
 type Pos = 'base' | 'sub' | 'sup';
@@ -325,6 +327,7 @@ class DocxReader {
     const hf = this.readHeaderFooter(first).hf;
     this.lastHf = hf;
     this.blocks(kids(body));
+    this.trackedOthers(root);
     this.resolveRefs();
     this.joinBibliographies();
     const out = this.assemble(hf, first);
@@ -398,6 +401,13 @@ class DocxReader {
       Object.assign(p, { hash, salt, alg, spin: Number(this.a(el, 'cryptSpinCount') ?? this.a(el, 'spinCount')) || 100000 });
     }
     return p;
+  }
+
+  /** Tracked changes kept only in part: moves (as a deletion and an insertion), and formatting changes other than to text (accepted). */
+  private trackedOthers(root: Element): void {
+    const has = (name: string) => root.getElementsByTagNameNS(this.W, name).length > 0;
+    if (has('moveFrom') || has('moveTo')) this.warn('moves');
+    if (['pPrChange', 'sectPrChange', 'tblPrChange', 'trPrChange', 'tcPrChange', 'tblGridChange', 'numberingChange', 'tblPrExChange'].some(has)) this.warn('propChanges');
   }
 
   private warn(k: keyof typeof WARN): void {
