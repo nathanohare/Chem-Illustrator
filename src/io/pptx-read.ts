@@ -419,6 +419,7 @@ class Reader {
     const guides = readSlideGuides(root);
     if (guides) view = { ...(view ?? { showGuides: false, snapToGrid: true, grid: 7.2 }), guides };
     const kept = readKeptParts(this.r, { main });
+    if (!ours && this.tagsLost()) this.warnings.add('This file was saved by a program that leaves out Chem Illustrator\'s own data (LibreOffice, for one): its structures came in as pictures, and some text and shapes may look a little different.');
     const settings: DeckSettings = { ...(show ? { show } : {}), ...(customShows.length ? { customShows } : {}), ...(view ? { view } : {}), ...(this.refs?.list.length ? { refs: this.refs } : {}) };
     return {
       size: this.size, master: this.masterOut, slides, warnings: [...this.warnings], design: this.design, ...(sections ? { sections } : {}), ...(Object.keys(settings).length ? { settings } : {}),
@@ -576,6 +577,19 @@ class Reader {
     const img = this.image(this.master.path, pic);
     if (!img) return null;
     return { src: img.src, px: img.px };
+  }
+
+  /**
+   * Whether a structure picture saved here has lost the tags that carry its drawing (a program
+   * other than PowerPoint saved the file and dropped every tag, keeping the picture and its name).
+   */
+  private tagsLost(): boolean {
+    return this.slidePaths.some((path) => {
+      if (!/name="Structure \d+"/.test(this.r.text(path) ?? '')) return false;
+      const doc = this.part(path)?.doc;
+      return !!doc && Array.from(doc.getElementsByTagNameNS(NS.p, 'pic')).some((pic) =>
+        /^Structure \d+$/.test(kid(pic, 'nvPicPr', 'cNvPr')?.getAttribute('name') ?? '') && !kid(pic, 'nvPicPr', 'nvPr', 'custDataLst'));
+    });
   }
 
   /** The text of a shape as plain text (paragraphs on lines of their own). */

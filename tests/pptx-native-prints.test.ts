@@ -175,3 +175,31 @@ describe('charts changed in PowerPoint', () => {
   });
 });
 
+describe('a deck saved by a program that drops every tag (LibreOffice)', () => {
+  it('says its structures came in as pictures', async () => {
+    const drawing: PptxOptions = {
+      ...opts,
+      async picture() { return { svg: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>', png: PNG, box: { x1: 90, y1: 90, x2: 210, y2: 210 } }; },
+    };
+    const host = new Doc();
+    const d = Deck.blank(host);
+    d.attach();
+    d.addSlide('blank');
+    host.edit('x', () => {
+      const ids = Array.from({ length: 6 }, (_, i) => host.addAtom(150 + 30 * Math.cos((i * Math.PI) / 3), 150 + 30 * Math.sin((i * Math.PI) / 3)).id);
+      ids.forEach((a, i) => host.addBond(a, ids[(i + 1) % 6], 1));
+    });
+    const p = unzipSync(await writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: i + 1, layout: s.layout, doc: d.docOf(i), notes: s.notes })) }, drawing));
+    expect(readPptx(rezip(p)).warnings.join(' ')).not.toMatch(/leaves out Chem Illustrator/);
+    // every tag gone, the pictures and their names kept (as LibreOffice 24.2 saves a deck)
+    const lost: Parts = {};
+    for (const [k, v] of Object.entries(p)) {
+      if (/^ppt\/tags\//.test(k)) continue;
+      lost[k] = /\.xml$/.test(k) ? new Uint8Array(strToU8(strFromU8(v).replace(/<p:custDataLst>[\s\S]*?<\/p:custDataLst>/g, ''))) : v;
+    }
+    expect(strFromU8(lost[SLIDE2])).toMatch(/name="Structure \d+"/);
+    const back = readPptx(rezip(lost));
+    expect(back.slides[1].contents.atoms).toHaveLength(0);
+    expect(back.warnings.join(' ')).toMatch(/leaves out Chem Illustrator's own data/);
+  });
+});
