@@ -1643,8 +1643,14 @@ class DocxReader {
           const code = parseInt(this.a(c, 'char') ?? '', 16);
           if (!Number.isFinite(code)) break;
           const font = this.a(c, 'font') ?? '';
+          // a character of another symbol font (Wingdings' check mark): kept in that font, at the
+          // code it has there (U+F020 to U+F0FF, as Word keeps such characters)
+          if (font && !/^symbol$/i.test(font)) {
+            this.emitText(ctx, String.fromCharCode(code >= 0x20 && code <= 0xff ? code + 0xf000 : code), { ...r, font });
+            break;
+          }
           const ch = String.fromCharCode(code >= 0xf000 ? code - 0xf000 : code);
-          this.emitText(ctx, /^symbol$/i.test(font) ? rt.fromSymbolFont(ch) : ch, { ...r, font: ctx.base.font });
+          this.emitText(ctx, font ? rt.fromSymbolFont(ch) : ch, { ...r, font: ctx.base.font });
           break;
         }
         case 'fldChar': this.fieldChar(c, r, ctx); break;
