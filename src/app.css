@@ -1685,6 +1685,9 @@ body.slides-mode #canvas-ribbon, body.design-mode #canvas-ribbon, body.sheet-mod
 .canvas-ribbon .cr-font .cb-font { width: 132px; height: 23px; }
 .canvas-ribbon .cr-font .cb-size { width: 50px; height: 23px; }
 .canvas-ribbon .cr-font .cb-color { width: 26px; height: 21px; margin-left: 2px; }
+/* the Paragraph group's symbols and spacing panels: drop-downs under their buttons, over the drawing */
+.cb-pop { position: fixed; z-index: 110; width: max-content; max-width: min(420px, calc(100vw - 8px)); padding: 4px 6px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); box-shadow: var(--sh-float, 0 4px 14px rgb(0 0 0 / 0.18)); }
+.caption-spacing.cb-pop { grid-template-columns: 1fr; width: 220px; }
 .canvas-ribbon button.cr-minor svg { width: 18px; height: 18px; }
 .canvas-ribbon button.cr-minor .cr-word { font-size: 10px; color: var(--text); padding: 0 3px; }
 .canvas-ribbon button.cr-minor:has(.cr-word) { width: auto; }
@@ -1705,6 +1708,9 @@ body.slides-mode #canvas-ribbon, body.design-mode #canvas-ribbon, body.sheet-mod
 .canvas-ribbon.cr-simple .cr-clipboard .rb-paste-more { height: 26px; }
 .canvas-ribbon.cr-simple .cr-clipboard .rb-col > button { font-size: 0; }
 .canvas-ribbon.cr-simple .cr-clipboard .rb-col > button .rb-lead :is(svg, .ci-ic) { margin-right: 0; }
+/* (and a group folded into one button stays one short button in the row, its picture then its name) */
+.canvas-ribbon.cr-simple .rb-group.rb-folded > .rb-fold-btn { flex-direction: row; align-items: center; align-self: center; gap: 4px; height: 26px; padding: 0 6px; }
+.canvas-ribbon.cr-simple .rb-fold-btn .rb-icon svg { width: 18px; height: 18px; }
 .canvas-ribbon.cr-simple button.cr-major { grid-row: auto; flex-direction: row; gap: 4px; height: 26px; padding: 0 6px; font-size: var(--fs-sm); }
 .canvas-ribbon button.cr-major .cr-line { display: block; }
 .canvas-ribbon.cr-simple button.cr-major .cr-line { display: inline; }

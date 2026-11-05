@@ -702,15 +702,15 @@ const toolbar = new Toolbar($<HTMLDivElement>('#tools'), TOOL_GROUPS, (name) => 
 
 // The Canvas ribbon: the chemistry commands without a toolbox of their own (Smart Schemes, energy
 // diagrams, mechanism checks, look-ups), with Analysis and the warnings in two small boxes
-/** The Canvas ribbon's Font group: its row, filled once the text hooks are made (further down). */
-let canvasFontRow: HTMLElement | null = null;
+/** The Canvas ribbon's Font and Paragraph groups: their rows, filled once the text hooks are made (further down). */
+let canvasTextRows: { font: HTMLElement; paragraph: HTMLElement } | null = null;
 let canvasFont: { refresh(): void } | null = null;
 const canvasRibbon = new CanvasRibbon({
   command: (cmd) => { command(cmd); },
   pickTool: (name) => pickTool(name),
   hasTool: (name) => name in TOOLS,
   icon: (it) => ('cmd' in it ? commandIcon(it.cmd) ?? RIBBON_ONLY_ICONS[it.cmd] ?? ICONS[it.cmd] : ICONS[it.tool]),
-  fontGroup: (row) => { canvasFontRow = row; },
+  textGroups: (font, paragraph) => { canvasTextRows = { font, paragraph }; },
   pasteMenu: (r) => { popupMenu(r.left, r.bottom + 2, [['Paste', () => command('paste')], ['Paste SMILES', () => command('paste-smiles')]]); },
 }, $('#sheet-ribbon'));
 const analysisBox = new AnalysisBox($('#analysis-section'));
@@ -12548,16 +12548,19 @@ const textToolboxHooks: TextToolboxHooks = {
   back: () => editor.refocusText(),
   say: (t) => flash(t),
 };
-// the Canvas ribbon's Font group: the typing bar's basics, working as the Text Formatting toolbox does
-if (canvasFontRow) {
-  canvasFont = buildTextBar(canvasFontRow, {
+// the Canvas ribbon's Font and Paragraph groups: all of the typing bar, working as the Text Formatting
+// toolbox does (and while they show, the bar above the text hides: see CaptionEditor.barElsewhere)
+// (set by the ribbon's callback, which TypeScript can't see)
+const textRows = canvasTextRows as { font: HTMLElement; paragraph: HTMLElement } | null;
+if (textRows) {
+  canvasFont = buildTextBar(textRows.font, {
     format: (f) => textToolboxHooks.format(f),
     type: (ch) => textToolboxHooks.type(ch),
     link: () => textToolboxHooks.link(),
     state: () => textToolboxHooks.look(),
     back: () => textToolboxHooks.back(),
     nothing: () => flash('Click into some text, or pick a caption or text box, first.'),
-  }, { basics: true });
+  }, { ribbon: { paragraph: textRows.paragraph } });
 }
 
 /** Ring Shape on the right-click menu, when the selection is one cyclohexane that can be redrawn. */
@@ -13749,8 +13752,10 @@ const designText = new SlideTextRibbon($('#design-ribbon'), {
 });
 /** The text groups of the ribbon showing (Presentation or Design) follow the text being edited. */
 const textRibbonNow = () => (ws.active.mode === 'slides' ? slideText : ws.active.mode === 'design' ? designText : null);
-// the Text Formatting toolbox is the typing bar, so with it showing the bar above the text hides
-CaptionEditor.barElsewhere = () => toolboxes.isShown('text');
+// the Text Formatting toolbox is the typing bar, and so are the Canvas ribbon's Home tab's Font and
+// Paragraph groups: with either showing, the bar above the text hides (with the ribbon collapsed or on
+// another tab, it shows as before)
+CaptionEditor.barElsewhere = () => toolboxes.isShown('text') || (!canvasRibbon.el.hidden && !ribbonCollapsed() && canvasRibbon.tab === 'home');
 CaptionEditor.onState = () => { textRibbonNow()?.refresh(); textToolbox?.refresh(); canvasFont?.refresh(); };
 // the Smart Scheme pane: the selected scheme's species, beside it
 const smartPane = new SmartPane({

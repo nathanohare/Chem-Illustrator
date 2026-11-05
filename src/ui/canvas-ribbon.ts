@@ -16,10 +16,10 @@ export type RibbonItem =
   | { tool: string; label: string; major?: boolean; tip?: string };
 /**
  * A group: its buttons, or one built specially: the Format Favorites gallery, the Clipboard (Paste,
- * Cut, Copy and Format Painter, as the Spreadsheet's Home tab has them) or the Font group (the
- * basics of the text formatting bar).
+ * Cut, Copy and Format Painter, as the Spreadsheet's Home tab has them), or the Font and Paragraph
+ * groups (every button and box of the text formatting bar, which hides while they show).
  */
-export interface RibbonGroup { name: string; items: RibbonItem[]; gallery?: 'favorites'; special?: 'clipboard' | 'font' }
+export interface RibbonGroup { name: string; items: RibbonItem[]; gallery?: 'favorites'; special?: 'clipboard' | 'font' | 'paragraph' }
 export interface RibbonTab { id: string; title: string; groups: RibbonGroup[]; context?: ContextKind }
 export type ContextKind = 'arrow' | 'ring' | 'bond';
 
@@ -33,6 +33,7 @@ export const CANVAS_TABS: RibbonTab[] = [
       // first, as the Spreadsheet's Home tab starts
       { name: 'Clipboard', items: [], special: 'clipboard' },
       { name: 'Font', items: [], special: 'font' },
+      { name: 'Paragraph', items: [], special: 'paragraph' },
       // (filled by the shared Format Favorites gallery, as on every mode's Home tab)
       { name: 'Format Favorites', items: [], gallery: 'favorites' },
       { name: 'Schemes', items: [c('smart-scheme', 'Smart Scheme', true), c('catalytic-cycle', 'Catalytic Cycle', true), c('convert-smart-scheme', 'Convert to Smart Scheme'), c('stoichiometry-table', 'Stoichiometry Table…'), c('check-balance', 'Check Balance…'), c('map-atoms', 'Map Atoms…')] },
@@ -105,8 +106,8 @@ export interface CanvasRibbonHost {
   hasTool(name: string): boolean;
   /** A command's or tool's picture (24×24 SVG), if it has one. */
   icon(item: RibbonItem): string | undefined;
-  /** Fill the Font group's row with the text formatting bar's basics. */
-  fontGroup(row: HTMLElement): void;
+  /** Fill the Font and Paragraph groups' rows with the text formatting bar's buttons and boxes. */
+  textGroups(font: HTMLElement, paragraph: HTMLElement): void;
   /** Paste's ▾: its menu, under the button. */
   pasteMenu(at: DOMRect): void;
 }
@@ -173,6 +174,7 @@ export class CanvasRibbon {
     p.hidden = tab.id !== 'home';
     p.setAttribute('role', 'tabpanel');
     if (tab.context) p.classList.add('cr-ctx-panel');
+    const text: Partial<Record<'font' | 'paragraph', HTMLElement>> = {};
     for (const g of tab.groups) {
       const items = g.items.filter((it) => !('tool' in it) || this.host.hasTool(it.tool));
       if (!items.length && !g.gallery && !g.special) continue;
@@ -181,11 +183,12 @@ export class CanvasRibbon {
       const row = document.createElement('div');
       row.className = 'rb-row cr-rows';
       if (g.special === 'clipboard') this.clipboard(row);
-      if (g.special === 'font') {
+      if (g.special === 'font' || g.special === 'paragraph') {
         row.className = 'rb-row cr-font';
-        // (a click in it keeps text being typed open, as the Text Formatting toolbox does)
-        row.dataset.keepsTyping = '';
-        this.host.fontGroup(row);
+        // (a click in them keeps text being typed open, as the Text Formatting toolbox does, and so
+        // does a click on the button they fold into in a narrow window)
+        group.dataset.keepsTyping = '';
+        text[g.special] = row;
       }
       if (g.gallery) {
         // the gallery fills its host itself (main.ts mounts every [data-favorites-gallery])
@@ -202,6 +205,7 @@ export class CanvasRibbon {
       group.append(row, label);
       p.append(group);
     }
+    if (text.font && text.paragraph) this.host.textGroups(text.font, text.paragraph);
     return p;
   }
 

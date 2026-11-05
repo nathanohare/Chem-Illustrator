@@ -125,6 +125,21 @@ try {
   });
   if (widths.box > widths.cells + 20) fail(`the floating Drawing Tools toolbox is ${Math.round(widths.box)} px wide for ${Math.round(widths.cells)} px of buttons`);
 
+  step('typing on the Canvas, the Home tab\'s Font and Paragraph groups stand in for the bar above the text');
+  await page.evaluate(() => window.__app.editor.setTool('text'));
+  const ov = await page.locator('#overlay').boundingBox();
+  await page.mouse.click(ov.x + ov.width / 2, ov.y + 120);
+  await page.keyboard.type('CH2Cl2');
+  const typing = await page.evaluate(() => ({
+    open: !!window.__app.editor.typingCaption,
+    bar: document.querySelector('.caption-bar')?.hidden,
+    buttons: document.querySelectorAll('#canvas-ribbon [data-cr-panel="home"] .cr-font .cb-btn').length,
+  }));
+  await page.keyboard.press('Escape');
+  if (!typing.open) fail('clicking with the Text tool opened no text to type in');
+  else if (typing.bar !== true) fail('the bar above the text shows while the Canvas Home tab has the same buttons');
+  if (typing.buttons < 18) fail(`the Canvas Home tab's Font and Paragraph groups have ${typing.buttons} buttons, not all of the typing bar's`);
+
   step('every menu fits in one column at 1280 × 720');
   for (const btn of await page.$$('header > .menu-wrap > button')) {
     if (!(await btn.isVisible())) continue;
