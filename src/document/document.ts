@@ -398,7 +398,7 @@ export type DocObject =
    * A footnote (or, with `end`, an endnote): its number in the text, and its own text, typed into
    * in place at the bottom of the page (or at the end of the document), as in Word.
    */
-  | { kind: 'note'; end?: boolean; runs: TextRun[]; paras?: ParaStyle[] }
+  | { kind: 'note'; end?: boolean; runs: TextRun[]; paras?: ParaStyle[]; /** From a Word file: what came between its number and its text, when not the one space Word puts there ('' for nothing, a tab). */ lead?: string }
   /** An equation, typed as LaTeX and shown laid out as maths (see math.ts); a Word equation in .docx files. */
   | { kind: 'math'; tex: string }
   /** A field: the date, a document property, the file's name, a page number, a bookmark's text or page (see fields.ts). */

@@ -996,13 +996,15 @@ class DocxReader {
       else this.warn('hiddenCells');
       return { ...style, text: o.code === 'word' ? o.text ?? '' : '' };
     }).filter((x) => x.obj === undefined || this.objects[x.obj]?.kind === 'cite').map(({ cmt: _c, ...x }) => x);
+    // (what comes between the number and the text: kept when it isn't Word's one space)
+    const lead = /^[ \t]*/.exec(runs.map((x) => x.text).join(''))![0];
     while (runs.length && /^[ \t]/.test(runs[0].text)) {
       const text = runs[0].text.replace(/^[ \t]+/, '');
       if (text) { runs[0] = { ...runs[0], text }; break; }
       if (runs.length === 1) { runs[0] = { ...runs[0], text: '' }; break; }
       runs.shift();
     }
-    this.emitObject(ctx, { kind: 'note', ...(end ? { end: true } : {}), runs: rt.normalizeRuns(runs), paras: got.paras }, { ...r, pos: 'sup' }, true);
+    this.emitObject(ctx, { kind: 'note', ...(end ? { end: true } : {}), runs: rt.normalizeRuns(runs), paras: got.paras, ...(lead !== ' ' ? { lead } : {}) }, { ...r, pos: 'sup' }, true);
   }
 
   // ---------------------------------------------------------------- the text
