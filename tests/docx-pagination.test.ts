@@ -57,3 +57,13 @@ describe('Word pagination settings', () => {
     expect(again.paras.map((p) => [!!p.keepLines, !!p.noWidow])).toEqual([[true, false], [false, true], [true, false], [false, true]]);
   });
 });
+
+describe('the first section\'s page numbers', () => {
+  it('start at 1 without a start value, which would restart them inside another document', async () => {
+    const { doc } = await readDocx(wordFile(BODY, STYLES));
+    const body = strFromU8(unzipSync(await writeDocx(doc, deps))['word/document.xml']);
+    expect(body).not.toContain('pgNumType');
+    const from5 = await writeDocx({ ...doc, hf: { ...doc.hf, start: 5 } }, deps);
+    expect(strFromU8(unzipSync(from5)['word/document.xml'])).toContain('<w:pgNumType w:start="5"/>');
+  });
+});
