@@ -383,6 +383,25 @@ export class Renderer {
     return [{ a: p, b: q, extra }];
   }
 
+  /** The smallest ring through a bond on each side of it (right, left of a1→a2 on screen); null when it is in none. */
+  private ringsBeside(doc: Doc, b: Bond, p: Atom, nrm: Vec): [RingBeside | null, RingBeside | null] | null {
+    let right: RingBeside | null = null, left: RingBeside | null = null;
+    for (const ring of ringsThroughBond(doc, b.id)) {
+      let cx = 0, cy = 0, doubles = 0;
+      ring.forEach((id, i) => {
+        const a = doc.atoms.get(id)!, next = ring[(i + 1) % ring.length];
+        cx += a.x;
+        cy += a.y;
+        const edge = (doc.adj.get(id) ?? []).map((e) => doc.bonds.get(e)!).find((e) => e.a1 === next || e.a2 === next);
+        if (edge && (edge.order === 2 || edge.order === 1.5)) doubles++;
+      });
+      const it = { size: ring.length, doubles };
+      const better = (was: RingBeside | null) => !was || it.size < was.size || (it.size === was.size && it.doubles > was.doubles);
+      if (dot(sub({ x: cx / ring.length, y: cy / ring.length }, p), nrm) >= 0) { if (better(right)) right = it; } else if (better(left)) left = it;
+    }
+    return right || left ? [right, left] : null;
+  }
+
   private bondInfo(doc: Doc, b: Bond): BondCache {
     let c = this.bondCache.get(b.id);
     if (c) return c;
@@ -416,32 +435,24 @@ export class Renderer {
       else if (b.dpos === 'left') side = -1;
       else if (b.dpos === 'center') side = 0;
       else {
-        const ring = doc.ringThroughBond(b.id);
-        if (ring) {
-          let cx = 0, cy = 0;
-          for (const id of ring) { const a = doc.atoms.get(id)!; cx += a.x; cy += a.y; }
-          const cen = { x: cx / ring.length, y: cy / ring.length };
-          side = dot(sub(cen, p), nrm) >= 0 ? 1 : -1;
+        const rings = this.ringsBeside(doc, b, p, nrm);
+        if (rings) {
+          // as ChemDraw 25 chooses, measured from its drawings: inside the ring, and between two
+          // rings the one with more double bonds, then the smaller, then the left
+          const [right, left] = rings;
+          if (!right || !left) side = right ? 1 : -1;
+          else side = right.doubles !== left.doubles ? (right.doubles > left.doubles ? 1 : -1) : right.size !== left.size ? (right.size < left.size ? 1 : -1) : -1;
         } else {
-          // Outside rings: centred if an end is terminal (C=O, C=CH2), otherwise on the
-          // side with more substituents.
+          // Outside rings: centred at the end of a chain with two bonds at one atom (a ketone) or
+          // none (ethene), otherwise on the side with more substituents, and on the left if even.
           const n1 = doc.neighbors(p.id).filter((x) => x.id !== q.id);
           const n2 = doc.neighbors(q.id).filter((x) => x.id !== p.id);
-          if (n1.length === 0 || n2.length === 0) {
-            const lab1 = this.atomInfo(doc, p).layout, lab2 = this.atomInfo(doc, q).layout;
-            const others = [...n1, ...n2];
-            if ((lab1 || lab2 || others.length !== 1) && !(n1.length === 0 && n2.length === 0 && false)) side = 0;
-            else {
-              // e.g. vinyl CH=CH2 with no labels: offset toward the substituent
-              let s = 0;
-              for (const o of others) s += Math.sign(dot(sub(o, p), nrm));
-              side = s >= 0 ? 1 : -1;
-            }
-            if (others.length === 0) side = 0;
-          } else {
+          const others = [...n1, ...n2];
+          if ((n1.length === 0 || n2.length === 0) && others.length !== 1) side = 0;
+          else {
             let s = 0;
-            for (const o of [...n1, ...n2]) s += Math.sign(dot(sub(o, p), nrm));
-            side = s === 0 ? 1 : Math.sign(s);
+            for (const o of others) s += Math.sign(dot(sub(o, p), nrm));
+            side = s === 0 ? -1 : Math.sign(s);
           }
         }
       }
@@ -2996,6 +3007,8 @@ export const WARN_LOOKS = ['box', 'soft', 'circle', 'dashed', 'corners'] as cons
 export type WarnLook = (typeof WARN_LOOKS)[number];
 const CHEM_MARK_COLOR = '#1f8a7a';
 
+
+interface RingBeside { size: number; doubles: number }
 
 /** A colour with some see-through: "#rrggbb" and opacity 0–1 as rgba(). */
 function withAlpha(c: string, a: number): string {
